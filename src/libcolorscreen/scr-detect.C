@@ -61,7 +61,5 @@ scr_detect::set_parameters (scr_detect_parameters param, luminosity_t gamma, con
 
 scr_detect::~scr_detect ()
 {
-  if (lookup_table[0])
-    render::release_lookup_tables (lookup_table);
 }
 }

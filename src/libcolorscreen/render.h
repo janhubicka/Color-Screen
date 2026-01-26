@@ -173,8 +173,8 @@ public:
   pure_attr inline luminosity_t fast_get_img_pixel (int x, int y) const;
     
   static const int num_color_models = render_parameters::color_model_max;
-  static bool get_lookup_tables (luminosity_t **ret, luminosity_t gamma, const image_data *img, progress_info *progress = NULL);
-  static void release_lookup_tables (luminosity_t **);
+  typedef lru_cache<lookup_table_params, luminosity_t[], luminosity_t *, get_new_lookup_table, 4> lookup_table_cache_t;
+  static bool get_lookup_tables (lookup_table_cache_t::cached_ptr *ret, luminosity_t gamma, const image_data *img, progress_info *progress = NULL);
   inline void set_color (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *) const;
   inline void set_color_precise (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *) const;
   inline void set_linear_hdr_color (luminosity_t, luminosity_t, luminosity_t, luminosity_t *, luminosity_t *, luminosity_t *) const;
@@ -250,7 +250,6 @@ public:
   }
 
   static constexpr const size_t out_lookup_table_size = 65536 * 16;
-  typedef lru_cache<lookup_table_params, luminosity_t[], luminosity_t *, get_new_lookup_table, 4> lookup_table_cache_t;
   typedef lru_cache<out_lookup_table_params, precomputed_function<luminosity_t>, precomputed_function<luminosity_t> *, get_new_out_lookup_table, 4> out_lookup_table_cache_t;
   typedef lru_cache<backlight_correction_cache_params, backlight_correction, backlight_correction *, get_new_backlight_correction, 10> backlight_cache_t;
   typedef lru_cache<gray_and_sharpen_params, sharpened_data, sharpened_data *, get_new_gray_sharpened_data, 2> gray_cache_t;

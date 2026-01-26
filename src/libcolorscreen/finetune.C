@@ -3609,11 +3609,10 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       int ext;
       if (sharpen_param.deconvolution_p ())
 	{
-	  mtf *mtf = mtf::get_mtf (sharpen_param.scanner_mtf, NULL);
+	  mtf::mtf_cache_t::cached_ptr mtf = mtf::get_mtf (sharpen_param.scanner_mtf, NULL);
 	  if (!mtf->precompute ())
 	    return false;
 	  ext = mtf->psf_size ( sharpen_param.scanner_mtf_scale);
-	  mtf::release_mtf (mtf);
 	}
       else
 	ext = fir_blur::convolve_matrix_length (sharpen_param.usm_radius) / 2;
@@ -3783,7 +3782,7 @@ render_screen (image_data &img, scr_to_img_parameters &param,
   sharpen_parameters sharpen = rparam.sharpen;
   sharpen.usm_radius = rparam.screen_blur_radius * pixel_size;
   sharpen.scanner_mtf_scale *= pixel_size;
-  screen *scr = render_to_scr::get_screen (
+  render_to_scr::screen_cache_t::cached_ptr scr = render_to_scr::get_screen (
       param.type, false,
       false,
       sharpen,
@@ -3805,6 +3804,5 @@ render_screen (image_data &img, scr_to_img_parameters &param,
           (unsigned short)(invert_gamma (d.blue, rparam.gamma) * 65535)
         };
       }
-  render_to_scr::release_screen (scr);
 }
 }

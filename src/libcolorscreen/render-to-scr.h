@@ -6,11 +6,86 @@
 #include "render.h"
 #include "screen.h"
 #include "simulate.h"
+#include "lru-cache.h"
 
 namespace colorscreen
 {
 class screen;
+class screen_table;
+class saturation_loss_table;
 struct render_to_file_params;
+
+struct screen_params
+{
+  enum scr_type t;
+  bool preview;
+  coord_t red_strip_width, green_strip_width;
+  bool anticipate_sharpening;
+  sharpen_parameters sharpen;
+
+  bool
+  operator== (const screen_params &o) const
+  {
+    return t == o.t && preview == o.preview 
+	   && anticipate_sharpening == o.anticipate_sharpening
+	   && sharpen == o.sharpen
+	   /* We also blur, so we need to compare MTF if used.  */
+	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
+	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
+           && (!screen_with_varying_strips_p (t)
+               || (red_strip_width == o.red_strip_width
+                   && green_strip_width == o.green_strip_width));
+  }
+};
+screen * get_new_screen (struct screen_params &, progress_info *);
+
+struct screen_table_params
+{
+  scanner_blur_correction_parameters *param;
+  uint64_t param_id;
+  scr_type type;
+  luminosity_t red_strip_width, green_strip_width;
+  sharpen_parameters sharpen;
+  bool
+  operator== (const screen_table_params &o) const
+  {
+    return type == o.type && param_id == o.param_id
+           && red_strip_width == o.red_strip_width
+           && green_strip_width == o.green_strip_width
+	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
+	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
+	   && sharpen == o.sharpen;
+  }
+};
+screen_table * get_new_screen_table (struct screen_table_params &, progress_info *);
+
+struct saturation_loss_params
+{
+  screen_table *scr_table;
+  uint64_t scr_table_id;
+  screen *collection_screen;
+  uint64_t collection_screen_id;
+  int img_width, img_height;
+  luminosity_t collection_threshold;
+  sharpen_parameters sharpen;
+  uint64_t mesh_id;
+  scr_to_img_parameters scr_to_img_params;
+  class scr_to_img *map;
+
+  bool
+  operator== (const saturation_loss_params &o) const
+  {
+    return scr_table_id == o.scr_table_id
+           && collection_threshold == o.collection_threshold
+           && sharpen == o.sharpen
+	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
+	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
+           && img_width == o.img_width && img_height == o.img_height
+           && mesh_id == o.mesh_id
+           && (mesh_id || scr_to_img_params == o.scr_to_img_params);
+  }
+};
+saturation_loss_table * get_new_saturation_loss_table (struct saturation_loss_params &, progress_info *);
 
 class screen_table
 {
@@ -98,8 +173,8 @@ public:
                  render_parameters &rparam, int dstmaxval)
       : render (img, rparam, dstmaxval),
 	m_scr_to_img_param (param),
-	m_screen_table (NULL), m_saturation_loss_table (NULL),
- 	m_simulated_screen (NULL), m_simulated_screen_id (0)
+	m_screen_table (), m_saturation_loss_table (),
+ 	m_simulated_screen (), m_simulated_screen_id (0)
   {
     m_final_width = -1;
     m_final_height = -1;
@@ -173,15 +248,25 @@ public:
   inline luminosity_t sample_scr_diag_square (coord_t xc, coord_t yc,
                                               coord_t s);
   inline luminosity_t sample_scr_square (coord_t xc, coord_t yc, coord_t w,
-                                         coord_t h);
-  static screen *get_screen (enum scr_type t, bool preview,
+                                          coord_t h);
+  typedef lru_cache<screen_params, screen, screen *, get_new_screen, 20> screen_cache_t;
+  typedef lru_cache<screen_table_params, screen_table, screen_table *, get_new_screen_table, 4> screen_table_cache_t;
+  typedef lru_cache<saturation_loss_params, saturation_loss_table, saturation_loss_table *, get_new_saturation_loss_table, 4> saturation_loss_table_cache_t;
+
+  static screen_cache_t::cached_ptr get_screen (enum scr_type t, bool preview,
 			     bool anticipate_sharpening,
    			     const sharpen_parameters &sharpen,
-                             coord_t dufay_red_strip_width,
+                             coord_t red_strip_width,
                              coord_t dufay_green_strip_height,
                              progress_info *progress = NULL,
                              uint64_t *id = NULL);
-  static void release_screen (screen *scr);
+  static screen * get_screen_raw (enum scr_type t, bool preview, 
+			     bool anticipate_sharpening,
+			     const sharpen_parameters &sharpen,
+                             coord_t red_strip_width, coord_t green_strip_width,
+                             progress_info *progress = NULL, uint64_t *id = NULL);
+  static void release_screen (screen *s);
+
   bool compute_screen_table (progress_info *progress);
   bool compute_saturation_loss_table (screen *collection_screen, uint64_t collection_screen_uid, luminosity_t collection_treshold, const sharpen_parameters &sharpen, progress_info *progress = NULL);
 /* Determine grayscale value at a given position in the image.
@@ -194,10 +279,10 @@ protected:
   /* Transformation between screen and image coordinates.  */
   scr_to_img m_scr_to_img;
   const scr_to_img_parameters &m_scr_to_img_param;
-  screen_table *m_screen_table;
-  saturation_loss_table *m_saturation_loss_table;
+  screen_table_cache_t::cached_ptr m_screen_table;
+  saturation_loss_table_cache_t::cached_ptr m_saturation_loss_table;
   uint64_t m_screen_table_uid;
-  simulated_screen *m_simulated_screen;
+  simulated_screen_cache_t::cached_ptr m_simulated_screen;
   uint64_t m_simulated_screen_id;
 
 private:

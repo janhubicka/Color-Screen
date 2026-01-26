@@ -16,7 +16,7 @@ namespace colorscreen
 stitch_project::stitch_project ()
   : params (), report_file (NULL), images(), param (), rparam (),
     common_scr_to_img (), dparam (), solver_param (),
-    pixel_size (0), my_screen (NULL), stitch_info_scale (0), 
+    pixel_size (0), my_screen (), stitch_info_scale (0), 
     release_images (true), rotation_adjustment (0)
 {}
 
@@ -24,7 +24,6 @@ stitch_project::~stitch_project ()
 {
   if (my_screen)
     render_to_scr::release_screen (my_screen);
-  my_screen = NULL;
 }
 
 bool

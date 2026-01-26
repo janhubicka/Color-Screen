@@ -2,6 +2,7 @@
 #define SCR_DETECT_H
 #include "include/scr-detect-parameters.h"
 #include "include/imagedata.h"
+#include "render.h"
 class progress_info;
 namespace colorscreen {
 
@@ -9,7 +10,7 @@ class scr_detect
 {
 public:
   scr_detect ()
-  : lookup_table {NULL, NULL, NULL}
+  : lookup_table {}
   {
   }
   ~scr_detect ();
@@ -62,7 +63,7 @@ public:
   scr_detect_parameters m_param;
 private:
   color_matrix m_color_adjust;
-  luminosity_t *lookup_table[3];
+  render::lookup_table_cache_t::cached_ptr lookup_table[3];
 };
 
 class color_class_map

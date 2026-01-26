@@ -55,26 +55,8 @@ precomputed_rgbdata::~precomputed_rgbdata ()
   m_data = NULL;
 }
 
-namespace
-{
 /* Lookup table translates raw input data into linear values.  */
-struct color_class_params
-{
-  uint64_t image_id;
-  const image_data *img;
-  render_scr_detect::my_mem_rgbdata *precomputed_rgbdata;
-  scr_detect_parameters p;
-  scr_detect *d;
-  luminosity_t gamma;
 
-  bool
-  operator==(color_class_params &o)
-  {
-    return image_id == o.image_id
-	   && gamma == o.gamma
-	   && p == o.p;
-  }
-};
 
 color_class_map *get_color_class_map(color_class_params &p, progress_info *progress)
 {
@@ -113,32 +95,11 @@ color_class_map *get_color_class_map(color_class_params &p, progress_info *progr
     }
   return map;
 }
-static lru_cache <color_class_params, color_class_map, color_class_map *, get_color_class_map, 1> color_class_cache ("color tables");
+static color_class_cache_t
+    color_class_cache ("color tables");
 
 /* Lookup table translates raw input data into linear values.  */
-struct precomputed_rgbdata_params
-{
-  uint64_t image_id;
-  scr_detect_parameters p;
-  luminosity_t gamma;
 
-  const image_data *img;
-  scr_detect *d;
-  render_scr_detect *r;
-
-  bool
-  operator==(precomputed_rgbdata_params &o)
-  {
-    return image_id == o.image_id
-	   && p.red == o.p.red
-	   && p.green == o.p.green
-	   && p.blue == o.p.blue
-	   && p.black == o.p.black
-	   && p.sharpen_radius == o.p.sharpen_radius
-	   && p.sharpen_amount == o.p.sharpen_amount
-	   && gamma == o.gamma;
-  }
-};
 
 rgbdata
 getdata_helper (render_scr_detect &r, int x, int y, int, int)
@@ -182,25 +143,11 @@ get_precomputed_rgbdata(precomputed_rgbdata_params &p, progress_info *progress)
     }
   return my_precomputed_rgbdata;
 }
-static lru_cache <precomputed_rgbdata_params, precomputed_rgbdata, precomputed_rgbdata *, get_precomputed_rgbdata, 1> precomputed_rgbdata_cache ("precomputed data");
+static precomputed_rgbdata_cache_t
+    precomputed_rgbdata_cache ("precomputed data");
 
 /* Lookup table translates raw input data into linear values.  */
-struct patches_cache_params
-{
-  uint64_t scr_map_id;
-  uint64_t gray_data_id;
-  color_class_map *map;
-  const image_data *img;
-  render *r;
 
-  /* TODO: render parameters affects luminosity.  */
-  bool
-  operator==(patches_cache_params &o)
-  {
-    return scr_map_id == o.scr_map_id
-	   && gray_data_id == o.gray_data_id;
-  }
-};
 /* TODO: progress info  */
 patches *get_patches(patches_cache_params &p, progress_info *progress)
 {
@@ -212,28 +159,14 @@ patches *get_patches(patches_cache_params &p, progress_info *progress)
     }
   return pat;
 }
-static lru_cache <patches_cache_params, patches, patches *, get_patches, 1> patches_cache ("patches");
+static patches_cache_t
+    patches_cache ("patches");
 
 /* Lookup table translates raw input data into linear values.  */
-struct color_data_params
-{
-  uint64_t color_class_map_id;
-  uint64_t graydata_id;
-  const image_data *img;
-  color_class_map *map;
-  render *r;
 
-
-  bool
-  operator==(color_data_params &o)
-  {
-    return color_class_map_id == o.color_class_map_id
-	   && graydata_id == o.graydata_id;
-  }
-};
 
 /* Do relaxation and demosaic color data.  TODO:progress  */
-static color_data *
+color_data *
 get_new_color_data (struct color_data_params &p, progress_info *progress)
 {
   color_data *data = new color_data (p.img->width, p.img->height);
@@ -339,8 +272,9 @@ get_new_color_data (struct color_data_params &p, progress_info *progress)
     }
   return data;
 }
-static lru_cache <color_data_params, color_data, color_data *, get_new_color_data, 1> color_data_cache ("color data");
-}
+static color_data_cache_t
+    color_data_cache ("color data");
+
 class distance_list distance_list;
 
 void
@@ -463,7 +397,7 @@ render_scr_detect::precompute_all (bool grayscale_needed, bool normalized_patche
   color_class_params p = {m_precomputed_rgbdata ? m_precomputed_rgbdata_id : m_img.id, &m_img, m_precomputed_rgbdata, m_scr_detect.m_param, &m_scr_detect, m_params.gamma};
   if (progress && progress->cancel_requested ())
     return false;
-  m_color_class_map = color_class_cache.get (p, progress, &m_color_class_map_id);
+  m_color_class_map = color_class_cache.get_cached (p, progress, &m_color_class_map_id);
   if (progress && progress->cancel_requested ())
     return false;
   return render::precompute_all (grayscale_needed, normalized_patches, {1/3.0, 1/3.0, 1/3.0}, progress);
@@ -475,7 +409,7 @@ render_scr_detect::precompute_rgbdata (progress_info *progress)
   if (m_precomputed_rgbdata)
     return true;
   struct precomputed_rgbdata_params p = {m_img.id, m_scr_detect.m_param, m_params.gamma, &m_img, &m_scr_detect, this};
-  m_precomputed_rgbdata_holder = precomputed_rgbdata_cache.get (p, progress, &m_precomputed_rgbdata_id);
+  m_precomputed_rgbdata_holder = precomputed_rgbdata_cache.get_cached (p, progress, &m_precomputed_rgbdata_id);
   m_precomputed_rgbdata = m_precomputed_rgbdata_holder->m_data;
   return m_precomputed_rgbdata;
 }
@@ -562,10 +496,6 @@ analyze_color_proportions (scr_detect_parameters param, render_parameters &rpara
 
 render_scr_detect::~render_scr_detect ()
 {
-  if (m_color_class_map)
-    color_class_cache.release (m_color_class_map);
-  if (m_precomputed_rgbdata)
-    precomputed_rgbdata_cache.release (m_precomputed_rgbdata_holder);
 }
 
 int cmp_entry(const void *p1, const void *p2)
@@ -599,7 +529,6 @@ distance_list::distance_list ()
 
 render_scr_nearest_scaled::~render_scr_nearest_scaled ()
 {
-  patches_cache.release (m_patches);
 }
 
 bool
@@ -607,9 +536,9 @@ render_scr_nearest_scaled::precompute_all (progress_info *progress)
 {
   if (!render_scr_detect::precompute_all (true, false, progress))
     return false;
-  patches_cache_params p = {m_color_class_map_id, m_gray_data_id, m_color_class_map, &m_img, this};
-  m_patches = patches_cache.get (p, progress);
-  return m_patches;
+  patches_cache_params p = {m_color_class_map_id, m_gray_data_id, m_color_class_map.get (), &m_img, this};
+  m_patches = patches_cache.get_cached (p, progress);
+  return (bool)m_patches;
 }
 
 bool
@@ -618,8 +547,8 @@ render_scr_relax::precompute_all (progress_info *progress)
 /* TODO; Rendering is not normalized correctly.  we probably should still compute vornoi diagrams and determine diameter. */
   if (!render_scr_detect::precompute_all (true, true, progress))
     return false;
-  color_data_params p = {m_color_class_map_id, m_gray_data_id, &m_img, m_color_class_map, this};
-  m_color_data_handle = color_data_cache.get (p, progress);
+  color_data_params p = {m_color_class_map_id, m_gray_data_id, &m_img, m_color_class_map.get (), this};
+  m_color_data_handle = color_data_cache.get_cached (p, progress);
   if (!m_color_data_handle)
     return false;
   for (int color = 0; color < 3; color++)
@@ -628,7 +557,6 @@ render_scr_relax::precompute_all (progress_info *progress)
 }
 render_scr_relax::~render_scr_relax()
 {
-  color_data_cache.release (m_color_data_handle);
 }
 /* Prune render scr detect cache.  We need to do this so destruction order of MapAlloc and
    the cache does not yield an segfault.  */

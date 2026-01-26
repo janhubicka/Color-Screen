@@ -616,39 +616,31 @@ color_matrix
 dufaycolor_correction_color_cinematography_matrix (luminosity_t temperature, luminosity_t backlight_temperature, progress_info *progress)
 {
   optimized_matrix_params p = {temperature, backlight_temperature, 0};
-  color_matrix *m = color_matrix_cache.get (p, progress);
-  color_matrix ret = *m;
-  color_matrix_cache.release (m);
-  return ret;
+  auto m = color_matrix_cache.get_cached (p, progress);
+  return *m;
 }
 
 color_matrix
 dufaycolor_correction_harrison_horner_matrix (luminosity_t temperature, luminosity_t backlight_temperature, progress_info *progress)
 {
   optimized_matrix_params p = {temperature, backlight_temperature, 1};
-  color_matrix *m = color_matrix_cache.get (p, progress);
-  color_matrix ret = *m;
-  color_matrix_cache.release (m);
-  return ret;
+  auto m = color_matrix_cache.get_cached (p, progress);
+  return *m;
 }
 
 color_matrix
 dufaycolor_correction_photography_its_materials_and_processes_matrix (luminosity_t temperature, luminosity_t backlight_temperature, progress_info *progress)
 {
   optimized_matrix_params p = {temperature, backlight_temperature, 2};
-  color_matrix *m = color_matrix_cache.get (p, progress);
-  color_matrix ret = *m;
-  color_matrix_cache.release (m);
-  return ret;
+  auto m = color_matrix_cache.get_cached (p, progress);
+  return *m;
 }
 
 color_matrix
 dufaycolor_correction_collins_and_giles_matrix (luminosity_t temperature, luminosity_t backlight_temperature, progress_info *progress)
 {
   optimized_matrix_params p = {temperature, backlight_temperature, 3};
-  color_matrix *m = color_matrix_cache.get (p, progress);
-  color_matrix ret = *m;
-  color_matrix_cache.release (m);
-  return ret;
+  auto m = color_matrix_cache.get_cached (p, progress);
+  return *m;
 }
 }

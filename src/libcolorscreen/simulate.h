@@ -5,11 +5,31 @@
 #include "include/scr-detect-parameters.h"
 #include "include/scr-to-img.h"
 #include "screen.h"
+#include "lru-cache.h"
 
 namespace colorscreen
 {
+struct simulated_screen;
 // typedef mem_rgbdata simulated_screen_pixel;
 typedef rgbdata simulated_screen_pixel;
+
+struct simulated_screen_params
+{
+  uint64_t screen_id;
+  uint64_t mesh_trans_id;
+  int width, height;
+  scr_to_img_parameters params;
+  sharpen_parameters sharpen;
+  const screen *scr;
+  bool
+  operator== (const simulated_screen_params &o) const
+  {
+    return screen_id == o.screen_id && mesh_trans_id == o.mesh_trans_id
+           && (mesh_trans_id || params == o.params) && sharpen == o.sharpen;
+  }
+};
+simulated_screen * get_new_simulated_screen (struct simulated_screen_params &, progress_info *);
+typedef lru_cache<simulated_screen_params, simulated_screen, simulated_screen *, get_new_simulated_screen, 1> simulated_screen_cache_t;
 
 struct simulated_screen
 {
@@ -40,12 +60,11 @@ protected:
   std::vector<simulated_screen_pixel> m_data;
   int m_width, m_height;
 };
-simulated_screen *get_simulated_screen (const scr_to_img_parameters &param,
+simulated_screen_cache_t::cached_ptr get_simulated_screen (const scr_to_img_parameters &param,
                                         const screen *scr, uint64_t screen_id,
                                         const sharpen_parameters sharpen,
                                         int width, int height,
                                         progress_info *progress, uint64_t *id);
-void release_simulated_screen (simulated_screen *s);
 
 rgbdata
 simulated_screen::get_interpolated_pixel (coord_t xp, coord_t yp)

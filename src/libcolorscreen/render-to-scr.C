@@ -104,30 +104,7 @@ saturation_loss_table::saturation_loss_table (
       }
 }
 
-namespace
-{
-struct screen_params
-{
-  enum scr_type t;
-  bool preview;
-  coord_t red_strip_width, green_strip_width;
-  bool anticipate_sharpening;
-  sharpen_parameters sharpen;
 
-  bool
-  operator== (screen_params &o)
-  {
-    return t == o.t && preview == o.preview 
-	   && anticipate_sharpening == o.anticipate_sharpening
-	   && sharpen == o.sharpen
-	   /* We also blur, so we need to compare MTF if used.  */
-	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
-	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
-           && (!screen_with_varying_strips_p (t)
-               || (red_strip_width == o.red_strip_width
-                   && green_strip_width == o.green_strip_width));
-  }
-};
 
 screen *
 get_new_screen (struct screen_params &p, progress_info *progress)
@@ -162,27 +139,12 @@ get_new_screen (struct screen_params &p, progress_info *progress)
   //blurred->clamp ();
   return blurred;
 }
-static lru_cache<screen_params, screen, screen *, get_new_screen, 20>
+static render_to_scr::screen_cache_t
     screen_cache ("screen");
 
-struct screen_table_params
-{
-  scanner_blur_correction_parameters *param;
-  uint64_t param_id;
-  scr_type type;
-  luminosity_t red_strip_width, green_strip_width;
-  sharpen_parameters sharpen;
-  bool
-  operator== (screen_table_params &o)
-  {
-    return type == o.type && param_id == o.param_id
-           && red_strip_width == o.red_strip_width
-           && green_strip_width == o.green_strip_width
-	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
-	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
-	   && sharpen == o.sharpen;
-  }
-};
+struct screen_table_params; // will use header definition
+
+
 
 screen_table *
 get_new_screen_table (struct screen_table_params &p, progress_info *progress)
@@ -196,37 +158,9 @@ get_new_screen_table (struct screen_table_params &p, progress_info *progress)
     }
   return s;
 }
-static lru_cache<screen_table_params, screen_table, screen_table *,
-                 get_new_screen_table, 4>
+static render_to_scr::screen_table_cache_t
     screen_table_cache ("screen table");
 
-}
-struct saturation_loss_params
-{
-  screen_table *scr_table;
-  uint64_t scr_table_id;
-  screen *collection_screen;
-  uint64_t collection_screen_id;
-  int img_width, img_height;
-  luminosity_t collection_threshold;
-  sharpen_parameters sharpen;
-  uint64_t mesh_id;
-  scr_to_img_parameters scr_to_img_params;
-  scr_to_img *map;
-
-  bool
-  operator== (saturation_loss_params &o)
-  {
-    return scr_table_id == o.scr_table_id
-           && collection_threshold == o.collection_threshold
-           && sharpen == o.sharpen
-	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
-	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
-           && img_width == o.img_width && img_height == o.img_height
-           && mesh_id == o.mesh_id
-           && (mesh_id || scr_to_img_params == o.scr_to_img_params);
-  }
-};
 saturation_loss_table *
 get_new_saturation_loss_table (struct saturation_loss_params &p,
                                progress_info *progress)
@@ -241,8 +175,7 @@ get_new_saturation_loss_table (struct saturation_loss_params &p,
     }
   return s;
 }
-static lru_cache<saturation_loss_params, saturation_loss_table,
-                 saturation_loss_table *, get_new_saturation_loss_table, 4>
+static render_to_scr::saturation_loss_table_cache_t
     saturation_loss_table_cache ("saturation loss table");
 
 /* Return approximate size of an scan pixel in screen corrdinates.  */
@@ -280,7 +213,7 @@ render_to_scr::precompute_img_range (bool grayscale_needed,
    is true, sharpen it back (so we get an estimate of what happens after
    sharpening step of scan).  */
 
-screen *
+render_to_scr::screen_cache_t::cached_ptr
 render_to_scr::get_screen (enum scr_type t, bool preview, 
 			   bool anticipate_sharpening,
 			   const sharpen_parameters &sharpen,
@@ -288,14 +221,28 @@ render_to_scr::get_screen (enum scr_type t, bool preview,
                            progress_info *progress, uint64_t *id)
 {
   screen_params p = { t, preview, red_strip_width, green_strip_width, anticipate_sharpening, sharpen};
+  return screen_cache.get_cached (p, progress, id);
+}
+
+screen *
+render_to_scr::get_screen_raw (enum scr_type t, bool preview, 
+			       bool anticipate_sharpening,
+			       const sharpen_parameters &sharpen,
+                               coord_t red_strip_width, coord_t green_strip_width,
+                               progress_info *progress, uint64_t *id)
+{
+  screen_params p = { t, preview, red_strip_width, green_strip_width, anticipate_sharpening, sharpen};
   return screen_cache.get (p, progress, id);
 }
+
 
 void
 render_to_scr::release_screen (screen *s)
 {
   screen_cache.release (s);
 }
+
+
 
 bool
 render_to_scr::compute_screen_table (progress_info *progress)
@@ -310,8 +257,8 @@ render_to_scr::compute_screen_table (progress_info *progress)
       p.sharpen = m_params.sharpen;
       p.sharpen.scanner_mtf_scale *= pixel_size ();
     }
-  m_screen_table = screen_table_cache.get (p, progress, &m_screen_table_uid);
-  return m_screen_table != NULL;
+  m_screen_table = screen_table_cache.get_cached (p, progress, &m_screen_table_uid);
+  return (bool)m_screen_table;
 }
 
 bool
@@ -326,7 +273,7 @@ render_to_scr::compute_saturation_loss_table (
     compute_screen_table (progress);
   scr_to_img_parameters dummy;
   saturation_loss_params p
-      = { m_screen_table,
+      = { m_screen_table.get (),
           m_screen_table_uid,
           collection_screen,
           collection_screen_uid,
@@ -338,8 +285,8 @@ render_to_scr::compute_saturation_loss_table (
                                         : 0,
           m_scr_to_img_param.mesh_trans ? dummy : m_scr_to_img_param,
           &m_scr_to_img };
-  m_saturation_loss_table = saturation_loss_table_cache.get (p, progress);
-  return m_saturation_loss_table != NULL;
+  m_saturation_loss_table = saturation_loss_table_cache.get_cached (p, progress);
+  return (bool)m_saturation_loss_table;
 }
 
 void
@@ -352,26 +299,19 @@ render_to_scr::simulate_screen (progress_info *progress)
   sharpen_parameters sharpen = m_params.sharpen;
   sharpen.usm_radius = m_params.screen_blur_radius * psize;
   sharpen.scanner_mtf_scale *= psize;
-  screen *scr = get_screen (m_scr_to_img.get_type (), false,
+  screen_cache_t::cached_ptr scr = get_screen (m_scr_to_img.get_type (), false,
 	       false,
 	       sharpen,
 	       m_params.red_strip_width,
 	       m_params.green_strip_width, progress, &screen_id);
   m_simulated_screen =
-    get_simulated_screen (m_scr_to_img.get_param (), scr, screen_id, m_params.sharpen,
+    get_simulated_screen (m_scr_to_img.get_param (), scr.get (), screen_id, m_params.sharpen,
 			  m_img.width, m_img.height, progress,
 			  &m_simulated_screen_id);
-  release_screen (scr);
 }
 
 render_to_scr::~render_to_scr ()
 {
-  if (m_screen_table)
-    screen_table_cache.release (m_screen_table);
-  if (m_saturation_loss_table)
-    saturation_loss_table_cache.release (m_saturation_loss_table);
-  if (m_simulated_screen)
-    release_simulated_screen (m_simulated_screen);
 }
 
 void
@@ -454,7 +394,7 @@ render_screen_tile (tile_parameters &tile, scr_type type,
       if (rst != sharpened_screen || sp.mode == sharpen_parameters::none)
         sp.mode = sharpen_parameters::blur_deconvolution;
     }
-  screen *scr = render_to_scr::get_screen (
+  render_to_scr::screen_cache_t::cached_ptr scr = render_to_scr::get_screen (
       type, false, rst == sharpened_screen, sp, rparam.red_strip_width,
       rparam.green_strip_width, progress);
   if (!scr)
@@ -484,14 +424,14 @@ render_screen_tile (tile_parameters &tile, scr_type type,
       rgbdata sum = { 0, 0, 0 };
       for (int y = 0; y < screen::size; y++)
         for (int x = 0; x < screen::size; x++)
-          sum += { scr->mult[y][x][0], scr->mult[y][x][1],
+          sum += rgbdata{ scr->mult[y][x][0], scr->mult[y][x][1],
                    scr->mult[y][x][2] };
       sum *= 1 / (luminosity_t)(screen::size * screen::size);
       m.apply_to_rgb (sum.red, sum.green, sum.blue, &sum.red, &sum.green,
                       &sum.blue);
       init_to_color (sum, tile);
     }
-  render_to_scr::release_screen (scr);
+
   return true;
 }
 

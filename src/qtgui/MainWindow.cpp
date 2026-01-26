@@ -2210,7 +2210,7 @@ void MainWindow::onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress
   }
   colorscreen::sub_task task (progress.get ());  /* Keep so tasks are nested.  */
   
-  bool computeMesh = userData.isValid() ? userData.toBool() : m_geometryPanel->isNonlinearEnabled();
+  bool computeMesh = userData.isValid() ? (userData.toBool() ? m_geometryPanel->isNonlinearEnabled() : false) : m_geometryPanel->isNonlinearEnabled();
   
   // Invoke solver in worker
   QMetaObject::invokeMethod(

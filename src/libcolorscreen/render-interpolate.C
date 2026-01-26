@@ -10,51 +10,9 @@
 #include "finetune-int.h"
 namespace colorscreen
 {
-namespace
-{
 
-struct analyzer_params
-{
-  uint64_t img_id;
-  uint64_t graydata_id;
-  uint64_t simulated_screen_id;
-  uint64_t screen_id;
-  luminosity_t gamma;
-  // int width, height, xshift, yshift;
-  enum analyze_base::mode mode;
-  luminosity_t collection_threshold;
-  uint64_t mesh_trans_id;
-  scr_to_img_parameters params;
 
-  const image_data *img;
-  const screen *scr;
-  render_to_scr *render;
-  scr_to_img *scr_to_img_map;
-  simulated_screen *simulated_screen_ptr;
-
-  bool
-  operator== (analyzer_params &o)
-  {
-    if (mode != o.mode || mesh_trans_id != o.mesh_trans_id
-	|| simulated_screen_id != o.simulated_screen_id
-        || (!mesh_trans_id && params != o.params)
-        || params.type != o.params.type)
-      return false;
-    if (mode == analyze_base::color || mode == analyze_base::precise_rgb)
-      {
-        if (img_id != o.img_id || gamma != o.gamma)
-          return false;
-      }
-    else if (graydata_id != o.graydata_id)
-      return false;
-    if (mode == analyze_base::fast || mode == analyze_base::color)
-      return true;
-    return screen_id == o.screen_id
-           && collection_threshold == o.collection_threshold;
-  };
-};
-
-static analyze_dufay *
+analyze_dufay *
 get_new_dufay_analysis (struct analyzer_params &p, int xshift, int yshift,
                         int width, int height, progress_info *progress)
 {
@@ -96,7 +54,7 @@ get_new_dufay_analysis (struct analyzer_params &p, int xshift, int yshift,
   return NULL;
 }
 
-static analyze_paget *
+analyze_paget *
 get_new_paget_analysis (struct analyzer_params &p, int xshift, int yshift,
                         int width, int height, progress_info *progress)
 {
@@ -107,7 +65,7 @@ get_new_paget_analysis (struct analyzer_params &p, int xshift, int yshift,
   delete ret;
   return NULL;
 }
-static analyze_strips *
+analyze_strips *
 get_new_strips_analysis (struct analyzer_params &p, int xshift, int yshift,
                          int width, int height, progress_info *progress)
 {
@@ -137,26 +95,21 @@ get_new_strips_analysis (struct analyzer_params &p, int xshift, int yshift,
   return NULL;
 }
 
-static lru_tile_cache<analyzer_params, analyze_dufay, analyze_dufay *,
-                      get_new_dufay_analysis, 1>
+static render_interpolate::dufay_analyzer_cache_t
     dufay_analyzer_cache ("dufay analyzer");
-static lru_tile_cache<analyzer_params, analyze_paget, analyze_paget *,
-                      get_new_paget_analysis, 1>
+static render_interpolate::paget_analyzer_cache_t
     paget_analyzer_cache ("Paget analyzer");
-static lru_tile_cache<analyzer_params, analyze_strips, analyze_strips *,
-                      get_new_strips_analysis, 1>
+static render_interpolate::strips_analyzer_cache_t
     strips_analyzer_cache ("Strips analyzer");
-
-}
 
 render_interpolate::render_interpolate (scr_to_img_parameters &param,
                                         image_data &img,
                                         render_parameters &rparam,
                                         int dst_maxval)
-    : render_to_scr (param, img, rparam, dst_maxval), m_screen (NULL),
+    : render_to_scr (param, img, rparam, dst_maxval), m_screen (),
       m_screen_compensation (false), m_adjust_luminosity (false),
       m_original_color (false), m_unadjusted (false), m_profiled (false),
-      m_precise_rgb (false), m_dufay (NULL), m_paget (NULL), m_strips (NULL)
+      m_precise_rgb (false), m_dufay (), m_paget (), m_strips ()
 {
 }
 void
@@ -234,7 +187,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
       if (!m_original_color && !m_precise_rgb)
         {
           if (m_params.scanner_blur_correction)
-            compute_saturation_loss_table (m_screen, screen_id,
+            compute_saturation_loss_table (m_screen.get (), screen_id,
                                            m_params.collection_threshold,
                                            m_params.sharpen, progress);
           else
@@ -243,27 +196,26 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
               sharpen_parameters sharpen = m_params.sharpen;
               sharpen.usm_radius = m_params.screen_blur_radius * psize;
               sharpen.scanner_mtf_scale *= psize;
-              screen *scr = get_screen (m_scr_to_img.get_type (), false, false,
+              render_to_scr::screen_cache_t::cached_ptr scr = get_screen (m_scr_to_img.get_type (), false, false,
                                         sharpen, m_params.red_strip_width,
                                         m_params.green_strip_width, progress,
                                         &screen_id);
               if (determine_color_loss (
                       &cred, &cgreen, &cblue, *scr, *m_screen,
-                      m_simulated_screen, m_params.collection_threshold,
+                      m_simulated_screen.get (), m_params.collection_threshold,
                       m_params.sharpen, m_scr_to_img, m_img.width / 2 - 100,
                       m_img.height / 2 - 100, m_img.width / 2 + 100,
                       m_img.height / 2 + 100))
                 {
-                  color_matrix sat (cred.red, cgreen.red, cblue.red,
-                                    0, //
-                                    cred.green, cgreen.green, cblue.green,
-                                    0, //
-                                    cred.blue, cgreen.blue, cblue.blue,
-                                    0, //
-                                    0, 0, 0, 1);
-                  m_saturation_matrix = sat.invert ();
+		  color_matrix sat (cred.red, cgreen.red, cblue.red,
+				    0, //
+				    cred.green, cgreen.green, cblue.green,
+				    0, //
+				    cred.blue, cgreen.blue, cblue.blue,
+				    0, //
+				    0, 0, 0, 1);
+		  m_saturation_matrix = sat.invert ();
                 }
-              release_screen (scr);
             }
         }
     }
@@ -316,28 +268,28 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
         : 0,
     m_scr_to_img.get_param (),
     &m_img,
-    m_screen,
+    m_screen.get (),
     this,
     &m_scr_to_img,
-    m_simulated_screen
+    m_simulated_screen.get ()
   };
   if (paget_like_screen_p (m_scr_to_img.get_type ()))
     {
-      m_paget = paget_analyzer_cache.get (p, xshift, yshift, width, height,
+      m_paget = paget_analyzer_cache.get_cached (p, xshift, yshift, width, height,
                                           progress);
       if (!m_paget)
         return false;
     }
   else if (dufay_like_screen_p (m_scr_to_img.get_type ()))
     {
-      m_dufay = dufay_analyzer_cache.get (p, xshift, yshift, width, height,
+      m_dufay = dufay_analyzer_cache.get_cached (p, xshift, yshift, width, height,
                                           progress);
       if (!m_dufay)
         return false;
     }
   else if (screen_with_vertical_strips_p (m_scr_to_img.get_type ()))
     {
-      m_strips = strips_analyzer_cache.get (p, xshift, yshift, width, height,
+      m_strips = strips_analyzer_cache.get_cached (p, xshift, yshift, width, height,
                                             progress);
       if (!m_strips)
         return false;
@@ -479,17 +431,6 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
     return c;
 }
 
-render_interpolate::~render_interpolate ()
-{
-  if (m_screen)
-    release_screen (m_screen);
-  if (m_dufay)
-    dufay_analyzer_cache.release (m_dufay);
-  if (m_paget)
-    paget_analyzer_cache.release (m_paget);
-  if (m_strips)
-    strips_analyzer_cache.release (m_strips);
-}
 void
 render_interpolated_increase_lru_cache_sizes_for_stitch_projects (int n)
 {
@@ -782,7 +723,6 @@ analyze_patches (analyzer analyze, const char *task, image_data &img,
           rparam.get_tile_adjustment (&stitch, tx, ty).apply (&my_rparam);
           int stack = 0;
 	  {
-	    sub_task task (progress);
 	    if (!analyze_patches (
 		    [&] (coord_t tsx, coord_t tsy, rgbdata c)
 		      {
@@ -863,7 +803,6 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img,
           rparam.get_tile_adjustment (&stitch, tx, ty).apply (&my_rparam);
           int stack = 0;
 	  {
-	    sub_task task (progress);
 	    if (!analyze_rgb_patches (
 		    [&] (coord_t tsx, coord_t tsy, rgbdata r, rgbdata g,
 			 rgbdata b)

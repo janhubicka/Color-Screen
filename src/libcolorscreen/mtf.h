@@ -11,6 +11,7 @@
 #include "include/precomputed-function.h"
 #include "include/progress-info.h"
 #include "include/render-parameters.h"
+#include "lru-cache.h"
 
 namespace colorscreen
 {
@@ -126,8 +127,10 @@ public:
 
   void print_mtf (FILE *);
 
-  static mtf *get_mtf (const mtf_parameters &mtfp, progress_info *p);
-  static void release_mtf (mtf *m);
+  static mtf * get_new_mtf (struct mtf_parameters &, progress_info *);
+  typedef lru_cache<mtf_parameters, mtf, mtf *, get_new_mtf, 10> mtf_cache_t;
+
+  static mtf_cache_t::cached_ptr get_mtf (const mtf_parameters &mtfp, progress_info *p);
   std::vector<double, fftw_allocator<double>>
   compute_2d_psf (int psf_size, luminosity_t subscale,
 		  progress_info *progress = NULL);

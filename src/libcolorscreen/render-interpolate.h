@@ -8,15 +8,64 @@
 #include "analyze-dufay.h"
 #include "analyze-paget.h"
 #include "analyze-strips.h"
+#include "analyze-strips.h"
+#include "lru-cache.h"
+#include "include/imagedata.h"
+#include "include/scr-to-img-parameters.h"
+
 namespace colorscreen
 {
+
+struct analyzer_params
+{
+  uint64_t img_id;
+  uint64_t graydata_id;
+  uint64_t simulated_screen_id;
+  uint64_t screen_id;
+  luminosity_t gamma;
+  // int width, height, xshift, yshift;
+  enum analyze_base::mode mode;
+  luminosity_t collection_threshold;
+  uint64_t mesh_trans_id;
+  scr_to_img_parameters params;
+
+  const image_data *img;
+  const screen *scr;
+  class render_to_scr *render;
+  class scr_to_img *scr_to_img_map;
+  struct simulated_screen *simulated_screen_ptr;
+
+  bool
+  operator== (const analyzer_params &o) const
+  {
+    if (mode != o.mode || mesh_trans_id != o.mesh_trans_id
+	|| simulated_screen_id != o.simulated_screen_id
+        || (!mesh_trans_id && params != o.params)
+        || params.type != o.params.type)
+      return false;
+    if (mode == analyze_base::color || mode == analyze_base::precise_rgb)
+      {
+        if (img_id != o.img_id || gamma != o.gamma)
+          return false;
+      }
+    else if (graydata_id != o.graydata_id)
+      return false;
+    if (mode == analyze_base::fast || mode == analyze_base::color)
+      return true;
+    return screen_id == o.screen_id
+           && collection_threshold == o.collection_threshold;
+  }
+};
+
+analyze_dufay * get_new_dufay_analysis (struct analyzer_params &, int, int, int, int, progress_info *);
+analyze_paget * get_new_paget_analysis (struct analyzer_params &, int, int, int, int, progress_info *);
+analyze_strips * get_new_strips_analysis (struct analyzer_params &, int, int, int, int, progress_info *);
 typedef std::function <bool (coord_t, coord_t, rgbdata)> analyzer;
 typedef std::function <bool (coord_t, coord_t, rgbdata, rgbdata, rgbdata)> rgb_analyzer;
 class render_interpolate : public render_to_scr
 {
 public:
   render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval);
-  ~render_interpolate ();
   bool precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress);
   pure_attr inline rgbdata sample_pixel_final (coord_t x, coord_t y) const
   {
@@ -83,19 +132,23 @@ public:
   bool dump_patch_density (FILE *);
   //bool finetune (render_parameters &rparam, solver_parameters::point_t &point, int x, int y, progress_info *progress);
   //void collect_rgb_histograms (rgb_histogram &red_histogram, rgb_histogram &green_histogram, rgb_histogram &blue_histogram, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);
+  typedef lru_tile_cache<analyzer_params, analyze_dufay, analyze_dufay *, get_new_dufay_analysis, 2> dufay_analyzer_cache_t;
+  typedef lru_tile_cache<analyzer_params, analyze_paget, analyze_paget *, get_new_paget_analysis, 2> paget_analyzer_cache_t;
+  typedef lru_tile_cache<analyzer_params, analyze_strips, analyze_strips *, get_new_strips_analysis, 2> strips_analyzer_cache_t;
 private:
   rgbdata compensate_saturation_loss_scr (point_t p, rgbdata c) const;
   rgbdata compensate_saturation_loss_img (point_t p, rgbdata c) const;
-  screen *m_screen;
+  render_to_scr::screen_cache_t::cached_ptr m_screen;
   bool m_screen_compensation;
   bool m_adjust_luminosity;
   bool m_original_color;
   bool m_unadjusted;
   bool m_profiled;
   bool m_precise_rgb;
-  analyze_dufay *m_dufay;
-  analyze_paget *m_paget;
-  analyze_strips *m_strips;
+
+  dufay_analyzer_cache_t::cached_ptr m_dufay;
+  paget_analyzer_cache_t::cached_ptr m_paget;
+  strips_analyzer_cache_t::cached_ptr m_strips;
   color_matrix m_saturation_matrix;
   color_matrix profile_matrix;
   // Proportions after premutatoins we do to handle screen variants.

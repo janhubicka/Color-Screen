@@ -67,7 +67,7 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
   rgbdata reds[samples*2];
   rgbdata greens[samples];
   rgbdata blues[samples];
-  luminosity_t *lookup_table[3];
+  render::lookup_table_cache_t::cached_ptr lookup_table[3];
   if (!render::get_lookup_tables (lookup_table, gamma, img, progress))
     return;
 
@@ -137,7 +137,6 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
 	      nnr++;
 	    }
 	}
-  render::release_lookup_tables (lookup_table);
   if (nnr < 10 || nnb < 10 || nng < 10)
     {
       fprintf (stderr, "Failed to find enough samples\n");
@@ -156,10 +155,10 @@ optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosit
   mem_rgbdata *sharpened = (mem_rgbdata*) malloc ((width + clen) * (height + clen) * sizeof (mem_rgbdata));
   if (!sharpened)
     return false;
-  luminosity_t *lookup_table[3];
+  render::lookup_table_cache_t::cached_ptr lookup_table[3];
   if (!render::get_lookup_tables (lookup_table, gamma, img, progress))
     return false;
-  struct imgtile section = {{lookup_table[0], lookup_table[1], lookup_table[2]}, x - clen / 2, y - clen / 2, img};
+  struct imgtile section = {{lookup_table[0].get (), lookup_table[1].get (), lookup_table[2].get ()}, x - clen / 2, y - clen / 2, img};
   sharpen<rgbdata, mem_rgbdata, imgtile *, int, &get_pixel> (sharpened, &section, 0, width + clen, height + clen, sharpen_radius, sharpen_amount, progress);
   std::vector<entry> pixels;
   for (int yy = y ; yy < y + height; yy++)
@@ -171,7 +170,6 @@ optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosit
 	e.priority = 3 - (e.orig_color.red + e.orig_color.green + e.orig_color.blue);
 	pixels.push_back (e);
       }
-  render::release_lookup_tables (lookup_table);
   free (sharpened);
 
   sort (pixels.begin (), pixels.end (), compare_priorities);

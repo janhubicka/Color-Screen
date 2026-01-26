@@ -5,6 +5,7 @@
 #include <atomic>
 #include <memory>
 #include <condition_variable>
+#include <type_traits>
 #include <include/progress-info.h>
 namespace colorscreen
 {
@@ -263,7 +264,11 @@ public:
         m_cache->release (m_val);
     }
 
-    // Shared ownership: Increment reference count
+    /* Do not allow copying; it is expensive when done accidentally. */
+    cached_ptr (const cached_ptr &o) = delete;
+    cached_ptr &
+    operator= (const cached_ptr &o) = delete;
+#if 0
     cached_ptr (const cached_ptr &o) : m_cache (o.m_cache), m_val (o.m_val)
     {
       if (m_cache && m_val)
@@ -283,9 +288,11 @@ public:
         }
       return *this;
     }
+#else
 
-    // Move semantics
-    cached_ptr (cached_ptr &&o) noexcept : m_cache (o.m_cache), m_val (o.m_val)
+    /* Move */
+    cached_ptr (cached_ptr &&o) noexcept
+    : m_cache (o.m_cache), m_val (o.m_val)
     {
       o.m_val = nullptr;
     }
@@ -303,14 +310,16 @@ public:
       return *this;
     }
 
-    // Pointer ergonomics
+    /* Pointer access.  */
     TP operator-> () const { return m_val; }
+    typename std::remove_pointer<TP>::type &operator* () const { return *m_val; }
     TP get () const { return m_val; }
     explicit operator bool () const { return m_val != nullptr; }
 
     template <typename Index>
     auto operator[] (Index i) const -> decltype(m_val[i]) { return m_val[i]; }
   };
+#endif
 
   cached_ptr
   get_cached (P &p, progress_info *progress, uint64_t *id = nullptr)
@@ -584,6 +593,7 @@ public:
 
     // Pointer ergonomics
     TP operator-> () const { return m_val; }
+    typename std::remove_pointer<TP>::type &operator* () const { return *m_val; }
     TP get () const { return m_val; }
     explicit operator bool () const { return m_val != nullptr; }
 

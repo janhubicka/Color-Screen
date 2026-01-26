@@ -10,7 +10,7 @@ class render_superpose_img : public render_to_scr
 public:
   inline render_superpose_img (scr_to_img_parameters &param, image_data &data,
                                render_parameters &rparam, int dst_maxval)
-      : render_to_scr (param, data, rparam, dst_maxval), m_screen (NULL),
+      : render_to_scr (param, data, rparam, dst_maxval), m_screen (),
         m_color (false), m_preview (false)
   {
   }
@@ -28,8 +28,6 @@ public:
   }
   inline ~render_superpose_img ()
   {
-    if (m_screen)
-      release_screen (m_screen);
   }
   bool
   precompute_all (progress_info *progress)
@@ -85,7 +83,7 @@ public:
 private:
   pure_attr inline rgbdata
   sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coord_t scr_y) const;
-  screen *m_screen;
+  render_to_scr::screen_cache_t::cached_ptr m_screen;
   bool m_color;
   bool m_preview;
 };

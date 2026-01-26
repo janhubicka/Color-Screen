@@ -4,14 +4,104 @@
 #include "scr-detect.h"
 #include "render.h"
 #include "patches.h"
+#include "lru-cache.h"
+
 namespace colorscreen
 {
+
+struct color_class_params
+{
+  uint64_t image_id;
+  const image_data *img;
+  rgbdata *precomputed_rgbdata;
+  scr_detect_parameters p;
+  class scr_detect *d;
+  luminosity_t gamma;
+
+  bool
+  operator==(const color_class_params &o) const
+  {
+    return image_id == o.image_id
+	   && gamma == o.gamma
+	   && p == o.p;
+  }
+};
+class color_class_map * get_color_class_map(color_class_params &, progress_info *);
+
+struct precomputed_rgbdata_params
+{
+  uint64_t image_id;
+  scr_detect_parameters p;
+  luminosity_t gamma;
+
+  const image_data *img;
+  class scr_detect *d;
+  class render_scr_detect *r;
+
+  bool
+  operator==(const precomputed_rgbdata_params &o) const
+  {
+    return image_id == o.image_id
+	   && p.red == o.p.red
+	   && p.green == o.p.green
+	   && p.blue == o.p.blue
+	   && p.black == o.p.black
+	   && p.sharpen_radius == o.p.sharpen_radius
+	   && p.sharpen_amount == o.p.sharpen_amount
+	   && gamma == o.gamma;
+  }
+};
+class precomputed_rgbdata * get_precomputed_rgbdata(precomputed_rgbdata_params &, progress_info *);
+
+struct patches_cache_params
+{
+  uint64_t scr_map_id;
+  uint64_t gray_data_id;
+  class color_class_map *map;
+  const image_data *img;
+  class render *r;
+
+  /* TODO: render parameters affects luminosity.  */
+  bool
+  operator==(const patches_cache_params &o) const
+  {
+    return scr_map_id == o.scr_map_id
+	   && gray_data_id == o.gray_data_id;
+  }
+};
+patches *get_patches(patches_cache_params &, progress_info *);
+
+struct color_data_params
+{
+  uint64_t color_class_map_id;
+  uint64_t graydata_id;
+  const image_data *img;
+  class color_class_map *map;
+  class render *r;
+
+
+  bool
+  operator==(const color_data_params &o) const
+  {
+    return color_class_map_id == o.color_class_map_id
+	   && graydata_id == o.graydata_id;
+  }
+};
+struct color_data;
+struct color_data * get_new_color_data(struct color_data_params &, progress_info *);
+typedef lru_cache<color_class_params, color_class_map, color_class_map *, get_color_class_map, 4> color_class_cache_t;
+typedef lru_cache<precomputed_rgbdata_params, precomputed_rgbdata, precomputed_rgbdata *, get_precomputed_rgbdata, 4> precomputed_rgbdata_cache_t;
+typedef lru_cache<patches_cache_params, patches, patches *, get_patches, 4> patches_cache_t;
+typedef lru_cache<color_data_params, struct color_data, struct color_data *, get_new_color_data, 10> color_data_cache_t;
+
 struct render_to_file_params;
 class render_scr_detect : public render
 {
 public:
   render_scr_detect (scr_detect_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
-    : render (img, rparam, dstmaxval), m_precomputed_rgbdata (NULL), m_color_class_map (NULL)
+    : render (img, rparam, dstmaxval),
+      m_precomputed_rgbdata (NULL), m_precomputed_rgbdata_holder (),
+      m_color_class_map ()
   {
     /* TODO: Move to precomputation and also check return value, pass progress.  */
     m_scr_detect.set_parameters (param, rparam.gamma, &m_img);
@@ -260,13 +350,13 @@ done:
   static const char *render_to_file (render_to_file_params &rfparams, render_type_parameters rtparam, scr_to_img_parameters &param, scr_detect_parameters &dparam, render_parameters rparam, image_data &img, int black, progress_info *progress);
   color_class_map *get_color_class_map ()
   {
-    return m_color_class_map;
+    return m_color_class_map.get ();
   }
   rgbdata analyze_color_proportions (scr_to_img_parameters *param, int xmin, int ymin, int xmax, int ymax, progress_info *p);
 protected:
   my_mem_rgbdata *m_precomputed_rgbdata;
-  class precomputed_rgbdata *m_precomputed_rgbdata_holder;
-  color_class_map *m_color_class_map;
+  precomputed_rgbdata_cache_t::cached_ptr m_precomputed_rgbdata_holder;
+  color_class_cache_t::cached_ptr m_color_class_map;
   scr_detect m_scr_detect;
   uint64_t m_color_class_map_id;
   uint64_t m_precomputed_rgbdata_id;
@@ -485,7 +575,7 @@ private:
     {
       return cdata[color][y * m_img.width + x];
     }
-  struct color_data *m_color_data_handle;
+  color_data_cache_t::cached_ptr m_color_data_handle;
 };
 class render_scr_nearest : public render_scr_detect
 {
@@ -563,7 +653,7 @@ class render_scr_nearest_scaled : public render_scr_detect
 {
 public:
   inline render_scr_nearest_scaled (scr_detect_parameters &param, image_data &data, render_parameters &rparam, int dst_maxval)
-   : render_scr_detect (param, data, rparam, dst_maxval), m_patches (NULL)
+   : render_scr_detect (param, data, rparam, dst_maxval), m_patches ()
   { 
   }
   ~render_scr_nearest_scaled ();
@@ -625,7 +715,7 @@ public:
     downscale<render_scr_relax, rgbdata, &render_scr_relax::fast_sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
   }
 private:
-  patches *m_patches;
+  patches_cache_t::cached_ptr m_patches;
 };
 }
 #endif

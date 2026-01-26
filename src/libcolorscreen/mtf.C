@@ -1002,24 +1002,18 @@ mtf::print_psf (FILE *f)
 }
 
 mtf *
-get_new_mtf (struct mtf_parameters &p, progress_info *progress)
+mtf::get_new_mtf (struct mtf_parameters &p, progress_info *)
 {
   return new mtf (p);
 }
 
-static lru_cache<mtf_parameters, mtf, mtf *, get_new_mtf, 10>
+static mtf::mtf_cache_t
     mtf_cache ("Modulation transfer functions");
 
-mtf *
+mtf::mtf_cache_t::cached_ptr
 mtf::get_mtf (const mtf_parameters &mtfp, progress_info *p)
 {
-  return mtf_cache.get (const_cast<mtf_parameters &> (mtfp), p);
-}
-
-void
-mtf::release_mtf (mtf *m)
-{
-  mtf_cache.release (m);
+  return mtf_cache.get_cached (const_cast<mtf_parameters &> (mtfp), p);
 }
 
 bool
