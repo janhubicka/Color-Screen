@@ -7,6 +7,14 @@ Write-Host "Waiting $DelaySeconds seconds before capturing screenshot to $Output
 Start-Sleep -Seconds $DelaySeconds
 
 try {
+    # Set process as DPI aware to get correct coordinates on high-DPI displays
+    $dpiAwareCode = @'
+    [DllImport("user32.dll")]
+    public static extern bool SetProcessDPIAware();
+'@
+    $user32 = Add-Type -MemberDefinition $dpiAwareCode -Name "User32" -Namespace "Win32" -PassThru
+    $user32::SetProcessDPIAware()
+
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
 
