@@ -24,7 +24,7 @@ scanner_blur_correction_parameters::scanner_blur_correction_parameters ()
 bool
 scanner_blur_correction_parameters::alloc (int width, int height, enum correction_mode mode)
 {
-  m_corrections = (coord_t *)calloc (width * height, sizeof (luminosity_t));
+  m_corrections = (luminosity_t *)calloc (width * height, sizeof (luminosity_t));
   m_width = width;
   m_height = height;
   m_mode = mode;

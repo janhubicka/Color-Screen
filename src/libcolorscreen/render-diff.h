@@ -48,9 +48,9 @@ public:
   {
     rgbdata c1 = r1.sample_pixel_scr (x, y);
     rgbdata c2 = r2.sample_pixel_scr (x, y);
-    return {0.25-4 * (c1.red - c2.red) * m_brightness,
-	    0.25-4 * (c1.green - c2.green) * m_brightness,
-	    0.25-4 * (c1.blue - c2.blue) * m_brightness};
+    return {(luminosity_t)0.25-4 * (c1.red - c2.red) * m_brightness,
+	    (luminosity_t)0.25-4 * (c1.green - c2.green) * m_brightness,
+	    (luminosity_t)0.25-4 * (c1.blue - c2.blue) * m_brightness};
   }
   pure_attr inline rgbdata
   sample_pixel_img (coord_t x, coord_t y) const

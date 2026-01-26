@@ -361,7 +361,7 @@ read_xyz (FILE *f, xyz *c)
   if (fscanf (f, "%lf %lf %lf\n", &x, &y, &z) != 3)
     return false;
   if (c)
-    *c = {x, y, z};
+    *c = {(luminosity_t)x, (luminosity_t)y, (luminosity_t)z};
   return true;
 }
 static bool
@@ -699,7 +699,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
       else if (!strcmp (buf, "dufay_red_strip_width")
 	       || !strcmp (buf, "red_strip_width"))
 	{
-	  if (!read_luminosity (f, rparam_check (red_strip_width)))
+	  if (!read_scalar (f, rparam_check (red_strip_width)))
 	    {
 	      *error = "error parsing red strip width";
 	      return false;
@@ -709,7 +709,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
       else if (!strcmp (buf, "dufay_green_strip_width")
 	       || !strcmp (buf, "green_strip_width"))
 	{
-	  if (!read_luminosity (f, rparam_check (green_strip_width)))
+	  if (!read_scalar (f, rparam_check (green_strip_width)))
 	    {
 	      *error = "error parsing green strip width";
 	      return false;
@@ -840,7 +840,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "collection_threshold"))
 	{
-	  if (!read_scalar (f, rparam_check (collection_threshold)))
+	  if (!read_luminosity (f, rparam_check (collection_threshold)))
 	    {
 	      *error = "error parsing collection_threshold";
 	      return false;

@@ -53,11 +53,11 @@ color_solver
   {
     return 9 + dark_point_elts;
   }
-  coord_t epsilon ()
+  luminosity_t epsilon ()
   {
     return 0.000001;
   }
-  coord_t scale ()
+  luminosity_t scale ()
   {
     return 2;
   }
@@ -66,7 +66,7 @@ color_solver
     return false;
   }
   void
-  constrain (coord_t *vals)
+  constrain (luminosity_t *vals)
   {
   }
 
@@ -99,7 +99,7 @@ color_solver
   }
 
   color_matrix
-  matrix_by_vals (coord_t *vals)
+  matrix_by_vals (luminosity_t *vals)
   {
     return color_matrix (vals[0], vals[1], vals[2], dark_point_elts == 1? vals[9]: dark_point_elts == 3 ? vals[9]: 0,
 			 vals[3], vals[4], vals[5], dark_point_elts == 1? vals[9]: dark_point_elts == 3 ? vals[10]: 0,
@@ -144,7 +144,7 @@ color_solver
   }
 
   luminosity_t
-  objfunc (coord_t *vals)
+  objfunc (luminosity_t *vals)
   {
     color_matrix ret = matrix_by_vals (vals);
     luminosity_t desum = 0;

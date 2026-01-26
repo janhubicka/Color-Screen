@@ -2609,6 +2609,8 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t 
   fparam.flags |= colorscreen::finetune_position | colorscreen::finetune_bw | colorscreen::finetune_verbose | colorscreen::finetune_use_srip_widths;
   
   auto progress = std::make_shared<colorscreen::progress_info>();
+  progress->set_task("Adding control points", 0);
+  colorscreen::sub_task task (progress.get ());  /* Keep so tasks are nested.  */
   addProgress(progress);
   
   colorscreen::finetune_result res = colorscreen::finetune(m_rparams, m_scrToImgParams, *m_scan, 

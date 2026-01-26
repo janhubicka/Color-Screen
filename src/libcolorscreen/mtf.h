@@ -105,14 +105,15 @@ public:
   typedef lru_cache<mtf_parameters, mtf, mtf *, get_new_mtf, 10> mtf_cache_t;
 
   static mtf_cache_t::cached_ptr get_mtf (const mtf_parameters &mtfp, progress_info *p);
-  std::vector<double, fft_allocator<double>>
+  typedef float psf_t;
+  std::vector<psf_t, fft_allocator<psf_t>>
   compute_2d_psf (int psf_size, luminosity_t subscale,
 		  progress_info *progress = NULL);
 
 private:
   mtf_parameters m_params;
   precomputed_function<luminosity_t> m_mtf;
-  precomputed_function<luminosity_t> m_psf;
+  precomputed_function<psf_t> m_psf;
   luminosity_t m_psf_radius;
   bool m_precomputed;
   bool m_precomputed_psf;
@@ -120,7 +121,7 @@ private:
   luminosity_t estimate_psf_size (luminosity_t min_threshold = 0.001, luminosity_t sum_threshold = 1.0 / 65535) const;
   bool compute_psf (luminosity_t max_radius, luminosity_t subsample,
                     const char *filename, const char **error);
-  void compute_lsf (std::vector<double, fft_allocator<double>> &lsf,
+  void compute_lsf (std::vector<psf_t, fft_allocator<psf_t>> &lsf,
                     luminosity_t subsample) const;
 };
 }

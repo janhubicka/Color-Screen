@@ -73,6 +73,7 @@ void TaskQueue::startTask(int reqId, const QVariant &userData)
     TaskInfo info;
     info.reqId = reqId;
     info.progress = std::make_shared<colorscreen::progress_info>();
+    info.progress->set_task("Waiting to be enqueued", 1);
     info.startTime.start();
     info.active = true;
     info.userData = userData;

@@ -99,7 +99,7 @@ rgbdata patch_proportions (enum scr_type t, const render_parameters *rparam)
       {
 	coord_t red_strip_width = rparam && rparam->red_strip_width ? rparam->red_strip_width : 1/3.0;
 	coord_t green_strip_width = rparam && rparam->green_strip_width ? rparam->green_strip_width : 1/3.0;
-        return {red_strip_width, green_strip_width, 1 - red_strip_width - green_strip_width};
+        return {(luminosity_t)red_strip_width, (luminosity_t)green_strip_width, (luminosity_t)(1 - red_strip_width - green_strip_width)};
       }
 
     /* Red strips.  */
@@ -107,7 +107,7 @@ rgbdata patch_proportions (enum scr_type t, const render_parameters *rparam)
       {
 	coord_t red_strip_width = rparam && rparam->red_strip_width ? rparam->red_strip_width : dufaycolor::red_strip_width;
 	coord_t green_strip_width = rparam && rparam->green_strip_width ? rparam->green_strip_width : dufaycolor::green_strip_width;
-        return {red_strip_width, green_strip_width * (1 - red_strip_width), (1 - green_strip_width) *  (1 - red_strip_width)};
+        return {(luminosity_t)red_strip_width, (luminosity_t)(green_strip_width * (1 - red_strip_width)), (luminosity_t)((1 - green_strip_width) *  (1 - red_strip_width))};
       }
     /* Green strips.  */
     case DioptichromeB:
@@ -117,22 +117,22 @@ rgbdata patch_proportions (enum scr_type t, const render_parameters *rparam)
 	   green_strip_width: 0.499510
 	   So it seems that both strips were 50%.  */
 
-	coord_t red_strip_width = rparam && rparam->red_strip_width ? rparam->red_strip_width : 0.5;
-	coord_t green_strip_width = rparam && rparam->green_strip_width ? rparam->green_strip_width : 0.5;
+	luminosity_t red_strip_width = rparam && rparam->red_strip_width ? rparam->red_strip_width : 0.5;
+	luminosity_t green_strip_width = rparam && rparam->green_strip_width ? rparam->green_strip_width : 0.5;
         return {(1 - green_strip_width) * red_strip_width, green_strip_width, (1 - green_strip_width) *  (1 - red_strip_width)};
       }
     /* Blue strips.  */
     case ImprovedDioptichromeB:
       {
-	coord_t red_strip_width = rparam && rparam->red_strip_width ? rparam->red_strip_width : 0.66;
-	coord_t green_strip_width = rparam && rparam->green_strip_width ? rparam->green_strip_width : 0.5;
+	luminosity_t red_strip_width = rparam && rparam->red_strip_width ? rparam->red_strip_width : 0.66;
+	luminosity_t green_strip_width = rparam && rparam->green_strip_width ? rparam->green_strip_width : 0.5;
         return {red_strip_width * (1 - green_strip_width), green_strip_width * red_strip_width, 1 - red_strip_width};
       }
     /* Blue strips.  */
     case Omnicolore:
       {
-	coord_t red_strip_width = rparam && rparam->red_strip_width ? rparam->red_strip_width : 0.69;
-	coord_t green_strip_width = rparam && rparam->green_strip_width ? rparam->green_strip_width : 0.55;
+	luminosity_t red_strip_width = rparam && rparam->red_strip_width ? rparam->red_strip_width : 0.69;
+	luminosity_t green_strip_width = rparam && rparam->green_strip_width ? rparam->green_strip_width : 0.55;
         return {red_strip_width * (1 - green_strip_width), green_strip_width * red_strip_width, 1 - red_strip_width};
       }
     default:
@@ -1151,7 +1151,7 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
   mix_green = gsl_vector_get (c, 2);
   mix_blue = gsl_vector_get (c, 3);
   //printf ("solution using %i samples step %i: red:%f green:%f blue:%f dark:%f chi %f\n", n, step, mix_red, mix_green, mix_blue, gsl_vector_get (c, 0), chisq);
-  mix_dark = {-gsl_vector_get (c, 0) / mix_red, 0, 0};
+  mix_dark = {(luminosity_t)(-gsl_vector_get (c, 0) / mix_red), 0, 0};
   //mix_dark.print (stdout);
   gsl_vector_free (c);
   return true;

@@ -1284,7 +1284,7 @@ screen::sum_almost_equal_p (const screen &scr, rgbdata *delta_ret,
   delta = sum1 - sum2;
   if (delta_ret)
     *delta_ret = delta;
-  return sum1.almost_equal_p (sum2);
+  return sum1.almost_equal_p (sum2, maxdelta);
 }
 
 /* Compute gaussiab blur using 2d point spread and fft.
@@ -1923,7 +1923,7 @@ void
 screen::initialize_with_blur (screen &scr, coord_t blur_radius,
                               enum blur_type type, enum blur_alg alg)
 {
-  initialize_with_blur (scr, { blur_radius, blur_radius, blur_radius }, type,
+  initialize_with_blur (scr, { (luminosity_t)blur_radius, (luminosity_t)blur_radius, (luminosity_t)blur_radius }, type,
                         alg);
 }
 void

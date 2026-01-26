@@ -3025,16 +3025,16 @@ finetune (int argc, char **argv)
                     int vr = std::min (
                         results[y * xsteps + x].screen_channel_blur_radius.red
                             / 2 * 65535,
-                        (coord_t)65535);
+                        (luminosity_t)65535);
                     int vg
                         = std::min (results[y * xsteps + x]
                                             .screen_channel_blur_radius.green
                                         / 2 * 65535,
-                                    (coord_t)65535);
+                                    (luminosity_t)65535);
                     int vb = std::min (
                         results[y * xsteps + x].screen_channel_blur_radius.blue
                             / 2 * 65535,
-                        (coord_t)65535);
+                        (luminosity_t)65535);
                     sharpness.put_pixel (x, vr, vg, vb);
                   }
                 else

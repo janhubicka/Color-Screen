@@ -44,7 +44,7 @@ struct screen_table_params
   scanner_blur_correction_parameters *param;
   uint64_t param_id;
   scr_type type;
-  luminosity_t red_strip_width, green_strip_width;
+  coord_t red_strip_width, green_strip_width;
   sharpen_parameters sharpen;
   bool
   operator== (const screen_table_params &o) const

@@ -53,11 +53,9 @@ intersect_vectors (coord_t x1, coord_t y1, coord_t dx1, coord_t dy1,
 inline void
 to_range (coord_t &v, coord_t min, coord_t max)
 {
-  if (!(v >= min))
-    v = min;
-  if (!(v <= max))
-    v = max;
+  v = std::clamp (v, min, max);
 }
+
 
 /* v is in range 0...1 expand it to minv...maxv.
    Finetuning works well if values are generaly kept
@@ -500,14 +498,14 @@ public:
     if (!optimize_scanner_mtf_defocus && !optimize_scanner_mtf_channel_defocus)
       {
 	auto r = mtf_params.simulate_difraction_p () ? mtf_params.defocus : mtf_params.blur_diameter;
-	return { r, r, r };
+	return { (luminosity_t)r, (luminosity_t)r, (luminosity_t)r };
       }
     if (!optimize_scanner_mtf_channel_defocus)
       {
-        auto b = v[mtf_defocus_index];
+        luminosity_t b = v[mtf_defocus_index];
         return { b, b, b };
       }
-    return { v[mtf_defocus_index], v[mtf_defocus_index + 1], v[mtf_defocus_index + 2] };
+    return { (luminosity_t)v[mtf_defocus_index], (luminosity_t)v[mtf_defocus_index + 1], (luminosity_t)v[mtf_defocus_index + 2] };
   }
 
   /* Return blur radius of screen. */
@@ -540,14 +538,14 @@ public:
   get_channel_blur_radius (coord_t *v)
   {
     if (!optimize_screen_blur && !optimize_screen_channel_blurs)
-      return { fixed_blur, fixed_blur, fixed_blur };
+      return { (luminosity_t)fixed_blur, (luminosity_t)fixed_blur, (luminosity_t)fixed_blur };
     if (!optimize_screen_channel_blurs)
       {
         coord_t b = pixel_blur (v[screen_index]);
-        return { b, b, b };
+        return { (luminosity_t)b, (luminosity_t)b, (luminosity_t)b };
       }
-    return { pixel_blur (v[screen_index]), pixel_blur (v[screen_index + 1]),
-             pixel_blur (v[screen_index + 2]) };
+    return { (luminosity_t)pixel_blur (v[screen_index]), (luminosity_t)pixel_blur (v[screen_index + 1]),
+             (luminosity_t)pixel_blur (v[screen_index + 2]) };
   }
 
   coord_t
@@ -1973,9 +1971,9 @@ public:
        also no excessively large values. Allow some overexposure.  */
     for (int c = 0; c < 3; c++)
       {
-        to_range (color_red[c], -0.01, 2);
-        to_range (color_green[c], -0.01, 2);
-        to_range (color_blue[c], -0.01, 2);
+        color_red[c] = std::clamp (color_red[c], (luminosity_t)-0.01, (luminosity_t)2);
+        color_green[c] = std::clamp (color_green[c], (luminosity_t)-0.01, (luminosity_t)2);
+        color_blue[c] = std::clamp (color_blue[c], (luminosity_t)-0.01, (luminosity_t)2);
       }
 
     *ret_red = color_red;
@@ -2127,12 +2125,9 @@ public:
 
 	if (fog_by_least_squares)
 	  {
-	    last_fog.red = gsl_vector_get (gsl_c, 6);
-	    to_range (last_fog.red, /*-fog_range.red*/-0.1, fog_range.red);
-	    last_fog.green = gsl_vector_get (gsl_c, 7);
-	    to_range (last_fog.green, /*-fog_range.green*/-0.1, fog_range.green);
-	    last_fog.blue = gsl_vector_get (gsl_c, 8);
-	    to_range (last_fog.blue, /*-fog_range.blue*/-0.1, fog_range.blue);
+	    last_fog.red = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 6), /*-fog_range.red*/(luminosity_t)-0.1, fog_range.red);
+	    last_fog.green = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 7), /*-fog_range.green*/(luminosity_t)-0.1, fog_range.green);
+	    last_fog.blue = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 8), /*-fog_range.blue*/(luminosity_t)-0.1, fog_range.blue);
 	  }
          return chisq;
       }
@@ -2169,16 +2164,12 @@ public:
 	    sqsum += chisq;
 	    /* Colors should be real reactions of scanner, so no negative values
 	       and also no excessively large values. Allow some overexposure.  */
-	    (*red)[ch] = gsl_vector_get (gsl_c, 0);
-	    to_range ((*red)[ch], 0, 2);
-	    (*green)[ch] = gsl_vector_get (gsl_c, 1);
-	    to_range ((*green)[ch], 0, 2);
-	    (*blue)[ch] = gsl_vector_get (gsl_c, 2);
-	    to_range ((*blue)[ch], 0, 2);
+	    (*red)[ch] = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 0), (luminosity_t)0, (luminosity_t)2);
+	    (*green)[ch] = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 1), (luminosity_t)0, (luminosity_t)2);
+	    (*blue)[ch] = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 2), (luminosity_t)0, (luminosity_t)2);
 	    if (fog_by_least_squares)
 	      {
-		last_fog[ch] = gsl_vector_get (gsl_c, 3);
-		to_range (last_fog[ch], -0.1, fog_range[ch]);
+		last_fog[ch] = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 3), (luminosity_t)-0.1, fog_range[ch]);
 	      }
 	  }
 	return sqsum;
@@ -2252,9 +2243,9 @@ public:
        over-exposure or cropping  */
     if (!bw_is_simulated_infrared)
       {
-	to_range (color.red, -0.1, 1.1);
-	to_range (color.green, -0.1, 1.1);
-	to_range (color.blue, -0.1, 1.1);
+	color.red = std::clamp (color.red, (luminosity_t)-0.1, (luminosity_t)1.1);
+	color.red = std::clamp (color.green, (luminosity_t)-0.1, (luminosity_t)1.1);
+	color.red = std::clamp (color.blue, (luminosity_t)-0.1, (luminosity_t)1.1);
       }
     return color;
   }
@@ -2282,18 +2273,18 @@ public:
       abort ();
     double chisq;
     gsl_multifit_linear (gsl_X, gsl_y[0], gsl_c, gsl_cov, &chisq, gsl_work);
-    rgbdata color = { gsl_vector_get (gsl_c, 0) * (2 * maxgray),
-                      gsl_vector_get (gsl_c, 1) * (2 * maxgray),
-                      gsl_vector_get (gsl_c, 2) * (2 * maxgray) };
+    rgbdata color = { (luminosity_t)gsl_vector_get (gsl_c, 0) * (2 * maxgray),
+                      (luminosity_t)gsl_vector_get (gsl_c, 1) * (2 * maxgray),
+                      (luminosity_t)gsl_vector_get (gsl_c, 2) * (2 * maxgray) };
     /* If infrared channel is simulated, negative values may be possible
        and it is kind of hard to constrain to reasonable bounds.
        Still allow values somewhat out of range to account for possible
        over-exposure or cropping  */
     if (!bw_is_simulated_infrared)
       {
-	to_range (color.red, -0.1, 1.1);
-	to_range (color.green, -0.1, 1.1);
-	to_range (color.blue, -0.1, 1.1);
+	color.red = std::clamp (color.red, (luminosity_t)-0.1, (luminosity_t)1.1);
+	color.red = std::clamp (color.green, (luminosity_t)-0.1, (luminosity_t)1.1);
+	color.red = std::clamp (color.blue, (luminosity_t)-0.1, (luminosity_t)1.1);
       }
     return color;
   }
@@ -2306,8 +2297,8 @@ public:
     if (fog_by_least_squares)
       return last_fog;
     assert (!colorscreen_checking || fog_index >= 0);
-    return { v[fog_index] * fog_range.red, v[fog_index + 1] * fog_range.green,
-             v[fog_index + 2] * fog_range.blue };
+    return { (luminosity_t)v[fog_index] * fog_range.red, (luminosity_t)v[fog_index + 1] * fog_range.green,
+             (luminosity_t)v[fog_index + 2] * fog_range.blue };
   }
 
   rgbdata
@@ -2326,9 +2317,9 @@ public:
               blue = 0;
             return { red, green, blue };
           }
-        return { v[emulsion_intensity_index + 3 * tileid - 1],
-                 v[emulsion_intensity_index + 3 * tileid - 0],
-                 v[emulsion_intensity_index + 3 * tileid + 1] };
+        return { (luminosity_t)v[emulsion_intensity_index + 3 * tileid - 1],
+                 (luminosity_t)v[emulsion_intensity_index + 3 * tileid - 0],
+                 (luminosity_t)v[emulsion_intensity_index + 3 * tileid + 1] };
       }
     else
       return { 1, 1, 1 };
@@ -2355,9 +2346,9 @@ public:
     if (mix_weights_index >= 0)
       {
 	if (!least_squares)
-	  return {v[mix_weights_index], v[mix_weights_index + 1], 1 - v[mix_weights_index] - v[mix_weights_index + 1]};
+	  return {(luminosity_t)v[mix_weights_index], (luminosity_t)v[mix_weights_index + 1], 1 - (luminosity_t)v[mix_weights_index] - (luminosity_t)v[mix_weights_index + 1]};
 	else
-	  return {v[mix_weights_index], v[mix_weights_index + 1], v[mix_weights_index + 2]};
+	  return {(luminosity_t)v[mix_weights_index], (luminosity_t)v[mix_weights_index + 1], (luminosity_t)v[mix_weights_index + 2]};
       }
     rgbdata red, green, blue;
     get_colors (v, &red, &green, &blue);
@@ -2389,7 +2380,7 @@ public:
   bw_get_color (coord_t *v)
   {
     if (!least_squares && !data_collection)
-      last_color = { v[color_index], v[color_index + 1], v[color_index + 2] };
+      last_color = { (luminosity_t)v[color_index], (luminosity_t)v[color_index + 1], (luminosity_t)v[color_index + 2] };
     if (data_collection)
       last_color = bw_determine_color_using_data_collection (v);
     else
@@ -2401,10 +2392,10 @@ public:
   {
     if (!least_squares && !data_collection)
       {
-        *red = { v[color_index], v[color_index + 1], v[color_index + 2] };
+        *red = { (luminosity_t)v[color_index], (luminosity_t)v[color_index + 1], (luminosity_t)v[color_index + 2] };
         *green
-            = { v[color_index + 3], v[color_index + 4], v[color_index + 5] };
-        *blue = { v[color_index + 6], v[color_index + 7], v[color_index + 8] };
+            = { (luminosity_t)v[color_index + 3], (luminosity_t)v[color_index + 4], (luminosity_t)v[color_index + 5] };
+        *blue = { (luminosity_t)v[color_index + 6], (luminosity_t)v[color_index + 7], (luminosity_t)v[color_index + 8] };
       }
     else if (data_collection)
       determine_colors_using_data_collection (v, red, green, blue);

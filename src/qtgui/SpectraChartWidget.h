@@ -1,6 +1,7 @@
 #ifndef SPECTRACHARTWIDGET_H
 #define SPECTRACHARTWIDGET_H
 
+#include "../libcolorscreen/include/color.h"
 #include <QWidget>
 #include <vector>
 
@@ -12,10 +13,10 @@ public:
   // Set data for the 4 curves. Data is expected to be 0..1 (or handled
   // internally) Vectors should match the X-axis range (e.g. 400..720 with some
   // step, or just mapped)
-  void setSpectraData(const std::vector<double> &redDye,
-                      const std::vector<double> &greenDye,
-                      const std::vector<double> &blueDye,
-                      const std::vector<double> &backlight);
+  void setSpectraData(const std::vector<colorscreen::luminosity_t> &redDye,
+                      const std::vector<colorscreen::luminosity_t> &greenDye,
+                      const std::vector<colorscreen::luminosity_t> &blueDye,
+                      const std::vector<colorscreen::luminosity_t> &backlight);
 
   void clear();
 
@@ -32,10 +33,10 @@ protected:
   void paintEvent(QPaintEvent *event) override;
 
 private:
-  std::vector<double> m_redDye;
-  std::vector<double> m_greenDye;
-  std::vector<double> m_blueDye;
-  std::vector<double> m_backlight;
+  std::vector<colorscreen::luminosity_t> m_redDye;
+  std::vector<colorscreen::luminosity_t> m_greenDye;
+  std::vector<colorscreen::luminosity_t> m_blueDye;
+  std::vector<colorscreen::luminosity_t> m_backlight;
 
   bool m_hasData = false;
 

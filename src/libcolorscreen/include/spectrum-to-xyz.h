@@ -23,7 +23,7 @@ DLL_PUBLIC extern const spectrum cie_cmf1964_z;
 inline luminosity_t const_attr
 transmitance_to_absorbance (luminosity_t t)
 {
-  return 2 - log10 (std::max (t, 0.000001) * 100);
+  return 2 - log10 (std::max (t, (luminosity_t)0.000001) * 100);
 }
 
 inline luminosity_t const_attr

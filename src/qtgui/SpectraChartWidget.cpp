@@ -11,10 +11,10 @@ SpectraChartWidget::SpectraChartWidget(QWidget *parent) : QWidget(parent) {
   setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
 }
 
-void SpectraChartWidget::setSpectraData(const std::vector<double> &redDye,
-                                        const std::vector<double> &greenDye,
-                                        const std::vector<double> &blueDye,
-                                        const std::vector<double> &backlight) {
+void SpectraChartWidget::setSpectraData(const std::vector<colorscreen::luminosity_t> &redDye,
+                                        const std::vector<colorscreen::luminosity_t> &greenDye,
+                                        const std::vector<colorscreen::luminosity_t> &blueDye,
+                                        const std::vector<colorscreen::luminosity_t> &backlight) {
   m_redDye = redDye;
   m_greenDye = greenDye;
   m_blueDye = blueDye;
@@ -58,12 +58,12 @@ static QColor wavelengthToRGB(double wavelength) {
   if (idx < 0 || idx >= SPECTRUM_SIZE - 1)
     return QColor(0, 0, 0);
 
-  colorscreen::xyz c = {colorscreen::cie_cmf_x[idx] * (1 - t) +
-                            colorscreen::cie_cmf_x[idx + 1] * t,
-                        colorscreen::cie_cmf_y[idx] * (1 - t) +
-                            colorscreen::cie_cmf_y[idx + 1] * t,
-                        colorscreen::cie_cmf_z[idx] * (1 - t) +
-                            colorscreen::cie_cmf_z[idx + 1] * t};
+  colorscreen::xyz c = {(colorscreen::luminosity_t)(colorscreen::cie_cmf_x[idx] * (1 - t) +
+                            colorscreen::cie_cmf_x[idx + 1] * t),
+                        (colorscreen::luminosity_t)(colorscreen::cie_cmf_y[idx] * (1 - t) +
+                            colorscreen::cie_cmf_y[idx + 1] * t),
+                        (colorscreen::luminosity_t)(colorscreen::cie_cmf_z[idx] * (1 - t) +
+                            colorscreen::cie_cmf_z[idx + 1] * t)};
   colorscreen::luminosity_t r, g, b;
   (c * 0.15).to_srgb(&r, &g, &b);
 
@@ -185,7 +185,7 @@ void SpectraChartWidget::paintEvent(QPaintEvent *) {
     return;
   }
 
-  auto drawCurve = [&](const std::vector<double> &data, const QColor &color,
+  auto drawCurve = [&](const std::vector<colorscreen::luminosity_t> &data, const QColor &color,
                        int width = 2) {
     if (data.empty())
       return;
@@ -195,7 +195,7 @@ void SpectraChartWidget::paintEvent(QPaintEvent *) {
 
     for (size_t i = 0; i < data.size(); ++i) {
       double t = i / (double)(data.size() - 1);
-      double val = std::clamp(data[i], m_yMin, m_yMax);
+      double val = std::clamp((double)data[i], m_yMin, m_yMax);
       double normalized = (val - m_yMin) / (m_yMax - m_yMin);
 
       int x = chartRect.left() + (int)(t * chartRect.width());

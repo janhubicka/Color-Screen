@@ -371,7 +371,7 @@ public:
   const mtf_parameters &m_measured_params;
   mtf_parameters m_params;
   progress_info *m_progress;
-  coord_t start[maxvals];
+  luminosity_t start[maxvals];
   bool difraction;
   int nvalues;
   int sigma_index;
@@ -382,7 +382,7 @@ public:
 
 /* Determine PSF kernel radius.  */
 static int
-get_psf_radius (double *psf, int size, bool *ok = NULL)
+get_psf_radius (mtf::psf_t *psf, int size, bool *ok = NULL)
 {
   double peak = 0;
   for (int i = 0; i < size; i++)
@@ -414,7 +414,7 @@ get_psf_radius (double *psf, int size, bool *ok = NULL)
    TODO: model Bayer.
    Bayer demosaicing usually reduces MTF by an additional factor of 0.8 to 0.9
    near the Nyquist frequency */
-double
+luminosity_t
 mtf_parameters::sensor_mtf (double pixel_freq) const
 {
   return std::abs (sinc (pixel_freq * my_sqrt (sensor_fill_factor)));
@@ -498,7 +498,7 @@ mtf_parameters::hopkins_defocus_mtf (double pixel_freq) const
   return 1;
 }
 
-double
+luminosity_t
 mtf_parameters::stokseth_defocus_mtf (double pixel_freq) const
 {
   double ef_stop = effective_f_stop ();
@@ -584,7 +584,7 @@ mtf_parameters::system_mtf (double pixel_freq) const
 /* Compute right half of LSF.  */
 
 void
-mtf::compute_lsf (std::vector<double, fft_allocator<double>> &lsf,
+mtf::compute_lsf (std::vector<psf_t, fft_allocator<psf_t>> &lsf,
                   luminosity_t subsample) const
 {
   int size = lsf.size ();
@@ -593,9 +593,9 @@ mtf::compute_lsf (std::vector<double, fft_allocator<double>> &lsf,
       lsf[size - 1] = 0;
       size--;
     }
-  std::vector<double, fft_allocator<double>> mtf_half (size);
-  auto plan = fft_plan_r2r_1d<double> (size, FFTW_REDFT00, mtf_half.data (), lsf.data ());
-  double scale = 1 / (size * subsample * 2);
+  std::vector<psf_t, fft_allocator<psf_t>> mtf_half (size);
+  auto plan = fft_plan_r2r_1d<psf_t> (size, FFTW_REDFT00, mtf_half.data (), lsf.data ());
+  psf_t scale = 1 / (size * subsample * 2);
 
   /* Mirror mtf.  */
   for (int i = 0; i < size; i++)
@@ -603,24 +603,24 @@ mtf::compute_lsf (std::vector<double, fft_allocator<double>> &lsf,
 
   plan.execute_r2r (mtf_half.data (), lsf.data ());
 
-  double sum = 0;
+  psf_t sum = 0;
   for (int i = 0; i < size; i++)
     sum += lsf[i];
-  double fin_scale = 1.0 / sum;
+  psf_t fin_scale = 1.0 / sum;
   for (int i = 0; i < size; i++)
     lsf[i] *= fin_scale;
 }
 
-std::vector<double, fft_allocator<double>>
+std::vector<mtf::psf_t, fft_allocator<mtf::psf_t>>
 mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
                      progress_info *progress)
 {
   int fft_size = psf_size / 2 + 1;
-  const double psf_step = 1 / (psf_size * subscale);
+  const psf_t psf_step = 1 / (psf_size * subscale);
   // Use unique_ptr with FFTW allocator for fftw_complex array
-  auto mtf_kernel = fft_alloc_complex<double> (psf_size * fft_size);
-  std::vector<double, fft_allocator<double>> psf_data (psf_size * psf_size);
-  auto plan = fft_plan_c2r_2d<double> (psf_size, psf_size, mtf_kernel.get (), psf_data.data ());
+  auto mtf_kernel = fft_alloc_complex<psf_t> (psf_size * fft_size);
+  std::vector<psf_t, fft_allocator<psf_t>> psf_data (psf_size * psf_size);
+  auto plan = fft_plan_c2r_2d<psf_t> (psf_size, psf_size, mtf_kernel.get (), psf_data.data ());
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
     shared(fft_size, psf_step, mtf_kernel, psf_size)
   for (int y = 0; y < fft_size; y++)
@@ -654,9 +654,9 @@ mtf::estimate_psf_size (luminosity_t min_threshold,
   int lsf_size = 256;
   while (true)
     {
-      std::vector<double, fft_allocator<double>> lsf (lsf_size);
+      std::vector<psf_t, fft_allocator<psf_t>> lsf (lsf_size);
       compute_lsf (lsf, subscale);
-      double max = 0;
+      psf_t max = 0;
       for (auto v : lsf)
         max = std::max (max, v);
       /* Not good enough.  */
@@ -788,10 +788,10 @@ mtf::compute_psf (luminosity_t max_radius, luminosity_t subscale, const char *fi
               if (!renderedu.write_row ())
                 return false;
             }
-          std::vector<double, fft_allocator<double>> lsf (radius);
+          std::vector<psf_t, fft_allocator<psf_t>> lsf (radius);
           compute_lsf (lsf, subscale);
-          double lsf_max = lsf[0], collected_lsf_max = 0;
-          std::vector<double, fft_allocator<double>> collected_lsf (width);
+          psf_t lsf_max = lsf[0], collected_lsf_max = 0;
+          std::vector<psf_t, fft_allocator<psf_t>> collected_lsf (width);
           for (int x = 0; x < width; x++)
             {
               int xx = (x < radius ? radius - x - 1 : x - radius);
@@ -869,9 +869,9 @@ mtf::precompute (progress_info *progress)
       /* TODO: Implement.  */
       if (!regular_steps)
         {
-          std::vector<luminosity_t, fft_allocator<double>> contrasts (size ()
+          std::vector<luminosity_t, fft_allocator<psf_t>> contrasts (size ()
                                                                        + 2);
-          std::vector<luminosity_t, fft_allocator<double>> freqs (size ()
+          std::vector<luminosity_t, fft_allocator<psf_t>> freqs (size ()
                                                                    + 2);
           for (size_t i = 0; i < size (); i++)
             {
@@ -889,7 +889,7 @@ mtf::precompute (progress_info *progress)
         }
       else
         {
-          std::vector<luminosity_t, fft_allocator<double>> contrasts (size ()
+          std::vector<luminosity_t, fft_allocator<psf_t>> contrasts (size ()
                                                                        + 2);
           for (size_t i = 0; i < size (); i++)
             contrasts[i] = get_contrast (i) * 0.01
@@ -926,7 +926,7 @@ mtf::precompute (progress_info *progress)
   else
     {
       const int entries = 512;
-      std::vector<luminosity_t, fft_allocator<double>> contrasts (entries);
+      std::vector<luminosity_t, fft_allocator<psf_t>> contrasts (entries);
       luminosity_t step = 1.0 / (entries - 2);
       for (int i = 0; i < entries - 2; i++)
         contrasts[i] = m_params.system_mtf (i * step);
@@ -1095,7 +1095,7 @@ mtf_parameters::compute_curves (int steps) const
   return result;
 }
 
-luminosity_t
+double
 mtf_parameters::estimate_parameters (const mtf_parameters &par,
                                      const char *write_table,
                                      progress_info *progress,

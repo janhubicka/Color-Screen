@@ -167,6 +167,7 @@ deconvolution<T>::deconvolution (mtf *mtf, luminosity_t mtf_scale,
       = 1.0 / (m_enlarged_tile_size * m_enlarged_tile_size);
   T rev_tile_size
       = m_supersample * mtf_scale / (T)m_enlarged_tile_size;
+#pragma omp parallel for shared(scale,mtf,rev_tile_size,mode,k_const) default(none) collapse(2)
   for (int y = 0; y < m_fft_size; y++)
     for (int x = 0; x < m_fft_size; x++)
       {

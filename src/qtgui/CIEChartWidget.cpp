@@ -132,9 +132,9 @@ void CIEChartWidget::generateCache() {
         }
 
         // Clamp to 0-1
-        r = std::clamp(r, 0.0, 1.0) * 0.3;
-        g = std::clamp(g, 0.0, 1.0) * 0.3;
-        b = std::clamp(b, 0.0, 1.0) * 0.3;
+        r = std::clamp((double)r, 0.0, 1.0) * 0.3;
+        g = std::clamp((double)g, 0.0, 1.0) * 0.3;
+        b = std::clamp((double)b, 0.0, 1.0) * 0.3;
 
         scanLine[x] = qRgb(r * 255, g * 255, b * 255);
       }

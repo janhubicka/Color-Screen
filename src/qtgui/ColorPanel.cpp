@@ -322,7 +322,7 @@ void ColorPanel::updateSpectraChart() {
   data.min_freq = 400;
   data.max_freq = 720;
   // 1nm resolution
-  size_t size = (size_t)(data.max_freq - data.min_freq + 1);
+  size_t size = (size_t)((data.max_freq - data.min_freq) / 5 + 1);
   data.red.resize(size);
   data.green.resize(size);
   data.blue.resize(size);
