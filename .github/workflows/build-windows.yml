@@ -97,6 +97,37 @@ jobs:
         cp LICENSE /c/Color-Screen-install/
         cp README.md /c/Color-Screen-install/
         makensis -DSOURCE_DIR="C:\Color-Screen-install" -DOUTFILE="Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe" os/windows/installer.nsi
+    - name: Verify application
+      shell: msys2 {0}
+      run: |
+        APP_BIN="/c/Color-Screen-install/bin/colorscreen-qt.exe"
+        CLI_BIN="/c/Color-Screen-install/bin/colorscreen.exe"
+        
+        echo "Testing CLI version..."
+        $CLI_BIN --version
+        
+        echo "Running colorscreen autodetect test..."
+        $CLI_BIN autodetect testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif test.par
+        
+        echo "Launching GUI Smoke Test..."
+        # Start screenshot helper in background (Windows way)
+        # We use a separate shell to run powershell in background
+        (
+          powershell -ExecutionPolicy Bypass -File os/windows/smoke-test-screenshot.ps1 shot_10s.png 10
+          powershell -ExecutionPolicy Bypass -File os/windows/smoke-test-screenshot.ps1 shot_20s.png 10
+        ) &
+        
+        # Run the GUI with smoke-test auto-quit
+        $APP_BIN --debug-qt --smoke-test 30000 "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" || echo "GUI exited with $?"
+        
+    - name: Upload GUI Screenshots
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: gui_screenshots-${{matrix.sys}}${{matrix.suffix}}
+        path: |
+          shot_*.png
+
     - uses: actions/upload-artifact@v4
       with:
         name: windows-installer-${{matrix.sys}}${{matrix.suffix}}
