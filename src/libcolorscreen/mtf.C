@@ -622,10 +622,7 @@ mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
   int fft_size = psf_size / 2 + 1;
   const double psf_step = 1 / (psf_size * subscale);
   // Use unique_ptr with FFTW allocator for fftw_complex array
-  std::unique_ptr<fftw_complex, decltype (&fftw_free)> mtf_kernel (
-      (fftw_complex *)fftw_malloc (sizeof (fftw_complex) * psf_size
-                                   * fft_size),
-      &fftw_free);
+  auto mtf_kernel = fftw_alloc_complex<double> (psf_size * fft_size);
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
     shared(fft_size, psf_step, mtf_kernel, psf_size)
   for (int y = 0; y < fft_size; y++)

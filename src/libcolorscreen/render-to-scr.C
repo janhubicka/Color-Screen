@@ -354,7 +354,7 @@ render_screen_tile (tile_parameters &tile, scr_type type,
   sharpen_parameters sp;
   bool avg = false;
   if (progress)
-    progress.set_task ("rendering tile");
+    progress->set_task ("rendering tile", 1);
   if (rst >= (int)backlight_screen)
     {
       spectrum_dyes_to_xyz s;

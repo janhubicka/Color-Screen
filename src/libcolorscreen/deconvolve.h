@@ -101,7 +101,7 @@ private:
   /* Supersampling */
   int m_supersample;
   /* Kernel for bluring or sharpening.  */
-  fftw_complex *m_blur_kernel;
+  fftw_unique_ptr<double> m_blur_kernel;
 
   bool m_richardson_lucy;
   deconvolution_data_t m_sigma;
@@ -118,7 +118,7 @@ private:
   /* Plans used for FFT calclation.  */
   struct tile_data
   {
-    fftw_complex *in;
+    fftw_unique_ptr<double> in;
     std::vector<deconvolution_data_t,fftw_allocator<deconvolution_data_t>> tile;
     std::vector<deconvolution_data_t,fftw_allocator<deconvolution_data_t>> *enlarged_tile;
     std::vector<deconvolution_data_t,fftw_allocator<deconvolution_data_t>> enlarged_tile_data;

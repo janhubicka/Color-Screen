@@ -160,7 +160,7 @@ deconvolution::deconvolution (mtf *mtf, luminosity_t mtf_scale,
      the FFT result is again a real function (all complex values should be 0 up
      to roundoff errors).  */
   m_fft_size = m_enlarged_tile_size / 2 + 1;
-  m_blur_kernel = new fftw_complex[m_enlarged_tile_size * m_fft_size];
+  m_blur_kernel = fftw_alloc_complex<double> (m_enlarged_tile_size * m_fft_size);
   deconvolution_data_t scale
       = 1.0 / (m_enlarged_tile_size * m_enlarged_tile_size);
   deconvolution_data_t rev_tile_size
@@ -220,7 +220,7 @@ deconvolution::init (int thread_id)
 {
   if (m_data[thread_id].initialized)
     return;
-  m_data[thread_id].in = new fftw_complex[m_enlarged_tile_size * m_fft_size];
+  m_data[thread_id].in = fftw_alloc_complex<double> (m_enlarged_tile_size * m_fft_size);
   m_data[thread_id].tile.resize (m_tile_size * m_tile_size);
   if (m_supersample > 1)
     {
@@ -243,12 +243,12 @@ deconvolution::init (int thread_id)
           return;
         }
       m_plan_2d_inv = fftw_plan_dft_c2r_2d (
-          m_enlarged_tile_size, m_enlarged_tile_size, m_data[thread_id].in,
+          m_enlarged_tile_size, m_enlarged_tile_size, m_data[thread_id].in.get (),
           m_data[thread_id].enlarged_tile->data (), FFTW_ESTIMATE);
       m_plan_2d
           = fftw_plan_dft_r2c_2d (m_enlarged_tile_size, m_enlarged_tile_size,
                                   m_data[thread_id].enlarged_tile->data (),
-                                  m_data[thread_id].in, FFTW_ESTIMATE);
+                                  m_data[thread_id].in.get (), FFTW_ESTIMATE);
       fftw_lock.unlock ();
     }
 }
@@ -383,7 +383,7 @@ deconvolution::process_tile (int thread_id)
 
   if (!m_richardson_lucy)
     {
-      fftw_complex *in = m_data[thread_id].in;
+      fftw_complex *in = m_data[thread_id].in.get ();
       fftw_execute_dft_r2c (m_plan_2d,
                             m_data[thread_id].enlarged_tile->data (), in);
 #pragma omp simd
@@ -405,7 +405,7 @@ deconvolution::process_tile (int thread_id)
           = *m_data[thread_id].enlarged_tile;
       std::vector<deconvolution_data_t,fftw_allocator<deconvolution::deconvolution_data_t>> &ratios = m_data[thread_id].ratios;
       deconvolution_data_t scale = 1;
-      fftw_complex *in = m_data[thread_id].in;
+      fftw_complex *in = m_data[thread_id].in.get ();
       deconvolution_data_t sigma = m_sigma;
       for (int iteration = 0; iteration < m_iterations; iteration++)
         {
@@ -538,10 +538,6 @@ deconvolution::process_tile (int thread_id)
 
 deconvolution::~deconvolution ()
 {
-  delete[] m_blur_kernel;
-  for (size_t i = 0; i < m_data.size (); i++)
-    if (m_data[i].initialized)
-      delete[] (m_data[i].in);
   fftw_lock.lock ();
   if (m_plans_exists)
     {

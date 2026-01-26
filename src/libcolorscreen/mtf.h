@@ -35,20 +35,43 @@ template <class T> struct fftw_allocator
       throw std::bad_alloc ();
     return static_cast<T *> (ptr);
   }
+  void
+  deallocate (T *p, std::size_t)
+  {
 #ifdef HAVE_MEMALIGN
-  void
-  deallocate (T *p, std::size_t)
-  {
     free (p);
-  }
 #else
-  void
-  deallocate (T *p, std::size_t)
-  {
     fftw_free (p);
-  }
 #endif
+  }
 };
+
+template <typename T> struct fftw_complex_t;
+template <> struct fftw_complex_t<double> { typedef fftw_complex type; };
+template <> struct fftw_complex_t<float> { typedef fftwf_complex type; };
+
+template <typename T> struct fftw_deleter
+{
+  void operator() (T *p) const
+  {
+#ifdef HAVE_MEMALIGN
+    free (p);
+#else
+    fftw_free (p);
+#endif
+  }
+};
+
+template <typename T>
+using fftw_unique_ptr = std::unique_ptr<typename fftw_complex_t<T>::type[], fftw_deleter<typename fftw_complex_t<T>::type>>;
+
+template <typename T>
+fftw_unique_ptr<T>
+fftw_alloc_complex (size_t n)
+{
+  fftw_allocator<typename fftw_complex_t<T>::type> alloc;
+  return fftw_unique_ptr<T> (alloc.allocate (n));
+}
 
 class mtf
 {
