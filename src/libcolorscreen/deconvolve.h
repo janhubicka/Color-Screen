@@ -12,9 +12,10 @@
 namespace colorscreen
 {
 
+template <typename T>
 class deconvolution
 {
-static constexpr const double lanczos_a = 3;
+static constexpr const int lanczos_a = 3;
 public:
   enum mode
   {
@@ -29,7 +30,6 @@ public:
   deconvolution (mtf *mtf, luminosity_t mtf_scale,
 		 luminosity_t snr, luminosity_t sigma, int max_threads,
                  enum mode, int iterations, int supersample);
-  typedef double deconvolution_data_t;
   ~deconvolution ();
 
   /* Size of tile processed without borders.  */
@@ -58,13 +58,13 @@ public:
 
   /* Put pixel to given thread  */
   void
-  put_pixel (int threadid, int x, int y, deconvolution_data_t val)
+  put_pixel (int threadid, int x, int y, T val)
   {
     m_data[threadid].tile[y * m_tile_size + x] = val;
   }
 
   /* Get pixel from given thread.  */
-  deconvolution_data_t
+  T
   get_pixel (int threadid, int x, int y) const
   {
     return m_data[threadid].tile[y * m_tile_size + x];
@@ -78,13 +78,13 @@ private:
 
   /* Put pixel to given thread  */
   void
-  put_enlarged_pixel (int threadid, int x, int y, deconvolution_data_t val)
+  put_enlarged_pixel (int threadid, int x, int y, T val)
   {
     (*m_data[threadid].enlarged_tile)[y * m_enlarged_tile_size + x] = val;
   }
 
   /* Get pixel from given thread.  */
-  deconvolution_data_t
+  T
   get_enlarged_pixel (int threadid, int x, int y) const
   {
     return (*m_data[threadid].enlarged_tile)[y * m_enlarged_tile_size + x];
@@ -102,28 +102,28 @@ private:
   /* Supersampling */
   int m_supersample;
   /* Kernel for bluring or sharpening.  */
-  fft_unique_ptr<double> m_blur_kernel;
+  fft_unique_ptr<T> m_blur_kernel;
 
   bool m_richardson_lucy;
-  deconvolution_data_t m_sigma;
+  T m_sigma;
   int m_iterations;
 
   /* Weights of edge tapering.  */
-  std::vector<deconvolution_data_t,fft_allocator<deconvolution_data_t>> m_weights;
+  std::vector<T,fft_allocator<T>> m_weights;
 
-  std::vector<deconvolution_data_t,fft_allocator<deconvolution_data_t>> m_lanczos_kernels;
+  std::vector<T,fft_allocator<T>> m_lanczos_kernels;
 
-  fft_plan<double> m_plan_2d_inv, m_plan_2d;
+  fft_plan<T> m_plan_2d_inv, m_plan_2d;
   bool m_plans_exists;
 
   /* Plans used for FFT calclation.  */
   struct tile_data
   {
-    fft_unique_ptr<double> in;
-    std::vector<deconvolution_data_t,fft_allocator<deconvolution_data_t>> tile;
-    std::vector<deconvolution_data_t,fft_allocator<deconvolution_data_t>> *enlarged_tile;
-    std::vector<deconvolution_data_t,fft_allocator<deconvolution_data_t>> enlarged_tile_data;
-    std::vector<deconvolution_data_t,fft_allocator<deconvolution_data_t>> ratios;
+    fft_unique_ptr<T> in;
+    std::vector<T,fft_allocator<T>> tile;
+    std::vector<T,fft_allocator<T>> *enlarged_tile;
+    std::vector<T,fft_allocator<T>> enlarged_tile_data;
+    std::vector<T,fft_allocator<T>> ratios;
     bool initialized;
   };
   std::vector<tile_data> m_data;
@@ -133,34 +133,36 @@ private:
    WIDTH*HEIGHT. DATA are accessed using getdata function and PARAM can be used
    to pass extra data around. MTF is MTF of scanner. O is output type name
    (must be convertible to double), T is data type name, P is extra bookeeping
-   parameter type.  */
+   parameter type.  
+   DT is a type to do deconvolution in.
+   */
 template <typename O, typename mem_O, typename T, typename P,
-          O (*getdata) (T data, int x, int y, int width, P param)>
+          O (*getdata) (T data, int x, int y, int width, P param), typename DT>
 bool
 deconvolve (mem_O *out, T data, P param, int width, int height,
             const sharpen_parameters &sharpen, progress_info *progress,
             bool parallel = true)
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
-  deconvolution::mode mode;
+  typename deconvolution<DT>::mode mode;
   if (progress)
     progress->set_task ("initializing MTF based deconvolution", 1);
   switch (sharpen.mode)
     {
     case sharpen_parameters::richardson_lucy_deconvolution:
-      mode = deconvolution::richardson_lucy_sharpen;
+      mode = deconvolution<DT>::richardson_lucy_sharpen;
       break;
     case sharpen_parameters::wiener_deconvolution:
-      mode = deconvolution::sharpen;
+      mode = deconvolution<DT>::sharpen;
       break;
     case sharpen_parameters::blur_deconvolution:
-      mode = deconvolution::blur;
+      mode = deconvolution<DT>::blur;
       break;
     default:
       abort ();
     }
   mtf::mtf_cache_t::cached_ptr scanner_mtf = mtf::get_mtf (sharpen.scanner_mtf, progress);
-  deconvolution d (scanner_mtf.get (), sharpen.scanner_mtf_scale,
+  deconvolution<DT> d (scanner_mtf.get (), sharpen.scanner_mtf_scale,
                    sharpen.scanner_snr, sharpen.richardson_lucy_sigma,
                    nthreads, mode, sharpen.richardson_lucy_iterations,
 		   sharpen.supersample);
@@ -171,7 +173,7 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
       = (height + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();
   if (progress)
     {
-      if (mode == deconvolution::sharpen)
+      if (mode == deconvolution<DT>::sharpen)
         progress->set_task ("Deconvolution sharpening (Weiner filter)",
                             xtiles * ytiles);
       else
@@ -222,7 +224,7 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
 }
 /* Deconvolution worker for rgbdata and related types (having red, green and blue fields)  */
 template <typename O, typename mem_O, typename T, typename P,
-          O (*getdata) (T data, int x, int y, int width, P param)>
+          O (*getdata) (T data, int x, int y, int width, P param), typename DT>
 bool
 deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
 		const sharpen_parameters &sharpen,
@@ -230,25 +232,25 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
 		bool parallel = true)
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
-  deconvolution::mode mode;
+  typename deconvolution<DT>::mode mode;
   if (progress)
     progress->set_task ("initializing MTF based deconvolution", 1);
   switch (sharpen.mode)
     {
     case sharpen_parameters::richardson_lucy_deconvolution:
-      mode = deconvolution::richardson_lucy_sharpen;
+      mode = deconvolution<DT>::richardson_lucy_sharpen;
       break;
     case sharpen_parameters::wiener_deconvolution:
-      mode = deconvolution::sharpen;
+      mode = deconvolution<DT>::sharpen;
       break;
     case sharpen_parameters::blur_deconvolution:
-      mode = deconvolution::blur;
+      mode = deconvolution<DT>::blur;
       break;
     default:
       abort ();
     }
   mtf::mtf_cache_t::cached_ptr scanner_mtf = mtf::get_mtf (sharpen.scanner_mtf, progress);
-  deconvolution d (scanner_mtf.get (), sharpen.scanner_mtf_scale,
+  deconvolution<DT> d (scanner_mtf.get (), sharpen.scanner_mtf_scale,
 		   sharpen.scanner_snr, sharpen.richardson_lucy_sigma, nthreads * 3, mode,
 		   sharpen.richardson_lucy_iterations,
 		   sharpen.supersample);
@@ -259,9 +261,9 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
       = (height + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();
   if (progress)
     {
-      if (mode == deconvolution::blur)
+      if (mode == deconvolution<DT>::blur)
         progress->set_task ("Deconvolution blurring", xtiles * ytiles);
-      if (mode == deconvolution::sharpen)
+      if (mode == deconvolution<DT>::sharpen)
         progress->set_task ("Deconvolution sharpening (Weiner filter)", xtiles * ytiles);
       else
         progress->set_task ("Deconvolution sharpening (Richardson-Lucy)", xtiles * ytiles);
@@ -328,6 +330,38 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
   if (progress && progress->cancelled ())
     return false;
   return true;
+}
+
+/* Auto-select the type.  */
+
+template <typename O, typename mem_O, typename T, typename P,
+          O (*getdata) (T data, int x, int y, int width, P param)>
+bool
+deconvolve (mem_O *out, T data, P param, int width, int height,
+            const sharpen_parameters &sharpen, progress_info *progress,
+            bool parallel = true)
+{
+  /* For many iterations use double; otherwise float is good and faster.  */
+  if (sharpen.mode != sharpen_parameters::richardson_lucy_deconvolution || sharpen.richardson_lucy_iterations < 300)
+    return deconvolve<O, mem_O, T, P, getdata, float>(out, data, param, width, height, sharpen, progress, parallel);
+  else
+    return deconvolve<O, mem_O, T, P, getdata, double>(out, data, param, width, height, sharpen, progress, parallel);
+}
+
+/* Auto-select the type.  */
+
+template <typename O, typename mem_O, typename T, typename P,
+          O (*getdata) (T data, int x, int y, int width, P param)>
+bool
+deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
+		const sharpen_parameters &sharpen, progress_info *progress,
+		bool parallel = true)
+{
+  /* For many iterations use double; otherwise float is good and faster.  */
+  if (sharpen.mode != sharpen_parameters::richardson_lucy_deconvolution || sharpen.richardson_lucy_iterations < 300)
+    return deconvolve_rgb<O, mem_O, T, P, getdata, float>(out, data, param, width, height, sharpen, progress, parallel);
+  else
+    return deconvolve_rgb<O, mem_O, T, P, getdata, double>(out, data, param, width, height, sharpen, progress, parallel);
 }
 
 //void mtf_to_2d_psf (precomputed_function<luminosity_t> *mtf, double scale, int size, double *psf);
