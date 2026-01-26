@@ -41,6 +41,7 @@ signals:
 private:
   void startTask(int reqId, const QVariant &userData);
   void processPending();
+  QString formatQueueState() const;
 
   int m_nextReqId = 1;
 

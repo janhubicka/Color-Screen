@@ -20,7 +20,7 @@ int TaskQueue::requestRender(const QVariant &userData)
     // 1. Cancel tasks running too long (> 5000ms)
     for (auto it = m_tasks.begin(); it != m_tasks.end(); ) {
         if (it->active && it->startTime.elapsed() > 5000) {
-            qCDebug(lcRenderSync) << "  Task ID:" << it->reqId << " timed out (>5000ms). Cancelling.";
+            qCDebug(lcRenderSync) << "  Task ID:" << it->reqId << " timed out (>5000ms). Cancelling. State:" << formatQueueState();
             if (it->progress && !it->progress->cancel_requested()) {
                 it->progress->cancel();
                 emit progressFinished(it->progress);
@@ -38,7 +38,7 @@ int TaskQueue::requestRender(const QVariant &userData)
             lastIt--; 
             
             if (lastIt->active && lastIt->progress && !lastIt->progress->cancel_requested()) {
-                qCDebug(lcRenderSync) << "  Queue Full. Cancelling younger task ID:" << lastIt->reqId << " to make room.";
+                qCDebug(lcRenderSync) << "  Queue Full. Cancelling younger task ID:" << lastIt->reqId << " to make room. State:" << formatQueueState();
                 lastIt->progress->cancel();
             }
         }
@@ -56,7 +56,7 @@ int TaskQueue::requestRender(const QVariant &userData)
 
 void TaskQueue::startTask(int reqId, const QVariant &userData)
 {
-    qCDebug(lcRenderSync) << "TaskQueue::startTask - Starting ID:" << reqId;
+    qCDebug(lcRenderSync) << "TaskQueue::startTask - Starting ID:" << reqId << "Active:" << formatQueueState();
     TaskInfo info;
     info.reqId = reqId;
     info.progress = std::make_shared<colorscreen::progress_info>();
@@ -83,7 +83,7 @@ void TaskQueue::reportFinished(int reqId, bool success)
     // (Older active tasks)
     for (auto it = m_tasks.begin(); it != m_tasks.end(); ) {
         if (it->reqId < reqId) {
-             qCDebug(lcRenderSync) << "  Cancelling older task ID:" << it->reqId << " as newer task finished.";
+             qCDebug(lcRenderSync) << "  Cancelling older task ID:" << it->reqId << " as newer task finished. State:" << formatQueueState();
              if (it->progress) it->progress->cancel();
              emit progressFinished(it->progress); // Optimistic cleanup
              it = m_tasks.erase(it);
@@ -124,4 +124,16 @@ void TaskQueue::cancelAll()
 
 bool TaskQueue::hasActiveTasks() const {
   return !m_tasks.isEmpty() || m_pendingReqId.has_value();
+}
+
+QString TaskQueue::formatQueueState() const
+{
+    QString state;
+    for (auto it = m_tasks.begin(); it != m_tasks.end(); ++it) {
+        state += QString(" [%1: %2ms]").arg(it.key()).arg(it.value().startTime.elapsed());
+    }
+    if (m_pendingReqId.has_value()) {
+        state += QString(" [Pending: %1]").arg(m_pendingReqId.value());
+    }
+    return state;
 }
