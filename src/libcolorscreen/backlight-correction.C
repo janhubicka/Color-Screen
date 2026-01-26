@@ -433,7 +433,7 @@ backlight_correction_parameters::render_preview (tile_parameters & tile,
   coord_t ystart = m_height * scan_area.y / scan_height;
   coord_t xend = m_width * (scan_area.x + scan_area.width) / scan_width;
   coord_t yend = m_height * (scan_area.y + scan_area.height) / scan_height;
-  coord_t scan_portion_y = scan_area.width / (coord_t) scan_height;
+  coord_t scan_portion_y = scan_area.height / (coord_t) scan_height;
   coord_t ystep = m_height * scan_portion_y / (tile.height);
   int rchannel = m_channel_enabled[0] ? 0 : 3;
   int gchannel = m_channel_enabled[1] ? 1 : m_channel_enabled[0] ? 0 : 3;
@@ -443,8 +443,8 @@ backlight_correction_parameters::render_preview (tile_parameters & tile,
 
   luminosity_t rmin = 1, rmax = 0, gmin = 1, gmax = 0, bmin = 1, bmax = 0;
 
-  for (int y = ystart; y < floor (yend); y++)
-    for (int x = xstart; x < floor (xend); x++)
+  for (int y = ystart; y < ceil (yend); y++)
+    for (int x = xstart; x < ceil (xend); x++)
       {
 	rmin = std::min (rmin, m_luminosities[y * m_width + x].lum[rchannel]);
 	rmax = std::max (rmax, m_luminosities[y * m_width + x].lum[rchannel]);
@@ -484,10 +484,10 @@ backlight_correction_parameters::render_preview (tile_parameters & tile,
 	  = invert_gamma (sample (rchannel, xx, yy, rx, ry, rmin, rmax), -1)
 	  * 255 + 0.5;
 	tile.pixels[y * tile.rowstride + 3 * x + 1]
-	  = invert_gamma (sample (rchannel, xx, yy, rx, ry, gmin, gmax), -1)
+	  = invert_gamma (sample (gchannel, xx, yy, rx, ry, gmin, gmax), -1)
 	  * 255 + 0.5;
 	tile.pixels[y * tile.rowstride + 3 * x + 2]
-	  = invert_gamma (sample (rchannel, xx, yy, rx, ry, bmin, bmax), -1)
+	  = invert_gamma (sample (bchannel, xx, yy, rx, ry, bmin, bmax), -1)
 	  * 255 + 0.5;
       }
   printf ("\n");
