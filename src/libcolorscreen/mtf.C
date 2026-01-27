@@ -213,7 +213,7 @@ class mtf_solver
 public:
   mtf_solver (const mtf_parameters &measured, const mtf_parameters &params,
               progress_info *progress, bool verbose)
-      : m_measured_params (params), m_params (params), m_progress (progress),
+      : m_measured_params (measured), m_params (params), m_progress (progress),
         be_verbose (verbose), start{ 0.5, 0.5, 0.5 }
   {
     nvalues = 0;

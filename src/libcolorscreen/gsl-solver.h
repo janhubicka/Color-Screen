@@ -115,7 +115,7 @@ struct gsl_solver_proxy
     for (int i = 0; i < p; i++)
       proxy->temp_params[i] = gsl_vector_get (v, i);
     
-    //proxy->c.constrain (proxy->temp_params.data ());
+    proxy->c.constrain (proxy->temp_params.data ());
     
     if (proxy->temp_residuals.size() != (size_t)n)
       proxy->temp_residuals.resize(n);
@@ -136,6 +136,7 @@ struct gsl_solver_proxy
     for (int i = 0; i < p; i++)
       proxy->temp_params[i] = gsl_vector_get (v, i);
     
+    proxy->c.constrain (proxy->temp_params.data ());
     jacobian_bridge<T, C, has_jacobian<C, T>::value>::call(proxy->c, proxy->temp_params.data (), J);
     return GSL_SUCCESS;
   }
@@ -148,6 +149,7 @@ struct gsl_solver_proxy
     for (int i = 0; i < p; i++)
       proxy->temp_params[i] = gsl_vector_get (v, i);
     
+    proxy->c.constrain (proxy->temp_params.data ());
     fvv_bridge<T, C, has_fvv<C, T>::value>::call(proxy->c, proxy->temp_params.data (), v_vec, fvv_vec);
     return GSL_SUCCESS;
   }
@@ -178,6 +180,7 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
   fdf.params = &proxy;
 
   gsl_multifit_nlinear_parameters fdf_params = gsl_multifit_nlinear_default_parameters ();
+  fdf_params.h_df = /*1e-4*/eps;
   
   /* Disable GSL default error handler to prevent aborts on singular matrices etc. */
   gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
