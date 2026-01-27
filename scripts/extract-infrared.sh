@@ -49,38 +49,29 @@ for img in "$@"; do
         output_file="$dirname/${filename}-ir"
     fi
 
-    echo "Extracting infrared from '$img' to '$output_file'..."
+    # Identify channel count and resolution info
+    # %[channels] returns something like 'srgb 4.1' or 'srgba 4.0'
+    CHANNEL_SPEC=$($IM_IDENTIFY -format "%[channels]" "$img" 2>/dev/null || echo "")
+    RES_INFO=$($IM_IDENTIFY -format "-units %U -density %x" "$img" 2>/dev/null || echo "")
     
-    # Create a temporary directory for channel separation
-    TEMP_DIR=$(mktemp -d)
-    
-    # Separate all channels into PNG files (robustly strips TIFF metadata)
-    $IM_CONVERT "$img" -separate +adjoin "$TEMP_DIR/chan_%d.png"
-    
-    # Count channels
-    NUM_CHANS=$(ls "$TEMP_DIR/chan_"*.png 2>/dev/null | wc -l)
+    # Calculate total channel count (e.g., 4.1 -> 5, 4.0 -> 4)
+    if [[ "$CHANNEL_SPEC" =~ ([0-9]+)\.([0-9]+)$ ]]; then
+        NUM_CHANS=$((${BASH_REMATCH[1]} + ${BASH_REMATCH[2]}))
+    else
+        NUM_CHANS=0
+    fi
     
     if [ "$NUM_CHANS" -le 3 ]; then
         echo "Error: '$img' has no alpha channel or extra channels (only $NUM_CHANS channels found). Failing." >&2
-        rm -rf "$TEMP_DIR"
         exit 1
     fi
 
-    # Identify the last channel (usually Alpha or Infrared)
-    # Using sort -V for natural sorting of indices
-    LAST_CHAN_PNG=$(ls "$TEMP_DIR/chan_"*.png 2>/dev/null | sort -V | tail -n 1)
+    echo "Extracting infrared from '$img' to '$output_file' (optimized pipe)..."
     
-    if [ -z "$LAST_CHAN_PNG" ]; then
-        echo "Error: Failed to extract channels from '$img'." >&2
-        rm -rf "$TEMP_DIR"
-        exit 1
-    fi
-
-    # Convert the last channel to the final 1-channel grayscale output
-    $IM_CONVERT "$LAST_CHAN_PNG" -alpha off -set colorspace Gray -type Grayscale "$output_file"
-    
-    # Clean up
-    rm -rf "$TEMP_DIR"
+    # Use PAM pipe to robustly separate and extract the last channel (index 3 or higher).
+    # This strips persistent TIFF meta-channel tags while avoiding disk I/O.
+    $IM_CONVERT "$img" -separate -delete 0--2 PAM:- | \
+        $IM_CONVERT PAM:- $RES_INFO -alpha off -set colorspace Gray -type Grayscale "$output_file"
 done
 
 echo "All extractions completed successfully."

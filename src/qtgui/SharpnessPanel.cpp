@@ -162,7 +162,7 @@ void SharpnessPanel::setupUi() {
       applyChange([](ParameterState &s) {
         const char *error = nullptr;
         s.rparams.sharpen.scanner_mtf.estimate_parameters(
-            s.rparams.sharpen.scanner_mtf, nullptr, nullptr, &error, false);
+            s.rparams.sharpen.scanner_mtf, nullptr, nullptr, &error);
       });
     },
     [this, separatorToggle](const ParameterState &s) {
