@@ -87,7 +87,7 @@ public:
   bool
   pool_cancel ()
   {
-    return (m_cancelled);
+    return (m_cancel);
   }
 
   /* Set current task to NAME with MAX steps.  */
