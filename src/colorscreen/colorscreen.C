@@ -3575,6 +3575,8 @@ do_mtf (int argc, char **argv)
   const char *quickmtfname = NULL;
   float sigma = 0, blur_diameter = 0, pixel_pitch = 0, wavelength = 0, f_stop = 0, defocus = 0, scan_dpi = 0;
   bool match = false;
+  int flags = mtf_parameters::estimate_use_nmsimplex | mtf_parameters::estimate_use_multifit;
+
   render_parameters rparam;
   for (int i = 0; i < argc; i++)
     {
@@ -3583,6 +3585,14 @@ do_mtf (int argc, char **argv)
         ;
       else if (!strcmp (argv[i], "--match"))
 	match = true;
+      else if (!strcmp (argv[i], "--simplex"))
+	flags |= mtf_parameters::estimate_use_nmsimplex;
+      else if (!strcmp (argv[i], "--no-simplex"))
+	flags &= ~mtf_parameters::estimate_use_nmsimplex;
+      else if (!strcmp (argv[i], "--multifit"))
+	flags |= mtf_parameters::estimate_use_multifit;
+      else if (!strcmp (argv[i], "--no-multifit"))
+	flags &= ~mtf_parameters::estimate_use_multifit;
       else if (const char *str = arg_with_param (argc, argv, &i, "save-csv"))
         csvname = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "load-quickmtf"))
@@ -3613,6 +3623,8 @@ do_mtf (int argc, char **argv)
 	    print_help (argv[i]);
 	}
     }
+  if (verbose)
+    flags |= mtf_parameters::estimate_verbose;
   if (!cspname && !quickmtfname && !sigma && !blur_diameter && !pixel_pitch)
     {
       fprintf (stderr, "No filename given and no MTF parameters specified\n");
@@ -3698,7 +3710,7 @@ do_mtf (int argc, char **argv)
 	  fprintf (stderr, "No measured MTF (scanner_mtf_point) data to match\n");
 	  return 1;
 	}
-      double sqsum = estimated.estimate_parameters (rparam.sharpen.scanner_mtf, csvname, NULL, &error);
+      double sqsum = estimated.estimate_parameters (rparam.sharpen.scanner_mtf, csvname, NULL, &error, flags);
       if (error)
 	{
 	  fprintf (stderr, "Error estimating mtf: %s\n", error);

@@ -925,35 +925,38 @@ static constexpr const int fft_size = screen::size / 2 + 1;
 static void
 gaussian_blur_mtf_fast (coord_t blur_radius, fft_complex_t<screen_fft_t>::type *out)
 {
-#if 1
   luminosity_t *cmatrix;
   // blur_radius = 0;
   int clen = fir_blur::gen_convolve_matrix (blur_radius, &cmatrix);
   int half_clen = clen / 2;
-  // luminosity_t nrm = std::sqrt(screen::size);
-  std::vector<screen_fft_t, fft_allocator<screen_fft_t>> in (screen::size, 0);
-  auto plan = fft_plan_r2c_1d<screen_fft_t> (screen::size, NULL /* Do not overwtie */, out);
-  // be sure that after plan initialization value is 0
-  for (int i = 0; i < clen; i++)
+  /* There is a bug in direct computation; it does not pass the unit test.  */
+  if (half_clen >= screen::size / 2 || 1)
     {
-      int idx = (i - half_clen /*+ screen::size / 4*/) & (screen::size - 1);
-      in[idx] += cmatrix[i] /** nrm*/;
+      // luminosity_t nrm = std::sqrt(screen::size);
+      std::vector<screen_fft_t, fft_allocator<screen_fft_t>> in (screen::size, 0);
+      auto plan = fft_plan_r2c_1d<screen_fft_t> (screen::size, NULL /* Do not overwtie */, out);
+      // be sure that after plan initialization value is 0
+      for (int i = 0; i < clen; i++)
+	{
+	  int idx = (i - half_clen /*+ screen::size / 4*/) & (screen::size - 1);
+	  in[idx] += cmatrix[i] /** nrm*/;
+	}
+      plan.execute_r2c (in.data (), out);
+      // for (int i = 0; i < fft_size; i++)
+      // printf ("%i: %f %f\n", i, out[i][0], out[i][1]);
+      free (cmatrix);
     }
-  plan.execute_r2c (in.data (), out);
-  // for (int i = 0; i < fft_size; i++)
-  // printf ("%i: %f %f\n", i, out[i][0], out[i][1]);
-  free (cmatrix);
-#else
-  /* This should also work but have problem with wrapping.  */
-  for (int i = 0; i < fft_size; i++)
-    {
-      screen_fft_t exponent = constant_factor * (i * i);
-      printf (" %f:", out[i][0]);
-      out[i][0] = std::exp (exponent);
-      out[i][0] = std::exp (-2.0 * M_PI * M_PI * blur_radius * blur_radius * freq * freq);
-    }
-  printf ("\n");
-#endif
+  else
+    for (int i = 0; i < fft_size; i++)
+      {
+	//screen_fft_t exponent = constant_factor * (i * i);
+	//printf (" %f:", out[i][0]);
+	//out[i][0] = std::exp (exponent);
+	coord_t freq = i / (coord_t)screen::size;
+	out[i][0] = std::exp (-2.0 * M_PI * M_PI * blur_radius * blur_radius * freq * freq);
+	out[i][1] = 0;
+      }
+    //printf ("\n");
 }
 
 static void

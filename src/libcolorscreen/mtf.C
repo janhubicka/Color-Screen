@@ -211,11 +211,10 @@ class mtf_solver
   static constexpr const double nanometers_max = 1000;
 
 public:
-  static constexpr const bool be_verbose = false;
   mtf_solver (const mtf_parameters &measured, const mtf_parameters &params,
-              progress_info *progress)
+              progress_info *progress, bool verbose)
       : m_measured_params (params), m_params (params), m_progress (progress),
-        start{ 0.5, 0.5, 0.5 }
+        be_verbose (verbose), start{ 0.5, 0.5, 0.5 }
   {
     nvalues = 0;
     if (!params.pixel_pitch || !params.f_stop)
@@ -353,8 +352,19 @@ public:
         sum += (contrast - contrast2) * (contrast - contrast2);
 	if (f_vec)
 	  f_vec[i] = contrast - contrast2;
+#if 0
         if (be_verbose)
           debug_data (freq, contrast, contrast2);
+#endif
+      }
+    if (be_verbose)
+      {
+	if (m_progress)
+	  m_progress->pause_stdout ();
+	printf ("gaussian blur sigma %f, wavelength %f, defocus %f, blur_diameter %f, sqsum %f\n",
+	        p.sigma, p.wavelength, p.defocus, p.blur_diameter, sum);
+	if (m_progress)
+	  m_progress->resume_stdout ();
       }
     return sum;
   }
@@ -371,6 +381,7 @@ public:
   const mtf_parameters &m_measured_params;
   mtf_parameters m_params;
   progress_info *m_progress;
+  bool be_verbose;
   luminosity_t start[maxvals];
   bool difraction;
   int nvalues;
@@ -1099,16 +1110,18 @@ double
 mtf_parameters::estimate_parameters (const mtf_parameters &par,
                                      const char *write_table,
                                      progress_info *progress,
-                                     const char **error, bool verbose)
+                                     const char **error, int flags)
 {
   *this = par;
 
   use_measured_mtf = false;
-  mtf_solver s (*this, par, progress);
-  //simplex<luminosity_t, mtf_solver> (s, "optimizing lens parameters",
-                                     //progress);
-  gsl_multifit<luminosity_t, mtf_solver> (s, "optimizing lens parameters",
-                                     progress);
+  mtf_solver s (*this, par, progress, flags & estimate_verbose);
+  if (flags & estimate_use_nmsimplex)
+    gsl_simplex<luminosity_t, mtf_solver> (s, "optimizing lens parameters (simplex)",
+				       progress);
+  if (flags & estimate_use_multifit)
+    gsl_multifit<luminosity_t, mtf_solver> (s, "optimizing lens parameters (multifit)",
+				       progress);
   wavelength = s.get_wavelength (s.start);
   sigma = s.get_sigma (s.start);
   defocus = s.get_defocus (s.start);
@@ -1154,7 +1167,8 @@ mtf_parameters::estimate_parameters (const mtf_parameters &par,
         }
     }
 
-  if (mtf_solver::be_verbose)
+#if 0
+  if (verbose)
     {
       for (size_t i = 0; i < par.size (); i++)
         {
@@ -1164,6 +1178,7 @@ mtf_parameters::estimate_parameters (const mtf_parameters &par,
           debug_data (freq, v1, v2);
         }
     }
+#endif
   return s.objfunc (s.start);
 }
 

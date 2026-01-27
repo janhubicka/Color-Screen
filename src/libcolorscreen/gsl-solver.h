@@ -189,7 +189,13 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
   if (!w)
     {
       if (c.verbose ())
-        fprintf (stderr, "GSL multifit: failed to allocate workspace (check n >= p)\n");
+        {
+	  if (progress)
+	    progress->pause_stdout ();
+          fprintf (stderr, "GSL multifit: failed to allocate workspace (check n >= p)\n");
+	  if (progress)
+	    progress->resume_stdout ();
+        }
       gsl_set_error_handler (old_handler);
       return NAN;
     }
@@ -215,11 +221,21 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
 	    {
 	      if (status == GSL_ENOPROG)
 	        {
+		  if (progress)
+		    progress->pause_stdout ();
 		  if (c.verbose ())
 		    printf ("Multifit did not improve solution\n");
+		  if (progress)
+		    progress->resume_stdout ();
 	        }
 	      else
-	        fprintf (stderr, "GSL multifit finished with error: %s\n", gsl_strerror (status));
+		{
+		  if (progress)
+		    progress->pause_stdout ();
+		  fprintf (stderr, "GSL multifit finished with error: %s\n", gsl_strerror (status));
+		  if (progress)
+		    progress->resume_stdout ();
+		}
 	      break;
 	    }
 
@@ -229,7 +245,11 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
           if (c.verbose ())
             {
               double r_norm = gsl_blas_dnrm2 (w->f);
+	      if (progress)
+		progress->pause_stdout ();
               printf ("Iteration %d: |f(x)| = %.10g\n", iter, r_norm);
+	      if (progress)
+		progress->resume_stdout ();
             }
 
           if (progress && progress_report)
@@ -243,7 +263,13 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
 	{
 	  double r_norm = gsl_blas_dnrm2 (w->f);
 	  if (c.verbose ())
-	    printf ("Finished after %d iterations: |f(x)| = %.10g\n", iter, r_norm);
+	    {
+	      if (progress)
+		progress->pause_stdout ();
+	      printf ("Finished after %d iterations: |f(x)| = %.10g\n", iter, r_norm);
+	      if (progress)
+		progress->resume_stdout ();
+	    }
 	}
 
       for (int i = 0; i < p; i++)
@@ -255,7 +281,13 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
       final_chisq = norm * norm;
     }
   else if (c.verbose ())
-    fprintf (stderr, "GSL multifit initialization failed: %s\n", gsl_strerror (status));
+    {
+      if (progress)
+	progress->pause_stdout ();
+      fprintf (stderr, "GSL multifit initialization failed: %s\n", gsl_strerror (status));
+      if (progress)
+	progress->resume_stdout ();
+    }
 
   gsl_vector_free (x);
   gsl_multifit_nlinear_free (w);
@@ -319,7 +351,13 @@ gsl_simplex (C &c, const char *task = NULL, progress_info *progress = NULL,
   if (!s)
     {
       if (c.verbose ())
-        fprintf (stderr, "GSL simplex: failed to allocate workspace\n");
+	{
+	  if (progress)
+	    progress->pause_stdout ();
+	  fprintf (stderr, "GSL simplex: failed to allocate workspace\n");
+	  if (progress)
+	    progress->resume_stdout ();
+	}
       gsl_vector_free (x);
       gsl_vector_free (ss);
       gsl_set_error_handler (old_handler);
@@ -343,10 +381,22 @@ gsl_simplex (C &c, const char *task = NULL, progress_info *progress = NULL,
 	      if (status == GSL_ENOPROG)
 		{
 		  if (c.verbose ())
-		    printf ("Simplex optimizer did not improve solution\n");
+		    {
+		      if (progress)
+			progress->pause_stdout ();
+		      printf ("Simplex optimizer did not improve solution\n");
+		      if (progress)
+			progress->resume_stdout ();
+		    }
 		}
 	      else
-		fprintf (stderr, "GSL multifit finished with error: %s\n", gsl_strerror (status));
+		{
+		  if (progress)
+		    progress->pause_stdout ();
+		  fprintf (stderr, "GSL multifit finished with error: %s\n", gsl_strerror (status));
+		  if (progress)
+		    progress->resume_stdout ();
+		}
 	      break;
 	    }
 
@@ -356,12 +406,22 @@ gsl_simplex (C &c, const char *task = NULL, progress_info *progress = NULL,
           if (status == GSL_SUCCESS)
             {
               if (c.verbose ())
-                printf ("Converged to minimum at\n");
+		{
+		  if (progress)
+		    progress->pause_stdout ();
+		  printf ("Converged to minimum at\n");
+		  if (progress)
+		    progress->resume_stdout ();
+		}
             }
 
           if (c.verbose ())
             {
+	      if (progress)
+		progress->pause_stdout ();
               printf ("Iteration %d: size = %.3e, f = %.10f\n", iter, size, s->fval);
+	      if (progress)
+		progress->resume_stdout ();
             }
 
           if (progress && progress_report)
@@ -384,7 +444,11 @@ gsl_simplex (C &c, const char *task = NULL, progress_info *progress = NULL,
     }
   else if (c.verbose ())
     {
+      if (progress)
+	progress->pause_stdout ();
       fprintf (stderr, "GSL simplex initialization failed: %s\n", gsl_strerror (status));
+      if (progress)
+	progress->resume_stdout ();
     }
 
   gsl_vector_free (x);

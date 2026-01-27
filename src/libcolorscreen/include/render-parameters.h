@@ -151,8 +151,15 @@ struct mtf_parameters
       std::vector<double> lens_mtf;
       std::vector<double> hopkins_blur_mtf;
   };
+
+  enum estimation_flags
+  {
+    estimate_verbose = 1,
+    estimate_use_nmsimplex = 2,
+    estimate_use_multifit = 4,
+  };
   
-  DLL_PUBLIC double estimate_parameters (const mtf_parameters &par, const char *write_table = NULL, progress_info *progress = NULL, const char **error = NULL, bool verbose = false);
+  DLL_PUBLIC double estimate_parameters (const mtf_parameters &par, const char *write_table = NULL, progress_info *progress = NULL, const char **error = NULL, int flags = estimate_use_nmsimplex | estimate_use_multifit);
   mtf_parameters ()
   : sigma (0), blur_diameter (0), defocus (0), f_stop (0), wavelength (0), pixel_pitch (0), sensor_fill_factor (1), scan_dpi (0), use_measured_mtf (0), m_data ()
   { }
