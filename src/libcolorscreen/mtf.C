@@ -253,6 +253,10 @@ public:
         else
           fill_factor_index = -1;
       }
+    n_observations = 0;
+    for (size_t i = 0; i < m_measured_params.size (); i++)
+      if (m_measured_params.get_freq (i) <= 0.5)
+        n_observations++;
   }
   int
   num_values ()
@@ -341,6 +345,7 @@ public:
         else
           p.blur_diameter = vals[blur_index];
       }
+    int out_idx = 0;
     for (size_t i = 0; i < m_measured_params.size (); i++)
       {
         luminosity_t freq = m_measured_params.get_freq (i);
@@ -350,8 +355,8 @@ public:
         luminosity_t contrast = m_measured_params.get_contrast (i);
         luminosity_t contrast2 = p.system_mtf (freq) * 100;
         sum += (contrast - contrast2) * (contrast - contrast2);
-	if (f_vec)
-	  f_vec[i] = contrast - contrast2;
+	if (f_vec && out_idx < n_observations)
+	  f_vec[out_idx++] = contrast - contrast2;
 #if 0
         if (be_verbose)
           debug_data (freq, contrast, contrast2);
@@ -371,7 +376,7 @@ public:
   int
   num_observations ()
   {
-    return m_measured_params.size ();
+    return n_observations;
   }
   void
   residuals (const luminosity_t *vals, luminosity_t *f_vec)
@@ -385,6 +390,7 @@ public:
   luminosity_t start[maxvals];
   bool difraction;
   int nvalues;
+  int n_observations;
   int sigma_index;
   int fill_factor_index;
   int wavelength_index;
