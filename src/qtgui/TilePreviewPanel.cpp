@@ -76,6 +76,8 @@ renderTilesGeneric(ParameterState state, int scanWidth, int scanHeight,
 }
 } // namespace
 
+Q_DECLARE_METATYPE(TilePreviewPanel::RenderRequest)
+
 TilePreviewPanel::TilePreviewPanel(StateGetter stateGetter,
                                    StateSetter stateSetter,
                                    ImageGetter imageGetter, QWidget *parent,
@@ -90,7 +92,46 @@ TilePreviewPanel::TilePreviewPanel(StateGetter stateGetter,
   m_updateTimer->setInterval(30);
   // Debounce -> Request Render in Queue
   connect(m_updateTimer, &QTimer::timeout, this, [this](){
-      m_renderQueue.requestRender();
+      // Capture state at the end of debounce (request time)
+      ParameterState state = m_stateGetter();
+      std::shared_ptr<colorscreen::image_data> scan = m_imageGetter();
+      
+      RenderRequest req;
+      req.state = state;
+      req.scan = scan;
+      req.tileTypes.clear();
+      for (auto &pair : getTileTypes()) {
+        req.tileTypes.push_back(pair.first);
+      }
+      
+      // Calculate tile size
+      int availableWidth = width();
+      if (m_tilesContainer && m_tilesContainer->isVisible() &&
+          m_tilesContainer->width() > 100) {
+        availableWidth = m_tilesContainer->width() - 20;
+      }
+      int margins = 0;
+      if (m_form) {
+        int l, t, r, b;
+        m_form->getContentsMargins(&l, &t, &r, &b);
+        margins = l + r;
+      }
+      int spacing = 10;
+      int numTiles = req.tileTypes.size();
+      if (numTiles == 0) numTiles = 1;
+      req.tileSize = qMax(64, (availableWidth - margins - spacing) / numTiles);
+      
+      if (scan) {
+        req.scanWidth = scan->width;
+        req.scanHeight = scan->height;
+        scr_to_img scrToImgObj;
+        scrToImgObj.set_parameters(state.scrToImg, scan->width, scan->height);
+        req.pixelSize = scrToImgObj.pixel_size(scan->width, scan->height);
+      } else {
+        req.scanWidth = 0; req.scanHeight = 0; req.pixelSize = 1.0;
+      }
+
+      m_renderQueue.requestRender(QVariant::fromValue(req));
   });
   
   connect(&m_renderQueue, &TaskQueue::triggerRender, this, &TilePreviewPanel::onTriggerRender);
@@ -265,66 +306,32 @@ void TilePreviewPanel::onTileRenderFinished() {
   scheduleTileUpdate();
 }
 
-void TilePreviewPanel::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress) {
-  if (m_tileLabels.empty()) {
+void TilePreviewPanel::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData) {
+  if (m_tileLabels.empty() || !userData.canConvert<RenderRequest>()) {
     m_renderQueue.reportFinished(reqId, true);
     return;
   }
 
-  ParameterState state = m_stateGetter();
-  std::shared_ptr<colorscreen::image_data> scan = m_imageGetter();
+  RenderRequest req = userData.value<RenderRequest>();
 
-  if ((!scan && requiresScan()) || !isTileRenderingEnabled(state)) {
+  if ((!req.scan && requiresScan()) || !isTileRenderingEnabled(req.state)) {
     for (auto l : m_tileLabels)
       l->clear();
     m_renderQueue.reportFinished(reqId, true);
     return;
   }
 
-  // Calculate dynamic tile size
-  int availableWidth = width();
-  if (m_tilesContainer && m_tilesContainer->isVisible() &&
-      m_tilesContainer->width() > 100) {
-    availableWidth = m_tilesContainer->width() - 20;
-  } else {
-    QScrollArea *sa = findChild<QScrollArea *>();
-    if (sa && sa->viewport()) {
-      availableWidth = sa->viewport()->width();
-    }
-  }
-
-  // Margins
-  int margins = 0;
-  if (m_form) {
-    int l, t, r, b;
-    m_form->getContentsMargins(&l, &t, &r, &b);
-    margins = l + r;
-  }
-  int spacing = 10;
-  int numTiles = m_tileLabels.size();
-  if (numTiles == 0)
-    numTiles = 1;
-
-  int tileSize = qMax(64, (availableWidth - margins - spacing) / numTiles);
-
+  // Update label sizes mapping to requested tileSize
   for (auto l : m_tileLabels)
-    l->setFixedSize(tileSize, tileSize);
-
-  // Compute pixel size for check/render
-  coord_t pixel_size = 1.0;
-  if (scan) {
-    scr_to_img scrToImgObj;
-    scrToImgObj.set_parameters(state.scrToImg, scan->width, scan->height);
-    pixel_size = scrToImgObj.pixel_size(scan->width, scan->height);
-  }
+    l->setFixedSize(req.tileSize, req.tileSize);
 
   // Subclass check
-  bool needsUpdate = shouldUpdateTiles(state);
+  bool needsUpdate = shouldUpdateTiles(req.state);
 
   // Also check if tileSize changed significantly or first run
-  if (tileSize != m_lastRenderedTileSize) {
+  if (req.tileSize != m_lastRenderedTileSize) {
     needsUpdate = true;
-    m_lastRenderedTileSize = tileSize;
+    m_lastRenderedTileSize = req.tileSize;
   }
 
   // Force update if tiles are empty/not rendered yet
@@ -338,19 +345,6 @@ void TilePreviewPanel::onTriggerRender(int reqId, std::shared_ptr<colorscreen::p
   }
 
   onTileUpdateScheduled();
-
-  // Prepare request
-  RenderRequest req;
-  req.state = state;
-  req.scan = scan;
-  req.tileTypes.clear();
-  for (auto &pair : getTileTypes()) {
-    req.tileTypes.push_back(pair.first);
-  }
-  req.tileSize = tileSize;
-  if(scan) req.scanWidth = scan->width;
-  if(scan) req.scanHeight = scan->height;
-  req.pixelSize = pixel_size; // calculated earlier
 
   // Start background render
   QFuture<TileRenderResult> future = QtConcurrent::run(

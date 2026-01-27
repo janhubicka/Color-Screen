@@ -20,10 +20,12 @@
 // Ensure shared ptr can be passed via signals
 Q_DECLARE_METATYPE(std::shared_ptr<colorscreen::progress_info>)
 Q_DECLARE_METATYPE(colorscreen::render_parameters)
+Q_DECLARE_METATYPE(ImageWidget::RenderRequestData)
 
 ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent), m_lastSize(0, 0) {
   qRegisterMetaType<std::shared_ptr<colorscreen::progress_info>>();
   qRegisterMetaType<colorscreen::render_parameters>();
+  qRegisterMetaType<ImageWidget::RenderRequestData>();
 
   // Background color
   QPalette pal = palette();
@@ -1346,45 +1348,42 @@ void ImageWidget::updateSimulatedPoints() {
 // Request a new render job (non-blocking)
 void ImageWidget::requestRender()
 {
-    // Capture pending view parameters
-    m_pendingViewX = m_viewX;
-    m_pendingViewY = m_viewY;
-    m_pendingScale = m_scale;
-    m_hasPendingRender = true;
+    if (!m_scan || !m_rparams) return;
+
+    RenderRequestData data;
+    data.xOffset = m_viewX;
+    data.yOffset = m_viewY;
+    data.scale = m_scale;
+    data.params = *m_rparams;
     
-    int reqId = m_renderQueue.requestRender();
+    int reqId = m_renderQueue.requestRender(QVariant::fromValue(data));
     qCDebug(lcRenderSync) << "ImageWidget::requestRender - Created ID:" << reqId << " scale:" << m_scale;
 }
 
-void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress)
+void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData)
 {
     progress->set_task ("Preparing renderer", 1);
-    if (!m_renderer) {
+    if (!m_renderer || !userData.canConvert<RenderRequestData>()) {
          m_renderQueue.reportFinished(reqId, false);
          return; 
     }
 
-    // Prepare Render
-    colorscreen::render_parameters params = m_rparams ? *m_rparams : colorscreen::render_parameters();
-    colorscreen::render_parameters frameParams = m_rparams ? *m_rparams : colorscreen::render_parameters();
+    RenderRequestData data = userData.value<RenderRequestData>();
 
-    double xOffset = m_pendingViewX;
-    double yOffset = m_pendingViewY;
-    double scale = m_pendingScale;
     int w = width();
     int h = height();
     
-    qCDebug(lcRenderSync) << "ImageWidget::onTriggerRender - Starting render ID:" << reqId << " scale:" << scale;
+    qCDebug(lcRenderSync) << "ImageWidget::onTriggerRender - Starting render ID:" << reqId << " scale:" << data.scale;
     
     // Trigger generic render
     bool result = QMetaObject::invokeMethod(m_renderer, "render", Qt::QueuedConnection,
                               Q_ARG(int, reqId),
-                              Q_ARG(double, xOffset),
-                              Q_ARG(double, yOffset),
-                              Q_ARG(double, scale),
+                              Q_ARG(double, data.xOffset),
+                              Q_ARG(double, data.yOffset),
+                              Q_ARG(double, data.scale),
                               Q_ARG(int, w),
                               Q_ARG(int, h),
-                              Q_ARG(colorscreen::render_parameters, frameParams),
+                              Q_ARG(colorscreen::render_parameters, data.params),
                               Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress),
                               Q_ARG(const char*, "Rendering image"));
     
@@ -1394,8 +1393,8 @@ void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progre
         // Only start refresh timer if current view params differ from last rendered image
         // (i.e. we are zooming or panning and need "stretching" preview)
         bool geometricChange = qAbs(m_scale - m_lastRenderedScale) > 1e-6 ||
-                               qAbs(m_viewX - m_lastRenderedX) > 0.1 ||
-                               qAbs(m_viewY - m_lastRenderedY) > 0.1;
+                                qAbs(m_viewX - m_lastRenderedX) > 0.1 ||
+                                qAbs(m_viewY - m_lastRenderedY) > 0.1;
         
         if (geometricChange && !m_refreshTimer->isActive()) {
             m_refreshTimer->start();

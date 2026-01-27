@@ -11,6 +11,8 @@
 #include "../libcolorscreen/include/scr-detect-parameters.h" // Replaces part of colorscreen.h
 #include "../libcolorscreen/include/progress-info.h" // Added for colorscreen::progress_info
 
+#include <QMutex>
+
 class Renderer : public QObject
 {
     Q_OBJECT
@@ -22,17 +24,12 @@ public:
                       const colorscreen::render_type_parameters &renderType);
     ~Renderer() override;
     
-    // Optional: method to update params if changed in UI
-    // void setProcessParams(...);
-
 public slots:
-    // We accept render_parameters by value here to capture state for this render frame
     void render(int reqId, double xOffset, double yOffset, double scale, int width, int height, 
                 colorscreen::render_parameters frameParams, 
                 std::shared_ptr<colorscreen::progress_info> progress,
                 const char* taskName = nullptr);
     
-    // Update internal parameter copies (for non-blocking parameter updates)
     void updateParameters(const colorscreen::render_parameters &rparams,
                          const colorscreen::scr_to_img_parameters &scrToImg,
                          const colorscreen::scr_detect_parameters &scrDetect,
@@ -43,9 +40,10 @@ signals:
 
 private:
     std::shared_ptr<colorscreen::image_data> m_scan;
-    colorscreen::render_parameters m_rparams; // Local copy
     
-    // We maintain copies or use defaults for now
+    // Parameters protected by mutex
+    mutable QMutex m_mutex;
+    colorscreen::render_parameters m_rparams; 
     colorscreen::scr_to_img_parameters m_scrToImg;
     colorscreen::scr_detect_parameters m_scrDetect;
     colorscreen::render_type_parameters m_renderType;

@@ -20,17 +20,26 @@
 #include "ThamesAnimation.h"
 #include "PagetAnimation.h"
 #include "JolyAnimation.h"
+
 // Forward declarations
 namespace colorscreen {
 class image_data;
 struct render_parameters;
-struct progress_info; // Added forward declaration for progress_info
+struct progress_info;
 } // namespace colorscreen
+
 class Renderer;
 
 class ImageWidget : public QWidget {
   Q_OBJECT
 public:
+  struct RenderRequestData {
+    double xOffset;
+    double yOffset;
+    double scale;
+    colorscreen::render_parameters params;
+  };
+
   explicit ImageWidget(QWidget *parent = nullptr);
   ~ImageWidget() override;
 
@@ -85,8 +94,6 @@ public slots:
   void setExaggerate(double ex);
   void setMaxArrowLength(double len);
 
-private:
-
 protected:
   void paintEvent(QPaintEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;
@@ -130,10 +137,10 @@ public:
 private slots:
   void handleImageReady(int reqId, QImage image, double x, double y,
                         double scale, bool success);
+  void onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData);
 
 private:
   void requestRender();
-
 
   std::shared_ptr<colorscreen::image_data> m_scan;
   colorscreen::render_parameters *m_rparams = nullptr;
@@ -157,7 +164,6 @@ private:
 
   QImage m_pixmap; // The currently displayed rendered tile
 
-
   double m_scale = 1.0;
   double m_viewX = 0.0; // Top-left of the view in Image Coordinates
   double m_viewY = 0.0;
@@ -171,13 +177,6 @@ private:
   // Concurrent Rendering
   TaskQueue m_renderQueue; // Manages IDs and progress notifications
   
-  
-private slots:
-  void onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress);
-
-private:
-  
-private:
   // Last successfully rendered state to compare against updates
   double m_lastRenderedScale = 1.0;
   double m_lastRenderedX = 0.0;

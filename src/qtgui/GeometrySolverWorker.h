@@ -23,7 +23,6 @@ signals:
   void finished(int reqId, colorscreen::scr_to_img_parameters result, bool success);
 
 private:
-  bool m_solveInProgress = false;
 };
 
 #endif // GEOMETRY_SOLVER_WORKER_H

@@ -100,7 +100,10 @@ private:
   qint64 m_timestamp; // Timestamp for merge window
 };
 
+Q_DECLARE_METATYPE(MainWindow::SolverRequestData)
+
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
+  qRegisterMetaType<MainWindow::SolverRequestData>();
   m_undoStack = new QUndoStack(this);
 
   setupUi();
@@ -2194,31 +2197,35 @@ void MainWindow::onOptimizeGeometry(bool autoChecked) {
   if (!m_scan || !m_solverWorker)
     return;
 
-  // Request new solve task with mesh computation enabled
-  m_solverQueue.requestRender(true);
+  SolverRequestData data;
+  data.scrToImg = m_scrToImgParams;
+  data.solver = m_solverParams;
+  data.computeMesh = m_geometryPanel->isNonlinearEnabled();
+  
+  // Request new solve task with captured data
+  m_solverQueue.requestRender(QVariant::fromValue(data));
 }
 
 void MainWindow::onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData) {
-  if (!m_scan || !m_solverWorker) {
+  if (!m_scan || !m_solverWorker || !userData.canConvert<SolverRequestData>()) {
     m_solverQueue.reportFinished(reqId, false);
     return;
   }
   
-  // Update progress info
+  SolverRequestData data = userData.value<SolverRequestData>();
+
   if (progress) {
       progress->set_task("Optimizing geometry", 1);
   }
-  colorscreen::sub_task task (progress.get ());  /* Keep so tasks are nested.  */
-  
-  bool computeMesh = userData.isValid() ? (userData.toBool() ? m_geometryPanel->isNonlinearEnabled() : false) : m_geometryPanel->isNonlinearEnabled();
+  colorscreen::sub_task task (progress.get ());
   
   // Invoke solver in worker
   QMetaObject::invokeMethod(
       m_solverWorker, "solve", Qt::QueuedConnection, Q_ARG(int, reqId),
-      Q_ARG(colorscreen::scr_to_img_parameters, m_scrToImgParams),
-      Q_ARG(colorscreen::solver_parameters, m_solverParams),
+      Q_ARG(colorscreen::scr_to_img_parameters, data.scrToImg),
+      Q_ARG(colorscreen::solver_parameters, data.solver),
       Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress),
-      Q_ARG(bool, computeMesh));
+      Q_ARG(bool, data.computeMesh));
 }
 
 void MainWindow::onSolverFinished(int reqId, colorscreen::scr_to_img_parameters result, bool success) {

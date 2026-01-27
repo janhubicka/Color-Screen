@@ -95,16 +95,17 @@ void TaskQueue::reportFinished(int reqId, bool success)
     
     // "If task finishes and there are older tasks in queue, they should be cancelled."
     // (Older active tasks)
-    for (auto it = m_tasks.begin(); it != m_tasks.end(); ) {
-        if (it->reqId < reqId) {
-             qCDebug(lcRenderSync) << "  Cancelling older task ID:" << it->reqId << " as newer task finished. State:" << formatQueueState();
-             if (it->progress) it->progress->cancel();
-             emit progressFinished(it->progress); // Optimistic cleanup
-             it = m_tasks.erase(it);
-        } else {
-             ++it;
-        }
-    }
+    if (success)
+      for (auto it = m_tasks.begin(); it != m_tasks.end(); ) {
+	  if (it->reqId < reqId) {
+	       qCDebug(lcRenderSync) << "  Cancelling older task ID:" << it->reqId << " as newer task finished. State:" << formatQueueState();
+	       if (it->progress) it->progress->cancel();
+	       emit progressFinished(it->progress); // Optimistic cleanup
+	       it = m_tasks.erase(it);
+	  } else {
+	       ++it;
+	  }
+      }
 
     processPending();
 }
@@ -147,7 +148,7 @@ QString TaskQueue::formatQueueState() const
         const char *t;
 	float s;
 	it.value().progress->get_status (&t, &s);
-        state += QString(" [%1: %2ms %3 %4]").arg(it.key()).arg(it.value().startTime.elapsed()).arg(t).arg(s);
+        state += QString(" [%1: %2ms %3 %4%%%5]").arg(it.key()).arg(it.value().startTime.elapsed()).arg(t).arg(s).arg(it.value().progress->pool_cancel () ? "canceling" : "");
     }
     if (m_pendingReqId.has_value()) {
         state += QString(" [Pending: %1]").arg(m_pendingReqId.value());

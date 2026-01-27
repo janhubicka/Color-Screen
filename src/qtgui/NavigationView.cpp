@@ -14,7 +14,10 @@
 // render_type_fast if scr_to_img type != Random
 // render_type_original (color=true) otherwise
 
+Q_DECLARE_METATYPE(NavigationView::RenderRequestData)
+
 NavigationView::NavigationView(QWidget *parent) : QWidget(parent) {
+  qRegisterMetaType<NavigationView::RenderRequestData>();
   QVBoxLayout *layout = new QVBoxLayout(this);
   layout->setContentsMargins(0, 0, 0, 0);
 
@@ -119,38 +122,37 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
             &NavigationView::onImageReady);
     m_renderThread->start();
 
-    m_renderQueue.requestRender();
+    // Use a helper or just manually create the request here
+    RenderRequestData data;
+    data.width = width();
+    data.height = height();
+    data.params = *m_rparams;
+    m_renderQueue.requestRender(QVariant::fromValue(data));
   }
   update();
 }
 
-
-void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress) {
-//    qDebug() << "NavigationView::onTriggerRender reqId:" << reqId << " renderer:" << m_renderer << " scan:" << m_scan.get();
-    
+void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData) {
     progress->set_task ("Preparing navigation renderer", 1);
-    if (!m_renderer || !m_scan) {
-//        qDebug() << "NavigationView::onTriggerRender - missing renderer or scan";
+    if (!m_renderer || !m_scan || !userData.canConvert<RenderRequestData>()) {
         m_renderQueue.reportFinished(reqId, false);
         return;
     }
+    
+    RenderRequestData data = userData.value<RenderRequestData>();
 
-    // 1. Calculate available size
-    QRect viewRect = rect();
+    // 1. Calculate available size using CAPTURED size
+    int w = data.width;
+    int h = data.height;
     if (m_zoomSlider && m_zoomSlider->isVisible()) {
-        viewRect.setBottom(m_zoomSlider->geometry().top());
+        h -= m_zoomSlider->height(); // Approximation
     }
 
-    int w = viewRect.width();
-    int h = viewRect.height();
-    
     // Use CoordinateTransformer to get effective dimensions (relative to crop)
-    CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+    CoordinateTransformer transformer(m_scan.get(), data.params);
     QSize transformedSize = transformer.getTransformedCropSize();
     int imgW = transformedSize.width();
     int imgH = transformedSize.height();
-    
-    colorscreen::int_image_area crop = transformer.getCrop();
     
     double scale = 0.1;
 
@@ -161,30 +163,26 @@ void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::pro
     }
     
     if (scale <= 0) scale = 0.1;
-    m_previewScale = scale; // Update member for mouse interaction
+    m_previewScale = scale; // Update member for mouse interaction (might be slightly racey but ok for UI)
 
-    // Correct target size calculation based on ROTATED dimensions
     int targetW = (int)(imgW * scale);
     int targetH = (int)(imgH * scale);
     if (targetW <= 0) targetW = 1;
     if (targetH <= 0) targetH = 1;
 
-    // 2. set current progress so onImageReady can emit finished signal
     m_currentProgress = progress;
 
-    // 3. Invoke renderer (relative to crop)
     bool result = QMetaObject::invokeMethod(
       m_renderer, "render", Qt::QueuedConnection,
       Q_ARG(int, reqId),      
-      Q_ARG(double, 0.0), // xOffset in transformed-crop space
-      Q_ARG(double, 0.0), // yOffset in transformed-crop space
+      Q_ARG(double, 0.0), 
+      Q_ARG(double, 0.0), 
       Q_ARG(double, scale), Q_ARG(int, targetW), Q_ARG(int, targetH),
-      Q_ARG(colorscreen::render_parameters, *m_rparams),
+      Q_ARG(colorscreen::render_parameters, data.params),
       Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress),
       Q_ARG(const char*, "Rendering navigation"));
       
     if (!result) {
-        qWarning() << "NavigationView::onTriggerRender - FAILED to invoke render method!";
         m_renderQueue.reportFinished(reqId, false);
     }
 }
@@ -193,12 +191,10 @@ void NavigationView::updateParameters(
     colorscreen::render_parameters *rparams,
     colorscreen::scr_to_img_parameters *scrToImg,
     colorscreen::scr_detect_parameters *scrDetect) {
-  // Update parameter pointers
   m_rparams = rparams;
   m_scrToImg = scrToImg;
   m_scrDetect = scrDetect;
 
-  // Recalculate render type based on new screen type
   if (m_scrToImg && m_scrToImg->type != colorscreen::Random) {
     m_renderType.type = colorscreen::render_type_fast;
   } else {
@@ -206,7 +202,6 @@ void NavigationView::updateParameters(
     m_renderType.color = true;
   }
 
-  // Update renderer's cached parameters if it exists
   if (m_renderer) {
     QMetaObject::invokeMethod(
         m_renderer, "updateParameters", Qt::QueuedConnection,
@@ -219,7 +214,6 @@ void NavigationView::updateParameters(
         Q_ARG(colorscreen::render_type_parameters, m_renderType));
   }
 
-  // Check if crop or orientation changed to clear preview
   if (m_rparams && (!(m_rparams->scan_crop == m_lastScanCrop) ||
                     m_rparams->scan_rotation != m_lastRotation ||
                     m_rparams->scan_mirror != m_lastMirror)) {
@@ -229,11 +223,20 @@ void NavigationView::updateParameters(
     m_lastMirror = m_rparams->scan_mirror;
   }
 
-  // Request re-render
-  m_renderQueue.requestRender();
+  RenderRequestData data;
+  data.width = width();
+  data.height = height();
+  data.params = m_rparams ? *m_rparams : colorscreen::render_parameters();
+  m_renderQueue.requestRender(QVariant::fromValue(data));
 }
 
-void NavigationView::resizeEvent(QResizeEvent *event) { m_renderQueue.requestRender(); }
+void NavigationView::resizeEvent(QResizeEvent *event) { 
+  RenderRequestData data;
+  data.width = event->size().width();
+  data.height = event->size().height();
+  data.params = m_rparams ? *m_rparams : colorscreen::render_parameters();
+  m_renderQueue.requestRender(QVariant::fromValue(data)); 
+}
 
 
 

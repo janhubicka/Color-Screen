@@ -1,5 +1,7 @@
 #include "Renderer.h"
 #include <QImage>
+#include <QtConcurrent>
+#include "Logging.h"
 
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/progress-info.h"
@@ -23,6 +25,7 @@ void Renderer::updateParameters(const colorscreen::render_parameters &rparams,
                                 const colorscreen::scr_detect_parameters &scrDetect,
                                 const colorscreen::render_type_parameters &renderType)
 {
+    QMutexLocker locker(&m_mutex);
     m_rparams = rparams;
     m_scrToImg = scrToImg;
     m_scrDetect = scrDetect;
@@ -34,118 +37,124 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
                       std::shared_ptr<colorscreen::progress_info> progress,
                       const char* taskName) 
 {
-    if (!m_scan || (!m_scan->data && !m_scan->rgbdata)) {
-        emit imageReady(reqId, QImage(), xOffset, yOffset, scale, true);
-        return;
-    }
+    // Capture necessary state under lock
+    colorscreen::scr_to_img_parameters scrToImg;
+    colorscreen::scr_detect_parameters scrDetect;
+    colorscreen::render_type_parameters renderType;
     
-    // Use passed params (which should be current from GUI thread)
-    m_rparams = frameParams; 
-
-    CoordinateTransformer transformer(m_scan.get(), m_rparams);
-    QSize transformedSize = transformer.getTransformedCropSize();
-
-    // View coordinates (xOffset, yOffset, width, height) are in TRANSORMED space relative to the Crop
-    // We want to intersect requested rect with [0,0, transformedSize]
-    QRectF visibleRect(0, 0, transformedSize.width(), transformedSize.height());
-    QRectF requestRect(xOffset, yOffset, (double)width / scale, (double)height / scale);
-    QRectF intersection = requestRect.intersected(visibleRect);
-
-    if (intersection.isEmpty()) {
-        emit imageReady(reqId, QImage(), xOffset, yOffset, scale, true);
-        return;
+    {
+        QMutexLocker locker(&m_mutex);
+        scrToImg = m_scrToImg;
+        scrDetect = m_scrDetect;
+        renderType = m_renderType;
     }
 
-    // Determine the part of the source image to render in absolute units (scale handled by Renderer)
-    colorscreen::point_t p0 = transformer.transformedToScanCrop({intersection.left(), intersection.top()});
-    colorscreen::point_t p1 = transformer.transformedToScanCrop({intersection.right(), intersection.bottom()});
+    // Run actual rendering in thread pool
+    QtConcurrent::run([this, reqId, xOffset, yOffset, scale, width, height, 
+                       frameParams, progress, taskName,
+                       scrToImg, scrDetect, renderType]() mutable {
+        
+        if (!m_scan || (!m_scan->data && !m_scan->rgbdata)) {
+            emit imageReady(reqId, QImage(), xOffset, yOffset, scale, true);
+            return;
+        }
 
-    double sx_unit = std::min(p0.x, p1.x);
-    double sy_unit = std::min(p0.y, p1.y);
+        CoordinateTransformer transformer(m_scan.get(), frameParams);
+        QSize transformedSize = transformer.getTransformedCropSize();
 
-    // Physical pixels for the intersection part
-    int tw = (int)std::round(intersection.width() * scale);
-    int th = (int)std::round(intersection.height() * scale);
+        QRectF visibleRect(0, 0, transformedSize.width(), transformedSize.height());
+        QRectF requestRect(xOffset, yOffset, (double)width / scale, (double)height / scale);
+        QRectF intersection = requestRect.intersected(visibleRect);
 
-    if (tw <= 0) tw = 1;
-    if (th <= 0) th = 1;
+        if (intersection.isEmpty()) {
+            emit imageReady(reqId, QImage(), xOffset, yOffset, scale, true);
+            return;
+        }
 
-    // Scan dimensions for buffer creation logic (swapped if 90/270 rot)
-    int angleIdx = (int)(m_rparams.scan_rotation) % 4;
-    if (angleIdx < 0) angleIdx += 4;
-    bool mirror = m_rparams.scan_mirror;
+        colorscreen::point_t p0 = transformer.transformedToScanCrop({intersection.left(), intersection.top()});
+        colorscreen::point_t p1 = transformer.transformedToScanCrop({intersection.right(), intersection.bottom()});
 
-    int renderW = tw;
-    int renderH = th;
-    if (angleIdx == 1 || angleIdx == 3) {
-        std::swap(renderW, renderH);
-    }
+        double sx_unit = std::min(p0.x, p1.x);
+        double sy_unit = std::min(p0.y, p1.y);
 
-    colorscreen::tile_parameters tile;
-    tile.pos.x = sx_unit * scale;
-    tile.pos.y = sy_unit * scale;
-    tile.step = 1.0 / scale;
-    tile.width = renderW;
-    tile.height = renderH;
+        int tw = (int)std::round(intersection.width() * scale);
+        int th = (int)std::round(intersection.height() * scale);
 
-    // Buffer
-    QImage image(renderW, renderH, QImage::Format_RGB888);
-    tile.pixels = image.bits();
-    tile.rowstride = image.bytesPerLine();
-    tile.pixelbytes = 3; // RGB888
+        if (tw <= 0) tw = 1;
+        if (th <= 0) th = 1;
 
-    // Updated result offsets
-    double outX = intersection.left();
-    double outY = intersection.top();
+        int angleIdx = (int)(frameParams.scan_rotation) % 4;
+        if (angleIdx < 0) angleIdx += 4;
+        bool mirror = frameParams.scan_mirror;
 
-    // Call the actual rendering function
-    bool success = false;
-    colorscreen::render_type_parameters rtparams = m_renderType;
-    
-    if (progress) {
-       progress->set_task(taskName, 1);
-    }
+        int renderW = tw;
+        int renderH = th;
+        if (angleIdx == 1 || angleIdx == 3) {
+            std::swap(renderW, renderH);
+        }
 
-    colorscreen::sub_task task (progress.get ());  /* Keep so tasks are nested.  */
-    try {
-        if (colorscreen::render_tile(*m_scan, m_scrToImg, m_scrDetect, m_rparams, rtparams, tile, progress.get()))
-            success = true;
-         else {
+        colorscreen::tile_parameters tile;
+        tile.pos.x = sx_unit * scale;
+        tile.pos.y = sy_unit * scale;
+        tile.step = 1.0 / scale;
+        tile.width = renderW;
+        tile.height = renderH;
+
+        QImage image(renderW, renderH, QImage::Format_RGB888);
+        tile.pixels = image.bits();
+        tile.rowstride = image.bytesPerLine();
+        tile.pixelbytes = 3;
+
+        double outX = intersection.left();
+        double outY = intersection.top();
+
+        bool success = false;
+        
+        if (progress) {
+           progress->set_task(taskName, 1);
+        }
+
+        colorscreen::sub_task task (progress.get ());
+        try {
+            qCDebug(lcRenderSync) << "  Task ID:" << reqId << " starts rendering tile";
+            if (colorscreen::render_tile(*m_scan, scrToImg, scrDetect, frameParams, renderType, tile, progress.get()))
+                success = true;
+            qCDebug(lcRenderSync) << "  Task ID:" << reqId << " finished rendering tile " << success;
+        } catch (...) {
             success = false;
         }
-    } catch (const std::exception& e) {
-        success = false;
-    }
-    
-    // Rotate and Mirror if needed to match requested view
-    if (success) {
-        QTransform transform;
-        bool transformed = false;
         
-        // 1. Rotate result to match View (un-mirrored)
-        if (angleIdx != 0) {
-           transform.rotate(angleIdx * 90); 
-           transformed = true;
+        if (success) {
+            QTransform transform;
+            bool transformed = false;
+            
+            if (angleIdx != 0) {
+               transform.rotate(angleIdx * 90); 
+               transformed = true;
+            }
+            
+            if (mirror) {
+               transform.scale(-1, 1);
+               transformed = true;
+            }
+            
+            if (transformed) {
+               if (progress) progress->set_task("transforming final image", 1);
+               if (!(progress && progress->cancel_requested()))
+                    image = image.transformed(transform);
+               else
+	         {
+                   qCDebug(lcRenderSync) << "  Task ID:" << reqId << " cancelled before transformation";
+                   success = false;
+	         }
+            }
         }
         
-        // 2. Mirror result if needed
-        if (mirror) {
-           transform.scale(-1, 1);
-           transformed = true;
+        qCDebug(lcRenderSync) << "  Task ID:" << reqId << " finished with " << success;
+        if (success) {
+            emit imageReady(reqId, image, outX, outY, scale, true);
+        } else {
+            emit imageReady(reqId, QImage(), xOffset, yOffset, scale, false);
         }
-        
-        progress->set_task("transforming final image", 1);
-        if (transformed) {
-	     if (progress && progress->cancel_requested())
-		success = false;
-	     else
-                image = image.transformed(transform);
-        }
-    }
-    
-    if (success) {
-        emit imageReady(reqId, image, outX, outY, scale, true);
-    } else {
-        emit imageReady(reqId, QImage(), xOffset, yOffset, scale, false);
-    }
+    });
 }

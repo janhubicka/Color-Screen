@@ -62,6 +62,12 @@ public:
   // Public method for loading files (CLI support)
   void loadFile(const QString &fileName, bool suppressParamPrompt = false);
 
+  struct SolverRequestData {
+    colorscreen::scr_to_img_parameters scrToImg;
+    colorscreen::solver_parameters solver;
+    bool computeMesh;
+  };
+ 
 private slots:
   void onZoomIn();
   void onZoomOut();

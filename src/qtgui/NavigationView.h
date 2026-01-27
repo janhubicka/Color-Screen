@@ -18,6 +18,12 @@ class NavigationView : public QWidget
 {
     Q_OBJECT
 public:
+    struct RenderRequestData {
+      int width;
+      int height;
+      colorscreen::render_parameters params;
+    };
+
     explicit NavigationView(QWidget *parent = nullptr);
     ~NavigationView() override;
 
@@ -54,19 +60,13 @@ protected:
 private slots:
     void onSliderValueChanged(int value);
     void onImageReady(int reqId, QImage image, double x, double y, double scale, bool success);
+    void onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData);
 
 private:
     void updateSliderRange();
 
     QSlider *m_zoomSlider;
     
-    // Render Queue
-    TaskQueue m_renderQueue;
-    
-private slots:
-    void onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress);
-    
-private:
     // Core Data (same as ImageWidget, but we own our Renderer)
     std::shared_ptr<colorscreen::image_data> m_scan;
     colorscreen::render_parameters *m_rparams = nullptr;
@@ -80,10 +80,7 @@ private:
     std::shared_ptr<colorscreen::progress_info> m_currentProgress;
     
     // Internal state
-    
-    // Single-thread rendering queue
-    bool m_renderInProgress = false;
-    bool m_hasPendingRender = false;
+    TaskQueue m_renderQueue;
     
     QImage m_previewImage;
     double m_previewScale = 1.0; // Scale of preview relative to original scan

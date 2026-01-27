@@ -1,6 +1,7 @@
 #include "GeometrySolverWorker.h"
 #include "mesh.h"
 #include <QDebug>
+#include <QtConcurrent>
 
 GeometrySolverWorker::GeometrySolverWorker(
     std::shared_ptr<colorscreen::image_data> scan, QObject *parent)
@@ -13,59 +14,56 @@ void GeometrySolverWorker::solve(
     colorscreen::solver_parameters solverParams,
     std::shared_ptr<colorscreen::progress_info> progress,
     bool computeMesh) {
-  if (!m_scan || m_solveInProgress) {
+    
+  if (!m_scan) {
     emit finished(reqId, params, false);
     return;
   }
 
-  m_solveInProgress = true;
-  bool success = false;
+  // Use QtConcurrent to run in thread pool
+  QtConcurrent::run([this, reqId, params, solverParams, progress, computeMesh]() mutable {
+      bool success = false;
 
-  try {
-    colorscreen::sub_task task (progress.get ());
-    // Lens optimization is slow. Disable it for nonlinear tranfomrs
-    if (computeMesh)
-      solverParams.optimize_lens = false;
-    
-    auto originalMesh = params.mesh_trans;
+      try {
+        colorscreen::sub_task task (progress.get ());
+        // Lens optimization is slow. Disable it for nonlinear transforms
+        if (computeMesh)
+          solverParams.optimize_lens = false;
+        
+        auto originalMesh = params.mesh_trans;
 
-    // colorscreen::solver modifies params in place and returns sum of squares of error
-    colorscreen::coord_t error_sq = colorscreen::solver(&params, *m_scan, solverParams, progress.get());
+        // colorscreen::solver modifies params in place and returns sum of squares of error
+        colorscreen::coord_t error_sq = colorscreen::solver(&params, *m_scan, solverParams, progress.get());
 
-    if (!computeMesh)
-      params.mesh_trans = originalMesh;
+        if (!computeMesh)
+          params.mesh_trans = originalMesh;
 
-    qDebug() << "Geometry solver finished with error squared:" << error_sq << " nonliner " << computeMesh;
+        qDebug() << "Geometry solver finished with error squared:" << error_sq << " nonlinear " << computeMesh;
 
-    if (progress && progress->cancelled()) {
-      success = false;
-    } else {
-      if (computeMesh) {
-        params.mesh_trans = colorscreen::solver_mesh(&params, *m_scan, solverParams, progress.get());
-        if (!params.mesh_trans) {
-           success = false;
-	   if (!progress->cancelled ())
-             qWarning() << "Geometry solver failed to compute mesh";
+        if (progress && progress->cancelled()) {
+          success = false;
+        } else {
+          if (computeMesh) {
+            params.mesh_trans = colorscreen::solver_mesh(&params, *m_scan, solverParams, progress.get());
+            if (!params.mesh_trans) {
+               success = false;
+               if (!progress->cancelled ())
+                 qWarning() << "Geometry solver failed to compute mesh";
+            }
+            else
+              success = true;
+          } else {
+            success = true;
+          }
         }
-	else
-	  success = true;
-      } else {
-        success = true;
-	// Do not clear mesh_trans.  When nonlinear tranformations are disabled,
-	// UI will clear mesh_trans.  When screen detection is finished, we compute
-	// mesh_trans but then invoke solver with !computeMesh to fill in approximate
-	// scrToImg map to get goemetry previews working well.
-        // params.mesh_trans = nullptr;
+      } catch (const std::exception &e) {
+        qWarning() << "Geometry solver failed with exception:" << e.what();
+        success = false;
+      } catch (...) {
+        qWarning() << "Geometry solver failed with unknown exception";
+        success = false;
       }
-    }
-  } catch (const std::exception &e) {
-    qWarning() << "Geometry solver failed with exception:" << e.what();
-    success = false;
-  } catch (...) {
-    qWarning() << "Geometry solver failed with unknown exception";
-    success = false;
-  }
 
-  m_solveInProgress = false;
-  emit finished(reqId, params, success);
+      emit finished(reqId, params, success);
+  });
 }
