@@ -280,6 +280,11 @@ public:
     return 0.00000001;
   }
   coord_t
+  derivative_perturbation ()
+  {
+    return 0.0001;
+  }
+  coord_t
   scale ()
   {
     return 0.3;
@@ -287,7 +292,7 @@ public:
   bool
   verbose ()
   {
-    return false;
+    return true;
   }
   void
   constrain (coord_t *vals)
@@ -376,7 +381,7 @@ public:
   int
   num_observations ()
   {
-    return m_sparam.points.size () * 2;
+    return m_sparam.points.size () * (screen_with_vertical_strips_p (m_param.type) ? 1 : 2);
   }
   void
   residuals(const coord_t *vals, coord_t *f_vec)
@@ -384,12 +389,18 @@ public:
     std::vector<point_t> transformed (m_sparam.points.size ());
     coord_t chisq;
     solve (vals, &chisq, &transformed);
-    for (int i = 0; i < m_sparam.points.size (); i++)
-    {
-      f_vec[2 * i] = transformed[i].x - m_sparam.points[i].scr.x;
-      f_vec[2 * i + 1] = transformed[i].y - m_sparam.points[i].scr.y;
-      //printf ("%f %f %f %f\n",transformed[i].x, transformed[i].y, m_sparam.points[i].scr.x, m_sparam.points[i].scr.y);
-    }
+    if (!screen_with_vertical_strips_p (m_param.type))
+      for (int i = 0; i < m_sparam.points.size (); i++)
+	{
+	  f_vec[2 * i] = transformed[i].x - m_sparam.points[i].scr.x;
+	  f_vec[2 * i + 1] = transformed[i].y - m_sparam.points[i].scr.y;
+	  //printf ("%f %f %f %f\n",transformed[i].x, transformed[i].y, m_sparam.points[i].scr.x, m_sparam.points[i].scr.y);
+	}
+    else
+      for (int i = 0; i < m_sparam.points.size (); i++)
+      {
+	f_vec[i] = transformed[i].x - m_sparam.points[i].scr.x;
+      }
     //printf ("%g %g %g %g %g error sq %.10g\n",vals[0], vals[1], vals[2], vals[3], vals[4], chisq);
   }
 
@@ -426,12 +437,16 @@ solver (scr_to_img_parameters *param, image_data &img_data,
     {
       lens_solver s (*param, img_data, sparam, progress);
       bool use_simplex = true;
-      bool use_multifit = true;
+      bool use_gsl_simplex = false;
+      bool use_multifit = false;
       if (use_simplex)
-	simplex<coord_t, lens_solver> (s, "optimizing lens correction",
+	simplex<coord_t, lens_solver> (s, "optimizing lens correction (simplex)",
+				       progress);
+      if (use_simplex)
+	gsl_simplex<coord_t, lens_solver> (s, "optimizing lens correction (GSL simplex)",
 				       progress);
       if (use_multifit)
-	gsl_multifit<coord_t, lens_solver> (s, "optimizing lens correction pass 2",
+	gsl_multifit<coord_t, lens_solver> (s, "optimizing lens correction (multifit)",
 				       progress);
       int n = s.num_coordinates ();
       if (is_fixed_lens (param->scanner_type))

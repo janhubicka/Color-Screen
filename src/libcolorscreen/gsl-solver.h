@@ -180,7 +180,7 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
   fdf.params = &proxy;
 
   gsl_multifit_nlinear_parameters fdf_params = gsl_multifit_nlinear_default_parameters ();
-  fdf_params.h_df = /*1e-4*/eps;
+  fdf_params.h_df = c.derivative_perturbation ();
   
   /* Disable GSL default error handler to prevent aborts on singular matrices etc. */
   gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();

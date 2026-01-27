@@ -266,7 +266,12 @@ public:
   luminosity_t
   epsilon ()
   {
-    return 0.0001;
+    return 0.0000001;
+  }
+  luminosity_t
+  derivative_perturbation ()
+  {
+    return 0.00001;
   }
   bool
   verbose ()
