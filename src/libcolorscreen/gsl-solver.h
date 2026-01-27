@@ -404,7 +404,7 @@ gsl_simplex (C &c, const char *task = NULL, progress_info *progress = NULL,
 	    }
 
           double size = gsl_multimin_fminimizer_size (s);
-          status = gsl_multimin_test_size (size, eps);
+          status = gsl_multimin_test_size (size, 1e-2);
 
           if (status == GSL_SUCCESS)
             {
