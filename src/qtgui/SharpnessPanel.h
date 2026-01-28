@@ -47,11 +47,13 @@ private:
   void updateScreenTiles(); // Wrapper to schedule
   void applyChange(std::function<void(ParameterState &)> modifier, const QString &description = QString()) override;
   void loadMTF();
+  void updateMeasurementList();
   void onParametersRefreshed(const ParameterState &state) override;
 
   MTFChartWidget *m_mtfChart = nullptr;
   class QLabel *m_diffractionNotice = nullptr;
   QVBoxLayout *m_mtfContainer = nullptr; // Container Layout
+  QVBoxLayout *m_measurementsLayout = nullptr;
 
   // Cached parameters for change detection (moved from private to be used in
   // shouldUpdateTiles)

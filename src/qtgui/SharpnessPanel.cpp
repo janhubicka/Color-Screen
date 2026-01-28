@@ -4,7 +4,9 @@
 #include "../libcolorscreen/include/scr-to-img.h"
 #include "MTFChartWidget.h"
 #include <QDebug>
+#include <QCheckBox>
 #include <QComboBox>
+#include <QDoubleSpinBox>
 #include <QString>
 #include <QFileDialog>
 #include <QFormLayout>
@@ -12,6 +14,7 @@
 #include <QMessageBox>
 #include <QHBoxLayout>
 #include <QIcon> // Added
+#include <QLineEdit>
 #include <QImage>
 #include <QLabel>
 #include <QPixmap>
@@ -188,6 +191,15 @@ void SharpnessPanel::setupUi() {
   addSeparator("Measurements");
   addButtonParameter("", "Load QuickMTF measurement", [this]() { loadMTF(); });
 
+  QWidget *measContainer = new QWidget();
+  m_measurementsLayout = new QVBoxLayout(measContainer);
+  m_measurementsLayout->setContentsMargins(0, 0, 0, 0);
+  m_measurementsLayout->setSpacing(2);
+  if (m_currentGroupForm)
+      m_currentGroupForm->addRow(measContainer);
+  else
+      m_form->addRow(measContainer);
+
   addSeparator("Deconvolution");
 
   // Supersample
@@ -343,6 +355,7 @@ void SharpnessPanel::applyChange(
 }
 
 void SharpnessPanel::onParametersRefreshed(const ParameterState &state) {
+  updateMeasurementList();
   updateMTFChart();
   updateScreenTiles();
 }
@@ -448,4 +461,126 @@ void SharpnessPanel::loadMTF() {
   applyChange([state](ParameterState &s) {
     s = state;
   }, tr("Load MTF measurement"));
+  updateMeasurementList();
+}
+
+void SharpnessPanel::updateMeasurementList() {
+    if (!m_measurementsLayout) return;
+
+    ParameterState state = m_stateGetter();
+    const auto &measurements = state.rparams.sharpen.scanner_mtf.measurements;
+
+    // To avoid losing focus during editing, we only recreate if size changed
+    // or if we really need to.
+    static size_t lastSize = -1;
+    if (measurements.size() == lastSize) {
+        // Just update values without recreation if possible?
+        // Actually, for simplicity and since it's a small list, let's clear and rebuild
+        // but maybe the user won't mind if it's on explicit refresh.
+        // Wait, every applyChange calls onParametersRefreshed.
+        // If I rebuild here, I WILL lose focus.
+    }
+    lastSize = measurements.size();
+
+    // Clear layout
+    QLayoutItem *item;
+    while ((item = m_measurementsLayout->takeAt(0)) != nullptr) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
+
+    for (int i = 0; i < (int)measurements.size(); ++i) {
+        const auto &m = measurements[i];
+        QWidget *row = new QWidget();
+        QHBoxLayout *hLayout = new QHBoxLayout(row);
+        hLayout->setContentsMargins(0, 0, 0, 0);
+        hLayout->setSpacing(4);
+
+        // Delete button
+        QPushButton *delBtn = new QPushButton();
+        delBtn->setIcon(QIcon::fromTheme("edit-delete"));
+        delBtn->setFlat(true);
+        delBtn->setToolTip(tr("Delete measurement"));
+        delBtn->setMaximumWidth(30);
+        connect(delBtn, &QPushButton::clicked, this, [this, i]() {
+            applyChange([i](ParameterState &s) {
+                if (i < (int)s.rparams.sharpen.scanner_mtf.measurements.size()) {
+                    s.rparams.sharpen.scanner_mtf.measurements.erase(
+                        s.rparams.sharpen.scanner_mtf.measurements.begin() + i);
+                    if (s.rparams.sharpen.scanner_mtf.measured_mtf_idx >= (int)s.rparams.sharpen.scanner_mtf.measurements.size())
+                        s.rparams.sharpen.scanner_mtf.measured_mtf_idx = (int)s.rparams.sharpen.scanner_mtf.measurements.size() - 1;
+                }
+            }, tr("Delete MTF measurement"));
+        });
+        hLayout->addWidget(delBtn);
+
+        // Name
+        QLineEdit *nameEdit = new QLineEdit(QString::fromStdString(m.name));
+        connect(nameEdit, &QLineEdit::editingFinished, this, [this, i, nameEdit]() {
+            applyChange([i, nameEdit](ParameterState &s) {
+                if (i < (int)s.rparams.sharpen.scanner_mtf.measurements.size()) {
+                    s.rparams.sharpen.scanner_mtf.measurements[i].name = nameEdit->text().toStdString();
+                }
+            }, tr("Change MTF measurement name"));
+        });
+        hLayout->addWidget(nameEdit, 1);
+
+        // Channel
+        QComboBox *chanCombo = new QComboBox();
+        chanCombo->addItem(tr("Unknown"), -1);
+        chanCombo->addItem(tr("Red"), 0);
+        chanCombo->addItem(tr("Green"), 1);
+        chanCombo->addItem(tr("Blue"), 2);
+        chanCombo->addItem(tr("IR"), 3);
+
+        int idx = chanCombo->findData(m.channel);
+        if (idx != -1) chanCombo->setCurrentIndex(idx);
+
+        connect(chanCombo, QOverload<int>::of(&QComboBox::activated), this, [this, i, chanCombo](int index) {
+            int val = chanCombo->itemData(index).toInt();
+            applyChange([i, val](ParameterState &s) {
+                if (i < (int)s.rparams.sharpen.scanner_mtf.measurements.size()) {
+                    s.rparams.sharpen.scanner_mtf.measurements[i].channel = val;
+                }
+            }, tr("Change MTF measurement channel"));
+        });
+        hLayout->addWidget(chanCombo);
+
+        // Wavelength
+        QDoubleSpinBox *waveSpin = new QDoubleSpinBox();
+        waveSpin->setRange(0, 2000);
+        waveSpin->setValue(m.wavelength);
+        waveSpin->setSuffix(" nm");
+        waveSpin->setDecimals(1);
+        waveSpin->setSpecialValueText(tr("unknown"));
+        waveSpin->setVisible(m.channel == -1);
+        connect(waveSpin, &QDoubleSpinBox::editingFinished, this, [this, i, waveSpin]() {
+            double val = waveSpin->value();
+            applyChange([i, val](ParameterState &s) {
+                if (i < (int)s.rparams.sharpen.scanner_mtf.measurements.size()) {
+                    s.rparams.sharpen.scanner_mtf.measurements[i].wavelength = val;
+                }
+            }, tr("Change MTF measurement wavelength"));
+        });
+        hLayout->addWidget(waveSpin);
+
+        // Same capture
+        QCheckBox *sameCheck = new QCheckBox(tr("Same"));
+        sameCheck->setChecked(m.same_capture);
+        if (i == 0) {
+            sameCheck->setChecked(false);
+            sameCheck->setEnabled(false);
+        }
+
+        connect(sameCheck, &QCheckBox::toggled, this, [this, i](bool v) {
+            applyChange([i, v](ParameterState &s) {
+                if (i < (int)s.rparams.sharpen.scanner_mtf.measurements.size()) {
+                    s.rparams.sharpen.scanner_mtf.measurements[i].same_capture = v;
+                }
+            }, tr("Change MTF measurement same capture"));
+        });
+        hLayout->addWidget(sameCheck);
+
+        m_measurementsLayout->addWidget(row);
+    }
 }
