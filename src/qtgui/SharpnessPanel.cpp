@@ -15,6 +15,7 @@
 #include <QHBoxLayout>
 #include <QIcon> // Added
 #include <QLineEdit>
+#include <QFileInfo>
 #include <QImage>
 #include <QLabel>
 #include <QPixmap>
@@ -194,7 +195,7 @@ void SharpnessPanel::setupUi() {
   QWidget *measContainer = new QWidget();
   m_measurementsLayout = new QVBoxLayout(measContainer);
   m_measurementsLayout->setContentsMargins(0, 0, 0, 0);
-  m_measurementsLayout->setSpacing(2);
+  m_measurementsLayout->setSpacing(4);
   if (m_currentGroupForm)
       m_currentGroupForm->addRow(measContainer);
   else
@@ -456,6 +457,11 @@ void SharpnessPanel::loadMTF() {
   }
   fclose(f);
   state.rparams.sharpen.scanner_mtf.measured_mtf_idx = 0;
+  // Use base name for the last added measurement
+  if (!state.rparams.sharpen.scanner_mtf.measurements.empty()) {
+      state.rparams.sharpen.scanner_mtf.measurements.back().name = 
+          QFileInfo(fileName).baseName().toStdString();
+  }
 
   // Now apply the change
   applyChange([state](ParameterState &s) {
@@ -488,6 +494,41 @@ void SharpnessPanel::updateMeasurementList() {
         if (item->widget()) item->widget()->deleteLater();
         delete item;
     }
+
+    if (measurements.empty()) return;
+
+    // Header row
+    QWidget *header = new QWidget();
+    QHBoxLayout *headerLayout = new QHBoxLayout(header);
+    headerLayout->setContentsMargins(0, 2, 0, 2);
+    headerLayout->setSpacing(4);
+
+    // Spacer for delete button
+    headerLayout->addSpacing(34); 
+
+    QFont boldFont = this->font();
+    boldFont.setBold(true);
+
+    QLabel *nameLabel = new QLabel(tr("Name"));
+    nameLabel->setFont(boldFont);
+    headerLayout->addWidget(nameLabel, 1);
+
+    QLabel *chanLabel = new QLabel(tr("Channel"));
+    chanLabel->setFont(boldFont);
+    chanLabel->setFixedWidth(100); 
+    headerLayout->addWidget(chanLabel);
+
+    QLabel *waveLabel = new QLabel(tr("Wavelength"));
+    waveLabel->setFont(boldFont);
+    waveLabel->setFixedWidth(120);
+    headerLayout->addWidget(waveLabel);
+
+    QLabel *sameLabel = new QLabel(tr("Same"));
+    sameLabel->setFixedWidth(50);
+    sameLabel->setFont(boldFont);
+    headerLayout->addWidget(sameLabel);
+
+    m_measurementsLayout->addWidget(header);
 
     for (int i = 0; i < (int)measurements.size(); ++i) {
         const auto &m = measurements[i];
@@ -535,6 +576,7 @@ void SharpnessPanel::updateMeasurementList() {
 
         int idx = chanCombo->findData(m.channel);
         if (idx != -1) chanCombo->setCurrentIndex(idx);
+        chanCombo->setFixedWidth(100);
 
         connect(chanCombo, QOverload<int>::of(&QComboBox::activated), this, [this, i, chanCombo](int index) {
             int val = chanCombo->itemData(index).toInt();
@@ -553,7 +595,8 @@ void SharpnessPanel::updateMeasurementList() {
         waveSpin->setSuffix(" nm");
         waveSpin->setDecimals(1);
         waveSpin->setSpecialValueText(tr("unknown"));
-        waveSpin->setVisible(m.channel == -1);
+        waveSpin->setEnabled(m.channel == -1);
+        waveSpin->setFixedWidth(120);
         connect(waveSpin, &QDoubleSpinBox::editingFinished, this, [this, i, waveSpin]() {
             double val = waveSpin->value();
             applyChange([i, val](ParameterState &s) {
@@ -565,7 +608,9 @@ void SharpnessPanel::updateMeasurementList() {
         hLayout->addWidget(waveSpin);
 
         // Same capture
-        QCheckBox *sameCheck = new QCheckBox(tr("Same"));
+        QCheckBox *sameCheck = new QCheckBox();
+        sameCheck->setFixedWidth(50);
+        sameCheck->setToolTip(tr("If enabled solver will assume that measurement come from the same capture as prevoius one and will use the same focus displacement"));
         sameCheck->setChecked(m.same_capture);
         if (i == 0) {
             sameCheck->setChecked(false);
