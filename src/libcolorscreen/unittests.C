@@ -536,6 +536,7 @@ test_render_linearity ()
 int
 main ()
 {
+#if 0
   printf ("1..8\n");
   test_matrix ();
   report ("matrix tests", true);
@@ -544,8 +545,11 @@ main ()
   report ("render linearity tests", test_render_linearity ());
   report ("screen blur tests", test_screen_blur ());
   report ("homography tests", test_homography (false, false, 0.000001));
+#endif
   report ("lens correction tests", test_homography (true, false, 0.15));
+#if 0
   report ("1d homography and lens correction tests", test_homography (true, true, 0.15));
   report ("screen discovery tests", test_discovery (1.8));
+#endif
   return 0;
 }

@@ -6,8 +6,10 @@
 #include <QDebug>
 #include <QComboBox>
 #include <QString>
+#include <QFileDialog>
 #include <QFormLayout>
 #include <QFutureWatcher>
+#include <QMessageBox>
 #include <QHBoxLayout>
 #include <QIcon> // Added
 #include <QImage>
@@ -85,13 +87,13 @@ void SharpnessPanel::setupUi() {
   addCheckboxParameter(
       "Use measured MTF",
       [](const ParameterState &s) {
-        return s.rparams.sharpen.scanner_mtf.use_measured_mtf;
+        return s.rparams.sharpen.scanner_mtf.measured_mtf_idx >= 0;
       },
       [](ParameterState &s, bool v) {
-        s.rparams.sharpen.scanner_mtf.use_measured_mtf = v;
+        s.rparams.sharpen.scanner_mtf.measured_mtf_idx = v ? 0 : -1;
       },
       [](const ParameterState &s) {
-        return s.rparams.sharpen.scanner_mtf.size() > 2;
+        return s.rparams.sharpen.scanner_mtf.measurements.size();
       });
 
 
@@ -166,7 +168,7 @@ void SharpnessPanel::setupUi() {
       });
     },
     [this, separatorToggle](const ParameterState &s) {
-       bool visible = s.rparams.sharpen.scanner_mtf.size() > 0;
+       bool visible = s.rparams.sharpen.scanner_mtf.measurements.size() > 0;
        if (separatorToggle && !separatorToggle->isChecked())
          visible = false;
        return visible;
@@ -182,6 +184,9 @@ void SharpnessPanel::setupUi() {
       [](ParameterState &s, double v) {
         s.rparams.sharpen.scanner_mtf_scale = v;
       });
+
+  addSeparator("Measurements");
+  addButtonParameter("", "Load QuickMTF measurement", [this]() { loadMTF(); });
 
   addSeparator("Deconvolution");
 
@@ -291,14 +296,14 @@ void SharpnessPanel::updateMTFChart() {
 
   // Extract measured MTF data if available
   const auto &scanner_mtf = state.rparams.sharpen.scanner_mtf;
-  if (scanner_mtf.size() > 0) {
+  if (scanner_mtf.measurements.size() > 0) {
     std::vector<double> freq, contrast;
-    freq.reserve(scanner_mtf.size());
-    contrast.reserve(scanner_mtf.size());
+    freq.reserve(scanner_mtf.measurements.size());
+    contrast.reserve(scanner_mtf.measurements.size());
 
-    for (size_t i = 0; i < scanner_mtf.size(); ++i) {
-      freq.push_back(scanner_mtf.get_freq(i));
-      contrast.push_back(scanner_mtf.get_contrast(i));
+    for (size_t i = 0; i < scanner_mtf.measurements[0].size(); ++i) {
+      freq.push_back(scanner_mtf.measurements[0].get_freq(i));
+      contrast.push_back(scanner_mtf.measurements[0].get_contrast(i));
     }
 
     m_mtfChart->setMeasuredMTF(freq, contrast);
@@ -410,3 +415,37 @@ void SharpnessPanel::reattachMTFChart(QWidget *widget) {
 }
 
 // reattachTiles removed (in base)
+void SharpnessPanel::loadMTF() {
+  QString fileName = QFileDialog::getOpenFileName(
+      this, tr("Load QuickMTF measurement"), "",
+      tr("QuickMTF files (*.csv *.txt);;All Files (*)"));
+
+  if (fileName.isEmpty())
+    return;
+
+  FILE *f = fopen(fileName.toLocal8Bit().constData(), "r");
+  if (!f) {
+    QMessageBox::critical(this, tr("Error"),
+                          tr("Could not open file %1").arg(fileName));
+    return;
+  }
+
+  ParameterState state = m_stateGetter();
+  const char *error = nullptr;
+  if (state.rparams.sharpen.scanner_mtf.load_csv(
+          f, fileName.toStdString(), &error) < 0) {
+    QMessageBox::critical(
+        this, tr("Error"),
+        tr("Error loading MTF measurement: %1")
+            .arg(error ? QString::fromUtf8(error) : tr("Unknown error")));
+    fclose(f);
+    return;
+  }
+  fclose(f);
+  state.rparams.sharpen.scanner_mtf.measured_mtf_idx = 0;
+
+  // Now apply the change
+  applyChange([state](ParameterState &s) {
+    s = state;
+  }, tr("Load MTF measurement"));
+}

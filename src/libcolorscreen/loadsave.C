@@ -109,18 +109,24 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "sharpen_amount: %f\n", rparam->sharpen.usm_amount) < 0
 	  || fprintf (f, "scanner_snr: %f\n", rparam->sharpen.scanner_snr) < 0
 	  || fprintf (f, "scanner_mtf_scale: %f\n", rparam->sharpen.scanner_mtf_scale) < 0
-	  || fprintf (f, "scanner_mtf_use_measured: %s\n", bool_names [(int)rparam->sharpen.scanner_mtf.use_measured_mtf]) < 0
+	  || fprintf (f, "scanner_use_mtf_measurement: %i\n", rparam->sharpen.scanner_mtf.measured_mtf_idx) < 0
 	  || fprintf (f, "richardson_lucy_iterations: %i\n", rparam->sharpen.richardson_lucy_iterations) < 0
 	  || fprintf (f, "richardson_lucy_sigma: %f\n", rparam->sharpen.richardson_lucy_sigma) < 0)
 	return false;
-      if (rparam->sharpen.scanner_mtf.size ())
-	for (size_t i = 0; i < rparam->sharpen.scanner_mtf.size (); i++)
-	  {
-	    if (fprintf (f, "scanner_mtf_point: %f %f\n",
-		rparam->sharpen.scanner_mtf.get_freq(i),
-		rparam->sharpen.scanner_mtf.get_contrast(i)) < 0)
-	      return false;
-	  }
+      if (rparam->sharpen.scanner_mtf.measurements.size ())
+	for (size_t m = 0; m < rparam->sharpen.scanner_mtf.measurements.size (); m++)
+	{
+	  auto &measurement = rparam->sharpen.scanner_mtf.measurements[m];
+	  if (fprintf (f, "scanner_mtf_meaurement: %i\n", m) < 0)
+	    return false;
+	  for (size_t i = 0; i < measurement.size (); i++)
+	    {
+	      if (fprintf (f, "scanner_mtf_point: %f %f\n",
+		  measurement.get_freq(i),
+		  measurement.get_contrast(i)) < 0)
+		return false;
+	    }
+	}
       if (fprintf (f, "scanner_mtf_sigma_px: %f\n",
 	    rparam->sharpen.scanner_mtf.sigma) < 0
 	  || fprintf (f, "scanner_mtf_blur_diameter_px: %f\n",
@@ -415,6 +421,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
   int gray_min = -1;
   int gray_max = -1;
   bool first_scanner_mtf = true;
+  int measurement = 0;
   if (fread (buf, 1, strlen (HEADER), f) < 0
       || memcmp (buf, HEADER, strlen (HEADER)))
     {
@@ -1329,13 +1336,17 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 		}
 	    }
 	}
+      /* Compatibility only.  */
       else if (!strcmp (buf, "scanner_mtf_use_measured"))
         {
-	  if (!parse_bool (f, rparam_check (sharpen.scanner_mtf.use_measured_mtf)))
+	  bool use;
+	  if (!parse_bool (f, &use))
 	    {
 	      *error = "error parsing scanner_mtf_use_measured";
 	      return false;
 	    }
+	  if (rparam)
+	    rparam->sharpen.scanner_mtf.measured_mtf_idx = use ? 0 : -1;
         }
       else if (!strcmp (buf, "scanner_mtf_point"))
 	{
@@ -1351,7 +1362,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	  if (rparam)
-	    rparam->sharpen.scanner_mtf.add_value (freq, contrast);
+	    rparam->sharpen.scanner_mtf.measurements[measurement].add_value (freq, contrast);
 	}
       else if (!strcmp (buf, "scanner_mtf_sigma") || !strcmp (buf, "scanner_mtf_sigma_px"))
 	{

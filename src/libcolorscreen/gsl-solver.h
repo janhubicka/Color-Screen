@@ -120,7 +120,9 @@ struct gsl_solver_proxy
     if (proxy->temp_residuals.size() != (size_t)n)
       proxy->temp_residuals.resize(n);
 
-    proxy->c.residuals (proxy->temp_params.data (), proxy->temp_residuals.data ());
+    auto res = proxy->c.residuals (proxy->temp_params.data (), proxy->temp_residuals.data ());
+    if constexpr (std::is_same_v<decltype(res), int>)
+      return res;
 
     for (int i = 0; i < n; i++)
       gsl_vector_set (f_vec, i, proxy->temp_residuals[i]);
@@ -210,6 +212,24 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
   double final_chisq = NAN;
   int status = gsl_multifit_nlinear_init (x, &fdf, w);
 
+  double initial_resid = 0;
+  {
+    c.residuals (c.start, proxy.temp_residuals.data ());
+    std::vector<double> d_residuals (n);
+    for (int i = 0; i < n; i++)
+      d_residuals[i] = proxy.temp_residuals[i];
+    gsl_vector_view v = gsl_vector_view_array (d_residuals.data (), n);
+    initial_resid = gsl_blas_dnrm2 (&v.vector);
+  }
+  if (c.verbose ())
+    {
+      if (progress)
+	progress->pause_stdout ();
+      printf ("Simplex/Initial chisq %f, norm %f\n", initial_resid * initial_resid, initial_resid);
+      if (progress)
+	progress->resume_stdout ();
+    }
+
   if (status == GSL_SUCCESS)
     {
       int info;
@@ -222,14 +242,16 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
 
           if (status > 0)
 	    {
-	      if (status == GSL_ENOPROG)
+	      if (status == GSL_ENOPROG || status == GSL_EDOM)
 	        {
-		  if (progress)
-		    progress->pause_stdout ();
 		  if (c.verbose ())
-		    printf ("Multifit did not improve solution\n");
-		  if (progress)
-		    progress->resume_stdout ();
+		    {
+		      if (progress)
+			progress->pause_stdout ();
+		      printf ("Multifit stopped (boundary or no progress)\n");
+		      if (progress)
+			progress->resume_stdout ();
+		    }
 	        }
 	      else
 		{
@@ -243,7 +265,7 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
 	    }
 
           /* test for convergence */
-          status = gsl_multifit_nlinear_test (eps, eps, eps, &info, w);
+          status = gsl_multifit_nlinear_test (1e-6, 1e-6, 1e-6, &info, w);
 
           if (c.verbose ())
             {
@@ -275,13 +297,29 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
 	    }
 	}
 
-      for (int i = 0; i < p; i++)
-        c.start[i] = gsl_vector_get (w->x, i);
+      double final_resid = gsl_blas_dnrm2 (w->f);
+      if (initial_resid < final_resid && std::isfinite (initial_resid))
+	{
+	  if (c.verbose ())
+	    {
+	      if (progress)
+		progress->pause_stdout ();
+	      printf ("Multifit worsened solution (%f -> %f); reverting\n",
+		      initial_resid * initial_resid, final_resid * final_resid);
+	      if (progress)
+		progress->resume_stdout ();
+	    }
+	}
+      else
+	{
+	  for (int i = 0; i < p; i++)
+	    c.start[i] = gsl_vector_get (w->x, i);
 
-      //c.constrain (c.start);
+	  c.constrain (c.start);
 
-      double norm = gsl_blas_dnrm2 (w->f);
-      final_chisq = norm * norm;
+	  final_resid = gsl_blas_dnrm2 (w->f);
+	  final_chisq = final_resid * final_resid;
+	}
     }
   else if (c.verbose ())
     {
@@ -396,7 +434,7 @@ gsl_simplex (C &c, const char *task = NULL, progress_info *progress = NULL,
 		{
 		  if (progress)
 		    progress->pause_stdout ();
-		  fprintf (stderr, "GSL multifit finished with error: %s\n", gsl_strerror (status));
+		  fprintf (stderr, "GSL simplex finished with error: %s\n", gsl_strerror (status));
 		  if (progress)
 		    progress->resume_stdout ();
 		}
@@ -404,7 +442,7 @@ gsl_simplex (C &c, const char *task = NULL, progress_info *progress = NULL,
 	    }
 
           double size = gsl_multimin_fminimizer_size (s);
-          status = gsl_multimin_test_size (size, 1e-2);
+          status = gsl_multimin_test_size (size, 1e-5);
 
           if (status == GSL_SUCCESS)
             {
@@ -443,7 +481,7 @@ gsl_simplex (C &c, const char *task = NULL, progress_info *progress = NULL,
         }
 
       // Re-apply constraints to final result
-      //c.constrain (c.start);
+      c.constrain (c.start);
     }
   else if (c.verbose ())
     {

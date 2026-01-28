@@ -211,9 +211,9 @@ class mtf_solver
   static constexpr const double nanometers_max = 1000;
 
 public:
-  mtf_solver (const mtf_parameters &measured, const mtf_parameters &params,
+  mtf_solver (const mtf_parameters &params, const std::vector <mtf_measurement> &measured, 
               progress_info *progress, bool verbose)
-      : m_measured_params (measured), m_params (params), m_progress (progress),
+      : m_measurements (measured), m_params (params), m_progress (progress),
         be_verbose (verbose), start{ 0.5, 0.5, 0.5 }
   {
     nvalues = 0;
@@ -254,9 +254,13 @@ public:
           fill_factor_index = -1;
       }
     n_observations = 0;
-    for (size_t i = 0; i < m_measured_params.size (); i++)
-      if (m_measured_params.get_freq (i) <= 0.5)
-        n_observations++;
+    for (size_t m = 0; m < m_measurements.size (); m++)
+      {
+	auto &measurement = m_measurements[m];
+	for (size_t i = 0; i < measurement.size (); i++)
+	  if (measurement.get_freq (i) <= 0.5)
+	    n_observations++;
+      }
   }
   int
   num_values ()
@@ -351,21 +355,25 @@ public:
           p.blur_diameter = vals[blur_index];
       }
     int out_idx = 0;
-    for (size_t i = 0; i < m_measured_params.size (); i++)
+    for (size_t m = 0; m < m_measurements.size (); m++)
       {
-        luminosity_t freq = m_measured_params.get_freq (i);
-        /* Do not care about values above Nyquist.  */
-        if (freq > 0.5)
-          continue;
-        luminosity_t contrast = m_measured_params.get_contrast (i);
-        luminosity_t contrast2 = p.system_mtf (freq) * 100;
-        sum += (contrast - contrast2) * (contrast - contrast2);
-	if (f_vec && out_idx < n_observations)
-	  f_vec[out_idx++] = contrast - contrast2;
+	auto &measurement = m_measurements[m];
+	for (size_t i = 0; i < measurement.size (); i++)
+	  {
+	    luminosity_t freq = measurement.get_freq (i);
+	    /* Do not care about values above Nyquist.  */
+	    if (freq > 0.5)
+	      continue;
+	    luminosity_t contrast = measurement.get_contrast (i);
+	    luminosity_t contrast2 = p.system_mtf (freq) * 100;
+	    sum += (contrast - contrast2) * (contrast - contrast2);
+	    if (f_vec && out_idx < n_observations)
+	      f_vec[out_idx++] = contrast - contrast2;
 #if 0
-        if (be_verbose)
-          debug_data (freq, contrast, contrast2);
+	    if (be_verbose)
+	      debug_data (freq, contrast, contrast2);
 #endif
+	  }
       }
     if (be_verbose)
       {
@@ -383,12 +391,13 @@ public:
   {
     return n_observations;
   }
-  void
+  int
   residuals (const luminosity_t *vals, luminosity_t *f_vec)
   {
     objfunc (vals, f_vec);
+    return GSL_SUCCESS;
   }
-  const mtf_parameters &m_measured_params;
+  const std::vector <mtf_measurement> &m_measurements;
   mtf_parameters m_params;
   progress_info *m_progress;
   bool be_verbose;
@@ -865,12 +874,13 @@ mtf::precompute (progress_info *progress)
     }
 
   /* Use actual MTF data.  */
-  if (m_params.use_measured_mtf_p ())
+  if (m_params.use_measured_mtf () >= 0)
     {
       bool monotone = true;
-      for (size_t i = 1; i < size () && monotone; i++)
+      mtf_measurement &measurement = m_params.measurements[m_params.measured_mtf_idx];
+      for (size_t i = 1; i < measurement.size () && monotone; i++)
         {
-          if (!(get_freq (i - 1) < get_freq (i)))
+          if (!(measurement.get_freq (i - 1) < measurement.get_freq (i)))
             {
               printf ("Sorry, unimplemented: MTF freqs are not in increasing "
                       "order.\n");
@@ -883,50 +893,49 @@ mtf::precompute (progress_info *progress)
          precomputed function exactly.  */
       bool regular_steps = true;
       luminosity_t step
-          = (get_freq (size () - 1) - get_freq (0)) / (size () - 1);
-      for (size_t i = 1; i < size () - 2 && regular_steps; i++)
-        if (fabs (get_freq (i) - get_freq (0) - i * step) > 0.0006)
+          = (measurement.get_freq (measurement.size () - 1) - measurement.get_freq (0)) / (measurement.size () - 1);
+      for (size_t i = 1; i < measurement.size () - 2 && regular_steps; i++)
+        if (fabs (measurement.get_freq (i) - measurement.get_freq (0) - i * step) > 0.0006)
           regular_steps = false;
 
-      /* TODO: Implement.  */
       if (!regular_steps)
         {
-          std::vector<luminosity_t, fft_allocator<psf_t>> contrasts (size ()
+          std::vector<luminosity_t, fft_allocator<psf_t>> contrasts (measurement.size ()
                                                                        + 2);
-          std::vector<luminosity_t, fft_allocator<psf_t>> freqs (size ()
+          std::vector<luminosity_t, fft_allocator<psf_t>> freqs (measurement.size ()
                                                                    + 2);
-          for (size_t i = 0; i < size (); i++)
+          for (size_t i = 0; i < measurement.size (); i++)
             {
-              contrasts[i] = get_contrast (i) * 0.01
-                             * m_params.measured_mtf_correction (get_freq (i));
-              freqs[i] = get_freq (i);
+              contrasts[i] = measurement.get_contrast (i) * 0.01
+                             * m_params.measured_mtf_correction (measurement.get_freq (i));
+              freqs[i] = measurement.get_freq (i);
             }
-          contrasts[size ()] = 0;
-          contrasts[size () + 1] = 0;
-          freqs[size ()] = freqs[size () - 1] + step;
-          freqs[size () + 1] = freqs[size () - 1] + 2 * step;
-          m_mtf.set_range (get_freq (0), get_freq (size () - 1) + 2 * step);
+          contrasts[measurement.size ()] = 0;
+          contrasts[measurement.size () + 1] = 0;
+          freqs[measurement.size ()] = freqs[measurement.size () - 1] + step;
+          freqs[measurement.size () + 1] = freqs[measurement.size () - 1] + 2 * step;
+          m_mtf.set_range (measurement.get_freq (0), measurement.get_freq (measurement.size () - 1) + 2 * step);
           m_mtf.init_by_x_y_values (freqs.data (), contrasts.data (),
-                                    size () + 2, 1024);
+                                    measurement.size () + 2, 1024);
         }
       else
         {
-          std::vector<luminosity_t, fft_allocator<psf_t>> contrasts (size ()
+          std::vector<luminosity_t, fft_allocator<psf_t>> contrasts (measurement.size ()
                                                                        + 2);
-          for (size_t i = 0; i < size (); i++)
-            contrasts[i] = get_contrast (i) * 0.01
-                           * m_params.measured_mtf_correction (get_freq (i));
+          for (size_t i = 0; i < measurement.size (); i++)
+            contrasts[i] = measurement.get_contrast (i) * 0.01
+                           * m_params.measured_mtf_correction (measurement.get_freq (i));
           /* Be sure that MTF trails in 0.  */
-          contrasts[size ()] = 0;
-          contrasts[size () + 1] = 0;
-          m_mtf.set_range (get_freq (0), get_freq (size () - 1) + 2 * step);
-          m_mtf.init_by_y_values (contrasts.data (), size () + 2);
+          contrasts[measurement.size ()] = 0;
+          contrasts[measurement.size () + 1] = 0;
+          m_mtf.set_range (measurement.get_freq (0), measurement.get_freq (measurement.size () - 1) + 2 * step);
+          m_mtf.init_by_y_values (contrasts.data (), measurement.size () + 2);
         }
       if (colorscreen_checking)
-        for (size_t i = 0; i < size (); i++)
+        for (size_t i = 0; i < measurement.size (); i++)
           {
-            luminosity_t freq = get_freq (i);
-            if (fabs (get_contrast (i) * 0.01
+            luminosity_t freq = measurement.get_freq (i);
+            if (fabs (measurement.get_contrast (i) * 0.01
                           * m_params.measured_mtf_correction (freq)
                       - get_mtf (freq))
                 > 0.01)
@@ -934,7 +943,7 @@ mtf::precompute (progress_info *progress)
                 printf (
                     "Mismatch (measured) %i freq %f table %f precomputed %f\n",
                     (int)i, freq,
-                    get_contrast (i) * 0.01
+                    measurement.get_contrast (i) * 0.01
                         * m_params.measured_mtf_correction (freq),
                     m_mtf.apply (freq));
                 abort ();
@@ -1118,15 +1127,14 @@ mtf_parameters::compute_curves (int steps) const
 }
 
 double
-mtf_parameters::estimate_parameters (const mtf_parameters &par,
+mtf_parameters::estimate_parameters (mtf_parameters &par,
                                      const char *write_table,
                                      progress_info *progress,
                                      const char **error, int flags)
 {
   *this = par;
 
-  use_measured_mtf = false;
-  mtf_solver s (*this, par, progress, flags & estimate_verbose);
+  mtf_solver s (*this, par.measurements, progress, flags & estimate_verbose);
   if (flags & estimate_use_nmsimplex)
     gsl_simplex<luminosity_t, mtf_solver> (s, "optimizing lens parameters (simplex)",
 				       progress);
@@ -1153,24 +1161,29 @@ mtf_parameters::estimate_parameters (const mtf_parameters &par,
           *error = "write error in CSV file";
           return -1;
         }
-      for (size_t i = 0; i < par.size (); i++)
-        {
-          luminosity_t freq = par.get_freq (i);
-          luminosity_t c = par.get_contrast (i);
-          if (fprintf (f,
-                       "%1.3f	%2.2f	%2.2f	%2.2f	%2.2f	%2.2f	"
-                       "%2.2f	%2.2f\n",
-                       freq, c, lens_difraction_mtf (freq) * 100,
-                       stokseth_defocus_mtf (freq) * 100,
-                       gaussian_blur_mtf (freq, sigma) * 100,
-                       lens_mtf (freq) * 100, sensor_mtf (freq) * 100,
-                       system_mtf (freq) * 100)
-              < 0)
-            {
-              *error = "write error in CSV file";
-              return -1;
-            }
-        }
+      for (size_t m = 0; m < par.measurements.size (); m++)
+      {
+	auto &measurement = par.measurements[m];
+	for (size_t i = 0; i < measurement.size (); i++)
+	  {
+	    luminosity_t freq = measurement.get_freq (i);
+	    luminosity_t c = measurement.get_contrast (i);
+	    if (fprintf (f,
+			 "%1.3f	%2.2f	%2.2f	%2.2f	%2.2f	%2.2f	"
+			 "%2.2f	%2.2f\n",
+			 freq, c, lens_difraction_mtf (freq) * 100,
+			 stokseth_defocus_mtf (freq) * 100,
+			 gaussian_blur_mtf (freq, sigma) * 100,
+			 lens_mtf (freq) * 100, sensor_mtf (freq) * 100,
+			 system_mtf (freq) * 100)
+		< 0)
+	      {
+		*error = "write error in CSV file";
+		return -1;
+	      }
+	  }
+	fprintf (f,"\n");
+      }
       if (fclose (f))
         {
           *error = "error closing CSV file";
@@ -1191,6 +1204,54 @@ mtf_parameters::estimate_parameters (const mtf_parameters &par,
     }
 #endif
   return s.objfunc (s.start);
+}
+
+int
+mtf_parameters::load_csv (FILE *in, std::string name, const char **error)
+{
+  struct row {float freq; float contrast[4];};
+  bool rgb = false;
+  std::vector<row> data;
+  char line[1024];
+  float v1, v2, v3, v4, v5;
+  char extra;
+  while (fgets(line, sizeof(line), in)) {
+    int itemsFound = sscanf(line, "%f\t%f\t%f\t%f\t%f %c", &v1, &v2, &v3, &v4, &v5, &extra);
+    /* Data are saved in order freq, red, green, blue, combined  */
+    if (itemsFound == 5) 
+      {
+	if (v2 != v3 || v2 != v3 || v2 != v4 || v2 != v5)
+	  rgb = true;
+        data.push_back ({v1,{v2,v3,v4,v5}});
+      }
+    else
+      {
+	*error = "Quickmtf output file should contain 4 tab separated values on every line:\n"
+		"pixel_frequency	red_contrast	green_constrast	blue_contrast	combined_contrast\n"
+		"contrasts are in percents.\n";
+	fclose (in);
+	return 0;
+      }
+  }
+  for (int c = rgb ? 0 : 3; c < (rgb ? 3 : 4); c++)
+    {
+      mtf_measurement m;
+      const char *color[3]={"red","green","blue"};
+      if (rgb)
+      {
+	m.name = name + " " + color[c];
+	if (c)
+	  m.same_capture = true;
+      }
+      else
+	m.name = name;
+      for (int i = 0; i < data.size (); i++)
+	m.add_value (data[i].freq,data[i].contrast[c]);
+      printf ("size %i %i\n", m.size (), data.size ());
+      measurements.push_back (m);
+    }
+  printf ("File loaded %i\n",(int)rgb);
+  return rgb ? 3 : 1;
 }
 
 }

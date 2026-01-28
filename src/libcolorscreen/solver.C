@@ -292,7 +292,7 @@ public:
   bool
   verbose ()
   {
-    return false;
+    return true;
   }
   void
   constrain (coord_t *vals)
@@ -318,7 +318,7 @@ public:
           vals[i] = 0.1 * scale_kr;
       }
   }
-  void
+  bool
   solve (const coord_t *vals, coord_t *chisq, std::vector <point_t> *transformed)
   {
     static const coord_t bad_val = 100000000;
@@ -336,16 +336,20 @@ public:
     m_param.lens_correction.kr[1] = vals[n] * (1 / scale_kr);
     m_param.lens_correction.kr[2] = vals[n + 1] * (1 / scale_kr);
     m_param.lens_correction.kr[3] = vals[n + 2] * (1 / scale_kr);
-    if (debug && !m_param.lens_correction.is_monotone ())
+    if (!m_param.lens_correction.is_monotone ())
       {
-        printf ("Non monotone lens correction %f %f: %f %f %f %f\n",
-                m_param.lens_correction.center.x,
-                m_param.lens_correction.center.y,
-                m_param.lens_correction.kr[0], m_param.lens_correction.kr[1],
-                m_param.lens_correction.kr[2], m_param.lens_correction.kr[3]);
+	if (colorscreen_checking)
+          printf ("Non monotone lens correction %f %f: %f %f %f %f\n",
+                  m_param.lens_correction.center.x,
+                  m_param.lens_correction.center.y,
+                  m_param.lens_correction.kr[0], m_param.lens_correction.kr[1],
+                  m_param.lens_correction.kr[2], m_param.lens_correction.kr[3]);
 	if (chisq)
 	  *chisq = bad_val;
-        return;
+        if (transformed)
+          for (int i = 0; i < m_sparam.points.size (); i++)
+            (*transformed)[i] = m_sparam.points[i].scr;
+        return false;
       }
     m_param.lens_correction.normalize ();
     scr_to_img map;
@@ -369,6 +373,7 @@ public:
       else
 	*chisq = chi;
     }
+    return (chi >= 0 && chi < bad_val);
   }
   coord_t
   objfunc (coord_t *vals)
@@ -383,12 +388,17 @@ public:
   {
     return m_sparam.points.size () * (screen_with_vertical_strips_p (m_param.type) ? 1 : 2);
   }
-  void
+  int
   residuals(const coord_t *vals, coord_t *f_vec)
   {
     std::vector<point_t> transformed (m_sparam.points.size ());
     coord_t chisq;
-    solve (vals, &chisq, &transformed);
+    if (!solve (vals, &chisq, &transformed))
+      {
+	for (int i = 0; i < (int)num_observations (); i++)
+	  f_vec[i] = 1000;
+	return GSL_EDOM;
+      }
     if (!screen_with_vertical_strips_p (m_param.type))
       for (int i = 0; i < m_sparam.points.size (); i++)
 	{
@@ -402,6 +412,7 @@ public:
 	f_vec[i] = transformed[i].x - m_sparam.points[i].scr.x;
       }
     //printf ("%g %g %g %g %g error sq %.10g\n",vals[0], vals[1], vals[2], vals[3], vals[4], chisq);
+    return GSL_SUCCESS;
   }
 
 };
@@ -438,11 +449,11 @@ solver (scr_to_img_parameters *param, image_data &img_data,
       lens_solver s (*param, img_data, sparam, progress);
       bool use_simplex = true;
       bool use_gsl_simplex = false;
-      bool use_multifit = false;
+      bool use_multifit = true;
       if (use_simplex)
 	simplex<coord_t, lens_solver> (s, "optimizing lens correction (simplex)",
 				       progress);
-      if (use_simplex)
+      if (use_gsl_simplex)
 	gsl_simplex<coord_t, lens_solver> (s, "optimizing lens correction (GSL simplex)",
 				       progress);
       if (use_multifit)

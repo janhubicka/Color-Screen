@@ -3675,24 +3675,6 @@ do_mtf (int argc, char **argv)
 	  perror (cspname);
 	  return 1;
 	}
-      char line[1024];
-      float v1, v2, v3, v4, v5;
-      char extra;
-      while (fgets(line, sizeof(line), in)) {
-	int itemsFound = sscanf(line, "%f\t%f\t%f\t%f\t%f %c", &v1, &v2, &v3, &v4, &v5, &extra);
-	rparam.sharpen.scanner_mtf.clear_data ();
-	/* Data are saved in order freq, red, green, blue, combined  */
-	if (itemsFound == 5) 
-	  rparam.sharpen.scanner_mtf.add_value (v1, v4);
-	else
-	  {
-	    printf ("Quickmtf output file should contain 4 tab separated values on every line:\n"
-		    "pixel_frequency	red_contrast	green_constrast	blue_contrast	combined_contrast\n"
-		    "contrasts are in percents.\n");
-	    fclose (in);
-	    exit (1);
-	  }
-      }
       fclose (in);
     }
   if (match)
@@ -3705,7 +3687,7 @@ do_mtf (int argc, char **argv)
 	  else
 	    printf ("Estimating parameters\n");
 	}
-      if (!rparam.sharpen.scanner_mtf.size ())
+      if (!rparam.sharpen.scanner_mtf.measurements.size ())
 	{
 	  fprintf (stderr, "No measured MTF (scanner_mtf_point) data to match\n");
 	  return 1;
@@ -3717,7 +3699,7 @@ do_mtf (int argc, char **argv)
 	  exit (1);
 	}
       if (verbose)
-        printf ("Average error sqare: %f\n\n", sqsum / rparam.sharpen.scanner_mtf.size ());
+        printf ("Average error sqare: %f\n\n", sqsum / rparam.sharpen.scanner_mtf.measurements.size ());
       printf ("scanner_mtf_sigma_px: %f\n", estimated.sigma);
       printf ("scanner_mtf_blur_diameter_px: %f\n", estimated.blur_diameter);
       printf ("scanner_mtf_pixel_pitch_um: %f\n", estimated.pixel_pitch);

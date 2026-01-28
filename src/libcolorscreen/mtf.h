@@ -71,22 +71,6 @@ public:
     return psf_radius (scale) * 2 - 1;
   }
 
-  size_t
-  size () const
-  {
-    return m_params.size ();
-  }
-  luminosity_t
-  get_freq (int i) const
-  {
-    return m_params.get_freq (i);
-  }
-  luminosity_t
-  get_contrast (int i) const
-  {
-    return m_params.get_contrast (i);
-  }
-
   mtf (const mtf_parameters &params) : m_params (params), m_precomputed (false), m_precomputed_psf (false)
   {
   }

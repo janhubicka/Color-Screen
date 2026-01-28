@@ -46,6 +46,7 @@ private:
   void updateMTFChart();
   void updateScreenTiles(); // Wrapper to schedule
   void applyChange(std::function<void(ParameterState &)> modifier, const QString &description = QString()) override;
+  void loadMTF();
   void onParametersRefreshed(const ParameterState &state) override;
 
   MTFChartWidget *m_mtfChart = nullptr;
