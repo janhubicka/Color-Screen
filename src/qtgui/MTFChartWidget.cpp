@@ -141,7 +141,7 @@ static QColor wavelengthToRGB(double wavelength) {
                         (colorscreen::luminosity_t)(colorscreen::cie_cmf_z[idx] * (1 - t) +
                             colorscreen::cie_cmf_z[idx + 1] * t)};
   colorscreen::luminosity_t r, g, b;
-  (c * 0.15).to_srgb(&r, &g, &b);
+  (c).to_normalized_srgb(&r, &g, &b);
 
   QColor col(std::clamp((int)(r * 255), 0, 255),
              std::clamp((int)(g * 255), 0, 255),

@@ -296,7 +296,7 @@ void CapturePanel::setupUi()
 
     // 16. Sensor fill factor (Slider)
     addSliderParameter(
-        "Sensor fill factor", 0.0, 8.0, 1000.0, 3, "", "unknown",
+        "Sensor fill factor", 0.0, 32.0, 1000.0, 3, "", "unknown",
         [](const ParameterState &s) {
           return s.rparams.sharpen.scanner_mtf.sensor_fill_factor;
         },

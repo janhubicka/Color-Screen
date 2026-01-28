@@ -116,7 +116,7 @@ struct mtf_parameters
   bool
   simulate_difraction_p () const
   {
-    return use_measured_mtf () < 0 && can_simulate_difraction_p ();
+    return !use_measured_mtf () && can_simulate_difraction_p ();
   }
   bool
   operator== (const mtf_parameters &o) const

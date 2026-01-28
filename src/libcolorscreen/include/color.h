@@ -180,6 +180,22 @@ struct xyz {
     *g = linear_to_srgb (*g);
     *b = linear_to_srgb (*b);
   }
+  inline void
+  to_normalized_srgb (luminosity_t *r, luminosity_t *g, luminosity_t *b)
+  {
+    xyz_srgb_matrix m;
+    m.apply_to_rgb (x, y, z, r, g, b);
+    luminosity_t max = std::max (*r, std::max (*g, *b));
+    if (max > 0)
+      {
+	*r /= max;
+	*g /= max;
+	*b /= max;
+      }
+    *r = linear_to_srgb (*r);
+    *g = linear_to_srgb (*g);
+    *b = linear_to_srgb (*b);
+  }
   static inline xyz
   from_srgb (luminosity_t r, luminosity_t g, luminosity_t b)
   {

@@ -1250,6 +1250,19 @@ image_data::load_part (int *permille, const char **error,
 	  f_stop = 2.8;
 	  //printf ("Nikon scanner detected\n");
 	}
+      /* TODO: Support also 4800DPI lens. */
+      if (camera_model == "PerfectionV700" || camera_model == "PerfectionV750"
+          || camera_model == "PerfectionV800" || camera_model == "PerfectionV850")
+	{
+	  /* Total array length at about 56.8 mm. 6 line 122,400 pixel array,
+	     the length of a line should be 122,400/6 or 20,400 pixels
+	     f the pixels were of the 2.7um x 5.4 um variety that
+	     seems in general use at NEC, then the active line length would be
+	     55.080 mm and extra dark pixels and room for amplifiers can easily
+	     account for the additional measured ~1.8mm.  */
+	  pixel_pitch = 2.7 * 6400 / xdpi;
+	  sensor_fill_factor = 8 * ((xdpi * xdpi) / (6400.0*6400));
+	}
     }
   return ret;
 }

@@ -214,42 +214,99 @@ public:
   mtf_solver (const mtf_parameters &params, const std::vector <mtf_measurement> &measured, 
               progress_info *progress, bool verbose)
       : m_measurements (measured), m_params (params), m_progress (progress),
-        be_verbose (verbose), start{ 0.5, 0.5, 0.5 }
+        be_verbose (verbose), start ()
   {
     nvalues = 0;
-    if (!params.pixel_pitch || !params.f_stop)
+    m_params.measured_mtf_idx = -1;
+    m_params.clear_data ();
+    if (!params.pixel_pitch || !params.scan_dpi)
       {
-        wavelength_index = -1;
+	abort ();
         if (!m_params.sigma)
-          sigma_index = nvalues++;
+	  {
+	    start_vec.push_back (0);
+            sigma_index = nvalues++;
+	  }
         else
           sigma_index = -1;
-        if (!m_params.blur_diameter)
-          blur_index = nvalues++;
-        else
-          blur_index = -1;
+	for (int m = 0; m < m_measurements.size (); m++)
+	  {
+	    wavelength_index.push_back (-1);
+	    if (!m_params.blur_diameter)
+	      {
+		start_vec.push_back (0);
+		blur_index.push_back (nvalues++);
+	      }
+	    else
+	      blur_index.push_back(-1);
+	  }
         difraction = false;
       }
     else
       {
         difraction = true;
-        if (!m_params.wavelength)
+        if (!m_params.f_stop)
           {
-            wavelength_index = nvalues++;
-            start[wavelength_index] = 0.5;
+	    start_vec.push_back (8);
+            f_stop_index = nvalues++;
           }
         else
-          wavelength_index = -1;
+          f_stop_index = -1;
         if (!m_params.sigma)
-          sigma_index = nvalues++;
+	  {
+	    start_vec.push_back (0);
+            sigma_index = nvalues++;
+	  }
         else
           sigma_index = -1;
-        if (!m_params.defocus)
-          blur_index = nvalues++;
-        else
-          blur_index = -1;
+	chanel_wavelength_index[0] = -1;
+	chanel_wavelength_index[1] = -1;
+	chanel_wavelength_index[2] = -1;
+	chanel_wavelength_index[3] = -1;
+	int cur_defocus_index = -1;
+	for (int m = 0; m < m_measurements.size (); m++)
+	  {
+	    if (!m_measurements[m].same_capture)
+	      cur_defocus_index = -1;
+	    if (!m_params.defocus)
+	      {
+		if (!cur_defocus_index)
+		  {
+		    start_vec.push_back (0);
+		    blur_index.push_back (nvalues++);
+		  }
+		else
+		  blur_index.push_back (cur_defocus_index);
+	      }
+	    else
+	      blur_index.push_back (-1);
+	    if (m_measurements[m].channel >= 0)
+	      {
+		int c = m_measurements[m].channel;
+		if (m_params.wavelengths[c] > 0)
+		  wavelength_index.push_back (-1);
+		else if (chanel_wavelength_index[c] >= 0)
+		  wavelength_index.push_back (chanel_wavelength_index[c]);
+		else
+		  {
+		    start_vec.push_back (0.5);
+		    chanel_wavelength_index [c] = nvalues++;
+		    wavelength_index.push_back (chanel_wavelength_index[c]);
+		  }
+	      }
+	    else if (!m_measurements[m].wavelength)
+	      {
+		start_vec.push_back (0.5);
+		wavelength_index.push_back (nvalues++);
+	      }
+	    else
+	      wavelength_index.push_back (-1);
+	  }
         if (!m_params.sensor_fill_factor)
-          fill_factor_index = nvalues++;
+	  {
+	    start_vec.push_back (1);
+            fill_factor_index = nvalues++;
+	  }
         else
           fill_factor_index = -1;
       }
@@ -261,6 +318,8 @@ public:
 	  if (measurement.get_freq (i) <= 0.5)
 	    n_observations++;
       }
+    start = start_vec.data ();
+    assert (nvalues == start_vec.size ());
   }
   int
   num_values ()
@@ -296,11 +355,15 @@ public:
       vals[fill_factor_index] = 8;
     if (sigma_index >= 0 && vals[sigma_index] < 0)
       vals[sigma_index] = 0;
-    if (blur_index >= 0 && vals[blur_index] < 0)
-      vals[blur_index] = 0;
-    if (wavelength_index >= 0)
-      vals[wavelength_index] = std::clamp (vals[wavelength_index],
-                                           (luminosity_t)0, (luminosity_t)1);
+    for (int e : blur_index)
+      if (e >= 0 && vals[e] < 0)
+        vals[e] = 0;
+    for (int e : wavelength_index)
+      if (e >= 0)
+	vals[e] = std::clamp (vals[e], (luminosity_t)0, (luminosity_t)1);
+    if (f_stop_index >= 0)
+      vals[f_stop_index] = std::clamp (vals[f_stop_index],
+                                           (luminosity_t)0, (luminosity_t)16);
   }
   luminosity_t
   get_fill_factor (const luminosity_t *vals)
@@ -310,12 +373,24 @@ public:
     return vals[fill_factor_index];
   }
   luminosity_t
-  get_wavelength (const luminosity_t *vals)
+  get_wavelength (int measurement, const luminosity_t *vals)
   {
-    if (wavelength_index < 0)
+    if (m_measurements[measurement].wavelength > 0)
+      return m_measurements[measurement].wavelength;
+    if (m_measurements[measurement].channel >= 0
+	&& m_params.wavelengths[m_measurements[measurement].channel] > 0)
+      return m_params.wavelengths[m_measurements[measurement].channel];
+    if (wavelength_index[measurement] < 0)
       return m_params.wavelength;
-    return vals[wavelength_index] * (nanometers_max - nanometers_min)
+    return vals[wavelength_index[measurement]] * (nanometers_max - nanometers_min)
            + nanometers_min;
+  }
+  luminosity_t
+  get_f_stop (const luminosity_t *vals)
+  {
+    if (f_stop_index < 0)
+      return m_params.f_stop;
+    return vals[f_stop_index];
   }
   luminosity_t
   get_sigma (const luminosity_t *vals)
@@ -325,39 +400,36 @@ public:
     return vals[sigma_index];
   }
   luminosity_t
-  get_defocus (const luminosity_t *vals)
+  get_defocus (int measurement, const luminosity_t *vals)
   {
-    if (!difraction || blur_index < 0)
+    if (!difraction || blur_index[measurement] < 0)
       return m_params.defocus;
-    return vals[blur_index] * m_params.pixel_pitch * (1.0 / 1000);
+    return vals[blur_index[measurement]] * m_params.pixel_pitch * (1.0 / 1000);
   }
   luminosity_t
-  get_blur_diameter (const luminosity_t *vals)
+  get_blur_diameter (int measurement, const luminosity_t *vals)
   {
-    if (difraction || blur_index < 0)
+    if (difraction || blur_index[measurement] < 0)
       return m_params.blur_diameter;
-    return vals[blur_index];
+    return vals[blur_index[measurement]];
   }
   luminosity_t
   objfunc (const luminosity_t *vals, luminosity_t *f_vec = NULL)
   {
     luminosity_t sum = 0;
     mtf_parameters p = m_params;
-    if (sigma_index >= 0)
-      p.sigma = vals[sigma_index];
-    if (wavelength_index >= 0)
-      p.wavelength = get_wavelength (vals);
-    if (blur_index >= 0)
-      {
-        if (difraction)
-          p.defocus = vals[blur_index] * p.pixel_pitch * (1.0 / 1000);
-        else
-          p.blur_diameter = vals[blur_index];
-      }
+    p.sigma = get_sigma (vals);
+    p.f_stop = get_f_stop (vals);
     int out_idx = 0;
     for (size_t m = 0; m < m_measurements.size (); m++)
       {
 	auto &measurement = m_measurements[m];
+	p.wavelength = get_wavelength (m, vals);
+	if (difraction)
+	  p.defocus = get_defocus (m, vals);
+	else
+	  p.blur_diameter = get_blur_diameter (m, vals);
+	assert (difraction == p.simulate_difraction_p ());
 	for (size_t i = 0; i < measurement.size (); i++)
 	  {
 	    luminosity_t freq = measurement.get_freq (i);
@@ -401,14 +473,17 @@ public:
   mtf_parameters m_params;
   progress_info *m_progress;
   bool be_verbose;
-  luminosity_t start[maxvals];
+  std::vector<luminosity_t> start_vec;
+  luminosity_t *start;
   bool difraction;
   int nvalues;
   int n_observations;
   int sigma_index;
   int fill_factor_index;
-  int wavelength_index;
-  int blur_index;
+  std::vector<int> wavelength_index;
+  std::array<int,4> chanel_wavelength_index;
+  std::vector<int> blur_index;
+  int f_stop_index;
 };
 
 /* Determine PSF kernel radius.  */
@@ -874,7 +949,7 @@ mtf::precompute (progress_info *progress)
     }
 
   /* Use actual MTF data.  */
-  if (m_params.use_measured_mtf () >= 0)
+  if (m_params.use_measured_mtf ())
     {
       bool monotone = true;
       mtf_measurement &measurement = m_params.measurements[m_params.measured_mtf_idx];
@@ -1141,10 +1216,11 @@ mtf_parameters::estimate_parameters (mtf_parameters &par,
   if (flags & estimate_use_multifit)
     gsl_multifit<luminosity_t, mtf_solver> (s, "optimizing lens parameters (multifit)",
 				       progress);
-  wavelength = s.get_wavelength (s.start);
+  wavelength = s.get_wavelength (0, s.start);
+  f_stop = s.get_f_stop (s.start);
   sigma = s.get_sigma (s.start);
-  defocus = s.get_defocus (s.start);
-  blur_diameter = s.get_blur_diameter (s.start);
+  defocus = s.get_defocus (0, s.start);
+  blur_diameter = s.get_blur_diameter (0, s.start);
   sensor_fill_factor = s.get_fill_factor (s.start);
 
   if (write_table)
@@ -1229,8 +1305,7 @@ mtf_parameters::load_csv (FILE *in, std::string name, const char **error)
 	*error = "Quickmtf output file should contain 4 tab separated values on every line:\n"
 		"pixel_frequency	red_contrast	green_constrast	blue_contrast	combined_contrast\n"
 		"contrasts are in percents.\n";
-	fclose (in);
-	return 0;
+	return -1;
       }
   }
   for (int c = rgb ? 0 : 3; c < (rgb ? 3 : 4); c++)
@@ -1238,13 +1313,17 @@ mtf_parameters::load_csv (FILE *in, std::string name, const char **error)
       mtf_measurement m;
       const char *color[3]={"red","green","blue"};
       if (rgb)
-      {
-	m.name = name + " " + color[c];
-	if (c)
-	  m.same_capture = true;
-      }
+	{
+	  m.name = name + " " + color[c];
+	  m.channel = c;
+	  if (c)
+	    m.same_capture = true;
+	}
       else
-	m.name = name;
+	{
+	  m.name = name;
+	  m.channel = -1;
+	}
       for (int i = 0; i < data.size (); i++)
 	m.add_value (data[i].freq,data[i].contrast[c]);
       printf ("size %i %i\n", m.size (), data.size ());

@@ -421,44 +421,47 @@ void SharpnessPanel::reattachMTFChart(QWidget *widget) {
 
 // reattachTiles removed (in base)
 void SharpnessPanel::loadMTF() {
-  QString fileName = QFileDialog::getOpenFileName(
-      this, tr("Load QuickMTF measurement"), "",
+  QStringList fileNames = QFileDialog::getOpenFileNames(
+      this, tr("Load QuickMTF measurements"), "",
       tr("QuickMTF files (*.csv *.txt);;All Files (*)"));
 
-  if (fileName.isEmpty())
+  if (fileNames.isEmpty())
     return;
-
-  FILE *f = fopen(fileName.toLocal8Bit().constData(), "r");
-  if (!f) {
-    QMessageBox::critical(this, tr("Error"),
-                          tr("Could not open file %1").arg(fileName));
-    return;
-  }
 
   ParameterState state = m_stateGetter();
-  const char *error = nullptr;
-  if (state.rparams.sharpen.scanner_mtf.load_csv(
-          f, fileName.toStdString(), &error) < 0) {
-    QMessageBox::critical(
-        this, tr("Error"),
-        tr("Error loading MTF measurement: %1")
-            .arg(error ? QString::fromUtf8(error) : tr("Unknown error")));
+  bool anySuccess = false;
+
+  for (const QString &fileName : fileNames) {
+    FILE *f = fopen(fileName.toLocal8Bit().constData(), "r");
+    if (!f) {
+      QMessageBox::warning(this, tr("Warning"),
+                            tr("Could not open file %1").arg(fileName));
+      continue;
+    }
+
+    const char *error = nullptr;
+    std::string baseName = QFileInfo(fileName).baseName().toStdString();
+    if (state.rparams.sharpen.scanner_mtf.load_csv(
+            f, baseName, &error) < 0) {
+      QMessageBox::warning(
+          this, tr("Warning"),
+          tr("Error loading MTF measurement from %1: %2")
+              .arg(fileName)
+              .arg(error ? QString::fromUtf8(error) : tr("Unknown error")));
+      fclose(f);
+      continue;
+    }
     fclose(f);
-    return;
-  }
-  fclose(f);
-  state.rparams.sharpen.scanner_mtf.measured_mtf_idx = 0;
-  // Use base name for the last added measurement
-  if (!state.rparams.sharpen.scanner_mtf.measurements.empty()) {
-      state.rparams.sharpen.scanner_mtf.measurements.back().name = 
-          QFileInfo(fileName).baseName().toStdString();
+    anySuccess = true;
   }
 
-  // Now apply the change
-  applyChange([state](ParameterState &s) {
-    s = state;
-  }, tr("Load MTF measurement"));
-  updateMeasurementList();
+  if (anySuccess) {
+    // Now apply the change
+    applyChange([state](ParameterState &s) {
+      s = state;
+    }, tr("Load MTF measurements"));
+    updateMeasurementList();
+  }
 }
 
 void SharpnessPanel::updateMeasurementList() {
