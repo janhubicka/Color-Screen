@@ -307,19 +307,10 @@ void SharpnessPanel::updateMTFChart() {
                          state.rparams.sharpen.scanner_mtf.scan_dpi,
                          screenFreq);
 
-  // Extract measured MTF data if available
+  // Pass all measured MTF data if available
   const auto &scanner_mtf = state.rparams.sharpen.scanner_mtf;
-  if (scanner_mtf.measurements.size() > 0) {
-    std::vector<double> freq, contrast;
-    freq.reserve(scanner_mtf.measurements.size());
-    contrast.reserve(scanner_mtf.measurements.size());
-
-    for (size_t i = 0; i < scanner_mtf.measurements[0].size(); ++i) {
-      freq.push_back(scanner_mtf.measurements[0].get_freq(i));
-      contrast.push_back(scanner_mtf.measurements[0].get_contrast(i));
-    }
-
-    m_mtfChart->setMeasuredMTF(freq, contrast);
+  if (!scanner_mtf.measurements.empty()) {
+    m_mtfChart->setMeasuredMTF(scanner_mtf.measurements, scanner_mtf.wavelengths);
   } else {
     // No measured data, clear it
     m_mtfChart->setMeasuredMTF({}, {});

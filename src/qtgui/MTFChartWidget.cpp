@@ -1,7 +1,12 @@
 #include "MTFChartWidget.h"
+#include "spectrum-to-xyz.h"
+#include "color.h"
 #include <QFontMetrics>
 #include <QPaintEvent>
 #include <QPainter>
+#include <QPainterPath>
+#include <algorithm>
+#include <cmath>
 
 MTFChartWidget::MTFChartWidget(QWidget *parent) : QWidget(parent) {
   setMinimumHeight(200);
@@ -19,19 +24,17 @@ void MTFChartWidget::setMTFData(
   update();
 }
 
-void MTFChartWidget::setMeasuredMTF(const std::vector<double> &freq,
-                                    const std::vector<double> &contrast) {
-  m_measuredFreq = freq;
-  m_measuredContrast = contrast;
-  m_hasMeasuredData = !freq.empty() && !contrast.empty();
+void MTFChartWidget::setMeasuredMTF(const std::vector<colorscreen::mtf_measurement> &measurements, const std::array<double, 4> &channelWavelengths) {
+  m_measurements = measurements;
+  m_channelWavelengths = channelWavelengths;
+  m_hasMeasuredData = !measurements.empty();
   update();
 }
 
 void MTFChartWidget::clear() {
   m_hasData = false;
   m_hasMeasuredData = false;
-  m_measuredFreq.clear();
-  m_measuredContrast.clear();
+  m_measurements.clear();
   update();
 }
 
@@ -92,7 +95,7 @@ MTFChartWidget::LayoutInfo MTFChartWidget::calculateLayout(int w, int h) const {
   if (m_canSimulateDifraction) numVisibleItems += 2; // Difraction, Defocus
   else numVisibleItems += 1; // Hopkins
   numVisibleItems += 5; // Gaussian, Lens, Sensor, System
-  if (m_hasMeasuredData) numVisibleItems += 1;
+  if (m_hasMeasuredData) numVisibleItems += m_measurements.size();
   
   // Legend wrap logic matches paintEvent
   int itemWidth = std::max(120, (int)(120 * (layout.baseFontSize / 9.0)));
@@ -116,6 +119,39 @@ MTFChartWidget::LayoutInfo MTFChartWidget::calculateLayout(int w, int h) const {
                            std::max(10, h - layout.marginTop - layout.marginBottom));
                            
   return layout;
+}
+
+// Wavelength to RGB conversion using CIE CMFs
+static QColor wavelengthToRGB(double wavelength) {
+  if (wavelength < 380 || wavelength > 780)
+    return Qt::white; // User requested white for not well visible/outside range
+
+  // Interpolate CMFs
+  double pos = (wavelength - SPECTRUM_START) / (double)SPECTRUM_STEP;
+  int idx = (int)pos;
+  double t = pos - idx;
+
+  if (idx < 0 || idx >= SPECTRUM_SIZE - 1)
+    return Qt::white;
+
+  colorscreen::xyz c = {(colorscreen::luminosity_t)(colorscreen::cie_cmf_x[idx] * (1 - t) +
+                            colorscreen::cie_cmf_x[idx + 1] * t),
+                        (colorscreen::luminosity_t)(colorscreen::cie_cmf_y[idx] * (1 - t) +
+                            colorscreen::cie_cmf_y[idx + 1] * t),
+                        (colorscreen::luminosity_t)(colorscreen::cie_cmf_z[idx] * (1 - t) +
+                            colorscreen::cie_cmf_z[idx + 1] * t)};
+  colorscreen::luminosity_t r, g, b;
+  (c * 0.15).to_srgb(&r, &g, &b);
+
+  QColor col(std::clamp((int)(r * 255), 0, 255),
+             std::clamp((int)(g * 255), 0, 255),
+             std::clamp((int)(b * 255), 0, 255));
+             
+  // If it's too dark or too close to background, make it white
+  if (col.red() + col.green() + col.blue() < 60)
+      return Qt::white;
+      
+  return col;
 }
 
 void MTFChartWidget::paintEvent(QPaintEvent *event) {
@@ -254,12 +290,12 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
 
   // Helper function to draw a curve
   auto drawCurve = [&](const std::vector<double> &data, const QColor &color,
-                       int lineWidth = 2) {
+                       int lineWidth = 2, Qt::PenStyle style = Qt::SolidLine) {
     if (data.empty())
       return;
 
-    painter.setPen(QPen(color, lineWidth));
-    QPointF prevPoint;
+    painter.setPen(QPen(color, lineWidth, style));
+    QPainterPath path;
 
     for (size_t i = 0; i < data.size(); ++i) {
       double freq = i / (double)(data.size() - 1);
@@ -268,13 +304,12 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
       int x = chartRect.left() + (int)(freq * chartRect.width());
       int y = chartRect.bottom() - (int)((value / 100.0) * chartRect.height());
 
-      QPointF point(x, y);
-
-      if (i > 0)
-        painter.drawLine(prevPoint, point);
-
-      prevPoint = point;
+      if (i == 0)
+        path.moveTo(x, y);
+      else
+        path.lineTo(x, y);
     }
+    painter.drawPath(path);
   };
 
   struct LegendItem {
@@ -298,8 +333,6 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
       {"Lens", Qt::blue, 2, true, &m_data.lens_mtf},
       {"Sensor", Qt::gray, 2, true, &m_data.sensor_mtf},
       {"System", Qt::white, 4, true, &m_data.system_mtf},
-      {"Measured MTF", Qt::red, 4, m_hasMeasuredData,
-       nullptr} // Measured data handled separately
   };
 
   // Draw all curves
@@ -311,30 +344,32 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
     if (item.data) {
       drawCurve(*item.data, item.color, item.width);
     }
-    // Measured MTF special case
-    else if (item.name == "Measured MTF" && m_hasMeasuredData &&
-             m_measuredFreq.size() == m_measuredContrast.size()) {
-      painter.setPen(QPen(item.color, item.width));
-      QPointF prevPoint;
+  }
 
-      for (size_t i = 0; i < m_measuredFreq.size(); ++i) {
-        double freq = m_measuredFreq[i];
-        double value = m_measuredContrast[i] * 0.01;
-
-        if (freq < 0.0 || freq > 1.0)
-          continue;
-
-        int x = chartRect.left() + (int)(freq * chartRect.width());
-        int y = chartRect.bottom() - (int)(value * chartRect.height());
-
-        QPointF point(x, y);
-
-        if (i > 0)
-          painter.drawLine(prevPoint, point);
-
-        prevPoint = point;
+  // Draw Measured MTFs separately
+  if (m_hasMeasuredData) {
+      for (const auto &m : m_measurements) {
+          double wl = m.wavelength;
+          if (m.channel >= 0 && m.channel < 4) {
+              wl = m_channelWavelengths[m.channel];
+          }
+          QColor col = (wl > 0) ? wavelengthToRGB(wl) : Qt::white;
+          
+          painter.setPen(QPen(col, 2, Qt::DotLine));
+          QPainterPath path;
+          for (size_t i = 0; i < m.size(); ++i) {
+              double freq = m.get_freq(i);
+              double value = m.get_contrast(i) * 0.01;
+              if (freq < 0.0 || freq > 1.0) continue;
+              int x = chartRect.left() + (int)(freq * chartRect.width());
+              int y = chartRect.bottom() - (int)(value * chartRect.height());
+              if (i == 0)
+                  path.moveTo(x, y);
+              else
+                  path.lineTo(x, y);
+          }
+          painter.drawPath(path);
       }
-    }
   }
 
   // Draw MTF50 information
@@ -419,5 +454,31 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
       col = 0;
       legendY += layout.lineHeight;
     }
+  }
+  
+  // Legend for measured data
+  if (m_hasMeasuredData) {
+      for (const auto &m : m_measurements) {
+          int x = legendX + col * itemWidth;
+          double wl = m.wavelength;
+          if (m.channel >= 0 && m.channel < 4) {
+              wl = m_channelWavelengths[m.channel];
+          }
+          QColor col_meas = (wl > 0) ? wavelengthToRGB(wl) : Qt::white;
+
+          painter.setPen(QPen(col_meas, 2, Qt::DotLine));
+          painter.drawLine(x, legendY + layout.lineHeight / 2, x + 20,
+                           legendY + layout.lineHeight / 2);
+
+          painter.setPen(palette().text().color());
+          painter.drawText(x + 25, legendY, itemWidth - 25, layout.lineHeight,
+                           Qt::AlignLeft | Qt::AlignVCenter, QString::fromStdString(m.name));
+
+          col++;
+          if (col >= 3 || (x + itemWidth * 2 > width())) {
+            col = 0;
+            legendY += layout.lineHeight;
+          }
+      }
   }
 }
