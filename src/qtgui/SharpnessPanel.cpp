@@ -25,9 +25,102 @@
 #include <QTimer>
 #include <QVBoxLayout> // Added
 #include <QtConcurrent>
+#include <QMimeData>
+#include <QDrag>
+#include <QMouseEvent>
 
 using namespace colorscreen;
 using sharpen_mode = colorscreen::sharpen_parameters::sharpen_mode;
+
+namespace {
+// Helper for drag and drop reordering
+class DragHandle : public QLabel {
+public:
+    DragHandle(int index, QWidget *parent = nullptr) : QLabel(parent), m_index(index) {
+        setPixmap(QPixmap(":icons/hand.svg").scaled(16, 16, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        setFixedSize(24, 24);
+        setAlignment(Qt::AlignCenter);
+        setCursor(Qt::OpenHandCursor);
+        setToolTip(tr("Drag to reorder"));
+    }
+
+protected:
+    void mousePressEvent(QMouseEvent *event) override {
+        if (event->button() == Qt::LeftButton) {
+            QDrag *drag = new QDrag(this);
+            QMimeData *mimeData = new QMimeData();
+            mimeData->setData("application/x-mtf-measurement-index", QByteArray::number(m_index));
+            drag->setMimeData(mimeData);
+            
+            // Create a preview pixmap of the row? For now just use the hand
+            drag->setPixmap(pixmap());
+            drag->setHotSpot(event->pos());
+            
+            setCursor(Qt::ClosedHandCursor);
+            drag->exec(Qt::MoveAction);
+            setCursor(Qt::OpenHandCursor);
+        }
+    }
+
+private:
+    int m_index;
+};
+
+class MeasurementContainer : public QWidget {
+public:
+    using ReorderCallback = std::function<void(int, int)>;
+    MeasurementContainer(ReorderCallback onReorder, QWidget *parent = nullptr) 
+        : QWidget(parent), m_onReorder(onReorder) {
+        setAcceptDrops(true);
+    }
+
+protected:
+    void dragEnterEvent(QDragEnterEvent *event) override {
+        if (event->mimeData()->hasFormat("application/x-mtf-measurement-index"))
+            event->acceptProposedAction();
+    }
+
+    void dragMoveEvent(QDragMoveEvent *event) override {
+        event->acceptProposedAction();
+    }
+
+    void dropEvent(QDropEvent *event) override {
+        bool ok;
+        int fromIndex = event->mimeData()->data("application/x-mtf-measurement-index").toInt(&ok);
+        if (ok) {
+            // Find which row we dropped on. We can iterate through the layout.
+            QVBoxLayout *layout = qobject_cast<QVBoxLayout*>(this->layout());
+            if (layout) {
+                int toIndex = -1;
+                for (int i = 0; i < layout->count(); ++i) {
+                    QWidget *w = layout->itemAt(i)->widget();
+                    if (w && event->pos().y() < w->geometry().bottom()) {
+                        toIndex = i;
+                        break;
+                    }
+                }
+                
+                // Adjustment for header row? The current implementation adds a header at index 0.
+                if (toIndex != -1) {
+                    // Header is at 0, measurements start at 1
+                    int actualFrom = fromIndex;
+                    int actualTo = std::max(0, toIndex - 1); // -1 because of header
+                    
+                    // Cap at measurement count
+                    // We don't have the count here easily, but let the callback handle it.
+                    if (actualFrom != actualTo) {
+                        m_onReorder(actualFrom, actualTo);
+                    }
+                }
+            }
+        }
+        event->acceptProposedAction();
+    }
+
+private:
+    ReorderCallback m_onReorder;
+};
+} // namespace
 
 SharpnessPanel::SharpnessPanel(StateGetter stateGetter, StateSetter stateSetter,
                                ImageGetter imageGetter, QWidget *parent)
@@ -192,7 +285,16 @@ void SharpnessPanel::setupUi() {
   addSeparator("Measurements");
   addButtonParameter("", "Load QuickMTF measurement", [this]() { loadMTF(); });
 
-  QWidget *measContainer = new QWidget();
+  QWidget *measContainer = new MeasurementContainer([this](int from, int to) {
+    applyChange([from, to](ParameterState &s) {
+        auto &ms = s.rparams.sharpen.scanner_mtf.measurements;
+        if (from >= 0 && from < (int)ms.size() && to >= 0 && to < (int)ms.size()) {
+            auto item = ms[from];
+            ms.erase(ms.begin() + from);
+            ms.insert(ms.begin() + to, item);
+        }
+    }, tr("Reorder MTF measurements"));
+  });
   m_measurementsLayout = new QVBoxLayout(measContainer);
   m_measurementsLayout->setContentsMargins(0, 0, 0, 0);
   m_measurementsLayout->setSpacing(4);
@@ -470,17 +572,11 @@ void SharpnessPanel::updateMeasurementList() {
     ParameterState state = m_stateGetter();
     const auto &measurements = state.rparams.sharpen.scanner_mtf.measurements;
 
-    // To avoid losing focus during editing, we only recreate if size changed
-    // or if we really need to.
-    static size_t lastSize = -1;
-    if (measurements.size() == lastSize) {
-        // Just update values without recreation if possible?
-        // Actually, for simplicity and since it's a small list, let's clear and rebuild
-        // but maybe the user won't mind if it's on explicit refresh.
-        // Wait, every applyChange calls onParametersRefreshed.
-        // If I rebuild here, I WILL lose focus.
+    // Memoization to avoid flickering and unnecessary rebuilds
+    if (measurements == m_lastMeasurements) {
+        return;
     }
-    lastSize = measurements.size();
+    m_lastMeasurements = measurements;
 
     // Clear layout
     QLayoutItem *item;
@@ -497,8 +593,8 @@ void SharpnessPanel::updateMeasurementList() {
     headerLayout->setContentsMargins(0, 2, 0, 2);
     headerLayout->setSpacing(4);
 
-    // Spacer for delete button
-    headerLayout->addSpacing(34); 
+    // Spacer for drag handle + delete button
+    headerLayout->addSpacing(34 + 24); 
 
     QFont boldFont = this->font();
     boldFont.setBold(true);
@@ -530,6 +626,10 @@ void SharpnessPanel::updateMeasurementList() {
         QHBoxLayout *hLayout = new QHBoxLayout(row);
         hLayout->setContentsMargins(0, 0, 0, 0);
         hLayout->setSpacing(4);
+
+        // Drag handle
+        DragHandle *handle = new DragHandle(i, row);
+        hLayout->addWidget(handle);
 
         // Delete button
         QPushButton *delBtn = new QPushButton();

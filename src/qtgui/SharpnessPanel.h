@@ -54,6 +54,7 @@ private:
   class QLabel *m_diffractionNotice = nullptr;
   QVBoxLayout *m_mtfContainer = nullptr; // Container Layout
   QVBoxLayout *m_measurementsLayout = nullptr;
+  std::vector<colorscreen::mtf_measurement> m_lastMeasurements;
 
   // Cached parameters for change detection (moved from private to be used in
   // shouldUpdateTiles)
