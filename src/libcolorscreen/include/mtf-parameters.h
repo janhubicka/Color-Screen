@@ -189,16 +189,26 @@ struct mtf_parameters
     estimate_verbose = 1,
     estimate_use_nmsimplex = 2,
     estimate_use_multifit = 4,
+    estimate_verbose_solving = 8
   };
   
   DLL_PUBLIC double estimate_parameters (mtf_parameters &par, const char *write_table = NULL, progress_info *progress = NULL, const char **error = NULL, int flags = estimate_use_nmsimplex | estimate_use_multifit);
   mtf_parameters ()
-  : sigma (0), blur_diameter (0), defocus (0), f_stop (0), wavelength (0), wavelengths {650, 550, 450, 850}, pixel_pitch (0), sensor_fill_factor (1), scan_dpi (0), measured_mtf_idx (-1), measurements ()
+  : sigma (0), blur_diameter (0), defocus (0), f_stop (0), wavelength (0), wavelengths {0, 0, 0, 0}, pixel_pitch (0), sensor_fill_factor (1), scan_dpi (0), measured_mtf_idx (-1), measurements ()
   { }
   DLL_PUBLIC bool save_psf (progress_info *progress, const char *write_table, const char **error) const;
   DLL_PUBLIC bool write_table (const char *write_table, const char **error) const;
   DLL_PUBLIC computed_mtf compute_curves (int steps) const;
   DLL_PUBLIC int load_csv (FILE *in, std::string name, const char **error);
+  DLL_PUBLIC luminosity_t get_chanel_wavelength (int c)
+  {
+    /* Approximate peaks of spectral sensitivity curves of Dikon D700.  */
+    static const constexpr luminosity_t default_wavelengths[] = {450, 530, 600, 850};
+    if (wavelengths[c] > 0)
+      return wavelengths[c];
+    else
+      return default_wavelengths[c];
+  }
 private:
   bool print_csv_header (FILE *f) const;
 };

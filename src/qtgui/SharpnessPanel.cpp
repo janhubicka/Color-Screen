@@ -542,7 +542,7 @@ void SharpnessPanel::loadMTF() {
     }
 
     const char *error = nullptr;
-    std::string baseName = QFileInfo(fileName).baseName().toStdString();
+    std::string baseName = QFileInfo(fileName).completeBaseName().toStdString();
     if (state.rparams.sharpen.scanner_mtf.load_csv(
             f, baseName, &error) < 0) {
       QMessageBox::warning(

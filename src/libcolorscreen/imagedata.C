@@ -169,7 +169,7 @@ image_data::image_data ()
       whitepoint{ 0.312700492, 0.329000939, 1.0 }, backlight_corr (nullptr), gamma (-2),
       f_stop (-2), focal_plane_x_resolution (-2), focal_plane_y_resolution (-2),
       focal_length (-2), focal_length_in_35mm (-2), pixel_pitch (-2), sensor_fill_factor (-2),
-      rotation (-1), mirror (-1), demosaiced_by (demosaic_max), own (false)
+      wavelengths {-2, -2, -2, -2}, rotation (-1), mirror (-1), demosaiced_by (demosaic_max), own (false)
 {
 }
 
@@ -1248,6 +1248,9 @@ image_data::load_part (int *permille, const char **error,
 	     or sampled which makes it smaller.  Assume sampling.  */
 	  sensor_fill_factor = 4 * ((xdpi * xdpi) / (4000.0 * 4000.0));
 	  f_stop = 2.8;
+	  wavelengths[0] =  466;
+	  wavelengths[1] =  526;
+	  wavelengths[2] =  653;
 	  //printf ("Nikon scanner detected\n");
 	}
       /* TODO: Support also 4800DPI lens. */

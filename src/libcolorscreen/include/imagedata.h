@@ -108,6 +108,7 @@ public:
   luminosity_t focal_length_in_35mm;
   luminosity_t pixel_pitch;
   luminosity_t sensor_fill_factor;
+  luminosity_t wavelengths[4];
   demosaicing_t demosaiced_by;
   int rotation;
   int mirror;

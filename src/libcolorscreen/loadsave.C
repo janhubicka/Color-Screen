@@ -150,7 +150,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  auto &measurement = rparam->sharpen.scanner_mtf.measurements[m];
 	  if (fprintf (f, "scanner_mtf_measurement: %i\n", m) < 0
 	      || fprintf (f, "scanner_mtf_measurement_channel: %s\n", channel_names[measurement.channel + 1]) < 0
-	      || fprintf (f, "scanner_mtf_measurement_wavelength: %f\n", measurement.wavelength) < 0
+	      || fprintf (f, "scanner_mtf_measurement_wavelength_nm: %f\n", measurement.wavelength) < 0
 	      || fprintf (f, "scanner_mtf_measurement_same_capture: %s\n", bool_names[(int)measurement.same_capture]) < 0
 	      || fprintf (f, "scanner_mtf_measurement_name: ") < 0)
 	    return false;
@@ -175,6 +175,8 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    rparam->sharpen.scanner_mtf.sensor_fill_factor) < 0
 	  || fprintf (f, "scanner_mtf_wavelength_nm: %f\n",
 	    rparam->sharpen.scanner_mtf.wavelength) < 0
+	  || fprintf (f, "scanner_mtf_channel_wavelengths_nm: %f %f %f %f\n",
+	    rparam->sharpen.scanner_mtf.wavelengths[0], rparam->sharpen.scanner_mtf.wavelengths[1], rparam->sharpen.scanner_mtf.wavelengths[2], rparam->sharpen.scanner_mtf.wavelengths[3]) < 0
 	  || fprintf (f, "scanner_mtf_f_stop: %f\n",
 	    rparam->sharpen.scanner_mtf.f_stop) < 0
 	  /* Use %g; small values matters.  */
@@ -1490,7 +1492,8 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (rparam)
 	    rparam->sharpen.scanner_mtf.measurements[measurement].channel = j - 1;
 	}
-      else if (!strcmp (buf, "scanner_mtf_measurement_wavelength"))
+      else if (!strcmp (buf, "scanner_mtf_measurement_wavelength")
+	       || !strcmp (buf, "scanner_mtf_measurement_wavelengths_nm"))
 	{
 	  if (measurement < 0)
 	    {
@@ -1587,6 +1590,29 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.wavelength)))
 	    {
 	      *error = "error parsing scanner_mtf_wavelength";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "scanner_mtf_channel_wavelengths_nm"))
+	{
+	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.wavelengths[0])))
+	    {
+	      *error = "error parsing scanner_mtf_channel_wavelengths_nm";
+	      return false;
+	    }
+	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.wavelengths[1])))
+	    {
+	      *error = "error parsing scanner_mtf_channel_wavelengths_nm";
+	      return false;
+	    }
+	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.wavelengths[2])))
+	    {
+	      *error = "error parsing scanner_mtf_channel_wavelengths_nm";
+	      return false;
+	    }
+	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.wavelengths[3])))
+	    {
+	      *error = "error parsing scanner_mtf_channel_wavelengths_nm";
 	      return false;
 	    }
 	}

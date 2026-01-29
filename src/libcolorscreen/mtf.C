@@ -1230,7 +1230,7 @@ mtf_parameters::estimate_parameters (mtf_parameters &par,
 {
   *this = par;
 
-  mtf_solver s (*this, par.measurements, progress, flags & estimate_verbose);
+  mtf_solver s (*this, par.measurements, progress, flags & estimate_verbose_solving);
   if (flags & estimate_use_nmsimplex)
     simplex<luminosity_t, mtf_solver> (s, "optimizing lens parameters (simplex)",
 				       progress);

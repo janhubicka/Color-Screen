@@ -3593,6 +3593,8 @@ do_mtf (int argc, char **argv)
 	flags |= mtf_parameters::estimate_use_multifit;
       else if (!strcmp (argv[i], "--no-multifit"))
 	flags &= ~mtf_parameters::estimate_use_multifit;
+      else if (!strcmp (argv[i], "--verbose-solving"))
+	flags |= mtf_parameters::estimate_verbose_solving;
       else if (const char *str = arg_with_param (argc, argv, &i, "save-csv"))
         csvname = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "load-quickmtf"))
@@ -3703,7 +3705,9 @@ do_mtf (int argc, char **argv)
       printf ("scanner_mtf_sigma_px: %f\n", estimated.sigma);
       printf ("scanner_mtf_blur_diameter_px: %f\n", estimated.blur_diameter);
       printf ("scanner_mtf_pixel_pitch_um: %f\n", estimated.pixel_pitch);
+      printf ("scanner_mtf_sensor_fill_factor: %f\n", estimated.sensor_fill_factor);
       printf ("scanner_mtf_wavelength_nm: %f\n", estimated.wavelength);
+      printf ("scanner_mtf_channel_wavelengths_nm: %f\n", estimated.wavelengths[0], estimated.wavelengths[1], estimated.wavelengths[2], estimated.wavelengths[3]);
       printf ("scanner_mtf_f_stop: %f\n", estimated.f_stop);
       printf ("scanner_mtf_defocus_mm: %g\n", estimated.defocus);
       printf ("scan_dpi: %f\n", estimated.scan_dpi);
