@@ -8,7 +8,7 @@
 
 namespace colorscreen
 {
-typedef float luminosity_t;
+typedef double luminosity_t;
 
 inline luminosity_t
 srgb_to_linear (luminosity_t c)

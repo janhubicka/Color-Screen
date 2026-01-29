@@ -1018,9 +1018,9 @@ mtf::precompute (progress_info *progress)
 
       if (!regular_steps)
         {
-          std::vector<luminosity_t, fft_allocator<psf_t>> contrasts (measurement.size ()
-                                                                       + 2);
-          std::vector<luminosity_t, fft_allocator<psf_t>> freqs (measurement.size ()
+          std::vector<luminosity_t> contrasts (measurement.size ()
+                                          + 2);
+          std::vector<luminosity_t> freqs (measurement.size ()
                                                                    + 2);
           for (size_t i = 0; i < measurement.size (); i++)
             {
@@ -1038,7 +1038,7 @@ mtf::precompute (progress_info *progress)
         }
       else
         {
-          std::vector<luminosity_t, fft_allocator<psf_t>> contrasts (measurement.size ()
+          std::vector<luminosity_t> contrasts (measurement.size ()
                                                                        + 2);
           for (size_t i = 0; i < measurement.size (); i++)
             contrasts[i] = measurement.get_contrast (i) * 0.01
@@ -1075,7 +1075,7 @@ mtf::precompute (progress_info *progress)
   else
     {
       const int entries = 512;
-      std::vector<luminosity_t, fft_allocator<psf_t>> contrasts (entries);
+      std::vector<luminosity_t> contrasts (entries);
       luminosity_t step = 1.0 / (entries - 2);
       for (int i = 0; i < entries - 2; i++)
         contrasts[i] = m_params.system_mtf (i * step);
