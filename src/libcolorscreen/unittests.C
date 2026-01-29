@@ -426,7 +426,7 @@ test_screen_blur ()
 	  return false;
         }
       rgbdata rgbdelta;
-      if (!scr1->sum_almost_equal_p (mstr, &rgbdelta, 0.003))
+      if (!scr1->sum_almost_equal_p (mstr, &rgbdelta))
         {
 	  fprintf (stderr, "FFT Gaussian blur result overall tonality does not match original radius %f delta %f %f %f (step %i); see /tmp/scr-fft.tif \n", radius, rgbdelta.red, rgbdelta.green, rgbdelta.blue, i);
 	  scr1->save_tiff ("/tmp/scr-fft.tif");
@@ -451,7 +451,7 @@ test_screen_blur ()
         }
 
       scr1->initialize_with_blur (mstr, radius, screen::blur_mtffilter, screen::blur_fft);
-      if (!scr1->sum_almost_equal_p (mstr, &rgbdelta, 0.003))
+      if (!scr1->sum_almost_equal_p (mstr, &rgbdelta))
         {
 	  fprintf (stderr, "FFT mtffilter blur result overall tonality does not match original radius %f delta %f %f %f (step %i); see /tmp/scr-fft.tif \n", radius, rgbdelta.red, rgbdelta.green, rgbdelta.blue, i);
 	  scr1->save_tiff ("/tmp/scr-fft.tif");
@@ -536,7 +536,6 @@ test_render_linearity ()
 int
 main ()
 {
-#if 0
   printf ("1..8\n");
   test_matrix ();
   report ("matrix tests", true);
@@ -545,11 +544,8 @@ main ()
   report ("render linearity tests", test_render_linearity ());
   report ("screen blur tests", test_screen_blur ());
   report ("homography tests", test_homography (false, false, 0.000001));
-#endif
   report ("lens correction tests", test_homography (true, false, 0.15));
-#if 0
   report ("1d homography and lens correction tests", test_homography (true, true, 0.15));
   report ("screen discovery tests", test_discovery (1.8));
-#endif
   return 0;
 }

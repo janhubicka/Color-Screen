@@ -361,8 +361,8 @@ public:
   {
     if (fill_factor_index >= 0 && vals[fill_factor_index] < 0.1)
       vals[fill_factor_index] = 0.1;
-    if (fill_factor_index >= 0 && vals[fill_factor_index] > 8)
-      vals[fill_factor_index] = 8;
+    if (fill_factor_index >= 0 && vals[fill_factor_index] > 32)
+      vals[fill_factor_index] = 32;
     if (sigma_index >= 0 && vals[sigma_index] < 0)
       vals[sigma_index] = 0;
     for (int e : blur_index)
@@ -430,6 +430,7 @@ public:
     mtf_parameters p = m_params;
     p.sigma = get_sigma (vals);
     p.f_stop = get_f_stop (vals);
+    p.sensor_fill_factor = get_fill_factor (vals);
     int out_idx = 0;
     for (size_t m = 0; m < m_measurements.size (); m++)
       {
@@ -440,6 +441,7 @@ public:
 	else
 	  p.blur_diameter = get_blur_diameter (m, vals);
 	assert (difraction == p.simulate_difraction_p ());
+	luminosity_t msum = 0;
 	for (size_t i = 0; i < measurement.size (); i++)
 	  {
 	    luminosity_t freq = measurement.get_freq (i);
@@ -448,7 +450,7 @@ public:
 	      continue;
 	    luminosity_t contrast = measurement.get_contrast (i);
 	    luminosity_t contrast2 = p.system_mtf (freq) * 100;
-	    sum += (contrast - contrast2) * (contrast - contrast2);
+	    msum += (contrast - contrast2) * (contrast - contrast2);
 	    if (f_vec && out_idx < n_observations)
 	      f_vec[out_idx++] = contrast - contrast2;
 #if 0
@@ -456,13 +458,23 @@ public:
 	      debug_data (freq, contrast, contrast2);
 #endif
 	  }
+	if (be_verbose)
+	  {
+	    if (m_progress)
+	      m_progress->pause_stdout ();
+	    printf ("measurement %i fill factor %f, f-stop %f (%f) gaussian blur sigma %f, wavelength %f, defocus %f, blur_diameter %f, sqsum %f\n",
+		    m, p.sensor_fill_factor, p.f_stop, p.effective_f_stop (), p.sigma, p.wavelength, p.defocus, p.blur_diameter, msum);
+	    if (m_progress)
+	      m_progress->resume_stdout ();
+	  }
+	sum += msum;
       }
+
     if (be_verbose)
       {
 	if (m_progress)
 	  m_progress->pause_stdout ();
-	printf ("gaussian blur sigma %f, wavelength %f, defocus %f, blur_diameter %f, sqsum %f\n",
-	        p.sigma, p.wavelength, p.defocus, p.blur_diameter, sum);
+	printf ("Overall sum %f\n", sum);
 	if (m_progress)
 	  m_progress->resume_stdout ();
       }
@@ -1221,7 +1233,7 @@ mtf_parameters::estimate_parameters (mtf_parameters &par,
 
   mtf_solver s (*this, par.measurements, progress, flags | estimate_verbose);
   if (flags & estimate_use_nmsimplex)
-    gsl_simplex<luminosity_t, mtf_solver> (s, "optimizing lens parameters (simplex)",
+    simplex<luminosity_t, mtf_solver> (s, "optimizing lens parameters (simplex)",
 				       progress);
   if (flags & estimate_use_multifit)
     gsl_multifit<luminosity_t, mtf_solver> (s, "optimizing lens parameters (multifit)",
@@ -1232,6 +1244,17 @@ mtf_parameters::estimate_parameters (mtf_parameters &par,
   defocus = s.get_defocus (0, s.start);
   blur_diameter = s.get_blur_diameter (0, s.start);
   sensor_fill_factor = s.get_fill_factor (s.start);
+  if ((flags | estimate_verbose))
+    {
+      if (progress)
+	progress->pause_stdout ();
+      for (int m = 0; m < par.measurements.size (); m++)
+        {
+	  printf ("Measurement %s defocus %f\n", par.measurements[m].name.c_str (), s.get_defocus (m, s.start));
+        }
+      if (progress)
+	progress->resume_stdout ();
+    }
 
   if (write_table)
     {
