@@ -1493,7 +1493,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    rparam->sharpen.scanner_mtf.measurements[measurement].channel = j - 1;
 	}
       else if (!strcmp (buf, "scanner_mtf_measurement_wavelength")
-	       || !strcmp (buf, "scanner_mtf_measurement_wavelengths_nm"))
+	       || !strcmp (buf, "scanner_mtf_measurement_wavelength_nm"))
 	{
 	  if (measurement < 0)
 	    {

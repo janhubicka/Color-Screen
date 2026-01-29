@@ -363,6 +363,9 @@ public:
       vals[fill_factor_index] = 32;
     if (sigma_index >= 0 && vals[sigma_index] < 0)
       vals[sigma_index] = 0;
+    for (int c = 0; c < 4; c++)
+      if (channel_wavelength_index[c] >= 0)
+	vals[channel_wavelength_index[c]] = std::clamp (vals[channel_wavelength_index[c]], (luminosity_t)0, (luminosity_t)1);
     for (int e : blur_index)
       if (e >= 0 && vals[e] < 0)
         vals[e] = 0;
@@ -384,9 +387,9 @@ public:
   get_channel_wavelength (int c, const luminosity_t *vals)
   {
     static const constexpr luminosity_t ranges[8] = {
-	    580, 680,  /* Red between 580 and 680.  */
-	    480, 580,  /* Green between 480 and 580.  */
-	    400, 480,  /* Blue between 400 and 480.  */
+	    580, 750,  /* Red range.  */
+	    480, 580,  /* Green range.  */
+	    380, 480,  /* Blue blue range.  */
 	    750, 1000, /* IR between 750 and 1000. */
     };
     if (channel_wavelength_index[c] >= 0)
@@ -1357,12 +1360,14 @@ mtf_parameters::load_csv (FILE *in, std::string name, const char **error)
   for (int c = rgb ? 0 : 3; c < (rgb ? 3 : 4); c++)
     {
       mtf_measurement m;
-      const char *color[3]={"blue","green","red"};
+      const char *color[3]={"red","green","blue"};
+      /* Seems the order is blue, green, red*/
+      const int chanel_map[3]={2,1,0};
       if (rgb)
 	{
-	  m.name = name + " " + color[c];
+	  m.name = name + " " + color[chanel_map[c]];
 	  /* It seems that it is blue/green/red  */
-	  m.channel = 2 - c;
+	  m.channel = chanel_map[c];
 	  if (c)
 	    m.same_capture = true;
 	}

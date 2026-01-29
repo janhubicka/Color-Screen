@@ -200,7 +200,7 @@ struct mtf_parameters
   DLL_PUBLIC bool write_table (const char *write_table, const char **error) const;
   DLL_PUBLIC computed_mtf compute_curves (int steps) const;
   DLL_PUBLIC int load_csv (FILE *in, std::string name, const char **error);
-  DLL_PUBLIC luminosity_t get_channel_wavelength (int c) const
+  luminosity_t get_channel_wavelength (int c) const
   {
     /* Approximate peaks of spectral sensitivity curves of Dikon D700.  */
     static const constexpr luminosity_t default_wavelengths[] = {600, 530, 450, 850};

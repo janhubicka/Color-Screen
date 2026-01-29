@@ -447,9 +447,13 @@ solver (scr_to_img_parameters *param, image_data &img_data,
   if (optimize_lens)
     {
       lens_solver s (*param, img_data, sparam, progress);
+      bool use_early_multifit = false;
       bool use_simplex = true;
       bool use_gsl_simplex = false;
       bool use_multifit = false;
+      if (use_early_multifit)
+	gsl_multifit<coord_t, lens_solver> (s, "optimizing lens correction (multifit)",
+				       progress);
       if (use_simplex)
 	simplex<coord_t, lens_solver> (s, "optimizing lens correction (simplex)",
 				       progress);
