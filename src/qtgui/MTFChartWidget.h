@@ -2,6 +2,7 @@
 #define MTFCHARTWIDGET_H
 
 #include <QWidget>
+#include <set>
 #include "../libcolorscreen/include/render-parameters.h"
 
 class MTFChartWidget : public QWidget
@@ -22,6 +23,7 @@ public:
     
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
     
 private:
     struct LayoutInfo {
@@ -34,10 +36,24 @@ private:
         int marginBottom;
         int infoSectionHeight;
         int legendHeight;
+        int infoStartY;
+        int legendStartY;
         QRect chartRect;
     };
     
     LayoutInfo calculateLayout(int width, int height) const;
+    
+    struct LegendItem {
+        QString name;
+        QColor color;
+        int width;
+        bool visible;
+        const std::vector<double> *data = nullptr;
+        const colorscreen::mtf_measurement *measurement = nullptr;
+    };
+    
+    std::vector<LegendItem> getLegendItems() const;
+    bool isVisible(const QString &name) const { return m_hiddenItems.find(name) == m_hiddenItems.end(); }
 
     colorscreen::mtf_parameters::computed_mtf m_data;
     bool m_hasData = false;
@@ -48,6 +64,8 @@ private:
     std::vector<colorscreen::mtf_measurement> m_measurements;
     std::array<double, 4> m_channelWavelengths;
     bool m_hasMeasuredData = false;
+
+    std::set<QString> m_hiddenItems;
 };
 
 #endif // MTFCHARTWIDGET_H

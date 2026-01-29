@@ -3,6 +3,7 @@
 #include "color.h"
 #include <QFontMetrics>
 #include <QPaintEvent>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <algorithm>
@@ -58,69 +59,6 @@ int MTFChartWidget::heightForWidth(int width) const {
   return chartHeight + layout.marginTop + layout.marginBottom;
 }
 
-MTFChartWidget::LayoutInfo MTFChartWidget::calculateLayout(int w, int h) const {
-  LayoutInfo layout;
-  
-  // Calculate dynamic font sizes
-  layout.baseFontSize = 9;
-  layout.smallFontSize = 8;
-  if (w > 300) {
-      int delta = (w - 300) / 100;
-      layout.baseFontSize = std::min(9 + delta, 14);
-      layout.smallFontSize = std::min(8 + delta, 12);
-  }
-  layout.lineHeight = layout.baseFontSize + 10;
-
-  // Margin Left: Title + Space + Labels + Tick
-  layout.marginLeft = 45 + (layout.baseFontSize * 4); // Dynamic based on font
-  layout.marginLeft = std::max(layout.marginLeft, 90);
-
-  // Margin Top: Captions
-  layout.marginTop = 45; 
-  if (layout.baseFontSize > 11) layout.marginTop += (layout.baseFontSize - 11) * 8;
-
-  // Margin Right: Padding
-  layout.marginRight = 20;
-
-  // Margin Bottom components
-  int bottomItemsRows = 2; // Axis ticks + "Pixel frequency" title
-  if (m_scanDpi > 0) bottomItemsRows += 2; // lp/mm ticks + title
-  
-  layout.infoSectionHeight = 0;
-  if (m_hasData) layout.infoSectionHeight += layout.lineHeight;
-  if (m_screenFreq > 0) layout.infoSectionHeight += layout.lineHeight;
-  
-  // Legend items count
-  int numVisibleItems = 0;
-  if (m_canSimulateDifraction) numVisibleItems += 2; // Difraction, Defocus
-  else numVisibleItems += 1; // Hopkins
-  numVisibleItems += 5; // Gaussian, Lens, Sensor, System
-  if (m_hasMeasuredData) numVisibleItems += m_measurements.size();
-  
-  // Legend wrap logic matches paintEvent
-  int itemWidth = std::max(120, (int)(120 * (layout.baseFontSize / 9.0)));
-  int col = 0;
-  int legendRows = 1;
-  for (int i = 0; i < numVisibleItems; ++i) {
-      int x = layout.marginLeft + col * itemWidth;
-      col++;
-      if (col >= 3 || (x + itemWidth * 2 > w)) {
-          col = 0;
-          if (i < numVisibleItems - 1) legendRows++;
-      }
-  }
-  layout.legendHeight = legendRows * layout.lineHeight + 20;
-  
-  layout.marginBottom = (bottomItemsRows + 0.5) * layout.lineHeight + layout.infoSectionHeight + layout.legendHeight;
-  if (m_scanDpi > 0) layout.marginBottom += 4;
-  
-  layout.chartRect = QRect(layout.marginLeft, layout.marginTop, 
-                           std::max(10, w - layout.marginLeft - layout.marginRight),
-                           std::max(10, h - layout.marginTop - layout.marginBottom));
-                           
-  return layout;
-}
-
 // Wavelength to RGB conversion using CIE CMFs
 static QColor wavelengthToRGB(double wavelength) {
   if (wavelength < 380 || wavelength > 780)
@@ -152,6 +90,108 @@ static QColor wavelengthToRGB(double wavelength) {
       return Qt::white;
       
   return col;
+}
+
+std::vector<MTFChartWidget::LegendItem> MTFChartWidget::getLegendItems() const {
+    std::vector<LegendItem> items;
+    items.push_back({"Difraction", QColor(255, 100, 100), 2, m_canSimulateDifraction, &m_data.lens_difraction_mtf});
+    items.push_back({"Defocus", QColor(255, 165, 0), 2, m_canSimulateDifraction, &m_data.stokseth_defocus_mtf});
+    items.push_back({"Hopkins blur", QColor(139, 69, 19), 2, !m_canSimulateDifraction, &m_data.hopkins_blur_mtf});
+    items.push_back({"Gaussian blur", QColor(100, 200, 100), 2, true, &m_data.gaussian_blur_mtf});
+    items.push_back({"Lens", Qt::blue, 2, true, &m_data.lens_mtf});
+    items.push_back({"Sensor", Qt::gray, 2, true, &m_data.sensor_mtf});
+    items.push_back({"System", Qt::white, 4, true, &m_data.system_mtf});
+
+    if (m_hasMeasuredData) {
+        for (const auto &m : m_measurements) {
+            double wl = m.wavelength;
+            if (m.channel >= 0 && m.channel < 4) {
+                wl = m_channelWavelengths[m.channel];
+            }
+            QColor col = (wl > 0) ? wavelengthToRGB(wl) : Qt::white;
+            items.push_back({QString::fromStdString(m.name), col, 2, true, nullptr, &m});
+        }
+    }
+    return items;
+}
+
+MTFChartWidget::LayoutInfo MTFChartWidget::calculateLayout(int w, int h) const {
+  LayoutInfo layout;
+  
+  // Calculate dynamic font sizes
+  layout.baseFontSize = 9;
+  layout.smallFontSize = 8;
+  if (w > 300) {
+      int delta = (w - 300) / 100;
+      layout.baseFontSize = std::min(9 + delta, 14);
+      layout.smallFontSize = std::min(8 + delta, 12);
+  }
+  layout.lineHeight = layout.baseFontSize + 10;
+
+  // Margin Left: Title + Space + Labels + Tick
+  layout.marginLeft = 45 + (layout.baseFontSize * 4); // Dynamic based on font
+  layout.marginLeft = std::max(layout.marginLeft, 90);
+
+  // Margin Top: Captions
+  layout.marginTop = 45; 
+  if (layout.baseFontSize > 11) layout.marginTop += (layout.baseFontSize - 11) * 8;
+
+  // Margin Right: Padding
+  layout.marginRight = 20;
+
+  // Margin Bottom components calculation
+  // Legend items count and height
+  auto allItems = getLegendItems();
+  int numVisibleItems = 0;
+  for (const auto &item : allItems) if (item.visible) numVisibleItems++;
+  
+  int itemWidth = std::max(120, (int)(120 * (layout.baseFontSize / 9.0)));
+  int col = 0;
+  int legendRows = numVisibleItems > 0 ? 1 : 0;
+  for (int i = 0; i < numVisibleItems; ++i) {
+      int x = layout.marginLeft + col * itemWidth;
+      col++;
+      if (col >= 3 || (x + itemWidth * 2 > w)) {
+          col = 0;
+          if (i < numVisibleItems - 1) legendRows++;
+      }
+  }
+  layout.legendHeight = legendRows * layout.lineHeight + 20;
+  
+  layout.infoSectionHeight = 0;
+  if (m_hasData) {
+      // MTF50 check (pre-calculation)
+      bool has_mtf50 = false;
+      if (!m_data.system_mtf.empty() && isVisible("System")) {
+          for (size_t i = 0; i < m_data.system_mtf.size() - 1; ++i) {
+              if (m_data.system_mtf[i] >= 0.5 && m_data.system_mtf[i+1] < 0.5) {
+                  has_mtf50 = true;
+                  break;
+              }
+          }
+      }
+      if (has_mtf50) layout.infoSectionHeight += layout.lineHeight;
+  }
+  if (m_screenFreq > 0) layout.infoSectionHeight += layout.lineHeight;
+  
+  // Axis labels height
+  double labelsHeightRatio = m_scanDpi > 0 ? 4.3 : 2.8;
+  int labelsHeight = (int)(labelsHeightRatio * layout.lineHeight);
+  if (m_scanDpi > 0) labelsHeight += 4;
+  
+  layout.marginBottom = labelsHeight + layout.infoSectionHeight + layout.legendHeight;
+  
+  layout.chartRect = QRect(layout.marginLeft, layout.marginTop, 
+                           std::max(10, w - layout.marginLeft - layout.marginRight),
+                           std::max(10, h - layout.marginTop - layout.marginBottom));
+                           
+  // Finalize starts
+  layout.infoStartY = layout.chartRect.bottom() + (int)(layout.lineHeight * (m_scanDpi > 0 ? 4.3 : 2.8));
+  if (m_scanDpi > 0) layout.infoStartY += 4;
+  
+  layout.legendStartY = layout.infoStartY + layout.infoSectionHeight + (int)(layout.lineHeight * 0.5);
+  
+  return layout;
 }
 
 void MTFChartWidget::paintEvent(QPaintEvent *event) {
@@ -253,32 +293,27 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
 
   // Axis labels
   painter.setPen(palette().text().color());
-  int labelY = chartRect.bottom() + (int)(layout.lineHeight * 0.8);
-  painter.drawText(QRect(layout.marginLeft, labelY, chartRect.width(), layout.lineHeight),
+  int axisLabelY = chartRect.bottom() + (int)(layout.lineHeight * 0.8);
+  painter.drawText(QRect(layout.marginLeft, axisLabelY, chartRect.width(), layout.lineHeight),
                    Qt::AlignCenter, "Pixel frequency");
                    
-  labelY += layout.lineHeight;
-
   if (m_scanDpi > 0) {
-    labelY += 4; // Extra padding below Pixel frequency
+    int lpMmY = axisLabelY + layout.lineHeight + 4;
     // Draw cycles per mm axis (lp/mm)
     double lp_mm_max = (m_scanDpi / 25.4);
 
     for (int i = 0; i <= 10; i++) {
         int x = chartRect.left() + (chartRect.width() * i / 10);
-        painter.drawLine(x, labelY - 5, x, labelY);
+        painter.drawLine(x, lpMmY - 5, x, lpMmY);
         
         double lp_mm = (i / 10.0) * lp_mm_max;
         QString label = QString::number(lp_mm, 'f', 1);
-        QRect textRect(x - 30, labelY, 60, layout.lineHeight);
+        QRect textRect(x - 30, lpMmY, 60, layout.lineHeight);
         painter.drawText(textRect, Qt::AlignCenter, label);
     }
-    labelY += layout.lineHeight;
-    painter.drawText(QRect(layout.marginLeft, labelY, chartRect.width(), layout.lineHeight),
+    int titleY = lpMmY + layout.lineHeight;
+    painter.drawText(QRect(layout.marginLeft, titleY, chartRect.width(), layout.lineHeight),
                      Qt::AlignCenter, "Cycles per millimeter (lp/mm)");
-    labelY += (int)(layout.lineHeight * 1.5);
-  } else {
-    labelY += layout.lineHeight;
   }
 
   painter.save();
@@ -312,69 +347,38 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
     painter.drawPath(path);
   };
 
-  struct LegendItem {
-    QString name;
-    QColor color;
-    int width;
-    bool visible;
-    const std::vector<double> *data;
-  };
-
-  // Define styling and data in one place
-  LegendItem items[] = {
-      {"Difraction", QColor(255, 100, 100), 2, m_canSimulateDifraction,
-       &m_data.lens_difraction_mtf},
-      {"Defocus", QColor(255, 165, 0), 2, m_canSimulateDifraction,
-       &m_data.stokseth_defocus_mtf},
-      {"Hopkins blur", QColor(139, 69, 19), 2, !m_canSimulateDifraction,
-       &m_data.hopkins_blur_mtf},
-      {"Gaussian blur", QColor(100, 200, 100), 2, true,
-       &m_data.gaussian_blur_mtf},
-      {"Lens", Qt::blue, 2, true, &m_data.lens_mtf},
-      {"Sensor", Qt::gray, 2, true, &m_data.sensor_mtf},
-      {"System", Qt::white, 4, true, &m_data.system_mtf},
-  };
+  auto items = getLegendItems();
 
   // Draw all curves
   for (const auto &item : items) {
-    if (!item.visible)
+    if (!item.visible || !isVisible(item.name))
       continue;
 
     // Standard curves
     if (item.data) {
       drawCurve(*item.data, item.color, item.width);
+    } else if (item.measurement) {
+        // Measured MTFs
+        painter.setPen(QPen(item.color, 2, Qt::DotLine));
+        QPainterPath path;
+        for (size_t i = 0; i < item.measurement->size(); ++i) {
+            double freq = item.measurement->get_freq(i);
+            double value = item.measurement->get_contrast(i) * 0.01;
+            if (freq < 0.0 || freq > 1.0) continue;
+            int x = chartRect.left() + (int)(freq * chartRect.width());
+            int y = chartRect.bottom() - (int)(value * chartRect.height());
+            if (i == 0)
+                path.moveTo(x, y);
+            else
+                path.lineTo(x, y);
+        }
+        painter.drawPath(path);
     }
-  }
-
-  // Draw Measured MTFs separately
-  if (m_hasMeasuredData) {
-      for (const auto &m : m_measurements) {
-          double wl = m.wavelength;
-          if (m.channel >= 0 && m.channel < 4) {
-              wl = m_channelWavelengths[m.channel];
-          }
-          QColor col = (wl > 0) ? wavelengthToRGB(wl) : Qt::white;
-          
-          painter.setPen(QPen(col, 2, Qt::DotLine));
-          QPainterPath path;
-          for (size_t i = 0; i < m.size(); ++i) {
-              double freq = m.get_freq(i);
-              double value = m.get_contrast(i) * 0.01;
-              if (freq < 0.0 || freq > 1.0) continue;
-              int x = chartRect.left() + (int)(freq * chartRect.width());
-              int y = chartRect.bottom() - (int)(value * chartRect.height());
-              if (i == 0)
-                  path.moveTo(x, y);
-              else
-                  path.lineTo(x, y);
-          }
-          painter.drawPath(path);
-      }
   }
 
   // Draw MTF50 information
   double mtf50_freq = -1;
-  if (!m_data.system_mtf.empty()) {
+  if (!m_data.system_mtf.empty() && isVisible("System")) {
       for (size_t i = 0; i < m_data.system_mtf.size() - 1; ++i) {
           if (m_data.system_mtf[i] >= 0.5 && m_data.system_mtf[i+1] < 0.5) {
               // Linear interpolation
@@ -388,7 +392,7 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
       }
   }
 
-  int infoY = labelY;
+  int infoY = layout.infoStartY;
   painter.setFont(baseFont);
   painter.setPen(palette().text().color());
   if (mtf50_freq >= 0) {
@@ -428,7 +432,7 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
   }
 
   // Draw legend
-  int legendY = infoY + (int)(layout.lineHeight * 0.5);
+  int legendY = layout.legendStartY;
   int legendX = chartRect.left();
   int itemWidth = std::max(120, (int)(120 * (layout.baseFontSize / 9.0)));
 
@@ -438,14 +442,18 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
       continue;
 
     int x = legendX + col * itemWidth;
+    bool visible = isVisible(item.name);
 
     // Line sample
-    painter.setPen(QPen(item.color, item.width));
+    QColor itemColor = item.color;
+    if (!visible) itemColor = palette().mid().color();
+    
+    painter.setPen(QPen(itemColor, item.width, item.measurement ? Qt::DotLine : Qt::SolidLine));
     painter.drawLine(x, legendY + layout.lineHeight / 2, x + 20,
                      legendY + layout.lineHeight / 2);
 
     // Text
-    painter.setPen(palette().text().color());
+    painter.setPen(visible ? palette().text().color() : palette().mid().color());
     painter.drawText(x + 25, legendY, itemWidth - 25, layout.lineHeight,
                      Qt::AlignLeft | Qt::AlignVCenter, item.name);
 
@@ -455,30 +463,39 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
       legendY += layout.lineHeight;
     }
   }
-  
-  // Legend for measured data
-  if (m_hasMeasuredData) {
-      for (const auto &m : m_measurements) {
-          int x = legendX + col * itemWidth;
-          double wl = m.wavelength;
-          if (m.channel >= 0 && m.channel < 4) {
-              wl = m_channelWavelengths[m.channel];
-          }
-          QColor col_meas = (wl > 0) ? wavelengthToRGB(wl) : Qt::white;
+}
 
-          painter.setPen(QPen(col_meas, 2, Qt::DotLine));
-          painter.drawLine(x, legendY + layout.lineHeight / 2, x + 20,
-                           legendY + layout.lineHeight / 2);
+void MTFChartWidget::mousePressEvent(QMouseEvent *event) {
+    LayoutInfo layout = calculateLayout(width(), height());
+    
+    int legendY = layout.legendStartY;
+    int legendX = layout.chartRect.left();
+    int itemWidth = std::max(120, (int)(120 * (layout.baseFontSize / 9.0)));
 
-          painter.setPen(palette().text().color());
-          painter.drawText(x + 25, legendY, itemWidth - 25, layout.lineHeight,
-                           Qt::AlignLeft | Qt::AlignVCenter, QString::fromStdString(m.name));
+    auto items = getLegendItems();
+    int col = 0;
+    for (const auto &item : items) {
+        if (!item.visible) continue;
 
-          col++;
-          if (col >= 3 || (x + itemWidth * 2 > width())) {
+        int x = legendX + col * itemWidth;
+        QRect itemRect(x, legendY, itemWidth, layout.lineHeight);
+        
+        if (itemRect.contains(event->pos())) {
+            if (m_hiddenItems.count(item.name)) {
+                m_hiddenItems.erase(item.name);
+            } else {
+                m_hiddenItems.insert(item.name);
+            }
+            update();
+            return;
+        }
+
+        col++;
+        if (col >= 3 || (x + itemWidth * 2 > width())) {
             col = 0;
             legendY += layout.lineHeight;
-          }
-      }
-  }
+        }
+    }
+    
+    QWidget::mousePressEvent(event);
 }
