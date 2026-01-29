@@ -205,7 +205,7 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
       return NAN;
     }
 
-  gsl_vector *x = gsl_vector_alloc (p);
+  gsl_vector *x = gsl_vector_calloc (p);  /* Use calloc to zero-initialize */
   for (int i = 0; i < p; i++)
     gsl_vector_set (x, i, c.start[i]);
 
