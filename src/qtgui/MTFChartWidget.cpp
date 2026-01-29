@@ -145,13 +145,15 @@ MTFChartWidget::LayoutInfo MTFChartWidget::calculateLayout(int w, int h) const {
   int numVisibleItems = 0;
   for (const auto &item : allItems) if (item.visible) numVisibleItems++;
   
-  int itemWidth = std::max(120, (int)(120 * (layout.baseFontSize / 9.0)));
+  layout.itemWidth = std::max(120, (int)(120 * (layout.baseFontSize / 9.0)));
+  int availableWidth = std::max(10, w - layout.marginLeft - layout.marginRight);
+  layout.numCols = std::max(1, availableWidth / layout.itemWidth);
+
   int col = 0;
   int legendRows = numVisibleItems > 0 ? 1 : 0;
   for (int i = 0; i < numVisibleItems; ++i) {
-      int x = layout.marginLeft + col * itemWidth;
       col++;
-      if (col >= 3 || (x + itemWidth * 2 > w)) {
+      if (col >= layout.numCols) {
           col = 0;
           if (i < numVisibleItems - 1) legendRows++;
       }
@@ -434,31 +436,36 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
   // Draw legend
   int legendY = layout.legendStartY;
   int legendX = chartRect.left();
-  int itemWidth = std::max(120, (int)(120 * (layout.baseFontSize / 9.0)));
 
   int col = 0;
   for (const auto &item : items) {
     if (!item.visible)
       continue;
 
-    int x = legendX + col * itemWidth;
+    int x = legendX + col * layout.itemWidth;
     bool visible = isVisible(item.name);
 
     // Line sample
     QColor itemColor = item.color;
-    if (!visible) itemColor = palette().mid().color();
+    if (!visible) {
+        itemColor.setAlpha(80);
+    }
     
     painter.setPen(QPen(itemColor, item.width, item.measurement ? Qt::DotLine : Qt::SolidLine));
     painter.drawLine(x, legendY + layout.lineHeight / 2, x + 20,
                      legendY + layout.lineHeight / 2);
 
     // Text
-    painter.setPen(visible ? palette().text().color() : palette().mid().color());
-    painter.drawText(x + 25, legendY, itemWidth - 25, layout.lineHeight,
+    QColor textColor = palette().text().color();
+    if (!visible) {
+        textColor.setAlpha(180);
+    }
+    painter.setPen(textColor);
+    painter.drawText(x + 25, legendY, layout.itemWidth - 25, layout.lineHeight,
                      Qt::AlignLeft | Qt::AlignVCenter, item.name);
 
     col++;
-    if (col >= 3 || (x + itemWidth * 2 > width())) { // wrap if no space
+    if (col >= layout.numCols) {
       col = 0;
       legendY += layout.lineHeight;
     }
@@ -470,15 +477,14 @@ void MTFChartWidget::mousePressEvent(QMouseEvent *event) {
     
     int legendY = layout.legendStartY;
     int legendX = layout.chartRect.left();
-    int itemWidth = std::max(120, (int)(120 * (layout.baseFontSize / 9.0)));
 
     auto items = getLegendItems();
     int col = 0;
     for (const auto &item : items) {
         if (!item.visible) continue;
 
-        int x = legendX + col * itemWidth;
-        QRect itemRect(x, legendY, itemWidth, layout.lineHeight);
+        int x = legendX + col * layout.itemWidth;
+        QRect itemRect(x, legendY, layout.itemWidth, layout.lineHeight);
         
         if (itemRect.contains(event->pos())) {
             if (m_hiddenItems.count(item.name)) {
@@ -491,7 +497,7 @@ void MTFChartWidget::mousePressEvent(QMouseEvent *event) {
         }
 
         col++;
-        if (col >= 3 || (x + itemWidth * 2 > width())) {
+        if (col >= layout.numCols) {
             col = 0;
             legendY += layout.lineHeight;
         }

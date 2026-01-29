@@ -38,6 +38,8 @@ private:
         int legendHeight;
         int infoStartY;
         int legendStartY;
+        int numCols;
+        int itemWidth;
         QRect chartRect;
     };
     
