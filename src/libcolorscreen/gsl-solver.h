@@ -121,11 +121,12 @@ struct gsl_solver_proxy
       proxy->temp_residuals.resize(n);
 
     auto res = proxy->c.residuals (proxy->temp_params.data (), proxy->temp_residuals.data ());
-    if constexpr (std::is_same_v<decltype(res), int>)
-      return res;
-
+    
     for (int i = 0; i < n; i++)
       gsl_vector_set (f_vec, i, proxy->temp_residuals[i]);
+
+    if constexpr (std::is_same_v<decltype(res), int>)
+      return res;
 
     return GSL_SUCCESS;
   }
@@ -191,6 +192,7 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
   const gsl_multifit_nlinear_type *T_type = gsl_multifit_nlinear_trust;
   gsl_multifit_nlinear_workspace *w = gsl_multifit_nlinear_alloc (T_type, &fdf_params, n, p);
 
+
   if (!w)
     {
       if (c.verbose ())
@@ -205,12 +207,29 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
       return NAN;
     }
 
-  gsl_vector *x = gsl_vector_calloc (p);  /* Use calloc to zero-initialize */
+  gsl_vector *x = gsl_vector_alloc (p);
   for (int i = 0; i < p; i++)
     gsl_vector_set (x, i, c.start[i]);
 
   double final_chisq = NAN;
   int status = gsl_multifit_nlinear_init (x, &fdf, w);
+
+  if (status != GSL_SUCCESS)
+    {
+      if (c.verbose ())
+        {
+          if (progress)
+            progress->pause_stdout ();
+          fprintf (stderr, "GSL multifit: init failed with status %d: %s\n", 
+                   status, gsl_strerror (status));
+          if (progress)
+            progress->resume_stdout ();
+        }
+      gsl_vector_free (x);
+      gsl_multifit_nlinear_free (w);
+      gsl_set_error_handler (old_handler);
+      return NAN;
+    }
 
   double initial_resid = 0;
   {
