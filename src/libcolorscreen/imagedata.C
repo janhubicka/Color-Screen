@@ -1248,9 +1248,9 @@ image_data::load_part (int *permille, const char **error,
 	     or sampled which makes it smaller.  Assume sampling.  */
 	  sensor_fill_factor = 4 * ((xdpi * xdpi) / (4000.0 * 4000.0));
 	  f_stop = 2.8;
-	  wavelengths[0] =  466;
+	  wavelengths[2] =  466;
 	  wavelengths[1] =  526;
-	  wavelengths[2] =  653;
+	  wavelengths[0] =  653;
 	  //printf ("Nikon scanner detected\n");
 	}
       /* TODO: Support also 4800DPI lens. */

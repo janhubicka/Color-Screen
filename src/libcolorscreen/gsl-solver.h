@@ -284,7 +284,7 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
 	    }
 
           /* test for convergence */
-          status = gsl_multifit_nlinear_test (1e-6, 1e-6, 1e-6, &info, w);
+          status = gsl_multifit_nlinear_test (1e-4, 1e-4, 1e-4, &info, w);
 
           if (c.verbose ())
             {

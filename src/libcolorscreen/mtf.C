@@ -326,6 +326,7 @@ public:
 	    n_observations++;
       }
     start = start_vec.data ();
+    sums.resize (m_measurements.size ());
     assert (nvalues == start_vec.size ());
   }
   int
@@ -341,7 +342,7 @@ public:
   luminosity_t
   derivative_perturbation ()
   {
-    return 0.00001;
+    return 0.0001;  // Increased from 0.00001 for more robust gradient estimation
   }
   bool
   verbose ()
@@ -482,6 +483,7 @@ public:
 	      m_progress->resume_stdout ();
 	  }
 	sum += msum;
+	sums[m] = msum;
       }
     assert (!f_vec || out_idx == n_observations);
 
@@ -511,6 +513,7 @@ public:
   progress_info *m_progress;
   bool be_verbose;
   std::vector<luminosity_t> start_vec;
+  std::vector<luminosity_t> sums;
   luminosity_t *start;
   bool difraction;
   int nvalues;
@@ -1269,7 +1272,7 @@ mtf_parameters::estimate_parameters (mtf_parameters &par,
 	progress->pause_stdout ();
       for (int m = 0; m < par.measurements.size (); m++)
         {
-	  printf ("Measurement %s defocus %f\n", par.measurements[m].name.c_str (), s.get_defocus (m, s.start));
+	  printf ("Measurement %s defocus %f sum %f\n", par.measurements[m].name.c_str (), s.get_defocus (m, s.start), s.sums[m]);
         }
       if (progress)
 	progress->resume_stdout ();
