@@ -173,13 +173,13 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
 
   gsl_solver_proxy<T, C> proxy{ c, std::vector<T> (p), std::vector<T> (n) };
 
-  gsl_multifit_nlinear_fdf fdf;
-  fdf.f = gsl_solver_proxy<T, C>::f;
-  fdf.df = has_jacobian<C, T>::value ? gsl_solver_proxy<T, C>::df : NULL;
-  fdf.fvv = has_fvv<C, T>::value ? gsl_solver_proxy<T, C>::fvv : NULL;
-  fdf.p = p;
-  fdf.n = n;
-  fdf.params = &proxy;
+  gsl_multifit_nlinear_fdf fdf = {};
+    fdf.f = gsl_solver_proxy<T, C>::f;
+    fdf.df = has_jacobian<C, T>::value ? gsl_solver_proxy<T, C>::df : NULL;
+    fdf.fvv = has_fvv<C, T>::value ? gsl_solver_proxy<T, C>::fvv : NULL;
+    fdf.p = p;
+    fdf.n = n;
+    fdf.params = &proxy;
 
   gsl_multifit_nlinear_parameters fdf_params = gsl_multifit_nlinear_default_parameters ();
   fdf_params.h_df = c.derivative_perturbation ();
@@ -371,10 +371,10 @@ gsl_simplex (C &c, const char *task = NULL, progress_info *progress = NULL,
 
   gsl_simplex_proxy<T, C> proxy{ c, std::vector<T> (n) };
 
-  gsl_multimin_function minex_func;
-  minex_func.n = n;
-  minex_func.f = gsl_simplex_proxy<T, C>::f;
-  minex_func.params = &proxy;
+  gsl_multimin_function minex_func = {};
+    minex_func.n = n;
+    minex_func.f = gsl_simplex_proxy<T, C>::f;
+    minex_func.params = &proxy;
 
   gsl_vector *x = gsl_vector_alloc (n);
   gsl_vector *ss = gsl_vector_alloc (n);
