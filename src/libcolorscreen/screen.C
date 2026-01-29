@@ -1853,93 +1853,14 @@ screen::initialize_with_point_spread (
 }
 
 void
-screen::initialize_with_fft_blur (screen &scr, rgbdata blur_radius)
+screen::initialize_with_blur (screen &scr, coord_t blur_radius, enum blur_alg alg)
 {
-  /* This is sample MTF curve of a camera taken from IMOD's mtffliter.
-     first column are spartial frequencies in reciprocal pixels and second
-     column is a contrast loss.  */
-  const static luminosity_t data[][2]
-      = { { 0.0085, 0.98585 }, { 0.0221, 0.94238 }, { 0.0357, 0.89398 },
-          { 0.0493, 0.83569 }, { 0.0629, 0.76320 }, { 0.0765, 0.69735 },
-          { 0.0901, 0.63647 }, { 0.1037, 0.56575 }, { 0.1173, 0.49876 },
-          { 0.1310, 0.43843 }, { 0.1446, 0.38424 }, { 0.1582, 0.34210 },
-          { 0.1718, 0.30289 }, { 0.1854, 0.26933 }, { 0.1990, 0.23836 },
-          { 0.2126, 0.21318 }, { 0.2262, 0.18644 }, { 0.2398, 0.15756 },
-          { 0.2534, 0.14863 }, { 0.2670, 0.12485 }, { 0.2806, 0.11436 },
-          { 0.2942, 0.09183 }, { 0.3078, 0.08277 }, { 0.3214, 0.07021 },
-          { 0.3350, 0.05714 }, { 0.3486, 0.04388 }, { 0.3622, 0.03955 },
-          { 0.3759, 0.03367 }, { 0.3895, 0.02844 }, { 0.4031, 0.02107 },
-          { 0.4167, 0.02031 }, { 0.4303, 0.01796 }, { 0.4439, 0.00999 },
-          { 0.4575, 0.01103 }, { 0.4711, 0.00910 }, { 0.4898, 0.00741 } };
-  int data_size = sizeof (data) / sizeof (luminosity_t) / 2 - 1;
-  bool use_sqrt = false;
-  memcpy (add, scr.add, sizeof (add));
-
-  if (!use_sqrt)
-    {
-      bool all = (blur_radius.red == blur_radius.green)
-                 && (blur_radius.red == blur_radius.blue);
-      for (int c = 0; c < 3; c++)
-        {
-          auto weights = fft_alloc_complex<screen_fft_t> (fft_size);
-          /* blur_radius is blur in the screen dimensions.
-             step should be 1 / size, but blur_radius of 1 corresponds to size
-             so this evens out. Compensate so the blur is approximately same as
-             gaussian blur.	 */
-          luminosity_t step = blur_radius[c] * 0.5 * (0.75 / 0.61);
-          luminosity_t f = step;
-          weights.get ()[0][0] = 1;
-          weights.get ()[0][1] = 0;
-          for (int x = 1, p = 0; x < fft_size; x++, f += step)
-            {
-              while (p < data_size - 1 && data[p + 1][0] < f)
-                p++;
-              luminosity_t w = data[p][1]
-                               + (data[p + 1][1] - data[p][1])
-                                     * (f - data[p][0])
-                                     / (data[p + 1][0] - data[p][0]);
-              // printf ("%f %i %f d1 %f %f d2 %f
-              // %f\n",f,p,w,data[p][0],data[p][1],data[p+1][0],data[p+1][1]);
-              if (w < 0)
-                w = 0;
-              if (w > 1)
-                w = 1;
-              weights.get ()[x][0] = w;
-              weights.get ()[x][1] = 0;
-            }
-          initialize_with_1D_fft_fast<screen_fft_t> (*this, scr, weights.get (), c, all ? 2 : c);
-          if (all)
-            break;
-        }
-    }
-  else
-    {
-      abort ();
-#if 0
-      static precomputed_function<luminosity_t> v (0, 0.5, size, data,
-                                                   data_size);
-      precomputed_function<luminosity_t> *vv[3] = { &v, &v, &v };
-      /* TODO: Implement correctly.   */
-      initialize_with_2D_fft (scr, vv, blur_radius * 0.5 * (0.75 / 0.61));
-#endif
-    }
-}
-
-void
-screen::initialize_with_blur (screen &scr, coord_t blur_radius,
-                              enum blur_type type, enum blur_alg alg)
-{
-  initialize_with_blur (scr, { (luminosity_t)blur_radius, (luminosity_t)blur_radius, (luminosity_t)blur_radius }, type,
-                        alg);
+  initialize_with_blur (scr, { (luminosity_t)blur_radius, (luminosity_t)blur_radius, (luminosity_t)blur_radius }, alg);
 }
 void
-screen::initialize_with_blur (screen &scr, rgbdata blur_radius,
-                              enum blur_type type, enum blur_alg alg)
+screen::initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_alg alg)
 {
-  if (type == blur_gaussian)
-    initialize_with_gaussian_blur (scr, blur_radius, alg);
-  else
-    initialize_with_fft_blur (scr, blur_radius);
+  initialize_with_gaussian_blur (scr, blur_radius, alg);
 }
 void
 screen::clamp ()

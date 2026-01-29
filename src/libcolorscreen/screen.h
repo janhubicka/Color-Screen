@@ -54,13 +54,6 @@ public:
   DLL_PUBLIC void initialize (enum scr_type type, coord_t dufay_red_strip_width = 0, coord_t dufay_green_strip_width = 0);
   /* Initialize to a given screen for preview window.  */
   void initialize_preview (enum scr_type type, coord_t dufay_red_strip_width = 0, coord_t dufay_green_strip_width = 0);
-  enum blur_type
-  {
-    /* Gaussian blur.  */
-    blur_gaussian,
-    /* MTF from IMOD's mtffliter.  */
-    blur_mtffilter
-  };
 
   /* Algorithm to use for bluring.  For small blurs
      direct algorthm is better, for large blur fft wins.
@@ -83,9 +76,9 @@ public:
   /* Initialize screen with single dot in middle.  Use to compute dot spread function.  */
   void initialize_dot ();
   /* Initialize imitating lens blur.  */
-  DLL_PUBLIC void initialize_with_blur (screen &scr, coord_t blur_radius, enum blur_type = /*blur_mtffilter*/ blur_gaussian, blur_alg alg = blur_auto);
+  DLL_PUBLIC void initialize_with_blur (screen &scr, coord_t blur_radius, blur_alg alg = blur_auto);
   /* Same but specify different blur for each color.  */
-  DLL_PUBLIC void initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type = /*blur_mtffilter*/ blur_gaussian, blur_alg alg = blur_auto);
+  DLL_PUBLIC void initialize_with_blur (screen &scr, rgbdata blur_radius, blur_alg alg = blur_auto);
   DLL_PUBLIC void initialize_with_sharpen_parameters (screen &scr, sharpen_parameters *sharpen[3], bool anticipate_sharpening);
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
@@ -106,9 +99,8 @@ private:
   __attribute__ ((always_inline)) inline void initialize_with_1d_kernel (screen &scr, int clen, luminosity_t *cmatrix, luminosity_t *hblur, int c);
   //__attribute__ ((always_inline)) inline void initialize_with_2d_kernel (screen &scr, int clen, luminosity_t *cmatrix2d, int c);
   void initialize_with_gaussian_blur (screen &scr, coord_t blur_radius, int cmin, int cmax);
-  void initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, blur_alg alg = blur_auto);
+  void initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, blur_alg alg);
   void initialize_with_1D_fft (screen &scr, luminosity_t weights[size], int cmin = 0, int cmax = 3);
-  void initialize_with_fft_blur (screen &scr, rgbdata blur_radius);
 };
 }
 #endif
