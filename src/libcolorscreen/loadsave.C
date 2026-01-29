@@ -148,7 +148,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	for (size_t m = 0; m < rparam->sharpen.scanner_mtf.measurements.size (); m++)
 	{
 	  auto &measurement = rparam->sharpen.scanner_mtf.measurements[m];
-	  if (fprintf (f, "scanner_mtf_meaurement: %i\n", m) < 0
+	  if (fprintf (f, "scanner_mtf_mesaurement: %i\n", m) < 0
 	      || fprintf (f, "scanner_mtf_measurement_channel: %s\n", channel_names[measurement.channel + 1]) < 0
 	      || fprintf (f, "scanner_mtf_measurement_wavelength: %f\n", measurement.wavelength) < 0
 	      || fprintf (f, "scanner_mtf_measurement_same_capture: %s\n", bool_names[(int)measurement.same_capture]) < 0
@@ -1494,7 +1494,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	{
 	  if (measurement < 0)
 	    {
-	      *error = "scanner_mtf_measurement_wavelength specified without scanner_mtf_meaurement";
+	      *error = "scanner_mtf_measurement_wavelength specified without scanner_mtf_mesaurement";
 	      return false;
 	    }
 	  if (!read_double (f, &rparam->sharpen.scanner_mtf.measurements[measurement].wavelength))
@@ -1507,7 +1507,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	{
 	  if (measurement < 0)
 	    {
-	      *error = "scanner_mtf_measurement_name specified without scanner_mtf_meaurement";
+	      *error = "scanner_mtf_measurement_name specified without scanner_mtf_mesaurement";
 	      return false;
 	    }
 	  std::string n = read_escaped_string (f);
@@ -1518,7 +1518,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	{
 	  if (measurement < 0)
 	    {
-	      *error = "scanner_mtf_measurement_same_capture specified without scanner_mtf_meaurement";
+	      *error = "scanner_mtf_measurement_same_capture specified without scanner_mtf_mesaurement";
 	      return false;
 	    }
 	   if (!parse_bool (f, &rparam->sharpen.scanner_mtf.measurements[measurement].same_capture))
