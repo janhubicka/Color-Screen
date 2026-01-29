@@ -7,12 +7,12 @@ namespace colorscreen
    This is useful when running multiple solvers in parallel.  */
 template<typename T,typename C>
 double
-simplex (C &c, const char *task = NULL, progress_info *progress = NULL, bool progress_report = true)
+simplex (C &c, const char *task = NULL, progress_info *progress = NULL, bool progress_report = true, int max_iterations = 10000)
 {
   const T ALPHA = 1;
   const T BETA = 0.5;
   const T GAMMA = 2;
-  const int MAX_IT =10000;      /* maximum number of iterations */
+  const int MAX_IT = max_iterations;  /* maximum number of iterations */
   int vs;			/* vertex with smallest value */
   int vh;			/* vertex with next smallest value */
   int vg;			/* vertex with largest value */

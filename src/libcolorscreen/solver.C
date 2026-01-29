@@ -449,7 +449,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
       lens_solver s (*param, img_data, sparam, progress);
       bool use_simplex = true;
       bool use_gsl_simplex = false;
-      bool use_multifit = true;
+      bool use_multifit = false;
       if (use_simplex)
 	simplex<coord_t, lens_solver> (s, "optimizing lens correction (simplex)",
 				       progress);

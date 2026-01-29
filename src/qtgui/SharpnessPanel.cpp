@@ -412,7 +412,7 @@ void SharpnessPanel::updateMTFChart() {
   // Pass all measured MTF data if available
   const auto &scanner_mtf = state.rparams.sharpen.scanner_mtf;
   if (!scanner_mtf.measurements.empty()) {
-    m_mtfChart->setMeasuredMTF(scanner_mtf.measurements, scanner_mtf.wavelengths);
+    m_mtfChart->setMeasuredMTF(scanner_mtf.measurements, {scanner_mtf.get_channel_wavelength (0), scanner_mtf.get_channel_wavelength (1), scanner_mtf.get_channel_wavelength (2), scanner_mtf.get_channel_wavelength (3)});
   } else {
     // No measured data, clear it
     m_mtfChart->setMeasuredMTF({}, {});

@@ -378,12 +378,12 @@ struct gsl_simplex_proxy
 template <typename T, typename C>
 double
 gsl_simplex (C &c, const char *task = NULL, progress_info *progress = NULL,
-             bool progress_report = true)
+             bool progress_report = true, int max_iterations = 10000)
 {
   int n = c.num_values ();
   T scale = c.scale ();
   T eps = c.epsilon ();
-  const int MAX_IT = 10000;
+  const int MAX_IT = max_iterations;
 
   if (progress && progress_report)
     progress->set_task (task, MAX_IT);

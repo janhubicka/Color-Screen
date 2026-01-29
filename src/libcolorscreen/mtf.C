@@ -1250,9 +1250,12 @@ mtf_parameters::estimate_parameters (mtf_parameters &par,
   *this = par;
 
   mtf_solver s (*this, par.measurements, progress, flags & estimate_verbose_solving);
+  if (flags & estimate_use_multifit)
+    gsl_multifit<luminosity_t, mtf_solver> (s, "optimizing system MTF (multifit 1)",
+				       progress);
   if (flags & estimate_use_nmsimplex)
     simplex<luminosity_t, mtf_solver> (s, "optimizing system MTF (simplex)",
-				       progress);
+				       progress, true, 1000); 
   if (flags & estimate_use_multifit)
     gsl_multifit<luminosity_t, mtf_solver> (s, "optimizing system MTF (multifit)",
 				       progress);
@@ -1354,7 +1357,7 @@ mtf_parameters::load_csv (FILE *in, std::string name, const char **error)
   for (int c = rgb ? 0 : 3; c < (rgb ? 3 : 4); c++)
     {
       mtf_measurement m;
-      const char *color[3]={"red","green","blue"};
+      const char *color[3]={"blue","green","red"};
       if (rgb)
 	{
 	  m.name = name + " " + color[c];
