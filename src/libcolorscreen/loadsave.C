@@ -40,6 +40,37 @@ static const char * const bool_names[2] =
   "yes"
 };
 
+static const char * const channel_names[5] =
+{
+  "unknown",
+  "red",
+  "green",
+  "blue",
+  "ir"
+};
+
+static bool
+write_escaped_string (FILE *f, const char *input)
+{
+  if (fputc ('"', f) == EOF)
+    return false;
+
+  for (; *input; input++)
+    {
+      if (*input == '"' || *input == '\\')
+        {
+	  if (fputc ('\\', f) == EOF)
+	    return false;
+        }
+      if (fputc (*input, f) == EOF)
+	return false;
+    }
+
+  if (fputc ('"', f) == EOF)
+    return false;
+  return true;
+}
+
 bool
 save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, render_parameters *rparam, solver_parameters *sparam)
 {
@@ -117,7 +148,14 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	for (size_t m = 0; m < rparam->sharpen.scanner_mtf.measurements.size (); m++)
 	{
 	  auto &measurement = rparam->sharpen.scanner_mtf.measurements[m];
-	  if (fprintf (f, "scanner_mtf_meaurement: %i\n", m) < 0)
+	  if (fprintf (f, "scanner_mtf_meaurement: %i\n", m) < 0
+	      || fprintf (f, "scanner_mtf_measurement_channel: %s\n", channel_names[measurement.channel]) < 0
+	      || fprintf (f, "scanner_mtf_measurement_wavelength: %f\n", measurement.wavelength) < 0
+	      || fprintf (f, "scanner_mtf_measurement_same_capture: %s\n", bool_names[(int)measurement.same_capture]) < 0
+	      || fprintf (f, "scanner_mtf_measurement_name: ") < 0)
+	    return false;
+	  write_escaped_string (f, measurement.name.c_str ());
+	  if (fputc ('\n', f) == EOF)
 	    return false;
 	  for (size_t i = 0; i < measurement.size (); i++)
 	    {
@@ -243,6 +281,40 @@ skipwhitespace (FILE *f)
 	}
     }
   return true;
+}
+
+std::string
+read_escaped_string (FILE *f)
+{
+  std::string result;
+  int c;
+
+  skipwhitespace (f);
+
+  c = getc (f);
+  if (c != '"')
+    {
+      if (c != EOF)
+        std::ungetc (c, stdin);
+      return "";
+    }
+
+  while ((c = getc (f)) != EOF)
+    {
+      if (c == '"')
+        break;
+      else if (c == '\\')
+        {
+          int next_c = getc (f);
+          if (next_c == EOF)
+            break; 
+          result += static_cast<char> (next_c);
+        }
+      else
+        result += static_cast<char> (c);
+    }
+
+  return result;
 }
 
 void
@@ -420,8 +492,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
   skipwhitespace (f);
   int gray_min = -1;
   int gray_max = -1;
-  bool first_scanner_mtf = true;
-  int measurement = 0;
+  int measurement = -1;
   if (fread (buf, 1, strlen (HEADER), f) < 0
       || memcmp (buf, HEADER, strlen (HEADER)))
     {
@@ -809,6 +880,29 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      *error = "error parsing scanner_mtf_scale";
 	      return false;
 	    }
+	}
+      else if (!strcmp (buf, "scanner_mtf_measurement"))
+	{
+	  int m;
+	  if (!read_int (f, &m))
+	    {
+	      *error = "error parsing scanner_mtf_measurement";
+	      return false;
+	    }
+	  if (rparam)
+	    {
+	      if (m != measurement + 1)
+		{
+		  *error = "wrong measurement index";
+		  return false;
+		}
+	      if (m == 0)
+	        rparam->sharpen.scanner_mtf.clear_data ();
+	      mtf_measurement empty;
+	      rparam->sharpen.scanner_mtf.measurements.push_back (empty);
+	      measurement++;
+	    }
+	    
 	}
       else if (!strcmp (buf, "scan_rotation"))
 	{
@@ -1352,9 +1446,98 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	{
 	  double freq;
 	  luminosity_t contrast;
-	  if (rparam && first_scanner_mtf)
-	    rparam->sharpen.scanner_mtf.clear_data ();
-	  first_scanner_mtf = false;
+	  if (measurement == -1)
+	    {
+	      rparam->sharpen.scanner_mtf.clear_data ();
+	      mtf_measurement empty;
+	      rparam->sharpen.scanner_mtf.measurements.push_back (empty);
+	      measurement = 0;
+	    }
+	  if (!read_double (f, &freq)
+	      || !read_luminosity (f, &contrast))
+	    {
+	      *error = "error parsing scanner_mtf_point";
+	      return false;
+	    }
+	  if (rparam)
+	    rparam->sharpen.scanner_mtf.measurements[measurement].add_value (freq, contrast);
+	}
+      else if (!strcmp (buf, "scanner_use_mtf_measurement"))
+        {
+	  if (!read_int (f, rparam_check (sharpen.scanner_mtf.measured_mtf_idx)))
+	    {
+	      *error = "error parsing scanner_use_mtf_measurement";
+	      return false;
+	    }
+        }
+      else if (!strcmp (buf, "scanner_mtf_measurement_channel"))
+	{
+	  get_keyword (f, buf2);
+	  int j;
+	  for (j = 0; j < 5; j++)
+	    if (!strcmp (buf2, channel_names[j]))
+	      break;
+	  if (j == 5)
+	    {
+	      *error = "unknown channel name";
+	      return false;
+	    }
+	  if (measurement < 0)
+	    {
+	      *error = "scanner_mtf_measurement_channel specified without scanner_mtf_measurement";
+	      return false;
+	    }
+	  if (rparam)
+	    rparam->sharpen.scanner_mtf.measurements[measurement].channel = j - 1;
+	}
+      else if (!strcmp (buf, "scanner_mtf_measurement_wavelength"))
+	{
+	  if (measurement < 0)
+	    {
+	      *error = "scanner_mtf_measurement_wavelength specified without scanner_mtf_meaurement";
+	      return false;
+	    }
+	  if (!read_double (f, &rparam->sharpen.scanner_mtf.measurements[measurement].wavelength))
+	    {
+	      *error = "Error parsing scanner_mtf_measurement_wavelength";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "scanner_mtf_measurement_name"))
+	{
+	  if (measurement < 0)
+	    {
+	      *error = "scanner_mtf_measurement_name specified without scanner_mtf_meaurement";
+	      return false;
+	    }
+	  std::string n = read_escaped_string (f);
+	  if (rparam)
+	    rparam->sharpen.scanner_mtf.measurements[measurement].name = n;
+	}
+      else if (!strcmp (buf, "scanner_mtf_measurement_same_capture"))
+	{
+	  if (measurement < 0)
+	    {
+	      *error = "scanner_mtf_measurement_same_capture specified without scanner_mtf_meaurement";
+	      return false;
+	    }
+	   if (!parse_bool (f, &rparam->sharpen.scanner_mtf.measurements[measurement].same_capture))
+	    {
+	      *error = "error parsing scanner_mtf_measurement_same_capture";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "scanner_mtf_point"))
+	{
+	  double freq;
+	  luminosity_t contrast;
+	  if (measurement == -1)
+	    {
+	      rparam->sharpen.scanner_mtf.clear_data ();
+	      mtf_measurement empty;
+	      rparam->sharpen.scanner_mtf.measurements.push_back (empty);
+	      measurement = 0;
+	    }
 	  if (!read_double (f, &freq)
 	      || !read_luminosity (f, &contrast))
 	    {
@@ -1374,9 +1557,6 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_mtf_blur_diameter_px"))
 	{
-	  if (rparam && first_scanner_mtf)
-	    rparam->sharpen.scanner_mtf.clear_data ();
-	  first_scanner_mtf = false;
 	  luminosity_t blur_diameter;
 	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.blur_diameter)))
 	    {
@@ -1386,9 +1566,6 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_mtf_pixel_pitch_um"))
 	{
-	  if (rparam && first_scanner_mtf)
-	    rparam->sharpen.scanner_mtf.clear_data ();
-	  first_scanner_mtf = false;
 	  luminosity_t pixel_pitch;
 	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.pixel_pitch)))
 	    {
@@ -1398,9 +1575,6 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_mtf_sensor_fill_factor"))
 	{
-	  if (rparam && first_scanner_mtf)
-	    rparam->sharpen.scanner_mtf.clear_data ();
-	  first_scanner_mtf = false;
 	  luminosity_t sensor_fill_factor;
 	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.sensor_fill_factor)))
 	    {
@@ -1410,9 +1584,6 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_mtf_wavelength_nm"))
 	{
-	  if (rparam && first_scanner_mtf)
-	    rparam->sharpen.scanner_mtf.clear_data ();
-	  first_scanner_mtf = false;
 	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.wavelength)))
 	    {
 	      *error = "error parsing scanner_mtf_wavelength";
@@ -1421,9 +1592,6 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_mtf_f_stop"))
 	{
-	  if (rparam && first_scanner_mtf)
-	    rparam->sharpen.scanner_mtf.clear_data ();
-	  first_scanner_mtf = false;
 	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.f_stop)))
 	    {
 	      *error = "error parsing scanner_mtf_f_stop";
@@ -1432,9 +1600,6 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_mtf_defocus_mm"))
 	{
-	  if (rparam && first_scanner_mtf)
-	    rparam->sharpen.scanner_mtf.clear_data ();
-	  first_scanner_mtf = false;
 	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.defocus)))
 	    {
 	      *error = "error parsing scanner_mtf_defocus_mm";

@@ -14,7 +14,8 @@
 #include <memory>
 namespace colorscreen
 {
-typedef float screen_fft_t;
+/* TODO: Work out in what cases using floats is good.  */
+typedef double screen_fft_t;
 /* Produce empty screen.  */
 void
 screen::empty ()

@@ -221,7 +221,6 @@ public:
     m_params.clear_data ();
     if (!params.pixel_pitch || !params.scan_dpi)
       {
-	abort ();
         if (!m_params.sigma)
 	  {
 	    start_vec.push_back (0);
@@ -229,13 +228,22 @@ public:
 	  }
         else
           sigma_index = -1;
+	int cur_blur_index = -1;
 	for (int m = 0; m < m_measurements.size (); m++)
 	  {
+	    if (!m_measurements[m].same_capture)
+	      cur_blur_index = -1;
 	    wavelength_index.push_back (-1);
 	    if (!m_params.blur_diameter)
 	      {
-		start_vec.push_back (0);
-		blur_index.push_back (nvalues++);
+		if (cur_blur_index == -1)
+		  {
+		    start_vec.push_back (0);
+		    cur_blur_index = nvalues;
+		    blur_index.push_back (nvalues++);
+		  }
+		else
+		  blur_index.push_back (cur_blur_index);
 	      }
 	    else
 	      blur_index.push_back(-1);
@@ -270,9 +278,11 @@ public:
 	      cur_defocus_index = -1;
 	    if (!m_params.defocus)
 	      {
-		if (!cur_defocus_index)
+		if (cur_defocus_index == -1)
 		  {
 		    start_vec.push_back (0);
+		    cur_defocus_index = nvalues;
+		    printf ("Defocus %i\n", nvalues);
 		    blur_index.push_back (nvalues++);
 		  }
 		else
@@ -363,7 +373,7 @@ public:
 	vals[e] = std::clamp (vals[e], (luminosity_t)0, (luminosity_t)1);
     if (f_stop_index >= 0)
       vals[f_stop_index] = std::clamp (vals[f_stop_index],
-                                           (luminosity_t)0, (luminosity_t)16);
+                                           (luminosity_t)0.5, (luminosity_t)16);
   }
   luminosity_t
   get_fill_factor (const luminosity_t *vals)
@@ -404,7 +414,7 @@ public:
   {
     if (!difraction || blur_index[measurement] < 0)
       return m_params.defocus;
-    return vals[blur_index[measurement]] * m_params.pixel_pitch * (1.0 / 1000);
+    return vals[blur_index[measurement]];
   }
   luminosity_t
   get_blur_diameter (int measurement, const luminosity_t *vals)
@@ -1209,7 +1219,7 @@ mtf_parameters::estimate_parameters (mtf_parameters &par,
 {
   *this = par;
 
-  mtf_solver s (*this, par.measurements, progress, flags & estimate_verbose);
+  mtf_solver s (*this, par.measurements, progress, flags | estimate_verbose);
   if (flags & estimate_use_nmsimplex)
     gsl_simplex<luminosity_t, mtf_solver> (s, "optimizing lens parameters (simplex)",
 				       progress);
@@ -1303,7 +1313,7 @@ mtf_parameters::load_csv (FILE *in, std::string name, const char **error)
     else
       {
 	*error = "Quickmtf output file should contain 4 tab separated values on every line:\n"
-		"pixel_frequency	red_contrast	green_constrast	blue_contrast	combined_contrast\n"
+		"pixel_frequency	blue_contrast	green_constrast	red_contrast	combined_contrast\n"
 		"contrasts are in percents.\n";
 	return -1;
       }
@@ -1315,7 +1325,8 @@ mtf_parameters::load_csv (FILE *in, std::string name, const char **error)
       if (rgb)
 	{
 	  m.name = name + " " + color[c];
-	  m.channel = c;
+	  /* It seems that it is blue/green/red  */
+	  m.channel = 3 - c;
 	  if (c)
 	    m.same_capture = true;
 	}

@@ -193,7 +193,7 @@ struct mtf_parameters
   
   DLL_PUBLIC double estimate_parameters (mtf_parameters &par, const char *write_table = NULL, progress_info *progress = NULL, const char **error = NULL, int flags = estimate_use_nmsimplex | estimate_use_multifit);
   mtf_parameters ()
-  : sigma (0), blur_diameter (0), defocus (0), f_stop (0), wavelength (0), wavelengths {450, 550, 650, 850}, pixel_pitch (0), sensor_fill_factor (1), scan_dpi (0), measured_mtf_idx (-1), measurements ()
+  : sigma (0), blur_diameter (0), defocus (0), f_stop (0), wavelength (0), wavelengths {650, 550, 450, 850}, pixel_pitch (0), sensor_fill_factor (1), scan_dpi (0), measured_mtf_idx (-1), measurements ()
   { }
   DLL_PUBLIC bool save_psf (progress_info *progress, const char *write_table, const char **error) const;
   DLL_PUBLIC bool write_table (const char *write_table, const char **error) const;
