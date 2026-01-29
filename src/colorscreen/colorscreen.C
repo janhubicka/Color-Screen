@@ -3679,27 +3679,35 @@ do_mtf (int argc, char **argv)
 	}
       fclose (in);
     }
+  file_progress_info progress (stdout, verbose, verbose_tasks);
   if (match)
     {
       mtf_parameters estimated;
       if (verbose)
 	{
+          progress.pause_stdout ();
 	  if (csvname)
 	    printf ("Estimating parameters and saving CSV: %s\n", csvname);
 	  else
 	    printf ("Estimating parameters\n");
+	  progress.resume_stdout ();
 	}
       if (!rparam.sharpen.scanner_mtf.measurements.size ())
 	{
+          progress.pause_stdout ();
 	  fprintf (stderr, "No measured MTF (scanner_mtf_point) data to match\n");
+	  progress.resume_stdout ();
 	  return 1;
 	}
-      double sqsum = estimated.estimate_parameters (rparam.sharpen.scanner_mtf, csvname, NULL, &error, flags);
+      double sqsum = estimated.estimate_parameters (rparam.sharpen.scanner_mtf, csvname, &progress, &error, flags);
       if (error)
 	{
+          progress.pause_stdout ();
 	  fprintf (stderr, "Error estimating mtf: %s\n", error);
+	  progress.resume_stdout ();
 	  exit (1);
 	}
+      progress.pause_stdout ();
       if (verbose)
         printf ("Average error sqare: %f\n\n", sqsum / rparam.sharpen.scanner_mtf.measurements.size ());
       printf ("scanner_mtf_sigma_px: %f\n", estimated.sigma);
@@ -3707,7 +3715,7 @@ do_mtf (int argc, char **argv)
       printf ("scanner_mtf_pixel_pitch_um: %f\n", estimated.pixel_pitch);
       printf ("scanner_mtf_sensor_fill_factor: %f\n", estimated.sensor_fill_factor);
       printf ("scanner_mtf_wavelength_nm: %f\n", estimated.wavelength);
-      printf ("scanner_mtf_channel_wavelengths_nm: %f\n", estimated.wavelengths[0], estimated.wavelengths[1], estimated.wavelengths[2], estimated.wavelengths[3]);
+      printf ("scanner_mtf_channel_wavelengths_nm: %f %f %f %f\n", estimated.wavelengths[0], estimated.wavelengths[1], estimated.wavelengths[2], estimated.wavelengths[3]);
       printf ("scanner_mtf_f_stop: %f\n", estimated.f_stop);
       printf ("scanner_mtf_defocus_mm: %g\n", estimated.defocus);
       printf ("scan_dpi: %f\n", estimated.scan_dpi);
@@ -3716,24 +3724,37 @@ do_mtf (int argc, char **argv)
       if (psfname2 && !estimated.save_psf (NULL, psfname2, &error))
 	{
 	  fprintf (stderr, "Matched PSF saving failed: %s\n", error);
+	  progress.resume_stdout ();
 	  exit (1);
 	}
+      progress.resume_stdout ();
     }
   else if (csvname)
     {
       if (verbose)
+        {
+          progress.pause_stdout ();
 	  printf ("Saving CSV file: %s\n", csvname);
+          progress.resume_stdout ();
+	}
       if (!rparam.sharpen.scanner_mtf.write_table (csvname, &error))
 	{
+          progress.pause_stdout ();
 	  fprintf (stderr, "CSV saving failed: %s\n", error);
 	  exit (1);
 	}
     }
   if (psfname && verbose)
+  {
+    progress.pause_stdout ();
     printf ("Saving PSF to tiff file: %s\n", psfname);
+    progress.resume_stdout ();
+  }
   if (psfname && !rparam.sharpen.scanner_mtf.save_psf (NULL, psfname, &error))
     {
+      progress.pause_stdout ();
       fprintf (stderr, "PSF saving failed: %s\n", error);
+      progress.resume_stdout ();
       exit (1);
     }
   return 0;

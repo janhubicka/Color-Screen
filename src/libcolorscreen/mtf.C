@@ -267,10 +267,10 @@ public:
 	  }
         else
           sigma_index = -1;
-	chanel_wavelength_index[0] = -1;
-	chanel_wavelength_index[1] = -1;
-	chanel_wavelength_index[2] = -1;
-	chanel_wavelength_index[3] = -1;
+	channel_wavelength_index[0] = -1;
+	channel_wavelength_index[1] = -1;
+	channel_wavelength_index[2] = -1;
+	channel_wavelength_index[3] = -1;
 	int cur_defocus_index = -1;
 	for (int m = 0; m < m_measurements.size (); m++)
 	  {
@@ -292,15 +292,14 @@ public:
 	    if (m_measurements[m].channel >= 0)
 	      {
 		int c = m_measurements[m].channel;
-		if (m_params.wavelengths[c] > 0)
-		  wavelength_index.push_back (-1);
-		else if (chanel_wavelength_index[c] >= 0)
-		  wavelength_index.push_back (chanel_wavelength_index[c]);
+		wavelength_index.push_back (-1);
+		if (m_params.wavelengths[c] > 0
+		    || channel_wavelength_index[c] >= 0)
+		  ;
 		else
 		  {
 		    start_vec.push_back (0.5);
-		    chanel_wavelength_index [c] = nvalues++;
-		    wavelength_index.push_back (chanel_wavelength_index[c]);
+		    channel_wavelength_index [c] = nvalues++;
 		  }
 	      }
 	    else if (!m_measurements[m].wavelength)
@@ -382,13 +381,27 @@ public:
     return vals[fill_factor_index];
   }
   luminosity_t
+  get_channel_wavelength (int c, const luminosity_t *vals)
+  {
+    static const constexpr luminosity_t ranges[8] = {
+	    580, 680,  /* Red between 580 and 680.  */
+	    480, 580,  /* Green between 480 and 580.  */
+	    400, 480,  /* Blue between 400 and 480.  */
+	    750, 1000, /* IR between 750 and 1000. */
+    };
+    if (channel_wavelength_index[c] > 0)
+      return vals[channel_wavelength_index[c]] * (ranges[2*c+1] - ranges[2*c])
+	     + ranges[2*c];
+    else
+      return m_params.wavelengths[c];
+  }
+  luminosity_t
   get_wavelength (int measurement, const luminosity_t *vals)
   {
     if (m_measurements[measurement].wavelength > 0)
       return m_measurements[measurement].wavelength;
-    if (m_measurements[measurement].channel >= 0
-	&& m_params.wavelengths[m_measurements[measurement].channel] > 0)
-      return m_params.wavelengths[m_measurements[measurement].channel];
+    if (m_measurements[measurement].channel >= 0)
+      return get_channel_wavelength (m_measurements[measurement].channel, vals);
     if (wavelength_index[measurement] < 0)
       return m_params.wavelength;
     return vals[wavelength_index[measurement]] * (nanometers_max - nanometers_min)
@@ -450,8 +463,11 @@ public:
 	    luminosity_t contrast = measurement.get_contrast (i);
 	    luminosity_t contrast2 = p.system_mtf (freq) * 100;
 	    msum += (contrast - contrast2) * (contrast - contrast2);
-	    if (f_vec && out_idx < n_observations)
-	      f_vec[out_idx++] = contrast - contrast2;
+	    if (f_vec)
+	      { 
+		assert (out_idx < n_observations);
+		f_vec[out_idx++] = contrast - contrast2;
+	      }
 #if 0
 	    if (be_verbose)
 	      debug_data (freq, contrast, contrast2);
@@ -468,6 +484,7 @@ public:
 	  }
 	sum += msum;
       }
+    assert (out_idx == n_observations);
 
     if (be_verbose)
       {
@@ -502,7 +519,7 @@ public:
   int sigma_index;
   int fill_factor_index;
   std::vector<int> wavelength_index;
-  std::array<int,4> chanel_wavelength_index;
+  std::array<int,4> channel_wavelength_index;
   std::vector<int> blur_index;
   int f_stop_index;
 };
@@ -1232,12 +1249,16 @@ mtf_parameters::estimate_parameters (mtf_parameters &par,
 
   mtf_solver s (*this, par.measurements, progress, flags & estimate_verbose_solving);
   if (flags & estimate_use_nmsimplex)
-    simplex<luminosity_t, mtf_solver> (s, "optimizing lens parameters (simplex)",
+    simplex<luminosity_t, mtf_solver> (s, "optimizing system MTF (simplex)",
 				       progress);
   if (flags & estimate_use_multifit)
-    gsl_multifit<luminosity_t, mtf_solver> (s, "optimizing lens parameters (multifit)",
+    gsl_multifit<luminosity_t, mtf_solver> (s, "optimizing system MTF (multifit)",
 				       progress);
   wavelength = s.get_wavelength (0, s.start);
+  wavelengths[0] = s.get_channel_wavelength (0, s.start);
+  wavelengths[1] = s.get_channel_wavelength (1, s.start);
+  wavelengths[2] = s.get_channel_wavelength (2, s.start);
+  wavelengths[3] = s.get_channel_wavelength (3, s.start);
   f_stop = s.get_f_stop (s.start);
   sigma = s.get_sigma (s.start);
   defocus = s.get_defocus (0, s.start);
@@ -1299,18 +1320,6 @@ mtf_parameters::estimate_parameters (mtf_parameters &par,
         }
     }
 
-#if 0
-  if (verbose)
-    {
-      for (size_t i = 0; i < par.size (); i++)
-        {
-          luminosity_t freq = par.get_freq (i);
-          luminosity_t v1 = par.get_contrast (i);
-          luminosity_t v2 = system_mtf (freq) * 100;
-          debug_data (freq, v1, v2);
-        }
-    }
-#endif
   return s.objfunc (s.start);
 }
 
