@@ -214,9 +214,12 @@ public:
   mtf_solver (const mtf_parameters &params, const std::vector <mtf_measurement> &measured, 
               progress_info *progress, bool verbose)
       : m_measurements (measured), m_params (params), m_progress (progress),
-        be_verbose (verbose), start ()
+        be_verbose (verbose), start_vec (), start (NULL), difraction (false), 
+	nvalues (0), n_observations (0), sigma_index (-1), fill_factor_index (-1),
+	wavelength_index (), channel_wavelength_index (), blur_index (),
+	f_stop_index (-1)
   {
-    nvalues = 0;
+    channel_wavelength_index.fill(-1);
     m_params.measured_mtf_idx = -1;
     m_params.clear_data ();
     if (!params.pixel_pitch || !params.scan_dpi)
@@ -267,10 +270,6 @@ public:
 	  }
         else
           sigma_index = -1;
-	channel_wavelength_index[0] = -1;
-	channel_wavelength_index[1] = -1;
-	channel_wavelength_index[2] = -1;
-	channel_wavelength_index[3] = -1;
 	int cur_defocus_index = -1;
 	for (int m = 0; m < m_measurements.size (); m++)
 	  {
@@ -389,7 +388,7 @@ public:
 	    400, 480,  /* Blue between 400 and 480.  */
 	    750, 1000, /* IR between 750 and 1000. */
     };
-    if (channel_wavelength_index[c] > 0)
+    if (channel_wavelength_index[c] >= 0)
       return vals[channel_wavelength_index[c]] * (ranges[2*c+1] - ranges[2*c])
 	     + ranges[2*c];
     else
