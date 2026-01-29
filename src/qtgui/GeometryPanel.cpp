@@ -239,6 +239,7 @@ void GeometryPanel::updateDeformationChart() {
   p0.center = state.scrToImg.center;
   p0.coordinate1 = state.scrToImg.coordinate1;
   p0.coordinate2 = state.scrToImg.coordinate2;
+  p0.scanner_type = state.scrToImg.scanner_type;
 
   bool mirror = state.rparams.scan_mirror;
   int rotation = state.rparams.scan_rotation;
