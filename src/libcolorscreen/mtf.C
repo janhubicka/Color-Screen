@@ -1327,20 +1327,20 @@ mtf_parameters::load_csv (FILE *in, std::string name, const char **error)
   while (fgets(line, sizeof(line), in)) {
     int itemsFound = sscanf(line, "%f\t%f\t%f\t%f\t%f %c", &v1, &v2, &v3, &v4, &v5, &extra);
     /* Data are saved in order freq, red, green, blue, combined  */
-    if (itemsFound == 5) 
+    if (itemsFound >= 5) 
       {
-	if (v2 != v3 || v2 != v3 || v2 != v4 || v2 != v5)
+	if (v2 != v3 || v3 != v4 || v4 != v5)
 	  rgb = true;
         data.push_back ({v1,{v2,v3,v4,v5}});
       }
-    else
-      {
-	*error = "Quickmtf output file should contain 4 tab separated values on every line:\n"
+  }
+  if (data.empty())
+    {
+	*error = "Quickmtf output file should contain 5 tab separated values on every line:\n"
 		"pixel_frequency	blue_contrast	green_constrast	red_contrast	combined_contrast\n"
 		"contrasts are in percents.\n";
 	return -1;
-      }
-  }
+    }
   for (int c = rgb ? 0 : 3; c < (rgb ? 3 : 4); c++)
     {
       mtf_measurement m;
@@ -1349,7 +1349,7 @@ mtf_parameters::load_csv (FILE *in, std::string name, const char **error)
 	{
 	  m.name = name + " " + color[c];
 	  /* It seems that it is blue/green/red  */
-	  m.channel = 3 - c;
+	  m.channel = 2 - c;
 	  if (c)
 	    m.same_capture = true;
 	}
