@@ -282,7 +282,6 @@ public:
 		  {
 		    start_vec.push_back (0);
 		    cur_defocus_index = nvalues;
-		    printf ("Defocus %i\n", nvalues);
 		    blur_index.push_back (nvalues++);
 		  }
 		else
@@ -1231,7 +1230,7 @@ mtf_parameters::estimate_parameters (mtf_parameters &par,
 {
   *this = par;
 
-  mtf_solver s (*this, par.measurements, progress, flags | estimate_verbose);
+  mtf_solver s (*this, par.measurements, progress, flags & estimate_verbose);
   if (flags & estimate_use_nmsimplex)
     simplex<luminosity_t, mtf_solver> (s, "optimizing lens parameters (simplex)",
 				       progress);
@@ -1244,7 +1243,7 @@ mtf_parameters::estimate_parameters (mtf_parameters &par,
   defocus = s.get_defocus (0, s.start);
   blur_diameter = s.get_blur_diameter (0, s.start);
   sensor_fill_factor = s.get_fill_factor (s.start);
-  if ((flags | estimate_verbose))
+  if ((flags & estimate_verbose))
     {
       if (progress)
 	progress->pause_stdout ();
