@@ -484,7 +484,7 @@ public:
 	  }
 	sum += msum;
       }
-    assert (out_idx == n_observations);
+    assert (!f_vec || out_idx == n_observations);
 
     if (be_verbose)
       {
