@@ -1,6 +1,6 @@
 #include "fft.h"
-#include <map>
-#include <tuple>
+#include <unordered_map>
+#include <utility>
 
 namespace colorscreen
 {
@@ -20,19 +20,52 @@ enum plan_kind
 /* Key for caching plans.  */
 typedef std::tuple<plan_kind, int, int, int, unsigned> plan_key;
 
+struct plan_key_hash
+{
+  std::size_t
+  operator() (const plan_key &k) const
+  {
+    std::size_t h = 0;
+    auto combine
+        = [&] (std::size_t v) { h ^= v + 0x9e3779b9 + (h << 6) + (h >> 2); };
+    combine (std::hash<int>{}(std::get<0> (k)));
+    combine (std::hash<int>{}(std::get<1> (k)));
+    combine (std::hash<int>{}(std::get<2> (k)));
+    combine (std::hash<int>{}(std::get<3> (k)));
+    combine (std::hash<unsigned>{}(std::get<4> (k)));
+    return h;
+  }
+};
+
+template <typename T> struct plan_cache
+{
+  std::unordered_map<plan_key, typename fft_plan_t<T>::type, plan_key_hash>
+      map;
+  ~plan_cache ()
+  {
+    for (auto it : map)
+      {
+        if constexpr (std::is_same_v<T, double>)
+          fftw_destroy_plan (it.second);
+        else
+          fftwf_destroy_plan (it.second);
+      }
+  }
+};
+
 template <typename T>
-std::map<plan_key, typename fft_plan_t<T>::type> &
+std::unordered_map<plan_key, typename fft_plan_t<T>::type, plan_key_hash> &
 get_plan_cache ()
 {
-  static std::map<plan_key, typename fft_plan_t<T>::type> cache;
-  return cache;
+  static plan_cache<T> cache;
+  return cache.map;
 }
 }
 
 template <typename T>
 fft_plan<T>
-fft_plan_r2c_2d (int n0, int n1, T *in,
-                 typename fft_complex_t<T>::type *out, unsigned flags)
+fft_plan_r2c_2d (int n0, int n1, T *in, typename fft_complex_t<T>::type *out,
+                 unsigned flags)
 {
   std::lock_guard<std::mutex> lock (fft_lock);
   plan_key key = { r2c_2d, n0, n1, 0, flags };
@@ -53,7 +86,7 @@ fft_plan_r2c_2d (int n0, int n1, T *in,
     p = fftw_plan_dft_r2c_2d (n0, n1, in, out, flags);
   else
     p = fftwf_plan_dft_r2c_2d (n0, n1, (float *)in, (fftwf_complex *)out,
-                                flags);
+                               flags);
   if (tmp_in)
     fftw_free (tmp_in);
   if (tmp_out)
@@ -64,8 +97,8 @@ fft_plan_r2c_2d (int n0, int n1, T *in,
 
 template <typename T>
 fft_plan<T>
-fft_plan_c2r_2d (int n0, int n1, typename fft_complex_t<T>::type *in,
-                 T *out, unsigned flags)
+fft_plan_c2r_2d (int n0, int n1, typename fft_complex_t<T>::type *in, T *out,
+                 unsigned flags)
 {
   std::lock_guard<std::mutex> lock (fft_lock);
   plan_key key = { c2r_2d, n0, n1, 0, flags };
@@ -86,7 +119,7 @@ fft_plan_c2r_2d (int n0, int n1, typename fft_complex_t<T>::type *in,
     p = fftw_plan_dft_c2r_2d (n0, n1, in, out, flags);
   else
     p = fftwf_plan_dft_c2r_2d (n0, n1, (fftwf_complex *)in, (float *)out,
-                                flags);
+                               flags);
   if (tmp_in)
     fftw_free (tmp_in);
   if (tmp_out)
@@ -158,14 +191,22 @@ fft_plan_r2r_1d (int n, fftw_r2r_kind kind, T *in, T *out, unsigned flags)
 }
 
 /* Explicit instantiations for double and float.  */
-template fft_plan<double> fft_plan_r2c_2d<double> (int, int, double *, fftw_complex *, unsigned);
-template fft_plan<double> fft_plan_c2r_2d<double> (int, int, fftw_complex *, double *, unsigned);
-template fft_plan<double> fft_plan_r2c_1d<double> (int, double *, fftw_complex *, unsigned);
-template fft_plan<double> fft_plan_r2r_1d<double> (int, fftw_r2r_kind, double *, double *, unsigned);
+template fft_plan<double> fft_plan_r2c_2d<double> (int, int, double *,
+                                                   fftw_complex *, unsigned);
+template fft_plan<double> fft_plan_c2r_2d<double> (int, int, fftw_complex *,
+                                                   double *, unsigned);
+template fft_plan<double> fft_plan_r2c_1d<double> (int, double *,
+                                                   fftw_complex *, unsigned);
+template fft_plan<double>
+fft_plan_r2r_1d<double> (int, fftw_r2r_kind, double *, double *, unsigned);
 
-template fft_plan<float> fft_plan_r2c_2d<float> (int, int, float *, fftwf_complex *, unsigned);
-template fft_plan<float> fft_plan_c2r_2d<float> (int, int, fftwf_complex *, float *, unsigned);
-template fft_plan<float> fft_plan_r2c_1d<float> (int, float *, fftwf_complex *, unsigned);
-template fft_plan<float> fft_plan_r2r_1d<float> (int, fftw_r2r_kind, float *, float *, unsigned);
+template fft_plan<float> fft_plan_r2c_2d<float> (int, int, float *,
+                                                 fftwf_complex *, unsigned);
+template fft_plan<float> fft_plan_c2r_2d<float> (int, int, fftwf_complex *,
+                                                 float *, unsigned);
+template fft_plan<float> fft_plan_r2c_1d<float> (int, float *, fftwf_complex *,
+                                                 unsigned);
+template fft_plan<float> fft_plan_r2r_1d<float> (int, fftw_r2r_kind, float *,
+                                                 float *, unsigned);
 
 }
