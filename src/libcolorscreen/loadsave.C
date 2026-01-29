@@ -149,7 +149,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	{
 	  auto &measurement = rparam->sharpen.scanner_mtf.measurements[m];
 	  if (fprintf (f, "scanner_mtf_meaurement: %i\n", m) < 0
-	      || fprintf (f, "scanner_mtf_measurement_channel: %s\n", channel_names[measurement.channel]) < 0
+	      || fprintf (f, "scanner_mtf_measurement_channel: %s\n", channel_names[measurement.channel + 1]) < 0
 	      || fprintf (f, "scanner_mtf_measurement_wavelength: %f\n", measurement.wavelength) < 0
 	      || fprintf (f, "scanner_mtf_measurement_same_capture: %s\n", bool_names[(int)measurement.same_capture]) < 0
 	      || fprintf (f, "scanner_mtf_measurement_name: ") < 0)

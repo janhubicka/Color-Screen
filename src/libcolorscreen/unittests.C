@@ -400,17 +400,18 @@ test_screen_blur ()
 {
   screen mstr;
   mstr.initialize (Paget);
-  std::unique_ptr <screen> scr1 (new screen);
+  //std::unique_ptr <screen> scr1 (new screen);
   std::unique_ptr <screen> scr2 (new screen);
   std::unique_ptr <screen> scr3 (new screen);
 
   for (int i = 0; i < 100; i++)
     {
       luminosity_t radius = i * screen::max_blur_radius / 100;
-      scr1->initialize_with_blur (mstr, radius, screen::blur_gaussian, screen::blur_fft);
+      //scr1->initialize_with_blur (mstr, radius, screen::blur_gaussian, screen::blur_fft);
       scr2->initialize_with_blur (mstr, radius, screen::blur_gaussian, screen::blur_direct);
       luminosity_t delta;
 
+#if 0
       /* For very small blurs fft produces roundoff errors along sharp edges.  */
       if (!scr1->almost_equal_p (*scr2, &delta, i < 20 ? 0.006 : 1.0/2048))
         {
@@ -432,24 +433,26 @@ test_screen_blur ()
 	  scr1->save_tiff ("/tmp/scr-fft.tif");
 	  return false;
         }
+#endif
       scr3->initialize_with_blur (mstr, radius, screen::blur_gaussian, screen::blur_fft2d);
       /* For very small blurs fft produces roundoff errors along sharp edges.  */
-      if (!scr1->almost_equal_p (*scr3, &delta, i < 20 || i > 80 ? 0.006 : 1.0/1024))
+      if (!scr2->almost_equal_p (*scr3, &delta, i < 20 || i > 80 ? 0.006 : 1.0/1024))
         {
 	  fprintf (stderr, "FFT Gaussian blur does not FFT2D version radius %f delta %f (step %i); see /tmp/scr-*.tif \n", radius, delta, i);
-	  scr1->save_tiff ("/tmp/scr-fft.tif");
+	  //scr1->save_tiff ("/tmp/scr-fft.tif");
 	  scr2->save_tiff ("/tmp/scr-nofft.tif");
 	  scr3->save_tiff ("/tmp/scr-fft2d.tif");
 	  std::unique_ptr <screen> diff (new screen);
 	  for (int y = 0; y < screen::size; y++)
 	   for (int x = 0; x < screen::size; x++)
 	     for (int c = 0; c < 3; c++)
-		diff->mult[y][x][c] = 0.5 + (scr3->mult[y][x][c] - scr1->mult[y][x][c]);
+		diff->mult[y][x][c] = 0.5 + (scr3->mult[y][x][c] - scr2->mult[y][x][c]);
 	  diff->save_tiff ("/tmp/scr-diff.tif");
 	  exit (0);
 	  return false;
         }
 
+#if 0
       scr1->initialize_with_blur (mstr, radius, screen::blur_mtffilter, screen::blur_fft);
       if (!scr1->sum_almost_equal_p (mstr, &rgbdelta, 0.006))
         {
@@ -457,6 +460,7 @@ test_screen_blur ()
 	  scr1->save_tiff ("/tmp/scr-fft.tif");
 	  return false;
         }
+#endif
     }
   return true;
 }

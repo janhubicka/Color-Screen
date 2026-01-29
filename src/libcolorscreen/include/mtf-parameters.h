@@ -46,7 +46,7 @@ struct mtf_measurement
   bool
   operator== (const mtf_measurement &o) const
   {
-    return wavelength == o.wavelength && same_capture == o.same_capture && m_data == o.m_data;
+    return channel == o.channel && wavelength == o.wavelength && same_capture == o.same_capture && name == o.name && m_data == o.m_data;
   }
 private:
   struct entry {
