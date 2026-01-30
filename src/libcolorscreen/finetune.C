@@ -1688,7 +1688,8 @@ public:
         src_scr = tiles[tileid].merged_scr;
       }
 
-    if (optimize_scanner_mtf_sigma || optimize_scanner_mtf_defocus)
+    if ((optimize_scanner_mtf_sigma || optimize_scanner_mtf_defocus)
+	|| (!optimize_screen_blur && !optimize_screen_channel_blurs))
       {
 	sharpen_parameters sp, sp_green, sp_blue;
 	sharpen_parameters *vs[3] = {&sp, &sp, &sp};
