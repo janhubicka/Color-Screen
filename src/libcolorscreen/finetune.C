@@ -8,6 +8,7 @@
 #include "include/stitch.h"
 #include "include/dufaycolor.h"
 #include "include/tiff-writer.h"
+#include "include/colorscreen.h"
 #include "render-interpolate.h"
 #include "sharpen.h"
 #include "nmsimplex.h"
@@ -2674,6 +2675,128 @@ public:
       }
     return noutliers;
   }
+  std::unique_ptr<simple_image>
+  produce_image (coord_t *v, int tileid, int type)
+  {
+    init_screen (v, tileid);
+    point_t off = get_offset (v, tileid);
+
+    std::unique_ptr<simple_image> img = std::make_unique <simple_image> ();
+    if (!img || !img->allocate (twidth, theight))
+      return img;
+
+    if (tiles[0].color)
+      {
+        luminosity_t rmax = 0, gmax = 0, bmax = 0;
+        rgbdata red, green, blue;
+        rgbdata mix_weights;
+	luminosity_t mix_dark;
+        if (simulate_infrared)
+	  {
+	    mix_weights = get_mix_weights (v);
+	    mix_dark = get_mix_dark (v);
+	  }
+        get_colors (v, &red, &green, &blue);
+        for (int y = 0; y < theight; y++)
+          for (int x = 0; x < twidth; x++)
+            {
+              rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y,
+                                          off, mix_weights, mix_dark);
+              rmax = std::max (c.red, rmax);
+              gmax = std::max (c.green, gmax);
+              bmax = std::max (c.blue, bmax);
+              rgbdata d = get_pixel (v, tileid, x, y);
+              rmax = std::max (d.red, rmax);
+              gmax = std::max (d.green, gmax);
+              bmax = std::max (d.blue, bmax);
+            }
+
+        for (int y = 0; y < theight; y++)
+          {
+            for (int x = 0; x < twidth; x++)
+              if (type == 1 || !noutliers
+                  || !tiles[tileid].outliers->test_bit (x, y))
+                switch (type)
+                  {
+                  case 0:
+                    {
+                      rgbdata c = evaulate_pixel (v, tileid, red, green, blue,
+                                                  x, y, off, mix_weights, mix_dark);
+                      img->put_linear_pixel (x, y, {c.red / rmax, c.green / gmax, c.blue / bmax});
+                    }
+                    break;
+                  case 1:
+                    {
+                      rgbdata d = get_orig_pixel (v, tileid, x, y);
+                      img->put_linear_pixel (x, y, {d.red / rmax, d.green / gmax, d.blue / bmax});
+                    }
+                    break;
+                  case 2:
+                    {
+                      rgbdata c = evaulate_pixel (v, tileid, red, green, blue,
+                                                  x, y, off, mix_weights, mix_dark);
+                      rgbdata d = c - get_pixel (v, tileid, x, y);
+                      img->put_linear_pixel (x, y, {d.red / rmax + 0.5, d.green / gmax + 0.5, d.blue / bmax + 0.5});
+                    }
+                    break;
+                  case 3:
+                    {
+                      rgbdata d = get_pixel (v, tileid, x, y);
+                      img->put_linear_pixel (x, y, {d.red / rmax, d.green / gmax, d.blue / bmax});
+                    }
+		    break;
+                  }
+              else
+                img->put_pixel (x, y, {0, 0, 0});
+          }
+      }
+    if (tiles[tileid].bw)
+      {
+        luminosity_t lmax = 0;
+        rgbdata color = bw_get_color (v);
+        for (int y = 0; y < theight; y++)
+          for (int x = 0; x < twidth; x++)
+            {
+              lmax = std::max (bw_evaulate_pixel (tileid, color, x, y, off),
+                               lmax);
+              lmax = std::max (bw_get_pixel (tileid, x, y), lmax);
+            }
+
+        for (int y = 0; y < theight; y++)
+          {
+            for (int x = 0; x < twidth; x++)
+              if (type == 1 || !noutliers
+                  || !tiles[tileid].outliers->test_bit (x, y))
+                switch (type)
+                  {
+                  case 0:
+                    {
+                      luminosity_t c
+                          = bw_evaulate_pixel (tileid, color, x, y, off) / lmax;
+                      img->put_linear_pixel (x, y, {c, c, c});
+                    }
+                    break;
+                  case 1:
+                    {
+                      luminosity_t d = bw_get_pixel (tileid, x, y) / lmax;
+                      img->put_linear_pixel (x, y, {d, d, d});
+                    }
+                    break;
+                  case 2:
+                    {
+                      luminosity_t c
+                          = bw_evaulate_pixel (tileid, color, x, y, off);
+                      luminosity_t d = (c - bw_get_pixel (tileid, x, y)) / lmax + 0.5;
+                      img->put_linear_pixel (x, y, {d, d, d});
+                    }
+                    break;
+                  }
+              else
+                img->put_pixel (x, y, {0, 0, 0});
+          }
+      }
+    return img;
+  }
 
   bool
   write_file (coord_t *v, const char *name, int tileid, int type)
@@ -3376,6 +3499,13 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
     best_solver.write_file (best_solver.start, fparams.sharpened_file, 0, 3);
   if (fparams.diff_file)
     best_solver.write_file (best_solver.start, fparams.diff_file, 0, 2);
+  if (fparams.flags & finetune_produce_images)
+  {
+    ret.simulated = best_solver.produce_image (best_solver.start, 0, 0);
+    ret.orig = best_solver.produce_image (best_solver.start, 0, 1);
+    ret.sharpened = best_solver.produce_image (best_solver.start, 0, 3);
+    ret.diff = best_solver.produce_image (best_solver.start, 0, 2);
+  }
   if (fparams.screen_file)
     best_solver.original_scr->save_tiff (fparams.screen_file);
   if (fparams.screen_blur_file)

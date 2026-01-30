@@ -2,6 +2,7 @@
 #define SCREEN_H
 #include "include/color.h"
 #include "include/scr-to-img.h"
+#include "include/colorscreen.h"
 #include "mtf.h"
 namespace colorscreen {
 struct sharpen_parameters;
@@ -85,6 +86,7 @@ public:
   void strip (coord_t first_strip_width, coord_t second_strip_width, int color1, int color2, int color3);
   void preview_strip (coord_t first_strip_width, coord_t second_strip_width, int color1, int color2, int color3);
   DLL_PUBLIC bool save_tiff (const char *filename, bool normalize = false, int tiles = 3) const;
+  DLL_PUBLIC std::unique_ptr<simple_image> get_image (bool normalize = false, int tiles = 3) const;
   DLL_PUBLIC void clamp ();
   DLL_PUBLIC rgbdata patch_proportions () const;
   void initialize_with_point_spread (screen &scr, precomputed_function<luminosity_t> *point_spread[3], rgbdata scale);

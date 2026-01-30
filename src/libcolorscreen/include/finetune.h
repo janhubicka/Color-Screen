@@ -2,6 +2,7 @@
 #define FINETUNE_H
 #include "base.h"
 #include "color.h"
+#include "colorscreen.h"
 #include <string>
 namespace colorscreen
 {
@@ -31,7 +32,8 @@ enum finetune_flags : uint64_t
   finetune_simulate_infrared = 1 << 16,
   finetune_sharpening = 1 << 17,
   finetune_scanner_mtf_channel_defocus = 1 << 18,
-  finetune_coordinates = 1 << 19
+  finetune_coordinates = 1 << 19,
+  finetune_produce_images = 1 << 20
 };
 struct finetune_parameters
 {
@@ -87,6 +89,18 @@ struct finetune_result
   enum solver_parameters::point_color solver_point_color;
 
   point_t center, coordinate1, coordinate2;
+
+  /* Solver images  */
+  std::unique_ptr <simple_image> diff;
+  std::unique_ptr <simple_image> simulated;
+  std::unique_ptr <simple_image> sharpened;
+  std::unique_ptr <simple_image> orig;
+  std::unique_ptr <simple_image> screen;
+  std::unique_ptr <simple_image> blured_screen;
+  std::unique_ptr <simple_image> emulsion_screen;
+  std::unique_ptr <simple_image> merged_screen;
+  std::unique_ptr <simple_image> collected_screen;
+  std::unique_ptr <simple_image> sot_spread;
 
   finetune_result ()
   : success (false), tile_pos {-1, -1}, badness (12345), uncertainity (12345),

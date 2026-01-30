@@ -1688,6 +1688,31 @@ screen::save_tiff (const char *filename, bool normalize, int tiles) const
     }
   return true;
 }
+std::unique_ptr <simple_image>
+screen::get_image (bool normalize, int tiles) const
+{
+  std::unique_ptr <simple_image> img = std::make_unique <simple_image> ();
+  rgbdata max = { 0, 0, 0 };
+  if (!normalize)
+    max.red = max.green = max.blue = 1;
+  else
+    for (int y = 0; y < size; y++)
+      for (int x = 0; x < size; x++)
+        {
+          max.red = std::max (mult[y][x][0], max.red);
+          max.green = std::max (mult[y][x][0], max.green);
+          max.blue = std::max (mult[y][x][0], max.blue);
+        }
+  if (!img->allocate (size * tiles, size * tiles))
+	  return NULL;
+  for (int y = 0; y < size * tiles; y++)
+      for (int x = 0; x < size * tiles; x++)
+          img->put_linear_pixel (x, y,
+	    {std::clamp (mult[y % size][x % size][0] / max.red, (luminosity_t)0, (luminosity_t)1),
+	     std::clamp (mult[y % size][x % size][1] / max.red, (luminosity_t)0, (luminosity_t)1),
+	     std::clamp (mult[y % size][x % size][2] / max.red, (luminosity_t)0, (luminosity_t)1)});
+  return img;
+}
 
 void
 screen::initialize_with_sharpen_parameters (screen &scr,

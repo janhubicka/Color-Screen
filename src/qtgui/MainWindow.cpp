@@ -2613,7 +2613,7 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t 
   // Run finetune to get the accurate screen location and color
   colorscreen::finetune_parameters fparam;
   fparam.multitile = 3;
-  fparam.flags |= colorscreen::finetune_position | colorscreen::finetune_bw | colorscreen::finetune_verbose | colorscreen::finetune_use_srip_widths;
+  fparam.flags |= colorscreen::finetune_position | colorscreen::finetune_bw | colorscreen::finetune_verbose | colorscreen::finetune_use_srip_widths | colorscreen::finetune_produce_image;
   
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Adding control points", 0);

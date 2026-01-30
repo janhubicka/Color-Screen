@@ -68,6 +68,53 @@ struct render_to_file_params
   }
 };
 
+/* Simple RGB image used to render various things for UI.  */
+struct simple_image
+{
+  int width;
+  int height;
+  int stride;
+  simple_image ()
+  : width (0), height (0), stride (0)
+  { }
+  struct rgb
+  {
+    int red;
+    int green;
+    int blue;
+  };
+  void
+  put_pixel (int x, int y, rgb color)
+  {
+    m_data[y * stride + x * 3] = color.red;
+    m_data[y * stride + x * 3 + 1] = color.green;
+    m_data[y * stride + x * 3 + 2] = color.blue;
+  }
+  void
+  put_linear_pixel (int x, int y, rgbdata c)
+  {
+    put_pixel (x, y, {(int)(invert_gamma (c.red, -1) * 255 + 0.5),
+		      (int)(invert_gamma (c.green, -1) * 255 + 0.5),
+		      (int)(invert_gamma (c.blue, -1) * 255 + 0.5)});
+  }
+  rgb
+  get_pixel (int x, int y)
+  {
+    return {m_data[y * stride + x * 3], m_data[y * stride + x * 3 + 1], m_data[y * stride + x * 3 + 2]};
+  }
+  bool
+  allocate (int set_width, int set_height)
+  {
+    width = set_width;
+    height = set_height;
+    stride = width * 3;
+    m_data.resize (stride * height);
+    return true;
+  }
+private:
+  std::vector<uint8_t> m_data;
+};
+
 struct tile_parameters
 {
   uint8_t *pixels;
