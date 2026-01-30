@@ -67,7 +67,8 @@ Easiest way to install on Windows is to use [MSYS2](https://www.msys2.org/).
 Then start MSYS2 WINGW64 from Windows start menu.  Install all necessary
 packages
 
-    pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-gtk2 mingw-w64-x86_64-libtiff mingw-w64-x86_64-libjpeg-turbo git make diffutils automake autoconf mingw-w64-x86_64-pkg-config vim gdb libtool mingw-w64-x86_64-libraw mingw-w64-x86_64-lcms  mingw-w64-x86_64-libzip mingw-w64-x86_64-gsl 
+    pacman -S make mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-libtiff mingw-w64-ucrt-x86_64-libjpeg-turbo git mingw-w64-ucrt-x86_64-pkg-config mingw-w64-ucrt-x86_64-libraw mingw-w64-ucrt-x86_64-lcms2  mingw-w64-ucrt-x86_64-libzip mingw-w64-ucrt-x86_64-gsl diffutils autoconf-archive mingw-w64-ucrt-x86_64-autotools  mingw-w64-ucrt-x86_64-fftw mingw-w64-ucrt-x86_64-qt6-base mingw-w64-ucrt-x86_64-qt6-tools mingw-w64-ucrt-x86_64-adwaita-icon-theme mingw-w64-ucrt-x86_64-qt6-svg mingw-w64-ucrt-x86_64-nsis mingw-w64-ucrt-x86_64-imagemagick mingw-w64-ucrt-x86_64-exiv2
+
 
 Then close the terminal emulation window and open MSYS2 MINGW64 again
 (this is necessary to get `PATH` set up).  Now Color-Screen can be built
@@ -76,7 +77,7 @@ in standard way.
     git clone https://github.com/janhubicka/Color-Screen.git Color-Screen
     mkdir Color-Screen-build
     cd Color-Screen-build/
-    CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216" ../Color-Screen/configure --prefix=~/Color-Screen-install --enable-gtkgui
+    CXXFLAGS="-Ofast -flto=auto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216" ../Color-Screen/configure --prefix=~/Color-Screen-install --enable-qtgui
     make
     make install-strip
 
@@ -127,8 +128,10 @@ There are two programs installed.
 [wiki](https://github.com/janhubicka/Color-Screen/wiki/colorscreen) for usage
 information.
 
-`colorscreen-gtk` is a (deprecated) GTK based gui application. Invoke it
-with `colorscreen-gtk <scan file>`. Scan must be either in tiff or jpeg file
-format.
+`colorscreen-qt` is a QT6 based GUI application. 
+
+Finally you may try to build also `colorscreen-gtk` which is a deprecated GTK
+based gui application. Invoke it with `colorscreen-gtk <scan file>`. Scan must
+be either in tiff or jpeg file format.
 
 Jan Hubička (hubicka@ucw.cz)

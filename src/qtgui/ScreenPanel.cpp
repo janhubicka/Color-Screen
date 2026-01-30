@@ -162,6 +162,41 @@ void ScreenPanel::setupUi() {
 
   addSeparator("Regular screen");
 
+  // Red Strip Width
+  addSliderParameter(
+      "Red Strip Width", 0.0, 1.0, 100.0, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.red_strip_width; },
+      [](ParameterState &s, double v) { s.rparams.red_strip_width = v; },
+      1.0,
+      [](const ParameterState &s) {
+        return screen_with_varying_strips_p(s.scrToImg.type);
+      });
+
+  // Green Strip Width
+  addSliderParameter(
+      "Green Strip Width", 0.0, 1.0, 100.0, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.green_strip_width; },
+      [](ParameterState &s, double v) { s.rparams.green_strip_width = v; },
+      1.0,
+      [](const ParameterState &s) {
+        return screen_with_varying_strips_p(s.scrToImg.type);
+      });
+
+  // Element density collection threshold
+  addSliderParameter(
+      "Element density collection threshold", 0.0, 1.0, 100.0, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.collection_threshold; },
+      [](ParameterState &s, double v) { s.rparams.collection_threshold = v; },
+      1.0);
+
+  // Collection Quality
+  addEnumParameter("Collection Quality", 
+      render_parameters::collection_quality_names, 
+      render_parameters::max_collection_quality,
+      [](const ParameterState &s) { return (int)s.rparams.collection_quality; },
+      [](ParameterState &s, int v) { s.rparams.collection_quality = (render_parameters::collection_quality_t)v; }
+  );
+
   ScreenPreviewPanel *preview =
       new ScreenPreviewPanel(m_stateGetter, m_stateSetter, m_imageGetter);
   m_previewPanel = preview;
