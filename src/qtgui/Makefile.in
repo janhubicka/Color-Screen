@@ -136,6 +136,7 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-DeformationChartWidget.$(OBJEXT) \
 	colorscreen_qt-SpectraChartWidget.$(OBJEXT) \
 	colorscreen_qt-CIEChartWidget.$(OBJEXT) \
+	colorscreen_qt-FinetuneImagesPanel.$(OBJEXT) \
 	colorscreen_qt-ThamesAnimation.$(OBJEXT) \
 	colorscreen_qt-PagetAnimation.$(OBJEXT) \
 	colorscreen_qt-JolyAnimation.$(OBJEXT) \
@@ -165,6 +166,7 @@ am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_DeformationChartWidget.$(OBJEXT) \
 	colorscreen_qt-moc_SpectraChartWidget.$(OBJEXT) \
 	colorscreen_qt-moc_CIEChartWidget.$(OBJEXT) \
+	colorscreen_qt-moc_FinetuneImagesPanel.$(OBJEXT) \
 	colorscreen_qt-moc_ThamesAnimation.$(OBJEXT) \
 	colorscreen_qt-moc_PagetAnimation.$(OBJEXT) \
 	colorscreen_qt-moc_JolyAnimation.$(OBJEXT) \
@@ -208,6 +210,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-CoordinateTransformer.Po \
 	./$(DEPDIR)/colorscreen_qt-DeformationChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-DetectScreenWorker.Po \
+	./$(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-FinetuneWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po \
@@ -237,6 +240,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_DeformationChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_DetectScreenWorker.Po \
+	./$(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po \
@@ -473,6 +477,7 @@ colorscreen_qt_SOURCES = \
     DeformationChartWidget.cpp \
     SpectraChartWidget.cpp \
     CIEChartWidget.cpp \
+    FinetuneImagesPanel.cpp \
     ThamesAnimation.cpp \
     PagetAnimation.cpp \
     JolyAnimation.cpp \
@@ -507,12 +512,13 @@ MOC_SOURCES = \
     moc_DeformationChartWidget.cpp \
     moc_SpectraChartWidget.cpp \
     moc_CIEChartWidget.cpp \
+    moc_FinetuneImagesPanel.cpp \
     moc_ThamesAnimation.cpp \
     moc_PagetAnimation.cpp \
     moc_JolyAnimation.cpp \
     moc_TaskQueue.cpp
 
-EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h Logging.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg
+EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h FinetuneImagesPanel.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h Logging.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
@@ -624,6 +630,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-CoordinateTransformer.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-DeformationChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-DetectScreenWorker.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-FinetuneWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po@am__quote@ # am--include-marker
@@ -653,6 +660,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_DeformationChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_DetectScreenWorker.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po@am__quote@ # am--include-marker
@@ -1026,6 +1034,20 @@ colorscreen_qt-CIEChartWidget.obj: CIEChartWidget.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='CIEChartWidget.cpp' object='colorscreen_qt-CIEChartWidget.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-CIEChartWidget.obj `if test -f 'CIEChartWidget.cpp'; then $(CYGPATH_W) 'CIEChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/CIEChartWidget.cpp'; fi`
+
+colorscreen_qt-FinetuneImagesPanel.o: FinetuneImagesPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-FinetuneImagesPanel.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Tpo -c -o colorscreen_qt-FinetuneImagesPanel.o `test -f 'FinetuneImagesPanel.cpp' || echo '$(srcdir)/'`FinetuneImagesPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Tpo $(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='FinetuneImagesPanel.cpp' object='colorscreen_qt-FinetuneImagesPanel.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-FinetuneImagesPanel.o `test -f 'FinetuneImagesPanel.cpp' || echo '$(srcdir)/'`FinetuneImagesPanel.cpp
+
+colorscreen_qt-FinetuneImagesPanel.obj: FinetuneImagesPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-FinetuneImagesPanel.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Tpo -c -o colorscreen_qt-FinetuneImagesPanel.obj `if test -f 'FinetuneImagesPanel.cpp'; then $(CYGPATH_W) 'FinetuneImagesPanel.cpp'; else $(CYGPATH_W) '$(srcdir)/FinetuneImagesPanel.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Tpo $(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='FinetuneImagesPanel.cpp' object='colorscreen_qt-FinetuneImagesPanel.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-FinetuneImagesPanel.obj `if test -f 'FinetuneImagesPanel.cpp'; then $(CYGPATH_W) 'FinetuneImagesPanel.cpp'; else $(CYGPATH_W) '$(srcdir)/FinetuneImagesPanel.cpp'; fi`
 
 colorscreen_qt-ThamesAnimation.o: ThamesAnimation.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-ThamesAnimation.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-ThamesAnimation.Tpo -c -o colorscreen_qt-ThamesAnimation.o `test -f 'ThamesAnimation.cpp' || echo '$(srcdir)/'`ThamesAnimation.cpp
@@ -1433,6 +1455,20 @@ colorscreen_qt-moc_CIEChartWidget.obj: moc_CIEChartWidget.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_CIEChartWidget.obj `if test -f 'moc_CIEChartWidget.cpp'; then $(CYGPATH_W) 'moc_CIEChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_CIEChartWidget.cpp'; fi`
 
+colorscreen_qt-moc_FinetuneImagesPanel.o: moc_FinetuneImagesPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_FinetuneImagesPanel.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Tpo -c -o colorscreen_qt-moc_FinetuneImagesPanel.o `test -f 'moc_FinetuneImagesPanel.cpp' || echo '$(srcdir)/'`moc_FinetuneImagesPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Tpo $(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_FinetuneImagesPanel.cpp' object='colorscreen_qt-moc_FinetuneImagesPanel.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_FinetuneImagesPanel.o `test -f 'moc_FinetuneImagesPanel.cpp' || echo '$(srcdir)/'`moc_FinetuneImagesPanel.cpp
+
+colorscreen_qt-moc_FinetuneImagesPanel.obj: moc_FinetuneImagesPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_FinetuneImagesPanel.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Tpo -c -o colorscreen_qt-moc_FinetuneImagesPanel.obj `if test -f 'moc_FinetuneImagesPanel.cpp'; then $(CYGPATH_W) 'moc_FinetuneImagesPanel.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_FinetuneImagesPanel.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Tpo $(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_FinetuneImagesPanel.cpp' object='colorscreen_qt-moc_FinetuneImagesPanel.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_FinetuneImagesPanel.obj `if test -f 'moc_FinetuneImagesPanel.cpp'; then $(CYGPATH_W) 'moc_FinetuneImagesPanel.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_FinetuneImagesPanel.cpp'; fi`
+
 colorscreen_qt-moc_ThamesAnimation.o: moc_ThamesAnimation.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_ThamesAnimation.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_ThamesAnimation.Tpo -c -o colorscreen_qt-moc_ThamesAnimation.o `test -f 'moc_ThamesAnimation.cpp' || echo '$(srcdir)/'`moc_ThamesAnimation.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_ThamesAnimation.Tpo $(DEPDIR)/colorscreen_qt-moc_ThamesAnimation.Po
@@ -1644,6 +1680,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CoordinateTransformer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DeformationChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DetectScreenWorker.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FinetuneWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po
@@ -1673,6 +1710,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_DeformationChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_DetectScreenWorker.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po
@@ -1746,6 +1784,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CoordinateTransformer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DeformationChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DetectScreenWorker.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FinetuneWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po
@@ -1775,6 +1814,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_DeformationChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_DetectScreenWorker.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po

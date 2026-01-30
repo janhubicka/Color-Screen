@@ -339,6 +339,11 @@ void MainWindow::setupUi() {
   m_backlightDock->setVisible(false);
   addDockWidget(Qt::RightDockWidgetArea, m_backlightDock);
 
+  m_finetuneImagesDock = new QDockWidget("Finetune Diagnostic Images", this);
+  m_finetuneImagesDock->setObjectName("FinetuneImagesDock");
+  m_finetuneImagesDock->setVisible(false);
+  addDockWidget(Qt::RightDockWidgetArea, m_finetuneImagesDock);
+
   // Event Filter for robust Close detection
   class DockCloseEventFilter : public QObject {
     std::function<void()> m_onClose;
@@ -494,6 +499,10 @@ void MainWindow::setupUi() {
   setupDock(m_nonlinearDock, m_geometryPanel,
             &GeometryPanel::detachNonlinearChartRequested,
             &GeometryPanel::reattachNonlinearChart);
+
+  setupDock(m_finetuneImagesDock, m_geometryPanel,
+            &GeometryPanel::detachFinetuneImagesRequested,
+            &GeometryPanel::reattachFinetuneImages);
 
   m_configTabs->addTab(m_capturePanel, "Digital capture");
   connect(m_capturePanel, &CapturePanel::cropRequested, this, &MainWindow::onCropRequested);
@@ -2613,7 +2622,7 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t 
   // Run finetune to get the accurate screen location and color
   colorscreen::finetune_parameters fparam;
   fparam.multitile = 3;
-  fparam.flags |= colorscreen::finetune_position | colorscreen::finetune_bw | colorscreen::finetune_verbose | colorscreen::finetune_use_srip_widths | colorscreen::finetune_produce_image;
+  fparam.flags |= colorscreen::finetune_position | colorscreen::finetune_bw | colorscreen::finetune_verbose | colorscreen::finetune_use_srip_widths | colorscreen::finetune_produce_images;
   
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Adding control points", 0);
@@ -2639,6 +2648,11 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t 
     // Create undo command with correct description
     ParameterState newState = getCurrentState();
     m_undoStack->push(new ChangeParametersCommand(this, oldState, newState, "Add registration point"));
+    
+    // Update finetune diagnostic images
+    if (m_geometryPanel) {
+      m_geometryPanel->updateFinetuneImages(res);
+    }
     
     // Trigger auto solver if enabled
     if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {

@@ -1,5 +1,6 @@
 #include "GeometryPanel.h"
 #include "DeformationChartWidget.h"
+#include "FinetuneImagesPanel.h"
 #include <QCheckBox>
 #include <QPushButton>
 #include <QHBoxLayout>
@@ -7,6 +8,7 @@
 #include <QSlider>
 #include <QLabel>
 #include "../libcolorscreen/include/render-parameters.h"
+#include "../libcolorscreen/include/finetune.h"
 
 GeometryPanel::GeometryPanel(StateGetter stateGetter, StateSetter stateSetter,
                              ImageGetter imageGetter, QWidget *parent)
@@ -165,6 +167,30 @@ void GeometryPanel::setupUi() {
   
   addToPanel(container);
 
+  // Finetune Diagnostic Images
+  m_finetuneImagesPanel = new FinetuneImagesPanel();
+  
+  QWidget *finetuneWrapper = new QWidget();
+  QVBoxLayout *finetuneWrapperLayout = new QVBoxLayout(finetuneWrapper);
+  finetuneWrapperLayout->setContentsMargins(0, 0, 0, 0);
+  finetuneWrapperLayout->addWidget(m_finetuneImagesPanel);
+  
+  QWidget *finetuneDetachable = createDetachableSection(
+      "Finetune Diagnostic Images", finetuneWrapper,
+      [this, finetuneWrapper](){
+        emit detachFinetuneImagesRequested(finetuneWrapper);
+      });
+  
+  QWidget *finetuneContainer = new QWidget();
+  m_finetuneImagesContainer = new QVBoxLayout(finetuneContainer);
+  m_finetuneImagesContainer->setContentsMargins(0, 0, 0, 0);
+  m_finetuneImagesContainer->addWidget(finetuneDetachable);
+  
+  // Initially hide until first finetune
+  finetuneContainer->hide();
+  
+  addToPanel(finetuneContainer);
+
   updateUI();
 }
 
@@ -292,4 +318,21 @@ void GeometryPanel::reattachNonlinearChart(QWidget *widget) {
     if (!widget) return;
     QWidget *detachable = createDetachableSection("Nonlinear transformation", widget, [this, widget](){ emit detachNonlinearChartRequested(widget); });
     m_nonlinearChartContainer->addWidget(detachable);
+}
+
+void GeometryPanel::updateFinetuneImages(const colorscreen::finetune_result& result) {
+    if (!m_finetuneImagesPanel) return;
+    
+    m_finetuneImagesPanel->setFinetuneResult(result);
+    
+    // Show the container if it was hidden
+    if (m_finetuneImagesContainer && m_finetuneImagesContainer->parentWidget()) {
+        m_finetuneImagesContainer->parentWidget()->show();
+    }
+}
+
+void GeometryPanel::reattachFinetuneImages(QWidget *widget) {
+    if (!widget) return;
+    QWidget *detachable = createDetachableSection("Finetune Diagnostic Images", widget, [this, widget](){ emit detachFinetuneImagesRequested(widget); });
+    m_finetuneImagesContainer->addWidget(detachable);
 }

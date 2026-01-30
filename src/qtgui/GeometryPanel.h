@@ -5,6 +5,11 @@
 
 class QCheckBox;
 class DeformationChartWidget;
+class FinetuneImagesPanel;
+
+namespace colorscreen {
+struct finetune_result;
+}
 
 class GeometryPanel : public ParameterPanel {
   Q_OBJECT
@@ -20,6 +25,7 @@ signals:
   void detachLensChartRequested(QWidget *widget);
   void detachPerspectiveChartRequested(QWidget *widget);
   void detachNonlinearChartRequested(QWidget *widget);
+  void detachFinetuneImagesRequested(QWidget *widget);
 
   void heatmapToleranceChanged(double tol);
   void exaggerateChanged(double ex);
@@ -33,6 +39,8 @@ public:
   void reattachLensChart(QWidget *widget);
   void reattachPerspectiveChart(QWidget *widget);
   void reattachNonlinearChart(QWidget *widget);
+  void updateFinetuneImages(const colorscreen::finetune_result& result);
+  void reattachFinetuneImages(QWidget *widget);
 
 protected:
   void onParametersRefreshed(const ParameterState &state) override { updateDeformationChart(); }
@@ -44,11 +52,13 @@ private:
   DeformationChartWidget *m_lensChart = nullptr;
   DeformationChartWidget *m_perspectiveChart = nullptr;
   DeformationChartWidget *m_nonlinearChart = nullptr;
+  FinetuneImagesPanel *m_finetuneImagesPanel = nullptr;
 
   QVBoxLayout *m_chartContainer = nullptr;
   QVBoxLayout *m_lensChartContainer = nullptr;
   QVBoxLayout *m_perspectiveChartContainer = nullptr;
   QVBoxLayout *m_nonlinearChartContainer = nullptr;
+  QVBoxLayout *m_finetuneImagesContainer = nullptr;
   QSlider *m_heatmapToleranceSlider = nullptr;
   QWidget *m_exaggerateSliderContainer = nullptr;
   QWidget *m_maxArrowLengthSliderContainer = nullptr;
