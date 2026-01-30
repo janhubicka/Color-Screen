@@ -54,6 +54,13 @@ intersect_vectors (coord_t x1, coord_t y1, coord_t dx1, coord_t dy1,
 inline void
 to_range (coord_t &v, coord_t min, coord_t max)
 {
+#if 0
+  if (!(v >= min))
+    v = min;
+  if (!(v <= max))
+    v = max;
+#endif
+
   v = std::clamp (v, min, max);
 }
 
@@ -2245,8 +2252,8 @@ public:
     if (!bw_is_simulated_infrared)
       {
 	color.red = std::clamp (color.red, (luminosity_t)-0.1, (luminosity_t)1.1);
-	color.red = std::clamp (color.green, (luminosity_t)-0.1, (luminosity_t)1.1);
-	color.red = std::clamp (color.blue, (luminosity_t)-0.1, (luminosity_t)1.1);
+	color.green = std::clamp (color.green, (luminosity_t)-0.1, (luminosity_t)1.1);
+	color.blue = std::clamp (color.blue, (luminosity_t)-0.1, (luminosity_t)1.1);
       }
     return color;
   }
@@ -2284,8 +2291,8 @@ public:
     if (!bw_is_simulated_infrared)
       {
 	color.red = std::clamp (color.red, (luminosity_t)-0.1, (luminosity_t)1.1);
-	color.red = std::clamp (color.green, (luminosity_t)-0.1, (luminosity_t)1.1);
-	color.red = std::clamp (color.blue, (luminosity_t)-0.1, (luminosity_t)1.1);
+	color.green = std::clamp (color.green, (luminosity_t)-0.1, (luminosity_t)1.1);
+	color.blue = std::clamp (color.blue, (luminosity_t)-0.1, (luminosity_t)1.1);
       }
     return color;
   }
