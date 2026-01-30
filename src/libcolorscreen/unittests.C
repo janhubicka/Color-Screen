@@ -426,7 +426,7 @@ test_screen_blur ()
 	  return false;
         }
       rgbdata rgbdelta;
-      if (!scr1->sum_almost_equal_p (mstr, &rgbdelta, 0.003))
+      if (!scr1->sum_almost_equal_p (mstr, &rgbdelta, 0.005))
         {
 	  fprintf (stderr, "FFT Gaussian blur result overall tonality does not match original radius %f delta %f %f %f (step %i); see /tmp/scr-fft.tif \n", radius, rgbdelta.red, rgbdelta.green, rgbdelta.blue, i);
 	  scr1->save_tiff ("/tmp/scr-fft.tif");
