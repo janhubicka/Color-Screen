@@ -4,6 +4,7 @@
 #include "color.h"
 #include "colorscreen.h"
 #include <string>
+#include <memory>
 namespace colorscreen
 {
 class screen;
@@ -91,16 +92,16 @@ struct finetune_result
   point_t center, coordinate1, coordinate2;
 
   /* Solver images  */
-  std::unique_ptr <simple_image> diff;
-  std::unique_ptr <simple_image> simulated;
-  std::unique_ptr <simple_image> sharpened;
-  std::unique_ptr <simple_image> orig;
-  std::unique_ptr <simple_image> screen;
-  std::unique_ptr <simple_image> blured_screen;
-  std::unique_ptr <simple_image> emulsion_screen;
-  std::unique_ptr <simple_image> merged_screen;
-  std::unique_ptr <simple_image> collected_screen;
-  std::unique_ptr <simple_image> sot_spread;
+  std::shared_ptr <simple_image> diff;
+  std::shared_ptr <simple_image> simulated;
+  std::shared_ptr <simple_image> sharpened;
+  std::shared_ptr <simple_image> orig;
+  std::shared_ptr <simple_image> screen;
+  std::shared_ptr <simple_image> blured_screen;
+  std::shared_ptr <simple_image> emulsion_screen;
+  std::shared_ptr <simple_image> merged_screen;
+  std::shared_ptr <simple_image> collected_screen;
+  std::shared_ptr <simple_image> sot_spread;
 
   finetune_result ()
   : success (false), tile_pos {-1, -1}, badness (12345), uncertainity (12345),
@@ -114,6 +115,9 @@ struct finetune_result
     solver_point_screen_location {-1, -1}, solver_point_color (solver_parameters::max_point_color)
     {
     }
+  
+  finetune_result(finetune_result&&) = default;
+  finetune_result& operator=(finetune_result&&) = default;
 };
 DLL_PUBLIC finetune_result
 finetune (render_parameters &rparam, const scr_to_img_parameters &param,

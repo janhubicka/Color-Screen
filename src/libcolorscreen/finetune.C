@@ -2743,7 +2743,7 @@ public:
                       rgbdata c = evaulate_pixel (v, tileid, red, green, blue,
                                                   x, y, off, mix_weights, mix_dark);
                       rgbdata d = c - get_pixel (v, tileid, x, y);
-                      img->put_linear_pixel (x, y, {d.red / rmax + 0.5, d.green / gmax + 0.5, d.blue / bmax + 0.5});
+                      img->put_linear_pixel (x, y, {d.red / rmax + (luminosity_t)0.5, d.green / gmax + (luminosity_t)0.5, d.blue / bmax + (luminosity_t)0.5});
                     }
                     break;
                   case 3:
