@@ -7,7 +7,7 @@
 #include "TaskQueue.h"
 #include <QFutureWatcher>
 #include <QWidget>
-#include <QLabel>
+#include "ScalableImageLabel.h"
 #include <QTimer>
 #include <memory>
 #include <vector>
@@ -85,7 +85,7 @@ private:
 
   QWidget *m_tilesContainer = nullptr;
   QVBoxLayout *m_tilesLayoutContainer = nullptr;
-  std::vector<QLabel *> m_tileLabels;
+  std::vector<ScalableImageLabel *> m_tileLabels;
 
   QTimer *m_updateTimer = nullptr;
   QFutureWatcher<TileRenderResult> *m_tileWatcher = nullptr;

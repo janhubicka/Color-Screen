@@ -224,27 +224,23 @@ void TilePreviewPanel::setupTiles(const QString &title) {
 
   m_tileLabels.clear();
   for (const auto &pair : types) {
-    QLabel *label = new QLabel();
-    label->setScaledContents(false);
-    label->setAlignment(Qt::AlignCenter);
-    label->setMinimumSize(100, 100);
-    label->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    ScalableImageLabel *label = new ScalableImageLabel();
     m_tileLabels.push_back(label);
 
     // Helper to create captioned tile
-    auto createCaptionedTile = [](QLabel *imageLabel, const QString &caption) {
+    auto createCaptionedTile = [](ScalableImageLabel *imageLabel, const QString &caption) {
       QWidget *container = new QWidget();
       QVBoxLayout *layout = new QVBoxLayout(container);
       layout->setContentsMargins(0, 0, 0, 0);
       layout->setSpacing(2);
 
-      layout->addWidget(imageLabel, 0, Qt::AlignHCenter);
+      layout->addWidget(imageLabel, 0, Qt::AlignHCenter); // No vertical stretch
 
       QLabel *captionLabel = new QLabel(caption);
       captionLabel->setAlignment(Qt::AlignCenter);
 
       layout->addWidget(captionLabel, 0, Qt::AlignHCenter);
-      layout->addStretch(1);
+      layout->addStretch(1); // Push everything to top
       return container;
     };
 
@@ -316,14 +312,14 @@ void TilePreviewPanel::onTriggerRender(int reqId, std::shared_ptr<colorscreen::p
 
   if ((!req.scan && requiresScan()) || !isTileRenderingEnabled(req.state)) {
     for (auto l : m_tileLabels)
-      l->clear();
+      l->setPixmap(QPixmap());
     m_renderQueue.reportFinished(reqId, true);
     return;
   }
 
-  // Update label sizes mapping to requested tileSize
-  for (auto l : m_tileLabels)
-    l->setFixedSize(req.tileSize, req.tileSize);
+  // No fixed size enforcement needed with ScalableImageLabel
+  // for (auto l : m_tileLabels)
+  //   l->setFixedSize(req.tileSize, req.tileSize);
 
   // Subclass check
   bool needsUpdate = shouldUpdateTiles(req.state);

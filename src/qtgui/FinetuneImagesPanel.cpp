@@ -25,11 +25,9 @@ void FinetuneImagesPanel::setupUi() {
   auto createImageSlot = [](const QString& caption) -> ImageSlot {
     ImageSlot slot;
     slot.caption = caption;
-    slot.label = new QLabel();
-    slot.label->setScaledContents(false);
-    slot.label->setAlignment(Qt::AlignCenter);
-    slot.label->setMinimumSize(10, 10); // Reduce minimum size
-    // pixmap is default constructed (null)
+    slot.label = new ScalableImageLabel();
+    // Align image to bottom so it sits on top of the caption even if widget is tall
+    slot.label->setAlignment(Qt::AlignBottom | Qt::AlignHCenter);
     return slot;
   };
 
@@ -43,16 +41,18 @@ void FinetuneImagesPanel::setupUi() {
     QVBoxLayout *vLayout = new QVBoxLayout(slot.container);
     vLayout->setContentsMargins(0, 0, 0, 0);
     vLayout->setSpacing(2);
-    vLayout->addWidget(slot.label, 0, Qt::AlignCenter);
+    // Add stretchable label
+    vLayout->addWidget(slot.label, 1);
     
     slot.captionLabel = new QLabel(slot.caption);
     slot.captionLabel->setAlignment(Qt::AlignCenter);
+    // Fixed size caption
     vLayout->addWidget(slot.captionLabel, 0, Qt::AlignCenter);
     
     m_row1Layout->addWidget(slot.container, 1);
   }
   
-  mainLayout->addWidget(row1Widget);
+  mainLayout->addWidget(row1Widget, 1);
 
   // Row 2: screen, blured_screen, emulsion_screen, merged_screen, collected_screen, dot_spread
   QWidget *row2Widget = new QWidget();
@@ -72,7 +72,7 @@ void FinetuneImagesPanel::setupUi() {
     QVBoxLayout *vLayout = new QVBoxLayout(slot.container);
     vLayout->setContentsMargins(0, 0, 0, 0);
     vLayout->setSpacing(2);
-    vLayout->addWidget(slot.label, 0, Qt::AlignCenter);
+    vLayout->addWidget(slot.label, 1);
     
     slot.captionLabel = new QLabel(slot.caption);
     slot.captionLabel->setAlignment(Qt::AlignCenter);
@@ -81,7 +81,7 @@ void FinetuneImagesPanel::setupUi() {
     m_row2Layout->addWidget(slot.container, 1);
   }
   
-  mainLayout->addWidget(row2Widget);
+  mainLayout->addWidget(row2Widget, 1);
 }
 
 void FinetuneImagesPanel::setFinetuneResult(const colorscreen::finetune_result& result) {
@@ -104,73 +104,29 @@ void FinetuneImagesPanel::setFinetuneResult(const colorscreen::finetune_result& 
 void FinetuneImagesPanel::clear() {
   for (auto& slot : m_row1Images) {
     slot.pixmap = QPixmap();
-    slot.label->clear();
+    slot.label->setPixmap(QPixmap());
     if (slot.container) slot.container->hide();
   }
   for (auto& slot : m_row2Images) {
     slot.pixmap = QPixmap();
-    slot.label->clear();
+    slot.label->setPixmap(QPixmap());
     if (slot.container) slot.container->hide();
   }
 }
 
-void FinetuneImagesPanel::resizeEvent(QResizeEvent *event) {
-  QWidget::resizeEvent(event);
-  if (event->size().width() != m_currentWidth) {
-    m_currentWidth = event->size().width();
-    updateImageDisplay();
-  }
-}
-
 void FinetuneImagesPanel::updateImageDisplay() {
-  if (width() <= 0) return;
-  
-  auto updateRow = [this](std::vector<ImageSlot>& row) {
-    // Count visible images
-    int visibleCount = 0;
-    for (const auto& slot : row) {
-      if (!slot.pixmap.isNull() && slot.pixmap.width() > 0 && slot.pixmap.height() > 0) {
-        visibleCount++;
-      }
-    }
-    
-    if (visibleCount == 0) return;
-
-    // Calculate target size
-    int availableWidth = width() - 20; // margins
-    // Subtract spacing between items
-    availableWidth -= (visibleCount - 1) * 5;
-    
-    int targetWidth = availableWidth / visibleCount;
-    if (targetWidth < 10) targetWidth = 10;
-    
+  auto updateRow = [&](std::vector<ImageSlot>& row) {
+    // Check if we have any valid images to determine row visibility (optional)
+    // But mainly we just update individual slots
     for (auto& slot : row) {
       if (slot.pixmap.isNull() || slot.pixmap.width() <= 0 || slot.pixmap.height() <= 0) {
-        // Hide empty slots entirely
         slot.container->hide();
-        continue;
-      }
-      
-      // Show valid slots
-      slot.container->show();
-      
-      int width = slot.pixmap.width();
-      int height = slot.pixmap.height();
-
-      // Calculate scaled dimensions maintaining aspect ratio
-      int targetHeight = (int)((double)targetWidth * height / width);
-      
-      // Determine scaling mode: nearest-neighbor if upscaling > 2x
-      Qt::TransformationMode mode = Qt::FastTransformation;
-      if (targetWidth > width * 2 || targetHeight > height * 2) {
-        mode = Qt::FastTransformation; // Nearest-neighbor for pixel visibility
+        slot.label->setPixmap(QPixmap());
       } else {
-        mode = Qt::SmoothTransformation;
+        slot.container->show();
+        slot.label->setPixmap(slot.pixmap);
+        // No manual sizing or scaling here; ScalableImageLabel and Layout handle it
       }
-
-      slot.label->setPixmap(slot.pixmap.scaled(targetWidth, targetHeight, 
-                                               Qt::KeepAspectRatio, mode));
-      slot.label->setFixedSize(targetWidth, targetHeight);
     }
   };
 

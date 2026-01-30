@@ -143,7 +143,8 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-TaskQueue.$(OBJEXT) \
 	colorscreen_qt-Logging.$(OBJEXT) \
 	colorscreen_qt-SubtitleOverlay.$(OBJEXT) \
-	colorscreen_qt-CoordinateTransformer.$(OBJEXT)
+	colorscreen_qt-CoordinateTransformer.$(OBJEXT) \
+	colorscreen_qt-ScalableImageLabel.$(OBJEXT)
 am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_ImageWidget.$(OBJEXT) \
 	colorscreen_qt-moc_BacklightChartWidget.$(OBJEXT) \
@@ -170,7 +171,8 @@ am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_ThamesAnimation.$(OBJEXT) \
 	colorscreen_qt-moc_PagetAnimation.$(OBJEXT) \
 	colorscreen_qt-moc_JolyAnimation.$(OBJEXT) \
-	colorscreen_qt-moc_TaskQueue.$(OBJEXT)
+	colorscreen_qt-moc_TaskQueue.$(OBJEXT) \
+	colorscreen_qt-moc_ScalableImageLabel.$(OBJEXT)
 nodist_colorscreen_qt_OBJECTS = $(am__objects_1) \
 	colorscreen_qt-qrc_resources.$(OBJEXT)
 colorscreen_qt_OBJECTS = $(am_colorscreen_qt_OBJECTS) \
@@ -225,6 +227,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-ParameterPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-ParameterState.Po \
 	./$(DEPDIR)/colorscreen_qt-Renderer.Po \
+	./$(DEPDIR)/colorscreen_qt-ScalableImageLabel.Po \
 	./$(DEPDIR)/colorscreen_qt-ScreenPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-SharpnessPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po \
@@ -253,6 +256,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-moc_PagetAnimation.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ParameterPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_Renderer.Po \
+	./$(DEPDIR)/colorscreen_qt-moc_ScalableImageLabel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ScreenPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po \
@@ -484,7 +488,8 @@ colorscreen_qt_SOURCES = \
     TaskQueue.cpp \
     Logging.cpp \
     SubtitleOverlay.cpp \
-    CoordinateTransformer.cpp
+    CoordinateTransformer.cpp \
+    ScalableImageLabel.cpp
 
 
 # MOC Generation
@@ -516,7 +521,8 @@ MOC_SOURCES = \
     moc_ThamesAnimation.cpp \
     moc_PagetAnimation.cpp \
     moc_JolyAnimation.cpp \
-    moc_TaskQueue.cpp
+    moc_TaskQueue.cpp \
+    moc_ScalableImageLabel.cpp
 
 EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h FinetuneImagesPanel.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h Logging.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg
 
@@ -645,6 +651,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ParameterPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ParameterState.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-Renderer.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ScalableImageLabel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ScreenPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-SharpnessPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po@am__quote@ # am--include-marker
@@ -673,6 +680,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_PagetAnimation.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ParameterPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_Renderer.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ScalableImageLabel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ScreenPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po@am__quote@ # am--include-marker
@@ -1147,6 +1155,20 @@ colorscreen_qt-CoordinateTransformer.obj: CoordinateTransformer.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-CoordinateTransformer.obj `if test -f 'CoordinateTransformer.cpp'; then $(CYGPATH_W) 'CoordinateTransformer.cpp'; else $(CYGPATH_W) '$(srcdir)/CoordinateTransformer.cpp'; fi`
 
+colorscreen_qt-ScalableImageLabel.o: ScalableImageLabel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-ScalableImageLabel.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-ScalableImageLabel.Tpo -c -o colorscreen_qt-ScalableImageLabel.o `test -f 'ScalableImageLabel.cpp' || echo '$(srcdir)/'`ScalableImageLabel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-ScalableImageLabel.Tpo $(DEPDIR)/colorscreen_qt-ScalableImageLabel.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='ScalableImageLabel.cpp' object='colorscreen_qt-ScalableImageLabel.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-ScalableImageLabel.o `test -f 'ScalableImageLabel.cpp' || echo '$(srcdir)/'`ScalableImageLabel.cpp
+
+colorscreen_qt-ScalableImageLabel.obj: ScalableImageLabel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-ScalableImageLabel.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-ScalableImageLabel.Tpo -c -o colorscreen_qt-ScalableImageLabel.obj `if test -f 'ScalableImageLabel.cpp'; then $(CYGPATH_W) 'ScalableImageLabel.cpp'; else $(CYGPATH_W) '$(srcdir)/ScalableImageLabel.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-ScalableImageLabel.Tpo $(DEPDIR)/colorscreen_qt-ScalableImageLabel.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='ScalableImageLabel.cpp' object='colorscreen_qt-ScalableImageLabel.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-ScalableImageLabel.obj `if test -f 'ScalableImageLabel.cpp'; then $(CYGPATH_W) 'ScalableImageLabel.cpp'; else $(CYGPATH_W) '$(srcdir)/ScalableImageLabel.cpp'; fi`
+
 colorscreen_qt-moc_MainWindow.o: moc_MainWindow.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_MainWindow.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_MainWindow.Tpo -c -o colorscreen_qt-moc_MainWindow.o `test -f 'moc_MainWindow.cpp' || echo '$(srcdir)/'`moc_MainWindow.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_MainWindow.Tpo $(DEPDIR)/colorscreen_qt-moc_MainWindow.Po
@@ -1525,6 +1547,20 @@ colorscreen_qt-moc_TaskQueue.obj: moc_TaskQueue.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_TaskQueue.obj `if test -f 'moc_TaskQueue.cpp'; then $(CYGPATH_W) 'moc_TaskQueue.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_TaskQueue.cpp'; fi`
 
+colorscreen_qt-moc_ScalableImageLabel.o: moc_ScalableImageLabel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_ScalableImageLabel.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_ScalableImageLabel.Tpo -c -o colorscreen_qt-moc_ScalableImageLabel.o `test -f 'moc_ScalableImageLabel.cpp' || echo '$(srcdir)/'`moc_ScalableImageLabel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_ScalableImageLabel.Tpo $(DEPDIR)/colorscreen_qt-moc_ScalableImageLabel.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_ScalableImageLabel.cpp' object='colorscreen_qt-moc_ScalableImageLabel.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_ScalableImageLabel.o `test -f 'moc_ScalableImageLabel.cpp' || echo '$(srcdir)/'`moc_ScalableImageLabel.cpp
+
+colorscreen_qt-moc_ScalableImageLabel.obj: moc_ScalableImageLabel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_ScalableImageLabel.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_ScalableImageLabel.Tpo -c -o colorscreen_qt-moc_ScalableImageLabel.obj `if test -f 'moc_ScalableImageLabel.cpp'; then $(CYGPATH_W) 'moc_ScalableImageLabel.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_ScalableImageLabel.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_ScalableImageLabel.Tpo $(DEPDIR)/colorscreen_qt-moc_ScalableImageLabel.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_ScalableImageLabel.cpp' object='colorscreen_qt-moc_ScalableImageLabel.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_ScalableImageLabel.obj `if test -f 'moc_ScalableImageLabel.cpp'; then $(CYGPATH_W) 'moc_ScalableImageLabel.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_ScalableImageLabel.cpp'; fi`
+
 colorscreen_qt-qrc_resources.o: qrc_resources.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-qrc_resources.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-qrc_resources.Tpo -c -o colorscreen_qt-qrc_resources.o `test -f 'qrc_resources.cpp' || echo '$(srcdir)/'`qrc_resources.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-qrc_resources.Tpo $(DEPDIR)/colorscreen_qt-qrc_resources.Po
@@ -1695,6 +1731,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterState.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-Renderer.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-ScalableImageLabel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ScreenPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-SharpnessPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po
@@ -1723,6 +1760,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_PagetAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ParameterPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_Renderer.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ScalableImageLabel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ScreenPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po
@@ -1799,6 +1837,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterState.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-Renderer.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-ScalableImageLabel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ScreenPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-SharpnessPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po
@@ -1827,6 +1866,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_PagetAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ParameterPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_Renderer.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ScalableImageLabel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ScreenPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po

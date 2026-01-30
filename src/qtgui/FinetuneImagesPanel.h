@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QLabel>
 #include <vector>
+#include "ScalableImageLabel.h"
 #include "../libcolorscreen/include/finetune.h"
 
 class QVBoxLayout;
@@ -19,7 +20,8 @@ public:
   void clear();
 
 protected:
-  void resizeEvent(QResizeEvent *event) override;
+  // No explicit resizeEvent needed now
+  // void resizeEvent(QResizeEvent *event) override;
 
 private:
   void setupUi();
@@ -32,7 +34,7 @@ private:
   
   struct ImageSlot {
     QWidget *container = nullptr;
-    QLabel *label = nullptr;
+    ScalableImageLabel *label = nullptr;
     QLabel *captionLabel = nullptr;
     QString caption;
     QPixmap pixmap;
@@ -40,8 +42,6 @@ private:
   
   std::vector<ImageSlot> m_row1Images; // original, sharpened, simulated, diff
   std::vector<ImageSlot> m_row2Images; // screen, blured_screen, emulsion_screen, merged_screen, collected_screen, dot_spread
-  
-  int m_currentWidth = 0;
 };
 
 #endif // FINETUNE_IMAGES_PANEL_H
