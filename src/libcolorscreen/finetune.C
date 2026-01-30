@@ -3500,12 +3500,28 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   if (fparams.diff_file)
     best_solver.write_file (best_solver.start, fparams.diff_file, 0, 2);
   if (fparams.flags & finetune_produce_images)
-  {
-    ret.simulated = best_solver.produce_image (best_solver.start, 0, 0);
-    ret.orig = best_solver.produce_image (best_solver.start, 0, 1);
-    ret.sharpened = best_solver.produce_image (best_solver.start, 0, 3);
-    ret.diff = best_solver.produce_image (best_solver.start, 0, 2);
-  }
+    {
+      ret.simulated = best_solver.produce_image (best_solver.start, 0, 0);
+      ret.orig = best_solver.produce_image (best_solver.start, 0, 1);
+      if (best_solver.optimize_sharpening)
+        ret.sharpened = best_solver.produce_image (best_solver.start, 0, 3);
+      ret.diff = best_solver.produce_image (best_solver.start, 0, 2);
+      ret.screen = best_solver.original_scr->get_image ();
+      ret.blured_screen = best_solver.tiles[0].scr->get_image ();
+      if (best_solver.optimize_emulsion_blur)
+        ret.emulsion_screen = best_solver.emulsion_scr->get_image ();
+      if (best_solver.optimize_emulsion_intensities)
+        ret.merged_screen = best_solver.tiles[0].merged_scr->get_image ();
+
+      screen tmp;
+      best_solver.collect_screen (&tmp, best_solver.start, 0);
+      ret.collected_screen = tmp.get_image ();
+
+      screen scr, scr1;
+      scr1.initialize_dot ();
+      best_solver.apply_blur (best_solver.start, 0, &scr, &scr1);
+      ret.sot_spread = scr.get_image (true, 1);
+    }
   if (fparams.screen_file)
     best_solver.original_scr->save_tiff (fparams.screen_file);
   if (fparams.screen_blur_file)

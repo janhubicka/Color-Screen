@@ -98,7 +98,7 @@ struct simple_image
 		      (int)(invert_gamma (c.blue, -1) * 255 + 0.5)});
   }
   rgb
-  get_pixel (int x, int y)
+  get_pixel (int x, int y) const
   {
     return {m_data[y * stride + x * 3], m_data[y * stride + x * 3 + 1], m_data[y * stride + x * 3 + 2]};
   }
