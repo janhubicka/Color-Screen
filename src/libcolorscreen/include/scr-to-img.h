@@ -62,7 +62,7 @@ public:
   {
     assert (!debug || m_early_correction_precomputed);
     p = apply_motor_correction (p);
-    return m_lens_correction.scan_to_corrected (p)
+    return apply_lens_correction (p)
            * m_inverted_projection_distance;
   }
 
@@ -76,36 +76,16 @@ public:
   nonprecomputed_apply_early_correction (point_t p) const
   {
     p = apply_motor_correction (p);
-    return m_lens_correction.nonprecomputed_scan_to_corrected (p)
+    return nonprecomputed_apply_lens_correction (p)
            * m_inverted_projection_distance;
   }
   pure_attr point_t
   inverse_early_correction (point_t p) const
   {
-    p = m_lens_correction.corrected_to_scan (p * m_param.projection_distance);
+    p = inverse_lens_correction (p * m_param.projection_distance);
     return inverse_motor_correction (p);
   }
 
-  pure_attr point_t
-  apply_lens_correction (point_t sp) const
-  {
-    point_t shift = { 0, 0 };
-    if (m_param.scanner_type == lens_move_horisontally)
-      shift.x = sp.x;
-    if (m_param.scanner_type == lens_move_vertically)
-      shift.y = sp.y;
-    return m_lens_correction.corrected_to_scan (sp - shift) + shift;
-  }
-  pure_attr point_t
-  inverse_lens_correction (point_t sp) const
-  {
-    point_t shift = { 0, 0 };
-    if (m_param.scanner_type == lens_move_horisontally)
-      shift.x = sp.x;
-    if (m_param.scanner_type == lens_move_vertically)
-      shift.y = sp.y;
-    return m_lens_correction.scan_to_corrected (sp - shift) + shift;
-  }
 
   /* Map screen coordinates to image coordinates.  */
   pure_attr inline point_t
@@ -265,6 +245,36 @@ private:
     else
       p.y = m_motor_correction->invert (p.y);
     return p;
+  }
+  pure_attr point_t
+  inverse_lens_correction (point_t sp) const
+  {
+    point_t shift = { 0, 0 };
+    if (m_param.scanner_type == lens_move_horisontally)
+      shift.x = sp.x;
+    if (m_param.scanner_type == lens_move_vertically)
+      shift.y = sp.y;
+    return m_lens_correction.corrected_to_scan (sp - shift) + shift;
+  }
+  pure_attr point_t
+  nonprecomputed_apply_lens_correction (point_t sp) const
+  {
+    point_t shift = { 0, 0 };
+    if (m_param.scanner_type == lens_move_horisontally)
+      shift.x = sp.x;
+    if (m_param.scanner_type == lens_move_vertically)
+      shift.y = sp.y;
+    return m_lens_correction.nonprecomputed_scan_to_corrected (sp - shift) + shift;
+  }
+  pure_attr point_t
+  apply_lens_correction (point_t sp) const
+  {
+    point_t shift = { 0, 0 };
+    if (m_param.scanner_type == lens_move_horisontally)
+      shift.x = sp.x;
+    if (m_param.scanner_type == lens_move_vertically)
+      shift.y = sp.y;
+    return m_lens_correction.scan_to_corrected (sp - shift) + shift;
   }
   static const bool debug = colorscreen_checking;
   void initialize ();
