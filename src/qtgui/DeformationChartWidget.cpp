@@ -43,7 +43,7 @@ DeformationChartWidget::DeformationChartWidget(QWidget *parent)
     
     mainLayout->addLayout(sliderLayout);
     
-    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
+    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 }
 
 void DeformationChartWidget::setDeformationData(
@@ -123,10 +123,11 @@ int DeformationChartWidget::heightForWidth(int width) const
 
     // Limit height for portrait images to prevent excessive vertical space usage.
     // However, user requested "space needed", so we shouldn't compress it too much unless necessary.
-    // A good heuristic for docks is "don't be taller than you are wide" (square limit).
-    // So we use 'availableWidth' as a soft limit, but allow a bit more for slider.
+    // Removing artificial clamp to satisfy "determine size from width" request.
+    /*
     int maxContentHeight = availableWidth; 
     if (desiredContentHeight > maxContentHeight) desiredContentHeight = maxContentHeight;
+    */
     
     // Ensure at least some visibility
     if (desiredContentHeight < 50) desiredContentHeight = 50;
@@ -171,20 +172,11 @@ float DeformationChartWidget::getExaggerationFactor() const
     return factor;
 }
 
-void DeformationChartWidget::paintEvent(QPaintEvent *event)
+QRect DeformationChartWidget::getChartRect() const
 {
-    QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
-    
-    // Background
-    painter.fillRect(rect(), palette().base());
-    
-    if (!m_hasData || m_scanWidth <= 0 || m_scanHeight <= 0) {
-        painter.setPen(palette().text().color());
-        painter.drawText(rect(), Qt::AlignCenter, "No deformation data");
-        return;
-    }
-    
+    if (!m_hasData || m_scanWidth <= 0 || m_scanHeight <= 0)
+        return QRect();
+        
     // Calculate chart area (leave space for slider at bottom)
     const int sliderHeight = 50;
     const int marginLeft = 10;
@@ -197,7 +189,7 @@ void DeformationChartWidget::paintEvent(QPaintEvent *event)
                    height() - marginTop - marginBottom);
     
     if (availableRect.width() < 10 || availableRect.height() < 10)
-        return;
+        return QRect();
 
     // Use CoordinateTransformer for dimensions
     colorscreen::image_data fakeScan;
@@ -229,7 +221,65 @@ void DeformationChartWidget::paintEvent(QPaintEvent *event)
         chartRect.setTop(availableRect.top() + offset);
         chartRect.setHeight(newHeight);
     }
+    return chartRect;
+}
+
+void DeformationChartWidget::mousePressEvent(QMouseEvent *event)
+{
+    QRect chartRect = getChartRect();
+    if (chartRect.isNull() || !chartRect.contains(event->pos()))
+        return;
+
+    // Use CoordinateTransformer for dimensions
+    colorscreen::image_data fakeScan;
+    fakeScan.width = m_scanWidth;
+    fakeScan.height = m_scanHeight;
+    colorscreen::render_parameters fakeParams;
+    fakeParams.scan_mirror = m_mirror;
+    fakeParams.scan_rotation = m_rotation;
     
+    CoordinateTransformer transformer(&fakeScan, fakeParams);
+    QSize transformedSize = transformer.getTransformedSize();
+
+    // Normalized Transformed Coordinate
+    double u = (event->pos().x() - chartRect.left()) / (double)chartRect.width();
+    double v = (event->pos().y() - chartRect.top()) / (double)chartRect.height();
+    
+    double tx = u * transformedSize.width();
+    double ty = v * transformedSize.height();
+    
+    colorscreen::point_t local = transformer.transformedToScan({tx, ty});
+    colorscreen::point_t p = { local.x + m_offsetX, local.y + m_offsetY };
+    
+    emit clicked(p);
+}
+
+void DeformationChartWidget::paintEvent(QPaintEvent *event)
+{
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    
+    // Background
+    painter.fillRect(rect(), palette().base());
+    
+    QRect chartRect = getChartRect();
+    if (chartRect.isNull()) {
+        painter.setPen(palette().text().color());
+        painter.drawText(rect(), Qt::AlignCenter, "No deformation data");
+        return;
+    }
+    
+    // Use CoordinateTransformer for dimensions
+    colorscreen::image_data fakeScan;
+    fakeScan.width = m_scanWidth;
+    fakeScan.height = m_scanHeight;
+    colorscreen::render_parameters fakeParams;
+    fakeParams.scan_mirror = m_mirror;
+    fakeParams.scan_rotation = m_rotation;
+    
+    CoordinateTransformer transformer(&fakeScan, fakeParams);
+    QSize transformedSize = transformer.getTransformedSize();
+        
     // Draw border
     painter.setPen(QPen(palette().text().color(), 1));
     painter.drawRect(chartRect);

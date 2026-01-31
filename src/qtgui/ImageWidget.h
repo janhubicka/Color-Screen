@@ -170,7 +170,7 @@ private:
   double m_minScale = 0.1; // Calculated 'fit' scale
   QSize m_lastSize; // Last known widget size for robust resizing
 
-  double m_heatmapTolerance = 0.5;
+  double m_heatmapTolerance = 0.1;
   double m_exaggerate = 200.0;
   double m_maxArrowLength = 100.0;
 
@@ -183,12 +183,6 @@ private:
   double m_lastRenderedY = 0.0;
   int m_lastCompletedReqId = 0;
   
-  // Pending render request (if queue is full)
-  bool m_hasPendingRender = false;
-  double m_pendingViewX = 0.0;
-  double m_pendingViewY = 0.0;
-  double m_pendingScale = 1.0;
-
   // Interaction
   QPoint m_lastMousePos;
   bool m_isDragging = false;

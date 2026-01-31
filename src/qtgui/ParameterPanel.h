@@ -122,6 +122,12 @@ protected:
       std::function<void(ParameterState &, bool)> setter,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr);
 
+  QCheckBox *addCheckboxWithReset(
+      const QString &label, std::function<bool(const ParameterState &)> getter,
+      std::function<void(ParameterState &, bool)> setter,
+      std::function<void(ParameterState &)> resetAction,
+      std::function<bool(const ParameterState &)> enabledCheck = nullptr);
+
   QPushButton *addButtonParameter(
       const QString &label, const QString &text, std::function<void()> onClicked,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr);
@@ -144,6 +150,9 @@ protected:
   // Helpers to create detachable sections
   QWidget *createDetachableSection(const QString &title, QWidget *content,
                                    std::function<void()> onDetach);
+
+  // Ends the current group (if any) so subsequent items are added to the main form
+  void endGroup();
 
 protected:
   virtual void applyChange(std::function<void(ParameterState &)> modifier, const QString &description = QString());

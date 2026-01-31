@@ -93,9 +93,9 @@ struct simple_image
   void
   put_linear_pixel (int x, int y, rgbdata c)
   {
-    put_pixel (x, y, {(int)(invert_gamma (c.red, -1) * 255 + 0.5),
-		      (int)(invert_gamma (c.green, -1) * 255 + 0.5),
-		      (int)(invert_gamma (c.blue, -1) * 255 + 0.5)});
+    put_pixel (x, y, {(int)(invert_gamma (std::clamp (c.red, (luminosity_t)0, (luminosity_t)1), -1) * 255 + 0.5),
+		      (int)(invert_gamma (std::clamp (c.green, (luminosity_t)0, (luminosity_t)1), -1) * 255 + 0.5),
+		      (int)(invert_gamma (std::clamp (c.blue, (luminosity_t)0, (luminosity_t)1), -1) * 255 + 0.5)});
   }
   rgb
   get_pixel (int x, int y) const

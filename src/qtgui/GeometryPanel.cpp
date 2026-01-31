@@ -89,14 +89,16 @@ void GeometryPanel::setupUi() {
       if (autoBtn->isChecked()) emit optimizeRequested(true);
   };
 
-  QCheckBox *lensCb = addCheckboxParameter("Optimize lens correction",
+  QCheckBox *lensCb = addCheckboxWithReset("Optimize lens correction",
       [](const ParameterState &s){ return s.solver.optimize_lens; },
-      [](ParameterState &s, bool v){ s.solver.optimize_lens = v; });
+      [](ParameterState &s, bool v){ s.solver.optimize_lens = v; },
+      [](ParameterState &s){ s.scrToImg.lens_correction = colorscreen::lens_warp_correction_parameters(); });
   connect(lensCb, &QCheckBox::toggled, this, triggerIfAuto);
 
-  QCheckBox *tiltCb = addCheckboxParameter("Optimize tilt",
+  QCheckBox *tiltCb = addCheckboxWithReset("Optimize tilt",
       [](const ParameterState &s){ return s.solver.optimize_tilt; },
-      [](ParameterState &s, bool v){ s.solver.optimize_tilt = v; });
+      [](ParameterState &s, bool v){ s.solver.optimize_tilt = v; },
+      [](ParameterState &s){ s.scrToImg.tilt_x = 0; s.scrToImg.tilt_y = 0; });
   connect(tiltCb, &QCheckBox::toggled, this, triggerIfAuto);
 
   QCheckBox *nlCb = addCheckboxParameter("Nonlinear corrections",
@@ -113,59 +115,8 @@ void GeometryPanel::setupUi() {
       [](const ParameterState &s){ return (int)s.scrToImg.scanner_type; },
       [](ParameterState &s, int v){ s.scrToImg.scanner_type = (colorscreen::scanner_type)v; });
 
-  QToolButton* visBtn = addSeparator("Visualization");
-  connect(visBtn, &QToolButton::toggled, this, [this](bool checked){
-      if (checked) updateDeformationChart();
-  });
-  
-  auto setupChart = [this, addToPanel](DeformationChartWidget*& chart, QVBoxLayout*& containerLayout, 
-                           const QString& title, auto detachSignal) {
-      chart = new DeformationChartWidget();
-      QWidget *wrapper = new QWidget();
-      QVBoxLayout *wl = new QVBoxLayout(wrapper);
-      wl->setContentsMargins(0, 0, 0, 0);
-      wl->addWidget(chart);
-      
-      QWidget *detachable = createDetachableSection(title, wrapper, [this, wrapper, detachSignal](){
-          emit (this->*detachSignal)(wrapper);
-      });
-      
-      QWidget *container = new QWidget();
-      containerLayout = new QVBoxLayout(container);
-      containerLayout->setContentsMargins(0,0,0,0);
-      containerLayout->addWidget(detachable);
-      addToPanel(container);
-  };
-
-  setupChart(m_lensChart, m_lensChartContainer, "Lens Correction", &GeometryPanel::detachLensChartRequested);
-  setupChart(m_perspectiveChart, m_perspectiveChartContainer, "Perspective", &GeometryPanel::detachPerspectiveChartRequested);
-  setupChart(m_nonlinearChart, m_nonlinearChartContainer, "Nonlinear transformation", &GeometryPanel::detachNonlinearChartRequested);
-
-  // Existing Deformation Chart
-  m_deformationChart = new DeformationChartWidget();
-
-  // Wrapper for chart
-  QWidget *chartWrapper = new QWidget();
-  QVBoxLayout *wrapperLayout = new QVBoxLayout(chartWrapper);
-  wrapperLayout->setContentsMargins(0, 0, 0, 0);
-  wrapperLayout->addWidget(m_deformationChart);
-  
-  // Detachable section
-  QWidget *detachable = createDetachableSection(
-      "Deformation Visualization", chartWrapper, 
-      [this, chartWrapper](){
-         emit detachDeformationChartRequested(chartWrapper);
-      });
-
-  // Container to allow reattaching
-  QWidget *container = new QWidget();
-  m_chartContainer = new QVBoxLayout(container);
-  m_chartContainer->setContentsMargins(0, 0, 0, 0);
-  m_chartContainer->addWidget(detachable);
-  
-
-  
-  addToPanel(container);
+  // Ensure Finetune widget is separate from Optimization group
+  endGroup();
 
   // Finetune Diagnostic Images
   m_finetuneImagesPanel = new FinetuneImagesPanel();
@@ -190,6 +141,60 @@ void GeometryPanel::setupUi() {
   finetuneContainer->hide();
   
   addToPanel(finetuneContainer);
+
+  QToolButton* visBtn = addSeparator("Visualization");
+  connect(visBtn, &QToolButton::toggled, this, [this](bool checked){
+      if (checked) updateDeformationChart();
+  });
+  
+  auto setupChart = [this, addToPanel](DeformationChartWidget*& chart, QVBoxLayout*& containerLayout, 
+                           const QString& title, auto detachSignal) {
+      chart = new DeformationChartWidget();
+      connect(chart, &DeformationChartWidget::clicked, this, &GeometryPanel::centerOnRequested);
+      QWidget *wrapper = new QWidget();
+      QVBoxLayout *wl = new QVBoxLayout(wrapper);
+      wl->setContentsMargins(0, 0, 0, 0);
+      wl->addWidget(chart);
+      
+      QWidget *detachable = createDetachableSection(title, wrapper, [this, wrapper, detachSignal](){
+          emit (this->*detachSignal)(wrapper);
+      });
+      
+      QWidget *container = new QWidget();
+      containerLayout = new QVBoxLayout(container);
+      containerLayout->setContentsMargins(0,0,0,0);
+      containerLayout->addWidget(detachable);
+      addToPanel(container);
+  };
+
+  setupChart(m_lensChart, m_lensChartContainer, "Lens Correction", &GeometryPanel::detachLensChartRequested);
+  setupChart(m_perspectiveChart, m_perspectiveChartContainer, "Perspective", &GeometryPanel::detachPerspectiveChartRequested);
+  setupChart(m_nonlinearChart, m_nonlinearChartContainer, "Nonlinear transformation", &GeometryPanel::detachNonlinearChartRequested);
+
+  // Existing Deformation Chart
+  m_deformationChart = new DeformationChartWidget();
+  connect(m_deformationChart, &DeformationChartWidget::clicked, this, &GeometryPanel::centerOnRequested);
+
+  // Wrapper for chart
+  QWidget *chartWrapper = new QWidget();
+  QVBoxLayout *wrapperLayout = new QVBoxLayout(chartWrapper);
+  wrapperLayout->setContentsMargins(0, 0, 0, 0);
+  wrapperLayout->addWidget(m_deformationChart);
+  
+  // Detachable section
+  QWidget *detachable = createDetachableSection(
+      "Deformation Visualization", chartWrapper, 
+      [this, chartWrapper](){
+         emit detachDeformationChartRequested(chartWrapper);
+      });
+
+  // Container to allow reattaching
+  QWidget *container = new QWidget();
+  m_chartContainer = new QVBoxLayout(container);
+  m_chartContainer->setContentsMargins(0, 0, 0, 0);
+  m_chartContainer->addWidget(detachable);
+  
+  addToPanel(container);
 
   updateUI();
 }

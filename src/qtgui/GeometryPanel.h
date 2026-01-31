@@ -27,6 +27,8 @@ signals:
   void detachNonlinearChartRequested(QWidget *widget);
   void detachFinetuneImagesRequested(QWidget *widget);
 
+  void centerOnRequested(const colorscreen::point_t &p);
+
   void heatmapToleranceChanged(double tol);
   void exaggerateChanged(double ex);
   void maxArrowLengthChanged(double len);

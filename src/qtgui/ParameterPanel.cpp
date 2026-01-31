@@ -546,6 +546,61 @@ QCheckBox *ParameterPanel::addCheckboxParameter(
   return checkbox;
 }
 
+QCheckBox *ParameterPanel::addCheckboxWithReset(
+    const QString &label, std::function<bool(const ParameterState &)> getter,
+    std::function<void(ParameterState &, bool)> setter,
+    std::function<void(ParameterState &)> resetAction,
+    std::function<bool(const ParameterState &)> enabledCheck) {
+  // Create container with label on left, checkbox on right
+  QWidget *container = new QWidget();
+  QHBoxLayout *hLayout = new QHBoxLayout(container);
+  hLayout->setContentsMargins(0, 0, 0, 0);
+
+  QCheckBox *checkbox = new QCheckBox();
+  QLabel *textLabel = new QLabel(label);
+  QPushButton *resetBtn = new QPushButton("Reset");
+  resetBtn->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+
+  hLayout->addWidget(checkbox, 0);  // Checkbox fixed size on left
+  hLayout->addWidget(textLabel, 1); // Label expands to fill space
+  hLayout->addWidget(resetBtn, 0);  // Reset button fixed size
+
+  // Add to form (single column - container spans both label and field)
+  if (m_currentGroupForm) {
+    m_currentGroupForm->addRow(container);
+  } else {
+    m_form->addRow(container);
+  }
+
+  // Connect changes: UI -> State
+  connect(checkbox, &QCheckBox::toggled, this, [this, setter, label](bool checked) {
+    applyChange([setter, checked](ParameterState &s) { setter(s, checked); }, label);
+  });
+
+  // Connect Reset Button
+  connect(resetBtn, &QPushButton::clicked, this, [this, resetAction, label]() {
+    applyChange(resetAction, QString("Reset %1").arg(label));
+  });
+
+  // Updater: State -> UI
+  m_paramUpdaters.push_back([checkbox, getter](const ParameterState &state) {
+    bool val = getter(state);
+    checkbox->blockSignals(true);
+    checkbox->setChecked(val);
+    checkbox->blockSignals(false);
+  });
+
+  // Enable/Visibility Update
+  if (enabledCheck) {
+    m_widgetStateUpdaters.push_back([this, container, enabledCheck]() {
+      ParameterState state = m_stateGetter();
+      bool visible = enabledCheck(state);
+      container->setVisible(visible);
+    });
+  }
+  return checkbox;
+}
+
 QPushButton *ParameterPanel::addButtonParameter(
     const QString &label, const QString &text, std::function<void()> onClicked,
     std::function<bool(const ParameterState &)> enabledCheck) {
@@ -902,4 +957,9 @@ ParameterPanel::createDetachableSection(const QString &title, QWidget *content,
           });
 
   return container;
+}
+
+
+void ParameterPanel::endGroup() {
+  m_currentGroupForm = nullptr;
 }

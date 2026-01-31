@@ -535,6 +535,7 @@ void MainWindow::setupUi() {
           &MainWindow::onOptimizeGeometry);
   connect(m_geometryPanel, &GeometryPanel::nonlinearToggled, this,
           &MainWindow::onNonlinearToggled);
+  connect(m_geometryPanel, &GeometryPanel::centerOnRequested, m_imageWidget, &ImageWidget::centerOn);
 
   // Connect visualization sliders
   connect(m_geometryPanel, &GeometryPanel::heatmapToleranceChanged, m_imageWidget, &ImageWidget::setHeatmapTolerance);

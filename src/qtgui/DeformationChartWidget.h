@@ -54,6 +54,15 @@ private:
     
     // Helper to get exaggeration factor from slider (logarithmic scale 1.0 to 100.0)
     float getExaggerationFactor() const;
+
+    // Helper to calculate chart rectangle
+    QRect getChartRect() const;
+    
+signals:
+    void clicked(const colorscreen::point_t &p);
+    
+protected:
+    void mousePressEvent(QMouseEvent *event) override;
 };
 
 #endif // DEFORMATIONCHARTWIDGET_H
