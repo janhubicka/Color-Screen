@@ -33,6 +33,7 @@ public:
 signals:
   void detachMTFChartRequested(QWidget *widget);
   void autodetectRequested();
+  void focusAnalysisRequested();
 
 protected:
   // TilePreviewPanel overrides

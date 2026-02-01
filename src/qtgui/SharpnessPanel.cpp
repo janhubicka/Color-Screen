@@ -368,10 +368,6 @@ void SharpnessPanel::setupUi() {
         return s.rparams.sharpen.mode == sharpen_mode::unsharp_mask;
       }, 3);
 
-  // Unsharp mask amount
-  // Range 0.0 - 100.0
-  // Gamma 2.0 for slow start
-  // Enabled only when mode is unsharp_mask
   addSliderParameter(
       "Amount", 0.0, 100.0, 100.0, 1, "", "",
       [](const ParameterState &s) { return s.rparams.sharpen.usm_amount; },
@@ -380,6 +376,11 @@ void SharpnessPanel::setupUi() {
       [](const ParameterState &s) {
         return s.rparams.sharpen.mode == sharpen_mode::unsharp_mask;
       });
+
+  addSeparator("Focus analyzer");
+  addButtonParameter("", tr("Analyze area"), [this]() {
+    emit focusAnalysisRequested();
+  });
 }
 
 void SharpnessPanel::updateMTFChart() {

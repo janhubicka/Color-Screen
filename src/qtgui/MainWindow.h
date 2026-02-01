@@ -104,6 +104,7 @@ private slots:
   void onPointManipulationStarted();
   void updateRegistrationActions();
   void maybeTriggerAutoSolver();
+  void onFocusAnalysisRequested();
 
   // Recent Files
   // Recent Files
@@ -307,6 +308,7 @@ private:
   QString m_currentImageFile;
   QString m_currentParamsFile;
   bool m_currentParamsFileIsWeak = false; // true if filename is suggested, not loaded
+  bool m_focusAnalysisPending = false;
 
   // Crash recovery
   QString m_recoveryDir;
