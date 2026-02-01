@@ -14,6 +14,7 @@ class CIEChartWidget : public QWidget {
 public:
   explicit CIEChartWidget(QWidget *parent = nullptr);
   ~CIEChartWidget() override;
+  QSize sizeHint() const override;
 
   void setWhitepoint(double x, double y);
   std::pair<double, double> getWhitepoint() const;
@@ -26,6 +27,8 @@ public:
       double wx, wy;
   };
   void setGamut(const GamutData& gamut);
+  void setReferenceGamut(const GamutData& gamut);
+  void setSelectionEnabled(bool enabled);
 
 signals:
   void whitepointChanged(double x, double y);
@@ -40,6 +43,7 @@ private:
   void updateLocus();
   QPointF mapToWidget(double x, double y) const;
   std::pair<double, double> mapFromWidget(const QPointF &p) const;
+  QRectF getChartRect() const;
   void generateCache(); // Added
 
   QPolygonF m_locus;
@@ -48,6 +52,8 @@ private:
   double m_selectedY = 0.33;
   
   GamutData m_gamut;
+  GamutData m_referenceGamut;
+  bool m_selectionEnabled = true;
 
   // Chart logic
   double m_minX = 0.0;

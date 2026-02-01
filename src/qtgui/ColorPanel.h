@@ -39,6 +39,7 @@ protected:
   void onTileUpdateScheduled() override;
   bool isTileRenderingEnabled(const ParameterState &state) const override;
   bool requiresScan() const override { return false; }
+  void resizeEvent(QResizeEvent* event) override;
 
 private:
   void setupUi();
@@ -59,6 +60,8 @@ private:
   QWidget *m_gamutSection = nullptr;
   CIEChartWidget *m_gamutChart = nullptr;
   QVBoxLayout *m_gamutContainer = nullptr;
+  QComboBox *m_gamutReferenceCombo = nullptr;
+  void updateGamutReference();
 };
 
 #endif // COLOR_PANEL_H
