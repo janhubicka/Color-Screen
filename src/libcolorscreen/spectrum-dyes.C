@@ -4235,6 +4235,313 @@ const static spectra_entry autochrome_ciortan_arteaga_trumpy_blue[] = {
   { 780.0, 0.081967 },
 };
 
+static const luminosity_t lavedrine_autochrome_blue_grain_0[] = {
+    1.127, 1.005, 0.887, 0.833, 0.818, 0.821, 0.816, 0.789, 0.736, 0.674,
+    0.618, 0.582, 0.569, 0.574, 0.592, 0.624, 0.666, 0.713, 0.761, 0.811,
+    0.875, 0.965, 1.085, 1.226, 1.370, 1.499, 1.593, 1.611, 1.519, 1.377,
+    1.265, 1.207, 1.183, 1.173, 1.168, 1.168, 1.176, 1.186, 1.191, 1.182,
+    1.144, 1.058, 0.931, 0.783, 0.649, 0.541, 0.457, 0.392, 0.356, 0.339,
+    0.334, 0.345, 0.379, 0.427, 0.465
+};
+
+static const luminosity_t lavedrine_autochrome_blue_grain_1[] = {
+    1.103, 0.992, 0.863, 0.774, 0.719, 0.679, 0.646, 0.614, 0.583, 0.555,
+    0.534, 0.521, 0.515, 0.518, 0.531, 0.554, 0.586, 0.627, 0.675, 0.734,
+    0.804, 0.882, 0.963, 1.045, 1.119, 1.174, 1.195, 1.180, 1.137, 1.088,
+    1.055, 1.041, 1.039, 1.034, 1.020, 0.993, 0.956, 0.908, 0.849, 0.774,
+    0.683, 0.585, 0.494, 0.415, 0.354, 0.309, 0.277, 0.256, 0.247, 0.245,
+    0.250, 0.267, 0.303, 0.351, 0.388
+};
+
+static const luminosity_t lavedrine_autochrome_blue_grain_2[] = {
+    1.739, 1.392, 1.133, 0.992, 0.906, 0.840, 0.783, 0.731, 0.685, 0.647,
+    0.617, 0.597, 0.586, 0.586, 0.595, 0.617, 0.647, 0.687, 0.730, 0.780,
+    0.839, 0.909, 0.986, 1.069, 1.153, 1.237, 1.314, 1.355, 1.314, 1.215,
+    1.126, 1.077, 1.059, 1.049, 1.037, 1.014, 0.982, 0.936, 0.878, 0.803,
+    0.709, 0.608, 0.514, 0.434, 0.374, 0.331, 0.300, 0.280, 0.272, 0.271,
+    0.278, 0.298, 0.339, 0.394, 0.438
+};
+
+static const luminosity_t lavedrine_autochrome_blue_grain_3[] = {
+    1.024, 0.917, 0.788, 0.694, 0.633, 0.585, 0.546, 0.511, 0.479, 0.452,
+    0.432, 0.422, 0.419, 0.426, 0.441, 0.467, 0.501, 0.542, 0.587, 0.640,
+    0.703, 0.776, 0.855, 0.935, 1.011, 1.078, 1.123, 1.131, 1.096, 1.041,
+    0.999, 0.980, 0.975, 0.968, 0.951, 0.921, 0.879, 0.827, 0.767, 0.692,
+    0.603, 0.508, 0.420, 0.346, 0.289, 0.248, 0.220, 0.201, 0.192, 0.191,
+    0.197, 0.214, 0.248, 0.295, 0.332
+};
+
+static const luminosity_t lavedrine_autochrome_blue_grain_4[] = {
+    2.564, 1.623, 1.259, 1.084, 0.975, 0.889, 0.819, 0.764, 0.722, 0.689,
+    0.663, 0.641, 0.621, 0.603, 0.588, 0.576, 0.564, 0.552, 0.542, 0.540,
+    0.551, 0.577, 0.616, 0.661, 0.707, 0.750, 0.782, 0.796, 0.787, 0.761,
+    0.738, 0.723, 0.711, 0.688, 0.652, 0.602, 0.549, 0.498, 0.454, 0.420,
+    0.394, 0.373, 0.355, 0.337, 0.317, 0.300, 0.287, 0.277, 0.274, 0.277,
+    0.286, 0.307, 0.349, 0.407, 0.452
+};
+
+static const luminosity_t lavedrine_autochrome_blue_grain_5[] = {
+    1.358, 1.163, 0.988, 0.900, 0.861, 0.841, 0.827, 0.817, 0.810, 0.806,
+    0.804, 0.805, 0.806, 0.809, 0.820, 0.841, 0.874, 0.919, 0.968, 1.020,
+    1.075, 1.137, 1.206, 1.287, 1.380, 1.481, 1.567, 1.574, 1.467, 1.325,
+    1.223, 1.168, 1.141, 1.114, 1.074, 1.016, 0.942, 0.852, 0.757, 0.668,
+    0.587, 0.518, 0.463, 0.417, 0.378, 0.347, 0.323, 0.303, 0.294, 0.293,
+    0.299, 0.318, 0.356, 0.408, 0.448
+};
+
+static const luminosity_t lavedrine_autochrome_blue_grain_6[] = {
+    1.484, 1.229, 1.019, 0.911, 0.857, 0.823, 0.801, 0.785, 0.774, 0.767,
+    0.762, 0.761, 0.761, 0.765, 0.777, 0.799, 0.828, 0.857, 0.887, 0.922,
+    0.966, 1.021, 1.087, 1.163, 1.246, 1.331, 1.400, 1.413, 1.340, 1.232,
+    1.145, 1.091, 1.052, 1.006, 0.943, 0.862, 0.772, 0.681, 0.600, 0.532,
+    0.475, 0.429, 0.394, 0.365, 0.337, 0.312, 0.292, 0.276, 0.269, 0.268,
+    0.275, 0.294, 0.334, 0.386, 0.428
+};
+
+static const luminosity_t lavedrine_autochrome_blue_grain_7[] = {
+    1.480, 1.257, 1.052, 0.929, 0.850, 0.789, 0.737, 0.691, 0.651, 0.616,
+    0.588, 0.570, 0.560, 0.558, 0.565, 0.582, 0.608, 0.643, 0.683, 0.732,
+    0.796, 0.875, 0.965, 1.061, 1.159, 1.255, 1.341, 1.383, 1.341, 1.248,
+    1.168, 1.126, 1.109, 1.094, 1.069, 1.028, 0.977, 0.916, 0.848, 0.767,
+    0.672, 0.574, 0.486, 0.413, 0.356, 0.315, 0.285, 0.265, 0.255, 0.254,
+    0.259, 0.276, 0.314, 0.366, 0.408
+};
+
+static const luminosity_t lavedrine_autochrome_blue_grain_8[] = {
+    1.416, 1.209, 1.026, 0.935, 0.894, 0.873, 0.859, 0.847, 0.835, 0.824,
+    0.812, 0.802, 0.792, 0.783, 0.775, 0.774, 0.782, 0.801, 0.833, 0.878,
+    0.933, 0.993, 1.057, 1.123, 1.190, 1.257, 1.311, 1.320, 1.255, 1.151,
+    1.064, 1.014, 0.987, 0.965, 0.934, 0.893, 0.844, 0.788, 0.726, 0.661,
+    0.594, 0.529, 0.470, 0.416, 0.372, 0.340, 0.318, 0.302, 0.295, 0.296,
+    0.305, 0.325, 0.364, 0.417, 0.459
+};
+
+static const luminosity_t lavedrine_autochrome_blue_grain_9[] = {
+    4.000, 2.049, 1.513, 1.380, 1.350, 1.346, 1.340, 1.327, 1.306, 1.278,
+    1.241, 1.196, 1.142, 1.083, 1.022, 0.966, 0.914, 0.877, 0.867, 0.889,
+    0.941, 1.014, 1.100, 1.191, 1.280, 1.358, 1.415, 1.429, 1.379, 1.294,
+    1.225, 1.187, 1.167, 1.142, 1.098, 1.037, 0.969, 0.898, 0.831, 0.768,
+    0.710, 0.658, 0.613, 0.572, 0.538, 0.512, 0.491, 0.473, 0.465, 0.466,
+    0.476, 0.497, 0.543, 0.606, 0.655
+};
+
+static const luminosity_t lavedrine_autochrome_blue_grain_10[] = {
+    1.747, 1.375, 1.129, 1.024, 0.984, 0.965, 0.950, 0.932, 0.912, 0.888,
+    0.863, 0.838, 0.810, 0.779, 0.747, 0.718, 0.699, 0.698, 0.720, 0.768,
+    0.839, 0.920, 1.008, 1.101, 1.193, 1.282, 1.355, 1.378, 1.311, 1.196,
+    1.101, 1.049, 1.029, 1.016, 0.998, 0.968, 0.928, 0.875, 0.810, 0.731,
+    0.642, 0.547, 0.457, 0.377, 0.313, 0.265, 0.231, 0.206, 0.194, 0.191,
+    0.196, 0.215, 0.253, 0.309, 0.353
+};
+
+// ==========================================
+// GREEN GRAIN DATASETS (Tableau 4)
+// ==========================================
+
+static const luminosity_t lavedrine_autochrome_green_grain_0[] = {
+    4.000, 4.000, 4.000, 1.933, 1.772, 1.732, 1.702, 1.662, 1.608, 1.548,
+    1.492, 1.452, 1.426, 1.413, 1.406, 1.391, 1.329, 1.201, 1.035, 0.893,
+    0.813, 0.802, 0.849, 0.937, 1.048, 1.170, 1.299, 1.417, 1.461, 1.404,
+    1.322, 1.272, 1.253, 1.247, 1.247, 1.252, 1.267, 1.286, 1.301, 1.315,
+    1.324, 1.314, 1.281, 1.199, 1.057, 0.880, 0.710, 0.574, 0.493, 0.453,
+    0.438, 0.447, 0.493, 0.563, 0.622
+};
+
+static const luminosity_t lavedrine_autochrome_green_grain_1[] = {
+    4.000, 4.000, 1.721, 1.487, 1.412, 1.371, 1.337, 1.303, 1.267, 1.232,
+    1.200, 1.172, 1.143, 1.115, 1.079, 1.023, 0.924, 0.791, 0.659, 0.563,
+    0.515, 0.509, 0.533, 0.579, 0.642, 0.714, 0.791, 0.867, 0.929, 0.971,
+    0.997, 1.016, 1.032, 1.045, 1.056, 1.063, 1.068, 1.065, 1.056, 1.038,
+    1.007, 0.959, 0.887, 0.775, 0.638, 0.508, 0.404, 0.332, 0.290, 0.271,
+    0.267, 0.281, 0.320, 0.377, 0.424
+};
+
+static const luminosity_t lavedrine_autochrome_green_grain_2[] = {
+    4.000, 4.000, 4.000, 1.816, 1.632, 1.537, 1.466, 1.406, 1.354, 1.311,
+    1.275, 1.247, 1.226, 1.213, 1.200, 1.175, 1.098, 0.955, 0.787, 0.652,
+    0.576, 0.554, 0.572, 0.620, 0.690, 0.781, 0.889, 1.004, 1.088, 1.105,
+    1.082, 1.061, 1.058, 1.064, 1.074, 1.081, 1.087, 1.085, 1.074, 1.052,
+    1.016, 0.965, 0.895, 0.790, 0.657, 0.527, 0.419, 0.345, 0.303, 0.283,
+    0.280, 0.295, 0.337, 0.398, 0.449
+};
+
+static const luminosity_t lavedrine_autochrome_green_grain_3[] = {
+    4.000, 2.269, 1.518, 1.335, 1.264, 1.221, 1.186, 1.153, 1.122, 1.094,
+    1.070, 1.049, 1.031, 1.015, 0.994, 0.956, 0.876, 0.756, 0.629, 0.533,
+    0.483, 0.476, 0.499, 0.545, 0.606, 0.580, 0.761, 0.842, 0.904, 0.937,
+    0.952, 0.964, 0.979, 0.992, 1.001, 1.006, 1.006, 0.997, 0.982, 0.957,
+    0.920, 0.865, 0.785, 0.671, 0.542, 0.425, 0.337, 0.276, 0.243, 0.228,
+    0.227, 0.242, 0.282, 0.339, 0.384
+};
+
+static const luminosity_t lavedrine_autochrome_green_grain_4[] = {
+    4.000, 4.000, 4.000, 1.860, 1.669, 1.565, 1.487, 1.425, 1.375, 1.332,
+    1.293, 1.254, 1.208, 1.157, 1.095, 1.015, 0.901, 0.762, 0.631, 0.533,
+    0.479, 0.462, 0.472, 0.503, 0.548, 0.605, 0.669, 0.736, 0.794, 0.831,
+    0.851, 0.866, 0.882, 0.892, 0.899, 0.898, 0.892, 0.877, 0.861, 0.846,
+    0.829, 0.802, 0.748, 0.656, 0.542, 0.436, 0.356, 0.301, 0.272, 0.259,
+    0.259, 0.275, 0.317, 0.377, 0.426
+};
+
+static const luminosity_t lavedrine_autochrome_green_grain_5[] = {
+    4.000, 4.000, 2.242, 1.781, 1.706, 1.687, 1.662, 1.620, 1.566, 1.512,
+    1.456, 1.395, 1.320, 1.239, 1.151, 1.053, 0.937, 0.820, 0.722, 0.664,
+    0.645, 0.660, 0.704, 0.773, 0.865, 0.978, 1.107, 1.229, 1.289, 1.272,
+    1.230, 1.203, 1.196, 1.193, 1.189, 1.179, 1.163, 1.138, 1.104, 1.069,
+    1.032, 0.988, 0.928, 0.822, 0.679, 0.537, 0.422, 0.343, 0.297, 0.275,
+    0.270, 0.281, 0.321, 0.378, 0.426
+};
+
+static const luminosity_t lavedrine_autochrome_green_grain_6[] = {
+    4.000, 4.000, 2.566, 1.759, 1.628, 1.576, 1.541, 1.513, 1.497, 1.462,
+    1.436, 1.406, 1.366, 1.319, 1.262, 1.180, 1.053, 0.900, 0.759, 0.662,
+    0.617, 0.616, 0.652, 0.717, 0.808, 0.921, 1.050, 1.169, 1.217, 1.181,
+    1.123, 1.086, 1.070, 1.061, 1.053, 1.038, 1.017, 0.991, 0.962, 0.935,
+    0.910, 0.884, 0.848, 0.766, 0.638, 0.499, 0.386, 0.306, 0.261, 0.240,
+    0.235, 0.248, 0.286, 0.345, 0.393
+};
+
+static const luminosity_t lavedrine_autochrome_green_grain_7[] = {
+    4.000, 4.000, 2.235, 1.684, 1.546, 1.470, 1.414, 1.367, 1.325, 1.288,
+    1.256, 1.230, 1.206, 1.186, 1.163, 1.122, 1.031, 0.887, 0.733, 0.617,
+    0.555, 0.541, 0.562, 0.608, 0.673, 0.756, 0.855, 0.961, 1.044, 1.078,
+    1.075, 1.071, 1.075, 1.082, 1.087, 1.087, 1.091, 1.067, 1.047, 1.020,
+    0.983, 0.932, 0.858, 0.744, 0.608, 0.483, 0.387, 0.323, 0.288, 0.272,
+    0.271, 0.286, 0.327, 0.386, 0.434
+};
+
+static const luminosity_t lavedrine_autochrome_green_grain_8[] = {
+    4.000, 4.000, 2.353, 1.750, 1.646, 1.611, 1.585, 1.560, 1.533, 1.503,
+    1.467, 1.425, 1.370, 1.305, 1.230, 1.140, 1.026, 0.902, 0.798, 0.728,
+    0.697, 0.696, 0.721, 0.765, 0.826, 0.903, 0.993, 1.079, 1.125, 1.112,
+    1.076, 1.051, 1.044, 1.045, 1.045, 1.042, 1.038, 1.028, 1.010, 0.987,
+    0.959, 0.916, 0.847, 0.740, 0.615, 0.506, 0.422, 0.364, 0.334, 0.322,
+    0.324, 0.341, 0.384, 0.449, 0.501
+};
+
+static const luminosity_t lavedrine_autochrome_green_grain_9[] = {
+    4.000, 4.000, 4.000, 2.115, 1.982, 1.959, 1.925, 1.860, 1.776, 1.691,
+    1.607, 1.524, 1.428, 1.329, 1.232, 1.131, 1.024, 0.926, 0.853, 0.816,
+    0.814, 0.841, 0.892, 0.960, 1.041, 1.130, 1.225, 1.310, 1.350, 1.330,
+    1.291, 1.269, 1.265, 1.265, 1.262, 1.252, 1.237, 1.215, 1.185, 1.153,
+    1.119, 1.076, 1.017, 0.925, 0.809, 0.697, 0.607, 0.539, 0.501, 0.485,
+    0.485, 0.501, 0.547, 0.615, 0.670
+};
+
+static const luminosity_t lavedrine_autochrome_green_grain_10[] = {
+    4.000, 4.000, 4.000, 1.939, 1.784, 1.733, 1.696, 1.657, 1.614, 1.566,
+    1.513, 1.454, 1.383, 1.301, 1.207, 1.094, 0.952, 0.796, 0.660, 0.567,
+    0.520, 0.513, 0.537, 0.586, 0.655, 0.739, 0.839, 0.943, 1.019, 1.039,
+    1.022, 1.008, 1.009, 1.016, 1.025, 1.032, 1.036, 1.034, 1.021, 0.999,
+    0.967, 0.916, 0.836, 0.708, 0.556, 0.417, 0.313, 0.242, 0.202, 0.184,
+    0.181, 0.195, 0.234, 0.293, 0.345
+};
+
+// ==========================================
+// ORANGE GRAIN DATASETS (Tableau 3)
+// ==========================================
+
+
+
+static const luminosity_t lavedrine_autochrome_orange_grain_0[] = {
+    4.000, 4.000, 4.000, 1.950, 1.789, 1.761, 1.723, 1.685, 1.631, 1.570,
+    1.514, 1.475, 1.450, 1.441, 1.442, 1.447, 1.428, 1.374, 1.293, 1.226,
+    1.205, 1.240, 1.326, 1.451, 1.592, 1.694, 1.642, 1.392, 1.090, 0.855,
+    0.708, 0.633, 0.600, 0.586, 0.579, 0.576, 0.577, 0.580, 0.582, 0.583,
+    0.582, 0.576, 0.571, 0.559, 0.543, 0.526, 0.504, 0.475, 0.457, 0.453,
+    0.460, 0.482, 0.538, 0.614, 0.677
+};
+
+static const luminosity_t lavedrine_autochrome_orange_grain_1[] = {
+    4.000, 4.000, 1.840, 1.553, 1.467, 1.425, 1.391, 1.359, 1.326, 1.296,
+    1.268, 1.245, 1.225, 1.211, 1.198, 1.185, 1.153, 1.099, 1.038, 1.000,
+    0.998, 1.023, 1.064, 1.108, 1.120, 1.057, 0.918, 0.752, 0.602, 0.489,
+    0.419, 0.383, 0.369, 0.363, 0.362, 0.362, 0.363, 0.363, 0.361, 0.357,
+    0.350, 0.339, 0.325, 0.309, 0.289, 0.272, 0.257, 0.244, 0.239, 0.241,
+    0.250, 0.271, 0.315, 0.376, 0.425
+};
+
+static const luminosity_t lavedrine_autochrome_orange_grain_2[] = {
+    4.000, 4.000, 4.000, 1.832, 1.645, 1.550, 1.479, 1.420, 1.368, 1.325,
+    1.289, 1.262, 1.244, 1.237, 1.240, 1.251, 1.253, 1.236, 1.193, 1.149,
+    1.129, 1.136, 1.174, 1.231, 1.302, 1.380, 1.416, 1.279, 0.976, 0.698,
+    0.519, 0.426, 0.388, 0.373, 0.370, 0.369, 0.371, 0.370, 0.366, 0.359,
+    0.349, 0.334, 0.318, 0.300, 0.283, 0.268, 0.256, 0.245, 0.242, 0.245,
+    0.256, 0.276, 0.323, 0.386, 0.480
+};
+
+static const luminosity_t lavedrine_autochrome_orange_grain_3[] = {
+    4.000, 2.218, 1.537, 1.358, 1.288, 1.245, 1.210, 1.177, 1.147, 1.119,
+    1.095, 1.076, 1.062, 1.054, 1.049, 1.045, 1.029, 0.997, 0.953, 0.921,
+    0.916, 0.937, 0.977, 1.028, 1.080, 1.100, 1.030, 0.865, 0.670, 0.511,
+    0.409, 0.357, 0.336, 0.328, 0.325, 0.323, 0.323, 0.320, 0.317, 0.310,
+    0.300, 0.286, 0.273, 0.255, 0.235, 0.216, 0.202, 0.191, 0.187, 0.188,
+    0.197, 0.218, 0.259, 0.317, 0.363
+};
+
+static const luminosity_t lavedrine_autochrome_orange_grain_4[] = {
+    4.000, 4.000, 4.000, 1.841, 1.654, 1.556, 1.485, 1.431, 1.390, 1.356,
+    1.324, 1.294, 1.262, 1.232, 1.205, 1.179, 1.137, 1.078, 1.012, 0.962,
+    0.937, 0.938, 0.959, 0.995, 1.039, 1.074, 1.056, 0.939, 0.748, 0.567,
+    0.442, 0.376, 0.348, 0.335, 0.328, 0.322, 0.317, 0.310, 0.305, 0.299,
+    0.295, 0.290, 0.285, 0.276, 0.263, 0.252, 0.243, 0.236, 0.234, 0.238,
+    0.248, 0.270, 0.315, 0.378, 0.429
+};
+
+static const luminosity_t lavedrine_autochrome_orange_grain_5[] = {
+    4.000, 4.000, 2.328, 1.797, 1.720, 1.704, 1.690, 1.670, 1.643, 1.613,
+    1.578, 1.538, 1.488, 1.441, 1.402, 1.369, 1.326, 1.281, 1.245, 1.230,
+    1.240, 1.273, 1.327, 1.401, 1.465, 1.536, 1.440, 1.166, 0.872, 0.656,
+    0.529, 0.456, 0.440, 0.428, 0.422, 0.416, 0.411, 0.403, 0.394, 0.383,
+    0.372, 0.361, 0.350, 0.336, 0.319, 0.303, 0.288, 0.275, 0.270, 0.272,
+    0.280, 0.300, 0.344, 0.406, 0.457
+};
+
+static const luminosity_t lavedrine_autochrome_orange_grain_6[] = {
+    1.388, 1.407, 1.416, 1.407, 1.398, 1.390, 1.382, 1.374, 1.366, 1.358,
+    1.350, 1.343, 1.336, 1.329, 1.323, 1.316, 1.294, 1.249, 1.190, 1.145,
+    1.127, 1.139, 1.175, 1.232, 1.297, 1.340, 1.283, 1.071, 0.802, 0.586,
+    0.456, 0.389, 0.360, 0.346, 0.339, 0.333, 0.326, 0.318, 0.306, 0.294,
+    0.283, 0.273, 0.263, 0.251, 0.235, 0.217, 0.197, 0.182, 0.172, 0.166,
+    0.168, 0.181, 0.210, 0.254, 0.291
+};
+
+static const luminosity_t lavedrine_autochrome_orange_grain_7[] = {
+    4.000, 4.000, 2.516, 1.742, 1.588, 1.508, 1.447, 1.397, 1.353, 1.315,
+    1.282, 1.256, 1.234, 1.221, 1.213, 1.210, 1.195, 1.162, 1.111, 1.066,
+    1.049, 1.063, 1.104, 1.165, 1.239, 1.314, 1.328, 1.163, 0.879, 0.637,
+    0.485, 0.408, 0.376, 0.363, 0.358, 0.355, 0.353, 0.348, 0.343, 0.336,
+    0.326, 0.312, 0.298, 0.282, 0.264, 0.248, 0.233, 0.221, 0.217, 0.218,
+    0.227, 0.248, 0.291, 0.352, 0.401
+};
+
+static const luminosity_t lavedrine_autochrome_orange_grain_8[] = {
+    4.000, 4.000, 1.813, 1.598, 1.541, 1.523, 1.510, 1.496, 1.482, 1.466,
+    1.446, 1.423, 1.395, 1.364, 1.335, 1.306, 1.271, 1.229, 1.191, 1.168,
+    1.166, 1.182, 1.213, 1.256, 1.307, 1.346, 1.311, 1.134, 0.886, 0.676,
+    0.547, 0.476, 0.447, 0.434, 0.427, 0.421, 0.417, 0.412, 0.405, 0.396,
+    0.387, 0.377, 0.365, 0.348, 0.329, 0.312, 0.297, 0.286, 0.281, 0.283,
+    0.291, 0.310, 0.351, 0.410, 0.459
+};
+
+static const luminosity_t lavedrine_autochrome_orange_grain_9[] = {
+    4.000, 4.000, 4.000, 2.066, 1.942, 1.917, 1.894, 1.865, 1.824, 1.776,
+    1.721, 1.662, 1.595, 1.531, 1.474, 1.421, 1.359, 1.301, 1.264, 1.258,
+    1.285, 1.341, 1.420, 1.514, 1.616, 1.699, 1.665, 1.410, 1.082, 0.829,
+    0.672, 0.595, 0.563, 0.550, 0.544, 0.540, 0.536, 0.531, 0.523, 0.512,
+    0.500, 0.486, 0.473, 0.457, 0.440, 0.425, 0.411, 0.397, 0.391, 0.393,
+    0.403, 0.425, 0.472, 0.540, 0.594
+};
+
+static const luminosity_t lavedrine_autochrome_orange_grain_10[] = {
+    4.000, 4.000, 4.000, 1.990, 1.828, 1.777, 1.744, 1.714, 1.681, 1.643,
+    1.599, 1.553, 1.500, 1.447, 1.394, 1.342, 1.280, 1.215, 1.160, 1.127,
+    1.124, 1.147, 1.194, 1.262, 1.342, 1.420, 1.422, 1.231, 0.925, 0.667,
+    0.505, 0.422, 0.387, 0.375, 0.371, 0.370, 0.370, 0.369, 0.365, 0.357,
+    0.345, 0.332, 0.315, 0.296, 0.275, 0.256, 0.239, 0.225, 0.218, 0.219,
+    0.227, 0.248, 0.291, 0.354, 0.406
+};
+
 /* Based on Casella-Tsukada paper.  */
 static void
 set_dyes_to_autochrome2 (spectrum red, spectrum green, spectrum blue,
@@ -4586,6 +4893,56 @@ set_dyes_to (spectrum red, spectrum green, spectrum blue, spectrum cyan, spectru
 	compute_spectrum (blue, sizeof (autochrome_mees_pledge_blue) / sizeof (spectra_entry), autochrome_mees_pledge_blue, true);
 	break;
 	}
+      case spectrum_dyes_to_xyz::autochrome_lavedrine1:
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_0, true);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_0, true);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_0, true);
+	break;
+      case spectrum_dyes_to_xyz::autochrome_lavedrine2:
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_1, true);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_1, true);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_1, true);
+	break;
+      case spectrum_dyes_to_xyz::autochrome_lavedrine3:
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_2, true);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_2, true);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_2, true);
+	break;
+      case spectrum_dyes_to_xyz::autochrome_lavedrine4:
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_3, true);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_3, true);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_3, true);
+	break;
+      case spectrum_dyes_to_xyz::autochrome_lavedrine5:
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_4, true);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_4, true);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_4, true);
+	break;
+      case spectrum_dyes_to_xyz::autochrome_lavedrine6:
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_5, true);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_5, true);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_5, true);
+	break;
+      case spectrum_dyes_to_xyz::autochrome_lavedrine7:
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_6, true);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_6, true);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_6, true);
+	break;
+      case spectrum_dyes_to_xyz::autochrome_lavedrine8:
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_7, true);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_7, true);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_7, true);
+	break;
+      case spectrum_dyes_to_xyz::autochrome_lavedrine9:
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_8, true);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_8, true);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_8, true);
+	break;
+      case spectrum_dyes_to_xyz::autochrome_lavedrine10:
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_9, true);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_9, true);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_9, true);
+	break;
       case spectrum_dyes_to_xyz::debug_dyes:
 	compute_spectrum (red, sizeof (debug_red) / sizeof (spectra_entry), debug_red, false, 1, 0, 1);
 	compute_spectrum (green, sizeof (debug_green) / sizeof (spectra_entry), debug_green, false, 1, 0, 1);

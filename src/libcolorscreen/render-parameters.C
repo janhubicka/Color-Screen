@@ -38,6 +38,16 @@ const render_parameters::color_model_property render_parameters::color_model_pro
   { "dufaycolor_NSMM_Bradford_11960", "Dufaycolor NSMM Bradford 11960", "", SPECTRA_BASED | SUPPORTS_AGING },
   { "dufaycolor_NSMM_Bradford_11967", "Dufaycolor NSMM Bradford 11967", "", SPECTRA_BASED | SUPPORTS_AGING },
   { "spicer_dufay_NSMM_Bradford_12075", "Spicer-Dufay NSMM Bradford 12075", "", 0 },
+  { "autochrome_lavedrine1", "Autochrome measured by Bertrand Lavedrine, sample 1", "", SPECTRA_BASED },
+  { "autochrome_lavedrine2", "Autochrome measured by Bertrand Lavedrine, sample 2", "", SPECTRA_BASED },
+  { "autochrome_lavedrine3", "Autochrome measured by Bertrand Lavedrine, sample 3", "", SPECTRA_BASED },
+  { "autochrome_lavedrine4", "Autochrome measured by Bertrand Lavedrine, sample 4", "", SPECTRA_BASED },
+  { "autochrome_lavedrine5", "Autochrome measured by Bertrand Lavedrine, sample 5", "", SPECTRA_BASED },
+  { "autochrome_lavedrine6", "Autochrome measured by Bertrand Lavedrine, sample 6", "", SPECTRA_BASED },
+  { "autochrome_lavedrine7", "Autochrome measured by Bertrand Lavedrine, sample 7", "", SPECTRA_BASED },
+  { "autochrome_lavedrine8", "Autochrome measured by Bertrand Lavedrine, sample 8", "", SPECTRA_BASED },
+  { "autochrome_lavedrine9", "Autochrome measured by Bertrand Lavedrine, sample 9", "", SPECTRA_BASED },
+  { "autochrome_lavedrine10", "Autochrome measured by Bertrand Lavedrine, sample 10", "", SPECTRA_BASED },
   { "autochrome_ciortan_arteaga_trumpy", "Autochrome unfaded, Ciortan-Arteaga-Trumpy 2025", "", SPECTRA_BASED },
   { "cinecolor_koshofer", "Cinecolor Koshofer", "", SPECTRA_BASED },
   { "autochrome_Casella_Tsukada", "Autochrome Casella Tsukada", "", SPECTRA_BASED | SUPPORTS_AGING },
@@ -303,6 +313,66 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	  dyes = matrix_by_dye_xy (0.620, 0.315,
 				   0.304, 0.541,
 				   0.182, 0.135);
+	  break;
+	}
+      case render_parameters::color_model_autochrome_lavedrine1:
+	{
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
+	  spect->set_dyes (spectrum_dyes_to_xyz::autochrome_lavedrine1);
+	  break;
+	}
+      case render_parameters::color_model_autochrome_lavedrine2:
+	{
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
+	  spect->set_dyes (spectrum_dyes_to_xyz::autochrome_lavedrine2);
+	  break;
+	}
+      case render_parameters::color_model_autochrome_lavedrine3:
+	{
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
+	  spect->set_dyes (spectrum_dyes_to_xyz::autochrome_lavedrine3);
+	  break;
+	}
+      case render_parameters::color_model_autochrome_lavedrine4:
+	{
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
+	  spect->set_dyes (spectrum_dyes_to_xyz::autochrome_lavedrine4);
+	  break;
+	}
+      case render_parameters::color_model_autochrome_lavedrine5:
+	{
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
+	  spect->set_dyes (spectrum_dyes_to_xyz::autochrome_lavedrine5);
+	  break;
+	}
+      case render_parameters::color_model_autochrome_lavedrine6:
+	{
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
+	  spect->set_dyes (spectrum_dyes_to_xyz::autochrome_lavedrine6);
+	  break;
+	}
+      case render_parameters::color_model_autochrome_lavedrine7:
+	{
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
+	  spect->set_dyes (spectrum_dyes_to_xyz::autochrome_lavedrine7);
+	  break;
+	}
+      case render_parameters::color_model_autochrome_lavedrine8:
+	{
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
+	  spect->set_dyes (spectrum_dyes_to_xyz::autochrome_lavedrine8);
+	  break;
+	}
+      case render_parameters::color_model_autochrome_lavedrine9:
+	{
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
+	  spect->set_dyes (spectrum_dyes_to_xyz::autochrome_lavedrine9);
+	  break;
+	}
+      case render_parameters::color_model_autochrome_lavedrine10:
+	{
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
+	  spect->set_dyes (spectrum_dyes_to_xyz::autochrome_lavedrine10);
 	  break;
 	}
       case render_parameters::color_model_autochrome_ciortan_arteaga_trumpy:

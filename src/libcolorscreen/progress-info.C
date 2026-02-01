@@ -185,6 +185,10 @@ progress_info::pop (int expected, bool safe)
   if (m_task && time_report)
     record_time (m_task, m_start_time);
   m_task = t.task;
+  if (!(expected == -1 || (int)stack.size () - 1 == expected))
+    {
+      printf ("Start size %i expected %i task %s\n", (int)stack.size (), expected, (const char *)m_task);
+    }
   assert (expected == -1 || (int)stack.size () - 1 == expected);
   stack.pop_back ();
   if (m_record_time || time_report)
