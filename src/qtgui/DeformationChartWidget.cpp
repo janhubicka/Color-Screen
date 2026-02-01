@@ -43,7 +43,7 @@ DeformationChartWidget::DeformationChartWidget(QWidget *parent)
     
     mainLayout->addLayout(sliderLayout);
     
-    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
 }
 
 void DeformationChartWidget::setDeformationData(
@@ -122,12 +122,8 @@ int DeformationChartWidget::heightForWidth(int width) const
     int desiredContentHeight = static_cast<int>(availableWidth / aspectRatio);
 
     // Limit height for portrait images to prevent excessive vertical space usage.
-    // However, user requested "space needed", so we shouldn't compress it too much unless necessary.
-    // Removing artificial clamp to satisfy "determine size from width" request.
-    /*
     int maxContentHeight = availableWidth; 
     if (desiredContentHeight > maxContentHeight) desiredContentHeight = maxContentHeight;
-    */
     
     // Ensure at least some visibility
     if (desiredContentHeight < 50) desiredContentHeight = 50;

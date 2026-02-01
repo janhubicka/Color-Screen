@@ -4,9 +4,10 @@
 
 ScalableImageLabel::ScalableImageLabel(QWidget *parent)
     : QWidget(parent) {
-  // Use Preferred so sizeHint is respected as the initial/ideal size,
-  // but shrinking is allowed down to minimumSizeHint.
-  setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+  // Use Preferred horizontal so it adapts to width.
+  // Use Minimum vertical so it enforces the heightForWidth aspect ratio,
+  // preventing it from being squashed (forces scrollbar if needed).
+  setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
 }
 
 void ScalableImageLabel::setPixmap(const QPixmap &pixmap) {
