@@ -208,7 +208,7 @@ public:
   std::shared_ptr<screen> original_scr;
   /* Screen with emulsion.  */
   std::shared_ptr<screen> emulsion_scr;
-  mtf_parameters mtf_params;
+  sharpen_parameters render_sharpen_params;
 
   finetune_solver ()
       : gsl_work (NULL), gsl_X (NULL), gsl_y{ NULL, NULL, NULL }, gsl_c (NULL),
@@ -245,6 +245,8 @@ public:
   coord_t pixel_size;
   scr_type type;
 
+  /* True if tile is already sharpened.  */
+  bool tile_sharpened;
   /* Try to adjust position of center of the patches (+- range)  */
   bool optimize_position;
   /* Try adjusting coordinate1 (rotation/scale)  */
@@ -485,7 +487,7 @@ public:
   get_scanner_mtf_sigma (coord_t *v)
   {
     if (!optimize_scanner_mtf_sigma)
-      return mtf_params.sigma;
+      return render_sharpen_params.scanner_mtf.sigma;
     return v[mtf_sigma_index];
   }
 
@@ -494,7 +496,7 @@ public:
   get_scanner_mtf_defocus (coord_t *v)
   {
     if (!optimize_scanner_mtf_defocus && !optimize_scanner_mtf_channel_defocus)
-      return mtf_params.simulate_difraction_p () ? mtf_params.defocus : mtf_params.blur_diameter;
+      return render_sharpen_params.scanner_mtf.simulate_difraction_p () ? render_sharpen_params.scanner_mtf.defocus : render_sharpen_params.scanner_mtf.blur_diameter;
     if (optimize_scanner_mtf_channel_defocus)
       return (v[mtf_defocus_index] + v[mtf_defocus_index + 1] + v[mtf_defocus_index + 2]) * (1/(coord_t)3);
     return v[mtf_defocus_index];
@@ -505,7 +507,7 @@ public:
   {
     if (!optimize_scanner_mtf_defocus && !optimize_scanner_mtf_channel_defocus)
       {
-	auto r = mtf_params.simulate_difraction_p () ? mtf_params.defocus : mtf_params.blur_diameter;
+	auto r = render_sharpen_params.scanner_mtf.simulate_difraction_p () ? render_sharpen_params.scanner_mtf.defocus : render_sharpen_params.scanner_mtf.blur_diameter;
 	return { (luminosity_t)r, (luminosity_t)r, (luminosity_t)r };
       }
     if (!optimize_scanner_mtf_channel_defocus)
@@ -674,7 +676,7 @@ public:
       printf ("Scanner mtf sigma %f px\n", get_scanner_mtf_sigma (v));
     if (optimize_scanner_mtf_defocus)
       {
-	if (!mtf_params.simulate_difraction_p ())
+	if (!render_sharpen_params.scanner_mtf.simulate_difraction_p ())
           printf ("Scanner mtf blur diameter %f px\n", get_scanner_mtf_defocus (v));
 	else
           printf ("Scanner mtf defocus %f mm\n", get_scanner_mtf_defocus (v));
@@ -682,7 +684,7 @@ public:
     if (optimize_scanner_mtf_channel_defocus)
       {
         rgbdata b = get_scanner_mtf_channel_defocus (v);
-	if (!mtf_params.simulate_difraction_p ())
+	if (!render_sharpen_params.scanner_mtf.simulate_difraction_p ())
           printf ("Scanner mtf blur diameter %f px (red) %f px (green) %f px (blue)\n",
 		  b.red, b.green, b.blue);
 	else
@@ -1108,6 +1110,9 @@ public:
     bw_is_simulated_infrared = sim_infrared;
 
     /* First decide on what to optimize.  */
+    tile_sharpened = false;
+    if (tiles[0].bw)
+      tile_sharpened = true;
     optimize_position = flags & finetune_position;
     optimize_coordinate1 = flags & finetune_coordinates;
     optimize_screen_blur = flags & finetune_screen_blur;
@@ -1693,10 +1698,11 @@ public:
       {
 	sharpen_parameters sp, sp_green, sp_blue;
 	sharpen_parameters *vs[3] = {&sp, &sp, &sp};
-	sp.scanner_mtf = mtf_params;
+	sp = render_sharpen_params;
+	//sp.scanner_mtf = mtf_params;
 	sp.scanner_mtf.sigma = get_scanner_mtf_sigma (v);
-	sp.scanner_mtf_scale = pixel_size;
-	sp.mode = sharpen_parameters::none;
+	sp.scanner_mtf_scale *= pixel_size;
+	//sp.mode = sharpen_parameters::none;
 	if (sp.scanner_mtf.simulate_difraction_p ())
 	  {
 	    sp.scanner_mtf.defocus = get_scanner_mtf_defocus (v);
@@ -1738,7 +1744,7 @@ public:
 		sp_blue.scanner_mtf.blur_diameter = blur_diameter.blue;
 	      }
 	  }
-	dst_scr->initialize_with_sharpen_parameters (*src_scr, vs, false);
+	dst_scr->initialize_with_sharpen_parameters (*src_scr, vs, tile_sharpened);
       }
     else
       dst_scr->initialize_with_blur (*src_scr, blur * pixel_size);
@@ -2975,15 +2981,15 @@ public:
     ret.center = param.center + get_offset (start, 0);
     ret.coordinate1 = param.coordinate1;
     ret.coordinate2 = param.coordinate2;
-    if (mtf_params.simulate_difraction_p ())
+    if (render_sharpen_params.scanner_mtf.simulate_difraction_p ())
       {
 	ret.scanner_mtf_defocus = get_scanner_mtf_defocus (start);
-	ret.scanner_mtf_blur_diameter = mtf_params.blur_diameter;
+	ret.scanner_mtf_blur_diameter = render_sharpen_params.scanner_mtf.blur_diameter;
       }
     else
       {
 	ret.scanner_mtf_blur_diameter = get_scanner_mtf_defocus (start);
-	ret.scanner_mtf_defocus = mtf_params.defocus;
+	ret.scanner_mtf_defocus = render_sharpen_params.scanner_mtf.defocus;
       }
     ret.scanner_mtf_channel_defocus_or_blur = get_scanner_mtf_channel_defocus (start);
     ret.screen_blur_radius = get_blur_radius (start);
@@ -3362,7 +3368,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
             solver.twidth = twidth;
             solver.theight = theight;
             solver.pixel_size = pixel_size;
-	    solver.mtf_params = rparam.sharpen.scanner_mtf;
+	    solver.render_sharpen_params = rparam.sharpen;
             solver.collection_threshold = rparam.collection_threshold;
             if (!solver.init_tile (0, cur_txmin, cur_tymin, bw, *mapp[0],
                                    render))
@@ -3402,7 +3408,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
       best_solver.twidth = twidth;
       best_solver.theight = theight;
       best_solver.collection_threshold = rparam.collection_threshold;
-      best_solver.mtf_params = rparam.sharpen.scanner_mtf;
+      best_solver.render_sharpen_params = rparam.sharpen;
       best_solver.pixel_size = pixel_size;
       for (int tileid = 0; tileid < n_tiles; tileid++)
         {
