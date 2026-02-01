@@ -292,7 +292,7 @@ public:
   bool
   verbose ()
   {
-    return true;
+    return false;
   }
   void
   constrain (coord_t *vals)
