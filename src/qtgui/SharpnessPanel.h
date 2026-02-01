@@ -8,11 +8,14 @@ class QLabel;
 class QWidget;
 class QImage;
 class QTimer;
+class QVBoxLayout;
+class FinetuneImagesPanel;
 template <typename T> class QFutureWatcher;
 
 namespace colorscreen {
 struct progress_info;
 struct sharpen_parameters;
+struct finetune_result;
 } // namespace colorscreen
 
 #include "TilePreviewPanel.h"
@@ -29,9 +32,12 @@ public:
 
   // Methods to handle re-attaching
   void reattachMTFChart(QWidget *widget);
+  void updateFinetuneImages(const colorscreen::finetune_result& result);
+  void reattachFinetuneImages(QWidget *widget);
 
 signals:
   void detachMTFChartRequested(QWidget *widget);
+  void detachFinetuneImagesRequested(QWidget *widget);
   void autodetectRequested();
   void focusAnalysisRequested();
 
@@ -55,6 +61,8 @@ private:
   class QLabel *m_diffractionNotice = nullptr;
   QVBoxLayout *m_mtfContainer = nullptr; // Container Layout
   QVBoxLayout *m_measurementsLayout = nullptr;
+  FinetuneImagesPanel *m_finetuneImagesPanel = nullptr;
+  QVBoxLayout *m_finetuneImagesContainer = nullptr;
   std::vector<colorscreen::mtf_measurement> m_lastMeasurements;
 
   // Cached parameters for change detection (moved from private to be used in

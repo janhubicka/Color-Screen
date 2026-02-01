@@ -3,6 +3,7 @@
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/scr-to-img.h"
 #include "MTFChartWidget.h"
+#include "FinetuneImagesPanel.h"
 #include <QDebug>
 #include <QCheckBox>
 #include <QComboBox>
@@ -381,6 +382,25 @@ void SharpnessPanel::setupUi() {
   addButtonParameter("", tr("Analyze area"), [this]() {
     emit focusAnalysisRequested();
   });
+
+  // Finetune diagnostic images section (initially hidden)
+  m_finetuneImagesPanel = new FinetuneImagesPanel();
+  m_finetuneImagesPanel->hide();
+
+  QWidget *fiWrapper = new QWidget();
+  m_finetuneImagesContainer = new QVBoxLayout(fiWrapper);
+  m_finetuneImagesContainer->setContentsMargins(0, 0, 0, 0);
+
+  QWidget *detachableFI =
+      createDetachableSection("Finetune Diagnostic Images", m_finetuneImagesPanel, [this]() {
+        emit detachFinetuneImagesRequested(m_finetuneImagesPanel);
+      });
+  m_finetuneImagesContainer->addWidget(detachableFI);
+
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(fiWrapper);
+  else
+    m_form->addRow(fiWrapper);
 }
 
 void SharpnessPanel::updateMTFChart() {
@@ -723,4 +743,45 @@ void SharpnessPanel::updateMeasurementList() {
 
         m_measurementsLayout->addWidget(row);
     }
+}
+void SharpnessPanel::updateFinetuneImages(const colorscreen::finetune_result& result) {
+    if (m_finetuneImagesPanel) {
+        m_finetuneImagesPanel->setFinetuneResult(result);
+        m_finetuneImagesPanel->show();
+        // Force layout update of the section container
+        if (m_finetuneImagesPanel->parentWidget()) {
+            m_finetuneImagesPanel->parentWidget()->show();
+        }
+    }
+}
+
+void SharpnessPanel::reattachFinetuneImages(QWidget *widget) {
+  if (widget != m_finetuneImagesPanel)
+    return;
+
+  if (m_finetuneImagesContainer && m_finetuneImagesContainer->count() > 0) {
+    QWidget *section = m_finetuneImagesContainer->itemAt(0)->widget();
+    if (section && section->layout()) {
+      // Remove placeholder (last item)
+      QLayoutItem *item =
+          section->layout()->takeAt(section->layout()->count() - 1);
+      if (item) {
+        if (item->widget())
+          delete item->widget();
+        delete item;
+      }
+
+      // Add widget back
+      section->layout()->addWidget(widget);
+      widget->show();
+
+      // Show header again
+      if (section->layout()->count() > 0) {
+        QLayoutItem *headerItem = section->layout()->itemAt(0);
+        if (headerItem && headerItem->widget()) {
+          headerItem->widget()->show();
+        }
+      }
+    }
+  }
 }

@@ -300,7 +300,8 @@ private:
   QDockWidget *m_nonlinearDock;
   QDockWidget *m_backlightDock;
   BacklightChartWidget *m_backlightChart;
-  QDockWidget *m_finetuneImagesDock; // Finetune diagnostic images dock
+  QDockWidget *m_finetuneImagesDock; // Finetune diagnostic images dock (Geometry)
+  QDockWidget *m_sharpnessFinetuneImagesDock; // Finetune diagnostic images dock (Sharpness)
   QDockWidget *m_gamutDock; // Gamut visualization dock
   QDockWidget *m_correctedGamutDock; // Corrected gamut visualization dock
 

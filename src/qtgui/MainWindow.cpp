@@ -352,10 +352,15 @@ void MainWindow::setupUi() {
   m_backlightDock->setVisible(false);
   addDockWidget(Qt::RightDockWidgetArea, m_backlightDock);
 
-  m_finetuneImagesDock = new QDockWidget("Finetune Diagnostic Images", this);
+  m_finetuneImagesDock = new QDockWidget("Finetune Diagnostic Images (Geometry)", this);
+  m_sharpnessFinetuneImagesDock = new QDockWidget("Finetune Diagnostic Images (Sharpness)", this);
   m_finetuneImagesDock->setObjectName("FinetuneImagesDock");
   m_finetuneImagesDock->setVisible(false);
   addDockWidget(Qt::RightDockWidgetArea, m_finetuneImagesDock);
+
+  m_sharpnessFinetuneImagesDock->setObjectName("SharpnessFinetuneImagesDock");
+  m_sharpnessFinetuneImagesDock->setVisible(false);
+  addDockWidget(Qt::RightDockWidgetArea, m_sharpnessFinetuneImagesDock);
 
   // Event Filter for robust Close detection
   class DockCloseEventFilter : public QObject {
@@ -527,6 +532,10 @@ void MainWindow::setupUi() {
   setupDock(m_finetuneImagesDock, m_geometryPanel,
             &GeometryPanel::detachFinetuneImagesRequested,
             &GeometryPanel::reattachFinetuneImages);
+
+  setupDock(m_sharpnessFinetuneImagesDock, m_sharpnessPanel,
+            &SharpnessPanel::detachFinetuneImagesRequested,
+            &SharpnessPanel::reattachFinetuneImages);
 
   m_configTabs->addTab(m_capturePanel, "Digital capture");
   connect(m_capturePanel, &CapturePanel::cropRequested, this, &MainWindow::onCropRequested);
@@ -2656,7 +2665,8 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t 
     fparam.flags |= colorscreen::finetune_position | colorscreen::finetune_bw |
                     colorscreen::finetune_verbose |
                     colorscreen::finetune_scanner_mtf_sigma |
-                    colorscreen::finetune_scanner_mtf_defocus;
+                    colorscreen::finetune_scanner_mtf_defocus |
+                    colorscreen::finetune_produce_images;
 
     auto progress = std::make_shared<colorscreen::progress_info>();
     progress->set_task("Focus analysis", 0);
@@ -2683,6 +2693,7 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t 
       m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
                                       &m_detectParams, &m_renderTypeParams,
                                       &m_solverParams);
+      m_sharpnessPanel->updateFinetuneImages(res);
       updateUIFromState(newState);
     }
     return;
