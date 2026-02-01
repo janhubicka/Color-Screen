@@ -1105,14 +1105,13 @@ public:
   void
   init (uint64_t flags, coord_t blur_radius, coord_t red_strip_width,
         coord_t green_strip_height, bool sim_infrared,
+	bool is_tile_sharpened,
         const std::vector<finetune_result> *results)
   {
     bw_is_simulated_infrared = sim_infrared;
 
     /* First decide on what to optimize.  */
-    tile_sharpened = false;
-    if (tiles[0].bw)
-      tile_sharpened = true;
+    tile_sharpened = is_tile_sharpened;
     optimize_position = flags & finetune_position;
     optimize_coordinate1 = flags & finetune_coordinates;
     optimize_screen_blur = flags & finetune_screen_blur;
@@ -3126,6 +3125,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
           const finetune_parameters &fparams, progress_info *progress)
 {
   finetune_result ret;
+  bool tile_sharpened = false;
 
   int n_tiles = locs.size ();
   if (fparams.flags & finetune_coordinates)
@@ -3285,6 +3285,19 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   bool failed = false;
 
   render_parameters rparam2 = rparam;
+  /* Working with sharpened tile is easier, since it is likely already
+     used by renderers.  But if we are finetuning sharpening, we must
+     use unsharpened data, so the parameters can be adjusted.
+     TODO: It is not clear if sharpening does decrease quality of the
+     simulation.  */
+  if (bw)
+    {
+      if (fparams.flags & (finetune_screen_blur | finetune_screen_channel_blurs | finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus))
+	rparam2.sharpen.mode = sharpen_parameters::none;
+      else
+	tile_sharpened = true;
+    }
+
   rparam2.invert = 0;
   int maxtiles = fparams.multitile;
   if (maxtiles < 1)
@@ -3346,7 +3359,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
 #pragma omp parallel for default(none) collapse(2) schedule(dynamic)          \
     shared(fparams, maxtiles, rparam, pixel_size, best_uncertainity, verbose, \
                std::nothrow, imgp, twidth, theight, txmin, tymin, bw,         \
-               progress, mapp, render, failed, best_solver, results, bw_is_simulated_infrared)
+               progress, mapp, render, failed, best_solver, results, bw_is_simulated_infrared, tile_sharpened)
       for (int ty = 0; ty < maxtiles; ty++)
         for (int tx = 0; tx < maxtiles; tx++)
           {
@@ -3378,7 +3391,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
               }
             solver.init (fparams.flags, rparam.screen_blur_radius,
                          rparam.red_strip_width,
-                         rparam.green_strip_width, bw_is_simulated_infrared, results);
+                         rparam.green_strip_width, bw_is_simulated_infrared, tile_sharpened, results);
             if (progress && progress->cancel_requested ())
               continue;
             coord_t uncertainity = solver.solve (
@@ -3451,7 +3464,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
         }
       best_solver.init (fparams.flags, rparam.screen_blur_radius,
                         rparam.red_strip_width,
-                        rparam.green_strip_width, bw_is_simulated_infrared, results);
+			rparam.green_strip_width, bw_is_simulated_infrared,
+			tile_sharpened, results);
       /* FIXME: For parallel solving this will yield race condition  */
       gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
       best_uncertainity = best_solver.solve (

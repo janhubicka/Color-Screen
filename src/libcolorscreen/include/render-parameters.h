@@ -674,7 +674,7 @@ struct render_parameters
   {
     xy_t red, green, blue, whitepoint;
   };
-  gamut get_gamut (bool corrected, scr_type type) const;
+  DLL_PUBLIC gamut get_gamut (bool corrected, scr_type type) const;
 
 private:
   static const bool debug = colorscreen_checking;
