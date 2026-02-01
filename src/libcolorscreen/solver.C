@@ -332,6 +332,8 @@ public:
       m_param.lens_correction.center = { 0, vals[0] };
     else if (m_param.scanner_type == lens_move_vertically)
       m_param.lens_correction.center = { vals[0], 0 };
+    else
+      abort ();
     m_param.lens_correction.kr[0] = 1;
     m_param.lens_correction.kr[1] = vals[n] * (1 / scale_kr);
     m_param.lens_correction.kr[2] = vals[n + 1] * (1 / scale_kr);
