@@ -250,73 +250,30 @@ private:
   inverse_lens_correction (point_t sp) const
   {
     point_t shift = { 0, 0 };
-#if 1
-    static int printed;
     if (m_param.scanner_type == lens_move_horisontally)
-    {
       shift.x = sp.x;
-      if (!printed)
-	      fprintf (stderr, "lens move horisontally\n");
-      printed = true;
-    }
     if (m_param.scanner_type == lens_move_vertically)
-    {
       shift.y = sp.y;
-      if (!printed)
-	      fprintf (stderr, "lens move horisontally\n");
-      printed = true;
-    }
-#endif
     return m_lens_correction.corrected_to_scan (sp - shift) + shift;
   }
   pure_attr point_t
   nonprecomputed_apply_lens_correction (point_t sp) const
   {
     point_t shift = { 0, 0 };
-#if 1
-    static int printed;
     if (m_param.scanner_type == lens_move_horisontally)
-    {
       shift.x = sp.x;
-      if (!printed)
-	      fprintf (stderr, "lens move horisontally\n");
-      printed = true;
-    }
     if (m_param.scanner_type == lens_move_vertically)
-    {
       shift.y = sp.y;
-      if (!printed)
-	      fprintf (stderr, "lens move horisontally\n");
-      printed = true;
-    }
-#endif
     return m_lens_correction.nonprecomputed_scan_to_corrected (sp - shift) + shift;
   }
   pure_attr point_t
   apply_lens_correction (point_t sp) const
   {
     point_t shift = { 0, 0 };
-#if 1
     if (m_param.scanner_type == lens_move_horisontally)
       shift.x = sp.x;
     if (m_param.scanner_type == lens_move_vertically)
       shift.y = sp.y;
-    static int printed;
-    if (m_param.scanner_type == lens_move_horisontally)
-    {
-      shift.x = sp.x;
-      if (!printed)
-	      fprintf (stderr, "lens move horisontally\n");
-      printed = true;
-    }
-    if (m_param.scanner_type == lens_move_vertically)
-    {
-      shift.y = sp.y;
-      if (!printed)
-	      fprintf (stderr, "lens move horisontally\n");
-      printed = true;
-    }
-#endif
     return m_lens_correction.scan_to_corrected (sp - shift) + shift;
   }
   static const bool debug = colorscreen_checking;
