@@ -126,6 +126,8 @@ private:
 SharpnessPanel::SharpnessPanel(StateGetter stateGetter, StateSetter stateSetter,
                                ImageGetter imageGetter, QWidget *parent)
     : TilePreviewPanel(stateGetter, stateSetter, imageGetter, parent) {
+  m_finetuneFlags = colorscreen::finetune_scanner_mtf_sigma |
+                    colorscreen::finetune_scanner_mtf_defocus;
   setDebounceInterval(5);
   setupUi();
 }
@@ -379,8 +381,29 @@ void SharpnessPanel::setupUi() {
       });
 
   addSeparator("Focus analyzer");
-  addButtonParameter("", tr("Analyze area"), [this]() {
-    emit focusAnalysisRequested();
+  
+  addCheckboxParameter(
+      "Optimize Sigma",
+      [this](const ParameterState &) {
+        return (m_finetuneFlags & colorscreen::finetune_scanner_mtf_sigma) != 0;
+      },
+      [this](ParameterState &, bool v) {
+        if (v) m_finetuneFlags |= colorscreen::finetune_scanner_mtf_sigma;
+        else m_finetuneFlags &= ~colorscreen::finetune_scanner_mtf_sigma;
+      });
+
+  addCheckboxParameter(
+      "Optimize Defocus",
+      [this](const ParameterState &) {
+        return (m_finetuneFlags & colorscreen::finetune_scanner_mtf_defocus) != 0;
+      },
+      [this](ParameterState &, bool v) {
+        if (v) m_finetuneFlags |= colorscreen::finetune_scanner_mtf_defocus;
+        else m_finetuneFlags &= ~colorscreen::finetune_scanner_mtf_defocus;
+      });
+
+  m_analyzeAreaBtn = addToggleButtonParameter("", tr("Analyze area"), [this](bool checked) {
+    emit focusAnalysisRequested(checked, m_finetuneFlags);
   });
 
   // Finetune diagnostic images section (initially hidden)
@@ -784,4 +807,12 @@ void SharpnessPanel::reattachFinetuneImages(QWidget *widget) {
       }
     }
   }
+}
+
+void SharpnessPanel::setFocusAnalysisChecked(bool checked) {
+    if (m_analyzeAreaBtn) {
+        m_analyzeAreaBtn->blockSignals(true);
+        m_analyzeAreaBtn->setChecked(checked);
+        m_analyzeAreaBtn->blockSignals(false);
+    }
 }

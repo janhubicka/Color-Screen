@@ -34,12 +34,13 @@ public:
   void reattachMTFChart(QWidget *widget);
   void updateFinetuneImages(const colorscreen::finetune_result& result);
   void reattachFinetuneImages(QWidget *widget);
+  void setFocusAnalysisChecked(bool checked);
 
 signals:
   void detachMTFChartRequested(QWidget *widget);
   void detachFinetuneImagesRequested(QWidget *widget);
   void autodetectRequested();
-  void focusAnalysisRequested();
+  void focusAnalysisRequested(bool checked, uint64_t flags);
 
 protected:
   // TilePreviewPanel overrides
@@ -73,6 +74,8 @@ private:
   colorscreen::sharpen_parameters m_lastSharpen;
   double m_lastRedStripWidth = 0.0;
   double m_lastGreenStripWidth = 0.0;
+  class QPushButton *m_analyzeAreaBtn = nullptr;
+  uint64_t m_finetuneFlags = 0;
 };
 
 #endif // SHARPNESS_PANEL_H

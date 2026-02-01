@@ -3,6 +3,7 @@
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/progress-info.h"
 #include "../libcolorscreen/include/render-parameters.h"
+#include "../libcolorscreen/include/finetune.h"
 #include "../libcolorscreen/include/render-type-parameters.h" // Added
 #include "../libcolorscreen/include/scr-detect-parameters.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
@@ -104,7 +105,8 @@ private slots:
   void onPointManipulationStarted();
   void updateRegistrationActions();
   void maybeTriggerAutoSolver();
-  void onFocusAnalysisRequested();
+  void onFocusAnalysisRequested(bool checked, uint64_t flags);
+  void onFocusAnalysisFinished(bool success, colorscreen::finetune_result result);
 
   // Recent Files
   // Recent Files
@@ -310,6 +312,7 @@ private:
   QString m_currentParamsFile;
   bool m_currentParamsFileIsWeak = false; // true if filename is suggested, not loaded
   bool m_focusAnalysisPending = false;
+  uint64_t m_focusAnalysisFlags = 0;
 
   // Crash recovery
   QString m_recoveryDir;

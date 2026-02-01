@@ -21,6 +21,8 @@
 #include <QFile>
 #include <QTextStream>
 #include <QComboBox>
+#include "FocusAnalysisWorker.h"
+#include <QElapsedTimer>
 #include <QDateTime>   // Added QDateTime include
 #include <QDockWidget> // Added
 #include <QDoubleSpinBox>
@@ -2658,44 +2660,35 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t 
     m_focusAnalysisPending = false;
     m_imageWidget->setInteractionMode(ImageWidget::PanMode);
 
-    // Finetuning focus
     colorscreen::finetune_parameters fparam;
     fparam.multitile = 3;
     fparam.range = 4;
+    fparam.flags = m_focusAnalysisFlags;
     fparam.flags |= colorscreen::finetune_position | colorscreen::finetune_bw |
                     colorscreen::finetune_verbose |
-                    colorscreen::finetune_scanner_mtf_sigma |
-                    colorscreen::finetune_scanner_mtf_defocus |
                     colorscreen::finetune_produce_images;
 
     auto progress = std::make_shared<colorscreen::progress_info>();
     progress->set_task("Focus analysis", 0);
-    colorscreen::sub_task task(progress.get());
     addProgress(progress);
 
-    colorscreen::finetune_result res = colorscreen::finetune(
-        m_rparams, m_scrToImgParams, *m_scan, {{imgPos.x, imgPos.y}}, nullptr,
-        fparam, progress.get());
+    FocusAnalysisWorker *worker = new FocusAnalysisWorker(
+        m_rparams, m_scrToImgParams, m_scan, imgPos, fparam, progress);
+    QThread *thread = new QThread();
+    worker->moveToThread(thread);
 
-    removeProgress(progress);
+    connect(thread, &QThread::started, worker, &FocusAnalysisWorker::run);
+    connect(worker, &FocusAnalysisWorker::finished, this, [this, worker, thread, progress](bool success, colorscreen::finetune_result result) {
+        onFocusAnalysisFinished(success, result);
+        removeProgress(progress);
+        worker->deleteLater();
+        thread->quit();
+        thread->wait();
+        thread->deleteLater();
+    });
 
-    if (res.success) {
-      ParameterState oldState = getCurrentState();
-      m_rparams.sharpen.scanner_mtf.sigma = res.scanner_mtf_sigma;
-      m_rparams.sharpen.scanner_mtf.defocus = res.scanner_mtf_defocus;
-      m_rparams.sharpen.scanner_mtf.blur_diameter =
-          res.scanner_mtf_blur_diameter;
-
-      ParameterState newState = getCurrentState();
-      m_undoStack->push(new ChangeParametersCommand(this, oldState, newState,
-                                                     "Focus analysis"));
-
-      m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
-                                      &m_detectParams, &m_renderTypeParams,
-                                      &m_solverParams);
-      m_sharpnessPanel->updateFinetuneImages(res);
-      updateUIFromState(newState);
-    }
+    thread->start();
+    m_finetuneThreads.push_back(thread);
     return;
   }
 
@@ -3145,10 +3138,41 @@ void MainWindow::onFlatFieldFinished(bool success, std::shared_ptr<colorscreen::
   
   QMessageBox::information(this, "Flat Field", "Flat field analysis successful.");
 }
-void MainWindow::onFocusAnalysisRequested() {
+void MainWindow::onFocusAnalysisRequested(bool checked, uint64_t flags) {
   if (!m_imageWidget)
     return;
-  m_focusAnalysisPending = true;
-  m_imageWidget->setInteractionMode(ImageWidget::AddPointMode);
-  statusBar()->showMessage(tr("Select point for focus analysis"), 5000);
+  m_focusAnalysisPending = checked;
+  m_focusAnalysisFlags = flags;
+  if (checked) {
+    m_imageWidget->setInteractionMode(ImageWidget::AddPointMode);
+    statusBar()->showMessage(tr("Select point for focus analysis"), 5000);
+  } else {
+    m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+    statusBar()->clearMessage();
+  }
+}
+
+void MainWindow::onFocusAnalysisFinished(bool success, colorscreen::finetune_result res) {
+  if (m_sharpnessPanel) {
+    m_sharpnessPanel->setFocusAnalysisChecked(false);
+  }
+
+  if (success) {
+    ParameterState oldState = getCurrentState();
+    m_rparams.sharpen.scanner_mtf.sigma = res.scanner_mtf_sigma;
+    m_rparams.sharpen.scanner_mtf.defocus = res.scanner_mtf_defocus;
+    m_rparams.sharpen.scanner_mtf.blur_diameter = res.scanner_mtf_blur_diameter;
+
+    ParameterState newState = getCurrentState();
+    m_undoStack->push(
+        new ChangeParametersCommand(this, oldState, newState, "Focus analysis"));
+    m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
+                                    &m_detectParams, &m_renderTypeParams,
+                                    &m_solverParams);
+    m_sharpnessPanel->updateFinetuneImages(res);
+    updateUIFromState(newState);
+    statusBar()->showMessage(tr("Focus analysis complete"), 3000);
+  } else {
+    statusBar()->showMessage(tr("Focus analysis failed"), 3000);
+  }
 }
