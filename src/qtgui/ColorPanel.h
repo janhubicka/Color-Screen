@@ -47,8 +47,6 @@ protected:
 private:
   void setupUi();
   void updateSpectraChart();
-  void updateGamutChart();
-  void updateCorrectedGamutChart();
   void applyChange(std::function<void(ParameterState &)> modifier, const QString &description = QString()) override;
 
   // Cached parameters for change detection
@@ -60,18 +58,25 @@ private:
   QVBoxLayout *m_spectraContainer = nullptr;
   QComboBox *m_spectraMode = nullptr;
   TilePreviewPanel *m_correctedPreview = nullptr;
-  
-  QWidget *m_gamutSection = nullptr;
-  CIEChartWidget *m_gamutChart = nullptr;
-  QVBoxLayout *m_gamutContainer = nullptr;
-  QComboBox *m_gamutReferenceCombo = nullptr;
-  void updateGamutReference();
 
-  QWidget *m_correctedGamutSection = nullptr;
-  CIEChartWidget *m_correctedGamutChart = nullptr;
-  QVBoxLayout *m_correctedGamutContainer = nullptr;
-  QComboBox *m_correctedGamutReferenceCombo = nullptr;
-  void updateCorrectedGamutReference();
+  struct GamutChartGroup {
+    CIEChartWidget *chart = nullptr;
+    QComboBox *referenceCombo = nullptr;
+    QWidget *section = nullptr;
+    QVBoxLayout *container = nullptr;
+    QString name;
+    bool corrected;
+  };
+
+  void initGamutGroup(GamutChartGroup &group, const QString &name, bool corrected, 
+                      std::function<void(QWidget*)> detachSignalEmitter);
+  void updateGamutGroup(GamutChartGroup &group);
+  void updateGamutReference(GamutChartGroup &group);
+  void reattachGamutGroup(GamutChartGroup &group, QWidget *widget,
+                          std::function<void(QWidget*)> detachSignalEmitter);
+
+  GamutChartGroup m_gamutGroup;
+  GamutChartGroup m_correctedGamutGroup;
 };
 
 #endif // COLOR_PANEL_H
