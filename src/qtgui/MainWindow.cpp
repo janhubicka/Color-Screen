@@ -197,6 +197,7 @@ MainWindow::~MainWindow() {
   if (m_lensDock) delete m_lensDock;
   if (m_perspectiveDock) delete m_perspectiveDock;
   if (m_nonlinearDock) delete m_nonlinearDock;
+  if (m_gamutDock) delete m_gamutDock;
 }
 
 void MainWindow::setupUi() {
@@ -312,6 +313,12 @@ void MainWindow::setupUi() {
   m_spectraDock->setObjectName("SpectraDock");
   addDockWidget(Qt::RightDockWidgetArea, m_spectraDock);
   m_spectraDock->hide(); // Initially hidden
+
+  // Gamut Dock
+  m_gamutDock = new QDockWidget("Gamut", this);
+  m_gamutDock->setObjectName("GamutDock");
+  addDockWidget(Qt::RightDockWidgetArea, m_gamutDock);
+  m_gamutDock->hide();
 
   // Deformation Chart Dock
   m_deformationDock = new QDockWidget("Deformation Visualization", this);
@@ -457,6 +464,10 @@ void MainWindow::setupUi() {
   setupDock(m_spectraDock, m_colorPanel,
             &ColorPanel::detachSpectraChartRequested,
             &ColorPanel::reattachSpectraChart);
+
+  setupDock(m_gamutDock, m_colorPanel,
+            &ColorPanel::detachGamutChartRequested,
+            &ColorPanel::reattachGamutChart);
 
   setupDock(m_screenPreviewDock, m_screenPanel,
             &ScreenPanel::detachPreviewRequested,

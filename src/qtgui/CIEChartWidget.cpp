@@ -87,6 +87,39 @@ void CIEChartWidget::paintEvent(QPaintEvent *) {
   double r = 6.0;
   painter.drawLine(pt - QPointF(r, 0), pt + QPointF(r, 0));
   painter.drawLine(pt - QPointF(0, r), pt + QPointF(0, r));
+
+  if (m_gamut.valid) {
+      QPointF rPt = mapToWidget(m_gamut.rx, m_gamut.ry);
+      QPointF gPt = mapToWidget(m_gamut.gx, m_gamut.gy);
+      QPointF bPt = mapToWidget(m_gamut.bx, m_gamut.by);
+      QPointF wPt = mapToWidget(m_gamut.wx, m_gamut.wy);
+      
+      QPolygonF triangle;
+      triangle << rPt << gPt << bPt;
+      
+      painter.setPen(QPen(Qt::white, 2));
+      painter.setBrush(Qt::NoBrush);
+      painter.drawPolygon(triangle);
+      
+      auto drawDot = [&](QPointF p, QColor c) {
+          painter.setPen(Qt::NoPen);
+          painter.setBrush(c);
+          painter.drawEllipse(p, 4, 4);
+      };
+
+      drawDot(rPt, Qt::red);
+      drawDot(gPt, Qt::green);
+      drawDot(bPt, Qt::blue);
+      drawDot(wPt, Qt::white);
+      
+      painter.setPen(Qt::white);
+      painter.drawText(wPt + QPointF(6, 4), "WP");
+  }
+}
+
+void CIEChartWidget::setGamut(const GamutData& gamut) {
+    m_gamut = gamut;
+    update();
 }
 
 void CIEChartWidget::generateCache() {

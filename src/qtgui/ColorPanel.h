@@ -8,6 +8,7 @@
 #include <QWidget>
 #include <vector>
 
+class CIEChartWidget; // Forward declaration
 class SpectraChartWidget;
 
 class ColorPanel : public TilePreviewPanel {
@@ -22,9 +23,13 @@ public:
   void reattachSpectraChart(QWidget *widget);
   void reattachCorrectedTiles(QWidget *widget);
 
+  QWidget *getGamutChartWidget() const;
+  void reattachGamutChart(QWidget *widget);
+
 signals:
   void detachSpectraChartRequested(QWidget *widget);
   void detachCorrectedTilesRequested(QWidget *widget);
+  void detachGamutChartRequested(QWidget *widget);
 
 protected:
   // TilePreviewPanel overrides
@@ -38,6 +43,7 @@ protected:
 private:
   void setupUi();
   void updateSpectraChart();
+  void updateGamutChart();
   void applyChange(std::function<void(ParameterState &)> modifier, const QString &description = QString()) override;
 
   // Cached parameters for change detection
@@ -49,6 +55,10 @@ private:
   QVBoxLayout *m_spectraContainer = nullptr;
   QComboBox *m_spectraMode = nullptr;
   TilePreviewPanel *m_correctedPreview = nullptr;
+  
+  QWidget *m_gamutSection = nullptr;
+  CIEChartWidget *m_gamutChart = nullptr;
+  QVBoxLayout *m_gamutContainer = nullptr;
 };
 
 #endif // COLOR_PANEL_H

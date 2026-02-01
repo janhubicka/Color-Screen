@@ -626,7 +626,7 @@ render_parameters::get_transmission_data (transmission_data &data) const
    default is D50 for XYZ_D50.  */
 
 color_matrix
-render_parameters::get_balanced_dyes_matrix (const image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint)
+render_parameters::get_balanced_dyes_matrix (const image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint) const
 {
   bool optimized;
   bool spectrum_based;
@@ -1451,6 +1451,33 @@ render_parameters::get_gray_range (int *min, int *max, int maxval)
 	      * maxval)
 	     - 0.5;
     }
+}
+
+render_parameters::gamut
+render_parameters::get_gamut (bool corrected, scr_type t) const
+{
+  bool spectrum_based, optimized;
+  gamut ret;
+  color_matrix m;
+  rgbdata proportions = {1,1,1};
+  if (t != Random)
+    proportions = patch_proportions (t, this);
+  if (corrected)
+    /*TODO: Check with observer whitepoint.  */
+    m = get_balanced_dyes_matrix (NULL, false, proportions, srgb_white);
+  else
+    m = get_dyes_matrix (&spectrum_based, &optimized, NULL, NULL);
+
+  xyz tmp;
+  m.apply_to_rgb (1, 0, 0, &tmp.x, &tmp.y, &tmp.z);
+  ret.red = tmp;
+  m.apply_to_rgb (0, 1, 0, &tmp.x, &tmp.y, &tmp.z);
+  ret.green = tmp;
+  m.apply_to_rgb (0, 0, 1, &tmp.x, &tmp.y, &tmp.z);
+  ret.blue = tmp;
+  m.apply_to_rgb (proportions.red, proportions.green, proportions.blue, &tmp.x, &tmp.y, &tmp.z);
+  ret.whitepoint = tmp;
+  return ret;
 }
 
 }

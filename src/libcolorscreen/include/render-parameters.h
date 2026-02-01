@@ -670,12 +670,18 @@ struct render_parameters
     return get_capture_type (capture_type, scan);
   }
 
+  struct gamut
+  {
+    xy_t red, green, blue, whitepoint;
+  };
+  gamut get_gamut (bool corrected, scr_type type) const;
+
 private:
   static const bool debug = colorscreen_checking;
   color_matrix get_balanced_dyes_matrix (const image_data *img,
                                          bool normalized_patches,
                                          rgbdata patch_proportions,
-                                         xyz target_whitepoint = d50_white);
+                                         xyz target_whitepoint = d50_white) const;
 };
 }
 #endif

@@ -122,6 +122,31 @@ void ColorPanel::setupUi() {
   addSeparator("Screen dyes");
   setupTiles("Color Preview");
 
+  // Gamut Chart
+  m_gamutChart = new CIEChartWidget();
+  m_gamutChart->setFixedHeight(200);
+
+  QWidget *gamutWrapper = new QWidget();
+  m_gamutContainer = new QVBoxLayout(gamutWrapper);
+  m_gamutContainer->setContentsMargins(0, 0, 0, 0);
+
+  QWidget *gamutChartWrapper = new QWidget();
+  QVBoxLayout *cwLayout = new QVBoxLayout(gamutChartWrapper);
+  cwLayout->setContentsMargins(0, 0, 0, 0);
+  cwLayout->addWidget(m_gamutChart);
+
+  m_gamutSection = createDetachableSection(
+      "Gamut", gamutChartWrapper,
+      [this, gamutChartWrapper]() { emit detachGamutChartRequested(gamutChartWrapper); });
+
+  m_gamutContainer->addWidget(m_gamutSection);
+
+  // Add to form layout
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(gamutWrapper);
+  else
+    m_form->addRow(gamutWrapper);
+
   // Dyes dropdown (Moved before Spectral Chart)
   using color_model = render_parameters::color_model_t;
   std::map<int, QString> dyes;
@@ -393,6 +418,7 @@ void ColorPanel::onTileUpdateScheduled() {
   m_lastRParams = state.rparams;
 
   updateSpectraChart();
+  updateGamutChart();
 }
 
 bool ColorPanel::isTileRenderingEnabled(const ParameterState &state) const {
@@ -404,4 +430,34 @@ bool ColorPanel::isTileRenderingEnabled(const ParameterState &state) const {
 void ColorPanel::applyChange(std::function<void(ParameterState &)> modifier, const QString &description) {
   ParameterPanel::applyChange(modifier, description);
   scheduleTileUpdate();
+}
+
+QWidget *ColorPanel::getGamutChartWidget() const { return m_gamutChart; }
+
+void ColorPanel::reattachGamutChart(QWidget *widget) {
+  if (!widget)
+    return;
+
+  // Re-wrap in detachable section
+  QWidget *detachable = createDetachableSection(
+      "Gamut", widget,
+      [this, widget]() { emit detachGamutChartRequested(widget); });
+
+  m_gamutContainer->addWidget(detachable);
+}
+
+void ColorPanel::updateGamutChart() {
+    if (!m_gamutChart) return;
+    ParameterState state = m_stateGetter();
+    
+    auto gamut = state.rparams.get_gamut(false, state.scrToImg.type);
+    
+    CIEChartWidget::GamutData data;
+    data.valid = true;
+    data.rx = gamut.red.x; data.ry = gamut.red.y;
+    data.gx = gamut.green.x; data.gy = gamut.green.y;
+    data.bx = gamut.blue.x; data.by = gamut.blue.y;
+    data.wx = gamut.whitepoint.x; data.wy = gamut.whitepoint.y;
+    
+    m_gamutChart->setGamut(data);
 }

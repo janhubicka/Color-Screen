@@ -300,6 +300,7 @@ private:
   QDockWidget *m_backlightDock;
   BacklightChartWidget *m_backlightChart;
   QDockWidget *m_finetuneImagesDock; // Finetune diagnostic images dock
+  QDockWidget *m_gamutDock; // Gamut visualization dock
 
   // Current parameters file path
   QString m_currentImageFile;

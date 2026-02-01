@@ -228,6 +228,9 @@ struct xyz {
 struct xy_t
 {
   luminosity_t x, y;
+  constexpr xy_t ()
+  : x (0), y (0)
+  { }
   constexpr xy_t (luminosity_t xx, luminosity_t yy)
   : x (xx), y (yy)
   { }

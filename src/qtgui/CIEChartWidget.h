@@ -18,6 +18,15 @@ public:
   void setWhitepoint(double x, double y);
   std::pair<double, double> getWhitepoint() const;
 
+  struct GamutData {
+      bool valid = false;
+      double rx, ry; 
+      double gx, gy;
+      double bx, by;
+      double wx, wy;
+  };
+  void setGamut(const GamutData& gamut);
+
 signals:
   void whitepointChanged(double x, double y);
 
@@ -37,6 +46,8 @@ private:
   QImage m_cache; // Added
   double m_selectedX = 0.33;
   double m_selectedY = 0.33;
+  
+  GamutData m_gamut;
 
   // Chart logic
   double m_minX = 0.0;
