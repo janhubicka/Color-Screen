@@ -278,6 +278,48 @@ void ColorPanel::setupUi() {
       m_form->addRow(correctedPreview);
   }
 
+  // Corrected Gamut Chart
+  m_correctedGamutChart = new CIEChartWidget();
+  m_correctedGamutChart->setFixedHeight(200);
+  m_correctedGamutChart->setSelectionEnabled(false);
+
+  m_correctedGamutReferenceCombo = new QComboBox();
+  m_correctedGamutReferenceCombo->addItems({"None", "sRGB", "AdobeRGB", "SMPTE-C"});
+  connect(m_correctedGamutReferenceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, [this](int){ updateCorrectedGamutReference(); });
+
+  QLabel *corrRefLabel = new QLabel("Reference gamut:");
+  QHBoxLayout *corrRefLayout = new QHBoxLayout();
+  corrRefLayout->addWidget(corrRefLabel);
+  corrRefLayout->addWidget(m_correctedGamutReferenceCombo, 1);
+
+  QWidget *corrGamutWrapper = new QWidget();
+  m_correctedGamutContainer = new QVBoxLayout(corrGamutWrapper);
+  m_correctedGamutContainer->setContentsMargins(0, 0, 0, 0);
+
+  QWidget *corrGamutChartWrapper = new QWidget();
+  QVBoxLayout *cwCorrLayout = new QVBoxLayout(corrGamutChartWrapper);
+  cwCorrLayout->setContentsMargins(0, 0, 0, 0);
+  cwCorrLayout->addLayout(corrRefLayout);
+  cwCorrLayout->addWidget(m_correctedGamutChart, 0, Qt::AlignCenter);
+
+  m_correctedGamutSection = createDetachableSection(
+      "Corrected Gamut", corrGamutChartWrapper,
+      [this, corrGamutChartWrapper]() { 
+            m_correctedGamutChart->setMinimumSize(0,0);
+            m_correctedGamutChart->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+            m_correctedGamutChart->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+            if (corrGamutChartWrapper->layout()) corrGamutChartWrapper->layout()->setAlignment(m_correctedGamutChart, Qt::Alignment());
+            emit detachCorrectedGamutChartRequested(corrGamutChartWrapper); 
+      });
+
+  m_correctedGamutContainer->addWidget(m_correctedGamutSection);
+
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(corrGamutWrapper);
+  else
+    m_form->addRow(corrGamutWrapper);
+
   // Dye Balancing Selector
   addEnumParameter(
       "Dye balancing", render_parameters::dye_balance_names,
@@ -438,6 +480,7 @@ void ColorPanel::onTileUpdateScheduled() {
 
   updateSpectraChart();
   updateGamutChart();
+  updateCorrectedGamutChart();
 }
 
 bool ColorPanel::isTileRenderingEnabled(const ParameterState &state) const {
@@ -485,6 +528,9 @@ void ColorPanel::resizeEvent(QResizeEvent *event) {
     if (m_gamutSection && m_gamutSection->isVisible() && m_gamutSection->isAncestorOf(m_gamutChart)) {
          m_gamutChart->setFixedWidth(event->size().width() / 2);
     }
+    if (m_correctedGamutSection && m_correctedGamutSection->isVisible() && m_correctedGamutSection->isAncestorOf(m_correctedGamutChart)) {
+         m_correctedGamutChart->setFixedWidth(event->size().width() / 2);
+    }
 }
 
 void ColorPanel::updateGamutChart() {
@@ -530,4 +576,77 @@ void ColorPanel::updateGamutReference() {
     }
     
     m_gamutChart->setReferenceGamut(data);
+}
+
+QWidget *ColorPanel::getCorrectedGamutChartWidget() const { return m_correctedGamutChart; }
+
+void ColorPanel::reattachCorrectedGamutChart(QWidget *widget) {
+  if (!widget)
+    return;
+    
+  // Restore docked constraints
+  m_correctedGamutChart->setFixedHeight(200);
+  m_correctedGamutChart->updateGeometry();
+  
+  // Restore alignment
+  if (widget->layout()) widget->layout()->setAlignment(m_correctedGamutChart, Qt::AlignCenter);
+
+  // Re-wrap in detachable section
+  QWidget *detachable = createDetachableSection(
+      "Corrected Gamut", widget,
+      [this, widget]() { 
+            m_correctedGamutChart->setMinimumSize(0,0);
+            m_correctedGamutChart->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+            m_correctedGamutChart->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+            if (widget->layout()) widget->layout()->setAlignment(m_correctedGamutChart, Qt::Alignment());
+            emit detachCorrectedGamutChartRequested(widget); 
+      });
+
+  m_correctedGamutContainer->addWidget(detachable);
+  if (width() > 0) m_correctedGamutChart->setFixedWidth(width() / 2);
+}
+
+void ColorPanel::updateCorrectedGamutChart() {
+    if (!m_correctedGamutChart) return;
+    ParameterState state = m_stateGetter();
+    
+    auto gamut = state.rparams.get_gamut(true, state.scrToImg.type);
+    
+    CIEChartWidget::GamutData data;
+    data.valid = true;
+    data.rx = gamut.red.x; data.ry = gamut.red.y;
+    data.gx = gamut.green.x; data.gy = gamut.green.y;
+    data.bx = gamut.blue.x; data.by = gamut.blue.y;
+    data.wx = gamut.whitepoint.x; data.wy = gamut.whitepoint.y;
+    
+    m_correctedGamutChart->setGamut(data);
+}
+
+void ColorPanel::updateCorrectedGamutReference() {
+    if (!m_correctedGamutChart || !m_correctedGamutReferenceCombo) return;
+    QString txt = m_correctedGamutReferenceCombo->currentText();
+    CIEChartWidget::GamutData data;
+    data.valid = false;
+    
+    if (txt == "sRGB") {
+        data.valid = true;
+        data.rx = 0.64; data.ry = 0.33;
+        data.gx = 0.30; data.gy = 0.60;
+        data.bx = 0.15; data.by = 0.06;
+        data.wx = 0.3127; data.wy = 0.3290;
+    } else if (txt == "AdobeRGB") {
+        data.valid = true;
+        data.rx = 0.64; data.ry = 0.33;
+        data.gx = 0.21; data.gy = 0.71;
+        data.bx = 0.15; data.by = 0.06;
+        data.wx = 0.3127; data.wy = 0.3290;
+    } else if (txt == "SMPTE-C") {
+        data.valid = true;
+        data.rx = 0.630; data.ry = 0.340;
+        data.gx = 0.310; data.gy = 0.595;
+        data.bx = 0.155; data.by = 0.070;
+        data.wx = 0.3127; data.wy = 0.3290;
+    }
+    
+    m_correctedGamutChart->setReferenceGamut(data);
 }

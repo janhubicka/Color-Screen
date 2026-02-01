@@ -320,6 +320,12 @@ void MainWindow::setupUi() {
   addDockWidget(Qt::RightDockWidgetArea, m_gamutDock);
   m_gamutDock->hide();
 
+  // Corrected Gamut Dock
+  m_correctedGamutDock = new QDockWidget("Corrected Gamut", this);
+  m_correctedGamutDock->setObjectName("CorrectedGamutDock");
+  addDockWidget(Qt::RightDockWidgetArea, m_correctedGamutDock);
+  m_correctedGamutDock->hide();
+
   // Deformation Chart Dock
   m_deformationDock = new QDockWidget("Deformation Visualization", this);
   m_deformationDock->setObjectName("DeformationDock");
@@ -468,6 +474,10 @@ void MainWindow::setupUi() {
   setupDock(m_gamutDock, m_colorPanel,
             &ColorPanel::detachGamutChartRequested,
             &ColorPanel::reattachGamutChart);
+
+  setupDock(m_correctedGamutDock, m_colorPanel,
+            &ColorPanel::detachCorrectedGamutChartRequested,
+            &ColorPanel::reattachCorrectedGamutChart);
 
   setupDock(m_screenPreviewDock, m_screenPanel,
             &ScreenPanel::detachPreviewRequested,

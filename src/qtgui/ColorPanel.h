@@ -25,11 +25,14 @@ public:
 
   QWidget *getGamutChartWidget() const;
   void reattachGamutChart(QWidget *widget);
+  QWidget *getCorrectedGamutChartWidget() const;
+  void reattachCorrectedGamutChart(QWidget *widget);
 
 signals:
   void detachSpectraChartRequested(QWidget *widget);
   void detachCorrectedTilesRequested(QWidget *widget);
   void detachGamutChartRequested(QWidget *widget);
+  void detachCorrectedGamutChartRequested(QWidget *widget);
 
 protected:
   // TilePreviewPanel overrides
@@ -45,6 +48,7 @@ private:
   void setupUi();
   void updateSpectraChart();
   void updateGamutChart();
+  void updateCorrectedGamutChart();
   void applyChange(std::function<void(ParameterState &)> modifier, const QString &description = QString()) override;
 
   // Cached parameters for change detection
@@ -62,6 +66,12 @@ private:
   QVBoxLayout *m_gamutContainer = nullptr;
   QComboBox *m_gamutReferenceCombo = nullptr;
   void updateGamutReference();
+
+  QWidget *m_correctedGamutSection = nullptr;
+  CIEChartWidget *m_correctedGamutChart = nullptr;
+  QVBoxLayout *m_correctedGamutContainer = nullptr;
+  QComboBox *m_correctedGamutReferenceCombo = nullptr;
+  void updateCorrectedGamutReference();
 };
 
 #endif // COLOR_PANEL_H
