@@ -51,10 +51,17 @@ while [ $queue_index -lt ${#work_queue[@]} ]; do
     echo "  Scanning [$queue_index/${#work_queue[@]}] $bin_base..."
     
     # Process dependencies and copy new ones
-    while read -r dep_path; do
-        if [ -n "$dep_path" ] && [ -f "$dep_path" ]; then
-            dep_name=$(basename "$dep_path")
-            
+    # Process dependencies and copy new ones
+    # Use objdump to find direct dependencies statically (avoids execution/hangs)
+    # Filter only for DLL names
+    deps=$(objdump -p "$bin" | grep "DLL Name: " | awk '{print $NF}' | tr -d '\r')
+    
+    for dep_name in $deps; do
+        # Check if this DLL exists in the source prefix (we only care about deploying those)
+        # In MinGW/MSYS2, DLLs are typically in $PREFIX/bin
+        dep_path="$PREFIX/bin/$dep_name"
+        
+        if [ -f "$dep_path" ]; then
             # If not in target dir, copy it and add to work queue
             if [ ! -f "$TARGET_DIR_UNIX/$dep_name" ]; then
                 echo "    + Copying $dep_name"
@@ -65,7 +72,7 @@ while [ $queue_index -lt ${#work_queue[@]} ]; do
                 fi
             fi
         fi
-    done < <(timeout 15 ldd "$bin" 2>/dev/null | grep " => $PREFIX" | sed -e 's/.* => \(.*\) (0x.*/\1/' | sort -u)
+    done
 done
 
 echo "DLL deployment complete. Scanned ${#scanned[@]} unique binaries."
