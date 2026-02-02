@@ -36,8 +36,11 @@ public:
   void reattachFinetuneImages(QWidget *widget);
   void setFocusAnalysisChecked(bool checked);
 
+  void reattachDotSpread(QWidget *widget);
+
 signals:
   void detachMTFChartRequested(QWidget *widget);
+  void detachDotSpreadRequested(QWidget *widget);
   void detachFinetuneImagesRequested(QWidget *widget);
   void autodetectRequested();
   void focusAnalysisRequested(bool checked, uint64_t flags);
@@ -76,6 +79,7 @@ private:
   double m_lastGreenStripWidth = 0.0;
   class QPushButton *m_analyzeAreaBtn = nullptr;
   uint64_t m_finetuneFlags = 0;
+  class TilePreviewPanel *m_dotSpreadPanel = nullptr;
 };
 
 #endif // SHARPNESS_PANEL_H

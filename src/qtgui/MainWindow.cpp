@@ -190,6 +190,7 @@ MainWindow::~MainWindow() {
 
   // Also manually delete docks as they might hold detached panels
   if (m_mtfDock) delete m_mtfDock;
+  if (m_dotSpreadDock) delete m_dotSpreadDock;
   if (m_spectraDock) delete m_spectraDock;
   if (m_tilesDock) delete m_tilesDock;
   if (m_colorTilesDock) delete m_colorTilesDock;
@@ -462,6 +463,15 @@ void MainWindow::setupUi() {
   setupDock(m_mtfDock, m_sharpnessPanel,
             &SharpnessPanel::detachMTFChartRequested,
             &SharpnessPanel::reattachMTFChart);
+
+  m_dotSpreadDock = new QDockWidget("Dot Spread Function", this);
+  m_dotSpreadDock->setObjectName("DotSpreadDock");
+  m_dotSpreadDock->setVisible(false);
+  addDockWidget(Qt::BottomDockWidgetArea, m_dotSpreadDock);
+  
+  setupDock(m_dotSpreadDock, m_sharpnessPanel,
+            &SharpnessPanel::detachDotSpreadRequested,
+            &SharpnessPanel::reattachDotSpread);
 
   setupDock(m_tilesDock, m_sharpnessPanel,
             &SharpnessPanel::detachTilesRequested,

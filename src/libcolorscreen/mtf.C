@@ -4,6 +4,7 @@
 #include "fft.h"
 #include "nmsimplex.h"
 #include "gsl-solver.h"
+#include "include/colorscreen.h"
 #include <cmath>
 #include <complex>
 #include <memory>
@@ -1388,6 +1389,29 @@ mtf_parameters::load_csv (FILE *in, std::string name, const char **error)
 bool
 mtf::render_dot_spread_tile (tile_parameters &tile, progress_info *p)
 {
+  precompute_psf (p);
+  int maxp = 0;
+  luminosity_t m = 0;
+  for (int p = 0; p < 1024; p++)
+    m = std::max (m, get_psf (p));
+  for (int p = 1; p < 1024; p++)
+    if (get_psf (p) > m / 100)
+      maxp = p;
+  if (m > 0)
+    m = 1 / m;
+  luminosity_t step = maxp / (tile.width / (luminosity_t)2);
+  for (int y = 0; y < tile.height; y++)
+    for (int x = 0; x < tile.width; x++)
+      {
+	coord_t posx = (x - tile.width / 2) * step;
+	coord_t posy = (y - tile.height / 2) * step;
+	luminosity_t val = get_psf (posx , posy, 1);
+	int i = (nearest_int (posx) + nearest_int (posy)) % 2;
+	luminosity_t lum = std::clamp (val * m, (luminosity_t)0, (luminosity_t)1);
+	luminosity_t lum2 = i ? std::clamp (val + lum * (luminosity_t)0.1,  (luminosity_t)0, (luminosity_t)1) : lum;
+	tile.pixels[x * 3 + y * tile.rowstride] = tile.pixels[x * 3 + y * tile.rowstride + 1] = invert_gamma (lum, -1) * 255 + 0.5;
+	tile.pixels[x * 3 + y * tile.rowstride + 2] = invert_gamma (lum2, -1) * 255 + 0.5;
+      }
   return true;
 }
 

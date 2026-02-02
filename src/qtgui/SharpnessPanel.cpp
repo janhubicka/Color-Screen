@@ -118,9 +118,49 @@ protected:
         event->acceptProposedAction();
     }
 
-private:
     ReorderCallback m_onReorder;
 };
+
+
+class DotSpreadPreviewPanel : public TilePreviewPanel {
+public:
+  DotSpreadPreviewPanel(StateGetter stateGetter, StateSetter stateSetter,
+                     ImageGetter imageGetter, QWidget *parent = nullptr)
+      : TilePreviewPanel(stateGetter, stateSetter, imageGetter, parent, false) {
+    setDebounceInterval(5);
+  }
+
+  void init(const QString &title) { setupTiles(title); }
+
+protected:
+  std::vector<std::pair<render_screen_tile_type, QString>>
+  getTileTypes() const override {
+    return {{dot_spread, "Dot Spread"}};
+  }
+
+  bool shouldUpdateTiles(const ParameterState &state) override {
+      // Dot spread might change if sharpening params change
+      if (!state.rparams.sharpen.equal_p(m_lastSharpen))
+         return true;
+      return false;
+  }
+
+  void onTileUpdateScheduled() override {
+    ParameterState state = m_stateGetter();
+    m_lastSharpen = state.rparams.sharpen;
+  }
+
+  bool requiresScan() const override { return false; }
+  
+  bool isTileRenderingEnabled(const ParameterState &state) const override {
+      // Always enabled regardless of scrToImg setting
+      return true;
+  }
+
+private:
+  colorscreen::sharpen_parameters m_lastSharpen;
+};
+
 } // namespace
 
 SharpnessPanel::SharpnessPanel(StateGetter stateGetter, StateSetter stateSetter,
@@ -181,6 +221,22 @@ void SharpnessPanel::setupUi() {
   else
     m_form->addRow(mtfWrapper);
   updateMTFChart();
+
+  DotSpreadPreviewPanel *dotSpread =
+      new DotSpreadPreviewPanel(m_stateGetter, m_stateSetter, m_imageGetter);
+  m_dotSpreadPanel = dotSpread;
+  dotSpread->init("Dot Spread");
+  connect(dotSpread, &TilePreviewPanel::detachTilesRequested, this,
+          &SharpnessPanel::detachDotSpreadRequested);
+  connect(dotSpread, &TilePreviewPanel::progressStarted, this, &SharpnessPanel::progressStarted);
+  connect(dotSpread, &TilePreviewPanel::progressFinished, this, &SharpnessPanel::progressFinished);
+  
+  m_widgetStateUpdaters.push_back([dotSpread, this]() {
+      dotSpread->updateUI();
+  });
+
+  if (m_currentGroupForm) m_currentGroupForm->addRow(dotSpread);
+  else m_form->addRow(dotSpread);
 
   // Add "Use measured MTF" checkbox (visible only if measured data exists and
   // separator is open)
@@ -563,6 +619,11 @@ void SharpnessPanel::reattachMTFChart(QWidget *widget) {
       }
     }
   }
+}
+
+void SharpnessPanel::reattachDotSpread(QWidget *widget) {
+    if (m_dotSpreadPanel)
+        m_dotSpreadPanel->reattachTiles(widget);
 }
 
 // reattachTiles removed (in base)
