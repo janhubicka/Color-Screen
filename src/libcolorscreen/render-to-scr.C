@@ -355,6 +355,12 @@ render_screen_tile (tile_parameters &tile, scr_type type,
   bool avg = false;
   if (progress)
     progress->set_task ("rendering tile", 1);
+  if (rst == dot_spread)
+    {
+      mtf::mtf_cache_t::cached_ptr mtf = mtf::get_mtf (rparam.sharpen.scanner_mtf, NULL);
+      return mtf->render_dot_spread_tile (tile, progress);
+    }
+
   if (rst >= (int)backlight_screen)
     {
       spectrum_dyes_to_xyz s;

@@ -94,6 +94,8 @@ public:
   compute_2d_psf (int psf_size, luminosity_t subscale,
 		  progress_info *progress = NULL);
 
+  bool render_dot_spread_tile (tile_parameters &tile, progress_info *p);
+
 private:
   mtf_parameters m_params;
   precomputed_function<luminosity_t> m_mtf;

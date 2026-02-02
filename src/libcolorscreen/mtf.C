@@ -1385,4 +1385,10 @@ mtf_parameters::load_csv (FILE *in, std::string name, const char **error)
   return rgb ? 3 : 1;
 }
 
+bool
+mtf::render_dot_spread_tile (tile_parameters &tile, progress_info *p)
+{
+  return true;
+}
+
 }

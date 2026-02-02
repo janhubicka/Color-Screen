@@ -3548,7 +3548,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
       screen scr, scr1;
       scr1.initialize_dot ();
       best_solver.apply_blur (best_solver.start, 0, &scr, &scr1);
-      ret.sot_spread = scr.get_image (true, 1);
+      ret.dot_spread = scr.get_image (true, 1);
     }
   if (fparams.screen_file)
     best_solver.original_scr->save_tiff (fparams.screen_file);

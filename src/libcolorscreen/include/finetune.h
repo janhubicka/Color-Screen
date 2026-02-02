@@ -101,7 +101,7 @@ struct finetune_result
   std::shared_ptr <simple_image> emulsion_screen;
   std::shared_ptr <simple_image> merged_screen;
   std::shared_ptr <simple_image> collected_screen;
-  std::shared_ptr <simple_image> sot_spread;
+  std::shared_ptr <simple_image> dot_spread;
 
   finetune_result ()
   : success (false), tile_pos {-1, -1}, badness (12345), uncertainity (12345),
