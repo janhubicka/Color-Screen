@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "AdaptiveSharpeningChart.h" // Added
 #include "AdaptiveSharpeningWorker.h"
 #include "FinetuneWorker.h"
 #include "DetectScreenWorker.h"
@@ -288,6 +289,11 @@ void MainWindow::setupUi() {
   m_mtfDock->setVisible(false);
   addDockWidget(Qt::BottomDockWidgetArea, m_mtfDock);
 
+  m_adaptiveSharpeningDock = new QDockWidget("Adaptive Sharpening", this);
+  m_adaptiveSharpeningDock->setObjectName("adaptiveSharpeningDock");
+  m_adaptiveSharpeningDock->setVisible(false);
+  addDockWidget(Qt::BottomDockWidgetArea, m_adaptiveSharpeningDock);
+
   m_tilesDock = new QDockWidget("Sharpness Preview", this);
   m_tilesDock->setObjectName("TilesDock");
   m_tilesDock->setVisible(false);
@@ -549,6 +555,10 @@ void MainWindow::setupUi() {
   setupDock(m_sharpnessFinetuneImagesDock, m_sharpnessPanel,
             &SharpnessPanel::detachFinetuneImagesRequested,
             &SharpnessPanel::reattachFinetuneImages);
+
+  setupDock(m_adaptiveSharpeningDock, m_sharpnessPanel,
+            &SharpnessPanel::detachAdaptiveChartRequested,
+            &SharpnessPanel::reattachAdaptiveChart);
 
   m_configTabs->addTab(m_capturePanel, "Digital capture");
   connect(m_capturePanel, &CapturePanel::cropRequested, this, &MainWindow::onCropRequested);
@@ -1936,6 +1946,10 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
   }
   
   updateRegistrationGroupVisibility();
+
+  if (m_sharpnessPanel && m_sharpnessPanel->getAdaptiveChart()) {
+      m_sharpnessPanel->getAdaptiveChart()->setCorrection(state.rparams.scanner_blur_correction);
+  }
 }
 
 ParameterState MainWindow::getCurrentState() const {
@@ -3051,6 +3065,24 @@ void MainWindow::onAdaptiveSharpeningRequested(int xsteps) {
 
     connect(thread, &QThread::started, worker, &AdaptiveSharpeningWorker::run);
     
+    // Connect visualization signals
+    if (m_sharpnessPanel && m_sharpnessPanel->getAdaptiveChart()) {
+        AdaptiveSharpeningChart *chart = m_sharpnessPanel->getAdaptiveChart();
+        
+        // Calculate ysteps similar to logic in analyze_scanner_blur_worker::step1
+        int ysteps = (xsteps * m_scan->height + m_scan->width / 2) / m_scan->width;
+        if (ysteps < 1) ysteps = 1;
+        
+        chart->initialize(xsteps, ysteps);
+        
+        connect(worker, &AdaptiveSharpeningWorker::stripAnalyzed, chart, &AdaptiveSharpeningChart::updateStrip);
+        connect(worker, &AdaptiveSharpeningWorker::blurAnalysisStarted, chart, [chart](int w, int h) {
+             // Re-initialize for high-res blur analysis
+             chart->initialize(w, h);
+        });
+        connect(worker, &AdaptiveSharpeningWorker::blurAnalyzed, chart, &AdaptiveSharpeningChart::updateBlur);
+    }
+    
     // Connect finished signal using lambda to capture thread and progress
     connect(worker, &AdaptiveSharpeningWorker::finished, this, 
         [this, worker, thread, progress](bool success, std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result) {
@@ -3081,6 +3113,11 @@ void MainWindow::onAdaptiveSharpeningFinished(bool success, std::shared_ptr<colo
     
     // Update UI
     updateUIFromState(newState);
+
+    // Explicitly update chart
+    if (m_sharpnessPanel && m_sharpnessPanel->getAdaptiveChart()) {
+         m_sharpnessPanel->getAdaptiveChart()->setCorrection(result);
+    }
 
     QMessageBox::information(this, tr("Adaptive Sharpening"), tr("Analysis completed successfully."));
 }

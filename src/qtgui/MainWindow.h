@@ -49,7 +49,8 @@ struct ProgressEntry {
 class ScreenPanel;
 class GeometryPanel;
 class GeometrySolverWorker;
-class AdaptiveSharpeningWorker; // Added
+class AdaptiveSharpeningWorker;
+class AdaptiveSharpeningChart; // Added
 class QUndoStack; // Forward decl
 
 class MainWindow : public QMainWindow {
@@ -264,6 +265,10 @@ private:
   QPushButton *m_prevProgressButton;
   QPushButton *m_nextProgressButton;
 
+  QDockWidget *m_sharpnessFinetuneImagesDock = nullptr;
+  AdaptiveSharpeningChart *m_adaptiveSharpeningChart = nullptr;
+  QDockWidget *m_adaptiveSharpeningDock = nullptr;
+
   QTimer *m_progressTimer;
   QTimer *m_recoveryTimer;  // Auto-save timer for crash recovery
   std::vector<ProgressEntry> m_activeProgresses;
@@ -307,7 +312,6 @@ private:
   QDockWidget *m_backlightDock;
   BacklightChartWidget *m_backlightChart;
   QDockWidget *m_finetuneImagesDock; // Finetune diagnostic images dock (Geometry)
-  QDockWidget *m_sharpnessFinetuneImagesDock; // Finetune diagnostic images dock (Sharpness)
   QDockWidget *m_gamutDock; // Gamut visualization dock
   QDockWidget *m_correctedGamutDock; // Corrected gamut visualization dock
 

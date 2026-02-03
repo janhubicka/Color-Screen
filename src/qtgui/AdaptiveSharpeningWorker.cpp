@@ -21,8 +21,8 @@ void AdaptiveSharpeningWorker::run() {
     int ysteps = m_xsteps * m_scan->height / m_scan->width;
     if (ysteps < 1) ysteps = 1;
 
-    // Hardcoded defaults matching CLI
-    int strip_xsteps = 0;
+    // Hardcoded defaults matching CLI, but syncing strip steps to requested steps for GUI visualization compatibility
+    int strip_xsteps = m_xsteps;
     int strip_ysteps = 0;
     int xsubsteps = 0; // Means 0 -> defaults
     int ysubsteps = 0;
@@ -66,9 +66,13 @@ void AdaptiveSharpeningWorker::run() {
             }
         }
         
-        QtConcurrent::blockingMap(stripTasks, [&worker](const QPair<int, int>& task) {
+        QtConcurrent::blockingMap(stripTasks, [this, &worker](const QPair<int, int>& task) {
              if (worker.progress && worker.progress->cancelled()) return;
-             worker.analyze_strips(task.first, task.second);
+             
+             colorscreen::coord_t red = 0, green = 0;
+             if (worker.analyze_strips(task.first, task.second, &red, &green)) {
+                 emit stripAnalyzed(task.first, task.second, red, green);
+             }
         });
         
         if (m_progress && m_progress->cancelled()) {
@@ -82,6 +86,10 @@ void AdaptiveSharpeningWorker::run() {
         return;
     }
 
+    int blurWidth = worker.xsteps * worker.xsubsteps;
+    int blurHeight = worker.ysteps * worker.ysubsteps;
+    emit blurAnalysisStarted(blurWidth, blurHeight);
+
     // Parallel loop for blur analysis
     std::vector<QPair<int, int>> blurTasks;
     // Note: step2 calculates actual xsteps/ysteps/substeps logic, so use worker values
@@ -91,9 +99,13 @@ void AdaptiveSharpeningWorker::run() {
         }
     }
 
-    QtConcurrent::blockingMap(blurTasks, [&worker](const QPair<int, int>& task) {
+    QtConcurrent::blockingMap(blurTasks, [this, &worker](const QPair<int, int>& task) {
         if (worker.progress && worker.progress->cancelled()) return;
-        worker.analyze_blur(task.first, task.second);
+        
+        colorscreen::rgbdata disp;
+        if (worker.analyze_blur(task.first, task.second, &disp)) {
+             emit blurAnalyzed(task.first, task.second, disp.red); // Assuming uniform
+        }
     });
     
     if (m_progress && m_progress->cancelled()) {

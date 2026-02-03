@@ -21,6 +21,7 @@ struct finetune_result;
 #include "TilePreviewPanel.h"
 
 class AdaptiveSharpeningWorker;
+class AdaptiveSharpeningChart;
 
 class SharpnessPanel : public TilePreviewPanel {
   Q_OBJECT
@@ -38,7 +39,10 @@ public:
   void reattachFinetuneImages(QWidget *widget);
   void setFocusAnalysisChecked(bool checked);
 
+  
   void reattachDotSpread(QWidget *widget);
+  void reattachAdaptiveChart(QWidget *widget);
+  AdaptiveSharpeningChart *getAdaptiveChart() const { return m_adaptiveChart; }
 
 public slots:
   void onAnalyzeDisplacements();
@@ -46,6 +50,7 @@ public slots:
 signals:
   void adaptiveSharpeningRequested(int xsteps);
   void detachMTFChartRequested(QWidget *widget);
+  void detachAdaptiveChartRequested(QWidget *widget);
   void detachDotSpreadRequested(QWidget *widget);
   void detachFinetuneImagesRequested(QWidget *widget);
   void autodetectRequested();
@@ -86,6 +91,7 @@ private:
   class QPushButton *m_analyzeAreaBtn = nullptr;
   uint64_t m_finetuneFlags = 0;
   class TilePreviewPanel *m_dotSpreadPanel = nullptr;
+  AdaptiveSharpeningChart *m_adaptiveChart = nullptr;
 };
 
 #endif // SHARPNESS_PANEL_H

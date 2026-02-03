@@ -31,6 +31,7 @@
 #include <QMouseEvent>
 #include <QInputDialog>
 #include <QApplication>
+#include "AdaptiveSharpeningChart.h"
 
 using namespace colorscreen;
 using sharpen_mode = colorscreen::sharpen_parameters::sharpen_mode;
@@ -493,6 +494,19 @@ void SharpnessPanel::setupUi() {
     m_currentGroupForm->addRow(analyzeDisplacementsBtn);
   else
     m_form->addRow(analyzeDisplacementsBtn);
+
+  m_adaptiveChart = new AdaptiveSharpeningChart(this);
+  m_adaptiveChart->initialize(10, 10); // Default size until real data comes
+  // Ideally, chart should handle empty state gracefully (it does clears in paintEvent)
+  
+  QWidget *detachableChart = createDetachableSection("Adaptive Sharpening Chart", m_adaptiveChart, [this]() {
+      emit detachAdaptiveChartRequested(m_adaptiveChart);
+  });
+  
+  if (m_currentGroupForm)
+      m_currentGroupForm->addRow(detachableChart);
+  else
+      m_form->addRow(detachableChart);
 }
 
 void SharpnessPanel::updateMTFChart() {
@@ -897,5 +911,12 @@ void SharpnessPanel::setFocusAnalysisChecked(bool checked) {
         m_analyzeAreaBtn->blockSignals(true);
         m_analyzeAreaBtn->setChecked(checked);
         m_analyzeAreaBtn->blockSignals(false);
+    }
+}
+
+void SharpnessPanel::reattachAdaptiveChart(QWidget *widget) {
+    if (widget && m_adaptiveChart == widget) {
+         QFormLayout *layout = qobject_cast<QFormLayout*>(this->layout());
+         if (layout) layout->addRow(widget);
     }
 }

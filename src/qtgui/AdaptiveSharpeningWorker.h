@@ -24,8 +24,13 @@ public:
 public slots:
   void run();
 
+  int get_xsteps() const { return m_xsteps; }
+
 signals:
   void finished(bool success, std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result);
+  void stripAnalyzed(int x, int y, double red, double green);
+  void blurAnalysisStarted(int width, int height);
+  void blurAnalyzed(int x, int y, double correction);
 
 private:
   colorscreen::scr_to_img_parameters m_scrToImg;
