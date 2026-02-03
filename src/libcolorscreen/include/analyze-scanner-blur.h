@@ -34,9 +34,9 @@ analyze_scanner_blur_worker
   {
     return prepass.size () > 0;
   }
-  DLL_PUBLIC bool analyze_strips (int x, int y);
+  DLL_PUBLIC bool analyze_strips (int x, int y, coord_t *red_strip_width = NULL, coord_t *green_strip_width = NULL);
   DLL_PUBLIC bool step2 ();
-  DLL_PUBLIC bool analyze_blur (int x, int y);
+  DLL_PUBLIC bool analyze_blur (int x, int y, rgbdata *displacements = NULL);
   DLL_PUBLIC std::unique_ptr <scanner_blur_correction_parameters> step3 ();
 private:
   scanner_blur_correction_parameters::correction_mode mode;

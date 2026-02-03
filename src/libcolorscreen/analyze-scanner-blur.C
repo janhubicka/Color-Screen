@@ -97,7 +97,7 @@ analyze_scanner_blur_worker::step1()
 }
 
 bool
-analyze_scanner_blur_worker::analyze_strips (int x, int y)
+analyze_scanner_blur_worker::analyze_strips (int x, int y, coord_t *red_strip_width, coord_t *green_strip_width)
 {
   finetune_parameters fparam;
   fparam.flags = flags | (screen_with_varying_strips_p (param.type) ? finetune_strips : 0);
@@ -108,7 +108,12 @@ analyze_scanner_blur_worker::analyze_strips (int x, int y)
 	  (coord_t)(y + 0.5) * scan.height / strip_ysteps } },
       NULL, fparam, progress);
   progress->inc_progress ();
-  return true;
+  if (prepass [y * strip_xsteps + x].success && red_strip_width)
+    {
+      *red_strip_width = prepass [y * strip_xsteps + x].red_strip_width;
+      *green_strip_width = prepass [y * strip_xsteps + x].green_strip_width;
+    }
+  return prepass [y * strip_xsteps + x].success;
 }
 bool
 analyze_scanner_blur_worker::step2()
@@ -264,18 +269,23 @@ analyze_scanner_blur_worker::step2()
 #endif
 }
 bool
-analyze_scanner_blur_worker::analyze_blur (int x, int y)
+analyze_scanner_blur_worker::analyze_blur (int x, int y, rgbdata *displacements)
 {
-        finetune_parameters fparam;
-        fparam.flags = flags | (reoptimize_strip_widths ? finetune_strips : 0);
-        fparam.multitile = 1;
-        mainpass[y * xsteps * xsubsteps + x] = finetune (
-            rparam, param, scan,
-            { { (coord_t)(x + 0.5) * scan.width / (xsteps * xsubsteps),
-                (coord_t)(y + 0.5) * scan.height / (ysteps * ysubsteps) } },
-            NULL, fparam, progress);
-        progress->inc_progress ();
-	return true;
+  finetune_parameters fparam;
+  fparam.flags = flags | (reoptimize_strip_widths ? finetune_strips : 0);
+  fparam.multitile = 1;
+  mainpass[y * xsteps * xsubsteps + x] = finetune (
+      rparam, param, scan,
+      { { (coord_t)(x + 0.5) * scan.width / (xsteps * xsubsteps),
+	  (coord_t)(y + 0.5) * scan.height / (ysteps * ysubsteps) } },
+      NULL, fparam, progress);
+  if (mainpass [y * strip_xsteps + x].success && displacements)
+    {
+      coord_t cor = get_correction (mode, mainpass[y * xsteps * xsubsteps + x]);
+      *displacements = {cor, cor, cor};
+    }
+  progress->inc_progress ();
+  return mainpass [y * strip_xsteps + x].success;
 } 
 std::unique_ptr <scanner_blur_correction_parameters>
 analyze_scanner_blur_worker::step3()
