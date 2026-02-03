@@ -1444,34 +1444,6 @@ analyze_scanner_blur (int argc, char **argv)
       return 1;
     }
   fclose (in);
-  if (!xsteps && !ysteps)
-    xsteps = 10;
-  if (!xsteps)
-    xsteps = (ysteps * scan.width + scan.height / 2) / scan.height;
-  if (!ysteps)
-    ysteps = (xsteps * scan.height + scan.width / 2) / scan.width;
-  if (xsteps <= 1)
-    xsteps = 2;
-  if (ysteps <= 1)
-    ysteps = 2;
-  if (!ysubsteps)
-    ysubsteps = xsubsteps;
-  if (!xsubsteps)
-    xsubsteps = ysubsteps;
-  if (!xsubsteps)
-    xsubsteps = ysubsteps = 5;
-  if (!strip_xsteps && !strip_ysteps)
-    strip_xsteps = 10;
-  if (!strip_xsteps)
-    strip_xsteps = (strip_ysteps * scan.width + scan.height / 2) / scan.height;
-  if (!strip_ysteps)
-    strip_ysteps = (strip_xsteps * scan.height + scan.width / 2) / scan.width;
-  if (!strip_xsteps)
-    strip_xsteps = 1;
-  if (!strip_ysteps)
-    strip_ysteps = 1;
-  if (rparam.scanner_blur_correction)
-    rparam.scanner_blur_correction = NULL;
 #ifdef _OPENMP
   omp_set_nested (1);
 #endif

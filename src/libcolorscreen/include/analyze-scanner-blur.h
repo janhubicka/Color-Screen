@@ -14,9 +14,10 @@ analyze_scanner_blur_worker
   public:
   analyze_scanner_blur_worker (scr_to_img_parameters &param1, render_parameters &rparam1, image_data &scan1)
   : param (param1), rparam (rparam1), scan (scan1), strip_xsteps (0), strip_ysteps (0), xsteps (0), ysteps (0), xsubsteps (0), ysubsteps (0), flags (finetune_position | finetune_no_progress_report | finetune_scanner_mtf_defocus), reoptimize_strip_widths (false), skipmin (25), skipmax (25), tolerance (-1), progress (NULL), verbose (false)
-  { }
+  {
+  }
   scr_to_img_parameters &param;
-  render_parameters &rparam;
+  render_parameters rparam;
   image_data &scan;
   int strip_xsteps, strip_ysteps;
   int xsteps, ysteps;
