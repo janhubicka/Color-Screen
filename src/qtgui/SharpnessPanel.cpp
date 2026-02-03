@@ -29,6 +29,8 @@
 #include <QMimeData>
 #include <QDrag>
 #include <QMouseEvent>
+#include <QInputDialog>
+#include <QApplication>
 
 using namespace colorscreen;
 using sharpen_mode = colorscreen::sharpen_parameters::sharpen_mode;
@@ -480,6 +482,17 @@ void SharpnessPanel::setupUi() {
     m_currentGroupForm->addRow(fiWrapper);
   else
     m_form->addRow(fiWrapper);
+
+  addSeparator("Adaptive sharpening");
+  
+  QPushButton *analyzeDisplacementsBtn = new QPushButton(tr("Analyze displacements"));
+  analyzeDisplacementsBtn->setToolTip(tr("Run adaptive sharpening analysis"));
+  connect(analyzeDisplacementsBtn, &QPushButton::clicked, this, &SharpnessPanel::onAnalyzeDisplacements);
+  
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(analyzeDisplacementsBtn);
+  else
+    m_form->addRow(analyzeDisplacementsBtn);
 }
 
 void SharpnessPanel::updateMTFChart() {
@@ -624,6 +637,15 @@ void SharpnessPanel::reattachMTFChart(QWidget *widget) {
 void SharpnessPanel::reattachDotSpread(QWidget *widget) {
     if (m_dotSpreadPanel)
         m_dotSpreadPanel->reattachTiles(widget);
+}
+
+void SharpnessPanel::onAnalyzeDisplacements() {
+    bool ok;
+    int xsteps = QInputDialog::getInt(this, tr("Adaptive Sharpening"),
+                                      tr("Number of horizontal steps:"), 25, 1, 1000, 1, &ok);
+    if (!ok) return;
+
+    emit adaptiveSharpeningRequested(xsteps);
 }
 
 // reattachTiles removed (in base)

@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "AdaptiveSharpeningWorker.h"
 #include "FinetuneWorker.h"
 #include "DetectScreenWorker.h"
 #include "../libcolorscreen/include/base.h"
@@ -573,7 +574,11 @@ void MainWindow::setupUi() {
   m_panels.push_back(m_sharpnessPanel);
   m_panels.push_back(m_screenPanel);
   m_panels.push_back(m_geometryPanel);
+  m_panels.push_back(m_geometryPanel);
   m_panels.push_back(m_colorPanel);
+
+  // Connect Adaptive Sharpening signal from Sharpness Panel
+  connect(m_sharpnessPanel, &SharpnessPanel::adaptiveSharpeningRequested, this, &MainWindow::onAdaptiveSharpeningRequested);
 
   // Link Geometry Panel signals
   connect(m_geometryPanel, &GeometryPanel::optimizeRequested, this,
@@ -3000,6 +3005,7 @@ void MainWindow::onDetectScreenFinished(bool success, colorscreen::detected_scre
     m_rparams.auto_color_model(result.param.type);
   }
   
+  
   // Copy the modified solver points from the worker's local copy
   m_solverParams.points = solverParams.points;
   
@@ -3021,6 +3027,62 @@ void MainWindow::onDetectScreenFinished(bool success, colorscreen::detected_scre
   // Create undo command
   ParameterState newState = getCurrentState();
   m_undoStack->push(new ChangeParametersCommand(this, oldState, newState, "Autodetect screen"));
+}
+
+void MainWindow::onAdaptiveSharpeningRequested(int xsteps) {
+    if (!m_scan) return;
+
+    // Create progress info
+    auto progress = std::make_shared<colorscreen::progress_info>();
+    progress->set_task("Adaptive sharpening analysis", 1);
+    addProgress(progress);
+
+    // Create worker
+    AdaptiveSharpeningWorker *worker = new AdaptiveSharpeningWorker(
+        m_scrToImgParams,
+        m_rparams,
+        m_scan,
+        xsteps,
+        progress
+    );
+
+    QThread *thread = new QThread;
+    worker->moveToThread(thread);
+
+    connect(thread, &QThread::started, worker, &AdaptiveSharpeningWorker::run);
+    
+    // Connect finished signal using lambda to capture thread and progress
+    connect(worker, &AdaptiveSharpeningWorker::finished, this, 
+        [this, worker, thread, progress](bool success, std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result) {
+            onAdaptiveSharpeningFinished(success, result);
+            removeProgress(progress); // Ensure progress is removed
+            worker->deleteLater();
+            thread->quit();
+            thread->wait();
+            thread->deleteLater();
+        });
+
+    thread->start();
+}
+
+void MainWindow::onAdaptiveSharpeningFinished(bool success, std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result) {
+    if (!success || !result) {
+        if (!success) {
+             QMessageBox::warning(this, tr("Adaptive Sharpening"), tr("Analysis failed or cancelled."));
+        }
+        return;
+    }
+
+    ParameterState oldState = getCurrentState();
+    ParameterState newState = oldState;
+    newState.rparams.scanner_blur_correction = result;
+
+    m_undoStack->push(new ChangeParametersCommand(this, oldState, newState, "Adaptive Sharpening Analysis"));
+    
+    // Update UI
+    updateUIFromState(newState);
+
+    QMessageBox::information(this, tr("Adaptive Sharpening"), tr("Analysis completed successfully."));
 }
 
 

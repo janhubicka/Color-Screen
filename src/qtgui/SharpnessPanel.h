@@ -20,6 +20,8 @@ struct finetune_result;
 
 #include "TilePreviewPanel.h"
 
+class AdaptiveSharpeningWorker;
+
 class SharpnessPanel : public TilePreviewPanel {
   Q_OBJECT
 public:
@@ -38,7 +40,11 @@ public:
 
   void reattachDotSpread(QWidget *widget);
 
+public slots:
+  void onAnalyzeDisplacements();
+
 signals:
+  void adaptiveSharpeningRequested(int xsteps);
   void detachMTFChartRequested(QWidget *widget);
   void detachDotSpreadRequested(QWidget *widget);
   void detachFinetuneImagesRequested(QWidget *widget);

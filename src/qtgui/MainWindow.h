@@ -49,6 +49,7 @@ struct ProgressEntry {
 class ScreenPanel;
 class GeometryPanel;
 class GeometrySolverWorker;
+class AdaptiveSharpeningWorker; // Added
 class QUndoStack; // Forward decl
 
 class MainWindow : public QMainWindow {
@@ -107,6 +108,8 @@ private slots:
   void maybeTriggerAutoSolver();
   void onFocusAnalysisRequested(bool checked, uint64_t flags);
   void onFocusAnalysisFinished(bool success, colorscreen::finetune_result result);
+  void onAdaptiveSharpeningRequested(int xsteps);
+  void onAdaptiveSharpeningFinished(bool success, std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result);
 
   // Recent Files
   // Recent Files

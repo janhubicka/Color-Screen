@@ -145,7 +145,8 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-SubtitleOverlay.$(OBJEXT) \
 	colorscreen_qt-CoordinateTransformer.$(OBJEXT) \
 	colorscreen_qt-ScalableImageLabel.$(OBJEXT) \
-	colorscreen_qt-FocusAnalysisWorker.$(OBJEXT)
+	colorscreen_qt-FocusAnalysisWorker.$(OBJEXT) \
+	colorscreen_qt-AdaptiveSharpeningWorker.$(OBJEXT)
 am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_ImageWidget.$(OBJEXT) \
 	colorscreen_qt-moc_BacklightChartWidget.$(OBJEXT) \
@@ -174,7 +175,8 @@ am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_JolyAnimation.$(OBJEXT) \
 	colorscreen_qt-moc_TaskQueue.$(OBJEXT) \
 	colorscreen_qt-moc_ScalableImageLabel.$(OBJEXT) \
-	colorscreen_qt-moc_FocusAnalysisWorker.$(OBJEXT)
+	colorscreen_qt-moc_FocusAnalysisWorker.$(OBJEXT) \
+	colorscreen_qt-moc_AdaptiveSharpeningWorker.$(OBJEXT)
 nodist_colorscreen_qt_OBJECTS = $(am__objects_1) \
 	colorscreen_qt-qrc_resources.$(OBJEXT)
 colorscreen_qt_OBJECTS = $(am_colorscreen_qt_OBJECTS) \
@@ -207,6 +209,7 @@ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/src/libcolorscreen -I$(top_bu
 depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade =  \
+	./$(DEPDIR)/colorscreen_qt-AdaptiveSharpeningWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-CapturePanel.Po \
@@ -240,6 +243,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-WorkerBase.Po \
 	./$(DEPDIR)/colorscreen_qt-main.Po \
+	./$(DEPDIR)/colorscreen_qt-moc_AdaptiveSharpeningWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_CapturePanel.Po \
@@ -494,7 +498,8 @@ colorscreen_qt_SOURCES = \
     SubtitleOverlay.cpp \
     CoordinateTransformer.cpp \
     ScalableImageLabel.cpp \
-    FocusAnalysisWorker.cpp
+    FocusAnalysisWorker.cpp \
+    AdaptiveSharpeningWorker.cpp
 
 
 # MOC Generation
@@ -528,9 +533,10 @@ MOC_SOURCES = \
     moc_JolyAnimation.cpp \
     moc_TaskQueue.cpp \
     moc_ScalableImageLabel.cpp \
-    moc_FocusAnalysisWorker.cpp
+    moc_FocusAnalysisWorker.cpp \
+    moc_AdaptiveSharpeningWorker.cpp
 
-EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h FinetuneImagesPanel.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h Logging.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg
+EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h FinetuneImagesPanel.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h Logging.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg AdaptiveSharpeningWorker.h
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
@@ -635,6 +641,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-AdaptiveSharpeningWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-CapturePanel.Po@am__quote@ # am--include-marker
@@ -668,6 +675,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-WorkerBase.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-main.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_AdaptiveSharpeningWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_CapturePanel.Po@am__quote@ # am--include-marker
@@ -1191,6 +1199,20 @@ colorscreen_qt-FocusAnalysisWorker.obj: FocusAnalysisWorker.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-FocusAnalysisWorker.obj `if test -f 'FocusAnalysisWorker.cpp'; then $(CYGPATH_W) 'FocusAnalysisWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/FocusAnalysisWorker.cpp'; fi`
 
+colorscreen_qt-AdaptiveSharpeningWorker.o: AdaptiveSharpeningWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-AdaptiveSharpeningWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-AdaptiveSharpeningWorker.Tpo -c -o colorscreen_qt-AdaptiveSharpeningWorker.o `test -f 'AdaptiveSharpeningWorker.cpp' || echo '$(srcdir)/'`AdaptiveSharpeningWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-AdaptiveSharpeningWorker.Tpo $(DEPDIR)/colorscreen_qt-AdaptiveSharpeningWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='AdaptiveSharpeningWorker.cpp' object='colorscreen_qt-AdaptiveSharpeningWorker.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-AdaptiveSharpeningWorker.o `test -f 'AdaptiveSharpeningWorker.cpp' || echo '$(srcdir)/'`AdaptiveSharpeningWorker.cpp
+
+colorscreen_qt-AdaptiveSharpeningWorker.obj: AdaptiveSharpeningWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-AdaptiveSharpeningWorker.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-AdaptiveSharpeningWorker.Tpo -c -o colorscreen_qt-AdaptiveSharpeningWorker.obj `if test -f 'AdaptiveSharpeningWorker.cpp'; then $(CYGPATH_W) 'AdaptiveSharpeningWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/AdaptiveSharpeningWorker.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-AdaptiveSharpeningWorker.Tpo $(DEPDIR)/colorscreen_qt-AdaptiveSharpeningWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='AdaptiveSharpeningWorker.cpp' object='colorscreen_qt-AdaptiveSharpeningWorker.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-AdaptiveSharpeningWorker.obj `if test -f 'AdaptiveSharpeningWorker.cpp'; then $(CYGPATH_W) 'AdaptiveSharpeningWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/AdaptiveSharpeningWorker.cpp'; fi`
+
 colorscreen_qt-moc_MainWindow.o: moc_MainWindow.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_MainWindow.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_MainWindow.Tpo -c -o colorscreen_qt-moc_MainWindow.o `test -f 'moc_MainWindow.cpp' || echo '$(srcdir)/'`moc_MainWindow.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_MainWindow.Tpo $(DEPDIR)/colorscreen_qt-moc_MainWindow.Po
@@ -1597,6 +1619,20 @@ colorscreen_qt-moc_FocusAnalysisWorker.obj: moc_FocusAnalysisWorker.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_FocusAnalysisWorker.obj `if test -f 'moc_FocusAnalysisWorker.cpp'; then $(CYGPATH_W) 'moc_FocusAnalysisWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_FocusAnalysisWorker.cpp'; fi`
 
+colorscreen_qt-moc_AdaptiveSharpeningWorker.o: moc_AdaptiveSharpeningWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_AdaptiveSharpeningWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_AdaptiveSharpeningWorker.Tpo -c -o colorscreen_qt-moc_AdaptiveSharpeningWorker.o `test -f 'moc_AdaptiveSharpeningWorker.cpp' || echo '$(srcdir)/'`moc_AdaptiveSharpeningWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_AdaptiveSharpeningWorker.Tpo $(DEPDIR)/colorscreen_qt-moc_AdaptiveSharpeningWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_AdaptiveSharpeningWorker.cpp' object='colorscreen_qt-moc_AdaptiveSharpeningWorker.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_AdaptiveSharpeningWorker.o `test -f 'moc_AdaptiveSharpeningWorker.cpp' || echo '$(srcdir)/'`moc_AdaptiveSharpeningWorker.cpp
+
+colorscreen_qt-moc_AdaptiveSharpeningWorker.obj: moc_AdaptiveSharpeningWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_AdaptiveSharpeningWorker.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_AdaptiveSharpeningWorker.Tpo -c -o colorscreen_qt-moc_AdaptiveSharpeningWorker.obj `if test -f 'moc_AdaptiveSharpeningWorker.cpp'; then $(CYGPATH_W) 'moc_AdaptiveSharpeningWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_AdaptiveSharpeningWorker.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_AdaptiveSharpeningWorker.Tpo $(DEPDIR)/colorscreen_qt-moc_AdaptiveSharpeningWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_AdaptiveSharpeningWorker.cpp' object='colorscreen_qt-moc_AdaptiveSharpeningWorker.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_AdaptiveSharpeningWorker.obj `if test -f 'moc_AdaptiveSharpeningWorker.cpp'; then $(CYGPATH_W) 'moc_AdaptiveSharpeningWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_AdaptiveSharpeningWorker.cpp'; fi`
+
 colorscreen_qt-qrc_resources.o: qrc_resources.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-qrc_resources.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-qrc_resources.Tpo -c -o colorscreen_qt-qrc_resources.o `test -f 'qrc_resources.cpp' || echo '$(srcdir)/'`qrc_resources.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-qrc_resources.Tpo $(DEPDIR)/colorscreen_qt-qrc_resources.Po
@@ -1745,6 +1781,7 @@ clean: clean-am
 clean-am: clean-binPROGRAMS clean-generic clean-libtool mostlyclean-am
 
 distclean: distclean-am
+	-rm -f ./$(DEPDIR)/colorscreen_qt-AdaptiveSharpeningWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CapturePanel.Po
@@ -1778,6 +1815,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-WorkerBase.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-main.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_AdaptiveSharpeningWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_CapturePanel.Po
@@ -1853,6 +1891,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
+	-rm -f ./$(DEPDIR)/colorscreen_qt-AdaptiveSharpeningWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CapturePanel.Po
@@ -1886,6 +1925,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-WorkerBase.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-main.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_AdaptiveSharpeningWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_CapturePanel.Po
