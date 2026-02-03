@@ -874,7 +874,7 @@ mtf::compute_psf (luminosity_t max_radius, luminosity_t subscale, const char *fi
             psf_size *= 2;
           else
             subscale /= 2;
-	  printf ("Iterating PSF computation %i %i %f\n", iterations, psf_size, subscale);
+	  //printf ("Iterating PSF computation %i %i %f\n", iterations, psf_size, subscale);
           iterations++;
           continue;
         }
@@ -1390,11 +1390,11 @@ bool
 mtf::render_dot_spread_tile (tile_parameters &tile, progress_info *p)
 {
   precompute_psf (p);
-  int maxp = 0;
+  double maxp = 1;
   luminosity_t m = 0;
   for (int p = 0; p < 1024; p++)
     m = std::max (m, get_psf (p));
-  for (int p = 1; p < 1024; p++)
+  for (double p = 1; p < 1024; p*= 1 + 1.0 / tile.width)
     if (get_psf (p) > m / 100)
       maxp = p;
   if (m > 0)
@@ -1406,9 +1406,9 @@ mtf::render_dot_spread_tile (tile_parameters &tile, progress_info *p)
 	coord_t posx = (x - tile.width / 2) * step;
 	coord_t posy = (y - tile.height / 2) * step;
 	luminosity_t val = get_psf (posx , posy, 1);
-	int i = (nearest_int (posx) + nearest_int (posy)) % 2;
+	int i = (nearest_int (posx) + nearest_int (posy)) & 1;
 	luminosity_t lum = std::clamp (val * m, (luminosity_t)0, (luminosity_t)1);
-	luminosity_t lum2 = i ? std::clamp (val + lum * (luminosity_t)0.1,  (luminosity_t)0, (luminosity_t)1) : lum;
+	luminosity_t lum2 = i ? std::clamp (val * m + i * (luminosity_t)0.6,  (luminosity_t)0, (luminosity_t)1) : lum;
 	tile.pixels[x * 3 + y * tile.rowstride] = tile.pixels[x * 3 + y * tile.rowstride + 1] = invert_gamma (lum, -1) * 255 + 0.5;
 	tile.pixels[x * 3 + y * tile.rowstride + 2] = invert_gamma (lum2, -1) * 255 + 0.5;
       }
