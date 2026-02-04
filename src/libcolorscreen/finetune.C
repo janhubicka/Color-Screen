@@ -223,6 +223,8 @@ public:
   int simulated_screen_height;
 
   coord_t *start;
+  /* True if openMP parallelism is desired.  */
+  bool parallel;
 
   /* Scanner mtf if known.  */
   mtf *fixed_scanner_mtf;
@@ -1743,7 +1745,7 @@ public:
 		sp_blue.scanner_mtf.blur_diameter = blur_diameter.blue;
 	      }
 	  }
-	dst_scr->initialize_with_sharpen_parameters (*src_scr, vs, tile_sharpened);
+	dst_scr->initialize_with_sharpen_parameters (*src_scr, vs, tile_sharpened, parallel);
       }
     else
       dst_scr->initialize_with_blur (*src_scr, blur * pixel_size);
@@ -3383,6 +3385,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
             solver.pixel_size = pixel_size;
 	    solver.render_sharpen_params = rparam.sharpen;
             solver.collection_threshold = rparam.collection_threshold;
+	    solver.parallel = !(fparams.flags & finetune_no_progress_report);
             if (!solver.init_tile (0, cur_txmin, cur_tymin, bw, *mapp[0],
                                    render))
               {
@@ -3423,6 +3426,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
       best_solver.collection_threshold = rparam.collection_threshold;
       best_solver.render_sharpen_params = rparam.sharpen;
       best_solver.pixel_size = pixel_size;
+      best_solver.parallel = !(fparams.flags & finetune_no_progress_report);
       for (int tileid = 0; tileid < n_tiles; tileid++)
         {
           int cur_txmin = std::min (std::max (x[tileid] - twidth / 2, 0),

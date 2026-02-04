@@ -763,7 +763,7 @@ mtf::compute_lsf (std::vector<psf_t, fft_allocator<psf_t>> &lsf,
 
 std::vector<mtf::psf_t, fft_allocator<mtf::psf_t>>
 mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
-                     progress_info *progress)
+                     progress_info *progress, bool parallel)
 {
   int fft_size = psf_size / 2 + 1;
   const psf_t psf_step = 1 / (psf_size * subscale);
@@ -771,22 +771,47 @@ mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
   auto mtf_kernel = fft_alloc_complex<psf_t> (psf_size * fft_size);
   std::vector<psf_t, fft_allocator<psf_t>> psf_data (psf_size * psf_size);
   auto plan = fft_plan_c2r_2d<psf_t> (psf_size, psf_size, mtf_kernel.get (), psf_data.data ());
+  for (int x = 0; x < fft_size; x++)
+    {
+      std::complex ker (std::clamp (get_mtf (x, 0, psf_step),
+				    (luminosity_t)0, (luminosity_t)1),
+			(luminosity_t)0);
+      mtf_kernel.get ()[x][0] = real (ker);
+      mtf_kernel.get ()[x][1] = imag (ker);
+    }
+  //printf ("%i %i\n",fft_size, parallel);
+  // This loop is performance critical for focus finetuning.
+  // Bring it inline when parallelism is disabled or kernel is too small
+  if (!parallel || fft_size < 256)
+    {
+      for (int y = 1; y < fft_size; y++)
+	for (int x = 0; x < fft_size; x++)
+	  {
+	    std::complex ker (std::clamp (get_mtf (x, y, psf_step),
+					  (luminosity_t)0, (luminosity_t)1),
+			      (luminosity_t)0);
+	    mtf_kernel.get ()[y * fft_size + x][0] = real (ker);
+	    mtf_kernel.get ()[y * fft_size + x][1] = imag (ker);
+	    mtf_kernel.get ()[(psf_size - y) * fft_size + x][0] = real (ker);
+	    mtf_kernel.get ()[(psf_size - y) * fft_size + x][1] = imag (ker);
+	  }
+    }
+  else
+    {
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
-    shared(fft_size, psf_step, mtf_kernel, psf_size)
-  for (int y = 0; y < fft_size; y++)
-    for (int x = 0; x < fft_size; x++)
-      {
-        std::complex ker (std::clamp (get_mtf (x, y, psf_step),
-                                      (luminosity_t)0, (luminosity_t)1),
-                          (luminosity_t)0);
-        mtf_kernel.get ()[y * fft_size + x][0] = real (ker);
-        mtf_kernel.get ()[y * fft_size + x][1] = imag (ker);
-        if (y)
-          {
-            mtf_kernel.get ()[(psf_size - y) * fft_size + x][0] = real (ker);
-            mtf_kernel.get ()[(psf_size - y) * fft_size + x][1] = imag (ker);
-          }
-      }
+      shared(fft_size, psf_step, mtf_kernel, psf_size) //if (parallel && fft_size > 256)
+    for (int y = 1; y < fft_size; y++)
+      for (int x = 0; x < fft_size; x++)
+	{
+	  std::complex ker (std::clamp (get_mtf (x, y, psf_step),
+					(luminosity_t)0, (luminosity_t)1),
+			    (luminosity_t)0);
+	  mtf_kernel.get ()[y * fft_size + x][0] = real (ker);
+	  mtf_kernel.get ()[y * fft_size + x][1] = imag (ker);
+	  mtf_kernel.get ()[(psf_size - y) * fft_size + x][0] = real (ker);
+	  mtf_kernel.get ()[(psf_size - y) * fft_size + x][1] = imag (ker);
+	}
+    }
   plan.execute_c2r (mtf_kernel.get (), psf_data.data ());
 
   return psf_data;
@@ -849,7 +874,7 @@ mtf::estimate_psf_size (luminosity_t min_threshold,
    pixel we compute at (smaller pixel means more precise PSF)  */
 bool
 mtf::compute_psf (luminosity_t max_radius, luminosity_t subscale, const char *filename,
-                  const char **error)
+                  const char **error, bool parallel)
 {
   bool verbose = false;
   /* Cap size of FFT to solve.  */
@@ -863,7 +888,7 @@ mtf::compute_psf (luminosity_t max_radius, luminosity_t subscale, const char *fi
       /* Determine PSF radius.  */
 
       bool ok;
-      auto psf_data = mtf::compute_2d_psf (psf_size, subscale, NULL);
+      auto psf_data = mtf::compute_2d_psf (psf_size, subscale, NULL, parallel);
       if (!psf_data.size ())
         return false;
       int radius = get_psf_radius (psf_data.data (), psf_size, &ok);
@@ -983,7 +1008,7 @@ mtf::compute_psf (luminosity_t max_radius, luminosity_t subscale, const char *fi
 }
 
 bool
-mtf::precompute (progress_info *progress)
+mtf::precompute (progress_info *progress, bool parallel)
 {
   m_lock.lock ();
   if (m_precomputed)
@@ -1110,7 +1135,7 @@ mtf::precompute (progress_info *progress)
   return true;
 }
 bool
-mtf::precompute_psf (progress_info *progress, const char *filename, const char **error)
+mtf::precompute_psf (progress_info *progress, bool parallel, const char *filename, const char **error)
 {
   if (!precompute (progress))
     return false;
@@ -1120,7 +1145,7 @@ mtf::precompute_psf (progress_info *progress, const char *filename, const char *
       m_lock.unlock ();
       return true;
     }
-  if (!compute_psf (psf_size (1), 1 / 32.0, filename, error))
+  if (!compute_psf (psf_size (1), 1 / 32.0, filename, error, parallel))
     {
       m_lock.unlock ();
       return false;
@@ -1159,7 +1184,7 @@ mtf_parameters::save_psf (progress_info *progress, const char *write_table,
                           const char **error) const
 {
   mtf mtf (*this);
-  return mtf.precompute_psf (progress, write_table, error);
+  return mtf.precompute_psf (progress, true, write_table, error);
 }
 
 bool

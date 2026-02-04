@@ -1717,7 +1717,7 @@ screen::get_image (bool normalize, int tiles) const
 void
 screen::initialize_with_sharpen_parameters (screen &scr,
 					    sharpen_parameters *sharpen[3],
-					    bool anticipate_sharpening)
+					    bool anticipate_sharpening, bool parallel)
 {
   auto fft = fft_alloc_complex<screen_fft_t> (screen::size * fft_size);
   bool all = *sharpen[0] == *sharpen[1] && *sharpen[0] == *sharpen[2];
@@ -1738,13 +1738,13 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 	  luminosity_t snr = sharpen[c]->scanner_snr;
           screen_fft_t k_const = snr > 0 ? 1.0f / snr : 0;
 	  mtf::mtf_cache_t::cached_ptr mtf = mtf::get_mtf (sharpen[c]->scanner_mtf, NULL);
-	  mtf->precompute ();
+	  mtf->precompute (NULL, parallel);
 	  int this_psf_size = mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
 	  //printf ("screen step %f %f psf size %i\n", step, screen::size * step, this_psf_size);
 	  /* PSF may revisit this_psf_size.  */
 	  if (this_psf_size > screen::size)
 	    {
-	      mtf->precompute_psf ();
+	      mtf->precompute_psf (NULL, parallel);
 	      this_psf_size = mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
 	    }
 
@@ -1778,30 +1778,58 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 	      std::vector <screen_fft_t> wrapped_psf (screen::size * screen::size, 0.0);
 	      //printf ("This psf size %i\n", this_psf_size);
 
+	      if (parallel)
+	      {
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
-    shared(wrapped_psf,mtf,step,this_psf_size)
-	      for (int yy = 0; yy < screen::size; yy++)
-	        for (int xx = 0; xx < screen::size; xx++)
-		  {
-		    screen_fft_t sum = 0.0;
-		    for (int y = yy; y < this_psf_size; y += screen::size)
-		      for (int x = xx; x < this_psf_size; x += screen::size)
-			sum += mtf->get_psf (x, y, (step * screen::size));
-		    
-		    for (int y = yy; y < this_psf_size; y += screen::size)
-		      for (int x = screen::size - xx; x < this_psf_size; x += screen::size)
-			sum += mtf->get_psf (x, y, (step * screen::size));
-		    
-		    for (int y = screen::size - yy; y < this_psf_size; y += screen::size)
-		      for (int x = xx; x < this_psf_size; x += screen::size)
-			sum += mtf->get_psf (x, y, (step * screen::size));
-		    
-		    for (int y = screen::size - yy; y < this_psf_size; y += screen::size)
-		      for (int x = screen::size - xx; x < this_psf_size; x += screen::size)
-			sum += mtf->get_psf (x, y, (step * screen::size));
-		    
-		    wrapped_psf[yy * screen::size + xx] = sum;
-		  }
+      shared(wrapped_psf,mtf,step,this_psf_size) if (parallel)
+		for (int yy = 0; yy < screen::size; yy++)
+		  for (int xx = 0; xx < screen::size; xx++)
+		    {
+		      screen_fft_t sum = 0.0;
+		      for (int y = yy; y < this_psf_size; y += screen::size)
+			for (int x = xx; x < this_psf_size; x += screen::size)
+			  sum += mtf->get_psf (x, y, (step * screen::size));
+		      
+		      for (int y = yy; y < this_psf_size; y += screen::size)
+			for (int x = screen::size - xx; x < this_psf_size; x += screen::size)
+			  sum += mtf->get_psf (x, y, (step * screen::size));
+		      
+		      for (int y = screen::size - yy; y < this_psf_size; y += screen::size)
+			for (int x = xx; x < this_psf_size; x += screen::size)
+			  sum += mtf->get_psf (x, y, (step * screen::size));
+		      
+		      for (int y = screen::size - yy; y < this_psf_size; y += screen::size)
+			for (int x = screen::size - xx; x < this_psf_size; x += screen::size)
+			  sum += mtf->get_psf (x, y, (step * screen::size));
+		      
+		      wrapped_psf[yy * screen::size + xx] = sum;
+		    }
+	      }
+	      else
+	      {
+		for (int yy = 0; yy < screen::size; yy++)
+		  for (int xx = 0; xx < screen::size; xx++)
+		    {
+		      screen_fft_t sum = 0.0;
+		      for (int y = yy; y < this_psf_size; y += screen::size)
+			for (int x = xx; x < this_psf_size; x += screen::size)
+			  sum += mtf->get_psf (x, y, (step * screen::size));
+		      
+		      for (int y = yy; y < this_psf_size; y += screen::size)
+			for (int x = screen::size - xx; x < this_psf_size; x += screen::size)
+			  sum += mtf->get_psf (x, y, (step * screen::size));
+		      
+		      for (int y = screen::size - yy; y < this_psf_size; y += screen::size)
+			for (int x = xx; x < this_psf_size; x += screen::size)
+			  sum += mtf->get_psf (x, y, (step * screen::size));
+		      
+		      for (int y = screen::size - yy; y < this_psf_size; y += screen::size)
+			for (int x = screen::size - xx; x < this_psf_size; x += screen::size)
+			  sum += mtf->get_psf (x, y, (step * screen::size));
+		      
+		      wrapped_psf[yy * screen::size + xx] = sum;
+		    }
+	      }
 	      screen_fft_t sum = 0;
 	      for (int x = 0; x < screen::size * screen::size; x++)
 		  sum += wrapped_psf [x];

@@ -27,9 +27,9 @@ namespace colorscreen
 class mtf
 {
 public:
-  bool precompute (progress_info *progress = NULL);
+  bool precompute (progress_info *progress = NULL, bool parallel = true);
   /* Precompute psf, psf_radius and psf_size estimate may be revisited.  */
-  bool precompute_psf (progress_info *progress = NULL, const char *filename = NULL,
+  bool precompute_psf (progress_info *progress = NULL, bool parallel = true, const char *filename = NULL,
                    const char **error = NULL);
 
   /* Reutrn 1d MTF value.  */
@@ -92,7 +92,7 @@ public:
   typedef float psf_t;
   std::vector<psf_t, fft_allocator<psf_t>>
   compute_2d_psf (int psf_size, luminosity_t subscale,
-		  progress_info *progress = NULL);
+		  progress_info *progress = NULL, bool parallel = true);
 
   bool render_dot_spread_tile (tile_parameters &tile, progress_info *p);
 
@@ -106,7 +106,7 @@ private:
   std::mutex m_lock;
   luminosity_t estimate_psf_size (luminosity_t min_threshold = 0.001, luminosity_t sum_threshold = 1.0 / 65535) const;
   bool compute_psf (luminosity_t max_radius, luminosity_t subsample,
-                    const char *filename, const char **error);
+                    const char *filename, const char **error, bool parallel = true);
   void compute_lsf (std::vector<psf_t, fft_allocator<psf_t>> &lsf,
                     luminosity_t subsample) const;
 };

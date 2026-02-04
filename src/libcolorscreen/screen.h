@@ -80,7 +80,7 @@ public:
   DLL_PUBLIC void initialize_with_blur (screen &scr, coord_t blur_radius, blur_alg alg = blur_auto);
   /* Same but specify different blur for each color.  */
   DLL_PUBLIC void initialize_with_blur (screen &scr, rgbdata blur_radius, blur_alg alg = blur_auto);
-  DLL_PUBLIC void initialize_with_sharpen_parameters (screen &scr, sharpen_parameters *sharpen[3], bool anticipate_sharpening);
+  DLL_PUBLIC void initialize_with_sharpen_parameters (screen &scr, sharpen_parameters *sharpen[3], bool anticipate_sharpening, bool parallel = true);
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
   void strip (coord_t first_strip_width, coord_t second_strip_width, int color1, int color2, int color3);
