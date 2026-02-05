@@ -8,6 +8,8 @@
 #ifdef RENDER_EXTRA
 #include "render-extra/render-extra.h"
 #endif
+#include "render-simulate.h"
+#include "render-screen.h"
 #include "render-fast.h"
 #include "render-scr-detect.h"
 namespace colorscreen
@@ -233,7 +235,7 @@ render_to_scr::render_to_file (render_to_file_params &rfparams, render_type_para
       return produce_file<render_screen,supports_scr> (rfparams, rtparam, param, param, rparam, img, black, progress);
       break;
     case render_type_simulate_process:
-      return produce_file<render_simulate_process,supports_scr> (rfparams, rtparam, param, param, rparam, img, black, progress);
+      return produce_file<render_simulate_process,supports_img> (rfparams, rtparam, param, param, rparam, img, black, progress);
       break;
     case render_type_interpolated_original:
     case render_type_interpolated_profiled_original:
