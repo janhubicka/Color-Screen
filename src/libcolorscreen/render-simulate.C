@@ -1,5 +1,6 @@
 #include "render-simulate.h"
 #include "deconvolve.h"
+#include "sharpen.h"
 namespace colorscreen
 {
 namespace {
@@ -17,27 +18,23 @@ get_new_simulation (struct simulation_params &param, progress_info *progress)
 {
   std::vector <float> *img = new std::vector <float> (param.img->width * param.img->height);
   bool ok = false;
-    if (param.sharpen.deconvolution_p ())
-      {
-	ok = deconvolve<luminosity_t, float,
-			int, render_simulate_process *, getdata> (
-	    img->data (), 0, param.r, param.img->width, param.img->height,
-	    param.sharpen, progress, true);
-      }
-#if 0
-    else
-      ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **,
-		   getdata_params &, getdata> (
-	  out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
-	  p.sp.get_mode () == sharpen_parameters::none ? 0 : p.sp.usm_radius,
-	  p.sp.usm_amount, progress);
-  }
-#endif
+  if (param.sharpen.deconvolution_p ())
+    ok = deconvolve<luminosity_t, float,
+		    int, render_simulate_process *, getdata> (
+	img->data (), 0, param.r, param.img->width, param.img->height,
+	param.sharpen, progress, true);
+  else
+    ok = sharpen<luminosity_t, float, int,
+		 render_simulate_process *, getdata> (
+	img->data (), 0, param.r, param.img->width, param.img->height,
+	param.sharpen.get_mode () == sharpen_parameters::none ? 0 : param.sharpen.usm_radius,
+	/* Blur intead of sharpen.  */
+	-param.sharpen.usm_amount, progress);
   if (!ok)
-  {
-    delete img;
-    return NULL;
-  }
+    {
+      delete img;
+      return NULL;
+    }
   return img;
 }
 
