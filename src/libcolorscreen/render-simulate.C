@@ -50,6 +50,10 @@ bool
 render_simulate_process::precompute_all (progress_info *progress)
 {
   sharpen_parameters sharpen;
+  m_proportions_cor = patch_proportions (m_scr_to_img.get_type (), &m_params);
+  m_proportions_cor.red = 0.333 / m_proportions_cor.red;
+  m_proportions_cor.green = 0.333 / m_proportions_cor.green;
+  m_proportions_cor.blue = 0.333 / m_proportions_cor.blue;
   m_screen = get_screen (m_scr_to_img.get_type (), false, false, sharpen,
 			 m_params.red_strip_width,
 			 m_params.green_strip_width, progress);

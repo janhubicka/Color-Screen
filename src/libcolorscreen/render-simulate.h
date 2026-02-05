@@ -51,7 +51,7 @@ public:
             m_scr_to_img.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 }));
         luminosity_t rr = get_data_red (x, y), gg = get_data_green (x, y),
                      bb = get_data_blue (x, y);
-        return rr * scr.red + gg * scr.green + bb * scr.blue;
+        return rr * scr.red * m_proportions_cor.red + gg * scr.green * m_proportions_cor.green + bb * scr.blue * m_proportions_cor.blue;
       }
     return 0;
   }
@@ -86,6 +86,7 @@ public:
 private:
   render_to_scr::screen_cache_t::cached_ptr m_screen;
   simulation_cache_t::cached_ptr m_simulated;
+  rgbdata m_proportions_cor;
 };
 }
 #endif
