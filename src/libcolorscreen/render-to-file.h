@@ -94,7 +94,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
         progress->pause_stdout ();
       printf ("Rendering %s in resolution %ix%i, bit-depth:%i, %s geometry", p.filename, p.width,
 	      p.height, p.depth,
-	      render_to_file_params::geometry_names [(int)p.geometry]);
+	      render_to_file_params::geometry_names [(int)p.geometry].pretty_name);
       if (p.antialias)
 	printf (", antialias %ix%i", p.antialias,p.antialias);
       if (p.hdr)

@@ -94,17 +94,23 @@ public:
   {
     return precompute_all (progress);
   }
-  inline rgbdata sample_pixel_scr (coord_t x, coord_t y) const
-  {
-    return m_screen->interpolated_mult ({ x + (coord_t)0.5, y + (coord_t)0.5 });
-  }
   inline rgbdata sample_pixel_img (coord_t x, coord_t y) const
   {
-    rgbdata scr = m_screen->interpolated_mult (m_scr_to_img.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 }));
-    luminosity_t rr = get_data_red (x, y), gg = get_data_green (x, y),
-		 bb = get_data_blue (x, y);
-    luminosity_t lum = rr * scr.red + gg * scr.green + bb * scr.blue;
+    luminosity_t lum = 0;
+    if (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height)
+      {
+	rgbdata scr = m_screen->interpolated_mult (m_scr_to_img.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 }));
+	luminosity_t rr = get_data_red (x, y), gg = get_data_green (x, y),
+		     bb = get_data_blue (x, y);
+	lum = rr * scr.red + gg * scr.green + bb * scr.blue;
+      }
+    //else printf ("%f %f\n",x,y);
     return {lum, lum, lum};
+  }
+  inline rgbdata sample_pixel_scr (coord_t x, coord_t y) const
+  {
+    point_t img = m_scr_to_img.to_img ({ x, y });
+    return sample_pixel_img (img.x, img.y);
   }
   pure_attr rgbdata
   sample_pixel_final (coord_t x, coord_t y) const
@@ -120,8 +126,8 @@ public:
   void get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
                        int height, coord_t pixelsize, progress_info *progress)
   {
-    downscale<render_screen, rgbdata,
-	      &render_screen::fast_sample_pixel_img, &account_rgb_pixel> (
+    downscale<render_simulate_process, rgbdata,
+	      &render_simulate_process::fast_sample_pixel_img, &account_rgb_pixel> (
 	data, x, y, width, height, pixelsize, progress);
   }
 
