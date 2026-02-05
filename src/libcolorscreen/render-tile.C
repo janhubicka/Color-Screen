@@ -24,6 +24,8 @@ const constexpr render_type_property render_type_properties[render_type_max] =
    {"interpolated", "interpolated",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::PATCH_RESOLUTION},
    {"interpolated-predictive", "interpolated-predictive",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
    {"interpolated-combined", "interpolated-combined",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
+   {"screen", "screen", render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS | render_type_property::OUTPUTS_SRGB_PROFILE},
+   {"simulate-process", "simulate-process", render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS | render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_RGB},
    {"fast", "fast", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCREEN_RESOLUTION},
    {"extra", "extra", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::PATCH_RESOLUTION},
    {"detected-adjusted-color", "detected-adjusted-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
@@ -163,6 +165,12 @@ render_to_scr::render_tile (render_type_parameters rtparam,
     case render_type_realistic:
       ok = do_render_tile<render_superpose_img> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
+    case render_type_screen:
+      ok = do_render_tile<render_screen> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+      break;
+    case render_type_simulate_process:
+      ok = do_render_tile<render_simulate_process> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+      break;
     case render_type_interpolated_original:
     case render_type_interpolated_profiled_original:
     case render_type_interpolated:
@@ -220,6 +228,12 @@ render_to_scr::render_to_file (render_to_file_params &rfparams, render_type_para
     case render_type_preview_grid:
     case render_type_realistic:
       return produce_file<render_superpose_img,supports_img> (rfparams, rtparam, param, param, rparam, img, black, progress);
+      break;
+    case render_type_screen:
+      return produce_file<render_screen,supports_scr> (rfparams, rtparam, param, param, rparam, img, black, progress);
+      break;
+    case render_type_simulate_process:
+      return produce_file<render_simulate_process,supports_scr> (rfparams, rtparam, param, param, rparam, img, black, progress);
       break;
     case render_type_interpolated_original:
     case render_type_interpolated_profiled_original:

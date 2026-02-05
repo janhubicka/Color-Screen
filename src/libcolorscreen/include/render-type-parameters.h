@@ -14,6 +14,8 @@ enum render_type_t
   render_type_interpolated,
   render_type_predictive,
   render_type_combined,
+  render_type_screen,
+  render_type_simulate_process,
   render_type_fast,
   render_type_extra,
   render_type_adjusted_color,
