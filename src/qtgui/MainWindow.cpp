@@ -1620,7 +1620,25 @@ void MainWindow::onProgressTimer() {
         }
       }
 
-      m_statusLabel->setText(tasks.join(" > "));
+      QString statusText = tasks.join(" > ");
+      
+      // Time estimation for long running tasks
+      qint64 elapsedMs = task->startTime.elapsed();
+      if (elapsedMs > 20000 && percent > 0.1f) { // > 20s and at least 0.1% progress to avoid huge estimates
+          double doneFraction = (double)percent / 100.0;
+          if (doneFraction > 0.0) {
+              qint64 totalEstimatedMs = (double)elapsedMs / doneFraction;
+              qint64 remainingMs = totalEstimatedMs - elapsedMs;
+              
+              if (remainingMs > 0) {
+                  int remainingSec = (remainingMs / 1000) % 60;
+                  int remainingMin = (remainingMs / 60000);
+                  statusText += QString(" (ETR: %1:%2)").arg(remainingMin).arg(remainingSec, 2, 10, QChar('0'));
+              }
+          }
+      }
+
+      m_statusLabel->setText(statusText);
 
       if (percent >= 0) {
         m_progressBar->setRange(0, 100);

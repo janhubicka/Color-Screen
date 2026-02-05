@@ -1,6 +1,7 @@
 #include "AdaptiveSharpeningWorker.h"
 #include "../libcolorscreen/include/analyze-scanner-blur.h"
 #include <QtConcurrent>
+#include <QThreadPool>
 #include <vector>
 
 AdaptiveSharpeningWorker::AdaptiveSharpeningWorker(
@@ -48,6 +49,11 @@ void AdaptiveSharpeningWorker::run() {
     worker.tolerance = tolerance;
     worker.progress = m_progress.get();
     worker.verbose = false; // Disable verbose for GUI
+    
+    // Use local ThreadPool to avoid starving the global pool used by Renderer
+    QThreadPool pool;
+    // Leave one thread free for GUI/Renderer
+    pool.setMaxThreadCount(std::max(1, QThread::idealThreadCount() - 1));
 
     if (!worker.step1()) {
         emit finished(false, nullptr);
@@ -66,14 +72,22 @@ void AdaptiveSharpeningWorker::run() {
             }
         }
         
-        QtConcurrent::blockingMap(stripTasks, [this, &worker](const QPair<int, int>& task) {
-             if (worker.progress && worker.progress->cancelled()) return;
-             
-             colorscreen::coord_t red = 0, green = 0;
-             if (worker.analyze_strips(task.first, task.second, &red, &green)) {
-                 emit stripAnalyzed(task.first, task.second, red, green);
-             }
-        });
+        if (m_progress && m_progress->cancelled()) {
+            emit finished(false, nullptr);
+            return;
+        }
+
+        for (const auto& task : stripTasks) {
+            pool.start([this, &worker, task]() {
+                if (worker.progress && worker.progress->cancelled()) return;
+                
+                colorscreen::coord_t red = 0, green = 0;
+                if (worker.analyze_strips(task.first, task.second, &red, &green)) {
+                    emit stripAnalyzed(task.first, task.second, red, green);
+                }
+            });
+        }
+        pool.waitForDone();
         
         if (m_progress && m_progress->cancelled()) {
             emit finished(false, nullptr);
@@ -99,14 +113,18 @@ void AdaptiveSharpeningWorker::run() {
         }
     }
 
-    QtConcurrent::blockingMap(blurTasks, [this, &worker](const QPair<int, int>& task) {
-        if (worker.progress && worker.progress->cancelled()) return;
-        
-        colorscreen::rgbdata disp;
-        if (worker.analyze_blur(task.first, task.second, &disp)) {
-             emit blurAnalyzed(task.first, task.second, disp.red); // Assuming uniform
-        }
-    });
+    // Reuse pool for blur tasks
+    for (const auto& task : blurTasks) {
+        pool.start([this, &worker, task]() {
+            if (worker.progress && worker.progress->cancelled()) return;
+            
+            colorscreen::rgbdata disp;
+            if (worker.analyze_blur(task.first, task.second, &disp)) {
+                 emit blurAnalyzed(task.first, task.second, disp.red); // Assuming uniform
+            }
+        });
+    }
+    pool.waitForDone();
     
     if (m_progress && m_progress->cancelled()) {
         emit finished(false, nullptr);
