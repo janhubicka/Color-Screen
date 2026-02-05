@@ -282,7 +282,7 @@ analyze_scanner_blur_worker::analyze_blur (int x, int y, rgbdata *displacements)
   if (mainpass [y * strip_xsteps + x].success && displacements)
     {
       coord_t cor = get_correction (mode, mainpass[y * xsteps * xsubsteps + x]);
-      *displacements = {cor, cor, cor};
+      *displacements = {(luminosity_t)cor, (luminosity_t)cor, (luminosity_t)cor};
     }
   progress->inc_progress ();
   return mainpass [y * strip_xsteps + x].success;
