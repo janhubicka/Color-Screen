@@ -138,12 +138,16 @@ public:
       }
     
     time++;
+  restart:
+    size = 0;
+    longest_unused = NULL;
     for (e = entries; e; e = e->next)
       {
         if (p == e->params)
           {
             while (e->computing)
               {
+                uint64_t id = e->id;
 		if (progress && e->computing)
 		  progress->wait ("waiting for other thread to finish computation");
                 if (cond.wait_for (guard, std::chrono::milliseconds (333))
@@ -152,6 +156,15 @@ public:
                     if (progress && progress->cancel_requested ())
                       return NULL;
                   }
+                bool found = false;
+                for (struct cache_entry *e2 = entries; e2; e2 = e2->next)
+                  if (e2 == e && e2->id == id)
+                    {
+                      found = true;
+                      break;
+                    }
+                if (!found)
+                  goto restart;
               }
             e->last_used = time;
             e->nuses++;
@@ -421,6 +434,9 @@ public:
           return NULL;
       }
     time++;
+  restart:
+    size = 0;
+    longest_unused = NULL;
     for (e = entries; e; e = e->next)
       {
         if (xshift <= e->xshift && yshift <= e->yshift
@@ -429,6 +445,7 @@ public:
           {
             while (e->computing)
               {
+                uint64_t id = e->id;
 		if (progress && e->computing)
 		  progress->wait ("waiting for other thread to finish computation");
                 if (cond.wait_for (guard, std::chrono::milliseconds (333))
@@ -437,6 +454,15 @@ public:
                     if (progress && progress->cancel_requested ())
                       return NULL;
                   }
+                bool found = false;
+                for (struct cache_entry *e2 = entries; e2; e2 = e2->next)
+                  if (e2 == e && e2->id == id)
+                    {
+                      found = true;
+                      break;
+                    }
+                if (!found)
+                  goto restart;
               }
             e->last_used = time;
             e->nuses++;
