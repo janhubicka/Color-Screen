@@ -24,9 +24,9 @@ Renderer::~Renderer()
     // This prevents use-after-free where a task tries to emit a signal on a destroyed Renderer
     for (const auto& future : m_activeFutures) {
         if (!future.isFinished()) {
-            // We cannot easily cancel the lambda body unless it checks for cancellation, 
-            // but at least we can wait for it to finish.
-            // Since the tasks are typically short-lived rendering of a tile, waiting should be fast.
+            // Although tasks can be cancelled using progress->cancel(), the cancellation 
+            // is cooperative and we must wait for the running task to return to ensure 
+            // no use-after-free occurs.
             const_cast<QFuture<void>&>(future).waitForFinished();
         }
     }

@@ -7,7 +7,14 @@ GeometrySolverWorker::GeometrySolverWorker(
     std::shared_ptr<colorscreen::image_data> scan, QObject *parent)
     : WorkerBase(scan, parent) {}
 
-GeometrySolverWorker::~GeometrySolverWorker() = default;
+GeometrySolverWorker::~GeometrySolverWorker() {
+    // Wait for all running tasks to complete before destruction
+    for (const auto& future : m_activeFutures) {
+        if (!future.isFinished()) {
+            const_cast<QFuture<void>&>(future).waitForFinished();
+        }
+    }
+}
 
 void GeometrySolverWorker::solve(
     int reqId, colorscreen::scr_to_img_parameters params,
@@ -20,8 +27,11 @@ void GeometrySolverWorker::solve(
     return;
   }
 
+  // Clean up finished futures
+  m_activeFutures.removeIf([](const QFuture<void>& f) { return f.isFinished(); });
+
   // Use QtConcurrent to run in thread pool
-  QtConcurrent::run([this, reqId, params, solverParams, progress, computeMesh]() mutable {
+  QFuture<void> future = QtConcurrent::run([this, reqId, params, solverParams, progress, computeMesh]() mutable {
       bool success = false;
 
       try {
@@ -64,6 +74,9 @@ void GeometrySolverWorker::solve(
         success = false;
       }
 
-      emit finished(reqId, params, success);
+      bool cancelled = progress && progress->cancelled();
+      emit finished(reqId, params, success, cancelled);
   });
+  
+  m_activeFutures.append(future);
 }

@@ -2321,7 +2321,7 @@ void MainWindow::onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress
       Q_ARG(bool, data.computeMesh));
 }
 
-void MainWindow::onSolverFinished(int reqId, colorscreen::scr_to_img_parameters result, bool success) {
+void MainWindow::onSolverFinished(int reqId, colorscreen::scr_to_img_parameters result, bool success, bool cancelled) {
   // Report back to queue
   m_solverQueue.reportFinished(reqId, success);
 
@@ -2330,7 +2330,10 @@ void MainWindow::onSolverFinished(int reqId, colorscreen::scr_to_img_parameters 
     newState.scrToImg.merge_solver_solution(result);
     changeParameters(newState, "Optimize Geometry");
   } else {
-    QMessageBox::warning(this, "Optimization Failed", "The geometry solver failed to find a solution.");
+    // Only show error if not cancelled
+    if (!cancelled) {
+        QMessageBox::warning(this, "Optimization Failed", "The geometry solver failed to find a solution.");
+    }
   }
 }
 

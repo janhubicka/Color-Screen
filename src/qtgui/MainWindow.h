@@ -92,7 +92,7 @@ private slots:
   void onNonlinearToggled(bool checked);
       // Slot for Geometry Optimization
   void onSolverFinished(int reqId, colorscreen::scr_to_img_parameters result,
-                        bool success);
+                        bool success, bool cancelled);
   void onSelectAll();
   void onDeselectAll();
   void onDeleteSelected();

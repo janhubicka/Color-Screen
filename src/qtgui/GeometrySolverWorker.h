@@ -6,6 +6,9 @@
 #include "../libcolorscreen/include/solver-parameters.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
 
+#include <QFuture>
+#include <QList>
+
 class GeometrySolverWorker : public WorkerBase {
   Q_OBJECT
 public:
@@ -20,9 +23,10 @@ public slots:
              bool computeMesh = false);
 
 signals:
-  void finished(int reqId, colorscreen::scr_to_img_parameters result, bool success);
+  void finished(int reqId, colorscreen::scr_to_img_parameters result, bool success, bool cancelled = false);
 
 private:
+  QList<QFuture<void>> m_activeFutures;
 };
 
 #endif // GEOMETRY_SOLVER_WORKER_H
