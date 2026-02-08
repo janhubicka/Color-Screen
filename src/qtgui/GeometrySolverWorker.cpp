@@ -1,20 +1,11 @@
 #include "GeometrySolverWorker.h"
+#include "../libcolorscreen/include/colorscreen.h"
 #include "mesh.h"
 #include <QDebug>
-#include <QtConcurrent>
 
 GeometrySolverWorker::GeometrySolverWorker(
     std::shared_ptr<colorscreen::image_data> scan, QObject *parent)
     : WorkerBase(scan, parent) {}
-
-GeometrySolverWorker::~GeometrySolverWorker() {
-    // Wait for all running tasks to complete before destruction
-    for (const auto& future : m_activeFutures) {
-        if (!future.isFinished()) {
-            const_cast<QFuture<void>&>(future).waitForFinished();
-        }
-    }
-}
 
 void GeometrySolverWorker::solve(
     int reqId, colorscreen::scr_to_img_parameters params,
@@ -23,60 +14,59 @@ void GeometrySolverWorker::solve(
     bool computeMesh) {
     
   if (!m_scan) {
-    emit finished(reqId, params, false);
+    emit finished(reqId, params, false, false);
     return;
   }
 
-  // Clean up finished futures
-  m_activeFutures.removeIf([](const QFuture<void>& f) { return f.isFinished(); });
+  bool success = false;
+  bool cancelled = false;
 
-  // Use QtConcurrent to run in thread pool
-  QFuture<void> future = QtConcurrent::run([this, reqId, params, solverParams, progress, computeMesh]() mutable {
-      bool success = false;
+  try {
+    colorscreen::sub_task task(progress.get());
+    
+    // Lens optimization is slow. Disable it for nonlinear transforms
+    if (computeMesh)
+      solverParams.optimize_lens = false;
+    
+    auto originalMesh = params.mesh_trans;
 
-      try {
-        colorscreen::sub_task task (progress.get ());
-        // Lens optimization is slow. Disable it for nonlinear transforms
-        if (computeMesh)
-          solverParams.optimize_lens = false;
-        
-        auto originalMesh = params.mesh_trans;
+    // colorscreen::solver modifies params in place and returns sum of squares of error
+    colorscreen::coord_t error_sq = colorscreen::solver(&params, *m_scan, solverParams, progress.get());
 
-        // colorscreen::solver modifies params in place and returns sum of squares of error
-        colorscreen::coord_t error_sq = colorscreen::solver(&params, *m_scan, solverParams, progress.get());
+    if (!computeMesh)
+      params.mesh_trans = originalMesh;
 
-        if (!computeMesh)
-          params.mesh_trans = originalMesh;
+    qDebug() << "Geometry solver finished with error squared:" << error_sq << " nonlinear " << computeMesh;
 
-        qDebug() << "Geometry solver finished with error squared:" << error_sq << " nonlinear " << computeMesh;
-
-        if (progress && progress->cancelled()) {
+    if (progress && progress->cancelled()) {
+      success = false;
+      cancelled = true;
+    } else {
+      if (computeMesh) {
+        params.mesh_trans = colorscreen::solver_mesh(&params, *m_scan, solverParams, progress.get());
+        if (!params.mesh_trans) {
           success = false;
+          if (!progress->cancelled())
+            qWarning() << "Geometry solver failed to compute mesh";
         } else {
-          if (computeMesh) {
-            params.mesh_trans = colorscreen::solver_mesh(&params, *m_scan, solverParams, progress.get());
-            if (!params.mesh_trans) {
-               success = false;
-               if (!progress->cancelled ())
-                 qWarning() << "Geometry solver failed to compute mesh";
-            }
-            else
-              success = true;
-          } else {
-            success = true;
-          }
+          success = true;
         }
-      } catch (const std::exception &e) {
-        qWarning() << "Geometry solver failed with exception:" << e.what();
-        success = false;
-      } catch (...) {
-        qWarning() << "Geometry solver failed with unknown exception";
-        success = false;
+      } else {
+        success = true;
       }
+    }
+  } catch (const std::exception &e) {
+    qWarning() << "Geometry solver failed with exception:" << e.what();
+    success = false;
+  } catch (...) {
+    qWarning() << "Geometry solver failed with unknown exception";
+    success = false;
+  }
 
-      bool cancelled = progress && progress->cancelled();
-      emit finished(reqId, params, success, cancelled);
-  });
-  
-  m_activeFutures.append(future);
+  // Check cancellation one more time
+  if (progress && progress->cancelled()) {
+    cancelled = true;
+  }
+
+  emit finished(reqId, params, success, cancelled);
 }
