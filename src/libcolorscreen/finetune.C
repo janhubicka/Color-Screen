@@ -3648,7 +3648,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
     {
       finetune_parameters fparam;
       fparam.flags |= finetune_position /*| finetune_multitile*/ | finetune_bw;
-      res[1] = finetune (rparam, param, img,
+      res[0] = finetune (rparam, param, img,
                          { { xmin + (0.5) * xstep, ymin + (0.5) * ystep } },
                          NULL, fparam, progress);
       progress->inc_progress ();
