@@ -18,7 +18,19 @@ Renderer::Renderer(std::shared_ptr<colorscreen::image_data> scan,
 {
 }
 
-Renderer::~Renderer() = default;
+Renderer::~Renderer() 
+{
+    // Wait for all running tasks to complete before destruction
+    // This prevents use-after-free where a task tries to emit a signal on a destroyed Renderer
+    for (const auto& future : m_activeFutures) {
+        if (!future.isFinished()) {
+            // We cannot easily cancel the lambda body unless it checks for cancellation, 
+            // but at least we can wait for it to finish.
+            // Since the tasks are typically short-lived rendering of a tile, waiting should be fast.
+            const_cast<QFuture<void>&>(future).waitForFinished();
+        }
+    }
+}
 
 void Renderer::updateParameters(const colorscreen::render_parameters &rparams,
                                 const colorscreen::scr_to_img_parameters &scrToImg,
@@ -50,7 +62,11 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
     }
 
     // Run actual rendering in thread pool
-    QtConcurrent::run([this, reqId, xOffset, yOffset, scale, width, height, 
+    // Clean up finished futures to prevent unbounded growth
+    m_activeFutures.removeIf([](const QFuture<void>& f) { return f.isFinished(); });
+
+    // Run actual rendering in thread pool and track the future
+    QFuture<void> future = QtConcurrent::run([this, reqId, xOffset, yOffset, scale, width, height, 
                        frameParams, progress, taskName,
                        scrToImg, scrDetect, renderType]() mutable {
         
@@ -157,4 +173,6 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
             emit imageReady(reqId, QImage(), xOffset, yOffset, scale, false);
         }
     });
+
+    m_activeFutures.append(future);
 }

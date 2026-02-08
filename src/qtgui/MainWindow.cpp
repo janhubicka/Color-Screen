@@ -2310,7 +2310,7 @@ void MainWindow::onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress
   if (progress) {
       progress->set_task("Optimizing geometry", 1);
   }
-  colorscreen::sub_task task (progress.get ());
+  //colorscreen::sub_task task (progress.get ());
   
   // Invoke solver in worker
   QMetaObject::invokeMethod(

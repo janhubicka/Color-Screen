@@ -4,6 +4,8 @@
 #include <QImage>
 #include <atomic>
 #include <memory> // Added for std::shared_ptr
+#include <QFuture>
+#include <QList>
 #include "../libcolorscreen/include/imagedata.h" // Replaces part of colorscreen.h
 #include "../libcolorscreen/include/render-parameters.h" // Replaces part of colorscreen.h
 #include "../libcolorscreen/include/render-type-parameters.h" // Added as per instruction
@@ -47,4 +49,7 @@ private:
     colorscreen::scr_to_img_parameters m_scrToImg;
     colorscreen::scr_detect_parameters m_scrDetect;
     colorscreen::render_type_parameters m_renderType;
+    
+    // Futures of active rendering tasks
+    QList<QFuture<void>> m_activeFutures;
 };
