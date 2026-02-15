@@ -157,7 +157,7 @@ progress_info::push (bool safe)
   //if (!safe)
     //printf ("Unsafe push\n");
   int ret = stack.size ();
-  assert (ret >= 0);
+  assert (ret >= 0 /*&& m_current*/);
   stack.push_back ({ m_max, m_current, m_task });
 
   if (m_record_time || time_report)

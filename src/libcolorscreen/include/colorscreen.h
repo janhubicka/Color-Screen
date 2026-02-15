@@ -18,9 +18,13 @@ struct render_to_file_params
   bool verbose;
   bool hdr;
   bool dng;
+  /* Scale relative to default size of the image.  */
   coord_t scale;
+  /* Scale relative to screen coordinates  */
+  coord_t screen_scale;
   const void *icc_profile;
   int icc_profile_len;
+  /* Antialiasing will happen on NxN grid.  */
   int antialias;
   coord_t xdpi, ydpi;
 
@@ -61,7 +65,7 @@ struct render_to_file_params
   coord_t xpos, ypos;
   render_to_file_params ()
       : filename (NULL), depth (16), verbose (false), hdr (false), dng (false),
-        scale (1), icc_profile (NULL), icc_profile_len (0), antialias (0),
+        scale (1), screen_scale (0), icc_profile (NULL), icc_profile_len (0), antialias (0),
         xdpi (0), ydpi (0), geometry (default_geometry), width (0), height (0), tile (0), xstart (0),
         ystart (0), xstep (0), ystep (0), pixel_size (0)
   {

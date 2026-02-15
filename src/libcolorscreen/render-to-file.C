@@ -80,8 +80,16 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
 	}
       if (!p->xstep)
 	{
-	  p->xstep = p->pixel_size / p->scale;
-	  p->ystep = p->pixel_size / p->scale;
+	  if (!p->screen_scale)
+	    {
+	      p->xstep = p->pixel_size / p->scale;
+	      p->ystep = p->pixel_size / p->scale;
+	    }
+	  else
+	    {
+	      p->xstep = 1 / p->screen_scale;
+	      p->ystep = 1 / p->screen_scale;
+	    }
 	}
       if (!p->antialias)
 	{

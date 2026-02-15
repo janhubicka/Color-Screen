@@ -103,6 +103,7 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --scan-ppi=val            specify resolution of scan\n");
       fprintf (stderr, "      --age=val                 specify age of color model\n");
       fprintf (stderr, "      --scale=val               specify scale of output file\n");
+      fprintf (stderr, "      --screen-scale=val        specify scale of output file relative to screen dimensions\n");
       fprintf (stderr, "      --ignore-infrared         force use of simulated IR channel\n");
     }
   if (subhelp == help_autodetect || subhelp == help_basic)
@@ -765,6 +766,7 @@ render_cmd (int argc, char **argv)
   bool detect_brightness = false;
   float scan_dpi = 0;
   float scale = 0;
+  float screen_scale = 0;
   float output_gamma = -4;
   subhelp = help_render;
   detect_regular_screen_params dsparams;
@@ -794,6 +796,8 @@ render_cmd (int argc, char **argv)
                                   1000000)
                || parse_float_param (argc, argv, &i, "age", age, -1000, 1000)
                || parse_float_param (argc, argv, &i, "scale", scale, 0.0000001,
+                                     100)
+               || parse_float_param (argc, argv, &i, "screen-scale", screen_scale, 0.0000001,
                                      100)
                || parse_float_param (argc, argv, &i, "output-gamma",
                                      output_gamma, -1, 100))
@@ -942,6 +946,8 @@ render_cmd (int argc, char **argv)
     rparam.output_gamma = output_gamma;
   if (scale)
     rfparams.scale = scale;
+  if (screen_scale)
+    rfparams.screen_scale = screen_scale;
   if (ignore_infrared)
     rparam.ignore_infrared = true;
 
