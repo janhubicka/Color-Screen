@@ -51,9 +51,20 @@ render_simulate_process::precompute_all (progress_info *progress)
 {
   sharpen_parameters sharpen;
   m_proportions_cor = patch_proportions (m_scr_to_img.get_type (), &m_params);
+#if 1
   m_proportions_cor.red = 0.333 / m_proportions_cor.red;
   m_proportions_cor.green = 0.333 / m_proportions_cor.green;
   m_proportions_cor.blue = 0.333 / m_proportions_cor.blue;
+#endif
+#if 0
+  m_proportions_cor.red = 0.333 * m_proportions_cor.red;
+  m_proportions_cor.green = 0.333 * m_proportions_cor.green;
+  m_proportions_cor.blue = 0.333 * m_proportions_cor.blue;
+#endif
+#if 0
+  // Seems abour right, but can not be
+  m_proportions_cor *= 2;
+#endif
   m_screen = get_screen (m_scr_to_img.get_type (), false, false, sharpen,
 			 m_params.red_strip_width,
 			 m_params.green_strip_width, progress);

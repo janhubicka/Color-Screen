@@ -314,6 +314,43 @@ void CapturePanel::setupUi()
         }
     });
 
+    // 17. Scanner MTF Wavelengths
+    addSliderParameter(
+        "Red wavelength", 380.0, 780.0, 1.0, 0, "nm", "default (600nm)",
+        [](const ParameterState &s) {
+          return s.rparams.sharpen.scanner_mtf.wavelengths[0];
+        },
+        [](ParameterState &s, double v) {
+          s.rparams.sharpen.scanner_mtf.wavelengths[0] = v;
+        });
+
+    addSliderParameter(
+        "Green wavelength", 380.0, 780.0, 1.0, 0, "nm", "default (530nm)",
+        [](const ParameterState &s) {
+          return s.rparams.sharpen.scanner_mtf.wavelengths[1];
+        },
+        [](ParameterState &s, double v) {
+          s.rparams.sharpen.scanner_mtf.wavelengths[1] = v;
+        });
+
+    addSliderParameter(
+        "Blue wavelength", 380.0, 780.0, 1.0, 0, "nm", "default (450nm)",
+        [](const ParameterState &s) {
+          return s.rparams.sharpen.scanner_mtf.wavelengths[2];
+        },
+        [](ParameterState &s, double v) {
+          s.rparams.sharpen.scanner_mtf.wavelengths[2] = v;
+        });
+
+    addSliderParameter(
+        "IR wavelength", 700.0, 1100.0, 1.0, 0, "nm", "default (850nm)",
+        [](const ParameterState &s) {
+          return s.rparams.sharpen.scanner_mtf.wavelengths[3];
+        },
+        [](ParameterState &s, double v) {
+          s.rparams.sharpen.scanner_mtf.wavelengths[3] = v;
+        });
+
     auto updateInfoLabels = [this, sensorWidthSlider](const ParameterState &state) {
         auto img = m_imageGetter();
         
