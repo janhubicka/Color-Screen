@@ -1169,6 +1169,13 @@ void MainWindow::createMenus() {
 
   fileMenu->addSeparator();
 
+  m_renderAction = fileMenu->addAction("&Render...");
+  m_renderAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_E));
+  m_renderAction->setEnabled(false);
+  connect(m_renderAction, &QAction::triggered, this, &MainWindow::onRender);
+
+  fileMenu->addSeparator();
+
   QAction *exitAction = fileMenu->addAction("E&xit");
   connect(exitAction, &QAction::triggered, this, &QWidget::close);
 
@@ -1715,6 +1722,7 @@ void MainWindow::onImageLoaded() {
   applyState(getCurrentState());
   updateRegistrationActions();
   updateRegistrationGroupVisibility();
+  m_renderAction->setEnabled(m_scan != nullptr);
 }
 
 // Recent Files Implementation
@@ -3305,4 +3313,67 @@ void MainWindow::onFocusAnalysisFinished(bool success, colorscreen::finetune_res
   } else {
     statusBar()->showMessage(tr("Focus analysis failed"), 3000);
   }
+}
+
+void MainWindow::onRender() {
+  if (!m_scan) {
+    QMessageBox::warning(this, tr("Render"),
+                         tr("No image loaded. Please open an image first."));
+    return;
+  }
+
+  // Default output filename: same directory as scan, with .tif extension
+  QString defaultPath;
+  if (!m_currentImageFile.isEmpty()) {
+    QFileInfo fi(m_currentImageFile);
+    defaultPath = fi.dir().filePath(fi.completeBaseName() + "-rendered.tif");
+  }
+
+  QString outputPath = QFileDialog::getSaveFileName(
+      this, tr("Render to TIFF"), defaultPath,
+      tr("TIFF images (*.tif *.tiff);;All files (*.*)"));
+  if (outputPath.isEmpty())
+    return;
+
+  // Snapshot current parameters (render runs in background)
+  auto scan = m_scan;
+  colorscreen::scr_to_img_parameters scrParams = m_scrToImgParams;
+  colorscreen::scr_detect_parameters detectParams = m_detectParams;
+  colorscreen::render_parameters rparams = m_rparams;
+  colorscreen::render_type_parameters rtparams = m_renderTypeParams;
+  std::string outputPathStd = outputPath.toStdString();
+
+  auto progress = std::make_shared<colorscreen::progress_info>();
+  addProgress(progress);
+
+  // Run render in background thread
+  auto *watcher = new QFutureWatcher<bool>(this);
+  connect(watcher, &QFutureWatcher<bool>::finished, this,
+          [this, watcher, progress, outputPath]() {
+            bool success = watcher->result();
+            removeProgress(progress);
+            watcher->deleteLater();
+            if (success) {
+              statusBar()->showMessage(
+                  tr("Rendered to %1").arg(outputPath), 5000);
+            } else {
+              QMessageBox::critical(this, tr("Render Failed"),
+                                    tr("Failed to render to:\n%1").arg(outputPath));
+            }
+          });
+
+  QFuture<bool> future = QtConcurrent::run(
+      [scan, scrParams, detectParams, rparams, rtparams, outputPathStd,
+       progress]() mutable -> bool {
+        colorscreen::render_to_file_params rfparams;
+        rfparams.filename = outputPathStd.c_str();
+        rfparams.verbose = false;
+
+        const char *error = nullptr;
+        return colorscreen::render_to_file(*scan, scrParams, detectParams,
+                                           rparams, rfparams, rtparams,
+                                           progress.get(), &error);
+      });
+
+  watcher->setFuture(future);
 }

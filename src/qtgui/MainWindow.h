@@ -81,6 +81,7 @@ private slots:
   void onOpenParameters();
   void onSaveParameters();
   void onSaveParametersAs();
+  void onRender();
   void onModeChanged(int index); // Slot for mode change
   void rotateLeft();
   void rotateRight();
@@ -158,6 +159,7 @@ private:
 
   QAction *m_openAction;
   QAction *m_saveAction;
+  QAction *m_renderAction;
   QAction *m_saveAsAction;
   QAction *m_zoomInAction;       // Added
   QAction *m_zoomOutAction;      // Added
