@@ -24,6 +24,7 @@
 #include <QTextStream>
 #include <QComboBox>
 #include "FocusAnalysisWorker.h"
+#include "RenderDialog.h"
 #include <QElapsedTimer>
 #include <QDateTime>   // Added QDateTime include
 #include <QDockWidget> // Added
@@ -3364,12 +3365,19 @@ void MainWindow::onRender() {
 
   bool isDng = outputPath.endsWith(".dng", Qt::CaseInsensitive);
 
+  // Show render settings dialog
+  RenderDialog dlg(m_renderTypeParams, m_rparams, m_scrToImgParams,
+                   m_scan.get(), isDng, this);
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
   // Snapshot current parameters (render runs in background)
   auto scan = m_scan;
   colorscreen::scr_to_img_parameters scrParams = m_scrToImgParams;
   colorscreen::scr_detect_parameters detectParams = m_detectParams;
   colorscreen::render_parameters rparams = m_rparams;
-  colorscreen::render_type_parameters rtparams = m_renderTypeParams;
+  colorscreen::render_type_parameters rtparams = dlg.renderTypeParams();
+  rparams.output_profile = dlg.outputProfile();
   std::string outputPathStd = outputPath.toStdString();
 
   auto progress = std::make_shared<colorscreen::progress_info>();
@@ -3401,13 +3409,24 @@ void MainWindow::onRender() {
             }
           });
 
+  // Extract all dialog results before spawning the background thread
+  // (QDialog is stack-allocated; capturing it by reference would be unsafe)
+  bool renderHdr = dlg.hdr();
+  int renderDepth = dlg.depth();
+  auto renderGeometry = dlg.geometry();
+  int renderAntialias = dlg.antialias();
+
   QFuture<bool> future = QtConcurrent::run(
       [scan, scrParams, detectParams, rparams, rtparams, outputPathStd, isDng,
-       progress]() mutable -> bool {
+       progress, renderHdr, renderDepth, renderGeometry, renderAntialias]() mutable -> bool {
         colorscreen::render_to_file_params rfparams;
         rfparams.filename = outputPathStd.c_str();
         rfparams.verbose = false;
         rfparams.dng = isDng;
+        rfparams.hdr = renderHdr;
+        rfparams.depth = renderDepth;
+        rfparams.geometry = renderGeometry;
+        rfparams.antialias = renderAntialias;
 
         const char *error = nullptr;
         return colorscreen::render_to_file(*scan, scrParams, detectParams,
