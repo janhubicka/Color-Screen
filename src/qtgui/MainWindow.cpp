@@ -3415,18 +3415,27 @@ void MainWindow::onRender() {
   int renderDepth = dlg.depth();
   auto renderGeometry = dlg.geometry();
   int renderAntialias = dlg.antialias();
+  double renderScale = dlg.scale();
+  double renderScreenScale = dlg.screenScale();
+  int renderWidth  = dlg.outputWidth();
+  int renderHeight = dlg.outputHeight();
 
   QFuture<bool> future = QtConcurrent::run(
       [scan, scrParams, detectParams, rparams, rtparams, outputPathStd, isDng,
-       progress, renderHdr, renderDepth, renderGeometry, renderAntialias]() mutable -> bool {
+       progress, renderHdr, renderDepth, renderGeometry, renderAntialias,
+       renderScale, renderScreenScale, renderWidth, renderHeight]() mutable -> bool {
         colorscreen::render_to_file_params rfparams;
-        rfparams.filename = outputPathStd.c_str();
-        rfparams.verbose = false;
-        rfparams.dng = isDng;
-        rfparams.hdr = renderHdr;
-        rfparams.depth = renderDepth;
-        rfparams.geometry = renderGeometry;
-        rfparams.antialias = renderAntialias;
+        rfparams.filename     = outputPathStd.c_str();
+        rfparams.verbose      = false;
+        rfparams.dng          = isDng;
+        rfparams.hdr          = renderHdr;
+        rfparams.depth        = renderDepth;
+        rfparams.geometry     = renderGeometry;
+        rfparams.antialias    = renderAntialias;
+        rfparams.scale        = renderScale;
+        rfparams.screen_scale = renderScreenScale;
+        rfparams.width        = renderWidth;
+        rfparams.height       = renderHeight;
 
         const char *error = nullptr;
         return colorscreen::render_to_file(*scan, scrParams, detectParams,

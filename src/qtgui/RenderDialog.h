@@ -9,6 +9,9 @@
 class QComboBox;
 class QCheckBox;
 class QSpinBox;
+class QDoubleSpinBox;
+class QSlider;
+class QLabel;
 
 class RenderDialog : public QDialog {
   Q_OBJECT
@@ -29,18 +32,45 @@ public:
   colorscreen::render_to_file_params::output_geometry geometry() const;
   int antialias() const;
 
-private:
-  void onModeChanged(int index);
+  // Size results (0 = use default)
+  double scale() const;
+  double screenScale() const;
+  int outputWidth() const;
+  int outputHeight() const;
 
-  QComboBox *m_modeCombo = nullptr;
-  QComboBox *m_profileCombo = nullptr;
-  QCheckBox *m_hdrCheck = nullptr;
-  QComboBox *m_depthCombo = nullptr;
+private slots:
+  void onGeometryChanged(int index);
+  void onModeChanged(int index);
+  void updateSizePreview();
+  void updateControlStates();
+
+private:
+  bool screenGeometryActive() const;
+
+  // Stored copies for complete_rendered_file_parameters calls
+  colorscreen::render_type_parameters m_rtparams;
+  colorscreen::scr_to_img_parameters  m_scrParams;
+  const colorscreen::image_data      *m_scan;
+
+  QComboBox *m_modeCombo     = nullptr;
+  QComboBox *m_profileCombo  = nullptr;
+  QCheckBox *m_hdrCheck      = nullptr;
+  QComboBox *m_depthCombo    = nullptr;
   QComboBox *m_geometryCombo = nullptr;
   QSpinBox  *m_antialiasSpin = nullptr;
 
-  // Non-DNG controls wrapper widget (hidden for DNG)
-  QWidget   *m_nonDngWidget = nullptr;
+  // Non-DNG controls wrapper
+  QWidget *m_nonDngWidget = nullptr;
 
-  colorscreen::render_type_parameters m_rtparams;
+  // Size controls
+  QDoubleSpinBox *m_scaleSpin       = nullptr;
+  QSlider        *m_scaleSlider     = nullptr;
+  QDoubleSpinBox *m_screenScaleSpin = nullptr;
+  QSlider        *m_screenScaleSlider = nullptr;
+  QWidget        *m_screenScaleRow  = nullptr; // to show/hide
+  QSpinBox       *m_widthSpin       = nullptr;
+  QSpinBox       *m_heightSpin      = nullptr;
+  QLabel         *m_sizePreviewLabel = nullptr;
+
+  bool m_updatingSliders = false; // re-entrancy guard
 };
