@@ -1662,7 +1662,22 @@ void MainWindow::onCancelClicked() {
   // Cancel the currently displayed progress (not necessarily the longest
   // running)
   if (m_currentlyDisplayedProgress) {
-    m_currentlyDisplayedProgress->cancel();
+    // Keep a local reference alive across the dialog's event loop.
+    // removeProgress() may null m_currentlyDisplayedProgress while the
+    // confirmation dialog is open, but our local copy keeps the object alive.
+    auto currentProgress = m_currentlyDisplayedProgress;
+
+    // If this is the render task, ask before cancelling
+    auto renderProgress = m_renderProgress.lock();
+    if (renderProgress && renderProgress == currentProgress) {
+      auto ret = QMessageBox::question(
+          this, tr("Cancel Rendering"),
+          tr("Cancel the current rendering?"),
+          QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+      if (ret != QMessageBox::Yes)
+        return;
+    }
+    currentProgress->cancel();
   }
 }
 
@@ -2026,7 +2041,19 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     event->ignore();
     return;
   }
-  
+
+  // If a render is running, ask before quitting
+  if (!m_renderProgress.expired()) {
+    auto ret = QMessageBox::question(
+        this, tr("Rendering in Progress"),
+        tr("A render is currently in progress. Cancel it and quit?"),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (ret != QMessageBox::Yes) {
+      event->ignore();
+      return;
+    }
+  }
+
   // Cancel all active processes
   for (const auto &progress : m_activeProgresses) {
       if (progress.info) {
@@ -3330,10 +3357,12 @@ void MainWindow::onRender() {
   }
 
   QString outputPath = QFileDialog::getSaveFileName(
-      this, tr("Render to TIFF"), defaultPath,
-      tr("TIFF images (*.tif *.tiff);;All files (*.*)"));
+      this, tr("Render to File"), defaultPath,
+      tr("TIFF images (*.tif *.tiff);;DNG images (*.dng);;All files (*.*)"));
   if (outputPath.isEmpty())
     return;
+
+  bool isDng = outputPath.endsWith(".dng", Qt::CaseInsensitive);
 
   // Snapshot current parameters (render runs in background)
   auto scan = m_scan;
@@ -3344,6 +3373,7 @@ void MainWindow::onRender() {
   std::string outputPathStd = outputPath.toStdString();
 
   auto progress = std::make_shared<colorscreen::progress_info>();
+  m_renderProgress = progress;  // track so close/cancel can ask for confirmation
   addProgress(progress);
 
   // Run render in background thread
@@ -3351,9 +3381,18 @@ void MainWindow::onRender() {
   connect(watcher, &QFutureWatcher<bool>::finished, this,
           [this, watcher, progress, outputPath]() {
             bool success = watcher->result();
+            bool cancelled = progress->cancelled();
+            m_renderProgress.reset();   // no longer active
             removeProgress(progress);
             watcher->deleteLater();
-            if (success) {
+            if (cancelled || !success) {
+              // Remove the incomplete output file
+              if (QFile::exists(outputPath))
+                QFile::remove(outputPath);
+            }
+            if (cancelled) {
+              statusBar()->showMessage(tr("Render cancelled"), 3000);
+            } else if (success) {
               statusBar()->showMessage(
                   tr("Rendered to %1").arg(outputPath), 5000);
             } else {
@@ -3363,11 +3402,12 @@ void MainWindow::onRender() {
           });
 
   QFuture<bool> future = QtConcurrent::run(
-      [scan, scrParams, detectParams, rparams, rtparams, outputPathStd,
+      [scan, scrParams, detectParams, rparams, rtparams, outputPathStd, isDng,
        progress]() mutable -> bool {
         colorscreen::render_to_file_params rfparams;
         rfparams.filename = outputPathStd.c_str();
         rfparams.verbose = false;
+        rfparams.dng = isDng;
 
         const char *error = nullptr;
         return colorscreen::render_to_file(*scan, scrParams, detectParams,

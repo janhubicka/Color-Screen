@@ -279,6 +279,8 @@ private:
                                        // button
   int m_manuallySelectedProgressIndex; // -1 = auto-select, >= 0 = manual
                                        // selection
+  // Tracks the active render progress so we can confirm before cancelling
+  std::weak_ptr<colorscreen::progress_info> m_renderProgress;
 
   // Helper to find the longest running task
   ProgressEntry *getLongestRunningTask();
