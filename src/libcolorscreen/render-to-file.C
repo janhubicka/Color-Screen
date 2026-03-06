@@ -101,10 +101,24 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
 	  if (!(p->antialias & 1))
 	    p->antialias++;
 	}
-      if (!p->width)
+      if (!p->width && !p->height)
 	{
 	  p->width = render_width / p->xstep;
 	  p->height = render_height / p->ystep;
+	}
+      else if (!p->width && p->height)
+	{
+	  /* height specified: derive step and width to preserve aspect ratio.  */
+	  double new_step = render_height / (double)p->height;
+	  p->xstep = p->ystep = new_step;
+	  p->width = (int)(render_width / new_step + 0.5);
+	}
+      else if (p->width && !p->height)
+	{
+	  /* width specified: derive step and height to preserve aspect ratio.  */
+	  double new_step = render_width / (double)p->width;
+	  p->xstep = p->ystep = new_step;
+	  p->height = (int)(render_height / new_step + 0.5);
 	}
       /* TODO: Make this work with stitched projects.  */
       if ((!p->xdpi || !p->ydpi) && scan && scan->xdpi && scan->ydpi)
@@ -139,10 +153,22 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
     {
       if (!p->xstep)
 	p->xstep = p->ystep = 1 / p->scale;
-      if (!p->width)
+      if (!p->width && !p->height)
 	{
 	  p->width = scan->width / p->xstep;
 	  p->height = scan->height / p->ystep;
+	}
+      else if (!p->width && p->height)
+	{
+	  double new_step = (double)scan->height / p->height;
+	  p->xstep = p->ystep = new_step;
+	  p->width = (int)(scan->width / new_step + 0.5);
+	}
+      else if (p->width && !p->height)
+	{
+	  double new_step = (double)scan->width / p->width;
+	  p->xstep = p->ystep = new_step;
+	  p->height = (int)(scan->height / new_step + 0.5);
 	}
       if (!p->antialias)
 	{
