@@ -3,9 +3,9 @@
 #include "CoordinateTransformer.h"
 #include "../libcolorscreen/include/imagedata.h"
 #include "../libcolorscreen/include/progress-info.h"
-#include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/scr-to-img.h"
 #include "../libcolorscreen/include/solver-parameters.h"
+#include "../libcolorscreen/include/stitch.h" // Needed for stitch_project
 #include "Renderer.h"
 #include <QDebug>
 #include "Logging.h"
@@ -410,6 +410,85 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
       }
     }
 
+    // Draw profile spots: always while in AddPointMode (like gtkgui.C's color_profiling mode),
+    // or when the show_profile_spots flag is set.
+    bool showSpots = m_profileSpots && !m_profileSpots->empty() && m_scan && m_scrToImg &&
+                     (m_interactionMode == AddPointMode || m_showProfileSpots);
+    if (showSpots) {
+      p.setRenderHint(QPainter::Antialiasing);
+
+      colorscreen::scr_to_img map;
+      map.set_parameters(*m_scrToImg, *m_scan);
+      
+      colorscreen::bradford_whitepoint_adaptation_matrix m_bradford(colorscreen::d50_white, colorscreen::srgb_white);
+
+      for (size_t i = 0; i < m_profileSpots->size(); ++i) {
+        colorscreen::point_t scrPos = (*m_profileSpots)[i];
+        
+        // Use stitch mapped coords if relevant (same logic as gtkgui.C)
+        colorscreen::point_t imgPos;
+        if (!m_scan->stitch) {
+            imgPos = map.to_img(scrPos);
+        } else {
+            imgPos = m_scan->stitch->common_scr_to_img.scr_to_final(scrPos);
+            imgPos.x -= m_scan->xmin;
+            imgPos.y -= m_scan->ymin;
+        }
+        
+        QPointF p_widget = imageToWidget(imgPos);
+
+        // Viewport culling
+        double marginPixels = 120.0 * m_scale;
+        if (p_widget.x() < -marginPixels || p_widget.x() > width() + marginPixels ||
+            p_widget.y() < -marginPixels || p_widget.y() > height() + marginPixels) {
+            continue;
+        }
+
+        // Calculate size based on expected dot size in widget space
+        double radiusWidget = 20.0; // Default base size
+        
+        bool hasResult = m_profileSpotResults && i < m_profileSpotResults->size();
+        
+        colorscreen::rgbdata c1 = {1, 1, 1}; // Target (inner)
+        colorscreen::rgbdata c2 = {1, 0, 0}; // Profiled (outer)
+        
+        if (hasResult) {
+            const auto &match = (*m_profileSpotResults)[i];
+            
+            colorscreen::xyz c = match.target;
+            m_bradford.apply_to_rgb(c.x, c.y, c.z, &c.x, &c.y, &c.z);
+            c.to_srgb(&c1.red, &c1.green, &c1.blue);
+            c1 = c1.clamp();
+            
+            c = match.profiled;
+            m_bradford.apply_to_rgb(c.x, c.y, c.z, &c.x, &c.y, &c.z);
+            c.to_srgb(&c2.red, &c2.green, &c2.blue);
+            c2 = c2.clamp();
+        }
+
+        // Draw outer ring (profiled)
+        p.setPen(QPen(Qt::white, 2));
+        p.setBrush(QColor::fromRgbF(c2.red, c2.green, c2.blue));
+        p.drawEllipse(p_widget, radiusWidget, radiusWidget);
+
+        // Draw inner ring (target)
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor::fromRgbF(c1.red, c1.green, c1.blue));
+        p.drawEllipse(p_widget, radiusWidget * 0.5, radiusWidget * 0.5);
+
+        // Draw dE text
+        if (hasResult) {
+            const auto &match = (*m_profileSpotResults)[i];
+            QString text = QString("%1ΔE2k").arg(match.deltaE, 0, 'f', 1);
+            
+            p.setPen(Qt::black); // Shadow
+            p.drawText(p_widget + QPointF(radiusWidget + 2, 2), text);
+            p.setPen(Qt::white); // Text
+            p.drawText(p_widget + QPointF(radiusWidget, 0), text);
+        }
+      }
+    }
+
     // Draw screen coordinate system when SetCenterMode is active
     if (m_interactionMode == SetCenterMode && m_scrToImg) {
       // Get color from first point location
@@ -796,6 +875,42 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
       }
       m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, QSize()));
       m_rubberBand->show();
+    }
+  } else if (event->button() == Qt::RightButton && m_interactionMode == AddPointMode) {
+    // Find nearest profile spot to remove
+    if (m_profileSpots && !m_profileSpots->empty() && m_scrToImg && m_scan) {
+      colorscreen::scr_to_img map;
+      map.set_parameters(*m_scrToImg, *m_scan);
+      
+      int bestIdx = -1;
+      double bestDistSq = 1e9;
+      
+      for (size_t i = 0; i < m_profileSpots->size(); ++i) {
+        colorscreen::point_t scrPos = (*m_profileSpots)[i];
+        colorscreen::point_t imgPos;
+        if (!m_scan->stitch) {
+            imgPos = map.to_img(scrPos);
+        } else {
+            imgPos = m_scan->stitch->common_scr_to_img.scr_to_final(scrPos);
+            imgPos.x -= m_scan->xmin;
+            imgPos.y -= m_scan->ymin;
+        }
+        
+        QPointF p_widget = imageToWidget(imgPos);
+        double dx = p_widget.x() - event->position().x();
+        double dy = p_widget.y() - event->position().y();
+        double distSq = dx * dx + dy * dy;
+        
+        // 20 pixels hit radius squared = 400
+        if (distSq < 400.0 && distSq < bestDistSq) {
+          bestDistSq = distSq;
+          bestIdx = i;
+        }
+      }
+      
+      if (bestIdx != -1) {
+        emit profileSpotRemoveRequested(bestIdx);
+      }
     }
   }
 }
@@ -1260,6 +1375,11 @@ void ImageWidget::setShowRegistrationPoints(bool show) {
   emit registrationPointsVisibilityChanged(show);
 }
 
+void ImageWidget::setShowProfileSpots(bool show) {
+  m_showProfileSpots = show;
+  update();
+}
+
 void ImageWidget::selectAll() {
   if (!m_solver || m_solver->points.empty()) return;
   
@@ -1424,4 +1544,11 @@ void ImageWidget::handleImageReady(int reqId, QImage image, double xOffset, doub
     if (!m_renderQueue.hasActiveTasks()) {
         m_refreshTimer->stop();
     }
+}
+
+void ImageWidget::setProfileSpots(const std::vector<colorscreen::point_t> *spots,
+                                  const std::vector<colorscreen::color_match> *results) {
+  m_profileSpots = spots;
+  m_profileSpotResults = results;
+  update();
 }

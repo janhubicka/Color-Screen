@@ -4,6 +4,7 @@
 #include "../libcolorscreen/include/render-type-parameters.h"
 #include "../libcolorscreen/include/scr-detect-parameters.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
+#include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/solver-parameters.h"
 #include "Renderer.h"
 #include "TaskQueue.h"
@@ -59,8 +60,11 @@ public:
                    colorscreen::scr_detect_parameters *scrDetect,
                    colorscreen::render_type_parameters *renderType = nullptr,
                    colorscreen::solver_parameters *solver = nullptr);
+  void setProfileSpots(const std::vector<colorscreen::point_t> *spots,
+                       const std::vector<colorscreen::color_match> *results);
 
   void setShowRegistrationPoints(bool show);
+  void setShowProfileSpots(bool show);
   void clearSelection();
   
   // Coordinate System options
@@ -119,6 +123,7 @@ signals:
   void registrationPointMoved(size_t index, colorscreen::point_t newPos);
   void pointsChanged();
   void exitFullscreenRequested();
+  void profileSpotRemoveRequested(int index);
 
 public:
   double getMinScale() const; // Returns scale that fits image to view
@@ -148,6 +153,8 @@ private:
   colorscreen::scr_detect_parameters *m_scrDetect = nullptr;
   colorscreen::render_type_parameters *m_renderType = nullptr;
   colorscreen::solver_parameters *m_solver = nullptr;
+  const std::vector<colorscreen::point_t> *m_profileSpots = nullptr;
+  const std::vector<colorscreen::color_match> *m_profileSpotResults = nullptr;
   
   // Coordinate system editing state
   enum class DragTarget { None, Center, Axis1, Axis2 };
@@ -158,6 +165,7 @@ private:
   bool m_lockRelativeCoordinates = true;
 
   bool m_showRegistrationPoints = false;
+  bool m_showProfileSpots = true;
 
   Renderer *m_renderer = nullptr;
   QThread *m_renderThread = nullptr;

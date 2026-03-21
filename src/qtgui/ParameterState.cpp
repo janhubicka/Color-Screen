@@ -8,5 +8,6 @@ bool ParameterState::operator==(const ParameterState &other) const
     return rparams == other.rparams &&
            scrToImg == other.scrToImg &&
            detect == other.detect &&
-           solver == other.solver;
+           solver == other.solver &&
+           profileSpots == other.profileSpots;
 }

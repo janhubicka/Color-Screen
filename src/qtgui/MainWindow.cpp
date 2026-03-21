@@ -272,6 +272,12 @@ void MainWindow::setupUi() {
                      [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
                      [this]() { return m_scan; }, this);
 
+  // Create Profile Panel
+  m_profilePanel =
+      new ProfilePanel([this]() { return getCurrentState(); },
+                       [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
+                       [this]() { return m_scan; }, this);
+
   // Connect Progress Signals from Panels
   connect(m_sharpnessPanel, &SharpnessPanel::progressStarted, this, &MainWindow::addProgress);
   connect(m_sharpnessPanel, &SharpnessPanel::progressFinished, this, &MainWindow::removeProgress);
@@ -578,6 +584,17 @@ void MainWindow::setupUi() {
   m_configTabs->addTab(m_screenPanel, "Screen");
   m_configTabs->addTab(m_geometryPanel, "Geometry");
   m_configTabs->addTab(m_colorPanel, "Color");
+  m_configTabs->addTab(m_profilePanel, "Profile");
+
+  connect(m_profilePanel, &ProfilePanel::optimizeColorRequested,
+          this, &MainWindow::onColorOptimizeRequested);
+  connect(m_profilePanel, &ProfilePanel::addSpotModeRequested,
+          this, &MainWindow::onAddSpotModeRequested);
+  connect(m_profilePanel, &ProfilePanel::showProfileSpotsChanged,
+          m_imageWidget, &ImageWidget::setShowProfileSpots);
+
+  // ImageWidget::pointAdded is routed to onPointAdded; profile spot
+  // handling is done there when m_addingProfileSpot is true.
   rightSplitter->addWidget(m_configTabs);
 
   // Register panels for updates
@@ -587,6 +604,7 @@ void MainWindow::setupUi() {
   m_panels.push_back(m_geometryPanel);
   m_panels.push_back(m_geometryPanel);
   m_panels.push_back(m_colorPanel);
+  m_panels.push_back(m_profilePanel);
 
   // Connect Adaptive Sharpening signal from Sharpness Panel
   connect(m_sharpnessPanel, &SharpnessPanel::adaptiveSharpeningRequested, this, &MainWindow::onAdaptiveSharpeningRequested);
@@ -907,6 +925,14 @@ void MainWindow::createToolbar() {
   connect(m_imageWidget, &ImageWidget::selectionChanged, this, &MainWindow::updateRegistrationActions);
   connect(m_imageWidget, &ImageWidget::registrationPointsVisibilityChanged, this, &MainWindow::updateRegistrationActions);
   connect(m_imageWidget, &ImageWidget::pointAdded, this, &MainWindow::onPointAdded);
+  connect(m_imageWidget, &ImageWidget::profileSpotRemoveRequested, this, [this](int index) {
+    if (!m_addingProfileSpot) return;
+    ParameterState newState = getCurrentState();
+    if (index >= 0 && index < (int)newState.profileSpots.size()) {
+      newState.profileSpots.erase(newState.profileSpots.begin() + index);
+      changeParameters(newState, "Remove profile spot");
+    }
+  });
   connect(m_imageWidget, &ImageWidget::areaSelected, this, &MainWindow::onAreaSelected);
   connect(m_imageWidget, &ImageWidget::setCenterRequested, this, &MainWindow::onSetCenter);
   connect(m_imageWidget, &ImageWidget::coordinateSystemChanged, this, &MainWindow::onCoordinateSystemChanged);
@@ -1940,6 +1966,7 @@ void MainWindow::applyState(const ParameterState &state) {
   m_scrToImgParams = state.scrToImg;
   m_detectParams = state.detect;
   m_solverParams = state.solver; // Manually copy logic if needed? Struct copy
+  m_profileSpots = state.profileSpots;
                                  // should work if fields are copyable.
   // solver_parameters has vector, copy constructor should be fine
   // (std::vector).
@@ -1949,6 +1976,7 @@ void MainWindow::applyState(const ParameterState &state) {
     m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
                                     &m_detectParams, &m_renderTypeParams,
                                     &m_solverParams);
+    m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileSpotResults);
     m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams,
                                        &m_detectParams);
   }
@@ -2000,6 +2028,7 @@ ParameterState MainWindow::getCurrentState() const {
   state.scrToImg = m_scrToImgParams;
   state.detect = m_detectParams;
   state.solver = m_solverParams;
+  state.profileSpots = m_profileSpots;
   return state;
 }
 
@@ -2244,13 +2273,12 @@ void MainWindow::openRecentParams() {
       changed = true;
 
     if (m_scan) {
+      // Set image to widget
       m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                               &m_detectParams, &m_renderTypeParams,
                               &m_solverParams);
+      m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileSpotResults);
       // Also update navigation view image
-      m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                                 &m_detectParams);
-
       m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                                  &m_detectParams);
 
@@ -2738,7 +2766,16 @@ void MainWindow::maybeTriggerAutoSolver() {
 }
 
 void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t scrPos, colorscreen::point_t color) {
-  if (!m_scan) {
+  if (!m_scan) return;
+
+  // Profile spot mode: convert img coords → screen coords and store
+  if (m_addingProfileSpot) {
+    colorscreen::scr_to_img map;
+    map.set_parameters(m_scrToImgParams, *m_scan);
+    colorscreen::point_t screen = map.to_scr(imgPos);
+    ParameterState newState = getCurrentState();
+    newState.profileSpots.push_back(screen);
+    changeParameters(newState, "Add profile spot");
     return;
   }
 
@@ -3441,6 +3478,75 @@ void MainWindow::onRender() {
         return colorscreen::render_to_file(*scan, scrParams, detectParams,
                                            rparams, rfparams, rtparams,
                                            progress.get(), &error);
+      });
+
+  watcher->setFuture(future);
+}
+
+void MainWindow::onAddSpotModeRequested(bool active)
+{
+  m_addingProfileSpot = active;
+  m_imageWidget->setInteractionMode(
+      active ? ImageWidget::AddPointMode : ImageWidget::PanMode);
+}
+
+void MainWindow::onColorOptimizeRequested(bool /*autoMode*/)
+{
+  if (!m_scan)
+    return;
+  ParameterState state = getCurrentState();
+  if (state.profileSpots.empty())
+    return;
+
+  // Snapshot everything needed on the background thread
+  auto scan              = m_scan;
+  auto scrParams         = m_scrToImgParams;
+  auto rparams           = m_rparams;
+  auto spots             = state.profileSpots;
+
+  auto progress = std::make_shared<colorscreen::progress_info>();
+  addProgress(progress);
+
+  // Result carries back: success flag, match report, AND the mutated rparams
+  // (optimize_color_model_colors writes profiled_dark/red/green/blue into rparams)
+  using Result = std::tuple<bool, std::vector<colorscreen::color_match>,
+                            colorscreen::render_parameters>;
+  auto *watcher = new QFutureWatcher<Result>(this);
+
+  connect(watcher, &QFutureWatcher<Result>::finished, this,
+          [this, watcher, progress]() {
+            removeProgress(progress);
+            auto [ok, results, updatedRparams] = watcher->result();
+            watcher->deleteLater();
+            if (ok) {
+              // Save the updated profiled colours into ParameterState
+              ParameterState newState = getCurrentState();
+              newState.rparams.profiled_dark  = updatedRparams.profiled_dark;
+              newState.rparams.profiled_red   = updatedRparams.profiled_red;
+              newState.rparams.profiled_green = updatedRparams.profiled_green;
+              newState.rparams.profiled_blue  = updatedRparams.profiled_blue;
+              changeParameters(newState, tr("Optimize color"));
+
+              m_profileSpotResults = results;
+              if (m_profilePanel)
+                m_profilePanel->setSpotResults(results);
+              // Refresh the image overlay
+              if (m_imageWidget) {
+                m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileSpotResults);
+                m_imageWidget->update();
+              }
+            } else {
+              statusBar()->showMessage(tr("Color optimization failed"), 4000);
+            }
+          });
+
+  QFuture<Result> future = QtConcurrent::run(
+      [scan, scrParams, rparams, spots, progress]() mutable -> Result {
+        std::vector<colorscreen::color_match> report;
+        bool ok = colorscreen::optimize_color_model_colors(
+            &scrParams, *scan, rparams, spots, &report, progress.get());
+        // rparams has been mutated by the optimizer – return it
+        return {ok, report, rparams};
       });
 
   watcher->setFuture(future);

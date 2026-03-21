@@ -35,6 +35,7 @@ class QTimer;
 #include "FlatFieldWorker.h"
 #include "CapturePanel.h"
 #include "ColorPanel.h"
+#include "ProfilePanel.h"
 #include "ParameterState.h"
 #include "SharpnessPanel.h"
 #include "TaskQueue.h"
@@ -82,6 +83,8 @@ private slots:
   void onSaveParameters();
   void onSaveParametersAs();
   void onRender();
+  void onColorOptimizeRequested(bool autoMode);
+  void onAddSpotModeRequested(bool active);
   void onModeChanged(int index); // Slot for mode change
   void rotateLeft();
   void rotateRight();
@@ -221,8 +224,9 @@ private:
   colorscreen::render_parameters m_rparams;
   colorscreen::scr_detect_parameters m_detectParams;
   colorscreen::scr_to_img_parameters m_scrToImgParams;
-  ParameterState m_undoSnapshot; // Added
   colorscreen::solver_parameters m_solverParams;
+  std::vector<colorscreen::point_t> m_profileSpots;
+  ParameterState m_undoSnapshot; // Added
   colorscreen::render_type_parameters m_renderTypeParams; // New member
 
   // Copies for change detection
@@ -297,6 +301,11 @@ private:
   ScreenPanel *m_screenPanel;
   GeometryPanel *m_geometryPanel;
   ColorPanel *m_colorPanel;
+  ProfilePanel *m_profilePanel;
+
+  // Color optimizer results (kept outside ParameterState — not undo-able)
+  std::vector<colorscreen::color_match> m_profileSpotResults;
+  bool m_addingProfileSpot = false;
 
   // List of all panels for automated updates
   std::vector<ParameterPanel *> m_panels;
