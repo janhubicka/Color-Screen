@@ -14,7 +14,6 @@ jobs:
     strategy:
       matrix:
         include:
-          - { sys: mingw64,     env: x86_64,         flags: "", suffix: "" }
           - { sys: ucrt64,      env: ucrt-x86_64,    flags: "", suffix: "" }
           - { sys: ucrt64,      env: ucrt-x86_64,    flags: "-march=znver2", suffix: "-znver2" }
           - { sys: ucrt64,      env: ucrt-x86_64,    flags: "-march=znver4", suffix: "-znver4" }
@@ -24,10 +23,7 @@ jobs:
       with:
         msystem: ${{matrix.sys}}
         update: true
-        install: make mingw-w64-${{matrix.env}}-gcc mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-pkg-config mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive mingw-w64-${{matrix.env}}-autotools  mingw-w64-${{matrix.env}}-fftw mingw-w64-${{matrix.env}}-qt6-base mingw-w64-${{matrix.env}}-qt6-tools mingw-w64-${{matrix.env}}-adwaita-icon-theme mingw-w64-${{matrix.env}}-qt6-svg mingw-w64-${{matrix.env}}-nsis mingw-w64-${{matrix.env}}-imagemagick
-    - name: install exiv2 (best-effort, not available in all repos)
-      shell: msys2 {0}
-      run: pacman -S --noconfirm --needed mingw-w64-${{matrix.env}}-exiv2 || echo "exiv2 not available for ${{matrix.env}}, skipping"
+        install: make mingw-w64-${{matrix.env}}-gcc mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-pkg-config mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive mingw-w64-${{matrix.env}}-autotools  mingw-w64-${{matrix.env}}-fftw mingw-w64-${{matrix.env}}-qt6-base mingw-w64-${{matrix.env}}-qt6-tools mingw-w64-${{matrix.env}}-adwaita-icon-theme mingw-w64-${{matrix.env}}-qt6-svg mingw-w64-${{matrix.env}}-nsis mingw-w64-${{matrix.env}}-imagemagick mingw-w64-${{matrix.env}}-exiv2
     - name: update autotools
       shell: msys2 {0}
       run: autoreconf -fiv
