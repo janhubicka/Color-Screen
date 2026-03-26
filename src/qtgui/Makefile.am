@@ -37,7 +37,8 @@ colorscreen_qt_SOURCES = \
     AdaptiveSharpeningWorker.cpp \
     AdaptiveSharpeningChart.cpp \
     RenderDialog.cpp \
-    ProfilePanel.cpp
+    ProfilePanel.cpp \
+    ColorOptimizerWorker.cpp
 
 # MOC Generation
 # We need to explicitly run moc on headers that have Q_OBJECT
@@ -54,6 +55,7 @@ MOC_SOURCES = \
     moc_ScreenPanel.cpp \
     moc_GeometryPanel.cpp \
     moc_GeometrySolverWorker.cpp \
+    moc_ColorOptimizerWorker.cpp \
     moc_DetectScreenWorker.cpp \
     moc_FlatFieldWorker.cpp \
     moc_FinetuneWorker.cpp \

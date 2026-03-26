@@ -13,6 +13,7 @@
 #include "ScreenPanel.h"
 #include "GeometryPanel.h"
 #include "GeometrySolverWorker.h"
+#include "ColorOptimizerWorker.h"
 #include "mesh.h"
 #include <QAction>
 #include <QApplication>
@@ -106,9 +107,19 @@ private:
 };
 
 Q_DECLARE_METATYPE(MainWindow::SolverRequestData)
+Q_DECLARE_METATYPE(MainWindow::ColorOptimizerRequestData)
+Q_DECLARE_METATYPE(colorscreen::render_parameters)
+Q_DECLARE_METATYPE(colorscreen::scr_to_img_parameters)
+Q_DECLARE_METATYPE(std::vector<colorscreen::point_t>)
+Q_DECLARE_METATYPE(std::vector<colorscreen::color_match>)
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   qRegisterMetaType<MainWindow::SolverRequestData>();
+  qRegisterMetaType<MainWindow::ColorOptimizerRequestData>();
+  qRegisterMetaType<colorscreen::render_parameters>();
+  qRegisterMetaType<colorscreen::scr_to_img_parameters>();
+  qRegisterMetaType<std::vector<colorscreen::point_t>>();
+  qRegisterMetaType<std::vector<colorscreen::color_match>>();
   m_undoStack = new QUndoStack(this);
 
   setupUi();
@@ -167,6 +178,21 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   connect(&m_solverQueue, &TaskQueue::triggerRender, this, &MainWindow::onTriggerSolve);
   connect(&m_solverQueue, &TaskQueue::progressStarted, this, &MainWindow::addProgress);
   connect(&m_solverQueue, &TaskQueue::progressFinished, this, &MainWindow::removeProgress);
+
+  // Initialize Color Optimizer Worker
+  m_colorOptimizerThread = new QThread(this);
+  m_colorOptimizerWorker = new ColorOptimizerWorker(m_scan);
+  m_colorOptimizerWorker->moveToThread(m_colorOptimizerThread);
+  m_colorOptimizerThread->start();
+
+  connect(m_colorOptimizerWorker, &ColorOptimizerWorker::finished,
+          this, &MainWindow::onColorOptimizerFinished);
+  connect(&m_colorOptimizerQueue, &TaskQueue::triggerRender,
+          this, &MainWindow::onTriggerColorOptimize);
+  connect(&m_colorOptimizerQueue, &TaskQueue::progressStarted,
+          this, &MainWindow::addProgress);
+  connect(&m_colorOptimizerQueue, &TaskQueue::progressFinished,
+          this, &MainWindow::removeProgress);
 }
 
 MainWindow::~MainWindow() {
@@ -177,9 +203,15 @@ MainWindow::~MainWindow() {
   if (m_solverThread) {
     m_solverThread->quit();
     m_solverThread->wait();
-    // Delete the worker that was moved to the thread
     delete m_solverWorker;
     m_solverWorker = nullptr;
+  }
+
+  if (m_colorOptimizerThread) {
+    m_colorOptimizerThread->quit();
+    m_colorOptimizerThread->wait();
+    delete m_colorOptimizerWorker;
+    m_colorOptimizerWorker = nullptr;
   }
   
   // Explicitly delete UI components that might access member variables (callbacks)
@@ -1755,6 +1787,8 @@ void MainWindow::onImageLoaded() {
   if (m_scan) {
     if (m_solverWorker)
       m_solverWorker->setScan(m_scan);
+    if (m_colorOptimizerWorker)
+      m_colorOptimizerWorker->setScan(m_scan);
     m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                                &m_detectParams);
     m_navigationView->setMinScale(m_imageWidget->getMinScale());
@@ -3492,62 +3526,65 @@ void MainWindow::onAddSpotModeRequested(bool active)
 
 void MainWindow::onColorOptimizeRequested(bool /*autoMode*/)
 {
-  if (!m_scan)
+  if (!m_scan || !m_colorOptimizerWorker)
     return;
   ParameterState state = getCurrentState();
   if (state.profileSpots.empty())
     return;
 
-  // Snapshot everything needed on the background thread
-  auto scan              = m_scan;
-  auto scrParams         = m_scrToImgParams;
-  auto rparams           = m_rparams;
-  auto spots             = state.profileSpots;
-
-  auto progress = std::make_shared<colorscreen::progress_info>();
-  addProgress(progress);
-
-  // Result carries back: success flag, match report, AND the mutated rparams
-  // (optimize_color_model_colors writes profiled_dark/red/green/blue into rparams)
-  using Result = std::tuple<bool, std::vector<colorscreen::color_match>,
-                            colorscreen::render_parameters>;
-  auto *watcher = new QFutureWatcher<Result>(this);
-
-  connect(watcher, &QFutureWatcher<Result>::finished, this,
-          [this, watcher, progress]() {
-            removeProgress(progress);
-            auto [ok, results, updatedRparams] = watcher->result();
-            watcher->deleteLater();
-            if (ok) {
-              // Save the updated profiled colours into ParameterState
-              ParameterState newState = getCurrentState();
-              newState.rparams.profiled_dark  = updatedRparams.profiled_dark;
-              newState.rparams.profiled_red   = updatedRparams.profiled_red;
-              newState.rparams.profiled_green = updatedRparams.profiled_green;
-              newState.rparams.profiled_blue  = updatedRparams.profiled_blue;
-              changeParameters(newState, tr("Optimize color"));
-
-              m_profileSpotResults = results;
-              if (m_profilePanel)
-                m_profilePanel->setSpotResults(results);
-              // Refresh the image overlay
-              if (m_imageWidget) {
-                m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileSpotResults);
-                m_imageWidget->update();
-              }
-            } else {
-              statusBar()->showMessage(tr("Color optimization failed"), 4000);
-            }
-          });
-
-  QFuture<Result> future = QtConcurrent::run(
-      [scan, scrParams, rparams, spots, progress]() mutable -> Result {
-        std::vector<colorscreen::color_match> report;
-        bool ok = colorscreen::optimize_color_model_colors(
-            &scrParams, *scan, rparams, spots, &report, progress.get());
-        // rparams has been mutated by the optimizer – return it
-        return {ok, report, rparams};
-      });
-
-  watcher->setFuture(future);
+  // Pack request data and hand it to the queue.
+  // If an optimization is already running the queue cancels it and starts a new one.
+  ColorOptimizerRequestData d{m_scrToImgParams, m_rparams, state.profileSpots};
+  m_colorOptimizerQueue.requestRender(QVariant::fromValue(d));
 }
+
+void MainWindow::onTriggerColorOptimize(int reqId,
+    std::shared_ptr<colorscreen::progress_info> progress,
+    const QVariant &userData)
+{
+  if (!m_scan || !m_colorOptimizerWorker ||
+      !userData.canConvert<ColorOptimizerRequestData>()) {
+    m_colorOptimizerQueue.reportFinished(reqId, false);
+    return;
+  }
+
+  auto d = userData.value<ColorOptimizerRequestData>();
+  if (progress)
+    progress->set_task("Optimizing color profile", 1);
+
+  QMetaObject::invokeMethod(
+      m_colorOptimizerWorker, "optimize", Qt::QueuedConnection,
+      Q_ARG(int, reqId),
+      Q_ARG(colorscreen::scr_to_img_parameters, d.scrParams),
+      Q_ARG(colorscreen::render_parameters, d.rparams),
+      Q_ARG(std::vector<colorscreen::point_t>, d.spots),
+      Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
+}
+
+void MainWindow::onColorOptimizerFinished(int reqId,
+    colorscreen::render_parameters updatedRparams,
+    std::vector<colorscreen::color_match> results,
+    bool success, bool cancelled)
+{
+  m_colorOptimizerQueue.reportFinished(reqId, success);
+
+  if (success) {
+    ParameterState newState = getCurrentState();
+    newState.rparams.profiled_dark  = updatedRparams.profiled_dark;
+    newState.rparams.profiled_red   = updatedRparams.profiled_red;
+    newState.rparams.profiled_green = updatedRparams.profiled_green;
+    newState.rparams.profiled_blue  = updatedRparams.profiled_blue;
+    changeParameters(newState, tr("Optimize color"));
+
+    m_profileSpotResults = results;
+    if (m_profilePanel)
+      m_profilePanel->setSpotResults(results);
+    if (m_imageWidget) {
+      m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileSpotResults);
+      m_imageWidget->update();
+    }
+  } else if (!cancelled) {
+    statusBar()->showMessage(tr("Color optimization failed"), 4000);
+  }
+}
+

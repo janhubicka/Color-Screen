@@ -149,7 +149,8 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-AdaptiveSharpeningWorker.$(OBJEXT) \
 	colorscreen_qt-AdaptiveSharpeningChart.$(OBJEXT) \
 	colorscreen_qt-RenderDialog.$(OBJEXT) \
-	colorscreen_qt-ProfilePanel.$(OBJEXT)
+	colorscreen_qt-ProfilePanel.$(OBJEXT) \
+	colorscreen_qt-ColorOptimizerWorker.$(OBJEXT)
 am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_ImageWidget.$(OBJEXT) \
 	colorscreen_qt-moc_BacklightChartWidget.$(OBJEXT) \
@@ -162,6 +163,7 @@ am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_ScreenPanel.$(OBJEXT) \
 	colorscreen_qt-moc_GeometryPanel.$(OBJEXT) \
 	colorscreen_qt-moc_GeometrySolverWorker.$(OBJEXT) \
+	colorscreen_qt-moc_ColorOptimizerWorker.$(OBJEXT) \
 	colorscreen_qt-moc_DetectScreenWorker.$(OBJEXT) \
 	colorscreen_qt-moc_FlatFieldWorker.$(OBJEXT) \
 	colorscreen_qt-moc_FinetuneWorker.$(OBJEXT) \
@@ -220,6 +222,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-CapturePanel.Po \
+	./$(DEPDIR)/colorscreen_qt-ColorOptimizerWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-ColorPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-CoordinateTransformer.Po \
 	./$(DEPDIR)/colorscreen_qt-DeformationChartWidget.Po \
@@ -257,6 +260,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_CapturePanel.Po \
+	./$(DEPDIR)/colorscreen_qt-moc_ColorOptimizerWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_DeformationChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_DetectScreenWorker.Po \
@@ -514,7 +518,8 @@ colorscreen_qt_SOURCES = \
     AdaptiveSharpeningWorker.cpp \
     AdaptiveSharpeningChart.cpp \
     RenderDialog.cpp \
-    ProfilePanel.cpp
+    ProfilePanel.cpp \
+    ColorOptimizerWorker.cpp
 
 
 # MOC Generation
@@ -532,6 +537,7 @@ MOC_SOURCES = \
     moc_ScreenPanel.cpp \
     moc_GeometryPanel.cpp \
     moc_GeometrySolverWorker.cpp \
+    moc_ColorOptimizerWorker.cpp \
     moc_DetectScreenWorker.cpp \
     moc_FlatFieldWorker.cpp \
     moc_FinetuneWorker.cpp \
@@ -664,6 +670,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-CapturePanel.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ColorOptimizerWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ColorPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-CoordinateTransformer.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-DeformationChartWidget.Po@am__quote@ # am--include-marker
@@ -701,6 +708,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_CapturePanel.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ColorOptimizerWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_DeformationChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_DetectScreenWorker.Po@am__quote@ # am--include-marker
@@ -1279,6 +1287,20 @@ colorscreen_qt-ProfilePanel.obj: ProfilePanel.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-ProfilePanel.obj `if test -f 'ProfilePanel.cpp'; then $(CYGPATH_W) 'ProfilePanel.cpp'; else $(CYGPATH_W) '$(srcdir)/ProfilePanel.cpp'; fi`
 
+colorscreen_qt-ColorOptimizerWorker.o: ColorOptimizerWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-ColorOptimizerWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-ColorOptimizerWorker.Tpo -c -o colorscreen_qt-ColorOptimizerWorker.o `test -f 'ColorOptimizerWorker.cpp' || echo '$(srcdir)/'`ColorOptimizerWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-ColorOptimizerWorker.Tpo $(DEPDIR)/colorscreen_qt-ColorOptimizerWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='ColorOptimizerWorker.cpp' object='colorscreen_qt-ColorOptimizerWorker.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-ColorOptimizerWorker.o `test -f 'ColorOptimizerWorker.cpp' || echo '$(srcdir)/'`ColorOptimizerWorker.cpp
+
+colorscreen_qt-ColorOptimizerWorker.obj: ColorOptimizerWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-ColorOptimizerWorker.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-ColorOptimizerWorker.Tpo -c -o colorscreen_qt-ColorOptimizerWorker.obj `if test -f 'ColorOptimizerWorker.cpp'; then $(CYGPATH_W) 'ColorOptimizerWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/ColorOptimizerWorker.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-ColorOptimizerWorker.Tpo $(DEPDIR)/colorscreen_qt-ColorOptimizerWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='ColorOptimizerWorker.cpp' object='colorscreen_qt-ColorOptimizerWorker.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-ColorOptimizerWorker.obj `if test -f 'ColorOptimizerWorker.cpp'; then $(CYGPATH_W) 'ColorOptimizerWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/ColorOptimizerWorker.cpp'; fi`
+
 colorscreen_qt-moc_MainWindow.o: moc_MainWindow.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_MainWindow.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_MainWindow.Tpo -c -o colorscreen_qt-moc_MainWindow.o `test -f 'moc_MainWindow.cpp' || echo '$(srcdir)/'`moc_MainWindow.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_MainWindow.Tpo $(DEPDIR)/colorscreen_qt-moc_MainWindow.Po
@@ -1446,6 +1468,20 @@ colorscreen_qt-moc_GeometrySolverWorker.obj: moc_GeometrySolverWorker.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_GeometrySolverWorker.cpp' object='colorscreen_qt-moc_GeometrySolverWorker.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_GeometrySolverWorker.obj `if test -f 'moc_GeometrySolverWorker.cpp'; then $(CYGPATH_W) 'moc_GeometrySolverWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_GeometrySolverWorker.cpp'; fi`
+
+colorscreen_qt-moc_ColorOptimizerWorker.o: moc_ColorOptimizerWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_ColorOptimizerWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_ColorOptimizerWorker.Tpo -c -o colorscreen_qt-moc_ColorOptimizerWorker.o `test -f 'moc_ColorOptimizerWorker.cpp' || echo '$(srcdir)/'`moc_ColorOptimizerWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_ColorOptimizerWorker.Tpo $(DEPDIR)/colorscreen_qt-moc_ColorOptimizerWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_ColorOptimizerWorker.cpp' object='colorscreen_qt-moc_ColorOptimizerWorker.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_ColorOptimizerWorker.o `test -f 'moc_ColorOptimizerWorker.cpp' || echo '$(srcdir)/'`moc_ColorOptimizerWorker.cpp
+
+colorscreen_qt-moc_ColorOptimizerWorker.obj: moc_ColorOptimizerWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_ColorOptimizerWorker.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_ColorOptimizerWorker.Tpo -c -o colorscreen_qt-moc_ColorOptimizerWorker.obj `if test -f 'moc_ColorOptimizerWorker.cpp'; then $(CYGPATH_W) 'moc_ColorOptimizerWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_ColorOptimizerWorker.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_ColorOptimizerWorker.Tpo $(DEPDIR)/colorscreen_qt-moc_ColorOptimizerWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_ColorOptimizerWorker.cpp' object='colorscreen_qt-moc_ColorOptimizerWorker.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_ColorOptimizerWorker.obj `if test -f 'moc_ColorOptimizerWorker.cpp'; then $(CYGPATH_W) 'moc_ColorOptimizerWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_ColorOptimizerWorker.cpp'; fi`
 
 colorscreen_qt-moc_DetectScreenWorker.o: moc_DetectScreenWorker.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_DetectScreenWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_DetectScreenWorker.Tpo -c -o colorscreen_qt-moc_DetectScreenWorker.o `test -f 'moc_DetectScreenWorker.cpp' || echo '$(srcdir)/'`moc_DetectScreenWorker.cpp
@@ -1894,6 +1930,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CapturePanel.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-ColorOptimizerWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ColorPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CoordinateTransformer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DeformationChartWidget.Po
@@ -1931,6 +1968,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_CapturePanel.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ColorOptimizerWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_DeformationChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_DetectScreenWorker.Po
@@ -2010,6 +2048,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CapturePanel.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-ColorOptimizerWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ColorPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CoordinateTransformer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DeformationChartWidget.Po
@@ -2047,6 +2086,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_CapturePanel.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ColorOptimizerWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_DeformationChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_DetectScreenWorker.Po

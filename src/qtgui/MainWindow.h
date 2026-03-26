@@ -50,6 +50,7 @@ struct ProgressEntry {
 class ScreenPanel;
 class GeometryPanel;
 class GeometrySolverWorker;
+class ColorOptimizerWorker;
 class AdaptiveSharpeningWorker;
 class AdaptiveSharpeningChart; // Added
 class QUndoStack; // Forward decl
@@ -70,6 +71,12 @@ public:
     colorscreen::scr_to_img_parameters scrToImg;
     colorscreen::solver_parameters solver;
     bool computeMesh;
+  };
+
+  struct ColorOptimizerRequestData {
+    colorscreen::scr_to_img_parameters scrParams;
+    colorscreen::render_parameters     rparams;
+    std::vector<colorscreen::point_t>  spots;
   };
  
 private slots:
@@ -97,6 +104,10 @@ private slots:
       // Slot for Geometry Optimization
   void onSolverFinished(int reqId, colorscreen::scr_to_img_parameters result,
                         bool success, bool cancelled);
+  void onTriggerColorOptimize(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData);
+  void onColorOptimizerFinished(int reqId, colorscreen::render_parameters updatedRparams,
+                                std::vector<colorscreen::color_match> results,
+                                bool success, bool cancelled);
   void onSelectAll();
   void onDeselectAll();
   void onDeleteSelected();
@@ -345,6 +356,11 @@ private:
   // Solver Worker
   GeometrySolverWorker *m_solverWorker;
   QThread *m_solverThread;
+  
+  // Color Optimizer Worker
+  ColorOptimizerWorker *m_colorOptimizerWorker = nullptr;
+  QThread *m_colorOptimizerThread = nullptr;
+  TaskQueue m_colorOptimizerQueue;
   // std::shared_ptr<colorscreen::progress_info> m_solverProgress; // Removed, now handled by queue request
   
   // Detect Screen Worker
