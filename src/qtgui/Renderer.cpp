@@ -70,7 +70,7 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
                        frameParams, progress, taskName,
                        scrToImg, scrDetect, renderType]() mutable {
         
-        if (!m_scan || (!m_scan->data && !m_scan->rgbdata)) {
+        if (!m_scan || (!m_scan->has_grayscale_or_ir () && !m_scan->has_rgb ())) {
             emit imageReady(reqId, QImage(), xOffset, yOffset, scale, true);
             return;
         }

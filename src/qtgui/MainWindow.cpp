@@ -1125,7 +1125,7 @@ void MainWindow::updateModeMenu() {
     // m_scan->rgbdata is NULL.
     if (prop.flags & render_type_property::NEEDS_RGB) {
       // Check m_scan
-      if (!m_scan || !m_scan->rgbdata) {
+      if (!m_scan || !m_scan->has_rgb ()) {
         show = false;
       }
     }
