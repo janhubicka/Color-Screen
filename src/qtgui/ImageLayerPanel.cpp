@@ -19,6 +19,50 @@ void ImageLayerPanel::setupUi() {
     s.rparams.ignore_infrared = checked;
     m_stateSetter(s, tr("Ignore infrared %1").arg(checked ? tr("on") : tr("off")));
   });
+
+  addSeparator(tr("Simulated image layer"));
+
+  auto enableSimulated = [this](const ParameterState &s) -> bool {
+    auto img = m_imageGetter();
+    if (!img) return false;
+    return img->has_rgb() && (!img->has_grayscale_or_ir() || s.rparams.ignore_infrared);
+  };
+
+  addSliderParameter(
+      tr("Mix dark (red)"), -3.0, 1.0, 1, 4, "", "",
+      [](const ParameterState &s) { return s.rparams.mix_dark.red; },
+      [](ParameterState &s, double v) { s.rparams.mix_dark.red = v; },
+      3.0, enableSimulated, false);
+
+  addSliderParameter(
+      tr("Mix dark (green)"), -3.0, 1.0, 1, 4, "", "",
+      [](const ParameterState &s) { return s.rparams.mix_dark.green; },
+      [](ParameterState &s, double v) { s.rparams.mix_dark.green = v; },
+      3.0, enableSimulated, false);
+
+  addSliderParameter(
+      tr("Mix dark (blue)"), -3.0, 1.0, 1, 4, "", "",
+      [](const ParameterState &s) { return s.rparams.mix_dark.blue; },
+      [](ParameterState &s, double v) { s.rparams.mix_dark.blue = v; },
+      3.0, enableSimulated, false);
+
+  addSliderParameter(
+      tr("Mix red"), -10.0, 10.0, 1, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.mix_red; },
+      [](ParameterState &s, double v) { s.rparams.mix_red = v; },
+      1.0, enableSimulated, false);
+
+  addSliderParameter(
+      tr("Mix green"), -10.0, 10.0, 1, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.mix_green; },
+      [](ParameterState &s, double v) { s.rparams.mix_green = v; },
+      1.0, enableSimulated, false);
+
+  addSliderParameter(
+      tr("Mix blue"), -10.0, 10.0, 1, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.mix_blue; },
+      [](ParameterState &s, double v) { s.rparams.mix_blue = v; },
+      1.0, enableSimulated, false);
 }
 
 void ImageLayerPanel::onParametersRefreshed(const ParameterState &state) {
