@@ -101,6 +101,12 @@ void ColorPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.white_balance.blue; },
       [](ParameterState &s, double v) { s.rparams.white_balance.blue = v; }, 1.0);
 
+  // Neutral Area Button
+  m_setNeutralAreaBtn = addToggleButtonParameter(
+      "", "Set by neutral area",
+      [this](bool) { emit neutralAreaRequested(); },
+      nullptr, [this](const ParameterState &) { return m_imageGetter() != nullptr; });
+
   m_currentGroupForm = nullptr; // End Adjustments section
 
   addSeparator("Backlight");
@@ -111,6 +117,12 @@ void ColorPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.brightness; },
       [](ParameterState &s, double v) { s.rparams.brightness = v; }, 3.0,
       nullptr, true);
+
+  // Auto Levels Button
+  m_setAutoLevelsBtn = addToggleButtonParameter(
+      "", "Auto levels",
+      [this](bool) { emit autoLevelsRequested(); },
+      nullptr, [this](const ParameterState &) { return m_imageGetter() != nullptr; });
 
   // Backlight temperature
   addSliderParameter(
@@ -587,4 +599,32 @@ void ColorPanel::reattachGamutGroup(GamutChartGroup &group, QWidget *widget,
   group.container->addWidget(detachable);
   if (width() > 0)
     group.chart->setFixedWidth(width() / 2);
+}
+
+void ColorPanel::setNeutralAreaChecked(bool checked) {
+  if (m_setNeutralAreaBtn) {
+    m_setNeutralAreaBtn->blockSignals(true);
+    m_setNeutralAreaBtn->setChecked(checked);
+    m_setNeutralAreaBtn->blockSignals(false);
+  }
+}
+
+void ColorPanel::setNeutralAreaEnabled(bool enabled) {
+  if (m_setNeutralAreaBtn) {
+    m_setNeutralAreaBtn->setEnabled(enabled);
+  }
+}
+
+void ColorPanel::setAutoLevelsChecked(bool checked) {
+  if (m_setAutoLevelsBtn) {
+    m_setAutoLevelsBtn->blockSignals(true);
+    m_setAutoLevelsBtn->setChecked(checked);
+    m_setAutoLevelsBtn->blockSignals(false);
+  }
+}
+
+void ColorPanel::setAutoLevelsEnabled(bool enabled) {
+  if (m_setAutoLevelsBtn) {
+    m_setAutoLevelsBtn->setEnabled(enabled);
+  }
 }

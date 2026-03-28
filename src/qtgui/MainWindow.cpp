@@ -628,7 +628,17 @@ void MainWindow::setupUi() {
       if (mode != ImageWidget::GenericAreaMode && m_areaSelectionCallback) {
           // If user switches tool during selection (abandoning generic area selection)
           m_areaSelectionCallback = nullptr;
-          if (m_imageLayerPanel) m_imageLayerPanel->setNeutralAreaChecked(false);
+          if (m_imageLayerPanel) {
+              m_imageLayerPanel->setNeutralAreaChecked(false);
+              m_imageLayerPanel->setInfraredAreaChecked(false);
+              m_imageLayerPanel->setDarkAreaChecked(false);
+              m_imageLayerPanel->updateUI();
+          }
+          if (m_colorPanel) {
+              m_colorPanel->setNeutralAreaChecked(false);
+              m_colorPanel->setAutoLevelsChecked(false);
+              m_colorPanel->updateUI();
+          }
       }
   });
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
@@ -751,6 +761,71 @@ void MainWindow::setupUi() {
           watcher->setFuture(future);
       });
   });
+
+  connect(m_colorPanel, &ColorPanel::neutralAreaRequested, this, [this]() {
+      startAreaSelection(tr("Select neutral area for white balance"), [this](QRect area) {
+          if (area.width() <= 0 || area.height() <= 0) return;
+          
+          auto progress = std::make_shared<colorscreen::progress_info>();
+          progress->set_task("Calculating white balance parameters", 1);
+          colorscreen::sub_task task(progress.get());
+          addProgress(progress);
+          if (m_colorPanel) m_colorPanel->setNeutralAreaEnabled(false);
+          
+          auto scan = m_scan;
+          auto state = getCurrentState();
+          
+          QFutureWatcher<ParameterState>* watcher = new QFutureWatcher<ParameterState>(this);
+          connect(watcher, &QFutureWatcher<ParameterState>::finished, this, [this, watcher, progress]() {
+              ParameterState newState = watcher->result();
+              changeParameters(newState, tr("Set white balance by neutral area"));
+              removeProgress(progress);
+              if (m_colorPanel) m_colorPanel->setNeutralAreaChecked(false);
+              watcher->deleteLater();
+          });
+          
+          QFuture<ParameterState> future = QtConcurrent::run(
+              [scan, state, area, progress]() mutable -> ParameterState {
+                  state.rparams.auto_white_balance(*scan, state.scrToImg, area.left(), area.top(), area.right(), area.bottom(), progress.get());
+                  return state;
+              }
+          );
+          watcher->setFuture(future);
+      });
+  });
+
+  connect(m_colorPanel, &ColorPanel::autoLevelsRequested, this, [this]() {
+      startAreaSelection(tr("Select area for auto levels"), [this](QRect area) {
+          if (area.width() <= 0 || area.height() <= 0) return;
+          
+          auto progress = std::make_shared<colorscreen::progress_info>();
+          progress->set_task("Calculating auto levels parameters", 1);
+          colorscreen::sub_task task(progress.get());
+          addProgress(progress);
+          if (m_colorPanel) m_colorPanel->setAutoLevelsEnabled(false);
+          
+          auto scan = m_scan;
+          auto state = getCurrentState();
+          
+          QFutureWatcher<ParameterState>* watcher = new QFutureWatcher<ParameterState>(this);
+          connect(watcher, &QFutureWatcher<ParameterState>::finished, this, [this, watcher, progress]() {
+              ParameterState newState = watcher->result();
+              changeParameters(newState, tr("Set auto levels by parameter area"));
+              removeProgress(progress);
+              if (m_colorPanel) m_colorPanel->setAutoLevelsChecked(false);
+              watcher->deleteLater();
+          });
+          
+          QFuture<ParameterState> future = QtConcurrent::run(
+              [scan, state, area, progress]() mutable -> ParameterState {
+                  state.rparams.auto_dark_brightness(*scan, state.scrToImg, area.left(), area.top(), area.right(), area.bottom(), progress.get());
+                  return state;
+              }
+          );
+          watcher->setFuture(future);
+      });
+  });
+
   m_panels.push_back(m_geometryPanel);
   m_panels.push_back(m_geometryPanel);
   m_panels.push_back(m_colorPanel);

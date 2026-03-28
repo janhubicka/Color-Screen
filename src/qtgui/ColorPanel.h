@@ -6,6 +6,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QWidget>
+#include <QPushButton>
 #include <vector>
 
 class CIEChartWidget; // Forward declaration
@@ -28,7 +29,16 @@ public:
   QWidget *getCorrectedGamutChartWidget() const;
   void reattachCorrectedGamutChart(QWidget *widget);
 
+  void setNeutralAreaChecked(bool checked);
+  void setNeutralAreaEnabled(bool enabled);
+
+  void setAutoLevelsChecked(bool checked);
+  void setAutoLevelsEnabled(bool enabled);
+
 signals:
+  void neutralAreaRequested();
+  void autoLevelsRequested();
+
   void detachSpectraChartRequested(QWidget *widget);
   void detachCorrectedTilesRequested(QWidget *widget);
   void detachGamutChartRequested(QWidget *widget);
@@ -58,6 +68,9 @@ private:
   QVBoxLayout *m_spectraContainer = nullptr;
   QComboBox *m_spectraMode = nullptr;
   TilePreviewPanel *m_correctedPreview = nullptr;
+
+  QPushButton *m_setNeutralAreaBtn = nullptr;
+  QPushButton *m_setAutoLevelsBtn = nullptr;
 
   struct GamutChartGroup {
     CIEChartWidget *chart = nullptr;
