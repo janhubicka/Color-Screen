@@ -143,13 +143,10 @@ void TilesPanel::rebuildTileGrid() {
       // 2. Enable checkbox (overlaid in bottom right)
       auto *enBtn = new QCheckBox(tileWidget);
       enBtn->setToolTip(tr("Enable/Disable tile %1, %2").arg(gx).arg(gy));
-      // Give it no text and a slight margin from the bottom-right corner
+      // Give it no text
       enBtn->setText("");
-      enBtn->setStyleSheet(
-          "QCheckBox { background: transparent; margin-right: 4px; margin-bottom: 4px; }"
-          "QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid #555; border-radius: 2px; background: white; }"
-          "QCheckBox::indicator:checked { background: #4caf50; image: url(:/icons/tick.svg); }" // optional tick.svg if it exists, otherwise it's just green
-      );
+      // Using layout margins instead of CSS so we don't break native styling
+      enBtn->setContentsMargins(0, 0, 4, 4);
       enBtn->setChecked(state.rparams.get_tile_adjustment(img->stitch, gx, gy).enabled);
 
       // Add enBtn to bottom right corner (row 1, col 1, aligned bottom-right)
