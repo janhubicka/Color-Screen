@@ -37,6 +37,7 @@ class QTimer;
 #include "ColorPanel.h"
 #include "ProfilePanel.h"
 #include "TilesPanel.h"
+#include "ImageLayerPanel.h"
 #include "ParameterState.h"
 #include "SharpnessPanel.h"
 #include "TaskQueue.h"
@@ -315,6 +316,7 @@ private:
   ColorPanel *m_colorPanel;
   ProfilePanel *m_profilePanel;
   TilesPanel   *m_tilesPanel = nullptr;
+  ImageLayerPanel *m_imageLayerPanel = nullptr;
 
   // Color optimizer results (kept outside ParameterState — not undo-able)
   std::vector<colorscreen::color_match> m_profileSpotResults;

@@ -317,6 +317,12 @@ void MainWindow::setupUi() {
                      [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
                      [this]() { return m_scan; }, this);
 
+  // Create Image Layer Panel
+  m_imageLayerPanel =
+      new ImageLayerPanel([this]() { return getCurrentState(); },
+                          [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
+                          [this]() { return m_scan; }, this);
+
   // Connect Progress Signals from Panels
   connect(m_sharpnessPanel, &SharpnessPanel::progressStarted, this, &MainWindow::addProgress);
   connect(m_sharpnessPanel, &SharpnessPanel::progressFinished, this, &MainWindow::removeProgress);
@@ -621,6 +627,7 @@ void MainWindow::setupUi() {
       }
   });
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
+  m_configTabs->addTab(m_imageLayerPanel, "Image Layer");
   m_configTabs->addTab(m_screenPanel, "Screen");
   m_configTabs->addTab(m_geometryPanel, "Geometry");
   m_configTabs->addTab(m_colorPanel, "Color");
@@ -641,6 +648,7 @@ void MainWindow::setupUi() {
   m_panels.push_back(m_capturePanel);
   m_panels.push_back(m_tilesPanel);
   m_panels.push_back(m_sharpnessPanel);
+  m_panels.push_back(m_imageLayerPanel);
   m_panels.push_back(m_screenPanel);
   m_panels.push_back(m_geometryPanel);
   m_panels.push_back(m_geometryPanel);
