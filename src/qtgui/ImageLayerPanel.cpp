@@ -27,6 +27,11 @@ void ImageLayerPanel::setupUi() {
   m_form->addRow(m_setNeutralAreaBtn);
   connect(m_setNeutralAreaBtn, &QPushButton::clicked, this, &ImageLayerPanel::neutralAreaRequested);
 
+  m_setInfraredAreaBtn = new QPushButton(tr("Set by infrared channel"), this);
+  m_setInfraredAreaBtn->setCheckable(true);
+  m_form->addRow(m_setInfraredAreaBtn);
+  connect(m_setInfraredAreaBtn, &QPushButton::clicked, this, &ImageLayerPanel::infraredAreaRequested);
+
   auto enableSimulated = [this](const ParameterState &s) -> bool {
     auto img = m_imageGetter();
     if (!img) return false;
@@ -50,6 +55,11 @@ void ImageLayerPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.mix_dark.blue; },
       [](ParameterState &s, double v) { s.rparams.mix_dark.blue = v; },
       3.0, enableSimulated, false);
+
+  m_setDarkAreaBtn = new QPushButton(tr("Set by dark area"), this);
+  m_setDarkAreaBtn->setCheckable(true);
+  m_form->addRow(m_setDarkAreaBtn);
+  connect(m_setDarkAreaBtn, &QPushButton::clicked, this, &ImageLayerPanel::darkAreaRequested);
 
   addSliderParameter(
       tr("Mix red"), -10.0, 10.0, 1, 2, "", "",
@@ -86,6 +96,18 @@ void ImageLayerPanel::onParametersRefreshed(const ParameterState &state) {
     bool enableSim = img && img->has_rgb() && (!img->has_grayscale_or_ir() || state.rparams.ignore_infrared);
     m_setNeutralAreaBtn->setEnabled(enableSim);
   }
+  
+  if (m_setInfraredAreaBtn) {
+    auto img = m_imageGetter();
+    bool enableIr = img && img->has_rgb() && img->has_grayscale_or_ir();
+    m_setInfraredAreaBtn->setEnabled(enableIr);
+  }
+  
+  if (m_setDarkAreaBtn) {
+    auto img = m_imageGetter();
+    bool enableSim = img && img->has_rgb() && (!img->has_grayscale_or_ir() || state.rparams.ignore_infrared);
+    m_setDarkAreaBtn->setEnabled(enableSim);
+  }
 }
 
 void ImageLayerPanel::setNeutralAreaChecked(bool checked) {
@@ -99,5 +121,33 @@ void ImageLayerPanel::setNeutralAreaChecked(bool checked) {
 void ImageLayerPanel::setNeutralAreaEnabled(bool enabled) {
   if (m_setNeutralAreaBtn) {
     m_setNeutralAreaBtn->setEnabled(enabled);
+  }
+}
+
+void ImageLayerPanel::setInfraredAreaChecked(bool checked) {
+  if (m_setInfraredAreaBtn) {
+    m_setInfraredAreaBtn->blockSignals(true);
+    m_setInfraredAreaBtn->setChecked(checked);
+    m_setInfraredAreaBtn->blockSignals(false);
+  }
+}
+
+void ImageLayerPanel::setInfraredAreaEnabled(bool enabled) {
+  if (m_setInfraredAreaBtn) {
+    m_setInfraredAreaBtn->setEnabled(enabled);
+  }
+}
+
+void ImageLayerPanel::setDarkAreaChecked(bool checked) {
+  if (m_setDarkAreaBtn) {
+    m_setDarkAreaBtn->blockSignals(true);
+    m_setDarkAreaBtn->setChecked(checked);
+    m_setDarkAreaBtn->blockSignals(false);
+  }
+}
+
+void ImageLayerPanel::setDarkAreaEnabled(bool enabled) {
+  if (m_setDarkAreaBtn) {
+    m_setDarkAreaBtn->setEnabled(enabled);
   }
 }

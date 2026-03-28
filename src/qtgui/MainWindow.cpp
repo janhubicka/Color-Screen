@@ -687,6 +687,70 @@ void MainWindow::setupUi() {
           watcher->setFuture(future);
       });
   });
+
+  connect(m_imageLayerPanel, &ImageLayerPanel::infraredAreaRequested, this, [this]() {
+      startAreaSelection(tr("Select area to set simulated mix parameters using infrared"), [this](QRect area) {
+          if (area.width() <= 0 || area.height() <= 0) return;
+          
+          auto progress = std::make_shared<colorscreen::progress_info>();
+          progress->set_task("Calculating IR mix parameters", 1);
+          colorscreen::sub_task task(progress.get());
+          addProgress(progress);
+          if (m_imageLayerPanel) m_imageLayerPanel->setInfraredAreaEnabled(false);
+          
+          auto scan = m_scan;
+          auto state = getCurrentState();
+          
+          QFutureWatcher<ParameterState>* watcher = new QFutureWatcher<ParameterState>(this);
+          connect(watcher, &QFutureWatcher<ParameterState>::finished, this, [this, watcher, progress]() {
+              ParameterState newState = watcher->result();
+              changeParameters(newState, tr("Set simulated mix parameters using infrared"));
+              removeProgress(progress);
+              if (m_imageLayerPanel) m_imageLayerPanel->setInfraredAreaChecked(false);
+              watcher->deleteLater();
+          });
+          
+          QFuture<ParameterState> future = QtConcurrent::run(
+              [scan, state, area, progress]() mutable -> ParameterState {
+                  state.rparams.auto_mix_weights_using_ir(*scan, state.scrToImg, area.left(), area.top(), area.right(), area.bottom(), progress.get());
+                  return state;
+              }
+          );
+          watcher->setFuture(future);
+      });
+  });
+
+  connect(m_imageLayerPanel, &ImageLayerPanel::darkAreaRequested, this, [this]() {
+      startAreaSelection(tr("Select dark area for simulated mixing"), [this](QRect area) {
+          if (area.width() <= 0 || area.height() <= 0) return;
+          
+          auto progress = std::make_shared<colorscreen::progress_info>();
+          progress->set_task("Calculating dark mix parameters", 1);
+          colorscreen::sub_task task(progress.get());
+          addProgress(progress);
+          if (m_imageLayerPanel) m_imageLayerPanel->setDarkAreaEnabled(false);
+          
+          auto scan = m_scan;
+          auto state = getCurrentState();
+          
+          QFutureWatcher<ParameterState>* watcher = new QFutureWatcher<ParameterState>(this);
+          connect(watcher, &QFutureWatcher<ParameterState>::finished, this, [this, watcher, progress]() {
+              ParameterState newState = watcher->result();
+              changeParameters(newState, tr("Set dark mix parameters by area"));
+              removeProgress(progress);
+              if (m_imageLayerPanel) m_imageLayerPanel->setDarkAreaChecked(false);
+              watcher->deleteLater();
+          });
+          
+          QFuture<ParameterState> future = QtConcurrent::run(
+              [scan, state, area, progress]() mutable -> ParameterState {
+                  state.rparams.auto_mix_dark(*scan, state.scrToImg, area.left(), area.top(), area.right(), area.bottom(), progress.get());
+                  return state;
+              }
+          );
+          watcher->setFuture(future);
+      });
+  });
   m_panels.push_back(m_geometryPanel);
   m_panels.push_back(m_geometryPanel);
   m_panels.push_back(m_colorPanel);
