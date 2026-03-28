@@ -496,8 +496,7 @@ struct render_parameters
   color_matrix get_rgb_adjustment_matrix (bool normalized_patches,
                                           rgbdata patch_proportions);
   size_t get_icc_profile (void **buf, image_data *img, bool normalized_dyes);
-  const tile_adjustment &get_tile_adjustment (stitch_project *stitch, int x,
-                                              int y) const;
+  DLL_PUBLIC const tile_adjustment &get_tile_adjustment (stitch_project *stitch, int x, int y) const;
   tile_adjustment &get_tile_adjustment_ref (stitch_project *stitch, int x,
                                             int y);
   DLL_PUBLIC tile_adjustment &get_tile_adjustment (int x, int y);
