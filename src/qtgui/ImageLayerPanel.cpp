@@ -22,16 +22,6 @@ void ImageLayerPanel::setupUi() {
 
   addSeparator(tr("Simulated image layer"));
 
-  m_setNeutralAreaBtn = new QPushButton(tr("Set by neutral area"), this);
-  m_setNeutralAreaBtn->setCheckable(true);
-  m_form->addRow(m_setNeutralAreaBtn);
-  connect(m_setNeutralAreaBtn, &QPushButton::clicked, this, &ImageLayerPanel::neutralAreaRequested);
-
-  m_setInfraredAreaBtn = new QPushButton(tr("Set by infrared channel"), this);
-  m_setInfraredAreaBtn->setCheckable(true);
-  m_form->addRow(m_setInfraredAreaBtn);
-  connect(m_setInfraredAreaBtn, &QPushButton::clicked, this, &ImageLayerPanel::infraredAreaRequested);
-
   auto enableSimulated = [this](const ParameterState &s) -> bool {
     auto img = m_imageGetter();
     if (!img) return false;
@@ -56,10 +46,12 @@ void ImageLayerPanel::setupUi() {
       [](ParameterState &s, double v) { s.rparams.mix_dark.blue = v; },
       3.0, enableSimulated, false);
 
-  m_setDarkAreaBtn = new QPushButton(tr("Set by dark area"), this);
-  m_setDarkAreaBtn->setCheckable(true);
-  m_form->addRow(m_setDarkAreaBtn);
-  connect(m_setDarkAreaBtn, &QPushButton::clicked, this, &ImageLayerPanel::darkAreaRequested);
+  // Dark Area Button
+  m_setDarkAreaBtn = addToggleButtonParameter(
+      "", tr("Set by dark area"),
+      [this](bool) { emit darkAreaRequested(); },
+      nullptr,
+      enableSimulated);
 
   addSliderParameter(
       tr("Mix red"), -10.0, 10.0, 1, 2, "", "",
@@ -78,6 +70,23 @@ void ImageLayerPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.mix_blue; },
       [](ParameterState &s, double v) { s.rparams.mix_blue = v; },
       1.0, enableSimulated, false);
+
+  // Neutral Area Button
+  m_setNeutralAreaBtn = addToggleButtonParameter(
+      "", tr("Set by neutral area"),
+      [this](bool) { emit neutralAreaRequested(); },
+      nullptr,
+      enableSimulated);
+
+  // Infrared Area Button
+  m_setInfraredAreaBtn = addToggleButtonParameter(
+      "", tr("Set by infrared channel"),
+      [this](bool) { emit infraredAreaRequested(); },
+      nullptr,
+      [this](const ParameterState &s) {
+          auto img = m_imageGetter();
+          return img && img->has_rgb() && img->has_grayscale_or_ir() && s.rparams.ignore_infrared;
+      });
 }
 
 void ImageLayerPanel::onParametersRefreshed(const ParameterState &state) {
@@ -99,7 +108,7 @@ void ImageLayerPanel::onParametersRefreshed(const ParameterState &state) {
   
   if (m_setInfraredAreaBtn) {
     auto img = m_imageGetter();
-    bool enableIr = img && img->has_rgb() && img->has_grayscale_or_ir();
+    bool enableIr = img && img->has_rgb() && img->has_grayscale_or_ir() && state.rparams.ignore_infrared;
     m_setInfraredAreaBtn->setEnabled(enableIr);
   }
   
