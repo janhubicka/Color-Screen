@@ -7,7 +7,9 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QCheckBox>
 #include <QVBoxLayout>
+#include <QFrame>
 
 TilesPanel::TilesPanel(StateGetter stateGetter, StateSetter stateSetter,
                        ImageGetter imageGetter, QWidget *parent)
@@ -18,13 +20,11 @@ TilesPanel::TilesPanel(StateGetter stateGetter, StateSetter stateSetter,
 TilesPanel::~TilesPanel() = default;
 
 void TilesPanel::setupUi() {
-  // Tile selector (Grid of buttons instead of combo)
-  m_selectorGridWidget = new QWidget(this);
-  m_form->addRow(tr("Current tile"), m_selectorGridWidget);
+  m_gridWidget = new QWidget(this);
+  m_form->addRow(m_gridWidget);
 
   m_currentGroupForm = nullptr;
 
-  // Exposure slider for selected tile
   addSeparator(tr("Tile adjustments"));
 
   addSliderParameter(
@@ -70,12 +70,6 @@ void TilesPanel::setupUi() {
         s.rparams.get_tile_adjustment(x, y).dark_point = (colorscreen::luminosity_t)v;
       },
       3.0);
-
-  // Tile toggle grid
-  m_currentGroupForm = nullptr;
-  addSeparator(tr("Tile enable / disable"));
-  m_enableGridWidget = new QWidget(this);
-  m_form->addRow(m_enableGridWidget);
 }
 
 void TilesPanel::updateForNewImage() {
@@ -83,18 +77,13 @@ void TilesPanel::updateForNewImage() {
 }
 
 void TilesPanel::rebuildTileGrid() {
-  // Clear existing buttons and layouts
   if (m_selectorGroup) {
     m_selectorGroup->deleteLater();
     m_selectorGroup = nullptr;
   }
-  qDeleteAll(m_selectorGridWidget->findChildren<QWidget*>());
-  if (m_selectorGridWidget->layout()) {
-    delete m_selectorGridWidget->layout();
-  }
-  qDeleteAll(m_enableGridWidget->findChildren<QWidget*>());
-  if (m_enableGridWidget->layout()) {
-    delete m_enableGridWidget->layout();
+  qDeleteAll(m_gridWidget->findChildren<QWidget*>());
+  if (m_gridWidget->layout()) {
+    delete m_gridWidget->layout();
   }
 
   m_tileChecks.clear();
@@ -110,19 +99,15 @@ void TilesPanel::rebuildTileGrid() {
   m_gridW = img->stitch->params.width;
   m_gridH = img->stitch->params.height;
 
-  m_tileChecks.resize(m_gridH, std::vector<QPushButton *>(m_gridW, nullptr));
+  m_tileChecks.resize(m_gridH, std::vector<QCheckBox *>(m_gridW, nullptr));
   m_tileSelectors.resize(m_gridH, std::vector<QPushButton *>(m_gridW, nullptr));
 
   m_selectorGroup = new QButtonGroup(this);
   m_selectorGroup->setExclusive(true);
 
-  auto *selectorLayout = new QGridLayout(m_selectorGridWidget);
-  selectorLayout->setContentsMargins(0, 0, 0, 0);
-  selectorLayout->setSpacing(2);
-
-  auto *enableLayout = new QGridLayout(m_enableGridWidget);
-  enableLayout->setContentsMargins(0, 0, 0, 0);
-  enableLayout->setSpacing(2);
+  auto *gridLayout = new QGridLayout(m_gridWidget);
+  gridLayout->setContentsMargins(0, 0, 0, 0);
+  gridLayout->setSpacing(4);
 
   ParameterState state = m_stateGetter();
 
@@ -130,29 +115,55 @@ void TilesPanel::rebuildTileGrid() {
     for (int gx = 0; gx < m_gridW; gx++) {
       int flatIndex = gy * m_gridW + gx;
 
+      auto *tileWidget = new QFrame(m_gridWidget);
+      tileWidget->setFrameStyle(QFrame::NoFrame);
+      
+      auto *tileLayout = new QGridLayout(tileWidget);
+      tileLayout->setContentsMargins(0, 0, 0, 0);
+      tileLayout->setSpacing(0);
+
       // 1. Selector button (Radio button behavior)
-      auto *selBtn = new QPushButton(m_selectorGridWidget);
+      auto *selBtn = new QPushButton(tileWidget);
       selBtn->setCheckable(true);
-      selBtn->setFixedSize(32, 32);
+      // Golden ratio: e.g. ~ 72x44
+      selBtn->setMinimumSize(72, 44);
+      selBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
       selBtn->setToolTip(tr("Select tile %1, %2").arg(gx).arg(gy));
+      selBtn->setStyleSheet(
+          "QPushButton { background-color: #e0e0e0; border: 1px solid #888; border-radius: 4px; }"
+          "QPushButton:hover { background-color: #d0d0d0; }"
+          "QPushButton:checked { background-color: #a5d6a7; border: 2px solid #2e7d32; font-weight: bold; }"
+      );
+
       m_selectorGroup->addButton(selBtn, flatIndex);
-      selectorLayout->addWidget(selBtn, gy, gx);
+      // Add selBtn to the grid spanning 2x2 cells so it fills the entire frame
+      tileLayout->addWidget(selBtn, 0, 0, 2, 2);
       m_tileSelectors[gy][gx] = selBtn;
 
-      // 2. Enable button (Checkbox behavior)
-      auto *enBtn = new QPushButton(m_enableGridWidget);
-      enBtn->setCheckable(true);
-      enBtn->setFixedSize(32, 32);
+      // 2. Enable checkbox (overlaid in bottom right)
+      auto *enBtn = new QCheckBox(tileWidget);
       enBtn->setToolTip(tr("Enable/Disable tile %1, %2").arg(gx).arg(gy));
+      // Give it no text and a slight margin from the bottom-right corner
+      enBtn->setText("");
+      enBtn->setStyleSheet(
+          "QCheckBox { background: transparent; margin-right: 4px; margin-bottom: 4px; }"
+          "QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid #555; border-radius: 2px; background: white; }"
+          "QCheckBox::indicator:checked { background: #4caf50; image: url(:/icons/tick.svg); }" // optional tick.svg if it exists, otherwise it's just green
+      );
       enBtn->setChecked(state.rparams.get_tile_adjustment(img->stitch, gx, gy).enabled);
-      enableLayout->addWidget(enBtn, gy, gx);
+
+      // Add enBtn to bottom right corner (row 1, col 1, aligned bottom-right)
+      tileLayout->addWidget(enBtn, 1, 1, Qt::AlignBottom | Qt::AlignRight);
       m_tileChecks[gy][gx] = enBtn;
 
-      connect(enBtn, &QPushButton::toggled, this, [this, gx, gy](bool checked) {
+      // enBtn is a QCheckBox, so its toggled signal passes a boolean
+      connect(enBtn, &QCheckBox::toggled, this, [this, gx, gy](bool checked) {
         ParameterState s = m_stateGetter();
         s.rparams.get_tile_adjustment(gx, gy).enabled = checked;
         m_stateSetter(s, tr("Toggle tile %1,%2").arg(gx).arg(gy));
       });
+
+      gridLayout->addWidget(tileWidget, gy, gx);
     }
   }
 
