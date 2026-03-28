@@ -118,6 +118,7 @@ private slots:
   void onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t scrPos,
                     colorscreen::point_t color);
   void onAreaSelected(QRect area);
+  void startAreaSelection(const QString &message, std::function<void(QRect)> callback);
   void onFinetuneFinished(bool success, std::vector<colorscreen::solver_parameters::solver_point_t> points,
                           QThread *thread, std::shared_ptr<colorscreen::progress_info> progress);
   void onSetCenter(colorscreen::point_t imgPos);
@@ -233,6 +234,11 @@ private:
   // We keep shared copies or references.
   // Using std::shared_ptr or just direct members.
   // Given the library usage in gtkgui, direct members are fine.
+  QString m_lastOpenDir;
+  QString m_lastSaveDir;
+
+  std::function<void(QRect)> m_areaSelectionCallback = nullptr;
+
   std::shared_ptr<colorscreen::image_data> m_scan;
   colorscreen::render_parameters m_rparams;
   colorscreen::scr_detect_parameters m_detectParams;

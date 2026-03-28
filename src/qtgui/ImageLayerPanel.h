@@ -3,6 +3,7 @@
 
 #include "ParameterPanel.h"
 #include <QCheckBox>
+#include <QPushButton>
 
 class ImageLayerPanel : public ParameterPanel {
   Q_OBJECT
@@ -14,10 +15,14 @@ public:
 protected:
   void onParametersRefreshed(const ParameterState &state) override;
 
+signals:
+  void neutralAreaRequested();
+
 private:
   void setupUi();
 
   QCheckBox *m_ignoreInfraredCheck = nullptr;
+  QPushButton *m_setNeutralAreaBtn = nullptr;
 };
 
 #endif // IMAGE_LAYER_PANEL_H

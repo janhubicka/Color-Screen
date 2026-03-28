@@ -650,6 +650,36 @@ void MainWindow::setupUi() {
   m_panels.push_back(m_sharpnessPanel);
   m_panels.push_back(m_imageLayerPanel);
   m_panels.push_back(m_screenPanel);
+
+  connect(m_imageLayerPanel, &ImageLayerPanel::neutralAreaRequested, this, [this]() {
+      startAreaSelection(tr("Select neutral area for simulated mixing"), [this](QRect area) {
+          if (area.width() <= 0 || area.height() <= 0) return;
+          
+          auto progress = std::make_shared<colorscreen::progress_info>();
+          progress->set_task("Calculating neutral mix parameters", 1);
+          colorscreen::sub_task task(progress.get());
+          addProgress(progress);
+          
+          auto scan = m_scan;
+          auto state = getCurrentState();
+          
+          QFutureWatcher<ParameterState>* watcher = new QFutureWatcher<ParameterState>(this);
+          connect(watcher, &QFutureWatcher<ParameterState>::finished, this, [this, watcher, progress]() {
+              ParameterState newState = watcher->result();
+              changeParameters(newState, tr("Set simulated mix parameters by neutral area"));
+              removeProgress(progress);
+              watcher->deleteLater();
+          });
+          
+          QFuture<ParameterState> future = QtConcurrent::run(
+              [scan, state, area, progress]() mutable -> ParameterState {
+                  state.rparams.auto_mix_weights(*scan, state.scrToImg, area.left(), area.top(), area.right(), area.bottom(), progress.get());
+                  return state;
+              }
+          );
+          watcher->setFuture(future);
+      });
+  });
   m_panels.push_back(m_geometryPanel);
   m_panels.push_back(m_geometryPanel);
   m_panels.push_back(m_colorPanel);
@@ -3017,6 +3047,21 @@ void MainWindow::onCropRequested() {
   statusBar()->showMessage("Select crop");
 }
 
+void MainWindow::startAreaSelection(const QString &message, std::function<void(QRect)> callback) {
+  if (!m_scan) return;
+
+  if (m_imageWidget->interactionMode() == ImageWidget::GenericAreaMode) {
+      m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+      statusBar()->clearMessage();
+      m_areaSelectionCallback = nullptr;
+      return;
+  }
+
+  m_areaSelectionCallback = callback;
+  m_imageWidget->setInteractionMode(ImageWidget::GenericAreaMode);
+  statusBar()->showMessage(message);
+}
+
 QRect MainWindow::getImageArea(QRect area) {
   if (!m_scan) return QRect();
 
@@ -3049,6 +3094,17 @@ void MainWindow::onAreaSelected(QRect area) {
 
   QRect imgArea = getImageArea(area);
   if (imgArea.width() <= 0 || imgArea.height() <= 0) return;
+
+  if (m_imageWidget->interactionMode() == ImageWidget::GenericAreaMode) {
+      auto cb = m_areaSelectionCallback;
+      m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+      statusBar()->clearMessage();
+      m_areaSelectionCallback = nullptr;
+      if (cb) {
+          cb(imgArea);
+      }
+      return;
+  }
 
   if (m_imageWidget->interactionMode() == ImageWidget::CropMode) {
       // Preserve center

@@ -72,7 +72,7 @@ public:
   void selectAll();
   void deleteSelectedPoints();
 
-  enum InteractionMode { PanMode, SelectMode, AddPointMode, SetCenterMode, CropMode };
+  enum InteractionMode { PanMode, SelectMode, AddPointMode, SetCenterMode, CropMode, GenericAreaMode };
   void setInteractionMode(InteractionMode mode);
 
   struct SelectedPoint {

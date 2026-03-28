@@ -22,6 +22,10 @@ void ImageLayerPanel::setupUi() {
 
   addSeparator(tr("Simulated image layer"));
 
+  m_setNeutralAreaBtn = new QPushButton(tr("Set by neutral area"), this);
+  m_form->addRow(m_setNeutralAreaBtn);
+  connect(m_setNeutralAreaBtn, &QPushButton::clicked, this, &ImageLayerPanel::neutralAreaRequested);
+
   auto enableSimulated = [this](const ParameterState &s) -> bool {
     auto img = m_imageGetter();
     if (!img) return false;
@@ -74,5 +78,11 @@ void ImageLayerPanel::onParametersRefreshed(const ParameterState &state) {
     auto img = m_imageGetter();
     bool enable = img && img->has_rgb() && img->has_grayscale_or_ir();
     m_ignoreInfraredCheck->setEnabled(enable);
+  }
+  
+  if (m_setNeutralAreaBtn) {
+    auto img = m_imageGetter();
+    bool enableSim = img && img->has_rgb() && (!img->has_grayscale_or_ir() || state.rparams.ignore_infrared);
+    m_setNeutralAreaBtn->setEnabled(enableSim);
   }
 }
