@@ -311,6 +311,12 @@ void MainWindow::setupUi() {
                        [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
                        [this]() { return m_scan; }, this);
 
+  // Create Tiles Panel
+  m_tilesPanel =
+      new TilesPanel([this]() { return getCurrentState(); },
+                     [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
+                     [this]() { return m_scan; }, this);
+
   // Connect Progress Signals from Panels
   connect(m_sharpnessPanel, &SharpnessPanel::progressStarted, this, &MainWindow::addProgress);
   connect(m_sharpnessPanel, &SharpnessPanel::progressFinished, this, &MainWindow::removeProgress);
@@ -601,6 +607,7 @@ void MainWindow::setupUi() {
             &SharpnessPanel::reattachAdaptiveChart);
 
   m_configTabs->addTab(m_capturePanel, "Digital capture");
+  m_configTabs->addTab(m_tilesPanel, "Tiles");
   connect(m_capturePanel, &CapturePanel::cropRequested, this, &MainWindow::onCropRequested);
   connect(m_capturePanel, &CapturePanel::flatFieldRequested, this, &MainWindow::onFlatFieldRequested);
   connect(m_capturePanel, &CapturePanel::autodetectRequested, this, &MainWindow::onAutodetectScreen);
@@ -632,6 +639,7 @@ void MainWindow::setupUi() {
 
   // Register panels for updates
   m_panels.push_back(m_capturePanel);
+  m_panels.push_back(m_tilesPanel);
   m_panels.push_back(m_sharpnessPanel);
   m_panels.push_back(m_screenPanel);
   m_panels.push_back(m_geometryPanel);
@@ -1793,6 +1801,15 @@ void MainWindow::onImageLoaded() {
     m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                                &m_detectParams);
     m_navigationView->setMinScale(m_imageWidget->getMinScale());
+  }
+
+  if (m_tilesPanel) {
+    m_tilesPanel->updateForNewImage();
+    bool hasStitch = (m_scan && m_scan->stitch);
+    int tilesTabIndex = m_configTabs->indexOf(m_tilesPanel);
+    if (tilesTabIndex >= 0) {
+      m_configTabs->setTabVisible(tilesTabIndex, hasStitch);
+    }
   }
 
   // Refresh param values too
