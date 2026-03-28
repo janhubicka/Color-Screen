@@ -36,11 +36,15 @@ private:
   int m_gridW = 0;
   int m_gridH = 0;
 
-  // Grid of "enabled" checkboxes  [y][x]
-  std::vector<std::vector<QCheckBox *>> m_tileChecks;
+  // Grid of "enabled" buttons  [y][x]
+  std::vector<std::vector<class QPushButton *>> m_tileChecks;
 
-  // Combo that selects which tile's exposure/dark_point sliders apply to
-  QComboBox *m_tileSelector = nullptr;
+  // Grid of "current tile" selectors [y][x]
+  std::vector<std::vector<class QPushButton *>> m_tileSelectors;
+  class QButtonGroup *m_selectorGroup = nullptr;
+
+  QWidget *m_selectorGridWidget = nullptr;
+  QWidget *m_enableGridWidget = nullptr;
 
   // Widgets for exposure / dark_point sliders (kept to hide/show)
   QWidget *m_sliderSection = nullptr;

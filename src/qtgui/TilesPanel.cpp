@@ -1,11 +1,12 @@
 #include "TilesPanel.h"
 #include "../libcolorscreen/include/stitch.h"
-#include <QCheckBox>
-#include <QComboBox>
+#include <QButtonGroup>
 #include <QFormLayout>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QVBoxLayout>
 
 TilesPanel::TilesPanel(StateGetter stateGetter, StateSetter stateSetter,
@@ -17,33 +18,15 @@ TilesPanel::TilesPanel(StateGetter stateGetter, StateSetter stateSetter,
 TilesPanel::~TilesPanel() = default;
 
 void TilesPanel::setupUi() {
-  // Tile selector
-  {
-    auto *row = new QWidget(this);
-    auto *hbox = new QHBoxLayout(row);
-    hbox->setContentsMargins(0, 0, 0, 0);
-    m_tileSelector = new QComboBox(row);
-    m_tileSelector->setObjectName("tileSelectorCombo");
-    hbox->addWidget(m_tileSelector);
-    m_form->addRow(tr("Current tile"), row);
-
-    connect(m_tileSelector,
-            QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-            [this](int idx) {
-              m_currentTileIndex = idx;
-              refreshTileSliders();
-            });
-  }
+  // Tile selector (Grid of buttons instead of combo)
+  m_selectorGridWidget = new QWidget(this);
+  m_form->addRow(tr("Current tile"), m_selectorGridWidget);
 
   m_currentGroupForm = nullptr;
 
   // Exposure slider for selected tile
   addSeparator(tr("Tile adjustments"));
 
-  // We use addSliderParameter with a getter/setter that routes through
-  // m_currentTileIndex. The updaters registered by addSliderParameter will be
-  // called by ParameterPanel::updateUI, so they must work correctly in all
-  // cases (including when no stitch is loaded – in that case we just return 1).
   addSliderParameter(
       tr("Exposure"), 0.01, 10.0, 100, 3, "", "",
       [this](const ParameterState &s) -> double {
@@ -88,88 +71,110 @@ void TilesPanel::setupUi() {
       },
       3.0);
 
-  // Tile toggle grid will be built dynamically via rebuildTileGrid().
+  // Tile toggle grid
   m_currentGroupForm = nullptr;
   addSeparator(tr("Tile enable / disable"));
+  m_enableGridWidget = new QWidget(this);
+  m_form->addRow(m_enableGridWidget);
 }
 
-// ---------------------------------------------------------------------------
-// Called by MainWindow after a new image is assigned to m_scan
-// ---------------------------------------------------------------------------
 void TilesPanel::updateForNewImage() {
   rebuildTileGrid();
 }
 
-// ---------------------------------------------------------------------------
-// Rebuild the checkbox grid whenever the stitch dimensions change
-// ---------------------------------------------------------------------------
 void TilesPanel::rebuildTileGrid() {
-  // Remove old checkboxes
-  for (auto &row : m_tileChecks)
-    for (auto *cb : row)
-      delete cb;
-  m_tileChecks.clear();
+  // Clear existing buttons and layouts
+  if (m_selectorGroup) {
+    m_selectorGroup->deleteLater();
+    m_selectorGroup = nullptr;
+  }
+  qDeleteAll(m_selectorGridWidget->findChildren<QWidget*>());
+  if (m_selectorGridWidget->layout()) {
+    delete m_selectorGridWidget->layout();
+  }
+  qDeleteAll(m_enableGridWidget->findChildren<QWidget*>());
+  if (m_enableGridWidget->layout()) {
+    delete m_enableGridWidget->layout();
+  }
 
-  // Clear old combo items
-  m_tileSelector->blockSignals(true);
-  m_tileSelector->clear();
+  m_tileChecks.clear();
+  m_tileSelectors.clear();
 
   auto img = m_imageGetter();
   if (!img || !img->stitch) {
     m_gridW = 0;
     m_gridH = 0;
-    m_tileSelector->blockSignals(false);
     return;
   }
 
   m_gridW = img->stitch->params.width;
   m_gridH = img->stitch->params.height;
-  m_tileChecks.resize(m_gridH, std::vector<QCheckBox *>(m_gridW, nullptr));
+
+  m_tileChecks.resize(m_gridH, std::vector<QPushButton *>(m_gridW, nullptr));
+  m_tileSelectors.resize(m_gridH, std::vector<QPushButton *>(m_gridW, nullptr));
+
+  m_selectorGroup = new QButtonGroup(this);
+  m_selectorGroup->setExclusive(true);
+
+  auto *selectorLayout = new QGridLayout(m_selectorGridWidget);
+  selectorLayout->setContentsMargins(0, 0, 0, 0);
+  selectorLayout->setSpacing(2);
+
+  auto *enableLayout = new QGridLayout(m_enableGridWidget);
+  enableLayout->setContentsMargins(0, 0, 0, 0);
+  enableLayout->setSpacing(2);
 
   ParameterState state = m_stateGetter();
 
-  // Add one row per tile-row to a grid container that we stick into the form
-  auto *gridWidget = new QWidget(this);
-  auto *gridLayout = new QVBoxLayout(gridWidget);
-  gridLayout->setContentsMargins(0, 0, 0, 0);
-  gridLayout->setSpacing(2);
-
   for (int gy = 0; gy < m_gridH; gy++) {
-    auto *rowWidget = new QWidget(gridWidget);
-    auto *rowLayout = new QHBoxLayout(rowWidget);
-    rowLayout->setContentsMargins(0, 0, 0, 0);
-    rowLayout->setSpacing(4);
-
     for (int gx = 0; gx < m_gridW; gx++) {
-      auto *cb = new QCheckBox(tr("%1,%2").arg(gx).arg(gy), rowWidget);
-      cb->setChecked(state.rparams.get_tile_adjustment(gx, gy).enabled);
-      m_tileChecks[gy][gx] = cb;
-      rowLayout->addWidget(cb);
+      int flatIndex = gy * m_gridW + gx;
 
-      connect(cb, &QCheckBox::toggled, this, [this, gx, gy](bool checked) {
+      // 1. Selector button (Radio button behavior)
+      auto *selBtn = new QPushButton(m_selectorGridWidget);
+      selBtn->setCheckable(true);
+      selBtn->setFixedSize(32, 32);
+      selBtn->setToolTip(tr("Select tile %1, %2").arg(gx).arg(gy));
+      m_selectorGroup->addButton(selBtn, flatIndex);
+      selectorLayout->addWidget(selBtn, gy, gx);
+      m_tileSelectors[gy][gx] = selBtn;
+
+      // 2. Enable button (Checkbox behavior)
+      auto *enBtn = new QPushButton(m_enableGridWidget);
+      enBtn->setCheckable(true);
+      enBtn->setFixedSize(32, 32);
+      enBtn->setToolTip(tr("Enable/Disable tile %1, %2").arg(gx).arg(gy));
+      enBtn->setChecked(state.rparams.get_tile_adjustment(img->stitch, gx, gy).enabled);
+      enableLayout->addWidget(enBtn, gy, gx);
+      m_tileChecks[gy][gx] = enBtn;
+
+      connect(enBtn, &QPushButton::toggled, this, [this, gx, gy](bool checked) {
         ParameterState s = m_stateGetter();
         s.rparams.get_tile_adjustment(gx, gy).enabled = checked;
         m_stateSetter(s, tr("Toggle tile %1,%2").arg(gx).arg(gy));
       });
-
-      // Add tile to combobox
-      m_tileSelector->addItem(tr("Tile %1,%2").arg(gx).arg(gy));
     }
-    gridLayout->addWidget(rowWidget);
   }
 
-  m_form->addRow(gridWidget);
-  m_tileSelector->blockSignals(false);
-
-  if (m_currentTileIndex >= m_gridW * m_gridH)
+  // Ensure current tile index is valid
+  if (m_currentTileIndex >= m_gridW * m_gridH || m_currentTileIndex < 0)
     m_currentTileIndex = 0;
-  m_tileSelector->setCurrentIndex(m_currentTileIndex);
+
+  // Check the currently selected tile in the radio group
+  if (m_selectorGroup->button(m_currentTileIndex)) {
+    m_selectorGroup->button(m_currentTileIndex)->setChecked(true);
+  }
+
+  connect(m_selectorGroup, &QButtonGroup::idToggled, this, [this](int id, bool checked) {
+    if (checked) {
+      m_currentTileIndex = id;
+      refreshTileSliders();
+    }
+  });
+
   refreshTileSliders();
 }
 
-// ---------------------------------------------------------------------------
-// Keep checkbox states in sync with parameter state (undo/redo etc.)
-// ---------------------------------------------------------------------------
 void TilesPanel::onParametersRefreshed(const ParameterState &state) {
   refreshTileToggles(state);
 }
@@ -199,8 +204,6 @@ void TilesPanel::refreshTileToggles(const ParameterState &state) {
 }
 
 void TilesPanel::refreshTileSliders() {
-  // Trigger a full UI update so the slider's registered updater re-reads from
-  // the correct tile index.
   updateUI();
 }
 
