@@ -12,6 +12,9 @@ public:
                            ImageGetter imageGetter, QWidget *parent = nullptr);
   ~ImageLayerPanel() override;
 
+  void setNeutralAreaChecked(bool checked);
+  void setNeutralAreaEnabled(bool enabled);
+
 protected:
   void onParametersRefreshed(const ParameterState &state) override;
 

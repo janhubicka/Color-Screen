@@ -625,6 +625,11 @@ void MainWindow::setupUi() {
       if (m_capturePanel) {
           m_capturePanel->setCropChecked(mode == ImageWidget::CropMode);
       }
+      if (mode != ImageWidget::GenericAreaMode && m_areaSelectionCallback) {
+          // If user switches tool during selection (abandoning generic area selection)
+          m_areaSelectionCallback = nullptr;
+          if (m_imageLayerPanel) m_imageLayerPanel->setNeutralAreaChecked(false);
+      }
   });
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
   m_configTabs->addTab(m_imageLayerPanel, "Image Layer");
@@ -659,6 +664,7 @@ void MainWindow::setupUi() {
           progress->set_task("Calculating neutral mix parameters", 1);
           colorscreen::sub_task task(progress.get());
           addProgress(progress);
+          if (m_imageLayerPanel) m_imageLayerPanel->setNeutralAreaEnabled(false);
           
           auto scan = m_scan;
           auto state = getCurrentState();
@@ -668,6 +674,7 @@ void MainWindow::setupUi() {
               ParameterState newState = watcher->result();
               changeParameters(newState, tr("Set simulated mix parameters by neutral area"));
               removeProgress(progress);
+              if (m_imageLayerPanel) m_imageLayerPanel->setNeutralAreaChecked(false);
               watcher->deleteLater();
           });
           
@@ -3054,6 +3061,7 @@ void MainWindow::startAreaSelection(const QString &message, std::function<void(Q
       m_imageWidget->setInteractionMode(ImageWidget::PanMode);
       statusBar()->clearMessage();
       m_areaSelectionCallback = nullptr;
+      if (m_imageLayerPanel) m_imageLayerPanel->setNeutralAreaChecked(false);
       return;
   }
 
@@ -3097,9 +3105,9 @@ void MainWindow::onAreaSelected(QRect area) {
 
   if (m_imageWidget->interactionMode() == ImageWidget::GenericAreaMode) {
       auto cb = m_areaSelectionCallback;
+      m_areaSelectionCallback = nullptr; // Clear first so interactionModeChanged doesn't uncheck
       m_imageWidget->setInteractionMode(ImageWidget::PanMode);
       statusBar()->clearMessage();
-      m_areaSelectionCallback = nullptr;
       if (cb) {
           cb(imgArea);
       }
