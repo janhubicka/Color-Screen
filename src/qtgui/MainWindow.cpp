@@ -8,6 +8,7 @@
 #include "../libcolorscreen/include/histogram.h"
 #include "../libcolorscreen/include/scr-to-img.h"
 #include "../libcolorscreen/include/render-parameters.h"
+#include "../libcolorscreen/include/stitch.h"
 #include "ImageWidget.h"
 #include "NavigationView.h"
 #include "ScreenPanel.h"
@@ -1926,10 +1927,12 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   // Access m_rparams carefully. It's a member.
   colorscreen::image_data::demosaicing_t demosaic = m_rparams.demosaic;
 
+  bool isCsprj = fileName.endsWith(QLatin1String(".csprj"), Qt::CaseInsensitive);
+
   QFutureWatcher<std::pair<bool, QString>> *watcher =
       new QFutureWatcher<std::pair<bool, QString>>(this);
   connect(watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
-          [this, watcher, tempScan, progress, fileName]() {
+          [this, watcher, tempScan, progress, fileName, isCsprj]() {
             std::pair<bool, QString> result = watcher->result();
             removeProgress(progress);
             watcher->deleteLater();
@@ -1945,6 +1948,18 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
               m_undoStack->clear();
 
+              // If this is a stitched project, disable all tiles initially so
+              // the UI is responsive while tiles load in the background.
+              if (isCsprj && m_scan->stitch) {
+                colorscreen::stitch_project *stitch = m_scan->stitch;
+                int w = stitch->params.width;
+                int h = stitch->params.height;
+                m_rparams.set_tile_adjustments_dimensions(w, h);
+                for (int y = 0; y < h; y++)
+                  for (int x = 0; x < w; x++)
+                    m_rparams.get_tile_adjustment(x, y).enabled = false;
+              }
+
               m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                                       &m_detectParams, &m_renderTypeParams,
                                       &m_solverParams);
@@ -1952,6 +1967,63 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
               // Add to recent files
               addToRecentFiles(fileName);
+
+              // Launch background tile loading for stitch projects.
+              if (isCsprj && m_scan->stitch) {
+                colorscreen::stitch_project *stitch = m_scan->stitch;
+                int w = stitch->params.width;
+                int h = stitch->params.height;
+
+                for (int ty = 0; ty < h; ty++) {
+                  for (int tx = 0; tx < w; tx++) {
+                    auto tileProgress =
+                        std::make_shared<colorscreen::progress_info>();
+                    tileProgress->set_task(
+                        qPrintable(tr("Loading tile %1,%2").arg(tx).arg(ty)),
+                        1);
+                    addProgress(tileProgress);
+
+                    auto scanRef   = m_scan;   // keep scan alive
+                    int  capturedX = tx;
+                    int  capturedY = ty;
+
+                    auto *tileWatcher =
+                        new QFutureWatcher<bool>(this);
+                    connect(
+                        tileWatcher, &QFutureWatcher<bool>::finished, this,
+                        [this, tileWatcher, tileProgress, scanRef,
+                         capturedX, capturedY]() {
+                          bool ok = tileWatcher->result();
+                          removeProgress(tileProgress);
+                          tileWatcher->deleteLater();
+
+                          if (ok) {
+                            // Enable the tile and trigger a re-render.
+                            ParameterState state = getCurrentState();
+                            state.rparams.get_tile_adjustment(capturedX,
+                                                              capturedY)
+                                .enabled = true;
+                            changeParameters(state, tr("Tile loaded %1,%2")
+                                                        .arg(capturedX)
+                                                        .arg(capturedY));
+                          }
+                        });
+
+                    QFuture<bool> tileFuture = QtConcurrent::run(
+                        [scanRef, capturedX, capturedY,
+                         tileProgress]() -> bool {
+                          if (!scanRef || !scanRef->stitch)
+                            return false;
+                          const char *err = nullptr;
+                          bool ok = scanRef->stitch
+                                        ->images[capturedY][capturedX]
+                                        .load_img(&err, tileProgress.get());
+                          return ok;
+                        });
+                    tileWatcher->setFuture(tileFuture);
+                  }
+                }
+              }
 
             } else {
               if (progress->cancelled()) {
@@ -1965,10 +2037,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           });
 
   QFuture<std::pair<bool, QString>> future =
-      QtConcurrent::run([tempScan, fileName, progress, demosaic]() {
+      QtConcurrent::run([tempScan, fileName, progress, demosaic, isCsprj]() {
         const char *error = nullptr;
 	colorscreen::sub_task task (progress.get ());
-        bool res = tempScan->load(fileName.toUtf8().constData(), true, &error,
+        bool res = tempScan->load(fileName.toUtf8().constData(),
+                                  /*preload_all=*/!isCsprj, &error,
                                   progress.get(), demosaic);
         QString errStr;
         if (!res && error) {
@@ -1979,6 +2052,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
   watcher->setFuture(future);
 }
+
 
 void MainWindow::loadRecentFiles() {
   QSettings settings;
