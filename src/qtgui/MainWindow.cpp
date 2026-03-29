@@ -1574,13 +1574,14 @@ void MainWindow::onOpenParameters() {
   if (fileName.isEmpty())
     return;
 
-  FILE *f = fopen(fileName.toUtf8().constData(), "r");
-  if (!f) {
-    QMessageBox::critical(this, "Error", "Could not open file.");
-    return;
-  }
+  QTimer::singleShot(0, this, [this, fileName]() {
+    FILE *f = fopen(fileName.toUtf8().constData(), "r");
+    if (!f) {
+      QMessageBox::critical(this, "Error", "Could not open file.");
+      return;
+    }
 
-  const char *error = nullptr;
+    const char *error = nullptr;
 
 
   // Store previous state for comparison
@@ -1627,6 +1628,7 @@ void MainWindow::onOpenParameters() {
 
   addToRecentParams(fileName);
   m_currentParamsFile = fileName; // Track current file for Save
+  });
 }
 
 void MainWindow::onSaveParameters() {
@@ -1671,42 +1673,45 @@ void MainWindow::onSaveParametersAs() {
   if (fileName.isEmpty())
     return;
 
-  // Add .par extension if not present
-  if (!fileName.endsWith(".par", Qt::CaseInsensitive)) {
-    fileName += ".par";
-  }
+  QTimer::singleShot(0, this, [this, fileName]() {
+    QString saveFileName = fileName;
+    // Add .par extension if not present
+    if (!saveFileName.endsWith(".par", Qt::CaseInsensitive)) {
+      saveFileName += ".par";
+    }
 
-  FILE *f = fopen(fileName.toUtf8().constData(), "wt");
-  if (!f) {
-    QMessageBox::critical(this, "Error", 
-                          QString("Could not open file for writing: %1").arg(fileName));
-    return;
-  }
+    FILE *f = fopen(saveFileName.toUtf8().constData(), "wt");
+    if (!f) {
+      QMessageBox::critical(this, "Error", 
+                            QString("Could not open file for writing: %1").arg(saveFileName));
+      return;
+    }
 
-  // Save parameters using save_csp
-  // Pass scan detection params only if we have RGB data (matching GTK behavior)
-  bool has_rgb = m_scan && m_scan->has_rgb();
-  if (!colorscreen::save_csp(f, &m_scrToImgParams, 
-                             has_rgb ? &m_detectParams : nullptr,
-                             &m_rparams, &m_solverParams)) {
+    // Save parameters using save_csp
+    // Pass scan detection params only if we have RGB data (matching GTK behavior)
+    bool has_rgb = m_scan && m_scan->has_rgb();
+    if (!colorscreen::save_csp(f, &m_scrToImgParams, 
+                               has_rgb ? &m_detectParams : nullptr,
+                               &m_rparams, &m_solverParams)) {
+      fclose(f);
+      QMessageBox::critical(this, "Error", "Failed to save parameters.");
+      return;
+    }
+
     fclose(f);
-    QMessageBox::critical(this, "Error", "Failed to save parameters.");
-    return;
-  }
-
-  fclose(f);
-  
-  // Update current file path and add to recent
-  m_currentParamsFile = fileName;
-  m_currentParamsFileIsWeak = false; // Now it's a real file, not a suggestion
-  addToRecentParams(fileName);
-  
-  statusBar()->showMessage(QString("Parameters saved to %1").arg(fileName), 3000);
-  
-  // Mark as saved (clean state)
-  if (m_undoStack) {
-    m_undoStack->setClean();
-  }
+    
+    // Update current file path and add to recent
+    m_currentParamsFile = fileName;
+    m_currentParamsFileIsWeak = false; // Now it's a real file, not a suggestion
+    addToRecentParams(fileName);
+    
+    statusBar()->showMessage(QString("Parameters saved to %1").arg(fileName), 3000);
+    
+    // Mark as saved (clean state)
+    if (m_undoStack) {
+      m_undoStack->setClean();
+    }
+  });
 }
 
 
@@ -1719,7 +1724,12 @@ void MainWindow::onOpenImage() {
   if (fileName.isEmpty())
     return;
 
-  loadFile(fileName);
+  // Defer loadFile to allow the event loop to spin and clean up
+  // KIO jobs from the file dialog before we pop up another dialog (QMessageBox)
+  // in loadFile(). Otherwise, KJob::kill can crash in KF6KIOGui.
+  QTimer::singleShot(0, this, [this, fileName]() {
+    loadFile(fileName);
+  });
 }
 
 void MainWindow::addProgress(std::shared_ptr<colorscreen::progress_info> info) {
@@ -3627,38 +3637,40 @@ void MainWindow::onFlatFieldRequested() {
   QString whiteFile = QFileDialog::getOpenFileName(this, "Choose White Reference", m_currentImageFile, filters);
   if (whiteFile.isEmpty()) return;
 
-  QString blackFile;
-  if (QMessageBox::question(this, "Flat Field", "Do you want to provide a black reference image (optional)?",
-                            QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
-    blackFile = QFileDialog::getOpenFileName(this, "Choose Black Reference", m_currentImageFile, filters);
-  }
-  
-  // Create progress info
-  auto progress = std::make_shared<colorscreen::progress_info>();
-  progress->set_task("Flat field analysis", 100);
-  addProgress(progress);
+  QTimer::singleShot(0, this, [this, filters, whiteFile]() {
+    QString blackFile;
+    if (QMessageBox::question(this, "Flat Field", "Do you want to provide a black reference image (optional)?",
+                              QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
+      blackFile = QFileDialog::getOpenFileName(this, "Choose Black Reference", m_currentImageFile, filters);
+    }
+    
+    // Create progress info
+    auto progress = std::make_shared<colorscreen::progress_info>();
+    progress->set_task("Flat field analysis", 100);
+    this->addProgress(progress);
 
-  // Create worker and thread
-  FlatFieldWorker *worker = new FlatFieldWorker(
-      whiteFile, blackFile, m_rparams.gamma, m_rparams.demosaic, progress);
-  QThread *thread = new QThread();
-  worker->moveToThread(thread);
+    // Create worker and thread
+    FlatFieldWorker *worker = new FlatFieldWorker(
+        whiteFile, blackFile, m_rparams.gamma, m_rparams.demosaic, progress);
+    QThread *thread = new QThread();
+    worker->moveToThread(thread);
 
-  // Connect signals
-  connect(thread, &QThread::started, worker, &FlatFieldWorker::run);
-  connect(worker, &FlatFieldWorker::finished, thread, &QThread::quit);
-  connect(worker, &FlatFieldWorker::finished, worker, &QObject::deleteLater);
-  connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    // Connect signals
+    connect(thread, &QThread::started, worker, &FlatFieldWorker::run);
+    connect(worker, &FlatFieldWorker::finished, thread, &QThread::quit);
+    connect(worker, &FlatFieldWorker::finished, worker, &QObject::deleteLater);
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
 
-  // Connect results
-  connect(worker, &FlatFieldWorker::finished, this,
-          [this, progress](bool success, std::shared_ptr<colorscreen::backlight_correction_parameters> result) {
-            onFlatFieldFinished(success, result);
-            removeProgress(progress);
-          });
+    // Connect results
+    connect(worker, &FlatFieldWorker::finished, this,
+            [this, progress](bool success, std::shared_ptr<colorscreen::backlight_correction_parameters> result) {
+              onFlatFieldFinished(success, result);
+              removeProgress(progress);
+            });
 
-  m_flatFieldThread = thread;
-  thread->start();
+    m_flatFieldThread = thread;
+    thread->start();
+  });
 }
 
 void MainWindow::onFlatFieldFinished(bool success, std::shared_ptr<colorscreen::backlight_correction_parameters> result) {
@@ -3736,13 +3748,14 @@ void MainWindow::onRender() {
   if (outputPath.isEmpty())
     return;
 
-  bool isDng = outputPath.endsWith(".dng", Qt::CaseInsensitive);
+  QTimer::singleShot(0, this, [this, outputPath]() {
+    bool isDng = outputPath.endsWith(".dng", Qt::CaseInsensitive);
 
-  // Show render settings dialog
-  RenderDialog dlg(m_renderTypeParams, m_rparams, m_scrToImgParams,
-                   m_scan.get(), isDng, this);
-  if (dlg.exec() != QDialog::Accepted)
-    return;
+    // Show render settings dialog
+    RenderDialog dlg(m_renderTypeParams, m_rparams, m_scrToImgParams,
+                     m_scan.get(), isDng, this);
+    if (dlg.exec() != QDialog::Accepted)
+      return;
 
   // Snapshot current parameters (render runs in background)
   auto scan = m_scan;
@@ -3817,6 +3830,7 @@ void MainWindow::onRender() {
       });
 
   watcher->setFuture(future);
+  });
 }
 
 void MainWindow::onAddSpotModeRequested(bool active)
