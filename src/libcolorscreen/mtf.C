@@ -330,7 +330,7 @@ public:
       }
     start = start_vec.data ();
     sums.resize (m_measurements.size ());
-    assert (nvalues == start_vec.size ());
+    assert (nvalues == (int)start_vec.size ());
   }
   int
   num_values ()
@@ -1303,7 +1303,7 @@ mtf_parameters::estimate_parameters (mtf_parameters &par,
     {
       if (progress)
 	progress->pause_stdout ();
-      for (int m = 0; m < par.measurements.size (); m++)
+      for (size_t m = 0; m < par.measurements.size (); m++)
         {
 	  printf ("Measurement %s defocus %f sum %f\n", par.measurements[m].name.c_str (), s.get_defocus (m, s.start), s.sums[m]);
         }

@@ -780,9 +780,9 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
 void
 solver_parameters::dump (FILE *out)
 {
-  for (int i = 0; i < n_points (); i++)
+  for (size_t i = 0; i < (size_t)n_points (); i++)
     {
-      fprintf (out, "point %i img %f %f maps to scr %f %f color %i\n", i,
+      fprintf (out, "point %zu img %f %f maps to scr %f %f color %i\n", i,
                points[i].img.x, points[i].img.y, points[i].scr.x,
                points[i].scr.y, (int)points[i].color);
     }

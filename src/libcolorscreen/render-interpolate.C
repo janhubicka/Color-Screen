@@ -721,7 +721,7 @@ analyze_patches (analyzer analyze, const char *task, image_data &img,
           image_data &tile = *stitch.images[ty][tx].img;
           render_parameters my_rparam = rparam;
           rparam.get_tile_adjustment (&stitch, tx, ty).apply (&my_rparam);
-          int stack = 0;
+
 	  {
 	    if (!analyze_patches (
 		    [&] (coord_t tsx, coord_t tsy, rgbdata c)
@@ -801,7 +801,7 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img,
           image_data &tile = *stitch.images[ty][tx].img;
           render_parameters my_rparam = rparam;
           rparam.get_tile_adjustment (&stitch, tx, ty).apply (&my_rparam);
-          int stack = 0;
+
 	  {
 	    if (!analyze_rgb_patches (
 		    [&] (coord_t tsx, coord_t tsy, rgbdata r, rgbdata g,

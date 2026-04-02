@@ -3511,7 +3511,6 @@ do_adjust_par (int argc, char **argv)
   std::vector<const char *> csps;
   for (int i = 0; i < argc; i++)
     {
-      float flt;
       if (parse_common_flags (argc, argv, &i))
         ;
       else if (const char *str = arg_with_param (argc, argv, &i, "merge"))

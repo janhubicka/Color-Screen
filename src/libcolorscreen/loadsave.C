@@ -1560,7 +1560,6 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_mtf_blur_diameter_px"))
 	{
-	  luminosity_t blur_diameter;
 	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.blur_diameter)))
 	    {
 	      *error = "error parsing scanner_mtf_blur_diameter";
@@ -1569,7 +1568,6 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_mtf_pixel_pitch_um"))
 	{
-	  luminosity_t pixel_pitch;
 	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.pixel_pitch)))
 	    {
 	      *error = "error parsing scanner_mtf_pixel_pitch";
@@ -1578,7 +1576,6 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_mtf_sensor_fill_factor"))
 	{
-	  luminosity_t sensor_fill_factor;
 	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.sensor_fill_factor)))
 	    {
 	      *error = "error parsing scanner_mtf_sensor_fill_factor";
