@@ -11,7 +11,7 @@ struct solver_parameters
 {
   DLL_PUBLIC_EXP
   solver_parameters ()
-      : points (), optimize_lens (true), optimize_tilt (true), weighted (false)
+      : points (), optimize_lens (true), optimize_tilt (true), weighted (false), center ({0, 0})
   {
   }
   DLL_PUBLIC_EXP void

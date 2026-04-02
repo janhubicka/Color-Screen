@@ -106,7 +106,7 @@ struct mtf_parameters
   int
   use_measured_mtf () const
   {
-    return measured_mtf_idx >= 0 && measurements.size () > measured_mtf_idx && measurements[measured_mtf_idx].size () >2;
+    return measured_mtf_idx >= 0 && measurements.size () > (size_t)measured_mtf_idx && measurements[measured_mtf_idx].size () > 2;
   }
   bool
   can_simulate_difraction_p () const
