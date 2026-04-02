@@ -41,7 +41,9 @@ public:
   inline
   matrix(const matrix &m)
   {
-    memcpy(m_elements,m.m_elements,sizeof (m_elements));
+    for (int j = 0; j < m_dim; j++)
+      for (int i = 0; i < m_dim; i++)
+        m_elements[j][i] = m.m_elements[j][i];
   }
 
   /* Usual matrix operations.  */
@@ -129,9 +131,11 @@ public:
   }
 
   inline
-  matrix2x2& operator=(const matrix<T, 2>rhs)
+  matrix2x2& operator=(const matrix<T, 2>& rhs)
   {
-    memcpy(B::m_elements,rhs.B::m_elements,sizeof (B::m_elements));
+    for (int j = 0; j < 2; j++)
+      for (int i = 0; i < 2; i++)
+        B::m_elements[j][i] = rhs.m_elements[j][i];
     return *this;
   }
 
@@ -179,7 +183,9 @@ public:
   inline
   matrix3x3<T>& operator=(const matrix<T, 3>&rhs)
   {
-    memcpy(B::m_elements,rhs.B::m_elements,sizeof (B::m_elements));
+    for (int j = 0; j < 3; j++)
+      for (int i = 0; i < 3; i++)
+        B::m_elements[j][i] = rhs.m_elements[j][i];
     return *this;
   }
 
@@ -243,7 +249,9 @@ public:
   inline
   matrix4x4<T>& operator=(const matrix<T, 4> &rhs)
   {
-    memcpy(B::m_elements,rhs.B::m_elements,sizeof (B::m_elements));
+    for (int j = 0; j < 4; j++)
+      for (int i = 0; i < 4; i++)
+        B::m_elements[j][i] = rhs.m_elements[j][i];
     return *this;
   }
 
