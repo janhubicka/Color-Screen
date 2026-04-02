@@ -349,7 +349,7 @@ public:
 	if (chisq)
 	  *chisq = bad_val;
         if (transformed)
-          for (int i = 0; i < m_sparam.points.size (); i++)
+          for (size_t i = 0; i < m_sparam.points.size (); i++)
             (*transformed)[i] = m_sparam.points[i].scr;
         return false;
       }
@@ -402,14 +402,14 @@ public:
 	return GSL_EDOM;
       }
     if (!screen_with_vertical_strips_p (m_param.type))
-      for (int i = 0; i < m_sparam.points.size (); i++)
+      for (size_t i = 0; i < m_sparam.points.size (); i++)
 	{
 	  f_vec[2 * i] = transformed[i].x - m_sparam.points[i].scr.x;
 	  f_vec[2 * i + 1] = transformed[i].y - m_sparam.points[i].scr.y;
 	  //printf ("%f %f %f %f\n",transformed[i].x, transformed[i].y, m_sparam.points[i].scr.x, m_sparam.points[i].scr.y);
 	}
     else
-      for (int i = 0; i < m_sparam.points.size (); i++)
+      for (size_t i = 0; i < m_sparam.points.size (); i++)
       {
 	f_vec[i] = transformed[i].x - m_sparam.points[i].scr.x;
       }

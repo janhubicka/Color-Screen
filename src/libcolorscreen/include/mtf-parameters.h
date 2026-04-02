@@ -103,7 +103,7 @@ struct mtf_parameters
   {
     return measurements.size () && measurements[0].size ();
   }
-  int
+  bool
   use_measured_mtf () const
   {
     return measured_mtf_idx >= 0 && measurements.size () > (size_t)measured_mtf_idx && measurements[measured_mtf_idx].size () > 2;

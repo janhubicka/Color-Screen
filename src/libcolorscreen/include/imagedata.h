@@ -109,9 +109,9 @@ public:
   luminosity_t pixel_pitch;
   luminosity_t sensor_fill_factor;
   luminosity_t wavelengths[4];
-  demosaicing_t demosaiced_by;
   int rotation;
   int mirror;
+  demosaicing_t demosaiced_by;
   std::string camera_model;
   std::string lens;
   std::string software;

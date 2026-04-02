@@ -166,7 +166,6 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
 {
   int p = c.num_values ();
   int n = c.num_observations ();
-  T eps = c.epsilon ();
   const int MAX_IT = 10000;
 
   if (progress && progress_report)
@@ -382,7 +381,6 @@ gsl_simplex (C &c, const char *task = NULL, progress_info *progress = NULL,
 {
   int n = c.num_values ();
   T scale = c.scale ();
-  T eps = c.epsilon ();
   const int MAX_IT = max_iterations;
 
   if (progress && progress_report)

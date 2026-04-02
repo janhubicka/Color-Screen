@@ -334,7 +334,7 @@ backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool ver
 	  {
 	    for (int x = 0; x < 111; x++)
 	      {
-		    uint16_t val = read_uint16 (f);
+		    read_uint16 (f);
 		    uint16_t val2 = read_uint16 (f);
 		    //float weight = ((luminosity_t)val)/32768;
 		    float weight2 = ((luminosity_t)val2)/32768;

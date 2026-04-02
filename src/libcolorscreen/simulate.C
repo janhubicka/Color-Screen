@@ -33,7 +33,6 @@ render_simulated_screen (simulated_screen &img,
   scr_to_img map;
   map.set_parameters (p.params, p.width, p.height);
   struct get_pixel_data pd = { p.scr, map };
-  int stack = 0;
   //printf ("Simulating %f\n", p.sharpen.scanner_mtf_scale);
   if (progress)
     progress->set_task ("simulating scan of the screen filter", 1);

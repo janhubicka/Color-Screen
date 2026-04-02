@@ -216,7 +216,6 @@ bool
 stitch_image::diff (stitch_image &other, progress_info *progress)
 {
   bool found = false;
-  int stack = 0;
   point_t s = scr_to_img_map.to_scr ({(coord_t)0, (coord_t)0}) + pos;
   if (other.img_pixel_known_p (s.x, s.y))
     found = true;
@@ -783,7 +782,7 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
       paget->analyze (&render, img.get(), &scr_to_img_map, m_prj->my_screen, NULL, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
       analyzer = (std::unique_ptr <analyze_base>) (paget);
     }
-  if (m_prj->params.max_contrast >= 0)
+  if (m_prj->params.max_contrast >= 0 && dufay_like_screen_p (param.type))
     dufay->analyze_contrast (&render, img.get(), &scr_to_img_map, progress);
   get_analyzer().set_known_pixels (compute_known_pixels (scr_to_img_map, skiptop, skipbottom, skipleft, skipright, progress) /*screen_detected_patches*/);
   screen_filename = (std::string)"screen"+(std::string)filename;
@@ -1359,7 +1358,6 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
 #pragma omp critical
 	    if (!render1)
 	      {
-		int stack = 0;
 		sub_task task (progress);
 		if (load_img (error, progress)
 		    && other.load_img (error, progress))

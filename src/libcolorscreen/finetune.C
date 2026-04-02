@@ -2704,8 +2704,8 @@ public:
       {
         luminosity_t rmax = 0, gmax = 0, bmax = 0;
         rgbdata red, green, blue;
-        rgbdata mix_weights;
-	luminosity_t mix_dark;
+        rgbdata mix_weights = {0, 0, 0};
+	luminosity_t mix_dark = 0;
         if (simulate_infrared)
 	  {
 	    mix_weights = get_mix_weights (v);
@@ -2838,8 +2838,8 @@ public:
       {
         luminosity_t rmax = 0, gmax = 0, bmax = 0;
         rgbdata red, green, blue;
-        rgbdata mix_weights;
-	luminosity_t mix_dark;
+        rgbdata mix_weights = {0, 0, 0};
+	luminosity_t mix_dark = 0;
         if (simulate_infrared)
 	  {
 	    mix_weights = get_mix_weights (v);

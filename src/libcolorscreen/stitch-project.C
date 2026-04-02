@@ -186,7 +186,6 @@ stitch_project::analyze_images (detect_regular_screen_params *dsparam, progress_
     progress->set_task ("analyzing tiles", params.width * params.height);
   if (params.width == 1 && params.height == 1)
     {
-      int stack = 0;
       sub_task task (progress);
       bool ret = analyze (dsparam, 0, 0, progress);
       return ret;
@@ -248,7 +247,6 @@ stitch_project::analyze_images (detect_regular_screen_params *dsparam, progress_
 	{
 	  coord_t xs;
 	  coord_t ys;
-	  int stack = 0;
 	  sub_task task (progress);
 	  if (!analyze (dsparam, x, y, progress)
 	      || !analyze (dsparam, x + 1, y, progress))

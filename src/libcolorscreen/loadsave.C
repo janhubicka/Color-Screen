@@ -129,7 +129,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
     {
       if (fprintf (f, "demosaic: %s\n", image_data::demosaic_names[(int)rparam->demosaic].name) < 0
 	  || fprintf (f, "gamma: %f\n", rparam->gamma) < 0
-	  || fprintf (f, "scan_rotation: %i\n", rparam->scan_rotation * 90) < 0
+	  || fprintf (f, "scan_rotation: %d\n", (int)(rparam->scan_rotation * 90)) < 0
 	  || fprintf (f, "scan_mirror: %s\n", bool_names [(int)rparam->scan_mirror]) < 0
 	  || fprintf (f, "scan_crop: %s %i %i %i %i\n", bool_names [(int)rparam->scan_crop.set], rparam->scan_crop.x, rparam->scan_crop.y, rparam->scan_crop.width, rparam->scan_crop.height) < 0
 	  || fprintf (f, "film_gamma: %f\n", rparam->film_gamma) < 0
@@ -140,15 +140,15 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "sharpen_amount: %f\n", rparam->sharpen.usm_amount) < 0
 	  || fprintf (f, "scanner_snr: %f\n", rparam->sharpen.scanner_snr) < 0
 	  || fprintf (f, "scanner_mtf_scale: %f\n", rparam->sharpen.scanner_mtf_scale) < 0
-	  || fprintf (f, "scanner_use_mtf_measurement: %i\n", rparam->sharpen.scanner_mtf.measured_mtf_idx) < 0
-	  || fprintf (f, "richardson_lucy_iterations: %i\n", rparam->sharpen.richardson_lucy_iterations) < 0
+	  || fprintf (f, "scanner_use_mtf_measurement: %zu\n", (size_t)rparam->sharpen.scanner_mtf.measured_mtf_idx) < 0
+	  || fprintf (f, "richardson_lucy_iterations: %zu\n", (size_t)rparam->sharpen.richardson_lucy_iterations) < 0
 	  || fprintf (f, "richardson_lucy_sigma: %f\n", rparam->sharpen.richardson_lucy_sigma) < 0)
 	return false;
       if (rparam->sharpen.scanner_mtf.measurements.size ())
 	for (size_t m = 0; m < rparam->sharpen.scanner_mtf.measurements.size (); m++)
 	{
 	  auto &measurement = rparam->sharpen.scanner_mtf.measurements[m];
-	  if (fprintf (f, "scanner_mtf_measurement: %i\n", m) < 0
+	  if (fprintf (f, "scanner_mtf_measurement: %zu\n", m) < 0
 	      || fprintf (f, "scanner_mtf_measurement_channel: %s\n", channel_names[measurement.channel + 1]) < 0
 	      || fprintf (f, "scanner_mtf_measurement_wavelength_nm: %f\n", measurement.wavelength) < 0
 	      || fprintf (f, "scanner_mtf_measurement_same_capture: %s\n", bool_names[(int)measurement.same_capture]) < 0

@@ -69,7 +69,7 @@ struct solver_parameters
   bool weighted;
   point_t center;
 
-  int
+  size_t
   n_points ()
   {
     return points.size ();
@@ -78,9 +78,9 @@ struct solver_parameters
   DLL_PUBLIC_EXP int
   find_img (point_t img)
   {
-    for (int n = 0; n < n_points (); n++)
+    for (size_t n = 0; n < n_points (); n++)
       if (points[n].img.almost_eq (img, 0.1))
-        return n;
+        return (int)n;
     return -1;
   }
 
@@ -88,25 +88,25 @@ struct solver_parameters
   add_point (point_t img, point_t screen, enum point_color color)
   {
     points.push_back ({ img, screen, color });
-    return n_points ();
+    return (int)n_points ();
   }
   DLL_PUBLIC_EXP int
   add_or_modify_point (point_t img, point_t screen, enum point_color color)
   {
-    for (int n = 0; n < n_points (); n++)
+    for (size_t n = 0; n < n_points (); n++)
       if (points[n].scr.almost_eq (screen, 0.5))
         {
 	  points[n].img = img;
 	  points[n].scr = screen;
 	  points[n].color = color;
-	  return n;
+	  return (int)n;
         }
     points.push_back ({ img, screen, color });
-    return n_points ();
+    return (int)n_points ();
   }
 
   DLL_PUBLIC_EXP void
-  remove_point (int n)
+  remove_point (size_t n)
   {
     /* Just for fun keep the order as points were added.  */
     points.erase (points.begin () + n);

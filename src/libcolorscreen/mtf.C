@@ -182,6 +182,7 @@ calculate_lsf (double x, double sigma)
 }
 #endif
 
+#if 0
 void
 debug_data (double freq, double v1, double v2)
 {
@@ -200,6 +201,7 @@ debug_data (double freq, double v1, double v2)
       printf (" ");
   printf ("|\n");
 }
+#endif
 
 class mtf_solver
 {
@@ -233,7 +235,7 @@ public:
         else
           sigma_index = -1;
 	int cur_blur_index = -1;
-	for (int m = 0; m < m_measurements.size (); m++)
+	for (size_t m = 0; m < m_measurements.size (); m++)
 	  {
 	    if (!m_measurements[m].same_capture)
 	      cur_blur_index = -1;
@@ -272,7 +274,7 @@ public:
         else
           sigma_index = -1;
 	int cur_defocus_index = -1;
-	for (int m = 0; m < m_measurements.size (); m++)
+	for (size_t m = 0; m < m_measurements.size (); m++)
 	  {
 	    if (!m_measurements[m].same_capture)
 	      cur_defocus_index = -1;
@@ -481,7 +483,7 @@ public:
 	  {
 	    if (m_progress)
 	      m_progress->pause_stdout ();
-	    printf ("measurement %i fill factor %f, f-stop %f (%f) gaussian blur sigma %f, wavelength %f, defocus %f, blur_diameter %f, sqsum %f\n",
+	    printf ("measurement %zu fill factor %f, f-stop %f (%f) gaussian blur sigma %f, wavelength %f, defocus %f, blur_diameter %f, sqsum %f\n",
 		    m, p.sensor_fill_factor, p.f_stop, p.effective_f_stop (), p.sigma, p.wavelength, p.defocus, p.blur_diameter, msum);
 	    if (m_progress)
 	      m_progress->resume_stdout ();
@@ -1108,7 +1110,6 @@ mtf::precompute (progress_info *progress, bool parallel)
       contrasts[entries - 2] = contrasts[entries - 1] = 0;
       m_mtf.set_range (0, 1 + step);
       m_mtf.init_by_y_values (contrasts.data (), entries);
-      int radius;
 
       if (colorscreen_checking)
         for (int i = 0; i < 1000; i++)
@@ -1402,12 +1403,12 @@ mtf_parameters::load_csv (FILE *in, std::string name, const char **error)
 	  m.name = name;
 	  m.channel = -1;
 	}
-      for (int i = 0; i < data.size (); i++)
-	m.add_value (data[i].freq,data[i].contrast[c]);
-      printf ("size %i %i\n", m.size (), data.size ());
+      for (size_t i = 0; i < data.size (); i++)
+	m.add_value (data[i].freq, data[i].contrast[c]);
+      printf ("size %zu %zu\n", m.size (), data.size ());
       measurements.push_back (m);
     }
-  printf ("File loaded %i\n",(int)rgb);
+  printf ("File loaded %d\n", (int)rgb);
   return rgb ? 3 : 1;
 }
 

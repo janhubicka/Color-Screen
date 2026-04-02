@@ -150,6 +150,7 @@ rgbdata patch_proportions (enum scr_type t, const render_parameters *rparam)
     }
 }
 
+#if 0
 static void
 print_mid_white (color_matrix m)
 {
@@ -158,6 +159,7 @@ print_mid_white (color_matrix m)
   printf ("Mid neutral:");
   c.print (stdout);
 }
+#endif
 
 /* Return true if dye balance applies to the model.  */
 

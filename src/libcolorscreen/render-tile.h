@@ -36,7 +36,6 @@ bool render_img_normal(render_type_parameters rtparam,
 {
   T render (param, img, rparam, 255);
   render.set_render_type (rtparam);
-  int stack = 0;
   if (progress)
     progress->set_task ("precomputing", 1);
   {
