@@ -35,7 +35,7 @@ constexpr double BALL_RADIUS_FACTOR = 0.45;               // Ball radius as frac
 
 
 ThamesAnimation::ThamesAnimation(QWidget *parent)
-    : QWidget(parent), m_rng(std::random_device{}()), m_physicsAccumulator(0.0) {
+    : QWidget(parent), m_physicsAccumulator(0.0), m_rng(std::random_device{}()) {
   
   // Animation timer - 60 FPS
   m_animTimer = new QTimer(this);

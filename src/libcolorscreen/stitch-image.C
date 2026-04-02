@@ -756,8 +756,8 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
       delete detected.known_patches;
       detected.known_patches = NULL;
     }
-  analyze_dufay *dufay;
-  analyze_paget *paget;
+  analyze_dufay *dufay = nullptr;
+  analyze_paget *paget = nullptr;
   if (m_prj->scr_param.type == Random)
     {
       m_prj->scr_param.type = param.type;

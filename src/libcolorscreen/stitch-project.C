@@ -200,8 +200,6 @@ stitch_project::analyze_images (detect_regular_screen_params *dsparam, progress_
 	{
 	  coord_t xs;
 	  coord_t ys;
-	  int stack = 0;
-
 	  sub_task task (progress);
 	  analyze (dsparam, 0, y - 1, progress);
 	  analyze (dsparam, 0, y, progress);

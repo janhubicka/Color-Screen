@@ -3,7 +3,7 @@
 This project, **Color-Screen**, is a high-performance color screening and image processing application. It utilizes a modular C++ architecture with a focus on color accuracy and optimized rendering.
 
 ## Project Core
-- **Language:** C++ (Standard: [e.g., C++17])
+- **Language:** C++ (Standard: C++17)
 - **Build System:** GNU Autotools (`autoconf`, `automake`, `libtool`)
 - **Primary Goal:** Implement highly optimized tools to reconstruct colors from digitized early color photographs
 

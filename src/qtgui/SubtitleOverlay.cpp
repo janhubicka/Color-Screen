@@ -459,7 +459,6 @@ void SubtitleOverlay::paint(QPainter *painter, const QRect &bounds) {
     // Position at bottom with some margin
     int bottomMargin = 40;
     int yPos = bounds.bottom() - bottomMargin - totalHeight;
-    int centerX = bounds.center().x();
     
     int currentY = yPos - bounds.top(); // Relative Y
     

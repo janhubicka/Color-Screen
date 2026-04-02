@@ -2575,8 +2575,8 @@ public:
   {
     rgbdata red, green, blue;
     get_colors (v, &red, &green, &blue);
-    rgbdata mix_weights;
-    luminosity_t mix_dark;
+    rgbdata mix_weights = { 0, 0, 0 };
+    luminosity_t mix_dark = 0;
 
     if (simulate_infrared)
       {
@@ -3641,7 +3641,8 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
                 rparam, param, img,
                 { { xmin + (x + 0.5) * xstep, ymin + (y + 0.5) * ystep } },
                 NULL, fparam, progress);
-            progress->inc_progress ();
+            if (progress)
+              progress->inc_progress ();
           }
     }
   else if (!progress || !progress->cancel_requested ())
