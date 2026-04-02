@@ -1043,7 +1043,6 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
         QRect rect = m_rubberBand->geometry();
         m_rubberBand->hide();
         
-        bool ctrl = event->modifiers() & Qt::ControlModifier;
         bool changed = false;
 
         if (m_showRegistrationPoints && m_solver) {

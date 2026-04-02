@@ -8,8 +8,7 @@ namespace colorscreen
 {
 namespace
 {
-
-static int stats = -1;
+static int stats __attribute__((unused)) = -1;
 std::mutex global_rendering_lock;
 
 static inline void
