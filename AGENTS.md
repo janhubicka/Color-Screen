@@ -31,7 +31,7 @@ To ensure optimal performance and compatibility (especially with GCC 15 + Qt6), 
 ```bash
 CXXFLAGS="-Ofast -march=native -Wall" \
 CFLAGS="-Ofast -march=native -Wall" \
-../configure --prefix=$HOME/Color-Screen-install --enable-qtgui --enable-maintainer-mode --prefix=/home/jan/barveni-bin --enable-gtkgui --enable-checking
+../configure --prefix=$HOME/Color-Screen-install --enable-qtgui --enable-maintainer-mode --prefix=/home/jan/barveni-bin --enable-gtkgui 
 ```
 
 ### Checking Mode
