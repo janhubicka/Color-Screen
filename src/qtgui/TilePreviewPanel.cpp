@@ -7,6 +7,7 @@
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QtConcurrent>
+#include <QColorSpace>
 
 using namespace colorscreen;
 
@@ -66,6 +67,7 @@ renderTilesGeneric(ParameterState state, int scanWidth, int scanHeight,
       result.tiles[i] = QImage(pixels.data(), tileSize, tileSize,
                                tile.rowstride, QImage::Format_RGB888)
                             .copy();
+      result.tiles[i].setColorSpace(QColorSpace(QColorSpace::SRgb));
     } else {
       allSuccess = false;
     }

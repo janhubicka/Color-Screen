@@ -2,6 +2,7 @@
 #include <QImage>
 #include <QtConcurrent>
 #include "Logging.h"
+#include <QColorSpace>
 
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/progress-info.h"
@@ -117,6 +118,7 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
         tile.height = renderH;
 
         QImage image(renderW, renderH, QImage::Format_RGB888);
+        image.setColorSpace(QColorSpace(QColorSpace::SRgb));
         tile.pixels = image.bits();
         tile.rowstride = image.bytesPerLine();
         tile.pixelbytes = 3;

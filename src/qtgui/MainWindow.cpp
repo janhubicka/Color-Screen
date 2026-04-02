@@ -35,6 +35,8 @@
 #include <QFormLayout>
 #include <QFutureWatcher>
 #include <QHBoxLayout>
+#include <QColorDialog>
+#include <QColorSpace>
 #include <QLabel>
 #include <QMessageBox>
 #include <QMenu>
@@ -1366,6 +1368,7 @@ QIcon MainWindow::renderScreenIcon(colorscreen::scr_type type) {
 
   if (ok) {
     QImage img(buffer.data(), w, h, w * 3, QImage::Format_RGB888);
+    img.setColorSpace(QColorSpace(QColorSpace::SRgb));
     return QIcon(QPixmap::fromImage(img.copy()));
   }
   return QIcon();
