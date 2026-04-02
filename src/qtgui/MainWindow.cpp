@@ -2006,6 +2006,13 @@ void MainWindow::onImageLoaded() {
     }
   }
 
+  if (m_profilePanel) {
+    int profileTabIndex = m_configTabs->indexOf(m_profilePanel);
+    if (profileTabIndex >= 0) {
+      m_configTabs->setTabVisible(profileTabIndex, m_scan && m_scan->has_rgb());
+    }
+  }
+
   // Refresh param values too
   applyState(getCurrentState());
   updateRegistrationActions();
