@@ -4,10 +4,9 @@
 
 ScalableImageLabel::ScalableImageLabel(QWidget *parent)
     : QWidget(parent) {
-  // Use Preferred horizontal so it adapts to width.
-  // Use Minimum vertical so it enforces the heightForWidth aspect ratio,
-  // preventing it from being squashed (forces scrollbar if needed).
-  setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
+  // Use Expanding horizontal so it adapts to width.
+  // Use Preferred vertical so it can be scaled down by layout if space is limited.
+  setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 }
 
 void ScalableImageLabel::setPixmap(const QPixmap &pixmap) {
@@ -17,11 +16,12 @@ void ScalableImageLabel::setPixmap(const QPixmap &pixmap) {
 }
 
 QSize ScalableImageLabel::sizeHint() const {
-  // Return the pixmap size as the preferred size.
-  // If no pixmap, return a default small size (or 100x100 for visibility).
   if (m_pixmap.isNull())
       return QSize(100, 100); 
-  return m_pixmap.size();
+  // Cap the size hint to a reasonable thumbnail size.
+  // This prevents the layout from being gargantuan by default.
+  // The widget is still allowed to grow/shrink based on sizePolicy.
+  return m_pixmap.size().boundedTo(QSize(256, 256));
 }
 
 QSize ScalableImageLabel::minimumSizeHint() const {

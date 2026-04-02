@@ -6,6 +6,52 @@
 #include <QImage>
 #include <QPixmap>
 
+namespace {
+// Helper widget that correctly propagates heightForWidth
+class SlotWidget : public QWidget {
+public:
+    explicit SlotWidget(QWidget *parent = nullptr) : QWidget(parent) {
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    }
+    bool hasHeightForWidth() const override { return true; }
+    int heightForWidth(int w) const override {
+        if (layout()) {
+            return layout()->heightForWidth(w);
+        }
+        return QWidget::heightForWidth(w);
+    }
+};
+
+// Helper layout that ensures heightForWidth propagation
+class VerticalSlotLayout : public QVBoxLayout {
+public:
+    using QVBoxLayout::QVBoxLayout;
+    int heightForWidth(int w) const override {
+        // QVBoxLayout implementation of heightForWidth usually sums up its children
+        // but it needs to be explicitly enabled/overridden to work with our SlotWidget
+        if (count() == 0) return 0;
+        int h = spacing() * (count() - 1) + contentsMargins().top() + contentsMargins().bottom();
+        for (int i = 0; i < count(); ++i) {
+            QLayoutItem *item = itemAt(i);
+            if (item->widget()) {
+                if (item->widget()->hasHeightForWidth())
+                    h += item->widget()->heightForWidth(w);
+                else
+                    h += item->widget()->sizeHint().height();
+            } else if (item->layout()) {
+                if (item->layout()->hasHeightForWidth())
+                    h += item->layout()->heightForWidth(w);
+                else
+                    h += item->layout()->sizeHint().height();
+            } else {
+                h += item->sizeHint().height();
+            }
+        }
+        return h;
+    }
+};
+}
+
 FinetuneImagesPanel::FinetuneImagesPanel(QWidget *parent)
     : QWidget(parent) {
   setupUi();
@@ -16,76 +62,80 @@ void FinetuneImagesPanel::setupUi() {
   mainLayout->setContentsMargins(0, 0, 0, 0);
   mainLayout->setSpacing(5);
 
-  // Row 1: original, sharpened, simulated, diff
-  QWidget *row1Widget = new QWidget();
-  m_row1Layout = new QHBoxLayout(row1Widget);
+  setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+
+  m_row1Layout = new QHBoxLayout();
   m_row1Layout->setContentsMargins(0, 0, 0, 0);
   m_row1Layout->setSpacing(5);
   
-  auto createImageSlot = [](const QString& caption) -> ImageSlot {
+  auto createSlot = [this](const QString& caption, std::vector<ImageSlot>& row, QHBoxLayout* rowLayout) {
     ImageSlot slot;
     slot.caption = caption;
     slot.label = new ScalableImageLabel();
-    // Align image to bottom so it sits on top of the caption even if widget is tall
-    slot.label->setAlignment(Qt::AlignBottom | Qt::AlignHCenter);
-    return slot;
-  };
-
-  m_row1Images.push_back(createImageSlot("Original"));
-  m_row1Images.push_back(createImageSlot("Sharpened"));
-  m_row1Images.push_back(createImageSlot("Simulated"));
-  m_row1Images.push_back(createImageSlot("Diff"));
-
-  for (auto& slot : m_row1Images) {
-    slot.container = new QWidget();
-    QVBoxLayout *vLayout = new QVBoxLayout(slot.container);
+    slot.label->setAlignment(Qt::AlignCenter);
+    
+    // Create height-for-width aware container
+    QWidget *container = new SlotWidget();
+    VerticalSlotLayout *vLayout = new VerticalSlotLayout(container);
     vLayout->setContentsMargins(0, 0, 0, 0);
     vLayout->setSpacing(2);
-    // Add stretchable label
-    vLayout->addWidget(slot.label, 1);
+    
+    // Image label (the height-for-width provider)
+    vLayout->addWidget(slot.label, 0);
     
     slot.captionLabel = new QLabel(slot.caption);
     slot.captionLabel->setAlignment(Qt::AlignCenter);
-    // Fixed size caption
     vLayout->addWidget(slot.captionLabel, 0, Qt::AlignCenter);
     
-    m_row1Layout->addWidget(slot.container, 1);
-  }
-  
-  mainLayout->addWidget(row1Widget, 1);
+    rowLayout->addWidget(container, 1);
+    
+    // We can't keep a pointer to container since we removed it from ImageSlot struct
+    // Wait, I should add it back or just use the label's parent.
+    // I removed it from 'FinetuneImagesPanel.h' but I can just use slot.label->parentWidget()!
+    row.push_back(slot);
+  };
 
-  // Row 2: screen, blured_screen, emulsion_screen, merged_screen, collected_screen, dot_spread
-  QWidget *row2Widget = new QWidget();
-  m_row2Layout = new QHBoxLayout(row2Widget);
+  createSlot("Original", m_row1Images, m_row1Layout);
+  createSlot("Sharpened", m_row1Images, m_row1Layout);
+  createSlot("Simulated", m_row1Images, m_row1Layout);
+  createSlot("Diff", m_row1Images, m_row1Layout);
+  
+  mainLayout->addLayout(m_row1Layout, 0);
+
+  m_row2Layout = new QHBoxLayout();
   m_row2Layout->setContentsMargins(0, 0, 0, 0);
   m_row2Layout->setSpacing(5);
 
-  m_row2Images.push_back(createImageSlot("Screen"));
-  m_row2Images.push_back(createImageSlot("Blured Screen"));
-  m_row2Images.push_back(createImageSlot("Emulsion"));
-  m_row2Images.push_back(createImageSlot("Merged"));
-  m_row2Images.push_back(createImageSlot("Collected"));
-  m_row2Images.push_back(createImageSlot("Dot Spread"));
-
-  for (auto& slot : m_row2Images) {
-    slot.container = new QWidget();
-    QVBoxLayout *vLayout = new QVBoxLayout(slot.container);
-    vLayout->setContentsMargins(0, 0, 0, 0);
-    vLayout->setSpacing(2);
-    vLayout->addWidget(slot.label, 1);
-    
-    slot.captionLabel = new QLabel(slot.caption);
-    slot.captionLabel->setAlignment(Qt::AlignCenter);
-    vLayout->addWidget(slot.captionLabel, 0, Qt::AlignCenter);
-    
-    m_row2Layout->addWidget(slot.container, 1);
-  }
+  createSlot("Screen", m_row2Images, m_row2Layout);
+  createSlot("Blured Screen", m_row2Images, m_row2Layout);
+  createSlot("Emulsion", m_row2Images, m_row2Layout);
+  createSlot("Merged", m_row2Images, m_row2Layout);
+  createSlot("Collected", m_row2Images, m_row2Layout);
+  createSlot("Dot Spread", m_row2Images, m_row2Layout);
   
-  mainLayout->addWidget(row2Widget, 1);
+  mainLayout->addLayout(m_row2Layout, 0);
+  
+  // Stretch at the end absorbs EXTRA space if the parent is very tall
+  mainLayout->addStretch(1);
+
+  // Tell the layout to respect size hints and height-for-width correctly
+  mainLayout->setSizeConstraint(QLayout::SetMinAndMaxSize);
+}
+
+bool FinetuneImagesPanel::hasHeightForWidth() const {
+  return true;
+}
+
+int FinetuneImagesPanel::heightForWidth(int w) const {
+  if (layout()) {
+    return layout()->heightForWidth(w);
+  }
+  return QWidget::heightForWidth(w);
 }
 
 void FinetuneImagesPanel::setFinetuneResult(const colorscreen::finetune_result& result) {
-  // Map result images to slots and convert to QPixmap immediately
+  if (m_row1Images.size() < 4 || m_row2Images.size() < 6) return;
+
   m_row1Images[0].pixmap = convertSimpleImageToQPixmap(result.orig.get());
   m_row1Images[1].pixmap = convertSimpleImageToQPixmap(result.sharpened.get());
   m_row1Images[2].pixmap = convertSimpleImageToQPixmap(result.simulated.get());
@@ -105,27 +155,25 @@ void FinetuneImagesPanel::clear() {
   for (auto& slot : m_row1Images) {
     slot.pixmap = QPixmap();
     slot.label->setPixmap(QPixmap());
-    if (slot.container) slot.container->hide();
+    if (slot.label->parentWidget()) slot.label->parentWidget()->hide();
   }
   for (auto& slot : m_row2Images) {
     slot.pixmap = QPixmap();
     slot.label->setPixmap(QPixmap());
-    if (slot.container) slot.container->hide();
+    if (slot.label->parentWidget()) slot.label->parentWidget()->hide();
   }
 }
 
 void FinetuneImagesPanel::updateImageDisplay() {
   auto updateRow = [&](std::vector<ImageSlot>& row) {
-    // Check if we have any valid images to determine row visibility (optional)
-    // But mainly we just update individual slots
     for (auto& slot : row) {
+      QWidget* container = slot.label->parentWidget();
       if (slot.pixmap.isNull() || slot.pixmap.width() <= 0 || slot.pixmap.height() <= 0) {
-        slot.container->hide();
+        if (container) container->hide();
         slot.label->setPixmap(QPixmap());
       } else {
-        slot.container->show();
+        if (container) container->show();
         slot.label->setPixmap(slot.pixmap);
-        // No manual sizing or scaling here; ScalableImageLabel and Layout handle it
       }
     }
   };
@@ -135,23 +183,17 @@ void FinetuneImagesPanel::updateImageDisplay() {
 }
 
 QPixmap FinetuneImagesPanel::convertSimpleImageToQPixmap(const colorscreen::simple_image* img) {
-  // Validate input
   if (!img || img->width <= 0 || img->height <= 0 || img->stride <= 0) {
     return QPixmap();
   }
-  
-  // Safety checks for corrupted data
   if (img->width > 100000 || img->height > 100000) {
       return QPixmap();
   }
-  
-  // Stride must be at least width * 3 (RGB)
   if (img->stride < img->width * 3) {
       return QPixmap();
   }
 
   QImage qImg(img->width, img->height, QImage::Format_RGB888);
-  
   for (int y = 0; y < img->height; ++y) {
     for (int x = 0; x < img->width; ++x) {
       colorscreen::simple_image::rgb pixel = img->get_pixel(x, y);
@@ -161,6 +203,5 @@ QPixmap FinetuneImagesPanel::convertSimpleImageToQPixmap(const colorscreen::simp
       qImg.setPixel(x, y, qRgb(r, g, b));
     }
   }
-
   return QPixmap::fromImage(qImg);
 }

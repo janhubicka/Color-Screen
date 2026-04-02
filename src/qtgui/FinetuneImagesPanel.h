@@ -20,8 +20,8 @@ public:
   void clear();
 
 protected:
-  // No explicit resizeEvent needed now
-  // void resizeEvent(QResizeEvent *event) override;
+  bool hasHeightForWidth() const override;
+  int heightForWidth(int w) const override;
 
 private:
   void setupUi();
@@ -33,7 +33,6 @@ private:
   QHBoxLayout *m_row2Layout = nullptr;
   
   struct ImageSlot {
-    QWidget *container = nullptr;
     ScalableImageLabel *label = nullptr;
     QLabel *captionLabel = nullptr;
     QString caption;
