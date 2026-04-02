@@ -98,7 +98,7 @@ protected:
                 int toIndex = -1;
                 for (int i = 0; i < layout->count(); ++i) {
                     QWidget *w = layout->itemAt(i)->widget();
-                    if (w && event->pos().y() < w->geometry().bottom()) {
+                    if (w && event->position().toPoint().y() < w->geometry().bottom()) {
                         toIndex = i;
                         break;
                     }

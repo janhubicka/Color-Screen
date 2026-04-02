@@ -156,11 +156,11 @@ protected:
 
 protected:
   virtual void applyChange(std::function<void(ParameterState &)> modifier, const QString &description = QString());
-  QFormLayout *m_currentGroupForm = nullptr;
 
   StateGetter m_stateGetter;
   StateSetter m_stateSetter;
   ImageGetter m_imageGetter;
+  QFormLayout *m_currentGroupForm = nullptr;
 
   QVBoxLayout *m_layout;
   QFormLayout *m_form; // Helper to access form layout

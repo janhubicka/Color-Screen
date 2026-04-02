@@ -2571,10 +2571,6 @@ void MainWindow::openRecentParams() {
 
     const char *error = nullptr;
 
-    // Store previous state
-    colorscreen::scr_to_img_parameters oldScrToImg = m_scrToImgParams;
-    colorscreen::scr_detect_parameters oldDetect = m_detectParams;
-
     // load_csp merges parameters in; reset first.
     colorscreen::scr_to_img_parameters emptyScrToImg;
     m_scrToImgParams = emptyScrToImg;
@@ -2595,12 +2591,6 @@ void MainWindow::openRecentParams() {
     fclose(f);
 
     // Update UI/Renderer
-    bool changed = false;
-    if (!(oldScrToImg == m_scrToImgParams))
-      changed = true;
-    if (!(oldDetect == m_detectParams))
-      changed = true;
-
     if (m_scan) {
       // Set image to widget
       m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,

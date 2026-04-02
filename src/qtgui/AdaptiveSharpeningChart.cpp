@@ -248,8 +248,6 @@ void AdaptiveSharpeningChart::renderLegend(QPainter &painter)
         // Red Section (Above Green)
         int rBarY = gTextY - textHeight - spacing - barHeight;
         QRect rLegend(10, rBarY, w - 20, barHeight);
-        
-        int rTextY = rBarY - spacing;
 
         // Draw Red
         QLinearGradient rGrad(rLegend.topLeft(), rLegend.topRight());

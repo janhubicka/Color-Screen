@@ -66,7 +66,6 @@ void CIEChartWidget::paintEvent(QPaintEvent *) {
   // Grid lines
   for (double x = 0.0; x <= 0.81; x += 0.1) {
       QPointF p = mapToWidget(x, 0.0);
-      QPointF top = mapToWidget(x, 0.9);
       painter.drawLine(QPointF(p.x(), r.bottom()), QPointF(p.x(), r.top()));
   }
   for (double y = 0.0; y <= 0.91; y += 0.1) {
@@ -164,7 +163,6 @@ void CIEChartWidget::paintEvent(QPaintEvent *) {
       QPointF rPt = mapToWidget(m_referenceGamut.rx, m_referenceGamut.ry);
       QPointF gPt = mapToWidget(m_referenceGamut.gx, m_referenceGamut.gy);
       QPointF bPt = mapToWidget(m_referenceGamut.bx, m_referenceGamut.by);
-      QPointF wPt = mapToWidget(m_referenceGamut.wx, m_referenceGamut.wy);
       
       QPolygonF triangle;
       triangle << rPt << gPt << bPt;

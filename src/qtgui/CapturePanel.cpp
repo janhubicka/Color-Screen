@@ -377,10 +377,8 @@ void CapturePanel::setupUi()
 
         // 4. Image Resolution
         bool showImageRes = false;
-        double imgRes = 0;
         if (img && img->xdpi > 0 && img->ydpi > 0) {
             showImageRes = true;
-            imgRes = img->xdpi;
             if (std::abs(img->xdpi - img->ydpi) < 1e-6) {
                 m_imageResolutionValue->setText(QString("%1 PPI").arg(img->xdpi));
             } else {
