@@ -568,49 +568,54 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
       return m_demosaiced[y * w + x];
     };
 
-  /* Read-only accessors for mosaiced channel data.  Return 0 for
-     out-of-bounds.  Assert that only the expected channel was set
-     by step 1 (the other two channels should still be 0 from calloc).
-     These are valid only before step 2 modifies the green channel.  */
+  /* Read-only accessors for mosaiced channel data.  Use bounds clamping
+     (border replication) for out-of-bounds coordinates — returning 0
+     would bias the Laplacian correction at image boundaries.
+     Assert that the pixel at the given position is the expected color
+     (only when coordinates are in-bounds).  */
   auto dred = [&](int x, int y) -> luminosity_t
     {
-      if (x < 0 || x >= w || y < 0 || y >= h)
-	return 0;
-      assert (!debug
-	      || (m_demosaiced[y * w + x].green == 0
-		  && m_demosaiced[y * w + x].blue == 0));
-      return m_demosaiced[y * w + x].red;
+      int cx = std::clamp (x, 0, w - 1);
+      int cy = std::clamp (y, 0, h - 1);
+      assert (!debug || cx != x || cy != y
+	      || GEOMETRY::demosaic_entry_color (x, y)
+		 == base_geometry::red);
+      return m_demosaiced[cy * w + cx].red;
     };
   auto dgreen = [&](int x, int y) -> luminosity_t
     {
-      if (x < 0 || x >= w || y < 0 || y >= h)
-	return 0;
-      assert (!debug
-	      || (m_demosaiced[y * w + x].red == 0
-		  && m_demosaiced[y * w + x].blue == 0));
-      return m_demosaiced[y * w + x].green;
+      int cx = std::clamp (x, 0, w - 1);
+      int cy = std::clamp (y, 0, h - 1);
+      assert (!debug || cx != x || cy != y
+	      || GEOMETRY::demosaic_entry_color (x, y)
+		 == base_geometry::green);
+      return m_demosaiced[cy * w + cx].green;
     };
   auto dblue = [&](int x, int y) -> luminosity_t
     {
-      if (x < 0 || x >= w || y < 0 || y >= h)
-	return 0;
-      assert (!debug
-	      || (m_demosaiced[y * w + x].red == 0
-		  && m_demosaiced[y * w + x].green == 0));
-      return m_demosaiced[y * w + x].blue;
+      int cx = std::clamp (x, 0, w - 1);
+      int cy = std::clamp (y, 0, h - 1);
+      assert (!debug || cx != x || cy != y
+	      || GEOMETRY::demosaic_entry_color (x, y)
+		 == base_geometry::blue);
+      return m_demosaiced[cy * w + cx].blue;
     };
 
   /* Return the known (mosaiced) channel value at position (x,y).
-     The color is determined by GEOMETRY.  */
+     The color is determined by GEOMETRY.  Uses clamping for
+     out-of-bounds to provide smooth boundary behavior.  */
   auto known = [&](int x, int y) -> luminosity_t
     {
+      int cx = std::clamp (x, 0, w - 1);
+      int cy = std::clamp (y, 0, h - 1);
       switch (GEOMETRY::demosaic_entry_color (x, y))
 	{
-	case base_geometry::red: return dred (x, y);
-	case base_geometry::green: return dgreen (x, y);
-	default: return dblue (x, y);
+	case base_geometry::red: return m_demosaiced[cy * w + cx].red;
+	case base_geometry::green: return m_demosaiced[cy * w + cx].green;
+	default: return m_demosaiced[cy * w + cx].blue;
 	}
     };
+
 
   /* Step 1: Populate m_demosaiced with the mosaiced data.
      Each pixel gets only its known channel value; others remain 0.  */
@@ -624,7 +629,7 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
 	data_entry e = GEOMETRY::red_scr_to_entry (p, &off);
 	if (fabs (off.x) < 0.01 && fabs (off.y) < 0.01)
 	  {
-	    m_demosaiced [y * w + x].red = red (e.x, e.y);
+	    m_demosaiced [y * w + x].red = std::max (red (e.x, e.y), (luminosity_t) 0);
 	    assert (!debug
 		    || GEOMETRY::demosaic_entry_color (x, y)
 		       == base_geometry::red);
@@ -633,14 +638,14 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
 	e = GEOMETRY::green_scr_to_entry (p, &off);
 	if (fabs (off.x) < 0.01 && fabs (off.y) < 0.01)
 	  {
-	    m_demosaiced [y * w + x].green = green (e.x, e.y);
+	    m_demosaiced [y * w + x].green = std::max (green (e.x, e.y), (luminosity_t) 0);
 	    assert (!debug
 		    || GEOMETRY::demosaic_entry_color (x, y)
 		       == base_geometry::green);
 	    continue;
 	  }
 	e = GEOMETRY::blue_scr_to_entry (p, &off);
-	m_demosaiced [y * w + x].blue = blue (e.x, e.y);
+        m_demosaiced [y * w + x].blue = std::max (blue (e.x, e.y), (luminosity_t) 0);
 	assert (!debug
 		|| GEOMETRY::demosaic_entry_color (x, y)
 		   == base_geometry::blue);
