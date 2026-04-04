@@ -669,6 +669,18 @@ struct render_parameters
     return get_capture_type (capture_type, scan);
   }
 
+  bool has_correction_profile () const
+  {
+    rgbdata dark = {0,0,0};
+    rgbdata red = {1,0,0};
+    rgbdata green = {0,1,0};
+    rgbdata blue = {0,0,1};
+    return profiled_dark != dark
+	   || profiled_red != red
+	   || profiled_green != green
+	   || profiled_blue != blue;
+  }
+
   struct gamut
   {
     xy_t red, green, blue, whitepoint;

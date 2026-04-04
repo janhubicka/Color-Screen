@@ -16,27 +16,28 @@ namespace colorscreen
 {
 const constexpr render_type_property render_type_properties[render_type_max] =
 {
-   {"original", "Original digital caputre", render_type_property::OUTPUTS_SCAN_PROFILE | render_type_property::SUPPORTS_IR_RGB_SWITCH | render_type_property::SCAN_RESOLUTION},
-   {"interpolated-original", "Original digital capture with mosaic removed", render_type_property::OUTPUTS_SCAN_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::PATCH_RESOLUTION},
-   {"profiled-original", "profiled-original", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG /* currently only to compute patch propertions, but we have no profiling otherwise yeet */| render_type_property::NEEDS_RGB | render_type_property::SCAN_RESOLUTION},
-   {"interpolated-profiled-original", "interpolated-profiled-original",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::PATCH_RESOLUTION},
-   {"interpolated-diff", "interpolated-diff", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::PATCH_RESOLUTION},
-   {"preview-grid", "preview-grid",render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::SUPPORTS_IR_RGB_SWITCH | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
-   {"realistic", "realistic",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::SUPPORTS_IR_RGB_SWITCH | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
-   {"interpolated", "interpolated",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::PATCH_RESOLUTION},
-   {"interpolated-predictive", "interpolated-predictive",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
-   {"interpolated-combined", "interpolated-combined",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
-   {"screen", "screen", render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS | render_type_property::OUTPUTS_SRGB_PROFILE},
-   {"simulate-process", "simulate-process", render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS | render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_RGB},
-   {"fast", "fast", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCREEN_RESOLUTION},
-   {"extra", "extra", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::PATCH_RESOLUTION},
-   {"detected-adjusted-color", "detected-adjusted-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
-   {"detected-normalized-color", "detected-normalized-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION | render_type_property::RESET_BRIGHTNESS_ETC},
-   {"detected-screen-color", "detected-screen-color",render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION | render_type_property::RESET_BRIGHTNESS_ETC},
-   {"detected-realistic", "detected-realistic",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
-   {"detected-interpolated", "detected-interpolated",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
-   {"detected-interpolated-scaled", "detected-interpolated-scaled",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
-   {"detected-relaxation-scaled", "detected-relaxation-scaled",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
+   {"original", "Original digital caputre", render_type_property::OUTPUTS_SCAN_PROFILE /*| render_type_property::SUPPORTS_IR_RGB_SWITCH*/ | render_type_property::SCAN_RESOLUTION},
+   {"interpolated", "Image layrer + screen filter demosaiced",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::PATCH_RESOLUTION},
+   {"interpolated-predictive", "Image layer + screen filter demosaiced with detail recovery",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
+   {"image-layer", "Image layer", render_type_property::OUTPUTS_SCAN_PROFILE | render_type_property::SCAN_RESOLUTION},
+   {"screen", "Screen filter", render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS | render_type_property::OUTPUTS_SRGB_PROFILE},
+   {"realistic", "Image layer + screen filter",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::SUPPORTS_IR_RGB_SWITCH | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
+   {"interpolated-combined", "Image layer + demosaiced colors",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
+   {"interpolated-original", "Original digital capture demosaiced", render_type_property::OUTPUTS_SCAN_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::PATCH_RESOLUTION},
+   {"preview-grid", "Preview screen registration",render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::SUPPORTS_IR_RGB_SWITCH | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
+   {"simulate-process", "Simulate capture using screen filter", render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS | render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_RGB},
+   {"fast", "Demosaiced using simple algorithm", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCREEN_RESOLUTION | render_type_property::HIDE_IN_GUI},
+   {"extra", "extra", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::PATCH_RESOLUTION | render_type_property::HIDE_IN_GUI},
+   {"detected-adjusted-color", "Color used for auto-detection of screen filter", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
+   {"detected-normalized-color", "Normalized color used for auto-detection of screen filter", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION | render_type_property::RESET_BRIGHTNESS_ETC},
+   {"detected-screen-color", "Auto-detected screen filter",render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION | render_type_property::RESET_BRIGHTNESS_ETC},
+   {"detected-realistic", "Image layer + auto-detected screen filter",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
+   {"detected-interpolated", "Image layer + auto-detected screen filter demosaiced",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
+   {"detected-interpolated-scaled", "Image layer + auto-detected screen filter demosaiced assuming irregular element size",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
+   {"detected-relaxation-scaled", "Image layer + auto-detected screen filter demosaiced assuming irregular element size and interpolated",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
+   {"profiled-original", "Original capture with correction profile", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG /* currently only to compute patch propertions, but we have no profiling otherwise yeet */| render_type_property::NEEDS_RGB  | render_type_property::NEEDS_CORRECTION_PROFILE | render_type_property::SCAN_RESOLUTION},
+   {"interpolated-profiled-original", "Original capture demosaiced with correction profile",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::PATCH_RESOLUTION | render_type_property::NEEDS_CORRECTION_PROFILE},
+   {"interpolated-diff", "Difference between profile and image layer", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::PATCH_RESOLUTION | render_type_property::NEEDS_CORRECTION_PROFILE},
 };
 static void
 sanitize_render_parameters (render_type_parameters &rtparam, scr_to_img_parameters &param, image_data &img)
@@ -44,16 +45,12 @@ sanitize_render_parameters (render_type_parameters &rtparam, scr_to_img_paramete
   if (rtparam.color && !img.has_rgb ())
     rtparam.color = false;
 
-  /* These rendering types requires RGB.  */
   if (!img.has_rgb ()
-      && (rtparam.type == render_type_interpolated_original || rtparam.type == render_type_interpolated_profiled_original
-	  || rtparam.type == render_type_interpolated_diff || rtparam.type == render_type_profiled_original))
+      && (render_type_properties [(int)rtparam.type].flags & render_type_property::NEEDS_RGB))
     rtparam.type = render_type_original;
 
-  /* only original and profiled original rendering can be performed on Random screen.  */
   if (param.type == Random
-      && rtparam.type != render_type_original
-      && rtparam.type != render_type_profiled_original)
+      && (render_type_properties [(int)rtparam.type].flags & render_type_property::NEEDS_SCR_TO_IMG))
     rtparam.type = render_type_original;
 
   if (rtparam.type == render_type_fast
@@ -61,6 +58,10 @@ sanitize_render_parameters (render_type_parameters &rtparam, scr_to_img_paramete
       || rtparam.type == render_type_interpolated_profiled_original
       || rtparam.type == render_type_interpolated)
     rtparam.antialias = false;
+  if (rtparam.type == render_type_original && img.has_rgb ())
+    rtparam.color = true;
+  if (rtparam.type == render_type_image_layer)
+    rtparam.color = false;
   if (rtparam.type == render_type_profiled_original)
     rtparam.color = true;
   if (rtparam.type == render_type_realistic)
@@ -161,6 +162,7 @@ render_to_scr::render_tile (render_type_parameters rtparam,
     {
     case render_type_original:
     case render_type_profiled_original:
+    case render_type_image_layer:
       ok = do_render_tile_with_gray<render_img> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     case render_type_preview_grid:
@@ -168,6 +170,7 @@ render_to_scr::render_tile (render_type_parameters rtparam,
       ok = do_render_tile<render_superpose_img> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     case render_type_screen:
+      my_rparam.brightness = 1;
       ok = do_render_tile<render_screen> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     case render_type_simulate_process:
@@ -225,6 +228,7 @@ render_to_scr::render_to_file (render_to_file_params &rfparams, render_type_para
     {
     case render_type_original:
     case render_type_profiled_original:
+    case render_type_image_layer:
       return produce_file<render_img,supports_img> (rfparams, rtparam, param, param, rparam, img, black, progress);
       break;
     case render_type_preview_grid:
@@ -232,6 +236,7 @@ render_to_scr::render_to_file (render_to_file_params &rfparams, render_type_para
       return produce_file<render_superpose_img,supports_img> (rfparams, rtparam, param, param, rparam, img, black, progress);
       break;
     case render_type_screen:
+      rparam.brightness = 1;
       return produce_file<render_screen,supports_scr> (rfparams, rtparam, param, param, rparam, img, black, progress);
       break;
     case render_type_simulate_process:

@@ -284,7 +284,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
     }
   if (progress)
     progress->set_task ("precomputing", 1);
-  if ((int)rtparam.type < (int)render_type_adjusted_color)
+  if ((int)rtparam.type < (int)render_type_adjusted_color || rtparam.type >= (int)render_type_profiled_original)
     render_to_scr::render_to_file (rfparams, rtparam, param, rparam, scan, black, progress);
   else
     render_scr_detect::render_to_file (rfparams, rtparam, param, dparam, rparam, scan, black, progress);

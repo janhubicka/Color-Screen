@@ -5,16 +5,14 @@ namespace colorscreen
 enum render_type_t
 {
   render_type_original,
-  render_type_interpolated_original,
-  render_type_profiled_original,
-  render_type_interpolated_profiled_original,
-  render_type_interpolated_diff,
-  render_type_preview_grid,
-  render_type_realistic,
   render_type_interpolated,
   render_type_predictive,
-  render_type_combined,
+  render_type_image_layer,
   render_type_screen,
+  render_type_realistic,
+  render_type_combined,
+  render_type_interpolated_original,
+  render_type_preview_grid,
   render_type_simulate_process,
   render_type_fast,
   render_type_extra,
@@ -26,6 +24,9 @@ enum render_type_t
   render_type_scr_nearest,
   render_type_scr_nearest_scaled,
   render_type_scr_relax,
+  render_type_profiled_original,
+  render_type_interpolated_profiled_original,
+  render_type_interpolated_diff,
   render_type_max
 };
 
@@ -40,16 +41,19 @@ public:
     NEEDS_SCR_TO_IMG = 1,
     NEEDS_RGB = 2,
     NEEDS_SCR_DETECT = 6, /* scr detect needs RGB.  */
-    OUTPUTS_SCAN_PROFILE = 8,
-    OUTPUTS_PROCESS_PROFILE = 16,
-    OUTPUTS_SRGB_PROFILE = 32,
-    SUPPORTS_IR_RGB_SWITCH = 64,
-    SCAN_RESOLUTION = 128,
-    SCREEN_RESOLUTION = 256,
-    PATCH_RESOLUTION = 512,
-    RESET_BRIGHTNESS_ETC = 1024,
-    ANTIALIAS = 2048,
+    NEEDS_CORRECTION_PROFILE = 8,
+    OUTPUTS_SCAN_PROFILE = 16,
+    OUTPUTS_PROCESS_PROFILE = 32,
+    OUTPUTS_SRGB_PROFILE = 64,
+    SUPPORTS_IR_RGB_SWITCH = 128,
+    SCAN_RESOLUTION = 256,
+    SCREEN_RESOLUTION = 512,
+    PATCH_RESOLUTION = 1024,
+    RESET_BRIGHTNESS_ETC = 2048,
+    ANTIALIAS = 4096,
+    HIDE_IN_GUI = 8192
   };
+  const char *help;
 };
 DLL_PUBLIC extern const render_type_property render_type_properties[render_type_max];
 

@@ -1308,6 +1308,9 @@ void MainWindow::updateModeMenu() {
     // Filter logic
     bool show = true;
 
+    if (prop.flags & render_type_property::HIDE_IN_GUI)
+      show = false;
+
     // If given type has render_type_property::NEEDS_SCR_TO_IMG do not show it
     // if scr_to_img type is Random.
     if (prop.flags & render_type_property::NEEDS_SCR_TO_IMG) {
@@ -1324,9 +1327,14 @@ void MainWindow::updateModeMenu() {
         show = false;
       }
     }
+    if ((prop.flags & render_type_property::NEEDS_CORRECTION_PROFILE)
+	&& !m_rparams.has_correction_profile ())
+      show = false;
 
     if (show) {
-      m_modeComboBox->addItem(prop.name, QVariant(i));
+      m_modeComboBox->addItem(prop.pretty_name, QVariant(i));
+      if (prop.help)
+        m_modeComboBox->setItemData (i, QString::fromUtf8 (prop.help), Qt::ToolTipRole);
     }
   }
 

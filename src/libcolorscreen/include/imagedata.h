@@ -21,10 +21,10 @@ public:
   enum demosaicing_t
   {
     demosaic_default,
-    demosaic_linear,
     demosaic_half,
     demosaic_monochromatic,
     demosaic_monochromatic_bayer_corrected,
+    demosaic_linear,
     demosaic_VNG,
     demosaic_PPG,
     demosaic_AHD,

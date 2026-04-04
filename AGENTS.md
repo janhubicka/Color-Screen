@@ -29,8 +29,8 @@ cd build-qt
 To ensure optimal performance and compatibility (especially with GCC 15 + Qt6), use the following configuration:
 
 ```bash
-CXXFLAGS="-Ofast -march=native -Wall" \
-CFLAGS="-Ofast -march=native -Wall" \
+CXXFLAGS="-Ofast -march=native -Wall -g" \
+CFLAGS="-Ofast -march=native -Wall -g" \
 ../configure --prefix=$HOME/Color-Screen-install --enable-qtgui --enable-maintainer-mode --prefix=/home/jan/barveni-bin --enable-gtkgui 
 ```
 

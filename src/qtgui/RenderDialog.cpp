@@ -77,14 +77,23 @@ RenderDialog::RenderDialog(
   for (int i = 0; i < render_type_max; ++i) {
     const render_type_property &prop = render_type_properties[i];
     bool show = true;
+    if (prop.flags & render_type_property::HIDE_IN_GUI)
+      show = false;
     if ((prop.flags & render_type_property::NEEDS_SCR_TO_IMG) &&
         scrParams.type == colorscreen::Random)
       show = false;
     if ((prop.flags & render_type_property::NEEDS_RGB) &&
         (!scan || !scan->rgbdata))
       show = false;
+    if ((prop.flags & render_type_property::NEEDS_CORRECTION_PROFILE)
+	&& !rparams.has_correction_profile ())
+      show = false;
     if (show)
-      m_modeCombo->addItem(prop.name, QVariant(i));
+      {
+        m_modeCombo->addItem(prop.pretty_name, QVariant(i));
+	if (prop.help)
+	  m_modeCombo->setItemData (i, QString::fromUtf8 (prop.help), Qt::ToolTipRole);
+      }
   }
   int idx = m_modeCombo->findData((int)rtparams.type);
   if (idx >= 0) m_modeCombo->setCurrentIndex(idx);

@@ -28,18 +28,18 @@ extern void prune_render_scr_detect_caches ();
 
 const property_t image_data::demosaic_names[(int)demosaic_max]
      = {
-  { "default", "Default", "" },
-  { "linear", "Linear", "" },
-  { "half", "Half", "" },
+  { "default", "Default", "Automatically choose demosaicing algorithm" },
+  { "half", "Reduce image size to half and avoid demosaicing", "" },
   { "monochromatic", "Monochromatic", "" },
-  { "monochromatic_bayer_corrected", "Monochromatic bayer corrected", "" },
-  { "VNG", "VNG", "" },
-  { "PPG", "PPG", "" },
-  { "AHD", "AHD", "" },
-  { "DCB", "DCB", "" },
-  { "DHT", "DHT", "" },
-  { "AAHD", "AAHD", "" },
-  { "none", "None", "" },
+  { "monochromatic_bayer_corrected", "Monochromatic with Bayer filter compensated" },
+  { "linear", "Linear interpolation", "" },
+  { "VNG", "Variable number of gradients interpolation (VNG)", "Variable number of gradients (VNG)[6] interpolation computes gradients near the pixel of interest and uses the lower gradients (representing smoother and more similar parts of the image) to make an estimate. It is used in first versions of dcraw, and suffers from color artifacts." },
+  { "PPG", "Pixel grouping (PPG)", "Pixel grouping (PPG)[7] uses assumptions about natural scenery in making estimates. It has fewer color artifacts on natural images than the Variable Number of Gradients method." },
+  { "AHD", "Adaptive homogeneity-directed (AHD)", "Adaptive homogeneity-directed (AHD) is widely used in the industry. It selects the direction of interpolation so as to maximize a homogeneity metric, thus typically minimizing color artifacts." },
+  { "DCB", "Directional Conditional Based (DCB)", "DCB (Directional Conditional Based) is a high-quality demosaicing algorithm that reconstructs full-color images by intelligently analyzing edge directions to prevent blurring. It utilizes a directional interpolation strategy to detect local gradients, followed by a conditional refinement stage that filters out \"zipper\" artifacts and false color fringing. This dual-pass approach makes it exceptionally effective at preserving sharp details and color accuracy in fine textures, offering a cleaner output than standard interpolation methods" },
+  { "DHT", "Directional Homogeneity and Thresholding (DHT)", "DHT (Directional Homogeneity and Thresholding) is an edge-aware demosaicing algorithm that minimizes image artifacts by reconstructing the green channel through competing horizontal and vertical interpolations. It evaluates directional homogeneity to determine which orientation best preserves local textures, using mathematical thresholds to suppress \"zipper\" effects and false color fringing. This approach makes DHT particularly effective at producing sharp, crisp edges in images with strong geometric patterns or fine architectural details." },
+  { "AAHD", "Adaptive Homogeneity-Directed (AAHD)", "AAHD (Adaptive Homogeneity-Directed) is a sophisticated demosaicing algorithm that improves upon standard directional methods by evaluating the \"homogeneity\"—or uniformity—of color and luminance in local pixel neighborhoods. It performs separate interpolations along horizontal and vertical directions and then selects the result that maintains the highest level of local consistency, which significantly reduces \"zipper\" artifacts and aliasing. Frequently paired with a Luminance/Chrominance refinement pass, AAHD is highly regarded for its ability to produce sharp, natural-looking edges while effectively suppressing the \"rainbow\" color moiré often found in high-frequency textures." },
+  { "none", "No demosaicing", "" },
 };
 
 class image_data_loader
@@ -700,9 +700,11 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
   switch (demosaic)
     {
     case image_data::demosaic_linear:
+    case image_data::demosaic_half:
+      RawProcessor.imgdata.params.user_qual = 0;
+      break;
 
     /* The following use no demosaicing; any value is good.  */
-    case image_data::demosaic_half:
     case image_data::demosaic_monochromatic:
     case image_data::demosaic_monochromatic_bayer_corrected:
     case image_data::demosaic_none: 

@@ -312,8 +312,19 @@ public:
   void
   set_render_type (render_type_parameters rtparam)
   {
-    if (rtparam.color)
-      set_color_display (rtparam.type == render_type_profiled_original);
+    switch (rtparam.type)
+    {
+      case render_type_image_layer:
+	break;
+      case render_type_original:
+	set_color_display (false);
+        break;
+      case render_type_profiled_original:
+	set_color_display (true);
+        break;
+      default:
+	abort ();
+    }
   }
   bool
   precompute_all (progress_info *progress = NULL)
