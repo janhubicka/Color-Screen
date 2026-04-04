@@ -469,7 +469,7 @@ struct render_parameters
         tile_adjustments (),
 
         /* Patch density parameters.  */
-        film_gamma (1), collection_quality (simple_screen_collection), screen_demosaic (bicubic_demosaic), screen_blur_radius (0.5),
+        film_gamma (1), collection_quality (simple_screen_collection), screen_demosaic (hamilton_adams_demosaic), screen_blur_radius (0.5),
         collection_threshold (0.2), red_strip_width (0),
         green_strip_width (0),
 

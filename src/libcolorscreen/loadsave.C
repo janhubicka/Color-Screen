@@ -205,6 +205,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "backlight_correction_black: %f\n", rparam->backlight_correction_black) < 0
 	  || fprintf (f, "invert: %s\n", bool_names [(int)rparam->invert]) < 0
 	  || fprintf (f, "collection_quality: %s\n", render_parameters::collection_quality_names [(int)rparam->collection_quality].name) < 0
+	  || fprintf (f, "screen_demosaic: %s\n", render_parameters::screen_demosaic_names [(int)rparam->screen_demosaic].name) < 0
 	  || fprintf (f, "mix_weights: %f %f %f\n", rparam->mix_red, rparam->mix_green, rparam->mix_blue) < 0
 	  || fprintf (f, "mix_dark: %f %f %f\n", rparam->mix_dark.red, rparam->mix_dark.green, rparam->mix_dark.blue) < 0
 	  || fprintf (f, "profiled_dark: %f %f %f\n", rparam->profiled_dark.red, rparam->profiled_dark.green, rparam->profiled_dark.blue) < 0
@@ -1182,6 +1183,21 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    }
 	  if (rparam)
 	    rparam->collection_quality = (enum render_parameters::collection_quality_t) j;
+	}
+      else if (!strcmp (buf, "screen_demosaic"))
+	{
+	  get_keyword (f, buf2);
+	  int j;
+	  for (j = 0; j < render_parameters::max_screen_demosaic; j++)
+	    if (!strcmp (buf2, render_parameters::screen_demosaic_names[j].name))
+	      break;
+	  if (j == render_parameters::max_screen_demosaic)
+	    {
+	      *error = "unknown collection quality";
+	      return false;
+	    }
+	  if (rparam)
+	    rparam->screen_demosaic = (enum render_parameters::screen_demosaic_t) j;
 	}
       else if (!strcmp (buf, "scr_detect_red"))
 	{
