@@ -568,37 +568,19 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
       return m_demosaiced[y * w + x];
     };
 
-  /* Read-only accessors for mosaiced channel data.  Use bounds clamping
+  /* Read-only accessor for mosaiced channel data.  Use bounds clamping
      (border replication) for out-of-bounds coordinates — returning 0
      would bias the Laplacian correction at image boundaries.
      Assert that the pixel at the given position is the expected color
      (only when coordinates are in-bounds).  */
-  auto dred = [&](int x, int y) -> luminosity_t
+  auto dch = [&](int x, int y, int ch) -> luminosity_t
     {
       int cx = std::clamp (x, 0, w - 1);
       int cy = std::clamp (y, 0, h - 1);
       assert (!debug || cx != x || cy != y
-	      || GEOMETRY::demosaic_entry_color (x, y)
-		 == base_geometry::red);
-      return m_demosaiced[cy * w + cx].red;
-    };
-  auto dgreen = [&](int x, int y) -> luminosity_t
-    {
-      int cx = std::clamp (x, 0, w - 1);
-      int cy = std::clamp (y, 0, h - 1);
-      assert (!debug || cx != x || cy != y
-	      || GEOMETRY::demosaic_entry_color (x, y)
-		 == base_geometry::green);
-      return m_demosaiced[cy * w + cx].green;
-    };
-  auto dblue = [&](int x, int y) -> luminosity_t
-    {
-      int cx = std::clamp (x, 0, w - 1);
-      int cy = std::clamp (y, 0, h - 1);
-      assert (!debug || cx != x || cy != y
-	      || GEOMETRY::demosaic_entry_color (x, y)
-		 == base_geometry::blue);
-      return m_demosaiced[cy * w + cx].blue;
+	      || (int)GEOMETRY::demosaic_entry_color (x, y)
+		 == ch);
+      return m_demosaiced[cy * w + cx][ch];
     };
 
   /* Return the known (mosaiced) channel value at position (x,y).
@@ -629,7 +611,7 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
 	data_entry e = GEOMETRY::red_scr_to_entry (p, &off);
 	if (fabs (off.x) < 0.01 && fabs (off.y) < 0.01)
 	  {
-	    m_demosaiced [y * w + x].red = std::max (red (e.x, e.y), (luminosity_t) 0);
+	    m_demosaiced [y * w + x].red =  std::max (red (e.x, e.y), (luminosity_t) 0);
 	    assert (!debug
 		    || GEOMETRY::demosaic_entry_color (x, y)
 		       == base_geometry::red);
@@ -652,6 +634,10 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
 	assert (fabs (off.x) < 0.01 && fabs (off.y) < 0.01);
       }
 
+  enum base_geometry::demosaic_entry_color ah_red = base_geometry::red;
+  enum base_geometry::demosaic_entry_color ah_green = base_geometry::blue;
+  enum base_geometry::demosaic_entry_color ah_blue = base_geometry::green;
+
   /* Step 2: Interpolate green channel at all non-green pixels.
 
      For each non-green pixel, check which cardinal and diagonal
@@ -662,30 +648,30 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
     for (int x = 0; x < w; x++)
       {
 	int color = GEOMETRY::demosaic_entry_color (x, y);
-	if (color == base_geometry::green)
+	if (color == ah_green)
 	  continue;
 
 	luminosity_t known_val = known (x, y);
 
 	/* Check which cardinal neighbors are green.  */
 	bool left_g  = GEOMETRY::demosaic_entry_color (x - 1, y)
-		       == base_geometry::green;
+		       == ah_green;
 	bool right_g = GEOMETRY::demosaic_entry_color (x + 1, y)
-		       == base_geometry::green;
+		       == ah_green;
 	bool up_g    = GEOMETRY::demosaic_entry_color (x, y - 1)
-		       == base_geometry::green;
+		       == ah_green;
 	bool down_g  = GEOMETRY::demosaic_entry_color (x, y + 1)
-		       == base_geometry::green;
+		       == ah_green;
 	bool h_green = left_g && right_g;
 	bool v_green = up_g && down_g;
 
 	if (h_green && v_green)
 	  {
 	    /* Green in both cardinal directions: Hamilton-Adams.  */
-	    luminosity_t g_left  = dgreen (x - 1, y);
-	    luminosity_t g_right = dgreen (x + 1, y);
-	    luminosity_t g_up    = dgreen (x, y - 1);
-	    luminosity_t g_down  = dgreen (x, y + 1);
+	    luminosity_t g_left  = dch (x - 1, y, ah_green);
+	    luminosity_t g_right = dch (x + 1, y, ah_green);
+	    luminosity_t g_up    = dch (x, y - 1, ah_green);
+	    luminosity_t g_down  = dch (x, y + 1, ah_green);
 	    luminosity_t kl2 = known (x - 2, y);
 	    luminosity_t kr2 = known (x + 2, y);
 	    luminosity_t ku2 = known (x, y - 2);
@@ -701,35 +687,35 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
 				  * (luminosity_t)0.25;
 
 	    if (grad_h < grad_v)
-	      d (x, y).green = (g_left + g_right) * (luminosity_t)0.5
+	      d (x, y)[(int)ah_green] = (g_left + g_right) * (luminosity_t)0.5
 			       + lapl_h;
 	    else if (grad_v < grad_h)
-	      d (x, y).green = (g_up + g_down) * (luminosity_t)0.5
+	      d (x, y)[(int)ah_green] = (g_up + g_down) * (luminosity_t)0.5
 			       + lapl_v;
 	    else
-	      d (x, y).green = (g_left + g_right + g_up + g_down)
+	      d (x, y)[(int)ah_green] = (g_left + g_right + g_up + g_down)
 			       * (luminosity_t)0.25
 			       + (lapl_h + lapl_v) * (luminosity_t)0.5;
 	  }
 	else if (h_green)
 	  {
 	    /* Green only in horizontal direction.  */
-	    luminosity_t g_left  = dgreen (x - 1, y);
-	    luminosity_t g_right = dgreen (x + 1, y);
+	    luminosity_t g_left  = dch (x - 1, y, ah_green);
+	    luminosity_t g_right = dch (x + 1, y, ah_green);
 	    luminosity_t kl2 = known (x - 2, y);
 	    luminosity_t kr2 = known (x + 2, y);
-	    d (x, y).green = (g_left + g_right) * (luminosity_t)0.5
+	    d (x, y)[(int)ah_green] = (g_left + g_right) * (luminosity_t)0.5
 			     + (2 * known_val - kl2 - kr2)
 			       * (luminosity_t)0.25;
 	  }
 	else if (v_green)
 	  {
 	    /* Green only in vertical direction.  */
-	    luminosity_t g_up   = dgreen (x, y - 1);
-	    luminosity_t g_down = dgreen (x, y + 1);
+	    luminosity_t g_up   = dch (x, y - 1, ah_green);
+	    luminosity_t g_down = dch (x, y + 1, ah_green);
 	    luminosity_t ku2 = known (x, y - 2);
 	    luminosity_t kd2 = known (x, y + 2);
-	    d (x, y).green = (g_up + g_down) * (luminosity_t)0.5
+	    d (x, y)[(int)ah_green] = (g_up + g_down) * (luminosity_t)0.5
 			     + (2 * known_val - ku2 - kd2)
 			       * (luminosity_t)0.25;
 	  }
@@ -737,19 +723,19 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
 	  {
 	    /* No cardinal green neighbors; use diagonal greens.  */
 	    bool tl_g = GEOMETRY::demosaic_entry_color (x - 1, y - 1)
-			== base_geometry::green;
+			== ah_green;
 	    bool tr_g = GEOMETRY::demosaic_entry_color (x + 1, y - 1)
-			== base_geometry::green;
+			== ah_green;
 	    bool bl_g = GEOMETRY::demosaic_entry_color (x - 1, y + 1)
-			== base_geometry::green;
+			== ah_green;
 	    bool br_g = GEOMETRY::demosaic_entry_color (x + 1, y + 1)
-			== base_geometry::green;
+			== ah_green;
 	    int count = 0;
 	    luminosity_t sum = 0;
-	    if (tl_g) { sum += dgreen (x - 1, y - 1); count++; }
-	    if (tr_g) { sum += dgreen (x + 1, y - 1); count++; }
-	    if (bl_g) { sum += dgreen (x - 1, y + 1); count++; }
-	    if (br_g) { sum += dgreen (x + 1, y + 1); count++; }
+	    if (tl_g) { sum += dch (x - 1, y - 1, ah_green); count++; }
+	    if (tr_g) { sum += dch (x + 1, y - 1, ah_green); count++; }
+	    if (bl_g) { sum += dch (x - 1, y + 1, ah_green); count++; }
+	    if (br_g) { sum += dch (x + 1, y + 1, ah_green); count++; }
 
 	    if (count > 0)
 	      {
@@ -759,7 +745,7 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
 		luminosity_t kd2 = known (x, y + 2);
 		luminosity_t lapl = (4 * known_val - kl2 - kr2 - ku2 - kd2)
 				    * (luminosity_t)0.125;
-		d (x, y).green = sum / count + lapl;
+		d (x, y)[(int)ah_green] = sum / count + lapl;
 	      }
 	  }
       }
@@ -773,153 +759,153 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
     for (int x = 0; x < w; x++)
       {
 	int color = GEOMETRY::demosaic_entry_color (x, y);
-	luminosity_t g_here = d (x, y).green;
+	luminosity_t g_here = d (x, y)[(int)ah_green];
 
 	/* Interpolate red if this pixel is not red.  */
-	if (color != base_geometry::red)
+	if (color != ah_red)
 	  {
 	    /* Check cardinal neighbors for red.  */
 	    bool l_r = GEOMETRY::demosaic_entry_color (x - 1, y)
-		       == base_geometry::red;
+		       == ah_red;
 	    bool r_r = GEOMETRY::demosaic_entry_color (x + 1, y)
-		       == base_geometry::red;
+		       == ah_red;
 	    bool u_r = GEOMETRY::demosaic_entry_color (x, y - 1)
-		       == base_geometry::red;
+		       == ah_red;
 	    bool d_r = GEOMETRY::demosaic_entry_color (x, y + 1)
-		       == base_geometry::red;
+		       == ah_red;
 	    bool h_r = l_r && r_r;
 	    bool v_r = u_r && d_r;
 
 	    if (h_r && v_r)
 	      {
-		luminosity_t rdl = d (x - 1, y).red - d (x - 1, y).green;
-		luminosity_t rdr = d (x + 1, y).red - d (x + 1, y).green;
-		luminosity_t rdu = d (x, y - 1).red - d (x, y - 1).green;
-		luminosity_t rdd = d (x, y + 1).red - d (x, y + 1).green;
+		luminosity_t rdl = d (x - 1, y)[(int)ah_red] - d (x - 1, y)[(int)ah_green];
+		luminosity_t rdr = d (x + 1, y)[(int)ah_red] - d (x + 1, y)[(int)ah_green];
+		luminosity_t rdu = d (x, y - 1)[(int)ah_red] - d (x, y - 1)[(int)ah_green];
+		luminosity_t rdd = d (x, y + 1)[(int)ah_red] - d (x, y + 1)[(int)ah_green];
 		luminosity_t rgh = fabs (rdl - rdr);
 		luminosity_t rgv = fabs (rdu - rdd);
 		if (rgh < rgv)
-		  d (x, y).red = g_here
+		  d (x, y)[(int)ah_red] = g_here
 				 + (rdl + rdr) * (luminosity_t)0.5;
 		else if (rgv < rgh)
-		  d (x, y).red = g_here
+		  d (x, y)[(int)ah_red] = g_here
 				 + (rdu + rdd) * (luminosity_t)0.5;
 		else
-		  d (x, y).red = g_here
+		  d (x, y)[(int)ah_red] = g_here
 				 + (rdl + rdr + rdu + rdd)
 				   * (luminosity_t)0.25;
 	      }
 	    else if (h_r)
 	      {
-		luminosity_t rdl = d (x - 1, y).red - d (x - 1, y).green;
-		luminosity_t rdr = d (x + 1, y).red - d (x + 1, y).green;
-		d (x, y).red = g_here
+		luminosity_t rdl = d (x - 1, y)[(int)ah_red] - d (x - 1, y)[(int)ah_green];
+		luminosity_t rdr = d (x + 1, y)[(int)ah_red] - d (x + 1, y)[(int)ah_green];
+		d (x, y)[(int)ah_red] = g_here
 			       + (rdl + rdr) * (luminosity_t)0.5;
 	      }
 	    else if (v_r)
 	      {
-		luminosity_t rdu = d (x, y - 1).red - d (x, y - 1).green;
-		luminosity_t rdd = d (x, y + 1).red - d (x, y + 1).green;
-		d (x, y).red = g_here
+		luminosity_t rdu = d (x, y - 1)[(int)ah_red] - d (x, y - 1)[(int)ah_green];
+		luminosity_t rdd = d (x, y + 1)[(int)ah_red] - d (x, y + 1)[(int)ah_green];
+		d (x, y)[(int)ah_red] = g_here
 			       + (rdu + rdd) * (luminosity_t)0.5;
 	      }
 	    else
 	      {
 		/* Check diagonals for red.  */
 		bool tl_r = GEOMETRY::demosaic_entry_color (x - 1, y - 1)
-			    == base_geometry::red;
+			    == ah_red;
 		bool tr_r = GEOMETRY::demosaic_entry_color (x + 1, y - 1)
-			    == base_geometry::red;
+			    == ah_red;
 		bool bl_r = GEOMETRY::demosaic_entry_color (x - 1, y + 1)
-			    == base_geometry::red;
+			    == ah_red;
 		bool br_r = GEOMETRY::demosaic_entry_color (x + 1, y + 1)
-			    == base_geometry::red;
+			    == ah_red;
 		int cnt = 0;
 		luminosity_t rdsum = 0;
-		if (tl_r) { rdsum += d (x - 1, y - 1).red
-				      - d (x - 1, y - 1).green; cnt++; }
-		if (tr_r) { rdsum += d (x + 1, y - 1).red
-				      - d (x + 1, y - 1).green; cnt++; }
-		if (bl_r) { rdsum += d (x - 1, y + 1).red
-				      - d (x - 1, y + 1).green; cnt++; }
-		if (br_r) { rdsum += d (x + 1, y + 1).red
-				      - d (x + 1, y + 1).green; cnt++; }
+		if (tl_r) { rdsum += d (x - 1, y - 1)[(int)ah_red]
+				      - d (x - 1, y - 1)[(int)ah_green]; cnt++; }
+		if (tr_r) { rdsum += d (x + 1, y - 1)[(int)ah_red]
+				      - d (x + 1, y - 1)[(int)ah_green]; cnt++; }
+		if (bl_r) { rdsum += d (x - 1, y + 1)[(int)ah_red]
+				      - d (x - 1, y + 1)[(int)ah_green]; cnt++; }
+		if (br_r) { rdsum += d (x + 1, y + 1)[(int)ah_red]
+				      - d (x + 1, y + 1)[(int)ah_green]; cnt++; }
 		if (cnt > 0)
-		  d (x, y).red = g_here + rdsum / cnt;
+		  d (x, y)[(int)ah_red] = g_here + rdsum / cnt;
 	      }
 	  }
 
 	/* Interpolate blue if this pixel is not blue.  */
-	if (color != base_geometry::blue)
+	if (color != ah_blue)
 	  {
 	    /* Check cardinal neighbors for blue.  */
 	    bool l_b = GEOMETRY::demosaic_entry_color (x - 1, y)
-		       == base_geometry::blue;
+		       == ah_blue;
 	    bool r_b = GEOMETRY::demosaic_entry_color (x + 1, y)
-		       == base_geometry::blue;
+		       == ah_blue;
 	    bool u_b = GEOMETRY::demosaic_entry_color (x, y - 1)
-		       == base_geometry::blue;
+		       == ah_blue;
 	    bool d_b = GEOMETRY::demosaic_entry_color (x, y + 1)
-		       == base_geometry::blue;
+		       == ah_blue;
 	    bool h_b = l_b && r_b;
 	    bool v_b = u_b && d_b;
 
 	    if (h_b && v_b)
 	      {
-		luminosity_t bdl = d (x - 1, y).blue - d (x - 1, y).green;
-		luminosity_t bdr = d (x + 1, y).blue - d (x + 1, y).green;
-		luminosity_t bdu = d (x, y - 1).blue - d (x, y - 1).green;
-		luminosity_t bdd = d (x, y + 1).blue - d (x, y + 1).green;
+		luminosity_t bdl = d (x - 1, y)[(int)ah_blue] - d (x - 1, y)[(int)ah_green];
+		luminosity_t bdr = d (x + 1, y)[(int)ah_blue] - d (x + 1, y)[(int)ah_green];
+		luminosity_t bdu = d (x, y - 1)[(int)ah_blue] - d (x, y - 1)[(int)ah_green];
+		luminosity_t bdd = d (x, y + 1)[(int)ah_blue] - d (x, y + 1)[(int)ah_green];
 		luminosity_t bgh = fabs (bdl - bdr);
 		luminosity_t bgv = fabs (bdu - bdd);
 		if (bgh < bgv)
-		  d (x, y).blue = g_here
+		  d (x, y)[(int)ah_blue] = g_here
 				  + (bdl + bdr) * (luminosity_t)0.5;
 		else if (bgv < bgh)
-		  d (x, y).blue = g_here
+		  d (x, y)[(int)ah_blue] = g_here
 				  + (bdu + bdd) * (luminosity_t)0.5;
 		else
-		  d (x, y).blue = g_here
+		  d (x, y)[(int)ah_blue] = g_here
 				  + (bdl + bdr + bdu + bdd)
 				    * (luminosity_t)0.25;
 	      }
 	    else if (h_b)
 	      {
-		luminosity_t bdl = d (x - 1, y).blue - d (x - 1, y).green;
-		luminosity_t bdr = d (x + 1, y).blue - d (x + 1, y).green;
-		d (x, y).blue = g_here
+		luminosity_t bdl = d (x - 1, y)[(int)ah_blue] - d (x - 1, y)[(int)ah_green];
+		luminosity_t bdr = d (x + 1, y)[(int)ah_blue] - d (x + 1, y)[(int)ah_green];
+		d (x, y)[(int)ah_blue] = g_here
 				+ (bdl + bdr) * (luminosity_t)0.5;
 	      }
 	    else if (v_b)
 	      {
-		luminosity_t bdu = d (x, y - 1).blue - d (x, y - 1).green;
-		luminosity_t bdd = d (x, y + 1).blue - d (x, y + 1).green;
-		d (x, y).blue = g_here
+		luminosity_t bdu = d (x, y - 1)[(int)ah_blue] - d (x, y - 1)[(int)ah_green];
+		luminosity_t bdd = d (x, y + 1)[(int)ah_blue] - d (x, y + 1)[(int)ah_green];
+		d (x, y)[(int)ah_blue] = g_here
 				+ (bdu + bdd) * (luminosity_t)0.5;
 	      }
 	    else
 	      {
 		/* Check diagonals for blue.  */
 		bool tl_b = GEOMETRY::demosaic_entry_color (x - 1, y - 1)
-			    == base_geometry::blue;
+			    == ah_blue;
 		bool tr_b = GEOMETRY::demosaic_entry_color (x + 1, y - 1)
-			    == base_geometry::blue;
+			    == ah_blue;
 		bool bl_b = GEOMETRY::demosaic_entry_color (x - 1, y + 1)
-			    == base_geometry::blue;
+			    == ah_blue;
 		bool br_b = GEOMETRY::demosaic_entry_color (x + 1, y + 1)
-			    == base_geometry::blue;
+			    == ah_blue;
 		int cnt = 0;
 		luminosity_t bdsum = 0;
-		if (tl_b) { bdsum += d (x - 1, y - 1).blue
-				      - d (x - 1, y - 1).green; cnt++; }
-		if (tr_b) { bdsum += d (x + 1, y - 1).blue
-				      - d (x + 1, y - 1).green; cnt++; }
-		if (bl_b) { bdsum += d (x - 1, y + 1).blue
-				      - d (x - 1, y + 1).green; cnt++; }
-		if (br_b) { bdsum += d (x + 1, y + 1).blue
-				      - d (x + 1, y + 1).green; cnt++; }
+		if (tl_b) { bdsum += d (x - 1, y - 1)[(int)ah_blue]
+				      - d (x - 1, y - 1)[(int)ah_green]; cnt++; }
+		if (tr_b) { bdsum += d (x + 1, y - 1)[(int)ah_blue]
+				      - d (x + 1, y - 1)[(int)ah_green]; cnt++; }
+		if (bl_b) { bdsum += d (x - 1, y + 1)[(int)ah_blue]
+				      - d (x - 1, y + 1)[(int)ah_green]; cnt++; }
+		if (br_b) { bdsum += d (x + 1, y + 1)[(int)ah_blue]
+				      - d (x + 1, y + 1)[(int)ah_green]; cnt++; }
 		if (cnt > 0)
-		  d (x, y).blue = g_here + bdsum / cnt;
+		  d (x, y)[(int)ah_blue] = g_here + bdsum / cnt;
 	      }
 	  }
       }
