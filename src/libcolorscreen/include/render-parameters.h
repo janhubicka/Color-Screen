@@ -280,7 +280,7 @@ struct render_parameters
     max_screen_demosaic
   };
   screen_demosaic_t screen_demosaic;
-  DLL_PUBLIC static const property_t screen_demosaic_names[(int)max_collection_quality];
+  DLL_PUBLIC static const property_t screen_demosaic_names[(int)max_screen_demosaic];
 
   /* Radius (in image pixels) the screen should be blured.  */
   coord_t screen_blur_radius;
@@ -551,7 +551,9 @@ struct render_parameters
            && green_strip_width == other.green_strip_width
            && invert == other.invert
            && screen_blur_radius == other.screen_blur_radius
-           && dye_balance == other.dye_balance && collection_quality == other.collection_quality
+           && dye_balance == other.dye_balance
+	   && collection_quality == other.collection_quality
+	   && screen_demosaic == other.screen_demosaic
            && film_characteristics_curve == other.film_characteristics_curve
            && restore_original_luminosity == other.restore_original_luminosity
            && output_curve == other.output_curve

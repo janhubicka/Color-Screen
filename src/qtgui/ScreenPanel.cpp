@@ -197,6 +197,14 @@ void ScreenPanel::setupUi() {
       [](ParameterState &s, int v) { s.rparams.collection_quality = (render_parameters::collection_quality_t)v; }
   );
 
+  // Screen Demosaic
+  addEnumParameter("Screen Demosaic",
+      render_parameters::screen_demosaic_names,
+      render_parameters::max_screen_demosaic,
+      [](const ParameterState &s) { return (int)s.rparams.screen_demosaic; },
+      [](ParameterState &s, int v) { s.rparams.screen_demosaic = (render_parameters::screen_demosaic_t)v; }
+  );
+
   ScreenPreviewPanel *preview =
       new ScreenPreviewPanel(m_stateGetter, m_stateSetter, m_imageGetter);
   m_previewPanel = preview;

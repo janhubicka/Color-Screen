@@ -62,7 +62,8 @@ get_new_paget_analysis (struct analyzer_params &p, int xshift, int yshift,
   if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, p.simulated_screen_ptr, width, height,
                     xshift, yshift, p.mode, p.collection_threshold, progress))
     {
-      ret->demosaic (progress);
+      if (p.demosaic == render_parameters::hamilton_adams_demosaic)
+        ret->demosaic (progress);
       return ret;
     }
   delete ret;
@@ -270,6 +271,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
         ? m_scr_to_img.get_param ().mesh_trans->id
         : 0,
     m_scr_to_img.get_param (),
+    m_params.screen_demosaic,
     &m_img,
     m_screen.get (),
     this,
