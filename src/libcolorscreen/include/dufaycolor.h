@@ -7,7 +7,8 @@ namespace colorscreen
 {
 
 /* Class expressing all knowledge on dufaycolor we have so far.  */
-class dufaycolor
+class dufaycolor : public base_geometry
+
 {
 public:
   /* New measuremet from Gawain's photo.  */
@@ -174,7 +175,7 @@ public:
   static bool tiff_with_primaries (const char *, bool);
 };
 
-struct dufay_geometry
+struct dufay_geometry : public base_geometry
 {
   /* There is red strip, green and blue patch per screen organized as follows:
     

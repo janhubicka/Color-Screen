@@ -3,7 +3,7 @@
 #include "base.h"
 namespace colorscreen
 {
-struct paget_geometry
+struct paget_geometry : public base_geometry
 {
   static constexpr const int red_width_scale = 1;
   static constexpr const int red_height_scale = 2;
@@ -177,6 +177,14 @@ struct paget_geometry
   point_t blue_entry_to_scr (int_point_t e)
   {
     return {e.x * (coord_t)0.5 + (coord_t)0.25, e.y * (coord_t)0.5 + (coord_t)0.25};
+  }
+  inline static point_t to_demosaiced_coordinates (point_t p)
+  {
+    return to_diagonal_coordinates (p) * 2;
+  }
+  inline static point_t from_demosaiced_coordinates (point_t p)
+  {
+    return from_diagonal_coordinates (p) * 0.25;
   }
 };
 }

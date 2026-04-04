@@ -61,7 +61,10 @@ get_new_paget_analysis (struct analyzer_params &p, int xshift, int yshift,
   analyze_paget *ret = new analyze_paget ();
   if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, p.simulated_screen_ptr, width, height,
                     xshift, yshift, p.mode, p.collection_threshold, progress))
-    return ret;
+    {
+      ret->demosaic (progress);
+      return ret;
+    }
   delete ret;
   return NULL;
 }

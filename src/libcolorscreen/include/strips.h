@@ -3,7 +3,7 @@
 #include "base.h"
 namespace colorscreen
 {
-struct strips_geometry
+struct strips_geometry : public base_geometry
 {
   /* Assume strips with horisontal strips
 

@@ -299,5 +299,57 @@ public:
 
 typedef image_area_base<int> int_image_area;
 typedef optional_image_area_base<int> int_optional_image_area;
+
+/* Base class for geometry specificatoins for analyzers of regular screens.  */
+struct base_geometry
+{
+#if 0
+  inline static point_t to_demosaiced_coordinates (point_t p)
+  {
+    return p;
+  }
+#endif
+  /* Convert demosaiced coordinates to screen coordinates.  */
+  inline static point_t from_demosaiced_coordinates (point_t p)
+  {
+    return p;
+  }
+  /* Convert screen coordinates to demosaiced coordinates.  */
+  inline static point_t to_demosaiced_coordinates (point_t p)
+  {
+    return p;
+  }
+#if 0
+  inline static int_point_t from_demosaiced_coordinates (int_point_t p)
+  {
+    return p;
+  }
+#endif
+  inline static int demosaic_period_x ()
+  {
+    return 2;
+  }
+  inline static int demosaic_period_y ()
+  {
+    return 2;
+  }
+  enum demosaic_entry_color
+  {
+    red,
+    gree,
+    blue,
+  };
+  inline static int demosaic_entry_color (int x, int y)
+  {
+    x &= 1;
+    y &= 1;
+    if (x == 0 && y == 0)
+      return green;
+    if (x == 1 && y == 1)
+      return red;
+    return blue;
+  }
+};
+
 }
 #endif

@@ -152,6 +152,14 @@ public:
     return m_contrast[y * m_width + x];
   }
 
+  rgbdata
+  demosaiced_data (int x, int y) const
+  {
+    return m_demosaiced[y * m_demosaiced_width + x];
+  }
+
+  virtual bool demosaic (progress_info *progress = NULL) = 0;
+
   virtual int find_best_match (int percentake, int max_percentage, analyze_base &other, int cpfind, coord_t *xshift, coord_t *yshift, int direction, scr_to_img &map, scr_to_img &other_map, FILE *report_file, progress_info *progress = NULL);
   void analyze_range (luminosity_t *rrmin, luminosity_t *rrmax, luminosity_t *rgmin, luminosity_t *rgmax, luminosity_t *rbmin, luminosity_t *rbmax);
   virtual bool write_screen (const char *filename, bitmap_2d *known_pixels, const char **error, progress_info *progress = NULL, luminosity_t rmin = 0, luminosity_t rmax = 1, luminosity_t gmin = 0, luminosity_t gmax = 1, luminosity_t bmin = 0, luminosity_t bmax = 1);
@@ -162,6 +170,7 @@ public:
     free (m_red);
     free (m_green);
     free (m_blue);
+    free (m_demosaiced);
     free (m_rgb_red);
     free (m_rgb_green);
     free (m_rgb_blue);
@@ -174,7 +183,7 @@ protected:
   /* Scales of R G and B tables as shifts.  I.e. 0 = one etry per screen period, 2 = two entries.  */
   analyze_base (int rwscl, int rhscl, int gwscl, int ghscl, int bwscl, int bhscl)
   : m_rwscl (rwscl), m_rhscl (rhscl), m_gwscl (gwscl), m_ghscl (ghscl), m_bwscl (bwscl), m_bhscl (bhscl),
-    m_xshift (0), m_yshift (0), m_width (0), m_height (0), m_red (0), m_green (0), m_blue (0),  m_rgb_red (0), m_rgb_green (0), m_rgb_blue (0), m_known_pixels (NULL), m_n_known_pixels (0),
+    m_xshift (0), m_yshift (0), m_width (0), m_height (0), m_demosaiced_width (0), m_demosaiced_xshift (0), m_demosaiced_height (0), m_demosaiced_yshift (0), m_red (0), m_green (0), m_blue (0), m_demosaiced (0),  m_rgb_red (0), m_rgb_green (0), m_rgb_blue (0), m_known_pixels (NULL), m_n_known_pixels (0),
     m_contrast (NULL)
   {
   }
@@ -186,7 +195,9 @@ protected:
   int m_bwscl;
   int m_bhscl;
   int m_xshift, m_yshift, m_width, m_height;
+  int m_demosaiced_width, m_demosaiced_xshift, m_demosaiced_height, m_demosaiced_yshift;
   luminosity_t *m_red, *m_green, *m_blue;
+  rgbdata *m_demosaiced;
   rgbdata *m_rgb_red, *m_rgb_green, *m_rgb_blue;
   bitmap_2d *m_known_pixels;
   int m_n_known_pixels;
@@ -204,6 +215,7 @@ public:
   {
   }
   inline pure_attr rgbdata bicubic_bw_interpolate (point_t scr);
+  inline pure_attr rgbdata bicubic_demosaiced_interpolate (point_t scr);
   inline pure_attr rgbdata bicubic_rgb_interpolate (point_t scr, rgbdata patch_proportions);
   inline pure_attr rgbdata bicubic_interpolate (point_t scr, rgbdata patch_proportions);
 
@@ -337,6 +349,7 @@ public:
 	blue += fast_rgb_blue (x * GEOMETRY::blue_width_scale + xx, y * GEOMETRY::blue_height_scale + yy);
     blue *= (1.0 / (GEOMETRY::blue_height_scale * GEOMETRY::blue_width_scale));
   }
+  virtual bool demosaic (progress_info *progress = NULL);
   bool analyze (render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, const screen *screen, const simulated_screen *simulated, int width, int height, int xshift, int yshift, mode mode, luminosity_t collection_threshold, progress_info *progress);
 protected:
   bool analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, const simulated_screen *simulated, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress);
@@ -478,12 +491,101 @@ analyze_base_worker<GEOMETRY>::bicubic_bw_interpolate (point_t scr)
 }
 template<typename GEOMETRY>
 inline pure_attr rgbdata
+analyze_base_worker<GEOMETRY>::bicubic_demosaiced_interpolate (point_t scr)
+{
+  point_t p = GEOMETRY::to_demosaiced_coordinates (scr);
+  int sx, sy;
+  coord_t rx = my_modf (p.x, &sx);
+  coord_t ry = my_modf (p.y, &sy); 
+  sx += m_demosaiced_xshift;
+  sy += m_demosaiced_yshift;
+  if (sx >= 1 && sx < m_demosaiced_width - 2 && sy >= 1 && sy < m_demosaiced_height - 2)
+    {
+      rgbdata ret;
+      ret.red = do_bicubic_interpolate ((vec_luminosity_t){demosaiced_data (sx-1, sy-1).red, demosaiced_data (sx, sy-1).red, demosaiced_data (sx+1, sy-1).red, demosaiced_data (sx+2, sy-1).red},
+				        (vec_luminosity_t){demosaiced_data (sx-1, sy  ).red, demosaiced_data (sx, sy  ).red, demosaiced_data (sx+1, sy  ).red, demosaiced_data (sx+2, sy  ).red},
+				        (vec_luminosity_t){demosaiced_data (sx-1, sy+1).red, demosaiced_data (sx, sy+1).red, demosaiced_data (sx+1, sy+1).red, demosaiced_data (sx+2, sy+1).red},
+				        (vec_luminosity_t){demosaiced_data (sx-1, sy+2).red, demosaiced_data (sx, sy+2).red, demosaiced_data (sx+1, sy+2).red, demosaiced_data (sx+2, sy+2).red}, {rx, ry});
+      ret.green = do_bicubic_interpolate ((vec_luminosity_t){demosaiced_data (sx-1, sy-1).green, demosaiced_data (sx, sy-1).green, demosaiced_data (sx+1, sy-1).green, demosaiced_data (sx+2, sy-1).green},
+				        (vec_luminosity_t){demosaiced_data (sx-1, sy  ).green, demosaiced_data (sx, sy  ).green, demosaiced_data (sx+1, sy  ).green, demosaiced_data (sx+2, sy  ).green},
+				        (vec_luminosity_t){demosaiced_data (sx-1, sy+1).green, demosaiced_data (sx, sy+1).green, demosaiced_data (sx+1, sy+1).green, demosaiced_data (sx+2, sy+1).green},
+				        (vec_luminosity_t){demosaiced_data (sx-1, sy+2).green, demosaiced_data (sx, sy+2).green, demosaiced_data (sx+1, sy+2).green, demosaiced_data (sx+2, sy+2).green}, {rx, ry});
+      ret.blue = do_bicubic_interpolate ((vec_luminosity_t){demosaiced_data (sx-1, sy-1).blue, demosaiced_data (sx, sy-1).blue, demosaiced_data (sx+1, sy-1).blue, demosaiced_data (sx+2, sy-1).blue},
+				        (vec_luminosity_t){demosaiced_data (sx-1, sy  ).blue, demosaiced_data (sx, sy  ).blue, demosaiced_data (sx+1, sy  ).blue, demosaiced_data (sx+2, sy  ).blue},
+				        (vec_luminosity_t){demosaiced_data (sx-1, sy+1).blue, demosaiced_data (sx, sy+1).blue, demosaiced_data (sx+1, sy+1).blue, demosaiced_data (sx+2, sy+1).blue},
+				        (vec_luminosity_t){demosaiced_data (sx-1, sy+2).blue, demosaiced_data (sx, sy+2).blue, demosaiced_data (sx+1, sy+2).blue, demosaiced_data (sx+2, sy+2).blue}, {rx, ry});
+      return ret;
+   }
+  return {(luminosity_t)0, (luminosity_t)0, (luminosity_t)0};
+}
+
+template<typename GEOMETRY>
+inline pure_attr rgbdata
 analyze_base_worker<GEOMETRY>::bicubic_interpolate (point_t scr, rgbdata patch_proportions)
 {
-  if (m_red)
+  if (m_demosaiced)
+    return bicubic_demosaiced_interpolate (scr);
+  else if (m_red)
     return bicubic_bw_interpolate (scr);
   else
     return bicubic_rgb_interpolate (scr, patch_proportions);
+}
+template<typename GEOMETRY>
+bool
+analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
+{
+  point_t topleft = GEOMETRY::to_demosaiced_coordinates ((point_t){(coord_t)-m_xshift, (coord_t)-m_yshift});
+  point_t topright = GEOMETRY::to_demosaiced_coordinates ((point_t){(coord_t)-m_xshift + m_width, (coord_t)-m_yshift});
+  point_t bottomleft = GEOMETRY::to_demosaiced_coordinates ((point_t){(coord_t)-m_xshift, (coord_t)-m_yshift + m_height});
+  point_t bottomright = GEOMETRY::to_demosaiced_coordinates ((point_t){(coord_t)-m_xshift + m_width, (coord_t)-m_yshift + m_height});
+  m_demosaiced_xshift = -std::min (topleft.x, std::min (topright.x, (std::min (bottomleft.x, bottomright.x))));
+  m_demosaiced_yshift = -std::min (topleft.y, std::min (topright.y, (std::min (bottomleft.y, bottomright.y))));
+  if (m_demosaiced_xshift > 0)
+    m_demosaiced_xshift -= m_demosaiced_xshift % GEOMETRY::demosaic_period_x ();
+  else
+    m_demosaiced_xshift = -(-m_demosaiced_xshift + (m_demosaiced_xshift % GEOMETRY::demosaic_period_x ()) - GEOMETRY::demosaic_period_x ());
+  if (m_demosaiced_yshift > 0)
+    m_demosaiced_yshift -= m_demosaiced_yshift % GEOMETRY::demosaic_period_y ();
+  else
+    m_demosaiced_yshift = -(-m_demosaiced_yshift + (m_demosaiced_yshift % GEOMETRY::demosaic_period_y ()) - GEOMETRY::demosaic_period_y ());
+  m_demosaiced_width = std::max (topleft.x, std::max (topright.x, (std::max (bottomleft.x, bottomright.x)))) + m_demosaiced_xshift;
+  m_demosaiced_height = std::max (topleft.y, std::max (topright.y, (std::max (bottomleft.y, bottomright.y)))) + m_demosaiced_yshift;
+  m_demosaiced_width = (m_demosaiced_width + GEOMETRY::demosaic_period_x () - 1)/ GEOMETRY::demosaic_period_x () * GEOMETRY::demosaic_period_x ();
+  m_demosaiced_height = (m_demosaiced_width + GEOMETRY::demosaic_period_y () - 1)/ GEOMETRY::demosaic_period_y () * GEOMETRY::demosaic_period_y ();
+  printf ("Demosaiced coords %i %i %i %i\n", m_demosaiced_xshift, m_demosaiced_yshift,  m_demosaiced_width, m_demosaiced_height);
+  m_demosaiced = (rgbdata *)calloc (m_demosaiced_width * m_demosaiced_height, sizeof (rgbdata));
+  if (!m_demosaiced)
+    return false;
+  for (int y = 0; y < m_demosaiced_height; y++)
+    for (int x = 0; x < m_demosaiced_width; x++)
+      {
+	point_t p = GEOMETRY::from_demosaiced_coordinates ((point_t){(coord_t)(x - m_demosaiced_xshift), (coord_t)(y - m_demosaiced_yshift)});
+	p.x += m_xshift;
+	p.y += m_yshift;
+	point_t off;
+	data_entry e = GEOMETRY::red_scr_to_entry (p, &off);
+	if (fabs (off.x) < 0.01 && fabs (off.y) < 0.01)
+	  {
+	    m_demosaiced [y * m_demosaiced_width + x].red = red (e.x, e.y);
+	    if (x < 4 && y < 4)
+		    printf ("%i %i red\n",x,y);
+	    continue;
+	  }
+	e = GEOMETRY::green_scr_to_entry (p, &off);
+	if (fabs (off.x) < 0.01 && fabs (off.y) < 0.01)
+	  {
+	    m_demosaiced [y * m_demosaiced_width + x].green = green (e.x, e.y);
+	    if (x < 4 && y < 4)
+		    printf ("%i %i green %f %f %f %f %i %i\n",x,y,p.x,p.y,off.x,off.y,(int)e.x,(int)e.y);
+	    continue;
+	  }
+	e = GEOMETRY::blue_scr_to_entry (p, &off);
+        m_demosaiced [y * m_demosaiced_width + x].blue = blue (e.x, e.y);
+	    if (x < 4 && y < 4)
+		    printf ("%i %i blue\n",x,y);
+	assert (fabs (off.x) < 0.01 && fabs (off.y) < 0.01);
+      }
+  return true;
 }
 }
 #endif
