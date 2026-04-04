@@ -272,6 +272,15 @@ struct render_parameters
   };
   collection_quality_t collection_quality;
   DLL_PUBLIC static const property_t collection_quality_names[(int)max_collection_quality];
+  /* Quality used when collection data for demosaicing.  */
+  enum screen_demosaic_t
+  {
+    bicubic_demosaic,
+    hamilton_adams_demosaic,
+    max_screen_demosaic
+  };
+  screen_demosaic_t screen_demosaic;
+  DLL_PUBLIC static const property_t screen_demosaic_names[(int)max_collection_quality];
 
   /* Radius (in image pixels) the screen should be blured.  */
   coord_t screen_blur_radius;
@@ -460,7 +469,7 @@ struct render_parameters
         tile_adjustments (),
 
         /* Patch density parameters.  */
-        film_gamma (1), collection_quality (simple_screen_collection), screen_blur_radius (0.5),
+        film_gamma (1), collection_quality (simple_screen_collection), screen_demosaic (bicubic_demosaic), screen_blur_radius (0.5),
         collection_threshold (0.2), red_strip_width (0),
         green_strip_width (0),
 

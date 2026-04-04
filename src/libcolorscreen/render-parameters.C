@@ -84,6 +84,10 @@ const property_t render_parameters::collection_quality_names []  = {
   { "simple-screen", "Simple-screen", "Collect denisty of patches on multiple pixels.  Do fast estimation on sharpened srceen filter." },
   { "simulated-screen", "Simulated-screen", "Collect denisty of patches on multiple pixels.  Render blured screen filter and sharpen it." },
 };
+const property_t render_parameters::screen_demosaic_names []  = {
+  { "bicubic", "Bicubic", "Bicubic interpolation" },
+  { "hamilton-adams", "Hamilton-adams", "Popular demosaicing algorithm." }
+};
 
 
 /* patch_portions describes how much percent of screen is occupied by red, green and blue

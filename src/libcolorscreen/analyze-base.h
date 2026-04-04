@@ -552,7 +552,7 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
   m_demosaiced_height = std::max (topleft.y, std::max (topright.y, (std::max (bottomleft.y, bottomright.y)))) + m_demosaiced_yshift;
   m_demosaiced_width = (m_demosaiced_width + GEOMETRY::demosaic_period_x () - 1)/ GEOMETRY::demosaic_period_x () * GEOMETRY::demosaic_period_x ();
   m_demosaiced_height = (m_demosaiced_height + GEOMETRY::demosaic_period_y () - 1)/ GEOMETRY::demosaic_period_y () * GEOMETRY::demosaic_period_y ();
-  printf ("Demosaiced coords %i %i %i %i\n", m_demosaiced_xshift, m_demosaiced_yshift,  m_demosaiced_width, m_demosaiced_height);
+  //printf ("Demosaiced coords %i %i %i %i\n", m_demosaiced_xshift, m_demosaiced_yshift,  m_demosaiced_width, m_demosaiced_height);
   m_demosaiced = (rgbdata *)calloc (m_demosaiced_width * m_demosaiced_height, sizeof (rgbdata));
   if (!m_demosaiced)
     return false;
