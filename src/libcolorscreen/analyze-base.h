@@ -560,15 +560,60 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
   int w = m_demosaiced_width;
   int h = m_demosaiced_height;
 
-  /* Step 1: Populate m_demosaiced with the mosaiced data.
-     Each pixel gets only its known channel value; others remain 0.
+  /* Accessor for the demosaiced array with bounds clamping (read/write).  */
+  auto d = [&](int x, int y) -> rgbdata &
+    {
+      x = std::clamp (x, 0, w - 1);
+      y = std::clamp (y, 0, h - 1);
+      return m_demosaiced[y * w + x];
+    };
 
-     The Bayer pattern (GB/BR) with period 2x2 is:
-       (x&1==0, y&1==0) -> Green
-       (x&1==1, y&1==0) -> Blue
-       (x&1==0, y&1==1) -> Blue
-       (x&1==1, y&1==1) -> Red
-     So blue appears at two positions per 2x2 tile.  */
+  /* Read-only accessors for mosaiced channel data.  Return 0 for
+     out-of-bounds.  Assert that only the expected channel was set
+     by step 1 (the other two channels should still be 0 from calloc).
+     These are valid only before step 2 modifies the green channel.  */
+  auto dred = [&](int x, int y) -> luminosity_t
+    {
+      if (x < 0 || x >= w || y < 0 || y >= h)
+	return 0;
+      assert (!debug
+	      || (m_demosaiced[y * w + x].green == 0
+		  && m_demosaiced[y * w + x].blue == 0));
+      return m_demosaiced[y * w + x].red;
+    };
+  auto dgreen = [&](int x, int y) -> luminosity_t
+    {
+      if (x < 0 || x >= w || y < 0 || y >= h)
+	return 0;
+      assert (!debug
+	      || (m_demosaiced[y * w + x].red == 0
+		  && m_demosaiced[y * w + x].blue == 0));
+      return m_demosaiced[y * w + x].green;
+    };
+  auto dblue = [&](int x, int y) -> luminosity_t
+    {
+      if (x < 0 || x >= w || y < 0 || y >= h)
+	return 0;
+      assert (!debug
+	      || (m_demosaiced[y * w + x].red == 0
+		  && m_demosaiced[y * w + x].green == 0));
+      return m_demosaiced[y * w + x].blue;
+    };
+
+  /* Return the known (mosaiced) channel value at position (x,y).
+     The color is determined by GEOMETRY.  */
+  auto known = [&](int x, int y) -> luminosity_t
+    {
+      switch (GEOMETRY::demosaic_entry_color (x, y))
+	{
+	case base_geometry::red: return dred (x, y);
+	case base_geometry::green: return dgreen (x, y);
+	default: return dblue (x, y);
+	}
+    };
+
+  /* Step 1: Populate m_demosaiced with the mosaiced data.
+     Each pixel gets only its known channel value; others remain 0.  */
   for (int y = 0; y < h; y++)
     for (int x = 0; x < w; x++)
       {
@@ -580,201 +625,297 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
 	if (fabs (off.x) < 0.01 && fabs (off.y) < 0.01)
 	  {
 	    m_demosaiced [y * w + x].red = red (e.x, e.y);
-	    assert (GEOMETRY::demosaic_entry_color (x, y) == GEOMETRY::red);
+	    assert (!debug
+		    || GEOMETRY::demosaic_entry_color (x, y)
+		       == base_geometry::red);
 	    continue;
 	  }
 	e = GEOMETRY::green_scr_to_entry (p, &off);
 	if (fabs (off.x) < 0.01 && fabs (off.y) < 0.01)
 	  {
 	    m_demosaiced [y * w + x].green = green (e.x, e.y);
-	    assert (GEOMETRY::demosaic_entry_color (x, y) == GEOMETRY::green);
+	    assert (!debug
+		    || GEOMETRY::demosaic_entry_color (x, y)
+		       == base_geometry::green);
 	    continue;
 	  }
 	e = GEOMETRY::blue_scr_to_entry (p, &off);
 	m_demosaiced [y * w + x].blue = blue (e.x, e.y);
-        assert (GEOMETRY::demosaic_entry_color (x, y) == GEOMETRY::blue);
+	assert (!debug
+		|| GEOMETRY::demosaic_entry_color (x, y)
+		   == base_geometry::blue);
 	assert (fabs (off.x) < 0.01 && fabs (off.y) < 0.01);
       }
 
-  /* Helper to access the demosaiced array with bounds clamping.  */
-  auto d = [&](int x, int y) -> rgbdata &
-    {
-      x = std::clamp (x, 0, w - 1);
-      y = std::clamp (y, 0, h - 1);
-      return m_demosaiced[y * w + x];
-    };
+  /* Step 2: Interpolate green channel at all non-green pixels.
 
-  /* Step 2: Hamilton-Adams interpolation of green channel.
-
-     Green is known at positions where (x&1)==0 && (y&1)==0.
-     We need to interpolate green at:
-       - Blue positions: (1,0) and (0,1) patterns
-       - Red positions:  (1,1) pattern
-
-     At each non-green pixel we compute horizontal and vertical
-     gradients from the known channel (blue or red) and choose the
-     direction with the smaller gradient.  The green estimate includes
-     a Laplacian correction from the known channel.  */
+     For each non-green pixel, check which cardinal and diagonal
+     neighbors are green and interpolate accordingly.
+     The Laplacian correction uses the known channel at the current
+     pixel and same-color pixels at distance 2.  */
   for (int y = 0; y < h; y++)
     for (int x = 0; x < w; x++)
       {
-	int xm = x & 1;
-	int ym = y & 1;
-
-	/* Skip green positions.  */
-	if (xm == 0 && ym == 0)
+	int color = GEOMETRY::demosaic_entry_color (x, y);
+	if (color == base_geometry::green)
 	  continue;
 
-	/* Determine the known channel at this pixel.  */
-	luminosity_t known_val;
-	if (xm == 1 && ym == 1)
-	  known_val = d (x, y).red; /* Red position.  */
-	else
-	  known_val = d (x, y).blue; /* Blue position.  */
+	luminosity_t known_val = known (x, y);
 
-	/* Get known channel values at neighboring pixels for gradient
-	   estimation.  For horizontal gradient we look at (x-2) and
-	   (x+2) which are same-color pixels, and for vertical at
-	   (y-2) and (y+2).  */
-	luminosity_t known_left2, known_right2, known_up2, known_down2;
-	if (xm == 1 && ym == 1)
+	/* Check which cardinal neighbors are green.  */
+	bool left_g  = GEOMETRY::demosaic_entry_color (x - 1, y)
+		       == base_geometry::green;
+	bool right_g = GEOMETRY::demosaic_entry_color (x + 1, y)
+		       == base_geometry::green;
+	bool up_g    = GEOMETRY::demosaic_entry_color (x, y - 1)
+		       == base_geometry::green;
+	bool down_g  = GEOMETRY::demosaic_entry_color (x, y + 1)
+		       == base_geometry::green;
+	bool h_green = left_g && right_g;
+	bool v_green = up_g && down_g;
+
+	if (h_green && v_green)
 	  {
-	    /* Red pixel.  Same-color neighbors are 2 steps away.  */
-	    known_left2  = d (x - 2, y).red;
-	    known_right2 = d (x + 2, y).red;
-	    known_up2    = d (x, y - 2).red;
-	    known_down2  = d (x, y + 2).red;
+	    /* Green in both cardinal directions: Hamilton-Adams.  */
+	    luminosity_t g_left  = dgreen (x - 1, y);
+	    luminosity_t g_right = dgreen (x + 1, y);
+	    luminosity_t g_up    = dgreen (x, y - 1);
+	    luminosity_t g_down  = dgreen (x, y + 1);
+	    luminosity_t kl2 = known (x - 2, y);
+	    luminosity_t kr2 = known (x + 2, y);
+	    luminosity_t ku2 = known (x, y - 2);
+	    luminosity_t kd2 = known (x, y + 2);
+
+	    luminosity_t grad_h = fabs (g_left - g_right)
+				  + fabs (2 * known_val - kl2 - kr2);
+	    luminosity_t grad_v = fabs (g_up - g_down)
+				  + fabs (2 * known_val - ku2 - kd2);
+	    luminosity_t lapl_h = (2 * known_val - kl2 - kr2)
+				  * (luminosity_t)0.25;
+	    luminosity_t lapl_v = (2 * known_val - ku2 - kd2)
+				  * (luminosity_t)0.25;
+
+	    if (grad_h < grad_v)
+	      d (x, y).green = (g_left + g_right) * (luminosity_t)0.5
+			       + lapl_h;
+	    else if (grad_v < grad_h)
+	      d (x, y).green = (g_up + g_down) * (luminosity_t)0.5
+			       + lapl_v;
+	    else
+	      d (x, y).green = (g_left + g_right + g_up + g_down)
+			       * (luminosity_t)0.25
+			       + (lapl_h + lapl_v) * (luminosity_t)0.5;
+	  }
+	else if (h_green)
+	  {
+	    /* Green only in horizontal direction.  */
+	    luminosity_t g_left  = dgreen (x - 1, y);
+	    luminosity_t g_right = dgreen (x + 1, y);
+	    luminosity_t kl2 = known (x - 2, y);
+	    luminosity_t kr2 = known (x + 2, y);
+	    d (x, y).green = (g_left + g_right) * (luminosity_t)0.5
+			     + (2 * known_val - kl2 - kr2)
+			       * (luminosity_t)0.25;
+	  }
+	else if (v_green)
+	  {
+	    /* Green only in vertical direction.  */
+	    luminosity_t g_up   = dgreen (x, y - 1);
+	    luminosity_t g_down = dgreen (x, y + 1);
+	    luminosity_t ku2 = known (x, y - 2);
+	    luminosity_t kd2 = known (x, y + 2);
+	    d (x, y).green = (g_up + g_down) * (luminosity_t)0.5
+			     + (2 * known_val - ku2 - kd2)
+			       * (luminosity_t)0.25;
 	  }
 	else
 	  {
-	    /* Blue pixel.  Same-color neighbors are 2 steps away.  */
-	    known_left2  = d (x - 2, y).blue;
-	    known_right2 = d (x + 2, y).blue;
-	    known_up2    = d (x, y - 2).blue;
-	    known_down2  = d (x, y + 2).blue;
+	    /* No cardinal green neighbors; use diagonal greens.  */
+	    bool tl_g = GEOMETRY::demosaic_entry_color (x - 1, y - 1)
+			== base_geometry::green;
+	    bool tr_g = GEOMETRY::demosaic_entry_color (x + 1, y - 1)
+			== base_geometry::green;
+	    bool bl_g = GEOMETRY::demosaic_entry_color (x - 1, y + 1)
+			== base_geometry::green;
+	    bool br_g = GEOMETRY::demosaic_entry_color (x + 1, y + 1)
+			== base_geometry::green;
+	    int count = 0;
+	    luminosity_t sum = 0;
+	    if (tl_g) { sum += dgreen (x - 1, y - 1); count++; }
+	    if (tr_g) { sum += dgreen (x + 1, y - 1); count++; }
+	    if (bl_g) { sum += dgreen (x - 1, y + 1); count++; }
+	    if (br_g) { sum += dgreen (x + 1, y + 1); count++; }
+
+	    if (count > 0)
+	      {
+		luminosity_t kl2 = known (x - 2, y);
+		luminosity_t kr2 = known (x + 2, y);
+		luminosity_t ku2 = known (x, y - 2);
+		luminosity_t kd2 = known (x, y + 2);
+		luminosity_t lapl = (4 * known_val - kl2 - kr2 - ku2 - kd2)
+				    * (luminosity_t)0.125;
+		d (x, y).green = sum / count + lapl;
+	      }
 	  }
-
-	/* Horizontal gradient: difference of green neighbors
-	   plus Laplacian of the known channel.  */
-	luminosity_t g_left  = d (x - 1, y).green;
-	luminosity_t g_right = d (x + 1, y).green;
-	luminosity_t g_up    = d (x, y - 1).green;
-	luminosity_t g_down  = d (x, y + 1).green;
-
-	luminosity_t grad_h = fabs (g_left - g_right)
-			      + fabs (2 * known_val - known_left2 - known_right2);
-	luminosity_t grad_v = fabs (g_up - g_down)
-			      + fabs (2 * known_val - known_up2 - known_down2);
-
-	luminosity_t green_est;
-	if (grad_h < grad_v)
-	  /* Horizontal direction is smoother: interpolate horizontally.  */
-	  green_est = (g_left + g_right) * (luminosity_t)0.5
-		      + (2 * known_val - known_left2 - known_right2) * (luminosity_t)0.25;
-	else if (grad_v < grad_h)
-	  /* Vertical direction is smoother: interpolate vertically.  */
-	  green_est = (g_up + g_down) * (luminosity_t)0.5
-		      + (2 * known_val - known_up2 - known_down2) * (luminosity_t)0.25;
-	else
-	  /* Equal gradients: average both directions.  */
-	  green_est = (g_left + g_right + g_up + g_down) * (luminosity_t)0.25
-		      + (2 * known_val - known_left2 - known_right2
-			 + 2 * known_val - known_up2 - known_down2) * (luminosity_t)0.125;
-
-	d (x, y).green = green_est;
       }
 
   /* Step 3: Interpolate red and blue at positions where they are missing.
 
      Now green is fully populated.  We use green-channel-guided
-     interpolation for the remaining channels.
-
-     Three cases:
-     a) Green pixel (x&1==0, y&1==0): missing red and blue.
-	Red neighbors are at diagonal positions (x+/-1, y+/-1).
-	Blue neighbors are at (x+/-1, y) and (x, y+/-1).
-     b) Blue pixel at (1,0): missing red.
-	Red neighbors are at (x, y+/-1).
-     c) Blue pixel at (0,1): missing red.
-	Red neighbors are at (x+/-1, y).
-     d) Red pixel (1,1): missing blue.
-	Blue neighbors are at (x+/-1, y) and (x, y+/-1).
-
-     We interpolate color differences (R-G, B-G) and reconstruct
-     by adding the interpolated difference to the local green.  */
+     color-difference interpolation: interpolate (C-G) from
+     positions where C is known, then add local green.  */
   for (int y = 0; y < h; y++)
     for (int x = 0; x < w; x++)
       {
-	int xm = x & 1;
-	int ym = y & 1;
+	int color = GEOMETRY::demosaic_entry_color (x, y);
 	luminosity_t g_here = d (x, y).green;
 
-	if (xm == 0 && ym == 0)
+	/* Interpolate red if this pixel is not red.  */
+	if (color != base_geometry::red)
 	  {
-	    /* Green pixel: interpolate both red and blue.  */
+	    /* Check cardinal neighbors for red.  */
+	    bool l_r = GEOMETRY::demosaic_entry_color (x - 1, y)
+		       == base_geometry::red;
+	    bool r_r = GEOMETRY::demosaic_entry_color (x + 1, y)
+		       == base_geometry::red;
+	    bool u_r = GEOMETRY::demosaic_entry_color (x, y - 1)
+		       == base_geometry::red;
+	    bool d_r = GEOMETRY::demosaic_entry_color (x, y + 1)
+		       == base_geometry::red;
+	    bool h_r = l_r && r_r;
+	    bool v_r = u_r && d_r;
 
-	    /* Red: diagonal neighbors at (x+/-1, y+/-1) are red pixels.
-	       Use bilinear of (R-G) at those four positions.  */
-	    luminosity_t rd_tl = d (x - 1, y - 1).red - d (x - 1, y - 1).green;
-	    luminosity_t rd_tr = d (x + 1, y - 1).red - d (x + 1, y - 1).green;
-	    luminosity_t rd_bl = d (x - 1, y + 1).red - d (x - 1, y + 1).green;
-	    luminosity_t rd_br = d (x + 1, y + 1).red - d (x + 1, y + 1).green;
-	    d (x, y).red = g_here + (rd_tl + rd_tr + rd_bl + rd_br) * (luminosity_t)0.25;
-
-	    /* Blue: neighbors at (x+/-1, y) and (x, y+/-1) are blue pixels.
-	       Use directional interpolation with gradient selection.  */
-	    luminosity_t bd_left  = d (x - 1, y).blue - d (x - 1, y).green;
-	    luminosity_t bd_right = d (x + 1, y).blue - d (x + 1, y).green;
-	    luminosity_t bd_up    = d (x, y - 1).blue - d (x, y - 1).green;
-	    luminosity_t bd_down  = d (x, y + 1).blue - d (x, y + 1).green;
-
-	    luminosity_t bgrad_h = fabs (bd_left - bd_right);
-	    luminosity_t bgrad_v = fabs (bd_up - bd_down);
-
-	    if (bgrad_h < bgrad_v)
-	      d (x, y).blue = g_here + (bd_left + bd_right) * (luminosity_t)0.5;
-	    else if (bgrad_v < bgrad_h)
-	      d (x, y).blue = g_here + (bd_up + bd_down) * (luminosity_t)0.5;
+	    if (h_r && v_r)
+	      {
+		luminosity_t rdl = d (x - 1, y).red - d (x - 1, y).green;
+		luminosity_t rdr = d (x + 1, y).red - d (x + 1, y).green;
+		luminosity_t rdu = d (x, y - 1).red - d (x, y - 1).green;
+		luminosity_t rdd = d (x, y + 1).red - d (x, y + 1).green;
+		luminosity_t rgh = fabs (rdl - rdr);
+		luminosity_t rgv = fabs (rdu - rdd);
+		if (rgh < rgv)
+		  d (x, y).red = g_here
+				 + (rdl + rdr) * (luminosity_t)0.5;
+		else if (rgv < rgh)
+		  d (x, y).red = g_here
+				 + (rdu + rdd) * (luminosity_t)0.5;
+		else
+		  d (x, y).red = g_here
+				 + (rdl + rdr + rdu + rdd)
+				   * (luminosity_t)0.25;
+	      }
+	    else if (h_r)
+	      {
+		luminosity_t rdl = d (x - 1, y).red - d (x - 1, y).green;
+		luminosity_t rdr = d (x + 1, y).red - d (x + 1, y).green;
+		d (x, y).red = g_here
+			       + (rdl + rdr) * (luminosity_t)0.5;
+	      }
+	    else if (v_r)
+	      {
+		luminosity_t rdu = d (x, y - 1).red - d (x, y - 1).green;
+		luminosity_t rdd = d (x, y + 1).red - d (x, y + 1).green;
+		d (x, y).red = g_here
+			       + (rdu + rdd) * (luminosity_t)0.5;
+	      }
 	    else
-	      d (x, y).blue = g_here + (bd_left + bd_right + bd_up + bd_down) * (luminosity_t)0.25;
+	      {
+		/* Check diagonals for red.  */
+		bool tl_r = GEOMETRY::demosaic_entry_color (x - 1, y - 1)
+			    == base_geometry::red;
+		bool tr_r = GEOMETRY::demosaic_entry_color (x + 1, y - 1)
+			    == base_geometry::red;
+		bool bl_r = GEOMETRY::demosaic_entry_color (x - 1, y + 1)
+			    == base_geometry::red;
+		bool br_r = GEOMETRY::demosaic_entry_color (x + 1, y + 1)
+			    == base_geometry::red;
+		int cnt = 0;
+		luminosity_t rdsum = 0;
+		if (tl_r) { rdsum += d (x - 1, y - 1).red
+				      - d (x - 1, y - 1).green; cnt++; }
+		if (tr_r) { rdsum += d (x + 1, y - 1).red
+				      - d (x + 1, y - 1).green; cnt++; }
+		if (bl_r) { rdsum += d (x - 1, y + 1).red
+				      - d (x - 1, y + 1).green; cnt++; }
+		if (br_r) { rdsum += d (x + 1, y + 1).red
+				      - d (x + 1, y + 1).green; cnt++; }
+		if (cnt > 0)
+		  d (x, y).red = g_here + rdsum / cnt;
+	      }
 	  }
-	else if (xm == 1 && ym == 1)
+
+	/* Interpolate blue if this pixel is not blue.  */
+	if (color != base_geometry::blue)
 	  {
-	    /* Red pixel: interpolate blue.
-	       Blue neighbors are at (x+/-1, y) and (x, y+/-1).
-	       Use directional interpolation on (B-G).  */
-	    luminosity_t bd_left  = d (x - 1, y).blue - d (x - 1, y).green;
-	    luminosity_t bd_right = d (x + 1, y).blue - d (x + 1, y).green;
-	    luminosity_t bd_up    = d (x, y - 1).blue - d (x, y - 1).green;
-	    luminosity_t bd_down  = d (x, y + 1).blue - d (x, y + 1).green;
+	    /* Check cardinal neighbors for blue.  */
+	    bool l_b = GEOMETRY::demosaic_entry_color (x - 1, y)
+		       == base_geometry::blue;
+	    bool r_b = GEOMETRY::demosaic_entry_color (x + 1, y)
+		       == base_geometry::blue;
+	    bool u_b = GEOMETRY::demosaic_entry_color (x, y - 1)
+		       == base_geometry::blue;
+	    bool d_b = GEOMETRY::demosaic_entry_color (x, y + 1)
+		       == base_geometry::blue;
+	    bool h_b = l_b && r_b;
+	    bool v_b = u_b && d_b;
 
-	    luminosity_t bgrad_h = fabs (bd_left - bd_right);
-	    luminosity_t bgrad_v = fabs (bd_up - bd_down);
-
-	    if (bgrad_h < bgrad_v)
-	      d (x, y).blue = g_here + (bd_left + bd_right) * (luminosity_t)0.5;
-	    else if (bgrad_v < bgrad_h)
-	      d (x, y).blue = g_here + (bd_up + bd_down) * (luminosity_t)0.5;
+	    if (h_b && v_b)
+	      {
+		luminosity_t bdl = d (x - 1, y).blue - d (x - 1, y).green;
+		luminosity_t bdr = d (x + 1, y).blue - d (x + 1, y).green;
+		luminosity_t bdu = d (x, y - 1).blue - d (x, y - 1).green;
+		luminosity_t bdd = d (x, y + 1).blue - d (x, y + 1).green;
+		luminosity_t bgh = fabs (bdl - bdr);
+		luminosity_t bgv = fabs (bdu - bdd);
+		if (bgh < bgv)
+		  d (x, y).blue = g_here
+				  + (bdl + bdr) * (luminosity_t)0.5;
+		else if (bgv < bgh)
+		  d (x, y).blue = g_here
+				  + (bdu + bdd) * (luminosity_t)0.5;
+		else
+		  d (x, y).blue = g_here
+				  + (bdl + bdr + bdu + bdd)
+				    * (luminosity_t)0.25;
+	      }
+	    else if (h_b)
+	      {
+		luminosity_t bdl = d (x - 1, y).blue - d (x - 1, y).green;
+		luminosity_t bdr = d (x + 1, y).blue - d (x + 1, y).green;
+		d (x, y).blue = g_here
+				+ (bdl + bdr) * (luminosity_t)0.5;
+	      }
+	    else if (v_b)
+	      {
+		luminosity_t bdu = d (x, y - 1).blue - d (x, y - 1).green;
+		luminosity_t bdd = d (x, y + 1).blue - d (x, y + 1).green;
+		d (x, y).blue = g_here
+				+ (bdu + bdd) * (luminosity_t)0.5;
+	      }
 	    else
-	      d (x, y).blue = g_here + (bd_left + bd_right + bd_up + bd_down) * (luminosity_t)0.25;
-	  }
-	else if (xm == 1 && ym == 0)
-	  {
-	    /* Blue pixel at (1,0): interpolate red.
-	       Red neighbors are at (x, y-1) and (x, y+1), i.e. vertical.
-	       Also at (x-2, y) blue, (x+2, y) blue same-row, but red is
-	       at (x, y+/-1).   Use (R-G) at the two vertical neighbors.  */
-	    luminosity_t rd_up   = d (x, y - 1).red - d (x, y - 1).green;
-	    luminosity_t rd_down = d (x, y + 1).red - d (x, y + 1).green;
-	    d (x, y).red = g_here + (rd_up + rd_down) * (luminosity_t)0.5;
-	  }
-	else /* xm == 0 && ym == 1 */
-	  {
-	    /* Blue pixel at (0,1): interpolate red.
-	       Red neighbors are at (x-1, y) and (x+1, y), i.e. horizontal.  */
-	    luminosity_t rd_left  = d (x - 1, y).red - d (x - 1, y).green;
-	    luminosity_t rd_right = d (x + 1, y).red - d (x + 1, y).green;
-	    d (x, y).red = g_here + (rd_left + rd_right) * (luminosity_t)0.5;
+	      {
+		/* Check diagonals for blue.  */
+		bool tl_b = GEOMETRY::demosaic_entry_color (x - 1, y - 1)
+			    == base_geometry::blue;
+		bool tr_b = GEOMETRY::demosaic_entry_color (x + 1, y - 1)
+			    == base_geometry::blue;
+		bool bl_b = GEOMETRY::demosaic_entry_color (x - 1, y + 1)
+			    == base_geometry::blue;
+		bool br_b = GEOMETRY::demosaic_entry_color (x + 1, y + 1)
+			    == base_geometry::blue;
+		int cnt = 0;
+		luminosity_t bdsum = 0;
+		if (tl_b) { bdsum += d (x - 1, y - 1).blue
+				      - d (x - 1, y - 1).green; cnt++; }
+		if (tr_b) { bdsum += d (x + 1, y - 1).blue
+				      - d (x + 1, y - 1).green; cnt++; }
+		if (bl_b) { bdsum += d (x - 1, y + 1).blue
+				      - d (x - 1, y + 1).green; cnt++; }
+		if (br_b) { bdsum += d (x + 1, y + 1).blue
+				      - d (x + 1, y + 1).green; cnt++; }
+		if (cnt > 0)
+		  d (x, y).blue = g_here + bdsum / cnt;
+	      }
 	  }
       }
 
@@ -783,3 +924,4 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
 
 }
 #endif
+
