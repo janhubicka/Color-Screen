@@ -551,13 +551,26 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
   m_demosaiced_width = std::max (topleft.x, std::max (topright.x, (std::max (bottomleft.x, bottomright.x)))) + m_demosaiced_xshift;
   m_demosaiced_height = std::max (topleft.y, std::max (topright.y, (std::max (bottomleft.y, bottomright.y)))) + m_demosaiced_yshift;
   m_demosaiced_width = (m_demosaiced_width + GEOMETRY::demosaic_period_x () - 1)/ GEOMETRY::demosaic_period_x () * GEOMETRY::demosaic_period_x ();
-  m_demosaiced_height = (m_demosaiced_width + GEOMETRY::demosaic_period_y () - 1)/ GEOMETRY::demosaic_period_y () * GEOMETRY::demosaic_period_y ();
+  m_demosaiced_height = (m_demosaiced_height + GEOMETRY::demosaic_period_y () - 1)/ GEOMETRY::demosaic_period_y () * GEOMETRY::demosaic_period_y ();
   printf ("Demosaiced coords %i %i %i %i\n", m_demosaiced_xshift, m_demosaiced_yshift,  m_demosaiced_width, m_demosaiced_height);
   m_demosaiced = (rgbdata *)calloc (m_demosaiced_width * m_demosaiced_height, sizeof (rgbdata));
   if (!m_demosaiced)
     return false;
-  for (int y = 0; y < m_demosaiced_height; y++)
-    for (int x = 0; x < m_demosaiced_width; x++)
+
+  int w = m_demosaiced_width;
+  int h = m_demosaiced_height;
+
+  /* Step 1: Populate m_demosaiced with the mosaiced data.
+     Each pixel gets only its known channel value; others remain 0.
+
+     The Bayer pattern (GB/BR) with period 2x2 is:
+       (x&1==0, y&1==0) -> Green
+       (x&1==1, y&1==0) -> Blue
+       (x&1==0, y&1==1) -> Blue
+       (x&1==1, y&1==1) -> Red
+     So blue appears at two positions per 2x2 tile.  */
+  for (int y = 0; y < h; y++)
+    for (int x = 0; x < w; x++)
       {
 	point_t p = GEOMETRY::from_demosaiced_coordinates ((point_t){(coord_t)(x - m_demosaiced_xshift), (coord_t)(y - m_demosaiced_yshift)});
 	p.x += m_xshift;
@@ -566,26 +579,207 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
 	data_entry e = GEOMETRY::red_scr_to_entry (p, &off);
 	if (fabs (off.x) < 0.01 && fabs (off.y) < 0.01)
 	  {
-	    m_demosaiced [y * m_demosaiced_width + x].red = red (e.x, e.y);
-	    if (x < 4 && y < 4)
-		    printf ("%i %i red\n",x,y);
+	    m_demosaiced [y * w + x].red = red (e.x, e.y);
+	    assert (GEOMETRY::demosaic_entry_color (x, y) == GEOMETRY::red);
 	    continue;
 	  }
 	e = GEOMETRY::green_scr_to_entry (p, &off);
 	if (fabs (off.x) < 0.01 && fabs (off.y) < 0.01)
 	  {
-	    m_demosaiced [y * m_demosaiced_width + x].green = green (e.x, e.y);
-	    if (x < 4 && y < 4)
-		    printf ("%i %i green %f %f %f %f %i %i\n",x,y,p.x,p.y,off.x,off.y,(int)e.x,(int)e.y);
+	    m_demosaiced [y * w + x].green = green (e.x, e.y);
+	    assert (GEOMETRY::demosaic_entry_color (x, y) == GEOMETRY::green);
 	    continue;
 	  }
 	e = GEOMETRY::blue_scr_to_entry (p, &off);
-        m_demosaiced [y * m_demosaiced_width + x].blue = blue (e.x, e.y);
-	    if (x < 4 && y < 4)
-		    printf ("%i %i blue\n",x,y);
+	m_demosaiced [y * w + x].blue = blue (e.x, e.y);
+        assert (GEOMETRY::demosaic_entry_color (x, y) == GEOMETRY::blue);
 	assert (fabs (off.x) < 0.01 && fabs (off.y) < 0.01);
       }
+
+  /* Helper to access the demosaiced array with bounds clamping.  */
+  auto d = [&](int x, int y) -> rgbdata &
+    {
+      x = std::clamp (x, 0, w - 1);
+      y = std::clamp (y, 0, h - 1);
+      return m_demosaiced[y * w + x];
+    };
+
+  /* Step 2: Hamilton-Adams interpolation of green channel.
+
+     Green is known at positions where (x&1)==0 && (y&1)==0.
+     We need to interpolate green at:
+       - Blue positions: (1,0) and (0,1) patterns
+       - Red positions:  (1,1) pattern
+
+     At each non-green pixel we compute horizontal and vertical
+     gradients from the known channel (blue or red) and choose the
+     direction with the smaller gradient.  The green estimate includes
+     a Laplacian correction from the known channel.  */
+  for (int y = 0; y < h; y++)
+    for (int x = 0; x < w; x++)
+      {
+	int xm = x & 1;
+	int ym = y & 1;
+
+	/* Skip green positions.  */
+	if (xm == 0 && ym == 0)
+	  continue;
+
+	/* Determine the known channel at this pixel.  */
+	luminosity_t known_val;
+	if (xm == 1 && ym == 1)
+	  known_val = d (x, y).red; /* Red position.  */
+	else
+	  known_val = d (x, y).blue; /* Blue position.  */
+
+	/* Get known channel values at neighboring pixels for gradient
+	   estimation.  For horizontal gradient we look at (x-2) and
+	   (x+2) which are same-color pixels, and for vertical at
+	   (y-2) and (y+2).  */
+	luminosity_t known_left2, known_right2, known_up2, known_down2;
+	if (xm == 1 && ym == 1)
+	  {
+	    /* Red pixel.  Same-color neighbors are 2 steps away.  */
+	    known_left2  = d (x - 2, y).red;
+	    known_right2 = d (x + 2, y).red;
+	    known_up2    = d (x, y - 2).red;
+	    known_down2  = d (x, y + 2).red;
+	  }
+	else
+	  {
+	    /* Blue pixel.  Same-color neighbors are 2 steps away.  */
+	    known_left2  = d (x - 2, y).blue;
+	    known_right2 = d (x + 2, y).blue;
+	    known_up2    = d (x, y - 2).blue;
+	    known_down2  = d (x, y + 2).blue;
+	  }
+
+	/* Horizontal gradient: difference of green neighbors
+	   plus Laplacian of the known channel.  */
+	luminosity_t g_left  = d (x - 1, y).green;
+	luminosity_t g_right = d (x + 1, y).green;
+	luminosity_t g_up    = d (x, y - 1).green;
+	luminosity_t g_down  = d (x, y + 1).green;
+
+	luminosity_t grad_h = fabs (g_left - g_right)
+			      + fabs (2 * known_val - known_left2 - known_right2);
+	luminosity_t grad_v = fabs (g_up - g_down)
+			      + fabs (2 * known_val - known_up2 - known_down2);
+
+	luminosity_t green_est;
+	if (grad_h < grad_v)
+	  /* Horizontal direction is smoother: interpolate horizontally.  */
+	  green_est = (g_left + g_right) * (luminosity_t)0.5
+		      + (2 * known_val - known_left2 - known_right2) * (luminosity_t)0.25;
+	else if (grad_v < grad_h)
+	  /* Vertical direction is smoother: interpolate vertically.  */
+	  green_est = (g_up + g_down) * (luminosity_t)0.5
+		      + (2 * known_val - known_up2 - known_down2) * (luminosity_t)0.25;
+	else
+	  /* Equal gradients: average both directions.  */
+	  green_est = (g_left + g_right + g_up + g_down) * (luminosity_t)0.25
+		      + (2 * known_val - known_left2 - known_right2
+			 + 2 * known_val - known_up2 - known_down2) * (luminosity_t)0.125;
+
+	d (x, y).green = green_est;
+      }
+
+  /* Step 3: Interpolate red and blue at positions where they are missing.
+
+     Now green is fully populated.  We use green-channel-guided
+     interpolation for the remaining channels.
+
+     Three cases:
+     a) Green pixel (x&1==0, y&1==0): missing red and blue.
+	Red neighbors are at diagonal positions (x+/-1, y+/-1).
+	Blue neighbors are at (x+/-1, y) and (x, y+/-1).
+     b) Blue pixel at (1,0): missing red.
+	Red neighbors are at (x, y+/-1).
+     c) Blue pixel at (0,1): missing red.
+	Red neighbors are at (x+/-1, y).
+     d) Red pixel (1,1): missing blue.
+	Blue neighbors are at (x+/-1, y) and (x, y+/-1).
+
+     We interpolate color differences (R-G, B-G) and reconstruct
+     by adding the interpolated difference to the local green.  */
+  for (int y = 0; y < h; y++)
+    for (int x = 0; x < w; x++)
+      {
+	int xm = x & 1;
+	int ym = y & 1;
+	luminosity_t g_here = d (x, y).green;
+
+	if (xm == 0 && ym == 0)
+	  {
+	    /* Green pixel: interpolate both red and blue.  */
+
+	    /* Red: diagonal neighbors at (x+/-1, y+/-1) are red pixels.
+	       Use bilinear of (R-G) at those four positions.  */
+	    luminosity_t rd_tl = d (x - 1, y - 1).red - d (x - 1, y - 1).green;
+	    luminosity_t rd_tr = d (x + 1, y - 1).red - d (x + 1, y - 1).green;
+	    luminosity_t rd_bl = d (x - 1, y + 1).red - d (x - 1, y + 1).green;
+	    luminosity_t rd_br = d (x + 1, y + 1).red - d (x + 1, y + 1).green;
+	    d (x, y).red = g_here + (rd_tl + rd_tr + rd_bl + rd_br) * (luminosity_t)0.25;
+
+	    /* Blue: neighbors at (x+/-1, y) and (x, y+/-1) are blue pixels.
+	       Use directional interpolation with gradient selection.  */
+	    luminosity_t bd_left  = d (x - 1, y).blue - d (x - 1, y).green;
+	    luminosity_t bd_right = d (x + 1, y).blue - d (x + 1, y).green;
+	    luminosity_t bd_up    = d (x, y - 1).blue - d (x, y - 1).green;
+	    luminosity_t bd_down  = d (x, y + 1).blue - d (x, y + 1).green;
+
+	    luminosity_t bgrad_h = fabs (bd_left - bd_right);
+	    luminosity_t bgrad_v = fabs (bd_up - bd_down);
+
+	    if (bgrad_h < bgrad_v)
+	      d (x, y).blue = g_here + (bd_left + bd_right) * (luminosity_t)0.5;
+	    else if (bgrad_v < bgrad_h)
+	      d (x, y).blue = g_here + (bd_up + bd_down) * (luminosity_t)0.5;
+	    else
+	      d (x, y).blue = g_here + (bd_left + bd_right + bd_up + bd_down) * (luminosity_t)0.25;
+	  }
+	else if (xm == 1 && ym == 1)
+	  {
+	    /* Red pixel: interpolate blue.
+	       Blue neighbors are at (x+/-1, y) and (x, y+/-1).
+	       Use directional interpolation on (B-G).  */
+	    luminosity_t bd_left  = d (x - 1, y).blue - d (x - 1, y).green;
+	    luminosity_t bd_right = d (x + 1, y).blue - d (x + 1, y).green;
+	    luminosity_t bd_up    = d (x, y - 1).blue - d (x, y - 1).green;
+	    luminosity_t bd_down  = d (x, y + 1).blue - d (x, y + 1).green;
+
+	    luminosity_t bgrad_h = fabs (bd_left - bd_right);
+	    luminosity_t bgrad_v = fabs (bd_up - bd_down);
+
+	    if (bgrad_h < bgrad_v)
+	      d (x, y).blue = g_here + (bd_left + bd_right) * (luminosity_t)0.5;
+	    else if (bgrad_v < bgrad_h)
+	      d (x, y).blue = g_here + (bd_up + bd_down) * (luminosity_t)0.5;
+	    else
+	      d (x, y).blue = g_here + (bd_left + bd_right + bd_up + bd_down) * (luminosity_t)0.25;
+	  }
+	else if (xm == 1 && ym == 0)
+	  {
+	    /* Blue pixel at (1,0): interpolate red.
+	       Red neighbors are at (x, y-1) and (x, y+1), i.e. vertical.
+	       Also at (x-2, y) blue, (x+2, y) blue same-row, but red is
+	       at (x, y+/-1).   Use (R-G) at the two vertical neighbors.  */
+	    luminosity_t rd_up   = d (x, y - 1).red - d (x, y - 1).green;
+	    luminosity_t rd_down = d (x, y + 1).red - d (x, y + 1).green;
+	    d (x, y).red = g_here + (rd_up + rd_down) * (luminosity_t)0.5;
+	  }
+	else /* xm == 0 && ym == 1 */
+	  {
+	    /* Blue pixel at (0,1): interpolate red.
+	       Red neighbors are at (x-1, y) and (x+1, y), i.e. horizontal.  */
+	    luminosity_t rd_left  = d (x - 1, y).red - d (x - 1, y).green;
+	    luminosity_t rd_right = d (x + 1, y).red - d (x + 1, y).green;
+	    d (x, y).red = g_here + (rd_left + rd_right) * (luminosity_t)0.5;
+	  }
+      }
+
   return true;
 }
+
 }
 #endif

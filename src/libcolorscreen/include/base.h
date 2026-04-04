@@ -336,7 +336,7 @@ struct base_geometry
   enum demosaic_entry_color
   {
     red,
-    gree,
+    green,
     blue,
   };
   inline static int demosaic_entry_color (int x, int y)
