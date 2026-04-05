@@ -280,6 +280,15 @@ struct render_parameters
     max_screen_demosaic
   };
   screen_demosaic_t screen_demosaic;
+  /* Quality used when collection data for demosaicing.  */
+  enum demosaiced_scaling_t
+  {
+    bicubic_scaling,
+    lanczos3_scaling,
+    max_demosaiced_scaling
+  };
+  demosaiced_scaling_t demosaiced_scaling;
+  DLL_PUBLIC static const property_t demosaiced_scaling_names[(int)max_demosaiced_scaling];
   DLL_PUBLIC static const property_t screen_demosaic_names[(int)max_screen_demosaic];
 
   /* Radius (in image pixels) the screen should be blured.  */
@@ -469,7 +478,7 @@ struct render_parameters
         tile_adjustments (),
 
         /* Patch density parameters.  */
-        film_gamma (1), collection_quality (simple_screen_collection), screen_demosaic (hamilton_adams_demosaic), screen_blur_radius (0.5),
+        film_gamma (1), collection_quality (simple_screen_collection), screen_demosaic (hamilton_adams_demosaic), demosaiced_scaling (lanczos3_scaling), screen_blur_radius (0.5),
         collection_threshold (0.2), red_strip_width (0),
         green_strip_width (0),
 
@@ -554,6 +563,7 @@ struct render_parameters
            && dye_balance == other.dye_balance
 	   && collection_quality == other.collection_quality
 	   && screen_demosaic == other.screen_demosaic
+	   && demosaiced_scaling == other.demosaiced_scaling
            && film_characteristics_curve == other.film_characteristics_curve
            && restore_original_luminosity == other.restore_original_luminosity
            && output_curve == other.output_curve

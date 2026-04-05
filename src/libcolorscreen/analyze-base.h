@@ -219,7 +219,7 @@ public:
   inline pure_attr rgbdata bicubic_demosaiced_interpolate (point_t scr);
   inline pure_attr rgbdata lanczos3_demosaiced_interpolate (point_t scr);
   inline pure_attr rgbdata bicubic_rgb_interpolate (point_t scr, rgbdata patch_proportions);
-  inline pure_attr rgbdata bicubic_interpolate (point_t scr, rgbdata patch_proportions);
+  inline pure_attr rgbdata bicubic_interpolate (point_t scr, rgbdata patch_proportions, render_parameters::demosaiced_scaling_t scaling_mode = render_parameters::bicubic_scaling);
 
   /* Accessors for color data; since width scales are compile time constants they will work faster then one from analyse_base.  */
   inline luminosity_t &
@@ -562,10 +562,15 @@ analyze_base_worker<GEOMETRY>::lanczos3_demosaiced_interpolate (point_t scr)
 
 template<typename GEOMETRY>
 inline pure_attr rgbdata
-analyze_base_worker<GEOMETRY>::bicubic_interpolate (point_t scr, rgbdata patch_proportions)
+analyze_base_worker<GEOMETRY>::bicubic_interpolate (point_t scr, rgbdata patch_proportions, render_parameters::demosaiced_scaling_t scaling_mode)
 {
   if (m_demosaiced)
-    return /*bicubic_demosaiced_interpolate (scr)*/ lanczos3_demosaiced_interpolate (scr);
+    {
+      if (scaling_mode == render_parameters::lanczos3_scaling)
+	return lanczos3_demosaiced_interpolate (scr);
+      else
+	return bicubic_demosaiced_interpolate (scr);
+    }
   else if (m_red)
     return bicubic_bw_interpolate (scr);
   else

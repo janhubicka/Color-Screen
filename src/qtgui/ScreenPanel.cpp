@@ -205,6 +205,14 @@ void ScreenPanel::setupUi() {
       [](ParameterState &s, int v) { s.rparams.screen_demosaic = (render_parameters::screen_demosaic_t)v; }
   );
 
+  // Demosaiced Image Scaling Algorithm
+  addEnumParameter("Demosaiced image scaling algorithm",
+      render_parameters::demosaiced_scaling_names,
+      render_parameters::max_demosaiced_scaling,
+      [](const ParameterState &s) { return (int)s.rparams.demosaiced_scaling; },
+      [](ParameterState &s, int v) { s.rparams.demosaiced_scaling = (render_parameters::demosaiced_scaling_t)v; }
+  );
+
   ScreenPreviewPanel *preview =
       new ScreenPreviewPanel(m_stateGetter, m_stateSetter, m_imageGetter);
   m_previewPanel = preview;

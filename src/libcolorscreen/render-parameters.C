@@ -88,6 +88,10 @@ const property_t render_parameters::screen_demosaic_names []  = {
   { "bicubic", "Bicubic", "Bicubic interpolation" },
   { "hamilton-adams", "Hamilton-adams", "Popular demosaicing algorithm." }
 };
+const property_t render_parameters::demosaiced_scaling_names []  = {
+  { "bicubic", "Bicubic", "Bicubic interpolation" },
+  { "lanczos3", "Lanczos3", "Lanczos3 results in sharper images than bicubic." }
+};
 
 
 /* patch_portions describes how much percent of screen is occupied by red, green and blue
