@@ -6,6 +6,7 @@
 #include "render-to-scr.h"
 #include "screen.h"
 #include "bitmap.h"
+#include "lanczos.h"
 namespace colorscreen {
 class analyze_base
 {
@@ -216,6 +217,7 @@ public:
   }
   inline pure_attr rgbdata bicubic_bw_interpolate (point_t scr);
   inline pure_attr rgbdata bicubic_demosaiced_interpolate (point_t scr);
+  inline pure_attr rgbdata lanczos3_demosaiced_interpolate (point_t scr);
   inline pure_attr rgbdata bicubic_rgb_interpolate (point_t scr, rgbdata patch_proportions);
   inline pure_attr rgbdata bicubic_interpolate (point_t scr, rgbdata patch_proportions);
 
@@ -521,10 +523,49 @@ analyze_base_worker<GEOMETRY>::bicubic_demosaiced_interpolate (point_t scr)
 
 template<typename GEOMETRY>
 inline pure_attr rgbdata
+analyze_base_worker<GEOMETRY>::lanczos3_demosaiced_interpolate (point_t scr)
+{
+  point_t p = GEOMETRY::to_demosaiced_coordinates (scr);
+  int sx, sy;
+  coord_t rx = my_modf (p.x, &sx);
+  coord_t ry = my_modf (p.y, &sy); 
+  sx += m_demosaiced_xshift;
+  sy += m_demosaiced_yshift;
+  if (sx >= 2 && sx < m_demosaiced_width - 3 && sy >= 2 && sy < m_demosaiced_height - 3)
+    {
+      rgbdata ret = {0, 0, 0};
+      double wx[6];
+      for (int i = 0; i < 6; i++)
+	wx[i] = lanczos_kernel (i - 2 - rx, 3);
+      double wy[6];
+      for (int j = 0; j < 6; j++)
+	wy[j] = lanczos_kernel (j - 2 - ry, 3);
+
+      for (int j = 0; j < 6; j++)
+	{
+	  rgbdata row_sum = {0, 0, 0};
+	  for (int i = 0; i < 6; i++)
+	    {
+	      rgbdata d = demosaiced_data (sx - 2 + i, sy - 2 + j);
+	      row_sum.red += d.red * wx[i];
+	      row_sum.green += d.green * wx[i];
+	      row_sum.blue += d.blue * wx[i];
+	    }
+	  ret.red += row_sum.red * wy[j];
+	  ret.green += row_sum.green * wy[j];
+	  ret.blue += row_sum.blue * wy[j];
+	}
+      return ret;
+    }
+  return {(luminosity_t)0, (luminosity_t)0, (luminosity_t)0};
+}
+
+template<typename GEOMETRY>
+inline pure_attr rgbdata
 analyze_base_worker<GEOMETRY>::bicubic_interpolate (point_t scr, rgbdata patch_proportions)
 {
   if (m_demosaiced)
-    return bicubic_demosaiced_interpolate (scr);
+    return /*bicubic_demosaiced_interpolate (scr)*/ lanczos3_demosaiced_interpolate (scr);
   else if (m_red)
     return bicubic_bw_interpolate (scr);
   else
@@ -561,35 +602,6 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
   int h = m_demosaiced_height;
 
 
-  /* Read-only accessor for mosaiced channel data.  Use bounds clamping
-     (border replication) for out-of-bounds coordinates — returning 0
-     would bias the Laplacian correction at image boundaries.
-     Assert that the pixel at the given position is the expected color
-     (only when coordinates are in-bounds).  */
-  auto dch = [&](int x, int y, int ch) -> luminosity_t
-    {
-      int cx = std::clamp (x, 0, w - 1);
-      int cy = std::clamp (y, 0, h - 1);
-      assert (!debug || cx != x || cy != y
-	      || (int)GEOMETRY::demosaic_entry_color (x, y)
-		 == ch);
-      return m_demosaiced[cy * w + cx][ch];
-    };
-
-  /* Return the known (mosaiced) channel value at position (x,y).
-     The color is determined by GEOMETRY.  Uses clamping for
-     out-of-bounds to provide smooth boundary behavior.  */
-  auto known = [&](int x, int y) -> luminosity_t
-    {
-      int cx = std::clamp (x, 0, w - 1);
-      int cy = std::clamp (y, 0, h - 1);
-      switch (GEOMETRY::demosaic_entry_color (x, y))
-	{
-	case base_geometry::red: return m_demosaiced[cy * w + cx].red;
-	case base_geometry::green: return m_demosaiced[cy * w + cx].green;
-	default: return m_demosaiced[cy * w + cx].blue;
-	}
-    };
 
   if (progress)
     progress->set_task ("Populating demosaiced data", h);
@@ -650,7 +662,7 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
      The Laplacian correction uses the known channel at the current
      pixel and same-color pixels at distance 2.  */
 
-  /* No parallel; green data is reused.  */
+#pragma omp parallel shared(progress,h,w) default(none)
   for (int y = 0; y < h; y++)
     {
       /* Accessor for the demosaiced array with bounds clamping (read/write).  */
@@ -660,6 +672,35 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
 	  y = std::clamp (y, 0, h - 1);
 	  return m_demosaiced[y * w + x];
 	};
+      /* Read-only accessor for mosaiced channel data.  Use bounds clamping
+	 (border replication) for out-of-bounds coordinates — returning 0
+	 would bias the Laplacian correction at image boundaries.
+	 Assert that the pixel at the given position is the expected color
+	 (only when coordinates are in-bounds).  */
+      auto dch = [&](int x, int y, int ch) -> luminosity_t
+	{
+	  int cx = std::clamp (x, 0, w - 1);
+	  int cy = std::clamp (y, 0, h - 1);
+	  assert (!debug || cx != x || cy != y
+		  || (int)GEOMETRY::demosaic_entry_color (x, y)
+		     == ch);
+	  return m_demosaiced[cy * w + cx][ch];
+	};
+      /* Return the known (mosaiced) channel value at position (x,y).
+	 The color is determined by GEOMETRY.  Uses clamping for
+	 out-of-bounds to provide smooth boundary behavior.  */
+      auto known = [&](int x, int y) -> luminosity_t
+	{
+	  int cx = std::clamp (x, 0, w - 1);
+	  int cy = std::clamp (y, 0, h - 1);
+	  switch (GEOMETRY::demosaic_entry_color (x, y))
+	    {
+	    case base_geometry::red: return m_demosaiced[cy * w + cx].red;
+	    case base_geometry::green: return m_demosaiced[cy * w + cx].green;
+	    default: return m_demosaiced[cy * w + cx].blue;
+	    }
+	};
+
       if (!progress || !progress->cancel_requested ())
 	for (int x = 0; x < w; x++)
 	  {
