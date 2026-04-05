@@ -560,13 +560,6 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
   int w = m_demosaiced_width;
   int h = m_demosaiced_height;
 
-  /* Accessor for the demosaiced array with bounds clamping (read/write).  */
-  auto d = [&](int x, int y) -> rgbdata &
-    {
-      x = std::clamp (x, 0, w - 1);
-      y = std::clamp (y, 0, h - 1);
-      return m_demosaiced[y * w + x];
-    };
 
   /* Read-only accessor for mosaiced channel data.  Use bounds clamping
      (border replication) for out-of-bounds coordinates — returning 0
@@ -603,7 +596,7 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
 
   /* Step 1: Populate m_demosaiced with the mosaiced data.
      Each pixel gets only its known channel value; others remain 0.  */
-#pragma omp parallel shared(progress)
+#pragma omp parallel shared(progress,h,w) default(none)
   for (int y = 0; y < h; y++)
     {
       if (!progress || !progress->cancel_requested ())
@@ -644,9 +637,9 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
   if (progress && progress->cancelled ())
     return false;
 
-  enum base_geometry::demosaic_entry_color ah_red = base_geometry::red;
-  enum base_geometry::demosaic_entry_color ah_green = base_geometry::blue;
-  enum base_geometry::demosaic_entry_color ah_blue = base_geometry::green;
+  const enum base_geometry::demosaic_entry_color ah_red = base_geometry::red;
+  const enum base_geometry::demosaic_entry_color ah_green = base_geometry::blue;
+  const enum base_geometry::demosaic_entry_color ah_blue = base_geometry::green;
 
   if (progress)
     progress->set_task ("Demosaicing dominating channel", h);
@@ -660,6 +653,13 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
   /* No parallel; green data is reused.  */
   for (int y = 0; y < h; y++)
     {
+      /* Accessor for the demosaiced array with bounds clamping (read/write).  */
+      const auto d = [&](int x, int y) -> rgbdata &
+	{
+	  x = std::clamp (x, 0, w - 1);
+	  y = std::clamp (y, 0, h - 1);
+	  return m_demosaiced[y * w + x];
+	};
       if (!progress || !progress->cancel_requested ())
 	for (int x = 0; x < w; x++)
 	  {
@@ -779,9 +779,16 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
      Now green is fully populated.  We use green-channel-guided
      color-difference interpolation: interpolate (C-G) from
      positions where C is known, then add local green.  */
-#pragma omp parallel shared(progress)
+#pragma omp parallel shared(progress,h,w) default(none)
   for (int y = 0; y < h; y++)
     {
+      /* Accessor for the demosaiced array with bounds clamping (read/write).  */
+      const auto d = [&](int x, int y) -> rgbdata &
+	{
+	  x = std::clamp (x, 0, w - 1);
+	  y = std::clamp (y, 0, h - 1);
+	  return m_demosaiced[y * w + x];
+	};
       if (!progress || !progress->cancel_requested ())
 	for (int x = 0; x < w; x++)
 	  {

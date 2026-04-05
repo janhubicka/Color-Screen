@@ -40,9 +40,10 @@ Changes in version 1.1
      correction tables
    - profiling now works on stitched projects.
    - support for Sony RAW files
-   - suport for demosaicing of converted monochromatic camera
+   - suport for demosaicing of RAW files specialized for converted monochromatic camera
    - fixed bug in backlight correction of monochromatic scans
    - gammut warnings
+   - Hamilton-Adams demosaicing algorithm
  - Scanner MTF can now be specified for more precise handling of sharpness of
    the scanner lens.  This curve can be measured using slanted edge method, i.e
    using quickMTF
