@@ -848,7 +848,7 @@ get_color (image_data &img, render_parameters &rparam, scr_to_img_parameters &pa
   c.red = r.adjust_luminosity_ir (c.red);
   c.green = r.adjust_luminosity_ir (c.green);
   c.blue = r.adjust_luminosity_ir (c.blue);
-  r.set_hdr_color (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
+  r.out_color.hdr_final_color (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
   return c;
 }
 static luminosity_t

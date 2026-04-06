@@ -200,20 +200,20 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
 precomputed_function<luminosity_t> *
 get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
 {
-  std::vector<luminosity_t> lookup_table(render::out_lookup_table_size);
+  std::vector<luminosity_t> lookup_table(out_color_adjustments::out_lookup_table_size);
   luminosity_t gamma = p.output_gamma;
   if (gamma != -1)
     gamma = std::clamp (gamma, (luminosity_t)0.0001, (luminosity_t)100.0);
   luminosity_t target_film_gamma = p.target_film_gamma;
   int maxval = p.maxval;
-  luminosity_t mul = 1 / (luminosity_t)(render::out_lookup_table_size - 1);
+  luminosity_t mul = 1 / (luminosity_t)(out_color_adjustments::out_lookup_table_size - 1);
 
-  for (int i = 0; i < (int)render::out_lookup_table_size; i++)
+  for (int i = 0; i < (int)out_color_adjustments::out_lookup_table_size; i++)
     lookup_table[i]
         = invert_gamma (apply_gamma (i * mul, target_film_gamma), gamma)
           * maxval + (luminosity_t) 0.5;
 
-  return new precomputed_function<luminosity_t> (0, 1, lookup_table.data (), render::out_lookup_table_size);
+  return new precomputed_function<luminosity_t> (0, 1, lookup_table.data (), out_color_adjustments::out_lookup_table_size);
 }
 
 /* To improve interactive response we cache conversion tables.  */
@@ -488,80 +488,22 @@ prune_render_caches ()
 {
   gray_and_sharpened_data_cache.prune ();
 }
-/*****************************************************************************/
-/*                             render implementation                         */
-/*****************************************************************************/
 
 bool
-render::precompute_all (bool grayscale_needed, bool normalized_patches,
-                        rgbdata patch_proportions, progress_info *progress)
+out_color_adjustments::precompute (render_parameters &m_params,
+				   const image_data *m_img, /* Only used when producing original preofile.  */
+				   bool normalized_patches,
+				   rgbdata patch_proportions,
+				   progress_info *progress)
 {
-  if (m_params.backlight_correction)
-    {
-      backlight_correction_cache_params p
-          = { m_params.backlight_correction.get (),
-              m_params.backlight_correction->id,
-              m_img.width,
-              m_img.height,
-              m_params.backlight_correction_black,
-              /*!grayscale_needed*/ true };
-      m_backlight_correction = backlight_correction_cache.get_cached (
-          p, progress, &m_backlight_correction_id);
-      if (!m_backlight_correction)
-        return false;
-    }
-  if (m_img.rgbdata)
-    {
-      lookup_table_params par;
-      par.maxval = m_img.maxval;
-      par.gamma = m_params.gamma;
-      if (!par.gamma)
-        par.gamma_table = m_img.to_linear[0];
-      par.invert = m_params.invert;
-      m_rgb_lookup_table[0] = lookup_table_cache.get_cached (par, progress);
-      if (!m_rgb_lookup_table[0])
-        return false;
-      if (!par.gamma)
-        {
-          par.gamma_table = m_img.to_linear[1];
-          m_rgb_lookup_table[1] = lookup_table_cache.get_cached (par, progress);
-          par.gamma_table = m_img.to_linear[2];
-          m_rgb_lookup_table[2] = lookup_table_cache.get_cached (par, progress);
-        }
-      else
-        {
-	  // We prevent copying to avoid accidental passing by value.
-          // m_rgb_lookup_table[1] = m_rgb_lookup_table[0];
-          // m_rgb_lookup_table[2] = m_rgb_lookup_table[0];
-	  m_rgb_lookup_table[1] = lookup_table_cache.get_cached (par, progress);
-	  m_rgb_lookup_table[2] = lookup_table_cache.get_cached (par, progress);
-        }
-    }
+  m_target_film_gamma = m_params.target_film_gamma;
+  m_output_gamma = m_params.output_gamma;
+  m_gammut_warning = m_params.gammut_warning;
+  m_output_curve = m_params.output_curve;
+
   out_lookup_table_params out_par
       = { m_dst_maxval, m_params.output_gamma, m_params.target_film_gamma };
   m_out_lookup_table = out_lookup_table_cache.get_cached (out_par, progress);
-
-  if (grayscale_needed)
-    {
-      gray_and_sharpen_params p
-          = { { m_img.id,
-                &m_img,
-                m_params.gamma,
-                { m_img.to_linear[0], m_img.to_linear[1], m_img.to_linear[2] },
-                m_params.mix_dark,
-                m_params.mix_red,
-                m_params.mix_green,
-                m_params.mix_blue,
-                m_params.invert,
-                m_backlight_correction.get (),
-                m_backlight_correction_id,
-                m_params.ignore_infrared }, m_params.sharpen };
-      m_sharpened_data_holder
-          = gray_and_sharpened_data_cache.get_cached (p, progress, &m_gray_data_id);
-      if (!m_sharpened_data_holder)
-        return false;
-      m_sharpened_data = m_sharpened_data_holder->m_data;
-    }
 
   color_matrix color;
 
@@ -574,7 +516,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
       // printf ("Prophoto %i\n", do_pro_photo);
       /* Matrix converting dyes to XYZ.  */
       color = m_params.get_rgb_to_xyz_matrix (
-          &m_img, normalized_patches, patch_proportions,
+          m_img, normalized_patches, patch_proportions,
           do_pro_photo ? d50_white : d65_white);
 
       // printf ("To xyz\n");
@@ -584,7 +526,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
        * after spectrum dyes to xyz are applied.  */
       if (m_params.color_model == render_parameters::color_model_kodachrome25)
         {
-          m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
+          m_spectrum_dyes_to_xyz = std::make_unique<spectrum_dyes_to_xyz> ();
           m_spectrum_dyes_to_xyz->set_film_response (
               spectrum_dyes_to_xyz::response_even);
           m_spectrum_dyes_to_xyz->set_dyes (
@@ -654,15 +596,80 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
     color = m_params.get_rgb_adjustment_matrix (normalized_patches,
                                                 patch_proportions);
   m_color_matrix = color;
-  // printf ("Final\n");
-  // color.print (stdout);
   return true;
 }
+/*****************************************************************************/
+/*                             render implementation                         */
+/*****************************************************************************/
 
-render::~render ()
+bool
+render::precompute_all (bool grayscale_needed, bool normalized_patches,
+                        rgbdata patch_proportions, progress_info *progress)
 {
-  if (m_spectrum_dyes_to_xyz)
-    delete m_spectrum_dyes_to_xyz;
+  if (m_params.backlight_correction)
+    {
+      backlight_correction_cache_params p
+          = { m_params.backlight_correction.get (),
+              m_params.backlight_correction->id,
+              m_img.width,
+              m_img.height,
+              m_params.backlight_correction_black,
+              /*!grayscale_needed*/ true };
+      m_backlight_correction = backlight_correction_cache.get_cached (
+          p, progress, &m_backlight_correction_id);
+      if (!m_backlight_correction)
+        return false;
+    }
+  if (m_img.rgbdata)
+    {
+      lookup_table_params par;
+      par.maxval = m_img.maxval;
+      par.gamma = m_params.gamma;
+      if (!par.gamma)
+        par.gamma_table = m_img.to_linear[0];
+      par.invert = m_params.invert;
+      m_rgb_lookup_table[0] = lookup_table_cache.get_cached (par, progress);
+      if (!m_rgb_lookup_table[0])
+        return false;
+      if (!par.gamma)
+        {
+          par.gamma_table = m_img.to_linear[1];
+          m_rgb_lookup_table[1] = lookup_table_cache.get_cached (par, progress);
+          par.gamma_table = m_img.to_linear[2];
+          m_rgb_lookup_table[2] = lookup_table_cache.get_cached (par, progress);
+        }
+      else
+        {
+	  // We prevent copying to avoid accidental passing by value.
+          // m_rgb_lookup_table[1] = m_rgb_lookup_table[0];
+          // m_rgb_lookup_table[2] = m_rgb_lookup_table[0];
+	  m_rgb_lookup_table[1] = lookup_table_cache.get_cached (par, progress);
+	  m_rgb_lookup_table[2] = lookup_table_cache.get_cached (par, progress);
+        }
+    }
+
+  if (grayscale_needed)
+    {
+      gray_and_sharpen_params p
+          = { { m_img.id,
+                &m_img,
+                m_params.gamma,
+                { m_img.to_linear[0], m_img.to_linear[1], m_img.to_linear[2] },
+                m_params.mix_dark,
+                m_params.mix_red,
+                m_params.mix_green,
+                m_params.mix_blue,
+                m_params.invert,
+                m_backlight_correction.get (),
+                m_backlight_correction_id,
+                m_params.ignore_infrared }, m_params.sharpen };
+      m_sharpened_data_holder
+          = gray_and_sharpened_data_cache.get_cached (p, progress, &m_gray_data_id);
+      if (!m_sharpened_data_holder)
+        return false;
+      m_sharpened_data = m_sharpened_data_holder->m_data;
+    }
+  return out_color.precompute (m_params, &m_img, normalized_patches, patch_proportions, progress);
 }
 
 /* Compute lookup table converting image_data to range 0...1 with GAMMA.  */
@@ -774,15 +781,17 @@ get_linearized_pixel (const image_data &img, render_parameters &rparam, int xx,
 std::vector <rgbdata>
 hd_y_to_rgb (image_data &img, render_parameters &rparam, int steps, luminosity_t miny, luminosity_t maxy)
 {
+  out_color_adjustments a (256);
+  if (!a.precompute (rparam, NULL, false, {0.33, 0.33, 0.33}, NULL))
+    return {};
   std::vector <rgbdata> data (steps);
-  render r (img, rparam, 256);
   for (int i = 0 ; i < steps; i++)
   {
     luminosity_t y = i * (maxy - miny) / (steps - 1) + miny;
     /* Density to linear */
     y = pow (10, -y * rparam.lab.boost);
     int rr, gg, bb;
-    r.set_color (y, y, y, &rr, &gg, &bb);
+    a.final_color (y, y, y, &rr, &gg, &bb);
     data[i].red = rr;
     data[i].green = gg;
     data[i].blue = bb;

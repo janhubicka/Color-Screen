@@ -279,12 +279,12 @@ public:
     int yy = y;
     if (xx < 0 || xx >= m_img.width || yy < 0 || yy >= m_img.height)
       {
-	set_color (0, 0, 0, r,g,b);
+	out_color.final_color (0, 0, 0, r,g,b);
 	return;
       }
     //rgbdata d = fast_get_adjusted_pixel (xx, yy);
     rgbdata d = fast_get_adjusted_pixel (xx, yy);
-    set_color (d.red,d.green,d.blue, r, g, b);
+    out_color.final_color (d.red,d.green,d.blue, r, g, b);
   }
 #endif
   pure_attr inline rgbdata get_normalized_pixel_img (coord_t x, coord_t y) const
@@ -395,7 +395,7 @@ public:
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b) const
   {
     rgbdata d = sample_pixel_img (x, y);
-    set_color (d.red, d.green, d.blue, r,g,b);
+    out_color.final_color (d.red, d.green, d.blue, r,g,b);
   }
 };
 
@@ -462,7 +462,7 @@ public:
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b) const
   {
     rgbdata d = sample_pixel_img (x, y);
-    set_color (d.red, d.green, d.blue, r,g,b);
+    out_color.final_color (d.red, d.green, d.blue, r,g,b);
   }
 };
 class render_scr_detect_superpose_img : public render_scr_detect
@@ -503,7 +503,7 @@ void
 render_scr_detect_superpose_img::render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b) 
 {
   rgbdata d = sample_pixel_img (x, y);
-  set_color (d.red, d.green, d.blue, r,g,b);
+  out_color.final_color (d.red, d.green, d.blue, r,g,b);
 }
 
 inline void
@@ -554,7 +554,7 @@ public:
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     rgbdata d = sample_pixel_img (x, y);
-    set_color (d.red, d.green, d.blue,r,g,b);
+    out_color.final_color (d.red, d.green, d.blue,r,g,b);
   }
   ~render_scr_relax();
   void set_render_type (render_type_parameters rtparam)
@@ -627,7 +627,7 @@ public:
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     rgbdata d = sample_pixel_img (x, y);
-    set_color (d.red, d.green, d.blue, r, g, b);
+    out_color.final_color (d.red, d.green, d.blue, r, g, b);
   }
   bool precompute_all (progress_info *progress)
   {
@@ -677,7 +677,7 @@ public:
 #else
 	luminosity_t rr;
 	rr = ((ri[0] & 15) + 1) / 17.0;
-        set_color (rr,rr,rr,r,g,b);
+        out_color.final_color (rr,rr,rr,r,g,b);
 #endif
 #if 0
 	luminosity_t rr;
@@ -685,7 +685,7 @@ public:
 	  rr = ((ri[0] & 15) + 1) / 17.0;
 	else
 	  rr = 0;
-        set_color (rr,rr,rr,r,g,b);
+        out_color.final_color (rr,rr,rr,r,g,b);
 #endif
       }
     else
@@ -700,7 +700,7 @@ public:
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     rgbdata d = sample_pixel_img (x, y);
-    set_color (d.red, d.green, d.blue,r,g,b);
+    out_color.final_color (d.red, d.green, d.blue,r,g,b);
   }
   void set_render_type (render_type_parameters rtparam)
   {

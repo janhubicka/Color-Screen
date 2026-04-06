@@ -50,7 +50,7 @@ public:
     int iy = scr.y + 0.5;
     point_t p = m_scr_to_img.to_img ({(coord_t)ix, (coord_t)iy});
     rgbdata d = sample_pixel (ix, iy, p.x, p.y);
-    set_color (d.red, d.green, d.blue, r, g, b);
+    out_color.final_color (d.red, d.green, d.blue, r, g, b);
    }
 private:
   pure_attr 

@@ -507,7 +507,7 @@ test_render_linearity ()
 	      ok = false;
 	    }
 	  /* Now out_lookup_table is applied.  */
-	  ren.set_color (ren.get_data_red (i,0), ren.get_data_green (i,0), ren.get_data_blue (i,0),
+	  ren.out_color.final_color (ren.get_data_red (i,0), ren.get_data_green (i,0), ren.get_data_blue (i,0),
 			 &r, &g, &b);
 	  if (i > mins[gamma_idx] && (r != i || g != i || b != i))
 	    {
@@ -516,7 +516,7 @@ test_render_linearity ()
 	      ok = false;
 	    }
 	  luminosity_t hr,hg,hb;
-	  ren.set_hdr_color (ren.get_data_red (i,0), ren.get_data_green (i,0), ren.get_data_blue (i,0),
+	  ren.out_color.hdr_final_color (ren.get_data_red (i,0), ren.get_data_green (i,0), ren.get_data_blue (i,0),
 			     &hr, &hg, &hb);
 	  int rr = hr * 65535 + 0.5;
 	  gg = hg * 65535 + 0.5;

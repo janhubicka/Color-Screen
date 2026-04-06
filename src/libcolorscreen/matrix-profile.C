@@ -129,12 +129,12 @@ color_solver
 	c.green = r->adjust_luminosity_ir (c.green / proportions.green);
 	c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
 
-	r->set_linear_hdr_color (c.red, c.green, c.blue, &color1.x, &color1.y, &color1.z);
+	r->out_color.linear_hdr_color (c.red, c.green, c.blue, &color1.x, &color1.y, &color1.z);
 	ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &c.red, &c.green, &c.blue);
 	c.red = r->adjust_luminosity_ir (c.red / proportions.red);
 	c.green = r->adjust_luminosity_ir (c.green / proportions.green);
 	c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
-	r->set_linear_hdr_color (c.red, c.green, c.blue, &color2.x, &color2.y, &color2.z);
+	r->out_color.linear_hdr_color (c.red, c.green, c.blue, &color2.x, &color2.y, &color2.z);
       }
     if (ret_color1)
       *ret_color1 = color1;
@@ -330,7 +330,7 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets,
               c.red = r->adjust_luminosity_ir (c.red / proportions.red);
               c.green = r->adjust_luminosity_ir (c.green / proportions.green);
               c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
-              r->set_linear_hdr_color (c.red, c.green, c.blue, &color1.x,
+              r->out_color.linear_hdr_color (c.red, c.green, c.blue, &color1.x,
                                        &color1.y, &color1.z);
 
               ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue,
@@ -338,7 +338,7 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets,
               c.red = r->adjust_luminosity_ir (c.red / proportions.red);
               c.green = r->adjust_luminosity_ir (c.green / proportions.green);
               c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
-              r->set_linear_hdr_color (c.red, c.green, c.blue, &color2.x,
+              r->out_color.linear_hdr_color (c.red, c.green, c.blue, &color2.x,
                                        &color2.y, &color2.z);
             }
           luminosity_t d = deltaE2000 (color1, color2, white);

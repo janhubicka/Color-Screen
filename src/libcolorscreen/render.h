@@ -144,17 +144,56 @@ luminosity_t * get_new_lookup_table (struct lookup_table_params &, progress_info
 precomputed_function<luminosity_t> * get_new_out_lookup_table (struct out_lookup_table_params &, progress_info *);
 sharpened_data * get_new_gray_sharpened_data (struct gray_and_sharpen_params &, progress_info *);
 
-/* Base class for rendering routines.  It holds
-     - scr-to-img transformation info
-     - the scanned image data
-     - the desired range of input and output values
-   and provides way to get a pixel at given screen or image coordinates.  */
+class out_color_adjustments
+{
+public:
+  out_color_adjustments (int maxval)
+  : m_dst_maxval (maxval)
+  {
+  }
+  bool 
+  precompute (render_parameters &rparam, const image_data *m_img, bool normalized_patches, rgbdata patch_proportions, progress_info *progress = NULL);
+  inline void final_color (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *) const;
+  inline void final_color_precise (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *) const;
+  inline void linear_hdr_color (luminosity_t, luminosity_t, luminosity_t, luminosity_t *, luminosity_t *, luminosity_t *) const;
+  inline void hdr_final_color (luminosity_t, luminosity_t, luminosity_t, luminosity_t *, luminosity_t *, luminosity_t *) const;
+
+  static constexpr const size_t out_lookup_table_size = 65536 * 16;
+  /* Color matrix.  For additvie processes it converts process RGB to prophoto RGB.
+     For subtractive processes it only applies transformations does in process RGB.
+     TODO: Only exported because of single use in render-interpolate that should
+     be rewritten.  */
+  color_matrix m_color_matrix;
+private:
+  typedef lru_cache<out_lookup_table_params, precomputed_function<luminosity_t>, precomputed_function<luminosity_t> *, get_new_out_lookup_table, 4> out_lookup_table_cache_t;
+
+  /* Desired maximal value of output data (usually either 256 or 65536).  */
+  int m_dst_maxval;
+  luminosity_t m_target_film_gamma;
+  luminosity_t m_output_gamma;
+  bool m_gammut_warning;
+  hd_curve *m_output_curve;
+  std::unique_ptr <tone_curve> m_tone_curve;
+
+  /* For substractive processes it converts xyz to prophoto RGB applying
+     corrections, like saturation control.  */
+  color_matrix m_color_matrix2;
+
+  /* For subtractive processes it converts dyes RGB to xyz.  */
+  std::unique_ptr<spectrum_dyes_to_xyz> m_spectrum_dyes_to_xyz;
+
+  //render_parameters &m_params;
+  /* Translates back to gamma 2.  */
+  out_lookup_table_cache_t::cached_ptr m_out_lookup_table;
+};
+
+/* Base class for rendering routines.  */
 class render
 {
 public:
   render (const image_data &img, const render_parameters &rparam, int dstmaxval)
-  : m_img (img), m_params (rparam), m_gray_data_id (img.id), m_sharpened_data (NULL), m_sharpened_data_holder (), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
-    m_spectrum_dyes_to_xyz (NULL), m_backlight_correction (), m_backlight_correction_id (0), m_tone_curve ()
+  : out_color (dstmaxval), m_img (img), m_params (rparam), m_gray_data_id (img.id), m_sharpened_data (NULL), m_sharpened_data_holder (), m_maxval (img.data ? img.maxval : 65535), 
+    m_backlight_correction (), m_backlight_correction_id (0)
   {
     if (m_params.invert)
       {
@@ -164,7 +203,6 @@ public:
     else
       m_params.output_curve = NULL;
   }
-  DLL_PUBLIC ~render ();
   pure_attr inline luminosity_t get_img_pixel (coord_t x, coord_t y) const;
   pure_attr inline luminosity_t get_unadjusted_img_pixel (coord_t x, coord_t y) const;
   inline void get_img_rgb_pixel (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b) const;
@@ -175,10 +213,6 @@ public:
   static const int num_color_models = render_parameters::color_model_max;
   typedef lru_cache<lookup_table_params, luminosity_t[], luminosity_t *, get_new_lookup_table, 4> lookup_table_cache_t;
   static bool get_lookup_tables (lookup_table_cache_t::cached_ptr *ret, luminosity_t gamma, const image_data *img, progress_info *progress = NULL);
-  inline void set_color (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *) const;
-  inline void set_color_precise (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *) const;
-  inline void set_linear_hdr_color (luminosity_t, luminosity_t, luminosity_t, luminosity_t *, luminosity_t *, luminosity_t *) const;
-  inline void set_hdr_color (luminosity_t, luminosity_t, luminosity_t, luminosity_t *, luminosity_t *, luminosity_t *) const;
   pure_attr inline luminosity_t get_data (int x, int y) const;
   pure_attr inline luminosity_t get_unadjusted_data (int x, int y) const;
   pure_attr inline luminosity_t adjust_luminosity_ir (luminosity_t) const;
@@ -249,10 +283,10 @@ public:
     return 128 * 1024;
   }
 
-  static constexpr const size_t out_lookup_table_size = 65536 * 16;
-  typedef lru_cache<out_lookup_table_params, precomputed_function<luminosity_t>, precomputed_function<luminosity_t> *, get_new_out_lookup_table, 4> out_lookup_table_cache_t;
   typedef lru_cache<backlight_correction_cache_params, backlight_correction, backlight_correction *, get_new_backlight_correction, 10> backlight_cache_t;
   typedef lru_cache<gray_and_sharpen_params, sharpened_data, sharpened_data *, get_new_gray_sharpened_data, 2> gray_cache_t;
+
+  out_color_adjustments out_color;
 
 protected:
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
@@ -286,28 +320,11 @@ protected:
   gray_cache_t::cached_ptr m_sharpened_data_holder;
   /* Maximal value in m_data.  */
   int m_maxval;
-  /* Desired maximal value of output data (usually either 256 or 65536).  */
-  int m_dst_maxval;
   /* Translates input rgb channel values into normalized range 0...1 gamma 1.  */
   lookup_table_cache_t::cached_ptr m_rgb_lookup_table[3];
-  /* Translates back to gamma 2.  */
-  out_lookup_table_cache_t::cached_ptr m_out_lookup_table;
-  /* Color matrix.  For additvie processes it converts process RGB to prophoto RGB.
-     For subtractive processes it only applies transformations does in process RGB.  */
-  color_matrix m_color_matrix;
-
-  /* For subtractive processes it converts dyes RGB to xyz.  */
-  spectrum_dyes_to_xyz *m_spectrum_dyes_to_xyz;
-
-  /* For cubstractive processes it converts xyz to prophoto RGB applying
-     corrections, like saturation control.  */
-  color_matrix m_color_matrix2;
 
   backlight_cache_t::cached_ptr m_backlight_correction;
   uint64_t m_backlight_correction_id;
-
-private:
-  std::unique_ptr <tone_curve> m_tone_curve;
 };
 
 typedef luminosity_t __attribute__ ((vector_size (sizeof (luminosity_t)*4))) vec_luminosity_t;
@@ -434,7 +451,7 @@ render::get_data_blue (int x, int y) const
 
 /* Compute color in linear HDR image.  */
 inline void
-render::set_linear_hdr_color (luminosity_t r, luminosity_t g, luminosity_t b, luminosity_t *rr, luminosity_t *gg, luminosity_t *bb) const
+out_color_adjustments::linear_hdr_color (luminosity_t r, luminosity_t g, luminosity_t b, luminosity_t *rr, luminosity_t *gg, luminosity_t *bb) const
 {
 #if 0
   r *= m_params.white_balance.red;
@@ -473,11 +490,11 @@ render::set_linear_hdr_color (luminosity_t r, luminosity_t g, luminosity_t b, lu
 
       m_color_matrix2.apply_to_rgb (c.x, c.y, c.z, &r, &g, &b);
     }
-  if (m_params.output_curve)
+  if (m_output_curve)
     {
       luminosity_t lum = r * rwght + g * gwght + b * bwght;
       luminosity_t lum2;
-      lum2 = m_params.output_curve->apply (lum);
+      lum2 = m_output_curve->apply (lum);
       if (lum != lum2)
 	{
 	  r *= lum2 / lum;
@@ -511,29 +528,29 @@ render::set_linear_hdr_color (luminosity_t r, luminosity_t g, luminosity_t b, lu
   *bb = b;
 }
 inline void
-render::set_hdr_color (luminosity_t r, luminosity_t g, luminosity_t b, luminosity_t *rr, luminosity_t *gg, luminosity_t *bb) const
+out_color_adjustments::hdr_final_color (luminosity_t r, luminosity_t g, luminosity_t b, luminosity_t *rr, luminosity_t *gg, luminosity_t *bb) const
 {
   luminosity_t r1, g1, b1;
-  render::set_linear_hdr_color (r, g, b, &r1, &g1, &b1);
-  if (m_params.target_film_gamma != 1)
+  linear_hdr_color (r, g, b, &r1, &g1, &b1);
+  if (m_target_film_gamma != 1)
     {
-      r1 = apply_gamma (r1, m_params.target_film_gamma);
-      g1 = apply_gamma (g1, m_params.target_film_gamma);
-      b1 = apply_gamma (b1, m_params.target_film_gamma);
+      r1 = apply_gamma (r1, m_target_film_gamma);
+      g1 = apply_gamma (g1, m_target_film_gamma);
+      b1 = apply_gamma (b1, m_target_film_gamma);
     }
-  *rr = invert_gamma (r1, m_params.output_gamma);
-  *gg = invert_gamma (g1, m_params.output_gamma);
-  *bb = invert_gamma (b1, m_params.output_gamma);
+  *rr = invert_gamma (r1, m_output_gamma);
+  *gg = invert_gamma (g1, m_output_gamma);
+  *bb = invert_gamma (b1, m_output_gamma);
 }
 
 /* Compute color in the final gamma and range 0...m_dst_maxval.
    Fast version that is not always precise for dark colors and gamma > 1.5  */
 inline void
-render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int *gg, int *bb) const
+out_color_adjustments::final_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int *gg, int *bb) const
 {
-  set_linear_hdr_color (r, g, b, &r, &g, &b);
+  linear_hdr_color (r, g, b, &r, &g, &b);
   // Show gammut warnings
-  if (m_params.gammut_warning && (r < 0 || r > 1 || g < 0 || g >1 || b < 0 || b > 1))
+  if (m_gammut_warning && (r < 0 || r > 1 || g < 0 || g >1 || b < 0 || b > 1))
     r = g = b = 0.5;
   else
     {
@@ -549,21 +566,21 @@ render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int 
 /* Compute color in the final gamma and range 0...m_dst_maxval.
    Slow version.  */
 inline void
-render::set_color_precise (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int *gg, int *bb) const
+out_color_adjustments::final_color_precise (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int *gg, int *bb) const
 {
-  if (m_params.gamma == 1)
+  if (m_output_gamma == 1)
     {
-      set_color (r, g, b, rr, gg, bb);
+      final_color (r, g, b, rr, gg, bb);
       return;
     }
   luminosity_t fr, fg, fb;
-  set_hdr_color (r, g, b, &fr, &fg, &fb);
+  hdr_final_color (r, g, b, &fr, &fg, &fb);
   fr = std::clamp (fr, (luminosity_t)0.0, (luminosity_t)1.0);
   fg = std::clamp (fg, (luminosity_t)0.0, (luminosity_t)1.0);
   fb = std::clamp (fb, (luminosity_t)0.0, (luminosity_t)1.0);
-  *rr = fr * m_maxval + 0.5;
-  *gg = fg * m_maxval + 0.5;
-  *bb = fb * m_maxval + 0.5;
+  *rr = fr * m_dst_maxval + 0.5;
+  *gg = fg * m_dst_maxval + 0.5;
+  *bb = fb * m_dst_maxval + 0.5;
 }
 
 #if 0
