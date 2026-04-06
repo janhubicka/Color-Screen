@@ -1,43 +1,45 @@
-#include "out-color-adjustments.h"
 #include "include/render-parameters.h"
+#include "out-color-adjustments.h"
 namespace colorscreen
 {
-/*****************************************************************************/
-/*    Out lookup table (translating linear values to output gamma) cache     */
-/*****************************************************************************/
-
-/* Output lookup table takes linear r,g,b values in range 0...65536
+/* Out lookup table (translating linear values to output gamma) cache
+   Output lookup table takes linear r,g,b values in range 0...65536
    and outputs r,g,b values in sRGB gamma curve in range 0...maxval.  */
-
 
 precomputed_function<luminosity_t> *
 get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
 {
-  std::vector<luminosity_t> lookup_table(out_color_adjustments::out_lookup_table_size);
+  std::vector<luminosity_t> lookup_table (
+      out_color_adjustments::out_lookup_table_size);
   luminosity_t gamma = p.output_gamma;
   if (gamma != -1)
     gamma = std::clamp (gamma, (luminosity_t)0.0001, (luminosity_t)100.0);
   luminosity_t target_film_gamma = p.target_film_gamma;
   int maxval = p.maxval;
-  luminosity_t mul = 1 / (luminosity_t)(out_color_adjustments::out_lookup_table_size - 1);
+  luminosity_t mul
+      = 1 / (luminosity_t)(out_color_adjustments::out_lookup_table_size - 1);
 
   for (int i = 0; i < (int)out_color_adjustments::out_lookup_table_size; i++)
     lookup_table[i]
         = invert_gamma (apply_gamma (i * mul, target_film_gamma), gamma)
-          * maxval + (luminosity_t) 0.5;
+              * maxval
+          + (luminosity_t)0.5;
 
-  return new precomputed_function<luminosity_t> (0, 1, lookup_table.data (), out_color_adjustments::out_lookup_table_size);
+  return new precomputed_function<luminosity_t> (
+      0, 1, lookup_table.data (),
+      out_color_adjustments::out_lookup_table_size);
 }
-static lru_cache<out_lookup_table_params, precomputed_function <luminosity_t>, precomputed_function <luminosity_t> *,
+static lru_cache<out_lookup_table_params, precomputed_function<luminosity_t>,
+                 precomputed_function<luminosity_t> *,
                  get_new_out_lookup_table, 4>
     out_lookup_table_cache ("out lookup tables");
 
 bool
-out_color_adjustments::precompute (render_parameters &m_params,
-				   const image_data *m_img, /* Only used when producing original preofile.  */
-				   bool normalized_patches,
-				   rgbdata patch_proportions,
-				   progress_info *progress)
+out_color_adjustments::precompute (
+    render_parameters &m_params,
+    const image_data *m_img, /* Only used when producing original preofile.  */
+    bool normalized_patches, rgbdata patch_proportions,
+    progress_info *progress)
 {
   m_target_film_gamma = m_params.target_film_gamma;
   m_output_gamma = m_params.output_gamma;

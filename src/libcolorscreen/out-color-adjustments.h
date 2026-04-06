@@ -25,32 +25,42 @@ struct out_lookup_table_params
   }
 };
 
-precomputed_function<luminosity_t> * get_new_out_lookup_table (struct out_lookup_table_params &, progress_info *);
+precomputed_function<luminosity_t> *
+get_new_out_lookup_table (struct out_lookup_table_params &, progress_info *);
 
 /* Convert color from process profile to final profile
    (either integer or HDR)  */
 class out_color_adjustments
 {
 public:
-  out_color_adjustments (int maxval)
-  : m_dst_maxval (maxval)
-  {
-  }
-  bool 
-  precompute (render_parameters &rparam, const image_data *m_img, bool normalized_patches, rgbdata patch_proportions, progress_info *progress = NULL);
-  inline void final_color (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *) const;
-  inline void final_color_precise (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *) const;
-  inline void linear_hdr_color (luminosity_t, luminosity_t, luminosity_t, luminosity_t *, luminosity_t *, luminosity_t *) const;
-  inline void hdr_final_color (luminosity_t, luminosity_t, luminosity_t, luminosity_t *, luminosity_t *, luminosity_t *) const;
+  out_color_adjustments (int maxval) : m_dst_maxval (maxval) {}
+  bool precompute (render_parameters &rparam, const image_data *m_img,
+                   bool normalized_patches, rgbdata patch_proportions,
+                   progress_info *progress = NULL);
+  inline void final_color (luminosity_t, luminosity_t, luminosity_t, int *,
+                           int *, int *) const;
+  inline void final_color_precise (luminosity_t, luminosity_t, luminosity_t,
+                                   int *, int *, int *) const;
+  inline void linear_hdr_color (luminosity_t, luminosity_t, luminosity_t,
+                                luminosity_t *, luminosity_t *,
+                                luminosity_t *) const;
+  inline void hdr_final_color (luminosity_t, luminosity_t, luminosity_t,
+                               luminosity_t *, luminosity_t *,
+                               luminosity_t *) const;
 
   static constexpr const size_t out_lookup_table_size = 65536 * 16;
-  /* Color matrix.  For additvie processes it converts process RGB to prophoto RGB.
-     For subtractive processes it only applies transformations does in process RGB.
-     TODO: Only exported because of single use in render-interpolate that should
-     be rewritten.  */
+  /* Color matrix.  For additvie processes it converts process RGB to prophoto
+     RGB. For subtractive processes it only applies transformations does in
+     process RGB.
+     TODO: Only exported because of single use in render-interpolate that
+     should be rewritten.  */
   color_matrix m_color_matrix;
+
 private:
-  typedef lru_cache<out_lookup_table_params, precomputed_function<luminosity_t>, precomputed_function<luminosity_t> *, get_new_out_lookup_table, 4> out_lookup_table_cache_t;
+  typedef lru_cache<
+      out_lookup_table_params, precomputed_function<luminosity_t>,
+      precomputed_function<luminosity_t> *, get_new_out_lookup_table, 4>
+      out_lookup_table_cache_t;
 
   /* Desired maximal value of output data (usually either 256 or 65536).  */
   int m_dst_maxval;
@@ -62,7 +72,7 @@ private:
   hd_curve *m_output_curve;
 
   /* Tone curve translation.  */
-  std::unique_ptr <tone_curve> m_tone_curve;
+  std::unique_ptr<tone_curve> m_tone_curve;
 
   /* For substractive processes it converts xyz to prophoto RGB applying
      corrections, like saturation control.  */

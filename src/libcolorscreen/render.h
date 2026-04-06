@@ -271,6 +271,9 @@ protected:
 
   backlight_cache_t::cached_ptr m_backlight_correction;
   uint64_t m_backlight_correction_id;
+
+  std::unique_ptr <film_sensitivity> m_sensitivity;
+  std::unique_ptr <hd_curve> m_sensitivity_hd_curve;
 };
 
 typedef luminosity_t __attribute__ ((vector_size (sizeof (luminosity_t)*4))) vec_luminosity_t;
@@ -307,6 +310,8 @@ pure_attr inline luminosity_t always_inline_attr
 render::adjust_luminosity_ir (luminosity_t lum) const
 {
   lum = (lum - m_params.dark_point) * m_params.scan_exposure;
+  if (m_sensitivity)
+    lum = m_sensitivity->apply (lum);
   if (m_params.film_gamma != 1)
     lum = invert_gamma (lum, m_params.film_gamma);
   return lum;

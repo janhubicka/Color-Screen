@@ -15,6 +15,11 @@ EmulsionPanel::EmulsionPanel(StateGetter stateGetter, StateSetter stateSetter,
 EmulsionPanel::~EmulsionPanel() = default;
 
 void EmulsionPanel::setupUi() {
+  addCheckboxParameter(
+      "Contact copy simulation",
+      [](const ParameterState &s) { return s.rparams.contact_copy.simulate; },
+      [](ParameterState &s, bool v) { s.rparams.contact_copy.simulate = v; });
+
   addSeparator("Film characteristics");
 
   // Create the interactive curve widget
@@ -41,7 +46,7 @@ void EmulsionPanel::setupUi() {
       
       applyChange(
           [params](ParameterState &s) {
-              s.rparams.emulsion_characteristic_curve = params;
+              s.rparams.contact_copy.emulsion_characteristic_curve = params;
           },
           "Modify emulsion curve"
       );
@@ -72,7 +77,7 @@ void EmulsionPanel::setupUi() {
           
           applyChange(
               [p](ParameterState &s) {
-                  s.rparams.emulsion_characteristic_curve = p;
+                  s.rparams.contact_copy.emulsion_characteristic_curve = p;
               },
               "Modify emulsion curve"
           );
@@ -104,28 +109,42 @@ void EmulsionPanel::setupUi() {
   addRow("Linear end", m_linear2XSpin, m_linear2YSpin);
   addRow("Max point", m_maxXSpin, m_maxYSpin);
 
-  addSeparator("Lab Parameters");
+  addSeparator("Simulated darkroom");
 
   addSliderParameter(
       "Preflash", 0.0, 100.0, 100.0, 2, "", "",
-      [](const ParameterState &s) { return s.rparams.lab.preflash; },
-      [](ParameterState &s, double v) { s.rparams.lab.preflash = v; });
+      [](const ParameterState &s) { return s.rparams.contact_copy.preflash; },
+      [](ParameterState &s, double v) { s.rparams.contact_copy.preflash = v; },
+      1.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; });
 
   addSliderParameter(
-      "Exposure", 0.0, 100.0, 100.0, 2, "", "",
-      [](const ParameterState &s) { return s.rparams.lab.exposure; },
-      [](ParameterState &s, double v) { s.rparams.lab.exposure = v; });
+      "Enlarger exposure", 0.0, 100.0, 100.0, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.contact_copy.exposure; },
+      [](ParameterState &s, double v) { s.rparams.contact_copy.exposure = v; },
+      1.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; });
 
   addSliderParameter(
-      "Boost", 0.0, 100.0, 100.0, 2, "", "",
-      [](const ParameterState &s) { return s.rparams.lab.boost; },
-      [](ParameterState &s, double v) { s.rparams.lab.boost = v; });
+      "Density boost", 0.0, 100.0, 100.0, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.contact_copy.boost; },
+      [](ParameterState &s, double v) { s.rparams.contact_copy.boost = v; },
+      1.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; });
 
   // Sync state to UI
   m_paramUpdaters.push_back([this](const ParameterState &s) {
-      if (!(s.rparams.emulsion_characteristic_curve == m_hdCurveWidget->getParameters())) {
+      bool sim = s.rparams.contact_copy.simulate;
+      m_hdCurveWidget->setEnabled(sim);
+      m_minXSpin->setEnabled(sim);
+      m_minYSpin->setEnabled(sim);
+      m_linear1XSpin->setEnabled(sim);
+      m_linear1YSpin->setEnabled(sim);
+      m_linear2XSpin->setEnabled(sim);
+      m_linear2YSpin->setEnabled(sim);
+      m_maxXSpin->setEnabled(sim);
+      m_maxYSpin->setEnabled(sim);
+
+      if (!(s.rparams.contact_copy.emulsion_characteristic_curve == m_hdCurveWidget->getParameters())) {
           m_hdCurveWidget->blockSignals(true);
-          m_hdCurveWidget->setParameters(s.rparams.emulsion_characteristic_curve);
+          m_hdCurveWidget->setParameters(s.rparams.contact_copy.emulsion_characteristic_curve);
           m_hdCurveWidget->blockSignals(false);
           updateSpinBoxes();
       }

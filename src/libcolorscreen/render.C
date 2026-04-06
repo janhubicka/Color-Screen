@@ -530,6 +530,12 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
         return false;
       m_sharpened_data = m_sharpened_data_holder->m_data;
     }
+  if (m_params.contact_copy.simulate)
+    {
+      m_sensitivity_hd_curve = std::make_unique <synthetic_hd_curve> (100, m_params.contact_copy.emulsion_characteristic_curve);
+      m_sensitivity = std::make_unique <film_sensitivity> (m_sensitivity_hd_curve.get (), m_params.contact_copy.preflash, m_params.contact_copy.exposure, m_params.contact_copy.boost);
+      m_sensitivity->precompute ();
+    }
   return out_color.precompute (m_params, &m_img, normalized_patches, patch_proportions, progress);
 }
 
@@ -650,7 +656,7 @@ hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity
   {
     luminosity_t y = i * (maxy - miny) / (steps - 1) + miny;
     /* Density to linear */
-    y = pow (10, -y * rparam.lab.boost);
+    y = pow (10, -y * rparam.contact_copy.boost);
     int rr, gg, bb;
     a.final_color (y, y, y, &rr, &gg, &bb);
     data[i].red = rr;

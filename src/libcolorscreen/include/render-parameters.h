@@ -17,22 +17,26 @@ class render_type_parameters;
 class render_type_property;
 class stitch_project;
 
-struct lab_parameters
+struct contact_copy_parameters
 {
+  bool simulate;
+  hd_curve_parameters emulsion_characteristic_curve;
+
   /* Light exposure before exposure in enlarger.  */
   luminosity_t preflash;
   /* Exposure time in enlarger.  */
   luminosity_t exposure;
   /* Density boost (development time)  */
   luminosity_t boost;
-  constexpr lab_parameters ()
-  : preflash (0), exposure (1), boost (1)
+  constexpr contact_copy_parameters ()
+  : simulate (false), preflash (0), exposure (1), boost (1)
   {
   }
   bool
-  operator== (const lab_parameters &o) const
+  operator== (const contact_copy_parameters &o) const
   {
     return preflash == o.preflash && boost == o.boost
+	   && emulsion_characteristic_curve == o.emulsion_characteristic_curve
 	   && exposure == o.exposure;
   }
 };
@@ -277,9 +281,7 @@ struct render_parameters
 
   /***** Patch density parameters  *****/
 
-  hd_curve_parameters emulsion_characteristic_curve;
-
-  lab_parameters lab;
+  contact_copy_parameters contact_copy;
 
   /* Gamma curve of the film (to be replaced by HD curve eventually)  */
   luminosity_t film_gamma;
@@ -554,8 +556,7 @@ struct render_parameters
         return false;
     return demosaic == other.demosaic
 	   && gamma == other.gamma && film_gamma == other.film_gamma
-	   && emulsion_characteristic_curve == other.emulsion_characteristic_curve
-	   && lab == other.lab
+	   && contact_copy == other.contact_copy
            && target_film_gamma == other.target_film_gamma
            && output_gamma == other.output_gamma
 	   && scan_rotation == other.scan_rotation

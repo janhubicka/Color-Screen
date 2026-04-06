@@ -94,7 +94,7 @@ struct hd_curve_parameters
   luminosity_t maxx, maxy;
 
   constexpr hd_curve_parameters ()
-  : minx(-3), miny(-2), linear1x (-2), linear1y (-2), linear2x(4.8), linear2y(4.8), maxx(4.8), maxy(5)
+  : minx(-6), miny(6), linear1x (-5), linear1y (5), linear2x(5), linear2y(-5), maxx(6), maxy(-5)
   {
   }
   constexpr hd_curve_parameters (luminosity_t new_minx, luminosity_t new_miny, luminosity_t new_linear1x, luminosity_t new_linear1y, luminosity_t new_linear2x, luminosity_t new_linear2y, luminosity_t new_maxx, luminosity_t new_maxy)
@@ -113,7 +113,7 @@ struct hd_curve_parameters
   }
 };
 
-/* Densitivity curve of an "ideal" digital camera with safety buffer in upper 90%.  */
+/* Sensitivity curve of an "ideal" digital camera with safety buffer in upper 90%.  */
 extern DLL_PUBLIC struct hd_curve_parameters safe_output_curve_params, safe_reversal_output_curve_params, input_curve_params;
 
 /* Produce a synthetic HD curve.  */
@@ -122,28 +122,49 @@ class synthetic_hd_curve : public hd_curve
 public:
   synthetic_hd_curve (int points, struct hd_curve_parameters p)
     {
-      bool dostart = p.minx != p.linear1x;
-      bool doend = p.linear2x != p.maxx;
+      if (!(p.minx < p.maxx))
+	p.maxx = p.minx + 1;
+      bool dostart = p.minx < p.linear1x && p.linear1x < p.linear2x && p.linear2x <= p.maxx;
+      bool doend = p.minx <= p.linear1x && p.linear1x < p.linear2x && p.linear2x < p.maxx;
       int n1 = dostart ? points : 1;
       n = n1 + (doend ? points : 1);
       xs = (luminosity_t *)malloc (n * sizeof (*xs));
       ys = (luminosity_t *)malloc (n * sizeof (*ys));
-      luminosity_t slope = (p.linear2x - p.linear1x) / (p.linear2y - p.linear1y);
+      luminosity_t slope = p.linear2y != p.linear1y ? (p.linear2x - p.linear1x) / (p.linear2y - p.linear1y) : 0;
       xs[0] = p.minx;
       ys[0] = p.miny;
       xs[n - 1] = p.maxx;
       ys[n - 1] = p.maxy;
+
+      luminosity_t start_middlex = p.linear1x - (p.linear1y - p.miny) * slope;
+      luminosity_t start_middley = p.miny;
+
+      if (start_middlex < p.minx && slope != 0)
+        {
+          start_middlex = p.minx;
+          start_middley = p.linear1y - (p.linear1x - p.minx) / slope;
+        }
+
+      luminosity_t end_middlex = p.linear2x + (p.maxy - p.linear2y) * slope;
+      luminosity_t end_middley = p.maxy;
+
+      if (end_middlex > p.maxx && slope != 0)
+        {
+          end_middlex = p.maxx;
+          end_middley = p.linear2y + (p.maxx - p.linear2x) / slope;
+        }
+
       for (int i = 0; i < points; i++)
 	{
 	  if (dostart)
 	    bezier (&xs[i], &ys[i], p.minx, p.miny, 
-		    p.linear1x - (p.linear1y - p.miny) * slope,
-		    p.miny, p.linear1x,p.linear1y,
+		    start_middlex, start_middley,
+		    p.linear1x,p.linear1y,
 		    i / (luminosity_t)(points - 1));
 	  if (doend)
 	    bezier (&xs[i+n1], &ys[i+n1], p.linear2x, p.linear2y, 
-		    p.linear2x + (p.maxy - p.linear2y) * slope,
-		    p.maxy, p.maxx, p.maxy,
+		    end_middlex, end_middley,
+		    p.maxx, p.maxy,
 		    i / (luminosity_t)(points - 1));
 	}
 #if 0
@@ -164,8 +185,8 @@ class
 film_sensitivity
 {
 public:
-  film_sensitivity (hd_curve *c, luminosity_t preflash = 0.1, luminosity_t exp = 100)
-  : m_curve (c), m_preflash (preflash), m_boost (1), m_exposure (exp), m_clip (false)
+  film_sensitivity (hd_curve *c, luminosity_t preflash = 0.1, luminosity_t exp = 100, luminosity_t m_boost = 1)
+  : m_curve (c), m_preflash (preflash), m_boost (m_boost), m_exposure (exp), m_clip (false)
   {
   }
   static struct hd_curve ilfrod_galerie_FB1;
