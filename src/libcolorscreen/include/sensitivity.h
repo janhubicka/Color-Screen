@@ -139,12 +139,12 @@ public:
 	    bezier (&xs[i], &ys[i], p.minx, p.miny, 
 		    p.linear1x - (p.linear1y - p.miny) * slope,
 		    p.miny, p.linear1x,p.linear1y,
-		    i / (luminosity_t)(n - 1));
+		    i / (luminosity_t)(points - 1));
 	  if (doend)
 	    bezier (&xs[i+n1], &ys[i+n1], p.linear2x, p.linear2y, 
 		    p.linear2x + (p.maxy - p.linear2y) * slope,
 		    p.maxy, p.maxx, p.maxy,
-		    i / (luminosity_t)(n - 1));
+		    i / (luminosity_t)(points - 1));
 	}
 #if 0
 	  FILE *f = fopen("/tmp/shd.dat", "wt");
