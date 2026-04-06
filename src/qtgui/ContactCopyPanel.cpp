@@ -1,4 +1,4 @@
-#include "EmulsionPanel.h"
+#include "ContactCopyPanel.h"
 #include "HDCurveWidget.h"
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -6,15 +6,15 @@
 #include <QLabel>
 #include <QVBoxLayout>
 
-EmulsionPanel::EmulsionPanel(StateGetter stateGetter, StateSetter stateSetter,
+ContactCopyPanel::ContactCopyPanel(StateGetter stateGetter, StateSetter stateSetter,
                              ImageGetter imageGetter, QWidget *parent)
     : ParameterPanel(stateGetter, stateSetter, imageGetter, parent) {
   setupUi();
 }
 
-EmulsionPanel::~EmulsionPanel() = default;
+ContactCopyPanel::~ContactCopyPanel() = default;
 
-void EmulsionPanel::setupUi() {
+void ContactCopyPanel::setupUi() {
   addCheckboxParameter(
       "Contact copy simulation",
       [](const ParameterState &s) { return s.rparams.contact_copy.simulate; },
@@ -161,7 +161,7 @@ void EmulsionPanel::setupUi() {
   updateUI();
 }
 
-void EmulsionPanel::updateSpinBoxes() {
+void ContactCopyPanel::updateSpinBoxes() {
     m_updatingSpinBoxes = true;
     colorscreen::hd_curve_parameters p = m_hdCurveWidget->getParameters();
     
@@ -179,7 +179,7 @@ void EmulsionPanel::updateSpinBoxes() {
     m_updatingSpinBoxes = false;
 }
 
-void EmulsionPanel::reattachHDCurve(QWidget *widget) {
+void ContactCopyPanel::reattachHDCurve(QWidget *widget) {
     if (widget != m_hdCurveWidget)
         return;
         

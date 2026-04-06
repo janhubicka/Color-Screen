@@ -1,17 +1,17 @@
-#ifndef EMULSION_PANEL_H
-#define EMULSION_PANEL_H
+#ifndef CONTACT_COPY_PANEL_H
+#define CONTACT_COPY_PANEL_H
 
 #include "ParameterPanel.h"
 
 class HDCurveWidget;
 class QDoubleSpinBox;
 
-class EmulsionPanel : public ParameterPanel {
+class ContactCopyPanel : public ParameterPanel {
   Q_OBJECT
 public:
-  EmulsionPanel(StateGetter stateGetter, StateSetter stateSetter,
+  ContactCopyPanel(StateGetter stateGetter, StateSetter stateSetter,
                 ImageGetter imageGetter, QWidget *parent = nullptr);
-  ~EmulsionPanel() override;
+  ~ContactCopyPanel() override;
 
 signals:
   void detachHDCurveRequested(QWidget *widget);
@@ -38,4 +38,4 @@ private:
   bool m_updatingSpinBoxes = false;
 };
 
-#endif // EMULSION_PANEL_H
+#endif // CONTACT_COPY_PANEL_H

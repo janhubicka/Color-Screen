@@ -302,8 +302,8 @@ void MainWindow::setupUi() {
 
   // Create Color Panel (after Sharpness)
   // Create Color Panel (after Sharpness)
-  m_emulsionPanel = 
-      new EmulsionPanel([this]() { return getCurrentState(); },
+  m_contactCopyPanel = 
+      new ContactCopyPanel([this]() { return getCurrentState(); },
                         [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
                         [this]() { return m_scan; }, this);
 
@@ -568,9 +568,9 @@ void MainWindow::setupUi() {
             &ColorPanel::detachCorrectedGamutChartRequested,
             &ColorPanel::reattachCorrectedGamutChart);
 
-  setupDock(m_hdCurveDock, m_emulsionPanel,
-            &EmulsionPanel::detachHDCurveRequested,
-            &EmulsionPanel::reattachHDCurve);
+  setupDock(m_hdCurveDock, m_contactCopyPanel,
+            &ContactCopyPanel::detachHDCurveRequested,
+            &ContactCopyPanel::reattachHDCurve);
 
   connect(m_sharpnessPanel, &SharpnessPanel::focusAnalysisRequested, this,
           &MainWindow::onFocusAnalysisRequested);
@@ -660,9 +660,9 @@ void MainWindow::setupUi() {
   });
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
   m_configTabs->addTab(m_imageLayerPanel, "Image Layer");
+  m_configTabs->addTab(m_contactCopyPanel, "Contact copy");
   m_configTabs->addTab(m_screenPanel, "Screen");
   m_configTabs->addTab(m_geometryPanel, "Geometry");
-  m_configTabs->addTab(m_emulsionPanel, "Emulsion");
   m_configTabs->addTab(m_colorPanel, "Color");
   m_configTabs->addTab(m_profilePanel, "Profile");
 
@@ -684,7 +684,7 @@ void MainWindow::setupUi() {
   m_panels.push_back(m_imageLayerPanel);
   m_panels.push_back(m_screenPanel);
   m_panels.push_back(m_geometryPanel);
-  m_panels.push_back(m_emulsionPanel);
+  m_panels.push_back(m_contactCopyPanel);
   m_panels.push_back(m_colorPanel);
   m_panels.push_back(m_profilePanel);
 
