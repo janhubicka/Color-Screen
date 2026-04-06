@@ -536,10 +536,10 @@ analyze_base_worker<GEOMETRY>::lanczos3_demosaiced_interpolate (point_t scr)
       rgbdata ret = {0, 0, 0};
       double wx[6];
       for (int i = 0; i < 6; i++)
-	wx[i] = lanczos_kernel (i - 2 - rx, 3);
+	wx[i] = lanczos3_kernel (i - 2 - rx);
       double wy[6];
       for (int j = 0; j < 6; j++)
-	wy[j] = lanczos_kernel (j - 2 - ry, 3);
+	wy[j] = lanczos3_kernel (j - 2 - ry);
 
       for (int j = 0; j < 6; j++)
 	{

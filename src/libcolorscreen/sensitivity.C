@@ -51,17 +51,17 @@ struct synthetic_hd_curve_parameters input_curve = {-2.3, 0.3,
 						    3.8, 4,
 						    3.8, 4};
 #endif
-struct synthetic_hd_curve_parameters input_curve_params = {-3, 0.3,
-							   -2.2, 0.35,
-							   3, 4,
-							   3, 4};
+struct hd_curve_parameters input_curve_params (-3, 0.3,
+              				       -2.2, 0.35,
+              				       3, 4,
+              				       3, 4);
 
-struct synthetic_hd_curve_parameters safe_output_curve_params = {0, 0,
-								 0, 0,
-								 0.7, 0.7,
-								 3, 1};
-struct synthetic_hd_curve_parameters safe_reversal_output_curve_params = {0, 1,
-									  0, 1,
-									  0.7, 0.3,
-									  3, 0};
+struct hd_curve_parameters safe_output_curve_params(0, 0,
+              					    0, 0,
+              					    0.7, 0.7,
+              					    3, 1);
+struct hd_curve_parameters safe_reversal_output_curve_params (0, 1,
+							      0, 1,
+							      0.7, 0.3,
+							      3, 0);
 }

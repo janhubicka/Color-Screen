@@ -38,6 +38,7 @@ class QTimer;
 #include "ProfilePanel.h"
 #include "TilesPanel.h"
 #include "ImageLayerPanel.h"
+#include "EmulsionPanel.h"
 #include "ParameterState.h"
 #include "SharpnessPanel.h"
 #include "TaskQueue.h"
@@ -319,6 +320,7 @@ private:
   SharpnessPanel *m_sharpnessPanel;
   ScreenPanel *m_screenPanel;
   GeometryPanel *m_geometryPanel;
+  EmulsionPanel *m_emulsionPanel;
   ColorPanel *m_colorPanel;
   ProfilePanel *m_profilePanel;
   TilesPanel   *m_tilesPanel = nullptr;

@@ -81,8 +81,8 @@ bezier (luminosity_t *rx, luminosity_t *ry,
 }
 
 
-/* Descriptio of a typical HD curve.  */
-struct synthetic_hd_curve_parameters
+/* Description of a typical HD curve.  */
+struct hd_curve_parameters
 {
   /* Point where minimal density is reached.  */
   luminosity_t minx, miny;
@@ -92,16 +92,35 @@ struct synthetic_hd_curve_parameters
   luminosity_t linear2x, linear2y;
   /* Point where the maximal density is reached.  */
   luminosity_t maxx, maxy;
+
+  constexpr hd_curve_parameters ()
+  : minx(-3), miny(-2), linear1x (-2), linear1y (-2), linear2x(4.8), linear2y(4.8), maxx(4.8), maxy(5)
+  {
+  }
+  constexpr hd_curve_parameters (luminosity_t new_minx, luminosity_t new_miny, luminosity_t new_linear1x, luminosity_t new_linear1y, luminosity_t new_linear2x, luminosity_t new_linear2y, luminosity_t new_maxx, luminosity_t new_maxy)
+  : minx(new_minx), miny(new_miny), linear1x (new_linear1x), linear1y (new_linear1y), linear2x(new_linear2x), linear2y(new_linear2y), maxx(new_maxx), maxy(new_maxy)
+  {
+  }
+  bool
+  operator== (const hd_curve_parameters &other) const
+  {
+    return minx == other.minx && miny == other.miny
+	   && linear1x == other.linear1x
+	   && linear1y == other.linear1y
+	   && linear2x == other.linear2x
+	   && linear2y == other.linear2y
+	   && minx == other.maxx && miny == other.maxy;
+  }
 };
 
 /* Densitivity curve of an "ideal" digital camera with safety buffer in upper 90%.  */
-extern DLL_PUBLIC struct synthetic_hd_curve_parameters safe_output_curve_params, safe_reversal_output_curve_params, input_curve_params;
+extern DLL_PUBLIC struct hd_curve_parameters safe_output_curve_params, safe_reversal_output_curve_params, input_curve_params;
 
 /* Produce a synthetic HD curve.  */
 class synthetic_hd_curve : public hd_curve
 {
 public:
-  synthetic_hd_curve (int points, struct synthetic_hd_curve_parameters p)
+  synthetic_hd_curve (int points, struct hd_curve_parameters p)
     {
       bool dostart = p.minx != p.linear1x;
       bool doend = p.linear2x != p.maxx;

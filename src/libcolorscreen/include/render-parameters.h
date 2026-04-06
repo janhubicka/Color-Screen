@@ -258,6 +258,8 @@ struct render_parameters
 
   /***** Patch density parameters  *****/
 
+  hd_curve_parameters emulsion_characteristic_curve;
+
   /* Gamma curve of the film (to be replaced by HD curve eventually)  */
   luminosity_t film_gamma;
   /* The following is used by interpolated rendering only.  */
@@ -531,6 +533,7 @@ struct render_parameters
         return false;
     return demosaic == other.demosaic
 	   && gamma == other.gamma && film_gamma == other.film_gamma
+	   && emulsion_characteristic_curve == other.emulsion_characteristic_curve
            && target_film_gamma == other.target_film_gamma
            && output_gamma == other.output_gamma
 	   && scan_rotation == other.scan_rotation

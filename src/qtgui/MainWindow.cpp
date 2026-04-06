@@ -302,6 +302,11 @@ void MainWindow::setupUi() {
 
   // Create Color Panel (after Sharpness)
   // Create Color Panel (after Sharpness)
+  m_emulsionPanel = 
+      new EmulsionPanel([this]() { return getCurrentState(); },
+                        [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
+                        [this]() { return m_scan; }, this);
+
   m_colorPanel =
       new ColorPanel([this]() { return getCurrentState(); },
                      [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
@@ -647,6 +652,7 @@ void MainWindow::setupUi() {
   m_configTabs->addTab(m_imageLayerPanel, "Image Layer");
   m_configTabs->addTab(m_screenPanel, "Screen");
   m_configTabs->addTab(m_geometryPanel, "Geometry");
+  m_configTabs->addTab(m_emulsionPanel, "Emulsion");
   m_configTabs->addTab(m_colorPanel, "Color");
   m_configTabs->addTab(m_profilePanel, "Profile");
 
@@ -667,6 +673,10 @@ void MainWindow::setupUi() {
   m_panels.push_back(m_sharpnessPanel);
   m_panels.push_back(m_imageLayerPanel);
   m_panels.push_back(m_screenPanel);
+  m_panels.push_back(m_geometryPanel);
+  m_panels.push_back(m_emulsionPanel);
+  m_panels.push_back(m_colorPanel);
+  m_panels.push_back(m_profilePanel);
 
   connect(m_imageLayerPanel, &ImageLayerPanel::neutralAreaRequested, this, [this]() {
       startAreaSelection(tr("Select neutral area for simulated mixing"), [this](QRect area) {
@@ -828,10 +838,7 @@ void MainWindow::setupUi() {
       });
   });
 
-  m_panels.push_back(m_geometryPanel);
-  m_panels.push_back(m_geometryPanel);
-  m_panels.push_back(m_colorPanel);
-  m_panels.push_back(m_profilePanel);
+  // Already pushed above
 
   // Connect Adaptive Sharpening signal from Sharpness Panel
   connect(m_sharpnessPanel, &SharpnessPanel::adaptiveSharpeningRequested, this, &MainWindow::onAdaptiveSharpeningRequested);
@@ -862,14 +869,7 @@ void MainWindow::setupUi() {
 
   // Link ImageWidget -> GeometryPanel checkbox
   connect(m_imageWidget, &ImageWidget::registrationPointsVisibilityChanged,
-          this, [this](bool visible) {
-    QCheckBox *cb = m_geometryPanel->findChild<QCheckBox*>("showRegistrationPointsBox");
-    if (cb) {
-        cb->blockSignals(true);
-        cb->setChecked(visible);
-        cb->blockSignals(false);
-    }
-  });
+          m_geometryPanel, &GeometryPanel::setRegistrationPointsVisible);
 
   // Connect fullscreen exit signal
   connect(m_imageWidget, &ImageWidget::exitFullscreenRequested, this, &MainWindow::toggleFullscreen);

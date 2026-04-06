@@ -43,6 +43,7 @@ public:
   void reattachNonlinearChart(QWidget *widget);
   void updateFinetuneImages(const colorscreen::finetune_result& result);
   void reattachFinetuneImages(QWidget *widget);
+  void setRegistrationPointsVisible(bool visible);
 
 protected:
   void onParametersRefreshed(const ParameterState &state) override { updateDeformationChart(); }

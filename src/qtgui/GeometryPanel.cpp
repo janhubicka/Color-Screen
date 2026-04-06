@@ -341,3 +341,14 @@ void GeometryPanel::reattachFinetuneImages(QWidget *widget) {
     QWidget *detachable = createDetachableSection("Finetune Diagnostic Images", widget, [this, widget](){ emit detachFinetuneImagesRequested(widget); });
     m_finetuneImagesContainer->addWidget(detachable);
 }
+
+void GeometryPanel::setRegistrationPointsVisible(bool visible) {
+    QCheckBox *cb = findChild<QCheckBox*>("showRegistrationPointsBox");
+    if (cb) {
+        cb->blockSignals(true);
+        cb->setChecked(visible);
+        cb->blockSignals(false);
+    }
+    if (m_exaggerateSliderContainer) m_exaggerateSliderContainer->setEnabled(visible);
+    if (m_maxArrowLengthSliderContainer) m_maxArrowLengthSliderContainer->setEnabled(visible);
+}
