@@ -17,6 +17,25 @@ class render_type_parameters;
 class render_type_property;
 class stitch_project;
 
+struct lab_parameters
+{
+  /* Light exposure before exposure in enlarger.  */
+  luminosity_t preflash;
+  /* Exposure time in enlarger.  */
+  luminosity_t exposure;
+  /* Density boost (development time)  */
+  luminosity_t boost;
+  constexpr lab_parameters ()
+  : preflash (0), exposure (1), boost (1)
+  {
+  }
+  bool
+  operator== (const lab_parameters &o) const
+  {
+    return preflash == o.preflash && boost == o.boost
+	   && exposure == o.exposure;
+  }
+};
 
 
 /* Parameters of sharpening.  */
@@ -259,6 +278,8 @@ struct render_parameters
   /***** Patch density parameters  *****/
 
   hd_curve_parameters emulsion_characteristic_curve;
+
+  lab_parameters lab;
 
   /* Gamma curve of the film (to be replaced by HD curve eventually)  */
   luminosity_t film_gamma;
@@ -534,6 +555,7 @@ struct render_parameters
     return demosaic == other.demosaic
 	   && gamma == other.gamma && film_gamma == other.film_gamma
 	   && emulsion_characteristic_curve == other.emulsion_characteristic_curve
+	   && lab == other.lab
            && target_film_gamma == other.target_film_gamma
            && output_gamma == other.output_gamma
 	   && scan_rotation == other.scan_rotation

@@ -104,6 +104,23 @@ void EmulsionPanel::setupUi() {
   addRow("Linear end", m_linear2XSpin, m_linear2YSpin);
   addRow("Max point", m_maxXSpin, m_maxYSpin);
 
+  addSeparator("Lab Parameters");
+
+  addSliderParameter(
+      "Preflash", 0.0, 100.0, 100.0, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.lab.preflash; },
+      [](ParameterState &s, double v) { s.rparams.lab.preflash = v; });
+
+  addSliderParameter(
+      "Exposure", 0.0, 100.0, 100.0, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.lab.exposure; },
+      [](ParameterState &s, double v) { s.rparams.lab.exposure = v; });
+
+  addSliderParameter(
+      "Boost", 0.0, 100.0, 100.0, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.lab.boost; },
+      [](ParameterState &s, double v) { s.rparams.lab.boost = v; });
+
   // Sync state to UI
   m_paramUpdaters.push_back([this](const ParameterState &s) {
       if (s.rparams.emulsion_characteristic_curve == m_hdCurveWidget->getParameters())

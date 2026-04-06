@@ -770,4 +770,24 @@ get_linearized_pixel (const image_data &img, render_parameters &rparam, int xx,
         }
   return n ? color / n : color;
 }
+
+std::vector <rgbdata>
+hd_y_to_rgb (image_data &img, render_parameters &rparam, int steps, luminosity_t miny, luminosity_t maxy)
+{
+  std::vector <rgbdata> data (steps);
+  render r (img, rparam, 256);
+  for (int i = 0 ; i < steps; i++)
+  {
+    luminosity_t y = i * (maxy - miny) / (steps - 1) + miny;
+    /* Density to linear */
+    y = pow (10, -y * rparam.lab.boost);
+    int rr, gg, bb;
+    r.set_color (y, y, y, &rr, &gg, &bb);
+    data[i].red = rr;
+    data[i].green = gg;
+    data[i].blue = bb;
+  }
+  return data;
+}
+
 }
