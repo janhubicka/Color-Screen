@@ -123,12 +123,20 @@ void EmulsionPanel::setupUi() {
 
   // Sync state to UI
   m_paramUpdaters.push_back([this](const ParameterState &s) {
-      if (s.rparams.emulsion_characteristic_curve == m_hdCurveWidget->getParameters())
-          return;
-      m_hdCurveWidget->blockSignals(true);
-      m_hdCurveWidget->setParameters(s.rparams.emulsion_characteristic_curve);
-      m_hdCurveWidget->blockSignals(false);
-      updateSpinBoxes();
+      if (!(s.rparams.emulsion_characteristic_curve == m_hdCurveWidget->getParameters())) {
+          m_hdCurveWidget->blockSignals(true);
+          m_hdCurveWidget->setParameters(s.rparams.emulsion_characteristic_curve);
+          m_hdCurveWidget->blockSignals(false);
+          updateSpinBoxes();
+      }
+
+      double minY = m_hdCurveWidget->getMinY();
+      double maxY = m_hdCurveWidget->getMaxY();
+      if (maxY > minY) {
+          colorscreen::render_parameters mut_rparams = s.rparams;
+          auto colors = colorscreen::hd_y_to_rgb(mut_rparams, 400, minY, maxY);
+          m_hdCurveWidget->setHDColors(colors, minY, maxY);
+      }
   });
 
   updateUI();
