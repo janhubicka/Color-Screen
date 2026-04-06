@@ -264,6 +264,6 @@ DLL_PUBLIC bool optimize_color_model_colors (scr_to_img_parameters *param,
                                              progress_info *progress);
 DLL_PUBLIC bool compare_deltae (image_data &img, scr_to_img_parameters &param1, render_parameters &rparam1, scr_to_img_parameters &param2, render_parameters &rparam2, const char *cmpname, double *, double *, progress_info *progress = NULL);
 DLL_PUBLIC std::vector <rgbdata>
-hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity_t maxy);
+hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity_t maxy, rgbdata patch_proportions);
 }
 #endif

@@ -153,7 +153,7 @@ void EmulsionPanel::setupUi() {
       double maxY = m_hdCurveWidget->getMaxY();
       if (maxY > minY) {
           colorscreen::render_parameters mut_rparams = s.rparams;
-          auto colors = colorscreen::hd_y_to_rgb(mut_rparams, 400, minY, maxY);
+          auto colors = colorscreen::hd_y_to_rgb(mut_rparams, 400, minY, maxY, s.scrToImg.type != colorscreen::Random ? colorscreen::patch_proportions(s.scrToImg.type, &mut_rparams) : (colorscreen::rgbdata){1.0/3, 1.0/3, 1.0/3});
           m_hdCurveWidget->setHDColors(colors, minY, maxY);
       }
   });

@@ -646,10 +646,10 @@ get_linearized_pixel (const image_data &img, render_parameters &rparam, int xx,
 }
 
 std::vector <rgbdata>
-hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity_t maxy)
+hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity_t maxy, rgbdata patch_proportions)
 {
   out_color_adjustments a (256);
-  if (!a.precompute (rparam, NULL, false, {0.33, 0.33, 0.33}, NULL))
+  if (!a.precompute (rparam, NULL, false, patch_proportions, NULL))
     return {};
   std::vector <rgbdata> data (steps);
   for (int i = 0 ; i < steps; i++)

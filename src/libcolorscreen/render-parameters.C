@@ -1291,7 +1291,11 @@ render_parameters::adjust_for (render_type_parameters &rtparam, render_parameter
 {
   const render_type_property &prop = render_type_properties[rtparam.type];
   if (prop.flags & render_type_property::OUTPUTS_SCAN_PROFILE)
-    original_render_from (rparam, rtparam.color, false);
+    {
+      original_render_from (rparam, rtparam.color, false);
+      if (rtparam.type == render_type_image_layer)
+	contact_copy = rparam.contact_copy;
+    }
   else if (prop.flags & render_type_property::OUTPUTS_SRGB_PROFILE)
     {
       *this = rparam;
