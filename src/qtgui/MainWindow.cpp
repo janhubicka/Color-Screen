@@ -395,6 +395,12 @@ void MainWindow::setupUi() {
   addDockWidget(Qt::RightDockWidgetArea, m_correctedGamutDock);
   m_correctedGamutDock->hide();
 
+  // H&D Curve Dock
+  m_hdCurveDock = new QDockWidget("H&D Curve", this);
+  m_hdCurveDock->setObjectName("HDCurveDock");
+  addDockWidget(Qt::RightDockWidgetArea, m_hdCurveDock);
+  m_hdCurveDock->hide();
+
   // Deformation Chart Dock
   m_deformationDock = new QDockWidget("Deformation Visualization", this);
   m_deformationDock->setObjectName("DeformationDock");
@@ -561,6 +567,10 @@ void MainWindow::setupUi() {
   setupDock(m_correctedGamutDock, m_colorPanel,
             &ColorPanel::detachCorrectedGamutChartRequested,
             &ColorPanel::reattachCorrectedGamutChart);
+
+  setupDock(m_hdCurveDock, m_emulsionPanel,
+            &EmulsionPanel::detachHDCurveRequested,
+            &EmulsionPanel::reattachHDCurve);
 
   connect(m_sharpnessPanel, &SharpnessPanel::focusAnalysisRequested, this,
           &MainWindow::onFocusAnalysisRequested);

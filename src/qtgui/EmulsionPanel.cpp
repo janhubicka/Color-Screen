@@ -22,9 +22,13 @@ void EmulsionPanel::setupUi() {
   
   // Wrap it nicely to center or align it
   QWidget *chartWrapper = new QWidget();
-  QVBoxLayout *cwLayout = new QVBoxLayout(chartWrapper);
-  cwLayout->setContentsMargins(0, 0, 0, 0);
-  cwLayout->addWidget(m_hdCurveWidget);
+  m_hdCurveContainer = new QVBoxLayout(chartWrapper);
+  m_hdCurveContainer->setContentsMargins(0, 0, 0, 0);
+  
+  QWidget *detachableCurve = createDetachableSection("H&D Curve", m_hdCurveWidget, [this]() {
+      emit detachHDCurveRequested(m_hdCurveWidget);
+  });
+  m_hdCurveContainer->addWidget(detachableCurve);
   
   if (m_currentGroupForm)
       m_currentGroupForm->addRow(chartWrapper);
@@ -129,4 +133,29 @@ void EmulsionPanel::updateSpinBoxes() {
     m_maxXSpin->setValue(p.maxx);
     m_maxYSpin->setValue(p.maxy);
     m_updatingSpinBoxes = false;
+}
+
+void EmulsionPanel::reattachHDCurve(QWidget *widget) {
+    if (widget != m_hdCurveWidget)
+        return;
+        
+    if (m_hdCurveContainer && m_hdCurveContainer->count() > 0) {
+        QWidget *section = m_hdCurveContainer->itemAt(0)->widget();
+        if (section && section->layout()) {
+            QLayoutItem *item = section->layout()->takeAt(section->layout()->count() - 1);
+            if (item) {
+                if (item->widget()) delete item->widget();
+                delete item;
+            }
+            section->layout()->addWidget(widget);
+            widget->show();
+            
+            if (section->layout()->count() > 0) {
+                QLayoutItem *headerItem = section->layout()->itemAt(0);
+                if (headerItem && headerItem->widget()) {
+                    headerItem->widget()->show();
+                }
+            }
+        }
+    }
 }

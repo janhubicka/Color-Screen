@@ -13,11 +13,18 @@ public:
                 ImageGetter imageGetter, QWidget *parent = nullptr);
   ~EmulsionPanel() override;
 
+signals:
+  void detachHDCurveRequested(QWidget *widget);
+
+public:
+  void reattachHDCurve(QWidget *widget);
+
 private:
   void setupUi();
   void updateSpinBoxes();
 
   HDCurveWidget *m_hdCurveWidget = nullptr;
+  QVBoxLayout *m_hdCurveContainer = nullptr;
   
   QDoubleSpinBox *m_minXSpin = nullptr;
   QDoubleSpinBox *m_minYSpin = nullptr;

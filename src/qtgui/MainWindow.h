@@ -349,6 +349,7 @@ private:
   BacklightChartWidget *m_backlightChart;
   QDockWidget *m_finetuneImagesDock; // Finetune diagnostic images dock (Geometry)
   QDockWidget *m_gamutDock; // Gamut visualization dock
+  QDockWidget *m_hdCurveDock; // Added
   QDockWidget *m_correctedGamutDock; // Corrected gamut visualization dock
 
   // Current parameters file path
