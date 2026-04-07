@@ -2,6 +2,9 @@
 #define COLORSCREEN_H
 #include <memory>
 #include <string>
+#include <vector>
+#include <cmath>
+#include <algorithm>
 #include "render-parameters.h"
 #include "render-type-parameters.h"
 #include "solver-parameters.h"
@@ -264,6 +267,57 @@ DLL_PUBLIC bool optimize_color_model_colors (scr_to_img_parameters *param,
                                              progress_info *progress);
 DLL_PUBLIC bool compare_deltae (image_data &img, scr_to_img_parameters &param1, render_parameters &rparam1, scr_to_img_parameters &param2, render_parameters &rparam2, const char *cmpname, double *, double *, progress_info *progress = NULL);
 enum hd_axis_type { hd_axis_hd, hd_axis_gamma10, hd_axis_gamma22 };
+
+static inline double
+hd_log_exposure_to_axis_x (double logE, hd_axis_type axis)
+{
+  if (axis == hd_axis_hd)
+    return logE;
+  return std::pow (10.0, logE);
+}
+
+static inline double
+hd_axis_x_to_log_exposure (double axisX, hd_axis_type axis)
+{
+  if (axis == hd_axis_hd)
+    return axisX;
+  return std::log10 (std::max (0.0000001, axisX));
+}
+
+static inline double
+hd_density_to_axis_y (double density, double boost, hd_axis_type axis)
+{
+  if (axis == hd_axis_hd)
+    return density;
+  double transmittance = std::pow (10.0, -density * boost);
+  if (axis == hd_axis_gamma10)
+    return transmittance;
+  return std::pow (transmittance, 1.0 / 2.2);
+}
+
+static inline double
+hd_axis_y_to_density (double axisY, double boost, hd_axis_type axis)
+{
+  if (axis == hd_axis_hd)
+    return axisY;
+  double transmittance;
+  if (axis == hd_axis_gamma10)
+    transmittance = axisY;
+  else
+    transmittance = std::pow (std::max (0.0000001, axisY), 2.2);
+  return -std::log10 (std::max (0.0000001, transmittance)) / std::max (0.01, boost);
+}
+
+static inline double
+hd_axis_y_to_linear (double axisY, double boost, hd_axis_type axis)
+{
+  if (axis == hd_axis_hd)
+    return std::pow (10.0, -axisY * boost);
+  if (axis == hd_axis_gamma10)
+    return axisY;
+  return std::pow (std::max (0.0000001, axisY), 2.2);
+}
+
 DLL_PUBLIC std::vector <rgbdata>
 hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity_t maxy, rgbdata patch_proportions, hd_axis_type axis_type = hd_axis_hd);
 }

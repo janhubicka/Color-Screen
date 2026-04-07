@@ -655,13 +655,7 @@ hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity
   for (int i = 0 ; i < steps; i++)
   {
     luminosity_t y = i * (maxy - miny) / (steps - 1) + miny;
-    if (axis_type == hd_axis_hd)
-      /* Density to linear */
-      y = pow (10, -y * rparam.contact_copy.boost);
-    else if (axis_type == hd_axis_gamma22)
-      /* Gamma back to linear */
-      y = pow (y, 2.2);
-    /* else it is already linear */
+    y = hd_axis_y_to_linear (y, rparam.contact_copy.boost, axis_type);
     int rr, gg, bb;
     a.final_color (y, y, y, &rr, &gg, &bb);
     data[i].red = rr;
