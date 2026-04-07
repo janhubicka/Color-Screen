@@ -83,8 +83,10 @@ The project uses different coding styles for its components:
 - **`src/colorscreen/`**: Follows the **GNU coding style**. C++ files uses .C extensions
 - **`src/gtkgui/`**: Follows the **GNU coding style**. C++ files uses .C extensions
 - **`src/qtgui/`**: Does **not** follow the GNU coding style (uses a more standard Qt-like style). C++ files uses .cpp extension.
+- Every function should have comment what it does.  In GNU style sections it should explain all function parameters in upper case
+- Every global class and enum should also have comment
 
-- **Memory**: Use RAII and Smart Pointers (`std::unique_ptr`, `std::shared_ptr`). Raw new/delete is prohibited.
+- **Memory**: Use RAII and Smart Pointers (`std::unique_ptr`, `std::shared_ptr`). Raw new/delete should only be used when necessary to interface legacy code.
 
 ## Common Troubleshooting
 
