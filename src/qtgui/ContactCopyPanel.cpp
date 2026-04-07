@@ -167,6 +167,15 @@ void ContactCopyPanel::setupUi() {
               
           auto colors = colorscreen::hd_y_to_rgb(mut_rparams, 400, minY, maxY, s.scrToImg.type != colorscreen::Random ? colorscreen::patch_proportions(s.scrToImg.type, &mut_rparams) : (colorscreen::rgbdata){1.0/3, 1.0/3, 1.0/3}, axisType);
           m_hdCurveWidget->setHDColors(colors, minY, maxY);
+
+          if (m_imageGetter()) {
+              double minX = m_hdCurveWidget->getMinX();
+              double maxX = m_hdCurveWidget->getMaxX();
+              auto hist = colorscreen::hd_x_histogram(mut_rparams, *m_imageGetter(), 256, minX, maxX, axisType, NULL);
+              m_hdCurveWidget->setHistogram(hist, minX, maxX);
+          }
+      } else {
+          m_hdCurveWidget->setHistogram({}, 0, 0);
       }
   });
 
