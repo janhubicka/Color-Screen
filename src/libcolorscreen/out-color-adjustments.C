@@ -37,7 +37,7 @@ static lru_cache<out_lookup_table_params, precomputed_function<luminosity_t>,
 bool
 out_color_adjustments::precompute (
     render_parameters &m_params,
-    const image_data *m_img, /* Only used when producing original preofile.  */
+    const image_data *m_img, /* Only used when producing original profile.  */
     bool normalized_patches, rgbdata patch_proportions,
     progress_info *progress)
 {
@@ -68,7 +68,7 @@ out_color_adjustments::precompute (
       // color.print (stdout);
 
       /* For subtractive processes we do post-processing in separate matrix
-       * after spectrum dyes to xyz are applied.  */
+         after spectrum dyes to xyz are applied.  */
       if (m_params.color_model == render_parameters::color_model_kodachrome25)
         {
           m_spectrum_dyes_to_xyz = std::make_unique<spectrum_dyes_to_xyz> ();

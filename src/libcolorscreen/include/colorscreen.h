@@ -269,6 +269,18 @@ DLL_PUBLIC bool compare_deltae (image_data &img, scr_to_img_parameters &param1, 
 enum hd_axis_type { hd_axis_hd, hd_axis_gamma10, hd_axis_gamma22 };
 
 static inline double
+hd_linear_to_axis_x (double linear, hd_axis_type axis, luminosity_t preflash, luminosity_t exposure)
+{
+  if (axis == hd_axis_hd)
+    {
+      if (linear < 0.0000001)
+	linear = 0.0000001;
+      return std::log10 ((linear + (preflash / 100)) * exposure);
+    }
+  return linear;
+}
+
+static inline double
 hd_log_exposure_to_axis_x (double logE, hd_axis_type axis)
 {
   if (axis == hd_axis_hd)
@@ -320,5 +332,7 @@ hd_axis_y_to_linear (double axisY, double boost, hd_axis_type axis)
 
 DLL_PUBLIC std::vector <rgbdata>
 hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity_t maxy, rgbdata patch_proportions, hd_axis_type axis_type = hd_axis_hd);
+DLL_PUBLIC std::vector <uint64_t>
+hd_x_histogram (render_parameters &rparam, image_data &img, int steps, luminosity_t minx, luminosity_t maxx, hd_axis_type axis_type, progress_info *progress);
 }
 #endif

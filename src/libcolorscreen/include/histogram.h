@@ -236,6 +236,18 @@ public:
     return m_total;
   }
 
+  size_t
+  n_entries ()
+  {
+    return m_entries.size ();
+  }
+
+  uint64_t
+  entry (size_t i)
+  {
+    return m_entries[i];
+  }
+
 private:
   luminosity_t m_minval, m_maxval;
   luminosity_t m_inv;

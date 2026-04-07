@@ -24,6 +24,7 @@
 #include <vector>
 namespace colorscreen
 {
+class histogram;
 /* Helper for downscaling template for color rendering
    data += lum * scale.  */
 inline void
@@ -127,6 +128,19 @@ struct gray_and_sharpen_params
   }
 };
 
+struct image_layer_histogram_params
+{
+  uint64_t graydata_id;
+  int_image_area crop;
+  render *r;
+  bool
+  operator== (const image_layer_histogram_params &o) const
+  {
+    return graydata_id == o.graydata_id && crop == o.crop;
+  }
+};
+histogram* get_new_image_layer_histogram (struct image_layer_histogram_params &, progress_info *);
+
 class sharpened_data;
 backlight_correction * get_new_backlight_correction (struct backlight_correction_cache_params &, progress_info *);
 luminosity_t * get_new_lookup_table (struct lookup_table_params &, progress_info *);
@@ -159,6 +173,8 @@ public:
   static const int num_color_models = render_parameters::color_model_max;
   typedef lru_cache<lookup_table_params, luminosity_t[], luminosity_t *, get_new_lookup_table, 4> lookup_table_cache_t;
   static bool get_lookup_tables (lookup_table_cache_t::cached_ptr *ret, luminosity_t gamma, const image_data *img, progress_info *progress = NULL);
+
+  
   pure_attr inline luminosity_t get_data (int x, int y) const;
   pure_attr inline luminosity_t get_unadjusted_data (int x, int y) const;
   pure_attr inline luminosity_t adjust_luminosity_ir (luminosity_t) const;
@@ -231,7 +247,9 @@ public:
 
   typedef lru_cache<backlight_correction_cache_params, backlight_correction, backlight_correction *, get_new_backlight_correction, 10> backlight_cache_t;
   typedef lru_cache<gray_and_sharpen_params, sharpened_data, sharpened_data *, get_new_gray_sharpened_data, 2> gray_cache_t;
+  typedef lru_cache<image_layer_histogram_params, histogram, histogram *, get_new_image_layer_histogram, 10> image_layer_histogram_cache_t;
 
+  image_layer_histogram_cache_t::cached_ptr get_image_layer_histogram (progress_info *progress = NULL);
   out_color_adjustments out_color;
 
 protected:

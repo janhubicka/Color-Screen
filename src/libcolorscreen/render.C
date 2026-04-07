@@ -8,6 +8,7 @@
 #include "mapalloc.h"
 #include "render.h"
 #include "sharpen.h"
+#include "include/histogram.h"
 #include <cassert>
 namespace colorscreen
 {
@@ -59,6 +60,28 @@ get_new_backlight_correction (struct backlight_correction_cache_params &p,
 static lru_cache<backlight_correction_cache_params, backlight_correction,
                  backlight_correction *, get_new_backlight_correction, 10>
     backlight_correction_cache ("backlight corrections");
+/*****************************************************************************/
+/*                         Image layer correction cache.                     */
+/*****************************************************************************/
+histogram*
+get_new_image_layer_histogram (struct image_layer_histogram_params &p, progress_info *progress)
+{
+  histogram *hist = new histogram;
+  if (!hist)
+    return NULL;
+  for (int y = p.crop.y; y < p.crop.y + p.crop.height; y++)
+    for (int x = p.crop.x; x < p.crop.x + p.crop.height; x++)
+      hist->pre_account (p.r->get_unadjusted_data (x, y));
+  hist->finalize_range (65536);
+  for (int y = p.crop.y; y < p.crop.y + p.crop.height; y++)
+    for (int x = p.crop.x; x < p.crop.x + p.crop.height; x++)
+      hist->account (p.r->get_unadjusted_data (x, y));
+  hist->finalize ();
+  return hist;
+}
+static lru_cache<image_layer_histogram_params, histogram,
+                 histogram *, get_new_image_layer_histogram, 10>
+    image_layer_histogram_cache ("image layer histograms");
 
 /*****************************************************************************/
 /*    In lookup table (translating scan values to linear values) cache       */
@@ -662,6 +685,37 @@ hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity
     data[i].green = gg;
     data[i].blue = bb;
   }
+  return data;
+}
+
+render::image_layer_histogram_cache_t::cached_ptr
+render::get_image_layer_histogram (progress_info *progress)
+{
+  image_layer_histogram_params p = {m_gray_data_id, m_params.get_scan_crop (m_img.width, m_img.height), this};
+  return image_layer_histogram_cache.get_cached (p, progress);
+}
+
+std::vector<uint64_t>
+hd_x_histogram (render_parameters &rparam, image_data &img, int steps, luminosity_t minx, luminosity_t maxx, hd_axis_type axis_type, progress_info *progress)
+{
+  render r (img, rparam, 256);
+  if (!r.precompute_all (true, false, {1, 1, 1}, progress))
+    return {};
+  auto hist = r.get_image_layer_histogram (progress);
+  if (!hist)
+    return {};
+  std::vector<uint64_t> data (steps);
+  for (size_t i = 0 ; i < hist->n_entries (); i++)
+    {
+      /* TODO: index_to_val is linear; use hd_linear_to_axis_x  */
+      luminosity_t x = hd_linear_to_axis_x (hist->index_to_val (i), axis_type, rparam.contact_copy.preflash, rparam.contact_copy.exposure);
+      if (x < minx || x > maxx)
+	continue;
+      int idx = nearest_int ((x - minx) * (steps-1) / (maxx - minx));
+      if (idx == steps)
+	idx = steps-1;
+      data[idx] += hist->entry (i);
+    }
   return data;
 }
 
