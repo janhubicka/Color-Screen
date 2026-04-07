@@ -21,10 +21,18 @@ void ContactCopyPanel::setupUi() {
       [](ParameterState &s, bool v) { s.rparams.contact_copy.simulate = v; });
 
   addSeparator("Film characteristics");
-
-  // Create the interactive curve widget
   m_hdCurveWidget = new HDCurveWidget();
   
+  QComboBox *modeCombo = new QComboBox();
+  modeCombo->addItem("Exposure + Density (H&D)", (int)HDCurveWidget::DisplayMode::HD);
+  modeCombo->addItem("Gamma 2.2", (int)HDCurveWidget::DisplayMode::Gamma22);
+  modeCombo->addItem("Gamma 1.0 (Linear)", (int)HDCurveWidget::DisplayMode::Gamma10);
+  m_form->addRow("Display mode", modeCombo);
+  connect(modeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, modeCombo](int){
+      m_hdCurveWidget->setDisplayMode((HDCurveWidget::DisplayMode)modeCombo->currentData().toInt());
+      updateUI();
+  });
+
   // Wrap it nicely to center or align it
   QWidget *chartWrapper = new QWidget();
   m_hdCurveContainer = new QVBoxLayout(chartWrapper);
@@ -149,11 +157,19 @@ void ContactCopyPanel::setupUi() {
           updateSpinBoxes();
       }
 
+      m_hdCurveWidget->setDensityBoost(s.rparams.contact_copy.boost);
+
       double minY = m_hdCurveWidget->getMinY();
       double maxY = m_hdCurveWidget->getMaxY();
       if (maxY > minY) {
           colorscreen::render_parameters mut_rparams = s.rparams;
-          auto colors = colorscreen::hd_y_to_rgb(mut_rparams, 400, minY, maxY, s.scrToImg.type != colorscreen::Random ? colorscreen::patch_proportions(s.scrToImg.type, &mut_rparams) : (colorscreen::rgbdata){1.0/3, 1.0/3, 1.0/3});
+          colorscreen::hd_axis_type axisType = colorscreen::hd_axis_hd;
+          if (m_hdCurveWidget->getDisplayMode() == HDCurveWidget::DisplayMode::Gamma10)
+              axisType = colorscreen::hd_axis_gamma10;
+          else if (m_hdCurveWidget->getDisplayMode() == HDCurveWidget::DisplayMode::Gamma22)
+              axisType = colorscreen::hd_axis_gamma22;
+              
+          auto colors = colorscreen::hd_y_to_rgb(mut_rparams, 400, minY, maxY, s.scrToImg.type != colorscreen::Random ? colorscreen::patch_proportions(s.scrToImg.type, &mut_rparams) : (colorscreen::rgbdata){1.0/3, 1.0/3, 1.0/3}, axisType);
           m_hdCurveWidget->setHDColors(colors, minY, maxY);
       }
   });

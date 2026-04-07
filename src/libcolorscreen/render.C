@@ -646,7 +646,7 @@ get_linearized_pixel (const image_data &img, render_parameters &rparam, int xx,
 }
 
 std::vector <rgbdata>
-hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity_t maxy, rgbdata patch_proportions)
+hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity_t maxy, rgbdata patch_proportions, hd_axis_type axis_type)
 {
   out_color_adjustments a (256);
   if (!a.precompute (rparam, NULL, false, patch_proportions, NULL))
@@ -655,8 +655,13 @@ hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity
   for (int i = 0 ; i < steps; i++)
   {
     luminosity_t y = i * (maxy - miny) / (steps - 1) + miny;
-    /* Density to linear */
-    y = pow (10, -y * rparam.contact_copy.boost);
+    if (axis_type == hd_axis_hd)
+      /* Density to linear */
+      y = pow (10, -y * rparam.contact_copy.boost);
+    else if (axis_type == hd_axis_gamma22)
+      /* Gamma back to linear */
+      y = pow (y, 2.2);
+    /* else it is already linear */
     int rr, gg, bb;
     a.final_color (y, y, y, &rr, &gg, &bb);
     data[i].red = rr;
