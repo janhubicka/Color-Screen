@@ -59,6 +59,12 @@ void ContactCopyPanel::setupUi() {
   });
   m_hdCurveContainer->addWidget(detachableCurve);
   
+  m_gammaLabel = new QLabel();
+  m_gammaLabel->setAlignment(Qt::AlignCenter);
+  // Optional: make it look a bit more premium
+  m_gammaLabel->setStyleSheet("color: #888; font-style: italic; margin-top: 4px;");
+  m_hdCurveContainer->addWidget(m_gammaLabel);
+  
   if (m_currentGroupForm)
       m_currentGroupForm->addRow(chartWrapper);
   else
@@ -145,13 +151,13 @@ void ContactCopyPanel::setupUi() {
       "Enlarger exposure", 0.0, 100.0, 100.0, 2, "", "",
       [](const ParameterState &s) { return s.rparams.contact_copy.exposure; },
       [](ParameterState &s, double v) { s.rparams.contact_copy.exposure = v; },
-      1.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; });
+      3.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; }, true);
 
   addSliderParameter(
       "Density boost", 0.0, 100.0, 100.0, 2, "", "",
       [](const ParameterState &s) { return s.rparams.contact_copy.boost; },
       [](ParameterState &s, double v) { s.rparams.contact_copy.boost = v; },
-      1.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; });
+      3.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; });
 
   // Sync state to UI
   m_paramUpdaters.push_back([this](const ParameterState &s) {
@@ -177,6 +183,16 @@ void ContactCopyPanel::setupUi() {
 
       double minY = m_hdCurveWidget->getMinY();
       double maxY = m_hdCurveWidget->getMaxY();
+      
+      const auto &p = s.rparams.contact_copy.emulsion_characteristic_curve;
+      double dx = p.linear2x - p.linear1x;
+      if (std::abs(dx) > 1e-6) {
+          double gamma = (p.linear2y - p.linear1y) / dx;
+          m_gammaLabel->setText(QString("Characteristic Curve Gamma: %1").arg(gamma, 0, 'f', 2));
+      } else {
+          m_gammaLabel->setText("Characteristic Curve Gamma: ---");
+      }
+
       if (maxY > minY) {
           colorscreen::render_parameters mut_rparams = s.rparams;
           colorscreen::hd_axis_type axisType = m_hdCurveWidget->getDisplayMode();

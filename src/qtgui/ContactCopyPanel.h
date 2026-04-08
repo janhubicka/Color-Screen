@@ -8,6 +8,7 @@
 
 class HDCurveWidget;
 class QDoubleSpinBox;
+class QLabel;
 
 class ContactCopyPanel : public ParameterPanel {
   Q_OBJECT
@@ -48,6 +49,8 @@ private:
   class HistogramWorker *m_worker = nullptr;
   QThread m_workerThread;
   int m_lastHistogramReqId = 0;
+
+  QLabel *m_gammaLabel = nullptr;
 };
 
 struct HistogramRequestData {

@@ -2034,6 +2034,13 @@ void MainWindow::onImageLoaded() {
     }
   }
 
+  if (m_imageLayerPanel) {
+    int layerTabIndex = m_configTabs->indexOf(m_imageLayerPanel);
+    if (layerTabIndex >= 0) {
+      m_configTabs->setTabVisible(layerTabIndex, m_scan && m_scan->has_rgb());
+    }
+  }
+
   // Refresh param values too
   applyState(getCurrentState());
   updateRegistrationActions();
