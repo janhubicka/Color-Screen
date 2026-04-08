@@ -1,5 +1,7 @@
 #pragma once
 
+#include "MultiLineTabWidget.h"
+
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/progress-info.h"
 #include "../libcolorscreen/include/render-parameters.h"
@@ -225,7 +227,7 @@ private:
   // Right side
   QWidget *m_rightColumn;
   NavigationView *m_navigationView;
-  QTabWidget *m_configTabs;
+  MultiLineTabWidget *m_configTabs;
 
   QToolBar *m_toolbar;        // New toolbar
   QComboBox *m_modeComboBox;  // Mode selector

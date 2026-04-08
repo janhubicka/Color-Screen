@@ -144,6 +144,8 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-JolyAnimation.$(OBJEXT) \
 	colorscreen_qt-TaskQueue.$(OBJEXT) \
 	colorscreen_qt-HistogramWorker.$(OBJEXT) \
+	colorscreen_qt-FlowLayout.$(OBJEXT) \
+	colorscreen_qt-MultiLineTabWidget.$(OBJEXT) \
 	colorscreen_qt-Logging.$(OBJEXT) \
 	colorscreen_qt-SubtitleOverlay.$(OBJEXT) \
 	colorscreen_qt-CoordinateTransformer.$(OBJEXT) \
@@ -187,6 +189,7 @@ am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_JolyAnimation.$(OBJEXT) \
 	colorscreen_qt-moc_TaskQueue.$(OBJEXT) \
 	colorscreen_qt-moc_HistogramWorker.$(OBJEXT) \
+	colorscreen_qt-moc_MultiLineTabWidget.$(OBJEXT) \
 	colorscreen_qt-moc_ScalableImageLabel.$(OBJEXT) \
 	colorscreen_qt-moc_FocusAnalysisWorker.$(OBJEXT) \
 	colorscreen_qt-moc_AdaptiveSharpeningWorker.$(OBJEXT) \
@@ -241,6 +244,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-FinetuneWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po \
+	./$(DEPDIR)/colorscreen_qt-FlowLayout.Po \
 	./$(DEPDIR)/colorscreen_qt-FocusAnalysisWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po \
@@ -252,6 +256,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-Logging.Po \
 	./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-MainWindow.Po \
+	./$(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-NavigationView.Po \
 	./$(DEPDIR)/colorscreen_qt-PagetAnimation.Po \
 	./$(DEPDIR)/colorscreen_qt-ParameterPanel.Po \
@@ -293,6 +298,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_MTFChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_MainWindow.Po \
+	./$(DEPDIR)/colorscreen_qt-moc_MultiLineTabWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_NavigationView.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_PagetAnimation.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ParameterPanel.Po \
@@ -533,6 +539,8 @@ colorscreen_qt_SOURCES = \
     JolyAnimation.cpp \
     TaskQueue.cpp \
     HistogramWorker.cpp \
+    FlowLayout.cpp \
+    MultiLineTabWidget.cpp \
     Logging.cpp \
     SubtitleOverlay.cpp \
     CoordinateTransformer.cpp \
@@ -581,6 +589,7 @@ MOC_SOURCES = \
     moc_JolyAnimation.cpp \
     moc_TaskQueue.cpp \
     moc_HistogramWorker.cpp \
+    moc_MultiLineTabWidget.cpp \
     moc_ScalableImageLabel.cpp \
     moc_FocusAnalysisWorker.cpp \
     moc_AdaptiveSharpeningWorker.cpp \
@@ -709,6 +718,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-FinetuneWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-FlowLayout.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-FocusAnalysisWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po@am__quote@ # am--include-marker
@@ -720,6 +730,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-Logging.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-MainWindow.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-NavigationView.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-PagetAnimation.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ParameterPanel.Po@am__quote@ # am--include-marker
@@ -761,6 +772,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_MTFChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_MainWindow.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_MultiLineTabWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_NavigationView.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_PagetAnimation.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ParameterPanel.Po@am__quote@ # am--include-marker
@@ -1242,6 +1254,34 @@ colorscreen_qt-HistogramWorker.obj: HistogramWorker.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='HistogramWorker.cpp' object='colorscreen_qt-HistogramWorker.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-HistogramWorker.obj `if test -f 'HistogramWorker.cpp'; then $(CYGPATH_W) 'HistogramWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/HistogramWorker.cpp'; fi`
+
+colorscreen_qt-FlowLayout.o: FlowLayout.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-FlowLayout.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-FlowLayout.Tpo -c -o colorscreen_qt-FlowLayout.o `test -f 'FlowLayout.cpp' || echo '$(srcdir)/'`FlowLayout.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-FlowLayout.Tpo $(DEPDIR)/colorscreen_qt-FlowLayout.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='FlowLayout.cpp' object='colorscreen_qt-FlowLayout.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-FlowLayout.o `test -f 'FlowLayout.cpp' || echo '$(srcdir)/'`FlowLayout.cpp
+
+colorscreen_qt-FlowLayout.obj: FlowLayout.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-FlowLayout.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-FlowLayout.Tpo -c -o colorscreen_qt-FlowLayout.obj `if test -f 'FlowLayout.cpp'; then $(CYGPATH_W) 'FlowLayout.cpp'; else $(CYGPATH_W) '$(srcdir)/FlowLayout.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-FlowLayout.Tpo $(DEPDIR)/colorscreen_qt-FlowLayout.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='FlowLayout.cpp' object='colorscreen_qt-FlowLayout.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-FlowLayout.obj `if test -f 'FlowLayout.cpp'; then $(CYGPATH_W) 'FlowLayout.cpp'; else $(CYGPATH_W) '$(srcdir)/FlowLayout.cpp'; fi`
+
+colorscreen_qt-MultiLineTabWidget.o: MultiLineTabWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-MultiLineTabWidget.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Tpo -c -o colorscreen_qt-MultiLineTabWidget.o `test -f 'MultiLineTabWidget.cpp' || echo '$(srcdir)/'`MultiLineTabWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Tpo $(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='MultiLineTabWidget.cpp' object='colorscreen_qt-MultiLineTabWidget.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-MultiLineTabWidget.o `test -f 'MultiLineTabWidget.cpp' || echo '$(srcdir)/'`MultiLineTabWidget.cpp
+
+colorscreen_qt-MultiLineTabWidget.obj: MultiLineTabWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-MultiLineTabWidget.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Tpo -c -o colorscreen_qt-MultiLineTabWidget.obj `if test -f 'MultiLineTabWidget.cpp'; then $(CYGPATH_W) 'MultiLineTabWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/MultiLineTabWidget.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Tpo $(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='MultiLineTabWidget.cpp' object='colorscreen_qt-MultiLineTabWidget.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-MultiLineTabWidget.obj `if test -f 'MultiLineTabWidget.cpp'; then $(CYGPATH_W) 'MultiLineTabWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/MultiLineTabWidget.cpp'; fi`
 
 colorscreen_qt-Logging.o: Logging.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-Logging.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-Logging.Tpo -c -o colorscreen_qt-Logging.o `test -f 'Logging.cpp' || echo '$(srcdir)/'`Logging.cpp
@@ -1845,6 +1885,20 @@ colorscreen_qt-moc_HistogramWorker.obj: moc_HistogramWorker.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_HistogramWorker.obj `if test -f 'moc_HistogramWorker.cpp'; then $(CYGPATH_W) 'moc_HistogramWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_HistogramWorker.cpp'; fi`
 
+colorscreen_qt-moc_MultiLineTabWidget.o: moc_MultiLineTabWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_MultiLineTabWidget.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_MultiLineTabWidget.Tpo -c -o colorscreen_qt-moc_MultiLineTabWidget.o `test -f 'moc_MultiLineTabWidget.cpp' || echo '$(srcdir)/'`moc_MultiLineTabWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_MultiLineTabWidget.Tpo $(DEPDIR)/colorscreen_qt-moc_MultiLineTabWidget.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_MultiLineTabWidget.cpp' object='colorscreen_qt-moc_MultiLineTabWidget.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_MultiLineTabWidget.o `test -f 'moc_MultiLineTabWidget.cpp' || echo '$(srcdir)/'`moc_MultiLineTabWidget.cpp
+
+colorscreen_qt-moc_MultiLineTabWidget.obj: moc_MultiLineTabWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_MultiLineTabWidget.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_MultiLineTabWidget.Tpo -c -o colorscreen_qt-moc_MultiLineTabWidget.obj `if test -f 'moc_MultiLineTabWidget.cpp'; then $(CYGPATH_W) 'moc_MultiLineTabWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_MultiLineTabWidget.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_MultiLineTabWidget.Tpo $(DEPDIR)/colorscreen_qt-moc_MultiLineTabWidget.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_MultiLineTabWidget.cpp' object='colorscreen_qt-moc_MultiLineTabWidget.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_MultiLineTabWidget.obj `if test -f 'moc_MultiLineTabWidget.cpp'; then $(CYGPATH_W) 'moc_MultiLineTabWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_MultiLineTabWidget.cpp'; fi`
+
 colorscreen_qt-moc_ScalableImageLabel.o: moc_ScalableImageLabel.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_ScalableImageLabel.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_ScalableImageLabel.Tpo -c -o colorscreen_qt-moc_ScalableImageLabel.o `test -f 'moc_ScalableImageLabel.cpp' || echo '$(srcdir)/'`moc_ScalableImageLabel.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_ScalableImageLabel.Tpo $(DEPDIR)/colorscreen_qt-moc_ScalableImageLabel.Po
@@ -2119,6 +2173,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FinetuneWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-FlowLayout.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FocusAnalysisWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po
@@ -2130,6 +2185,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-Logging.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MainWindow.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-NavigationView.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-PagetAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterPanel.Po
@@ -2171,6 +2227,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_MTFChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_MainWindow.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_MultiLineTabWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_NavigationView.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_PagetAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ParameterPanel.Po
@@ -2247,6 +2304,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FinetuneWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-FlowLayout.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FocusAnalysisWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po
@@ -2258,6 +2316,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-Logging.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MainWindow.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-NavigationView.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-PagetAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterPanel.Po
@@ -2299,6 +2358,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_MTFChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_MainWindow.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_MultiLineTabWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_NavigationView.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_PagetAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ParameterPanel.Po

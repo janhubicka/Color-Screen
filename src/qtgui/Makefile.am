@@ -32,6 +32,8 @@ colorscreen_qt_SOURCES = \
     JolyAnimation.cpp \
     TaskQueue.cpp \
     HistogramWorker.cpp \
+    FlowLayout.cpp \
+    MultiLineTabWidget.cpp \
     Logging.cpp \
     SubtitleOverlay.cpp \
     CoordinateTransformer.cpp \
@@ -79,6 +81,7 @@ MOC_SOURCES = \
     moc_JolyAnimation.cpp \
     moc_TaskQueue.cpp \
     moc_HistogramWorker.cpp \
+    moc_MultiLineTabWidget.cpp \
     moc_ScalableImageLabel.cpp \
     moc_FocusAnalysisWorker.cpp \
     moc_AdaptiveSharpeningWorker.cpp \

@@ -286,7 +286,7 @@ void MainWindow::setupUi() {
           &MainWindow::removeProgress);
 
   // Bottom Right: Tabs
-  m_configTabs = new QTabWidget(this);
+  m_configTabs = new MultiLineTabWidget(this);
 
   // Create Sharpness Panel
   m_sharpnessPanel = new SharpnessPanel(
