@@ -271,13 +271,12 @@ enum hd_axis_type { hd_axis_hd, hd_axis_gamma10, hd_axis_gamma22 };
 static inline double
 hd_linear_to_axis_x (double linear, hd_axis_type axis, luminosity_t preflash, luminosity_t exposure)
 {
+  double val = (linear + (preflash / 100)) * exposure;
   if (axis == hd_axis_hd)
-    {
-      if (linear < 0.0000001)
-	linear = 0.0000001;
-      return std::log10 ((linear + (preflash / 100)) * exposure);
-    }
-  return linear;
+    return std::log10 (std::max (0.0000001, val));
+  if (axis == hd_axis_gamma22)
+    return std::pow (std::max (0.0000001, val), 1.0 / 2.2);
+  return val;
 }
 
 static inline double
@@ -285,6 +284,8 @@ hd_log_exposure_to_axis_x (double logE, hd_axis_type axis)
 {
   if (axis == hd_axis_hd)
     return logE;
+  if (axis == hd_axis_gamma22)
+    return std::pow (std::pow (10.0, logE), 1.0 / 2.2);
   return std::pow (10.0, logE);
 }
 
@@ -293,6 +294,8 @@ hd_axis_x_to_log_exposure (double axisX, hd_axis_type axis)
 {
   if (axis == hd_axis_hd)
     return axisX;
+  if (axis == hd_axis_gamma22)
+    return std::log10 (std::max (0.0000001, std::pow (axisX, 2.2)));
   return std::log10 (std::max (0.0000001, axisX));
 }
 

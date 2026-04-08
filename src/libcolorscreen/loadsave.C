@@ -204,6 +204,14 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "dark_point: %f\n", rparam->dark_point) < 0
 	  || fprintf (f, "backlight_correction_black: %f\n", rparam->backlight_correction_black) < 0
 	  || fprintf (f, "invert: %s\n", bool_names [(int)rparam->invert]) < 0
+	  || fprintf (f, "contact-copy: %s\n", bool_names [(int)rparam->contact_copy.simulate]) < 0
+	  || fprintf (f, "contact-copy-dhcurve-min: %f %f\n", rparam->contact_copy.emulsion_characteristic_curve.minx, rparam->contact_copy.emulsion_characteristic_curve.miny) < 0
+	  || fprintf (f, "contact-copy-dhcurve-linear1: %f %f\n", rparam->contact_copy.emulsion_characteristic_curve.linear1x, rparam->contact_copy.emulsion_characteristic_curve.linear1y) < 0
+	  || fprintf (f, "contact-copy-dhcurve-linear2: %f %f\n", rparam->contact_copy.emulsion_characteristic_curve.linear2x, rparam->contact_copy.emulsion_characteristic_curve.linear2y) < 0
+	  || fprintf (f, "contact-copy-dhcurve-max: %f %f\n", rparam->contact_copy.emulsion_characteristic_curve.maxx, rparam->contact_copy.emulsion_characteristic_curve.maxy) < 0
+	  || fprintf (f, "contact-copy-preflash: %f\n", rparam->contact_copy.preflash) < 0
+	  || fprintf (f, "contact-copy-exposure: %f\n", rparam->contact_copy.exposure) < 0
+	  || fprintf (f, "contact-copy-boost: %f\n", rparam->contact_copy.boost) < 0
 	  || fprintf (f, "collection_quality: %s\n", render_parameters::collection_quality_names [(int)rparam->collection_quality].name) < 0
 	  || fprintf (f, "screen_demosaic: %s\n", render_parameters::screen_demosaic_names [(int)rparam->screen_demosaic].name) < 0
 	  || fprintf (f, "mix_weights: %f %f %f\n", rparam->mix_red, rparam->mix_green, rparam->mix_blue) < 0
@@ -1152,6 +1160,90 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!parse_bool (f, rparam_check (invert)))
 	    {
 	      *error = "error parsing invert";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "contact-copy"))
+	{
+	  if (!parse_bool (f, rparam_check (contact_copy.simulate)))
+	    {
+	      *error = "error parsing contact-copy";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "contact-copy-dhcurve-min"))
+	{
+	  if (!read_luminosity (f, rparam_check (contact_copy.emulsion_characteristic_curve.minx)))
+	    {
+	      *error = "error parsing contact-copy-dhcurve-min coordinate x";
+	      return false;
+	    }
+	  if (!read_luminosity (f, rparam_check (contact_copy.emulsion_characteristic_curve.miny)))
+	    {
+	      *error = "error parsing contact-copy-dhcurve-min coordinate y";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "contact-copy-dhcurve-linear1"))
+	{
+	  if (!read_luminosity (f, rparam_check (contact_copy.emulsion_characteristic_curve.linear1x)))
+	    {
+	      *error = "error parsing contact-copy-dhcurve-linear1 coordinate x";
+	      return false;
+	    }
+	  if (!read_luminosity (f, rparam_check (contact_copy.emulsion_characteristic_curve.linear1y)))
+	    {
+	      *error = "error parsing contact-copy-dhcurve-linear1 coordinate y";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "contact-copy-dhcurve-linear2"))
+	{
+	  if (!read_luminosity (f, rparam_check (contact_copy.emulsion_characteristic_curve.linear2x)))
+	    {
+	      *error = "error parsing contact-copy-dhcurve-linear2 coordinate x";
+	      return false;
+	    }
+	  if (!read_luminosity (f, rparam_check (contact_copy.emulsion_characteristic_curve.linear2y)))
+	    {
+	      *error = "error parsing contact-copy-dhcurve-linear2 coordinate y";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "contact-copy-dhcurve-max"))
+	{
+	  if (!read_luminosity (f, rparam_check (contact_copy.emulsion_characteristic_curve.maxx)))
+	    {
+	      *error = "error parsing contact-copy-dhcurve-max coordinate x";
+	      return false;
+	    }
+	  if (!read_luminosity (f, rparam_check (contact_copy.emulsion_characteristic_curve.maxy)))
+	    {
+	      *error = "error parsing contact-copy-dhcurve-max coordinate y";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "contact-copy-preflash"))
+	{
+	  if (!read_luminosity (f, rparam_check (contact_copy.preflash)))
+	    {
+	      *error = "error parsing contact-copy-preflash";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "contact-copy-exposure"))
+	{
+	  if (!read_luminosity (f, rparam_check (contact_copy.exposure)))
+	    {
+	      *error = "error parsing contact-copy-exposure";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "contact-copy-boost"))
+	{
+	  if (!read_luminosity (f, rparam_check (contact_copy.boost)))
+	    {
+	      *error = "error parsing contact-copy-boost";
 	      return false;
 	    }
 	}

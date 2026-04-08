@@ -712,7 +712,7 @@ hd_x_histogram (render_parameters &rparam, image_data &img, int steps, luminosit
     {
       luminosity_t xv = hist->index_to_val (i);
       xv = (xv - rparam.dark_point) * rparam.scan_exposure;
-      luminosity_t x = hd_linear_to_axis_x (hist->index_to_val (i), axis_type, rparam.contact_copy.preflash, rparam.contact_copy.exposure);
+      luminosity_t x = hd_linear_to_axis_x (xv, axis_type, rparam.contact_copy.preflash, rparam.contact_copy.exposure);
       if (x < minx || x > maxx)
 	continue;
       int idx = nearest_int ((x - minx) * (steps-1) / (maxx - minx));
