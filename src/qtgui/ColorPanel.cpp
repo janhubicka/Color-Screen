@@ -83,7 +83,7 @@ void ColorPanel::setupUi() {
   addSliderParameter(
       "Presaturation", 0, 100, 1, 2, "", "",
       [](const ParameterState &s) { return s.rparams.presaturation; },
-      [](ParameterState &s, double v) { s.rparams.presaturation = v; }, 1.0);
+      [](ParameterState &s, double v) { s.rparams.presaturation = v; }, 3.0);
 
   // White Balance
   addSliderParameter(

@@ -161,6 +161,29 @@ void ScreenPanel::setupUi() {
       });
 
   addSeparator("Regular screen");
+  
+  ScreenPreviewPanel *preview =
+      new ScreenPreviewPanel(m_stateGetter, m_stateSetter, m_imageGetter);
+  m_previewPanel = preview;
+  preview->init("Screen Preview");
+
+  connect(preview, &TilePreviewPanel::detachTilesRequested, this,
+          &ScreenPanel::detachPreviewRequested);
+  
+  connect(preview, &TilePreviewPanel::progressStarted, this, &ScreenPanel::progressStarted);
+  connect(preview, &TilePreviewPanel::progressFinished, this, &ScreenPanel::progressFinished);
+
+  m_widgetStateUpdaters.push_back([this, preview]() {
+    preview->updateUI();
+    bool visible = m_stateGetter().scrToImg.type != Random;
+    preview->setVisible(visible);
+  });
+
+  if (m_currentGroupForm) {
+    m_currentGroupForm->addRow(preview);
+  } else {
+    m_form->addRow(preview);
+  }
 
   // Red Strip Width
   addSliderParameter(
@@ -213,28 +236,6 @@ void ScreenPanel::setupUi() {
       [](ParameterState &s, int v) { s.rparams.demosaiced_scaling = (render_parameters::demosaiced_scaling_t)v; }
   );
 
-  ScreenPreviewPanel *preview =
-      new ScreenPreviewPanel(m_stateGetter, m_stateSetter, m_imageGetter);
-  m_previewPanel = preview;
-  preview->init("Screen Preview");
-
-  connect(preview, &TilePreviewPanel::detachTilesRequested, this,
-          &ScreenPanel::detachPreviewRequested);
-  
-  connect(preview, &TilePreviewPanel::progressStarted, this, &ScreenPanel::progressStarted);
-  connect(preview, &TilePreviewPanel::progressFinished, this, &ScreenPanel::progressFinished);
-
-  m_widgetStateUpdaters.push_back([this, preview]() {
-    preview->updateUI();
-    bool visible = m_stateGetter().scrToImg.type != Random;
-    preview->setVisible(visible);
-  });
-
-  if (m_currentGroupForm) {
-    m_currentGroupForm->addRow(preview);
-  } else {
-    m_form->addRow(preview);
-  }
 
   // Placeholder for future parameters (scr_to_img_parameters,
   // scr_detect_parameters, solver_parameters)

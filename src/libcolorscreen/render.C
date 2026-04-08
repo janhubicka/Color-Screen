@@ -698,6 +698,9 @@ render::get_image_layer_histogram (progress_info *progress)
 std::vector<uint64_t>
 hd_x_histogram (render_parameters &rparam, image_data &img, int steps, luminosity_t minx, luminosity_t maxx, hd_axis_type axis_type, progress_info *progress)
 {
+  /* TODO: Handle stitched projects.  */
+  if (img.stitch)
+    return {};
   render r (img, rparam, 256);
   if (!r.precompute_all (true, false, {1, 1, 1}, progress))
     return {};
@@ -707,7 +710,8 @@ hd_x_histogram (render_parameters &rparam, image_data &img, int steps, luminosit
   std::vector<uint64_t> data (steps);
   for (size_t i = 0 ; i < hist->n_entries (); i++)
     {
-      /* TODO: index_to_val is linear; use hd_linear_to_axis_x  */
+      luminosity_t xv = hist->index_to_val (i);
+      xv = (xv - rparam.dark_point) * rparam.scan_exposure;
       luminosity_t x = hd_linear_to_axis_x (hist->index_to_val (i), axis_type, rparam.contact_copy.preflash, rparam.contact_copy.exposure);
       if (x < minx || x > maxx)
 	continue;
