@@ -31,6 +31,7 @@ colorscreen_qt_SOURCES = \
     PagetAnimation.cpp \
     JolyAnimation.cpp \
     TaskQueue.cpp \
+    HistogramWorker.cpp \
     Logging.cpp \
     SubtitleOverlay.cpp \
     CoordinateTransformer.cpp \
@@ -77,6 +78,7 @@ MOC_SOURCES = \
     moc_PagetAnimation.cpp \
     moc_JolyAnimation.cpp \
     moc_TaskQueue.cpp \
+    moc_HistogramWorker.cpp \
     moc_ScalableImageLabel.cpp \
     moc_FocusAnalysisWorker.cpp \
     moc_AdaptiveSharpeningWorker.cpp \

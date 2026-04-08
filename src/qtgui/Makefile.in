@@ -143,6 +143,7 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-PagetAnimation.$(OBJEXT) \
 	colorscreen_qt-JolyAnimation.$(OBJEXT) \
 	colorscreen_qt-TaskQueue.$(OBJEXT) \
+	colorscreen_qt-HistogramWorker.$(OBJEXT) \
 	colorscreen_qt-Logging.$(OBJEXT) \
 	colorscreen_qt-SubtitleOverlay.$(OBJEXT) \
 	colorscreen_qt-CoordinateTransformer.$(OBJEXT) \
@@ -185,6 +186,7 @@ am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_PagetAnimation.$(OBJEXT) \
 	colorscreen_qt-moc_JolyAnimation.$(OBJEXT) \
 	colorscreen_qt-moc_TaskQueue.$(OBJEXT) \
+	colorscreen_qt-moc_HistogramWorker.$(OBJEXT) \
 	colorscreen_qt-moc_ScalableImageLabel.$(OBJEXT) \
 	colorscreen_qt-moc_FocusAnalysisWorker.$(OBJEXT) \
 	colorscreen_qt-moc_AdaptiveSharpeningWorker.$(OBJEXT) \
@@ -243,6 +245,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-HDCurveWidget.Po \
+	./$(DEPDIR)/colorscreen_qt-HistogramWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-ImageLayerPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-ImageWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-JolyAnimation.Po \
@@ -284,6 +287,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_HDCurveWidget.Po \
+	./$(DEPDIR)/colorscreen_qt-moc_HistogramWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ImageLayerPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po \
@@ -528,6 +532,7 @@ colorscreen_qt_SOURCES = \
     PagetAnimation.cpp \
     JolyAnimation.cpp \
     TaskQueue.cpp \
+    HistogramWorker.cpp \
     Logging.cpp \
     SubtitleOverlay.cpp \
     CoordinateTransformer.cpp \
@@ -575,6 +580,7 @@ MOC_SOURCES = \
     moc_PagetAnimation.cpp \
     moc_JolyAnimation.cpp \
     moc_TaskQueue.cpp \
+    moc_HistogramWorker.cpp \
     moc_ScalableImageLabel.cpp \
     moc_FocusAnalysisWorker.cpp \
     moc_AdaptiveSharpeningWorker.cpp \
@@ -707,6 +713,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-HDCurveWidget.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-HistogramWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ImageLayerPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ImageWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-JolyAnimation.Po@am__quote@ # am--include-marker
@@ -748,6 +755,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_HDCurveWidget.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_HistogramWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ImageLayerPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po@am__quote@ # am--include-marker
@@ -1220,6 +1228,20 @@ colorscreen_qt-TaskQueue.obj: TaskQueue.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='TaskQueue.cpp' object='colorscreen_qt-TaskQueue.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-TaskQueue.obj `if test -f 'TaskQueue.cpp'; then $(CYGPATH_W) 'TaskQueue.cpp'; else $(CYGPATH_W) '$(srcdir)/TaskQueue.cpp'; fi`
+
+colorscreen_qt-HistogramWorker.o: HistogramWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-HistogramWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-HistogramWorker.Tpo -c -o colorscreen_qt-HistogramWorker.o `test -f 'HistogramWorker.cpp' || echo '$(srcdir)/'`HistogramWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-HistogramWorker.Tpo $(DEPDIR)/colorscreen_qt-HistogramWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='HistogramWorker.cpp' object='colorscreen_qt-HistogramWorker.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-HistogramWorker.o `test -f 'HistogramWorker.cpp' || echo '$(srcdir)/'`HistogramWorker.cpp
+
+colorscreen_qt-HistogramWorker.obj: HistogramWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-HistogramWorker.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-HistogramWorker.Tpo -c -o colorscreen_qt-HistogramWorker.obj `if test -f 'HistogramWorker.cpp'; then $(CYGPATH_W) 'HistogramWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/HistogramWorker.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-HistogramWorker.Tpo $(DEPDIR)/colorscreen_qt-HistogramWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='HistogramWorker.cpp' object='colorscreen_qt-HistogramWorker.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-HistogramWorker.obj `if test -f 'HistogramWorker.cpp'; then $(CYGPATH_W) 'HistogramWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/HistogramWorker.cpp'; fi`
 
 colorscreen_qt-Logging.o: Logging.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-Logging.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-Logging.Tpo -c -o colorscreen_qt-Logging.o `test -f 'Logging.cpp' || echo '$(srcdir)/'`Logging.cpp
@@ -1809,6 +1831,20 @@ colorscreen_qt-moc_TaskQueue.obj: moc_TaskQueue.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_TaskQueue.obj `if test -f 'moc_TaskQueue.cpp'; then $(CYGPATH_W) 'moc_TaskQueue.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_TaskQueue.cpp'; fi`
 
+colorscreen_qt-moc_HistogramWorker.o: moc_HistogramWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_HistogramWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_HistogramWorker.Tpo -c -o colorscreen_qt-moc_HistogramWorker.o `test -f 'moc_HistogramWorker.cpp' || echo '$(srcdir)/'`moc_HistogramWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_HistogramWorker.Tpo $(DEPDIR)/colorscreen_qt-moc_HistogramWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_HistogramWorker.cpp' object='colorscreen_qt-moc_HistogramWorker.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_HistogramWorker.o `test -f 'moc_HistogramWorker.cpp' || echo '$(srcdir)/'`moc_HistogramWorker.cpp
+
+colorscreen_qt-moc_HistogramWorker.obj: moc_HistogramWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_HistogramWorker.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_HistogramWorker.Tpo -c -o colorscreen_qt-moc_HistogramWorker.obj `if test -f 'moc_HistogramWorker.cpp'; then $(CYGPATH_W) 'moc_HistogramWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_HistogramWorker.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_HistogramWorker.Tpo $(DEPDIR)/colorscreen_qt-moc_HistogramWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_HistogramWorker.cpp' object='colorscreen_qt-moc_HistogramWorker.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_HistogramWorker.obj `if test -f 'moc_HistogramWorker.cpp'; then $(CYGPATH_W) 'moc_HistogramWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_HistogramWorker.cpp'; fi`
+
 colorscreen_qt-moc_ScalableImageLabel.o: moc_ScalableImageLabel.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_ScalableImageLabel.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_ScalableImageLabel.Tpo -c -o colorscreen_qt-moc_ScalableImageLabel.o `test -f 'moc_ScalableImageLabel.cpp' || echo '$(srcdir)/'`moc_ScalableImageLabel.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_ScalableImageLabel.Tpo $(DEPDIR)/colorscreen_qt-moc_ScalableImageLabel.Po
@@ -2087,6 +2123,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-HDCurveWidget.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-HistogramWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageLayerPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-JolyAnimation.Po
@@ -2128,6 +2165,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_HDCurveWidget.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_HistogramWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ImageLayerPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po
@@ -2213,6 +2251,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-HDCurveWidget.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-HistogramWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageLayerPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-JolyAnimation.Po
@@ -2254,6 +2293,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_HDCurveWidget.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_HistogramWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ImageLayerPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po

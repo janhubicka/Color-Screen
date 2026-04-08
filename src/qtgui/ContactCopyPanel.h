@@ -2,6 +2,9 @@
 #define CONTACT_COPY_PANEL_H
 
 #include "ParameterPanel.h"
+#include "TaskQueue.h"
+#include <QThread>
+#include <QVariant>
 
 class HDCurveWidget;
 class QDoubleSpinBox;
@@ -18,6 +21,10 @@ signals:
 
 public:
   void reattachHDCurve(QWidget *widget);
+
+private slots:
+  void onTriggerHistogram(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData);
+  void onHistogramFinished(int reqId, std::vector<uint64_t> data, double minx, double maxx, bool success);
 
 private:
   void setupUi();
@@ -36,6 +43,20 @@ private:
   QDoubleSpinBox *m_maxYSpin = nullptr;
 
   bool m_updatingSpinBoxes = false;
+  
+  TaskQueue m_taskQueue;
+  class HistogramWorker *m_worker = nullptr;
+  QThread m_workerThread;
+  int m_lastHistogramReqId = 0;
 };
+
+struct HistogramRequestData {
+    colorscreen::render_parameters params;
+    int steps;
+    double minX;
+    double maxX;
+    colorscreen::hd_axis_type axisType;
+};
+Q_DECLARE_METATYPE(HistogramRequestData)
 
 #endif // CONTACT_COPY_PANEL_H

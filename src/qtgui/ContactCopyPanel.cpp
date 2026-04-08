@@ -5,14 +5,30 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QVBoxLayout>
+#include "HistogramWorker.h"
 
 ContactCopyPanel::ContactCopyPanel(StateGetter stateGetter, StateSetter stateSetter,
                              ImageGetter imageGetter, QWidget *parent)
     : ParameterPanel(stateGetter, stateSetter, imageGetter, parent) {
+  qRegisterMetaType<std::vector<uint64_t>>("std::vector<uint64_t>");
+  qRegisterMetaType<HistogramRequestData>("HistogramRequestData");
+
+  m_worker = new HistogramWorker(m_imageGetter());
+  m_worker->moveToThread(&m_workerThread);
+
+  connect(&m_workerThread, &QThread::finished, m_worker, &QObject::deleteLater);
+  connect(&m_taskQueue, &TaskQueue::triggerRender, this, &ContactCopyPanel::onTriggerHistogram);
+  connect(m_worker, &HistogramWorker::finished, this, &ContactCopyPanel::onHistogramFinished);
+
+  m_workerThread.start();
+
   setupUi();
 }
 
-ContactCopyPanel::~ContactCopyPanel() = default;
+ContactCopyPanel::~ContactCopyPanel() {
+    m_workerThread.quit();
+    m_workerThread.wait();
+}
 
 void ContactCopyPanel::setupUi() {
   addCheckboxParameter(
@@ -168,13 +184,18 @@ void ContactCopyPanel::setupUi() {
           auto colors = colorscreen::hd_y_to_rgb(mut_rparams, 400, minY, maxY, s.scrToImg.type != colorscreen::Random ? colorscreen::patch_proportions(s.scrToImg.type, &mut_rparams) : (colorscreen::rgbdata){1.0/3, 1.0/3, 1.0/3}, axisType);
           m_hdCurveWidget->setHDColors(colors, minY, maxY);
 
-          if (m_imageGetter()) {
-              double minX = m_hdCurveWidget->getMinX();
-              double maxX = m_hdCurveWidget->getMaxX();
-              auto hist = colorscreen::hd_x_histogram(mut_rparams, *m_imageGetter(), 256, minX, maxX, axisType, NULL);
-              m_hdCurveWidget->setHistogram(hist, minX, maxX);
+          if (m_imageGetter() && m_hdCurveWidget->isVisible() && m_hdCurveWidget->isEnabled()) {
+              HistogramRequestData data;
+              data.params = mut_rparams;
+              data.steps = 256;
+              data.minX = m_hdCurveWidget->getMinX();
+              data.maxX = m_hdCurveWidget->getMaxX();
+              data.axisType = axisType;
+              
+              m_taskQueue.requestRender(QVariant::fromValue(data));
           }
       } else {
+          m_taskQueue.cancelAll();
           m_hdCurveWidget->setHistogram({}, 0, 0);
       }
   });
@@ -198,6 +219,34 @@ void ContactCopyPanel::updateSpinBoxes() {
     m_maxXSpin->setValue(p.maxx);
     m_maxYSpin->setValue(p.maxy);
     m_updatingSpinBoxes = false;
+}
+
+void ContactCopyPanel::onTriggerHistogram(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData) {
+    if (!userData.canConvert<HistogramRequestData>()) {
+        m_taskQueue.reportFinished(reqId, false);
+        return;
+    }
+
+    HistogramRequestData data = userData.value<HistogramRequestData>();
+    m_worker->setScan(m_imageGetter());
+    
+    QMetaObject::invokeMethod(m_worker, "compute", Qt::QueuedConnection,
+                             Q_ARG(int, reqId),
+                             Q_ARG(colorscreen::render_parameters, data.params),
+                             Q_ARG(int, data.steps),
+                             Q_ARG(double, data.minX),
+                             Q_ARG(double, data.maxX),
+                             Q_ARG(colorscreen::hd_axis_type, data.axisType),
+                             Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
+}
+
+void ContactCopyPanel::onHistogramFinished(int reqId, std::vector<uint64_t> data, double minx, double maxx, bool success) {
+    m_taskQueue.reportFinished(reqId, success);
+    
+    if (success && reqId > m_lastHistogramReqId) {
+        m_lastHistogramReqId = reqId;
+        m_hdCurveWidget->setHistogram(data, minx, maxx);
+    }
 }
 
 void ContactCopyPanel::reattachHDCurve(QWidget *widget) {
