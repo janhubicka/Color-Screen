@@ -21,7 +21,7 @@ QSize ScalableImageLabel::sizeHint() const {
   // Cap the size hint to a reasonable thumbnail size.
   // This prevents the layout from being gargantuan by default.
   // The widget is still allowed to grow/shrink based on sizePolicy.
-  return m_pixmap.size().boundedTo(QSize(256, 256));
+  return m_pixmap.size()/*.boundedTo(QSize(256, 256))*/;
 }
 
 QSize ScalableImageLabel::minimumSizeHint() const {
