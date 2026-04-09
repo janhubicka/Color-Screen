@@ -51,6 +51,7 @@ private:
   int m_lastHistogramReqId = 0;
 
   QLabel *m_gammaLabel = nullptr;
+  QComboBox *m_presetCombo = nullptr;
 };
 
 struct HistogramRequestData {

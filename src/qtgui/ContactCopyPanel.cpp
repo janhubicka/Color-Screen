@@ -6,6 +6,7 @@
 #include <QLabel>
 #include <QVBoxLayout>
 #include "HistogramWorker.h"
+#include "../libcolorscreen/include/sensitivity.h"
 
 ContactCopyPanel::ContactCopyPanel(StateGetter stateGetter, StateSetter stateSetter,
                              ImageGetter imageGetter, QWidget *parent)
@@ -39,6 +40,24 @@ void ContactCopyPanel::setupUi() {
   addSeparator("Film characteristics");
   m_hdCurveWidget = new HDCurveWidget();
   
+  QComboBox *presetCombo = new QComboBox();
+  m_presetCombo = presetCombo;
+  presetCombo->addItem("Custom", -1);
+  for (int i = 0; i < colorscreen::film_sensitivity::hd_curves_max; ++i) {
+      presetCombo->addItem(QString::fromUtf8(colorscreen::film_sensitivity::hd_curves_properties[i].pretty_name), i);
+  }
+  m_form->addRow("Presets", presetCombo);
+
+  connect(presetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, presetCombo](int index) {
+      int presetIdx = presetCombo->itemData(index).toInt();
+      if (presetIdx >= 0) {
+          const auto &preset = colorscreen::film_sensitivity::hd_curves_properties[presetIdx];
+          applyChange([preset](ParameterState &s) {
+              s.rparams.contact_copy.emulsion_characteristic_curve = preset.params;
+          }, "Apply characteristic curve preset");
+      }
+  });
+
   QComboBox *modeCombo = new QComboBox();
   modeCombo->addItem("Exposure + Density (H&D)", (int)colorscreen::hd_axis_hd);
   modeCombo->addItem("Gamma 2.2", (int)colorscreen::hd_axis_gamma22);
@@ -180,6 +199,20 @@ void ContactCopyPanel::setupUi() {
       }
 
       m_hdCurveWidget->setDensityBoost(s.rparams.contact_copy.boost);
+      
+      // Update preset combo
+      if (m_presetCombo) {
+          int foundIdx = 0; // "Custom"
+          for (int i = 0; i < colorscreen::film_sensitivity::hd_curves_max; ++i) {
+              if (s.rparams.contact_copy.emulsion_characteristic_curve == colorscreen::film_sensitivity::hd_curves_properties[i].params) {
+                  foundIdx = i + 1;
+                  break;
+              }
+          }
+          m_presetCombo->blockSignals(true);
+          m_presetCombo->setCurrentIndex(foundIdx);
+          m_presetCombo->blockSignals(false);
+      }
 
       double minY = m_hdCurveWidget->getMinY();
       double maxY = m_hdCurveWidget->getMaxY();

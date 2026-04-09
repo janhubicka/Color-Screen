@@ -94,7 +94,7 @@ struct hd_curve_parameters
   luminosity_t maxx, maxy;
 
   constexpr hd_curve_parameters ()
-  : minx(-6), miny(6), linear1x (-5), linear1y (5), linear2x(5), linear2y(-5), maxx(6), maxy(-5)
+  : minx(-6), miny(5), linear1x (-5), linear1y (5), linear2x(5), linear2y(-5), maxx(6), maxy(-5)
   {
   }
   constexpr hd_curve_parameters (luminosity_t new_minx, luminosity_t new_miny, luminosity_t new_linear1x, luminosity_t new_linear1y, luminosity_t new_linear2x, luminosity_t new_linear2y, luminosity_t new_maxx, luminosity_t new_maxy)
@@ -109,7 +109,7 @@ struct hd_curve_parameters
 	   && linear1y == other.linear1y
 	   && linear2x == other.linear2x
 	   && linear2y == other.linear2y
-	   && minx == other.maxx && miny == other.maxy;
+	   && maxx == other.maxx && maxy == other.maxy;
   }
 };
 
@@ -195,6 +195,90 @@ public:
   static struct hd_curve kodachrome_25_green;
   static struct hd_curve kodachrome_25_blue;
   DLL_PUBLIC static struct hd_curve linear_sensitivity;
+
+  struct hd_curve_description
+  {
+    const char *name;
+    const char *pretty_name;
+    hd_curve_parameters params;
+  };
+
+  enum hd_curves
+  {
+    linear_reversal_sensitivity,
+    linear_negative_sensitivity,
+    safe_linear_reversal_sensitivity,
+    safe_linear_negative_sensitivity,
+    spicer_dufay_low,
+    spicer_dufay_mid,
+    spicer_dufay_high,
+    spicer_dufay_reversal_low,
+    spicer_dufay_reversal_mid,
+    spicer_dufay_reversal_high,
+    hd_curves_max,
+  };
+
+  static constexpr DLL_PUBLIC struct hd_curve_description hd_curves_properties[] = {
+    {
+      "linear-reversal", "Linear reversal film",
+      {-6, 5, -5, 5, 5, -5, 6, -5}
+    },
+    {
+      "linear-negative", "Linear negative film",
+      {-6, -5, -5, -5, 5, 5, 6, 5}
+    },
+    {
+      "safe-linear-reversal", "Linear reversal film",
+      {0,1,0,1,0.7,0.3,3,0}
+    },
+    {
+      "safe-linear-negative", "Linear negative film",
+      {0, 0, 0, 0, 0.7, 0.7, 3, 1}
+    },
+    {
+      "spicer-dufay-low", "Spicer-Dufay low development",
+      {0.005596021177603383, 0.13326648483876236,
+       0.9264367078453395, 0.25357372051981475,
+       3.8351612385689076, 1.7539186587518052,
+       3.8351612385689076, 1.7539186587518052}
+    },
+    {
+      "spicer-dufay-mid", "Spicer-Dufay mid development",
+       {0.005596021177603383, 0.13326648483876236,
+        0.7346061286699825, 0.3354524306112632,
+        2.7042515642547724, 2.207183539226697,
+        2.7042515642547724, 2.207183539226697}
+    },
+    {
+      "spicer-dufay-high", "Spicer-Dufay high development",
+       {0.005596021177603383, 0.13326648483876236,
+        0.664193807155463, 0.430406706240976,
+        1.5716733515161239, 2.2480065778918665,
+        1.5716733515161239, 2.2480065778918665}
+    },
+    {
+      "spicer-dufay-reversal-low", "Spicer-Dufay reversal low development",
+      {
+	0.10817262955238283, 1.7389218674795455,
+	0.10817262955238283, 1.7389218674795455,
+	3.1461832183539227, 0.19716428686026033,
+	3.990309642226858, 0.10466468795122763}
+    },
+    {
+      "spicer-dufay-reversal-mid", "Spicer-Dufay reversal mid development",
+       {1.2834525910476495, 2.253437349590888,
+	1.2834525910476495, 2.253437349590888,
+	3.262801219316541, 0.27367639980747693,
+	3.990309642226858, 0.10466468795122763}
+    },
+    {
+      "spicer-dufay-reversal-high", "Spicer-Dufay reversal high development",
+	{2.446334028557678, 2.2031926841007543,
+	 2.446334028557678, 2.2031926841007543,
+	 3.409735279961495, 0.34393951548211144,
+	 3.9904123215145204, 0.13004572437028772}
+    }
+  };
 
   void
   precompute ()
