@@ -35,7 +35,8 @@ struct contact_copy_parameters
   bool
   operator== (const contact_copy_parameters &o) const
   {
-    return preflash == o.preflash && boost == o.boost
+    return simulate == o.simulate
+	   && preflash == o.preflash && boost == o.boost
 	   && emulsion_characteristic_curve == o.emulsion_characteristic_curve
 	   && exposure == o.exposure;
   }

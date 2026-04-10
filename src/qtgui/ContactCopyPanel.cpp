@@ -40,13 +40,24 @@ void ContactCopyPanel::setupUi() {
   addSeparator("Film characteristics");
   m_hdCurveWidget = new HDCurveWidget();
   
+  QComboBox *modeCombo = new QComboBox();
+  m_modeCombo = modeCombo;
+  modeCombo->addItem("Exposure + Density (H&D)", (int)colorscreen::hd_axis_hd);
+  modeCombo->addItem("Gamma 2.2", (int)colorscreen::hd_axis_gamma22);
+  modeCombo->addItem("Gamma 1.0 (Linear)", (int)colorscreen::hd_axis_gamma10);
+  m_currentGroupForm->addRow("Display mode", modeCombo);
+  connect(modeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, modeCombo](int){
+      m_hdCurveWidget->setDisplayMode((colorscreen::hd_axis_type)modeCombo->currentData().toInt());
+      updateUI();
+  });
+
   QComboBox *presetCombo = new QComboBox();
   m_presetCombo = presetCombo;
   presetCombo->addItem("Custom", -1);
   for (int i = 0; i < colorscreen::film_sensitivity::hd_curves_max; ++i) {
       presetCombo->addItem(QString::fromUtf8(colorscreen::film_sensitivity::hd_curves_properties[i].pretty_name), i);
   }
-  m_form->addRow("Presets", presetCombo);
+  m_currentGroupForm->addRow("Presets", presetCombo);
 
   connect(presetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, presetCombo](int index) {
       int presetIdx = presetCombo->itemData(index).toInt();
@@ -56,16 +67,6 @@ void ContactCopyPanel::setupUi() {
               s.rparams.contact_copy.emulsion_characteristic_curve = preset.params;
           }, "Apply characteristic curve preset");
       }
-  });
-
-  QComboBox *modeCombo = new QComboBox();
-  modeCombo->addItem("Exposure + Density (H&D)", (int)colorscreen::hd_axis_hd);
-  modeCombo->addItem("Gamma 2.2", (int)colorscreen::hd_axis_gamma22);
-  modeCombo->addItem("Gamma 1.0 (Linear)", (int)colorscreen::hd_axis_gamma10);
-  m_form->addRow("Display mode", modeCombo);
-  connect(modeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, modeCombo](int){
-      m_hdCurveWidget->setDisplayMode((colorscreen::hd_axis_type)modeCombo->currentData().toInt());
-      updateUI();
   });
 
   // Wrap it nicely to center or align it
@@ -182,6 +183,8 @@ void ContactCopyPanel::setupUi() {
   m_paramUpdaters.push_back([this](const ParameterState &s) {
       bool sim = s.rparams.contact_copy.simulate;
       m_hdCurveWidget->setEnabled(sim);
+      if (m_presetCombo) m_presetCombo->setEnabled(sim);
+      if (m_modeCombo) m_modeCombo->setEnabled(sim);
       m_minXSpin->setEnabled(sim);
       m_minYSpin->setEnabled(sim);
       m_linear1XSpin->setEnabled(sim);

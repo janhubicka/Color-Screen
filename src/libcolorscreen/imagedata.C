@@ -1257,7 +1257,9 @@ image_data::load_part (int *permille, const char **error,
 	}
       /* TODO: Support also 4800DPI lens. */
       if (camera_model == "PerfectionV700" || camera_model == "PerfectionV750"
-          || camera_model == "PerfectionV800" || camera_model == "PerfectionV850")
+          || camera_model == "PerfectionV800" || camera_model == "PerfectionV850"
+          || camera_model == "Perfection V700/V750"
+          || camera_model == "Perfection V800/V850")
 	{
 	  /* Total array length at about 56.8 mm. 6 line 122,400 pixel array,
 	     the length of a line should be 122,400/6 or 20,400 pixels

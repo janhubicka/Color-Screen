@@ -392,7 +392,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
       luminosity_t llum = c.red * s.red + c.green * s.green + c.blue * s.blue;
       luminosity_t correction = llum ? lum / llum : lum * 100;
 
-#if 0
+#if 1
       luminosity_t redmin = lum - (1 - std::min (s.red, (luminosity_t)1));
       luminosity_t redmax = lum + (1 - std::min (s.red, (luminosity_t)1));
       if (c.red * correction < redmin)
