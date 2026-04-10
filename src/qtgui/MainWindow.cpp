@@ -23,6 +23,7 @@
 #include <QStandardPaths>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QTextStream>
 #include <QComboBox>
 #include "FocusAnalysisWorker.h"
@@ -196,6 +197,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
           this, &MainWindow::addProgress);
   connect(&m_colorOptimizerQueue, &TaskQueue::progressFinished,
           this, &MainWindow::removeProgress);
+
+  updateWindowTitle();
 }
 
 MainWindow::~MainWindow() {
@@ -2101,6 +2104,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     return;
 
   m_currentImageFile = fileName;
+  updateWindowTitle();
 
   // Clear current image and stop rendering
   m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
@@ -2454,6 +2458,14 @@ void MainWindow::closeEvent(QCloseEvent *event) {
   event->accept();
 }
 
+void MainWindow::updateWindowTitle() {
+  QString title = "Color-Screen " PACKAGE_VERSION;
+  if (!m_currentImageFile.isEmpty()) {
+    title += ": " + QFileInfo(m_currentImageFile).fileName();
+  }
+  setWindowTitle(title);
+}
+
 void MainWindow::saveWindowState() {
   QSettings settings;
 
@@ -2787,6 +2799,23 @@ void MainWindow::updateRegistrationGroupVisibility() {
   
   for (QAction *action : m_registrationActions) {
     action->setVisible(shouldShow);
+  }
+
+  // Hide/Show registration menu
+  if (m_registrationMenu) {
+    m_registrationMenu->menuAction()->setVisible(shouldShow);
+  }
+
+  // Hide/Show Geometry and Profile tabs
+  if (m_configTabs) {
+    int geometryIndex = m_configTabs->indexOf(m_geometryPanel);
+    if (geometryIndex != -1) {
+      m_configTabs->setTabVisible(geometryIndex, shouldShow);
+    }
+    int profileIndex = m_configTabs->indexOf(m_profilePanel);
+    if (profileIndex != -1) {
+      m_configTabs->setTabVisible(profileIndex, shouldShow);
+    }
   }
   
   // If hiding and a registration tool is active, switch to Pan

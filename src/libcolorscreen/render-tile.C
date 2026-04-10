@@ -64,8 +64,10 @@ sanitize_render_parameters (render_type_parameters &rtparam, scr_to_img_paramete
     rtparam.color = false;
   if (rtparam.type == render_type_profiled_original)
     rtparam.color = true;
+#if 0
   if (rtparam.type == render_type_realistic)
     rtparam.color = false;
+#endif
 }
 
 bool

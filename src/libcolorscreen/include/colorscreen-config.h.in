@@ -1,2 +1,4 @@
 /* define if checking is enabled */
 #undef COLORSCREEN_CHECKING
+/* define package version */
+#undef PACKAGE_VERSION

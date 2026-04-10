@@ -153,6 +153,7 @@ private:
   void createToolbar();  // New helper
   void updateModeMenu(); // Updates combo box items
   QIcon renderScreenIcon(colorscreen::scr_type type);
+  void updateWindowTitle(); // Helper to update window title
 
   // Window state management
   void saveWindowState();
