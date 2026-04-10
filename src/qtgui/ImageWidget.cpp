@@ -50,12 +50,25 @@ ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent), m_lastSize(0, 0) {
   m_hurleyAnim->setGeometry(rect());
   m_hurleyAnim->hide();
   
-  // Randomly choose which animation to use
-  int animChoice = QRandomGenerator::global()->bounded(4);
-  if (animChoice == 0) m_activeAnim = m_thamesAnim;
-  else if (animChoice == 1) m_activeAnim = m_pagetAnim;
-  else if (animChoice == 2) m_activeAnim = m_jolyAnim;
-  else m_activeAnim = m_hurleyAnim;
+  // Choose animation (Random by default, or overridden by CSEGG env var)
+  QByteArray csegg = qgetenv("CSEGG").toLower();
+  if (csegg == "none") {
+      m_activeAnim = nullptr;
+  } else if (csegg == "thames") {
+      m_activeAnim = m_thamesAnim;
+  } else if (csegg == "paget") {
+      m_activeAnim = m_pagetAnim;
+  } else if (csegg == "joly") {
+      m_activeAnim = m_jolyAnim;
+  } else if (csegg == "hurley") {
+      m_activeAnim = m_hurleyAnim;
+  } else {
+      int animChoice = QRandomGenerator::global()->bounded(4);
+      if (animChoice == 0) m_activeAnim = m_thamesAnim;
+      else if (animChoice == 1) m_activeAnim = m_pagetAnim;
+      else if (animChoice == 2) m_activeAnim = m_jolyAnim;
+      else m_activeAnim = m_hurleyAnim;
+  }
 
   setMouseTracking(false); // Only track when dragging
   setContextMenuPolicy(Qt::NoContextMenu); // Allow right-click for our custom handling
