@@ -157,22 +157,9 @@ void HurleyAnimation::initDunes() {
 // DUNE DYNAMICS UPDATE
 // ============================================================================
 
-void HurleyAnimation::updateDunes(double dt) {
-    // Occasionally nudge targets for organic movement
-    auto nudge = [&](DuneStrip *strips, int count) {
-        if (QRandomGenerator::global()->bounded(120) < 1) {
-            int idx = QRandomGenerator::global()->bounded(count);
-            strips[idx].targetSpeed = DUNE_FG_SPEED * (0.5 + QRandomGenerator::global()->generateDouble());
-            strips[idx].targetAmpFactor = 0.5 + 0.5 * QRandomGenerator::global()->generateDouble();
-        }
-        for (int i = 0; i < count; ++i) {
-            strips[i].currentSpeed     += (strips[i].targetSpeed     - strips[i].currentSpeed)     * 0.003;
-            strips[i].currentAmpFactor += (strips[i].targetAmpFactor - strips[i].currentAmpFactor) * 0.003;
-            strips[i].phase            += strips[i].currentSpeed * dt;
-        }
-    };
-    nudge(m_duneBg, DUNE_BG_COUNT);
-    nudge(m_duneFg, DUNE_FG_COUNT);
+void HurleyAnimation::updateDunes(double /*dt*/) {
+    // Dunes are now still in world space.
+    // Their horizontal position is derived purely from camera parallax.
 }
 
 // ============================================================================
@@ -1107,10 +1094,17 @@ void HurleyAnimation::drawDuneBgStrips(QPainter &p) {
     double zoneH   = h * 0.22;        // How tall the BG zone is
     double stripH  = zoneH / DUNE_BG_COUNT;
 
-    // BG parallax offset: 30% of camera X
-    double bgOffsetX = m_cameraX * 0.3;
+    // Integrated Parallax Index mapping: Total 9 strips (6 FG, 3 BG)
+    // i_from_bottom: 0=closest FG, 5=furthest FG, 6=closest BG, 8=furthest BG
+    constexpr double MIN_DISTANCE  = 1.0;
+    constexpr double DUNE_DISTANCE = 0.5;
 
     for (int i = 0; i < DUNE_BG_COUNT; ++i) {
+        // Index mapping for BG: m_duneBg[0] is top (furthest), m_duneBg[2] is bottom (closest BG)
+        int i_from_bottom = 8 - i; 
+        double F = (MIN_DISTANCE + i_from_bottom * DUNE_DISTANCE) / (MIN_DISTANCE + 2 * DUNE_DISTANCE);
+        double bgOffsetX = m_cameraX / F;
+
         double yBase = zoneTop + i * stripH;
 
         // Perspective: strips closer to bottom are slightly larger
@@ -1126,7 +1120,7 @@ void HurleyAnimation::drawDuneBgStrips(QPainter &p) {
         QPolygonF poly;
         for (int sx = 0; sx <= w; sx += 4) {
             double worldX = sx + bgOffsetX;
-            double angle  = worldX * freq + m_duneBg[i].phase;
+            double angle  = worldX * freq; // No procedural phase
             double waveY  = amp * qSin(angle);
             poly << QPointF(sx, yBase + waveY);
         }
@@ -1162,10 +1156,16 @@ void HurleyAnimation::drawDuneFgStrips(QPainter &p, int startIdx, int endIdx) {
     double zoneH   = h * 0.58;
     double stripH  = zoneH / DUNE_FG_COUNT;
 
-    // FG dunes move at full camera speed
-    double fgOffsetX = m_cameraX;
+    // Integrated Parallax Index mapping
+    constexpr double MIN_DISTANCE  = 1.0;
+    constexpr double DUNE_DISTANCE = 0.5;
 
     for (int i = startIdx; i <= endIdx && i < DUNE_FG_COUNT; ++i) {
+        // Index mapping for FG: m_duneFg[0] is top (furthest FG), m_duneFg[5] is bottom (closest)
+        int i_from_bottom = 5 - i;
+        double F = (MIN_DISTANCE + i_from_bottom * DUNE_DISTANCE) / (MIN_DISTANCE + 2 * DUNE_DISTANCE);
+        double fgOffsetX = m_cameraX / F;
+
         double yBase = zoneTop + i * stripH;
 
         double perspect = 0.5 + 0.5 * ((double)(i + 1) / DUNE_FG_COUNT);
@@ -1180,7 +1180,7 @@ void HurleyAnimation::drawDuneFgStrips(QPainter &p, int startIdx, int endIdx) {
         QPolygonF poly;
         for (int sx = 0; sx <= w; sx += 4) {
             double worldX = sx + fgOffsetX;
-            double angle  = worldX * freq + m_duneFg[i].phase;
+            double angle  = worldX * freq; // No procedural phase
             double waveY  = amp * qSin(angle);
             poly << QPointF(sx, yBase + waveY);
         }
