@@ -30,6 +30,7 @@ colorscreen_qt_SOURCES = \
     ThamesAnimation.cpp \
     PagetAnimation.cpp \
     JolyAnimation.cpp \
+    HurleyAnimation.cpp \
     TaskQueue.cpp \
     HistogramWorker.cpp \
     FlowLayout.cpp \
@@ -79,6 +80,7 @@ MOC_SOURCES = \
     moc_ThamesAnimation.cpp \
     moc_PagetAnimation.cpp \
     moc_JolyAnimation.cpp \
+    moc_HurleyAnimation.cpp \
     moc_TaskQueue.cpp \
     moc_HistogramWorker.cpp \
     moc_MultiLineTabWidget.cpp \
@@ -91,7 +93,7 @@ MOC_SOURCES = \
     moc_TilesPanel.cpp \
     moc_ImageLayerPanel.cpp
 
-EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h FinetuneImagesPanel.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h WorkerBase.h ContactCopyPanel.h HDCurveWidget.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h Logging.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg AdaptiveSharpeningWorker.h AdaptiveSharpeningChart.h RenderDialog.h ProfilePanel.h TilesPanel.h ImageLayerPanel.h
+EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h FinetuneImagesPanel.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h WorkerBase.h ContactCopyPanel.h HDCurveWidget.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h HurleyAnimation.h TaskQueue.h SubtitleOverlay.h Logging.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg AdaptiveSharpeningWorker.h AdaptiveSharpeningChart.h RenderDialog.h ProfilePanel.h TilesPanel.h ImageLayerPanel.h
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp

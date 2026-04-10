@@ -21,6 +21,7 @@
 #include "ThamesAnimation.h"
 #include "PagetAnimation.h"
 #include "JolyAnimation.h"
+#include "HurleyAnimation.h"
 
 // Forward declarations
 namespace colorscreen {
@@ -212,6 +213,7 @@ private:
   ThamesAnimation *m_thamesAnim = nullptr;
   PagetAnimation *m_pagetAnim = nullptr;
   JolyAnimation *m_jolyAnim = nullptr;
+  HurleyAnimation *m_hurleyAnim = nullptr;
   QWidget *m_activeAnim = nullptr; // Points to whichever is active
   QTimer *m_refreshTimer = nullptr;
 };

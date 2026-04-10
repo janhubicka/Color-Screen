@@ -46,11 +46,16 @@ ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent), m_lastSize(0, 0) {
   m_jolyAnim->setGeometry(rect());
   m_jolyAnim->hide();
   
+  m_hurleyAnim = new HurleyAnimation(this);
+  m_hurleyAnim->setGeometry(rect());
+  m_hurleyAnim->hide();
+  
   // Randomly choose which animation to use
-  int animChoice = QRandomGenerator::global()->bounded(3);
+  int animChoice = QRandomGenerator::global()->bounded(4);
   if (animChoice == 0) m_activeAnim = m_thamesAnim;
   else if (animChoice == 1) m_activeAnim = m_pagetAnim;
-  else m_activeAnim = m_jolyAnim;
+  else if (animChoice == 2) m_activeAnim = m_jolyAnim;
+  else m_activeAnim = m_hurleyAnim;
 
   setMouseTracking(false); // Only track when dragging
   setContextMenuPolicy(Qt::NoContextMenu); // Allow right-click for our custom handling
@@ -718,6 +723,10 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
       m_jolyAnim->stopAnimation();
       m_jolyAnim->hide();
     }
+    if (m_hurleyAnim && !m_hurleyAnim->isHidden()) {
+      m_hurleyAnim->stopAnimation();
+      m_hurleyAnim->hide();
+    }
   } else {
     // Show active animation when no image
     if (m_activeAnim && m_activeAnim->isHidden()) {
@@ -731,6 +740,8 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
         m_pagetAnim->startAnimation();
       } else if (m_activeAnim == m_jolyAnim) {
         m_jolyAnim->startAnimation();
+      } else if (m_activeAnim == m_hurleyAnim) {
+        m_hurleyAnim->startAnimation();
       }
     }
   }

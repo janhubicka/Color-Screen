@@ -143,6 +143,7 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-ThamesAnimation.$(OBJEXT) \
 	colorscreen_qt-PagetAnimation.$(OBJEXT) \
 	colorscreen_qt-JolyAnimation.$(OBJEXT) \
+	colorscreen_qt-HurleyAnimation.$(OBJEXT) \
 	colorscreen_qt-TaskQueue.$(OBJEXT) \
 	colorscreen_qt-HistogramWorker.$(OBJEXT) \
 	colorscreen_qt-FlowLayout.$(OBJEXT) \
@@ -188,6 +189,7 @@ am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_ThamesAnimation.$(OBJEXT) \
 	colorscreen_qt-moc_PagetAnimation.$(OBJEXT) \
 	colorscreen_qt-moc_JolyAnimation.$(OBJEXT) \
+	colorscreen_qt-moc_HurleyAnimation.$(OBJEXT) \
 	colorscreen_qt-moc_TaskQueue.$(OBJEXT) \
 	colorscreen_qt-moc_HistogramWorker.$(OBJEXT) \
 	colorscreen_qt-moc_MultiLineTabWidget.$(OBJEXT) \
@@ -251,6 +253,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-HDCurveWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-HistogramWorker.Po \
+	./$(DEPDIR)/colorscreen_qt-HurleyAnimation.Po \
 	./$(DEPDIR)/colorscreen_qt-ImageLayerPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-ImageWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-JolyAnimation.Po \
@@ -294,6 +297,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_HDCurveWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_HistogramWorker.Po \
+	./$(DEPDIR)/colorscreen_qt-moc_HurleyAnimation.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ImageLayerPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po \
@@ -538,6 +542,7 @@ colorscreen_qt_SOURCES = \
     ThamesAnimation.cpp \
     PagetAnimation.cpp \
     JolyAnimation.cpp \
+    HurleyAnimation.cpp \
     TaskQueue.cpp \
     HistogramWorker.cpp \
     FlowLayout.cpp \
@@ -588,6 +593,7 @@ MOC_SOURCES = \
     moc_ThamesAnimation.cpp \
     moc_PagetAnimation.cpp \
     moc_JolyAnimation.cpp \
+    moc_HurleyAnimation.cpp \
     moc_TaskQueue.cpp \
     moc_HistogramWorker.cpp \
     moc_MultiLineTabWidget.cpp \
@@ -600,7 +606,7 @@ MOC_SOURCES = \
     moc_TilesPanel.cpp \
     moc_ImageLayerPanel.cpp
 
-EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h FinetuneImagesPanel.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h WorkerBase.h ContactCopyPanel.h HDCurveWidget.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h Logging.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg AdaptiveSharpeningWorker.h AdaptiveSharpeningChart.h RenderDialog.h ProfilePanel.h TilesPanel.h ImageLayerPanel.h
+EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h FinetuneImagesPanel.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h WorkerBase.h ContactCopyPanel.h HDCurveWidget.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h HurleyAnimation.h TaskQueue.h SubtitleOverlay.h Logging.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg AdaptiveSharpeningWorker.h AdaptiveSharpeningChart.h RenderDialog.h ProfilePanel.h TilesPanel.h ImageLayerPanel.h
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
@@ -725,6 +731,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-HDCurveWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-HistogramWorker.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-HurleyAnimation.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ImageLayerPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ImageWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-JolyAnimation.Po@am__quote@ # am--include-marker
@@ -768,6 +775,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_HDCurveWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_HistogramWorker.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_HurleyAnimation.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ImageLayerPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po@am__quote@ # am--include-marker
@@ -1227,6 +1235,20 @@ colorscreen_qt-JolyAnimation.obj: JolyAnimation.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='JolyAnimation.cpp' object='colorscreen_qt-JolyAnimation.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-JolyAnimation.obj `if test -f 'JolyAnimation.cpp'; then $(CYGPATH_W) 'JolyAnimation.cpp'; else $(CYGPATH_W) '$(srcdir)/JolyAnimation.cpp'; fi`
+
+colorscreen_qt-HurleyAnimation.o: HurleyAnimation.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-HurleyAnimation.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-HurleyAnimation.Tpo -c -o colorscreen_qt-HurleyAnimation.o `test -f 'HurleyAnimation.cpp' || echo '$(srcdir)/'`HurleyAnimation.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-HurleyAnimation.Tpo $(DEPDIR)/colorscreen_qt-HurleyAnimation.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='HurleyAnimation.cpp' object='colorscreen_qt-HurleyAnimation.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-HurleyAnimation.o `test -f 'HurleyAnimation.cpp' || echo '$(srcdir)/'`HurleyAnimation.cpp
+
+colorscreen_qt-HurleyAnimation.obj: HurleyAnimation.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-HurleyAnimation.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-HurleyAnimation.Tpo -c -o colorscreen_qt-HurleyAnimation.obj `if test -f 'HurleyAnimation.cpp'; then $(CYGPATH_W) 'HurleyAnimation.cpp'; else $(CYGPATH_W) '$(srcdir)/HurleyAnimation.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-HurleyAnimation.Tpo $(DEPDIR)/colorscreen_qt-HurleyAnimation.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='HurleyAnimation.cpp' object='colorscreen_qt-HurleyAnimation.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-HurleyAnimation.obj `if test -f 'HurleyAnimation.cpp'; then $(CYGPATH_W) 'HurleyAnimation.cpp'; else $(CYGPATH_W) '$(srcdir)/HurleyAnimation.cpp'; fi`
 
 colorscreen_qt-TaskQueue.o: TaskQueue.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-TaskQueue.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-TaskQueue.Tpo -c -o colorscreen_qt-TaskQueue.o `test -f 'TaskQueue.cpp' || echo '$(srcdir)/'`TaskQueue.cpp
@@ -1858,6 +1880,20 @@ colorscreen_qt-moc_JolyAnimation.obj: moc_JolyAnimation.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_JolyAnimation.obj `if test -f 'moc_JolyAnimation.cpp'; then $(CYGPATH_W) 'moc_JolyAnimation.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_JolyAnimation.cpp'; fi`
 
+colorscreen_qt-moc_HurleyAnimation.o: moc_HurleyAnimation.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_HurleyAnimation.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_HurleyAnimation.Tpo -c -o colorscreen_qt-moc_HurleyAnimation.o `test -f 'moc_HurleyAnimation.cpp' || echo '$(srcdir)/'`moc_HurleyAnimation.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_HurleyAnimation.Tpo $(DEPDIR)/colorscreen_qt-moc_HurleyAnimation.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_HurleyAnimation.cpp' object='colorscreen_qt-moc_HurleyAnimation.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_HurleyAnimation.o `test -f 'moc_HurleyAnimation.cpp' || echo '$(srcdir)/'`moc_HurleyAnimation.cpp
+
+colorscreen_qt-moc_HurleyAnimation.obj: moc_HurleyAnimation.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_HurleyAnimation.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_HurleyAnimation.Tpo -c -o colorscreen_qt-moc_HurleyAnimation.obj `if test -f 'moc_HurleyAnimation.cpp'; then $(CYGPATH_W) 'moc_HurleyAnimation.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_HurleyAnimation.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_HurleyAnimation.Tpo $(DEPDIR)/colorscreen_qt-moc_HurleyAnimation.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_HurleyAnimation.cpp' object='colorscreen_qt-moc_HurleyAnimation.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_HurleyAnimation.obj `if test -f 'moc_HurleyAnimation.cpp'; then $(CYGPATH_W) 'moc_HurleyAnimation.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_HurleyAnimation.cpp'; fi`
+
 colorscreen_qt-moc_TaskQueue.o: moc_TaskQueue.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_TaskQueue.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_TaskQueue.Tpo -c -o colorscreen_qt-moc_TaskQueue.o `test -f 'moc_TaskQueue.cpp' || echo '$(srcdir)/'`moc_TaskQueue.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_TaskQueue.Tpo $(DEPDIR)/colorscreen_qt-moc_TaskQueue.Po
@@ -2180,6 +2216,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-HDCurveWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-HistogramWorker.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-HurleyAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageLayerPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-JolyAnimation.Po
@@ -2223,6 +2260,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_HDCurveWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_HistogramWorker.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_HurleyAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ImageLayerPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po
@@ -2311,6 +2349,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-HDCurveWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-HistogramWorker.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-HurleyAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageLayerPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-JolyAnimation.Po
@@ -2354,6 +2393,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_HDCurveWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_HistogramWorker.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_HurleyAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ImageLayerPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po
