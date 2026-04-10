@@ -927,11 +927,33 @@ void HurleyAnimation::drawSun(QPainter &p) {
     double sunY = height() * 0.10;
     double sunR = qMin(width(), height()) * 0.07;
 
-    // Shimmer / corona
+    // --- 1. Rays (Behind Sun) ---
+    p.save();
+    p.translate(sunX, sunY);
+    p.rotate(m_time * 20.0); // Slow rotation
+    p.setBrush(QColor(255, 210, 50, 180));
+    p.setPen(Qt::NoPen);
+    int numRays = 12;
+    for (int i = 0; i < numRays; ++i) {
+        QPolygonF ray;
+        double rInner = sunR * 0.9;
+        double rOuter = sunR * 1.6;
+        double angleStep = (M_PI * 2.0) / numRays;
+        double curA = i * angleStep;
+        
+        // Triangular ray
+        ray << QPointF(rInner * qCos(curA - 0.1), rInner * qSin(curA - 0.1));
+        ray << QPointF(rOuter * qCos(curA),       rOuter * qSin(curA));
+        ray << QPointF(rInner * qCos(curA + 0.1), rInner * qSin(curA + 0.1));
+        p.drawPolygon(ray);
+    }
+    p.restore();
+
+    // --- 2. Sun Glow ---
     double shimmer = 0.5 + 0.5 * qSin(m_time * 3.7);
-    for (int ring = 5; ring >= 1; --ring) {
-        double rr = sunR * (1.0 + ring * 0.28 + shimmer * 0.08 * ring);
-        int alpha = (int)(40.0 / ring * (0.6 + shimmer * 0.4));
+    for (int ring = 4; ring >= 1; --ring) {
+        double rr = sunR * (1.0 + ring * 0.25 + shimmer * 0.08 * ring);
+        int alpha = (int)(30.0 / ring * (0.6 + shimmer * 0.4));
         QRadialGradient corona(sunX, sunY, rr);
         corona.setColorAt(0.6, QColor(255, 230, 100, alpha));
         corona.setColorAt(1.0, QColor(255, 180, 50, 0));
@@ -940,13 +962,62 @@ void HurleyAnimation::drawSun(QPainter &p) {
         p.drawEllipse(QPointF(sunX, sunY), rr, rr);
     }
 
-    // Core disc
+    // --- 3. Core Disc ---
     QRadialGradient sunGrad(sunX - sunR*0.25, sunY - sunR*0.25, sunR * 1.1);
     sunGrad.setColorAt(0.0, QColor(255, 255, 210));
     sunGrad.setColorAt(0.5, QColor(255, 235, 80));
     sunGrad.setColorAt(1.0, QColor(255, 180, 20));
     p.setBrush(sunGrad);
     p.drawEllipse(QPointF(sunX, sunY), sunR, sunR);
+
+    // --- 4. Face (Eyes tracking Hero) ---
+    bool heroSurprised = false;
+    double hx = width() * 0.5; // Default focus
+    double hy = height() * 0.3;
+    if (m_heroIdx >= 0 && m_planes[m_heroIdx].active) {
+        const auto &hero = m_planes[m_heroIdx];
+        hx = toScreenX(hero.x);
+        hy = hero.y;
+        if (hero.health < PLANE_HEALTH_HERO || hero.state != PlaneState::Flying) {
+            heroSurprised = true;
+        }
+    }
+
+    // Normalized look vector from sun to hero
+    double dx = hx - sunX;
+    double dy = hy - sunY;
+    double dist = qMax(1.0, qSqrt(dx*dx + dy*dy));
+    double ux = dx / dist;
+    double uy = dy / dist;
+
+    // Draw Eyes
+    p.setPen(QPen(Qt::black, 0.8));
+    p.setBrush(Qt::white);
+    for (int i : {-1, 1}) {
+        double ex = sunX + i * sunR * 0.35;
+        double ey = sunY - sunR * 0.15;
+        double eyeR = sunR * 0.18;
+        p.drawEllipse(QPointF(ex, ey), eyeR, eyeR);
+        
+        // Pupil
+        p.setBrush(Qt::black);
+        double px = ex + ux * eyeR * 0.5;
+        double py = ey + uy * eyeR * 0.5;
+        p.drawEllipse(QPointF(px, py), eyeR * 0.4, eyeR * 0.4);
+        p.setBrush(Qt::white);
+    }
+
+    // Draw Mouth
+    p.setPen(QPen(QColor(100, 50, 0), 2.0, Qt::SolidLine, Qt::RoundCap));
+    if (heroSurprised) {
+        // Surprised 'O'
+        p.setBrush(QColor(150, 40, 0));
+        p.drawEllipse(QPointF(sunX, sunY + sunR * 0.4), sunR * 0.15, sunR * 0.22);
+    } else {
+        // Happy Smile
+        p.setBrush(Qt::NoBrush);
+        p.drawArc(QRectF(sunX - sunR*0.3, sunY + sunR*0.05, sunR*0.6, sunR*0.6), 210*16, 120*16);
+    }
 }
 
 // ============================================================================
