@@ -984,6 +984,10 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
       double startDist = sqrt((x1 * x1) + (y1 * y1));
       double currentDist = sqrt((x2 * x2) + (y2 * y2));
       double scale = (startDist > 1e-9) ? currentDist / startDist : 1.0;
+
+      if (event->modifiers() & Qt::ShiftModifier) {
+        scale = 1.0;
+      }
       
       // Enforce minimum length of 2.0
       double len1 = sqrt(m_pressParams.coordinate1.x*m_pressParams.coordinate1.x + 
@@ -1263,6 +1267,34 @@ void ImageWidget::keyPressEvent(QKeyEvent *event) {
     event->accept();
     return;
   }
+
+  // Handle arrow keys for moving screen center in SetCenterMode
+  if (m_interactionMode == SetCenterMode && m_scrToImg) {
+    colorscreen::point_t move = {0, 0};
+    if (event->key() == Qt::Key_Up) {
+      move.x = -0.1 * m_scrToImg->coordinate2.x;
+      move.y = -0.1 * m_scrToImg->coordinate2.y;
+    } else if (event->key() == Qt::Key_Down) {
+      move.x = 0.1 * m_scrToImg->coordinate2.x;
+      move.y = 0.1 * m_scrToImg->coordinate2.y;
+    } else if (event->key() == Qt::Key_Left) {
+      move.x = -0.1 * m_scrToImg->coordinate1.x;
+      move.y = -0.1 * m_scrToImg->coordinate1.y;
+    } else if (event->key() == Qt::Key_Right) {
+      move.x = 0.1 * m_scrToImg->coordinate1.x;
+      move.y = 0.1 * m_scrToImg->coordinate1.y;
+    }
+
+    if (move.x != 0 || move.y != 0) {
+      m_scrToImg->center.x += move.x;
+      m_scrToImg->center.y += move.y;
+      emit coordinateSystemChanged();
+      update();
+      event->accept();
+      return;
+    }
+  }
+
   QWidget::keyPressEvent(event);
 }
 
