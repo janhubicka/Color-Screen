@@ -1170,120 +1170,97 @@ void HurleyAnimation::drawPlane(QPainter &p, const Airplane &plane) {
     //  - Short rounded tail
     // =====================================================================
 
-    // -- Fuselage --
-    // Drawn nose-to-tail, nose at +X (right)
+    // -- Fuselage (Path 3) --
     QPainterPath fuse;
-    // Nose cowling (circular rotary engine)
-    fuse.moveTo(22,  4);   // Bottom of nose
-    fuse.cubicTo(28,  4, 30, -2, 28, -7);  // Bottom-right of cowl
-    fuse.cubicTo(26,-12, 18,-13, 14, -8);  // Top of cowl
-    // Top of fuselage (hump then flat then tail)
-    fuse.lineTo(10, -10);
-    fuse.lineTo( 4, -12);  // Hump peak (gun mount)
-    fuse.lineTo(-4, -10);
-    fuse.lineTo(-8,  -8);  // Cockpit region
-    fuse.cubicTo(-14, -7, -18, -5, -22, -3); // Tail taper top
-    // Tail post
-    fuse.lineTo(-24,  0);
-    fuse.lineTo(-22,  3);
-    // Bottom of fuselage
-    fuse.cubicTo(-16,  5, -8,  6,  0,  6);
-    fuse.cubicTo(  8,  6, 16,  5, 22,  4);
+    fuse.moveTo( 39.88,  -3.11);
+    fuse.lineTo( 39.80,   5.00);
+    fuse.lineTo( 18.06,   6.22);
+    fuse.lineTo(-19.66,   3.67);
+    fuse.lineTo(-22.52,   6.45);
+    fuse.lineTo(-25.39,   8.32);
+    fuse.lineTo(-28.75,   9.82);
+    fuse.lineTo(-33.40,  10.97);
+    fuse.lineTo(-37.42,  10.62);
+    fuse.lineTo(-39.43,   8.76);
+    fuse.lineTo(-39.82,   5.01);
+    fuse.lineTo(-39.61,   2.22);
+    fuse.lineTo(-37.73,  -1.17);
+    fuse.lineTo(-30.07,  -3.01);
+    fuse.lineTo(-22.70,  -2.40);
+    fuse.lineTo(-19.48,  -1.57);
+    fuse.lineTo(  2.14,  -5.65);
+    fuse.lineTo( 23.36,  -6.24);
+    fuse.lineTo( 24.62,  -5.92);
     fuse.closeSubpath();
     p.drawPath(fuse);
 
-    // -- Upper wing (longer, slightly forward) --
-    QPainterPath upperWing;
-    upperWing.moveTo( 6, -10);
-    upperWing.lineTo( 8, -24);
-    upperWing.lineTo(-14, -24);
-    upperWing.lineTo(-12, -10);
-    upperWing.closeSubpath();
-    p.drawPath(upperWing);
+    // -- Top Wing (Path 5) --
+    QPainterPath topWing;
+    topWing.moveTo( 24.05,  -5.35);
+    topWing.lineTo( 24.19,  -8.90);
+    topWing.lineTo(  6.37,  -8.65);
+    topWing.lineTo(  3.00,  -5.21);
+    topWing.lineTo( 10.54,  -4.01);
+    topWing.lineTo( 18.51,  -4.37);
+    topWing.closeSubpath();
+    p.drawPath(topWing);
 
-    // -- Lower wing (shorter, slightly behind) --
-    QPainterPath lowerWing;
-    lowerWing.moveTo( 4,  6);
-    lowerWing.lineTo( 6, 16);
-    lowerWing.lineTo(-10, 16);
-    lowerWing.lineTo(-10,  6);
-    lowerWing.closeSubpath();
-    p.drawPath(lowerWing);
+    // -- Bottom Wing (Path 4) --
+    QPainterPath bottomWing;
+    bottomWing.moveTo( 29.97,  13.63);
+    bottomWing.lineTo( 29.16,   7.12);
+    bottomWing.lineTo( 12.38,   8.65);
+    bottomWing.lineTo(  9.64,  14.20);
+    bottomWing.lineTo( 17.65,  15.19);
+    bottomWing.lineTo( 25.55,  14.54);
+    bottomWing.closeSubpath();
+    p.drawPath(bottomWing);
 
-    // -- Wing struts (N-strut between wings) --
-    p.setPen(QPen(outlineColor, 1.0));
-    // Forward strut
-    p.drawLine(QPointF( 5, -10), QPointF( 5,  6));
-    // Rear strut (diagonal: N-shape)
-    p.drawLine(QPointF(-10, -10), QPointF(-10,  6));
-    p.drawLine(QPointF(  5, -10), QPointF(-10,  6));
-
-    // -- Horizontal tail (elevator) --
-    p.setBrush(bodyColor);
+    // -- Struts (Paths 11 & 12) --
     p.setPen(QPen(outlineColor, 0.7));
-    QPainterPath hStab;
-    hStab.moveTo(-22, -2);
-    hStab.lineTo(-30, -2);
-    hStab.lineTo(-30,  2);
-    hStab.lineTo(-22,  3);
-    hStab.closeSubpath();
-    p.drawPath(hStab);
+    QPainterPath struts;
+    struts.moveTo( 26.72,   9.79);
+    struts.lineTo( 22.18,  -5.02);
+    struts.lineTo( 19.93,  -4.62);
+    struts.lineTo( 24.92,  10.04);
+    struts.moveTo( 18.29,  11.92);
+    struts.lineTo( 12.36,  -4.09);
+    struts.lineTo( 10.91,  -4.03);
+    struts.lineTo( 17.10,  12.11);
+    p.drawPath(struts);
 
-    // -- Vertical tail (fin) --
-    QPainterPath vFin;
-    vFin.moveTo(-22, -3);
-    vFin.lineTo(-26,-13);
-    vFin.cubicTo(-24,-10,-22, -7,-22, -3);
-    p.drawPath(vFin);
-
-    // -- Propeller (Side View) --
-    // Vertical lines that get shorter/longer to simulate a spinning disc from the side
-    // Positioned at the front of the nose cowling ring (x=29)
-    double pLen = 12.0 * qSin(plane.propPhase);
-    double pLen2 = 12.0 * qSin(plane.propPhase + M_PI * 0.5); // 90-degree phase shift
-    
-    // Main spinning blade line
+    // -- Propeller (Yellow Dot Anchor 41.38, -1.81) --
+    double pLen = 15.0 * qSin(plane.propPhase);
+    double pLen2 = 15.0 * qSin(plane.propPhase + M_PI * 0.5);
     p.setPen(QPen(QColor(100, 100, 100, 150), 1.2, Qt::SolidLine, Qt::RoundCap));
-    p.drawLine(QPointF(29, -2 - pLen), QPointF(29, -2 + pLen));
-
-    // High-speed blur effect (secondary phase)
+    p.drawLine(QPointF(41.4, -1.8 - pLen), QPointF(41.4, -1.8 + pLen));
     if (plane.throttle > 0.4) {
         p.setPen(QPen(QColor(120, 120, 120, 60), 2.5, Qt::SolidLine, Qt::RoundCap));
-        p.drawLine(QPointF(29, -2 - pLen2), QPointF(29, -2 + pLen2));
+        p.drawLine(QPointF(41.4, -1.8 - pLen2), QPointF(41.4, -1.8 + pLen2));
     }
 
-    // -- Rotary engine cowling ring --
-    p.setPen(QPen(accentColor, 1.2));
-    p.setBrush(Qt::NoBrush);
-    p.drawEllipse(QPointF(22, -2), 7, 7);
+    // -- Pilot (Green Circle, conditional) --
+    if (!plane.pilotEjected) {
+        p.setBrush(Qt::green);
+        p.setPen(QPen(Qt::black, 0.5));
+        p.drawEllipse(QPointF(10, -5), 4, 4); // Placed in cockpit area
+    }
 
-    // -- Twin Vickers guns ("hump") --
-    p.setBrush(accentColor);
+    // -- Insignia (SVG Centered at -4.42, 0.87) --
     p.setPen(Qt::NoPen);
-    p.drawRect(QRectF(4, -15, 3, 5));   // Left gun barrel
-    p.drawRect(QRectF(8, -15, 3, 5));   // Right gun barrel
-
-    // -- Open cockpit / pilot silhouette --
-    p.setBrush(QColor(100, 80, 50));
-    p.drawEllipse(QPointF(-6, -10), 4, 3);  // Helmet
-
-    // -- Insignia --
-    p.setPen(Qt::NoPen);
+    double rx = -4.4, ry = 0.9;
     if (plane.team == Team::Allied) {
-        // RAF roundel on upper wing (red/white/blue)
-        double rx = -4.0, ry = -17.0;
-        p.setBrush(QColor(0, 0, 140));
-        p.drawEllipse(QPointF(rx, ry), 5, 5);
-        p.setBrush(QColor(230, 230, 230));
-        p.drawEllipse(QPointF(rx, ry), 3.5, 3.5);
+        p.setBrush(QColor(0, 0, 180));
+        p.drawEllipse(QPointF(rx, ry), 6, 6);
+        p.setBrush(Qt::white);
+        p.drawEllipse(QPointF(rx, ry), 4, 4);
         p.setBrush(QColor(200, 0, 0));
         p.drawEllipse(QPointF(rx, ry), 2, 2);
     } else {
-        // Iron Cross on wing
         p.setBrush(Qt::black);
-        p.setPen(QPen(Qt::white, 0.6));
-        p.drawRect(QRectF(-10, -20, 12, 4));  // Horizontal bar
-        p.drawRect(QRectF( -5, -23, 4,  10)); // Vertical bar
+        p.setPen(QPen(Qt::white, 0.8));
+        p.drawRect(QRectF(rx - 5, ry - 1.5, 10, 3));
+        p.drawRect(QRectF(rx - 1.5, ry - 5, 3, 10));
     }
 
     p.restore();
