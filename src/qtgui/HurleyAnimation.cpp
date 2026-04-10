@@ -396,18 +396,22 @@ void HurleyAnimation::spawnSmoke(double x, double y, double vx, double vy, int c
 // ============================================================================
 
 void HurleyAnimation::spawnPilot(const Airplane &plane) {
-    // Regular ejection: roll the dice
-    if (QRandomGenerator::global()->generateDouble() > PILOT_EJECT_CHANCE) return;
+    // 1. Determine if this is the hero
+    bool isHero = plane.isHero; 
+    
+    // 2. Regular ejection: roll the dice (unless it's the hero)
+    if (!isHero && QRandomGenerator::global()->generateDouble() > PILOT_EJECT_CHANCE) return;
 
     for (int i = 0; i < MAX_PILOTS; ++i) {
         if (!m_pilots[i].active) {
             Pilot &pilot      = m_pilots[i];
             pilot.active      = true;
             pilot.team        = plane.team;
+            pilot.hasCamera   = isHero; // Hero pilot gets the camera
             pilot.x           = plane.x;
             pilot.y           = plane.y - 12;
             pilot.vx          = plane.vx * 0.2;
-            pilot.vy          = -180.0;  // Strong eject upward
+            pilot.vy          = -180.0;  
             pilot.state       = PilotState::Falling;
             pilot.parachuteOpen = false;
             pilot.landedTimer = 0;
@@ -417,19 +421,22 @@ void HurleyAnimation::spawnPilot(const Airplane &plane) {
     }
 }
 
-// Bypasses the random survival chance for emergency situations
 void HurleyAnimation::spawnPilotGuaranteed(Airplane &a) {
     if (a.pilotEjected) return;
     a.pilotEjected = true;
+    
+    bool isHero = a.isHero;
+
     for (int i = 0; i < MAX_PILOTS; ++i) {
         if (!m_pilots[i].active) {
             Pilot &pilot        = m_pilots[i];
             pilot.active        = true;
             pilot.team          = a.team;
+            pilot.hasCamera     = isHero; // Hero pilot gets the camera
             pilot.x             = a.x;
             pilot.y             = a.y - 12;
             pilot.vx            = a.vx * 0.2;
-            pilot.vy            = -200.0; // Extra strong eject for emergency
+            pilot.vy            = -200.0;
             pilot.state         = PilotState::Falling;
             pilot.parachuteOpen = false;
             pilot.landedTimer   = 0;
@@ -656,7 +663,8 @@ void HurleyAnimation::updatePlanes(double dt) {
             // Ground crash check
 
             // Predictive Emergency Catapult: Bailing out just before a high-speed impact
-            if (!a.pilotEjected && a.vy > 50.0) {
+            // Note: During takeoff skimming, we are immune to this impact-panic.
+            if (!a.pilotEjected && a.vy > 50.0 && a.takeoffTimer <= 0) {
                 if (a.y + a.vy * (dt * 1.5) >= groundY) { // Look ahead slightly
                     spawnPilotGuaranteed(a);
                 }
@@ -1168,87 +1176,85 @@ void HurleyAnimation::drawPlane(QPainter &p, const Airplane &plane) {
     //  - Distinctive "hump" forward of cockpit (twin Vickers guns)
     //  - Upper wing slightly ahead of lower wing (stagger)
     //  - Short rounded tail
-    // =====================================================================
-
-    // -- Fuselage (Path 3) --
+    // ===========================================================    // -- Fuselage (Path 3) --
     QPainterPath fuse;
-    fuse.moveTo( 39.88,  -3.11);
-    fuse.lineTo( 39.80,   5.00);
-    fuse.lineTo( 18.06,   6.22);
-    fuse.lineTo(-19.66,   3.67);
-    fuse.lineTo(-22.52,   6.45);
-    fuse.lineTo(-25.39,   8.32);
-    fuse.lineTo(-28.75,   9.82);
-    fuse.lineTo(-33.40,  10.97);
-    fuse.lineTo(-37.42,  10.62);
-    fuse.lineTo(-39.43,   8.76);
-    fuse.lineTo(-39.82,   5.01);
-    fuse.lineTo(-39.61,   2.22);
-    fuse.lineTo(-37.73,  -1.17);
-    fuse.lineTo(-30.07,  -3.01);
-    fuse.lineTo(-22.70,  -2.40);
-    fuse.lineTo(-19.48,  -1.57);
-    fuse.lineTo(  2.14,  -5.65);
-    fuse.lineTo( 23.36,  -6.24);
-    fuse.lineTo( 24.62,  -5.92);
+    fuse.moveTo( 39.88,   1.81);
+    fuse.lineTo( 39.80,  -6.30);
+    fuse.lineTo( 18.06,  -7.52);
+    fuse.lineTo(-19.66,  -4.97);
+    fuse.lineTo(-22.52,  -7.75);
+    fuse.lineTo(-25.39,  -9.62);
+    fuse.lineTo(-28.75, -11.12);
+    fuse.lineTo(-33.40, -12.27);
+    fuse.lineTo(-37.42, -11.92);
+    fuse.lineTo(-39.43, -10.06);
+    fuse.lineTo(-39.82,  -6.31);
+    fuse.lineTo(-39.61,  -3.52);
+    fuse.lineTo(-37.73,  -0.13);
+    fuse.lineTo(-30.07,   1.71);
+    fuse.lineTo(-22.70,   1.10);
+    fuse.lineTo(-19.48,   0.27);
+    fuse.lineTo(  2.14,   4.35);
+    fuse.lineTo( 23.36,   4.94);
+    fuse.lineTo( 24.62,   4.62);
     fuse.closeSubpath();
     p.drawPath(fuse);
 
-    // -- Top Wing (Path 5) --
+    // -- Top Wing (was Path 4 in inverted logic) --
     QPainterPath topWing;
-    topWing.moveTo( 24.05,  -5.35);
-    topWing.lineTo( 24.19,  -8.90);
-    topWing.lineTo(  6.37,  -8.65);
-    topWing.lineTo(  3.00,  -5.21);
-    topWing.lineTo( 10.54,  -4.01);
-    topWing.lineTo( 18.51,  -4.37);
+    topWing.moveTo( 29.97, -13.63);
+    topWing.lineTo( 29.16,  -7.12);
+    topWing.lineTo( 12.38,  -8.65);
+    topWing.lineTo(  9.64, -14.20);
+    topWing.lineTo( 17.65, -15.19);
+    topWing.lineTo( 25.55, -14.54);
     topWing.closeSubpath();
     p.drawPath(topWing);
 
-    // -- Bottom Wing (Path 4) --
+    // -- Bottom Wing (was Path 5 in inverted logic) --
     QPainterPath bottomWing;
-    bottomWing.moveTo( 29.97,  13.63);
-    bottomWing.lineTo( 29.16,   7.12);
-    bottomWing.lineTo( 12.38,   8.65);
-    bottomWing.lineTo(  9.64,  14.20);
-    bottomWing.lineTo( 17.65,  15.19);
-    bottomWing.lineTo( 25.55,  14.54);
+    bottomWing.moveTo( 24.05,   5.35);
+    bottomWing.lineTo( 24.19,   8.90);
+    bottomWing.lineTo(  6.37,   8.65);
+    bottomWing.lineTo(  3.00,   5.21);
+    bottomWing.lineTo( 10.54,   4.01);
+    bottomWing.lineTo( 18.51,   4.37);
     bottomWing.closeSubpath();
     p.drawPath(bottomWing);
 
     // -- Struts (Paths 11 & 12) --
     p.setPen(QPen(outlineColor, 0.7));
     QPainterPath struts;
-    struts.moveTo( 26.72,   9.79);
-    struts.lineTo( 22.18,  -5.02);
-    struts.lineTo( 19.93,  -4.62);
-    struts.lineTo( 24.92,  10.04);
-    struts.moveTo( 18.29,  11.92);
-    struts.lineTo( 12.36,  -4.09);
-    struts.lineTo( 10.91,  -4.03);
-    struts.lineTo( 17.10,  12.11);
+    struts.moveTo( 26.72,  -9.79);
+    struts.lineTo( 22.18,   5.02);
+    struts.lineTo( 19.93,   4.62);
+    struts.lineTo( 24.92, -10.04);
+    struts.moveTo( 18.29, -11.92);
+    struts.lineTo( 12.36,   4.09);
+    struts.lineTo( 10.91,   4.03);
+    struts.lineTo( 17.10, -12.11);
     p.drawPath(struts);
 
-    // -- Propeller (Yellow Dot Anchor 41.38, -1.81) --
-    double pLen = 15.0 * qSin(plane.propPhase);
-    double pLen2 = 15.0 * qSin(plane.propPhase + M_PI * 0.5);
+    // -- Propeller (Yellow Dot Anchor 41.38, 0.2) --
+    double pLen = 10.0 * qSin(plane.propPhase);
+    double pLen2 = 10.0 * qSin(plane.propPhase + M_PI * 0.5);
     p.setPen(QPen(QColor(100, 100, 100, 150), 1.2, Qt::SolidLine, Qt::RoundCap));
-    p.drawLine(QPointF(41.4, -1.8 - pLen), QPointF(41.4, -1.8 + pLen));
+    p.drawLine(QPointF(41.4, 0.2 - pLen), QPointF(41.4, 0.2 + pLen));
     if (plane.throttle > 0.4) {
         p.setPen(QPen(QColor(120, 120, 120, 60), 2.5, Qt::SolidLine, Qt::RoundCap));
-        p.drawLine(QPointF(41.4, -1.8 - pLen2), QPointF(41.4, -1.8 + pLen2));
+        p.drawLine(QPointF(41.4, 0.2 - pLen2), QPointF(41.4, 0.2 + pLen2));
     }
 
     // -- Pilot (Green Circle, conditional) --
     if (!plane.pilotEjected) {
         p.setBrush(Qt::green);
         p.setPen(QPen(Qt::black, 0.5));
-        p.drawEllipse(QPointF(10, -5), 4, 4); // Placed in cockpit area
+        p.drawEllipse(QPointF(10, -3.7), 4, 4); // Seated on top
     }
 
-    // -- Insignia (SVG Centered at -4.42, 0.87) --
+    // -- Insignia (SVG Centered at -4.42, -2.2) --
     p.setPen(Qt::NoPen);
-    double rx = -4.4, ry = 0.9;
+    double rx = -4.4, ry = -2.2;
     if (plane.team == Team::Allied) {
         p.setBrush(QColor(0, 0, 180));
         p.drawEllipse(QPointF(rx, ry), 6, 6);
@@ -1374,8 +1380,31 @@ void HurleyAnimation::drawPilot(QPainter &p, const Pilot &pilot) {
     p.drawEllipse(QPointF(0, -4), 3.5, 3.5);
     // Body
     p.drawLine(QPointF(0, -0.5), QPointF(0, 8));
-    // Arms
-    p.drawLine(QPointF(-5, 3), QPointF(5, 3));
+
+    // Historical Camera (Bellows style)
+    if (pilot.hasCamera) {
+        // Arms holding the camera
+        p.drawLine(QPointF(0, 2), QPointF(-6, 5));
+        p.drawLine(QPointF(0, 2), QPointF( 6, 5));
+
+        // Camera Body (Dark Wood)
+        p.setBrush(QColor(93, 58, 26)); 
+        p.setPen(QPen(Qt::black, 0.8));
+        p.drawRect(QRectF(-7, 4, 14, 10));
+
+        // Bellows (Black segments)
+        p.setBrush(Qt::black);
+        p.drawRect(QRectF(-5, 14, 10, 3));
+        p.drawRect(QRectF(-4, 17, 8, 2));
+
+        // Lens (Brass/Gold)
+        p.setBrush(QColor(218, 165, 32));
+        p.drawEllipse(QPointF(0, 20), 2.5, 2.5);
+    } else {
+        // Normal Arms
+        p.drawLine(QPointF(-5, 3), QPointF(5, 3));
+    }
+
     // Legs
     p.drawLine(QPointF(0, 8), QPointF(-4, 14));
     p.drawLine(QPointF(0, 8), QPointF( 4, 14));

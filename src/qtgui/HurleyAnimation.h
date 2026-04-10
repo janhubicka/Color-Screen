@@ -117,6 +117,7 @@ private:
     double landedTimer;
     double fallY;    // Target landing Y
     Team team;
+    bool hasCamera = false;
   };
 
   // -----------------------------------------------------------------------
