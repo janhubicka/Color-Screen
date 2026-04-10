@@ -56,8 +56,8 @@ constexpr double PLANE_FALL_SPIN_SPEED   = 220.0; // deg/s tumble when shot down
 constexpr double PLANE_LANDED_DURATION   = 4.0;
 
 // --- Spawn ---
-constexpr double ALLIED_SPAWN_COOLDOWN_BASE = 6.0;
-constexpr double ENEMY_SPAWN_COOLDOWN_BASE  = 6.0;
+constexpr double ALLIED_SPAWN_COOLDOWN_BASE = 1.5;
+constexpr double ENEMY_SPAWN_COOLDOWN_BASE  = 1.5;
 constexpr int    MAX_ALLIED                 = 4;
 constexpr int    MAX_ENEMY                  = 4;
 
@@ -207,118 +207,144 @@ double HurleyAnimation::getGroundY(double worldX) {
 // ============================================================================
 
 void HurleyAnimation::spawnHero() {
-    // Find free slot
+    // 1. Find free slot
+    int bestSlot = -1;
     for (int i = 0; i < MAX_PLANES; ++i) {
         if (!m_planes[i].active) {
-            Airplane &a     = m_planes[i];
-            a.active        = true;
-            a.team          = Team::Allied;
-            a.isHero        = true;
-            a.health        = PLANE_HEALTH_HERO;
-            a.shootCooldown = 0.5;
-            a.jinkTimer     = randRange(1.0, 2.0);
-            a.spinAngle     = 0;
-            a.state         = PlaneState::Flying;
-            a.landedTimer   = 0;
-            a.pilotEjected  = false;
-            a.smokeAccum    = 0.0;
-            a.facingRight   = true;
-            a.angle         = 0.0;     // Pitch 0 is level flight
-            a.targetAngle   = 0.0;
-            a.angularVel    = 0.0;
-            a.throttle      = 1.0;     // Full power for take-off
-            a.takeoffTimer  = 4.5;     // 4.5 seconds of horizontal take-off skimming
-            // Start behind the second dune from bottom
-            a.x = m_cameraX + width() * 0.25;
-            a.y = duneLandingY(a.x) - 4; // Start right on the surface
-            
-            a.vx = PLANE_CRUISE_SPEED * 0.4; // Start slower for the ground run
-            a.vy = 0;
-            a.targetAngle = 0.0; // Horizontal take-off run
-            a.angle = 0.0;
-            m_heroIdx = i;
-            return;
+            bestSlot = i;
+            break;
         }
+    }
+
+    // 2. Pool Saturation Fallback: Hijack oldest wreckage
+    if (bestSlot < 0) {
+        double maxTime = -1.0;
+        for (int i = 0; i < MAX_PLANES; ++i) {
+            // Find non-hero debris
+            if (m_planes[i].active && !m_planes[i].isHero && m_planes[i].state == PlaneState::Landed) {
+                if (m_planes[i].landedTimer > maxTime) {
+                    maxTime = m_planes[i].landedTimer;
+                    bestSlot = i;
+                }
+            }
+        }
+        // If still no slot (all flying?), just use any non-hero
+        if (bestSlot < 0) {
+            for (int i = 0; i < MAX_PLANES; ++i) {
+                if (!m_planes[i].isHero) { bestSlot = i; break; }
+            }
+        }
+    }
+
+    if (bestSlot >= 0) {
+        Airplane &a     = m_planes[bestSlot];
+        a.active        = true;
+        a.team          = Team::Allied;
+        a.isHero        = true;
+        a.health        = PLANE_HEALTH_HERO;
+        a.shootCooldown = 0.5;
+        a.jinkTimer     = randRange(1.0, 2.0);
+        a.spinAngle     = 0;
+        a.state         = PlaneState::Flying;
+        a.landedTimer   = 0;
+        a.pilotEjected  = false;
+        a.smokeAccum    = 0.0;
+        a.facingRight   = true;
+        a.angle         = 0.0;     
+        a.targetAngle   = 0.0;
+        a.angularVel    = 0.0;
+        a.throttle      = 1.0;
+        a.takeoffTimer  = 3.5;
+        
+        a.x = m_cameraX - 120;
+        a.y = getGroundY(a.x) - 5; 
+        
+        a.vx = PLANE_CRUISE_SPEED * 1.5;
+        a.vy = 0;
+        m_heroIdx = bestSlot;
     }
 }
 
 void HurleyAnimation::spawnAllied() {
     if (m_alliedSpawnCooldown > 0.0) return;
 
-    // Count active allied
-    int cnt = 0;
-    for (int i = 0; i < MAX_PLANES; ++i)
-        if (m_planes[i].active && m_planes[i].team == Team::Allied
-            && m_planes[i].state == PlaneState::Flying) cnt++;
-    if (cnt >= MAX_ALLIED) return;
+    // Fast Squadron Regroup: Repeat spawn logic up to quota
+    for (int loop = 0; loop < 2; ++loop) {
+        int cnt = 0;
+        for (int i = 0; i < MAX_PLANES; ++i)
+            if (m_planes[i].active && m_planes[i].team == Team::Allied
+                && m_planes[i].state == PlaneState::Flying) cnt++;
+        if (cnt >= MAX_ALLIED) break;
 
-    for (int i = 0; i < MAX_PLANES; ++i) {
-        if (!m_planes[i].active) {
-            Airplane &a    = m_planes[i];
-            a.active       = true;
-            a.team         = Team::Allied;
-            a.isHero       = false;
-            a.health       = PLANE_HEALTH_NORMAL;
-            a.shootCooldown = randRange(0.2, PLANE_SHOOT_COOLDOWN);
-            a.jinkTimer    = randRange(PLANE_JINK_INTERVAL_MIN, PLANE_JINK_INTERVAL_MAX);
-            a.spinAngle    = 0;
-            a.state        = PlaneState::Flying;
-            a.landedTimer  = 0;
-            a.pilotEjected = false;
-            a.smokeAccum   = 0.0;
-            a.facingRight  = true;
-            a.angle        = 0.0;   // Level pitch
-            a.targetAngle  = 0.0;
-            a.angularVel   = 0.0;
-            a.throttle     = 0.6;
-            // Spawn at left edge of visible world
-            a.x  = m_cameraX - 60;
-            a.y  = height() * randRange(0.08, 0.38);
-            a.vx = PLANE_CRUISE_SPEED * randRange(0.7, 1.3);
-            a.vy = 0;
-            m_alliedSpawnCooldown = ALLIED_SPAWN_COOLDOWN_BASE * randRange(0.6, 1.4);
-            return;
+        for (int i = 0; i < MAX_PLANES; ++i) {
+            if (!m_planes[i].active) {
+                Airplane &a    = m_planes[i];
+                a.active       = true;
+                a.team         = Team::Allied;
+                a.isHero       = false;
+                a.health       = PLANE_HEALTH_NORMAL;
+                a.shootCooldown = randRange(0.2, PLANE_SHOOT_COOLDOWN);
+                a.jinkTimer    = randRange(PLANE_JINK_INTERVAL_MIN, PLANE_JINK_INTERVAL_MAX);
+                a.spinAngle    = 0;
+                a.state        = PlaneState::Flying;
+                a.landedTimer  = 0;
+                a.pilotEjected = false;
+                a.smokeAccum   = 0.0;
+                a.facingRight  = true;
+                a.angle        = 0.0;
+                a.targetAngle  = 0.0;
+                a.angularVel   = 0.0;
+                a.throttle     = 0.6;
+                a.x  = m_cameraX - 60;
+                a.y  = height() * randRange(0.08, 0.38);
+                a.vx = PLANE_CRUISE_SPEED * randRange(0.7, 1.3);
+                a.vy = 0;
+                break; // Found slot for one plane
+            }
         }
     }
+    m_alliedSpawnCooldown = ALLIED_SPAWN_COOLDOWN_BASE * randRange(0.8, 1.2);
 }
 
 void HurleyAnimation::spawnEnemy() {
     if (m_enemySpawnCooldown > 0.0) return;
 
-    int cnt = 0;
-    for (int i = 0; i < MAX_PLANES; ++i)
-        if (m_planes[i].active && m_planes[i].team == Team::Enemy
-            && m_planes[i].state == PlaneState::Flying) cnt++;
-    if (cnt >= MAX_ENEMY) return;
+    // Fast Squadron Regroup: Repeat spawn logic up to quota
+    for (int loop = 0; loop < 2; ++loop) {
+        int cnt = 0;
+        for (int i = 0; i < MAX_PLANES; ++i)
+            if (m_planes[i].active && m_planes[i].team == Team::Enemy
+                && m_planes[i].state == PlaneState::Flying) cnt++;
+        if (cnt >= MAX_ENEMY) break;
 
-    for (int i = 0; i < MAX_PLANES; ++i) {
-        if (!m_planes[i].active) {
-            Airplane &a    = m_planes[i];
-            a.active       = true;
-            a.team         = Team::Enemy;
-            a.isHero       = false;
-            a.health       = PLANE_HEALTH_NORMAL;
-            a.shootCooldown = randRange(0.2, PLANE_SHOOT_COOLDOWN);
-            a.jinkTimer    = randRange(PLANE_JINK_INTERVAL_MIN, PLANE_JINK_INTERVAL_MAX);
-            a.spinAngle    = 0;
-            a.state        = PlaneState::Flying;
-            a.landedTimer  = 0;
-            a.pilotEjected = false;
-            a.smokeAccum   = 0.0;
-            a.facingRight  = false; // Facing left
-            a.angle        = 0.0;   // Level pitch for both Allied/Enemy
-            a.targetAngle  = 0.0;
-            a.angularVel   = 0.0;
-            a.throttle     = 0.6;
-            // Spawn at right edge of visible world
-            a.x  = m_cameraX + width() + 60;
-            a.y  = height() * randRange(0.08, 0.38);
-            a.vx = -PLANE_CRUISE_SPEED * randRange(0.7, 1.3);
-            a.vy = 0;
-            m_enemySpawnCooldown = ENEMY_SPAWN_COOLDOWN_BASE * randRange(0.6, 1.4);
-            return;
+        for (int i = 0; i < MAX_PLANES; ++i) {
+            if (!m_planes[i].active) {
+                Airplane &a    = m_planes[i];
+                a.active       = true;
+                a.team         = Team::Enemy;
+                a.isHero       = false;
+                a.health       = PLANE_HEALTH_NORMAL;
+                a.shootCooldown = randRange(0.2, PLANE_SHOOT_COOLDOWN);
+                a.jinkTimer    = randRange(PLANE_JINK_INTERVAL_MIN, PLANE_JINK_INTERVAL_MAX);
+                a.spinAngle    = 0;
+                a.state        = PlaneState::Flying;
+                a.landedTimer  = 0;
+                a.pilotEjected = false;
+                a.smokeAccum   = 0.0;
+                a.facingRight  = false; // Enemies face left
+                a.angle        = 0.0;
+                a.targetAngle  = 0.0;
+                a.angularVel   = 0.0;
+                a.throttle     = 0.6;
+                a.x  = m_cameraX + width() + 60;
+                a.y  = height() * randRange(0.08, 0.38);
+                a.vx = -PLANE_CRUISE_SPEED * randRange(0.7, 1.3);
+                a.vy = 0;
+                break;
+            }
         }
     }
+    m_enemySpawnCooldown = ENEMY_SPAWN_COOLDOWN_BASE * randRange(0.8, 1.2);
 }
 
 // ============================================================================
@@ -410,12 +436,12 @@ void HurleyAnimation::spawnPilot(const Airplane &plane) {
             pilot.hasCamera   = isHero; // Hero pilot gets the camera
             pilot.x           = plane.x;
             pilot.y           = plane.y - 12;
-            pilot.vx          = plane.vx * 0.2;
-            pilot.vy          = -180.0;  
+            pilot.vx          = plane.vx * 0.15; // Inherit horizontal momentum
+            pilot.vy          = -220.0;  // Strong eject upward
             pilot.state       = PilotState::Falling;
             pilot.parachuteOpen = false;
             pilot.landedTimer = 0;
-            pilot.fallY       = duneLandingY(plane.x);
+            pilot.fallY       = 99999.0; // Never "land"
             return;
         }
     }
@@ -425,22 +451,22 @@ void HurleyAnimation::spawnPilotGuaranteed(Airplane &a) {
     if (a.pilotEjected) return;
     a.pilotEjected = true;
     
-    bool isHero = a.isHero;
+    bool isCameraman = a.isHero;
 
     for (int i = 0; i < MAX_PILOTS; ++i) {
         if (!m_pilots[i].active) {
             Pilot &pilot        = m_pilots[i];
             pilot.active        = true;
             pilot.team          = a.team;
-            pilot.hasCamera     = isHero; // Hero pilot gets the camera
+            pilot.hasCamera     = isCameraman;
             pilot.x             = a.x;
             pilot.y             = a.y - 12;
-            pilot.vx            = a.vx * 0.2;
-            pilot.vy            = -200.0;
+            pilot.vx            = a.vx * 0.15;
+            pilot.vy            = -250.0; // Extra strong eject for hero
             pilot.state         = PilotState::Falling;
             pilot.parachuteOpen = false;
             pilot.landedTimer   = 0;
-            pilot.fallY         = getGroundY(a.x);
+            pilot.fallY         = 99999.0;
             return;
         }
     }
@@ -696,9 +722,11 @@ void HurleyAnimation::updatePlanes(double dt) {
                 }
             }
 
-            // ---- Despawn ----
-            double screenX = toScreenX(a.x);
-            if (screenX < -400 || screenX > width() + 400) {
+            // ---- Despawn / Respawn Check ----
+            double sx = toScreenX(a.x);
+            if (sx < -150 || sx > width() + 150 || a.y < -400 || a.y > height() + 400) {
+                // Non-hero planes simply deactivate.
+                // Hero plane deactivation is handled by the dedicated monitor below.
                 if (!a.isHero) a.active = false;
             }
 
@@ -719,15 +747,54 @@ void HurleyAnimation::updatePlanes(double dt) {
 
             if (a.y >= a.fallY) {
                 a.y = a.fallY; a.vy = 0; a.vx = 0; a.state = PlaneState::Landed;
-                if (!a.pilotEjected) { a.pilotEjected = true; spawnPilot(a); }
+                if (!a.pilotEjected) { 
+                    a.pilotEjected = true; 
+                    spawnPilotGuaranteed(a); 
+                }
             }
+
         } else if (a.state == PlaneState::Landed) {
-            a.landedTimer += dt;
-            if (a.landedTimer > PLANE_LANDED_DURATION) {
-                a.active = false;
-                if (i == m_heroIdx) { m_heroIdx = -1; spawnHero(); }
-            }
+            // No state-specific deactivation here anymore; handled above.
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // DEDICATED HERO MONITOR
+    // -----------------------------------------------------------------------
+    bool heroActiveInPool = false;
+    for (int i = 0; i < MAX_PLANES; ++i) {
+        if (m_planes[i].active && m_planes[i].isHero) {
+            heroActiveInPool = true;
+            Airplane &hero = m_planes[i];
+            m_heroIdx = i; // Re-sync index
+            
+            if (hero.state != PlaneState::Flying) {
+                // Hero aircraft is downed (Falling or Landed).
+                // Check if the camera pilot is still descending.
+                bool cameraActive = false;
+                for (int pIdx = 0; pIdx < MAX_PILOTS; ++pIdx) {
+                    if (m_pilots[pIdx].active && m_pilots[pIdx].hasCamera) {
+                        cameraActive = true;
+                        break;
+                    }
+                }
+                
+                // If the pilot has vanished, the mission continues!
+                if (!cameraActive) {
+                    // Detach old wreckage so it cleans up naturally
+                    hero.isHero = false;
+                    m_heroIdx = -1;
+                    spawnHero();
+                }
+            }
+            break; 
+        }
+    }
+
+    // Fallback: If no Hero plane is active in the pool at all, spawn one.
+    if (!heroActiveInPool) {
+        m_heroIdx = -1;
+        spawnHero();
     }
 }
 
@@ -805,31 +872,23 @@ void HurleyAnimation::updatePilots(double dt) {
         if (!pilot.active) continue;
 
         if (pilot.state == PilotState::Falling) {
-            // Emergency proximity trigger or vertical fall trigger
-            bool tooLow = (pilot.fallY - pilot.y) < 64.0;
+            // Emergency proximity trigger or vertical fall trigger (if close to dunes)
+            double curGroundY = getGroundY(pilot.x);
+            bool tooLow = (curGroundY - pilot.y) < 60.0;
             if (!pilot.parachuteOpen && (pilot.vy > 20.0 || tooLow)) {
                 pilot.parachuteOpen = true;
             }
             pilot.vy += GRAVITY * dt;
             if (pilot.parachuteOpen) {
                 pilot.vy *= (1.0 - (1.0 - PARACHUTE_DRAG) * dt * 60.0);
-                pilot.vy = qMin(pilot.vy, 60.0);
+                pilot.vy = qMin(pilot.vy, 55.0); // Slightly slower fall
                 pilot.vx *= (1.0 - 1.5 * dt);
             }
             pilot.x += pilot.vx * dt;
             pilot.y += pilot.vy * dt;
 
-            double curGroundY = getGroundY(pilot.x) - 1.0;
-            if (pilot.y >= curGroundY) {
-                pilot.y   = curGroundY;
-                pilot.vy  = 0;
-                pilot.vx  = 0;
-                pilot.state = PilotState::Landed;
-                pilot.landedTimer = 0.0;
-            }
-        } else {
-            pilot.landedTimer += dt;
-            if (pilot.landedTimer > 6.0) {
+            // Pilots fall off-screen at the bottom ONLY
+            if (pilot.y > height()) {
                 pilot.active = false;
             }
         }
@@ -842,20 +901,29 @@ void HurleyAnimation::updatePilots(double dt) {
 // ============================================================================
 
 void HurleyAnimation::updateCamera(double dt) {
-    if (m_heroIdx < 0 || !m_planes[m_heroIdx].active) return;
+    if (m_heroIdx < 0) return;
     const Airplane &hero = m_planes[m_heroIdx];
+    if (!hero.active) return;
 
-    double heroScreenX = toScreenX(hero.x);
+    double targetCamX = m_cameraX;
     double w = width();
 
-    // Target camera so hero stays between 1/4 and 3/4
-    double targetCamX = m_cameraX;
-
-    if (heroScreenX < w * CAMERA_LEAD_LEFT) {
-        targetCamX = hero.x - w * CAMERA_LEAD_LEFT;
-    } else if (heroScreenX > w * CAMERA_LEAD_RIGHT) {
-        targetCamX = hero.x - w * CAMERA_LEAD_RIGHT;
+    if (hero.state == PlaneState::Flying) {
+        double heroScreenX = toScreenX(hero.x);
+        // Target camera so hero stays between 1/4 and 3/4
+        if (heroScreenX < w * CAMERA_LEAD_LEFT) {
+            targetCamX = hero.x - w * CAMERA_LEAD_LEFT;
+        } else if (heroScreenX > w * CAMERA_LEAD_RIGHT) {
+            targetCamX = hero.x - w * CAMERA_LEAD_RIGHT;
+        }
+    } else {
+        // CINEMATIC DRIFT: Hero is crashed or falling. 
+        // Keep moving forward so wreckage eventually slides off-screen left.
+        targetCamX = m_cameraX + 130.0 * dt; 
     }
+
+    // Clamp targetCamX so it never moves backwards
+    if (targetCamX < m_cameraX) targetCamX = m_cameraX;
 
     // Smooth pan via lerp
     m_cameraX += (targetCamX - m_cameraX) * CAMERA_LERP * dt;
@@ -1165,6 +1233,13 @@ void HurleyAnimation::drawPlane(QPainter &p, const Airplane &plane) {
     QColor outlineColor = (plane.team == Team::Allied) ? QColor(80, 80, 80)  : QColor(50, 50, 50);
     QColor accentColor  = (plane.team == Team::Allied) ? QColor(200,200,200) : QColor(70, 70, 70);
 
+    // -- Pilot (Green Circle, conditional) --
+    if (!plane.pilotEjected) {
+        p.setBrush(bodyColor);
+        p.setPen(QPen(Qt::black, 0.5));
+        p.drawEllipse(QPointF(10, -8.7), 3, 3); // Seated on top
+    }
+
     p.setBrush(bodyColor);
     p.setPen(QPen(outlineColor, 0.7));
 
@@ -1245,23 +1320,16 @@ void HurleyAnimation::drawPlane(QPainter &p, const Airplane &plane) {
         p.drawLine(QPointF(41.4, 0.2 - pLen2), QPointF(41.4, 0.2 + pLen2));
     }
 
-    // -- Pilot (Green Circle, conditional) --
-    if (!plane.pilotEjected) {
-        p.setBrush(Qt::green);
-        p.setPen(QPen(Qt::black, 0.5));
-        p.drawEllipse(QPointF(10, -3.7), 4, 4); // Seated on top
-    }
-
     // -- Insignia (SVG Centered at -4.42, -2.2) --
     p.setPen(Qt::NoPen);
     double rx = -4.4, ry = -2.2;
     if (plane.team == Team::Allied) {
         p.setBrush(QColor(0, 0, 180));
-        p.drawEllipse(QPointF(rx, ry), 6, 6);
+        p.drawEllipse(QPointF(rx, ry), 5, 5);
         p.setBrush(Qt::white);
-        p.drawEllipse(QPointF(rx, ry), 4, 4);
+        p.drawEllipse(QPointF(rx, ry), 3, 3);
         p.setBrush(QColor(200, 0, 0));
-        p.drawEllipse(QPointF(rx, ry), 2, 2);
+        p.drawEllipse(QPointF(rx, ry), 1, 1);
     } else {
         p.setBrush(Qt::black);
         p.setPen(QPen(Qt::white, 0.8));

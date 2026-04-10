@@ -148,7 +148,7 @@ private:
   // -----------------------------------------------------------------------
   // Game objects
   // -----------------------------------------------------------------------
-  static constexpr int MAX_PLANES    = 14;
+  static constexpr int MAX_PLANES    = 24;
   static constexpr int MAX_BULLETS   = 40;
   static constexpr int MAX_PILOTS    = 6;
   static constexpr int MAX_SMOKE     = 200;
