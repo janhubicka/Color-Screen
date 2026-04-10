@@ -182,6 +182,7 @@ private:
   // Initialization
   void initDunes();
   void spawnHero();
+  int findBestPlaneSlot(bool isHero);
 
   // Spawning
   void spawnAllied();

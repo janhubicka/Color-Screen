@@ -56,8 +56,8 @@ constexpr double PLANE_FALL_SPIN_SPEED   = 220.0; // deg/s tumble when shot down
 constexpr double PLANE_LANDED_DURATION   = 4.0;
 
 // --- Spawn ---
-constexpr double ALLIED_SPAWN_COOLDOWN_BASE = 1.5;
-constexpr double ENEMY_SPAWN_COOLDOWN_BASE  = 1.5;
+constexpr double ALLIED_SPAWN_COOLDOWN_BASE = 4.0;
+constexpr double ENEMY_SPAWN_COOLDOWN_BASE  = 4.0;
 constexpr int    MAX_ALLIED                 = 4;
 constexpr int    MAX_ENEMY                  = 4;
 
@@ -206,36 +206,42 @@ double HurleyAnimation::getGroundY(double worldX) {
 // SPAWN helpers
 // ============================================================================
 
-void HurleyAnimation::spawnHero() {
-    // 1. Find free slot
-    int bestSlot = -1;
+int HurleyAnimation::findBestPlaneSlot(bool isHero) {
+    // 1. Look for truly free slot
     for (int i = 0; i < MAX_PLANES; ++i) {
-        if (!m_planes[i].active) {
-            bestSlot = i;
-            break;
+        if (!m_planes[i].active) return i;
+    }
+
+    // 2. Pool Saturation: Hijack oldest ground wreckage
+    double maxTime = -1.0;
+    int    bestSlot = -1;
+    for (int i = 0; i < MAX_PLANES; ++i) {
+        // Hero can hijack any non-hero debris. 
+        // Allied/Enemy only hijack very old debris to avoid "popping" too many wrecks.
+        if (m_planes[i].active && !m_planes[i].isHero && m_planes[i].state == PlaneState::Landed) {
+            if (m_planes[i].landedTimer > maxTime) {
+                maxTime = m_planes[i].landedTimer;
+                bestSlot = i;
+            }
         }
     }
 
-    // 2. Pool Saturation Fallback: Hijack oldest wreckage
-    if (bestSlot < 0) {
-        double maxTime = -1.0;
+    // If still no slot (all flying or pool full of fresh wreckage), 
+    // Hero MUST have a slot; take any non-hero.
+    if (bestSlot < 0 && isHero) {
         for (int i = 0; i < MAX_PLANES; ++i) {
-            // Find non-hero debris
-            if (m_planes[i].active && !m_planes[i].isHero && m_planes[i].state == PlaneState::Landed) {
-                if (m_planes[i].landedTimer > maxTime) {
-                    maxTime = m_planes[i].landedTimer;
-                    bestSlot = i;
-                }
-            }
-        }
-        // If still no slot (all flying?), just use any non-hero
-        if (bestSlot < 0) {
-            for (int i = 0; i < MAX_PLANES; ++i) {
-                if (!m_planes[i].isHero) { bestSlot = i; break; }
-            }
+            if (!m_planes[i].isHero) return i;
         }
     }
 
+    if (bestSlot >= 0) {
+        m_planes[bestSlot].active = false; // Mark for reuse
+    }
+    return bestSlot;
+}
+
+void HurleyAnimation::spawnHero() {
+    int bestSlot = findBestPlaneSlot(true);
     if (bestSlot >= 0) {
         Airplane &a     = m_planes[bestSlot];
         a.active        = true;
@@ -268,39 +274,35 @@ void HurleyAnimation::spawnHero() {
 void HurleyAnimation::spawnAllied() {
     if (m_alliedSpawnCooldown > 0.0) return;
 
-    // Fast Squadron Regroup: Repeat spawn logic up to quota
-    for (int loop = 0; loop < 2; ++loop) {
-        int cnt = 0;
-        for (int i = 0; i < MAX_PLANES; ++i)
-            if (m_planes[i].active && m_planes[i].team == Team::Allied
-                && m_planes[i].state == PlaneState::Flying) cnt++;
-        if (cnt >= MAX_ALLIED) break;
-
-        for (int i = 0; i < MAX_PLANES; ++i) {
-            if (!m_planes[i].active) {
-                Airplane &a    = m_planes[i];
-                a.active       = true;
-                a.team         = Team::Allied;
-                a.isHero       = false;
-                a.health       = PLANE_HEALTH_NORMAL;
-                a.shootCooldown = randRange(0.2, PLANE_SHOOT_COOLDOWN);
-                a.jinkTimer    = randRange(PLANE_JINK_INTERVAL_MIN, PLANE_JINK_INTERVAL_MAX);
-                a.spinAngle    = 0;
-                a.state        = PlaneState::Flying;
-                a.landedTimer  = 0;
-                a.pilotEjected = false;
-                a.smokeAccum   = 0.0;
-                a.facingRight  = true;
-                a.angle        = 0.0;
-                a.targetAngle  = 0.0;
-                a.angularVel   = 0.0;
-                a.throttle     = 0.6;
-                a.x  = m_cameraX - 60;
-                a.y  = height() * randRange(0.08, 0.38);
-                a.vx = PLANE_CRUISE_SPEED * randRange(0.7, 1.3);
-                a.vy = 0;
-                break; // Found slot for one plane
-            }
+    int cnt = 0;
+    for (int i = 0; i < MAX_PLANES; ++i)
+        if (m_planes[i].active && m_planes[i].team == Team::Allied
+            && m_planes[i].state == PlaneState::Flying) cnt++;
+    
+    if (cnt < MAX_ALLIED) {
+        int slot = findBestPlaneSlot(false);
+        if (slot >= 0) {
+            Airplane &a    = m_planes[slot];
+            a.active       = true;
+            a.team         = Team::Allied;
+            a.isHero       = false;
+            a.health       = PLANE_HEALTH_NORMAL;
+            a.shootCooldown = randRange(0.2, PLANE_SHOOT_COOLDOWN);
+            a.jinkTimer    = randRange(PLANE_JINK_INTERVAL_MIN, PLANE_JINK_INTERVAL_MAX);
+            a.spinAngle    = 0;
+            a.state        = PlaneState::Flying;
+            a.landedTimer  = 0;
+            a.pilotEjected = false;
+            a.smokeAccum   = 0.0;
+            a.facingRight  = true;
+            a.angle        = 0.0;
+            a.targetAngle  = 0.0;
+            a.angularVel   = 0.0;
+            a.throttle     = 0.6;
+            a.x  = m_cameraX - 60;
+            a.y  = height() * randRange(0.08, 0.38);
+            a.vx = PLANE_CRUISE_SPEED * randRange(0.7, 1.3);
+            a.vy = 0;
         }
     }
     m_alliedSpawnCooldown = ALLIED_SPAWN_COOLDOWN_BASE * randRange(0.8, 1.2);
@@ -309,39 +311,35 @@ void HurleyAnimation::spawnAllied() {
 void HurleyAnimation::spawnEnemy() {
     if (m_enemySpawnCooldown > 0.0) return;
 
-    // Fast Squadron Regroup: Repeat spawn logic up to quota
-    for (int loop = 0; loop < 2; ++loop) {
-        int cnt = 0;
-        for (int i = 0; i < MAX_PLANES; ++i)
-            if (m_planes[i].active && m_planes[i].team == Team::Enemy
-                && m_planes[i].state == PlaneState::Flying) cnt++;
-        if (cnt >= MAX_ENEMY) break;
-
-        for (int i = 0; i < MAX_PLANES; ++i) {
-            if (!m_planes[i].active) {
-                Airplane &a    = m_planes[i];
-                a.active       = true;
-                a.team         = Team::Enemy;
-                a.isHero       = false;
-                a.health       = PLANE_HEALTH_NORMAL;
-                a.shootCooldown = randRange(0.2, PLANE_SHOOT_COOLDOWN);
-                a.jinkTimer    = randRange(PLANE_JINK_INTERVAL_MIN, PLANE_JINK_INTERVAL_MAX);
-                a.spinAngle    = 0;
-                a.state        = PlaneState::Flying;
-                a.landedTimer  = 0;
-                a.pilotEjected = false;
-                a.smokeAccum   = 0.0;
-                a.facingRight  = false; // Enemies face left
-                a.angle        = 0.0;
-                a.targetAngle  = 0.0;
-                a.angularVel   = 0.0;
-                a.throttle     = 0.6;
-                a.x  = m_cameraX + width() + 60;
-                a.y  = height() * randRange(0.08, 0.38);
-                a.vx = -PLANE_CRUISE_SPEED * randRange(0.7, 1.3);
-                a.vy = 0;
-                break;
-            }
+    int cnt = 0;
+    for (int i = 0; i < MAX_PLANES; ++i)
+        if (m_planes[i].active && m_planes[i].team == Team::Enemy
+            && m_planes[i].state == PlaneState::Flying) cnt++;
+    
+    if (cnt < MAX_ENEMY) {
+        int slot = findBestPlaneSlot(false);
+        if (slot >= 0) {
+            Airplane &a    = m_planes[slot];
+            a.active       = true;
+            a.team         = Team::Enemy;
+            a.isHero       = false;
+            a.health       = PLANE_HEALTH_NORMAL;
+            a.shootCooldown = randRange(0.2, PLANE_SHOOT_COOLDOWN);
+            a.jinkTimer    = randRange(PLANE_JINK_INTERVAL_MIN, PLANE_JINK_INTERVAL_MAX);
+            a.spinAngle    = 0;
+            a.state        = PlaneState::Flying;
+            a.landedTimer  = 0;
+            a.pilotEjected = false;
+            a.smokeAccum   = 0.0;
+            a.facingRight  = false; // Enemies face left
+            a.angle        = 0.0;
+            a.targetAngle  = 0.0;
+            a.angularVel   = 0.0;
+            a.throttle     = 0.6;
+            a.x  = m_cameraX + width() + 60;
+            a.y  = height() * randRange(0.08, 0.38);
+            a.vx = -PLANE_CRUISE_SPEED * randRange(0.7, 1.3);
+            a.vy = 0;
         }
     }
     m_enemySpawnCooldown = ENEMY_SPAWN_COOLDOWN_BASE * randRange(0.8, 1.2);
