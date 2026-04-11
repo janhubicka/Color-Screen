@@ -780,7 +780,7 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
 	      };
 	    int color = GEOMETRY::demosaic_entry_color (x, y);
 	    if (color != ah_green
-		|| (int)predA.test_bit (x - 1, y) + (int)predA.test_bit (x + 1, y) + (int)predA.test_bit (x, y-1) + (int)predA.test_bit (x, y+1) > 2)
+		|| (int)predA.test_bit (x - 1, y) + (int)predA.test_bit (x + 1, y) + (int)predA.test_bit (x, y-1) + (int)predA.test_bit (x, y+1) <= 2)
 	      continue;
 	    d (x, y)[ah_green] = (d (x-1, y)[ah_green] + d (x+1, y)[ah_green] + d (x, y-1)[ah_green] + d (x, y+1)[ah_green])*(luminosity_t)0.25;
 	  }
