@@ -1074,6 +1074,7 @@ void MainWindow::createToolbar() {
   m_panAction->setChecked(true);
   m_panAction->setToolTip("Pan Tool (P)");
   m_panAction->setShortcut(QKeySequence("P"));
+  m_panAction->setShortcutContext(Qt::ApplicationShortcut);
   m_toolbar->addAction(m_panAction);
 
   // Zoom controls
@@ -1104,6 +1105,7 @@ void MainWindow::createToolbar() {
   m_selectAction->setCheckable(true);
   m_selectAction->setToolTip("Select Tool (S)");
   m_selectAction->setShortcut(QKeySequence("S"));
+  m_selectAction->setShortcutContext(Qt::ApplicationShortcut);
   m_toolbar->addAction(m_selectAction);
   m_registrationActions.append(m_selectAction);
 
@@ -1112,6 +1114,7 @@ void MainWindow::createToolbar() {
   m_addPointAction->setCheckable(true);
   m_addPointAction->setToolTip("Add Registration Point (A)");
   m_addPointAction->setShortcut(QKeySequence("A"));
+  m_addPointAction->setShortcutContext(Qt::ApplicationShortcut);
   m_toolbar->addAction(m_addPointAction);
   m_registrationActions.append(m_addPointAction);
 
@@ -1120,6 +1123,7 @@ void MainWindow::createToolbar() {
   m_setCenterAction->setCheckable(true);
   m_setCenterAction->setToolTip("Set Screen Coordinates (C)");
   m_setCenterAction->setShortcut(QKeySequence("C"));
+  m_setCenterAction->setShortcutContext(Qt::ApplicationShortcut);
   m_toolbar->addAction(m_setCenterAction);
   m_registrationActions.append(m_setCenterAction);
   
@@ -1179,8 +1183,25 @@ void MainWindow::createToolbar() {
 
   // Initially hide registration group
   updateRegistrationGroupVisibility();
-
+  createModeShortcuts();
   updateModeMenu();
+}
+
+void MainWindow::createModeShortcuts() {
+  for (int i = 0; i < 10; ++i) {
+    int key = (i + 1) % 10;
+    QAction *action = new QAction(this);
+    action->setShortcut(QKeySequence(QString::number(key)));
+    action->setShortcutContext(Qt::ApplicationShortcut);
+    action->setEnabled(false); // Initially disabled
+    connect(action, &QAction::triggered, this, [this, i]() {
+      if (i < m_modeComboBox->count()) {
+        m_modeComboBox->setCurrentIndex(i);
+      }
+    });
+    addAction(action);
+    m_modeActions.append(action);
+  }
 }
 
 void MainWindow::rotateLeft() {
@@ -1362,8 +1383,21 @@ void MainWindow::updateModeMenu() {
     // Let's defer that to user interaction or explicit set.
   }
 
-  // Update color checkbox state based on current render type
-  updateColorCheckBoxState();
+  // Update shortcuts and tooltips
+  for (int i = 0; i < m_modeActions.size(); ++i) {
+    if (i < m_modeComboBox->count()) {
+      m_modeActions[i]->setEnabled(true);
+      QString hotkeyStr = QString::number((i + 1) % 10);
+      
+      QString help = m_modeComboBox->itemData(i, Qt::ToolTipRole).toString();
+      if (help.isEmpty()) {
+          help = m_modeComboBox->itemText(i);
+      }
+      m_modeComboBox->setItemData(i, QString("[%1] %2").arg(hotkeyStr, help), Qt::ToolTipRole);
+    } else {
+      m_modeActions[i]->setEnabled(false);
+    }
+  }
 
   m_modeComboBox->blockSignals(false);
 }
@@ -1472,11 +1506,13 @@ void MainWindow::createMenus() {
   m_zoomInAction = m_viewMenu->addAction("Zoom &In");
   m_zoomInAction->setIcon(getSymbolicIcon(":/icons/zoom-in.svg"));
   m_zoomInAction->setShortcut(QKeySequence::ZoomIn); // Ctrl++
+  m_zoomInAction->setShortcutContext(Qt::ApplicationShortcut);
   connect(m_zoomInAction, &QAction::triggered, this, &MainWindow::onZoomIn);
 
   m_zoomOutAction = new QAction(tr("Zoom &Out"), this);
   m_zoomOutAction->setIcon(getSymbolicIcon(":/icons/zoom-out.svg"));
   m_zoomOutAction->setShortcut(QKeySequence::ZoomOut); // Ctrl+-
+  m_zoomOutAction->setShortcutContext(Qt::ApplicationShortcut);
   m_zoomOutAction->setStatusTip(tr("Zoom out"));
   connect(m_zoomOutAction, &QAction::triggered, this, &MainWindow::onZoomOut);
   m_viewMenu->addAction(m_zoomOutAction);
@@ -1484,6 +1520,7 @@ void MainWindow::createMenus() {
   m_zoom100Action = new QAction(tr("Zoom &1:1"), this);
   m_zoom100Action->setIcon(getSymbolicIcon(":/icons/zoom-100.svg"));
   m_zoom100Action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
+  m_zoom100Action->setShortcutContext(Qt::ApplicationShortcut);
   m_zoom100Action->setStatusTip(tr("Zoom to 100%"));
   connect(m_zoom100Action, &QAction::triggered, this, &MainWindow::onZoom100);
   m_viewMenu->addAction(m_zoom100Action);
@@ -1491,6 +1528,7 @@ void MainWindow::createMenus() {
   m_zoomFitAction = new QAction(tr("Fit to &Screen"), this);
   m_zoomFitAction->setIcon(getSymbolicIcon(":/icons/zoom-fit.svg"));
   m_zoomFitAction->setShortcut(Qt::CTRL | Qt::Key_0);
+  m_zoomFitAction->setShortcutContext(Qt::ApplicationShortcut);
   connect(m_zoomFitAction, &QAction::triggered, this, &MainWindow::onZoomFit);
   m_viewMenu->addAction(m_zoomFitAction);
 
@@ -1513,11 +1551,13 @@ void MainWindow::createMenus() {
   // (which might pan). But navigation pan is usually just arrows. Let's use
   // Ctrl+L and Ctrl+R.
   m_rotateLeftAction->setShortcut(Qt::CTRL | Qt::Key_L);
+  m_rotateLeftAction->setShortcutContext(Qt::ApplicationShortcut);
   connect(m_rotateLeftAction, &QAction::triggered, this,
           &MainWindow::rotateLeft);
 
   m_rotateRightAction = m_viewMenu->addAction("Rotate &Right");
   m_rotateRightAction->setShortcut(Qt::CTRL | Qt::Key_R);
+  m_rotateRightAction->setShortcutContext(Qt::ApplicationShortcut);
   connect(m_rotateRightAction, &QAction::triggered, this,
           &MainWindow::rotateRight);
           
@@ -1530,6 +1570,7 @@ void MainWindow::createMenus() {
   m_fullscreenAction = m_viewMenu->addAction("&Fullscreen");
   m_fullscreenAction->setCheckable(true);
   m_fullscreenAction->setShortcut(Qt::Key_F11);
+  m_fullscreenAction->setShortcutContext(Qt::ApplicationShortcut);
   connect(m_fullscreenAction, &QAction::triggered, this, &MainWindow::toggleFullscreen);
 
   // Registration Menu

@@ -740,8 +740,8 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
 	    luminosity_t v = fabs(2*c00 - c_20 - c20) + 2 * fabs (g_10 - g10)
 		             + fabs (2*(c00 + bv) - g_10 - g10);
 
-	    luminosity_t TL=0.1 * 2;
-	    luminosity_t TH=0.8 * 2;
+	    luminosity_t TL=0.1 /** 2*/;
+	    luminosity_t TH=0.8 /** 2*/;
 
 	    if (h < TL && v < TL)
 	      {
@@ -764,7 +764,7 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
   if (progress && progress->cancelled ())
     return false;
 
-#if 0
+#if 1
 #pragma omp parallel shared(progress,h,w,predA) default(none)
   for (int y = 1; y < h - 1; y++)
     {

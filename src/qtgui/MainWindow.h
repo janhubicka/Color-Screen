@@ -151,6 +151,7 @@ private:
   QRect getImageArea(QRect area);
   void pivotViewport(int oldRot, int newRot);
   void createToolbar();  // New helper
+  void createModeShortcuts(); // Create 1-0 hotkeys for modes
   void updateModeMenu(); // Updates combo box items
   QIcon renderScreenIcon(colorscreen::scr_type type);
   void updateWindowTitle(); // Helper to update window title
@@ -213,6 +214,7 @@ private:
   QMenu *m_recentFilesMenu;
   enum { MaxRecentFiles = 10 };
   QList<QAction *> m_recentFileActions;
+  QList<QAction *> m_modeActions; // 1-0 hotkeys for modes
   QStringList m_recentFiles;
 
   QMenu *m_recentParamsMenu;
