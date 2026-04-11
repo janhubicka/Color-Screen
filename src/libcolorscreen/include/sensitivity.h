@@ -215,6 +215,7 @@ public:
     spicer_dufay_reversal_low,
     spicer_dufay_reversal_mid,
     spicer_dufay_reversal_high,
+    hurley_video,
     hd_curves_max,
   };
 
@@ -277,6 +278,13 @@ public:
 	 2.446334028557678, 2.2031926841007543,
 	 3.409735279961495, 0.34393951548211144,
 	 3.9904123215145204, 0.13004572437028772}
+    },
+    {
+      "hurley-video", "Frank Hurley's laboratory correction",
+        { -2.745997, 3.133772,
+ 	  -1.930210, 2.190697,
+ 	  -0.970248, 1.208836,
+ 	  -0.299072, -0.399532 }
     }
   };
 
