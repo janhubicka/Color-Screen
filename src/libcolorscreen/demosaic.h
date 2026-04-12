@@ -901,6 +901,8 @@ protected:
   hamiltom_adams_interpolation_remaining_channels (progress_info *progress)
   {
     int h = m_height, w = m_width;
+    if (progress)
+      progress->set_task ("Demosaicing remaining chanels (Hamilton-Adams)", h);
 #pragma omp parallel shared(progress, h, w) default(none)
     for (int y = 0; y < h; y++)
       {

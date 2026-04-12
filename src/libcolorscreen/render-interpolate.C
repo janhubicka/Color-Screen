@@ -291,6 +291,8 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
       uint64_t id;
       m_paget = paget_analyzer_cache.get_cached (p, xshift, yshift, width, height,
                                           progress, &id);
+      if (!m_paget)
+        return false;
       if (m_params.screen_demosaic == render_parameters::hamilton_adams_demosaic)
         {
 	  struct demosaiced_params<analyze_paget> pp = {
@@ -300,8 +302,6 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
 	  if (!m_demosaic_paget)
 	    return false;
         }
-      if (!m_paget)
-        return false;
     }
   else if (dufay_like_screen_p (m_scr_to_img.get_type ()))
     {
