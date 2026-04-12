@@ -313,6 +313,7 @@ struct render_parameters
   {
     default_scaling,
     nearest_scaling,
+    bspline_scaling,
     linear_scaling,
     bicubic_scaling,
     lanczos3_scaling,

@@ -93,6 +93,7 @@ const property_t render_parameters::screen_demosaic_names []  = {
 const property_t render_parameters::demosaiced_scaling_names []  = {
   { "default", "Best for given rendering setting", "Choose best algorithm automatically" },
   { "nearest", "Nearest neighbour", "Do not interpolate (fastest)" },
+  { "bspline", "Cubic B-Spline", "Smoothest interpolation" },
   { "linear", "Linear", "Linear interpolation" },
   { "bicubic", "Bicubic", "Bicubic interpolation" },
   { "lanczos3", "Lanczos3", "Lanczos3 results in sharper images than bicubic" }
