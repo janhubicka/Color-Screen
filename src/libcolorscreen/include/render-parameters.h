@@ -301,6 +301,8 @@ struct render_parameters
   /* Quality used when collection data for demosaicing.  */
   enum screen_demosaic_t
   {
+    nearest_demosaic,
+    linear_demosaic,
     bicubic_demosaic,
     hamilton_adams_demosaic,
     max_screen_demosaic
@@ -309,6 +311,8 @@ struct render_parameters
   /* Quality used when collection data for demosaicing.  */
   enum demosaiced_scaling_t
   {
+    nearest_scaling,
+    linear_scaling,
     bicubic_scaling,
     lanczos3_scaling,
     max_demosaiced_scaling

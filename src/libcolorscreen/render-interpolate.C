@@ -61,17 +61,7 @@ get_new_paget_analysis (struct analyzer_params &p, int xshift, int yshift,
   analyze_paget *ret = new analyze_paget ();
   if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, p.simulated_screen_ptr, width, height,
                     xshift, yshift, p.mode, p.collection_threshold, progress))
-    {
-      if (p.demosaic == render_parameters::hamilton_adams_demosaic)
-	{
-	  if (!ret->demosaic (progress))
-	    {
-	      delete ret;
-	      return NULL;
-	    }
-	}
-      return ret;
-    }
+    return ret;
   delete ret;
   return NULL;
 }
@@ -290,7 +280,6 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
         ? m_scr_to_img.get_param ().mesh_trans->id
         : 0,
     m_scr_to_img.get_param (),
-    m_params.screen_demosaic,
     &m_img,
     m_screen.get (),
     this,
@@ -361,12 +350,12 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
 	  //adjusted = true;
 	}
       else
-        c = m_paget->bicubic_interpolate ({ x, y }, m_interpolation_proportions, m_params.demosaiced_scaling);
+        c = m_paget->interpolate ({ x, y }, m_interpolation_proportions, m_params.screen_demosaic);
     }
   else if (screen_with_vertical_strips_p (m_scr_to_img.get_type ()))
     {
-      c = m_strips->bicubic_interpolate ({ x, y },
-                                         m_interpolation_proportions, m_params.demosaiced_scaling);
+      c = m_strips->interpolate ({ x, y },
+                                 m_interpolation_proportions, m_params.screen_demosaic);
       if (m_original_color)
         ;
       else if (m_scr_to_img.get_type () == Joly)
@@ -374,7 +363,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
     }
   else
     {
-      c = m_dufay->bicubic_interpolate ({ x, y }, m_interpolation_proportions, m_params.demosaiced_scaling);
+      c = m_dufay->interpolate ({ x, y }, m_interpolation_proportions, m_params.screen_demosaic);
       if (m_original_color)
         ;
       else if (m_scr_to_img.get_type () == DioptichromeB)

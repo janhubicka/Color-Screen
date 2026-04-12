@@ -29,7 +29,6 @@ struct analyzer_params
   luminosity_t collection_threshold;
   uint64_t mesh_trans_id;
   scr_to_img_parameters params;
-  render_parameters::screen_demosaic_t demosaic;
 
   const image_data *img;
   const screen *scr;
@@ -43,7 +42,6 @@ struct analyzer_params
     if (mode != o.mode || mesh_trans_id != o.mesh_trans_id
 	|| simulated_screen_id != o.simulated_screen_id
         || (!mesh_trans_id && params != o.params)
-	|| demosaic != o.demosaic
         || params.type != o.params.type)
       return false;
     if (mode == analyze_base::color || mode == analyze_base::precise_rgb)

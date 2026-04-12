@@ -85,12 +85,16 @@ const property_t render_parameters::collection_quality_names []  = {
   { "simulated-screen", "Simulated-screen", "Collect denisty of patches on multiple pixels.  Render blured screen filter and sharpen it." },
 };
 const property_t render_parameters::screen_demosaic_names []  = {
+  { "nearest", "Nearest neighbour", "Do not interpolate" },
+  { "linear", "Linear", "Linear interpolation" },
   { "bicubic", "Bicubic", "Bicubic interpolation" },
-  { "hamilton-adams", "Hamilton-adams", "Popular demosaicing algorithm." }
+  { "hamilton-adams", "Hamilton-adams", "Popular demosaicing algorithm (currently imlemented only for Paget-type screens)" }
 };
 const property_t render_parameters::demosaiced_scaling_names []  = {
+  { "nearest", "Nearest neighbour", "Do not interpolate" },
+  { "linear", "Linear", "Linear interpolation" },
   { "bicubic", "Bicubic", "Bicubic interpolation" },
-  { "lanczos3", "Lanczos3", "Lanczos3 results in sharper images than bicubic." }
+  { "lanczos3", "Lanczos3", "Lanczos3 results in sharper images than bicubic" }
 };
 
 
