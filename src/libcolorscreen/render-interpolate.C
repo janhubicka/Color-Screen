@@ -348,7 +348,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
 	{
 	  c = m_demosaic_paget->interpolate ({x, y}, m_interpolation_proportions, 
 			  m_params.demosaiced_scaling == render_parameters::default_scaling
-			  ? (m_screen_compensation ? render_parameters::linear_scaling : render_parameters::lanczos3_scaling)
+			  ? (m_screen_compensation ? render_parameters::bspline_scaling : render_parameters::lanczos3_scaling)
 			  : m_params.demosaiced_scaling);
 	  adjusted = true;
 	}
