@@ -30,6 +30,8 @@ protected:
   void resizeEvent(QResizeEvent *event) override;
   void keyPressEvent(QKeyEvent *event) override;
   void mousePressEvent(QMouseEvent *event) override;
+  void mouseMoveEvent(QMouseEvent *event) override;
+  void mouseReleaseEvent(QMouseEvent *event) override;
 
 private slots:
   void updateAnimation();
@@ -92,6 +94,7 @@ private:
     double x, y;
     double vx, vy;
     Team team;
+    int shooterIdx;
   };
 
   // -----------------------------------------------------------------------
@@ -103,6 +106,17 @@ private:
     double life;      // 0..1, decreases over time
     double size;
     double alpha;
+    bool   isFire = false;
+  };
+
+  // -----------------------------------------------------------------------
+  // Bomb / Ordinance
+  // -----------------------------------------------------------------------
+  struct Bomb {
+    bool active = false;
+    double x, y;
+    double vx, vy;
+    int shooterIdx;
   };
 
   // -----------------------------------------------------------------------
@@ -116,10 +130,12 @@ private:
     double vx, vy;
     PilotState state = PilotState::Falling;
     bool parachuteOpen;
+    bool parachuteDestroyed = false;
     double landedTimer;
     double fallY;    // Target landing Y
     Team team;
     bool hasCamera = false;
+    double immunityTimer = 0.0;
   };
 
   // -----------------------------------------------------------------------
@@ -154,10 +170,12 @@ private:
   static constexpr int MAX_BULLETS   = 40;
   static constexpr int MAX_PILOTS    = 6;
   static constexpr int MAX_SMOKE     = 200;
+  static constexpr int MAX_BOMBS     = 10;
 
   Airplane m_planes[MAX_PLANES];
   Bullet   m_bullets[MAX_BULLETS];
   Pilot    m_pilots[MAX_PILOTS];
+  Bomb     m_bombs[MAX_BOMBS];
 
   // Smoke uses a ring-buffer approach via a vector for simplicity
   std::vector<SmokeParticle> m_smoke;
@@ -170,12 +188,27 @@ private:
   int    m_heroIdx;
   bool   m_heroManualControl;
   double m_autopilotMessageTimer;
+  bool   m_heroManualFire;
+  bool   m_isMouseDown;
+  QPoint m_mousePos;
+  double m_autoFireMessageTimer;
+
+  // -----------------------------------------------------------------------
+  // Score & Sun Expression
+  // -----------------------------------------------------------------------
+  enum class SunExpression { Normal, Happy, Sad };
+  int           m_score;
+  SunExpression m_sunExpression;
+  double        m_sunExpressionTimer;
+
+  void setSunExpression(SunExpression expr, double duration);
 
   // -----------------------------------------------------------------------
   // Spawn timing
   // -----------------------------------------------------------------------
   double m_alliedSpawnCooldown;
   double m_enemySpawnCooldown;
+  double m_bombCooldown;
 
   // -----------------------------------------------------------------------
   // Internal methods
@@ -198,11 +231,12 @@ private:
   void updateBullets(double dt);
   void updateSmoke(double dt);
   void updatePilots(double dt);
+  void updateBombs(double dt);
   void updateCamera(double dt);
 
   // Shoot
   void fireFromPlane(int planeIdx);
-  void spawnSmoke(double x, double y, double vx, double vy, int count);
+  void spawnSmoke(double x, double y, double vx, double vy, int count, bool isFire = false);
   void spawnPilot(const Airplane &plane);
   void spawnPilotGuaranteed(Airplane &airplane);
 
@@ -213,6 +247,7 @@ private:
   void drawDuneFgStrips(QPainter &p, int startIdx, int endIdx);
   void drawPlane(QPainter &p, const Airplane &plane);
   void drawBullets(QPainter &p);
+  void drawBomb(QPainter &p, const Bomb &b);
   void drawSmoke(QPainter &p);
   void drawPilot(QPainter &p, const Pilot &pilot);
 

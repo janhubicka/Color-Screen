@@ -105,8 +105,15 @@ HurleyAnimation::HurleyAnimation(QWidget *parent)
       m_heroIdx(-1),
       m_heroManualControl(false),
       m_autopilotMessageTimer(0.0),
+      m_heroManualFire(false),
+      m_isMouseDown(false),
+      m_autoFireMessageTimer(0.0),
+      m_score(0),
+      m_sunExpression(SunExpression::Normal),
+      m_sunExpressionTimer(0.0),
       m_alliedSpawnCooldown(1.0),
       m_enemySpawnCooldown(2.5),
+      m_bombCooldown(0.0),
       m_debugEnabled(qEnvironmentVariableIsSet("CSDEBUG"))
 {
     setFocusPolicy(Qt::StrongFocus);
@@ -297,11 +304,24 @@ void HurleyAnimation::spawnAllied() {
             a.angle        = 0.0;
             a.targetAngle  = 0.0;
             a.angularVel   = 0.0;
-            a.throttle     = 0.6;
-            a.x  = m_cameraX - 60;
-            a.y  = height() * randRange(0.08, 0.38);
-            a.vx = PLANE_CRUISE_SPEED * randRange(0.7, 1.3);
-            a.vy = 0;
+            a.throttle     = 0.7;
+
+            bool groundStart = (QRandomGenerator::global()->generateDouble() < 0.3);
+            if (groundStart) {
+                // Ground takeoff start
+                a.x = m_cameraX - 100;
+                a.y = getGroundY(a.x);
+                a.vx = 75.0; // Initial taxi speed
+                a.vy = 0;
+                a.takeoffTimer = randRange(1.5, 3.5);
+            } else {
+                // Air spawn
+                a.x  = m_cameraX - 60;
+                a.y  = height() * randRange(0.05, 0.55);
+                a.vx = PLANE_CRUISE_SPEED * randRange(0.8, 1.2);
+                a.vy = 0;
+                a.takeoffTimer = 0;
+            }
         }
     }
     m_alliedSpawnCooldown = ALLIED_SPAWN_COOLDOWN_BASE * randRange(0.8, 1.2);
@@ -334,11 +354,24 @@ void HurleyAnimation::spawnEnemy() {
             a.angle        = 0.0;
             a.targetAngle  = 0.0;
             a.angularVel   = 0.0;
-            a.throttle     = 0.6;
-            a.x  = m_cameraX + width() + 60;
-            a.y  = height() * randRange(0.08, 0.38);
-            a.vx = -PLANE_CRUISE_SPEED * randRange(0.7, 1.3);
-            a.vy = 0;
+            a.throttle     = 0.7;
+
+            bool groundStart = (QRandomGenerator::global()->generateDouble() < 0.3);
+            if (groundStart) {
+                // Ground takeoff start from the right
+                a.x = m_cameraX + width() + 100;
+                a.y = getGroundY(a.x);
+                a.vx = -75.0; // Facing left
+                a.vy = 0;
+                a.takeoffTimer = randRange(1.8, 3.8);
+            } else {
+                // Air spawn
+                a.x  = m_cameraX + width() + 60;
+                a.y  = height() * randRange(0.05, 0.55);
+                a.vx = -PLANE_CRUISE_SPEED * randRange(0.8, 1.2);
+                a.vy = 0;
+                a.takeoffTimer = 0;
+            }
         }
     }
     m_enemySpawnCooldown = ENEMY_SPAWN_COOLDOWN_BASE * randRange(0.8, 1.2);
@@ -351,7 +384,19 @@ void HurleyAnimation::spawnEnemy() {
 void HurleyAnimation::fireFromPlane(int planeIdx) {
     const Airplane &shooter = m_planes[planeIdx];
 
-    // Find nearest enemy in range
+    // Current forward vector in global space
+    double fxHead = shooter.facingRight ? 1.0 : -1.0;
+    double rad    = qDegreesToRadians(shooter.angle);
+    double fwdX   = fxHead * qCos(rad);
+    double fwdY   = qSin(rad);
+
+    // Vector pointing "Local Down" (under the wings) relative to flight path
+    // For mirrored planes, clockwise rotation from fwd towards down is still dot > 0
+    // consistently if we use: downX = -faceScale * fwdY, downY = faceScale * fwdX.
+    double downX = -fxHead * fwdY;
+    double downY = fxHead * fwdX;
+
+    // Find nearest enemy in range and NOT "under" the aircraft
     double bestDist = PLANE_SHOOT_RANGE;
     int    bestTarget = -1;
     for (int j = 0; j < MAX_PLANES; ++j) {
@@ -359,10 +404,16 @@ void HurleyAnimation::fireFromPlane(int planeIdx) {
         const Airplane &t = m_planes[j];
         if (!t.active || t.state != PlaneState::Flying) continue;
         if (t.team == shooter.team) continue;
+
         double dx = t.x - shooter.x;
         double dy = t.y - shooter.y;
         double dist = qSqrt(dx*dx + dy*dy);
+
         if (dist < bestDist) {
+            // Check if target is "under" the nose-line using dot product with local down
+            double dot = dx * downX + dy * downY;
+            if (dot > 0) continue; // Forbidden zone (under the airplane)
+
             bestDist  = dist;
             bestTarget = j;
         }
@@ -373,9 +424,10 @@ void HurleyAnimation::fireFromPlane(int planeIdx) {
     for (int k = 0; k < MAX_BULLETS; ++k) {
         if (!m_bullets[k].active) {
             Bullet &b = m_bullets[k];
-            b.active = true;
-            b.team   = shooter.team;
-            b.x      = shooter.x;
+            b.active     = true;
+            b.team       = shooter.team;
+            b.shooterIdx = planeIdx;
+            b.x          = shooter.x;
             b.y      = shooter.y;
 
             // Aim at predicted position
@@ -383,12 +435,18 @@ void HurleyAnimation::fireFromPlane(int planeIdx) {
             double T    = bestDist / BULLET_SPEED;
             double predX = tgt.x + tgt.vx * T * 0.6;
             double predY = tgt.y + tgt.vy * T * 0.3;
-            double dx    = predX - b.x;
-            double dy    = predY - b.y;
-            double len   = qSqrt(dx*dx + dy*dy);
-            if (len < 1.0) len = 1.0;
-            b.vx = BULLET_SPEED * dx / len;
-            b.vy = BULLET_SPEED * dy / len;
+
+            // Final verification: Is predicted trajectory under the nose-line?
+            double pdx = predX - shooter.x;
+            double pdy = predY - shooter.y;
+            if (pdx * downX + pdy * downY > 0) return;
+
+            double bdx   = predX - b.x;
+            double bdy   = predY - b.y;
+            double blen  = qSqrt(bdx*bdx + bdy*bdy);
+            if (blen < 1.0) blen = 1.0;
+            b.vx = BULLET_SPEED * bdx / blen;
+            b.vy = BULLET_SPEED * bdy / blen;
             break;
         }
     }
@@ -398,7 +456,7 @@ void HurleyAnimation::fireFromPlane(int planeIdx) {
 // SMOKE
 // ============================================================================
 
-void HurleyAnimation::spawnSmoke(double x, double y, double vx, double vy, int count) {
+void HurleyAnimation::spawnSmoke(double x, double y, double vx, double vy, int count, bool isFire) {
     if ((int)m_smoke.size() >= MAX_SMOKE) return;
     for (int i = 0; i < count; ++i) {
         if ((int)m_smoke.size() >= MAX_SMOKE) break;
@@ -408,8 +466,9 @@ void HurleyAnimation::spawnSmoke(double x, double y, double vx, double vy, int c
         sp.vx   = vx * 0.25 + randRange(-30, 30);
         sp.vy   = vy * 0.15 + randRange(-25, 10);
         sp.life = 1.0;
-        sp.size = randRange(5.0, 14.0);
+        sp.size = isFire ? randRange(8.0, 22.0) : randRange(5.0, 14.0);
         sp.alpha = randRange(0.55, 0.9);
+        sp.isFire = isFire;
         m_smoke.push_back(sp);
     }
 }
@@ -439,6 +498,7 @@ void HurleyAnimation::spawnPilot(const Airplane &plane) {
             pilot.parachuteOpen = false;
             pilot.landedTimer = 0;
             pilot.fallY       = 99999.0; // Never "land"
+            pilot.immunityTimer = 0.3;
             return;
         }
     }
@@ -464,6 +524,7 @@ void HurleyAnimation::spawnPilotGuaranteed(Airplane &a) {
             pilot.parachuteOpen = false;
             pilot.landedTimer   = 0;
             pilot.fallY         = 99999.0;
+            pilot.immunityTimer  = 0.3;
             return;
         }
     }
@@ -691,6 +752,24 @@ void HurleyAnimation::updatePlanes(double dt) {
             a.x  += a.vx * dt;
             a.y  += a.vy * dt;
 
+            // --- Engine Damage Smoke ---
+            int maxH = a.isHero ? PLANE_HEALTH_HERO : PLANE_HEALTH_NORMAL;
+            if (a.health < maxH && a.state == PlaneState::Flying) {
+                double damage = 1.0 - (double)a.health / maxH;
+                // Emit up to 14 particles/sec at near-death
+                a.smokeAccum += dt * (damage * 14.0);
+                if (a.smokeAccum >= 1.0) {
+                    double scale  = a.isHero ? PLANE_HERO_SCALE : PLANE_NORMAL_SCALE;
+                    // Engine cowling is just behind propeller (prop is at 41.4)
+                    double localE = 37.0; 
+                    double ex = a.x + a.phys.fwdX * (localE * scale);
+                    double ey = a.y + a.phys.fwdY * (localE * scale);
+                    // Spawn single puff with reduced velocity
+                    spawnSmoke(ex, ey, a.vx * 0.4, a.vy * 0.4, 1);
+                    a.smokeAccum -= 1.0;
+                }
+            }
+
 
             // No hard bounce at top anymore, handled by AI awareness
             // if (a.y < airYMin) { a.y = airYMin; a.vy = qAbs(a.vy) * 0.4; }
@@ -712,6 +791,10 @@ void HurleyAnimation::updatePlanes(double dt) {
                     if (a.vy > 0) a.vy = 0;
                 } else {
                     // High-speed collision or failed take-off
+                    if (a.isHero) {
+                        m_score -= 50;
+                        setSunExpression(SunExpression::Sad, 2.5);
+                    }
                     a.y = groundY;
                     a.state = PlaneState::Falling;
                     a.fallY = groundY;
@@ -724,7 +807,43 @@ void HurleyAnimation::updatePlanes(double dt) {
             // ---- Shooting ----
             if (!a.pilotEjected) {
                 a.shootCooldown -= dt;
-                if (a.shootCooldown <= 0) {
+                
+                if (a.isHero && m_heroManualFire) {
+                    if (m_isMouseDown && a.shootCooldown <= 0) {
+                        // Manual firing logic towards mouse
+                        double dx = (m_mousePos.x() + m_cameraX) - a.x;
+                        double dy = m_mousePos.y() - a.y;
+                        double dist = qSqrt(dx*dx + dy*dy);
+                        
+                        if (dist > 5.0) {
+                            // Upper hemisphere check (robust dot-product)
+                            double fxHead = a.facingRight ? 1.0 : -1.0;
+                            double rad    = qDegreesToRadians(a.angle);
+                            double fwdX   = fxHead * qCos(rad);
+                            double fwdY   = qSin(rad);
+                            double downX = -fxHead * fwdY;
+                            double downY = fxHead * fwdX;
+                            
+                            if (dx * downX + dy * downY <= 0) {
+                                // Find free bullet slot
+                                for (int k = 0; k < MAX_BULLETS; ++k) {
+                                    if (!m_bullets[k].active) {
+                                        Bullet &b = m_bullets[k];
+                                        b.active = true;
+                                        b.team = a.team;
+                                        b.shooterIdx = i;
+                                        b.x = a.x;
+                                        b.y = a.y;
+                                        b.vx = BULLET_SPEED * dx / dist;
+                                        b.vy = BULLET_SPEED * dy / dist;
+                                        break;
+                                    }
+                                }
+                                a.shootCooldown = 0.08; // Machine gun rate
+                            }
+                        }
+                    }
+                } else if (a.shootCooldown <= 0) {
                     double cd = a.isHero ? PLANE_HERO_SHOOT_CD : PLANE_SHOOT_COOLDOWN;
                     fireFromPlane(i);
                     a.shootCooldown = cd * randRange(0.7, 1.3);
@@ -826,29 +945,71 @@ void HurleyAnimation::updateBullets(double dt) {
             continue;
         }
 
-        // Collision with enemy planes
+        // Collision with airplanes
         for (int i = 0; i < MAX_PLANES; ++i) {
             Airplane &a = m_planes[i];
             if (!a.active || a.state != PlaneState::Flying) continue;
-            if (a.team == b.team) continue;
+            if (i == b.shooterIdx) continue; // Immune to own bullets
+            
             double dx = b.x - a.x;
             double dy = b.y - a.y;
             double r  = a.isHero ? 22.0 : 14.0;
             if (dx*dx + dy*dy < r*r) {
                 // Hit!
+                if (b.team == Team::Allied) {
+                    if (a.team == Team::Enemy) {
+                        m_score += 1;
+                        setSunExpression(SunExpression::Happy, 1.2);
+                    } else {
+                        m_score -= 3;
+                        setSunExpression(SunExpression::Sad, 1.2);
+                    }
+                }
+
                 spawnSmoke(a.x, a.y, a.vx, a.vy, 4);
                 a.health--;
                 b.active = false;
 
                 if (a.health <= 0) {
+                    if (a.isHero) {
+                        m_score -= 50;
+                        setSunExpression(SunExpression::Sad, 2.5);
+                    }
                     a.state = PlaneState::Falling;
                     a.fallY = duneLandingY(a.x);
-                    // Spawn pilot before state change
+                    if (b.team == Team::Allied) {
+                        if (a.team == Team::Enemy) m_score += 5;
+                        else m_score -= 10;
+                    }
                     if (!a.pilotEjected) {
                         a.pilotEjected = true;
                         spawnPilot(a);
                     }
                 }
+                break;
+            }
+        }
+
+        // Collision with pilots
+        for (int i = 0; i < MAX_PILOTS; ++i) {
+            Pilot &p = m_pilots[i];
+            if (!p.active || p.state != PilotState::Falling) continue;
+            if (p.parachuteDestroyed) continue; // Already free-falling
+            if (p.immunityTimer > 0) continue;  // Grace period
+
+            double pdx = b.x - p.x;
+            double pdy = b.y - p.y;
+            double pr  = 10.0; // Pilot/Chute hitbox
+            if (pdx*pdx + pdy*pdy < pr*pr) {
+                if (b.team == Team::Allied && p.team == Team::Allied) {
+                    m_score -= 20;
+                    setSunExpression(SunExpression::Sad, 2.0);
+                }
+                
+                p.parachuteDestroyed = true;
+                p.parachuteOpen = false;
+                b.active = false;
+                spawnSmoke(p.x, p.y, p.vx, p.vy, 3);
                 break;
             }
         }
@@ -881,14 +1042,16 @@ void HurleyAnimation::updatePilots(double dt) {
         if (!pilot.active) continue;
 
         if (pilot.state == PilotState::Falling) {
+            if (pilot.immunityTimer > 0) pilot.immunityTimer -= dt;
+
             // Emergency proximity trigger or vertical fall trigger (if close to dunes)
             double curGroundY = getGroundY(pilot.x);
             bool tooLow = (curGroundY - pilot.y) < 60.0;
-            if (!pilot.parachuteOpen && (pilot.vy > 20.0 || tooLow)) {
+            if (!pilot.parachuteOpen && !pilot.parachuteDestroyed && (pilot.vy > 20.0 || tooLow)) {
                 pilot.parachuteOpen = true;
             }
             pilot.vy += GRAVITY * dt;
-            if (pilot.parachuteOpen) {
+            if (pilot.parachuteOpen && !pilot.parachuteDestroyed) {
                 pilot.vy *= (1.0 - (1.0 - PARACHUTE_DRAG) * dt * 60.0);
                 pilot.vy = qMin(pilot.vy, 55.0); // Slightly slower fall
                 pilot.vx *= (1.0 - 1.5 * dt);
@@ -900,6 +1063,76 @@ void HurleyAnimation::updatePilots(double dt) {
             if (pilot.y > height()) {
                 pilot.active = false;
             }
+        }
+    }
+}
+void HurleyAnimation::updateBombs(double dt) {
+    for (int i = 0; i < MAX_BOMBS; ++i) {
+        Bomb &b = m_bombs[i];
+        if (!b.active) continue;
+
+        b.vy += GRAVITY * dt;
+        b.x  += b.vx * dt;
+        b.y  += b.vy * dt;
+
+        bool exploded = false;
+
+        // 1. Ground impact
+        double gy = getGroundY(b.x);
+        if (b.y >= gy) {
+            b.y = gy;
+            exploded = true;
+        }
+
+        // 2. Collision with planes
+        if (!exploded) {
+            for (int j = 0; j < MAX_PLANES; ++j) {
+                Airplane &a = m_planes[j];
+                if (!a.active || a.state != PlaneState::Flying) continue;
+                if (j == b.shooterIdx) continue; // Immune to own bombs
+
+                double dx = b.x - a.x;
+                double dy = b.y - a.y;
+                double r  = a.isHero ? 25.0 : 18.0;
+                if (dx*dx + dy*dy < r*r) {
+                    if (a.isHero) {
+                        m_score -= 50;
+                        setSunExpression(SunExpression::Sad, 2.5);
+                    }
+                    a.health = 0;
+                    a.state = PlaneState::Falling;
+                    a.fallY = duneLandingY(a.x);
+                    if (!a.pilotEjected) {
+                        a.pilotEjected = true;
+                        spawnPilot(a);
+                    }
+                    exploded = true;
+                    break;
+                }
+            }
+        }
+
+        // 3. Collision with pilots
+        if (!exploded) {
+            for (int j = 0; j < MAX_PILOTS; ++j) {
+                Pilot &p = m_pilots[j];
+                if (!p.active || p.state != PilotState::Falling) continue;
+                double dx = b.x - p.x;
+                double dy = b.y - p.y;
+                if (dx*dx + dy*dy < 12*12) {
+                    p.active = false;
+                    exploded = true;
+                    break;
+                }
+            }
+        }
+
+        if (exploded) {
+            b.active = false;
+            // Large firey explosion burst
+            spawnSmoke(b.x, b.y, b.vx * 0.2, b.vy * 0.2, 20, true);
+            // Plus some standard dark trailing smoke
+            spawnSmoke(b.x, b.y, b.vx * 0.4, b.vy * 0.4, 5, false);
         }
     }
 }
@@ -949,7 +1182,12 @@ void HurleyAnimation::stepAnimation(double dt) {
 
     // Spawn cooldowns
     m_alliedSpawnCooldown -= dt;
-    m_enemySpawnCooldown  -= dt;
+    
+    // Enemy spawn rate 3x in interactive mode
+    double spawnRateFactor = (m_heroManualControl || m_heroManualFire) ? 3.0 : 1.0;
+    m_enemySpawnCooldown -= dt * spawnRateFactor;
+
+    if (m_bombCooldown > 0) m_bombCooldown -= dt;
 
     // Ensure hero exists
     if (m_heroIdx < 0) spawnHero();
@@ -962,12 +1200,22 @@ void HurleyAnimation::stepAnimation(double dt) {
 
     updatePlanes(dt);
     updateBullets(dt);
+    updateBombs(dt);
     updateSmoke(dt);
     updatePilots(dt);
     updateCamera(dt);
 
     if (m_autopilotMessageTimer > 0)
         m_autopilotMessageTimer -= dt;
+    if (m_autoFireMessageTimer > 0)
+        m_autoFireMessageTimer -= dt;
+
+    if (m_sunExpressionTimer > 0) {
+        m_sunExpressionTimer -= dt;
+        if (m_sunExpressionTimer <= 0) {
+            m_sunExpression = SunExpression::Normal;
+        }
+    }
 
     m_subtitles.update(dt);
 }
@@ -1079,32 +1327,46 @@ void HurleyAnimation::drawSun(QPainter &p) {
     double uy = dy / dist;
 
     // Draw Eyes
-    p.setPen(QPen(Qt::black, 0.8));
-    p.setBrush(Qt::white);
     for (int i : {-1, 1}) {
         double ex = sunX + i * sunR * 0.35;
         double ey = sunY - sunR * 0.15;
         double eyeR = sunR * 0.18;
-        p.drawEllipse(QPointF(ex, ey), eyeR, eyeR);
         
-        // Pupil
-        p.setBrush(Qt::black);
-        double px = ex + ux * eyeR * 0.5;
-        double py = ey + uy * eyeR * 0.5;
-        p.drawEllipse(QPointF(px, py), eyeR * 0.4, eyeR * 0.4);
-        p.setBrush(Qt::white);
+        if (m_sunExpression == SunExpression::Sad) {
+            // Crossed Eyes (X)
+            p.setPen(QPen(Qt::black, 1.8, Qt::SolidLine, Qt::RoundCap));
+            double xSize = eyeR * 0.7;
+            p.drawLine(QPointF(ex - xSize, ey - xSize), QPointF(ex + xSize, ey + xSize));
+            p.drawLine(QPointF(ex + xSize, ey - xSize), QPointF(ex - xSize, ey + xSize));
+        } else {
+            p.setPen(QPen(Qt::black, 0.8));
+            p.setBrush(Qt::white);
+            p.drawEllipse(QPointF(ex, ey), eyeR, eyeR);
+            
+            // Pupil
+            p.setBrush(Qt::black);
+            double px = ex + ux * eyeR * 0.5;
+            double py = ey + uy * eyeR * 0.5;
+            p.drawEllipse(QPointF(px, py), eyeR * 0.4, eyeR * 0.4);
+        }
     }
 
     // Draw Mouth
-    p.setPen(QPen(QColor(100, 50, 0), 2.0, Qt::SolidLine, Qt::RoundCap));
-    if (heroSurprised) {
+    p.setPen(QPen(QColor(100, 50, 0), 2.2, Qt::SolidLine, Qt::RoundCap));
+    p.setBrush(Qt::NoBrush);
+    if (m_sunExpression == SunExpression::Sad) {
+        // Frown
+        p.drawArc(QRectF(sunX - sunR*0.3, sunY + sunR*0.25, sunR*0.6, sunR*0.6), 30*16, 120*16);
+    } else if (heroSurprised) {
         // Surprised 'O'
         p.setBrush(QColor(150, 40, 0));
         p.drawEllipse(QPointF(sunX, sunY + sunR * 0.4), sunR * 0.15, sunR * 0.22);
     } else {
         // Happy Smile
-        p.setBrush(Qt::NoBrush);
         p.drawArc(QRectF(sunX - sunR*0.3, sunY + sunR*0.05, sunR*0.6, sunR*0.6), 210*16, 120*16);
+        if (m_sunExpression == SunExpression::Happy) {
+            // Extra "Happy" sparkles/cheeks could go here, but a smile is standard
+        }
     }
 }
 
@@ -1408,11 +1670,31 @@ void HurleyAnimation::drawBullets(QPainter &p) {
         p.setPen(QPen(tracerColor, 2.0));
         p.drawLine(QPointF(sx, sy), QPointF(tailX, tailY));
 
-        // Bright tip dot
         p.setBrush(Qt::white);
         p.setPen(Qt::NoPen);
         p.drawEllipse(QPointF(sx, sy), 1.5, 1.5);
     }
+}
+
+void HurleyAnimation::drawBomb(QPainter &p, const Bomb &b) {
+    double sx = toScreenX(b.x);
+    double sy = b.y;
+
+    p.save();
+    p.translate(sx, sy);
+    p.rotate(qRadiansToDegrees(qAtan2(b.vy, b.vx)));
+
+    // Bomb body
+    p.setBrush(Qt::black);
+    p.setPen(QPen(Qt::darkGray, 0.5));
+    // Bomb is -8..+4 in X, -4..+4 in Y
+    p.drawEllipse(QRectF(-8, -4, 12, 8));
+    
+    // Fins
+    p.setBrush(Qt::darkGray);
+    p.drawRect(QRectF(-10, -3, 3, 6));
+
+    p.restore();
 }
 
 // ============================================================================
@@ -1425,8 +1707,18 @@ void HurleyAnimation::drawSmoke(QPainter &p) {
         double sx = toScreenX(sp.x);
         int alpha = (int)(sp.alpha * sp.life * 200);
         if (alpha < 5) continue;
-        int gray = 60 + (int)((1.0 - sp.life) * 120);
-        p.setBrush(QColor(gray, gray, gray, alpha));
+        
+        if (sp.isFire) {
+            // Hot orange core fading to yellow
+            int r = 255;
+            int g = 100 + (int)(sp.life * 155);
+            int b = (int)((1.0 - sp.life) * 50);
+            p.setBrush(QColor(r, g, b, alpha));
+        } else {
+            int gray = 60 + (int)((1.0 - sp.life) * 120);
+            p.setBrush(QColor(gray, gray, gray, alpha));
+        }
+        
         p.drawEllipse(QPointF(sx, sp.y), sp.size, sp.size);
     }
 }
@@ -1554,6 +1846,12 @@ void HurleyAnimation::paintEvent(QPaintEvent *) {
             drawPilot(p, m_pilots[i]);
     }
 
+    // 7.5 Bombs
+    for (int i = 0; i < MAX_BOMBS; ++i) {
+        if (m_bombs[i].active)
+            drawBomb(p, m_bombs[i]);
+    }
+
     // 8. Subtitle overlay
     m_subtitles.paint(&p, rect());
  
@@ -1576,6 +1874,51 @@ void HurleyAnimation::paintEvent(QPaintEvent *) {
             p.setPen(Qt::white);
             p.drawText(r, Qt::AlignCenter, msg);
         }
+    }
+
+    if (m_autoFireMessageTimer > 0 && m_heroIdx >= 0) {
+        const Airplane &hero = m_planes[m_heroIdx];
+        if (hero.active && hero.state == PlaneState::Flying) {
+            double sx = toScreenX(hero.x);
+            double sy = hero.y - 75;
+            p.setPen(Qt::white);
+            p.setFont(QFont("Monospace", 10, QFont::Bold));
+            QString msg = "Auto-fire disabled";
+            QRect r = p.fontMetrics().boundingRect(msg);
+            r.moveCenter(QPoint(sx, sy));
+            
+            p.setBrush(QColor(180, 0, 0, 160));
+            p.setPen(Qt::NoPen);
+            p.drawRoundedRect(r.adjusted(-5, -2, 5, 2), 4, 4);
+            
+            p.setPen(Qt::white);
+            p.drawText(r, Qt::AlignCenter, msg);
+        }
+    }
+
+    // 11. HUD (Score & Thrust)
+    if (m_heroManualControl || m_heroManualFire) {
+        p.save();
+        p.setPen(Qt::white);
+        p.setFont(QFont("Monospace", 12, QFont::Bold));
+        
+        int hudX = 20;
+        int hudY = 30;
+        
+        // Background for readability
+        p.setBrush(QColor(0, 0, 0, 100));
+        p.setPen(Qt::NoPen);
+        p.drawRoundedRect(hudX - 10, hudY - 20, 180, 60, 5, 5);
+        
+        p.setPen(Qt::white);
+        p.drawText(hudX, hudY, QString("SCORE: %1").arg(m_score));
+        
+        double thr = 0;
+        if (m_heroIdx >= 0 && m_planes[m_heroIdx].active) {
+            thr = m_planes[m_heroIdx].throttle * 100.0;
+        }
+        p.drawText(hudX, hudY + 25, QString("THRUST: %1%").arg((int)thr));
+        p.restore();
     }
 }
 
@@ -1621,6 +1964,25 @@ void HurleyAnimation::keyPressEvent(QKeyEvent *event) {
             hero.throttle += PLANE_MANUAL_THROTTLE_STEP * 0.1;
             handled = true;
             break;
+        case Qt::Key_Space:
+            if (m_bombCooldown <= 0) {
+                // Drop bomb
+                for (int j = 0; j < MAX_BOMBS; ++j) {
+                    if (!m_bombs[j].active) {
+                        Bomb &b = m_bombs[j];
+                        b.active = true;
+                        b.x  = hero.x;
+                        b.y  = hero.y + 12;
+                        b.vx = hero.vx;
+                        b.vy = hero.vy + 40; // Kick it down a bit
+                        b.shooterIdx = m_heroIdx;
+                        m_bombCooldown = 1.0;
+                        break;
+                    }
+                }
+            }
+            handled = true;
+            break;
         default:
             break;
     }
@@ -1643,5 +2005,27 @@ void HurleyAnimation::keyPressEvent(QKeyEvent *event) {
 
 void HurleyAnimation::mousePressEvent(QMouseEvent *event) {
     setFocus();
-    QWidget::mousePressEvent(event);
+    if (event->button() == Qt::LeftButton) {
+        m_isMouseDown = true;
+        m_mousePos = event->pos();
+        if (m_heroIdx >= 0 && !m_heroManualFire) {
+            m_heroManualFire = true;
+            m_autoFireMessageTimer = 3.0;
+        }
+    }
+}
+
+void HurleyAnimation::mouseMoveEvent(QMouseEvent *event) {
+    m_mousePos = event->pos();
+}
+
+void HurleyAnimation::mouseReleaseEvent(QMouseEvent *event) {
+    if (event->button() == Qt::LeftButton) {
+        m_isMouseDown = false;
+    }
+}
+
+void HurleyAnimation::setSunExpression(SunExpression expr, double duration) {
+    m_sunExpression = expr;
+    m_sunExpressionTimer = duration;
 }
