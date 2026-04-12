@@ -28,6 +28,8 @@ public:
 protected:
   void paintEvent(QPaintEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;
+  void keyPressEvent(QKeyEvent *event) override;
+  void mousePressEvent(QMouseEvent *event) override;
 
 private slots:
   void updateAnimation();
@@ -163,9 +165,11 @@ private:
   SubtitleOverlay m_subtitles;
 
   // -----------------------------------------------------------------------
-  // Hero plane index
+  // Hero plane index & manual control
   // -----------------------------------------------------------------------
-  int m_heroIdx;
+  int    m_heroIdx;
+  bool   m_heroManualControl;
+  double m_autopilotMessageTimer;
 
   // -----------------------------------------------------------------------
   // Spawn timing

@@ -12,7 +12,9 @@
 #include "HurleyAnimation.h"
 #include <QPainter>
 #include <QPainterPath>
+#include <QMouseEvent>
 #include <QResizeEvent>
+#include <QKeyEvent>
 #include <QtMath>
 #include <QRandomGenerator>
 #include <algorithm>
@@ -33,7 +35,7 @@ constexpr double GRAVITY           = 720.0;  // More punchy gravity
 
 // --- Physics Revisited ---
 constexpr double PLANE_CRUISE_SPEED  = 160.0;
-constexpr double PLANE_THRUST_CONST  = 195.0;  // Total thrust (scaled with dampening)
+constexpr double PLANE_THRUST_CONST  = 390.0;  // Total thrust (scaled with dampening)
 constexpr double PLANE_LIFT_CONST    = 0.028;  // Lift = v_para^2 * K
 constexpr double PLANE_SLOWDOWN      = 0.50;  // 50% parasitic energy loss per second
 constexpr double PLANE_INDUCED_DRAG_CONST = 0.00018; // Slowdown increment per unit of lift
@@ -77,6 +79,10 @@ constexpr double PARACHUTE_DRAG      = 0.92;
 constexpr double CAMERA_LERP         = 3.5;
 constexpr double CAMERA_LEAD_LEFT    = 0.333;
 constexpr double CAMERA_LEAD_RIGHT   = 0.500;
+ 
+// --- Manual Control ---
+constexpr double PLANE_MANUAL_PITCH_STEP    = 2.5; 
+constexpr double PLANE_MANUAL_THROTTLE_STEP = 0.4;
 
 // ============================================================================
 // HELPERS
@@ -97,10 +103,13 @@ HurleyAnimation::HurleyAnimation(QWidget *parent)
       m_cameraX(0.0),
       m_cameraVel(0.0),
       m_heroIdx(-1),
+      m_heroManualControl(false),
+      m_autopilotMessageTimer(0.0),
       m_alliedSpawnCooldown(1.0),
       m_enemySpawnCooldown(2.5),
       m_debugEnabled(qEnvironmentVariableIsSet("CSDEBUG"))
 {
+    setFocusPolicy(Qt::StrongFocus);
     m_animTimer = new QTimer(this);
     connect(m_animTimer, &QTimer::timeout, this, &HurleyAnimation::updateAnimation);
 
@@ -122,6 +131,7 @@ HurleyAnimation::~HurleyAnimation() = default;
 // ============================================================================
 
 void HurleyAnimation::startAnimation() {
+    setFocus();
     m_elapsedTimer.start();
     m_animTimer->start(16); // ~60 FPS
 }
@@ -255,6 +265,8 @@ void HurleyAnimation::spawnHero() {
         a.vx = PLANE_CRUISE_SPEED * 1.5;
         a.vy = 0;
         m_heroIdx = bestSlot;
+        m_heroManualControl = false;
+        m_autopilotMessageTimer = 0.0;
     }
 }
 
@@ -477,67 +489,71 @@ void HurleyAnimation::updatePlanes(double dt) {
             double groundY = getGroundY(a.x);
 
             if (!a.pilotEjected) {
-                a.jinkTimer -= dt;
-                if (a.jinkTimer <= 0) {
-                    // Default: wander and maintain altitude
-                    double midY = (airYMin + airYMax) * 0.5;
-                    double altFactor = (midY - a.y) / (h * 0.15);
-                    double baseA = -altFactor * 40.0; 
-                    double wander = randRange(-PLANE_JINK_ANGLE, PLANE_JINK_ANGLE);
-                    a.targetAngle = baseA + wander;
+                bool isManual = (a.isHero && m_heroManualControl);
 
-                    // Pursuit: Look for nearest enemy
-                    double bestDist = PLANE_CHASE_RANGE;
-                    int bestTarget = -1;
-                    for (int j = 0; j < MAX_PLANES; ++j) {
-                        const Airplane &t = m_planes[j];
-                        if (!t.active || t.state != PlaneState::Flying || t.team == a.team) continue;
-                        double dist = qSqrt(qPow(t.x - a.x, 2) + qPow(t.y - a.y, 2));
-                        if (dist < bestDist) {
-                            // Check if in front quadrant (roughly)
+                if (!isManual) {
+                    a.jinkTimer -= dt;
+                    if (a.jinkTimer <= 0) {
+                        // Default: wander and maintain altitude
+                        double midY = (airYMin + airYMax) * 0.5;
+                        double altFactor = (midY - a.y) / (h * 0.15);
+                        double baseA = -altFactor * 40.0; 
+                        double wander = randRange(-PLANE_JINK_ANGLE, PLANE_JINK_ANGLE);
+                        a.targetAngle = baseA + wander;
+
+                        // Pursuit: Look for nearest enemy
+                        double bestDist = PLANE_CHASE_RANGE;
+                        int bestTarget = -1;
+                        for (int j = 0; j < MAX_PLANES; ++j) {
+                            const Airplane &t = m_planes[j];
+                            if (!t.active || t.state != PlaneState::Flying || t.team == a.team) continue;
+                            double dist = qSqrt(qPow(t.x - a.x, 2) + qPow(t.y - a.y, 2));
+                            if (dist < bestDist) {
+                                // Check if in front quadrant (roughly)
+                                double dx = (t.x - a.x) * (a.facingRight ? 1 : -1);
+                                if (dx > 0) { // Target is in front
+                                    bestDist = dist;
+                                    bestTarget = j;
+                                }
+                            }
+                        }
+
+                        // Apply Pitch Authority: At low speeds, restrict target angle to maintain lift
+                        double speed = qSqrt(a.vx * a.vx + a.vy * a.vy);
+                        double speedRel = speed / PLANE_CRUISE_SPEED;
+                        // Authority is 1.0 at cruise speed, falls off squared below cruise
+                        double authority = qBound(0.15, speedRel * speedRel, 1.2);
+
+                        if (bestTarget >= 0) {
+                            const Airplane &t = m_planes[bestTarget];
                             double dx = (t.x - a.x) * (a.facingRight ? 1 : -1);
-                            if (dx > 0) { // Target is in front
-                                bestDist = dist;
-                                bestTarget = j;
+                            double dy = t.y - a.y;
+                            double rawAngle = qRadiansToDegrees(qAtan2(dy, dx));
+                            // Clamp pursuit angle based on authority
+                            a.targetAngle = rawAngle * authority;
+                            a.jinkTimer = 0.5; // Frequent updates while chasing
+                        } else {
+                            // 10% chance: do a full loop (Only if speed is high enough!)
+                            if (authority > 0.8 && QRandomGenerator::global()->bounded(100) < 10) {
+                                a.targetAngle = (randRange(0, 1) > 0.5 ? 360.0 : -360.0);
+                                a.jinkTimer = 2.5; 
+                            } else {
+                                // Regular wandering, also scaled by authority
+                                double limitedWander = randRange(-PLANE_JINK_ANGLE * authority, 
+                                                                PLANE_JINK_ANGLE * authority);
+                                a.targetAngle = baseA * authority + limitedWander;
+                                a.jinkTimer = randRange(PLANE_JINK_INTERVAL_MIN, PLANE_JINK_INTERVAL_MAX);
                             }
                         }
                     }
 
-                    // Apply Pitch Authority: At low speeds, restrict target angle to maintain lift
-                    double speed = qSqrt(a.vx * a.vx + a.vy * a.vy);
-                    double speedRel = speed / PLANE_CRUISE_SPEED;
-                    // Authority is 1.0 at cruise speed, falls off squared below cruise
-                    double authority = qBound(0.15, speedRel * speedRel, 1.2);
-
-                    if (bestTarget >= 0) {
-                        const Airplane &t = m_planes[bestTarget];
-                        double dx = (t.x - a.x) * (a.facingRight ? 1 : -1);
-                        double dy = t.y - a.y;
-                        double rawAngle = qRadiansToDegrees(qAtan2(dy, dx));
-                        // Clamp pursuit angle based on authority
-                        a.targetAngle = rawAngle * authority;
-                        a.jinkTimer = 0.5; // Frequent updates while chasing
-                    } else {
-                        // 10% chance: do a full loop (Only if speed is high enough!)
-                        if (authority > 0.8 && QRandomGenerator::global()->bounded(100) < 10) {
-                            a.targetAngle = (randRange(0, 1) > 0.5 ? 360.0 : -360.0);
-                            a.jinkTimer = 2.5; 
-                        } else {
-                            // Regular wandering, also scaled by authority
-                            double limitedWander = randRange(-PLANE_JINK_ANGLE * authority, 
-                                                             PLANE_JINK_ANGLE * authority);
-                            a.targetAngle = baseA * authority + limitedWander;
-                            a.jinkTimer = randRange(PLANE_JINK_INTERVAL_MIN, PLANE_JINK_INTERVAL_MAX);
-                        }
+                    // Ceiling Awareness: Every frame penalty if too high
+                    if (a.y < airYMin + 100.0) {
+                        double danger = (airYMin + 100.0 - a.y) / 100.0;
+                        // Force target angle to be at least N degrees down
+                        double minDown = danger * 60.0; 
+                        if (a.targetAngle < minDown) a.targetAngle = minDown;
                     }
-                }
-
-                // Ceiling Awareness: Every frame penalty if too high
-                if (a.y < airYMin + 100.0) {
-                    double danger = (airYMin + 100.0 - a.y) / 100.0;
-                    // Force target angle to be at least N degrees down
-                    double minDown = danger * 60.0; 
-                    if (a.targetAngle < minDown) a.targetAngle = minDown;
                 }
 
                 // Pitch control: AngularVel accelerates toward targetAngle
@@ -552,36 +568,44 @@ void HurleyAnimation::updatePlanes(double dt) {
                 a.angularVel += acc * dt;
                 a.angle      += a.angularVel * dt;
 
-                // Throttle control: adaptive to help with altitude
-                double targetCruise = PLANE_CRUISE_SPEED;
-                double midY = (airYMin + airYMax) * 0.5;
-                double speed = qSqrt(a.vx * a.vx + a.vy * a.vy);
+                if (!isManual) {
+                    // Throttle control: adaptive to help with altitude
+                    double targetCruise = PLANE_CRUISE_SPEED;
+                    double midY = (airYMin + airYMax) * 0.5;
+                    double speed = qSqrt(a.vx * a.vx + a.vy * a.vy);
 
-                // 1. Predictive Panic Recovery: If imminent crash, pull up and throttle up
-                double predictedY = a.y + a.vy * 1.5; // Look ahead 1.5 seconds
-                bool panic = (predictedY > groundY) && (a.takeoffTimer <= 0);
+                    // 1. Predictive Panic Recovery: If imminent crash, pull up and throttle up
+                    double predictedY = a.y + a.vy * 1.5; // Look ahead 1.5 seconds
+                    bool panic = (predictedY > groundY) && (a.takeoffTimer <= 0);
 
-                if (panic) {
-                    targetCruise = 260.0; // Panic speed!
-                    a.targetAngle = -15.0; // Force a horizontal-to-climb attitude
-                } else if (a.y > midY + 50.0) {
-                    // Regular recovery logic
-                    targetCruise += 120.0;
-                    a.targetAngle = a.targetAngle * 0.65; 
+                    if (panic) {
+                        targetCruise = 260.0; // Panic speed!
+                        a.targetAngle = -15.0; // Force a horizontal-to-climb attitude
+                    } else if (a.y > midY + 50.0) {
+                        // Regular recovery logic
+                        targetCruise += 120.0;
+                        a.targetAngle = a.targetAngle * 0.65; 
+                    }
+
+                    // 2. Speed Governor: If too fast, kill engine to stabilize
+                    if (speed > 240.0 && !panic) {
+                        targetCruise = 100.0;
+                    }
+
+                    // Standard altitude-based throttle bias
+                    if (a.y > midY + 40.0) targetCruise += 40.0;
+                    if (a.y < midY - 40.0) targetCruise -= 40.0;
+
+                    // 3. Falling Flat recovery: if losing height and nose is near horizontal, boost!
+                    if (!panic && a.vy > 15.0 && std::abs(a.angle) < 20.0) {
+                        targetCruise += 100.0;
+                    }
+
+                    double speedErr = targetCruise - speed;
+                    double responseK = panic ? 0.15 : 0.02; // React much faster if crashing!
+                    a.throttle += speedErr * responseK * dt; 
                 }
 
-                // 2. Speed Governor: If too fast, kill engine to stabilize
-                if (speed > 240.0 && !panic) {
-                    targetCruise = 100.0;
-                }
-
-                // Standard altitude-based throttle bias
-                if (a.y > midY + 40.0) targetCruise += 40.0;
-                if (a.y < midY - 40.0) targetCruise -= 40.0;
-
-                double speedErr = targetCruise - speed;
-                double responseK = panic ? 0.15 : 0.02; // React much faster if crashing!
-                a.throttle += speedErr * responseK * dt; 
                 a.throttle = qBound(0.2, a.throttle, 1.0);
                 
                 // Advance propeller phase based on engine speed
@@ -590,7 +614,7 @@ void HurleyAnimation::updatePlanes(double dt) {
                 // Take-off logic: keep nose horizontal and handle skimming
                 if (a.takeoffTimer > 0) {
                     a.takeoffTimer -= dt;
-                    a.targetAngle = 0; // Forced horizontal run
+                    if (!isManual) a.targetAngle = 0; // Forced horizontal run
                 }
             }
 
@@ -942,6 +966,9 @@ void HurleyAnimation::stepAnimation(double dt) {
     updatePilots(dt);
     updateCamera(dt);
 
+    if (m_autopilotMessageTimer > 0)
+        m_autopilotMessageTimer -= dt;
+
     m_subtitles.update(dt);
 }
 
@@ -1216,15 +1243,11 @@ void HurleyAnimation::drawPlane(QPainter &p, const Airplane &plane) {
     p.save();
     p.translate(sx, sy);
 
-    // Rotate by the actual flight angle so the nose always points where
-    // the plane is going (including loops and inverted flight).
-    // angle=0 → facing right, angle=180 → facing left, etc.
-    p.rotate(plane.angle);
-
-    // Scale: hero is bigger, mirrored if facing left
     double faceScale = plane.facingRight ? 1.0 : -1.0;
     double scale = plane.isHero ? PLANE_HERO_SCALE : PLANE_NORMAL_SCALE;
     p.scale(faceScale * scale, scale);
+
+    p.rotate(plane.angle);
 
     // Colors
     QColor bodyColor    = (plane.team == Team::Allied) ? Qt::white           : Qt::black;
@@ -1533,6 +1556,27 @@ void HurleyAnimation::paintEvent(QPaintEvent *) {
 
     // 8. Subtitle overlay
     m_subtitles.paint(&p, rect());
+ 
+    // 9. Manual control message
+    if (m_autopilotMessageTimer > 0 && m_heroIdx >= 0) {
+        const Airplane &hero = m_planes[m_heroIdx];
+        if (hero.active && hero.state == PlaneState::Flying) {
+            double sx = toScreenX(hero.x);
+            double sy = hero.y - 45;
+            p.setPen(Qt::white);
+            p.setFont(QFont("Monospace", 10, QFont::Bold));
+            QString msg = "Autopilot disabled";
+            QRect r = p.fontMetrics().boundingRect(msg);
+            r.moveCenter(QPoint(sx, sy));
+            
+            p.setBrush(QColor(0, 0, 0, 160));
+            p.setPen(Qt::NoPen);
+            p.drawRoundedRect(r.adjusted(-5, -2, 5, 2), 4, 4);
+            
+            p.setPen(Qt::white);
+            p.drawText(r, Qt::AlignCenter, msg);
+        }
+    }
 }
 
 // ============================================================================
@@ -1541,4 +1585,63 @@ void HurleyAnimation::paintEvent(QPaintEvent *) {
 
 void HurleyAnimation::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);
+}
+
+// ============================================================================
+// KEY PRESS EVENT
+// ============================================================================
+
+void HurleyAnimation::keyPressEvent(QKeyEvent *event) {
+    if (m_heroIdx < 0) {
+        QWidget::keyPressEvent(event);
+        return;
+    }
+
+    Airplane &hero = m_planes[m_heroIdx];
+    if (!hero.active || hero.state != PlaneState::Flying) {
+        QWidget::keyPressEvent(event);
+        return;
+    }
+
+    bool handled = false;
+    switch (event->key()) {
+        case Qt::Key_Up:
+            hero.targetAngle -= PLANE_MANUAL_PITCH_STEP * 2.5; 
+            handled = true;
+            break;
+        case Qt::Key_Down:
+            hero.targetAngle += PLANE_MANUAL_PITCH_STEP * 2.5;
+            handled = true;
+            break;
+        case Qt::Key_Left:
+            hero.throttle -= PLANE_MANUAL_THROTTLE_STEP * 0.1;
+            handled = true;
+            break;
+        case Qt::Key_Right:
+            hero.throttle += PLANE_MANUAL_THROTTLE_STEP * 0.1;
+            handled = true;
+            break;
+        default:
+            break;
+    }
+
+    if (handled) {
+        if (!m_heroManualControl) {
+            m_heroManualControl = true;
+            m_autopilotMessageTimer = 2.0;
+        }
+        event->accept();
+        update();
+    } else {
+        QWidget::keyPressEvent(event);
+    }
+}
+
+// ============================================================================
+// MOUSE PRESS EVENT
+// ============================================================================
+
+void HurleyAnimation::mousePressEvent(QMouseEvent *event) {
+    setFocus();
+    QWidget::mousePressEvent(event);
 }

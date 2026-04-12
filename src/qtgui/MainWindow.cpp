@@ -1455,6 +1455,7 @@ void MainWindow::createMenus() {
   QMenu *fileMenu = menuBar()->addMenu("&File");
   m_openAction = fileMenu->addAction("&Open Image...");
   m_openAction->setShortcut(QKeySequence::Open); // Ctrl+O
+  m_openAction->setShortcutContext(Qt::ApplicationShortcut);
   connect(m_openAction, &QAction::triggered, this, &MainWindow::onOpenImage);
 
   m_recentFilesMenu = fileMenu->addMenu("Open &Recent");
@@ -1471,10 +1472,12 @@ void MainWindow::createMenus() {
 
   m_saveAction = fileMenu->addAction("&Save Parameters");
   m_saveAction->setShortcut(QKeySequence::Save); // Ctrl+S
+  m_saveAction->setShortcutContext(Qt::ApplicationShortcut);
   connect(m_saveAction, &QAction::triggered, this, &MainWindow::onSaveParameters);
 
   m_saveAsAction = fileMenu->addAction("Save Parameters &As...");
   m_saveAsAction->setShortcut(QKeySequence::SaveAs); // Ctrl+Shift+S
+  m_saveAsAction->setShortcutContext(Qt::ApplicationShortcut);
   connect(m_saveAsAction, &QAction::triggered, this, &MainWindow::onSaveParametersAs);
 
   fileMenu->addSeparator();
@@ -1592,18 +1595,22 @@ void MainWindow::createMenus() {
 
   m_selectAllAction = m_registrationMenu->addAction("Select &All");
   m_selectAllAction->setShortcut(QKeySequence::SelectAll); // Ctrl+A
+  m_selectAllAction->setShortcutContext(Qt::ApplicationShortcut);
   connect(m_selectAllAction, &QAction::triggered, this, &MainWindow::onSelectAll);
 
   m_deselectAllAction = m_registrationMenu->addAction("&Deselect All");
   m_deselectAllAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+  m_deselectAllAction->setShortcutContext(Qt::ApplicationShortcut);
   connect(m_deselectAllAction, &QAction::triggered, this, &MainWindow::onDeselectAll);
 
   m_deleteSelectedAction = m_registrationMenu->addAction("&Remove Selected Points");
   m_deleteSelectedAction->setShortcuts({QKeySequence::Delete, QKeySequence(Qt::Key_Backspace)});
+  m_deleteSelectedAction->setShortcutContext(Qt::ApplicationShortcut);
   connect(m_deleteSelectedAction, &QAction::triggered, this, &MainWindow::onDeleteSelected);
 
   m_pruneMisplacedAction = m_registrationMenu->addAction("&Prune Misplaced Points");
   m_pruneMisplacedAction->setShortcuts({QKeySequence("Ctrl+Delete"), QKeySequence("Ctrl+Backspace")});
+  m_pruneMisplacedAction->setShortcutContext(Qt::ApplicationShortcut);
   connect(m_pruneMisplacedAction, &QAction::triggered, this, &MainWindow::onPruneMisplaced);
 
   m_registrationMenu->addSeparator();

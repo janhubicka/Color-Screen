@@ -75,6 +75,17 @@ get_new_paget_analysis (struct analyzer_params &p, int xshift, int yshift,
   delete ret;
   return NULL;
 }
+demosaic_paget *
+get_new_demosaic_paget (demosaiced_params<analyze_paget> &p, progress_info *progress)
+{
+  demosaic_paget *ret = new demosaic_paget ();
+  if (!ret->demosaic (p.analyzer, p.r, progress))
+    {
+      delete ret;
+      return NULL;
+    }
+  return ret;
+}
 analyze_strips *
 get_new_strips_analysis (struct analyzer_params &p, int xshift, int yshift,
                          int width, int height, progress_info *progress)
@@ -111,6 +122,8 @@ static render_interpolate::paget_analyzer_cache_t
     paget_analyzer_cache ("Paget analyzer");
 static render_interpolate::strips_analyzer_cache_t
     strips_analyzer_cache ("Strips analyzer");
+static render_interpolate::demosaic_paget_cache_t
+    demosaic_paget_cache ("Paget demosaic");
 
 render_interpolate::render_interpolate (scr_to_img_parameters &param,
                                         image_data &img,
@@ -286,8 +299,18 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
   };
   if (paget_like_screen_p (m_scr_to_img.get_type ()))
     {
+      uint64_t id;
       m_paget = paget_analyzer_cache.get_cached (p, xshift, yshift, width, height,
-                                          progress);
+                                          progress, &id);
+      if (m_params.screen_demosaic == render_parameters::hamilton_adams_demosaic)
+        {
+	  struct demosaiced_params<analyze_paget> pp = {
+	    id, m_paget.get (), this
+	  };
+	  m_demosaic_paget = demosaic_paget_cache.get_cached (pp, progress);
+	  if (!m_demosaic_paget)
+	    return false;
+        }
       if (!m_paget)
         return false;
     }
@@ -328,9 +351,18 @@ pure_attr rgbdata
 render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
 {
   rgbdata c;
+  bool adjusted = false;
 
   if (paget_like_screen_p (m_scr_to_img.get_type ()))
-    c = m_paget->bicubic_interpolate ({ x, y }, m_interpolation_proportions, m_params.demosaiced_scaling);
+    {
+      if (m_demosaic_paget)
+	{
+	  c = m_demosaic_paget->interpolate ({x, y}, m_interpolation_proportions, m_params.demosaiced_scaling);
+	  //adjusted = true;
+	}
+      else
+        c = m_paget->bicubic_interpolate ({ x, y }, m_interpolation_proportions, m_params.demosaiced_scaling);
+    }
   else if (screen_with_vertical_strips_p (m_scr_to_img.get_type ()))
     {
       c = m_strips->bicubic_interpolate ({ x, y },
@@ -351,9 +383,13 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
                || m_scr_to_img.get_type () == Omnicolore)
         std::swap (c.red, c.blue);
     }
+  /* TODO: With demosaicing we incorrectly first apply adjust_luminosity_ir
+     (when constructing demosaiced data) and only later compensate saturation loss.
+     This seems unavoidable, since we can only compensate after demosaicing.
+     It seems that in this case we may need to build more complex profile?  */
   if (!m_original_color)
     c = compensate_saturation_loss_scr ({ x, y }, c);
-  if (m_unadjusted)
+  if (m_unadjusted || adjusted)
     ;
   else if (!m_original_color)
     {
@@ -451,6 +487,7 @@ render_interpolated_increase_lru_cache_sizes_for_stitch_projects (int n)
   dufay_analyzer_cache.increase_capacity (3 * n);
   paget_analyzer_cache.increase_capacity (3 * n);
   strips_analyzer_cache.increase_capacity (3 * n);
+  demosaic_paget_cache.increase_capacity (3 * n);
 }
 
 /* Compute RGB data of downscaled image.  */

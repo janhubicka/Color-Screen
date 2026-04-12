@@ -167,6 +167,8 @@ public:
 		    p.maxx, p.maxy,
 		    i / (luminosity_t)(points - 1));
 	}
+      // Roundoff errors can make small differences here.
+      // assert (xs[0] == p.minx && ys[0] == p.miny && xs[n-1] == p.maxx && ys[n-1] == p.maxy);
 #if 0
 	  FILE *f = fopen("/tmp/shd.dat", "wt");
 	  print (f);
@@ -310,13 +312,19 @@ public:
       y *= m_exposure;
 
       /* Scale emulsion response and logarithmize.  */
-      y = std::log10 (y);
+
+      if (y > 0)
+	{
+	  y = std::log10 (y);
+	  /* Apply HD curve. */
+	  y = m_curve->apply (y);
+	}
+      else
+	y = m_curve->ys[0];
 
       /* Adjust contrast.  */
       //y = (y - mid) * m_contrast + mid;
       
-      /* Apply HD curve. */
-      y = m_curve->apply (y);
 
       /* Apply density boost.  */
       y *= m_boost;

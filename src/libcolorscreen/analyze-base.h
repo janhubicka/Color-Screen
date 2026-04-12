@@ -160,6 +160,7 @@ public:
   }
 
   virtual bool demosaic (progress_info *progress = NULL) = 0;
+  virtual void demosaiced_dimensions (int *width, int *height, int *xshift, int *yshift) = 0;
 
   virtual int find_best_match (int percentake, int max_percentage, analyze_base &other, int cpfind, coord_t *xshift, coord_t *yshift, int direction, scr_to_img &map, scr_to_img &other_map, FILE *report_file, progress_info *progress = NULL);
   void analyze_range (luminosity_t *rrmin, luminosity_t *rrmax, luminosity_t *rgmin, luminosity_t *rgmax, luminosity_t *rbmin, luminosity_t *rbmax);
@@ -351,7 +352,10 @@ public:
 	blue += fast_rgb_blue (x * GEOMETRY::blue_width_scale + xx, y * GEOMETRY::blue_height_scale + yy);
     blue *= (1.0 / (GEOMETRY::blue_height_scale * GEOMETRY::blue_width_scale));
   }
+  bool
+  populate_demosaiced_data (std::vector<rgbdata> &demosaic, render *r, int width, int height, int xshift, int yshift, progress_info *progress);
   virtual bool demosaic (progress_info *progress = NULL);
+  virtual void demosaiced_dimensions (int *width, int *height, int *xshift, int *yshift);
   bool analyze (render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, const screen *screen, const simulated_screen *simulated, int width, int height, int xshift, int yshift, mode mode, luminosity_t collection_threshold, progress_info *progress);
 protected:
   bool analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, const simulated_screen *simulated, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress);
@@ -575,6 +579,85 @@ analyze_base_worker<GEOMETRY>::bicubic_interpolate (point_t scr, rgbdata patch_p
     return bicubic_bw_interpolate (scr);
   else
     return bicubic_rgb_interpolate (scr, patch_proportions);
+}
+template<typename GEOMETRY>
+bool
+analyze_base_worker<GEOMETRY>::populate_demosaiced_data (std::vector<rgbdata> &demosaic, render *r, int w, int h, int xshift, int yshift, progress_info *progress)
+{
+  if (progress)
+    progress->set_task ("Populating demosaiced data", h);
+
+  /* Step 1: Populate demosaic with the mosaiced data.
+     Each pixel gets only its known channel value; others remain 0.  */
+#pragma omp parallel shared(progress,h,w,xshift,yshift,r,demosaic) default(none)
+  for (int y = 0; y < h; y++)
+    {
+      if (!progress || !progress->cancel_requested ())
+	for (int x = 0; x < w; x++)
+	  {
+	    point_t p = GEOMETRY::from_demosaiced_coordinates ((point_t){(coord_t)(x - xshift), (coord_t)(y - yshift)});
+	    p.x += m_xshift;
+	    p.y += m_yshift;
+	    point_t off;
+	    data_entry e = GEOMETRY::red_scr_to_entry (p, &off);
+	    if (fabs (off.x) < 0.01 && fabs (off.y) < 0.01)
+	      {
+		demosaic [y * w + x].red =  /*std::max (red (e.x, e.y), (luminosity_t) 0)*/ /*r->adjust_luminosity_ir*/ (red (e.x, e.y));
+		assert (!debug
+			|| GEOMETRY::demosaic_entry_color (x, y)
+			   == base_geometry::red);
+		continue;
+	      }
+	    e = GEOMETRY::green_scr_to_entry (p, &off);
+	    if (fabs (off.x) < 0.01 && fabs (off.y) < 0.01)
+	      {
+		demosaic [y * w + x].green = /*std::max (green (e.x, e.y), (luminosity_t) 0)*/ /*r->adjust_luminosity_ir*/ (green (e.x, e.y));
+		assert (!debug
+			|| GEOMETRY::demosaic_entry_color (x, y)
+			   == base_geometry::green);
+		continue;
+	      }
+	    e = GEOMETRY::blue_scr_to_entry (p, &off);
+	    demosaic [y * w + x].blue = /*std::max (blue (e.x, e.y), (luminosity_t) 0)*/ /*r->adjust_luminosity_ir*/ (blue (e.x, e.y));
+	    assert (!debug
+		    || GEOMETRY::demosaic_entry_color (x, y)
+		       == base_geometry::blue);
+	    assert (fabs (off.x) < 0.01 && fabs (off.y) < 0.01);
+	  }
+      if (progress)
+	progress->inc_progress ();
+    }
+  return !progress || !progress->cancelled ();
+}
+template<typename GEOMETRY>
+void
+analyze_base_worker<GEOMETRY>::demosaiced_dimensions (int *width, int *height, int *xshift, int *yshift)
+{
+  point_t topleft = GEOMETRY::to_demosaiced_coordinates ((point_t){(coord_t)-m_xshift, (coord_t)-m_yshift});
+  point_t topright = GEOMETRY::to_demosaiced_coordinates ((point_t){(coord_t)-m_xshift + m_width, (coord_t)-m_yshift});
+  point_t bottomleft = GEOMETRY::to_demosaiced_coordinates ((point_t){(coord_t)-m_xshift, (coord_t)-m_yshift + m_height});
+  point_t bottomright = GEOMETRY::to_demosaiced_coordinates ((point_t){(coord_t)-m_xshift + m_width, (coord_t)-m_yshift + m_height});
+
+  /* Identify corner.  */
+  *xshift = -std::min (topleft.x, std::min (topright.x, (std::min (bottomleft.x, bottomright.x))));
+  *yshift = -std::min (topleft.y, std::min (topright.y, (std::min (bottomleft.y, bottomright.y))));
+
+  /* Round to the demosaicing period.  */
+  if (*xshift > 0)
+    *xshift -= *xshift % GEOMETRY::demosaic_period_x ();
+  else
+    *xshift = -(-*xshift + (*xshift % GEOMETRY::demosaic_period_x ()) - GEOMETRY::demosaic_period_x ());
+  if (*yshift > 0)
+    *yshift -= *yshift % GEOMETRY::demosaic_period_y ();
+  else
+    *yshift = -(-*yshift + (*yshift % GEOMETRY::demosaic_period_y ()) - GEOMETRY::demosaic_period_y ());
+
+  /* Identify width and height.  */
+  *width = std::max (topleft.x, std::max (topright.x, (std::max (bottomleft.x, bottomright.x)))) + *xshift;
+  *height = std::max (topleft.y, std::max (topright.y, (std::max (bottomleft.y, bottomright.y)))) + *yshift;
+  /* Also round up to demosaicing period.  */
+  *width = (*width + GEOMETRY::demosaic_period_x () - 1)/ GEOMETRY::demosaic_period_x () * GEOMETRY::demosaic_period_x ();
+  *height = (*height + GEOMETRY::demosaic_period_y () - 1)/ GEOMETRY::demosaic_period_y () * GEOMETRY::demosaic_period_y ();
 }
 template<typename GEOMETRY>
 bool
@@ -1182,7 +1265,6 @@ analyze_base_worker<GEOMETRY>::demosaic (progress_info *progress)
 		    }
 		  else
 		    {
-		      /* Check diagonals for red.  */
 		      assert (!colorscreen_checking
 			      || (GEOMETRY::demosaic_entry_color (x - 1, y - 1) == ah_chn
 			          && GEOMETRY::demosaic_entry_color (x + 1, y - 1) == ah_chn

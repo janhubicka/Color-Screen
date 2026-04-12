@@ -11,6 +11,7 @@
 #include "analyze-strips.h"
 #include "lru-cache.h"
 #include "include/imagedata.h"
+#include "demosaic.h"
 #include "include/scr-to-img-parameters.h"
 
 namespace colorscreen
@@ -58,7 +59,23 @@ struct analyzer_params
            && collection_threshold == o.collection_threshold;
   }
 };
+template <typename ANALYZER>
+struct demosaiced_params
+{
+  uint64_t analyzer_id;
 
+  ANALYZER *analyzer;
+  render *r;
+
+  bool
+  operator== (const demosaiced_params &o) const
+  {
+    return analyzer_id == o.analyzer_id
+	   /*&& render == o.render*/;
+  }
+};
+
+demosaic_paget * get_new_demosaic_paget (demosaiced_params<analyze_paget> &, progress_info *);
 analyze_dufay * get_new_dufay_analysis (struct analyzer_params &, int, int, int, int, progress_info *);
 analyze_paget * get_new_paget_analysis (struct analyzer_params &, int, int, int, int, progress_info *);
 analyze_strips * get_new_strips_analysis (struct analyzer_params &, int, int, int, int, progress_info *);
@@ -137,6 +154,7 @@ public:
   typedef lru_tile_cache<analyzer_params, analyze_dufay, analyze_dufay *, get_new_dufay_analysis, 2> dufay_analyzer_cache_t;
   typedef lru_tile_cache<analyzer_params, analyze_paget, analyze_paget *, get_new_paget_analysis, 2> paget_analyzer_cache_t;
   typedef lru_tile_cache<analyzer_params, analyze_strips, analyze_strips *, get_new_strips_analysis, 2> strips_analyzer_cache_t;
+  typedef lru_cache<demosaiced_params<analyze_paget>, demosaic_paget, demosaic_paget *, get_new_demosaic_paget, 2> demosaic_paget_cache_t;
 private:
   rgbdata compensate_saturation_loss_scr (point_t p, rgbdata c) const;
   rgbdata compensate_saturation_loss_img (point_t p, rgbdata c) const;
@@ -151,6 +169,7 @@ private:
   dufay_analyzer_cache_t::cached_ptr m_dufay;
   paget_analyzer_cache_t::cached_ptr m_paget;
   strips_analyzer_cache_t::cached_ptr m_strips;
+  demosaic_paget_cache_t::cached_ptr m_demosaic_paget;
   color_matrix m_saturation_matrix;
   color_matrix profile_matrix;
   // Proportions after premutatoins we do to handle screen variants.
