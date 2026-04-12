@@ -615,7 +615,7 @@ analyze_base_worker<GEOMETRY>::populate_demosaiced_data (std::vector<rgbdata> &d
 	    data_entry e = GEOMETRY::red_scr_to_entry (p, &off);
 	    if (fabs (off.x) < 0.01 && fabs (off.y) < 0.01)
 	      {
-		demosaic [y * w + x].red =  /*std::max (red (e.x, e.y), (luminosity_t) 0)*/ /*r->adjust_luminosity_ir*/ (red (e.x, e.y));
+		demosaic [y * w + x].red =  /*std::max (red (e.x, e.y), (luminosity_t) 0)*/ r->adjust_luminosity_ir (red (e.x, e.y));
 		assert (!debug
 			|| GEOMETRY::demosaic_entry_color (x, y)
 			   == base_geometry::red);
@@ -624,14 +624,14 @@ analyze_base_worker<GEOMETRY>::populate_demosaiced_data (std::vector<rgbdata> &d
 	    e = GEOMETRY::green_scr_to_entry (p, &off);
 	    if (fabs (off.x) < 0.01 && fabs (off.y) < 0.01)
 	      {
-		demosaic [y * w + x].green = /*std::max (green (e.x, e.y), (luminosity_t) 0)*/ /*r->adjust_luminosity_ir*/ (green (e.x, e.y));
+		demosaic [y * w + x].green = /*std::max (green (e.x, e.y), (luminosity_t) 0)*/ r->adjust_luminosity_ir (green (e.x, e.y));
 		assert (!debug
 			|| GEOMETRY::demosaic_entry_color (x, y)
 			   == base_geometry::green);
 		continue;
 	      }
 	    e = GEOMETRY::blue_scr_to_entry (p, &off);
-	    demosaic [y * w + x].blue = /*std::max (blue (e.x, e.y), (luminosity_t) 0)*/ /*r->adjust_luminosity_ir*/ (blue (e.x, e.y));
+	    demosaic [y * w + x].blue = /*std::max (blue (e.x, e.y), (luminosity_t) 0)*/ r->adjust_luminosity_ir (blue (e.x, e.y));
 	    assert (!debug
 		    || GEOMETRY::demosaic_entry_color (x, y)
 		       == base_geometry::blue);

@@ -62,6 +62,11 @@ struct demosaiced_params
 {
   uint64_t analyzer_id;
 
+  luminosity_t dark_point;
+  luminosity_t scan_exposure;
+  contact_copy_parameters contact_copy;
+  luminosity_t film_gamma;
+
   ANALYZER *analyzer;
   render *r;
 
@@ -69,7 +74,10 @@ struct demosaiced_params
   operator== (const demosaiced_params &o) const
   {
     return analyzer_id == o.analyzer_id
-	   /*&& render == o.render*/;
+	   && dark_point == o.dark_point
+	   && scan_exposure == o.scan_exposure
+	   && contact_copy == o.contact_copy
+	   && film_gamma == o.film_gamma;
   }
 };
 

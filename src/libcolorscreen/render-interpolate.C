@@ -294,7 +294,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
       if (m_params.screen_demosaic == render_parameters::hamilton_adams_demosaic)
         {
 	  struct demosaiced_params<analyze_paget> pp = {
-	    id, m_paget.get (), this
+	    id, m_params.dark_point, m_params.scan_exposure, m_params.contact_copy, m_params.film_gamma, m_paget.get (), this
 	  };
 	  m_demosaic_paget = demosaic_paget_cache.get_cached (pp, progress);
 	  if (!m_demosaic_paget)
@@ -346,8 +346,11 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
     {
       if (m_demosaic_paget)
 	{
-	  c = m_demosaic_paget->interpolate ({x, y}, m_interpolation_proportions, m_params.demosaiced_scaling);
-	  //adjusted = true;
+	  c = m_demosaic_paget->interpolate ({x, y}, m_interpolation_proportions, 
+			  m_params.demosaiced_scaling == render_parameters::default_scaling
+			  ? (m_screen_compensation ? render_parameters::linear_scaling : render_parameters::lanczos3_scaling)
+			  : m_params.demosaiced_scaling);
+	  adjusted = true;
 	}
       else
         c = m_paget->interpolate ({ x, y }, m_interpolation_proportions, m_params.screen_demosaic);

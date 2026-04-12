@@ -311,6 +311,7 @@ struct render_parameters
   /* Quality used when collection data for demosaicing.  */
   enum demosaiced_scaling_t
   {
+    default_scaling,
     nearest_scaling,
     linear_scaling,
     bicubic_scaling,
@@ -508,7 +509,7 @@ struct render_parameters
         tile_adjustments (),
 
         /* Patch density parameters.  */
-        film_gamma (1), collection_quality (simple_screen_collection), screen_demosaic (hamilton_adams_demosaic), demosaiced_scaling (lanczos3_scaling), screen_blur_radius (0.5),
+        film_gamma (1), collection_quality (simple_screen_collection), screen_demosaic (hamilton_adams_demosaic), demosaiced_scaling (default_scaling), screen_blur_radius (0.5),
         collection_threshold (0.2), red_strip_width (0),
         green_strip_width (0),
 
