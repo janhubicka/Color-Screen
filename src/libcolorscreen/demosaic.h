@@ -98,12 +98,8 @@ template <typename GEOMETRY> class demosaic_base : public demosaic_generic_base
     if (sx >= 2 && sx < m_width - 3 && sy >= 2 && sy < m_height - 3)
       {
         rgbdata ret = { 0, 0, 0 };
-        double wx[6];
-        for (int i = 0; i < 6; i++)
-          wx[i] = lanczos3_kernel (i - 2 - rx);
-        double wy[6];
-        for (int j = 0; j < 6; j++)
-          wy[j] = lanczos3_kernel (j - 2 - ry);
+        const luminosity_t *wx = lanczos3_kernel (rx);
+        const luminosity_t *wy = lanczos3_kernel (ry);
 
         for (int j = 0; j < 6; j++)
           {
@@ -123,45 +119,6 @@ template <typename GEOMETRY> class demosaic_base : public demosaic_generic_base
       }
     return { (luminosity_t)0, (luminosity_t)0, (luminosity_t)0 };
   }
-#if 0
-  inline pure_attr rgbdata
-  bspline_demosaiced_interpolate (point_t scr)
-  {
-    point_t p = GEOMETRY::to_demosaiced_coordinates (scr);
-    int sx, sy;
-    coord_t rx = my_modf (p.x, &sx);
-    coord_t ry = my_modf (p.y, &sy);
-    sx += m_xshift;
-    sy += m_yshift;
-    if (sx >= 1 && sx < m_width - 2 && sy >= 1 && sy < m_height - 2)
-      {
-        rgbdata ret = { 0, 0, 0 };
-        double wx[4];
-        for (int i = 0; i < 4; i++)
-          wx[i] = bspline_kernel (i - 1 - rx);
-        double wy[4];
-        for (int j = 0; j < 4; j++)
-          wy[j] = bspline_kernel (j - 1 - ry);
-
-        for (int j = 0; j < 4; j++)
-          {
-            rgbdata row_sum = { 0, 0, 0 };
-            for (int i = 0; i < 4; i++)
-              {
-                rgbdata d = fast_demosaiced_data (sx - 1 + i, sy - 1 + j);
-                row_sum.red += d.red * wx[i];
-                row_sum.green += d.green * wx[i];
-                row_sum.blue += d.blue * wx[i];
-              }
-            ret.red += row_sum.red * wy[j];
-            ret.green += row_sum.green * wy[j];
-            ret.blue += row_sum.blue * wy[j];
-          }
-        return ret;
-      }
-    return { (luminosity_t)0, (luminosity_t)0, (luminosity_t)0 };
-  }
-#endif
   inline pure_attr rgbdata
   nearest_demosaiced_interpolate (point_t scr)
   {

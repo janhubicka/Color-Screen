@@ -5,13 +5,13 @@
 
 namespace colorscreen
 {
-inline double
-sinc (double x)
+inline luminosity_t
+sinc (luminosity_t x)
 {
   if (x == 0)
     return 1.0;
   x *= M_PI;
-  return std::sin (x) / x;
+  return std::sinf (x) / x;
 }
 
 /* a = 1	Lanczos-1	Mathematically identical to a Sinc filter; very blurry.
@@ -20,8 +20,8 @@ sinc (double x)
    a = 4+	Lanczos-4+	Theoretically sharper, but often introduces
    				excessive "ringing" (ghost edges) that can ruin the image.  */
 
-inline double
-lanczos_kernel (double x, int a = 3)
+inline luminosity_t
+lanczos_kernel (luminosity_t x, int a = 3)
 {
   if (std::abs (x) >= a)
     return 0.0;
@@ -30,30 +30,44 @@ lanczos_kernel (double x, int a = 3)
 
 struct lanczos3_initializer
 {
-  precomputed_function<double> func;
+  static constexpr int steps = 1025;
+  luminosity_t kernels[steps][6];
+  lanczos3_initializer ()
+  {
+    for (int i = 0; i < steps; ++i)
+      {
+        luminosity_t off = i / (luminosity_t)(steps - 1);
+        kernels[i][0] = lanczos_kernel (-2 - off);
+        kernels[i][1] = lanczos_kernel (-1 - off);
+        kernels[i][2] = lanczos_kernel ( 0 - off);
+        kernels[i][3] = lanczos_kernel ( 1 - off);
+        kernels[i][4] = lanczos_kernel ( 2 - off);
+        kernels[i][5] = lanczos_kernel ( 3 - off);
+      }
+  }
+#if 0
+  precomputed_function<luminosity_t> func;
   lanczos3_initializer ()
   {
     const int steps = 1024;
-    double y[steps];
+    luminosity_t y[steps];
     for (int i = 0; i < steps; ++i)
       {
-	double x = 3.0 * i / (steps - 1);
+	luminosity_t x = 3.0 * i / (steps - 1);
 	y[i] = lanczos_kernel (x, 3);
       }
     func.set_range (0.0, 3.0);
     func.init_by_y_values (y, steps);
   }
+#endif
 };
 
 inline const lanczos3_initializer precomputed_lanczos3;
 
-inline double
-lanczos3_kernel (double x)
+inline const luminosity_t *
+lanczos3_kernel (luminosity_t x)
 {
-  x = std::abs (x);
-  if (x >= 3.0)
-    return 0.0;
-  return precomputed_lanczos3.func.apply (x);
+  return precomputed_lanczos3.kernels[nearest_int (x * (precomputed_cubic.steps - 1))];
 }
 }
 #endif
