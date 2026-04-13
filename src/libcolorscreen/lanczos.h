@@ -1,3 +1,5 @@
+#ifndef LANZCOS_H
+#define LANZCOS_H
 #include <cmath>
 #include "include/precomputed-function.h"
 
@@ -53,6 +55,5 @@ lanczos3_kernel (double x)
     return 0.0;
   return precomputed_lanczos3.func.apply (x);
 }
-
 }
-
+#endif

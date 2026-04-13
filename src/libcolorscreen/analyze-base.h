@@ -354,12 +354,6 @@ protected:
 
 };
 
-inline flatten_attr pure_attr luminosity_t always_inline_attr
-do_bicubic_interpolate (vec_luminosity_t v1, vec_luminosity_t v2, vec_luminosity_t v3, vec_luminosity_t v4, point_t off)
-{
-  vec_luminosity_t v = vec_cubic_interpolate (v1, v2, v3, v4, off.y);
-  return cubic_interpolate (v[0], v[1], v[2], v[3], off.x);
-}
 inline luminosity_t linear_interpolate (luminosity_t a, luminosity_t b, luminosity_t off)
 {
   return a * (1-off) + b * off;
