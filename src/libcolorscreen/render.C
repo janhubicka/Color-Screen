@@ -559,6 +559,16 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
       m_sensitivity = std::make_unique <film_sensitivity> (m_sensitivity_hd_curve.get (), m_params.contact_copy.preflash, m_params.contact_copy.exposure, m_params.contact_copy.boost);
       m_sensitivity->precompute ();
     }
+  if (m_sensitivity || m_params.film_gamma != 1)
+    {
+      luminosity_t lmin=-0.1;
+      luminosity_t lmax=2;
+      const int steps = 65536;
+      luminosity_t yvals[steps];
+      for (int i = 0; i < steps; i++)
+	yvals[i] = adjust_luminosity_ir (i * (lmax - lmin) / (steps - 1) + lmin);
+      m_adjust_luminosity = std::make_unique <precomputed_function <luminosity_t>> (lmin, lmax, yvals, steps);
+    }
   return out_color.precompute (m_params, &m_img, normalized_patches, patch_proportions, progress);
 }
 

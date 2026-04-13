@@ -497,6 +497,7 @@ struct render_parameters
 
   render_parameters ()
       : 
+	capture_type (capture_unknown),
 	demosaic (image_data::demosaic_default),
 	/* Scan linearization.  */
         gamma (-1), scan_rotation (0), scan_mirror (false), backlight_correction (NULL),
