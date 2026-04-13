@@ -123,6 +123,7 @@ template <typename GEOMETRY> class demosaic_base : public demosaic_generic_base
       }
     return { (luminosity_t)0, (luminosity_t)0, (luminosity_t)0 };
   }
+#if 0
   inline pure_attr rgbdata
   bspline_demosaiced_interpolate (point_t scr)
   {
@@ -160,6 +161,7 @@ template <typename GEOMETRY> class demosaic_base : public demosaic_generic_base
       }
     return { (luminosity_t)0, (luminosity_t)0, (luminosity_t)0 };
   }
+#endif
   inline pure_attr rgbdata
   nearest_demosaiced_interpolate (point_t scr)
   {
@@ -205,6 +207,76 @@ template <typename GEOMETRY> class demosaic_base : public demosaic_generic_base
             fast_demosaiced_data (sx + 1, sy).blue,
             fast_demosaiced_data (sx, sy + 1).blue,
             fast_demosaiced_data (sx + 1, sy + 1).blue, { rx, ry });
+        return ret;
+      }
+    return { (luminosity_t)0, (luminosity_t)0, (luminosity_t)0 };
+  }
+  inline pure_attr rgbdata
+  bspline_demosaiced_interpolate (point_t scr)
+  {
+    point_t p = GEOMETRY::to_demosaiced_coordinates (scr);
+    int sx, sy;
+    coord_t rx = my_modf (p.x, &sx);
+    coord_t ry = my_modf (p.y, &sy);
+    sx += m_xshift;
+    sy += m_yshift;
+    if (sx >= 1 && sx < m_width - 2 && sy >= 1 && sy < m_height - 2)
+      {
+        rgbdata ret;
+        ret.red = do_bspline_interpolate (
+            (vec_luminosity_t){ fast_demosaiced_data (sx - 1, sy - 1).red,
+                                fast_demosaiced_data (sx, sy - 1).red,
+                                fast_demosaiced_data (sx + 1, sy - 1).red,
+                                fast_demosaiced_data (sx + 2, sy - 1).red },
+            (vec_luminosity_t){ fast_demosaiced_data (sx - 1, sy).red,
+                                fast_demosaiced_data (sx, sy).red,
+                                fast_demosaiced_data (sx + 1, sy).red,
+                                fast_demosaiced_data (sx + 2, sy).red },
+            (vec_luminosity_t){ fast_demosaiced_data (sx - 1, sy + 1).red,
+                                fast_demosaiced_data (sx, sy + 1).red,
+                                fast_demosaiced_data (sx + 1, sy + 1).red,
+                                fast_demosaiced_data (sx + 2, sy + 1).red },
+            (vec_luminosity_t){ fast_demosaiced_data (sx - 1, sy + 2).red,
+                                fast_demosaiced_data (sx, sy + 2).red,
+                                fast_demosaiced_data (sx + 1, sy + 2).red,
+                                fast_demosaiced_data (sx + 2, sy + 2).red },
+            { rx, ry });
+        ret.green = do_bspline_interpolate (
+            (vec_luminosity_t){ fast_demosaiced_data (sx - 1, sy - 1).green,
+                                fast_demosaiced_data (sx, sy - 1).green,
+                                fast_demosaiced_data (sx + 1, sy - 1).green,
+                                fast_demosaiced_data (sx + 2, sy - 1).green },
+            (vec_luminosity_t){ fast_demosaiced_data (sx - 1, sy).green,
+                                fast_demosaiced_data (sx, sy).green,
+                                fast_demosaiced_data (sx + 1, sy).green,
+                                fast_demosaiced_data (sx + 2, sy).green },
+            (vec_luminosity_t){ fast_demosaiced_data (sx - 1, sy + 1).green,
+                                fast_demosaiced_data (sx, sy + 1).green,
+                                fast_demosaiced_data (sx + 1, sy + 1).green,
+                                fast_demosaiced_data (sx + 2, sy + 1).green },
+            (vec_luminosity_t){ fast_demosaiced_data (sx - 1, sy + 2).green,
+                                fast_demosaiced_data (sx, sy + 2).green,
+                                fast_demosaiced_data (sx + 1, sy + 2).green,
+                                fast_demosaiced_data (sx + 2, sy + 2).green },
+            { rx, ry });
+        ret.blue = do_bspline_interpolate (
+            (vec_luminosity_t){ fast_demosaiced_data (sx - 1, sy - 1).blue,
+                                fast_demosaiced_data (sx, sy - 1).blue,
+                                fast_demosaiced_data (sx + 1, sy - 1).blue,
+                                fast_demosaiced_data (sx + 2, sy - 1).blue },
+            (vec_luminosity_t){ fast_demosaiced_data (sx - 1, sy).blue,
+                                fast_demosaiced_data (sx, sy).blue,
+                                fast_demosaiced_data (sx + 1, sy).blue,
+                                fast_demosaiced_data (sx + 2, sy).blue },
+            (vec_luminosity_t){ fast_demosaiced_data (sx - 1, sy + 1).blue,
+                                fast_demosaiced_data (sx, sy + 1).blue,
+                                fast_demosaiced_data (sx + 1, sy + 1).blue,
+                                fast_demosaiced_data (sx + 2, sy + 1).blue },
+            (vec_luminosity_t){ fast_demosaiced_data (sx - 1, sy + 2).blue,
+                                fast_demosaiced_data (sx, sy + 2).blue,
+                                fast_demosaiced_data (sx + 1, sy + 2).blue,
+                                fast_demosaiced_data (sx + 2, sy + 2).blue },
+            { rx, ry });
         return ret;
       }
     return { (luminosity_t)0, (luminosity_t)0, (luminosity_t)0 };
