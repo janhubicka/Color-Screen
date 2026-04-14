@@ -1265,16 +1265,13 @@ void ImageWidget::wheelEvent(QWheelEvent *event) {
   double numSteps = numDegrees / 15.0;
   double factor = qPow(1.1, numSteps);
 
-  double mouseX;
-  double mouseY;
-
   if (m_interactionMode == ExploreMode) {
-      mouseX = width() / 2.0;
-      mouseY = height() / 2.0;
-  } else {
-      mouseX = event->position().x();
-      mouseY = event->position().y();
+      m_exploreTargetScale *= factor;
+      return;
   }
+
+  double mouseX = event->position().x();
+  double mouseY = event->position().y();
 
   double mouseImageX = m_viewX + mouseX / m_scale;
   double mouseImageY = m_viewY + mouseY / m_scale;
@@ -1287,11 +1284,6 @@ void ImageWidget::wheelEvent(QWheelEvent *event) {
   // new_viewX + mouseX / new_scale = mouseImageX
   m_viewX = mouseImageX - mouseX / m_scale;
   m_viewY = mouseImageY - mouseY / m_scale;
-
-  if (m_interactionMode == ExploreMode) {
-      m_exploreTargetX = m_viewX;
-      m_exploreTargetY = m_viewY;
-  }
 
   requestRender();
   if (m_renderQueue.hasActiveTasks() && !m_refreshTimer->isActive()) {
@@ -1574,6 +1566,7 @@ void ImageWidget::setExploreMode(bool enable) {
       setMouseTracking(true);
       m_exploreTargetX = m_viewX;
       m_exploreTargetY = m_viewY;
+      m_exploreTargetScale = m_scale;
       QCursor::setPos(mapToGlobal(rect().center()));
       m_ignoreNextMouseMove = true;
       m_exploreTimer->start();
@@ -1590,33 +1583,59 @@ void ImageWidget::setExploreMode(bool enable) {
 
 void ImageWidget::exploreTick() {
   if (m_interactionMode != ExploreMode) return;
+  bool needsUpdate = false;
   
+  double ds = m_exploreTargetScale - m_scale;
+  if (std::abs(ds / m_scale) > 0.001) {
+      double oldScale = m_scale;
+      m_scale += ds * 0.15; // Smooth factor
+      
+      double w2 = width() / 2.0;
+      double h2 = height() / 2.0;
+      double centerImgX = m_viewX + w2 / oldScale;
+      double centerImgY = m_viewY + h2 / oldScale;
+      
+      double shiftX = (centerImgX - w2 / m_scale) - m_viewX;
+      double shiftY = (centerImgY - h2 / m_scale) - m_viewY;
+      
+      m_viewX += shiftX;
+      m_viewY += shiftY;
+      
+      m_exploreTargetX += shiftX;
+      m_exploreTargetY += shiftY;
+      needsUpdate = true;
+  }
+
   double dx = m_exploreTargetX - m_viewX;
   double dy = m_exploreTargetY - m_viewY;
   
   double distSq = dx*dx + dy*dy;
-  if (distSq < 0.0001) return;
-  // Smooth factor
-  double moveX = dx * 0.15;
-  double moveY = dy * 0.15;
-  
-  // Limited maximal speed
-  double maxSpeed = 20.0 / m_scale;
-  double moveDist = std::sqrt(moveX*moveX + moveY*moveY);
-  if (moveDist > maxSpeed) {
-      moveX = (moveX / moveDist) * maxSpeed;
-      moveY = (moveY / moveDist) * maxSpeed;
+  if (distSq > 0.0001) {
+      // Smooth factor
+      double moveX = dx * 0.15;
+      double moveY = dy * 0.15;
+      
+      // Limited maximal speed
+      double maxSpeed = 20.0 / m_scale;
+      double moveDist = std::sqrt(moveX*moveX + moveY*moveY);
+      if (moveDist > maxSpeed) {
+          moveX = (moveX / moveDist) * maxSpeed;
+          moveY = (moveY / moveDist) * maxSpeed;
+      }
+      
+      m_viewX += moveX;
+      m_viewY += moveY;
+      needsUpdate = true;
   }
   
-  m_viewX += moveX;
-  m_viewY += moveY;
-  
-  requestRender();
-  if (m_renderQueue.hasActiveTasks() && !m_refreshTimer->isActive()) {
-      m_refreshTimer->start();
+  if (needsUpdate) {
+      requestRender();
+      if (m_renderQueue.hasActiveTasks() && !m_refreshTimer->isActive()) {
+          m_refreshTimer->start();
+      }
+      emit viewStateChanged(
+          QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
   }
-  emit viewStateChanged(
-      QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
 }
 
 // Request a new render job (non-blocking)

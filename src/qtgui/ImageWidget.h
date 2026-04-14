@@ -215,6 +215,7 @@ private:
   QTimer *m_exploreTimer = nullptr;
   double m_exploreTargetX = 0.0;
   double m_exploreTargetY = 0.0;
+  double m_exploreTargetScale = 1.0;
   bool m_ignoreNextMouseMove = false;
 
   void updateSimulatedPoints();
