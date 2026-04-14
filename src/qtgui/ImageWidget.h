@@ -39,6 +39,8 @@ public:
     double xOffset;
     double yOffset;
     double scale;
+    int w;
+    int h;
     colorscreen::render_parameters params;
   };
 
@@ -73,7 +75,7 @@ public:
   void selectAll();
   void deleteSelectedPoints();
 
-  enum InteractionMode { PanMode, SelectMode, AddPointMode, SetCenterMode, CropMode, GenericAreaMode };
+  enum InteractionMode { PanMode, SelectMode, AddPointMode, SetCenterMode, CropMode, GenericAreaMode, ExploreMode };
   void setInteractionMode(InteractionMode mode);
 
   struct SelectedPoint {
@@ -94,6 +96,8 @@ public slots:
   void rotateLeft();
   void rotateRight();
   void pivotViewport(int oldRotIdx, int newRotIdx);
+
+  void setExploreMode(bool enable);
 
   void setHeatmapTolerance(double tol);
   void setExaggerate(double ex);
@@ -144,6 +148,7 @@ private slots:
   void handleImageReady(int reqId, QImage image, double x, double y,
                         double scale, bool success);
   void onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData);
+  void exploreTick();
 
 private:
   void requestRender();
@@ -206,6 +211,11 @@ private:
   QRubberBand *m_rubberBand = nullptr;
   QPoint m_rubberBandOrigin;
   int m_draggedPointIndex = -1;
+
+  QTimer *m_exploreTimer = nullptr;
+  double m_exploreTargetX = 0.0;
+  double m_exploreTargetY = 0.0;
+  bool m_ignoreNextMouseMove = false;
 
   void updateSimulatedPoints();
   

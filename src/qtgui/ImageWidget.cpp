@@ -82,6 +82,10 @@ ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent), m_lastSize(0, 0) {
   m_refreshTimer = new QTimer(this);
   m_refreshTimer->setInterval(33); // ~30 FPS
   connect(m_refreshTimer, &QTimer::timeout, this, [this]() { update(); });
+
+  m_exploreTimer = new QTimer(this);
+  m_exploreTimer->setInterval(16); // ~60 FPS
+  connect(m_exploreTimer, &QTimer::timeout, this, &ImageWidget::exploreTick);
 }
 
 double ImageWidget::getMinScale() const { return m_minScale; }
@@ -845,6 +849,13 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
     return;
   }
 
+  if (m_interactionMode == ExploreMode) {
+    // Ignore clicks in Explore mode, or maybe leave by clicking?
+    // Let's just consume them.
+    event->accept();
+    return;
+  }
+
   if (event->button() == Qt::LeftButton) {
     if (m_interactionMode == PanMode) {
       m_isDragging = true;
@@ -1056,6 +1067,23 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
         update();
       }
     }
+  } else if (m_interactionMode == ExploreMode) {
+    if (m_ignoreNextMouseMove) {
+        m_ignoreNextMouseMove = false;
+        return;
+    }
+    
+    QPoint center = rect().center();
+    QPoint delta = event->pos() - center;
+    if (delta.isNull()) return;
+
+    // Accumulate target distance
+    m_exploreTargetX -= delta.x() / m_scale;
+    m_exploreTargetY -= delta.y() / m_scale;
+    
+    // Warp mouse back to center immediately
+    m_ignoreNextMouseMove = true;
+    QCursor::setPos(mapToGlobal(center));
   }
 }
 
@@ -1237,8 +1265,16 @@ void ImageWidget::wheelEvent(QWheelEvent *event) {
   double numSteps = numDegrees / 15.0;
   double factor = qPow(1.1, numSteps);
 
-  double mouseX = event->position().x();
-  double mouseY = event->position().y();
+  double mouseX;
+  double mouseY;
+
+  if (m_interactionMode == ExploreMode) {
+      mouseX = width() / 2.0;
+      mouseY = height() / 2.0;
+  } else {
+      mouseX = event->position().x();
+      mouseY = event->position().y();
+  }
 
   double mouseImageX = m_viewX + mouseX / m_scale;
   double mouseImageY = m_viewY + mouseY / m_scale;
@@ -1252,6 +1288,11 @@ void ImageWidget::wheelEvent(QWheelEvent *event) {
   m_viewX = mouseImageX - mouseX / m_scale;
   m_viewY = mouseImageY - mouseY / m_scale;
 
+  if (m_interactionMode == ExploreMode) {
+      m_exploreTargetX = m_viewX;
+      m_exploreTargetY = m_viewY;
+  }
+
   requestRender();
   if (m_renderQueue.hasActiveTasks() && !m_refreshTimer->isActive()) {
        m_refreshTimer->start();
@@ -1261,6 +1302,12 @@ void ImageWidget::wheelEvent(QWheelEvent *event) {
 }
 
 void ImageWidget::keyPressEvent(QKeyEvent *event) {
+  if (m_interactionMode == ExploreMode && (event->key() == Qt::Key_M || event->key() == Qt::Key_Escape)) {
+      setExploreMode(false);
+      event->accept();
+      return;
+  }
+
   // Handle fullscreen exit keys
   if (isFullScreen() && (event->key() == Qt::Key_Escape || event->key() == Qt::Key_F11)) {
     emit exitFullscreenRequested();
@@ -1520,15 +1567,82 @@ void ImageWidget::updateSimulatedPoints() {
   m_simulatedPointsDirty = false;
 }
 
+void ImageWidget::setExploreMode(bool enable) {
+  if (enable && m_interactionMode != ExploreMode) {
+      m_interactionMode = ExploreMode;
+      setCursor(Qt::BlankCursor);
+      setMouseTracking(true);
+      m_exploreTargetX = m_viewX;
+      m_exploreTargetY = m_viewY;
+      QCursor::setPos(mapToGlobal(rect().center()));
+      m_ignoreNextMouseMove = true;
+      m_exploreTimer->start();
+      setFocus();
+      emit interactionModeChanged(ExploreMode);
+  } else if (!enable && m_interactionMode == ExploreMode) {
+      m_interactionMode = PanMode;
+      unsetCursor();
+      setMouseTracking(false);
+      m_exploreTimer->stop();
+      emit interactionModeChanged(PanMode);
+  }
+}
+
+void ImageWidget::exploreTick() {
+  if (m_interactionMode != ExploreMode) return;
+  
+  double dx = m_exploreTargetX - m_viewX;
+  double dy = m_exploreTargetY - m_viewY;
+  
+  double distSq = dx*dx + dy*dy;
+  if (distSq < 0.0001) return;
+  // Smooth factor
+  double moveX = dx * 0.15;
+  double moveY = dy * 0.15;
+  
+  // Limited maximal speed
+  double maxSpeed = 20.0 / m_scale;
+  double moveDist = std::sqrt(moveX*moveX + moveY*moveY);
+  if (moveDist > maxSpeed) {
+      moveX = (moveX / moveDist) * maxSpeed;
+      moveY = (moveY / moveDist) * maxSpeed;
+  }
+  
+  m_viewX += moveX;
+  m_viewY += moveY;
+  
+  requestRender();
+  if (m_renderQueue.hasActiveTasks() && !m_refreshTimer->isActive()) {
+      m_refreshTimer->start();
+  }
+  emit viewStateChanged(
+      QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
+}
+
 // Request a new render job (non-blocking)
 void ImageWidget::requestRender()
 {
     if (!m_scan || !m_rparams) return;
 
     RenderRequestData data;
-    data.xOffset = m_viewX;
-    data.yOffset = m_viewY;
+    
+    int reqW = width();
+    int reqH = height();
+    double marginX = 0;
+    double marginY = 0;
+
+    if (m_interactionMode == ExploreMode) {
+        reqW = width() * 1.30;
+        reqH = height() * 1.30;
+        marginX = (width() * 0.15) / m_scale;
+        marginY = (height() * 0.15) / m_scale;
+    }
+    
+    data.xOffset = m_viewX - marginX;
+    data.yOffset = m_viewY - marginY;
     data.scale = m_scale;
+    data.w = reqW;
+    data.h = reqH;
     data.params = *m_rparams;
     
     int reqId = m_renderQueue.requestRender(QVariant::fromValue(data));
@@ -1545,9 +1659,6 @@ void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progre
 
     RenderRequestData data = userData.value<RenderRequestData>();
 
-    int w = width();
-    int h = height();
-    
     qCDebug(lcRenderSync) << "ImageWidget::onTriggerRender - Starting render ID:" << reqId << " scale:" << data.scale;
     
     // Trigger generic render
@@ -1556,8 +1667,8 @@ void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progre
                               Q_ARG(double, data.xOffset),
                               Q_ARG(double, data.yOffset),
                               Q_ARG(double, data.scale),
-                              Q_ARG(int, w),
-                              Q_ARG(int, h),
+                              Q_ARG(int, data.w),
+                              Q_ARG(int, data.h),
                               Q_ARG(colorscreen::render_parameters, data.params),
                               Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress),
                               Q_ARG(const char*, "Rendering image"));

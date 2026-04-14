@@ -1185,6 +1185,16 @@ void MainWindow::createToolbar() {
   updateRegistrationGroupVisibility();
   createModeShortcuts();
   updateModeMenu();
+  
+  QAction *exploreModeAction = new QAction("Explore Mode", this);
+  exploreModeAction->setShortcut(QKeySequence("Ctrl+M"));
+  exploreModeAction->setShortcutContext(Qt::ApplicationShortcut);
+  connect(exploreModeAction, &QAction::triggered, this, [this]() {
+    if (m_imageWidget) {
+      m_imageWidget->setExploreMode(m_imageWidget->interactionMode() != ImageWidget::ExploreMode);
+    }
+  });
+  addAction(exploreModeAction);
 }
 
 void MainWindow::createModeShortcuts() {
