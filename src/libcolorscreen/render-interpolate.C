@@ -69,7 +69,7 @@ demosaic_paget *
 get_new_demosaic_paget (demosaiced_params<analyze_paget> &p, progress_info *progress)
 {
   demosaic_paget *ret = new demosaic_paget ();
-  if (!ret->demosaic (p.analyzer, p.r, progress))
+  if (!ret->demosaic (p.analyzer, p.r, p.alg, progress))
     {
       delete ret;
       return NULL;
@@ -293,10 +293,10 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
                                           progress, &id);
       if (!m_paget)
         return false;
-      if (m_params.screen_demosaic == render_parameters::hamilton_adams_demosaic)
+      if ((int)m_params.screen_demosaic >= (int)render_parameters::hamilton_adams_demosaic)
         {
 	  struct demosaiced_params<analyze_paget> pp = {
-	    id, m_params.dark_point, m_params.scan_exposure, m_params.contact_copy, m_params.film_gamma, m_paget.get (), this
+	    id, m_params.dark_point, m_params.scan_exposure, m_params.contact_copy, m_params.film_gamma, m_params.screen_demosaic, m_paget.get (), this
 	  };
 	  m_demosaic_paget = demosaic_paget_cache.get_cached (pp, progress);
 	  if (!m_demosaic_paget)

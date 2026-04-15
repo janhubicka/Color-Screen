@@ -88,7 +88,9 @@ const property_t render_parameters::screen_demosaic_names []  = {
   { "nearest", "Nearest neighbour", "Do not interpolate (fastest)" },
   { "linear", "Linear", "Linear interpolation" },
   { "bicubic", "Bicubic", "Bicubic interpolation" },
-  { "hamilton-adams", "Hamilton-adams", "Popular demosaicing algorithm (currently imlemented only for Paget-type screens)" }
+  { "hamilton-adams", "Hamilton-adams, Paget/Finlay only", "Popular demosaicing algorithm (currently imlemented only for Paget-type screens)" },
+  { "ahd", "AHD (Adaptive Homogeneity-Directed), Paget/Finlay only", "Slower, more advanced algorithm" },
+  { "generic", "Generic, Paget/Finlay only", "experimental algorithm" }
 };
 const property_t render_parameters::demosaiced_scaling_names []  = {
   { "default", "Best for given rendering setting", "Choose best algorithm automatically" },

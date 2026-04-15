@@ -305,6 +305,8 @@ struct render_parameters
     linear_demosaic,
     bicubic_demosaic,
     hamilton_adams_demosaic,
+    ahd_demosaic,
+    generic_demosaic,
     max_screen_demosaic
   };
   screen_demosaic_t screen_demosaic;

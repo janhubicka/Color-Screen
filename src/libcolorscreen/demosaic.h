@@ -993,26 +993,379 @@ protected:
       }
     return !progress || !progress->cancelled ();
   }
+  luminosity_t
+  interp (int x, int y, int ch, const std::vector<luminosity_t> &G_dir) 
+  {
+    int w = m_width, h = m_height;
+    x = std::clamp (x, 0, w - 1);
+    y = std::clamp (y, 0, h - 1);
+    if (GEOMETRY::demosaic_entry_color (x, y) == ch)
+      return dch (x, y, ch);
+
+    bool l_c = GEOMETRY::demosaic_entry_color (x - 1, y) == ch;
+    bool r_c = GEOMETRY::demosaic_entry_color (x + 1, y) == ch;
+    bool u_c = GEOMETRY::demosaic_entry_color (x, y - 1) == ch;
+    bool d_c = GEOMETRY::demosaic_entry_color (x, y + 1) == ch;
+
+    luminosity_t g_here = G_dir[y * w + x];
+
+    if (l_c && r_c)
+      {
+	int xl = std::clamp (x - 1, 0, w - 1);
+	int xr = std::clamp (x + 1, 0, w - 1);
+	return g_here
+	       + (dch (x - 1, y, ch) - G_dir[y * w + xl]
+		  + dch (x + 1, y, ch) - G_dir[y * w + xr])
+		     * (luminosity_t)0.5;
+      }
+    else if (u_c && d_c)
+      {
+	int yu = std::clamp (y - 1, 0, h - 1);
+	int yd = std::clamp (y + 1, 0, h - 1);
+	return g_here
+	       + (dch (x, y - 1, ch) - G_dir[yu * w + x]
+		  + dch (x, y + 1, ch) - G_dir[yd * w + x])
+		     * (luminosity_t)0.5;
+      }
+    else if (l_c)
+      return g_here + dch (x - 1, y, ch) - G_dir[y * w + std::clamp (x - 1, 0, w - 1)];
+    else if (r_c)
+      return g_here + dch (x + 1, y, ch) - G_dir[y * w + std::clamp (x + 1, 0, w - 1)];
+    else if (u_c)
+      return g_here + dch (x, y - 1, ch) - G_dir[std::clamp (y - 1, 0, h - 1) * w + x];
+    else if (d_c)
+      return g_here + dch (x, y + 1, ch) - G_dir[std::clamp (y + 1, 0, h - 1) * w + x];
+    else
+      {
+	bool tl = GEOMETRY::demosaic_entry_color (x - 1, y - 1) == ch;
+	bool tr = GEOMETRY::demosaic_entry_color (x + 1, y - 1) == ch;
+	bool bl = GEOMETRY::demosaic_entry_color (x - 1, y + 1) == ch;
+	bool br = GEOMETRY::demosaic_entry_color (x + 1, y + 1) == ch;
+	int cnt = 0;
+	luminosity_t sum = 0;
+	if (tl)
+	  {
+	    int cx = std::clamp (x - 1, 0, w - 1);
+	    int cy = std::clamp (y - 1, 0, h - 1);
+	    sum += dch (x - 1, y - 1, ch) - G_dir[cy * w + cx];
+	    cnt++;
+	  }
+	if (tr)
+	  {
+	    int cx = std::clamp (x + 1, 0, w - 1);
+	    int cy = std::clamp (y - 1, 0, h - 1);
+	    sum += dch (x + 1, y - 1, ch) - G_dir[cy * w + cx];
+	    cnt++;
+	  }
+	if (bl)
+	  {
+	    int cx = std::clamp (x - 1, 0, w - 1);
+	    int cy = std::clamp (y + 1, 0, h - 1);
+	    sum += dch (x - 1, y + 1, ch) - G_dir[cy * w + cx];
+	    cnt++;
+	  }
+	if (br)
+	  {
+	    int cx = std::clamp (x + 1, 0, w - 1);
+	    int cy = std::clamp (y + 1, 0, h - 1);
+	    sum += dch (x + 1, y + 1, ch) - G_dir[cy * w + cx];
+	    cnt++;
+	  }
+	if (cnt > 0)
+	  return g_here + sum / (luminosity_t)cnt;
+      }
+    return g_here;
+  };
+  /* AHD (Adaptive Homogeneity-Directed) interpolation for the dominating channel.
+     This algorithm performs directional interpolations (horizontal and vertical) for the
+     dominating channel. It interpolates the remaining channels in those directions if
+     using the slow mode. It evaluates a homogeneity metric and selects the direction
+     with the greatest homogeneity. The fast version uses a simple color difference
+     variance metric. The slow version computes true CIELAB homogeneity mapped across
+     a 3x3 window using the full color delta metrics.
+     Template parameters allow its application on arbitrary geometries where color channels
+     can be exchanged.
+   */
+  template <int ah_green, int ah_red, int ah_blue, bool fast, bool smoothen>
+  bool
+  ahd_interpolation_dominating_channel (progress_info *progress)
+  {
+    int w = m_width, h = m_height;
+    if (progress)
+      progress->set_task (fast ? "Demosaicing dominating channel (AHD fast)" :
+                                 "Demosaicing dominating channel (AHD slow)",
+                          fast ? (smoothen ? h * 2 : h) : (smoothen ? h * 5 : h * 4));
+
+    std::vector<luminosity_t> Green_H (w * h);
+    std::vector<luminosity_t> Green_V (w * h);
+
+    /* Real AHD requires filling Green_H and Green_V fully first.  */
+#pragma omp parallel shared(progress, h, w, Green_H, Green_V) default(none)
+    for (int y = 0; y < h; y++)
+      {
+        if (!progress || !progress->cancel_requested ())
+          for (int x = 0; x < w; x++)
+            {
+              int color = GEOMETRY::demosaic_entry_color (x, y);
+              if (color == ah_green)
+                {
+                  Green_H[y * w + x] = known (x, y);
+                  Green_V[y * w + x] = known (x, y);
+                  continue;
+                }
+
+              luminosity_t g_10 = dch (x - 1, y, ah_green);
+              luminosity_t g10 = dch (x + 1, y, ah_green);
+              luminosity_t g0_1 = dch (x, y - 1, ah_green);
+              luminosity_t g01 = dch (x, y + 1, ah_green);
+
+              luminosity_t c00 = known (x, y);
+              luminosity_t c_20 = known (x - 2, y);
+              luminosity_t c20 = known (x + 2, y);
+              luminosity_t c0_2 = known (x, y - 2);
+              luminosity_t c02 = known (x, y + 2);
+
+              Green_H[y * w + x]
+                  = (g_10 + g10) * (luminosity_t)0.5
+                    + (2 * c00 - c_20 - c20) * (luminosity_t)0.25;
+              Green_V[y * w + x]
+                  = (g0_1 + g01) * (luminosity_t)0.5
+                    + (2 * c00 - c0_2 - c02) * (luminosity_t)0.25;
+            }
+        if (progress)
+          progress->inc_progress ();
+      }
+    if (progress && progress->cancelled ())
+      return false;
+
+    std::vector<rgbdata> RGB_H;
+    std::vector<rgbdata> RGB_V;
+    std::vector<cie_lab> LAB_H;
+    std::vector<cie_lab> LAB_V;
+
+    if (!fast)
+      {
+        luminosity_t range = find_robust_max (progress);
+        if (progress && progress->cancelled ())
+          return false;
+        if (range <= 0)
+          range = 1.0f;
+
+        RGB_H.resize (w * h);
+        RGB_V.resize (w * h);
+        
+
+#pragma omp parallel shared(progress, h, w, RGB_H, RGB_V, LAB_H, LAB_V, Green_H, Green_V) default(none)
+        for (int y = 0; y < h; y++)
+          {
+            if (!progress || !progress->cancel_requested ())
+              for (int x = 0; x < w; x++)
+                {
+                  int idx = y * w + x;
+                  RGB_H[idx][ah_green] = Green_H[idx];
+                  RGB_H[idx][ah_red] = interp (x, y, ah_red, Green_H);
+                  RGB_H[idx][ah_blue] = interp (x, y, ah_blue, Green_H);
+
+                  RGB_V[idx][ah_green] = Green_V[idx];
+                  RGB_V[idx][ah_red] = interp (x, y, ah_red, Green_V);
+                  RGB_V[idx][ah_blue] = interp (x, y, ah_blue, Green_V);
+                }
+            if (progress)
+              progress->inc_progress ();
+          }
+        if (progress && progress->cancelled ())
+          return false;
+
+        // Convert to Lab sequentially to avoid omp initialization/sizing overhead
+        LAB_H.resize (w * h, cie_lab(xyz(0,0,0), srgb_white));
+        LAB_V.resize (w * h, cie_lab(xyz(0,0,0), srgb_white));
+#pragma omp parallel for shared(progress, h, w, range, RGB_H, RGB_V, LAB_H, LAB_V, srgb_white) default(none)
+        for (int i = 0; i < h * w; i++)
+          {
+            xyz xyz_h = xyz::from_srgb (std::clamp(RGB_H[i].red / range, 0.0f, 1.0f),
+                                        std::clamp(RGB_H[i].green / range, 0.0f, 1.0f),
+                                        std::clamp(RGB_H[i].blue / range, 0.0f, 1.0f));
+            LAB_H[i] = cie_lab (xyz_h, srgb_white);
+
+            xyz xyz_v = xyz::from_srgb (std::clamp(RGB_V[i].red / range, 0.0f, 1.0f),
+                                        std::clamp(RGB_V[i].green / range, 0.0f, 1.0f),
+                                        std::clamp(RGB_V[i].blue / range, 0.0f, 1.0f));
+            LAB_V[i] = cie_lab (xyz_v, srgb_white);
+          }
+      }
+
+    bitmap_2d predA (smoothen ? w : 0, smoothen ? h : 0);
+
+#pragma omp parallel shared(progress, h, w, predA, Green_H, Green_V, LAB_H, LAB_V) default(none)
+    for (int y = 0; y < h; y++)
+      {
+        if (!progress || !progress->cancel_requested ())
+          for (int x = 0; x < w; x++)
+            {
+              int color = GEOMETRY::demosaic_entry_color (x, y);
+              if (color == ah_green)
+                continue;
+
+              bool choose_h = true;
+
+              if (fast)
+                {
+                  // Fast variance metric based on simple color difference
+                  luminosity_t h_var = 0;
+                  luminosity_t v_var = 0;
+                  luminosity_t gh = Green_H[y * w + x];
+                  luminosity_t gv = Green_V[y * w + x];
+
+                  luminosity_t c00 = known (x, y);
+                  luminosity_t diff_h = fabs (c00 - gh);
+                  luminosity_t diff_v = fabs (c00 - gv);
+
+                  luminosity_t g_10 = dch (x - 1, y, ah_green);
+                  luminosity_t g10 = dch (x + 1, y, ah_green);
+                  luminosity_t g0_1 = dch (x, y - 1, ah_green);
+                  luminosity_t g01 = dch (x, y + 1, ah_green);
+
+                  h_var = diff_h + fabs(g_10 - g10);
+                  v_var = diff_v + fabs(g0_1 - g01);
+
+                  choose_h = (h_var < v_var);
+                }
+              else
+                {
+                  // Slow CIELAB homogeneity metric
+                  int h_homogeneity = 0;
+                  int v_homogeneity = 0;
+
+                  // 3x3 window homogeneity check against the center pixel
+                  for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                      {
+                        int nx = std::clamp (x + dx, 0, w - 1);
+                        int ny = std::clamp (y + dy, 0, h - 1);
+                        
+                        if (deltaE (LAB_H[y * w + x], LAB_H[ny * w + nx]) < 2.0f)
+                          h_homogeneity++;
+                        if (deltaE (LAB_V[y * w + x], LAB_V[ny * w + nx]) < 2.0f)
+                          v_homogeneity++;
+                      }
+                  
+                  choose_h = (h_homogeneity >= v_homogeneity);
+                }
+
+              if (choose_h)
+                {
+                  d (x, y)[ah_green] = Green_H[y * w + x];
+                  predA.set_bit (x, y);
+                }
+              else
+                {
+                  d (x, y)[ah_green] = Green_V[y * w + x];
+                }
+            }
+        if (progress)
+          progress->inc_progress ();
+      }
+    if (progress && progress->cancelled ())
+      return false;
+
+    if (smoothen)
+      {
+        if (progress)
+          progress->set_task ("Smoothening noisy areas in the dominating "
+                              "channel (AHD)",
+                              h);
+#pragma omp parallel shared(progress, h, w, predA) default(none)
+        for (int y = 1; y < h - 1; y++)
+          {
+            if (!progress || !progress->cancel_requested ())
+              for (int x = 1; x < w - 1; x++)
+                {
+                  int color = GEOMETRY::demosaic_entry_color (x, y);
+                  if (color != ah_green
+                      || (int)predA.test_bit (x - 1, y)
+                                 + (int)predA.test_bit (x + 1, y)
+                                 + (int)predA.test_bit (x, y - 1)
+                                 + (int)predA.test_bit (x, y + 1)
+                             <= 2)
+                    continue;
+                  d (x, y)[ah_green]
+                      = (d (x - 1, y)[ah_green] + d (x + 1, y)[ah_green]
+                         + d (x, y - 1)[ah_green] + d (x, y + 1)[ah_green])
+                        * (luminosity_t)0.25;
+                }
+            if (progress)
+              progress->inc_progress ();
+          }
+      }
+    return !progress || !progress->cancelled ();
+  }
+
+  /* Step 2: Interpolate red and blue at positions where they are missing.
+
+     Now green is fully populated by AHD. We use a parallel color difference strategy
+     that mirrors Hamilton-Adams's residual calculation for remaining channels. 
+   */
+  template <int ah_green, int ah_red, int ah_blue>
+  bool
+  ahd_interpolation_remaining_channels (progress_info *progress)
+  {
+    int h = m_height, w = m_width;
+    if (progress)
+      progress->set_task ("Demosaicing remaining chanels (AHD)", h);
+#pragma omp parallel shared(progress, h, w) default(none)
+    for (int y = 0; y < h; y++)
+      {
+        if (!progress || !progress->cancel_requested ())
+          for (int x = 0; x < w; x++)
+            {
+              int color = GEOMETRY::demosaic_entry_color (x, y);
+              luminosity_t g_here = d (x, y)[(int)ah_green];
+
+              if (color != ah_red)
+                hamilton_adams_interpolate_color<ah_green, ah_red> (g_here, x, y);
+              if (color != ah_blue)
+                hamilton_adams_interpolate_color<ah_green, ah_blue> (g_here, x, y);
+            }
+        if (progress)
+          progress->inc_progress ();
+      }
+    return !progress || !progress->cancelled ();
+  }
 };
 
 class demosaic_paget : public demosaic_base<paget_geometry>
 {
 public:
   bool
-  demosaic (analyze_paget *analyze, render *r, progress_info *progress)
+  demosaic (analyze_paget *analyze, render *r, render_parameters::screen_demosaic_t alg, progress_info *progress)
   {
     if (!initialize (analyze))
       return false;
     if (!analyze->populate_demosaiced_data (m_demosaiced, r, m_width, m_height,
                                             m_xshift, m_yshift, progress))
       return false;
-    if (!hamiltom_adams_interpolation_dominating_channel<base_geometry::blue,
-                                                         true> (progress))
-      return false;
-    if (!hamiltom_adams_interpolation_remaining_channels<
-            base_geometry::blue, base_geometry::red, base_geometry::green> (
-            progress))
-      return false;
+    switch (alg)
+      {
+      case render_parameters::hamilton_adams_demosaic:
+	if (!hamiltom_adams_interpolation_dominating_channel<base_geometry::blue,
+							     true> (progress))
+	  return false;
+	if (!hamiltom_adams_interpolation_remaining_channels<
+		base_geometry::blue, base_geometry::red, base_geometry::green> (
+		progress))
+	  return false;
+	break;
+      case render_parameters::ahd_demosaic:
+	if (!ahd_interpolation_dominating_channel<base_geometry::blue, base_geometry::red, base_geometry::green, true, true> (progress))
+	  return false;
+	if (!ahd_interpolation_remaining_channels<
+		base_geometry::blue, base_geometry::red, base_geometry::green> (
+		progress))
+	  return false;
+	break;
+      default:
+	break;
+      }
     return true;
   }
 };
