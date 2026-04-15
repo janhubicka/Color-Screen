@@ -1196,7 +1196,10 @@ protected:
 
     bitmap_2d predA (smoothen ? w : 0, smoothen ? h : 0);
 
-#pragma omp parallel shared(progress, h, w, predA, Green_H, Green_V, LAB_H, LAB_V) default(none)
+    std::vector<luminosity_t> H_scores (w * h, 0);
+    std::vector<luminosity_t> V_scores (w * h, 0);
+
+#pragma omp parallel shared(progress, h, w, Green_H, Green_V, LAB_H, LAB_V, H_scores, V_scores) default(none)
     for (int y = 0; y < h; y++)
       {
         if (!progress || !progress->cancel_requested ())
@@ -1206,35 +1209,33 @@ protected:
               if (color == ah_green)
                 continue;
 
-              bool choose_h = true;
-
               if (fast)
                 {
-                  // Fast variance metric based on simple color difference
-                  luminosity_t h_var = 0;
-                  luminosity_t v_var = 0;
+                  // Fast variance metric utilizing robust HA gradient calculations
                   luminosity_t gh = Green_H[y * w + x];
                   luminosity_t gv = Green_V[y * w + x];
-
                   luminosity_t c00 = known (x, y);
-                  luminosity_t diff_h = fabs (c00 - gh);
-                  luminosity_t diff_v = fabs (c00 - gv);
-
+                  
                   luminosity_t g_10 = dch (x - 1, y, ah_green);
                   luminosity_t g10 = dch (x + 1, y, ah_green);
                   luminosity_t g0_1 = dch (x, y - 1, ah_green);
                   luminosity_t g01 = dch (x, y + 1, ah_green);
+                  
+                  luminosity_t c_20 = known (x - 2, y);
+                  luminosity_t c20 = known (x + 2, y);
+                  luminosity_t c0_2 = known (x, y - 2);
+                  luminosity_t c02 = known (x, y + 2);
 
-                  h_var = diff_h + fabs(g_10 - g10);
-                  v_var = diff_v + fabs(g0_1 - g01);
-
-                  choose_h = (h_var < v_var);
+                  // H_scores is the penalty for horizontal interpolation (measures horizontal variance)
+                  H_scores[y * w + x] = fabs (2 * c00 - c_20 - c20) + 2 * fabs (g_10 - g10) + fabs(2 * gh - g_10 - g10);
+                  // V_scores is the penalty for vertical interpolation (measures vertical variance)
+                  V_scores[y * w + x] = fabs (2 * c00 - c0_2 - c02) + 2 * fabs (g0_1 - g01) + fabs(2 * gv - g0_1 - g01);
                 }
               else
                 {
                   // Slow CIELAB homogeneity metric
-                  int h_homogeneity = 0;
-                  int v_homogeneity = 0;
+                  int h_homo = 0;
+                  int v_homo = 0;
 
                   // 3x3 window homogeneity check against the center pixel
                   for (int dy = -1; dy <= 1; dy++)
@@ -1244,15 +1245,48 @@ protected:
                         int ny = std::clamp (y + dy, 0, h - 1);
                         
                         if (deltaE (LAB_H[y * w + x], LAB_H[ny * w + nx]) < 2.0f)
-                          h_homogeneity++;
+                          h_homo++;
                         if (deltaE (LAB_V[y * w + x], LAB_V[ny * w + nx]) < 2.0f)
-                          v_homogeneity++;
+                          v_homo++;
                       }
                   
-                  choose_h = (h_homogeneity >= v_homogeneity);
+                  // Inverting the score so a lower score consistently means 'better'
+                  H_scores[y * w + x] = -h_homo;
+                  V_scores[y * w + x] = -v_homo;
                 }
+            }
+      }
 
-              if (choose_h)
+
+
+#pragma omp parallel shared(progress, h, w, predA, Green_H, Green_V, H_scores, V_scores) default(none)
+    for (int y = 0; y < h; y++)
+      {
+        if (!progress || !progress->cancel_requested ())
+          for (int x = 0; x < w; x++)
+            {
+              int color = GEOMETRY::demosaic_entry_color (x, y);
+              if (color == ah_green)
+                continue;
+
+              // Spatially smooth the decision map to reduce checkerboard/blocking artifacts
+              luminosity_t smoothed_H = 0;
+              luminosity_t smoothed_V = 0;
+
+              for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                  {
+                    int nx = std::clamp (x + dx, 0, w - 1);
+                    int ny = std::clamp (y + dy, 0, h - 1);
+                    
+                    if (GEOMETRY::demosaic_entry_color (nx, ny) != ah_green)
+                      {
+                        smoothed_H += H_scores[ny * w + nx];
+                        smoothed_V += V_scores[ny * w + nx];
+                      }
+                  }
+
+              if (smoothed_H <= smoothed_V)
                 {
                   d (x, y)[ah_green] = Green_H[y * w + x];
                   predA.set_bit (x, y);
