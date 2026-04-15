@@ -89,17 +89,17 @@ void ColorPanel::setupUi() {
   addSliderParameter(
       "White balance red", 0, 10, 100, 2, "", "",
       [](const ParameterState &s) { return s.rparams.white_balance.red; },
-      [](ParameterState &s, double v) { s.rparams.white_balance.red = v; }, 1.0);
+      [](ParameterState &s, double v) { s.rparams.white_balance.red = v; }, 3.0);
 
   addSliderParameter(
       "White balance green", 0, 10, 100, 2, "", "",
       [](const ParameterState &s) { return s.rparams.white_balance.green; },
-      [](ParameterState &s, double v) { s.rparams.white_balance.green = v; }, 1.0);
+      [](ParameterState &s, double v) { s.rparams.white_balance.green = v; }, 3.0);
 
   addSliderParameter(
       "White balance blue", 0, 10, 100, 2, "", "",
       [](const ParameterState &s) { return s.rparams.white_balance.blue; },
-      [](ParameterState &s, double v) { s.rparams.white_balance.blue = v; }, 1.0);
+      [](ParameterState &s, double v) { s.rparams.white_balance.blue = v; }, 3.0);
 
   // Neutral Area Button
   m_setNeutralAreaBtn = addToggleButtonParameter(

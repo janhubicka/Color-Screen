@@ -105,9 +105,10 @@ void ImageWidget::setZoom(double scale) {
         // New view top-left
         m_viewX = centerX - (w / m_scale) / 2.0;
         m_viewY = centerY - (h / m_scale) / 2.0;
-    } else {
         m_scale = scale;
     }
+
+    m_exploreTargetScale = m_scale;
 
     requestRender();
     if (m_renderQueue.hasActiveTasks() && !m_refreshTimer->isActive()) {
@@ -798,6 +799,7 @@ void ImageWidget::resizeEvent(QResizeEvent *event) {
       }
       if (m_scale < 1e-9) m_scale = newMinScale; // fallback
       m_minScale = newMinScale;
+      m_exploreTargetScale = m_scale;
     }
     
     // 4. Recalculate view position to keep the center point stable
@@ -1265,32 +1267,11 @@ void ImageWidget::wheelEvent(QWheelEvent *event) {
   double numSteps = numDegrees / 15.0;
   double factor = qPow(1.1, numSteps);
 
-  if (m_interactionMode == ExploreMode) {
-      m_exploreTargetScale *= factor;
-      return;
+  m_exploreTargetScale *= factor;
+
+  if (!m_exploreTimer->isActive()) {
+      m_exploreTimer->start();
   }
-
-  double mouseX = event->position().x();
-  double mouseY = event->position().y();
-
-  double mouseImageX = m_viewX + mouseX / m_scale;
-  double mouseImageY = m_viewY + mouseY / m_scale;
-
-  m_scale *= factor;
-
-  // Clamp scale? (Optional)
-
-  // Adjust view so mouseImageX remains under mouseX
-  // new_viewX + mouseX / new_scale = mouseImageX
-  m_viewX = mouseImageX - mouseX / m_scale;
-  m_viewY = mouseImageY - mouseY / m_scale;
-
-  requestRender();
-  if (m_renderQueue.hasActiveTasks() && !m_refreshTimer->isActive()) {
-       m_refreshTimer->start();
-  }
-  emit viewStateChanged(
-      QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
 }
 
 void ImageWidget::keyPressEvent(QKeyEvent *event) {
@@ -1450,6 +1431,8 @@ void ImageWidget::fitToView() {
     m_minScale = 0.1;
   }
 
+  m_exploreTargetScale = m_scale;
+
   // Center view
   m_viewX = (imgW - w / m_scale) / 2.0;
   m_viewY = (imgH - h / m_scale) / 2.0;
@@ -1576,27 +1559,34 @@ void ImageWidget::setExploreMode(bool enable) {
       m_interactionMode = PanMode;
       unsetCursor();
       setMouseTracking(false);
-      m_exploreTimer->stop();
+      // Let exploreTick() auto-stop the timer if no animation is active
       emit interactionModeChanged(PanMode);
   }
 }
 
 void ImageWidget::exploreTick() {
-  if (m_interactionMode != ExploreMode) return;
   bool needsUpdate = false;
   
   double ds = m_exploreTargetScale - m_scale;
-  if (std::abs(ds / m_scale) > 0.001) {
+  if (std::abs(ds / (m_scale + 1e-9)) > 0.001) {
       double oldScale = m_scale;
       m_scale += ds * 0.15; // Smooth factor
       
-      double w2 = width() / 2.0;
-      double h2 = height() / 2.0;
-      double centerImgX = m_viewX + w2 / oldScale;
-      double centerImgY = m_viewY + h2 / oldScale;
+      double focusX, focusY;
+      if (m_interactionMode == ExploreMode) {
+          focusX = width() / 2.0;
+          focusY = height() / 2.0;
+      } else {
+          QPoint p = mapFromGlobal(QCursor::pos());
+          focusX = p.x();
+          focusY = p.y();
+      }
       
-      double shiftX = (centerImgX - w2 / m_scale) - m_viewX;
-      double shiftY = (centerImgY - h2 / m_scale) - m_viewY;
+      double centerImgX = m_viewX + focusX / oldScale;
+      double centerImgY = m_viewY + focusY / oldScale;
+      
+      double shiftX = (centerImgX - focusX / m_scale) - m_viewX;
+      double shiftY = (centerImgY - focusY / m_scale) - m_viewY;
       
       m_viewX += shiftX;
       m_viewY += shiftY;
@@ -1604,28 +1594,36 @@ void ImageWidget::exploreTick() {
       m_exploreTargetX += shiftX;
       m_exploreTargetY += shiftY;
       needsUpdate = true;
+  } else {
+      m_scale = m_exploreTargetScale;
   }
 
-  double dx = m_exploreTargetX - m_viewX;
-  double dy = m_exploreTargetY - m_viewY;
-  
-  double distSq = dx*dx + dy*dy;
-  if (distSq > 0.0001) {
-      // Smooth factor
-      double moveX = dx * 0.15;
-      double moveY = dy * 0.15;
+  if (m_interactionMode == ExploreMode) {
+      double dx = m_exploreTargetX - m_viewX;
+      double dy = m_exploreTargetY - m_viewY;
       
-      // Limited maximal speed
-      double maxSpeed = 20.0 / m_scale;
-      double moveDist = std::sqrt(moveX*moveX + moveY*moveY);
-      if (moveDist > maxSpeed) {
-          moveX = (moveX / moveDist) * maxSpeed;
-          moveY = (moveY / moveDist) * maxSpeed;
+      double distSq = dx*dx + dy*dy;
+      if (distSq > 0.0001) {
+          // Smooth factor
+          double moveX = dx * 0.15;
+          double moveY = dy * 0.15;
+          
+          // Limited maximal speed
+          double maxSpeed = 20.0 / m_scale;
+          double moveDist = std::sqrt(moveX*moveX + moveY*moveY);
+          if (moveDist > maxSpeed) {
+              moveX = (moveX / moveDist) * maxSpeed;
+              moveY = (moveY / moveDist) * maxSpeed;
+          }
+          
+          m_viewX += moveX;
+          m_viewY += moveY;
+          needsUpdate = true;
       }
-      
-      m_viewX += moveX;
-      m_viewY += moveY;
-      needsUpdate = true;
+  }
+
+  if (m_interactionMode != ExploreMode && !needsUpdate) {
+      m_exploreTimer->stop();
   }
   
   if (needsUpdate) {

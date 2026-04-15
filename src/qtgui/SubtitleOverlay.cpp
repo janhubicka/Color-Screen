@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <QFont>
 #include <QFontMetrics>
+#include "../libcolorscreen/include/base.h"
 
 QVector<SubtitleMessage> SubtitleOverlay::s_thanksList;
 
@@ -303,7 +304,7 @@ void SubtitleOverlay::start(const QString &name, const QString &dates, const QSt
     m_opacity = 0.0;
 
     // 1. Intro
-    addMessage("Color-Screen 2.0", "Developed by Jan Hubička  2022-2026", "https://github.com/janhubicka/Color-Screen/wiki", 4.0);
+    addMessage("Color-Screen " PACKAGE_VERSION, "Developed by Jan Hubička  2022-2026", "https://github.com/janhubicka/Color-Screen/wiki", 4.0);
     
     addMessage("Graphical interface", "Vibe-coding experiment, January 2026", "based on Java GUI by Linda Kimrová", 4.0);
     // 2. Animation Details
@@ -396,16 +397,18 @@ void SubtitleOverlay::paint(QPainter *painter, const QRect &bounds) {
     // Make bounds local
     QRect localBounds(0, 0, bounds.width(), bounds.height());
 
+    qreal scale = qMax(0.1, bounds.width() / 1500.0);
+
     // Setup Fonts (Must be before lambda)
     QFont titleFont = painter->font();
     titleFont.setBold(true);
-    titleFont.setPointSize(24);
+    titleFont.setPointSizeF(24.0 * scale);
     
     QFont subFont = painter->font();
-    subFont.setPointSize(14);
+    subFont.setPointSizeF(14.0 * scale);
     
     QFont descFont = painter->font();
-    descFont.setPointSize(12);
+    descFont.setPointSizeF(12.0 * scale);
     descFont.setItalic(true);
 
     QFontMetrics fmTitle(titleFont);
@@ -418,13 +421,15 @@ void SubtitleOverlay::paint(QPainter *painter, const QRect &bounds) {
     
     // Header font
     QFont headerFont = painter->font();
-    headerFont.setPointSize(12);
+    headerFont.setPointSizeF(12.0 * scale);
     headerFont.setCapitalization(QFont::SmallCaps);
-    headerFont.setLetterSpacing(QFont::AbsoluteSpacing, 2.0);
+    headerFont.setLetterSpacing(QFont::AbsoluteSpacing, 2.0 * scale);
     QFontMetrics fmHeader(headerFont);
     int hHeader = fmHeader.height();
     
-    int spacing = 5;
+    int spacing = qRound(5 * scale);
+    int shadowOffset = qMax(1, qRound(4 * scale));
+    int outlineOffset = qBound(1, qRound(2 * scale), 4); // cap at 4 for performance
 
     auto drawTextWithShadow = [&](int y, const QString &text, const QFont &font) {
         p.setFont(font);
@@ -432,17 +437,17 @@ void SubtitleOverlay::paint(QPainter *painter, const QRect &bounds) {
         
         // 1. Heavy Outline (Opaque Black)
         p.setPen(QColor(0, 0, 0, 255)); // Full alpha
-        for (int dx = -2; dx <= 2; dx++) {
-            for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -outlineOffset; dx <= outlineOffset; dx++) {
+            for (int dy = -outlineOffset; dy <= outlineOffset; dy++) {
                 if (dx == 0 && dy == 0) continue;
-                if (abs(dx) == 2 && abs(dy) == 2) continue; 
+                if (abs(dx) == outlineOffset && abs(dy) == outlineOffset) continue; 
                 p.drawText(textRect.translated(dx, dy), Qt::AlignCenter, text);
             }
         }
         
         // 2. Soft Drop Shadow (Opaque Shadow Color)
         p.setPen(QColor(0, 0, 0, 180));
-        p.drawText(textRect.translated(4, 4), Qt::AlignCenter, text);
+        p.drawText(textRect.translated(shadowOffset, shadowOffset), Qt::AlignCenter, text);
         
         // 3. Main Text (Opaque White)
         p.setPen(Qt::white);
@@ -457,7 +462,7 @@ void SubtitleOverlay::paint(QPainter *painter, const QRect &bounds) {
     if (!msg.line3.isEmpty()) totalHeight += hDesc + spacing;
     
     // Position at bottom with some margin
-    int bottomMargin = 40;
+    int bottomMargin = qRound(40 * scale);
     int yPos = bounds.bottom() - bottomMargin - totalHeight;
     
     int currentY = yPos - bounds.top(); // Relative Y
