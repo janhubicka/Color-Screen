@@ -279,7 +279,17 @@ tone_curve::init_by_sensitivity (enum spectrum_dyes_to_xyz::characteristic_curve
   init_by_y_values (table, len);
 }
 
-constexpr const char *tone_curve::tone_curve_names[tone_curve::tone_curve_max];
+const property_t tone_curve::tone_curve_names[tone_curve::tone_curve_max] =
+{
+  {"linear", "Linear", "Linear tone curve (no adjustment)"},
+  {"dng", "DNG", "Adobe DNG default tone curve"},
+  {"dng_contrast", "DNG Contrast", "Adobe DNG default tone curve with 2.2 gamma contrast"},
+  {"safe", "Safe", "Safe reversal output curve"},
+  {"kodachrome25", "Kodachrome 25", "Simulated Kodachrome 25 response"},
+  {"spicer_dufay_low", "Spicer Dufay Low", "Spicer's Dufaycolor reversal curve (low contrast)"},
+  {"spicer_dufay_mid", "Spicer Dufay Mid", "Spicer's Dufaycolor reversal curve (medium contrast)"},
+  {"spicer_dufay_high", "Spicer Dufay High", "Spicer's Dufaycolor reversal curve (high contrast)"}
+};
 tone_curve::tone_curve (enum tone_curves type)
 : precomputed_function (0, 1)
 {

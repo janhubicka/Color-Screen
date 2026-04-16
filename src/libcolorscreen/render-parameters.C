@@ -91,6 +91,7 @@ const property_t render_parameters::screen_demosaic_names []  = {
   { "hamilton-adams", "Hamilton-adams, Paget/Finlay only", "Popular demosaicing algorithm (currently imlemented only for Paget-type screens)" },
   { "ahd", "AHD (Adaptive Homogeneity-Directed), Paget/Finlay only", "Slower, more advanced algorithm" },
   { "amaze", "AMaZE (Aliasing Minimization and Zipper Elimination), Paget/Finlay only", "High quality algorithm based on adaptive color ratios and variance analysis" },
+  { "rcd", "RCD (Ratio Corrected Demosaicing), Paget/Finlay only", "Fast, high quality algorithm using ratio-corrected color interpolation" },
   { "generic", "Generic, Paget/Finlay only", "experimental algorithm" }
 };
 const property_t render_parameters::demosaiced_scaling_names []  = {

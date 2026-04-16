@@ -25,17 +25,7 @@ public:
     tone_curve_spicer_dufay_high,
     tone_curve_max
   };
-  DLL_PUBLIC constexpr static const char *tone_curve_names[tone_curve_max] =
-  {
-    "linear",
-    "dng",
-    "dng_contrast",
-    "safe",
-    "kodachrome25",
-    "spicer_dufay_low",
-    "spicer_dufay_mid",
-    "spicer_dufay_high"
-  };
+  DLL_PUBLIC static const property_t tone_curve_names[tone_curve_max];
   static bool DLL_PUBLIC save_tone_curve (FILE *f, tone_curves curve, bool hd);
   tone_curve (enum tone_curves type);
   /* This does the same as dng reference implementation.  */

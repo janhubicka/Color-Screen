@@ -1722,8 +1722,9 @@ parse_illuminant (const char *il, luminosity_t *temperature)
 static enum tone_curve::tone_curves
 parse_tone_curve (const char *profile)
 {
-  return parse_enum<enum tone_curve::tone_curves, tone_curve::tone_curve_names,
-                    (int)tone_curve::tone_curve_max> (
+  return parse_enum_property<enum tone_curve::tone_curves, property_t,
+                             tone_curve::tone_curve_names,
+                             (int)tone_curve::tone_curve_max> (
       profile, "Unkonwn tone curve:%s\n");
 }
 static enum spectrum_dyes_to_xyz::responses

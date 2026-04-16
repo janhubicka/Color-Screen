@@ -2229,6 +2229,630 @@ protected:
       }
     return !progress || !progress->cancelled ();
   }
+
+  /* RCD (Ratio Corrected Demosaicing) algorithm.
+
+     Based on the algorithm by Luis Sanz Rodríguez, release 2.3.
+     This implementation follows the darktable reference (src/iop/demosaicing/rcd.c)
+     closely, adapted to work with the GEOMETRY template and floating-point
+     linear data.
+
+     The algorithm operates in five main steps:
+       1. Compute vertical and horizontal directional discrimination by
+          analyzing squared high-pass filter responses on the CFA data.
+       2. Compute a low-pass filter (LPF) incorporating all local CFA samples
+          around each non-dominating site.
+       3. Populate the dominating channel at non-dominating sites using
+          ratio-corrected cardinal interpolation, weighted by cardinal
+          gradients and the VH directional discrimination.
+       4. Populate non-dominating channels at non-dominating sites using
+          diagonal (P/Q) ratio-corrected interpolation with diagonal
+          gradient weighting and PQ directional discrimination.
+       5. Populate non-dominating channels at dominating sites using
+          cardinal color-difference interpolation with VH directional
+          discrimination.
+
+     Key differences from the AMaZE approach:
+       - Uses ratio-corrected interpolation (neighbor * ratio) instead of
+         Hamilton-Adams Laplacian correction.
+       - Simpler, fewer passes, generally faster.
+       - Uses a 6th-order high-pass filter for directional analysis (wider
+         support than AMaZE's gradient computation).
+
+     Template parameters:
+       AH_GREEN  - the dominating channel (plays role of "green" in Bayer)
+       AH_RED    - first non-dominating channel
+       AH_BLUE   - second non-dominating channel
+
+     Possible improvements:
+       - Tile-based processing for better cache locality (as in darktable)
+       - SIMD vectorization of inner loops
+       - Adaptive eps based on local noise estimation
+       - Post-interpolation refinement pass (Nyquist texture handling)
+       - Median filtering in highlight regions for clipping robustness  */
+  template <int ah_green, int ah_red, int ah_blue>
+  bool
+  rcd_interpolation (progress_info *progress)
+  {
+    int w = m_width, h = m_height;
+
+    /* Tolerance to avoid division by zero.  */
+    constexpr luminosity_t eps = (luminosity_t)1e-5;
+    constexpr luminosity_t epssq = (luminosity_t)1e-10;
+
+    /* Total progress: step1(h) + step2(h) + step3(h) + step4diag(h)
+       + step4.2(h) + step4.3(h) = 6*h.  */
+    if (progress)
+      progress->set_task ("Demosaicing (RCD)", h * 6);
+
+    /* ================================================================
+       Step 1: Find vertical and horizontal interpolation directions.
+
+       We compute a 6th-order high-pass filter on the CFA data in both
+       vertical and horizontal directions.  The filter kernel is:
+         HPF(x) = (x[-3] - x[-1] - x[+1] + x[+3])
+                  - 3*(x[-2] + x[+2]) + 6*x[0]
+       The squared magnitude of V and H HPF responses are accumulated
+       over 3 consecutive same-direction rows/columns, and the ratio
+       V_Stat / (V_Stat + H_Stat) gives the directional discrimination:
+         VH_Dir near 1.0 = strong vertical variation = prefer horizontal
+         VH_Dir near 0.0 = strong horizontal variation = prefer vertical
+         VH_Dir near 0.5 = isotropic = blend equally
+
+       This is the core innovation of RCD: using high-order color
+       difference HPF statistics instead of simple gradients.
+
+       Possible improvement: use a Gaussian-weighted accumulation instead
+       of a box filter over 3 rows for smoother transitions.
+       ================================================================ */
+    std::vector<luminosity_t> VH_Dir (w * h, 0);
+    {
+      /* Temporary buffers for squared vertical HPF values.
+         We use a rolling buffer of 3 rows to avoid storing the full
+         image of squared HPF values.  */
+      std::vector<luminosity_t> Vsq_row0 (w, 0);
+      std::vector<luminosity_t> Vsq_row1 (w, 0);
+      std::vector<luminosity_t> Vsq_row2 (w, 0);
+
+      /* Pre-fill the rolling buffer for rows 3 and 4.  */
+      for (int init_row = 3; init_row <= 4; init_row++)
+        {
+          luminosity_t *target
+              = (init_row == 3) ? Vsq_row0.data () : Vsq_row1.data ();
+          for (int x = 4; x < w - 4; x++)
+            {
+              /* Vertical 6th-order HPF.  */
+              luminosity_t v
+                  = (known (x, init_row - 3) - known (x, init_row - 1)
+                     - known (x, init_row + 1) + known (x, init_row + 3))
+                    - 3 * (known (x, init_row - 2) + known (x, init_row + 2))
+                    + 6 * known (x, init_row);
+              target[x] = v * v;
+            }
+        }
+
+      for (int y = 4; y < h - 4; y++)
+        {
+          if (progress && progress->cancel_requested ())
+            break;
+
+          /* Compute squared vertical HPF for row y+1 into the oldest
+             slot (Vsq_row2 will be rotated to become the new "next").  */
+          for (int x = 4; x < w - 4; x++)
+            {
+              int yr = y + 1;
+              luminosity_t v
+                  = (known (x, yr - 3) - known (x, yr - 1)
+                     - known (x, yr + 1) + known (x, yr + 3))
+                    - 3 * (known (x, yr - 2) + known (x, yr + 2))
+                    + 6 * known (x, yr);
+              Vsq_row2[x] = v * v;
+            }
+
+          /* Compute horizontal HPF and accumulate both directions.  */
+          /* bufferH[x] stores the squared horizontal HPF for (x, y).
+             We accumulate col-1, col, col+1 horizontally
+             (in the darktable code these are bufferH[col-4], bufferH[col-3],
+             bufferH[col-2] which corresponds to a 3-sample window).  */
+          std::vector<luminosity_t> Hsq (w, 0);
+          for (int x = 3; x < w - 3; x++)
+            {
+              luminosity_t hv
+                  = (known (x - 3, y) - known (x - 1, y)
+                     - known (x + 1, y) + known (x + 3, y))
+                    - 3 * (known (x - 2, y) + known (x + 2, y))
+                    + 6 * known (x, y);
+              Hsq[x] = hv * hv;
+            }
+
+          for (int x = 4; x < w - 4; x++)
+            {
+              /* Accumulate 3-row vertical and 3-column horizontal
+                 statistics.  */
+              luminosity_t V_Stat = std::max (
+                  epssq, Vsq_row0[x] + Vsq_row1[x] + Vsq_row2[x]);
+              luminosity_t H_Stat = std::max (
+                  epssq, Hsq[x - 1] + Hsq[x] + Hsq[x + 1]);
+              VH_Dir[y * w + x] = V_Stat / (V_Stat + H_Stat);
+            }
+
+          /* Roll the buffers: row0 <- row1, row1 <- row2,
+             row2 <- row0 (to be overwritten next iteration).  */
+          std::swap (Vsq_row0, Vsq_row1);
+          std::swap (Vsq_row1, Vsq_row2);
+
+          if (progress)
+            progress->inc_progress ();
+        }
+    }
+    if (progress && progress->cancelled ())
+      return false;
+
+    /* ================================================================
+       Step 2: Compute the low-pass filter (LPF).
+
+       At each non-dominating pixel, we compute a weighted average of
+       the 3x3 neighborhood CFA values:
+         LPF = center + 0.5*(N+S+W+E) + 0.25*(NW+NE+SW+SE)
+       This incorporates samples from all three Bayer color channels
+       to produce a luminance-like estimate.
+
+       The LPF is stored only at non-dominating sites.  At dominating
+       sites the LPF value is unused (set to 0).
+
+       Possible improvement: use a larger kernel (5x5) for more robust
+       estimation in noisy images.
+       ================================================================ */
+    std::vector<luminosity_t> lpf (w * h, 0);
+#pragma omp parallel for schedule(dynamic, 16)
+    for (int y = 2; y < h - 2; y++)
+      {
+        if (progress && progress->cancel_requested ())
+          continue;
+        for (int x = 2; x < w - 2; x++)
+          {
+            if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
+              continue;
+            lpf[y * w + x]
+                = known (x, y)
+                  + (luminosity_t)0.5
+                        * (known (x, y - 1) + known (x, y + 1)
+                           + known (x - 1, y) + known (x + 1, y))
+                  + (luminosity_t)0.25
+                        * (known (x - 1, y - 1) + known (x + 1, y - 1)
+                           + known (x - 1, y + 1) + known (x + 1, y + 1));
+          }
+        if (progress)
+          progress->inc_progress ();
+      }
+    if (progress && progress->cancelled ())
+      return false;
+
+    /* ================================================================
+       Step 3: Populate the dominating channel at non-dominating sites.
+
+       For each non-dominating pixel (R or B), estimate the dominating
+       channel (G) using ratio-corrected cardinal interpolation.
+
+       Cardinal gradients measure how much the CFA and interpolated
+       values change in each direction (N/S/E/W), extending to distance 4.
+       These provide edge-awareness.
+
+       Cardinal estimates use ratio-corrected interpolation:
+         G_est_N = cfa_N * (2 * LPF_center) / (LPF_center + LPF_N)
+       This adapts the neighbor value by the ratio of local luminance
+       estimates.  When LPF values are similar (smooth area), the ratio
+       is near 1 and the estimate is basically the neighbor value.
+
+       Vertical and horizontal estimates are weighted by their opposing
+       gradients (cross-gradient weighting):
+         V_Est = (S_Grad * N_Est + N_Grad * S_Est) / (N_Grad + S_Grad)
+
+       The VH directional discrimination from Step 1 is refined by
+       comparing the local value with the neighborhood average (diagonal
+       neighbors), choosing whichever has stronger discrimination.
+
+       Final G = lerp(VH_Disc, H_Est, V_Est).
+
+       Possible improvement: use a 6-pixel gradient window like AMaZE
+       for even more edge sensitivity.
+       ================================================================ */
+#pragma omp parallel for schedule(dynamic, 16)
+    for (int y = 4; y < h - 4; y++)
+      {
+        if (progress && progress->cancel_requested ())
+          continue;
+        for (int x = 4; x < w - 4; x++)
+          {
+            if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
+              continue;
+
+            luminosity_t cfai = known (x, y);
+            int idx = y * w + x;
+
+            /* Cardinal gradients.
+               Each gradient sums:
+               - |neighbor1 - neighbor2| (same-channel variation)
+               - |center - same_channel_at_distance_2|
+               - |neighbor1 - same_channel_at_distance_3|
+               - |same_channel_at_distance_2 - same_channel_at_distance_4|
+               This provides a 4-pixel-deep edge measure.  */
+            luminosity_t N_Grad
+                = eps + fabs (known (x, y - 1) - known (x, y + 1))
+                  + fabs (cfai - known (x, y - 2))
+                  + fabs (known (x, y - 1) - known (x, y - 3))
+                  + fabs (known (x, y - 2) - known (x, y - 4));
+            luminosity_t S_Grad
+                = eps + fabs (known (x, y + 1) - known (x, y - 1))
+                  + fabs (cfai - known (x, y + 2))
+                  + fabs (known (x, y + 1) - known (x, y + 3))
+                  + fabs (known (x, y + 2) - known (x, y + 4));
+            luminosity_t W_Grad
+                = eps + fabs (known (x - 1, y) - known (x + 1, y))
+                  + fabs (cfai - known (x - 2, y))
+                  + fabs (known (x - 1, y) - known (x - 3, y))
+                  + fabs (known (x - 2, y) - known (x - 4, y));
+            luminosity_t E_Grad
+                = eps + fabs (known (x + 1, y) - known (x - 1, y))
+                  + fabs (cfai - known (x + 2, y))
+                  + fabs (known (x + 1, y) - known (x + 3, y))
+                  + fabs (known (x + 2, y) - known (x + 4, y));
+
+            /* Ratio-corrected cardinal estimates.
+               Each uses: neighbor * (2 * lpf_here) / (lpf_here + lpf_neighbor).
+               This ratio correction is the core innovation of RCD—it adapts
+               the interpolation to local luminance ratios instead of using
+               additive Laplacian corrections like Hamilton-Adams.  */
+            luminosity_t lpfi = lpf[idx];
+            luminosity_t lpf2 = lpfi + lpfi;
+            luminosity_t N_Est = known (x, y - 1) * lpf2
+                                 / (eps + lpfi + lpf[(y - 1) * w + x]);
+            luminosity_t S_Est = known (x, y + 1) * lpf2
+                                 / (eps + lpfi + lpf[(y + 1) * w + x]);
+            luminosity_t W_Est = known (x - 1, y) * lpf2
+                                 / (eps + lpfi + lpf[y * w + (x - 1)]);
+            luminosity_t E_Est = known (x + 1, y) * lpf2
+                                 / (eps + lpfi + lpf[y * w + (x + 1)]);
+
+            /* Vertical and horizontal estimates.
+               Cross-gradient weighting: the estimate from the direction with
+               less gradient (smoother) gets more weight.  */
+            luminosity_t V_Est
+                = (S_Grad * N_Est + N_Grad * S_Est) / (N_Grad + S_Grad);
+            luminosity_t H_Est
+                = (W_Grad * E_Est + E_Grad * W_Est) / (E_Grad + W_Grad);
+
+            /* Refined VH directional discrimination.
+               Compare the local VH_Dir with the average of the four
+               diagonal neighbors.  Use whichever has stronger
+               discrimination (farther from 0.5).  */
+            luminosity_t VH_Central = VH_Dir[idx];
+            luminosity_t VH_Neighbourhood
+                = (luminosity_t)0.25
+                  * (VH_Dir[(y - 1) * w + (x - 1)]
+                     + VH_Dir[(y - 1) * w + (x + 1)]
+                     + VH_Dir[(y + 1) * w + (x - 1)]
+                     + VH_Dir[(y + 1) * w + (x + 1)]);
+            luminosity_t VH_Disc
+                = (fabs ((luminosity_t)0.5 - VH_Central)
+                   < fabs ((luminosity_t)0.5 - VH_Neighbourhood))
+                      ? VH_Neighbourhood
+                      : VH_Central;
+
+            /* Clamp VH_Disc to [0, 1] for safe interpolation.  */
+            VH_Disc = std::clamp (VH_Disc, (luminosity_t)0,
+                                  (luminosity_t)1);
+
+            /* G@R or G@B: blend V and H estimates.
+               VH_Disc near 1 => prefer H_Est (horizontal is smoother)
+               VH_Disc near 0 => prefer V_Est (vertical is smoother)  */
+            d (x, y)[(int)ah_green]
+                = VH_Disc * H_Est + (1 - VH_Disc) * V_Est;
+          }
+        if (progress)
+          progress->inc_progress ();
+      }
+    if (progress && progress->cancelled ())
+      return false;
+
+    /* ================================================================
+       Step 4: Populate non-dominating channels (R and B).
+
+       Step 4 has two sub-steps:
+       4.2: At non-dominating sites (R@B or B@R) — diagonal interpolation
+       4.3: At dominating sites (R@G or B@G) — cardinal interpolation
+
+       Sub-step 4.0-4.1: Compute P/Q diagonal directional discrimination.
+
+       Similar to Step 1, but using diagonal high-pass filters instead
+       of cardinal ones.  The P diagonal goes NW-SE, the Q diagonal
+       goes NE-SW.
+
+       Possible improvement: combine Steps 4.0-4.1 with 4.2 to reduce
+       memory usage—the PQ_Dir values are only needed at non-dominating
+       sites.
+       ================================================================ */
+
+    /* Step 4.0-4.1: Diagonal directional discrimination.  */
+    std::vector<luminosity_t> PQ_Dir (w * h, (luminosity_t)0.5);
+    {
+      /* Compute squared diagonal HPF.  We only need values at
+         non-dominating sites.  The P-diagonal HPF uses offsets
+         along the NW-SE direction (stride = w+1).
+         The Q-diagonal HPF uses NE-SW direction (stride = w-1).  */
+      std::vector<luminosity_t> P_CDiff_Hpf (w * h, 0);
+      std::vector<luminosity_t> Q_CDiff_Hpf (w * h, 0);
+
+#pragma omp parallel for schedule(dynamic, 16)
+      for (int y = 3; y < h - 3; y++)
+        {
+          if (progress && progress->cancel_requested ())
+            continue;
+          for (int x = 3; x < w - 3; x++)
+            {
+              if (GEOMETRY::demosaic_entry_color (x, y) != ah_green)
+                continue;
+              /* P diagonal (NW-SE): offsets (-3,-3)..(+3,+3).  */
+              luminosity_t p
+                  = (known (x - 3, y - 3) - known (x - 1, y - 1)
+                     - known (x + 1, y + 1) + known (x + 3, y + 3))
+                    - 3 * (known (x - 2, y - 2) + known (x + 2, y + 2))
+                    + 6 * known (x, y);
+              P_CDiff_Hpf[y * w + x] = p * p;
+
+              /* Q diagonal (NE-SW): offsets (+3,-3)..(-3,+3).  */
+              luminosity_t q
+                  = (known (x + 3, y - 3) - known (x + 1, y - 1)
+                     - known (x - 1, y + 1) + known (x - 3, y + 3))
+                    - 3 * (known (x + 2, y - 2) + known (x - 2, y + 2))
+                    + 6 * known (x, y);
+              Q_CDiff_Hpf[y * w + x] = q * q;
+            }
+        }
+
+      /* Accumulate 3-sample diagonal statistics.  */
+#pragma omp parallel for schedule(dynamic, 16)
+      for (int y = 4; y < h - 4; y++)
+        {
+          if (progress && progress->cancel_requested ())
+            continue;
+          for (int x = 4; x < w - 4; x++)
+            {
+              if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
+                continue;
+              /* The 3 same-type diagonal neighbors for P and Q
+                 accumulation are at (-1,-1), (0,0), (+1,+1) in the
+                 half-resolution grid of the same color, which maps to
+                 positions shifted by (-1,-1), (0,0), (+1,+1) in the
+                 dominating-channel grid.  */
+              luminosity_t P_Stat = std::max (
+                  epssq, P_CDiff_Hpf[(y - 1) * w + (x - 1)]
+                             + P_CDiff_Hpf[y * w + x]
+                             + P_CDiff_Hpf[(y + 1) * w + (x + 1)]);
+              luminosity_t Q_Stat = std::max (
+                  epssq, Q_CDiff_Hpf[(y - 1) * w + (x + 1)]
+                             + Q_CDiff_Hpf[y * w + x]
+                             + Q_CDiff_Hpf[(y + 1) * w + (x - 1)]);
+              PQ_Dir[y * w + x] = P_Stat / (P_Stat + Q_Stat);
+            }
+        }
+    }
+    if (progress && progress->cancelled ())
+      return false;
+
+    /* Step 4.2: R at B sites and B at R sites (diagonal interpolation).
+
+       At each non-dominating pixel we already have the dominating channel
+       (from Step 3).  The "other" non-dominating channel (the one that is
+       NOT this pixel's native channel) is estimated using diagonal
+       neighbors where that channel IS known.
+
+       Diagonal gradients measure edge strength along NW-SE and NE-SW
+       diagonals using:
+       - the "other" channel difference across the diagonal
+       - second-order difference (distance-3 neighbor)
+       - dominating channel (green) curvature in the same direction
+
+       Ratio-corrected estimates use color difference (C - G) at
+       diagonal neighbors, then add back the local G.
+
+       PQ_Dir discrimination (same refinement as VH_Dir) selects the
+       dominant diagonal direction.  */
+#pragma omp parallel for schedule(dynamic, 16)
+    for (int y = 4; y < h - 4; y++)
+      {
+        if (progress && progress->cancel_requested ())
+          continue;
+        for (int x = 4; x < w - 4; x++)
+          {
+            int color = GEOMETRY::demosaic_entry_color (x, y);
+            if (color == ah_green)
+              continue;
+
+            /* Determine which non-dominating channel to interpolate.
+               If we are at a red pixel, we need blue.
+               If we are at a blue pixel, we need red.  */
+            int c = (color == ah_red) ? ah_blue : ah_red;
+            int idx = y * w + x;
+
+            /* Refined PQ directional discrimination.  */
+            luminosity_t PQ_Central = PQ_Dir[idx];
+            luminosity_t PQ_Neighbourhood
+                = (luminosity_t)0.25
+                  * (PQ_Dir[(y - 1) * w + (x - 1)]
+                     + PQ_Dir[(y - 1) * w + (x + 1)]
+                     + PQ_Dir[(y + 1) * w + (x - 1)]
+                     + PQ_Dir[(y + 1) * w + (x + 1)]);
+            luminosity_t PQ_Disc
+                = (fabs ((luminosity_t)0.5 - PQ_Central)
+                   < fabs ((luminosity_t)0.5 - PQ_Neighbourhood))
+                      ? PQ_Neighbourhood
+                      : PQ_Central;
+            PQ_Disc = std::clamp (PQ_Disc, (luminosity_t)0,
+                                  (luminosity_t)1);
+
+            /* Diagonal gradients.
+               Each incorporates:
+               - opposite-diagonal same-channel difference
+               - second-order same-channel difference (distance 3)
+               - dominating channel curvature in the same direction  */
+            luminosity_t g_here = d (x, y)[(int)ah_green];
+            luminosity_t NW_Grad
+                = eps
+                  + fabs (dch (x - 1, y - 1, c) - dch (x + 1, y + 1, c))
+                  + fabs (dch (x - 1, y - 1, c) - dch (x - 3, y - 3, c))
+                  + fabs (g_here - d (x - 2, y - 2)[(int)ah_green]);
+            luminosity_t NE_Grad
+                = eps
+                  + fabs (dch (x + 1, y - 1, c) - dch (x - 1, y + 1, c))
+                  + fabs (dch (x + 1, y - 1, c) - dch (x + 3, y - 3, c))
+                  + fabs (g_here - d (x + 2, y - 2)[(int)ah_green]);
+            luminosity_t SW_Grad
+                = eps
+                  + fabs (dch (x + 1, y - 1, c) - dch (x - 1, y + 1, c))
+                  + fabs (dch (x - 1, y + 1, c) - dch (x - 3, y + 3, c))
+                  + fabs (g_here - d (x - 2, y + 2)[(int)ah_green]);
+            luminosity_t SE_Grad
+                = eps
+                  + fabs (dch (x - 1, y - 1, c) - dch (x + 1, y + 1, c))
+                  + fabs (dch (x + 1, y + 1, c) - dch (x + 3, y + 3, c))
+                  + fabs (g_here - d (x + 2, y + 2)[(int)ah_green]);
+
+            /* Diagonal color differences (C - G at diagonal neighbor).  */
+            luminosity_t NW_Est = dch (x - 1, y - 1, c)
+                                  - d (x - 1, y - 1)[(int)ah_green];
+            luminosity_t NE_Est = dch (x + 1, y - 1, c)
+                                  - d (x + 1, y - 1)[(int)ah_green];
+            luminosity_t SW_Est = dch (x - 1, y + 1, c)
+                                  - d (x - 1, y + 1)[(int)ah_green];
+            luminosity_t SE_Est = dch (x + 1, y + 1, c)
+                                  - d (x + 1, y + 1)[(int)ah_green];
+
+            /* P (NW-SE) and Q (NE-SW) diagonal estimates.
+               Cross-gradient weighting as in Step 3.  */
+            luminosity_t P_Est
+                = (NW_Grad * SE_Est + SE_Grad * NW_Est)
+                  / (NW_Grad + SE_Grad);
+            luminosity_t Q_Est
+                = (NE_Grad * SW_Est + SW_Grad * NE_Est)
+                  / (NE_Grad + SW_Grad);
+
+            /* R@B or B@R: G + interpolated(C-G).  */
+            d (x, y)[(int)c]
+                = g_here
+                  + PQ_Disc * Q_Est + (1 - PQ_Disc) * P_Est;
+          }
+        if (progress)
+          progress->inc_progress ();
+      }
+    if (progress && progress->cancelled ())
+      return false;
+
+    /* Step 4.3: R and B at green CFA positions (cardinal interpolation).
+
+       At dominating (green) pixels, both R and B need to be interpolated.
+       We use cardinal color-difference interpolation (C - G at cardinal
+       neighbors) with the same VH directional discrimination from Step 1.
+
+       Cardinal gradients incorporate:
+       - dominating channel second-order difference (G curvature)
+       - same-channel north-south or east-west difference
+       - same-channel second-order difference (C at distance 3)
+
+       Possible improvement: use the lpf-based ratio correction here
+       (as in Step 3) instead of simple color-difference interpolation,
+       for better behavior in high-saturation regions.
+       ================================================================ */
+#pragma omp parallel for schedule(dynamic, 16)
+    for (int y = 4; y < h - 4; y++)
+      {
+        if (progress && progress->cancel_requested ())
+          continue;
+        for (int x = 4; x < w - 4; x++)
+          {
+            if (GEOMETRY::demosaic_entry_color (x, y) != ah_green)
+              continue;
+
+            int idx = y * w + x;
+
+            /* Refined VH directional discrimination (same as Step 3).  */
+            luminosity_t VH_Central = VH_Dir[idx];
+            luminosity_t VH_Neighbourhood
+                = (luminosity_t)0.25
+                  * (VH_Dir[(y - 1) * w + (x - 1)]
+                     + VH_Dir[(y - 1) * w + (x + 1)]
+                     + VH_Dir[(y + 1) * w + (x - 1)]
+                     + VH_Dir[(y + 1) * w + (x + 1)]);
+            luminosity_t VH_Disc
+                = (fabs ((luminosity_t)0.5 - VH_Central)
+                   < fabs ((luminosity_t)0.5 - VH_Neighbourhood))
+                      ? VH_Neighbourhood
+                      : VH_Central;
+            VH_Disc = std::clamp (VH_Disc, (luminosity_t)0,
+                                  (luminosity_t)1);
+
+            luminosity_t g_here = d (x, y)[(int)ah_green];
+
+            /* Green second-order differences for gradient computation.  */
+            luminosity_t N1 = eps + fabs (g_here
+                                          - d (x, y - 2)[(int)ah_green]);
+            luminosity_t S1 = eps + fabs (g_here
+                                          - d (x, y + 2)[(int)ah_green]);
+            luminosity_t W1 = eps + fabs (g_here
+                                          - d (x - 2, y)[(int)ah_green]);
+            luminosity_t E1 = eps + fabs (g_here
+                                          - d (x + 2, y)[(int)ah_green]);
+
+            /* Green values at cardinal neighbors.  */
+            luminosity_t g_n = d (x, y - 1)[(int)ah_green];
+            luminosity_t g_s = d (x, y + 1)[(int)ah_green];
+            luminosity_t g_w = d (x - 1, y)[(int)ah_green];
+            luminosity_t g_e = d (x + 1, y)[(int)ah_green];
+
+            /* Interpolate both non-dominating channels.  */
+            for (int c = ah_red; c <= ah_blue; c += (ah_blue - ah_red))
+              {
+                /* Same-channel absolute differences for gradients.  */
+                luminosity_t SNabs = fabs (dch (x, y - 1, c)
+                                           - dch (x, y + 1, c));
+                luminosity_t EWabs = fabs (dch (x - 1, y, c)
+                                           - dch (x + 1, y, c));
+
+                /* Cardinal gradients.  */
+                luminosity_t N_Grad = N1 + SNabs
+                    + fabs (dch (x, y - 1, c) - dch (x, y - 3, c));
+                luminosity_t S_Grad = S1 + SNabs
+                    + fabs (dch (x, y + 1, c) - dch (x, y + 3, c));
+                luminosity_t W_Grad = W1 + EWabs
+                    + fabs (dch (x - 1, y, c) - dch (x - 3, y, c));
+                luminosity_t E_Grad = E1 + EWabs
+                    + fabs (dch (x + 1, y, c) - dch (x + 3, y, c));
+
+                /* Cardinal color differences (C - G at neighbors).  */
+                luminosity_t N_Est = dch (x, y - 1, c) - g_n;
+                luminosity_t S_Est = dch (x, y + 1, c) - g_s;
+                luminosity_t W_Est = dch (x - 1, y, c) - g_w;
+                luminosity_t E_Est = dch (x + 1, y, c) - g_e;
+
+                /* V and H estimates with cross-gradient weighting.  */
+                luminosity_t V_Est
+                    = (N_Grad * S_Est + S_Grad * N_Est)
+                      / (N_Grad + S_Grad);
+                luminosity_t H_Est
+                    = (E_Grad * W_Est + W_Grad * E_Est)
+                      / (E_Grad + W_Grad);
+
+                /* R@G or B@G: G + interpolated(C-G).  */
+                d (x, y)[(int)c]
+                    = g_here
+                      + VH_Disc * H_Est + (1 - VH_Disc) * V_Est;
+              }
+          }
+        if (progress)
+          progress->inc_progress ();
+      }
+    return !progress || !progress->cancelled ();
+  }
 };
 
 class demosaic_paget : public demosaic_base<paget_geometry>
@@ -2264,6 +2888,11 @@ public:
       case render_parameters::amaze_demosaic:
 	if (!amaze_interpolation<base_geometry::blue, base_geometry::red,
 				 base_geometry::green, true> (progress))
+	  return false;
+	break;
+      case render_parameters::rcd_demosaic:
+	if (!rcd_interpolation<base_geometry::blue, base_geometry::red,
+			       base_geometry::green> (progress))
 	  return false;
 	break;
       default:

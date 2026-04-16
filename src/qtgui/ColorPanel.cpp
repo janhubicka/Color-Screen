@@ -335,8 +335,25 @@ void ColorPanel::setupUi() {
   else
     m_form->addRow(spacer);
 
-  // Future: Add color parameters here
-  
+  // Final adjustments
+  addSeparator ("Final adjustments");
+
+  // Saturation
+  addSliderParameter (
+      "Saturation", 0, 10, 100, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.saturation; },
+      [](ParameterState &s, double v) { s.rparams.saturation = v; }, 3.0);
+
+  // Tone curve
+  addEnumParameter (
+      "Tone curve", tone_curve::tone_curve_names,
+      (int)tone_curve::tone_curve_max,
+      [](const ParameterState &s) { return (int)s.rparams.output_tone_curve; },
+      [](ParameterState &s, int v) {
+	s.rparams.output_tone_curve = (tone_curve::tone_curves)v;
+      });
+  m_currentGroupForm = nullptr;
+
     // Updater for Spectra Chart visibility in main layout
   m_paramUpdaters.push_back([this](const ParameterState &s) {
     bool spectraBased =

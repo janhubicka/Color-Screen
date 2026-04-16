@@ -307,6 +307,7 @@ struct render_parameters
     hamilton_adams_demosaic,
     ahd_demosaic,
     amaze_demosaic,
+    rcd_demosaic,
     generic_demosaic,
     max_screen_demosaic
   };
@@ -608,6 +609,7 @@ struct render_parameters
            && backlight_correction == other.backlight_correction
            && backlight_correction_black == other.backlight_correction_black
 	   && observer_whitepoint == other.observer_whitepoint
+	   && output_tone_curve == other.output_tone_curve
 	   && white_balance == other.white_balance;
   }
   bool

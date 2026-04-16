@@ -759,7 +759,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  get_keyword (f, buf2);
 	  int j;
 	  for (j = 0; j < (int)tone_curve::tone_curve_max; j++)
-	    if (!strcmp (buf2, tone_curve::tone_curve_names[j]))
+	    if (!strcmp (buf2, tone_curve::tone_curve_names[j].name))
 	      break;
 	  if (j == tone_curve::tone_curve_max)
 	    {
