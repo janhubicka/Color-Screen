@@ -11,7 +11,10 @@ sinc (luminosity_t x)
   if (x == 0)
     return 1.0;
   x *= M_PI;
-  return std::sinf (x) / x;
+  // Ubuntu math library has bug and does not define sinf for C++17.
+  // Hopefully this is not big difference in practice since we precompute.
+  //return std::sinf (x) / x;
+  return std::sin (x) / x;
 }
 
 /* a = 1	Lanczos-1	Mathematically identical to a Sinc filter; very blurry.
