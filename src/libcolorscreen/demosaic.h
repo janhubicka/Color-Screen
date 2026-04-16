@@ -1571,12 +1571,6 @@ protected:
             int idx = y * w + x;
             luminosity_t c00 = known (x, y);
 
-            /* Sign for consistent color difference convention.  */
-            luminosity_t sgn
-                = (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
-                      ? (luminosity_t)1
-                      : (luminosity_t)-1;
-
             /* Safely retrieve directional weights with clamping.  */
             auto wt0 = [&] (int xx, int yy) -> luminosity_t {
               return dirwts0[std::clamp (yy, 0, h - 1) * w
@@ -1643,13 +1637,28 @@ protected:
             luminosity_t Gintvha = vwt * gdha + (1 - vwt) * guha;
             luminosity_t Ginthha = hwt * grha + (1 - hwt) * glha;
 
-            /* Primary and alternative color differences.  */
-            luminosity_t vcd_val
-                = sgn * ((vwt * gdar + (1 - vwt) * guar) - c00);
-            luminosity_t hcd_val
-                = sgn * ((hwt * grar + (1 - hwt) * glar) - c00);
-            luminosity_t vcdalt = sgn * (Gintvha - c00);
-            luminosity_t hcdalt = sgn * (Ginthha - c00);
+            /* Primary and alternative color differences.
+               Convention matching RawTherapee scalar code:
+                 At R/B pixels: vcd = G_estimate - CFA  (positive when G > R/B)
+                 At G pixels:   vcd = CFA - G_estimate
+               Phase 5 reconstruction: G_written = CFA + Dgrb.
+                 R/B: G = R + (G_est - R) = G_est  (correct)
+                 G sites are not written in Phase 5 (already initialized).  */
+            luminosity_t vcd_val, hcd_val, vcdalt, hcdalt;
+            if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
+              {
+                vcd_val = c00 - (vwt * gdar + (1 - vwt) * guar);
+                hcd_val = c00 - (hwt * grar + (1 - hwt) * glar);
+                vcdalt = c00 - Gintvha;
+                hcdalt = c00 - Ginthha;
+              }
+            else
+              {
+                vcd_val = (vwt * gdar + (1 - vwt) * guar) - c00;
+                hcd_val = (hwt * grar + (1 - hwt) * glar) - c00;
+                vcdalt = Gintvha - c00;
+                hcdalt = Ginthha - c00;
+              }
 
             /* Near highlights, fall back to HA.
 
@@ -1699,54 +1708,101 @@ protected:
         for (int x = 0; x < w; x++)
           {
             int idx = y * w + x;
-            luminosity_t sgn
-                = (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
-                      ? (luminosity_t)1
-                      : (luminosity_t)-1;
+            bool is_green = (GEOMETRY::demosaic_entry_color (x, y) == ah_green);
             luminosity_t c00 = known (x, y);
 
-            /* Bound horizontal color difference.  */
+            /* Bound horizontal color difference.
+               Convention: at R/B sites, hcd = G_estimate - C (positive normal).
+               At G sites, hcd = C - G_estimate (negative normal).
+               Ginth reconstructs the G estimate: C + hcd for R/B, C - hcd for G.
+               Bounding fires when the difference overshoots:  
+                 R/B: hcd < 0 means G_est < C (suspicious, should be G > R/B).
+                 G:   hcd > 0 means G_est < G (suspicious over-correction).  */
             luminosity_t hcd_val = hcd_arr[idx];
-            luminosity_t Ginth = sgn * hcd_val + c00;
-            luminosity_t h_med
-                = median3 (Ginth, known (x - 1, y), known (x + 1, y));
-
-            if (sgn * hcd_val > 0)
+            if (is_green)
               {
-                luminosity_t bound = sgn * (c00 - h_med);
-                if (3 * sgn * hcd_val > (Ginth + c00))
-                  hcd_val = bound;
-                else
+                /* At G sites: Ginth = c00 - hcd (the estimated other channel).  */
+                luminosity_t Ginth = c00 - hcd_val;
+                luminosity_t h_med
+                    = median3 (Ginth, known (x - 1, y), known (x + 1, y));
+                if (hcd_val > 0)
                   {
-                    luminosity_t w2
-                        = 1 - 3 * sgn * hcd_val / (eps + Ginth + c00);
-                    hcd_val = w2 * hcd_val + (1 - w2) * bound;
+                    /* Over-correcting toward lower G_est.  */
+                    luminosity_t bound = c00 - h_med;
+                    if (3 * hcd_val > (Ginth + c00))
+                      hcd_val = bound;
+                    else
+                      {
+                        luminosity_t w2 = 1 - 3 * hcd_val / (eps + Ginth + c00);
+                        hcd_val = w2 * hcd_val + (1 - w2) * bound;
+                      }
                   }
+                if (Ginth > clip_pt)
+                  hcd_val = c00 - h_med;
               }
-            if (Ginth > clip_pt)
-              hcd_val = sgn * (c00 - h_med);
+            else
+              {
+                /* At R/B sites: Ginth = c00 + hcd (the estimated G).  */
+                luminosity_t Ginth = c00 + hcd_val;
+                luminosity_t h_med
+                    = median3 (Ginth, known (x - 1, y), known (x + 1, y));
+                if (hcd_val < 0)
+                  {
+                    /* G_estimate is below CFA value: suspicious.  */
+                    luminosity_t bound = h_med - c00;
+                    if (3 * (-hcd_val) > (Ginth + c00))
+                      hcd_val = bound;
+                    else
+                      {
+                        luminosity_t w2 = 1 + 3 * hcd_val / (eps + Ginth + c00);
+                        hcd_val = w2 * hcd_val + (1 - w2) * bound;
+                      }
+                  }
+                if (Ginth > clip_pt)
+                  hcd_val = h_med - c00;
+              }
             hcd_arr[idx] = hcd_val;
 
-            /* Bound vertical color difference.  */
+            /* Bound vertical color difference (same structure).  */
             luminosity_t vcd_val = vcd_arr[idx];
-            luminosity_t Gintv = sgn * vcd_val + c00;
-            luminosity_t v_med
-                = median3 (Gintv, known (x, y - 1), known (x, y + 1));
-
-            if (sgn * vcd_val > 0)
+            if (is_green)
               {
-                luminosity_t bound = sgn * (c00 - v_med);
-                if (3 * sgn * vcd_val > (Gintv + c00))
-                  vcd_val = bound;
-                else
+                luminosity_t Gintv = c00 - vcd_val;
+                luminosity_t v_med
+                    = median3 (Gintv, known (x, y - 1), known (x, y + 1));
+                if (vcd_val > 0)
                   {
-                    luminosity_t w2
-                        = 1 - 3 * sgn * vcd_val / (eps + Gintv + c00);
-                    vcd_val = w2 * vcd_val + (1 - w2) * bound;
+                    luminosity_t bound = c00 - v_med;
+                    if (3 * vcd_val > (Gintv + c00))
+                      vcd_val = bound;
+                    else
+                      {
+                        luminosity_t w2 = 1 - 3 * vcd_val / (eps + Gintv + c00);
+                        vcd_val = w2 * vcd_val + (1 - w2) * bound;
+                      }
                   }
+                if (Gintv > clip_pt)
+                  vcd_val = c00 - v_med;
               }
-            if (Gintv > clip_pt)
-              vcd_val = sgn * (c00 - v_med);
+            else
+              {
+                luminosity_t Gintv = c00 + vcd_val;
+                luminosity_t v_med
+                    = median3 (Gintv, known (x, y - 1), known (x, y + 1));
+                if (vcd_val < 0)
+                  {
+                    luminosity_t bound = v_med - c00;
+                    if (3 * (-vcd_val) > (Gintv + c00))
+                      vcd_val = bound;
+                    else
+                      {
+                        luminosity_t w2 = 1 + 3 * vcd_val / (eps + Gintv + c00);
+                        vcd_val = w2 * vcd_val + (1 - w2) * bound;
+                      }
+                  }
+                if (Gintv > clip_pt)
+                  vcd_val = v_med - c00;
+              }
             vcd_arr[idx] = vcd_val;
 
             /* Squared color-difference for Nyquist detection.  */
