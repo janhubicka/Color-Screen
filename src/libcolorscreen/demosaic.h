@@ -3577,23 +3577,16 @@ protected:
       }
 
     /* ================================================================
-       Step 8: EECI refinement (2 passes).
+       Step 8: EECI refinement (0 passes).
 
        Edge Enhanced Color Interpolation reinforces each channel by
        using gradient-weighted directional color-difference averaging.
-
-       At non-dominating sites, the dominating channel is refined.
-       At dominating sites, the non-dominating channels are refined.
-       At cross non-dominating sites, the cross-channel is refined.
-
-       Each refinement uses inverse-gradient weights:
-         w_dir = 1 / (1 + |same_ch_gradient| + |other_ch_gradient|)
-       favoring directions with less variation.
-
-       Possible improvement: combine with the VH directional
-       discrimination from separate analysis for more robust weighting.
+       
+       NOTE: Disabled (0 passes) to strictly follow the RawTherapee /
+       Darktable default behavior. While EECI can sharpen axial edges,
+       it often slightly distorts 45-degree diagonal contours.
        ================================================================ */
-    for (int step = 0; step < 2; step++)
+    for (int step = 0; step < 0; step++)
       {
         /* Refine G at R/B sites.  */
         for (int y = 2; y < h - 2; y++)
