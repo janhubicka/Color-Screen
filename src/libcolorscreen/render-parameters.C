@@ -92,6 +92,7 @@ const property_t render_parameters::screen_demosaic_names []  = {
   { "ahd", "AHD (Adaptive Homogeneity-Directed), Paget/Finlay only", "Slower, more advanced algorithm" },
   { "amaze", "AMaZE (Aliasing Minimization and Zipper Elimination), Paget/Finlay only", "High quality algorithm based on adaptive color ratios and variance analysis" },
   { "rcd", "RCD (Ratio Corrected Demosaicing), Paget/Finlay only", "Fast, high quality algorithm using ratio-corrected color interpolation" },
+  { "lmmse", "LMMSE (Linear Minimum Mean Square Error), Paget/Finlay only", "Noise-robust algorithm using directional LMMSE estimation, recommended for noisy scans" },
   { "generic", "Generic, Paget/Finlay only", "experimental algorithm" }
 };
 const property_t render_parameters::demosaiced_scaling_names []  = {

@@ -308,6 +308,7 @@ struct render_parameters
     ahd_demosaic,
     amaze_demosaic,
     rcd_demosaic,
+    lmmse_demosaic,
     generic_demosaic,
     max_screen_demosaic
   };

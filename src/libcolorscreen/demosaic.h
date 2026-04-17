@@ -2502,17 +2502,24 @@ protected:
                Each uses: neighbor * (2 * lpf_here) / (lpf_here + lpf_neighbor).
                This ratio correction is the core innovation of RCD—it adapts
                the interpolation to local luminance ratios instead of using
-               additive Laplacian corrections like Hamilton-Adams.  */
+               additive Laplacian corrections like Hamilton-Adams.
+
+               IMPORTANT: The LPF is only stored at non-dominating (R/B)
+               sites.  The cardinal neighbors at distance 1 are dominating
+               (G) sites where LPF = 0.  We must use the LPF at same-color
+               pixels at distance 2, which correspond to the darktable
+               half-resolution LPF buffer offsets (lpindx ± w1, lpindx ± 1
+               in half-res = distance 2 in full-res).  */
             luminosity_t lpfi = lpf[idx];
             luminosity_t lpf2 = lpfi + lpfi;
             luminosity_t N_Est = known (x, y - 1) * lpf2
-                                 / (eps + lpfi + lpf[(y - 1) * w + x]);
+                                 / (eps + lpfi + lpf[(y - 2) * w + x]);
             luminosity_t S_Est = known (x, y + 1) * lpf2
-                                 / (eps + lpfi + lpf[(y + 1) * w + x]);
+                                 / (eps + lpfi + lpf[(y + 2) * w + x]);
             luminosity_t W_Est = known (x - 1, y) * lpf2
-                                 / (eps + lpfi + lpf[y * w + (x - 1)]);
+                                 / (eps + lpfi + lpf[y * w + (x - 2)]);
             luminosity_t E_Est = known (x + 1, y) * lpf2
-                                 / (eps + lpfi + lpf[y * w + (x + 1)]);
+                                 / (eps + lpfi + lpf[y * w + (x + 2)]);
 
             /* Vertical and horizontal estimates.
                Cross-gradient weighting: the estimate from the direction with
@@ -2576,10 +2583,13 @@ protected:
     /* Step 4.0-4.1: Diagonal directional discrimination.  */
     std::vector<luminosity_t> PQ_Dir (w * h, (luminosity_t)0.5);
     {
-      /* Compute squared diagonal HPF.  We only need values at
-         non-dominating sites.  The P-diagonal HPF uses offsets
-         along the NW-SE direction (stride = w+1).
-         The Q-diagonal HPF uses NE-SW direction (stride = w-1).  */
+      /* Compute squared diagonal HPF at ALL sites (both dominating and
+         non-dominating).  In the darktable half-resolution approach,
+         every-other-column is processed on each row, covering both
+         green and non-green sites across alternating rows.  With our
+         full-resolution storage we simply compute at every pixel.
+         The P-diagonal HPF uses offsets along the NW-SE direction.
+         The Q-diagonal HPF uses the NE-SW direction.  */
       std::vector<luminosity_t> P_CDiff_Hpf (w * h, 0);
       std::vector<luminosity_t> Q_CDiff_Hpf (w * h, 0);
 
@@ -2590,8 +2600,6 @@ protected:
             continue;
           for (int x = 3; x < w - 3; x++)
             {
-              if (GEOMETRY::demosaic_entry_color (x, y) != ah_green)
-                continue;
               /* P diagonal (NW-SE): offsets (-3,-3)..(+3,+3).  */
               luminosity_t p
                   = (known (x - 3, y - 3) - known (x - 1, y - 1)
@@ -2853,6 +2861,930 @@ protected:
       }
     return !progress || !progress->cancelled ();
   }
+
+  /* LMMSE (Linear Minimum Mean Square Error) demosaicing.
+
+     Based on the algorithm by Lei Zhang and Xiaolin Wu:
+     "Color demosaicking via directional Linear Minimum Mean Square-error
+     Estimation", IEEE Trans. on Image Processing, vol. 14, pp. 2167-2178,
+     Dec. 2005.
+
+     This implementation follows the darktable/rawtherapee/librtprocess
+     reference, adapted to work with the GEOMETRY template and
+     floating-point linear data.
+
+     The algorithm:
+       1. Convert CFA data to gamma-corrected (perceptual) space.
+          This is critical because LMMSE variance estimation assumes
+          approximately uniform noise, which holds in perceptual space
+          but not in linear space (where shadows have far less variance).
+       2. Compute horizontal and vertical G-R/B color differences at
+          every pixel.  At non-dominating sites, these are direct
+          estimates; at dominating sites, they are interpolated from
+          neighbors (with opposite sign).
+       3. Apply a 1D Gaussian low-pass filter along the respective
+          direction to produce smoothed color difference estimates.
+       4. At non-dominating sites, apply the LMMSE formula to optimally
+          combine the raw and filtered estimates:
+            x_lmmse = (x_raw * Var_filtered + x_filtered * Var_noise)
+                      / (Var_filtered + Var_noise)
+          This gives the minimum mean square error estimate under Gaussian
+          assumptions.  The high-variance (textured) signal retains the
+          raw estimate; the low-variance (smooth) signal converges to
+          the filtered estimate.
+       5. Reconstruct the dominating channel at non-dominating sites
+          using the LMMSE-estimated color difference.
+       6. Interpolate non-dominating channels using bilinear color
+          differences.
+       7. Optional median filtering of color differences and EECI
+          (Edge Enhanced Color Interpolation) refinement.
+       8. Convert back to linear space.
+
+     Template parameters:
+       AH_GREEN  - the dominating channel
+       AH_RED    - first non-dominating channel
+       AH_BLUE   - second non-dominating channel
+
+     Possible improvements:
+       - Tile-based processing for better cache locality
+       - SIMD vectorization of inner loops
+       - Noise-adaptive gamma curve
+       - Adaptive number of median/refine iterations based on noise level
+       - Separate treatment of highlight clipping regions  */
+  template <int ah_green, int ah_red, int ah_blue>
+  bool
+  lmmse_interpolation (progress_info *progress)
+  {
+    int w = m_width, h = m_height;
+
+    /* Gamma correction functions matching the darktable reference.
+       These map linear [0,1] data to a perceptually uniform space
+       using a power curve with gamma ~ 2.4.  The linear segment
+       near zero avoids numerical issues at very small values.
+
+       Possible improvement: use a noise-adaptive gamma that varies
+       the toe slope based on estimated read noise.  */
+    auto gamma_fwd = [] (luminosity_t x) -> luminosity_t
+    {
+      x = std::clamp (x, (luminosity_t)0, (luminosity_t)1);
+      return (x <= (luminosity_t)0.001867)
+                 ? x * (luminosity_t)17.0
+                 : (luminosity_t)1.044445
+                       * std::exp (std::log (x) / (luminosity_t)2.4)
+                   - (luminosity_t)0.044445;
+    };
+    auto gamma_inv = [] (luminosity_t x) -> luminosity_t
+    {
+      x = std::clamp (x, (luminosity_t)0, (luminosity_t)1);
+      return (x <= (luminosity_t)0.031746)
+                 ? x / (luminosity_t)17.0
+                 : std::exp (std::log ((x + (luminosity_t)0.044445)
+                                       / (luminosity_t)1.044445)
+                             * (luminosity_t)2.4);
+    };
+
+    /* Find robust max for normalization.  */
+    luminosity_t range = find_robust_max (progress);
+    if (progress && progress->cancelled ())
+      return false;
+    if (range <= 0)
+      range = 1;
+    luminosity_t inv_range = 1 / range;
+
+    /* 9-tap Gaussian kernel weights for low-pass filtering.
+       sigma^2 = 8, so weights are exp(-k^2 / (2*8)) = exp(-k^2/8).
+       The kernel is applied in 1D along the interpolation direction.  */
+    luminosity_t gh0 = 1;
+    luminosity_t gh1 = std::exp ((luminosity_t)(-1.0 / 8.0));
+    luminosity_t gh2 = std::exp ((luminosity_t)(-4.0 / 8.0));
+    luminosity_t gh3 = std::exp ((luminosity_t)(-9.0 / 8.0));
+    luminosity_t gh4 = std::exp ((luminosity_t)(-16.0 / 8.0));
+    luminosity_t ghs = gh0 + 2 * (gh1 + gh2 + gh3 + gh4);
+    gh0 /= ghs;
+    gh1 /= ghs;
+    gh2 /= ghs;
+    gh3 /= ghs;
+    gh4 /= ghs;
+
+    /* Total progress:
+       gamma(h) + GR_diff(h) + LP(h) + LMMSE(h) + copy(h) +
+       bilinear_G(h) + bilinear_RB(h) + median(3*h) + refine(3*h)
+       + writeback(h) = ~10*h to ~16*h depending on passes.
+       We use 12*h as a reasonable estimate.  */
+    if (progress)
+      progress->set_task ("Demosaicing (LMMSE)", h * 12);
+
+    /* Allocate working buffers.
+       cfa     - gamma-corrected CFA mosaic values
+       hdiff   - horizontal G-R(B) color difference
+       vdiff   - vertical G-R(B) color difference
+       hlp     - LP-filtered hdiff
+       vlp     - LP-filtered vdiff
+       rgb[3]  - reconstructed channels in gamma space  */
+    std::vector<luminosity_t> cfa (w * h, 0);
+    std::vector<luminosity_t> hdiff (w * h, 0);
+    std::vector<luminosity_t> vdiff (w * h, 0);
+
+    /* ================================================================
+       Step 1: Gamma correction.
+
+       Convert the CFA data from linear to perceptual space.  The LMMSE
+       variance estimation works best when noise is approximately uniform
+       across the tonal range.  In linear space, shadow noise dominates
+       and the LMMSE would under-weight shadows.
+       ================================================================ */
+    for (int y = 0; y < h; y++)
+      {
+        for (int x = 0; x < w; x++)
+          cfa[y * w + x] = gamma_fwd (known (x, y) * inv_range);
+        if (progress)
+          progress->inc_progress ();
+      }
+    if (progress && progress->cancelled ())
+      return false;
+
+    /* ================================================================
+       Step 2: Compute G-R(B) color differences.
+
+       At non-dominating (R or B) sites:
+         hdiff = horizontal interpolation of G-R(B)
+               = -0.25*(cfa[x-2] + cfa[x+2]) + 0.5*(cfa[x-1] + cfa[x] + cfa[x+1])
+         This is a 5-tap filter that estimates the dominating channel
+         from horizontal neighbors, then subtracts the non-dominating CFA.
+
+         A clipping guard handles values near highlights where the
+         interpolation can overshoot: if cfa > 1.75 * local_average,
+         replace with median of three neighbors.
+
+       At dominating (G) sites:
+         hdiff = interpolation of R(B)-G from horizontal neighbors
+               = 0.25*(cfa[x-2] + cfa[x+2]) - 0.5*(cfa[x-1] + cfa[x] + cfa[x+1])
+         Note the opposite sign convention.  This is clamped to [-1, 0]
+         then added back to cfa to produce: cfa + clamp(R-G, -1, 0).
+
+       Possible improvement: use a 7-tap or 9-tap interpolation filter
+       for better frequency response.
+       ================================================================ */
+    for (int y = 2; y < h - 2; y++)
+      {
+        if (progress && progress->cancel_requested ())
+          break;
+
+        /* Non-dominating sites: G-R(B) color difference.  */
+        for (int x = 2; x < w - 2; x++)
+          {
+            if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
+              continue;
+            int idx = y * w + x;
+            luminosity_t c = cfa[idx];
+
+            /* Local average incorporating diagonal and center values.  */
+            luminosity_t v0
+                = (luminosity_t)0.0625
+                      * (cfa[(y - 1) * w + (x - 1)] + cfa[(y - 1) * w + (x + 1)]
+                         + cfa[(y + 1) * w + (x - 1)]
+                         + cfa[(y + 1) * w + (x + 1)])
+                  + (luminosity_t)0.25 * c;
+
+            /* Horizontal G-R(B) estimate.  */
+            luminosity_t hd
+                = (luminosity_t)(-0.25) * (cfa[idx - 2] + cfa[idx + 2])
+                  + (luminosity_t)0.5
+                        * (cfa[idx - 1] + c + cfa[idx + 1]);
+            luminosity_t Y0 = v0 + (luminosity_t)0.5 * hd;
+            /* Highlight guard: if CFA value is much brighter than
+               expected, the linear interpolation overshoots.
+               Fall back to median of three horizontal neighbors.  */
+            hd = (c > (luminosity_t)1.75 * Y0)
+                     ? median3 (hd, cfa[idx - 1], cfa[idx + 1])
+                     : std::clamp (hd, (luminosity_t)0, (luminosity_t)1);
+            hdiff[idx] = hd - c;
+
+            /* Vertical G-R(B) estimate.  */
+            luminosity_t vd
+                = (luminosity_t)(-0.25)
+                      * (cfa[(y - 2) * w + x] + cfa[(y + 2) * w + x])
+                  + (luminosity_t)0.5
+                        * (cfa[(y - 1) * w + x] + c + cfa[(y + 1) * w + x]);
+            luminosity_t Y1 = v0 + (luminosity_t)0.5 * vd;
+            vd = (c > (luminosity_t)1.75 * Y1)
+                     ? median3 (vd, cfa[(y - 1) * w + x],
+                                cfa[(y + 1) * w + x])
+                     : std::clamp (vd, (luminosity_t)0, (luminosity_t)1);
+            vdiff[idx] = vd - c;
+          }
+
+        /* Dominating sites: -(R(B)-G) color difference.  */
+        for (int x = 2; x < w - 2; x++)
+          {
+            if (GEOMETRY::demosaic_entry_color (x, y) != ah_green)
+              continue;
+            int idx = y * w + x;
+            luminosity_t c = cfa[idx];
+
+            luminosity_t hd
+                = (luminosity_t)0.25 * (cfa[idx - 2] + cfa[idx + 2])
+                  - (luminosity_t)0.5
+                        * (cfa[idx - 1] + c + cfa[idx + 1]);
+            luminosity_t vd
+                = (luminosity_t)0.25
+                      * (cfa[(y - 2) * w + x] + cfa[(y + 2) * w + x])
+                  - (luminosity_t)0.5
+                        * (cfa[(y - 1) * w + x] + c + cfa[(y + 1) * w + x]);
+            hdiff[idx] = std::clamp (hd, (luminosity_t)(-1),
+                                     (luminosity_t)0)
+                         + c;
+            vdiff[idx] = std::clamp (vd, (luminosity_t)(-1),
+                                     (luminosity_t)0)
+                         + c;
+          }
+        if (progress)
+          progress->inc_progress ();
+      }
+    if (progress && progress->cancelled ())
+      return false;
+
+    /* ================================================================
+       Step 3: Apply 1D Gaussian low-pass filter.
+
+       The horizontal LP is applied along rows to hdiff.
+       The vertical LP is applied along columns to vdiff.
+       This produces smoothed color-difference estimates that retain
+       low-frequency structure but remove high-frequency noise.
+
+       Possible improvement: use a 2D separable filter for better
+       isotropy, or an edge-preserving filter (e.g., bilateral).
+       ================================================================ */
+    std::vector<luminosity_t> hlp (w * h, 0);
+    std::vector<luminosity_t> vlp (w * h, 0);
+
+#pragma omp parallel for schedule(dynamic, 16)
+    for (int y = 4; y < h - 4; y++)
+      {
+        if (progress && progress->cancel_requested ())
+          continue;
+        for (int x = 4; x < w - 4; x++)
+          {
+            int idx = y * w + x;
+            /* Horizontal LP: 9-tap Gaussian along the row.  */
+            hlp[idx] = gh0 * hdiff[idx]
+                       + gh1 * (hdiff[idx - 1] + hdiff[idx + 1])
+                       + gh2 * (hdiff[idx - 2] + hdiff[idx + 2])
+                       + gh3 * (hdiff[idx - 3] + hdiff[idx + 3])
+                       + gh4 * (hdiff[idx - 4] + hdiff[idx + 4]);
+            /* Vertical LP: 9-tap Gaussian along the column.  */
+            vlp[idx] = gh0 * vdiff[idx]
+                       + gh1 * (vdiff[idx - w] + vdiff[idx + w])
+                       + gh2 * (vdiff[idx - 2 * w] + vdiff[idx + 2 * w])
+                       + gh3 * (vdiff[idx - 3 * w] + vdiff[idx + 3 * w])
+                       + gh4 * (vdiff[idx - 4 * w] + vdiff[idx + 4 * w]);
+          }
+        if (progress)
+          progress->inc_progress ();
+      }
+    if (progress && progress->cancelled ())
+      return false;
+
+    /* ================================================================
+       Step 4: LMMSE estimation at non-dominating sites.
+
+       For each non-dominating pixel, compute the optimal linear
+       combination of the raw color difference and its LP-filtered
+       version.
+
+       The LMMSE formula is:
+         x_est = (x_raw * Var_s + x_filtered * Var_n) / (Var_s + Var_n)
+       where:
+         Var_s = variance of LP-filtered signal in a 9-sample window
+                 (measures "true" signal variance)
+         Var_n = variance of (LP - raw) residual
+                 (measures noise variance)
+
+       When signal variance >> noise variance, x_est ≈ x_raw (keep detail).
+       When noise variance >> signal variance, x_est ≈ x_filtered (smooth).
+
+       The horizontal and vertical LMMSE estimates are combined using the
+       same formula a second time:
+         x_final = (x_h * Var_v + x_v * Var_h) / (Var_h + Var_v)
+       This chooses the direction with lower variance (smoother interpolation).
+
+       Possible improvement: use a larger window (e.g., 13 samples) for
+       more robust variance estimation in very noisy images.
+       ================================================================ */
+    std::vector<luminosity_t> interp (w * h, 0);
+
+#pragma omp parallel for schedule(dynamic, 16)
+    for (int y = 4; y < h - 4; y++)
+      {
+        if (progress && progress->cancel_requested ())
+          continue;
+        for (int x = 4; x < w - 4; x++)
+          {
+            if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
+              continue;
+            int idx = y * w + x;
+
+            /* Horizontal LMMSE.  */
+            /* Collect 9 LP-filtered samples along the row.  */
+            luminosity_t p1 = hlp[idx - 4];
+            luminosity_t p2 = hlp[idx - 3];
+            luminosity_t p3 = hlp[idx - 2];
+            luminosity_t p4 = hlp[idx - 1];
+            luminosity_t p5 = hlp[idx];
+            luminosity_t p6 = hlp[idx + 1];
+            luminosity_t p7 = hlp[idx + 2];
+            luminosity_t p8 = hlp[idx + 3];
+            luminosity_t p9 = hlp[idx + 4];
+
+            /* Signal variance: Var(LP samples).  */
+            luminosity_t mu
+                = (p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9)
+                  / (luminosity_t)9;
+            luminosity_t vx
+                = (luminosity_t)1e-7
+                  + (p1 - mu) * (p1 - mu) + (p2 - mu) * (p2 - mu)
+                  + (p3 - mu) * (p3 - mu) + (p4 - mu) * (p4 - mu)
+                  + (p5 - mu) * (p5 - mu) + (p6 - mu) * (p6 - mu)
+                  + (p7 - mu) * (p7 - mu) + (p8 - mu) * (p8 - mu)
+                  + (p9 - mu) * (p9 - mu);
+
+            /* Noise variance: Var(LP - raw).  */
+            p1 -= hdiff[idx - 4];
+            p2 -= hdiff[idx - 3];
+            p3 -= hdiff[idx - 2];
+            p4 -= hdiff[idx - 1];
+            p5 -= hdiff[idx];
+            p6 -= hdiff[idx + 1];
+            p7 -= hdiff[idx + 2];
+            p8 -= hdiff[idx + 3];
+            p9 -= hdiff[idx + 4];
+            luminosity_t vn
+                = (luminosity_t)1e-7
+                  + p1 * p1 + p2 * p2 + p3 * p3 + p4 * p4 + p5 * p5
+                  + p6 * p6 + p7 * p7 + p8 * p8 + p9 * p9;
+
+            /* LMMSE horizontal estimate.  */
+            luminosity_t xh
+                = (hdiff[idx] * vx + hlp[idx] * vn) / (vx + vn);
+            luminosity_t vh = vx * vn / (vx + vn);
+
+            /* Vertical LMMSE.  */
+            p1 = vlp[idx - 4 * w];
+            p2 = vlp[idx - 3 * w];
+            p3 = vlp[idx - 2 * w];
+            p4 = vlp[idx - w];
+            p5 = vlp[idx];
+            p6 = vlp[idx + w];
+            p7 = vlp[idx + 2 * w];
+            p8 = vlp[idx + 3 * w];
+            p9 = vlp[idx + 4 * w];
+
+            mu = (p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9)
+                 / (luminosity_t)9;
+            vx = (luminosity_t)1e-7
+                 + (p1 - mu) * (p1 - mu) + (p2 - mu) * (p2 - mu)
+                 + (p3 - mu) * (p3 - mu) + (p4 - mu) * (p4 - mu)
+                 + (p5 - mu) * (p5 - mu) + (p6 - mu) * (p6 - mu)
+                 + (p7 - mu) * (p7 - mu) + (p8 - mu) * (p8 - mu)
+                 + (p9 - mu) * (p9 - mu);
+
+            p1 -= vdiff[idx - 4 * w];
+            p2 -= vdiff[idx - 3 * w];
+            p3 -= vdiff[idx - 2 * w];
+            p4 -= vdiff[idx - w];
+            p5 -= vdiff[idx];
+            p6 -= vdiff[idx + w];
+            p7 -= vdiff[idx + 2 * w];
+            p8 -= vdiff[idx + 3 * w];
+            p9 -= vdiff[idx + 4 * w];
+            vn = (luminosity_t)1e-7
+                 + p1 * p1 + p2 * p2 + p3 * p3 + p4 * p4 + p5 * p5
+                 + p6 * p6 + p7 * p7 + p8 * p8 + p9 * p9;
+
+            luminosity_t xv
+                = (vdiff[idx] * vx + vlp[idx] * vn) / (vx + vn);
+            luminosity_t vv = vx * vn / (vx + vn);
+
+            /* Combine H and V using the same LMMSE weighting:
+               the direction with more "signal" (higher LP variance)
+               gets more weight.  */
+            interp[idx] = (xh * vv + xv * vh) / (vh + vv);
+          }
+        if (progress)
+          progress->inc_progress ();
+      }
+
+    /* Free LP buffers no longer needed.  */
+    hlp.clear ();
+    hlp.shrink_to_fit ();
+    vlp.clear ();
+    vlp.shrink_to_fit ();
+    hdiff.clear ();
+    hdiff.shrink_to_fit ();
+    vdiff.clear ();
+    vdiff.shrink_to_fit ();
+
+    if (progress && progress->cancelled ())
+      return false;
+
+    /* ================================================================
+       Step 5: Reconstruct channel buffers.
+
+       Copy CFA values to the appropriate channel buffer.  At non-
+       dominating sites, reconstruct the dominating channel as:
+         G = CFA_nondom + interp[LMMSE G-R(B)]
+
+       We use three separate channel buffers (rgb[3]) in gamma space
+       for the subsequent bilinear R/B interpolation.
+       ================================================================ */
+    std::vector<luminosity_t> rgb[3];
+    rgb[ah_green].resize (w * h, 0);
+    rgb[ah_red].resize (w * h, 0);
+    rgb[ah_blue].resize (w * h, 0);
+
+    for (int y = 0; y < h; y++)
+      {
+        for (int x = 0; x < w; x++)
+          {
+            int idx = y * w + x;
+            int c = GEOMETRY::demosaic_entry_color (x, y);
+
+            /* Store the known CFA value in its channel.  */
+            rgb[c][idx] = cfa[idx];
+
+            /* At non-dominating sites, also reconstruct the dominating
+               channel from the color difference.  */
+            if (c != ah_green)
+              rgb[ah_green][idx] = cfa[idx] + interp[idx];
+          }
+        if (progress)
+          progress->inc_progress ();
+      }
+
+    /* Free interp and cfa buffers.  */
+    interp.clear ();
+    interp.shrink_to_fit ();
+    cfa.clear ();
+    cfa.shrink_to_fit ();
+
+    if (progress && progress->cancelled ())
+      return false;
+
+    /* ================================================================
+       Step 6: Bilinear interpolation of non-dominating channels.
+
+       Step 6a: R/B at dominating (G) positions.
+       At each G pixel, one non-dominating color has cardinal neighbors
+       and the other has the same cardinal direction neighbors (depending
+       on row parity in Bayer).  Use color-difference bilinear:
+         C@G = G + 0.5 * ((C-G)_neighbor1 + (C-G)_neighbor2)
+       One channel uses horizontal neighbors, the other vertical.
+
+       Step 6b: R at B positions and B at R positions.
+       Use the average of all four cardinal color differences:
+         C@opposite = G + 0.25 * sum_4_cardinal((C-G)_neighbor)
+
+       Possible improvement: use the directional weights from the LMMSE
+       step (VH discrimination) instead of simple bilinear for better
+       edge preservation.
+       ================================================================ */
+
+    /* Step 6a: Non-dominating channels at dominating sites.  */
+    for (int y = 1; y < h - 1; y++)
+      {
+        if (progress && progress->cancel_requested ())
+          break;
+        for (int x = 1; x < w - 1; x++)
+          {
+            if (GEOMETRY::demosaic_entry_color (x, y) != ah_green)
+              continue;
+            int idx = y * w + x;
+            luminosity_t g = rgb[ah_green][idx];
+
+            /* Determine which non-dominating channel has horizontal
+               vs vertical neighbors by checking one adjacent pixel's
+               color.  */
+            int c_horiz = GEOMETRY::demosaic_entry_color (x + 1, y);
+            int c_vert = GEOMETRY::demosaic_entry_color (x, y + 1);
+
+            /* Skip if neighbors are also dominating (shouldn't happen
+               in standard patterns, but be safe).  */
+            if (c_horiz == ah_green && c_vert == ah_green)
+              continue;
+
+            /* Horizontal neighbor's channel: bilinear from E and W.  */
+            if (c_horiz != ah_green)
+              rgb[c_horiz][idx]
+                  = g
+                    + (luminosity_t)0.5
+                          * (rgb[c_horiz][idx - 1]
+                             - rgb[ah_green][idx - 1]
+                             + rgb[c_horiz][idx + 1]
+                             - rgb[ah_green][idx + 1]);
+
+            /* Vertical neighbor's channel: bilinear from N and S.  */
+            if (c_vert != ah_green)
+              rgb[c_vert][idx]
+                  = g
+                    + (luminosity_t)0.5
+                          * (rgb[c_vert][idx - w]
+                             - rgb[ah_green][idx - w]
+                             + rgb[c_vert][idx + w]
+                             - rgb[ah_green][idx + w]);
+          }
+        if (progress)
+          progress->inc_progress ();
+      }
+    if (progress && progress->cancelled ())
+      return false;
+
+    /* Step 6b: Cross non-dominating channel at non-dominating sites.
+       R at B positions and B at R positions.  */
+    for (int y = 1; y < h - 1; y++)
+      {
+        if (progress && progress->cancel_requested ())
+          break;
+        for (int x = 1; x < w - 1; x++)
+          {
+            int c = GEOMETRY::demosaic_entry_color (x, y);
+            if (c == ah_green)
+              continue;
+            int idx = y * w + x;
+
+            /* The "other" non-dominating channel.  */
+            int c_other = (c == ah_red) ? ah_blue : ah_red;
+            luminosity_t g = rgb[ah_green][idx];
+
+            /* Average of four cardinal color differences.  */
+            rgb[c_other][idx]
+                = g
+                  + (luminosity_t)0.25
+                        * (rgb[c_other][(y - 1) * w + x]
+                           - rgb[ah_green][(y - 1) * w + x]
+                           + rgb[c_other][idx - 1]
+                           - rgb[ah_green][idx - 1]
+                           + rgb[c_other][idx + 1]
+                           - rgb[ah_green][idx + 1]
+                           + rgb[c_other][(y + 1) * w + x]
+                           - rgb[ah_green][(y + 1) * w + x]);
+          }
+        if (progress)
+          progress->inc_progress ();
+      }
+    if (progress && progress->cancelled ())
+      return false;
+
+    /* ================================================================
+       Step 7: Median filtering on color differences (3 passes).
+
+       Apply a 3x3 median filter to the R-G and B-G color differences.
+       This suppresses outlier pixels (zipper artifacts, hot pixels)
+       without blurring edges.  Each pass also reconstructs the
+       dominating channel at non-dominating sites from the corrected
+       color differences.
+
+       Possible improvement: make the number of passes configurable.
+       ================================================================ */
+    for (int pass = 0; pass < 3; pass++)
+      {
+        /* Compute median(C-G) in temporary buffers.
+           We reuse the original channel buffers as correction targets.
+           corr_r stores median(R-G), corr_b stores median(B-G).  */
+        std::vector<luminosity_t> corr_r (w * h, 0);
+        std::vector<luminosity_t> corr_b (w * h, 0);
+
+        for (int y = 1; y < h - 1; y++)
+          {
+            if (progress && progress->cancel_requested ())
+              break;
+            for (int x = 1; x < w - 1; x++)
+              {
+                int idx = y * w + x;
+
+                /* Median of 3x3 (R-G) differences.  */
+                luminosity_t pr[9];
+                luminosity_t pb[9];
+                int n = 0;
+                for (int dy = -1; dy <= 1; dy++)
+                  for (int dx = -1; dx <= 1; dx++)
+                    {
+                      int i = (y + dy) * w + (x + dx);
+                      pr[n] = rgb[ah_red][i] - rgb[ah_green][i];
+                      pb[n] = rgb[ah_blue][i] - rgb[ah_green][i];
+                      n++;
+                    }
+                /* Sort to find median of 9 values.
+                   Use a sorting network for efficiency.  */
+                auto sort2 = [] (luminosity_t &a, luminosity_t &b)
+                {
+                  if (a > b)
+                    std::swap (a, b);
+                };
+                /* Bose-Nelson sorting network for 9 elements,
+                   extracting only the median (element [4]).  */
+                sort2 (pr[1], pr[2]);
+                sort2 (pr[4], pr[5]);
+                sort2 (pr[7], pr[8]);
+                sort2 (pr[0], pr[1]);
+                sort2 (pr[3], pr[4]);
+                sort2 (pr[6], pr[7]);
+                sort2 (pr[1], pr[2]);
+                sort2 (pr[4], pr[5]);
+                sort2 (pr[7], pr[8]);
+                sort2 (pr[0], pr[3]);
+                sort2 (pr[5], pr[8]);
+                sort2 (pr[4], pr[7]);
+                sort2 (pr[3], pr[6]);
+                sort2 (pr[1], pr[4]);
+                sort2 (pr[2], pr[5]);
+                sort2 (pr[4], pr[7]);
+                sort2 (pr[4], pr[2]);
+                sort2 (pr[6], pr[4]);
+                sort2 (pr[4], pr[2]);
+                corr_r[idx] = pr[4];
+
+                sort2 (pb[1], pb[2]);
+                sort2 (pb[4], pb[5]);
+                sort2 (pb[7], pb[8]);
+                sort2 (pb[0], pb[1]);
+                sort2 (pb[3], pb[4]);
+                sort2 (pb[6], pb[7]);
+                sort2 (pb[1], pb[2]);
+                sort2 (pb[4], pb[5]);
+                sort2 (pb[7], pb[8]);
+                sort2 (pb[0], pb[3]);
+                sort2 (pb[5], pb[8]);
+                sort2 (pb[4], pb[7]);
+                sort2 (pb[3], pb[6]);
+                sort2 (pb[1], pb[4]);
+                sort2 (pb[2], pb[5]);
+                sort2 (pb[4], pb[7]);
+                sort2 (pb[4], pb[2]);
+                sort2 (pb[6], pb[4]);
+                sort2 (pb[4], pb[2]);
+                corr_b[idx] = pb[4];
+              }
+          }
+
+        /* Apply corrections: reconstruct channels from median
+           color differences at all positions.  */
+        for (int y = 1; y < h - 1; y++)
+          {
+            for (int x = 1; x < w - 1; x++)
+              {
+                int idx = y * w + x;
+                int c = GEOMETRY::demosaic_entry_color (x, y);
+                if (c == ah_green)
+                  {
+                    /* At G sites: R = G + median(R-G),
+                                   B = G + median(B-G).  */
+                    rgb[ah_red][idx]
+                        = rgb[ah_green][idx] + corr_r[idx];
+                    rgb[ah_blue][idx]
+                        = rgb[ah_green][idx] + corr_b[idx];
+                  }
+                else
+                  {
+                    /* At R/B sites: the "other" non-dominating channel
+                       is updated from its median correction, and
+                       G is reconstructed as average of the two
+                       corrected estimates.  */
+                    int c_other = (c == ah_red) ? ah_blue : ah_red;
+                    rgb[c_other][idx]
+                        = rgb[ah_green][idx]
+                          + ((c_other == ah_red) ? corr_r[idx]
+                                                 : corr_b[idx]);
+                    rgb[ah_green][idx]
+                        = (luminosity_t)0.5
+                          * (rgb[ah_red][idx] - corr_r[idx]
+                             + rgb[ah_blue][idx] - corr_b[idx]);
+                  }
+              }
+            if (progress)
+              progress->inc_progress ();
+          }
+        if (progress && progress->cancelled ())
+          return false;
+      }
+
+    /* Restore CFA values in the known-channel slots, which may have
+       been overwritten by the median correction.
+       The gamma-corrected CFA is recomputed from the original data.  */
+    for (int y = 4; y < h - 4; y++)
+      {
+        for (int x = 4; x < w - 4; x++)
+          {
+            int idx = y * w + x;
+            int c = GEOMETRY::demosaic_entry_color (x, y);
+            rgb[c][idx] = gamma_fwd (known (x, y) * inv_range);
+          }
+      }
+
+    /* ================================================================
+       Step 8: EECI refinement (2 passes).
+
+       Edge Enhanced Color Interpolation reinforces each channel by
+       using gradient-weighted directional color-difference averaging.
+
+       At non-dominating sites, the dominating channel is refined.
+       At dominating sites, the non-dominating channels are refined.
+       At cross non-dominating sites, the cross-channel is refined.
+
+       Each refinement uses inverse-gradient weights:
+         w_dir = 1 / (1 + |same_ch_gradient| + |other_ch_gradient|)
+       favoring directions with less variation.
+
+       Possible improvement: combine with the VH directional
+       discrimination from separate analysis for more robust weighting.
+       ================================================================ */
+    for (int step = 0; step < 2; step++)
+      {
+        /* Refine G at R/B sites.  */
+        for (int y = 2; y < h - 2; y++)
+          {
+            if (progress && progress->cancel_requested ())
+              break;
+            for (int x = 2; x < w - 2; x++)
+              {
+                int c = GEOMETRY::demosaic_entry_color (x, y);
+                if (c == ah_green)
+                  continue;
+                int idx = y * w + x;
+                luminosity_t dL
+                    = 1 / (1 + fabs (rgb[c][idx - 2] - rgb[c][idx])
+                            + fabs (rgb[ah_green][idx + 1]
+                                    - rgb[ah_green][idx - 1]));
+                luminosity_t dR
+                    = 1 / (1 + fabs (rgb[c][idx + 2] - rgb[c][idx])
+                            + fabs (rgb[ah_green][idx + 1]
+                                    - rgb[ah_green][idx - 1]));
+                luminosity_t dU
+                    = 1
+                      / (1
+                         + fabs (rgb[c][idx - 2 * w] - rgb[c][idx])
+                         + fabs (rgb[ah_green][idx + w]
+                                 - rgb[ah_green][idx - w]));
+                luminosity_t dD
+                    = 1
+                      / (1
+                         + fabs (rgb[c][idx + 2 * w] - rgb[c][idx])
+                         + fabs (rgb[ah_green][idx + w]
+                                 - rgb[ah_green][idx - w]));
+                rgb[ah_green][idx]
+                    = rgb[c][idx]
+                      + ((rgb[ah_green][idx - 1] - rgb[c][idx - 1])
+                             * dL
+                         + (rgb[ah_green][idx + 1] - rgb[c][idx + 1])
+                               * dR
+                         + (rgb[ah_green][idx - w] - rgb[c][idx - w])
+                               * dU
+                         + (rgb[ah_green][idx + w] - rgb[c][idx + w])
+                               * dD)
+                        / (dL + dR + dU + dD);
+              }
+          }
+
+        /* Refine R/B at G sites.  */
+        for (int y = 2; y < h - 2; y++)
+          {
+            if (progress && progress->cancel_requested ())
+              break;
+            for (int x = 2; x < w - 2; x++)
+              {
+                if (GEOMETRY::demosaic_entry_color (x, y) != ah_green)
+                  continue;
+                int idx = y * w + x;
+                for (int cc = 0; cc < 3; cc++)
+                  {
+                    if (cc == ah_green)
+                      continue;
+                    luminosity_t dL
+                        = 1
+                          / (1
+                             + fabs (rgb[ah_green][idx - 2]
+                                     - rgb[ah_green][idx])
+                             + fabs (rgb[cc][idx + 1]
+                                     - rgb[cc][idx - 1]));
+                    luminosity_t dR
+                        = 1
+                          / (1
+                             + fabs (rgb[ah_green][idx + 2]
+                                     - rgb[ah_green][idx])
+                             + fabs (rgb[cc][idx + 1]
+                                     - rgb[cc][idx - 1]));
+                    luminosity_t dU
+                        = 1
+                          / (1
+                             + fabs (rgb[ah_green][idx - 2 * w]
+                                     - rgb[ah_green][idx])
+                             + fabs (rgb[cc][idx + w]
+                                     - rgb[cc][idx - w]));
+                    luminosity_t dD
+                        = 1
+                          / (1
+                             + fabs (rgb[ah_green][idx + 2 * w]
+                                     - rgb[ah_green][idx])
+                             + fabs (rgb[cc][idx + w]
+                                     - rgb[cc][idx - w]));
+                    rgb[cc][idx]
+                        = rgb[ah_green][idx]
+                          - ((rgb[ah_green][idx - 1] - rgb[cc][idx - 1])
+                                 * dL
+                             + (rgb[ah_green][idx + 1]
+                                - rgb[cc][idx + 1])
+                                   * dR
+                             + (rgb[ah_green][idx - w]
+                                - rgb[cc][idx - w])
+                                   * dU
+                             + (rgb[ah_green][idx + w]
+                                - rgb[cc][idx + w])
+                                   * dD)
+                            / (dL + dR + dU + dD);
+                  }
+              }
+          }
+
+        /* Refine cross non-dominating at R/B sites.  */
+        for (int y = 2; y < h - 2; y++)
+          {
+            if (progress && progress->cancel_requested ())
+              break;
+            for (int x = 2; x < w - 2; x++)
+              {
+                int c = GEOMETRY::demosaic_entry_color (x, y);
+                if (c == ah_green)
+                  continue;
+                int c_other = (c == ah_red) ? ah_blue : ah_red;
+                int idx = y * w + x;
+                luminosity_t dL
+                    = 1 / (1 + fabs (rgb[c][idx - 2] - rgb[c][idx])
+                            + fabs (rgb[ah_green][idx + 1]
+                                    - rgb[ah_green][idx - 1]));
+                luminosity_t dR
+                    = 1 / (1 + fabs (rgb[c][idx + 2] - rgb[c][idx])
+                            + fabs (rgb[ah_green][idx + 1]
+                                    - rgb[ah_green][idx - 1]));
+                luminosity_t dU
+                    = 1
+                      / (1
+                         + fabs (rgb[c][idx - 2 * w] - rgb[c][idx])
+                         + fabs (rgb[ah_green][idx + w]
+                                 - rgb[ah_green][idx - w]));
+                luminosity_t dD
+                    = 1
+                      / (1
+                         + fabs (rgb[c][idx + 2 * w] - rgb[c][idx])
+                         + fabs (rgb[ah_green][idx + w]
+                                 - rgb[ah_green][idx - w]));
+                rgb[c_other][idx]
+                    = rgb[ah_green][idx]
+                      - ((rgb[ah_green][idx - 1]
+                          - rgb[c_other][idx - 1])
+                             * dL
+                         + (rgb[ah_green][idx + 1]
+                            - rgb[c_other][idx + 1])
+                               * dR
+                         + (rgb[ah_green][idx - w]
+                            - rgb[c_other][idx - w])
+                               * dU
+                         + (rgb[ah_green][idx + w]
+                            - rgb[c_other][idx + w])
+                               * dD)
+                        / (dL + dR + dU + dD);
+              }
+          }
+        if (progress)
+          progress->inc_progress ();
+        if (progress && progress->cancelled ())
+          return false;
+      }
+
+    /* ================================================================
+       Step 9: Convert back to linear space and write results.
+
+       Apply inverse gamma, rescale to the original data range, and
+       store the reconstructed RGB values into the m_demosaiced array.
+       ================================================================ */
+    for (int y = 0; y < h; y++)
+      {
+        for (int x = 0; x < w; x++)
+          {
+            int idx = y * w + x;
+            d (x, y)[(int)ah_red]
+                = std::max ((luminosity_t)0,
+                            range * gamma_inv (rgb[ah_red][idx]));
+            d (x, y)[(int)ah_green]
+                = std::max ((luminosity_t)0,
+                            range * gamma_inv (rgb[ah_green][idx]));
+            d (x, y)[(int)ah_blue]
+                = std::max ((luminosity_t)0,
+                            range * gamma_inv (rgb[ah_blue][idx]));
+          }
+        if (progress)
+          progress->inc_progress ();
+      }
+    return !progress || !progress->cancelled ();
+  }
 };
 
 class demosaic_paget : public demosaic_base<paget_geometry>
@@ -2893,6 +3825,11 @@ public:
       case render_parameters::rcd_demosaic:
 	if (!rcd_interpolation<base_geometry::blue, base_geometry::red,
 			       base_geometry::green> (progress))
+	  return false;
+	break;
+      case render_parameters::lmmse_demosaic:
+	if (!lmmse_interpolation<base_geometry::blue, base_geometry::red,
+				 base_geometry::green> (progress))
 	  return false;
 	break;
       default:

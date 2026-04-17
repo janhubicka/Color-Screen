@@ -188,7 +188,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
       if (fprintf (f, "presaturation: %f\n", rparam->presaturation) < 0
 	  || fprintf (f, "saturation: %f\n", rparam->saturation) < 0
 	  || fprintf (f, "brightness: %f\n", rparam->brightness) < 0
-	  || fprintf (f, "output_tone_curve: %s\n", tone_curve::tone_curve_names[(int)rparam->output_tone_curve]) < 0
+	  || fprintf (f, "output_tone_curve: %s\n", tone_curve::tone_curve_names[(int)rparam->output_tone_curve].name) < 0
 	  || fprintf (f, "red_strip_width: %f\n", rparam->red_strip_width) < 0
 	  || fprintf (f, "green_strip_width: %f\n", rparam->green_strip_width) < 0
 	  || fprintf (f, "collection_threshold: %f\n", rparam->collection_threshold) < 0
