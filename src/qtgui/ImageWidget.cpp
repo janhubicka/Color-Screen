@@ -109,6 +109,8 @@ void ImageWidget::setZoom(double scale) {
     }
 
     m_exploreTargetScale = m_scale;
+    m_exploreTargetX = m_viewX;
+    m_exploreTargetY = m_viewY;
 
     requestRender();
     if (m_renderQueue.hasActiveTasks() && !m_refreshTimer->isActive()) {
@@ -117,6 +119,47 @@ void ImageWidget::setZoom(double scale) {
     emit viewStateChanged(
         QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale),
         m_scale);
+  }
+}
+
+void ImageWidget::smoothZoomBy(double factor) {
+  m_exploreTargetScale *= factor;
+  m_exploreZoomSpeed = 0.15;
+  m_zoomFocusCenter = true;
+  if (!m_exploreTimer->isActive()) m_exploreTimer->start();
+}
+
+void ImageWidget::smoothZoomTo(double targetScale, bool fast) {
+  m_exploreTargetScale = targetScale;
+  m_exploreZoomSpeed = fast ? 0.35 : 0.15;
+  m_zoomFocusCenter = true;
+  if (!m_exploreTimer->isActive()) m_exploreTimer->start();
+}
+
+void ImageWidget::smoothFitToView() {
+  if (!m_scan || m_scan->width <= 0) return;
+  double w = width();
+  double h = height();
+  CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+  QSize transformedSize = transformer.getTransformedCropSize();
+  double imgW = transformedSize.width();
+  double imgH = transformedSize.height();
+
+  if (w > 0 && h > 0 && imgW > 0 && imgH > 0) {
+    double scaleX = w / imgW;
+    double scaleY = h / imgH;
+    double targetScale = qMin(scaleX, scaleY);
+    if (targetScale == 0) targetScale = 1.0;
+
+    m_exploreTargetScale = targetScale;
+    m_exploreZoomSpeed = 0.35; // Fast
+    m_zoomFocusCenter = true;
+    
+    // Smoothly pan to center AT THE CURRENT SCALE
+    m_exploreTargetX = imgW / 2.0 - w / (2.0 * m_scale);
+    m_exploreTargetY = imgH / 2.0 - h / (2.0 * m_scale);
+    
+    if (!m_exploreTimer->isActive()) m_exploreTimer->start();
   }
 }
 
@@ -1268,6 +1311,8 @@ void ImageWidget::wheelEvent(QWheelEvent *event) {
   double factor = qPow(1.1, numSteps);
 
   m_exploreTargetScale *= factor;
+  m_exploreZoomSpeed = 0.15;
+  m_zoomFocusCenter = false;
 
   if (!m_exploreTimer->isActive()) {
       m_exploreTimer->start();
@@ -1275,10 +1320,28 @@ void ImageWidget::wheelEvent(QWheelEvent *event) {
 }
 
 void ImageWidget::keyPressEvent(QKeyEvent *event) {
-  if (m_interactionMode == ExploreMode && (event->key() == Qt::Key_M || event->key() == Qt::Key_Escape)) {
-      setExploreMode(false);
-      event->accept();
-      return;
+  if (m_interactionMode == ExploreMode) {
+      if (event->key() == Qt::Key_Plus || event->key() == Qt::Key_Equal || 
+         (event->modifiers() & Qt::ControlModifier && event->key() == Qt::Key_Plus)) {
+          m_plusHeld = true;
+          m_zoomFocusCenter = true;
+          if (!m_exploreTimer->isActive()) m_exploreTimer->start();
+          event->accept();
+          return;
+      } else if (event->key() == Qt::Key_Minus || 
+                (event->modifiers() & Qt::ControlModifier && event->key() == Qt::Key_Minus)) {
+          m_minusHeld = true;
+          m_zoomFocusCenter = true;
+          if (!m_exploreTimer->isActive()) m_exploreTimer->start();
+          event->accept();
+          return;
+      }
+  
+      if (event->key() == Qt::Key_M || event->key() == Qt::Key_Escape) {
+          setExploreMode(false);
+          event->accept();
+          return;
+      }
   }
 
   // Handle fullscreen exit keys
@@ -1316,6 +1379,23 @@ void ImageWidget::keyPressEvent(QKeyEvent *event) {
   }
 
   QWidget::keyPressEvent(event);
+}
+
+void ImageWidget::keyReleaseEvent(QKeyEvent *event) {
+  if (event->isAutoRepeat()) {
+      QWidget::keyReleaseEvent(event);
+      return;
+  }
+  
+  if (event->key() == Qt::Key_Plus || event->key() == Qt::Key_Equal || 
+     (event->modifiers() & Qt::ControlModifier && event->key() == Qt::Key_Plus)) {
+      m_plusHeld = false;
+  } else if (event->key() == Qt::Key_Minus || 
+            (event->modifiers() & Qt::ControlModifier && event->key() == Qt::Key_Minus)) {
+      m_minusHeld = false;
+  }
+  
+  QWidget::keyReleaseEvent(event);
 }
 
 colorscreen::point_t ImageWidget::widgetToImage(QPointF p) const {
@@ -1437,6 +1517,9 @@ void ImageWidget::fitToView() {
   m_viewX = (imgW - w / m_scale) / 2.0;
   m_viewY = (imgH - h / m_scale) / 2.0;
   m_lastSize = size(); 
+
+  m_exploreTargetX = m_viewX;
+  m_exploreTargetY = m_viewY;
 
   requestRender();
   emit viewStateChanged(
@@ -1567,13 +1650,29 @@ void ImageWidget::setExploreMode(bool enable) {
 void ImageWidget::exploreTick() {
   bool needsUpdate = false;
   
+  if (m_plusHeld) {
+      m_keyboardZoomVelocity += 0.0005; // accelerate
+      if (m_keyboardZoomVelocity > 0.015) m_keyboardZoomVelocity = 0.015; // 1/4th of 1.25^2
+      m_exploreTargetScale *= (1.0 + m_keyboardZoomVelocity);
+      m_exploreZoomSpeed = 0.15;
+      needsUpdate = true;
+  } else if (m_minusHeld) {
+      m_keyboardZoomVelocity += 0.0005; // accelerate
+      if (m_keyboardZoomVelocity > 0.015) m_keyboardZoomVelocity = 0.015; // 1/4th of 1.25^2
+      m_exploreTargetScale /= (1.0 + m_keyboardZoomVelocity);
+      m_exploreZoomSpeed = 0.15;
+      needsUpdate = true;
+  } else {
+      m_keyboardZoomVelocity = 0;
+  }
+
   double ds = m_exploreTargetScale - m_scale;
   if (std::abs(ds / (m_scale + 1e-9)) > 0.001) {
       double oldScale = m_scale;
-      m_scale += ds * 0.15; // Smooth factor
+      m_scale += ds * m_exploreZoomSpeed;
       
       double focusX, focusY;
-      if (m_interactionMode == ExploreMode) {
+      if (m_zoomFocusCenter || m_interactionMode == ExploreMode) {
           focusX = width() / 2.0;
           focusY = height() / 2.0;
       } else {

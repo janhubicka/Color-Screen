@@ -1518,13 +1518,13 @@ void MainWindow::createMenus() {
 
   m_zoomInAction = m_viewMenu->addAction("Zoom &In");
   m_zoomInAction->setIcon(getSymbolicIcon(":/icons/zoom-in.svg"));
-  m_zoomInAction->setShortcut(QKeySequence::ZoomIn); // Ctrl++
+  m_zoomInAction->setShortcuts({QKeySequence::ZoomIn, QKeySequence(Qt::Key_Plus), QKeySequence(Qt::Key_Equal)}); // Ctrl++, +, =
   m_zoomInAction->setShortcutContext(Qt::ApplicationShortcut);
   connect(m_zoomInAction, &QAction::triggered, this, &MainWindow::onZoomIn);
 
   m_zoomOutAction = new QAction(tr("Zoom &Out"), this);
   m_zoomOutAction->setIcon(getSymbolicIcon(":/icons/zoom-out.svg"));
-  m_zoomOutAction->setShortcut(QKeySequence::ZoomOut); // Ctrl+-
+  m_zoomOutAction->setShortcuts({QKeySequence::ZoomOut, QKeySequence(Qt::Key_Minus)}); // Ctrl+-, -
   m_zoomOutAction->setShortcutContext(Qt::ApplicationShortcut);
   m_zoomOutAction->setStatusTip(tr("Zoom out"));
   connect(m_zoomOutAction, &QAction::triggered, this, &MainWindow::onZoomOut);
@@ -1643,6 +1643,17 @@ void MainWindow::createMenus() {
   m_optimizeCoordinatesAction = new QAction(QIcon::fromTheme("system-run"), tr("Optimize Coordinates"), this);
   m_optimizeCoordinatesAction->setToolTip("Optimize Coordinates");
   connect(m_optimizeCoordinatesAction, &QAction::triggered, this, &MainWindow::onOptimizeCoordinates);
+
+  // Dynamically manage zoom shortcuts for ExploreMode to allow continuous hold-to-zoom
+  connect(m_imageWidget, &ImageWidget::interactionModeChanged, this, [this](ImageWidget::InteractionMode mode) {
+      if (mode == ImageWidget::ExploreMode) {
+          m_zoomInAction->setShortcuts({});
+          m_zoomOutAction->setShortcuts({});
+      } else {
+          m_zoomInAction->setShortcuts({QKeySequence::ZoomIn, QKeySequence(Qt::Key_Plus), QKeySequence(Qt::Key_Equal)});
+          m_zoomOutAction->setShortcuts({QKeySequence::ZoomOut, QKeySequence(Qt::Key_Minus)});
+      }
+  });
 }
 
 void MainWindow::onOpenParameters() {
@@ -2726,20 +2737,20 @@ void MainWindow::saveRecentParams() {
 }
 
 void MainWindow::onZoomIn() {
-  double currentZoom = m_imageWidget->getZoom();
-  m_imageWidget->setZoom(currentZoom * 1.25);
+  if (m_imageWidget) {
+    m_imageWidget->smoothZoomBy(1.25);
+  }
 }
 
 void MainWindow::onZoomOut() {
   if (m_imageWidget) {
-    double currentZoom = m_imageWidget->getZoom();
-    m_imageWidget->setZoom(currentZoom / 1.1); // Zoom out by 10%
+    m_imageWidget->smoothZoomBy(1.0 / 1.1); // Zoom out by 10%
   }
 }
 
 void MainWindow::onZoom100() {
   if (m_imageWidget) {
-    m_imageWidget->setZoom(1.0);
+    m_imageWidget->smoothZoomTo(1.0, true);
   }
 }
 void MainWindow::onNonlinearToggled(bool checked) {
@@ -2758,7 +2769,11 @@ void MainWindow::onNonlinearToggled(bool checked) {
   }
 }
 
-void MainWindow::onZoomFit() { m_imageWidget->fitToView(); }
+void MainWindow::onZoomFit() { 
+  if (m_imageWidget) {
+    m_imageWidget->smoothFitToView(); 
+  }
+}
 
 void MainWindow::onRegistrationPointsToggled(bool checked) {
   m_imageWidget->setShowRegistrationPoints(checked);

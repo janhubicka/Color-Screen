@@ -89,10 +89,13 @@ public:
 
 public slots:
   void setZoom(double scale);
+  void smoothZoomBy(double factor);
+  void smoothZoomTo(double targetScale, bool fast = false);
   void setPan(double x, double y);
   void centerOn(colorscreen::point_t imgPos);
   void setLastSize(QSize s) { m_lastSize = s; }
   void fitToView(); // New slot
+  void smoothFitToView(); // Smoothly animate to fit view
   void rotateLeft();
   void rotateRight();
   void pivotViewport(int oldRotIdx, int newRotIdx);
@@ -111,6 +114,7 @@ protected:
   void mouseReleaseEvent(QMouseEvent *event) override;
   void wheelEvent(QWheelEvent *event) override;
   void keyPressEvent(QKeyEvent *event) override;
+  void keyReleaseEvent(QKeyEvent *event) override;
 
 signals:
   void progressStarted(std::shared_ptr<colorscreen::progress_info> progress);
@@ -216,7 +220,13 @@ private:
   double m_exploreTargetX = 0.0;
   double m_exploreTargetY = 0.0;
   double m_exploreTargetScale = 1.0;
+  double m_exploreZoomSpeed = 0.15;
+  bool m_zoomFocusCenter = false;
   bool m_ignoreNextMouseMove = false;
+
+  bool m_plusHeld = false;
+  bool m_minusHeld = false;
+  double m_keyboardZoomVelocity = 0.0;
 
   void updateSimulatedPoints();
   
