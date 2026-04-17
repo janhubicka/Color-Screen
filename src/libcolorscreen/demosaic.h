@@ -2926,7 +2926,7 @@ protected:
        the toe slope based on estimated read noise.  */
     auto gamma_fwd = [] (luminosity_t x) -> luminosity_t
     {
-      x = std::clamp (x, (luminosity_t)0, (luminosity_t)1);
+      x = std::max (x, (luminosity_t)0);
       return (x <= (luminosity_t)0.001867)
                  ? x * (luminosity_t)17.0
                  : (luminosity_t)1.044445
@@ -2935,7 +2935,7 @@ protected:
     };
     auto gamma_inv = [] (luminosity_t x) -> luminosity_t
     {
-      x = std::clamp (x, (luminosity_t)0, (luminosity_t)1);
+      x = std::max (x, (luminosity_t)0);
       return (x <= (luminosity_t)0.031746)
                  ? x / (luminosity_t)17.0
                  : std::exp (std::log ((x + (luminosity_t)0.044445)
@@ -3057,7 +3057,7 @@ protected:
                Fall back to median of three horizontal neighbors.  */
             hd = (c > (luminosity_t)1.75 * Y0)
                      ? median3 (hd, cfa[idx - 1], cfa[idx + 1])
-                     : std::clamp (hd, (luminosity_t)0, (luminosity_t)1);
+                     : std::max (hd, (luminosity_t)0);
             hdiff[idx] = hd - c;
 
             /* Vertical G-R(B) estimate.  */
@@ -3070,7 +3070,7 @@ protected:
             vd = (c > (luminosity_t)1.75 * Y1)
                      ? median3 (vd, cfa[(y - 1) * w + x],
                                 cfa[(y + 1) * w + x])
-                     : std::clamp (vd, (luminosity_t)0, (luminosity_t)1);
+                     : std::max (vd, (luminosity_t)0);
             vdiff[idx] = vd - c;
           }
 
@@ -3091,12 +3091,8 @@ protected:
                       * (cfa[(y - 2) * w + x] + cfa[(y + 2) * w + x])
                   - (luminosity_t)0.5
                         * (cfa[(y - 1) * w + x] + c + cfa[(y + 1) * w + x]);
-            hdiff[idx] = std::clamp (hd, (luminosity_t)(-1),
-                                     (luminosity_t)0)
-                         + c;
-            vdiff[idx] = std::clamp (vd, (luminosity_t)(-1),
-                                     (luminosity_t)0)
-                         + c;
+            hdiff[idx] = std::min (hd, (luminosity_t)0) + c;
+            vdiff[idx] = std::min (vd, (luminosity_t)0) + c;
           }
         if (progress)
           progress->inc_progress ();
