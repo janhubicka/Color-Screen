@@ -1466,7 +1466,7 @@ image_data::set_dpi (coord_t new_xdpi, coord_t new_ydpi)
 }
 
 bool
-image_data::has_rgb ()
+image_data::has_rgb () const
 {
   if (stitch)
     return stitch->images[0][0].img->has_rgb ();
@@ -1474,7 +1474,7 @@ image_data::has_rgb ()
 }
 
 bool
-image_data::has_grayscale_or_ir ()
+image_data::has_grayscale_or_ir () const
 {
   if (stitch)
     return stitch->images[0][0].img->has_grayscale_or_ir ();

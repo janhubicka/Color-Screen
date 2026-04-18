@@ -89,8 +89,8 @@ public:
 				  bool allocate_rgb = false, bool allocate_grayscale = false);
   DLL_PUBLIC bool save_tiff (const char *name, progress_info *progress = NULL);
 
-  pure_attr DLL_PUBLIC bool has_rgb ();
-  pure_attr DLL_PUBLIC bool has_grayscale_or_ir ();
+  pure_attr DLL_PUBLIC bool has_rgb () const;
+  pure_attr DLL_PUBLIC bool has_grayscale_or_ir () const;
 
   xyY primary_red;
   xyY primary_green;
