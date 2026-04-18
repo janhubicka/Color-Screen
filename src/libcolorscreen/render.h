@@ -302,8 +302,6 @@ render::adjust_luminosity_ir (luminosity_t lum) const
   lum = (lum - m_params.dark_point) * m_params.scan_exposure;
   if (m_sensitivity)
     lum = m_sensitivity->apply (lum);
-  if (m_params.film_gamma != 1)
-    lum = invert_gamma (lum, m_params.film_gamma);
   return lum;
 }
 
@@ -461,12 +459,6 @@ out_color_adjustments::hdr_final_color (luminosity_t r, luminosity_t g, luminosi
 {
   luminosity_t r1, g1, b1;
   linear_hdr_color (r, g, b, &r1, &g1, &b1);
-  if (m_target_film_gamma != 1)
-    {
-      r1 = apply_gamma (r1, m_target_film_gamma);
-      g1 = apply_gamma (g1, m_target_film_gamma);
-      b1 = apply_gamma (b1, m_target_film_gamma);
-    }
   *rr = invert_gamma (r1, m_output_gamma);
   *gg = invert_gamma (g1, m_output_gamma);
   *bb = invert_gamma (b1, m_output_gamma);

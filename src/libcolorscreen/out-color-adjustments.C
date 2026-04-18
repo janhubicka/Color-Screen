@@ -14,14 +14,13 @@ get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
   luminosity_t gamma = p.output_gamma;
   if (gamma != -1)
     gamma = std::clamp (gamma, (luminosity_t)0.0001, (luminosity_t)100.0);
-  luminosity_t target_film_gamma = p.target_film_gamma;
   int maxval = p.maxval;
   luminosity_t mul
       = 1 / (luminosity_t)(out_color_adjustments::out_lookup_table_size - 1);
 
   for (int i = 0; i < (int)out_color_adjustments::out_lookup_table_size; i++)
     lookup_table[i]
-        = invert_gamma (apply_gamma (i * mul, target_film_gamma), gamma)
+        = invert_gamma (i * mul, gamma)
               * maxval
           + (luminosity_t)0.5;
 
@@ -41,12 +40,11 @@ out_color_adjustments::precompute (
     bool normalized_patches, rgbdata patch_proportions,
     progress_info *progress)
 {
-  m_target_film_gamma = m_params.target_film_gamma;
   m_output_gamma = m_params.output_gamma;
   m_gammut_warning = m_params.gammut_warning;
 
   out_lookup_table_params out_par
-      = { m_dst_maxval, m_params.output_gamma, m_params.target_film_gamma };
+      = { m_dst_maxval, m_params.output_gamma };
   m_out_lookup_table = out_lookup_table_cache.get_cached (out_par, progress);
 
   color_matrix color;

@@ -281,8 +281,6 @@ struct render_parameters
 
   contact_copy_parameters contact_copy;
 
-  /* Gamma curve of the film (to be replaced by HD curve eventually)  */
-  luminosity_t film_gamma;
   /* The following is used by interpolated rendering only.  */
 
   /* Quality used when collection data for demosaicing.  */
@@ -468,8 +466,6 @@ struct render_parameters
   /* Brightness adjustments.  */
   luminosity_t brightness;
   enum tone_curve::tone_curves output_tone_curve;
-  /* desired gamma of the resulting image.  */
-  luminosity_t target_film_gamma;
 
   /***** Output Profile *****/
 
@@ -506,7 +502,7 @@ struct render_parameters
         tile_adjustments (),
 
         /* Patch density parameters.  */
-        film_gamma (1), collection_quality (simple_screen_collection), screen_demosaic (default_demosaic), demosaiced_scaling (default_scaling), screen_blur_radius (0.5),
+        collection_quality (simple_screen_collection), screen_demosaic (default_demosaic), demosaiced_scaling (default_scaling), screen_blur_radius (0.5),
         collection_threshold (0.2), red_strip_width (0),
         green_strip_width (0),
 
@@ -524,7 +520,6 @@ struct render_parameters
         observer_whitepoint (/*srgb_white*/ d50_white),
         dye_balance (dye_balance_bradford), saturation (1), brightness (1),
         output_tone_curve (tone_curve::tone_curve_linear),
-        target_film_gamma (1),
 
         /* Output profile  */
         output_profile (output_profile_sRGB), output_gamma (-1), gammut_warning (false)
@@ -556,9 +551,8 @@ struct render_parameters
       if (tile_adjustments[i] != other.tile_adjustments[i])
         return false;
     return demosaic == other.demosaic
-	   && gamma == other.gamma && film_gamma == other.film_gamma
+	   && gamma == other.gamma 
 	   && contact_copy == other.contact_copy
-           && target_film_gamma == other.target_film_gamma
            && output_gamma == other.output_gamma
 	   && scan_rotation == other.scan_rotation
 	   && scan_mirror == other.scan_mirror

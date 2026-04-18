@@ -312,7 +312,7 @@ print_help()
 	   printf ("Motor editing mode\n"
 		   "r   - swithc to screen editing mode\n");
 	if (ui_mode == screen_editing || ui_mode == motor_correction_editing || ui_mode == solver_editing)
-	   printf ("g G - control film gamma                      d   - set to dufay                  p - set to Paget\n"
+	   printf ("                                              d   - set to dufay                  p - set to Paget\n"
 	           "f   - set to Finlay                           N   - compute mesh (nonlinear)      n - disable mesh\n"
 		   "1-9 - display modes                           t   - scanner type                  R - motor editing mode\n"
 		   "l L - dye balance\n");
@@ -1071,34 +1071,6 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
   }
   if (ui_mode == screen_editing || ui_mode == motor_correction_editing || ui_mode == solver_editing || ui_mode == color_profiling)
     {
-      if (k == 'g')
-      {
-	if (!(event->state & GDK_CONTROL_MASK))
-	  {
-	    rparams.film_gamma -= 0.01;
-	    printf ("Film gamma %f\n", rparams.film_gamma);
-	  }
-	else
-	  {
-	    rparams.target_film_gamma -= 0.01;
-	    printf ("Target film gamma %f\n", rparams.target_film_gamma);
-	  }
-	display_scheduled = true;
-      }
-      if (k == 'G')
-      {
-	if (!(event->state & GDK_CONTROL_MASK))
-	  {
-	    rparams.film_gamma += 0.01;
-	    printf ("Film gamma %f\n", rparams.film_gamma);
-	  }
-	else
-	  {
-	    rparams.target_film_gamma += 0.01;
-	    printf ("Target film gamma %f\n", rparams.target_film_gamma);
-	  }
-	display_scheduled = true;
-      }
       if (k == 'd' && current.type != Dufay  && !(event->state & GDK_CONTROL_MASK))
       {
 	save_parameters ();

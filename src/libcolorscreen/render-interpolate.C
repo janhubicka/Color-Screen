@@ -297,7 +297,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
 	  || m_params.screen_demosaic == render_parameters::default_demosaic)
         {
 	  struct demosaiced_params<analyze_paget> pp = {
-	    id, m_params.dark_point, m_params.scan_exposure, m_params.contact_copy, m_params.film_gamma,
+	    id, m_params.dark_point, m_params.scan_exposure, m_params.contact_copy,
 	    m_params.screen_demosaic == render_parameters::default_demosaic
 	    ? (m_screen_compensation ? render_parameters::rcd_demosaic : render_parameters::amaze_demosaic)
 	    : m_params.screen_demosaic,

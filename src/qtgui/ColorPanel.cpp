@@ -107,12 +107,6 @@ void ColorPanel::setupUi() {
       [this](bool) { emit neutralAreaRequested(); },
       nullptr, [this](const ParameterState &) { return m_imageGetter() != nullptr; });
 
-  // Film Gamma
-  addSliderParameter(
-      "Film gamma", 0.1, 5.0, 100, 2, "", "",
-      [](const ParameterState &s) { return s.rparams.film_gamma; },
-      [](ParameterState &s, double v) { s.rparams.film_gamma = v; }, 1.0);
-
   m_currentGroupForm = nullptr; // End Adjustments section
 
   addSeparator("Backlight");

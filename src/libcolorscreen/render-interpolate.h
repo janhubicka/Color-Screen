@@ -65,7 +65,6 @@ struct demosaiced_params
   luminosity_t dark_point;
   luminosity_t scan_exposure;
   contact_copy_parameters contact_copy;
-  luminosity_t film_gamma;
   render_parameters::screen_demosaic_t alg;
 
   ANALYZER *analyzer;
@@ -78,7 +77,6 @@ struct demosaiced_params
 	   && dark_point == o.dark_point
 	   && scan_exposure == o.scan_exposure
 	   && contact_copy == o.contact_copy
-	   && film_gamma == o.film_gamma
 	   && alg == o.alg;
   }
 };

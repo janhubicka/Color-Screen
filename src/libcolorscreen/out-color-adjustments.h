@@ -16,12 +16,10 @@ struct out_lookup_table_params
 {
   int maxval;
   luminosity_t output_gamma;
-  luminosity_t target_film_gamma;
   bool
   operator== (out_lookup_table_params &o)
   {
-    return maxval == o.maxval && output_gamma == o.output_gamma
-           && target_film_gamma == o.target_film_gamma;
+    return maxval == o.maxval && output_gamma == o.output_gamma;
   }
 };
 
@@ -66,7 +64,6 @@ private:
   int m_dst_maxval;
 
   /* Copied values from render_parameters. */
-  luminosity_t m_target_film_gamma;
   luminosity_t m_output_gamma;
   bool m_gammut_warning;
 
