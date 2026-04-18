@@ -43,7 +43,18 @@ Changes in version 1.1
    - suport for demosaicing of RAW files specialized for converted monochromatic camera
    - fixed bug in backlight correction of monochromatic scans
    - gammut warnings
-   - Hamilton-Adams demosaicing algorithm
+   - New demosaicing algorithms
+     - Hamilton-Adams
+     - AMaZE
+     - RCD (Ratio corrected demosaicing)
+     - LMMSE (Linear minimum square error)
+   - New scaling algorithms
+     - Lanczos3
+     - B-spline
+     - linear
+     - nearest neighbour
+   - New contact copy (darkroom) simulator replacing former invert, film-gamma,
+     target-film-gamma and output-curve parameters.
  - Scanner MTF can now be specified for more precise handling of sharpness of
    the scanner lens.  This curve can be measured using slanted edge method, i.e
    using quickMTF
