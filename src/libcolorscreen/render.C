@@ -475,18 +475,20 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
 
   if (grayscale_needed)
     {
+      bool ir_simulation = !m_img.has_grayscale_or_ir ()
+			   || (m_img.has_rgb () && m_params.ignore_infrared);
       gray_and_sharpen_params p
           = { { m_img.id,
                 &m_img,
                 m_params.gamma,
                 { m_img.to_linear[0], m_img.to_linear[1], m_img.to_linear[2] },
-                m_params.mix_dark,
-                m_params.mix_red,
-                m_params.mix_green,
-                m_params.mix_blue,
+                ir_simulation ? m_params.mix_dark : (rgbdata) {(luminosity_t)1.0,(luminosity_t)1.0,(luminosity_t)1.0},
+                ir_simulation ? m_params.mix_red : 1,
+                ir_simulation ? m_params.mix_green : 1,
+                ir_simulation ? m_params.mix_blue : 1,
                 m_backlight_correction.get (),
                 m_backlight_correction_id,
-                m_params.ignore_infrared }, m_params.sharpen };
+                ir_simulation ? m_params.ignore_infrared : false }, m_params.sharpen };
       m_sharpened_data_holder
           = gray_and_sharpened_data_cache.get_cached (p, progress, &m_gray_data_id);
       if (!m_sharpened_data_holder)
