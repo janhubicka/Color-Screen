@@ -138,13 +138,74 @@ void ContactCopyPanel::setupUi() {
   createSpinBox(m_linear1XSpin); createSpinBox(m_linear1YSpin);
   createSpinBox(m_linear2XSpin); createSpinBox(m_linear2YSpin);
   createSpinBox(m_maxXSpin); createSpinBox(m_maxYSpin);
+  addSeparator("H&D Richards model parameters");
+
+  auto addRichardsSlider = [this](const QString &label, const QString &tooltip, 
+                                 std::function<double(const colorscreen::richards_curve_parameters &)> getter,
+                                 std::function<void(colorscreen::richards_curve_parameters &, double)> setter,
+                                 double min = -10.0, double max = 10.0, bool logarithmic = false) {
+      addSliderParameter(
+          label, min, max, 100.0, 3, "", "",
+          [getter](const ParameterState &s) {
+              return getter(colorscreen::hd_to_richards_curve_parameters(s.rparams.contact_copy.emulsion_characteristic_curve));
+          },
+          [this, setter](ParameterState &s, double v) {
+              auto rp = colorscreen::hd_to_richards_curve_parameters(s.rparams.contact_copy.emulsion_characteristic_curve);
+              setter(rp, v);
+              s.rparams.contact_copy.emulsion_characteristic_curve = colorscreen::richards_to_hd_curve_parameters(rp);
+          },
+          1.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; }, logarithmic);
+      
+      // Set tooltips on label and field
+      QFormLayout *layout = m_currentGroupForm ? m_currentGroupForm : m_form;
+      if (layout->count() >= 2) {
+          QWidget *field = layout->itemAt(layout->count() - 1)->widget();
+          QWidget *labelW = layout->itemAt(layout->count() - 2)->widget();
+          if (field) field->setToolTip(tooltip);
+          if (labelW) labelW->setToolTip(tooltip);
+      }
+  };
+
+  addRichardsSlider("Minimal density (A)", "Lower asymptote (minimal density). Represents the base fog level.", 
+                    [](const auto& r) { return r.A; }, [](auto& r, double v) { r.A = v; });
+  addRichardsSlider("Maximal density (K)", "Upper asymptote (maximal density). Represents the saturation level.", 
+                    [](const auto& r) { return r.K; }, [](auto& r, double v) { r.K = v; });
+  addRichardsSlider("Slope (B)", "Growth rate (slope). Controls the steepness of the linear region.", 
+                    [](const auto& r) { return r.B; }, [](auto& r, double v) { r.B = v; }, -100.0, 100.0, false);
+  addRichardsSlider("Offset (M)", "Horizontal offset. Center point of the linear region.", 
+                    [](const auto& r) { return r.M; }, [](auto& r, double v) { r.M = v; });
+  addRichardsSlider("Asymmetry (\u03BD)", "Asymmetry parameter. Controls where the curve inflection occurs (\u03BD=1 is symmetric).", 
+                    [](const auto& r) { return r.v; }, [](auto& r, double v) { r.v = v; }, 0.01, 10.0, true);
+
+  addCheckboxParameter(
+      "Inverse mode",
+      [](const ParameterState &s) { 
+          return colorscreen::hd_to_richards_curve_parameters(s.rparams.contact_copy.emulsion_characteristic_curve).is_inverse; 
+      },
+      [this](ParameterState &s, bool v) {
+          auto rp = colorscreen::hd_to_richards_curve_parameters(s.rparams.contact_copy.emulsion_characteristic_curve);
+          rp.is_inverse = v;
+          s.rparams.contact_copy.emulsion_characteristic_curve = colorscreen::richards_to_hd_curve_parameters(rp);
+      },
+      [](const ParameterState &s) { return s.rparams.contact_copy.simulate; });
+  
+  QFormLayout *layout = m_currentGroupForm ? m_currentGroupForm : m_form;
+  if (layout->count() >= 1) {
+      QWidget *invField = layout->itemAt(layout->count() - 1)->widget();
+      if (invField) invField->setToolTip("Calculate X as a function of Y. Essential for very steep (high gamma) curves.");
+  }
+
+  addSeparator("H&D Coordinate points (manual entry)");
 
   auto addRow = [this](const QString &label, QWidget *w1, QWidget *w2) {
       QWidget *row = new QWidget();
       QHBoxLayout *l = new QHBoxLayout(row);
       l->setContentsMargins(0, 0, 0, 0);
+      l->setSpacing(4);
+      l->addStretch();
       l->addWidget(new QLabel("X:"));
       l->addWidget(w1);
+      l->addSpacing(8);
       l->addWidget(new QLabel("Y:"));
       l->addWidget(w2);
       
@@ -166,18 +227,39 @@ void ContactCopyPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.contact_copy.preflash; },
       [](ParameterState &s, double v) { s.rparams.contact_copy.preflash = v; },
       1.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; });
+  {
+      QFormLayout *layout = m_currentGroupForm ? m_currentGroupForm : m_form;
+      if (layout->count() >= 2) {
+          layout->itemAt(layout->count() - 1)->widget()->setToolTip("Adds base exposure to lift shadows and reduce overall contrast.");
+          layout->itemAt(layout->count() - 2)->widget()->setToolTip("Adds base exposure to lift shadows and reduce overall contrast.");
+      }
+  }
 
   addSliderParameter(
       "Enlarger exposure", 0.0, 100.0, 100.0, 2, "", "",
       [](const ParameterState &s) { return s.rparams.contact_copy.exposure; },
       [](ParameterState &s, double v) { s.rparams.contact_copy.exposure = v; },
       3.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; }, true);
+  {
+      QFormLayout *layout = m_currentGroupForm ? m_currentGroupForm : m_form;
+      if (layout->count() >= 2) {
+          layout->itemAt(layout->count() - 1)->widget()->setToolTip("Total amount of light hitting the simulated paper.");
+          layout->itemAt(layout->count() - 2)->widget()->setToolTip("Total amount of light hitting the simulated paper.");
+      }
+  }
 
   addSliderParameter(
       "Density boost", 0.0, 100.0, 100.0, 2, "", "",
       [](const ParameterState &s) { return s.rparams.contact_copy.boost; },
       [](ParameterState &s, double v) { s.rparams.contact_copy.boost = v; },
       3.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; });
+  {
+      QFormLayout *layout = m_currentGroupForm ? m_currentGroupForm : m_form;
+      if (layout->count() >= 2) {
+          layout->itemAt(layout->count() - 1)->widget()->setToolTip("Adjusts the maximum blackness reachable by the paper.");
+          layout->itemAt(layout->count() - 2)->widget()->setToolTip("Adjusts the maximum blackness reachable by the paper.");
+      }
+  }
 
   // Sync state to UI
   m_paramUpdaters.push_back([this](const ParameterState &s) {

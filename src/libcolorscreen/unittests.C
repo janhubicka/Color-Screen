@@ -522,7 +522,9 @@ test_richards_reversibility ()
     {0.1, 2.5, 2.0, -1.0, 0.8, false},
     {-0.5, 3.0, 0.5, 2.0, 1.5, false},
     {0.0, 4.0, 1.0, 2.0, 1.0, true},
-    {1.0, 5.0, 0.7, 3.0, 1.2, true}
+    {1.0, 5.0, 0.7, 3.0, 1.2, true},
+    /* User case: Negative slope curve (requires negative B in inverse mode) */
+    {-2.274, -0.437, -3.986, 0.997, 2.647, true}
   };
 
   for (auto &p : test_params)

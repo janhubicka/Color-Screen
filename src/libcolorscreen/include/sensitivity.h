@@ -161,12 +161,13 @@ hd_to_richards_curve_parameters (const hd_curve_parameters &p)
   luminosity_t shoulder = (p.maxx != p.linear2x) 
                           ? std::abs((p.maxy - p.linear2y) / (p.maxx - p.linear2x)) : 1e10;
   
-  bool is_inverse = (toe > gamma || shoulder > gamma);
+  bool is_inverse = (toe > gamma || shoulder > gamma || (gamma > 10.0 && gamma != 1e10));
   
   luminosity_t v = 1.0;
   if (p.maxx != p.linear2x)
     v = std::abs((p.linear1x - p.minx) / (p.maxx - p.linear2x));
-  if (v <= 1e-4) v = 1.0;
+  if (v < 0.01) v = 0.01;
+  if (v > 10.0) v = 10.0;
 
   luminosity_t eps = 1e-5;
   luminosity_t A, K, B, M;
@@ -186,6 +187,8 @@ hd_to_richards_curve_parameters (const hd_curve_parameters &p)
 
       luminosity_t v1 = std::pow((K - A) / (y1 - A), v) - 1.0;
       luminosity_t v2 = std::pow((K - A) / (y2 - A), v) - 1.0;
+      if (v1 > 1e30 || std::isinf(v1)) v1 = 1e30;
+      if (v2 > 1e30 || std::isinf(v2)) v2 = 1e30;
       if (v1 <= 0) v1 = eps;
       if (v2 <= 0) v2 = eps;
       
@@ -213,6 +216,8 @@ hd_to_richards_curve_parameters (const hd_curve_parameters &p)
 
       luminosity_t v1 = std::pow((K - A) / (x1 - A), v) - 1.0;
       luminosity_t v2 = std::pow((K - A) / (x2 - A), v) - 1.0;
+      if (v1 > 1e30 || std::isinf(v1)) v1 = 1e30;
+      if (v2 > 1e30 || std::isinf(v2)) v2 = 1e30;
       if (v1 <= 0) v1 = eps;
       if (v2 <= 0) v2 = eps;
       

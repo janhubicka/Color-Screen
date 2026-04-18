@@ -8,6 +8,8 @@
 
 class HDCurveWidget;
 class QDoubleSpinBox;
+class QCheckBox;
+class QSlider;
 class QLabel;
 
 class ContactCopyPanel : public ParameterPanel {
@@ -44,6 +46,14 @@ private:
   QDoubleSpinBox *m_maxYSpin = nullptr;
 
   bool m_updatingSpinBoxes = false;
+  bool m_updatingRichards = false;
+  
+  QDoubleSpinBox *m_richardsASpin = nullptr;
+  QDoubleSpinBox *m_richardsKSpin = nullptr;
+  QDoubleSpinBox *m_richardsBSpin = nullptr;
+  QDoubleSpinBox *m_richardsMSpin = nullptr;
+  QDoubleSpinBox *m_richardsVSpin = nullptr;
+  QCheckBox *m_richardsInverseCheck = nullptr;
   
   TaskQueue m_taskQueue;
   class HistogramWorker *m_worker = nullptr;
