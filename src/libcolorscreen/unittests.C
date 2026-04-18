@@ -461,6 +461,88 @@ test_screen_blur ()
   return true;
 }
 
+bool
+test_richards_curve ()
+{
+  bool ok = true;
+  // Test direct curve
+  luminosity_t A = -5;
+  luminosity_t K = 5;
+  luminosity_t B = 1.2;
+  luminosity_t M = 0;
+  luminosity_t v = 0.8;
+  
+  hd_curve_parameters params_direct = richards_to_hd_curve_parameters({A, K, B, M, v, false});
+  richards_hd_curve curve_direct(1000, params_direct);
+  
+  for (int i = 5; i < 95; i++)
+    {
+      luminosity_t X = params_direct.minx + i * (params_direct.maxx - params_direct.minx) / 100.0;
+      luminosity_t expected = A + (K - A) / std::pow(1.0 + std::exp(-B * (X - M)), 1.0 / v);
+      luminosity_t actual = curve_direct.apply(X);
+      if (std::abs(expected - actual) > 0.3)
+        {
+          printf ("Direct Richards curve mismatch at x=%f: expected %f, got %f\n", X, expected, actual);
+          ok = false;
+        }
+    }
+
+  // Test inverse curve
+  luminosity_t Ax = -6;
+  luminosity_t Kx = 6;
+  luminosity_t Bx = 2.5;
+  luminosity_t Mx = 0;
+  luminosity_t vx = 1.5;
+  
+  hd_curve_parameters params_inverse = richards_to_hd_curve_parameters({Ax, Kx, Bx, Mx, vx, true});
+  richards_hd_curve curve_inverse(1000, params_inverse);
+  
+  for (int i = 5; i < 95; i++)
+    {
+      luminosity_t Y = params_inverse.miny + i * (params_inverse.maxy - params_inverse.miny) / 100.0;
+      luminosity_t expected_X = Ax + (Kx - Ax) / std::pow(1.0 + std::exp(-Bx * (Y - Mx)), 1.0 / vx);
+      
+      luminosity_t actual_Y = curve_inverse.apply(expected_X);
+      if (std::abs(Y - actual_Y) > 0.3)
+        {
+          printf ("Inverse Richards curve mismatch at X=%f: expected Y=%f, got Y=%f\n", expected_X, Y, actual_Y);
+          ok = false;
+        }
+    }
+  return ok;
+}
+
+bool
+test_richards_reversibility ()
+{
+  bool ok = true;
+  /* Test points: A, K, B, M, v, is_inverse */
+  struct richards_curve_parameters test_params[] = {
+    {0.0, 1.0, 1.5, 0.5, 1.0, false},
+    {0.1, 2.5, 2.0, -1.0, 0.8, false},
+    {-0.5, 3.0, 0.5, 2.0, 1.5, false},
+    {0.0, 4.0, 1.0, 2.0, 1.0, true},
+    {1.0, 5.0, 0.7, 3.0, 1.2, true}
+  };
+
+  for (auto &p : test_params)
+    {
+       hd_curve_parameters hdp = richards_to_hd_curve_parameters(p);
+       richards_curve_parameters rp = hd_to_richards_curve_parameters(hdp);
+       
+       if (std::abs(rp.A - p.A) > 1e-4 || std::abs(rp.K - p.K) > 1e-4 ||
+           std::abs(rp.B - p.B) > 1e-4 || std::abs(rp.M - p.M) > 1e-4 ||
+           std::abs(rp.v - p.v) > 1e-4 || rp.is_inverse != p.is_inverse)
+         {
+            printf ("Richards reversibility failed for %s mode!\n", p.is_inverse ? "inverse" : "direct");
+            printf ("Expected: A=%f, K=%f, B=%f, M=%f, v=%f\n", p.A, p.K, p.B, p.M, p.v);
+            printf ("Got:      A=%f, K=%f, B=%f, M=%f, v=%f\n", rp.A, rp.K, rp.B, rp.M, rp.v);
+            ok = false;
+         }
+    }
+  return ok;
+}
+
 int
 test_render_linearity ()
 {
@@ -536,7 +618,7 @@ test_render_linearity ()
 int
 main ()
 {
-  printf ("1..8\n");
+  printf ("1..10\n");
   test_matrix ();
   report ("matrix tests", true);
   test_color ();
@@ -547,5 +629,7 @@ main ()
   report ("lens correction tests", test_homography (true, false, 0.15));
   report ("1d homography and lens correction tests", test_homography (true, true, 0.15));
   report ("screen discovery tests", test_discovery (1.8));
+  report ("richards curve tests", test_richards_curve ());
+  report ("richards reversibility tests", test_richards_reversibility ());
   return 0;
 }

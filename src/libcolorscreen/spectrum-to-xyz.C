@@ -4986,18 +4986,18 @@ spectrum_dyes_to_xyz::set_characteristic_curve (enum characteristic_curves curve
   case linear_reversal_curve:
     break;
   case input_curve:
-    hd_curve = new synthetic_hd_curve (10, input_curve_params);
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve);
+    hd_curve_inst = new richards_hd_curve (100, input_curve_params);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst);
     red_characteristic_curve->precompute ();
     break;
   case safe_output_curve:
-    hd_curve = new synthetic_hd_curve (10, safe_output_curve_params);
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve);
+    hd_curve_inst = new richards_hd_curve (100, safe_output_curve_params);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst);
     red_characteristic_curve->precompute ();
     break;
   case safe_reversal_output_curve:
-    hd_curve = new synthetic_hd_curve (10, safe_reversal_output_curve_params);
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve);
+    hd_curve_inst = new richards_hd_curve (100, safe_reversal_output_curve_params);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst);
     red_characteristic_curve->precompute ();
     break;
   case kodachrome25_curve:
@@ -5010,56 +5010,56 @@ spectrum_dyes_to_xyz::set_characteristic_curve (enum characteristic_curves curve
     break;
     /* Based on chart in The Spicer-Dudfay Colour Film Process, Thorne Baker, The Photograhic Jounral, March 1932, 109--117 */
   case spicer_dufay_curve_low:
-    hd_curve = new synthetic_hd_curve (10, {0.005596021177603383, 0.13326648483876236,
+    hd_curve_inst = new richards_hd_curve (100, {0.005596021177603383, 0.13326648483876236,
 					    0.9264367078453395, 0.25357372051981475,
 					    3.8351612385689076, 1.7539186587518052,
 					    3.8351612385689076, 1.7539186587518052});
 
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve, 0.25, 6);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst, 0.25, 6);
     blue_characteristic_curve->precompute ();
     break;
   case spicer_dufay_curve_mid:
-    hd_curve = new synthetic_hd_curve (10, {0.005596021177603383, 0.13326648483876236,
+    hd_curve_inst = new richards_hd_curve (100, {0.005596021177603383, 0.13326648483876236,
 					    0.7346061286699825, 0.3354524306112632,
 					    2.7042515642547724, 2.207183539226697,
 					    2.7042515642547724, 2.207183539226697});
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve, 0.25, 4);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst, 0.25, 4);
     blue_characteristic_curve->precompute ();
     break;
   case spicer_dufay_curve_high:
-    hd_curve = new synthetic_hd_curve (10, {0.005596021177603383, 0.13326648483876236,
+    hd_curve_inst = new richards_hd_curve (100, {0.005596021177603383, 0.13326648483876236,
 					    0.664193807155463, 0.430406706240976,
 					    1.5716733515161239, 2.2480065778918665,
 					    1.5716733515161239, 2.2480065778918665});
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve, 0.25, 4);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst, 0.25, 4);
     blue_characteristic_curve->precompute ();
     break;
   case spicer_dufay_reversal_curve_low:
-    hd_curve = new synthetic_hd_curve (10, {
+    hd_curve_inst = new richards_hd_curve (100, {
 		0.10817262955238283, 1.7389218674795455,
 		0.10817262955238283, 1.7389218674795455,
 		3.1461832183539227, 0.19716428686026033,
 		3.990309642226858, 0.10466468795122763});
 
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve, 0, 3000 /*6000*/);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst, 0, 3000 /*6000*/);
     blue_characteristic_curve->precompute ();
     break;
   case spicer_dufay_reversal_curve_mid:
-    hd_curve = new synthetic_hd_curve (10, {
+    hd_curve_inst = new richards_hd_curve (100, {
 		1.2834525910476495, 2.253437349590888,
 		1.2834525910476495, 2.253437349590888,
 		3.262801219316541, 0.27367639980747693,
 		3.990309642226858, 0.10466468795122763});
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve,0 , 3000 /*20000*/);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst,0 , 3000 /*20000*/);
     blue_characteristic_curve->precompute ();
     break;
   case spicer_dufay_reversal_curve_high:
-    hd_curve = new synthetic_hd_curve (10, {
+    hd_curve_inst = new richards_hd_curve (100, {
 		2.446334028557678, 2.2031926841007543,
 		2.446334028557678, 2.2031926841007543,
 		3.409735279961495, 0.34393951548211144,
 		3.9904123215145204, 0.13004572437028772});
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve,0 , 3000 /*30000*/);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst,0 , 3000 /*30000*/);
     blue_characteristic_curve->precompute ();
     break;
   default:

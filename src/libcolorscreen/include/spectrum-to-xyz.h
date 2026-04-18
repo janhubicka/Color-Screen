@@ -207,7 +207,7 @@ public:
       exp_adjust {1,1,1},
       red_characteristic_curve (NULL), green_characteristic_curve (NULL), blue_characteristic_curve (NULL),
       subtractive (false),
-      hd_curve (NULL)
+      hd_curve_inst (NULL)
   {
   }
   ~spectrum_dyes_to_xyz ()
@@ -218,8 +218,8 @@ public:
       delete (green_characteristic_curve);
     if (blue_characteristic_curve && blue_characteristic_curve != red_characteristic_curve)
       delete (blue_characteristic_curve);
-    if (hd_curve)
-      delete (hd_curve);
+    if (hd_curve_inst)
+      delete (hd_curve_inst);
   }
   spectrum backlight;
   /* Transmitance spectra of dyes for additive color synthetis.  */
@@ -384,7 +384,7 @@ public:
   DLL_PUBLIC bool tiff_with_spectra_photo (const char *filename);
 
   private:
-    synthetic_hd_curve *hd_curve;
+    hd_curve *hd_curve_inst;
     static const bool debug = false;
     /* Compute XYZ values.  */
     inline struct xyz pure_attr
