@@ -319,7 +319,7 @@ print_help()
 	else
 	   printf ("d   - set dark point                         r g b- set color\n");
 	printf    ("W   - switch to solver editing mode           E   - screen editing mode                   \n"
-		   "o   - (simulated) infrared/color switch       i   - invert negative             u U - undo / redo\n"
+		   "o   - (simulated) infrared/color switch                                         u U - undo / redo\n"
 	           "m M - color models                            b B - light temperature      ctrl b B - backlight temperature\n"
 		   "q Q - control age                             v V - tone curve                    I - ignore/use infrared\n"
 		   "G   - optimize tile adjustments          ctrl G   - reset tile adjustments        w - toggle gammut warning\n");
@@ -366,12 +366,6 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	printf ("Ignoring infrared\n");
       else
 	printf ("Using infrared\n");
-      display_scheduled = true;
-      preview_display_scheduled = true;
-    }
-  if (k == 'i' && !(event->state & GDK_CONTROL_MASK))
-    {
-      rparams.invert = !rparams.invert;
       display_scheduled = true;
       preview_display_scheduled = true;
     }

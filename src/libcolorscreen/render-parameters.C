@@ -85,6 +85,7 @@ const property_t render_parameters::collection_quality_names []  = {
   { "simulated-screen", "Simulated-screen", "Collect denisty of patches on multiple pixels.  Render blured screen filter and sharpen it." },
 };
 const property_t render_parameters::screen_demosaic_names []  = {
+  { "default", "Best for given rendering mode and screen", "Choose best algorithm automatically" },
   { "nearest", "Nearest neighbour", "Do not interpolate (fastest)" },
   { "linear", "Linear", "Linear interpolation" },
   { "bicubic", "Bicubic", "Bicubic interpolation" },
@@ -1100,7 +1101,6 @@ render_parameters::auto_mix_dark (image_data &img, scr_to_img_parameters &param,
     /* Disable sharpening.  */
     sharpen_parameters dummy;
     rparam.sharpen = dummy;
-    rparam.invert = false;
     rparam.dark_point = 0;
     render render (img, rparam, 256);
     if (!render.precompute_all (false, false, {1/3.0, 1/3.0, 1/3.0}, progress))
@@ -1189,7 +1189,6 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
     /* Disable sharpening.  */
     sharpen_parameters dummy;
     rparam.sharpen = dummy;
-    rparam.invert = false;
     render render (img, rparam, 256);
     if (!render.precompute_all (true, false, {1/3.0, 1/3.0, 1/3.0}, progress))
       return false;
@@ -1383,7 +1382,6 @@ render_parameters::original_render_from (render_parameters &rparam, bool color, 
   scan_rotation = rparam.scan_rotation;
   scan_mirror = rparam.scan_mirror;
   scan_crop = rparam.scan_crop;
-  invert = rparam.invert;
   scan_exposure = rparam.scan_exposure;
   ignore_infrared = rparam.ignore_infrared;
   scanner_red = rparam.scanner_red;
@@ -1447,7 +1445,6 @@ render_parameters::set_gray_range (int gray_min, int gray_max, int maxval)
 	  = apply_gamma ((gray_max + 0.5) / (luminosity_t)maxval, gamma);
       scan_exposure = 1 / (max2 - min2);
       dark_point = min2;
-      invert = false;
     }
   else if (gray_min > gray_max)
     {
@@ -1457,13 +1454,13 @@ render_parameters::set_gray_range (int gray_min, int gray_max, int maxval)
 	  = 1 / apply_gamma ((gray_max + 0.5) / (luminosity_t)maxval, gamma);
       scan_exposure = 1 / (max2 - min2);
       dark_point = min2;
-      invert = true;
+      // invert = true;
     }
 }
 void
 render_parameters::get_gray_range (int *min, int *max, int maxval)
 {
-  if (!invert)
+  if (/*!invert*/0)
     {
       *min = invert_gamma (dark_point, gamma) * maxval - 0.5;
       *max = invert_gamma (dark_point + 1 / scan_exposure, gamma) * maxval

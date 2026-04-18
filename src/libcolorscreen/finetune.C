@@ -3300,7 +3300,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
 	tile_sharpened = true;
     }
 
-  rparam2.invert = 0;
+  /* TODO: shall we reset contact copy?  */
+  //rparam2.invert = 0;
   int maxtiles = fparams.multitile;
   if (maxtiles < 1)
     maxtiles = 1;

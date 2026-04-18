@@ -223,9 +223,6 @@ struct render_parameters
   /* Ignore infrared channel and produce fake one using RGB data.  */
   bool ignore_infrared;
 
-  /* True if negatuve should be inverted to positive.  */
-  bool invert;
-
   /* Black subtracted before channel mixing.  */
   rgbdata mix_dark;
   /* Parameters used to turn RGB data to grayscale (fake infrared channel):
@@ -301,6 +298,7 @@ struct render_parameters
   /* Quality used when collection data for demosaicing.  */
   enum screen_demosaic_t
   {
+    default_demosaic,
     nearest_demosaic,
     linear_demosaic,
     bicubic_demosaic,
@@ -494,11 +492,7 @@ struct render_parameters
 
   /***** Experimental (unfinished) stuff *****/
 
-  hd_curve *film_characteristics_curve;
   hd_curve *output_curve;
-
-  /* Use characteristics curves to restore original luminosity.  */
-  bool restore_original_luminosity;
 
   render_parameters ()
       : 
@@ -508,7 +502,7 @@ struct render_parameters
         gamma (-1), scan_rotation (0), scan_mirror (false), backlight_correction (NULL),
         backlight_correction_black (0), scanner_blur_correction (NULL),
         dark_point (0), scan_exposure (1), ignore_infrared (false),
-        invert (false), mix_dark (0, 0, 0), mix_red (0.3), mix_green (0.1),
+        mix_dark (0, 0, 0), mix_red (0.3), mix_green (0.1),
         mix_blue (1),  sharpen (),
 
         /* Tile adjustment.  */
@@ -516,7 +510,7 @@ struct render_parameters
         tile_adjustments (),
 
         /* Patch density parameters.  */
-        film_gamma (1), collection_quality (simple_screen_collection), screen_demosaic (hamilton_adams_demosaic), demosaiced_scaling (default_scaling), screen_blur_radius (0.5),
+        film_gamma (1), collection_quality (simple_screen_collection), screen_demosaic (default_demosaic), demosaiced_scaling (default_scaling), screen_blur_radius (0.5),
         collection_threshold (0.2), red_strip_width (0),
         green_strip_width (0),
 
@@ -538,8 +532,7 @@ struct render_parameters
 
         /* Output profile  */
         output_profile (output_profile_sRGB), output_gamma (-1), gammut_warning (false),
-        film_characteristics_curve (&film_sensitivity::linear_sensitivity),
-        output_curve (NULL), restore_original_luminosity (true)
+        output_curve (NULL)
   {
   }
 
@@ -597,14 +590,11 @@ struct render_parameters
            && scan_exposure == other.scan_exposure
            && red_strip_width == other.red_strip_width
            && green_strip_width == other.green_strip_width
-           && invert == other.invert
            && screen_blur_radius == other.screen_blur_radius
            && dye_balance == other.dye_balance
 	   && collection_quality == other.collection_quality
 	   && screen_demosaic == other.screen_demosaic
 	   && demosaiced_scaling == other.demosaiced_scaling
-           && film_characteristics_curve == other.film_characteristics_curve
-           && restore_original_luminosity == other.restore_original_luminosity
            && output_curve == other.output_curve
            && scanner_blur_correction == other.scanner_blur_correction
            && backlight_correction == other.backlight_correction
@@ -618,7 +608,7 @@ struct render_parameters
   {
     return !(*this == other);
   }
-  /* Set invert, exposure and dark_point for a given range of values
+  /* Set exposure and dark_point for a given range of values
      in input scan.  Used to interpret old gray_range parameter
      and can be removed eventually.  */
   DLL_PUBLIC void set_gray_range (int gray_min, int gray_max, int maxval);

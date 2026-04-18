@@ -147,68 +147,13 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
   luminosity_t dark_point = p.dark_point;
   luminosity_t scan_exposure = p.scan_exposure;
 
-  if (!p.invert)
-    {
-      if (!use_table)
-        for (int i = 0; i <= p.maxval; i++)
-          lookup_table[i] = (apply_gamma (i * mul, gamma) - dark_point)
-                            * scan_exposure;
-      else
-        for (int i = 0; i <= p.maxval; i++)
-          lookup_table[i] = (p.gamma_table[i] - dark_point) * scan_exposure;
-    }
-  else if (!p.film_characteristic_curve)
-    {
-      // luminosity_t v = simulate_linear_negative (apply_gamma
-      // (((luminosity_t)0.5 * p.maxval / 256) * mul, gamma)); scan_exposure *=
-      // 1/v;
-      /* i+3 is hack so scans of negatives with 0 do not get very large values.
-         We probably should add preflash parameter.  */
-      if (!use_table)
-        for (int i = 0; i <= p.maxval; i++)
-          lookup_table[i] = simulate_linear_negative (
-              (apply_gamma (i * mul, gamma) - dark_point)
-              * scan_exposure);
-      else
-        for (int i = 0; i <= p.maxval; i++)
-          lookup_table[i] = simulate_linear_negative (
-              (p.gamma_table[i] - dark_point) * scan_exposure);
-      // lookup_table[i] = std::pow((luminosity_t)10, -(p.gamma_table[i]) -
-      // dark_point * maxd) * scan_exposure;
-    }
-  else if (p.restore_original_luminosity)
-    {
-      film_sensitivity s (p.film_characteristic_curve);
-      s.precompute ();
-
-      // TODO: For stitching exposure should be really inside
-      if (!use_table)
-        for (int i = 0; i <= p.maxval; i++)
-          lookup_table[i]
-              = s.unapply (1
-                           - apply_gamma ((i + (luminosity_t)0.5) * mul, gamma)
-                           - dark_point)
-                * scan_exposure;
-      else
-        for (int i = 0; i <= p.maxval; i++)
-          lookup_table[i]
-              = s.unapply (1 - p.gamma_table[i] - dark_point) * scan_exposure;
-    }
+  if (!use_table)
+    for (int i = 0; i <= p.maxval; i++)
+      lookup_table[i] = (apply_gamma (i * mul, gamma) - dark_point)
+			* scan_exposure;
   else
-    {
-      film_sensitivity s (p.film_characteristic_curve);
-      s.precompute ();
-
-      if (!use_table)
-        for (int i = 0; i <= p.maxval; i++)
-          lookup_table[i]
-              = s.apply (1 - apply_gamma ((i + 0.5) * mul, gamma) - dark_point)
-                * scan_exposure;
-      else
-        for (int i = 0; i <= p.maxval; i++)
-          lookup_table[i]
-              = s.apply (1 - p.gamma_table[i] - dark_point) * scan_exposure;
-    }
+    for (int i = 0; i <= p.maxval; i++)
+      lookup_table[i] = (p.gamma_table[i] - dark_point) * scan_exposure;
   return lookup_table;
 }
 
@@ -233,7 +178,6 @@ struct gray_data_tables
   rgbdata dark;
   luminosity_t red, green, blue;
   backlight_correction *correction;
-  bool invert;
 };
 
 inline gray_data_tables
@@ -272,7 +216,6 @@ compute_gray_data_tables (struct graydata_params &p, bool correction,
   par.maxval = p.img->maxval;
   par.scan_exposure = correction ? 1 : red;
   par.dark_point = correction ? 0 : dark.red;
-  par.invert = p.invert;
   par.gamma_table = p.gamma_table[0];
   ret.rtable = lookup_table_cache.get_cached (par, progress);
   if (!ret.rtable)
@@ -390,7 +333,6 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
       getdata_params d;
       par.maxval = p.gp.img->maxval;
       par.gamma = p.gp.gamma;
-      par.invert = p.gp.invert;
       /* Here we want to use table for infrared, but that is not present in ICC
          profile. Use blue instead, since usually blue dye fades first and thus
          blue channel is most representative for IR in the scan.
@@ -511,7 +453,6 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
       par.gamma = m_params.gamma;
       if (!par.gamma)
         par.gamma_table = m_img.to_linear[0];
-      par.invert = m_params.invert;
       m_rgb_lookup_table[0] = lookup_table_cache.get_cached (par, progress);
       if (!m_rgb_lookup_table[0])
         return false;
@@ -543,7 +484,6 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
                 m_params.mix_red,
                 m_params.mix_green,
                 m_params.mix_blue,
-                m_params.invert,
                 m_backlight_correction.get (),
                 m_backlight_correction_id,
                 m_params.ignore_infrared }, m_params.sharpen };

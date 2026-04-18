@@ -68,13 +68,9 @@ struct lookup_table_params
   luminosity_t gamma;
   std::vector<luminosity_t> gamma_table;
   luminosity_t dark_point, scan_exposure;
-  bool invert;
-  class hd_curve *film_characteristic_curve;
-  bool restore_original_luminosity;
 
   lookup_table_params ()
-      : maxval (0), gamma (1), dark_point (0), scan_exposure (1), invert (0),
-        film_characteristic_curve (NULL), restore_original_luminosity (0)
+      : maxval (0), gamma (1), dark_point (0), scan_exposure (1)
   {
   }
 
@@ -83,10 +79,7 @@ struct lookup_table_params
   {
     return maxval == o.maxval && gamma == o.gamma
            && (gamma || gamma_table == o.gamma_table)
-           && dark_point == o.dark_point && scan_exposure == o.scan_exposure
-           && invert == o.invert
-           && film_characteristic_curve == o.film_characteristic_curve
-           && restore_original_luminosity == o.restore_original_luminosity;
+           && dark_point == o.dark_point && scan_exposure == o.scan_exposure;
   }
 };
 
@@ -99,7 +92,6 @@ struct graydata_params
   std::vector<luminosity_t> gamma_table[3];
   rgbdata dark;
   luminosity_t red, green, blue;
-  bool invert;
   class backlight_correction *backlight;
   uint64_t backlight_correction_id;
   bool ignore_infrared;
@@ -111,7 +103,7 @@ struct graydata_params
                || (gamma_table[0] == o.gamma_table[0]
                    && gamma_table[1] == o.gamma_table[1]
                    && gamma_table[2] == o.gamma_table[2]))
-           && invert == o.invert && dark == o.dark && red == o.red
+           && dark == o.dark && red == o.red
            && green == o.green && blue == o.blue
            && backlight_correction_id == o.backlight_correction_id
            && ignore_infrared == o.ignore_infrared;
@@ -156,13 +148,7 @@ public:
   : out_color (dstmaxval), m_img (img), m_params (rparam), m_gray_data_id (img.id), m_sharpened_data (NULL), m_sharpened_data_holder (), m_maxval (img.data ? img.maxval : 65535), 
     m_backlight_correction (), m_backlight_correction_id (0)
   {
-    if (m_params.invert)
-      {
-	static synthetic_hd_curve c (10, safe_output_curve_params);
-	m_params.output_curve = &c;
-      }
-    else
-      m_params.output_curve = NULL;
+    m_params.output_curve = NULL;
   }
   pure_attr inline luminosity_t get_img_pixel (coord_t x, coord_t y) const;
   pure_attr inline luminosity_t get_unadjusted_img_pixel (coord_t x, coord_t y) const;

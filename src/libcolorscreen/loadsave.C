@@ -203,7 +203,6 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "scan_exposure: %f\n", rparam->scan_exposure) < 0
 	  || fprintf (f, "dark_point: %f\n", rparam->dark_point) < 0
 	  || fprintf (f, "backlight_correction_black: %f\n", rparam->backlight_correction_black) < 0
-	  || fprintf (f, "invert: %s\n", bool_names [(int)rparam->invert]) < 0
 	  || fprintf (f, "contact-copy: %s\n", bool_names [(int)rparam->contact_copy.simulate]) < 0
 	  || fprintf (f, "contact-copy-dhcurve-min: %f %f\n", rparam->contact_copy.emulsion_characteristic_curve.minx, rparam->contact_copy.emulsion_characteristic_curve.miny) < 0
 	  || fprintf (f, "contact-copy-dhcurve-linear1: %f %f\n", rparam->contact_copy.emulsion_characteristic_curve.linear1x, rparam->contact_copy.emulsion_characteristic_curve.linear1y) < 0
@@ -1155,9 +1154,10 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	}
+      // Only kept for compatibility with old files
       else if (!strcmp (buf, "invert"))
 	{
-	  if (!parse_bool (f, rparam_check (invert)))
+	  if (!parse_bool (f, NULL))
 	    {
 	      *error = "error parsing invert";
 	      return false;
