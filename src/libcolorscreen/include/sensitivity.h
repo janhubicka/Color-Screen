@@ -182,6 +182,113 @@ public:
     }
 };
 
+/* Produce a Richard's HD curve.  */
+class richards_hd_curve : public hd_curve
+{
+public:
+  richards_hd_curve (int points, struct hd_curve_parameters p)
+    {
+      if (!(p.minx < p.maxx))
+        p.maxx = p.minx + 1;
+      
+      n = points;
+      xs = (luminosity_t *)malloc (n * sizeof (*xs));
+      ys = (luminosity_t *)malloc (n * sizeof (*ys));
+      xs[0] = p.minx;
+      ys[0] = p.miny;
+      xs[n - 1] = p.maxx;
+      ys[n - 1] = p.maxy;
+
+      luminosity_t gamma = (p.linear2x != p.linear1x) 
+                           ? std::abs((p.linear2y - p.linear1y) / (p.linear2x - p.linear1x)) : 1e10;
+      luminosity_t toe = (p.linear1x != p.minx) 
+                         ? std::abs((p.linear1y - p.miny) / (p.linear1x - p.minx)) : 1e10;
+      luminosity_t shoulder = (p.maxx != p.linear2x) 
+                              ? std::abs((p.maxy - p.linear2y) / (p.maxx - p.linear2x)) : 1e10;
+      
+      bool is_inverse = (toe > gamma || shoulder > gamma);
+      
+      luminosity_t v = 1.0;
+      if (p.maxx != p.linear2x)
+        v = std::abs((p.linear1x - p.minx) / (p.maxx - p.linear2x));
+      if (v <= 0.0001) v = 1.0;
+
+      luminosity_t eps = 1e-5;
+
+      if (!is_inverse)
+        {
+          luminosity_t A = p.miny;
+          luminosity_t K = p.maxy;
+          
+          luminosity_t y1 = p.linear1y;
+          if (std::abs(y1 - A) < eps) y1 = A + (K > A ? eps : -eps);
+          if (std::abs(y1 - K) < eps) y1 = K - (K > A ? eps : -eps);
+          
+          luminosity_t y2 = p.linear2y;
+          if (std::abs(y2 - A) < eps) y2 = A + (K > A ? eps : -eps);
+          if (std::abs(y2 - K) < eps) y2 = K - (K > A ? eps : -eps);
+
+          luminosity_t v1 = std::pow((K - A) / (y1 - A), v) - 1.0;
+          luminosity_t v2 = std::pow((K - A) / (y2 - A), v) - 1.0;
+          if (v1 <= 0) v1 = eps;
+          if (v2 <= 0) v2 = eps;
+          
+          luminosity_t L1 = std::log(v1);
+          luminosity_t L2 = std::log(v2);
+
+          luminosity_t denom = p.linear1x - p.linear2x;
+          if (denom == 0) denom = eps;
+          luminosity_t B = (L2 - L1) / denom;
+          if (B == 0) B = eps;
+          luminosity_t M = p.linear1x + L1 / B;
+
+          for (int i = 1; i < n - 1; i++)
+            {
+              xs[i] = p.minx + i * (p.maxx - p.minx) / (luminosity_t)(n - 1);
+              ys[i] = A + (K - A) / std::pow(1.0 + std::exp(-B * (xs[i] - M)), 1.0 / v);
+            }
+        }
+      else
+        {
+          luminosity_t Ax = p.minx;
+          luminosity_t Kx = p.maxx;
+          
+          luminosity_t x1 = p.linear1x;
+          if (std::abs(x1 - Ax) < eps) x1 = Ax + (Kx > Ax ? eps : -eps);
+          if (std::abs(x1 - Kx) < eps) x1 = Kx - (Kx > Ax ? eps : -eps);
+          
+          luminosity_t x2 = p.linear2x;
+          if (std::abs(x2 - Ax) < eps) x2 = Ax + (Kx > Ax ? eps : -eps);
+          if (std::abs(x2 - Kx) < eps) x2 = Kx - (Kx > Ax ? eps : -eps);
+
+          luminosity_t v1 = std::pow((Kx - Ax) / (x1 - Ax), v) - 1.0;
+          luminosity_t v2 = std::pow((Kx - Ax) / (x2 - Ax), v) - 1.0;
+          if (v1 <= 0) v1 = eps;
+          if (v2 <= 0) v2 = eps;
+          
+          luminosity_t L1 = std::log(v1);
+          luminosity_t L2 = std::log(v2);
+
+          luminosity_t denom = p.linear1y - p.linear2y;
+          if (denom == 0) denom = eps;
+          luminosity_t B = (L2 - L1) / denom;
+          if (B == 0) B = eps;
+          luminosity_t M = p.linear1y + L1 / B;
+
+          for (int i = 1; i < n - 1; i++)
+            {
+              ys[i] = p.miny + i * (p.maxy - p.miny) / (luminosity_t)(n - 1);
+              xs[i] = Ax + (Kx - Ax) / std::pow(1.0 + std::exp(-B * (ys[i] - M)), 1.0 / v);
+            }
+        }
+    }
+  ~richards_hd_curve()
+    {
+      free (xs);
+      free (ys);
+    }
+};
+
 
 class
 film_sensitivity

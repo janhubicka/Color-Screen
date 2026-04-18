@@ -495,7 +495,8 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
     }
   if (m_params.contact_copy.simulate)
     {
-      m_sensitivity_hd_curve = std::make_unique <synthetic_hd_curve> (100, m_params.contact_copy.emulsion_characteristic_curve);
+      //m_sensitivity_hd_curve = std::make_unique <synthetic_hd_curve> (100, m_params.contact_copy.emulsion_characteristic_curve);
+      m_sensitivity_hd_curve = std::make_unique <richards_hd_curve> (100, m_params.contact_copy.emulsion_characteristic_curve);
       m_sensitivity = std::make_unique <film_sensitivity> (m_sensitivity_hd_curve.get (), m_params.contact_copy.preflash, m_params.contact_copy.exposure, m_params.contact_copy.boost);
       m_sensitivity->precompute ();
     }

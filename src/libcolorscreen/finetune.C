@@ -3622,7 +3622,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
     /* We are going to initialize render inside of nested region.
        TODO: We probably want to set omp_nested on proper place.  */
 #ifdef _OPENMP
-  omp_set_nested (1);
+  omp_set_max_active_levels (3);
 #endif
   if (xsteps > 1 || ysteps > 1)
     {

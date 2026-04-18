@@ -70,7 +70,7 @@ void HDCurveWidget::setHDColors(const std::vector<colorscreen::rgbdata> &colors,
 
 void HDCurveWidget::updateCurve() {
     m_curvePath.clear();
-    colorscreen::synthetic_hd_curve synthLine(100, m_params);
+    colorscreen::richards_hd_curve synthLine(100, m_params);
     
     QRectF rect = getChartRect();
     if (rect.width() <= 0) return;
