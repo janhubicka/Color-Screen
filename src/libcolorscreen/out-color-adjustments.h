@@ -69,7 +69,6 @@ private:
   luminosity_t m_target_film_gamma;
   luminosity_t m_output_gamma;
   bool m_gammut_warning;
-  hd_curve *m_output_curve;
 
   /* Tone curve translation.  */
   std::unique_ptr<tone_curve> m_tone_curve;

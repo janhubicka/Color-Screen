@@ -148,7 +148,6 @@ public:
   : out_color (dstmaxval), m_img (img), m_params (rparam), m_gray_data_id (img.id), m_sharpened_data (NULL), m_sharpened_data_holder (), m_maxval (img.data ? img.maxval : 65535), 
     m_backlight_correction (), m_backlight_correction_id (0)
   {
-    m_params.output_curve = NULL;
   }
   pure_attr inline luminosity_t get_img_pixel (coord_t x, coord_t y) const;
   pure_attr inline luminosity_t get_unadjusted_img_pixel (coord_t x, coord_t y) const;
@@ -431,18 +430,6 @@ out_color_adjustments::linear_hdr_color (luminosity_t r, luminosity_t g, luminos
       xyz c = m_spectrum_dyes_to_xyz->dyes_rgb_to_xyz (r, g, b);
 
       m_color_matrix2.apply_to_rgb (c.x, c.y, c.z, &r, &g, &b);
-    }
-  if (m_output_curve)
-    {
-      luminosity_t lum = r * rwght + g * gwght + b * bwght;
-      luminosity_t lum2;
-      lum2 = m_output_curve->apply (lum);
-      if (lum != lum2)
-	{
-	  r *= lum2 / lum;
-	  g *= lum2 / lum;
-	  b *= lum2 / lum;
-	}
     }
 
   /* Apply DNG-style tone curve correction.  */

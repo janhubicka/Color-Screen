@@ -44,7 +44,6 @@ out_color_adjustments::precompute (
   m_target_film_gamma = m_params.target_film_gamma;
   m_output_gamma = m_params.output_gamma;
   m_gammut_warning = m_params.gammut_warning;
-  m_output_curve = m_params.output_curve;
 
   out_lookup_table_params out_par
       = { m_dst_maxval, m_params.output_gamma, m_params.target_film_gamma };

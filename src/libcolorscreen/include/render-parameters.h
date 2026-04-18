@@ -490,10 +490,6 @@ struct render_parameters
 
   bool gammut_warning;
 
-  /***** Experimental (unfinished) stuff *****/
-
-  hd_curve *output_curve;
-
   render_parameters ()
       : 
 	capture_type (capture_unknown),
@@ -531,8 +527,7 @@ struct render_parameters
         target_film_gamma (1),
 
         /* Output profile  */
-        output_profile (output_profile_sRGB), output_gamma (-1), gammut_warning (false),
-        output_curve (NULL)
+        output_profile (output_profile_sRGB), output_gamma (-1), gammut_warning (false)
   {
   }
 
@@ -595,7 +590,6 @@ struct render_parameters
 	   && collection_quality == other.collection_quality
 	   && screen_demosaic == other.screen_demosaic
 	   && demosaiced_scaling == other.demosaiced_scaling
-           && output_curve == other.output_curve
            && scanner_blur_correction == other.scanner_blur_correction
            && backlight_correction == other.backlight_correction
            && backlight_correction_black == other.backlight_correction_black
