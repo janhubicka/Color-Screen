@@ -74,6 +74,13 @@ public:
   {
     return m_linear;
   }
+  luminosity_t
+  apply (luminosity_t c)
+  {
+    if (m_linear)
+      return c;
+    return precomputed_function::apply (c);
+  }
 private:
   inline
   rgbdata apply_to_rgb_1 (rgbdata c, int i1, int i2, int i3)
