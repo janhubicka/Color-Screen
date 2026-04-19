@@ -64,4 +64,335 @@ struct hd_curve_parameters safe_reversal_output_curve_params (0, 1,
 							      0, 1,
 							      0.7, 0.3,
 							      3, 0);
+
+/* Convert 4-point HD curve parameters to Richards curve parameters.  */
+struct richards_curve_parameters
+hd_to_richards_curve_parameters (const hd_curve_parameters &p)
+{
+  bool is_inverse = p.is_inverted_p();
+  
+  luminosity_t eps = 1e-4;
+  luminosity_t v = 1.0;
+  
+  luminosity_t z1 = is_inverse ? p.linear1y : p.linear1x;
+  luminosity_t z2 = is_inverse ? p.linear2y : p.linear2x;
+  luminosity_t min_z = is_inverse ? p.miny : p.minx;
+  luminosity_t max_z = is_inverse ? p.maxy : p.maxx;
+
+  luminosity_t d_low = std::abs(z1 - min_z);
+  luminosity_t d_high = std::abs(max_z - z2);
+
+  if (d_high > eps) v = d_low / d_high;
+  
+  if (v < 0.01) v = 0.01;
+  if (v > 10.0) v = 10.0;
+
+  luminosity_t A, K, B, M;
+
+  auto fit = [&](luminosity_t in1, luminosity_t in2, luminosity_t out1, luminosity_t out2, luminosity_t a, luminosity_t k) {
+      if (std::abs(out1 - a) < eps) out1 = a + (k > a ? eps : -eps);
+      if (std::abs(out1 - k) < eps) out1 = k - (k > a ? eps : -eps);
+      if (std::abs(out2 - a) < eps) out2 = a + (k > a ? eps : -eps);
+      if (std::abs(out2 - k) < eps) out2 = k - (k > a ? eps : -eps);
+      
+      luminosity_t vv1 = std::pow((k - a) / (out1 - a), v) - 1.0;
+      luminosity_t vv2 = std::pow((k - a) / (out2 - a), v) - 1.0;
+      if (vv1 > 1e30 || std::isinf(vv1)) vv1 = 1e30;
+      if (vv2 > 1e30 || std::isinf(vv2)) vv2 = 1e30;
+      if (vv1 <= 0) vv1 = eps;
+      if (vv2 <= 0) vv2 = eps;
+      
+      luminosity_t L1 = std::log(vv1);
+      luminosity_t L2 = std::log(vv2);
+      
+      luminosity_t denom = in1 - in2;
+      if (std::abs(denom) < eps) denom = (denom >= 0 ? eps : -eps);
+      
+      B = (L2 - L1) / denom;
+      if (std::abs(B) < eps) B = eps;
+      M = in1 + L1 / B;
+  };
+
+  if (!is_inverse)
+    {
+      A = p.miny; K = p.maxy;
+      fit(p.linear1x, p.linear2x, p.linear1y, p.linear2y, A, K);
+    }
+  else
+    {
+      A = p.minx; K = p.maxx;
+      fit(p.linear1y, p.linear2y, p.linear1x, p.linear2x, A, K);
+    }
+  return richards_curve_parameters(A, K, B, M, v, is_inverse);
+}
+
+
+/* Helper function to generate hd_curve_parameters perfectly representing a Richard's curve.  */
+struct hd_curve_parameters
+richards_to_hd_curve_parameters (const richards_curve_parameters &rp)
+{
+  luminosity_t A = rp.A, K = rp.K, B = rp.B, M = rp.M, v = rp.v;
+  bool inverse = rp.is_inverse;
+  luminosity_t eps = 1e-4;
+  
+  auto pick = [&](luminosity_t a, luminosity_t k) {
+      luminosity_t delta_o = 0.1 * std::abs(k - a);
+      if (delta_o == 0) delta_o = 1.0;
+      
+      luminosity_t o1 = a + (k > a ? delta_o : -delta_o);
+      luminosity_t o2 = k - (k > a ? delta_o : -delta_o);
+      
+      auto solve = [&](luminosity_t out) {
+          luminosity_t vv = std::max(eps, (luminosity_t)(std::pow((k - a) / (out - a), v) - 1.0));
+          return M - std::log(vv) / B;
+      };
+      
+      auto formula = [&](luminosity_t in) {
+          return a + (k - a) / std::pow(1.0 + std::exp(-B * (in - M)), 1.0 / v);
+      };
+      
+      luminosity_t i1 = solve(o1);
+      luminosity_t i2 = solve(o2);
+      
+      // D is the characteristic interval on the independent axis.
+      luminosity_t D = std::abs(i1 - i2);
+      if (D == 0) D = 1.0;
+      D *= 10.0; // Standardized buffer
+      
+      luminosity_t min_in = std::min(i1, i2) - v * D;
+      luminosity_t max_in = std::max(i1, i2) + D;
+      
+      // Calculate exact boundary locations on the 'output' axis for H&D endpoints
+      luminosity_t b1 = formula(min_in);
+      luminosity_t b2 = formula(max_in);
+      
+      return std::make_tuple(min_in, max_in, i1, o1, i2, o2, b1, b2);
+  };
+
+  if (!inverse)
+    {
+      auto [minx, maxx, x1, y1, x2, y2, y_min, y_max] = pick(A, K);
+      // Ensure X-axis monotonicity
+      if (x1 > x2) { std::swap(x1, x2); std::swap(y1, y2); }
+      // In Direct Mode, the curve must reach fog and saturation limits (A, K)
+      luminosity_t r_miny = (y1 < y2) ? std::min(A, K) : std::max(A, K);
+      luminosity_t r_maxy = (y1 < y2) ? std::max(A, K) : std::min(A, K);
+      return hd_curve_parameters(minx, r_miny, x1, y1, x2, y2, maxx, r_maxy);
+    }
+  else
+    {
+      auto [miny, maxy, y1, x1, y2, x2, x_min, x_max] = pick(A, K);
+      // Ensure X-axis (Output) monotonicity for the renderer
+      luminosity_t cx1 = x1, cy1 = y1, cx2 = x2, cy2 = y2;
+      if (cx1 > cx2) { std::swap(cx1, cx2); std::swap(cy1, cy2); }
+      // In Inverse Mode, exposure X is bounded by the solved range (x_min, x_max)
+      luminosity_t r_minx = std::min(x_min, x_max);
+      luminosity_t r_maxx = std::max(x_min, x_max);
+      // Pair with density boundaries
+      luminosity_t r_miny = (x1 < x2) ? miny : maxy;
+      luminosity_t r_maxy = (x1 < x2) ? maxy : miny;
+      return hd_curve_parameters(r_minx, r_miny, cx1, cy1, cx2, cy2, r_maxx, r_maxy);
+    }
+}
+
+/* Compute cubic bezier curve passing trhoug y1,y2 and x3,y3
+   with pint x2,y2 determining derivatives at the endpoints.  */
+inline void
+bezier (luminosity_t *rx, luminosity_t *ry,
+        luminosity_t x1, luminosity_t y1,
+        luminosity_t x2, luminosity_t y2,
+        luminosity_t x3, luminosity_t y3,
+	luminosity_t t)
+{
+    luminosity_t xa = interpolate (x1, x2, t);
+    luminosity_t ya = interpolate (y1, y2, t);
+    luminosity_t xb = interpolate (x2, x3, t);
+    luminosity_t yb = interpolate (y2, y3, t);
+
+    *rx = interpolate(xa, xb, t);
+    *ry = interpolate(ya, yb, t);
+}
+
+synthetic_hd_curve::synthetic_hd_curve (int points, struct hd_curve_parameters p)
+{
+  if (!(p.minx < p.maxx))
+    p.maxx = p.minx + 1;
+  bool dostart = p.minx < p.linear1x && p.linear1x < p.linear2x && p.linear2x <= p.maxx;
+  bool doend = p.minx <= p.linear1x && p.linear1x < p.linear2x && p.linear2x < p.maxx;
+  int n1 = dostart ? points : 1;
+  n = n1 + (doend ? points : 1);
+  xs = (luminosity_t *)malloc (n * sizeof (*xs));
+  ys = (luminosity_t *)malloc (n * sizeof (*ys));
+  luminosity_t slope = p.linear2y != p.linear1y ? (p.linear2x - p.linear1x) / (p.linear2y - p.linear1y) : 0;
+  xs[0] = p.minx;
+  ys[0] = p.miny;
+  xs[n - 1] = p.maxx;
+  ys[n - 1] = p.maxy;
+
+  luminosity_t start_middlex = p.linear1x - (p.linear1y - p.miny) * slope;
+  luminosity_t start_middley = p.miny;
+
+  if (start_middlex < p.minx && slope != 0)
+    {
+      start_middlex = p.minx;
+      start_middley = p.linear1y - (p.linear1x - p.minx) / slope;
+    }
+
+  luminosity_t end_middlex = p.linear2x + (p.maxy - p.linear2y) * slope;
+  luminosity_t end_middley = p.maxy;
+
+  if (end_middlex > p.maxx && slope != 0)
+    {
+      end_middlex = p.maxx;
+      end_middley = p.linear2y + (p.maxx - p.linear2x) / slope;
+    }
+
+  for (int i = 0; i < points; i++)
+    {
+      if (dostart)
+	bezier (&xs[i], &ys[i], p.minx, p.miny, 
+		start_middlex, start_middley,
+		p.linear1x,p.linear1y,
+		i / (luminosity_t)(points - 1));
+      if (doend)
+	bezier (&xs[i+n1], &ys[i+n1], p.linear2x, p.linear2y, 
+		end_middlex, end_middley,
+		p.maxx, p.maxy,
+		i / (luminosity_t)(points - 1));
+    }
+}
+luminosity_t
+richards_hd_curve::eval_richards (const richards_curve_parameters &p, luminosity_t xs,
+		 bool clamp, luminosity_t clampmin, luminosity_t clampmax)
+  {
+    if (!p.is_inverse)
+      {
+	// Direct: Density = Richards(LogE)
+	return p.A + (p.K - p.A) / std::pow(1.0 + std::exp(-p.B * (xs - p.M)), 1.0 / p.v);
+      }
+    else
+      {
+	// Inverse: Density = Richards^-1(LogE). 
+	// Valid only between exposure asymptotes A and K.
+	//
+	luminosity_t eps_x = 1e-8 * std::abs(p.K - p.A);
+	
+	// Strictly clamp to open interval (A, K) to avoid log(0)
+	if (p.K > p.A) {
+	    if (xs <= p.A + eps_x)
+	      {
+	        xs = p.A + eps_x;
+		if (clamp)
+		  return clampmin;
+	      }
+	    if (xs >= p.K - eps_x)
+	      {
+	        xs = p.K - eps_x;
+		if (clamp)
+		  return clampmax;
+	      }
+	} else {
+	    if (xs >= p.A - eps_x)
+	      {
+	        xs = p.A - eps_x;
+		if (clamp)
+		  return clampmax;
+	      }
+	    if (xs <= p.K + eps_x)
+	      {
+	        xs = p.K + eps_x;
+		if (clamp)
+		  return clampmin;
+	      }
+	}
+
+	luminosity_t base = (p.K - p.A) / (xs - p.A);
+	luminosity_t vv = std::pow(std::abs(base), p.v) - 1.0;
+	if (vv <= 1e-15) vv = 1e-15;
+	luminosity_t ret = p.M - std::log(vv) / p.B;
+	if (clamp)
+	  ret = std::clamp (ret, std::min (clampmin, clampmax), std::max (clampmin, clampmax));
+	return ret;
+      }
+  }
+richards_hd_curve::richards_hd_curve (int points, const struct hd_curve_parameters &p)
+  {
+    n = points;
+    xs = (luminosity_t *)malloc (n * sizeof (*xs));
+    ys = (luminosity_t *)malloc (n * sizeof (*ys));
+
+    richards_curve_parameters rp = hd_to_richards_curve_parameters(p);
+    sample (rp, p.minx, p.maxx, rp.is_inverse, p.miny, p.maxy);
+  }
+richards_hd_curve::richards_hd_curve (int points, const struct richards_curve_parameters &rp)
+  {
+    n = points;
+    xs = (luminosity_t *)malloc (n * sizeof (*xs));
+    ys = (luminosity_t *)malloc (n * sizeof (*ys));
+
+    sample(rp, std::min (rp.A, rp.K), std::max (rp.A, rp.K));
+  }
+void
+richards_hd_curve::sample (const richards_curve_parameters &p, luminosity_t min_x, luminosity_t max_x,
+	       bool clamp, luminosity_t clampmin, luminosity_t clampmax)
+  {
+    // Always sample Exposure (X) axis uniformly for optimal resolution in the table.
+    for (int i = 0; i < n; i++)
+      {
+        xs[i] = min_x + i * (max_x - min_x) / (luminosity_t)(n - 1);
+	ys[i] = eval_richards (p, xs[i], clamp, clampmin, clampmax);
+      }
+  }
+  void hd_curve_parameters::adjust_v(double old_v, double new_v, double B, double M) {
+    auto f = [&](double in) {
+      double Z = B * (in - M);
+      // Height S = (1 + exp(-Z))^(-1/v) remains constant
+      double inner = std::expm1((new_v / old_v) * std::log1p(std::exp(-Z)));
+      if (inner <= 1e-20) inner = 1e-20;
+      return M - std::log(inner) / B;
+    };
+    
+    // 1. Move knots using precise formula
+    double old_l1, old_l2, new_l1, new_l2, old_min, old_max, new_min, new_max;
+    if (is_inverted_p()) {
+      old_l1 = linear1y; old_l2 = linear2y; old_min = miny; old_max = maxy;
+      linear1y = f(linear1y); linear2y = f(linear2y);
+      new_l1 = linear1y; new_l2 = linear2y;
+    } else {
+      old_l1 = linear1x; old_l2 = linear2x; old_min = minx; old_max = maxx;
+      linear1x = f(linear1x); linear2x = f(linear2x);
+      new_l1 = linear1x; new_l2 = linear2x;
+    }
+
+    // 2. Adjust endpoints to satisfy solver's heuristic: v = d_low / d_high
+    // d_low = |min - l_toe|, d_high = |max - l_shoulder|
+    double old_d_toe = std::abs(old_l1 - old_min);
+    double old_d_shoulder = std::abs(old_max - old_l2);
+    double old_knot_span = std::abs(old_l2 - old_l1);
+    double new_knot_span = std::abs(new_l2 - new_l1);
+    
+    // Scale distances such that ratio changes by new_v / old_v
+    double scale = (old_knot_span > 1e-8) ? (new_knot_span / old_knot_span) : 1.0;
+    // d_low_new = d_low_old * scale * (v_new / v_old)
+    // d_high_new = d_high_old * scale
+    double new_d_toe = old_d_toe * scale * (new_v / old_v);
+    double new_d_shoulder = old_d_shoulder * scale;
+    
+    if (is_inverted_p()) {
+      miny = (linear1y < linear2y) ? (linear1y - new_d_toe) : (linear1y + new_d_toe);
+      maxy = (linear2y > linear1y) ? (linear2y + new_d_shoulder) : (linear2y - new_d_shoulder);
+    } else {
+      minx = (linear1x < linear2x) ? (linear1x - new_d_toe) : (linear1x + new_d_toe);
+      maxx = (linear2x > linear1x) ? (linear2x + new_d_shoulder) : (linear2x - new_d_shoulder);
+    }
+  }
+
+  void hd_curve_parameters::adjust_richards(const richards_curve_parameters &old_rp, const richards_curve_parameters &new_rp) {
+    if (old_rp.is_inverse != new_rp.is_inverse) return; // Should not happen in incremental GUI use
+    if (old_rp.A != new_rp.A) adjust_A(old_rp.A, new_rp.A, old_rp.K);
+    if (old_rp.K != new_rp.K) adjust_K(old_rp.K, new_rp.K, new_rp.A);
+    if (old_rp.M != new_rp.M) adjust_M(old_rp.M, new_rp.M);
+    if (old_rp.B != new_rp.B) adjust_B(old_rp.B, new_rp.B, new_rp.M);
+    if (old_rp.v != new_rp.v) adjust_v(old_rp.v, new_rp.v, new_rp.B, new_rp.M);
+  }
 }
