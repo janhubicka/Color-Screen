@@ -11,6 +11,7 @@
 
 class CIEChartWidget; // Forward declaration
 class SpectraChartWidget;
+class ToneCurveWidget;
 
 class ColorPanel : public TilePreviewPanel {
   Q_OBJECT
@@ -90,6 +91,9 @@ private:
 
   GamutChartGroup m_gamutGroup;
   GamutChartGroup m_correctedGamutGroup;
+
+  ToneCurveWidget *m_toneCurveWidget = nullptr;
+  QComboBox *m_toneCurveCoordCombo = nullptr;
 };
 
 #endif // COLOR_PANEL_H

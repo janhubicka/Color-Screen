@@ -1,5 +1,7 @@
 #include "include/tone-curve.h"
 #include "include/sensitivity.h"
+#include "spline.h"
+#include <algorithm>
 namespace colorscreen
 {
 namespace
@@ -288,9 +290,10 @@ const property_t tone_curve::tone_curve_names[tone_curve::tone_curve_max] =
   {"kodachrome25", "Kodachrome 25", "Simulated Kodachrome 25 response"},
   {"spicer_dufay_low", "Spicer Dufay Low", "Spicer's Dufaycolor reversal curve (low contrast)"},
   {"spicer_dufay_mid", "Spicer Dufay Mid", "Spicer's Dufaycolor reversal curve (medium contrast)"},
-  {"spicer_dufay_high", "Spicer Dufay High", "Spicer's Dufaycolor reversal curve (high contrast)"}
+  {"spicer_dufay_high", "Spicer Dufay High", "Spicer's Dufaycolor reversal curve (high contrast)"},
+  {"custom", "Custom", "Custom tone curve defined by control points"}
 };
-tone_curve::tone_curve (enum tone_curves type)
+tone_curve::tone_curve (enum tone_curves type, const std::vector<point_t> &control_points)
 : precomputed_function (0, 1)
 {
   m_linear = false;
@@ -326,6 +329,9 @@ tone_curve::tone_curve (enum tone_curves type)
       case tone_curve_spicer_dufay_high:
 	init_by_sensitivity (spectrum_dyes_to_xyz::spicer_dufay_reversal_curve_high);
 	break;
+      case tone_curve_custom:
+	init_by_control_points (control_points);
+	break;
       default: abort ();
     }
 }
@@ -343,5 +349,57 @@ tone_curve::save_tone_curve (FILE *f, tone_curves curve, bool hd)
          fprintf (f, "%f %f\n", log10(i)/*-log10 (0.001)*/, log10 (1/val));
      }
    return true;
+}
+std::vector<point_t>
+tone_curve::default_control_points ()
+{
+  return {
+    {0.0, 0.0},
+    {0.25, 0.10433},
+    {0.5, 0.28881},
+    {0.75, 0.61436},
+    {1.0, 1.0}
+  };
+}
+tone_curve::tone_curve (const std::vector<point_t> &control_points)
+: precomputed_function (0, 1)
+{
+  init_by_control_points (control_points);
+}
+
+void
+tone_curve::init_by_control_points (const std::vector<point_t> &control_points)
+{
+  m_linear = false;
+  std::vector<point_t> cp = control_points;
+  if (cp.empty ())
+    cp = default_control_points ();
+  std::sort (cp.begin (), cp.end (), [](const point_t &a, const point_t &b) {
+    return a.x < b.x;
+  });
+  if (cp[0].x > 0)
+    cp.insert (cp.begin (), {0.0, 0.0});
+  if (cp.back ().x < 1.0)
+    cp.push_back ({1.0, 1.0});
+
+  int n = cp.size ();
+  double *x = new double[n];
+  double *y = new double[n];
+  for (int i = 0; i < n; i++)
+    {
+      x[i] = cp[i].x;
+      y[i] = cp[i].y;
+    }
+  spline<double> s (x, y, n);
+  const int len = 1024;
+  luminosity_t table[len];
+  for (int i = 0; i < len; i++)
+    {
+      double val = s.apply (i / (double)(len - 1));
+      table[i] = std::max (0.0, std::min (1.0, val));
+    }
+  init_by_y_values (table, len);
+  delete[] x;
+  delete[] y;
 }
 }

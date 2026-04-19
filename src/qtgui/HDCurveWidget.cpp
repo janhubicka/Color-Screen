@@ -4,9 +4,11 @@
 #include <QMouseEvent>
 #include <cmath>
 
-HDCurveWidget::HDCurveWidget(QWidget *parent) : QWidget(parent) {
-    setMinimumSize(250, 250);
-    setMouseTracking(true);
+HDCurveWidget::HDCurveWidget(QWidget *parent) : InteractiveChartWidget(parent) {
+    m_defaultMinX = m_minX = -5.0;
+    m_defaultMaxX = m_maxX = 5.0;
+    m_defaultMinY = m_minY = -5.0;
+    m_defaultMaxY = m_maxY = 5.0;
     updateCurve();
 }
 
@@ -33,13 +35,11 @@ void HDCurveWidget::setDisplayMode(colorscreen::hd_axis_type mode) {
     
     // Reset zoom based on mode
     if (m_displayMode == colorscreen::hd_axis_hd) {
-        m_minX = -5.0; m_maxX = 5.0;
-        m_minY = -5.0; m_maxY = 5.0;
+        m_defaultMinX = m_minX = -5.0; m_defaultMaxX = m_maxX = 5.0;
+        m_defaultMinY = m_minY = -5.0; m_defaultMaxY = m_maxY = 5.0;
     } else {
-        // Linear exposure normally from 0 to something above 1
-        m_minX = 0.0; m_maxX = 2.0;
-        // Transmittance from 0 (black) to 1 (transparent background)
-        m_minY = 0.0; m_maxY = 1.1;
+        m_defaultMinX = m_minX = 0.0; m_defaultMaxX = m_maxX = 2.0;
+        m_defaultMinY = m_minY = 0.0; m_defaultMaxY = m_maxY = 1.1;
     }
     updateCurve();
     update();
@@ -91,19 +91,6 @@ void HDCurveWidget::updateCurve() {
     }
 }
 
-QRectF HDCurveWidget::getChartRect() const {
-    const int margin = 20;
-    const int leftMargin = 60;
-    return QRectF(leftMargin, margin, width() - leftMargin - margin, height() - 2 * margin);
-}
-
-QPointF HDCurveWidget::plotToWidget(double plotX, double plotY) const {
-    QRectF rect = getChartRect();
-    double nx = (plotX - m_minX) / (m_maxX - m_minX);
-    double ny = (plotY - m_minY) / (m_maxY - m_minY);
-    return QPointF(rect.left() + nx * rect.width(), rect.bottom() - ny * rect.height());
-}
-
 QPointF HDCurveWidget::mapToWidget(double x, double y) const {
     double plotX = colorscreen::hd_log_exposure_to_axis_x(x, m_displayMode);
     double plotY = colorscreen::hd_density_to_axis_y(y, m_densityBoost, m_displayMode);
@@ -111,26 +98,12 @@ QPointF HDCurveWidget::mapToWidget(double x, double y) const {
 }
 
 std::pair<double, double> HDCurveWidget::mapFromWidget(const QPointF &p) const {
-    QRectF rect = getChartRect();
-    double nx = (p.x() - rect.left()) / rect.width();
-    double ny = (rect.bottom() - p.y()) / rect.height();
-    
-    double plotX = m_minX + nx * (m_maxX - m_minX);
-    double plotY = m_minY + ny * (m_maxY - m_minY);
-    
+    auto [plotX, plotY] = widgetToPlot(p);
     return {colorscreen::hd_axis_x_to_log_exposure(plotX, m_displayMode),
             colorscreen::hd_axis_y_to_density(plotY, m_densityBoost, m_displayMode)};
 }
 
-void HDCurveWidget::paintEvent(QPaintEvent *event) {
-    QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
-    
-    QRectF rect = getChartRect();
-    
-    // Fill background
-    painter.fillRect(rect, QColor(40, 40, 40));
-    
+void HDCurveWidget::drawGrid(QPainter &painter, const QRectF &rect) {
     // Draw Histogram
     if (!m_histogram.empty()) {
         uintmax_t maxCount = 0;
@@ -197,7 +170,6 @@ void HDCurveWidget::paintEvent(QPaintEvent *event) {
         int leftStripX = rect.left() - 15;
         int stripW = 10;
         
-        // Draw vertical strip left of chart using a gradient to avoid banding
         QLinearGradient gradient(0, rect.bottom(), 0, rect.top());
         for (size_t i = 0; i < m_hdColors.size(); ++i) {
             double pos = (double)i / (m_hdColors.size() - 1);
@@ -208,10 +180,7 @@ void HDCurveWidget::paintEvent(QPaintEvent *event) {
         }
         painter.fillRect(QRectF(leftStripX, rect.top(), stripW, rect.height()), gradient);
 
-        // Draw transparent bands for 1..254 across chart
         auto drawBand = [&](int channel, QColor bandColor) {
-            // Find y ranges where channel is in [1, 254]
-            // Since the curve is monotonic, we expect a single range
             int startIdx = -1;
             int endIdx = -1;
             for (int i = 0; i < (int)m_hdColors.size(); ++i) {
@@ -242,14 +211,18 @@ void HDCurveWidget::paintEvent(QPaintEvent *event) {
         drawBand(1, QColor(0, 255, 0, 30));
         drawBand(2, QColor(0, 0, 255, 30));
     }
+}
 
-    // Draw Curve
+void HDCurveWidget::drawPlot(QPainter &painter, const QRectF &rect) {
+    Q_UNUSED(rect);
     painter.setPen(QPen(Qt::green, 2));
     if (!m_curvePath.isEmpty()) {
         painter.drawPolyline(m_curvePath);
     }
-    
-    // Draw Control Points
+}
+
+void HDCurveWidget::drawControlPoints(QPainter &painter, const QRectF &rect) {
+    Q_UNUSED(rect);
     painter.setBrush(Qt::white);
     painter.setPen(QPen(Qt::black, 1));
     
@@ -271,8 +244,6 @@ void HDCurveWidget::paintEvent(QPaintEvent *event) {
 }
 
 void HDCurveWidget::mousePressEvent(QMouseEvent *event) {
-    m_lastMousePos = event->position();
-    
     if (event->button() == Qt::LeftButton) {
         QPointF pts[4] = {
             mapToWidget(m_params.minx, m_params.miny),
@@ -291,15 +262,17 @@ void HDCurveWidget::mousePressEvent(QMouseEvent *event) {
         
         if (m_dragPointIndex != -1) {
             update();
+            return;
         }
     }
+    InteractiveChartWidget::mousePressEvent(event);
 }
 
 void HDCurveWidget::mouseMoveEvent(QMouseEvent *event) {
     if (m_dragPointIndex != -1) {
         QRectF rect = getChartRect();
-        double nx = qBound(0.0, (event->position().x() - rect.left()) / rect.width(), 1.0);
-        double ny = qBound(0.0, (rect.bottom() - event->position().y()) / rect.height(), 1.0);
+        double nx = qBound(0.0, (double)(event->position().x() - rect.left()) / rect.width(), 1.0);
+        double ny = qBound(0.0, (double)(rect.bottom() - event->position().y()) / rect.height(), 1.0);
         
         double plotX = m_minX + nx * (m_maxX - m_minX);
         double plotY = m_minY + ny * (m_maxY - m_minY);
@@ -307,50 +280,22 @@ void HDCurveWidget::mouseMoveEvent(QMouseEvent *event) {
         double logicX = colorscreen::hd_axis_x_to_log_exposure(plotX, m_displayMode);
         double logicY = colorscreen::hd_axis_y_to_density(plotY, m_densityBoost, m_displayMode);
         
-        // Constrain points to maintain left-to-right order to keep function valid
         switch (m_dragPointIndex) {
-            case 0: // min
-                logicX = qMin(logicX, m_params.linear1x);
-                m_params.minx = logicX;
-                m_params.miny = logicY;
-                break;
-            case 1: // linear1
-                logicX = qBound(m_params.minx, logicX, m_params.linear2x);
-                m_params.linear1x = logicX;
-                m_params.linear1y = logicY;
-                break;
-            case 2: // linear2
-                logicX = qBound(m_params.linear1x, logicX, m_params.maxx);
-                m_params.linear2x = logicX;
-                m_params.linear2y = logicY;
-                break;
-            case 3: // max
-                logicX = qMax(logicX, m_params.linear2x);
-                m_params.maxx = logicX;
-                m_params.maxy = logicY;
-                break;
+            case 0: logicX = qMin(logicX, m_params.linear1x); m_params.minx = logicX; m_params.miny = logicY; break;
+            case 1: logicX = qBound(m_params.minx, logicX, m_params.linear2x); m_params.linear1x = logicX; m_params.linear1y = logicY; break;
+            case 2: logicX = qBound(m_params.linear1x, logicX, m_params.maxx); m_params.linear2x = logicX; m_params.linear2y = logicY; break;
+            case 3: logicX = qMax(logicX, m_params.linear2x); m_params.maxx = logicX; m_params.maxy = logicY; break;
         }
         
         updateCurve();
         update();
         emit parametersChanged(m_params);
-    } else if (event->buttons() & Qt::RightButton) {
-        QPointF delta = event->position() - m_lastMousePos;
-        
-        QRectF rect = getChartRect();
-        double dx = (delta.x() / rect.width()) * (m_maxX - m_minX);
-        double dy = (delta.y() / rect.height()) * (m_maxY - m_minY);
-        
-        m_minX -= dx;
-        m_maxX -= dx;
-        m_minY += dy;
-        m_maxY += dy;
-        
-        updateCurve();
-        update();
-        emit parametersChanged(m_params); // To refresh color strip if it uses these bounds
+    } else {
+        InteractiveChartWidget::mouseMoveEvent(event);
+        if (m_isPanning) {
+            updateCurve();
+        }
     }
-    m_lastMousePos = event->position();
 }
 
 void HDCurveWidget::mouseReleaseEvent(QMouseEvent *event) {
@@ -358,65 +303,10 @@ void HDCurveWidget::mouseReleaseEvent(QMouseEvent *event) {
         m_dragPointIndex = -1;
         update();
     }
-}
-
-void HDCurveWidget::mouseDoubleClickEvent(QMouseEvent *event) {
-    Q_UNUSED(event);
-    resetZoom();
-}
-
-void HDCurveWidget::resetZoom() {
-    m_minX = -5.0;
-    m_maxX = 5.0;
-    m_minY = -5.0;
-    m_maxY = 5.0;
-    updateCurve();
-    update();
-    emit parametersChanged(m_params);
-}
-
-void HDCurveWidget::wheelEvent(QWheelEvent *event) {
-    // Zoom factor: 0.9 per 120 units (step)
-    double angle = event->angleDelta().y();
-    double factor = std::pow(0.9, angle / 120.0);
-    
-    // Zoom around the mouse cursor
-    // Zoom around the mouse cursor
-    QRectF rect = getChartRect();
-    double nx = (event->position().x() - rect.left()) / rect.width();
-    double ny = (rect.bottom() - event->position().y()) / rect.height();
-    
-    double zoomX = m_minX + nx * (m_maxX - m_minX);
-    double zoomY = m_minY + ny * (m_maxY - m_minY);
-    
-    m_minX = zoomX - (zoomX - m_minX) * factor;
-    m_maxX = zoomX + (m_maxX - zoomX) * factor;
-    m_minY = zoomY - (zoomY - m_minY) * factor;
-    m_maxY = zoomY + (m_maxY - zoomY) * factor;
-    
-    // Clamp zoom levels to prevent numeric issues
-    // Min range: 0.01, Max range: 100
-    if (m_maxX - m_minX < 0.01) {
-        double mid = (m_minX + m_maxX) / 2.0;
-        m_minX = mid - 0.005;
-        m_maxX = mid + 0.005;
-    }
-    if (m_maxY - m_minY < 0.01) {
-        double mid = (m_minY + m_maxY) / 2.0;
-        m_minY = mid - 0.005;
-        m_maxY = mid + 0.005;
-    }
-    
-    updateCurve();
-    update();
-    
-    // Notify ContactCopyPanel to potentially re-compute high-res color strips
-    // actually, let's just use the parametersChanged signal but we haven't changed parameters.
-    // Let's create a new signal: zoomChanged
-    emit parametersChanged(m_params); // Force update to refresh the color strip if needed
+    InteractiveChartWidget::mouseReleaseEvent(event);
 }
 
 void HDCurveWidget::resizeEvent(QResizeEvent *event) {
-    QWidget::resizeEvent(event);
+    InteractiveChartWidget::resizeEvent(event);
     updateCurve();
 }

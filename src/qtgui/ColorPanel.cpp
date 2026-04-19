@@ -1,6 +1,7 @@
 #include "ColorPanel.h"
 #include "CIEChartWidget.h"
 #include "SpectraChartWidget.h"
+#include "ToneCurveWidget.h"
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -346,6 +347,43 @@ void ColorPanel::setupUi() {
       [](ParameterState &s, int v) {
 	s.rparams.output_tone_curve = (tone_curve::tone_curves)v;
       });
+
+  // Tone Curve Widget
+  m_toneCurveWidget = new ToneCurveWidget();
+  m_toneCurveWidget->setFixedHeight(250);
+  
+  m_toneCurveCoordCombo = new QComboBox();
+  m_toneCurveCoordCombo->addItem("Linear", static_cast<int>(ToneCurveWidget::CoordinateType::Linear));
+  m_toneCurveCoordCombo->addItem("Gamma 2.2", static_cast<int>(ToneCurveWidget::CoordinateType::Gamma22));
+  m_toneCurveCoordCombo->addItem("Logarithm", static_cast<int>(ToneCurveWidget::CoordinateType::Log));
+  m_toneCurveCoordCombo->setCurrentIndex(1); // Gamma 2.2 default
+  
+  connect(m_toneCurveCoordCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+      m_toneCurveWidget->setCoordinateType(static_cast<ToneCurveWidget::CoordinateType>(m_toneCurveCoordCombo->itemData(index).toInt()));
+  });
+
+  connect(m_toneCurveWidget, &ToneCurveWidget::controlPointsChanged, this, [this](const std::vector<point_t> &points) {
+      applyChange([points](ParameterState &s) {
+          s.rparams.output_tone_curve_control_points = points;
+      });
+  });
+
+  QWidget *tcWrapper = new QWidget();
+  QVBoxLayout *tcLayout = new QVBoxLayout(tcWrapper);
+  tcLayout->setContentsMargins(0, 0, 0, 0);
+  
+  QHBoxLayout *tcHeader = new QHBoxLayout();
+  tcHeader->addWidget(new QLabel("Coordinate View:"));
+  tcHeader->addWidget(m_toneCurveCoordCombo);
+  tcHeader->addStretch();
+  tcLayout->addLayout(tcHeader);
+  tcLayout->addWidget(m_toneCurveWidget);
+
+  m_form->addRow(tcWrapper);
+
+  m_paramUpdaters.push_back([this](const ParameterState &s) {
+      m_toneCurveWidget->setToneCurve(s.rparams.output_tone_curve, s.rparams.output_tone_curve_control_points);
+  });
   m_currentGroupForm = nullptr;
 
     // Updater for Spectra Chart visibility in main layout

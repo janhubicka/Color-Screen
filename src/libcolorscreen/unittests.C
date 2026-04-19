@@ -855,6 +855,42 @@ test_hd_sorting ()
   return ok;
 }
 
+bool
+test_custom_tone_curve ()
+{
+  bool ok = true;
+  // Test default points
+  tone_curve c1 (tone_curve::tone_curve_custom);
+  if (fabs (c1.apply (0.5) - 0.28881) > 0.001)
+    {
+      printf ("Default custom tone curve mismatch at 0.5: got %f, expected 0.28881\n", c1.apply (0.5));
+      ok = false;
+    }
+
+  // Test explicit points
+  std::vector<point_t> cp = {{0.0, 0.0}, {0.5, 0.5}, {1.0, 1.0}};
+  tone_curve c2 (cp);
+  for (float x = 0; x <= 1.0; x += 0.1)
+    {
+      if (fabs (c2.apply (x) - x) > 0.001)
+	{
+	  printf ("Linear custom tone curve mismatch at %f: got %f, expected %f\n", x, c2.apply (x), x);
+	  ok = false;
+	}
+    }
+
+  // Test non-linear interpolation
+  std::vector<point_t> cp3 = {{0.0, 0.0}, {0.5, 0.25}, {1.0, 1.0}};
+  tone_curve c3 (cp3);
+  if (fabs (c3.apply (0.5) - 0.25) > 0.001)
+    {
+      printf ("Non-linear custom tone curve mismatch at 0.5: got %f, expected 0.25\n", c3.apply (0.5));
+      ok = false;
+    }
+
+  return ok;
+}
+
 int
 test_render_linearity ()
 {
@@ -930,7 +966,7 @@ test_render_linearity ()
 int
 main ()
 {
-  printf ("1..16\n");
+  printf ("1..17\n");
   test_matrix ();
   report ("matrix tests", true);
   test_color ();
@@ -949,5 +985,6 @@ main ()
   report ("hd incremental update tests", test_hd_incremental_update ());
   report ("hd validity tests", test_hd_validity ());
   report ("hd sorting tests", test_hd_sorting ());
+  report ("custom tone curve tests", test_custom_tone_curve ());
   return 0;
 }

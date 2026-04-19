@@ -106,7 +106,7 @@ out_color_adjustments::precompute (
               xyz_pro_photo_rgb_matrix m;
               m_color_matrix2 = m * m_color_matrix2;
               m_tone_curve
-                  = std::make_unique<tone_curve> (m_params.output_tone_curve);
+                  = std::make_unique<tone_curve> (m_params.output_tone_curve, m_params.output_tone_curve_control_points);
               assert (!m_tone_curve->is_linear ());
             }
           else

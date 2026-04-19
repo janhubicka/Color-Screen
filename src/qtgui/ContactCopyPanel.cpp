@@ -312,8 +312,8 @@ void ContactCopyPanel::setupUi() {
           m_presetCombo->blockSignals(false);
       }
 
-      double minY = m_hdCurveWidget->getMinY();
-      double maxY = m_hdCurveWidget->getMaxY();
+      double minY = m_hdCurveWidget->minY();
+      double maxY = m_hdCurveWidget->maxY();
       
       const auto &p = s.rparams.contact_copy.emulsion_characteristic_curve;
       double dx = p.linear2x - p.linear1x;
@@ -335,8 +335,8 @@ void ContactCopyPanel::setupUi() {
               HistogramRequestData data;
               data.params = mut_rparams;
               data.steps = 256;
-              data.minX = m_hdCurveWidget->getMinX();
-              data.maxX = m_hdCurveWidget->getMaxX();
+              data.minX = m_hdCurveWidget->minX();
+              data.maxX = m_hdCurveWidget->maxX();
               data.axisType = axisType;
               
               m_taskQueue.requestRender(QVariant::fromValue(data));

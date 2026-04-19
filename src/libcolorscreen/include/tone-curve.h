@@ -1,6 +1,7 @@
 #ifndef TONE_CURVE_H
 #define TONE_CURVE_H
 #include <cassert>
+#include <vector>
 #include "precomputed-function.h"
 #include "color.h"
 #include "spectrum-to-xyz.h"
@@ -23,11 +24,14 @@ public:
     tone_curve_spicer_dufay_low,
     tone_curve_spicer_dufay_mid,
     tone_curve_spicer_dufay_high,
+    tone_curve_custom,
     tone_curve_max
   };
   DLL_PUBLIC static const property_t tone_curve_names[tone_curve_max];
   static bool DLL_PUBLIC save_tone_curve (FILE *f, tone_curves curve, bool hd);
-  tone_curve (enum tone_curves type);
+  tone_curve (enum tone_curves type, const std::vector<point_t> &control_points = default_control_points ());
+  tone_curve (const std::vector<point_t> &control_points);
+  DLL_PUBLIC static std::vector<point_t> default_control_points ();
   /* This does the same as dng reference implementation.  */
   rgbdata
   apply_to_rgb (rgbdata c)
@@ -88,6 +92,8 @@ private:
   }
   bool m_linear;
   void init_by_sensitivity (enum spectrum_dyes_to_xyz::characteristic_curves curve);
+private:
+  void init_by_control_points (const std::vector<point_t> &control_points);
 };
 }
 #endif

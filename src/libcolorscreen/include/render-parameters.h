@@ -466,6 +466,7 @@ struct render_parameters
   /* Brightness adjustments.  */
   luminosity_t brightness;
   enum tone_curve::tone_curves output_tone_curve;
+  std::vector<point_t> output_tone_curve_control_points;
 
   /***** Output Profile *****/
 
@@ -519,7 +520,7 @@ struct render_parameters
         backlight_temperature (5000),
         observer_whitepoint (/*srgb_white*/ d50_white),
         dye_balance (dye_balance_bradford), saturation (1), brightness (1),
-        output_tone_curve (tone_curve::tone_curve_linear),
+        output_tone_curve (tone_curve::tone_curve_linear), output_tone_curve_control_points (tone_curve::default_control_points ()),
 
         /* Output profile  */
         output_profile (output_profile_sRGB), output_gamma (-1), gammut_warning (false)
