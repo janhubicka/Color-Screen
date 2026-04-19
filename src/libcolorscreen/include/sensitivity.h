@@ -212,9 +212,10 @@ struct hd_curve_parameters
   void adjust_v(double old_v, double new_v, double B, double M) {
     auto f = [&](double in) {
       double Z = B * (in - M);
-      double exp_Z = std::exp(-Z);
+      // Height S = (1 + exp(-Z))^(-1/v) remains constant
       // Z_new = -ln((1 + exp(-Z))^(new_v / old_v) - 1)
-      double inner = std::pow(1.0 + exp_Z, new_v / old_v) - 1.0;
+      // Use expm1 and log1p for numerical stability near Z -> infinity
+      double inner = std::expm1((new_v / old_v) * std::log1p(std::exp(-Z)));
       if (inner <= 1e-20) inner = 1e-20;
       return M - std::log(inner) / B;
     };

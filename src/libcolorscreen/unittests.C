@@ -740,6 +740,36 @@ test_hd_incremental_update ()
       }
   }
 
+  // 4. Test A adjustment (Lower asymptote)
+  {
+    auto rp_new = rp1;
+    rp_new.A -= 0.2;
+    auto hurley_new = hurley;
+    hurley_new.adjust_A(rp1.A, rp_new.A, rp1.K);
+
+    luminosity_t y1_fit = richards_hd_curve::eval_richards(rp_new, hurley_new.linear1x);
+    if (std::abs(y1_fit - hurley_new.linear1y) > 1e-3)
+      {
+        printf ("Incremental A adjustment: point moved off curve! expected %f, got %f\n", hurley_new.linear1y, y1_fit);
+        ok = false;
+      }
+  }
+
+  // 5. Test K adjustment (Upper asymptote)
+  {
+    auto rp_new = rp1;
+    rp_new.K += 0.3;
+    auto hurley_new = hurley;
+    hurley_new.adjust_K(rp1.K, rp_new.K, rp1.A);
+
+    luminosity_t y1_fit = richards_hd_curve::eval_richards(rp_new, hurley_new.linear1x);
+    if (std::abs(y1_fit - hurley_new.linear1y) > 1e-3)
+      {
+        printf ("Incremental K adjustment: point moved off curve! expected %f, got %f\n", hurley_new.linear1y, y1_fit);
+        ok = false;
+      }
+  }
+
   return ok;
 }
 
