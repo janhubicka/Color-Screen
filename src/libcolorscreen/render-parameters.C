@@ -1393,6 +1393,7 @@ render_parameters::original_render_from (render_parameters &rparam, bool color, 
 				  : render_parameters::color_model_scan)
 		      : render_parameters::color_model_none;
   output_tone_curve = rparam.output_tone_curve;
+  output_tone_curve_control_points = rparam.output_tone_curve_control_points;
   tile_adjustments = rparam.tile_adjustments;
   tile_adjustments_width = rparam.tile_adjustments_width;
   tile_adjustments_height = rparam.tile_adjustments_height;

@@ -16,7 +16,7 @@ namespace colorscreen
 {
 const constexpr render_type_property render_type_properties[render_type_max] =
 {
-   {"original", "Original digital caputre", render_type_property::OUTPUTS_SCAN_PROFILE /*| render_type_property::SUPPORTS_IR_RGB_SWITCH*/ | render_type_property::SCAN_RESOLUTION},
+   {"original", "Original digital capture", render_type_property::OUTPUTS_SCAN_PROFILE /*| render_type_property::SUPPORTS_IR_RGB_SWITCH*/ | render_type_property::SCAN_RESOLUTION},
    {"interpolated", "Image layrer + screen filter demosaiced",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::PATCH_RESOLUTION},
    {"interpolated-predictive", "Image layer + screen filter demosaiced with detail recovery",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
    {"image-layer", "Image layer", render_type_property::OUTPUTS_SCAN_PROFILE | render_type_property::SCAN_RESOLUTION},

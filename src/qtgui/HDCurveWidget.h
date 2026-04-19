@@ -28,6 +28,7 @@ protected:
     void drawGrid(QPainter &painter, const QRectF &rect) override;
     void drawPlot(QPainter &painter, const QRectF &rect) override;
     void drawControlPoints(QPainter &painter, const QRectF &rect) override;
+    void onViewChanged() override;
     
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;

@@ -227,6 +227,10 @@ void HDCurveWidget::drawGrid(QPainter &painter, const QRectF &rect) {
     }
 }
 
+void HDCurveWidget::onViewChanged() {
+    updateCurve();
+}
+
 void HDCurveWidget::drawPlot(QPainter &painter, const QRectF &rect) {
     Q_UNUSED(rect);
     painter.setPen(QPen(Qt::green, 2));
@@ -306,9 +310,6 @@ void HDCurveWidget::mouseMoveEvent(QMouseEvent *event) {
         emit parametersChanged(m_params);
     } else {
         InteractiveChartWidget::mouseMoveEvent(event);
-        if (m_isPanning) {
-            updateCurve();
-        }
     }
 }
 
@@ -322,5 +323,4 @@ void HDCurveWidget::mouseReleaseEvent(QMouseEvent *event) {
 
 void HDCurveWidget::resizeEvent(QResizeEvent *event) {
     InteractiveChartWidget::resizeEvent(event);
-    updateCurve();
 }
