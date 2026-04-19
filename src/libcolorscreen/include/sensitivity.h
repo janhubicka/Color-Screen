@@ -367,6 +367,7 @@ public:
   {
     linear_reversal_sensitivity,
     linear_negative_sensitivity,
+#if 0
     safe_linear_reversal_sensitivity,
     safe_linear_negative_sensitivity,
     spicer_dufay_low,
@@ -375,7 +376,9 @@ public:
     spicer_dufay_reversal_low,
     spicer_dufay_reversal_mid,
     spicer_dufay_reversal_high,
-    hurley_video,
+#endif
+    paget_correction1,
+    paget_correction2,
     hd_curves_max,
   };
 
