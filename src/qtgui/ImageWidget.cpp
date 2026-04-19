@@ -1651,14 +1651,14 @@ void ImageWidget::exploreTick() {
   bool needsUpdate = false;
   
   if (m_plusHeld) {
-      m_keyboardZoomVelocity += 0.0005; // accelerate
-      if (m_keyboardZoomVelocity > 0.015) m_keyboardZoomVelocity = 0.015; // 1/4th of 1.25^2
+      m_keyboardZoomVelocity += 0.00016; // accelerate
+      if (m_keyboardZoomVelocity > 0.005) m_keyboardZoomVelocity = 0.005; // 1/3rd of 0.015
       m_exploreTargetScale *= (1.0 + m_keyboardZoomVelocity);
       m_exploreZoomSpeed = 0.15;
       needsUpdate = true;
   } else if (m_minusHeld) {
-      m_keyboardZoomVelocity += 0.0005; // accelerate
-      if (m_keyboardZoomVelocity > 0.015) m_keyboardZoomVelocity = 0.015; // 1/4th of 1.25^2
+      m_keyboardZoomVelocity += 0.00016; // accelerate
+      if (m_keyboardZoomVelocity > 0.005) m_keyboardZoomVelocity = 0.005; // 1/3rd of 0.015
       m_exploreTargetScale /= (1.0 + m_keyboardZoomVelocity);
       m_exploreZoomSpeed = 0.15;
       needsUpdate = true;
