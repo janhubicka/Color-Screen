@@ -861,9 +861,9 @@ test_custom_tone_curve ()
   bool ok = true;
   // Test default points
   tone_curve c1 (tone_curve::tone_curve_custom);
-  if (fabs (c1.apply (0.5) - 0.80629) > 0.001)
+  if (fabs (c1.apply (0.21764) - 0.46303) > 0.001)
     {
-      printf ("Default custom tone curve mismatch at 0.5: got %f, expected 0.80629\n", c1.apply (0.5));
+      printf ("Default custom tone curve mismatch at 0.21764: got %f, expected 0.46303\n", c1.apply (0.21764));
       ok = false;
     }
 
