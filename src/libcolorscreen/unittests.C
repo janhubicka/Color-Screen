@@ -680,6 +680,69 @@ test_hd_reversibility ()
   return ok;
 }
 
+bool
+test_hd_incremental_update ()
+{
+  bool ok = true;
+  /* Test that adjusting Richards parameters via geometric transformations 
+     actually produces a valid and consistent new model. */
+  hd_curve_parameters hurley = {
+      -2.745997, 3.133772,
+      -1.930210, 2.190697,
+      -0.970248, 1.208836,
+      -0.299072, -0.399532
+  };
+  
+  auto rp1 = hd_to_richards_curve_parameters(hurley);
+  
+  // 1. Test M adjustment (Translation)
+  {
+    auto rp_new = rp1;
+    rp_new.M += 0.5;
+    auto hurley_new = hurley;
+    hurley_new.adjust_M(rp1.M, rp_new.M);
+    
+    luminosity_t y1_fit = richards_hd_curve::eval_richards(rp_new, hurley_new.linear1x);
+    if (std::abs(y1_fit - hurley_new.linear1y) > 1e-3)
+      {
+        printf ("Incremental M adjustment: point moved off curve! expected %f, got %f\n", hurley_new.linear1y, y1_fit);
+        ok = false;
+      }
+  }
+
+  // 2. Test B adjustment (Scaling)
+  {
+    auto rp_new = rp1;
+    rp_new.B *= 1.2;
+    auto hurley_new = hurley;
+    hurley_new.adjust_B(rp1.B, rp_new.B, rp1.M);
+    
+    luminosity_t y1_fit = richards_hd_curve::eval_richards(rp_new, hurley_new.linear1x);
+    if (std::abs(y1_fit - hurley_new.linear1y) > 1e-3)
+      {
+        printf ("Incremental B adjustment: point moved off curve! expected %f, got %f\n", hurley_new.linear1y, y1_fit);
+        ok = false;
+      }
+  }
+
+  // 3. Test v adjustment (Non-linear)
+  {
+    auto rp_new = rp1;
+    rp_new.v *= 0.8;
+    auto hurley_new = hurley;
+    hurley_new.adjust_v(rp1.v, rp_new.v, rp1.B, rp1.M);
+    
+    luminosity_t y1_fit = richards_hd_curve::eval_richards(rp_new, hurley_new.linear1x);
+    if (std::abs(y1_fit - hurley_new.linear1y) > 1e-3)
+      {
+        printf ("Incremental v adjustment: point moved off curve! expected %f, got %f\n", hurley_new.linear1y, y1_fit);
+        ok = false;
+      }
+  }
+
+  return ok;
+}
+
 int
 test_render_linearity ()
 {
@@ -771,5 +834,6 @@ main ()
   report ("richards reversibility tests", test_richards_reversibility ());
   report ("richards functional inverse tests", test_richards_functional_inverse ());
   report ("hd reversibility tests", test_hd_reversibility ());
+  report ("hd incremental update tests", test_hd_incremental_update ());
   return 0;
 }

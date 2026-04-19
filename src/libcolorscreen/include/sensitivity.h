@@ -83,38 +83,6 @@ bezier (luminosity_t *rx, luminosity_t *ry,
 }
 
 
-/* Description of a typical HD curve.  */
-struct hd_curve_parameters
-{
-  /* Point where minimal density is reached.  */
-  luminosity_t minx, miny;
-  /* First point of the linear segment.  */
-  luminosity_t linear1x, linear1y;
-  /* Last point of the linear segment.  */
-  luminosity_t linear2x, linear2y;
-  /* Point where the maximal density is reached.  */
-  luminosity_t maxx, maxy;
-
-  constexpr hd_curve_parameters ()
-  : minx(-6), miny(5), linear1x (-5), linear1y (5), linear2x(5), linear2y(-5), maxx(6), maxy(-5)
-  {
-  }
-  constexpr hd_curve_parameters (luminosity_t new_minx, luminosity_t new_miny, luminosity_t new_linear1x, luminosity_t new_linear1y, luminosity_t new_linear2x, luminosity_t new_linear2y, luminosity_t new_maxx, luminosity_t new_maxy)
-  : minx(new_minx), miny(new_miny), linear1x (new_linear1x), linear1y (new_linear1y), linear2x(new_linear2x), linear2y(new_linear2y), maxx(new_maxx), maxy(new_maxy)
-  {
-  }
-  bool
-  operator== (const hd_curve_parameters &other) const
-  {
-    return minx == other.minx && miny == other.miny
-	   && linear1x == other.linear1x
-	   && linear1y == other.linear1y
-	   && linear2x == other.linear2x
-	   && linear2y == other.linear2y
-	   && maxx == other.maxx && maxy == other.maxy;
-  }
-};
-
 /* The generalized logistic function, also known as Richards' curve, 
    is a flexible growth model that provides an alternative to the standard 
    logisitic or sigmoid functions. It is used here to model the H&D 
@@ -152,18 +120,126 @@ struct richards_curve_parameters
   }
 };
 
+/* Description of a typical HD curve.  */
+struct hd_curve_parameters
+{
+  /* Point where minimal density is reached.  */
+  luminosity_t minx, miny;
+  /* First point of the linear segment.  */
+  luminosity_t linear1x, linear1y;
+  /* Last point of the linear segment.  */
+  luminosity_t linear2x, linear2y;
+  /* Point where the maximal density is reached.  */
+  luminosity_t maxx, maxy;
+
+  constexpr hd_curve_parameters ()
+  : minx(-6), miny(5), linear1x (-5), linear1y (5), linear2x(5), linear2y(-5), maxx(6), maxy(-5)
+  {
+  }
+  constexpr hd_curve_parameters (luminosity_t new_minx, luminosity_t new_miny, luminosity_t new_linear1x, luminosity_t new_linear1y, luminosity_t new_linear2x, luminosity_t new_linear2y, luminosity_t new_maxx, luminosity_t new_maxy)
+  : minx(new_minx), miny(new_miny), linear1x (new_linear1x), linear1y (new_linear1y), linear2x(new_linear2x), linear2y(new_linear2y), maxx(new_maxx), maxy(new_maxy)
+  {
+  }
+  bool
+  operator== (const hd_curve_parameters &other) const
+  {
+    return minx == other.minx && miny == other.miny
+	   && linear1x == other.linear1x
+	   && linear1y == other.linear1y
+	   && linear2x == other.linear2x
+	   && linear2y == other.linear2y
+	   && maxx == other.maxx && maxy == other.maxy;
+  }
+
+  bool is_inverted_p() const {
+    luminosity_t gamma = (linear2x != linear1x) 
+                         ? std::abs((linear2y - linear1y) / (linear2x - linear1x)) : 1e10;
+    luminosity_t toe = (linear1x != minx) 
+                       ? std::abs((linear1y - miny) / (linear1x - minx)) : 1e10;
+    luminosity_t shoulder = (maxx != linear2x) 
+                            ? std::abs((maxy - linear2y) / (maxx - linear2x)) : 1e10;
+    return (toe > gamma || shoulder > gamma || (gamma > 10.0 && gamma != 1e10));
+  }
+
+  void adjust_M(double old_M, double new_M) {
+    double delta = new_M - old_M;
+    if (is_inverted_p()) {
+      miny += delta; linear1y += delta; linear2y += delta; maxy += delta;
+    } else {
+      minx += delta; linear1x += delta; linear2x += delta; maxx += delta;
+    }
+  }
+
+  void adjust_B(double old_B, double new_B, double M) {
+    double ratio = old_B / new_B;
+    if (is_inverted_p()) {
+      miny = M + (miny - M) * ratio;
+      linear1y = M + (linear1y - M) * ratio;
+      linear2y = M + (linear2y - M) * ratio;
+      maxy = M + (maxy - M) * ratio;
+    } else {
+      minx = M + (minx - M) * ratio;
+      linear1x = M + (linear1x - M) * ratio;
+      linear2x = M + (linear2x - M) * ratio;
+      maxx = M + (maxx - M) * ratio;
+    }
+  }
+
+  void adjust_A(double old_A, double new_A, double K) {
+    auto f = [&](double v) {
+      if (std::abs(K - old_A) < 1e-8) return v;
+      return new_A + (v - old_A) * (K - new_A) / (K - old_A);
+    };
+    if (is_inverted_p()) {
+      minx = f(minx); linear1x = f(linear1x); linear2x = f(linear2x); maxx = f(maxx);
+    } else {
+      miny = f(miny); linear1y = f(linear1y); linear2y = f(linear2y); maxy = f(maxy);
+    }
+  }
+
+  void adjust_K(double old_K, double new_K, double A) {
+    auto f = [&](double v) {
+      if (std::abs(old_K - A) < 1e-8) return v;
+      return A + (v - A) * (new_K - A) / (old_K - A);
+    };
+    if (is_inverted_p()) {
+      minx = f(minx); linear1x = f(linear1x); linear2x = f(linear2x); maxx = f(maxx);
+    } else {
+      miny = f(miny); linear1y = f(linear1y); linear2y = f(linear2y); maxy = f(maxy);
+    }
+  }
+
+  void adjust_v(double old_v, double new_v, double B, double M) {
+    auto f = [&](double in) {
+      double Z = B * (in - M);
+      double exp_Z = std::exp(-Z);
+      // Z_new = -ln((1 + exp(-Z))^(new_v / old_v) - 1)
+      double inner = std::pow(1.0 + exp_Z, new_v / old_v) - 1.0;
+      if (inner <= 1e-20) inner = 1e-20;
+      return M - std::log(inner) / B;
+    };
+    if (is_inverted_p()) {
+      miny = f(miny); linear1y = f(linear1y); linear2y = f(linear2y); maxy = f(maxy);
+    } else {
+      minx = f(minx); linear1x = f(linear1x); linear2x = f(linear2x); maxx = f(maxx);
+    }
+  }
+
+  void adjust_richards(const richards_curve_parameters &old_rp, const richards_curve_parameters &new_rp) {
+    if (old_rp.is_inverse != new_rp.is_inverse) return; // Should not happen in incremental GUI use
+    if (old_rp.A != new_rp.A) adjust_A(old_rp.A, new_rp.A, old_rp.K);
+    if (old_rp.K != new_rp.K) adjust_K(old_rp.K, new_rp.K, new_rp.A);
+    if (old_rp.M != new_rp.M) adjust_M(old_rp.M, new_rp.M);
+    if (old_rp.B != new_rp.B) adjust_B(old_rp.B, new_rp.B, new_rp.M);
+    if (old_rp.v != new_rp.v) adjust_v(old_rp.v, new_rp.v, new_rp.B, new_rp.M);
+  }
+};
+
 /* Convert 4-point HD curve parameters to Richards curve parameters.  */
 inline struct richards_curve_parameters
 hd_to_richards_curve_parameters (const hd_curve_parameters &p)
 {
-  luminosity_t gamma = (p.linear2x != p.linear1x) 
-                       ? std::abs((p.linear2y - p.linear1y) / (p.linear2x - p.linear1x)) : 1e10;
-  luminosity_t toe = (p.linear1x != p.minx) 
-                     ? std::abs((p.linear1y - p.miny) / (p.linear1x - p.minx)) : 1e10;
-  luminosity_t shoulder = (p.maxx != p.linear2x) 
-                          ? std::abs((p.maxy - p.linear2y) / (p.maxx - p.linear2x)) : 1e10;
-  
-  bool is_inverse = (toe > gamma || shoulder > gamma || (gamma > 10.0 && gamma != 1e10));
+  bool is_inverse = p.is_inverted_p();
   
   luminosity_t eps = 1e-4;
   luminosity_t v = 1.0;

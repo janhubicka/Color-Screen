@@ -150,9 +150,10 @@ void ContactCopyPanel::setupUi() {
               return getter(colorscreen::hd_to_richards_curve_parameters(s.rparams.contact_copy.emulsion_characteristic_curve));
           },
           [this, setter](ParameterState &s, double v) {
-              auto rp = colorscreen::hd_to_richards_curve_parameters(s.rparams.contact_copy.emulsion_characteristic_curve);
-              setter(rp, v);
-              s.rparams.contact_copy.emulsion_characteristic_curve = colorscreen::richards_to_hd_curve_parameters(rp);
+              auto rp_old = colorscreen::hd_to_richards_curve_parameters(s.rparams.contact_copy.emulsion_characteristic_curve);
+              auto rp_new = rp_old;
+              setter(rp_new, v);
+              s.rparams.contact_copy.emulsion_characteristic_curve.adjust_richards(rp_old, rp_new);
           },
           1.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; }, logarithmic);
       
