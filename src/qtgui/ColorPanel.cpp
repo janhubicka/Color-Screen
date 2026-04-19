@@ -350,7 +350,7 @@ void ColorPanel::setupUi() {
 
   // Tone Curve Widget
   m_toneCurveWidget = new ToneCurveWidget();
-  m_toneCurveWidget->setFixedHeight(250);
+  m_toneCurveWidget->setMinimumHeight(250);
   
   m_toneCurveCoordCombo = new QComboBox();
   m_toneCurveCoordCombo->addItem("Linear", static_cast<int>(ToneCurveWidget::CoordinateType::Linear));
@@ -368,18 +368,21 @@ void ColorPanel::setupUi() {
       });
   });
 
-  QWidget *tcWrapper = new QWidget();
-  QVBoxLayout *tcLayout = new QVBoxLayout(tcWrapper);
-  tcLayout->setContentsMargins(0, 0, 0, 0);
+  QWidget *tcContent = new QWidget();
+  m_toneCurveContainer = new QVBoxLayout(tcContent);
+  m_toneCurveContainer->setContentsMargins(0, 0, 0, 0);
   
   QHBoxLayout *tcHeader = new QHBoxLayout();
   tcHeader->addWidget(new QLabel("Coordinate View:"));
   tcHeader->addWidget(m_toneCurveCoordCombo);
   tcHeader->addStretch();
-  tcLayout->addLayout(tcHeader);
-  tcLayout->addWidget(m_toneCurveWidget);
+  m_toneCurveContainer->addLayout(tcHeader);
+  m_toneCurveContainer->addWidget(m_toneCurveWidget);
 
-  m_form->addRow(tcWrapper);
+  m_toneCurveSection = createDetachableSection("Tone Curve", tcContent, [this, tcContent]() {
+      emit detachToneCurveRequested(tcContent);
+  });
+  m_form->addRow(m_toneCurveSection);
 
   m_paramUpdaters.push_back([this](const ParameterState &s) {
       m_toneCurveWidget->setToneCurve(s.rparams.output_tone_curve, s.rparams.output_tone_curve_control_points);
@@ -517,9 +520,31 @@ QWidget *ColorPanel::getCorrectedGamutChartWidget() const {
 }
 
 void ColorPanel::reattachCorrectedGamutChart(QWidget *widget) {
-  reattachGamutGroup(m_correctedGamutGroup, widget, [this](QWidget *w) {
-    emit detachCorrectedGamutChartRequested(w);
-  });
+  reattachGamutGroup(m_correctedGamutGroup, widget, [this](QWidget *w) { emit detachCorrectedGamutChartRequested(w); });
+}
+
+void ColorPanel::reattachToneCurve(QWidget *widget) {
+    if (widget && m_toneCurveSection && m_toneCurveSection->layout()) {
+        QLayout *layout = m_toneCurveSection->layout();
+        // Remove placeholder (last item)
+        if (layout->count() > 1) {
+            QLayoutItem *item = layout->takeAt(layout->count() - 1);
+            if (item) {
+                if (item->widget()) delete item->widget();
+                delete item;
+            }
+        }
+        layout->addWidget(widget);
+        widget->show();
+
+        // Show header
+        if (layout->count() > 0) {
+            QLayoutItem *headerItem = layout->itemAt(0);
+            if (headerItem && headerItem->widget()) {
+                headerItem->widget()->show();
+            }
+        }
+    }
 }
 
 void ColorPanel::initGamutGroup(GamutChartGroup &group, const QString &name,

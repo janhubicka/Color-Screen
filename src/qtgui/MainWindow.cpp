@@ -409,6 +409,11 @@ void MainWindow::setupUi() {
   m_deformationDock->setObjectName("DeformationDock");
   addDockWidget(Qt::RightDockWidgetArea, m_deformationDock);
   m_deformationDock->hide();
+  
+  m_toneCurveDock = new QDockWidget("Tone Curve", this);
+  m_toneCurveDock->setObjectName("ToneCurveDock");
+  addDockWidget(Qt::RightDockWidgetArea, m_toneCurveDock);
+  m_toneCurveDock->hide();
 
   m_lensDock = new QDockWidget("Lens Correction", this);
   m_lensDock->setObjectName("LensDock");
@@ -570,6 +575,10 @@ void MainWindow::setupUi() {
   setupDock(m_correctedGamutDock, m_colorPanel,
             &ColorPanel::detachCorrectedGamutChartRequested,
             &ColorPanel::reattachCorrectedGamutChart);
+
+  setupDock(m_toneCurveDock, m_colorPanel,
+            &ColorPanel::detachToneCurveRequested,
+            &ColorPanel::reattachToneCurve);
 
   setupDock(m_hdCurveDock, m_contactCopyPanel,
             &ContactCopyPanel::detachHDCurveRequested,

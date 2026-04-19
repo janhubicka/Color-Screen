@@ -29,6 +29,7 @@ public:
   void reattachGamutChart(QWidget *widget);
   QWidget *getCorrectedGamutChartWidget() const;
   void reattachCorrectedGamutChart(QWidget *widget);
+  void reattachToneCurve(QWidget *widget);
 
   void setNeutralAreaChecked(bool checked);
   void setNeutralAreaEnabled(bool enabled);
@@ -44,6 +45,7 @@ signals:
   void detachCorrectedTilesRequested(QWidget *widget);
   void detachGamutChartRequested(QWidget *widget);
   void detachCorrectedGamutChartRequested(QWidget *widget);
+  void detachToneCurveRequested(QWidget *widget);
 
 protected:
   // TilePreviewPanel overrides
@@ -93,6 +95,8 @@ private:
   GamutChartGroup m_correctedGamutGroup;
 
   ToneCurveWidget *m_toneCurveWidget = nullptr;
+  QVBoxLayout *m_toneCurveContainer = nullptr;
+  QWidget *m_toneCurveSection = nullptr;
   QComboBox *m_toneCurveCoordCombo = nullptr;
 };
 

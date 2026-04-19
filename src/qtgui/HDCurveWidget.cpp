@@ -143,7 +143,7 @@ void HDCurveWidget::drawGrid(QPainter &painter, const QRectF &rect) {
         painter.setPen(QPen(QColor(100, 100, 100, 100), 1, Qt::DashLine));
         painter.drawLine(QPointF(px, rect.top()), QPointF(px, rect.bottom()));
         painter.setPen(QPen(Qt::white, 1));
-        painter.drawText(QRectF(px - 20, rect.bottom() + 2, 40, 15), Qt::AlignCenter, 
+        painter.drawText(QRectF(px - 20, rect.bottom() + 18, 40, 15), Qt::AlignCenter, 
                          (m_displayMode == colorscreen::hd_axis_hd) ? QString::number(i, 'f', 0) : QString::number(i, 'f', 1));
     }
     
@@ -165,20 +165,34 @@ void HDCurveWidget::drawGrid(QPainter &painter, const QRectF &rect) {
     painter.drawLine(QPointF(rect.left(), zeroOrigin.y()), QPointF(rect.right(), zeroOrigin.y()));
     painter.drawLine(QPointF(zeroOrigin.x(), rect.top()), QPointF(zeroOrigin.x(), rect.bottom()));
 
-    // Draw HD Colors and Transparency Bands
+    // Draw HD Colors result bands
     if (!m_hdColors.empty() && m_hdColorsMaxY > m_hdColorsMinY) {
-        int leftStripX = rect.left() - 15;
-        int stripW = 10;
-        
-        QLinearGradient gradient(0, rect.bottom(), 0, rect.top());
-        for (size_t i = 0; i < m_hdColors.size(); ++i) {
-            double pos = (double)i / (m_hdColors.size() - 1);
-            auto c = m_hdColors[i];
-            gradient.setColorAt(pos, QColor(std::clamp((int)c.red, 0, 255), 
-                                            std::clamp((int)c.green, 0, 255), 
-                                            std::clamp((int)c.blue, 0, 255)));
-        }
-        painter.fillRect(QRectF(leftStripX, rect.top(), stripW, rect.height()), gradient);
+        // Vertical guide (Density/Output)
+        drawGrayscaleBar(painter, rect, Qt::Vertical, [this](double plotY) {
+            double pos = (plotY - m_hdColorsMinY) / (m_hdColorsMaxY - m_hdColorsMinY);
+            int idx = std::clamp((int)(pos * (m_hdColors.size() - 1)), 0, (int)m_hdColors.size() - 1);
+            auto c = m_hdColors[idx];
+            return QColor(std::clamp((int)c.red, 0, 255), 
+                          std::clamp((int)c.green, 0, 255), 
+                          std::clamp((int)c.blue, 0, 255));
+        });
+
+        // Horizontal guide (Exposure -> Resulting color)
+        drawGrayscaleBar(painter, rect, Qt::Horizontal, [this](double plotX) {
+            // Find logicX for this plotX
+            double logicX = colorscreen::hd_axis_x_to_log_exposure(plotX, m_displayMode);
+            // Apply Richards curve logic
+            colorscreen::richards_hd_curve synthLine(100, m_params);
+            double logicY = synthLine.apply(logicX);
+            
+            // Map logicY to color
+            double pos = (logicY - m_hdColorsMinY) / (m_hdColorsMaxY - m_hdColorsMinY);
+            int idx = std::clamp((int)(pos * (m_hdColors.size() - 1)), 0, (int)m_hdColors.size() - 1);
+            auto c = m_hdColors[idx];
+            return QColor(std::clamp((int)c.red, 0, 255), 
+                          std::clamp((int)c.green, 0, 255), 
+                          std::clamp((int)c.blue, 0, 255));
+        });
 
         auto drawBand = [&](int channel, QColor bandColor) {
             int startIdx = -1;
