@@ -590,6 +590,7 @@ struct render_parameters
            && backlight_correction_black == other.backlight_correction_black
 	   && observer_whitepoint == other.observer_whitepoint
 	   && output_tone_curve == other.output_tone_curve
+	   && output_tone_curve_control_points == other.output_tone_curve_control_points
 	   && white_balance == other.white_balance;
   }
   bool
