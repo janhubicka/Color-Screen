@@ -2,6 +2,8 @@
 #define SENSITIVITY_H
 #include "dllpublic.h"
 #include "color.h"
+#include <tuple>
+#include <cmath>
 namespace colorscreen
 {
 /* Hurter–Driffield characteristic curve based on data points
@@ -163,75 +165,63 @@ hd_to_richards_curve_parameters (const hd_curve_parameters &p)
   
   bool is_inverse = (toe > gamma || shoulder > gamma || (gamma > 10.0 && gamma != 1e10));
   
+  luminosity_t eps = 1e-4;
   luminosity_t v = 1.0;
-  if (p.maxx != p.linear2x)
-    v = std::abs((p.linear1x - p.minx) / (p.maxx - p.linear2x));
+  
+  luminosity_t z1 = is_inverse ? p.linear1y : p.linear1x;
+  luminosity_t z2 = is_inverse ? p.linear2y : p.linear2x;
+  luminosity_t mz = is_inverse ? (is_inverse ? p.miny : p.minx) : p.minx;
+  // wait, p.miny is correct if is_inverse. Let's be explicit
+  luminosity_t min_z = is_inverse ? p.miny : p.minx;
+  luminosity_t max_z = is_inverse ? p.maxy : p.maxx;
+
+  luminosity_t d_low = std::abs(std::min(z1, z2) - std::min(min_z, max_z));
+  luminosity_t d_high = std::abs(std::max(min_z, max_z) - std::max(z1, z2));
+
+  if (d_high > eps) v = d_low / d_high;
+  
   if (v < 0.01) v = 0.01;
   if (v > 10.0) v = 10.0;
 
-  luminosity_t eps = 1e-5;
   luminosity_t A, K, B, M;
+
+  auto fit = [&](luminosity_t in1, luminosity_t in2, luminosity_t out1, luminosity_t out2, luminosity_t a, luminosity_t k) {
+      if (std::abs(out1 - a) < eps) out1 = a + (k > a ? eps : -eps);
+      if (std::abs(out1 - k) < eps) out1 = k - (k > a ? eps : -eps);
+      if (std::abs(out2 - a) < eps) out2 = a + (k > a ? eps : -eps);
+      if (std::abs(out2 - k) < eps) out2 = k - (k > a ? eps : -eps);
+      
+      luminosity_t vv1 = std::pow((k - a) / (out1 - a), v) - 1.0;
+      luminosity_t vv2 = std::pow((k - a) / (out2 - a), v) - 1.0;
+      if (vv1 > 1e30 || std::isinf(vv1)) vv1 = 1e30;
+      if (vv2 > 1e30 || std::isinf(vv2)) vv2 = 1e30;
+      if (vv1 <= 0) vv1 = eps;
+      if (vv2 <= 0) vv2 = eps;
+      
+      luminosity_t L1 = std::log(vv1);
+      luminosity_t L2 = std::log(vv2);
+      
+      luminosity_t denom = in1 - in2;
+      if (std::abs(denom) < eps) denom = (denom >= 0 ? eps : -eps);
+      
+      B = (L2 - L1) / denom;
+      if (std::abs(B) < eps) B = eps;
+      M = in1 + L1 / B;
+  };
 
   if (!is_inverse)
     {
-      A = p.miny;
-      K = p.maxy;
-      
-      luminosity_t y1 = p.linear1y;
-      if (std::abs(y1 - A) < eps) y1 = A + (K > A ? eps : -eps);
-      if (std::abs(y1 - K) < eps) y1 = K - (K > A ? eps : -eps);
-      
-      luminosity_t y2 = p.linear2y;
-      if (std::abs(y2 - A) < eps) y2 = A + (K > A ? eps : -eps);
-      if (std::abs(y2 - K) < eps) y2 = K - (K > A ? eps : -eps);
-
-      luminosity_t v1 = std::pow((K - A) / (y1 - A), v) - 1.0;
-      luminosity_t v2 = std::pow((K - A) / (y2 - A), v) - 1.0;
-      if (v1 > 1e30 || std::isinf(v1)) v1 = 1e30;
-      if (v2 > 1e30 || std::isinf(v2)) v2 = 1e30;
-      if (v1 <= 0) v1 = eps;
-      if (v2 <= 0) v2 = eps;
-      
-      luminosity_t L1 = std::log(v1);
-      luminosity_t L2 = std::log(v2);
-
-      luminosity_t denom = p.linear1x - p.linear2x;
-      if (std::abs(denom) < eps) denom = (denom >= 0 ? eps : -eps);
-      B = (L2 - L1) / denom;
-      if (std::abs(B) < eps) B = eps;
-      M = p.linear1x + L1 / B;
+      A = p.miny; K = p.maxy;
+      fit(p.linear1x, p.linear2x, p.linear1y, p.linear2y, A, K);
     }
   else
     {
-      A = p.minx;
-      K = p.maxx;
-      
-      luminosity_t x1 = p.linear1x;
-      if (std::abs(x1 - A) < eps) x1 = A + (K > A ? eps : -eps);
-      if (std::abs(x1 - K) < eps) x1 = K - (K > A ? eps : -eps);
-      
-      luminosity_t x2 = p.linear2x;
-      if (std::abs(x2 - A) < eps) x2 = A + (K > A ? eps : -eps);
-      if (std::abs(x2 - K) < eps) x2 = K - (K > A ? eps : -eps);
-
-      luminosity_t v1 = std::pow((K - A) / (x1 - A), v) - 1.0;
-      luminosity_t v2 = std::pow((K - A) / (x2 - A), v) - 1.0;
-      if (v1 > 1e30 || std::isinf(v1)) v1 = 1e30;
-      if (v2 > 1e30 || std::isinf(v2)) v2 = 1e30;
-      if (v1 <= 0) v1 = eps;
-      if (v2 <= 0) v2 = eps;
-      
-      luminosity_t L1 = std::log(v1);
-      luminosity_t L2 = std::log(v2);
-
-      luminosity_t denom = p.linear1y - p.linear2y;
-      if (std::abs(denom) < eps) denom = (denom >= 0 ? eps : -eps);
-      B = (L2 - L1) / denom;
-      if (std::abs(B) < eps) B = eps;
-      M = p.linear1y + L1 / B;
+      A = p.minx; K = p.maxx;
+      fit(p.linear1y, p.linear2y, p.linear1x, p.linear2x, A, K);
     }
   return richards_curve_parameters(A, K, B, M, v, is_inverse);
 }
+
 
 /* Helper function to generate hd_curve_parameters perfectly representing a Richard's curve.  */
 inline struct hd_curve_parameters
@@ -240,46 +230,64 @@ richards_to_hd_curve_parameters (const richards_curve_parameters &rp)
   luminosity_t A = rp.A, K = rp.K, B = rp.B, M = rp.M, v = rp.v;
   bool inverse = rp.is_inverse;
   luminosity_t eps = 1e-4;
-  luminosity_t delta = 0.1 * std::abs(K - A);
   
+  auto pick = [&](luminosity_t a, luminosity_t k) {
+      luminosity_t delta_o = 0.1 * std::abs(k - a);
+      if (delta_o == 0) delta_o = 1.0;
+      
+      luminosity_t o1 = a + (k > a ? delta_o : -delta_o);
+      luminosity_t o2 = k - (k > a ? delta_o : -delta_o);
+      
+      auto solve = [&](luminosity_t out) {
+          luminosity_t vv = std::max(eps, (luminosity_t)(std::pow((k - a) / (out - a), v) - 1.0));
+          return M - std::log(vv) / B;
+      };
+      
+      auto formula = [&](luminosity_t in) {
+          return a + (k - a) / std::pow(1.0 + std::exp(-B * (in - M)), 1.0 / v);
+      };
+      
+      luminosity_t i1 = solve(o1);
+      luminosity_t i2 = solve(o2);
+      
+      // D is the characteristic interval on the independent axis.
+      luminosity_t D = std::abs(i1 - i2);
+      if (D == 0) D = 1.0;
+      D *= 10.0; // Standardized buffer
+      
+      luminosity_t min_in = std::min(i1, i2) - v * D;
+      luminosity_t max_in = std::max(i1, i2) + D;
+      
+      // Calculate exact boundary locations on the 'output' axis for H&D endpoints
+      luminosity_t b1 = formula(min_in);
+      luminosity_t b2 = formula(max_in);
+      
+      return std::make_tuple(min_in, max_in, i1, o1, i2, o2, b1, b2);
+  };
+
   if (!inverse)
     {
-      luminosity_t y1 = A + (K > A ? delta : -delta);
-      luminosity_t y2 = K - (K > A ? delta : -delta);
-      
-      luminosity_t v1 = std::max(eps, (luminosity_t)(std::pow((K - A) / (y1 - A), v) - 1.0));
-      luminosity_t v2 = std::max(eps, (luminosity_t)(std::pow((K - A) / (y2 - A), v) - 1.0));
-      
-      luminosity_t x1 = M - std::log(v1) / B;
-      luminosity_t x2 = M - std::log(v2) / B;
-      
-      luminosity_t D = std::abs(x2 - x1);
-      if (D == 0) D = 1.0;
-      D *= 10;
-      
-      luminosity_t minx = x1 - v * D;
-      luminosity_t maxx = x2 + D;
-      
-      return hd_curve_parameters(minx, A, x1, y1, x2, y2, maxx, K);
+      auto [minx, maxx, x1, y1, x2, y2, y_min, y_max] = pick(A, K);
+      // Ensure X-axis monotonicity
+      if (x1 > x2) { std::swap(x1, x2); std::swap(y1, y2); }
+      // In Direct Mode, the curve must reach fog and saturation limits (A, K)
+      luminosity_t r_miny = (y1 < y2) ? std::min(A, K) : std::max(A, K);
+      luminosity_t r_maxy = (y1 < y2) ? std::max(A, K) : std::min(A, K);
+      return hd_curve_parameters(minx, r_miny, x1, y1, x2, y2, maxx, r_maxy);
     }
   else
     {
-      luminosity_t x2 = K - (K > A ? delta : -delta);
-      luminosity_t x1 = A + (K > A ? v * delta : -v * delta);
-      
-      luminosity_t v1 = std::max(eps, (luminosity_t)(std::pow((K - A) / (x1 - A), v) - 1.0));
-      luminosity_t v2 = std::max(eps, (luminosity_t)(std::pow((K - A) / (x2 - A), v) - 1.0));
-      
-      luminosity_t y1 = M - std::log(v1) / B;
-      luminosity_t y2 = M - std::log(v2) / B;
-      
-      luminosity_t sign_y = (y2 > y1) ? 1.0 : -1.0;
-      luminosity_t gamma = std::abs((y2 - y1) / (x2 - x1));
-      
-      luminosity_t miny = y1 - sign_y * gamma * std::abs(x1 - A) * 10;
-      luminosity_t maxy = y2 + sign_y * gamma * std::abs(K - x2) * 10;
-      
-      return hd_curve_parameters(A, miny, x1, y1, x2, y2, K, maxy);
+      auto [miny, maxy, y1, x1, y2, x2, x_min, x_max] = pick(A, K);
+      // Ensure X-axis (Output) monotonicity for the renderer
+      luminosity_t cx1 = x1, cy1 = y1, cx2 = x2, cy2 = y2;
+      if (cx1 > cx2) { std::swap(cx1, cx2); std::swap(cy1, cy2); }
+      // In Inverse Mode, exposure X is bounded by the solved range (x_min, x_max)
+      luminosity_t r_minx = std::min(x_min, x_max);
+      luminosity_t r_maxx = std::max(x_min, x_max);
+      // Pair with density boundaries
+      luminosity_t r_miny = (x1 < x2) ? miny : maxy;
+      luminosity_t r_maxy = (x1 < x2) ? maxy : miny;
+      return hd_curve_parameters(r_minx, r_miny, cx1, cy1, cx2, cy2, r_maxx, r_maxy);
     }
 }
 
@@ -356,40 +364,69 @@ public:
 /* Produce a Richard's HD curve.  */
 class richards_hd_curve : public hd_curve
 {
-private:
-  void sample (const richards_curve_parameters &p, luminosity_t min_coord, luminosity_t max_coord)
+public:
+  static luminosity_t
+  eval_richards (const richards_curve_parameters &p, luminosity_t xs,
+		 bool clamp = false, luminosity_t clampmin = 0, luminosity_t clampmax =0)
   {
     if (!p.is_inverse)
       {
-        for (int i = 1; i < n - 1; i++)
-          {
-            xs[i] = min_coord + i * (max_coord - min_coord) / (luminosity_t)(n - 1);
-            ys[i] = p.A + (p.K - p.A) / std::pow(1.0 + std::exp(-p.B * (xs[i] - p.M)), 1.0 / p.v);
-          }
+	// Direct: Density = Richards(LogE)
+	return p.A + (p.K - p.A) / std::pow(1.0 + std::exp(-p.B * (xs - p.M)), 1.0 / p.v);
       }
     else
       {
-        for (int i = 1; i < n - 1; i++)
-          {
-            ys[i] = min_coord + i * (max_coord - min_coord) / (luminosity_t)(n - 1);
-            xs[i] = p.A + (p.K - p.A) / std::pow(1.0 + std::exp(-p.B * (ys[i] - p.M)), 1.0 / p.v);
-          }
+	// Inverse: Density = Richards^-1(LogE). 
+	// Valid only between exposure asymptotes A and K.
+	//
+	luminosity_t eps_x = 1e-8 * std::abs(p.K - p.A);
+	
+	// Strictly clamp to open interval (A, K) to avoid log(0)
+	if (p.K > p.A) {
+	    if (xs <= p.A + eps_x)
+	      {
+	        xs = p.A + eps_x;
+		if (clamp)
+		  return clampmin;
+	      }
+	    if (xs >= p.K - eps_x)
+	      {
+	        xs = p.K - eps_x;
+		if (clamp)
+		  return clampmax;
+	      }
+	} else {
+	    if (xs >= p.A - eps_x)
+	      {
+	        xs = p.A - eps_x;
+		if (clamp)
+		  return clampmax;
+	      }
+	    if (xs <= p.K + eps_x)
+	      {
+	        xs = p.K + eps_x;
+		if (clamp)
+		  return clampmin;
+	      }
+	}
+
+	luminosity_t base = (p.K - p.A) / (xs - p.A);
+	luminosity_t vv = std::pow(std::abs(base), p.v) - 1.0;
+	if (vv <= 1e-15) vv = 1e-15;
+	luminosity_t ret = p.M - std::log(vv) / p.B;
+	if (clamp)
+	  ret = std::clamp (ret, std::min (clampmin, clampmax), std::max (clampmin, clampmax));
+	return ret;
       }
   }
-
-public:
   richards_hd_curve (int points, const struct hd_curve_parameters &p)
   {
     n = points;
     xs = (luminosity_t *)malloc (n * sizeof (*xs));
     ys = (luminosity_t *)malloc (n * sizeof (*ys));
-    xs[0] = p.minx;
-    ys[0] = p.miny;
-    xs[n - 1] = p.maxx;
-    ys[n - 1] = p.maxy;
 
     richards_curve_parameters rp = hd_to_richards_curve_parameters(p);
-    sample(rp, rp.is_inverse ? p.miny : p.minx, rp.is_inverse ? p.maxy : p.maxx);
+    sample (rp, p.minx, p.maxx, rp.is_inverse, p.miny, p.maxy);
   }
 
   richards_hd_curve (int points, const struct richards_curve_parameters &rp)
@@ -397,20 +434,26 @@ public:
     n = points;
     xs = (luminosity_t *)malloc (n * sizeof (*xs));
     ys = (luminosity_t *)malloc (n * sizeof (*ys));
-    
-    hd_curve_parameters hdp = richards_to_hd_curve_parameters(rp);
-    xs[0] = hdp.minx;
-    ys[0] = hdp.miny;
-    xs[n - 1] = hdp.maxx;
-    ys[n - 1] = hdp.maxy;
 
-    sample(rp, rp.is_inverse ? hdp.miny : hdp.minx, rp.is_inverse ? hdp.maxy : hdp.maxx);
+    sample(rp, std::min (rp.A, rp.K), std::max (rp.A, rp.K));
   }
   ~richards_hd_curve()
     {
       free (xs);
       free (ys);
     }
+private:
+  void sample (const richards_curve_parameters &p, luminosity_t min_x, luminosity_t max_x,
+	       bool clamp = false, luminosity_t clampmin = 0, luminosity_t clampmax = 0)
+  {
+    // Always sample Exposure (X) axis uniformly for optimal resolution in the table.
+    for (int i = 0; i < n; i++)
+      {
+        xs[i] = min_x + i * (max_x - min_x) / (luminosity_t)(n - 1);
+	ys[i] = eval_richards (p, xs[i], clamp, clampmin, clampmax);
+      }
+  }
+
 };
 
 
