@@ -2896,7 +2896,7 @@ void MainWindow::updateRegistrationGroupVisibility() {
     }
     int profileIndex = m_configTabs->indexOf(m_profilePanel);
     if (profileIndex != -1) {
-      m_configTabs->setTabVisible(profileIndex, shouldShow);
+      m_configTabs->setTabVisible(profileIndex, shouldShow && m_scan->has_rgb());
     }
   }
   
