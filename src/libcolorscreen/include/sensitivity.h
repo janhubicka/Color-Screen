@@ -167,6 +167,31 @@ struct hd_curve_parameters
             || (gamma > 10.0 && gamma != 1e10));
   }
 
+  bool
+  is_valid_for_richards_curve () const
+  {
+    auto monotonic = [] (double a, double b, double c, double d) {
+      if (std::abs (a - b) < 1e-6 || std::abs (b - c) < 1e-6
+          || std::abs (c - d) < 1e-6)
+        return false;
+      return (a < b && b < c && c < d) || (a > b && b > c && c > d);
+    };
+    return monotonic (minx, linear1x, linear2x, maxx)
+           && monotonic (miny, linear1y, linear2y, maxy);
+  }
+
+  void
+  sort_by_x ()
+  {
+    if (minx > maxx)
+      {
+        std::swap (minx, maxx);
+        std::swap (miny, maxy);
+        std::swap (linear1x, linear2x);
+        std::swap (linear1y, linear2y);
+      }
+  }
+
   void
   adjust_M (double old_M, double new_M)
   {
@@ -392,10 +417,13 @@ public:
             { 2.446334028557678, 2.2031926841007543, 2.446334028557678,
               2.2031926841007543, 3.409735279961495, 0.34393951548211144,
               3.9904123215145204, 0.13004572437028772 } },
-          { "hurley-video",
-            "Frank Hurley's laboratory correction",
-            { -2.745997, 3.133772, -1.930210, 2.190697, -0.970248, 1.208836,
-              -0.299072, -0.399532 } } };
+          { "paget-coorection1",
+            "Paget correction 1 (to linear)",
+            { -2.274010, 3.400111, -1.341965, 1.402846, -0.789100, 0.927726, -0.437047, -0.003900 } },
+          { "hurley-video2",
+            "Paget correction 2 (to linear)",
+            { -2.500011, 4.610400, -1.003162, 1.374261, -0.718547, 1.165326, -0.255926, -0.118284 } } 
+      };
 
   void
   precompute ()

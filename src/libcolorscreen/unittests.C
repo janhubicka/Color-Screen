@@ -809,6 +809,52 @@ test_hd_incremental_update ()
   return ok;
 }
 
+bool
+test_hd_validity ()
+{
+  bool ok = true;
+  // S-shape Direct
+  hd_curve_parameters p1 (-3, 0, -2, 1, 2, 3, 3, 4);
+  if (!p1.is_valid_for_richards_curve())
+    {
+      printf("H&D validity failed for valid direct curve\n");
+      ok = false;
+    }
+  
+  // Non-monotonic X (X-loop)
+  hd_curve_parameters p2 (-3, 0, 1, 1, -2, 3, 3, 4);
+  if (p2.is_valid_for_richards_curve())
+    {
+      printf("H&D validity failed: accepted non-monotonic X\n");
+      ok = false;
+    }
+    
+  // Non-monotonic Y (Y-loop)
+  hd_curve_parameters p3 (-3, 0, -2, 3, 2, 1, 3, 4);
+  if (p3.is_valid_for_richards_curve())
+    {
+      printf("H&D validity failed: accepted non-monotonic Y\n");
+      ok = false;
+    }
+
+  return ok;
+}
+
+bool
+test_hd_sorting ()
+{
+  bool ok = true;
+  // Decreasing X
+  hd_curve_parameters p1 (5, 0, 4, 1, 1, 3, 0, 4);
+  p1.sort_by_x();
+  if (p1.minx != 0 || p1.maxx != 5 || p1.linear1x != 1 || p1.linear2x != 4)
+    {
+       printf("H&D sorting failed to reverse decreasing X\n");
+       ok = false;
+    }
+  return ok;
+}
+
 int
 test_render_linearity ()
 {
@@ -884,7 +930,7 @@ test_render_linearity ()
 int
 main ()
 {
-  printf ("1..14\n");
+  printf ("1..16\n");
   test_matrix ();
   report ("matrix tests", true);
   test_color ();
@@ -901,5 +947,7 @@ main ()
   report ("richards functional inverse tests", test_richards_functional_inverse ());
   report ("hd reversibility tests", test_hd_reversibility ());
   report ("hd incremental update tests", test_hd_incremental_update ());
+  report ("hd validity tests", test_hd_validity ());
+  report ("hd sorting tests", test_hd_sorting ());
   return 0;
 }

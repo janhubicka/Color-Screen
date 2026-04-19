@@ -63,6 +63,7 @@ private:
   QLabel *m_gammaLabel = nullptr;
   QComboBox *m_presetCombo = nullptr;
   QComboBox *m_modeCombo = nullptr;
+  std::vector<QWidget*> m_richardsWidgets;
 };
 
 struct HistogramRequestData {

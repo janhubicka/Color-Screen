@@ -162,8 +162,8 @@ void ContactCopyPanel::setupUi() {
       if (layout->count() >= 2) {
           QWidget *field = layout->itemAt(layout->count() - 1)->widget();
           QWidget *labelW = layout->itemAt(layout->count() - 2)->widget();
-          if (field) field->setToolTip(tooltip);
-          if (labelW) labelW->setToolTip(tooltip);
+          if (field) { field->setToolTip(tooltip); m_richardsWidgets.push_back(field); }
+          if (labelW) { labelW->setToolTip(tooltip); m_richardsWidgets.push_back(labelW); }
       }
   };
 
@@ -184,16 +184,22 @@ void ContactCopyPanel::setupUi() {
           return colorscreen::hd_to_richards_curve_parameters(s.rparams.contact_copy.emulsion_characteristic_curve).is_inverse; 
       },
       [this](ParameterState &s, bool v) {
-          auto rp = colorscreen::hd_to_richards_curve_parameters(s.rparams.contact_copy.emulsion_characteristic_curve);
-          rp.is_inverse = v;
-          s.rparams.contact_copy.emulsion_characteristic_curve = colorscreen::richards_to_hd_curve_parameters(rp);
+          auto &p = s.rparams.contact_copy.emulsion_characteristic_curve;
+          std::swap(p.minx, p.miny);
+          std::swap(p.linear1x, p.linear1y);
+          std::swap(p.linear2x, p.linear2y);
+          std::swap(p.maxx, p.maxy);
+          p.sort_by_x();
       },
       [](const ParameterState &s) { return s.rparams.contact_copy.simulate; });
   
   QFormLayout *layout = m_currentGroupForm ? m_currentGroupForm : m_form;
   if (layout->count() >= 1) {
       QWidget *invField = layout->itemAt(layout->count() - 1)->widget();
-      if (invField) invField->setToolTip("Calculate X as a function of Y. Essential for very steep (high gamma) curves.");
+      if (invField) {
+          invField->setToolTip("Calculate X as a function of Y. Essential for very steep (high gamma) curves.");
+          m_richardsWidgets.push_back(invField);
+      }
   }
 
   addSeparator("H&D Coordinate points (manual entry)");
@@ -286,6 +292,12 @@ void ContactCopyPanel::setupUi() {
 
       m_hdCurveWidget->setDensityBoost(s.rparams.contact_copy.boost);
       
+      // Update Richards widgets enablement
+      bool canRichards = s.rparams.contact_copy.emulsion_characteristic_curve.is_valid_for_richards_curve();
+      for (QWidget *w : m_richardsWidgets) {
+          if (w) w->setEnabled(sim && canRichards);
+      }
+
       // Update preset combo
       if (m_presetCombo) {
           int foundIdx = 0; // "Custom"
