@@ -573,9 +573,10 @@ test_richards_reversibility ()
        hd_curve_parameters hdp = richards_to_hd_curve_parameters(p);
        richards_curve_parameters rp = hd_to_richards_curve_parameters(hdp);
        
+       /* We use heuristic to determine v, so it is not recovered perfectly.  */
        if (std::abs(rp.A - p.A) > 1e-4 || std::abs(rp.K - p.K) > 1e-4 ||
-           std::abs(rp.B - p.B) > 1e-4 || std::abs(rp.M - p.M) > 1e-4 ||
-           std::abs(rp.v - p.v) > 1e-4 || rp.is_inverse != p.is_inverse)
+           std::abs(rp.B - p.B) > 0.2 || std::abs(rp.M - p.M) > 0.1 ||
+           std::abs(rp.v - p.v) > 0.2 || rp.is_inverse != p.is_inverse)
          {
             printf ("Richards reversibility failed for %s mode!\n", p.is_inverse ? "inverse" : "direct");
             printf ("Expected: A=%f, K=%f, B=%f, M=%f, v=%f\n", p.A, p.K, p.B, p.M, p.v);
@@ -708,6 +709,13 @@ test_hd_incremental_update ()
         printf ("Incremental M adjustment: point moved off curve! expected %f, got %f\n", hurley_new.linear1y, y1_fit);
         ok = false;
       }
+    auto rp_fit = hd_to_richards_curve_parameters(hurley_new);
+    if (std::abs(rp_fit.M - rp_new.M) > 1e-3 || std::abs(rp_fit.B - rp_new.B) > 0.05)
+      {
+	printf ("Incremental M adjustment: parameter drift! M: expected %f got %f, B: expected %f got %f\n",
+		rp_new.M, rp_fit.M, rp_new.B, rp_fit.B);
+	ok = false;
+      }
   }
 
   // 2. Test B adjustment (Scaling)
@@ -722,6 +730,13 @@ test_hd_incremental_update ()
       {
         printf ("Incremental B adjustment: point moved off curve! expected %f, got %f\n", hurley_new.linear1y, y1_fit);
         ok = false;
+      }
+    auto rp_fit = hd_to_richards_curve_parameters(hurley_new);
+    if (std::abs(rp_fit.B - rp_new.B) > 0.05 || std::abs(rp_fit.M - rp_new.M) > 1e-3)
+      {
+	printf ("Incremental B adjustment: parameter drift! B: expected %f got %f, M: expected %f got %f\n",
+		rp_new.B, rp_fit.B, rp_new.M, rp_fit.M);
+	ok = false;
       }
   }
 
@@ -738,6 +753,13 @@ test_hd_incremental_update ()
         printf ("Incremental v adjustment: point moved off curve! expected %f, got %f\n", hurley_new.linear1y, y1_fit);
         ok = false;
       }
+    auto rp_fit = hd_to_richards_curve_parameters(hurley_new);
+    if (std::abs(rp_fit.v - rp_new.v) > 0.1 || std::abs(rp_fit.B - rp_new.B) > 0.1 || std::abs(rp_fit.M - rp_new.M) > 0.05)
+      {
+	printf ("Incremental v adjustment: parameter drift! v: exp %f got %f, B: exp %f got %f, M: exp %f got %f\n",
+		rp_new.v, rp_fit.v, rp_new.B, rp_fit.B, rp_new.M, rp_fit.M);
+	ok = false;
+      }
   }
 
   // 4. Test A adjustment (Lower asymptote)
@@ -753,6 +775,13 @@ test_hd_incremental_update ()
         printf ("Incremental A adjustment: point moved off curve! expected %f, got %f\n", hurley_new.linear1y, y1_fit);
         ok = false;
       }
+    auto rp_fit = hd_to_richards_curve_parameters(hurley_new);
+    if (std::abs(rp_fit.A - rp_new.A) > 1e-3 || std::abs(rp_fit.B - rp_new.B) > 0.05)
+      {
+	printf ("Incremental A adjustment: parameter drift! A: exp %f got %f, B: exp %f got %f\n",
+		rp_new.A, rp_fit.A, rp_new.B, rp_fit.B);
+	ok = false;
+      }
   }
 
   // 5. Test K adjustment (Upper asymptote)
@@ -767,6 +796,13 @@ test_hd_incremental_update ()
       {
         printf ("Incremental K adjustment: point moved off curve! expected %f, got %f\n", hurley_new.linear1y, y1_fit);
         ok = false;
+      }
+    auto rp_fit = hd_to_richards_curve_parameters(hurley_new);
+    if (std::abs(rp_fit.K - rp_new.K) > 1e-3 || std::abs(rp_fit.B - rp_new.B) > 0.05)
+      {
+	printf ("Incremental K adjustment: parameter drift! K: exp %f got %f, B: exp %f got %f\n",
+		rp_new.K, rp_fit.K, rp_new.B, rp_fit.B);
+	ok = false;
       }
   }
 

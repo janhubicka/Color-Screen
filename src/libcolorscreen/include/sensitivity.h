@@ -213,16 +213,43 @@ struct hd_curve_parameters
     auto f = [&](double in) {
       double Z = B * (in - M);
       // Height S = (1 + exp(-Z))^(-1/v) remains constant
-      // Z_new = -ln((1 + exp(-Z))^(new_v / old_v) - 1)
-      // Use expm1 and log1p for numerical stability near Z -> infinity
       double inner = std::expm1((new_v / old_v) * std::log1p(std::exp(-Z)));
       if (inner <= 1e-20) inner = 1e-20;
       return M - std::log(inner) / B;
     };
+    
+    // 1. Move knots using precise formula
+    double old_l1, old_l2, new_l1, new_l2, old_min, old_max, new_min, new_max;
     if (is_inverted_p()) {
-      miny = f(miny); linear1y = f(linear1y); linear2y = f(linear2y); maxy = f(maxy);
+      old_l1 = linear1y; old_l2 = linear2y; old_min = miny; old_max = maxy;
+      linear1y = f(linear1y); linear2y = f(linear2y);
+      new_l1 = linear1y; new_l2 = linear2y;
     } else {
-      minx = f(minx); linear1x = f(linear1x); linear2x = f(linear2x); maxx = f(maxx);
+      old_l1 = linear1x; old_l2 = linear2x; old_min = minx; old_max = maxx;
+      linear1x = f(linear1x); linear2x = f(linear2x);
+      new_l1 = linear1x; new_l2 = linear2x;
+    }
+
+    // 2. Adjust endpoints to satisfy solver's heuristic: v = d_low / d_high
+    // d_low = |min - l_toe|, d_high = |max - l_shoulder|
+    double old_d_toe = std::abs(old_l1 - old_min);
+    double old_d_shoulder = std::abs(old_max - old_l2);
+    double old_knot_span = std::abs(old_l2 - old_l1);
+    double new_knot_span = std::abs(new_l2 - new_l1);
+    
+    // Scale distances such that ratio changes by new_v / old_v
+    double scale = (old_knot_span > 1e-8) ? (new_knot_span / old_knot_span) : 1.0;
+    // d_low_new = d_low_old * scale * (v_new / v_old)
+    // d_high_new = d_high_old * scale
+    double new_d_toe = old_d_toe * scale * (new_v / old_v);
+    double new_d_shoulder = old_d_shoulder * scale;
+    
+    if (is_inverted_p()) {
+      miny = (linear1y < linear2y) ? (linear1y - new_d_toe) : (linear1y + new_d_toe);
+      maxy = (linear2y > linear1y) ? (linear2y + new_d_shoulder) : (linear2y - new_d_shoulder);
+    } else {
+      minx = (linear1x < linear2x) ? (linear1x - new_d_toe) : (linear1x + new_d_toe);
+      maxx = (linear2x > linear1x) ? (linear2x + new_d_shoulder) : (linear2x - new_d_shoulder);
     }
   }
 
@@ -247,13 +274,11 @@ hd_to_richards_curve_parameters (const hd_curve_parameters &p)
   
   luminosity_t z1 = is_inverse ? p.linear1y : p.linear1x;
   luminosity_t z2 = is_inverse ? p.linear2y : p.linear2x;
-  luminosity_t mz = is_inverse ? (is_inverse ? p.miny : p.minx) : p.minx;
-  // wait, p.miny is correct if is_inverse. Let's be explicit
   luminosity_t min_z = is_inverse ? p.miny : p.minx;
   luminosity_t max_z = is_inverse ? p.maxy : p.maxx;
 
-  luminosity_t d_low = std::abs(std::min(z1, z2) - std::min(min_z, max_z));
-  luminosity_t d_high = std::abs(std::max(min_z, max_z) - std::max(z1, z2));
+  luminosity_t d_low = std::abs(z1 - min_z);
+  luminosity_t d_high = std::abs(max_z - z2);
 
   if (d_high > eps) v = d_low / d_high;
   
