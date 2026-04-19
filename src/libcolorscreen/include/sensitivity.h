@@ -126,8 +126,8 @@ struct hd_curve_parameters
   luminosity_t maxx, maxy;
 
   constexpr hd_curve_parameters ()
-      : minx (-6), miny (5), linear1x (-5), linear1y (5), linear2x (5),
-        linear2y (-5), maxx (6), maxy (-5)
+      : minx (-6), miny (5.5), linear1x (-5), linear1y (5), linear2x (5),
+        linear2y (-5), maxx (6), maxy (-5.5)
   {
   }
   constexpr hd_curve_parameters (luminosity_t new_minx, luminosity_t new_miny,
@@ -135,10 +135,15 @@ struct hd_curve_parameters
                                  luminosity_t new_linear1y,
                                  luminosity_t new_linear2x,
                                  luminosity_t new_linear2y,
-                                 luminosity_t new_maxx, luminosity_t new_maxy)
-      : minx (new_minx), miny (new_miny), linear1x (new_linear1x),
-        linear1y (new_linear1y), linear2x (new_linear2x),
-        linear2y (new_linear2y), maxx (new_maxx), maxy (new_maxy)
+                                 luminosity_t new_maxx, luminosity_t new_maxy, bool normalize = false)
+      : minx (new_minx + (normalize ? -0.3-(new_linear1x + new_linear2x) : 0)),
+        miny (new_miny),
+       	linear1x (new_linear1x + (normalize ? -0.3-(new_linear1x + new_linear2x) : 0)),
+        linear1y (new_linear1y),
+       	linear2x (new_linear2x + (normalize ? -0.3-(new_linear1x + new_linear2x) : 0)),
+        linear2y (new_linear2y),
+       	maxx (new_maxx + (normalize ? -0.3-(new_linear1x + new_linear2x) : 0)),
+       	maxy (new_maxy)
   {
   }
   bool
@@ -374,58 +379,7 @@ public:
     hd_curves_max,
   };
 
-  static constexpr DLL_PUBLIC struct hd_curve_description
-      hd_curves_properties[]
-      = { { "linear-reversal",
-            "Linear reversal film",
-            { -6, 5, -5, 5, 5, -5, 6, -5 } },
-          { "linear-negative",
-            "Linear negative film",
-            { -6, -5, -5, -5, 5, 5, 6, 5 } },
-          { "safe-linear-reversal",
-            "Linear reversal film",
-            { 0, 1, 0, 1, 0.7, 0.3, 3, 0 } },
-          { "safe-linear-negative",
-            "Linear negative film",
-            { 0, 0, 0, 0, 0.7, 0.7, 3, 1 } },
-          { "spicer-dufay-low",
-            "Spicer-Dufay low development",
-            { 0.005596021177603383, 0.13326648483876236, 0.9264367078453395,
-              0.25357372051981475, 3.8351612385689076, 1.7539186587518052,
-              3.8351612385689076, 1.7539186587518052 } },
-          { "spicer-dufay-mid",
-            "Spicer-Dufay mid development",
-            { 0.005596021177603383, 0.13326648483876236, 0.7346061286699825,
-              0.3354524306112632, 2.7042515642547724, 2.207183539226697,
-              2.7042515642547724, 2.207183539226697 } },
-          { "spicer-dufay-high",
-            "Spicer-Dufay high development",
-            { 0.005596021177603383, 0.13326648483876236, 0.664193807155463,
-              0.430406706240976, 1.5716733515161239, 2.2480065778918665,
-              1.5716733515161239, 2.2480065778918665 } },
-          { "spicer-dufay-reversal-low",
-            "Spicer-Dufay reversal low development",
-            { 0.10817262955238283, 1.7389218674795455, 0.10817262955238283,
-              1.7389218674795455, 3.1461832183539227, 0.19716428686026033,
-              3.990309642226858, 0.10466468795122763 } },
-          { "spicer-dufay-reversal-mid",
-            "Spicer-Dufay reversal mid development",
-            { 1.2834525910476495, 2.253437349590888, 1.2834525910476495,
-              2.253437349590888, 3.262801219316541, 0.27367639980747693,
-              3.990309642226858, 0.10466468795122763 } },
-          { "spicer-dufay-reversal-high",
-            "Spicer-Dufay reversal high development",
-            { 2.446334028557678, 2.2031926841007543, 2.446334028557678,
-              2.2031926841007543, 3.409735279961495, 0.34393951548211144,
-              3.9904123215145204, 0.13004572437028772 } },
-          { "paget-coorection1",
-            "Paget correction 1 (to linear)",
-            { -2.274010, 3.400111, -1.341965, 1.402846, -0.789100, 0.927726,
-              -0.437047, -0.003900 } },
-          { "hurley-video2",
-            "Paget correction 2 (to linear)",
-            { -2.500011, 4.610400, -1.003162, 1.374261, -0.718547, 1.165326,
-              -0.255926, -0.118284 } } };
+  static const DLL_PUBLIC struct hd_curve_description hd_curves_properties[];
 
   void
   precompute ()
