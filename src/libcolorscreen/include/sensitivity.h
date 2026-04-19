@@ -1,9 +1,9 @@
 #ifndef SENSITIVITY_H
 #define SENSITIVITY_H
-#include "dllpublic.h"
 #include "color.h"
-#include <tuple>
+#include "dllpublic.h"
 #include <cmath>
+#include <tuple>
 namespace colorscreen
 {
 /* Hurter–Driffield characteristic curve based on data points
@@ -170,12 +170,13 @@ struct hd_curve_parameters
   bool
   is_valid_for_richards_curve () const
   {
-    auto monotonic = [] (double a, double b, double c, double d) {
-      if (std::abs (a - b) < 1e-6 || std::abs (b - c) < 1e-6
-          || std::abs (c - d) < 1e-6)
-        return false;
-      return (a < b && b < c && c < d) || (a > b && b > c && c > d);
-    };
+    auto monotonic = [] (double a, double b, double c, double d)
+      {
+        if (std::abs (a - b) < 1e-6 || std::abs (b - c) < 1e-6
+            || std::abs (c - d) < 1e-6)
+          return false;
+        return (a < b && b < c && c < d) || (a > b && b > c && c > d);
+      };
     return monotonic (minx, linear1x, linear2x, maxx)
            && monotonic (miny, linear1y, linear2y, maxy);
   }
@@ -282,17 +283,15 @@ struct hd_curve_parameters
       }
   }
 
-  void adjust_v (double old_v, double new_v, double B, double M);
+  DLL_PUBLIC void adjust_v (double old_v, double new_v, double B, double M);
 
-  void adjust_richards (const richards_curve_parameters &old_rp,
-                        const richards_curve_parameters &new_rp);
+  DLL_PUBLIC void adjust_richards (const richards_curve_parameters &old_rp,
+                                   const richards_curve_parameters &new_rp);
 };
 
 /* Convert 4-point HD curve parameters to Richards curve parameters.  */
-struct richards_curve_parameters
-hd_to_richards_curve_parameters (const hd_curve_parameters &p);
-struct hd_curve_parameters
-richards_to_hd_curve_parameters (const richards_curve_parameters &rp);
+DLL_PUBLIC struct richards_curve_parameters hd_to_richards_curve_parameters (const hd_curve_parameters &p);
+DLL_PUBLIC struct hd_curve_parameters richards_to_hd_curve_parameters (const richards_curve_parameters &rp);
 
 /* Sensitivity curve of an "ideal" digital camera with safety buffer in upper
  * 90%.  */
@@ -315,13 +314,15 @@ public:
 class richards_hd_curve : public hd_curve
 {
 public:
-  static luminosity_t eval_richards (const richards_curve_parameters &p,
-                                     luminosity_t xs, bool clamp = false,
-                                     luminosity_t clampmin = 0,
-                                     luminosity_t clampmax = 0);
-  richards_hd_curve (int points, const struct hd_curve_parameters &p);
+  DLL_PUBLIC static luminosity_t
+  eval_richards (const richards_curve_parameters &p, luminosity_t xs,
+                 bool clamp = false, luminosity_t clampmin = 0,
+                 luminosity_t clampmax = 0);
+  DLL_PUBLIC richards_hd_curve (int points,
+                                const struct hd_curve_parameters &p);
 
-  richards_hd_curve (int points, const struct richards_curve_parameters &rp);
+  DLL_PUBLIC richards_hd_curve (int points,
+                                const struct richards_curve_parameters &rp);
   ~richards_hd_curve ()
   {
     free (xs);
@@ -419,11 +420,12 @@ public:
               3.9904123215145204, 0.13004572437028772 } },
           { "paget-coorection1",
             "Paget correction 1 (to linear)",
-            { -2.274010, 3.400111, -1.341965, 1.402846, -0.789100, 0.927726, -0.437047, -0.003900 } },
+            { -2.274010, 3.400111, -1.341965, 1.402846, -0.789100, 0.927726,
+              -0.437047, -0.003900 } },
           { "hurley-video2",
             "Paget correction 2 (to linear)",
-            { -2.500011, 4.610400, -1.003162, 1.374261, -0.718547, 1.165326, -0.255926, -0.118284 } } 
-      };
+            { -2.500011, 4.610400, -1.003162, 1.374261, -0.718547, 1.165326,
+              -0.255926, -0.118284 } } };
 
   void
   precompute ()

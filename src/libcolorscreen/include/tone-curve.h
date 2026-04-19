@@ -29,8 +29,8 @@ public:
   };
   DLL_PUBLIC static const property_t tone_curve_names[tone_curve_max];
   static bool DLL_PUBLIC save_tone_curve (FILE *f, tone_curves curve, bool hd);
-  tone_curve (enum tone_curves type, const std::vector<point_t> &control_points = default_control_points ());
-  tone_curve (const std::vector<point_t> &control_points);
+  DLL_PUBLIC tone_curve (enum tone_curves type, const std::vector<point_t> &control_points = default_control_points ());
+  DLL_PUBLIC tone_curve (const std::vector<point_t> &control_points);
   DLL_PUBLIC static std::vector<point_t> default_control_points ();
   /* This does the same as dng reference implementation.  */
   rgbdata
