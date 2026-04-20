@@ -187,7 +187,7 @@ void SharpnessPanel::setupUi() {
       [](const ParameterState &s) { return (int)s.rparams.sharpen.mode; },
       [](ParameterState &s, int v) {
         s.rparams.sharpen.mode = (sharpen_mode)v;
-      });
+      }, nullptr, "Select the sharpening algorithm. \"None\" disables sharpening, \"Wiener\" and \"Richardson-Lucy\" use the MTF model, \"Unsharp mask\" is a classic edge enhancement.");
 
   QToolButton *separatorToggle = addSeparator("Scanner/Camera properties");
 
@@ -253,7 +253,7 @@ void SharpnessPanel::setupUi() {
       },
       [](const ParameterState &s) {
         return s.rparams.sharpen.scanner_mtf.measurements.size();
-      });
+      }, "Use the Modulation Transfer Function (MTF) data imported from QuickMTF instead of the synthetic model (Sigma/Defocus).");
 
 
   // Gaussian blur (Sigma)
@@ -269,7 +269,7 @@ void SharpnessPanel::setupUi() {
       },
       [](ParameterState &s, double v) {
         s.rparams.sharpen.scanner_mtf.sigma = v;
-      }, 3);
+      }, 1.0, nullptr, false, "Synthetic model parameter for camera sensor and scanner blur. Higher values simulate more blurring of fine details.");
 
   // Wavelength
   // Range 0.0 - 1200.0 (0.0 = unknown)
@@ -280,7 +280,7 @@ void SharpnessPanel::setupUi() {
       },
       [](ParameterState &s, double v) {
         s.rparams.sharpen.scanner_mtf.wavelength = v;
-      });
+      }, 1.0, nullptr, false, "Peak wavelength in nanometers used for calculating diffraction-limited MTF. 0 means use the average wavelength from the Capture tab.");
 
   // Defocus
   // Range 0.0 - 10.0 mm
@@ -297,7 +297,7 @@ void SharpnessPanel::setupUi() {
       2.0, // Gamma
       [](const ParameterState &s) {
         return s.rparams.sharpen.scanner_mtf.simulate_difraction_p();
-      }, 3);
+      }, false, "Simulates optical defocus in millimeters. This affects the MTF by introducing a sinc-like suppression of high frequencies.");
 
   // Blur diameter
   // Range 0.0 - 20.0 pixels
@@ -314,7 +314,7 @@ void SharpnessPanel::setupUi() {
       2.0, // Gamma
       [](const ParameterState &s) {
         return !s.rparams.sharpen.scanner_mtf.simulate_difraction_p();
-      });
+      }, false, "Simulates a uniform \"box\" blur of a specific diameter in pixels. Used when diffraction simulation is disabled.");
 
 
   // Add "Match measured data" button (visible only if measured data exists)
@@ -331,7 +331,7 @@ void SharpnessPanel::setupUi() {
        if (separatorToggle && !separatorToggle->isChecked())
          visible = false;
        return visible;
-    });
+    }, "Automatically find Sigma and Defocus parameters that best fit the currently loaded QuickMTF measurements.");
 
   // MTF Scale
   // Range 0.0 - 2.0 (0.0 = no MTF)
@@ -342,7 +342,7 @@ void SharpnessPanel::setupUi() {
       },
       [](ParameterState &s, double v) {
         s.rparams.sharpen.scanner_mtf_scale = v;
-      });
+      }, 1.0, nullptr, false, "Global intensity of the deconvolution-based sharpening. 0.0 disables it, 1.0 is standard.");
 
   addSeparator("Measurements");
   addButtonParameter("", "Load QuickMTF measurement", [this]() { loadMTF(); });
@@ -376,7 +376,7 @@ void SharpnessPanel::setupUi() {
       },
       [](ParameterState &s, double v) {
         s.rparams.sharpen.supersample = (int)v;
-      });
+      }, 1.0, nullptr, false, "Process the sharpening at a higher resolution than the original scan to reduce aliasing artifacts. Increases computation time significantly.");
 
   addSeparator("Wiener filter");
 
@@ -386,8 +386,8 @@ void SharpnessPanel::setupUi() {
       "Signal to noise ratio", 0.0, 65535.0, 1.0, 0, "", "",
       [](const ParameterState &s) { return s.rparams.sharpen.scanner_snr; },
       [](ParameterState &s, double v) { s.rparams.sharpen.scanner_snr = v; },
-      2.0 // Gamma (slow start)
-  );
+      2.0, // Gamma (slow start)
+      nullptr, false, "Used by the Wiener filter to balance between sharpening detail and amplifying image noise. Higher values result in stronger sharpening.");
 
   addSeparator("Richardson–Lucy deconvolution");
 
@@ -401,8 +401,8 @@ void SharpnessPanel::setupUi() {
       [](ParameterState &s, double v) {
         s.rparams.sharpen.richardson_lucy_iterations = (int)v;
       },
-      2.0 // Gamma (slow start)
-  );
+      2.0, // Gamma (slow start)
+      nullptr, false, "Number of iterations for the Richardson-Lucy deconvolution. More iterations produce sharper results but may introduce \"ringing\" or \"halos\".");
 
   // Richardson-Lucy sigma
   // Range 0.0 - 2.0, floating point
@@ -413,7 +413,7 @@ void SharpnessPanel::setupUi() {
       },
       [](ParameterState &s, double v) {
         s.rparams.sharpen.richardson_lucy_sigma = v;
-      });
+      }, 1.0, nullptr, false, "Damping factor for the Richardson-Lucy algorithm to suppress noise amplification in dark areas.");
 
   addSeparator("Unsharp mask");
 
@@ -428,7 +428,7 @@ void SharpnessPanel::setupUi() {
       1.0, // No gamma
       [](const ParameterState &s) {
         return s.rparams.sharpen.mode == sharpen_mode::unsharp_mask;
-      }, 3);
+      }, false, "The radius of the unsharp mask (edge enhancement) in pixels.");
 
   addSliderParameter(
       "Amount", 0.0, 100.0, 100.0, 1, "", "",
@@ -437,7 +437,7 @@ void SharpnessPanel::setupUi() {
       2.0, // Gamma (slow start)
       [](const ParameterState &s) {
         return s.rparams.sharpen.mode == sharpen_mode::unsharp_mask;
-      });
+      }, "The strength of the unsharp mask enhancement.");
 
   addSeparator("Focus analyzer");
   
@@ -449,7 +449,7 @@ void SharpnessPanel::setupUi() {
       [this](ParameterState &, bool v) {
         if (v) m_finetuneFlags |= colorscreen::finetune_scanner_mtf_sigma;
         else m_finetuneFlags &= ~colorscreen::finetune_scanner_mtf_sigma;
-      });
+      }, nullptr, "Included in the focus analyzer optimization loop.");
 
   addCheckboxParameter(
       "Optimize Defocus",
@@ -459,11 +459,11 @@ void SharpnessPanel::setupUi() {
       [this](ParameterState &, bool v) {
         if (v) m_finetuneFlags |= colorscreen::finetune_scanner_mtf_defocus;
         else m_finetuneFlags &= ~colorscreen::finetune_scanner_mtf_defocus;
-      });
+      }, nullptr, "Included in the focus analyzer optimization loop.");
 
   m_analyzeAreaBtn = addToggleButtonParameter("", tr("Analyze area"), [this](bool checked) {
     emit focusAnalysisRequested(checked, m_finetuneFlags);
-  });
+  }, nullptr, nullptr, "Experimental tool that attempts to find the best Focus/Sigma by analyzing the local contrast and sharpness of the selected area.");
 
   // Finetune diagnostic images section (initially hidden)
   m_finetuneImagesPanel = new FinetuneImagesPanel();

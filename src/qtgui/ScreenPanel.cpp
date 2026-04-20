@@ -126,6 +126,7 @@ void ScreenPanel::setupUi() {
   }
 
   addEnumTooltips(screenCombo, scr_names, max_scr_type);
+  screenCombo->setToolTip("Select the physical color screen process (e.g., Autochrome, Joly, Dufaycolor). \"Random\" is used for modern digital images without a screen.");
 
   if (m_currentGroupForm) {
     m_currentGroupForm->addRow("Screen type", screenCombo);
@@ -158,7 +159,7 @@ void ScreenPanel::setupUi() {
       [this](const ParameterState &) {
           auto img = m_imageGetter();
           return img && img->has_rgb();
-      });
+      }, "Attempt to automatically identify the screen type and its orientation from the image content.");
 
   addSeparator("Regular screen");
   
@@ -193,7 +194,7 @@ void ScreenPanel::setupUi() {
       1.0,
       [](const ParameterState &s) {
         return screen_with_varying_strips_p(s.scrToImg.type);
-      });
+      }, false, "Relative width of the red filter strips for line-screen processes like Joly or Dufaycolor.");
 
   // Green Strip Width
   addSliderParameter(
@@ -203,21 +204,22 @@ void ScreenPanel::setupUi() {
       1.0,
       [](const ParameterState &s) {
         return screen_with_varying_strips_p(s.scrToImg.type);
-      });
+      }, false, "Relative width of the green filter strips for line-screen processes like Joly or Dufaycolor.");
 
   // Element density collection threshold
   addSliderParameter(
       "Element density collection threshold", 0.0, 1.0, 100.0, 2, "", "",
       [](const ParameterState &s) { return s.rparams.collection_threshold; },
       [](ParameterState &s, double v) { s.rparams.collection_threshold = v; },
-      1.0);
+      1.0, nullptr, false, "Threshold for identifying screen elements based on their color density. Smaller values require stronger color enhancement and may result in edge artefacts. Too large values may result in no data being collected at all.");
 
   // Collection Quality
   addEnumParameter("Collection Quality", 
       render_parameters::collection_quality_names, 
       render_parameters::max_collection_quality,
       [](const ParameterState &s) { return (int)s.rparams.collection_quality; },
-      [](ParameterState &s, int v) { s.rparams.collection_quality = (render_parameters::collection_quality_t)v; }
+      [](ParameterState &s, int v) { s.rparams.collection_quality = (render_parameters::collection_quality_t)v; },
+      nullptr, "Algorithmic precision for collecting and averaging color information from the screen elements."
   );
 
   // Screen Demosaic
@@ -225,7 +227,8 @@ void ScreenPanel::setupUi() {
       render_parameters::screen_demosaic_names,
       render_parameters::max_screen_demosaic,
       [](const ParameterState &s) { return (int)s.rparams.screen_demosaic; },
-      [](ParameterState &s, int v) { s.rparams.screen_demosaic = (render_parameters::screen_demosaic_t)v; }
+      [](ParameterState &s, int v) { s.rparams.screen_demosaic = (render_parameters::screen_demosaic_t)v; },
+      nullptr, "Interpolation algorithm used to fill in missing color information between the screen elements."
   );
 
   // Demosaiced Image Scaling Algorithm
@@ -233,7 +236,8 @@ void ScreenPanel::setupUi() {
       render_parameters::demosaiced_scaling_names,
       render_parameters::max_demosaiced_scaling,
       [](const ParameterState &s) { return (int)s.rparams.demosaiced_scaling; },
-      [](ParameterState &s, int v) { s.rparams.demosaiced_scaling = (render_parameters::demosaiced_scaling_t)v; }
+      [](ParameterState &s, int v) { s.rparams.demosaiced_scaling = (render_parameters::demosaiced_scaling_t)v; },
+      nullptr, "Method used to rescale the internally reconstructed image to the final output resolution."
   );
 
 

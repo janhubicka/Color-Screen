@@ -45,12 +45,12 @@ void GeometryPanel::setupUi() {
   m_exaggerateSliderContainer = addSlider("Exaggerate", 1.0, 10000.0, 100.0, 1, "x", "", 200.0,
             [this](double v) {
                 emit exaggerateChanged(v);
-            }, 1.0, true);
+            }, 1.0, true, "Magnification factor for displaying registration errors. Higher values make tiny misalignments more visible.");
 
   m_maxArrowLengthSliderContainer = addSlider("Max arrow length", 1.0, 1000.0, 1.0, 0, "px", "", 100.0,
             [this](double v) {
                 emit maxArrowLengthChanged(v);
-            });
+            }, 1.0, false, "Maximum length of the arrows displaying registration errors on the image viewer.");
 
   connect(showBox, &QCheckBox::toggled, this, [this](bool checked){
       if (m_exaggerateSliderContainer) m_exaggerateSliderContainer->setEnabled(checked);
@@ -68,18 +68,19 @@ void GeometryPanel::setupUi() {
                 if (m_perspectiveChart) m_perspectiveChart->setHeatmapTolerance(v);
                 if (m_nonlinearChart) m_nonlinearChart->setHeatmapTolerance(v);
                 emit heatmapToleranceChanged(v);
-            });
+            }, 1.0, false, "The threshold for color-coding deformation errors in the diagnostic charts. Lower values make the heatmap more sensitive to small errors.");
 
   addSeparator("Optimization");
 
   QCheckBox *autoBtn = addCheckboxParameter("Auto optimize",
       [this](const ParameterState &){ return isAutoEnabled(); },
-      [](ParameterState &, bool){ /* Handled by checkbox toggle signal */ });
+      [](ParameterState &, bool){ /* Handled by checkbox toggle signal */ },
+      nullptr, "Automatically trigger a geometry optimization whenever registration points are added or moved.");
   autoBtn->setObjectName("autoSolverBox");
 
   addButtonParameter("Optimization", "Optimize geometry", [this, autoBtn]() {
       emit optimizeRequested(autoBtn->isChecked());
-  });
+  }, nullptr, "Run the solver to optimize the geometry parameters (rotation, tilt, lens) to match the registration points.");
 
   connect(autoBtn, &QCheckBox::toggled, this, [this](bool checked){
       if (checked) emit optimizeRequested(true);
@@ -92,13 +93,15 @@ void GeometryPanel::setupUi() {
   QCheckBox *lensCb = addCheckboxWithReset("Optimize lens correction",
       [](const ParameterState &s){ return s.solver.optimize_lens; },
       [](ParameterState &s, bool v){ s.solver.optimize_lens = v; },
-      [](ParameterState &s){ s.scrToImg.lens_correction = colorscreen::lens_warp_correction_parameters(); });
+      [](ParameterState &s){ s.scrToImg.lens_correction = colorscreen::lens_warp_correction_parameters(); },
+      nullptr, "Include lens distortion parameters in the optimization solver.");
   connect(lensCb, &QCheckBox::toggled, this, triggerIfAuto);
 
   QCheckBox *tiltCb = addCheckboxWithReset("Optimize tilt",
       [](const ParameterState &s){ return s.solver.optimize_tilt; },
       [](ParameterState &s, bool v){ s.solver.optimize_tilt = v; },
-      [](ParameterState &s){ s.scrToImg.tilt_x = 0; s.scrToImg.tilt_y = 0; });
+      [](ParameterState &s){ s.scrToImg.tilt_x = 0; s.scrToImg.tilt_y = 0; },
+      nullptr, "Include perspective tilt parameters in the optimization solver.");
   connect(tiltCb, &QCheckBox::toggled, this, triggerIfAuto);
 
   QCheckBox *nlCb = addCheckboxParameter("Nonlinear corrections",
@@ -107,13 +110,15 @@ void GeometryPanel::setupUi() {
       },
       [this](ParameterState &, bool v){
           m_nonlinearEnabled = v;
-      });
+      },
+      nullptr, "Enable higher-order mesh-based corrections for complex dewarping (only active after successful optimization).");
   nlCb->setObjectName("nonlinearBox");
   connect(nlCb, &QCheckBox::toggled, this, &GeometryPanel::nonlinearToggled);
 
   addEnumParameter("Scanner/camera geometry", pretty_scanner_type_names,
       [](const ParameterState &s){ return (int)s.scrToImg.scanner_type; },
-      [](ParameterState &s, int v){ s.scrToImg.scanner_type = (colorscreen::scanner_type)v; });
+      [](ParameterState &s, int v){ s.scrToImg.scanner_type = (colorscreen::scanner_type)v; },
+      nullptr, "Select the physical movement model of your scanner or camera rig. This defines how the perspective and lens distortions affects the image.");
 
   // Ensure Finetune widget is separate from Optimization group
   endGroup();
