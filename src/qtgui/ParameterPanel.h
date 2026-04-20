@@ -45,7 +45,8 @@ protected:
                           std::function<void(ParameterState &, double)> setter,
                           const std::map<double, QString> &specialValues = {},
                           const std::map<double, QString> &quickSelects = {},
-                          std::function<bool(double)> validator = nullptr);
+                          std::function<bool(double)> validator = nullptr,
+                          const QString &tooltip = QString());
 
   /*
     Adds a slider parameter row (Slider + SpinBox).
@@ -58,7 +59,7 @@ protected:
       std::function<double(const ParameterState &)> getter,
       std::function<void(ParameterState &, double)> setter, double gamma = 1.0,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr,
-      bool logarithmic = false);
+      bool logarithmic = false, const QString &tooltip = QString());
 
   /*
     Adds a slider parameter row (Slider + SpinBox) that does not participate in state.
@@ -68,13 +69,14 @@ protected:
       const QString &suffix, const QString &specialValueText,
       double initialValue,
       std::function<void(double)> onChanged, double gamma = 1.0,
-      bool logarithmic = false);
+      bool logarithmic = false, const QString &tooltip = QString());
 
   QComboBox *addEnumParameter(
       const QString &label, const std::map<int, QString> &options,
       std::function<int(const ParameterState &)> getter,
       std::function<void(ParameterState &, int)> setter,
-      std::function<bool(const ParameterState &)> enabledCheck = nullptr);
+      std::function<bool(const ParameterState &)> enabledCheck = nullptr,
+      const QString &tooltip = QString());
 
   template <typename T>
   void addEnumTooltips(QComboBox *combo, const T *names, int max) {
@@ -94,7 +96,8 @@ protected:
       const QString &label, const T *names, int max,
       std::function<int(const ParameterState &)> getter,
       std::function<void(ParameterState &, int)> setter,
-      std::function<bool(const ParameterState &)> enabledCheck = nullptr) {
+      std::function<bool(const ParameterState &)> enabledCheck = nullptr,
+      const QString &tooltip = QString()) {
     std::map<int, QString> options;
     for (int i = 0; i < max; ++i) {
       if (names[i].pretty_name && names[i].pretty_name[0]) {
@@ -104,7 +107,7 @@ protected:
       }
     }
 
-    QComboBox *combo = addEnumParameter(label, options, getter, setter, enabledCheck);
+    QComboBox *combo = addEnumParameter(label, options, getter, setter, enabledCheck, tooltip);
     addEnumTooltips(combo, names, max);
     return combo;
   }
@@ -113,37 +116,43 @@ protected:
   QComboBox *addEnumParameter(
       const QString &label, std::function<int(const ParameterState &)> getter,
       std::function<void(ParameterState &, int)> setter,
-      std::function<bool(const ParameterState &)> enabledCheck = nullptr) {
-    return addEnumParameter(label, Names, Max, getter, setter, enabledCheck);
+      std::function<bool(const ParameterState &)> enabledCheck = nullptr,
+      const QString &tooltip = QString()) {
+    return addEnumParameter(label, Names, Max, getter, setter, enabledCheck, tooltip);
   }
 
   QCheckBox *addCheckboxParameter(
       const QString &label, std::function<bool(const ParameterState &)> getter,
       std::function<void(ParameterState &, bool)> setter,
-      std::function<bool(const ParameterState &)> enabledCheck = nullptr);
+      std::function<bool(const ParameterState &)> enabledCheck = nullptr,
+      const QString &tooltip = QString());
 
   QCheckBox *addCheckboxWithReset(
       const QString &label, std::function<bool(const ParameterState &)> getter,
       std::function<void(ParameterState &, bool)> setter,
       std::function<void(ParameterState &)> resetAction,
-      std::function<bool(const ParameterState &)> enabledCheck = nullptr);
+      std::function<bool(const ParameterState &)> enabledCheck = nullptr,
+      const QString &tooltip = QString());
 
   QPushButton *addButtonParameter(
       const QString &label, const QString &text, std::function<void()> onClicked,
-      std::function<bool(const ParameterState &)> enabledCheck = nullptr);
+      std::function<bool(const ParameterState &)> enabledCheck = nullptr,
+      const QString &tooltip = QString());
 
   QPushButton *addToggleButtonParameter(
       const QString &label, const QString &text,
       std::function<void(bool)> onToggled,
       std::function<bool(const ParameterState &)> getter = nullptr,
-      std::function<bool(const ParameterState &)> enabledCheck = nullptr);
+      std::function<bool(const ParameterState &)> enabledCheck = nullptr,
+      const QString &tooltip = QString());
 
   void addCorrelatedRGBParameter(
       const QString &label, double min, double max, double scale, int decimals,
       const QString &suffix,
       std::function<colorscreen::rgbdata(const ParameterState &)> getter,
       std::function<void(ParameterState &, const colorscreen::rgbdata &)> setter,
-      std::function<bool(const ParameterState &)> enabledCheck = nullptr);
+      std::function<bool(const ParameterState &)> enabledCheck = nullptr,
+      const QString &tooltip = QString());
 
   QToolButton *addSeparator(const QString &title);
 

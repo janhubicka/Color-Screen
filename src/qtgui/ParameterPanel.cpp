@@ -75,11 +75,15 @@ void ParameterPanel::addDoubleParameter(
     std::function<void(ParameterState &, double)> setter,
     const std::map<double, QString> &specialValues,
     const std::map<double, QString> &quickSelects,
-    std::function<bool(double)> validator) {
+    std::function<bool(double)> validator,
+    const QString &tooltip) {
   SmartSpinBox *spin = new SmartSpinBox();
   spin->setRange(min, max);
   spin->setSingleStep(0.1);
   spin->setSpecialValues(specialValues);
+
+  if (!tooltip.isEmpty())
+    spin->setToolTip(tooltip);
 
   // Container
   QWidget *container = new QWidget();
@@ -90,6 +94,8 @@ void ParameterPanel::addDoubleParameter(
   QComboBox *combo = nullptr;
   if (!quickSelects.empty()) {
     combo = new QComboBox();
+    if (!tooltip.isEmpty())
+      combo->setToolTip(tooltip);
     for (auto const &[val, text] : quickSelects) {
       combo->addItem(text, val);
     }
@@ -170,13 +176,15 @@ void ParameterPanel::addSliderParameter(
     std::function<double(const ParameterState &)> getter,
     std::function<void(ParameterState &, double)> setter, double gamma,
     std::function<bool(const ParameterState &)> enabledCheck,
-    bool logarithmic) {
+    bool logarithmic, const QString &tooltip) {
   // Container: Slider + SpinBox
   QWidget *container = new QWidget();
   QHBoxLayout *hLayout = new QHBoxLayout(container);
   hLayout->setContentsMargins(0, 0, 0, 0);
 
   QSlider *slider = new QSlider(Qt::Horizontal);
+  if (!tooltip.isEmpty())
+    slider->setToolTip(tooltip);
 
   // For non-linear, use fixed high resolution range
   const int SLIDER_MAX = 65535;
@@ -327,13 +335,15 @@ QWidget* ParameterPanel::addSlider(
     const QString &suffix, const QString &specialValueText,
     double initialValue,
     std::function<void(double)> onChanged, double gamma,
-    bool logarithmic) {
+    bool logarithmic, const QString &tooltip) {
   // Container: Slider + SpinBox
   QWidget *container = new QWidget();
   QHBoxLayout *hLayout = new QHBoxLayout(container);
   hLayout->setContentsMargins(0, 0, 0, 0);
 
   QSlider *slider = new QSlider(Qt::Horizontal);
+  if (!tooltip.isEmpty())
+    slider->setToolTip(tooltip);
 
   // For non-linear, use fixed high resolution range
   const int SLIDER_MAX = 65535;
@@ -453,8 +463,11 @@ QComboBox *ParameterPanel::addEnumParameter(
     const QString &label, const std::map<int, QString> &options,
     std::function<int(const ParameterState &)> getter,
     std::function<void(ParameterState &, int)> setter,
-    std::function<bool(const ParameterState &)> enabledCheck) {
+    std::function<bool(const ParameterState &)> enabledCheck,
+    const QString &tooltip) {
   QComboBox *combo = new QComboBox();
+  if (!tooltip.isEmpty())
+    combo->setToolTip(tooltip);
   combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
   combo->setMinimumContentsLength(10);
   combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -503,7 +516,8 @@ QComboBox *ParameterPanel::addEnumParameter(
 QCheckBox *ParameterPanel::addCheckboxParameter(
     const QString &label, std::function<bool(const ParameterState &)> getter,
     std::function<void(ParameterState &, bool)> setter,
-    std::function<bool(const ParameterState &)> enabledCheck) {
+    std::function<bool(const ParameterState &)> enabledCheck,
+    const QString &tooltip) {
   // Create container with label on left, checkbox on right
   QWidget *container = new QWidget();
   QHBoxLayout *hLayout = new QHBoxLayout(container);
@@ -511,6 +525,11 @@ QCheckBox *ParameterPanel::addCheckboxParameter(
 
   QCheckBox *checkbox = new QCheckBox();
   QLabel *textLabel = new QLabel(label);
+
+  if (!tooltip.isEmpty()) {
+    checkbox->setToolTip(tooltip);
+    textLabel->setToolTip(tooltip);
+  }
 
   hLayout->addWidget(checkbox, 0);  // Checkbox fixed size on left
   hLayout->addWidget(textLabel, 1); // Label expands to fill space
@@ -550,7 +569,8 @@ QCheckBox *ParameterPanel::addCheckboxWithReset(
     const QString &label, std::function<bool(const ParameterState &)> getter,
     std::function<void(ParameterState &, bool)> setter,
     std::function<void(ParameterState &)> resetAction,
-    std::function<bool(const ParameterState &)> enabledCheck) {
+    std::function<bool(const ParameterState &)> enabledCheck,
+    const QString &tooltip) {
   // Create container with label on left, checkbox on right
   QWidget *container = new QWidget();
   QHBoxLayout *hLayout = new QHBoxLayout(container);
@@ -558,6 +578,11 @@ QCheckBox *ParameterPanel::addCheckboxWithReset(
 
   QCheckBox *checkbox = new QCheckBox();
   QLabel *textLabel = new QLabel(label);
+
+  if (!tooltip.isEmpty()) {
+    checkbox->setToolTip(tooltip);
+    textLabel->setToolTip(tooltip);
+  }
   QPushButton *resetBtn = new QPushButton("Reset");
   resetBtn->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
@@ -603,8 +628,11 @@ QCheckBox *ParameterPanel::addCheckboxWithReset(
 
 QPushButton *ParameterPanel::addButtonParameter(
     const QString &label, const QString &text, std::function<void()> onClicked,
-    std::function<bool(const ParameterState &)> enabledCheck) {
+    std::function<bool(const ParameterState &)> enabledCheck,
+    const QString &tooltip) {
   QPushButton *button = new QPushButton(text);
+  if (!tooltip.isEmpty())
+    button->setToolTip(tooltip);
   if (m_currentGroupForm) {
     m_currentGroupForm->addRow(label, button);
   } else {
@@ -635,9 +663,12 @@ QPushButton *ParameterPanel::addToggleButtonParameter(
     const QString &label, const QString &text,
     std::function<void(bool)> onToggled,
     std::function<bool(const ParameterState &)> getter,
-    std::function<bool(const ParameterState &)> enabledCheck) {
+    std::function<bool(const ParameterState &)> enabledCheck,
+    const QString &tooltip) {
   QPushButton *button = new QPushButton(text);
   button->setCheckable(true);
+  if (!tooltip.isEmpty())
+    button->setToolTip(tooltip);
   if (m_currentGroupForm) {
     m_currentGroupForm->addRow(label, button);
   } else {
@@ -679,7 +710,8 @@ void ParameterPanel::addCorrelatedRGBParameter(
     const QString &suffix,
     std::function<colorscreen::rgbdata(const ParameterState &)> getter,
     std::function<void(ParameterState &, const colorscreen::rgbdata &)> setter,
-    std::function<bool(const ParameterState &)> enabledCheck) {
+    std::function<bool(const ParameterState &)> enabledCheck,
+    const QString &tooltip) {
 
   // 1. Link Checkbox
   QCheckBox *linkCheck = new QCheckBox("Link channels");
@@ -707,6 +739,10 @@ void ParameterPanel::addCorrelatedRGBParameter(
     spin->setSingleStep(1.0 / scale);
     if (!suffix.isEmpty())
       spin->setSuffix(QString(" %1").arg(suffix));
+    if (!tooltip.isEmpty()) {
+      slider->setToolTip(tooltip);
+      spin->setToolTip(tooltip);
+    }
 
     hLayout->addWidget(slider, 1);
     hLayout->addWidget(spin, 0);

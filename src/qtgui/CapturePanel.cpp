@@ -95,6 +95,7 @@ void CapturePanel::setupUi()
             m_demosaicCombo->setItemData(i, QString::fromUtf8(colorscreen::image_data::demosaic_names[i].help), Qt::ToolTipRole);
         }
     }
+    m_demosaicCombo->setToolTip("Algorithm to interpolate missing color information from CFA (Bayer) sensor.");
     demosaicHLayout->addWidget(m_demosaicCombo, 1);
 
     m_reloadDemosaicBtn = new QPushButton("Reload and demosaic");
@@ -127,7 +128,8 @@ void CapturePanel::setupUi()
         [](ParameterState &s, double v) { s.rparams.gamma = v; },
         gammas,
         quickSelects,
-        nullptr
+        nullptr,
+        "Gamma correction applied to the input scan."
     );
 
     // 2. Detected gamma (Label) + Use
@@ -141,7 +143,7 @@ void CapturePanel::setupUi()
         },
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.scan_dpi = v;
-        });
+        }, 1.0, nullptr, false, "Scanner or camera resolution in Pixels Per Inch (PPI). Crucial for MTF-based sharpening.");
 
     // 4. Image resolution (Label) + Use
     addValueWithUseButton("Image resolution", &m_imageResolutionValue, &m_useImageResBtn, [this, onUseRes]() {
@@ -197,7 +199,7 @@ void CapturePanel::setupUi()
         },
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.f_stop = v;
-        });
+        }, 1.0, nullptr, false, "Lens aperture used during capture. Affects diffraction part of the MTF model used for sharpening.");
 
     // 10. F-stop (Label) + Use
     addValueWithUseButton("Exif F-stop", &m_fStopValue, &m_useFStopBtn, [this, onUseFStop]() { onUseFStop(); });
@@ -289,7 +291,7 @@ void CapturePanel::setupUi()
         },
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.pixel_pitch = v;
-        });
+        }, 1.0, nullptr, false, "Physical distance between centers of adjacent pixels on the sensor.");
 
     // 15. Pixel pitch (Label) + Use
     addValueWithUseButton("Pixel pitch", &m_pixelPitchValue, &m_usePixelPitchBtn, [this, onUsePixelPitch]() { onUsePixelPitch(); });
@@ -302,7 +304,7 @@ void CapturePanel::setupUi()
         },
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.sensor_fill_factor = v;
-        });
+        }, 1.0, nullptr, false, "The fraction of the pixel area that is sensitive to light. Affects sensor MTF used for sharpening.");
 
     // 16b. Detected sensor fill (Label) + Use
     addValueWithUseButton("Detected sensor fill factor", &m_detectedSensorFillValue, &m_useDetectedSensorFillBtn, [this]() {
@@ -322,7 +324,7 @@ void CapturePanel::setupUi()
         },
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.wavelengths[0] = v;
-        });
+        }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the red channel.");
 
     addSliderParameter(
         "Green wavelength", 380.0, 780.0, 1.0, 0, "nm", "default (530nm)",
@@ -331,7 +333,7 @@ void CapturePanel::setupUi()
         },
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.wavelengths[1] = v;
-        });
+        }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the green channel.");
 
     addSliderParameter(
         "Blue wavelength", 380.0, 780.0, 1.0, 0, "nm", "default (450nm)",
@@ -340,7 +342,7 @@ void CapturePanel::setupUi()
         },
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.wavelengths[2] = v;
-        });
+        }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the blue channel.");
 
     addSliderParameter(
         "IR wavelength", 700.0, 1100.0, 1.0, 0, "nm", "default (850nm)",
@@ -349,7 +351,7 @@ void CapturePanel::setupUi()
         },
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.wavelengths[3] = v;
-        });
+        }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the infrared channel.");
 
     auto updateInfoLabels = [this, sensorWidthSlider](const ParameterState &state) {
         auto img = m_imageGetter();
