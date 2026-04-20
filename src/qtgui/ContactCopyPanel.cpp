@@ -35,7 +35,8 @@ void ContactCopyPanel::setupUi() {
   addCheckboxParameter(
       "Contact copy simulation",
       [](const ParameterState &s) { return s.rparams.contact_copy.simulate; },
-      [](ParameterState &s, bool v) { s.rparams.contact_copy.simulate = v; });
+      [](ParameterState &s, bool v) { s.rparams.contact_copy.simulate = v; },
+      nullptr, "Enable physics-based simulation of photographic contact printing. This models the response of a photographic glass plate to the light transmitted through the digitized color screen.");
 
   addSeparator("Film characteristics");
   m_hdCurveWidget = new HDCurveWidget();
@@ -45,7 +46,10 @@ void ContactCopyPanel::setupUi() {
   modeCombo->addItem("Exposure + Density (H&D)", (int)colorscreen::hd_axis_hd);
   modeCombo->addItem("Gamma 2.2", (int)colorscreen::hd_axis_gamma22);
   modeCombo->addItem("Gamma 1.0 (Linear)", (int)colorscreen::hd_axis_gamma10);
-  m_currentGroupForm->addRow("Display mode", modeCombo);
+  auto *dmLabel = new QLabel("Display mode");
+  dmLabel->setToolTip("Select the units for the horizontal axis of the H&D curve (log exposure or gamma-corrected values).");
+  modeCombo->setToolTip("Select the units for the horizontal axis of the H&D curve (log exposure or gamma-corrected values).");
+  m_currentGroupForm->addRow(dmLabel, modeCombo);
   connect(modeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, modeCombo](int){
       m_hdCurveWidget->setDisplayMode((colorscreen::hd_axis_type)modeCombo->currentData().toInt());
       updateUI();
@@ -57,7 +61,10 @@ void ContactCopyPanel::setupUi() {
   for (int i = 0; i < colorscreen::film_sensitivity::hd_curves_max; ++i) {
       presetCombo->addItem(QString::fromUtf8(colorscreen::film_sensitivity::hd_curves_properties[i].pretty_name), i);
   }
-  m_currentGroupForm->addRow("Presets", presetCombo);
+  auto *pLabel = new QLabel("Presets");
+  pLabel->setToolTip("Select from a variety of historical photographic emulsion characteristics (e.g., glass plate negatives or positives).");
+  presetCombo->setToolTip("Select from a variety of historical photographic emulsion characteristics (e.g., glass plate negatives or positives).");
+  m_currentGroupForm->addRow(pLabel, presetCombo);
 
   connect(presetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, presetCombo](int index) {
       int presetIdx = presetCombo->itemData(index).toInt();
@@ -197,7 +204,7 @@ void ContactCopyPanel::setupUi() {
   if (layout->count() >= 1) {
       QWidget *invField = layout->itemAt(layout->count() - 1)->widget();
       if (invField) {
-          invField->setToolTip("Calculate X as a function of Y. Essential for very steep (high gamma) curves.");
+          invField->setToolTip("Invert the characteristic curve. This is used to mathematically reverse a physical laboratory copy step (e.g., to reconstruct the linear image).");
           m_richardsWidgets.push_back(invField);
       }
   }
@@ -237,8 +244,8 @@ void ContactCopyPanel::setupUi() {
   {
       QFormLayout *layout = m_currentGroupForm ? m_currentGroupForm : m_form;
       if (layout->count() >= 2) {
-          layout->itemAt(layout->count() - 1)->widget()->setToolTip("Adds base exposure to lift shadows and reduce overall contrast.");
-          layout->itemAt(layout->count() - 2)->widget()->setToolTip("Adds base exposure to lift shadows and reduce overall contrast.");
+          layout->itemAt(layout->count() - 1)->widget()->setToolTip("Simulates a uniform low-intensity exposure applied to the entire plate before printing. This \"lifts\" the shadows and effectively reduces the overall contrast.");
+          layout->itemAt(layout->count() - 2)->widget()->setToolTip("Simulates a uniform low-intensity exposure applied to the entire plate before printing. This \"lifts\" the shadows and effectively reduces the overall contrast.");
       }
   }
 
@@ -250,8 +257,8 @@ void ContactCopyPanel::setupUi() {
   {
       QFormLayout *layout = m_currentGroupForm ? m_currentGroupForm : m_form;
       if (layout->count() >= 2) {
-          layout->itemAt(layout->count() - 1)->widget()->setToolTip("Total amount of light hitting the simulated paper.");
-          layout->itemAt(layout->count() - 2)->widget()->setToolTip("Total amount of light hitting the simulated paper.");
+          layout->itemAt(layout->count() - 1)->widget()->setToolTip("The duration and intensity of the simulated enlarger light hitting the copy plate. Adjust this to control the overall brightness (density) of the reconstructed image.");
+          layout->itemAt(layout->count() - 2)->widget()->setToolTip("The duration and intensity of the simulated enlarger light hitting the copy plate. Adjust this to control the overall brightness (density) of the reconstructed image.");
       }
   }
 
@@ -263,8 +270,8 @@ void ContactCopyPanel::setupUi() {
   {
       QFormLayout *layout = m_currentGroupForm ? m_currentGroupForm : m_form;
       if (layout->count() >= 2) {
-          layout->itemAt(layout->count() - 1)->widget()->setToolTip("Adjusts the maximum blackness reachable by the paper.");
-          layout->itemAt(layout->count() - 2)->widget()->setToolTip("Adjusts the maximum blackness reachable by the paper.");
+          layout->itemAt(layout->count() - 1)->widget()->setToolTip("Adjusts the maximum reachable density of the simulated emulsion.");
+          layout->itemAt(layout->count() - 2)->widget()->setToolTip("Adjusts the maximum reachable density of the simulated emulsion.");
       }
   }
 
