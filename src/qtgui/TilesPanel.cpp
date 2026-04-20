@@ -47,7 +47,7 @@ void TilesPanel::setupUi() {
         int y = m_currentTileIndex / w;
         s.rparams.get_tile_adjustment(x, y).exposure = (colorscreen::luminosity_t)v;
       },
-      2.0);
+      2.0, nullptr, -1, "Brightness adjustment for the selected tile. Use this to compensate for variations in illumination during capture.");
 
   addSliderParameter(
       tr("Dark point"), -0.1, 0.5, 1000, 4, "", "",
@@ -69,7 +69,7 @@ void TilesPanel::setupUi() {
         int y = m_currentTileIndex / w;
         s.rparams.get_tile_adjustment(x, y).dark_point = (colorscreen::luminosity_t)v;
       },
-      3.0);
+      3.0, nullptr, -1, "Black level adjustment for the selected tile. Use this to unify the black point across stitched tiles.");
 }
 
 void TilesPanel::updateForNewImage() {
