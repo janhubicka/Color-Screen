@@ -78,35 +78,40 @@ void ColorPanel::setupUi() {
       "Black", 0, 1, 1, 4, "", "",
       [](const ParameterState &s) { return s.rparams.dark_point; },
       [](ParameterState &s, double v) { s.rparams.dark_point = v; }, 3.0,
-      nullptr, false);
+      nullptr, false, "Scanner or camera dark point. This value is subtracted from the scan before processing.");
 
   // Presaturation
   addSliderParameter(
       "Presaturation", 0, 100, 1, 2, "", "",
       [](const ParameterState &s) { return s.rparams.presaturation; },
-      [](ParameterState &s, double v) { s.rparams.presaturation = v; }, 3.0);
+      [](ParameterState &s, double v) { s.rparams.presaturation = v; }, 3.0, 
+      nullptr, false, "Increase saturation of the scan before applying the color model. Useful for quick preview of colors before sharpness is configured correctly.");
 
   // White Balance
   addSliderParameter(
       "White balance red", 0, 10, 100, 2, "", "",
       [](const ParameterState &s) { return s.rparams.white_balance.red; },
-      [](ParameterState &s, double v) { s.rparams.white_balance.red = v; }, 3.0);
+      [](ParameterState &s, double v) { s.rparams.white_balance.red = v; }, 3.0,
+      nullptr, false, "Adjust the white balance by scaling the individual process red channel.");
 
   addSliderParameter(
       "White balance green", 0, 10, 100, 2, "", "",
       [](const ParameterState &s) { return s.rparams.white_balance.green; },
-      [](ParameterState &s, double v) { s.rparams.white_balance.green = v; }, 3.0);
+      [](ParameterState &s, double v) { s.rparams.white_balance.green = v; }, 3.0,
+      nullptr, false, "Adjust the white balance by scaling the individual process green channel.");
 
   addSliderParameter(
       "White balance blue", 0, 10, 100, 2, "", "",
       [](const ParameterState &s) { return s.rparams.white_balance.blue; },
-      [](ParameterState &s, double v) { s.rparams.white_balance.blue = v; }, 3.0);
+      [](ParameterState &s, double v) { s.rparams.white_balance.blue = v; }, 3.0,
+      nullptr, false, "Adjust the white balance by scaling the individual process blue channel.");
 
   // Neutral Area Button
   m_setNeutralAreaBtn = addToggleButtonParameter(
       "", "Set by neutral area",
       [this](bool) { emit neutralAreaRequested(); },
-      nullptr, [this](const ParameterState &) { return m_imageGetter() != nullptr; });
+      nullptr, [this](const ParameterState &) { return m_imageGetter() != nullptr; },
+      "Pick a neutral gray area in the image to automatically set the white balance.");
 
   m_currentGroupForm = nullptr; // End Adjustments section
 
@@ -117,20 +122,21 @@ void ColorPanel::setupUi() {
       "Backlight intensity", 0, 65535, 1, 2, "", "",
       [](const ParameterState &s) { return s.rparams.brightness; },
       [](ParameterState &s, double v) { s.rparams.brightness = v; }, 3.0,
-      nullptr, true);
+      nullptr, true, "Overall brightness of the backlight. Affects the intensity of the viewing light source.");
 
   // Auto Levels Button
   m_setAutoLevelsBtn = addToggleButtonParameter(
       "", "Auto levels",
       [this](bool) { emit autoLevelsRequested(); },
-      nullptr, [this](const ParameterState &) { return m_imageGetter() != nullptr; });
+      nullptr, [this](const ParameterState &) { return m_imageGetter() != nullptr; },
+      "Pick the brightest points in the image to automatically set the backlight intensity.");
 
   // Backlight temperature
   addSliderParameter(
       "Backlight temperature", 2500, 25000, 1, 0, "K", "",
       [](const ParameterState &s) { return s.rparams.backlight_temperature; },
       [](ParameterState &s, double v) { s.rparams.backlight_temperature = v; },
-      3.0);
+      3.0, nullptr, false, "Color temperature of the backlight in Kelvin. Higher values are bluer (daylight), lower values are yellower (tungsten).");
 
   m_currentGroupForm = nullptr; // End Backlight section
   addSeparator("Screen dyes");
@@ -155,7 +161,8 @@ void ColorPanel::setupUi() {
   QComboBox *dyesCombo = addEnumParameter(
       "Dyes", dyes,
       [](const ParameterState &s) { return (int)s.rparams.color_model; },
-      [](ParameterState &s, int v) { s.rparams.color_model = (color_model)v; });
+      [](ParameterState &s, int v) { s.rparams.color_model = (color_model)v; },
+      nullptr, "Select the physical color process model used for the original transparency or negative.");
 
   // Add Tooltips
   for (int i = 0; i < dyesCombo->count(); ++i) {
@@ -221,14 +228,14 @@ void ColorPanel::setupUi() {
         return render_parameters::color_model_properties[s.rparams.color_model]
                    .flags &
                render_parameters::SUPPORTS_AGING;
-      });
+      }, "Simulates the aging (fading) of the screen dyes. 0% is new, 100% is fully aged.");
 
   addCorrelatedRGBParameter(
       "dye density", 0.0, 1000.0, 1.0, 0, "%",
       [](const ParameterState &s) { return s.rparams.dye_density * 100.0; },
       [](ParameterState &s, const colorscreen::rgbdata &v) {
         s.rparams.dye_density = v / 100.0;
-      });
+      }, nullptr, "Adjust the physical density (concentration) of the screen dyes.");
 
   m_currentGroupForm = nullptr; // End Screen dyes section
   // Separator
@@ -273,7 +280,7 @@ void ColorPanel::setupUi() {
       [](const ParameterState &s) { return (int)s.rparams.dye_balance; },
       [](ParameterState &s, int v) {
         s.rparams.dye_balance = (render_parameters::dye_balance_t)v;
-      });
+      }, nullptr, "Algorithm used to balance the colors of the screen dyes to a neutral gray.");
 
   // Observer Whitepoint
   {
@@ -337,7 +344,8 @@ void ColorPanel::setupUi() {
   addSliderParameter (
       "Saturation", 0, 10, 100, 2, "", "",
       [](const ParameterState &s) { return s.rparams.saturation; },
-      [](ParameterState &s, double v) { s.rparams.saturation = v; }, 3.0);
+      [](ParameterState &s, double v) { s.rparams.saturation = v; }, 3.0,
+      nullptr, false, "Final saturation adjustment of the output image.");
 
   // Tone curve
   addEnumParameter (
@@ -346,7 +354,7 @@ void ColorPanel::setupUi() {
       [](const ParameterState &s) { return (int)s.rparams.output_tone_curve; },
       [](ParameterState &s, int v) {
 	s.rparams.output_tone_curve = (tone_curve::tone_curves)v;
-      });
+      }, nullptr, "Select the contrast curve applied to the final output.");
 
   // Tone Curve Widget
   m_toneCurveWidget = new ToneCurveWidget();
