@@ -221,6 +221,13 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "scanner_green: %f %f %f\n", rparam->scanner_green.x, rparam->scanner_green.y, rparam->scanner_green.z) < 0
 	  || fprintf (f, "scanner_blue: %f %f %f\n", rparam->scanner_blue.x, rparam->scanner_blue.y, rparam->scanner_blue.z) < 0)
 	return false;
+      for (size_t i = 0; i < rparam->output_tone_curve_control_points.size (); i++)
+	{
+	  if (fprintf (f, "output_tone_curve_control_point: %f %f\n",
+	      rparam->output_tone_curve_control_points[i].x,
+	      rparam->output_tone_curve_control_points[i].y) < 0)
+	    return false;
+	}
       if (rparam->backlight_correction)
 	{
 	  if (fprintf (f, "backlight_correction: yes\n") < 0)
@@ -501,6 +508,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
   int gray_min = -1;
   int gray_max = -1;
   int measurement = -1;
+  bool first_control_point = true;
   if (fread (buf, 1, strlen (HEADER), f) < 0
       || memcmp (buf, HEADER, strlen (HEADER)))
     {
@@ -767,6 +775,24 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    }
 	  if (rparam)
 	    rparam->output_tone_curve = (tone_curve::tone_curves)j;
+	}
+      else if (!strcmp (buf, "output_tone_curve_control_point"))
+	{
+	  point_t p;
+	  if (!read_vector (f, &p.x, &p.y))
+	    {
+	      *error = "error parsing output_tone_curve_control_point";
+	      return false;
+	    }
+          if (rparam)
+	    {
+	      if (first_control_point)
+	        {
+		  rparam->output_tone_curve_control_points.clear ();
+		  first_control_point = false;
+	        }
+	      rparam->output_tone_curve_control_points.push_back (p);
+	    }
 	}
       else if (!strcmp (buf, "demosaic"))
 	{
