@@ -60,8 +60,8 @@ extern class lru_caches lru_caches;
         - Task Cancellation: All wait loops (both for the global lock and the
           condition variable) periodically wake up (333ms) to check if the
           caller has requested task cancellation via the "progress" object.  */
-template <typename P, typename T, typename TP,
-          TP get_new (P &, progress_info *progress), int base_cache_size>
+template <typename P, typename T,
+          std::unique_ptr<T> get_new (P &, progress_info *progress), int base_cache_size>
 class lru_cache
 {
   static const bool debug = false;
@@ -71,11 +71,10 @@ public:
   struct cache_entry
   {
     P params;
-    std::unique_ptr<T> val;
+    std::shared_ptr<T> val;
     cache_entry *next;
     uint64_t id;
     uint64_t last_used;
-    int nuses;
     bool computing = false;
   } *entries;
 
@@ -91,7 +90,9 @@ public:
     struct cache_entry **e;
     for (e = &entries; *e;)
       {
-        if (!(*e)->nuses)
+        // If use_count == 1, only the cache entry holds a reference to it.
+        // It means no other part of the application is using it.
+        if ((*e)->val.use_count() <= 1 && !(*e)->computing)
           {
             if (verbose)
               fprintf (stderr, "Cache %s: deleting id %i\n", name,
@@ -121,7 +122,7 @@ public:
   /* Get T for parameters P; do caching.
      If ID is non-NULL initialize it to the unique identifier of the cached
      data.  */
-  TP
+  std::shared_ptr<T>
   get (P &p, progress_info *progress, uint64_t *id = NULL)
   {
     int size = 0;
@@ -167,16 +168,16 @@ public:
                   goto restart;
               }
             e->last_used = time;
-            e->nuses++;
             if (verbose)
-              fprintf (stderr, "Cache %s: hit id %i nuses %i\n", name,
-                       (int)e->id, e->nuses);
-            TP ret = e->val.get ();
+              fprintf (stderr, "Cache %s: hit id %i\n", name,
+                       (int)e->id);
+            std::shared_ptr<T> ret = e->val;
             if (id)
               *id = e->id;
             return ret;
           }
-        if (!e->nuses && !e->computing
+        // Identifies an unused item (use_count == 1) to be evicted
+        if (e->val.use_count() <= 1 && !e->computing
             && (!longest_unused || longest_unused->last_used < e->last_used))
           longest_unused = e;
         size++;
@@ -186,7 +187,7 @@ public:
         e = longest_unused;
         if (verbose)
           fprintf (stderr, "Cache %s: deleting id %i\n", name, (int)e->id);
-        e->val = NULL;
+        e->val = nullptr; // Note: resetting the shared_ptr drops the previous value
       }
     else
       {
@@ -196,26 +197,25 @@ public:
         e = new cache_entry;
         if (!e)
           {
-            return NULL;
+            return nullptr;
           }
         e->next = entries;
         entries = e;
       }
     e->params = p;
     e->computing = true;
-    e->nuses = 1;
     e->id = time;
     e->last_used = time;
     
     guard.unlock ();
-    std::unique_ptr<T> val(get_new (e->params, progress));
+    std::unique_ptr<T> val = get_new (e->params, progress);
     guard.lock ();
 
     e->val = std::move(val);
     e->computing = false;
     cond.notify_all ();
 
-    TP ret = e->val.get ();
+    std::shared_ptr<T> ret = e->val;
     if (id)
       *id = e->id;
     if (!ret)
@@ -234,114 +234,7 @@ public:
     return ret;
   }
 
-  /* Release T but keep it possibly in the cache.  */
-  void
-  release (TP val)
-  {
-    std::lock_guard<std::timed_mutex> guard (lock);
-    for (cache_entry *e = entries;; e = e->next)
-      if (e->val.get () == val)
-        {
-          e->nuses--;
-          assert (e->nuses >= 0);
-          if (verbose)
-            fprintf (stderr, "Cache %s: reclaimed id %i nuses %i\n", name,
-                     (int)e->id, e->nuses);
-          return;
-        }
-    fprintf (stderr, "Released data not found in cache %s\n", name);
-  }
 
-  void
-  inc_nuses (TP val)
-  {
-    std::lock_guard<std::timed_mutex> guard (lock);
-    for (cache_entry *e = entries;; e = e->next)
-      if (e->val.get () == val)
-        {
-          e->nuses++;
-          return;
-        }
-  }
-
-  class cached_ptr
-  {
-    lru_cache *m_cache;
-    TP m_val;
-
-  public:
-    // Lifecycle: Ensure release() is called automatically
-    cached_ptr () : m_cache (nullptr), m_val (nullptr) {}
-    cached_ptr (std::nullptr_t) : m_cache (nullptr), m_val (nullptr) {}
-    cached_ptr (lru_cache *c, TP v) : m_cache (c), m_val (v) {}
-    ~cached_ptr ()
-    {
-      if (m_cache && m_val)
-        m_cache->release (m_val);
-    }
-
-    /* Do not allow copying; it is expensive when done accidentally. */
-    cached_ptr (const cached_ptr &o) = delete;
-    cached_ptr &
-    operator= (const cached_ptr &o) = delete;
-#if 0
-    cached_ptr (const cached_ptr &o) : m_cache (o.m_cache), m_val (o.m_val)
-    {
-      if (m_cache && m_val)
-        m_cache->inc_nuses (m_val);
-    }
-    cached_ptr &
-    operator= (const cached_ptr &o)
-    {
-      if (this != &o)
-        {
-          if (m_cache && m_val)
-            m_cache->release (m_val);
-          m_cache = o.m_cache;
-          m_val = o.m_val;
-          if (m_cache && m_val)
-            m_cache->inc_nuses (m_val);
-        }
-      return *this;
-    }
-#else
-
-    /* Move */
-    cached_ptr (cached_ptr &&o) noexcept
-    : m_cache (o.m_cache), m_val (o.m_val)
-    {
-      o.m_val = nullptr;
-    }
-    cached_ptr &
-    operator= (cached_ptr &&o) noexcept
-    {
-      if (this != &o)
-        {
-          if (m_cache && m_val)
-            m_cache->release (m_val);
-          m_cache = o.m_cache;
-          m_val = o.m_val;
-          o.m_val = nullptr;
-        }
-      return *this;
-    }
-
-    /* Pointer access.  */
-    TP operator-> () const { return m_val; }
-    typename std::remove_pointer<TP>::type &operator* () const { return *m_val; }
-    TP get () const { return m_val; }
-    explicit operator bool () const { return m_val != nullptr; }
-
-    template <typename Index>
-    auto operator[] (Index i) const -> decltype(m_val[i]) { return m_val[i]; }
-  };
-#endif
-
-  cached_ptr
-  get_cached (P &p, progress_info *progress, uint64_t *id = nullptr)
-  {
-    return cached_ptr (this, get (p, progress, id));
-  }
 
 private:
   int cache_size;
@@ -355,8 +248,8 @@ private:
    allocate memory via new and lru_cache will eventually delete it.  
 
    The synchronization model and race condition prevention is identical to lru_cache class. */
-template <typename P, typename T, typename TP,
-          TP get_new (P &, int xshift, int yshift, int width, int height,
+template <typename P, typename T,
+          std::unique_ptr<T> get_new (P &, int xshift, int yshift, int width, int height,
                       progress_info *progress),
           int base_cache_size>
 class lru_tile_cache
@@ -368,12 +261,12 @@ public:
   struct cache_entry
   {
     P params;
-    std::unique_ptr<T> val;
+    std::shared_ptr<T> val;
     cache_entry *next;
     int xshift, yshift, width, height;
     uint64_t id;
     uint64_t last_used;
-    int nuses; bool computing = false;
+    bool computing = false;
   } *entries;
 
   lru_tile_cache (const char *n)
@@ -388,7 +281,7 @@ public:
     struct cache_entry **e;
     for (e = &entries; *e;)
       {
-        if (!(*e)->nuses)
+        if ((*e)->val.use_count() <= 1 && !(*e)->computing)
           {
             if (verbose)
               fprintf (stderr, "Cache %s: deleting id %i\n", name,
@@ -418,7 +311,7 @@ public:
   /* Get T for parameters P; do caching.
      If ID is non-NULL initialize it to the unique identifier of the cached
      data.  */
-  TP
+  std::shared_ptr<T>
   get (P &p, int xshift, int yshift, int width, int height,
        progress_info *progress, uint64_t *id = NULL)
   {
@@ -465,16 +358,15 @@ public:
                   goto restart;
               }
             e->last_used = time;
-            e->nuses++;
             if (verbose)
-              fprintf (stderr, "Cache %s: hit id %i nuses %i\n", name,
-                       (int)e->id, (int)e->nuses);
-            TP ret = e->val.get ();
+              fprintf (stderr, "Cache %s: hit id %i\n", name,
+                       (int)e->id);
+            std::shared_ptr<T> ret = e->val;
             if (id)
               *id = e->id;
             return ret;
           }
-        if (!e->nuses && !e->computing
+        if (e->val.use_count() <= 1 && !e->computing
             && (!longest_unused || longest_unused->last_used < e->last_used))
           longest_unused = e;
         size++;
@@ -484,7 +376,7 @@ public:
         e = longest_unused;
         if (verbose)
           fprintf (stderr, "Cache %s: deleting id %i\n", name, (int)e->id);
-        e->val = NULL;
+        e->val = nullptr;
       }
     else
       {
@@ -494,7 +386,7 @@ public:
         e = new cache_entry;
         if (!e)
           {
-            return NULL;
+            return nullptr;
           }
         e->next = entries;
         entries = e;
@@ -505,19 +397,18 @@ public:
     e->width = width;
     e->height = height;
     e->computing = true;
-    e->nuses = 1;
     e->id = time;
     e->last_used = time;
 
     guard.unlock ();
-    std::unique_ptr<T> val(get_new (e->params, xshift, yshift, width, height, progress));
+    std::unique_ptr<T> val = get_new (e->params, xshift, yshift, width, height, progress);
     guard.lock ();
 
     e->val = std::move(val);
     e->computing = false;
     cond.notify_all ();
 
-    TP ret = e->val.get ();
+    std::shared_ptr<T> ret = e->val;
     if (id)
       *id = e->id;
     if (!ret)
@@ -536,108 +427,7 @@ public:
     return ret;
   }
 
-  /* Release T but keep it possibly in the cache.  */
-  void
-  release (TP val)
-  {
-    std::lock_guard<std::timed_mutex> guard (lock);
-    for (cache_entry *e = entries;; e = e->next)
-      if (e->val.get () == val)
-        {
-          e->nuses--;
-          assert (e->nuses >= 0);
-          if (verbose)
-            fprintf (stderr, "Cache %s: reclaimed id %i nuses %i\n", name,
-                     (int)e->id, e->nuses);
-          return;
-        }
-    fprintf (stderr, "Released data not found in cache %s\n", name);
-  }
 
-  void
-  inc_nuses (TP val)
-  {
-    std::lock_guard<std::timed_mutex> guard (lock);
-    for (cache_entry *e = entries;; e = e->next)
-      if (e->val.get () == val)
-        {
-          e->nuses++;
-          return;
-        }
-  }
-
-  class cached_ptr
-  {
-    lru_tile_cache *m_cache;
-    TP m_val;
-
-  public:
-    // Lifecycle: Ensure release() is called automatically
-    cached_ptr () : m_cache (nullptr), m_val (nullptr) {}
-    cached_ptr (std::nullptr_t) : m_cache (nullptr), m_val (nullptr) {}
-    cached_ptr (lru_tile_cache *c, TP v) : m_cache (c), m_val (v) {}
-    ~cached_ptr ()
-    {
-      if (m_cache && m_val)
-        m_cache->release (m_val);
-    }
-
-    // Shared ownership: Increment reference count
-    cached_ptr (const cached_ptr &o) : m_cache (o.m_cache), m_val (o.m_val)
-    {
-      if (m_cache && m_val)
-        m_cache->inc_nuses (m_val);
-    }
-    cached_ptr &
-    operator= (const cached_ptr &o)
-    {
-      if (this != &o)
-        {
-          if (m_cache && m_val)
-            m_cache->release (m_val);
-          m_cache = o.m_cache;
-          m_val = o.m_val;
-          if (m_cache && m_val)
-            m_cache->inc_nuses (m_val);
-        }
-      return *this;
-    }
-
-    // Move semantics
-    cached_ptr (cached_ptr &&o) noexcept : m_cache (o.m_cache), m_val (o.m_val)
-    {
-      o.m_val = nullptr;
-    }
-    cached_ptr &
-    operator= (cached_ptr &&o) noexcept
-    {
-      if (this != &o)
-        {
-          if (m_cache && m_val)
-            m_cache->release (m_val);
-          m_cache = o.m_cache;
-          m_val = o.m_val;
-          o.m_val = nullptr;
-        }
-      return *this;
-    }
-
-    // Pointer ergonomics
-    TP operator-> () const { return m_val; }
-    typename std::remove_pointer<TP>::type &operator* () const { return *m_val; }
-    TP get () const { return m_val; }
-    explicit operator bool () const { return m_val != nullptr; }
-
-    template <typename Index>
-    auto operator[] (Index i) const -> decltype(m_val[i]) { return m_val[i]; }
-  };
-
-  cached_ptr
-  get_cached (P &p, int xshift, int yshift, int width, int height,
-              progress_info *progress, uint64_t *id = nullptr)
-  {
-    return cached_ptr (this, get (p, xshift, yshift, width, height, progress, id));
-  }
 
 private:
   int cache_size;

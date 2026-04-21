@@ -58,10 +58,10 @@ precomputed_rgbdata::~precomputed_rgbdata ()
 /* Lookup table translates raw input data into linear values.  */
 
 
-color_class_map *get_color_class_map(color_class_params &p, progress_info *progress)
+std::unique_ptr<color_class_map> get_color_class_map(color_class_params &p, progress_info *progress)
 {
   const image_data &img = *p.img;
-  color_class_map *map = new color_class_map;
+  auto map = std::make_unique<color_class_map> ();
   map->allocate (img.width, img.height);
   //printf ("New color map\n");
   if (progress)
@@ -90,8 +90,7 @@ color_class_map *get_color_class_map(color_class_params &p, progress_info *progr
     }
   if (progress && progress->cancelled ())
     {
-      delete map;
-      return NULL;
+      return nullptr;
     }
   return map;
 }
@@ -108,17 +107,16 @@ getdata_helper (render_scr_detect &r, int x, int y, int, int)
 }
 
 
-precomputed_rgbdata *
+std::unique_ptr<precomputed_rgbdata>
 get_precomputed_rgbdata(precomputed_rgbdata_params &p, progress_info *progress)
 {
-  precomputed_rgbdata *my_precomputed_rgbdata = new precomputed_rgbdata (p.img->width, p.img->height);
+  auto my_precomputed_rgbdata = std::make_unique<precomputed_rgbdata> (p.img->width, p.img->height);
   bool ok = true;
   if (!my_precomputed_rgbdata)
-    return NULL;
+    return nullptr;
   if (!my_precomputed_rgbdata->m_data)
     {
-      delete (my_precomputed_rgbdata);
-      return NULL;
+      return nullptr;
     }
   if (p.p.sharpen_radius > 0 && p.p.sharpen_amount > 0)
     ok = sharpen<rgbdata, render_scr_detect::my_mem_rgbdata, render_scr_detect &,int, getdata_helper> (my_precomputed_rgbdata->m_data, *p.r, 0, p.img->width, p.img->height, p.p.sharpen_radius, p.p.sharpen_amount, progress);
@@ -138,8 +136,7 @@ get_precomputed_rgbdata(precomputed_rgbdata_params &p, progress_info *progress)
     }
   if (!ok || (progress && progress->cancelled ()))
     {
-      delete (my_precomputed_rgbdata);
-      return NULL;
+      return nullptr;
     }
   return my_precomputed_rgbdata;
 }
@@ -149,13 +146,12 @@ static precomputed_rgbdata_cache_t
 /* Lookup table translates raw input data into linear values.  */
 
 /* TODO: progress info  */
-patches *get_patches(patches_cache_params &p, progress_info *progress)
+std::unique_ptr<patches> get_patches(patches_cache_params &p, progress_info *progress)
 {
-  patches *pat = new patches (*p.img, *p.r, *p.map, 16, progress);
+  auto pat = std::make_unique<patches> (*p.img, *p.r, *p.map, 16, progress);
   if (progress && progress->cancelled ())
     {
-      delete pat;
-      return NULL;
+      return nullptr;
     }
   return pat;
 }
@@ -166,15 +162,13 @@ static patches_cache_t
 
 
 /* Do relaxation and demosaic color data.  TODO:progress  */
-color_data *
+std::unique_ptr<color_data>
 get_new_color_data (struct color_data_params &p, progress_info *progress)
 {
-  color_data *data = new color_data (p.img->width, p.img->height);
+  auto data = std::make_unique<color_data> (p.img->width, p.img->height);
   if (!data || !data->m_data[0] || !data->m_data[1] || !data->m_data[2])
     {
-      if (data)
-	delete data;
-      return NULL;
+      return nullptr;
     }
   const int max_patch_size = 8;
   const int min_patch_size = 1;
@@ -228,8 +222,7 @@ get_new_color_data (struct color_data_params &p, progress_info *progress)
       }
   if (progress && progress->cancelled ())
     {
-      delete data;
-      return NULL;
+      return nullptr;
     }
   luminosity_t *tmp = (luminosity_t *)MapAlloc::Alloc (p.img->width * p.img->height * sizeof (luminosity_t), "Demosaiced HDR data");
   if (progress)
@@ -267,8 +260,7 @@ get_new_color_data (struct color_data_params &p, progress_info *progress)
   MapAlloc::Free (tmp);
   if (progress && progress->cancelled ())
     {
-      delete data;
-      return NULL;
+      return nullptr;
     }
   return data;
 }
@@ -397,7 +389,7 @@ render_scr_detect::precompute_all (bool grayscale_needed, bool normalized_patche
   color_class_params p = {m_precomputed_rgbdata ? m_precomputed_rgbdata_id : m_img.id, &m_img, m_precomputed_rgbdata, m_scr_detect.m_param, &m_scr_detect, m_params.gamma};
   if (progress && progress->cancel_requested ())
     return false;
-  m_color_class_map = color_class_cache.get_cached (p, progress, &m_color_class_map_id);
+  m_color_class_map = color_class_cache.get (p, progress, &m_color_class_map_id);
   if (progress && progress->cancel_requested ())
     return false;
   return render::precompute_all (grayscale_needed, normalized_patches, {1/3.0, 1/3.0, 1/3.0}, progress);
@@ -409,7 +401,7 @@ render_scr_detect::precompute_rgbdata (progress_info *progress)
   if (m_precomputed_rgbdata)
     return true;
   struct precomputed_rgbdata_params p = {m_img.id, m_scr_detect.m_param, m_params.gamma, &m_img, &m_scr_detect, this};
-  m_precomputed_rgbdata_holder = precomputed_rgbdata_cache.get_cached (p, progress, &m_precomputed_rgbdata_id);
+  m_precomputed_rgbdata_holder = precomputed_rgbdata_cache.get (p, progress, &m_precomputed_rgbdata_id);
   m_precomputed_rgbdata = m_precomputed_rgbdata_holder->m_data;
   return m_precomputed_rgbdata;
 }
@@ -537,7 +529,7 @@ render_scr_nearest_scaled::precompute_all (progress_info *progress)
   if (!render_scr_detect::precompute_all (true, false, progress))
     return false;
   patches_cache_params p = {m_color_class_map_id, m_gray_data_id, m_color_class_map.get (), &m_img, this};
-  m_patches = patches_cache.get_cached (p, progress);
+  m_patches = patches_cache.get (p, progress);
   return (bool)m_patches;
 }
 
@@ -548,7 +540,7 @@ render_scr_relax::precompute_all (progress_info *progress)
   if (!render_scr_detect::precompute_all (true, true, progress))
     return false;
   color_data_params p = {m_color_class_map_id, m_gray_data_id, &m_img, m_color_class_map.get (), this};
-  m_color_data_handle = color_data_cache.get_cached (p, progress);
+  m_color_data_handle = color_data_cache.get (p, progress);
   if (!m_color_data_handle)
     return false;
   for (int color = 0; color < 3; color++)

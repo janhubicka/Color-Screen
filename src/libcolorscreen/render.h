@@ -132,12 +132,12 @@ struct image_layer_histogram_params
     return graydata_id == o.graydata_id && crop == o.crop;
   }
 };
-histogram* get_new_image_layer_histogram (struct image_layer_histogram_params &, progress_info *);
+std::unique_ptr<histogram> get_new_image_layer_histogram (struct image_layer_histogram_params &, progress_info *);
 
 class sharpened_data;
-backlight_correction * get_new_backlight_correction (struct backlight_correction_cache_params &, progress_info *);
-luminosity_t * get_new_lookup_table (struct lookup_table_params &, progress_info *);
-sharpened_data * get_new_gray_sharpened_data (struct gray_and_sharpen_params &, progress_info *);
+std::unique_ptr<backlight_correction> get_new_backlight_correction (struct backlight_correction_cache_params &, progress_info *);
+std::unique_ptr<luminosity_t[]> get_new_lookup_table (struct lookup_table_params &, progress_info *);
+std::unique_ptr<sharpened_data> get_new_gray_sharpened_data (struct gray_and_sharpen_params &, progress_info *);
 
 
 /* Base class for rendering routines.  */
@@ -157,8 +157,8 @@ public:
   pure_attr inline luminosity_t fast_get_img_pixel (int x, int y) const;
     
   static const int num_color_models = render_parameters::color_model_max;
-  typedef lru_cache<lookup_table_params, luminosity_t[], luminosity_t *, get_new_lookup_table, 4> lookup_table_cache_t;
-  static bool get_lookup_tables (lookup_table_cache_t::cached_ptr *ret, luminosity_t gamma, const image_data *img, progress_info *progress = NULL);
+  typedef lru_cache<lookup_table_params, luminosity_t[], get_new_lookup_table, 4> lookup_table_cache_t;
+  static bool get_lookup_tables (std::shared_ptr<luminosity_t[]> *ret, luminosity_t gamma, const image_data *img, progress_info *progress = NULL);
 
   
   pure_attr inline luminosity_t get_data (int x, int y) const;
@@ -231,11 +231,11 @@ public:
     return 128 * 1024;
   }
 
-  typedef lru_cache<backlight_correction_cache_params, backlight_correction, backlight_correction *, get_new_backlight_correction, 10> backlight_cache_t;
-  typedef lru_cache<gray_and_sharpen_params, sharpened_data, sharpened_data *, get_new_gray_sharpened_data, 2> gray_cache_t;
-  typedef lru_cache<image_layer_histogram_params, histogram, histogram *, get_new_image_layer_histogram, 10> image_layer_histogram_cache_t;
+  typedef lru_cache<backlight_correction_cache_params, backlight_correction, get_new_backlight_correction, 10> backlight_cache_t;
+  typedef lru_cache<gray_and_sharpen_params, sharpened_data, get_new_gray_sharpened_data, 2> gray_cache_t;
+  typedef lru_cache<image_layer_histogram_params, histogram, get_new_image_layer_histogram, 10> image_layer_histogram_cache_t;
 
-  image_layer_histogram_cache_t::cached_ptr get_image_layer_histogram (progress_info *progress = NULL);
+  std::shared_ptr<histogram> get_image_layer_histogram (progress_info *progress = NULL);
   out_color_adjustments out_color;
 
 protected:
@@ -267,13 +267,13 @@ protected:
   /* Sharpened data we render from.  */
   mem_luminosity_t *m_sharpened_data;
   /* Wrapping class to cause proper destruction.  */
-  gray_cache_t::cached_ptr m_sharpened_data_holder;
+  std::shared_ptr<sharpened_data> m_sharpened_data_holder;
   /* Maximal value in m_data.  */
   int m_maxval;
   /* Translates input rgb channel values into normalized range 0...1 gamma 1.  */
-  lookup_table_cache_t::cached_ptr m_rgb_lookup_table[3];
+  std::shared_ptr<luminosity_t[]> m_rgb_lookup_table[3];
 
-  backlight_cache_t::cached_ptr m_backlight_correction;
+  std::shared_ptr<backlight_correction> m_backlight_correction;
   uint64_t m_backlight_correction_id;
 
   std::unique_ptr <film_sensitivity> m_sensitivity;

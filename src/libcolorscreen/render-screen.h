@@ -61,7 +61,7 @@ public:
   }
 
 private:
-  render_to_scr::screen_cache_t::cached_ptr m_screen;
+  std::shared_ptr<screen> m_screen;
 };
 }
 #endif

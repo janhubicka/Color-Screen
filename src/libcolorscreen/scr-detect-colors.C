@@ -67,7 +67,7 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
   rgbdata reds[samples*2];
   rgbdata greens[samples];
   rgbdata blues[samples];
-  render::lookup_table_cache_t::cached_ptr lookup_table[3];
+  std::shared_ptr<float[]> lookup_table[3];
   if (!render::get_lookup_tables (lookup_table, gamma, img, progress))
     return;
 
@@ -155,7 +155,7 @@ optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosit
   mem_rgbdata *sharpened = (mem_rgbdata*) malloc ((width + clen) * (height + clen) * sizeof (mem_rgbdata));
   if (!sharpened)
     return false;
-  render::lookup_table_cache_t::cached_ptr lookup_table[3];
+  std::shared_ptr<float[]> lookup_table[3];
   if (!render::get_lookup_tables (lookup_table, gamma, img, progress))
     return false;
   struct imgtile section = {{lookup_table[0].get (), lookup_table[1].get (), lookup_table[2].get ()}, x - clen / 2, y - clen / 2, img};

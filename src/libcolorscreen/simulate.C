@@ -84,10 +84,10 @@ render_simulated_screen (simulated_screen &img,
     }
 }
 
-simulated_screen *
+std::unique_ptr<simulated_screen>
 get_new_simulated_screen (simulated_screen_params &p, progress_info *progress)
 {
-  simulated_screen *img = new simulated_screen (p.width, p.height);
+  auto img = std::make_unique<simulated_screen> (p.width, p.height);
   render_simulated_screen (*img, p, progress);
   return img;
 }
@@ -95,7 +95,7 @@ get_new_simulated_screen (simulated_screen_params &p, progress_info *progress)
 static simulated_screen_cache_t
     simulated_screen_cache ("simulated screens");
 
-simulated_screen_cache_t::cached_ptr
+std::shared_ptr<simulated_screen>
 get_simulated_screen (const scr_to_img_parameters &param, const screen *scr,
                       uint64_t screen_id, const sharpen_parameters sharpen,
                       int width, int height, progress_info *progress,
@@ -106,7 +106,7 @@ get_simulated_screen (const scr_to_img_parameters &param, const screen *scr,
           width,     height,
           param,     sharpen,
           scr };
-  return simulated_screen_cache.get_cached (p, progress, id);
+  return simulated_screen_cache.get (p, progress, id);
 }
 
 }

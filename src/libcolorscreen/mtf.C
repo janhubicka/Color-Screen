@@ -1165,19 +1165,19 @@ mtf::print_psf (FILE *f)
     fprintf (f, "%1.3f %1.3f\n", i * 0.1, get_psf (i * 0.1) / scale);
 }
 
-mtf *
+std::unique_ptr<mtf>
 mtf::get_new_mtf (struct mtf_parameters &p, progress_info *)
 {
-  return new mtf (p);
+  return std::make_unique<mtf> (p);
 }
 
 static mtf::mtf_cache_t
     mtf_cache ("Modulation transfer functions");
 
-mtf::mtf_cache_t::cached_ptr
+std::shared_ptr<mtf>
 mtf::get_mtf (const mtf_parameters &mtfp, progress_info *p)
 {
-  return mtf_cache.get_cached (const_cast<mtf_parameters &> (mtfp), p);
+  return mtf_cache.get (const_cast<mtf_parameters &> (mtfp), p);
 }
 
 bool

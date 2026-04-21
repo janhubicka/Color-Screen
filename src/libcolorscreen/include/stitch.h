@@ -384,7 +384,7 @@ private:
   void print_panorama_map (FILE *out);
   void print_status (FILE *out);
   /* Screen used to collect patch density at analysis stage.  */
-  screen *my_screen;
+  std::shared_ptr<screen> my_screen;
   int stitch_info_scale = 0;
   bool release_images;
   coord_t rotation_adjustment;

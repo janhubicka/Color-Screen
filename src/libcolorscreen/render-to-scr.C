@@ -106,10 +106,10 @@ saturation_loss_table::saturation_loss_table (
 
 
 
-screen *
+std::unique_ptr<screen>
 get_new_screen (struct screen_params &p, progress_info *progress)
 {
-  screen *s = new screen;
+  auto s = std::make_unique<screen>();
   if (progress)
     progress->set_task ("initializing screen", 1);
   if (p.preview)
@@ -118,7 +118,7 @@ get_new_screen (struct screen_params &p, progress_info *progress)
     s->initialize (p.t, p.red_strip_width, p.green_strip_width);
   if (p.sharpen.get_mode () == sharpen_parameters::none && !p.sharpen.usm_radius)
     return s;
-  screen *blurred = new screen;
+  auto blurred = std::make_unique<screen>();
   if (progress)
     progress->set_task ("bluring screen", 1);
   //if (p.sharpen.deconvolution_p ())
@@ -135,7 +135,6 @@ get_new_screen (struct screen_params &p, progress_info *progress)
     }
   else
     blurred->initialize_with_blur (*s, p.sharpen.usm_radius);
-  delete s;
   //blurred->clamp ();
   return blurred;
 }
@@ -146,32 +145,30 @@ struct screen_table_params; // will use header definition
 
 
 
-screen_table *
+std::unique_ptr<screen_table>
 get_new_screen_table (struct screen_table_params &p, progress_info *progress)
 {
-  screen_table *s = new screen_table (p.param, p.type, p.red_strip_width,
+  auto s = std::make_unique<screen_table> (p.param, p.type, p.red_strip_width,
                                       p.green_strip_width, p.sharpen, progress);
   if (progress && progress->cancelled ())
     {
-      delete s;
-      return NULL;
+      return nullptr;
     }
   return s;
 }
 static render_to_scr::screen_table_cache_t
     screen_table_cache ("screen table");
 
-saturation_loss_table *
+std::unique_ptr<saturation_loss_table>
 get_new_saturation_loss_table (struct saturation_loss_params &p,
                                progress_info *progress)
 {
-  saturation_loss_table *s = new saturation_loss_table (
+  auto s = std::make_unique<saturation_loss_table> (
       p.scr_table, p.collection_screen, p.img_width, p.img_height, p.map,
       p.collection_threshold, p.sharpen, progress);
   if (progress && progress->cancelled ())
     {
-      delete s;
-      return NULL;
+      return nullptr;
     }
   return s;
 }
@@ -213,7 +210,7 @@ render_to_scr::precompute_img_range (bool grayscale_needed,
    is true, sharpen it back (so we get an estimate of what happens after
    sharpening step of scan).  */
 
-render_to_scr::screen_cache_t::cached_ptr
+std::shared_ptr<screen>
 render_to_scr::get_screen (enum scr_type t, bool preview, 
 			   bool anticipate_sharpening,
 			   const sharpen_parameters &sharpen,
@@ -221,10 +218,10 @@ render_to_scr::get_screen (enum scr_type t, bool preview,
                            progress_info *progress, uint64_t *id)
 {
   screen_params p = { t, preview, red_strip_width, green_strip_width, anticipate_sharpening, sharpen};
-  return screen_cache.get_cached (p, progress, id);
+  return screen_cache.get (p, progress, id);
 }
 
-screen *
+std::shared_ptr<screen>
 render_to_scr::get_screen_raw (enum scr_type t, bool preview, 
 			       bool anticipate_sharpening,
 			       const sharpen_parameters &sharpen,
@@ -239,7 +236,6 @@ render_to_scr::get_screen_raw (enum scr_type t, bool preview,
 void
 render_to_scr::release_screen (screen *s)
 {
-  screen_cache.release (s);
 }
 
 
@@ -257,7 +253,7 @@ render_to_scr::compute_screen_table (progress_info *progress)
       p.sharpen = m_params.sharpen;
       p.sharpen.scanner_mtf_scale *= pixel_size ();
     }
-  m_screen_table = screen_table_cache.get_cached (p, progress, &m_screen_table_uid);
+  m_screen_table = screen_table_cache.get (p, progress, &m_screen_table_uid);
   return (bool)m_screen_table;
 }
 
@@ -285,7 +281,7 @@ render_to_scr::compute_saturation_loss_table (
                                         : 0,
           m_scr_to_img_param.mesh_trans ? dummy : m_scr_to_img_param,
           &m_scr_to_img };
-  m_saturation_loss_table = saturation_loss_table_cache.get_cached (p, progress);
+  m_saturation_loss_table = saturation_loss_table_cache.get (p, progress);
   return (bool)m_saturation_loss_table;
 }
 
@@ -299,7 +295,7 @@ render_to_scr::simulate_screen (progress_info *progress)
   sharpen_parameters sharpen = m_params.sharpen;
   sharpen.usm_radius = m_params.screen_blur_radius * psize;
   sharpen.scanner_mtf_scale *= psize;
-  screen_cache_t::cached_ptr scr = get_screen (m_scr_to_img.get_type (), false,
+  std::shared_ptr<screen> scr = get_screen (m_scr_to_img.get_type (), false,
 	       false,
 	       sharpen,
 	       m_params.red_strip_width,
@@ -357,8 +353,8 @@ render_screen_tile (tile_parameters &tile, scr_type type,
     progress->set_task ("rendering tile", 1);
   if (rst == dot_spread)
     {
-      mtf::mtf_cache_t::cached_ptr mtf = mtf::get_mtf (rparam.sharpen.scanner_mtf, NULL);
-      return mtf->render_dot_spread_tile (tile, progress);
+      std::shared_ptr<mtf> cur_mtf = mtf::get_mtf (rparam.sharpen.scanner_mtf, NULL);
+      return cur_mtf->render_dot_spread_tile (tile, progress);
     }
 
   if (rst >= (int)backlight_screen)
@@ -402,7 +398,7 @@ render_screen_tile (tile_parameters &tile, scr_type type,
       if (rst != sharpened_screen || sp.mode == sharpen_parameters::none)
         sp.mode = sharpen_parameters::blur_deconvolution;
     }
-  render_to_scr::screen_cache_t::cached_ptr scr = render_to_scr::get_screen (
+  std::shared_ptr<screen> scr = render_to_scr::get_screen (
       type, false, rst == sharpened_screen, sp, rparam.red_strip_width,
       rparam.green_strip_width, progress);
   if (!scr)

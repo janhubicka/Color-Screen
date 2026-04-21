@@ -12,11 +12,11 @@ namespace colorscreen
 {
 
 
-analyze_dufay *
+std::unique_ptr<analyze_dufay>
 get_new_dufay_analysis (struct analyzer_params &p, int xshift, int yshift,
                         int width, int height, progress_info *progress)
 {
-  analyze_dufay *ret = new analyze_dufay ();
+  auto ret = std::make_unique<analyze_dufay> ();
   {
     const screen *s = p.scr;
     screen adapted;
@@ -50,37 +50,34 @@ get_new_dufay_analysis (struct analyzer_params &p, int xshift, int yshift,
                       progress))
       return ret;
   }
-  delete ret;
-  return NULL;
+  return nullptr;
 }
 
-analyze_paget *
+std::unique_ptr<analyze_paget>
 get_new_paget_analysis (struct analyzer_params &p, int xshift, int yshift,
                         int width, int height, progress_info *progress)
 {
-  analyze_paget *ret = new analyze_paget ();
+  auto ret = std::make_unique<analyze_paget> ();
   if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, p.simulated_screen_ptr, width, height,
                     xshift, yshift, p.mode, p.collection_threshold, progress))
     return ret;
-  delete ret;
-  return NULL;
+  return nullptr;
 }
-demosaic_paget *
+std::unique_ptr<demosaic_paget>
 get_new_demosaic_paget (demosaiced_params<analyze_paget> &p, progress_info *progress)
 {
-  demosaic_paget *ret = new demosaic_paget ();
+  auto ret = std::make_unique<demosaic_paget> ();
   if (!ret->demosaic (p.analyzer, p.r, p.alg, progress))
     {
-      delete ret;
-      return NULL;
+      return nullptr;
     }
   return ret;
 }
-analyze_strips *
+std::unique_ptr<analyze_strips>
 get_new_strips_analysis (struct analyzer_params &p, int xshift, int yshift,
                          int width, int height, progress_info *progress)
 {
-  analyze_strips *ret = new analyze_strips ();
+  auto ret = std::make_unique<analyze_strips> ();
   {
     const screen *s = p.scr;
     screen adapted;
@@ -102,8 +99,7 @@ get_new_strips_analysis (struct analyzer_params &p, int xshift, int yshift,
                       progress))
       return ret;
   }
-  delete ret;
-  return NULL;
+  return nullptr;
 }
 
 static render_interpolate::dufay_analyzer_cache_t
@@ -209,7 +205,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
               sharpen_parameters sharpen = m_params.sharpen;
               sharpen.usm_radius = m_params.screen_blur_radius * psize;
               sharpen.scanner_mtf_scale *= psize;
-              render_to_scr::screen_cache_t::cached_ptr scr = get_screen (m_scr_to_img.get_type (), false, false,
+              std::shared_ptr<screen> scr = get_screen (m_scr_to_img.get_type (), false, false,
                                         sharpen, m_params.red_strip_width,
                                         m_params.green_strip_width, progress,
                                         &screen_id);
@@ -289,7 +285,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
   if (paget_like_screen_p (m_scr_to_img.get_type ()))
     {
       uint64_t id;
-      m_paget = paget_analyzer_cache.get_cached (p, xshift, yshift, width, height,
+      m_paget = paget_analyzer_cache.get (p, xshift, yshift, width, height,
                                           progress, &id);
       if (!m_paget)
         return false;
@@ -303,21 +299,21 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
 	    : m_params.screen_demosaic,
 	    m_paget.get (), this
 	  };
-	  m_demosaic_paget = demosaic_paget_cache.get_cached (pp, progress);
+	  m_demosaic_paget = demosaic_paget_cache.get (pp, progress);
 	  if (!m_demosaic_paget)
 	    return false;
         }
     }
   else if (dufay_like_screen_p (m_scr_to_img.get_type ()))
     {
-      m_dufay = dufay_analyzer_cache.get_cached (p, xshift, yshift, width, height,
+      m_dufay = dufay_analyzer_cache.get (p, xshift, yshift, width, height,
                                           progress);
       if (!m_dufay)
         return false;
     }
   else if (screen_with_vertical_strips_p (m_scr_to_img.get_type ()))
     {
-      m_strips = strips_analyzer_cache.get_cached (p, xshift, yshift, width, height,
+      m_strips = strips_analyzer_cache.get (p, xshift, yshift, width, height,
                                             progress);
       if (!m_strips)
         return false;

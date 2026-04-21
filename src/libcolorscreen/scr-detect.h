@@ -63,7 +63,7 @@ public:
   scr_detect_parameters m_param;
 private:
   color_matrix m_color_adjust;
-  render::lookup_table_cache_t::cached_ptr lookup_table[3];
+  std::shared_ptr<float[]> lookup_table[3];
 };
 
 class color_class_map

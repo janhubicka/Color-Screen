@@ -22,7 +22,7 @@ struct simulation_params
 	   && scr_to_img == o.scr_to_img && sharpen == o.sharpen;
   }
 };
-std::vector<float> *get_new_simulation (struct simulation_params &, progress_info *);
+std::unique_ptr<std::vector<float>> get_new_simulation (struct simulation_params &, progress_info *);
 class render_simulate_process : public render_to_scr
 {
 public:
@@ -81,11 +81,11 @@ public:
                        int height, coord_t pixelsize, progress_info *progress);
 
   typedef lru_cache<simulation_params, std::vector<float>,
-                    std::vector<float> *, &get_new_simulation, 1>
+                    &get_new_simulation, 1>
       simulation_cache_t;
 private:
-  render_to_scr::screen_cache_t::cached_ptr m_screen;
-  simulation_cache_t::cached_ptr m_simulated;
+  std::shared_ptr<screen> m_screen;
+  std::shared_ptr<std::vector<float>> m_simulated;
   rgbdata m_proportions_cor;
 };
 }

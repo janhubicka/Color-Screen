@@ -83,7 +83,7 @@ public:
 private:
   pure_attr inline rgbdata
   sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coord_t scr_y) const;
-  render_to_scr::screen_cache_t::cached_ptr m_screen;
+  std::shared_ptr<screen> m_screen;
   bool m_color;
   bool m_preview;
 };

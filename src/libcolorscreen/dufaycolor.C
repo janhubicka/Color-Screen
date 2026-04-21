@@ -598,7 +598,7 @@ struct optimized_matrix_params
   }
 };
 
-color_matrix *
+std::unique_ptr<color_matrix>
 get_new_optimized_matrix (struct optimized_matrix_params &p, progress_info *progress)
 {
   spectrum_dyes_to_xyz spec;
@@ -606,17 +606,17 @@ get_new_optimized_matrix (struct optimized_matrix_params &p, progress_info *prog
   initialize_spec (spec, p.type, true);
   spectrum_dyes_to_xyz view_spec;
   view_spec.set_backlight (spectrum_dyes_to_xyz::il_D, p.backlight_temperature);
-  color_matrix *m = new color_matrix;
+  auto m = std::make_unique<color_matrix> ();
   *m = spec.optimized_xyz_matrix (&view_spec, progress);
   return m;
 }
-static lru_cache <optimized_matrix_params, color_matrix, color_matrix *, get_new_optimized_matrix, 10> color_matrix_cache ("color_matrix_cache");
+static lru_cache <optimized_matrix_params, color_matrix, get_new_optimized_matrix, 10> color_matrix_cache ("color_matrix_cache");
 
 color_matrix
 dufaycolor_correction_color_cinematography_matrix (luminosity_t temperature, luminosity_t backlight_temperature, progress_info *progress)
 {
   optimized_matrix_params p = {temperature, backlight_temperature, 0};
-  auto m = color_matrix_cache.get_cached (p, progress);
+  auto m = color_matrix_cache.get (p, progress);
   return *m;
 }
 
@@ -624,7 +624,7 @@ color_matrix
 dufaycolor_correction_harrison_horner_matrix (luminosity_t temperature, luminosity_t backlight_temperature, progress_info *progress)
 {
   optimized_matrix_params p = {temperature, backlight_temperature, 1};
-  auto m = color_matrix_cache.get_cached (p, progress);
+  auto m = color_matrix_cache.get (p, progress);
   return *m;
 }
 
@@ -632,7 +632,7 @@ color_matrix
 dufaycolor_correction_photography_its_materials_and_processes_matrix (luminosity_t temperature, luminosity_t backlight_temperature, progress_info *progress)
 {
   optimized_matrix_params p = {temperature, backlight_temperature, 2};
-  auto m = color_matrix_cache.get_cached (p, progress);
+  auto m = color_matrix_cache.get (p, progress);
   return *m;
 }
 
@@ -640,7 +640,7 @@ color_matrix
 dufaycolor_correction_collins_and_giles_matrix (luminosity_t temperature, luminosity_t backlight_temperature, progress_info *progress)
 {
   optimized_matrix_params p = {temperature, backlight_temperature, 3};
-  auto m = color_matrix_cache.get_cached (p, progress);
+  auto m = color_matrix_cache.get (p, progress);
   return *m;
 }
 }

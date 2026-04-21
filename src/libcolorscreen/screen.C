@@ -1737,15 +1737,15 @@ screen::initialize_with_sharpen_parameters (screen &scr,
           screen_fft_t data_scale = 1.0 / (screen::size * screen::size);
 	  luminosity_t snr = sharpen[c]->scanner_snr;
           screen_fft_t k_const = snr > 0 ? 1.0f / snr : 0;
-	  mtf::mtf_cache_t::cached_ptr mtf = mtf::get_mtf (sharpen[c]->scanner_mtf, NULL);
-	  mtf->precompute (NULL, parallel);
-	  int this_psf_size = mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
+	  std::shared_ptr<mtf> cur_mtf = mtf::get_mtf (sharpen[c]->scanner_mtf, NULL);
+	  cur_mtf->precompute (NULL, parallel);
+	  int this_psf_size = cur_mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
 	  //printf ("screen step %f %f psf size %i\n", step, screen::size * step, this_psf_size);
 	  /* PSF may revisit this_psf_size.  */
 	  if (this_psf_size > screen::size)
 	    {
-	      mtf->precompute_psf (NULL, parallel);
-	      this_psf_size = mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
+	      cur_mtf->precompute_psf (NULL, parallel);
+	      this_psf_size = cur_mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
 	    }
 
 	  /* Small PSF size: use fast path of producing its FFT directly.  */
@@ -1755,20 +1755,20 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		for (int x = 0; x < fft_size; x++)
 		  {
 		    std::complex ker (
-			std::clamp ((screen_fft_t)mtf->get_mtf (x, y, step),
+			std::clamp ((screen_fft_t)cur_mtf->get_mtf (x, y, step),
 				    (screen_fft_t)0, (screen_fft_t)1),
 			(screen_fft_t)0);
 		    if (mode == sharpen_parameters::wiener_deconvolution)
-		      ker = ker * (conj (ker) / (std::norm (ker) + k_const));
+		      ker = ker * (std::conj (ker) / (std::norm (ker) + k_const));
 		    else if (mode == sharpen_parameters::blur_deconvolution)
 		      ker = ker * ker;
 		    ker = ker * data_scale;
-		    fft[y * fft_size + x][0] = real (ker);
-		    fft[y * fft_size + x][1] = imag (ker);
+		    fft[y * fft_size + x][0] = std::real (ker);
+		    fft[y * fft_size + x][1] = std::imag (ker);
 		    if (y)
 		      {
-			fft[(screen::size - y) * fft_size + x][0] = real (ker);
-			fft[(screen::size - y) * fft_size + x][1] = imag (ker);
+			fft[(screen::size - y) * fft_size + x][0] = std::real (ker);
+			fft[(screen::size - y) * fft_size + x][1] = std::imag (ker);
 		      }
 		  }
 	    }
@@ -1781,26 +1781,26 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 	      if (parallel)
 	      {
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
-      shared(wrapped_psf,mtf,step,this_psf_size) if (parallel)
+      shared(wrapped_psf,cur_mtf,step,this_psf_size) if (parallel)
 		for (int yy = 0; yy < screen::size; yy++)
 		  for (int xx = 0; xx < screen::size; xx++)
 		    {
 		      screen_fft_t sum = 0.0;
 		      for (int y = yy; y < this_psf_size; y += screen::size)
 			for (int x = xx; x < this_psf_size; x += screen::size)
-			  sum += mtf->get_psf (x, y, (step * screen::size));
+			  sum += cur_mtf->get_psf (x, y, (step * screen::size));
 		      
 		      for (int y = yy; y < this_psf_size; y += screen::size)
 			for (int x = screen::size - xx; x < this_psf_size; x += screen::size)
-			  sum += mtf->get_psf (x, y, (step * screen::size));
+			  sum += cur_mtf->get_psf (x, y, (step * screen::size));
 		      
 		      for (int y = screen::size - yy; y < this_psf_size; y += screen::size)
 			for (int x = xx; x < this_psf_size; x += screen::size)
-			  sum += mtf->get_psf (x, y, (step * screen::size));
+			  sum += cur_mtf->get_psf (x, y, (step * screen::size));
 		      
 		      for (int y = screen::size - yy; y < this_psf_size; y += screen::size)
 			for (int x = screen::size - xx; x < this_psf_size; x += screen::size)
-			  sum += mtf->get_psf (x, y, (step * screen::size));
+			  sum += cur_mtf->get_psf (x, y, (step * screen::size));
 		      
 		      wrapped_psf[yy * screen::size + xx] = sum;
 		    }
@@ -1813,19 +1813,19 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		      screen_fft_t sum = 0.0;
 		      for (int y = yy; y < this_psf_size; y += screen::size)
 			for (int x = xx; x < this_psf_size; x += screen::size)
-			  sum += mtf->get_psf (x, y, (step * screen::size));
+			  sum += cur_mtf->get_psf (x, y, (step * screen::size));
 		      
 		      for (int y = yy; y < this_psf_size; y += screen::size)
 			for (int x = screen::size - xx; x < this_psf_size; x += screen::size)
-			  sum += mtf->get_psf (x, y, (step * screen::size));
+			  sum += cur_mtf->get_psf (x, y, (step * screen::size));
 		      
 		      for (int y = screen::size - yy; y < this_psf_size; y += screen::size)
 			for (int x = xx; x < this_psf_size; x += screen::size)
-			  sum += mtf->get_psf (x, y, (step * screen::size));
+			  sum += cur_mtf->get_psf (x, y, (step * screen::size));
 		      
 		      for (int y = screen::size - yy; y < this_psf_size; y += screen::size)
 			for (int x = screen::size - xx; x < this_psf_size; x += screen::size)
-			  sum += mtf->get_psf (x, y, (step * screen::size));
+			  sum += cur_mtf->get_psf (x, y, (step * screen::size));
 		      
 		      wrapped_psf[yy * screen::size + xx] = sum;
 		    }
@@ -1873,9 +1873,9 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		{
 		  std::complex ker (fft[x][0], fft[x][1]);
 		  if (mode == sharpen_parameters::wiener_deconvolution)
-		    ker = ker * (conj (ker) / (std::norm (ker) + k_const));
-		  fft[x][0] = real (ker) * (1.0 / (screen::size * screen::size));
-		  fft[x][1] = imag (ker) * (1.0 / (screen::size * screen::size));
+		    ker = ker * (std::conj (ker) / (std::norm (ker) + k_const));
+		  fft[x][0] = std::real (ker) * (1.0 / (screen::size * screen::size));
+		  fft[x][1] = std::imag (ker) * (1.0 / (screen::size * screen::size));
 		}
 	    }
         }

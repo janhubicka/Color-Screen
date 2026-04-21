@@ -4,6 +4,7 @@
 #include "precomputed-function.h"
 #include "progress-info.h"
 #include "lens-warp-correction-parameters.h"
+#include <memory>
 
 namespace colorscreen
 {
@@ -19,7 +20,7 @@ struct lens_warp_correction
 
   DLL_PUBLIC_EXP
   lens_warp_correction ()
-      : m_params (), m_inverted_ratio (NULL)
+      : m_params (), m_inverted_ratio ()
   {
   }
 
@@ -92,7 +93,7 @@ private:
   /* Center in image coordinates, possibly after applying motor corrections. */
   point_t m_center;
   coord_t m_max_dist, m_inv_max_dist_sq2;
-  precomputed_function<coord_t> *m_inverted_ratio;
+  std::shared_ptr<precomputed_function<coord_t>> m_inverted_ratio;
   // coord_t get_inverse (coord_t dist);
   // coord_t m_max;
   bool m_noop;

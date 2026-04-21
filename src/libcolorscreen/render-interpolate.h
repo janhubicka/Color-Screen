@@ -81,10 +81,10 @@ struct demosaiced_params
   }
 };
 
-demosaic_paget * get_new_demosaic_paget (demosaiced_params<analyze_paget> &, progress_info *);
-analyze_dufay * get_new_dufay_analysis (struct analyzer_params &, int, int, int, int, progress_info *);
-analyze_paget * get_new_paget_analysis (struct analyzer_params &, int, int, int, int, progress_info *);
-analyze_strips * get_new_strips_analysis (struct analyzer_params &, int, int, int, int, progress_info *);
+std::unique_ptr<demosaic_paget> get_new_demosaic_paget (demosaiced_params<analyze_paget> &, progress_info *);
+std::unique_ptr<analyze_dufay> get_new_dufay_analysis (struct analyzer_params &, int, int, int, int, progress_info *);
+std::unique_ptr<analyze_paget> get_new_paget_analysis (struct analyzer_params &, int, int, int, int, progress_info *);
+std::unique_ptr<analyze_strips> get_new_strips_analysis (struct analyzer_params &, int, int, int, int, progress_info *);
 typedef std::function <bool (coord_t, coord_t, rgbdata)> analyzer;
 typedef std::function <bool (coord_t, coord_t, rgbdata, rgbdata, rgbdata)> rgb_analyzer;
 class render_interpolate : public render_to_scr
@@ -157,14 +157,14 @@ public:
   bool dump_patch_density (FILE *);
   //bool finetune (render_parameters &rparam, solver_parameters::point_t &point, int x, int y, progress_info *progress);
   //void collect_rgb_histograms (rgb_histogram &red_histogram, rgb_histogram &green_histogram, rgb_histogram &blue_histogram, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);
-  typedef lru_tile_cache<analyzer_params, analyze_dufay, analyze_dufay *, get_new_dufay_analysis, 2> dufay_analyzer_cache_t;
-  typedef lru_tile_cache<analyzer_params, analyze_paget, analyze_paget *, get_new_paget_analysis, 2> paget_analyzer_cache_t;
-  typedef lru_tile_cache<analyzer_params, analyze_strips, analyze_strips *, get_new_strips_analysis, 2> strips_analyzer_cache_t;
-  typedef lru_cache<demosaiced_params<analyze_paget>, demosaic_paget, demosaic_paget *, get_new_demosaic_paget, 2> demosaic_paget_cache_t;
+  typedef lru_tile_cache<analyzer_params, analyze_dufay, get_new_dufay_analysis, 2> dufay_analyzer_cache_t;
+  typedef lru_tile_cache<analyzer_params, analyze_paget, get_new_paget_analysis, 2> paget_analyzer_cache_t;
+  typedef lru_tile_cache<analyzer_params, analyze_strips, get_new_strips_analysis, 2> strips_analyzer_cache_t;
+  typedef lru_cache<demosaiced_params<analyze_paget>, demosaic_paget, get_new_demosaic_paget, 2> demosaic_paget_cache_t;
 private:
   rgbdata compensate_saturation_loss_scr (point_t p, rgbdata c) const;
   rgbdata compensate_saturation_loss_img (point_t p, rgbdata c) const;
-  render_to_scr::screen_cache_t::cached_ptr m_screen;
+  std::shared_ptr<screen> m_screen;
   bool m_screen_compensation;
   bool m_adjust_luminosity;
   bool m_original_color;
@@ -172,10 +172,10 @@ private:
   bool m_profiled;
   bool m_precise_rgb;
 
-  dufay_analyzer_cache_t::cached_ptr m_dufay;
-  paget_analyzer_cache_t::cached_ptr m_paget;
-  strips_analyzer_cache_t::cached_ptr m_strips;
-  demosaic_paget_cache_t::cached_ptr m_demosaic_paget;
+  std::shared_ptr<analyze_dufay> m_dufay;
+  std::shared_ptr<analyze_paget> m_paget;
+  std::shared_ptr<analyze_strips> m_strips;
+  std::shared_ptr<demosaic_paget> m_demosaic_paget;
   color_matrix m_saturation_matrix;
   color_matrix profile_matrix;
   // Proportions after premutatoins we do to handle screen variants.

@@ -85,10 +85,10 @@ public:
 
   void print_mtf (FILE *);
 
-  static mtf * get_new_mtf (struct mtf_parameters &, progress_info *);
-  typedef lru_cache<mtf_parameters, mtf, mtf *, get_new_mtf, 10> mtf_cache_t;
+  static std::unique_ptr<mtf> get_new_mtf (struct mtf_parameters &, progress_info *);
+  typedef lru_cache<mtf_parameters, mtf, get_new_mtf, 10> mtf_cache_t;
 
-  static mtf_cache_t::cached_ptr get_mtf (const mtf_parameters &mtfp, progress_info *p);
+  static std::shared_ptr<mtf> get_mtf (const mtf_parameters &mtfp, progress_info *p);
   typedef float psf_t;
   std::vector<psf_t, fft_allocator<psf_t>>
   compute_2d_psf (int psf_size, luminosity_t subscale,

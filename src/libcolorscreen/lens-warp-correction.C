@@ -40,7 +40,7 @@ get_inverse (const lens_warp_correction_parameters &param, coord_t dist,
         max = r;
     }
 }
-precomputed_function<coord_t> *
+std::unique_ptr<precomputed_function<coord_t>>
 get_new_inverse (struct lens_inverse_parameters &p, progress_info *)
 {
   coord_t data[lens_warp_correction::size];
@@ -81,11 +81,11 @@ get_new_inverse (struct lens_inverse_parameters &p, progress_info *)
     data[i] = get_inverse (p.param,
                            i * p.max_dist / (lens_warp_correction::size - 1),
                            max, inv_max_dist_sq2);
-  return new precomputed_function<coord_t> (0, p.max_dist, data,
+  return std::make_unique<precomputed_function<coord_t>> (0, p.max_dist, data,
                                             lens_warp_correction::size);
 }
 static lru_cache<lens_inverse_parameters, precomputed_function<coord_t>,
-                 precomputed_function<coord_t> *, get_new_inverse, 4>
+                 get_new_inverse, 4>
     lens_inverse_cache ("lens inverse functions");
 }
 
@@ -126,8 +126,6 @@ lens_warp_correction::precompute_inverse ()
 
 lens_warp_correction::~lens_warp_correction ()
 {
-  if (m_inverted_ratio)
-    lens_inverse_cache.release (m_inverted_ratio);
 }
 
 pure_attr point_t

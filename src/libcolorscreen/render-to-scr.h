@@ -37,7 +37,7 @@ struct screen_params
                    && green_strip_width == o.green_strip_width));
   }
 };
-screen * get_new_screen (struct screen_params &, progress_info *);
+std::unique_ptr<screen> get_new_screen (struct screen_params &, progress_info *);
 
 struct screen_table_params
 {
@@ -57,7 +57,7 @@ struct screen_table_params
 	   && sharpen == o.sharpen;
   }
 };
-screen_table * get_new_screen_table (struct screen_table_params &, progress_info *);
+std::unique_ptr<screen_table> get_new_screen_table (struct screen_table_params &, progress_info *);
 
 struct saturation_loss_params
 {
@@ -85,7 +85,7 @@ struct saturation_loss_params
            && (mesh_id || scr_to_img_params == o.scr_to_img_params);
   }
 };
-saturation_loss_table * get_new_saturation_loss_table (struct saturation_loss_params &, progress_info *);
+std::unique_ptr<saturation_loss_table> get_new_saturation_loss_table (struct saturation_loss_params &, progress_info *);
 
 class screen_table
 {
@@ -249,18 +249,18 @@ public:
                                               coord_t s);
   inline luminosity_t sample_scr_square (coord_t xc, coord_t yc, coord_t w,
                                           coord_t h);
-  typedef lru_cache<screen_params, screen, screen *, get_new_screen, 20> screen_cache_t;
-  typedef lru_cache<screen_table_params, screen_table, screen_table *, get_new_screen_table, 4> screen_table_cache_t;
-  typedef lru_cache<saturation_loss_params, saturation_loss_table, saturation_loss_table *, get_new_saturation_loss_table, 4> saturation_loss_table_cache_t;
+  typedef lru_cache<screen_params, screen, get_new_screen, 20> screen_cache_t;
+  typedef lru_cache<screen_table_params, screen_table, get_new_screen_table, 4> screen_table_cache_t;
+  typedef lru_cache<saturation_loss_params, saturation_loss_table, get_new_saturation_loss_table, 4> saturation_loss_table_cache_t;
 
-  static screen_cache_t::cached_ptr get_screen (enum scr_type t, bool preview,
+  static std::shared_ptr<screen> get_screen (enum scr_type t, bool preview,
 			     bool anticipate_sharpening,
    			     const sharpen_parameters &sharpen,
                              coord_t red_strip_width,
                              coord_t dufay_green_strip_height,
                              progress_info *progress = NULL,
                              uint64_t *id = NULL);
-  static screen * get_screen_raw (enum scr_type t, bool preview, 
+  static std::shared_ptr<screen> get_screen_raw (enum scr_type t, bool preview, 
 			     bool anticipate_sharpening,
 			     const sharpen_parameters &sharpen,
                              coord_t red_strip_width, coord_t green_strip_width,
@@ -279,10 +279,10 @@ protected:
   /* Transformation between screen and image coordinates.  */
   scr_to_img m_scr_to_img;
   const scr_to_img_parameters &m_scr_to_img_param;
-  screen_table_cache_t::cached_ptr m_screen_table;
-  saturation_loss_table_cache_t::cached_ptr m_saturation_loss_table;
+  std::shared_ptr<screen_table> m_screen_table;
+  std::shared_ptr<saturation_loss_table> m_saturation_loss_table;
   uint64_t m_screen_table_uid;
-  simulated_screen_cache_t::cached_ptr m_simulated_screen;
+  std::shared_ptr<simulated_screen> m_simulated_screen;
   uint64_t m_simulated_screen_id;
 
 private:

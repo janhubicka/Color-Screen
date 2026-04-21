@@ -23,7 +23,7 @@ struct out_lookup_table_params
   }
 };
 
-precomputed_function<luminosity_t> *
+std::unique_ptr<precomputed_function<luminosity_t>>
 get_new_out_lookup_table (struct out_lookup_table_params &, progress_info *);
 
 /* Convert color from process profile to final profile
@@ -57,7 +57,7 @@ public:
 private:
   typedef lru_cache<
       out_lookup_table_params, precomputed_function<luminosity_t>,
-      precomputed_function<luminosity_t> *, get_new_out_lookup_table, 4>
+      get_new_out_lookup_table, 4>
       out_lookup_table_cache_t;
 
   /* Desired maximal value of output data (usually either 256 or 65536).  */
@@ -78,7 +78,7 @@ private:
   std::unique_ptr<spectrum_dyes_to_xyz> m_spectrum_dyes_to_xyz;
 
   /* Translates back to gamma 2.  */
-  out_lookup_table_cache_t::cached_ptr m_out_lookup_table;
+  std::shared_ptr<precomputed_function<luminosity_t>> m_out_lookup_table;
 };
 }
 #endif

@@ -161,7 +161,7 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
     default:
       abort ();
     }
-  mtf::mtf_cache_t::cached_ptr scanner_mtf = mtf::get_mtf (sharpen.scanner_mtf, progress);
+  std::shared_ptr<mtf> scanner_mtf = mtf::get_mtf (sharpen.scanner_mtf, progress);
   deconvolution<DT> d (scanner_mtf.get (), sharpen.scanner_mtf_scale,
                    sharpen.scanner_snr, sharpen.richardson_lucy_sigma,
                    nthreads, mode, sharpen.richardson_lucy_iterations,
@@ -249,7 +249,7 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
     default:
       abort ();
     }
-  mtf::mtf_cache_t::cached_ptr scanner_mtf = mtf::get_mtf (sharpen.scanner_mtf, progress);
+  std::shared_ptr<mtf> scanner_mtf = mtf::get_mtf (sharpen.scanner_mtf, progress);
   deconvolution<DT> d (scanner_mtf.get (), sharpen.scanner_mtf_scale,
 		   sharpen.scanner_snr, sharpen.richardson_lucy_sigma, nthreads * 3, mode,
 		   sharpen.richardson_lucy_iterations,

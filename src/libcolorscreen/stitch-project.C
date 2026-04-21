@@ -22,8 +22,6 @@ stitch_project::stitch_project ()
 
 stitch_project::~stitch_project ()
 {
-  if (my_screen)
-    render_to_scr::release_screen (my_screen);
 }
 
 bool

@@ -26,7 +26,7 @@ struct color_class_params
 	   && p == o.p;
   }
 };
-class color_class_map * get_color_class_map(color_class_params &, progress_info *);
+std::unique_ptr<color_class_map> get_color_class_map(color_class_params &, progress_info *);
 
 struct precomputed_rgbdata_params
 {
@@ -51,7 +51,8 @@ struct precomputed_rgbdata_params
 	   && gamma == o.gamma;
   }
 };
-class precomputed_rgbdata * get_precomputed_rgbdata(precomputed_rgbdata_params &, progress_info *);
+struct precomputed_rgbdata;
+std::unique_ptr<precomputed_rgbdata> get_precomputed_rgbdata(precomputed_rgbdata_params &, progress_info *);
 
 struct patches_cache_params
 {
@@ -69,7 +70,7 @@ struct patches_cache_params
 	   && gray_data_id == o.gray_data_id;
   }
 };
-patches *get_patches(patches_cache_params &, progress_info *);
+std::unique_ptr<patches> get_patches(patches_cache_params &, progress_info *);
 
 struct color_data_params
 {
@@ -88,11 +89,11 @@ struct color_data_params
   }
 };
 struct color_data;
-struct color_data * get_new_color_data(struct color_data_params &, progress_info *);
-typedef lru_cache<color_class_params, color_class_map, color_class_map *, get_color_class_map, 4> color_class_cache_t;
-typedef lru_cache<precomputed_rgbdata_params, precomputed_rgbdata, precomputed_rgbdata *, get_precomputed_rgbdata, 4> precomputed_rgbdata_cache_t;
-typedef lru_cache<patches_cache_params, patches, patches *, get_patches, 4> patches_cache_t;
-typedef lru_cache<color_data_params, struct color_data, struct color_data *, get_new_color_data, 10> color_data_cache_t;
+std::unique_ptr<color_data> get_new_color_data(struct color_data_params &, progress_info *);
+typedef lru_cache<color_class_params, color_class_map, get_color_class_map, 4> color_class_cache_t;
+typedef lru_cache<precomputed_rgbdata_params, precomputed_rgbdata, get_precomputed_rgbdata, 4> precomputed_rgbdata_cache_t;
+typedef lru_cache<patches_cache_params, patches, get_patches, 4> patches_cache_t;
+typedef lru_cache<color_data_params, struct color_data, get_new_color_data, 10> color_data_cache_t;
 
 struct render_to_file_params;
 class render_scr_detect : public render
@@ -355,8 +356,8 @@ done:
   rgbdata analyze_color_proportions (scr_to_img_parameters *param, int xmin, int ymin, int xmax, int ymax, progress_info *p);
 protected:
   my_mem_rgbdata *m_precomputed_rgbdata;
-  precomputed_rgbdata_cache_t::cached_ptr m_precomputed_rgbdata_holder;
-  color_class_cache_t::cached_ptr m_color_class_map;
+  std::shared_ptr<precomputed_rgbdata> m_precomputed_rgbdata_holder;
+  std::shared_ptr<color_class_map> m_color_class_map;
   scr_detect m_scr_detect;
   uint64_t m_color_class_map_id;
   uint64_t m_precomputed_rgbdata_id;
@@ -575,7 +576,7 @@ private:
     {
       return cdata[color][y * m_img.width + x];
     }
-  color_data_cache_t::cached_ptr m_color_data_handle;
+  std::shared_ptr<color_data> m_color_data_handle;
 };
 class render_scr_nearest : public render_scr_detect
 {
@@ -715,7 +716,7 @@ public:
     downscale<render_scr_relax, rgbdata, &render_scr_relax::fast_sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
   }
 private:
-  patches_cache_t::cached_ptr m_patches;
+  std::shared_ptr<patches> m_patches;
 };
 }
 #endif

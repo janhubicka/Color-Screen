@@ -13,10 +13,10 @@ getdata (int, int x, int y, int width, render_simulate_process *r)
 }
 }
 
-std::vector<float> *
+std::unique_ptr<std::vector<float>>
 get_new_simulation (struct simulation_params &param, progress_info *progress)
 {
-  std::vector <float> *img = new std::vector <float> (param.img->width * param.img->height);
+  auto img = std::make_unique<std::vector <float>> (param.img->width * param.img->height);
   bool ok = false;
   if (param.sharpen.deconvolution_p ())
     ok = deconvolve<luminosity_t, float,
@@ -32,8 +32,7 @@ get_new_simulation (struct simulation_params &param, progress_info *progress)
 	-param.sharpen.usm_amount, progress);
   if (!ok)
     {
-      delete img;
-      return NULL;
+      return nullptr;
     }
   return img;
 }
@@ -72,7 +71,7 @@ render_simulate_process::precompute_all (progress_info *progress)
     return false;
   struct simulation_params p = {m_img.id, &m_img, this, m_params.gamma, m_scr_to_img.get_param (), m_params.sharpen};
   p.sharpen.mode = sharpen_parameters::blur_deconvolution;
-  m_simulated = simulation_cache.get_cached (p, progress);
+  m_simulated = simulation_cache.get (p, progress);
   return m_simulated.get() != NULL;
 }
 }

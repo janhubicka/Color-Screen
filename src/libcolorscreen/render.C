@@ -43,32 +43,31 @@ sharpened_data::~sharpened_data ()
 
 
 
-backlight_correction *
+std::unique_ptr<backlight_correction>
 get_new_backlight_correction (struct backlight_correction_cache_params &p,
                               progress_info *progress)
 {
-  backlight_correction *c = new backlight_correction (
+  auto c = std::make_unique<backlight_correction> (
       *p.backlight_correction_params, p.width, p.height,
       p.backlight_correction_black, p.grayscale_needed, progress);
   if (!c->initialized_p ())
     {
-      delete c;
-      return NULL;
+      return nullptr;
     }
   return c;
 }
 static lru_cache<backlight_correction_cache_params, backlight_correction,
-                 backlight_correction *, get_new_backlight_correction, 10>
+                 get_new_backlight_correction, 10>
     backlight_correction_cache ("backlight corrections");
 /*****************************************************************************/
 /*                         Image layer correction cache.                     */
 /*****************************************************************************/
-histogram*
+std::unique_ptr<histogram>
 get_new_image_layer_histogram (struct image_layer_histogram_params &p, progress_info *progress)
 {
-  histogram *hist = new histogram;
+  auto hist = std::make_unique<histogram> ();
   if (!hist)
-    return NULL;
+    return nullptr;
   for (int y = p.crop.y; y < p.crop.y + p.crop.height; y++)
     for (int x = p.crop.x; x < p.crop.x + p.crop.height; x++)
       hist->pre_account (p.r->get_unadjusted_data (x, y));
@@ -80,7 +79,7 @@ get_new_image_layer_histogram (struct image_layer_histogram_params &p, progress_
   return hist;
 }
 static lru_cache<image_layer_histogram_params, histogram,
-                 histogram *, get_new_image_layer_histogram, 10>
+                 get_new_image_layer_histogram, 10>
     image_layer_histogram_cache ("image layer histograms");
 
 /*****************************************************************************/
@@ -91,14 +90,14 @@ static lru_cache<image_layer_histogram_params, histogram,
 
 
 
-luminosity_t *
+std::unique_ptr<luminosity_t[]>
 get_new_lookup_table (struct lookup_table_params &p, progress_info *)
 {
   bool use_table = !p.gamma && p.gamma_table.size ();
   /* Use some sane data if table is missing.  */
   if (!p.gamma && !use_table)
     p.gamma = 1;
-  luminosity_t *lookup_table = new luminosity_t[p.maxval + 1];
+  auto lookup_table = std::make_unique<luminosity_t[]> (p.maxval + 1);
   luminosity_t gamma = p.gamma;
   if (gamma != -1)
     gamma = std::clamp (gamma, (luminosity_t)0.0001, (luminosity_t)100.0);
@@ -119,8 +118,7 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
 
 
 /* To improve interactive response we cache conversion tables.  */
-static lru_cache<lookup_table_params, luminosity_t[], luminosity_t *,
-                 get_new_lookup_table, 4>
+static lru_cache<lookup_table_params, luminosity_t[], get_new_lookup_table, 4>
     lookup_table_cache ("in lookup tables");
 
 /*****************************************************************************/
@@ -132,9 +130,9 @@ static lru_cache<lookup_table_params, luminosity_t[], luminosity_t *,
 
 struct gray_data_tables
 {
-  render::lookup_table_cache_t::cached_ptr rtable;
-  render::lookup_table_cache_t::cached_ptr gtable;
-  render::lookup_table_cache_t::cached_ptr btable;
+  std::shared_ptr<luminosity_t[]> rtable;
+  std::shared_ptr<luminosity_t[]> gtable;
+  std::shared_ptr<luminosity_t[]> btable;
   rgbdata dark;
   luminosity_t red, green, blue;
   backlight_correction *correction;
@@ -177,13 +175,13 @@ compute_gray_data_tables (struct graydata_params &p, bool correction,
   par.scan_exposure = correction ? 1 : red;
   par.dark_point = correction ? 0 : dark.red;
   par.gamma_table = p.gamma_table[0];
-  ret.rtable = lookup_table_cache.get_cached (par, progress);
+  ret.rtable = lookup_table_cache.get (par, progress);
   if (!ret.rtable)
     return ret;
   par.scan_exposure = correction ? 1 : green;
   par.dark_point = correction ? 0 : dark.green;
   par.gamma_table = p.gamma_table[1];
-  ret.gtable = lookup_table_cache.get_cached (par, progress);
+  ret.gtable = lookup_table_cache.get (par, progress);
   if (!ret.gtable)
     {
       ret.rtable = {};
@@ -192,7 +190,7 @@ compute_gray_data_tables (struct graydata_params &p, bool correction,
   par.scan_exposure = correction ? 1 : blue;
   par.dark_point = correction ? 0 : dark.blue;
   par.gamma_table = p.gamma_table[2];
-  ret.btable = lookup_table_cache.get_cached (par, progress);
+  ret.btable = lookup_table_cache.get (par, progress);
   if (!ret.btable)
     {
       ret.rtable = {};
@@ -235,7 +233,7 @@ compute_gray_data (gray_data_tables &t, int width, int height, int x, int y,
 
 struct getdata_params
 {
-  render::lookup_table_cache_t::cached_ptr table;
+  std::shared_ptr<luminosity_t[]> table;
   backlight_correction *correction;
   int width, height;
 };
@@ -272,18 +270,17 @@ getdata_helper2 (const image_data *img, int x, int y, int, gray_data_tables &t)
   return val;
 }
 
-sharpened_data *
+std::unique_ptr<sharpened_data>
 get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
                              progress_info *progress)
 {
-  sharpened_data *ret = new sharpened_data (p.gp.img->width, p.gp.img->height);
+  auto ret = std::make_unique<sharpened_data> (p.gp.img->width, p.gp.img->height);
   if (!ret)
-    return NULL;
+    return nullptr;
   mem_luminosity_t *out = ret->m_data;
   if (!out)
     {
-      delete ret;
-      return NULL;
+      return nullptr;
     }
 
   bool ok;
@@ -299,14 +296,13 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
          ??? This does not work with the argyll profiles I made for Nikon.  */
       // if (!p.gp.gamma)
       // par.gamma_table = p.gp.img->to_linear[2];
-      d.table = lookup_table_cache.get_cached (par, progress);
+      d.table = lookup_table_cache.get (par, progress);
       d.correction = p.gp.backlight;
       d.width = p.gp.img->width;
       d.height = p.gp.img->height;
       if (!d.table)
         {
-          delete ret;
-          return NULL;
+          return nullptr;
         }
       if (d.correction)
         {
@@ -366,12 +362,11 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
     }
   if (!ok)
     {
-      delete ret;
-      return NULL;
+      return nullptr;
     }
   return ret;
 }
-static lru_cache<gray_and_sharpen_params, sharpened_data, sharpened_data *,
+static lru_cache<gray_and_sharpen_params, sharpened_data,
                  get_new_gray_sharpened_data, 2>
     gray_and_sharpened_data_cache ("gray and sharpened data");
 
@@ -401,7 +396,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
               m_img.height,
               m_params.backlight_correction_black,
               /*!grayscale_needed*/ true };
-      m_backlight_correction = backlight_correction_cache.get_cached (
+      m_backlight_correction = backlight_correction_cache.get (
           p, progress, &m_backlight_correction_id);
       if (!m_backlight_correction)
         return false;
@@ -413,23 +408,23 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
       par.gamma = m_params.gamma;
       if (!par.gamma)
         par.gamma_table = m_img.to_linear[0];
-      m_rgb_lookup_table[0] = lookup_table_cache.get_cached (par, progress);
+      m_rgb_lookup_table[0] = lookup_table_cache.get (par, progress);
       if (!m_rgb_lookup_table[0])
         return false;
       if (!par.gamma)
         {
           par.gamma_table = m_img.to_linear[1];
-          m_rgb_lookup_table[1] = lookup_table_cache.get_cached (par, progress);
+          m_rgb_lookup_table[1] = lookup_table_cache.get (par, progress);
           par.gamma_table = m_img.to_linear[2];
-          m_rgb_lookup_table[2] = lookup_table_cache.get_cached (par, progress);
+          m_rgb_lookup_table[2] = lookup_table_cache.get (par, progress);
         }
       else
         {
 	  // We prevent copying to avoid accidental passing by value.
           // m_rgb_lookup_table[1] = m_rgb_lookup_table[0];
           // m_rgb_lookup_table[2] = m_rgb_lookup_table[0];
-	  m_rgb_lookup_table[1] = lookup_table_cache.get_cached (par, progress);
-	  m_rgb_lookup_table[2] = lookup_table_cache.get_cached (par, progress);
+	  m_rgb_lookup_table[1] = lookup_table_cache.get (par, progress);
+	  m_rgb_lookup_table[2] = lookup_table_cache.get (par, progress);
         }
     }
 
@@ -450,7 +445,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
                 m_backlight_correction_id,
                 ir_simulation ? m_params.ignore_infrared : false }, m_params.sharpen };
       m_sharpened_data_holder
-          = gray_and_sharpened_data_cache.get_cached (p, progress, &m_gray_data_id);
+          = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
       if (!m_sharpened_data_holder)
         return false;
       m_sharpened_data = m_sharpened_data_holder->m_data;
@@ -477,7 +472,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
 
 /* Compute lookup table converting image_data to range 0...1 with GAMMA.  */
 bool
-render::get_lookup_tables (lookup_table_cache_t::cached_ptr *ret,
+render::get_lookup_tables (std::shared_ptr<luminosity_t[]> *ret,
                            luminosity_t gamma, const image_data *img,
                            progress_info *progress)
 {
@@ -487,27 +482,27 @@ render::get_lookup_tables (lookup_table_cache_t::cached_ptr *ret,
 
   if (!par.gamma)
     par.gamma_table = img->to_linear[0];
-  ret[0] = lookup_table_cache.get_cached (par, progress);
+  ret[0] = lookup_table_cache.get (par, progress);
   if (!ret[0])
     return false;
   if (par.gamma)
   {
     //We block copying to prevent accidental use.
     //ret[1] = ret[2] = ret[0];
-    ret[1] = lookup_table_cache.get_cached (par, progress);
-    ret[2] = lookup_table_cache.get_cached (par, progress);
+    ret[1] = lookup_table_cache.get (par, progress);
+    ret[2] = lookup_table_cache.get (par, progress);
   }
   else
     {
       par.gamma_table = img->to_linear[1];
-      ret[1] = lookup_table_cache.get_cached (par, progress);
+      ret[1] = lookup_table_cache.get (par, progress);
       if (!ret[1])
         {
           ret[0] = {};
           return false;
         }
       par.gamma_table = img->to_linear[2];
-      ret[2] = lookup_table_cache.get_cached (par, progress);
+      ret[2] = lookup_table_cache.get (par, progress);
       if (!ret[2])
         {
           ret[0] = {};
@@ -601,11 +596,11 @@ hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity
   return data;
 }
 
-render::image_layer_histogram_cache_t::cached_ptr
+std::shared_ptr<histogram>
 render::get_image_layer_histogram (progress_info *progress)
 {
   image_layer_histogram_params p = {m_gray_data_id, m_params.get_scan_crop (m_img.width, m_img.height), this};
-  return image_layer_histogram_cache.get_cached (p, progress);
+  return image_layer_histogram_cache.get (p, progress);
 }
 
 std::vector<uint64_t>

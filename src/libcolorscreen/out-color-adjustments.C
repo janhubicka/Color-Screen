@@ -6,7 +6,7 @@ namespace colorscreen
    Output lookup table takes linear r,g,b values in range 0...65536
    and outputs r,g,b values in sRGB gamma curve in range 0...maxval.  */
 
-precomputed_function<luminosity_t> *
+std::unique_ptr<precomputed_function<luminosity_t>>
 get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
 {
   std::vector<luminosity_t> lookup_table (
@@ -24,12 +24,11 @@ get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
               * maxval
           + (luminosity_t)0.5;
 
-  return new precomputed_function<luminosity_t> (
+  return std::make_unique<precomputed_function<luminosity_t>> (
       0, 1, lookup_table.data (),
       out_color_adjustments::out_lookup_table_size);
 }
 static lru_cache<out_lookup_table_params, precomputed_function<luminosity_t>,
-                 precomputed_function<luminosity_t> *,
                  get_new_out_lookup_table, 4>
     out_lookup_table_cache ("out lookup tables");
 
@@ -45,7 +44,7 @@ out_color_adjustments::precompute (
 
   out_lookup_table_params out_par
       = { m_dst_maxval, m_params.output_gamma };
-  m_out_lookup_table = out_lookup_table_cache.get_cached (out_par, progress);
+  m_out_lookup_table = out_lookup_table_cache.get (out_par, progress);
 
   color_matrix color;
 

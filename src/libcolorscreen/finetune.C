@@ -3780,10 +3780,10 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       int ext;
       if (sharpen_param.deconvolution_p ())
 	{
-	  mtf::mtf_cache_t::cached_ptr mtf = mtf::get_mtf (sharpen_param.scanner_mtf, NULL);
-	  if (!mtf->precompute ())
+	  std::shared_ptr<mtf> cur_mtf = mtf::get_mtf (sharpen_param.scanner_mtf, NULL);
+	  if (!cur_mtf->precompute ())
 	    return false;
-	  ext = mtf->psf_size ( sharpen_param.scanner_mtf_scale);
+	  ext = cur_mtf->psf_size ( sharpen_param.scanner_mtf_scale);
 	}
       else
 	ext = fir_blur::convolve_matrix_length (sharpen_param.usm_radius) / 2;
@@ -3953,7 +3953,7 @@ render_screen (image_data &img, scr_to_img_parameters &param,
   sharpen_parameters sharpen = rparam.sharpen;
   sharpen.usm_radius = rparam.screen_blur_radius * pixel_size;
   sharpen.scanner_mtf_scale *= pixel_size;
-  render_to_scr::screen_cache_t::cached_ptr scr = render_to_scr::get_screen (
+  std::shared_ptr<screen> scr = render_to_scr::get_screen (
       param.type, false,
       false,
       sharpen,

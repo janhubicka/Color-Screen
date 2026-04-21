@@ -709,9 +709,7 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
   sharpen_parameters sharpen = my_rparam.sharpen;
   sharpen.usm_radius = m_prj->pixel_size * my_rparam.screen_blur_radius;
   sharpen.scanner_mtf_scale *= m_prj->pixel_size;
-  if (m_prj->my_screen)
-    render_to_scr::release_screen (m_prj->my_screen);
-  m_prj->my_screen = render_to_scr::get_screen_raw (param.type, false,
+  m_prj->my_screen = render_to_scr::get_screen (param.type, false,
 						true, sharpen,
 					       	0, 0, progress);
   scr_to_img_map.set_parameters (param, *img, m_prj->rotation_adjustment);
@@ -772,14 +770,14 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
   if (dufay_like_screen_p (param.type))
     {
       dufay = new (analyze_dufay);
-      dufay->analyze (&render, img.get(), &scr_to_img_map, m_prj->my_screen, NULL, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
+      dufay->analyze (&render, img.get(), &scr_to_img_map, m_prj->my_screen.get(), NULL, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
       analyzer = (std::unique_ptr <analyze_base>) (dufay);
     }
   else
     {
       paget = new (analyze_paget);
       assert (!dufay_like_screen_p (detected.param.type));
-      paget->analyze (&render, img.get(), &scr_to_img_map, m_prj->my_screen, NULL, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
+      paget->analyze (&render, img.get(), &scr_to_img_map, m_prj->my_screen.get(), NULL, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
       analyzer = (std::unique_ptr <analyze_base>) (paget);
     }
   if (m_prj->params.max_contrast >= 0 && dufay_like_screen_p (param.type))
