@@ -46,11 +46,12 @@ test_matrix ()
   matrix2x2<double> m1 (1, 2, 3, 4);
   matrix2x2<double> m2 (5, 6, 7, 8);
   matrix<double, 2> mm = m1 * m2;
-  assert (mm.m_elements[0][0] == 19 && mm.m_elements[1][0] == 22
-          && mm.m_elements[0][1] == 43 && mm.m_elements[1][1] == 50);
+  /* Test that operator() works and points to the right elements.  */
+  assert (m1(0, 0) == 1 && m1(0, 1) == 2 && m1(1, 0) == 3 && m1(1, 1) == 4);
+  assert (mm.m_elements[0][0] == 19 && mm.m_elements[1][1] == 50);
+  assert (mm(0, 0) == 19 && mm(0, 1) == 22 && mm(1, 0) == 43 && mm(1, 1) == 50);
   mm = m1 * m1.invert ();
-  assert (mm.m_elements[0][0] == 1 && mm.m_elements[1][0] == 0
-          && mm.m_elements[0][1] == 0 && mm.m_elements[1][1] == 1);
+  assert (mm(0, 0) == 1 && mm(1, 0) == 0 && mm(0, 1) == 0 && mm(1, 1) == 1);
   matrix4x4<double> m;
 
   double xr, yr;
