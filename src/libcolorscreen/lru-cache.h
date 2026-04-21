@@ -8,6 +8,7 @@
 #include <shared_mutex>
 #include <type_traits>
 #include <include/progress-info.h>
+#include "include/dllpublic.h"
 
 namespace colorscreen
 {
@@ -28,7 +29,7 @@ public:
   }
 
 private:
-  static std::atomic_uint64_t time;
+  DLL_PUBLIC static std::atomic_uint64_t time;
 };
 extern class lru_caches lru_caches;
 
