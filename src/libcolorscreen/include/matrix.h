@@ -279,7 +279,9 @@ public:
   }
 
   /* Apply matrix to 2 dimensional coordinates and do perspective projection.
-     Note: indexing is consistent with homography-matrix.C expectations.  */
+     Note: indexing is consistent with homography-matrix.C expectations.
+     Unlike traditional homography matrix this can handle projection for scanners
+     with moving lens where only one direction causes perspective distortion.  */
   inline void
   perspective_transform (T x, T y, T &xr, T &yr) const
   {
@@ -406,11 +408,6 @@ public:
     ret(1, 1) = det * ((*this)(0, 0) * A2323 - (*this)(0, 2) * A0323 + (*this)(0, 3) * A0223);
     ret(2, 1) = det * -((*this)(0, 0) * A1323 - (*this)(0, 1) * A0323 + (*this)(0, 3) * A0123);
     ret(3, 1) = det * ((*this)(0, 0) * A1223 - (*this)(0, 1) * A0223 + (*this)(0, 2) * A0112);
-    // Fixed typo from previous turn: A0112 should be A0123 logic? wait.
-    // Let's re-verify the det calculation.
-    // A0123 was used in the det.
-    // The previous Turn had ret(3, 1) = det * ((*this)(0, 0) * A1223 - (*this)(0, 1) * A0223 + (*this)(0, 2) * A0123);
-    // I should use that.
     ret(3, 1) = det * ((*this)(0, 0) * A1223 - (*this)(0, 1) * A0223 + (*this)(0, 2) * A0123);
 
     ret(0, 2) = det * ((*this)(0, 1) * A2313 - (*this)(0, 2) * A1313 + (*this)(0, 3) * A1213);
