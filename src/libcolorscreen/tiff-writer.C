@@ -106,14 +106,14 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
       TIFFMergeFieldInfo (out, tiffFields, sizeof (tiffFields) / sizeof (TIFFFieldInfo));
       long white[] = {0xffff, 0xffff, 0xffff, 0xffff};
       float forward_matrix[] = {
-        (float)p.dye_to_xyz.m_elements[0][0], (float)p.dye_to_xyz.m_elements[1][0], (float)p.dye_to_xyz.m_elements[2][0],
-        (float)p.dye_to_xyz.m_elements[0][1], (float)p.dye_to_xyz.m_elements[1][1], (float)p.dye_to_xyz.m_elements[2][1],
-        (float)p.dye_to_xyz.m_elements[0][2], (float)p.dye_to_xyz.m_elements[1][2], (float)p.dye_to_xyz.m_elements[2][2]};
+        (float)p.dye_to_xyz(0, 0), (float)p.dye_to_xyz(0, 1), (float)p.dye_to_xyz(0, 2),
+        (float)p.dye_to_xyz(1, 0), (float)p.dye_to_xyz(1, 1), (float)p.dye_to_xyz(1, 2),
+        (float)p.dye_to_xyz(2, 0), (float)p.dye_to_xyz(2, 1), (float)p.dye_to_xyz(2, 2)};
       color_matrix m = p.dye_to_xyz.invert ();
       float cam_xyz[] = {
-        (float)m.m_elements[0][0], (float)m.m_elements[1][0], (float)m.m_elements[2][0],
-        (float)m.m_elements[0][1], (float)m.m_elements[1][1], (float)m.m_elements[2][1],
-        (float)m.m_elements[0][2], (float)m.m_elements[1][2], (float)m.m_elements[2][2]};
+        (float)m(0, 0), (float)m(0, 1), (float)m(0, 2),
+        (float)m(1, 0), (float)m(1, 1), (float)m(1, 2),
+        (float)m(2, 0), (float)m(2, 1), (float)m(2, 2)};
       ///*= { /*0.807133, 1.0, 0.913289*/ };
       //luminosity_t n0, n1, n2;
       //p.dye_to_xyz.apply_to_rgb (1,1,1, &n0, &n1, &n2);

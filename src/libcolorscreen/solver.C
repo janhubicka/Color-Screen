@@ -143,9 +143,9 @@ solver (scr_to_img_parameters *param, image_data &img_data,
 
       for (int i = 0; i < 3; i++)
 	for (int j = 0; j < 3; j++)
-	  gsl_matrix_set (A, i, j, h.m_elements[j][i]);
+	  gsl_matrix_set (A, i, j, h(i, j));
       /* h is 4x4 and Y shift is in the last row.  */
-      gsl_matrix_set (A, 1, 2, h.m_elements[3][1]);
+      gsl_matrix_set (A, 1, 2, h(1, 3));
 
       print_matrix (stdout, "A", A);
       gsl_matrix_swap_rows (A, 0, 2);

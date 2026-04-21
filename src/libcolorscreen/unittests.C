@@ -48,7 +48,7 @@ test_matrix ()
   matrix<double, 2> mm = m1 * m2;
   /* Test that operator() works and points to the right elements.  */
   assert (m1(0, 0) == 1 && m1(0, 1) == 2 && m1(1, 0) == 3 && m1(1, 1) == 4);
-  assert (mm.m_elements[0][0] == 19 && mm.m_elements[1][1] == 50);
+  assert (mm(0, 0) == 19 && mm(1, 1) == 50);
   assert (mm(0, 0) == 19 && mm(0, 1) == 22 && mm(1, 0) == 43 && mm(1, 1) == 50);
   mm = m1 * m1.invert ();
   assert (mm(0, 0) == 1 && mm(1, 0) == 0 && mm(0, 1) == 0 && mm(1, 1) == 1);
@@ -75,7 +75,7 @@ test_matrix ()
   matrix<double, 4> mm3 = mm1 * mm2;
   for (int i = 0; i < 4; i++)
     for (int j = 0; j < 4; j++)
-      if (fabs (mm3.m_elements[i][j] - (double)(i == j)) > 0.0001)
+      if (fabs (mm3(j, i) - (double)(i == j)) > 0.0001)
         {
           mm3.print (stderr);
           abort ();
@@ -85,7 +85,7 @@ test_matrix ()
   matrix<double, 3> mm6 = mm4 * mm5;
   for (int i = 0; i < 3; i++)
     for (int j = 0; j < 3; j++)
-      if (fabs (mm6.m_elements[i][j] - (double)(i == j)) > 0.0001)
+      if (fabs (mm6(j, i) - (double)(i == j)) > 0.0001)
         {
           mm6.print (stderr);
           abort ();

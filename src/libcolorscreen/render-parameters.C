@@ -588,21 +588,21 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
       xyz backlight_white = s.whitepoint_xyz ();
       if (dye_density.red != 1)
 	{
-	  dyes.m_elements[0][0] = my_pow (dyes.m_elements[0][0], dye_density.red);
-	  dyes.m_elements[0][1] = my_pow (dyes.m_elements[0][1], dye_density.red);
-	  dyes.m_elements[0][2] = my_pow (dyes.m_elements[0][2], dye_density.red);
+	  dyes(0, 0) = my_pow (dyes(0, 0), dye_density.red);
+	  dyes(1, 0) = my_pow (dyes(1, 0), dye_density.red);
+	  dyes(2, 0) = my_pow (dyes(2, 0), dye_density.red);
 	}
       if (dye_density.green != 1)
 	{
-	  dyes.m_elements[0][0] = my_pow (dyes.m_elements[0][0], dye_density.green);
-	  dyes.m_elements[0][1] = my_pow (dyes.m_elements[0][1], dye_density.green);
-	  dyes.m_elements[0][2] = my_pow (dyes.m_elements[0][2], dye_density.green);
+	  dyes(0, 0) = my_pow (dyes(0, 0), dye_density.green);
+	  dyes(1, 0) = my_pow (dyes(1, 0), dye_density.green);
+	  dyes(2, 0) = my_pow (dyes(2, 0), dye_density.green);
 	}
       if (dye_density.blue != 1)
 	{
-	  dyes.m_elements[0][0] = my_pow (dyes.m_elements[0][0], dye_density.blue);
-	  dyes.m_elements[0][1] = my_pow (dyes.m_elements[0][1], dye_density.blue);
-	  dyes.m_elements[0][2] = my_pow (dyes.m_elements[0][2], dye_density.blue);
+	  dyes(0, 0) = my_pow (dyes(0, 0), dye_density.blue);
+	  dyes(1, 0) = my_pow (dyes(1, 0), dye_density.blue);
+	  dyes(2, 0) = my_pow (dyes(2, 0), dye_density.blue);
 	}
 	
       //printf (" Dye :");
@@ -690,7 +690,7 @@ render_parameters::get_balanced_dyes_matrix (const image_data *img, bool normali
 	    if (dye_whitepoint.y > 0)
 	      {
 	        dyes = dyes * (1/dye_whitepoint.y);
-		dyes.m_elements[3][3] = 1;
+		dyes(3, 3) = 1;
 	      }
 	    break;
 
@@ -713,9 +713,9 @@ render_parameters::get_balanced_dyes_matrix (const image_data *img, bool normali
 	    for (int i = 0; i < 4; i++)
 	      {
 		xyz white = observer_whitepoint;
-		dyes.m_elements[i][0] *= white.x / dye_whitepoint.x;
-		dyes.m_elements[i][1] *= white.y / dye_whitepoint.y;
-		dyes.m_elements[i][2] *= white.z / dye_whitepoint.z;
+		dyes(0, i) *= white.x / dye_whitepoint.x;
+		dyes(1, i) *= white.y / dye_whitepoint.y;
+		dyes(2, i) *= white.z / dye_whitepoint.z;
 	      }
 	    break;
 	  default:
@@ -793,9 +793,9 @@ render_parameters::get_icc_profile (void **buffer, image_data *img, bool normali
 {
   // TODO: Handle patch proportions right
   color_matrix dyes = get_rgb_to_xyz_matrix (img, normalized_patches, {1/3.0,1/3.0,1/3.0});
-  xyz r = {dyes.m_elements[0][0], dyes.m_elements[0][1], dyes.m_elements[0][2]};
-  xyz g = {dyes.m_elements[1][0], dyes.m_elements[1][1], dyes.m_elements[1][2]};
-  xyz b = {dyes.m_elements[2][0], dyes.m_elements[2][1], dyes.m_elements[2][2]};
+  xyz r = {dyes(0, 0), dyes(1, 0), dyes(2, 0)};
+  xyz g = {dyes(0, 1), dyes(1, 1), dyes(2, 1)};
+  xyz b = {dyes(0, 2), dyes(1, 2), dyes(2, 2)};
   return create_profile(color_model_properties[color_model].name, r, g, b, observer_whitepoint, output_gamma, buffer);
 }
 

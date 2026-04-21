@@ -34,27 +34,27 @@ public:
        0  cx    -sx
       -sy cy*sx  cy*cx
        We want to rotate plane with center in 0 and stretch the rest.  */
-    m_elements[0][0] = cy;
-    m_elements[1][0] = sy * sx;
-    m_elements[2][0] = 0;
-    m_elements[3][0] = 0;
-    m_elements[0][1] = 0;
-    m_elements[1][1] = cx;
-    m_elements[2][1] = 0;
-    m_elements[3][1] = 0;
-    m_elements[0][2] = -sy;
-    m_elements[1][2] = cy * sx;
-    m_elements[2][2] = distance;
-    m_elements[3][2] = 0;
-    m_elements[0][3] = -sy;
-    m_elements[1][3] = cy * sx;
-    m_elements[2][3] = 0;
-    m_elements[3][3] = distance;
+    (*this)(0, 0) = cy;
+    (*this)(0, 1) = sy * sx;
+    (*this)(0, 2) = 0;
+    (*this)(0, 3) = 0;
+    (*this)(1, 0) = 0;
+    (*this)(1, 1) = cx;
+    (*this)(1, 2) = 0;
+    (*this)(1, 3) = 0;
+    (*this)(2, 0) = -sy;
+    (*this)(2, 1) = cy * sx;
+    (*this)(2, 2) = distance;
+    (*this)(2, 3) = 0;
+    (*this)(3, 0) = -sy;
+    (*this)(3, 1) = cy * sx;
+    (*this)(3, 2) = 0;
+    (*this)(3, 3) = distance;
     /* Disable perspective corrections along the lens movement axis.  */
     if (type == lens_move_horisontally)
-      m_elements[0][2] = 0, m_elements[1][2] = 0 /*, m_elements[2][2]=1*/;
+      (*this)(2, 0) = 0, (*this)(2, 1) = 0 /*, (*this)(2, 2)=1*/;
     if (type == lens_move_vertically)
-      m_elements[0][3] = 0, m_elements[1][3] = 0 /*, m_elements[3][3]=1*/;
+      (*this)(3, 0) = 0, (*this)(3, 1) = 0 /*, (*this)(3, 3)=1*/;
   }
 };
 
@@ -64,8 +64,8 @@ class translation_3x3matrix : public matrix3x3<coord_t>
 public:
   translation_3x3matrix (point_t center)
   {
-    m_elements[2][0] = center.x;
-    m_elements[2][1] = center.y;
+    (*this)(0, 2) = center.x;
+    (*this)(1, 2) = center.y;
   }
 };
 
@@ -75,10 +75,10 @@ class change_of_basis_3x3matrix : public matrix3x3<coord_t>
 public:
   change_of_basis_3x3matrix (point_t c1, point_t c2)
   {
-    m_elements[0][0] = c1.x;
-    m_elements[1][0] = c2.x;
-    m_elements[0][1] = c1.y;
-    m_elements[1][1] = c2.y;
+    (*this)(0, 0) = c1.x;
+    (*this)(0, 1) = c2.x;
+    (*this)(1, 0) = c1.y;
+    (*this)(1, 1) = c2.y;
   }
 };
 
@@ -90,8 +90,8 @@ public:
     rotation *= M_PI / 180;
     double s = sin (rotation);
     double c = cos (rotation);
-    m_elements[0][0] = c; m_elements[1][0] = -s;
-    m_elements[0][1] = s; m_elements[1][1] = c;
+    (*this)(0, 0) = c; (*this)(0, 1) = -s;
+    (*this)(1, 0) = s; (*this)(1, 1) = c;
   }
 };
 

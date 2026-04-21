@@ -29,10 +29,10 @@ class translation_scale_matrix : public trans_4d_matrix
 public:
   translation_scale_matrix (coord_t tx, coord_t ty, coord_t s)
   {
-    m_elements[0][0] = s; m_elements[1][0] = 0; m_elements[2][0] = s * tx; m_elements[3][0] = 0;
-    m_elements[0][1] = 0; m_elements[1][1] = s; m_elements[2][1] = s * ty; m_elements[3][1] = 0;
-    m_elements[0][2] = 0; m_elements[1][2] = 0; m_elements[2][2] = 1;      m_elements[3][2] = 0;
-    m_elements[0][3] = 0; m_elements[1][3] = 0; m_elements[2][3] = 0;      m_elements[3][3] = 1;
+    (*this)(0, 0) = s; (*this)(0, 1) = 0; (*this)(0, 2) = s * tx; (*this)(0, 3) = 0;
+    (*this)(1, 0) = 0; (*this)(1, 1) = s; (*this)(1, 2) = s * ty; (*this)(1, 3) = 0;
+    (*this)(2, 0) = 0; (*this)(2, 1) = 0; (*this)(2, 2) = 1;      (*this)(2, 3) = 0;
+    (*this)(3, 0) = 0; (*this)(3, 1) = 0; (*this)(3, 2) = 0;      (*this)(3, 3) = 1;
   }
 };
 
@@ -238,92 +238,92 @@ solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type,
     std::swap (ts, td);
   if (!(flags & homography::solve_vertical_strips))
     {
-      ret.m_elements[0][0] = gsl_vector_get (v, 0);
-      ret.m_elements[1][0] = gsl_vector_get (v, 1);
-      ret.m_elements[2][0] = gsl_vector_get (v, 2);
-      ret.m_elements[3][0] = 0;
+      ret(0, 0) = gsl_vector_get (v, 0);
+      ret(0, 1) = gsl_vector_get (v, 1);
+      ret(0, 2) = gsl_vector_get (v, 2);
+      ret(0, 3) = 0;
 
-      ret.m_elements[0][1] = gsl_vector_get (v, 3);
-      ret.m_elements[1][1] = gsl_vector_get (v, 4);
-      ret.m_elements[2][1] = 0;
-      ret.m_elements[3][1] = gsl_vector_get (v, 5);
+      ret(1, 0) = gsl_vector_get (v, 3);
+      ret(1, 1) = gsl_vector_get (v, 4);
+      ret(1, 2) = 0;
+      ret(1, 3) = gsl_vector_get (v, 5);
 
       if ((flags & (homography::solve_rotation) && type != lens_move_horisontally)
 	  || (flags & homography::solve_free_rotation))
 	{
-	  ret.m_elements[0][2] = gsl_vector_get (v, 6);
-	  ret.m_elements[1][2] = gsl_vector_get (v, 7);
+	  ret(2, 0) = gsl_vector_get (v, 6);
+	  ret(2, 1) = gsl_vector_get (v, 7);
 	}
       else
 	{
-	  ret.m_elements[0][2] = 0;
-	  ret.m_elements[1][2] = 0;
+	  ret(2, 0) = 0;
+	  ret(2, 1) = 0;
 	}
-      ret.m_elements[2][2] = 1;
-      ret.m_elements[3][2] = 0;
+      ret(2, 2) = 1;
+      ret(2, 3) = 0;
 
       if (flags & homography::solve_free_rotation)
 	{
-	  ret.m_elements[0][3] = gsl_vector_get (v, 8);
-	  ret.m_elements[1][3] = gsl_vector_get (v, 9);
+	  ret(3, 0) = gsl_vector_get (v, 8);
+	  ret(3, 1) = gsl_vector_get (v, 9);
 	}
       else if ((flags & homography::solve_rotation)
 	       && type != lens_move_vertically)
 	{
-	  ret.m_elements[0][3] = gsl_vector_get (v, 6);
-	  ret.m_elements[1][3] = gsl_vector_get (v, 7);
+	  ret(3, 0) = gsl_vector_get (v, 6);
+	  ret(3, 1) = gsl_vector_get (v, 7);
 	}
       else
 	{
-	  ret.m_elements[0][3] = 0;
-	  ret.m_elements[1][3] = 0;
+	  ret(3, 0) = 0;
+	  ret(3, 1) = 0;
 	}
-      ret.m_elements[2][3] = 0;
-      ret.m_elements[3][3] = 1;
+      ret(3, 2) = 0;
+      ret(3, 3) = 1;
     }
   else
     {
-      ret.m_elements[0][0] = gsl_vector_get (v, 0);
-      ret.m_elements[1][0] = gsl_vector_get (v, 1);
-      ret.m_elements[2][0] = gsl_vector_get (v, 2);
-      ret.m_elements[3][0] = 0;
+      ret(0, 0) = gsl_vector_get (v, 0);
+      ret(0, 1) = gsl_vector_get (v, 1);
+      ret(0, 2) = gsl_vector_get (v, 2);
+      ret(0, 3) = 0;
 
       /* Make y coordiate orthogonal and 1/3th of length of x coordinate.
          Length of this affect the size of "squares" used by interpolation
 	 algorithms.  Since there are 3 strips per period we want to have
          y 1/3 of length. */
-      ret.m_elements[0][1] = -gsl_vector_get (v, 1) * 3;
-      ret.m_elements[1][1] = gsl_vector_get (v, 0) * 3;
-      ret.m_elements[2][1] = 0;
-      ret.m_elements[3][1] = 0;
+      ret(1, 0) = -gsl_vector_get (v, 1) * 3;
+      ret(1, 1) = gsl_vector_get (v, 0) * 3;
+      ret(1, 2) = 0;
+      ret(1, 3) = 0;
 
       if ((flags & homography::solve_free_rotation)
 	  || (flags & homography::solve_rotation))
 	{
-	  ret.m_elements[0][2] = gsl_vector_get (v, 3);
-	  ret.m_elements[1][2] = gsl_vector_get (v, 4);
+	  ret(2, 0) = gsl_vector_get (v, 3);
+	  ret(2, 1) = gsl_vector_get (v, 4);
 	}
       else
 	{
-	  ret.m_elements[0][2] = 0;
-	  ret.m_elements[1][2] = 0;
+	  ret(2, 0) = 0;
+	  ret(2, 1) = 0;
 	}
-      ret.m_elements[2][2] = 1;
-      ret.m_elements[3][2] = 0;
+      ret(2, 2) = 1;
+      ret(2, 3) = 0;
 
       if ((flags & homography::solve_free_rotation)
 	  || (flags & homography::solve_rotation))
 	{
-	  ret.m_elements[0][3] = gsl_vector_get (v, 3);
-	  ret.m_elements[1][3] = gsl_vector_get (v, 4);
+	  ret(3, 0) = gsl_vector_get (v, 3);
+	  ret(3, 1) = gsl_vector_get (v, 4);
 	}
       else
 	{
-	  ret.m_elements[0][3] = 0;
-	  ret.m_elements[1][3] = 0;
+	  ret(3, 0) = 0;
+	  ret(3, 1) = 0;
 	}
-      ret.m_elements[2][3] = 0;
-      ret.m_elements[3][3] = 1;
+      ret(3, 2) = 0;
+      ret(3, 3) = 1;
       //fprintf (stdout, "Inverse homography\n");
       //ret.print (stdout);
       //fprintf (stdout, "Homography\n");
@@ -341,17 +341,17 @@ solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type,
       //ret.print (stdout);
 
   /* Make things prettier. There is a redundancy between thrid and 4th column.  */
-  ret.m_elements[2][0] += ret.m_elements[3][0];
-  ret.m_elements[3][0] = 0;
-  ret.m_elements[3][1] += ret.m_elements[2][1];
-  ret.m_elements[2][1] = 0;
-  ret.m_elements[2][2] += ret.m_elements[3][2];
-  ret.m_elements[3][2] = 0;
-  ret.m_elements[3][3] += ret.m_elements[2][3];
-  ret.m_elements[2][3] = 0;
+  ret(0, 2) += ret(0, 3);
+  ret(0, 3) = 0;
+  ret(1, 3) += ret(1, 2);
+  ret(1, 2) = 0;
+  ret(2, 2) += ret(2, 3);
+  ret(2, 3) = 0;
+  ret(3, 3) += ret(3, 2);
+  ret(3, 2) = 0;
   for (int x = 0; x < 4; x++)
     for (int y = 0; y < 4; y++)
-      ret.m_elements[x][y] /= ret.m_elements[3][3];
+      ret(y, x) /= ret(3, 3);
   //fprintf (stdout, "Pretty homography\n");
   //ret.print (stdout);
   return ret;

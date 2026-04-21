@@ -73,20 +73,20 @@ color_solver
   void
   init_by_matrix (color_matrix &m)
   {
-    start[0] = m.m_elements[0][0]; start[1] = m.m_elements[1][0]; start[2] = m.m_elements[2][0];
-    start[3] = m.m_elements[0][1]; start[4] = m.m_elements[1][1]; start[5] = m.m_elements[2][1];
-    start[6] = m.m_elements[0][2]; start[7] = m.m_elements[1][2]; start[8] = m.m_elements[2][2];
+    start[0] = m(0, 0); start[1] = m(0, 1); start[2] = m(0, 2);
+    start[3] = m(1, 0); start[4] = m(1, 1); start[5] = m(1, 2);
+    start[6] = m(2, 0); start[7] = m(2, 1); start[8] = m(2, 2);
     if (dark_point_elts == 1)
       {
-        start[9] = m.m_elements[3][0];
+        start[9] = m(0, 3);
 	start[10] = 0;
 	start[11] = 0;
       }
     else if (dark_point_elts == 3)
       {
-	start[9]  = m.m_elements[3][0];
-	start[10]  = m.m_elements[3][1];
-	start[11] = m.m_elements[3][2];
+	start[9]  = m(0, 3);
+	start[10]  = m(1, 3);
+	start[11] = m(2, 3);
       }
     else if (dark_point_elts == 0)
       {
@@ -516,23 +516,23 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img,
          range 0...1  */
       for (int i = 0; i < 4; i++)
         for (int j = 0; j < 3; j++)
-          if (!(c.m_elements[i][j] > -10000 && c.m_elements[i][j] < 10000))
+          if (!(c(j, i) > -10000 && c(j, i) < 10000))
             return false;
       color_matrix ci = c.invert ();
       rparam.profiled_dark
-          = { ci.m_elements[3][0], ci.m_elements[3][1], ci.m_elements[3][2] };
+          = { ci(0, 3), ci(1, 3), ci(2, 3) };
 
       /* Now obtain scanner response to process red, green and blue.  */
-      c.m_elements[3][0] = 0;
-      c.m_elements[3][1] = 0;
-      c.m_elements[3][2] = 0;
+      c(0, 3) = 0;
+      c(1, 3) = 0;
+      c(2, 3) = 0;
       c = c.invert ();
       rparam.profiled_red
-          = { c.m_elements[0][0], c.m_elements[0][1], c.m_elements[0][2] };
+          = { c(0, 0), c(1, 0), c(2, 0) };
       rparam.profiled_green
-          = { c.m_elements[1][0], c.m_elements[1][1], c.m_elements[1][2] };
+          = { c(0, 1), c(1, 1), c(2, 1) };
       rparam.profiled_blue
-          = { c.m_elements[2][0], c.m_elements[2][1], c.m_elements[2][2] };
+          = { c(0, 2), c(1, 2), c(2, 2) };
 
       if (verbose)
         {
