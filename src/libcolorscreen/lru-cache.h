@@ -5,6 +5,7 @@
 #include <atomic>
 #include <memory>
 #include <condition_variable>
+#include <shared_mutex>
 #include <type_traits>
 #include <include/progress-info.h>
 namespace colorscreen
@@ -29,15 +30,15 @@ extern class lru_caches lru_caches;
 
 /* LRU cache used keep various data between invocations of renderers.
    P represents parameters which are used to produce T.
-   get_new is a function computing T based on P.  It is expected to
-   allocate memory via new and lru_cache will eventually delete it.
+   get_new is a function computing T based on P. It is expected to
+   allocate memory via std::unique_ptr and lru_cache will manage it.
 
    Synchronization Model:
-   The cache uses a combination of a global lock (std::timed_mutex) and per-entry
+   The cache uses a combination of a global lock (std::shared_timed_mutex) and per-entry
    state ("computing" flag) to ensure thread-safety while maximizing concurrency.
 
    1. Lock Granularity: The global "lock" protects the integrity of the linked list
-      ("entries") and metadata (nuses, last_used, id).
+      ("entries") and metadata (last_used, id).
 
    2. Non-blocking Computation: To prevent the cache from stalling the entire
       application during a long "get_new" call, the implementation:
@@ -60,6 +61,7 @@ extern class lru_caches lru_caches;
         - Task Cancellation: All wait loops (both for the global lock and the
           condition variable) periodically wake up (333ms) to check if the
           caller has requested task cancellation via the "progress" object.  */
+
 template <typename P, typename T,
           std::unique_ptr<T> get_new (P &, progress_info *progress), int base_cache_size>
 class lru_cache
@@ -86,12 +88,10 @@ public:
   void
   prune ()
   {
-    std::lock_guard<std::timed_mutex> guard (lock);
+    std::unique_lock<std::shared_timed_mutex> guard (lock);
     struct cache_entry **e;
     for (e = &entries; *e;)
       {
-        // If use_count == 1, only the cache entry holds a reference to it.
-        // It means no other part of the application is using it.
         if ((*e)->val.use_count() <= 1 && !(*e)->computing)
           {
             if (verbose)
@@ -115,23 +115,40 @@ public:
   void
   increase_capacity (int n)
   {
-    std::lock_guard<std::timed_mutex> guard (lock);
+    std::unique_lock<std::shared_timed_mutex> guard (lock);
     cache_size = n * base_cache_size;
   }
 
-  /* Get T for parameters P; do caching.
-     If ID is non-NULL initialize it to the unique identifier of the cached
-     data.  */
+  struct ComputingGuard
+  {
+    bool &flag;
+    std::shared_timed_mutex &mutex;
+    std::condition_variable_any &cond;
+    bool active;
+    ComputingGuard(bool &f, std::shared_timed_mutex &m, std::condition_variable_any &c)
+      : flag(f), mutex(m), cond(c), active(true) {}
+    ~ComputingGuard() {
+      if (active)
+        {
+          std::unique_lock<std::shared_timed_mutex> guard (mutex);
+          flag = false;
+          cond.notify_all();
+        }
+    }
+    void finished() { active = false; }
+  };
+
   std::shared_ptr<T>
   get (P &p, progress_info *progress, uint64_t *id = NULL)
   {
-    int size = 0;
     uint64_t time = lru_caches::get ();
     struct cache_entry *longest_unused = NULL, *e;
+    int size = 0;
 
     if (progress)
       progress->wait ("unlocking cache");
-    std::unique_lock<std::timed_mutex> guard (lock, std::defer_lock);
+
+    std::unique_lock<std::shared_timed_mutex> guard (lock, std::defer_lock);
     while (!guard.try_lock_for (std::chrono::milliseconds (333)))
       {
         if (progress && progress->cancel_requested ())
@@ -148,8 +165,8 @@ public:
           {
             while (e->computing)
               {
-                uint64_t id = e->id;
-		if (progress && e->computing)
+                uint64_t id_val = e->id;
+		if (progress)
 		  progress->wait ("waiting for other thread to finish computation");
                 if (cond.wait_for (guard, std::chrono::milliseconds (333))
                     == std::cv_status::timeout)
@@ -159,7 +176,7 @@ public:
                   }
                 bool found = false;
                 for (struct cache_entry *e2 = entries; e2; e2 = e2->next)
-                  if (e2 == e && e2->id == id)
+                  if (e2 == e && e2->id == id_val)
                     {
                       found = true;
                       break;
@@ -176,49 +193,47 @@ public:
               *id = e->id;
             return ret;
           }
-        // Identifies an unused item (use_count == 1) to be evicted
         if (e->val.use_count() <= 1 && !e->computing
             && (!longest_unused || longest_unused->last_used < e->last_used))
           longest_unused = e;
         size++;
       }
+
     if (size >= cache_size && longest_unused)
       {
         e = longest_unused;
         if (verbose)
           fprintf (stderr, "Cache %s: deleting id %i\n", name, (int)e->id);
-        e->val = nullptr; // Note: resetting the shared_ptr drops the previous value
+        e->val = nullptr;
       }
     else
       {
-        if (debug && size >= cache_size)
-          fprintf (stderr, "Cache %s is over capacity: %i %i\n", name,
-                   size + 1, cache_size);
         e = new cache_entry;
-        if (!e)
-          {
-            return nullptr;
-          }
         e->next = entries;
         entries = e;
       }
+
     e->params = p;
     e->computing = true;
     e->id = time;
     e->last_used = time;
     
     guard.unlock ();
-    std::unique_ptr<T> val = get_new (e->params, progress);
-    guard.lock ();
-
-    e->val = std::move(val);
-    e->computing = false;
+    std::shared_ptr<T> ret_val;
+    {
+      ComputingGuard cguard(e->computing, lock, cond);
+      std::unique_ptr<T> val = get_new (e->params, progress);
+      guard.lock ();
+      e->val = std::move(val);
+      e->computing = false;
+      ret_val = e->val;
+      cguard.finished();
+    }
     cond.notify_all ();
 
-    std::shared_ptr<T> ret = e->val;
     if (id)
       *id = e->id;
-    if (!ret)
+    if (!ret_val)
       {
         for (cache_entry **e2 = &entries;; e2 = &(*e2)->next)
           if (*e2 == e)
@@ -228,24 +243,23 @@ public:
               break;
             }
       }
-    if (verbose)
+    if (verbose && ret_val)
       fprintf (stderr, "Cache %s: added id %i size %i\n", name, (int)e->id,
                (int)size);
-    return ret;
+    return ret_val;
   }
-
-
 
 private:
   int cache_size;
-  std::timed_mutex lock; std::condition_variable_any cond;
+  std::shared_timed_mutex lock;
+  std::condition_variable_any cond;
   const char *name;
 };
 
 /* LRU tile cache used keep various data between invocations of renderers.
    P represents parameters which are used to produce T.
-   get_new is a function computing T based on P.  It is expected to
-   allocate memory via new and lru_cache will eventually delete it.  
+   get_new is a function computing T based on P. It is expected to
+   allocate memory via std::unique_ptr and lru_cache will manage it.
 
    The synchronization model and race condition prevention is identical to lru_cache class. */
 template <typename P, typename T,
@@ -277,7 +291,7 @@ public:
   void
   prune ()
   {
-    std::lock_guard<std::timed_mutex> guard (lock);
+    std::unique_lock<std::shared_timed_mutex> guard (lock);
     struct cache_entry **e;
     for (e = &entries; *e;)
       {
@@ -304,28 +318,47 @@ public:
   void
   increase_capacity (int n)
   {
-    std::lock_guard<std::timed_mutex> guard (lock);
+    std::unique_lock<std::shared_timed_mutex> guard (lock);
     cache_size = n * base_cache_size;
   }
 
-  /* Get T for parameters P; do caching.
-     If ID is non-NULL initialize it to the unique identifier of the cached
-     data.  */
+  struct ComputingGuard
+  {
+    bool &flag;
+    std::shared_timed_mutex &mutex;
+    std::condition_variable_any &cond;
+    bool active;
+    ComputingGuard(bool &f, std::shared_timed_mutex &m, std::condition_variable_any &c)
+      : flag(f), mutex(m), cond(c), active(true) {}
+    ~ComputingGuard() {
+      if (active)
+        {
+          std::unique_lock<std::shared_timed_mutex> guard (mutex);
+          flag = false;
+          cond.notify_all();
+        }
+    }
+    void finished() { active = false; }
+  };
+
   std::shared_ptr<T>
   get (P &p, int xshift, int yshift, int width, int height,
        progress_info *progress, uint64_t *id = NULL)
   {
-    int size = 0;
     uint64_t time = lru_caches::get ();
     struct cache_entry *longest_unused = NULL, *e;
+    int size = 0;
+
     if (progress)
       progress->wait ("unlocking cache");
-    std::unique_lock<std::timed_mutex> guard (lock, std::defer_lock);
+
+    std::unique_lock<std::shared_timed_mutex> guard (lock, std::defer_lock);
     while (!guard.try_lock_for (std::chrono::milliseconds (333)))
       {
         if (progress && progress->cancel_requested ())
           return NULL;
       }
+    
     time++;
   restart:
     size = 0;
@@ -338,8 +371,8 @@ public:
           {
             while (e->computing)
               {
-                uint64_t id = e->id;
-		if (progress && e->computing)
+                uint64_t id_val = e->id;
+		if (progress)
 		  progress->wait ("waiting for other thread to finish computation");
                 if (cond.wait_for (guard, std::chrono::milliseconds (333))
                     == std::cv_status::timeout)
@@ -349,7 +382,7 @@ public:
                   }
                 bool found = false;
                 for (struct cache_entry *e2 = entries; e2; e2 = e2->next)
-                  if (e2 == e && e2->id == id)
+                  if (e2 == e && e2->id == id_val)
                     {
                       found = true;
                       break;
@@ -371,6 +404,7 @@ public:
           longest_unused = e;
         size++;
       }
+
     if (size >= cache_size && longest_unused)
       {
         e = longest_unused;
@@ -380,17 +414,11 @@ public:
       }
     else
       {
-        if (debug && size >= cache_size)
-          fprintf (stderr, "Cache %s is over capacity: %i %i\n", name,
-                   size + 1, cache_size);
         e = new cache_entry;
-        if (!e)
-          {
-            return nullptr;
-          }
         e->next = entries;
         entries = e;
       }
+
     e->params = p;
     e->xshift = xshift;
     e->yshift = yshift;
@@ -401,17 +429,21 @@ public:
     e->last_used = time;
 
     guard.unlock ();
-    std::unique_ptr<T> val = get_new (e->params, xshift, yshift, width, height, progress);
-    guard.lock ();
-
-    e->val = std::move(val);
-    e->computing = false;
+    std::shared_ptr<T> ret_val;
+    {
+      ComputingGuard cguard(e->computing, lock, cond);
+      std::unique_ptr<T> val = get_new (e->params, xshift, yshift, width, height, progress);
+      guard.lock ();
+      e->val = std::move(val);
+      e->computing = false;
+      ret_val = e->val;
+      cguard.finished();
+    }
     cond.notify_all ();
 
-    std::shared_ptr<T> ret = e->val;
     if (id)
       *id = e->id;
-    if (!ret)
+    if (!ret_val)
       {
         for (cache_entry **e2 = &entries;; e2 = &(*e2)->next)
           if (*e2 == e)
@@ -421,17 +453,16 @@ public:
               break;
             }
       }
-    if (verbose)
+    if (verbose && ret_val)
       fprintf (stderr, "Cache %s: added id %i size %i\n", name, (int)e->id,
                (int)size);
-    return ret;
+    return ret_val;
   }
-
-
 
 private:
   int cache_size;
-  std::timed_mutex lock; std::condition_variable_any cond;
+  std::shared_timed_mutex lock;
+  std::condition_variable_any cond;
   const char *name;
 };
 
