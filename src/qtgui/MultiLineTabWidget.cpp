@@ -114,6 +114,13 @@ QWidget *MultiLineTabWidget::widget(int index) const
     return nullptr;
 }
 
+void MultiLineTabWidget::setTabToolTip(int index, const QString &tooltip)
+{
+    if (index >= 0 && index < m_tabs.size()) {
+        m_tabs[index].button->setToolTip(tooltip);
+    }
+}
+
 void MultiLineTabWidget::onTabClicked(int id)
 {
     if (id >= 0 && id < m_tabs.size()) {

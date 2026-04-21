@@ -22,6 +22,7 @@ public:
     void setCurrentIndex(int index);
     int currentIndex() const;
     QWidget *widget(int index) const;
+    void setTabToolTip(int index, const QString &tooltip);
 
 signals:
     void currentChanged(int index);

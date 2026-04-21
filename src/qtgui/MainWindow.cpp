@@ -678,6 +678,16 @@ void MainWindow::setupUi() {
   m_configTabs->addTab(m_colorPanel, "Color");
   m_configTabs->addTab(m_profilePanel, "Profile");
 
+  m_configTabs->setTabToolTip(0, "Configure demosaicking, resolution, sensor parameters, and image gamma.");
+  m_configTabs->setTabToolTip(1, "Manage per-tile adjustments (exposure, dark point) for stitched images.");
+  m_configTabs->setTabToolTip(2, "Configure sharpening algorithms (Wiener, Richardson-Lucy, USM) and MTF models.");
+  m_configTabs->setTabToolTip(3, "Configure simulated mixing and layer-based adjustments (infrared, dark area).");
+  m_configTabs->setTabToolTip(4, "Simulate photographic contact printing on glass plate emulsions using the H&D curve.");
+  m_configTabs->setTabToolTip(5, "Select the physical color screen type and configure reconstruction algorithms.");
+  m_configTabs->setTabToolTip(6, "Align the screen and image geometry, including rotation, tilt, and lens correction.");
+  m_configTabs->setTabToolTip(7, "Adjust white balance, black point, presaturation, and dye model parameters.");
+  m_configTabs->setTabToolTip(8, "Apply color correction profiles and manage calibration spots.");
+
   connect(m_profilePanel, &ProfilePanel::optimizeColorRequested,
           this, &MainWindow::onColorOptimizeRequested);
   connect(m_profilePanel, &ProfilePanel::addSpotModeRequested,
@@ -1481,6 +1491,7 @@ void MainWindow::createMenus() {
   updateRecentFileActions();
 
   QAction *openParamsAction = fileMenu->addAction("Open &Parameters...");
+  openParamsAction->setToolTip("Load rendering and geometry settings from a parameter (.par) file.");
   connect(openParamsAction, &QAction::triggered, this,
           &MainWindow::onOpenParameters);
 
@@ -1490,11 +1501,13 @@ void MainWindow::createMenus() {
   fileMenu->addSeparator();
 
   m_saveAction = fileMenu->addAction("&Save Parameters");
+  m_saveAction->setToolTip("Save all current parameters to the current .par file.");
   m_saveAction->setShortcut(QKeySequence::Save); // Ctrl+S
   m_saveAction->setShortcutContext(Qt::ApplicationShortcut);
   connect(m_saveAction, &QAction::triggered, this, &MainWindow::onSaveParameters);
 
   m_saveAsAction = fileMenu->addAction("Save Parameters &As...");
+  m_saveAsAction->setToolTip("Save current parameters to a new .par file.");
   m_saveAsAction->setShortcut(QKeySequence::SaveAs); // Ctrl+Shift+S
   m_saveAsAction->setShortcutContext(Qt::ApplicationShortcut);
   connect(m_saveAsAction, &QAction::triggered, this, &MainWindow::onSaveParametersAs);
@@ -1509,6 +1522,7 @@ void MainWindow::createMenus() {
   fileMenu->addSeparator();
 
   QAction *exitAction = fileMenu->addAction("E&xit");
+  exitAction->setToolTip("Close the application.");
   connect(exitAction, &QAction::triggered, this, &QWidget::close);
 
   QMenu *editMenu = menuBar()->addMenu("&Edit");
@@ -1529,6 +1543,7 @@ void MainWindow::createMenus() {
   m_zoomInAction->setIcon(getSymbolicIcon(":/icons/zoom-in.svg"));
   m_zoomInAction->setShortcuts({QKeySequence::ZoomIn, QKeySequence(Qt::Key_Plus), QKeySequence(Qt::Key_Equal)}); // Ctrl++, +, =
   m_zoomInAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_zoomInAction->setToolTip("Increase view magnification.");
   connect(m_zoomInAction, &QAction::triggered, this, &MainWindow::onZoomIn);
 
   m_zoomOutAction = new QAction(tr("Zoom &Out"), this);
@@ -1536,6 +1551,7 @@ void MainWindow::createMenus() {
   m_zoomOutAction->setShortcuts({QKeySequence::ZoomOut, QKeySequence(Qt::Key_Minus)}); // Ctrl+-, -
   m_zoomOutAction->setShortcutContext(Qt::ApplicationShortcut);
   m_zoomOutAction->setStatusTip(tr("Zoom out"));
+  m_zoomOutAction->setToolTip("Decrease view magnification.");
   connect(m_zoomOutAction, &QAction::triggered, this, &MainWindow::onZoomOut);
   m_viewMenu->addAction(m_zoomOutAction);
 
@@ -1544,6 +1560,7 @@ void MainWindow::createMenus() {
   m_zoom100Action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
   m_zoom100Action->setShortcutContext(Qt::ApplicationShortcut);
   m_zoom100Action->setStatusTip(tr("Zoom to 100%"));
+  m_zoom100Action->setToolTip("Restore view to 1:1 pixel scale (100%).");
   connect(m_zoom100Action, &QAction::triggered, this, &MainWindow::onZoom100);
   m_viewMenu->addAction(m_zoom100Action);
 
@@ -1551,6 +1568,7 @@ void MainWindow::createMenus() {
   m_zoomFitAction->setIcon(getSymbolicIcon(":/icons/zoom-fit.svg"));
   m_zoomFitAction->setShortcut(Qt::CTRL | Qt::Key_0);
   m_zoomFitAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_zoomFitAction->setToolTip("Adjust zoom to fit the entire image in the viewer.");
   connect(m_zoomFitAction, &QAction::triggered, this, &MainWindow::onZoomFit);
   m_viewMenu->addAction(m_zoomFitAction);
 
@@ -1558,6 +1576,7 @@ void MainWindow::createMenus() {
   m_gamutWarningAction = new QAction(tr("Gamut Warning"), this);
   m_gamutWarningAction->setCheckable(true);
   m_gamutWarningAction->setChecked(false);
+  m_gamutWarningAction->setToolTip("Highlight colors that cannot be accurately represented in the target color space.");
   connect(m_gamutWarningAction, &QAction::toggled, this,
           &MainWindow::onGamutWarningToggled);
   m_viewMenu->addAction(m_gamutWarningAction);
@@ -1574,17 +1593,20 @@ void MainWindow::createMenus() {
   // Ctrl+L and Ctrl+R.
   m_rotateLeftAction->setShortcut(Qt::CTRL | Qt::Key_L);
   m_rotateLeftAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_rotateLeftAction->setToolTip("Rotate the digital scan 90 degrees counter-clockwise.");
   connect(m_rotateLeftAction, &QAction::triggered, this,
           &MainWindow::rotateLeft);
 
   m_rotateRightAction = m_viewMenu->addAction("Rotate &Right");
   m_rotateRightAction->setShortcut(Qt::CTRL | Qt::Key_R);
   m_rotateRightAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_rotateRightAction->setToolTip("Rotate the digital scan 90 degrees clockwise.");
   connect(m_rotateRightAction, &QAction::triggered, this,
           &MainWindow::rotateRight);
           
   m_mirrorAction = m_viewMenu->addAction(getSymbolicIcon(":/icons/mirror.svg"), "Mirror \u0026Horizontally");
   m_mirrorAction->setCheckable(true);
+  m_mirrorAction->setToolTip("Flip the image horizontally (useful for glass plates scanned from the wrong side).");
   connect(m_mirrorAction, &QAction::triggered, this, &MainWindow::onMirrorHorizontally);
 
   m_viewMenu->addSeparator();
@@ -1593,6 +1615,7 @@ void MainWindow::createMenus() {
   m_fullscreenAction->setCheckable(true);
   m_fullscreenAction->setShortcut(Qt::Key_F11);
   m_fullscreenAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_fullscreenAction->setToolTip("Toggle fullscreen image display.");
   connect(m_fullscreenAction, &QAction::triggered, this, &MainWindow::toggleFullscreen);
 
   // Registration Menu
@@ -1601,12 +1624,14 @@ void MainWindow::createMenus() {
   m_lockRelativeCoordinatesAction = new QAction(QIcon::fromTheme("system-lock-screen-symbolic"), tr("Lock relative coordinates"), this);
   m_lockRelativeCoordinatesAction->setCheckable(true);
   m_lockRelativeCoordinatesAction->setChecked(true); // Default ON
+  m_lockRelativeCoordinatesAction->setToolTip("Maintain relative positions of registration points when the grid size changes.");
   connect(m_lockRelativeCoordinatesAction, &QAction::toggled, m_imageWidget, &ImageWidget::setLockRelativeCoordinates);
   m_registrationMenu->addAction(m_lockRelativeCoordinatesAction);
 
   m_registrationPointsAction = new QAction(tr("Show Registration &Points"), this);
   m_registrationPointsAction->setCheckable(true);
   m_registrationPointsAction->setChecked(false);
+  m_registrationPointsAction->setToolTip("Show or hide dots indicating registration points and their errors.");
   
   // Visibility toggle at the top
   m_registrationMenu->addAction(m_registrationPointsAction);
@@ -1615,26 +1640,31 @@ void MainWindow::createMenus() {
   m_selectAllAction = m_registrationMenu->addAction("Select &All");
   m_selectAllAction->setShortcut(QKeySequence::SelectAll); // Ctrl+A
   m_selectAllAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_selectAllAction->setToolTip("Select all registration points.");
   connect(m_selectAllAction, &QAction::triggered, this, &MainWindow::onSelectAll);
 
   m_deselectAllAction = m_registrationMenu->addAction("&Deselect All");
   m_deselectAllAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
   m_deselectAllAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_deselectAllAction->setToolTip("Clear current point selection.");
   connect(m_deselectAllAction, &QAction::triggered, this, &MainWindow::onDeselectAll);
 
   m_deleteSelectedAction = m_registrationMenu->addAction("&Remove Selected Points");
   m_deleteSelectedAction->setShortcuts({QKeySequence::Delete, QKeySequence(Qt::Key_Backspace)});
   m_deleteSelectedAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_deleteSelectedAction->setToolTip("Delete the currently selected registration points.");
   connect(m_deleteSelectedAction, &QAction::triggered, this, &MainWindow::onDeleteSelected);
 
   m_pruneMisplacedAction = m_registrationMenu->addAction("&Prune Misplaced Points");
   m_pruneMisplacedAction->setShortcuts({QKeySequence("Ctrl+Delete"), QKeySequence("Ctrl+Backspace")});
   m_pruneMisplacedAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_pruneMisplacedAction->setToolTip("Automatically delete points with high registration error scores.");
   connect(m_pruneMisplacedAction, &QAction::triggered, this, &MainWindow::onPruneMisplaced);
 
   m_registrationMenu->addSeparator();
 
   m_optimizeGeometryAction = m_registrationMenu->addAction("&Optimize Geometry");
+  m_optimizeGeometryAction->setToolTip("Run the geometry solver to align screen and image using the current registration points.");
   connect(m_optimizeGeometryAction, &QAction::triggered, this, [this]() {
     onOptimizeGeometry(m_autoOptimizeAction->isChecked());
   });
@@ -1642,6 +1672,7 @@ void MainWindow::createMenus() {
   m_autoOptimizeAction = new QAction(tr("Auto &Optimize"), this);
   m_autoOptimizeAction->setCheckable(true);
   m_autoOptimizeAction->setChecked(false);
+  m_autoOptimizeAction->setToolTip("Automatically run the geometry solver whenever points are added or moved.");
   m_registrationMenu->addAction(m_autoOptimizeAction);
 
   m_registrationMenu->addSeparator();
@@ -1729,7 +1760,7 @@ void MainWindow::onOpenParameters() {
   updateUIFromState(getCurrentState());
 
   addToRecentParams(fileName);
-  m_currentParamsFile = fileName; // Track current file for Save
+  m_currentParamsFile = QFileInfo(fileName).absoluteFilePath(); // Track current file for Save
   });
 }
 
@@ -1803,7 +1834,7 @@ void MainWindow::onSaveParametersAs() {
     fclose(f);
     
     // Update current file path and add to recent
-    m_currentParamsFile = fileName;
+    m_currentParamsFile = QFileInfo(fileName).absoluteFilePath();
     m_currentParamsFileIsWeak = false; // Now it's a real file, not a suggestion
     addToRecentParams(fileName);
     
@@ -2132,8 +2163,9 @@ void MainWindow::onImageLoaded() {
 // Recent Files Implementation
 
 void MainWindow::addToRecentFiles(const QString &filePath) {
-  m_recentFiles.removeAll(filePath);
-  m_recentFiles.prepend(filePath);
+  QString absolutePath = QFileInfo(filePath).absoluteFilePath();
+  m_recentFiles.removeAll(absolutePath);
+  m_recentFiles.prepend(absolutePath);
 
   while (m_recentFiles.size() > MaxRecentFiles)
     m_recentFiles.removeLast();
@@ -2181,7 +2213,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   if (fileName.isEmpty())
     return;
 
-  m_currentImageFile = fileName;
+  m_currentImageFile = QFileInfo(fileName).absoluteFilePath();
   updateWindowTitle();
 
   // Clear current image and stop rendering
@@ -2189,7 +2221,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
   // Check for .par file (only if not suppressed, e.g., during recovery)
   if (!suppressParamPrompt) {
-    QFileInfo fileInfo(fileName);
+    QFileInfo fileInfo(m_currentImageFile);
     QString parFile =
         fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
 
@@ -2239,7 +2271,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
       }
     } else {
       // No parameter file exists - suggest filename
-      QFileInfo fileInfo(fileName);
+      QFileInfo fileInfo(m_currentImageFile);
       m_currentParamsFile = fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
       m_currentParamsFileIsWeak = true;
     }
@@ -2294,7 +2326,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
               onImageLoaded();
 
               // Add to recent files
-              addToRecentFiles(fileName);
+              addToRecentFiles(m_currentImageFile);
 
               // Launch background tile loading for stitch projects.
               if (isCsprj && m_scan->stitch) {
@@ -2364,11 +2396,12 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
             }
           });
 
+  QString absolutePath = m_currentImageFile;
   QFuture<std::pair<bool, QString>> future =
-      QtConcurrent::run([tempScan, fileName, progress, demosaic, isCsprj]() {
+      QtConcurrent::run([tempScan, absolutePath, progress, demosaic, isCsprj]() {
         const char *error = nullptr;
 	colorscreen::sub_task task (progress.get ());
-        bool res = tempScan->load(fileName.toUtf8().constData(),
+        bool res = tempScan->load(absolutePath.toUtf8().constData(),
                                   /*preload_all=*/!isCsprj, &error,
                                   progress.get(), demosaic);
         QString errStr;
@@ -2635,8 +2668,9 @@ void MainWindow::restoreWindowState() {
 // Recent Parameters Implementation
 
 void MainWindow::addToRecentParams(const QString &filePath) {
-  m_recentParams.removeAll(filePath);
-  m_recentParams.prepend(filePath);
+  QString absolutePath = QFileInfo(filePath).absoluteFilePath();
+  m_recentParams.removeAll(absolutePath);
+  m_recentParams.prepend(absolutePath);
 
   while (m_recentParams.size() > MaxRecentFiles)
     m_recentParams.removeLast();
