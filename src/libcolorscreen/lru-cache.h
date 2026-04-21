@@ -119,15 +119,15 @@ public:
     cache_size = n * base_cache_size;
   }
 
-  struct ComputingGuard
+  struct computing_guard
   {
     bool &flag;
     std::shared_timed_mutex &mutex;
     std::condition_variable_any &cond;
     bool active;
-    ComputingGuard(bool &f, std::shared_timed_mutex &m, std::condition_variable_any &c)
+    computing_guard(bool &f, std::shared_timed_mutex &m, std::condition_variable_any &c)
       : flag(f), mutex(m), cond(c), active(true) {}
-    ~ComputingGuard() {
+    ~computing_guard() {
       if (active)
         {
           std::unique_lock<std::shared_timed_mutex> guard (mutex);
@@ -221,7 +221,7 @@ public:
     guard.unlock ();
     std::shared_ptr<T> ret_val;
     {
-      ComputingGuard cguard(e->computing, lock, cond);
+      computing_guard cguard(e->computing, lock, cond);
       std::unique_ptr<T> val = get_new (e->params, progress);
       guard.lock ();
       e->val = std::move(val);
@@ -322,15 +322,15 @@ public:
     cache_size = n * base_cache_size;
   }
 
-  struct ComputingGuard
+  struct computing_guard
   {
     bool &flag;
     std::shared_timed_mutex &mutex;
     std::condition_variable_any &cond;
     bool active;
-    ComputingGuard(bool &f, std::shared_timed_mutex &m, std::condition_variable_any &c)
+    computing_guard(bool &f, std::shared_timed_mutex &m, std::condition_variable_any &c)
       : flag(f), mutex(m), cond(c), active(true) {}
-    ~ComputingGuard() {
+    ~computing_guard() {
       if (active)
         {
           std::unique_lock<std::shared_timed_mutex> guard (mutex);
@@ -431,7 +431,7 @@ public:
     guard.unlock ();
     std::shared_ptr<T> ret_val;
     {
-      ComputingGuard cguard(e->computing, lock, cond);
+      computing_guard cguard(e->computing, lock, cond);
       std::unique_ptr<T> val = get_new (e->params, xshift, yshift, width, height, progress);
       guard.lock ();
       e->val = std::move(val);
