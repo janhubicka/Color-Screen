@@ -11,6 +11,8 @@
 
 namespace colorscreen
 {
+
+/* Class used to generate unique identifiers for cached entries.  */
 class lru_caches
 {
 public:
@@ -18,6 +20,7 @@ public:
   lru_caches ()
   {
   }
+  /* Return a new unique identifier.  */
   static uint64_t
   get ()
   {
@@ -29,7 +32,54 @@ private:
 };
 extern class lru_caches lru_caches;
 
-/* Base structure for cache entries. */
+/* LRU cache used keep various data between invocations of renderers.
+   P represents parameters which are used to produce T.
+   get_new is a function computing T based on P. It is expected to
+   allocate memory via std::unique_ptr and the cache will manage it.
+
+   Template Architecture:
+   The implementation uses a template-based design to support different
+   types of keys and values while sharing common logic via abstract_lru_cache.
+   - P: Parameter type (key)
+   - T: Result type (value)
+   - Entry: The struct type representing a cache entry
+   - Derived: The final cache class (CRTP) used to fetch base configuration
+
+   Synchronization Model:
+   The cache uses a combination of a global lock (std::shared_timed_mutex) and 
+   per-entry state ("computing" flag) to ensure thread-safety while maximizing 
+   concurrency.
+
+   1. Lock Granularity: The global "lock" protects the integrity of the linked list
+      ("entries") and metadata (last_used, id). Using shared_timed_mutex allows
+      concurrent lookup attempts while waiting for long-running computations.
+
+   2. Non-blocking Computation: To prevent the cache from stalling the entire
+      application during a long "get_new" call, the implementation:
+        a) Identifies/allocates the target hit/miss while locked.
+        b) Sets "computing = true" on the entry.
+        c) Unlocks the global lock.
+        d) Executes "get_new" concurrently.
+        e) Re-locks to store the result and unset "computing".
+      Other threads can freely access, add, or release independent entries
+      while "get_new" is running.
+
+   3. Race Condition Prevention:
+        - Redundant Computation: If a second thread requests the same parameters
+          while an entry is already marked "computing", it waits on a
+          condition variable ("cond") until the first thread finishes.
+          It does NOT start a second "get_new" call.
+        - Premature Reuse: The "computing" flag ensures that "prune()" or lookup
+          logic for "longest_unused" will skip entries currently being generated
+          or updated out-of-lock.
+        - Task Cancellation: All wait loops (both for the global lock and the
+          condition variable) periodically wake up (333ms) to check if the
+          caller has requested task cancellation via the "progress" object.  */
+
+/* Base structure for cache entries. 
+   P is the parameter type.
+   T is the value type.
+   ENTRY is the pointer type for the linked list.  */
 template <typename P, typename T, typename Entry>
 struct lru_entry_base
 {
@@ -41,7 +91,10 @@ struct lru_entry_base
   bool computing = false;
 };
 
-/* RAII guard to manage the computing flag and notifications. */
+/* RAII guard to manage the computing flag and notifications. 
+   F is the computing flag to be reset.
+   M is the mutex used for synchronization.
+   C is the condition variable to notify waiting threads.  */
 template <typename Mutex>
 struct computing_guard
 {
@@ -62,6 +115,9 @@ struct computing_guard
         cond.notify_all ();
       }
   }
+  /* Mark the computation as successfully finished so that the 
+     automatic flag reset in the destructor does not trigger a 
+     re-lock if not needed (optional optimization).  */
   void
   finished ()
   {
@@ -69,7 +125,11 @@ struct computing_guard
   }
 };
 
-/* Consolidated LRU cache implementation. */
+/* Consolidated LRU cache implementation baseline. 
+   P is the parameter type.
+   T is the value type.
+   ENTRY is the entry structure.
+   DERIVED is the final class type.  */
 template <typename P, typename T, typename Entry, typename Derived>
 class abstract_lru_cache
 {
@@ -82,6 +142,7 @@ protected:
   std::condition_variable_any cond;
   const char *name;
 
+  /* Initialize the cache with a NAME and BASE_SIZE.  */
   abstract_lru_cache (const char *n, int base_size)
       : entries (NULL), cache_size (base_size), name (n)
   {
@@ -94,7 +155,13 @@ protected:
       fprintf (stderr, "Claimed entries in cache %s. Leaking memory\n", name);
   }
 
-  /* Internal lookup and management logic shared by all cache types. */
+  /* Internal lookup and management logic shared by all cache types. 
+     P is the parameter set.
+     PROGRESS is the progress info for task cancellation.
+     ID_OUT will receive the unique ID of the entry.
+     MATCH_FUNC is a predicate checking if an entry matches P.
+     INIT_FUNC initializes a new entry for P.
+     FETCH_FUNC produces the value T for P.  */
   template <typename Matcher, typename Init, typename Fetcher>
   std::shared_ptr<T>
   get_internal (P &p, progress_info *progress, uint64_t *id_out, Matcher &&match_func, Init &&init_func, Fetcher &&fetch_func)
@@ -207,6 +274,7 @@ protected:
   }
 
 public:
+  /* Remove all unused entries from the cache.  */
   void
   prune ()
   {
@@ -227,6 +295,7 @@ public:
       }
   }
 
+  /* Increase the capacity of the cache to N times the base size.  */
   void
   increase_capacity (int n)
   {
@@ -235,9 +304,15 @@ public:
   }
 };
 
+/* Standard cache entry for simple parameter mapping.  */
 template <typename P, typename T>
 struct lru_cache_entry : lru_entry_base<P, T, lru_cache_entry<P, T>> {};
 
+/* Simple LRU cache for 1-to-1 parameter mappings.
+   P is the parameter type.
+   T is the result type.
+   GET_NEW is the generator function.
+   BASE_CACHE_SIZE is the default size.  */
 template <typename P, typename T, std::unique_ptr<T> get_new (P &, progress_info *progress), int base_cache_size>
 class lru_cache : public abstract_lru_cache<P, T, lru_cache_entry<P, T>, lru_cache<P, T, get_new, base_cache_size>>
 {
@@ -246,8 +321,12 @@ class lru_cache : public abstract_lru_cache<P, T, lru_cache_entry<P, T>, lru_cac
 
 public:
   static constexpr int base_size_const = base_cache_size;
+  /* Create an LRU cache named N.  */
   lru_cache (const char *n) : Base (n, base_cache_size) {}
 
+  /* Fetch the value for parameters P or generate it.
+     Use PROGRESS for task cancellation.
+     ID will receive the unique identifier of the entry.  */
   std::shared_ptr<T>
   get (P &p, progress_info *progress, uint64_t *id = NULL)
   {
@@ -259,12 +338,18 @@ public:
   }
 };
 
+/* Cache entry for tile-based data.  */
 template <typename P, typename T>
 struct tile_cache_entry : lru_entry_base<P, T, tile_cache_entry<P, T>>
 {
   int xshift, yshift, width, height;
 };
 
+/* LRU cache for tile-based data associated with parameters. 
+   P is the parameter type.
+   T is the result type.
+   GET_NEW is the generator function.
+   BASE_CACHE_SIZE is the default size.  */
 template <typename P, typename T,
           std::unique_ptr<T> get_new (P &, int xshift, int yshift, int width, int height, progress_info *progress),
           int base_cache_size>
@@ -275,8 +360,13 @@ class lru_tile_cache : public abstract_lru_cache<P, T, tile_cache_entry<P, T>, l
 
 public:
   static constexpr int base_size_const = base_cache_size;
+  /* Create an LRU tile cache named N.  */
   lru_tile_cache (const char *n) : Base (n, base_cache_size) {}
 
+  /* Fetch the value for parameters P and given tile coordinates or generate it.
+     XSHIFT, YSHIFT, WIDTH, HEIGHT define the tile geometry.
+     Use PROGRESS for task cancellation.
+     ID will receive the unique identifier of the entry.  */
   std::shared_ptr<T>
   get (P &p, int xshift, int yshift, int width, int height, progress_info *progress, uint64_t *id = NULL)
   {
@@ -298,6 +388,7 @@ public:
 
 extern void render_increase_lru_cache_sizes_for_stitch_projects (int n);
 extern void render_interpolated_increase_lru_cache_sizes_for_stitch_projects (int n);
+/* Increase the capacity of all stitch-related caches by N times.  */
 inline void
 increase_lru_cache_sizes_for_stitch_projects (int n)
 {
