@@ -372,12 +372,16 @@ do_test_discovery (scr_to_img_parameters &param, int width, int height, coord_t 
   return ok;
 }
 
+bool error_found = false;
+
 void
 report (const char *name, bool ok)
 {
   static int testnum = 0;
   testnum++;
   printf ("%sok %i - %s\n", ok ? "" : "not ", testnum, name);
+  if (!ok)
+    error_found = true;
   fflush (stdout);
 }
 bool
@@ -1053,6 +1057,6 @@ main ()
   report ("hd sorting tests", test_hd_sorting ());
   report ("custom tone curve tests", test_custom_tone_curve ());
   report ("lru cache concurrency tests", test_lru_cache_concurrency ());
-  return 0;
+  return error_found;
 
 }

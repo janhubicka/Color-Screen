@@ -8,9 +8,11 @@
 
 namespace colorscreen
 {
-//typedef double luminosity_t;
-typedef float luminosity_t;
+//using luminosity_t = double;
+using luminosity_t = float;
 
+/* Convert sRGB value C to linear space.
+   sRGB values are undefined outside range 0..1 but give them reasonable meanings.  */
 inline luminosity_t
 srgb_to_linear (luminosity_t c)
 {
@@ -24,7 +26,8 @@ srgb_to_linear (luminosity_t c)
   return my_pow ((c + (luminosity_t)0.055) / (luminosity_t)1.055, (luminosity_t)2.4);
 }
 
-/* We handle special gama of -1 for sRGB color space curves.  */
+/* Apply gamma G to value VAL.
+   We handle special gama of -1 for sRGB color space curves.  */
 inline luminosity_t
 apply_gamma (luminosity_t val, luminosity_t gamma)
 {
@@ -39,11 +42,12 @@ apply_gamma (luminosity_t val, luminosity_t gamma)
 }
 
 /* sRGB->XYZ conversion matrix.  */
-typedef matrix4x4<luminosity_t> color_matrix;
+using color_matrix = matrix4x4<luminosity_t>;
+/* sRGB->XYZ conversion matrix.  */
 class srgb_xyz_matrix : public color_matrix
 {
 public:
-  inline
+  constexpr
   srgb_xyz_matrix ()
   : color_matrix (0.4124564,  0.3575761,  0.1804375, 0,
 		  0.2126729,  0.7151522,  0.0721750, 0,
@@ -55,7 +59,7 @@ public:
 class xyz_srgb_matrix : public color_matrix
 {
 public:
-  inline
+  constexpr
   xyz_srgb_matrix ()
   : color_matrix (3.2404542, -1.5371385, -0.4985314, 0,
 		 -0.9692660,  1.8760108,  0.0415560, 0,
@@ -64,6 +68,8 @@ public:
   {}
 };
 
+/* Convert linear luminescence C to sRGB space.
+   sRGB values are undefined outside range 0..1 but give them reasonable meanings.  */
 inline luminosity_t
 linear_to_srgb (luminosity_t c)
 {
@@ -162,6 +168,16 @@ struct xyz {
       default: __builtin_unreachable ();
     }
   }
+  const luminosity_t &operator[](const int index) const
+  {
+    switch (index)
+    {
+      case 0: return x;
+      case 1: return y;
+      case 2: return z;
+      default: __builtin_unreachable ();
+    }
+  }
   bool operator== (const xyz &other) const
   {
     return x == other.x
@@ -172,8 +188,9 @@ struct xyz {
   {
     return !(*this == other);
   }
+  /* Convert linear RGB values to sRGB.  */
   inline void
-  to_srgb (luminosity_t *r, luminosity_t *g, luminosity_t *b)
+  to_srgb (luminosity_t *r, luminosity_t *g, luminosity_t *b) const
   {
     xyz_srgb_matrix m;
     m.apply_to_rgb (x, y, z, r, g, b);
@@ -181,12 +198,14 @@ struct xyz {
     *g = linear_to_srgb (*g);
     *b = linear_to_srgb (*b);
   }
+
+  /* Convert linear RGB values to sRGB normalized to 1.  */
   inline void
-  to_normalized_srgb (luminosity_t *r, luminosity_t *g, luminosity_t *b)
+  to_normalized_srgb (luminosity_t *r, luminosity_t *g, luminosity_t *b) const
   {
     xyz_srgb_matrix m;
     m.apply_to_rgb (x, y, z, r, g, b);
-    luminosity_t max = std::max (*r, std::max (*g, *b));
+    luminosity_t max = std::max ({*r, *g, *b});
     if (max > 0)
       {
 	*r /= max;
@@ -197,32 +216,34 @@ struct xyz {
     *g = linear_to_srgb (*g);
     *b = linear_to_srgb (*b);
   }
+
+  /* Return xyz color from sRGB values R, G, B.  */
   static inline xyz
   from_srgb (luminosity_t r, luminosity_t g, luminosity_t b)
   {
-    srgb_xyz_matrix m;
-    luminosity_t x,y,z;
     r = srgb_to_linear (r);
     g = srgb_to_linear (g);
     b = srgb_to_linear (b);
-    m.apply_to_rgb (r, g, b, &x, &y, &z);
-    return xyz (x, y, z);
+    return from_linear_srgb (r, g, b);
   }
+
+  /* Return xyz color from linear sRGB values R, G, B.  */
   static inline xyz
   from_linear_srgb (luminosity_t r, luminosity_t g, luminosity_t b)
   {
     srgb_xyz_matrix m;
-    luminosity_t x,y,z;
+    luminosity_t x, y, z;
     m.apply_to_rgb (r, g, b, &x, &y, &z);
     return xyz (x, y, z);
   }
   DLL_PUBLIC void print_sRGB (FILE *f, bool verbose);
   DLL_PUBLIC void print (FILE *f);
-  bool almost_equal_p (xyz other, luminosity_t epsilon = 0.001)
+  /* Return true if this color is almost equal to OTHER within EPSILON.  */
+  bool almost_equal_p (xyz other, luminosity_t epsilon = 0.001) const
   {
     return (fabs (x - other.x) < epsilon 
-	    || fabs (y - other.y) > epsilon
-	    || fabs (z - other.z) > epsilon);
+	    && fabs (y - other.y) < epsilon
+	    && fabs (z - other.z) < epsilon);
   }
 };
 struct xy_t
@@ -255,7 +276,9 @@ struct xyY
   : x (xx), y (yy), Y (YY)
   {}
   constexpr xyY (xyz c)
-  : x (c.x + c.y + c.z ? c.x / (c.x + c.y + c.z) : 0), y (c.x + c.y + c.z ? c.y / (c.x + c.y + c.z) : 0), Y (c.y)
+  : x (c.x + c.y + c.z ? c.x / (c.x + c.y + c.z) : 0),
+    y (c.x + c.y + c.z ? c.y / (c.x + c.y + c.z) : 0),
+    Y (c.y)
   {}
 };
 
@@ -267,7 +290,7 @@ xy_t::xy_t (struct xyY c)
 class bradford_xyz_to_rgb_matrix : public color_matrix
 {
 public:
-  inline
+  constexpr
   bradford_xyz_to_rgb_matrix ()
   : color_matrix ( 0.8951,  0.2664, -0.1614, 0,
 		  -0.7502,  1.7135,  0.0367, 0,
@@ -279,7 +302,7 @@ public:
 class bradford_rgb_to_xyz_matrix : public color_matrix
 {
 public:
-  inline
+  constexpr
   bradford_rgb_to_xyz_matrix ()
   : color_matrix (0.986993,   -0.147054,  0.159963,  0,
 		  0.432305,    0.51836,   0.0492912, 0,
@@ -316,7 +339,7 @@ public:
 class bradford_d50_to_d65_matrix : public color_matrix
 {
 public:
-  inline
+  constexpr
   bradford_d50_to_d65_matrix ()
   : color_matrix (0.9555766, -0.0230393,  0.0631636, 0,
 		  -0.0282895,  1.0099416, 0.0210077, 0,
@@ -362,7 +385,7 @@ struct rgbdata
 	   && green == other.green
 	   && blue == other.blue;
   }
-  bool operator!= (rgbdata &other) const
+  bool operator!= (const rgbdata &other) const
   {
     return !(*this == other);
   }
@@ -433,6 +456,16 @@ struct rgbdata
       default: __builtin_unreachable ();
     }
   }
+  const luminosity_t &operator[](const int index) const
+  {
+    switch (index)
+    {
+      case 0: return red;
+      case 1: return green;
+      case 2: return blue;
+      default: __builtin_unreachable ();
+    }
+  }
   inline rgbdata
   clamp (luminosity_t min = 0, luminosity_t max = 1)
   {
@@ -468,11 +501,12 @@ struct rgbdata
     return ret;
   }
   DLL_PUBLIC void print (FILE *f);
-  bool almost_equal_p (rgbdata other, luminosity_t epsilon = 0.001)
+  /* Return true if this color is almost equal to OTHER within EPSILON.  */
+  bool almost_equal_p (rgbdata other, luminosity_t epsilon = 0.001) const
   {
     return (fabs (red - other.red) < epsilon 
-	    || fabs (green - other.green) > epsilon
-	    || fabs (blue - other.blue) > epsilon);
+	    && fabs (green - other.green) < epsilon
+	    && fabs (blue - other.blue) < epsilon);
   }
 };
 
@@ -532,13 +566,13 @@ color_matrix matrix_by_dye_xy (luminosity_t rx, luminosity_t ry,
 color_matrix matrix_by_dye_xyY (xyY red, xyY green, xyY blue);
 color_matrix matrix_by_dye_xyz (xyz red, xyz green, xyz blue);
 // http://www.graficaobscura.com/matrix/index.html
-static const luminosity_t rwght = 0.3086, gwght = 0.6094, bwght = 0.0820;
+static constexpr luminosity_t rwght = 0.3086, gwght = 0.6094, bwght = 0.0820;
 
 // http://www.graficaobscura.com/matrix/index.html
 class saturation_matrix : public color_matrix
 {
 public:
-  inline
+  constexpr
   saturation_matrix (luminosity_t s)
   : color_matrix ((1-s)*rwght + s, (1-s)*gwght    , (1-s)*bwght    , 0,
 	       (1-s)*rwght    , (1-s)*gwght + s, (1-s)*bwght    , 0,
@@ -551,7 +585,7 @@ public:
 class presaturation_matrix : public color_matrix
 {
 public:
-  inline
+  constexpr
   presaturation_matrix (luminosity_t s)
   : color_matrix ((1-s)*(1.0/3.0) + s, (1-s)*(1.0/3.0)    , (1-s)*(1.0/3.0)    , 0,
 	       (1-s)*(1.0/3.0)    , (1-s)*(1.0/3.0) + s, (1-s)*(1.0/3.0)    , 0,
@@ -564,7 +598,7 @@ public:
 class xyz_wide_gammut_rgb_matrix : public color_matrix
 {
 public:
-  inline
+  constexpr
   xyz_wide_gammut_rgb_matrix ()
   : color_matrix ( 1.4628067, -0.1840623, -0.2743606, 0,
 		  -0.5217933,  1.4472381,  0.0677227, 0,
@@ -576,7 +610,7 @@ public:
 class xyz_pro_photo_rgb_matrix : public color_matrix
 {
 public:
-  inline
+  constexpr
   xyz_pro_photo_rgb_matrix ()
   : color_matrix (1.3459433, -0.2556075, -0.0511118, 0,
 		  -0.5445989,  1.5081673,  0.0205351, 0,
@@ -588,7 +622,7 @@ public:
 class pro_photo_rgb_xyz_matrix : public color_matrix
 {
 public:
-  inline
+  constexpr
   pro_photo_rgb_xyz_matrix ()
   : color_matrix (0.7976749,  0.1351917,  0.0313534, 0,
 		  0.2880402,  0.7118741,  0.0000857, 0,
@@ -632,14 +666,13 @@ xyz_to_pro_linear_photo_rgb (luminosity_t x, luminosity_t y, luminosity_t z,  lu
   m.apply_to_rgb (x, y, z, r, g, b);
 }
 
+/* Return xyz color from xyY values X, Y, and Y luminescence.  */
 inline xyz
 xyY_to_xyz (luminosity_t x, luminosity_t y, luminosity_t Y)
 {
-  if (!Y)
-    return (xyz){0,0,0};
-  xyz ret = {x * Y / y, Y, (1 - x - y) * Y / y};
-  return ret;
+  return xyz (xyY (x, y, Y));
 }
+/* Convert values in XYZ space to xyY space.  */
 inline void
 xyz_to_xyY (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *rx, luminosity_t *ry, luminosity_t *rY)
 {
