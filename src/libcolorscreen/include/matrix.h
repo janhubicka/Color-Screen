@@ -141,6 +141,24 @@ public:
     return *this;
   }
 
+  inline matrix2x2
+  operator+ (const matrix<T, 2>& rhs) const
+  {
+    return matrix2x2 (matrix<T, 2>::operator+ (rhs));
+  }
+
+  inline matrix2x2
+  operator* (const matrix<T, 2>& rhs) const
+  {
+    return matrix2x2 (matrix<T, 2>::operator* (rhs));
+  }
+
+  inline matrix2x2
+  operator* (const T rhs) const
+  {
+    return matrix2x2 (matrix<T, 2>::operator* (rhs));
+  }
+
   /* Matrix-vector multiplication.  */
   inline void
   apply_to_vector (T x, T y, T *xx, T *yy) const
@@ -178,6 +196,24 @@ public:
   {
     matrix<T, 3>::operator=(rhs);
     return *this;
+  }
+
+  inline matrix3x3
+  operator+ (const matrix<T, 3>& rhs) const
+  {
+    return matrix3x3 (matrix<T, 3>::operator+ (rhs));
+  }
+
+  inline matrix3x3
+  operator* (const matrix<T, 3>& rhs) const
+  {
+    return matrix3x3 (matrix<T, 3>::operator* (rhs));
+  }
+
+  inline matrix3x3
+  operator* (const T rhs) const
+  {
+    return matrix3x3 (matrix<T, 3>::operator* (rhs));
   }
 
   /* Apply matrix to vector (x,y,1) and return its two elements.  */
@@ -222,6 +258,24 @@ public:
   {
     matrix<T, 4>::operator=(rhs);
     return *this;
+  }
+
+  inline matrix4x4
+  operator+ (const matrix<T, 4>& rhs) const
+  {
+    return matrix4x4 (matrix<T, 4>::operator+ (rhs));
+  }
+
+  inline matrix4x4
+  operator* (const matrix<T, 4>& rhs) const
+  {
+    return matrix4x4 (matrix<T, 4>::operator* (rhs));
+  }
+
+  inline matrix4x4
+  operator* (const T rhs) const
+  {
+    return matrix4x4 (matrix<T, 4>::operator* (rhs));
   }
 
   /* Apply matrix to 2 dimensional coordinates and do perspective projection.
