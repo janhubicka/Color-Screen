@@ -2,6 +2,11 @@
 #include <math.h>
 #include <stdlib.h>
 #include <memory>
+#include <thread>
+#include <vector>
+#include <atomic>
+#include <chrono>
+
 
 #include "include/colorscreen.h"
 #include "include/imagedata.h"
@@ -13,6 +18,8 @@
 #include "screen.h"
 #include "render.h"
 #include "simulate.h"
+#include "lru-cache.h"
+
 
 using namespace colorscreen;
 namespace
@@ -961,12 +968,70 @@ test_render_linearity ()
     }
   return ok;
 }
+
+struct test_params
+{
+  int x;
+  bool
+  operator== (const test_params &other) const
+  {
+    return x == other.x;
+  }
+};
+
+std::atomic<int> get_new_calls;
+
+std::unique_ptr<int>
+get_new_test (test_params &p, progress_info *)
+{
+  get_new_calls++;
+  std::this_thread::sleep_for (std::chrono::milliseconds (100));
+  return std::make_unique<int> (p.x * 2);
 }
+
+bool
+test_lru_cache_concurrency ()
+{
+  lru_cache<test_params, int, get_new_test, 10> cache ("test_cache");
+  const int num_threads = 10;
+  std::vector<std::thread> threads;
+  std::vector<std::shared_ptr<int>> results (num_threads);
+  test_params p = { 42 };
+  get_new_calls = 0;
+
+  for (int i = 0; i < num_threads; ++i)
+    {
+      threads.emplace_back ([&, i] () { results[i] = cache.get (p, NULL); });
+    }
+
+  for (auto &t : threads)
+    t.join ();
+
+  bool ok = true;
+  if (get_new_calls != 1)
+    {
+      printf ("LRU concurrency test FAIL: get_new called %d times (expected 1)\n",
+	      (int)get_new_calls);
+      ok = false;
+    }
+  for (int i = 0; i < num_threads; ++i)
+    {
+      if (!results[i] || *results[i] != 84)
+	{
+	  printf ("LRU concurrency test FAIL: thread %d got wrong result\n", i);
+	  ok = false;
+	}
+    }
+  return ok;
+}
+}
+
 
 int
 main ()
 {
-  printf ("1..17\n");
+  printf ("1..18\n");
+
   test_matrix ();
   report ("matrix tests", true);
   test_color ();
@@ -986,5 +1051,7 @@ main ()
   report ("hd validity tests", test_hd_validity ());
   report ("hd sorting tests", test_hd_sorting ());
   report ("custom tone curve tests", test_custom_tone_curve ());
+  report ("lru cache concurrency tests", test_lru_cache_concurrency ());
   return 0;
+
 }
