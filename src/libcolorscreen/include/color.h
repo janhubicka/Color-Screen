@@ -296,6 +296,7 @@ public:
 class bradford_whitepoint_adaptation_matrix : public color_matrix
 {
 public:
+  using color_matrix::operator=;
   bradford_whitepoint_adaptation_matrix (xyz from, xyz to)
   {
     color_matrix Mbfdinv = bradford_rgb_to_xyz_matrix ();
@@ -308,7 +309,7 @@ public:
 			     0, 0, tob/fromb, 0,
 			     0, 0, 0, 1);
     matrix<luminosity_t,4> ret = Mbfdinv * correction * Mbfd;
-    memcpy (m_elements, ret.m_elements, sizeof (m_elements));
+    *this = ret;
   }
 };
 

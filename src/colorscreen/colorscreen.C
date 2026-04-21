@@ -2112,30 +2112,30 @@ digital_laboratory (int argc, char **argv)
           // m1.print (stdout);
           printf ("\nScanner primary red: ");
           xyz red_primary
-		  = { m1.m_elements[0][0], m1.m_elements[0][1], m1.m_elements[0][2] };
+		  = { m1(0, 0), m1(1, 0), m1(2, 0) };
           red_primary.print (stdout);
           printf ("Scanner primary green: ");
           xyz green_primary
-		  = { m1.m_elements[1][0], m1.m_elements[1][1], m1.m_elements[1][2] };
+		  = { m1(0, 1), m1(1, 1), m1(2, 1) };
           green_primary.print (stdout);
           printf ("Scanner primary blue: ");
           xyz blue_primary
-		  = { m1.m_elements[2][0], m1.m_elements[2][1], m1.m_elements[2][2] };
+		  = { m1(0, 2), m1(1, 2), m1(2, 2) };
           blue_primary.print (stdout);
           m1 = bradford_whitepoint_adaptation_matrix (spec2.whitepoint_xyz (),
                                                       d50_white)
                * m1;
           printf ("\nScanner primary red Bradford corrected to D50: ");
           xyz corrected_red_primary
-              = { m1.m_elements[0][0], m1.m_elements[0][1], m1.m_elements[0][2] };
+              = { m1(0, 0), m1(1, 0), m1(2, 0) };
           corrected_red_primary.print (stdout);
           printf ("Scanner primary green Bradford corrected to D50: ");
           xyz corrected_green_primary
-              = { m1.m_elements[1][0], m1.m_elements[1][1], m1.m_elements[1][2] };
+              = { m1(0, 1), m1(1, 1), m1(2, 1) };
           corrected_green_primary.print (stdout);
           printf ("Scanner primary blue Bradford corrected to D50: ");
           xyz corrected_blue_primary
-              = { m1.m_elements[2][0], m1.m_elements[2][1], m1.m_elements[2][2] };
+              = { m1(0, 2), m1(1, 2), m1(2, 2) };
           corrected_blue_primary.print (stdout);
           if (do_balance)
             printf ("\nThe following can be used in parameter file with "

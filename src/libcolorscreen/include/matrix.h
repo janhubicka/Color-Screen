@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstring>
 #include <stdio.h>
+#include <type_traits>
 #include "base.h"
 
 namespace colorscreen
@@ -16,45 +17,52 @@ class matrix
 {
 public:
   static constexpr size_t m_dim = dim;
-  typedef T Te[dim][dim];
-  Te m_elements;
 
   /* Default constructor: build identity matrix.  */
-  constexpr matrix()
+  constexpr matrix() : m_elements{}
   {
-    for (size_t col = 0; col < m_dim; col++)
-      for (size_t row = 0; row < m_dim; row++)
-        m_elements[col][row] = (T)(row == col);
+    for (size_t i = 0; i < m_dim; i++)
+      m_elements[i][i] = (T)1;
   }
 
-  /* Support for Row, Column indexing.  Storage is column-major.  */
+  /* Variadic constructor to initialize all elements in row-major order.  */
+  template <typename... Args, typename = std::enable_if_t<sizeof...(Args) == dim * dim>>
+  constexpr matrix(Args... args) : m_elements{}
+  {
+    T values[] = { static_cast<T>(args)... };
+    for (size_t i = 0; i < dim; i++)
+      for (size_t j = 0; j < dim; j++)
+        m_elements[i][j] = values[i * dim + j];
+  }
+
+  /* Support for Row, Column indexing.  Storage is row-major.  */
   always_inline_attr inline T&
   operator() (size_t row, size_t col)
   {
-    return m_elements[col][row];
+    return m_elements[row][col];
   }
 
   always_inline_attr inline const T&
   operator() (size_t row, size_t col) const
   {
-    return m_elements[col][row];
+    return m_elements[row][col];
   }
 
   /* Make matrix random (for unit testing).  */
   void
   randomize ()
   {
-    for (size_t j = 0; j < m_dim; j++)
-      for (size_t i = 0; i < m_dim; i++)
-        m_elements[j][i] = (T)(rand() % 100);
+    for (size_t i = 0; i < m_dim; i++)
+      for (size_t j = 0; j < m_dim; j++)
+        m_elements[i][j] = (T)(rand() % 100);
   }
 
   /* Copy constructor.  */
-  constexpr matrix(const matrix &m)
+  constexpr matrix(const matrix &m) : m_elements{}
   {
-    for (size_t j = 0; j < m_dim; j++)
-      for (size_t i = 0; i < m_dim; i++)
-        m_elements[j][i] = m.m_elements[j][i];
+    for (size_t i = 0; i < m_dim; i++)
+      for (size_t j = 0; j < m_dim; j++)
+        m_elements[i][j] = m.m_elements[i][j];
   }
 
   /* Usual matrix operations.  */
@@ -62,9 +70,9 @@ public:
   operator+ (const matrix<T, dim>& rhs) const
   {
     matrix<T, dim> ret;
-    for (size_t j = 0; j < m_dim; j++)
-      for (size_t i = 0; i < m_dim; i++)
-        ret.m_elements[j][i] = m_elements[j][i] + rhs.m_elements[j][i];
+    for (size_t i = 0; i < m_dim; i++)
+      for (size_t j = 0; j < m_dim; j++)
+        ret(i, j) = (*this)(i, j) + rhs(i, j);
     return ret;
   }
 
@@ -72,13 +80,13 @@ public:
   operator* (const matrix<T, dim>& rhs) const
   {
     matrix<T, dim> ret;
-    for (size_t j = 0; j < m_dim; j++)
-      for (size_t i = 0; i < m_dim; i++)
+    for (size_t i = 0; i < m_dim; i++)
+      for (size_t j = 0; j < m_dim; j++)
         {
           T a = 0;
           for (size_t k = 0; k < m_dim; k++)
-            a += m_elements[k][i] * rhs.m_elements[j][k];
-          ret.m_elements[j][i] = a;
+            a += (*this)(i, k) * rhs(k, j);
+          ret(i, j) = a;
         }
     return ret;
   }
@@ -87,18 +95,18 @@ public:
   operator* (const T rhs) const
   {
     matrix<T, dim> ret;
-    for (size_t j = 0; j < m_dim; j++)
-      for (size_t i = 0; i < m_dim; i++)
-        ret.m_elements[j][i] = m_elements[j][i] * rhs;
+    for (size_t i = 0; i < m_dim; i++)
+      for (size_t j = 0; j < m_dim; j++)
+        ret(i, j) = (*this)(i, j) * rhs;
     return ret;
   }
 
   inline void
   transpose()
   {
-    for (size_t j = 0; j < m_dim; j++)
-      for (size_t i = 0; i < j; i++)
-        std::swap (m_elements[j][i], m_elements[i][j]);
+    for (size_t i = 0; i < m_dim; i++)
+      for (size_t j = 0; j < i; j++)
+        std::swap (m_elements[i][j], m_elements[j][i]);
   }
 
   void
@@ -111,6 +119,9 @@ public:
         fprintf (f, "\n");
       }
   }
+
+protected:
+  T m_elements[dim][dim];
 };
 
 /* 2x2 matrix with inverse operation.  */
@@ -118,29 +129,15 @@ template<typename T>
 class matrix2x2 : public matrix<T, 2>
 {
 public:
-  using matrix<T, 2>::m_elements;
+  using matrix<T, 2>::matrix;
   using matrix<T, 2>::operator();
+  using matrix<T, 2>::operator=;
 
-  /* Constructor with standard row-major input parameters.  */
-  inline
-  matrix2x2 (T e00, T e01,
-             T e10, T e11)
+  constexpr matrix2x2 () : matrix<T, 2> () {}
+  constexpr matrix2x2 (const matrix<T, 2> &rhs) : matrix<T, 2> (rhs) {}
+  matrix2x2& operator=(const matrix<T, 2> &rhs)
   {
-    (*this)(0, 0) = e00; (*this)(0, 1) = e01;
-    (*this)(1, 0) = e10; (*this)(1, 1) = e11;
-  }
-
-  inline
-  matrix2x2 ()
-  {
-  }
-
-  inline
-  matrix2x2& operator=(const matrix<T, 2>& rhs)
-  {
-    for (size_t col = 0; col < 2; col++)
-      for (size_t row = 0; row < 2; row++)
-        m_elements[col][row] = rhs.m_elements[col][row];
+    matrix<T, 2>::operator=(rhs);
     return *this;
   }
 
@@ -171,28 +168,15 @@ template<typename T>
 class matrix3x3 : public matrix<T, 3>
 {
 public:
-  using matrix<T, 3>::m_elements;
+  using matrix<T, 3>::matrix;
   using matrix<T, 3>::operator();
+  using matrix<T, 3>::operator=;
 
-  matrix3x3 () { }
-
-  /* Constructor with standard row-major input parameters.  */
-  inline
-  matrix3x3 (T e00, T e01, T e02,
-             T e10, T e11, T e12,
-             T e20, T e21, T e22)
+  constexpr matrix3x3 () : matrix<T, 3> () {}
+  constexpr matrix3x3 (const matrix<T, 3> &rhs) : matrix<T, 3> (rhs) {}
+  matrix3x3& operator=(const matrix<T, 3> &rhs)
   {
-    (*this)(0, 0) = e00; (*this)(0, 1) = e01; (*this)(0, 2) = e02;
-    (*this)(1, 0) = e10; (*this)(1, 1) = e11; (*this)(1, 2) = e12;
-    (*this)(2, 0) = e20; (*this)(2, 1) = e21; (*this)(2, 2) = e22;
-  }
-
-  inline
-  matrix3x3<T>& operator=(const matrix<T, 3>& rhs)
-  {
-    for (size_t col = 0; col < 3; col++)
-      for (size_t row = 0; row < 3; row++)
-        m_elements[col][row] = rhs.m_elements[col][row];
+    matrix<T, 3>::operator=(rhs);
     return *this;
   }
 
@@ -228,29 +212,15 @@ template<typename T>
 class matrix4x4 : public matrix<T, 4>
 {
 public:
-  using matrix<T, 4>::m_elements;
+  using matrix<T, 4>::matrix;
   using matrix<T, 4>::operator();
-  matrix4x4 () { }
+  using matrix<T, 4>::operator=;
 
-  /* Constructor with standard row-major input parameters.  */
-  inline
-  matrix4x4 (T e00, T e01, T e02, T e03,
-             T e10, T e11, T e12, T e13,
-             T e20, T e21, T e22, T e23,
-             T e30, T e31, T e32, T e33)
+  constexpr matrix4x4 () : matrix<T, 4> () {}
+  constexpr matrix4x4 (const matrix<T, 4> &rhs) : matrix<T, 4> (rhs) {}
+  matrix4x4& operator=(const matrix<T, 4> &rhs)
   {
-    (*this)(0, 0) = e00; (*this)(0, 1) = e01; (*this)(0, 2) = e02; (*this)(0, 3) = e03;
-    (*this)(1, 0) = e10; (*this)(1, 1) = e11; (*this)(1, 2) = e12; (*this)(1, 3) = e13;
-    (*this)(2, 0) = e20; (*this)(2, 1) = e21; (*this)(2, 2) = e22; (*this)(2, 3) = e23;
-    (*this)(3, 0) = e30; (*this)(3, 1) = e31; (*this)(3, 2) = e32; (*this)(3, 3) = e33;
-  }
-
-  inline
-  matrix4x4<T>& operator=(const matrix<T, 4> &rhs)
-  {
-    for (size_t col = 0; col < 4; col++)
-      for (size_t row = 0; row < 4; row++)
-        m_elements[col][row] = rhs.m_elements[col][row];
+    matrix<T, 4>::operator=(rhs);
     return *this;
   }
 
@@ -284,11 +254,11 @@ public:
   inline void
   scale_channels (T r, T g, T b)
   {
-    for (size_t j = 0; j < 4; j++)
+    for (size_t i = 0; i < 4; i++)
     {
-      (*this)(j, 0) *= r;
-      (*this)(j, 1) *= g;
-      (*this)(j, 2) *= b;
+      (*this)(i, 0) *= r;
+      (*this)(i, 1) *= g;
+      (*this)(i, 2) *= b;
     }
   }
 
@@ -381,6 +351,12 @@ public:
     ret(0, 1) = det * -((*this)(0, 1) * A2323 - (*this)(0, 2) * A1323 + (*this)(0, 3) * A1223);
     ret(1, 1) = det * ((*this)(0, 0) * A2323 - (*this)(0, 2) * A0323 + (*this)(0, 3) * A0223);
     ret(2, 1) = det * -((*this)(0, 0) * A1323 - (*this)(0, 1) * A0323 + (*this)(0, 3) * A0123);
+    ret(3, 1) = det * ((*this)(0, 0) * A1223 - (*this)(0, 1) * A0223 + (*this)(0, 2) * A0112);
+    // Fixed typo from previous turn: A0112 should be A0123 logic? wait.
+    // Let's re-verify the det calculation.
+    // A0123 was used in the det.
+    // The previous Turn had ret(3, 1) = det * ((*this)(0, 0) * A1223 - (*this)(0, 1) * A0223 + (*this)(0, 2) * A0123);
+    // I should use that.
     ret(3, 1) = det * ((*this)(0, 0) * A1223 - (*this)(0, 1) * A0223 + (*this)(0, 2) * A0123);
 
     ret(0, 2) = det * ((*this)(0, 1) * A2313 - (*this)(0, 2) * A1313 + (*this)(0, 3) * A1213);

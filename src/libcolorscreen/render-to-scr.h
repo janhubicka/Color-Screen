@@ -147,9 +147,9 @@ public:
       color_matrix ret;
       for (int i = 0; i < 4; i++)
 	for (int j = 0; j < 4; j++)
-	  ret.m_elements[i][j] = 
-	      (m_saturation_matrices [y * m_saturation_width + x].m_elements[i][j] * (1 - rx) + m_saturation_matrices [y * m_saturation_width + x + 1].m_elements[i][j] * rx) * (1 - ry) +
-	      (m_saturation_matrices [(y + 1) * m_saturation_width + x].m_elements[i][j] * (1 - rx) + m_saturation_matrices [(y + 1) * m_saturation_width + x + 1].m_elements[i][j] * rx) * ry;
+	  ret(i, j) = 
+	      (m_saturation_matrices [y * m_saturation_width + x](i, j) * (1 - rx) + m_saturation_matrices [y * m_saturation_width + x + 1](i, j) * rx) * (1 - ry) +
+	      (m_saturation_matrices [(y + 1) * m_saturation_width + x](i, j) * (1 - rx) + m_saturation_matrices [(y + 1) * m_saturation_width + x + 1](i, j) * rx) * ry;
        return ret;
 #endif
        return (c00 * (1 - rx) + c10 * rx) * (1 - ry)
