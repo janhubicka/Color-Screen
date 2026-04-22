@@ -4,17 +4,26 @@ namespace colorscreen
 {
 namespace
 {
+/* Parameters passed to the LRU cache for computing inverse mapping.  */
 struct lens_inverse_parameters
 {
   lens_warp_correction_parameters param;
   coord_t max_dist;
 
+  /* Return true if this parameter set is equal to O.  */
   bool
-  operator== (lens_inverse_parameters &o)
+  operator== (const lens_inverse_parameters &o) const
   {
-    return param == o.param && max_dist == o.max_dist;
+    return param == o.param 
+           && max_dist == o.max_dist;
   }
 };
+
+/* Compute the inverse radial distortion for DIST by binary search.
+   PARAM are the lens parameters.
+   MAX is the maximum search radius.
+   INV_MAX_DIST_SQ2 is 1 / (max_dist^2) for normalization.
+   Returns the ratio R / DIST such that corrected_to_scan(R) == DIST.  */
 pure_attr inline coord_t
 get_inverse (const lens_warp_correction_parameters &param, coord_t dist,
              coord_t max, coord_t inv_max_dist_sq2)
@@ -26,7 +35,7 @@ get_inverse (const lens_warp_correction_parameters &param, coord_t dist,
     {
       coord_t r = (min + max) * (coord_t)0.5;
       coord_t ra = r * param.get_ratio (r * r * inv_max_dist_sq2);
-      if (fabs (ra - dist) < 1 / (4 * (coord_t)65536) || min == r || max == r)
+      if (fabs (ra - dist) < 1.0 / (4 * 65536.0) || min == r || max == r)
         {
           if (lens_warp_correction::debug
               && fabs (ra - dist) > lens_warp_correction::epsilon / 2)
@@ -40,9 +49,12 @@ get_inverse (const lens_warp_correction_parameters &param, coord_t dist,
         max = r;
     }
 }
+/* Precompute the inverse radial distortion function for parameters P.
+   Provides progress updates via PROG.  */
 std::unique_ptr<precomputed_function<coord_t>>
-get_new_inverse (struct lens_inverse_parameters &p, progress_info *)
+get_new_inverse (struct lens_inverse_parameters &p, progress_info *prog)
 {
+  (void)prog;
   coord_t data[lens_warp_correction::size];
   coord_t inv_max_dist_sq2 = 1 / (p.max_dist * p.max_dist);
 
@@ -90,11 +102,12 @@ static lru_cache<lens_inverse_parameters, precomputed_function<coord_t>,
 }
 
 /* Precompute everything needed to apply lens distortion.
-   center is lens center in image coordinates. c1, c2, c3 and c4
-   corners of the scan.   */
+   CENTER is lens center in image coordinates.
+   C1, C2, C3 and C4 are corners of the scan.
+   Returns true on success.  */
 bool
 lens_warp_correction::precompute (point_t center, point_t c1, point_t c2,
-                                  point_t c3, point_t c4)
+                                   point_t c3, point_t c4)
 {
   assert (!m_inverted_ratio);
   if (m_params.is_noop ())
@@ -112,22 +125,24 @@ lens_warp_correction::precompute (point_t center, point_t c1, point_t c2,
   return true;
 }
 
-/* get ready to compute lens correction.  Needs to be called after precompute.
- */
+/* Precompute the inverse radial distortion function lookup table.
+   Returns true on success.  */
 bool
 lens_warp_correction::precompute_inverse ()
 {
   if (m_noop)
     return true;
   lens_inverse_parameters p = { m_params, m_max_dist };
-  m_inverted_ratio = lens_inverse_cache.get (p, NULL);
-  return m_inverted_ratio != NULL;
+  m_inverted_ratio = lens_inverse_cache.get (p, nullptr);
+  return m_inverted_ratio != nullptr;
 }
 
 lens_warp_correction::~lens_warp_correction ()
 {
 }
 
+/* Transform point P from scan coordinates to corrected image coordinates
+   without using the precomputed table.  Uses binary search for inversion.  */
 pure_attr point_t
 lens_warp_correction::nonprecomputed_scan_to_corrected (point_t p) const
 {
@@ -135,11 +150,15 @@ lens_warp_correction::nonprecomputed_scan_to_corrected (point_t p) const
     return p;
   bool too_far = false;
   coord_t dist = p.dist_from (m_center);
+  /* The search range for r_dst should cover up to m_max_dist * 10 (safe).  */
+  //coord_t max_search = m_max_dist * 10;
+  coord_t max_search = m_max_dist;
   if (dist > m_max_dist)
     dist = m_max_dist, too_far = true;
+
   point_t ret
       = (p - m_center)
-            * get_inverse (m_params, dist, m_max_dist, m_inv_max_dist_sq2)
+            * get_inverse (m_params, dist, max_search, m_inv_max_dist_sq2)
         + m_center;
   if (debug && !too_far)
     {

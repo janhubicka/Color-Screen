@@ -9,6 +9,9 @@
 namespace colorscreen
 {
 
+/* Radial lens warp correction.  This class performs both forward and
+   inverse radial distortion corrections.  The inverse mapping is
+   precomputed using a lookup table for performance.  */
 struct lens_warp_correction
 {
   static constexpr const bool debug = colorscreen_checking;
@@ -20,22 +23,32 @@ struct lens_warp_correction
 
   DLL_PUBLIC_EXP
   lens_warp_correction ()
-      : m_params (), m_inverted_ratio ()
+      : m_params (), m_center ({ 0, 0 }), m_max_dist (1), m_inv_max_dist_sq2 (1),
+        m_inverted_ratio (nullptr), m_noop (true)
   {
   }
 
   DLL_PUBLIC ~lens_warp_correction ();
 
+  /* Set parameters for lens correction from P.  */
   void
   set_parameters (const lens_warp_correction_parameters &p)
   {
     m_params = p;
   }
 
+  /* Precompute normalization factor so that the distance from CENTER to
+     any of the four corners C1, C2, C3, C4 is at most 1.
+     Returns true on success.  */
   bool precompute (point_t center, point_t c1, point_t c2, point_t c3,
                    point_t c4);
+
+  /* Precompute inverse mapping using a lookup table.
+     Returns true on success.  */
   bool precompute_inverse ();
 
+  /* Transform point P from corrected image to scan coordinates.
+     This is the forward transform.  */
   inline pure_attr point_t
   corrected_to_scan (point_t p) const
   {
@@ -55,6 +68,8 @@ struct lens_warp_correction
     return ret;
   }
 
+  /* Transform point P from scan coordinates to corrected image.
+     This is the inverse transform using the precomputed table.  */
   inline pure_attr point_t
   scan_to_corrected (point_t p) const
   {
@@ -79,9 +94,13 @@ struct lens_warp_correction
       }
     return ret;
   }
+
+  /* Transform point P from scan coordinates to corrected image without
+     using the precomputed table.  This uses binary search instead.  */
   pure_attr point_t
   nonprecomputed_scan_to_corrected (point_t p) const;
 
+  /* Return true if lens correction is a no-op.  */
   pure_attr bool
   is_noop ()
   {

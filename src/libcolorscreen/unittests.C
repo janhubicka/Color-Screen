@@ -1156,13 +1156,95 @@ test_whitepoint_constants ()
 
   return ok;
 }
+
+/* Verify that lens warp correction works correctly and agrees with DNG.  */
+bool
+test_lens_warp ()
+{
+  bool ok = true;
+  struct test_case {
+    const char *name;
+    coord_t kr[4];
+    point_t center;
+  } cases[] = {
+    { "Synthetic Barrel", { 1.0, 0.05, 0.02, 0.01 }, { 0.5, 0.5 } },
+    { "Nikon Coolscan 9000ED", { 0.99508, 0.0245411, -0.0521967, 0.0325757 }, { 0.560586, 0.482547 } },
+    { "Adobe DNG Sample", { 0.999787, 0.000025, -0.000025, 0.000006 }, { 0.500029, 0.499863 } }
+  };
+
+  for (const auto& tc : cases)
+    {
+      lens_warp_correction_parameters p;
+      for (int i = 0; i < 4; i++) p.kr[i] = tc.kr[i];
+      p.center = tc.center;
+
+      if (!p.is_monotone ())
+        {
+          printf ("FAILED: is_monotone should be true for %s!\n", tc.name);
+          ok = false;
+        }
+
+      lens_warp_correction lw;
+      lw.set_parameters (p);
+      point_t img_center = { 500, 500 };
+      
+      /* Calculate scan corners for normalization.  */
+      lens_warp_correction lw_prep;
+      lw_prep.set_parameters (p);
+      lw_prep.precompute (img_center, { 0, 0 }, { 1000, 0 }, { 1000, 1000 }, { 0, 1000 });
+      point_t scan_c1 = lw_prep.corrected_to_scan ({ 0, 0 });
+      point_t scan_c2 = lw_prep.corrected_to_scan ({ 1000, 0 });
+      point_t scan_c3 = lw_prep.corrected_to_scan ({ 1000, 1000 });
+      point_t scan_c4 = lw_prep.corrected_to_scan ({ 0, 1000 });
+
+      lw.precompute (img_center, scan_c1, scan_c2, scan_c3, scan_c4);
+      lw.precompute_inverse ();
+
+      /* Verify center is fixed.  */
+      point_t c_scan = lw.corrected_to_scan (img_center);
+      if (!img_center.almost_eq (c_scan, 1e-6))
+        {
+          printf ("FAILED: %s center should be fixed point!\n", tc.name);
+          ok = false;
+        }
+
+      /* Verify round-trip accuracy on a grid.  */
+      for (int y = 0; y <= 1000; y += 250)
+        for (int x = 0; x <= 1000; x += 250)
+          {
+            point_t orig = { (coord_t) x, (coord_t) y };
+            point_t scan = lw.corrected_to_scan (orig);
+            point_t corrected = lw.scan_to_corrected (scan);
+            if (!orig.almost_eq (corrected, 0.01))
+              {
+                printf ("FAILED: %s roundtrip mismatch at (%i,%i)\n", tc.name, x, y);
+                ok = false;
+              }
+          }
+    }
+
+  /* Broken parameters: non-monotone.  */
+  lens_warp_correction_parameters p2;
+  p2.kr[0] = 1.0;
+  p2.kr[1] = -1.0;
+  p2.kr[2] = 0.0;
+  p2.kr[3] = 0.0;
+  /* Derivative is f(x) = 1 - 3x. For x > 1/3, f(x) < 0.  */
+  if (p2.is_monotone ())
+    {
+      printf ("FAILED: is_monotone should be false for p2!\n");
+      ok = false;
+    }
+
+  return ok;
+}
 }
 
 
 int
 main ()
 {
-  printf ("1..20\n");
+  printf ("1..21\n");
 
   test_matrix ();
   report ("matrix tests", true);
@@ -1171,6 +1253,7 @@ main ()
   report ("render linearity tests", test_render_linearity ());
   report ("screen blur tests", test_screen_blur ());
   report ("homography tests", test_homography (false, false, 0.000001));
+  report ("lens warp tests", test_lens_warp ());
   report ("lens correction tests", test_homography (true, false, 0.15));
   report ("1d homography and lens correction tests", test_homography (true, true, 0.15));
   report ("screen discovery tests", test_discovery (1.8));
