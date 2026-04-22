@@ -272,13 +272,9 @@ tone_curve::init_by_sensitivity (enum spectrum_dyes_to_xyz::characteristic_curve
 {
   spectrum_dyes_to_xyz spec;
   spec.set_characteristic_curve (curve);
-  const int len = 1024;
-  luminosity_t table[len];
-  //luminosity_t min = spec.red_characteristic_curve->apply (0);
-  //luminosity_t max = spec.red_characteristic_curve->apply (1);
-  for (int i = 0; i < len; i++)
-    table[i] = (spec.red_characteristic_curve->apply (i / 1023.0)/* - min) * (1 / (max - min)*/);
-  init_by_y_values (table, len);
+  init_by_function (1024, [&] (luminosity_t x) {
+    return spec.red_characteristic_curve->apply (x);
+  });
 }
 
 const property_t tone_curve::tone_curve_names[tone_curve::tone_curve_max] =
@@ -306,14 +302,14 @@ tone_curve::tone_curve (enum tone_curves type, const std::vector<point_t> &contr
 	init_by_y_values (dng_curve, sizeof (dng_curve) / sizeof (luminosity_t));
   	return;
       case tone_curve_dng_contrast:
-	{
-	  const int len = sizeof (dng_curve) / sizeof (luminosity_t);
-	  luminosity_t table[len];
-	  for (int i = 0; i < len; i++)
-	    table[i] = apply_gamma (dng_curve[i], 2.2);
-	  init_by_y_values (table, len);
-  	  return;
-	}
+	init_by_function (sizeof (dng_curve) / sizeof (luminosity_t),
+			  [] (luminosity_t x) {
+			    /* DNG curve is defined for 0..1 range.  */
+			    static precomputed_function<luminosity_t>
+			      dng (0, 1, dng_curve, sizeof (dng_curve) / sizeof (luminosity_t));
+			    return apply_gamma (dng.apply (x), 2.2);
+			  });
+  	return;
       case tone_curve_safe:
 	init_by_sensitivity (spectrum_dyes_to_xyz::safe_reversal_output_curve);
 	break;
@@ -391,14 +387,10 @@ tone_curve::init_by_control_points (const std::vector<point_t> &control_points)
       y[i] = cp[i].y;
     }
   spline<double> s (x, y, n);
-  const int len = 1024;
-  luminosity_t table[len];
-  for (int i = 0; i < len; i++)
-    {
-      double val = s.apply (i / (double)(len - 1));
-      table[i] = std::max (0.0, std::min (1.0, val));
-    }
-  init_by_y_values (table, len);
+  init_by_function (1024, [&] (double x) {
+    double val = s.apply (x);
+    return std::max (0.0, std::min (1.0, val));
+  });
   delete[] x;
   delete[] y;
 }

@@ -55,7 +55,6 @@ std::unique_ptr<precomputed_function<coord_t>>
 get_new_inverse (struct lens_inverse_parameters &p, progress_info *prog)
 {
   (void)prog;
-  coord_t data[lens_warp_correction::size];
   coord_t inv_max_dist_sq2 = 1 / (p.max_dist * p.max_dist);
 
   /* Determine the start of binary search for computing inverse.
@@ -87,14 +86,13 @@ get_new_inverse (struct lens_inverse_parameters &p, progress_info *prog)
         }
     }
 
-    /* Now precompute inverse.  */
-#pragma omp parallel for default(none) shared(p, data, inv_max_dist_sq2, max)
-  for (int i = 0; i < lens_warp_correction::size; i++)
-    data[i] = get_inverse (p.param,
-                           i * p.max_dist / (lens_warp_correction::size - 1),
-                           max, inv_max_dist_sq2);
-  return std::make_unique<precomputed_function<coord_t>> (0, p.max_dist, data,
-                                            lens_warp_correction::size);
+  /* Now precompute inverse.  */
+  return std::make_unique<precomputed_function<coord_t>> (
+      0, p.max_dist, lens_warp_correction::size,
+      [&] (coord_t x) {
+        return get_inverse (p.param, x, max, inv_max_dist_sq2);
+      },
+      true);
 }
 static lru_cache<lens_inverse_parameters, precomputed_function<coord_t>,
                  get_new_inverse, 4>

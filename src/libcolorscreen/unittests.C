@@ -474,6 +474,46 @@ test_screen_blur ()
   return true;
 }
 
+/* Internal unit test for the precomputed_function class.  */
+static bool
+test_precomputed_function ()
+{
+  bool ok = true;
+  /* Test functional constructor with x^2.  */
+  precomputed_function<double> f (0, 10, 101, [] (double x) { return x * x; });
+
+  for (double x = 0; x <= 10; x += 0.5)
+    {
+      double val = f.apply (x);
+      if (std::abs (val - x * x) > 0.01)
+        {
+          printf ("FAILED: precomputed_function x^2 mismatch at %f: "
+                  "expected %f, got %f\n",
+                  (double)x, (double)(x * x), (double)val);
+          ok = false;
+        }
+    }
+
+  /* Test move constructor.  */
+  precomputed_function<double> f2 = std::move (f);
+  if (std::abs (f2.apply (5.0) - 25.0) > 0.01)
+    {
+      printf ("FAILED: precomputed_function move constructor failed!\n");
+      ok = false;
+    }
+
+  /* Test monotonicity and inverse.  */
+  if (std::abs (f2.invert (49.0) - 7.0) > 0.01)
+    {
+      printf ("FAILED: precomputed_function inverse mismatch: "
+              "expected 7.0, got %f\n",
+              (double)f2.invert (49.0));
+      ok = false;
+    }
+
+  return ok;
+}
+
 bool
 test_richards_curve ()
 {
@@ -1269,7 +1309,7 @@ test_lens_warp ()
 int
 main ()
 {
-  printf ("1..21\n");
+  printf ("1..22\n");
 
   test_matrix ();
   report ("matrix tests", true);
@@ -1282,6 +1322,7 @@ main ()
   report ("lens correction tests", test_homography (true, false, 0.15));
   report ("1d homography and lens correction tests", test_homography (true, true, 0.15));
   report ("screen discovery tests", test_discovery (1.8));
+  report ("precomputed function tests", test_precomputed_function ());
   report ("richards curve tests", test_richards_curve ());
   report ("richards symmetry tests", test_richards_symmetry ());
   report ("richards reversibility tests", test_richards_reversibility ());
