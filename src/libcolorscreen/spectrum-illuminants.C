@@ -960,13 +960,13 @@ set_illuminant_to (spectrum backlight, spectrum_dyes_to_xyz::illuminants il, lum
   switch (il)
   {
     case spectrum_dyes_to_xyz::il_A:
-      compute_spectrum (backlight, 300, 830, sizeof (il_A)/sizeof (luminosity_t), il_A, false, 100, false);
+      compute_spectrum (backlight, 300, 830, sizeof (il_A)/sizeof (luminosity_t), il_A, /* absorbance= */ false, /* norm= */ 100, /* limit_range= */ false, /* clamp= */ false);
       break;
     case spectrum_dyes_to_xyz::il_B:
-      compute_spectrum (backlight, 320, 780, sizeof (il_B)/sizeof (luminosity_t), il_B, false, 100, false);
+      compute_spectrum (backlight, 320, 780, sizeof (il_B)/sizeof (luminosity_t), il_B, /* absorbance= */ false, /* norm= */ 100, /* limit_range= */ false, /* clamp= */ false);
       break;
     case spectrum_dyes_to_xyz::il_C:
-      compute_spectrum (backlight, 320, 780, sizeof (il_C)/sizeof (luminosity_t), il_C, false, 100, false);
+      compute_spectrum (backlight, 320, 780, sizeof (il_C)/sizeof (luminosity_t), il_C, /* absorbance= */ false, /* norm= */ 100, /* limit_range= */ false, /* clamp= */ false);
       break;
     case spectrum_dyes_to_xyz::il_D:
       daylight_il (backlight, temperature);
@@ -998,7 +998,7 @@ set_illuminant_to (spectrum backlight, spectrum_dyes_to_xyz::illuminants il, lum
     case spectrum_dyes_to_xyz::il_nikon_coolscan_9000ED_LED_red:
 	compute_spectrum (backlight,
 			  sizeof (nikon_coolscan_9000ED_LED_red) / sizeof (spectra_entry),
-			  nikon_coolscan_9000ED_LED_red, false, 1);
+			  nikon_coolscan_9000ED_LED_red, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
       break;
     /* separated leds are guesses.  Since blue and red are more obviously separated, guess on
        green led.  */
@@ -1007,13 +1007,13 @@ set_illuminant_to (spectrum backlight, spectrum_dyes_to_xyz::illuminants il, lum
 	spectrum red, blue;
 	compute_spectrum (red,
 			  sizeof (nikon_coolscan_9000ED_LED_red) / sizeof (spectra_entry),
-			  nikon_coolscan_9000ED_LED_red, false, 1);
+			  nikon_coolscan_9000ED_LED_red, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
 	compute_spectrum (blue,
 			  sizeof (nikon_coolscan_9000ED_LED_blue) / sizeof (spectra_entry),
-			  nikon_coolscan_9000ED_LED_blue, false, 1);
+			  nikon_coolscan_9000ED_LED_blue, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
 	compute_spectrum (backlight,
 			  sizeof (nikon_coolscan_9000ED_LED_white) / sizeof (spectra_entry),
-			  nikon_coolscan_9000ED_LED_white, false, 1);
+			  nikon_coolscan_9000ED_LED_white, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
 	for (int i = 0; i < SPECTRUM_SIZE; i++)
 	  {
 	    backlight[i] -= red[i] + blue[i];
@@ -1025,12 +1025,12 @@ set_illuminant_to (spectrum backlight, spectrum_dyes_to_xyz::illuminants il, lum
     case spectrum_dyes_to_xyz::il_nikon_coolscan_9000ED_LED_blue:
 	compute_spectrum (backlight,
 			  sizeof (nikon_coolscan_9000ED_LED_blue) / sizeof (spectra_entry),
-			  nikon_coolscan_9000ED_LED_blue, false, 1);
+			  nikon_coolscan_9000ED_LED_blue, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
       break;
     case spectrum_dyes_to_xyz::il_debug:
 	compute_spectrum (backlight,
 			  sizeof (debug_light) / sizeof (spectra_entry),
-			  debug_light, false, 1);
+			  debug_light, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
       break;
     default: abort ();
   }

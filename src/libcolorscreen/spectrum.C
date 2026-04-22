@@ -85,7 +85,7 @@ compute_spectrum (spectrum s, luminosity_t start, luminosity_t end, int size,
 void
 compute_spectrum (spectrum s, const xspect &in)
 {
-  compute_spectrum (s, (luminosity_t)in.spec_wl_short, (luminosity_t)in.spec_wl_long, in.spec_n, in.spec, false, (luminosity_t)in.norm, false);
+  compute_spectrum (s, (luminosity_t)in.spec_wl_short, (luminosity_t)in.spec_wl_long, in.spec_n, in.spec, /* absorbance= */ false, (luminosity_t)in.norm, /* limit_range= */ false, /* clamp= */ false);
 }
 
 /* Process absorbance chart with regular step to a spectrum.

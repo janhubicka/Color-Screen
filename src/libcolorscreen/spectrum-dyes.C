@@ -4555,42 +4555,42 @@ set_dyes_to_autochrome2 (spectrum red, spectrum green, spectrum blue,
   //compute_spectrum (tartrazine, 400, 700, sizeof tartrazine_data / sizeof (luminosity_t), tartrazine_data, false);
   compute_spectrum (tartrazine,
 		    sizeof (tartrazine_paper_data) / sizeof (spectra_entry),
-		    tartrazine_paper_data, false, 100);
+		    tartrazine_paper_data, /* absorbance= */ false, /* norm= */ 100, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
   //compute_spectrum (rose, 400, 700, sizeof rose_data / sizeof (luminosity_t), rose_data, false);
   compute_spectrum (rose,
 		    sizeof (rose_paper_data) / sizeof (spectra_entry),
-		    rose_paper_data, false, 100);
+		    rose_paper_data, /* absorbance= */ false, /* norm= */ 100, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
   compute_spectrum (o2_rose,
 		    sizeof (o2_rose_paper_data) / sizeof (spectra_entry),
-		    o2_rose_paper_data, false, 100);
+		    o2_rose_paper_data, /* absorbance= */ false, /* norm= */ 100, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
   //compute_spectrum (erythrosine, 400, 700, sizeof erythrosine_data / sizeof (luminosity_t), erythrosine_data, false);
   compute_spectrum (erythrosine,
 		    sizeof (erythrosine_paper_data) / sizeof (spectra_entry),
-		    erythrosine_paper_data, false, 100);
+		    erythrosine_paper_data, /* absorbance= */ false, /* norm= */ 100, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
   compute_spectrum (o2_erythrosine,
 		    sizeof (o2_erythrosine_paper_data) / sizeof (spectra_entry),
-		    o2_erythrosine_paper_data, false, 100);
+		    o2_erythrosine_paper_data, /* absorbance= */ false, /* norm= */ 100, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
   //compute_spectrum (patent, 400, 700, sizeof patent_data / sizeof (luminosity_t), patent_data, false);
   compute_spectrum (patent,
 		    sizeof (patent_paper_data) / sizeof (spectra_entry),
-		    patent_paper_data, false, 100);
+		    patent_paper_data, /* absorbance= */ false, /* norm= */ 100, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
   compute_spectrum (o2_patent,
 		    sizeof (o2_patent_paper_data) / sizeof (spectra_entry),
-		    o2_patent_paper_data, false, 100);
+		    o2_patent_paper_data, /* absorbance= */ false, /* norm= */ 100, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
   //compute_spectrum (flexo, 400, 700, sizeof flexo_data / sizeof (luminosity_t), flexo_data, false);
   compute_spectrum (flexo,
 		    sizeof (flexo_paper_data) / sizeof (spectra_entry),
-		    flexo_paper_data, false, 100);
+		    flexo_paper_data, /* absorbance= */ false, /* norm= */ 100, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
   compute_spectrum (o2_flexo,
 		    sizeof (o2_flexo_paper_data) / sizeof (spectra_entry),
-		    o2_flexo_paper_data, false, 100);
+		    o2_flexo_paper_data, /* absorbance= */ false, /* norm= */ 100, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
   //compute_spectrum (crystal, 400, 700, sizeof crystal_data / sizeof (luminosity_t), crystal_data, false);
   compute_spectrum (crystal,
 		    sizeof (crystal_paper_data) / sizeof (spectra_entry),
-		    crystal_paper_data, false, 100);
+		    crystal_paper_data, /* absorbance= */ false, /* norm= */ 100, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
   compute_spectrum (o2_crystal,
 		    sizeof (o2_crystal_paper_data) / sizeof (spectra_entry),
-		    o2_crystal_paper_data, false, 100);
+		    o2_crystal_paper_data, /* absorbance= */ false, /* norm= */ 100, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
   if (false)
     {
       FILE *f;
@@ -4653,8 +4653,8 @@ set_synthetic_dufay_red (spectrum red, luminosity_t d1, luminosity_t d2)
   static spectrum rhodamine_b;
   if (!initialized)
     {
-      compute_spectrum (auramine, 380.0, 780.0, sizeof (auramine_absorption) / sizeof (luminosity_t), auramine_absorption, true, NORM);
-      compute_spectrum (rhodamine_b, 380.0, 780.0, sizeof (rhodamine_b_absorption) / sizeof (luminosity_t), rhodamine_b_absorption, true, NORM);
+      compute_spectrum (auramine, 380.0, 780.0, sizeof (auramine_absorption) / sizeof (luminosity_t), auramine_absorption, /* absorbance= */ true, /* norm= */ NORM, /* limit_range= */ true, /* clamp= */ false);
+      compute_spectrum (rhodamine_b, 380.0, 780.0, sizeof (rhodamine_b_absorption) / sizeof (luminosity_t), rhodamine_b_absorption, /* absorbance= */ true, /* norm= */ NORM, /* limit_range= */ true, /* clamp= */ false);
       initialized = true;
     }
   for (int i = 0; i < SPECTRUM_SIZE; i++)
@@ -4676,9 +4676,9 @@ set_synthetic_dufay_green (spectrum green, luminosity_t d1, luminosity_t d2)
   static bool initialized;
   if (!initialized)
     {
-      compute_spectrum (malachite, 380.0, 780.0, sizeof (malachite_green_absorption) / sizeof (luminosity_t), malachite_green_absorption, true, NORM);
-      compute_spectrum (auramine, 380.0, 780.0, sizeof (auramine_absorption) / sizeof (luminosity_t), auramine_absorption, true, NORM);
-      compute_spectrum (methylene_blue, 380.0, 780.0, sizeof (methylene_blue_absorption) / sizeof (luminosity_t), methylene_blue_absorption, true, NORM);
+      compute_spectrum (malachite, 380.0, 780.0, sizeof (malachite_green_absorption) / sizeof (luminosity_t), malachite_green_absorption, /* absorbance= */ true, /* norm= */ NORM, /* limit_range= */ true, /* clamp= */ false);
+      compute_spectrum (auramine, 380.0, 780.0, sizeof (auramine_absorption) / sizeof (luminosity_t), auramine_absorption, /* absorbance= */ true, /* norm= */ NORM, /* limit_range= */ true, /* clamp= */ false);
+      compute_spectrum (methylene_blue, 380.0, 780.0, sizeof (methylene_blue_absorption) / sizeof (luminosity_t), methylene_blue_absorption, /* absorbance= */ true, /* norm= */ NORM, /* limit_range= */ true, /* clamp= */ false);
       initialized = true;
     }
   for (int i = 0; i < SPECTRUM_SIZE; i++)
@@ -4703,9 +4703,9 @@ set_synthetic_dufay_blue (spectrum blue, luminosity_t d1, luminosity_t d2)
   static bool initialized;
   if (!initialized)
     {
-      compute_spectrum (malachite, 380.0, 780.0, sizeof (malachite_green_absorption) / sizeof (luminosity_t), malachite_green_absorption, true, NORM);
-      compute_spectrum (violet, 380.0, 780.0, sizeof (crystal_violet_absorption) / sizeof (luminosity_t), crystal_violet_absorption, true, NORM);
-      compute_spectrum (methylene_blue, 380.0, 780.0, sizeof (methylene_blue_absorption) / sizeof (luminosity_t), methylene_blue_absorption, true, NORM);
+      compute_spectrum (malachite, 380.0, 780.0, sizeof (malachite_green_absorption) / sizeof (luminosity_t), malachite_green_absorption, /* absorbance= */ true, /* norm= */ NORM, /* limit_range= */ true, /* clamp= */ false);
+      compute_spectrum (violet, 380.0, 780.0, sizeof (crystal_violet_absorption) / sizeof (luminosity_t), crystal_violet_absorption, /* absorbance= */ true, /* norm= */ NORM, /* limit_range= */ true, /* clamp= */ false);
+      compute_spectrum (methylene_blue, 380.0, 780.0, sizeof (methylene_blue_absorption) / sizeof (luminosity_t), methylene_blue_absorption, /* absorbance= */ true, /* norm= */ NORM, /* limit_range= */ true, /* clamp= */ false);
       initialized = true;
     }
   for (int i = 0; i < SPECTRUM_SIZE; i++)
@@ -4723,75 +4723,75 @@ set_dyes_to (spectrum red, spectrum green, spectrum blue, spectrum cyan, spectru
   switch (dyes)
     {
       case spectrum_dyes_to_xyz::dufaycolor_color_cinematography:
-	compute_spectrum (red, sizeof (color_cinematography_dufay_red) / sizeof (spectra_entry), color_cinematography_dufay_red, false, 100, 0, 100);
-	compute_spectrum (green, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, false, 100, 0, 100);
-	compute_spectrum (blue, sizeof (color_cinematography_dufay_blue) / sizeof (spectra_entry), color_cinematography_dufay_blue, false, 100, 0, 100);
+	compute_spectrum (red, sizeof (color_cinematography_dufay_red) / sizeof (spectra_entry), color_cinematography_dufay_red, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
+	compute_spectrum (green, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
+	compute_spectrum (blue, sizeof (color_cinematography_dufay_blue) / sizeof (spectra_entry), color_cinematography_dufay_blue, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::dufaycolor_harrison_horner:
-	compute_spectrum (red, sizeof (harrison_horner_dufay_red) / sizeof (spectra_entry), harrison_horner_dufay_red, false, 100, 0, 100);
-	compute_spectrum (green, sizeof (harrison_horner_dufay_green) / sizeof (spectra_entry), harrison_horner_dufay_green, false, 100, 0, 100);
-	compute_spectrum (blue, sizeof (harrison_horner_dufay_blue) / sizeof (spectra_entry), harrison_horner_dufay_blue, false, 100, 0, 100);
+	compute_spectrum (red, sizeof (harrison_horner_dufay_red) / sizeof (spectra_entry), harrison_horner_dufay_red, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
+	compute_spectrum (green, sizeof (harrison_horner_dufay_green) / sizeof (spectra_entry), harrison_horner_dufay_green, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
+	compute_spectrum (blue, sizeof (harrison_horner_dufay_blue) / sizeof (spectra_entry), harrison_horner_dufay_blue, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::dufaycolor_collins_giles:
-	compute_spectrum (red, sizeof (dufaycolor_collins_giles_red) / sizeof (spectra_entry), dufaycolor_collins_giles_red, false, 100, 0, 100);
-	compute_spectrum (green, sizeof (dufaycolor_collins_giles_green) / sizeof (spectra_entry), dufaycolor_collins_giles_green, false, 100, 0, 100);
-	compute_spectrum (blue, sizeof (dufaycolor_collins_giles_blue) / sizeof (spectra_entry), dufaycolor_collins_giles_blue, false, 100, 0, 100);
+	compute_spectrum (red, sizeof (dufaycolor_collins_giles_red) / sizeof (spectra_entry), dufaycolor_collins_giles_red, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
+	compute_spectrum (green, sizeof (dufaycolor_collins_giles_green) / sizeof (spectra_entry), dufaycolor_collins_giles_green, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
+	compute_spectrum (blue, sizeof (dufaycolor_collins_giles_blue) / sizeof (spectra_entry), dufaycolor_collins_giles_blue, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::dufaycolor_photography_its_materials_and_processes:
-	compute_spectrum (red, sizeof (dufaycolor_photography_its_materials_and_processes_red) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_red, false, 100, 0, 100);
-	compute_spectrum (green, sizeof (dufaycolor_photography_its_materials_and_processes_green) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_green, false, 100, 0, 100);
-	compute_spectrum (blue, sizeof (dufaycolor_photography_its_materials_and_processes_blue) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_blue, false, 100, 0, 100);
+	compute_spectrum (red, sizeof (dufaycolor_photography_its_materials_and_processes_red) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_red, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
+	compute_spectrum (green, sizeof (dufaycolor_photography_its_materials_and_processes_green) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_green, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
+	compute_spectrum (blue, sizeof (dufaycolor_photography_its_materials_and_processes_blue) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_blue, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::dufaycolor_separation_filters_photography_its_materials_and_processes:
-	compute_spectrum (red, sizeof (dufaycolor_photography_its_materials_and_processes_red1s) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_red1s, false, 100, 0, 100);
-	compute_spectrum (green, sizeof (dufaycolor_photography_its_materials_and_processes_green2s) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_green2s, false, 100, 0, 100);
-	compute_spectrum (blue, sizeof (dufaycolor_photography_its_materials_and_processes_blue3s) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_blue3s, false, 100, 0, 100);
+	compute_spectrum (red, sizeof (dufaycolor_photography_its_materials_and_processes_red1s) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_red1s, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
+	compute_spectrum (green, sizeof (dufaycolor_photography_its_materials_and_processes_green2s) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_green2s, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
+	compute_spectrum (blue, sizeof (dufaycolor_photography_its_materials_and_processes_blue3s) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_blue3s, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::dufaycolor_narrow_cut_filters_harrison_horner:
-	compute_spectrum (red, sizeof (dufaycolor_harrison_horner_narrow_cut_red) / sizeof (spectra_entry), dufaycolor_harrison_horner_narrow_cut_red, false, 100, 0, 100);
-	compute_spectrum (green, sizeof (dufaycolor_harrison_horner_narrow_cut_green) / sizeof (spectra_entry), dufaycolor_harrison_horner_narrow_cut_green, false, 100, 0, 100);
-	compute_spectrum (blue, sizeof (dufaycolor_harrison_horner_narrow_cut_blue) / sizeof (spectra_entry), dufaycolor_harrison_horner_narrow_cut_blue, false, 100, 0, 100);
+	compute_spectrum (red, sizeof (dufaycolor_harrison_horner_narrow_cut_red) / sizeof (spectra_entry), dufaycolor_harrison_horner_narrow_cut_red, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
+	compute_spectrum (green, sizeof (dufaycolor_harrison_horner_narrow_cut_green) / sizeof (spectra_entry), dufaycolor_harrison_horner_narrow_cut_green, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
+	compute_spectrum (blue, sizeof (dufaycolor_harrison_horner_narrow_cut_blue) / sizeof (spectra_entry), dufaycolor_harrison_horner_narrow_cut_blue, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ 100, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::dufaycolor_dufaycolor_manual:
-	compute_spectrum (red, sizeof (manual_dufay_red) / sizeof (spectra_entry), manual_dufay_red, false);
-	compute_spectrum (green, sizeof (manual_dufay_green) / sizeof (spectra_entry), manual_dufay_green, false);
-	compute_spectrum (blue, sizeof (manual_dufay_blue) / sizeof (spectra_entry), manual_dufay_blue, false);
+	compute_spectrum (red, sizeof (manual_dufay_red) / sizeof (spectra_entry), manual_dufay_red, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (green, sizeof (manual_dufay_green) / sizeof (spectra_entry), manual_dufay_green, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (blue, sizeof (manual_dufay_blue) / sizeof (spectra_entry), manual_dufay_blue, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM11948_spicer_dufaycolor:
-	compute_spectrum (red, sizeof (real_dufay_red) / sizeof (spectra_entry), real_dufay_red, true);
-	compute_spectrum (green, sizeof (real_dufay_green) / sizeof (spectra_entry), real_dufay_green, true);
-	compute_spectrum (blue, sizeof (real_dufay_blue) / sizeof (spectra_entry), real_dufay_blue, true);
+	compute_spectrum (red, sizeof (real_dufay_red) / sizeof (spectra_entry), real_dufay_red, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (green, sizeof (real_dufay_green) / sizeof (spectra_entry), real_dufay_green, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (blue, sizeof (real_dufay_blue) / sizeof (spectra_entry), real_dufay_blue, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM11951:
-	compute_spectrum (red, sizeof (real_dufay_red2) / sizeof (spectra_entry), real_dufay_red2, true);
-	compute_spectrum (green, sizeof (real_dufay_green2) / sizeof (spectra_entry), real_dufay_green2, true);
-	compute_spectrum (blue, sizeof (real_dufay_blue2) / sizeof (spectra_entry), real_dufay_blue2, true);
+	compute_spectrum (red, sizeof (real_dufay_red2) / sizeof (spectra_entry), real_dufay_red2, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (green, sizeof (real_dufay_green2) / sizeof (spectra_entry), real_dufay_green2, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (blue, sizeof (real_dufay_blue2) / sizeof (spectra_entry), real_dufay_blue2, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM11960:
-	compute_spectrum (red, sizeof (real_dufay_red3) / sizeof (spectra_entry), real_dufay_red3, true);
-	compute_spectrum (green, sizeof (real_dufay_green3) / sizeof (spectra_entry), real_dufay_green3, true);
-	compute_spectrum (blue, sizeof (real_dufay_blue3) / sizeof (spectra_entry), real_dufay_blue3, true);
+	compute_spectrum (red, sizeof (real_dufay_red3) / sizeof (spectra_entry), real_dufay_red3, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (green, sizeof (real_dufay_green3) / sizeof (spectra_entry), real_dufay_green3, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (blue, sizeof (real_dufay_blue3) / sizeof (spectra_entry), real_dufay_blue3, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM11967:
-	compute_spectrum (red, sizeof (real_dufay_red4) / sizeof (spectra_entry), real_dufay_red4, true);
-	compute_spectrum (green, sizeof (real_dufay_green4) / sizeof (spectra_entry), real_dufay_green4, true);
-	compute_spectrum (blue, sizeof (real_dufay_blue4) / sizeof (spectra_entry), real_dufay_blue4, true);
+	compute_spectrum (red, sizeof (real_dufay_red4) / sizeof (spectra_entry), real_dufay_red4, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (green, sizeof (real_dufay_green4) / sizeof (spectra_entry), real_dufay_green4, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (blue, sizeof (real_dufay_blue4) / sizeof (spectra_entry), real_dufay_blue4, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM12075:
-	compute_spectrum (red, sizeof (real_dufay_red5) / sizeof (spectra_entry), real_dufay_red5, true);
-	compute_spectrum (green, sizeof (real_dufay_green5) / sizeof (spectra_entry), real_dufay_green5, true);
-	compute_spectrum (blue, sizeof (real_dufay_blue5) / sizeof (spectra_entry), real_dufay_blue5, true);
+	compute_spectrum (red, sizeof (real_dufay_red5) / sizeof (spectra_entry), real_dufay_red5, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (green, sizeof (real_dufay_green5) / sizeof (spectra_entry), real_dufay_green5, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (blue, sizeof (real_dufay_blue5) / sizeof (spectra_entry), real_dufay_blue5, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::cinecolor:
 	compute_spectrum (red,
 			  sizeof (autochrome_orange) / sizeof (spectra_entry),
-			  autochrome_orange, false, 1);
+			  autochrome_orange, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
 	compute_spectrum (green,
 			  sizeof (autochrome_green) / sizeof (spectra_entry),
-			  autochrome_green, false, 1);
+			  autochrome_green, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
 	compute_spectrum (blue,
 			  sizeof (autochrome_violet) / sizeof (spectra_entry),
-			  autochrome_violet, false, 1);
+			  autochrome_violet, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::autochrome_reconstructed:
 	set_dyes_to_autochrome2 (red, green, blue, 1, 1, 19.7 / (20.35),
@@ -4804,14 +4804,14 @@ set_dyes_to (spectrum red, spectrum green, spectrum blue, spectrum cyan, spectru
 							   1,1, true);
 	break;
       case spectrum_dyes_to_xyz::wratten_25_58_47_color_cinematography:
-	compute_spectrum (red, 400.0, 700.0, sizeof (wratten_filter_red_25_kodak) / sizeof (luminosity_t), wratten_filter_red_25_kodak, false, 100);
-	compute_spectrum (green, 400.0, 700.0, sizeof (wratten_filter_green_58_kodak) / sizeof (luminosity_t), wratten_filter_green_58_kodak, false, 100);
-	compute_spectrum (blue, 400.0, 700.0, sizeof (wratten_filter_blue_47_kodak) / sizeof (luminosity_t), wratten_filter_blue_47_kodak, false, 100);
+	compute_spectrum (red, 400.0, 700.0, sizeof (wratten_filter_red_25_kodak) / sizeof (luminosity_t), wratten_filter_red_25_kodak, /* absorbance= */ false, /* norm= */ 100, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (green, 400.0, 700.0, sizeof (wratten_filter_green_58_kodak) / sizeof (luminosity_t), wratten_filter_green_58_kodak, /* absorbance= */ false, /* norm= */ 100, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (blue, 400.0, 700.0, sizeof (wratten_filter_blue_47_kodak) / sizeof (luminosity_t), wratten_filter_blue_47_kodak, /* absorbance= */ false, /* norm= */ 100, /* limit_range= */ true, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::wratten_25_58_47_kodak_1945:
-	compute_spectrum (red, 400.0, 700.0, sizeof (wratten_filter_red_25_kodak) / sizeof (luminosity_t), wratten_filter_red_25_kodak, false, 100);
-	compute_spectrum (green, 400.0, 700.0, sizeof (wratten_filter_green_58_kodak) / sizeof (luminosity_t), wratten_filter_green_58_kodak, false, 100);
-	compute_spectrum (blue, 400.0, 700.0, sizeof (wratten_filter_blue_47_kodak) / sizeof (luminosity_t), wratten_filter_blue_47_kodak, false, 100);
+	compute_spectrum (red, 400.0, 700.0, sizeof (wratten_filter_red_25_kodak) / sizeof (luminosity_t), wratten_filter_red_25_kodak, /* absorbance= */ false, /* norm= */ 100, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (green, 400.0, 700.0, sizeof (wratten_filter_green_58_kodak) / sizeof (luminosity_t), wratten_filter_green_58_kodak, /* absorbance= */ false, /* norm= */ 100, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (blue, 400.0, 700.0, sizeof (wratten_filter_blue_47_kodak) / sizeof (luminosity_t), wratten_filter_blue_47_kodak, /* absorbance= */ false, /* norm= */ 100, /* limit_range= */ true, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::kodachrome_25_sensitivity:
 	/* It is best to clamp missing data to 0 for spectral response.
@@ -4822,20 +4822,20 @@ set_dyes_to (spectrum red, spectrum green, spectrum blue, spectrum cyan, spectru
 	log_sensitivity_to_reversal_transmitance (red);
 	log_sensitivity_to_reversal_transmitance (green);
 	log_sensitivity_to_reversal_transmitance (blue);
-	compute_spectrum (cyan, sizeof (kodachrome25_cyan) / sizeof (spectra_entry), kodachrome25_cyan, false, 1.0, 0, 1.3);
-	compute_spectrum (magenta, sizeof (kodachrome25_magenta) / sizeof (spectra_entry), kodachrome25_magenta, false, 1.0, 0, 1.3);
-	compute_spectrum (yellow, sizeof (kodachrome25_yellow) / sizeof (spectra_entry), kodachrome25_yellow, false, 1.0, 0, 1.3);
+	compute_spectrum (cyan, sizeof (kodachrome25_cyan) / sizeof (spectra_entry), kodachrome25_cyan, /* absorbance= */ false, /* norm= */ 1.0, /* min= */ 0, /* max= */ 1.3, /* clamp= */ false);
+	compute_spectrum (magenta, sizeof (kodachrome25_magenta) / sizeof (spectra_entry), kodachrome25_magenta, /* absorbance= */ false, /* norm= */ 1.0, /* min= */ 0, /* max= */ 1.3, /* clamp= */ false);
+	compute_spectrum (yellow, sizeof (kodachrome25_yellow) / sizeof (spectra_entry), kodachrome25_yellow, /* absorbance= */ false, /* norm= */ 1.0, /* min= */ 0, /* max= */ 1.3, /* clamp= */ false);
 	return true;
 	break;
       case spectrum_dyes_to_xyz::phase_one_sensitivity:
-	compute_spectrum (red, 400, 720, sizeof (phase_one_red) / sizeof (luminosity_t), phase_one_red, false);
-	compute_spectrum (green, 400, 720, sizeof (phase_one_green) / sizeof (luminosity_t), phase_one_green, false);
-	compute_spectrum (blue, 400, 720, sizeof (phase_one_blue) / sizeof (luminosity_t), phase_one_blue, false);
+	compute_spectrum (red, 400, 720, sizeof (phase_one_red) / sizeof (luminosity_t), phase_one_red, /* absorbance= */ false, /* norm= */ 1.0, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (green, 400, 720, sizeof (phase_one_green) / sizeof (luminosity_t), phase_one_green, /* absorbance= */ false, /* norm= */ 1.0, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (blue, 400, 720, sizeof (phase_one_blue) / sizeof (luminosity_t), phase_one_blue, /* absorbance= */ false, /* norm= */ 1.0, /* limit_range= */ true, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::nikon_d3_sensitivity:
-	compute_spectrum (red, 400, 720, sizeof (nikon_d3_red) / sizeof (luminosity_t), nikon_d3_red, false);
-	compute_spectrum (green, 400, 720, sizeof (nikon_d3_green) / sizeof (luminosity_t), nikon_d3_green, false);
-	compute_spectrum (blue, 400, 720, sizeof (nikon_d3_blue) / sizeof (luminosity_t), nikon_d3_blue, false);
+	compute_spectrum (red, 400, 720, sizeof (nikon_d3_red) / sizeof (luminosity_t), nikon_d3_red, /* absorbance= */ false, /* norm= */ 1.0, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (green, 400, 720, sizeof (nikon_d3_green) / sizeof (luminosity_t), nikon_d3_green, /* absorbance= */ false, /* norm= */ 1.0, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (blue, 400, 720, sizeof (nikon_d3_blue) / sizeof (luminosity_t), nikon_d3_blue, /* absorbance= */ false, /* norm= */ 1.0, /* limit_range= */ true, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::nikon_coolscan_9000ED_sensitivity:
 	{
@@ -4867,86 +4867,86 @@ set_dyes_to (spectrum red, spectrum green, spectrum blue, spectrum cyan, spectru
 	break;
       case spectrum_dyes_to_xyz::thames_mees_pledge:
 	{
-	compute_spectrum (red, sizeof (thames_red) / sizeof (spectra_entry), thames_red, true);
-	compute_spectrum (green, sizeof (thames_green) / sizeof (spectra_entry), thames_green, true);
-	compute_spectrum (blue, sizeof (thames_blue) / sizeof (spectra_entry), thames_blue, true);
+	compute_spectrum (red, sizeof (thames_red) / sizeof (spectra_entry), thames_red, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (green, sizeof (thames_green) / sizeof (spectra_entry), thames_green, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (blue, sizeof (thames_blue) / sizeof (spectra_entry), thames_blue, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
 	break;
 	}
       case spectrum_dyes_to_xyz::dioptichrome_mees_pledge:
 	{
-	compute_spectrum (red, sizeof (dioptichrome_red) / sizeof (spectra_entry), dioptichrome_red, true);
-	compute_spectrum (green, sizeof (dioptichrome_green) / sizeof (spectra_entry), dioptichrome_green, true);
-	compute_spectrum (blue, sizeof (dioptichrome_blue) / sizeof (spectra_entry), dioptichrome_blue, true);
+	compute_spectrum (red, sizeof (dioptichrome_red) / sizeof (spectra_entry), dioptichrome_red, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (green, sizeof (dioptichrome_green) / sizeof (spectra_entry), dioptichrome_green, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (blue, sizeof (dioptichrome_blue) / sizeof (spectra_entry), dioptichrome_blue, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
 	break;
 	}
       case spectrum_dyes_to_xyz::autochrome_ciortan_arteaga_trumpy:
 	{
-	compute_spectrum (red, sizeof (autochrome_ciortan_arteaga_trumpy_red) / sizeof (spectra_entry), autochrome_ciortan_arteaga_trumpy_red, true);
-	compute_spectrum (green, sizeof (autochrome_ciortan_arteaga_trumpy_green) / sizeof (spectra_entry), autochrome_ciortan_arteaga_trumpy_green, true);
-	compute_spectrum (blue, sizeof (autochrome_ciortan_arteaga_trumpy_blue) / sizeof (spectra_entry), autochrome_ciortan_arteaga_trumpy_blue, true);
+	compute_spectrum (red, sizeof (autochrome_ciortan_arteaga_trumpy_red) / sizeof (spectra_entry), autochrome_ciortan_arteaga_trumpy_red, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (green, sizeof (autochrome_ciortan_arteaga_trumpy_green) / sizeof (spectra_entry), autochrome_ciortan_arteaga_trumpy_green, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (blue, sizeof (autochrome_ciortan_arteaga_trumpy_blue) / sizeof (spectra_entry), autochrome_ciortan_arteaga_trumpy_blue, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
 	break;
 	}
       case spectrum_dyes_to_xyz::autochrome_mees_pledge:
 	{
-	compute_spectrum (red, sizeof (autochrome_mees_pledge_red) / sizeof (spectra_entry), autochrome_mees_pledge_red, true);
-	compute_spectrum (green, sizeof (autochrome_mees_pledge_green) / sizeof (spectra_entry), autochrome_mees_pledge_green, true);
-	compute_spectrum (blue, sizeof (autochrome_mees_pledge_blue) / sizeof (spectra_entry), autochrome_mees_pledge_blue, true);
+	compute_spectrum (red, sizeof (autochrome_mees_pledge_red) / sizeof (spectra_entry), autochrome_mees_pledge_red, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (green, sizeof (autochrome_mees_pledge_green) / sizeof (spectra_entry), autochrome_mees_pledge_green, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+	compute_spectrum (blue, sizeof (autochrome_mees_pledge_blue) / sizeof (spectra_entry), autochrome_mees_pledge_blue, /* absorbance= */ true, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
 	break;
 	}
       case spectrum_dyes_to_xyz::autochrome_lavedrine1:
-	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_0, true);
-	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_0, true);
-	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_0, true);
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_0, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_0, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_0, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::autochrome_lavedrine2:
-	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_1, true);
-	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_1, true);
-	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_1, true);
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_1, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_1, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_1, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::autochrome_lavedrine3:
-	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_2, true);
-	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_2, true);
-	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_2, true);
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_2, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_2, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_2, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::autochrome_lavedrine4:
-	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_3, true);
-	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_3, true);
-	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_3, true);
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_3, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_3, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_3, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::autochrome_lavedrine5:
-	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_4, true);
-	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_4, true);
-	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_4, true);
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_4, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_4, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_4, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::autochrome_lavedrine6:
-	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_5, true);
-	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_5, true);
-	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_5, true);
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_5, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_5, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_5, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::autochrome_lavedrine7:
-	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_6, true);
-	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_6, true);
-	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_6, true);
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_6, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_6, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_6, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::autochrome_lavedrine8:
-	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_7, true);
-	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_7, true);
-	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_7, true);
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_7, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_7, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_7, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::autochrome_lavedrine9:
-	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_8, true);
-	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_8, true);
-	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_8, true);
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_8, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_8, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_8, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::autochrome_lavedrine10:
-	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_9, true);
-	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_9, true);
-	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_9, true);
+	compute_spectrum (red, 380, 763.9, sizeof (lavedrine_autochrome_orange_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_orange_grain_9, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (green, 380, 763.9, sizeof (lavedrine_autochrome_green_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_green_grain_9, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
+	compute_spectrum (blue, 380, 763.9, sizeof (lavedrine_autochrome_blue_grain_0) / sizeof (luminosity_t), lavedrine_autochrome_blue_grain_9, /* absorbance= */ true, /* norm= */ 1, /* limit_range= */ true, /* clamp= */ false);
 	break;
       case spectrum_dyes_to_xyz::debug_dyes:
-	compute_spectrum (red, sizeof (debug_red) / sizeof (spectra_entry), debug_red, false, 1, 0, 1);
-	compute_spectrum (green, sizeof (debug_green) / sizeof (spectra_entry), debug_green, false, 1, 0, 1);
-	compute_spectrum (blue, sizeof (debug_blue) / sizeof (spectra_entry), debug_blue, false, 1, 0, 1);
+	compute_spectrum (red, sizeof (debug_red) / sizeof (spectra_entry), debug_red, /* absorbance= */ false, /* norm= */ 1, /* min= */ 0, /* max= */ 1, /* clamp= */ false);
+	compute_spectrum (green, sizeof (debug_green) / sizeof (spectra_entry), debug_green, /* absorbance= */ false, /* norm= */ 1, /* min= */ 0, /* max= */ 1, /* clamp= */ false);
+	compute_spectrum (blue, sizeof (debug_blue) / sizeof (spectra_entry), debug_blue, /* absorbance= */ false, /* norm= */ 1, /* min= */ 0, /* max= */ 1, /* clamp= */ false);
 	break;
       default:
 	abort ();

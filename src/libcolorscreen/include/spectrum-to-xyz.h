@@ -1,8 +1,8 @@
 #ifndef SPECTRUM_TO_XYZ_H
 #define SPECTRUM_TO_XYZ_H
-#include "dllpublic.h"
-#include "color.h"
 #include "sensitivity.h"
+#include <memory>
+#include <cstring>
 
 namespace colorscreen
 {
@@ -12,7 +12,7 @@ namespace colorscreen
 #define SPECTRUM_END   780
 #define SPECTRUM_SIZE ((SPECTRUM_END - SPECTRUM_START) / SPECTRUM_STEP + 1)
 
-typedef luminosity_t spectrum[SPECTRUM_SIZE];
+using spectrum = luminosity_t[SPECTRUM_SIZE];
 class progress_info;
 DLL_PUBLIC extern const spectrum cie_cmf_x;
 DLL_PUBLIC extern const spectrum cie_cmf_y;
@@ -20,12 +20,14 @@ DLL_PUBLIC extern const spectrum cie_cmf_z;
 DLL_PUBLIC extern const spectrum cie_cmf1964_x;
 DLL_PUBLIC extern const spectrum cie_cmf1964_y;
 DLL_PUBLIC extern const spectrum cie_cmf1964_z;
+/* transmitance_to_absorbance converts transmitance T to absorbance.  */
 inline luminosity_t const_attr
 transmitance_to_absorbance (luminosity_t t)
 {
   return 2 - log10 (std::max (t, (luminosity_t)0.000001) * 100);
 }
 
+/* absorbance_to_transmitance converts absorbance A to transmitance.  */
 inline luminosity_t const_attr
 absorbance_to_transmitance (luminosity_t a)
 {
@@ -33,6 +35,7 @@ absorbance_to_transmitance (luminosity_t a)
   return ret;
 }
 
+/* Class representing conversion from spectrum to XYZ using given dyes and backlight.  */
 class spectrum_dyes_to_xyz
 {
 public:
@@ -200,26 +203,20 @@ public:
 };
 
   static const int default_observer = 1931;
+  /* Constructor for spectrum_dyes_to_xyz.  */
   spectrum_dyes_to_xyz ()
     : rscale (1), gscale (1), bscale (1),
       xscale (1), yscale (1), zscale (1),
       dark (0,0,0),
       exp_adjust {1,1,1},
-      red_characteristic_curve (NULL), green_characteristic_curve (NULL), blue_characteristic_curve (NULL),
+      red_characteristic_curve (nullptr), green_characteristic_curve (nullptr), blue_characteristic_curve (nullptr),
       subtractive (false),
-      hd_curve_inst (NULL)
+      hd_curve_inst (nullptr)
   {
   }
+  /* Destructor for spectrum_dyes_to_xyz.  */
   ~spectrum_dyes_to_xyz ()
   {
-    if (red_characteristic_curve)
-      delete (red_characteristic_curve);
-    if (green_characteristic_curve && green_characteristic_curve != red_characteristic_curve)
-      delete (green_characteristic_curve);
-    if (blue_characteristic_curve && blue_characteristic_curve != red_characteristic_curve)
-      delete (blue_characteristic_curve);
-    if (hd_curve_inst)
-      delete (hd_curve_inst);
   }
   spectrum backlight;
   /* Transmitance spectra of dyes for additive color synthetis.  */
@@ -233,18 +230,26 @@ public:
   rgbdata exp_adjust;
 
   /* Characteristic curves of film . */
-  film_sensitivity *red_characteristic_curve, *green_characteristic_curve, *blue_characteristic_curve;
+  std::shared_ptr<film_sensitivity> red_characteristic_curve, green_characteristic_curve, blue_characteristic_curve;
 
 
   bool subtractive;
+  /* linear_film_rgb_response returns the linear RGB response of the film.
+     S is the spectrum of the light source.  */
   DLL_PUBLIC rgbdata linear_film_rgb_response (luminosity_t *s);
+  /* film_rgb_response returns the RGB response of the film.
+     S is the spectrum of the light source.  */
   DLL_PUBLIC rgbdata film_rgb_response (luminosity_t *s);
 
+  /* set_backlight sets the backlight spectrum.
+     S is the spectrum to be used as backlight.  */
   void
   set_backlight (spectrum s)
     {
       memcpy (backlight, s, sizeof (backlight));
     }
+  /* set_dyes sets the dyes spectra.
+     R, G, B are the spectra of the red, green and blue dyes.  */
   void
   set_dyes (spectrum r, spectrum g, spectrum b)
     {
@@ -252,25 +257,30 @@ public:
       memcpy (green, g, sizeof (backlight));
       memcpy (blue, b, sizeof (backlight));
     }
+  /* set_characteristic_curve sets the characteristic curve of the film.  */
   DLL_PUBLIC void set_characteristic_curve (enum characteristic_curves);
-  /* Set dyes to given measured spectra.
-     If dyes2 is set and age > 1, then mix the two spectras in given ratio.  */
-  DLL_PUBLIC void set_dyes (enum dyes, enum dyes dyes2 = dyes_max, rgbdata age = {1,1,1});
+  /* set_dyes sets the dyes to given measured spectra.
+     DYES is the measured spectra to use.
+     If DYES2 is set and AGE > 0, then mix the two spectras in given ratio.  */
+  DLL_PUBLIC void set_dyes (enum dyes dyes, enum dyes dyes2 = dyes_max, rgbdata age = {1,1,1});
+  /* set_backlight sets the backlight to given illuminant IL and TEMPERATURE.  */
   DLL_PUBLIC void set_backlight (enum illuminants il, luminosity_t temperature = 5400);
-  /* Adjust rscale, gscale and bscale so dye tgb (1,1,1) results
-     in white in a given temperature of daylight.  */
+  /* normalize_dyes adjusts rscale, gscale and bscale so dye rgb (1,1,1) results
+     in white in a given TEMPERATURE of daylight.  */
   void normalize_dyes (luminosity_t temperature);
-  /* Adjust xscale, yscale and zscale so dye rgb (1,1,1) results
-     in intensity 1  */
+  /* normalize_brightness adjusts xscale, yscale and zscale so dye rgb (1,1,1) results
+     in intensity 1.  */
   void normalize_brightness ();
-  /* Adjust xscale, yscale and zscale so dye rgb (1,1,1) results
-     in sRGB white  */
+  /* normalize_xyz_to_backlight_whitepoint adjusts xscale, yscale and zscale
+     so dye rgb (1,1,1) results in sRGB white.  */
   void normalize_xyz_to_backlight_whitepoint ();
-  /* Write spectra to tmp directory so they can be printed by gnuplot script.  */
+  /* debug_write_spectra writes spectra to tmp directory so they can be printed by gnuplot script.  */
   DLL_PUBLIC void debug_write_spectra ();
 
 
 
+  /* dyes_rgb_to_xyz converts dyes (R, G, B) to XYZ color space.
+     OBSERVER is the observer to use.  */
   struct xyz  pure_attr __attribute__ ((noinline))
   dyes_rgb_to_xyz (luminosity_t r, luminosity_t g, luminosity_t b, int observer = default_observer)
     {
@@ -296,6 +306,8 @@ public:
     }
 
   /* Return color matrix converting dyes rgb to xyz.  */
+  /* xyz_matrix returns the color matrix converting dyes rgb to xyz.
+     OBSERVER is the observer to use.  */
   color_matrix
   xyz_matrix (int observer = default_observer)
     {
@@ -308,11 +320,15 @@ public:
 		      0  , 0  , 0  , 1);
       return m;
     }
-  color_matrix optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec = NULL, progress_info * = NULL);
-  color_matrix process_transformation_matrix (spectrum_dyes_to_xyz *);
+  /* optimized_xyz_matrix returns the optimized color matrix.
+     OBSERVING_SPEC is the observing spectrum to use.  */
+  color_matrix optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec = nullptr, progress_info *progress = nullptr);
+  /* process_transformation_matrix returns the transformation matrix between two processes.  */
+  color_matrix process_transformation_matrix (spectrum_dyes_to_xyz *from);
 
-  /* Figure out relative sizes of patches which makes screen to look neutral with current dyes
-     and backlight.  */
+  /* xyz_to_dyes_rgb figures out relative sizes of patches which makes screen to look neutral with current dyes
+     and backlight for given COLOR.
+     OBSERVER is the observer to use.  */
   rgbdata
   xyz_to_dyes_rgb (xyz color, int observer = default_observer)
   {
@@ -321,7 +337,8 @@ public:
     m.normalize_grayscale (color.x, color.y, color.z, &ret.red, &ret.green, &ret.blue);
     return ret;
   }
-  /* Return XYZ of white color seen through the dyes.  */
+  /* whitepoint_xyz returns XYZ of white color seen through the dyes.
+     OBSERVER is the observer to use.  */
   xyz whitepoint_xyz (int observer = default_observer)
     {
       spectrum nofilter;
@@ -329,28 +346,44 @@ public:
 	nofilter[i]=1;
       return get_xyz (nofilter, observer);
     }
+  /* temperature_xyz returns XYZ of whitepoint for given TEMPERATURE.  */
   static xyz temperature_xyz (luminosity_t temperature);
-  /* Return true if dyes_rgb_to_xyz behaves linearly.  */
+  /* is_linear returns true if dyes_rgb_to_xyz behaves linearly.  */
   bool is_linear ();
 
+  /* write_spectra writes spectra to given files.  */
   DLL_PUBLIC void write_spectra (const char *red, const char *green, const char *blue, const char *backlight, int start = SPECTRUM_START, int end = SPECTRUM_END, bool absorbance = false);
+  /* write_responses writes responses to given files.  */
   DLL_PUBLIC void write_responses (const char *red, const char *green, const char *blue, bool log = false, int start = SPECTRUM_START, int end = SPECTRUM_END);
+  /* write_ssf_json writes spectral sensitivity function to JSON file.  */
   DLL_PUBLIC void write_ssf_json (const char *name);
+  /* write_film_response writes film response to given file.  */
   DLL_PUBLIC bool write_film_response (const char *filename, luminosity_t *f, bool absolute, bool log = true);
+  /* write_film_characteristic_curves writes film characteristic curves to given files.  */
   DLL_PUBLIC void write_film_characteristic_curves (const char *red, const char *green, const char *blue);
+  /* write_film_hd_characteristic_curves writes film H&D characteristic curves to given files.  */
   DLL_PUBLIC void write_film_hd_characteristic_curves (const char *red, const char *green, const char *blue);
 
+  /* synthetic_dufay_red sets red dye to synthetic Dufay spectrum.  */
   void synthetic_dufay_red (luminosity_t d1, luminosity_t d2);
+  /* synthetic_dufay_green sets green dye to synthetic Dufay spectrum.  */
   void synthetic_dufay_green (luminosity_t d1, luminosity_t d2);
+  /* synthetic_dufay_blue sets blue dye to synthetic Dufay spectrum.  */
   void synthetic_dufay_blue (luminosity_t d1, luminosity_t d2);
+  /* generate_simulated_argyll_ti3_file generates Argyll .ti3 file.  */
   bool generate_simulated_argyll_ti3_file (FILE *f);
+  /* generate_color_target_tiff generates color target TIFF file.  */
   DLL_PUBLIC bool generate_color_target_tiff (const char *filename, const char **error, bool white_balance, bool optimized);
+  /* set_film_response sets the film response.  */
   DLL_PUBLIC void set_film_response (enum responses film);
+  /* set_response_to_kodachrome_25 sets response to Kodachrome 25.  */
   void set_response_to_kodachrome_25 ();
+  /* adjust_film_response_for_zeiss_contact_prime_cp2_lens adjusts film response for Zeiss lens.  */
   void adjust_film_response_for_zeiss_contact_prime_cp2_lens ();
+  /* adjust_film_response_for_canon_CN_E_85mm_T1_3_lens adjusts film response for Canon lens.  */
   void adjust_film_response_for_canon_CN_E_85mm_T1_3_lens ();
 
-  /* Figure out relative sizes of patches which makes screen to look neutral with current dyes
+  /* determine_relative_patch_sizes_by_whitepoint figures out relative sizes of patches which makes screen to look neutral with current dyes
      and backlight.  */
   rgbdata
   determine_relative_patch_sizes_by_whitepoint (int observer = default_observer)
@@ -360,8 +393,10 @@ public:
     luminosity_t sum = white.red + white.green + white.blue;
     return white / sum;
   }
+  /* determine_patch_weights_by_simulated_response determines patch weights by simulated response.  */
   rgbdata determine_patch_weights_by_simulated_response (int observer = default_observer);
 
+  /* determine_relative_patch_sizes_by_simulated_response determines relative patch sizes by simulated response.  */
   rgbdata
   determine_relative_patch_sizes_by_simulated_response (int observer = default_observer)
   {
@@ -370,23 +405,28 @@ public:
     return ret / sum;
   }
 
+  /* adjust_exposure adjusts exposure.  */
   void
   adjust_exposure ()
   {
-    rgbdata film_white = linear_film_rgb_response (NULL);
+    rgbdata film_white = linear_film_rgb_response (nullptr);
     luminosity_t sum = (film_white.red + film_white.green + film_white.blue) / 3;
     exp_adjust.red = exp_adjust.green = exp_adjust.blue = 1 / sum;
   }
 
+  /* tiff_with_primaries generates TIFF with primaries.  */
   DLL_PUBLIC bool tiff_with_primaries (const char *filename, rgbdata white);
+  /* tiff_with_overlapping_filters generates TIFF with overlapping filters.  */
   DLL_PUBLIC bool tiff_with_overlapping_filters (const char *filename, rgbdata white, const char *spectra_prefix);
+  /* tiff_with_overlapping_filters_response generates TIFF with overlapping filters response.  */
   DLL_PUBLIC bool tiff_with_overlapping_filters_response (const char *filename, rgbdata white);
+  /* tiff_with_spectra_photo generates TIFF with spectra photo.  */
   DLL_PUBLIC bool tiff_with_spectra_photo (const char *filename);
 
   private:
-    hd_curve *hd_curve_inst;
+    std::unique_ptr<hd_curve> hd_curve_inst;
     static const bool debug = false;
-    /* Compute XYZ values.  */
+    /* get_xyz computes XYZ values for given spectrum S and OBSERVER.  */
     inline struct xyz pure_attr
     get_xyz (spectrum s, int observer = default_observer)
     {

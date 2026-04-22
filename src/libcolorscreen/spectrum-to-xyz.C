@@ -1,4 +1,5 @@
 #include <string>
+#include <memory>
 #include "include/colorscreen.h"
 #include "include/spectrum-to-xyz.h"
 #include "include/scr-to-img.h"
@@ -3794,8 +3795,8 @@ const static spectra_entry canon_CN_E_85mm_T1_3_tramsmission[] =
 
 }
 
-/* Adjust xscale, yscale and zscale so dye rgb (1,1,1) results
-   in intensity 1  */
+/* NORMALIZE_BRIGHTNESS adjusts xscale, yscale and zscale so dye rgb (1,1,1) results
+   in intensity 1.  */
 void
 spectrum_dyes_to_xyz::normalize_brightness ()
 {
@@ -3810,8 +3811,8 @@ spectrum_dyes_to_xyz::normalize_brightness ()
       printf ("xscale %f yscale %f zscale %f\n", xscale, yscale, zscale);
     }
 }
-/* Adjust xscale, yscale and zscale so dye rgb (1,1,1) results
-   in sRGB white  */
+/* normalize_xyz_to_backlight_whitepoint adjusts xscale, yscale and zscale
+   so dye rgb (1,1,1) results in sRGB white.  */
 void
 spectrum_dyes_to_xyz::normalize_xyz_to_backlight_whitepoint ()
 {
@@ -3834,14 +3835,15 @@ spectrum_dyes_to_xyz::normalize_xyz_to_backlight_whitepoint ()
     }
 }
 
+/* set_backlight sets the backlight to given illuminant IL and TEMPERATURE.  */
 void
 spectrum_dyes_to_xyz::set_backlight (enum illuminants il, luminosity_t temperature)
 {
   set_illuminant_to (backlight, il, temperature);
 }
 
-/* Autochrome screen was made by mixing dyes to be gray.  Simulate same thing: find
-   rscale, gscale and wscale so together they produce a given.  */
+/* normalize_dyes adjusts rscale, gscale and bscale so dye rgb (1,1,1) results
+   in white in a given TEMPERATURE of daylight.  */
 void
 spectrum_dyes_to_xyz::normalize_dyes (luminosity_t temperature)
 {
@@ -3883,6 +3885,7 @@ change_concentration (spectrum s, luminosity_t concentration)
 }
 
 
+/* debug_write_spectra writes spectra to tmp directory so they can be printed by gnuplot script.  */
 void
 spectrum_dyes_to_xyz::debug_write_spectra ()
 {
@@ -3918,6 +3921,7 @@ spectrum_dyes_to_xyz::debug_write_spectra ()
   fclose (f);
 }
 
+/* is_linear returns true if dyes_rgb_to_xyz behaves linearly.  */
 bool
 spectrum_dyes_to_xyz::is_linear ()
 {
@@ -3941,7 +3945,7 @@ spectrum_dyes_to_xyz::is_linear ()
   return true;
 }
 
-/* Return XYZ of a daylight with given TEMPERATURE.  */
+/* temperature_xyz returns XYZ of whitepoint for given TEMPERATURE.  */
 xyz
 spectrum_dyes_to_xyz::temperature_xyz (luminosity_t temperature)
 {
@@ -3950,13 +3954,17 @@ spectrum_dyes_to_xyz::temperature_xyz (luminosity_t temperature)
   return dyes.whitepoint_xyz ();
 }
 
-/* Compute XYZ values.  */
-static inline struct xyz
-get_xyz_old_observer (spectrum backlight, spectrum s, const char *filename = NULL)
+/* get_xyz_old_observer computes XYZ values for given BACKLIGHT and spectrum S.
+   This function is a replicate of get_xyz and is used for isolated dataset printing tasks.
+   BACKLIGHT is the backlight spectrum.
+   S is the spectrum to convert.
+   FILENAME is optional filename for debug output.  */
+static inline xyz
+get_xyz_old_observer (spectrum backlight, spectrum s, const char *filename = nullptr)
 {
-  struct xyz ret = { 0, 0, 0 };
+  xyz ret = { 0, 0, 0 };
   luminosity_t sum = 0;
-  FILE *f = NULL;
+  FILE *f = nullptr;
   if (filename)
      f = fopen(filename, "wt");
   /* TODO: CIE recommends going by 1nm bands and interpolate.
@@ -3980,8 +3988,10 @@ get_xyz_old_observer (spectrum backlight, spectrum s, const char *filename = NUL
   return ret;
 }
 
+/* combined_xyz computes XYZ for two dyes DYE1 and DYE2 combined with BACKLIGHT.
+   FILENAME and FILENAME2 are optional filenames for debug output.  */
 xyz
-combined_xyz (luminosity_t *dye1, luminosity_t *dye2, luminosity_t *backlight, const char *filename = NULL, const char *filename2 = NULL)
+combined_xyz (luminosity_t *dye1, luminosity_t *dye2, luminosity_t *backlight, const char *filename = nullptr, const char *filename2 = nullptr)
 {
   spectrum tmp;
   for (int i = 0; i < SPECTRUM_SIZE; i++)
@@ -3999,31 +4009,37 @@ combined_xyz (luminosity_t *dye1, luminosity_t *dye2, luminosity_t *backlight, c
   return ret;
 }
 
+
+/* adjust_film_response_for_zeiss_contact_prime_cp2_lens adjusts film response for Zeiss lens.  */
 void
 spectrum_dyes_to_xyz::adjust_film_response_for_zeiss_contact_prime_cp2_lens ()
 {
   spectrum s;
-  compute_spectrum (s, sizeof (zeiss_contact_prime_cp2_tramsmission) / sizeof (spectra_entry), zeiss_contact_prime_cp2_tramsmission, false, 100/* norm */, 0/*min*/);
+  compute_spectrum (s, sizeof (zeiss_contact_prime_cp2_tramsmission) / sizeof (spectra_entry), zeiss_contact_prime_cp2_tramsmission, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ -1, /* clamp= */ false);
   for (int i = 0 ; i < SPECTRUM_SIZE; i++)
     film_response[i] *= s[i];
 }
 
+/* adjust_film_response_for_canon_CN_E_85mm_T1_3_lens adjusts film response for Canon lens.  */
 void
 spectrum_dyes_to_xyz::adjust_film_response_for_canon_CN_E_85mm_T1_3_lens ()
 {
   spectrum s;
-  compute_spectrum (s, sizeof (canon_CN_E_85mm_T1_3_tramsmission) / sizeof (spectra_entry), canon_CN_E_85mm_T1_3_tramsmission, false, 100/* norm */, 0/*min*/);
+  compute_spectrum (s, sizeof (canon_CN_E_85mm_T1_3_tramsmission) / sizeof (spectra_entry), canon_CN_E_85mm_T1_3_tramsmission, /* absorbance= */ false, /* norm= */ 100, /* min= */ 0, /* max= */ -1, /* clamp= */ false);
   for (int i = 0 ; i < SPECTRUM_SIZE; i++)
     film_response[i] *= s[i];
 }
 
 
+/* set_film_response sets the film response.
+   FILM is the film response to use.  */
 void
 spectrum_dyes_to_xyz::set_film_response (enum responses film)
 {
   set_response (film_response, film);
 }
 
+/* set_response_to_kodachrome_25 sets response to Kodachrome 25.  */
 void
 spectrum_dyes_to_xyz::set_response_to_kodachrome_25 ()
 {
@@ -4032,17 +4048,14 @@ spectrum_dyes_to_xyz::set_response_to_kodachrome_25 ()
     film_response[i] = 1;
 }
 
-/* Simulate density of recording BACKLIGHT filtred by FILTER1 and FILTER2
+/* simulated_response simulates density of recording BACKLIGHT filtered by FILTER1 and FILTER2
    on film with sensitivity RESPONSE.
-
-   RESPONSE is not wedge histogram, but transmitance loss computed by
-   log_sensitivity_to_reversal_transmitance
-
-   BACKLIGHT may be NULL if film response is already relative to some backlight.
-   FILTER2 may be NULL if filter is missing.  */
-
+   RESPONSE is the film response.
+   BACKLIGHT is the light source spectrum.
+   FILTER1 is the first filter spectrum.
+   FILTER2 is the second filter spectrum.  */
 static luminosity_t
-simulated_response (luminosity_t *backlight, luminosity_t *response, luminosity_t *filter1 = NULL, luminosity_t *filter2 = NULL)
+simulated_response (luminosity_t *backlight, luminosity_t *response, luminosity_t *filter1 = nullptr, luminosity_t *filter2 = nullptr)
 {
   luminosity_t sum = 0;
   luminosity_t rsum = 0;
@@ -4086,9 +4099,11 @@ simulated_response (luminosity_t *backlight, luminosity_t *response, luminosity_
   return sum / rsum;
 }
 
-/* Increase/decrease concentration of filter S to reach luminosity Y.
-   NORM is base for no filter, i.e. estimated density of film base.  */
-
+/* adjust_concentration_to_y increases or decreases concentration of filter S to reach luminosity Y.
+   BACKLIGHT is the light source spectrum.
+   S is the filter spectrum.
+   Y is the target luminosity.
+   NORM is the base for no filter.  */
 luminosity_t
 adjust_concentration_to_y (spectrum backlight, spectrum s, luminosity_t y, luminosity_t norm = 1)
 {
@@ -4114,12 +4129,14 @@ adjust_concentration_to_y (spectrum backlight, spectrum s, luminosity_t y, lumin
   return bestc;
 }
 
+/* determine_patch_weights_by_simulated_response determines patch weights by simulated response.
+   OBSERVER is the observer to use.  */
 rgbdata
 spectrum_dyes_to_xyz::determine_patch_weights_by_simulated_response (int observer)
 {
   xyz half_whitepoint = whitepoint_xyz (observer) * 0.5;
   rgbdata white = xyz_to_dyes_rgb (half_whitepoint, observer);
-  rgbdata res = /*linear_*/film_rgb_response (NULL) * 0.5;
+  rgbdata res = film_rgb_response (nullptr) * 0.5;
 #if 0
   if (red_characteristic_curve)
     return {red_characteristic_curve->unapply (white.red) / red_characteristic_curve->unapply (res.red),
@@ -4129,11 +4146,13 @@ spectrum_dyes_to_xyz::determine_patch_weights_by_simulated_response (int observe
   return {white.red / res.red, white.green / res.green, white.blue / res.blue};
 }
 
+/* generate_simulated_argyll_ti3_file generates Argyll .ti3 file.
+   F is the FILE pointer to write to.  */
 bool
 spectrum_dyes_to_xyz::generate_simulated_argyll_ti3_file (FILE *f)
 {
   adjust_exposure ();
-  rgbdata res = film_rgb_response (NULL);
+  rgbdata res = film_rgb_response (nullptr);
   luminosity_t sum = res.red + res.green + res.blue;
   rgbdata scale = {1/sum, 1/sum, 1/sum};
   int nsamples = sizeof (TLCI_2012_TCS) / sizeof (xspect);
@@ -4169,6 +4188,8 @@ spectrum_dyes_to_xyz::generate_simulated_argyll_ti3_file (FILE *f)
   fprintf (f, "END_DATA\n");
   return true;
 }
+/* linear_film_rgb_response returns the linear RGB response of the film.
+   S is the spectrum of the light source.  */
 rgbdata
 spectrum_dyes_to_xyz::linear_film_rgb_response (luminosity_t *s)
 {
@@ -4177,6 +4198,8 @@ spectrum_dyes_to_xyz::linear_film_rgb_response (luminosity_t *s)
 	  simulated_response (backlight, film_response, blue, s)};
 }
 
+/* film_rgb_response returns the RGB response of the film.
+   S is the spectrum of the light source.  */
 rgbdata
 spectrum_dyes_to_xyz::film_rgb_response (luminosity_t *s)
 {
@@ -4190,26 +4213,23 @@ spectrum_dyes_to_xyz::film_rgb_response (luminosity_t *s)
   return ret;
 }
 
+/* generate_color_target_tiff generates color target TIFF file.
+   FILENAME is the name of the file to write.
+   ERROR is the error message if the operation fails.
+   WHITE_BALANCE if true, perform white balance.
+   OPTIMIZED if true, use optimized color matrix.  */
 bool
 spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const char **error, bool white_balance, bool optimized)
 {
   xyz whitepoint = whitepoint_xyz ();
-  rgbdata scale = {0,0,0};/*determine_relative_patch_sizes_by_simulated_response ();*/
-  //scale = determine_patch_weights_by_simulated_response ();
+  rgbdata scale = {0,0,0};
   int nsamples = sizeof (TLCI_2012_TCS) / sizeof (xspect);
   int n = 0;
   adjust_exposure ();
   spectrum tile;
-#if 0
-  if (subtractive)
-    {
-	//xyz dufay_color = dyes_rgb_to_xyz (0.1, 0.1, 0.1);
-	rscale = gscale = bscale = /*dufay_color.y / 0.1*/1;
-    }
-#endif
   if (optimized)
     {
-      rgbdata film_white = film_rgb_response (NULL);
+      rgbdata film_white = film_rgb_response (nullptr);
       luminosity_t sum = (film_white.red + film_white.green + film_white.blue) / 3;
       scale.red = 1/sum;
       scale.green = 1/sum;
@@ -4316,15 +4336,17 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
   printf ("Average deltaE 2000 %f, max %f\n", deltaEsum / n, deltaEmax);
   return true;
 }
+/* optimized_xyz_matrix returns the optimized color matrix.
+   OBSERVING_SPEC is the observing spectrum to use.  */
 color_matrix
 spectrum_dyes_to_xyz::optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec, progress_info  *progress)
 {
-  if (observing_spec == NULL)
+  if (observing_spec == nullptr)
     observing_spec = this;
   const int n = sizeof (TLCI_2012_TCS) / sizeof (xspect);
   rgbdata colors[n];
   xyz targets[n];
-  rgbdata res = film_rgb_response (NULL);
+  rgbdata res = film_rgb_response (nullptr);
   luminosity_t sum = res.red + res.green + res.blue;
   res.red = res.green = res.blue = sum / 3;
   rgbdata scale = {1 / res.red, 1 / res.green, 1 / res.blue};
@@ -4336,24 +4358,26 @@ spectrum_dyes_to_xyz::optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec
       colors[i] = film_rgb_response (tile) * scale;
       targets[i] = get_xyz_old_observer (observing_spec->backlight, tile);
     }
-  color_matrix m1 = determine_color_matrix (colors, targets, NULL, n, observing_spec->whitepoint_xyz (), 0, NULL, NULL, {1,1,1}, progress);
+  color_matrix m1 = determine_color_matrix (colors, targets, nullptr, n, observing_spec->whitepoint_xyz (), 0, nullptr, nullptr, {1,1,1}, progress);
   m1.scale_channels (1/rscale, 1/gscale, 1/bscale);
   
   return m1;
 }
 
+/* process_transformation_matrix returns the transformation matrix between two processes.
+   FROM is the source spectrum.  */
 color_matrix
 spectrum_dyes_to_xyz::process_transformation_matrix (spectrum_dyes_to_xyz *from)
 {
   const int n = sizeof (TLCI_2012_TCS) / sizeof (xspect);
   rgbdata colors[n];
   rgbdata targets[n];
-  rgbdata res = film_rgb_response (NULL);
+  rgbdata res = film_rgb_response (nullptr);
   //luminosity_t sum = res.red + res.green + res.blue;
   //res.red = res.green = res.blue = sum / 3;
   rgbdata scale = {1 / res.red, 1 / res.green, 1 / res.blue};
 
-  rgbdata res2 = from->film_rgb_response (NULL);
+  rgbdata res2 = from->film_rgb_response (nullptr);
   //luminosity_t sum2 = res2.red + res2.green + res2.blue;
   //res2.red = res2.green = res2.blue = sum2 / 3;
   rgbdata scale2 = {1 / res2.red, 1 / res2.green, 1 / res2.blue};
@@ -4372,11 +4396,16 @@ spectrum_dyes_to_xyz::process_transformation_matrix (spectrum_dyes_to_xyz *from)
 #endif
       //printf ("%f %f %f : %f %f %f\n", colors[i].red, colors[i].green, colors[i].blue, targets[i].red, targets[i].green, targets[i].blue);
     }
-  color_matrix m1 = determine_color_matrix (colors, NULL, targets, n, whitepoint_xyz ());
+  color_matrix m1 = determine_color_matrix (colors, nullptr, targets, n, whitepoint_xyz ());
   m1.scale_channels (1/rscale, 1/gscale, 1/bscale);
   
   return m1;
 }
+/* write_spectra writes spectra to given files.
+   REDS, GREENS, BLUES are filenames for dyes.
+   BACKLIGHTS is filename for backlight.
+   START, END define the spectral range.
+   ABSORBANCE if true, write absorbance instead of transmitance.  */
 void
 spectrum_dyes_to_xyz::write_spectra (const char *reds, const char *greens, const char *blues, const char *backlights, int start, int end, bool absorbance)
 {
@@ -4416,6 +4445,8 @@ spectrum_dyes_to_xyz::write_spectra (const char *reds, const char *greens, const
 }
 
 
+/* write_film_characteristic_curves writes film characteristic curves to given files.
+   REDS, GREENS, BLUES are filenames for the curves.  */
 void
 spectrum_dyes_to_xyz::write_film_characteristic_curves (const char *reds, const char *greens, const char *blues)
 {
@@ -4438,6 +4469,8 @@ spectrum_dyes_to_xyz::write_film_characteristic_curves (const char *reds, const 
       fclose (f);
     }
 }
+/* write_film_hd_characteristic_curves writes film H&D characteristic curves to given files.
+   REDS, GREENS, BLUES are filenames for the curves.  */
 void
 spectrum_dyes_to_xyz::write_film_hd_characteristic_curves (const char *reds, const char *greens, const char *blues)
 {
@@ -4486,6 +4519,8 @@ print_transmitance_spectrum_json (FILE *f, const char *name, spectrum s)
   fprintf (f, "]");
 }
 
+/* write_ssf_json writes spectral sensitivity function to JSON file.
+   NAME is the file name to write to.  */
 void
 spectrum_dyes_to_xyz::write_ssf_json (const char *name)
 {
@@ -4510,6 +4545,10 @@ spectrum_dyes_to_xyz::write_ssf_json (const char *name)
   fprintf (f, "\n}");
 }
 
+/* write_responses writes responses to given files.
+   REDS, GREENS, BLUES are filenames for the responses.
+   LOG if true, write log10 of response.
+   START, END define the spectral range.  */
 void
 spectrum_dyes_to_xyz::write_responses (const char *reds, const char *greens, const char *blues, bool log, int start, int end)
 {
@@ -4548,8 +4587,10 @@ spectrum_dyes_to_xyz::write_responses (const char *reds, const char *greens, con
       fclose (f);
     }
 }
-/* Write response of the film covered by optional filter specified by F.  */
-
+/* write_film_response writes film response of the film covered by optional filter specified by FI.
+   FILENAME is the file name to write to.
+   ABSOLUTE if true, do not scale by backlight.
+   LOG if true, write log10 of response.  */
 bool
 spectrum_dyes_to_xyz::write_film_response (const char *filename, luminosity_t *fi, bool absolute, bool log)
 {
@@ -4657,7 +4698,7 @@ spectrum_dyes_to_xyz::tiff_with_spectra_photo (const char *filename)
   {
     int band = x + SPECTRUM_START;
     set_illuminant_to (bandf, il_band, band);
-    luminosity_t l = simulated_response (backlight, film_response, bandf, NULL);
+    luminosity_t l = simulated_response (backlight, film_response, bandf, nullptr);
     if (l > max)
       max = l;
   }
@@ -4683,7 +4724,7 @@ spectrum_dyes_to_xyz::tiff_with_spectra_photo (const char *filename)
 	  else 
 	    {
 	      set_illuminant_to (bandf, il_band, band);
-	      luminosity_t *s = y < w ? blue : y < 2 * w ? green : y < 3 * w ? red : NULL, r, g, b;
+	      luminosity_t *s = y < w ? blue : y < 2 * w ? green : y < 3 * w ? red : nullptr, r, g, b;
 	      if ((y % w) < 2 * w / 3)
 		{
 	          luminosity_t l = simulated_response (backlight, film_response, bandf, s);
@@ -4796,8 +4837,8 @@ spectrum_dyes_to_xyz::tiff_with_overlapping_filters (const char *filename, rgbda
 		      filename = sfile.c_str ();
 		      filename2 = sfile2.c_str ();
 		    }
-		  xyz f = combined_xyz (i1 < 0 ? NULL : i1 == 0 ? red : i1 == 1 ? green : blue,
-					i2 < 0 ? NULL : i2 == 0 ? red : i2 == 1 ? green : blue,
+		  xyz f = combined_xyz (i1 < 0 ? nullptr : i1 == 0 ? red : i1 == 1 ? green : blue,
+					i2 < 0 ? nullptr : i2 == 0 ? red : i2 == 1 ? green : blue,
 					backlight, filename, filename2);
 		  int br2 = (i && j) ? br : 1;
 		  xyz_to_pro_photo_rgb (f.x * br2, f.y * br2, f.z * br2, &r, &g, &b);
@@ -4839,7 +4880,7 @@ spectrum_dyes_to_xyz::tiff_with_overlapping_filters_response (const char *filena
   rgbdata dred = film_rgb_response (red);
   rgbdata dgreen = film_rgb_response (green);
   rgbdata dblue = film_rgb_response (blue);
-  rgbdata dwhite = film_rgb_response (NULL);
+  rgbdata dwhite = film_rgb_response (nullptr);
   /*TODO apply sensitivity curve.  */
   luminosity_t dglass = simulated_response (backlight, film_response);
   color_matrix m = xyz_matrix ();
@@ -4951,6 +4992,9 @@ spectrum_dyes_to_xyz::synthetic_dufay_blue (luminosity_t d1, luminosity_t d2)
   set_synthetic_dufay_blue (red, d1, d2);
 }
 
+/* SET_DYES sets the dyes spectra to given measured spectra.
+   DYES is the measured spectra to use.
+   If DYES2 is set and AGE > 0, then mix the two spectras in given ratio.  */
 void
 spectrum_dyes_to_xyz::set_dyes (enum dyes dyes, enum dyes dyes2, rgbdata age)
 {
@@ -4977,6 +5021,8 @@ spectrum_dyes_to_xyz::set_dyes (enum dyes dyes, enum dyes dyes2, rgbdata age)
     }
 }
 
+/* SET_CHARACTERISTIC_CURVE sets the characteristic curve of the film.
+   CURVE is the characteristic curve to use.  */
 void
 spectrum_dyes_to_xyz::set_characteristic_curve (enum characteristic_curves curve)
 {
@@ -4986,80 +5032,80 @@ spectrum_dyes_to_xyz::set_characteristic_curve (enum characteristic_curves curve
   case linear_reversal_curve:
     break;
   case input_curve:
-    hd_curve_inst = new richards_hd_curve (100, input_curve_params);
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst);
+    hd_curve_inst = std::make_unique<richards_hd_curve> (100, input_curve_params);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = std::make_shared<film_sensitivity> (hd_curve_inst.get ());
     red_characteristic_curve->precompute ();
     break;
   case safe_output_curve:
-    hd_curve_inst = new richards_hd_curve (100, safe_output_curve_params);
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst);
+    hd_curve_inst = std::make_unique<richards_hd_curve> (100, safe_output_curve_params);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = std::make_shared<film_sensitivity> (hd_curve_inst.get ());
     red_characteristic_curve->precompute ();
     break;
   case safe_reversal_output_curve:
-    hd_curve_inst = new richards_hd_curve (100, safe_reversal_output_curve_params);
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst);
+    hd_curve_inst = std::make_unique<richards_hd_curve> (100, safe_reversal_output_curve_params);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = std::make_shared<film_sensitivity> (hd_curve_inst.get ());
     red_characteristic_curve->precompute ();
     break;
   case kodachrome25_curve:
-    red_characteristic_curve = new film_sensitivity (&film_sensitivity::kodachrome_25_red, 0, 4);
+    red_characteristic_curve = std::make_shared<film_sensitivity> (&film_sensitivity::kodachrome_25_red, 0, 4);
     red_characteristic_curve->precompute ();
-    green_characteristic_curve = new film_sensitivity (&film_sensitivity::kodachrome_25_green, 0, 4);
+    green_characteristic_curve = std::make_shared<film_sensitivity> (&film_sensitivity::kodachrome_25_green, 0, 4);
     green_characteristic_curve->precompute ();
-    blue_characteristic_curve = new film_sensitivity (&film_sensitivity::kodachrome_25_blue, 0, 4);
+    blue_characteristic_curve = std::make_shared<film_sensitivity> (&film_sensitivity::kodachrome_25_blue, 0, 4);
     blue_characteristic_curve->precompute ();
     break;
     /* Based on chart in The Spicer-Dudfay Colour Film Process, Thorne Baker, The Photograhic Jounral, March 1932, 109--117 */
   case spicer_dufay_curve_low:
-    hd_curve_inst = new richards_hd_curve (100, {0.005596021177603383, 0.13326648483876236,
+    hd_curve_inst = std::make_unique<richards_hd_curve> (100, hd_curve_parameters(0.005596021177603383, 0.13326648483876236,
 					    0.9264367078453395, 0.25357372051981475,
 					    3.8351612385689076, 1.7539186587518052,
-					    3.8351612385689076, 1.7539186587518052});
+					    3.8351612385689076, 1.7539186587518052));
 
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst, 0.25, 6);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = std::make_shared<film_sensitivity> (hd_curve_inst.get (), 0.25, 6);
     blue_characteristic_curve->precompute ();
     break;
   case spicer_dufay_curve_mid:
-    hd_curve_inst = new richards_hd_curve (100, {0.005596021177603383, 0.13326648483876236,
+    hd_curve_inst = std::make_unique<richards_hd_curve> (100, hd_curve_parameters(0.005596021177603383, 0.13326648483876236,
 					    0.7346061286699825, 0.3354524306112632,
 					    2.7042515642547724, 2.207183539226697,
-					    2.7042515642547724, 2.207183539226697});
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst, 0.25, 4);
+					    2.7042515642547724, 2.207183539226697));
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = std::make_shared<film_sensitivity> (hd_curve_inst.get (), 0.25, 4);
     blue_characteristic_curve->precompute ();
     break;
   case spicer_dufay_curve_high:
-    hd_curve_inst = new richards_hd_curve (100, {0.005596021177603383, 0.13326648483876236,
+    hd_curve_inst = std::make_unique<richards_hd_curve> (100, hd_curve_parameters(0.005596021177603383, 0.13326648483876236,
 					    0.664193807155463, 0.430406706240976,
 					    1.5716733515161239, 2.2480065778918665,
-					    1.5716733515161239, 2.2480065778918665});
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst, 0.25, 4);
+					    1.5716733515161239, 2.2480065778918665));
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = std::make_shared<film_sensitivity> (hd_curve_inst.get (), 0.25, 4);
     blue_characteristic_curve->precompute ();
     break;
   case spicer_dufay_reversal_curve_low:
-    hd_curve_inst = new richards_hd_curve (100, {
+    hd_curve_inst = std::make_unique<richards_hd_curve> (100, hd_curve_parameters(
 		0.10817262955238283, 1.7389218674795455,
 		0.10817262955238283, 1.7389218674795455,
 		3.1461832183539227, 0.19716428686026033,
-		3.990309642226858, 0.10466468795122763});
+		3.990309642226858, 0.10466468795122763));
 
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst, 0, 3000 /*6000*/);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = std::make_shared<film_sensitivity> (hd_curve_inst.get (), 0, 3000 /*6000*/);
     blue_characteristic_curve->precompute ();
     break;
   case spicer_dufay_reversal_curve_mid:
-    hd_curve_inst = new richards_hd_curve (100, {
+    hd_curve_inst = std::make_unique<richards_hd_curve> (100, hd_curve_parameters(
 		1.2834525910476495, 2.253437349590888,
 		1.2834525910476495, 2.253437349590888,
 		3.262801219316541, 0.27367639980747693,
-		3.990309642226858, 0.10466468795122763});
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst,0 , 3000 /*20000*/);
+		3.990309642226858, 0.10466468795122763));
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = std::make_shared<film_sensitivity> (hd_curve_inst.get (),0 , 3000 /*20000*/);
     blue_characteristic_curve->precompute ();
     break;
   case spicer_dufay_reversal_curve_high:
-    hd_curve_inst = new richards_hd_curve (100, {
+    hd_curve_inst = std::make_unique<richards_hd_curve> (100, hd_curve_parameters(
 		2.446334028557678, 2.2031926841007543,
 		2.446334028557678, 2.2031926841007543,
 		3.409735279961495, 0.34393951548211144,
-		3.9904123215145204, 0.13004572437028772});
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve_inst,0 , 3000 /*30000*/);
+		3.9904123215145204, 0.13004572437028772));
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = std::make_shared<film_sensitivity> (hd_curve_inst.get (),0 , 3000 /*30000*/);
     blue_characteristic_curve->precompute ();
     break;
   default:

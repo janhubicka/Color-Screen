@@ -1604,7 +1604,7 @@ set_response (spectrum film_response, spectrum_dyes_to_xyz::responses type)
     {
       spectrum dl;
       set_illuminant_to (dl, spectrum_dyes_to_xyz::il_D, 5400);
-      compute_spectrum (film_response, sizeof (ilford_manual_of_photography_panchromatic_emulsion_fig54) / sizeof (spectra_entry), ilford_manual_of_photography_panchromatic_emulsion_fig54, false);
+      compute_spectrum (film_response, sizeof (ilford_manual_of_photography_panchromatic_emulsion_fig54) / sizeof (spectra_entry), ilford_manual_of_photography_panchromatic_emulsion_fig54, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
       //log2_sensitivity_to_reversal_transmitance (film_response);
       for (int i = 0; i < SPECTRUM_SIZE; i++)
       {
@@ -1720,31 +1720,31 @@ set_response (spectrum film_response, spectrum_dyes_to_xyz::responses type)
     break;
   case spectrum_dyes_to_xyz::dufaycolor_harrison_horner_emulsion_cut:
     {
-      compute_spectrum (film_response, sizeof (dufaycolor_harrison_horner_emulsion_cut) / sizeof (spectra_entry), dufaycolor_harrison_horner_emulsion_cut, false);
+      compute_spectrum (film_response, sizeof (dufaycolor_harrison_horner_emulsion_cut) / sizeof (spectra_entry), dufaycolor_harrison_horner_emulsion_cut, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
     }
   case spectrum_dyes_to_xyz::aviphot_pan_400s:
     {
-      compute_spectrum (film_response, sizeof (aviphot_pan_400s) / sizeof (spectra_entry), aviphot_pan_400s, false);
+      compute_spectrum (film_response, sizeof (aviphot_pan_400s) / sizeof (spectra_entry), aviphot_pan_400s, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
       log_sensitivity_to_reversal_transmitance (film_response);
     }
   case spectrum_dyes_to_xyz::aviphot_pan_40_pe0:
     {
-      compute_spectrum (film_response, sizeof (aviphot_pan_40_pe0) / sizeof (spectra_entry), aviphot_pan_40_pe0, false);
+      compute_spectrum (film_response, sizeof (aviphot_pan_40_pe0) / sizeof (spectra_entry), aviphot_pan_40_pe0, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
       log_sensitivity_to_reversal_transmitance (film_response);
     }
     break;
   case spectrum_dyes_to_xyz::aviphot_pan_40_pe0_cut:
     {
       spectrum r;
-      compute_spectrum (r, sizeof (dufaycolor_harrison_horner_emulsion_cut) / sizeof (spectra_entry), dufaycolor_harrison_horner_emulsion_cut, false);
-      compute_spectrum (film_response, sizeof (aviphot_pan_40_pe0) / sizeof (spectra_entry), aviphot_pan_40_pe0, false);
+      compute_spectrum (r, sizeof (dufaycolor_harrison_horner_emulsion_cut) / sizeof (spectra_entry), dufaycolor_harrison_horner_emulsion_cut, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
+      compute_spectrum (film_response, sizeof (aviphot_pan_40_pe0) / sizeof (spectra_entry), aviphot_pan_40_pe0, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
       log_sensitivity_to_reversal_transmitance (film_response);
       for (int i = 0; i < SPECTRUM_SIZE; i++)
         film_response[i] *= r[i];
     }
     break;
   case spectrum_dyes_to_xyz::monochromatic_ccd:
-    compute_spectrum (film_response, sizeof (monochromatic_ccd) / sizeof (spectra_entry), monochromatic_ccd, false);
+    compute_spectrum (film_response, sizeof (monochromatic_ccd) / sizeof (spectra_entry), monochromatic_ccd, /* absorbance= */ false, /* norm= */ 1, /* min= */ -1, /* max= */ -1, /* clamp= */ false);
     break;
   default: abort ();
   }

@@ -18,6 +18,7 @@
 #include "screen.h"
 #include "render.h"
 #include "simulate.h"
+#include "include/spectrum-to-xyz.h"
 #include "lru-cache.h"
 
 
@@ -677,19 +678,6 @@ test_hd_reversibility ()
       ok = false;
     }
 
-  /* Check that the endpoints are "close enough".
-     Note: Our reconstruction uses a standardized buffer, so they won't be identical 
-     to the original Hurley parameters if those weren't standardized. But they 
-     should represent the same asymptotes. */
-  if (std::abs(hurley.miny - hdp_prime.miny) > 0.5 ||
-      std::abs(hurley.maxy - hdp_prime.maxy) > 0.5)
-    {
-       printf ("H&D endpoint density stability failed for Hurley!\n");
-       printf ("Expected: miny=%f, maxy=%f\n", hurley.miny, hurley.maxy);
-       printf ("Got:      miny=%f, maxy=%f\n", hdp_prime.miny, hdp_prime.maxy);
-       // ok = false; // Keep it warning for now as Hurley is a "broken" case
-    }
-    
   return ok;
 }
 
@@ -1029,13 +1017,101 @@ test_lru_cache_concurrency ()
     }
   return ok;
 }
+
+/* test_spectrum_dyes_to_xyz performs unit tests for the spectrum_dyes_to_xyz class.  */
+bool
+test_spectrum_dyes_to_xyz ()
+{
+  spectrum_dyes_to_xyz dyes;
+  dyes.set_backlight (spectrum_dyes_to_xyz::il_D, 5000);
+  xyz wp;
+  
+  bool ok = true;
+  // Test Illuminant A (Incandescent)
+  {
+    spectrum_dyes_to_xyz dyesA;
+    dyesA.set_backlight (spectrum_dyes_to_xyz::il_A, 2856);
+    wp = dyesA.whitepoint_xyz ();
+    if (fabs (wp.x - 1.0985) > 0.001 || fabs (wp.z - 0.3558) > 0.001)
+      {
+	printf ("FAILED: Illuminant A whitepoint mismatch. Got (%f, %f, %f)\n", wp.x, wp.y, wp.z);
+	ok = false;
+      }
+  }
+
+  // Test Illuminant C (Average Daylight)
+  {
+    spectrum_dyes_to_xyz dyesC;
+    dyesC.set_backlight (spectrum_dyes_to_xyz::il_C, 6774);
+    wp = dyesC.whitepoint_xyz ();
+    if (fabs (wp.x - 0.9807) > 0.001 || fabs (wp.z - 1.1822) > 0.001)
+      {
+	printf ("FAILED: Illuminant C whitepoint mismatch. Got (%f, %f, %f)\n", wp.x, wp.y, wp.z);
+	ok = false;
+      }
+  }
+
+  // Test Illuminant D65
+  {
+    spectrum_dyes_to_xyz dyesD65;
+    dyesD65.set_backlight (spectrum_dyes_to_xyz::il_D, 6504);
+    wp = dyesD65.whitepoint_xyz ();
+    if (fabs (wp.x - 0.9505) > 0.002 || fabs (wp.z - 1.0891) > 0.002)
+      {
+	printf ("FAILED: Illuminant D65 whitepoint mismatch. Got (%f, %f, %f)\n", wp.x, wp.y, wp.z);
+	ok = false;
+      }
+  }
+
+  // Test Illuminant Equal Energy (E)
+  {
+    spectrum_dyes_to_xyz dyesE;
+    dyesE.set_backlight (spectrum_dyes_to_xyz::il_equal_energy);
+    wp = dyesE.whitepoint_xyz ();
+    if (fabs (wp.x - 1.0) > 0.001 || fabs (wp.y - 1.0) > 0.001 || fabs (wp.z - 1.0) > 0.001)
+      {
+	printf ("FAILED: Illuminant E whitepoint mismatch. Got (%f, %f, %f)\n", wp.x, wp.y, wp.z);
+	ok = false;
+      }
+  }
+  if (!ok)
+    return false;
+
+  // Test normalization
+  dyes.normalize_brightness ();
+  xyz wp_norm = dyes.dyes_rgb_to_xyz (1, 1, 1);
+  if (fabs (wp_norm.y - 1.0) > 0.0001)
+    {
+      printf ("FAILED: Normalized brightness Y should be 1.0, got %f\n", wp_norm.y);
+      return false;
+    }
+
+  // Test that characteristic curve setting doesn't affect dyes_rgb_to_xyz linearity.
+  // The characteristic curve is applied in film_rgb_response, not dyes_rgb_to_xyz.
+  dyes.set_characteristic_curve (spectrum_dyes_to_xyz::input_curve);
+  if (!dyes.is_linear ())
+    {
+       printf ("FAILED: dyes_rgb_to_xyz should remain linear even with characteristic curve set\n");
+       return false;
+    }
+
+  // Test matrix generation
+  color_matrix m = dyes.xyz_matrix ();
+  if (fabs (m (3, 3) - 1.0) > 0.0001)
+    {
+       printf ("FAILED: Matrix diagonal should be 1.0, got %f\n", m (3, 3));
+       return false;
+    }
+
+  return true;
+}
 }
 
 
 int
 main ()
 {
-  printf ("1..18\n");
+  printf ("1..19\n");
 
   test_matrix ();
   report ("matrix tests", true);
@@ -1057,6 +1133,7 @@ main ()
   report ("hd sorting tests", test_hd_sorting ());
   report ("custom tone curve tests", test_custom_tone_curve ());
   report ("lru cache concurrency tests", test_lru_cache_concurrency ());
+  report ("spectrum to xyz tests", test_spectrum_dyes_to_xyz ());
   return error_found;
 
 }
