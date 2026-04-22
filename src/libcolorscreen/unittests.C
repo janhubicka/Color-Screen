@@ -1105,13 +1105,64 @@ test_spectrum_dyes_to_xyz ()
 
   return true;
 }
+
+/* test_whitepoint_constants verifies that the spectral path whitepoints computed for various
+   standard illuminants match the hardcoded xyz constants in color.h.  */
+bool
+test_whitepoint_constants ()
+{
+  bool ok = true;
+  spectrum_dyes_to_xyz dyes;
+  xyz wp;
+  
+  auto compare_wp = [&] (const char *name, xyz spec_wp, xyz const_wp, luminosity_t eps = 0.002) {
+    if (!spec_wp.almost_equal_p (const_wp, eps))
+      {
+	printf ("FAILED: %s whitepoint mismatch!\n", name);
+	printf ("  Spectral: (%f, %f, %f)\n", spec_wp.x, spec_wp.y, spec_wp.z);
+	printf ("  Constant: (%f, %f, %f)\n", const_wp.x, const_wp.y, const_wp.z);
+	printf ("  Diff:     (%f, %f, %f)\n", spec_wp.x - const_wp.x, spec_wp.y - const_wp.y, spec_wp.z - const_wp.z);
+	ok = false;
+      }
+  };
+
+  // 1. Illuminant A (Incandescent) - 2856K
+  dyes.set_backlight (spectrum_dyes_to_xyz::il_A, 2856);
+  compare_wp ("Illuminant A", dyes.whitepoint_xyz (), il_A_white);
+
+  // 2. Illuminant B (Direct Sunlight) - 4874K
+  dyes.set_backlight (spectrum_dyes_to_xyz::il_B, 4874);
+  compare_wp ("Illuminant B", dyes.whitepoint_xyz (), il_B_white);
+
+  // 3. Illuminant C (Average Daylight) - 6774K
+  dyes.set_backlight (spectrum_dyes_to_xyz::il_C, 6774);
+  compare_wp ("Illuminant C", dyes.whitepoint_xyz (), il_C_white);
+
+  // 4. Illuminant D50 - 5003K
+  dyes.set_backlight (spectrum_dyes_to_xyz::il_D, 5003);
+  compare_wp ("Illuminant D50", dyes.whitepoint_xyz (), d50_white);
+
+  // 5. Illuminant D55 - 5503K
+  dyes.set_backlight (spectrum_dyes_to_xyz::il_D, 5503);
+  compare_wp ("Illuminant D55", dyes.whitepoint_xyz (), d55_white);
+
+  // 6. Illuminant D65 - 6504K
+  dyes.set_backlight (spectrum_dyes_to_xyz::il_D, 6504);
+  compare_wp ("Illuminant D65", dyes.whitepoint_xyz (), d65_white);
+
+  // 7. sRGB Whitepoint (D65)
+  // sRGB standard specifically uses D65.
+  compare_wp ("sRGB/D65", dyes.whitepoint_xyz (), srgb_white);
+
+  return ok;
+}
 }
 
 
 int
 main ()
 {
-  printf ("1..19\n");
+  printf ("1..20\n");
 
   test_matrix ();
   report ("matrix tests", true);
@@ -1134,6 +1185,7 @@ main ()
   report ("custom tone curve tests", test_custom_tone_curve ());
   report ("lru cache concurrency tests", test_lru_cache_concurrency ());
   report ("spectrum to xyz tests", test_spectrum_dyes_to_xyz ());
+  report ("whitepoint consistency tests", test_whitepoint_constants ());
   return error_found;
 
 }
