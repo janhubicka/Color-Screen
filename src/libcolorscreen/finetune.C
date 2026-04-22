@@ -101,28 +101,23 @@ public:
     int txmin, tymin;
 
     /* Tile colors collected form the scan for faster access.
-       NULL for BW mode.  */
-    rgbdata *color;
+       nullptr for BW mode.  */
+    rgbdata *color = nullptr;
     /* Sharpened tile.  */
-    rgbdata *sharpened_color;
+    rgbdata *sharpened_color = nullptr;
     /* Black and white tile.
-       NULL for color mode.  */
-    luminosity_t *bw;
+       nullptr for color mode.  */
+    luminosity_t *bw = nullptr;
     /* Tile position  */
-    point_t *pos;
+    point_t *pos = nullptr;
     /* If we do not finetune offsets, fix one. Usually 0,0.  */
-    point_t fixed_offset, fixed_emulsion_offset;
+    point_t fixed_offset = {-10, -10}, fixed_emulsion_offset = {-10, -10};
     /* Screen merging emulsion and unblurred screen.  */
-    screen *merged_scr;
+    screen *merged_scr = nullptr;
     /* Blured screen used to render simulated scan.  */
-    screen *scr;
+    screen *scr = nullptr;
 
     tile_data ()
-        : outliers (), color (NULL), sharpened_color (NULL), bw (NULL), pos (NULL),
-          fixed_offset{ -10, -10 }, fixed_emulsion_offset{ -10, -10 },
-          merged_scr (NULL), scr (NULL),
-          last_emulsion_intensities (-1, -1, -1),
-          last_emulsion_offset{ -10, -10 }, simulated_screen (NULL)
     {
     }
     ~tile_data ()
@@ -143,37 +138,37 @@ public:
     void
     forget ()
     {
-      color = NULL;
-      sharpened_color = NULL;
-      bw = NULL;
-      pos = NULL;
-      scr = NULL;
-      merged_scr = NULL;
-      simulated_screen = NULL;
+      color = nullptr;
+      sharpened_color = nullptr;
+      bw = nullptr;
+      pos = nullptr;
+      scr = nullptr;
+      merged_scr = nullptr;
+      simulated_screen = nullptr;
     }
 
   protected:
     friend finetune_solver;
 
     /* Remember last settings, so we do not recompute screens uselessly.  */
-    rgbdata last_emulsion_intensities;
-    point_t last_emulsion_offset;
+    rgbdata last_emulsion_intensities = {-1, -1, -1};
+    point_t last_emulsion_offset = {-10, -10};
     /* Simulation of screen.  */
-    rgbdata *simulated_screen;
+    rgbdata *simulated_screen = nullptr;
   };
   tile_data tiles[max_tiles];
 
 private:
   /* Least squares solver for optimizing parameters that behaves linearly.  */
-  gsl_multifit_linear_workspace *gsl_work;
-  gsl_matrix *gsl_X;
-  gsl_vector *gsl_y[3];
-  gsl_vector *gsl_c;
-  gsl_matrix *gsl_cov;
+  gsl_multifit_linear_workspace *gsl_work = nullptr;
+  gsl_matrix *gsl_X = nullptr;
+  gsl_vector *gsl_y[3] = {nullptr, nullptr, nullptr};
+  gsl_vector *gsl_c = nullptr;
+  gsl_matrix *gsl_cov = nullptr;
   bool least_squares_initialized;
 
   /* we ignore some outliers to get more realistic result.  */
-  int noutliers;
+  int noutliers = 0;
 
   /* Indexes into optimized values array to fetch individual parameters  */
   int fog_index;
@@ -211,8 +206,6 @@ public:
   sharpen_parameters render_sharpen_params;
 
   finetune_solver ()
-      : gsl_work (NULL), gsl_X (NULL), gsl_y{ NULL, NULL, NULL }, gsl_c (NULL),
-        gsl_cov (NULL), noutliers (0), start (NULL)
   {
   }
   int n_tiles;
@@ -893,22 +886,22 @@ public:
     if (gsl_work)
       {
         gsl_multifit_linear_free (gsl_work);
-        gsl_work = NULL;
+        gsl_work = nullptr;
         gsl_matrix_free (gsl_X);
-        gsl_X = NULL;
+        gsl_X = nullptr;
         gsl_vector_free (gsl_y[0]);
-        gsl_y[0] = NULL;
+        gsl_y[0] = nullptr;
         if (tiles[0].color && !simulate_infrared)
           {
             gsl_vector_free (gsl_y[1]);
-            gsl_y[1] = NULL;
+            gsl_y[1] = nullptr;
             gsl_vector_free (gsl_y[2]);
-            gsl_y[1] = NULL;
+            gsl_y[2] = nullptr;
           }
         gsl_vector_free (gsl_c);
-        gsl_c = NULL;
+        gsl_c = nullptr;
         gsl_matrix_free (gsl_cov);
-        gsl_cov = NULL;
+        gsl_cov = nullptr;
       }
   }
 
@@ -1140,7 +1133,7 @@ public:
     least_squares = !(flags & finetune_no_least_squares);
     data_collection = !(flags & finetune_no_data_collection);
     simulate_infrared = (flags & finetune_simulate_infrared) && tiles[0].color;
-    optimize_sharpening = (flags & finetune_sharpening) && tiles[0].color != NULL;
+    optimize_sharpening = (flags & finetune_sharpening) && tiles[0].color != nullptr;
     optimize_mix_weights = false;
     optimize_mix_dark = false;
     optimize_emulsion_offset = false;
@@ -1609,7 +1602,7 @@ public:
         free_least_squares ();
         alloc_least_squares ();
         if (!optimize_fog || fog_by_least_squares)
-          init_least_squares (NULL);
+          init_least_squares (nullptr);
       }
     simulated_screen_border = 0;
     simulated_screen_width = twidth;
@@ -1652,7 +1645,7 @@ public:
   /* Apply blur to SRC_SCR and compute DST_SCR.  */
   void
   apply_blur (coord_t *v, int tileid, screen *dst_scr, screen *src_scr,
-              screen *weight_scr = NULL)
+              screen *weight_scr = nullptr)
   {
     rgbdata blur = get_channel_blur_radius (v);
 
@@ -1796,7 +1789,7 @@ public:
                         ? emulsion_scr.get ()
                         : original_scr.get (),
                     optimize_emulsion_intensities ? emulsion_scr.get ()
-                                                  : NULL);
+                                                  : nullptr);
         last_blur = blur;
 	last_scanner_mtf_sigma = scanner_mtf_sigma;
 	last_scanner_mtf_defocus = scanner_mtf_defocus;
@@ -2434,7 +2427,7 @@ public:
       {
         /* FIXME: parallelism is disabled because sometimes we are called form parallel block.  */
 	if (tiles[tileid].sharpened_color && tiles[tileid].sharpened_color != tiles[tileid].color)
-          sharpen<rgbdata, rgbdata, rgbdata *,int, getdata_helper> (tiles[tileid].sharpened_color, tiles[tileid].color, theight, twidth, theight, get_sharpen_radius (v), get_sharpen_amount (v), NULL, false);
+          sharpen<rgbdata, rgbdata, rgbdata *,int, getdata_helper> (tiles[tileid].sharpened_color, tiles[tileid].color, theight, twidth, theight, get_sharpen_radius (v), get_sharpen_amount (v), nullptr, false);
         init_screen (v, tileid);
         simulate_screen (v, tileid);
       }
@@ -2633,7 +2626,7 @@ public:
         free_least_squares ();
         alloc_least_squares ();
         if (!optimize_fog || fog_by_least_squares)
-          init_least_squares (NULL);
+          init_least_squares (nullptr);
       }
     return noutliers;
   }
@@ -2686,7 +2679,7 @@ public:
         free_least_squares ();
         alloc_least_squares ();
         if (!optimize_fog || fog_by_least_squares)
-          init_least_squares (NULL);
+          init_least_squares (nullptr);
       }
     return noutliers;
   }
@@ -3156,8 +3149,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   coord_t pixel_size = -1;
 
   scr_to_img map;
-  imgp[0] = NULL;
-  mapp[0] = NULL;
+  imgp[0] = nullptr;
+  mapp[0] = nullptr;
   x[0] = 0;
   y[0] = 0;
   for (int tileid = 0; tileid < n_tiles; tileid++)
@@ -3328,7 +3321,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
 	  rxmax = std::max (txmax + (twidth * maxtiles / 2), imgp[0]->width - 1);
 	  rymax = std::max (tymax + (theight * maxtiles / 2), imgp[0]->height - 1);
 	}
-      //if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, rxmin, rymin, rxmax + 1, rymax + 1, !(fparams.flags & finetune_no_progress_report) ? progress : NULL))
+      //if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, rxmin, rymin, rxmax + 1, rymax + 1, !(fparams.flags & finetune_no_progress_report) ? progress : nullptr))
 #endif
       if (bw && (rparam2.ignore_infrared || !imgp[0]->data))
 	bw_is_simulated_infrared = true;
@@ -3336,7 +3329,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
               bw /*grayscale*/, false /*normalized*/,
               patch_proportions (param.type, &rparam2),
               !(fparams.flags & finetune_no_progress_report) ? progress
-                                                             : NULL))
+                                                             : nullptr))
         {
           if (verbose)
             {
@@ -3410,7 +3403,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
               if (best_uncertainity < 0 || best_uncertainity > uncertainity)
                 {
                   best_solver = solver;
-                  solver.start = NULL;
+                  solver.start = nullptr;
                   for (int i = 0; i < solver.n_tiles; i++)
                     solver.tiles[i].forget ();
                   best_uncertainity = uncertainity;
@@ -3445,7 +3438,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
                   bw /*grayscale*/, false /*normalized*/,
                   patch_proportions (param.type, &rparam2),
                   !(fparams.flags & finetune_no_progress_report) ? progress
-                                                                 : NULL))
+                                                                 : nullptr))
             {
               ret.err = "precomputing failed";
               return ret;
@@ -3641,7 +3634,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
             res[x + y * xsteps] = finetune (
                 rparam, param, img,
                 { { xmin + (x + 0.5) * xstep, ymin + (y + 0.5) * ystep } },
-                NULL, fparam, progress);
+                nullptr, fparam, progress);
             if (progress)
               progress->inc_progress ();
           }
@@ -3652,7 +3645,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
       fparam.flags |= finetune_position /*| finetune_multitile*/ | finetune_bw;
       res[0] = finetune (rparam, param, img,
                          { { xmin + (0.5) * xstep, ymin + (0.5) * ystep } },
-                         NULL, fparam, progress);
+                         nullptr, fparam, progress);
       progress->inc_progress ();
     }
   if (progress && progress->cancel_requested ())
@@ -3780,7 +3773,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       int ext;
       if (sharpen_param.deconvolution_p ())
 	{
-	  std::shared_ptr<mtf> cur_mtf = mtf::get_mtf (sharpen_param.scanner_mtf, NULL);
+	  std::shared_ptr<mtf> cur_mtf = mtf::get_mtf (sharpen_param.scanner_mtf, nullptr);
 	  if (!cur_mtf->precompute ())
 	    return false;
 	  ext = cur_mtf->psf_size ( sharpen_param.scanner_mtf_scale);
@@ -3810,12 +3803,12 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       if (!sharpen_param.deconvolution_p ())
 	sharpen<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
 	    rendered2.data (), rendered.data (), xsize, ysize, ysize,
-	    sharpen_param.usm_radius, sharpen_param.usm_amount, NULL, false);
+	    sharpen_param.usm_radius, sharpen_param.usm_amount, nullptr, false);
       else
 	{
 	  deconvolve_rgb<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
 	      rendered2.data (), rendered.data (), xsize, ysize, ysize,
-	      sharpen_param, NULL, false);
+	      sharpen_param, nullptr, false);
 	}
 
       if (debugfiles)
