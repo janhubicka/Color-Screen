@@ -6,11 +6,13 @@
 #include "colorscreen-config.h"
 namespace colorscreen
 {
+/* Property specification.  */
 struct property_t {
   const char *name;
   const char *pretty_name;
   const char *help;
 };
+
 #define flatten_attr __attribute__ ((__flatten__))
 #define always_inline_attr __attribute__ ((__always_inline__))
 #ifdef COLORSCREEN_CHECKING
@@ -53,6 +55,7 @@ my_sqrt (double x)
   return sqrt (x);
 }
 
+/* Floor value X.  */
 static inline double
 my_floor (double x)
 {
@@ -64,120 +67,190 @@ my_floor (float x)
   return floorf (x);
 }
 
-typedef double coord_t;
+using coord_t = double;
 struct int_point_t;
+
+/* Coordinate point with real values.  */
 struct point_t
 {
   coord_t x, y;
-  pure_attr inline coord_t
+
+  /* Return squared distance from this point to P.  XSCALE and YSCALE
+     can scale the axes.  */
+  pure_attr inline constexpr coord_t
   dist_sq2_from (point_t p, coord_t xscale = 1, coord_t yscale = 1) const
   {
     return (x - p.x) * (x - p.x) * (xscale * xscale) + (y - p.y) * (y - p.y) * (yscale * yscale);
   }
+
+  /* Return distance from this point to P.  XSCALE and YSCALE
+     can scale the axes.  */
   pure_attr inline coord_t
   dist_from (point_t p, coord_t xscale = 1, coord_t yscale = 1) const
   {
     return my_sqrt (dist_sq2_from (p, xscale, yscale));
   }
+
+  /* Return length of the vector formed by this point.  */
   pure_attr inline coord_t
   length () const
   {
     return my_sqrt (x * x + y * y);
   }
-  point_t inline &operator+=(const point_t other)
+
+  /* Add OTHER to this point.  */
+  inline constexpr point_t &
+  operator+=(const point_t other)
   {
     x += other.x;
     y += other.y;
     return *this;
   }
-  pure_attr inline point_t operator+(const point_t other) const
+
+  /* Return sum of this point and OTHER.  */
+  pure_attr inline constexpr point_t
+  operator+(const point_t other) const
   {
     return {x + other.x, y + other.y};
   }
-  point_t inline &operator-=(const point_t other)
+
+  /* Subtract OTHER from this point.  */
+  inline constexpr point_t &
+  operator-=(const point_t other)
   {
     x -= other.x;
     y -= other.y;
     return *this;
   }
-  pure_attr inline point_t operator-(const point_t other) const
+
+  /* Return difference between this point and OTHER.  */
+  pure_attr inline constexpr point_t
+  operator-(const point_t other) const
   {
     return {x - other.x, y - other.y};
   }
-  point_t inline &operator*=(const coord_t other)
+
+  /* Multiply this point by scalar OTHER.  */
+  inline constexpr point_t &
+  operator*=(const coord_t other)
   {
     x *= other;
     y *= other;
     return *this;
   }
-  pure_attr inline point_t operator*(const coord_t other) const
+
+  /* Return product of this point and scalar OTHER.  */
+  pure_attr inline constexpr point_t
+  operator*(const coord_t other) const
   {
     return {x * other, y * other};
   }
-  const_attr inline bool almost_eq(point_t other, coord_t epsilon = 0.001) const
+
+  /* Divide this point by scalar OTHER.  */
+  inline constexpr point_t &
+  operator/=(const coord_t other)
   {
-    return (fabs (x-other.x) < epsilon && fabs (y - other.y) < epsilon);
+    x /= other;
+    y /= other;
+    return *this;
   }
-  pure_attr inline bool operator== (point_t &other) const
+
+  /* Return quotient of this point and scalar OTHER.  */
+  pure_attr inline constexpr point_t
+  operator/(const coord_t other) const
+  {
+    return {x / other, y / other};
+  }
+
+  /* Return true if this point is almost equal to OTHER within EPSILON.  */
+  const_attr inline bool
+  almost_eq(point_t other, coord_t epsilon = 0.001) const
+  {
+    return (fabs (x - other.x) < epsilon && fabs (y - other.y) < epsilon);
+  }
+
+  /* Return true if this point is equal to OTHER.  */
+  pure_attr inline bool
+  operator== (const point_t &other) const
   {
     return x == other.x && y == other.y;
   }
-  bool inline operator==(const point_t &other) const
+
+  /* Return true if this point is not equal to OTHER.  */
+  bool inline
+  operator!=(const point_t &other) const
   {
-    return other.x == x && other.y == y;
+    return !(*this == other);
   }
-  bool inline operator!=(const point_t &other) const
-  {
-    return other.x != x || other.y != y;
-  }
-  inline int_point_t floor ();
-  inline int_point_t nearest ();
-  inline point_t modf (int_point_t *ret = nullptr);
+  inline int_point_t floor () const;
+  inline int_point_t nearest () const;
+  inline point_t modf (int_point_t *ret = nullptr) const;
 };
+/* Coordinate point with integer values.  */
 struct int_point_t
 {
   int64_t x, y;
-  int_point_t inline &operator+=(const int_point_t other)
+
+  /* Add OTHER to this point.  */
+  inline constexpr int_point_t &
+  operator+=(const int_point_t other)
   {
     x += other.x;
     y += other.y;
     return *this;
   }
-  pure_attr inline int_point_t operator+(const int_point_t other) const
+
+  /* Return sum of this point and OTHER.  */
+  pure_attr inline constexpr int_point_t
+  operator+(const int_point_t other) const
   {
     return {x + other.x, y + other.y};
   }
-  int_point_t inline &operator-=(const int_point_t other)
+
+  /* Subtract OTHER from this point.  */
+  inline constexpr int_point_t &
+  operator-=(const int_point_t other)
   {
     x -= other.x;
     y -= other.y;
     return *this;
   }
-  pure_attr inline int_point_t operator-(const int_point_t other) const
+
+  /* Return difference between this point and OTHER.  */
+  pure_attr inline constexpr int_point_t
+  operator-(const int_point_t other) const
   {
     return {x - other.x, y - other.y};
   }
-  int_point_t inline &operator*=(const int64_t other)
+
+  /* Multiply this point by scalar OTHER.  */
+  inline constexpr int_point_t &
+  operator*=(const int64_t other)
   {
     x *= other;
     y *= other;
     return *this;
   }
-  pure_attr inline int_point_t operator*(const int64_t other) const
+
+  /* Return product of this point and scalar OTHER.  */
+  pure_attr inline constexpr int_point_t
+  operator*(const int64_t other) const
   {
     return {x * other, y * other};
   }
-  pure_attr inline bool operator== (int_point_t &other) const
+
+  /* Return true if this point is equal to OTHER.  */
+  pure_attr inline bool
+  operator== (const int_point_t &other) const
   {
     return x == other.x && y == other.y;
   }
-  bool inline operator==(const int_point_t &other) const
+
+  /* Return true if this point is not equal to OTHER.  */
+  bool inline
+  operator!=(const int_point_t &other) const
   {
-    return other.x == x && other.y == y;
-  }
-  bool inline operator!=(const int_point_t &other) const
-  {
-    return other.x != x || other.y != y;
+    return !(*this == other);
   }
 };
 
@@ -193,12 +266,13 @@ my_modf (float x, int *ptr)
 static inline double
 my_modf (double x, int *ptr)
 {
-  float f = floor (x);
-  float ret = x - f;
+  double f = floor (x);
+  double ret = x - f;
   *ptr = f;
   return ret;
 }
 
+/* Round value X to nearest integer.  */
 static inline int64_t
 nearest_int (float x)
 {
@@ -210,18 +284,23 @@ nearest_int (double x)
   return round (x);
 }
 
+/* Return floor of this point.  */
 int_point_t
-point_t::floor ()
+point_t::floor () const
 {
   return {(int64_t)my_floor (x), (int64_t)my_floor (y)};
 }
+
+/* Return nearest integer of this point.  */
 int_point_t
-point_t::nearest ()
+point_t::nearest () const
 {
   return {(int64_t)nearest_int (x), (int64_t)nearest_int (y)};
 }
+
+/* Decompose this point to integer and fractional part.  */
 point_t
-point_t::modf (int_point_t *val)
+point_t::modf (int_point_t *val) const
 {
   int xx, yy;
   point_t ret = {my_modf (x, &xx), my_modf (y, &yy)};
@@ -247,13 +326,15 @@ public:
   : x (nx), y (ny), width (nwidth), height (nheight)
   { }
 
-  bool
-  empty_p ()
+  /* Return true if the area is empty.  */
+  pure_attr inline constexpr bool
+  empty_p () const
   {
     return width <= 0 || height <= 0;
   }
 
-  image_area_base<T>
+  /* Return intersection of this area and OTHER.  */
+  pure_attr inline constexpr image_area_base<T>
   intersect (image_area_base other) const
   {
     image_area_base<T> ret (x, y, width, height);
@@ -275,7 +356,9 @@ public:
     ret.height = std::max (height, (T)0);
     return ret;
   }
-  bool
+
+  /* Return true if this area is equal to OTHER.  */
+  pure_attr inline constexpr bool
   operator== (const image_area_base &other) const
   {
     return x == other.x && y == other.y && width == other.width && height == other.height;
@@ -300,15 +383,9 @@ public:
 typedef image_area_base<int> int_image_area;
 typedef optional_image_area_base<int> int_optional_image_area;
 
-/* Base class for geometry specificatoins for analyzers of regular screens.  */
+/* Base class for geometry specifications for analyzers of regular screens.  */
 struct base_geometry
 {
-#if 0
-  inline static point_t to_demosaiced_coordinates (point_t p)
-  {
-    return p;
-  }
-#endif
   /* Convert demosaiced coordinates to screen coordinates.  */
   inline static point_t from_demosaiced_coordinates (point_t p)
   {
@@ -319,12 +396,6 @@ struct base_geometry
   {
     return p;
   }
-#if 0
-  inline static int_point_t from_demosaiced_coordinates (int_point_t p)
-  {
-    return p;
-  }
-#endif
   inline static int demosaic_period_x ()
   {
     return 2;
@@ -339,6 +410,8 @@ struct base_geometry
     green,
     blue,
   };
+
+  /* Default color pattern.  */
   inline static int demosaic_entry_color (int x, int y)
   {
     x &= 1;
