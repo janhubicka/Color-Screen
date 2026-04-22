@@ -12,14 +12,7 @@
 #include "include/progress-info.h"
 #include "include/render-parameters.h"
 #include "lru-cache.h"
-
 #include "fft.h"
-#include "include/base.h"
-#include "include/color.h"
-#include "include/precomputed-function.h"
-#include "include/progress-info.h"
-#include "include/render-parameters.h"
-#include "lru-cache.h"
 
 namespace colorscreen
 {

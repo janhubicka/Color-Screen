@@ -333,27 +333,27 @@ public:
     assert (nvalues == (int)start_vec.size ());
   }
   int
-  num_values ()
+  num_values () const
   {
     return nvalues;
   }
   luminosity_t
-  epsilon ()
+  epsilon () const
   {
     return 0.0000001;
   }
   luminosity_t
-  derivative_perturbation ()
+  derivative_perturbation () const
   {
     return 0.0001;  // Increased from 0.00001 for more robust gradient estimation
   }
   bool
-  verbose ()
+  verbose () const
   {
     return be_verbose;
   }
   luminosity_t
-  scale ()
+  scale () const
   {
     return 1;
   }
@@ -504,7 +504,7 @@ public:
     return sum;
   }
   int
-  num_observations ()
+  num_observations () const
   {
     return n_observations;
   }
@@ -1012,10 +1012,9 @@ mtf::compute_psf (luminosity_t max_radius, luminosity_t subscale, const char *fi
 bool
 mtf::precompute (progress_info *progress, bool parallel)
 {
-  m_lock.lock ();
+  std::lock_guard<std::mutex> lock (m_lock);
   if (m_precomputed)
     {
-      m_lock.unlock ();
       return true;
     }
 
@@ -1132,7 +1131,6 @@ mtf::precompute (progress_info *progress, bool parallel)
   // m_mtf.plot (0, 1);
   // m_psf.plot (0, 5);
   m_precomputed = true;
-  m_lock.unlock ();
   return true;
 }
 bool
@@ -1140,10 +1138,9 @@ mtf::precompute_psf (progress_info *progress, bool parallel, const char *filenam
 {
   if (!precompute (progress))
     return false;
-  m_lock.lock ();
+  std::lock_guard<std::mutex> lock (m_lock);
   if (m_precomputed_psf)
     {
-      m_lock.unlock ();
       return true;
     }
   if (!compute_psf (psf_size (1), 1 / 32.0, filename, error, parallel))
@@ -1152,7 +1149,6 @@ mtf::precompute_psf (progress_info *progress, bool parallel, const char *filenam
       return false;
     }
   m_precomputed_psf = true;
-  m_lock.unlock ();
   return true;
 }
 
