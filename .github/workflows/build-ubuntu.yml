@@ -61,6 +61,15 @@ jobs:
     - name: make distcheck
       if: matrix.arch == 'amd64'
       run: make -j$(nproc) distcheck
+    - name: Upload Test Results (distcheck)
+      if: matrix.arch == 'amd64' && always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: testsuite-distcheck-${{ matrix.arch }}
+        path: |
+          testsuite/*.txt
+          testsuite/*.log
+          testsuite/*.par
     
     - uses: actions/upload-artifact@v4
       if: matrix.arch == 'amd64'
