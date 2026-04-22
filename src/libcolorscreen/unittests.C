@@ -460,7 +460,6 @@ test_screen_blur ()
 	     for (int c = 0; c < 3; c++)
 		diff->mult[y][x][c] = 0.5 + (scr3->mult[y][x][c] - scr2->mult[y][x][c]);
 	  diff->save_tiff ("/tmp/scr-diff.tif");
-	  exit (0);
 	  return false;
         }
 
