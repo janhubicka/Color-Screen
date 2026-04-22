@@ -1236,6 +1236,31 @@ test_lens_warp ()
       ok = false;
     }
 
+  /* Adobe DNG Specification 1.3 Worked Example.
+     Image 1000x1000, center (500,500), corner (0,0) defines r=1.0.
+     Parameters: kr = [1.0, 0.05, -0.02, 0.005]
+     Point (600, 700) -> Delta (100, 200), r^2 = (100^2+200^2)/(500^2+500^2) = 0.1.
+     Distortion ratio f(0.1) = 1.0 + 0.05(0.1) - 0.02(0.01) + 0.005(0.001) = 1.004805.
+     Expected point: (500 + 100*1.004805, 500 + 200*1.004805) = (600.4805, 700.961).  */
+  {
+    lens_warp_correction_parameters p_ref;
+    p_ref.kr[0] = 1.0; p_ref.kr[1] = 0.05; p_ref.kr[2] = -0.02; p_ref.kr[3] = 0.005;
+    p_ref.center = { 0.5, 0.5 };
+    lens_warp_correction lw_ref;
+    lw_ref.set_parameters (p_ref);
+    lw_ref.precompute ({ 500, 500 }, { 0, 0 }, { 1000, 0 }, { 1000, 1000 }, { 0, 1000 });
+    
+    point_t p_in = { 600, 700 };
+    point_t p_out = lw_ref.corrected_to_scan (p_in);
+    point_t p_expected = { 600.4805, 700.9610 };
+    if (!p_out.almost_eq (p_expected, 1e-4))
+      {
+        printf ("FAILED: DNG Specification Worked Example mismatch!\n");
+        printf ("Expected (%f, %f), got (%f, %f)\n", p_expected.x, p_expected.y, p_out.x, p_out.y);
+        ok = false;
+      }
+  }
+
   return ok;
 }
 }
