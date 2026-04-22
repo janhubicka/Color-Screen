@@ -63,20 +63,27 @@ static lru_cache<backlight_correction_cache_params, backlight_correction,
 /*                         Image layer correction cache.                     */
 /*****************************************************************************/
 std::unique_ptr<histogram>
-get_new_image_layer_histogram (struct image_layer_histogram_params &p, progress_info *progress)
+get_new_image_layer_histogram (struct image_layer_histogram_params &p,
+                               progress_info *)
 {
-  auto hist = std::make_unique<histogram> ();
-  if (!hist)
-    return nullptr;
+  histogram hist;
+
+  /* First determine the global range of values.  */
+#pragma omp parallel for reduction(histogram_range : hist)
   for (int y = p.crop.y; y < p.crop.y + p.crop.height; y++)
-    for (int x = p.crop.x; x < p.crop.x + p.crop.height; x++)
-      hist->pre_account (p.r->get_unadjusted_data (x, y));
-  hist->finalize_range (65536);
+    for (int x = p.crop.x; x < p.crop.x + p.crop.width; x++)
+      hist.pre_account (p.r->get_unadjusted_data (x, y));
+
+  hist.finalize_range (65536);
+
+  /* Now account values into the finalized range.  */
+#pragma omp parallel for reduction(histogram_entries : hist)
   for (int y = p.crop.y; y < p.crop.y + p.crop.height; y++)
-    for (int x = p.crop.x; x < p.crop.x + p.crop.height; x++)
-      hist->account (p.r->get_unadjusted_data (x, y));
-  hist->finalize ();
-  return hist;
+    for (int x = p.crop.x; x < p.crop.x + p.crop.width; x++)
+      hist.account (p.r->get_unadjusted_data (x, y));
+
+  hist.finalize ();
+  return std::make_unique<histogram> (std::move (hist));
 }
 static lru_cache<image_layer_histogram_params, histogram,
                  get_new_image_layer_histogram, 10>

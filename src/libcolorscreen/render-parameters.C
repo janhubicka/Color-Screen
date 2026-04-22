@@ -1105,24 +1105,26 @@ render_parameters::auto_mix_dark (image_data &img, scr_to_img_parameters &param,
     render render (img, rparam, 256);
     if (!render.precompute_all (false, false, {1/3.0, 1/3.0, 1/3.0}, progress))
       return false;
-    for (int yy = 0; yy <= ymax - ymin; yy ++)
+#pragma omp parallel for reduction(rgb_histogram_range : hist)
+    for (int yy = 0; yy <= ymax - ymin; yy++)
       {
-	if (!progress || !progress->cancel_requested ())
-	  for (int xx = 0; xx <= xmax - xmin; xx ++)
-	    {
-	      rgbdata c = render.get_unadjusted_rgb_pixel (xx + xmin, yy + ymin);
-	      hist.pre_account (c);
-	    }
+        if (!progress || !progress->cancel_requested ())
+          for (int xx = 0; xx <= xmax - xmin; xx++)
+            {
+              rgbdata c = render.get_unadjusted_rgb_pixel (xx + xmin, yy + ymin);
+              hist.pre_account (c);
+            }
       }
     hist.finalize_range (65536*256);
-    for (int yy = 0; yy <= ymax - ymin; yy ++)
+#pragma omp parallel for reduction(rgb_histogram_entries : hist)
+    for (int yy = 0; yy <= ymax - ymin; yy++)
       {
-	if (!progress || !progress->cancel_requested ())
-	  for (int xx = 0; xx <= xmax - xmin; xx ++)
-	    {
-	      rgbdata c = render.get_unadjusted_rgb_pixel (xx + xmin, yy + ymin);
-	      hist.account (c);
-	    }
+        if (!progress || !progress->cancel_requested ())
+          for (int xx = 0; xx <= xmax - xmin; xx++)
+            {
+              rgbdata c = render.get_unadjusted_rgb_pixel (xx + xmin, yy + ymin);
+              hist.account (c);
+            }
       }
     hist.finalize ();
   }

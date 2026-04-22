@@ -35,33 +35,40 @@ public:
     histogram h;
     if (progress)
       progress->set_task ("Determining demosaiced value range", m_height * 2);
+
+#pragma omp parallel for reduction(histogram_range : h)
     for (int y = 0; y < m_height; y++)
       {
         if (!progress || !progress->cancel_requested ())
-	  for (int x = 0; x < m_height; x++)
-	    {
-	      h.pre_account (fast_demosaiced_data (x, y).red);
-	      h.pre_account (fast_demosaiced_data (x, y).green);
-	      h.pre_account (fast_demosaiced_data (x, y).blue);
-	    }
+          for (int x = 0; x < m_width; x++)
+            {
+              h.pre_account (fast_demosaiced_data (x, y).red);
+              h.pre_account (fast_demosaiced_data (x, y).green);
+              h.pre_account (fast_demosaiced_data (x, y).blue);
+            }
         if (progress)
           progress->inc_progress ();
       }
+
     if (progress && progress->cancelled ())
       return 1;
+
     h.finalize_range (256);
+
+#pragma omp parallel for reduction(histogram_entries : h)
     for (int y = 0; y < m_height; y++)
       {
         if (!progress || !progress->cancel_requested ())
-	  for (int x = 0; x < m_height; x++)
-	    {
-	      h.account (fast_demosaiced_data (x, y).red);
-	      h.account (fast_demosaiced_data (x, y).green);
-	      h.account (fast_demosaiced_data (x, y).blue);
-	    }
+          for (int x = 0; x < m_width; x++)
+            {
+              h.account (fast_demosaiced_data (x, y).red);
+              h.account (fast_demosaiced_data (x, y).green);
+              h.account (fast_demosaiced_data (x, y).blue);
+            }
         if (progress)
           progress->inc_progress ();
       }
+
     if (progress && progress->cancelled ())
       return 1;
     h.finalize ();

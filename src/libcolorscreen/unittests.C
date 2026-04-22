@@ -20,6 +20,7 @@
 #include "simulate.h"
 #include "include/spectrum-to-xyz.h"
 #include "lru-cache.h"
+#include "include/histogram.h"
 
 
 using namespace colorscreen;
@@ -512,6 +513,53 @@ test_precomputed_function ()
     }
 
   return ok;
+}
+
+/* Internal unit test for the histogram parallel collection.  */
+static bool
+test_histogram_parallel ()
+{
+  printf ("Testing histogram parallel collection...\n");
+  histogram h;
+  const int n = 1000000;
+
+  /* Stage 1: Parallel range.  */
+#pragma omp parallel for reduction(histogram_range : h)
+  for (int i = 0; i < n; i++)
+    h.pre_account ((luminosity_t)(i % 1000));
+
+  if (h.find_min (0) != 0 || h.find_max (0) != 999)
+    {
+      printf ("FAILED: Parallel range mismatch! Min: %f Max: %f\n",
+              (double)h.find_min (0), (double)h.find_max (0));
+      return false;
+    }
+
+  h.finalize_range (1000);
+
+  /* Stage 2: Parallel entries.  */
+#pragma omp parallel for reduction(histogram_entries : h)
+  for (int i = 0; i < n; i++)
+    h.account ((luminosity_t)(i % 1000));
+
+  h.finalize ();
+
+  if (h.num_samples () != n)
+    {
+      printf ("FAILED: Total count mismatch! Expected %i, got %i\n", n,
+              h.num_samples ());
+      return false;
+    }
+
+  for (int i = 0; i < 1000; i++)
+    if (h.entry (i) != 1000)
+      {
+        printf ("FAILED: Entry %i count mismatch! Expected 1000, got %llu\n", i,
+                (unsigned long long)h.entry (i));
+        return false;
+      }
+
+  return true;
 }
 
 bool
@@ -1309,7 +1357,7 @@ test_lens_warp ()
 int
 main ()
 {
-  printf ("1..22\n");
+  printf ("1..23\n");
 
   test_matrix ();
   report ("matrix tests", true);
@@ -1323,6 +1371,7 @@ main ()
   report ("1d homography and lens correction tests", test_homography (true, true, 0.15));
   report ("screen discovery tests", test_discovery (1.8));
   report ("precomputed function tests", test_precomputed_function ());
+  report ("histogram parallel tests", test_histogram_parallel ());
   report ("richards curve tests", test_richards_curve ());
   report ("richards symmetry tests", test_richards_symmetry ());
   report ("richards reversibility tests", test_richards_reversibility ());
