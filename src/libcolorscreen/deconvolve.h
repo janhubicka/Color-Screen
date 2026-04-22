@@ -102,11 +102,11 @@ private:
   /* Supersampling */
   int m_supersample;
   /* Kernel for bluring or sharpening.  */
-  fft_unique_ptr<T> m_blur_kernel;
+  fft_unique_ptr<T> m_blur_kernel = nullptr;
 
-  bool m_richardson_lucy;
-  T m_sigma;
-  int m_iterations;
+  bool m_richardson_lucy = false;
+  T m_sigma = 0;
+  int m_iterations = 0;
 
   /* Weights of edge tapering.  */
   std::vector<T,fft_allocator<T>> m_weights;
@@ -114,7 +114,7 @@ private:
   std::vector<T,fft_allocator<T>> m_lanczos_kernels;
 
   fft_plan<T> m_plan_2d_inv, m_plan_2d;
-  bool m_plans_exists;
+  bool m_plans_exists = false;
 
   /* Plans used for FFT calclation.  */
   struct tile_data
@@ -124,6 +124,7 @@ private:
     std::vector<T,fft_allocator<T>> *enlarged_tile;
     std::vector<T,fft_allocator<T>> enlarged_tile_data;
     std::vector<T,fft_allocator<T>> ratios;
+    std::vector<T,fft_allocator<T>> observed;
     bool initialized;
   };
   std::vector<tile_data> m_data;
@@ -204,7 +205,7 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
               if (px >= width)
                 px = width - (px - width) - 1;
               if (py >= height)
-                px = height - (px - height) - 1;
+                py = height - (py - height) - 1;
               px = std::clamp (px, 0, width - 1);
               py = std::clamp (py, 0, height - 1);
               d.put_pixel (id, xx, yy, getdata (data, px, py, width, param));
@@ -297,7 +298,7 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
 	      if (px >= width)
 		px = width - (px - width) - 1;
 	      if (py >= height)
-		px = height - (px - height) - 1;
+		py = height - (py - height) - 1;
 	      px = std::clamp (px, 0, width - 1);
 	      py = std::clamp (py, 0, height - 1);
               pixel = getdata (data, px, py, width, param);

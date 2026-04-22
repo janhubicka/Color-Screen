@@ -24,7 +24,7 @@ resample_line (T *output,
                int out_stride,
 	       int in_len,
 	       int supersample,
-	       std::vector<T,fft_allocator<T>> kernels,
+	       const std::vector<T,fft_allocator<T>>& kernels,
 	       int a = 3)
 {
   /* Let compiler know that supersample is small integer.  */
@@ -40,7 +40,7 @@ resample_line (T *output,
       int io = (center / 2) % supersample;
 
       T sum = 0.0;
-      T *k = kernels.data () + io * a * 2;
+      const T *k = kernels.data () + io * a * 2;
 
 #pragma omp simd
       for (int jj = 0; jj < 2 * a; ++jj)
@@ -67,7 +67,7 @@ resample_line (T *output,
       int io = (center / 2) % supersample;
 
       T sum = 0.0;
-      T *k = kernels.data () + io * a * 2;
+      const T *k = kernels.data () + io * a * 2;
 
 #pragma omp simd
       for (int jj = 0; jj < 2 * a; ++jj)
@@ -87,7 +87,7 @@ resample_line (T *output,
       int io = (center / 2) % supersample;
 
       T sum = 0.0;
-      T *k = kernels.data () + io * a * 2;
+      const T *k = kernels.data () + io * a * 2;
 
 #pragma omp simd
       for (int jj = 0; jj < 2 * a; ++jj)
@@ -111,8 +111,8 @@ deconvolution<T>::deconvolution (mtf *mtf, luminosity_t mtf_scale,
                               int max_threads, enum mode mode, int iterations,
                               int supersample)
     : m_border_size (0), m_taper_size (0), m_tile_size (1),
-      m_enlarged_tile_size (1), m_supersample (supersample),
-      m_blur_kernel (NULL), m_sigma (sigma),
+  m_enlarged_tile_size (1), m_supersample (supersample),
+      m_blur_kernel (nullptr), m_sigma (sigma),
       m_iterations (iterations), m_plans_exists (false)
 {
   mtf->precompute ();
@@ -213,8 +213,12 @@ deconvolution<T>::init (int thread_id)
   else
     m_data[thread_id].enlarged_tile = &m_data[thread_id].tile;
   if (m_richardson_lucy)
-    m_data[thread_id].ratios.resize (m_enlarged_tile_size
-                                     * m_enlarged_tile_size);
+    {
+      m_data[thread_id].ratios.resize (m_enlarged_tile_size
+                                       * m_enlarged_tile_size);
+      m_data[thread_id].observed.resize (m_enlarged_tile_size
+                                         * m_enlarged_tile_size);
+    }
   m_data[thread_id].initialized = true;
   if (!m_plans_exists)
     {
@@ -366,17 +370,21 @@ deconvolution<T>::process_tile (int thread_id)
 #pragma omp simd
       for (int i = 0; i < m_fft_size * m_enlarged_tile_size; i++)
         {
-          std::complex w (m_blur_kernel[i][0], m_blur_kernel[i][1]);
-          std::complex v (in[i][0], in[i][1]);
-          in[i][0] = real (v * w);
-          in[i][1] = imag (v * w);
+          T vr = in[i][0];
+          T vi = in[i][1];
+          T wr = m_blur_kernel[i][0];
+          T wi = m_blur_kernel[i][1];
+          in[i][0] = vr * wr - vi * wi;
+          in[i][1] = vr * wi + vi * wr;
         }
       m_plan_2d_inv.execute_c2r (in, m_data[thread_id].enlarged_tile->data ());
     }
   else
     {
-      std::vector<T,fft_allocator<T>> observed
-          = *m_data[thread_id].enlarged_tile;
+      std::vector<T,fft_allocator<T>> &observed = m_data[thread_id].observed;
+      std::copy (m_data[thread_id].enlarged_tile->begin (),
+                 m_data[thread_id].enlarged_tile->end (),
+                 observed.begin ());
       std::vector<T,fft_allocator<T>> &estimate
           = *m_data[thread_id].enlarged_tile;
       std::vector<T,fft_allocator<T>> &ratios = m_data[thread_id].ratios;
@@ -392,10 +400,12 @@ deconvolution<T>::process_tile (int thread_id)
 #pragma omp simd
           for (int i = 0; i < m_fft_size * m_enlarged_tile_size; i++)
             {
-              std::complex w (m_blur_kernel[i][0], m_blur_kernel[i][1]);
-              std::complex v (in[i][0], in[i][1]);
-              in[i][0] = real (v * w);
-              in[i][1] = imag (v * w);
+              T vr = in[i][0];
+              T vi = in[i][1];
+              T wr = m_blur_kernel[i][0];
+              T wi = m_blur_kernel[i][1];
+              in[i][0] = vr * wr - vi * wi;
+              in[i][1] = vr * wi + vi * wr;
             }
           m_plan_2d_inv.execute_c2r (in, ratios.data ());
 
@@ -441,13 +451,15 @@ deconvolution<T>::process_tile (int thread_id)
 #pragma omp simd
           for (int i = 0; i < m_fft_size * m_enlarged_tile_size; i++)
             {
-              std::complex w (m_blur_kernel[i][0], -m_blur_kernel[i][1]);
-              std::complex v (in[i][0], in[i][1]);
+              T vr = in[i][0];
+              T vi = in[i][1];
+              T wr = m_blur_kernel[i][0];
+              T wi = -m_blur_kernel[i][1];
               ///* Blurred kernel is pre-scalled taking into account the
               ///inverse FFT.  */
               // w *= m_tile_size * m_tile_size;
-              in[i][0] = real (v * w);
-              in[i][1] = imag (v * w);
+              in[i][0] = vr * wr - vi * wi;
+              in[i][1] = vr * wi + vi * wr;
             }
           /* Now initialize ratios  */
           m_plan_2d_inv.execute_c2r (in, ratios.data ());
@@ -461,6 +473,7 @@ deconvolution<T>::process_tile (int thread_id)
   /* Use bicubic interpolation for upscaling by 2.  */
   if (m_supersample == 2)
     {
+      const T* enlarged_ptr = m_data[thread_id].enlarged_tile->data();
       for (int y = m_border_size; y < m_tile_size - m_border_size; y++)
 #pragma omp simd
         for (int x = m_border_size; x < m_tile_size - m_border_size; x++)
@@ -469,25 +482,25 @@ deconvolution<T>::process_tile (int thread_id)
             int sy = y * 2;
             T val = cubic_interpolate (
                 cubic_interpolate (
-                    get_enlarged_pixel (thread_id, sx - 1, sy - 1),
-                    get_enlarged_pixel (thread_id, sx - 1, sy),
-                    get_enlarged_pixel (thread_id, sx - 1, sy + 1),
-                    get_enlarged_pixel (thread_id, sx - 1, sy + 2), 0.5),
+                    enlarged_ptr[(sy - 1) * m_enlarged_tile_size + sx - 1],
+                    enlarged_ptr[(sy) * m_enlarged_tile_size + sx - 1],
+                    enlarged_ptr[(sy + 1) * m_enlarged_tile_size + sx - 1],
+                    enlarged_ptr[(sy + 2) * m_enlarged_tile_size + sx - 1], 0.5),
                 cubic_interpolate (
-                    get_enlarged_pixel (thread_id, sx - 0, sy - 1),
-                    get_enlarged_pixel (thread_id, sx - 0, sy),
-                    get_enlarged_pixel (thread_id, sx - 0, sy + 1),
-                    get_enlarged_pixel (thread_id, sx - 0, sy + 2), 0.5),
+                    enlarged_ptr[(sy - 1) * m_enlarged_tile_size + sx - 0],
+                    enlarged_ptr[(sy) * m_enlarged_tile_size + sx - 0],
+                    enlarged_ptr[(sy + 1) * m_enlarged_tile_size + sx - 0],
+                    enlarged_ptr[(sy + 2) * m_enlarged_tile_size + sx - 0], 0.5),
                 cubic_interpolate (
-                    get_enlarged_pixel (thread_id, sx + 1, sy - 1),
-                    get_enlarged_pixel (thread_id, sx + 1, sy),
-                    get_enlarged_pixel (thread_id, sx + 1, sy + 1),
-                    get_enlarged_pixel (thread_id, sx + 1, sy + 2), 0.5),
+                    enlarged_ptr[(sy - 1) * m_enlarged_tile_size + sx + 1],
+                    enlarged_ptr[(sy) * m_enlarged_tile_size + sx + 1],
+                    enlarged_ptr[(sy + 1) * m_enlarged_tile_size + sx + 1],
+                    enlarged_ptr[(sy + 2) * m_enlarged_tile_size + sx + 1], 0.5),
                 cubic_interpolate (
-                    get_enlarged_pixel (thread_id, sx + 2, sy - 1),
-                    get_enlarged_pixel (thread_id, sx + 2, sy),
-                    get_enlarged_pixel (thread_id, sx + 2, sy + 1),
-                    get_enlarged_pixel (thread_id, sx + 2, sy + 2), 0.5),
+                    enlarged_ptr[(sy - 1) * m_enlarged_tile_size + sx + 2],
+                    enlarged_ptr[(sy) * m_enlarged_tile_size + sx + 2],
+                    enlarged_ptr[(sy + 1) * m_enlarged_tile_size + sx + 2],
+                    enlarged_ptr[(sy + 2) * m_enlarged_tile_size + sx + 2], 0.5),
                 0.5);
 	    put_pixel (thread_id, x, y, val);
              //put_pixel (thread_id, x, y, get_enlarged_pixel (thread_id, x,  y));
