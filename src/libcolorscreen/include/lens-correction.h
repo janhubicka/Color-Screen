@@ -46,7 +46,7 @@ struct lens_warp_correction
 
   /* Precompute inverse mapping using a lookup table.
      Returns true on success.  */
-  bool precompute_inverse ();
+  DLL_PUBLIC bool precompute_inverse ();
 
   /* Transform point P from corrected image to scan coordinates.
      This is the forward transform.  */
