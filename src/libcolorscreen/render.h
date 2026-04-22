@@ -115,9 +115,10 @@ public:
   pure_attr inline luminosity_t get_linearized_data_blue (int x, int y) const;
 
   /* Precompute all data needed for rendering.  */
-  DLL_PUBLIC bool precompute_all (bool grayscale_needed, bool normalized_patches,
-                                  rgbdata patch_proportions,
-                                  progress_info *progress);
+  DLL_PUBLIC nodiscard_attr bool precompute_all (bool grayscale_needed,
+						 bool normalized_patches,
+						 rgbdata patch_proportions,
+						 progress_info *progress);
 
   /* Get linearized RGB pixel value at index X, Y.  */
   pure_attr inline rgbdata

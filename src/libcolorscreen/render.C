@@ -626,8 +626,9 @@ get_linearized_pixel (const image_data &img, render_parameters &rparam, int xx,
       imgp = img.stitch->images[ty][tx].img.get ();
     }
   render r (*imgp, rparam, 255);
-  r.precompute_all (img.rgbdata ? false : true, false,
-                    { 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f }, progress);
+  if (!r.precompute_all (img.rgbdata ? false : true, false,
+                    { 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f }, progress))
+    return {0,0,0};
   for (int y = yy - range; y < yy + range; y++)
     for (int x = xx - range; x < xx + range; x++)
       if (x >= 0 && x < img.width && y >= 0 && y < img.height)

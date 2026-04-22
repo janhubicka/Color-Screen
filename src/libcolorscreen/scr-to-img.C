@@ -292,7 +292,7 @@ scr_to_img::initialize ()
   update_scr_to_final_parameters (m_param.final_ratio, m_param.final_angle);
 }
 
-void
+bool
 scr_to_img::set_parameters_for_early_correction (
     const scr_to_img_parameters &param,
     int width, int height)
@@ -343,20 +343,24 @@ scr_to_img::set_parameters_for_early_correction (
     c1.x = c2.x = c3.x = c4.x = center.x = m_param.lens_correction.center.x;
   if (m_param.scanner_type == lens_move_vertically)
     c1.y = c2.y = c3.y = c4.y = center.y = m_param.lens_correction.center.y;
-  m_lens_correction.precompute (center, c1, c2, c3, c4);
+  if (!m_lens_correction.precompute (center, c1, c2, c3, c4))
+    return false;
   /* For non-noop conversion we need to also precompute inverse.  */
   m_early_correction_precomputed = m_lens_correction.is_noop ();
+  return true;
 }
 
-void
+bool
 scr_to_img::set_parameters (const scr_to_img_parameters &param,
                             int width, int height, coord_t rotation_adjustment)
 {
   m_rotation_adjustment = rotation_adjustment;
-  scr_to_img::set_parameters_for_early_correction (param, width, height);
+  if (!scr_to_img::set_parameters_for_early_correction (param, width, height))
+    return false;
   m_lens_correction.precompute_inverse ();
   m_early_correction_precomputed = true;
   initialize ();
+  return true;
 }
 
 /* Update map for new parameters.  It can only differ in those describing the

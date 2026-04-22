@@ -1005,7 +1005,8 @@ test_render_linearity ()
       rparam.output_gamma = gamma;
       rparam.output_profile = render_parameters::output_profile_original;
       render ren (img, rparam, 65535);
-      ren.precompute_all (true, false, {1, 1, 1}, NULL);
+      if (!ren.precompute_all (true, false, {1, 1, 1}, NULL))
+	return false;
       for (int i = 0; i < 65535; i++)
 	{
 	  int r, g, b;
@@ -1279,13 +1280,15 @@ test_lens_warp ()
       /* Calculate scan corners for normalization.  */
       lens_warp_correction lw_prep;
       lw_prep.set_parameters (p);
-      lw_prep.precompute (img_center, { 0, 0 }, { 1000, 0 }, { 1000, 1000 }, { 0, 1000 });
+      if (!lw_prep.precompute (img_center, { 0, 0 }, { 1000, 0 }, { 1000, 1000 }, { 0, 1000 }))
+	return false;
       point_t scan_c1 = lw_prep.corrected_to_scan ({ 0, 0 });
       point_t scan_c2 = lw_prep.corrected_to_scan ({ 1000, 0 });
       point_t scan_c3 = lw_prep.corrected_to_scan ({ 1000, 1000 });
       point_t scan_c4 = lw_prep.corrected_to_scan ({ 0, 1000 });
 
-      lw.precompute (img_center, scan_c1, scan_c2, scan_c3, scan_c4);
+      if (!lw.precompute (img_center, scan_c1, scan_c2, scan_c3, scan_c4))
+	return false;
       lw.precompute_inverse ();
 
       /* Verify center is fixed.  */
@@ -1336,7 +1339,8 @@ test_lens_warp ()
     p_ref.center = { 0.5, 0.5 };
     lens_warp_correction lw_ref;
     lw_ref.set_parameters (p_ref);
-    lw_ref.precompute ({ 500, 500 }, { 0, 0 }, { 1000, 0 }, { 1000, 1000 }, { 0, 1000 });
+    if (!lw_ref.precompute ({ 500, 500 }, { 0, 0 }, { 1000, 0 }, { 1000, 1000 }, { 0, 1000 }))
+      return false;
     
     point_t p_in = { 600, 700 };
     point_t p_out = lw_ref.corrected_to_scan (p_in);

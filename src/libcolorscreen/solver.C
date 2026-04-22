@@ -356,10 +356,13 @@ public:
     m_param.lens_correction.normalize ();
     scr_to_img map;
     /* We may save some inversions if points are relatively few.  */
+    bool ok;
     if (m_sparam.n_points () * 2 < lens_warp_correction::size)
-      map.set_parameters_for_early_correction (m_param, m_img_data.width, m_img_data.height);
+      ok = map.set_parameters_for_early_correction (m_param, m_img_data.width, m_img_data.height);
     else
-      map.set_parameters (m_param, m_img_data);
+      ok = map.set_parameters (m_param, m_img_data);
+    if (!ok)
+      return false;
     coord_t chi = -5;
     /* Do not use ransac here, since it is not smooth and will confuse solver.  */
     homography::get_matrix (m_sparam.points, 
