@@ -510,7 +510,9 @@ render_scr_detect_superpose_img::render_pixel_img (coord_t x, coord_t y, int *r,
 inline void
 render_scr_detect_superpose_img::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 { 
-  downscale<render_scr_detect_superpose_img, rgbdata, &render_scr_detect_superpose_img::fast_sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
+  downscale<render_scr_detect_superpose_img, rgbdata,
+            &render_scr_detect_superpose_img::fast_sample_pixel_img> (
+      data, x, y, width, height, pixelsize, progress);
 }
 
 class distance_list
@@ -568,7 +570,9 @@ public:
   inline void
   get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
   { 
-    downscale<render_scr_relax, rgbdata, &render_scr_relax::fast_sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
+    downscale<render_scr_relax, rgbdata,
+              &render_scr_relax::fast_sample_pixel_img> (data, x, y, width, height, pixelsize,
+                                          progress);
   }
 private:
   luminosity_t *cdata[3];
@@ -644,7 +648,9 @@ public:
   inline void
   get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
   { 
-    downscale<render_scr_nearest, rgbdata, &render_scr_nearest::fast_sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
+    downscale<render_scr_nearest, rgbdata,
+              &render_scr_nearest::fast_sample_pixel_img> (data, x, y, width, height, pixelsize,
+                                          progress);
   }
 private:
 };
@@ -660,7 +666,7 @@ public:
   ~render_scr_nearest_scaled ();
   bool precompute_all (progress_info *);
   rgbdata
-  sample_pixel_img (coord_t x, coord_t y)
+  sample_pixel_img (coord_t x, coord_t y) const
   {
     int rx[3], ry[3];
     patches::patch_index_t ri[3];
@@ -693,7 +699,7 @@ public:
       return {0, 0, 0};
   }
   rgbdata
-  fast_sample_pixel_img (int x, int y)
+  fast_sample_pixel_img (int x, int y) const
   {
     return sample_pixel_img (x + 0.5, y + 0.5);
   }
@@ -713,7 +719,9 @@ public:
   inline void
   get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
   { 
-    downscale<render_scr_relax, rgbdata, &render_scr_relax::fast_sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
+    downscale<render_scr_nearest_scaled, rgbdata,
+              &render_scr_nearest_scaled::fast_sample_pixel_img> (
+        data, x, y, width, height, pixelsize, progress);
   }
 private:
   std::shared_ptr<patches> m_patches;

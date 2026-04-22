@@ -42,7 +42,7 @@ render_simulate_process::get_color_data (rgbdata *data, coord_t x, coord_t y, in
 					 int height, coord_t pixelsize, progress_info *progress)
 {
   downscale<render_simulate_process, rgbdata,
-	    &render_simulate_process::fast_sample_pixel_img, &account_rgb_pixel> (
+	    &render_simulate_process::fast_sample_pixel_img> (
       data, x, y, width, height, pixelsize, progress);
 }
 bool

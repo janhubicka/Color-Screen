@@ -28,22 +28,53 @@ namespace colorscreen
 {
 class histogram;
 
-/* Helper for downscaling template for color rendering.
-   Account LUM * SCALE to DATA.  */
+/* Helper for downscaling template for grayscale rendering.
+   Account VAL * SCALE to DATA.  */
+template<bool UseAtomic = false>
 inline void
-account_rgb_pixel (rgbdata *data, rgbdata lum, luminosity_t scale)
+account_pixel (luminosity_t *data, luminosity_t val, luminosity_t scale)
 {
-  data->red += lum.red * scale;
-  data->green += lum.green * scale;
-  data->blue += lum.blue * scale;
+  if constexpr (UseAtomic)
+    {
+#pragma omp atomic
+      *data += val * scale;
+    }
+  else
+    *data += val * scale;
 }
 
-/* Helper for downscaling template for grayscale rendering.
-   Account LUM * SCALE to DATA.  */
+/* Helper for downscaling template for color rendering.
+   Account VAL * SCALE to DATA.  */
+template<bool UseAtomic = false>
 inline void
-account_pixel (luminosity_t *data, luminosity_t lum, luminosity_t scale)
+account_rgb_pixel (rgbdata *data, rgbdata val, luminosity_t scale)
 {
-  *data += lum * scale;
+  if constexpr (UseAtomic)
+    {
+#pragma omp atomic
+      data->red += val.red * scale;
+#pragma omp atomic
+      data->green += val.green * scale;
+#pragma omp atomic
+      data->blue += val.blue * scale;
+    }
+  else
+    {
+      data->red += val.red * scale;
+      data->green += val.green * scale;
+      data->blue += val.blue * scale;
+    }
+}
+
+/* Unified accounting dispatcher.  */
+template<typename T, bool UseAtomic = false>
+inline void
+do_account (T *data, T val, luminosity_t scale)
+{
+  if constexpr (std::is_same_v<T, rgbdata>)
+    account_rgb_pixel<UseAtomic> (data, val, scale);
+  else
+    account_pixel<UseAtomic> (data, val, scale);
 }
 
 /* Base class for rendering routines.  */
@@ -115,7 +146,7 @@ public:
   pure_attr inline luminosity_t get_linearized_data_blue (int x, int y) const;
 
   /* Precompute all data needed for rendering.  */
-  DLL_PUBLIC nodiscard_attr bool precompute_all (bool grayscale_needed,
+  nodiscard_attr DLL_PUBLIC bool precompute_all (bool grayscale_needed,
 						 bool normalized_patches,
 						 rgbdata patch_proportions,
 						 progress_info *progress);
@@ -192,7 +223,7 @@ public:
 
   /* Generic image downscaling routine using bilinear weights.  */
   template<typename D, typename T, T (D::*get_pixel) (int x, int y) const,
-           void (*account_pixel) (T *, T, luminosity_t)>
+           auto account_p = nullptr>
   bool downscale (T *data, coord_t x, coord_t y, int width, int height,
                   coord_t pixelsize, progress_info *progress);
 
@@ -203,17 +234,17 @@ protected:
 
   /* Inner loop for image downscaling processing single line.  */
   template<typename T, typename D, T (D::*get_pixel) (int x, int y) const,
-           void (*account_pixel) (T *, T, luminosity_t)>
+           bool UseAtomic = false, auto account_p = nullptr>
   void process_line (T *data, int *pixelpos, luminosity_t *weights,
 		     int xstart, int xend,
 		     int width, int height,
 		     int py, int yy,
 		     bool y0, bool y1,
 		     luminosity_t scale, luminosity_t yweight);
-
+ 
   /* Inner loop for image downscaling processing single pixel.  */
-  template<typename T, void (*account_pixel) (T *, T, luminosity_t)>
-  inline always_inline_attr void
+  template<typename T, bool UseAtomic = false, auto account_p = nullptr>
+  inline void
   process_pixel (T *data, int width, int height, int px, int py, bool x0,
                  bool x1, bool y0, bool y1, T val, luminosity_t scale,
                  luminosity_t xweight, luminosity_t yweight);
@@ -542,8 +573,8 @@ render::get_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t
 
 /* Inner loop for image downscaling processing single pixel PX, PY in result DATA
    from source pixel VAL.  */
-template<typename T, void (*account_pixel) (T *, T, luminosity_t)>
-inline void always_inline_attr
+template<typename T, bool UseAtomic, auto account_p>
+inline void
 render::process_pixel (T *data, int width, int height, int px, int py, bool x0, bool x1, bool y0, bool y1, T pixel, luminosity_t scale, luminosity_t xweight, luminosity_t yweight)
 {
   if (colorscreen_checking)
@@ -554,22 +585,22 @@ render::process_pixel (T *data, int width, int height, int px, int py, bool x0, 
   if (x0)
     {
       if (y0)
-	account_pixel (data + px + py * width, pixel, scale * (1 - yweight) * (1 - xweight));
+	do_account<T, UseAtomic> (data + px + py * width, pixel, scale * (1 - yweight) * (1 - xweight));
       if (y1)
-	account_pixel (data + px + (py + 1) * width, pixel, scale * yweight * (1 - xweight));
+	do_account<T, UseAtomic> (data + px + (py + 1) * width, pixel, scale * yweight * (1 - xweight));
     }
   if (x1)
     {
       if (y0)
-        account_pixel (data + px + (py * width) + 1, pixel, scale * (1 - yweight) * xweight);
+        do_account<T, UseAtomic> (data + px + (py * width) + 1, pixel, scale * (1 - yweight) * xweight);
       if (y1)
-	account_pixel (data + px + (py + 1) * width + 1, pixel, scale * yweight * xweight);
+	do_account<T, UseAtomic> (data + px + (py + 1) * width + 1, pixel, scale * yweight * xweight);
     }
 }
 
 /* Inner loop for image downscaling processing single line.  */
 template<typename T, typename D, T (D::*get_pixel) (int x, int y) const,
-         void (*account_pixel) (T *, T, luminosity_t)>
+         bool UseAtomic, auto account_p>
 inline void
 render::process_line (T *data, int *pixelpos, luminosity_t *weights,
                       int xstart, int xend,
@@ -586,7 +617,7 @@ render::process_line (T *data, int *pixelpos, luminosity_t *weights,
   if (px >= 0 && xx >= 0)
     {
       T pixel = (((D *)this)->*get_pixel) (xx, yy);
-      process_pixel<T, account_pixel> (data, width, height, px - 1, py, false, true, y0, y1, pixel, scale, weights[px], yweight);
+      process_pixel<T, UseAtomic, account_p> (data, width, height, px - 1, py, false, true, y0, y1, pixel, scale, weights[px], yweight);
     }
   xx++;
   if (xx < 0)
@@ -595,32 +626,31 @@ render::process_line (T *data, int *pixelpos, luminosity_t *weights,
   for (; xx < stop; xx++)
     {
       T pixel = (((D *)this)->*get_pixel) (xx, yy);
-      process_pixel<T, account_pixel> (data, width, height, px, py, true, false, y0, y1, pixel, scale, 0, yweight);
+      process_pixel<T, UseAtomic, account_p> (data, width, height, px, py, true, false, y0, y1, pixel, scale, 0, yweight);
     }
   px++;
   while (px <= xend)
     {
       T pixel = (((D *)this)->*get_pixel) (xx, yy);
-      process_pixel<T, account_pixel> (data, width, height, px - 1, py, true, true, y0, y1, pixel, scale, weights[px], yweight);
+      process_pixel<T, UseAtomic, account_p> (data, width, height, px - 1, py, true, true, y0, y1, pixel, scale, weights[px], yweight);
       stop = pixelpos[px + 1];
       xx++;
       for (; xx < stop; xx++)
         {
           T pixel = (((D *)this)->*get_pixel) (xx, yy);
-          process_pixel<T, account_pixel> (data, width, height, px, py, true, false, y0, y1, pixel, scale, 0, yweight);
+          process_pixel<T, UseAtomic, account_p> (data, width, height, px, py, true, false, y0, y1, pixel, scale, 0, yweight);
         }
       px++;
     }
   if (xx < m_img.width)
     {
       T pixel = (((D *)this)->*get_pixel) (xx, yy);
-      process_pixel<T, account_pixel> (data, width, height, px - 1, py, true, false, y0, y1, pixel, scale, weights[px], yweight);
+      process_pixel<T, UseAtomic, account_p> (data, width, height, px - 1, py, true, false, y0, y1, pixel, scale, weights[px], yweight);
     }
 }
 
-/* Template for parallelized downscaling of image.  */
 template<typename D, typename T, T (D::*get_pixel) (int x, int y) const,
-         void (*account_pixel) (T *, T, luminosity_t)>
+         auto account_p>
 bool
 render::downscale (T *data, coord_t x, coord_t y, int width, int height,
                    coord_t pixelsize, progress_info *progress)
@@ -628,7 +658,7 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height,
   int pxstart = std::max (0, (int)(-x / pixelsize));
   int pxend = std::min (width - 1, (int)((m_img.width - x) / pixelsize));
 
-  memset (data, 0, sizeof (T) * width * height);
+  std::fill (data, data + (size_t)width * height, T{});
 
   if (pxstart > pxend)
     return true;
@@ -660,13 +690,15 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height,
     luminosity_t scale = 1 / (pixelsize * pixelsize);
     int pystart = std::max (0, (int)(-y / pixelsize));
     int pyend = std::min (height - 1, (int)((m_img.height - y) / pixelsize));
+
 #ifdef _OPENMP
     int tn = omp_get_thread_num ();
-    int threads = omp_get_max_threads ();
+    int threads = omp_get_num_threads ();
 #else
     int tn = 0;
     int threads = 1;
 #endif
+
     int ystart = pystart + (pyend + 1 - pystart) * tn / threads;
     int yend = pystart + (pyend + 1 - pystart) * (tn + 1) / threads - 1;
 
@@ -674,30 +706,44 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height,
     int yy = ypixelpos (py);
     int stop;
 
-    if (ystart > yend)
-      goto end;
-    if (py >= 0 && yy >= 0)
-      process_line<T, D, get_pixel, account_pixel> (data, pixelpos.data (), weights.data (), pxstart, pxend, width, height, py - 1, yy, false, true, scale, weight (py));
-    yy++;
-    stop = std::min (ypixelpos (py + 1), m_img.height);
-    for (; yy < stop; yy++)
-      process_line<T, D, get_pixel, account_pixel> (data, pixelpos.data (), weights.data (), pxstart, pxend, width, height, py, yy, true, false, scale, 0);
-    py++;
-
-    while (py <= yend && (!progress || !progress->cancel_requested ()))
+	if (ystart <= yend)
       {
-	process_line<T, D, get_pixel, account_pixel> (data, pixelpos.data (), weights.data (), pxstart, pxend, width, height, py - 1, yy, true, true, scale, weight (py));
-	stop = std::min (ypixelpos (py + 1), m_img.height);
+	if (py >= 0 && yy >= 0)
+	  process_line<T, D, get_pixel, true, account_p> (data, pixelpos.data (), weights.data (), pxstart, pxend, width, height, py - 1, yy, false, true, scale, weight (py));
 	yy++;
+	stop = std::min (ypixelpos (py + 1), m_img.height);
 	for (; yy < stop; yy++)
-	  process_line<T, D, get_pixel, account_pixel> (data, pixelpos.data (), weights.data (), pxstart, pxend, width, height, py, yy, true, false, scale, 0);
+	  {
+	    if (py == yend)
+	      process_line<T, D, get_pixel, true, account_p> (data, pixelpos.data (), weights.data (), pxstart, pxend, width, height, py, yy, true, false, scale, 0);
+	    else
+	      process_line<T, D, get_pixel, false, account_p> (data, pixelpos.data (), weights.data (), pxstart, pxend, width, height, py, yy, true, false, scale, 0);
+	  }
 	py++;
-	if (progress)
-	  progress->inc_progress ();
+
+	while (py <= yend && (!progress || !progress->cancel_requested ()))
+	  {
+	    if (py == yend)
+	      process_line<T, D, get_pixel, true, account_p> (data, pixelpos.data (), weights.data (), pxstart, pxend, width, height, py - 1, yy, true, true, scale, weight (py));
+	    else
+	      process_line<T, D, get_pixel, false, account_p> (data, pixelpos.data (), weights.data (), pxstart, pxend, width, height, py - 1, yy, true, true, scale, weight (py));
+
+	    stop = std::min (ypixelpos (py + 1), m_img.height);
+	    yy++;
+	    for (; yy < stop; yy++)
+	      {
+		if (py == yend)
+		  process_line<T, D, get_pixel, true, account_p> (data, pixelpos.data (), weights.data (), pxstart, pxend, width, height, py, yy, true, false, scale, 0);
+		else
+		  process_line<T, D, get_pixel, false, account_p> (data, pixelpos.data (), weights.data (), pxstart, pxend, width, height, py, yy, true, false, scale, 0);
+	      }
+	    py++;
+	    if (progress)
+	      progress->inc_progress ();
+	  }
+	if (yy < m_img.height)
+	  process_line<T, D, get_pixel, true, account_p> (data, pixelpos.data (), weights.data (), pxstart, pxend, width, height, py - 1, yy, true, false, scale, weight (py));
       }
-    if (yy < m_img.height)
-      process_line<T, D, get_pixel, account_pixel> (data, pixelpos.data (), weights.data (), pxstart, pxend, width, height, py - 1, yy, true, false, scale, weight (py));
-    end:;
   }
 
 #undef ypixelpos

@@ -585,7 +585,7 @@ void
 render::get_gray_data (luminosity_t *data, coord_t x, coord_t y, int width,
                        int height, coord_t pixelsize, progress_info *progress)
 {
-  downscale<render, luminosity_t, &render::get_data, &account_pixel> (
+  downscale<render, luminosity_t, &render::get_data> (
       data, x, y, width, height, pixelsize, progress);
 }
 
@@ -594,7 +594,7 @@ void
 render::get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
                         int height, coord_t pixelsize, progress_info *progress)
 {
-  downscale<render, rgbdata, &render::get_rgb_pixel, &account_rgb_pixel> (
+  downscale<render, rgbdata, &render::get_rgb_pixel> (
       data, x, y, width, height, pixelsize, progress);
 }
 
