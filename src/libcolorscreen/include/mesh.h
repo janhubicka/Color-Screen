@@ -1,6 +1,7 @@
 #ifndef MESH_H
 #define MESH_H
 #include <memory>
+#include <vector>
 #include "dllpublic.h"
 #include "base.h"
 #include "matrix.h"
@@ -8,6 +9,8 @@
 namespace colorscreen
 {
 
+/* Class implementing 2D mesh transformation.  It maps image coordinates
+   to screen coordinates and vice versa using bilinear interpolation.  */
 class mesh
 {
   static const bool debug = colorscreen_checking;
@@ -15,15 +18,23 @@ class mesh
 public:
   /* Conserve memory; we do not need to be that precise here since we
      interpolate across small regions.  */
-  typedef float mesh_coord_t;
+  using mesh_coord_t = float;
 
+  /* Initialize mesh for range [XSHIFT, YSHIFT] with given XSTEP and YSTEP
+     and dimensions WIDTH x HEIGHT.  */
   mesh (coord_t xshift, coord_t yshift, coord_t xstep, coord_t ystep,
         int width, int height);
+
+  /* Destructor.  */
   DLL_PUBLIC ~mesh ();
+
+  /* Structure representing a point in the mesh.  */
   struct mesh_point
   {
     mesh_coord_t x, y;
   };
+
+  /* Set point at index SRC to value DST.  */
   void
   set_point (int_point_t src, point_t dst)
   {
@@ -31,6 +42,8 @@ public:
       abort ();
     m_data[src.y * m_width + src.x] = {(mesh_coord_t)dst.x, (mesh_coord_t)dst.y};
   }
+
+  /* Get mesh point at index P.  */
   pure_attr point_t
   get_point (int_point_t p) const
   {
@@ -38,13 +51,17 @@ public:
       abort ();
     return {(coord_t) m_data[p.y * m_width + p.x].x, (coord_t) m_data[p.y * m_width + p.x].y};
   }
+
+  /* Get source coordinate of mesh point at index P.  */
   pure_attr point_t
   get_screen_point (int_point_t p) const
   {
     if (debug && (p.y < 0 || p.y >= m_height || p.x < 0 || p.x >= m_width))
       abort ();
-    return {(coord_t) (p.x * m_xstep - m_xshift), (coord_t) (coord_t) (p.y * m_ystep - m_yshift)};
+    return {(coord_t) (p.x * m_xstep - m_xshift), (coord_t) (p.y * m_ystep - m_yshift)};
   }
+
+  /* Apply mesh transformation to point P.  */
   point_t pure_attr
   apply (point_t p) const
   {
@@ -53,25 +70,21 @@ public:
     p.y = my_modf ((p.y + m_yshift) * m_ystepinv, &iy);
     if (ix < 0)
       {
-        // x += ix * m_xstep;
         p.x = 0;
         ix = 0;
       }
     if (iy < 0)
       {
-        // y += iy * m_ystep;
         p.y = 0;
         iy = 0;
       }
     if (ix >= m_width - 1)
       {
-        // x -= ix * (ix - m_width + 1);
         p.x = 1;
         ix = m_width - 2;
       }
     if (iy >= m_height - 1)
       {
-        // y -= iy * (iy - m_height + 1);
         p.y = 1;
         iy = m_height - 2;
       }
@@ -81,7 +94,8 @@ public:
                       m_data[(iy + 1) * m_width + ix + 1], np);
     return { np.x, np.y };
   }
-  /* Return true if x, y are in the range covered by mesh.  */
+
+  /* Return true if X, Y are in the range covered by mesh.  */
   bool
   in_range_p (coord_t x, coord_t y) const
   {
@@ -89,121 +103,111 @@ public:
     y = (y + m_yshift) * m_ystepinv;
     return (x >= 0 && y >= 0 && x < m_width && y < m_height);
   }
-  point_t pure_attr
-  invert (point_t ip) const
-  {
-    mesh_point p = { (mesh_coord_t)ip.x, (mesh_coord_t)ip.y };
-    int ix = (ip.x + m_invxshift) * m_invxstepinv;
-    int iy = (ip.y + m_invyshift) * m_invystepinv;
-    if (ix >= 0 && iy >= 0 && ix < m_width - 1 && iy < m_height - 1)
-      {
-        int pp = iy * m_invwidth + ix;
-        for (int y = m_invdata[pp].miny; y <= (int)m_invdata[pp].maxy; y++)
-          for (int x = m_invdata[pp].minx; x <= (int)m_invdata[pp].maxx; x++)
-            {
-              /* Determine cell corners.  */
-              mesh_point p1 = m_data[y * m_width + x];
-              mesh_point p2 = m_data[y * m_width + x + 1];
-              mesh_point p3 = m_data[(y + 1) * m_width + x];
-              mesh_point p4 = m_data[(y + 1) * m_width + x + 1];
 
-              /* Check if point is above or bellow diagonal.  */
-              mesh_coord_t sgn1 = sign (p, p1, p4);
-              if (sgn1 > 0)
-                {
-                  /* Check if point is inside of the triangle.  */
-                  if (sign (p, p4, p3) < 0 || sign (p, p3, p1) < 0)
-                    continue;
-                  mesh_coord_t rx, ry;
-                  intersect_vectors (p1.x, p1.y, p.x - p1.x, p.y - p1.y, p3.x,
-                                     p3.y, p4.x - p3.x, p4.y - p3.y, &rx, &ry);
-                  rx = 1 / rx;
-                  return { (ry * rx + x) * m_xstep - m_xshift,
-                           (rx + y) * m_ystep - m_yshift };
-                }
-              else
-                {
-                  /* Check if point is inside of the triangle.  */
-                  if (sign (p, p4, p2) > 0 || sign (p, p2, p1) > 0)
-                    continue;
-                  mesh_coord_t rx, ry;
-                  intersect_vectors (p1.x, p1.y, p.x - p1.x, p.y - p1.y, p2.x,
-                                     p2.y, p4.x - p2.x, p4.y - p2.y, &rx, &ry);
-                  rx = 1 / rx;
-                  return { (rx + x) * m_xstep - m_xshift,
-                           (ry * rx + y) * m_ystep - m_yshift };
-                }
-            }
-      }
-    point_t ret;
-    if (ix < m_invwidth / 2)
-      ret.x = -m_xshift;
-    else
-      ret.x = -m_xshift + m_xstep * m_width;
-    if (iy < m_invwidth / 2)
-      ret.y = -m_yshift;
-    else
-      ret.y = -m_yshift + m_ystep * m_height;
-    return ret;
-  }
+  /* Invert mesh transformation for point IP.  */
+  point_t pure_attr
+  invert (point_t ip) const;
+
+  /* Determine range in image coordinates covering [X1, Y1]..[X2, Y2]
+     transformed by TRANS. Result is stored in XMIN, XMAX, YMIN, YMAX.  */
   void get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1,
                   coord_t x2, coord_t y2, coord_t *xmin,
                   coord_t *xmax, coord_t *ymin, coord_t *ymax) const;
+
+  /* Print mesh content to file F.  */
   void print (FILE *f) const;
+
+  /* Precompute inverse lookup table.  */
   void precompute_inverse ();
+
+  /* Grow mesh by given number of points to LEFT, RIGHT, TOP and BOTTOM.  */
   bool grow (int left, int right, int top, int bottom);
+
+  /* Return true if mesh needs to grow in given direction to cover image
+     of WIDTH x HEIGHT.  */
   pure_attr bool need_to_grow_left (int width, int height) const;
   pure_attr bool need_to_grow_top (int width, int height) const;
   pure_attr bool need_to_grow_right (int width, int height) const;
   pure_attr bool need_to_grow_bottom (int width, int height) const;
+
+  /* Return width of the mesh in points.  */
   int get_width () const
   {
     return m_width;
   }
+
+  /* Return height of the mesh in points.  */
   int
   get_height () const
   {
     return m_height;
   }
+
+  /* Return shift in X coordinate.  */
   coord_t
   get_xshift () const
   {
     return m_xshift;
   }
+
+  /* Return shift in Y coordinate.  */
   coord_t
   get_yshift () const
   {
     return m_yshift;
   }
+
+  /* Return step in X coordinate.  */
   coord_t
   get_xstep () const
   {
     return m_xstep;
   }
+
+  /* Return step in Y coordinate.  */
   coord_t
   get_ystep () const
   {
     return m_ystep;
   }
+
+  /* Save mesh content to file F.  */
   bool save (FILE *f) const;
+
+  /* Load mesh content from file F. Store description of error in ERROR if any.  */
   static std::unique_ptr <mesh> load (FILE *f, const char **error);
+
   /* Unique id of the mesh (used for caching).  */
   uint64_t id;
 
+  /* Disable copying.  */
+  mesh (const mesh &) = delete;
+  mesh &operator= (const mesh &) = delete;
+
+  /* Default move semantics.  */
+  mesh (mesh &&) = default;
+  mesh &operator= (mesh &&) = default;
+
 private:
+  /* Structure used for inverse lookup table.  */
   struct mesh_inverse
   {
     unsigned int minx, miny, maxx, maxy;
   };
-  mesh_point *m_data;
-  mesh_inverse *m_invdata;
+
+  /* Mesh point data.  */
+  std::vector<mesh_point> m_data;
+
+  /* Inverse lookup data.  */
+  std::vector<mesh_inverse> m_invdata;
+
   mesh_coord_t m_xshift, m_yshift, m_xstep, m_ystep, m_xstepinv, m_ystepinv;
   int m_width, m_height;
   mesh_coord_t m_invxshift, m_invyshift, m_invxstep, m_invystep, m_invxstepinv,
       m_invystepinv;
   int m_invwidth, m_invheight;
 
-  /* Entry is useful if it is in the image area or its neightbours are.  */
+  /* Return true if entry E is useful for image range [XMIN, XMAX, YMIN, YMAX].  */
   inline bool
   entry_useful_p (int_point_t e, int xmin, int xmax, int ymin, int ymax) const
   {
@@ -217,14 +221,16 @@ private:
     return false;
   }
 
+  /* Compute oriented sign of triangle P1, P2, P3.  */
   static mesh_coord_t
   sign (mesh_point p1, mesh_point p2, mesh_point p3)
   {
     return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
   }
-  /* Compute a, b such that
-     x1 + dx1 * a = x2 + dx2 * b
-     y1 + dy1 * a = y2 + dy2 * b  */
+
+  /* Compute A, B such that
+     X1 + DX1 * A = X2 + DX2 * B
+     Y1 + DY1 * A = Y2 + DY2 * B  */
   static void
   intersect_vectors (mesh_coord_t x1, mesh_coord_t y1, mesh_coord_t dx1,
                      mesh_coord_t dy1, mesh_coord_t x2, mesh_coord_t y2,
@@ -236,8 +242,7 @@ private:
     m.apply_to_vector (x2 - x1, y2 - y1, a, b);
   }
 
-  /* Smoothly map triangle (0,0), (1,0), (1,1) to trangle z, x, y */
-
+  /* Smoothly map triangle (0,0), (1,0), (1,1) to triangle Z, X, Y.  */
   static mesh_point const_attr
   triangle_interpolate (mesh_point z, mesh_point x, mesh_point y, mesh_point p)
   {
@@ -258,8 +263,7 @@ private:
     return ret;
   }
 
-  /* tl is a top left point, tr is top right, bl is bottom left and br is
-     bottom right point of a square cell.  Interpolate point p accordingly.  */
+  /* Bilinearly interpolate point P within square defined by TL, TR, BL, BR.  */
   static mesh_point const_attr
   interpolate (mesh_point tl, mesh_point tr, mesh_point bl, mesh_point br,
                mesh_point p)
@@ -273,6 +277,8 @@ private:
     p = triangle_interpolate (tl, tr, br, p);
     return p;
   }
+
+  /* Find coordinate in range [X1, Y1]..[X2, Y2] that is close to entry (X, Y).  */
   point_t push_to_range (int x, int y, coord_t x1, coord_t y1, coord_t x2, coord_t y2) const;
 };
 }

@@ -1,64 +1,89 @@
 #include "include/mesh.h"
 #include "lru-cache.h"
 #include "loadsave.h"
+#include <cmath>
+#include <cstring>
+#include <algorithm>
+#include <omp.h>
+
 namespace colorscreen
 {
+
+/* Initialize 2D mesh transformation.  XSHIFT and YSHIFT are the range shifts,
+   XSTEP and YSTEP are the grid step sizes.  WIDTH and HEIGHT are dimensions
+   of the mesh in points.  */
 mesh::mesh (coord_t xshift, coord_t yshift, coord_t xstep, coord_t ystep,
             int width, int height)
-    : id (lru_caches::get ()), m_data (NULL), m_invdata (NULL),
-      m_xshift (xshift), m_yshift (yshift), m_xstep (xstep), m_ystep (ystep),
-      m_xstepinv (1 / xstep), m_ystepinv (1 / ystep), m_width (width),
-      m_height (height)
+    : id (lru_caches::get ()), m_xshift (xshift), m_yshift (yshift),
+      m_xstep (xstep), m_ystep (ystep), m_xstepinv (1.0f / xstep),
+      m_ystepinv (1.0f / ystep), m_width (width), m_height (height)
 {
-  m_data = (mesh_point *)malloc (width * height * sizeof (mesh_point));
+  m_data.resize (width * height);
 }
+
+/* Destructor.  */
 mesh::~mesh ()
 {
-  free (m_data);
-  free (m_invdata);
 }
+
+/* Print mesh dimensions and point grid to file F.  */
 void
 mesh::print (FILE *f) const
 {
   fprintf (f, "Mesh %ix%i shift:%fx%f steps:%fx%f\n", m_width, m_height,
-           m_xshift, m_yshift, m_xstep, m_ystep);
+           (double)m_xshift, (double)m_yshift, (double)m_xstep, (double)m_ystep);
   for (int y = 0; y < m_height; y++)
     {
       for (int x = 0; x < m_width; x++)
         {
-          fprintf (f, " (%4.2f,%4.2f)", m_data[y * m_width + x].x,
-                   m_data[y * m_width + x].y);
+          fprintf (f, " (%4.2f,%4.2f)", (double)m_data[y * m_width + x].x,
+                   (double)m_data[y * m_width + x].y);
         }
       fprintf (f, "\n");
     }
 }
+
+/* Precompute indices for inverse lookup.  This speeds up invert() by mapping
+   output coordinates back to mesh cells.  */
 void
 mesh::precompute_inverse ()
 {
-  if (m_invdata)
+  if (m_data.empty () || !m_invdata.empty ())
     return;
 
-  mesh_coord_t minx = m_data[0].x, maxx = m_data[0].x, miny = m_data[0].y,
-               maxy = m_data[0].y;
-  for (int y = 0; y < m_height; y++)
-    for (int x = 0; x < m_width; x++)
-      {
-        minx = std::min (m_data[y * m_width + x].x, minx);
-        maxx = std::max (m_data[y * m_width + x].x, maxx);
-        miny = std::min (m_data[y * m_width + x].y, miny);
-        maxy = std::max (m_data[y * m_width + x].y, maxy);
-      }
+  mesh_coord_t minx = std::numeric_limits<mesh_coord_t>::max ();
+  mesh_coord_t maxx = std::numeric_limits<mesh_coord_t>::lowest ();
+  mesh_coord_t miny = std::numeric_limits<mesh_coord_t>::max ();
+  mesh_coord_t maxy = std::numeric_limits<mesh_coord_t>::lowest ();
+
+  /* Find bounding box of the mesh.  */
+#pragma omp parallel for reduction(min:minx, miny) reduction(max:maxx, maxy)
+  for (int i = 0; i < (int)m_data.size (); i++)
+    {
+      minx = std::min (m_data[i].x, minx);
+      maxx = std::max (m_data[i].x, maxx);
+      miny = std::min (m_data[i].y, miny);
+      maxy = std::max (m_data[i].y, maxy);
+    }
+
   m_invxshift = -minx;
   m_invyshift = -miny;
   m_invwidth = m_width * 2;
   m_invheight = m_height * 2;
-  m_invxstep = (maxx - minx) / (m_width - 1);
-  m_invystep = (maxy - miny) / (m_height - 1);
-  m_invxstepinv = 1 / m_invxstep;
-  m_invystepinv = 1 / m_invystep;
-  m_invdata = (struct mesh_inverse *)malloc (m_invwidth * m_invheight
-                                             * sizeof (struct mesh_inverse));
-  for (int i = 0; i < m_invwidth * m_invheight; i++)
+
+  /* Handle meshes with single point in a dimension to avoid division by zero.  */
+  m_invxstep = (m_width > 1) ? (maxx - minx) / (m_width - 1) : 1.0f;
+  m_invystep = (m_height > 1) ? (maxy - miny) / (m_height - 1) : 1.0f;
+
+  /* Avoid division by zero when mesh has zero width or height in image area.  */
+  m_invxstepinv = (m_invxstep > 1e-9f) ? 1.0f / m_invxstep : 0.0f;
+  m_invystepinv = (m_invystep > 1e-9f) ? 1.0f / m_invystep : 0.0f;
+
+  m_invdata.resize (m_invwidth * m_invheight);
+
+  /* Initialize inverse lookup table.  */
+#pragma omp parallel for
+  for (int i = 0; i < (int)m_invdata.size (); i++)
     {
       m_invdata[i].minx = m_width;
       m_invdata[i].maxx = 0;
@@ -66,55 +91,114 @@ mesh::precompute_inverse ()
       m_invdata[i].maxy = 0;
     }
 
+  /* Fill inverse lookup table with cells covering each output region.  */
+#pragma omp parallel for collapse(2)
   for (int y = 0; y < m_height - 1; y++)
     for (int x = 0; x < m_width - 1; x++)
       {
-        mesh_coord_t minx = m_data[y * m_width + x].x;
-        mesh_coord_t maxx = m_data[y * m_width + x].x;
-        mesh_coord_t miny = m_data[y * m_width + x].y;
-        mesh_coord_t maxy = m_data[y * m_width + x].y;
+        mesh_coord_t cell_minx = m_data[y * m_width + x].x;
+        mesh_coord_t cell_maxx = m_data[y * m_width + x].x;
+        mesh_coord_t cell_miny = m_data[y * m_width + x].y;
+        mesh_coord_t cell_maxy = m_data[y * m_width + x].y;
 
-        minx = std::min (m_data[y * m_width + x + 1].x, minx);
-        maxx = std::max (m_data[y * m_width + x + 1].x, maxx);
-        miny = std::min (m_data[y * m_width + x + 1].y, miny);
-        maxy = std::max (m_data[y * m_width + x + 1].y, maxy);
-        minx = std::min (m_data[(y + 1) * m_width + x].x, minx);
-        maxx = std::max (m_data[(y + 1) * m_width + x].x, maxx);
-        miny = std::min (m_data[(y + 1) * m_width + x].y, miny);
-        maxy = std::max (m_data[(y + 1) * m_width + x].y, maxy);
-        minx = std::min (m_data[(y + 1) * m_width + x + 1].x, minx);
-        maxx = std::max (m_data[(y + 1) * m_width + x + 1].x, maxx);
-        miny = std::min (m_data[(y + 1) * m_width + x + 1].y, miny);
-        maxy = std::max (m_data[(y + 1) * m_width + x + 1].y, maxy);
+        /* Check all 4 corners of the cell.  */
+        for (int dy = 0; dy <= 1; dy++)
+          for (int dx = 0; dx <= 1; dx++)
+            {
+              cell_minx = std::min (m_data[(y + dy) * m_width + x + dx].x, cell_minx);
+              cell_maxx = std::max (m_data[(y + dy) * m_width + x + dx].x, cell_maxx);
+              cell_miny = std::min (m_data[(y + dy) * m_width + x + dx].y, cell_miny);
+              cell_maxy = std::max (m_data[(y + dy) * m_width + x + dx].y, cell_maxy);
+            }
 
-        int iminx = floor ((minx + m_invxshift) * m_invxstepinv);
-        int imaxx = floor ((maxx + m_invxshift) * m_invxstepinv);
-        int iminy = floor ((miny + m_invyshift) * m_invystepinv);
-        int imaxy = floor ((maxy + m_invyshift) * m_invystepinv);
-        if (iminx < 0 || iminx >= m_invwidth || imaxx < 0
-            || imaxx >= m_invwidth || iminy < 0 || iminy >= m_invheight
-            || imaxy < 0 || imaxy >= m_invheight)
-          {
-            printf ("%i %i %i %i\n", iminx, imaxx, iminy, imaxy);
-            abort ();
-          }
+        int iminx = floor ((cell_minx + m_invxshift) * m_invxstepinv);
+        int imaxx = floor ((cell_maxx + m_invxshift) * m_invxstepinv);
+        int iminy = floor ((cell_miny + m_invyshift) * m_invystepinv);
+        int imaxy = floor ((cell_maxy + m_invyshift) * m_invystepinv);
+
+        iminx = std::clamp (iminx, 0, m_invwidth - 1);
+        imaxx = std::clamp (imaxx, 0, m_invwidth - 1);
+        iminy = std::clamp (iminy, 0, m_invheight - 1);
+        imaxy = std::clamp (imaxy, 0, m_invheight - 1);
+
+        /* Update coverage info for each overlapping lookup bucket.  */
         for (int yy = iminy; yy <= imaxy; yy++)
           for (int xx = iminx; xx <= imaxx; xx++)
             {
-              m_invdata[yy * m_invwidth + xx].minx
-                  = std::min ((int)m_invdata[yy * m_invwidth + xx].minx, x);
-              m_invdata[yy * m_invwidth + xx].maxx
-                  = std::max ((int)m_invdata[yy * m_invwidth + xx].maxx, x);
-              m_invdata[yy * m_invwidth + xx].miny
-                  = std::min ((int)m_invdata[yy * m_invwidth + xx].miny, y);
-              m_invdata[yy * m_invwidth + xx].maxy
-                  = std::max ((int)m_invdata[yy * m_invwidth + xx].maxy, y);
+              int idx = yy * m_invwidth + xx;
+#pragma omp critical(mesh_inv_update)
+              {
+                m_invdata[idx].minx = std::min (m_invdata[idx].minx, (unsigned int)x);
+                m_invdata[idx].maxx = std::max (m_invdata[idx].maxx, (unsigned int)x);
+                m_invdata[idx].miny = std::min (m_invdata[idx].miny, (unsigned int)y);
+                m_invdata[idx].maxy = std::max (m_invdata[idx].maxy, (unsigned int)y);
+              }
             }
       }
 }
 
-/* Find mesh inverse that is close to entry (x,y) but within range of x1, y1,
- * x2, y2.  */
+/* Find source point corresponding to image point IP using the inverse lookup table.  */
+point_t
+mesh::invert (point_t ip) const
+{
+  mesh_point p = { (mesh_coord_t)ip.x, (mesh_coord_t)ip.y };
+  int ix = floor ((ip.x + m_invxshift) * m_invxstepinv);
+  int iy = floor ((ip.y + m_invyshift) * m_invystepinv);
+  if (ix >= 0 && iy >= 0 && ix < m_invwidth && iy < m_invheight && !m_invdata.empty ())
+    {
+      int pp = iy * m_invwidth + ix;
+      for (int y = m_invdata[pp].miny; y <= (int)m_invdata[pp].maxy; y++)
+        for (int x = m_invdata[pp].minx; x <= (int)m_invdata[pp].maxx; x++)
+          {
+            /* Determine cell corners.  */
+            mesh_point p1 = m_data[y * m_width + x];
+            mesh_point p2 = m_data[y * m_width + x + 1];
+            mesh_point p3 = m_data[(y + 1) * m_width + x];
+            mesh_point p4 = m_data[(y + 1) * m_width + x + 1];
+
+            /* Check if point is above or below diagonal.  */
+            mesh_coord_t sgn1 = sign (p, p1, p4);
+            if (sgn1 > 0)
+              {
+                /* Check if point is inside of the triangle.  */
+                if (sign (p, p4, p3) < 0 || sign (p, p3, p1) < 0)
+                  continue;
+                mesh_coord_t rx, ry;
+                intersect_vectors (p1.x, p1.y, p.x - p1.x, p.y - p1.y, p3.x,
+                                   p3.y, p4.x - p3.x, p4.y - p3.y, &rx, &ry);
+                rx = 1.0f / rx;
+                return { (ry * rx + x) * m_xstep - m_xshift,
+                         (rx + y) * m_ystep - m_yshift };
+              }
+            else
+              {
+                /* Check if point is inside of the triangle.  */
+                if (sign (p, p4, p2) > 0 || sign (p, p2, p1) > 0)
+                  continue;
+                mesh_coord_t rx, ry;
+                intersect_vectors (p1.x, p1.y, p.x - p1.x, p.y - p1.y, p2.x,
+                                   p2.y, p4.x - p2.x, p4.y - p2.y, &rx, &ry);
+                rx = 1.0f / rx;
+                return { (rx + x) * m_xstep - m_xshift,
+                         (ry * rx + y) * m_ystep - m_yshift };
+              }
+          }
+    }
+  
+  /* Fallback: return mesh boundaries.  */
+  point_t ret;
+  if (ix < m_invwidth / 2)
+    ret.x = -m_xshift;
+  else
+    ret.x = -m_xshift + m_xstep * (m_width - 1);
+  if (iy < m_invheight / 2)
+    ret.y = -m_yshift;
+  else
+    ret.y = -m_yshift + m_ystep * (m_height - 1);
+  return ret;
+}
+
+/* Small helper to push mesh entry (X, Y) to image range [X1, Y1]..[X2, Y2].  */
 point_t
 mesh::push_to_range (int x, int y, coord_t x1, coord_t y1, coord_t x2,
                      coord_t y2) const
@@ -135,102 +219,59 @@ mesh::push_to_range (int x, int y, coord_t x1, coord_t y1, coord_t x2,
 }
 
 /* Get rectangular range of source coordinates which covers range given by
-   x1,y1,x2,y2 transformed by trans in image coordinates.  */
+   X1, Y1, X2, Y2 transformed by TRANS in image coordinates.  Result is 
+   stored in XMIN, XMAX, YMIN, YMAX.  */
 void
 mesh::get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1, coord_t x2,
                  coord_t y2, coord_t *xmin, coord_t *xmax, coord_t *ymin,
                  coord_t *ymax) const
 {
-  coord_t ixmin = 0;
-  coord_t ixmax = 0;
-  coord_t iymin = 0;
-  coord_t iymax = 0;
+  coord_t ixmin = 0, ixmax = 0, iymin = 0, iymax = 0;
   bool found = false;
+
   for (int y = 0; y < m_height - 1; y++)
     for (int x = 0; x < m_width - 1; x++)
       {
-        // matrix2x2 <mesh_coord_t> identity;
-        mesh_coord_t xx, yy;
-        // trans.apply_to_vector (m_data [y * m_width + x].x, m_data [y *
-        // m_width + x].y, &xx, &yy);
-        xx = m_data[y * m_width + x].x;
-        yy = m_data[y * m_width + x].y;
-        mesh_coord_t mminx = xx;
-        mesh_coord_t mminy = yy;
-        mesh_coord_t mmaxx = xx;
-        mesh_coord_t mmaxy = yy;
+        mesh_coord_t mminx = m_data[y * m_width + x].x;
+        mesh_coord_t mmaxx = mminx;
+        mesh_coord_t mminy = m_data[y * m_width + x].y;
+        mesh_coord_t mmaxy = mminy;
 
-        // trans.apply_to_vector (m_data [y * m_width + x + 1].x, m_data [y *
-        // m_width + x + 1].y, &xx, &yy);
-        xx = m_data[y * m_width + x + 1].x;
-        yy = m_data[y * m_width + x + 1].y;
-        mminx = std::min ((mesh_coord_t)xx, mminx);
-        mmaxx = std::max ((mesh_coord_t)xx, mmaxx);
-        mminy = std::min ((mesh_coord_t)yy, mminy);
-        mmaxy = std::max ((mesh_coord_t)yy, mmaxy);
-
-        // trans.apply_to_vector (m_data [(y + 1) * m_width + x].x, m_data [(y
-        // + 1) * m_width + x].y, &xx, &yy);
-        xx = m_data[(y + 1) * m_width + x].x;
-        yy = m_data[(y + 1) * m_width + x].y;
-        mminx = std::min ((mesh_coord_t)xx, mminx);
-        mmaxx = std::max ((mesh_coord_t)xx, mmaxx);
-        mminy = std::min ((mesh_coord_t)yy, mminy);
-        mmaxy = std::max ((mesh_coord_t)yy, mmaxy);
-
-        // trans.apply_to_vector (m_data [(y + 1) * m_width + x + 1].x, m_data
-        // [(y + 1) * m_width + x + 1].y, &xx, &yy);
-        xx = m_data[(y + 1) * m_width + x + 1].x;
-        yy = m_data[(y + 1) * m_width + x + 1].y;
-        mminx = std::min ((mesh_coord_t)xx, mminx);
-        mmaxx = std::max ((mesh_coord_t)xx, mmaxx);
-        mminy = std::min ((mesh_coord_t)yy, mminy);
-        mmaxy = std::max ((mesh_coord_t)yy, mmaxy);
+        for (int dy = 0; dy <= 1; dy++)
+          for (int dx = 0; dx <= 1; dx++)
+            {
+              mminx = std::min (m_data[(y + dy) * m_width + x + dx].x, mminx);
+              mmaxx = std::max (m_data[(y + dy) * m_width + x + dx].x, mmaxx);
+              mminy = std::min (m_data[(y + dy) * m_width + x + dx].y, mminy);
+              mmaxy = std::max (m_data[(y + dy) * m_width + x + dx].y, mmaxy);
+            }
 
         if (x1 > mmaxx || y1 > mmaxy)
-          continue;
+            continue;
         if (x2 < mminx || y2 < mminy)
           continue;
-        coord_t px, py;
-        point_t p = push_to_range (x, y, x1, y1, x2, y2);
-        trans.apply_to_vector (p.x, p.y, &px, &py);
-        coord_t pxmin = px;
-        coord_t pxmax = px;
-        coord_t pymin = py;
-        coord_t pymax = py;
-        p = push_to_range (x + 1, y, x1, y1, x2, y2);
-        trans.apply_to_vector (p.x, p.y, &px, &py);
-        pxmin = std::min (pxmin, px);
-        pxmax = std::max (pxmax, px);
-        pymin = std::min (pymin, py);
-        pymax = std::max (pymax, py);
-        p = push_to_range (x, y + 1, x1, y1, x2, y2);
-        trans.apply_to_vector (p.x, p.y, &px, &py);
-        pxmin = std::min (pxmin, px);
-        pxmax = std::max (pxmax, px);
-        pymin = std::min (pymin, py);
-        pymax = std::max (pymax, py);
-        p = push_to_range (x + 1, y + 1, x1, y1, x2, y2);
-        trans.apply_to_vector (p.x, p.y, &px, &py);
-        pxmin = std::min (pxmin, px);
-        pxmax = std::max (pxmax, px);
-        pymin = std::min (pymin, py);
-        pymax = std::max (pymax, py);
-        if (!found)
-          {
-            ixmin = pxmin;
-            ixmax = pxmax;
-            iymin = pymin;
-            iymin = pymax;
-            found = true;
-          }
-        else
-          {
-            ixmin = std::min (ixmin, pxmin);
-            ixmax = std::max (ixmax, pxmax);
-            iymin = std::min (iymin, pymin);
-            iymax = std::max (iymax, pymax);
-          }
+
+        /* For overlapping cells, transform corners to source coordinates.  */
+        for (int dy = 0; dy <= 1; dy++)
+          for (int dx = 0; dx <= 1; dx++)
+            {
+              coord_t px, py;
+              point_t p = push_to_range (x + dx, y + dy, x1, y1, x2, y2);
+              trans.apply_to_vector (p.x, p.y, &px, &py);
+              if (!found)
+                {
+                  ixmin = ixmax = px;
+                  iymin = iymax = py;
+                  found = true;
+                }
+              else
+                {
+                  ixmin = std::min (ixmin, px);
+                  ixmax = std::max (ixmax, px);
+                  iymin = std::min (iymin, py);
+                  iymax = std::max (iymax, py);
+                }
+            }
       }
   *xmin = ixmin;
   *xmax = ixmax;
@@ -238,14 +279,15 @@ mesh::get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1, coord_t x2,
   *ymax = iymax;
 }
 
+/* Save mesh dimensions, shifts, steps and point grid to file F.  */
 bool
 mesh::save (FILE *f) const
 {
   if (fprintf (f, "  mesh_dimensions: %i %i\n", m_width, m_height) < 0)
     return false;
-  if (fprintf (f, "  mesh_shifts: %f %f\n", m_xshift, m_yshift) < 0)
+  if (fprintf (f, "  mesh_shifts: %f %f\n", (double)m_xshift, (double)m_yshift) < 0)
     return false;
-  if (fprintf (f, "  mesh_steps: %f %f\n", m_xstep, m_ystep) < 0)
+  if (fprintf (f, "  mesh_steps: %f %f\n", (double)m_xstep, (double)m_ystep) < 0)
     return false;
   if (fprintf (f, "  mesh_points:") < 0)
     return false;
@@ -254,8 +296,8 @@ mesh::save (FILE *f) const
       if (y)
         fprintf (f, "\n              ");
       for (int x = 0; x < m_width; x++)
-        if (fprintf (f, " (%4.2f, %4.2f)", m_data[y * m_width + x].x,
-                     m_data[y * m_width + x].y)
+        if (fprintf (f, " (%4.2f, %4.2f)", (double)m_data[y * m_width + x].x,
+                     (double)m_data[y * m_width + x].y)
             < 0)
           return false;
     }
@@ -264,53 +306,49 @@ mesh::save (FILE *f) const
   return true;
 }
 
+/* Load mesh from file F. Descriptions of parse errors are stored in ERROR.  */
 std::unique_ptr<mesh>
 mesh::load (FILE *f, const char **error)
 {
   if (!expect_keyword (f, "mesh_dimensions:"))
     {
       *error = "expected mesh_dimensions";
-      return NULL;
+      return nullptr;
     }
   int width, height;
   if (fscanf (f, "%i %i", &width, &height) != 2)
     {
       *error = "failed to parse mesh_dimensions";
-      return NULL;
+      return nullptr;
     }
   float xshift, yshift;
   if (!expect_keyword (f, "mesh_shifts:"))
     {
       *error = "expected mesh_shifts";
-      return NULL;
+      return nullptr;
     }
   if (fscanf (f, "%f %f", &xshift, &yshift) != 2)
     {
       *error = "failed to parse mesh_shifts";
-      return NULL;
+      return nullptr;
     }
   float xstep, ystep;
   if (!expect_keyword (f, "mesh_steps:"))
     {
       *error = "expected mesh_steps";
-      return NULL;
+      return nullptr;
     }
   if (fscanf (f, "%f %f", &xstep, &ystep) != 2)
     {
       *error = "failed to parse mesh_steps";
-      return NULL;
+      return nullptr;
     }
   if (!expect_keyword (f, "mesh_points:"))
     {
       *error = "expected mesh_points";
-      return NULL;
+      return nullptr;
     }
-  std::unique_ptr <mesh> m = std::make_unique<mesh> (xshift, yshift, xstep, ystep, width, height);
-  if (!m)
-    {
-      *error = "failed to construct mesh";
-      return NULL;
-    }
+  auto m = std::make_unique<mesh> (xshift, yshift, xstep, ystep, width, height);
   for (int y = 0; y < height; y++)
     {
       for (int x = 0; x < width; x++)
@@ -319,10 +357,9 @@ mesh::load (FILE *f, const char **error)
           if (!expect_keyword (f, "(") || fscanf (f, "%f", &sx) != 1
               || !expect_keyword (f, ",") || fscanf (f, "%f", &sy) != 1
               || !expect_keyword (f, ")"))
-            // if (fscanf (f, " (%f, %f)", &sx, &sy) != 2)
             {
               *error = "failed to parse mesh points";
-              return NULL;
+              return nullptr;
             }
           m->set_point ({ x, y }, { sx, sy });
         }
@@ -330,37 +367,39 @@ mesh::load (FILE *f, const char **error)
   if (!expect_keyword (f, "mesh_end"))
     {
       *error = "expected mesh_end";
-      return NULL;
+      return nullptr;
     }
   return m;
 }
+
+/* Grow mesh dimensions by given number of points to LEFT, RIGHT, TOP and BOTTOM.  */
 bool
 mesh::grow (int left, int right, int top, int bottom)
 {
-  int new_xshift = m_xshift + left * m_xstep;
-  int new_yshift = m_yshift + top * m_ystep;
   int new_width = m_width + left + right;
   int new_height = m_height + top + bottom;
-  assert (!m_invdata);
-  mesh_point *new_data
-      = (mesh_point *)malloc (new_width * new_height * sizeof (mesh_point));
-  if (!new_data)
-    return false;
+  
+  if (!m_invdata.empty ())
+    abort (); // Growing mesh after inverse precomputation is not supported.
+
+  std::vector<mesh_point> new_data (new_width * new_height);
   for (int y = 0; y < m_height; y++)
-    memcpy (new_data + (new_width * (y + top) + left), m_data + m_width * y,
-            m_width * sizeof (mesh_point));
-  free (m_data);
-  m_data = new_data;
+    std::copy (m_data.begin () + y * m_width, 
+               m_data.begin () + (y + 1) * m_width,
+               new_data.begin () + (y + top) * new_width + left);
+
+  m_data = std::move (new_data);
+  m_xshift += left * m_xstep;
+  m_yshift += top * m_ystep;
   m_width = new_width;
   m_height = new_height;
-  m_xshift = new_xshift;
-  m_yshift = new_yshift;
   return true;
 }
+
+/* Check if mesh needs growth to the left for image of WIDTH x HEIGHT.  */
 bool
 mesh::need_to_grow_left (int width, int height) const
 {
-  /* Avoid missing triangles on corners.  */
   if (!m_width)
     return true;
   int xo = m_width == 1 ? 0 : 1;
@@ -369,10 +408,11 @@ mesh::need_to_grow_left (int width, int height) const
       return true;
   return false;
 }
+
+/* Check if mesh needs growth to the top for image of WIDTH x HEIGHT.  */
 bool
 mesh::need_to_grow_top (int width, int height) const
 {
-  /* Avoid missing triangles on corners.  */
   if (!m_height)
     return true;
   int yo = m_height == 1 ? 0 : 1;
@@ -381,10 +421,11 @@ mesh::need_to_grow_top (int width, int height) const
       return true;
   return false;
 }
+
+/* Check if mesh needs growth to the right for image of WIDTH x HEIGHT.  */
 bool
 mesh::need_to_grow_right (int width, int height) const
 {
-  /* Avoid missing triangles on corners.  */
   if (!m_width)
     return true;
   int xo = m_width == 1 ? 0 : m_width - 2;
@@ -393,10 +434,11 @@ mesh::need_to_grow_right (int width, int height) const
       return true;
   return false;
 }
+
+/* Check if mesh needs growth to the bottom for image of WIDTH x HEIGHT.  */
 bool
 mesh::need_to_grow_bottom (int width, int height) const
 {
-  /* Avoid missing triangles on corners.  */
   if (!m_height)
     return true;
   int yo = m_height == 1 ? 0 : m_height - 2;
@@ -405,4 +447,5 @@ mesh::need_to_grow_bottom (int width, int height) const
       return true;
   return false;
 }
-}
+
+} // namespace colorscreen
