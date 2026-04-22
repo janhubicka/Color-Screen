@@ -15,6 +15,7 @@ struct property_t {
 
 #define flatten_attr __attribute__ ((__flatten__))
 #define always_inline_attr __attribute__ ((__always_inline__))
+#define nodiscard_attr __attribute__ ((__warn_unused_result__))
 #ifdef COLORSCREEN_CHECKING
 #define pure_attr
 #define const_attr
