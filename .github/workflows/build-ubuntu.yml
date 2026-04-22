@@ -85,7 +85,7 @@ jobs:
       if: matrix.arch == 'amd64' && always()
       uses: actions/upload-artifact@v4
       with:
-        name: testsuite-checking
+        name: testsuite-checking-${{ matrix.arch }}
         path: |
           testsuite/*.txt
           testsuite/*.log
