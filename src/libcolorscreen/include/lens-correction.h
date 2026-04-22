@@ -40,8 +40,9 @@ struct lens_warp_correction
   /* Precompute normalization factor so that the distance from CENTER to
      any of the four corners C1, C2, C3, C4 is at most 1.
      Returns true on success.  */
-  bool precompute (point_t center, point_t c1, point_t c2, point_t c3,
-                   point_t c4);
+  DLL_PUBLIC nodiscard_attr bool precompute (point_t center, point_t c1,
+					     point_t c2, point_t c3,
+					     point_t c4);
 
   /* Precompute inverse mapping using a lookup table.
      Returns true on success.  */

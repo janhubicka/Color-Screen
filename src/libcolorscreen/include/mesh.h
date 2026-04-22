@@ -118,7 +118,7 @@ public:
   void print (FILE *f) const;
 
   /* Precompute inverse lookup table.  */
-  void precompute_inverse ();
+  DLL_PUBLIC void precompute_inverse ();
 
   /* Grow mesh by given number of points to LEFT, RIGHT, TOP and BOTTOM.  */
   bool grow (int left, int right, int top, int bottom);

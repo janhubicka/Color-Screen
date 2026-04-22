@@ -270,7 +270,7 @@ public:
   void normalize_dyes (luminosity_t temperature);
   /* normalize_brightness adjusts xscale, yscale and zscale so dye rgb (1,1,1) results
      in intensity 1.  */
-  void normalize_brightness ();
+  DLL_PUBLIC void normalize_brightness ();
   /* normalize_xyz_to_backlight_whitepoint adjusts xscale, yscale and zscale
      so dye rgb (1,1,1) results in sRGB white.  */
   void normalize_xyz_to_backlight_whitepoint ();
@@ -349,7 +349,7 @@ public:
   /* temperature_xyz returns XYZ of whitepoint for given TEMPERATURE.  */
   static xyz temperature_xyz (luminosity_t temperature);
   /* is_linear returns true if dyes_rgb_to_xyz behaves linearly.  */
-  bool is_linear ();
+  DLL_PUBLIC bool is_linear ();
 
   /* write_spectra writes spectra to given files.  */
   DLL_PUBLIC void write_spectra (const char *red, const char *green, const char *blue, const char *backlight, int start = SPECTRUM_START, int end = SPECTRUM_END, bool absorbance = false);
