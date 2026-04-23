@@ -328,7 +328,7 @@ public:
     int n = num_coordinates ();
     if (is_fixed_lens (m_param.scanner_type))
       m_param.lens_correction.center = { vals[0], vals[1] };
-    else if (m_param.scanner_type == lens_move_horisontally)
+    else if (m_param.scanner_type == lens_move_horizontally)
       m_param.lens_correction.center = { 0, vals[0] };
     else if (m_param.scanner_type == lens_move_vertically)
       m_param.lens_correction.center = { vals[0], 0 };
@@ -471,7 +471,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
       int n = s.num_coordinates ();
       if (is_fixed_lens (param->scanner_type))
         param->lens_correction.center = { s.start[0], s.start[1] };
-      else if (param->scanner_type == lens_move_horisontally)
+      else if (param->scanner_type == lens_move_horizontally)
         param->lens_correction.center = { 0, s.start[0] };
       else if (param->scanner_type == lens_move_vertically)
         param->lens_correction.center = { s.start[0], 0 };
@@ -697,7 +697,7 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
     for (int x = 0; x < width; x++)
       if (!progress || !progress->cancel_requested ())
         {
-          // TODO: copying motor corrections is unnecesary and expensive.
+          // TODO: copying motor corrections is unnecessary and expensive.
           scr_to_img_parameters lparam = *param;
           solver_parameters sparam;
           sparam.copy_without_points (sparam2);

@@ -1506,7 +1506,7 @@ public:
 	set_red_strip_width (start, dufaycolor::red_strip_width);
 	set_green_strip_width (start, dufaycolor::green_strip_width);
       }
-    /* Dioptichromes seems to be printed with strips of equal widhts.  */
+    /* Dioptichromes seems to be printed with strips of equal widths.  */
     else if (dufay_like_screen_p (type))
       {
 	set_red_strip_width (start, 0.5);
@@ -3596,8 +3596,8 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
   const int steps = 100;
   int overall_xsteps = steps;
   int overall_ysteps = steps;
-  if (param.scanner_type == lens_move_horisontally
-      || param.scanner_type == fixed_lens_sensor_move_horisontally)
+  if (param.scanner_type == lens_move_horizontally
+      || param.scanner_type == fixed_lens_sensor_move_horizontally)
     overall_xsteps *= 3, overall_ysteps /= 3;
   else if (param.scanner_type == lens_move_vertically
            || param.scanner_type == fixed_lens_sensor_move_vertically)

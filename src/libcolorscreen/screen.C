@@ -94,7 +94,7 @@ screen::thames ()
 /* X,y are coordinates of entry in screen array of dimensions
    SIZE * SIZE.
 
-   CX, CY are coordinates of another point (in screen coordiantes, i.e. range
+   CX, CY are coordinates of another point (in screen coordinates, i.e. range
    0..1).  Compute sum distance between them considering the periodicity.  */
 
 static inline int
@@ -1057,7 +1057,7 @@ initialize_with_2D_fft_fast (screen &out_scr, const screen &scr,
 }
 
 
-/* Apply Richardson-Lucy deconvolution shaprening on SCR and write it to
+/* Apply Richardson-Lucy deconvolution sharpening on SCR and write it to
    out_scr.  */
 
 template <typename T>

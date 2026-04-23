@@ -30,9 +30,9 @@ void GeometryPanel::setupUi() {
 
   std::map<int, QString> pretty_scanner_type_names = {
       {colorscreen::fixed_lens, "Fixed Lens"},
-      {colorscreen::fixed_lens_sensor_move_horisontally, "Fixed Lens (Sensor moves horizontally)"},
+      {colorscreen::fixed_lens_sensor_move_horizontally, "Fixed Lens (Sensor moves horizontally)"},
       {colorscreen::fixed_lens_sensor_move_vertically, "Fixed Lens (Sensor moves vertically)"},
-      {colorscreen::lens_move_horisontally, "Lens moves horizontally"},
+      {colorscreen::lens_move_horizontally, "Lens moves horizontally"},
       {colorscreen::lens_move_vertically, "Lens moves vertically"}
   };
 

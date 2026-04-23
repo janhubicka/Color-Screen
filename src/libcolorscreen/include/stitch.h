@@ -129,7 +129,7 @@ public:
 
   /* Screen angle and ratio.  Used in Dufaycolor analysis since
      the Dufaycolor screens are printed with different ratios and angles
-     of the horisontal and vertical lines.
+     of the horizontal and vertical lines.
 
      Computed at analysis time and used in final output.  */
   coord_t angle, ratio;

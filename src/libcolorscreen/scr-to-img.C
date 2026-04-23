@@ -51,7 +51,7 @@ public:
     (*this)(3, 2) = 0;
     (*this)(3, 3) = distance;
     /* Disable perspective corrections along the lens movement axis.  */
-    if (type == lens_move_horisontally)
+    if (type == lens_move_horizontally)
       (*this)(2, 0) = 0, (*this)(2, 1) = 0 /*, (*this)(2, 2)=1*/;
     if (type == lens_move_vertically)
       (*this)(3, 0) = 0, (*this)(3, 1) = 0 /*, (*this)(3, 3)=1*/;
@@ -107,7 +107,7 @@ scr_to_img::update_scr_to_final_parameters (coord_t final_ratio,
   //
   m_param.final_angle = final_angle;
   m_param.final_ratio = final_ratio;
-  /* On only scan I have horosontal cycle is 10.1592036279 pixels (along blue line)
+  /* On only scan I have horizontal cycle is 10.1592036279 pixels (along blue line)
      and vertical cycle (slopy rad/green lines) are 8.15944528388.  */
   if (m_param.type == ImprovedDioptichromeB)
     {
@@ -133,7 +133,7 @@ scr_to_img::update_scr_to_final_parameters (coord_t final_ratio,
   matrix2x2<coord_t> fm (1, cos (r) * m_param.final_ratio,
 			 0, sin (r) * m_param.final_ratio);
 
-  /* By Dufacyolor manual grid is rotated by 23 degrees.  In reality it seems
+  /* By Dufaycolor manual grid is rotated by 23 degrees.  In reality it seems
      to be 23.77. We organize the grid making red lines horizontal, so rotate
      by additional 90 degrees to get image right.  */
   coord_t rotate = m_param.final_rotation;
@@ -313,7 +313,7 @@ scr_to_img::set_parameters_for_early_correction (
   point_t c3 = { (coord_t)0, (coord_t)height };
   point_t c4 = { (coord_t)width, (coord_t)height };
   m_lens_correction.set_parameters (m_param.lens_correction);
-  if (m_param.scanner_type == lens_move_horisontally)
+  if (m_param.scanner_type == lens_move_horizontally)
     c1.x = c2.x = c3.x = c4.x = center.x = m_param.lens_correction.center.x;
   if (m_param.scanner_type == lens_move_vertically)
     c1.y = c2.y = c3.y = c4.y = center.y = m_param.lens_correction.center.y;
@@ -497,7 +497,7 @@ scr_to_img::get_final_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2,
     *final_height = 1;
 }
 
-/* Determine rectangular section of the final coordiantes to which the whole
+/* Determine rectangular section of the final coordinates to which the whole
    image with dimension img_width x img_height fits.
 
    The section is having dimensions scr_width x scr_height and will

@@ -104,7 +104,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
       else
 	{
 	  if (p.xdpi)
-	    printf (", horisontal PPI %.2f", p.xdpi);
+	    printf (", horizontal PPI %.2f", p.xdpi);
 	  if (p.ydpi)
 	    printf (", vertical PPI %.2f", p.ydpi);
 	}

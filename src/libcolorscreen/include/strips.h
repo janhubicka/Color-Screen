@@ -5,7 +5,7 @@ namespace colorscreen
 {
 struct strips_geometry : public base_geometry
 {
-  /* Assume strips with horisontal strips
+  /* Assume strips with horizontal strips
 
      GGGGG
      BBBBB

@@ -1,5 +1,5 @@
-#ifndef GAUSIAN_BLUR_H
-#define GAUSIAN_BLUR_H
+#ifndef GAUSSIAN_BLUR_H
+#define GAUSSIAN_BLUR_H
 #include <functional>
 namespace colorscreen
 {
@@ -50,13 +50,13 @@ public:
       return clen;
     }
 
-  /* Helper for bluring.  Apply horisontal blur on DATA line Y of given WIDTH and write to OUT.
+  /* Helper for blurring.  Apply horizontal blur on DATA line Y of given WIDTH and write to OUT.
      CLEN and CMATRIX are precomputed using code above.
      For performance reasons do not use lambda function since it won't get inlined.
      O is output type name, T is data type name, P is extra bookeeping parameter type.  */
   template<typename O, typename T>
   inline static void
-  blur_horisontal(O *out, O *in, int width, int clen, luminosity_t *cmatrix)
+  blur_horizontal(O *out, O *in, int width, int clen, luminosity_t *cmatrix)
   {
     if (width < clen)
     {
@@ -94,6 +94,14 @@ public:
 	  sum += in[x + d] * cmatrix[d + clen / 2];
 	out[x] = sum;
       }
+  }
+
+  /* Old misspelled alias for backward compatibility.  */
+  template<typename O, typename T>
+  inline static void
+  blur_horisontal(O *out, O *in, int width, int clen, luminosity_t *cmatrix)
+  {
+    blur_horizontal<O, T> (out, in, width, clen, cmatrix);
   }
 
   static int

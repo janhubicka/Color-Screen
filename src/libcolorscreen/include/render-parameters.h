@@ -205,7 +205,7 @@ struct render_parameters
 
   /* Rotation of scan (in multiples of 90) to be used by UI nad file output.  */
   int scan_rotation;
-  /* If set mirror the image horisontally.  */
+  /* If set mirror the image horizontally.  */
   bool scan_mirror;
   /* Crop of scan (in image coordinates.  */
   int_optional_image_area scan_crop;

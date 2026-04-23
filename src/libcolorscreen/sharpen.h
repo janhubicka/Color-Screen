@@ -1,11 +1,11 @@
-#ifndef SHAPREN_H
-#define SHAPREN_H
+#ifndef SHARPEN_H
+#define SHARPEN_H
 #include "gaussian-blur.h"
 namespace colorscreen
 {
 
 /* Kernel for "sharpening" with with either radius or amount being zero.
-   Flattened so avoid doing unnecesary stuff.  */
+   Flattened so avoid doing unnecessary stuff.  */
 
 template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int_point_t p, int width, P param)>
 flatten_attr void
@@ -35,8 +35,8 @@ do_unsharp_mask_loop(mem_O *out, O *hblur, int clen, luminosity_t *rotated_cmatr
     }
 }
 
-/* Kernel for actual shaprening.
-   Flattened so avoid doing unnecesary stuff.  */
+/* Kernel for actual sharpening.
+   Flattened so avoid doing unnecessary stuff.  */
 template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int_point_t p, int width, P param)>
 flatten_attr void
 do_unsharp_mask(mem_O *out, T data, P param, int width, int height, int clen, luminosity_t *cmatrix, luminosity_t amount, progress_info *progress, bool maybe_parallel = true)
@@ -67,7 +67,7 @@ do_unsharp_mask(mem_O *out, T data, P param, int width, int height, int clen, lu
 	{
 	  for (int x = 0; x < width ; x++)
 	    line[x] =getdata (data, {x, yp}, width, param);
-	  fir_blur::blur_horisontal<O, T> (hblur + tp * width, line, width, clen, cmatrix);
+	  fir_blur::blur_horizontal<O, T> (hblur + tp * width, line, width, clen, cmatrix);
 	}
       }
     if (!progress || !progress->cancel_requested ())
@@ -81,25 +81,25 @@ do_unsharp_mask(mem_O *out, T data, P param, int width, int height, int clen, lu
 	  if (y + clen / 2 - 1 < height)
 	    switch (clen)
 	      {
-	      case 3:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
-	      case 5:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
-	      case 7:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
-	      case 9:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
-	      case 11:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
-	      case 13:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
-	      case 15:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
-	      case 17:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
-	      case 19:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
-	      case 21:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
-	      case 23:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
-	      case 25:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
-	      case 27:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
-	      case 29:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
-	      case 31:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 3:fir_blur::blur_horizontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 5:fir_blur::blur_horizontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 7:fir_blur::blur_horizontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 9:fir_blur::blur_horizontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 11:fir_blur::blur_horizontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 13:fir_blur::blur_horizontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 15:fir_blur::blur_horizontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 17:fir_blur::blur_horizontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 19:fir_blur::blur_horizontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 21:fir_blur::blur_horizontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 23:fir_blur::blur_horizontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 25:fir_blur::blur_horizontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 27:fir_blur::blur_horizontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 29:fir_blur::blur_horizontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 31:fir_blur::blur_horizontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
 	      default:
 	        if (clen < 32 || !(clen & 1))
 		  abort ();/*__builtin_unreachable ();*/
-	        fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); 
+	        fir_blur::blur_horizontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); 
 	      }
 	  else
 	    memset ((void*)(hblur + ((y + clen / 2 - 1 + clen) % clen) * width), 0, sizeof (O) * width);
@@ -140,7 +140,7 @@ do_unsharp_mask(mem_O *out, T data, P param, int width, int height, int clen, lu
 
 /* Sharpening worker. Sharpen DATA to OUT which both has dimensions WIDTH*HEIGHT.
    DATA are accessed using getdata function and PARAM can be used to pass extra data around.
-   RADIOUS and AMOUNT are usual parameters of unsharp masking.
+   RADIUS and AMOUNT are usual parameters of unsharp masking.
 
    For performance reasons do not use lambda function since it won't get inlined.
      O is output type name, T is data type name, P is extra bookeeping parameter type.  */

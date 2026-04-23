@@ -142,12 +142,12 @@ print_help (char *err = NULL)
       fprintf (stderr, "    Supported args:\n");
       fprintf (stderr, "      --out=name.par            save parameters to a given file instead of overwritting original\n");
       fprintf (stderr, "      --out-tiff=name.tif       save resulting table also as tiff file\n");
-      fprintf (stderr, "      --strip-width=n           number of horisontal samples used to detec strip widths\n");
+      fprintf (stderr, "      --strip-width=n           number of horizontal samples used to detec strip widths\n");
       fprintf (stderr, "      --strip-height=n          number of vertical samples used to detect strip widths\n");
       fprintf (stderr, "      --reoptimize-strip-widths optimize strip widths also during blur detection\n");
       fprintf (stderr, "      --width=n                 width of the correction table\n");
       fprintf (stderr, "      --height=n                height of the correction table\n");
-      fprintf (stderr, "      --xsamples=n              number of horisontal samples to analyze for every entry in table\n");
+      fprintf (stderr, "      --xsamples=n              number of horizontal samples to analyze for every entry in table\n");
       fprintf (stderr, "      --ysamples=n              number of vertical samples to analyze for every entry in table\n");
       fprintf (stderr, "      --toerance=max            maximal difference between minimal and maximal blur radius in robust average\n");
       fprintf (stderr, "      --optimize-fog            enable finetuning of fog (dark point)\n");
@@ -215,7 +215,7 @@ print_help (char *err = NULL)
       fprintf (stderr, "     hugin output:\n");
       fprintf (stderr, "      --num-control-points=n     number of control "
                        "points for each pair of images\n");
-      fprintf (stderr, "      --hfov=val                 lens horisontal "
+      fprintf (stderr, "      --hfov=val                 lens horizontal "
                        "field of view saved to hugin file\n");
       fprintf (stderr, "     other:\n");
       fprintf (stderr, "      --panorama-map             print panorama map "
@@ -246,7 +246,7 @@ print_help (char *err = NULL)
   if (subhelp == help_finetune)
     {
       fprintf (stderr, "    Supported args:\n");
-      fprintf (stderr, "      --width=n                 analyze n samples horisontally "
+      fprintf (stderr, "      --width=n                 analyze n samples horizontally "
           "(number of vertical samples depeends on aspect ratio)\n");
       fprintf (stderr, "      --optimize-position       enable finetuning of "
                        "screen registration\n");
@@ -368,7 +368,7 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --threshold=n             threshold needed to consier tile to have regular screen\n");
       fprintf (stderr, "      --tile-threshold=n        percentage of tiles needed to agree on given period\n");
       fprintf (stderr, "      --gamma=n                 gamma of input scan (2.2 is default)\n");
-      fprintf (stderr, "      --xtiles                  number of tiles to analyze in horisontal direction\n");
+      fprintf (stderr, "      --xtiles                  number of tiles to analyze in horizontal direction\n");
       fprintf (stderr, "      --ytiles                  number of tiles to analyze in vertical direction\n");
       fprintf (stderr, "      --report=filename         save report about analysis\n");
       fprintf (stderr, "      --save-matches=filename   save filenames of files with regular pattern\n");
@@ -885,7 +885,7 @@ render_cmd (int argc, char **argv)
       else
         {
           if (scan.xdpi)
-            printf (", horisontal PPI %f", scan.xdpi);
+            printf (", horizontal PPI %f", scan.xdpi);
           if (scan.ydpi)
             printf (", vertical PPI %f", scan.ydpi);
         }

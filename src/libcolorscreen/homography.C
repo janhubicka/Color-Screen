@@ -140,7 +140,7 @@ init_equation (gsl_matrix *A, gsl_vector *v, int n, bool invert, int flags,
       if (flags & (homography::solve_rotation | homography::solve_free_rotation))
 	{
 	  if ((flags & homography::solve_free_rotation)
-	      || scanner_type != lens_move_horisontally)
+	      || scanner_type != lens_move_horizontally)
 	    {
 	      gsl_matrix_set (A, n * 2, 6, -d.x * s.x);
 	      gsl_matrix_set (A, n * 2, 7, -d.x * s.y);
@@ -248,7 +248,7 @@ solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type,
       ret(1, 2) = 0;
       ret(1, 3) = gsl_vector_get (v, 5);
 
-      if ((flags & (homography::solve_rotation) && type != lens_move_horisontally)
+      if ((flags & (homography::solve_rotation) && type != lens_move_horizontally)
 	  || (flags & homography::solve_free_rotation))
 	{
 	  ret(2, 0) = gsl_vector_get (v, 6);
@@ -768,7 +768,7 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
     {
       tpoints_vec.resize (n);
       /* For lens solving it is faster to avoid precomputing lens inverse.  */
-      if (map->early_correction_precoputed ())
+      if (map->early_correction_precomputed ())
 	for (int i = 0; i < n; i++)
 	  {
 	    tpoints_vec[i].img = map->apply_early_correction (points[i].img);
@@ -819,7 +819,7 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
   const coord_t screen_weight_pow = 2;
   /* For moving lens, take into account that in one direction geometry changes
      a lot more than in the other.  */
-  if (scanner_type == lens_move_horisontally)
+  if (scanner_type == lens_move_horizontally)
     xscale = 100;
   if (scanner_type == lens_move_vertically)
     yscale = 100;

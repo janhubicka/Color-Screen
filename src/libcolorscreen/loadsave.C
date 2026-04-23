@@ -1,8 +1,8 @@
-#include <locale>
 #include "include/colorscreen.h"
 #include "include/mesh.h"
 #include "loadsave.h"
 #include "mtf.h"
+#include <locale>
 #define HEADER "screen_alignment_version: 1"
 namespace colorscreen
 {
@@ -11,13 +11,13 @@ namespace colorscreen
    diagonally the frequency is higher since side of square with
    diagonal 1 is sqrt(2)/2  */
 
-#define Paget_res (1/(1.41421356237/2))
+#define Paget_res (1 / (1.41421356237 / 2))
 
-const scr_type_property_t scr_names[max_scr_type]  = {
+const scr_type_property_t scr_names[max_scr_type] = {
   { "Random", "Random", "", 0 },
-  { "Paget", "Paget", "", Paget_res},
-  { "Thames", "Thames", "", Paget_res  },
-  { "Finlay", "Finlay", "", Paget_res},
+  { "Paget", "Paget", "", Paget_res },
+  { "Thames", "Thames", "", Paget_res },
+  { "Finlay", "Finlay", "", Paget_res },
   { "Dufay", "Dufay", "", 1 },
   { "Dioptichrome-B", "Dioptichrome-B", "", 1 },
   { "ImprovedDioptichrome-B", "ImprovedDioptichrome-B", "", 1 },
@@ -26,28 +26,20 @@ const scr_type_property_t scr_names[max_scr_type]  = {
   { "Omnicolore", "Omnicolore", "", 3.0 / 2 },
 };
 
-const property_t scanner_type_names[max_scanner_type]  = {
+const property_t scanner_type_names[max_scanner_type] = {
   { "fixed-lens", "Fixed-lens", "" },
-  { "fixed-lens-horizontally-moving-sensor", "Fixed-lens-horizontally-moving-sensor", "" },
-  { "fixed-lens-vertically-moving-sensor", "Fixed-lens-vertically-moving-sensor", "" },
+  { "fixed-lens-horizontally-moving-sensor",
+    "Fixed-lens-horizontally-moving-sensor", "" },
+  { "fixed-lens-vertically-moving-sensor",
+    "Fixed-lens-vertically-moving-sensor", "" },
   { "horizontally-moving-lens", "Horizontally-moving-lens", "" },
   { "vertically-moving-lens", "Vertically-moving-lens", "" },
 };
 
-static const char * const bool_names[2] =
-{
-  "no",
-  "yes"
-};
+static const char *const bool_names[2] = { "no", "yes" };
 
-static const char * const channel_names[5] =
-{
-  "unknown",
-  "red",
-  "green",
-  "blue",
-  "ir"
-};
+static const char *const channel_names[5]
+    = { "unknown", "red", "green", "blue", "ir" };
 
 static bool
 write_escaped_string (FILE *f, const char *input)
@@ -59,11 +51,11 @@ write_escaped_string (FILE *f, const char *input)
     {
       if (*input == '"' || *input == '\\')
         {
-	  if (fputc ('\\', f) == EOF)
-	    return false;
+          if (fputc ('\\', f) == EOF)
+            return false;
         }
       if (fputc (*input, f) == EOF)
-	return false;
+        return false;
     }
 
   if (fputc ('"', f) == EOF)
@@ -72,203 +64,370 @@ write_escaped_string (FILE *f, const char *input)
 }
 
 bool
-save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, render_parameters *rparam, solver_parameters *sparam)
+save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
+          render_parameters *rparam, solver_parameters *sparam)
 {
   if (fprintf (f, "%s\n", HEADER) < 0)
     return false;
   /* TODO: hack.  */
-  setlocale(LC_NUMERIC, "C");
+  setlocale (LC_NUMERIC, "C");
   /* Save param.  */
   if (param)
     {
-      if (fprintf (f, "screen_type: %s\n", scr_names [param->type].name) < 0
-	  || fprintf (f, "scanner_type: %s\n", scanner_type_names [param->scanner_type].name) < 0
-	  //|| fprintf (f, "lens_center: %f %f\n", param->lens_center_x, param->lens_center_y) < 0
-	  || fprintf (f, "screen_shift: %f %f\n", param->center.x, param->center.y) < 0
-	  || fprintf (f, "coordinate_x: %f %f\n", param->coordinate1.x, param->coordinate1.y) < 0
-	  || fprintf (f, "coordinate_y: %f %f\n", param->coordinate2.x, param->coordinate2.y) < 0
-	  || fprintf (f, "projection_distance: %f\n", param->projection_distance) < 0
-	  /* Needs large precision close to zero - so use %g.  */
-	  || fprintf (f, "tilt: %g %g\n", param->tilt_x, param->tilt_y) < 0
-	  || fprintf (f, "final_rotation: %f\n", param->final_rotation) < 0
-	  /* Needs large precision close to zero - so use %g.  */
-	  || fprintf (f, "lens_warp_rectilinear: 1 %g %g %g %g 0 0 %g %g\n",
-		      param->lens_correction.kr[0],
-		      param->lens_correction.kr[1],
-		      param->lens_correction.kr[2],
-		      param->lens_correction.kr[3],
-		      param->lens_correction.center.x,
-		      param->lens_correction.center.y) < 0)
-	return false;
+      if (fprintf (f, "screen_type: %s\n", scr_names[param->type].name) < 0
+          || fprintf (f, "scanner_type: %s\n",
+                      scanner_type_names[param->scanner_type].name)
+                 < 0
+          //|| fprintf (f, "lens_center: %f %f\n", param->lens_center_x,
+          // param->lens_center_y) < 0
+          || fprintf (f, "screen_shift: %f %f\n", param->center.x,
+                      param->center.y)
+                 < 0
+          || fprintf (f, "coordinate_x: %f %f\n", param->coordinate1.x,
+                      param->coordinate1.y)
+                 < 0
+          || fprintf (f, "coordinate_y: %f %f\n", param->coordinate2.x,
+                      param->coordinate2.y)
+                 < 0
+          || fprintf (f, "projection_distance: %f\n",
+                      param->projection_distance)
+                 < 0
+          /* Needs large precision close to zero - so use %g.  */
+          || fprintf (f, "tilt: %g %g\n", param->tilt_x, param->tilt_y) < 0
+          || fprintf (f, "final_rotation: %f\n", param->final_rotation) < 0
+          /* Needs large precision close to zero - so use %g.  */
+          || fprintf (
+                 f, "lens_warp_rectilinear: 1 %g %g %g %g 0 0 %g %g\n",
+                 param->lens_correction.kr[0], param->lens_correction.kr[1],
+                 param->lens_correction.kr[2], param->lens_correction.kr[3],
+                 param->lens_correction.center.x,
+                 param->lens_correction.center.y)
+                 < 0)
+        return false;
       if (param->mesh_trans)
         {
-	  if (fprintf (f, "mesh: yes\n") < 0)
-	    return false;
-	  if (!param->mesh_trans->save (f))
-	    return false;
+          if (fprintf (f, "mesh: yes\n") < 0)
+            return false;
+          if (!param->mesh_trans->save (f))
+            return false;
         }
     }
   if (dparam)
     {
-      if (fprintf (f, "scr_detect_red: %f %f %f\n", dparam->red.red, dparam->red.green, dparam->red.blue) < 0
-	  || fprintf (f, "scr_detect_green: %f %f %f\n", dparam->green.red, dparam->green.green, dparam->green.blue) < 0
-	  || fprintf (f, "scr_detect_blue: %f %f %f\n", dparam->blue.red, dparam->blue.green, dparam->blue.blue) < 0
-	  || fprintf (f, "scr_detect_black: %f %f %f\n", dparam->black.red, dparam->black.green, dparam->black.blue) < 0
-	  || fprintf (f, "scr_detect_min_luminosity: %f\n", dparam->min_luminosity) < 0
-	  || fprintf (f, "scr_detect_min_ratio: %f\n", dparam->min_ratio) < 0
-	  || fprintf (f, "scr_detect_sharpen_radius: %f\n", dparam->sharpen_radius) < 0
-	  || fprintf (f, "scr_detect_sharpen_amount: %f\n", dparam->sharpen_amount) < 0)
-	return false;
+      if (fprintf (f, "scr_detect_red: %f %f %f\n", dparam->red.red,
+                   dparam->red.green, dparam->red.blue)
+              < 0
+          || fprintf (f, "scr_detect_green: %f %f %f\n", dparam->green.red,
+                      dparam->green.green, dparam->green.blue)
+                 < 0
+          || fprintf (f, "scr_detect_blue: %f %f %f\n", dparam->blue.red,
+                      dparam->blue.green, dparam->blue.blue)
+                 < 0
+          || fprintf (f, "scr_detect_black: %f %f %f\n", dparam->black.red,
+                      dparam->black.green, dparam->black.blue)
+                 < 0
+          || fprintf (f, "scr_detect_min_luminosity: %f\n",
+                      dparam->min_luminosity)
+                 < 0
+          || fprintf (f, "scr_detect_min_ratio: %f\n", dparam->min_ratio) < 0
+          || fprintf (f, "scr_detect_sharpen_radius: %f\n",
+                      dparam->sharpen_radius)
+                 < 0
+          || fprintf (f, "scr_detect_sharpen_amount: %f\n",
+                      dparam->sharpen_amount)
+                 < 0)
+        return false;
     }
   if (rparam)
     {
-      if (fprintf (f, "demosaic: %s\n", image_data::demosaic_names[(int)rparam->demosaic].name) < 0
-	  || fprintf (f, "gamma: %f\n", rparam->gamma) < 0
-	  || fprintf (f, "scan_rotation: %d\n", (int)(rparam->scan_rotation * 90)) < 0
-	  || fprintf (f, "scan_mirror: %s\n", bool_names [(int)rparam->scan_mirror]) < 0
-	  || fprintf (f, "scan_crop: %s %i %i %i %i\n", bool_names [(int)rparam->scan_crop.set], rparam->scan_crop.x, rparam->scan_crop.y, rparam->scan_crop.width, rparam->scan_crop.height) < 0
-	  || fprintf (f, "white_balance: %f %f %f\n", rparam->white_balance.red, rparam->white_balance.green, rparam->white_balance.blue) < 0
-	  || fprintf (f, "sharpen: %s\n", sharpen_parameters::sharpen_mode_names [(int)rparam->sharpen.mode].name) < 0
-	  || fprintf (f, "sharpen_radius: %f\n", rparam->sharpen.usm_radius) < 0
-	  || fprintf (f, "sharpen_amount: %f\n", rparam->sharpen.usm_amount) < 0
-	  || fprintf (f, "scanner_snr: %f\n", rparam->sharpen.scanner_snr) < 0
-	  || fprintf (f, "scanner_mtf_scale: %f\n", rparam->sharpen.scanner_mtf_scale) < 0
-	  || fprintf (f, "scanner_use_mtf_measurement: %zu\n", (size_t)rparam->sharpen.scanner_mtf.measured_mtf_idx) < 0
-	  || fprintf (f, "richardson_lucy_iterations: %zu\n", (size_t)rparam->sharpen.richardson_lucy_iterations) < 0
-	  || fprintf (f, "richardson_lucy_sigma: %f\n", rparam->sharpen.richardson_lucy_sigma) < 0)
-	return false;
+      if (fprintf (f, "demosaic: %s\n",
+                   image_data::demosaic_names[(int)rparam->demosaic].name)
+              < 0
+          || fprintf (f, "gamma: %f\n", rparam->gamma) < 0
+          || fprintf (f, "scan_rotation: %d\n",
+                      (int)(rparam->scan_rotation * 90))
+                 < 0
+          || fprintf (f, "scan_mirror: %s\n",
+                      bool_names[(int)rparam->scan_mirror])
+                 < 0
+          || fprintf (f, "scan_crop: %s %i %i %i %i\n",
+                      bool_names[(int)rparam->scan_crop.set],
+                      rparam->scan_crop.x, rparam->scan_crop.y,
+                      rparam->scan_crop.width, rparam->scan_crop.height)
+                 < 0
+          || fprintf (f, "white_balance: %f %f %f\n",
+                      rparam->white_balance.red, rparam->white_balance.green,
+                      rparam->white_balance.blue)
+                 < 0
+          || fprintf (
+                 f, "sharpen: %s\n",
+                 sharpen_parameters::sharpen_mode_names[(int)rparam->sharpen
+                                                            .mode]
+                     .name)
+                 < 0
+          || fprintf (f, "sharpen_radius: %f\n", rparam->sharpen.usm_radius)
+                 < 0
+          || fprintf (f, "sharpen_amount: %f\n", rparam->sharpen.usm_amount)
+                 < 0
+          || fprintf (f, "scanner_snr: %f\n", rparam->sharpen.scanner_snr) < 0
+          || fprintf (f, "scanner_mtf_scale: %f\n",
+                      rparam->sharpen.scanner_mtf_scale)
+                 < 0
+          || fprintf (f, "scanner_use_mtf_measurement: %zu\n",
+                      (size_t)rparam->sharpen.scanner_mtf.measured_mtf_idx)
+                 < 0
+          || fprintf (f, "richardson_lucy_iterations: %zu\n",
+                      (size_t)rparam->sharpen.richardson_lucy_iterations)
+                 < 0
+          || fprintf (f, "richardson_lucy_sigma: %f\n",
+                      rparam->sharpen.richardson_lucy_sigma)
+                 < 0)
+        return false;
       if (rparam->sharpen.scanner_mtf.measurements.size ())
-	for (size_t m = 0; m < rparam->sharpen.scanner_mtf.measurements.size (); m++)
-	{
-	  auto &measurement = rparam->sharpen.scanner_mtf.measurements[m];
-	  if (fprintf (f, "scanner_mtf_measurement: %zu\n", m) < 0
-	      || fprintf (f, "scanner_mtf_measurement_channel: %s\n", channel_names[measurement.channel + 1]) < 0
-	      || fprintf (f, "scanner_mtf_measurement_wavelength_nm: %f\n", measurement.wavelength) < 0
-	      || fprintf (f, "scanner_mtf_measurement_same_capture: %s\n", bool_names[(int)measurement.same_capture]) < 0
-	      || fprintf (f, "scanner_mtf_measurement_name: ") < 0)
-	    return false;
-	  write_escaped_string (f, measurement.name.c_str ());
-	  if (fputc ('\n', f) == EOF)
-	    return false;
-	  for (size_t i = 0; i < measurement.size (); i++)
-	    {
-	      if (fprintf (f, "scanner_mtf_point: %f %f\n",
-		  measurement.get_freq(i),
-		  measurement.get_contrast(i)) < 0)
-		return false;
-	    }
-	}
+        for (size_t m = 0;
+             m < rparam->sharpen.scanner_mtf.measurements.size (); m++)
+          {
+            auto &measurement = rparam->sharpen.scanner_mtf.measurements[m];
+            if (fprintf (f, "scanner_mtf_measurement: %zu\n", m) < 0
+                || fprintf (f, "scanner_mtf_measurement_channel: %s\n",
+                            channel_names[measurement.channel + 1])
+                       < 0
+                || fprintf (f, "scanner_mtf_measurement_wavelength_nm: %f\n",
+                            measurement.wavelength)
+                       < 0
+                || fprintf (f, "scanner_mtf_measurement_same_capture: %s\n",
+                            bool_names[(int)measurement.same_capture])
+                       < 0
+                || fprintf (f, "scanner_mtf_measurement_name: ") < 0)
+              return false;
+            write_escaped_string (f, measurement.name.c_str ());
+            if (fputc ('\n', f) == EOF)
+              return false;
+            for (size_t i = 0; i < measurement.size (); i++)
+              {
+                if (fprintf (f, "scanner_mtf_point: %f %f\n",
+                             measurement.get_freq (i),
+                             measurement.get_contrast (i))
+                    < 0)
+                  return false;
+              }
+          }
       if (fprintf (f, "scanner_mtf_sigma_px: %f\n",
-	    rparam->sharpen.scanner_mtf.sigma) < 0
-	  || fprintf (f, "scanner_mtf_blur_diameter_px: %f\n",
-	    rparam->sharpen.scanner_mtf.blur_diameter) < 0
-	  || fprintf (f, "scanner_mtf_pixel_pitch_um: %f\n",
-	    rparam->sharpen.scanner_mtf.pixel_pitch) < 0
-	  || fprintf (f, "scanner_mtf_sensor_fill_factor: %f\n",
-	    rparam->sharpen.scanner_mtf.sensor_fill_factor) < 0
-	  || fprintf (f, "scanner_mtf_wavelength_nm: %f\n",
-	    rparam->sharpen.scanner_mtf.wavelength) < 0
-	  || fprintf (f, "scanner_mtf_channel_wavelengths_nm: %f %f %f %f\n",
-	    rparam->sharpen.scanner_mtf.wavelengths[0], rparam->sharpen.scanner_mtf.wavelengths[1], rparam->sharpen.scanner_mtf.wavelengths[2], rparam->sharpen.scanner_mtf.wavelengths[3]) < 0
-	  || fprintf (f, "scanner_mtf_f_stop: %f\n",
-	    rparam->sharpen.scanner_mtf.f_stop) < 0
-	  /* Use %g; small values matters.  */
-	  || fprintf (f, "scanner_mtf_defocus_mm: %g\n",
-	    rparam->sharpen.scanner_mtf.defocus) < 0
-	  || fprintf (f, "scan_dpi: %f\n",
-	    rparam->sharpen.scanner_mtf.scan_dpi) < 0)
-	return false;
+                   rparam->sharpen.scanner_mtf.sigma)
+              < 0
+          || fprintf (f, "scanner_mtf_blur_diameter_px: %f\n",
+                      rparam->sharpen.scanner_mtf.blur_diameter)
+                 < 0
+          || fprintf (f, "scanner_mtf_pixel_pitch_um: %f\n",
+                      rparam->sharpen.scanner_mtf.pixel_pitch)
+                 < 0
+          || fprintf (f, "scanner_mtf_sensor_fill_factor: %f\n",
+                      rparam->sharpen.scanner_mtf.sensor_fill_factor)
+                 < 0
+          || fprintf (f, "scanner_mtf_wavelength_nm: %f\n",
+                      rparam->sharpen.scanner_mtf.wavelength)
+                 < 0
+          || fprintf (f, "scanner_mtf_channel_wavelengths_nm: %f %f %f %f\n",
+                      rparam->sharpen.scanner_mtf.wavelengths[0],
+                      rparam->sharpen.scanner_mtf.wavelengths[1],
+                      rparam->sharpen.scanner_mtf.wavelengths[2],
+                      rparam->sharpen.scanner_mtf.wavelengths[3])
+                 < 0
+          || fprintf (f, "scanner_mtf_f_stop: %f\n",
+                      rparam->sharpen.scanner_mtf.f_stop)
+                 < 0
+          /* Use %g; small values matters.  */
+          || fprintf (f, "scanner_mtf_defocus_mm: %g\n",
+                      rparam->sharpen.scanner_mtf.defocus)
+                 < 0
+          || fprintf (f, "scan_dpi: %f\n",
+                      rparam->sharpen.scanner_mtf.scan_dpi)
+                 < 0)
+        return false;
       if (fprintf (f, "presaturation: %f\n", rparam->presaturation) < 0
-	  || fprintf (f, "saturation: %f\n", rparam->saturation) < 0
-	  || fprintf (f, "brightness: %f\n", rparam->brightness) < 0
-	  || fprintf (f, "output_tone_curve: %s\n", tone_curve::tone_curve_names[(int)rparam->output_tone_curve].name) < 0
-	  || fprintf (f, "red_strip_width: %f\n", rparam->red_strip_width) < 0
-	  || fprintf (f, "green_strip_width: %f\n", rparam->green_strip_width) < 0
-	  || fprintf (f, "collection_threshold: %f\n", rparam->collection_threshold) < 0
-	  || fprintf (f, "screen_blur_radius: %f\n", rparam->screen_blur_radius) < 0
-	  || fprintf (f, "color_model: %s\n", render_parameters::color_model_properties [rparam->color_model].name) < 0
-	  || fprintf (f, "dye_age: %f %f %f\n", rparam->age.red, rparam->age.green, rparam->age.blue) < 0
-	  || fprintf (f, "dye_density: %f %f %f\n", rparam->dye_density.red, rparam->dye_density.green, rparam->dye_density.blue) < 0
-	  || fprintf (f, "backlight_temperature: %f\n", rparam->backlight_temperature) < 0
-	  || fprintf (f, "temperature: %f\n", rparam->temperature) < 0
-	  || fprintf (f, "dye_balance: %s\n", render_parameters::dye_balance_names [rparam->dye_balance].name) < 0
-	  //|| fprintf (f, "gray_range: %i %i\n", rparam->gray_min, rparam->gray_max) < 0
-	  || fprintf (f, "scan_exposure: %f\n", rparam->scan_exposure) < 0
-	  || fprintf (f, "dark_point: %f\n", rparam->dark_point) < 0
-	  || fprintf (f, "backlight_correction_black: %f\n", rparam->backlight_correction_black) < 0
-	  || fprintf (f, "contact-copy: %s\n", bool_names [(int)rparam->contact_copy.simulate]) < 0
-	  || fprintf (f, "contact-copy-dhcurve-min: %f %f\n", rparam->contact_copy.emulsion_characteristic_curve.minx, rparam->contact_copy.emulsion_characteristic_curve.miny) < 0
-	  || fprintf (f, "contact-copy-dhcurve-linear1: %f %f\n", rparam->contact_copy.emulsion_characteristic_curve.linear1x, rparam->contact_copy.emulsion_characteristic_curve.linear1y) < 0
-	  || fprintf (f, "contact-copy-dhcurve-linear2: %f %f\n", rparam->contact_copy.emulsion_characteristic_curve.linear2x, rparam->contact_copy.emulsion_characteristic_curve.linear2y) < 0
-	  || fprintf (f, "contact-copy-dhcurve-max: %f %f\n", rparam->contact_copy.emulsion_characteristic_curve.maxx, rparam->contact_copy.emulsion_characteristic_curve.maxy) < 0
-	  || fprintf (f, "contact-copy-preflash: %f\n", rparam->contact_copy.preflash) < 0
-	  || fprintf (f, "contact-copy-exposure: %f\n", rparam->contact_copy.exposure) < 0
-	  || fprintf (f, "contact-copy-boost: %f\n", rparam->contact_copy.boost) < 0
-	  || fprintf (f, "collection_quality: %s\n", render_parameters::collection_quality_names [(int)rparam->collection_quality].name) < 0
-	  || fprintf (f, "screen_demosaic: %s\n", render_parameters::screen_demosaic_names [(int)rparam->screen_demosaic].name) < 0
-	  || fprintf (f, "mix_weights: %f %f %f\n", rparam->mix_red, rparam->mix_green, rparam->mix_blue) < 0
-	  || fprintf (f, "mix_dark: %f %f %f\n", rparam->mix_dark.red, rparam->mix_dark.green, rparam->mix_dark.blue) < 0
-	  || fprintf (f, "profiled_dark: %f %f %f\n", rparam->profiled_dark.red, rparam->profiled_dark.green, rparam->profiled_dark.blue) < 0
-	  || fprintf (f, "profiled_red: %f %f %f\n", rparam->profiled_red.red, rparam->profiled_red.green, rparam->profiled_red.blue) < 0
-	  || fprintf (f, "profiled_green: %f %f %f\n", rparam->profiled_green.red, rparam->profiled_green.green, rparam->profiled_green.blue) < 0
-	  || fprintf (f, "profiled_blue: %f %f %f\n", rparam->profiled_blue.red, rparam->profiled_blue.green, rparam->profiled_blue.blue) < 0
-	  || fprintf (f, "scanner_red: %f %f %f\n", rparam->scanner_red.x, rparam->scanner_red.y, rparam->scanner_red.z) < 0
-	  || fprintf (f, "scanner_green: %f %f %f\n", rparam->scanner_green.x, rparam->scanner_green.y, rparam->scanner_green.z) < 0
-	  || fprintf (f, "scanner_blue: %f %f %f\n", rparam->scanner_blue.x, rparam->scanner_blue.y, rparam->scanner_blue.z) < 0)
-	return false;
-      for (size_t i = 0; i < rparam->output_tone_curve_control_points.size (); i++)
-	{
-	  if (fprintf (f, "output_tone_curve_control_point: %f %f\n",
-	      rparam->output_tone_curve_control_points[i].x,
-	      rparam->output_tone_curve_control_points[i].y) < 0)
-	    return false;
-	}
+          || fprintf (f, "saturation: %f\n", rparam->saturation) < 0
+          || fprintf (f, "brightness: %f\n", rparam->brightness) < 0
+          || fprintf (
+                 f, "output_tone_curve: %s\n",
+                 tone_curve::tone_curve_names[(int)rparam->output_tone_curve]
+                     .name)
+                 < 0
+          || fprintf (f, "red_strip_width: %f\n", rparam->red_strip_width) < 0
+          || fprintf (f, "green_strip_width: %f\n", rparam->green_strip_width)
+                 < 0
+          || fprintf (f, "collection_threshold: %f\n",
+                      rparam->collection_threshold)
+                 < 0
+          || fprintf (f, "screen_blur_radius: %f\n",
+                      rparam->screen_blur_radius)
+                 < 0
+          || fprintf (
+                 f, "color_model: %s\n",
+                 render_parameters::color_model_properties[rparam->color_model]
+                     .name)
+                 < 0
+          || fprintf (f, "dye_age: %f %f %f\n", rparam->age.red,
+                      rparam->age.green, rparam->age.blue)
+                 < 0
+          || fprintf (f, "dye_density: %f %f %f\n", rparam->dye_density.red,
+                      rparam->dye_density.green, rparam->dye_density.blue)
+                 < 0
+          || fprintf (f, "backlight_temperature: %f\n",
+                      rparam->backlight_temperature)
+                 < 0
+          || fprintf (f, "temperature: %f\n", rparam->temperature) < 0
+          || fprintf (f, "dye_balance: %s\n",
+                      render_parameters::dye_balance_names[rparam->dye_balance]
+                          .name)
+                 < 0
+          //|| fprintf (f, "gray_range: %i %i\n", rparam->gray_min,
+          // rparam->gray_max) < 0
+          || fprintf (f, "scan_exposure: %f\n", rparam->scan_exposure) < 0
+          || fprintf (f, "dark_point: %f\n", rparam->dark_point) < 0
+          || fprintf (f, "backlight_correction_black: %f\n",
+                      rparam->backlight_correction_black)
+                 < 0
+          || fprintf (f, "contact-copy: %s\n",
+                      bool_names[(int)rparam->contact_copy.simulate])
+                 < 0
+          || fprintf (f, "contact-copy-dhcurve-min: %f %f\n",
+                      rparam->contact_copy.emulsion_characteristic_curve.minx,
+                      rparam->contact_copy.emulsion_characteristic_curve.miny)
+                 < 0
+          || fprintf (
+                 f, "contact-copy-dhcurve-linear1: %f %f\n",
+                 rparam->contact_copy.emulsion_characteristic_curve.linear1x,
+                 rparam->contact_copy.emulsion_characteristic_curve.linear1y)
+                 < 0
+          || fprintf (
+                 f, "contact-copy-dhcurve-linear2: %f %f\n",
+                 rparam->contact_copy.emulsion_characteristic_curve.linear2x,
+                 rparam->contact_copy.emulsion_characteristic_curve.linear2y)
+                 < 0
+          || fprintf (f, "contact-copy-dhcurve-max: %f %f\n",
+                      rparam->contact_copy.emulsion_characteristic_curve.maxx,
+                      rparam->contact_copy.emulsion_characteristic_curve.maxy)
+                 < 0
+          || fprintf (f, "contact-copy-preflash: %f\n",
+                      rparam->contact_copy.preflash)
+                 < 0
+          || fprintf (f, "contact-copy-exposure: %f\n",
+                      rparam->contact_copy.exposure)
+                 < 0
+          || fprintf (f, "contact-copy-boost: %f\n",
+                      rparam->contact_copy.boost)
+                 < 0
+          || fprintf (f, "collection_quality: %s\n",
+                      render_parameters::collection_quality_names
+                          [(int)rparam->collection_quality]
+                              .name)
+                 < 0
+          || fprintf (f, "screen_demosaic: %s\n",
+                      render_parameters::screen_demosaic_names
+                          [(int)rparam->screen_demosaic]
+                              .name)
+                 < 0
+          || fprintf (f, "mix_weights: %f %f %f\n", rparam->mix_red,
+                      rparam->mix_green, rparam->mix_blue)
+                 < 0
+          || fprintf (f, "mix_dark: %f %f %f\n", rparam->mix_dark.red,
+                      rparam->mix_dark.green, rparam->mix_dark.blue)
+                 < 0
+          || fprintf (f, "profiled_dark: %f %f %f\n",
+                      rparam->profiled_dark.red, rparam->profiled_dark.green,
+                      rparam->profiled_dark.blue)
+                 < 0
+          || fprintf (f, "profiled_red: %f %f %f\n", rparam->profiled_red.red,
+                      rparam->profiled_red.green, rparam->profiled_red.blue)
+                 < 0
+          || fprintf (f, "profiled_green: %f %f %f\n",
+                      rparam->profiled_green.red, rparam->profiled_green.green,
+                      rparam->profiled_green.blue)
+                 < 0
+          || fprintf (f, "profiled_blue: %f %f %f\n",
+                      rparam->profiled_blue.red, rparam->profiled_blue.green,
+                      rparam->profiled_blue.blue)
+                 < 0
+          || fprintf (f, "scanner_red: %f %f %f\n", rparam->scanner_red.x,
+                      rparam->scanner_red.y, rparam->scanner_red.z)
+                 < 0
+          || fprintf (f, "scanner_green: %f %f %f\n", rparam->scanner_green.x,
+                      rparam->scanner_green.y, rparam->scanner_green.z)
+                 < 0
+          || fprintf (f, "scanner_blue: %f %f %f\n", rparam->scanner_blue.x,
+                      rparam->scanner_blue.y, rparam->scanner_blue.z)
+                 < 0)
+        return false;
+      for (size_t i = 0; i < rparam->output_tone_curve_control_points.size ();
+           i++)
+        {
+          if (fprintf (f, "output_tone_curve_control_point: %f %f\n",
+                       rparam->output_tone_curve_control_points[i].x,
+                       rparam->output_tone_curve_control_points[i].y)
+              < 0)
+            return false;
+        }
       if (rparam->backlight_correction)
-	{
-	  if (fprintf (f, "backlight_correction: yes\n") < 0)
-	    return false;
-	  if (!rparam->backlight_correction->save (f))
-	    return false;
-	}
+        {
+          if (fprintf (f, "backlight_correction: yes\n") < 0)
+            return false;
+          if (!rparam->backlight_correction->save (f))
+            return false;
+        }
       if (rparam->scanner_blur_correction)
-	{
-	  if (fprintf (f, "scanner_blur_correction: yes\n") < 0)
-	    return false;
-	  if (!rparam->scanner_blur_correction->save (f))
-	    return false;
-	}
+        {
+          if (fprintf (f, "scanner_blur_correction: yes\n") < 0)
+            return false;
+          if (!rparam->scanner_blur_correction->save (f))
+            return false;
+        }
       if (rparam->tile_adjustments_width)
-	{
-	  if (fprintf (f, "tile_adjustments_dimensions: %i %i\n", rparam->tile_adjustments_width, rparam->tile_adjustments_height) < 0)
-	    return false;
-	  for (int y = 0; y < rparam->tile_adjustments_height; y++)
-	    for (int x = 0; x < rparam->tile_adjustments_width; x++)
-	      {
-		if (fprintf (f, "tile_adjustment_exposure: %i %i %f\n", x, y, rparam->get_tile_adjustment (x, y).exposure) < 0
-		    || fprintf (f, "tile_adjustment_dark_point: %i %i %f\n", x, y, rparam->get_tile_adjustment (x, y).dark_point) < 0)
-		  return false;
-		if (rparam->get_tile_adjustment (x, y).scanner_blur_correction
-		    && (fprintf (f, "tile_adjustment_scanner_blur_correction: %i %i yes\n", x, y)< 0
-			|| !rparam->get_tile_adjustment (x, y).scanner_blur_correction->save (f)))
-		  return false;
-	      }
-	}
+        {
+          if (fprintf (f, "tile_adjustments_dimensions: %i %i\n",
+                       rparam->tile_adjustments_width,
+                       rparam->tile_adjustments_height)
+              < 0)
+            return false;
+          for (int y = 0; y < rparam->tile_adjustments_height; y++)
+            for (int x = 0; x < rparam->tile_adjustments_width; x++)
+              {
+                if (fprintf (f, "tile_adjustment_exposure: %i %i %f\n", x, y,
+                             rparam->get_tile_adjustment (x, y).exposure)
+                        < 0
+                    || fprintf (f, "tile_adjustment_dark_point: %i %i %f\n", x,
+                                y,
+                                rparam->get_tile_adjustment (x, y).dark_point)
+                           < 0)
+                  return false;
+                if (rparam->get_tile_adjustment (x, y).scanner_blur_correction
+                    && (fprintf (f,
+                                 "tile_adjustment_scanner_blur_correction: %i "
+                                 "%i yes\n",
+                                 x, y)
+                            < 0
+                        || !rparam->get_tile_adjustment (x, y)
+                                .scanner_blur_correction->save (f)))
+                  return false;
+              }
+        }
     }
   if (sparam)
     {
-      if (fprintf (f, "solver_optimize_lens: %s\n", bool_names [(int)sparam->optimize_lens]) < 0
-	  || fprintf (f, "solver_optimize_tilt: %s\n", bool_names [(int)sparam->optimize_tilt]) < 0)
-	return false;
+      if (fprintf (f, "solver_optimize_lens: %s\n",
+                   bool_names[(int)sparam->optimize_lens])
+              < 0
+          || fprintf (f, "solver_optimize_tilt: %s\n",
+                      bool_names[(int)sparam->optimize_tilt])
+                 < 0)
+        return false;
       for (auto point : sparam->points)
-	{
-	  if (fprintf (f, "solver_point: %f %f %f %f %s\n",
-		       point.img.x,
-		       point.img.y,
-		       point.scr.x,
-		       point.scr.y,
-		       solver_parameters::point_color_names [(int)point.color]) < 0)
-	   return false;
-	}
+        {
+          if (fprintf (f, "solver_point: %f %f %f %f %s\n", point.img.x,
+                       point.img.y, point.scr.x, point.scr.y,
+                       solver_parameters::point_color_names[(int)point.color])
+              < 0)
+            return false;
+        }
     }
   if (fprintf (f, "screen_alignment_end\n") < 0)
     {
@@ -283,12 +442,12 @@ skipwhitespace (FILE *f)
     {
       int c = getc (f);
       if (c == EOF)
-	return true;
+        return true;
       if (c != '\n' && c != '\r' && !isspace (c))
-	{
-	  ungetc (c, f);
-	  return true;
-	}
+        {
+          ungetc (c, f);
+          return true;
+        }
     }
   return true;
 }
@@ -317,7 +476,7 @@ read_escaped_string (FILE *f)
         {
           int next_c = getc (f);
           if (next_c == EOF)
-            break; 
+            break;
           result += static_cast<char> (next_c);
         }
       else
@@ -332,19 +491,19 @@ get_keyword (FILE *f, char *buf)
 {
   int l;
   skipwhitespace (f);
-  for (l = 0; ; l++)
+  for (l = 0;; l++)
     {
       if (l == 255)
-	{
-	  buf[l] = 0;
-	  return;
-	}
+        {
+          buf[l] = 0;
+          return;
+        }
       int c = getc (f);
       if (c == EOF || (!isalnum (c) && c != '-' && c != '_'))
-	{
-	  buf[l] = 0;
-	  return;
-	}
+        {
+          buf[l] = 0;
+          return;
+        }
       buf[l] = c;
     }
 }
@@ -357,7 +516,7 @@ parse_bool (FILE *f, bool *val)
   if (c == 'y')
     {
       if (getc (f) != 'e' || getc (f) != 's')
-	return false;
+        return false;
       if (val)
         *val = true;
       return true;
@@ -365,7 +524,7 @@ parse_bool (FILE *f, bool *val)
   else if (c == 'n')
     {
       if (getc (f) != 'o')
-	return false;
+        return false;
       if (val)
         *val = false;
       return true;
@@ -449,13 +608,14 @@ read_xyz (FILE *f, xyz *c)
   if (fscanf (f, "%lf %lf %lf\n", &x, &y, &z) != 3)
     return false;
   if (c)
-    *c = {(luminosity_t)x, (luminosity_t)y, (luminosity_t)z};
+    *c = { (luminosity_t)x, (luminosity_t)y, (luminosity_t)z };
   return true;
 }
 static bool
 read_color (FILE *f, color_t *c)
 {
-  return read_rgb (f, c ? &c->red : NULL, c ? &c->green : NULL, c ? &c->blue : NULL);
+  return read_rgb (f, c ? &c->red : NULL, c ? &c->green : NULL,
+                   c ? &c->blue : NULL);
 }
 
 bool
@@ -465,26 +625,26 @@ expect_keyword (FILE *f, const char *keyword)
   for (int i = 0; keyword[i]; i++)
     {
       if (feof (f))
-	{
-	  for (int j = 0; j < i; j++)
-	    ungetc (keyword[j], f);
-	  return false;
-	}
+        {
+          for (int j = 0; j < i; j++)
+            ungetc (keyword[j], f);
+          return false;
+        }
       char c = getc (f);
       if (!i && (c == '\r' || isspace (c)))
-	{
-	  skipwhitespace (f);
-	  if (feof (f))
-	    return false;
-	  c = getc (f);
-	}
+        {
+          skipwhitespace (f);
+          if (feof (f))
+            return false;
+          c = getc (f);
+        }
 
       if (c != keyword[i])
         {
-	  for (int j = 0; j < i; j++)
-	    ungetc (keyword[j], f);
-	  ungetc (c, f);
-	  return false;
+          for (int j = 0; j < i; j++)
+            ungetc (keyword[j], f);
+          ungetc (c, f);
+          return false;
         }
     }
   return true;
@@ -496,7 +656,9 @@ expect_keyword (FILE *f, const char *keyword)
 #define sparam_check(name) sparam ? &sparam->name : NULL
 
 bool
-load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, render_parameters *rparam, solver_parameters *sparam, const char **error)
+load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
+          render_parameters *rparam, solver_parameters *sparam,
+          const char **error)
 {
   char buf[256];
   skipwhitespace (f);
@@ -511,7 +673,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
       return false;
     }
   /* TODO: hack.  */
-  setlocale(LC_NUMERIC, "C");
+  setlocale (LC_NUMERIC, "C");
   if (rparam)
     rparam->set_tile_adjustments_dimensions (0, 0);
   while (!feof (f))
@@ -520,1273 +682,1326 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
       char buf2[256];
       int l;
       skipwhitespace (f);
-      for (l = 0; ; l++)
-	{
- 	  if (l == 255)
-	    {
-	      *error = "too long keyword";
-	      return false;
-	    }
-	  int c = getc (f);
-	  if (c == EOF || c=='\n' || c=='\r')
-	    {
-	      buf[l]=0;
-	      if (!l && c == EOF)
-		{
-		  l = -1;
-		  break;
-		}
-	      if (!strcmp (buf, "screen_alignment_end"))
-		{
-		  l = -1;
-		  break;
-		}
-	      *error = "file truncated";
-	      return false;
-	    }
-	  if (c == ':')
-	    {
-	      buf[l] = 0;
-	      break;
-	    }
-	  buf[l] = c;
-	}
+      for (l = 0;; l++)
+        {
+          if (l == 255)
+            {
+              *error = "too long keyword";
+              return false;
+            }
+          int c = getc (f);
+          if (c == EOF || c == '\n' || c == '\r')
+            {
+              buf[l] = 0;
+              if (!l && c == EOF)
+                {
+                  l = -1;
+                  break;
+                }
+              if (!strcmp (buf, "screen_alignment_end"))
+                {
+                  l = -1;
+                  break;
+                }
+              *error = "file truncated";
+              return false;
+            }
+          if (c == ':')
+            {
+              buf[l] = 0;
+              break;
+            }
+          buf[l] = c;
+        }
       if (l < 0)
         break;
       if (!strcmp (buf, "screen_type"))
-	{
-	  get_keyword (f, buf2);
-	  int j;
-	  for (j = 0; j < max_scr_type; j++)
-	    if (!strcmp (buf2, scr_names[j].name))
-	      break;
-	  if (j == max_scr_type
-	      && !strcmp (buf2, "PagetFinlay"))
-	    j = Finlay;
-	  if (j == max_scr_type)
-	    {
-	      *error = "unknown screen type";
-	      return false;
-	    }
-	  if (param)
-	    param->type = (enum scr_type) j;
-	}
+        {
+          get_keyword (f, buf2);
+          int j;
+          for (j = 0; j < max_scr_type; j++)
+            if (!strcmp (buf2, scr_names[j].name))
+              break;
+          if (j == max_scr_type && !strcmp (buf2, "PagetFinlay"))
+            j = Finlay;
+          if (j == max_scr_type)
+            {
+              *error = "unknown screen type";
+              return false;
+            }
+          if (param)
+            param->type = (enum scr_type)j;
+        }
       else if (!strcmp (buf, "scanner_type"))
-	{
-	  get_keyword (f, buf2);
-	  int j;
-	  for (j = 0; j < max_scanner_type; j++)
-	    if (!strcmp (buf2, scanner_type_names[j].name))
-	      break;
-	  if (j == max_scanner_type)
-	    {
-	      if (!strcmp (buf2, "fixed-lens-horisontally-moving-sensor"))
-		j = fixed_lens_sensor_move_horizontally;
-	      else if (!strcmp (buf2, "horisontally-moving-lens"))
-		j = horizontally_moving_lens;
-	    }
-	  if (j == max_scanner_type)
-	    {
-	      *error = "unknown scanner type";
-	      return false;
-	    }
-	  if (param)
-	    param->scanner_type = (enum scanner_type) j;
-	}
+        {
+          get_keyword (f, buf2);
+          int j;
+          for (j = 0; j < max_scanner_type; j++)
+            if (!strcmp (buf2, scanner_type_names[j].name))
+              break;
+          if (j == max_scanner_type)
+            {
+              if (!strcmp (buf2, "fixed-lens-horisontally-moving-sensor"))
+                j = fixed_lens_sensor_move_horizontally;
+              else if (!strcmp (buf2, "horisontally-moving-lens"))
+                j = horizontally_moving_lens;
+            }
+          if (j == max_scanner_type)
+            {
+              *error = "unknown scanner type";
+              return false;
+            }
+          if (param)
+            param->scanner_type = (enum scanner_type)j;
+        }
       else if (!strcmp (buf, "lens_warp_rectilinear"))
         {
-	  coord_t a,t1,t2;
-	  if (!read_scalar (f, &a)
-	      || a != 1
-	      || !read_scalar (f, param_check (lens_correction.kr[0]))
-	      || !read_scalar (f, param_check (lens_correction.kr[1]))
-	      || !read_scalar (f, param_check (lens_correction.kr[2]))
-	      || !read_scalar (f, param_check (lens_correction.kr[3]))
-	      || !read_scalar (f, &t1)
-	      || t1
-	      || !read_scalar (f, &t2)
-	      || t2
-	      || !read_vector (f, param_check (lens_correction.center.x), param_check (lens_correction.center.y)))
-	    {
-	      *error = "error parsing lens_warp_rectililnear";
-	      return false;
-	    }
+          coord_t a, t1, t2;
+          if (!read_scalar (f, &a) || a != 1
+              || !read_scalar (f, param_check (lens_correction.kr[0]))
+              || !read_scalar (f, param_check (lens_correction.kr[1]))
+              || !read_scalar (f, param_check (lens_correction.kr[2]))
+              || !read_scalar (f, param_check (lens_correction.kr[3]))
+              || !read_scalar (f, &t1) || t1 || !read_scalar (f, &t2) || t2
+              || !read_vector (f, param_check (lens_correction.center.x),
+                               param_check (lens_correction.center.y)))
+            {
+              *error = "error parsing lens_warp_rectililnear";
+              return false;
+            }
         }
       /* Old lens correction parameter; now ignored.  */
       else if (!strcmp (buf, "lens_center"))
-	{
-	  if (!read_vector (f, /*param_check (lens_center_x), param_check (lens_center_y)*/ NULL, NULL))
-	    {
-	      *error = "error parsing screen_shift";
-	      return false;
-	    }
-	}
+        {
+          if (!read_vector (
+                  f,
+                  /*param_check (lens_center_x), param_check (lens_center_y)*/
+                  NULL, NULL))
+            {
+              *error = "error parsing screen_shift";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "screen_shift"))
-	{
-	  if (!read_vector (f, param_check (center.x), param_check (center.y)))
-	    {
-	      *error = "error parsing screen_shift";
-	      return false;
-	    }
-	}
+        {
+          if (!read_vector (f, param_check (center.x), param_check (center.y)))
+            {
+              *error = "error parsing screen_shift";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "coordinate_x"))
-	{
-	  if (!read_vector (f, param_check (coordinate1.x), param_check (coordinate1.y)))
-	    {
-	      *error = "error parsing coordinate_x";
-	      return false;
-	    }
-	}
+        {
+          if (!read_vector (f, param_check (coordinate1.x),
+                            param_check (coordinate1.y)))
+            {
+              *error = "error parsing coordinate_x";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "coordinate_y"))
-	{
-	  if (!read_vector (f, param_check (coordinate2.x), param_check (coordinate2.y)))
-	    {
-	      *error = "error parsing coordinate_y";
-	      return false;
-	    }
-	}
+        {
+          if (!read_vector (f, param_check (coordinate2.x),
+                            param_check (coordinate2.y)))
+            {
+              *error = "error parsing coordinate_y";
+              return false;
+            }
+        }
       /* Compatibility only.  */
       else if (!strcmp (buf, "motor_correction"))
-	{
-	  coord_t x, y;
-	  if (!read_vector (f, &x, &y))
-	    {
-	      *error = "error parsing motor_correction";
-	      return false;
-	    }
-	}
+        {
+          coord_t x, y;
+          if (!read_vector (f, &x, &y))
+            {
+              *error = "error parsing motor_correction";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "projection_distance"))
-	{
-	  if (!read_scalar (f, param_check (projection_distance)))
-	    {
-	      *error = "error parsing projection_distance";
-	      return false;
-	    }
-	}
+        {
+          if (!read_scalar (f, param_check (projection_distance)))
+            {
+              *error = "error parsing projection_distance";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "tilt"))
-	{
-	  if (!read_vector (f, param_check (tilt_x), param_check (tilt_y)))
-	    {
-	      *error = "error parsing tilt";
-	      return false;
-	    }
-	}
+        {
+          if (!read_vector (f, param_check (tilt_x), param_check (tilt_y)))
+            {
+              *error = "error parsing tilt";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "final_rotation"))
-	{
-	  if (!read_scalar (f, param_check (final_rotation)))
-	    {
-	      *error = "error parsing final_rotation";
-	      return false;
-	    }
-	}
+        {
+          if (!read_scalar (f, param_check (final_rotation)))
+            {
+              *error = "error parsing final_rotation";
+              return false;
+            }
+        }
       /* Old lens correction parameter; now ignored.  */
       else if (!strcmp (buf, "k1"))
-	{
-	  if (!read_scalar (f, /*param_check (k1)*/ NULL))
-	    {
-	      *error = "error parsing k1";
-	      return false;
-	    }
-	}
+        {
+          if (!read_scalar (f, /*param_check (k1)*/ NULL))
+            {
+              *error = "error parsing k1";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "gamma"))
-	{
-	  if (!read_luminosity (f, rparam_check (gamma)))
-	    {
-	      *error = "error parsing gamma";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, rparam_check (gamma)))
+            {
+              *error = "error parsing gamma";
+              return false;
+            }
+        }
       /* Kep for compatibility with old files.  */
       else if (!strcmp (buf, "film_gamma"))
-	{
-	  if (!read_luminosity (f, NULL))
-	    {
-	      *error = "error parsing film_gamma";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, NULL))
+            {
+              *error = "error parsing film_gamma";
+              return false;
+            }
+        }
       /* Kept for compatibility.  */
       else if (!strcmp (buf, "target_film_gamma"))
-	{
-	  if (!read_luminosity (f, NULL))
-	    {
-	      *error = "error parsing target_film_gamma";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, NULL))
+            {
+              *error = "error parsing target_film_gamma";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "white_balance"))
-	{
-	  if (!read_color (f, rparam_check (white_balance)))
-	    {
-	      *error = "error parsing scr_detect_green";
-	      return false;
-	    }
-	}
+        {
+          if (!read_color (f, rparam_check (white_balance)))
+            {
+              *error = "error parsing scr_detect_green";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "sharpen_radius"))
-	{
-	  if (!read_luminosity (f, rparam_check (sharpen.usm_radius)))
-	    {
-	      *error = "error parsing sharpen_radius";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, rparam_check (sharpen.usm_radius)))
+            {
+              *error = "error parsing sharpen_radius";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "sharpen_amount"))
-	{
-	  if (!read_luminosity (f, rparam_check (sharpen.usm_amount)))
-	    {
-	      *error = "error parsing sharpen_amount";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, rparam_check (sharpen.usm_amount)))
+            {
+              *error = "error parsing sharpen_amount";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "presaturation"))
-	{
-	  if (!read_luminosity (f, rparam_check (presaturation)))
-	    {
-	      *error = "error parsing presaturation";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, rparam_check (presaturation)))
+            {
+              *error = "error parsing presaturation";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "saturation"))
-	{
-	  if (!read_luminosity (f, rparam_check (saturation)))
-	    {
-	      *error = "error parsing saturation";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, rparam_check (saturation)))
+            {
+              *error = "error parsing saturation";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "brightness"))
-	{
-	  if (!read_luminosity (f, rparam_check (brightness)))
-	    {
-	      *error = "error parsing brightness";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, rparam_check (brightness)))
+            {
+              *error = "error parsing brightness";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "output_tone_curve"))
-	{
-	  get_keyword (f, buf2);
-	  int j;
-	  for (j = 0; j < (int)tone_curve::tone_curve_max; j++)
-	    if (!strcmp (buf2, tone_curve::tone_curve_names[j].name))
-	      break;
-	  if (j == tone_curve::tone_curve_max)
-	    {
-	      *error = "unknown output tone curve";
-	      return false;
-	    }
-	  if (rparam)
-	    rparam->output_tone_curve = (tone_curve::tone_curves)j;
-	}
-      else if (!strcmp (buf, "output_tone_curve_control_point"))
-	{
-	  point_t p;
-	  if (!read_vector (f, &p.x, &p.y))
-	    {
-	      *error = "error parsing output_tone_curve_control_point";
-	      return false;
-	    }
+        {
+          get_keyword (f, buf2);
+          int j;
+          for (j = 0; j < (int)tone_curve::tone_curve_max; j++)
+            if (!strcmp (buf2, tone_curve::tone_curve_names[j].name))
+              break;
+          if (j == tone_curve::tone_curve_max)
+            {
+              *error = "unknown output tone curve";
+              return false;
+            }
           if (rparam)
-	    {
-	      if (first_control_point)
-	        {
-		  rparam->output_tone_curve_control_points.clear ();
-		  first_control_point = false;
-	        }
-	      rparam->output_tone_curve_control_points.push_back (p);
-	    }
-	}
+            rparam->output_tone_curve = (tone_curve::tone_curves)j;
+        }
+      else if (!strcmp (buf, "output_tone_curve_control_point"))
+        {
+          point_t p;
+          if (!read_vector (f, &p.x, &p.y))
+            {
+              *error = "error parsing output_tone_curve_control_point";
+              return false;
+            }
+          if (rparam)
+            {
+              if (first_control_point)
+                {
+                  rparam->output_tone_curve_control_points.clear ();
+                  first_control_point = false;
+                }
+              rparam->output_tone_curve_control_points.push_back (p);
+            }
+        }
       else if (!strcmp (buf, "demosaic"))
-	{
-	  get_keyword (f, buf2);
-	  int j;
-	  for (j = 0; j < (int)image_data::demosaic_max; j++)
-	    if (!strcmp (buf2, image_data::demosaic_names[j].name))
-	      break;
-	  if (j == image_data::demosaic_max)
-	    {
-	      *error = "unknown demosaicing algorihtm";
-	      return false;
-	    }
-	  if (rparam)
-	    rparam->demosaic = (image_data::demosaicing_t)j;
-	}
+        {
+          get_keyword (f, buf2);
+          int j;
+          for (j = 0; j < (int)image_data::demosaic_max; j++)
+            if (!strcmp (buf2, image_data::demosaic_names[j].name))
+              break;
+          if (j == image_data::demosaic_max)
+            {
+              *error = "unknown demosaicing algorihtm";
+              return false;
+            }
+          if (rparam)
+            rparam->demosaic = (image_data::demosaicing_t)j;
+        }
       /* dufay_red_strip_width is for compatibility with old files.  */
       else if (!strcmp (buf, "dufay_red_strip_width")
-	       || !strcmp (buf, "red_strip_width"))
-	{
-	  if (!read_scalar (f, rparam_check (red_strip_width)))
-	    {
-	      *error = "error parsing red strip width";
-	      return false;
-	    }
-	}
+               || !strcmp (buf, "red_strip_width"))
+        {
+          if (!read_scalar (f, rparam_check (red_strip_width)))
+            {
+              *error = "error parsing red strip width";
+              return false;
+            }
+        }
       /* dufay_green_strip_width is for compatibility with old files.  */
       else if (!strcmp (buf, "dufay_green_strip_width")
-	       || !strcmp (buf, "green_strip_width"))
-	{
-	  if (!read_scalar (f, rparam_check (green_strip_width)))
-	    {
-	      *error = "error parsing green strip width";
-	      return false;
-	    }
-	}
+               || !strcmp (buf, "green_strip_width"))
+        {
+          if (!read_scalar (f, rparam_check (green_strip_width)))
+            {
+              *error = "error parsing green strip width";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "mix_weights"))
-	{
-	  if (!read_rgb (f, rparam_check (mix_red), rparam_check (mix_green), rparam_check (mix_blue)))
-	    {
-	      *error = "error parsing mix_weights";
-	      return false;
-	    }
-	}
+        {
+          if (!read_rgb (f, rparam_check (mix_red), rparam_check (mix_green),
+                         rparam_check (mix_blue)))
+            {
+              *error = "error parsing mix_weights";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "mix_dark"))
-	{
-	  if (!read_rgb (f, rparam_check (mix_dark.red), rparam_check (mix_dark.green), rparam_check (mix_dark.blue)))
-	    {
-	      *error = "error parsing mix_weights";
-	      return false;
-	    }
-	}
+        {
+          if (!read_rgb (f, rparam_check (mix_dark.red),
+                         rparam_check (mix_dark.green),
+                         rparam_check (mix_dark.blue)))
+            {
+              *error = "error parsing mix_weights";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "profiled_dark"))
-	{
-	  if (!read_color (f, rparam_check (profiled_dark)))
-	    {
-	      *error = "error parsing profiled_dark";
-	      return false;
-	    }
-	}
+        {
+          if (!read_color (f, rparam_check (profiled_dark)))
+            {
+              *error = "error parsing profiled_dark";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "profiled_red"))
-	{
-	  if (!read_color (f, rparam_check (profiled_red)))
-	    {
-	      *error = "error parsing profiled_red";
-	      return false;
-	    }
-	}
+        {
+          if (!read_color (f, rparam_check (profiled_red)))
+            {
+              *error = "error parsing profiled_red";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "profiled_green"))
-	{
-	  if (!read_color (f, rparam_check (profiled_green)))
-	    {
-	      *error = "error parsing profiled_green";
-	      return false;
-	    }
-	}
+        {
+          if (!read_color (f, rparam_check (profiled_green)))
+            {
+              *error = "error parsing profiled_green";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "profiled_blue"))
-	{
-	  if (!read_color (f, rparam_check (profiled_blue)))
-	    {
-	      *error = "error parsing profiled_blue";
-	      return false;
-	    }
-	}
+        {
+          if (!read_color (f, rparam_check (profiled_blue)))
+            {
+              *error = "error parsing profiled_blue";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scanner_red"))
-	{
-	  if (!read_xyz (f, rparam_check (scanner_red)))
-	    {
-	      *error = "error parsing scanner_red";
-	      return false;
-	    }
-	}
+        {
+          if (!read_xyz (f, rparam_check (scanner_red)))
+            {
+              *error = "error parsing scanner_red";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scanner_green"))
-	{
-	  if (!read_xyz (f, rparam_check (scanner_green)))
-	    {
-	      *error = "error parsing scanner_green";
-	      return false;
-	    }
-	}
+        {
+          if (!read_xyz (f, rparam_check (scanner_green)))
+            {
+              *error = "error parsing scanner_green";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scanner_blue"))
-	{
-	  if (!read_xyz (f, rparam_check (scanner_blue)))
-	    {
-	      *error = "error parsing scanned_blue";
-	      return false;
-	    }
-	}
+        {
+          if (!read_xyz (f, rparam_check (scanner_blue)))
+            {
+              *error = "error parsing scanned_blue";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scanner_snr"))
-	{
-	  if (!read_luminosity (f, rparam_check (sharpen.scanner_snr)))
-	    {
-	      *error = "error parsing scanned_snr";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, rparam_check (sharpen.scanner_snr)))
+            {
+              *error = "error parsing scanned_snr";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scanner_mtf_scale"))
-	{
-	  if (!read_luminosity (f, rparam_check (sharpen.scanner_mtf_scale)))
-	    {
-	      *error = "error parsing scanner_mtf_scale";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, rparam_check (sharpen.scanner_mtf_scale)))
+            {
+              *error = "error parsing scanner_mtf_scale";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scanner_mtf_measurement"))
-	{
-	  int m;
-	  if (!read_int (f, &m))
-	    {
-	      *error = "error parsing scanner_mtf_measurement";
-	      return false;
-	    }
-	  if (rparam)
-	    {
-	      if (m != measurement + 1)
-		{
-		  *error = "wrong measurement index";
-		  return false;
-		}
-	      if (m == 0)
-	        rparam->sharpen.scanner_mtf.clear_data ();
-	      mtf_measurement empty;
-	      rparam->sharpen.scanner_mtf.measurements.push_back (empty);
-	      measurement++;
-	    }
-	    
-	}
+        {
+          int m;
+          if (!read_int (f, &m))
+            {
+              *error = "error parsing scanner_mtf_measurement";
+              return false;
+            }
+          if (rparam)
+            {
+              if (m != measurement + 1)
+                {
+                  *error = "wrong measurement index";
+                  return false;
+                }
+              if (m == 0)
+                rparam->sharpen.scanner_mtf.clear_data ();
+              mtf_measurement empty;
+              rparam->sharpen.scanner_mtf.measurements.push_back (empty);
+              measurement++;
+            }
+        }
       else if (!strcmp (buf, "scan_rotation"))
-	{
-	  if (!read_int (f, rparam_check (scan_rotation)))
-	    {
-	      *error = "error parsing richardson_lucy_iterations";
-	      return false;
-	    }
-	  if (rparam)
-	    rparam->scan_rotation /= 90;
-	}
+        {
+          if (!read_int (f, rparam_check (scan_rotation)))
+            {
+              *error = "error parsing richardson_lucy_iterations";
+              return false;
+            }
+          if (rparam)
+            rparam->scan_rotation /= 90;
+        }
       else if (!strcmp (buf, "richardson_lucy_iterations"))
-	{
-	  if (!read_int (f, rparam_check (sharpen.richardson_lucy_iterations)))
-	    {
-	      *error = "error parsing richardson_lucy_iterations";
-	      return false;
-	    }
-	}
+        {
+          if (!read_int (f, rparam_check (sharpen.richardson_lucy_iterations)))
+            {
+              *error = "error parsing richardson_lucy_iterations";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "richardson_lucy_sigma"))
-	{
-	  if (!read_luminosity (f, rparam_check (sharpen.richardson_lucy_sigma)))
-	    {
-	      *error = "error parsing richardson_lucy_sigma";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f,
+                                rparam_check (sharpen.richardson_lucy_sigma)))
+            {
+              *error = "error parsing richardson_lucy_sigma";
+              return false;
+            }
+        }
       /* Handle typo which was present in old save implementation.  */
-      else if (!strcmp (buf, "scren_blur_radius") || !strcmp (buf, "screen_blur_radius"))
-	{
-	  if (!read_scalar (f, rparam_check (screen_blur_radius)))
-	    {
-	      *error = "error parsing screen_blur_radius";
-	      return false;
-	    }
-	}
+      else if (!strcmp (buf, "scren_blur_radius")
+               || !strcmp (buf, "screen_blur_radius"))
+        {
+          if (!read_scalar (f, rparam_check (screen_blur_radius)))
+            {
+              *error = "error parsing screen_blur_radius";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "collection_threshold"))
-	{
-	  if (!read_luminosity (f, rparam_check (collection_threshold)))
-	    {
-	      *error = "error parsing collection_threshold";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, rparam_check (collection_threshold)))
+            {
+              *error = "error parsing collection_threshold";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "tile_adjustments_dimensions"))
-	{
-	  int w, h;
-	  if (fscanf (f, "%i %i", &w, &h) != 2
-	      || w <= 0
-	      || h <= 0)
-	    {
-	      *error = "error parsing tile_adjustments_dimensions";
-	      return false;
-	    }
-	  if (rparam)
-	    rparam->set_tile_adjustments_dimensions (w, h);
-	}
+        {
+          int w, h;
+          if (fscanf (f, "%i %i", &w, &h) != 2 || w <= 0 || h <= 0)
+            {
+              *error = "error parsing tile_adjustments_dimensions";
+              return false;
+            }
+          if (rparam)
+            rparam->set_tile_adjustments_dimensions (w, h);
+        }
       else if (!strcmp (buf, "tile_adjustment_exposure"))
-	{
-	  int x, y;
-	  luminosity_t val;
-	  if (fscanf (f, "%i %i", &x, &y) != 2
-	      || x < 0
-	      || y < 0
-	      || !read_luminosity (f, &val))
-	    {
-	      *error = "error parsing tile_adjustment_exposure";
-	      return false;
-	    }
-	  if (rparam)
-	    {
-	      if (x >= rparam->tile_adjustments_width
-		  || y >= rparam->tile_adjustments_height)
-		{
-		  *error = "tile_adjustment_exposure out of range";
-		  return false;
-		}
-	      rparam->get_tile_adjustment (x, y).exposure = val;
-	    }
-	}
+        {
+          int x, y;
+          luminosity_t val;
+          if (fscanf (f, "%i %i", &x, &y) != 2 || x < 0 || y < 0
+              || !read_luminosity (f, &val))
+            {
+              *error = "error parsing tile_adjustment_exposure";
+              return false;
+            }
+          if (rparam)
+            {
+              if (x >= rparam->tile_adjustments_width
+                  || y >= rparam->tile_adjustments_height)
+                {
+                  *error = "tile_adjustment_exposure out of range";
+                  return false;
+                }
+              rparam->get_tile_adjustment (x, y).exposure = val;
+            }
+        }
       else if (!strcmp (buf, "tile_adjustment_dark_point"))
-	{
-	  int x, y;
-	  luminosity_t val;
-	  if (fscanf (f, "%i %i", &x, &y) != 2
-	      || x < 0
-	      || y < 0
-	      || !read_luminosity (f, &val))
-	    {
-	      *error = "error parsing tile_adjustment_dark_point";
-	      return false;
-	    }
-	  if (rparam)
-	    {
-	      if (x >= rparam->tile_adjustments_width
-		  || y >= rparam->tile_adjustments_height)
-		{
-		  *error = "tile_adjustment_exposure out of range";
-		  return false;
-		}
-	      rparam->get_tile_adjustment (x, y).dark_point = val;
-	    }
-	}
+        {
+          int x, y;
+          luminosity_t val;
+          if (fscanf (f, "%i %i", &x, &y) != 2 || x < 0 || y < 0
+              || !read_luminosity (f, &val))
+            {
+              *error = "error parsing tile_adjustment_dark_point";
+              return false;
+            }
+          if (rparam)
+            {
+              if (x >= rparam->tile_adjustments_width
+                  || y >= rparam->tile_adjustments_height)
+                {
+                  *error = "tile_adjustment_exposure out of range";
+                  return false;
+                }
+              rparam->get_tile_adjustment (x, y).dark_point = val;
+            }
+        }
       else if (!strcmp (buf, "sharpen"))
-	{
-	  get_keyword (f, buf2);
-	  int j;
-	  for (j = 0; j < sharpen_parameters::sharpen_mode_max; j++)
-	    if (!strcmp (buf2, sharpen_parameters::sharpen_mode_names[j].name))
-	      break;
-	  if (j == sharpen_parameters::sharpen_mode_max)
-	    {
-	      *error = "unknown sharpening algorithm";
-	      return false;
-	    }
-	  if (rparam)
-	    rparam->sharpen.mode = (enum sharpen_parameters::sharpen_mode) j;
-	}
+        {
+          get_keyword (f, buf2);
+          int j;
+          for (j = 0; j < sharpen_parameters::sharpen_mode_max; j++)
+            if (!strcmp (buf2, sharpen_parameters::sharpen_mode_names[j].name))
+              break;
+          if (j == sharpen_parameters::sharpen_mode_max)
+            {
+              *error = "unknown sharpening algorithm";
+              return false;
+            }
+          if (rparam)
+            rparam->sharpen.mode = (enum sharpen_parameters::sharpen_mode)j;
+        }
       else if (!strcmp (buf, "color_model"))
-	{
-	  get_keyword (f, buf2);
-	  int j;
-	  for (j = 0; j < render_parameters::color_model_max; j++)
-	    if (!strcmp (buf2, render_parameters::color_model_properties[j].name))
-	      break;
-	  if (j == render_parameters::color_model_max)
-	    {
-	      *error = "unknown color model";
-	      return false;
-	    }
-	  if (rparam)
-	    rparam->color_model = (enum render_parameters::color_model_t) j;
-	}
+        {
+          get_keyword (f, buf2);
+          int j;
+          for (j = 0; j < render_parameters::color_model_max; j++)
+            if (!strcmp (buf2,
+                         render_parameters::color_model_properties[j].name))
+              break;
+          if (j == render_parameters::color_model_max)
+            {
+              *error = "unknown color model";
+              return false;
+            }
+          if (rparam)
+            rparam->color_model = (enum render_parameters::color_model_t)j;
+        }
       else if (!strcmp (buf, "dye_age"))
-	{
-	  if (!read_rgb (f, rparam_check (age.red), rparam_check (age.green), rparam_check (age.blue)))
-	    {
-	      *error = "error parsing dye_age";
-	      return false;
-	    }
-	}
+        {
+          if (!read_rgb (f, rparam_check (age.red), rparam_check (age.green),
+                         rparam_check (age.blue)))
+            {
+              *error = "error parsing dye_age";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "dye_density"))
-	{
-	  if (!read_rgb (f, rparam_check (dye_density.red), rparam_check (dye_density.green), rparam_check (dye_density.blue)))
-	    {
-	      *error = "error parsing dye_density";
-	      return false;
-	    }
-	}
+        {
+          if (!read_rgb (f, rparam_check (dye_density.red),
+                         rparam_check (dye_density.green),
+                         rparam_check (dye_density.blue)))
+            {
+              *error = "error parsing dye_density";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "dye_balance"))
-	{
-	  get_keyword (f, buf2);
-	  int j;
-	  for (j = 0; j < render_parameters::dye_balance_max; j++)
-	    if (!strcmp (buf2, render_parameters::dye_balance_names[j].name))
-	      break;
-	  if (j == render_parameters::dye_balance_max)
-	    {
-	      *error = "unknown color model";
-	      return false;
-	    }
-	  if (rparam)
-	    rparam->dye_balance = (enum render_parameters::dye_balance_t) j;
-	}
+        {
+          get_keyword (f, buf2);
+          int j;
+          for (j = 0; j < render_parameters::dye_balance_max; j++)
+            if (!strcmp (buf2, render_parameters::dye_balance_names[j].name))
+              break;
+          if (j == render_parameters::dye_balance_max)
+            {
+              *error = "unknown color model";
+              return false;
+            }
+          if (rparam)
+            rparam->dye_balance = (enum render_parameters::dye_balance_t)j;
+        }
       else if (!strcmp (buf, "temperature"))
-	{
-	  if (!read_luminosity (f, rparam_check (temperature)))
-	    {
-	      *error = "error parsing temperature";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, rparam_check (temperature)))
+            {
+              *error = "error parsing temperature";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "backlight_temperature"))
-	{
-	  if (!read_luminosity (f, rparam_check (backlight_temperature)))
-	    {
-	      *error = "error parsing backlight temperature";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, rparam_check (backlight_temperature)))
+            {
+              *error = "error parsing backlight temperature";
+              return false;
+            }
+        }
       /* This is for compatibility with old files; remove it eventually.  */
       else if (!strcmp (buf, "gray_range"))
-	{
-	  if (fscanf (f, "%i %i\n", &gray_min, &gray_max) != 2)
-	    {
-	      *error = "error parsing gray_range";
-	      return false;
-	    }
-	}
+        {
+          if (fscanf (f, "%i %i\n", &gray_min, &gray_max) != 2)
+            {
+              *error = "error parsing gray_range";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scan_exposure"))
-	{
-	  if (!read_luminosity (f, rparam_check (scan_exposure)))
-	    {
-	      *error = "error parsing scan_exposure";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, rparam_check (scan_exposure)))
+            {
+              *error = "error parsing scan_exposure";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "dark_point"))
-	{
-	  if (!read_luminosity (f, rparam_check (dark_point)))
-	    {
-	      *error = "error parsing dark_point";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, rparam_check (dark_point)))
+            {
+              *error = "error parsing dark_point";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scan_mirror"))
-	{
-	  if (!parse_bool (f, rparam_check (scan_mirror)))
-	    {
-	      *error = "error parsing scan_mirror";
-	      return false;
-	    }
-	}
+        {
+          if (!parse_bool (f, rparam_check (scan_mirror)))
+            {
+              *error = "error parsing scan_mirror";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scan_crop"))
-	{
-	  if (!parse_bool (f, rparam_check (scan_crop.set)))
-	    {
-	      *error = "error parsing scan_crop";
-	      return false;
-	    }
-	  if (!read_int (f, rparam_check (scan_crop.x)))
-	    {
-	      *error = "error parsing scan_crop";
-	      return false;
-	    }
-	  if (!read_int (f, rparam_check (scan_crop.y)))
-	    {
-	      *error = "error parsing scan_crop";
-	      return false;
-	    }
-	  if (!read_int (f, rparam_check (scan_crop.width)))
-	    {
-	      *error = "error parsing scan_crop";
-	      return false;
-	    }
-	  if (!read_int (f, rparam_check (scan_crop.height)))
-	    {
-	      *error = "error parsing scan_crop";
-	      return false;
-	    }
-	}
+        {
+          if (!parse_bool (f, rparam_check (scan_crop.set)))
+            {
+              *error = "error parsing scan_crop";
+              return false;
+            }
+          if (!read_int (f, rparam_check (scan_crop.x)))
+            {
+              *error = "error parsing scan_crop";
+              return false;
+            }
+          if (!read_int (f, rparam_check (scan_crop.y)))
+            {
+              *error = "error parsing scan_crop";
+              return false;
+            }
+          if (!read_int (f, rparam_check (scan_crop.width)))
+            {
+              *error = "error parsing scan_crop";
+              return false;
+            }
+          if (!read_int (f, rparam_check (scan_crop.height)))
+            {
+              *error = "error parsing scan_crop";
+              return false;
+            }
+        }
       // Only kept for compatibility with old files
       else if (!strcmp (buf, "invert"))
-	{
-	  if (!parse_bool (f, NULL))
-	    {
-	      *error = "error parsing invert";
-	      return false;
-	    }
-	}
+        {
+          if (!parse_bool (f, NULL))
+            {
+              *error = "error parsing invert";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "contact-copy"))
-	{
-	  if (!parse_bool (f, rparam_check (contact_copy.simulate)))
-	    {
-	      *error = "error parsing contact-copy";
-	      return false;
-	    }
-	}
+        {
+          if (!parse_bool (f, rparam_check (contact_copy.simulate)))
+            {
+              *error = "error parsing contact-copy";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "contact-copy-dhcurve-min"))
-	{
-	  if (!read_luminosity (f, rparam_check (contact_copy.emulsion_characteristic_curve.minx)))
-	    {
-	      *error = "error parsing contact-copy-dhcurve-min coordinate x";
-	      return false;
-	    }
-	  if (!read_luminosity (f, rparam_check (contact_copy.emulsion_characteristic_curve.miny)))
-	    {
-	      *error = "error parsing contact-copy-dhcurve-min coordinate y";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (
+                  f, rparam_check (
+                         contact_copy.emulsion_characteristic_curve.minx)))
+            {
+              *error = "error parsing contact-copy-dhcurve-min coordinate x";
+              return false;
+            }
+          if (!read_luminosity (
+                  f, rparam_check (
+                         contact_copy.emulsion_characteristic_curve.miny)))
+            {
+              *error = "error parsing contact-copy-dhcurve-min coordinate y";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "contact-copy-dhcurve-linear1"))
-	{
-	  if (!read_luminosity (f, rparam_check (contact_copy.emulsion_characteristic_curve.linear1x)))
-	    {
-	      *error = "error parsing contact-copy-dhcurve-linear1 coordinate x";
-	      return false;
-	    }
-	  if (!read_luminosity (f, rparam_check (contact_copy.emulsion_characteristic_curve.linear1y)))
-	    {
-	      *error = "error parsing contact-copy-dhcurve-linear1 coordinate y";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (
+                  f, rparam_check (
+                         contact_copy.emulsion_characteristic_curve.linear1x)))
+            {
+              *error
+                  = "error parsing contact-copy-dhcurve-linear1 coordinate x";
+              return false;
+            }
+          if (!read_luminosity (
+                  f, rparam_check (
+                         contact_copy.emulsion_characteristic_curve.linear1y)))
+            {
+              *error
+                  = "error parsing contact-copy-dhcurve-linear1 coordinate y";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "contact-copy-dhcurve-linear2"))
-	{
-	  if (!read_luminosity (f, rparam_check (contact_copy.emulsion_characteristic_curve.linear2x)))
-	    {
-	      *error = "error parsing contact-copy-dhcurve-linear2 coordinate x";
-	      return false;
-	    }
-	  if (!read_luminosity (f, rparam_check (contact_copy.emulsion_characteristic_curve.linear2y)))
-	    {
-	      *error = "error parsing contact-copy-dhcurve-linear2 coordinate y";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (
+                  f, rparam_check (
+                         contact_copy.emulsion_characteristic_curve.linear2x)))
+            {
+              *error
+                  = "error parsing contact-copy-dhcurve-linear2 coordinate x";
+              return false;
+            }
+          if (!read_luminosity (
+                  f, rparam_check (
+                         contact_copy.emulsion_characteristic_curve.linear2y)))
+            {
+              *error
+                  = "error parsing contact-copy-dhcurve-linear2 coordinate y";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "contact-copy-dhcurve-max"))
-	{
-	  if (!read_luminosity (f, rparam_check (contact_copy.emulsion_characteristic_curve.maxx)))
-	    {
-	      *error = "error parsing contact-copy-dhcurve-max coordinate x";
-	      return false;
-	    }
-	  if (!read_luminosity (f, rparam_check (contact_copy.emulsion_characteristic_curve.maxy)))
-	    {
-	      *error = "error parsing contact-copy-dhcurve-max coordinate y";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (
+                  f, rparam_check (
+                         contact_copy.emulsion_characteristic_curve.maxx)))
+            {
+              *error = "error parsing contact-copy-dhcurve-max coordinate x";
+              return false;
+            }
+          if (!read_luminosity (
+                  f, rparam_check (
+                         contact_copy.emulsion_characteristic_curve.maxy)))
+            {
+              *error = "error parsing contact-copy-dhcurve-max coordinate y";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "contact-copy-preflash"))
-	{
-	  if (!read_luminosity (f, rparam_check (contact_copy.preflash)))
-	    {
-	      *error = "error parsing contact-copy-preflash";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, rparam_check (contact_copy.preflash)))
+            {
+              *error = "error parsing contact-copy-preflash";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "contact-copy-exposure"))
-	{
-	  if (!read_luminosity (f, rparam_check (contact_copy.exposure)))
-	    {
-	      *error = "error parsing contact-copy-exposure";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, rparam_check (contact_copy.exposure)))
+            {
+              *error = "error parsing contact-copy-exposure";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "contact-copy-boost"))
-	{
-	  if (!read_luminosity (f, rparam_check (contact_copy.boost)))
-	    {
-	      *error = "error parsing contact-copy-boost";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, rparam_check (contact_copy.boost)))
+            {
+              *error = "error parsing contact-copy-boost";
+              return false;
+            }
+        }
       /* Compatibility with old files.  */
       else if (!strcmp (buf, "precise"))
-	{
-	  bool b;
-	  if (!parse_bool (f, &b))
-	    {
-	      *error = "error parsing precise";
-	      return false;
-	    }
-	  if (rparam)
-	    {
-	      rparam->collection_quality = b ? render_parameters::simple_screen_collection : render_parameters::fast_collection;
-	    }
-	}
+        {
+          bool b;
+          if (!parse_bool (f, &b))
+            {
+              *error = "error parsing precise";
+              return false;
+            }
+          if (rparam)
+            {
+              rparam->collection_quality
+                  = b ? render_parameters::simple_screen_collection
+                      : render_parameters::fast_collection;
+            }
+        }
       else if (!strcmp (buf, "collection_quality"))
-	{
-	  get_keyword (f, buf2);
-	  int j;
-	  for (j = 0; j < render_parameters::max_collection_quality; j++)
-	    if (!strcmp (buf2, render_parameters::collection_quality_names[j].name))
-	      break;
-	  if (j == render_parameters::max_collection_quality)
-	    {
-	      *error = "unknown collection quality";
-	      return false;
-	    }
-	  if (rparam)
-	    rparam->collection_quality = (enum render_parameters::collection_quality_t) j;
-	}
+        {
+          get_keyword (f, buf2);
+          int j;
+          for (j = 0; j < render_parameters::max_collection_quality; j++)
+            if (!strcmp (buf2,
+                         render_parameters::collection_quality_names[j].name))
+              break;
+          if (j == render_parameters::max_collection_quality)
+            {
+              *error = "unknown collection quality";
+              return false;
+            }
+          if (rparam)
+            rparam->collection_quality
+                = (enum render_parameters::collection_quality_t)j;
+        }
       else if (!strcmp (buf, "screen_demosaic"))
-	{
-	  get_keyword (f, buf2);
-	  int j;
-	  for (j = 0; j < render_parameters::max_screen_demosaic; j++)
-	    if (!strcmp (buf2, render_parameters::screen_demosaic_names[j].name))
-	      break;
-	  if (j == render_parameters::max_screen_demosaic)
-	    {
-	      *error = "unknown collection quality";
-	      return false;
-	    }
-	  if (rparam)
-	    rparam->screen_demosaic = (enum render_parameters::screen_demosaic_t) j;
-	}
+        {
+          get_keyword (f, buf2);
+          int j;
+          for (j = 0; j < render_parameters::max_screen_demosaic; j++)
+            if (!strcmp (buf2,
+                         render_parameters::screen_demosaic_names[j].name))
+              break;
+          if (j == render_parameters::max_screen_demosaic)
+            {
+              *error = "unknown collection quality";
+              return false;
+            }
+          if (rparam)
+            rparam->screen_demosaic
+                = (enum render_parameters::screen_demosaic_t)j;
+        }
       else if (!strcmp (buf, "scr_detect_red"))
-	{
-	  if (!read_color (f, dparam_check (red)))
-	    {
-	      *error = "error parsing scr_detect_red";
-	      return false;
-	    }
-	}
+        {
+          if (!read_color (f, dparam_check (red)))
+            {
+              *error = "error parsing scr_detect_red";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scr_detect_green"))
-	{
-	  if (!read_color (f, dparam_check (green)))
-	    {
-	      *error = "error parsing scr_detect_green";
-	      return false;
-	    }
-	}
+        {
+          if (!read_color (f, dparam_check (green)))
+            {
+              *error = "error parsing scr_detect_green";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scr_detect_blue"))
-	{
-	  if (!read_color (f, dparam_check (blue)))
-	    {
-	      *error = "error parsing scr_detect_blue";
-	      return false;
-	    }
-	}
+        {
+          if (!read_color (f, dparam_check (blue)))
+            {
+              *error = "error parsing scr_detect_blue";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scr_detect_black"))
-	{
-	  if (!read_color (f, dparam_check (black)))
-	    {
-	      *error = "error parsing scr_detect_black";
-	      return false;
-	    }
-	}
+        {
+          if (!read_color (f, dparam_check (black)))
+            {
+              *error = "error parsing scr_detect_black";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scr_detect_min_luminosity"))
-	{
-	  if (!read_luminosity (f, dparam_check (min_luminosity)))
-	    {
-	      *error = "error parsing scr_detect_min_luminosity";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, dparam_check (min_luminosity)))
+            {
+              *error = "error parsing scr_detect_min_luminosity";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scr_detect_min_ratio"))
-	{
-	  if (!read_luminosity (f, dparam_check (min_ratio)))
-	    {
-	      *error = "error parsing scr_detect_min_ratio";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, dparam_check (min_ratio)))
+            {
+              *error = "error parsing scr_detect_min_ratio";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scr_detect_sharpen_radius"))
-	{
-	  if (!read_scalar (f, dparam_check (sharpen_radius)))
-	    {
-	      *error = "error parsing scr_detect_sharpen_radius";
-	      return false;
-	    }
-	}
+        {
+          if (!read_scalar (f, dparam_check (sharpen_radius)))
+            {
+              *error = "error parsing scr_detect_sharpen_radius";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scr_detect_sharpen_amount"))
-	{
-	  if (!read_luminosity (f, dparam_check (sharpen_amount)))
-	    {
-	      *error = "error parsing scr_detect_sharpen_amount";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, dparam_check (sharpen_amount)))
+            {
+              *error = "error parsing scr_detect_sharpen_amount";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "solver_optimize_lens"))
-	{
-	  if (!parse_bool (f, sparam_check (optimize_lens)))
-	    {
-	      *error = "error parsing solver_optimize_lens";
-	      return false;
-	    }
-	}
+        {
+          if (!parse_bool (f, sparam_check (optimize_lens)))
+            {
+              *error = "error parsing solver_optimize_lens";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "solver_optimize_tilt"))
-	{
-	  if (!parse_bool (f, sparam_check (optimize_tilt)))
-	    {
-	      *error = "error parsing solver_optimize_tilt";
-	      return false;
-	    }
-	}
+        {
+          if (!parse_bool (f, sparam_check (optimize_tilt)))
+            {
+              *error = "error parsing solver_optimize_tilt";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "solver_point"))
-	{
-	  double screen_x, screen_y, img_x, img_y;
-	  if (fscanf (f, "%lf %lf %lf %lf", &img_x, &img_y, &screen_x, &screen_y) == 4)
-	    {
-	      get_keyword (f, buf2);
-	      int j;
-	      for (j = 0; j < solver_parameters::max_point_color; j++)
-		if (!strcmp (buf2, solver_parameters::point_color_names[j]))
-		  break;
-	      if (j == solver_parameters::max_point_color)
-		{
-		  *error = "error parsing color in solver_point";
-		  return false;
-		}
-	      if (sparam)
-		sparam->add_point ({img_x, img_y}, {screen_x, screen_y}, (solver_parameters::point_color)j);
-	    }
-	  else
-	    {
-	      *error = "error parsing solver_point";
-	      return false;
-	    }
-	}
+        {
+          double screen_x, screen_y, img_x, img_y;
+          if (fscanf (f, "%lf %lf %lf %lf", &img_x, &img_y, &screen_x,
+                      &screen_y)
+              == 4)
+            {
+              get_keyword (f, buf2);
+              int j;
+              for (j = 0; j < solver_parameters::max_point_color; j++)
+                if (!strcmp (buf2, solver_parameters::point_color_names[j]))
+                  break;
+              if (j == solver_parameters::max_point_color)
+                {
+                  *error = "error parsing color in solver_point";
+                  return false;
+                }
+              if (sparam)
+                sparam->add_point ({ img_x, img_y }, { screen_x, screen_y },
+                                   (solver_parameters::point_color)j);
+            }
+          else
+            {
+              *error = "error parsing solver_point";
+              return false;
+            }
+        }
       /* Silently ignore; we used to save these but we no longer need them.  */
       else if (!strcmp (buf, "screen_compensation"))
-	{
-	  if (!parse_bool (f, NULL))
-	    {
-	      *error = "error parsing screen_compensation";
-	      return false;
-	    }
-	}
+        {
+          if (!parse_bool (f, NULL))
+            {
+              *error = "error parsing screen_compensation";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "adjust_luminosity"))
-	{
-	  if (!parse_bool (f, NULL))
-	    {
-	      *error = "error parsing adjust_luminosity";
-	      return false;
-	    }
-	}
+        {
+          if (!parse_bool (f, NULL))
+            {
+              *error = "error parsing adjust_luminosity";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "mix_gamma"))
-	{
-	  if (!read_luminosity (f, NULL))
-	    {
-	      *error = "error parsing mix_gamma";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, NULL))
+            {
+              *error = "error parsing mix_gamma";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "backlight_correction_black"))
-	{
-	  if (!read_luminosity (f, rparam_check (backlight_correction_black)))
-	    {
-	      *error = "error parsing mix_gamma";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, rparam_check (backlight_correction_black)))
+            {
+              *error = "error parsing mix_gamma";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "backlight_correction"))
-	{
-	  bool correction;
-	  if (!parse_bool (f, &correction))
-	    {
-	      *error = "error parsing backlight_correction";
-	      return false;
-	    }
-	  if (correction)
-	    {
-	      std::unique_ptr <backlight_correction_parameters> c = std::make_unique <backlight_correction_parameters> ();
-	      if (!c->load (f, error))
-		return false;
-	      if (rparam)
-		rparam->backlight_correction = std::move (c);
-	    }
-	}
+        {
+          bool correction;
+          if (!parse_bool (f, &correction))
+            {
+              *error = "error parsing backlight_correction";
+              return false;
+            }
+          if (correction)
+            {
+              std::unique_ptr<backlight_correction_parameters> c
+                  = std::make_unique<backlight_correction_parameters> ();
+              if (!c->load (f, error))
+                return false;
+              if (rparam)
+                rparam->backlight_correction = std::move (c);
+            }
+        }
       else if (!strcmp (buf, "scanner_blur_correction"))
-	{
-	  bool correction;
-	  if (!parse_bool (f, &correction))
-	    {
-	      *error = "error parsing scanner_blur_correction";
-	      return false;
-	    }
-	  if (correction)
-	    {
-	      std::unique_ptr <scanner_blur_correction_parameters> c = std::make_unique <scanner_blur_correction_parameters> ();
-	      if (!c->load (f, error))
-		return false;
-	      if (rparam)
-		rparam->scanner_blur_correction = std::move (c);
-	    }
-	}
+        {
+          bool correction;
+          if (!parse_bool (f, &correction))
+            {
+              *error = "error parsing scanner_blur_correction";
+              return false;
+            }
+          if (correction)
+            {
+              std::unique_ptr<scanner_blur_correction_parameters> c
+                  = std::make_unique<scanner_blur_correction_parameters> ();
+              if (!c->load (f, error))
+                return false;
+              if (rparam)
+                rparam->scanner_blur_correction = std::move (c);
+            }
+        }
       else if (!strcmp (buf, "tile_adjustment_scanner_blur_correction"))
         {
-	  int x, y;
-	  if (fscanf (f, "%i %i", &x, &y) != 2
-	      || x < 0
-	      || y < 0)
-	    {
-	      *error = "error parsing tile_adjustment_correction";
-	      return false;
-	    }
-	  if (rparam)
-	    {
-	      if (x >= rparam->tile_adjustments_width
-		  || y >= rparam->tile_adjustments_height)
-		{
-		  *error = "tile_adjustment_scanner_blur_correction out of range";
-		  return false;
-		}
-	    }
-	  bool enb;
-	  if (!parse_bool (f, &enb))
-	    {
-	      *error = "error parsing tile_adjustment_scanner_blur_correction";
-	      return false;
-	    }
-	  if (enb)
-	    {
-	      std::unique_ptr <scanner_blur_correction_parameters> c = std::make_unique <scanner_blur_correction_parameters> ();
-	      if (!c->load (f, error))
-		return false;
-	      if (rparam)
-		rparam->get_tile_adjustment (x, y).scanner_blur_correction = std::move (c);
-	    }
+          int x, y;
+          if (fscanf (f, "%i %i", &x, &y) != 2 || x < 0 || y < 0)
+            {
+              *error = "error parsing tile_adjustment_correction";
+              return false;
+            }
+          if (rparam)
+            {
+              if (x >= rparam->tile_adjustments_width
+                  || y >= rparam->tile_adjustments_height)
+                {
+                  *error
+                      = "tile_adjustment_scanner_blur_correction out of range";
+                  return false;
+                }
+            }
+          bool enb;
+          if (!parse_bool (f, &enb))
+            {
+              *error = "error parsing tile_adjustment_scanner_blur_correction";
+              return false;
+            }
+          if (enb)
+            {
+              std::unique_ptr<scanner_blur_correction_parameters> c
+                  = std::make_unique<scanner_blur_correction_parameters> ();
+              if (!c->load (f, error))
+                return false;
+              if (rparam)
+                rparam->get_tile_adjustment (x, y).scanner_blur_correction
+                    = std::move (c);
+            }
         }
       else if (!strcmp (buf, "scr_detect_gamma"))
-	{
-	  if (!read_luminosity (f, NULL))
-	    {
-	      *error = "error parsing scr_detect_gamma";
-	      return false;
-	    }
-	}
+        {
+          if (!read_luminosity (f, NULL))
+            {
+              *error = "error parsing scr_detect_gamma";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "tilt_x"))
-	{
-	  if (!read_vector (f, NULL, NULL))
-	    {
-	      *error = "error parsing tilt_x";
-	      return false;
-	    }
-	}
+        {
+          if (!read_vector (f, NULL, NULL))
+            {
+              *error = "error parsing tilt_x";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "tilt_y"))
-	{
-	  if (!read_vector (f, NULL, NULL))
-	    {
-	      *error = "error parsing tilt_y";
-	      return false;
-	    }
-	}
+        {
+          if (!read_vector (f, NULL, NULL))
+            {
+              *error = "error parsing tilt_y";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "mesh"))
-	{
-	  bool b;
-	  if (!parse_bool (f, &b))
-	    {
-	      *error = "error parsing mesh";
-	      return false;
-	    }
-	  if (b)
-	    {
-	      std::unique_ptr <mesh> m = mesh::load (f, error);
-	      if (!m)
-		return false;
-	      if (param)
-		{
-		  m->precompute_inverse ();
-		  param->mesh_trans = std::move (m);
-		}
-	    }
-	}
+        {
+          bool b;
+          if (!parse_bool (f, &b))
+            {
+              *error = "error parsing mesh";
+              return false;
+            }
+          if (b)
+            {
+              std::unique_ptr<mesh> m = mesh::load (f, error);
+              if (!m)
+                return false;
+              if (param)
+                {
+                  m->precompute_inverse ();
+                  param->mesh_trans = std::move (m);
+                }
+            }
+        }
       /* Compatibility only.  */
       else if (!strcmp (buf, "scanner_mtf_use_measured"))
         {
-	  bool use;
-	  if (!parse_bool (f, &use))
-	    {
-	      *error = "error parsing scanner_mtf_use_measured";
-	      return false;
-	    }
-	  if (rparam)
-	    rparam->sharpen.scanner_mtf.measured_mtf_idx = use ? 0 : -1;
+          bool use;
+          if (!parse_bool (f, &use))
+            {
+              *error = "error parsing scanner_mtf_use_measured";
+              return false;
+            }
+          if (rparam)
+            rparam->sharpen.scanner_mtf.measured_mtf_idx = use ? 0 : -1;
         }
       else if (!strcmp (buf, "scanner_mtf_point"))
-	{
-	  double freq;
-	  luminosity_t contrast;
-	  if (measurement == -1)
-	    {
-	      rparam->sharpen.scanner_mtf.clear_data ();
-	      mtf_measurement empty;
-	      rparam->sharpen.scanner_mtf.measurements.push_back (empty);
-	      measurement = 0;
-	    }
-	  if (!read_double (f, &freq)
-	      || !read_luminosity (f, &contrast))
-	    {
-	      *error = "error parsing scanner_mtf_point";
-	      return false;
-	    }
-	  if (rparam)
-	    rparam->sharpen.scanner_mtf.measurements[measurement].add_value (freq, contrast);
-	}
+        {
+          double freq;
+          luminosity_t contrast;
+          if (measurement == -1)
+            {
+              rparam->sharpen.scanner_mtf.clear_data ();
+              mtf_measurement empty;
+              rparam->sharpen.scanner_mtf.measurements.push_back (empty);
+              measurement = 0;
+            }
+          if (!read_double (f, &freq) || !read_luminosity (f, &contrast))
+            {
+              *error = "error parsing scanner_mtf_point";
+              return false;
+            }
+          if (rparam)
+            rparam->sharpen.scanner_mtf.measurements[measurement].add_value (
+                freq, contrast);
+        }
       else if (!strcmp (buf, "scanner_use_mtf_measurement"))
         {
-	  if (!read_int (f, rparam_check (sharpen.scanner_mtf.measured_mtf_idx)))
-	    {
-	      *error = "error parsing scanner_use_mtf_measurement";
-	      return false;
-	    }
+          if (!read_int (f,
+                         rparam_check (sharpen.scanner_mtf.measured_mtf_idx)))
+            {
+              *error = "error parsing scanner_use_mtf_measurement";
+              return false;
+            }
         }
       else if (!strcmp (buf, "scanner_mtf_measurement_channel"))
-	{
-	  get_keyword (f, buf2);
-	  int j;
-	  for (j = 0; j < 5; j++)
-	    if (!strcmp (buf2, channel_names[j]))
-	      break;
-	  if (j == 5)
-	    {
-	      *error = "unknown channel name";
-	      return false;
-	    }
-	  if (measurement < 0)
-	    {
-	      *error = "scanner_mtf_measurement_channel specified without scanner_mtf_measurement";
-	      return false;
-	    }
-	  if (rparam)
-	    rparam->sharpen.scanner_mtf.measurements[measurement].channel = j - 1;
-	}
+        {
+          get_keyword (f, buf2);
+          int j;
+          for (j = 0; j < 5; j++)
+            if (!strcmp (buf2, channel_names[j]))
+              break;
+          if (j == 5)
+            {
+              *error = "unknown channel name";
+              return false;
+            }
+          if (measurement < 0)
+            {
+              *error = "scanner_mtf_measurement_channel specified without "
+                       "scanner_mtf_measurement";
+              return false;
+            }
+          if (rparam)
+            rparam->sharpen.scanner_mtf.measurements[measurement].channel
+                = j - 1;
+        }
       else if (!strcmp (buf, "scanner_mtf_measurement_wavelength")
-	       || !strcmp (buf, "scanner_mtf_measurement_wavelength_nm"))
-	{
-	  if (measurement < 0)
-	    {
-	      *error = "scanner_mtf_measurement_wavelength specified without scanner_mtf_measurement";
-	      return false;
-	    }
-	  if (!read_double (f, &rparam->sharpen.scanner_mtf.measurements[measurement].wavelength))
-	    {
-	      *error = "Error parsing scanner_mtf_measurement_wavelength";
-	      return false;
-	    }
-	}
+               || !strcmp (buf, "scanner_mtf_measurement_wavelength_nm"))
+        {
+          if (measurement < 0)
+            {
+              *error = "scanner_mtf_measurement_wavelength specified without "
+                       "scanner_mtf_measurement";
+              return false;
+            }
+          if (!read_double (
+                  f, &rparam->sharpen.scanner_mtf.measurements[measurement]
+                          .wavelength))
+            {
+              *error = "Error parsing scanner_mtf_measurement_wavelength";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scanner_mtf_measurement_name"))
-	{
-	  if (measurement < 0)
-	    {
-	      *error = "scanner_mtf_measurement_name specified without scanner_mtf_measurement";
-	      return false;
-	    }
-	  std::string n = read_escaped_string (f);
-	  if (rparam)
-	    rparam->sharpen.scanner_mtf.measurements[measurement].name = n;
-	}
+        {
+          if (measurement < 0)
+            {
+              *error = "scanner_mtf_measurement_name specified without "
+                       "scanner_mtf_measurement";
+              return false;
+            }
+          std::string n = read_escaped_string (f);
+          if (rparam)
+            rparam->sharpen.scanner_mtf.measurements[measurement].name = n;
+        }
       else if (!strcmp (buf, "scanner_mtf_measurement_same_capture"))
-	{
-	  if (measurement < 0)
-	    {
-	      *error = "scanner_mtf_measurement_same_capture specified without scanner_mtf_measurement";
-	      return false;
-	    }
-	   if (!parse_bool (f, &rparam->sharpen.scanner_mtf.measurements[measurement].same_capture))
-	    {
-	      *error = "error parsing scanner_mtf_measurement_same_capture";
-	      return false;
-	    }
-	}
+        {
+          if (measurement < 0)
+            {
+              *error
+                  = "scanner_mtf_measurement_same_capture specified without "
+                    "scanner_mtf_measurement";
+              return false;
+            }
+          if (!parse_bool (
+                  f, &rparam->sharpen.scanner_mtf.measurements[measurement]
+                          .same_capture))
+            {
+              *error = "error parsing scanner_mtf_measurement_same_capture";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scanner_mtf_point"))
-	{
-	  double freq;
-	  luminosity_t contrast;
-	  if (measurement == -1)
-	    {
-	      rparam->sharpen.scanner_mtf.clear_data ();
-	      mtf_measurement empty;
-	      rparam->sharpen.scanner_mtf.measurements.push_back (empty);
-	      measurement = 0;
-	    }
-	  if (!read_double (f, &freq)
-	      || !read_luminosity (f, &contrast))
-	    {
-	      *error = "error parsing scanner_mtf_point";
-	      return false;
-	    }
-	  if (rparam)
-	    rparam->sharpen.scanner_mtf.measurements[measurement].add_value (freq, contrast);
-	}
-      else if (!strcmp (buf, "scanner_mtf_sigma") || !strcmp (buf, "scanner_mtf_sigma_px"))
-	{
-	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.sigma)))
-	    {
-	      *error = "error parsing scanner_mtf_sigma";
-	      return false;
-	    }
-	}
+        {
+          double freq;
+          luminosity_t contrast;
+          if (measurement == -1)
+            {
+              rparam->sharpen.scanner_mtf.clear_data ();
+              mtf_measurement empty;
+              rparam->sharpen.scanner_mtf.measurements.push_back (empty);
+              measurement = 0;
+            }
+          if (!read_double (f, &freq) || !read_luminosity (f, &contrast))
+            {
+              *error = "error parsing scanner_mtf_point";
+              return false;
+            }
+          if (rparam)
+            rparam->sharpen.scanner_mtf.measurements[measurement].add_value (
+                freq, contrast);
+        }
+      else if (!strcmp (buf, "scanner_mtf_sigma")
+               || !strcmp (buf, "scanner_mtf_sigma_px"))
+        {
+          if (!read_double (f, rparam_check (sharpen.scanner_mtf.sigma)))
+            {
+              *error = "error parsing scanner_mtf_sigma";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scanner_mtf_blur_diameter_px"))
-	{
-	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.blur_diameter)))
-	    {
-	      *error = "error parsing scanner_mtf_blur_diameter";
-	      return false;
-	    }
-	}
+        {
+          if (!read_double (f,
+                            rparam_check (sharpen.scanner_mtf.blur_diameter)))
+            {
+              *error = "error parsing scanner_mtf_blur_diameter";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scanner_mtf_pixel_pitch_um"))
-	{
-	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.pixel_pitch)))
-	    {
-	      *error = "error parsing scanner_mtf_pixel_pitch";
-	      return false;
-	    }
-	}
+        {
+          if (!read_double (f, rparam_check (sharpen.scanner_mtf.pixel_pitch)))
+            {
+              *error = "error parsing scanner_mtf_pixel_pitch";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scanner_mtf_sensor_fill_factor"))
-	{
-	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.sensor_fill_factor)))
-	    {
-	      *error = "error parsing scanner_mtf_sensor_fill_factor";
-	      return false;
-	    }
-	}
+        {
+          if (!read_double (
+                  f, rparam_check (sharpen.scanner_mtf.sensor_fill_factor)))
+            {
+              *error = "error parsing scanner_mtf_sensor_fill_factor";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scanner_mtf_wavelength_nm"))
-	{
-	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.wavelength)))
-	    {
-	      *error = "error parsing scanner_mtf_wavelength";
-	      return false;
-	    }
-	}
+        {
+          if (!read_double (f, rparam_check (sharpen.scanner_mtf.wavelength)))
+            {
+              *error = "error parsing scanner_mtf_wavelength";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scanner_mtf_channel_wavelengths_nm"))
-	{
-	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.wavelengths[0])))
-	    {
-	      *error = "error parsing scanner_mtf_channel_wavelengths_nm";
-	      return false;
-	    }
-	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.wavelengths[1])))
-	    {
-	      *error = "error parsing scanner_mtf_channel_wavelengths_nm";
-	      return false;
-	    }
-	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.wavelengths[2])))
-	    {
-	      *error = "error parsing scanner_mtf_channel_wavelengths_nm";
-	      return false;
-	    }
-	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.wavelengths[3])))
-	    {
-	      *error = "error parsing scanner_mtf_channel_wavelengths_nm";
-	      return false;
-	    }
-	}
+        {
+          if (!read_double (f,
+                            rparam_check (sharpen.scanner_mtf.wavelengths[0])))
+            {
+              *error = "error parsing scanner_mtf_channel_wavelengths_nm";
+              return false;
+            }
+          if (!read_double (f,
+                            rparam_check (sharpen.scanner_mtf.wavelengths[1])))
+            {
+              *error = "error parsing scanner_mtf_channel_wavelengths_nm";
+              return false;
+            }
+          if (!read_double (f,
+                            rparam_check (sharpen.scanner_mtf.wavelengths[2])))
+            {
+              *error = "error parsing scanner_mtf_channel_wavelengths_nm";
+              return false;
+            }
+          if (!read_double (f,
+                            rparam_check (sharpen.scanner_mtf.wavelengths[3])))
+            {
+              *error = "error parsing scanner_mtf_channel_wavelengths_nm";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scanner_mtf_f_stop"))
-	{
-	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.f_stop)))
-	    {
-	      *error = "error parsing scanner_mtf_f_stop";
-	      return false;
-	    }
-	}
+        {
+          if (!read_double (f, rparam_check (sharpen.scanner_mtf.f_stop)))
+            {
+              *error = "error parsing scanner_mtf_f_stop";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scanner_mtf_defocus_mm"))
-	{
-	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.defocus)))
-	    {
-	      *error = "error parsing scanner_mtf_defocus_mm";
-	      return false;
-	    }
-	}
+        {
+          if (!read_double (f, rparam_check (sharpen.scanner_mtf.defocus)))
+            {
+              *error = "error parsing scanner_mtf_defocus_mm";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "scan_dpi"))
-	{
-	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.scan_dpi)))
-	    {
-	      *error = "error parsing scanner_mtf_scan_dpi";
-	      return false;
-	    }
-	}
+        {
+          if (!read_double (f, rparam_check (sharpen.scanner_mtf.scan_dpi)))
+            {
+              *error = "error parsing scanner_mtf_scan_dpi";
+              return false;
+            }
+        }
       else
-	{
-	  *error = "unexpected keyword";
-	  fprintf (stderr, "keyword:%s\n", buf);
-	  return false;
-	}
+        {
+          *error = "unexpected keyword";
+          fprintf (stderr, "keyword:%s\n", buf);
+          return false;
+        }
       if (isspace (buf[l]) || buf[l] == '\n')
-	{
-	  *error = "trailing charactrs";
-	  return false;
-	}
+        {
+          *error = "trailing charactrs";
+          return false;
+        }
       skipwhitespace (f);
     }
-  if (rparam && gray_min >=0)
+  if (rparam && gray_min >= 0)
     rparam->set_gray_range (gray_min, gray_max, 65535);
   return true;
 }
-}
+} // namespace colorscreen

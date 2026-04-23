@@ -24,10 +24,10 @@ class scr_to_img
 {
 public:
   nodiscard_attr DLL_PUBLIC bool set_parameters (const scr_to_img_parameters &param,
-				  int widht, int height,
+				  int width, int height,
                                   coord_t rotation_adjustment = 0);
   nodiscard_attr bool set_parameters_for_early_correction (const scr_to_img_parameters &param,
-							   int widht, int height);
+							   int width, int height);
   void update_linear_parameters (scr_to_img_parameters &param);
   void update_scr_to_final_parameters (coord_t final_ratio,
                                        coord_t final_angle);
@@ -61,7 +61,7 @@ public:
   }
 
   bool
-  early_correction_precoputed () const
+  early_correction_precomputed () const
   {
     return m_early_correction_precomputed;
   }
@@ -216,7 +216,7 @@ private:
   inverse_lens_correction (point_t sp) const
   {
     point_t shift = { 0, 0 };
-    if (m_param.scanner_type == lens_move_horisontally)
+    if (m_param.scanner_type == lens_move_horizontally)
       shift.x = sp.x;
     if (m_param.scanner_type == lens_move_vertically)
       shift.y = sp.y;
@@ -226,7 +226,7 @@ private:
   nonprecomputed_apply_lens_correction (point_t sp) const
   {
     point_t shift = { 0, 0 };
-    if (m_param.scanner_type == lens_move_horisontally)
+    if (m_param.scanner_type == lens_move_horizontally)
       shift.x = sp.x;
     if (m_param.scanner_type == lens_move_vertically)
       shift.y = sp.y;
@@ -236,7 +236,7 @@ private:
   apply_lens_correction (point_t sp) const
   {
     point_t shift = { 0, 0 };
-    if (m_param.scanner_type == lens_move_horisontally)
+    if (m_param.scanner_type == lens_move_horizontally)
       shift.x = sp.x;
     if (m_param.scanner_type == lens_move_vertically)
       shift.y = sp.y;
