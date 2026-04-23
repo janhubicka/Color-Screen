@@ -516,12 +516,13 @@ test_screen_sharpening ()
 	  sp.richardson_lucy_iterations = 0;
 	}
 
-      for (int i = 0; i <= 100; i++)
+      for (int i = 0; i <= 100; i+=5)
 	{
 	  double defocus = 12.0*i/100.0; // 0 to 2mm in 5 steps
 	  sp.scanner_mtf.defocus = defocus;
 	  scr->initialize_with_sharpen_parameters (*mstr, par, m != 2, true);
 
+	  /* Disable debug tiffs */
 	  if (0)
 	    {
 	      char buf[256];

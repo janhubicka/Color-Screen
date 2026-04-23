@@ -1163,20 +1163,22 @@ compute_point_spread (T *data,
                       precomputed_function<luminosity_t> &point_spread,
                       luminosity_t scale)
 {
-  luminosity_t sum = 0;
+  /* Use double to avoid cummulation of roundoff error.  */
+  double sum = 0;
   int range = point_spread.get_max ();
   for (int y = 0; y <= screen::size / 2; y++)
     for (int x = 0; x <= screen::size / 2; x++)
       {
-        luminosity_t w = 0;
+	/* Use double to avoid cummulation of roundoff error.  */
+        double w = 0;
 
         for (int yy = -range * screen::size; yy <= (1 + range) * screen::size;
              yy += screen::size)
           for (int xx = -range * screen::size;
                xx <= (1 + range) * screen::size; xx += screen::size)
             {
-              luminosity_t dist
-                  = my_sqrt ((luminosity_t)((x - xx) * (x - xx)
+              double dist
+                  = my_sqrt ((double)((x - xx) * (x - xx)
                                             + (y - yy) * (y - yy)))
                     * (scale * (1 / (luminosity_t)screen::size));
               w += point_spread.apply (dist);
@@ -1202,7 +1204,8 @@ compute_point_spread (T *data,
               }
           }
       }
-  luminosity_t nrm = 1.0 / (screen::size * screen::size);
+  /* Use double to avoid cummulation of roundoff error.  */
+  double nrm = 1.0 / (screen::size * screen::size);
   // luminosity_t nrm = 1;
   // luminosity_t nrm = screen::size * screen::size;
   if (!sum)
@@ -1271,7 +1274,7 @@ bool
 screen::almost_equal_p (const screen &scr, luminosity_t *delta_ret,
                         luminosity_t maxdelta) const
 {
-  luminosity_t delta = 0;
+  double delta = 0;
   for (int y = 0; y < size; y++)
     for (int x = 0; x < size; x++)
       for (int c = 0; c < 3; c++)
@@ -1807,7 +1810,8 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		for (int yy = 0; yy < screen::size; yy++)
 		  for (int xx = 0; xx < screen::size; xx++)
 		    {
-		      screen_fft_t sum = 0.0;
+		      /* Use double to avoid cummulation of roundoff error.  */
+		      double sum = 0.0;
 		      for (int y = yy; y < this_psf_size; y += screen::size)
 			for (int x = xx; x < this_psf_size; x += screen::size)
 			  sum += cur_mtf->get_psf (x, y, (step * screen::size));
@@ -1832,7 +1836,8 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		for (int yy = 0; yy < screen::size; yy++)
 		  for (int xx = 0; xx < screen::size; xx++)
 		    {
-		      screen_fft_t sum = 0.0;
+		      /* Use double to avoid cummulation of roundoff error.  */
+		      double sum = 0.0;
 		      for (int y = yy; y < this_psf_size; y += screen::size)
 			for (int x = xx; x < this_psf_size; x += screen::size)
 			  sum += cur_mtf->get_psf (x, y, (step * screen::size));
@@ -1852,12 +1857,11 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		      wrapped_psf[yy * screen::size + xx] = sum;
 		    }
 	      }
-	      screen_fft_t sum = 0;
+	      /* Use double to avoid cummulation of roundoff error.  */
+	      double sum = 0;
 	      for (int x = 0; x < screen::size * screen::size; x++)
 		  sum += wrapped_psf [x];
-	      screen_fft_t sum_inv = 1 / sum;
-	      if (snr == 0)
-		sum_inv /= screen::size * screen::size;
+	      double sum_inv = 1 / sum;
 	      for (int x = 0; x < screen::size * screen::size; x++)
 		wrapped_psf [x] *= sum_inv;
 	      if (0)
@@ -1896,9 +1900,18 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		  std::complex ker (fft[x][0], fft[x][1]);
 		  if (mode == sharpen_parameters::wiener_deconvolution)
 		    ker = ker * (std::conj (ker) / (std::norm (ker) + k_const));
+		  else if (mode == sharpen_parameters::blur_deconvolution)
+		    ker = ker * ker;
 		  fft[x][0] = std::real (ker) * (1.0 / (screen::size * screen::size));
 		  fft[x][1] = std::imag (ker) * (1.0 / (screen::size * screen::size));
 		}
+	    }
+	  /* Normalize so DC is exactly 1.0 (before data_scale).  */
+	  screen_fft_t sc = data_scale / fft[0][0];
+	  for (int x = 0; x < fft_size * screen::size; x++)
+	    {
+	      fft[x][0] *= sc;
+	      fft[x][1] *= sc;
 	    }
         }
       if (mode != sharpen_parameters::richardson_lucy_deconvolution)

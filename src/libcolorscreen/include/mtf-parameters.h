@@ -166,13 +166,13 @@ struct mtf_parameters
   }
   pure_attr double effective_f_stop () const;
   pure_attr double nu (double pixel_freq) const;
-  pure_attr luminosity_t lens_difraction_mtf (double pixe_freq) const;
-  pure_attr luminosity_t hopkins_defocus_mtf (double pixe_freq) const;
-  pure_attr luminosity_t stokseth_defocus_mtf (double pixe_freq) const;
-  pure_attr luminosity_t lens_mtf (double pixel_freq) const;
-  pure_attr luminosity_t system_mtf (double pixel_freq) const;
-  pure_attr luminosity_t sensor_mtf (double pixel_freq) const;
-  pure_attr luminosity_t measured_mtf_correction (double pixel_freq) const;
+  pure_attr double lens_difraction_mtf (double pixe_freq) const;
+  pure_attr double hopkins_defocus_mtf (double pixe_freq) const;
+  pure_attr double stokseth_defocus_mtf (double pixe_freq) const;
+  pure_attr double lens_mtf (double pixel_freq) const;
+  pure_attr double system_mtf (double pixel_freq) const;
+  pure_attr double sensor_mtf (double pixel_freq) const;
+  pure_attr double measured_mtf_correction (double pixel_freq) const;
  
   struct computed_mtf {
       std::vector<double> system_mtf;
@@ -200,7 +200,7 @@ struct mtf_parameters
   DLL_PUBLIC bool write_table (const char *write_table, const char **error) const;
   DLL_PUBLIC computed_mtf compute_curves (int steps) const;
   DLL_PUBLIC int load_csv (FILE *in, std::string name, const char **error);
-  luminosity_t get_channel_wavelength (int c) const
+  double get_channel_wavelength (int c) const
   {
     /* Approximate peaks of spectral sensitivity curves of Dikon D700.  */
     static const constexpr luminosity_t default_wavelengths[] = {600, 530, 450, 850};

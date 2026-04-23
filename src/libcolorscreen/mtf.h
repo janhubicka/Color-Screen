@@ -26,20 +26,20 @@ public:
                    const char **error = NULL);
 
   /* Reutrn 1d MTF value.  */
-  inline luminosity_t
+  inline double
   get_mtf (luminosity_t val) const
   {
     return m_mtf.apply (val);
   }
 
   /* Return 2d MTF value.  */
-  inline luminosity_t
+  inline double
   get_mtf (luminosity_t x, luminosity_t y, luminosity_t scale = 1) const
   {
     return m_mtf.apply (my_sqrt (x * x + y * y) * scale);
   }
 
-  inline luminosity_t
+  inline double
   get_psf (luminosity_t x, luminosity_t scale = 1) const
   {
     return m_psf.apply (fabs (x) * (1 / scale));
@@ -48,7 +48,7 @@ public:
   /* Return PSF (point spread function) value.
      This is 2D function created as rotation of LSF which is
      determined at precomputation time.  */
-  inline luminosity_t
+  inline double
   get_psf (luminosity_t x, luminosity_t y, luminosity_t scale = 1) const
   {
     return m_psf.apply (my_sqrt (x * x + y * y) * (1 / scale));
@@ -93,11 +93,11 @@ private:
   mtf_parameters m_params;
   precomputed_function<luminosity_t> m_mtf;
   precomputed_function<psf_t> m_psf;
-  luminosity_t m_psf_radius;
+  double m_psf_radius;
   bool m_precomputed;
   bool m_precomputed_psf;
   std::mutex m_lock;
-  luminosity_t estimate_psf_size (luminosity_t min_threshold = 0.001, luminosity_t sum_threshold = 1.0 / 65535) const;
+  double estimate_psf_size (luminosity_t min_threshold = 0.001, luminosity_t sum_threshold = 1.0 / 65535) const;
   bool compute_psf (luminosity_t max_radius, luminosity_t subsample,
                     const char *filename, const char **error, bool parallel = true);
   void compute_lsf (std::vector<psf_t, fft_allocator<psf_t>> &lsf,

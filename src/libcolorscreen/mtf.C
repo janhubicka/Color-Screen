@@ -568,7 +568,7 @@ get_psf_radius (mtf::psf_t *psf, int size, bool *ok = NULL)
    TODO: model Bayer.
    Bayer demosaicing usually reduces MTF by an additional factor of 0.8 to 0.9
    near the Nyquist frequency */
-luminosity_t
+double
 mtf_parameters::sensor_mtf (double pixel_freq) const
 {
   return std::abs (sinc (pixel_freq * my_sqrt (sensor_fill_factor)));
@@ -601,7 +601,7 @@ mtf_parameters::nu (double pixel_freq) const
 
 /* Return MTF of perfect difraction limited lens.  */
 
-luminosity_t
+double
 mtf_parameters::lens_difraction_mtf (double pixel_freq) const
 {
   /* IF we have measured MTF data, difractoin is already included.  */
@@ -610,7 +610,7 @@ mtf_parameters::lens_difraction_mtf (double pixel_freq) const
 }
 
 /* Estimate lens blur using Hopkins model.  */
-luminosity_t
+double
 mtf_parameters::hopkins_defocus_mtf (double pixel_freq) const
 {
   double ef_stop = effective_f_stop ();
@@ -652,7 +652,7 @@ mtf_parameters::hopkins_defocus_mtf (double pixel_freq) const
   return 1;
 }
 
-luminosity_t
+double
 mtf_parameters::stokseth_defocus_mtf (double pixel_freq) const
 {
   double ef_stop = effective_f_stop ();
@@ -700,7 +700,7 @@ mtf_parameters::stokseth_defocus_mtf (double pixel_freq) const
     - defocus (defocus_mm)
  */
 
-luminosity_t
+double
 mtf_parameters::lens_mtf (double pixel_freq) const
 {
   if (simulate_difraction_p ())
@@ -716,7 +716,7 @@ mtf_parameters::lens_mtf (double pixel_freq) const
     - defocus (defocus_mm)
  */
 
-luminosity_t
+double
 mtf_parameters::measured_mtf_correction (double pixel_freq) const
 {
   if (simulate_difraction_p ())
@@ -729,7 +729,7 @@ mtf_parameters::measured_mtf_correction (double pixel_freq) const
 
 /* Simulate system as a combination of sensor MTF and lens MTF.  */
 
-luminosity_t
+double
 mtf_parameters::system_mtf (double pixel_freq) const
 {
   return sensor_mtf (pixel_freq) * lens_mtf (pixel_freq);
@@ -778,11 +778,11 @@ mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
   auto plan = fft_plan_c2r_2d<psf_t> (psf_size, psf_size, mtf_kernel.get (), psf_data.data ());
   for (int x = 0; x < fft_size; x++)
     {
-      std::complex ker (std::clamp (get_mtf (x, 0, psf_step),
-				    (luminosity_t)0, (luminosity_t)1),
-			(luminosity_t)0);
-      mtf_kernel.get ()[x][0] = real (ker);
-      mtf_kernel.get ()[x][1] = imag (ker);
+      std::complex ker (std::clamp ((double)get_mtf (x, 0, psf_step),
+				    0.0, 1.0),
+			0.0);
+      mtf_kernel.get ()[x][0] = std::real (ker);
+      mtf_kernel.get ()[x][1] = std::imag (ker);
     }
   //printf ("%i %i\n",fft_size, parallel);
   // This loop is performance critical for focus finetuning.
@@ -792,13 +792,13 @@ mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
       for (int y = 1; y < fft_size; y++)
 	for (int x = 0; x < fft_size; x++)
 	  {
-	    std::complex ker (std::clamp (get_mtf (x, y, psf_step),
-					  (luminosity_t)0, (luminosity_t)1),
-			      (luminosity_t)0);
-	    mtf_kernel.get ()[y * fft_size + x][0] = real (ker);
-	    mtf_kernel.get ()[y * fft_size + x][1] = imag (ker);
-	    mtf_kernel.get ()[(psf_size - y) * fft_size + x][0] = real (ker);
-	    mtf_kernel.get ()[(psf_size - y) * fft_size + x][1] = imag (ker);
+	    std::complex ker (std::clamp ((double)get_mtf (x, y, psf_step),
+					  0.0, 1.0),
+			      0.0);
+	    mtf_kernel.get ()[y * fft_size + x][0] = std::real (ker);
+	    mtf_kernel.get ()[y * fft_size + x][1] = std::imag (ker);
+	    mtf_kernel.get ()[(psf_size - y) * fft_size + x][0] = std::real (ker);
+	    mtf_kernel.get ()[(psf_size - y) * fft_size + x][1] = std::imag (ker);
 	  }
     }
   else
@@ -808,13 +808,13 @@ mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
     for (int y = 1; y < fft_size; y++)
       for (int x = 0; x < fft_size; x++)
 	{
-	  std::complex ker (std::clamp (get_mtf (x, y, psf_step),
-					(luminosity_t)0, (luminosity_t)1),
-			    (luminosity_t)0);
-	  mtf_kernel.get ()[y * fft_size + x][0] = real (ker);
-	  mtf_kernel.get ()[y * fft_size + x][1] = imag (ker);
-	  mtf_kernel.get ()[(psf_size - y) * fft_size + x][0] = real (ker);
-	  mtf_kernel.get ()[(psf_size - y) * fft_size + x][1] = imag (ker);
+	  std::complex ker (std::clamp ((double)get_mtf (x, y, psf_step),
+					0.0, 1.0),
+			    0.0);
+	  mtf_kernel.get ()[y * fft_size + x][0] = std::real (ker);
+	  mtf_kernel.get ()[y * fft_size + x][1] = std::imag (ker);
+	  mtf_kernel.get ()[(psf_size - y) * fft_size + x][0] = std::real (ker);
+	  mtf_kernel.get ()[(psf_size - y) * fft_size + x][1] = std::imag (ker);
 	}
     }
   plan.execute_c2r (mtf_kernel.get (), psf_data.data ());
@@ -825,12 +825,12 @@ mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
 /* Determine raidus of PSF to be sure that the minimal value is at most MAX *
    MIN_THRESHOLD. If SUM_THRESHOLD is non-zero reduce it then so the sum of the
    kernel up to radius is 1-sum_threshold of the overall kernel.  */
-luminosity_t
+double
 mtf::estimate_psf_size (luminosity_t min_threshold,
                         luminosity_t sum_threshold) const
 {
   /* Make a guess that PSF does not spread over 4 pixels.  */
-  luminosity_t subscale = 1 / 32.0;
+  double subscale = 1 / 32.0;
   int lsf_size = 256;
   while (true)
     {
@@ -934,7 +934,7 @@ mtf::compute_psf (luminosity_t max_radius, luminosity_t subscale, const char *fi
           tiff_writer renderedu (pp, &error);
           if (error)
             return false;
-          luminosity_t err = 0, m = 0;
+          double err = 0, m = 0;
           for (int y = 0; y < psf_size / 2; y++)
             for (int x = 0; x < psf_size / 2; x++)
               {
@@ -1106,7 +1106,7 @@ mtf::precompute (progress_info *progress, bool parallel)
     {
       const int entries = 512;
       std::vector<luminosity_t> contrasts (entries);
-      luminosity_t step = 1.0 / (entries - 2);
+      double step = 1.0 / (entries - 2);
       for (int i = 0; i < entries - 2; i++)
         contrasts[i] = m_params.system_mtf (i * step);
       contrasts[entries - 2] = contrasts[entries - 1] = 0;
@@ -1416,9 +1416,9 @@ mtf::render_dot_spread_tile (tile_parameters &tile, progress_info *p)
 {
   precompute_psf (p);
   double maxp = 1;
-  luminosity_t m = 0;
+  double m = 0;
   for (int p = 0; p < 1024; p++)
-    m = std::max (m, get_psf (p));
+    m = std::max (m, (double)get_psf (p));
   for (double p = 1; p < 1024; p*= 1 + 1.0 / tile.width)
     if (get_psf (p) > m / 100)
       maxp = p;
@@ -1432,8 +1432,8 @@ mtf::render_dot_spread_tile (tile_parameters &tile, progress_info *p)
 	coord_t posy = (y - tile.height / 2) * step;
 	luminosity_t val = get_psf (posx , posy, 1);
 	int i = (nearest_int (posx) + nearest_int (posy)) & 1;
-	luminosity_t lum = std::clamp (val * m, (luminosity_t)0, (luminosity_t)1);
-	luminosity_t lum2 = i ? std::clamp (val * m + i * (luminosity_t)0.6,  (luminosity_t)0, (luminosity_t)1) : lum;
+	luminosity_t lum = std::clamp (val * m, 0.0, 1.0);
+	luminosity_t lum2 = i ? std::clamp (val * m + i * (double)0.6,  0.0, 1.0) : lum;
 	tile.pixels[x * 3 + y * tile.rowstride] = tile.pixels[x * 3 + y * tile.rowstride + 1] = invert_gamma (lum, -1) * 255 + 0.5;
 	tile.pixels[x * 3 + y * tile.rowstride + 2] = invert_gamma (lum2, -1) * 255 + 0.5;
       }
