@@ -484,12 +484,12 @@ render_interpolated_increase_lru_cache_sizes_for_stitch_projects (int n)
 }
 
 /* Compute RGB data of downscaled image.  */
-void
+bool
 render_interpolate::get_color_data (rgbdata *data, coord_t x, coord_t y,
                                     int width, int height, coord_t pixelsize,
                                     progress_info *progress)
 {
-  downscale<render_interpolate, rgbdata, &render_interpolate::fast_sample_pixel_img> (
+  return downscale<render_interpolate, rgbdata, &render_interpolate::fast_sample_pixel_img> (
       data, x, y, width, height, pixelsize, progress);
 }
 

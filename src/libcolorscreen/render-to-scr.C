@@ -310,16 +310,16 @@ render_to_scr::~render_to_scr ()
 {
 }
 
-void
+bool
 render_img::get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
                             int height, coord_t pixelsize,
                             progress_info *progress)
 {
   if (m_profiled)
-    downscale<render_img, rgbdata, &render_img::get_profiled_rgb_pixel> (
+    return downscale<render_img, rgbdata, &render_img::get_profiled_rgb_pixel> (
         data, x, y, width, height, pixelsize, progress);
   else
-    render::get_color_data (data, x, y, width, height, pixelsize, progress);
+    return render::get_color_data (data, x, y, width, height, pixelsize, progress);
 }
 
 static void

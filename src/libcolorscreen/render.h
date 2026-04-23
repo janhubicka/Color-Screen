@@ -98,21 +98,16 @@ public:
      luminosity adjustments.  */
   pure_attr inline luminosity_t get_unadjusted_img_pixel (coord_t x, coord_t y) const noexcept;
 
-  /* Determine RGB value at a given position in the image.  Store results
-     into R, G, and B.  */
-  inline void get_img_rgb_pixel (coord_t x, coord_t y, luminosity_t *r,
-                                 luminosity_t *g, luminosity_t *b) const noexcept;
+  /* Determine RGB value at a given position X, Y in the image.  */
+  pure_attr inline rgbdata get_img_rgb_pixel (coord_t x, coord_t y) const noexcept;
 
-  /* Determine RGB value at a given position in the image without
-     luminosity adjustments.  Store results into R, G, and B at XP, YP.  */
-  inline void get_unadjusted_img_rgb_pixel (coord_t xp, coord_t yp,
-                                            luminosity_t *r, luminosity_t *g,
-                                            luminosity_t *b) const noexcept;
+  /* Determine RGB value at a given position XP, YP in the image without
+     luminosity adjustments.  */
+  pure_attr inline rgbdata get_unadjusted_img_rgb_pixel (coord_t xp, coord_t yp) const noexcept;
 
-  /* Sample square patch with center XC and YC and corner offsets X1, Y1, X2, Y2.  */
+  /* Sample square patch with center C and corner offsets P1, P2.  */
   pure_attr luminosity_t
-  sample_img_square (coord_t xc, coord_t yc, coord_t x1, coord_t y1, coord_t x2,
-                     coord_t y2) const;
+  sample_img_square (point_t c, point_t p1, point_t p2) const;
 
   /* Quickly determine grayscale value at a given position X, Y in the image.  */
   pure_attr inline luminosity_t fast_get_img_pixel (int x, int y) const noexcept;
@@ -209,10 +204,10 @@ public:
   void compute_final_range () {}
 
   /* Compute grayscale data for downscaled region at X, Y with WIDTH,
-     HEIGHT and PIXELSIZE.  Store result in GRAYDATA.  Report progress
-     to PROGRESS.  */
-  void get_gray_data (luminosity_t *graydata, coord_t x, coord_t y, int width,
-                      int height, coord_t pixelsize, progress_info *progress);
+     HEIGHT and PIXELSIZE.  Store result in DATA.  Report progress
+     to PROGRESS.  Return false on failure or cancellation.  */
+  nodiscard_attr bool get_gray_data (luminosity_t *data, coord_t x, coord_t y, int width,
+                       int height, coord_t pixelsize, progress_info *progress);
 
   /* Return number of pixel computations considered profitable for OMP.  */
   const_attr size_t openmp_size ()
@@ -238,10 +233,10 @@ public:
 
 protected:
   /* Compute color data for downscaled region at X, Y with WIDTH, HEIGHT
-     and PIXELSIZE.  Store result in GRAYDATA.  Report progress
-     to PROGRESS.  */
-  void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width,
-                       int height, coord_t pixelsize, progress_info *progress);
+     and PIXELSIZE.  Store result in DATA.  Report progress
+     to PROGRESS.  Return false on failure or cancellation.  */
+  nodiscard_attr virtual bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
+                        int height, coord_t pixelsize, progress_info *progress);
 
   /* Inner loop for image downscaling processing single line YY from input
      to output DATA at line PY.  XSTART and XEND specify the horizontal
@@ -436,9 +431,8 @@ render::get_img_pixel (coord_t xp, coord_t yp) const noexcept
 
 /* Determine RGB value at position XP, YP in the image using bicubic interpolation
    without adjustments.  */
-inline flatten_attr void
-render::get_unadjusted_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r,
-                                      luminosity_t *g, luminosity_t *b) const noexcept
+pure_attr inline rgbdata always_inline_attr
+render::get_unadjusted_img_rgb_pixel (coord_t xp, coord_t yp) const noexcept
 {
   /* Center of pixel [0,0] is [0.5,0.5].  */
   xp -= (coord_t)0.5;
@@ -449,50 +443,40 @@ render::get_unadjusted_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r,
 
   if (sx >= 1 && sx < m_img.width - 2 && sy >= 1 && sy < m_img.height - 2)
     {
-      luminosity_t rr, gg, bb;
+      rgbdata ret;
       vec_luminosity_t r1 = {get_linearized_data_red (sx-1, sy-1), get_linearized_data_red (sx, sy-1), get_linearized_data_red (sx+1, sy-1), get_linearized_data_red (sx+2, sy-1)};
       vec_luminosity_t r2 = {get_linearized_data_red (sx-1, sy-0), get_linearized_data_red (sx, sy-0), get_linearized_data_red (sx+1, sy-0), get_linearized_data_red (sx+2, sy-0)};
       vec_luminosity_t r3 = {get_linearized_data_red (sx-1, sy+1), get_linearized_data_red (sx, sy+1), get_linearized_data_red (sx+1, sy+1), get_linearized_data_red (sx+2, sy+1)};
       vec_luminosity_t r4 = {get_linearized_data_red (sx-1, sy+2), get_linearized_data_red (sx, sy+2), get_linearized_data_red (sx+1, sy+2), get_linearized_data_red (sx+2, sy+2)};
-      rr = do_bicubic_interpolate (r1, r2, r3, r4, {rx, ry});
+      ret.red = do_bicubic_interpolate (r1, r2, r3, r4, {rx, ry});
 
       vec_luminosity_t g1 = {get_linearized_data_green (sx-1, sy-1), get_linearized_data_green (sx, sy-1), get_linearized_data_green (sx+1, sy-1), get_linearized_data_green (sx+2, sy-1)};
       vec_luminosity_t g2 = {get_linearized_data_green (sx-1, sy-0), get_linearized_data_green (sx, sy-0), get_linearized_data_green (sx+1, sy-0), get_linearized_data_green (sx+2, sy-0)};
       vec_luminosity_t g3 = {get_linearized_data_green (sx-1, sy+1), get_linearized_data_green (sx, sy+1), get_linearized_data_green (sx+1, sy+1), get_linearized_data_green (sx+2, sy+1)};
       vec_luminosity_t g4 = {get_linearized_data_green (sx-1, sy+2), get_linearized_data_green (sx, sy+2), get_linearized_data_green (sx+1, sy+2), get_linearized_data_green (sx+2, sy+2)};
-      gg = do_bicubic_interpolate (g1, g2, g3, g4, {rx, ry});
+      ret.green = do_bicubic_interpolate (g1, g2, g3, g4, {rx, ry});
 
       vec_luminosity_t b1 = {get_linearized_data_blue (sx-1, sy-1), get_linearized_data_blue (sx, sy-1), get_linearized_data_blue (sx+1, sy-1), get_linearized_data_blue (sx+2, sy-1)};
       vec_luminosity_t b2 = {get_linearized_data_blue (sx-1, sy-0), get_linearized_data_blue (sx, sy-0), get_linearized_data_blue (sx+1, sy-0), get_linearized_data_blue (sx+2, sy-0)};
       vec_luminosity_t b3 = {get_linearized_data_blue (sx-1, sy+1), get_linearized_data_blue (sx, sy+1), get_linearized_data_blue (sx+1, sy+1), get_linearized_data_blue (sx+2, sy+1)};
       vec_luminosity_t b4 = {get_linearized_data_blue (sx-1, sy+2), get_linearized_data_blue (sx, sy+2), get_linearized_data_blue (sx+1, sy+2), get_linearized_data_blue (sx+2, sy+2)};
-      bb = do_bicubic_interpolate (b1, b2, b3, b4, {rx, ry});
+      ret.blue = do_bicubic_interpolate (b1, b2, b3, b4, {rx, ry});
       if (m_backlight_correction)
 	{
-	  rr = m_backlight_correction->apply (rr, xp, yp, backlight_correction_parameters::red, true);
-	  gg = m_backlight_correction->apply (gg, xp, yp, backlight_correction_parameters::green, true);
-	  bb = m_backlight_correction->apply (bb, xp, yp, backlight_correction_parameters::blue, true);
+	  ret.red = m_backlight_correction->apply (ret.red, xp, yp, backlight_correction_parameters::red, true);
+	  ret.green = m_backlight_correction->apply (ret.green, xp, yp, backlight_correction_parameters::green, true);
+	  ret.blue = m_backlight_correction->apply (ret.blue, xp, yp, backlight_correction_parameters::blue, true);
 	}
-      *r = rr;
-      *g = gg;
-      *b = bb;
+      return ret;
     }
-  else
-    {
-      *r = 0;
-      *g = 0;
-      *b = 0;
-    }
+  return rgbdata{};
 }
 
 /* Determine RGB value at position XP, YP in the image using bicubic interpolation.  */
-inline flatten_attr void
-render::get_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t *g, luminosity_t *b) const noexcept
+pure_attr inline rgbdata always_inline_attr
+render::get_img_rgb_pixel (coord_t xp, coord_t yp) const noexcept
 {
-  get_unadjusted_img_rgb_pixel (xp, yp, r, g, b);
-  *r = (*r - m_params.dark_point) * m_params.scan_exposure;
-  *g = (*g - m_params.dark_point) * m_params.scan_exposure;
-  *b = (*b - m_params.dark_point) * m_params.scan_exposure;
+  return adjust_rgb (get_unadjusted_img_rgb_pixel (xp, yp));
 }
 
 /* Inner loop for image downscaling processing single pixel PX, PY in result DATA
@@ -574,7 +558,7 @@ render::process_line (T *data, int *pixelpos, luminosity_t *weights,
 }
 
 template<typename D, typename T, T (D::*get_pixel) (int x, int y) const,
-         auto account_p>
+           auto account_p>
 bool
 render::downscale (T *data, coord_t x, coord_t y, int width, int height,
                    coord_t pixelsize, progress_info *progress)
@@ -611,7 +595,7 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height,
 
 #pragma omp parallel shared(progress, data, pixelsize, width, height, pixelpos, x, y, pxstart, pxend, weights) default(none)
   {
-    luminosity_t scale = 1 / (pixelsize * pixelsize);
+    luminosity_t scale = (luminosity_t)1.0 / (pixelsize * pixelsize);
     int pystart = std::max (0, (int)(-y / pixelsize));
     int pyend = std::min (height - 1, (int)((m_img.height - y) / pixelsize));
 

@@ -585,22 +585,92 @@ render::get_lookup_tables (std::shared_ptr<luminosity_t[]> *ret,
   return true;
 }
 
-/* Compute graydata of downscaled image.  */
-void
+/* Compute grayscale data for downscaled region at X, Y with WIDTH,
+   HEIGHT and PIXELSIZE.  Store result in DATA.  Report progress
+   to PROGRESS.  Return false on failure or cancellation.  */
+bool
 render::get_gray_data (luminosity_t *data, coord_t x, coord_t y, int width,
                        int height, coord_t pixelsize, progress_info *progress)
 {
-  downscale<render, luminosity_t, &render::get_data> (
+  return downscale<render, luminosity_t, &render::get_data> (
       data, x, y, width, height, pixelsize, progress);
 }
 
-/* Compute RGB data of downscaled image.  */
-void
+/* Compute color data for downscaled region at X, Y with WIDTH, HEIGHT
+   and PIXELSIZE.  Store result in DATA.  Report progress
+   to PROGRESS.  Return false on failure or cancellation.  */
+bool
 render::get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
                         int height, coord_t pixelsize, progress_info *progress)
 {
-  downscale<render, rgbdata, &render::get_rgb_pixel> (
+  return downscale<render, rgbdata, &render::get_rgb_pixel> (
       data, x, y, width, height, pixelsize, progress);
+}
+
+/* Sample square patch with center C and corner offsets P1, P2.  */
+luminosity_t
+render::sample_img_square (point_t c, point_t p1, point_t p2) const
+{
+  luminosity_t acc = 0, weights = 0;
+  coord_t x_min_val = std::min ({c.x - p1.x, c.x + p1.x, c.x - p2.x, c.x + p2.x});
+  coord_t x_max_val = std::max ({c.x - p1.x, c.x + p1.x, c.x - p2.x, c.x + p2.x});
+  int xmin = std::max ((int)(x_min_val - (coord_t)0.5), 0);
+  int xmax = std::min ((int)ceil (x_max_val + (coord_t)0.5), m_img.width - 1);
+
+  /* If the resolution is too small, just sample given point.  */
+  if (xmax - xmin < 2)
+    return get_img_pixel (c.x, c.y);
+
+  /* For bigger resolution we can sample few points in the square.  */
+  if (xmax - xmin < 6)
+    {
+      int samples = (int)my_floor (my_sqrt (p1.x * p1.x + p1.y * p1.y) + (coord_t)0.5) * 2;
+      if (!samples)
+        return get_img_pixel (c.x, c.y);
+      luminosity_t rec = (luminosity_t)1.0 / samples;
+      for (int y = -samples; y <= samples; y++)
+        for (int x = -samples; x <= samples; x++)
+          {
+            int w = 1 + (samples - abs (x) - abs (y));
+            if (w < 0)
+              continue;
+            acc += (luminosity_t)w * get_img_pixel (c.x + (p1.x * x + p2.x * y) * rec,
+                                                    c.y + (p1.y * x + p2.y * y) * rec);
+            weights += (luminosity_t)w;
+          }
+    }
+  /* Faster version of the above which does not need multiple calls to get_img_pixel.
+     It however may suffer from banding when spots are too small.  */
+  else
+    {
+      coord_t y_min_val = std::min ({c.y - p1.y, c.y + p1.y, c.y - p2.y, c.y + p2.y});
+      coord_t y_max_val = std::max ({c.y - p1.y, c.y + p1.y, c.y - p2.y, c.y + p2.y});
+      int ymin = std::max ((int)(y_min_val - (coord_t)0.5), 0);
+      int ymax = std::min ((int)ceil (y_max_val + (coord_t)0.5), m_img.height - 1);
+      matrix2x2<coord_t> base (p1.x, p2.x, p1.y, p2.y);
+      matrix2x2<coord_t> inv = base.invert ();
+      for (int y = ymin; y <= ymax; y++)
+        {
+          for (int x = xmin; x <= xmax; x++)
+            {
+              coord_t cx = (coord_t)x + (coord_t)0.5 - c.x;
+              coord_t cy = (coord_t)y + (coord_t)0.5 - c.y;
+              coord_t ccx, ccy;
+              inv.apply_to_vector (cx, cy, &ccx, &ccy);
+              luminosity_t w = (luminosity_t)(fabs (ccx) + fabs (ccy));
+
+              if (w < 1)
+                {
+                  w = (luminosity_t)1.0 - w;
+                  acc += w * get_data (x, y);
+                  weights += w;
+                }
+            }
+        }
+    }
+  if (weights > 0)
+    return acc / weights;
+  return 0;
 }
 
 /* Increase capacity of stitch related caches to N.  */

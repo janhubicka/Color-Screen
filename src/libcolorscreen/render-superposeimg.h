@@ -62,8 +62,8 @@ public:
     if (m_img.rgbdata)
       m_color = 1;
   }
-  void get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
-                       int height, coord_t pixelsize, progress_info *);
+  bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
+                       int height, coord_t pixelsize, progress_info *) override;
   pure_attr rgbdata
   sample_pixel_final (coord_t x, coord_t y) const
   {
@@ -133,15 +133,14 @@ render_superpose_img::fast_sample_pixel_img (int x, int y) const
   return ret;
 }
 
-inline void
+inline bool
 render_superpose_img::get_color_data (rgbdata *data, coord_t x, coord_t y,
                                       int width, int height, coord_t pixelsize,
                                       progress_info *progress)
 {
-  downscale<render_superpose_img, rgbdata,
-            &render_superpose_img::fast_sample_pixel_img> (data, x, y, width,
-                                                           height, pixelsize,
-                                                           progress);
+  return downscale<render_superpose_img, rgbdata,
+                   &render_superpose_img::fast_sample_pixel_img> (
+      data, x, y, width, height, pixelsize, progress);
 }
 
 pure_attr inline rgbdata
@@ -164,11 +163,10 @@ render_superpose_img::sample_pixel_img (coord_t x, coord_t y, coord_t scr_x,
     }
   else
     {
-      luminosity_t rr, gg, bb;
-      get_img_rgb_pixel (x, y, &rr, &gg, &bb);
-      return { rr * m_screen->mult[iy][ix][0] + m_screen->add[iy][ix][0],
-               gg * m_screen->mult[iy][ix][1] + m_screen->add[iy][ix][1],
-               bb * m_screen->mult[iy][ix][2] + m_screen->add[iy][ix][2] };
+      rgbdata c = get_img_rgb_pixel (x, y);
+      return { c.red * m_screen->mult[iy][ix][0] + m_screen->add[iy][ix][0],
+               c.green * m_screen->mult[iy][ix][1] + m_screen->add[iy][ix][1],
+               c.blue * m_screen->mult[iy][ix][2] + m_screen->add[iy][ix][2] };
     }
 }
 pure_attr inline rgbdata

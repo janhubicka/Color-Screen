@@ -39,7 +39,7 @@ public:
     return sample_pixel_scr (p.x, p.y);
   }
   /* Unimplemented; just exists to make rendering templates happy. We never downscale.  */
-  void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
+  bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress) override
   {
     abort ();
   }

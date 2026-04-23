@@ -411,8 +411,8 @@ public:
     return sample_pixel_img (p.x, p.y);
   }
   /* Compute RGB data of downscaled image.  */
-  void get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
-                       int height, coord_t pixelsize, progress_info *progress);
+  nodiscard_attr bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
+                        int height, coord_t pixelsize, progress_info *progress);
 
 private:
   bool m_color;
@@ -427,10 +427,9 @@ render_to_scr::sample_scr_diag_square (coord_t xc, coord_t yc,
                                        coord_t diagonal_size)
 {
   point_t pc = m_scr_to_img.to_img ({ xc, yc });
-  point_t p1 = m_scr_to_img.to_img ({ xc + diagonal_size / 2, yc });
-  point_t p2 = m_scr_to_img.to_img ({ xc, yc + diagonal_size / 2 });
-  return sample_img_square (pc.x, pc.y, p1.x - pc.x, p1.y - pc.y, p2.x - pc.x,
-                            p2.y - pc.y);
+  point_t p1 = m_scr_to_img.to_img ({ xc + diagonal_size / (coord_t)2.0, yc });
+  point_t p2 = m_scr_to_img.to_img ({ xc, yc + diagonal_size / (coord_t)2.0 });
+  return sample_img_square (pc, p1 - pc, p2 - pc);
 }
 
 /* Sample diagonal square.
@@ -440,10 +439,9 @@ render_to_scr::sample_scr_square (coord_t xc, coord_t yc, coord_t width,
                                   coord_t height)
 {
   point_t pc = m_scr_to_img.to_img ({ xc, yc });
-  point_t p1 = m_scr_to_img.to_img ({ xc - width / 2, yc + height / 2 });
-  point_t p2 = m_scr_to_img.to_img ({ xc + width / 2, yc + height / 2 });
-  return sample_img_square (pc.x, pc.y, p1.x - pc.x, p1.y - pc.y, p2.x - pc.x,
-                            p2.y - pc.y);
+  point_t p1 = m_scr_to_img.to_img ({ xc - width / (coord_t)2.0, yc + height / (coord_t)2.0 });
+  point_t p2 = m_scr_to_img.to_img ({ xc + width / (coord_t)2.0, yc + height / (coord_t)2.0 });
+  return sample_img_square (pc, p1 - pc, p2 - pc);
 }
 
 /* Determine grayscale value at a given position in the image.
@@ -470,10 +468,7 @@ pure_attr inline rgbdata
 render_to_scr::get_unadjusted_rgb_pixel_scr (coord_t x, coord_t y) const
 {
   point_t p = m_scr_to_img.to_img ({ x, y });
-  rgbdata ret;
-  render::get_unadjusted_img_rgb_pixel (p.x, p.y, &ret.red, &ret.green,
-                                        &ret.blue);
-  return ret;
+  return get_unadjusted_img_rgb_pixel (p.x, p.y);
 }
 
 pure_attr inline rgbdata

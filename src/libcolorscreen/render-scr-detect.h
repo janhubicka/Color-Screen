@@ -391,7 +391,7 @@ public:
   {
     return precompute_all (progress);
   }
-  void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
+  bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress) override;
   inline void
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b) const
   {
@@ -429,7 +429,7 @@ public:
   {
     return precompute_all (progress);
   }
-  void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
+  bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress) override;
 };
 /* Simple wrapper to be used by rendering templates.  */
 class render_scr_detect_pixel_color : public render_scr_detect
@@ -459,7 +459,7 @@ public:
   {
     return precompute_all (progress);
   }
-  void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
+  bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress) override;
   void
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b) const
   {
@@ -476,7 +476,7 @@ public:
   { 
   }
   void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b);
-  void get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *);
+  bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *) override;
   pure_attr inline rgbdata fast_sample_pixel_img (int x, int y) const;
   pure_attr inline rgbdata sample_pixel_img (coord_t x, coord_t y) const;
   bool precompute_all (progress_info *progress)
@@ -510,11 +510,11 @@ render_scr_detect_superpose_img::render_pixel_img (coord_t x, coord_t y, int *r,
   *r = out_c.red; *g = out_c.green; *b = out_c.blue;
 }
 
-inline void
+inline bool
 render_scr_detect_superpose_img::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 { 
-  downscale<render_scr_detect_superpose_img, rgbdata,
-            &render_scr_detect_superpose_img::fast_sample_pixel_img> (
+  return downscale<render_scr_detect_superpose_img, rgbdata,
+                   &render_scr_detect_superpose_img::fast_sample_pixel_img> (
       data, x, y, width, height, pixelsize, progress);
 }
 
@@ -571,12 +571,12 @@ public:
   {
     return precompute_all (progress);
   }
-  inline void
-  get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
+  inline bool
+  get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress) override
   { 
-    downscale<render_scr_relax, rgbdata,
-              &render_scr_relax::fast_sample_pixel_img> (data, x, y, width, height, pixelsize,
-                                          progress);
+    return downscale<render_scr_relax, rgbdata,
+                     &render_scr_relax::fast_sample_pixel_img> (data, x, y, width, height, pixelsize,
+                                                 progress);
   }
 private:
   luminosity_t *cdata[3];
@@ -650,12 +650,12 @@ public:
   {
     return precompute_all (progress);
   }
-  inline void
-  get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
+  inline bool
+  get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress) override
   { 
-    downscale<render_scr_nearest, rgbdata,
-              &render_scr_nearest::fast_sample_pixel_img> (data, x, y, width, height, pixelsize,
-                                          progress);
+    return downscale<render_scr_nearest, rgbdata,
+                     &render_scr_nearest::fast_sample_pixel_img> (data, x, y, width, height, pixelsize,
+                                                 progress);
   }
 private:
 };
@@ -722,11 +722,11 @@ public:
   {
     return precompute_all (progress);
   }
-  inline void
-  get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
+  inline bool
+  get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress) override
   { 
-    downscale<render_scr_nearest_scaled, rgbdata,
-              &render_scr_nearest_scaled::fast_sample_pixel_img> (
+    return downscale<render_scr_nearest_scaled, rgbdata,
+                     &render_scr_nearest_scaled::fast_sample_pixel_img> (
         data, x, y, width, height, pixelsize, progress);
   }
 private:

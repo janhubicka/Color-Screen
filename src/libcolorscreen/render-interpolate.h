@@ -149,7 +149,8 @@ public:
 	}
       }
   }
-  void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
+  bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
+                      int height, coord_t pixelsize, progress_info *progress) override;
 
   bool analyze_patches (analyzer, const char *, bool screen, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);
   bool analyze_rgb_patches (rgb_analyzer, const char *, bool screen, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);

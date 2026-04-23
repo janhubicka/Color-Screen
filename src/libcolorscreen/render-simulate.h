@@ -77,8 +77,8 @@ public:
     luminosity_t lum = (*m_simulated)[y * m_img.width + x];
     return {lum, lum, lum};
   }
-  void get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
-                       int height, coord_t pixelsize, progress_info *progress);
+  bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
+                       int height, coord_t pixelsize, progress_info *progress) override;
 
   typedef lru_cache<simulation_params, std::vector<float>,
                     &get_new_simulation, 1>

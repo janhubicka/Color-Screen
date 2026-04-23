@@ -87,7 +87,11 @@ bool render_img_downscale(render_type_parameters rtparam,
   rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
   if (!data)
     return false;
-  render.get_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);
+  if (!render.get_color_data (data, xoffset * step, yoffset * step, width, height, step, progress))
+    {
+      free (data);
+      return false;
+    }
   if (progress)
     progress->set_task ("rendering", height);
 #pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data) if (width * (size_t)height > render.openmp_size ())
@@ -129,7 +133,11 @@ bool render_img_gray_downscale(render_type_parameters rtparam,
   luminosity_t *data = (luminosity_t *)malloc (sizeof (luminosity_t) * width * height);
   if (!data)
     return false;
-  render.get_gray_data (data, xoffset * step, yoffset * step, width, height, step, progress);
+  if (!render.get_gray_data (data, xoffset * step, yoffset * step, width, height, step, progress))
+    {
+      free (data);
+      return false;
+    }
   if (progress)
     progress->set_task ("rendering", height);
 #pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data) if (width * (size_t)height > render.openmp_size ())

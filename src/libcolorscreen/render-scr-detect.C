@@ -269,28 +269,28 @@ static color_data_cache_t
 
 class distance_list distance_list;
 
-void
+bool
 render_scr_detect_adjusted::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 { 
-  downscale<render_scr_detect, rgbdata,
-            &render_scr_detect::fast_get_adjusted_pixel> (data, x, y, width, height, pixelsize,
-                                        progress);
+  return downscale<render_scr_detect, rgbdata,
+                   &render_scr_detect::fast_get_adjusted_pixel> (data, x, y, width, height, pixelsize,
+                                               progress);
 }
 
-void
+bool
 render_scr_detect_normalized::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 { 
-  downscale<render_scr_detect, rgbdata,
-            &render_scr_detect::fast_get_normalized_pixel> (data, x, y, width, height, pixelsize,
-                                        progress);
+  return downscale<render_scr_detect, rgbdata,
+                   &render_scr_detect::fast_get_normalized_pixel> (data, x, y, width, height, pixelsize,
+                                               progress);
 }
 
-void
+bool
 render_scr_detect_pixel_color::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 { 
-  downscale<render_scr_detect, rgbdata,
-            &render_scr_detect::fast_get_screen_pixel> (data, x, y, width, height, pixelsize,
-                                        progress);
+  return downscale<render_scr_detect, rgbdata,
+                   &render_scr_detect::fast_get_screen_pixel> (data, x, y, width, height, pixelsize,
+                                               progress);
 }
 
 bool
