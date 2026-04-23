@@ -1,3 +1,7 @@
+/* Configuration parameters for screen-to-image mapping.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of ColorScreen.  */
+
 #ifndef SCR_TO_IMG_PARAMETERS_H
 #define SCR_TO_IMG_PARAMETERS_H
 #include "base.h"
@@ -32,12 +36,14 @@ enum scr_type
   max_scr_type
 };
 
+/* Return true if screen T is Paget-like.  */
 inline bool
 paget_like_screen_p (enum scr_type t)
 {
   return t == Paget || t == Thames || t == Finlay;
 }
 
+/* Return true if screen T is Dufay-like.  */
 inline bool
 dufay_like_screen_p (enum scr_type t)
 {
@@ -45,19 +51,21 @@ dufay_like_screen_p (enum scr_type t)
          || t == Omnicolore;
 }
 
-/* Return true if screen is integrated to the emulsoin and can not move.  */
+/* Return true if screen T is integrated to the emulsion and can not move.  */
 inline bool
 integrated_screen_p (enum scr_type t)
 {
   return t == Dufay;
 }
 
+/* Return true if screen T has vertical strips.  */
 inline bool
 screen_with_vertical_strips_p (enum scr_type t)
 {
   return t == WarnerPowrie || t == Joly;
 }
 
+/* Return true if screen T has varying strips.  */
 inline bool
 screen_with_varying_strips_p (enum scr_type t)
 {
@@ -71,9 +79,12 @@ struct scr_type_property_t
   const char *help;
   coord_t frequency;
 };
+
 DLL_PUBLIC extern const scr_type_property_t scr_names[max_scr_type];
+
+/* Return patch proportions for screen T and RPARAM.  */
 pure_attr DLL_PUBLIC rgbdata patch_proportions (enum scr_type t,
-                                                const render_parameters *);
+                                                const render_parameters *rparam);
 
 /* Type of a scanner used.  */
 enum scanner_type
@@ -93,6 +104,7 @@ enum scanner_type
   lens_move_vertically = vertically_moving_lens
 };
 
+/* Return true if TYPE is a fixed lens scanner.  */
 inline bool
 is_fixed_lens (scanner_type type)
 {
@@ -120,55 +132,37 @@ DLL_PUBLIC extern const property_t scanner_type_names[max_scanner_type];
 struct scr_to_img_parameters
 {
   /* Coordinates (in the image) of the center of the screen (a green dot).  */
-  point_t center;
+  point_t center = { (coord_t)0, (coord_t)0 };
   /* First coordinate vector:
      image's (center.x+coordinate1.x, center.y+coordinate1.y) should describe
      a green dot just on the right side of (center_x, center_y).  */
-  point_t coordinate1;
+  point_t coordinate1 = { (coord_t)1, (coord_t)0 };
   /* Second coordinate vector:
      image's (center.x+coordinate2.x, center.y+coordinate2.y) should describe
      a green dot just below (center.x, center.y).  */
-  point_t coordinate2;
+  point_t coordinate2 = { (coord_t)0, (coord_t)1 };
 
-  /* Distance of the perspective pane from the camera coordinate.  */
-  coord_t projection_distance;
+  /* Distance of the perspective plane from the camera coordinate.  */
+  coord_t projection_distance = 1;
   /* Perspective tilt in x and y coordinate in degrees.  */
-  coord_t tilt_x, tilt_y;
+  coord_t tilt_x = 0, tilt_y = 0;
 
   /* Rotation from screen coordinates to final coordinates.  */
-  coord_t final_rotation;
+  coord_t final_rotation = 0;
   /* Angle of the screen X and Y axis in the final coordinates.  */
-  coord_t final_angle;
+  coord_t final_angle = 90;
   /* Ratio of the X and Y axis in the final coordinates.  */
-  coord_t final_ratio;
+  coord_t final_ratio = 1;
 
-  std::shared_ptr<mesh> mesh_trans;
+  std::shared_ptr<mesh> mesh_trans = nullptr;
 
-  enum scr_type type;
-  enum scanner_type scanner_type;
+  enum scr_type type = Random;
+  enum scanner_type scanner_type = fixed_lens;
 
   lens_warp_correction_parameters lens_correction;
 
-  scr_to_img_parameters ()
-      : center{ (coord_t)0, (coord_t)0 },
-        coordinate1{ (coord_t)1, (coord_t)0 },
-        coordinate2{ (coord_t)0, (coord_t)1 }, projection_distance (1),
-        tilt_x (0), tilt_y (0), final_rotation (0), final_angle (90),
-        final_ratio (1), mesh_trans (NULL), type (Random),
-        scanner_type (fixed_lens), lens_correction ()
-  {
-  }
-  scr_to_img_parameters (const scr_to_img_parameters &from)
-      : center (from.center), coordinate1 (from.coordinate1),
-        coordinate2 (from.coordinate2),
-        projection_distance (from.projection_distance), tilt_x (from.tilt_x),
-        tilt_y (from.tilt_y), final_rotation (from.final_rotation),
-        final_angle (from.final_angle), final_ratio (from.final_ratio),
-        mesh_trans (from.mesh_trans), type (from.type),
-        scanner_type (from.scanner_type),
-        lens_correction (from.lens_correction)
-  {
-  }
+  scr_to_img_parameters () = default;
+  scr_to_img_parameters (const scr_to_img_parameters &from) = default;
   scr_to_img_parameters &
   operator= (const scr_to_img_parameters &other)
   {
@@ -206,6 +200,8 @@ struct scr_to_img_parameters
            && lens_correction == other.lens_correction
            && mesh_trans == other.mesh_trans;
   }
+  /* Merge solution from solver into the parameters.
+     OTHER is the solution from the solver.  */
   void
   merge_solver_solution (const scr_to_img_parameters &other)
   {
@@ -218,11 +214,15 @@ struct scr_to_img_parameters
     projection_distance = other.projection_distance;
     mesh_trans = other.mesh_trans;
   }
+
+  /* Return true if OTHER is not equal to this.  */
   bool
   operator!= (const scr_to_img_parameters &other) const
   {
     return !(*this == other);
   }
+
+  /* Return estimated screen per inch for the current screen type.  */
   coord_t
   screen_per_inch () const
   {
@@ -233,16 +233,22 @@ struct scr_to_img_parameters
       /* 2 squares per screen.  */
       return 25.4 / 2;
   }
+
+  /* Return the length of the first coordinate vector.  */
   pure_attr coord_t
-  get_xlen () const
+  get_x_len () const
   {
     return coordinate1.length ();
   }
+
+  /* Return the length of the second coordinate vector.  */
   pure_attr coord_t
-  get_ylen () const
+  get_y_len () const
   {
     return coordinate2.length ();
   }
+
+  /* Return the angle between the two coordinate vectors in degrees.  */
   pure_attr coord_t
   get_angle () const
   {
@@ -250,8 +256,10 @@ struct scr_to_img_parameters
         = coordinate1.x * coordinate2.x + coordinate1.y * coordinate2.y;
     // coord_t det = coordinate1.x*coordinate2.y - coordinate1.y*coordinate2.x;
     // return atan2(det, dot) * 180 / M_PI;
-    return acos (dot / (get_xlen () * get_ylen ())) * (180 / M_PI);
+    return std::acos (dot / (get_x_len () * get_y_len ())) * (180 / M_PI);
   }
+
+  /* Estimate DPI for a given PIXEL_SIZE.  */
   DLL_PUBLIC coord_t estimate_dpi (coord_t pixel_size) const;
 };
 } // namespace colorscreen

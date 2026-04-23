@@ -800,9 +800,9 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
     }
   progress->pause_stdout ();
   angle = param.get_angle ();
-  ratio = param.get_ylen () / param.get_xlen ();
+  ratio = param.get_y_len () / param.get_x_len ();
   if (m_prj->report_file)
-    fprintf (m_prj->report_file, "Screen angle %f, x length %f, y length %f, ratio %f\n", angle, param.get_xlen (), param.get_ylen (), ratio);
+    fprintf (m_prj->report_file, "Screen angle %f, x length %f, y length %f, ratio %f\n", angle, param.get_x_len (), param.get_y_len (), ratio);
   progress->resume_stdout ();
   //dufay.set_known_pixels (bitmap);
   analyzed = true;

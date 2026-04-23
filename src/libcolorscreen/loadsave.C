@@ -1,3 +1,7 @@
+/* Support for loading and saving screen parameters.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of ColorScreen.  */
+
 #include "include/colorscreen.h"
 #include "include/mesh.h"
 #include "loadsave.h"
@@ -41,6 +45,7 @@ static const char *const bool_names[2] = { "no", "yes" };
 static const char *const channel_names[5]
     = { "unknown", "red", "green", "blue", "ir" };
 
+/* Write INPUT string to F with escaped characters.  */
 static bool
 write_escaped_string (FILE *f, const char *input)
 {
@@ -63,6 +68,9 @@ write_escaped_string (FILE *f, const char *input)
   return true;
 }
 
+/* Save CSP parameters to F.  PARAM are the screen parameters, DPARAM the
+   detection parameters, RPARAM the rendering parameters and SPARAM the solver
+   parameters.  */
 bool
 save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
           render_parameters *rparam, solver_parameters *sparam)
@@ -655,6 +663,9 @@ expect_keyword (FILE *f, const char *keyword)
 #define dparam_check(name) dparam ? &dparam->name : NULL
 #define sparam_check(name) sparam ? &sparam->name : NULL
 
+/* Load CSP parameters from F.  PARAM are the screen parameters, DPARAM the
+   detection parameters, RPARAM the rendering parameters and SPARAM the solver
+   parameters. ERROR is set to the error message on failure.  */
 bool
 load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
           render_parameters *rparam, solver_parameters *sparam,
