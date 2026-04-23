@@ -129,12 +129,18 @@ color_solver
 	c.green = r->adjust_luminosity_ir (c.green / proportions.green);
 	c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
 
-	r->out_color.linear_hdr_color (c.red, c.green, c.blue, &color1.x, &color1.y, &color1.z);
+	{
+	  rgbdata out = r->out_color.linear_hdr_color (c);
+	  color1.x = out.red; color1.y = out.green; color1.z = out.blue;
+	}
 	ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &c.red, &c.green, &c.blue);
 	c.red = r->adjust_luminosity_ir (c.red / proportions.red);
 	c.green = r->adjust_luminosity_ir (c.green / proportions.green);
 	c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
-	r->out_color.linear_hdr_color (c.red, c.green, c.blue, &color2.x, &color2.y, &color2.z);
+	{
+	  rgbdata out = r->out_color.linear_hdr_color (c);
+	  color2.x = out.red; color2.y = out.green; color2.z = out.blue;
+	}
       }
     if (ret_color1)
       *ret_color1 = color1;
@@ -330,16 +336,20 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets,
               c.red = r->adjust_luminosity_ir (c.red / proportions.red);
               c.green = r->adjust_luminosity_ir (c.green / proportions.green);
               c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
-              r->out_color.linear_hdr_color (c.red, c.green, c.blue, &color1.x,
-                                       &color1.y, &color1.z);
+              {
+                rgbdata out = r->out_color.linear_hdr_color (c);
+                color1.x = out.red; color1.y = out.green; color1.z = out.blue;
+              }
 
               ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue,
                                 &c.red, &c.green, &c.blue);
               c.red = r->adjust_luminosity_ir (c.red / proportions.red);
               c.green = r->adjust_luminosity_ir (c.green / proportions.green);
               c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
-              r->out_color.linear_hdr_color (c.red, c.green, c.blue, &color2.x,
-                                       &color2.y, &color2.z);
+              {
+                rgbdata out = r->out_color.linear_hdr_color (c);
+                color2.x = out.red; color2.y = out.green; color2.z = out.blue;
+              }
             }
           luminosity_t d = deltaE2000 (color1, color2, white);
           if (report)

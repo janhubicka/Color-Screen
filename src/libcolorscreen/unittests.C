@@ -1025,8 +1025,8 @@ test_render_linearity ()
 	      ok = false;
 	    }
 	  /* Now out_lookup_table is applied.  */
-	  ren.out_color.final_color (ren.get_data_red (i,0), ren.get_data_green (i,0), ren.get_data_blue (i,0),
-			 &r, &g, &b);
+	  int_rgbdata out_int = ren.out_color.final_color ({ren.get_data_red (i,0), ren.get_data_green (i,0), ren.get_data_blue (i,0)});
+	  r = out_int.red; g = out_int.green; b = out_int.blue;
 	  if (i > mins[gamma_idx] && (r != i || g != i || b != i))
 	    {
 	      printf ("Render is non-linear at gamma %f linear: %i becomes %i %i %i (with table)\n",
@@ -1034,8 +1034,8 @@ test_render_linearity ()
 	      ok = false;
 	    }
 	  luminosity_t hr,hg,hb;
-	  ren.out_color.hdr_final_color (ren.get_data_red (i,0), ren.get_data_green (i,0), ren.get_data_blue (i,0),
-			     &hr, &hg, &hb);
+	  rgbdata out_hdr = ren.out_color.hdr_final_color ({ren.get_data_red (i,0), ren.get_data_green (i,0), ren.get_data_blue (i,0)});
+	  hr = out_hdr.red; hg = out_hdr.green; hb = out_hdr.blue;
 	  int rr = hr * 65535 + 0.5;
 	  gg = hg * 65535 + 0.5;
 	  int bb = hb * 65535 + 0.5;

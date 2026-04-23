@@ -112,7 +112,7 @@ public:
 
   /* Evaluate the function at X using linear interpolation.  */
   T pure_attr
-  apply (T x) const
+  apply (T x) const noexcept
   {
     if (m_table.empty ())
       return x;
@@ -124,7 +124,7 @@ public:
   /* Determine the inverse of the function for value Y.  Works only for
      monotone functions.  */
   T pure_attr
-  invert (T y) const
+  invert (T y) const noexcept
   {
     unsigned int min = 0;
     unsigned int max = m_table.size ();

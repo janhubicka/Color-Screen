@@ -662,11 +662,10 @@ hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity
   {
     luminosity_t y = i * (maxy - miny) / (steps - 1) + miny;
     y = hd_axis_y_to_linear (y, rparam.contact_copy.boost, axis_type);
-    int rr, gg, bb;
-    a.final_color (y, y, y, &rr, &gg, &bb);
-    data[i].red = rr;
-    data[i].green = gg;
-    data[i].blue = bb;
+    int_rgbdata out = a.final_color ({y, y, y});
+    data[i].red = out.red;
+    data[i].green = out.green;
+    data[i].blue = out.blue;
   }
   return data;
 }

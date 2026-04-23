@@ -1006,8 +1006,12 @@ compare_deltae (image_data &img, scr_to_img_parameters &param1,
   long cln = 0;
   xyz fc1, fc2;
 
-  render1.out_color.linear_hdr_color (1, 0, 0, &fc1.x, &fc1.y, &fc1.z);
-  render2.out_color.linear_hdr_color (1, 0, 0, &fc2.x, &fc2.y, &fc2.z);
+  {
+    rgbdata out1 = render1.out_color.linear_hdr_color ({1, 0, 0});
+    fc1 = {out1.red, out1.green, out1.blue};
+    rgbdata out2 = render2.out_color.linear_hdr_color ({1, 0, 0});
+    fc2 = {out2.red, out2.green, out2.blue};
+  }
   if (progress)
     progress->pause_stdout ();
   printf ("Red primary 1: ");
@@ -1016,8 +1020,12 @@ compare_deltae (image_data &img, scr_to_img_parameters &param1,
   fc2.print (stdout);
   printf ("Red primary deltaE 2000: %f\n", get_deltae (fc1, fc2));
 
-  render1.out_color.linear_hdr_color (0, 1, 0, &fc1.x, &fc1.y, &fc1.z);
-  render2.out_color.linear_hdr_color (0, 1, 0, &fc2.x, &fc2.y, &fc2.z);
+  {
+    rgbdata out1 = render1.out_color.linear_hdr_color ({0, 1, 0});
+    fc1 = {out1.red, out1.green, out1.blue};
+    rgbdata out2 = render2.out_color.linear_hdr_color ({0, 1, 0});
+    fc2 = {out2.red, out2.green, out2.blue};
+  }
   if (progress)
     progress->pause_stdout ();
   printf ("Green primary 1: ");
@@ -1026,8 +1034,12 @@ compare_deltae (image_data &img, scr_to_img_parameters &param1,
   fc2.print (stdout);
   printf ("Green primary deltaE 2000: %f\n", get_deltae (fc1, fc2));
 
-  render1.out_color.linear_hdr_color (0, 0, 1, &fc1.x, &fc1.y, &fc1.z);
-  render2.out_color.linear_hdr_color (0, 0, 1, &fc2.x, &fc2.y, &fc2.z);
+  {
+    rgbdata out1 = render1.out_color.linear_hdr_color ({0, 0, 1});
+    fc1 = {out1.red, out1.green, out1.blue};
+    rgbdata out2 = render2.out_color.linear_hdr_color ({0, 0, 1});
+    fc2 = {out2.red, out2.green, out2.blue};
+  }
   if (progress)
     progress->pause_stdout ();
   printf ("Blue primary 1: ");
@@ -1052,10 +1064,12 @@ compare_deltae (image_data &img, scr_to_img_parameters &param1,
           {
             rgbdata c1 = render1.sample_pixel_img (x, y);
             rgbdata c2 = render2.sample_pixel_img (x, y);
-            render1.out_color.linear_hdr_color (c1.red, c1.green, c1.blue, &fc1.x,
-                                          &fc1.y, &fc1.z);
-            render2.out_color.linear_hdr_color (c2.red, c2.green, c2.blue, &fc2.x,
-                                          &fc2.y, &fc2.z);
+            {
+              rgbdata out1 = render1.out_color.linear_hdr_color (c1);
+              fc1 = {out1.red, out1.green, out1.blue};
+              rgbdata out2 = render2.out_color.linear_hdr_color (c2);
+              fc2 = {out2.red, out2.green, out2.blue};
+            }
             double delta = get_deltae (fc1, fc2);
             deltaE.pre_account (delta);
 #if 0
@@ -1084,10 +1098,12 @@ compare_deltae (image_data &img, scr_to_img_parameters &param1,
               {
                 rgbdata c1 = render1.sample_pixel_img (x, y);
                 rgbdata c2 = render2.sample_pixel_img (x, y);
-                render1.out_color.linear_hdr_color (c1.red, c1.green, c1.blue,
-                                              &fc1.x, &fc1.y, &fc1.z);
-                render2.out_color.linear_hdr_color (c2.red, c2.green, c2.blue,
-                                              &fc2.x, &fc2.y, &fc2.z);
+                {
+                  rgbdata out1 = render1.out_color.linear_hdr_color (c1);
+                  fc1 = {out1.red, out1.green, out1.blue};
+                  rgbdata out2 = render2.out_color.linear_hdr_color (c2);
+                  fc2 = {out2.red, out2.green, out2.blue};
+                }
                 double delta = get_deltae (fc1, fc2, &cln, &mins, &maxs);
                 deltaE.account (delta);
                 n++;
@@ -1115,10 +1131,12 @@ compare_deltae (image_data &img, scr_to_img_parameters &param1,
               {
                 rgbdata c1 = render1.sample_pixel_img (x, y);
                 rgbdata c2 = render2.sample_pixel_img (x, y);
-                render1.out_color.linear_hdr_color (c1.red, c1.green, c1.blue,
-                                              &fc1.x, &fc1.y, &fc1.z);
-                render2.out_color.linear_hdr_color (c2.red, c2.green, c2.blue,
-                                              &fc2.x, &fc2.y, &fc2.z);
+                {
+                  rgbdata out1 = render1.out_color.linear_hdr_color (c1);
+                  fc1 = {out1.red, out1.green, out1.blue};
+                  rgbdata out2 = render2.out_color.linear_hdr_color (c2);
+                  fc2 = {out2.red, out2.green, out2.blue};
+                }
                 double delta = get_deltae (fc1, fc2, &cln, &mins, &maxs);
                 deltaE.account (delta);
                 n++;

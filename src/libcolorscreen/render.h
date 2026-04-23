@@ -92,22 +92,22 @@ public:
   virtual ~render () = default;
 
   /* Determine grayscale value at a given position in the image.  */
-  pure_attr inline luminosity_t get_img_pixel (coord_t x, coord_t y) const;
+  pure_attr inline luminosity_t get_img_pixel (coord_t x, coord_t y) const noexcept;
 
   /* Determine grayscale value at a given position in the image without
      luminosity adjustments.  */
-  pure_attr inline luminosity_t get_unadjusted_img_pixel (coord_t x, coord_t y) const;
+  pure_attr inline luminosity_t get_unadjusted_img_pixel (coord_t x, coord_t y) const noexcept;
 
   /* Determine RGB value at a given position in the image.  Store results
      into R, G, and B.  */
   inline void get_img_rgb_pixel (coord_t x, coord_t y, luminosity_t *r,
-                                 luminosity_t *g, luminosity_t *b) const;
+                                 luminosity_t *g, luminosity_t *b) const noexcept;
 
   /* Determine RGB value at a given position in the image without
      luminosity adjustments.  Store results into R, G, and B at XP, YP.  */
   inline void get_unadjusted_img_rgb_pixel (coord_t xp, coord_t yp,
                                             luminosity_t *r, luminosity_t *g,
-                                            luminosity_t *b) const;
+                                            luminosity_t *b) const noexcept;
 
   /* Sample square patch with center XC and YC and corner offsets X1, Y1, X2, Y2.  */
   pure_attr luminosity_t
@@ -115,7 +115,7 @@ public:
                      coord_t y2) const;
 
   /* Quickly determine grayscale value at a given position X, Y in the image.  */
-  pure_attr inline luminosity_t fast_get_img_pixel (int x, int y) const;
+  pure_attr inline luminosity_t fast_get_img_pixel (int x, int y) const noexcept;
 
   static const int num_color_models = render_parameters::color_model_max;
 
@@ -126,23 +126,23 @@ public:
                                  progress_info *progress = nullptr);
 
   /* Get sharpened grayscale value at index X, Y.  */
-  pure_attr inline luminosity_t get_data (int x, int y) const;
+  pure_attr inline luminosity_t get_data (int x, int y) const noexcept;
 
   /* Get unadjusted sharpened grayscale value at index X, Y.  */
-  pure_attr inline luminosity_t get_unadjusted_data (int x, int y) const;
+  pure_attr inline luminosity_t get_unadjusted_data (int x, int y) const noexcept;
 
   /* Adjust luminosity LUM considering infrared sensitivity.  */
-  pure_attr inline luminosity_t adjust_luminosity_ir (luminosity_t lum) const;
+  pure_attr inline luminosity_t adjust_luminosity_ir (luminosity_t lum) const noexcept;
 
   /* Get sharpened color values at index X, Y.  */
-  pure_attr inline luminosity_t get_data_red (int x, int y) const;
-  pure_attr inline luminosity_t get_data_green (int x, int y) const;
-  pure_attr inline luminosity_t get_data_blue (int x, int y) const;
+  pure_attr inline luminosity_t get_data_red (int x, int y) const noexcept;
+  pure_attr inline luminosity_t get_data_green (int x, int y) const noexcept;
+  pure_attr inline luminosity_t get_data_blue (int x, int y) const noexcept;
 
   /* Get linearized color values at index X, Y.  */
-  pure_attr inline luminosity_t get_linearized_data_red (int x, int y) const;
-  pure_attr inline luminosity_t get_linearized_data_green (int x, int y) const;
-  pure_attr inline luminosity_t get_linearized_data_blue (int x, int y) const;
+  pure_attr inline luminosity_t get_linearized_data_red (int x, int y) const noexcept;
+  pure_attr inline luminosity_t get_linearized_data_green (int x, int y) const noexcept;
+  pure_attr inline luminosity_t get_linearized_data_blue (int x, int y) const noexcept;
 
   /* Precompute all data needed for rendering.  GRAYSCALE_NEEDED
      indicates if gray data is required.  If NORMALIZED_PATCHES is true,
@@ -155,7 +155,7 @@ public:
 
   /* Get linearized RGB pixel value at index X, Y.  */
   pure_attr inline rgbdata
-  get_linearized_rgb_pixel (int x, int y) const
+  get_linearized_rgb_pixel (int x, int y) const noexcept
   {
     if (colorscreen_checking)
       assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
@@ -167,7 +167,7 @@ public:
 
   /* Get unadjusted RGB pixel value at index X, Y.  */
   pure_attr inline rgbdata
-  get_unadjusted_rgb_pixel (int x, int y) const
+  get_unadjusted_rgb_pixel (int x, int y) const noexcept
   {
     rgbdata d = get_linearized_rgb_pixel (x, y);
     if (m_backlight_correction)
@@ -181,7 +181,7 @@ public:
 
   /* Adjust RGB value D based on dark point and exposure.  */
   pure_attr inline rgbdata
-  adjust_rgb (rgbdata d) const
+  adjust_rgb (rgbdata d) const noexcept
   {
     d.red = (d.red - m_params.dark_point) * m_params.scan_exposure;
     d.green = (d.green - m_params.dark_point) * m_params.scan_exposure;
@@ -191,7 +191,7 @@ public:
 
   /* Get final RGB pixel value at index X, Y.  */
   pure_attr inline rgbdata
-  get_rgb_pixel (int x, int y) const
+  get_rgb_pixel (int x, int y) const noexcept
   {
     return adjust_rgb (get_unadjusted_rgb_pixel (x, y));
   }
@@ -302,7 +302,7 @@ protected:
 
 /* Get sharpened grayscale value at index X, Y without adjustments.  */
 pure_attr inline luminosity_t always_inline_attr
-render::get_unadjusted_data (int x, int y) const
+render::get_unadjusted_data (int x, int y) const noexcept
 {
   if (colorscreen_checking)
     assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
@@ -311,7 +311,7 @@ render::get_unadjusted_data (int x, int y) const
 
 /* Adjust luminosity LUM considering infrared sensitivity and dark point.  */
 pure_attr inline luminosity_t always_inline_attr
-render::adjust_luminosity_ir (luminosity_t lum) const
+render::adjust_luminosity_ir (luminosity_t lum) const noexcept
 {
   if (m_adjust_luminosity)
     return m_adjust_luminosity->apply (lum);
@@ -323,14 +323,14 @@ render::adjust_luminosity_ir (luminosity_t lum) const
 
 /* Get sharpened grayscale value at index X, Y.  */
 pure_attr inline luminosity_t always_inline_attr
-render::get_data (int x, int y) const
+render::get_data (int x, int y) const noexcept
 {
   return adjust_luminosity_ir (get_unadjusted_data (x, y));
 }
 
 /* Get linearized red channel value at index X, Y.  */
 pure_attr inline luminosity_t always_inline_attr
-render::get_linearized_data_red (int x, int y) const
+render::get_linearized_data_red (int x, int y) const noexcept
 {
   if (colorscreen_checking)
     assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
@@ -339,7 +339,7 @@ render::get_linearized_data_red (int x, int y) const
 
 /* Get linearized green channel value at index X, Y.  */
 pure_attr inline luminosity_t always_inline_attr
-render::get_linearized_data_green (int x, int y) const
+render::get_linearized_data_green (int x, int y) const noexcept
 {
   if (colorscreen_checking)
     assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
@@ -348,7 +348,7 @@ render::get_linearized_data_green (int x, int y) const
 
 /* Get linearized blue channel value at index X, Y.  */
 pure_attr inline luminosity_t always_inline_attr
-render::get_linearized_data_blue (int x, int y) const
+render::get_linearized_data_blue (int x, int y) const noexcept
 {
   if (colorscreen_checking)
     assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
@@ -357,7 +357,7 @@ render::get_linearized_data_blue (int x, int y) const
 
 /* Get sharpened red channel value at index X, Y.  */
 pure_attr inline luminosity_t
-render::get_data_red (int x, int y) const
+render::get_data_red (int x, int y) const noexcept
 {
   if (colorscreen_checking)
     assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
@@ -370,7 +370,7 @@ render::get_data_red (int x, int y) const
 
 /* Get sharpened green channel value at index X, Y.  */
 pure_attr inline luminosity_t
-render::get_data_green (int x, int y) const
+render::get_data_green (int x, int y) const noexcept
 {
   if (colorscreen_checking)
     assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
@@ -383,7 +383,7 @@ render::get_data_green (int x, int y) const
 
 /* Get sharpened blue channel value at index X, Y.  */
 pure_attr inline luminosity_t
-render::get_data_blue (int x, int y) const
+render::get_data_blue (int x, int y) const noexcept
 {
   if (colorscreen_checking)
     assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
@@ -396,7 +396,7 @@ render::get_data_blue (int x, int y) const
 
 /* Quickly determine grayscale value at a given position in the image.  */
 pure_attr inline luminosity_t
-render::fast_get_img_pixel (int x, int y) const
+render::fast_get_img_pixel (int x, int y) const noexcept
 {
   if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
     return 0;
@@ -406,7 +406,7 @@ render::fast_get_img_pixel (int x, int y) const
 /* Determine grayscale value at position XP, YP in the image using bicubic
    interpolation without adjustments.  */
 pure_attr inline luminosity_t
-render::get_unadjusted_img_pixel (coord_t xp, coord_t yp) const
+render::get_unadjusted_img_pixel (coord_t xp, coord_t yp) const noexcept
 {
   /* Center of pixel [0,0] is [0.5,0.5].  */
   xp -= (coord_t)0.5;
@@ -429,7 +429,7 @@ render::get_unadjusted_img_pixel (coord_t xp, coord_t yp) const
 /* Determine grayscale value at position XP, YP in the image using bicubic
    interpolation.  */
 pure_attr inline luminosity_t
-render::get_img_pixel (coord_t xp, coord_t yp) const
+render::get_img_pixel (coord_t xp, coord_t yp) const noexcept
 {
   return adjust_luminosity_ir (get_unadjusted_img_pixel (xp, yp));
 }
@@ -438,7 +438,7 @@ render::get_img_pixel (coord_t xp, coord_t yp) const
    without adjustments.  */
 inline flatten_attr void
 render::get_unadjusted_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r,
-                                      luminosity_t *g, luminosity_t *b) const
+                                      luminosity_t *g, luminosity_t *b) const noexcept
 {
   /* Center of pixel [0,0] is [0.5,0.5].  */
   xp -= (coord_t)0.5;
@@ -487,7 +487,7 @@ render::get_unadjusted_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r,
 
 /* Determine RGB value at position XP, YP in the image using bicubic interpolation.  */
 inline flatten_attr void
-render::get_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t *g, luminosity_t *b) const
+render::get_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t *g, luminosity_t *b) const noexcept
 {
   get_unadjusted_img_rgb_pixel (xp, yp, r, g, b);
   *r = (*r - m_params.dark_point) * m_params.scan_exposure;

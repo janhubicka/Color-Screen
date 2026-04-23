@@ -138,15 +138,13 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		      rgbdata d = sample_data_scr (render, map, scr.x, scr.y);
 		      if (!p.hdr)
 			{
-			  int rr, gg, bb;
-			  render.out_color.final_color_precise (d.red, d.green, d.blue, &rr, &gg, &bb);
-			  out.put_pixel (x, row, rr, gg, bb);
+			  int_rgbdata out_c = render.out_color.final_color_precise (d);
+			  out.put_pixel (x, row, out_c.red, out_c.green, out_c.blue);
 			}
 		      else
 			{
-			  luminosity_t rr, gg, bb;
-			  render.out_color.hdr_final_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-			  out.put_hdr_pixel (x, row, rr, gg, bb);
+			  rgbdata out_c = render.out_color.hdr_final_color (d);
+			  out.put_hdr_pixel (x, row, out_c.red, out_c.green, out_c.blue);
 			}
 		    }
 		  if (x == p.width - 1 && progress)
@@ -162,15 +160,13 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		  rgbdata d = sample_data_final (render, map, xx, yy, final_xshift, final_yshift);
 		  if (!p.hdr)
 		    {
-		      int rr, gg, bb;
-		      render.out_color.final_color_precise (d.red, d.green, d.blue, &rr, &gg, &bb);
-		      out.put_pixel (x, row, rr, gg, bb);
+		      int_rgbdata out_c = render.out_color.final_color_precise (d);
+		      out.put_pixel (x, row, out_c.red, out_c.green, out_c.blue);
 		    }
 		  else
 		    {
-		      luminosity_t rr, gg, bb;
-		      render.out_color.hdr_final_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-		      out.put_hdr_pixel (x, row, rr, gg, bb);
+		      rgbdata out_c = render.out_color.hdr_final_color (d);
+		      out.put_hdr_pixel (x, row, out_c.red, out_c.green, out_c.blue);
 		    }
 		  if (x == p.width - 1 && progress)
 		    progress->inc_progress ();
@@ -186,15 +182,13 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		  rgbdata d = render.fast_sample_pixel_img (xx - final_xshift, yy - final_yshift);
 		  if (!p.hdr)
 		    {
-		      int rr, gg, bb;
-		      render.out_color.final_color_precise (d.red, d.green, d.blue, &rr, &gg, &bb);
-		      out.put_pixel (x, row, rr, gg, bb);
+		      int_rgbdata out_c = render.out_color.final_color_precise (d);
+		      out.put_pixel (x, row, out_c.red, out_c.green, out_c.blue);
 		    }
 		  else
 		    {
-		      luminosity_t rr, gg, bb;
-		      render.out_color.hdr_final_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-		      out.put_hdr_pixel (x, row, rr, gg, bb);
+		      rgbdata out_c = render.out_color.hdr_final_color (d);
+		      out.put_hdr_pixel (x, row, out_c.red, out_c.green, out_c.blue);
 		    }
 		  if (x == p.width - 1 && progress)
 		    progress->inc_progress ();
@@ -233,15 +227,13 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		      d.blue *= sc;
 		      if (!p.hdr)
 			{
-			  int rr, gg, bb;
-			  render.out_color.final_color_precise (d.red, d.green, d.blue, &rr, &gg, &bb);
-			  out.put_pixel (x, row, rr, gg, bb);
+			  int_rgbdata out_c = render.out_color.final_color_precise (d);
+			  out.put_pixel (x, row, out_c.red, out_c.green, out_c.blue);
 			}
 		      else
 			{
-			  luminosity_t rr, gg, bb;
-			  render.out_color.hdr_final_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-			  out.put_hdr_pixel (x, row, rr, gg, bb);
+			  rgbdata out_c = render.out_color.hdr_final_color (d);
+			  out.put_hdr_pixel (x, row, out_c.red, out_c.green, out_c.blue);
 			}
 		    }
 		  if (x == p.width - 1 && progress)
@@ -263,15 +255,13 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		  d.blue *= sc;
 		  if (!p.hdr)
 		    {
-		      int rr, gg, bb;
-		      render.out_color.final_color_precise (d.red, d.green, d.blue, &rr, &gg, &bb);
-		      out.put_pixel (x, row, rr, gg, bb);
+		      int_rgbdata out_c = render.out_color.final_color_precise (d);
+		      out.put_pixel (x, row, out_c.red, out_c.green, out_c.blue);
 		    }
 		  else
 		    {
-		      luminosity_t rr, gg, bb;
-		      render.out_color.hdr_final_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-		      out.put_hdr_pixel (x, row, rr, gg, bb);
+		      rgbdata out_c = render.out_color.hdr_final_color (d);
+		      out.put_hdr_pixel (x, row, out_c.red, out_c.green, out_c.blue);
 		    }
 		  if (x == p.width - 1 && progress)
 		    progress->inc_progress ();
@@ -292,15 +282,13 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		  d.blue *= sc;
 		  if (!p.hdr)
 		    {
-		      int rr, gg, bb;
-		      render.out_color.final_color_precise (d.red, d.green, d.blue, &rr, &gg, &bb);
-		      out.put_pixel (x, row, rr, gg, bb);
+		      int_rgbdata out_c = render.out_color.final_color_precise (d);
+		      out.put_pixel (x, row, out_c.red, out_c.green, out_c.blue);
 		    }
 		  else
 		    {
-		      luminosity_t rr, gg, bb;
-		      render.out_color.hdr_final_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-		      out.put_hdr_pixel (x, row, rr, gg, bb);
+		      rgbdata out_c = render.out_color.hdr_final_color (d);
+		      out.put_hdr_pixel (x, row, out_c.red, out_c.green, out_c.blue);
 		    }
 		  if (x == p.width - 1 && progress)
 		    progress->inc_progress ();

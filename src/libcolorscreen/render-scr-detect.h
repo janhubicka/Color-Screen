@@ -396,7 +396,8 @@ public:
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b) const
   {
     rgbdata d = sample_pixel_img (x, y);
-    out_color.final_color (d.red, d.green, d.blue, r,g,b);
+    int_rgbdata out_c = out_color.final_color (d);
+    *r = out_c.red; *g = out_c.green; *b = out_c.blue;
   }
 };
 
@@ -463,7 +464,8 @@ public:
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b) const
   {
     rgbdata d = sample_pixel_img (x, y);
-    out_color.final_color (d.red, d.green, d.blue, r,g,b);
+    int_rgbdata out_c = out_color.final_color (d);
+    *r = out_c.red; *g = out_c.green; *b = out_c.blue;
   }
 };
 class render_scr_detect_superpose_img : public render_scr_detect
@@ -504,7 +506,8 @@ void
 render_scr_detect_superpose_img::render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b) 
 {
   rgbdata d = sample_pixel_img (x, y);
-  out_color.final_color (d.red, d.green, d.blue, r,g,b);
+  int_rgbdata out_c = out_color.final_color (d);
+  *r = out_c.red; *g = out_c.green; *b = out_c.blue;
 }
 
 inline void
@@ -557,7 +560,8 @@ public:
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     rgbdata d = sample_pixel_img (x, y);
-    out_color.final_color (d.red, d.green, d.blue,r,g,b);
+    int_rgbdata out_c = out_color.final_color (d);
+    *r = out_c.red; *g = out_c.green; *b = out_c.blue;
   }
   ~render_scr_relax();
   void set_render_type (render_type_parameters rtparam)
@@ -632,7 +636,8 @@ public:
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     rgbdata d = sample_pixel_img (x, y);
-    out_color.final_color (d.red, d.green, d.blue, r, g, b);
+    int_rgbdata out_c = out_color.final_color (d);
+    *r = out_c.red; *g = out_c.green; *b = out_c.blue;
   }
   bool precompute_all (progress_info *progress)
   {
@@ -707,7 +712,8 @@ public:
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     rgbdata d = sample_pixel_img (x, y);
-    out_color.final_color (d.red, d.green, d.blue,r,g,b);
+    int_rgbdata out_c = out_color.final_color (d);
+    *r = out_c.red; *g = out_c.green; *b = out_c.blue;
   }
   void set_render_type (render_type_parameters rtparam)
   {

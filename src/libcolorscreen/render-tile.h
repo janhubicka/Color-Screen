@@ -54,10 +54,9 @@ bool render_img_normal(render_type_parameters rtparam,
       if (!progress || !progress->cancel_requested ())
 	for (int x = 0; x < width; x++)
 	  {
-	    int r, g, b;
 	    rgbdata c = render.sample_pixel_img ((x + xoffset) * step, py);
-	    render.out_color.final_color (c.red, c.green, c.blue, &r, &g, &b);
-	    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+	    int_rgbdata out_c = render.out_color.final_color (c);
+	    putpixel (pixels, pixelbytes, rowstride, x, y, out_c.red, out_c.green, out_c.blue);
 	  }
        if (progress)
 	 progress->inc_progress ();
@@ -97,9 +96,8 @@ bool render_img_downscale(render_type_parameters rtparam,
       if (!progress || !progress->cancel_requested ())
 	for (int x = 0; x < width; x++)
 	  {
-	    int r, g, b;
-	    render.out_color.final_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
-	    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+	    int_rgbdata out_c = render.out_color.final_color (data[x + width * y]);
+	    putpixel (pixels, pixelbytes, rowstride, x, y, out_c.red, out_c.green, out_c.blue);
 	  }
        if (progress)
 	 progress->inc_progress ();
@@ -140,9 +138,8 @@ bool render_img_gray_downscale(render_type_parameters rtparam,
       if (!progress || !progress->cancel_requested ())
 	for (int x = 0; x < width; x++)
 	  {
-	    int r, g, b;
-            render.out_color.final_color (data[x + width * y], data[x + width * y], data[x + width * y], &r, &g, &b);
-	    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+	    int_rgbdata out_c = render.out_color.final_color ({data[x + width * y], data[x + width * y], data[x + width * y]});
+	    putpixel (pixels, pixelbytes, rowstride, x, y, out_c.red, out_c.green, out_c.blue);
 	  }
        if (progress)
 	 progress->inc_progress ();
@@ -385,9 +382,8 @@ void render_stitched(RP &rtparam, P &outer_param,
 		lasty = iy;
 	      }
 	  rgbdata d = render_loop (*lastrender, stitch.images[lasty][lastx].scr_to_img_map, antialias, scr.x - stitch.images[lasty][lastx].pos.x, scr.y - stitch.images[lasty][lastx].pos.y, step);
-	  int r, g, b;
-	  lastrender->out_color.final_color (d.red, d.green, d.blue, &r, &g, &b);
-	  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+	  int_rgbdata out_c = lastrender->out_color.final_color (d);
+	  putpixel (pixels, pixelbytes, rowstride, x, y, out_c.red, out_c.green, out_c.blue);
 	}
       if (progress)
 	progress->inc_progress ();
