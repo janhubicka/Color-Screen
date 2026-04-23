@@ -77,17 +77,24 @@ pure_attr DLL_PUBLIC rgbdata patch_proportions (enum scr_type t,
 enum scanner_type
 {
   fixed_lens,
-  fixed_lens_sensor_move_horisontally,
+  fixed_lens_sensor_move_horizontally,
   fixed_lens_sensor_move_vertically,
-  lens_move_horisontally,
-  lens_move_vertically,
-  max_scanner_type
+  horizontally_moving_lens,
+  vertically_moving_lens,
+  max_scanner_type,
+
+  /* Old misspelled aliases for backward compatibility.  */
+  fixed_lens_sensor_move_horisontally = fixed_lens_sensor_move_horizontally,
+  horisontally_moving_lens = horizontally_moving_lens,
+  lens_move_horizontally = horizontally_moving_lens,
+  lens_move_horisontally = horizontally_moving_lens,
+  lens_move_vertically = vertically_moving_lens
 };
 
 inline bool
 is_fixed_lens (scanner_type type)
 {
-  return type == fixed_lens || type == fixed_lens_sensor_move_horisontally
+  return type == fixed_lens || type == fixed_lens_sensor_move_horizontally
          || type == fixed_lens_sensor_move_vertically;
 }
 

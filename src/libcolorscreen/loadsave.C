@@ -7,7 +7,7 @@
 namespace colorscreen
 {
 
-/* There are two squares diagonally.  Horisontally the frequency is 1
+/* There are two squares diagonally.  Horizontally the frequency is 1
    diagonally the frequency is higher since side of square with
    diagonal 1 is sqrt(2)/2  */
 
@@ -28,9 +28,9 @@ const scr_type_property_t scr_names[max_scr_type]  = {
 
 const property_t scanner_type_names[max_scanner_type]  = {
   { "fixed-lens", "Fixed-lens", "" },
-  { "fixed-lens-horisontally-moving-sensor", "Fixed-lens-horisontally-moving-sensor", "" },
+  { "fixed-lens-horizontally-moving-sensor", "Fixed-lens-horizontally-moving-sensor", "" },
   { "fixed-lens-vertically-moving-sensor", "Fixed-lens-vertically-moving-sensor", "" },
-  { "horisontally-moving-lens", "Horisontally-moving-lens", "" },
+  { "horizontally-moving-lens", "Horizontally-moving-lens", "" },
   { "vertically-moving-lens", "Vertically-moving-lens", "" },
 };
 
@@ -578,6 +578,13 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  for (j = 0; j < max_scanner_type; j++)
 	    if (!strcmp (buf2, scanner_type_names[j].name))
 	      break;
+	  if (j == max_scanner_type)
+	    {
+	      if (!strcmp (buf2, "fixed-lens-horisontally-moving-sensor"))
+		j = fixed_lens_sensor_move_horizontally;
+	      else if (!strcmp (buf2, "horisontally-moving-lens"))
+		j = horizontally_moving_lens;
+	    }
 	  if (j == max_scanner_type)
 	    {
 	      *error = "unknown scanner type";
