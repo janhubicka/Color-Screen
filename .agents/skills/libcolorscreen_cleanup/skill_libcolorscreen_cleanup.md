@@ -71,3 +71,4 @@ This skill provides guidelines for maintaining, refactoring, and modernizing the
 
 ## 7. Tools
 - **clang-refactor**: You can use `clang-refactor` and other clang tools for refactoring
+- **tools**: You can suggest use of other open-source tools to speed up refactoring
