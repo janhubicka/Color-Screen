@@ -11,33 +11,33 @@ inline rgbdata
 sample_data_final_by_img (T &render, scr_to_img &map,coord_t x, coord_t y, int final_xshift, int final_yshift)
 {
   point_t p = map.final_to_img ({x - final_xshift, y - final_yshift});
-  return render.sample_pixel_img (p.x, p.y);
+  return render.sample_pixel_img (p);
 }
 template<typename T>
 inline rgbdata
 sample_data_final_by_scr (T &render, scr_to_img &map,coord_t x, coord_t y, int final_xshift, int final_yshift)
 {
   point_t p = map.final_to_scr ({x - final_xshift, y - final_yshift});
-  return render.sample_pixel_scr (p.x, p.y);
+  return render.sample_pixel_scr (p);
 }
 template<typename T>
 inline rgbdata
 sample_data_final_by_final (T &render, scr_to_img &,coord_t x, coord_t y, int final_xshift, int final_yshift)
 {
-  return render.sample_pixel_final (x, y);
+  return render.sample_pixel_final ({x, y});
 }
 template<typename T>
 inline rgbdata
 sample_data_scr_by_scr (T &render, scr_to_img &map,coord_t x, coord_t y)
 {
-  return render.sample_pixel_scr (x, y);
+  return render.sample_pixel_scr ({x, y});
 }
 template<typename T>
 inline rgbdata
 sample_data_scr_by_img (T &render, scr_to_img &map,coord_t x, coord_t y)
 {
   point_t p = map.to_img ({x, y});
-  return render.sample_pixel_img (p.x, p.y);
+  return render.sample_pixel_img (p);
 }
 
 #define supports_final sample_data_final_by_final, sample_data_scr_by_scr
@@ -179,7 +179,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		  coord_t xx = x * p.xstep + p.xstart;
 		  coord_t yy = (y + row) * p.ystep + p.ystart;
 		  //rgbdata d = render.sample_pixel_img (xx - final_xshift + 0.5, yy - final_yshift + 0.5);
-		  rgbdata d = render.fast_sample_pixel_img (xx - final_xshift, yy - final_yshift);
+		  rgbdata d = render.fast_sample_pixel_img ({(int)(xx - final_xshift), (int)(yy - final_yshift)});
 		  if (!p.hdr)
 		    {
 		      int_rgbdata out_c = render.out_color.final_color_precise (d);
@@ -276,7 +276,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		  coord_t yy = (y + row) * p.ystep + p.ystart;
 		  for (int ay = 0 ; ay < p.antialias; ay++)
 		    for (int ax = 0 ; ax < p.antialias; ax++)
-		      d += render.sample_pixel_img (xx + (ax + 0.5) * asx - final_xshift, yy + (ay + 0.5) * asy - final_yshift);
+		      d += render.sample_pixel_img ({xx + (ax + 0.5) * asx - final_xshift, yy + (ay + 0.5) * asy - final_yshift});
 		  d.red *= sc;
 		  d.green *= sc;
 		  d.blue *= sc;

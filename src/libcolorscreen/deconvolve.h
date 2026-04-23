@@ -138,7 +138,7 @@ private:
    DT is a type to do deconvolution in.
    */
 template <typename O, typename mem_O, typename T, typename P,
-          O (*getdata) (T data, int x, int y, int width, P param), typename DT>
+          O (*getdata) (T data, int_point_t p, int width, P param), typename DT>
 bool
 deconvolve (mem_O *out, T data, P param, int width, int height,
             const sharpen_parameters &sharpen, progress_info *progress,
@@ -208,7 +208,7 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
                 py = height - (py - height) - 1;
               px = std::clamp (px, 0, width - 1);
               py = std::clamp (py, 0, height - 1);
-              d.put_pixel (id, xx, yy, getdata (data, px, py, width, param));
+              d.put_pixel (id, xx, yy, getdata (data, {px, py}, width, param));
             }
         d.process_tile (id);
         for (int yy = 0; yy < d.get_basic_tile_size (); yy++)
@@ -225,7 +225,7 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
 }
 /* Deconvolution worker for rgbdata and related types (having red, green and blue fields)  */
 template <typename O, typename mem_O, typename T, typename P,
-          O (*getdata) (T data, int x, int y, int width, P param), typename DT>
+          O (*getdata) (T data, int_point_t p, int width, P param), typename DT>
 bool
 deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
 		const sharpen_parameters &sharpen,
@@ -301,7 +301,7 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
 		py = height - (py - height) - 1;
 	      px = std::clamp (px, 0, width - 1);
 	      py = std::clamp (py, 0, height - 1);
-              pixel = getdata (data, px, py, width, param);
+              pixel = getdata (data, {px, py}, width, param);
               d.put_pixel (3 * id, xx, yy, pixel.red);
               d.put_pixel (3 * id + 1, xx, yy, pixel.green);
               d.put_pixel (3 * id + 2, xx, yy, pixel.blue);
@@ -336,7 +336,7 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
 /* Auto-select the type.  */
 
 template <typename O, typename mem_O, typename T, typename P,
-          O (*getdata) (T data, int x, int y, int width, P param)>
+          O (*getdata) (T data, int_point_t p, int width, P param)>
 bool
 deconvolve (mem_O *out, T data, P param, int width, int height,
             const sharpen_parameters &sharpen, progress_info *progress,
@@ -352,7 +352,7 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
 /* Auto-select the type.  */
 
 template <typename O, typename mem_O, typename T, typename P,
-          O (*getdata) (T data, int x, int y, int width, P param)>
+          O (*getdata) (T data, int_point_t p, int width, P param)>
 bool
 deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
 		const sharpen_parameters &sharpen, progress_info *progress,

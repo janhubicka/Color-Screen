@@ -270,7 +270,7 @@ DLL_PUBLIC bool
 render_tile(image_data &scan, scr_to_img_parameters &param, scr_detect_parameters &dparam, render_parameters &rparam,
 	    render_type_parameters &rtparam, tile_parameters &tile, progress_info *progress)
 {
-  if ((int)rtparam.type < (int)render_type_first_scr_detect)
+  if ((int)rtparam.type < (int)render_type_first_scr_detect && rtparam.type != render_type_interpolated_diff)
     return render_to_scr::render_tile (rtparam, param, scan, rparam,
 				       tile.pixels, tile.pixelbytes, tile.rowstride, tile.width, tile.height, tile.pos.x, tile.pos.y, tile.step, progress);
   else

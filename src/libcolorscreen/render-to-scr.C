@@ -184,25 +184,23 @@ render_to_scr::pixel_size ()
 
 bool
 render_to_scr::precompute_all (bool grayscale_needed, bool normalized_patches,
-                               progress_info *progress)
+			       progress_info *progress)
 {
   return render::precompute_all (grayscale_needed, normalized_patches,
-                                 normalized_patches ? m_scr_to_img.patch_proportions (&m_params) : (rgbdata){1.0/3, 1.0/3, 1.0/3},
-                                 progress);
+				 normalized_patches ? m_scr_to_img.patch_proportions (&m_params) : (rgbdata){1.0/3, 1.0/3, 1.0/3},
+				 progress);
 }
+#if 0
 bool
-render_to_scr::precompute (bool grayscale_needed, bool normalized_patches,
-                           coord_t, coord_t, coord_t, coord_t,
-                           progress_info *progress)
+render_to_scr::precompute (int_image_area, progress_info *progress)
 {
-  return precompute_all (grayscale_needed, normalized_patches, progress);
+  return render_to_scr::precompute_all (grayscale_needed, normalized_patches, progress);
 }
+#endif
 bool
-render_to_scr::precompute_img_range (bool grayscale_needed,
-                                     bool normalized_patches, coord_t, coord_t,
-                                     coord_t, coord_t, progress_info *progress)
+render_to_scr::precompute_img_range (bool grayscale_needed, bool normalized_patches, int_image_area, progress_info *progress)
 {
-  return precompute_all (grayscale_needed, normalized_patches, progress);
+  return render_to_scr::precompute_all (grayscale_needed, normalized_patches, progress);
 }
 
 /* Compute screen of type T possibly in PREVIEW.
@@ -311,15 +309,15 @@ render_to_scr::~render_to_scr ()
 }
 
 bool
-render_img::get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
+render_img::get_color_data (rgbdata *data, point_t p, int width,
                             int height, coord_t pixelsize,
                             progress_info *progress)
 {
   if (m_profiled)
     return downscale<render_img, rgbdata, &render_img::get_profiled_rgb_pixel> (
-        data, x, y, width, height, pixelsize, progress);
+        data, p, width, height, pixelsize, progress);
   else
-    return render::get_color_data (data, x, y, width, height, pixelsize, progress);
+    return render::get_color_data (data, p, width, height, pixelsize, progress);
 }
 
 static void

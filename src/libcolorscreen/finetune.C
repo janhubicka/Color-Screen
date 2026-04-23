@@ -22,11 +22,11 @@ namespace
 
 /* Callback used for sharpening.  */
 rgbdata
-getdata_helper (rgbdata *r, int x, int y, int width, int height)
+getdata_helper (rgbdata *r, int_point_t p, int width, int height)
 {
   if (colorscreen_checking)
-    assert (x >= 0 && x < width && y >= 0 && y < height);
-  return r[y * width + x];
+    assert (p.x >= 0 && p.x < width && p.y >= 0 && p.y < height);
+  return r[p.y * width + p.x];
 }
 
 /* Sign of angle used for mesh transform.  */
@@ -586,9 +586,9 @@ public:
 
   /* Get screen coordinates of a given pixel of a given tile.  */
   point_t
-  get_pos (coord_t *v, int tileid, int x, int y)
+  get_pos (coord_t *v, int tileid, int_point_t p)
   {
-    return tiles[tileid].pos[y * twidth + x] + get_offset (v, tileid);
+    return tiles[tileid].pos[p.y * twidth + p.x] + get_offset (v, tileid);
   }
 
   /* Return true if we consider outliers.  */
@@ -1023,7 +1023,7 @@ public:
             for (int x = border; x < twidth - border; x++)
               if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
                 {
-                  rgbdata c = fog_by_least_squares ? get_pixel_nofog (tileid, x, y) : get_pixel (v, tileid, x, y);
+                  rgbdata c = fog_by_least_squares ? get_pixel_nofog (tileid, {x, y}) : get_pixel (v, tileid, {x, y});
                   gsl_vector_set (gsl_y[0], e, c.red);
                   gsl_vector_set (gsl_y[1], e, c.green);
                   gsl_vector_set (gsl_y[2], e, c.blue);
@@ -1053,7 +1053,7 @@ public:
               if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
                 {
                   gsl_vector_set (gsl_y[0], e,
-                                  bw_get_pixel (tileid, x, y) / (2 * maxgray));
+                                  bw_get_pixel (tileid, {x, y}) / (2 * maxgray));
                   e++;
                 }
         if (e != (int)gsl_y[0]->size)
@@ -1087,11 +1087,10 @@ public:
               = map.to_scr ({ cur_txmin + x + 0.5, cur_tymin + y + 0.5 });
           if (tiles[tileid].color)
             tiles[tileid].color[y * twidth + x]
-                = render.get_unadjusted_rgb_pixel (x + cur_txmin,
-                                                   y + cur_tymin);
+                = render.get_unadjusted_rgb_pixel ({x + cur_txmin, y + cur_tymin});
           if (tiles[tileid].bw)
             tiles[tileid].bw[y * twidth + x]
-                = render.get_unadjusted_data (x + cur_txmin, y + cur_tymin);
+                = render.get_unadjusted_data ({x + cur_txmin, y + cur_tymin});
         }
     return true;
   }
@@ -1549,13 +1548,13 @@ public:
     maxgray = mingray = 0;
     if (tiles[0].bw)
       {
-	mingray = maxgray = bw_get_pixel (0, 0, 0);
+	mingray = maxgray = bw_get_pixel (0, {0, 0});
 	for (int tileid = 0; tileid < n_tiles; tileid++)
 	  for (int y = 0; y < theight; y++)
 	    for (int x = 0; x < twidth; x++)
 	      {
-		maxgray = std::max (maxgray, bw_get_pixel (tileid, x, y));
-		mingray = std::min (mingray, bw_get_pixel (tileid, x, y));
+		maxgray = std::max (maxgray, bw_get_pixel (tileid, {x, y}));
+		mingray = std::min (mingray, bw_get_pixel (tileid, {x, y}));
 	      }
       }
 
@@ -1637,9 +1636,9 @@ public:
 
   /* Getpixel for simulaed screen.  */
   rgbdata
-  get_simulated_screen_pixel (int tile, int x, int y)
+  get_simulated_screen_pixel (int tile, int_point_t p)
   {
-    return tiles[tile].simulated_screen[y * simulated_screen_width + x];
+    return tiles[tile].simulated_screen[p.y * simulated_screen_width + p.x];
   }
 
   /* Apply blur to SRC_SCR and compute DST_SCR.  */
@@ -1829,12 +1828,12 @@ public:
   evaulate_pixel (coord_t *v, int tileid, rgbdata red, rgbdata green,
                   rgbdata blue, int x, int y, point_t off, rgbdata mix_weights, luminosity_t mix_dark)
   {
-    rgbdata m = get_simulated_screen_pixel (tileid, x, y);
+    rgbdata m = get_simulated_screen_pixel (tileid, {x, y});
     rgbdata c = ((red * m.red + green * m.green + blue * m.blue)
                  * ((coord_t)1.0 / rgbscale));
     if (simulate_infrared)
       {
-        rgbdata p = get_pixel (v, tileid, x, y);
+        rgbdata p = get_pixel (v, tileid, {x, y});
         luminosity_t intensity = p.red * mix_weights.red
                                  + p.green * mix_weights.green
                                  + p.blue * mix_weights.blue - mix_dark;
@@ -1859,16 +1858,16 @@ public:
   pure_attr inline luminosity_t
   bw_evaulate_pixel (int tileid, rgbdata color, int x, int y, point_t off)
   {
-    rgbdata m = get_simulated_screen_pixel (tileid, x, y);
+    rgbdata m = get_simulated_screen_pixel (tileid, {x, y});
     return ((m.red * color.red + m.green * color.green
              + m.blue * color.blue) /** (2 * maxgray)*/);
   }
   pure_attr rgbdata
-  get_orig_pixel (coord_t *v, int tileid, int x, int y)
+  get_orig_pixel (coord_t *v, int tileid, int_point_t p)
   {
     if (!optimize_fog)
-      return tiles[tileid].color[y * twidth + x];
-    rgbdata d = tiles[tileid].color[y * twidth + x] - get_fog (v);
+      return tiles[tileid].color[p.y * twidth + p.x];
+    rgbdata d = tiles[tileid].color[p.y * twidth + p.x] - get_fog (v);
     if (normalize)
       {
         luminosity_t ssum = fabs (d.red + d.green + d.blue);
@@ -1880,17 +1879,17 @@ public:
   }
 
   pure_attr rgbdata
-  get_pixel_nofog (int tileid, int x, int y)
+  get_pixel_nofog (int tileid, int_point_t p)
   {
-    return tiles[tileid].sharpened_color[y * twidth + x];
+    return tiles[tileid].sharpened_color[p.y * twidth + p.x];
   }
 
   pure_attr rgbdata
-  get_pixel (coord_t *v, int tileid, int x, int y)
+  get_pixel (coord_t *v, int tileid, int_point_t p)
   {
     if (!optimize_fog)
-      return tiles[tileid].sharpened_color[y * twidth + x];
-    rgbdata d = tiles[tileid].sharpened_color[y * twidth + x] - get_fog (v);
+      return tiles[tileid].sharpened_color[p.y * twidth + p.x];
+    rgbdata d = tiles[tileid].sharpened_color[p.y * twidth + p.x] - get_fog (v);
     if (normalize)
       {
         luminosity_t ssum = fabs (d.red + d.green + d.blue);
@@ -1902,9 +1901,9 @@ public:
   }
 
   luminosity_t
-  bw_get_pixel (int tileid, int x, int y)
+  bw_get_pixel (int tileid, int_point_t p)
   {
-    return tiles[tileid].bw[y * twidth + x];
+    return tiles[tileid].bw[p.y * twidth + p.x];
   }
   void
   determine_colors_using_data_collection (coord_t *v, rgbdata *ret_red,
@@ -1922,8 +1921,8 @@ public:
         for (int x = border; x < twidth - border; x++)
           if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
             {
-              rgbdata m = get_simulated_screen_pixel (tileid, x, y);
-              rgbdata d = get_pixel (v, tileid, x, y);
+              rgbdata m = get_simulated_screen_pixel (tileid, {x, y});
+              rgbdata d = get_pixel (v, tileid, {x, y});
               if (m.red > threshold)
                 {
                   coord_t val = m.red - threshold;
@@ -2013,8 +2012,8 @@ public:
 	    for (int x = border; x < twidth - border; x++)
 	      if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
 		{
-		  rgbdata c = get_simulated_screen_pixel (tileid, x, y);
-                  rgbdata d = fog_by_least_squares ? get_pixel_nofog (tileid, x, y) : get_pixel (v, tileid, x, y);
+		  rgbdata c = get_simulated_screen_pixel (tileid, {x, y});
+                  rgbdata d = fog_by_least_squares ? get_pixel_nofog (tileid, {x, y}) : get_pixel (v, tileid, {x, y});
 		  /* ??? This is not right when fog is optimized by least squares.
 		     For this reason we use non-linear solver to optimize fog.  */
 		  c *= d.red * mix_weights.red + d.green * mix_weights.green + d.blue * mix_weights.blue - mix_dark;
@@ -2147,7 +2146,7 @@ public:
 	    for (int x = border; x < twidth - border; x++)
 	      if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
 		{
-		  rgbdata c = get_simulated_screen_pixel (tileid, x, y);
+		  rgbdata c = get_simulated_screen_pixel (tileid, {x, y});
 		  gsl_matrix_set (gsl_X, e, 0, c.red);
 		  gsl_matrix_set (gsl_X, e, 1, c.green);
 		  gsl_matrix_set (gsl_X, e, 2, c.blue);
@@ -2203,8 +2202,8 @@ public:
         for (int x = border; x < twidth - border; x++)
           if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
             {
-              rgbdata m = get_simulated_screen_pixel (tileid, x, y);
-              luminosity_t l = bw_get_pixel (tileid, x, y);
+              rgbdata m = get_simulated_screen_pixel (tileid, {x, y});
+              luminosity_t l = bw_get_pixel (tileid, {x, y});
               if (m.red > threshold)
                 {
                   coord_t val = m.red - threshold;
@@ -2270,7 +2269,7 @@ public:
         for (int x = border; x < twidth - border; x++)
           if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
             {
-              rgbdata c = get_simulated_screen_pixel (tileid, x, y);
+              rgbdata c = get_simulated_screen_pixel (tileid, {x, y});
               gsl_matrix_set (gsl_X, e, 0, c.red);
               gsl_matrix_set (gsl_X, e, 1, c.green);
               gsl_matrix_set (gsl_X, e, 2, c.blue);
@@ -2454,7 +2453,7 @@ public:
                   {
                     rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x,
                                                 y, off, mix_weights, mix_dark);
-                    rgbdata d = get_pixel (v, tileid, x, y);
+                    rgbdata d = get_pixel (v, tileid, {x, y});
 
                     /* Bayer pattern. */
                     if (!(x & 1) && !(y & 1))
@@ -2479,7 +2478,7 @@ public:
                   {
                     luminosity_t c
                         = bw_evaulate_pixel (tileid, color, x, y, off);
-                    luminosity_t d = bw_get_pixel (tileid, x, y);
+                    luminosity_t d = bw_get_pixel (tileid, {x, y});
                     sum += fabs (c - d);
                   }
             sum /= maxgray;
@@ -2585,7 +2584,7 @@ public:
             {
               rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y,
                                           off, mix_weights, mix_dark);
-              rgbdata d = get_pixel (v, tileid, x, y);
+              rgbdata d = get_pixel (v, tileid, {x, y});
               coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green)
                             + fabs (c.blue - d.blue);
               hist.pre_account (err);
@@ -2596,7 +2595,7 @@ public:
             {
               rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y,
                                           off, mix_weights, mix_dark);
-              rgbdata d = get_pixel (v, tileid, x, y);
+              rgbdata d = get_pixel (v, tileid, {x, y});
               coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green)
                             + fabs (c.blue - d.blue);
               hist.account (err);
@@ -2609,7 +2608,7 @@ public:
             {
               rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y,
                                           off, mix_weights, mix_dark);
-              rgbdata d = get_pixel (v, tileid, x, y);
+              rgbdata d = get_pixel (v, tileid, {x, y});
               coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green)
                             + fabs (c.blue - d.blue);
               if (err > merr)
@@ -2643,7 +2642,7 @@ public:
           for (int x = border; x < twidth - border; x++)
             {
               luminosity_t c = bw_evaulate_pixel (tileid, color, x, y, off);
-              luminosity_t d = bw_get_pixel (tileid, x, y);
+              luminosity_t d = bw_get_pixel (tileid, {x, y});
               coord_t err = fabs (c - d);
               hist.pre_account (err);
             }
@@ -2652,7 +2651,7 @@ public:
           for (int x = border; x < twidth - border; x++)
             {
               luminosity_t c = bw_evaulate_pixel (tileid, color, x, y, off);
-              luminosity_t d = bw_get_pixel (tileid, x, y);
+              luminosity_t d = bw_get_pixel (tileid, {x, y});
               coord_t err = fabs (c - d);
               hist.account (err);
             }
@@ -2663,7 +2662,7 @@ public:
           for (int x = border; x < twidth - border; x++)
             {
               luminosity_t c = bw_evaulate_pixel (tileid, color, x, y, off);
-              luminosity_t d = bw_get_pixel (tileid, x, y);
+              luminosity_t d = bw_get_pixel (tileid, {x, y});
               coord_t err = fabs (c - d);
               if (err > merr)
                 {
@@ -2713,7 +2712,7 @@ public:
               rmax = std::max (c.red, rmax);
               gmax = std::max (c.green, gmax);
               bmax = std::max (c.blue, bmax);
-              rgbdata d = get_pixel (v, tileid, x, y);
+              rgbdata d = get_pixel (v, tileid, {x, y});
               rmax = std::max (d.red, rmax);
               gmax = std::max (d.green, gmax);
               bmax = std::max (d.blue, bmax);
@@ -2735,7 +2734,7 @@ public:
                     break;
                   case 1:
                     {
-                      rgbdata d = get_orig_pixel (v, tileid, x, y);
+                      rgbdata d = get_orig_pixel (v, tileid, {x, y});
                       img->put_linear_pixel (x, y, {d.red / rmax, d.green / gmax, d.blue / bmax});
                     }
                     break;
@@ -2743,13 +2742,13 @@ public:
                     {
                       rgbdata c = evaulate_pixel (v, tileid, red, green, blue,
                                                   x, y, off, mix_weights, mix_dark);
-                      rgbdata d = c - get_pixel (v, tileid, x, y);
+                      rgbdata d = c - get_pixel (v, tileid, {x, y});
                       img->put_linear_pixel (x, y, {d.red / rmax + (luminosity_t)0.5, d.green / gmax + (luminosity_t)0.5, d.blue / bmax + (luminosity_t)0.5});
                     }
                     break;
                   case 3:
                     {
-                      rgbdata d = get_pixel (v, tileid, x, y);
+                      rgbdata d = get_pixel (v, tileid, {x, y});
                       img->put_linear_pixel (x, y, {d.red / rmax, d.green / gmax, d.blue / bmax});
                     }
 		    break;
@@ -2767,7 +2766,7 @@ public:
             {
               lmax = std::max (bw_evaulate_pixel (tileid, color, x, y, off),
                                lmax);
-              lmax = std::max (bw_get_pixel (tileid, x, y), lmax);
+              lmax = std::max (bw_get_pixel (tileid, {x, y}), lmax);
             }
 
         for (int y = 0; y < theight; y++)
@@ -2786,7 +2785,7 @@ public:
                     break;
                   case 1:
                     {
-                      luminosity_t d = bw_get_pixel (tileid, x, y) / lmax;
+                      luminosity_t d = bw_get_pixel (tileid, {x, y}) / lmax;
                       img->put_linear_pixel (x, y, {d, d, d});
                     }
                     break;
@@ -2794,7 +2793,7 @@ public:
                     {
                       luminosity_t c
                           = bw_evaulate_pixel (tileid, color, x, y, off);
-                      luminosity_t d = (c - bw_get_pixel (tileid, x, y)) / lmax + 0.5;
+                      luminosity_t d = (c - bw_get_pixel (tileid, {x, y})) / lmax + 0.5;
                       img->put_linear_pixel (x, y, {d, d, d});
                     }
                     break;
@@ -2847,7 +2846,7 @@ public:
               rmax = std::max (c.red, rmax);
               gmax = std::max (c.green, gmax);
               bmax = std::max (c.blue, bmax);
-              rgbdata d = get_pixel (v, tileid, x, y);
+              rgbdata d = get_pixel (v, tileid, {x, y});
               rmax = std::max (d.red, rmax);
               gmax = std::max (d.green, gmax);
               bmax = std::max (d.blue, bmax);
@@ -2871,7 +2870,7 @@ public:
                     break;
                   case 1:
                     {
-                      rgbdata d = get_orig_pixel (v, tileid, x, y);
+                      rgbdata d = get_orig_pixel (v, tileid, {x, y});
                       rendered.put_pixel (x, invert_gamma (d.red / rmax, -1) * 65535,
                                           invert_gamma (d.green / gmax, -1) * 65535,
                                           invert_gamma (d.blue / bmax, -1) * 65535);
@@ -2881,7 +2880,7 @@ public:
                     {
                       rgbdata c = evaulate_pixel (v, tileid, red, green, blue,
                                                   x, y, off, mix_weights, mix_dark);
-                      rgbdata d = get_pixel (v, tileid, x, y);
+                      rgbdata d = get_pixel (v, tileid, {x, y});
                       rendered.put_pixel (
                           x, (c.red - d.red) * 65535 / rmax + 65536 / 2,
                           (c.green - d.green) * 65535 / gmax + 65536 / 2,
@@ -2890,7 +2889,7 @@ public:
                     break;
                   case 3:
                     {
-                      rgbdata d = get_pixel (v, tileid, x, y);
+                      rgbdata d = get_pixel (v, tileid, {x, y});
                       rendered.put_pixel (x, d.red * 65535 / rmax,
                                           d.green * 65535 / gmax,
                                           d.blue * 65535 / bmax);
@@ -2912,7 +2911,7 @@ public:
             {
               lmax = std::max (bw_evaulate_pixel (tileid, color, x, y, off),
                                lmax);
-              lmax = std::max (bw_get_pixel (tileid, x, y), lmax);
+              lmax = std::max (bw_get_pixel (tileid, {x, y}), lmax);
             }
 
         for (int y = 0; y < theight; y++)
@@ -2932,7 +2931,7 @@ public:
                     break;
                   case 1:
                     {
-                      luminosity_t d = bw_get_pixel (tileid, x, y);
+                      luminosity_t d = bw_get_pixel (tileid, {x, y});
                       rendered.put_pixel (x, d * 65535 / lmax,
                                           d * 65535 / lmax, d * 65535 / lmax);
                     }
@@ -2941,7 +2940,7 @@ public:
                     {
                       luminosity_t c
                           = bw_evaulate_pixel (tileid, color, x, y, off);
-                      luminosity_t d = bw_get_pixel (tileid, x, y);
+                      luminosity_t d = bw_get_pixel (tileid, {x, y});
                       rendered.put_pixel (x,
                                           (c - d) * 65535 / lmax + 65536 / 2,
                                           (c - d) * 65535 / lmax + 65536 / 2,
@@ -3013,16 +3012,16 @@ public:
         /* Construct solver point.  Try to get closest point to the center of
          * analyzed tile.  */
         int fsx
-            = nearest_int (get_pos (start, tileid, twidth / 2, theight / 2).x);
+            = nearest_int (get_pos (start, tileid, {twidth / 2, theight / 2}).x);
         int fsy
-            = nearest_int (get_pos (start, tileid, twidth / 2, theight / 2).y);
+            = nearest_int (get_pos (start, tileid, {twidth / 2, theight / 2}).y);
         int bx = -1, by = -1;
         coord_t bdist = 0;
         for (int y = 0; y < theight; y++)
           {
             for (int x = 0; x < twidth; x++)
               {
-                point_t p = get_pos (start, tileid, x, y);
+                point_t p = get_pos (start, tileid, {x, y});
                 // printf ("  %-5.2f,%-5.2f", p.x, p.y);
                 coord_t dist = fabs (p.x - fsx) + fabs (p.y - fsy);
                 if (bx < 0 || dist < bdist)
@@ -3056,10 +3055,10 @@ public:
             {
               /* Determine cell corners.  */
               point_t p = { (coord_t)fsx, (coord_t)fsy };
-              point_t p1 = get_pos (start, tileid, x, y);
-              point_t p2 = get_pos (start, tileid, x + 1, y);
-              point_t p3 = get_pos (start, tileid, x, y + 1);
-              point_t p4 = get_pos (start, tileid, x + 1, y + 1);
+              point_t p1 = get_pos (start, tileid, {x, y});
+              point_t p2 = get_pos (start, tileid, {x + 1, y});
+              point_t p3 = get_pos (start, tileid, {x, y + 1});
+              point_t p4 = get_pos (start, tileid, {x + 1, y + 1});
               /* Check if point is above or bellow diagonal.  */
               coord_t sgn1 = sign (p, p1, p4);
               if (sgn1 > 0)
@@ -3102,7 +3101,7 @@ public:
           }
         ret.solver_point_img_location = { fp.x + tiles[tileid].txmin + 0.5,
                                           fp.y + tiles[tileid].tymin + 0.5 };
-	//printf ("New location %f %f %f %f  %f %f\n", fp.x + tiles[tileid].txmin + 0.5, fp.y + tiles[tileid].tymin + 0.5, bx + tiles[tileid].txmin + 0.5, by + tiles[tileid].tymin + 0.05, get_pos (start, tileid, bx, by).x, get_pos (start, tileid, bx, by).y);
+	//printf ("New location %f %f %f %f  %f %f\n", fp.x + tiles[tileid].txmin + 0.5, fp.y + tiles[tileid].tymin + 0.5, bx + tiles[tileid].txmin + 0.5, by + tiles[tileid].tymin + 0.05, get_pos (start, tileid, {bx, by}).x, get_pos (start, tileid, {bx, by}).y);
         ret.solver_point_screen_location = { (coord_t)fsx, (coord_t)fsy };
         ret.solver_point_color = solver_parameters::green;
       }

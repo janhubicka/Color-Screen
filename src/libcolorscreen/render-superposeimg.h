@@ -48,11 +48,12 @@ public:
     return render_to_scr::precompute_all (!m_color, m_preview, progress);
   }
   bool
-  precompute_img_range (int, int, int, int, progress_info *progress = NULL)
+  precompute_img_range (int_image_area area, progress_info *progress = NULL)
   {
+    (void)area;
     return precompute_all (progress);
   }
-  inline rgbdata sample_pixel_img (coord_t x, coord_t y) const;
+  inline rgbdata sample_pixel_img (point_t p) const;
   void inline analyze_tile (int x, int y, int w, int h, int stepx, int stepy,
                             luminosity_t *r, luminosity_t *g, luminosity_t *b);
   /* If set, use color scan for input.  */
@@ -62,40 +63,40 @@ public:
     if (m_img.rgbdata)
       m_color = 1;
   }
-  bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
+  bool get_color_data (rgbdata *data, point_t p, int width,
                        int height, coord_t pixelsize, progress_info *) override;
   pure_attr rgbdata
-  sample_pixel_final (coord_t x, coord_t y) const
+  sample_pixel_final (point_t p) const
   {
     point_t scr = m_scr_to_img.final_to_scr (
-        { x - get_final_xshift (), y - get_final_yshift () });
-    point_t p = m_scr_to_img.to_img (scr);
-    return sample_pixel_img (p.x, p.y, scr.x, scr.y);
+        { p.x - get_final_xshift (), p.y - get_final_yshift () });
+    point_t pi = m_scr_to_img.to_img (scr);
+    return sample_pixel_img (pi, scr);
   }
   pure_attr rgbdata
-  sample_pixel_scr (coord_t x, coord_t y) const
+  sample_pixel_scr (point_t p) const
   {
-    point_t p = m_scr_to_img.to_img ({ x, y });
-    return sample_pixel_img (p.x, p.y, x, y);
+    point_t pi = m_scr_to_img.to_img (p);
+    return sample_pixel_img (pi, p);
   }
-  pure_attr inline rgbdata fast_sample_pixel_img (int x, int y) const;
+  pure_attr inline rgbdata fast_sample_pixel_img (int_point_t p) const;
 
 private:
   pure_attr inline rgbdata
-  sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coord_t scr_y) const;
+  sample_pixel_img (point_t p, point_t scr) const;
   std::shared_ptr<screen> m_screen;
   bool m_color;
   bool m_preview;
 };
 
 inline rgbdata
-render_superpose_img::fast_sample_pixel_img (int x, int y) const
+render_superpose_img::fast_sample_pixel_img (int_point_t p) const
 {
   luminosity_t rs, gs, bs;
   luminosity_t ra, ga, ba;
 
   int ix, iy;
-  point_t scr = m_scr_to_img.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
+  point_t scr = m_scr_to_img.to_scr ({ p.x + (coord_t)0.5, p.y + (coord_t)0.5 });
 
   ix = (uint64_t)nearest_int (scr.x * screen::size)
        & (unsigned)(screen::size - 1);
@@ -111,15 +112,15 @@ render_superpose_img::fast_sample_pixel_img (int x, int y) const
   rgbdata ret;
   if (!m_color)
     {
-      luminosity_t graydata = get_img_pixel (x + 0.5, y + 0.5);
+      luminosity_t graydata = get_img_pixel ({(coord_t)(p.x + 0.5), (coord_t)(p.y + 0.5)});
       ret.red = graydata * rs + ra;
       ret.green = graydata * gs + ga;
       ret.blue = graydata * bs + ba;
     }
   else
     {
-      luminosity_t rr = get_data_red (x, y), gg = get_data_green (x, y),
-                   bb = get_data_blue (x, y);
+      luminosity_t rr = get_data_red ({p.x, p.y}), gg = get_data_green ({p.x, p.y}),
+                   bb = get_data_blue ({p.x, p.y});
       ret.red = rr * m_screen->mult[iy][ix][0] + m_screen->add[iy][ix][0];
       ret.green = gg * m_screen->mult[iy][ix][1] + m_screen->add[iy][ix][1];
       ret.blue = bb * m_screen->mult[iy][ix][2] + m_screen->add[iy][ix][2];
@@ -134,28 +135,27 @@ render_superpose_img::fast_sample_pixel_img (int x, int y) const
 }
 
 inline bool
-render_superpose_img::get_color_data (rgbdata *data, coord_t x, coord_t y,
+render_superpose_img::get_color_data (rgbdata *data, point_t p,
                                       int width, int height, coord_t pixelsize,
                                       progress_info *progress)
 {
   return downscale<render_superpose_img, rgbdata,
                    &render_superpose_img::fast_sample_pixel_img> (
-      data, x, y, width, height, pixelsize, progress);
+      data, p, width, height, pixelsize, progress);
 }
 
 pure_attr inline rgbdata
-render_superpose_img::sample_pixel_img (coord_t x, coord_t y, coord_t scr_x,
-                                        coord_t scr_y) const
+render_superpose_img::sample_pixel_img (point_t p, point_t scr) const
 {
   int ix, iy;
 
-  ix = (uint64_t)nearest_int (scr_x * screen::size)
+  ix = (uint64_t)nearest_int (scr.x * screen::size)
        & (unsigned)(screen::size - 1);
-  iy = (uint64_t)nearest_int (scr_y * screen::size)
+  iy = (uint64_t)nearest_int (scr.y * screen::size)
        & (unsigned)(screen::size - 1);
   if (!m_color)
     {
-      luminosity_t graydata = get_img_pixel (x, y);
+      luminosity_t graydata = get_img_pixel (p);
       return { graydata * m_screen->mult[iy][ix][0] + m_screen->add[iy][ix][0],
                graydata * m_screen->mult[iy][ix][1] + m_screen->add[iy][ix][1],
                graydata * m_screen->mult[iy][ix][2]
@@ -163,17 +163,17 @@ render_superpose_img::sample_pixel_img (coord_t x, coord_t y, coord_t scr_x,
     }
   else
     {
-      rgbdata c = get_img_rgb_pixel (x, y);
+      rgbdata c = get_img_rgb_pixel (p);
       return { c.red * m_screen->mult[iy][ix][0] + m_screen->add[iy][ix][0],
                c.green * m_screen->mult[iy][ix][1] + m_screen->add[iy][ix][1],
                c.blue * m_screen->mult[iy][ix][2] + m_screen->add[iy][ix][2] };
     }
 }
 pure_attr inline rgbdata
-render_superpose_img::sample_pixel_img (coord_t x, coord_t y) const
+render_superpose_img::sample_pixel_img (point_t p) const
 {
-  point_t scr = m_scr_to_img.to_scr ({ x, y });
-  return sample_pixel_img (x, y, scr.x, scr.y);
+  point_t scr = m_scr_to_img.to_scr (p);
+  return sample_pixel_img (p, scr);
 }
 
 /* Analyze average r, g and b color in a given tile in the image coordinates.
@@ -187,7 +187,7 @@ render_superpose_img::analyze_tile (int xs, int ys, int w, int h, int stepx,
   for (int x = xs; x < xs + w; x += stepx)
     for (int y = ys; y < ys + h; y += stepy)
       {
-        luminosity_t l = fast_get_img_pixel (x, y);
+        luminosity_t l = fast_get_img_pixel ({x, y});
 
         point_t scr
             = m_scr_to_img.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });

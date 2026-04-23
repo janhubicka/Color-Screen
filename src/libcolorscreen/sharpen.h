@@ -7,7 +7,7 @@ namespace colorscreen
 /* Kernel for "sharpening" with with either radius or amount being zero.
    Flattened so avoid doing unnecesary stuff.  */
 
-template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
+template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int_point_t p, int width, P param)>
 flatten_attr void
 non_sharpen(mem_O *out, T data, P param, int width, int height, progress_info *progress)
 {
@@ -16,12 +16,12 @@ non_sharpen(mem_O *out, T data, P param, int width, int height, progress_info *p
     {
       if (!progress || !progress->cancel_requested ())
 	for (int x = 0; x < width; x++)
-	  out[y * width + x] = (mem_O) getdata (data, x, y, width, param);
+	  out[y * width + x] = (mem_O) getdata (data, {x, y}, width, param);
       if (progress)
 	 progress->inc_progress ();
     }
 }
-template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
+template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int_point_t p, int width, P param)>
 inline void
 do_unsharp_mask_loop(mem_O *out, O *hblur, int clen, luminosity_t *rotated_cmatrix, T data,int width, int y, luminosity_t amount, P param)
 {
@@ -30,14 +30,14 @@ do_unsharp_mask_loop(mem_O *out, O *hblur, int clen, luminosity_t *rotated_cmatr
       O sum = hblur[0 * width + x] * rotated_cmatrix[0];
       for (int d = 1; d < clen; d++)
 	sum += hblur[d * width + x] * rotated_cmatrix[d];
-      O orig = getdata (data, x, y, width, param);
+      O orig = getdata (data, {x, y}, width, param);
       out[y * width + x] = (mem_O) (orig + (orig - sum) * amount);
     }
 }
 
 /* Kernel for actual shaprening.
    Flattened so avoid doing unnecesary stuff.  */
-template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
+template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int_point_t p, int width, P param)>
 flatten_attr void
 do_unsharp_mask(mem_O *out, T data, P param, int width, int height, int clen, luminosity_t *cmatrix, luminosity_t amount, progress_info *progress, bool maybe_parallel = true)
 {
@@ -66,7 +66,7 @@ do_unsharp_mask(mem_O *out, T data, P param, int width, int height, int clen, lu
 	else
 	{
 	  for (int x = 0; x < width ; x++)
-	    line[x] =getdata (data, x, yp, width, param);
+	    line[x] =getdata (data, {x, yp}, width, param);
 	  fir_blur::blur_horisontal<O, T> (hblur + tp * width, line, width, clen, cmatrix);
 	}
       }
@@ -77,7 +77,7 @@ do_unsharp_mask(mem_O *out, T data, P param, int width, int height, int clen, lu
 	    break;
 	  if (y + clen / 2 - 1 < height)
 	    for (int x = 0; x < width ; x++)
-	      line[x] =getdata (data, x, y + clen / 2 - 1, width, param);
+	      line[x] =getdata (data, {x, y + clen / 2 - 1}, width, param);
 	  if (y + clen / 2 - 1 < height)
 	    switch (clen)
 	      {
@@ -144,7 +144,7 @@ do_unsharp_mask(mem_O *out, T data, P param, int width, int height, int clen, lu
 
    For performance reasons do not use lambda function since it won't get inlined.
      O is output type name, T is data type name, P is extra bookeeping parameter type.  */
-template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
+template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int_point_t p, int width, P param)>
 bool
 sharpen(mem_O *out, T data, P param, int width, int height, luminosity_t radius, luminosity_t amount, progress_info *progress, bool parallel = true)
 {

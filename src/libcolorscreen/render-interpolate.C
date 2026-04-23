@@ -111,8 +111,8 @@ static render_interpolate::strips_analyzer_cache_t
 static render_interpolate::demosaic_paget_cache_t
     demosaic_paget_cache ("Paget demosaic");
 
-render_interpolate::render_interpolate (scr_to_img_parameters &param,
-                                        image_data &img,
+render_interpolate::render_interpolate (const scr_to_img_parameters &param,
+                                        const image_data &img,
                                         render_parameters &rparam,
                                         int dst_maxval)
     : render_to_scr (param, img, rparam, dst_maxval), m_screen (),
@@ -158,20 +158,21 @@ render_interpolate::compensate_saturation_loss_img (point_t p, rgbdata c) const
 }
 
 bool
-render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
-                                coord_t ymax, progress_info *progress)
+render_interpolate::precompute (int_image_area area, progress_info *progress)
 {
+  int xmin = area.x;
+  int ymin = area.y;
+  int xmax = area.x + area.width;
+  int ymax = area.y + area.height;
   uint64_t screen_id = 0;
   if (m_scr_to_img_param.type == Random)
     return false;
-  // printf ("Precomputing %f %f %f %f\n",xmin,ymin,xmax,ymax);
   /* When doing profiled matrix, we need to pre-scale the profile so black
      point corretion goes right. Without doing so, for exmaple black from red
      pixels would be subtracted too agressively, since we account for every
      pixel in image, not only red patch portion.  */
-  if (!render_to_scr::precompute (!m_original_color && !m_precise_rgb,
-                                  !m_original_color || m_profiled, xmin, ymin,
-                                  xmax, ymax, progress))
+  if (!render_to_scr::precompute_img_range (!m_original_color && !m_precise_rgb,
+					    !m_original_color || m_profiled, area, progress))
     return false;
   if (m_screen_compensation
       || m_params.collection_quality != render_parameters::fast_collection
@@ -338,8 +339,9 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
 }
 
 pure_attr rgbdata
-render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
+render_interpolate::sample_pixel_scr (point_t p) const
 {
+  coord_t x = p.x, y = p.y;
   rgbdata c;
   bool adjusted = false;
 
@@ -381,7 +383,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
      This seems unavoidable, since we can only compensate after demosaicing.
      It seems that in this case we may need to build more complex profile?  */
   if (!m_original_color)
-    c = compensate_saturation_loss_scr ({ x, y }, c);
+    c = compensate_saturation_loss_scr (p, c);
   if (m_unadjusted || adjusted)
     ;
   else if (!m_original_color)
@@ -402,13 +404,13 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
     c = adjust_rgb (c);
   if (m_screen_compensation)
     {
-      point_t p = m_scr_to_img.to_img ({ x, y });
-      coord_t lum = get_img_pixel (p.x, p.y);
+      point_t pi = m_scr_to_img.to_img (p);
+      coord_t lum = get_img_pixel (pi);
       rgbdata s;
       if (!m_simulated_screen)
-        s = m_screen->interpolated_mult ({x, y});
+        s = m_screen->interpolated_mult (p);
       else
-	s = get_simulated_screen_pixel (p.x, p.y);
+	s = get_simulated_screen_pixel (pi);
 
       /* This is clamping logic trying to avoid too colorful artifacts
          alongs the edges.  */
@@ -449,7 +451,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
     }
   else if (m_adjust_luminosity)
     {
-      luminosity_t l = get_img_pixel_scr (x, y);
+      luminosity_t l = get_img_pixel_scr (p);
       luminosity_t red2, green2, blue2;
       out_color.m_color_matrix.apply_to_rgb (c.red, c.green, c.blue, &red2, &green2,
                                    &blue2);
@@ -485,12 +487,12 @@ render_interpolated_increase_lru_cache_sizes_for_stitch_projects (int n)
 
 /* Compute RGB data of downscaled image.  */
 bool
-render_interpolate::get_color_data (rgbdata *data, coord_t x, coord_t y,
+render_interpolate::get_color_data (rgbdata *data, point_t p,
                                     int width, int height, coord_t pixelsize,
                                     progress_info *progress)
 {
   return downscale<render_interpolate, rgbdata, &render_interpolate::fast_sample_pixel_img> (
-      data, x, y, width, height, pixelsize, progress);
+      data, p, width, height, pixelsize, progress);
 }
 
 /* Run ANALYZE on every screen point in the given (image) range, pass infared
@@ -795,12 +797,12 @@ analyze_patches (analyzer analyze, const char *task, image_data &img,
   render.set_unadjusted ();
   if (!screen)
     {
-      if (!render.precompute_img_range (xmin, ymin, xmax, ymax, progress))
+      if (!render.precompute_img_range ({{xmin, ymin}, {xmax, ymax}}, progress))
         return false;
     }
   else
     {
-      if (!render.precompute (xmin, ymin, xmax, ymax, progress))
+      if (!render.precompute ({{xmin, ymin}, {xmax, ymax}}, progress))
         // if (!render.precompute_img_range (0, 0, img.width, img.height,
         // progress))
         return false;
@@ -882,14 +884,14 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img,
   // printf ("Screen %i\n",screen);
   if (!screen)
     {
-      if (!render.precompute_img_range (xmin, ymin, xmax, ymax, progress))
+      if (!render.precompute_img_range ({{xmin, ymin}, {xmax, ymax}}, progress))
         return false;
     }
   else
     {
       // if (!render.precompute_img_range (0, 0, img.width, img.height,
       // progress))
-      if (!render.precompute (xmin, ymin, xmax, ymax, progress))
+      if (!render.precompute ({{xmin, ymin}, {xmax, ymax}}, progress))
         return false;
     }
   if (progress && progress->cancel_requested ())
@@ -1062,8 +1064,8 @@ compare_deltae (image_data &img, scr_to_img_parameters &param1,
       if (!progress || !progress->cancel_requested ())
         for (int x = border; x < img.width - border; x += step)
           {
-            rgbdata c1 = render1.sample_pixel_img (x, y);
-            rgbdata c2 = render2.sample_pixel_img (x, y);
+            rgbdata c1 = render1.fast_sample_pixel_img ({x, y});
+            rgbdata c2 = render2.fast_sample_pixel_img ({x, y});
             {
               rgbdata out1 = render1.out_color.linear_hdr_color (c1);
               fc1 = {out1.red, out1.green, out1.blue};
@@ -1096,8 +1098,8 @@ compare_deltae (image_data &img, scr_to_img_parameters &param1,
           if (!progress || !progress->cancel_requested ())
             for (int x = border; x < img.width - border; x += step)
               {
-                rgbdata c1 = render1.sample_pixel_img (x, y);
-                rgbdata c2 = render2.sample_pixel_img (x, y);
+                rgbdata c1 = render1.fast_sample_pixel_img ({x, y});
+                rgbdata c2 = render2.fast_sample_pixel_img ({x, y});
                 {
                   rgbdata out1 = render1.out_color.linear_hdr_color (c1);
                   fc1 = {out1.red, out1.green, out1.blue};
@@ -1129,8 +1131,8 @@ compare_deltae (image_data &img, scr_to_img_parameters &param1,
           if (!progress || !progress->cancel_requested ())
             for (int x = border; x < img.width - border; x += step)
               {
-                rgbdata c1 = render1.sample_pixel_img (x, y);
-                rgbdata c2 = render2.sample_pixel_img (x, y);
+                rgbdata c1 = render1.fast_sample_pixel_img ({x, y});
+                rgbdata c2 = render2.fast_sample_pixel_img ({x, y});
                 {
                   rgbdata out1 = render1.out_color.linear_hdr_color (c1);
                   fc1 = {out1.red, out1.green, out1.blue};

@@ -92,25 +92,25 @@ public:
   virtual ~render () = default;
 
   /* Determine grayscale value at a given position in the image.  */
-  pure_attr inline luminosity_t get_img_pixel (coord_t x, coord_t y) const noexcept;
+  pure_attr inline luminosity_t get_img_pixel (point_t p) const noexcept;
 
   /* Determine grayscale value at a given position in the image without
      luminosity adjustments.  */
-  pure_attr inline luminosity_t get_unadjusted_img_pixel (coord_t x, coord_t y) const noexcept;
+  pure_attr inline luminosity_t get_unadjusted_img_pixel (point_t p) const noexcept;
 
   /* Determine RGB value at a given position X, Y in the image.  */
-  pure_attr inline rgbdata get_img_rgb_pixel (coord_t x, coord_t y) const noexcept;
+  pure_attr inline rgbdata get_img_rgb_pixel (point_t p) const noexcept;
 
   /* Determine RGB value at a given position XP, YP in the image without
      luminosity adjustments.  */
-  pure_attr inline rgbdata get_unadjusted_img_rgb_pixel (coord_t xp, coord_t yp) const noexcept;
+  pure_attr inline rgbdata get_unadjusted_img_rgb_pixel (point_t p) const noexcept;
 
   /* Sample square patch with center C and corner offsets P1, P2.  */
   pure_attr luminosity_t
   sample_img_square (point_t c, point_t p1, point_t p2) const;
 
   /* Quickly determine grayscale value at a given position X, Y in the image.  */
-  pure_attr inline luminosity_t fast_get_img_pixel (int x, int y) const noexcept;
+  pure_attr inline luminosity_t fast_get_img_pixel (int_point_t p) const noexcept;
 
   static const int num_color_models = render_parameters::color_model_max;
 
@@ -121,55 +121,52 @@ public:
                                  progress_info *progress = nullptr);
 
   /* Get sharpened grayscale value at index X, Y.  */
-  pure_attr inline luminosity_t get_data (int x, int y) const noexcept;
+  pure_attr inline luminosity_t get_data (int_point_t p) const noexcept;
 
   /* Get unadjusted sharpened grayscale value at index X, Y.  */
-  pure_attr inline luminosity_t get_unadjusted_data (int x, int y) const noexcept;
+  pure_attr inline luminosity_t get_unadjusted_data (int_point_t p) const noexcept;
 
   /* Adjust luminosity LUM considering infrared sensitivity.  */
   pure_attr inline luminosity_t adjust_luminosity_ir (luminosity_t lum) const noexcept;
 
   /* Get sharpened color values at index X, Y.  */
-  pure_attr inline luminosity_t get_data_red (int x, int y) const noexcept;
-  pure_attr inline luminosity_t get_data_green (int x, int y) const noexcept;
-  pure_attr inline luminosity_t get_data_blue (int x, int y) const noexcept;
+  pure_attr inline luminosity_t get_data_red (int_point_t p) const noexcept;
+  pure_attr inline luminosity_t get_data_green (int_point_t p) const noexcept;
+  pure_attr inline luminosity_t get_data_blue (int_point_t p) const noexcept;
 
   /* Get linearized color values at index X, Y.  */
-  pure_attr inline luminosity_t get_linearized_data_red (int x, int y) const noexcept;
-  pure_attr inline luminosity_t get_linearized_data_green (int x, int y) const noexcept;
-  pure_attr inline luminosity_t get_linearized_data_blue (int x, int y) const noexcept;
+  pure_attr inline luminosity_t get_linearized_data_red (int_point_t p) const noexcept;
+  pure_attr inline luminosity_t get_linearized_data_green (int_point_t p) const noexcept;
+  pure_attr inline luminosity_t get_linearized_data_blue (int_point_t p) const noexcept;
 
   /* Precompute all data needed for rendering.  GRAYSCALE_NEEDED
      indicates if gray data is required.  If NORMALIZED_PATCHES is true,
      spectral computation is normalized.  PATCH_PROPORTIONS specifies
      color proportions.  Report progress to PROGRESS.  Return false on failure.  */
-  nodiscard_attr DLL_PUBLIC bool precompute_all (bool grayscale_needed,
-						 bool normalized_patches,
-						 rgbdata patch_proportions,
-						 progress_info *progress);
+  nodiscard_attr DLL_PUBLIC bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress);
 
   /* Get linearized RGB pixel value at index X, Y.  */
   pure_attr inline rgbdata
-  get_linearized_rgb_pixel (int x, int y) const noexcept
+  get_linearized_rgb_pixel (int_point_t p) const noexcept
   {
     if (colorscreen_checking)
-      assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
-    rgbdata d = {m_rgb_lookup_table [0][m_img.rgbdata[y][x].r],
-		 m_rgb_lookup_table [1][m_img.rgbdata[y][x].g],
-		 m_rgb_lookup_table [2][m_img.rgbdata[y][x].b]};
+      assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
+    rgbdata d = {m_rgb_lookup_table [0][m_img.rgbdata[p.y][p.x].r],
+		 m_rgb_lookup_table [1][m_img.rgbdata[p.y][p.x].g],
+		 m_rgb_lookup_table [2][m_img.rgbdata[p.y][p.x].b]};
     return d;
   }
 
   /* Get unadjusted RGB pixel value at index X, Y.  */
   pure_attr inline rgbdata
-  get_unadjusted_rgb_pixel (int x, int y) const noexcept
+  get_unadjusted_rgb_pixel (int_point_t p) const noexcept
   {
-    rgbdata d = get_linearized_rgb_pixel (x, y);
+    rgbdata d = get_linearized_rgb_pixel (p);
     if (m_backlight_correction)
       {
-	d.red = m_backlight_correction->apply (d.red, x, y, backlight_correction_parameters::red, true);
-	d.green = m_backlight_correction->apply (d.green, x, y, backlight_correction_parameters::green, true);
-	d.blue = m_backlight_correction->apply (d.blue, x, y, backlight_correction_parameters::blue, true);
+	d.red = m_backlight_correction->apply (d.red, p.x, p.y, backlight_correction_parameters::red, true);
+	d.green = m_backlight_correction->apply (d.green, p.x, p.y, backlight_correction_parameters::green, true);
+	d.blue = m_backlight_correction->apply (d.blue, p.x, p.y, backlight_correction_parameters::blue, true);
       }
     return d;
   }
@@ -186,9 +183,9 @@ public:
 
   /* Get final RGB pixel value at index X, Y.  */
   pure_attr inline rgbdata
-  get_rgb_pixel (int x, int y) const noexcept
+  get_rgb_pixel (int_point_t p) const noexcept
   {
-    return adjust_rgb (get_unadjusted_rgb_pixel (x, y));
+    return adjust_rgb (get_unadjusted_rgb_pixel (p));
   }
 
   /* Fetch matrix translating RGB values to XYZ.  Uses info from IMG,
@@ -206,7 +203,7 @@ public:
   /* Compute grayscale data for downscaled region at X, Y with WIDTH,
      HEIGHT and PIXELSIZE.  Store result in DATA.  Report progress
      to PROGRESS.  Return false on failure or cancellation.  */
-  nodiscard_attr bool get_gray_data (luminosity_t *data, coord_t x, coord_t y, int width,
+  nodiscard_attr bool get_gray_data (luminosity_t *data, point_t p, int width,
                        int height, coord_t pixelsize, progress_info *progress);
 
   /* Return number of pixel computations considered profitable for OMP.  */
@@ -226,16 +223,16 @@ public:
      Store result in DATA.  GET_PIXEL is the pixel fetching function.
      ACCOUNT_P is optional accounting function.  Report progress
      to PROGRESS.  */
-  template<typename D, typename T, T (D::*get_pixel) (int x, int y) const,
+  template<typename D, typename T, T (D::*get_pixel) (int_point_t p) const,
            auto account_p = nullptr>
-  bool downscale (T *data, coord_t x, coord_t y, int width, int height,
-                  coord_t pixelsize, progress_info *progress);
+  bool downscale (T *data, point_t p, int width, int height,
+                  coord_t pixelsize, progress_info *progress) noexcept;
 
 protected:
   /* Compute color data for downscaled region at X, Y with WIDTH, HEIGHT
      and PIXELSIZE.  Store result in DATA.  Report progress
      to PROGRESS.  Return false on failure or cancellation.  */
-  nodiscard_attr virtual bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
+  nodiscard_attr virtual bool get_color_data (rgbdata *data, point_t p, int width,
                         int height, coord_t pixelsize, progress_info *progress);
 
   /* Inner loop for image downscaling processing single line YY from input
@@ -244,14 +241,14 @@ protected:
      if output lines PY and PY+1 are affected.  SCALE is global scaling,
      YWEIGHT is the bilinear weight for the Y axis.  IF USEATOMIC is true,
      writes are updated atomically.  ACCOUNT_P is optional accounting function.  */
-  template<typename T, typename D, T (D::*get_pixel) (int x, int y) const,
+  template<typename T, typename D, T (D::*get_pixel) (int_point_t p) const,
            bool UseAtomic = false, auto account_p = nullptr>
   void process_line (T *data, int *pixelpos, luminosity_t *weights,
 		     int xstart, int xend,
 		     int width, int height,
 		     int py, int yy,
 		     bool y0, bool y1,
-		     luminosity_t scale, luminosity_t yweight);
+		     luminosity_t scale, luminosity_t yweight) noexcept;
   
   /* Inner loop for image downscaling processing single pixel PIXEL at PX, PY.
      WIDTH and HEIGHT are output dimensions.  X0, X1, Y0, Y1 indicate if
@@ -262,7 +259,7 @@ protected:
   inline void
   process_pixel (T *data, int width, int height, int px, int py, bool x0,
                  bool x1, bool y0, bool y1, T pixel, luminosity_t scale,
-                 luminosity_t xweight, luminosity_t yweight);
+                 luminosity_t xweight, luminosity_t yweight) noexcept;
 
   /* Scanned image.  */
   const image_data &m_img;
@@ -297,11 +294,11 @@ protected:
 
 /* Get sharpened grayscale value at index X, Y without adjustments.  */
 pure_attr inline luminosity_t always_inline_attr
-render::get_unadjusted_data (int x, int y) const noexcept
+render::get_unadjusted_data (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
-    assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
-  return m_sharpened_data [y * m_img.width + x];
+    assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
+  return m_sharpened_data [p.y * m_img.width + p.x];
 }
 
 /* Adjust luminosity LUM considering infrared sensitivity and dark point.  */
@@ -318,104 +315,104 @@ render::adjust_luminosity_ir (luminosity_t lum) const noexcept
 
 /* Get sharpened grayscale value at index X, Y.  */
 pure_attr inline luminosity_t always_inline_attr
-render::get_data (int x, int y) const noexcept
+render::get_data (int_point_t p) const noexcept
 {
-  return adjust_luminosity_ir (get_unadjusted_data (x, y));
+  return adjust_luminosity_ir (get_unadjusted_data (p));
 }
 
 /* Get linearized red channel value at index X, Y.  */
 pure_attr inline luminosity_t always_inline_attr
-render::get_linearized_data_red (int x, int y) const noexcept
+render::get_linearized_data_red (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
-    assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
-  return m_rgb_lookup_table [0][m_img.rgbdata[y][x].r];
+    assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
+  return m_rgb_lookup_table [0][m_img.rgbdata[p.y][p.x].r];
 }
 
 /* Get linearized green channel value at index X, Y.  */
 pure_attr inline luminosity_t always_inline_attr
-render::get_linearized_data_green (int x, int y) const noexcept
+render::get_linearized_data_green (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
-    assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
-  return m_rgb_lookup_table [1][m_img.rgbdata[y][x].g];
+    assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
+  return m_rgb_lookup_table [1][m_img.rgbdata[p.y][p.x].g];
 }
 
 /* Get linearized blue channel value at index X, Y.  */
 pure_attr inline luminosity_t always_inline_attr
-render::get_linearized_data_blue (int x, int y) const noexcept
+render::get_linearized_data_blue (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
-    assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
-  return m_rgb_lookup_table [2][m_img.rgbdata[y][x].b];
+    assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
+  return m_rgb_lookup_table [2][m_img.rgbdata[p.y][p.x].b];
 }
 
 /* Get sharpened red channel value at index X, Y.  */
 pure_attr inline luminosity_t
-render::get_data_red (int x, int y) const noexcept
+render::get_data_red (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
-    assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
-  luminosity_t v = m_rgb_lookup_table [0][m_img.rgbdata[y][x].r];
+    assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
+  luminosity_t v = m_rgb_lookup_table [0][m_img.rgbdata[p.y][p.x].r];
   if (m_backlight_correction)
-    v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::red, true);
+    v = m_backlight_correction->apply (v, p.x, p.y, backlight_correction_parameters::red, true);
   v = (v - m_params.dark_point) * m_params.scan_exposure;
   return v;
 }
 
 /* Get sharpened green channel value at index X, Y.  */
 pure_attr inline luminosity_t
-render::get_data_green (int x, int y) const noexcept
+render::get_data_green (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
-    assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
-  luminosity_t v = m_rgb_lookup_table [1][m_img.rgbdata[y][x].g];
+    assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
+  luminosity_t v = m_rgb_lookup_table [1][m_img.rgbdata[p.y][p.x].g];
   if (m_backlight_correction)
-    v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::green, true);
+    v = m_backlight_correction->apply (v, p.x, p.y, backlight_correction_parameters::green, true);
   v = (v - m_params.dark_point) * m_params.scan_exposure;
   return v;
 }
 
 /* Get sharpened blue channel value at index X, Y.  */
 pure_attr inline luminosity_t
-render::get_data_blue (int x, int y) const noexcept
+render::get_data_blue (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
-    assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
-  luminosity_t v = m_rgb_lookup_table [2][m_img.rgbdata[y][x].b];
+    assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
+  luminosity_t v = m_rgb_lookup_table [2][m_img.rgbdata[p.y][p.x].b];
   if (m_backlight_correction)
-    v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::blue, true);
+    v = m_backlight_correction->apply (v, p.x, p.y, backlight_correction_parameters::blue, true);
   v = (v - m_params.dark_point) * m_params.scan_exposure;
   return v;
 }
 
 /* Quickly determine grayscale value at a given position in the image.  */
 pure_attr inline luminosity_t
-render::fast_get_img_pixel (int x, int y) const noexcept
+render::fast_get_img_pixel (int_point_t p) const noexcept
 {
-  if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
+  if (p.x < 0 || p.x >= m_img.width || p.y < 0 || p.y >= m_img.height)
     return 0;
-  return render::get_data (x, y);
+  return render::get_data (p);
 }
 
 /* Determine grayscale value at position XP, YP in the image using bicubic
    interpolation without adjustments.  */
 pure_attr inline luminosity_t
-render::get_unadjusted_img_pixel (coord_t xp, coord_t yp) const noexcept
+render::get_unadjusted_img_pixel (point_t p) const noexcept
 {
   /* Center of pixel [0,0] is [0.5,0.5].  */
-  xp -= (coord_t)0.5;
-  yp -= (coord_t)0.5;
+  p.x -= (coord_t)0.5;
+  p.y -= (coord_t)0.5;
   int sx, sy;
-  coord_t rx = my_modf (xp, &sx);
-  coord_t ry = my_modf (yp, &sy);
+  coord_t rx = my_modf (p.x, &sx);
+  coord_t ry = my_modf (p.y, &sy);
 
   if (sx >= 1 && sx < m_img.width - 2 && sy >= 1 && sy < m_img.height - 2)
     {
-      vec_luminosity_t v1 = {get_unadjusted_data (sx-1, sy-1), get_unadjusted_data (sx, sy-1), get_unadjusted_data (sx+1, sy-1), get_unadjusted_data (sx+2, sy-1)};
-      vec_luminosity_t v2 = {get_unadjusted_data (sx-1, sy-0), get_unadjusted_data (sx, sy-0), get_unadjusted_data (sx+1, sy-0), get_unadjusted_data (sx+2, sy-0)};
-      vec_luminosity_t v3 = {get_unadjusted_data (sx-1, sy+1), get_unadjusted_data (sx, sy+1), get_unadjusted_data (sx+1, sy+1), get_unadjusted_data (sx+2, sy+1)};
-      vec_luminosity_t v4 = {get_unadjusted_data (sx-1, sy+2), get_unadjusted_data (sx, sy+2), get_unadjusted_data (sx+1, sy+2), get_unadjusted_data (sx+2, sy+2)};
+      vec_luminosity_t v1 = {get_unadjusted_data ({sx-1, sy-1}), get_unadjusted_data ({sx, sy-1}), get_unadjusted_data ({sx+1, sy-1}), get_unadjusted_data ({sx+2, sy-1})};
+      vec_luminosity_t v2 = {get_unadjusted_data ({sx-1, sy-0}), get_unadjusted_data ({sx, sy-0}), get_unadjusted_data ({sx+1, sy-0}), get_unadjusted_data ({sx+2, sy-0})};
+      vec_luminosity_t v3 = {get_unadjusted_data ({sx-1, sy+1}), get_unadjusted_data ({sx, sy+1}), get_unadjusted_data ({sx+1, sy+1}), get_unadjusted_data ({sx+2, sy+1})};
+      vec_luminosity_t v4 = {get_unadjusted_data ({sx-1, sy+2}), get_unadjusted_data ({sx, sy+2}), get_unadjusted_data ({sx+1, sy+2}), get_unadjusted_data ({sx+2, sy+2})};
       return do_bicubic_interpolate (v1, v2, v3, v4, {rx, ry});
     }
   return 0;
@@ -424,48 +421,48 @@ render::get_unadjusted_img_pixel (coord_t xp, coord_t yp) const noexcept
 /* Determine grayscale value at position XP, YP in the image using bicubic
    interpolation.  */
 pure_attr inline luminosity_t
-render::get_img_pixel (coord_t xp, coord_t yp) const noexcept
+render::get_img_pixel (point_t p) const noexcept
 {
-  return adjust_luminosity_ir (get_unadjusted_img_pixel (xp, yp));
+  return adjust_luminosity_ir (get_unadjusted_img_pixel (p));
 }
 
 /* Determine RGB value at position XP, YP in the image using bicubic interpolation
    without adjustments.  */
 pure_attr inline rgbdata always_inline_attr
-render::get_unadjusted_img_rgb_pixel (coord_t xp, coord_t yp) const noexcept
+render::get_unadjusted_img_rgb_pixel (point_t p) const noexcept
 {
   /* Center of pixel [0,0] is [0.5,0.5].  */
-  xp -= (coord_t)0.5;
-  yp -= (coord_t)0.5;
+  p.x -= (coord_t)0.5;
+  p.y -= (coord_t)0.5;
   int sx, sy;
-  coord_t rx = my_modf (xp, &sx);
-  coord_t ry = my_modf (yp, &sy);
+  coord_t rx = my_modf (p.x, &sx);
+  coord_t ry = my_modf (p.y, &sy);
 
   if (sx >= 1 && sx < m_img.width - 2 && sy >= 1 && sy < m_img.height - 2)
     {
       rgbdata ret;
-      vec_luminosity_t r1 = {get_linearized_data_red (sx-1, sy-1), get_linearized_data_red (sx, sy-1), get_linearized_data_red (sx+1, sy-1), get_linearized_data_red (sx+2, sy-1)};
-      vec_luminosity_t r2 = {get_linearized_data_red (sx-1, sy-0), get_linearized_data_red (sx, sy-0), get_linearized_data_red (sx+1, sy-0), get_linearized_data_red (sx+2, sy-0)};
-      vec_luminosity_t r3 = {get_linearized_data_red (sx-1, sy+1), get_linearized_data_red (sx, sy+1), get_linearized_data_red (sx+1, sy+1), get_linearized_data_red (sx+2, sy+1)};
-      vec_luminosity_t r4 = {get_linearized_data_red (sx-1, sy+2), get_linearized_data_red (sx, sy+2), get_linearized_data_red (sx+1, sy+2), get_linearized_data_red (sx+2, sy+2)};
+      vec_luminosity_t r1 = {get_linearized_data_red ({sx-1, sy-1}), get_linearized_data_red ({sx, sy-1}), get_linearized_data_red ({sx+1, sy-1}), get_linearized_data_red ({sx+2, sy-1})};
+      vec_luminosity_t r2 = {get_linearized_data_red ({sx-1, sy-0}), get_linearized_data_red ({sx, sy-0}), get_linearized_data_red ({sx+1, sy-0}), get_linearized_data_red ({sx+2, sy-0})};
+      vec_luminosity_t r3 = {get_linearized_data_red ({sx-1, sy+1}), get_linearized_data_red ({sx, sy+1}), get_linearized_data_red ({sx+1, sy+1}), get_linearized_data_red ({sx+2, sy+1})};
+      vec_luminosity_t r4 = {get_linearized_data_red ({sx-1, sy+2}), get_linearized_data_red ({sx, sy+2}), get_linearized_data_red ({sx+1, sy+2}), get_linearized_data_red ({sx+2, sy+2})};
       ret.red = do_bicubic_interpolate (r1, r2, r3, r4, {rx, ry});
 
-      vec_luminosity_t g1 = {get_linearized_data_green (sx-1, sy-1), get_linearized_data_green (sx, sy-1), get_linearized_data_green (sx+1, sy-1), get_linearized_data_green (sx+2, sy-1)};
-      vec_luminosity_t g2 = {get_linearized_data_green (sx-1, sy-0), get_linearized_data_green (sx, sy-0), get_linearized_data_green (sx+1, sy-0), get_linearized_data_green (sx+2, sy-0)};
-      vec_luminosity_t g3 = {get_linearized_data_green (sx-1, sy+1), get_linearized_data_green (sx, sy+1), get_linearized_data_green (sx+1, sy+1), get_linearized_data_green (sx+2, sy+1)};
-      vec_luminosity_t g4 = {get_linearized_data_green (sx-1, sy+2), get_linearized_data_green (sx, sy+2), get_linearized_data_green (sx+1, sy+2), get_linearized_data_green (sx+2, sy+2)};
+      vec_luminosity_t g1 = {get_linearized_data_green ({sx-1, sy-1}), get_linearized_data_green ({sx, sy-1}), get_linearized_data_green ({sx+1, sy-1}), get_linearized_data_green ({sx+2, sy-1})};
+      vec_luminosity_t g2 = {get_linearized_data_green ({sx-1, sy-0}), get_linearized_data_green ({sx, sy-0}), get_linearized_data_green ({sx+1, sy-0}), get_linearized_data_green ({sx+2, sy-0})};
+      vec_luminosity_t g3 = {get_linearized_data_green ({sx-1, sy+1}), get_linearized_data_green ({sx, sy+1}), get_linearized_data_green ({sx+1, sy+1}), get_linearized_data_green ({sx+2, sy+1})};
+      vec_luminosity_t g4 = {get_linearized_data_green ({sx-1, sy+2}), get_linearized_data_green ({sx, sy+2}), get_linearized_data_green ({sx+1, sy+2}), get_linearized_data_green ({sx+2, sy+2})};
       ret.green = do_bicubic_interpolate (g1, g2, g3, g4, {rx, ry});
 
-      vec_luminosity_t b1 = {get_linearized_data_blue (sx-1, sy-1), get_linearized_data_blue (sx, sy-1), get_linearized_data_blue (sx+1, sy-1), get_linearized_data_blue (sx+2, sy-1)};
-      vec_luminosity_t b2 = {get_linearized_data_blue (sx-1, sy-0), get_linearized_data_blue (sx, sy-0), get_linearized_data_blue (sx+1, sy-0), get_linearized_data_blue (sx+2, sy-0)};
-      vec_luminosity_t b3 = {get_linearized_data_blue (sx-1, sy+1), get_linearized_data_blue (sx, sy+1), get_linearized_data_blue (sx+1, sy+1), get_linearized_data_blue (sx+2, sy+1)};
-      vec_luminosity_t b4 = {get_linearized_data_blue (sx-1, sy+2), get_linearized_data_blue (sx, sy+2), get_linearized_data_blue (sx+1, sy+2), get_linearized_data_blue (sx+2, sy+2)};
+      vec_luminosity_t b1 = {get_linearized_data_blue ({sx-1, sy-1}), get_linearized_data_blue ({sx, sy-1}), get_linearized_data_blue ({sx+1, sy-1}), get_linearized_data_blue ({sx+2, sy-1})};
+      vec_luminosity_t b2 = {get_linearized_data_blue ({sx-1, sy-0}), get_linearized_data_blue ({sx, sy-0}), get_linearized_data_blue ({sx+1, sy-0}), get_linearized_data_blue ({sx+2, sy-0})};
+      vec_luminosity_t b3 = {get_linearized_data_blue ({sx-1, sy+1}), get_linearized_data_blue ({sx, sy+1}), get_linearized_data_blue ({sx+1, sy+1}), get_linearized_data_blue ({sx+2, sy+1})};
+      vec_luminosity_t b4 = {get_linearized_data_blue ({sx-1, sy+2}), get_linearized_data_blue ({sx, sy+2}), get_linearized_data_blue ({sx+1, sy+2}), get_linearized_data_blue ({sx+2, sy+2})};
       ret.blue = do_bicubic_interpolate (b1, b2, b3, b4, {rx, ry});
       if (m_backlight_correction)
 	{
-	  ret.red = m_backlight_correction->apply (ret.red, xp, yp, backlight_correction_parameters::red, true);
-	  ret.green = m_backlight_correction->apply (ret.green, xp, yp, backlight_correction_parameters::green, true);
-	  ret.blue = m_backlight_correction->apply (ret.blue, xp, yp, backlight_correction_parameters::blue, true);
+	  ret.red = m_backlight_correction->apply (ret.red, p.x, p.y, backlight_correction_parameters::red, true);
+	  ret.green = m_backlight_correction->apply (ret.green, p.x, p.y, backlight_correction_parameters::green, true);
+	  ret.blue = m_backlight_correction->apply (ret.blue, p.x, p.y, backlight_correction_parameters::blue, true);
 	}
       return ret;
     }
@@ -474,16 +471,16 @@ render::get_unadjusted_img_rgb_pixel (coord_t xp, coord_t yp) const noexcept
 
 /* Determine RGB value at position XP, YP in the image using bicubic interpolation.  */
 pure_attr inline rgbdata always_inline_attr
-render::get_img_rgb_pixel (coord_t xp, coord_t yp) const noexcept
+render::get_img_rgb_pixel (point_t p) const noexcept
 {
-  return adjust_rgb (get_unadjusted_img_rgb_pixel (xp, yp));
+  return adjust_rgb (get_unadjusted_img_rgb_pixel (p));
 }
 
 /* Inner loop for image downscaling processing single pixel PX, PY in result DATA
    from source pixel VAL.  */
 template<typename T, bool UseAtomic, auto account_p>
 inline void
-render::process_pixel (T *data, int width, int height, int px, int py, bool x0, bool x1, bool y0, bool y1, T pixel, luminosity_t scale, luminosity_t xweight, luminosity_t yweight)
+render::process_pixel (T *data, int width, int height, int px, int py, bool x0, bool x1, bool y0, bool y1, T pixel, luminosity_t scale, luminosity_t xweight, luminosity_t yweight) noexcept
 {
   if (colorscreen_checking)
     {
@@ -507,7 +504,7 @@ render::process_pixel (T *data, int width, int height, int px, int py, bool x0, 
 }
 
 /* Inner loop for image downscaling processing single line.  */
-template<typename T, typename D, T (D::*get_pixel) (int x, int y) const,
+template<typename T, typename D, T (D::*get_pixel) (int_point_t p) const,
          bool UseAtomic, auto account_p>
 inline void
 render::process_line (T *data, int *pixelpos, luminosity_t *weights,
@@ -515,7 +512,7 @@ render::process_line (T *data, int *pixelpos, luminosity_t *weights,
                       int width, int height,
                       int py, int yy,
                       bool y0, bool y1,
-                      luminosity_t scale, luminosity_t yweight)
+                      luminosity_t scale, luminosity_t yweight) noexcept
 {
   int px = xstart;
   int xx = pixelpos[px];
@@ -524,7 +521,7 @@ render::process_line (T *data, int *pixelpos, luminosity_t *weights,
     return;
   if (px >= 0 && xx >= 0)
     {
-      T pixel = (((D *)this)->*get_pixel) (xx, yy);
+      T pixel = (((D *)this)->*get_pixel) ({xx, yy});
       process_pixel<T, UseAtomic, account_p> (data, width, height, px - 1, py, false, true, y0, y1, pixel, scale, weights[px], yweight);
     }
   xx++;
@@ -533,36 +530,38 @@ render::process_line (T *data, int *pixelpos, luminosity_t *weights,
   stop = pixelpos[px + 1];
   for (; xx < stop; xx++)
     {
-      T pixel = (((D *)this)->*get_pixel) (xx, yy);
+      T pixel = (((D *)this)->*get_pixel) ({xx, yy});
       process_pixel<T, UseAtomic, account_p> (data, width, height, px, py, true, false, y0, y1, pixel, scale, 0, yweight);
     }
   px++;
   while (px <= xend)
     {
-      T pixel = (((D *)this)->*get_pixel) (xx, yy);
+      T pixel = (((D *)this)->*get_pixel) ({xx, yy});
       process_pixel<T, UseAtomic, account_p> (data, width, height, px - 1, py, true, true, y0, y1, pixel, scale, weights[px], yweight);
       stop = pixelpos[px + 1];
       xx++;
       for (; xx < stop; xx++)
         {
-          T pixel = (((D *)this)->*get_pixel) (xx, yy);
+          T pixel = (((D *)this)->*get_pixel) ({xx, yy});
           process_pixel<T, UseAtomic, account_p> (data, width, height, px, py, true, false, y0, y1, pixel, scale, 0, yweight);
         }
       px++;
     }
   if (xx < m_img.width)
     {
-      T pixel = (((D *)this)->*get_pixel) (xx, yy);
+      T pixel = (((D *)this)->*get_pixel) ({xx, yy});
       process_pixel<T, UseAtomic, account_p> (data, width, height, px - 1, py, true, false, y0, y1, pixel, scale, weights[px], yweight);
     }
 }
 
-template<typename D, typename T, T (D::*get_pixel) (int x, int y) const,
+template<typename D, typename T, T (D::*get_pixel) (int_point_t p) const,
            auto account_p>
 bool
-render::downscale (T *data, coord_t x, coord_t y, int width, int height,
-                   coord_t pixelsize, progress_info *progress)
+render::downscale (T *data, point_t p, int width, int height,
+                   coord_t pixelsize, progress_info *progress) noexcept
 {
+  coord_t x = p.x;
+  coord_t y = p.y;
   int pxstart = std::max (0, (int)(-x / pixelsize));
   int pxend = std::min (width - 1, (int)((m_img.width - x) / pixelsize));
 

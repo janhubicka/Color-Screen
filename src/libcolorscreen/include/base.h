@@ -327,7 +327,7 @@ public:
   : x (nx), y (ny), width (nwidth), height (nheight)
   { }
   constexpr image_area_base (P topleft, P bottomright)
-  : x (topleft.x), y (topleft.y), width (bottomright.x-topleft.x), height (bottomright.y-topleft.y)
+  : x (topleft.x), y (topleft.y), width (bottomright.x-topleft.x+1), height (bottomright.y-topleft.y+1)
   { }
   constexpr image_area_base (P topleft, T nwidth, T nheight)
   : x (topleft.x), y (topleft.y), width (nwidth), height (nheight)
@@ -385,15 +385,15 @@ public:
   }
   constexpr P top_right ()
   {
-    return {x + width, y};
+    return {x + width - 1, y};
   }
   constexpr P bottom_left ()
   {
-    return {x, y};
+    return {x, y + height - 1};
   }
   constexpr P bottom_right ()
   {
-    return {x + width, y};
+    return {x + width - 1, y + height - 1};
   }
 };
 /* Optinally hold area of an image. */

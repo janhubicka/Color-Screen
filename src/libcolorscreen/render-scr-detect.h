@@ -108,16 +108,19 @@ public:
     m_scr_detect.set_parameters (param, rparam.gamma, &m_img);
   }
   ~render_scr_detect ();
-  scr_detect::color_class classify_pixel (int x, int y)
+  void set_render_type (render_type_parameters)
   {
-    if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
+  }
+  scr_detect::color_class classify_pixel (int_point_t p)
+  {
+    if (p.x < 0 || p.x >= m_img.width || p.y < 0 || p.y >= m_img.height)
       return scr_detect::unknown;
-    scr_detect::color_class t = m_color_class_map->get_class (x, y);
+    scr_detect::color_class t = m_color_class_map->get_class (p.x, p.y);
     if (t == scr_detect::unknown)
       return scr_detect::unknown;
-    for (int yy = std::max (y - 1, 0); yy <= std::min (y + 1, m_img.height); yy++)
-      for (int xx = std::max (x - 1, 0); xx <= std::min (x + 1, m_img.width); xx++)
-	if (xx != x || yy != y)
+    for (int yy = std::max (p.y - 1, (int64_t)0); yy <= std::min (p.y + 1, (int64_t)m_img.height); yy++)
+      for (int xx = std::max (p.x - 1, (int64_t)0); xx <= std::min (p.x + 1, (int64_t)m_img.width); xx++)
+	if (xx != p.x || yy != p.y)
 	  {
 	    scr_detect::color_class q = m_color_class_map->get_class (xx, yy);
 	    if (q != scr_detect::unknown && q != t)
@@ -126,11 +129,11 @@ public:
     return t;
   }
   pure_attr inline rgbdata
-  get_screen_color (coord_t xp, coord_t yp) const
+  get_screen_color (point_t p) const
   {
     /* Center of pixel [0,0] is [0.5,0.5].  */
-    xp -= (coord_t)0.5;
-    yp -= (coord_t)0.5;
+    coord_t xp = p.x - (coord_t)0.5;
+    coord_t yp = p.y - (coord_t)0.5;
     int sx, sy;
     coord_t rx = my_modf (xp, &sx);
     coord_t ry = my_modf (yp, &sy);
@@ -158,12 +161,16 @@ public:
     else
      return {0, 0, 0};
   }
-  bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *);
-  bool precompute_rgbdata (progress_info *progress);
-  pure_attr inline rgbdata get_adjusted_pixel (coord_t xp, coord_t yp) const
+  bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress)
   {
-    xp -= (coord_t)0.5;
-    yp -= (coord_t)0.5;
+    abort ();
+  }
+  bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress);
+  bool precompute_rgbdata (progress_info *progress);
+  pure_attr inline rgbdata get_adjusted_pixel (point_t p) const
+  {
+    coord_t xp = p.x - (coord_t)0.5;
+    coord_t yp = p.y - (coord_t)0.5;
     int sx, sy;
     coord_t rx = my_modf (xp, &sx);
     coord_t ry = my_modf (yp, &sy);
@@ -174,11 +181,11 @@ public:
 	if (m_precomputed_rgbdata)
 	  for (int yy = -1; yy <= 2; yy++)
 	    for (int xx = -1; xx <= 2; xx++)
-	      d[yy+1][xx+1] = fast_precomputed_get_adjusted_pixel (xx + sx, yy + sy);
+	      d[yy+1][xx+1] = fast_precomputed_get_adjusted_pixel ({xx + sx, yy + sy});
 	else
 	  for (int yy = -1; yy <= 2; yy++)
 	    for (int xx = -1; xx <= 2; xx++)
-	      d[yy+1][xx+1] =  fast_nonprecomputed_get_adjusted_pixel (xx + sx, yy + sy);
+	      d[yy+1][xx+1] =  fast_nonprecomputed_get_adjusted_pixel ({xx + sx, yy + sy});
 	luminosity_t rr,gg, bb;
 	rr = cubic_interpolate (cubic_interpolate (d[0][0].red, d[1][0].red, d[2][0].red, d[3][0].red, ry),
 				cubic_interpolate (d[0][1].red, d[1][1].red, d[2][1].red, d[3][1].red, ry),
@@ -227,13 +234,13 @@ public:
   }
   /* TODO: 16bit floats seems to be too slow for screen detection.  */
   typedef rgbdata my_mem_rgbdata;
-  pure_attr inline my_mem_rgbdata fast_precomputed_get_adjusted_pixel (int x, int y) const
+  pure_attr inline my_mem_rgbdata fast_precomputed_get_adjusted_pixel (int_point_t p) const
   {
-    return m_precomputed_rgbdata[y * m_img.width + x];
+    return m_precomputed_rgbdata[p.y * m_img.width + p.x];
   }
-  pure_attr inline my_mem_rgbdata fast_precomputed_get_normalized_pixel (int x, int y) const
+  pure_attr inline my_mem_rgbdata fast_precomputed_get_normalized_pixel (int_point_t p) const
   {
-    return normalize_color (m_precomputed_rgbdata[y * m_img.width + x]);
+    return normalize_color (m_precomputed_rgbdata[p.y * m_img.width + p.x]);
   }
   pure_attr inline rgbdata adjust_linearized_color (rgbdata c) const
   {
@@ -241,36 +248,36 @@ public:
     m_scr_detect.adjust_linearized_color (c.red, c.green, c.blue, &d.red, &d.green, &d.blue);
     return d;
   }
-  pure_attr inline rgbdata fast_nonprecomputed_get_adjusted_pixel (int x, int y) const
+  pure_attr inline rgbdata fast_nonprecomputed_get_adjusted_pixel (int_point_t p) const
   {
     rgbdata d;
-    m_scr_detect.adjust_color (m_img.rgbdata[y][x].r, m_img.rgbdata[y][x].g, m_img.rgbdata[y][x].b, &d.red, &d.green, &d.blue);
+    m_scr_detect.adjust_color (m_img.rgbdata[p.y][p.x].r, m_img.rgbdata[p.y][p.x].g, m_img.rgbdata[p.y][p.x].b, &d.red, &d.green, &d.blue);
     return d;
   }
-  pure_attr inline rgbdata fast_nonprecomputed_get_normalized_pixel (int x, int y) const
+  pure_attr inline rgbdata fast_nonprecomputed_get_normalized_pixel (int_point_t p) const
   {
     rgbdata d;
-    m_scr_detect.adjust_color (m_img.rgbdata[y][x].r, m_img.rgbdata[y][x].g, m_img.rgbdata[y][x].b, &d.red, &d.green, &d.blue);
+    m_scr_detect.adjust_color (m_img.rgbdata[p.y][p.x].r, m_img.rgbdata[p.y][p.x].g, m_img.rgbdata[p.y][p.x].b, &d.red, &d.green, &d.blue);
     return normalize_color (d);
   }
-  pure_attr inline rgbdata fast_get_adjusted_pixel (int x, int y) const
+  pure_attr inline rgbdata fast_get_adjusted_pixel (int_point_t p) const
   {
     if (m_precomputed_rgbdata)
-      return fast_precomputed_get_adjusted_pixel (x, y);
+      return fast_precomputed_get_adjusted_pixel (p);
     else
-      return fast_nonprecomputed_get_adjusted_pixel (x, y);
+      return fast_nonprecomputed_get_adjusted_pixel (p);
   }
-  pure_attr inline rgbdata fast_get_normalized_pixel (int x, int y) const
+  pure_attr inline rgbdata fast_get_normalized_pixel (int_point_t p) const
   {
-    rgbdata c = normalize_color (fast_get_adjusted_pixel (x, y));
+    rgbdata c = normalize_color (fast_get_adjusted_pixel (p));
     return c;
   }
-  pure_attr inline rgbdata fast_get_screen_pixel (int x, int y) const
+  pure_attr inline rgbdata fast_get_screen_pixel (int_point_t p) const
   {
     rgbdata d;
-    d.red = m_color_class_map->get_color_red (x, y);
-    d.green = m_color_class_map->get_color_green (x, y);
-    d.blue = m_color_class_map->get_color_blue (x, y);
+    d.red = m_color_class_map->get_color_red (p.x, p.y);
+    d.green = m_color_class_map->get_color_green (p.x, p.y);
+    d.blue = m_color_class_map->get_color_blue (p.x, p.y);
     return d;
   }
 #if 0
@@ -288,14 +295,14 @@ public:
     out_color.final_color (d.red,d.green,d.blue, r, g, b);
   }
 #endif
-  pure_attr inline rgbdata get_normalized_pixel_img (coord_t x, coord_t y) const
+  pure_attr inline rgbdata get_normalized_pixel_img (point_t p) const
   {
-    int xx = x;
-    int yy = y;
+    int xx = p.x;
+    int yy = p.y;
     if (xx < 0 || xx >= m_img.width || yy < 0 || yy >= m_img.height)
       return {0,0,0};
     //rgbdata d = fast_get_normalized_pixel (xx, yy);
-    return  fast_get_normalized_pixel (xx, yy);
+    return  fast_get_normalized_pixel ({xx, yy});
   }
   inline pure_attr luminosity_t
   get_patch_density (int x, int y, scr_detect::color_class c) const
@@ -341,7 +348,7 @@ done:
 	int cy = queue[i].y;
 	//visited[cy * m_img.width + cx] = 0;
         //assert (m_color_class_map.get_class (cx, cy) == c);
-	val += get_data (cx, cy);
+	val += get_data ({cx, cy});
       }
      return val / end;
   }
@@ -374,28 +381,29 @@ public:
   {
   }
   pure_attr inline rgbdata
-  sample_pixel_img (coord_t xx, coord_t yy) const
+  sample_pixel_img (point_t p) const
   {
-    return get_adjusted_pixel (xx, yy);
+    return get_adjusted_pixel (p);
   }
   pure_attr inline rgbdata
-  fast_sample_pixel_img (int xx, int yy) const
+  fast_sample_pixel_img (int_point_t p) const
   {
-    return fast_get_adjusted_pixel (xx, yy);
+    return fast_get_adjusted_pixel (p);
   }
   bool precompute_all (progress_info *progress)
   {
     return render_scr_detect::precompute_all (true, false, progress);
   }
-  bool precompute_img_range (coord_t, coord_t, coord_t, coord_t, progress_info *progress)
+  bool precompute_img_range (int_image_area area, progress_info *progress)
   {
+    (void)area;
     return precompute_all (progress);
   }
-  bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress) override;
+  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress) override;
   inline void
-  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b) const
+  render_pixel_img (point_t p, int *r, int *g, int *b) const
   {
-    rgbdata d = sample_pixel_img (x, y);
+    rgbdata d = sample_pixel_img (p);
     int_rgbdata out_c = out_color.final_color (d);
     *r = out_c.red; *g = out_c.green; *b = out_c.blue;
   }
@@ -412,24 +420,25 @@ public:
   {
   }
   pure_attr inline rgbdata
-  sample_pixel_img (coord_t xx, coord_t yy) const
+  sample_pixel_img (point_t p) const
   {
-    return get_normalized_pixel_img (xx, yy);
+    return get_normalized_pixel_img (p);
   }
   pure_attr inline rgbdata
-  fast_sample_pixel_img (int xx, int yy) const
+  fast_sample_pixel_img (int_point_t p) const
   {
-    return fast_get_normalized_pixel (xx, yy);
+    return fast_get_normalized_pixel (p);
   }
   bool precompute_all (progress_info *progress)
   {
     return render_scr_detect::precompute_all (true, false, progress);
   }
-  bool precompute_img_range (coord_t, coord_t, coord_t, coord_t, progress_info *progress)
+  bool precompute_img_range (int_image_area area, progress_info *progress)
   {
+    (void)area;
     return precompute_all (progress);
   }
-  bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress) override;
+  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress) override;
 };
 /* Simple wrapper to be used by rendering templates.  */
 class render_scr_detect_pixel_color : public render_scr_detect
@@ -442,28 +451,29 @@ public:
   {
   }
   pure_attr inline rgbdata
-  sample_pixel_img (coord_t xx, coord_t yy) const
+  sample_pixel_img (point_t p) const
   {
-    return get_screen_color (xx, yy);
+    return get_screen_color (p);
   }
   pure_attr inline rgbdata
-  fast_sample_pixel_img (int xx, int yy) const
+  fast_sample_pixel_img (int_point_t p) const
   {
-    return fast_get_screen_pixel (xx, yy);
+    return fast_get_screen_pixel (p);
   }
   bool precompute_all (progress_info *progress)
   {
     return render_scr_detect::precompute_all (true, false, progress);
   }
-  bool precompute_img_range (coord_t, coord_t, coord_t, coord_t, progress_info *progress)
+  bool precompute_img_range (int_image_area area, progress_info *progress)
   {
+    (void)area;
     return precompute_all (progress);
   }
-  bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress) override;
+  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress) override;
   void
-  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b) const
+  render_pixel_img (point_t p, int *r, int *g, int *b) const
   {
-    rgbdata d = sample_pixel_img (x, y);
+    rgbdata d = sample_pixel_img (p);
     int_rgbdata out_c = out_color.final_color (d);
     *r = out_c.red; *g = out_c.green; *b = out_c.blue;
   }
@@ -475,47 +485,48 @@ public:
    : render_scr_detect (param, data, rparam, dst_maxval)
   { 
   }
-  void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b);
-  bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *) override;
-  pure_attr inline rgbdata fast_sample_pixel_img (int x, int y) const;
-  pure_attr inline rgbdata sample_pixel_img (coord_t x, coord_t y) const;
+  void set_render_type (render_type_parameters)
+  {
+  }
+  void inline render_pixel_img (point_t p, int *r, int *g, int *b);
+  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *) override;
+  pure_attr inline rgbdata fast_sample_pixel_img (int_point_t p) const;
+  pure_attr inline rgbdata sample_pixel_img (point_t p) const;
   bool precompute_all (progress_info *progress)
   {
     return render_scr_detect::precompute_all (true, false, progress);
   }
-  void set_render_type (render_type_parameters rtparam)
+  bool precompute_img_range (int_image_area area, progress_info *progress)
   {
-  }
-  bool precompute_img_range (coord_t, coord_t, coord_t, coord_t, progress_info *progress)
-  {
+    (void)area;
     return precompute_all (progress);
   }
 private:
 };
 pure_attr inline rgbdata
-render_scr_detect_superpose_img::fast_sample_pixel_img (int x, int y) const
+render_scr_detect_superpose_img::fast_sample_pixel_img (int_point_t p) const
 {
-  return get_screen_color (x, y) * get_data (x, y);
+  return get_screen_color ({(coord_t)(p.x + 0.5), (coord_t)(p.y + 0.5)}) * get_data (p);
 }
 pure_attr inline rgbdata
-render_scr_detect_superpose_img::sample_pixel_img (coord_t x, coord_t y) const
+render_scr_detect_superpose_img::sample_pixel_img (point_t p) const
 {
-  return get_screen_color (x, y) * get_img_pixel (x, y);
+  return get_screen_color (p) * get_img_pixel (p);
 }
 void
-render_scr_detect_superpose_img::render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b) 
+render_scr_detect_superpose_img::render_pixel_img (point_t p, int *r, int *g, int *b) 
 {
-  rgbdata d = sample_pixel_img (x, y);
+  rgbdata d = sample_pixel_img (p);
   int_rgbdata out_c = out_color.final_color (d);
   *r = out_c.red; *g = out_c.green; *b = out_c.blue;
 }
 
 inline bool
-render_scr_detect_superpose_img::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
+render_scr_detect_superpose_img::get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress)
 { 
   return downscale<render_scr_detect_superpose_img, rgbdata,
                    &render_scr_detect_superpose_img::fast_sample_pixel_img> (
-      data, x, y, width, height, pixelsize, progress);
+      data, p, width, height, pixelsize, progress);
 }
 
 class distance_list
@@ -540,26 +551,26 @@ public:
    : render_scr_detect (param, data, rparam, dst_maxval), m_color_data_handle (NULL)
   { 
   }
-  bool precompute_all (progress_info *);
+  bool precompute_all (progress_info *progress);
   inline pure_attr rgbdata
-  fast_sample_pixel_img (int x, int y) const
+  fast_sample_pixel_img (int_point_t p) const
   {
-    if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
+    if (p.x < 0 || p.x >= m_img.width || p.y < 0 || p.y >= m_img.height)
       return {0,0,0};
     else
-      return {get_luminosity (0, x, y),
-	      get_luminosity (1, x, y),
-	      get_luminosity (2, x, y)};
+      return {get_luminosity (0, p.x, p.y),
+	      get_luminosity (1, p.x, p.y),
+	      get_luminosity (2, p.x, p.y)};
   }
   rgbdata
-  sample_pixel_img (coord_t xx, coord_t yy)
+  sample_pixel_img (point_t p)
   {
-    return fast_sample_pixel_img (xx + 0.5, yy + 0.5);
+    return fast_sample_pixel_img ({(int)(p.x + 0.5), (int)(p.y + 0.5)});
   }
   void
-  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  render_pixel_img (point_t p, int *r, int *g, int *b)
   {
-    rgbdata d = sample_pixel_img (x, y);
+    rgbdata d = sample_pixel_img (p);
     int_rgbdata out_c = out_color.final_color (d);
     *r = out_c.red; *g = out_c.green; *b = out_c.blue;
   }
@@ -567,15 +578,15 @@ public:
   void set_render_type (render_type_parameters rtparam)
   {
   }
-  bool precompute_img_range (coord_t, coord_t, coord_t, coord_t, progress_info *progress)
+  bool precompute_img_range (int_image_area area, progress_info *progress)
   {
+    (void)area;
     return precompute_all (progress);
   }
-  inline bool
-  get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress) override
+  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress) override
   { 
     return downscale<render_scr_relax, rgbdata,
-                     &render_scr_relax::fast_sample_pixel_img> (data, x, y, width, height, pixelsize,
+                     &render_scr_relax::fast_sample_pixel_img> (data, p, width, height, pixelsize,
                                                  progress);
   }
 private:
@@ -594,7 +605,7 @@ public:
   { 
   }
   inline pure_attr rgbdata
-  sample_pixel_img (coord_t x, coord_t y) const
+  sample_pixel_img (point_t p) const
   {
      /* Search for nearest pixels of each known color.  */
      const coord_t inf = distance_list::max_distance + 1;
@@ -603,8 +614,8 @@ public:
      coord_t biggest = inf;
      for (int i = 0; i < distance_list.num && distance_list.list[i].fdist < biggest + 2; i++)
        {
-	 int xx = (int)x + distance_list.list[i].x;
-	 int yy = (int)y + distance_list.list[i].y;
+	 int xx = (int)p.x + distance_list.list[i].x;
+	 int yy = (int)p.y + distance_list.list[i].y;
 	 if (xx < 0 || yy < 0 || xx >= m_img.width || yy >= m_img.height)
 	   continue;
 	 scr_detect::color_class t = m_color_class_map->get_class (xx, yy);
@@ -613,7 +624,7 @@ public:
          //assert (t>=0 && t < 3);
 	 if (distance_list.list[i].fdist > cdist[(int)t] + 2)
 	   continue;
-	 double dist = my_sqrt ((xx + (coord_t)0.5 - x) * (xx + (coord_t)0.5 - x) + (yy + (coord_t)0.5 - y) * (yy + (coord_t)0.5 - y));
+	 double dist = my_sqrt ((xx + (coord_t)0.5 - p.x) * (xx + (coord_t)0.5 - p.x) + (yy + (coord_t)0.5 - p.y) * (yy + (coord_t)0.5 - p.y));
 	 if (dist < cdist[(int)t])
 	   {
 	     cdist[(int)t] = dist;
@@ -628,14 +639,14 @@ public:
       return {get_patch_density (rx[0], ry[0], scr_detect::red), get_patch_density (rx[1], ry[1], scr_detect::green), get_patch_density (rx[2], ry[2], scr_detect::blue)};
   }
   inline pure_attr rgbdata
-  fast_sample_pixel_img (int x, int y) const
+  fast_sample_pixel_img (int_point_t p) const
   {
-    return sample_pixel_img (x + 0.5, y + 0.5);
+    return sample_pixel_img ({p.x + (coord_t)0.5, p.y + (coord_t)0.5});
   }
   void
-  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  render_pixel_img (point_t p, int *r, int *g, int *b)
   {
-    rgbdata d = sample_pixel_img (x, y);
+    rgbdata d = sample_pixel_img (p);
     int_rgbdata out_c = out_color.final_color (d);
     *r = out_c.red; *g = out_c.green; *b = out_c.blue;
   }
@@ -646,15 +657,15 @@ public:
   void set_render_type (render_type_parameters rtparam)
   {
   }
-  bool precompute_img_range (coord_t, coord_t, coord_t, coord_t, progress_info *progress)
+  bool precompute_img_range (int_image_area area, progress_info *progress)
   {
+    (void)area;
     return precompute_all (progress);
   }
-  inline bool
-  get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress) override
+  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress) override
   { 
     return downscale<render_scr_nearest, rgbdata,
-                     &render_scr_nearest::fast_sample_pixel_img> (data, x, y, width, height, pixelsize,
+                     &render_scr_nearest::fast_sample_pixel_img> (data, p, width, height, pixelsize,
                                                  progress);
   }
 private:
@@ -669,22 +680,22 @@ public:
   { 
   }
   ~render_scr_nearest_scaled ();
-  bool precompute_all (progress_info *);
+  bool precompute_all (progress_info *progress);
   rgbdata
-  sample_pixel_img (coord_t x, coord_t y) const
+  sample_pixel_img (point_t p) const
   {
     int rx[3], ry[3];
     patches::patch_index_t ri[3];
-    if (m_patches->nearest_patches (x,y, rx, ry, ri))
+    if (m_patches->nearest_patches (p.x, p.y, rx, ry, ri))
       {
 #if 1
-	patches::patch p = m_patches->get_patch (ri[0]);
+	patches::patch p1 = m_patches->get_patch (ri[0]);
 	rgbdata ret;
-	ret.red = p.luminosity_sum / (luminosity_t) p.overall_pixels;
-	p = m_patches->get_patch (ri[1]);
-	ret.green = p.luminosity_sum / (luminosity_t) p.overall_pixels;
-	p = m_patches->get_patch (ri[2]);
-	ret.blue = p.luminosity_sum / (luminosity_t) p.overall_pixels;
+	ret.red = p1.luminosity_sum / (luminosity_t) p1.overall_pixels;
+	p1 = m_patches->get_patch (ri[1]);
+	ret.green = p1.luminosity_sum / (luminosity_t) p1.overall_pixels;
+	p1 = m_patches->get_patch (ri[2]);
+	ret.blue = p1.luminosity_sum / (luminosity_t) p1.overall_pixels;
 	return ret;
 #else
 	luminosity_t rr;
@@ -693,7 +704,7 @@ public:
 #endif
 #if 0
 	luminosity_t rr;
-	if (!m_patches->get_patch_color (x,y))
+	if (!m_patches->get_patch_color (p.x, p.y))
 	  rr = ((ri[0] & 15) + 1) / 17.0;
 	else
 	  rr = 0;
@@ -704,30 +715,31 @@ public:
       return {0, 0, 0};
   }
   rgbdata
-  fast_sample_pixel_img (int x, int y) const
+  fast_sample_pixel_img (int_point_t p) const
   {
-    return sample_pixel_img (x + 0.5, y + 0.5);
+    return sample_pixel_img ({p.x + (coord_t)0.5, p.y + (coord_t)0.5});
   }
   void
-  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  render_pixel_img (point_t p, int *r, int *g, int *b)
   {
-    rgbdata d = sample_pixel_img (x, y);
+    rgbdata d = sample_pixel_img (p);
     int_rgbdata out_c = out_color.final_color (d);
     *r = out_c.red; *g = out_c.green; *b = out_c.blue;
   }
   void set_render_type (render_type_parameters rtparam)
   {
   }
-  bool precompute_img_range (coord_t, coord_t, coord_t, coord_t, progress_info *progress)
+  bool precompute_img_range (int_image_area area, progress_info *progress)
   {
+    (void)area;
     return precompute_all (progress);
   }
   inline bool
-  get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress) override
+  get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress)
   { 
     return downscale<render_scr_nearest_scaled, rgbdata,
                      &render_scr_nearest_scaled::fast_sample_pixel_img> (
-        data, x, y, width, height, pixelsize, progress);
+        data, p, width, height, pixelsize, progress);
   }
 private:
   std::shared_ptr<patches> m_patches;

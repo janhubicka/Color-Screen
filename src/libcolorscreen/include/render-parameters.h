@@ -537,8 +537,7 @@ struct render_parameters
                                           rgbdata patch_proportions);
   size_t get_icc_profile (void **buf, image_data *img, bool normalized_dyes);
   DLL_PUBLIC const tile_adjustment &get_tile_adjustment (stitch_project *stitch, int x, int y) const;
-  tile_adjustment &get_tile_adjustment_ref (stitch_project *stitch, int x,
-                                            int y);
+  tile_adjustment &get_tile_adjustment_ref (stitch_project *stitch, int x, int y);
   DLL_PUBLIC tile_adjustment &get_tile_adjustment (int x, int y);
 
   bool

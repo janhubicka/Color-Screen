@@ -26,7 +26,7 @@ collect_tile (tile_t &tile, image_data &scan, const render &render, int x, int y
     y = scan.height - tile_height;
   for (int yy = 0; yy < tile_width; yy++)
     for (int xx = 0; xx < tile_height; xx++)
-      tile[yy * tile_width + xx] = render.fast_get_img_pixel (xx + x, yy + y);
+      tile[yy * tile_width + xx] = render.fast_get_img_pixel ({xx + x, yy + y});
   return true;
 }
 

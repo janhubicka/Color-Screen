@@ -169,7 +169,7 @@ get_new_image_layer_histogram (image_layer_histogram_params &p,
 #pragma omp parallel for reduction(histogram_range : hist)
   for (int y = p.crop.y; y < p.crop.y + p.crop.height; y++)
     for (int x = p.crop.x; x < p.crop.x + p.crop.width; x++)
-      hist.pre_account (p.r->get_unadjusted_data (x, y));
+      hist.pre_account (p.r->get_unadjusted_data ({x, y}));
 
   hist.finalize_range (65536);
 
@@ -177,7 +177,7 @@ get_new_image_layer_histogram (image_layer_histogram_params &p,
 #pragma omp parallel for reduction(histogram_entries : hist)
   for (int y = p.crop.y; y < p.crop.y + p.crop.height; y++)
     for (int x = p.crop.x; x < p.crop.x + p.crop.width; x++)
-      hist.account (p.r->get_unadjusted_data (x, y));
+      hist.account (p.r->get_unadjusted_data ({x, y}));
 
   hist.finalize ();
   return std::make_unique<histogram> (std::move (hist));
@@ -328,35 +328,35 @@ struct getdata_params
 /* Helper for sharpening template for images with gray data with no correction.
    Fetch pixel from GRAYDATA at X, Y using parameters D.  */
 inline luminosity_t
-getdata_helper_no_correction (unsigned short **graydata, int x, int y, int,
+getdata_helper_no_correction (unsigned short **graydata, int_point_t p, int,
                               getdata_params &d)
 {
   if (colorscreen_checking)
-    assert (x >= 0 && x < d.width && y >= 0 && y < d.height);
-  return d.table[graydata[y][x]];
+    assert (p.x >= 0 && p.x < d.width && p.y >= 0 && p.y < d.height);
+  return d.table[graydata[p.y][p.x]];
 }
 
 /* Helper for sharpening template for images with gray data with correction.
    Fetch pixel from GRAYDATA at X, Y using parameters D.  */
 inline luminosity_t
-getdata_helper_correction (unsigned short **graydata, int x, int y, int,
+getdata_helper_correction (unsigned short **graydata, int_point_t p, int,
                            getdata_params &d)
 {
   if (colorscreen_checking)
-    assert (x >= 0 && x < d.width && y >= 0 && y < d.height);
-  luminosity_t v = d.table[graydata[y][x]];
-  v = d.correction->apply (v, x, y, backlight_correction_parameters::ir);
+    assert (p.x >= 0 && p.x < d.width && p.y >= 0 && p.y < d.height);
+  luminosity_t v = d.table[graydata[p.y][p.x]];
+  v = d.correction->apply (v, p.x, p.y, backlight_correction_parameters::ir);
   return v;
 }
 
 /* Helper for sharpening template for images with RGB data only.
    Fetch pixel from IMG at X, Y using tables T.  */
 inline luminosity_t
-getdata_helper2 (const image_data *img, int x, int y, int, gray_data_tables &t)
+getdata_helper2 (const image_data *img, int_point_t p, int, gray_data_tables &t)
 {
   return compute_gray_data (
-      t, x, y, img->rgbdata[y][x].r,
-      img->rgbdata[y][x].g, img->rgbdata[y][x].b);
+      t, p.x, p.y, img->rgbdata[p.y][p.x].r,
+      img->rgbdata[p.y][p.x].g, img->rgbdata[p.y][p.x].b);
 }
 
 /* Create new grayscale and sharpened data using parameters P.
@@ -463,7 +463,7 @@ prune_render_caches ()
 /* Precompute all data needed for rendering.  */
 bool
 render::precompute_all (bool grayscale_needed, bool normalized_patches,
-                        rgbdata patch_proportions, progress_info *progress)
+			rgbdata patch_proportions, progress_info *progress)
 {
   if (m_params.backlight_correction)
     {
@@ -544,6 +544,16 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
   return out_color.precompute (m_params, &m_img, normalized_patches, patch_proportions, progress);
 }
 
+#if 0
+/* Precompute data for given AREA.  */
+bool
+render::precompute_img_range (int_image_area area, progress_info *progress)
+{
+  (void)area;
+  return precompute_all (true, false, {1.0/3, 1.0/3, 1.0/3}, progress);
+}
+#endif
+
 /* Compute lookup table converting image_data to range 0..1 with GAMMA.  */
 bool
 render::get_lookup_tables (std::shared_ptr<luminosity_t[]> *ret,
@@ -589,22 +599,22 @@ render::get_lookup_tables (std::shared_ptr<luminosity_t[]> *ret,
    HEIGHT and PIXELSIZE.  Store result in DATA.  Report progress
    to PROGRESS.  Return false on failure or cancellation.  */
 bool
-render::get_gray_data (luminosity_t *data, coord_t x, coord_t y, int width,
+render::get_gray_data (luminosity_t *data, point_t p, int width,
                        int height, coord_t pixelsize, progress_info *progress)
 {
   return downscale<render, luminosity_t, &render::get_data> (
-      data, x, y, width, height, pixelsize, progress);
+      data, p, width, height, pixelsize, progress);
 }
 
 /* Compute color data for downscaled region at X, Y with WIDTH, HEIGHT
    and PIXELSIZE.  Store result in DATA.  Report progress
    to PROGRESS.  Return false on failure or cancellation.  */
 bool
-render::get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
+render::get_color_data (rgbdata *data, point_t p, int width,
                         int height, coord_t pixelsize, progress_info *progress)
 {
   return downscale<render, rgbdata, &render::get_rgb_pixel> (
-      data, x, y, width, height, pixelsize, progress);
+      data, p, width, height, pixelsize, progress);
 }
 
 /* Sample square patch with center C and corner offsets P1, P2.  */
@@ -619,14 +629,14 @@ render::sample_img_square (point_t c, point_t p1, point_t p2) const
 
   /* If the resolution is too small, just sample given point.  */
   if (xmax - xmin < 2)
-    return get_img_pixel (c.x, c.y);
+    return get_img_pixel ({c.x, c.y});
 
   /* For bigger resolution we can sample few points in the square.  */
   if (xmax - xmin < 6)
     {
       int samples = (int)my_floor (my_sqrt (p1.x * p1.x + p1.y * p1.y) + (coord_t)0.5) * 2;
       if (!samples)
-        return get_img_pixel (c.x, c.y);
+        return get_img_pixel ({c.x, c.y});
       luminosity_t rec = (luminosity_t)1.0 / samples;
       for (int y = -samples; y <= samples; y++)
         for (int x = -samples; x <= samples; x++)
@@ -634,8 +644,8 @@ render::sample_img_square (point_t c, point_t p1, point_t p2) const
             int w = 1 + (samples - abs (x) - abs (y));
             if (w < 0)
               continue;
-            acc += (luminosity_t)w * get_img_pixel (c.x + (p1.x * x + p2.x * y) * rec,
-                                                    c.y + (p1.y * x + p2.y * y) * rec);
+            acc += (luminosity_t)w * get_img_pixel ({c.x + (p1.x * x + p2.x * y) * rec,
+                                                    c.y + (p1.y * x + p2.y * y) * rec});
             weights += (luminosity_t)w;
           }
     }
@@ -662,7 +672,7 @@ render::sample_img_square (point_t c, point_t p1, point_t p2) const
               if (w < 1)
                 {
                   w = (luminosity_t)1.0 - w;
-                  acc += w * get_data (x, y);
+                  acc += w * get_data ({x, y});
                   weights += w;
                 }
             }
@@ -701,19 +711,18 @@ get_linearized_pixel (const image_data &img, render_parameters &rparam, int xx,
       imgp = img.stitch->images[ty][tx].img.get ();
     }
   render r (*imgp, rparam, 255);
-  if (!r.precompute_all (!img.rgbdata, false,
-                    { 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f }, progress))
+  if (!r.precompute_all (!img.rgbdata, false, { 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f }, progress))
     return rgbdata(0, 0, 0);
   for (int y = yy - range; y < yy + range; y++)
     for (int x = xx - range; x < xx + range; x++)
       if (x >= 0 && x < img.width && y >= 0 && y < img.height)
         {
           if (img.rgbdata)
-            color += r.get_linearized_rgb_pixel (x, y);
+            color += r.get_linearized_rgb_pixel ({x, y});
           else
             {
               rgbdata color2 = { 1, 1, 1 };
-              color += color2 * r.get_unadjusted_data (x, y);
+              color += color2 * r.get_unadjusted_data ({x, y});
             }
           n++;
         }

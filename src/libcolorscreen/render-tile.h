@@ -40,9 +40,9 @@ bool render_img_normal(render_type_parameters rtparam,
     progress->set_task ("precomputing", 1);
   {
     sub_task task (progress);
-    if (!render.precompute_img_range (xoffset * step, yoffset * step,
-				      (width + xoffset) * step,
-				      (height + yoffset) * step, progress))
+    if (!render.precompute_img_range ({{(int)(xoffset * step), (int)(yoffset * step)},
+				      {(int)((width + xoffset) * step),
+				       (int)((height + yoffset) * step)}}, progress))
       return false;
   }
   if (progress)
@@ -54,7 +54,7 @@ bool render_img_normal(render_type_parameters rtparam,
       if (!progress || !progress->cancel_requested ())
 	for (int x = 0; x < width; x++)
 	  {
-	    rgbdata c = render.sample_pixel_img ((x + xoffset) * step, py);
+	    rgbdata c = render.sample_pixel_img ({(coord_t)((x + xoffset) * step), py});
 	    int_rgbdata out_c = render.out_color.final_color (c);
 	    putpixel (pixels, pixelbytes, rowstride, x, y, out_c.red, out_c.green, out_c.blue);
 	  }
@@ -79,15 +79,15 @@ bool render_img_downscale(render_type_parameters rtparam,
     progress->set_task ("precomputing", 1);
   {
     sub_task task (progress);
-    if (!render.precompute_img_range (xoffset * step, yoffset * step,
-				      (width + xoffset) * step,
-				      (height + yoffset) * step, progress))
+    if (!render.precompute_img_range ({{(int)(xoffset * step), (int)(yoffset * step)},
+				      {(int)((width + xoffset) * step),
+				       (int)((height + yoffset) * step)}}, progress))
       return false;
   }
   rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
   if (!data)
     return false;
-  if (!render.get_color_data (data, xoffset * step, yoffset * step, width, height, step, progress))
+  if (!render.get_color_data (data, {(coord_t)(xoffset * step), (coord_t)(yoffset * step)}, width, height, step, progress))
     {
       free (data);
       return false;
@@ -125,15 +125,15 @@ bool render_img_gray_downscale(render_type_parameters rtparam,
     progress->set_task ("precomputing", 1);
   {
     sub_task task (progress);
-    if (!render.precompute_img_range (xoffset * step, yoffset * step,
-				      (width + xoffset) * step,
-				      (height + yoffset) * step, progress))
+    if (!render.precompute_img_range ({{(int)(xoffset * step), (int)(yoffset * step)},
+				      {(int)((width + xoffset) * step),
+				       (int)((height + yoffset) * step)}}, progress))
       return false;
   }
   luminosity_t *data = (luminosity_t *)malloc (sizeof (luminosity_t) * width * height);
   if (!data)
     return false;
-  if (!render.get_gray_data (data, xoffset * step, yoffset * step, width, height, step, progress))
+  if (!render.get_gray_data (data, {(coord_t)(xoffset * step), (coord_t)(yoffset * step)}, width, height, step, progress))
     {
       free (data);
       return false;
@@ -189,14 +189,14 @@ render_loop_scr (T &render, scr_to_img &, int antialias, coord_t x, coord_t y, c
 {
   rgbdata d;
   if (antialias == 1)
-    d = render.sample_pixel_scr (x, y);
+    d = render.sample_pixel_scr ({x, y});
   else
     {
       coord_t substep = step / antialias;
       d = {0,0,0};
-      for (int ax = 0; ax < antialias; ax++)
+    for (int ax = 0; ax < antialias; ax++)
 	for (int ay = 0; ay < antialias; ay++)
-	  d += render.sample_pixel_scr (x + ax * substep, y + ay * substep);
+	  d += render.sample_pixel_scr ({x + ax * substep, y + ay * substep});
       luminosity_t ainv = 1 / (luminosity_t)(antialias * antialias);
       d.red *= ainv;
       d.green *= ainv;
@@ -213,7 +213,7 @@ render_loop_img (T &render, scr_to_img &map, int antialias, coord_t x, coord_t y
   if (antialias == 1)
     {
       point_t p = map.to_img ({x, y});
-      d = render.sample_pixel_img (p.x, p.y);
+      d = render.sample_pixel_img (p);
     }
   else
     {
@@ -223,7 +223,7 @@ render_loop_img (T &render, scr_to_img &map, int antialias, coord_t x, coord_t y
 	for (int ay = 0; ay < antialias; ay++)
 	  {
 	    point_t p = map.to_img ({x + ax * substep, y + ay * substep});
-	    d += render.sample_pixel_img (p.x, p.y);
+	    d += render.sample_pixel_img (p);
 	  }
       luminosity_t ainv = 1 / (luminosity_t)(antialias * antialias);
       d.red *= ainv;

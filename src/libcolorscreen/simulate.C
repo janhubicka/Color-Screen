@@ -17,9 +17,9 @@ struct get_pixel_data
 };
 
 inline rgbdata
-get_pixel (get_pixel_data *p, int x, int y, int, int)
+get_pixel (get_pixel_data *p, int_point_t pt, int, int)
 {
-  return antialias_screen (*p->scr, p->map, x, y);
+  return antialias_screen (*p->scr, p->map, pt.x, pt.y);
 }
 
 /* Render screen to IMG.  This is used for unit-testing of the screen

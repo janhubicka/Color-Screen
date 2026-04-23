@@ -1066,14 +1066,14 @@ stitch_project::solve_equations (render_parameters *in_rparams, std::vector <ove
 	    {
 	      int idx = exp_index (this, flags, fx, fy, x, y);
 	      if (idx >= 0)
-		in_rparams->get_tile_adjustment (x,y).exposure = gsl_vector_get (c, idx);
+		in_rparams->get_tile_adjustment (x, y).exposure = gsl_vector_get (c, idx);
 	      else
-		in_rparams->get_tile_adjustment (x,y).exposure = 1;
+		in_rparams->get_tile_adjustment (x, y).exposure = 1;
 	      idx = black_index (this, flags, fx, fy, x, y);
 	      if (idx >= 0)
-		in_rparams->get_tile_adjustment (x,y).dark_point = -gsl_vector_get (c, idx) / in_rparams->get_tile_adjustment (x,y).exposure;
+		in_rparams->get_tile_adjustment (x, y).dark_point = -gsl_vector_get (c, idx) / in_rparams->get_tile_adjustment (x, y).exposure;
 	      else
-		in_rparams->get_tile_adjustment (x,y).dark_point = 0;
+		in_rparams->get_tile_adjustment (x, y).dark_point = 0;
 	    }
 	}
       if (progress)
@@ -1127,7 +1127,7 @@ stitch_project::solve_equations (render_parameters *in_rparams, std::vector <ove
       for (int y = 0; y < params.height; y++)
 	{
 	  for (int x = 0; x < params.width; x++)
-	    printf ("  i%i%i*%1.8f%+6.2f", x, y, in_rparams->get_tile_adjustment (x,y).exposure, -in_rparams->get_tile_adjustment (x,y).dark_point*65535);
+	    printf ("  i%i%i*%1.8f%+6.2f", x, y, in_rparams->get_tile_adjustment (x, y).exposure, -in_rparams->get_tile_adjustment (x, y).dark_point*65535);
 	  printf ("\n");
 	}
       printf ("Corrected diff %f (avg) %f (max) %f (sq), uncorrected %f %3.2f%% (avg) %f  %3.2f%% (max) %f %3.2f%% (sq), chisq %f\n", avg_cor / wsum * 65535, max_cor * 65535, cor_sq, avg_uncor / wsum * 65535, avg_uncor * 100 / avg_cor, max_uncor * 65535, max_uncor * 100 / max_cor, uncor_sq, uncor_sq * 100 / cor_sq, chisq);

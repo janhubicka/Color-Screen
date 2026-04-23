@@ -183,22 +183,17 @@ public:
     m_scr_to_img.set_parameters (param, img);
   }
   ~render_to_scr ();
-  pure_attr inline luminosity_t get_img_pixel_scr (coord_t x, coord_t y) const;
-  pure_attr inline luminosity_t get_unadjusted_img_pixel_scr (coord_t x,
-                                                              coord_t y) const;
-  pure_attr inline rgbdata get_unadjusted_rgb_pixel_scr (coord_t x,
-                                                         coord_t y) const;
+  pure_attr inline luminosity_t get_img_pixel_scr (point_t p) const;
+  pure_attr inline luminosity_t get_unadjusted_img_pixel_scr (point_t p) const;
+  pure_attr inline rgbdata get_unadjusted_rgb_pixel_scr (point_t p) const;
   coord_t pixel_size ();
-  DLL_PUBLIC bool precompute_all (bool grayscale_needed,
-                                  bool normalized_patches,
-                                  progress_info *progress);
-  DLL_PUBLIC bool precompute (bool grayscale_needed, bool normalized_patches,
-                              coord_t, coord_t, coord_t, coord_t,
-                              progress_info *progress);
-  DLL_PUBLIC bool precompute_img_range (bool grayscale_needed,
-                                        bool normalized_patches, coord_t,
-                                        coord_t, coord_t, coord_t,
-                                        progress_info *progress);
+  DLL_PUBLIC bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress)
+  {
+    abort ();
+  }
+  DLL_PUBLIC bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress);
+  //DLL_PUBLIC bool precompute (bool grayscale_needed, bool normalized_patches, int_image_area area, progress_info *progress);
+  DLL_PUBLIC bool precompute_img_range (bool grayscale_needed, bool normalized_patches, int_image_area area, progress_info *progress);
   void simulate_screen (progress_info *);
   void
   compute_final_range ()
@@ -272,8 +267,8 @@ public:
 /* Determine grayscale value at a given position in the image.
    Use bicubic interpolation.  */
 
-  pure_attr inline rgbdata get_simulated_screen_pixel (coord_t xp, coord_t yp) const;
-  pure_attr inline rgbdata get_simulated_screen_pixel_fast (int xp, int yp) const;
+  pure_attr inline rgbdata get_simulated_screen_pixel (point_t p) const;
+  pure_attr inline rgbdata get_simulated_screen_pixel_fast (int_point_t p) const;
 
 protected:
   /* Transformation between screen and image coordinates.  */
@@ -294,7 +289,7 @@ private:
 class render_img : public render_to_scr
 {
 public:
-  render_img (scr_to_img_parameters &param, image_data &img,
+  render_img (const scr_to_img_parameters &param, const image_data &img,
               render_parameters &rparam, int dstmaxval)
       : render_to_scr (param, img, rparam, dstmaxval), m_color (false),
         m_profiled (false)
@@ -341,23 +336,25 @@ public:
     return true;
   }
   bool
-  precompute_img_range (int, int, int, int, progress_info *progress = NULL)
+  precompute_img_range (int_image_area area, progress_info *progress = NULL)
   {
+    (void)area;
     return precompute_all (progress);
   }
   pure_attr inline rgbdata
-  sample_pixel_img (coord_t x, coord_t y) const
+  sample_pixel_img (point_t p) const
   {
     rgbdata ret;
-    if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
+    int_point_t pi = p.nearest ();
+    if (pi.x < 0 || pi.x >= m_img.width || pi.y < 0 || pi.y >= m_img.height)
       return ret;
     if (!m_color)
-      ret.red = ret.green = ret.blue = fast_get_img_pixel (x, y);
+      ret.red = ret.green = ret.blue = fast_get_img_pixel (pi);
     else if (!m_profiled)
-      ret = get_rgb_pixel (x, y);
+      ret = get_rgb_pixel (pi);
     else
       {
-        ret = get_unadjusted_rgb_pixel (x, y);
+        ret = get_unadjusted_rgb_pixel (pi);
         profile_matrix.apply_to_rgb (ret.red, ret.green, ret.blue, &ret.red,
                                      &ret.green, &ret.blue);
         ret.red = adjust_luminosity_ir (ret.red);
@@ -367,18 +364,18 @@ public:
     return ret;
   }
   pure_attr inline rgbdata
-  fast_sample_pixel_img (int x, int y) const
+  fast_sample_pixel_img (int_point_t p) const
   {
     rgbdata ret;
-    if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
+    if (p.x < 0 || p.x >= m_img.width || p.y < 0 || p.y >= m_img.height)
       return ret;
     if (!m_color)
-      ret.red = ret.green = ret.blue = get_data (x, y);
+      ret.red = ret.green = ret.blue = get_data (p);
     else if (!m_profiled)
-      ret = get_rgb_pixel (x, y);
+      ret = get_rgb_pixel (p);
     else
       {
-        ret = get_unadjusted_rgb_pixel (x, y);
+        ret = get_unadjusted_rgb_pixel (p);
         profile_matrix.apply_to_rgb (ret.red, ret.green, ret.blue, &ret.red,
                                      &ret.green, &ret.blue);
         ret.red = adjust_luminosity_ir (ret.red);
@@ -387,9 +384,9 @@ public:
       }
     return ret;
   }
-  pure_attr rgbdata inline get_profiled_rgb_pixel (int x, int y) const
+  pure_attr rgbdata inline get_profiled_rgb_pixel (int_point_t p) const
   {
-    rgbdata c = get_unadjusted_rgb_pixel (x, y);
+    rgbdata c = get_unadjusted_rgb_pixel (p);
     profile_matrix.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green,
                                  &c.blue);
     c.red = adjust_luminosity_ir (c.red);
@@ -398,20 +395,20 @@ public:
     return c;
   }
   pure_attr inline rgbdata
-  sample_pixel_final (coord_t x, coord_t y) const
+  sample_pixel_final (point_t p) const
   {
-    point_t p = m_scr_to_img.final_to_img (
-        { x - get_final_xshift (), y - get_final_yshift () });
-    return sample_pixel_img (p.x, p.y);
+    point_t pi = m_scr_to_img.final_to_img (
+        { p.x - get_final_xshift (), p.y - get_final_yshift () });
+    return sample_pixel_img (pi);
   }
   inline rgbdata
-  sample_pixel_scr (coord_t x, coord_t y)
+  sample_pixel_scr (point_t p) const
   {
-    point_t p = m_scr_to_img.to_img ({ x, y });
-    return sample_pixel_img (p.x, p.y);
+    point_t pi = m_scr_to_img.to_img (p);
+    return sample_pixel_img (pi);
   }
   /* Compute RGB data of downscaled image.  */
-  nodiscard_attr bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
+  nodiscard_attr bool get_color_data (rgbdata *data, point_t p, int width,
                         int height, coord_t pixelsize, progress_info *progress);
 
 private:
@@ -447,40 +444,40 @@ render_to_scr::sample_scr_square (coord_t xc, coord_t yc, coord_t width,
 /* Determine grayscale value at a given position in the image.
    The position is in the screen coordinates.  */
 pure_attr inline luminosity_t
-render_to_scr::get_img_pixel_scr (coord_t x, coord_t y) const
+render_to_scr::get_img_pixel_scr (point_t p) const
 {
-  point_t p = m_scr_to_img.to_img ({ x, y });
-  return get_img_pixel (p.x, p.y);
+  point_t pi = m_scr_to_img.to_img (p);
+  return get_img_pixel (pi);
 }
 
 /* Determine grayscale value at a given position in the image.
    The position is in the screen coordinates.  */
 pure_attr inline luminosity_t
-render_to_scr::get_unadjusted_img_pixel_scr (coord_t x, coord_t y) const
+render_to_scr::get_unadjusted_img_pixel_scr (point_t p) const
 {
-  point_t p = m_scr_to_img.to_img ({ x, y });
-  return get_unadjusted_img_pixel (p.x, p.y);
+  point_t pi = m_scr_to_img.to_img (p);
+  return get_unadjusted_img_pixel (pi);
 }
 
 /* Determine RGB value at a given position in the image.
    The position is in the screen coordinates.  */
 pure_attr inline rgbdata
-render_to_scr::get_unadjusted_rgb_pixel_scr (coord_t x, coord_t y) const
+render_to_scr::get_unadjusted_rgb_pixel_scr (point_t p) const
 {
-  point_t p = m_scr_to_img.to_img ({ x, y });
-  return get_unadjusted_img_rgb_pixel (p.x, p.y);
+  point_t pi = m_scr_to_img.to_img (p);
+  return get_unadjusted_img_rgb_pixel (pi);
 }
 
 pure_attr inline rgbdata
-render_to_scr::get_simulated_screen_pixel_fast (int xp, int yp) const
+render_to_scr::get_simulated_screen_pixel_fast (int_point_t p) const
 {
-  return m_simulated_screen->get_pixel (yp, xp);
+  return m_simulated_screen->get_pixel (p.y, p.x);
 }
 
 pure_attr inline pure_attr rgbdata
-render_to_scr::get_simulated_screen_pixel (coord_t xp, coord_t yp) const
+render_to_scr::get_simulated_screen_pixel (point_t p) const
 {
-  return m_simulated_screen->get_interpolated_pixel (xp, yp);
+  return m_simulated_screen->get_interpolated_pixel (p.x, p.y);
 }
 
 /* Determine image pixel X,Y in screen filter SCR using MAP.

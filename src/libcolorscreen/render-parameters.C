@@ -937,7 +937,7 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
     FILE *nbf = fopen ("/tmp/norm_blue.txt", "wt");
     render_interpolate render (param, img, rparam, 256);
     render.set_precise_rgb ();
-    render.precompute_img_range (xmin, ymin, xmax, ymax, progress);
+    render.precompute_img_range ({{(int)xmin, (int)ymin}, {(int)xmax, (int)ymax}}, progress);
     render.analyze_rgb_tiles ([&] (coord_t x, coord_t y, rgbdata r, rgbdata g, rgbdata b)
 			      {
 				reds.push_back (r);
@@ -1112,7 +1112,7 @@ render_parameters::auto_mix_dark (image_data &img, scr_to_img_parameters &param,
         if (!progress || !progress->cancel_requested ())
           for (int xx = 0; xx <= xmax - xmin; xx++)
             {
-              rgbdata c = render.get_unadjusted_rgb_pixel (xx + xmin, yy + ymin);
+              rgbdata c = render.get_unadjusted_rgb_pixel ({xx + xmin, yy + ymin});
               hist.pre_account (c);
             }
       }
@@ -1123,7 +1123,7 @@ render_parameters::auto_mix_dark (image_data &img, scr_to_img_parameters &param,
         if (!progress || !progress->cancel_requested ())
           for (int xx = 0; xx <= xmax - xmin; xx++)
             {
-              rgbdata c = render.get_unadjusted_rgb_pixel (xx + xmin, yy + ymin);
+              rgbdata c = render.get_unadjusted_rgb_pixel ({xx + xmin, yy + ymin});
               hist.account (c);
             }
       }
@@ -1204,8 +1204,8 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
 	    {
 	      int cx = xx * step + xmin;
 	      int cy = yy * step + ymin;
-	      luminosity_t l = render.get_unadjusted_data (cx, cy);
-	      rgbdata c = render.get_unadjusted_rgb_pixel (cx, cy);
+	      luminosity_t l = render.get_unadjusted_data ({cx, cy});
+	      rgbdata c = render.get_unadjusted_rgb_pixel ({cx, cy});
 	      int n = yy * xsteps + xx;
 	      gsl_matrix_set (X, n, 0, 1);
 	      gsl_matrix_set (X, n, 1, c.red);

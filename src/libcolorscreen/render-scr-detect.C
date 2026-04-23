@@ -101,9 +101,9 @@ static color_class_cache_t
 
 
 rgbdata
-getdata_helper (render_scr_detect &r, int x, int y, int, int)
+getdata_helper (render_scr_detect &r, int_point_t p, int, int)
 {
-  return r.fast_get_adjusted_pixel (x, y);
+  return r.fast_get_adjusted_pixel (p);
 }
 
 
@@ -129,7 +129,7 @@ get_precomputed_rgbdata(precomputed_rgbdata_params &p, progress_info *progress)
 	{
 	  if (!progress || !progress->cancel_requested ())
 	    for (int x = 0; x < p.img->width; x++)
-	      my_precomputed_rgbdata->m_data[y * p.img->width + x] = p.r->fast_nonprecomputed_get_adjusted_pixel (x, y);
+	      my_precomputed_rgbdata->m_data[y * p.img->width + x] = p.r->fast_nonprecomputed_get_adjusted_pixel ({x, y});
 	   if (progress)
 	     progress->inc_progress ();
 	}
@@ -187,7 +187,7 @@ get_new_color_data (struct color_data_params &p, progress_info *progress)
 	    continue;
 	  }
 	struct queue {int x, y;} queue [max_patch_size];
-	luminosity_t sum = p.r->get_data (x, y);
+	luminosity_t sum = p.r->get_data ({x, y});
 	int start = 0, end = 1;
 	queue[0].x = x;
 	queue[0].y = y;
@@ -205,7 +205,7 @@ get_new_color_data (struct color_data_params &p, progress_info *progress)
 			break;
 		    if (i != end)
 		      continue;
-		    sum += p.r->get_data (xx, yy);
+		    sum += p.r->get_data ({xx, yy});
 		    queue[end].x = xx;
 		    queue[end].y = yy;
 		    //visited[yy * p.img->width + xx] = 1;
@@ -270,26 +270,26 @@ static color_data_cache_t
 class distance_list distance_list;
 
 bool
-render_scr_detect_adjusted::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
+render_scr_detect_adjusted::get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress)
 { 
   return downscale<render_scr_detect, rgbdata,
-                   &render_scr_detect::fast_get_adjusted_pixel> (data, x, y, width, height, pixelsize,
+                   &render_scr_detect::fast_get_adjusted_pixel> (data, p, width, height, pixelsize,
                                                progress);
 }
 
 bool
-render_scr_detect_normalized::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
+render_scr_detect_normalized::get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress)
 { 
   return downscale<render_scr_detect, rgbdata,
-                   &render_scr_detect::fast_get_normalized_pixel> (data, x, y, width, height, pixelsize,
+                   &render_scr_detect::fast_get_normalized_pixel> (data, p, width, height, pixelsize,
                                                progress);
 }
 
 bool
-render_scr_detect_pixel_color::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
+render_scr_detect_pixel_color::get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress)
 { 
   return downscale<render_scr_detect, rgbdata,
-                   &render_scr_detect::fast_get_screen_pixel> (data, x, y, width, height, pixelsize,
+                   &render_scr_detect::fast_get_screen_pixel> (data, p, width, height, pixelsize,
                                                progress);
 }
 
@@ -400,6 +400,7 @@ render_scr_detect::precompute_all (bool grayscale_needed, bool normalized_patche
     return false;
   return render::precompute_all (grayscale_needed, normalized_patches, {1/3.0, 1/3.0, 1/3.0}, progress);
 }
+
 
 bool
 render_scr_detect::precompute_rgbdata (progress_info *progress)

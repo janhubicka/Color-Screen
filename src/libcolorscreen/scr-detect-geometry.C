@@ -835,7 +835,7 @@ confirm (render_scr_detect *render, point_t coordinate1, point_t coordinate2,
             coord_t ysum = 0;
 #define account(xx, yy, wx, wy)                                               \
   {                                                                           \
-    rgbdata color = render->fast_precomputed_get_normalized_pixel (xx, yy);   \
+    rgbdata color = render->fast_precomputed_get_normalized_pixel ({xx, yy});   \
     luminosity_t c = color[t];                                                \
     xsum += c * wx * wy * (xx + 0.5 - cx);                                    \
     ysum += c * wx * wy * (yy + 0.5 - cy);                                    \
@@ -894,7 +894,7 @@ confirm (render_scr_detect *render, point_t coordinate1, point_t coordinate2,
 
 #define account(xx, yy, wx, wy)                                               \
   {                                                                           \
-    rgbdata color = render->fast_precomputed_get_normalized_pixel (xx, yy);   \
+    rgbdata color = render->fast_precomputed_get_normalized_pixel ({xx, yy});   \
     luminosity_t c = color[t];                                                \
     luminosity_t d                                                            \
         = std::max (color[0] + color[1] + color[2], (luminosity_t)0.0001);    \
@@ -927,7 +927,7 @@ confirm (render_scr_detect *render, point_t coordinate1, point_t coordinate2,
 		for (int yy = floor (cy + ymin) ; yy < ceil (cy + ymax); yy++)
 		  for (int xx = floor (cx + xmin) ; xx < ceil (cx + xmax); xx++)
 		    {
-		      rgbdata color = render->fast_precomputed_get_adjusted_pixel (xx, yy);
+		      rgbdata color = render->fast_precomputed_get_adjusted_pixel ({xx, yy});
 		      //xsum += std::max (color[t], (luminosity_t)0) * (xx + 0.5 - cx);
 		      //ysum += std::max (color[t], (luminosity_t)0) * (yy + 0.5 - cy);
 		      xsum += color[t] * (xx + 0.5 - cx) * (maxdistsq - (yy - cy) * (yy - cy) - (xx - cx) * (xx - cx) + 1);
@@ -938,7 +938,7 @@ confirm (render_scr_detect *render, point_t coordinate1, point_t coordinate2,
 		for (int yy = floor (cy + ymin) ; yy < ceil (cy + ymax); yy++)
 		  for (int xx = floor (cx + xmin) ; xx < ceil (cx + xmax); xx++)
 		    {
-		      rgbdata color = render->fast_precomputed_get_adjusted_pixel (xx, yy);
+		      rgbdata color = render->fast_precomputed_get_adjusted_pixel ({xx, yy});
 		      //xsum += std::max (color[t], (luminosity_t)0) * (xx + 0.5 - cx);
 		      //ysum += std::max (color[t], (luminosity_t)0) * (yy + 0.5 - cy);
 		      xsum += color[t] * (xx + 0.5 - cx) * (maxdistsq - (yy - cy) * (yy - cy) - (xx - cx) * (xx - cx) + 1);
@@ -949,7 +949,7 @@ confirm (render_scr_detect *render, point_t coordinate1, point_t coordinate2,
 		for (int yy = floor (cy + ymin) ; yy < ceil (cy + ymax); yy++)
 		  for (int xx = floor (cx + xmin) ; xx < ceil (cx + xmax); xx++)
 		    {
-		      rgbdata color = render->fast_precomputed_get_adjusted_pixel (xx, yy);
+		      rgbdata color = render->fast_precomputed_get_adjusted_pixel ({xx, yy});
 		      //xsum += std::max (color[t], (luminosity_t)0) * (xx + 0.5 - cx);
 		      //ysum += std::max (color[t], (luminosity_t)0) * (yy + 0.5 - cy);
 		      xsum += color[t] * (xx + 0.5 - cx) * (maxdistsq - (yy - cy) * (yy - cy) - (xx - cx) * (xx - cx) + 1);
@@ -1018,7 +1018,7 @@ confirm (render_scr_detect *render, point_t coordinate1, point_t coordinate2,
                              * patch_yscale))
                              * coordinate2.y;
 
-          rgbdata d = render->get_adjusted_pixel (ax, ay);
+          rgbdata d = render->get_adjusted_pixel ({ax, ay});
           luminosity_t color[3] = { d.red, d.green, d.blue };
 
           luminosity_t sum = color[0] + color[1] + color[2];
@@ -1937,7 +1937,7 @@ we simply try both cmaps.  */
                 {
                   if (!progress || !progress->cancel_requested ())
                     for (int x = 0; x < img.width; x++)
-                      cmap->set_class (x, y, render->classify_pixel (x, y));
+                      cmap->set_class (x, y, render->classify_pixel ({x, y}));
                   if (progress)
                     progress->inc_progress ();
                 }

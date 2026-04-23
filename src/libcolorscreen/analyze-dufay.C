@@ -32,7 +32,7 @@ analyze_dufay::analyze_contrast (render_to_scr *render, const image_data *img, s
 	    iy += m_yshift;
 	    if (ix >= 0 && ix < m_width && iy >= 0 && iy < m_height)
 	      {
-		luminosity_t d = render->get_data_red (x, y);
+		luminosity_t d = render->get_data_red ({x, y});
 //#pragma omp critical
 		{
 		  get_contrast (ix,iy).min = std::min (get_contrast (ix,iy).min, d);

@@ -1019,13 +1019,13 @@ test_render_linearity ()
 	      ok = false;
 	    }
 	  /* Check that linearization works as expected.  */
-	  if (fabs (linear - ren.get_data_red (i, 0)) > 1.0/655350)
+	  if (fabs (linear - ren.get_data_red ({(int)i, 0})) > 1.0/655350)
 	    {
-	      printf ("Bad linearization of %i: %f should be %f\n", i, linear, ren.get_data_red (i, 0));
+	      printf ("Bad linearization of %i: %f should be %f\n", i, linear, ren.get_data_red ({(int)i, 0}));
 	      ok = false;
 	    }
 	  /* Now out_lookup_table is applied.  */
-	  int_rgbdata out_int = ren.out_color.final_color ({ren.get_data_red (i,0), ren.get_data_green (i,0), ren.get_data_blue (i,0)});
+	  int_rgbdata out_int = ren.out_color.final_color ({ren.get_data_red ({(int)i,0}), ren.get_data_green ({(int)i,0}), ren.get_data_blue ({(int)i,0})});
 	  r = out_int.red; g = out_int.green; b = out_int.blue;
 	  if (i > mins[gamma_idx] && (r != i || g != i || b != i))
 	    {
@@ -1034,7 +1034,7 @@ test_render_linearity ()
 	      ok = false;
 	    }
 	  luminosity_t hr,hg,hb;
-	  rgbdata out_hdr = ren.out_color.hdr_final_color ({ren.get_data_red (i,0), ren.get_data_green (i,0), ren.get_data_blue (i,0)});
+	  rgbdata out_hdr = ren.out_color.hdr_final_color ({ren.get_data_red ({(int)i,0}), ren.get_data_green ({(int)i,0}), ren.get_data_blue ({(int)i,0})});
 	  hr = out_hdr.red; hg = out_hdr.green; hb = out_hdr.blue;
 	  int rr = hr * 65535 + 0.5;
 	  gg = hg * 65535 + 0.5;

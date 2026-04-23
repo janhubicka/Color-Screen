@@ -317,10 +317,10 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
           point_t scr = scr_to_img_map.to_scr ({(coord_t)x, (coord_t)y}) + pos;
           if (other.img_pixel_known_p (scr.x, scr.y))
 	   {
-	     rgbdata c1 = render.sample_pixel_scr (scr.x + pos.x, scr.y + pos.y);
-	     rgbdata c2 = render.sample_pixel_scr (scr.x + other.pos.x, scr.y + other.pos.y);
-	     int r = c1.red * 65535, g = c1.green * 65535, b = c1.blue * 65545;
-	     int r2 = c2.red * 65535, g2 = c2.green * 65535, b2 = c2.blue * 65545;
+	     rgbdata c1 = render.sample_pixel_scr ({scr.x + pos.x, scr.y + pos.y});
+	     rgbdata c2 = render.sample_pixel_scr ({scr.x + other.pos.x, scr.y + other.pos.y});
+	     int r = c1.red * 65535, g = c1.green * 65535, b = c1.blue * 65535;
+	     int r2 = c2.red * 65535, g2 = c2.green * 65535, b2 = c2.blue * 65535;
 #if 0
 	     render_pixel (65535, sx + xpos, sy + ypos, &r, &g, &b, progress);
 #endif
@@ -1288,17 +1288,17 @@ sample_image_area (image_data *img, render *render, coord_t fx, coord_t fy,
 
       if (xmin2 >= 0)
 	{
-	  sum += render->get_linearized_rgb_pixel (xmin2, y) * yweight * (1 - rx);
+	  sum += render->get_linearized_rgb_pixel ({xmin2, y}) * yweight * (1 - rx);
 	  sumweight += yweight * (1 - rx);
 	}
       for (x = xmin + 1; x < xmax - 1; x++)
 	{
-	  sum += render->get_linearized_rgb_pixel (x, y) * yweight;
+	  sum += render->get_linearized_rgb_pixel ({x, y}) * yweight;
 	  sumweight += yweight;
 	}
       if (xmax2 < img->width)
 	{
-	  sum += render->get_linearized_rgb_pixel (xmax2 - 1, y) * yweight * rx;
+	  sum += render->get_linearized_rgb_pixel ({xmax2 - 1, y}) * yweight * rx;
 	  sumweight += yweight * rx;
 	}
     }
@@ -1361,14 +1361,14 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
 		    && other.load_img (error, progress))
 		  {
 		    render1 = new render (*img, rparams, 255);
-		    if (!render1->precompute_all (img->data != NULL, false, {1/3.0, 1/3.0, 1/3.0}, progress))
+		    if (!render1->precompute_all (img->data != NULL, false, {1.0/3.0, 1.0/3.0, 1.0/3.0}, progress))
 		      {
 			*error = "precomputation failed";
 			delete render1;
 			render1 = 0;
 		      }
 		    render2 = new render (*other.img, rparams, 255);
-		    if (!render2->precompute_all (img->data != NULL, false, {1/3.0, 1/3.0, 1/3.0}, progress))
+		    if (!render2->precompute_all (img->data != NULL, false, {1.0/3.0, 1.0/3.0, 1.0/3.0}, progress))
 		      {
 			*error = "precomputation failed";
 			delete render1;

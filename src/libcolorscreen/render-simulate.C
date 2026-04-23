@@ -7,9 +7,9 @@ namespace {
 render_simulate_process::simulation_cache_t simulation_cache ("Simulated image layers");
 
 luminosity_t
-getdata (int, int x, int y, int width, render_simulate_process *r)
+getdata (int, int_point_t p, int width, render_simulate_process *r)
 {
-  return r->simulate_pixel_img (x, y);
+  return r->simulate_pixel_img (p);
 }
 }
 
@@ -38,12 +38,12 @@ get_new_simulation (struct simulation_params &param, progress_info *progress)
 }
 
 bool
-render_simulate_process::get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
+render_simulate_process::get_color_data (rgbdata *data, point_t p, int width,
 					 int height, coord_t pixelsize, progress_info *progress)
 {
   return downscale<render_simulate_process, rgbdata,
 		    &render_simulate_process::fast_sample_pixel_img> (
-      data, x, y, width, height, pixelsize, progress);
+      data, p, width, height, pixelsize, progress);
 }
 bool
 render_simulate_process::precompute_all (progress_info *progress)

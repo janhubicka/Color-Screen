@@ -8,15 +8,15 @@ render_fast::render_fast (scr_to_img_parameters &param, image_data &img, render_
 }
 
 pure_attr rgbdata
-render_fast::sample_pixel (int x, int y, coord_t zx, coord_t zy)
+render_fast::sample_pixel (int_point_t p, point_t img_p) const
 {
   luminosity_t red, green, blue;
   //m_scr_to_img.to_img (dx, dy, &zx, &zy);
-  point_t z = {zx, zy};
-  point_t dx = m_scr_to_img.to_img ({(coord_t)(x + 1), (coord_t)y}) - z;
-  point_t dy = m_scr_to_img.to_img ({(coord_t)x, (coord_t)(y + 1)}) - z;
+  point_t z = img_p;
+  point_t dx = m_scr_to_img.to_img ({(coord_t)(p.x + 1), (coord_t)p.y}) - z;
+  point_t dy = m_scr_to_img.to_img ({(coord_t)p.x, (coord_t)(p.y + 1)}) - z;
 
-#define pixel(xo,yo) get_img_pixel (z.x + dx.x * (xo) + dy.x * (yo), z.y + dx.y * (xo) + dy.y * (yo))
+#define pixel(xo,yo) get_img_pixel ({(coord_t)(z.x + dx.x * (xo) + dy.x * (yo)), (coord_t)(z.y + dx.y * (xo) + dy.y * (yo))})
   
   if (paget_like_screen_p (m_scr_to_img.get_type ()))
     {
@@ -107,7 +107,7 @@ render_preview (image_data &scan, scr_to_img_parameters &param, render_parameter
     for (int x = 0; x < width; x ++)
       {
 	int red, green, blue;
-	render.render_pixel_final (x * step, y * step, &red, &green, &blue);
+	render.render_pixel_final ({x * step, y * step}, &red, &green, &blue);
 	*(pixels + y * rowstride + x * 3) = red;
 	*(pixels + y * rowstride + x * 3 + 1) = green;
 	*(pixels + y * rowstride + x * 3 + 2) = blue;

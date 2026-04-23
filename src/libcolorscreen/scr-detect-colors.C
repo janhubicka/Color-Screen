@@ -22,16 +22,16 @@ struct imgtile
 };
 
 static rgbdata
-get_pixel (struct imgtile *sec, int x, int y, int, int)
+get_pixel (struct imgtile *sec, int_point_t pt, int, int)
 {
   rgbdata ret = {0,0,0};
-  x += sec->xstart;
-  y += sec->ystart;
-  if (x < 0 || y < 0 || x >= sec->img->width || y >= sec->img->height)
+  pt.x += sec->xstart;
+  pt.y += sec->ystart;
+  if (pt.x < 0 || pt.y < 0 || pt.x >= sec->img->width || pt.y >= sec->img->height)
     return ret;
-  ret.red = sec->lookup_table[0] [sec->img->rgbdata[y][x].r];
-  ret.green = sec->lookup_table[1] [sec->img->rgbdata[y][x].g];
-  ret.blue = sec->lookup_table[2] [sec->img->rgbdata[y][x].b];
+  ret.red = sec->lookup_table[0] [sec->img->rgbdata[pt.y][pt.x].r];
+  ret.green = sec->lookup_table[1] [sec->img->rgbdata[pt.y][pt.x].g];
+  ret.blue = sec->lookup_table[2] [sec->img->rgbdata[pt.y][pt.x].b];
   return ret;
 }
 
@@ -165,7 +165,7 @@ optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosit
     for (int xx = x ; xx < x + width; xx++)
       {
 	struct entry e;
-	e.orig_color = get_pixel (&section, xx-x+clen/2, yy-y+clen/2, 0, 0);
+	e.orig_color = get_pixel (&section, {xx-x+clen/2, yy-y+clen/2}, 0, 0);
 	e.sharpened_color = sharpened[(yy-y+clen/2) * (width + clen) + xx -x + clen/2];
 	e.priority = 3 - (e.orig_color.red + e.orig_color.green + e.orig_color.blue);
 	pixels.push_back (e);

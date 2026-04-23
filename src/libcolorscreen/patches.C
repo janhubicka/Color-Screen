@@ -40,7 +40,7 @@ patches::patches (const image_data &img, render &render, color_class_map &color_
 			set_patch_index (xx, yy, id, (int)t);
 			end++;
 			p.pixels++;
-			p.luminosity_sum += render.fast_get_img_pixel (xx,yy);
+			p.luminosity_sum += render.fast_get_img_pixel ({xx,yy});
 			num_pixels++;
 			if (end == max_patch_size)
 			  goto done;

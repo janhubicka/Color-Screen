@@ -90,12 +90,12 @@ typedef std::function <bool (coord_t, coord_t, rgbdata, rgbdata, rgbdata)> rgb_a
 class render_interpolate : public render_to_scr
 {
 public:
-  render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval);
-  bool precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress);
-  pure_attr inline rgbdata sample_pixel_final (coord_t x, coord_t y) const
+  render_interpolate (const scr_to_img_parameters &param, const image_data &img, render_parameters &rparam, int dst_maxval);
+  bool precompute (int_image_area area, progress_info *progress);
+  pure_attr inline rgbdata sample_pixel_final (point_t p) const
   {
-    point_t p = m_scr_to_img.final_to_scr ({x - get_final_xshift (), y - get_final_yshift ()});
-    return sample_pixel_scr (p.x, p.y);
+    point_t ps = m_scr_to_img.final_to_scr ({p.x - get_final_xshift (), p.y - get_final_yshift ()});
+    return sample_pixel_scr (ps);
   }
   void set_render_type (render_type_parameters rtparam);
   void set_precise_rgb ()
@@ -118,24 +118,30 @@ public:
   {
     int xshift, yshift, width, height;
     m_scr_to_img.get_range (0, 0, m_img.width, m_img.height, &xshift, &yshift, &width, &height);
-    return precompute (-xshift, -yshift, -xshift + width, -yshift + height, progress);
+    return precompute ({{-xshift, -yshift}, {-xshift + width, -yshift + height}}, progress);
   }
-  bool precompute_img_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2, progress_info *progress)
+  bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress)
   {
-    int xshift, yshift, width, height;
-    m_scr_to_img.get_range (x1, y1, x2, y2, &xshift, &yshift, &width, &height);
-    return precompute (-xshift, -yshift, -xshift + width, -yshift + height, progress);
+    abort ();
   }
-  pure_attr rgbdata sample_pixel_scr (coord_t x, coord_t y) const;
-  pure_attr inline rgbdata sample_pixel_img (coord_t x, coord_t y) const
+
+  bool precompute_img_range (int_image_area area, progress_info *progress) 
   {
-    point_t p = m_scr_to_img.to_scr ({(coord_t)x, (coord_t)y});
-    return sample_pixel_scr (p.x, p.y);
+     int xshift, yshift, width, height;
+     m_scr_to_img.get_range (area.x, area.y, area.x + area.width, area.y + area.height, &xshift, &yshift, &width, &height);
+     return precompute (int_image_area (-xshift, -yshift, width, height), progress);
+
   }
-  pure_attr inline rgbdata fast_sample_pixel_img (int x, int y) const
+  pure_attr rgbdata sample_pixel_scr (point_t p) const;
+  pure_attr inline rgbdata sample_pixel_img (point_t p) const
   {
-    point_t p = m_scr_to_img.to_scr ({x+(coord_t)0.5, y+(coord_t)0.5});
-    return sample_pixel_scr (p.x, p.y);
+    point_t ps = m_scr_to_img.to_scr (p);
+    return sample_pixel_scr (ps);
+  }
+  pure_attr inline rgbdata fast_sample_pixel_img (int_point_t p) const
+  {
+    point_t ps = m_scr_to_img.to_scr ({p.x+(coord_t)0.5, p.y+(coord_t)0.5});
+    return sample_pixel_scr (ps);
   }
   void original_color (bool profiled)
   {
@@ -149,7 +155,7 @@ public:
 	}
       }
   }
-  bool get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
+  bool get_color_data (rgbdata *data, point_t p, int width,
                       int height, coord_t pixelsize, progress_info *progress) override;
 
   bool analyze_patches (analyzer, const char *, bool screen, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);
