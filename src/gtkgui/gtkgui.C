@@ -32,7 +32,6 @@ enum ui_mode
 {
   screen_editing,
   screen_detection,
-  motor_correction_editing,
   solver_editing,
   color_profiling
 } ui_mode;
@@ -311,10 +310,10 @@ print_help()
 	if (ui_mode == solver_editing)
 	   printf ("Motor editing mode\n"
 		   "r   - swithc to screen editing mode\n");
-	if (ui_mode == screen_editing || ui_mode == motor_correction_editing || ui_mode == solver_editing)
+	if (ui_mode == screen_editing || ui_mode == solver_editing)
 	   printf ("                                              d   - set to dufay                  p - set to Paget\n"
 	           "f   - set to Finlay                           N   - compute mesh (nonlinear)      n - disable mesh\n"
-		   "1-9 - display modes                           t   - scanner type                  R - motor editing mode\n"
+		   "1-9 - display modes                           t   - scanner type                  \n"
 		   "l L - dye balance\n");
 	else
 	   printf ("d   - set dark point                         r g b- set color\n");
@@ -1069,7 +1068,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     printf ("Color editing mode\n");
     return false;
   }
-  if (ui_mode == screen_editing || ui_mode == motor_correction_editing || ui_mode == solver_editing || ui_mode == color_profiling)
+  if (ui_mode == screen_editing || ui_mode == solver_editing || ui_mode == color_profiling)
     {
       if (k == 'd' && current.type != Dufay  && !(event->state & GDK_CONTROL_MASK))
       {
@@ -1139,18 +1138,6 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    current.scanner_type = fixed_lens;
 	  printf ("scanner type: %s\n", scanner_type_names [(int)current.scanner_type]);
 	  maybe_solve ();
-	}
-      if (k == 'r' && ui_mode == motor_correction_editing)
-      {
-	ui_mode = screen_editing;
-        print_help ();
-        printf ("Motor correction mode\n");
-      }
-      if (k == 'R' && (ui_mode == screen_editing || ui_mode == solver_editing))
-	{
-	  ui_mode = motor_correction_editing;
-          print_help ();
-	  printf ("Screen editing mode\n");
 	}
       if (k == 'P' && scan.has_rgb ())
         {
@@ -1546,21 +1533,7 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
         }
     }
 
-  if (current.n_motor_corrections && (ui_mode == motor_correction_editing || ui_mode == solver_editing))
-    for (int i = 0; i < current.n_motor_corrections; i++)
-      {
-	if (current.scanner_type == lens_move_horisontally || current.scanner_type == fixed_lens_sensor_move_horisontally)
-	  {
-	    draw_line (surface, bigscale, xoffset, yoffset, current.motor_correction_x[i], 0, current.motor_correction_x[i], scan.height, 1, 1, 0);
-	    draw_line (surface, bigscale, xoffset, yoffset, current.motor_correction_y[i], 0, current.motor_correction_y[i], scan.height, 0, 1, 1);
-	  }
-	else if (current.scanner_type == lens_move_vertically || current.scanner_type == fixed_lens_sensor_move_vertically)
-	  {
-	    draw_line (surface, bigscale, xoffset, yoffset, 0, current.motor_correction_x[i], scan.width, current.motor_correction_x[i], 1, 1, 0);
-	    draw_line (surface, bigscale, xoffset, yoffset, 0, current.motor_correction_y[i], scan.width, current.motor_correction_y[i], 0, 1, 1);
-	  }
-      }
-  if (current_solver.n_points() && (ui_mode == motor_correction_editing || ui_mode == solver_editing))
+  if (current_solver.n_points() && ui_mode == solver_editing)
     {
       scr_to_img map;
       map.set_parameters (current, scan);
@@ -1654,8 +1627,6 @@ static double xpress1, ypress1;
 static bool button1_pressed;
 static bool button3_pressed;
 static struct scr_to_img_parameters press_parameters;
-static int current_motor_correction = -1;
-static double current_motor_correction_val;
 
 static gdouble saved_scale_x, saved_scale_y;
 static gint saved_shift_x, saved_shift_y;
@@ -1767,78 +1738,6 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	    display_scheduled = true;
 	    setcolor = 0;
 	    //preview_display_scheduled = true;
-	}
-    }
-  else if (ui_mode == motor_correction_editing)
-    {
-      double x = (event->x + shift_x) / scale_x;
-      double y = (event->y + shift_y) / scale_y;
-      double click;
-      double scale;
-      if (current.scanner_type == lens_move_horisontally || current.scanner_type == fixed_lens_sensor_move_horisontally)
-	{
-	  click = x;
-	  scale = scale_x;
-	}
-      else
-	{
-	  click = y;
-	  scale = scale_y;
-	}
-
-      if (current.scanner_type != fixed_lens && event->button == 1)
-	{
-	  int i;
-	  int best_i = -1;
-	  double min_dist = 5 / scale_x;
-
-	  save_parameters ();
-
-	  for (i = 0; i < current.n_motor_corrections; i++)
-	    {
-	      double dist = fabs (click - current.motor_correction_x[i]);
-	      if (dist < min_dist)
-		{
-		  best_i = i;
-		  min_dist = dist;
-		}
-	    }
-	  if (best_i >= 0)
-	    {
-	      current_motor_correction = best_i;
-	      current_motor_correction_val = current.motor_correction_x[best_i];
-	      printf ("Found %i\n", best_i);
-	    }
-	  else
-	    {
-	      current_motor_correction = current.add_motor_correction_point (click, click);
-	      current_motor_correction_val = click;
-	    }
-	  display_scheduled = true;
-	  xpress1 = event->x;
-	  ypress1 = event->y;
-	  button1_pressed = true;
-	}
-      if (current.scanner_type != fixed_lens && event->button == 3)
-	{
-	  double min_dist = 5 / scale;
-	  int best_i = -1;
-	  for (int i = 0; i < current.n_motor_corrections; i++)
-	    {
-	      double dist = fabs (click - current.motor_correction_x[i]);
-	      if (dist < min_dist)
-		{
-		  best_i = i;
-		  min_dist = dist;
-		}
-	    }
-	  if (best_i >= 0)
-	    {
-	       save_parameters ();
-	       display_scheduled = true;
-	       preview_display_scheduled = true;
-	       current.remove_motor_correction_point (best_i);
-	    }
 	}
     }
   else if (ui_mode == solver_editing)
@@ -1953,28 +1852,7 @@ handle_drag (int x, int y, int button)
   gtk_image_viewer_get_scale_and_shift (GTK_IMAGE_VIEWER
 					(data.image_viewer), &scale_x,
 					&scale_y, &shift_x, &shift_y);
-  if (ui_mode == motor_correction_editing)
-    {
-      if (current_motor_correction >= 0 && button == 1)
-	{
-	  double xoffset = (x - xpress1) / scale_x;
-	  double yoffset = (y - ypress1) / scale_y;
-	  if (current.scanner_type == lens_move_horisontally || current.scanner_type == fixed_lens_sensor_move_horisontally)
-	    current.motor_correction_x[current_motor_correction] = current_motor_correction_val + xoffset;
-	  else
-	    current.motor_correction_x[current_motor_correction] = current_motor_correction_val + yoffset;
-	  setvals ();
-	  display_scheduled = true;
-	  preview_display_scheduled = true;
-	  for (int i = 0; i < current.n_motor_corrections; i++)
-	    {
-	      printf (" %f:%f", current.motor_correction_x[i], current.motor_correction_y[i]);
-	    }
-	  printf ("\n");
-	}
-      return;
-    }
-  else if (ui_mode == solver_editing)
+  if (ui_mode == solver_editing)
     {
       coord_t xx = (x + shift_x) / scale_x;
       coord_t yy = (y + shift_y) / scale_y;
