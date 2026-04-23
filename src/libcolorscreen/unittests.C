@@ -111,8 +111,11 @@ compare_scr_to_img (const char *test_name, scr_to_img_parameters & param,
 		    coord_t epsilon)
 {
   scr_to_img map, map2;
-  map.set_parameters (param, img);
-  map2.set_parameters (param2, img);
+  if (!map.set_parameters (param, img) || !map2.set_parameters (param2, img))
+    {
+      printf ("set-parameters failed\n");
+      return false;
+    }
   const int grid = 5;
 
   struct data
@@ -266,7 +269,11 @@ do_test_homography (scr_to_img_parameters &param, int width, int height,
   image_data img;
   unsigned int g_seed = 0;
   img.set_dimensions (width, height);
-  map.set_parameters (param, img);
+  if (!map.set_parameters (param, img))
+    {
+      printf ("Set parameters failed\n");
+      return false;
+    }
   solver_parameters sparam;
   sparam.optimize_lens = lens_correction;
   int xstep = (width + 99) / 11;
@@ -470,6 +477,72 @@ test_screen_blur ()
 	  scr1->save_tiff ("/tmp/scr-fft.tif");
 	  return false;
         }
+    }
+  return true;
+}
+bool
+test_screen_sharpening ()
+{
+  std::unique_ptr <screen> scr (new screen);
+  std::unique_ptr <screen> mstr (new screen);
+  mstr->initialize (Paget);
+
+  sharpen_parameters sp;
+  sp.scanner_mtf.f_stop = 8;
+  sp.scanner_mtf.wavelength = 750;
+  /* Pixel pitch 3.7/10 micrometers as requested.  */
+  sp.scanner_mtf.pixel_pitch = 3.7  /*/ 10.0*/;
+  sp.scanner_mtf.scan_dpi = 4000;
+  sp.scanner_mtf_scale = 0.01;
+  //sp.scanner_snr = 2000;
+  
+  sharpen_parameters *par[3] = {&sp, &sp, &sp};
+
+  for (int m = 0; m < 3; m++)
+    {
+      if (m == 0)
+	{
+	  sp.mode = sharpen_parameters::wiener_deconvolution;
+	  sp.richardson_lucy_iterations = 0;
+	}
+      else if (m == 1)
+	{
+	  sp.mode = sharpen_parameters::richardson_lucy_deconvolution;
+	  sp.richardson_lucy_iterations = 5;
+	}
+      else
+	{
+	  sp.mode = sharpen_parameters::blur_deconvolution;
+	  sp.richardson_lucy_iterations = 0;
+	}
+
+      for (int i = 0; i <= 100; i++)
+	{
+	  double defocus = 12.0*i/100.0; // 0 to 2mm in 5 steps
+	  sp.scanner_mtf.defocus = defocus;
+	  scr->initialize_with_sharpen_parameters (*mstr, par, m != 2, true);
+
+	  if (0)
+	    {
+	      char buf[256];
+	      sprintf (buf, "/tmp/scr-sharpen-%s-defocus-%.1f.tif", 
+		       m == 0 ? "wiener" : m == 1 ? "richardson-lucy" : "blur", defocus);
+	      scr->save_tiff (buf);
+	    }
+	  rgbdata rgbdelta;
+	  if (!scr->sum_almost_equal_p (*mstr, &rgbdelta, 0.001))
+	    {
+	      fprintf (stderr, "MTF %s defocus %f delta %f %f %f (step %i); see /tmp/scr-mtf.tif \n", m == 0 ? "wiener" : m == 1 ? "richardson-lucy" : "blur", defocus, rgbdelta.red, rgbdelta.green, rgbdelta.blue, i);
+	      scr->save_tiff ("/tmp/scr-mtf.tif");
+	      std::unique_ptr <screen> diff (new screen);
+	      for (int y = 0; y < screen::size; y++)
+	       for (int x = 0; x < screen::size; x++)
+		 for (int c = 0; c < 3; c++)
+		    diff->mult[y][x][c] = 0.5 + (scr->mult[y][x][c] - mstr->mult[y][x][c]);
+	      diff->save_tiff ("/tmp/scr-diff.tif");
+	      return false;
+	    }
+	}
     }
   return true;
 }
@@ -1361,7 +1434,7 @@ test_lens_warp ()
 int
 main ()
 {
-  printf ("1..23\n");
+  printf ("1..24\n");
 
   test_matrix ();
   report ("matrix tests", true);
@@ -1369,6 +1442,7 @@ main ()
   report ("color tests", true);
   report ("render linearity tests", test_render_linearity ());
   report ("screen blur tests", test_screen_blur ());
+  report ("screen sharpening tests", test_screen_sharpening ());
   report ("homography tests", test_homography (false, false, 0.000001));
   report ("lens warp tests", test_lens_warp ());
   report ("lens correction tests", test_homography (true, false, 0.15));
