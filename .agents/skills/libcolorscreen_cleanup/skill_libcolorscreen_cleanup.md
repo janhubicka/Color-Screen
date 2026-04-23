@@ -13,7 +13,12 @@ This skill provides guidelines for maintaining, refactoring, and modernizing the
 - **Function Comments**: Every function must have a comment explaining its purpose and all its parameters. 
     - **Parameter Documentation**: Parameters within comments must be in **UPPERCASE**.
     - **Consistency**: Add missing comments to legacy functions when refactoring.
-- **File comments**: Every source file should start with a brief comment on what it is doing
+- **File comments**: Every source file should start with a brief comment on what it is doing. Use
+```
+/* Brief description
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+```
 - **Member Initialization**: For parameter structures and classes, prefer C++11 default member initialization (`type var = initial_value;`) over assignments in the constructor body.
 - **C++17**: Suggest improvements for using best practices of C++17. Be careful about performance impact. Suggest use of range fors where cleaner. Get codebase ready for C++ standard update.  Always ask in plan.
 - **lambda**: Lambda functions in performance critical codde are OK only if they are template parameters and will be for sure optimized out at compile time.
