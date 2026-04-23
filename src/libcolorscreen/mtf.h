@@ -20,9 +20,9 @@ namespace colorscreen
 class mtf
 {
 public:
-  bool precompute (progress_info *progress = NULL, bool parallel = true);
+  nodiscard_attr bool precompute (progress_info *progress = NULL, bool parallel = true);
   /* Precompute psf, psf_radius and psf_size estimate may be revisited.  */
-  bool precompute_psf (progress_info *progress = NULL, bool parallel = true, const char *filename = NULL,
+  nodiscard_attr bool precompute_psf (progress_info *progress = NULL, bool parallel = true, const char *filename = NULL,
                    const char **error = NULL);
 
   /* Reutrn 1d MTF value.  */
@@ -82,7 +82,7 @@ public:
   typedef lru_cache<mtf_parameters, mtf, get_new_mtf, 10> mtf_cache_t;
 
   static std::shared_ptr<mtf> get_mtf (const mtf_parameters &mtfp, progress_info *p);
-  typedef float psf_t;
+  typedef double psf_t;
   std::vector<psf_t, fft_allocator<psf_t>>
   compute_2d_psf (int psf_size, luminosity_t subscale,
 		  progress_info *progress = NULL, bool parallel = true);

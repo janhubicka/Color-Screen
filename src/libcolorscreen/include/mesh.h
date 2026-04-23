@@ -106,7 +106,7 @@ public:
 
   /* Invert mesh transformation for point IP.  */
   point_t pure_attr
-  invert (point_t ip) const;
+  DLL_PUBLIC invert (point_t ip) const;
 
   /* Determine range in image coordinates covering [X1, Y1]..[X2, Y2]
      transformed by TRANS. Result is stored in XMIN, XMAX, YMIN, YMAX.  */

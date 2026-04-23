@@ -254,7 +254,8 @@ screen::dufay (coord_t red_strip_width, coord_t green_strip_width)
   coord_t strip_height = size / 2 * green_strip_width;
 
   luminosity_t red[size];
-  luminosity_t sum = 0;
+  /* Use double to avoid cummulation of roundoff error.  */
+  double sum = 0;
   for (int yy = 0; yy < size; yy++)
     {
       if (yy >= ceil (strip_width) && yy + 1 <= floor (size - strip_width))
@@ -307,7 +308,8 @@ screen::dufay (coord_t red_strip_width, coord_t green_strip_width)
   // strip_height, size);
   assert (!colorscreen_checking
           || fabs (sum / size - green_strip_width) < 0.00001);
-  luminosity_t rsum = 0, gsum = 0, bsum = 0;
+  /* Use double to avoid cummulation of roundoff error.  */
+  double rsum = 0, gsum = 0, bsum = 0;
   for (int yy = 0; yy < size; yy++)
     for (int xx = 0; xx < size; xx++)
       {
@@ -468,7 +470,8 @@ screen::initialize_with_1d_kernel (screen &scr, int clen,
         mmult[x] = scr.mult[y][(x - clen / 2) & (size - 1)][c];
       for (int x = 0; x < size; x++)
         {
-          luminosity_t sum = 0;
+          /* Use double to avoid cummulation of roundoff error.  */
+          double sum = 0;
           for (int d = -clen / 2; d <= clen / 2; d++)
             // sum += cmatrix[d + clen / 2] * scr.mult[y][(x + d) & (size -
             // 1)][c];
@@ -485,7 +488,8 @@ screen::initialize_with_1d_kernel (screen &scr, int clen,
         mmult[y] = hblur[x + ((y - clen / 2) & (size - 1)) * size];
       for (int y = 0; y < size; y++)
         {
-          luminosity_t sum = 0;
+          /* Use double to avoid cummulation of roundoff error.  */
+          double sum = 0;
           for (int d = -clen / 2; d <= clen / 2; d++)
             // sum += cmatrix[d + clen / 2] * hblur[x+ ((y + d) & (size - 1)) *
             // size];
@@ -504,7 +508,8 @@ screen::initialize_with_2d_kernel (screen &scr, int clen,
   for (int y = 0; y < size; y++)
     for (int x = 0; x < size; x++)
       {
-        luminosity_t sum = 0;
+        /* Use double to avoid cummulation of roundoff error.  */
+        double sum = 0;
         for (int yd = -clen / 2; yd < clen / 2; yd++)
           for (int xd = -clen / 2; xd < clen / 2; xd++)
             sum += cmatrix2d[(yd + clen / 2) * clen + xd + clen / 2]
