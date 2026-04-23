@@ -16,17 +16,19 @@ namespace colorscreen
 class histogram
 {
 public:
+  /* Use double to avoid roundoff errors.  */
+  using entry_t = double;
   /* Construct an empty histogram.  */
   histogram ()
-      : m_minval (std::numeric_limits<luminosity_t>::max ()),
-        m_maxval (std::numeric_limits<luminosity_t>::lowest ()), m_inv (0),
+      : m_minval (std::numeric_limits<entry_t>::max ()),
+        m_maxval (std::numeric_limits<entry_t>::lowest ()), m_inv (0),
         m_total (-1)
   {
   }
 
   /* Adjust range so VAL will fit in.  */
   inline void
-  pre_account (luminosity_t val)
+  pre_account (entry_t val)
   {
     /* Check that pre_account is not done after finalizing.  */
     assert (!colorscreen_checking || m_inv == 0);
@@ -58,7 +60,7 @@ public:
   /* Alternative way to initialize histogram if range is known.
      Initialize range to [MINVAL, MAXVAL] with NVALS buckets.  */
   inline void
-  set_range (luminosity_t minval, luminosity_t maxval, int nvals)
+  set_range (entry_t minval, entry_t maxval, int nvals)
   {
     m_minval = minval;
     m_maxval = maxval;
@@ -81,7 +83,7 @@ public:
 
   /* Turn value VAL intro index of entry in the value histogram.  */
   pure_attr inline int
-  val_to_index (luminosity_t val) const
+  val_to_index (entry_t val) const
   {
     assert (!colorscreen_checking || m_inv > 0);
     if (val >= m_minval && val <= m_maxval)
@@ -96,7 +98,7 @@ public:
 
   /* Same as val_to_index but always return index in range [0, N_ENTRIES-1].  */
   pure_attr inline int
-  val_to_index_force (luminosity_t val) const
+  val_to_index_force (entry_t val) const
   {
     assert (!colorscreen_checking || m_inv > 0);
     int entry = (val - m_minval) * m_inv;
@@ -108,7 +110,7 @@ public:
   }
 
   /* Turn index ENTRY back into a typical value in its range.  */
-  pure_attr inline luminosity_t
+  pure_attr inline entry_t
   index_to_val (size_t entry) const
   {
     assert (!colorscreen_checking || m_inv > 0);
@@ -119,7 +121,7 @@ public:
   /* Account value VAL to histogram. Return true if it fits in the range and was
      accounted.  */
   inline bool
-  account_if_in_range (luminosity_t val)
+  account_if_in_range (entry_t val)
   {
     if (colorscreen_checking && m_total != -1)
       abort ();
@@ -134,7 +136,7 @@ public:
 
   /* Account value VAL to histogram, clamping to range if necessary.  */
   inline void
-  account (luminosity_t val)
+  account (entry_t val)
   {
     if (colorscreen_checking && m_total != -1)
       abort ();
@@ -166,7 +168,7 @@ public:
   /* Find bucket indices MINI and MAXI after skipping SKIP_MIN and SKIP_MAX
      ratios of samples.  */
   void
-  find_min_max (luminosity_t skip_min, luminosity_t skip_max, int &mini,
+  find_min_max (entry_t skip_min, entry_t skip_max, int &mini,
                 int &maxi) const
   {
     uint64_t sum1 = 0;
@@ -193,7 +195,7 @@ public:
 
   /* Dump histogram content to file OUT, skipping SKIP_MIN and SKIP_MAX parts.  */
   void
-  dump (FILE *out, luminosity_t skip_min = 0, luminosity_t skip_max = 0) const
+  dump (FILE *out, entry_t skip_min = 0, entry_t skip_max = 0) const
   {
     if (m_total == -1)
       fprintf (out, "Histogram is not finalized\n");
@@ -222,8 +224,8 @@ public:
   }
 
   /* Find minimal value after cutting off SKIP ratio of samples.  */
-  pure_attr luminosity_t
-  find_min (luminosity_t skip) const
+  pure_attr entry_t
+  find_min (entry_t skip) const
   {
     if (!skip)
       return m_minval;
@@ -241,8 +243,8 @@ public:
   }
 
   /* Find maximal value after cutting off SKIP ratio of samples.  */
-  pure_attr luminosity_t
-  find_max (luminosity_t skip) const
+  pure_attr entry_t
+  find_max (entry_t skip) const
   {
     if (!skip)
       return m_maxval;
@@ -261,8 +263,8 @@ public:
   }
 
   /* Return average value skipping SKIP_MIN and SKIP_MAX extreme points.  */
-  pure_attr luminosity_t
-  find_avg (luminosity_t skip_min = 0, luminosity_t skip_max = 0) const
+  pure_attr entry_t
+  find_avg (entry_t skip_min = 0, entry_t skip_max = 0) const
   {
     if (m_total <= 0)
       abort ();
@@ -305,8 +307,8 @@ public:
   void
   reset ()
   {
-    m_minval = std::numeric_limits<luminosity_t>::max ();
-    m_maxval = std::numeric_limits<luminosity_t>::lowest ();
+    m_minval = std::numeric_limits<entry_t>::max ();
+    m_maxval = std::numeric_limits<entry_t>::lowest ();
     m_inv = 0;
     m_entries.clear ();
     m_total = -1;
@@ -321,8 +323,8 @@ public:
   histogram &operator= (const histogram &) = delete;
 
 private:
-  luminosity_t m_minval, m_maxval;
-  luminosity_t m_inv;
+  entry_t m_minval, m_maxval;
+  entry_t m_inv;
   std::vector<uint64_t> m_entries;
   int64_t m_total;
 
@@ -425,36 +427,38 @@ public:
 
   /* Find minimal values after skipping SKIP.  */
   pure_attr rgbdata
-  find_min (luminosity_t skip) const
+  find_min (histogram::entry_t skip) const
   {
-    return { m_histogram[0].find_min (skip), m_histogram[1].find_min (skip),
-             m_histogram[2].find_min (skip) };
+    return { (luminosity_t)m_histogram[0].find_min (skip),
+	     (luminosity_t)m_histogram[1].find_min (skip),
+             (luminosity_t)m_histogram[2].find_min (skip) };
   }
 
   /* Find maximal values after skipping SKIP.  */
   pure_attr rgbdata
-  find_max (luminosity_t skip) const
+  find_max (histogram::entry_t skip) const
   {
-    return { m_histogram[0].find_max (skip), m_histogram[1].find_max (skip),
-             m_histogram[2].find_max (skip) };
+    return { (luminosity_t)m_histogram[0].find_max (skip),
+	     (luminosity_t)m_histogram[1].find_max (skip),
+             (luminosity_t)m_histogram[2].find_max (skip) };
   }
 
   /* Find average values after skipping extreme points.  */
   pure_attr rgbdata
-  find_avg (luminosity_t skipmin = 0, luminosity_t skipmax = 0) const
+  find_avg (histogram::entry_t skipmin = 0, histogram::entry_t skipmax = 0) const
   {
-    return { m_histogram[0].find_avg (skipmin, skipmax),
-             m_histogram[1].find_avg (skipmin, skipmax),
-             m_histogram[2].find_avg (skipmin, skipmax) };
+    return { (luminosity_t)m_histogram[0].find_avg (skipmin, skipmax),
+             (luminosity_t)m_histogram[1].find_avg (skipmin, skipmax),
+             (luminosity_t)m_histogram[2].find_avg (skipmin, skipmax) };
   }
 
   /* Return number of samples.  */
   pure_attr int
   num_samples () const
   {
-    return std::min ({ m_histogram[0].num_samples (),
-                       m_histogram[1].num_samples (),
-                       m_histogram[2].num_samples () });
+    return std::min ({ (luminosity_t)m_histogram[0].num_samples (),
+                       (luminosity_t)m_histogram[1].num_samples (),
+                       (luminosity_t)m_histogram[2].num_samples () });
   }
 
   /* Default move semantics.  */
