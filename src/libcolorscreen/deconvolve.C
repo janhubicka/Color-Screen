@@ -172,6 +172,14 @@ deconvolution<T>::deconvolution (mtf *mtf, luminosity_t mtf_scale,
                 = imag (ker);
           }
       }
+  T sc = scale / m_blur_kernel[0][0];
+  //printf ("sc %f\n", sc);
+  if (sc != 1)
+    for (int x = 0; x < m_fft_size * m_enlarged_tile_size; x++)
+      {
+	m_blur_kernel[x][0] *= sc;
+	m_blur_kernel[x][1] *= sc;
+      }
   m_richardson_lucy = mode == richardson_lucy_sharpen;
   if (taper_edges)
     {

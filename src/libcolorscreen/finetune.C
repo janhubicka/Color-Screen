@@ -300,8 +300,8 @@ public:
      and optimized intensities for BW simulation.
      Initialized by objfunc and can be reused after it
      since get_colors is expensive.  */
-  rgbdata last_red, last_green, last_blue, last_color;
-  rgbdata last_fog;
+  double_rgbdata last_red, last_green, last_blue, last_color;
+  double_rgbdata last_fog;
 
   ~finetune_solver ()
   {
@@ -702,7 +702,7 @@ public:
       }
     if (tiles[0].color)
       {
-        rgbdata red, green, blue;
+        double_rgbdata red, green, blue;
         get_colors (v, &red, &green, &blue);
 
         printf ("Red :");
@@ -1023,10 +1023,10 @@ public:
             for (int x = border; x < twidth - border; x++)
               if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
                 {
-                  rgbdata c = fog_by_least_squares ? get_pixel_nofog (tileid, {x, y}) : get_pixel (v, tileid, {x, y});
-                  gsl_vector_set (gsl_y[0], e, c.red);
-                  gsl_vector_set (gsl_y[1], e, c.green);
-                  gsl_vector_set (gsl_y[2], e, c.blue);
+                  rgbdata d = fog_by_least_squares ? get_pixel_nofog (tileid, {x, y}) : get_pixel (v, tileid, {x, y});
+                  gsl_vector_set (gsl_y[0], e, d.red);
+                  gsl_vector_set (gsl_y[1], e, d.green);
+                  gsl_vector_set (gsl_y[2], e, d.blue);
                   e++;
                 }
         /* We want fog to be 0.  */
@@ -1825,8 +1825,8 @@ public:
   /* Evaulate pixel at (x,y) using RGB values v and offsets offx, offy
      compensating coordates stored in tole_pos.  */
   pure_attr inline rgbdata
-  evaulate_pixel (coord_t *v, int tileid, rgbdata red, rgbdata green,
-                  rgbdata blue, int x, int y, point_t off, rgbdata mix_weights, luminosity_t mix_dark)
+  evaulate_pixel (coord_t *v, int tileid, double_rgbdata red, double_rgbdata green,
+                  double_rgbdata blue, int x, int y, point_t off, double_rgbdata mix_weights, double mix_dark)
   {
     rgbdata m = get_simulated_screen_pixel (tileid, {x, y});
     rgbdata c = ((red * m.red + green * m.green + blue * m.blue)
@@ -1845,7 +1845,7 @@ public:
   void
   simulate_screen (coord_t *v, int tileid)
   {
-    rgbdata red, green, blue;
+    double_rgbdata red, green, blue;
     point_t off = get_offset (v, tileid);
     for (int y = 0; y < theight; y++)
       for (int x = 0; x < twidth; x++)
@@ -1856,7 +1856,7 @@ public:
   /* Evaulate pixel at (x,y) using RGB values v and offsets offx, offy
      compensating coordates stored in tole_pos.  */
   pure_attr inline luminosity_t
-  bw_evaulate_pixel (int tileid, rgbdata color, int x, int y, point_t off)
+  bw_evaulate_pixel (int tileid, double_rgbdata color, int x, int y, point_t off)
   {
     rgbdata m = get_simulated_screen_pixel (tileid, {x, y});
     return ((m.red * color.red + m.green * color.green
@@ -1906,15 +1906,17 @@ public:
     return tiles[tileid].bw[p.y * twidth + p.x];
   }
   void
-  determine_colors_using_data_collection (coord_t *v, rgbdata *ret_red,
-                                          rgbdata *ret_green,
-                                          rgbdata *ret_blue)
+  determine_colors_using_data_collection (coord_t *v, double_rgbdata *ret_red,
+                                          double_rgbdata *ret_green,
+                                          double_rgbdata *ret_blue)
   {
-    rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
-    rgbdata color_red = { 0, 0, 0 }, color_green = { 0, 0, 0 },
+    /* Use double_rgbdata to avoid cummulation of roundoff error.  */
+    double_rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
+    double_rgbdata color_red = { 0, 0, 0 }, color_green = { 0, 0, 0 },
             color_blue = { 0, 0, 0 };
     luminosity_t threshold = collection_threshold;
-    coord_t wr = 0, wg = 0, wb = 0;
+    /* Use double to avoid cummulation of roundoff error.  */
+    double wr = 0, wg = 0, wb = 0;
 
     for (int tileid = 0; tileid < n_tiles; tileid++)
       for (int y = border; y < theight - border; y++)
@@ -1959,10 +1961,10 @@ public:
     color_blue /= wb;
     // sum /= n;
     // sum.print (stdout);
-    rgbdata cred = (rgbdata){ red.red, green.red, blue.red };
-    rgbdata cgreen = (rgbdata){ red.green, green.green, blue.green };
-    rgbdata cblue = (rgbdata){ red.blue, green.blue, blue.blue };
-    color_matrix sat (cred.red, cgreen.red, cblue.red, 0, cred.green,
+    double_rgbdata cred = (double_rgbdata){ red.red, green.red, blue.red };
+    double_rgbdata cgreen = (double_rgbdata){ red.green, green.green, blue.green };
+    double_rgbdata cblue = (double_rgbdata){ red.blue, green.blue, blue.blue };
+    matrix4x4<double> sat (cred.red, cgreen.red, cblue.red, 0, cred.green,
                       cgreen.green, cblue.green, 0, cred.blue, cgreen.blue,
                       cblue.blue, 0, 0, 0, 0, 1);
     sat = sat.invert ();
@@ -1979,9 +1981,9 @@ public:
        also no excessively large values. Allow some overexposure.  */
     for (int c = 0; c < 3; c++)
       {
-        color_red[c] = std::clamp (color_red[c], (luminosity_t)-0.01, (luminosity_t)2);
-        color_green[c] = std::clamp (color_green[c], (luminosity_t)-0.01, (luminosity_t)2);
-        color_blue[c] = std::clamp (color_blue[c], (luminosity_t)-0.01, (luminosity_t)2);
+        color_red[c] = std::clamp (color_red[c], (double)-0.01, (double)2);
+        color_green[c] = std::clamp (color_green[c], (double)-0.01, (double)2);
+        color_blue[c] = std::clamp (color_blue[c], (double)-0.01, (double)2);
       }
 
     *ret_red = color_red;
@@ -1990,8 +1992,8 @@ public:
   }
 
   coord_t
-  determine_colors_using_least_squares (coord_t *v, rgbdata *red,
-                                        rgbdata *green, rgbdata *blue)
+  determine_colors_using_least_squares (coord_t *v, double_rgbdata *red,
+                                        double_rgbdata *green, double_rgbdata *blue)
   {
     /* Use double to not cummulate errors.  */
     double sqsum = 0;
@@ -2189,10 +2191,12 @@ public:
   rgbdata
   bw_determine_color_using_data_collection (coord_t *v)
   {
-    rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
-    rgbdata color = { 0, 0, 0 };
+    /* Use double_rgbdata to avoid cummulation of roundoff error.  */
+    double_rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
+    double_rgbdata color = { 0, 0, 0 };
     luminosity_t threshold = collection_threshold;
-    coord_t wr = 0, wg = 0, wb = 0;
+    /* Use double to avoid cummulation of roundoff error.  */
+    double wr = 0, wg = 0, wb = 0;
 
     /* This follows same algorithm as data collection in analyze_base.
        We collect data only if screen has intensity greater then zero
@@ -2237,10 +2241,10 @@ public:
     color.green /= wg;
     color.blue /= wb;
 
-    rgbdata cred = (rgbdata){ red.red, green.red, blue.red };
-    rgbdata cgreen = (rgbdata){ red.green, green.green, blue.green };
-    rgbdata cblue = (rgbdata){ red.blue, green.blue, blue.blue };
-    color_matrix sat (cred.red, cgreen.red, cblue.red, 0, cred.green,
+    double_rgbdata cred = (double_rgbdata){ red.red, green.red, blue.red };
+    double_rgbdata cgreen = (double_rgbdata){ red.green, green.green, blue.green };
+    double_rgbdata cblue = (double_rgbdata){ red.blue, green.blue, blue.blue };
+    matrix4x4<double> sat (cred.red, cgreen.red, cblue.red, 0, cred.green,
                       cgreen.green, cblue.green, 0, cred.blue, cgreen.blue,
                       cblue.blue, 0, 0, 0, 0, 1);
     sat = sat.invert ();
@@ -2252,9 +2256,9 @@ public:
        over-exposure or cropping  */
     if (!bw_is_simulated_infrared)
       {
-	color.red = std::clamp (color.red, (luminosity_t)-0.1, (luminosity_t)1.1);
-	color.green = std::clamp (color.green, (luminosity_t)-0.1, (luminosity_t)1.1);
-	color.blue = std::clamp (color.blue, (luminosity_t)-0.1, (luminosity_t)1.1);
+	color.red = std::clamp (color.red, (double)-0.1, (double)1.1);
+	color.green = std::clamp (color.green, (double)-0.1, (double)1.1);
+	color.blue = std::clamp (color.blue, (double)-0.1, (double)1.1);
       }
     return color;
   }
@@ -2359,7 +2363,7 @@ public:
 	else
 	  return {(luminosity_t)v[mix_weights_index], (luminosity_t)v[mix_weights_index + 1], (luminosity_t)v[mix_weights_index + 2]};
       }
-    rgbdata red, green, blue;
+    double_rgbdata red, green, blue;
     get_colors (v, &red, &green, &blue);
     color_matrix process_colors (red.red, red.green, red.blue, 0,
 				 green.red, green.green, green.blue, 0,
@@ -2385,11 +2389,11 @@ public:
     return 0;
   }
 
-  rgbdata
+  double_rgbdata
   bw_get_color (coord_t *v)
   {
     if (!least_squares && !data_collection)
-      last_color = { (luminosity_t)v[color_index], (luminosity_t)v[color_index + 1], (luminosity_t)v[color_index + 2] };
+      last_color = { v[color_index], v[color_index + 1], v[color_index + 2] };
     if (data_collection)
       last_color = bw_determine_color_using_data_collection (v);
     else
@@ -2397,14 +2401,14 @@ public:
     return last_color;
   }
   void
-  get_colors (coord_t *v, rgbdata *red, rgbdata *green, rgbdata *blue)
+  get_colors (coord_t *v, double_rgbdata *red, double_rgbdata *green, double_rgbdata *blue)
   {
     if (!least_squares && !data_collection)
       {
-        *red = { (luminosity_t)v[color_index], (luminosity_t)v[color_index + 1], (luminosity_t)v[color_index + 2] };
+        *red = { v[color_index], v[color_index + 1], v[color_index + 2] };
         *green
-            = { (luminosity_t)v[color_index + 3], (luminosity_t)v[color_index + 4], (luminosity_t)v[color_index + 5] };
-        *blue = { (luminosity_t)v[color_index + 6], (luminosity_t)v[color_index + 7], (luminosity_t)v[color_index + 8] };
+            = { v[color_index + 3], v[color_index + 4], v[color_index + 5] };
+        *blue = { v[color_index + 6], v[color_index + 7], v[color_index + 8] };
       }
     else if (data_collection)
       determine_colors_using_data_collection (v, red, green, blue);
@@ -2422,7 +2426,8 @@ public:
   coord_t
   objfunc (coord_t *v)
   {
-    coord_t sum = 0;
+    /* Use double to avoid cummulation of roundoff error.  */
+    double sum = 0;
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
         /* FIXME: parallelism is disabled because sometimes we are called form parallel block.  */
@@ -2431,7 +2436,8 @@ public:
         init_screen (v, tileid);
         simulate_screen (v, tileid);
       }
-    rgbdata red, green, blue, color;
+    double_rgbdata red, green, blue;
+    rgbdata color;
     if (tiles[0].color)
       get_colors (v, &red, &green, &blue);
     else
@@ -2458,13 +2464,13 @@ public:
 
                     /* Bayer pattern. */
                     if (!(x & 1) && !(y & 1))
-                      sum += fabs (c.red - d.red) * 2;
+                      sum += my_fabs (c.red - d.red) * 2;
                     else if ((x & 1) && (y & 1))
-                      sum += fabs (c.blue - d.blue) * 2;
+                      sum += my_fabs (c.blue - d.blue) * 2;
                     else
-                      sum += fabs (c.green - d.green);
+                      sum += my_fabs (c.green - d.green);
 #if 0
-		    sum += fabs (c.red - d.red) + fabs (c.green - d.green) + fabs (c.blue - d.blue);
+		    sum += my_fabs (c.red - d.red) + my_fabs (c.green - d.green) + my_fabs (c.blue - d.blue);
 #endif
                     /*(c.red - d.red) * (c.red - d.red) + (c.green - d.green) *
                      * (c.green - d.green) + (c.blue - d.blue) * (c.blue -
@@ -2480,7 +2486,7 @@ public:
                     luminosity_t c
                         = bw_evaulate_pixel (tileid, color, x, y, off);
                     luminosity_t d = bw_get_pixel (tileid, {x, y});
-                    sum += fabs (c - d);
+                    sum += my_fabs (c - d);
                   }
             sum /= maxgray;
           }
@@ -2566,7 +2572,7 @@ public:
   int
   determine_outliers (coord_t *v, coord_t ratio)
   {
-    rgbdata red, green, blue;
+    double_rgbdata red, green, blue;
     get_colors (v, &red, &green, &blue);
     rgbdata mix_weights = { 0, 0, 0 };
     luminosity_t mix_dark = 0;
@@ -2696,7 +2702,7 @@ public:
     if (tiles[0].color)
       {
         luminosity_t rmax = 0, gmax = 0, bmax = 0;
-        rgbdata red, green, blue;
+        double_rgbdata red, green, blue;
         rgbdata mix_weights = {0, 0, 0};
 	luminosity_t mix_dark = 0;
         if (simulate_infrared)
@@ -2830,7 +2836,7 @@ public:
     if (tiles[0].color)
       {
         luminosity_t rmax = 0, gmax = 0, bmax = 0;
-        rgbdata red, green, blue;
+        double_rgbdata red, green, blue;
         rgbdata mix_weights = {0, 0, 0};
 	luminosity_t mix_dark = 0;
         if (simulate_infrared)
@@ -2989,7 +2995,13 @@ public:
     ret.screen_blur_radius = get_blur_radius (start);
     ret.screen_channel_blur_radius = get_channel_blur_radius (start);
     if (tiles[0].color)
-      get_colors (start, &ret.screen_red, &ret.screen_green, &ret.screen_blue);
+      {
+        double_rgbdata screen_red, screen_green, screen_blue;
+        get_colors (start, &screen_red, &screen_green, &screen_blue);
+        ret.screen_red = screen_red;
+        ret.screen_green = screen_green;
+        ret.screen_blue = screen_blue;
+      }
     ret.emulsion_blur_radius = get_emulsion_blur_radius (start);
     ret.screen_coord_adjust = get_offset (start, 0);
     ret.emulsion_coord_adjust = get_emulsion_offset (start, 0);
@@ -3683,7 +3695,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 		      scr_to_img &map, int xmin,
                       int ymin, int xmax, int ymax)
 {
-  rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
+  double_rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
   coord_t wr = 0, wg = 0, wb = 0;
   const bool debugfiles = false;
 
@@ -3696,7 +3708,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
   sharpen_parameters::sharpen_mode sharpen_mode = sharpen_param.get_mode ();
   if (simulated_screen)
     {
-#pragma omp declare reduction(+ : rgbdata : omp_out = omp_out + omp_in)
+#pragma omp declare reduction(+ : double_rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
     shared(ymin, ymax, xmin, xmax, threshold, simulated_screen)       \
     reduction(+ : wr, wg, wb, red, green, blue)
@@ -3730,7 +3742,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
   else if (sharpen_mode == sharpen_parameters::none)
     {
       bool antialias = !sharpen_param.scanner_mtf_scale;
-#pragma omp declare reduction(+ : rgbdata : omp_out = omp_out + omp_in)
+#pragma omp declare reduction(+ : double_rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
     shared(ymin, ymax, xmin, xmax, threshold, map, scr, collection_scr)       \
     reduction(+ : wr, wg, wb, red, green, blue, antialias)
@@ -3918,9 +3930,9 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
   *ret_green = green;
   *ret_blue = blue;
 #else
-  *ret_red = (rgbdata){ red.red, green.red, blue.red };
-  *ret_green = (rgbdata){ red.green, green.green, blue.green };
-  *ret_blue = (rgbdata){ red.blue, green.blue, blue.blue };
+  *ret_red = (rgbdata){ (luminosity_t)red.red, (luminosity_t)green.red, (luminosity_t)blue.red };
+  *ret_green = (rgbdata){ (luminosity_t)red.green, (luminosity_t)green.green, (luminosity_t)blue.green };
+  *ret_blue = (rgbdata){ (luminosity_t)red.blue, (luminosity_t)green.blue, (luminosity_t)blue.blue };
 #endif
 #if 0
   printf ("Color loss info\n");

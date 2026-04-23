@@ -1796,6 +1796,14 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 			fft[(screen::size - y) * fft_size + x][1] = std::imag (ker);
 		      }
 		  }
+	      /* Normalize so DC is exactly 1.0 (before data_scale).  */
+	      screen_fft_t sc = data_scale / fft[0][0];
+	      if (sc != 1)
+		for (int x = 0; x < fft_size * screen::size; x++)
+		  {
+		    fft[x][0] *= sc;
+		    fft[x][1] *= sc;
+		  }
 	    }
 	  /* Large PSF: Compute its periodic form and do FFT.  */
 	  else
@@ -1908,11 +1916,12 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 	    }
 	  /* Normalize so DC is exactly 1.0 (before data_scale).  */
 	  screen_fft_t sc = data_scale / fft[0][0];
-	  for (int x = 0; x < fft_size * screen::size; x++)
-	    {
-	      fft[x][0] *= sc;
-	      fft[x][1] *= sc;
-	    }
+	  if (sc != 1)
+	    for (int x = 0; x < fft_size * screen::size; x++)
+	      {
+		fft[x][0] *= sc;
+		fft[x][1] *= sc;
+	      }
         }
       if (mode != sharpen_parameters::richardson_lucy_deconvolution)
         initialize_with_2D_fft_fast<screen_fft_t> (*this, scr, fft.get (), c, all ? 2 : c);

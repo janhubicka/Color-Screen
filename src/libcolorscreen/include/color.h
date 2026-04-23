@@ -501,6 +501,14 @@ struct rgbdata_base
 	    && my_fabs (green - other.green) < epsilon
 	    && my_fabs (blue - other.blue) < epsilon);
   }
+  void print (FILE *f) const
+  {
+    rgbdata_base c = (*this * (T)255);
+    c.red = std::clamp (c.red, (T)0, (T)255);
+    c.green = std::clamp (c.green, (T)0, (T)255);
+    c.blue = std::clamp (c.blue, (T)0, (T)255);
+    fprintf (f, "red:%f green:%f blue:%f #%02x%02x%02x\n", (double)red, (double)green, (double)blue, (int)(c.red + 0.5), (int)(c.green + 0.5), (int)(c.blue + 0.5));
+  }
 };
 
 typedef rgbdata_base<double> double_rgbdata;
@@ -547,7 +555,6 @@ struct rgbdata : public rgbdata_base<luminosity_t>
     rgbdata ret = {red * coef, green * coef, blue * coef};
     return ret;
   }
-  DLL_PUBLIC void print (FILE *f);
 };
 /* Datastructure used to store information about dye luminosities.  */
 /* Global operators for rgbdata_base.  */
@@ -590,6 +597,10 @@ inline double_rgbdata operator+ (double_rgbdata lhs, double rhs) { lhs += rhs; r
 inline double_rgbdata operator- (double_rgbdata lhs, double rhs) { lhs -= rhs; return lhs; }
 inline double_rgbdata operator* (double_rgbdata lhs, double rhs) { lhs *= rhs; return lhs; }
 inline double_rgbdata operator/ (double_rgbdata lhs, double rhs) { lhs /= rhs; return lhs; }
+inline double_rgbdata operator+ (double_rgbdata lhs, luminosity_t rhs) { lhs += (double)rhs; return lhs; }
+inline double_rgbdata operator- (double_rgbdata lhs, luminosity_t rhs) { lhs -= (double)rhs; return lhs; }
+inline double_rgbdata operator* (double_rgbdata lhs, luminosity_t rhs) { lhs *= (double)rhs; return lhs; }
+inline double_rgbdata operator/ (double_rgbdata lhs, luminosity_t rhs) { lhs /= (double)rhs; return lhs; }
 
 inline rgbdata operator+ (rgbdata lhs, rgbdata rhs) { lhs += rhs; return lhs; }
 inline rgbdata operator- (rgbdata lhs, rgbdata rhs) { lhs -= rhs; return lhs; }

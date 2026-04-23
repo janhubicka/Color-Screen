@@ -4,12 +4,6 @@
 #include "include/spectrum-to-xyz.h"
 namespace colorscreen
 {
-void
-rgbdata::print (FILE *f)
-{
-  rgbdata c = (*this * (luminosity_t)255).clamp (0, 255);
-  fprintf (f, "red:%f green:%f blue:%f #%02x%02x%02x\n", red, green, blue, (int)(c.red + 0.5), (int)(c.green + 0.5), (int)(c.blue + 0.5));
-}
 void xyz::print_sRGB (FILE *f, bool verbose)
 {
   rgbdata c;
