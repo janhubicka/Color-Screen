@@ -9,18 +9,22 @@ This skill provides guidelines for maintaining, refactoring, and modernizing the
 
 ## 1. Documentation & Coding Style
 
-- **GNU Style Formatting**: Files with `.C` and `.h` in `libcolorscreen` MUST follow the GNU coding style.
+- **GNU Style Formatting**: Files with `.C` and `.h` in `libcolorscreen` MUST follow the GNU coding style. Do not mass reformat while files; we can do that in separate commit.
 - **Function Comments**: Every function must have a comment explaining its purpose and all its parameters. 
     - **Parameter Documentation**: Parameters within comments must be in **UPPERCASE**.
     - **Consistency**: Add missing comments to legacy functions when refactoring.
 - **File comments**: Every source file should start with a brief comment on what it is doing
 - **Member Initialization**: For parameter structures and classes, prefer C++11 default member initialization (`type var = initial_value;`) over assignments in the constructor body.
-- **C++17**: Suggest improvements for using best practices of C++17. Be careful about performance impact. Suggest use of range fors where cleaner. Always ask in plan.
+- **C++17**: Suggest improvements for using best practices of C++17. Be careful about performance impact. Suggest use of range fors where cleaner. Get codebase ready for C++ standard update.  Always ask in plan.
+- **lambda**: Lambda functions in performance critical codde are OK only if they are template parameters and will be for sure optimized out at compile time.
+- **headers and standard library**: Turn C headers to C++ headers. Use C++ library calls instead of C library calls where performance is better or equal.
 - **Typos and grammar errors**: Check for typos and grammar errors in strings and comments. Always ask in plan for corrections in strings.  Project should use American english.
-- **Code readability**: Ask user when code does not seem to make sense or is hard to understand
+- **Code correctness**: Verify code correctness thoroughly; look into other files to understand it.
+- **Code readability**: Ask user when code does not seem to make sense or is hard to understand.
 - **standard color and linear algebra**: Check that color and linear algebra operations are implemented in a standard way. Ask in plan.
-- **Compiler warnings**: Do not ignore compiler warnings in libcolorscreen
+- **Compiler warnings**: Do not ignore compiler warnings in libcolorscreen.
 - **checking**: There is `libcolorscreen_checking` that can be turned on/off at compile time. Suggest new checks such as array range checks in non-trivial situations. Ask in plan.
+- **stdio**: Use stdio instead of iostreams for i/o.
 
 
 ## 2. Type Safety & Correctness
@@ -28,7 +32,7 @@ This skill provides guidelines for maintaining, refactoring, and modernizing the
 - **Type Precision**:
     - Use `luminosity_t` for color and light intensity computations.
     - Use `coord_t` for spatial coordinates.
-- **Avoid Implicit Conversions**: Carefully review code to prevent accidental conversions to `double`.
+- **Avoid Implicit Conversions**: Carefully review code to prevent accidental conversions to `double`. Both `luminosity_t` and `coord_t` should work when set to `float`.
     - Avoid `double` literals (use `(coord_t)1.0` or `1.0f` if `luminosity_t` is float).
     - Use project math wrappers (`my_sqrt`, `my_pow`, `my_floor`) instead of standard `std::` functions to maintain type consistency.
 - **Correctness Review**: Always perform a deep review for logic errors, especially **cut-and-paste errors**.
