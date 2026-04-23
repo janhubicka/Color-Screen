@@ -785,4 +785,10 @@ hd_x_histogram (render_parameters &rparam, image_data &img, int steps, luminosit
     }
   return data;
 }
+
+/* Destroy renderer
+   It is offline so the virtual table is not accessed from unittests.  */
+render::~render ()
+{
+}
 }

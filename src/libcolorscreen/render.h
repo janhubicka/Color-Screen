@@ -89,7 +89,7 @@ public:
   }
 
   /* Destroy renderer.  */
-  virtual ~render () = default;
+  virtual ~render ();
 
   /* Determine grayscale value at a given position in the image.  */
   pure_attr inline luminosity_t get_img_pixel (point_t p) const noexcept;

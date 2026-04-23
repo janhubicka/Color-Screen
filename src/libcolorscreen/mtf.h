@@ -82,7 +82,7 @@ public:
   typedef lru_cache<mtf_parameters, mtf, get_new_mtf, 10> mtf_cache_t;
 
   static std::shared_ptr<mtf> get_mtf (const mtf_parameters &mtfp, progress_info *p);
-  typedef double psf_t;
+  typedef float psf_t;
   std::vector<psf_t, fft_allocator<psf_t>>
   compute_2d_psf (int psf_size, luminosity_t subscale,
 		  progress_info *progress = NULL, bool parallel = true);
