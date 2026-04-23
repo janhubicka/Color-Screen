@@ -18,6 +18,7 @@ This skill provides guidelines for maintaining, refactoring, and modernizing the
 - **Typos and grammar errors**: Check for typos and grammar errors in strings and comments. Always ask in plan for corrections in strings.  Project should use American english.
 - **Code readability**: Ask user when code does not seem to make sense or is hard to understand
 - **standard color and linear algebra**: Check that color and linear algebra operations are implemented in a standard way. Ask in plan.
+- **Compiler warnings**: Do not ignore compiler warnings in libcolorscreen
 
 
 ## 2. Type Safety & Correctness
@@ -32,13 +33,13 @@ This skill provides guidelines for maintaining, refactoring, and modernizing the
 - **Error Handling**: Functions returning `bool` as an error indicator must have their return values checked by the caller. Systematically identify and fix missing checks.
 
 ## 3. API andinternal datastructures cleanups
-- **Use rgbdata, int_rgbdata, point_t and int_point_t**: Suggest changes to use `rgbdata`, `int_rgbdata`, `point_t` and `int_point_t` to pass and return values that are rgb and points of a given type. Always ask in plan.
+- **Use rgbdata, int_rgbdata, point_t and int_point_t**: Suggest changes to use `rgbdata`, `int_rgbdata`, `point_t` and `int_point_t` to pass and return values that are rgb and points of a given type. Always ask in plan. Pass by value; use const modifiers where appropriate.
 - **typos in identifiers**: Suggest fixes for typos in identifier names. Use `snake_case`.
 - **int_image_area**: Use `int_image_area` instead of xshit/yship/width/height. Always ask in plan.
 
 ## 4. Progress info
 - **lowercase in set_task**: Set task messages should be in lowercase
-- **check for cancellation**: When passing progress info to a function; check if it can be cancelled and returns a indicating cancellation/failure. Do not ingnore return values. If it can be cancelled but it is not indicated by return value check for `progress && progress->cancelled()`
+- **check for cancellation**: When passing progress info to a function; check if it can be cancelled and returns a indicating cancellation/failure. Do not ingnore return values. If it can be cancelled but it is not indicated by return value check for `progress && progress->cancelled()`. Add `nodiscard_attr` to functions that return false on cancellation (such as `precompute`)
 
 ## 3. Template & Performance Modernization
 
