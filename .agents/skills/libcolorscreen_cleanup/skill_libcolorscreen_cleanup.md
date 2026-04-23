@@ -37,6 +37,10 @@ This skill provides guidelines for maintaining, refactoring, and modernizing the
 - **Type Precision**:
     - Use `luminosity_t` for color and light intensity computations.
     - Use `coord_t` for spatial coordinates.
+    - Watch for loops that accumulate large number of values to `rgbdata_t`,
+      `luminosity_t` or `coord_t` (or similar construct) which may cummulate roundoff errors.
+      Suggest using `double_rgbdata` or `double` in plan. If approved allways
+      comment why double precision is needed.
 - **Avoid Implicit Conversions**: Carefully review code to prevent accidental conversions to `double`. Both `luminosity_t` and `coord_t` should work when set to `float`.
     - Avoid `double` literals (use `(coord_t)1.0` or `1.0f` if `luminosity_t` is float).
     - Use project math wrappers (`my_sqrt`, `my_pow`, `my_floor`) instead of standard `std::` functions to maintain type consistency.
