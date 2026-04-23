@@ -346,7 +346,8 @@ scr_to_img::set_parameters (const scr_to_img_parameters &param,
   m_rotation_adjustment = rotation_adjustment;
   if (!scr_to_img::set_parameters_for_early_correction (param, width, height))
     return false;
-  m_lens_correction.precompute_inverse ();
+  if (!m_lens_correction.precompute_inverse ())
+    return false;
   m_early_correction_precomputed = true;
   initialize ();
   return true;

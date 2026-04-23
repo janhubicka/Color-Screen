@@ -1,5 +1,7 @@
 #ifndef LENS_CORRECTION_H
 #define LENS_CORRECTION_H
+/* Class implementing forward and inverse radial lens distortion correction.
+   The inverse mapping is precomputed via an LRU-cached lookup table.  */
 #include <cstdio>
 #include "precomputed-function.h"
 #include "progress-info.h"
@@ -46,7 +48,7 @@ struct lens_warp_correction
 
   /* Precompute inverse mapping using a lookup table.
      Returns true on success.  */
-  DLL_PUBLIC bool precompute_inverse ();
+  nodiscard_attr DLL_PUBLIC bool precompute_inverse ();
 
   /* Transform point P from corrected image to scan coordinates.
      This is the forward transform.  */
@@ -62,7 +64,7 @@ struct lens_warp_correction
 #if 0
     if (debug && 1 / ratio != m_inverted_ratio.apply (ret.dist_from (m_center)))
       fprintf (stderr, "Inverted ratio error %f %f\n", ratio, m_inverted_ratio.apply (ret.dist_from (m_center)));
-    if (debug && fabs (ret.dist_from (m_center) - ratio * p.dist_from (m_center)) > epsilon)
+    if (debug && my_fabs (ret.dist_from (m_center) - ratio * p.dist_from (m_center)) > epsilon)
       fprintf (stderr, "Inverted ratio error2 %f %f\n", ratio, m_inverted_ratio.apply (ret.dist_from (m_center)));
     //fprintf (stderr, "Lens correction %f, %f -> %f, %f\n", p.x, p.y, ret.x, ret.y);
 #endif
@@ -114,8 +116,6 @@ private:
   point_t m_center;
   coord_t m_max_dist, m_inv_max_dist_sq2;
   std::shared_ptr<precomputed_function<coord_t>> m_inverted_ratio;
-  // coord_t get_inverse (coord_t dist);
-  // coord_t m_max;
   bool m_noop;
 };
 }

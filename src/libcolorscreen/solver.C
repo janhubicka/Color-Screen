@@ -353,7 +353,15 @@ public:
             (*transformed)[i] = m_sparam.points[i].scr;
         return false;
       }
-    m_param.lens_correction.normalize ();
+    if (!m_param.lens_correction.normalize ())
+      {
+        if (chisq)
+          *chisq = bad_val;
+        if (transformed)
+          for (size_t i = 0; i < m_sparam.points.size (); i++)
+            (*transformed)[i] = m_sparam.points[i].scr;
+        return false;
+      }
     scr_to_img map;
     /* We may save some inversions if points are relatively few.  */
     bool ok;
@@ -428,7 +436,7 @@ simple_solver (scr_to_img_parameters *param, image_data &img_data,
                solver_parameters &sparam, progress_info *progress)
 {
   if (progress)
-    progress->set_task ("determing geometry by linear regression", 1);
+    progress->set_task ("determining geometry by linear regression", 1);
   return solver (param, img_data, sparam.points, sparam.center,
                  (sparam.weighted ? homography::solve_image_weights : 0),
                  true);
@@ -481,7 +489,8 @@ solver (scr_to_img_parameters *param, image_data &img_data,
           = s.start[n + 1] * (1 / lens_solver::scale_kr);
       param->lens_correction.kr[3]
           = s.start[n + 2] * (1 / lens_solver::scale_kr);
-      param->lens_correction.normalize ();
+      if (!param->lens_correction.normalize ())
+        return false;
     }
   if (progress)
     progress->set_task ("optimizing perspective correction", 1);

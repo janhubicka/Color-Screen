@@ -2256,7 +2256,7 @@ we simply try both cmaps.  */
       /* Now produce output (regular) grid of solver points.
          This can be used to re-compute the mesh from GUI  */
       if (progress)
-        progress->set_task ("Determinig solver points", 1);
+        progress->set_task ("determining solver points", 1);
       sparam.remove_points ();
       for (int y = 0; y < ysteps; y++)
         for (int x = 0; x < xsteps; x++)

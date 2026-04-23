@@ -1,3 +1,6 @@
+/* Lens warp correction implementation.
+   Precomputes and caches the inverse radial distortion mapping using an
+   LRU-cached lookup table for fast scan-to-corrected coordinate transforms.  */
 #include "include/lens-correction.h"
 #include "lru-cache.h"
 namespace colorscreen
@@ -35,12 +38,12 @@ get_inverse (const lens_warp_correction_parameters &param, coord_t dist,
     {
       coord_t r = (min + max) * (coord_t)0.5;
       coord_t ra = r * param.get_ratio (r * r * inv_max_dist_sq2);
-      if (fabs (ra - dist) < 1.0 / (4 * 65536.0) || min == r || max == r)
+      if (my_fabs (ra - dist) < 1.0 / (4 * 65536.0) || min == r || max == r)
         {
           if (lens_warp_correction::debug
-              && fabs (ra - dist) > lens_warp_correction::epsilon / 2)
+              && my_fabs (ra - dist) > lens_warp_correction::epsilon / 2)
             printf ("Inexact lens inverse: %f:%f %f %f %ff\n", dist, ra, r,
-                    r / dist, sqrt (r * r * inv_max_dist_sq2));
+                    r / dist, my_sqrt (r * r * inv_max_dist_sq2));
           return r / dist;
         }
       else if (ra < dist)
@@ -66,7 +69,7 @@ get_new_inverse (struct lens_inverse_parameters &p, progress_info *prog)
      In common case the lens parameters will be normalized so ratio of 1 is 1.
      In this case max is max_dist. */
   coord_t max = 1;
-  if (fabs (p.param.get_ratio (1) - 1)
+  if (my_fabs (p.param.get_ratio (1) - 1)
       < lens_warp_correction::epsilon / p.max_dist)
     max = p.max_dist;
   else
@@ -148,8 +151,6 @@ lens_warp_correction::nonprecomputed_scan_to_corrected (point_t p) const
     return p;
   bool too_far = false;
   coord_t dist = p.dist_from (m_center);
-  /* The search range for r_dst should cover up to m_max_dist * 10 (safe).  */
-  //coord_t max_search = m_max_dist * 10;
   coord_t max_search = m_max_dist;
   if (dist > m_max_dist)
     dist = m_max_dist, too_far = true;
@@ -167,7 +168,10 @@ lens_warp_correction::nonprecomputed_scan_to_corrected (point_t p) const
                  "%f; dist %f ratio %f\n",
                  p.x - m_center.x, p.y - m_center.y, ret.x - m_center.x,
                  ret.y - m_center.y, orig.x - m_center.x, orig.y - m_center.y,
-                 dist, m_inverted_ratio->apply (p.dist_from (m_center)));
+                 dist,
+                 m_inverted_ratio
+                     ? m_inverted_ratio->apply (p.dist_from (m_center))
+                     : (coord_t)-1.0);
     }
   return ret;
 }

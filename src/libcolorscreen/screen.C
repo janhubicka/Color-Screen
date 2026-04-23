@@ -1,4 +1,7 @@
-#include "fft.h"
+/* High-performance color screening and image processing logic.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #include "fft.h"
 #include "deconvolve.h"
 #include "gaussian-blur.h"
@@ -139,7 +142,7 @@ screen::paget_finlay ()
 {
   int xx, yy;
 
-  /* Constant bellow specifies ratio of blue square diagonal to diagonal of red
+  /* Constant below specifies ratio of blue square diagonal to diagonal of red
      and green squares.
 
      Original paget announcement claims that blue squares are smaller
@@ -237,6 +240,8 @@ screen::paget_finlay ()
       }
 }
 
+/* Initialize screen to the dufaycolor screen plate with given RED_STRIP_WIDTH
+   and GREEN_STRIP_WIDTH.  */
 void
 screen::dufay (coord_t red_strip_width, coord_t green_strip_width)
 {
@@ -447,12 +452,14 @@ screen::preview_dufay ()
       }
 }
 
+/* Apply a 1D convolution kernel CMATRIX of length CLEN to screen SCR for
+   channel C.  HBLUR is a temporary buffer for the first pass.  */
 __attribute__ ((always_inline)) inline void
 screen::initialize_with_1d_kernel (screen &scr, int clen,
                                    luminosity_t *cmatrix, luminosity_t *hblur,
                                    int c)
 {
-  // #pragma omp parallel shared(scr, clen, cmatrix, hblur,c)
+#pragma omp parallel for shared(scr, clen, cmatrix, hblur, c)
   for (int y = 0; y < size; y++)
     {
       luminosity_t mmult[size + clen];
@@ -462,14 +469,14 @@ screen::initialize_with_1d_kernel (screen &scr, int clen,
       for (int x = 0; x < size; x++)
         {
           luminosity_t sum = 0;
-          for (int d = -clen / 2; d < clen / 2; d++)
+          for (int d = -clen / 2; d <= clen / 2; d++)
             // sum += cmatrix[d + clen / 2] * scr.mult[y][(x + d) & (size -
             // 1)][c];
             sum += cmatrix[d + clen / 2] * mmult[x + d + clen / 2];
           hblur[x + y * size] = sum;
         }
     }
-  // #pragma omp parallel shared(scr, clen, cmatrix, hblur,c)
+#pragma omp parallel for shared(scr, clen, cmatrix, hblur, c)
   for (int x = 0; x < size; x++)
     {
       luminosity_t mmult[size + clen];
@@ -479,7 +486,7 @@ screen::initialize_with_1d_kernel (screen &scr, int clen,
       for (int y = 0; y < size; y++)
         {
           luminosity_t sum = 0;
-          for (int d = -clen / 2; d < clen / 2; d++)
+          for (int d = -clen / 2; d <= clen / 2; d++)
             // sum += cmatrix[d + clen / 2] * hblur[x+ ((y + d) & (size - 1)) *
             // size];
             sum += cmatrix[d + clen / 2] * mmult[y + d + clen / 2];
@@ -508,6 +515,8 @@ screen::initialize_with_2d_kernel (screen &scr, int clen,
 }
 #endif
 
+/* Initialize current screen by applying Gaussian blur with BLUR_RADIUS to SCR.
+   Restrict operation to channels between CMIN and CMAX.  */
 void
 screen::initialize_with_gaussian_blur (screen &scr, coord_t blur_radius,
                                        int cmin, int cmax)
@@ -986,7 +995,7 @@ initialize_with_1D_fft_fast (screen &out_scr, const screen &scr,
               in.get ()[y * fft_size + x][1] = imag (v * w1 * w2);
             }
         }
-      for (int y = 1; y < fft_size; y++)
+      for (int y = 1; y < fft_size - 1; y++)
         {
           std::complex w2 (weights[y][0], -weights[y][1]);
           for (int x = 0; x < fft_size; x++)
@@ -1255,7 +1264,9 @@ point_spread_fft (fft_complex_t<screen_fft_t>::type *weights,
   plan_2d.execute_r2c (data.data (), weights);
 }
 
-/* Compute average error between the two implementations.  */
+/* Compute average error between the two screens THIS and SCR.
+   Return true if it is within MAXDELTA.  Optionally return the error
+   in DELTA_RET.  */
 bool
 screen::almost_equal_p (const screen &scr, luminosity_t *delta_ret,
                         luminosity_t maxdelta) const
@@ -1293,10 +1304,12 @@ screen::sum_almost_equal_p (const screen &scr, rgbdata *delta_ret,
   return sum1.almost_equal_p (sum2, maxdelta);
 }
 
-/* Compute gaussiab blur using 2d point spread and fft.
+/* Compute Gaussian blur using 2D point spread and FFT.
+   DST is the output screen, SCR is the input screen.
+   RADIUS is the blur radius, CLEN is the kernel length.
+   CMIN and CMAX specify the range of channels to process.
    Implemented primarily for testing.  It is always slower than
-   1d fft version.  */
-
+   1D FFT version.  */
 static void
 initialize_with_gaussian_blur_fft2d (screen &dst, const screen &scr,
                                      luminosity_t radius, int clen, int cmin,
@@ -1620,6 +1633,7 @@ screen::initialize_preview (enum scr_type type, coord_t red_strip_width,
     preview ();
 }
 
+/* Initialize screen with a single white dot in the center.  */
 void
 screen::initialize_dot ()
 {
@@ -1634,6 +1648,9 @@ screen::initialize_dot ()
       = mult[size / 2][size / 2][2] = 1;
 }
 
+/* Save the current screen to a TIFF file named FILENAME.
+   If NORMALIZE is true, the values are scaled to the maximum.
+   TILES specifies how many times the screen pattern is tiled.  */
 bool
 screen::save_tiff (const char *filename, bool normalize, int tiles) const
 {
@@ -1688,6 +1705,9 @@ screen::save_tiff (const char *filename, bool normalize, int tiles) const
     }
   return true;
 }
+/* Return a simple_image representation of the screen.
+   If NORMALIZE is true, the values are scaled to the maximum.
+   TILES specifies how many times the screen pattern is tiled.  */
 std::unique_ptr <simple_image>
 screen::get_image (bool normalize, int tiles) const
 {
@@ -1714,6 +1734,9 @@ screen::get_image (bool normalize, int tiles) const
   return img;
 }
 
+/* Initialize current screen by applying sharpening parameters SHARPEN
+   to SCR.  If ANTICIPATE_SHARPENING is true, the sharpening is applied.
+   If PARALLEL is true, use OpenMP.  */
 void
 screen::initialize_with_sharpen_parameters (screen &scr,
 					    sharpen_parameters *sharpen[3],

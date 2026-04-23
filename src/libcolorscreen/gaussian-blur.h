@@ -64,7 +64,7 @@ public:
       {
         int m = std::max (- clen / 2, -x);
 	O sum = in[x + m] * cmatrix[m + clen / 2];
-	for (int d = m; d < std::min (clen / 2, width - x); d++)
+	for (int d = m + 1; d <= std::min (clen / 2, width - x - 1); d++)
 	  sum += in [x + d] * cmatrix[d + clen / 2];
 	out[x] = sum;
       }
@@ -74,7 +74,7 @@ public:
     for (int x = 0; x < std::min (width - clen / 2, clen / 2); x++)
       {
 	O sum = in[0] * cmatrix[-x + clen / 2];
-	for (int d = -x + 1; d < clen / 2; d++)
+	for (int d = -x + 1; d <= clen / 2; d++)
 	  sum += in[x + d] * cmatrix[d + clen / 2];
 	out[x] = sum;
       }
@@ -82,7 +82,7 @@ public:
       {
 	int m = - clen / 2;
 	O sum = in[x + m] * cmatrix[m + clen / 2];
-	for (int d = m + 1; d < clen / 2; d++)
+	for (int d = m + 1; d <= clen / 2; d++)
 	  sum += in[x + d] * cmatrix[d + clen / 2];
 	out[x] = sum;
       }

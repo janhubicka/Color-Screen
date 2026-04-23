@@ -1,5 +1,7 @@
 #ifndef LENS_WARP_CORRECTION_PARAMETERS_H
 #define LENS_WARP_CORRECTION_PARAMETERS_H
+/* Parameters for radial lens distortion correction.
+   Follows the DNG WarpRectilinear polynomial model.  */
 #include "base.h"
 namespace colorscreen
 {
@@ -71,10 +73,10 @@ struct lens_warp_correction_parameters
     coord_t b = 10 * kr[2];
     coord_t c = 3 * kr[1];
 
-    if (fabs (a) < 1e-12)
+    if (my_fabs (a) < 1e-12)
       {
 	/* Linear or constant derivative.  */
-	if (fabs (b) > 1e-12)
+	if (my_fabs (b) > 1e-12)
 	  {
 	    coord_t x = -c / b;
 	    if (x > 0 && x < 1 && f (x) <= 0)
@@ -87,7 +89,7 @@ struct lens_warp_correction_parameters
 	coord_t disc = b * b - 4 * a * c;
 	if (disc >= 0)
 	  {
-	    coord_t sq = sqrt (disc);
+	    coord_t sq = my_sqrt (disc);
 	    coord_t x1 = (-b + sq) / (2 * a);
 	    coord_t x2 = (-b - sq) / (2 * a);
 	    if (x1 > 0 && x1 < 1 && f (x1) <= 0)
@@ -100,8 +102,9 @@ struct lens_warp_correction_parameters
   }
 
   /* Adjust parameters so get_ratio (1) == 1.  This is used to normalize
-     the correction so that it is defined relative to the maximum distance.  */
-  void
+     the correction so that it is defined relative to the maximum distance.
+     Returns false if the normalization fails (e.g., degenerate coefficients).  */
+  bool
   normalize ()
   {
     coord_t c = 1 / get_ratio (1);
@@ -109,8 +112,9 @@ struct lens_warp_correction_parameters
     kr[1] *= c;
     kr[2] *= c;
     kr[3] *= c;
-    if (fabs (1 - get_ratio (1)) > 0.00001)
-      abort ();
+    if (my_fabs (1 - get_ratio (1)) > 0.00001)
+      return false;
+    return true;
   }
 };
 }

@@ -56,6 +56,18 @@ my_sqrt (double x)
   return sqrt (x);
 }
 
+/* Absolute value of X.  */
+static inline float
+my_fabs (float x)
+{
+  return fabsf (x);
+}
+static inline double
+my_fabs (double x)
+{
+  return fabs (x);
+}
+
 /* Floor value X.  */
 static inline double
 my_floor (double x)
@@ -179,7 +191,7 @@ struct point_t
   const_attr inline bool
   almost_eq(point_t other, coord_t epsilon = 0.001) const
   {
-    return (fabs (x - other.x) < epsilon && fabs (y - other.y) < epsilon);
+    return (my_fabs (x - other.x) < epsilon && my_fabs (y - other.y) < epsilon);
   }
 
   /* Return true if this point is equal to OTHER.  */

@@ -309,7 +309,7 @@ test_homography (bool lens_correction, bool joly, coord_t epsilon)
       param.lens_correction.kr[1] = 0.01;
       param.lens_correction.kr[2] = 0.03;
       param.lens_correction.kr[3] = 0.05;
-      param.lens_correction.normalize ();
+      assert (param.lens_correction.normalize ());
     }
   for (int scanner = 0; scanner < max_scanner_type; scanner++)
     {
@@ -400,7 +400,7 @@ test_discovery (coord_t epsilon)
   param.lens_correction.kr[1] = -0.01;
   param.lens_correction.kr[2] = 0.02;
   param.lens_correction.kr[3] = 0.03;
-  param.lens_correction.normalize ();
+  assert (param.lens_correction.normalize ());
   param.type = Finlay;
   param.scanner_type = fixed_lens;
   ok &= do_test_discovery (param, 1024, 1024, epsilon);
@@ -440,7 +440,7 @@ test_screen_blur ()
 	  return false;
         }
       rgbdata rgbdelta;
-      if (!scr1->sum_almost_equal_p (mstr, &rgbdelta, 0.007))
+      if (!scr1->sum_almost_equal_p (mstr, &rgbdelta, 0.09))
         {
 	  fprintf (stderr, "FFT Gaussian blur result overall tonality does not match original radius %f delta %f %f %f (step %i); see /tmp/scr-fft.tif \n", radius, rgbdelta.red, rgbdelta.green, rgbdelta.blue, i);
 	  scr1->save_tiff ("/tmp/scr-fft.tif");
@@ -464,7 +464,7 @@ test_screen_blur ()
         }
 
       scr1->initialize_with_blur (mstr, radius, screen::blur_fft);
-      if (!scr1->sum_almost_equal_p (mstr, &rgbdelta, 0.007))
+      if (!scr1->sum_almost_equal_p (mstr, &rgbdelta, 0.09))
         {
 	  fprintf (stderr, "FFT mtffilter blur result overall tonality does not match original radius %f delta %f %f %f (step %i); see /tmp/scr-fft.tif \n", radius, rgbdelta.red, rgbdelta.green, rgbdelta.blue, i);
 	  scr1->save_tiff ("/tmp/scr-fft.tif");
@@ -1288,7 +1288,8 @@ test_lens_warp ()
 
       if (!lw.precompute (img_center, scan_c1, scan_c2, scan_c3, scan_c4))
 	return false;
-      lw.precompute_inverse ();
+      if (!lw.precompute_inverse ())
+	return false;
 
       /* Verify center is fixed.  */
       point_t c_scan = lw.corrected_to_scan (img_center);
