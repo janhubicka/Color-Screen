@@ -215,7 +215,7 @@ public:
                       int height, coord_t pixelsize, progress_info *progress);
 
   /* Return number of pixel computations considered profitable for OMP.  */
-  const_attr pure_attr size_t openmp_size ()
+  const_attr size_t openmp_size ()
   {
     return 128 * 1024;
   }

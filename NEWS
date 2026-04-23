@@ -94,6 +94,13 @@ Changes in version 1.1
    - `colorscreen render --solver` now executes solver even if mesh is already
      present in parameter file.
    - Fixed crash with very small blur radius
+   - Fixed illuminants A, B and C
+ - Removed features
+   - Motor correction (replaced by geometry solver)
+   - Negative inversion (replaced by H&D curves)
+   - Film gamma (replaced by H&D curves)
+   - Target film gamma (replaced by H&D curves)
+   - gray range (replaced by exposure + dark point)
  - Internal changes:
    - Cleaned up public API and privatized large part of libcolorscreen
      datastructures.

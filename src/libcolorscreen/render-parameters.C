@@ -856,7 +856,8 @@ static rgbdata
 get_color (image_data &img, render_parameters &rparam, scr_to_img_parameters &param, rgbdata c, progress_info *progress)
 {
   render r(img, rparam, 256);
-  r.precompute_all (false, true, patch_proportions (param.type, &rparam), progress);
+  if (!r.precompute_all (false, true, patch_proportions (param.type, &rparam), progress))
+    return c;
   c.red = r.adjust_luminosity_ir (c.red);
   c.green = r.adjust_luminosity_ir (c.green);
   c.blue = r.adjust_luminosity_ir (c.blue);
