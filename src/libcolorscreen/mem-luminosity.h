@@ -80,8 +80,9 @@ struct mem_rgbdata
   constexpr mem_rgbdata()
   { }
 };
+
 inline rgbdata::rgbdata (mem_rgbdata color)
-: red (color.red), green (color.green), blue (color.blue)
+: rgbdata_base<luminosity_t> (color.red, color.green, color.blue)
 {
 }
 }

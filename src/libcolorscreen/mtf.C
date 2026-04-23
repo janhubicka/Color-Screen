@@ -444,7 +444,8 @@ public:
   luminosity_t
   objfunc (const luminosity_t *vals, luminosity_t *f_vec = NULL)
   {
-    luminosity_t sum = 0;
+    /* Use double to avoid cummulation of an error */
+    double sum = 0;
     mtf_parameters p = m_params;
     p.sigma = get_sigma (vals);
     p.f_stop = get_f_stop (vals);
@@ -459,7 +460,8 @@ public:
 	else
 	  p.blur_diameter = get_blur_diameter (m, vals);
 	assert (difraction == p.simulate_difraction_p ());
-	luminosity_t msum = 0;
+	/* Use double to avoid cummulation of an error */
+	double msum = 0;
 	for (size_t i = 0; i < measurement.size (); i++)
 	  {
 	    luminosity_t freq = measurement.get_freq (i);
@@ -755,7 +757,8 @@ mtf::compute_lsf (std::vector<psf_t, fft_allocator<psf_t>> &lsf,
 
   plan.execute_r2r (mtf_half.data (), lsf.data ());
 
-  psf_t sum = 0;
+  /* Use double to avoid cummulation of error.  */
+  double sum = 0;
   for (int i = 0; i < size; i++)
     sum += lsf[i];
   psf_t fin_scale = 1.0 / sum;

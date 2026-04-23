@@ -366,87 +366,115 @@ struct cie_lab
 
 struct mem_rgbdata;
 
-/* Datastructure used to store information about dye luminosities.  */
-struct rgbdata
+template <typename T>
+struct rgbdata_base
 {
-  luminosity_t red, green, blue;
-  inline rgbdata  (mem_rgbdata color);
-  constexpr rgbdata ()
+  T red, green, blue;
+  constexpr rgbdata_base ()
   : red (0), green (0), blue (0)
   { }
-  constexpr rgbdata (luminosity_t red1, luminosity_t green1, luminosity_t blue1)
+  constexpr rgbdata_base (T red1, T green1, T blue1)
   : red (red1), green (green1), blue (blue1)
   { }
-  rgbdata (const std::nothrow_t&)
+  template <typename U>
+  constexpr rgbdata_base (const U v[3])
+  : red (v[0]), green (v[1]), blue (v[2])
   { }
-  bool operator== (const rgbdata &other) const
+  constexpr rgbdata_base (T v)
+  : red (v), green (v), blue (v)
+  { }
+  template <typename U>
+  constexpr rgbdata_base (const rgbdata_base<U> &other)
+  : red (other.red), green (other.green), blue (other.blue)
+  { }
+  bool operator== (const rgbdata_base &other) const
   {
     return red == other.red
 	   && green == other.green
 	   && blue == other.blue;
   }
-  bool operator!= (const rgbdata &other) const
+  bool operator!= (const rgbdata_base &other) const
   {
     return !(*this == other);
   }
-  rgbdata &operator+=(const luminosity_t other)
+  rgbdata_base &operator+=(const T other)
   {
     red += other;
     green += other;
     blue += other;
     return *this;
   }
-  rgbdata &operator-=(const luminosity_t other)
+  rgbdata_base &operator-=(const T other)
   {
     red -= other;
     green -= other;
     blue -= other;
     return *this;
   }
-  rgbdata &operator*=(const luminosity_t other)
+  rgbdata_base &operator*=(const T other)
   {
     red *= other;
     green *= other;
     blue *= other;
     return *this;
   }
-  rgbdata &operator/=(const rgbdata other)
+  rgbdata_base &operator/=(const T other)
   {
-    red /= other.red;
-    green /= other.green;
-    blue /= other.blue;
-    return *this;
-  }
-  rgbdata &operator/=(const luminosity_t other)
-  {
-    luminosity_t rother = 1 / other;
+    T rother = 1 / other;
     red *= rother;
     green *= rother;
     blue *= rother;
     return *this;
   }
-  rgbdata &operator+=(const rgbdata other)
+  template <typename U>
+  rgbdata_base &operator+=(const U other[3])
   {
-    red += other.red;
-    green += other.green;
-    blue += other.blue;
+    red += (T)other[0];
+    green += (T)other[1];
+    blue += (T)other[2];
     return *this;
   }
-  rgbdata &operator-=(const rgbdata other)
+  template <typename U>
+  rgbdata_base &operator-=(const U other[3])
   {
-    red -= other.red;
-    green -= other.green;
-    blue -= other.blue;
+    red -= (T)other[0];
+    green -= (T)other[1];
+    blue -= (T)other[2];
     return *this;
   }
-  rgbdata &operator*=(const rgbdata other)
+  template <typename U>
+  rgbdata_base &operator+=(const rgbdata_base<U> &other)
   {
-    red *= other.red;
-    green *= other.green;
-    blue *= other.blue;
+    red += (T)other.red;
+    green += (T)other.green;
+    blue += (T)other.blue;
     return *this;
   }
-  luminosity_t &operator[](const int index)
+  template <typename U>
+  rgbdata_base &operator-=(const rgbdata_base<U> &other)
+  {
+    red -= (T)other.red;
+    green -= (T)other.green;
+    blue -= (T)other.blue;
+    return *this;
+  }
+  template <typename U>
+  rgbdata_base &operator*=(const rgbdata_base<U> &other)
+  {
+    red *= (T)other.red;
+    green *= (T)other.green;
+    blue *= (T)other.blue;
+    return *this;
+  }
+  template <typename U>
+  rgbdata_base &operator/=(const rgbdata_base<U> &other)
+  {
+    red /= (T)other.red;
+    green /= (T)other.green;
+    blue /= (T)other.blue;
+    return *this;
+  }
+  T &operator[](const int index)
   {
     switch (index)
     {
@@ -456,7 +484,7 @@ struct rgbdata
       default: __builtin_unreachable ();
     }
   }
-  const luminosity_t &operator[](const int index) const
+  const T &operator[](const int index) const
   {
     switch (index)
     {
@@ -466,6 +494,25 @@ struct rgbdata
       default: __builtin_unreachable ();
     }
   }
+  /* Return true if this color is almost equal to OTHER within EPSILON.  */
+  bool almost_equal_p (rgbdata_base other, T epsilon = 0.001) const
+  {
+    return (my_fabs (red - other.red) < epsilon 
+	    && my_fabs (green - other.green) < epsilon
+	    && my_fabs (blue - other.blue) < epsilon);
+  }
+};
+
+typedef rgbdata_base<double> double_rgbdata;
+
+struct rgbdata : public rgbdata_base<luminosity_t>
+{
+  using rgbdata_base<luminosity_t>::rgbdata_base;
+  inline rgbdata  (mem_rgbdata color);
+  rgbdata (const std::nothrow_t&)
+  : rgbdata_base<luminosity_t> ()
+  { }
+
   inline rgbdata
   clamp (luminosity_t min = 0, luminosity_t max = 1)
   {
@@ -484,7 +531,7 @@ struct rgbdata
   inline rgbdata
   sgngamma (luminosity_t g)
   {
-    rgbdata ret = {apply_gamma (fabs (red), g), apply_gamma (fabs (green), g), apply_gamma (fabs (blue), g)};
+    rgbdata ret = {apply_gamma (my_fabs (red), g), apply_gamma (my_fabs (green), g), apply_gamma (my_fabs (blue), g)};
     if (red < 0)
       ret.red = -ret.red;
     if (green < 0)
@@ -501,56 +548,58 @@ struct rgbdata
     return ret;
   }
   DLL_PUBLIC void print (FILE *f);
-  /* Return true if this color is almost equal to OTHER within EPSILON.  */
-  bool almost_equal_p (rgbdata other, luminosity_t epsilon = 0.001) const
-  {
-    return (fabs (red - other.red) < epsilon 
-	    && fabs (green - other.green) < epsilon
-	    && fabs (blue - other.blue) < epsilon);
-  }
 };
 /* Datastructure used to store information about dye luminosities.  */
-struct int_rgbdata
-{
-  int red, green, blue;
-};
-
-inline rgbdata operator+(rgbdata lhs, luminosity_t rhs)
+/* Global operators for rgbdata_base.  */
+template <typename T, typename U>
+inline rgbdata_base<T> operator+ (rgbdata_base<T> lhs, const rgbdata_base<U> &rhs)
 {
   lhs += rhs;
   return lhs;
 }
-inline rgbdata operator-(rgbdata lhs, luminosity_t rhs)
+template <typename T, typename U>
+inline rgbdata_base<T> operator- (rgbdata_base<T> lhs, const rgbdata_base<U> &rhs)
 {
   lhs -= rhs;
   return lhs;
 }
-inline rgbdata operator*(rgbdata lhs, luminosity_t rhs)
+template <typename T, typename U>
+inline rgbdata_base<T> operator* (rgbdata_base<T> lhs, const rgbdata_base<U> &rhs)
 {
   lhs *= rhs;
   return lhs;
 }
-inline rgbdata operator/(rgbdata lhs, luminosity_t rhs)
+template <typename T, typename U>
+inline rgbdata_base<T> operator/ (rgbdata_base<T> lhs, const rgbdata_base<U> &rhs)
 {
   lhs /= rhs;
   return lhs;
 }
-inline rgbdata operator+(rgbdata lhs, rgbdata rhs)
-{
-  lhs += rhs;
-  return lhs;
-}
-inline rgbdata operator-(rgbdata lhs, rgbdata rhs)
-{
-  lhs -= rhs;
-  return lhs;
-}
-inline rgbdata operator*(rgbdata lhs, rgbdata rhs)
-{
-  lhs *= rhs;
-  return lhs;
-}
 
+inline rgbdata operator+ (rgbdata lhs, luminosity_t rhs) { lhs += rhs; return lhs; }
+inline rgbdata operator- (rgbdata lhs, luminosity_t rhs) { lhs -= rhs; return lhs; }
+inline rgbdata operator* (rgbdata lhs, luminosity_t rhs) { lhs *= rhs; return lhs; }
+inline rgbdata operator/ (rgbdata lhs, luminosity_t rhs) { lhs /= rhs; return lhs; }
+
+inline rgbdata operator+ (rgbdata lhs, double rhs) { lhs += (luminosity_t)rhs; return lhs; }
+inline rgbdata operator- (rgbdata lhs, double rhs) { lhs -= (luminosity_t)rhs; return lhs; }
+inline rgbdata operator* (rgbdata lhs, double rhs) { lhs *= (luminosity_t)rhs; return lhs; }
+inline rgbdata operator/ (rgbdata lhs, double rhs) { lhs /= (luminosity_t)rhs; return lhs; }
+
+inline double_rgbdata operator+ (double_rgbdata lhs, double rhs) { lhs += rhs; return lhs; }
+inline double_rgbdata operator- (double_rgbdata lhs, double rhs) { lhs -= rhs; return lhs; }
+inline double_rgbdata operator* (double_rgbdata lhs, double rhs) { lhs *= rhs; return lhs; }
+inline double_rgbdata operator/ (double_rgbdata lhs, double rhs) { lhs /= rhs; return lhs; }
+
+inline rgbdata operator+ (rgbdata lhs, rgbdata rhs) { lhs += rhs; return lhs; }
+inline rgbdata operator- (rgbdata lhs, rgbdata rhs) { lhs -= rhs; return lhs; }
+inline rgbdata operator* (rgbdata lhs, rgbdata rhs) { lhs *= rhs; return lhs; }
+inline rgbdata operator/ (rgbdata lhs, rgbdata rhs) { lhs /= rhs; return lhs; }
+
+struct int_rgbdata
+{
+  int red, green, blue;
+};
 inline luminosity_t
 invert_gamma (luminosity_t val, luminosity_t gamma)
 {

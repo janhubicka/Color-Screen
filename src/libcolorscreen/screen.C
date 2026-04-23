@@ -1013,7 +1013,7 @@ initialize_with_1D_fft_fast (screen &out_scr, const screen &scr,
           {
             out_scr.mult[y][x][c]
                 = out[y * screen::size + x]
-                  * ((luminosity_t)1 / (screen::size * screen::size));
+                  * (1.0 / ((double)screen::size * (double)screen::size));
             // printf ("%f\n", out[y * screen::size + x]);
 #if 0
             if (out_scr.mult[y][x][c] < 0)
@@ -1288,16 +1288,15 @@ screen::sum_almost_equal_p (const screen &scr, rgbdata *delta_ret,
                             luminosity_t maxdelta) const
 {
   rgbdata sum1, sum2, delta;
+  double_rgbdata sum1_d, sum2_d;
   for (int y = 0; y < size; y++)
     for (int x = 0; x < size; x++)
       {
-        sum1[0] += scr.mult[y][x][0];
-        sum1[1] += scr.mult[y][x][1];
-        sum1[2] += scr.mult[y][x][2];
-        sum2[0] += mult[y][x][0];
-        sum2[1] += mult[y][x][1];
-        sum2[2] += mult[y][x][2];
+        sum1_d += scr.mult[y][x];
+        sum2_d += mult[y][x];
       }
+  sum1 = sum1_d;
+  sum2 = sum2_d;
   delta = sum1 - sum2;
   if (delta_ret)
     *delta_ret = delta;
@@ -1665,8 +1664,8 @@ screen::save_tiff (const char *filename, bool normalize, int tiles) const
       for (int x = 0; x < size; x++)
         {
           max.red = std::max (mult[y][x][0], max.red);
-          max.green = std::max (mult[y][x][0], max.green);
-          max.blue = std::max (mult[y][x][0], max.blue);
+          max.green = std::max (mult[y][x][1], max.green);
+          max.blue = std::max (mult[y][x][2], max.blue);
         }
   p.filename = filename;
   p.width = size * tiles;
@@ -1720,8 +1719,8 @@ screen::get_image (bool normalize, int tiles) const
       for (int x = 0; x < size; x++)
         {
           max.red = std::max (mult[y][x][0], max.red);
-          max.green = std::max (mult[y][x][0], max.green);
-          max.blue = std::max (mult[y][x][0], max.blue);
+          max.green = std::max (mult[y][x][1], max.green);
+          max.blue = std::max (mult[y][x][2], max.blue);
         }
   if (!img->allocate (size * tiles, size * tiles))
 	  return NULL;
@@ -1952,15 +1951,13 @@ screen::clamp ()
 rgbdata
 screen::patch_proportions () const
 {
-  rgbdata sum = {0, 0, 0};
+  rgbdata sum;
+  double_rgbdata sum_d;
   for (int yy = 0; yy < size; yy++)
     for (int xx = 0; xx < size; xx++)
-      {
-        sum.red += mult[yy][xx][0]; 
-        sum.green += mult[yy][xx][1]; 
-        sum.blue += mult[yy][xx][2];
-      }
-  luminosity_t s = sum.red + sum.green + sum.blue;
+      sum_d += mult[yy][xx];
+  sum = sum_d;
+  double s = sum.red + sum.green + sum.blue;
   sum /= s;
   return sum;
 }

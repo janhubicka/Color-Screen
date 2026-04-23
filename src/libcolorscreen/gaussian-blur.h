@@ -33,7 +33,9 @@ public:
       else
 	{
 	  int    i;
-	  luminosity_t sum = 0;
+	  /* Use double for normalization to keep tonality as accurate as
+	     possible.  */
+	  double sum = 0;
 	  int    half_clen = clen / 2;
 
 	  for (i = 0; i < clen; i++)
@@ -42,7 +44,7 @@ public:
 	      sum += cmatrix_p [i];
 	    }
 
-	  luminosity_t inv = 1 / sum;
+	  double inv = 1 / sum;
 
 	  for (i = 0; i < clen; i++)
 	    cmatrix_p [i] *= inv;

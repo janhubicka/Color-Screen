@@ -1993,7 +1993,8 @@ public:
   determine_colors_using_least_squares (coord_t *v, rgbdata *red,
                                         rgbdata *green, rgbdata *blue)
   {
-    coord_t sqsum = 0;
+    /* Use double to not cummulate errors.  */
+    double sqsum = 0;
 
     if (!least_squares_initialized)
       abort ();
