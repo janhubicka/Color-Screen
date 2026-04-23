@@ -311,7 +311,7 @@ point_t::modf (int_point_t *val) const
 }
 
 /* Hold coordinates of a rectangular tile within a bigger image.  */
-template<typename T>
+template<typename T,typename P>
 class image_area_base
 {
 public:
@@ -326,6 +326,12 @@ public:
   constexpr image_area_base (T nx, T ny, T nwidth, T nheight)
   : x (nx), y (ny), width (nwidth), height (nheight)
   { }
+  constexpr image_area_base (P topleft, P bottomright)
+  : x (topleft.x), y (topleft.y), width (bottomright.x-topleft.x), height (bottomright.y-topleft.y)
+  { }
+  constexpr image_area_base (P topleft, T nwidth, T nheight)
+  : x (topleft.x), y (topleft.y), width (nwidth), height (nheight)
+  { }
 
   /* Return true if the area is empty.  */
   pure_attr inline constexpr bool
@@ -335,10 +341,10 @@ public:
   }
 
   /* Return intersection of this area and OTHER.  */
-  pure_attr inline constexpr image_area_base<T>
+  pure_attr inline constexpr image_area_base<T, P>
   intersect (image_area_base other) const
   {
-    image_area_base<T> ret (x, y, width, height);
+    image_area_base<T,P> ret (x, y, width, height);
     if (x < other.x)
       {
 	ret.width -= other.x - x;
@@ -364,10 +370,35 @@ public:
   {
     return x == other.x && y == other.y && width == other.width && height == other.height;
   }
+
+  constexpr T xshift ()
+  {
+    return -x;
+  }
+  constexpr T yshift ()
+  {
+    return -x;
+  }
+  constexpr P top_left ()
+  {
+    return {x, y};
+  }
+  constexpr P top_right ()
+  {
+    return {x + width, y};
+  }
+  constexpr P bottom_left ()
+  {
+    return {x, y};
+  }
+  constexpr P bottom_right ()
+  {
+    return {x + width, y};
+  }
 };
 /* Optinally hold area of an image. */
-template<typename T>
-class optional_image_area_base : public image_area_base<T>
+template<typename T, typename P>
+class optional_image_area_base : public image_area_base<T,P>
 {
 public:
   bool set;
@@ -377,12 +408,12 @@ public:
   bool
   operator== (const optional_image_area_base &other) const
   {
-    return (image_area_base<T>::operator==(other) && set == other.set);
+    return (image_area_base<T,P>::operator==(other) && set == other.set);
   }
 };
 
-typedef image_area_base<int> int_image_area;
-typedef optional_image_area_base<int> int_optional_image_area;
+typedef image_area_base<int, int_point_t> int_image_area;
+typedef optional_image_area_base<int, int_point_t> int_optional_image_area;
 
 /* Base class for geometry specifications for analyzers of regular screens.  */
 struct base_geometry

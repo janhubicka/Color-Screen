@@ -372,7 +372,7 @@ struct rgbdata
   luminosity_t red, green, blue;
   inline rgbdata  (mem_rgbdata color);
   constexpr rgbdata ()
-  : red (-1), green (-1), blue (-1)
+  : red (0), green (0), blue (0)
   { }
   constexpr rgbdata (luminosity_t red1, luminosity_t green1, luminosity_t blue1)
   : red (red1), green (green1), blue (blue1)
@@ -508,6 +508,11 @@ struct rgbdata
 	    && fabs (green - other.green) < epsilon
 	    && fabs (blue - other.blue) < epsilon);
   }
+};
+/* Datastructure used to store information about dye luminosities.  */
+struct int_rgbdata
+{
+  int red, green, blue;
 };
 
 inline rgbdata operator+(rgbdata lhs, luminosity_t rhs)
