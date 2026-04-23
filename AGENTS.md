@@ -52,7 +52,7 @@ make install-strip
 The project includes a comprehensive testsuite covering `libcolorscreen` features. Tests are invoked using:
 
 ```bash
-make check
+make -j$(nproc) check
 ```
 
 - **Unit Tests**: Implemented in `src/libcolorscreen/unittests.C`.

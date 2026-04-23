@@ -1,4 +1,8 @@
-#include <math.h>
+/* Mapping between screen and scan coordinates.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of ColorScreen.  */
+
+#include <cmath>
 #include <algorithm>
 #include "include/colorscreen.h"
 #include "include/scr-to-img.h"
@@ -15,20 +19,20 @@ const render_parameters::capture_type_property render_parameters::capture_proper
 namespace
 {
 
-
-
+/* Matrix performing perspective transformation including tilts and shifting
+   to a given DISTANCE.  */
 class rotation_distance_matrix : public matrix4x4<coord_t>
 {
 public:
-  rotation_distance_matrix (double distance, double tiltx, double tilty,
+  rotation_distance_matrix (coord_t distance, coord_t tilt_x, coord_t tilt_y,
                             enum scanner_type type)
   {
-    double radx = (double)tiltx * M_PI / 180;
-    double rady = (double)tilty * M_PI / 180;
-    double sy = sin (radx); /*s*/
-    double cy = cos (radx); /*c*/
-    double sx = sin (rady); /*t*/
-    double cx = cos (rady); /*d*/
+    const coord_t rad_x = tilt_x * (coord_t)M_PI / 180;
+    const coord_t rad_y = tilt_y * (coord_t)M_PI / 180;
+    const coord_t sy = std::sin (rad_x); /*s*/
+    const coord_t cy = std::cos (rad_x); /*c*/
+    const coord_t sx = std::sin (rad_y); /*t*/
+    const coord_t cx = std::cos (rad_y); /*d*/
     /* Rotation matrix is the following:
        cy sy*sx  cx*sy
        0  cx    -sx
@@ -62,6 +66,7 @@ public:
 class translation_3x3matrix : public matrix3x3<coord_t>
 {
 public:
+  /* Initialize translation to CENTER.  */
   translation_3x3matrix (point_t center)
   {
     (*this)(0, 2) = center.x;
@@ -73,6 +78,7 @@ public:
 class change_of_basis_3x3matrix : public matrix3x3<coord_t>
 {
 public:
+  /* Initialize change of basis to C1 and C2.  */
   change_of_basis_3x3matrix (point_t c1, point_t c2)
   {
     (*this)(0, 0) = c1.x;
@@ -82,14 +88,16 @@ public:
   }
 };
 
+/* Rotate by given angle.  */
 class rotation_2x2matrix : public matrix2x2<coord_t>
 {
 public:
-  rotation_2x2matrix (double rotation)
+  /* Initialize rotation by ROTATION degrees.  */
+  rotation_2x2matrix (coord_t rotation)
   {
-    rotation *= M_PI / 180;
-    double s = sin (rotation);
-    double c = cos (rotation);
+    rotation *= (coord_t)M_PI / 180;
+    const coord_t s = std::sin (rotation);
+    const coord_t c = std::cos (rotation);
     (*this)(0, 0) = c; (*this)(0, 1) = -s;
     (*this)(1, 0) = s; (*this)(1, 1) = c;
   }
@@ -97,6 +105,7 @@ public:
 
 }
 
+/* Update the mapping for new linear parameters FINAL_RATIO and FINAL_ANGLE.  */
 void
 scr_to_img::update_scr_to_final_parameters (coord_t final_ratio,
                                             coord_t final_angle)
@@ -146,7 +155,7 @@ scr_to_img::update_scr_to_final_parameters (coord_t final_ratio,
       point_t z = to_img ({ (coord_t)0, (coord_t)0 });
       point_t d = to_img ({ (coord_t)1, (coord_t)0 }) - z;
       coord_t angle
-          = -asin (d.x / my_sqrt (d.x * d.x + d.y * d.y)) * 180 / M_PI;
+          = -std::asin (d.x / my_sqrt (d.x * d.x + d.y * d.y)) * 180 / (coord_t)M_PI;
       // angle += 23 - 99 + 0.77;
       for (int b = 0; b < 360; b += 90)
         {
@@ -184,6 +193,7 @@ scr_to_img::update_scr_to_final_parameters (coord_t final_ratio,
   m_scr_to_final_matrix = rotation_2x2matrix (rotate) * fm;
   m_final_to_scr_matrix = m_scr_to_final_matrix.invert ();
 }
+/* Initialize matrices from mapping parameters.  */
 void
 scr_to_img::initialize ()
 {
@@ -292,14 +302,16 @@ scr_to_img::initialize ()
   update_scr_to_final_parameters (m_param.final_ratio, m_param.final_angle);
 }
 
+/* Set parameters of the early correction for image of dimensions WIDTH x HEIGHT.
+   Return true on success.  */
 bool
 scr_to_img::set_parameters_for_early_correction (
     const scr_to_img_parameters &param,
     int width, int height)
 {
-  m_param.copy_from_cheap (param);
+  m_param = param;
   
-  m_inverted_projection_distance = 1 / m_param.projection_distance;
+  m_inverted_projection_distance = (coord_t)1 / m_param.projection_distance;
   m_nwarnings = 0;
   assert (!debug || (width > 0 && height > 0));
 
@@ -324,6 +336,9 @@ scr_to_img::set_parameters_for_early_correction (
   return true;
 }
 
+/* Set all parameters for image of dimensions WIDTH x HEIGHT.
+   ROTATION_ADJUSTMENT can be used to adjust the rotation.
+   Return true on success.  */
 bool
 scr_to_img::set_parameters (const scr_to_img_parameters &param,
                             int width, int height, coord_t rotation_adjustment)
@@ -349,12 +364,11 @@ scr_to_img::update_linear_parameters (scr_to_img_parameters &param)
 /* Determine rectangular section of the screen to which the whole image
    with dimension img_width x img_height fits.
 
-   The section is having dimensions scr_width x scr_height and will
-   start at position (-scr_xshift, -scr_yshift).  */
-void
-scr_to_img::get_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2,
-                       int *scr_xshift, int *scr_yshift, int *scr_width,
-                       int *scr_height)
+   The section is returned as an int_image_area where x/y is the minimum
+   screen coordinate and width/height cover all screen coordinates mapped
+   from the image.  */
+int_image_area
+scr_to_img::get_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) const noexcept
 {
   coord_t minx, miny, maxx, maxy;
   if (!m_param.mesh_trans)
@@ -409,48 +423,35 @@ scr_to_img::get_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2,
     }
 
   /* Determine the coordinates.  */
-  *scr_xshift = -minx - 1;
-  *scr_yshift = -miny - 1;
-  *scr_width = maxx - minx + 2;
-  *scr_height = maxy - miny + 2;
+  return int_image_area ((int)minx + 1, (int)miny + 1, (int)(maxx - minx) + 2, (int)(maxy - miny) + 2);
 }
 /* Determine rectangular section of the screen to which the whole image
-   with dimension img_width x img_height fits.
-
-   The section is having dimensions scr_width x scr_height and will
-   start at position (-scr_xshift, -scr_yshift).  */
-void
-scr_to_img::get_range (int img_width, int img_height, int *scr_xshift,
-                       int *scr_yshift, int *scr_width, int *scr_height)
+   with dimension img_width x img_height fits.  */
+int_image_area
+scr_to_img::get_range (int img_width, int img_height) const noexcept
 {
-  get_range (0.0, 0.0, (coord_t)img_width, (coord_t)img_height, scr_xshift,
-             scr_yshift, scr_width, scr_height);
+  return get_range (0.0, 0.0, (coord_t)img_width, (coord_t)img_height);
 }
-/* Determine rectangular section of the screen to which the whole image
-   with dimension img_width x img_height fits.
-
-   The section is having dimensions scr_width x scr_height and will
-   start at position (-scr_xshift, -scr_yshift).  */
-void
-scr_to_img::get_final_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2,
-                             int *final_xshift, int *final_yshift,
-                             int *final_width, int *final_height)
+/* Determine rectangular section of the final coordinates to which image section
+   from (X1, Y1) to (X2, Y2) fits.  */
+int_image_area
+scr_to_img::get_final_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) const noexcept
 {
   coord_t minx, miny, maxx, maxy;
   /* Do not use mesh.get_range since it is way too conservative.  */
   if (!m_param.mesh_trans)
     {
       /* Compute all the corners.  */
-      point_t ul = img_to_final ({ x1, y1 });
-      point_t ur = img_to_final ({ x2, y1 });
-      point_t dl = img_to_final ({ x1, y2 });
-      point_t dr = img_to_final ({ x2, y2 });
+      const point_t ul = img_to_final ({ x1, y1 });
+      const point_t ur = img_to_final ({ x2, y1 });
+      const point_t dl = img_to_final ({ x1, y2 });
+      const point_t dr = img_to_final ({ x2, y2 });
 
       /* Find extremas.  */
-      minx = std::min (std::min (std::min (ul.x, ur.x), dl.x), dr.x);
-      miny = std::min (std::min (std::min (ul.y, ur.y), dl.y), dr.y);
-      maxx = std::max (std::max (std::max (ul.x, ur.x), dl.x), dr.x);
-      maxy = std::max (std::max (std::max (ul.y, ur.y), dl.y), dr.y);
+      minx = std::min ({ul.x, ur.x, dl.x, dr.x});
+      miny = std::min ({ul.y, ur.y, dl.y, dr.y});
+      maxx = std::max ({ul.x, ur.x, dl.x, dr.x});
+      maxy = std::max ({ul.y, ur.y, dl.y, dr.y});
 
       /* If we correct lens distortion the corners may not be extremes.  */
       if (!m_lens_correction.is_noop () || m_param.tilt_x || m_param.tilt_y
@@ -487,37 +488,33 @@ scr_to_img::get_final_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2,
                                    &minx, &maxx, &miny, &maxy);
 
   /* Determine the coordinates.  */
-  *final_xshift = -floor (minx);
-  *final_yshift = -floor (miny);
-  *final_width = ceil (maxx - floor (minx));
-  if (*final_width <= 0)
-    *final_width = 1;
-  *final_height = ceil (maxy - floor (miny));
-  if (*final_height <= 0)
-    *final_height = 1;
+  const int min_x = (int)my_floor (minx);
+  const int min_y = (int)my_floor (miny);
+  int width = (int)my_ceil (maxx - (coord_t)min_x);
+  if (width <= 0)
+    width = 1;
+  int height = (int)my_ceil (maxy - (coord_t)min_y);
+  if (height <= 0)
+    height = 1;
+  return int_image_area (min_x, min_y, width, height);
 }
 
 /* Determine rectangular section of the final coordinates to which the whole
-   image with dimension img_width x img_height fits.
-
-   The section is having dimensions scr_width x scr_height and will
-   start at position (-scr_xshift, -scr_yshift).  */
-void
-scr_to_img::get_final_range (int img_width, int img_height, int *final_xshift,
-                             int *final_yshift, int *final_width,
-                             int *final_height)
+   image with dimension img_width x img_height fits.  */
+int_image_area
+scr_to_img::get_final_range (int img_width, int img_height) const noexcept
 {
-  get_final_range (0, 0, (coord_t)img_width, (coord_t)img_height, final_xshift,
-                   final_yshift, final_width, final_height);
+  return get_final_range (0, 0, (coord_t)img_width, (coord_t)img_height);
 }
 
+/* Dump mapping state to file F.  */
 void
-scr_to_img::dump (FILE *f)
+scr_to_img::dump (FILE *f) const
 {
   fprintf (f, "scr to img dump:\n");
   if (m_param.mesh_trans)
     fprintf (f, "have mesh trans\n");
-  save_csp (f, &m_param, NULL, NULL, NULL);
+  save_csp (f, const_cast<scr_to_img_parameters *> (&m_param), NULL, NULL, NULL);
 }
 
 /* Estimate DPI for given pixel size.  */

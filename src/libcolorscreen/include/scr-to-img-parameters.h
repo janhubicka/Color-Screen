@@ -161,31 +161,6 @@ struct scr_to_img_parameters
 
   lens_warp_correction_parameters lens_correction;
 
-  scr_to_img_parameters () = default;
-  scr_to_img_parameters (const scr_to_img_parameters &from) = default;
-  scr_to_img_parameters &
-  operator= (const scr_to_img_parameters &other)
-  {
-    copy_from_cheap (other);
-    return *this;
-  }
-  void
-  copy_from_cheap (const scr_to_img_parameters &from)
-  {
-    center = from.center;
-    coordinate1 = from.coordinate1;
-    coordinate2 = from.coordinate2;
-    projection_distance = from.projection_distance;
-    tilt_x = from.tilt_x;
-    tilt_y = from.tilt_y;
-    final_rotation = from.final_rotation;
-    final_angle = from.final_angle;
-    final_ratio = from.final_ratio;
-    type = from.type;
-    scanner_type = from.scanner_type;
-    mesh_trans = from.mesh_trans;
-    lens_correction = from.lens_correction;
-  }
   bool
   operator== (const scr_to_img_parameters &other) const
   {

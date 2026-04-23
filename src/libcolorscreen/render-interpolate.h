@@ -116,9 +116,7 @@ public:
   }
   bool precompute_all (progress_info *progress)
   {
-    int xshift, yshift, width, height;
-    m_scr_to_img.get_range (0, 0, m_img.width, m_img.height, &xshift, &yshift, &width, &height);
-    return precompute ({{-xshift, -yshift}, {-xshift + width, -yshift + height}}, progress);
+    return precompute (m_scr_to_img.get_range (0, 0, (coord_t)m_img.width, (coord_t)m_img.height), progress);
   }
   bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress)
   {
@@ -127,9 +125,7 @@ public:
 
   bool precompute_img_range (int_image_area area, progress_info *progress) 
   {
-     int xshift, yshift, width, height;
-     m_scr_to_img.get_range (area.x, area.y, area.x + area.width, area.y + area.height, &xshift, &yshift, &width, &height);
-     return precompute (int_image_area (-xshift, -yshift, width, height), progress);
+     return precompute (m_scr_to_img.get_range (area.x, area.y, area.x + area.width, area.y + area.height), progress);
 
   }
   pure_attr rgbdata sample_pixel_scr (point_t p) const;

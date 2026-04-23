@@ -103,7 +103,7 @@ struct lens_warp_correction
 
   /* Return true if lens correction is a no-op.  */
   pure_attr bool
-  is_noop ()
+  is_noop () const
   {
     return m_noop;
   }

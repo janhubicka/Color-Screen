@@ -537,14 +537,13 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
 {
   if (sparam.n_points () < 10)
     return NULL;
-  int xshift, yshift, width, height;
   int step = 10;
   if (param->mesh_trans)
     abort ();
   scr_to_img map;
   map.set_parameters (*param, img_data);
-  map.get_range (img_data.width, img_data.height, &xshift, &yshift, &width,
-                 &height);
+  int_image_area r1 = map.get_range (img_data.width, img_data.height);
+  int xshift = r1.xshift (), yshift = r1.yshift (), width = r1.width, height = r1.height;
   width = (width + step - 1) / step;
   height = (height + step - 1) / step;
   if (progress)
@@ -677,14 +676,13 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
              solver_parameters &sparam2, screen_map &smap,
              progress_info *progress)
 {
-  int xshift, yshift, width, height;
   const int step = 10;
   if (param->mesh_trans)
     abort ();
   scr_to_img map;
   map.set_parameters (*param, img_data);
-  map.get_range (img_data.width, img_data.height, &xshift, &yshift, &width,
-                 &height);
+  int_image_area r2 = map.get_range (img_data.width, img_data.height);
+  int xshift = r2.xshift (), yshift = r2.yshift (), width = r2.width, height = r2.height;
   width = (width + step - 1) / step;
   height = (height + step - 1) / step;
   if (progress)

@@ -50,11 +50,14 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 {
   const char *error = NULL;
   scr_to_img map;
-  int final_xshift = 0, final_yshift = 0, final_width = img.width, final_height = img.height;
+  int final_xshift = 0, final_yshift = 0, final_width = img.width,
+      final_height = img.height;
   if (p.geometry == render_to_file_params::screen_geometry)
     {
       map.set_parameters (param, img);
-      map.get_final_range (img.width, img.height, &final_xshift, &final_yshift, &final_width, &final_height);
+      int_image_area range = map.get_final_range (img.width, img.height);
+      final_xshift = range.xshift (), final_yshift = range.yshift (),
+      final_width = range.width, final_height = range.height;
     }
   tiff_writer_params tp;
   tp.parallel = true;

@@ -1273,8 +1273,9 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx,
   coord_t max_distance = (screen_xsize + screen_ysize) * 0.1;
   int nfound = 1;
 
-  int xshift, yshift, width, height;
-  scr_map.get_range (img.width, img.height, &xshift, &yshift, &width, &height);
+  int_image_area range = scr_map.get_range (img.width, img.height);
+  int xshift = range.xshift (), yshift = range.yshift (), width = range.width,
+      height = range.height;
 #if 0
   if (width <= xshift)
     width = xshift + 1;

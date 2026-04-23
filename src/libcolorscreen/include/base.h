@@ -68,6 +68,18 @@ my_floor (float x)
   return floorf (x);
 }
 
+/* Ceil value X.  */
+static inline double
+my_ceil (double x)
+{
+  return ceil (x);
+}
+static inline float
+my_ceil (float x)
+{
+  return ceilf (x);
+}
+
 using coord_t = double;
 struct int_point_t;
 
@@ -377,7 +389,7 @@ public:
   }
   constexpr T yshift ()
   {
-    return -x;
+    return -y;
   }
   constexpr P top_left ()
   {

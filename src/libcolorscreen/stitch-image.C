@@ -561,7 +561,8 @@ stitch_image::update_scr_to_final_parameters (coord_t ratio, coord_t anlge)
 {
   scr_to_img_map.update_scr_to_final_parameters (ratio, angle);
   basic_scr_to_img_map.update_scr_to_final_parameters (ratio, angle);
-  scr_to_img_map.get_final_range (img_width, img_height, &final_xshift, &final_yshift, &final_width, &final_height);
+  int_image_area r = scr_to_img_map.get_final_range (img_width, img_height);
+  final_xshift = r.xshift (), final_yshift = r.yshift (), final_width = r.width, final_height = r.height;
 }
 
 bool
@@ -741,7 +742,8 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
   final_width = render.get_final_width ();
   final_height = render.get_final_height ();
 
-  scr_to_img_map.get_range (img->width, img->height, &xshift, &yshift, &width, &height);
+  int_image_area r = scr_to_img_map.get_range (img->width, img->height);
+  xshift = r.xshift (), yshift = r.yshift (), width = r.width, height = r.height;
   if (!m_prj->params.load_registration)
     {
       screen_detected_patches =  std::make_unique<bitmap_2d> (width, height);

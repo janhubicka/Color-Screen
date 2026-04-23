@@ -199,9 +199,11 @@ public:
   compute_final_range ()
   {
     if (m_final_width < 0)
-      m_scr_to_img.get_final_range (m_img.width, m_img.height, &m_final_xshift,
-                                    &m_final_yshift, &m_final_width,
-                                    &m_final_height);
+      {
+        int_image_area range = m_scr_to_img.get_final_range (m_img.width, m_img.height);
+        m_final_xshift = range.xshift (), m_final_yshift = range.yshift (),
+        m_final_width = range.width, m_final_height = range.height;
+      }
   }
   /* This returns screen coordinate width of rendered output.  */
   int

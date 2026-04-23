@@ -233,9 +233,8 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
   int yshift = -ymin;
   int width = xmax - xmin;
   int height = ymax - ymin;
-  int xshift2, yshift2, width2, height2;
-  m_scr_to_img.get_range (0, 0, m_img.width, m_img.height, &xshift2, &yshift2,
-                          &width2, &height2);
+  int_image_area r2 = m_scr_to_img.get_range (0, 0, m_img.width, m_img.height);
+  int xshift2 = r2.xshift (), yshift2 = r2.yshift (), width2 = r2.width, height2 = r2.height;
   if (xshift > xshift2)
     width -= xshift - xshift2, xshift = xshift2;
   if (yshift > yshift2)

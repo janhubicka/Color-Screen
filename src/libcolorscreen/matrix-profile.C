@@ -443,8 +443,8 @@ optimize_color_model_colors_collect (scr_to_img_parameters *param,
       for (int y = py - range; y <= py + range; y++)
         for (int x = px - range; x <= px + range; x++)
           {
-            target += r.sample_pixel_scr ({x, y});
-            color += r2.sample_pixel_scr ({x, y});
+            target += r.sample_pixel_scr ({(coord_t)x, (coord_t)y});
+            color += r2.sample_pixel_scr ({(coord_t)x, (coord_t)y});
           }
       target *= (1 / (luminosity_t)((2 * range + 1) * (2 * range + 1)));
       color *= (1 / (luminosity_t)((2 * range + 1) * (2 * range + 1)));
