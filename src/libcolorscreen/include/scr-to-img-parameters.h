@@ -100,12 +100,11 @@ DLL_PUBLIC extern const property_t scanner_type_names[max_scanner_type];
 
    In order to turn scan coordinates to screen the following transformations
    are performed
-     1) motor correction
-     2) translation to move lens_center to (0,0)
-     3) lens correction
-     4) perspective correction (with tilt applied)
-     5) translation to move center to (0,0)
-     6) change of basis so center+coordinate1 becomes (1.0) and
+     1) translation to move lens_center to (0,0)
+     2) lens correction
+     3) perspective correction (with tilt applied)
+     4) translation to move center to (0,0)
+     5) change of basis so center+coordinate1 becomes (1.0) and
    center+coordinate2 becomes (0,1)
 */
 
@@ -134,10 +133,6 @@ struct scr_to_img_parameters
   /* Ratio of the X and Y axis in the final coordinates.  */
   coord_t final_ratio;
 
-  /* Stepping motor correction is described by a spline.  */
-  coord_t *motor_correction_x, *motor_correction_y;
-  int n_motor_corrections;
-
   std::shared_ptr<mesh> mesh_trans;
 
   enum scr_type type;
@@ -150,8 +145,7 @@ struct scr_to_img_parameters
         coordinate1{ (coord_t)1, (coord_t)0 },
         coordinate2{ (coord_t)0, (coord_t)1 }, projection_distance (1),
         tilt_x (0), tilt_y (0), final_rotation (0), final_angle (90),
-        final_ratio (1), motor_correction_x (NULL), motor_correction_y (NULL),
-        n_motor_corrections (0), mesh_trans (NULL), type (Random),
+        final_ratio (1), mesh_trans (NULL), type (Random),
         scanner_type (fixed_lens), lens_correction ()
   {
   }
@@ -160,46 +154,17 @@ struct scr_to_img_parameters
         projection_distance (from.projection_distance), tilt_x (from.tilt_x),
         tilt_y (from.tilt_y), final_rotation (from.final_rotation),
         final_angle (from.final_angle), final_ratio (from.final_ratio),
-        motor_correction_x (NULL), motor_correction_y (NULL),
-        n_motor_corrections (from.n_motor_corrections),
         mesh_trans (from.mesh_trans), type (from.type),
         scanner_type (from.scanner_type),
         lens_correction (from.lens_correction)
   {
-    if (n_motor_corrections)
-      {
-        motor_correction_x
-            = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
-        motor_correction_y
-            = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
-        memcpy (motor_correction_x, from.motor_correction_x,
-                n_motor_corrections * sizeof (coord_t));
-        memcpy (motor_correction_y, from.motor_correction_y,
-                n_motor_corrections * sizeof (coord_t));
-      }
   }
   scr_to_img_parameters &
   operator= (const scr_to_img_parameters &other)
   {
-    free (motor_correction_x);
-    free (motor_correction_y);
-    n_motor_corrections = 0;
     copy_from_cheap (other);
-    n_motor_corrections = other.n_motor_corrections;
-    if (n_motor_corrections)
-      {
-	motor_correction_x
-	    = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
-	motor_correction_y
-	    = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
-	memcpy (motor_correction_x, other.motor_correction_x,
-		n_motor_corrections * sizeof (coord_t));
-	memcpy (motor_correction_y, other.motor_correction_y,
-		n_motor_corrections * sizeof (coord_t));
-      }
     return *this;
   }
-  /* Copy everything except for motor corrections.  */
   void
   copy_from_cheap (const scr_to_img_parameters &from)
   {
@@ -216,23 +181,10 @@ struct scr_to_img_parameters
     scanner_type = from.scanner_type;
     mesh_trans = from.mesh_trans;
     lens_correction = from.lens_correction;
-    if (n_motor_corrections)
-      abort ();
-  }
-  ~scr_to_img_parameters ()
-  {
-    free (motor_correction_x);
-    free (motor_correction_y);
   }
   bool
   operator== (const scr_to_img_parameters &other) const
   {
-    if (n_motor_corrections != other.n_motor_corrections)
-      return false;
-    for (int i = 0; i < n_motor_corrections; i++)
-      if (motor_correction_x[i] != other.motor_correction_x[i]
-          || motor_correction_y[i] != other.motor_correction_y[i])
-        return false;
     return center == other.center 
            && coordinate1 == other.coordinate1
            && coordinate2 == other.coordinate2
@@ -261,39 +213,6 @@ struct scr_to_img_parameters
   operator!= (const scr_to_img_parameters &other) const
   {
     return !(*this == other);
-  }
-  int
-  add_motor_correction_point (coord_t x, coord_t y)
-  {
-    int p = 0;
-
-    motor_correction_x
-        = (coord_t *)realloc ((void *)motor_correction_x,
-                              (n_motor_corrections + 1) * sizeof (coord_t));
-    motor_correction_y
-        = (coord_t *)realloc ((void *)motor_correction_y,
-                              (n_motor_corrections + 1) * sizeof (coord_t));
-    for (p = n_motor_corrections; p > 0 && motor_correction_x[p - 1] > x; p--)
-      ;
-    for (int p2 = n_motor_corrections; p2 > p; p2--)
-      {
-        motor_correction_x[p2] = motor_correction_x[p2 - 1];
-        motor_correction_y[p2] = motor_correction_y[p2 - 1];
-      }
-    motor_correction_x[p] = x;
-    motor_correction_y[p] = y;
-    n_motor_corrections++;
-    return p;
-  }
-  void
-  remove_motor_correction_point (int i)
-  {
-    for (; i < n_motor_corrections; i++)
-      {
-        motor_correction_x[i] = motor_correction_x[i + 1];
-        motor_correction_y[i] = motor_correction_y[i + 1];
-      }
-    n_motor_corrections--;
   }
   coord_t
   screen_per_inch () const

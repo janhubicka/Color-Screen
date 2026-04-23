@@ -297,47 +297,21 @@ scr_to_img::set_parameters_for_early_correction (
     const scr_to_img_parameters &param,
     int width, int height)
 {
-  /* We do not need to copy motor corrections since we already constructed the
-     function.  */
   m_param.copy_from_cheap (param);
   
   m_inverted_projection_distance = 1 / m_param.projection_distance;
   m_nwarnings = 0;
   assert (!debug || (width > 0 && height > 0));
 
-  /* Initialize motor correction.  */
-  m_motor_correction = NULL;
-  if (m_param.n_motor_corrections && !is_fixed_lens (m_param.scanner_type))
-    {
-      int len = m_param.scanner_type == lens_move_horisontally
-                        || m_param.scanner_type
-                               == fixed_lens_sensor_move_horisontally
-                    ? width
-                    : height;
-      if (m_param.n_motor_corrections > 2 && 0)
-        {
-          spline<coord_t> spline (m_param.motor_correction_x,
-                                  m_param.motor_correction_y,
-                                  m_param.n_motor_corrections);
-          m_motor_correction = spline.precompute (0, len, len);
-        }
-      else
-        m_motor_correction = new precomputed_function<coord_t> (
-            0, len, len, m_param.motor_correction_x, m_param.motor_correction_y,
-            m_param.n_motor_corrections);
-    }
-
   /* Next initialize lens correction.
      Lens center is specified in scan coordinates, so apply previous
      corrections.  */
-  point_t center = apply_motor_correction (
-      { m_param.lens_correction.center.x * width,
-        m_param.lens_correction.center.y * height });
-  point_t c1 = apply_motor_correction ({ (coord_t)0, (coord_t)0 });
-  point_t c2 = apply_motor_correction ({ (coord_t)width, (coord_t)0 });
-  point_t c3 = apply_motor_correction ({ (coord_t)0, (coord_t)height });
-  point_t c4
-      = apply_motor_correction ({ (coord_t)width, (coord_t)height });
+  point_t center = { m_param.lens_correction.center.x * width,
+    		     m_param.lens_correction.center.y * height};
+  point_t c1 = { (coord_t)0, (coord_t)0 };
+  point_t c2 = { (coord_t)width, (coord_t)0 };
+  point_t c3 = { (coord_t)0, (coord_t)height };
+  point_t c4 = { (coord_t)width, (coord_t)height };
   m_lens_correction.set_parameters (m_param.lens_correction);
   if (m_param.scanner_type == lens_move_horisontally)
     c1.x = c2.x = c3.x = c4.x = center.x = m_param.lens_correction.center.x;

@@ -48,12 +48,7 @@ public:
     return m_rotation_adjustment;
   }
 
-  scr_to_img () : m_motor_correction (NULL), m_early_correction_precomputed (false) {}
-  ~scr_to_img ()
-  {
-    if (m_motor_correction)
-      delete m_motor_correction;
-  }
+  scr_to_img () : m_early_correction_precomputed (false) {}
 
   /* Apply corrections that fix scanner optics that does not fit into the
      linear transformation matrix.  */
@@ -61,7 +56,6 @@ public:
   apply_early_correction (point_t p) const
   {
     assert (!debug || m_early_correction_precomputed);
-    p = apply_motor_correction (p);
     return apply_lens_correction (p)
            * m_inverted_projection_distance;
   }
@@ -75,15 +69,13 @@ public:
   pure_attr point_t
   nonprecomputed_apply_early_correction (point_t p) const
   {
-    p = apply_motor_correction (p);
     return nonprecomputed_apply_lens_correction (p)
            * m_inverted_projection_distance;
   }
   pure_attr point_t
   inverse_early_correction (point_t p) const
   {
-    p = inverse_lens_correction (p * m_param.projection_distance);
-    return inverse_motor_correction (p);
+    return inverse_lens_correction (p * m_param.projection_distance);
   }
 
 
@@ -195,7 +187,6 @@ public:
   void dump (FILE *f);
 
 private:
-  precomputed_function<coord_t> *m_motor_correction;
   /* Inversed m_params.projection_distance.  */
   coord_t m_inverted_projection_distance;
   /* Perspective correction matrix.  */
@@ -221,31 +212,6 @@ private:
   coord_t m_rotation_adjustment;
   lens_warp_correction m_lens_correction;
 
-  /* Apply spline defining motor correction.  */
-  inline pure_attr point_t
-  apply_motor_correction (point_t p) const
-  {
-    if (!m_motor_correction)
-      return p;
-    if (m_param.scanner_type == lens_move_horisontally
-        || m_param.scanner_type == fixed_lens_sensor_move_horisontally)
-      p.x = m_motor_correction->apply (p.x);
-    else
-      p.y = m_motor_correction->apply (p.y);
-    return p;
-  }
-  inline pure_attr point_t
-  inverse_motor_correction (point_t p) const
-  {
-    if (!m_motor_correction)
-      return p;
-    if (m_param.scanner_type == lens_move_horisontally
-        || m_param.scanner_type == fixed_lens_sensor_move_vertically)
-      p.x = m_motor_correction->invert (p.x);
-    else
-      p.y = m_motor_correction->invert (p.y);
-    return p;
-  }
   pure_attr point_t
   inverse_lens_correction (point_t sp) const
   {

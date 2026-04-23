@@ -66,7 +66,7 @@ account_rgb_pixel (rgbdata *data, rgbdata val, luminosity_t scale)
     }
 }
 
-/* Unified accounting dispatcher.  */
+/* Unified accounting dispatcher.  Account VAL * SCALE to DATA.  */
 template<typename T, bool UseAtomic = false>
 inline void
 do_account (T *data, T val, luminosity_t scale)
@@ -84,10 +84,7 @@ public:
   /* Initialize renderer for image IMG using parameters RPARAM and
      outputting to range 0..DSTMAXVAL.  */
   render (const image_data &img, const render_parameters &rparam, int dstmaxval)
-      : out_color (dstmaxval), m_img (img), m_params (rparam),
-        m_gray_data_id (img.id), m_sharpened_data (nullptr),
-        m_sharpened_data_holder (), m_maxval (img.data ? img.maxval : 65535),
-        m_backlight_correction (), m_backlight_correction_id (0)
+      : out_color (dstmaxval), m_img (img), m_params (rparam)
   {
   }
 
@@ -101,27 +98,29 @@ public:
      luminosity adjustments.  */
   pure_attr inline luminosity_t get_unadjusted_img_pixel (coord_t x, coord_t y) const;
 
-  /* Determine RGB value at a given position in the image.  */
+  /* Determine RGB value at a given position in the image.  Store results
+     into R, G, and B.  */
   inline void get_img_rgb_pixel (coord_t x, coord_t y, luminosity_t *r,
                                  luminosity_t *g, luminosity_t *b) const;
 
   /* Determine RGB value at a given position in the image without
-     luminosity adjustments.  */
+     luminosity adjustments.  Store results into R, G, and B at XP, YP.  */
   inline void get_unadjusted_img_rgb_pixel (coord_t xp, coord_t yp,
                                             luminosity_t *r, luminosity_t *g,
                                             luminosity_t *b) const;
 
-  /* Sample square patch with center XC and YC and corner offsets.  */
+  /* Sample square patch with center XC and YC and corner offsets X1, Y1, X2, Y2.  */
   pure_attr luminosity_t
   sample_img_square (coord_t xc, coord_t yc, coord_t x1, coord_t y1, coord_t x2,
                      coord_t y2) const;
 
-  /* Quickly determine grayscale value at a given position in the image.  */
+  /* Quickly determine grayscale value at a given position X, Y in the image.  */
   pure_attr inline luminosity_t fast_get_img_pixel (int x, int y) const;
 
   static const int num_color_models = render_parameters::color_model_max;
 
-  /* Fetch lookup tables for image IMG and given GAMMA.  */
+  /* Fetch lookup tables for image IMG and given GAMMA.  Store results in RET.
+     Return false on failure.  */
   static bool get_lookup_tables (std::shared_ptr<luminosity_t[]> *ret,
                                  luminosity_t gamma, const image_data *img,
                                  progress_info *progress = nullptr);
@@ -145,7 +144,10 @@ public:
   pure_attr inline luminosity_t get_linearized_data_green (int x, int y) const;
   pure_attr inline luminosity_t get_linearized_data_blue (int x, int y) const;
 
-  /* Precompute all data needed for rendering.  */
+  /* Precompute all data needed for rendering.  GRAYSCALE_NEEDED
+     indicates if gray data is required.  If NORMALIZED_PATCHES is true,
+     spectral computation is normalized.  PATCH_PROPORTIONS specifies
+     color proportions.  Report progress to PROGRESS.  Return false on failure.  */
   nodiscard_attr DLL_PUBLIC bool precompute_all (bool grayscale_needed,
 						 bool normalized_patches,
 						 rgbdata patch_proportions,
@@ -194,7 +196,8 @@ public:
     return adjust_rgb (get_unadjusted_rgb_pixel (x, y));
   }
 
-  /* Fetch matrix translating RGB values to XYZ.  */
+  /* Fetch matrix translating RGB values to XYZ.  Uses info from IMG,
+     NORMALIZED_PATCHES, and PATCH_PROPORTIONS.  */
   color_matrix get_rgb_to_xyz_matrix (bool normalized_patches,
                                       rgbdata patch_proportions)
   {
@@ -205,34 +208,47 @@ public:
   /* Placeholder for final range computation.  */
   void compute_final_range () {}
 
-  /* Compute grayscale data for downscaled region.  */
+  /* Compute grayscale data for downscaled region at X, Y with WIDTH,
+     HEIGHT and PIXELSIZE.  Store result in GRAYDATA.  Report progress
+     to PROGRESS.  */
   void get_gray_data (luminosity_t *graydata, coord_t x, coord_t y, int width,
                       int height, coord_t pixelsize, progress_info *progress);
 
   /* Return number of pixel computations considered profitable for OMP.  */
-  size_t openmp_size ()
+  const_attr pure_attr size_t openmp_size ()
   {
     return 128 * 1024;
   }
 
-  /* Fetch histogram for the current scan area.  */
+  /* Fetch histogram for the current scan area.  Report progress to PROGRESS.  */
   std::shared_ptr<histogram> get_image_layer_histogram (progress_info *progress = nullptr);
 
   /* Output color adjustments.  */
   out_color_adjustments out_color;
 
-  /* Generic image downscaling routine using bilinear weights.  */
+  /* Generic image downscaling routine using bilinear weights.
+     Compute downscaled region at X, Y with WIDTH, HEIGHT and PIXELSIZE.
+     Store result in DATA.  GET_PIXEL is the pixel fetching function.
+     ACCOUNT_P is optional accounting function.  Report progress
+     to PROGRESS.  */
   template<typename D, typename T, T (D::*get_pixel) (int x, int y) const,
            auto account_p = nullptr>
   bool downscale (T *data, coord_t x, coord_t y, int width, int height,
                   coord_t pixelsize, progress_info *progress);
 
 protected:
-  /* Compute color data for downscaled region.  */
+  /* Compute color data for downscaled region at X, Y with WIDTH, HEIGHT
+     and PIXELSIZE.  Store result in GRAYDATA.  Report progress
+     to PROGRESS.  */
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width,
                        int height, coord_t pixelsize, progress_info *progress);
 
-  /* Inner loop for image downscaling processing single line.  */
+  /* Inner loop for image downscaling processing single line YY from input
+     to output DATA at line PY.  XSTART and XEND specify the horizontal
+     range.  WIDTH and HEIGHT are output dimensions.  Y0 and Y1 indicate
+     if output lines PY and PY+1 are affected.  SCALE is global scaling,
+     YWEIGHT is the bilinear weight for the Y axis.  IF USEATOMIC is true,
+     writes are updated atomically.  ACCOUNT_P is optional accounting function.  */
   template<typename T, typename D, T (D::*get_pixel) (int x, int y) const,
            bool UseAtomic = false, auto account_p = nullptr>
   void process_line (T *data, int *pixelpos, luminosity_t *weights,
@@ -242,11 +258,15 @@ protected:
 		     bool y0, bool y1,
 		     luminosity_t scale, luminosity_t yweight);
  
-  /* Inner loop for image downscaling processing single pixel.  */
+  /* Inner loop for image downscaling processing single pixel PIXEL at PX, PY.
+     WIDTH and HEIGHT are output dimensions.  X0, X1, Y0, Y1 indicate if
+     neighboring output pixels are affected.  SCALE is global scaling.
+     XWEIGHT and YWEIGHT are bilinear weights.  IF USEATOMIC is true, writes
+     are updated atomically.  ACCOUNT_P is optional accounting function.  */
   template<typename T, bool UseAtomic = false, auto account_p = nullptr>
   inline void
   process_pixel (T *data, int width, int height, int px, int py, bool x0,
-                 bool x1, bool y0, bool y1, T val, luminosity_t scale,
+                 bool x1, bool y0, bool y1, T pixel, luminosity_t scale,
                  luminosity_t xweight, luminosity_t yweight);
 
   /* Scanned image.  */
@@ -256,28 +276,28 @@ protected:
   render_parameters m_params;
 
   /* ID of graydata computed.  */
-  uint64_t m_gray_data_id;
+  uint64_t m_gray_data_id = m_img.id;
 
   /* Sharpened data we render from.  */
-  mem_luminosity_t *m_sharpened_data;
+  mem_luminosity_t *m_sharpened_data = nullptr;
 
   /* Wrapping class to cause proper destruction.  */
-  std::shared_ptr<class sharpened_data> m_sharpened_data_holder;
+  std::shared_ptr<class sharpened_data> m_sharpened_data_holder = nullptr;
 
   /* Maximal value in M_IMG.  */
-  int m_maxval;
+  int m_maxval = m_img.data ? m_img.maxval : 65535;
 
   /* Translates input rgb channel values into normalized range.  */
   std::shared_ptr<luminosity_t[]> m_rgb_lookup_table[3];
 
   /* Backlight correction handler.  */
-  std::shared_ptr<backlight_correction> m_backlight_correction;
-  uint64_t m_backlight_correction_id;
+  std::shared_ptr<backlight_correction> m_backlight_correction = nullptr;
+  uint64_t m_backlight_correction_id = 0;
 
   /* Film sensitivity handlers for simulated contact copies.  */
-  std::unique_ptr <film_sensitivity> m_sensitivity;
-  std::unique_ptr <hd_curve> m_sensitivity_hd_curve;
-  std::unique_ptr <precomputed_function<luminosity_t>> m_adjust_luminosity;
+  std::unique_ptr <film_sensitivity> m_sensitivity = nullptr;
+  std::unique_ptr <hd_curve> m_sensitivity_hd_curve = nullptr;
+  std::unique_ptr <precomputed_function<luminosity_t>> m_adjust_luminosity = nullptr;
 };
 
 /* Get sharpened grayscale value at index X, Y without adjustments.  */
@@ -498,8 +518,7 @@ render::get_unadjusted_img_pixel (coord_t xp, coord_t yp) const
       vec_luminosity_t v2 = {get_unadjusted_data (sx-1, sy-0), get_unadjusted_data (sx, sy-0), get_unadjusted_data (sx+1, sy-0), get_unadjusted_data (sx+2, sy-0)};
       vec_luminosity_t v3 = {get_unadjusted_data (sx-1, sy+1), get_unadjusted_data (sx, sy+1), get_unadjusted_data (sx+1, sy+1), get_unadjusted_data (sx+2, sy+1)};
       vec_luminosity_t v4 = {get_unadjusted_data (sx-1, sy+2), get_unadjusted_data (sx, sy+2), get_unadjusted_data (sx+1, sy+2), get_unadjusted_data (sx+2, sy+2)};
-      vec_luminosity_t v = vec_cubic_interpolate (v1, v2, v3, v4, ry);
-      return cubic_interpolate (v[0], v[1], v[2], v[3], rx);
+      return do_bicubic_interpolate (v1, v2, v3, v4, {rx, ry});
     }
   return 0;
 }
@@ -528,21 +547,23 @@ render::get_unadjusted_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r,
   if (sx >= 1 && sx < m_img.width - 2 && sy >= 1 && sy < m_img.height - 2)
     {
       luminosity_t rr, gg, bb;
-      rr = cubic_interpolate (cubic_interpolate (get_linearized_data_red ( sx-1, sy-1), get_linearized_data_red (sx-1, sy), get_linearized_data_red (sx-1, sy+1), get_linearized_data_red (sx-1, sy+2), ry),
-			      cubic_interpolate (get_linearized_data_red ( sx-0, sy-1), get_linearized_data_red (sx-0, sy), get_linearized_data_red (sx-0, sy+1), get_linearized_data_red (sx-0, sy+2), ry),
-			      cubic_interpolate (get_linearized_data_red ( sx+1, sy-1), get_linearized_data_red (sx+1, sy), get_linearized_data_red (sx+1, sy+1), get_linearized_data_red (sx+1, sy+2), ry),
-			      cubic_interpolate (get_linearized_data_red ( sx+2, sy-1), get_linearized_data_red (sx+2, sy), get_linearized_data_red (sx+2, sy+1), get_linearized_data_red (sx+2, sy+2), ry),
-			      rx);
-      gg = cubic_interpolate (cubic_interpolate (get_linearized_data_green ( sx-1, sy-1), get_linearized_data_green (sx-1, sy), get_linearized_data_green (sx-1, sy+1), get_linearized_data_green (sx-1, sy+2), ry),
-			      cubic_interpolate (get_linearized_data_green ( sx-0, sy-1), get_linearized_data_green (sx-0, sy), get_linearized_data_green (sx-0, sy+1), get_linearized_data_green (sx-0, sy+2), ry),
-			      cubic_interpolate (get_linearized_data_green ( sx+1, sy-1), get_linearized_data_green (sx+1, sy), get_linearized_data_green (sx+1, sy+1), get_linearized_data_green (sx+1, sy+2), ry),
-			      cubic_interpolate (get_linearized_data_green ( sx+2, sy-1), get_linearized_data_green (sx+2, sy), get_linearized_data_green (sx+2, sy+1), get_linearized_data_green (sx+2, sy+2), ry),
-			      rx);
-      bb = cubic_interpolate (cubic_interpolate (get_linearized_data_blue ( sx-1, sy-1), get_linearized_data_blue (sx-1, sy), get_linearized_data_blue (sx-1, sy+1), get_linearized_data_blue (sx-1, sy+2), ry),
-			      cubic_interpolate (get_linearized_data_blue ( sx-0, sy-1), get_linearized_data_blue (sx-0, sy), get_linearized_data_blue (sx-0, sy+1), get_linearized_data_blue (sx-0, sy+2), ry),
-			      cubic_interpolate (get_linearized_data_blue ( sx+1, sy-1), get_linearized_data_blue (sx+1, sy), get_linearized_data_blue (sx+1, sy+1), get_linearized_data_blue (sx+1, sy+2), ry),
-			      cubic_interpolate (get_linearized_data_blue ( sx+2, sy-1), get_linearized_data_blue (sx+2, sy), get_linearized_data_blue (sx+2, sy+1), get_linearized_data_blue (sx+2, sy+2), ry),
-			      rx);
+      vec_luminosity_t r1 = {get_linearized_data_red (sx-1, sy-1), get_linearized_data_red (sx, sy-1), get_linearized_data_red (sx+1, sy-1), get_linearized_data_red (sx+2, sy-1)};
+      vec_luminosity_t r2 = {get_linearized_data_red (sx-1, sy-0), get_linearized_data_red (sx, sy-0), get_linearized_data_red (sx+1, sy-0), get_linearized_data_red (sx+2, sy-0)};
+      vec_luminosity_t r3 = {get_linearized_data_red (sx-1, sy+1), get_linearized_data_red (sx, sy+1), get_linearized_data_red (sx+1, sy+1), get_linearized_data_red (sx+2, sy+1)};
+      vec_luminosity_t r4 = {get_linearized_data_red (sx-1, sy+2), get_linearized_data_red (sx, sy+2), get_linearized_data_red (sx+1, sy+2), get_linearized_data_red (sx+2, sy+2)};
+      rr = do_bicubic_interpolate (r1, r2, r3, r4, {rx, ry});
+
+      vec_luminosity_t g1 = {get_linearized_data_green (sx-1, sy-1), get_linearized_data_green (sx, sy-1), get_linearized_data_green (sx+1, sy-1), get_linearized_data_green (sx+2, sy-1)};
+      vec_luminosity_t g2 = {get_linearized_data_green (sx-1, sy-0), get_linearized_data_green (sx, sy-0), get_linearized_data_green (sx+1, sy-0), get_linearized_data_green (sx+2, sy-0)};
+      vec_luminosity_t g3 = {get_linearized_data_green (sx-1, sy+1), get_linearized_data_green (sx, sy+1), get_linearized_data_green (sx+1, sy+1), get_linearized_data_green (sx+2, sy+1)};
+      vec_luminosity_t g4 = {get_linearized_data_green (sx-1, sy+2), get_linearized_data_green (sx, sy+2), get_linearized_data_green (sx+1, sy+2), get_linearized_data_green (sx+2, sy+2)};
+      gg = do_bicubic_interpolate (g1, g2, g3, g4, {rx, ry});
+
+      vec_luminosity_t b1 = {get_linearized_data_blue (sx-1, sy-1), get_linearized_data_blue (sx, sy-1), get_linearized_data_blue (sx+1, sy-1), get_linearized_data_blue (sx+2, sy-1)};
+      vec_luminosity_t b2 = {get_linearized_data_blue (sx-1, sy-0), get_linearized_data_blue (sx, sy-0), get_linearized_data_blue (sx+1, sy-0), get_linearized_data_blue (sx+2, sy-0)};
+      vec_luminosity_t b3 = {get_linearized_data_blue (sx-1, sy+1), get_linearized_data_blue (sx, sy+1), get_linearized_data_blue (sx+1, sy+1), get_linearized_data_blue (sx+2, sy+1)};
+      vec_luminosity_t b4 = {get_linearized_data_blue (sx-1, sy+2), get_linearized_data_blue (sx, sy+2), get_linearized_data_blue (sx+1, sy+2), get_linearized_data_blue (sx+2, sy+2)};
+      bb = do_bicubic_interpolate (b1, b2, b3, b4, {rx, ry});
       if (m_backlight_correction)
 	{
 	  rr = m_backlight_correction->apply (rr, xp, yp, backlight_correction_parameters::red, true);
@@ -677,12 +698,12 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height,
   for (int px = pxstart; px <= pxend + 1; px++)
     {
       coord_t ix = x + pixelsize * px;
-      int xx = floor (ix);
+      int xx = my_floor (ix);
       pixelpos[px] = std::min (xx, m_img.width);
       weights[px] = 1 - (ix - xx);
     }
 
-#define ypixelpos(p) ((int)floor (y + pixelsize * (p)))
+#define ypixelpos(p) ((int)my_floor (y + pixelsize * (p)))
 #define weight(p) (1 - (y + pixelsize * (p) - ypixelpos (p)))
 
 #pragma omp parallel shared(progress, data, pixelsize, width, height, pixelpos, x, y, pxstart, pxend, weights) default(none)
@@ -708,12 +729,16 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height,
 
 	if (ystart <= yend)
       {
+	/* The first line of each thread's range may overlap with the previous thread's
+	   last line because bilinear interpolation spans two output rows.  We use
+	   UseAtomic=true for boundary rows.  */
 	if (py >= 0 && yy >= 0)
 	  process_line<T, D, get_pixel, true, account_p> (data, pixelpos.data (), weights.data (), pxstart, pxend, width, height, py - 1, yy, false, true, scale, weight (py));
 	yy++;
 	stop = std::min (ypixelpos (py + 1), m_img.height);
 	for (; yy < stop; yy++)
 	  {
+	    /* If we have only one output row in our chunk, use atomics.  */
 	    if (py == yend)
 	      process_line<T, D, get_pixel, true, account_p> (data, pixelpos.data (), weights.data (), pxstart, pxend, width, height, py, yy, true, false, scale, 0);
 	    else
@@ -723,6 +748,8 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height,
 
 	while (py <= yend && (!progress || !progress->cancel_requested ()))
 	  {
+	    /* Only use atomics if this is the last row of our range, which might be
+	       shared with the next thread.  */
 	    if (py == yend)
 	      process_line<T, D, get_pixel, true, account_p> (data, pixelpos.data (), weights.data (), pxstart, pxend, width, height, py - 1, yy, true, true, scale, weight (py));
 	    else
@@ -741,6 +768,7 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height,
 	    if (progress)
 	      progress->inc_progress ();
 	  }
+	/* Final line of input image might also contribute to the last row of our range.  */
 	if (yy < m_img.height)
 	  process_line<T, D, get_pixel, true, account_p> (data, pixelpos.data (), weights.data (), pxstart, pxend, width, height, py - 1, yy, true, false, scale, weight (py));
       }

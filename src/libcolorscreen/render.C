@@ -17,11 +17,11 @@ class lru_caches lru_caches;
 std::atomic_uint64_t lru_caches::time;
 
 /* A wrapper class around m_sharpened_data which handles allocation and
-   dealocation. This is needed for the cache.  */
+   deallocation. This is needed for the cache.  */
 class sharpened_data
 {
 public:
-  mem_luminosity_t *m_data;
+  mem_luminosity_t *m_data = nullptr;
   /* Initialize sharpened data with given WIDTH and HEIGHT.  */
   sharpened_data (int width, int height);
   ~sharpened_data ();
@@ -45,12 +45,12 @@ namespace
 /* Parameters for backlight correction cache.  */
 struct backlight_correction_cache_params
 {
-  class backlight_correction_parameters *backlight_correction_params;
-  uint64_t backlight_correction_id;
-  int width;
-  int height;
-  luminosity_t backlight_correction_black;
-  bool grayscale_needed;
+  class backlight_correction_parameters *backlight_correction_params = nullptr;
+  uint64_t backlight_correction_id = 0;
+  int width = 0;
+  int height = 0;
+  luminosity_t backlight_correction_black = 0;
+  bool grayscale_needed = false;
 
   /* Return true if this parameter set is equal to O.  */
   bool
@@ -66,15 +66,10 @@ struct backlight_correction_cache_params
 /* Parameters for input lookup table cache.  */
 struct lookup_table_params
 {
-  int maxval;
-  luminosity_t gamma;
-  std::vector<luminosity_t> gamma_table;
-  luminosity_t dark_point, scan_exposure;
-
-  lookup_table_params ()
-      : maxval (0), gamma (1), dark_point (0), scan_exposure (1)
-  {
-  }
+  int maxval = 0;
+  luminosity_t gamma = 1;
+  std::vector<luminosity_t> gamma_table = {};
+  luminosity_t dark_point = 0, scan_exposure = 1;
 
   /* Return true if this parameter set is equal to O.  */
   bool
@@ -89,15 +84,15 @@ struct lookup_table_params
 /* Parameters for grayscale data generation.  */
 struct graydata_params
 {
-  uint64_t image_id;
-  const class image_data *img;
-  luminosity_t gamma;
-  std::vector<luminosity_t> gamma_table[3];
-  rgbdata dark;
-  luminosity_t red, green, blue;
-  class backlight_correction *backlight;
-  uint64_t backlight_correction_id;
-  bool ignore_infrared;
+  uint64_t image_id = 0;
+  const class image_data *img = nullptr;
+  luminosity_t gamma = 1;
+  std::vector<luminosity_t> gamma_table[3] = {};
+  rgbdata dark = {0, 0, 0};
+  luminosity_t red = 1, green = 1, blue = 1;
+  class backlight_correction *backlight = nullptr;
+  uint64_t backlight_correction_id = 0;
+  bool ignore_infrared = false;
 
   /* Return true if this parameter set is equal to O.  */
   bool
@@ -118,8 +113,8 @@ struct graydata_params
 /* Parameters for grayscale and sharpened data cache.  */
 struct gray_and_sharpen_params
 {
-  graydata_params gp;
-  class sharpen_parameters sp;
+  graydata_params gp = {};
+  class sharpen_parameters sp = {};
 
   /* Return true if this parameter set is equal to O.  */
   bool
@@ -132,9 +127,9 @@ struct gray_and_sharpen_params
 /* Parameters for image layer histogram cache.  */
 struct image_layer_histogram_params
 {
-  uint64_t graydata_id;
-  int_image_area crop;
-  render *r;
+  uint64_t graydata_id = 0;
+  int_image_area crop = {};
+  render *r = nullptr;
 
   /* Return true if this parameter set is equal to O.  */
   bool
@@ -144,7 +139,8 @@ struct image_layer_histogram_params
   }
 };
 
-/* Create new backlight correction instance using parameters P.  */
+/* Create new backlight correction instance using parameters P.
+   Report progress to PROGRESS.  */
 std::unique_ptr<backlight_correction>
 get_new_backlight_correction (backlight_correction_cache_params &p,
                               progress_info *progress)
@@ -161,7 +157,8 @@ get_new_backlight_correction (backlight_correction_cache_params &p,
 std::unique_ptr<histogram>
 get_new_image_layer_histogram (image_layer_histogram_params &p, progress_info *);
 
-/* Create new image layer histogram using parameters P.  */
+/* Create new image layer histogram using parameters P.  Report progress
+   to PROGRESS.  */
 std::unique_ptr<histogram>
 get_new_image_layer_histogram (image_layer_histogram_params &p,
                                progress_info *)
@@ -186,7 +183,8 @@ get_new_image_layer_histogram (image_layer_histogram_params &p,
   return std::make_unique<histogram> (std::move (hist));
 }
 
-/* Create new input lookup table using parameters P.  */
+/* Create new input lookup table using parameters P.  Report progress
+   to PROGRESS.  */
 std::unique_ptr<luminosity_t[]>
 get_new_lookup_table (lookup_table_params &p, progress_info *)
 {
@@ -236,20 +234,22 @@ static lru_cache<gray_and_sharpen_params, sharpened_data,
 /* Tables used during gray data computation.  */
 struct gray_data_tables
 {
-  std::shared_ptr<luminosity_t[]> rtable;
-  std::shared_ptr<luminosity_t[]> gtable;
-  std::shared_ptr<luminosity_t[]> btable;
-  rgbdata dark;
-  luminosity_t red, green, blue;
-  backlight_correction *correction;
+  std::shared_ptr<luminosity_t[]> rtable = nullptr;
+  std::shared_ptr<luminosity_t[]> gtable = nullptr;
+  std::shared_ptr<luminosity_t[]> btable = nullptr;
+  rgbdata dark = {0, 0, 0};
+  luminosity_t red = 1, green = 1, blue = 1;
+  backlight_correction *correction = nullptr;
 };
 
-/* Compute lookup tables for grayscale conversion using parameters P.  */
+/* Compute lookup tables for grayscale conversion using parameters P.
+   If CORRECTION is true, backlight correction is enabled.  Report progress
+   to PROGRESS.  */
 inline gray_data_tables
 compute_gray_data_tables (graydata_params &p, bool correction,
                           progress_info *progress)
 {
-  gray_data_tables ret = {nullptr, nullptr, nullptr, {0,0,0}, 0, 0, 0, nullptr};
+  gray_data_tables ret = {};
   luminosity_t red = p.red;
   luminosity_t green = p.green;
   luminosity_t blue = p.blue;
@@ -291,7 +291,8 @@ compute_gray_data_tables (graydata_params &p, bool correction,
   return ret;
 }
 
-/* Compute grayscale value for source pixel R, G, B at index X, Y.  */
+/* Compute grayscale value for source pixel R, G, B at index X, Y
+   using tables T.  */
 inline luminosity_t
 compute_gray_data (gray_data_tables &t, int x, int y, int r, int g, int b)
 {
@@ -319,12 +320,13 @@ compute_gray_data (gray_data_tables &t, int x, int y, int r, int g, int b)
 /* Helper parameters for grayscale data fetching.  */
 struct getdata_params
 {
-  std::shared_ptr<luminosity_t[]> table;
-  backlight_correction *correction;
-  int width, height;
+  std::shared_ptr<luminosity_t[]> table = nullptr;
+  backlight_correction *correction = nullptr;
+  int width = 0, height = 0;
 };
 
-/* Helper for sharpening template for images with gray data with no correction.  */
+/* Helper for sharpening template for images with gray data with no correction.
+   Fetch pixel from GRAYDATA at X, Y using parameters D.  */
 inline luminosity_t
 getdata_helper_no_correction (unsigned short **graydata, int x, int y, int,
                               getdata_params &d)
@@ -334,7 +336,8 @@ getdata_helper_no_correction (unsigned short **graydata, int x, int y, int,
   return d.table[graydata[y][x]];
 }
 
-/* Helper for sharpening template for images with gray data with correction.  */
+/* Helper for sharpening template for images with gray data with correction.
+   Fetch pixel from GRAYDATA at X, Y using parameters D.  */
 inline luminosity_t
 getdata_helper_correction (unsigned short **graydata, int x, int y, int,
                            getdata_params &d)
@@ -346,7 +349,8 @@ getdata_helper_correction (unsigned short **graydata, int x, int y, int,
   return v;
 }
 
-/* Helper for sharpening template for images with RGB data only.  */
+/* Helper for sharpening template for images with RGB data only.
+   Fetch pixel from IMG at X, Y using tables T.  */
 inline luminosity_t
 getdata_helper2 (const image_data *img, int x, int y, int, gray_data_tables &t)
 {
@@ -355,7 +359,8 @@ getdata_helper2 (const image_data *img, int x, int y, int, gray_data_tables &t)
       img->rgbdata[y][x].g, img->rgbdata[y][x].b);
 }
 
-/* Create new grayscale and sharpened data using parameters P.  */
+/* Create new grayscale and sharpened data using parameters P.
+   Report progress to PROGRESS.  */
 std::unique_ptr<sharpened_data>
 get_new_gray_sharpened_data (gray_and_sharpen_params &p,
                              progress_info *progress)
@@ -441,7 +446,7 @@ get_new_gray_sharpened_data (gray_and_sharpen_params &p,
 } // anonymous namespace
 
 /* Prune render cache.  We need to do this so destruction order of MapAlloc and
-   the cache does not yield an segfault.  */
+   the cache does not yield a segfault.  */
 void
 prune_render_caches ()
 {
@@ -507,7 +512,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
                 &m_img,
                 m_params.gamma,
                 { m_img.to_linear[0], m_img.to_linear[1], m_img.to_linear[2] },
-                ir_simulation ? m_params.mix_dark : (rgbdata) {1.0f,1.0f,1.0f},
+                ir_simulation ? m_params.mix_dark : rgbdata{1.0f, 1.0f, 1.0f},
                 ir_simulation ? m_params.mix_red : 1.0f,
                 ir_simulation ? m_params.mix_green : 1.0f,
                 ir_simulation ? m_params.mix_blue : 1.0f,
@@ -626,9 +631,9 @@ get_linearized_pixel (const image_data &img, render_parameters &rparam, int xx,
       imgp = img.stitch->images[ty][tx].img.get ();
     }
   render r (*imgp, rparam, 255);
-  if (!r.precompute_all (img.rgbdata ? false : true, false,
+  if (!r.precompute_all (!img.rgbdata, false,
                     { 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f }, progress))
-    return {0,0,0};
+    return rgbdata(0, 0, 0);
   for (int y = yy - range; y < yy + range; y++)
     for (int x = xx - range; x < xx + range; x++)
       if (x >= 0 && x < img.width && y >= 0 && y < img.height)

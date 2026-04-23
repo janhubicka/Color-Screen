@@ -100,11 +100,6 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 		      param->lens_correction.center.x,
 		      param->lens_correction.center.y) < 0)
 	return false;
-      for (int i = 0; i < param->n_motor_corrections; i++)
-	{
-	  if (fprintf (f, "motor_correction: %f %f\n", param->motor_correction_x[i], param->motor_correction_y[i]) < 0)
-	    return false;
-	}
       if (param->mesh_trans)
         {
 	  if (fprintf (f, "mesh: yes\n") < 0)
@@ -643,6 +638,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	}
+      /* Compatibility only.  */
       else if (!strcmp (buf, "motor_correction"))
 	{
 	  coord_t x, y;
@@ -651,8 +647,6 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      *error = "error parsing motor_correction";
 	      return false;
 	    }
-          if (param)
-	    param->add_motor_correction_point (x, y);
 	}
       else if (!strcmp (buf, "projection_distance"))
 	{
