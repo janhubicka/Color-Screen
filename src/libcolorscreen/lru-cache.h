@@ -374,10 +374,7 @@ public:
     return this->get_internal (
         p, progress, id,
         [&](Entry *e) {
-          return area.x >= e->area.x && area.y >= e->area.y
-                 && area.x + area.width <= e->area.x + e->area.width
-                 && area.y + area.height <= e->area.y + e->area.height
-                 && p == e->params;
+          return e->area.contains_p (area) && p == e->params;
         },
         [&](Entry *e) {
           e->area = area;

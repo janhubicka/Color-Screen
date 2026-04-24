@@ -49,8 +49,8 @@ public:
   {
     assert (!m_known_pixels && !m_n_known_pixels);
     m_known_pixels.reset (bitmap);
-    for (int y = 0; y < m_height; y++)
-      for (int x = 0; x < m_width; x++)
+    for (int y = 0; y < m_area.height; y++)
+      for (int x = 0; x < m_area.width; x++)
 	if (bitmap->test_bit (x,y))
 	  m_n_known_pixels++;
   }
@@ -58,181 +58,181 @@ public:
   /* Access blue channel luminosity at (X, Y).  */
   pure_attr inline luminosity_t & blue (int x, int y) noexcept
     {
-      x = std::min (std::max (x, 0), (m_width << m_bwscl) - 1);
-      y = std::min (std::max (y, 0), (m_height << m_bhscl) - 1);
-      return m_blue [y * (m_width << m_bwscl) + x];
+      x = std::min (std::max (x, 0), (m_area.width << m_bwscl) - 1);
+      y = std::min (std::max (y, 0), (m_area.height << m_bhscl) - 1);
+      return m_blue [y * (m_area.width << m_bwscl) + x];
     }
 
   /* Access blue channel luminosity at (X, Y) (const version).  */
   pure_attr inline luminosity_t blue (int x, int y) const noexcept
     {
-      x = std::min (std::max (x, 0), (m_width << m_bwscl) - 1);
-      y = std::min (std::max (y, 0), (m_height << m_bhscl) - 1);
-      return m_blue [y * (m_width << m_bwscl) + x];
+      x = std::min (std::max (x, 0), (m_area.width << m_bwscl) - 1);
+      y = std::min (std::max (y, 0), (m_area.height << m_bhscl) - 1);
+      return m_blue [y * (m_area.width << m_bwscl) + x];
     }
 
   /* Access red channel luminosity at (X, Y).  */
   pure_attr inline luminosity_t & red (int x, int y) noexcept
     {
-      x = std::min (std::max (x, 0), (m_width << m_rwscl)  - 1);
-      y = std::min (std::max (y, 0), (m_height << m_rhscl) - 1);
-      return m_red [y * (m_width << m_rwscl) + x];
+      x = std::min (std::max (x, 0), (m_area.width << m_rwscl)  - 1);
+      y = std::min (std::max (y, 0), (m_area.height << m_rhscl) - 1);
+      return m_red [y * (m_area.width << m_rwscl) + x];
     }
 
   /* Access red channel luminosity at (X, Y) (const version).  */
   pure_attr inline luminosity_t red (int x, int y) const noexcept
     {
-      x = std::min (std::max (x, 0), (m_width << m_rwscl)  - 1);
-      y = std::min (std::max (y, 0), (m_height << m_rhscl) - 1);
-      return m_red [y * (m_width << m_rwscl) + x];
+      x = std::min (std::max (x, 0), (m_area.width << m_rwscl)  - 1);
+      y = std::min (std::max (y, 0), (m_area.height << m_rhscl) - 1);
+      return m_red [y * (m_area.width << m_rwscl) + x];
     }
 
   /* Access green channel luminosity at (X, Y).  */
   pure_attr inline luminosity_t & green (int x, int y) noexcept
     {
-      x = std::min (std::max (x, 0), (m_width << m_ghscl) - 1);
-      y = std::min (std::max (y, 0), (m_height << m_bhscl) - 1);
-      return m_green [y * (m_width << m_gwscl) + x];
+      x = std::min (std::max (x, 0), (m_area.width << m_ghscl) - 1);
+      y = std::min (std::max (y, 0), (m_area.height << m_bhscl) - 1);
+      return m_green [y * (m_area.width << m_gwscl) + x];
     }
 
   /* Access green channel luminosity at (X, Y) (const version).  */
   pure_attr inline luminosity_t green (int x, int y) const noexcept
     {
-      x = std::min (std::max (x, 0), (m_width << m_ghscl) - 1);
-      y = std::min (std::max (y, 0), (m_height << m_bhscl) - 1);
-      return m_green [y * (m_width << m_gwscl) + x];
+      x = std::min (std::max (x, 0), (m_area.width << m_ghscl) - 1);
+      y = std::min (std::max (y, 0), (m_area.height << m_bhscl) - 1);
+      return m_green [y * (m_area.width << m_gwscl) + x];
     }
 
   /* Access blue channel RGB data at (X, Y).  */
   pure_attr inline rgbdata & rgb_blue (int x, int y) noexcept
     {
-      x = std::min (std::max (x, 0), (m_width << m_bwscl) - 1);
-      y = std::min (std::max (y, 0), (m_height << m_bhscl) - 1);
-      return m_rgb_blue [y * (m_width << m_bwscl) + x];
+      x = std::min (std::max (x, 0), (m_area.width << m_bwscl) - 1);
+      y = std::min (std::max (y, 0), (m_area.height << m_bhscl) - 1);
+      return m_rgb_blue [y * (m_area.width << m_bwscl) + x];
     }
 
   /* Access blue channel RGB data at (X, Y) (const version).  */
   pure_attr inline rgbdata rgb_blue (int x, int y) const noexcept
     {
-      x = std::min (std::max (x, 0), (m_width << m_bwscl) - 1);
-      y = std::min (std::max (y, 0), (m_height << m_bhscl) - 1);
-      return m_rgb_blue [y * (m_width << m_bwscl) + x];
+      x = std::min (std::max (x, 0), (m_area.width << m_bwscl) - 1);
+      y = std::min (std::max (y, 0), (m_area.height << m_bhscl) - 1);
+      return m_rgb_blue [y * (m_area.width << m_bwscl) + x];
     }
 
   /* Access red channel RGB data at (X, Y).  */
   pure_attr inline rgbdata & rgb_red (int x, int y) noexcept
     {
-      x = std::min (std::max (x, 0), (m_width << m_rwscl)  - 1);
-      y = std::min (std::max (y, 0), (m_height << m_rhscl) - 1);
-      return m_rgb_red [y * (m_width << m_rwscl) + x];
+      x = std::min (std::max (x, 0), (m_area.width << m_rwscl)  - 1);
+      y = std::min (std::max (y, 0), (m_area.height << m_rhscl) - 1);
+      return m_rgb_red [y * (m_area.width << m_rwscl) + x];
     }
 
   /* Access red channel RGB data at (X, Y) (const version).  */
   pure_attr inline rgbdata rgb_red (int x, int y) const noexcept
     {
-      x = std::min (std::max (x, 0), (m_width << m_rwscl)  - 1);
-      y = std::min (std::max (y, 0), (m_height << m_rhscl) - 1);
-      return m_rgb_red [y * (m_width << m_rwscl) + x];
+      x = std::min (std::max (x, 0), (m_area.width << m_rwscl)  - 1);
+      y = std::min (std::max (y, 0), (m_area.height << m_rhscl) - 1);
+      return m_rgb_red [y * (m_area.width << m_rwscl) + x];
     }
 
   /* Access green channel RGB data at (X, Y).  */
   pure_attr inline rgbdata & rgb_green (int x, int y) noexcept
     {
-      x = std::min (std::max (x, 0), (m_width << m_ghscl) - 1);
-      y = std::min (std::max (y, 0), (m_height << m_bhscl) - 1);
-      return m_rgb_green [y * (m_width << m_gwscl) + x];
+      x = std::min (std::max (x, 0), (m_area.width << m_ghscl) - 1);
+      y = std::min (std::max (y, 0), (m_area.height << m_bhscl) - 1);
+      return m_rgb_green [y * (m_area.width << m_gwscl) + x];
     }
 
   /* Access green channel RGB data at (X, Y) (const version).  */
   pure_attr inline rgbdata rgb_green (int x, int y) const noexcept
     {
-      x = std::min (std::max (x, 0), (m_width << m_ghscl) - 1);
-      y = std::min (std::max (y, 0), (m_height << m_bhscl) - 1);
-      return m_rgb_green [y * (m_width << m_gwscl) + x];
+      x = std::min (std::max (x, 0), (m_area.width << m_ghscl) - 1);
+      y = std::min (std::max (y, 0), (m_area.height << m_bhscl) - 1);
+      return m_rgb_green [y * (m_area.width << m_gwscl) + x];
     }
 
   /* Return average blue channel luminosity at patch (X, Y).  */
   pure_attr inline luminosity_t blue_avg (int x, int y) const noexcept
     {
-      x = std::min (std::max (x, 0), (m_width) - 1);
-      y = std::min (std::max (y, 0), (m_height) - 1);
+      x = std::min (std::max (x, 0), (m_area.width) - 1);
+      y = std::min (std::max (y, 0), (m_area.height) - 1);
       if (!m_bhscl)
 	{
 	  if (!m_bwscl)
-	    return m_blue [y * m_width + x];
+	    return m_blue [y * m_area.width + x];
 	  else
-	    return (m_blue [y * m_width * 2 + 2 * x] + m_blue [y * m_width * 2 + 2 * x + 1]) * (luminosity_t)0.5;
+	    return (m_blue [y * m_area.width * 2 + 2 * x] + m_blue [y * m_area.width * 2 + 2 * x + 1]) * (luminosity_t)0.5;
 	}
       else
 	{
 	  if (!m_bwscl)
-	    return (m_blue [2 * y * m_width + x] + m_blue [2 * (y + 1) * m_width + x]) * (luminosity_t)0.5;
+	    return (m_blue [2 * y * m_area.width + x] + m_blue [2 * (y + 1) * m_area.width + x]) * (luminosity_t)0.5;
 	  else
-	    return (m_blue [4 * y * m_width + 2 * x] + m_blue [4 * y * m_width + 2 * x + 1]
-	            + m_blue [2 * (2 * y + 1) * m_width + 2 * x] + m_blue [2 * (2 * y + 1) * m_width + 2 * x + 1]) * (luminosity_t)0.25;
+	    return (m_blue [4 * y * m_area.width + 2 * x] + m_blue [4 * y * m_area.width + 2 * x + 1]
+	            + m_blue [2 * (2 * y + 1) * m_area.width + 2 * x] + m_blue [2 * (2 * y + 1) * m_area.width + 2 * x + 1]) * (luminosity_t)0.25;
 	}
     }
 
   /* Return average red channel luminosity at patch (X, Y).  */
   pure_attr inline luminosity_t red_avg (int x, int y) const noexcept
     {
-      x = std::min (std::max (x, 0), (m_width) - 1);
-      y = std::min (std::max (y, 0), (m_height) - 1);
+      x = std::min (std::max (x, 0), (m_area.width) - 1);
+      y = std::min (std::max (y, 0), (m_area.height) - 1);
       if (!m_rhscl)
 	{
 	  if (!m_rwscl)
-	    return m_red [y * m_width + x];
+	    return m_red [y * m_area.width + x];
 	  else
-	    return (m_red [y * m_width * 2 + 2 * x] + m_red [y * m_width * 2 + 2 * x + 1]) * (luminosity_t)0.5;
+	    return (m_red [y * m_area.width * 2 + 2 * x] + m_red [y * m_area.width * 2 + 2 * x + 1]) * (luminosity_t)0.5;
 	}
       else
 	{
 	  if (!m_rwscl)
-	    return (m_red [2 * y * m_width + x] + m_red [2 * (y + 1) * m_width + x]) * (luminosity_t)0.5;
+	    return (m_red [2 * y * m_area.width + x] + m_red [2 * (y + 1) * m_area.width + x]) * (luminosity_t)0.5;
 	  else
-	    return (m_red [4 * y * m_width + 2 * x] + m_red [4 * y * m_width + 2 * x + 1]
-	            + m_red [2 * (2 * y + 1) * m_width + 2 * x] + m_red [2 * (2 * y + 1) * m_width + 2 * x + 1]) * (luminosity_t)0.25;
+	    return (m_red [4 * y * m_area.width + 2 * x] + m_red [4 * y * m_area.width + 2 * x + 1]
+	            + m_red [2 * (2 * y + 1) * m_area.width + 2 * x] + m_red [2 * (2 * y + 1) * m_area.width + 2 * x + 1]) * (luminosity_t)0.25;
 	}
     }
 
   /* Return average green channel luminosity at patch (X, Y).  */
   pure_attr inline luminosity_t green_avg (int x, int y) const noexcept
     {
-      x = std::min (std::max (x, 0), (m_width << m_gwscl) - 1);
-      y = std::min (std::max (y, 0), (m_height << m_ghscl) - 1);
+      x = std::min (std::max (x, 0), (m_area.width << m_gwscl) - 1);
+      y = std::min (std::max (y, 0), (m_area.height << m_ghscl) - 1);
       if (!m_ghscl)
 	{
 	  if (!m_gwscl)
-	    return m_green [y * m_width + x];
+	    return m_green [y * m_area.width + x];
 	  else
-	    return (m_green [y * m_width * 2 + 2 * x] + m_green [y * m_width * 2 + 2 * x + 1]) * (luminosity_t)0.5;
+	    return (m_green [y * m_area.width * 2 + 2 * x] + m_green [y * m_area.width * 2 + 2 * x + 1]) * (luminosity_t)0.5;
 	}
       else
 	{
 	  if (!m_gwscl)
-	    return (m_green [2 * y * m_width + x] + m_green [2 * (y + 1) * m_width + x]) * (luminosity_t)0.5;
+	    return (m_green [2 * y * m_area.width + x] + m_green [2 * (y + 1) * m_area.width + x]) * (luminosity_t)0.5;
 	  else
-	    return (m_green [4 * y * m_width + 2 * x] + m_green [4 * y * m_width + 2 * x + 1]
-	            + m_green [2 * (2 * y + 1) * m_width + 2 * x] + m_green [2 * (2 * y + 1) * m_width + 2 * x + 1]) * (luminosity_t)0.25;
+	    return (m_green [4 * y * m_area.width + 2 * x] + m_green [4 * y * m_area.width + 2 * x + 1]
+	            + m_green [2 * (2 * y + 1) * m_area.width + 2 * x] + m_green [2 * (2 * y + 1) * m_area.width + 2 * x + 1]) * (luminosity_t)0.25;
 	}
     }
 
   /* Return the analysis area.  */
   const_attr inline int_image_area get_area () const noexcept
   {
-    return {m_xshift, m_yshift, m_width, m_height};
+    return m_area;
   }
 
   /* Return contrast info for patch (X, Y).  */
   pure_attr inline contrast_info &get_contrast (int x, int y) noexcept
   {
-    return m_contrast[y * m_width + x];
+    return m_contrast[y * m_area.width + x];
   }
 
   /* Return contrast info for patch (X, Y) (const version).  */
   pure_attr inline const contrast_info &get_contrast (int x, int y) const noexcept
   {
-    return m_contrast[y * m_width + x];
+    return m_contrast[y * m_area.width + x];
   }
 
   /* Return area of the demosaiced image.  */
@@ -253,13 +253,13 @@ public:
   virtual ~analyze_base() = default;
 
   /* Return screen width.  */
-  int get_width () const { return m_width; }
+  int get_width () const { return m_area.width; }
   /* Return screen height.  */
-  int get_height () const { return m_height; }
+  int get_height () const { return m_area.height; }
   /* Return X shift.  */
-  int get_xshift () const { return m_xshift; }
+  int get_xshift () const { return m_area.xshift (); }
   /* Return Y shift.  */
-  int get_yshift () const { return m_yshift; }
+  int get_yshift () const { return m_area.yshift (); }
 
 protected:
   /* Minimum size for OpenMP parallelization.  */
@@ -280,7 +280,7 @@ protected:
   int m_ghscl = 0;
   int m_bwscl = 0;
   int m_bhscl = 0;
-  int m_xshift = 0, m_yshift = 0, m_width = 0, m_height = 0;
+  int_image_area m_area;
   std::unique_ptr<luminosity_t[]> m_red, m_green, m_blue;
   std::unique_ptr<rgbdata[]> m_rgb_red, m_rgb_green, m_rgb_blue;
   std::unique_ptr<bitmap_2d> m_known_pixels;
@@ -309,91 +309,91 @@ public:
   /* Access red channel luminosity at (X, Y) with fixed scale from GEOMETRY.  */
   pure_attr inline luminosity_t & red (int x, int y) const noexcept
   {
-    x = std::min (std::max (x, 0), m_width * GEOMETRY::red_width_scale - 1);
-    y = std::min (std::max (y, 0), m_height * GEOMETRY::red_height_scale - 1);
-    return m_red [y * m_width * GEOMETRY::red_width_scale + x];
+    x = std::min (std::max (x, 0), m_area.width * GEOMETRY::red_width_scale - 1);
+    y = std::min (std::max (y, 0), m_area.height * GEOMETRY::red_height_scale - 1);
+    return m_red [y * m_area.width * GEOMETRY::red_width_scale + x];
   }
 
   /* Access green channel luminosity at (X, Y) with fixed scale from GEOMETRY.  */
   pure_attr inline luminosity_t & green (int x, int y) const noexcept
   {
-    x = std::min (std::max (x, 0), m_width * GEOMETRY::green_width_scale - 1);
-    y = std::min (std::max (y, 0), m_height * GEOMETRY::green_height_scale - 1);
-    return m_green [y * m_width * GEOMETRY::green_width_scale + x];
+    x = std::min (std::max (x, 0), m_area.width * GEOMETRY::green_width_scale - 1);
+    y = std::min (std::max (y, 0), m_area.height * GEOMETRY::green_height_scale - 1);
+    return m_green [y * m_area.width * GEOMETRY::green_width_scale + x];
   }
 
   /* Access blue channel luminosity at (X, Y) with fixed scale from GEOMETRY.  */
   pure_attr inline luminosity_t & blue (int x, int y) const noexcept
   {
-    x = std::min (std::max (x, 0), m_width * GEOMETRY::blue_width_scale - 1);
-    y = std::min (std::max (y, 0), m_height * GEOMETRY::blue_height_scale - 1);
-    return m_blue [y * m_width * GEOMETRY::blue_width_scale + x];
+    x = std::min (std::max (x, 0), m_area.width * GEOMETRY::blue_width_scale - 1);
+    y = std::min (std::max (y, 0), m_area.height * GEOMETRY::blue_height_scale - 1);
+    return m_blue [y * m_area.width * GEOMETRY::blue_width_scale + x];
   }
 
   /* Access red channel RGB data at (X, Y) with fixed scale from GEOMETRY.  */
   pure_attr inline rgbdata & rgb_red (int x, int y) const noexcept
   { 
-    x = std::min (std::max (x, 0), m_width * GEOMETRY::red_width_scale - 1);
-    y = std::min (std::max (y, 0), m_height * GEOMETRY::red_height_scale - 1);
-    return m_rgb_red [y * m_width * GEOMETRY::red_width_scale + x];
+    x = std::min (std::max (x, 0), m_area.width * GEOMETRY::red_width_scale - 1);
+    y = std::min (std::max (y, 0), m_area.height * GEOMETRY::red_height_scale - 1);
+    return m_rgb_red [y * m_area.width * GEOMETRY::red_width_scale + x];
   }
 
   /* Access green channel RGB data at (X, Y) with fixed scale from GEOMETRY.  */
   pure_attr inline rgbdata & rgb_green (int x, int y) const noexcept
   { 
-    x = std::min (std::max (x, 0), m_width * GEOMETRY::green_width_scale - 1);
-    y = std::min (std::max (y, 0), m_height * GEOMETRY::green_height_scale - 1);
-    return m_rgb_green [y * m_width * GEOMETRY::green_width_scale + x];
+    x = std::min (std::max (x, 0), m_area.width * GEOMETRY::green_width_scale - 1);
+    y = std::min (std::max (y, 0), m_area.height * GEOMETRY::green_height_scale - 1);
+    return m_rgb_green [y * m_area.width * GEOMETRY::green_width_scale + x];
   }
 
   /* Access blue channel RGB data at (X, Y) with fixed scale from GEOMETRY.  */
   pure_attr inline rgbdata & rgb_blue (int x, int y) const noexcept
   { 
-    x = std::min (std::max (x, 0), m_width * GEOMETRY::blue_width_scale - 1);
-    y = std::min (std::max (y, 0), m_height * GEOMETRY::blue_height_scale - 1);
-    return m_rgb_blue [y * m_width * GEOMETRY::blue_width_scale + x];
+    x = std::min (std::max (x, 0), m_area.width * GEOMETRY::blue_width_scale - 1);
+    y = std::min (std::max (y, 0), m_area.height * GEOMETRY::blue_height_scale - 1);
+    return m_rgb_blue [y * m_area.width * GEOMETRY::blue_width_scale + x];
   }
 
   /* Access red channel luminosity at (X, Y) (fast, no bounds checking).  */
   pure_attr inline luminosity_t & fast_red (int x, int y) const noexcept
   {
-    assert (!debug || (x >= 0 && y >= 0 && x < m_width * GEOMETRY::red_width_scale && y < m_height * GEOMETRY::red_height_scale));
-    return m_red [y * m_width * GEOMETRY::red_width_scale + x];
+    assert (!debug || (x >= 0 && y >= 0 && x < m_area.width * GEOMETRY::red_width_scale && y < m_area.height * GEOMETRY::red_height_scale));
+    return m_red [y * m_area.width * GEOMETRY::red_width_scale + x];
   }
 
   /* Access green channel luminosity at (X, Y) (fast, no bounds checking).  */
   pure_attr inline luminosity_t & fast_green (int x, int y) const noexcept
   {
-    assert (!debug || (x >= 0 && y >= 0 && x < m_width * GEOMETRY::green_width_scale && y < m_height * GEOMETRY::green_height_scale));
-    return m_green [y * m_width * GEOMETRY::green_width_scale + x];
+    assert (!debug || (x >= 0 && y >= 0 && x < m_area.width * GEOMETRY::green_width_scale && y < m_area.height * GEOMETRY::green_height_scale));
+    return m_green [y * m_area.width * GEOMETRY::green_width_scale + x];
   }
 
   /* Access blue channel luminosity at (X, Y) (fast, no bounds checking).  */
   pure_attr inline luminosity_t & fast_blue (int x, int y) const noexcept
   {
-    assert (!debug || (x >= 0 && y >= 0 && x < m_width * GEOMETRY::blue_width_scale && y < m_height * GEOMETRY::blue_height_scale));
-    return m_blue [y * m_width * GEOMETRY::blue_width_scale + x];
+    assert (!debug || (x >= 0 && y >= 0 && x < m_area.width * GEOMETRY::blue_width_scale && y < m_area.height * GEOMETRY::blue_height_scale));
+    return m_blue [y * m_area.width * GEOMETRY::blue_width_scale + x];
   }
 
   /* Access red channel RGB data at (X, Y) (fast, no bounds checking).  */
   pure_attr inline rgbdata & fast_rgb_red (int x, int y) const noexcept
   { 
-    assert (!debug || (x >= 0 && y >= 0 && x < m_width * GEOMETRY::red_width_scale && y < m_height * GEOMETRY::red_height_scale));
-    return m_rgb_red [y * m_width * GEOMETRY::red_width_scale + x];
+    assert (!debug || (x >= 0 && y >= 0 && x < m_area.width * GEOMETRY::red_width_scale && y < m_area.height * GEOMETRY::red_height_scale));
+    return m_rgb_red [y * m_area.width * GEOMETRY::red_width_scale + x];
   }
 
   /* Access green channel RGB data at (X, Y) (fast, no bounds checking).  */
   pure_attr inline rgbdata & fast_rgb_green (int x, int y) const noexcept
   { 
-    assert (!debug || (x >= 0 && y >= 0 && x < m_width * GEOMETRY::green_width_scale && y < m_height * GEOMETRY::green_height_scale));
-    return m_rgb_green [y * m_width * GEOMETRY::green_width_scale + x];
+    assert (!debug || (x >= 0 && y >= 0 && x < m_area.width * GEOMETRY::green_width_scale && y < m_area.height * GEOMETRY::green_height_scale));
+    return m_rgb_green [y * m_area.width * GEOMETRY::green_width_scale + x];
   }
 
   /* Access blue channel RGB data at (X, Y) (fast, no bounds checking).  */
   pure_attr inline rgbdata & fast_rgb_blue (int x, int y) const noexcept
   { 
-    assert (!debug || (x >= 0 && y >= 0 && x < m_width * GEOMETRY::blue_width_scale && y < m_height * GEOMETRY::blue_height_scale));
-    return m_rgb_blue [y * m_width * GEOMETRY::blue_width_scale + x];
+    assert (!debug || (x >= 0 && y >= 0 && x < m_area.width * GEOMETRY::blue_width_scale && y < m_area.height * GEOMETRY::blue_height_scale));
+    return m_rgb_blue [y * m_area.width * GEOMETRY::blue_width_scale + x];
   }
 
   /* Return the average color of a screen tile at (X, Y).  */
@@ -439,13 +439,13 @@ public:
 
   /* Populate demosaiced data vector.  */
   bool
-  populate_demosaiced_data (std::vector<rgbdata> &demosaic, render *r, int width, int height, int xshift, int yshift, progress_info *progress);
+  populate_demosaiced_data (std::vector<rgbdata> &demosaic, render *r, int_image_area area, progress_info *progress);
 
   /* Return the demosaiced area.  */
   virtual int_image_area demosaiced_area () const override;
 
   /* Analyze the image data.  */
-  bool analyze (render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, const screen *screen, const simulated_screen *simulated, int width, int height, int xshift, int yshift, mode mode, luminosity_t collection_threshold, progress_info *progress);
+  bool analyze (render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, const screen *screen, const simulated_screen *simulated, int_image_area area, mode mode, luminosity_t collection_threshold, progress_info *progress);
 
 protected:
   /* Precise analysis collecting all pixels.  */
@@ -482,14 +482,14 @@ analyze_base_worker<GEOMETRY>::bicubic_rgb_interpolate (point_t scr, rgbdata pat
   int64_t red_minx = -2, red_miny = -3, green_minx = -2, green_miny = -3, blue_minx = -2, blue_miny = -2;
   int64_t red_maxx = 2, red_maxy = 3, green_maxx = 2, green_maxy = 3, blue_maxx = 2, blue_maxy = 2;
 
-  scr.x += (coord_t)m_xshift;
-  scr.y += (coord_t)m_yshift;
+  scr.x += (coord_t)m_area.xshift ();
+  scr.y += (coord_t)m_area.yshift ();
   point_t off;
 
   data_entry e = GEOMETRY::red_scr_to_entry (scr, &off);
   rgbdata intred = {0, 0, 0};
-  if (e.x + red_minx >= 0 && e.x + red_maxx < m_width * GEOMETRY::red_width_scale
-      && e.y + red_miny >= 0 && e.y + red_maxy < m_height * GEOMETRY::red_height_scale)
+  if (e.x + red_minx >= 0 && e.x + red_maxx < m_area.width * GEOMETRY::red_width_scale
+      && e.y + red_miny >= 0 && e.y + red_maxy < m_area.height * GEOMETRY::red_height_scale)
     {
 #define get_red_p(xx, yy) fast_rgb_red (GEOMETRY::offset_for_interpolation_red (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_red (e, {xx, yy}).y)
       intred.red = do_bicubic_interpolate ((vec_luminosity_t){get_red_p (-1, -1).red, get_red_p (0, -1).red, get_red_p (1, -1).red, get_red_p (2, -1).red},
@@ -508,8 +508,8 @@ analyze_base_worker<GEOMETRY>::bicubic_rgb_interpolate (point_t scr, rgbdata pat
     }
   rgbdata intgreen = {0, 0, 0};
   e = GEOMETRY::green_scr_to_entry (scr, &off);
-  if (e.x + green_minx >= 0 && e.x + green_maxx < m_width * GEOMETRY::green_width_scale
-      && e.y + green_miny >= 0 && e.y + green_maxy < m_height * GEOMETRY::green_height_scale)
+  if (e.x + green_minx >= 0 && e.x + green_maxx < m_area.width * GEOMETRY::green_width_scale
+      && e.y + green_miny >= 0 && e.y + green_maxy < m_area.height * GEOMETRY::green_height_scale)
     {
 #define get_green_p(xx, yy) fast_rgb_green (GEOMETRY::offset_for_interpolation_green (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_green (e, {xx, yy}).y)
       intgreen.red = do_bicubic_interpolate ((vec_luminosity_t){get_green_p (-1, -1).red, get_green_p (0, -1).red, get_green_p (1, -1).red, get_green_p (2, -1).red},
@@ -528,8 +528,8 @@ analyze_base_worker<GEOMETRY>::bicubic_rgb_interpolate (point_t scr, rgbdata pat
     }
   rgbdata intblue = {0, 0, 0};
   e = GEOMETRY::blue_scr_to_entry (scr, &off);
-  if (e.x + blue_minx >= 0 && e.x + blue_maxx < m_width * GEOMETRY::blue_width_scale
-      && e.y + blue_miny >= 0 && e.y + blue_maxy < m_height * GEOMETRY::blue_height_scale)
+  if (e.x + blue_minx >= 0 && e.x + blue_maxx < m_area.width * GEOMETRY::blue_width_scale
+      && e.y + blue_miny >= 0 && e.y + blue_maxy < m_area.height * GEOMETRY::blue_height_scale)
     {
 #define get_blue_p(xx, yy) fast_rgb_blue (GEOMETRY::offset_for_interpolation_blue (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_blue (e, {xx, yy}).y)
       intblue.red = do_bicubic_interpolate ((vec_luminosity_t){get_blue_p (-1, -1).red, get_blue_p (0, -1).red, get_blue_p (1, -1).red, get_blue_p (2, -1).red},
@@ -558,28 +558,28 @@ analyze_base_worker<GEOMETRY>::nearest_bw_interpolate (point_t scr) const
   int64_t red_maxx = 2, red_maxy = 3, green_maxx = 2, green_maxy = 3, blue_maxx = 2, blue_maxy = 2;
   rgbdata ret = {(luminosity_t)1, (luminosity_t)0, (luminosity_t)0};
 
-  scr.x += (coord_t)m_xshift;
-  scr.y += (coord_t)m_yshift;
+  scr.x += (coord_t)m_area.xshift ();
+  scr.y += (coord_t)m_area.yshift ();
   point_t off;
   data_entry e = GEOMETRY::red_scr_to_entry (scr, &off);
-  if (e.x + red_minx >= 0 && e.x + red_maxx < m_width * GEOMETRY::red_width_scale
-      && e.y + red_miny >= 0 && e.y + red_maxy < m_height * GEOMETRY::red_height_scale)
+  if (e.x + red_minx >= 0 && e.x + red_maxx < m_area.width * GEOMETRY::red_width_scale
+      && e.y + red_miny >= 0 && e.y + red_maxy < m_area.height * GEOMETRY::red_height_scale)
     {
 #define get_red_p(xx, yy) fast_red (GEOMETRY::offset_for_interpolation_red (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_red (e, {xx, yy}).y)
       ret.red = get_red_p (off.x > (coord_t)0.5, off.y > (coord_t)0.5);
 #undef get_red_p
     }
   e = GEOMETRY::green_scr_to_entry (scr, &off);
-  if (e.x + green_minx >= 0 && e.x + green_maxx < m_width * GEOMETRY::green_width_scale
-      && e.y + green_miny >= 0 && e.y + green_maxy < m_height * GEOMETRY::green_height_scale)
+  if (e.x + green_minx >= 0 && e.x + green_maxx < m_area.width * GEOMETRY::green_width_scale
+      && e.y + green_miny >= 0 && e.y + green_maxy < m_area.height * GEOMETRY::green_height_scale)
     {
 #define get_green_p(xx, yy) fast_green (GEOMETRY::offset_for_interpolation_green (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_green (e, {xx, yy}).y)
       ret.green = get_green_p (off.x > (coord_t)0.5, off.y > (coord_t)0.5);
 #undef get_green_p
     }
   e = GEOMETRY::blue_scr_to_entry (scr, &off);
-  if (e.x + blue_minx >= 0 && e.x + blue_maxx < m_width * GEOMETRY::blue_width_scale
-      && e.y + blue_miny >= 0 && e.y + blue_maxy < m_height * GEOMETRY::blue_height_scale)
+  if (e.x + blue_minx >= 0 && e.x + blue_maxx < m_area.width * GEOMETRY::blue_width_scale
+      && e.y + blue_miny >= 0 && e.y + blue_maxy < m_area.height * GEOMETRY::blue_height_scale)
     {
 #define get_blue_p(xx, yy) fast_blue (GEOMETRY::offset_for_interpolation_blue (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_blue (e, {xx, yy}).y)
       ret.blue = get_blue_p (off.x > (coord_t)0.5, off.y > (coord_t)0.5);
@@ -596,28 +596,28 @@ analyze_base_worker<GEOMETRY>::linear_bw_interpolate (point_t scr) const
   int64_t red_maxx = 2, red_maxy = 3, green_maxx = 2, green_maxy = 3, blue_maxx = 2, blue_maxy = 2;
   rgbdata ret = {(luminosity_t)1, (luminosity_t)0, (luminosity_t)0};
 
-  scr.x += (coord_t)m_xshift;
-  scr.y += (coord_t)m_yshift;
+  scr.x += (coord_t)m_area.xshift ();
+  scr.y += (coord_t)m_area.yshift ();
   point_t off;
   data_entry e = GEOMETRY::red_scr_to_entry (scr, &off);
-  if (e.x + red_minx >= 0 && e.x + red_maxx < m_width * GEOMETRY::red_width_scale
-      && e.y + red_miny >= 0 && e.y + red_maxy < m_height * GEOMETRY::red_height_scale)
+  if (e.x + red_minx >= 0 && e.x + red_maxx < m_area.width * GEOMETRY::red_width_scale
+      && e.y + red_miny >= 0 && e.y + red_maxy < m_area.height * GEOMETRY::red_height_scale)
     {
 #define get_red_p(xx, yy) fast_red (GEOMETRY::offset_for_interpolation_red (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_red (e, {xx, yy}).y)
       ret.red = do_linear_interpolate (get_red_p (0, 0), get_red_p (1, 0), get_red_p (0, 1), get_red_p (1, 1), off);
 #undef get_red_p
     }
   e = GEOMETRY::green_scr_to_entry (scr, &off);
-  if (e.x + green_minx >= 0 && e.x + green_maxx < m_width * GEOMETRY::green_width_scale
-      && e.y + green_miny >= 0 && e.y + green_maxy < m_height * GEOMETRY::green_height_scale)
+  if (e.x + green_minx >= 0 && e.x + green_maxx < m_area.width * GEOMETRY::green_width_scale
+      && e.y + green_miny >= 0 && e.y + green_maxy < m_area.height * GEOMETRY::green_height_scale)
     {
 #define get_green_p(xx, yy) fast_green (GEOMETRY::offset_for_interpolation_green (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_green (e, {xx, yy}).y)
       ret.green = do_linear_interpolate (get_green_p (0, 0), get_green_p (1, 0), get_green_p (0, 1), get_green_p (1, 1), off);
 #undef get_green_p
     }
   e = GEOMETRY::blue_scr_to_entry (scr, &off);
-  if (e.x + blue_minx >= 0 && e.x + blue_maxx < m_width * GEOMETRY::blue_width_scale
-      && e.y + blue_miny >= 0 && e.y + blue_maxy < m_height * GEOMETRY::blue_height_scale)
+  if (e.x + blue_minx >= 0 && e.x + blue_maxx < m_area.width * GEOMETRY::blue_width_scale
+      && e.y + blue_miny >= 0 && e.y + blue_maxy < m_area.height * GEOMETRY::blue_height_scale)
     {
 #define get_blue_p(xx, yy) fast_blue (GEOMETRY::offset_for_interpolation_blue (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_blue (e, {xx, yy}).y)
       ret.blue = do_linear_interpolate (get_blue_p (0, 0), get_blue_p (1, 0), get_blue_p (0, 1), get_blue_p (1, 1), off);
@@ -635,12 +635,12 @@ analyze_base_worker<GEOMETRY>::bicubic_bw_interpolate (point_t scr) const
   int64_t red_maxx = 2, red_maxy = 3, green_maxx = 2, green_maxy = 3, blue_maxx = 2, blue_maxy = 2;
   rgbdata ret = {(luminosity_t)1, (luminosity_t)0, (luminosity_t)0};
 
-  scr.x += (coord_t)m_xshift;
-  scr.y += (coord_t)m_yshift;
+  scr.x += (coord_t)m_area.xshift ();
+  scr.y += (coord_t)m_area.yshift ();
   point_t off;
   data_entry e = GEOMETRY::red_scr_to_entry (scr, &off);
-  if (e.x + red_minx >= 0 && e.x + red_maxx < m_width * GEOMETRY::red_width_scale
-      && e.y + red_miny >= 0 && e.y + red_maxy < m_height * GEOMETRY::red_height_scale)
+  if (e.x + red_minx >= 0 && e.x + red_maxx < m_area.width * GEOMETRY::red_width_scale
+      && e.y + red_miny >= 0 && e.y + red_maxy < m_area.height * GEOMETRY::red_height_scale)
     {
 #define get_red_p(xx, yy) fast_red (GEOMETRY::offset_for_interpolation_red (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_red (e, {xx, yy}).y)
       ret.red = do_bicubic_interpolate ((vec_luminosity_t){get_red_p (-1, -1), get_red_p (0, -1), get_red_p (1, -1), get_red_p (2, -1)},
@@ -650,8 +650,8 @@ analyze_base_worker<GEOMETRY>::bicubic_bw_interpolate (point_t scr) const
 #undef get_red_p
     }
   e = GEOMETRY::green_scr_to_entry (scr, &off);
-  if (e.x + green_minx >= 0 && e.x + green_maxx < m_width * GEOMETRY::green_width_scale
-      && e.y + green_miny >= 0 && e.y + green_maxy < m_height * GEOMETRY::green_height_scale)
+  if (e.x + green_minx >= 0 && e.x + green_maxx < m_area.width * GEOMETRY::green_width_scale
+      && e.y + green_miny >= 0 && e.y + green_maxy < m_area.height * GEOMETRY::green_height_scale)
     {
 #define get_green_p(xx, yy) fast_green (GEOMETRY::offset_for_interpolation_green (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_green (e, {xx, yy}).y)
       ret.green = do_bicubic_interpolate ((vec_luminosity_t){get_green_p (-1, -1), get_green_p (0, -1), get_green_p (1, -1), get_green_p (2, -1)},
@@ -661,8 +661,8 @@ analyze_base_worker<GEOMETRY>::bicubic_bw_interpolate (point_t scr) const
 #undef get_green_p
     }
   e = GEOMETRY::blue_scr_to_entry (scr, &off);
-  if (e.x + blue_minx >= 0 && e.x + blue_maxx < m_width * GEOMETRY::blue_width_scale
-      && e.y + blue_miny >= 0 && e.y + blue_maxy < m_height * GEOMETRY::blue_height_scale)
+  if (e.x + blue_minx >= 0 && e.x + blue_maxx < m_area.width * GEOMETRY::blue_width_scale
+      && e.y + blue_miny >= 0 && e.y + blue_maxy < m_area.height * GEOMETRY::blue_height_scale)
     {
 #define get_blue_p(xx, yy) fast_blue (GEOMETRY::offset_for_interpolation_blue (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_blue (e, {xx, yy}).y)
       ret.blue = do_bicubic_interpolate ((vec_luminosity_t){get_blue_p (-1, -1), get_blue_p (0, -1), get_blue_p (1, -1), get_blue_p (2, -1)},
@@ -697,45 +697,45 @@ analyze_base_worker<GEOMETRY>::interpolate (point_t scr, rgbdata patch_proportio
 }
 template<typename GEOMETRY>
 bool
-analyze_base_worker<GEOMETRY>::populate_demosaiced_data (std::vector<rgbdata> &demosaic, render *r, int w, int h, int xshift, int yshift, progress_info *progress)
+analyze_base_worker<GEOMETRY>::populate_demosaiced_data (std::vector<rgbdata> &demosaic, render *r, int_image_area area, progress_info *progress)
 {
   if (progress)
-    progress->set_task ("populating demosaiced data", h);
+    progress->set_task ("populating demosaiced data", area.height);
 
   /* Step 1: Populate demosaic with the mosaiced data.
      Each pixel gets only its known channel value; others remain 0.  */
-#pragma omp parallel shared(progress,h,w,xshift,yshift,r,demosaic) default(none)
-  for (int y = 0; y < h; y++)
+#pragma omp parallel shared(progress,area,r,demosaic) default(none)
+  for (int y = 0; y < area.height; y++)
     {
       if (!progress || !progress->cancel_requested ())
-	for (int x = 0; x < w; x++)
+	for (int x = 0; x < area.width; x++)
 	  {
-	    point_t p = GEOMETRY::from_demosaiced_coordinates ((point_t){(coord_t)(x - xshift), (coord_t)(y - yshift)});
-	    p.x += (coord_t)m_xshift;
-	    p.y += (coord_t)m_yshift;
+	    point_t p = GEOMETRY::from_demosaiced_coordinates (point_t {(coord_t)(x + area.x), (coord_t)(y + area.y)});
+	    p.x += (coord_t)m_area.xshift ();
+	    p.y += (coord_t)m_area.yshift ();
 	    point_t off;
 	    data_entry e = GEOMETRY::red_scr_to_entry (p, &off);
 	    if (my_fabs (off.x) < (coord_t)0.01 && my_fabs (off.y) < (coord_t)0.01)
 	      {
-		demosaic [y * w + x].red =  /*std::max (red (e.x, e.y), (luminosity_t) 0)*/ r->adjust_luminosity_ir (red (e.x, e.y));
+		demosaic [y * area.width + x].red =  /*std::max (red (e.x, e.y), (luminosity_t) 0)*/ r->adjust_luminosity_ir (red (e.x, e.y));
 		assert (!debug
-			|| GEOMETRY::demosaic_entry_color (x, y)
+			|| GEOMETRY::demosaic_entry_color (x + area.x, y + area.y)
 			   == base_geometry::red);
 		continue;
 	      }
 	    e = GEOMETRY::green_scr_to_entry (p, &off);
 	    if (my_fabs (off.x) < (coord_t)0.01 && my_fabs (off.y) < (coord_t)0.01)
 	      {
-		demosaic [y * w + x].green = /*std::max (green (e.x, e.y), (luminosity_t) 0)*/ r->adjust_luminosity_ir (green (e.x, e.y));
+		demosaic [y * area.width + x].green = /*std::max (green (e.x, e.y), (luminosity_t) 0)*/ r->adjust_luminosity_ir (green (e.x, e.y));
 		assert (!debug
-			|| GEOMETRY::demosaic_entry_color (x, y)
+			|| GEOMETRY::demosaic_entry_color (x + area.x, y + area.y)
 			   == base_geometry::green);
 		continue;
 	      }
 	    e = GEOMETRY::blue_scr_to_entry (p, &off);
-	    demosaic [y * w + x].blue = /*std::max (blue (e.x, e.y), (luminosity_t) 0)*/ r->adjust_luminosity_ir (blue (e.x, e.y));
+	    demosaic [y * area.width + x].blue = /*std::max (blue (e.x, e.y), (luminosity_t) 0)*/ r->adjust_luminosity_ir (blue (e.x, e.y));
 	    assert (!debug
-		    || GEOMETRY::demosaic_entry_color (x, y)
+		    || GEOMETRY::demosaic_entry_color (x + area.x, y + area.y)
 		       == base_geometry::blue);
 	    assert (my_fabs (off.x) < (coord_t)0.01 && my_fabs (off.y) < (coord_t)0.01);
 	  }
@@ -748,14 +748,24 @@ template<typename GEOMETRY>
 int_image_area
 analyze_base_worker<GEOMETRY>::demosaiced_area () const
 {
-  point_t topleft = GEOMETRY::to_demosaiced_coordinates ((point_t){(coord_t)-m_xshift, (coord_t)-m_yshift});
-  point_t topright = GEOMETRY::to_demosaiced_coordinates ((point_t){(coord_t)-m_xshift + m_width, (coord_t)-m_yshift});
-  point_t bottomleft = GEOMETRY::to_demosaiced_coordinates ((point_t){(coord_t)-m_xshift, (coord_t)-m_yshift + m_height});
-  point_t bottomright = GEOMETRY::to_demosaiced_coordinates ((point_t){(coord_t)-m_xshift + m_width, (coord_t)-m_yshift + m_height});
+  point_t corners[4] = {
+    GEOMETRY::to_demosaiced_coordinates (m_area.top_left ()),
+    GEOMETRY::to_demosaiced_coordinates (m_area.top_right ()),
+    GEOMETRY::to_demosaiced_coordinates (m_area.bottom_left ()),
+    GEOMETRY::to_demosaiced_coordinates (m_area.bottom_right ())
+  };
 
-  /* Identify corner.  */
-  int x = my_floor (std::min (topleft.x, std::min (topright.x, (std::min (bottomleft.x, bottomright.x)))));
-  int y = my_floor (std::min (topleft.y, std::min (topright.y, (std::min (bottomleft.y, bottomright.y)))));
+  int_image_area area (int_point_t {my_floor (corners[0].x), my_floor (corners[0].y)});
+  for (int i = 0; i < 4; i++)
+    {
+      area.extend (int_point_t {my_floor (corners[i].x), my_floor (corners[i].y)});
+      area.extend (int_point_t {my_ceil (corners[i].x), my_ceil (corners[i].y)});
+    }
+
+  int x = area.x;
+  int y = area.y;
+  int max_x = area.x + area.width;
+  int max_y = area.y + area.height;
 
   /* Round to the demosaicing period.  */
   if (x > 0)
@@ -768,8 +778,8 @@ analyze_base_worker<GEOMETRY>::demosaiced_area () const
     y = -(-y + (y % GEOMETRY::demosaic_period_y ()) - GEOMETRY::demosaic_period_y ());
 
   /* Identify width and height.  */
-  int width = my_ceil (std::max (topleft.x, std::max (topright.x, (std::max (bottomleft.x, bottomright.x))))) - x;
-  int height = my_ceil (std::max (topleft.y, std::max (topright.y, (std::max (bottomleft.y, bottomright.y))))) - y;
+  int width = max_x - x;
+  int height = max_y - y;
   /* Also round up to demosaicing period.  */
   width = (width + GEOMETRY::demosaic_period_x () - 1)/ GEOMETRY::demosaic_period_x () * GEOMETRY::demosaic_period_x ();
   height = (height + GEOMETRY::demosaic_period_y () - 1)/ GEOMETRY::demosaic_period_y () * GEOMETRY::demosaic_period_y ();

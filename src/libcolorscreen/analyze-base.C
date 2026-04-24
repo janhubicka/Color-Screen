@@ -34,8 +34,8 @@ analyze_base::find_best_match_using_cpfind (
       direction ? "project-cpfind-vert.pto" : "project-cpfind-hor.pto", "wt");
   if (!f)
     return false;
-  int mwidth = std::max (m_width, other.m_width);
-  int mheight = std::max (m_height, other.m_height);
+  int mwidth = std::max (m_area.width, other.m_area.width);
+  int mheight = std::max (m_area.height, other.m_area.height);
   luminosity_t rmin, rmax, gmin, gmax, bmin, bmax;
   luminosity_t rmin2, rmax2, gmin2, gmax2, bmin2, bmax2;
   analyze_range (&rmin, &rmax, &gmin, &gmax, &bmin, &bmax);
@@ -72,8 +72,8 @@ analyze_base::find_best_match_using_cpfind (
       "c=0 d=0 e=0 g=0 t=0 Va=0 Vb=0 Vc=0 Vd=0 Vx=0 Vy=0  Vm5  n\"%s\"\n"
       "v TrX1\n"
       "v TrY1\n",
-      /*m_width, m_height,*/ mwidth * scale, mheight * scale,
-      /*filename1*/ screen1, /*other.m_width, other.m_height,*/ mwidth * scale,
+      /*m_area.width, m_area.height,*/ mwidth * scale, mheight * scale,
+      /*filename1*/ screen1, /*other.m_area.width, other.m_area.height,*/ mwidth * scale,
       mheight * scale, /*filename2*/ screen2);
   fclose (f);
   /* cpfind ransac does not understand the setup where camera shifts.  But use
@@ -216,8 +216,8 @@ analyze_base::find_best_match_using_cpfind (
           int yo = round (y2 - y1);
           if (direction >= 0)
             {
-              int xx = -xo / (coord_t)scale - (m_xshift - other.m_xshift);
-              int yy = -yo / (coord_t)scale - (m_yshift - other.m_yshift);
+              int xx = -xo / (coord_t)scale - (m_area.xshift () - other.m_area.xshift ());
+              int yy = -yo / (coord_t)scale - (m_area.yshift () - other.m_area.yshift ());
               point_t imgp = map.to_img ({ l.x + xx, l.y + yy });
 
               if ((direction == 0
@@ -286,14 +286,14 @@ analyze_base::find_best_match_using_cpfind (
           if (real_n > std::min (npoints / 3, 2))
             {
               *xshift_ret
-                  = -max.x / (coord_t)scale - (m_xshift - other.m_xshift);
+                  = -max.x / (coord_t)scale - (m_area.xshift () - other.m_area.xshift ());
               *yshift_ret
-                  = -max.y / (coord_t)scale - (m_yshift - other.m_yshift);
+                  = -max.y / (coord_t)scale - (m_area.yshift () - other.m_area.yshift ());
               if (report_file)
                 fprintf (report_file,
                          "Best offset %f %f with %i points, shifts %i %i\n",
                          *xshift_ret, *yshift_ret, max.n,
-                         m_xshift - other.m_xshift, m_yshift - other.m_yshift);
+                         m_area.xshift () - other.m_area.xshift (), m_area.yshift () - other.m_area.yshift ());
               return true;
             }
           else if (report_file)
@@ -345,17 +345,17 @@ analyze_base::find_best_match (int percentage, int max_percentage,
   };
   std::vector<range_t> range;
   std::vector<range_t> other_range;
-  range.resize (m_height);
+  range.resize (m_area.height);
 
   int first = -1, last = -1;
   int left = -1, right = -1;
-  for (int y = 0; y < m_height; y++)
+  for (int y = 0; y < m_area.height; y++)
     {
       int x;
-      for (x = 0; x < m_width; x++)
+      for (x = 0; x < m_area.width; x++)
         if (m_known_pixels->test_bit (x, y))
           break;
-      if (x == m_width)
+      if (x == m_area.width)
         {
           range[y].min = 0;
           range[y].max = -1;
@@ -363,7 +363,7 @@ analyze_base::find_best_match (int percentage, int max_percentage,
         }
       last = y;
       range[y].min = x;
-      for (x = m_width - 1; !m_known_pixels->test_bit (x, y); x--)
+      for (x = m_area.width - 1; !m_known_pixels->test_bit (x, y); x--)
         ;
       range[y].max = x;
       if (first == -1)
@@ -378,16 +378,16 @@ analyze_base::find_best_match (int percentage, int max_percentage,
           right = std::max (right, range[y].max);
         }
     }
-  other_range.resize (other.m_height);
+  other_range.resize (other.m_area.height);
   int other_first = -1, other_last = -1;
   int other_left = -1, other_right = -1;
-  for (int y = 0; y < other.m_height; y++)
+  for (int y = 0; y < other.m_area.height; y++)
     {
       int x;
-      for (x = 0; x < other.m_width; x++)
+      for (x = 0; x < other.m_area.width; x++)
         if (other.m_known_pixels->test_bit (x, y))
           break;
-      if (x == other.m_width)
+      if (x == other.m_area.width)
         {
           other_range[y].min = 0;
           other_range[y].max = -1;
@@ -395,7 +395,7 @@ analyze_base::find_best_match (int percentage, int max_percentage,
         }
       other_last = y;
       other_range[y].min = x;
-      for (x = other.m_width - 1; !other.m_known_pixels->test_bit (x, y); x--)
+      for (x = other.m_area.width - 1; !other.m_known_pixels->test_bit (x, y); x--)
         ;
       other_range[y].max = x;
       if (other_first == -1)
@@ -422,19 +422,19 @@ analyze_base::find_best_match (int percentage, int max_percentage,
   xend = right - other_left - 2;
   yend = last - other_first - 2;
 
-  xstart -= m_xshift - other.m_xshift;
-  ystart -= m_yshift - other.m_yshift;
-  xend -= m_xshift - other.m_xshift;
-  yend -= m_yshift - other.m_yshift;
+  xstart -= m_area.xshift () - other.m_area.xshift ();
+  ystart -= m_area.yshift () - other.m_area.yshift ();
+  xend -= m_area.xshift () - other.m_area.xshift ();
+  yend -= m_area.yshift () - other.m_area.yshift ();
   if (report_file && val_known
       && ((*xshift_ret < xstart || *xshift_ret > xend)
           || (*yshift_ret < ystart || *yshift_ret > yend)))
     fprintf (report_file, "cpfind output: %f,%f out of range\n", *xshift_ret,
              *yshift_ret);
 
-  rgbdata *sums = (rgbdata *)malloc (sizeof (rgbdata) * m_width * m_height);
+  rgbdata *sums = (rgbdata *)malloc (sizeof (rgbdata) * m_area.width * m_area.height);
   rgbdata *other_sums
-      = (rgbdata *)malloc (sizeof (rgbdata) * other.m_width * other.m_height);
+      = (rgbdata *)malloc (sizeof (rgbdata) * other.m_area.width * other.m_area.height);
   if (!sums || !other_sums)
     {
       if (progress)
@@ -445,20 +445,20 @@ analyze_base::find_best_match (int percentage, int max_percentage,
       return false;
     }
   if (progress)
-    progress->set_task ("summarizing densities", m_height + other.m_height);
-  for (int y = 0; y < m_height; y++)
+    progress->set_task ("summarizing densities", m_area.height + other.m_area.height);
+  for (int y = 0; y < m_area.height; y++)
     {
       int x;
       rgbdata sum = { 0, 0, 0 };
-      for (x = 0; x < m_width; x++)
+      for (x = 0; x < m_area.width; x++)
         {
           sum.red += red_avg (x, y);
           sum.green += green_avg (x, y);
           sum.blue += blue_avg (x, y);
         }
-      for (x = 0; x < m_width; x++)
+      for (x = 0; x < m_area.width; x++)
         {
-          sums[y * m_width + x] = sum;
+          sums[y * m_area.width + x] = sum;
           sum.red -= red_avg (x, y);
           sum.green -= green_avg (x, y);
           sum.blue -= blue_avg (x, y);
@@ -466,19 +466,19 @@ analyze_base::find_best_match (int percentage, int max_percentage,
       if (progress)
         progress->inc_progress ();
     }
-  for (int y = 0; y < other.m_height; y++)
+  for (int y = 0; y < other.m_area.height; y++)
     {
       int x;
       rgbdata sum = { 0, 0, 0 };
-      for (x = 0; x < other.m_width; x++)
+      for (x = 0; x < other.m_area.width; x++)
         {
           sum.red += other.red_avg (x, y);
           sum.green += other.green_avg (x, y);
           sum.blue += other.blue_avg (x, y);
         }
-      for (x = 0; x < other.m_width; x++)
+      for (x = 0; x < other.m_area.width; x++)
         {
-          other_sums[y * other.m_width + x] = sum;
+          other_sums[y * other.m_area.width + x] = sum;
           sum.red -= other.red_avg (x, y);
           sum.green -= other.green_avg (x, y);
           sum.blue -= other.blue_avg (x, y);
@@ -505,10 +505,10 @@ analyze_base::find_best_match (int percentage, int max_percentage,
       for (int x = xstart; x < xend; x++)
         {
           int est_noverlap = 0;
-          int xxstart = -m_xshift + left;
-          int xxend = -m_xshift + right + 1;
-          int yystart = -m_yshift + first;
-          int yyend = -m_yshift + last + 1;
+          int xxstart = -m_area.xshift () + left;
+          int xxend = -m_area.xshift () + right + 1;
+          int yystart = -m_area.yshift () + first;
+          int yyend = -m_area.yshift () + last + 1;
           luminosity_t sqsum = 0;
           bool is_cpfind = false;
           if (report_file && val_known && *xshift_ret == x && *yshift_ret == y)
@@ -546,17 +546,17 @@ analyze_base::find_best_match (int percentage, int max_percentage,
 	    }
 #endif
 
-          xxstart = std::max (-other.m_xshift + x + other_left, xxstart);
-          yystart = std::max (-other.m_yshift + y + other_first, yystart);
-          xxend = std::min (-other.m_xshift + other_right + 1 + x, xxend);
-          yyend = std::min (-other.m_yshift + other_last + 1 + y, yyend);
+          xxstart = std::max (-other.m_area.xshift () + x + other_left, xxstart);
+          yystart = std::max (-other.m_area.yshift () + y + other_first, yystart);
+          xxend = std::min (-other.m_area.xshift () + other_right + 1 + x, xxend);
+          yyend = std::min (-other.m_area.yshift () + other_last + 1 + y, yyend);
 
           // if (yystart >= yyend || xxstart >= xxend)
           // continue;
           // printf ("Shift %i %i checking %i to %i, %i to %i; img1 %i %i %i
           // %i; img2 %i %i %i %i\n", x, y, xxstart, xxend, yystart, yyend,
-          // m_xshift, m_yshift, m_width, m_height, other.m_xshift,
-          // other.m_yshift, other.m_width, other.m_height);
+          // m_area.xshift (), m_area.yshift (), m_area.width, m_area.height, other.m_area.xshift (),
+          // other.m_area.yshift (), other.m_area.width, other.m_area.height);
           assert (yystart < yyend && xxstart < xxend);
           if ((xxend - xxstart) * (yyend - yystart) * 100
               < std::min (m_n_known_pixels, other.m_n_known_pixels)
@@ -584,44 +584,44 @@ analyze_base::find_best_match (int percentage, int max_percentage,
 
           // printf ("Shift %i %i checking %i to %i, %i to %i; img1 %i %i %i
           // %i; img2 %i %i %i %i\n", x, y, xxstart, xxend, yystart, yyend,
-          // m_xshift, m_yshift, m_width, m_height, other.m_xshift,
-          // other.m_yshift, other.m_width, other.m_height);
+          // m_area.xshift (), m_area.yshift (), m_area.width, m_area.height, other.m_area.xshift (),
+          // other.m_area.yshift (), other.m_area.width, other.m_area.height);
           for (int yy = yystart; yy < yyend; yy++)
             {
-              int y1 = yy + m_yshift;
-              int xxstart = -m_xshift + range[y1].min;
-              int xxend = -m_xshift + range[y1].max + 1;
-              int y2 = yy - y + other.m_yshift;
-              xxstart = std::max (-other.m_xshift + x + other_range[y2].min,
+              int y1 = yy + m_area.yshift ();
+              int xxstart = -m_area.xshift () + range[y1].min;
+              int xxend = -m_area.xshift () + range[y1].max + 1;
+              int y2 = yy - y + other.m_area.yshift ();
+              xxstart = std::max (-other.m_area.xshift () + x + other_range[y2].min,
                                   xxstart);
-              xxend = std::min (-other.m_xshift + other_range[y2].max + 1 + x,
+              xxend = std::min (-other.m_area.xshift () + other_range[y2].max + 1 + x,
                                 xxend);
               if (xxend > xxstart)
                 {
                   est_noverlap += xxend - xxstart;
-                  rsum1 += sums[xxstart + m_xshift + y1 * m_width].red
-                           - sums[xxend - 1 + m_xshift + y1 * m_width].red;
-                  gsum1 += sums[xxstart + m_xshift + y1 * m_width].green
-                           - sums[xxend - 1 + m_xshift + y1 * m_width].green;
-                  bsum1 += sums[xxstart + m_xshift + y1 * m_width].blue
-                           - sums[xxend - 1 + m_xshift + y1 * m_width].blue;
-                  rsum2 += other_sums[xxstart - x + other.m_xshift
-                                      + y2 * other.m_width]
+                  rsum1 += sums[xxstart + m_area.xshift () + y1 * m_area.width].red
+                           - sums[xxend - 1 + m_area.xshift () + y1 * m_area.width].red;
+                  gsum1 += sums[xxstart + m_area.xshift () + y1 * m_area.width].green
+                           - sums[xxend - 1 + m_area.xshift () + y1 * m_area.width].green;
+                  bsum1 += sums[xxstart + m_area.xshift () + y1 * m_area.width].blue
+                           - sums[xxend - 1 + m_area.xshift () + y1 * m_area.width].blue;
+                  rsum2 += other_sums[xxstart - x + other.m_area.xshift ()
+                                      + y2 * other.m_area.width]
                                .red
-                           - other_sums[xxend - x - 1 + other.m_xshift
-                                        + y2 * other.m_width]
+                           - other_sums[xxend - x - 1 + other.m_area.xshift ()
+                                        + y2 * other.m_area.width]
                                  .red;
-                  gsum2 += other_sums[xxstart - x + other.m_xshift
-                                      + y2 * other.m_width]
+                  gsum2 += other_sums[xxstart - x + other.m_area.xshift ()
+                                      + y2 * other.m_area.width]
                                .green
-                           - other_sums[xxend - x - 1 + other.m_xshift
-                                        + y2 * other.m_width]
+                           - other_sums[xxend - x - 1 + other.m_area.xshift ()
+                                        + y2 * other.m_area.width]
                                  .green;
-                  bsum2 += other_sums[xxstart - x + other.m_xshift
-                                      + y2 * other.m_width]
+                  bsum2 += other_sums[xxstart - x + other.m_area.xshift ()
+                                      + y2 * other.m_area.width]
                                .blue
-                           - other_sums[xxend - x - 1 + other.m_xshift
-                                        + y2 * other.m_width]
+                           - other_sums[xxend - x - 1 + other.m_area.xshift ()
+                                        + y2 * other.m_area.width]
                                  .blue;
                 }
             }
@@ -654,15 +654,15 @@ analyze_base::find_best_match (int percentage, int max_percentage,
 	  int noverlap = 0;
 	  for (int yy = yystart; yy < yyend; yy+= ystep)
 	    {
-	      int y1 = yy + m_yshift;
-	      int xxstart = -m_xshift + range[y1].min;
-	      int xxend = -m_xshift + range[y1].max + 1;
-	      int y2 = yy - y + other.m_yshift;
-	      xxstart = std::max (-other.m_xshift + x + other_range[y2].min, xxstart);
-	      xxend = std::min (-other.m_xshift + other_range[y2].max + 1 + x, xxend);
+	      int y1 = yy + m_area.yshift ();
+	      int xxstart = -m_area.xshift () + range[y1].min;
+	      int xxend = -m_area.xshift () + range[y1].max + 1;
+	      int y2 = yy - y + other.m_area.yshift ();
+	      xxstart = std::max (-other.m_area.xshift () + x + other_range[y2].min, xxstart);
+	      xxend = std::min (-other.m_area.xshift () + other_range[y2].max + 1 + x, xxend);
 	      for (int xx = xxstart; xx < xxend; xx+= xstep)
 		{
-		  int x1 = xx + m_xshift;
+		  int x1 = xx + m_area.xshift ();
 #if 0
 		  if (!m_known_pixels->test_bit (x1, y1))
 		  {
@@ -670,7 +670,7 @@ analyze_base::find_best_match (int percentage, int max_percentage,
 		    continue;
 		  }
 #endif
-		  int x2 = xx - x + other.m_xshift;
+		  int x2 = xx - x + other.m_area.xshift ();
 #if 0
 		  if (!other.m_known_pixels->test_bit (x2, y2))
 		  {
@@ -717,24 +717,24 @@ analyze_base::find_best_match (int percentage, int max_percentage,
 
           for (int yy = yystart; yy < yyend; yy += ystep)
             {
-              int y1 = yy + m_yshift;
-              int xxstart = -m_xshift + range[y1].min;
-              int xxend = -m_xshift + range[y1].max + 1;
-              int y2 = yy - y + other.m_yshift;
-              xxstart = std::max (-other.m_xshift + x + other_range[y2].min,
+              int y1 = yy + m_area.yshift ();
+              int xxstart = -m_area.xshift () + range[y1].min;
+              int xxend = -m_area.xshift () + range[y1].max + 1;
+              int y2 = yy - y + other.m_area.yshift ();
+              xxstart = std::max (-other.m_area.xshift () + x + other_range[y2].min,
                                   xxstart);
-              xxend = std::min (-other.m_xshift + other_range[y2].max + 1 + x,
+              xxend = std::min (-other.m_area.xshift () + other_range[y2].max + 1 + x,
                                 xxend);
               for (int xx = xxstart; xx < xxend; xx += xstep)
                 {
-                  int x1 = xx + m_xshift;
-                  int y1 = yy + m_yshift;
+                  int x1 = xx + m_area.xshift ();
+                  int y1 = yy + m_area.yshift ();
 #if 0
 		  if (!m_known_pixels->test_bit (x1, y1))
 		    continue;
 #endif
-                  int x2 = xx - x + other.m_xshift;
-                  int y2 = yy - y + other.m_yshift;
+                  int x2 = xx - x + other.m_area.xshift ();
+                  int y2 = yy - y + other.m_area.yshift ();
 #if 0
 		  if (!other.m_known_pixels->test_bit (x2, y2))
 		    continue;
@@ -837,30 +837,30 @@ analyze_base::find_best_match (int percentage, int max_percentage,
       unsigned char ov[256][256][3];
       memset (ov, 0, 256 * 256 * 3);
       fn++;
-      int xxstart = -m_xshift + left;
-      int xxend = -m_xshift + right + 1;
-      int yystart = -m_yshift + first;
-      int yyend = -m_yshift + last + 1;
+      int xxstart = -m_area.xshift () + left;
+      int xxend = -m_area.xshift () + right + 1;
+      int yystart = -m_area.yshift () + first;
+      int yyend = -m_area.yshift () + last + 1;
 
-      xxstart = std::max (-other.m_xshift + x + other_left, xxstart);
-      yystart = std::max (-other.m_yshift + y + other_first, yystart);
-      xxend = std::min (-other.m_xshift + other_right + 1 + x, xxend);
-      yyend = std::min (-other.m_yshift + other_last + 1 + y, yyend);
+      xxstart = std::max (-other.m_area.xshift () + x + other_left, xxstart);
+      yystart = std::max (-other.m_area.yshift () + y + other_first, yystart);
+      xxend = std::min (-other.m_area.xshift () + other_right + 1 + x, xxend);
+      yyend = std::min (-other.m_area.yshift () + other_last + 1 + y, yyend);
 
       for (int yy = yystart; yy < yyend; yy++)
         {
-          int y1 = yy + m_yshift;
-          int xxstart = -m_xshift + range[y1].min;
-          int xxend = -m_xshift + range[y1].max + 1;
-          int y2 = yy - y + other.m_yshift;
+          int y1 = yy + m_area.yshift ();
+          int xxstart = -m_area.xshift () + range[y1].min;
+          int xxend = -m_area.xshift () + range[y1].max + 1;
+          int y2 = yy - y + other.m_area.yshift ();
           xxstart
-              = std::max (-other.m_xshift + x + other_range[y2].min, xxstart);
-          xxend = std::min (-other.m_xshift + other_range[y2].max + 1 + x,
+              = std::max (-other.m_area.xshift () + x + other_range[y2].min, xxstart);
+          xxend = std::min (-other.m_area.xshift () + other_range[y2].max + 1 + x,
                             xxend);
           for (int xx = xxstart; xx < xxend; xx++)
             {
-              int x1 = xx + m_xshift;
-              int x2 = xx - x + other.m_xshift;
+              int x1 = xx + m_area.xshift ();
+              int x2 = xx - x + other.m_area.xshift ();
               add (ov, 0, red_avg (x1, y1), other.red_avg (x2, y2));
               add (ov, 1, green_avg (x1, y1), other.green_avg (x2, y2));
               add (ov, 2, blue_avg (x1, y1), other.blue_avg (x2, y2));
@@ -919,23 +919,23 @@ analyze_base::write_screen (const char *filename, bitmap_2d *known_pixels,
 {
   tiff_writer_params p;
   p.filename = filename;
-  p.width = m_width;
-  p.height = m_height;
+  p.width = m_area.width;
+  p.height = m_area.height;
   p.alpha = true;
   tiff_writer out (p, error);
   if (*error)
     return false;
   if (progress)
-    progress->set_task ("Saving screen", m_height);
+    progress->set_task ("Saving screen", m_area.height);
   // progress->pause_stdout ();
-  // printf ("Saving screen to %s in resolution %ix%i\n", filename, m_width,
-  // m_height); progress->resume_stdout ();
+  // printf ("Saving screen to %s in resolution %ix%i\n", filename, m_area.width,
+  // m_area.height); progress->resume_stdout ();
   luminosity_t rscale = rmax > rmin ? 1 / (rmax - rmin) : 1;
   luminosity_t gscale = gmax > gmin ? 1 / (gmax - gmin) : 1;
   luminosity_t bscale = bmax > bmin ? 1 / (bmax - bmin) : 1;
-  for (int y = 0; y < m_height; y++)
+  for (int y = 0; y < m_area.height; y++)
     {
-      for (int x = 0; x < m_width; x++)
+      for (int x = 0; x < m_area.width; x++)
         {
           if ((known_pixels ? known_pixels : m_known_pixels.get ())->test_bit (x, y))
             {
@@ -983,8 +983,8 @@ analyze_base::analyze_range (luminosity_t *rrmin, luminosity_t *rrmax,
   std::vector<luminosity_t> rvec;
   std::vector<luminosity_t> gvec;
   std::vector<luminosity_t> bvec;
-  for (int y = 0; y < m_height; y++)
-    for (int x = 0; x < m_width; x++)
+  for (int y = 0; y < m_area.height; y++)
+    for (int x = 0; x < m_area.width; x++)
       if (m_known_pixels->test_bit (x, y))
         {
           rvec.push_back (red_avg (x, y));
@@ -1016,8 +1016,8 @@ analyze_base::analyze_range (luminosity_t *rrmin, luminosity_t *rrmax,
   luminosity_t bmin = 1, bmax = 0;
   std::
 
-  for (int y = 0; y < m_height; y++)
-    for (int x = 0; x < m_width; x++)
+  for (int y = 0; y < m_area.height; y++)
+    for (int x = 0; x < m_area.width; x++)
       {
 	rmin = std::min (rmin, red (x * 2 + 1, y));
 	rmax = std::max (rmax, red (x * 2 + 1, y));

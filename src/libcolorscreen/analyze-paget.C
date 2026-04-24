@@ -10,22 +10,22 @@ analyze_paget::write_screen (const char *filename, bitmap_2d *known_pixels, cons
 {
   tiff_writer_params p;
   p.filename = filename;
-  p.width = 2 * m_width;
-  p.height = 2 * m_height;
+  p.width = 2 * m_area.width;
+  p.height = 2 * m_area.height;
   p.alpha = true;
   tiff_writer out(p, error);
   if (*error)
     return false;
   if (progress)
-    progress->set_task ("Saving screen", m_height * 2);
+    progress->set_task ("Saving screen", m_area.height * 2);
   luminosity_t rscale = rmax > rmin ? 1/(rmax-rmin) : 1;
   luminosity_t gscale = gmax > gmin ? 1/(gmax-gmin) : 1;
   luminosity_t bscale = bmax > bmin ? 1/(bmax-bmin) : 1;
-  for (int y = 0; y < m_height * 2; y++)
+  for (int y = 0; y < m_area.height * 2; y++)
     {
-      for (int x = 0; x < m_width; x++)
+      for (int x = 0; x < m_area.width; x++)
 	{
-	  if (x > 0 && y / 2 > 0 && x < m_width - 1 && y / 2 < m_height - 1
+	  if (x > 0 && y / 2 > 0 && x < m_area.width - 1 && y / 2 < m_area.height - 1
 	      && (known_pixels ? known_pixels : m_known_pixels.get ())->test_bit (x, y / 2)
 	      && (known_pixels ? known_pixels : m_known_pixels.get ())->test_bit (x-1, y / 2)
 	      && (known_pixels ? known_pixels : m_known_pixels.get ())->test_bit (x+1, y / 2)
@@ -99,25 +99,25 @@ analyze_paget::find_best_match (int percentage, int max_percentage, analyze_base
 bool
 analyze_paget::dump_patch_density (FILE *out)
 {
-  fprintf (out, "Paget dimenstion: %i %i\n", m_width, m_height);
-  fprintf (out, "Red %i %i\n", m_width , 2*m_height);
-  for (int y = 0; y < m_height * 2; y++)
+  fprintf (out, "Paget dimenstion: %i %i\n", m_area.width, m_area.height);
+  fprintf (out, "Red %i %i\n", m_area.width , 2*m_area.height);
+  for (int y = 0; y < m_area.height * 2; y++)
     {
-      for (int x = 0; x < m_width; x++)
+      for (int x = 0; x < m_area.width; x++)
 	fprintf (out, "  %f", red (x, y));
       fprintf (out, "\n");
     }
-  fprintf (out, "Green %i %i\n", m_width , 2*m_height);
-  for (int y = 0; y < m_height * 2; y++)
+  fprintf (out, "Green %i %i\n", m_area.width , 2*m_area.height);
+  for (int y = 0; y < m_area.height * 2; y++)
     {
-      for (int x = 0; x < m_width; x++)
+      for (int x = 0; x < m_area.width; x++)
 	fprintf (out, "  %f", green (x, y));
       fprintf (out, "\n");
     }
-  fprintf (out, "Blue %i %i\n", m_width * 2, m_height * 2);
-  for (int y = 0; y < m_height * 2; y++)
+  fprintf (out, "Blue %i %i\n", m_area.width * 2, m_area.height * 2);
+  for (int y = 0; y < m_area.height * 2; y++)
     {
-      for (int x = 0; x < m_width * 2; x++)
+      for (int x = 0; x < m_area.width * 2; x++)
 	fprintf (out, "  %f", blue (x, y));
       fprintf (out, "\n");
     }

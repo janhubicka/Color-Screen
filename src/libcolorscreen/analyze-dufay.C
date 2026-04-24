@@ -6,14 +6,14 @@ namespace colorscreen
 bool
 analyze_dufay::analyze_contrast (render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, progress_info *progress)
 {
-  m_contrast.reset (new contrast_info [m_width * m_height]);
+  m_contrast.reset (new contrast_info [m_area.width * m_area.height]);
   if (!m_contrast)
     return false;
   if (progress)
     progress->set_task ("collecting contrast info", img->height);
 #pragma omp parallel for default (none) 
-  for (int y = 0; y < m_height; y++)
-    for (int x = 0; x < m_width; x++)
+  for (int y = 0; y < m_area.height; y++)
+    for (int x = 0; x < m_area.width; x++)
       {
 	get_contrast (x,y).min = 10000;
 	get_contrast (x,y).max = -10000;
@@ -25,12 +25,12 @@ analyze_dufay::analyze_contrast (render_to_scr *render, const image_data *img, s
 	for (int x = 0; x < img->width; x++)
 	  {
             point_t scr = scr_to_img->to_scr ({x + (coord_t)0.5, y + (coord_t)0.5});
-	    scr += {(coord_t)m_xshift, (coord_t)m_yshift};
+	    scr += {(coord_t)m_area.xshift (), (coord_t)m_area.yshift ()};
 	    int ix = floor (scr.x);
 	    int iy = floor (scr.y);
-	    ix += m_xshift;
-	    iy += m_yshift;
-	    if (ix >= 0 && ix < m_width && iy >= 0 && iy < m_height)
+	    ix += m_area.xshift ();
+	    iy += m_area.yshift ();
+	    if (ix >= 0 && ix < m_area.width && iy >= 0 && iy < m_area.height)
 	      {
 		luminosity_t d = render->get_data_red ({x, y});
 //#pragma omp critical
@@ -53,15 +53,15 @@ analyze_dufay::compare_contrast (analyze_dufay &other, int xpos, int ypos, int *
   luminosity_t max_ratio = 0;
   int maxx = 0, maxy = 0;
   if (progress)
-    progress->set_task ("comparing contrast", m_height);
-  for (int y = 0; y < m_height - tile_size; y++)
+    progress->set_task ("comparing contrast", m_area.height);
+  for (int y = 0; y < m_area.height - tile_size; y++)
     {
-      int y2 = y - m_yshift - ypos + other.m_yshift;
-      if (y2 >= 0 && y2 < other.m_height - tile_size)
-        for (int x = 0; x < m_width - tile_size; x++)
+      int y2 = y - m_area.yshift () - ypos + other.m_area.yshift ();
+      if (y2 >= 0 && y2 < other.m_area.height - tile_size)
+        for (int x = 0; x < m_area.width - tile_size; x++)
 	  {
-	    int x2 = x - m_xshift - xpos + other.m_xshift;
-	    if (x2 >= 0 && x2 < other.m_width - tile_size)
+	    int x2 = x - m_area.xshift () - xpos + other.m_area.xshift ();
+	    if (x2 >= 0 && x2 < other.m_area.width - tile_size)
 	      {
 		bool skip = false;
 #if 0
@@ -121,10 +121,10 @@ analyze_dufay::compare_contrast (analyze_dufay &other, int xpos, int ypos, int *
     }
   if (!max_ratio)
     return -1;
-  point_t imgp = map.to_img ({maxx + tile_size / (coord_t)2 - m_xshift, maxy + tile_size / (coord_t)2 - m_yshift});
+  point_t imgp = map.to_img ({maxx + tile_size / (coord_t)2 - m_area.xshift (), maxy + tile_size / (coord_t)2 - m_area.yshift ()});
   *x1 = imgp.x;
   *y1 = imgp.y;
-  imgp = other_map.to_img ({maxx + tile_size / (coord_t)2 - m_xshift -xpos, maxy + tile_size / (coord_t)2 - m_yshift - ypos});
+  imgp = other_map.to_img ({maxx + tile_size / (coord_t)2 - m_area.xshift () -xpos, maxy + tile_size / (coord_t)2 - m_area.yshift () - ypos});
   *x2 = imgp.x;
   *y2 = imgp.y;
   return max_ratio;
@@ -133,25 +133,25 @@ analyze_dufay::compare_contrast (analyze_dufay &other, int xpos, int ypos, int *
 bool
 analyze_dufay::dump_patch_density (FILE *out)
 {
-  fprintf (out, "Paget dimenstion: %i %i\n", m_width, m_height);
-  fprintf (out, "LeftDot %i %i\n", m_width , m_height);
-  for (int y = 0; y < m_height; y++)
+  fprintf (out, "Paget dimenstion: %i %i\n", m_area.width, m_area.height);
+  fprintf (out, "LeftDot %i %i\n", m_area.width , m_area.height);
+  for (int y = 0; y < m_area.height; y++)
     {
-      for (int x = 0; x < m_width; x++)
+      for (int x = 0; x < m_area.width; x++)
 	fprintf (out, "  %f", green (x, y));
       fprintf (out, "\n");
     }
-  fprintf (out, "RightDot %i %i\n", m_width , m_height);
-  for (int y = 0; y < m_height; y++)
+  fprintf (out, "RightDot %i %i\n", m_area.width , m_area.height);
+  for (int y = 0; y < m_area.height; y++)
     {
-      for (int x = 0; x < m_width; x++)
+      for (int x = 0; x < m_area.width; x++)
 	fprintf (out, "  %f", blue (x, y));
       fprintf (out, "\n");
     }
-  fprintf (out, "Strip %i %i\n", m_width * 2, m_height);
-  for (int y = 0; y < m_height; y++)
+  fprintf (out, "Strip %i %i\n", m_area.width * 2, m_area.height);
+  for (int y = 0; y < m_area.height; y++)
     {
-      for (int x = 0; x < m_width * 2; x++)
+      for (int x = 0; x < m_area.width * 2; x++)
 	fprintf (out, "  %f", red (x, y));
       fprintf (out, "\n");
     }

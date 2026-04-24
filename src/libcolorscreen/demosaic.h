@@ -4132,8 +4132,7 @@ public:
   {
     if (!initialize (analyze))
       return false;
-    if (!analyze->populate_demosaiced_data (m_demosaiced, r, m_width, m_height,
-                                            m_xshift, m_yshift, progress))
+    if (!analyze->populate_demosaiced_data (m_demosaiced, r, {-m_xshift, -m_yshift, m_width, m_height}, progress))
       return false;
     switch (alg)
       {

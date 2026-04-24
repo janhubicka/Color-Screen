@@ -122,7 +122,7 @@ get_new_dufay_analysis (struct analyzer_params &p, int_image_area area,
             }
       }
     if (ret->analyze (p.render, p.img, p.scr_to_img_map, s, p.simulated_screen_ptr,
-                      area.width, area.height, -area.x, -area.y, p.mode,
+                      area, p.mode,
                       p.collection_threshold, progress))
       return ret;
   }
@@ -136,7 +136,7 @@ get_new_paget_analysis (struct analyzer_params &p, int_image_area area,
 {
   auto ret = std::make_unique<analyze_paget> ();
   if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, p.simulated_screen_ptr,
-                    area.width, area.height, -area.x, -area.y, p.mode,
+                    area, p.mode,
                     p.collection_threshold, progress))
     return ret;
   return nullptr;
@@ -177,7 +177,7 @@ get_new_strips_analysis (struct analyzer_params &p, int_image_area area,
             }
       }
     if (ret->analyze (p.render, p.img, p.scr_to_img_map, s, p.simulated_screen_ptr,
-                      area.width, area.height, -area.x, -area.y, p.mode,
+                      area, p.mode,
                       p.collection_threshold, progress))
       return ret;
   }

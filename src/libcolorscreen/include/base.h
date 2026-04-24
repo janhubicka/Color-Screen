@@ -428,6 +428,9 @@ public:
   constexpr image_area_base (P topleft, T nwidth, T nheight)
   : x (topleft.x), y (topleft.y), width (nwidth), height (nheight)
   { }
+  constexpr image_area_base (P p)
+  : x (p.x), y (p.y), width (1), height (1)
+  { }
 
   /* Return true if the area is empty.  */
   pure_attr inline constexpr bool
@@ -467,27 +470,71 @@ public:
     return x == other.x && y == other.y && width == other.width && height == other.height;
   }
 
-  constexpr T xshift ()
+  constexpr T xshift () const
   {
     return -x;
   }
-  constexpr T yshift ()
+  constexpr T yshift () const
   {
     return -y;
   }
-  constexpr P top_left ()
+  pure_attr inline constexpr bool
+  contains_p (P p) const
+  {
+    return p.x >= x && p.x < x + width && p.y >= y && p.y < y + height;
+  }
+  pure_attr inline constexpr bool
+  contains_p (const image_area_base &other) const
+  {
+    return other.x >= x && other.x + other.width <= x + width
+	   && other.y >= y && other.y + other.height <= y + height;
+  }
+  /* Extend the area to contain point P.  */
+  inline void extend (P p)
+  {
+    if (empty_p ())
+      {
+	x = p.x;
+	y = p.y;
+	width = 1;
+	height = 1;
+      }
+    else
+      {
+	if (p.x < x)
+	  {
+	    width += x - p.x;
+	    x = p.x;
+	  }
+	else if (p.x >= x + width)
+	  width = p.x - x + 1;
+	if (p.y < y)
+	  {
+	    height += y - p.y;
+	    y = p.y;
+	  }
+	else if (p.y >= y + height)
+	  height = p.y - y + 1;
+      }
+  }
+  pure_attr inline constexpr P
+  relative (P p) const
+  {
+    return {p.x - x, p.y - y};
+  }
+  constexpr P top_left () const
   {
     return {x, y};
   }
-  constexpr P top_right ()
+  constexpr P top_right () const
   {
     return {x + width - 1, y};
   }
-  constexpr P bottom_left ()
+  constexpr P bottom_left () const
   {
     return {x, y + height - 1};
   }
-  constexpr P bottom_right ()
+  constexpr P bottom_right () const
   {
     return {x + width - 1, y + height - 1};
   }
