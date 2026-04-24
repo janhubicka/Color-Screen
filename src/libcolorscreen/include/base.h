@@ -68,6 +68,18 @@ my_fabs (double x)
   return fabs (x);
 }
 
+/* Natural logarithm of X.  */
+static inline float
+my_log (float x)
+{
+  return logf (x);
+}
+static inline double
+my_log (double x)
+{
+  return log (x);
+}
+
 /* Floor value X.  */
 static inline double
 my_floor (double x)
