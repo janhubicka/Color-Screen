@@ -868,7 +868,7 @@ analyze_patches (analyzer analyze, const char *task, image_data &img,
 			return analyze (pfin.x - img.xmin, pfin.y - img.ymin, c);
 		      },
 		    "analyzing tile", tile, rparam, stitch.images[ty][tx].param,
-		    true, {r.xmin, r.ymin, r.xmax - r.xmin, r.ymax - r.ymin}, progress))
+		    true, {(int)-r.xmin, (int)-r.ymin, (int)(r.xmax - r.xmin)+1, (int)(r.ymax - r.ymin)+1}, progress))
 	      return false;
 	  }
           if (progress)
@@ -948,7 +948,7 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img,
 					g_val, b_val);
 		      },
 		    "analyzing tile", tile, rparam, stitch.images[ty][tx].param,
-		    true, {r.xmin, r.ymin, r.xmax - r.xmin, r.ymax - r.ymin}, progress))
+		    true, {(int)-r.xmin, (int)-r.ymin, (int)(r.xmax - r.xmin)+1, (int)(r.ymax - r.ymin)+1}, progress))
 	      return false;
 	  }
           if (progress)
