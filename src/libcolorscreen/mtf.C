@@ -1114,14 +1114,14 @@ mtf::precompute (progress_info *progress, bool parallel)
       m_mtf.init_by_y_values (contrasts.data (), entries);
 
       if (colorscreen_checking)
-        for (int i = 0; i < 1000; i++)
-          if (fabs (m_params.system_mtf (i / 1000.0)
-                    - m_mtf.apply (i / 1000.0))
-              > 0.001)
+        for (int i = 0; i < entries; i++)
+          if (fabs (m_params.system_mtf (i * step)
+                    - m_mtf.apply (i * step))
+              > 0.0001)
             {
               printf ("Mismatch (model) %f %f\n",
-                      m_params.system_mtf (i / 1000.),
-                      m_mtf.apply (i / 1000.0));
+                      m_params.system_mtf (i * step),
+                      m_mtf.apply (i * step));
               abort ();
             }
 
@@ -1414,7 +1414,8 @@ mtf_parameters::load_csv (FILE *in, std::string name, const char **error)
 bool
 mtf::render_dot_spread_tile (tile_parameters &tile, progress_info *p)
 {
-  precompute_psf (p);
+  if (!precompute_psf (p))
+    return false;
   double maxp = 1;
   double m = 0;
   for (int p = 0; p < 1024; p++)
