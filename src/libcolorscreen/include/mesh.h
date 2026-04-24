@@ -24,6 +24,8 @@ public:
      and dimensions WIDTH x HEIGHT.  */
   mesh (coord_t xshift, coord_t yshift, coord_t xstep, coord_t ystep,
         int width, int height);
+  /* Initialize mesh for given AREA with given XSTEP and YSTEP.  */
+  mesh (int_image_area area, coord_t xstep, coord_t ystep);
 
   /* Destructor.  */
   DLL_PUBLIC ~mesh ();

@@ -80,6 +80,66 @@ my_log (double x)
   return log (x);
 }
 
+/* Base 10 logarithm of X.  */
+static inline float
+my_log10 (float x)
+{
+  return log10f (x);
+}
+static inline double
+my_log10 (double x)
+{
+  return log10 (x);
+}
+
+/* Sine of X.  */
+static inline float
+my_sin (float x)
+{
+  return sinf (x);
+}
+static inline double
+my_sin (double x)
+{
+  return sin (x);
+}
+
+/* Cosine of X.  */
+static inline float
+my_cos (float x)
+{
+  return cosf (x);
+}
+static inline double
+my_cos (double x)
+{
+  return cos (x);
+}
+
+/* Arc sine of X.  */
+static inline float
+my_asin (float x)
+{
+  return asinf (x);
+}
+static inline double
+my_asin (double x)
+{
+  return asin (x);
+}
+
+/* Arc cosine of X.  */
+static inline float
+my_acos (float x)
+{
+  return acosf (x);
+}
+static inline double
+my_acos (double x)
+{
+  return acos (x);
+}
+
 /* Floor value X.  */
 static inline double
 my_floor (double x)

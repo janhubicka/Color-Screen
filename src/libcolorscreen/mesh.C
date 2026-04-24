@@ -21,6 +21,13 @@ mesh::mesh (coord_t xshift, coord_t yshift, coord_t xstep, coord_t ystep,
   m_data.resize (width * height);
 }
 
+/* Initialize 2D mesh transformation for given AREA with given XSTEP and YSTEP.  */
+mesh::mesh (int_image_area area, coord_t xstep, coord_t ystep)
+    : mesh (area.xshift (), area.yshift (), xstep, ystep,
+            (area.width + xstep - 1) / xstep, (area.height + ystep - 1) / ystep)
+{
+}
+
 /* Destructor.  */
 mesh::~mesh ()
 {
