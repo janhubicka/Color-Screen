@@ -187,7 +187,7 @@ public:
   get_final_xshift () const
   {
     assert (!colorscreen_checking || !m_final_range.empty_p ());
-    return m_final_range.x;
+    return -m_final_range.x;
   }
 
   /* Return screen coordinate Y shift of rendered output.  */
@@ -195,7 +195,7 @@ public:
   get_final_yshift () const
   {
     assert (!colorscreen_checking || !m_final_range.empty_p ());
-    return m_final_range.y;
+    return -m_final_range.y;
   }
 
   /* Render TILE of image IMG for PARAM, RPARAM and RTPARAM.
