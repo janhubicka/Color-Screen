@@ -62,8 +62,9 @@ test_matrix ()
       m.randomize ();
       double x = rand () % 100;
       double y = rand () % 100;
-      m.perspective_transform (x, y, xr, yr);
-      m.inverse_perspective_transform (xr, yr, xr, yr);
+      point_t p = m.perspective_transform ({ (coord_t) x, (coord_t) y });
+      p = m.inverse_perspective_transform (p);
+      xr = p.x; yr = p.y;
       if (fabs (x - xr) > 0.1 || fabs (y - yr) > 0.1)
         {
           printf ("%f %f %f %f %f %f\n", xr, yr, x, y, fabs (x - xr),

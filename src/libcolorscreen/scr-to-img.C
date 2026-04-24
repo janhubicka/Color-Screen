@@ -210,11 +210,9 @@ scr_to_img::initialize ()
   point_t c2
       = apply_early_correction (m_param.center + m_param.coordinate2);
 
-  m_perspective_matrix.inverse_perspective_transform (
-      corrected_center.x, corrected_center.y, corrected_center.x,
-      corrected_center.y);
-  m_perspective_matrix.inverse_perspective_transform (c1.x, c1.y, c1.x, c1.y);
-  m_perspective_matrix.inverse_perspective_transform (c2.x, c2.y, c2.x, c2.y);
+  corrected_center = m_perspective_matrix.inverse_perspective_transform (corrected_center);
+  c1 = m_perspective_matrix.inverse_perspective_transform (c1);
+  c2 = m_perspective_matrix.inverse_perspective_transform (c2);
   c1 -= corrected_center;
   c2 -= corrected_center;
 
@@ -242,15 +240,15 @@ scr_to_img::initialize ()
     point_t txpy;
     coord_t tx, ty;
     m_matrix.apply (0, 0, &tx, &ty);
-    m_perspective_matrix.perspective_transform (tx, ty, zero.x, zero.y);
+    zero = m_perspective_matrix.perspective_transform ({ tx, ty });
     m_matrix.apply (1000, 0, &tx, &ty);
-    m_perspective_matrix.perspective_transform (tx, ty, x.x, x.y);
+    x = m_perspective_matrix.perspective_transform ({ tx, ty });
     m_matrix.apply (0, 1000, &tx, &ty);
-    m_perspective_matrix.perspective_transform (tx, ty, y.x, y.y);
+    y = m_perspective_matrix.perspective_transform ({ tx, ty });
     m_matrix.apply (1000, 1000, &tx, &ty);
-    m_perspective_matrix.perspective_transform (tx, ty, xpy.x, xpy.y);
+    xpy = m_perspective_matrix.perspective_transform ({ tx, ty });
     m_matrix.apply (2000, 3000, &tx, &ty);
-    m_perspective_matrix.perspective_transform (tx, ty, txpy.x, txpy.y);
+    txpy = m_perspective_matrix.perspective_transform ({ tx, ty });
     m_scr_to_img_homography_matrix = homography::get_matrix_5points (
         false, m_param.scanner_type, zero, x, y, xpy, txpy);
     if (m_do_homography)
@@ -273,9 +271,10 @@ scr_to_img::initialize ()
               coord_t px, py;
               coord_t xt, yt;
               m_matrix.apply (x, y, &px, &py);
-              m_perspective_matrix.perspective_transform (px, py, px, py);
-              m_scr_to_img_homography_matrix.perspective_transform (x, y, xt,
-                                                                    yt);
+              point_t pt = m_perspective_matrix.perspective_transform ({ px, py });
+              px = pt.x; py = pt.y;
+              point_t xtyt = m_scr_to_img_homography_matrix.perspective_transform ({ (coord_t) x, (coord_t) y });
+              xt = xtyt.x; yt = xtyt.y;
               if (fabs (px - xt) > 1 || fabs (py - yt) > 1)
                 {
                   printf ("scr-to-img forward mismatch %i %i: %f %f should be "
@@ -286,8 +285,8 @@ scr_to_img::initialize ()
               if (!m_do_homography)
                 continue;
               coord_t bx, by;
-              m_img_to_scr_homography_matrix.perspective_transform (px, py, bx,
-                                                                    by);
+              point_t bxby = m_img_to_scr_homography_matrix.perspective_transform ({ px, py });
+              bx = bxby.x; by = bxby.y;
               if (fabs (x - bx) > 1 || fabs (y - by) > 1)
                 {
                   printf ("scr-to-img backward mismatch %i %i: %f %f should "

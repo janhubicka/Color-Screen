@@ -73,17 +73,14 @@ solver (scr_to_img_parameters *param, image_data &img_data,
   else
     h = homography::get_matrix (points, flags, param->scanner_type, &map,
                                 w_center, &chisq);
-  coord_t center_x, center_y, coordinate1_x, coordinate1_y, coordinate2_x,
-      coordinate2_y;
-
   /* Determine center and coordinate vectors.  */
-  h.perspective_transform (0, 0, center_x, center_y);
-  h.perspective_transform (1, 0, coordinate1_x, coordinate1_y);
-  h.perspective_transform (0, 1, coordinate2_x, coordinate2_y);
+  point_t center = h.perspective_transform ({ (coord_t) 0, (coord_t) 0 });
+  point_t coordinate1 = h.perspective_transform ({ (coord_t) 1, (coord_t) 0 });
+  point_t coordinate2 = h.perspective_transform ({ (coord_t) 0, (coord_t) 1 });
 
-  param->center = map.inverse_early_correction ({ center_x, center_y });
-  param->coordinate1 = map.inverse_early_correction ({ coordinate1_x, coordinate1_y }) - param->center;
-  param->coordinate2 = map.inverse_early_correction ({ coordinate2_x, coordinate2_y }) - param->center;
+  param->center = map.inverse_early_correction (center);
+  param->coordinate1 = map.inverse_early_correction (coordinate1) - param->center;
+  param->coordinate2 = map.inverse_early_correction (coordinate2) - param->center;
   /* TODO: Can we decompose matrix in the way scr_to_img expects the
      parameters?  */
   coord_t minsq = INT_MAX;
@@ -112,7 +109,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
 		    {
 		      point_t t = map2.to_img ({ (coord_t)sx, (coord_t)sy });
 		      point_t p;
-		      h.perspective_transform (sx, sy, p.x, p.y);
+		      p = h.perspective_transform ({ (coord_t)sx, (coord_t)sy });
 		      p = map.inverse_early_correction (p);
 		      sq += p.dist_sq2_from (t);
 		    }
@@ -160,7 +157,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
 	    point_t scr = point.scr;
 	    point_t t = map2.to_img (scr);
 	    point_t p;
-	    h.perspective_transform (scr.x, scr.y, p.x, p.y);
+	    p = h.perspective_transform (scr);
 	    p = map.inverse_early_correction (p);
 	    if (!p.almost_eq (t, 1))
 	      {
@@ -176,7 +173,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
 	    point_t img = point.img;
 	    point_t t = map2.to_scr (img);
 	    point_t p = map.apply_early_correction (img);
-	    h.inverse_perspective_transform (p.x, p.y, p.x, p.y);
+	    p = h.inverse_perspective_transform (p);
 	    if (!p.almost_eq (t, 0.03))
 	      {
 		printf ("Solver model mismatch %f %f should be %f %f (ideally "
@@ -494,7 +491,7 @@ compute_mesh_point (solver_parameters &sparam, scanner_type type,
       ,
       type, nullptr, scrp, nullptr);
   point_t imgp;
-  h.perspective_transform (scrp.x, scrp.y, imgp.x, imgp.y);
+  imgp = h.perspective_transform (scrp);
 
   /* We need to set weight assymetrically based on image distance.  Problem is
      that without knowing the image distance we can not set one, so iteratively
@@ -510,7 +507,7 @@ compute_mesh_point (solver_parameters &sparam, scanner_type type,
               /*homography::solve_limit_ransac_iterations |
                  homography::solve_free_rotation*/
               type, nullptr, imgp, nullptr);
-          h.perspective_transform (scrp.x, scrp.y, imgp.x, imgp.y);
+          imgp = h.perspective_transform (scrp);
           if (last_imgp.almost_eq (imgp, 0.5))
             break;
         }
@@ -637,7 +634,7 @@ compute_mesh_point (screen_map &smap, solver_parameters &sparam,
       sparam.points, homography::solve_screen_weights, lparam.scanner_type,
       nullptr, scrp, nullptr);
   point_t imgp;
-  h.perspective_transform (scrp.x, scrp.y, imgp.x, imgp.y);
+  imgp = h.perspective_transform (scrp);
   /* We need to set weight assymetrically based on image distance.  Problem is
      that without knowing the image distance we can not set one, so iteratively
      find right one.  */
@@ -650,7 +647,7 @@ compute_mesh_point (screen_map &smap, solver_parameters &sparam,
           trans_4d_matrix h = homography::get_matrix (
               sparam.points, homography::solve_image_weights,
               lparam.scanner_type, nullptr, imgp, nullptr);
-          h.perspective_transform (scrp.x, scrp.y, imgp.x, imgp.y);
+          imgp = h.perspective_transform (scrp);
           if (last_imgp.almost_eq (imgp, 0.5))
             break;
         }

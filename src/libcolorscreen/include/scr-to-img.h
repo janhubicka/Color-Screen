@@ -101,7 +101,7 @@ public:
   {
     if (m_param.mesh_trans)
       return m_param.mesh_trans->apply (p);
-    m_scr_to_img_homography_matrix.perspective_transform (p.x, p.y, p.x, p.y);
+    p = m_scr_to_img_homography_matrix.perspective_transform (p);
     return inverse_early_correction (p);
   }
   pure_attr inline bool
@@ -124,12 +124,10 @@ public:
         /* For scanners with moving lens the inverse transform may not
            correspond to homography.  */
         if (m_do_homography)
-          m_img_to_scr_homography_matrix.perspective_transform (p.x, p.y, p.x,
-                                                                p.y);
+          p = m_img_to_scr_homography_matrix.perspective_transform (p);
         else
           {
-            m_perspective_matrix.inverse_perspective_transform (p.x, p.y, p.x,
-                                                                p.y);
+            p = m_perspective_matrix.inverse_perspective_transform (p);
             m_inverse_matrix.apply (p.x, p.y, &p.x, &p.y);
           }
       }

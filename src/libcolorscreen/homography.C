@@ -137,8 +137,8 @@ init_equation (gsl_matrix *A, gsl_vector *v, int n, bool invert, int flags,
                enum scanner_type scanner_type, point_t s, point_t d,
                trans_4d_matrix ts, trans_4d_matrix td)
 {
-  ts.perspective_transform (s.x, s.y, s.x, s.y);
-  td.perspective_transform (d.x, d.y, d.x, d.y);
+  s = ts.perspective_transform (s);
+  d = td.perspective_transform (d);
   if (!(flags & homography::solve_vertical_strips))
     {
       if (invert)
@@ -387,8 +387,7 @@ screen_compute_chisq (int flags, const std::vector <solver_parameters::solver_po
   if (!(flags & homography::solve_vertical_strips))
     for (auto point : points)
       {
-	point_t t;
-	homography.inverse_perspective_transform (point.img.x, point.img.y, t.x, t.y);
+	point_t t = homography.inverse_perspective_transform (point.img);
 	if (transformed)
 	  (*transformed)[i]=t;
 	i++;
@@ -400,8 +399,7 @@ screen_compute_chisq (int flags, const std::vector <solver_parameters::solver_po
   else
     for (auto point : points)
       {
-	point_t t;
-	homography.inverse_perspective_transform (point.img.x, point.img.y, t.x, t.y);
+	point_t t = homography.inverse_perspective_transform (point.img);
 	coord_t dist = (point.scr.x - t.x) * (point.scr.x - t.x);
 	if (transformed)
 	  (*transformed)[i]={t.x, point.scr.y};
@@ -598,9 +596,7 @@ get_matrix_ransac (const std::vector <solver_parameters::solver_point_t> &points
 	  {
 	    for (int i = 0; i < n; i++)
 	      {
-		point_t t;
-		cur.perspective_transform (tpoints[i].scr.x, tpoints[i].scr.y, t.x,
-					   t.y);
+		point_t t = cur.perspective_transform (tpoints[i].scr);
 		cur_chisq += t.dist_sq2_from (tpoints[i].img);
 		if (t.almost_eq (tpoints[i].img, dist))
 		  {
@@ -613,8 +609,7 @@ get_matrix_ransac (const std::vector <solver_parameters::solver_point_t> &points
 	  {
 	    for (int i = 0; i < n; i++)
 	      {
-		point_t s;
-		cur.inverse_perspective_transform (tpoints[i].img.x, tpoints[i].img.y, s.x, s.y);
+		point_t s = cur.inverse_perspective_transform (tpoints[i].img);
 		cur_chisq += (tpoints[i].scr.x - s.x) * (tpoints[i].scr.x - s.x);
 		if (my_fabs (tpoints[i].scr.x - s.x) < scr_dist)
 		  {
@@ -673,8 +668,7 @@ get_matrix_ransac (const std::vector <solver_parameters::solver_point_t> &points
 	  for (int i = 0; i < n; i++)
 	    {
 	      point_t scr = tpoints[i].scr;
-	      point_t t;
-	      ret.perspective_transform (scr.x, scr.y, t.x, t.y);
+	      point_t t = ret.perspective_transform (scr);
 	      if (tpoints[i].img.almost_eq (t, dist))
 		{
 		  scrnorm.account1 (scr, scanner_type);
@@ -688,8 +682,7 @@ get_matrix_ransac (const std::vector <solver_parameters::solver_point_t> &points
 	    {
 	      point_t img = tpoints[i].img;
 	      point_t scr = tpoints[i].scr;
-	      point_t s;
-	      ret.inverse_perspective_transform (img.x, img.y, s.x, s.y);
+	      point_t s = ret.inverse_perspective_transform (img);
 	      if (fabs (scr.x - s.x) < scr_dist)
 		{
 		  scrnorm.account1_xonly (scr, scanner_type);
@@ -704,8 +697,7 @@ get_matrix_ransac (const std::vector <solver_parameters::solver_point_t> &points
 	  for (int i = 0; i < n; i++)
 	    {
 	      point_t scr = tpoints[i].scr;
-	      point_t t;
-	      ret.perspective_transform (scr.x, scr.y, t.x, t.y);
+	      point_t t = ret.perspective_transform (scr);
 	      if (tpoints[i].img.almost_eq (t, dist))
 		{
 		  scrnorm.account2 (scr);
@@ -719,8 +711,7 @@ get_matrix_ransac (const std::vector <solver_parameters::solver_point_t> &points
 	    {
 	      point_t img = tpoints[i].img;
 	      point_t scr = tpoints[i].scr;
-	      point_t s;
-	      ret.inverse_perspective_transform (img.x, img.y, s.x, s.y);
+	      point_t s = ret.inverse_perspective_transform (img);
 	      if (fabs (scr.x - s.x) < scr_dist)
 		{
 		  scrnorm.account2_xonly (scr);
@@ -736,8 +727,7 @@ get_matrix_ransac (const std::vector <solver_parameters::solver_point_t> &points
 	for (int i = 0; i < n; i++)
 	  {
 	    point_t scr = tpoints[i].scr;
-	    point_t t;
-	    ret.perspective_transform (scr.x, scr.y, t.x, t.y);
+	    point_t t = ret.perspective_transform (scr);
 	    if (tpoints[i].img.almost_eq (t, dist))
 	      {
 		init_equation (X, y, p, false, flags, scanner_type, scr,
@@ -750,8 +740,7 @@ get_matrix_ransac (const std::vector <solver_parameters::solver_point_t> &points
 	  {
 	    point_t img = tpoints[i].img;
 	    point_t scr = tpoints[i].scr;
-	    point_t s;
-	    ret.inverse_perspective_transform (img.x, img.y, s.x, s.y);
+	    point_t s = ret.inverse_perspective_transform (img);
 	    if (fabs (scr.x - s.x) < scr_dist)
 	      {
 		init_equation (X, y, p, false, flags, scanner_type, scr,
