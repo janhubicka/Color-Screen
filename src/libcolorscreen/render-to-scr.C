@@ -264,7 +264,7 @@ saturation_loss_table::saturation_loss_table (
 
 /* Return approximate size of an scan pixel in screen coordinates.  */
 coord_t
-render_to_scr::pixel_size () const
+render_to_scr::pixel_size () const noexcept
 {
   return m_scr_to_img.pixel_size (m_img.width, m_img.height);
 }

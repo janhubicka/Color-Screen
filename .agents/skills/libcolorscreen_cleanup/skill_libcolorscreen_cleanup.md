@@ -20,6 +20,7 @@ This skill provides guidelines for maintaining, refactoring, and modernizing the
    This file is part of Color-Screen.  */
 ```
 - **Member Initialization**: For parameter structures and classes, prefer C++11 default member initialization (`type var = initial_value;`) over assignments in the constructor body.
+  Do not introduce new unnecesary default values.
 - **C++17**: Suggest improvements for using best practices of C++17. Be careful about performance impact. Suggest use of range fors where cleaner. Get codebase ready for C++ standard update.  Always ask in plan.
 - **lambda**: Lambda functions in performance critical codde are OK only if they are template parameters and will be for sure optimized out at compile time.
 - **headers and standard library**: Turn C headers to C++ headers. Use C++ library calls instead of C library calls where performance is better or equal.
