@@ -5,11 +5,10 @@ FinetuneWorker::FinetuneWorker(colorscreen::solver_parameters solverParams,
                                colorscreen::render_parameters rparams,
                                colorscreen::scr_to_img_parameters scrToImg,
                                std::shared_ptr<colorscreen::image_data> scan,
-                               int xmin, int ymin, int xmax, int ymax,
+                               colorscreen::int_image_area area,
                                std::shared_ptr<colorscreen::progress_info> progress)
     : m_solverParams(solverParams), m_rparams(rparams), m_scrToImg(scrToImg),
-      m_scan(scan), m_xmin(xmin), m_ymin(ymin), m_xmax(xmax), m_ymax(ymax),
-      m_progress(progress) {
+      m_scan(scan), m_area(area), m_progress(progress) {
 }
 
 void FinetuneWorker::run() {
@@ -21,7 +20,7 @@ void FinetuneWorker::run() {
   
   // Call finetune_area
   bool success = colorscreen::finetune_area(&localSolver, m_rparams, m_scrToImg,
-                                            *m_scan, m_xmin, m_ymin, m_xmax, m_ymax,
+                                            *m_scan, m_area,
                                             m_progress.get());
   
   // Check if cancelled

@@ -844,7 +844,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	      xmax = scan.width;
 	      ymax = scan.height;
 	    }
-	  if (!scan.stitch && finetune_area (&current_solver, rparams, current, scan, xmin, ymin, xmax, ymax, &progress))
+	  if (!scan.stitch && finetune_area (&current_solver, rparams, current, scan, {xmin, ymin, xmax, ymax}, &progress))
 	    {
 	      autosolving = true;
 	      display_scheduled = true;

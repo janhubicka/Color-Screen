@@ -3462,7 +3462,7 @@ void MainWindow::onAreaSelected(QRect area) {
   
   // Create worker and thread
   FinetuneWorker *worker = new FinetuneWorker(m_solverParams, m_rparams, m_scrToImgParams,
-                                              m_scan, imgArea.left(), imgArea.top(), imgArea.right(), imgArea.bottom(), progress);
+                                              m_scan, {imgArea.left(), imgArea.top(), imgArea.width(), imgArea.height()}, progress);
   QThread *thread = new QThread();
   worker->moveToThread(thread);
   

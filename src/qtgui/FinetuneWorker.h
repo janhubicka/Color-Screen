@@ -4,6 +4,7 @@
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
 #include "../libcolorscreen/include/solver-parameters.h"
 #include "../libcolorscreen/include/progress-info.h"
+#include "../libcolorscreen/include/base.h"
 #include <QObject>
 #include <memory>
 #include <vector>
@@ -19,7 +20,7 @@ public:
                  colorscreen::render_parameters rparams,
                  colorscreen::scr_to_img_parameters scrToImg,
                  std::shared_ptr<colorscreen::image_data> scan,
-                 int xmin, int ymin, int xmax, int ymax,
+                 colorscreen::int_image_area area,
                  std::shared_ptr<colorscreen::progress_info> progress);
 
 public slots:
@@ -34,6 +35,6 @@ private:
   colorscreen::render_parameters m_rparams;
   colorscreen::scr_to_img_parameters m_scrToImg;
   std::shared_ptr<colorscreen::image_data> m_scan;
-  int m_xmin, m_ymin, m_xmax, m_ymax;
+  colorscreen::int_image_area m_area;
   std::shared_ptr<colorscreen::progress_info> m_progress;
 };

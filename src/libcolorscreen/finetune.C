@@ -3587,24 +3587,33 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   return ret;
 }
 
+/* Finetune SOLVER parameters in given AREA using RPARAM and PARAM in IMG.
+   PROGRESS is used to report progress.  */
+
 bool
 finetune_area (solver_parameters *solver, render_parameters &rparam,
                const scr_to_img_parameters &param, const image_data &img,
-               int xmin, int ymin, int xmax, int ymax, progress_info *progress)
+               int_image_area area, progress_info *progress)
 {
-  if (xmin < 0)
-    xmin = 0;
-  if (xmin > img.width - 1)
+  if (area.x < 0)
+    {
+      area.width += area.x;
+      area.x = 0;
+    }
+  if (area.x > img.width - 1)
     return false;
-  if (ymin < 0)
-    ymin = 0;
-  if (ymin > img.height - 1)
+  if (area.y < 0)
+    {
+      area.height += area.y;
+      area.y = 0;
+    }
+  if (area.y > img.height - 1)
     return false;
-  if (xmax > img.width - 1)
-    xmax = img.width - 1;
-  if (ymax > img.height - 1)
-    ymax = img.height - 1;
-  if (xmax < xmin || ymax < ymin)
+  if (area.x + area.width > img.width)
+    area.width = img.width - area.x;
+  if (area.y + area.height > img.height)
+    area.height = img.height - area.y;
+  if (area.width <= 0 || area.height <= 0)
     return false;
   const int steps = 100;
   int overall_xsteps = steps;
@@ -3617,8 +3626,8 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
     overall_ysteps *= 3, overall_xsteps /= 3;
   int xstep = img.width / overall_xsteps;
   int ystep = img.width / overall_ysteps;
-  int xsteps = (xmax - xmin + xstep) / xstep;
-  int ysteps = (ymax - ymin + ystep) / ystep;
+  int xsteps = (area.width + xstep - 1) / xstep;
+  int ysteps = (area.height + ystep - 1) / ystep;
   if (!xsteps || !ysteps)
     return false;
   std::vector<finetune_result> res (xsteps * ysteps);
@@ -3632,8 +3641,8 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
   if (xsteps > 1 || ysteps > 1)
     {
 #pragma omp parallel for default(none) collapse(2) schedule(dynamic)          \
-    shared(xsteps, ysteps, rparam, param, progress, img, solver, res, xmin,   \
-               ymin, xstep, ystep)
+    shared(xsteps, ysteps, rparam, param, progress, img, solver, res, area,   \
+           xstep, ystep)
       for (int x = 0; x < xsteps; x++)
         for (int y = 0; y < ysteps; y++)
           {
@@ -3645,7 +3654,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
                    | finetune_no_progress_report;
             res[x + y * xsteps] = finetune (
                 rparam, param, img,
-                { { xmin + (x + 0.5) * xstep, ymin + (y + 0.5) * ystep } },
+                { { area.x + (x + 0.5) * xstep, area.y + (y + 0.5) * ystep } },
                 nullptr, fparam, progress);
             if (progress)
               progress->inc_progress ();
@@ -3656,7 +3665,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
       finetune_parameters fparam;
       fparam.flags |= finetune_position /*| finetune_multitile*/ | finetune_bw;
       res[0] = finetune (rparam, param, img,
-                         { { xmin + (0.5) * xstep, ymin + (0.5) * ystep } },
+                         { { area.x + (0.5) * xstep, area.y + (0.5) * ystep } },
                          nullptr, fparam, progress);
       progress->inc_progress ();
     }
