@@ -1,11 +1,19 @@
+/* High-level rendering to screen coordinates.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #include <cassert>
 #include "render-to-scr.h"
 #include "screen.h"
 #include "lru-cache.h"
 #include "finetune-int.h"
 #include "include/finetune.h"
+
 namespace colorscreen
 {
+
+/* Initialize screen table for PARAM, TYPE, RED_STRIP_WIDTH, GREEN_STRIP_WIDTH and SHARPEN.
+   Update PROGRESS.  */
 screen_table::screen_table (scanner_blur_correction_parameters *param,
                             scr_type type, luminosity_t red_strip_width,
                             luminosity_t green_strip_width,
@@ -29,7 +37,7 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
 	  {
 	  case scanner_blur_correction_parameters::blur_radius:
 	    m_screen_table[y * m_width + x].initialize_with_blur (
-		s, param->get_correction (x, y)/* * (1 + (x & 1) + (y & 1))*/);
+		s, param->get_correction (x, y));
 	    break;
 	  case scanner_blur_correction_parameters::mtf_defocus:
 	    {
@@ -54,6 +62,9 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
           progress->inc_progress ();
       }
 }
+
+/* Initialize saturation loss table for SCREEN_TABLE, COLLECTION_SCREEN, IMG_WIDTH, IMG_HEIGHT, MAP, COLLECTION_THRESHOLD and SHARPEN.
+   Update PROGRESS.  */
 saturation_loss_table::saturation_loss_table (
     screen_table *screen_table, screen *collection_screen, int img_width,
     int img_height, scr_to_img *map, luminosity_t collection_threshold,
@@ -62,8 +73,8 @@ saturation_loss_table::saturation_loss_table (
     : m_id (lru_caches::get ()), m_width (screen_table->get_width ()),
       m_height (screen_table->get_height ()), m_img_width (img_width),
       m_img_height (img_height),
-      m_xstepinv (m_width / (coord_t)img_width),
-      m_ystepinv (m_height / (coord_t)img_height),
+      m_xstepinv ((coord_t)m_width / (coord_t)img_width),
+      m_ystepinv ((coord_t)m_height / (coord_t)img_height),
       m_saturation_loss_table (m_width * m_height)
 {
   if (progress)
@@ -76,22 +87,22 @@ saturation_loss_table::saturation_loss_table (
         if (progress && progress->cancel_requested ())
           continue;
         int idx = y * m_width + x;
-        // No progress here since we compute in parallel
-        int xp = (x + 0.5) * m_img_width / m_width;
-        int yp = (y + 0.5) * m_img_height / m_height;
+        /* No progress here since we compute in parallel.  */
+        int xp = (int)((x + (coord_t)0.5) * (coord_t)m_img_width / (coord_t)m_width);
+        int yp = (int)((y + (coord_t)0.5) * (coord_t)m_img_height / (coord_t)m_height);
         rgbdata cred, cgreen, cblue;
         if (determine_color_loss (
                 &cred, &cgreen, &cblue, screen_table->get_screen (x, y),
-		/* TODO: No support for adaptive sharpening/bluring of simulated
+		/* TODO: No support for adaptive sharpening/blurring of simulated
 		   screens yet.  */
                 *collection_screen, NULL,
 	       	collection_threshold, sharpen, *map, xp - 100,
                 yp - 100, xp + 100, yp + 100))
           {
-            color_matrix sat (cred.red, cgreen.red, cblue.red, 0, //
-			      cred.green, cgreen.green, cblue.green, 0, //
-			      cred.blue, cgreen.blue, cblue.blue, 0, //
-			      0, 0, 0, 1);
+            color_matrix sat (cred.red, cgreen.red, cblue.red, (luminosity_t)0.0,
+			      cred.green, cgreen.green, cblue.green, (luminosity_t)0.0,
+			      cred.blue, cgreen.blue, cblue.blue, (luminosity_t)0.0,
+			      (luminosity_t)0.0, (luminosity_t)0.0, (luminosity_t)0.0, (luminosity_t)1.0);
             m_saturation_loss_table[idx] = sat.invert ();
           }
         else
@@ -104,8 +115,7 @@ saturation_loss_table::saturation_loss_table (
       }
 }
 
-
-
+/* Return new screen for parameters P.  Update PROGRESS.  */
 std::unique_ptr<screen>
 get_new_screen (struct screen_params &p, progress_info *progress)
 {
@@ -120,45 +130,40 @@ get_new_screen (struct screen_params &p, progress_info *progress)
     return s;
   auto blurred = std::make_unique<screen>();
   if (progress)
-    progress->set_task ("bluring screen", 1);
-  //if (p.sharpen.deconvolution_p ())
+    progress->set_task ("blurring screen", 1);
   if (p.sharpen.scanner_mtf_scale)
     {
       /* No need to adjust by screen::size.  If p.screen_mtf_scale == screen::size
 	 we should scale exactly by it.  */
-      //mtf *vv[3] = {p.sharpen.scanner_mtf.get (), p.sharpen.scanner_mtf.get (), p.sharpen.scanner_mtf.get ()};
       sharpen_parameters *vv[3] = {&p.sharpen, &p.sharpen, &p.sharpen};
       blurred->empty ();
       blurred->initialize_with_sharpen_parameters (*s, vv, p.anticipate_sharpening);
-      //blurred->initialize_with_2D_fft (*s, vv, { p.sharpen.scanner_mtf_scale, p.sharpen.scanner_mtf_scale, p.sharpen.scanner_mtf_scale }, p.anticipate_sharpening ? p.sharpen.scanner_snr : 0);
-      //blurred->save_tiff ("/tmp/scr.tif", false, 3);
     }
   else
     blurred->initialize_with_blur (*s, p.sharpen.usm_radius);
-  //blurred->clamp ();
   return blurred;
 }
+
 static render_to_scr::screen_cache_t
     screen_cache ("screen");
 
-struct screen_table_params; // will use header definition
-
-
-
+/* Return new screen table for parameters P.  Update PROGRESS.  */
 std::unique_ptr<screen_table>
 get_new_screen_table (struct screen_table_params &p, progress_info *progress)
 {
   auto s = std::make_unique<screen_table> (p.param, p.type, p.red_strip_width,
-                                      p.green_strip_width, p.sharpen, progress);
+                                       p.green_strip_width, p.sharpen, progress);
   if (progress && progress->cancelled ())
     {
       return nullptr;
     }
   return s;
 }
+
 static render_to_scr::screen_table_cache_t
     screen_table_cache ("screen table");
 
+/* Return new saturation loss table for parameters P.  Update PROGRESS.  */
 std::unique_ptr<saturation_loss_table>
 get_new_saturation_loss_table (struct saturation_loss_params &p,
                                progress_info *progress)
@@ -172,42 +177,44 @@ get_new_saturation_loss_table (struct saturation_loss_params &p,
     }
   return s;
 }
+
 static render_to_scr::saturation_loss_table_cache_t
     saturation_loss_table_cache ("saturation loss table");
 
-/* Return approximate size of an scan pixel in screen corrdinates.  */
+/* Return approximate size of an scan pixel in screen coordinates.  */
 coord_t
-render_to_scr::pixel_size ()
+render_to_scr::pixel_size () const
 {
   return m_scr_to_img.pixel_size (m_img.width, m_img.height);
 }
 
+/* Precompute all data needed for rendering.  Update PROGRESS.
+   GRAYSCALE_NEEDED specifies if grayscale only rendering is sufficient.
+   NORMALIZED_PATCHES specifies if patches should be normalized.  */
 bool
 render_to_scr::precompute_all (bool grayscale_needed, bool normalized_patches,
 			       progress_info *progress)
 {
+  if (!m_ok)
+    return false;
   return render::precompute_all (grayscale_needed, normalized_patches,
-				 normalized_patches ? m_scr_to_img.patch_proportions (&m_params) : (rgbdata){1.0/3, 1.0/3, 1.0/3},
+				 normalized_patches ? m_scr_to_img.patch_proportions (&m_params) : (rgbdata){(luminosity_t)1.0/(luminosity_t)3.0, (luminosity_t)1.0/(luminosity_t)3.0, (luminosity_t)1.0/(luminosity_t)3.0},
 				 progress);
 }
-#if 0
+
+/* Precompute all data needed for rendering in AREA.  Update PROGRESS.
+   GRAYSCALE_NEEDED specifies if grayscale only rendering is sufficient.
+   NORMALIZED_PATCHES specifies if patches should be normalized.  */
 bool
-render_to_scr::precompute (int_image_area, progress_info *progress)
+render_to_scr::precompute_img_range (bool grayscale_needed, bool normalized_patches, int_image_area area, progress_info *progress)
 {
-  return render_to_scr::precompute_all (grayscale_needed, normalized_patches, progress);
-}
-#endif
-bool
-render_to_scr::precompute_img_range (bool grayscale_needed, bool normalized_patches, int_image_area, progress_info *progress)
-{
+  (void)area;
   return render_to_scr::precompute_all (grayscale_needed, normalized_patches, progress);
 }
 
-/* Compute screen of type T possibly in PREVIEW.
-   Blur it according to SHARPEN parameters and if ANTICIPATE_SHARPENING
-   is true, sharpen it back (so we get an estimate of what happens after
-   sharpening step of scan).  */
-
+/* Return screen of type T in PREVIEW mode.  Sharpen it according to SHARPEN parameters
+   if ANTICIPATE_SHARPENING is true.  RED_STRIP_WIDTH and GREEN_STRIP_WIDTH specify
+   strip widths.  Update PROGRESS and return screen unique ID in ID.  */
 std::shared_ptr<screen>
 render_to_scr::get_screen (enum scr_type t, bool preview, 
 			   bool anticipate_sharpening,
@@ -219,25 +226,14 @@ render_to_scr::get_screen (enum scr_type t, bool preview,
   return screen_cache.get (p, progress, id);
 }
 
-std::shared_ptr<screen>
-render_to_scr::get_screen_raw (enum scr_type t, bool preview, 
-			       bool anticipate_sharpening,
-			       const sharpen_parameters &sharpen,
-                               coord_t red_strip_width, coord_t green_strip_width,
-                               progress_info *progress, uint64_t *id)
-{
-  screen_params p = { t, preview, red_strip_width, green_strip_width, anticipate_sharpening, sharpen};
-  return screen_cache.get (p, progress, id);
-}
-
-
+/* Release screen S.  */
 void
 render_to_scr::release_screen (screen *s)
 {
+  (void)s;
 }
 
-
-
+/* Compute screen table for PROGRESS.  */
 bool
 render_to_scr::compute_screen_table (progress_info *progress)
 {
@@ -245,7 +241,7 @@ render_to_scr::compute_screen_table (progress_info *progress)
   screen_table_params p
       = { m_params.scanner_blur_correction.get (),
           m_params.scanner_blur_correction->id, m_scr_to_img.get_type (),
-          m_params.red_strip_width, m_params.green_strip_width };
+          m_params.red_strip_width, m_params.green_strip_width, {} };
   if (m_params.scanner_blur_correction->get_mode () != scanner_blur_correction_parameters::blur_radius)
     {
       p.sharpen = m_params.sharpen;
@@ -255,6 +251,8 @@ render_to_scr::compute_screen_table (progress_info *progress)
   return (bool)m_screen_table;
 }
 
+/* Compute saturation loss table for COLLECTION_SCREEN with ID COLLECTION_SCREEN_UID,
+   COLLECTION_THRESHOLD and SHARPEN parameters.  Update PROGRESS.  */
 bool
 render_to_scr::compute_saturation_loss_table (
     screen *collection_screen, uint64_t collection_screen_uid,
@@ -283,6 +281,7 @@ render_to_scr::compute_saturation_loss_table (
   return (bool)m_saturation_loss_table;
 }
 
+/* Simulate screen rendering for PROGRESS.  */
 void
 render_to_scr::simulate_screen (progress_info *progress)
 {
@@ -308,6 +307,7 @@ render_to_scr::~render_to_scr ()
 {
 }
 
+/* Compute RGB data of downscaled image.  Update PROGRESS.  */
 bool
 render_img::get_color_data (rgbdata *data, point_t p, int width,
                             int height, coord_t pixelsize,
@@ -320,13 +320,14 @@ render_img::get_color_data (rgbdata *data, point_t p, int width,
     return render::get_color_data (data, p, width, height, pixelsize, progress);
 }
 
+/* Initialize TILE to COLOR.  */
 static void
 init_to_color (rgbdata color, tile_parameters &tile)
 {
   color = color.clamp ();
-  int r = invert_gamma (color.red, -1) * 255 + 0.5;
-  int g = invert_gamma (color.green, -1) * 255 + 0.5;
-  int b = invert_gamma (color.blue, -1) * 255 + 0.5;
+  int r = invert_gamma (color.red, -1) * 255 + (coord_t)0.5;
+  int g = invert_gamma (color.green, -1) * 255 + (coord_t)0.5;
+  int b = invert_gamma (color.blue, -1) * 255 + (coord_t)0.5;
 
   for (int y = 0; y < tile.height; y++)
     for (int x = 0; x < tile.width; x++)
@@ -337,6 +338,8 @@ init_to_color (rgbdata color, tile_parameters &tile)
       }
 }
 
+/* Render screen TILE of TYPE for RPARAM, PIXEL_SIZE and RST.
+   Update PROGRESS.  */
 DLL_PUBLIC
 bool
 render_screen_tile (tile_parameters &tile, scr_type type,
@@ -364,7 +367,7 @@ render_screen_tile (tile_parameters &tile, scr_type type,
       rgbdata backlight;
       a.apply_to_rgb (backlight_white.x, backlight_white.y, backlight_white.z,
                       &backlight.red, &backlight.green, &backlight.blue);
-      luminosity_t max = 1 / std::max (std::max (backlight.red, backlight.green), backlight.blue);
+      luminosity_t max = (luminosity_t)1.0 / std::max (std::max (backlight.red, backlight.green), backlight.blue);
       if (type == Random)
         type = Joly;
       if (rst == backlight_screen || rst == corrected_backlight_screen)
@@ -407,27 +410,26 @@ render_screen_tile (tile_parameters &tile, scr_type type,
       for (int x = 0; x < tile.width; x++)
         {
           rgbdata wd
-              = scr->interpolated_mult ({ x * (mult / ((coord_t)tile.width)),
-                                          y * (mult / ((coord_t)tile.height)) });
+              = scr->interpolated_mult ({ (coord_t)x * ((coord_t)mult / ((coord_t)tile.width)),
+                                          (coord_t)y * ((coord_t)mult / ((coord_t)tile.height)) });
           m.apply_to_rgb (wd.red, wd.green, wd.blue, &wd.red, &wd.green,
                           &wd.blue);
-          // wd = (wd * 0.9) + (rgbdata){0.1,0.1,0.1};
           wd = wd.clamp ();
           tile.pixels[x * 3 + y * tile.rowstride]
-              = invert_gamma (wd.red, -1) * 255 + 0.5;
+              = invert_gamma (wd.red, -1) * 255 + (coord_t)0.5;
           tile.pixels[x * 3 + y * tile.rowstride + 1]
-              = invert_gamma (wd.green, -1) * 255 + 0.5;
+              = invert_gamma (wd.green, -1) * 255 + (coord_t)0.5;
           tile.pixels[x * 3 + y * tile.rowstride + 2]
-              = invert_gamma (wd.blue, -1) * 255 + 0.5;
+              = invert_gamma (wd.blue, -1) * 255 + (coord_t)0.5;
         }
   else
     {
-      rgbdata sum = { 0, 0, 0 };
+      rgbdata sum = { (luminosity_t)0.0, (luminosity_t)0.0, (luminosity_t)0.0 };
       for (int y = 0; y < screen::size; y++)
         for (int x = 0; x < screen::size; x++)
           sum += rgbdata{ scr->mult[y][x][0], scr->mult[y][x][1],
                    scr->mult[y][x][2] };
-      sum *= 1 / (luminosity_t)(screen::size * screen::size);
+      sum *= (luminosity_t)1.0 / (luminosity_t)(screen::size * screen::size);
       m.apply_to_rgb (sum.red, sum.green, sum.blue, &sum.red, &sum.green,
                       &sum.blue);
       init_to_color (sum, tile);
