@@ -40,7 +40,7 @@ trans_4d_matrix get_matrix_5points (bool invert, scanner_type type,
    then adjust weight according to distance from WCENTER.
    If CHISQ_RET is non-NULL initialize it to square of errors.
    If FINAL_RUN is true then this is the final call to RANSAC.  */
-trans_4d_matrix get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points,
+trans_4d_matrix get_matrix_ransac (const std::vector <solver_parameters::solver_point_t> &points,
                                    int flags, scanner_type type,
                                    scr_to_img *map, point_t wcenter,
                                    coord_t *chisq_ret = nullptr,
@@ -53,7 +53,7 @@ trans_4d_matrix get_matrix_ransac (std::vector <solver_parameters::solver_point_
    If CHISQ_RET is non-NULL initialize it to square of errors.
    If TRANSFORMED is non-NULL it is initialized to the set of source points
    transformed by the resulting homography.  */
-trans_4d_matrix get_matrix (std::vector <solver_parameters::solver_point_t> &points,
+trans_4d_matrix get_matrix (const std::vector <solver_parameters::solver_point_t> &points,
                             int flags, scanner_type type, scr_to_img *map,
                             point_t wcenter, coord_t *chisq_ret = nullptr,
 			    std::vector <point_t> *transformed = nullptr);

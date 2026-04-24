@@ -590,7 +590,10 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
 #if 0
   if (m_prj->params.optimize_colors)
   {
-    if (!optimize_screen_colors (&dparam, img, rparam.gamma, img->width / 2 - 500, img->height /2 - 500, 1000, 1000,  progress, report_file))
+    if (!optimize_screen_colors (
+            &dparam, img, rparam.gamma,
+            { img->width / 2 - 500, img->height / 2 - 500, 1000, 1000 }, progress,
+            report_file))
       {
 	progress->pause_stdout ();
 	fprintf (stderr, "Failed analyze screen colors of %s\n", filename.c_str ());
@@ -639,7 +642,11 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
       if (m_prj->params.reoptimize_colors)
 	{
 	  scr_detect_parameters optimized_dparam = m_prj->dparam;
-	  optimize_screen_colors (&optimized_dparam, detected.param.type, img.get (), mesh_trans.get (), detected.xshift, detected.yshift, detected.known_patches, m_prj->rparam.gamma, progress, m_prj->report_file);
+	  optimize_screen_colors (
+              &optimized_dparam, detected.param.type, img.get (),
+              mesh_trans.get (), { detected.xshift, detected.yshift },
+              detected.known_patches, m_prj->rparam.gamma, progress,
+              m_prj->report_file);
 	  mesh_trans= NULL;
 	  delete detected.known_patches;
 	  delete detected.smap;

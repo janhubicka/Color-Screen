@@ -5,6 +5,7 @@
 #define HAVE_INLINE
 #define GSL_RANGE_CHECK_OFF
 #include <memory>
+#include <array>
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_linalg.h>
 #include "gsl-utils.h"
@@ -14,6 +15,7 @@
 #include "nmsimplex.h"
 #include "gsl-solver.h"
 #include "homography.h"
+
 namespace colorscreen
 {
 const char *const solver_parameters::point_color_names[(int)max_point_color]
@@ -26,13 +28,13 @@ bool debug = colorscreen_checking;
 
 /* Determine homography matrix matching points specified by POINTS.
    Update PARAM for desired transformations.
-   If solve_screen_weights or solve_image_weights are set in FLAGS then
-   WCENTER specifies point where to optimize for.
+   W_CENTER specifies point where to optimize for if solve_screen_weights
+   or solve_image_weights are set in FLAGS.
    If FINAL_RUN is true output info on results.  */
 
-coord_t
+nodiscard_attr coord_t
 solver (scr_to_img_parameters *param, image_data &img_data,
-        std::vector<solver_parameters::solver_point_t> &points,
+        const std::vector<solver_parameters::solver_point_t> &points,
         point_t w_center, int flags, bool final_run = false)
 {
   if (debug_output && final_run)
@@ -189,7 +191,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
           printf ("Tilts %f %f %f\n", best_tilt_x, best_tilt_y, minsq);
         }
     }
-  return chisq;
+  return (coord_t)chisq;
 }
 /* Nonlinear optimizer for determining radial lens warp parameters.  */
 class lens_solver
@@ -198,10 +200,10 @@ public:
   lens_solver (scr_to_img_parameters &param, image_data &img_data,
                solver_parameters &sparam, progress_info *progress)
       : m_param (param), m_img_data (img_data), m_sparam (sparam),
-        m_progress (progress), start{ 0.5, 0.5, 0, 0, 0 }
+        m_progress (progress), m_start{ (coord_t)0.5, (coord_t)0.5, (coord_t)0, (coord_t)0, (coord_t)0 }
   {
     if (num_coordinates () == 1)
-      start[1] = 0;
+      m_start[1] = 0;
   }
   scr_to_img_parameters &m_param;
   image_data &m_img_data;
@@ -209,63 +211,83 @@ public:
   progress_info *m_progress;
   static constexpr coord_t scale_kr = 128;
 
+  /* Return number of lens center coordinates.  */
   int
-  num_coordinates ()
+  num_coordinates () const
   {
     return is_fixed_lens (m_param.scanner_type) ? 2 : 1;
   }
+
+  /* Return total number of parameters to optimize.  */
   int
-  num_values ()
+  num_values () const
   {
     return num_coordinates () + 3;
   }
-  coord_t start[5];
+  std::array<coord_t, 5> m_start;
+  coord_t *start = m_start.data ();
+
+  /* Return epsilon for solver convergence.  */
   coord_t
-  epsilon ()
+  epsilon () const
   {
-    return 0.00000001;
+    return (coord_t)0.00000001;
   }
+
+  /* Return perturbation for finite differences derivatives.  */
   coord_t
-  derivative_perturbation ()
+  derivative_perturbation () const
   {
-    return 0.0001;
+    return (coord_t)0.0001;
   }
+
+  /* Return initial scale for simplex solver.  */
   coord_t
-  scale ()
+  scale () const
   {
-    return 0.3;
+    return (coord_t)0.3;
   }
+
+  /* Return true if solver should be verbose.  */
   bool
-  verbose ()
+  verbose () const
   {
     return false;
   }
+
+  /* Constrain parameters to valid range.
+     VALS are parameters to be constrained.  */
   void
-  constrain (coord_t *vals)
+  constrain (coord_t *vals) const
   {
     int n = num_coordinates ();
     /* Also consider the case that lens center is outside of the scan.  */
-    if (vals[0] < -10)
-      vals[0] = -10;
-    if (vals[0] > 10)
-      vals[0] = 10;
+    if (vals[0] < (coord_t)-10)
+      vals[0] = (coord_t)-10;
+    if (vals[0] > (coord_t)10)
+      vals[0] = (coord_t)10;
     if (n == 2)
       {
-        if (vals[1] < -10)
-          vals[1] = -1;
-        if (vals[1] > 1)
-          vals[1] = 1;
+        if (vals[1] < (coord_t)-10)
+          vals[1] = (coord_t)-1;
+        if (vals[1] > (coord_t)1)
+          vals[1] = (coord_t)1;
       }
     for (int i = n; i < n + 3; i++)
       {
-        if (vals[i] < -0.1 * scale_kr)
-          vals[i] = -0.1 * scale_kr;
-        if (vals[i] > 0.1 * scale_kr)
-          vals[i] = 0.1 * scale_kr;
+        if (vals[i] < (coord_t)-0.1 * scale_kr)
+          vals[i] = (coord_t)-0.1 * scale_kr;
+        if (vals[i] > (coord_t)0.1 * scale_kr)
+          vals[i] = (coord_t)0.1 * scale_kr;
       }
   }
+
+  /* Solve for lens parameters.
+     VALS are current lens parameters.
+     CHISQ is updated with resulting chi square.
+     TRANSFORMED is updated with transformed points.  */
   bool
-  solve (const coord_t *vals, coord_t *chisq, std::vector <point_t> *transformed)
+  solve (const coord_t *vals, coord_t *chisq, std::vector <point_t> *transformed) const
   {
     static constexpr coord_t bad_val = 100000000;
     m_param.center = { (coord_t)0, (coord_t)0 };
@@ -591,13 +613,7 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
         progress->resume_stdout ();
     }
   if (progress && progress->cancel_requested ())
-    {
-      return nullptr;
-    }
-  if (progress && progress->cancel_requested ())
-    {
-      return nullptr;
-    }
+    return nullptr;
   // mesh_trans->print (stdout);
   if (progress)
     progress->set_task ("inverting mesh", 1);
@@ -663,20 +679,22 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
   if (progress)
     progress->set_task ("computing mesh from detected points", width * height);
   std::unique_ptr<mesh> mesh_trans = std::make_unique<mesh> (r2, step, step);
-#pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
-    shared(progress, r2, step, width, height, img_data,                       \
-               mesh_trans, param, smap, sparam2)
-  for (int y = 0; y < height; y++)
-    for (int x = 0; x < width; x++)
-      if (!progress || !progress->cancel_requested ())
-        {
-          solver_parameters sparam;
-          sparam.copy_without_points (sparam2);
-          compute_mesh_point (smap, sparam, *param, img_data, mesh_trans.get (), x,
-                              y);
-          if (progress)
-            progress->inc_progress ();
-        }
+#pragma omp parallel default(none) \
+    shared(progress, r2, step, width, height, img_data, mesh_trans, param, smap, sparam2)
+  {
+    solver_parameters sparam;
+    sparam.copy_without_points (sparam2);
+    #pragma omp for schedule(dynamic) collapse(2)
+    for (int y = 0; y < height; y++)
+      for (int x = 0; x < width; x++)
+        if (!progress || !progress->cancel_requested ())
+          {
+            compute_mesh_point (smap, sparam, *param, img_data, mesh_trans.get (), x,
+                                y);
+            if (progress) 
+              progress->inc_progress ();
+          }
+  }
   scr_to_img_parameters lparam = *param;
   int miter = width + height;
   if (progress)

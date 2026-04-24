@@ -379,7 +379,7 @@ solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type,
    homography.  */
 
 static double
-screen_compute_chisq (int flags, std::vector <solver_parameters::solver_point_t> &points, trans_4d_matrix homography, std::vector <point_t> *transformed = nullptr)
+screen_compute_chisq (int flags, const std::vector <solver_parameters::solver_point_t> &points, trans_4d_matrix homography, std::vector <point_t> *transformed = nullptr)
 {
   double chisq = 0;
   int i = 0;
@@ -422,7 +422,7 @@ namespace homography
    then adjust weight according to distance from WCENTER_X and WCENTER_Y.
    If CHISQ_RET is non-NULL initialize it to square of errors.  */
 trans_4d_matrix
-get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points, int flags,
+get_matrix_ransac (const std::vector <solver_parameters::solver_point_t> &points, int flags,
                    enum scanner_type scanner_type, scr_to_img *map,
                    point_t wcenter, coord_t *chisq_ret,
                    bool final_run)
@@ -459,7 +459,8 @@ get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points, int 
           tpoints_vec[i].scr = points[i].scr;
         }
     }
-  std::vector <solver_parameters::solver_point_t> &tpoints = map ? tpoints_vec : points;
+  const std::vector<solver_parameters::solver_point_t> &tpoints
+      = map ? tpoints_vec : points;
   if (nsamples > n)
     {
       fprintf (stderr, "Too few samples in RANSAC\n");
@@ -785,7 +786,7 @@ get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points, int 
    then adjust weight according to distance from WCENTER_X and WCENTER_Y.
    If CHISQ_RET is non-NULL initialize it to square of errors.  */
 trans_4d_matrix
-get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
+get_matrix (const std::vector <solver_parameters::solver_point_t> &points, int flags,
             enum scanner_type scanner_type, scr_to_img *map, point_t wcenter,
             coord_t *chisq_ret,
 	    std::vector <point_t> *transformed)
@@ -816,7 +817,8 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
 	    tpoints_vec[i].scr = points[i].scr;
 	  }
     }
-  std::vector <solver_parameters::solver_point_t> &tpoints = map ? tpoints_vec : points;
+  const std::vector<solver_parameters::solver_point_t> &tpoints
+      = map ? tpoints_vec : points;
   if (flags & homography::solve_vertical_strips)
     for (int i = 0; i < n; i++)
       {

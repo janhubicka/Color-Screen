@@ -50,11 +50,12 @@ compare_priorities(struct entry &e1, struct entry &e2)
 }
 
 /* Given known portion of screen collect color samples and optimize to PARAM.
-   M, XSHIFT, YSHIFT, KNOWN_PATCHES are results of screen analysis. 
-   
-   TODO: Add return value*/
+   M, SHIFT, KNOWN_PATCHES are results of screen analysis.  */
 void
-optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data *img, mesh *m, int xshift, int yshift, bitmap_2d *known_patches, luminosity_t gamma, progress_info *progress, FILE *report)
+optimize_screen_colors (scr_detect_parameters *param, scr_type type,
+                        image_data *img, mesh *m, int_point_t shift,
+                        bitmap_2d *known_patches, luminosity_t gamma,
+                        progress_info *progress, FILE *report)
 {
   int count = 0;
   const int range = 2;
@@ -71,9 +72,11 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
   if (!render::get_lookup_tables (lookup_table, gamma, img, progress))
     return;
 
-  for (int y = -yshift, nf = 0, next =0, step = count / samples; y < (int)known_patches->height - yshift; y++)
-    for (int x = -xshift; x < (int)known_patches->width - xshift; x++)
-      if (known_patches->test_range ({x + xshift,y + yshift}, range) && nf++ > next)
+  for (int y = -shift.y, nf = 0, next = 0, step = count / samples;
+       y < (int)known_patches->height - shift.y; y++)
+    for (int x = -shift.x; x < (int)known_patches->width - shift.x; x++)
+      if (known_patches->test_range ({ x + shift.x, y + shift.y }, range)
+          && nf++ > next)
 	{
 	  coord_t ix, iy;
 	  next += step;
@@ -146,29 +149,44 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
 }
 
 
+/* Optimize screen colors using detected color patches in image IMG.
+   AREA is the area to optimize.  */
 bool
-optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosity_t gamma, int x, int y, int width, int height, progress_info *progress, FILE *report)
+optimize_screen_colors (scr_detect_parameters *param, image_data *img,
+                        luminosity_t gamma, int_image_area area,
+                        progress_info *progress, FILE *report)
 {
   const double sharpen_amount = 0;
   const double sharpen_radius = 3;
   int clen = fir_blur::convolve_matrix_length (sharpen_radius);
-  mem_rgbdata *sharpened = (mem_rgbdata*) malloc ((width + clen) * (height + clen) * sizeof (mem_rgbdata));
+  mem_rgbdata *sharpened = (mem_rgbdata *)malloc (
+      (area.width + clen) * (area.height + clen) * sizeof (mem_rgbdata));
   if (!sharpened)
     return false;
   std::shared_ptr<float[]> lookup_table[3];
   if (!render::get_lookup_tables (lookup_table, gamma, img, progress))
     return false;
-  struct imgtile section = {{lookup_table[0].get (), lookup_table[1].get (), lookup_table[2].get ()}, x - clen / 2, y - clen / 2, img};
-  sharpen<rgbdata, mem_rgbdata, imgtile *, int, &get_pixel> (sharpened, &section, 0, width + clen, height + clen, sharpen_radius, sharpen_amount, progress);
+  struct imgtile section = { { lookup_table[0].get (), lookup_table[1].get (),
+                               lookup_table[2].get () },
+                             area.x - clen / 2,
+                             area.y - clen / 2,
+                             img };
+  sharpen<rgbdata, mem_rgbdata, imgtile *, int, &get_pixel> (
+      sharpened, &section, 0, area.width + clen, area.height + clen,
+      sharpen_radius, sharpen_amount, progress);
   std::vector<entry> pixels;
-  for (int yy = y ; yy < y + height; yy++)
-    for (int xx = x ; xx < x + width; xx++)
+  for (int yy = area.y; yy < area.y + area.height; yy++)
+    for (int xx = area.x; xx < area.x + area.width; xx++)
       {
-	struct entry e;
-	e.orig_color = get_pixel (&section, {xx-x+clen/2, yy-y+clen/2}, 0, 0);
-	e.sharpened_color = sharpened[(yy-y+clen/2) * (width + clen) + xx -x + clen/2];
-	e.priority = 3 - (e.orig_color.red + e.orig_color.green + e.orig_color.blue);
-	pixels.push_back (e);
+        struct entry e;
+        e.orig_color
+            = get_pixel (&section, { xx - area.x + clen / 2, yy - area.y + clen / 2 },
+                         0, 0);
+        e.sharpened_color = sharpened[(yy - area.y + clen / 2) * (area.width + clen)
+                                      + xx - area.x + clen / 2];
+        e.priority = 3
+                     - (e.orig_color.red + e.orig_color.green + e.orig_color.blue);
+        pixels.push_back (e);
       }
   free (sharpened);
 

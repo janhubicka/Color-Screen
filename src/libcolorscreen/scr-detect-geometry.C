@@ -1864,9 +1864,10 @@ detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam,
           if (dsparams->optimize_colors)
             {
               if (!optimize_screen_colors (
-                      &dparam, &img, dsparams->gamma, xmin, ymin,
-                      std::min (1000, xmax - xmin),
-                      std::min (1000, ymax - ymin), progress, report_file))
+                      &dparam, &img, dsparams->gamma,
+                      { xmin, ymin, std::min (1000, xmax - xmin),
+                        std::min (1000, ymax - ymin) },
+                      progress, report_file))
                 {
                   if (progress)
                     progress->pause_stdout ();
