@@ -749,17 +749,17 @@ int_image_area
 analyze_base_worker<GEOMETRY>::demosaiced_area () const
 {
   point_t corners[4] = {
-    GEOMETRY::to_demosaiced_coordinates (m_area.top_left ()),
-    GEOMETRY::to_demosaiced_coordinates (m_area.top_right ()),
-    GEOMETRY::to_demosaiced_coordinates (m_area.bottom_left ()),
-    GEOMETRY::to_demosaiced_coordinates (m_area.bottom_right ())
+    GEOMETRY::to_demosaiced_coordinates (point_t {(coord_t)m_area.top_left ().x, (coord_t)m_area.top_left ().y}),
+    GEOMETRY::to_demosaiced_coordinates (point_t {(coord_t)m_area.top_right ().x, (coord_t)m_area.top_right ().y}),
+    GEOMETRY::to_demosaiced_coordinates (point_t {(coord_t)m_area.bottom_left ().x, (coord_t)m_area.bottom_left ().y}),
+    GEOMETRY::to_demosaiced_coordinates (point_t {(coord_t)m_area.bottom_right ().x, (coord_t)m_area.bottom_right ().y})
   };
 
-  int_image_area area (int_point_t {my_floor (corners[0].x), my_floor (corners[0].y)});
+  int_image_area area (int_point_t {(int64_t)my_floor (corners[0].x), (int64_t)my_floor (corners[0].y)});
   for (int i = 0; i < 4; i++)
     {
-      area.extend (int_point_t {my_floor (corners[i].x), my_floor (corners[i].y)});
-      area.extend (int_point_t {my_ceil (corners[i].x), my_ceil (corners[i].y)});
+      area.extend (int_point_t {(int64_t)my_floor (corners[i].x), (int64_t)my_floor (corners[i].y)});
+      area.extend (int_point_t {(int64_t)my_ceil (corners[i].x), (int64_t)my_ceil (corners[i].y)});
     }
 
   int x = area.x;
