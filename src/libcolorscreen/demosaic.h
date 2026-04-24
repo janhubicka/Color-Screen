@@ -17,16 +17,16 @@ public:
   rgbdata &
   demosaiced_data (int x, int y)
   {
-    x = std::clamp (x, 0, m_width - 1);
-    y = std::clamp (y, 0, m_height - 1);
-    return m_demosaiced[y * m_width + x];
+    x = std::clamp (x, 0, m_area.width - 1);
+    y = std::clamp (y, 0, m_area.height - 1);
+    return m_demosaiced[y * m_area.width + x];
   };
 
   /* Basic access to demosaiced data; no clamping.  */
   rgbdata &
   fast_demosaiced_data (int x, int y)
   {
-    return m_demosaiced[y * m_width + x];
+    return m_demosaiced[y * m_area.width + x];
   };
 
   luminosity_t
@@ -34,13 +34,13 @@ public:
   {
     histogram h;
     if (progress)
-      progress->set_task ("Determining demosaiced value range", m_height * 2);
+      progress->set_task ("Determining demosaiced value range", m_area.height * 2);
 
 #pragma omp parallel for reduction(histogram_range : h)
-    for (int y = 0; y < m_height; y++)
+    for (int y = 0; y < m_area.height; y++)
       {
         if (!progress || !progress->cancel_requested ())
-          for (int x = 0; x < m_width; x++)
+          for (int x = 0; x < m_area.width; x++)
             {
               h.pre_account (fast_demosaiced_data (x, y).red);
               h.pre_account (fast_demosaiced_data (x, y).green);
@@ -56,10 +56,10 @@ public:
     h.finalize_range (256);
 
 #pragma omp parallel for reduction(histogram_entries : h)
-    for (int y = 0; y < m_height; y++)
+    for (int y = 0; y < m_area.height; y++)
       {
         if (!progress || !progress->cancel_requested ())
-          for (int x = 0; x < m_width; x++)
+          for (int x = 0; x < m_area.width; x++)
             {
               h.account (fast_demosaiced_data (x, y).red);
               h.account (fast_demosaiced_data (x, y).green);
@@ -78,16 +78,16 @@ public:
   std::vector<rgbdata> m_demosaiced;
 
 protected:
-  int m_width, m_height, m_xshift, m_yshift;
+  int_image_area m_area;
 
   /* Accessor shorcut used in the demosaicing algorithm
      implementation.  */
   always_inline_attr rgbdata &
   d (int x, int y)
   {
-    x = std::clamp (x, 0, m_width - 1);
-    y = std::clamp (y, 0, m_height - 1);
-    return m_demosaiced[y * m_width + x];
+    x = std::clamp (x, 0, m_area.width - 1);
+    y = std::clamp (y, 0, m_area.height - 1);
+    return m_demosaiced[y * m_area.width + x];
   };
 };
 
@@ -100,9 +100,9 @@ template <typename GEOMETRY> class demosaic_base : public demosaic_generic_base
     int sx, sy;
     coord_t rx = my_modf (p.x, &sx);
     coord_t ry = my_modf (p.y, &sy);
-    sx += m_xshift;
-    sy += m_yshift;
-    if (sx >= 2 && sx < m_width - 3 && sy >= 2 && sy < m_height - 3)
+    sx += m_area.xshift ();
+    sy += m_area.yshift ();
+    if (sx >= 2 && sx < m_area.width - 3 && sy >= 2 && sy < m_area.height - 3)
       {
         rgbdata ret = { 0, 0, 0 };
         const luminosity_t *wx = lanczos3_kernel (rx);
@@ -132,9 +132,9 @@ template <typename GEOMETRY> class demosaic_base : public demosaic_generic_base
     point_t p = GEOMETRY::to_demosaiced_coordinates (scr);
     int sx = nearest_int (p.x);
     int sy = nearest_int (p.y);
-    sx += m_xshift;
-    sy += m_yshift;
-    if (sx >= 0 && sx < m_width && sy >= 0 && sy < m_height)
+    sx += m_area.xshift ();
+    sy += m_area.yshift ();
+    if (sx >= 0 && sx < m_area.width && sy >= 0 && sy < m_area.height)
       {
         rgbdata ret;
         ret.red = fast_demosaiced_data (sx, sy).red;
@@ -151,9 +151,9 @@ template <typename GEOMETRY> class demosaic_base : public demosaic_generic_base
     int sx, sy;
     coord_t rx = my_modf (p.x, &sx);
     coord_t ry = my_modf (p.y, &sy);
-    sx += m_xshift;
-    sy += m_yshift;
-    if (sx >= 0 && sx < m_width - 1 && sy >= 0 && sy < m_height - 1)
+    sx += m_area.xshift ();
+    sy += m_area.yshift ();
+    if (sx >= 0 && sx < m_area.width - 1 && sy >= 0 && sy < m_area.height - 1)
       {
         rgbdata ret;
         ret.red = do_linear_interpolate (
@@ -182,9 +182,9 @@ template <typename GEOMETRY> class demosaic_base : public demosaic_generic_base
     int sx, sy;
     coord_t rx = my_modf (p.x, &sx);
     coord_t ry = my_modf (p.y, &sy);
-    sx += m_xshift;
-    sy += m_yshift;
-    if (sx >= 1 && sx < m_width - 2 && sy >= 1 && sy < m_height - 2)
+    sx += m_area.xshift ();
+    sy += m_area.yshift ();
+    if (sx >= 1 && sx < m_area.width - 2 && sy >= 1 && sy < m_area.height - 2)
       {
         rgbdata ret;
         ret.red = do_bspline_interpolate (
@@ -252,9 +252,9 @@ template <typename GEOMETRY> class demosaic_base : public demosaic_generic_base
     int sx, sy;
     coord_t rx = my_modf (p.x, &sx);
     coord_t ry = my_modf (p.y, &sy);
-    sx += m_xshift;
-    sy += m_yshift;
-    if (sx >= 1 && sx < m_width - 2 && sy >= 1 && sy < m_height - 2)
+    sx += m_area.xshift ();
+    sy += m_area.yshift ();
+    if (sx >= 1 && sx < m_area.width - 2 && sy >= 1 && sy < m_area.height - 2)
       {
         rgbdata ret;
         ret.red = do_bicubic_interpolate (
@@ -342,12 +342,8 @@ protected:
   bool
   initialize (analyze_base_worker<GEOMETRY> *analysis)
   {
-    int_image_area area = analysis->demosaiced_area ();
-    m_width = area.width;
-    m_height = area.height;
-    m_xshift = area.xshift ();
-    m_yshift = area.yshift ();
-    m_demosaiced.resize ((size_t)m_width * m_height);
+    m_area = analysis->demosaiced_area ();
+    m_demosaiced.resize ((size_t)m_area.width * m_area.height);
     return true;
   }
 
@@ -356,27 +352,27 @@ protected:
   always_inline_attr luminosity_t &
   dch (int x, int y, int ch)
   {
-    int cx = std::clamp (x, 0, m_width - 1);
-    int cy = std::clamp (y, 0, m_height - 1);
+    int cx = std::clamp (x, 0, m_area.width - 1);
+    int cy = std::clamp (y, 0, m_area.height - 1);
     assert (!debug || cx != x || cy != y
             || (int)GEOMETRY::demosaic_entry_color (cx, cy) == ch);
-    return m_demosaiced[cy * m_width + cx][ch];
+    return m_demosaiced[cy * m_area.width + cx][ch];
   };
   /* Return the known (mosaiced) channel value at position (x,y).
      The color is determined by GEOMETRY.  */
   always_inline_attr luminosity_t
   known (int x, int y)
   {
-    int cx = std::clamp (x, 0, m_width - 1);
-    int cy = std::clamp (y, 0, m_height - 1);
+    int cx = std::clamp (x, 0, m_area.width - 1);
+    int cy = std::clamp (y, 0, m_area.height - 1);
     switch (GEOMETRY::demosaic_entry_color (x, y))
       {
       case base_geometry::red:
-        return m_demosaiced[cy * m_width + cx].red;
+        return m_demosaiced[cy * m_area.width + cx].red;
       case base_geometry::green:
-        return m_demosaiced[cy * m_width + cx].green;
+        return m_demosaiced[cy * m_area.width + cx].green;
       default:
-        return m_demosaiced[cy * m_width + cx].blue;
+        return m_demosaiced[cy * m_area.width + cx].blue;
       }
   };
   /* Formely AI generation experiment for demosaicing of non-bayer filters.
@@ -390,7 +386,7 @@ protected:
   bool
   generic_dominating_channel (progress_info *progress)
   {
-    int w = m_width, h = m_height;
+    int w = m_area.width, h = m_area.height;
 #pragma omp parallel shared(progress, h, w) default(none)
     for (int y = 0; y < h; y++)
       {
@@ -571,7 +567,7 @@ protected:
   bool
   generic_interpolation_remaining_channels (progress_info *progress)
   {
-    int w = m_width, h = m_height;
+    int w = m_area.width, h = m_area.height;
 #pragma omp parallel shared(progress, h, w) default(none)
     for (int y = 0; y < h; y++)
       {
@@ -804,7 +800,7 @@ protected:
   bool
   hamiltom_adams_interpolation_dominating_channel (progress_info *progress)
   {
-    int w = m_width, h = m_height;
+    int w = m_area.width, h = m_area.height;
     luminosity_t range = find_robust_max (progress);
     if (progress && progress->cancelled ())
       return false;
@@ -980,7 +976,7 @@ protected:
   bool
   hamiltom_adams_interpolation_remaining_channels (progress_info *progress)
   {
-    int h = m_height, w = m_width;
+    int h = m_area.height, w = m_area.width;
     if (progress)
       progress->set_task ("Demosaicing remaining chanels (Hamilton-Adams)", h);
 #pragma omp parallel shared(progress, h, w) default(none)
@@ -1015,7 +1011,7 @@ protected:
   luminosity_t
   interp (int x, int y, int ch, const std::vector<luminosity_t> &G_dir) 
   {
-    int w = m_width, h = m_height;
+    int w = m_area.width, h = m_area.height;
     x = std::clamp (x, 0, w - 1);
     y = std::clamp (y, 0, h - 1);
     if (GEOMETRY::demosaic_entry_color (x, y) == ch)
@@ -1109,7 +1105,7 @@ protected:
   bool
   ahd_interpolation_dominating_channel (progress_info *progress)
   {
-    int w = m_width, h = m_height;
+    int w = m_area.width, h = m_area.height;
     if (progress)
       progress->set_task (fast ? "Demosaicing dominating channel (AHD fast)" :
                                  "Demosaicing dominating channel (AHD slow)",
@@ -1414,7 +1410,7 @@ protected:
   bool
   ahd_interpolation_remaining_channels (progress_info *progress)
   {
-    int h = m_height, w = m_width;
+    int h = m_area.height, w = m_area.width;
     if (progress)
       progress->set_task ("Demosaicing remaining chanels (AHD)", h);
 #pragma omp parallel shared(progress, h, w) default(none)
@@ -1501,7 +1497,7 @@ protected:
   bool
   amaze_interpolation (progress_info *progress)
   {
-    int w = m_width, h = m_height;
+    int w = m_area.width, h = m_area.height;
     luminosity_t range = find_robust_max (progress);
     if (progress && progress->cancelled ())
       return false;
@@ -2345,7 +2341,7 @@ protected:
   bool
   rcd_interpolation (progress_info *progress)
   {
-    int w = m_width, h = m_height;
+    int w = m_area.width, h = m_area.height;
 
     /* Tolerance to avoid division by zero.  */
     constexpr luminosity_t eps = (luminosity_t)1e-5;
@@ -2986,7 +2982,7 @@ protected:
   bool
   lmmse_interpolation (progress_info *progress)
   {
-    int w = m_width, h = m_height;
+    int w = m_area.width, h = m_area.height;
 
     /* Gamma correction functions matching the darktable reference.
        These map linear [0,1] data to a perceptually uniform space
@@ -3850,7 +3846,7 @@ protected:
   always_inline_attr luminosity_t
   interp_dcraw (int x, int y, int ch, const std::vector<luminosity_t> &G_dir, luminosity_t limit_max)
   {
-    int w = m_width, h = m_height;
+    int w = m_area.width, h = m_area.height;
     if (GEOMETRY::demosaic_entry_color (x, y) == ch)
       return dch (x, y, ch);
 
@@ -3935,7 +3931,7 @@ protected:
   bool
   ahd_interpolation_dominating_channel_dcraw (progress_info *progress)
   {
-    int w = m_width, h = m_height;
+    int w = m_area.width, h = m_area.height;
     if (progress)
       progress->set_task ("Demosaicing dominating channel (AHD dcraw variant)", h * 4);
 
@@ -4132,7 +4128,7 @@ public:
   {
     if (!initialize (analyze))
       return false;
-    if (!analyze->populate_demosaiced_data (m_demosaiced, r, {-m_xshift, -m_yshift, m_width, m_height}, progress))
+    if (!analyze->populate_demosaiced_data (m_demosaiced, r, m_area, progress))
       return false;
     switch (alg)
       {
