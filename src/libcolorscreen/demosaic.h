@@ -371,7 +371,7 @@ protected:
       case base_geometry::red:
         return m_demosaiced[cy * m_width + cx].red;
       case base_geometry::green:
-        return m_demosaiced[cy * m_height + cx].green;
+        return m_demosaiced[cy * m_width + cx].green;
       default:
         return m_demosaiced[cy * m_width + cx].blue;
       }
