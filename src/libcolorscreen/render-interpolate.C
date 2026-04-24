@@ -1,3 +1,7 @@
+/* Render tools for color screen reconstruction using interpolation.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #include <assert.h>
 #include <memory>
 #include <limits>
@@ -8,13 +12,85 @@
 #include "include/stitch.h"
 #include "render-interpolate.h"
 #include "finetune-int.h"
+
 namespace colorscreen
 {
 
+namespace
+{
 
+/* Parameters for tile-based analysis caching.  */
+struct analyzer_params
+{
+  uint64_t img_id;
+  uint64_t graydata_id;
+  uint64_t simulated_screen_id;
+  uint64_t screen_id;
+  luminosity_t gamma;
+  enum analyze_base::mode mode;
+  luminosity_t collection_threshold;
+  uint64_t mesh_trans_id;
+  scr_to_img_parameters params;
+
+  const image_data *img;
+  const screen *scr;
+  class render_to_scr *render;
+  class scr_to_img *scr_to_img_map;
+  struct simulated_screen *simulated_screen_ptr;
+
+  /* Return true if this structure is equal to O.  */
+  bool
+  operator== (const analyzer_params &o) const
+  {
+    if (mode != o.mode || mesh_trans_id != o.mesh_trans_id
+	|| simulated_screen_id != o.simulated_screen_id
+        || (!mesh_trans_id && params != o.params)
+        || params.type != o.params.type)
+      return false;
+    if (mode == analyze_base::color || mode == analyze_base::precise_rgb)
+      {
+        if (img_id != o.img_id || gamma != o.gamma)
+          return false;
+      }
+    else if (graydata_id != o.graydata_id)
+      return false;
+    if (mode == analyze_base::fast || mode == analyze_base::color)
+      return true;
+    return screen_id == o.screen_id
+           && collection_threshold == o.collection_threshold;
+  }
+};
+
+/* Parameters for demosaicing caching.  */
+template <typename ANALYZER>
+struct demosaiced_params
+{
+  uint64_t analyzer_id;
+
+  luminosity_t dark_point;
+  luminosity_t scan_exposure;
+  contact_copy_parameters contact_copy;
+  render_parameters::screen_demosaic_t alg;
+
+  ANALYZER *analyzer;
+  class render_interpolate *r;
+
+  /* Return true if this structure is equal to O.  */
+  bool
+  operator== (const demosaiced_params &o) const
+  {
+    return analyzer_id == o.analyzer_id
+	   && dark_point == o.dark_point
+	   && scan_exposure == o.scan_exposure
+	   && contact_copy == o.contact_copy
+	   && alg == o.alg;
+  }
+};
+
+/* Factory function for Dufay color analysis.  */
 std::unique_ptr<analyze_dufay>
-get_new_dufay_analysis (struct analyzer_params &p, int xshift, int yshift,
-                        int width, int height, progress_info *progress)
+get_new_dufay_analysis (struct analyzer_params &p, int_image_area area,
+                        progress_info *progress)
 {
   auto ret = std::make_unique<analyze_dufay> ();
   {
@@ -45,37 +121,43 @@ get_new_dufay_analysis (struct analyzer_params &p, int xshift, int yshift,
               adapted.mult[y][x][2] = p.scr->mult[y][x][0];
             }
       }
-    if (ret->analyze (p.render, p.img, p.scr_to_img_map, s, p.simulated_screen_ptr, width, height,
-                      xshift, yshift, p.mode, p.collection_threshold,
-                      progress))
+    if (ret->analyze (p.render, p.img, p.scr_to_img_map, s, p.simulated_screen_ptr,
+                      area.width, area.height, area.x, area.y, p.mode,
+                      p.collection_threshold, progress))
       return ret;
   }
   return nullptr;
 }
 
+/* Factory function for Paget color analysis.  */
 std::unique_ptr<analyze_paget>
-get_new_paget_analysis (struct analyzer_params &p, int xshift, int yshift,
-                        int width, int height, progress_info *progress)
+get_new_paget_analysis (struct analyzer_params &p, int_image_area area,
+                        progress_info *progress)
 {
   auto ret = std::make_unique<analyze_paget> ();
-  if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, p.simulated_screen_ptr, width, height,
-                    xshift, yshift, p.mode, p.collection_threshold, progress))
+  if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, p.simulated_screen_ptr,
+                    area.width, area.height, area.x, area.y, p.mode,
+                    p.collection_threshold, progress))
     return ret;
   return nullptr;
 }
+
+/* Factory function for Paget demosaicing.  */
 std::unique_ptr<demosaic_paget>
 get_new_demosaic_paget (demosaiced_params<analyze_paget> &p, progress_info *progress)
 {
   auto ret = std::make_unique<demosaic_paget> ();
-  if (!ret->demosaic (p.analyzer, p.r, p.alg, progress))
+  if (!ret->demosaic (p.analyzer, (render_to_scr *)p.r, p.alg, progress))
     {
       return nullptr;
     }
   return ret;
 }
+
+/* Factory function for strips color analysis.  */
 std::unique_ptr<analyze_strips>
-get_new_strips_analysis (struct analyzer_params &p, int xshift, int yshift,
-                         int width, int height, progress_info *progress)
+get_new_strips_analysis (struct analyzer_params &p, int_image_area area,
+                         progress_info *progress)
 {
   auto ret = std::make_unique<analyze_strips> ();
   {
@@ -94,22 +176,25 @@ get_new_strips_analysis (struct analyzer_params &p, int xshift, int yshift,
               adapted.mult[y][x][2] = p.scr->mult[y][x][0];
             }
       }
-    if (ret->analyze (p.render, p.img, p.scr_to_img_map, s, p.simulated_screen_ptr, width, height,
-                      xshift, yshift, p.mode, p.collection_threshold,
-                      progress))
+    if (ret->analyze (p.render, p.img, p.scr_to_img_map, s, p.simulated_screen_ptr,
+                      area.width, area.height, area.x, area.y, p.mode,
+                      p.collection_threshold, progress))
       return ret;
   }
   return nullptr;
 }
 
-static render_interpolate::dufay_analyzer_cache_t
-    dufay_analyzer_cache ("dufay analyzer");
-static render_interpolate::paget_analyzer_cache_t
-    paget_analyzer_cache ("Paget analyzer");
-static render_interpolate::strips_analyzer_cache_t
-    strips_analyzer_cache ("Strips analyzer");
-static render_interpolate::demosaic_paget_cache_t
-    demosaic_paget_cache ("Paget demosaic");
+typedef lru_tile_cache<analyzer_params, analyze_dufay, get_new_dufay_analysis, 2> dufay_analyzer_cache_t;
+typedef lru_tile_cache<analyzer_params, analyze_paget, get_new_paget_analysis, 2> paget_analyzer_cache_t;
+typedef lru_tile_cache<analyzer_params, analyze_strips, get_new_strips_analysis, 2> strips_analyzer_cache_t;
+typedef lru_cache<demosaiced_params<analyze_paget>, demosaic_paget, get_new_demosaic_paget, 2> demosaic_paget_cache_t;
+
+static dufay_analyzer_cache_t dufay_analyzer_cache ("dufay analyzer");
+static paget_analyzer_cache_t paget_analyzer_cache ("paget analyzer");
+static strips_analyzer_cache_t strips_analyzer_cache ("strips analyzer");
+static demosaic_paget_cache_t demosaic_paget_cache ("paget demosaic");
+
+}
 
 render_interpolate::render_interpolate (const scr_to_img_parameters &param,
                                         const image_data &img,
@@ -132,18 +217,24 @@ render_interpolate::set_render_type (render_type_parameters rtparam)
                     == render_type_interpolated_profiled_original);
 }
 
+/* Sample pixel at screen coordinate P and return its color. Apply saturation
+   loss compensation if necessary.  */
+
 rgbdata
 render_interpolate::compensate_saturation_loss_scr (point_t p, rgbdata c) const
 {
   if (!m_saturation_loss_table)
     {
       m_saturation_matrix.apply_to_rgb (c.red, c.green, c.blue, &c.red,
-                                        &c.green, &c.blue);
+                                         &c.green, &c.blue);
       return c;
     }
   return m_saturation_loss_table->compensate_saturation_loss_img (
       m_scr_to_img.to_img (p), c);
 }
+
+/* Sample pixel at image coordinate P and return its color. Apply saturation
+   loss compensation if necessary.  */
 
 rgbdata
 render_interpolate::compensate_saturation_loss_img (point_t p, rgbdata c) const
@@ -151,25 +242,24 @@ render_interpolate::compensate_saturation_loss_img (point_t p, rgbdata c) const
   if (!m_saturation_loss_table)
     {
       m_saturation_matrix.apply_to_rgb (c.red, c.green, c.blue, &c.red,
-                                        &c.green, &c.blue);
+                                         &c.green, &c.blue);
       return c;
     }
   return m_saturation_loss_table->compensate_saturation_loss_img (p, c);
 }
 
+/* Precompute internal data structures for AREA. PROGRESS is used for progress
+   reporting.  */
+
 bool
 render_interpolate::precompute (int_image_area area, progress_info *progress)
 {
-  int xmin = area.x;
-  int ymin = area.y;
-  int xmax = area.x + area.width;
-  int ymax = area.y + area.height;
   uint64_t screen_id = 0;
   if (m_scr_to_img_param.type == Random)
     return false;
   /* When doing profiled matrix, we need to pre-scale the profile so black
-     point corretion goes right. Without doing so, for exmaple black from red
-     pixels would be subtracted too agressively, since we account for every
+     point correction goes right. Without doing so, for example black from red
+     pixels would be subtracted too aggressively, since we account for every
      pixel in image, not only red patch portion.  */
   if (!render_to_scr::precompute_img_range (!m_original_color && !m_precise_rgb,
 					    !m_original_color || m_profiled, area, progress))
@@ -218,46 +308,33 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
                       m_img.height / 2 + 100))
                 {
 		  color_matrix sat (cred.red, cgreen.red, cblue.red,
-				    0, //
+				    (luminosity_t)0,
 				    cred.green, cgreen.green, cblue.green,
-				    0, //
+				    (luminosity_t)0,
 				    cred.blue, cgreen.blue, cblue.blue,
-				    0, //
-				    0, 0, 0, 1);
+				    (luminosity_t)0,
+				    (luminosity_t)0, (luminosity_t)0, (luminosity_t)0, (luminosity_t)1);
 		  m_saturation_matrix = sat.invert ();
                 }
             }
         }
     }
-  int xshift = -xmin;
-  int yshift = -ymin;
-  int width = xmax - xmin;
-  int height = ymax - ymin;
-  int_image_area r2 = m_scr_to_img.get_range (0, 0, m_img.width, m_img.height);
-  int xshift2 = r2.xshift (), yshift2 = r2.yshift (), width2 = r2.width, height2 = r2.height;
-  if (xshift > xshift2)
-    width -= xshift - xshift2, xshift = xshift2;
-  if (yshift > yshift2)
-    height -= yshift - yshift2, yshift = yshift2;
-  if (width - xshift > width2 - xshift2)
-    width = width2 - xshift2 + xshift;
-  if (height - yshift > height2 - yshift2)
-    height = height2 - yshift2 + yshift;
+  int_image_area full_range = m_scr_to_img.get_range (0, 0, m_img.width, m_img.height);
+  int_image_area analysis_area = area;
+
+  /* If area is significantly larger then half of image, just compute whole image.  */
+  if (analysis_area.width * analysis_area.height > full_range.width * full_range.height / 2)
+    analysis_area = full_range;
+  
   /* For UI response,
      it is better to compute whole image then significant portion of it.  */
-  if (width * height > width2 * height2 / 2)
-    {
-      xshift = xshift2;
-      yshift = yshift2;
-      width = width2;
-      height = height2;
-    }
   /* We need to compute bit more to get interpolation right.
      TODO: figure out how much.  */
-  xshift += 5;
-  yshift += 5;
-  width += 9;
-  height += 9;
+  analysis_area.x -= 5;
+  analysis_area.y -= 5;
+  analysis_area.width += 9;
+  analysis_area.height += 9;
+
   struct analyzer_params p{
     m_img.id,
     m_gray_data_id,
@@ -265,12 +342,12 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
     screen_id,
     m_params.gamma,
     m_original_color
-        ? analyze_base::/*color*/ precise_rgb
+        ? analyze_base::precise_rgb
         : (m_precise_rgb ? analyze_base::precise_rgb
                          : (m_params.collection_quality
-                                    == render_parameters::fast_collection
-                                ? analyze_base::fast
-                                : analyze_base::precise)),
+                                     == render_parameters::fast_collection
+                                 ? analyze_base::fast
+                                 : analyze_base::precise)),
     m_params.collection_threshold,
     m_scr_to_img.get_param ().mesh_trans
         ? m_scr_to_img.get_param ().mesh_trans->id
@@ -285,8 +362,7 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
   if (paget_like_screen_p (m_scr_to_img.get_type ()))
     {
       uint64_t id;
-      m_paget = paget_analyzer_cache.get (p, xshift, yshift, width, height,
-                                          progress, &id);
+      m_paget = paget_analyzer_cache.get (p, analysis_area, progress, &id);
       if (!m_paget)
         return false;
       if ((int)m_params.screen_demosaic >= (int)render_parameters::hamilton_adams_demosaic
@@ -306,15 +382,13 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
     }
   else if (dufay_like_screen_p (m_scr_to_img.get_type ()))
     {
-      m_dufay = dufay_analyzer_cache.get (p, xshift, yshift, width, height,
-                                          progress);
+      m_dufay = dufay_analyzer_cache.get (p, analysis_area, progress);
       if (!m_dufay)
         return false;
     }
   else if (screen_with_vertical_strips_p (m_scr_to_img.get_type ()))
     {
-      m_strips = strips_analyzer_cache.get (p, xshift, yshift, width, height,
-                                            progress);
+      m_strips = strips_analyzer_cache.get (p, analysis_area, progress);
       if (!m_strips)
         return false;
     }
@@ -336,6 +410,8 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
     }
   return !progress || !progress->cancelled ();
 }
+
+/* Sample pixel at screen coordinate P and return its color.  */
 
 pure_attr rgbdata
 render_interpolate::sample_pixel_scr (point_t p) const
@@ -360,7 +436,7 @@ render_interpolate::sample_pixel_scr (point_t p) const
   else if (screen_with_vertical_strips_p (m_scr_to_img.get_type ()))
     {
       c = m_strips->interpolate ({ x, y },
-                                 m_interpolation_proportions, m_params.screen_demosaic);
+                                  m_interpolation_proportions, m_params.screen_demosaic);
       if (m_original_color)
         ;
       else if (m_scr_to_img.get_type () == Joly)
@@ -420,7 +496,7 @@ render_interpolate::sample_pixel_scr (point_t p) const
 #endif
 
       luminosity_t llum = c.red * s.red + c.green * s.green + c.blue * s.blue;
-      luminosity_t correction = llum ? lum / llum : lum * 100;
+      luminosity_t correction = llum ? lum / llum : lum * (luminosity_t)100;
 
 #if 1
       luminosity_t redmin = lum - (1 - std::min (s.red, (luminosity_t)1));
@@ -456,7 +532,7 @@ render_interpolate::sample_pixel_scr (point_t p) const
                                    &blue2);
       // TODO: We really should convert to XYZ and determine just Y.
       luminosity_t gr = (red2 * rwght + green2 * gwght + blue2 * bwght);
-      if (gr <= 0.00001 || l <= 0.00001)
+      if (gr <= (luminosity_t)1e-5 || l <= (luminosity_t)1e-5)
         red2 = green2 = blue2 = l;
       else
         {
@@ -474,6 +550,8 @@ render_interpolate::sample_pixel_scr (point_t p) const
     return c;
 }
 
+/* Increase LRU cache sizes for stitch projects by N.  */
+
 void
 render_interpolated_increase_lru_cache_sizes_for_stitch_projects (int n)
 {
@@ -484,7 +562,8 @@ render_interpolated_increase_lru_cache_sizes_for_stitch_projects (int n)
   demosaic_paget_cache.increase_capacity (3 * n);
 }
 
-/* Compute RGB data of downscaled image.  */
+/* Store downscaled image data starting at P of size WIDTH x HEIGHT to DATA.  */
+
 bool
 render_interpolate::get_color_data (rgbdata *data, point_t p,
                                     int width, int height, coord_t pixelsize,
@@ -494,13 +573,14 @@ render_interpolate::get_color_data (rgbdata *data, point_t p,
       data, p, width, height, pixelsize, progress);
 }
 
-/* Run ANALYZE on every screen point in the given (image) range, pass infared
-   value of tile color. Rendering must be initialized in precise mode from
-   infrared channel.  */
+/* Run ANALYZE on every screen point in the given AREA. If SCREEN is true,
+   AREA is in screen coordinates, otherwise it is in image coordinates.
+   PROGRESS is used for progress reporting.  */
+
 bool
 render_interpolate::analyze_patches (analyzer analyze, const char *task,
-                                     bool screen, int xmin, int xmax, int ymin,
-                                     int ymax, progress_info *progress)
+                                     bool screen, int_image_area area,
+                                     progress_info *progress)
 {
   assert (!m_precise_rgb && !m_original_color);
   if (dufay_like_screen_p (m_scr_to_img.get_type ()))
@@ -515,14 +595,14 @@ render_interpolate::analyze_patches (analyzer analyze, const char *task,
                 coord_t xs = x - m_dufay->get_xshift (),
                         ys = y - m_dufay->get_yshift ();
                 if (screen
-                    && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
+                    && (xs < area.x || ys < area.y || xs > area.x + area.width || ys > area.y + area.height))
                   continue;
                 if (!screen)
                   {
                     point_t imgp = m_scr_to_img.to_img ({ xs, ys });
                     if (!screen
-                        && (imgp.x < xmin || imgp.y < ymin || imgp.x > xmax
-                            || imgp.y > ymax))
+                        && (imgp.x < area.x || imgp.y < area.y || imgp.x > area.x + area.width
+                            || imgp.y > area.y + area.height))
                       continue;
                   }
                 rgbdata c = m_dufay->screen_tile_color (x, y);
@@ -551,14 +631,14 @@ render_interpolate::analyze_patches (analyzer analyze, const char *task,
                 coord_t xs = x - m_strips->get_xshift (),
                         ys = y - m_strips->get_yshift ();
                 if (screen
-                    && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
+                    && (xs < area.x || ys < area.y || xs > area.x + area.width || ys > area.y + area.height))
                   continue;
                 if (!screen)
                   {
                     point_t imgp = m_scr_to_img.to_img ({ xs, ys });
                     if (!screen
-                        && (imgp.x < xmin || imgp.y < ymin || imgp.x > xmax
-                            || imgp.y > ymax))
+                        && (imgp.x < area.x || imgp.y < area.y || imgp.x > area.x + area.width
+                            || imgp.y > area.y + area.height))
                       continue;
                   }
                 rgbdata c = m_strips->screen_tile_color (x, y);
@@ -584,14 +664,14 @@ render_interpolate::analyze_patches (analyzer analyze, const char *task,
                 coord_t xs = x - m_paget->get_xshift (),
                         ys = y - m_paget->get_yshift ();
                 if (screen
-                    && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
+                    && (xs < area.x || ys < area.y || xs > area.x + area.width || ys > area.y + area.height))
                   continue;
                 if (!screen)
                   {
                     point_t imgp = m_scr_to_img.to_img ({ xs, ys });
                     if (!screen
-                        && (imgp.x < xmin || imgp.y < ymin || imgp.x > xmax
-                            || imgp.y > ymax))
+                        && (imgp.x < area.x || imgp.y < area.y || imgp.x > area.x + area.width
+                            || imgp.y > area.y + area.height))
                       continue;
                   }
                 rgbdata c = m_paget->screen_tile_color (x, y);
@@ -605,14 +685,15 @@ render_interpolate::analyze_patches (analyzer analyze, const char *task,
     }
   return !progress || !progress->cancelled ();
 }
-/* Run ANALYZE on every screen point in the given (image) range, pass RGB value
-   of every tile color. Rendering must be initialized in precise_rgb mode from
-   infrared channel.  */
+
+/* Run ANALYZE on every screen point in the given AREA. If SCREEN is true,
+   AREA is in screen coordinates, otherwise it is in image coordinates.
+   Rendering must be initialized in precise_rgb mode from infrared channel.  */
+
 bool
 render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
                                          const char *task, bool screen,
-                                         int xmin, int xmax, int ymin,
-                                         int ymax, progress_info *progress)
+                                         int_image_area area, progress_info *progress)
 {
   assert (m_precise_rgb && !m_original_color);
   if (dufay_like_screen_p (m_scr_to_img.get_type ()))
@@ -627,14 +708,14 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
                 coord_t xs = x - m_dufay->get_xshift (),
                         ys = y - m_dufay->get_yshift ();
                 if (screen
-                    && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
+                    && (xs < area.x || ys < area.y || xs > area.x + area.width || ys > area.y + area.height))
                   continue;
                 if (!screen)
                   {
                     point_t imgp = m_scr_to_img.to_img ({ xs, ys });
                     if (!screen
-                        && (imgp.x < xmin || imgp.y < ymin || imgp.x > xmax
-                            || imgp.y > ymax))
+                        && (imgp.x < area.x || imgp.y < area.y || imgp.x > area.x + area.width
+                            || imgp.y > area.y + area.height))
                       continue;
                   }
                 rgbdata r, g, b;
@@ -663,14 +744,14 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
                 coord_t xs = x - m_strips->get_xshift (),
                         ys = y - m_strips->get_yshift ();
                 if (screen
-                    && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
+                    && (xs < area.x || ys < area.y || xs > area.x + area.width || ys > area.y + area.height))
                   continue;
                 if (!screen)
                   {
                     point_t imgp = m_scr_to_img.to_img ({ xs, ys });
                     if (!screen
-                        && (imgp.x < xmin || imgp.y < ymin || imgp.x > xmax
-                            || imgp.y > ymax))
+                        && (imgp.x < area.x || imgp.y < area.y || imgp.x > area.x + area.width
+                            || imgp.y > area.y + area.height))
                       continue;
                   }
                 rgbdata r, g, b;
@@ -696,14 +777,14 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
                 coord_t xs = x - m_paget->get_xshift (),
                         ys = y - m_paget->get_yshift ();
                 if (screen
-                    && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
+                    && (xs < area.x || ys < area.y || xs > area.x + area.width || ys > area.y + area.height))
                   continue;
                 if (!screen)
                   {
                     point_t imgp = m_scr_to_img.to_img ({ xs, ys });
                     if (!screen
-                        && (imgp.x < xmin || imgp.y < ymin || imgp.x > xmax
-                            || imgp.y > ymax))
+                        && (imgp.x < area.x || imgp.y < area.y || imgp.x > area.x + area.width
+                            || imgp.y > area.y + area.height))
                       continue;
                   }
                 rgbdata r, g, b;
@@ -718,6 +799,8 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
   return !progress || !progress->cancelled ();
 }
 
+/* Dump patch density to OUT.  */
+
 bool
 render_interpolate::dump_patch_density (FILE *out)
 {
@@ -728,33 +811,33 @@ render_interpolate::dump_patch_density (FILE *out)
   if (m_paget)
     return m_paget->dump_patch_density (out);
 
-  fprintf (stderr, "Unsuported screen format\n");
+  fprintf (stderr, "unsuported screen format\n");
   return false;
 }
 
-/* Cool ANALYZE with unadjusted luminosity of every screen tile in range
-   xmin,ymin,xmax,ymmax. For normal images range can be either in image or
-   screen coordinates (specified for screen). For stitch project image is
-   always in final coordinates.  */
+/* Analyze screen patches for IMG using RPARAM and PARAM in given AREA.
+   If SCREEN is true, AREA is in screen coordinates, otherwise it is in image coordinates.
+   ANALYZE is called for every patch.  */
+
 bool
 analyze_patches (analyzer analyze, const char *task, image_data &img,
                  render_parameters &rparam, scr_to_img_parameters &param,
-                 bool screen, int xmin, int xmax, int ymin, int ymax,
-                 progress_info *progress)
+                 bool screen, int_image_area area, progress_info *progress)
 {
   if (img.stitch)
     {
       stitch_project &stitch = *img.stitch;
-      xmin += img.xmin;
-      ymin += img.ymin;
-      xmax += img.xmin;
-      ymax += img.ymin;
+      int_image_area full_area = area;
+      full_area.x += img.xmin;
+      full_area.y += img.ymin;
+
       if (progress)
         progress->set_task ("searching for tiles", 1);
       /* It is easy to add support for screen coordinates if needed.  */
       assert (!screen);
       std::vector<stitch_project::tile_range> ranges
-          = stitch.find_ranges (xmin, xmax, ymin, ymax, true, true);
+          = stitch.find_ranges (full_area.x, full_area.x + full_area.width,
+                                full_area.y, full_area.y + full_area.height, true, true);
       if (progress)
         progress->set_task (task, ranges.size ());
       for (auto r : ranges)
@@ -775,8 +858,9 @@ analyze_patches (analyzer analyze, const char *task, image_data &img,
 				{ tsx, tsy });
 			point_t pfin
 			    = stitch.common_scr_to_img.scr_to_final (src);
-			if (pfin.x < xmin || pfin.y < ymin || pfin.x > xmax
-			    || pfin.y > ymax
+			if (pfin.x < full_area.x || pfin.y < full_area.y
+                            || pfin.x > full_area.x + full_area.width
+			    || pfin.y > full_area.y + full_area.height
 			    || !stitch.tile_for_scr (&my_rparam, src.x, src.y,
 						     &ttx, &tty, true)
 			    || ttx != tx || tty != ty)
@@ -784,7 +868,7 @@ analyze_patches (analyzer analyze, const char *task, image_data &img,
 			return analyze (pfin.x - img.xmin, pfin.y - img.ymin, c);
 		      },
 		    "analyzing tile", tile, rparam, stitch.images[ty][tx].param,
-		    true, r.xmin, r.xmax, r.ymin, r.ymax, progress))
+		    true, {r.xmin, r.ymin, r.xmax - r.xmin, r.ymax - r.ymin}, progress))
 	      return false;
 	  }
           if (progress)
@@ -796,45 +880,42 @@ analyze_patches (analyzer analyze, const char *task, image_data &img,
   render.set_unadjusted ();
   if (!screen)
     {
-      if (!render.precompute_img_range ({{xmin, ymin}, {xmax, ymax}}, progress))
+      if (!render.precompute_img_range (area, progress))
         return false;
     }
   else
     {
-      if (!render.precompute ({{xmin, ymin}, {xmax, ymax}}, progress))
-        // if (!render.precompute_img_range (0, 0, img.width, img.height,
-        // progress))
+      if (!render.precompute (area, progress))
         return false;
     }
   if (progress && progress->cancel_requested ())
     return false;
-  return render.analyze_patches (analyze, task, screen, xmin, xmax, ymin, ymax,
-                                 progress);
+  return render.analyze_patches (analyze, task, screen, area, progress);
 }
 
-/* Cool ANALYZE with unadjusted RGB value of every screen tile in range
-   xmin,ymin,xmax,ymmax. For normal images range can be either in image or
-   screen coordinates (specified for screen). For stitch project image is
-   always in final coordinates.  */
+/* Analyze RGB screen patches for IMG using RPARAM and PARAM in given AREA.
+   If SCREEN is true, AREA is in screen coordinates, otherwise it is in image coordinates.
+   ANALYZE is called for every patch.  */
+
 bool
 analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img,
                      render_parameters &rparam, scr_to_img_parameters &param,
-                     bool screen, int xmin, int xmax, int ymin, int ymax,
-                     progress_info *progress)
+                     bool screen, int_image_area area, progress_info *progress)
 {
   if (img.stitch)
     {
       stitch_project &stitch = *img.stitch;
-      xmin += img.xmin;
-      ymin += img.ymin;
-      xmax += img.xmin;
-      ymax += img.ymin;
+      int_image_area full_area = area;
+      full_area.x += img.xmin;
+      full_area.y += img.ymin;
+
       /* It is easy to add support for screen coordinates if needed.  */
       assert (!screen);
       if (progress)
         progress->set_task ("searching for tiles", 1);
       std::vector<stitch_project::tile_range> ranges
-          = stitch.find_ranges (xmin, xmax, ymin, ymax, true, true);
+          = stitch.find_ranges (full_area.x, full_area.x + full_area.width,
+                                full_area.y, full_area.y + full_area.height, true, true);
       if (progress)
         progress->set_task (task, ranges.size ());
       for (auto r : ranges)
@@ -847,8 +928,8 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img,
 
 	  {
 	    if (!analyze_rgb_patches (
-		    [&] (coord_t tsx, coord_t tsy, rgbdata r, rgbdata g,
-			 rgbdata b)
+		    [&] (coord_t tsx, coord_t tsy, rgbdata r_val, rgbdata g_val,
+			 rgbdata b_val)
 		      {
 			int ttx, tty;
 			point_t src
@@ -856,20 +937,18 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img,
 				{ tsx, tsy });
 			point_t pfin
 			    = stitch.common_scr_to_img.scr_to_final (src);
-			// printf ("tile %i %i tilescreen %f %f screen %f %f
-			// final %f %f range %i:%i %i:%i\n",tx,ty,
-			// tsx,tsy,src.x,src.y,fx,fy,xmin,xmax,ymin,ymax);
-			if (pfin.x < xmin || pfin.y < ymin || pfin.x > xmax
-			    || pfin.y > ymax
+			if (pfin.x < full_area.x || pfin.y < full_area.y
+                            || pfin.x > full_area.x + full_area.width
+			    || pfin.y > full_area.y + full_area.height
 			    || !stitch.tile_for_scr (&my_rparam, src.x, src.y,
 						     &ttx, &tty, true)
 			    || ttx != tx || tty != ty)
 			  return true;
-			return analyze (pfin.x - img.xmin, pfin.y - img.ymin, r,
-					g, b);
+			return analyze (pfin.x - img.xmin, pfin.y - img.ymin, r_val,
+					g_val, b_val);
 		      },
 		    "analyzing tile", tile, rparam, stitch.images[ty][tx].param,
-		    true, r.xmin, r.xmax, r.ymin, r.ymax, progress))
+		    true, {r.xmin, r.ymin, r.xmax - r.xmin, r.ymax - r.ymin}, progress))
 	      return false;
 	  }
           if (progress)
@@ -880,24 +959,22 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img,
   render_interpolate render (param, img, rparam, 256);
   render.set_precise_rgb ();
   render.set_unadjusted ();
-  // printf ("Screen %i\n",screen);
   if (!screen)
     {
-      if (!render.precompute_img_range ({{xmin, ymin}, {xmax, ymax}}, progress))
+      if (!render.precompute_img_range (area, progress))
         return false;
     }
   else
     {
-      // if (!render.precompute_img_range (0, 0, img.width, img.height,
-      // progress))
-      if (!render.precompute ({{xmin, ymin}, {xmax, ymax}}, progress))
+      if (!render.precompute (area, progress))
         return false;
     }
   if (progress && progress->cancel_requested ())
     return false;
-  return render.analyze_rgb_patches (analyze, task, screen, xmin, xmax, ymin,
-                                     ymax, progress);
+  return render.analyze_rgb_patches (analyze, task, screen, area, progress);
 }
+
+/* Dump patch density for SCAN using PARAM and RPARAM to OUT.  */
 
 bool
 dump_patch_density (FILE *out, image_data &scan, scr_to_img_parameters &param,
@@ -909,11 +986,12 @@ dump_patch_density (FILE *out, image_data &scan, scr_to_img_parameters &param,
   return render.dump_patch_density (out);
 }
 
+/* Return deltaE 2000 difference between colors FC1 and FC2.  */
+
 static double
 get_deltae (xyz fc1, xyz fc2, long *cln = NULL, xyz *mins = NULL,
             xyz *maxs = NULL)
 {
-  //xyz bfc1 = fc1, bfc2 = fc2;
   if (mins)
     {
       if (fc1.x < mins->x)
@@ -928,17 +1006,17 @@ get_deltae (xyz fc1, xyz fc2, long *cln = NULL, xyz *mins = NULL,
         mins->y = fc2.y;
       if (fc2.z < mins->z)
         mins->z = fc2.z;
-      if (fc1.x < maxs->x)
+      if (fc1.x > maxs->x)
         maxs->x = fc1.x;
-      if (fc1.y < maxs->y)
+      if (fc1.y > maxs->y)
         maxs->y = fc1.y;
-      if (fc1.z < maxs->z)
+      if (fc1.z > maxs->z)
         maxs->z = fc1.z;
-      if (fc2.x < maxs->x)
+      if (fc2.x > maxs->x)
         maxs->x = fc2.x;
-      if (fc2.y < maxs->y)
+      if (fc2.y > maxs->y)
         maxs->y = fc2.y;
-      if (fc2.z < maxs->z)
+      if (fc2.z > maxs->z)
         maxs->z = fc2.z;
     }
   /* DeltaE is meaningfully defined only in the range of xyz.  */
@@ -969,13 +1047,6 @@ get_deltae (xyz fc1, xyz fc2, long *cln = NULL, xyz *mins = NULL,
     fc2.z = 1, cl = true;
   if (cl && cln)
     {
-#if 0
-      printf ("Clamping\n");
-      bfc1.print (stdout);
-      fc1.print (stdout);
-      bfc2.print (stdout);
-      fc2.print (stdout);
-#endif
       (*cln)++;
     }
   cie_lab cc1 (fc1, srgb_white);
@@ -985,6 +1056,9 @@ get_deltae (xyz fc1, xyz fc2, long *cln = NULL, xyz *mins = NULL,
     abort ();
   return delta;
 }
+
+/* Compare two rendering methods defined by PARAM1, RPARAM1 and PARAM2, RPARAM2
+   for image IMG. Store average deltaE to RET_AVG and maximum deltaE to RET_MAX.  */
 
 bool
 compare_deltae (image_data &img, scr_to_img_parameters &param1,
@@ -1056,8 +1130,7 @@ compare_deltae (image_data &img, scr_to_img_parameters &param1,
     progress->set_task ("comparing", (img.height - 2 * border) / step * 2);
   histogram deltaE;
   luminosity_t sum = 0;
-  // #pragma omp parallel for default(none) shared(progress,img,render1,
-  // redner2,mins,maxs,sum)
+  #pragma omp parallel for default(none) shared(progress, img, render1, render2, border, step) reduction(+:sum) reduction(histogram_range:deltaE)
   for (int y = border; y < img.height - border; y += step)
     {
       if (!progress || !progress->cancel_requested ())
@@ -1065,24 +1138,15 @@ compare_deltae (image_data &img, scr_to_img_parameters &param1,
           {
             rgbdata c1 = render1.fast_sample_pixel_img ({x, y});
             rgbdata c2 = render2.fast_sample_pixel_img ({x, y});
+            xyz lfc1, lfc2;
             {
               rgbdata out1 = render1.out_color.linear_hdr_color (c1);
-              fc1 = {out1.red, out1.green, out1.blue};
+              lfc1 = {out1.red, out1.green, out1.blue};
               rgbdata out2 = render2.out_color.linear_hdr_color (c2);
-              fc2 = {out2.red, out2.green, out2.blue};
+              lfc2 = {out2.red, out2.green, out2.blue};
             }
-            double delta = get_deltae (fc1, fc2);
+            double delta = get_deltae (lfc1, lfc2);
             deltaE.pre_account (delta);
-#if 0
-	    if (delta > 0.1)
-	      {
-		printf ("Delta %f\n",delta);
-		fc1.print (stdout);
-		fc2.print (stdout);
-	      }
-#endif
-            // sum += delta;
-            // maxd = std::max (maxd, delta);
             sum += delta;
           }
       if (progress)
@@ -1165,7 +1229,7 @@ compare_deltae (image_data &img, scr_to_img_parameters &param1,
   if (maxs.z > 1)
     fprintf (stderr, "Warning: maximal z is %f; clamping\n", maxs.z);
   if (cln)
-    fprintf (stderr, "Clamped %li pixels out of %li (%f%%)\n", cln, n,
+    fprintf (stderr, "clamped %li pixels out of %li (%f%%)\n", cln, n,
              cln * 100.0 / n);
   printf ("Average %f\n", sum / n);
   if (progress)
@@ -1173,8 +1237,6 @@ compare_deltae (image_data &img, scr_to_img_parameters &param1,
 
   *ret_avg = deltaE.find_avg (0, 0.01);
   *ret_max = deltaE.find_max (0.01);
-  //*ret_avg = sum / n;
-  //*ret_max = maxd;
   return true;
 }
 

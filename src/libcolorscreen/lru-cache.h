@@ -343,7 +343,7 @@ public:
 template <typename P, typename T>
 struct tile_cache_entry : lru_entry_base<P, T, tile_cache_entry<P, T>>
 {
-  int xshift, yshift, width, height;
+  int_image_area area;
 };
 
 /* LRU cache for tile-based data associated with parameters. 
@@ -352,7 +352,7 @@ struct tile_cache_entry : lru_entry_base<P, T, tile_cache_entry<P, T>>
    GET_NEW is the generator function.
    BASE_CACHE_SIZE is the default size.  */
 template <typename P, typename T,
-          std::unique_ptr<T> get_new (P &, int xshift, int yshift, int width, int height, progress_info *progress),
+          std::unique_ptr<T> get_new (P &, int_image_area area, progress_info *progress),
           int base_cache_size>
 class lru_tile_cache : public abstract_lru_cache<P, T, tile_cache_entry<P, T>, lru_tile_cache<P, T, get_new, base_cache_size>>
 {
@@ -365,25 +365,24 @@ public:
   lru_tile_cache (const char *n) : Base (n, base_cache_size) {}
 
   /* Fetch the value for parameters P and given tile coordinates or generate it.
-     XSHIFT, YSHIFT, WIDTH, HEIGHT define the tile geometry.
+     AREA defines the tile geometry.
      Use PROGRESS for task cancellation.
      ID will receive the unique identifier of the entry.  */
   std::shared_ptr<T>
-  get (P &p, int xshift, int yshift, int width, int height, progress_info *progress, uint64_t *id = NULL)
+  get (P &p, int_image_area area, progress_info *progress, uint64_t *id = NULL)
   {
     return this->get_internal (
         p, progress, id,
         [&](Entry *e) {
-          return xshift <= e->xshift && yshift <= e->yshift && width - xshift <= e->width - e->xshift
-                 && height - yshift <= e->height - e->yshift && p == e->params;
+          return area.x >= e->area.x && area.y >= e->area.y
+                 && area.x + area.width <= e->area.x + e->area.width
+                 && area.y + area.height <= e->area.y + e->area.height
+                 && p == e->params;
         },
         [&](Entry *e) {
-          e->xshift = xshift;
-          e->yshift = yshift;
-          e->width = width;
-          e->height = height;
+          e->area = area;
         },
-        [&](Entry *e) { return get_new (e->params, e->xshift, e->yshift, e->width, e->height, progress); });
+        [&](Entry *e) { return get_new (e->params, e->area, progress); });
   }
 };
 
