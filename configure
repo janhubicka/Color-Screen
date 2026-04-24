@@ -661,6 +661,8 @@ HOST_WIN32_TRUE
 WIN_NO_UNDEFINED
 EXIV2_LIBS
 EXIV2_CFLAGS
+LIBRAW_LIBS
+LIBRAW_CFLAGS
 OPENMP_CXXFLAGS
 HAVE_CXX17
 PKG_CONFIG_LIBDIR
@@ -843,6 +845,8 @@ CXXCPP
 PKG_CONFIG
 PKG_CONFIG_PATH
 PKG_CONFIG_LIBDIR
+LIBRAW_CFLAGS
+LIBRAW_LIBS
 EXIV2_CFLAGS
 EXIV2_LIBS
 GTKGUI_BIN_CFLAGS
@@ -1537,6 +1541,9 @@ Some influential environment variables:
               directories to add to pkg-config's search path
   PKG_CONFIG_LIBDIR
               path overriding pkg-config's built-in search path
+  LIBRAW_CFLAGS
+              C compiler flags for LIBRAW, overriding pkg-config
+  LIBRAW_LIBS linker flags for LIBRAW, overriding pkg-config
   EXIV2_CFLAGS
               C compiler flags for EXIV2, overriding pkg-config
   EXIV2_LIBS  linker flags for EXIV2, overriding pkg-config
@@ -21633,69 +21640,99 @@ fi
 if test -n "$with_libraw"; then echo "option: with_libraw $with_libraw"; fi
 
 if test "$with_libraw" != "no"; then
-{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking for library containing libraw_init" >&5
-printf %s "checking for library containing libraw_init... " >&6; }
-if test ${ac_cv_search_libraw_init+y}
-then :
-  printf %s "(cached) " >&6
-else case e in #(
-  e) ac_func_search_save_LIBS=$LIBS
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
 
-namespace conftest {
-  extern "C" int libraw_init ();
-}
-int
-main (void)
-{
-return conftest::libraw_init ();
-  ;
-  return 0;
-}
-_ACEOF
-for ac_lib in '' raw
-do
-  if test -z "$ac_lib"; then
-    ac_res="none required"
-  else
-    ac_res=-l$ac_lib
-    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
-  fi
-  if ac_fn_cxx_try_link "$LINENO"
-then :
-  ac_cv_search_libraw_init=$ac_res
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.beam \
-    conftest$ac_exeext
-  if test ${ac_cv_search_libraw_init+y}
-then :
-  break
-fi
-done
-if test ${ac_cv_search_libraw_init+y}
-then :
+pkg_failed=no
+{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking for libraw >= 0.21.0" >&5
+printf %s "checking for libraw >= 0.21.0... " >&6; }
 
-else case e in #(
-  e) ac_cv_search_libraw_init=no ;;
-esac
+if test -n "$LIBRAW_CFLAGS"; then
+    pkg_cv_LIBRAW_CFLAGS="$LIBRAW_CFLAGS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libraw >= 0.21.0\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "libraw >= 0.21.0") 2>&5
+  ac_status=$?
+  printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_LIBRAW_CFLAGS=`$PKG_CONFIG --cflags "libraw >= 0.21.0" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
 fi
-rm conftest.$ac_ext
-LIBS=$ac_func_search_save_LIBS ;;
-esac
+ else
+    pkg_failed=untried
 fi
-{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_libraw_init" >&5
-printf '%s\n' "$ac_cv_search_libraw_init" >&6; }
-ac_res=$ac_cv_search_libraw_init
-if test "$ac_res" != no
-then :
-  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
-  check_libraw_h="libraw.h"
-else case e in #(
-  e)  echo " * * * try option --with-libraw=PATH" ;;
-esac
+if test -n "$LIBRAW_LIBS"; then
+    pkg_cv_LIBRAW_LIBS="$LIBRAW_LIBS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libraw >= 0.21.0\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "libraw >= 0.21.0") 2>&5
+  ac_status=$?
+  printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_LIBRAW_LIBS=`$PKG_CONFIG --libs "libraw >= 0.21.0" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
 fi
 
+
+
+if test $pkg_failed = yes; then
+        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf '%s\n' "no" >&6; }
+
+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+        _pkg_short_errors_supported=yes
+else
+        _pkg_short_errors_supported=no
+fi
+        if test $_pkg_short_errors_supported = yes; then
+                LIBRAW_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libraw >= 0.21.0" 2>&1`
+        else
+                LIBRAW_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libraw >= 0.21.0" 2>&1`
+        fi
+        # Put the nasty error message in config.log where it belongs
+        echo "$LIBRAW_PKG_ERRORS" >&5
+
+        as_fn_error $? "Package requirements (libraw >= 0.21.0) were not met:
+
+$LIBRAW_PKG_ERRORS
+
+Consider adjusting the PKG_CONFIG_PATH environment variable if you
+installed software in a non-standard prefix.
+
+Alternatively, you may set the environment variables LIBRAW_CFLAGS
+and LIBRAW_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details." "$LINENO" 5
+elif test $pkg_failed = untried; then
+        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf '%s\n' "no" >&6; }
+        { { printf '%s\n' "$as_me:${as_lineno-$LINENO}: error: in '$ac_pwd':" >&5
+printf '%s\n' "$as_me: error: in '$ac_pwd':" >&2;}
+as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
+is in your PATH or set the PKG_CONFIG environment variable to the full
+path to pkg-config.
+
+Alternatively, you may set the environment variables LIBRAW_CFLAGS
+and LIBRAW_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details.
+
+To get pkg-config, see <http://pkg-config.freedesktop.org/>.
+See 'config.log' for more details" "$LINENO" 5; }
+else
+        LIBRAW_CFLAGS=$pkg_cv_LIBRAW_CFLAGS
+        LIBRAW_LIBS=$pkg_cv_LIBRAW_LIBS
+        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf '%s\n' "yes" >&6; }
+
+printf '%s\n' "#define HAVE_LIBRAW 1" >>confdefs.h
+
+fi
 fi
 
 

@@ -1,3 +1,4 @@
+#include "config.h"
 #include "backlight-correction.h"
 #include "include/histogram.h"
 #include "include/imagedata.h"
@@ -16,7 +17,6 @@
 #include <zip.h>
 #include <exiv2/exiv2.hpp>
 
-#define HAVE_LIBRAW
 
 #ifdef HAVE_LIBRAW
 #include <libraw/libraw.h>
@@ -119,7 +119,7 @@ private:
 class raw_image_data_loader : public image_data_loader
 {
 public:
-  raw_image_data_loader (image_data *img) : m_backlight_corr (nullptr), m_img (img) {}
+  raw_image_data_loader (image_data *img) : m_backlight_corr (nullptr), m_img (img), m_buffer (nullptr), m_processor (std::make_unique<LibRaw> ()) {}
   virtual bool init_loader (const char *name, const char **error,
                             progress_info *, image_data::demosaicing_t);
   virtual bool load_part (int *permille, const char **error,
@@ -128,12 +128,16 @@ public:
   {
     /*if (lcc)
       delete lcc;*/
+    if (m_buffer)
+      free (m_buffer);
   }
 
 private:
   std::shared_ptr<backlight_correction_parameters> m_backlight_corr;
   image_data *m_img;
-  LibRaw RawProcessor;
+  void *m_buffer;
+  /* Do not put it on stack since it is rather large.  */
+  std::unique_ptr<LibRaw> m_processor;
   bool monochromatic;
   bool bayer_correction;
 };
@@ -241,9 +245,11 @@ image_data::allocate ()
       rgbdata = (pixel **)malloc (sizeof (*rgbdata) * height);
       if (!rgbdata)
         {
-          free (*data);
           if (data)
-            free (data);
+            {
+              MapAlloc::Free (*data);
+              free (data);
+            }
           data = NULL;
           return false;
         }
@@ -251,9 +257,11 @@ image_data::allocate ()
           width * height * sizeof (**rgbdata), "RGB data");
       if (!rgbdata[0])
         {
-          free (*data);
           if (data)
-            free (data);
+            {
+              MapAlloc::Free (*data);
+              free (data);
+            }
           data = NULL;
           free (rgbdata);
           rgbdata = NULL;
@@ -591,7 +599,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
                                     image_data::demosaicing_t demosaic)
 {
   size_t buffer_size;
-  void *buffer = NULL;
+  m_buffer = NULL;
   if (has_suffix (name, ".eip"))
     {
       int errcode;
@@ -622,16 +630,17 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
           return false;
         }
       buffer_size = stat.size;
-      buffer = malloc (buffer_size);
-      if (!buffer)
+      m_buffer = malloc (buffer_size);
+      if (!m_buffer)
         {
           *error = "can not allocate buffer to decompress RAW file";
           return false;
         }
-      if (buffer_size != (size_t)zip_fread (zip_file, buffer, buffer_size))
+      if (buffer_size != (size_t)zip_fread (zip_file, m_buffer, buffer_size))
         {
           *error = "can not decompress the RAW file";
-          free (buffer);
+          free (m_buffer);
+          m_buffer = NULL;
           return false;
         }
       zip_fclose (zip_file);
@@ -647,7 +656,8 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
                 {
                   *error = "can not determine length of LLC file in the eip "
                            "zip archive";
-                  free (buffer);
+                  free (m_buffer);
+                  m_buffer = NULL;
                   return false;
                 }
               zip_file = zip_fopen (zip, name, 0);
@@ -662,7 +672,8 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
               if (!mbuffer.data)
                 {
                   *error = "can not allocate buffer to decompress LCC file";
-                  free (buffer);
+                  free (m_buffer);
+                  m_buffer = NULL;
                   free (mbuffer.data);
                   return false;
                 }
@@ -670,7 +681,8 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
                   != (size_t)zip_fread (zip_file, mbuffer.data, mbuffer.len))
                 {
                   *error = "can not allocate buffer to decompress LCC file";
-                  free (buffer);
+                  free (m_buffer);
+                  m_buffer = NULL;
                   free (mbuffer.data);
                   return false;
                 }
@@ -679,7 +691,8 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
 	      if (!lcc)
 		{
 		  *error = "can not read LCC file";
-		  free (buffer);
+		  free (m_buffer);
+                  m_buffer = NULL;
 		  free (mbuffer.data);
 		  return false;
 		}
@@ -692,64 +705,64 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
         }
       zip_close (zip);
     }
-  RawProcessor.imgdata.params.gamm[0] = RawProcessor.imgdata.params.gamm[1]
-      = RawProcessor.imgdata.params.no_auto_bright = 1;
-  RawProcessor.imgdata.params.use_camera_matrix = 0;
-  RawProcessor.imgdata.params.output_color = 0;
-  RawProcessor.imgdata.params.highlight = 0;
+  m_processor->imgdata.params.gamm[0] = m_processor->imgdata.params.gamm[1]
+      = m_processor->imgdata.params.no_auto_bright = 1;
+  m_processor->imgdata.params.use_camera_matrix = 0;
+  m_processor->imgdata.params.output_color = 0;
+  m_processor->imgdata.params.highlight = 0;
   switch (demosaic)
     {
     case image_data::demosaic_linear:
     case image_data::demosaic_half:
-      RawProcessor.imgdata.params.user_qual = 0;
+      m_processor->imgdata.params.user_qual = 0;
       break;
 
     /* The following use no demosaicing; any value is good.  */
     case image_data::demosaic_monochromatic:
     case image_data::demosaic_monochromatic_bayer_corrected:
     case image_data::demosaic_none: 
-      RawProcessor.imgdata.params.user_qual = 0;
+      m_processor->imgdata.params.user_qual = 0;
       break;
     case image_data::demosaic_VNG:
-      RawProcessor.imgdata.params.user_qual = 1;
+      m_processor->imgdata.params.user_qual = 1;
       m_img->demosaiced_by = image_data::demosaic_VNG;
       break;
     case image_data::demosaic_PPG:
-      RawProcessor.imgdata.params.user_qual = 2;
+      m_processor->imgdata.params.user_qual = 2;
       m_img->demosaiced_by = image_data::demosaic_PPG;
       break;
     /* AHD seems to go well on demosaicing photo of Paget screen.  */
     case image_data::demosaic_default:
     case image_data::demosaic_AHD:
-      RawProcessor.imgdata.params.user_qual = 3;
+      m_processor->imgdata.params.user_qual = 3;
       m_img->demosaiced_by = image_data::demosaic_AHD;
       break;
     case image_data::demosaic_DCB:
-      RawProcessor.imgdata.params.user_qual = 4;
+      m_processor->imgdata.params.user_qual = 4;
       m_img->demosaiced_by = image_data::demosaic_DCB;
       break;
     case image_data::demosaic_DHT:
-      RawProcessor.imgdata.params.user_qual = 11;
+      m_processor->imgdata.params.user_qual = 11;
       m_img->demosaiced_by = image_data::demosaic_DHT;
       break;
     case image_data::demosaic_AAHD:
-      RawProcessor.imgdata.params.user_qual = 12;
+      m_processor->imgdata.params.user_qual = 12;
       m_img->demosaiced_by = image_data::demosaic_AAHD;
       break;
     case image_data::demosaic_max:
       abort ();
     }
-  RawProcessor.imgdata.params.use_auto_wb = 0;
-  RawProcessor.imgdata.params.use_camera_wb = 0;
-  RawProcessor.imgdata.params.use_camera_matrix = 0;
-  RawProcessor.imgdata.rawparams.max_raw_memory_mb = 10000;
+  m_processor->imgdata.params.use_auto_wb = 0;
+  m_processor->imgdata.params.use_camera_wb = 0;
+  m_processor->imgdata.params.use_camera_matrix = 0;
+  m_processor->imgdata.rawparams.max_raw_memory_mb = 10000;
   if (demosaic == image_data::demosaic_half)
     {
-      RawProcessor.imgdata.params.half_size = 1;
+      m_processor->imgdata.params.half_size = 1;
       m_img->demosaiced_by = image_data::demosaic_half;
     }
-  RawProcessor.imgdata.params.no_auto_bright = 1;
-  RawProcessor.imgdata.params.fbdd_noiserd = 0;
+  m_processor->imgdata.params.no_auto_bright = 1;
+  m_processor->imgdata.params.fbdd_noiserd = 0;
 
   monochromatic
       = (demosaic == image_data::demosaic_monochromatic
@@ -759,31 +772,34 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
   if (monochromatic)
     m_img->demosaiced_by = demosaic;
   /* TODO figure out threshold.  */
-  RawProcessor.imgdata.params.threshold = 0;
+  m_processor->imgdata.params.threshold = 0;
   if (demosaic == image_data::demosaic_none || monochromatic)
-    RawProcessor.imgdata.params.no_interpolation = 1;
+    m_processor->imgdata.params.no_interpolation = 1;
   int ret;
-  if (buffer)
-    ret = RawProcessor.open_buffer (buffer, buffer_size);
+  if (m_buffer)
+    ret = m_processor->open_buffer (m_buffer, buffer_size);
   else
-    ret = RawProcessor.open_file (name);
+    ret = m_processor->open_file (name);
   if (ret != LIBRAW_SUCCESS)
     {
-      if (buffer)
-        free (buffer);
+      if (m_buffer)
+        {
+          free (m_buffer);
+          m_buffer = NULL;
+        }
       *error = libraw_strerror (ret);
       return false;
     }
-  if (!RawProcessor.imgdata.idata.filters)
+  if (!m_processor->imgdata.idata.filters)
     m_img->demosaiced_by = image_data::demosaic_max;
-  m_img->f_stop = RawProcessor.imgdata.other.aperture;
-  m_img->focal_length = RawProcessor.imgdata.other.focal_len;
-  m_img->camera_model = RawProcessor.imgdata.idata.model;
-  m_img->lens = RawProcessor.imgdata.lens.Lens;
-  if (RawProcessor.imgdata.lens.FocalLengthIn35mmFormat > 0)
-    m_img->focal_length_in_35mm = RawProcessor.imgdata.lens.FocalLengthIn35mmFormat;
-  if (RawProcessor.imgdata.idata.colors != 1
-      && RawProcessor.imgdata.idata.colors != 3)
+  m_img->f_stop = m_processor->imgdata.other.aperture;
+  m_img->focal_length = m_processor->imgdata.other.focal_len;
+  m_img->camera_model = m_processor->imgdata.idata.model;
+  m_img->lens = m_processor->imgdata.lens.Lens;
+  if (m_processor->imgdata.lens.FocalLengthIn35mmFormat > 0)
+    m_img->focal_length_in_35mm = m_processor->imgdata.lens.FocalLengthIn35mmFormat;
+  if (m_processor->imgdata.idata.colors != 1
+      && m_processor->imgdata.idata.colors != 3)
     {
       *error
           = "number of colors in RAW file should be 3 (RGB) or 1 (achromatic)";
@@ -791,65 +807,71 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
     }
   if (progress)
     progress->set_task ("unpacking RAW data", 1);
-  if ((ret = RawProcessor.unpack ()) != LIBRAW_SUCCESS)
+  if ((ret = m_processor->unpack ()) != LIBRAW_SUCCESS)
     {
-      if (buffer)
-        free (buffer);
+      if (m_buffer)
+        {
+          free (m_buffer);
+          m_buffer = NULL;
+        }
       *error = libraw_strerror (ret);
       return false;
     }
   if (progress)
     progress->set_task ("demosaicing", 1);
-  if ((ret = RawProcessor.dcraw_process ()) != LIBRAW_SUCCESS)
+  if ((ret = m_processor->dcraw_process ()) != LIBRAW_SUCCESS)
     {
-      if (buffer)
-        free (buffer);
+      if (m_buffer)
+        {
+          free (m_buffer);
+          m_buffer = NULL;
+        }
       *error = libraw_strerror (ret);
       return false;
     }
   grayscale = false;
   m_img->gamma = 1;
-  if (monochromatic && RawProcessor.imgdata.idata.colors != 3)
+  if (monochromatic && m_processor->imgdata.idata.colors != 3)
     monochromatic = false;
-  rgb = RawProcessor.imgdata.idata.colors == 3 && !monochromatic;
-  grayscale = RawProcessor.imgdata.idata.colors == 1 || monochromatic;
-  m_img->width = RawProcessor.imgdata.sizes.width;
-  m_img->height = RawProcessor.imgdata.sizes.height;
+  rgb = m_processor->imgdata.idata.colors == 3 && !monochromatic;
+  grayscale = m_processor->imgdata.idata.colors == 1 || monochromatic;
+  m_img->width = m_processor->imgdata.sizes.width;
+  m_img->height = m_processor->imgdata.sizes.height;
   m_img->maxval = 65535;
 
   /* For acromatic back we need no camera matrix.  */
-  if (RawProcessor.imgdata.idata.colors == 3)
+  if (m_processor->imgdata.idata.colors == 3)
     {
       bool nonzero = false;
       /* some RAW files has empty camera matrix.  */
       for (int i = 0; i < 3; i++)
         for (int j = 0; j < 3; j++)
-          if (RawProcessor.imgdata.color.cam_xyz[i][j])
+          if (m_processor->imgdata.color.cam_xyz[i][j])
             nonzero = true;
       if (nonzero)
         {
-          color_matrix m (RawProcessor.imgdata.color.cam_xyz[0][0],
-                          RawProcessor.imgdata.color.cam_xyz[1][0],
-                          RawProcessor.imgdata.color.cam_xyz[2][0], 0,
-                          RawProcessor.imgdata.color.cam_xyz[0][1],
-                          RawProcessor.imgdata.color.cam_xyz[1][1],
-                          RawProcessor.imgdata.color.cam_xyz[2][1], 0,
-                          RawProcessor.imgdata.color.cam_xyz[0][2],
-                          RawProcessor.imgdata.color.cam_xyz[1][2],
-                          RawProcessor.imgdata.color.cam_xyz[2][2], 0, 0, 0, 0,
+          color_matrix m (m_processor->imgdata.color.cam_xyz[0][0],
+                          m_processor->imgdata.color.cam_xyz[1][0],
+                          m_processor->imgdata.color.cam_xyz[2][0], 0,
+                          m_processor->imgdata.color.cam_xyz[0][1],
+                          m_processor->imgdata.color.cam_xyz[1][1],
+                          m_processor->imgdata.color.cam_xyz[2][1], 0,
+                          m_processor->imgdata.color.cam_xyz[0][2],
+                          m_processor->imgdata.color.cam_xyz[1][2],
+                          m_processor->imgdata.color.cam_xyz[2][2], 0, 0, 0, 0,
                           1);
           // m = m.invert ();
 #if 0
 	  const double b = 512;
-	  color_matrix premult (b/RawProcessor.imgdata.color.cam_mul[0],0, 0, 0,
-				0, b/RawProcessor.imgdata.color.cam_mul[1], 0, 0,
-				0, 0, b/RawProcessor.imgdata.color.cam_mul[2], 0,
+	  color_matrix premult (b/m_processor->imgdata.color.cam_mul[0],0, 0, 0,
+				0, b/m_processor->imgdata.color.cam_mul[1], 0, 0,
+				0, 0, b/m_processor->imgdata.color.cam_mul[2], 0,
 				0, 0, 0, 1);
 #endif
           color_matrix premult (
-              1 / RawProcessor.imgdata.color.pre_mul[0], 0, 0, 0, 0,
-              1 / RawProcessor.imgdata.color.pre_mul[1], 0, 0, 0, 0,
-              1 / RawProcessor.imgdata.color.pre_mul[2], 0, 0, 0, 0, 1);
+              1 / m_processor->imgdata.color.pre_mul[0], 0, 0, 0, 0,
+              1 / m_processor->imgdata.color.pre_mul[1], 0, 0, 0, 0,
+              1 / m_processor->imgdata.color.pre_mul[2], 0, 0, 0, 0, 1);
           m = premult * m.invert ();
           xyz_to_xyY (m(0, 0), m(0, 1),
                       m(0, 2), &m_img->primary_red.x,
@@ -866,14 +888,11 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
                       &m_img->primary_blue.y, &m_img->primary_blue.Y);
           // printf ("blue %f %f\n",  m_img->primary_blue.x,
           // m_img->primary_blue.y); m_img->primary_red.Y /=
-          // RawProcessor.imgdata.color.pre_mul[0]; m_img->primary_green.Y /=
-          // RawProcessor.imgdata.color.pre_mul[1]; m_img->primary_blue.Y /=
-          // RawProcessor.imgdata.color.pre_mul[2];
+          // m_processor->imgdata.color.pre_mul[0]; m_img->primary_green.Y /=
+          // m_processor->imgdata.color.pre_mul[1]; m_img->primary_blue.Y /=
+          // m_processor->imgdata.color.pre_mul[2];
         }
     }
-  if (buffer)
-    free (buffer);
-
   m_img->load_exif (name);
 
   return true;
@@ -899,13 +918,13 @@ raw_image_data_loader::load_part (int *permille, const char **error,
             for (int x = 0; x < m_img->width - 1; x++)
 	      {
 		int i = y * m_img->width + x;
-		int g = RawProcessor.imgdata.image[i][1];
+		int g = m_processor->imgdata.image[i][1];
 		if (g > 0 && g < 65535 - 256)
 		{
-		  int r = RawProcessor.imgdata.image[i + 1][0];
+		  int r = m_processor->imgdata.image[i + 1][0];
 		  if (r > 0 && r < 65535 - 256)
 		    grsum += g, rsum += r;
-		  int b = RawProcessor.imgdata.image[i + 1][2];
+		  int b = m_processor->imgdata.image[i + 1][2];
 		  if (b > 0 && b < 65535 - 256)
 		    gbsum += g, bsum += b;
 		}
@@ -934,20 +953,20 @@ raw_image_data_loader::load_part (int *permille, const char **error,
             for (int x = 0; x < m_img->width - 1; x++)
               {
                 int i = y * m_img->width + x;
-                int g = RawProcessor.imgdata.image[i][1];
+                int g = m_processor->imgdata.image[i][1];
 
                 if (g > 256 && g < 65535 - 256)
                   {
-                    assert (!RawProcessor.imgdata.image[i][0]
-                            && !RawProcessor.imgdata.image[i][2]);
-                    int r = RawProcessor.imgdata.image[i + 1][0];
+                    assert (!m_processor->imgdata.image[i][0]
+                            && !m_processor->imgdata.image[i][2]);
+                    int r = m_processor->imgdata.image[i + 1][0];
                     if (r > 256 && r < 65535 - 256)
                       {
                         luminosity_t ratio = g * rratio / (luminosity_t)r;
                         if (ratio > 1 - range && ratio < 1 + range)
                           rhistogram.account (ratio);
                       }
-                    int b = RawProcessor.imgdata.image[i + 1][2];
+                    int b = m_processor->imgdata.image[i + 1][2];
                     if (b > 256 && b < 65535 - 256)
                       {
                         luminosity_t ratio = g * bratio / (luminosity_t)b;
@@ -969,42 +988,41 @@ raw_image_data_loader::load_part (int *permille, const char **error,
 	  //fprintf (stderr, "rscale %f bscale %f\n", rscale, bscale);
         }
 #pragma omp parallel for default(none)                                        \
-    shared(m_img, RawProcessor, bscale, rscale)
+    shared(m_img, m_processor, bscale, rscale)
       for (int y = 0; y < m_img->height; y++)
         for (int x = 0; x < m_img->width; x++)
           {
             int i = y * m_img->width + x;
             m_img->data[y][x] = std::clamp (
-                RawProcessor.imgdata.image[i][0] * rscale
-                    + RawProcessor.imgdata.image[i][1]
-                    + RawProcessor.imgdata.image[i][2] * bscale + (float)0.5,
+                m_processor->imgdata.image[i][0] * rscale
+                    + m_processor->imgdata.image[i][1]
+                    + m_processor->imgdata.image[i][2] * bscale + (float)0.5,
                 (float)0, (float)65535);
           }
     }
   else if (m_img->rgbdata)
     {
-#pragma omp parallel for default(none) shared(m_img, RawProcessor)
+#pragma omp parallel for default(none) shared(m_img, m_processor)
       for (int y = 0; y < m_img->height; y++)
         for (int x = 0; x < m_img->width; x++)
           {
             int i = y * m_img->width + x;
-            m_img->rgbdata[y][x].r = RawProcessor.imgdata.image[i][0];
-            m_img->rgbdata[y][x].g = RawProcessor.imgdata.image[i][1];
-            m_img->rgbdata[y][x].b = RawProcessor.imgdata.image[i][2];
+            m_img->rgbdata[y][x].r = m_processor->imgdata.image[i][0];
+            m_img->rgbdata[y][x].g = m_processor->imgdata.image[i][1];
+            m_img->rgbdata[y][x].b = m_processor->imgdata.image[i][2];
           }
     }
   else
     {
-#pragma omp parallel for default(none) shared(m_img, RawProcessor)
+#pragma omp parallel for default(none) shared(m_img, m_processor)
       for (int y = 0; y < m_img->height; y++)
         for (int x = 0; x < m_img->width; x++)
           {
             int i = y * m_img->width + x;
-            m_img->data[y][x] = RawProcessor.imgdata.image[i][0];
+            m_img->data[y][x] = m_processor->imgdata.image[i][0];
           }
     }
   *permille = 1000;
-  RawProcessor.recycle ();
   return true;
 }
 
@@ -1160,8 +1178,8 @@ image_data::init_loader (const char *name, bool preload_all,
   else if (has_suffix (name, ".jpg") || has_suffix (name, ".jpeg"))
     loader = std::make_unique<jpg_image_data_loader> (this);
   else if (has_suffix (name, ".raw") || has_suffix (name, ".dng")
-           || has_suffix (name, "iiq") || has_suffix (name, "NEF")
-           || has_suffix (name, "cr2") || has_suffix (name, "CR2"))
+           || has_suffix (name, ".iiq") || has_suffix (name, ".NEF")
+           || has_suffix (name, ".cr2") || has_suffix (name, ".CR2"))
     loader = std::make_unique<raw_image_data_loader> (this);
   else if (has_suffix (name, ".eip"))
     loader = std::make_unique<raw_image_data_loader> (this);
