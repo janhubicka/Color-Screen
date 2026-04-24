@@ -449,11 +449,11 @@ public:
 
 protected:
   /* Precise analysis collecting all pixels.  */
-  bool analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, const simulated_screen *simulated, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress);
+  bool analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, const simulated_screen *simulated, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int_image_area area, progress_info *progress);
   /* Precise analysis in RGB scanner color space.  */
-  bool analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, const simulated_screen *simulated, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress);
+  bool analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, const simulated_screen *simulated, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int_image_area area, progress_info *progress);
   /* Analysis of original scanner colors.  */
-  bool analyze_color (scr_to_img *scr_to_img, render_to_scr *render, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress);
+  bool analyze_color (scr_to_img *scr_to_img, render_to_scr *render, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int_image_area area, progress_info *progress);
   /* Fast analysis from patch centers.  */
   bool analyze_fast (render_to_scr *render,progress_info *progress);
 

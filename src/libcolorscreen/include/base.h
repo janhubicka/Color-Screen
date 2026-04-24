@@ -443,24 +443,13 @@ public:
   pure_attr inline constexpr image_area_base<T, P>
   intersect (image_area_base other) const
   {
-    image_area_base<T,P> ret (x, y, width, height);
-    if (x < other.x)
-      {
-	ret.width -= other.x - x;
-	ret.x = other.x;
-      }
-    if (y < other.y)
-      {
-	ret.height -= other.y - y;
-	ret.y = other.y;
-      }
-    if (ret.x + ret.width > other.x + other.width)
-      ret.width = other.x + other.width - x;
-    if (ret.y + ret.height > other.y + other.height)
-      ret.height = other.y + other.height - y;
-    ret.width = std::max (width, (T)0);
-    ret.height = std::max (height, (T)0);
-    return ret;
+    T nx = std::max (x, other.x);
+    T ny = std::max (y, other.y);
+    T nwidth = std::min (x + width, other.x + other.width) - nx;
+    T nheight = std::min (y + height, other.y + other.height) - ny;
+    if (nwidth < 0 || nheight < 0)
+      return image_area_base<T,P> ();
+    return image_area_base<T,P> (nx, ny, nwidth, nheight);
   }
 
   /* Return true if this area is equal to OTHER.  */

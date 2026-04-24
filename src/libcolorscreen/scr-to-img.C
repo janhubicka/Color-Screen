@@ -370,60 +370,53 @@ scr_to_img::update_linear_parameters (scr_to_img_parameters &param)
 int_image_area
 scr_to_img::get_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) const noexcept
 {
-  coord_t minx, miny, maxx, maxy;
   if (!m_param.mesh_trans)
     {
       /* Compute all the corners.  */
-      point_t ul = to_scr ({ x1, y1 });
-      point_t ur = to_scr ({ x2, y1 });
-      point_t dl = to_scr ({ x1, y2 });
-      point_t dr = to_scr ({ x2, y2 });
+      int_image_area area (int_point_t {(int64_t)my_floor (to_scr ({ x1, y1 }).x), (int64_t)my_floor (to_scr ({ x1, y1 }).y)});
+      area.extend (int_point_t {(int64_t)my_ceil (to_scr ({ x1, y1 }).x), (int64_t)my_ceil (to_scr ({ x1, y1 }).y)});
+      area.extend (int_point_t {(int64_t)my_floor (to_scr ({ x2, y1 }).x), (int64_t)my_floor (to_scr ({ x2, y1 }).y)});
+      area.extend (int_point_t {(int64_t)my_ceil (to_scr ({ x2, y1 }).x), (int64_t)my_ceil (to_scr ({ x2, y1 }).y)});
+      area.extend (int_point_t {(int64_t)my_floor (to_scr ({ x1, y2 }).x), (int64_t)my_floor (to_scr ({ x1, y2 }).y)});
+      area.extend (int_point_t {(int64_t)my_ceil (to_scr ({ x1, y2 }).x), (int64_t)my_ceil (to_scr ({ x1, y2 }).y)});
+      area.extend (int_point_t {(int64_t)my_floor (to_scr ({ x2, y2 }).x), (int64_t)my_floor (to_scr ({ x2, y2 }).y)});
+      area.extend (int_point_t {(int64_t)my_ceil (to_scr ({ x2, y2 }).x), (int64_t)my_ceil (to_scr ({ x2, y2 }).y)});
 
-      /* Find extremas.  */
-      minx = std::min (std::min (std::min (ul.x, ur.x), dl.x), dr.x);
-      miny = std::min (std::min (std::min (ul.y, ur.y), dl.y), dr.y);
-      maxx = std::max (std::max (std::max (ul.x, ur.x), dl.x), dr.x);
-      maxy = std::max (std::max (std::max (ul.y, ur.y), dl.y), dr.y);
-
-      /* Hack warning: if we correct lens distortion the corners may not be
-       * extremes.  */
+      /* If we correct lens distortion the corners may not be extremes.  */
       if (!m_lens_correction.is_noop () || m_param.tilt_x || m_param.tilt_y)
         {
           const int steps = 16 * 1024;
           for (int i = 1; i < steps; i++)
             {
               point_t p = to_scr ({ x1 + (x2 - x1) * i / steps, y1 });
-              minx = std::min (minx, p.x);
-              miny = std::min (miny, p.y);
-              maxx = std::max (maxx, p.x);
-              maxy = std::max (maxy, p.y);
+              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
+              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
               p = to_scr ({ x1 + (x2 - x1) * i / steps, y2 });
-              minx = std::min (minx, p.x);
-              miny = std::min (miny, p.y);
-              maxx = std::max (maxx, p.x);
-              maxy = std::max (maxy, p.y);
+              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
+              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
               p = to_scr ({ x1, y1 + (y2 - y1) * i / steps });
-              minx = std::min (minx, p.x);
-              miny = std::min (miny, p.y);
-              maxx = std::max (maxx, p.x);
-              maxy = std::max (maxy, p.y);
+              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
+              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
               p = to_scr ({ x2, y1 + (y2 - y1) * i / steps });
-              minx = std::min (minx, p.x);
-              miny = std::min (miny, p.y);
-              maxx = std::max (maxx, p.x);
-              maxy = std::max (maxy, p.y);
+              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
+              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
             }
         }
+      /* Adjust slightly to be safe.  */
+      area.x -= 1;
+      area.y -= 1;
+      area.width += 2;
+      area.height += 2;
+      return area;
     }
   else
     {
+      coord_t minx, miny, maxx, maxy;
       matrix2x2<coord_t> identity;
       m_param.mesh_trans->get_range (identity, x1, y1, x2, y2, &minx, &maxx,
                                      &miny, &maxy);
+      return int_image_area ((int)minx + 1, (int)miny + 1, (int)(maxx - minx) + 2, (int)(maxy - miny) + 2);
     }
-
-  /* Determine the coordinates.  */
-  return int_image_area ((int)minx + 1, (int)miny + 1, (int)(maxx - minx) + 2, (int)(maxy - miny) + 2);
 }
 /* Determine rectangular section of the screen to which the whole image
    with dimension img_width x img_height fits.  */
@@ -437,21 +430,17 @@ scr_to_img::get_range (int img_width, int img_height) const noexcept
 int_image_area
 scr_to_img::get_final_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) const noexcept
 {
-  coord_t minx, miny, maxx, maxy;
-  /* Do not use mesh.get_range since it is way too conservative.  */
   if (!m_param.mesh_trans)
     {
       /* Compute all the corners.  */
-      const point_t ul = img_to_final ({ x1, y1 });
-      const point_t ur = img_to_final ({ x2, y1 });
-      const point_t dl = img_to_final ({ x1, y2 });
-      const point_t dr = img_to_final ({ x2, y2 });
-
-      /* Find extremas.  */
-      minx = std::min ({ul.x, ur.x, dl.x, dr.x});
-      miny = std::min ({ul.y, ur.y, dl.y, dr.y});
-      maxx = std::max ({ul.x, ur.x, dl.x, dr.x});
-      maxy = std::max ({ul.y, ur.y, dl.y, dr.y});
+      int_image_area area (int_point_t {(int64_t)my_floor (img_to_final ({ x1, y1 }).x), (int64_t)my_floor (img_to_final ({ x1, y1 }).y)});
+      area.extend (int_point_t {(int64_t)my_ceil (img_to_final ({ x1, y1 }).x), (int64_t)my_ceil (img_to_final ({ x1, y1 }).y)});
+      area.extend (int_point_t {(int64_t)my_floor (img_to_final ({ x2, y1 }).x), (int64_t)my_floor (img_to_final ({ x2, y1 }).y)});
+      area.extend (int_point_t {(int64_t)my_ceil (img_to_final ({ x2, y1 }).x), (int64_t)my_ceil (img_to_final ({ x2, y1 }).y)});
+      area.extend (int_point_t {(int64_t)my_floor (img_to_final ({ x1, y2 }).x), (int64_t)my_floor (img_to_final ({ x1, y2 }).y)});
+      area.extend (int_point_t {(int64_t)my_ceil (img_to_final ({ x1, y2 }).x), (int64_t)my_ceil (img_to_final ({ x1, y2 }).y)});
+      area.extend (int_point_t {(int64_t)my_floor (img_to_final ({ x2, y2 }).x), (int64_t)my_floor (img_to_final ({ x2, y2 }).y)});
+      area.extend (int_point_t {(int64_t)my_ceil (img_to_final ({ x2, y2 }).x), (int64_t)my_ceil (img_to_final ({ x2, y2 }).y)});
 
       /* If we correct lens distortion the corners may not be extremes.  */
       if (!m_lens_correction.is_noop () || m_param.tilt_x || m_param.tilt_y
@@ -461,42 +450,37 @@ scr_to_img::get_final_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) con
           for (int i = 1; i < steps; i++)
             {
               point_t p = img_to_final ({ x1 + (x2 - x1) * i / steps, y1 });
-              minx = std::min (minx, p.x);
-              miny = std::min (miny, p.y);
-              maxx = std::max (maxx, p.x);
-              maxy = std::max (maxy, p.y);
+              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
+              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
               p = img_to_final ({ x1 + (x2 - x1) * i / steps, y2 });
-              minx = std::min (minx, p.x);
-              miny = std::min (miny, p.y);
-              maxx = std::max (maxx, p.x);
-              maxy = std::max (maxy, p.y);
+              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
+              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
               p = img_to_final ({ x1, y1 + (y2 - y1) * i / steps });
-              minx = std::min (minx, p.x);
-              miny = std::min (miny, p.y);
-              maxx = std::max (maxx, p.x);
-              maxy = std::max (maxy, p.y);
+              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
+              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
               p = img_to_final ({ x2, y1 + (y2 - y1) * i / steps });
-              minx = std::min (minx, p.x);
-              miny = std::min (miny, p.y);
-              maxx = std::max (maxx, p.x);
-              maxy = std::max (maxy, p.y);
+              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
+              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
             }
         }
+      return area;
     }
   else
-    m_param.mesh_trans->get_range (m_scr_to_final_matrix, x1, y1, x2, y2,
-                                   &minx, &maxx, &miny, &maxy);
-
-  /* Determine the coordinates.  */
-  const int min_x = (int)my_floor (minx);
-  const int min_y = (int)my_floor (miny);
-  int width = (int)my_ceil (maxx - (coord_t)min_x);
-  if (width <= 0)
-    width = 1;
-  int height = (int)my_ceil (maxy - (coord_t)min_y);
-  if (height <= 0)
-    height = 1;
-  return int_image_area (min_x, min_y, width, height);
+    {
+      coord_t minx, miny, maxx, maxy;
+      m_param.mesh_trans->get_range (m_scr_to_final_matrix, x1, y1, x2, y2,
+                                     &minx, &maxx, &miny, &maxy);
+      /* Determine the coordinates.  */
+      const int min_x = (int)my_floor (minx);
+      const int min_y = (int)my_floor (miny);
+      int width = (int)my_ceil (maxx - (coord_t)min_x);
+      if (width <= 0)
+        width = 1;
+      int height = (int)my_ceil (maxy - (coord_t)min_y);
+      if (height <= 0)
+        height = 1;
+      return int_image_area (min_x, min_y, width, height);
+    }
 }
 
 /* Determine rectangular section of the final coordinates to which the whole

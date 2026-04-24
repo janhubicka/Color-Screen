@@ -25,22 +25,21 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
     scr_to_img *scr_to_img, render_to_scr *render, const screen *screen,
     const simulated_screen *simulated_screen,
     luminosity_t collection_threshold, luminosity_t *w_red,
-    luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx,
-    int maxy, progress_info *progress)
+    luminosity_t *w_green, luminosity_t *w_blue, int_image_area area,
+    progress_info *progress)
 {
-  int size = (openmp_min_size + (maxx - minx)) / (maxx - minx + 1);
+  int size = (openmp_min_size + area.width - 1) / area.width;
   int size2 = (openmp_min_size + m_area.width - 1) / m_area.width;
 #pragma omp parallel shared(                                                  \
         progress, render, scr_to_img, screen, collection_threshold, w_blue,   \
-            w_red, w_green, minx, miny, maxx, simulated_screen,               \
-            maxy) default(none) if (maxy - miny > size                        \
-                                        || this -> m_area.height > size2)
+            w_red, w_green, area, simulated_screen) default(none) \
+	    if (area.height > size || this -> m_area.height > size2)
   {
 #pragma omp for
-    for (int y = miny; y <= maxy; y++)
+    for (int y = area.y; y < area.y + area.height; y++)
       {
         if (!progress || !progress->cancel_requested ())
-          for (int x = minx; x <= maxx; x++)
+          for (int x = area.x; x < area.x + area.width; x++)
             {
               point_t scr = scr_to_img->to_scr (
                   { x + (coord_t)0.5, y + (coord_t)0.5 });
@@ -254,22 +253,21 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
     scr_to_img *scr_to_img, render_to_scr *render, const screen *screen,
     const simulated_screen *simulated_screen,
     luminosity_t collection_threshold, luminosity_t *w_red,
-    luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx,
-    int maxy, progress_info *progress)
+    luminosity_t *w_green, luminosity_t *w_blue, int_image_area area,
+    progress_info *progress)
 {
-  int size = (openmp_min_size + (maxx - minx)) / (maxx - minx + 1);
+  int size = (openmp_min_size + area.width - 1) / area.width;
   int size2 = (openmp_min_size + m_area.width - 1) / m_area.width;
 #pragma omp parallel shared(                                                  \
         progress, render, scr_to_img, screen, collection_threshold, w_blue,   \
-            w_red, w_green, minx, miny, maxx, simulated_screen,               \
-            maxy) default(none) if (maxy - miny > size                        \
-                                        || this -> m_area.height > size2)
+            w_red, w_green, area, simulated_screen) default(none) \
+	    if (area.height > size || this -> m_area.height > size2)
   {
 #pragma omp for
-    for (int y = miny; y <= maxy; y++)
+    for (int y = area.y; y < area.y + area.height; y++)
       {
         if (!progress || !progress->cancel_requested ())
-          for (int x = minx; x <= maxx; x++)
+          for (int x = area.x; x < area.x + area.width; x++)
             {
               point_t scr = scr_to_img->to_scr (
                   { x + (coord_t)0.5, y + (coord_t)0.5 });
@@ -486,12 +484,12 @@ template <typename GEOMETRY>
 bool
 analyze_base_worker<GEOMETRY>::analyze_color (
     scr_to_img *scr_to_img, render_to_scr *render, luminosity_t *w_red,
-    luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx,
-    int maxy, progress_info *progress)
+    luminosity_t *w_green, luminosity_t *w_blue, int_image_area area,
+    progress_info *progress)
 {
   luminosity_t weights[256];
   luminosity_t half_weights[256];
-  int size = (openmp_min_size + (maxx - minx)) / (maxx - minx + 1);
+  int size = (openmp_min_size + area.width - 1) / area.width;
   int size2 = (openmp_min_size + m_area.width - 1) / m_area.width;
 
   /* FIXME: technically not right for paget where diagonal coordinates are not
@@ -521,20 +519,20 @@ analyze_base_worker<GEOMETRY>::analyze_color (
                           / (luminosity_t)(half_right - half_left);
     }
 #pragma omp parallel shared(                                                  \
-        progress, render, scr_to_img, w_blue, w_red, w_green, minx, miny,     \
-            maxx, maxy, half_weights,                                         \
-            weights) default(none) if (maxy - miny > size                     \
+        progress, render, scr_to_img, w_blue, w_red, w_green, area,           \
+            half_weights,                                                     \
+            weights) default(none) if (area.height > size                     \
                                            || this -> m_area.height > size2)
   {
 #pragma omp for
-    for (int y = miny; y <= maxy; y++)
+    for (int y = area.y; y < area.y + area.height; y++)
       {
         int64_t red_minx = -2, red_miny = -2, green_minx = -2, green_miny = -2,
                 blue_minx = -2, blue_miny = -2;
         int64_t red_maxx = 2, red_maxy = 2, green_maxx = 2, green_maxy = 2,
                 blue_maxx = 2, blue_maxy = 2;
         if (!progress || !progress->cancel_requested ())
-          for (int x = minx; x <= maxx; x++)
+          for (int x = area.x; x < area.x + area.width; x++)
             {
               point_t scr = scr_to_img->to_scr (
                   { x + (coord_t)0.5, y + (coord_t)0.5 });
@@ -991,63 +989,50 @@ analyze_base_worker<GEOMETRY>::analyze (
                   * (GEOMETRY::blue_width_scale * GEOMETRY::blue_height_scale)
                   * sizeof (luminosity_t));
 
-      /* Determine region is image that is covered by screen.  */
-      int minx, maxx, miny, maxy;
-      point_t d = scr_to_img->to_img (
-          { (coord_t) - m_area.xshift (), (coord_t) - m_area.yshift () });
-      minx = maxx = (int)d.x;
-      miny = maxy = (int)d.y;
-      d = scr_to_img->to_img ({ (coord_t)(-m_area.xshift () + m_area.width),
-                                (coord_t) - m_area.yshift () });
-      minx = std::min ((int)d.x, minx);
-      miny = std::min ((int)d.y, miny);
-      maxx = std::max ((int)d.x, maxx);
-      maxy = std::max ((int)d.y, maxy);
-      d = scr_to_img->to_img ({ (coord_t) - m_area.xshift (),
-                                (coord_t)(-m_area.yshift () + m_area.height) });
-      minx = std::min ((int)d.x, minx);
-      miny = std::min ((int)d.y, miny);
-      maxx = std::max ((int)d.x, maxx);
-      maxy = std::max ((int)d.y, maxy);
-      d = scr_to_img->to_img ({ (coord_t)(-m_area.xshift () + m_area.width),
-                                (coord_t)(-m_area.yshift () + m_area.height) });
-      minx = std::min ((int)d.x, minx);
-      miny = std::min ((int)d.y, miny);
-      maxx = std::max ((int)d.x, maxx);
-      maxy = std::max ((int)d.y, maxy);
-
-      minx = std::max (minx, 0);
-      miny = std::max (miny, 0);
-      maxx = std::min (maxx, img->width - 1);
-      maxy = std::min (maxy, img->height - 1);
+      /* Determine region in image that is covered by screen.  */
+      point_t corners[4] = {
+        scr_to_img->to_img (point_t {(coord_t)m_area.top_left ().x, (coord_t)m_area.top_left ().y}),
+        scr_to_img->to_img (point_t {(coord_t)m_area.top_right ().x, (coord_t)m_area.top_right ().y}),
+        scr_to_img->to_img (point_t {(coord_t)m_area.bottom_left ().x, (coord_t)m_area.bottom_left ().y}),
+        scr_to_img->to_img (point_t {(coord_t)m_area.bottom_right ().x, (coord_t)m_area.bottom_right ().y})
+      };
+      int_image_area img_area (int_point_t {(int64_t)my_floor (corners[0].x), (int64_t)my_floor (corners[0].y)});
+      for (int i = 0; i < 4; i++)
+        {
+          img_area.extend (int_point_t {(int64_t)my_floor (corners[i].x), (int64_t)my_floor (corners[i].y)});
+          img_area.extend (int_point_t {(int64_t)my_ceil (corners[i].x), (int64_t)my_ceil (corners[i].y)});
+        }
+      img_area = img_area.intersect ({0, 0, img->width, img->height});
+      if (img_area.empty_p ())
+        return true;
 
       if (progress)
         {
           if (mode == precise)
             progress->set_task ("determining intensities of color screen "
                                 "patches (precise mode)",
-                                maxy - miny + m_area.height * 3);
+                                img_area.height + m_area.height * 3);
           else if (mode == color)
             progress->set_task ("determining intensities of color screen "
                                 "patches (original color mode)",
-                                maxy - miny + m_area.height * 3);
+                                img_area.height + m_area.height * 3);
           else
             progress->set_task ("determining intensities of color screen "
                                 "patches (precise rgb mode)",
-                                maxy - miny + m_area.height * 3);
+                                img_area.height + m_area.height * 3);
         }
 
       if (mode == precise)
         ok = analyze_precise (scr_to_img, render, screen, simulated_scr,
                               collection_threshold, w_red, w_green, w_blue,
-                              minx, miny, maxx, maxy, progress);
+                              img_area, progress);
       else if (mode == precise_rgb)
         ok = analyze_precise_rgb (scr_to_img, render, screen, simulated_scr,
                                   collection_threshold, w_red, w_green, w_blue,
-                                  minx, miny, maxx, maxy, progress);
+                                  img_area, progress);
       else
-        ok = analyze_color (scr_to_img, render, w_red, w_green, w_blue, minx,
-                            miny, maxx, maxy, progress);
+        ok = analyze_color (scr_to_img, render, w_red, w_green, w_blue, img_area,
+                            progress);
     }
   else
     {
