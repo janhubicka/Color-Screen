@@ -1,3 +1,7 @@
+/* Geometry and lens warp solvers.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #define HAVE_INLINE
 #define GSL_RANGE_CHECK_OFF
 #include <memory>
@@ -20,16 +24,16 @@ namespace
 bool debug_output = false;
 bool debug = colorscreen_checking;
 
-/* Determine homography matrix matching points specified by POINT and N.
+/* Determine homography matrix matching points specified by POINTS.
    Update PARAM for desired transformations.
    If solve_screen_weights or solve_image_weights are set in FLAGS then
-   WCENTER_X and WCENTER_Y spedifies point where top optimize for.
-   If FINAL is true output info on results.  */
+   WCENTER specifies point where to optimize for.
+   If FINAL_RUN is true output info on results.  */
 
 coord_t
 solver (scr_to_img_parameters *param, image_data &img_data,
         std::vector<solver_parameters::solver_point_t> &points,
-        point_t wcenter, int flags, bool final_run = false)
+        point_t w_center, int flags, bool final_run = false)
 {
   if (debug_output && final_run)
     {
@@ -63,10 +67,10 @@ solver (scr_to_img_parameters *param, image_data &img_data,
   trans_4d_matrix h;
   if (do_ransac)
     h = homography::get_matrix_ransac (points, flags, param->scanner_type,
-                                       &map, wcenter, &chisq, final_run);
+                                       &map, w_center, &chisq, final_run);
   else
     h = homography::get_matrix (points, flags, param->scanner_type, &map,
-                                wcenter, &chisq);
+                                w_center, &chisq);
   coord_t center_x, center_y, coordinate1_x, coordinate1_y, coordinate2_x,
       coordinate2_y;
 
@@ -168,16 +172,16 @@ solver (scr_to_img_parameters *param, image_data &img_data,
       gsl_vector_free (tau);
       double sy = -gsl_matrix_get (Q, 2, 0);
       sy *= param->projection_distance;
-      if (fabs (sy) > 1)
+      if (my_fabs (sy) > 1)
 	printf ("tilt y out of range %f\n", sy);
-      param->tilt_y = asin (sy) * 180 / M_PI;
+      param->tilt_y = my_asin (sy) * 180 / M_PI;
       printf ("solver sy: %f tilt %f\n", sy, param->tilt_y);
       double cy = cos (asin (sy));
       double sx = gsl_matrix_get (Q, 2, 1) / cy;
       sx *= param->projection_distance;
-      if (fabs (sx) > 1)
+      if (my_fabs (sx) > 1)
 	printf ("tilt x out of range %f\n", sx);
-      param->tilt_x = asin (sx) * 180 / M_PI;
+      param->tilt_x = my_asin (sx) * 180 / M_PI;
       printf ("slver sx: %f tilt x %f\n", sx, param->tilt_x);
 #endif
     }
@@ -261,7 +265,7 @@ public:
   image_data &m_img_data;
   solver_parameters &m_sparam;
   progress_info *m_progress;
-  static const constexpr coord_t scale_kr = 128;
+  static constexpr coord_t scale_kr = 128;
 
   int
   num_coordinates ()
@@ -321,7 +325,7 @@ public:
   bool
   solve (const coord_t *vals, coord_t *chisq, std::vector <point_t> *transformed)
   {
-    static const coord_t bad_val = 100000000;
+    static constexpr coord_t bad_val = 100000000;
     m_param.center = { (coord_t)0, (coord_t)0 };
     m_param.coordinate1 = { (coord_t)1, (coord_t)0 };
     m_param.coordinate2 = { (coord_t)0, (coord_t)1 };
@@ -388,19 +392,15 @@ public:
     }
     return (chi >= 0 && chi < bad_val);
   }
-  coord_t
-  objfunc (coord_t *vals)
-  {
-    coord_t chisq;
-    solve (vals, &chisq, NULL);
-    return chisq;
-  }
-  /* TODO: Joly has only half of them.  */
+  /* Return number of observations.  */
   int
   num_observations ()
   {
     return m_sparam.points.size () * (screen_with_vertical_strips_p (m_param.type) ? 1 : 2);
   }
+
+  /* Compute residuals.  VALS is current set of parameters, F_VEC is the
+     output vector of residuals.  */
   int
   residuals(const coord_t *vals, coord_t *f_vec)
   {
@@ -428,8 +428,20 @@ public:
     return GSL_SUCCESS;
   }
 
+  /* Objective function for simplex solver.  */
+  coord_t
+  objfunc (coord_t *vals)
+  {
+    coord_t chisq;
+    solve (vals, &chisq, nullptr);
+    return chisq;
+  }
 };
 }
+
+/* Determine geometry using linear regression.  PARAM is updated with results.
+   IMG_DATA is the source image.  SPARAM contains solver points.
+   PROGRESS is used for progress reporting.  */
 
 coord_t
 simple_solver (scr_to_img_parameters *param, image_data &img_data,
@@ -443,6 +455,10 @@ simple_solver (scr_to_img_parameters *param, image_data &img_data,
 }
 
 
+/* Determine geometry and lens warp.  PARAM is updated with results.
+   IMG_DATA is the source image.  SPARAM contains solver points.
+   PROGRESS is used for progress reporting.  */
+
 coord_t
 solver (scr_to_img_parameters *param, image_data &img_data,
         solver_parameters &sparam, progress_info *progress)
@@ -451,7 +467,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
   if (sparam.n_points () < (screen_with_vertical_strips_p (param->type) ? 4 : 3))
     return 0;
 
-  param->mesh_trans = NULL;
+  param->mesh_trans = nullptr;
 
   /* Require more points for strips; we only can verify 1d info.  */
   bool optimize_lens = sparam.optimize_lens && (sparam.n_points () > (screen_with_vertical_strips_p (param->type) ? 200 : 100));
@@ -512,7 +528,7 @@ compute_mesh_point (solver_parameters &sparam, scanner_type type,
           solve_screen_weights /*homography::solve_limit_ransac_iterations
                                   | homography::solve_free_rotation*/
       ,
-      type, NULL, scrp, NULL);
+      type, nullptr, scrp, nullptr);
   point_t imgp;
   h.perspective_transform (scrp.x, scrp.y, imgp.x, imgp.y);
 
@@ -529,7 +545,7 @@ compute_mesh_point (solver_parameters &sparam, scanner_type type,
               sparam.points, homography::solve_image_weights,
               /*homography::solve_limit_ransac_iterations |
                  homography::solve_free_rotation*/
-              type, NULL, imgp, NULL);
+              type, nullptr, imgp, nullptr);
           h.perspective_transform (scrp.x, scrp.y, imgp.x, imgp.y);
           if (last_imgp.almost_eq (imgp, 0.5))
             break;
@@ -540,26 +556,27 @@ compute_mesh_point (solver_parameters &sparam, scanner_type type,
   mesh_trans->set_point (e, imgp);
 }
 
+/* Determine mesh transformation for PARAM.  IMG_DATA is the source image.
+   SPARAM contains solver points.  PROGRESS is used for progress reporting.  */
+
 std::unique_ptr <mesh>
 solver_mesh (scr_to_img_parameters *param, image_data &img_data,
              solver_parameters &sparam, progress_info *progress)
 {
   if (sparam.n_points () < 10)
-    return NULL;
+    return nullptr;
   int step = 10;
   if (param->mesh_trans)
     abort ();
   scr_to_img map;
   map.set_parameters (*param, img_data);
   int_image_area r1 = map.get_range (img_data.width, img_data.height);
-  int xshift = r1.xshift (), yshift = r1.yshift (), width = r1.width, height = r1.height;
-  width = (width + step - 1) / step;
-  height = (height + step - 1) / step;
+  int width = (r1.width + step - 1) / step, height = (r1.height + step - 1) / step;
   if (progress)
     progress->set_task ("computing mesh", width * height);
-  std::unique_ptr <mesh> mesh_trans = std::make_unique<mesh> (xshift, yshift, step, step, width, height);
+  std::unique_ptr <mesh> mesh_trans = std::make_unique<mesh> (r1, step, step);
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
-    shared(progress, xshift, yshift, step, width, height, sparam, img_data,   \
+    shared(progress, r1, step, width, height, sparam, img_data,               \
                mesh_trans, param)
   for (int y = 0; y < height; y++)
     for (int x = 0; x < width; x++)
@@ -593,7 +610,7 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
       if (!grow_left && !grow_right && !grow_top && !grow_bottom)
         break;
       if (progress && progress->cancel_requested ())
-        return NULL;
+        return nullptr;
       if (!mesh_trans->grow (grow_left, grow_right, grow_top, grow_bottom))
         break;
       if (grow_left || grow_right)
@@ -633,11 +650,11 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
     }
   if (progress && progress->cancel_requested ())
     {
-      return NULL;
+      return nullptr;
     }
   if (progress && progress->cancel_requested ())
     {
-      return NULL;
+      return nullptr;
     }
   // mesh_trans->print (stdout);
   if (progress)
@@ -646,9 +663,13 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
   return mesh_trans;
 }
 
+/* Determine single mesh point coordinates for SMAP.
+   SPARAM is updated with nearby solver points.
+   LPARAM determines the scanner geometry.  */
+
 static void
 compute_mesh_point (screen_map &smap, solver_parameters &sparam,
-                    scr_to_img_parameters &lparam, image_data &img_data,
+                    const scr_to_img_parameters &lparam, image_data &img_data,
                     mesh *mesh_trans, int x, int y)
 {
   int_point_t e = { x, y };
@@ -656,7 +677,7 @@ compute_mesh_point (screen_map &smap, solver_parameters &sparam,
   smap.get_solver_points_nearby (scrp.x, scrp.y, 100, sparam);
   trans_4d_matrix h = homography::get_matrix (
       sparam.points, homography::solve_screen_weights, lparam.scanner_type,
-      NULL, scrp, NULL);
+      nullptr, scrp, nullptr);
   point_t imgp;
   h.perspective_transform (scrp.x, scrp.y, imgp.x, imgp.y);
   /* We need to set weight assymetrically based on image distance.  Problem is
@@ -670,7 +691,7 @@ compute_mesh_point (screen_map &smap, solver_parameters &sparam,
           point_t last_imgp = imgp;
           trans_4d_matrix h = homography::get_matrix (
               sparam.points, homography::solve_image_weights,
-              lparam.scanner_type, NULL, imgp, NULL);
+              lparam.scanner_type, nullptr, imgp, nullptr);
           h.perspective_transform (scrp.x, scrp.y, imgp.x, imgp.y);
           if (last_imgp.almost_eq (imgp, 0.5))
             break;
@@ -680,6 +701,11 @@ compute_mesh_point (screen_map &smap, solver_parameters &sparam,
     }
   mesh_trans->set_point (e, imgp);
 }
+
+/* Determine mesh transformation for PARAM based on detected points in SMAP.
+   IMG_DATA is the source image.  SPARAM2 contains solver parameters.
+   PROGRESS is used for progress reporting.  */
+
 std::unique_ptr <mesh>
 solver_mesh (scr_to_img_parameters *param, image_data &img_data,
              solver_parameters &sparam2, screen_map &smap,
@@ -691,24 +717,20 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
   scr_to_img map;
   map.set_parameters (*param, img_data);
   int_image_area r2 = map.get_range (img_data.width, img_data.height);
-  int xshift = r2.xshift (), yshift = r2.yshift (), width = r2.width, height = r2.height;
-  width = (width + step - 1) / step;
-  height = (height + step - 1) / step;
+  int width = (r2.width + step - 1) / step, height = (r2.height + step - 1) / step;
   if (progress)
     progress->set_task ("computing mesh from detected points", width * height);
-  std::unique_ptr<mesh> mesh_trans = std::make_unique<mesh> (xshift, yshift, step, step, width, height);
+  std::unique_ptr<mesh> mesh_trans = std::make_unique<mesh> (r2, step, step);
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
-    shared(progress, xshift, yshift, step, width, height, img_data,           \
+    shared(progress, r2, step, width, height, img_data,                       \
                mesh_trans, param, smap, sparam2)
   for (int y = 0; y < height; y++)
     for (int x = 0; x < width; x++)
       if (!progress || !progress->cancel_requested ())
         {
-          // TODO: copying motor corrections is unnecessary and expensive.
-          scr_to_img_parameters lparam = *param;
           solver_parameters sparam;
           sparam.copy_without_points (sparam2);
-          compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans.get (), x,
+          compute_mesh_point (smap, sparam, *param, img_data, mesh_trans.get (), x,
                               y);
           if (progress)
             progress->inc_progress ();
@@ -738,7 +760,7 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
       if (!grow_left && !grow_right && !grow_top && !grow_bottom)
         break;
       if (progress && progress->cancel_requested ())
-        return NULL;
+        return nullptr;
       if (!mesh_trans->grow (grow_left, grow_right, grow_top, grow_bottom))
         break;
       solver_parameters sparam;
@@ -779,13 +801,15 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
         progress->resume_stdout ();
     }
   if (progress && progress->cancel_requested ())
-    return NULL;
+    return nullptr;
   // mesh_trans->print (stdout);
   if (progress)
     progress->set_task ("inverting mesh", 1);
   mesh_trans->precompute_inverse ();
   return mesh_trans;
 }
+
+/* Dump solver points to file OUT.  */
 
 void
 solver_parameters::dump (FILE *out)
@@ -797,6 +821,9 @@ solver_parameters::dump (FILE *out)
                points[i].scr.y, (int)points[i].color);
     }
 }
+
+/* Return description of individual color patches in single period of the screen
+   for screen type TYPE.  N is initialized to number of patches.  */
 
 solver_parameters::point_location *
 solver_parameters::get_point_locations (enum scr_type type, int *n)
