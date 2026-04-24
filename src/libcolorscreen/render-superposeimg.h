@@ -64,7 +64,7 @@ public:
       m_color = 1;
   }
   bool get_color_data (rgbdata *data, point_t p, int width,
-                       int height, coord_t pixelsize, progress_info *) override;
+                       int height, coord_t pixelsize, progress_info *);
   pure_attr rgbdata
   sample_pixel_final (point_t p) const
   {

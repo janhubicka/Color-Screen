@@ -79,7 +79,7 @@ public:
     return {lum, lum, lum};
   }
   bool get_color_data (rgbdata *data, point_t p, int width,
-                       int height, coord_t pixelsize, progress_info *progress) override;
+                       int height, coord_t pixelsize, progress_info *progress);
 
   typedef lru_cache<simulation_params, std::vector<float>,
                     &get_new_simulation, 1>

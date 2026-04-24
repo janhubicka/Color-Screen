@@ -399,7 +399,7 @@ public:
     (void)area;
     return precompute_all (progress);
   }
-  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress) override;
+  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress);
   inline void
   render_pixel_img (point_t p, int *r, int *g, int *b) const
   {
@@ -438,7 +438,7 @@ public:
     (void)area;
     return precompute_all (progress);
   }
-  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress) override;
+  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress);
 };
 /* Simple wrapper to be used by rendering templates.  */
 class render_scr_detect_pixel_color : public render_scr_detect
@@ -469,7 +469,7 @@ public:
     (void)area;
     return precompute_all (progress);
   }
-  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress) override;
+  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress);
   void
   render_pixel_img (point_t p, int *r, int *g, int *b) const
   {
@@ -489,7 +489,7 @@ public:
   {
   }
   void inline render_pixel_img (point_t p, int *r, int *g, int *b);
-  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *) override;
+  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *);
   pure_attr inline rgbdata fast_sample_pixel_img (int_point_t p) const;
   pure_attr inline rgbdata sample_pixel_img (point_t p) const;
   bool precompute_all (progress_info *progress)
@@ -583,7 +583,7 @@ public:
     (void)area;
     return precompute_all (progress);
   }
-  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress) override
+  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress)
   { 
     return downscale<render_scr_relax, rgbdata,
                      &render_scr_relax::fast_sample_pixel_img> (data, p, width, height, pixelsize,
@@ -662,7 +662,7 @@ public:
     (void)area;
     return precompute_all (progress);
   }
-  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress) override
+  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress)
   { 
     return downscale<render_scr_nearest, rgbdata,
                      &render_scr_nearest::fast_sample_pixel_img> (data, p, width, height, pixelsize,

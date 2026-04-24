@@ -88,9 +88,6 @@ public:
   {
   }
 
-  /* Destroy renderer.  */
-  virtual ~render ();
-
   /* Determine grayscale value at a given position in the image.  */
   pure_attr inline luminosity_t get_img_pixel (point_t p) const noexcept;
 
@@ -232,7 +229,7 @@ protected:
   /* Compute color data for downscaled region at X, Y with WIDTH, HEIGHT
      and PIXELSIZE.  Store result in DATA.  Report progress
      to PROGRESS.  Return false on failure or cancellation.  */
-  nodiscard_attr virtual bool get_color_data (rgbdata *data, point_t p, int width,
+  nodiscard_attr bool get_color_data (rgbdata *data, point_t p, int width,
                         int height, coord_t pixelsize, progress_info *progress);
 
   /* Inner loop for image downscaling processing single line YY from input

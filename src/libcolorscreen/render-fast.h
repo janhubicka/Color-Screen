@@ -48,7 +48,7 @@ public:
     return sample_pixel_scr (pscr);
   }
   /* Unimplemented; just exists to make rendering templates happy. We never downscale.  */
-  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress) override
+  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress)
   {
     abort ();
   }

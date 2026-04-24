@@ -54,7 +54,7 @@ public:
     return sample_pixel_img ({(coord_t)p.x, (coord_t)p.y});
   }
   bool get_color_data (rgbdata *data, point_t p, int width,
-                       int height, coord_t pixelsize, progress_info *progress) override
+                       int height, coord_t pixelsize, progress_info *progress)
   {
     return downscale<render_screen, rgbdata, &render_screen::fast_sample_pixel_img> (
         data, p, width, height, pixelsize, progress);

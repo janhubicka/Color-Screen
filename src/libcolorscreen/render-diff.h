@@ -64,7 +64,7 @@ public:
     point_t p = m_scr_to_img.to_scr ({pi.x+(coord_t)0.5, pi.y+(coord_t)0.5});
     return sample_pixel_scr (p);
   }
-  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress) override
+  bool get_color_data (rgbdata *data, point_t p, int width, int height, coord_t pixelsize, progress_info *progress)
   {
     return downscale<render_diff, rgbdata, &render_diff::fast_sample_pixel_img> (
         data, p, width, height, pixelsize, progress);
