@@ -1114,14 +1114,14 @@ mtf::precompute (progress_info *progress, bool parallel)
       m_mtf.init_by_y_values (contrasts.data (), entries);
 
       if (colorscreen_checking)
-        for (int i = 0; i < entries; i++)
+        for (int i = 0; i < entries - 1; i++)
           if (fabs (m_params.system_mtf (i * step)
                     - m_mtf.apply (i * step))
               > 0.0001)
             {
-              printf ("Mismatch (model) %f %f\n",
+              printf ("Mismatch (model) %f %f %i\n",
                       m_params.system_mtf (i * step),
-                      m_mtf.apply (i * step));
+                      m_mtf.apply (i * step), step);
               abort ();
             }
 
