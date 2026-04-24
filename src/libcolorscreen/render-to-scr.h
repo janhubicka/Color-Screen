@@ -19,87 +19,6 @@ class screen_table;
 class saturation_loss_table;
 struct render_to_file_params;
 
-/* Parameters for screen initialization.  */
-struct screen_params
-{
-  enum scr_type t = Joly;
-  bool preview = false;
-  coord_t red_strip_width = (coord_t)0.0, green_strip_width = (coord_t)0.0;
-  bool anticipate_sharpening = false;
-  sharpen_parameters sharpen = {};
-
-  /* Return true if this structure is equal to O.  */
-  bool
-  operator== (const screen_params &o) const
-  {
-    return t == o.t && preview == o.preview 
-	   && anticipate_sharpening == o.anticipate_sharpening
-	   && sharpen == o.sharpen
-	   /* We also blur, so we need to compare MTF if used.  */
-	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
-	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
-           && (!screen_with_varying_strips_p (t)
-               || (red_strip_width == o.red_strip_width
-                   && green_strip_width == o.green_strip_width));
-  }
-};
-/* Return new screen for parameters P.  Update PROGRESS.  */
-std::unique_ptr<screen> get_new_screen (struct screen_params &p, progress_info *progress);
-
-/* Parameters for screen table initialization.  */
-struct screen_table_params
-{
-  scanner_blur_correction_parameters *param = nullptr;
-  uint64_t param_id = 0;
-  scr_type type = Joly;
-  coord_t red_strip_width = (coord_t)0.0, green_strip_width = (coord_t)0.0;
-  sharpen_parameters sharpen = {};
-
-  /* Return true if this structure is equal to O.  */
-  bool
-  operator== (const screen_table_params &o) const
-  {
-    return type == o.type && param_id == o.param_id
-           && red_strip_width == o.red_strip_width
-           && green_strip_width == o.green_strip_width
-	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
-	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
-	   && sharpen == o.sharpen;
-  }
-};
-/* Return new screen table for parameters P.  Update PROGRESS.  */
-std::unique_ptr<screen_table> get_new_screen_table (struct screen_table_params &p, progress_info *progress);
-
-/* Parameters for saturation loss table initialization.  */
-struct saturation_loss_params
-{
-  screen_table *scr_table = nullptr;
-  uint64_t scr_table_id = 0;
-  screen *collection_screen = nullptr;
-  uint64_t collection_screen_id = 0;
-  int img_width = 0, img_height = 0;
-  luminosity_t collection_threshold = (luminosity_t)0.0;
-  sharpen_parameters sharpen = {};
-  uint64_t mesh_id = 0;
-  scr_to_img_parameters scr_to_img_params = {};
-  class scr_to_img *map = nullptr;
-
-  /* Return true if this structure is equal to O.  */
-  bool
-  operator== (const saturation_loss_params &o) const
-  {
-    return scr_table_id == o.scr_table_id
-           && collection_threshold == o.collection_threshold
-           && sharpen == o.sharpen
-	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
-	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
-           && img_width == o.img_width && img_height == o.img_height
-           && mesh_id == o.mesh_id
-           && (mesh_id || scr_to_img_params == o.scr_to_img_params);
-  }
-};
-/* Return new saturation loss table for parameters P.  Update PROGRESS.  */
-std::unique_ptr<saturation_loss_table> get_new_saturation_loss_table (struct saturation_loss_params &p, progress_info *progress);
 
 /* Table of screens for adaptive sharpening/blurring.  */
 class screen_table
@@ -305,9 +224,6 @@ public:
   inline luminosity_t sample_scr_square (coord_t xc, coord_t yc, coord_t w,
                                            coord_t h) const;
 
-  typedef lru_cache<screen_params, screen, get_new_screen, 20> screen_cache_t;
-  typedef lru_cache<screen_table_params, screen_table, get_new_screen_table, 4> screen_table_cache_t;
-  typedef lru_cache<saturation_loss_params, saturation_loss_table, get_new_saturation_loss_table, 4> saturation_loss_table_cache_t;
 
   /* Return screen of type T in PREVIEW mode.  Sharpen it according to SHARPEN parameters
      if ANTICIPATE_SHARPENING is true.  RED_STRIP_WIDTH and DUFAY_GREEN_STRIP_HEIGHT specify

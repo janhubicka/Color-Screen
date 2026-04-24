@@ -12,6 +12,153 @@
 namespace colorscreen
 {
 
+namespace
+{
+
+/* Parameters for screen initialization.  */
+struct screen_params
+{
+  enum scr_type t = Joly;
+  bool preview = false;
+  coord_t red_strip_width = (coord_t)0.0, green_strip_width = (coord_t)0.0;
+  bool anticipate_sharpening = false;
+  sharpen_parameters sharpen = {};
+
+  /* Return true if this structure is equal to O.  */
+  bool
+  operator== (const screen_params &o) const
+  {
+    return t == o.t && preview == o.preview 
+	   && anticipate_sharpening == o.anticipate_sharpening
+	   && sharpen == o.sharpen
+	   /* We also blur, so we need to compare MTF if used.  */
+	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
+	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
+           && (!screen_with_varying_strips_p (t)
+               || (red_strip_width == o.red_strip_width
+                   && green_strip_width == o.green_strip_width));
+  }
+};
+
+/* Return new screen for parameters P.  Update PROGRESS.  */
+std::unique_ptr<screen>
+get_new_screen (struct screen_params &p, progress_info *progress)
+{
+  auto s = std::make_unique<screen>();
+  if (progress)
+    progress->set_task ("initializing screen", 1);
+  if (p.preview)
+    s->initialize_preview (p.t, p.red_strip_width, p.green_strip_width);
+  else
+    s->initialize (p.t, p.red_strip_width, p.green_strip_width);
+  if (p.sharpen.get_mode () == sharpen_parameters::none && !p.sharpen.usm_radius)
+    return s;
+  auto blurred = std::make_unique<screen>();
+  if (progress)
+    progress->set_task ("blurring screen", 1);
+  if (p.sharpen.scanner_mtf_scale)
+    {
+      /* No need to adjust by screen::size.  If p.screen_mtf_scale == screen::size
+	 we should scale exactly by it.  */
+      sharpen_parameters *vv[3] = {&p.sharpen, &p.sharpen, &p.sharpen};
+      blurred->empty ();
+      blurred->initialize_with_sharpen_parameters (*s, vv, p.anticipate_sharpening);
+    }
+  else
+    blurred->initialize_with_blur (*s, p.sharpen.usm_radius);
+  return blurred;
+}
+
+typedef lru_cache<screen_params, screen, get_new_screen, 20> screen_cache_t;
+static screen_cache_t screen_cache ("screen");
+
+/* Parameters for screen table initialization.  */
+struct screen_table_params
+{
+  scanner_blur_correction_parameters *param = nullptr;
+  uint64_t param_id = 0;
+  scr_type type = Joly;
+  coord_t red_strip_width = (coord_t)0.0, green_strip_width = (coord_t)0.0;
+  sharpen_parameters sharpen = {};
+
+  /* Return true if this structure is equal to O.  */
+  bool
+  operator== (const screen_table_params &o) const
+  {
+    return type == o.type && param_id == o.param_id
+           && red_strip_width == o.red_strip_width
+           && green_strip_width == o.green_strip_width
+	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
+	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
+           && sharpen == o.sharpen;
+  }
+};
+
+/* Return new screen table for parameters P.  Update PROGRESS.  */
+std::unique_ptr<screen_table>
+get_new_screen_table (struct screen_table_params &p, progress_info *progress)
+{
+  auto s = std::make_unique<screen_table> (p.param, p.type, p.red_strip_width,
+                                       p.green_strip_width, p.sharpen, progress);
+  if (progress && progress->cancelled ())
+    {
+      return nullptr;
+    }
+  return s;
+}
+
+typedef lru_cache<screen_table_params, screen_table, get_new_screen_table, 4> screen_table_cache_t;
+static screen_table_cache_t screen_table_cache ("screen table");
+
+/* Parameters for saturation loss table initialization.  */
+struct saturation_loss_params
+{
+  screen_table *scr_table = nullptr;
+  uint64_t scr_table_id = 0;
+  screen *collection_screen = nullptr;
+  uint64_t collection_screen_id = 0;
+  int img_width = 0, img_height = 0;
+  luminosity_t collection_threshold = (luminosity_t)0.0;
+  sharpen_parameters sharpen = {};
+  uint64_t mesh_id = 0;
+  scr_to_img_parameters scr_to_img_params = {};
+  class scr_to_img *map = nullptr;
+
+  /* Return true if this structure is equal to O.  */
+  bool
+  operator== (const saturation_loss_params &o) const
+  {
+    return scr_table_id == o.scr_table_id
+           && collection_threshold == o.collection_threshold
+           && sharpen == o.sharpen
+	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
+	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
+           && img_width == o.img_width && img_height == o.img_height
+           && mesh_id == o.mesh_id
+           && (mesh_id || scr_to_img_params == o.scr_to_img_params);
+  }
+};
+
+/* Return new saturation loss table for parameters P.  Update PROGRESS.  */
+std::unique_ptr<saturation_loss_table>
+get_new_saturation_loss_table (struct saturation_loss_params &p,
+                               progress_info *progress)
+{
+  auto s = std::make_unique<saturation_loss_table> (
+      p.scr_table, p.collection_screen, p.img_width, p.img_height, p.map,
+      p.collection_threshold, p.sharpen, progress);
+  if (progress && progress->cancelled ())
+    {
+      return nullptr;
+    }
+  return s;
+}
+
+typedef lru_cache<saturation_loss_params, saturation_loss_table, get_new_saturation_loss_table, 4> saturation_loss_table_cache_t;
+static saturation_loss_table_cache_t saturation_loss_table_cache ("saturation loss table");
+
+}
+
 /* Initialize screen table for PARAM, TYPE, RED_STRIP_WIDTH, GREEN_STRIP_WIDTH and SHARPEN.
    Update PROGRESS.  */
 screen_table::screen_table (scanner_blur_correction_parameters *param,
@@ -114,72 +261,6 @@ saturation_loss_table::saturation_loss_table (
           progress->inc_progress ();
       }
 }
-
-/* Return new screen for parameters P.  Update PROGRESS.  */
-std::unique_ptr<screen>
-get_new_screen (struct screen_params &p, progress_info *progress)
-{
-  auto s = std::make_unique<screen>();
-  if (progress)
-    progress->set_task ("initializing screen", 1);
-  if (p.preview)
-    s->initialize_preview (p.t, p.red_strip_width, p.green_strip_width);
-  else
-    s->initialize (p.t, p.red_strip_width, p.green_strip_width);
-  if (p.sharpen.get_mode () == sharpen_parameters::none && !p.sharpen.usm_radius)
-    return s;
-  auto blurred = std::make_unique<screen>();
-  if (progress)
-    progress->set_task ("blurring screen", 1);
-  if (p.sharpen.scanner_mtf_scale)
-    {
-      /* No need to adjust by screen::size.  If p.screen_mtf_scale == screen::size
-	 we should scale exactly by it.  */
-      sharpen_parameters *vv[3] = {&p.sharpen, &p.sharpen, &p.sharpen};
-      blurred->empty ();
-      blurred->initialize_with_sharpen_parameters (*s, vv, p.anticipate_sharpening);
-    }
-  else
-    blurred->initialize_with_blur (*s, p.sharpen.usm_radius);
-  return blurred;
-}
-
-static render_to_scr::screen_cache_t
-    screen_cache ("screen");
-
-/* Return new screen table for parameters P.  Update PROGRESS.  */
-std::unique_ptr<screen_table>
-get_new_screen_table (struct screen_table_params &p, progress_info *progress)
-{
-  auto s = std::make_unique<screen_table> (p.param, p.type, p.red_strip_width,
-                                       p.green_strip_width, p.sharpen, progress);
-  if (progress && progress->cancelled ())
-    {
-      return nullptr;
-    }
-  return s;
-}
-
-static render_to_scr::screen_table_cache_t
-    screen_table_cache ("screen table");
-
-/* Return new saturation loss table for parameters P.  Update PROGRESS.  */
-std::unique_ptr<saturation_loss_table>
-get_new_saturation_loss_table (struct saturation_loss_params &p,
-                               progress_info *progress)
-{
-  auto s = std::make_unique<saturation_loss_table> (
-      p.scr_table, p.collection_screen, p.img_width, p.img_height, p.map,
-      p.collection_threshold, p.sharpen, progress);
-  if (progress && progress->cancelled ())
-    {
-      return nullptr;
-    }
-  return s;
-}
-
-static render_to_scr::saturation_loss_table_cache_t
-    saturation_loss_table_cache ("saturation loss table");
 
 /* Return approximate size of an scan pixel in screen coordinates.  */
 coord_t
