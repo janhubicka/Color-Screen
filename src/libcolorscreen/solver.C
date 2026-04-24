@@ -132,58 +132,6 @@ solver (scr_to_img_parameters *param, image_data &img_data,
         }
       param->tilt_x = best_tilt_x;
       param->tilt_y = best_tilt_y;
-#if 0
-	/* Compute RQ decomposition.  */
-	gsl_matrix *A = gsl_matrix_alloc (3, 3);
-	gsl_matrix *P = gsl_matrix_alloc (3, 3);
-	gsl_matrix *Q = gsl_matrix_alloc (3, 3);
-	gsl_matrix *R = gsl_matrix_alloc (3, 3);
-	gsl_vector *tau = gsl_vector_alloc (3);
-      h.print (stdout);
-      for (int i = 0; i < 3; i++)
-	for (int j = 0; j < 3; j++)
-	  gsl_matrix_set (P, i, j, 2-j==i);
-      print_matrix (stdout, "P", P);
-
-      for (int i = 0; i < 3; i++)
-	for (int j = 0; j < 3; j++)
-	  gsl_matrix_set (A, i, j, h(i, j));
-      /* h is 4x4 and Y shift is in the last row.  */
-      gsl_matrix_set (A, 1, 2, h(1, 3));
-
-      print_matrix (stdout, "A", A);
-      gsl_matrix_swap_rows (A, 0, 2);
-      print_matrix (stdout, "A rows reversed", A);
-      gsl_matrix_transpose (A);
-      print_matrix (stdout, "A transposed", A);
-
-      gsl_linalg_QR_decomp (A, tau);
-      gsl_linalg_QR_unpack (A, tau, Q, R);
-      gsl_matrix_swap_rows (R, 0, 2);
-      gsl_matrix_transpose (R);
-      gsl_matrix_swap_rows (R, 0, 2);
-      print_matrix (stdout, "R", R);
-      gsl_matrix_transpose (Q);
-      gsl_matrix_swap_rows (Q, 0, 2);
-      print_matrix (stdout, "Q", Q);
-      gsl_matrix_free (P);
-      gsl_matrix_free (R);
-      gsl_matrix_free (A);
-      gsl_vector_free (tau);
-      double sy = -gsl_matrix_get (Q, 2, 0);
-      sy *= param->projection_distance;
-      if (my_fabs (sy) > 1)
-	printf ("tilt y out of range %f\n", sy);
-      param->tilt_y = my_asin (sy) * 180 / M_PI;
-      printf ("solver sy: %f tilt %f\n", sy, param->tilt_y);
-      double cy = cos (asin (sy));
-      double sx = gsl_matrix_get (Q, 2, 1) / cy;
-      sx *= param->projection_distance;
-      if (my_fabs (sx) > 1)
-	printf ("tilt x out of range %f\n", sx);
-      param->tilt_x = my_asin (sx) * 180 / M_PI;
-      printf ("slver sx: %f tilt x %f\n", sx, param->tilt_x);
-#endif
     }
   if (debug_output && final_run)
     {
@@ -212,12 +160,6 @@ solver (scr_to_img_parameters *param, image_data &img_data,
 	    point_t p;
 	    h.perspective_transform (scr.x, scr.y, p.x, p.y);
 	    p = map.inverse_early_correction (p);
-#if 0
-	    map.to_img (px, py, &px, &py);
-	    if (debug_output)
-	      printf ("image: %g %g screen %g %g translated %g %g translated by solver %g %g dist %g\n", xi, yi, xs, ys, xt, yt,
-		  px, py, sqrt ((xt-xi)*(xt-xi)+(yt-yi)*(yt-yi)));
-#endif
 	    if (!p.almost_eq (t, 1))
 	      {
 		printf ("Solver model mismatch %f %f should be %f %f (ideally "
