@@ -6,9 +6,9 @@ namespace colorscreen
 bool
 analyze_dufay::analyze_contrast (render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, progress_info *progress)
 {
-  m_contrast = (contrast_info *)malloc (m_width * m_height * sizeof (contrast_info));
+  m_contrast.reset (new contrast_info [m_width * m_height]);
   if (!m_contrast)
-    return 0;
+    return false;
   if (progress)
     progress->set_task ("collecting contrast info", img->height);
 #pragma omp parallel for default (none) 

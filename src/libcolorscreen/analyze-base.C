@@ -937,7 +937,7 @@ analyze_base::write_screen (const char *filename, bitmap_2d *known_pixels,
     {
       for (int x = 0; x < m_width; x++)
         {
-          if ((known_pixels ? known_pixels : m_known_pixels)->test_bit (x, y))
+          if ((known_pixels ? known_pixels : m_known_pixels.get ())->test_bit (x, y))
             {
               out.row16bit ()[x * 4 + 0] = std::max (
                   std::min (linear_to_srgb ((red_avg (x, y) - rmin) * rscale)

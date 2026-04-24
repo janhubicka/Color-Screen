@@ -26,11 +26,11 @@ analyze_paget::write_screen (const char *filename, bitmap_2d *known_pixels, cons
       for (int x = 0; x < m_width; x++)
 	{
 	  if (x > 0 && y / 2 > 0 && x < m_width - 1 && y / 2 < m_height - 1
-	      && (known_pixels ? known_pixels : m_known_pixels)->test_bit (x, y / 2)
-	      && (known_pixels ? known_pixels : m_known_pixels)->test_bit (x-1, y / 2)
-	      && (known_pixels ? known_pixels : m_known_pixels)->test_bit (x+1, y / 2)
-	      && (known_pixels ? known_pixels : m_known_pixels)->test_bit (x, y / 2-1)
-	      && (known_pixels ? known_pixels : m_known_pixels)->test_bit (x, y / 2+1))
+	      && (known_pixels ? known_pixels : m_known_pixels.get ())->test_bit (x, y / 2)
+	      && (known_pixels ? known_pixels : m_known_pixels.get ())->test_bit (x-1, y / 2)
+	      && (known_pixels ? known_pixels : m_known_pixels.get ())->test_bit (x+1, y / 2)
+	      && (known_pixels ? known_pixels : m_known_pixels.get ())->test_bit (x, y / 2-1)
+	      && (known_pixels ? known_pixels : m_known_pixels.get ())->test_bit (x, y / 2+1))
 	    {
 	      luminosity_t red1 = 0, green1 = 0, blue1 = 0;
 	      luminosity_t red2 = 0, green2 = 0, blue2 = 0;

@@ -342,9 +342,12 @@ protected:
   bool
   initialize (analyze_base_worker<GEOMETRY> *analysis)
   {
-    analysis->demosaiced_dimensions (&m_width, &m_height, &m_xshift,
-                                     &m_yshift);
-    m_demosaiced.resize (m_width * m_height);
+    int_image_area area = analysis->demosaiced_area ();
+    m_width = area.width;
+    m_height = area.height;
+    m_xshift = area.xshift ();
+    m_yshift = area.yshift ();
+    m_demosaiced.resize ((size_t)m_width * m_height);
     return true;
   }
 
