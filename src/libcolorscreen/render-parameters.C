@@ -887,7 +887,7 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
 			  },
 			  "determining value ranges",
 			  img, rparam, param, false,
-			  {xmin, ymin, xmax - xmin, ymax - ymin}, progress))
+			  {-xmin, -ymin, xmax - xmin, ymax - ymin}, progress))
       return false;
     hist.finalize_range (65536*256);
     if (!analyze_patches ([&] (coord_t x, coord_t y, rgbdata c)
@@ -897,7 +897,7 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
 			  },
 			  "producing histograms",
 			  img, rparam, param, false,
-			  {xmin, ymin, xmax - xmin, ymax - ymin}, progress))
+			  {-xmin, -ymin, xmax - xmin, ymax - ymin}, progress))
       return false;
     hist.finalize ();
 
@@ -1013,7 +1013,7 @@ render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &par
 			    },
 			    "determining RGB value ranges",
 			    img, rparam, param, false,
-			    {xmin, ymin, xmax - xmin, ymax - ymin}, progress))
+			    {-xmin, -ymin, xmax - xmin, ymax - ymin}, progress))
     return false;
   hist_red.finalize_range (65536);
   hist_green.finalize_range (65536);
@@ -1027,7 +1027,7 @@ render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &par
 			    },
 			    "determining RGB value ranges",
 			    img, rparam, param, false,
-			    {xmin, ymin, xmax - xmin, ymax - ymin}, progress))
+			    {-xmin, -ymin, xmax - xmin, ymax - ymin}, progress))
     return false;
   hist_red.finalize ();
   hist_green.finalize ();
@@ -1263,7 +1263,7 @@ render_parameters::auto_white_balance (image_data &img, scr_to_img_parameters &p
 			},
 			"determining value ranges",
 			img, rparam, param, false,
-			{xmin, ymin, xmax - xmin, ymax - ymin}, progress))
+			{-xmin, -ymin, xmax - xmin, ymax - ymin}, progress))
     return false;
   hist.finalize_range (65536*256);
   if (!analyze_patches ([&] (coord_t x, coord_t y, rgbdata c)
@@ -1273,7 +1273,7 @@ render_parameters::auto_white_balance (image_data &img, scr_to_img_parameters &p
 			},
 			"producing histograms",
 			img, rparam, param, false,
-			{xmin, ymin, xmax - xmin, ymax - ymin}, progress))
+			{-xmin, -ymin, xmax - xmin, ymax - ymin}, progress))
     return false;
   hist.finalize ();
 
