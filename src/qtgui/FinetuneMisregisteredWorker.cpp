@@ -29,7 +29,6 @@ void FinetuneMisregisteredWorker::run() {
       size_t initialPointCount = localSolver.points.size();
 
       // Call finetune_misregistered_area
-      printf ("Finetuning\n");
       bool found = colorscreen::finetune_misregistered_area(
 	  &localSolver, m_rparams, localScrToImg, *m_scan, m_area,
 	  m_progress.get());
@@ -37,7 +36,6 @@ void FinetuneMisregisteredWorker::run() {
       if (m_progress && m_progress->cancelled())
 	break;
 
-      printf ("Finetuning finished %i %i %i\n", found, localSolver.points.size (), initialPointCount);
       if (!found || localSolver.points.size () == initialPointCount)
 	break;
 
