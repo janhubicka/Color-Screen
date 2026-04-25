@@ -126,6 +126,8 @@ private slots:
                           QThread *thread, std::shared_ptr<colorscreen::progress_info> progress);
   void onSetCenter(colorscreen::point_t imgPos);
   void onPointManipulationStarted();
+  void onCoordinateSystemManipulationStarted();
+  void onCoordinateSystemManipulationFinished();
   void updateRegistrationActions();
   void maybeTriggerAutoSolver();
   void onFocusAnalysisRequested(bool checked, uint64_t flags);
@@ -253,6 +255,7 @@ private:
   colorscreen::solver_parameters m_solverParams;
   std::vector<colorscreen::point_t> m_profileSpots;
   ParameterState m_undoSnapshot; // Added
+  ParameterState m_gridManipulationOldState;
   colorscreen::render_type_parameters m_renderTypeParams; // New member
 
   // Copies for change detection

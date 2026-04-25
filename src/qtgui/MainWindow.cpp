@@ -1334,6 +1334,10 @@ void MainWindow::createToolbar() {
           &MainWindow::onSetCenter);
   connect(m_imageWidget, &ImageWidget::coordinateSystemChanged, this,
           &MainWindow::onCoordinateSystemChanged);
+  connect(m_imageWidget, &ImageWidget::coordinateSystemManipulationStarted, this,
+          &MainWindow::onCoordinateSystemManipulationStarted);
+  connect(m_imageWidget, &ImageWidget::coordinateSystemManipulationFinished, this,
+          &MainWindow::onCoordinateSystemManipulationFinished);
 
   // Initially hide registration group
   updateRegistrationGroupVisibility();
@@ -4154,6 +4158,16 @@ void MainWindow::onCoordinateSystemChanged() {
     }
   }
 }
+void MainWindow::onCoordinateSystemManipulationStarted() {
+  m_gridManipulationOldState = getCurrentState();
+}
+
+void MainWindow::onCoordinateSystemManipulationFinished() {
+  ParameterState newState = getCurrentState();
+  m_undoStack->push(new ChangeParametersCommand(
+      this, m_gridManipulationOldState, newState, "Modify coordinate system"));
+}
+
 void MainWindow::onFlatFieldRequested() {
   QString filters =
       "Images (*.tif *.tiff *.jpg *.jpeg *.raw *.dng *.iiq *.nef *.NEF *.cr2 "

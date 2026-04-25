@@ -872,6 +872,7 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
       m_dragStartImg = widgetToImage(event->position());
       if (m_scrToImg) {
         m_pressParams = *m_scrToImg;
+        emit coordinateSystemManipulationStarted();
       }
     } else if (event->button() == Qt::RightButton || (event->button() == Qt::LeftButton && ctrl)) {
       // Start dragging Axis 1 (X)
@@ -880,6 +881,7 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
       m_dragStartImg = widgetToImage(event->position());
       if (m_scrToImg) {
         m_pressParams = *m_scrToImg;
+        emit coordinateSystemManipulationStarted();
       }
       grabMouse();
       event->accept();
@@ -890,6 +892,7 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
       m_dragStartImg = widgetToImage(event->position());
       if (m_scrToImg) {
         m_pressParams = *m_scrToImg;
+        emit coordinateSystemManipulationStarted();
       }
       grabMouse();
       event->accept();
@@ -1304,6 +1307,9 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
        }
     }
 
+    if (m_dragTarget != DragTarget::None) {
+        emit coordinateSystemManipulationFinished();
+    }
     // Reset drag target
     m_dragTarget = DragTarget::None;
     event->accept();
