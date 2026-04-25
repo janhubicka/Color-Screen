@@ -587,7 +587,7 @@ void SharpnessPanel::onParametersRefreshed(const ParameterState &state) {
 std::vector<std::pair<render_screen_tile_type, QString>>
 SharpnessPanel::getTileTypes() const {
   return {{original_screen, "Original"},
-          {blured_screen, "Blured"},
+          {blurred_screen, "Blurred"},
           {sharpened_screen, "Sharpened"}};
 }
 

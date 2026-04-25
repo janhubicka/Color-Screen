@@ -200,7 +200,7 @@ render_tile(image_data &scan, scr_to_img_parameters &param,
 enum render_screen_tile_type
 {
   original_screen,
-  blured_screen,
+  blurred_screen,
   sharpened_screen,
   backlight_screen,
   detail_screen,

@@ -93,7 +93,7 @@ struct finetune_result
   std::shared_ptr<simple_image> sharpened;
   std::shared_ptr<simple_image> orig;
   std::shared_ptr<simple_image> screen;
-  std::shared_ptr<simple_image> blured_screen;
+  std::shared_ptr<simple_image> blurred_screen;
   std::shared_ptr<simple_image> emulsion_screen;
   std::shared_ptr<simple_image> merged_screen;
   std::shared_ptr<simple_image> collected_screen;

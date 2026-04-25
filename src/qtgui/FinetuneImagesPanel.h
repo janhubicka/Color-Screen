@@ -40,7 +40,7 @@ private:
   };
   
   std::vector<ImageSlot> m_row1Images; // original, sharpened, simulated, diff
-  std::vector<ImageSlot> m_row2Images; // screen, blured_screen, emulsion_screen, merged_screen, collected_screen, dot_spread
+  std::vector<ImageSlot> m_row2Images; // screen, blurred_screen, emulsion_screen, merged_screen, collected_screen, dot_spread
 };
 
 #endif // FINETUNE_IMAGES_PANEL_H

@@ -157,6 +157,9 @@ public:
     /* Remember last settings, so we do not recompute screens uselessly.  */
     rgbdata last_emulsion_intensities = { -1, -1, -1 };
     point_t last_emulsion_offset = { -10, -10 };
+    int last_screen_revision = -1;
+    point_t last_simulated_offset = { -100, -100 };
+
     /* Simulation of screen.  */
     std::vector<rgbdata> simulated_screen;
   };
@@ -194,14 +197,15 @@ private:
   rgbdata fog_range;
   luminosity_t maxgray;
   luminosity_t mingray;
+  luminosity_t min_nonone_clen;
 
+  /* Global tracking of shared screen parameters.  */
+  int screen_revision;
   rgbdata last_blur;
   luminosity_t last_scanner_mtf_sigma;
   rgbdata last_scanner_mtf_defocus;
   luminosity_t last_emulsion_blur;
   coord_t last_width, last_height;
-  luminosity_t min_nonone_clen;
-
 public:
   /* Unblurred screen.  */
   std::shared_ptr<screen> original_scr;
@@ -316,31 +320,31 @@ public:
 
   /* Return number of values to optimize non-linearly.  */
   int
-  num_values ()
+  num_values () const
   {
     return n_values;
   }
-  constexpr static const coord_t rgbscale = /*256*/ 1;
+  constexpr static const coord_t rgbscale = 1;
 
   /* Epsilon used by nonlinear solver.  */
   coord_t
-  epsilon ()
+  epsilon () const
   {
     /* the objective function computes average difference.
        1/65536 seems to be way too small epsilon.  */
-    return /*0.00000001*/ (coord_t)1.0 / 10000; /*65536*/
+    return (coord_t)1.0 / 10000;
   }
 
   /* Scale of original simplex.  */
   coord_t
-  scale ()
+  scale () const
   {
-    return /*2 * rgbscale*/ 0.1;
+    return 0.1;
   }
 
   /* Should nonlinear solver output info?  */
   bool
-  verbose ()
+  verbose () const
   {
     return false;
   }
@@ -348,7 +352,7 @@ public:
   /* How many samples we work with.
      We ignore outliers and when sharpening also some border  */
   int
-  sample_points ()
+  sample_points () const
   {
     return (twidth - 2 * border) * (theight - 2 * border) * n_tiles
            - noutliers;
@@ -357,7 +361,7 @@ public:
   /* Return correction to the scr-to-img map for TILEID.
      Values are in vector V.  */
   point_t
-  get_offset (coord_t *v, int tileid)
+  get_offset (coord_t *v, int tileid) const
   {
     if (!optimize_position)
       return tiles[tileid].fixed_offset;
@@ -1404,18 +1408,22 @@ public:
       tiles[tileid].scr = std::make_unique<screen> ();
 
     /* Set up cached values.   */
+    screen_revision = 0;
     last_blur = { -1, -1, -1 };
     last_scanner_mtf_sigma = -1;
     last_scanner_mtf_defocus = { -1, -1, -1 };
+    last_emulsion_blur = -1;
+    last_width = -1;
+    last_height = -1;
+
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
         tiles[tileid].last_emulsion_intensities = { -1, -1, -1 };
         tiles[tileid].last_emulsion_offset = { -100, -100 };
+        tiles[tileid].last_screen_revision = -1;
+        tiles[tileid].last_simulated_offset = { -100, -100 };
       }
     last_fog = { 0, 0, 0 };
-    last_emulsion_blur = -1;
-    last_width = -1;
-    last_height = -1;
 
     /* If we are not reusing older results, offset should be 0
        since we assume scr-to-img map to be meaningful.  */
@@ -1796,8 +1804,9 @@ public:
       dst_scr->initialize_with_blur (*src_scr, blur * pixel_size);
   }
 
-  /* Initialize screen for tile TILEID using values in vector V.  */
-  void
+  /* Initialize screen for tile TILEID using values in vector V.
+     Return true if screen was updated.  */
+  bool
   init_screen (coord_t *v, int tileid)
   {
     luminosity_t emulsion_blur = get_emulsion_blur_radius (v);
@@ -1808,31 +1817,36 @@ public:
     luminosity_t green_strip_width = get_green_strip_width (v);
     rgbdata intensities = get_emulsion_intensities (v, tileid);
     point_t emulsion_offset = get_emulsion_offset (v, tileid);
-
-    bool updated = false;
+    bool global_updated = false;
     if (red_strip_width != last_width || green_strip_width != last_height)
       {
         original_scr->initialize (type, red_strip_width, green_strip_width);
         last_width = red_strip_width;
         last_height = green_strip_width;
-        updated = true;
+        global_updated = true;
       }
 
     if (optimize_emulsion_blur
-        && (emulsion_blur != last_emulsion_blur || updated))
+        && (emulsion_blur != last_emulsion_blur || global_updated))
       {
         emulsion_scr->initialize_with_blur (*original_scr, emulsion_blur);
         last_emulsion_blur = emulsion_blur;
-        updated = true;
+        global_updated = true;
       }
 
-    /* Force update on all tiles.  */
-    if (updated)
-      for (int t = 0; t < n_tiles; t++)
-        tiles[t].last_emulsion_offset = { -10, -10 };
-
     if (blur != last_blur || scanner_mtf_sigma != last_scanner_mtf_sigma
-        || scanner_mtf_defocus != last_scanner_mtf_defocus
+        || scanner_mtf_defocus != last_scanner_mtf_defocus)
+      {
+        last_blur = blur;
+        last_scanner_mtf_sigma = scanner_mtf_sigma;
+        last_scanner_mtf_defocus = scanner_mtf_defocus;
+        global_updated = true;
+      }
+
+    if (global_updated)
+      screen_revision++;
+
+    if (tiles[tileid].last_screen_revision != screen_revision
         || tiles[tileid].last_emulsion_intensities != intensities
         || tiles[tileid].last_emulsion_offset != emulsion_offset)
       {
@@ -1842,37 +1856,23 @@ public:
                         : original_scr.get (),
                     optimize_emulsion_intensities ? emulsion_scr.get ()
                                                   : nullptr);
-        last_blur = blur;
-        last_scanner_mtf_sigma = scanner_mtf_sigma;
-        last_scanner_mtf_defocus = scanner_mtf_defocus;
+        tiles[tileid].last_screen_revision = screen_revision;
         tiles[tileid].last_emulsion_intensities = intensities;
         tiles[tileid].last_emulsion_offset = emulsion_offset;
+        return true;
       }
+    return false;
   }
 
-  /* Determine color of screen at pixel X,Y with offset OFF for TILEID.  */
+  /* Evaluate screen pixel for TILEID at X,Y with offset OFF.  */
   pure_attr inline rgbdata
-  evaluate_screen_pixel (int tileid, int x, int y, point_t off)
+  evaluate_screen_pixel (int tileid, int x, int y, point_t off) const
   {
     point_t p = tiles[tileid].pos[y * twidth + x] + off;
     /* When using scanner mtf, the screen is already blurred to
        estimate sensor mtf as well.  No need for antialiasing
        then.  */
-    if (1)
-      {
-        return tiles[tileid].scr->interpolated_mult (p);
-      }
-    int dx = x == twidth - 1 ? -1 : 1;
-    point_t px = tiles[tileid].pos[y * twidth + (x + dx)] + off;
-    int dy = y == theight - 1 ? -1 : 1;
-    point_t py = tiles[tileid].pos[(y + dy) * twidth + x] + off;
-    point_t pdx = (px - p) * ((coord_t)1.0 / (coord_t)6.0) * (coord_t)dx;
-    point_t pdy = (py - p) * ((coord_t)1.0 / (coord_t)6.0) * (coord_t)dy;
-    rgbdata m = { 0, 0, 0 };
-    for (int yy = -2; yy <= 2; yy++)
-      for (int xx = -2; xx <= 2; xx++)
-        m += tiles[tileid].scr->interpolated_mult (p + pdx * xx + pdy * yy);
-    return m * ((coord_t)1.0 / (coord_t)25);
+    return tiles[tileid].scr->interpolated_mult (p);
   }
 
   /* Evaluate pixel at (X,Y) using RGB values RED, GREEN, BLUE and offsets OFF
@@ -1898,16 +1898,21 @@ public:
     return c;
   }
 
-  /* Simulate screen for TILEID using values in vector V.  */
-  void
-  simulate_screen (coord_t *v, int tileid)
+  /* Simulate screen for TILEID using values in vector V.
+     Return true if simulation was updated.  */
+  bool
+  simulate_screen (coord_t *v, int tileid, bool force = false)
   {
     double_rgbdata red, green, blue;
     point_t off = get_offset (v, tileid);
+    if (!force && tiles[tileid].last_simulated_offset == off)
+      return false;
     for (int y = 0; y < theight; y++)
       for (int x = 0; x < twidth; x++)
         tiles[tileid].simulated_screen[y * simulated_screen_width + x]
             = evaluate_screen_pixel (tileid, x, y, off);
+    tiles[tileid].last_simulated_offset = off;
+    return true;
   }
 
   /* Evaluate pixel at (X,Y) using COLOR and offset OFF for TILEID.
@@ -2202,8 +2207,9 @@ public:
             e++;
           }
         double chisq;
-        gsl_multifit_linear (gsl_X.get (), gsl_y[0].get (), gsl_c.get (), gsl_cov.get (), &chisq,
-                             gsl_work.get ());
+        if (gsl_multifit_linear (gsl_X.get (), gsl_y[0].get (), gsl_c.get (), gsl_cov.get (), &chisq,
+                                 gsl_work.get ()) != GSL_SUCCESS)
+          return 1e10;
         /* Colors should be real reactions of scanner, so no negative values
            and also no excessively large values. Allow some overexposure.  */
         (*red).red = gsl_vector_get (gsl_c.get (), 0);
@@ -2276,8 +2282,9 @@ public:
         for (int ch = 0; ch < 3; ch++)
           {
             double chisq;
-            gsl_multifit_linear (gsl_X.get (), gsl_y[ch].get (), gsl_c.get (), gsl_cov.get (), &chisq,
-                                 gsl_work.get ());
+            if (gsl_multifit_linear (gsl_X.get (), gsl_y[ch].get (), gsl_c.get (), gsl_cov.get (), &chisq,
+                                     gsl_work.get ()) != GSL_SUCCESS)
+              return 1e10;
             sqsum += chisq;
             /* Colors should be real reactions of scanner, so no negative
                values and also no excessively large values. Allow some
@@ -2397,8 +2404,9 @@ public:
     if (e != (int)gsl_X->size1)
       abort ();
     double chisq;
-    gsl_multifit_linear (gsl_X.get (), gsl_y[0].get (), gsl_c.get (),
-                         gsl_cov.get (), &chisq, gsl_work.get ());
+    if (gsl_multifit_linear (gsl_X.get (), gsl_y[0].get (), gsl_c.get (),
+                             gsl_cov.get (), &chisq, gsl_work.get ()) != GSL_SUCCESS)
+      return { -1, -1, -1 };
     rgbdata color
         = { (luminosity_t)gsl_vector_get (gsl_c.get (), 0) * (2 * maxgray),
             (luminosity_t)gsl_vector_get (gsl_c.get (), 1) * (2 * maxgray),
@@ -2546,6 +2554,8 @@ public:
     last_blue = *blue;
   }
 
+  /* Objective function to minimize difference between simulated and actual
+     scan.  V is vector of parameters.  */
   coord_t
   objfunc (coord_t *v)
   {
@@ -2561,8 +2571,8 @@ public:
               tiles[tileid].sharpened_color, tiles[tileid].color.data (), theight,
               twidth, theight, get_sharpen_radius (v), get_sharpen_amount (v),
               nullptr, false);
-        init_screen (v, tileid);
-        simulate_screen (v, tileid);
+        bool updated = init_screen (v, tileid);
+        simulate_screen (v, tileid, updated);
       }
     double_rgbdata red, green, blue;
     rgbdata color;
@@ -2590,7 +2600,10 @@ public:
                                                 y, off, mix_weights, mix_dark);
                     rgbdata d = get_pixel (v, tileid, { x, y });
 
-                    /* Bayer pattern. */
+                    /* Bayer pattern.
+                       TODO: This weighting is specific to Bayer patterns; for
+                       general screen plates, a more uniform weighting should
+                       be used. We will address this later.  */
                     if (!(x & 1) && !(y & 1))
                       sum += my_fabs (c.red - d.red) * 2;
                     else if ((x & 1) && (y & 1))
@@ -3709,7 +3722,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
           ret.dot_spread = scr.get_image (true, 1);
         }
       ret.screen = best_solver.original_scr->get_image ();
-      ret.blured_screen = best_solver.tiles[0].scr->get_image ();
+      ret.blurred_screen = best_solver.tiles[0].scr->get_image ();
       if (best_solver.optimize_emulsion_blur)
         ret.emulsion_screen = best_solver.emulsion_scr->get_image ();
       if (best_solver.optimize_emulsion_intensities)

@@ -142,7 +142,7 @@ void FinetuneImagesPanel::setFinetuneResult(const colorscreen::finetune_result& 
   m_row1Images[3].pixmap = convertSimpleImageToQPixmap(result.diff.get());
 
   m_row2Images[0].pixmap = convertSimpleImageToQPixmap(result.screen.get());
-  m_row2Images[1].pixmap = convertSimpleImageToQPixmap(result.blured_screen.get());
+  m_row2Images[1].pixmap = convertSimpleImageToQPixmap(result.blurred_screen.get());
   m_row2Images[2].pixmap = convertSimpleImageToQPixmap(result.emulsion_screen.get());
   m_row2Images[3].pixmap = convertSimpleImageToQPixmap(result.merged_screen.get());
   m_row2Images[4].pixmap = convertSimpleImageToQPixmap(result.collected_screen.get());
