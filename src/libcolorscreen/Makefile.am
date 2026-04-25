@@ -12,9 +12,7 @@ libcolorscreen_la_CXXFLAGS = -fvisibility=hidden -DLIBCOLORSCREEN $(EXIV2_CFLAGS
 libcolorscreen_la_LIBADD = $(EXIV2_LIBS) $(LIBRAW_LIBS)
 
 noinst_PROGRAMS=unittests
-if static_link
-  unittests_LDFLAGS = -static
-  unittests_CXXFLAGS = -static
-endif
+unittests_LDFLAGS = -static
+unittests_CXXFLAGS = -DLIBCOLORSCREEN
 unittests_LDADD = libcolorscreen.la 
 unittests_SOURCES=unittests.C

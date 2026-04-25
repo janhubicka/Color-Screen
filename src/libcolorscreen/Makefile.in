@@ -480,8 +480,8 @@ EXTRA_DIST = lru-cache.h analyze-base-worker.h gaussian-blur.h icc-srgb.h  rende
 libcolorscreen_la_LDFLAGS = -version-info 2:0:0 $(WIN_NO_UNDEFINED)
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden -DLIBCOLORSCREEN $(EXIV2_CFLAGS) $(LIBRAW_CFLAGS)
 libcolorscreen_la_LIBADD = $(EXIV2_LIBS) $(LIBRAW_LIBS)
-@static_link_TRUE@unittests_LDFLAGS = -static
-@static_link_TRUE@unittests_CXXFLAGS = -static
+unittests_LDFLAGS = -static
+unittests_CXXFLAGS = -DLIBCOLORSCREEN
 unittests_LDADD = libcolorscreen.la 
 unittests_SOURCES = unittests.C
 all: config.h
