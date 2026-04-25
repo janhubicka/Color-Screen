@@ -1431,13 +1431,56 @@ test_lens_warp ()
 
   return ok;
 }
+
+/* Test the simulated photographic darkroom process.
+   This verifies the symmetry of the 'apply' and 'unapply' functions
+   in film_sensitivity, modeling the chain from scanned transmittance
+   to print transmittance and back.  */
+bool
+test_darkroom ()
+{
+  bool ok = true;
+  luminosity_t xs[] = { 1.5, 2.0, 2.5, 3.0, 3.5 };
+  luminosity_t ys[] = { 0.1, 0.5, 1.5, 2.0, 2.2 };
+  hd_curve paper (xs, ys, 5);
+
+  /* Preflash=0.5, Exposure=100, Boost=1.2.  */
+  film_sensitivity sens (&paper, 0.5, 100.0, 1.2);
+  sens.precompute ();
+
+  /* Test symmetry for values within the paper's dynamic range.  */
+  luminosity_t test_vals[] = { 0.4, 0.6, 0.8 };
+  for (luminosity_t v : test_vals)
+    {
+      luminosity_t t = sens.apply (v);
+      luminosity_t v_inv = sens.unapply (t);
+      if (fabs (v - v_inv) > 1e-4)
+        {
+          printf ("FAILED: Darkroom symmetry mismatch for V=%f! Expected %f, got %f\n",
+                  v, v, v_inv);
+          ok = false;
+        }
+    }
+
+  /* Test that preflash affects the output (fog lifting).
+     Preflash adds exposure, which increases density and DECREASES transmittance.  */
+  film_sensitivity sens_no_pre (&paper, 0.0, 100.0, 1.2);
+  sens_no_pre.precompute ();
+  if (sens.apply (0.5) >= sens_no_pre.apply (0.5))
+    {
+      printf ("FAILED: Preflash should increase density (decrease transmittance)!\n");
+      ok = false;
+    }
+
+  return ok;
+}
 }
 
 
 int
 main ()
 {
-  printf ("1..24\n");
+  printf ("1..25\n");
 
   test_matrix ();
   report ("matrix tests", true);
@@ -1465,6 +1508,6 @@ main ()
   report ("lru cache concurrency tests", test_lru_cache_concurrency ());
   report ("spectrum to xyz tests", test_spectrum_dyes_to_xyz ());
   report ("whitepoint consistency tests", test_whitepoint_constants ());
+  report ("darkroom simulation tests", test_darkroom ());
   return error_found;
-
 }

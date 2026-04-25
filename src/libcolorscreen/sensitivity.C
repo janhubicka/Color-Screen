@@ -258,7 +258,7 @@ struct hd_curve_parameters safe_output_curve_params (0, 0, 0, 0, 0.7, 0.7, 3,
 struct hd_curve_parameters safe_reversal_output_curve_params (0, 1, 0, 1, 0.7,
                                                               0.3, 3, 0);
 
-/* Convert 4-point HD curve parameters to Richards curve parameters.  */
+/* Convert 4-point HD curve parameters P to Richards curve parameters.  */
 struct richards_curve_parameters
 hd_to_richards_curve_parameters (const hd_curve_parameters &p)
 {
@@ -337,7 +337,7 @@ hd_to_richards_curve_parameters (const hd_curve_parameters &p)
 }
 
 /* Helper function to generate hd_curve_parameters perfectly representing a
- * Richard's curve.  */
+   Richard's curve RP.  */
 struct hd_curve_parameters
 richards_to_hd_curve_parameters (const richards_curve_parameters &rp)
 {
@@ -424,8 +424,9 @@ richards_to_hd_curve_parameters (const richards_curve_parameters &rp)
     }
 }
 
-/* Compute cubic bezier curve passing trhoug y1,y2 and x3,y3
-   with pint x2,y2 determining derivatives at the endpoints.  */
+/* Compute cubic bezier curve passing through (X1, Y1), (X3, Y3)
+   with control point (X2, Y2) determining derivatives at the endpoints.
+   Return coordinates in RX and RY for given parameter T.  */
 inline void
 bezier (luminosity_t *rx, luminosity_t *ry, luminosity_t x1, luminosity_t y1,
         luminosity_t x2, luminosity_t y2, luminosity_t x3, luminosity_t y3,
@@ -490,6 +491,8 @@ synthetic_hd_curve::synthetic_hd_curve (int points,
                 end_middley, p.maxx, p.maxy, i / (luminosity_t)(points - 1));
     }
 }
+/* Evaluate Richards curve with parameters P at position XS.
+   If CLAMP is true, ensure output is within [CLAMPMIN, CLAMPMAX].  */
 luminosity_t
 richards_hd_curve::eval_richards (const richards_curve_parameters &p,
                                   luminosity_t xs, bool clamp,
@@ -552,6 +555,7 @@ richards_hd_curve::eval_richards (const richards_curve_parameters &p,
       return ret;
     }
 }
+/* Initialize Richards curve by sampling POINTS from HD_CURVE_PARAMETERS P.  */
 richards_hd_curve::richards_hd_curve (int points,
                                       const struct hd_curve_parameters &p)
 {
@@ -562,6 +566,8 @@ richards_hd_curve::richards_hd_curve (int points,
   richards_curve_parameters rp = hd_to_richards_curve_parameters (p);
   sample (rp, p.minx, p.maxx, rp.is_inverse, p.miny, p.maxy);
 }
+/* Initialize Richards curve by sampling POINTS from
+   RICHARDS_CURVE_PARAMETERS RP.  */
 richards_hd_curve::richards_hd_curve (
     int points, const struct richards_curve_parameters &rp)
 {
@@ -571,6 +577,9 @@ richards_hd_curve::richards_hd_curve (
 
   sample (rp, std::min (rp.A, rp.K), std::max (rp.A, rp.K));
 }
+/* Fill the lookup table by sampling the Richards curve defined by parameters P
+   over the range [MIN_X, MAX_X]. If CLAMP is true, ensure output stays
+   within [CLAMPMIN, CLAMPMAX].  */
 void
 richards_hd_curve::sample (const richards_curve_parameters &p,
                            luminosity_t min_x, luminosity_t max_x, bool clamp,

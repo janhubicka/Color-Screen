@@ -16,7 +16,8 @@ struct hd_curve
   luminosity_t *ys;
   /* Number of points.  */
   int n;
-  /* Constructor for HD_CURVE.  */
+  /* Constructor for HD_CURVE.  Initialize with arrays of XS and YS of length
+     N.  */
   constexpr hd_curve (luminosity_t *new_xs, luminosity_t *new_ys, int new_n)
     : xs (new_xs), ys (new_ys), n (new_n)
   {
@@ -26,7 +27,7 @@ struct hd_curve
   {
   }
 
-  /* Return curve in position in.  */
+  /* Return density for given exposure IN.  */
   luminosity_t
   apply (luminosity_t in)
   {
@@ -43,7 +44,7 @@ struct hd_curve
       }
     return ys[n - 1];
   }
-  /* Get minimal value multiplied by BOOST.  */
+  /* Get minimal value (base fog) multiplied by BOOST.  */
   constexpr luminosity_t
   get_fog (luminosity_t boost) const
   {
@@ -52,7 +53,7 @@ struct hd_curve
       min = std::min (min, ys[i]);
     return min * boost;
   }
-  /* Get maximal value.  */
+  /* Get maximal value (saturation density).  */
   constexpr luminosity_t
   get_max () const
   {
@@ -61,7 +62,7 @@ struct hd_curve
       max = std::max (max, ys[i]);
     return max;
   }
-  /* Output GNU plottable data.  */
+  /* Output GNU plottable data to file F.  */
   void
   print (FILE *f)
   {
@@ -348,10 +349,11 @@ private:
                luminosity_t max_x, bool clamp = false,
                luminosity_t clampmin = 0, luminosity_t clampmax = 0);
 };
-
 class film_sensitivity
 {
 public:
+  /* Initialize film sensitivity simulation with curve C, exposure scaling
+     EXP, density BOOST and additive PREFLASH.  */
   film_sensitivity (hd_curve *c, luminosity_t preflash = 0.1,
                     luminosity_t exp = 100, luminosity_t m_boost = 1)
       : m_curve (c), m_preflash (preflash), m_boost (m_boost),
@@ -404,6 +406,9 @@ public:
     if (m_curve->n < 2)
       abort ();
   }
+  /* Apply simulated photographic process to scanned transmittance Y.
+     Models the chain: Scanned Transmittance -> Exposure -> Density ->
+     Output Transmittance.  */
   luminosity_t
   apply (luminosity_t y)
   {
@@ -437,6 +442,8 @@ public:
     y = pow (10, -y);
     return y;
   }
+  /* Return original scanned transmittance for given output transmittance Y.
+     Uses binary search to find the inverse of the simulated process.  */
   luminosity_t
   unapply (luminosity_t y)
   {
