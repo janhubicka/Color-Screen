@@ -6,10 +6,12 @@ description: Guidelines for modernizing and refactoring the core libcolorscreen 
 # Libcolorscreen Modernization & Cleanup
 
 This skill provides guidelines for maintaining, refactoring, and modernizing the `libcolorscreen` C++ library. Follow these rules to ensure performance, correctness, and consistency.
+If changes gets too involved suggest doing simpler ones first and proceed with more involved ones incrementally.
+Do **not mass reformat** while files; we can do that in a separate commit.
 
 ## 1. Documentation & Coding Style
 
-- **GNU Style Formatting**: Files with `.C` and `.h` in `libcolorscreen` MUST follow the GNU coding style. Do not mass reformat while files; we can do that in separate commit.
+- **GNU Style Formatting**: Files with `.C` and `.h` in `libcolorscreen` MUST follow the GNU coding style. 
 - **Function Comments**: Every function must have a comment explaining its purpose and all its parameters. 
     - **Parameter Documentation**: Parameters within comments must be in **UPPERCASE**.
     - **Consistency**: Add missing comments to legacy functions when refactoring.
@@ -61,7 +63,7 @@ This skill provides guidelines for maintaining, refactoring, and modernizing the
 
 - **Constancy**: Proactively add missing `const`, `constexpr`, `pure_attr`, and `const_attr` to functions, function parameters and variables where possible.
 - **OpenMP**: Identify opportunities for parallelization. Suggest OpenMP improvements (e.g., `#pragma omp parallel for`) in the implementation plan.
-- **noexcept**: Mark API functions as `noexcept` where possible. Always ask in plan.
+- **noexcept**: Mark API functions as `noexcept` where possible. Do not do that in case compiler can work it out itself (anonymous namespace and inline). Always ask in plan.
 - **pure_attr**, **const_attr**: Suggest use of these attributes in performance critical functions. Always ask in plan.
 - **performance**: Suggest performance improvements. Alays ask in plan.
 - **accidental passed by value**: While small data (rgbdata and pixels) are OK to pass by value sometimes bigger data and vectors are passed by accident. Ask in plan.
