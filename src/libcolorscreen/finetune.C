@@ -80,7 +80,7 @@ expand_range (coord_t v, coord_t minv, coord_t maxv)
 inline coord_t
 shrink_range (coord_t v, coord_t minv, coord_t maxv)
 {
-  return (v - minv) * (1 / (maxv - minv));
+  return (v - minv) * ((coord_t)1 / (maxv - minv));
 }
 
 /* Solver used to find parameters of simulated scan (position of the grid,
@@ -233,7 +233,7 @@ public:
   /* Screens with strips have strips with offset 1/3.
      Shifting too far may make us to mix up the strips.
      Be sure we do not move more than -1/6 to 1/6  */
-  constexpr static const coord_t strips_range = 1 / 6.0;
+  constexpr static const coord_t strips_range = (coord_t)1 / 6.0;
 
   coord_t pixel_size;
   scr_type type;
@@ -323,7 +323,7 @@ public:
   {
     /* the objective function computes average difference.
        1/65536 seems to be way too small epsilon.  */
-    return /*0.00000001*/ 1.0 / 10000; /*65536*/
+    return /*0.00000001*/ (coord_t)1.0 / 10000; /*65536*/
   }
 
   /* Scale of original simplex.  */
@@ -410,7 +410,7 @@ public:
                  v[emulsion_offset_index + 2 * tileid + 1] * range };
       }
     else
-      return { v[emulsion_offset_index + tileid] * (strips_range * 2), 0 };
+      return { v[emulsion_offset_index + tileid] * (strips_range * (coord_t)2), 0 };
   }
   /* Set displacement between the image layer and emulsion OFF for TILEID.
      Store values in vector V.  */
@@ -448,8 +448,8 @@ public:
       return fixed_emulsion_blur;
     /* screen::max_blur_radius allows so large blurs that the resulting
        process would be next to useless. Also the minimal blur is non-zero.  */
-    return v[emulsion_blur_index] * (screen::max_blur_radius * 0.2 - 0.03)
-           + 0.03;
+    return v[emulsion_blur_index] * (screen::max_blur_radius * (coord_t)0.2 - (coord_t)0.03)
+           + (coord_t)0.03;
   }
 
   /* Set current emulsion blur radius BLUR.
@@ -461,7 +461,7 @@ public:
       fixed_emulsion_blur = blur;
     else
       v[emulsion_blur_index]
-          = (blur - 0.03) / (screen::max_blur_radius * 0.2 - 0.03);
+          = (blur - (coord_t)0.03) / (screen::max_blur_radius * (coord_t)0.2 - (coord_t)0.03);
   }
 
   /* Return pixel blur for value V.  Do pixel blurs in the range 0.3 ...
@@ -471,13 +471,13 @@ public:
   coord_t
   pixel_blur (coord_t v)
   {
-    return expand_range (v, 0.3, screen::max_blur_radius / pixel_size);
+    return expand_range (v, (coord_t)0.3, screen::max_blur_radius / pixel_size);
   }
   /* Inverse of pixel_blur.  */
   coord_t
   rev_pixel_blur (coord_t v)
   {
-    return shrink_range (v, 0.3, screen::max_blur_radius / pixel_size);
+    return shrink_range (v, (coord_t)0.3, screen::max_blur_radius / pixel_size);
   }
 
   /* Return sigma of screen from vector V. */
@@ -500,7 +500,7 @@ public:
     if (optimize_scanner_mtf_channel_defocus)
       return (v[mtf_defocus_index] + v[mtf_defocus_index + 1]
               + v[mtf_defocus_index + 2])
-             * (1 / (coord_t)3);
+             * ((coord_t)1 / (coord_t)3);
     return v[mtf_defocus_index];
   }
   /* Return blur radius of screen for individual channels from vector V. */
@@ -531,7 +531,7 @@ public:
     if (optimize_screen_channel_blurs)
       return pixel_blur (
           (v[screen_index] + v[screen_index + 1] + v[screen_index + 2])
-          * (1 / (coord_t)3));
+          * ((coord_t)1 / (coord_t)3));
     if (!optimize_screen_blur)
       return fixed_blur;
     return pixel_blur (v[screen_index]);
@@ -823,9 +823,9 @@ public:
     if (fog_index >= 0)
       {
         assert (!colorscreen_checking || optimize_fog);
-        to_range (v[fog_index + 0], -0.1 / fog_range.red, 1);
-        to_range (v[fog_index + 1], -0.1 / fog_range.green, 1);
-        to_range (v[fog_index + 2], -0.1 / fog_range.blue, 1);
+        to_range (v[fog_index + 0], (coord_t)-0.1 / (coord_t)fog_range.red, (coord_t)1);
+        to_range (v[fog_index + 1], (coord_t)-0.1 / (coord_t)fog_range.green, (coord_t)1);
+        to_range (v[fog_index + 2], (coord_t)-0.1 / (coord_t)fog_range.blue, (coord_t)1);
       }
     if (tiles[0].bw && !least_squares && !data_collection)
       {
@@ -835,42 +835,42 @@ public:
            over-exposure or cropping  */
         if (!bw_is_simulated_infrared)
           {
-            to_range (v[color_index + 0], -0.1, 1.1);
-            to_range (v[color_index + 1], -0.1, 1.1);
-            to_range (v[color_index + 2], -0.1, 1.1);
+            to_range (v[color_index + 0], (coord_t)-0.1, (coord_t)1.1);
+            to_range (v[color_index + 1], (coord_t)-0.1, (coord_t)1.1);
+            to_range (v[color_index + 2], (coord_t)-0.1, (coord_t)1.1);
           }
       }
     if (sharpen_index >= 0)
       {
-        to_range (v[sharpen_index], 0, 5);        // radius
-        to_range (v[sharpen_index + 1], 0, 1000); // amount
+        to_range (v[sharpen_index], (coord_t)0, (coord_t)5);        // radius
+        to_range (v[sharpen_index + 1], (coord_t)0, (coord_t)1000); // amount
       }
     if (optimize_emulsion_blur)
-      to_range (v[emulsion_blur_index], 0, 1);
+      to_range (v[emulsion_blur_index], (coord_t)0, (coord_t)1);
     if (optimize_emulsion_intensities)
       for (int i = 0; i < n_tiles * 3 - 1; i++)
         /* First 2 values are normalized and make only sense in range 0..1
            Rest of values are relative to the first two and may be large if
            first patch is dark.  */
-        to_range (v[emulsion_intensity_index + i], 0, i < 3 ? 1 : 100);
+        to_range (v[emulsion_intensity_index + i], (coord_t)0, i < 3 ? (coord_t)1 : (coord_t)100);
     if (optimize_screen_blur)
-      to_range (v[screen_index], 0, 1);
+      to_range (v[screen_index], (coord_t)0, (coord_t)1);
     if (optimize_scanner_mtf_sigma)
-      to_range (v[mtf_sigma_index], 0, 20);
+      to_range (v[mtf_sigma_index], (coord_t)0, (coord_t)20);
     if (optimize_scanner_mtf_defocus)
-      to_range (v[mtf_defocus_index], 0, 20);
+      to_range (v[mtf_defocus_index], (coord_t)0, (coord_t)20);
     if (optimize_scanner_mtf_channel_defocus)
       {
-        to_range (v[mtf_defocus_index], 0, 20);
-        to_range (v[mtf_defocus_index + 1], 0, 20);
-        to_range (v[mtf_defocus_index + 2], 0, 20);
+        to_range (v[mtf_defocus_index], (coord_t)0, (coord_t)20);
+        to_range (v[mtf_defocus_index + 1], (coord_t)0, (coord_t)20);
+        to_range (v[mtf_defocus_index + 2], (coord_t)0, (coord_t)20);
       }
     if (optimize_screen_channel_blurs)
       {
         /* Screen blur radius.  */
-        to_range (v[screen_index + 0], 0, 1);
-        to_range (v[screen_index + 1], 0, 1);
-        to_range (v[screen_index + 2], 0, 1);
+        to_range (v[screen_index + 0], (coord_t)0, (coord_t)1);
+        to_range (v[screen_index + 1], (coord_t)0, (coord_t)1);
+        to_range (v[screen_index + 2], (coord_t)0, (coord_t)1);
       }
     if (optimize_strips)
       {
@@ -883,16 +883,16 @@ public:
 
                Red strip width is more narrow in Dufay screens
                so overall coverage of colors is equal.  */
-            to_range (v[strips_index + 0], 0.1, 0.6);
+            to_range (v[strips_index + 0], (coord_t)0.1, (coord_t)0.6);
             /* Green strip width approx 0.5 in Dufay screens.  */
-            to_range (v[strips_index + 1], 0.3, 0.7);
+            to_range (v[strips_index + 1], (coord_t)0.3, (coord_t)0.7);
           }
         /* Dioptichrome screens come in various combinations
            and strip widths.  */
         else if (dufay_like_screen_p (type))
           {
-            to_range (v[strips_index + 0], 0.1, 0.7);
-            to_range (v[strips_index + 1], 0.1, 0.7);
+            to_range (v[strips_index + 0], (coord_t)0.1, (coord_t)0.7);
+            to_range (v[strips_index + 1], (coord_t)0.1, (coord_t)0.7);
           }
         /* Widths of red, green and blue strip needs to sub to 1
            when we have screens with vertical strips.
@@ -902,8 +902,8 @@ public:
            green second tiny green strip between red and blue.  */
         else if (screen_with_vertical_strips_p (type))
           {
-            to_range (v[strips_index + 0], 0.1, 0.7);
-            to_range (v[strips_index + 1], 0.1, 0.9 - v[strips_index + 0]);
+            to_range (v[strips_index + 0], (coord_t)0.1, (coord_t)0.7);
+            to_range (v[strips_index + 1], (coord_t)0.1, (coord_t)0.9 - v[strips_index + 0]);
           }
         else
           abort ();
@@ -1131,7 +1131,7 @@ public:
       for (int x = 0; x < twidth; x++)
         {
           tiles[tileid].pos[y * twidth + x]
-              = map.to_scr ({ cur_txmin + x + 0.5, cur_tymin + y + 0.5 });
+              = map.to_scr ({ cur_txmin + x + (coord_t)0.5, cur_tymin + y + (coord_t)0.5 });
           if (tiles[tileid].color)
             tiles[tileid].color[y * twidth + x]
                 = render.get_unadjusted_rgb_pixel (
@@ -1475,13 +1475,13 @@ public:
 
     if (optimize_emulsion_intensities)
       for (int tileid = 0; tileid < 3 * n_tiles - 1; tileid++)
-        start[emulsion_intensity_index + tileid] = 1 / 3.0;
+        start[emulsion_intensity_index + tileid] = (coord_t)1 / (coord_t)3;
     /* Starting from small blur seems to work better, since other parameters
        are then more relevant.  Sane scanner lens blurs are close to Nyquist
        frequency.  */
     if (optimize_emulsion_blur)
       {
-        coord_t blur = 0.03;
+        coord_t blur = (coord_t)0.03;
         if (results)
           {
             histogram hist;
@@ -1491,10 +1491,10 @@ public:
             for (int tileid = 0; tileid < n_tiles; tileid++)
               hist.account ((*results)[tileid].emulsion_blur_radius);
             hist.finalize ();
-            blur = hist.find_avg (0.1);
+            blur = hist.find_avg ((coord_t)0.1);
           }
         set_emulsion_blur_radius (start, blur);
-        if (fabs (get_emulsion_blur_radius (start) - blur) > 0.01)
+        if (my_fabs (get_emulsion_blur_radius (start) - blur) > (coord_t)0.01)
           {
             printf ("Emulsion blur %f %f\n", get_emulsion_blur_radius (start),
                     blur);
@@ -1507,14 +1507,14 @@ public:
       set_emulsion_blur_radius (start, -1);
     if (optimize_screen_channel_blurs)
       start[screen_index] = start[screen_index + 1] = start[screen_index + 2]
-          = rev_pixel_blur (0.3);
+          = rev_pixel_blur ((coord_t)0.3);
     else
       {
         /* Optimizations seem to work better when it starts from small blur. */
         if (optimize_screen_blur && !results)
           {
             if (!(flags & finetune_use_screen_blur))
-              blur_radius = 0.3;
+              blur_radius = (coord_t)0.3;
           }
         if (results)
           {
@@ -1525,10 +1525,10 @@ public:
             for (int tileid = 0; tileid < n_tiles; tileid++)
               hist.account ((*results)[tileid].screen_blur_radius);
             hist.finalize ();
-            blur_radius = hist.find_avg (0.1);
+            blur_radius = hist.find_avg ((coord_t)0.1);
           }
         set_blur_radius (start, blur_radius);
-        if (fabs (get_blur_radius (start) - blur_radius) > 0.01)
+        if (my_fabs (get_blur_radius (start) - blur_radius) > (coord_t)0.01)
           {
             printf ("Screen blur %f %f\n", get_blur_radius (start),
                     blur_radius);
@@ -1565,14 +1565,14 @@ public:
     /* Dioptichromes seem to be printed with strips of equal widths.  */
     else if (dufay_like_screen_p (type))
       {
-        set_red_strip_width (start, 0.5);
-        set_green_strip_width (start, 0.5);
+        set_red_strip_width (start, (coord_t)0.5);
+        set_green_strip_width (start, (coord_t)0.5);
       }
     /* Joly and Warner-Powrie should be approx 1/3 each.  */
     else
       {
-        set_red_strip_width (start, 1.0 / 3);
-        set_green_strip_width (start, 1.0 / 3);
+        set_red_strip_width (start, (coord_t)1.0 / (coord_t)3);
+        set_green_strip_width (start, (coord_t)1.0 / (coord_t)3);
       }
     if (fog_index >= 0)
       {
@@ -1582,10 +1582,10 @@ public:
       }
     if (mix_weights_index >= 0)
       {
-        start[mix_weights_index + 0] = 1.0 / 3;
-        start[mix_weights_index + 1] = 1.0 / 3;
+        start[mix_weights_index + 0] = (coord_t)1.0 / (coord_t)3;
+        start[mix_weights_index + 1] = (coord_t)1.0 / (coord_t)3;
         if (least_squares)
-          start[mix_weights_index + 2] = 1.0 / 3;
+          start[mix_weights_index + 2] = (coord_t)1.0 / (coord_t)3;
       }
     if (mix_dark_index >= 0)
       start[mix_dark_index] = 0;
@@ -1628,13 +1628,13 @@ public:
             for (int x = 0; x < twidth; x++)
               hist.account (tiles[tileid].color[y * twidth + x]);
         hist.finalize ();
-        fog_range = hist.find_min (0.1);
+        fog_range = hist.find_min ((coord_t)0.1);
         if (!(fog_range.red > 0))
-          fog_range.red = 4.0 / 65536;
+          fog_range.red = (luminosity_t)4 / (luminosity_t)65536;
         if (!(fog_range.green > 0))
-          fog_range.green = 4.0 / 65536;
+          fog_range.green = (luminosity_t)4 / (luminosity_t)65536;
         if (!(fog_range.blue > 0))
-          fog_range.blue = 4.0 / 65536;
+          fog_range.blue = (luminosity_t)4 / (luminosity_t)65536;
       }
     else
       assert (!colorscreen_checking || fog_index == -1);
@@ -1730,8 +1730,8 @@ public:
             for (int x = 0; x < screen::size; x++)
               {
                 rgbdata wd = weight_scr->interpolated_mult (
-                    (point_t){ x * (1 / (coord_t)screen::size),
-                               y * (1 / (coord_t)screen::size) }
+                    (point_t){ x * ((coord_t)1 / (coord_t)screen::size),
+                               y * ((coord_t)1 / (coord_t)screen::size) }
                     + offset);
                 luminosity_t w
                     = wd.red * i.red + wd.green * i.green + wd.blue * i.blue;
@@ -1873,13 +1873,13 @@ public:
     point_t px = tiles[tileid].pos[y * twidth + (x + dx)] + off;
     int dy = y == theight - 1 ? -1 : 1;
     point_t py = tiles[tileid].pos[(y + dy) * twidth + x] + off;
-    point_t pdx = (px - p) * (1.0 / 6.0) * dx;
-    point_t pdy = (py - p) * (1.0 / 6.0) * dy;
+    point_t pdx = (px - p) * ((coord_t)1.0 / (coord_t)6.0) * (coord_t)dx;
+    point_t pdy = (py - p) * ((coord_t)1.0 / (coord_t)6.0) * (coord_t)dy;
     rgbdata m = { 0, 0, 0 };
     for (int yy = -2; yy <= 2; yy++)
       for (int xx = -2; xx <= 2; xx++)
         m += tiles[tileid].scr->interpolated_mult (p + pdx * xx + pdy * yy);
-    return m * ((coord_t)1.0 / 25);
+    return m * ((coord_t)1.0 / (coord_t)25);
   }
 
   /* Evaluate pixel at (X,Y) using RGB values RED, GREEN, BLUE and offsets OFF
@@ -1893,7 +1893,7 @@ public:
   {
     rgbdata m = get_simulated_screen_pixel (tileid, { x, y });
     rgbdata c = ((red * m.red + green * m.green + blue * m.blue)
-                 * ((coord_t)1.0 / rgbscale));
+                 * ((coord_t)1.0 / (coord_t)rgbscale));
     if (simulate_infrared)
       {
         rgbdata p = get_pixel (v, tileid, { x, y });
@@ -1935,9 +1935,9 @@ public:
     rgbdata d = tiles[tileid].color[p.y * twidth + p.x] - get_fog (v);
     if (normalize)
       {
-        luminosity_t ssum = fabs (d.red + d.green + d.blue);
+        luminosity_t ssum = my_fabs (d.red + d.green + d.blue);
         if (ssum == 0)
-          ssum = 0.0000001;
+          ssum = (luminosity_t)0.0000001;
         d /= ssum;
       }
     return d;
@@ -1958,9 +1958,9 @@ public:
         = tiles[tileid].sharpened_color[p.y * twidth + p.x] - get_fog (v);
     if (normalize)
       {
-        luminosity_t ssum = fabs (d.red + d.green + d.blue);
+        luminosity_t ssum = my_fabs (d.red + d.green + d.blue);
         if (ssum == 0)
-          ssum = 0.0000001;
+          ssum = (luminosity_t)0.0000001;
         d /= ssum;
       }
     return d;
@@ -2506,7 +2506,7 @@ public:
       return ret;
 #endif
     luminosity_t sum = ret.red + ret.green + ret.blue;
-    return ret * (1.0 / sum);
+    return ret * ((coord_t)1.0 / (coord_t)sum);
   }
 
   luminosity_t
@@ -2630,9 +2630,9 @@ public:
        Otherwise it will pick solutions with too large blur and very contrasty
        colors.  */
     return (sum / sample_points ())
-           * (1
+           * ((coord_t)1
               + get_blur_radius (v)
-                    * 0.01) /** (1 + get_emulsion_blur_radius (v) * 0.0001)*/;
+                    * (coord_t)0.01) /** (1 + get_emulsion_blur_radius (v) * 0.0001)*/;
   }
 
   void
@@ -2729,8 +2729,8 @@ public:
               rgbdata c = evaluate_pixel (v, tileid, red, green, blue, x, y,
                                           off, mix_weights, mix_dark);
               rgbdata d = get_pixel (v, tileid, { x, y });
-              coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green)
-                            + fabs (c.blue - d.blue);
+              coord_t err = my_fabs (c.red - d.red) + my_fabs (c.green - d.green)
+                            + my_fabs (c.blue - d.blue);
               hist.pre_account (err);
             }
         hist.finalize_range (65535);
@@ -2740,12 +2740,12 @@ public:
               rgbdata c = evaluate_pixel (v, tileid, red, green, blue, x, y,
                                           off, mix_weights, mix_dark);
               rgbdata d = get_pixel (v, tileid, { x, y });
-              coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green)
-                            + fabs (c.blue - d.blue);
+              coord_t err = my_fabs (c.red - d.red) + my_fabs (c.green - d.green)
+                            + my_fabs (c.blue - d.blue);
               hist.account (err);
             }
         hist.finalize ();
-        coord_t merr = hist.find_max (ratio) * 1.3;
+        coord_t merr = hist.find_max (ratio) * (coord_t)1.3;
         tiles[tileid].outliers = std::make_unique<bitmap_2d> (twidth, theight);
         for (int y = border; y < theight - border; y++)
           for (int x = border; x < twidth - border; x++)
@@ -2753,8 +2753,8 @@ public:
               rgbdata c = evaluate_pixel (v, tileid, red, green, blue, x, y,
                                           off, mix_weights, mix_dark);
               rgbdata d = get_pixel (v, tileid, { x, y });
-              coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green)
-                            + fabs (c.blue - d.blue);
+              coord_t err = my_fabs (c.red - d.red) + my_fabs (c.green - d.green)
+                            + my_fabs (c.blue - d.blue);
               if (err > merr)
                 {
                   noutliers++;
@@ -2787,7 +2787,7 @@ public:
             {
               luminosity_t c = bw_evaluate_pixel (tileid, color, x, y, off);
               luminosity_t d = bw_get_pixel (tileid, { x, y });
-              coord_t err = fabs (c - d);
+              coord_t err = my_fabs (c - d);
               hist.pre_account (err);
             }
         hist.finalize_range (65535);
@@ -2796,18 +2796,18 @@ public:
             {
               luminosity_t c = bw_evaluate_pixel (tileid, color, x, y, off);
               luminosity_t d = bw_get_pixel (tileid, { x, y });
-              coord_t err = fabs (c - d);
+              coord_t err = my_fabs (c - d);
               hist.account (err);
             }
         hist.finalize ();
-        coord_t merr = hist.find_max (ratio) * 1.3;
+        coord_t merr = hist.find_max (ratio) * (coord_t)1.3;
         tiles[tileid].outliers = std::make_unique<bitmap_2d> (twidth, theight);
         for (int y = border; y < theight - border; y++)
           for (int x = border; x < twidth - border; x++)
             {
               luminosity_t c = bw_evaluate_pixel (tileid, color, x, y, off);
               luminosity_t d = bw_get_pixel (tileid, { x, y });
-              coord_t err = fabs (c - d);
+              coord_t err = my_fabs (c - d);
               if (err > merr)
                 {
                   noutliers++;
@@ -2951,7 +2951,7 @@ public:
                       luminosity_t c
                           = bw_evaluate_pixel (tileid, color, x, y, off);
                       luminosity_t d
-                          = (c - bw_get_pixel (tileid, { x, y })) / lmax + 0.5;
+                          = (c - bw_get_pixel (tileid, { x, y })) / lmax + (luminosity_t)0.5;
                       img->put_linear_pixel (x, y, { d, d, d });
                     }
                     break;
@@ -3044,17 +3044,17 @@ public:
                                             off, mix_weights, mix_dark);
                       rgbdata d = get_pixel (v, tileid, { x, y });
                       rendered.put_pixel (
-                          x, (c.red - d.red) * 65535 / rmax + 65536 / 2,
-                          (c.green - d.green) * 65535 / gmax + 65536 / 2,
-                          (c.blue - d.blue) * 65535 / bmax + 65536 / 2);
+                          x, (c.red - d.red) * (luminosity_t)65535 / rmax + (luminosity_t)32768,
+                          (c.green - d.green) * (luminosity_t)65535 / gmax + (luminosity_t)32768,
+                          (c.blue - d.blue) * (luminosity_t)65535 / bmax + (luminosity_t)32768);
                     }
                     break;
                   case 3:
                     {
                       rgbdata d = get_pixel (v, tileid, { x, y });
-                      rendered.put_pixel (x, d.red * 65535 / rmax,
-                                          d.green * 65535 / gmax,
-                                          d.blue * 65535 / bmax);
+                      rendered.put_pixel (x, d.red * (luminosity_t)65535 / rmax,
+                                          d.green * (luminosity_t)65535 / gmax,
+                                          d.blue * (luminosity_t)65535 / bmax);
                     }
                     break;
                   }
@@ -3087,15 +3087,15 @@ public:
                     {
                       luminosity_t c
                           = bw_evaluate_pixel (tileid, color, x, y, off);
-                      rendered.put_pixel (x, c * 65535 / lmax,
-                                          c * 65535 / lmax, c * 65535 / lmax);
+                      rendered.put_pixel (x, c * (luminosity_t)65535 / lmax,
+                                          c * (luminosity_t)65535 / lmax, c * (luminosity_t)65535 / lmax);
                     }
                     break;
                   case 1:
                     {
                       luminosity_t d = bw_get_pixel (tileid, { x, y });
-                      rendered.put_pixel (x, d * 65535 / lmax,
-                                          d * 65535 / lmax, d * 65535 / lmax);
+                      rendered.put_pixel (x, d * (luminosity_t)65535 / lmax,
+                                          d * (luminosity_t)65535 / lmax, d * (luminosity_t)65535 / lmax);
                     }
                     break;
                   case 2:
@@ -3104,9 +3104,9 @@ public:
                           = bw_evaluate_pixel (tileid, color, x, y, off);
                       luminosity_t d = bw_get_pixel (tileid, { x, y });
                       rendered.put_pixel (x,
-                                          (c - d) * 65535 / lmax + 65536 / 2,
-                                          (c - d) * 65535 / lmax + 65536 / 2,
-                                          (c - d) * 65535 / lmax + 65536 / 2);
+                                          (c - d) * (luminosity_t)65535 / lmax + (luminosity_t)32768,
+                                          (c - d) * (luminosity_t)65535 / lmax + (luminosity_t)32768,
+                                          (c - d) * (luminosity_t)65535 / lmax + (luminosity_t)32768);
                     }
                     break;
                   }
@@ -3193,7 +3193,7 @@ public:
               {
                 point_t p = get_pos (start, tileid, { x, y });
                 // printf ("  %-5.2f,%-5.2f", p.x, p.y);
-                coord_t dist = fabs (p.x - fsx) + fabs (p.y - fsy);
+                coord_t dist = my_fabs (p.x - fsx) + my_fabs (p.y - fsy);
                 if (bx < 0 || dist < bdist)
                   {
                     bx = x;
@@ -3239,7 +3239,7 @@ public:
                   coord_t rx, ry;
                   intersect_vectors (p1.x, p1.y, p.x - p1.x, p.y - p1.y, p3.x,
                                      p3.y, p4.x - p3.x, p4.y - p3.y, &rx, &ry);
-                  rx = 1 / rx;
+                  rx = (coord_t)1 / rx;
                   found = true;
                   fp = { (ry * rx + x), (rx + y) };
                 }
@@ -3251,7 +3251,7 @@ public:
                   coord_t rx, ry;
                   intersect_vectors (p1.x, p1.y, p.x - p1.x, p.y - p1.y, p2.x,
                                      p2.y, p4.x - p2.x, p4.y - p2.y, &rx, &ry);
-                  rx = 1 / rx;
+                  rx = (coord_t)1 / rx;
                   found = true;
                   fp = { (rx + x), (ry * rx + y) };
                 }
@@ -3269,8 +3269,8 @@ public:
             ret.err = "Failed to find solver point";
             return;
           }
-        ret.solver_point_img_location = { fp.x + tiles[tileid].txmin + 0.5,
-                                          fp.y + tiles[tileid].tymin + 0.5 };
+        ret.solver_point_img_location = { fp.x + tiles[tileid].txmin + (coord_t)0.5,
+                                          fp.y + tiles[tileid].tymin + (coord_t)0.5 };
         // printf ("New location %f %f %f %f  %f %f\n", fp.x +
         // tiles[tileid].txmin
         // + 0.5, fp.y + tiles[tileid].tymin + 0.5, bx + tiles[tileid].txmin +
@@ -3386,7 +3386,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   coord_t test_xrange
       = fparams.range
             ? fparams.range
-            : ((fparams.flags & finetune_no_normalize) || bw ? 1 : 2);
+            : ((fparams.flags & finetune_no_normalize) || bw ? (coord_t)1 : (coord_t)2);
   coord_t test_yrange = test_xrange;
 
   /* If screen tile is far from rectangular, compensate.
@@ -3421,8 +3421,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   symin = std::min (symin, p.y);
   symax = std::max (symax, p.y);
 
-  int txmin = floor (sxmin), tymin = floor (symin), txmax = ceil (sxmax),
-      tymax = ceil (symax);
+  int txmin = my_floor (sxmin), tymin = my_floor (symin), txmax = my_ceil (sxmax),
+      tymax = my_ceil (symax);
   if (txmin < 0)
     txmin = 0;
   if (txmax > imgp[0]->width)
@@ -4015,11 +4015,11 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                     renderedt.put_pixel (
                         x - xmin + ext,
                         std::clamp (d.red, (luminosity_t)0, (luminosity_t)1)
-                            * 65535,
+                            * (luminosity_t)65535,
                         std::clamp (d.green, (luminosity_t)0, (luminosity_t)1)
-                            * 65535,
+                            * (luminosity_t)65535,
                         std::clamp (d.blue, (luminosity_t)0, (luminosity_t)1)
-                            * 65535);
+                            * (luminosity_t)65535);
                   }
                 if (!renderedt.write_row ())
                   return false;
@@ -4034,8 +4034,8 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                   {
                     rgbdata d
                         = rendered[(y - ymin + ext) * xsize + x - xmin + ext];
-                    renderedt.put_pixel (x - xmin + ext, d.red * 65535,
-                                         d.green * 65535, d.blue * 65535);
+                    renderedt.put_pixel (x - xmin + ext, d.red * (luminosity_t)65535,
+                                         d.green * (luminosity_t)65535, d.blue * (luminosity_t)65535);
                   }
                 if (!renderedt.write_row ())
                   return false;
@@ -4051,8 +4051,8 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                     point_t p
                         = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
                     rgbdata m = collection_scr.noninterpolated_mult (p);
-                    renderedu.put_pixel (x - xmin + ext, m.red * 65535,
-                                         m.green * 65535, m.blue * 65535);
+                    renderedu.put_pixel (x - xmin + ext, m.red * (luminosity_t)65535,
+                                         m.green * (luminosity_t)65535, m.blue * (luminosity_t)65535);
                   }
                 if (!renderedu.write_row ())
                   return false;
@@ -4148,7 +4148,7 @@ render_screen (image_data &img, scr_to_img_parameters &param,
             d += scr->interpolated_mult (
                 map.to_scr ({ x + (xx + 1) / (coord_t)(steps + 1),
                               y + (yy + 1) / (coord_t)(steps + 1) }));
-        d *= 1 / (coord_t)(steps * steps);
+        d *= (coord_t)1 / (coord_t)(steps * steps);
         img.rgbdata[y][x] = {
           (unsigned short)(invert_gamma (d.red, rparam.gamma) * 65535),
           (unsigned short)(invert_gamma (d.green, rparam.gamma) * 65535),
