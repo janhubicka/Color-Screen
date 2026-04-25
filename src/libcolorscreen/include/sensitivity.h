@@ -35,7 +35,7 @@ struct hd_curve
   constexpr hd_curve () = default;
 
   /* Destructor for HD_CURVE.  DELETE[] the arrays if they are owned.  */
-  DLL_PUBLIC virtual ~hd_curve ()
+  DLL_PUBLIC_EXP virtual ~hd_curve ()
   {
     if (m_owns_memory)
       {
