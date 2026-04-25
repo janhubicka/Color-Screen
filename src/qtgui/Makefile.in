@@ -131,6 +131,7 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-DetectScreenWorker.$(OBJEXT) \
 	colorscreen_qt-FlatFieldWorker.$(OBJEXT) \
 	colorscreen_qt-FinetuneWorker.$(OBJEXT) \
+	colorscreen_qt-FinetuneMisregisteredWorker.$(OBJEXT) \
 	colorscreen_qt-WorkerBase.$(OBJEXT) \
 	colorscreen_qt-ContactCopyPanel.$(OBJEXT) \
 	colorscreen_qt-HDCurveWidget.$(OBJEXT) \
@@ -178,6 +179,7 @@ am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_DetectScreenWorker.$(OBJEXT) \
 	colorscreen_qt-moc_FlatFieldWorker.$(OBJEXT) \
 	colorscreen_qt-moc_FinetuneWorker.$(OBJEXT) \
+	colorscreen_qt-moc_FinetuneMisregisteredWorker.$(OBJEXT) \
 	colorscreen_qt-moc_WorkerBase.$(OBJEXT) \
 	colorscreen_qt-moc_ContactCopyPanel.$(OBJEXT) \
 	colorscreen_qt-moc_HDCurveWidget.$(OBJEXT) \
@@ -249,6 +251,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-DeformationChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-DetectScreenWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Po \
+	./$(DEPDIR)/colorscreen_qt-FinetuneMisregisteredWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-FinetuneWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-FlowLayout.Po \
@@ -296,6 +299,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-moc_DeformationChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_DetectScreenWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po \
+	./$(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Po \
@@ -538,6 +542,7 @@ colorscreen_qt_SOURCES = \
     DetectScreenWorker.cpp \
     FlatFieldWorker.cpp \
     FinetuneWorker.cpp \
+    FinetuneMisregisteredWorker.cpp \
     WorkerBase.cpp \
     ContactCopyPanel.cpp \
     HDCurveWidget.cpp \
@@ -590,6 +595,7 @@ MOC_SOURCES = \
     moc_DetectScreenWorker.cpp \
     moc_FlatFieldWorker.cpp \
     moc_FinetuneWorker.cpp \
+    moc_FinetuneMisregisteredWorker.cpp \
     moc_WorkerBase.cpp \
     moc_ContactCopyPanel.cpp \
     moc_HDCurveWidget.cpp \
@@ -618,7 +624,7 @@ MOC_SOURCES = \
     moc_TilesPanel.cpp \
     moc_ImageLayerPanel.cpp
 
-EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h FinetuneImagesPanel.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h WorkerBase.h ContactCopyPanel.h HDCurveWidget.h InteractiveChartWidget.h ToneCurveWidget.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h HurleyAnimation.h TaskQueue.h SubtitleOverlay.h Logging.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg AdaptiveSharpeningWorker.h AdaptiveSharpeningChart.h RenderDialog.h ProfilePanel.h TilesPanel.h ImageLayerPanel.h
+EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h FinetuneImagesPanel.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h FinetuneMisregisteredWorker.h WorkerBase.h ContactCopyPanel.h HDCurveWidget.h InteractiveChartWidget.h ToneCurveWidget.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h HurleyAnimation.h TaskQueue.h SubtitleOverlay.h Logging.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg AdaptiveSharpeningWorker.h AdaptiveSharpeningChart.h RenderDialog.h ProfilePanel.h TilesPanel.h ImageLayerPanel.h
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
@@ -735,6 +741,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-DeformationChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-DetectScreenWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-FinetuneMisregisteredWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-FinetuneWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-FlowLayout.Po@am__quote@ # am--include-marker
@@ -782,6 +789,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_DeformationChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_DetectScreenWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Po@am__quote@ # am--include-marker
@@ -1083,6 +1091,20 @@ colorscreen_qt-FinetuneWorker.obj: FinetuneWorker.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='FinetuneWorker.cpp' object='colorscreen_qt-FinetuneWorker.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-FinetuneWorker.obj `if test -f 'FinetuneWorker.cpp'; then $(CYGPATH_W) 'FinetuneWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/FinetuneWorker.cpp'; fi`
+
+colorscreen_qt-FinetuneMisregisteredWorker.o: FinetuneMisregisteredWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-FinetuneMisregisteredWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-FinetuneMisregisteredWorker.Tpo -c -o colorscreen_qt-FinetuneMisregisteredWorker.o `test -f 'FinetuneMisregisteredWorker.cpp' || echo '$(srcdir)/'`FinetuneMisregisteredWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-FinetuneMisregisteredWorker.Tpo $(DEPDIR)/colorscreen_qt-FinetuneMisregisteredWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='FinetuneMisregisteredWorker.cpp' object='colorscreen_qt-FinetuneMisregisteredWorker.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-FinetuneMisregisteredWorker.o `test -f 'FinetuneMisregisteredWorker.cpp' || echo '$(srcdir)/'`FinetuneMisregisteredWorker.cpp
+
+colorscreen_qt-FinetuneMisregisteredWorker.obj: FinetuneMisregisteredWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-FinetuneMisregisteredWorker.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-FinetuneMisregisteredWorker.Tpo -c -o colorscreen_qt-FinetuneMisregisteredWorker.obj `if test -f 'FinetuneMisregisteredWorker.cpp'; then $(CYGPATH_W) 'FinetuneMisregisteredWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/FinetuneMisregisteredWorker.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-FinetuneMisregisteredWorker.Tpo $(DEPDIR)/colorscreen_qt-FinetuneMisregisteredWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='FinetuneMisregisteredWorker.cpp' object='colorscreen_qt-FinetuneMisregisteredWorker.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-FinetuneMisregisteredWorker.obj `if test -f 'FinetuneMisregisteredWorker.cpp'; then $(CYGPATH_W) 'FinetuneMisregisteredWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/FinetuneMisregisteredWorker.cpp'; fi`
 
 colorscreen_qt-WorkerBase.o: WorkerBase.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-WorkerBase.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-WorkerBase.Tpo -c -o colorscreen_qt-WorkerBase.o `test -f 'WorkerBase.cpp' || echo '$(srcdir)/'`WorkerBase.cpp
@@ -1742,6 +1764,20 @@ colorscreen_qt-moc_FinetuneWorker.obj: moc_FinetuneWorker.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_FinetuneWorker.obj `if test -f 'moc_FinetuneWorker.cpp'; then $(CYGPATH_W) 'moc_FinetuneWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_FinetuneWorker.cpp'; fi`
 
+colorscreen_qt-moc_FinetuneMisregisteredWorker.o: moc_FinetuneMisregisteredWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_FinetuneMisregisteredWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Tpo -c -o colorscreen_qt-moc_FinetuneMisregisteredWorker.o `test -f 'moc_FinetuneMisregisteredWorker.cpp' || echo '$(srcdir)/'`moc_FinetuneMisregisteredWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Tpo $(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_FinetuneMisregisteredWorker.cpp' object='colorscreen_qt-moc_FinetuneMisregisteredWorker.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_FinetuneMisregisteredWorker.o `test -f 'moc_FinetuneMisregisteredWorker.cpp' || echo '$(srcdir)/'`moc_FinetuneMisregisteredWorker.cpp
+
+colorscreen_qt-moc_FinetuneMisregisteredWorker.obj: moc_FinetuneMisregisteredWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_FinetuneMisregisteredWorker.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Tpo -c -o colorscreen_qt-moc_FinetuneMisregisteredWorker.obj `if test -f 'moc_FinetuneMisregisteredWorker.cpp'; then $(CYGPATH_W) 'moc_FinetuneMisregisteredWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_FinetuneMisregisteredWorker.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Tpo $(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_FinetuneMisregisteredWorker.cpp' object='colorscreen_qt-moc_FinetuneMisregisteredWorker.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_FinetuneMisregisteredWorker.obj `if test -f 'moc_FinetuneMisregisteredWorker.cpp'; then $(CYGPATH_W) 'moc_FinetuneMisregisteredWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_FinetuneMisregisteredWorker.cpp'; fi`
+
 colorscreen_qt-moc_WorkerBase.o: moc_WorkerBase.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_WorkerBase.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_WorkerBase.Tpo -c -o colorscreen_qt-moc_WorkerBase.o `test -f 'moc_WorkerBase.cpp' || echo '$(srcdir)/'`moc_WorkerBase.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_WorkerBase.Tpo $(DEPDIR)/colorscreen_qt-moc_WorkerBase.Po
@@ -2280,6 +2316,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DeformationChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DetectScreenWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-FinetuneMisregisteredWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FinetuneWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FlowLayout.Po
@@ -2327,6 +2364,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_DeformationChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_DetectScreenWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Po
@@ -2417,6 +2455,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DeformationChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DetectScreenWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FinetuneImagesPanel.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-FinetuneMisregisteredWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FinetuneWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FlowLayout.Po
@@ -2464,6 +2503,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_DeformationChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_DetectScreenWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Po

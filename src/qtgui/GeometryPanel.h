@@ -32,6 +32,7 @@ signals:
   void heatmapToleranceChanged(double tol);
   void exaggerateChanged(double ex);
   void maxArrowLengthChanged(double len);
+  void automaticallyAddPointsRequested();
 
 public:
   bool isAutoEnabled() const;

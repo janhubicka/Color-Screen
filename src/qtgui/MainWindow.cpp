@@ -10,6 +10,7 @@
 #include "ColorOptimizerWorker.h"
 #include "DetectScreenWorker.h"
 #include "FinetuneWorker.h"
+#include "FinetuneMisregisteredWorker.h"
 #include "FocusAnalysisWorker.h"
 #include "GeometryPanel.h"
 #include "GeometrySolverWorker.h"
@@ -984,6 +985,8 @@ void MainWindow::setupUi() {
   // Link Geometry Panel signals
   connect(m_geometryPanel, &GeometryPanel::optimizeRequested, this,
           &MainWindow::onOptimizeGeometry);
+  connect(m_geometryPanel, &GeometryPanel::automaticallyAddPointsRequested, this,
+          &MainWindow::onAutomaticallyAddPointsRequested);
   connect(m_geometryPanel, &GeometryPanel::nonlinearToggled, this,
           &MainWindow::onNonlinearToggled);
   connect(m_geometryPanel, &GeometryPanel::centerOnRequested, m_imageWidget,
@@ -3709,6 +3712,56 @@ void MainWindow::onAreaSelected(QRect area) {
         onFinetuneFinished(true, points, thread, progress);
       });
   connect(worker, &FinetuneWorker::finished, this,
+          [this, thread, progress](bool success) {
+            if (!success) {
+              onFinetuneFinished(false, {}, thread, progress);
+            }
+          });
+
+  // Track thread
+  m_finetuneThreads.push_back(thread);
+
+  // Start thread
+  thread->start();
+}
+
+void MainWindow::onAutomaticallyAddPointsRequested() {
+  if (!m_scan) {
+    return;
+  }
+
+  // Get current scan crop
+  colorscreen::int_image_area crop =
+      m_rparams.get_scan_crop(m_scan->width, m_scan->height);
+
+  // Create progress info
+  auto progress = std::make_shared<colorscreen::progress_info>();
+  progress->set_task("Finding missing registration points", 1);
+  colorscreen::sub_task task(progress.get());
+  addProgress(progress);
+
+  // Create worker and thread
+  FinetuneMisregisteredWorker *worker = new FinetuneMisregisteredWorker(
+      m_solverParams, m_rparams, m_scrToImgParams, m_scan, crop, progress);
+  QThread *thread = new QThread();
+  worker->moveToThread(thread);
+
+  // Connect signals
+  connect(thread, &QThread::started, worker, &FinetuneMisregisteredWorker::run);
+  connect(worker, &FinetuneMisregisteredWorker::finished, thread,
+          &QThread::quit);
+  connect(worker, &FinetuneMisregisteredWorker::finished, worker,
+          &QObject::deleteLater);
+  connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+
+  // Connect to our slot to handle results
+  connect(
+      worker, &FinetuneMisregisteredWorker::pointsReady, this,
+      [this, thread, progress](
+          std::vector<colorscreen::solver_parameters::solver_point_t> points) {
+        onFinetuneFinished(true, points, thread, progress);
+      });
+  connect(worker, &FinetuneMisregisteredWorker::finished, this,
           [this, thread, progress](bool success) {
             if (!success) {
               onFinetuneFinished(false, {}, thread, progress);

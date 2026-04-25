@@ -132,6 +132,7 @@ private slots:
   void onFocusAnalysisFinished(bool success, colorscreen::finetune_result result);
   void onAdaptiveSharpeningRequested(int xsteps);
   void onAdaptiveSharpeningFinished(bool success, std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result);
+  void onAutomaticallyAddPointsRequested();
 
   // Recent Files
   // Recent Files

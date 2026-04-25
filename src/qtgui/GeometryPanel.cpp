@@ -61,6 +61,10 @@ void GeometryPanel::setupUi() {
   m_exaggerateSliderContainer->setEnabled(showBox->isChecked());
   m_maxArrowLengthSliderContainer->setEnabled(showBox->isChecked());
 
+  addButtonParameter("Registration points", "Automatically add points", [this]() {
+      emit automaticallyAddPointsRequested();
+  }, nullptr, "Automatically identify and add missing registration points within the current crop area.");
+
   addSlider("Heatmap tolerance", 0.0, 1.0, 1000.0, 3, "", "", 0.1,
             [this](double v) {
                 if (m_deformationChart) m_deformationChart->setHeatmapTolerance(v);

@@ -3368,7 +3368,11 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
         {
           if (!tileid)
             {
-              map.set_parameters (param, *imgp[tileid]);
+              if (!map.set_parameters (param, *imgp[tileid]))
+	        {
+		  ret.err = "failed to convert screen to image coordinates";
+		  return ret;
+	        }
               pixel_size
                   = map.pixel_size (imgp[tileid]->width, imgp[tileid]->height);
             }
@@ -3764,6 +3768,182 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   return ret;
 }
 
+static void
+get_steps (const image_data &img, int_image_area area, const scr_to_img_parameters &param, int *xstep, int *ystep)
+{
+  const int steps = 100;
+  int overall_xsteps = steps;
+  int overall_ysteps = steps;
+  if (param.scanner_type == lens_move_horizontally
+      || param.scanner_type == fixed_lens_sensor_move_horizontally)
+    overall_xsteps *= 3, overall_ysteps /= 3;
+  else if (param.scanner_type == lens_move_vertically
+           || param.scanner_type == fixed_lens_sensor_move_vertically)
+    overall_ysteps *= 3, overall_xsteps /= 3;
+  int w = std::max (img.width, img.height);
+  *xstep = w / overall_xsteps;
+  *ystep = w / overall_ysteps;
+}
+
+/* Finetune SOLVER parameters in given AREA using RPARAM and PARAM in IMG.
+   PROGRESS is used to report progress.  */
+
+bool
+finetune_misregistered_area (solver_parameters *solver,
+                             render_parameters &rparam,
+                             const scr_to_img_parameters &param,
+                             const image_data &img, int_image_area area,
+                             progress_info *progress)
+{
+  area = area.intersect ({ 0, 0, img.width, img.height });
+  if (area.empty_p ())
+    return false;
+  int xstep, ystep;
+  get_steps (img, area, param, &xstep, &ystep);
+  int xsubstep = xstep / 3;
+  int ysubstep = xstep / 3;
+  int xsubsteps = (area.width + xsubstep - 1) / xsubstep;
+  int ysubsteps = (area.height + ysubstep - 1) / ysubstep;
+  int npoints;
+  const bool verbose = false; 
+  coord_t max_uncertainty = 10000;
+  if (!xsubsteps || !ysubsteps)
+    return false;
+
+  enum elt
+  {
+    unknown,
+    known,
+    to_be_computed,
+    bad
+  };
+
+  std::vector<elt> tiles (xsubsteps * ysubsteps, unknown);
+
+  if (verbose)
+    printf ("Adding points to area with top left (%i,%i) width %i height %i, "
+            "steps %i %i size %i %i with known points %i\n",
+            area.x, area.y, area.width, area.height, xsubstep, ysubstep,
+            xsubsteps, ysubsteps, (int)solver->points.size ());
+  for (auto p : solver->points)
+    {
+      int px = nearest_int ((p.img.x - area.x) / (coord_t)xsubstep);
+      int py = nearest_int ((p.img.y - area.y) / (coord_t)ysubstep);
+      if (px >= 0 && px < xsubsteps && py >= 0 && py < ysubsteps)
+        {
+          if (verbose)
+            printf ("Existing point on %i %i\n", px, py);
+          tiles[py * xsubsteps + px] = known;
+        }
+    }
+
+  do
+    {
+
+      std::vector<int_point_t> points;
+      for (int y = 2; y < ysubsteps - 2; y++)
+        for (int x = 2; x < xsubsteps - 2; x++)
+          {
+            bool ok = true;
+            for (int yy = y - 1; yy <= y + 1 && ok; yy++)
+              for (int xx = x - 1; xx <= x + 1 && ok; xx++)
+                if (tiles[yy * xsubsteps + xx] != unknown)
+                  ok = false;
+            if (!ok)
+              continue;
+            int nknown = 0;
+            for (int yy = y - 2; yy <= y + 2 && ok; yy++)
+              for (int xx = x - 2; xx <= x + 2 && ok; xx++)
+                if (tiles[yy * xsubsteps + xx] == known)
+                  nknown++;
+            if (!nknown)
+              continue;
+            tiles[y * xsubsteps + x] = to_be_computed;
+            points.push_back ({ nearest_int ((x + 0.5) * xsubstep) + area.x,
+                                nearest_int ((y + 0.5) * ysubstep) + area.y });
+            if (verbose)
+              printf ("Will compute %i %i\n", x, y);
+          }
+      if (!points.size ())
+        return false;
+      if (progress)
+        progress->set_task ("finetuning points nearby known points",
+                            points.size ());
+      std::vector<finetune_result> res (points.size ());
+      /* We are going to initialize render inside of nested region.
+         TODO: We probably want to set omp_nested on proper place.  */
+#ifdef _OPENMP
+      omp_set_max_active_levels (3);
+#endif
+#pragma omp parallel for default(none) schedule(dynamic)                      \
+    shared(rparam, param, progress, img, solver, res, points)
+      for (size_t i = 0; i < points.size (); i++)
+        {
+          if (progress && progress->cancel_requested ())
+            continue;
+          finetune_parameters fparam;
+          fparam.flags
+              |= finetune_position /*| finetune_multitile*/ | finetune_bw
+                 | finetune_no_progress_report;
+          res[i]
+              = finetune (rparam, param, img,
+                          { { (coord_t)points[i].x, (coord_t)points[i].y } },
+                          nullptr, fparam, progress);
+          if (progress)
+            progress->inc_progress ();
+        }
+      if (progress && progress->cancel_requested ())
+        return false;
+      /* If we have many points; rule out uncertain ones.  Let the value only
+         drop in each wave.  */
+      if (points.size () > 5)
+        {
+          std::sort (res.begin (), res.end (),
+                     [] (finetune_result &a, finetune_result &b)
+                       { return a.uncertainty > b.uncertainty; });
+          max_uncertainty = std::min (max_uncertainty,
+                                      res[points.size () * 0.2].uncertainty);
+        }
+      scr_to_img map;
+      if (!map.set_parameters (param, img))
+        return false;
+
+      /* Clear info about points to be computed.  */
+      for (int i = 0; i < xsubsteps * ysubsteps; i++)
+        if (tiles[i] == to_be_computed)
+          tiles[i] = unknown;
+      npoints = 0;
+
+      /* Look for coputed points.  */
+      for (size_t i = 0; i < points.size (); i++)
+        {
+          finetune_result &r = res[i];
+          point_t transformed = map.to_scr (r.solver_point_img_location);
+          int px
+              = (r.solver_point_img_location.x - area.x) / (coord_t)xsubstep;
+          int py
+              = (r.solver_point_img_location.y - area.y) / (coord_t)ysubstep;
+          if (verbose)
+            printf ("found %i %i %f %f %f %f\n", px, py, transformed.x,
+                    transformed.y, r.solver_point_screen_location.x,
+                    r.solver_point_screen_location.y);
+          if (r.success && r.uncertainty <= max_uncertainty
+              && transformed.dist_from (r.solver_point_screen_location) < 0.05)
+            {
+              solver->add_point (r.solver_point_img_location,
+                                 r.solver_point_screen_location,
+                                 r.solver_point_color);
+              tiles[py * xsubsteps + px] = known;
+              npoints++;
+            }
+          else
+            tiles[py * xsubsteps + px] = bad;
+        }
+    }
+  while (npoints);
+  return true;
+}
+
 /* Finetune SOLVER parameters in given AREA using RPARAM and PARAM in IMG.
    PROGRESS is used to report progress.  */
 
@@ -3775,17 +3955,8 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
   area = area.intersect ({ 0, 0, img.width, img.height });
   if (area.empty_p ())
     return false;
-  const int steps = 100;
-  int overall_xsteps = steps;
-  int overall_ysteps = steps;
-  if (param.scanner_type == lens_move_horizontally
-      || param.scanner_type == fixed_lens_sensor_move_horizontally)
-    overall_xsteps *= 3, overall_ysteps /= 3;
-  else if (param.scanner_type == lens_move_vertically
-           || param.scanner_type == fixed_lens_sensor_move_vertically)
-    overall_ysteps *= 3, overall_xsteps /= 3;
-  int xstep = img.width / overall_xsteps;
-  int ystep = img.width / overall_ysteps;
+  int xstep, ystep;
+  get_steps (img, area, param, &xstep, &ystep);
   int xsteps = (area.width + xstep - 1) / xstep;
   int ysteps = (area.height + ystep - 1) / ystep;
   if (!xsteps || !ysteps)
@@ -3841,9 +4012,11 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
       {
         finetune_result &r = res[x + y * xsteps];
         if (r.success && r.uncertainty <= max_uncertainty)
-          solver->add_point (r.solver_point_img_location,
-                             r.solver_point_screen_location,
-                             r.solver_point_color);
+	  {
+	    solver->add_point (r.solver_point_img_location,
+			       r.solver_point_screen_location,
+			       r.solver_point_color);
+	  }
       }
   return true;
 }
