@@ -438,9 +438,9 @@ public:
       v[emulsion_offset_index + tileid] = off.x / (2 * strips_range);
   }
 
-  /* Return current emulsion blur radius from vector V.  Value is in screen size.
-     This does not use pixel_blur since physical emulsion is not dependent
-     on scanner parameters.  */
+  /* Return current emulsion blur radius from vector V.  Value is in screen
+     size. This does not use pixel_blur since physical emulsion is not
+     dependent on scanner parameters.  */
   coord_t
   get_emulsion_blur_radius (coord_t *v)
   {
@@ -464,8 +464,8 @@ public:
           = (blur - 0.03) / (screen::max_blur_radius * 0.2 - 0.03);
   }
 
-  /* Return pixel blur for value V.  Do pixel blurs in the range 0.3 ... screen::max_blur_radius / pixel_size.
-     Value is in pixels, not screen size.
+  /* Return pixel blur for value V.  Do pixel blurs in the range 0.3 ...
+     screen::max_blur_radius / pixel_size. Value is in pixels, not screen size.
      Scans are always bit blurred at pixel level, so 0.3 should be reasonable
      minima.  */
   coord_t
@@ -1510,7 +1510,7 @@ public:
           = rev_pixel_blur (0.3);
     else
       {
-        /* Optimizations seem to work better when it starts from small blur.  */
+        /* Optimizations seem to work better when it starts from small blur. */
         if (optimize_screen_blur && !results)
           {
             if (!(flags & finetune_use_screen_blur))
@@ -2851,9 +2851,8 @@ public:
         for (int y = 0; y < theight; y++)
           for (int x = 0; x < twidth; x++)
             {
-                      rgbdata c
-                          = evaluate_pixel (v, tileid, red, green, blue, x, y,
-                                            off, mix_weights, mix_dark);
+              rgbdata c = evaluate_pixel (v, tileid, red, green, blue, x, y,
+                                          off, mix_weights, mix_dark);
               rmax = std::max (c.red, rmax);
               gmax = std::max (c.green, gmax);
               bmax = std::max (c.blue, bmax);
@@ -3532,7 +3531,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
 
       gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
 #pragma omp parallel for default(none) collapse(2) schedule(dynamic)          \
-    shared(fparams, maxtiles, rparam, pixel_size, best_uncertainty, verbose, \
+    shared(fparams, maxtiles, rparam, pixel_size, best_uncertainty, verbose,  \
                std::nothrow, imgp, twidth, theight, txmin, tymin, bw,         \
                progress, mapp, render, failed, best_solver, results,          \
                bw_is_simulated_infrared, tile_sharpened)
@@ -3845,8 +3844,9 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
    RET_RED, RET_GREEN, RET_BLUE are returned colors.
    SCR is screen used to render the pattern, while COLLECTION_SCR is used to do
    the data collection.  SIMULATED_SCREEN is optional simulated screen.
-   THRESHOLD is the collection threshold.  SHARPEN_PARAM are sharpen parameters.
-   MAP is the scr-to-img map.  XMIN, YMIN, XMAX, YMAX define the area.  */
+   THRESHOLD is the collection threshold.  SHARPEN_PARAM are sharpen
+   parameters. MAP is the scr-to-img map.  XMIN, YMIN, XMAX, YMAX define the
+   area.  */
 
 bool
 determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
@@ -3912,9 +3912,9 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
           {
             point_t p;
             rgbdata am;
-      /* Render screen.
-         Scanner MTF already estimates sensor loss; so we should not need to
-         antialias.  */
+            /* Render screen.
+               Scanner MTF already estimates sensor loss; so we should not need
+               to antialias.  */
             if (!antialias)
               am = noantialias_screen (scr, map, x, y, &p);
             else
