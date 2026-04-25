@@ -1,6 +1,7 @@
 #include "FinetuneMisregisteredWorker.h"
 #include "../libcolorscreen/include/finetune.h"
 #include "../libcolorscreen/include/mesh.h"
+#include <QElapsedTimer>
 
 FinetuneMisregisteredWorker::FinetuneMisregisteredWorker(
     colorscreen::solver_parameters solverParams,
@@ -18,6 +19,12 @@ void FinetuneMisregisteredWorker::run() {
   // Create local copies to work with and accumulate
   colorscreen::solver_parameters localSolver = m_solverParams;
   colorscreen::scr_to_img_parameters localScrToImg = m_scrToImg;
+  
+  std::vector<colorscreen::solver_parameters::solver_point_t> accumulatedPoints;
+  QElapsedTimer lastUpdateTime;
+  lastUpdateTime.start();
+  size_t pointsAtLastUpdate = localSolver.points.size();
+
   try {
     colorscreen::sub_task task(m_progress.get());
 
@@ -39,15 +46,12 @@ void FinetuneMisregisteredWorker::run() {
       if (!found || localSolver.points.size () == initialPointCount)
 	break;
 
-      // If successful, extract the new points that were added
-      std::vector<colorscreen::solver_parameters::solver_point_t> newPoints;
+      // Accumulate the new points that were added
       for (size_t i = initialPointCount; i < localSolver.points.size(); ++i) {
-	newPoints.push_back(localSolver.points[i]);
+	accumulatedPoints.push_back(localSolver.points[i]);
       }
-      emit pointsReady(newPoints);
 
       // Invoke geometry solver same way as in GeometrySolverWorker.cpp
-      //
       bool nonlinear = m_computeMesh && localSolver.points.size () > 10;
 
       // Lens optimization is slow. Disable it for nonlinear transforms
@@ -55,14 +59,9 @@ void FinetuneMisregisteredWorker::run() {
       if (nonlinear || localSolver.points.size () < 30)
 	solverParamsCopy.optimize_lens = false;
 
-      //auto originalMesh = localScrToImg.mesh_trans;
-
       // colorscreen::solver modifies params in place
       colorscreen::solver(&localScrToImg, *m_scan, solverParamsCopy,
 			  m_progress.get());
-
-      //if (!nonlinear)
-	//localScrToImg.mesh_trans = originalMesh;
 
       if (m_progress && m_progress->cancelled())
 	break;
@@ -80,11 +79,29 @@ void FinetuneMisregisteredWorker::run() {
       if (m_progress && m_progress->cancelled())
 	break;
 
-      emit geometryReady(localScrToImg);
+      // Check if we should send updates to GUI
+      bool timeThreshold = lastUpdateTime.elapsed() >= 5000;
+      bool countThreshold = localSolver.points.size() >= (size_t)(pointsAtLastUpdate * 1.1 + 0.5);
+
+      if (timeThreshold || countThreshold) {
+	if (!accumulatedPoints.empty()) {
+	  emit pointsReady(accumulatedPoints);
+	  emit geometryReady(localScrToImg);
+	  accumulatedPoints.clear();
+	  pointsAtLastUpdate = localSolver.points.size();
+	  lastUpdateTime.restart();
+	}
+      }
     }
   } catch (...) {
     emit finished(false);
     return;
+  }
+
+  // Final update if something changed since last one
+  if (!accumulatedPoints.empty()) {
+    emit pointsReady(accumulatedPoints);
+    emit geometryReady(localScrToImg);
   }
 
   emit finished(true);

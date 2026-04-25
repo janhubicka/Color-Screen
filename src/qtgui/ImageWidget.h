@@ -222,6 +222,7 @@ private:
   double m_exploreTargetScale = 1.0;
   double m_exploreZoomSpeed = 0.15;
   bool m_zoomFocusCenter = false;
+  bool m_panAnimationActive = false;
   bool m_ignoreNextMouseMove = false;
 
   bool m_plusHeld = false;

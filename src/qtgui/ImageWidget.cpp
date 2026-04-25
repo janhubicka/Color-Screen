@@ -152,12 +152,11 @@ void ImageWidget::smoothFitToView() {
     if (targetScale == 0) targetScale = 1.0;
 
     m_exploreTargetScale = targetScale;
+    m_exploreTargetX = imgW / 2.0 - w / (2.0 * targetScale);
+    m_exploreTargetY = imgH / 2.0 - h / (2.0 * targetScale);
     m_exploreZoomSpeed = 0.35; // Fast
-    m_zoomFocusCenter = true;
-    
-    // Smoothly pan to center AT THE CURRENT SCALE
-    m_exploreTargetX = imgW / 2.0 - w / (2.0 * m_scale);
-    m_exploreTargetY = imgH / 2.0 - h / (2.0 * m_scale);
+    m_zoomFocusCenter = true; // Follow center of screen during zoom
+    m_panAnimationActive = true;
     
     if (!m_exploreTimer->isActive()) m_exploreTimer->start();
   }
@@ -167,6 +166,8 @@ void ImageWidget::setPan(double x, double y) {
   if (qAbs(x - m_viewX) > 0.1 || qAbs(y - m_viewY) > 0.1) {
     m_viewX = x;
     m_viewY = y;
+    m_exploreTargetX = x;
+    m_exploreTargetY = y;
     requestRender();
     if (m_renderQueue.hasActiveTasks() && !m_refreshTimer->isActive()) {
          m_refreshTimer->start();
@@ -240,6 +241,9 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
   }
 
   fitToView();
+  m_exploreTargetX = m_viewX;
+  m_exploreTargetY = m_viewY;
+  m_panAnimationActive = false;
 
   if (m_scan && m_rparams) {
     m_renderThread = new QThread(this);
@@ -387,11 +391,6 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
         
         double marginPixels = m_maxArrowLength + 20.0 * m_scale;
         
-        if (p_widget.x() < -marginPixels || p_widget.x() > width() + marginPixels ||
-            p_widget.y() < -marginPixels || p_widget.y() > height() + marginPixels) {
-            continue;
-        }
-
         if (p_widget.x() < -marginPixels || p_widget.x() > width() + marginPixels ||
             p_widget.y() < -marginPixels || p_widget.y() > height() + marginPixels) {
             continue;
@@ -848,6 +847,10 @@ void ImageWidget::resizeEvent(QResizeEvent *event) {
     // 4. Recalculate view position to keep the center point stable
     m_viewX = centerX - (newSize.width() / m_scale) / 2.0;
     m_viewY = centerY - (newSize.height() / m_scale) / 2.0;
+    if (!m_panAnimationActive) {
+      m_exploreTargetX = m_viewX;
+      m_exploreTargetY = m_viewY;
+    }
   }
   
   m_lastSize = newSize; // Update for next event
@@ -1003,6 +1006,8 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
     // Move view opposite to drag (m_viewX/Y are in transformed space already)
     m_viewX -= delta.x() / m_scale;
     m_viewY -= delta.y() / m_scale;
+    m_exploreTargetX = m_viewX;
+    m_exploreTargetY = m_viewY;
 
     requestRender();
     emit viewStateChanged(
@@ -1313,6 +1318,7 @@ void ImageWidget::wheelEvent(QWheelEvent *event) {
   m_exploreTargetScale *= factor;
   m_exploreZoomSpeed = 0.15;
   m_zoomFocusCenter = false;
+  m_panAnimationActive = false; // User took over with wheel
 
   if (!m_exploreTimer->isActive()) {
       m_exploreTimer->start();
@@ -1479,6 +1485,10 @@ void ImageWidget::pivotViewport(int oldRotIdx, int newRotIdx) {
     // Set new viewX/Y to maintain center
     m_viewX = newCenter_tr.x - (width() / m_scale) / 2.0;
     m_viewY = newCenter_tr.y - (height() / m_scale) / 2.0;
+    if (!m_panAnimationActive) {
+        m_exploreTargetX = m_viewX;
+        m_exploreTargetY = m_viewY;
+    }
 
     // Update m_minScale for the NEW orientation fit
     // This ensures subsequent resize events use the correct reference.
@@ -1689,15 +1699,13 @@ void ImageWidget::exploreTick() {
       
       m_viewX += shiftX;
       m_viewY += shiftY;
-      
-      m_exploreTargetX += shiftX;
-      m_exploreTargetY += shiftY;
       needsUpdate = true;
   } else {
       m_scale = m_exploreTargetScale;
   }
 
-  if (m_interactionMode == ExploreMode) {
+  // Perform pan animation if requested or in ExploreMode
+  if (!m_isDragging && (m_interactionMode == ExploreMode || m_panAnimationActive)) {
       double dx = m_exploreTargetX - m_viewX;
       double dy = m_exploreTargetY - m_viewY;
       
@@ -1717,6 +1725,11 @@ void ImageWidget::exploreTick() {
           
           m_viewX += moveX;
           m_viewY += moveY;
+          needsUpdate = true;
+      } else {
+          m_viewX = m_exploreTargetX;
+          m_viewY = m_exploreTargetY;
+          m_panAnimationActive = false;
           needsUpdate = true;
       }
   }
