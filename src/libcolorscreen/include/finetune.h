@@ -113,7 +113,7 @@ nodiscard_attr DLL_PUBLIC bool
 finetune_area (solver_parameters *sparam, render_parameters &rparam,
                const scr_to_img_parameters &param, const image_data &img,
                int_image_area area, progress_info *progress);
-bool
+nodiscard_attr DLL_PUBLIC bool
 finetune_misregistered_area (solver_parameters *solver, render_parameters &rparam,
 			     const scr_to_img_parameters &param, const image_data &img,
 			     int_image_area area, progress_info *progress);

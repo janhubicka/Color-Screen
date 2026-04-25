@@ -3742,7 +3742,8 @@ void MainWindow::onAutomaticallyAddPointsRequested() {
 
   // Create worker and thread
   FinetuneMisregisteredWorker *worker = new FinetuneMisregisteredWorker(
-      m_solverParams, m_rparams, m_scrToImgParams, m_scan, crop, progress);
+      m_solverParams, m_rparams, m_scrToImgParams, m_scan, crop, progress,
+      m_geometryPanel->isNonlinearEnabled());
   QThread *thread = new QThread();
   worker->moveToThread(thread);
 
@@ -3761,6 +3762,13 @@ void MainWindow::onAutomaticallyAddPointsRequested() {
           std::vector<colorscreen::solver_parameters::solver_point_t> points) {
         onFinetuneFinished(true, points, thread, progress);
       });
+  connect(worker, &FinetuneMisregisteredWorker::geometryReady, this,
+          [this](colorscreen::scr_to_img_parameters result) {
+            ParameterState newState = getCurrentState();
+            newState.scrToImg.merge_solver_solution(result);
+            changeParameters(newState,
+                             "Automatically add points (Geometry update)");
+          });
   connect(worker, &FinetuneMisregisteredWorker::finished, this,
           [this, thread, progress](bool success) {
             if (!success) {

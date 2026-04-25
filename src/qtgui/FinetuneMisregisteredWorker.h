@@ -20,7 +20,8 @@ public:
                               colorscreen::scr_to_img_parameters scrToImg,
                               std::shared_ptr<colorscreen::image_data> scan,
                               colorscreen::int_image_area area,
-                              std::shared_ptr<colorscreen::progress_info> progress);
+                              std::shared_ptr<colorscreen::progress_info> progress,
+                              bool computeMesh = false);
 
 public slots:
   void run();
@@ -29,6 +30,7 @@ signals:
   void finished(bool success);
   void pointsReady(
       std::vector<colorscreen::solver_parameters::solver_point_t> points);
+  void geometryReady(colorscreen::scr_to_img_parameters result);
 
 private:
   colorscreen::solver_parameters m_solverParams;
@@ -37,4 +39,5 @@ private:
   std::shared_ptr<colorscreen::image_data> m_scan;
   colorscreen::int_image_area m_area;
   std::shared_ptr<colorscreen::progress_info> m_progress;
+  bool m_computeMesh;
 };
