@@ -2548,7 +2548,7 @@ finetune (int argc, char **argv)
     {
       for (int x = 0; x < xsteps; x++)
         if (results[y * xsteps + x].success)
-          printf ("  %6.3f", results[y * xsteps + x].badness);
+          printf ("  %6.3f", results[y * xsteps + x].uncertainty);
         else
           printf ("  ------");
       printf ("\n");
@@ -2600,7 +2600,7 @@ finetune (int argc, char **argv)
               printf ("\n");
             }
         }
-      else if (flags & (finetune_scanner_mtf_defocus) && rparam.sharpen.scanner_mtf.simulate_difraction_p ())
+      else if (flags & (finetune_scanner_mtf_defocus) && rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
         {
           printf ("Detected scanner mtf defocus (mm)\n");
           for (int y = 0; y < ysteps; y++)
@@ -2614,7 +2614,7 @@ finetune (int argc, char **argv)
               printf ("\n");
             }
         }
-      else if (flags & (finetune_scanner_mtf_defocus) && !rparam.sharpen.scanner_mtf.simulate_difraction_p ())
+      else if (flags & (finetune_scanner_mtf_defocus) && !rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
         {
           printf ("Detected scanner mtf blur diameter (pixels)\n");
           for (int y = 0; y < ysteps; y++)
@@ -2749,7 +2749,7 @@ finetune (int argc, char **argv)
                                         * 0.5 * 65535,
                                     (coord_t)65535);
 		    double def;
-		    if (rparam.sharpen.scanner_mtf.simulate_difraction_p ())
+		    if (rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
 		      def = results[y * xsteps + x].scanner_mtf_defocus;
 		    else
 		      def = results[y * xsteps + x].scanner_mtf_blur_diameter;

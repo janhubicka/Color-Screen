@@ -28,7 +28,7 @@ enum finetune_flags : uint64_t
   finetune_no_normalize = 1 << 11,
   finetune_emulsion_blur = 1 << 12,
   finetune_verbose = 1 << 13,
-  finetune_use_srip_widths = 1 << 14,
+  finetune_use_strip_widths = 1 << 14,
   finetune_use_screen_blur = 1 << 15,
   finetune_simulate_infrared = 1 << 16,
   finetune_sharpening = 1 << 17,
@@ -59,7 +59,7 @@ struct finetune_result
   bool success = false;
   point_t tile_pos = { -1, -1 };
   coord_t badness = 12345;
-  coord_t uncertainity = 12345;
+  coord_t uncertainty = 12345;
   coord_t screen_blur_radius = -1;
   rgbdata screen_channel_blur_radius = { -1, -1, -1 };
   luminosity_t scanner_mtf_sigma = -1;

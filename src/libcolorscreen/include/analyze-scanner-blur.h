@@ -50,7 +50,7 @@ public:
 
 private:
   scanner_blur_correction_parameters::correction_mode mode;
-  histogram uncertainity_hist;
+  histogram uncertainty_hist;
   histogram red_hist;
   histogram green_hist;
   histogram blur_hist;

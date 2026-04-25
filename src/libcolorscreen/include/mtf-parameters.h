@@ -109,14 +109,14 @@ struct mtf_parameters
     return measured_mtf_idx >= 0 && measurements.size () > (size_t)measured_mtf_idx && measurements[measured_mtf_idx].size () > 2;
   }
   bool
-  can_simulate_difraction_p () const
+  can_simulate_diffraction_p () const
   {
     return pixel_pitch && f_stop && wavelength && scan_dpi;
   }
   bool
-  simulate_difraction_p () const
+  simulate_diffraction_p () const
   {
-    return !use_measured_mtf () && can_simulate_difraction_p ();
+    return !use_measured_mtf () && can_simulate_diffraction_p ();
   }
   bool
   operator== (const mtf_parameters &o) const
@@ -131,15 +131,15 @@ struct mtf_parameters
       return false;
     if (sigma != o.sigma || sensor_fill_factor != o.sensor_fill_factor)
       return false;
-    if (simulate_difraction_p ())
-      return o.simulate_difraction_p ()
+    if (simulate_diffraction_p ())
+      return o.simulate_diffraction_p ()
 	     && defocus == o.defocus
 	     && blur_diameter == o.blur_diameter
 	     && f_stop == o.f_stop
 	     && wavelength == o.wavelength
 	     && pixel_pitch == o.pixel_pitch
 	     && scan_dpi == o.scan_dpi;
-    else if (o.simulate_difraction_p ())
+    else if (o.simulate_diffraction_p ())
       return false;
     if (blur_diameter != o.blur_diameter)
       return false;

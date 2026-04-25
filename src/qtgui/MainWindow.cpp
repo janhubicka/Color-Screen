@@ -3519,7 +3519,7 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
   fparam.multitile = 3;
   fparam.flags |= colorscreen::finetune_position | colorscreen::finetune_bw |
                   colorscreen::finetune_verbose |
-                  colorscreen::finetune_use_srip_widths |
+                  colorscreen::finetune_use_strip_widths |
                   colorscreen::finetune_produce_images;
 
   auto progress = std::make_shared<colorscreen::progress_info>();
@@ -4012,7 +4012,7 @@ void MainWindow::onOptimizeCoordinates() {
   colorscreen::finetune_parameters fparams;
   fparams.flags = colorscreen::finetune_position |
                   colorscreen::finetune_coordinates | colorscreen::finetune_bw |
-                  colorscreen::finetune_use_srip_widths;
+                  colorscreen::finetune_use_strip_widths;
 
   std::vector<colorscreen::point_t> locs;
 

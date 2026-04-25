@@ -2250,7 +2250,7 @@ extern "C"
             finetune_parameters fparam;
             fparam.multitile = scale_x > 1 ? 3 : 1;
             fparam.flags |= finetune_position | finetune_bw | finetune_verbose
-                            | finetune_use_srip_widths;
+                            | finetune_use_strip_widths;
             if (tmphack)
               {
                 fparam.simulated_file = "/tmp/bwsimulated.tif";

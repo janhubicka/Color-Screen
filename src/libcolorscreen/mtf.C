@@ -459,7 +459,7 @@ public:
 	  p.defocus = get_defocus (m, vals);
 	else
 	  p.blur_diameter = get_blur_diameter (m, vals);
-	assert (difraction == p.simulate_difraction_p ());
+	assert (difraction == p.simulate_diffraction_p ());
 	/* Use double to avoid cummulation of an error */
 	double msum = 0;
 	for (size_t i = 0; i < measurement.size (); i++)
@@ -703,7 +703,7 @@ mtf_parameters::stokseth_defocus_mtf (double pixel_freq) const
 double
 mtf_parameters::lens_mtf (double pixel_freq) const
 {
-  if (simulate_difraction_p ())
+  if (simulate_diffraction_p ())
     return stokseth_defocus_mtf (pixel_freq) * lens_difraction_mtf (pixel_freq)
            * gaussian_blur_mtf (pixel_freq, sigma);
   else
@@ -719,7 +719,7 @@ mtf_parameters::lens_mtf (double pixel_freq) const
 double
 mtf_parameters::measured_mtf_correction (double pixel_freq) const
 {
-  if (simulate_difraction_p ())
+  if (simulate_diffraction_p ())
     return stokseth_defocus_mtf (pixel_freq)
            * gaussian_blur_mtf (pixel_freq, sigma);
   else

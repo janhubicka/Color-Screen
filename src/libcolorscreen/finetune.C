@@ -70,7 +70,6 @@ to_range (coord_t &v, coord_t min, coord_t max)
 /* V is in range 0...1 expand it to MINV...MAXV.
    Finetuning works well if values are generally kept
    in range 0...1.  */
-
 inline coord_t
 expand_range (coord_t v, coord_t minv, coord_t maxv)
 {
@@ -102,7 +101,7 @@ public:
     /* Tile positions */
     int txmin, tymin;
 
-    /* Tile colors collected form the scan for faster access.
+    /* Tile colors collected from the scan for faster access.
        nullptr for BW mode.  */
     rgbdata *color = nullptr;
     /* Sharpened tile.  */
@@ -135,6 +134,7 @@ public:
     /* We copy finetune solver to keep best one.
        This is kind of hack since clang on MacOS has problems with shared
        pointers.  */
+    /* Forget all data.  */
     void
     forget ()
     {
@@ -250,7 +250,7 @@ public:
   /* Try to optimize screen blur attribute (otherwise fixed_defocus is used, if
    * any).  */
   bool optimize_scanner_mtf_defocus;
-  /* Same but per-cannel.  */
+  /* Same but per-channel.  */
   bool optimize_scanner_mtf_channel_defocus;
   /* Try to optimize screen blur attribute (otherwise fixed_blur is used).  */
   bool optimize_screen_blur;
@@ -261,7 +261,7 @@ public:
   bool optimize_strips;
   /* Try to optimize dark point.  */
   bool optimize_fog;
-  /* Try to otimize for blur caused by film emulsion.  For this screen blur
+  /* Try to optimize for blur caused by film emulsion.  For this screen blur
      needs to be fixed.  */
   bool optimize_sharpening;
   /* Try to optimize sharpening radius and amount.  */
@@ -274,7 +274,7 @@ public:
   bool data_collection;
   /* Normalize colors for simulation to uniform intensity.  This is useful
      in RGB simulation to eliminate underlying silver image (which works as
-     netural density filter) of the input scan is linear.  */
+     neutral density filter) of the input scan is linear.  */
   bool normalize;
   /* Use simulated infrared channel when rendering.  */
   bool simulate_infrared;
@@ -298,7 +298,7 @@ public:
 
   /* Optimized values of red, green, blue for RGB simulation
      and optimized intensities for BW simulation.
-     Initialized by objfunc and can be reused after it
+     Initialized by objfunc and can be reused after it is computed
      since get_colors is expensive.  */
   double_rgbdata last_red, last_green, last_blue, last_color;
   double_rgbdata last_fog;
@@ -349,7 +349,8 @@ public:
            - noutliers;
   }
 
-  /* Return correction to the scr-to-img map.  */
+  /* Return correction to the scr-to-img map for TILEID.
+     Values are in vector V.  */
   point_t
   get_offset (coord_t *v, int tileid)
   {
@@ -366,7 +367,8 @@ public:
       return { v[tileid] * strips_range, 0 };
   }
 
-  /* Set correction to the scr-to-img-map.  Should be inverse of get_offset. */
+  /* Set correction to the scr-to-img-map OFF for TILEID.
+     Store values in vector V.  */
   void
   set_offset (coord_t *v, int tileid, point_t off)
   {
@@ -385,10 +387,8 @@ public:
       v[tileid] = off.x / strips_range;
   }
 
-  /* We simulate displacement between the image layer and emulsion.
-     For processes with removable screens this may be substantial.
-     For processes with integrated screens far less, but may be still non-zero
-     if scanner pictures in angle.   */
+  /* Return displacement between the image layer and emulsion for TILEID.
+     Values are in vector V.  */
   point_t
   get_emulsion_offset (coord_t *v, int tileid)
   {
@@ -412,7 +412,8 @@ public:
     else
       return { v[emulsion_offset_index + tileid] * (strips_range * 2), 0 };
   }
-  /* Inverse of get_emulsion_offset.  */
+  /* Set displacement between the image layer and emulsion OFF for TILEID.
+     Store values in vector V.  */
   void
   set_emulsion_offset (coord_t *v, int tileid, point_t off)
   {
@@ -437,7 +438,7 @@ public:
       v[emulsion_offset_index + tileid] = off.x / (2 * strips_range);
   }
 
-  /* Return current emulsion blur radius.  Value is in screen size.
+  /* Return current emulsion blur radius from vector V.  Value is in screen size.
      This does not use pixel_blur since physical emulsion is not dependent
      on scanner parameters.  */
   coord_t
@@ -451,7 +452,8 @@ public:
            + 0.03;
   }
 
-  /* Inverse of get_emulsion_blur_radius.  */
+  /* Set current emulsion blur radius BLUR.
+     Store values in vector V.  */
   void
   set_emulsion_blur_radius (coord_t *v, coord_t blur)
   {
@@ -462,23 +464,23 @@ public:
           = (blur - 0.03) / (screen::max_blur_radius * 0.2 - 0.03);
   }
 
-  /* Do pixel blurs in the range 0.3 ... screen::max_blur_radius / pixel_size.
+  /* Return pixel blur for value V.  Do pixel blurs in the range 0.3 ... screen::max_blur_radius / pixel_size.
      Value is in pixels, not screen size.
-
-     Scans are always bit blurred at pixel level, so 0.3 should be resonable
+     Scans are always bit blurred at pixel level, so 0.3 should be reasonable
      minima.  */
   coord_t
   pixel_blur (coord_t v)
   {
     return expand_range (v, 0.3, screen::max_blur_radius / pixel_size);
   }
+  /* Inverse of pixel_blur.  */
   coord_t
   rev_pixel_blur (coord_t v)
   {
     return shrink_range (v, 0.3, screen::max_blur_radius / pixel_size);
   }
 
-  /* Return sigma of screen. */
+  /* Return sigma of screen from vector V. */
   coord_t
   get_scanner_mtf_sigma (coord_t *v)
   {
@@ -487,12 +489,12 @@ public:
     return v[mtf_sigma_index];
   }
 
-  /* Return blur radius of screen. */
+  /* Return blur radius of screen from vector V. */
   coord_t
   get_scanner_mtf_defocus (coord_t *v)
   {
     if (!optimize_scanner_mtf_defocus && !optimize_scanner_mtf_channel_defocus)
-      return render_sharpen_params.scanner_mtf.simulate_difraction_p ()
+      return render_sharpen_params.scanner_mtf.simulate_diffraction_p ()
                  ? render_sharpen_params.scanner_mtf.defocus
                  : render_sharpen_params.scanner_mtf.blur_diameter;
     if (optimize_scanner_mtf_channel_defocus)
@@ -501,13 +503,13 @@ public:
              * (1 / (coord_t)3);
     return v[mtf_defocus_index];
   }
-  /* Return blur radius of screen. */
+  /* Return blur radius of screen for individual channels from vector V. */
   rgbdata
   get_scanner_mtf_channel_defocus (coord_t *v)
   {
     if (!optimize_scanner_mtf_defocus && !optimize_scanner_mtf_channel_defocus)
       {
-        auto r = render_sharpen_params.scanner_mtf.simulate_difraction_p ()
+        auto r = render_sharpen_params.scanner_mtf.simulate_diffraction_p ()
                      ? render_sharpen_params.scanner_mtf.defocus
                      : render_sharpen_params.scanner_mtf.blur_diameter;
         return { (luminosity_t)r, (luminosity_t)r, (luminosity_t)r };
@@ -522,7 +524,7 @@ public:
              (luminosity_t)v[mtf_defocus_index + 2] };
   }
 
-  /* Return blur radius of screen. */
+  /* Return blur radius of screen from vector V. */
   coord_t
   get_blur_radius (coord_t *v)
   {
@@ -534,6 +536,8 @@ public:
       return fixed_blur;
     return pixel_blur (v[screen_index]);
   }
+  /* Set blur radius BLUR.
+     Store values in vector V.  */
   void
   set_blur_radius (coord_t *v, coord_t blur)
   {
@@ -547,7 +551,7 @@ public:
   }
 
   /* Same as get_blur_radius but when optimizing blurs of individual
-     channels.  */
+     channels from vector V.  */
   rgbdata
   get_channel_blur_radius (coord_t *v)
   {
@@ -564,6 +568,7 @@ public:
              (luminosity_t)pixel_blur (v[screen_index + 2]) };
   }
 
+  /* Return red strip width from vector V.  */
   coord_t
   get_red_strip_width (coord_t *v)
   {
@@ -571,6 +576,7 @@ public:
       return fixed_red_width;
     return v[strips_index];
   }
+  /* Return green strip width from vector V.  */
   coord_t
   get_green_strip_width (coord_t *v)
   {
@@ -578,6 +584,8 @@ public:
       return fixed_green_width;
     return v[strips_index + 1];
   }
+  /* Set red strip width W.
+     Store values in vector V.  */
   void
   set_red_strip_width (coord_t *v, coord_t w)
   {
@@ -586,6 +594,8 @@ public:
     else
       v[strips_index] = w;
   }
+  /* Set green strip width W.
+     Store values in vector V.  */
   void
   set_green_strip_width (coord_t *v, coord_t w)
   {
@@ -595,7 +605,8 @@ public:
       v[strips_index + 1] = w;
   }
 
-  /* Get screen coordinates of a given pixel of a given tile.  */
+  /* Get screen coordinates of a given pixel P of a given tile TILEID.
+     Values are in vector V.  */
   point_t
   get_pos (coord_t *v, int tileid, int_point_t p)
   {
@@ -609,6 +620,7 @@ public:
     return noutliers;
   }
 
+  /* Output values in vector V.  */
   void
   print_values (coord_t *v)
   {
@@ -644,7 +656,7 @@ public:
     printf ("\n");
     if (least_squares)
       printf (" Estimating color using least squares %s\n",
-              fog_by_least_squares ? "(includin fog)" : "");
+              fog_by_least_squares ? "(including fog)" : "");
     if (data_collection)
       printf (" Estimating color using data collection with threshold %f\n",
               collection_threshold);
@@ -685,7 +697,7 @@ public:
       printf ("Scanner mtf sigma %f px\n", get_scanner_mtf_sigma (v));
     if (optimize_scanner_mtf_defocus)
       {
-        if (!render_sharpen_params.scanner_mtf.simulate_difraction_p ())
+        if (!render_sharpen_params.scanner_mtf.simulate_diffraction_p ())
           printf ("Scanner mtf blur diameter %f px\n",
                   get_scanner_mtf_defocus (v));
         else
@@ -694,7 +706,7 @@ public:
     if (optimize_scanner_mtf_channel_defocus)
       {
         rgbdata b = get_scanner_mtf_channel_defocus (v);
-        if (!render_sharpen_params.scanner_mtf.simulate_difraction_p ())
+        if (!render_sharpen_params.scanner_mtf.simulate_diffraction_p ())
           printf ("Scanner mtf blur diameter %f px (red) %f px (green) %f px "
                   "(blue)\n",
                   b.red, b.green, b.blue);
@@ -775,6 +787,7 @@ public:
       }
   }
 
+  /* Constrain values in vector V to reasonable range.  */
   void
   constrain (coord_t *v)
   {
@@ -1031,7 +1044,7 @@ public:
     gsl_cov = gsl_matrix_alloc (matrixw, matrixw);
   }
 
-  /* Initialize least square.
+  /* Initialize least square solver using values in vector V.
      Only those values which do not change during optimization are computed.
      Rest is done later.
 
@@ -1097,8 +1110,8 @@ public:
   }
 
   /* Used to set up optimization of tile TILEID
-     with left corner (TXMIN, TYMIN) and screen-to-image map MAP.
-     if BW is true, ignore color data.  */
+     with left corner (CUR_TXMIN, CUR_TYMIN) and screen-to-image map MAP.
+     if BW is true, ignore color data.  RENDER is used to fetch data.  */
   bool
   init_tile (int tileid, int cur_txmin, int cur_tymin, bool bw,
              scr_to_img &map, render &render)
@@ -1130,10 +1143,13 @@ public:
     return true;
   }
 
-  /* Init solver.   */
+  /* Init solver with FLAGS, BLUR_RADIUS, RED_STRIP_WIDTH, GREEN_STRIP_WIDTH.
+     If SIM_INFRARED is true, simulate infrared channel.
+     IS_TILE_SHARPENED indicates if tile is already sharpened.
+     RESULTS are previous results if any.  */
   void
   init (uint64_t flags, coord_t blur_radius, coord_t red_strip_width,
-        coord_t green_strip_height, bool sim_infrared, bool is_tile_sharpened,
+        coord_t green_strip_width, bool sim_infrared, bool is_tile_sharpened,
         const std::vector<finetune_result> *results)
   {
     bw_is_simulated_infrared = sim_infrared;
@@ -1245,13 +1261,7 @@ public:
         for (int i = 0; i < n_tiles; i++)
           tiles[i].sharpened_color
               = (rgbdata *)malloc (twidth * theight * sizeof (rgbdata));
-#if 0
-	/* Determine minimal meaningful sharpening radius.  */
-	for (min_nonone_clen = 0; fir_blur::convolve_matrix_length (min_nonone_clen) <= 1; min_nonone_clen += 0.00001)
-		;
-#endif
-        /* Smaller sharpen radius than 0.3 makes essentially no difference on
-           the image, so we waste effort optimizing amount.  */
+        /* Determine minimum meaningful sharpening radius.  */
         min_nonone_clen = 0.3;
       }
     else
@@ -1336,7 +1346,7 @@ public:
     else
       emulsion_blur_index = -1;
 
-    /* Screen index has different meanings depeding on how well
+    /* Screen index has different meanings depending on how well
        we want to estimate the blur.  */
     if (optimize_screen_channel_blurs)
       {
@@ -1390,7 +1400,7 @@ public:
           assert (start[i] == INT_MAX);
       }
 
-    /* Allocate also memory for all simulatoins.  */
+    /* Allocate also memory for all simulations.  */
     original_scr = std::shared_ptr<screen> (new screen);
     if (optimize_emulsion_blur)
       emulsion_scr = std::shared_ptr<screen> (new screen);
@@ -1430,7 +1440,7 @@ public:
                                (*results)[tileid].emulsion_coord_adjust);
         }
 
-    /* Always start from scratch with sharpening; otherwise the optimizer thens
+    /* Always start from scratch with sharpening; otherwise the optimizer tends
        to pick up very large values.  */
     if (sharpen_index >= 0)
       {
@@ -1467,7 +1477,7 @@ public:
       for (int tileid = 0; tileid < 3 * n_tiles - 1; tileid++)
         start[emulsion_intensity_index + tileid] = 1 / 3.0;
     /* Starting from small blur seems to work better, since other parameters
-       are then more relevant.  Sane scanner lens blurs close to Nqyist
+       are then more relevant.  Sane scanner lens blurs are close to Nyquist
        frequency.  */
     if (optimize_emulsion_blur)
       {
@@ -1500,7 +1510,7 @@ public:
           = rev_pixel_blur (0.3);
     else
       {
-        /* Optimization seem to work better when it starts from small blur.  */
+        /* Optimizations seem to work better when it starts from small blur.  */
         if (optimize_screen_blur && !results)
           {
             if (!(flags & finetune_use_screen_blur))
@@ -1541,10 +1551,10 @@ public:
       }
     /* TODO: Maybe we want to use previous results and start from params by
      * default.  */
-    if (flags & finetune_use_srip_widths)
+    if (flags & finetune_use_strip_widths)
       {
         set_red_strip_width (start, red_strip_width);
-        set_green_strip_width (start, green_strip_height);
+        set_green_strip_width (start, green_strip_width);
       }
     /* Default Dufaycolor strip widths.  */
     else if (type == Dufay)
@@ -1552,7 +1562,7 @@ public:
         set_red_strip_width (start, dufaycolor::red_strip_width);
         set_green_strip_width (start, dufaycolor::green_strip_width);
       }
-    /* Dioptichromes seems to be printed with strips of equal widths.  */
+    /* Dioptichromes seem to be printed with strips of equal widths.  */
     else if (dufay_like_screen_p (type))
       {
         set_red_strip_width (start, 0.5);
@@ -1657,7 +1667,8 @@ public:
           rgbdata[simulated_screen_width * simulated_screen_height];
   }
 
-  /* Invoke solver.  if REPORT is true, set progress report.
+  /* Invoke solver.  If REPORT is true, set progress report.
+     PROGRESS is used to report progress.
      This may be disabled if we run in OpenMP parallel.  */
   coord_t
   solve (progress_info *progress, bool report)
@@ -1680,14 +1691,16 @@ public:
     return uncertainty;
   }
 
-  /* Getpixel for simulated screen.  */
+  /* Get screen pixel for simulated screen TILE at point P.  */
   rgbdata
   get_simulated_screen_pixel (int tile, int_point_t p)
   {
     return tiles[tile].simulated_screen[p.y * simulated_screen_width + p.x];
   }
 
-  /* Apply blur to SRC_SCR and compute DST_SCR.  */
+  /* Apply blur to SRC_SCR and compute DST_SCR.
+     Values are in vector V.  TILEID is the tile ID.
+     If WEIGHT_SCR is non-null, use it as a weight screen.  */
   void
   apply_blur (coord_t *v, int tileid, screen *dst_scr, screen *src_scr,
               screen *weight_scr = nullptr)
@@ -1742,7 +1755,7 @@ public:
         sp.scanner_mtf.sigma = get_scanner_mtf_sigma (v);
         sp.scanner_mtf_scale *= pixel_size;
         // sp.mode = sharpen_parameters::none;
-        if (sp.scanner_mtf.simulate_difraction_p ())
+        if (sp.scanner_mtf.simulate_diffraction_p ())
           {
             sp.scanner_mtf.defocus = get_scanner_mtf_defocus (v);
             if (tiles[0].color)
@@ -1790,6 +1803,7 @@ public:
       dst_scr->initialize_with_blur (*src_scr, blur * pixel_size);
   }
 
+  /* Initialize screen for tile TILEID using values in vector V.  */
   void
   init_screen (coord_t *v, int tileid)
   {
@@ -1798,16 +1812,16 @@ public:
     luminosity_t scanner_mtf_sigma = get_scanner_mtf_sigma (v);
     rgbdata scanner_mtf_defocus = get_scanner_mtf_channel_defocus (v);
     luminosity_t red_strip_width = get_red_strip_width (v);
-    luminosity_t green_strip_height = get_green_strip_width (v);
+    luminosity_t green_strip_width = get_green_strip_width (v);
     rgbdata intensities = get_emulsion_intensities (v, tileid);
     point_t emulsion_offset = get_emulsion_offset (v, tileid);
 
     bool updated = false;
-    if (red_strip_width != last_width || green_strip_height != last_height)
+    if (red_strip_width != last_width || green_strip_width != last_height)
       {
-        original_scr->initialize (type, red_strip_width, green_strip_height);
+        original_scr->initialize (type, red_strip_width, green_strip_width);
         last_width = red_strip_width;
-        last_height = green_strip_height;
+        last_height = green_strip_width;
         updated = true;
       }
 
@@ -1843,7 +1857,7 @@ public:
       }
   }
 
-  /* Determine color of screen at pixel X,Y with offset OFF.  */
+  /* Determine color of screen at pixel X,Y with offset OFF for TILEID.  */
   pure_attr inline rgbdata
   evaluate_screen_pixel (int tileid, int x, int y, point_t off)
   {
@@ -1868,8 +1882,10 @@ public:
     return m * ((coord_t)1.0 / 25);
   }
 
-  /* Evaluate pixel at (x,y) using RGB values v and offsets offx, offy
-     compensating coordinates stored in tile_pos.  */
+  /* Evaluate pixel at (X,Y) using RGB values RED, GREEN, BLUE and offsets OFF
+     compensating coordinates stored in tile_pos.
+     Values are in vector V.  TILEID is the tile ID.
+     MIX_WEIGHTS and MIX_DARK are used for infrared simulation.  */
   pure_attr inline rgbdata
   evaluate_pixel (coord_t *v, int tileid, double_rgbdata red,
                   double_rgbdata green, double_rgbdata blue, int x, int y,
@@ -1889,6 +1905,7 @@ public:
     return c;
   }
 
+  /* Simulate screen for TILEID using values in vector V.  */
   void
   simulate_screen (coord_t *v, int tileid)
   {
@@ -1900,8 +1917,8 @@ public:
             = evaluate_screen_pixel (tileid, x, y, off);
   }
 
-  /* Evaluate pixel at (x,y) using RGB values v and offsets offx, offy
-     compensating coordinates stored in tile_pos.  */
+  /* Evaluate pixel at (X,Y) using COLOR and offset OFF for TILEID.
+     This is used for black and white mode.  */
   pure_attr inline luminosity_t
   bw_evaluate_pixel (int tileid, double_rgbdata color, int x, int y,
                      point_t off)
@@ -2046,7 +2063,7 @@ public:
                                         double_rgbdata *green,
                                         double_rgbdata *blue)
   {
-    /* Use double to not cummulate errors.  */
+    /* Use double to not accumulate errors.  */
     double sqsum = 0;
 
     if (!least_squares_initialized)
@@ -2104,8 +2121,8 @@ public:
                   gsl_vector_set (gsl_y[0], e, d.green);
                   e++;
 
-                  /* red.red * mix_weights.red + red.green + mix_weights.green
-                     + red.blue + mix_weigts.blue = sum gives: red.blue = (sum
+                  /* red.red * mix_weights.red + red.green * mix_weights.green
+                     + red.blue * mix_weights.blue = sum gives: red.blue = (sum
                      - red.red * mix_weights.red - red.green *
                      mix_weights.green) / mix_weights.blue
 
@@ -2300,9 +2317,9 @@ public:
     double wr = 0, wg = 0, wb = 0;
 
     /* This follows same algorithm as data collection in analyze_base.
-       We collect data only if screen has intensity greater then zero
+       We collect data only if screen has intensity greater than zero
        in given channel.  We also make statistics on how much saturation
-       this process can loss and reverts that.  */
+       this process can lose and reverts that.  */
     for (int tileid = 0; tileid < n_tiles; tileid++)
       for (int y = border; y < theight - border; y++)
         for (int x = border; x < twidth - border; x++)
@@ -2538,11 +2555,11 @@ public:
   coord_t
   objfunc (coord_t *v)
   {
-    /* Use double to avoid accumulation of roundoff error.  */
+    /* Use double to avoid accumulation of round-off error.  */
     double sum = 0;
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
-        /* FIXME: parallelism is disabled because sometimes we are called form
+        /* FIXME: parallelism is disabled because sometimes we are called from
          * parallel block.  */
         if (tiles[tileid].sharpened_color
             && tiles[tileid].sharpened_color != tiles[tileid].color)
@@ -2777,7 +2794,7 @@ public:
         for (int y = border; y < theight - border; y++)
           for (int x = border; x < twidth - border; x++)
             {
-              luminosity_t c = bw_evaulate_pixel (tileid, color, x, y, off);
+              luminosity_t c = bw_evaluate_pixel (tileid, color, x, y, off);
               luminosity_t d = bw_get_pixel (tileid, { x, y });
               coord_t err = fabs (c - d);
               hist.account (err);
@@ -2788,7 +2805,7 @@ public:
         for (int y = border; y < theight - border; y++)
           for (int x = border; x < twidth - border; x++)
             {
-              luminosity_t c = bw_evaulate_pixel (tileid, color, x, y, off);
+              luminosity_t c = bw_evaluate_pixel (tileid, color, x, y, off);
               luminosity_t d = bw_get_pixel (tileid, { x, y });
               coord_t err = fabs (c - d);
               if (err > merr)
@@ -2856,7 +2873,7 @@ public:
                   case 0:
                     {
                       rgbdata c
-                          = evaulate_pixel (v, tileid, red, green, blue, x, y,
+                          = evaluate_pixel (v, tileid, red, green, blue, x, y,
                                             off, mix_weights, mix_dark);
                       img->put_linear_pixel (
                           x, y,
@@ -2874,7 +2891,7 @@ public:
                   case 2:
                     {
                       rgbdata c
-                          = evaulate_pixel (v, tileid, red, green, blue, x, y,
+                          = evaluate_pixel (v, tileid, red, green, blue, x, y,
                                             off, mix_weights, mix_dark);
                       rgbdata d = c - get_pixel (v, tileid, { x, y });
                       img->put_linear_pixel (
@@ -2904,7 +2921,7 @@ public:
         for (int y = 0; y < theight; y++)
           for (int x = 0; x < twidth; x++)
             {
-              lmax = std::max (bw_evaulate_pixel (tileid, color, x, y, off),
+              lmax = std::max (bw_evaluate_pixel (tileid, color, x, y, off),
                                lmax);
               lmax = std::max (bw_get_pixel (tileid, { x, y }), lmax);
             }
@@ -2933,7 +2950,7 @@ public:
                   case 2:
                     {
                       luminosity_t c
-                          = bw_evaulate_pixel (tileid, color, x, y, off);
+                          = bw_evaluate_pixel (tileid, color, x, y, off);
                       luminosity_t d
                           = (c - bw_get_pixel (tileid, { x, y })) / lmax + 0.5;
                       img->put_linear_pixel (x, y, { d, d, d });
@@ -2983,7 +3000,7 @@ public:
         for (int y = 0; y < theight; y++)
           for (int x = 0; x < twidth; x++)
             {
-              rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y,
+              rgbdata c = evaluate_pixel (v, tileid, red, green, blue, x, y,
                                           off, mix_weights, mix_dark);
               rmax = std::max (c.red, rmax);
               gmax = std::max (c.green, gmax);
@@ -3004,7 +3021,7 @@ public:
                   case 0:
                     {
                       rgbdata c
-                          = evaulate_pixel (v, tileid, red, green, blue, x, y,
+                          = evaluate_pixel (v, tileid, red, green, blue, x, y,
                                             off, mix_weights, mix_dark);
                       rendered.put_pixel (
                           x, invert_gamma (c.red / rmax, -1) * 65535,
@@ -3024,7 +3041,7 @@ public:
                   case 2:
                     {
                       rgbdata c
-                          = evaulate_pixel (v, tileid, red, green, blue, x, y,
+                          = evaluate_pixel (v, tileid, red, green, blue, x, y,
                                             off, mix_weights, mix_dark);
                       rgbdata d = get_pixel (v, tileid, { x, y });
                       rendered.put_pixel (
@@ -3055,7 +3072,7 @@ public:
         for (int y = 0; y < theight; y++)
           for (int x = 0; x < twidth; x++)
             {
-              lmax = std::max (bw_evaulate_pixel (tileid, color, x, y, off),
+              lmax = std::max (bw_evaluate_pixel (tileid, color, x, y, off),
                                lmax);
               lmax = std::max (bw_get_pixel (tileid, { x, y }), lmax);
             }
@@ -3070,7 +3087,7 @@ public:
                   case 0:
                     {
                       luminosity_t c
-                          = bw_evaulate_pixel (tileid, color, x, y, off);
+                          = bw_evaluate_pixel (tileid, color, x, y, off);
                       rendered.put_pixel (x, c * 65535 / lmax,
                                           c * 65535 / lmax, c * 65535 / lmax);
                     }
@@ -3085,7 +3102,7 @@ public:
                   case 2:
                     {
                       luminosity_t c
-                          = bw_evaulate_pixel (tileid, color, x, y, off);
+                          = bw_evaluate_pixel (tileid, color, x, y, off);
                       luminosity_t d = bw_get_pixel (tileid, { x, y });
                       rendered.put_pixel (x,
                                           (c - d) * 65535 / lmax + 65536 / 2,
@@ -3120,7 +3137,7 @@ public:
     ret.center = param.center + get_offset (start, 0);
     ret.coordinate1 = param.coordinate1;
     ret.coordinate2 = param.coordinate2;
-    if (render_sharpen_params.scanner_mtf.simulate_difraction_p ())
+    if (render_sharpen_params.scanner_mtf.simulate_diffraction_p ())
       {
         ret.scanner_mtf_defocus = get_scanner_mtf_defocus (start);
         ret.scanner_mtf_blur_diameter
@@ -3268,7 +3285,10 @@ public:
 };
 } // namespace
 
-/* Finetune parameters and update RPARAM.  */
+/* Finetune parameters and update RPARAM.
+   PARAM is scr-to-img parameters.  IMG is the image data.
+   LOCS are tile locations.  RESULTS are previous results.
+   FPARAMS are finetune parameters.  PROGRESS is used to report progress.  */
 
 finetune_result
 finetune (render_parameters &rparam, const scr_to_img_parameters &param,
@@ -3820,10 +3840,13 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
 
 /* Simulate data collection of scan of given color screen (assumed to be
    blurred) and return collected red, green and blue.  This can be used to
-   increase color saturation to compensate loss caused by the collection.
+   increase color saturation to compensate losses caused by the collection.
 
-   src is screen used to render the pattern, while collection_str is used to do
-   the data collection*/
+   RET_RED, RET_GREEN, RET_BLUE are returned colors.
+   SCR is screen used to render the pattern, while COLLECTION_SCR is used to do
+   the data collection.  SIMULATED_SCREEN is optional simulated screen.
+   THRESHOLD is the collection threshold.  SHARPEN_PARAM are sharpen parameters.
+   MAP is the scr-to-img map.  XMIN, YMIN, XMAX, YMAX define the area.  */
 
 bool
 determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
@@ -3937,7 +3960,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       std::vector<rgbdata> rendered (xsize * ysize);
 
       /* Render screen.
-         Scanner MTF already esimtates sensor loss; so we should not need to
+         Scanner MTF already estimates sensor loss; so we should not need to
          antialias.  */
       if (sharpen_param.scanner_mtf_scale)
         for (int y = ymin - ext; y <= ymax + ext; y++)
@@ -3952,7 +3975,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 
       /* Sharpen it  */
       std::vector<rgbdata> rendered2 (xsize * ysize);
-      /* FIXME: parallelism is disabled because sometimes we are called form
+      /* FIXME: parallelism is disabled because sometimes we are called from
        * parallel block.  */
       if (!sharpen_param.deconvolution_p ())
         sharpen<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
@@ -4080,11 +4103,11 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
   *ret_green = green;
   *ret_blue = blue;
 #else
-  *ret_red = (rgbdata){ (luminosity_t)red.red, (luminosity_t)green.red,
-                        (luminosity_t)blue.red };
-  *ret_green = (rgbdata){ (luminosity_t)red.green, (luminosity_t)green.green,
-                          (luminosity_t)blue.green };
-  *ret_blue = (rgbdata){ (luminosity_t)red.blue, (luminosity_t)green.blue,
+  *ret_red = (rgbdata){ (luminosity_t)red.red, (luminosity_t)red.green,
+                        (luminosity_t)red.blue };
+  *ret_green = (rgbdata){ (luminosity_t)green.red, (luminosity_t)green.green,
+                          (luminosity_t)green.blue };
+  *ret_blue = (rgbdata){ (luminosity_t)blue.red, (luminosity_t)blue.green,
                          (luminosity_t)blue.blue };
 #endif
 #if 0
@@ -4095,9 +4118,6 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 #endif
   return true;
 }
-
-/* Render screen to IMG.  This is used for unit-testing of the screen
-   discovery.  */
 
 /* Render simulated screen pattern to IMG using parameters PARAM, RPARAM and
    DPARAM.  The image is rendered in resolution WIDTH x HEIGHT.  */

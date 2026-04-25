@@ -66,7 +66,7 @@ analyze_scanner_blur_worker::step1 ()
   mode = scanner_blur_correction_parameters::blur_radius;
   if (flags
       & (finetune_scanner_mtf_defocus | finetune_scanner_mtf_channel_defocus))
-    mode = rparam.sharpen.scanner_mtf.simulate_difraction_p ()
+    mode = rparam.sharpen.scanner_mtf.simulate_diffraction_p ()
                ? scanner_blur_correction_parameters::mtf_defocus
                : scanner_blur_correction_parameters::mtf_blur_diameter;
   {
@@ -135,24 +135,24 @@ analyze_scanner_blur_worker::step2 ()
           {
             finetune_result &res = prepass[y * strip_xsteps + x];
             if (res.success)
-              uncertainity_hist.pre_account (res.uncertainity);
+              uncertainty_hist.pre_account (res.uncertainty);
           }
-      uncertainity_hist.finalize_range (65536);
+      uncertainty_hist.finalize_range (65536);
       for (int y = 0; y < strip_ysteps; y++)
         for (int x = 0; x < strip_xsteps; x++)
           {
             finetune_result &res = prepass[y * strip_xsteps + x];
             if (res.success)
-              uncertainity_hist.account (res.uncertainity);
+              uncertainty_hist.account (res.uncertainty);
           }
-      uncertainity_hist.finalize ();
-      coord_t uncertainity_threshold
-          = uncertainity_hist.find_max (skipmax / 100.0);
+      uncertainty_hist.finalize ();
+      coord_t uncertainty_threshold
+          = uncertainty_hist.find_max (skipmax / 100.0);
       for (int y = 0; y < strip_ysteps; y++)
         for (int x = 0; x < strip_xsteps; x++)
           {
             finetune_result &res = prepass[y * strip_xsteps + x];
-            if (!res.success || res.uncertainity > uncertainity_threshold)
+            if (!res.success || res.uncertainty > uncertainty_threshold)
               continue;
             if (screen_with_varying_strips_p (param.type))
               {
@@ -178,7 +178,7 @@ analyze_scanner_blur_worker::step2 ()
         for (int x = 0; x < strip_xsteps; x++)
           {
             finetune_result &res = prepass[y * strip_xsteps + x];
-            if (!res.success || res.uncertainity > uncertainity_threshold)
+            if (!res.success || res.uncertainty > uncertainty_threshold)
               continue;
             if (screen_with_varying_strips_p (param.type))
               {
@@ -319,7 +319,7 @@ analyze_scanner_blur_worker::step3 ()
     for (int x = 0; x < xsteps; x++)
       {
         int nok = 0;
-        histogram uncertainity_hist;
+        histogram uncertainty_hist;
         for (int yy = 0; yy < ysubsteps; yy++)
           for (int xx = 0; xx < xsubsteps; xx++)
             {
@@ -327,9 +327,9 @@ analyze_scanner_blur_worker::step3 ()
                   = mainpass[(y * ysubsteps + yy) * xsteps * xsubsteps
                              + x * xsubsteps + xx];
               if (res.success)
-                uncertainity_hist.pre_account (res.uncertainity);
+                uncertainty_hist.pre_account (res.uncertainty);
             }
-        uncertainity_hist.finalize_range (65536);
+        uncertainty_hist.finalize_range (65536);
         for (int yy = 0; yy < ysubsteps; yy++)
           for (int xx = 0; xx < xsubsteps; xx++)
             {
@@ -337,11 +337,11 @@ analyze_scanner_blur_worker::step3 ()
                   = mainpass[(y * ysubsteps + yy) * xsteps * xsubsteps
                              + x * xsubsteps + xx];
               if (res.success)
-                uncertainity_hist.account (res.uncertainity);
+                uncertainty_hist.account (res.uncertainty);
             }
-        uncertainity_hist.finalize ();
-        coord_t uncertainity_threshold
-            = uncertainity_hist.find_max (skipmax / 100.0);
+        uncertainty_hist.finalize ();
+        coord_t uncertainty_threshold
+            = uncertainty_hist.find_max (skipmax / 100.0);
         histogram hist;
         for (int yy = 0; yy < ysubsteps; yy++)
           for (int xx = 0; xx < xsubsteps; xx++)
@@ -349,7 +349,7 @@ analyze_scanner_blur_worker::step3 ()
               finetune_result &res
                   = mainpass[(y * ysubsteps + yy) * xsteps * xsubsteps
                              + x * xsubsteps + xx];
-              if (!res.success || res.uncertainity > uncertainity_threshold)
+              if (!res.success || res.uncertainty > uncertainty_threshold)
                 continue;
               nok++;
               hist.pre_account (get_correction (mode, res));

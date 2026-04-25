@@ -285,7 +285,7 @@ void SharpnessPanel::setupUi() {
   // Defocus
   // Range 0.0 - 10.0 mm
   // Non-linear Gamma 2.0 (slow start)
-  // Enabled only if simulate_difraction_p()
+  // Enabled only if simulate_diffraction_p()
   addSliderParameter(
       "Defocus", 0.0, 10.0, 1000.0, 3, "mm", "",
       [](const ParameterState &s) {
@@ -296,13 +296,13 @@ void SharpnessPanel::setupUi() {
       },
       2.0, // Gamma
       [](const ParameterState &s) {
-        return s.rparams.sharpen.scanner_mtf.simulate_difraction_p();
+        return s.rparams.sharpen.scanner_mtf.simulate_diffraction_p();
       }, false, "Simulates optical defocus in millimeters. This affects the MTF by introducing a sinc-like suppression of high frequencies.");
 
   // Blur diameter
   // Range 0.0 - 20.0 pixels
   // Non-linear Gamma 2.0 (slow start)
-  // Enabled only if !simulate_difraction_p()
+  // Enabled only if !simulate_diffraction_p()
   addSliderParameter(
       "Blur diameter", 0.0, 20.0, 1000.0, 2, "pixels", "",
       [](const ParameterState &s) {
@@ -313,7 +313,7 @@ void SharpnessPanel::setupUi() {
       },
       2.0, // Gamma
       [](const ParameterState &s) {
-        return !s.rparams.sharpen.scanner_mtf.simulate_difraction_p();
+        return !s.rparams.sharpen.scanner_mtf.simulate_diffraction_p();
       }, false, "Simulates a uniform \"box\" blur of a specific diameter in pixels. Used when diffraction simulation is disabled.");
 
 
@@ -521,7 +521,7 @@ void SharpnessPanel::updateMTFChart() {
 
   // Pass simulation flag to chart
   bool canSimulateDifraction =
-      state.rparams.sharpen.scanner_mtf.simulate_difraction_p();
+      state.rparams.sharpen.scanner_mtf.simulate_diffraction_p();
   // Calculate screen frequency if applicable
   double screenFreq = -1;
   auto img = m_imageGetter();
@@ -546,7 +546,7 @@ void SharpnessPanel::updateMTFChart() {
   }
 
   // Update diffraction notice
-  bool canSimulate = state.rparams.sharpen.scanner_mtf.can_simulate_difraction_p();
+  bool canSimulate = state.rparams.sharpen.scanner_mtf.can_simulate_diffraction_p();
   if (canSimulate) {
       m_diffractionNotice->hide();
   } else {
