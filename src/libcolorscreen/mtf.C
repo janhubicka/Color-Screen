@@ -1,3 +1,7 @@
+/* Modulation transfer function and point spread function computation.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #include "include/tiff-writer.h"
 #include "lru-cache.h"
 #include "mtf.h"
@@ -27,7 +31,9 @@ get_j1 (double x)
 #endif
 }
 
-/* Return MTF of given blur circle diameter and given frequency.
+/* Return MTF of circular blur.
+   FREQ is the spatial frequency.
+   BLUR_CIRCLE_DIAMETER is the diameter of the blur circle.
    This is model for small defocus that does not seem to work that well.
    See Hopkins model below.  */
 double
@@ -39,10 +45,12 @@ defocus_mtf (double freq, double blur_circle_diameter)
 
   /* The transfer function of a circular blur is 2*J1(x)/x  */
   double arg = M_PI * freq * blur_circle_diameter;
-  return std::abs (2.0 * get_j1 (arg) / arg);
+  return my_fabs (2.0 * get_j1 (arg) / arg);
 }
 
-/* Return MTF of gaussian blur with a given sigma.  */
+/* Return MTF of gaussian blur.
+   FREQ is the spatial frequency.
+   SIGMA is the standard deviation of the Gaussian.  */
 double
 gaussian_blur_mtf (double freq, double sigma)
 {
@@ -54,10 +62,10 @@ gaussian_blur_mtf (double freq, double sigma)
 double
 sinc (double x)
 {
-  x = std::abs (x);
+  x = my_fabs (x);
   if (x < 1e-6)
     return 1.0; /* Avoid division by zero (Taylor expansion limit)  */
-  return std::sin (M_PI * x) / (M_PI * x);
+  return my_sin (M_PI * x) / (M_PI * x);
 }
 
 #if 0
@@ -217,7 +225,7 @@ public:
   mtf_solver (const mtf_parameters &params, const std::vector <mtf_measurement> &measured, 
               progress_info *progress, bool verbose)
       : m_measurements (measured), m_params (params), m_progress (progress),
-        be_verbose (verbose), start_vec (), start (NULL), difraction (false), 
+        be_verbose (verbose), start_vec (), start (nullptr), diffraction (false), 
 	nvalues (0), n_observations (0), sigma_index (-1), fill_factor_index (-1),
 	wavelength_index (), channel_wavelength_index (), blur_index (),
 	f_stop_index (-1)
@@ -234,92 +242,92 @@ public:
 	  }
         else
           sigma_index = -1;
-	int cur_blur_index = -1;
-	for (size_t m = 0; m < m_measurements.size (); m++)
-	  {
-	    if (!m_measurements[m].same_capture)
-	      cur_blur_index = -1;
-	    wavelength_index.push_back (-1);
-	    if (!m_params.blur_diameter)
-	      {
-		if (cur_blur_index == -1)
-		  {
-		    start_vec.push_back (0);
-		    cur_blur_index = nvalues;
-		    blur_index.push_back (nvalues++);
-		  }
-		else
-		  blur_index.push_back (cur_blur_index);
-	      }
-	    else
-	      blur_index.push_back(-1);
-	  }
-        difraction = false;
-      }
-    else
+    int cur_blur_index = -1;
+    for (const auto &measurement : m_measurements)
       {
-        difraction = true;
-        if (!m_params.f_stop)
+        if (!measurement.same_capture)
+          cur_blur_index = -1;
+        wavelength_index.push_back (-1);
+        if (!m_params.blur_diameter)
           {
-	    start_vec.push_back (8);
-            f_stop_index = nvalues++;
+            if (cur_blur_index == -1)
+              {
+                start_vec.push_back (0);
+                cur_blur_index = nvalues;
+                blur_index.push_back (nvalues++);
+              }
+            else
+              blur_index.push_back (cur_blur_index);
           }
         else
-          f_stop_index = -1;
-        if (!m_params.sigma)
-	  {
-	    start_vec.push_back (0);
-            sigma_index = nvalues++;
-	  }
-        else
-          sigma_index = -1;
-	int cur_defocus_index = -1;
-	for (size_t m = 0; m < m_measurements.size (); m++)
-	  {
-	    if (!m_measurements[m].same_capture)
-	      cur_defocus_index = -1;
-	    if (!m_params.defocus)
-	      {
-		if (cur_defocus_index == -1)
-		  {
-		    start_vec.push_back (0);
-		    cur_defocus_index = nvalues;
-		    blur_index.push_back (nvalues++);
-		  }
-		else
-		  blur_index.push_back (cur_defocus_index);
-	      }
-	    else
-	      blur_index.push_back (-1);
-	    if (m_measurements[m].channel >= 0)
-	      {
-		int c = m_measurements[m].channel;
-		wavelength_index.push_back (-1);
-		if (m_params.wavelengths[c] > 0
-		    || channel_wavelength_index[c] >= 0)
-		  ;
-		else
-		  {
-		    start_vec.push_back (0.5);
-		    channel_wavelength_index [c] = nvalues++;
-		  }
-	      }
-	    else if (!m_measurements[m].wavelength)
-	      {
-		start_vec.push_back (0.5);
-		wavelength_index.push_back (nvalues++);
-	      }
-	    else
-	      wavelength_index.push_back (-1);
-	  }
-        if (!m_params.sensor_fill_factor)
-	  {
-	    start_vec.push_back (1);
-            fill_factor_index = nvalues++;
-	  }
-        else
-          fill_factor_index = -1;
+          blur_index.push_back(-1);
       }
+    diffraction = false;
+  }
+  else
+  {
+    diffraction = true;
+    if (!m_params.f_stop)
+      {
+        start_vec.push_back (8);
+        f_stop_index = nvalues++;
+      }
+    else
+      f_stop_index = -1;
+    if (!m_params.sigma)
+      {
+        start_vec.push_back (0);
+        sigma_index = nvalues++;
+      }
+    else
+      sigma_index = -1;
+    int cur_defocus_index = -1;
+    for (const auto &measurement : m_measurements)
+      {
+        if (!measurement.same_capture)
+          cur_defocus_index = -1;
+        if (!m_params.defocus)
+          {
+            if (cur_defocus_index == -1)
+              {
+                start_vec.push_back (0);
+                cur_defocus_index = nvalues;
+                blur_index.push_back (nvalues++);
+              }
+            else
+              blur_index.push_back (cur_defocus_index);
+          }
+        else
+          blur_index.push_back (-1);
+        if (measurement.channel >= 0)
+          {
+            int c = measurement.channel;
+            wavelength_index.push_back (-1);
+            if (m_params.wavelengths[c] > 0
+                || channel_wavelength_index[c] >= 0)
+              ;
+            else
+              {
+                start_vec.push_back (0.5);
+                channel_wavelength_index [c] = nvalues++;
+              }
+          }
+        else if (!measurement.wavelength)
+          {
+            start_vec.push_back (0.5);
+            wavelength_index.push_back (nvalues++);
+          }
+        else
+          wavelength_index.push_back (-1);
+      }
+    if (!m_params.sensor_fill_factor)
+      {
+        start_vec.push_back (1);
+        fill_factor_index = nvalues++;
+      }
+    else
+      fill_factor_index = -1;
+  }
     n_observations = 0;
     for (size_t m = 0; m < m_measurements.size (); m++)
       {
@@ -430,21 +438,21 @@ public:
   luminosity_t
   get_defocus (int measurement, const luminosity_t *vals)
   {
-    if (!difraction || blur_index[measurement] < 0)
+    if (!diffraction || blur_index[measurement] < 0)
       return m_params.defocus;
     return vals[blur_index[measurement]];
   }
   luminosity_t
   get_blur_diameter (int measurement, const luminosity_t *vals)
   {
-    if (difraction || blur_index[measurement] < 0)
+    if (diffraction || blur_index[measurement] < 0)
       return m_params.blur_diameter;
     return vals[blur_index[measurement]];
   }
   luminosity_t
-  objfunc (const luminosity_t *vals, luminosity_t *f_vec = NULL)
+  objfunc (const luminosity_t *vals, luminosity_t *f_vec = nullptr)
   {
-    /* Use double to avoid cummulation of an error */
+    /* Use double to avoid accumulation of an error */
     double sum = 0;
     mtf_parameters p = m_params;
     p.sigma = get_sigma (vals);
@@ -455,12 +463,12 @@ public:
       {
 	auto &measurement = m_measurements[m];
 	p.wavelength = get_wavelength (m, vals);
-	if (difraction)
+	if (diffraction)
 	  p.defocus = get_defocus (m, vals);
 	else
 	  p.blur_diameter = get_blur_diameter (m, vals);
-	assert (difraction == p.simulate_diffraction_p ());
-	/* Use double to avoid cummulation of an error */
+	assert (diffraction == p.simulate_diffraction_p ());
+	/* Use double to avoid accumulation of an error */
 	double msum = 0;
 	for (size_t i = 0; i < measurement.size (); i++)
 	  {
@@ -523,7 +531,7 @@ public:
   std::vector<luminosity_t> start_vec;
   std::vector<luminosity_t> sums;
   luminosity_t *start;
-  bool difraction;
+  bool diffraction;
   int nvalues;
   int n_observations;
   int sigma_index;
@@ -536,7 +544,7 @@ public:
 
 /* Determine PSF kernel radius.  */
 static int
-get_psf_radius (mtf::psf_t *psf, int size, bool *ok = NULL)
+get_psf_radius (mtf::psf_t *psf, int size, bool *ok = nullptr)
 {
   double peak = 0;
   for (int i = 0; i < size; i++)
@@ -565,13 +573,11 @@ get_psf_radius (mtf::psf_t *psf, int size, bool *ok = NULL)
 }
 
 /* Return sensor MTF at given pixel frequency.
-   TODO: model Bayer.
-   Bayer demosaicing usually reduces MTF by an additional factor of 0.8 to 0.9
-   near the Nyquist frequency */
+   PIXEL_FREQ is the spatial frequency in cycles per pixel.  */
 double
 mtf_parameters::sensor_mtf (double pixel_freq) const
 {
-  return std::abs (sinc (pixel_freq * my_sqrt (sensor_fill_factor)));
+  return my_fabs (sinc (pixel_freq * my_sqrt (sensor_fill_factor)));
 }
 
 /* The effective f-fstop changes in macro photography based on magnification.
@@ -588,8 +594,9 @@ mtf_parameters::effective_f_stop () const
   return f_stop * (1 + magnification);
 }
 
-/* Normalized frequency (nu)
-   nu needs to be in range 0 to 1. 1 is the absolute resoultion of the lens. */
+/* Return normalized frequency (nu).
+   PIXEL_FREQ is the spatial frequency in cycles per pixel.
+   nu needs to be in range 0 to 1. 1 is the absolute resolution of the lens. */
 double
 mtf_parameters::nu (double pixel_freq) const
 {
@@ -599,14 +606,15 @@ mtf_parameters::nu (double pixel_freq) const
   return std::clamp (freq / cutoff_freq, 0.0, 1.0);
 }
 
-/* Return MTF of perfect difraction limited lens.  */
+/* Return MTF of perfect diffraction limited lens.
+   PIXEL_FREQ is the spatial frequency in cycles per pixel.  */
 
 double
-mtf_parameters::lens_difraction_mtf (double pixel_freq) const
+mtf_parameters::lens_diffraction_mtf (double pixel_freq) const
 {
-  /* IF we have measured MTF data, difractoin is already included.  */
+  /* If we have measured MTF data, diffraction is already included.  */
   double s = nu (pixel_freq);
-  return (2.0 / M_PI) * (std::acos (s) - s * sqrt (1.0 - s * s));
+  return (2.0 / M_PI) * (my_acos (s) - s * my_sqrt (1.0 - s * s));
 }
 
 /* Estimate lens blur using Hopkins model.  */
@@ -620,14 +628,14 @@ mtf_parameters::hopkins_defocus_mtf (double pixel_freq) const
   /* Slight defocus model; not seem to be working in practice.  */
   if (0)
     {
-      double blur_diameter = std::abs (defocus) / effective_f_stop ();
+      double blur_diameter = my_fabs (defocus) / effective_f_stop ();
       return defocus_mtf (freq, blur_diameter);
     }
   if (s <= 0 || s >= 1)
     return 1;
 
-  /*Calculate Wavefront Defocus (W_{020}). This convertes physical
-    distance to wavefront error.
+  /* Calculate Wavefront Defocus (W_{020}). This converts physical
+     distance to wavefront error.
 
     W_{20} = delta_z / (8 * f_number^2)  */
   double w20 = defocus / (8.0 * ef_stop * ef_stop);
@@ -636,7 +644,7 @@ mtf_parameters::hopkins_defocus_mtf (double pixel_freq) const
   /* Hopkins Defocus Factor
      This is a simplified wave-optical approximation for slight defocus  */
   double arg = 4.0 * M_PI * w20 * s * (1.0 - s) / wavelength_mm;
-  return (std::abs(arg) < 1e-9) ? 1.0 : std::sin(arg) / arg;
+  return (my_fabs(arg) < 1e-9) ? 1.0 : std::sin(arg) / arg;
 #endif
 
   /* Hopkins Defocus Factor
@@ -645,12 +653,16 @@ mtf_parameters::hopkins_defocus_mtf (double pixel_freq) const
 
   /* Apply the Defocus Transfer Function using Bessel J1
      Handle the limit where Z -> 0 to avoid division by zero  */
-  /* Ringing effect of defocus is modelled by Bessel function.  */
-  if (std::abs (Z) > 1e-9)
-    return fabs (2.0 * get_j1 (Z) / Z);
-  // return fabs (2.0 * j1 (Z) / Z);
+  /* Ringing effect of defocus is modeled by Bessel function.  */
+  if (my_fabs (Z) > 1e-9)
+    return my_fabs (2.0 * get_j1 (Z) / Z);
+  // return my_fabs (2.0 * j1 (Z) / Z);
   return 1;
 }
+
+/* Calculates the Stokseth approximation for the MTF of a defocused lens.
+   PIXEL_FREQ is the spatial frequency in cycles per pixel.
+   Returns the MTF value as a product of diffraction and defocus effects.  */
 
 double
 mtf_parameters::stokseth_defocus_mtf (double pixel_freq) const
@@ -670,32 +682,25 @@ mtf_parameters::stokseth_defocus_mtf (double pixel_freq) const
 
   // 2. Calculate Wavefront Aberration W20 (in mm)
   // Formula: delta_z / (8 * N_eff^2)
-  double w20 = defocus / (8.0 * std::pow (ef_stop, 2));
+  double w20 = defocus / (8.0 * my_pow (ef_stop, 2));
 
   // 3. Stokseth B Parameter
-  // Scales the defocus impact by frequency
+  // Scales the defocus impact by frequency.
+  // Standard approximation: B = 8 * pi * (w20 / lambda) * s * (1 - s)
   double B
-      = (4.0 * M_PI * w20 * freq / (wavelength_mm * cutoff_freq)) * (1.0 - s);
+      = (8.0 * M_PI * w20 * s) * (1.0 - s) / wavelength_mm;
 
-  // 5. Defocus MTF using Bessel J1
+  // 4. Defocus MTF using Bessel J1
   // 2*J1(B)/B is the optical transfer of a circular blur
-  double j_term = (std::abs (B) < 1e-8) ? 1.0 : 2.0 * get_j1 (B) / B;
+  double j_term = (my_fabs (B) < 1e-8) ? 1.0 : 2.0 * get_j1 (B) / B;
 
-  // 6. Full Stokseth Polynomial Correction (1 - 0.6s + 0.4s^2)
-  double stokseth_poly = 1.0 - 0.6 * s + 0.4 * s * s;
-
-  // 7. Empirical Correction (1 - 0.6s)
-  double phase_error_ratio = w20 / (wavelength_mm * 0.25);
-  double weight = std::clamp (phase_error_ratio, 0.0, 1.0);
-
-  // Apply correction: if weight is 0 (perfect focus), factor is 1.0.
-  // If weight is 1 (significant defocus), factor is the Stokseth polynomial.
-  double final_correction = (1.0 - weight) + (weight * stokseth_poly);
-  return std::abs (j_term) * final_correction;
+  return my_fabs (j_term);
 }
 
-/* Simulate lens as a combination of
-    - difraction limit (pixel_pitch, wavelength_mm, f_stop)
+/* Simulate lens MTF.
+   PIXEL_FREQ is the spatial frequency in cycles per pixel.
+   Simulates lens as a combination of:
+    - diffraction limit (pixel_pitch, wavelength_mm, f_stop)
     - gaussian blur (sigma)
     - defocus (defocus_mm)
  */
@@ -704,7 +709,7 @@ double
 mtf_parameters::lens_mtf (double pixel_freq) const
 {
   if (simulate_diffraction_p ())
-    return stokseth_defocus_mtf (pixel_freq) * lens_difraction_mtf (pixel_freq)
+    return stokseth_defocus_mtf (pixel_freq) * lens_diffraction_mtf (pixel_freq)
            * gaussian_blur_mtf (pixel_freq, sigma);
   else
     return gaussian_blur_mtf (pixel_freq, sigma)
@@ -735,7 +740,9 @@ mtf_parameters::system_mtf (double pixel_freq) const
   return sensor_mtf (pixel_freq) * lens_mtf (pixel_freq);
 }
 
-/* Compute right half of LSF.  */
+/* Compute right half of LSF.
+   LSF is vector to store the result.
+   SUBSAMPLE is the spatial sampling step.  */
 
 void
 mtf::compute_lsf (std::vector<psf_t, fft_allocator<psf_t>> &lsf,
@@ -749,7 +756,8 @@ mtf::compute_lsf (std::vector<psf_t, fft_allocator<psf_t>> &lsf,
     }
   std::vector<psf_t, fft_allocator<psf_t>> mtf_half (size);
   auto plan = fft_plan_r2r_1d<psf_t> (size, FFTW_REDFT00, mtf_half.data (), lsf.data ());
-  psf_t scale = 1 / (size * subsample * 2);
+  /* FFTW_REDFT00 (DCT-I) corresponds to a symmetric DFT of length 2*(size - 1).  */
+  psf_t scale = 1.0 / ((size - 1) * subsample * 2);
 
   /* Mirror mtf.  */
   for (int i = 0; i < size; i++)
@@ -757,7 +765,7 @@ mtf::compute_lsf (std::vector<psf_t, fft_allocator<psf_t>> &lsf,
 
   plan.execute_r2r (mtf_half.data (), lsf.data ());
 
-  /* Use double to avoid cummulation of error.  */
+  /* Use double to avoid accumulation of error.  */
   double sum = 0;
   for (int i = 0; i < size; i++)
     sum += lsf[i];
@@ -822,7 +830,7 @@ mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
   return psf_data;
 }
 
-/* Determine raidus of PSF to be sure that the minimal value is at most MAX *
+/* Determine radius of PSF to be sure that the minimal value is at most MAX *
    MIN_THRESHOLD. If SUM_THRESHOLD is non-zero reduce it then so the sum of the
    kernel up to radius is 1-sum_threshold of the overall kernel.  */
 double
@@ -883,9 +891,9 @@ mtf::compute_psf (luminosity_t max_radius, luminosity_t subscale, const char *fi
 {
   bool verbose = false;
   /* Cap size of FFT to solve.  */
-  while (ceil (max_radius / subscale) * 2 + 1 > 1024)
+  while (my_ceil (max_radius / subscale) * 2 + 1 > 1024)
     subscale *= 2;
-  int psf_size = ceil (max_radius / subscale) * 2 + 1;
+  int psf_size = my_ceil (max_radius / subscale) * 2 + 1;
   int iterations = 0;
 
   while (true)
@@ -893,8 +901,8 @@ mtf::compute_psf (luminosity_t max_radius, luminosity_t subscale, const char *fi
       /* Determine PSF radius.  */
 
       bool ok;
-      auto psf_data = mtf::compute_2d_psf (psf_size, subscale, NULL, parallel);
-      if (!psf_data.size ())
+      auto psf_data = mtf::compute_2d_psf (psf_size, subscale, nullptr, parallel);
+      if (psf_data.empty ())
         return false;
       int radius = get_psf_radius (psf_data.data (), psf_size, &ok);
       /* If FFT size was to small for the PSF, increase it and restart.  */
@@ -939,7 +947,7 @@ mtf::compute_psf (luminosity_t max_radius, luminosity_t subscale, const char *fi
             for (int x = 0; x < psf_size / 2; x++)
               {
                 luminosity_t val = get_psf (x, y, 1 / subscale);
-                luminosity_t diff = fabs (val - psf_data[y * psf_size + x]);
+                luminosity_t diff = my_fabs (val - psf_data[y * psf_size + x]);
                 if (val > m)
                   m = val;
                 if (diff > err)
@@ -1043,7 +1051,7 @@ mtf::precompute (progress_info *progress, bool parallel)
       luminosity_t step
           = (measurement.get_freq (measurement.size () - 1) - measurement.get_freq (0)) / (measurement.size () - 1);
       for (size_t i = 1; i < measurement.size () - 2 && regular_steps; i++)
-        if (fabs (measurement.get_freq (i) - measurement.get_freq (0) - i * step) > 0.0006)
+        if (my_fabs (measurement.get_freq (i) - measurement.get_freq (0) - i * step) > 0.0006)
           regular_steps = false;
 
       if (!regular_steps)
@@ -1054,9 +1062,10 @@ mtf::precompute (progress_info *progress, bool parallel)
                                                                    + 2);
           for (size_t i = 0; i < measurement.size (); i++)
             {
+              luminosity_t freq = measurement.get_freq (i);
               contrasts[i] = measurement.get_contrast (i) * 0.01
-                             * m_params.measured_mtf_correction (measurement.get_freq (i));
-              freqs[i] = measurement.get_freq (i);
+                             * m_params.measured_mtf_correction (freq);
+              freqs[i] = freq;
             }
           contrasts[measurement.size ()] = 0;
           contrasts[measurement.size () + 1] = 0;
@@ -1071,8 +1080,11 @@ mtf::precompute (progress_info *progress, bool parallel)
           std::vector<luminosity_t> contrasts (measurement.size ()
                                                                        + 2);
           for (size_t i = 0; i < measurement.size (); i++)
-            contrasts[i] = measurement.get_contrast (i) * 0.01
-                           * m_params.measured_mtf_correction (measurement.get_freq (i));
+            {
+              luminosity_t freq = measurement.get_freq (i);
+              contrasts[i] = measurement.get_contrast (i) * 0.01
+                             * m_params.measured_mtf_correction (freq);
+            }
           /* Be sure that MTF trails in 0.  */
           contrasts[measurement.size ()] = 0;
           contrasts[measurement.size () + 1] = 0;
@@ -1083,7 +1095,7 @@ mtf::precompute (progress_info *progress, bool parallel)
         for (size_t i = 0; i < measurement.size (); i++)
           {
             luminosity_t freq = measurement.get_freq (i);
-            if (fabs (measurement.get_contrast (i) * 0.01
+            if (my_fabs (measurement.get_contrast (i) * 0.01
                           * m_params.measured_mtf_correction (freq)
                       - get_mtf (freq))
                 > 0.01)
@@ -1115,7 +1127,7 @@ mtf::precompute (progress_info *progress, bool parallel)
 
       if (colorscreen_checking)
         for (int i = 0; i < entries - 1; i++)
-          if (fabs (m_params.system_mtf (i * step)
+          if (my_fabs (m_params.system_mtf (i * step)
                     - m_mtf.apply (i * step))
               > 0.0001)
             {
@@ -1192,7 +1204,7 @@ mtf_parameters::print_csv_header (FILE *f) const
 {
   return fprintf (
              f,
-             "difraction f-stop 0/%.0f (effective 0/%.0f) wavelength %f.0nm "
+             "diffraction f-stop 0/%.0f (effective 0/%.0f) wavelength %f.0nm "
              "magnification %f pixel pitch %f	defocus %.5fmm	"
              "sigma=%.2fpx	lens	sensor fill factor %.1f	estimated\n",
              f_stop, effective_f_stop (), wavelength,
@@ -1223,7 +1235,7 @@ mtf_parameters::write_table (const char *write_table, const char **error) const
           if (fprintf (f,
                        "%1.3f	%2.2f	%2.2f	%2.2f	%2.2f	%2.2f	"
                        "%2.2f\n",
-                       freq, lens_difraction_mtf (freq) * 100,
+                       freq, lens_diffraction_mtf (freq) * 100,
                        stokseth_defocus_mtf (freq) * 100,
                        gaussian_blur_mtf (freq, sigma) * 100,
                        lens_mtf (freq) * 100, sensor_mtf (freq) * 100,
@@ -1251,14 +1263,14 @@ mtf_parameters::compute_curves (int steps) const
   result.sensor_mtf.reserve (steps);
   result.gaussian_blur_mtf.reserve (steps);
   result.stokseth_defocus_mtf.reserve (steps);
-  result.lens_difraction_mtf.reserve (steps);
+  result.lens_diffraction_mtf.reserve (steps);
   result.lens_mtf.reserve (steps);
   result.hopkins_blur_mtf.reserve (steps);
 
   for (int i = 0; i < steps; i++)
     {
       double freq = i / (double)(steps - 1);
-      result.lens_difraction_mtf.push_back (lens_difraction_mtf (freq));
+      result.lens_diffraction_mtf.push_back (lens_diffraction_mtf (freq));
       result.stokseth_defocus_mtf.push_back (stokseth_defocus_mtf (freq));
       result.gaussian_blur_mtf.push_back (gaussian_blur_mtf (freq, sigma));
       result.lens_mtf.push_back (lens_mtf (freq));
@@ -1280,13 +1292,13 @@ mtf_parameters::estimate_parameters (mtf_parameters &par,
 
   mtf_solver s (*this, par.measurements, progress, flags & estimate_verbose_solving);
   if (flags & estimate_use_multifit)
-    gsl_multifit<luminosity_t, mtf_solver> (s, "optimizing system MTF (multifit 1)",
+    gsl_multifit<luminosity_t, mtf_solver> (s, "optimizing system mtf (multifit 1)",
 				       progress);
   if (flags & estimate_use_nmsimplex)
-    simplex<luminosity_t, mtf_solver> (s, "optimizing system MTF (simplex)",
+    simplex<luminosity_t, mtf_solver> (s, "optimizing system mtf (simplex)",
 				       progress, true, 1000); 
   if (flags & estimate_use_multifit)
-    gsl_multifit<luminosity_t, mtf_solver> (s, "optimizing system MTF (multifit)",
+    gsl_multifit<luminosity_t, mtf_solver> (s, "optimizing system mtf (multifit)",
 				       progress);
   wavelength = s.get_wavelength (0, s.start);
   wavelengths[0] = s.get_channel_wavelength (0, s.start);
@@ -1334,7 +1346,7 @@ mtf_parameters::estimate_parameters (mtf_parameters &par,
 	    if (fprintf (f,
 			 "%1.3f	%2.2f	%2.2f	%2.2f	%2.2f	%2.2f	"
 			 "%2.2f	%2.2f\n",
-			 freq, c, lens_difraction_mtf (freq) * 100,
+			 freq, c, lens_diffraction_mtf (freq) * 100,
 			 stokseth_defocus_mtf (freq) * 100,
 			 gaussian_blur_mtf (freq, sigma) * 100,
 			 lens_mtf (freq) * 100, sensor_mtf (freq) * 100,
@@ -1433,8 +1445,8 @@ mtf::render_dot_spread_tile (tile_parameters &tile, progress_info *p)
 	coord_t posy = (y - tile.height / 2) * step;
 	luminosity_t val = get_psf (posx , posy, 1);
 	int i = (nearest_int (posx) + nearest_int (posy)) & 1;
-	luminosity_t lum = std::clamp (val * m, 0.0, 1.0);
-	luminosity_t lum2 = i ? std::clamp (val * m + i * (double)0.6,  0.0, 1.0) : lum;
+	luminosity_t lum = std::clamp ((luminosity_t)(val * m), (luminosity_t)0.0, (luminosity_t)1.0);
+	luminosity_t lum2 = i ? std::clamp ((luminosity_t)(val * m + i * (double)0.6), (luminosity_t)0.0, (luminosity_t)1.0) : lum;
 	tile.pixels[x * 3 + y * tile.rowstride] = tile.pixels[x * 3 + y * tile.rowstride + 1] = invert_gamma (lum, -1) * 255 + 0.5;
 	tile.pixels[x * 3 + y * tile.rowstride + 2] = invert_gamma (lum2, -1) * 255 + 0.5;
       }

@@ -1,3 +1,7 @@
+/* Modulation transfer function parameters.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #ifndef MTF_PARAMETERS_H
 #define MTF_PARAMETERS_H
 #include <string>
@@ -60,40 +64,40 @@ private:
   std::vector <entry> m_data;
 };
 /* MTF can be either based on real measured data (then size() != 0)
-   or computed by difraction limit or just a blur disk simulation.
+   or computed by diffraction limit or just a blur disk simulation.
    In each case one can adjust sigma.  */
 struct mtf_parameters
 {
   /* Sigma (in pixels) used to estimate gaussian blur.  */
-  double sigma;
+  double sigma = 0;
 
   /* Size of blur diameter (in pixels) used to estimate defocus.
-     This parameter is used only if pixel_pitch/f_num/wavelength_nm
+     This parameter is used only if pixel_pitch/f_stop/wavelength
      is not defined.  */
-  double blur_diameter;
+  double blur_diameter = 0;
 
-  /* Defocus (in milimeters) */
-  double defocus;
+  /* Defocus (in millimeters) */
+  double defocus = 0;
   /* F-stop.  */
-  double f_stop;
+  double f_stop = 0;
   /* Wavelength of light in nm.  */
-  double wavelength;
+  double wavelength = 0;
   /* Per-channel Wavelength of light in nm.  */
-  std::array<double, 4> wavelengths;
+  std::array<double, 4> wavelengths = {0, 0, 0, 0};
   /* Sensor pixel pitch (size of a pixel) in micrometers.  */
-  double pixel_pitch;
+  double pixel_pitch = 0;
   /* The ratio of the active area to the total pixel area of the sensor.
-     Usually in range 0..1 but for scanner and linear sensor it may be grater
+     Usually in range 0..1 but for scanner and linear sensor it may be greater
      than that.  For Nikon Coolscan it seems to be 4.
 
      0 disables accounting sensor MTF.  */
-  double sensor_fill_factor;
+  double sensor_fill_factor = 1;
 
   /* DPI of the scan; necessary to calculate magnification.  */
-  double scan_dpi;
+  double scan_dpi = 0;
 
   /* Measurement to use.  */
-  int measured_mtf_idx;
+  int measured_mtf_idx = -1;
 
   std::vector <mtf_measurement> measurements;
 
@@ -166,9 +170,9 @@ struct mtf_parameters
   }
   pure_attr double effective_f_stop () const;
   pure_attr double nu (double pixel_freq) const;
-  pure_attr double lens_difraction_mtf (double pixe_freq) const;
-  pure_attr double hopkins_defocus_mtf (double pixe_freq) const;
-  pure_attr double stokseth_defocus_mtf (double pixe_freq) const;
+  pure_attr double lens_diffraction_mtf (double pixel_freq) const;
+  pure_attr double hopkins_defocus_mtf (double pixel_freq) const;
+  pure_attr double stokseth_defocus_mtf (double pixel_freq) const;
   pure_attr double lens_mtf (double pixel_freq) const;
   pure_attr double system_mtf (double pixel_freq) const;
   pure_attr double sensor_mtf (double pixel_freq) const;
@@ -179,7 +183,7 @@ struct mtf_parameters
       std::vector<double> sensor_mtf;
       std::vector<double> gaussian_blur_mtf;
       std::vector<double> stokseth_defocus_mtf;
-      std::vector<double> lens_difraction_mtf;
+      std::vector<double> lens_diffraction_mtf;
       std::vector<double> lens_mtf;
       std::vector<double> hopkins_blur_mtf;
   };
@@ -192,10 +196,10 @@ struct mtf_parameters
     estimate_verbose_solving = 8
   };
   
-  DLL_PUBLIC double estimate_parameters (mtf_parameters &par, const char *write_table = NULL, progress_info *progress = NULL, const char **error = NULL, int flags = estimate_use_nmsimplex | estimate_use_multifit);
-  mtf_parameters ()
-  : sigma (0), blur_diameter (0), defocus (0), f_stop (0), wavelength (0), wavelengths {0, 0, 0, 0}, pixel_pitch (0), sensor_fill_factor (1), scan_dpi (0), measured_mtf_idx (-1), measurements ()
-  { }
+  DLL_PUBLIC double estimate_parameters (mtf_parameters &par, const char *write_table = nullptr,
+					 progress_info *progress = nullptr, const char **error = nullptr,
+					 int flags = estimate_use_nmsimplex | estimate_use_multifit);
+  mtf_parameters () = default;
   DLL_PUBLIC bool save_psf (progress_info *progress, const char *write_table, const char **error) const;
   DLL_PUBLIC bool write_table (const char *write_table, const char **error) const;
   DLL_PUBLIC computed_mtf compute_curves (int steps) const;

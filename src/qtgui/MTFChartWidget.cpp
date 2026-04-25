@@ -16,10 +16,10 @@ MTFChartWidget::MTFChartWidget(QWidget *parent) : QWidget(parent) {
 
 void MTFChartWidget::setMTFData(
     const colorscreen::mtf_parameters::computed_mtf &data,
-    bool canSimulateDifraction, double scanDpi, double screenFreq) {
+    bool canSimulateDiffraction, double scanDpi, double screenFreq) {
   m_data = data;
   m_hasData = !data.system_mtf.empty();
-  m_canSimulateDifraction = canSimulateDifraction;
+  m_canSimulateDiffraction = canSimulateDiffraction;
   m_scanDpi = scanDpi;
   m_screenFreq = screenFreq;
   update();
@@ -94,9 +94,9 @@ static QColor wavelengthToRGB(double wavelength) {
 
 std::vector<MTFChartWidget::LegendItem> MTFChartWidget::getLegendItems() const {
     std::vector<LegendItem> items;
-    items.push_back({"Difraction", QColor(255, 100, 100), 2, m_canSimulateDifraction, &m_data.lens_difraction_mtf});
-    items.push_back({"Defocus", QColor(255, 165, 0), 2, m_canSimulateDifraction, &m_data.stokseth_defocus_mtf});
-    items.push_back({"Hopkins blur", QColor(139, 69, 19), 2, !m_canSimulateDifraction, &m_data.hopkins_blur_mtf});
+    items.push_back({"Diffraction", QColor(255, 100, 100), 2, m_canSimulateDiffraction, &m_data.lens_diffraction_mtf});
+    items.push_back({"Defocus", QColor(255, 165, 0), 2, m_canSimulateDiffraction, &m_data.stokseth_defocus_mtf});
+    items.push_back({"Hopkins blur", QColor(139, 69, 19), 2, !m_canSimulateDiffraction, &m_data.hopkins_blur_mtf});
     items.push_back({"Gaussian blur", QColor(100, 200, 100), 2, true, &m_data.gaussian_blur_mtf});
     items.push_back({"Lens", Qt::blue, 2, true, &m_data.lens_mtf});
     items.push_back({"Sensor", Qt::gray, 2, true, &m_data.sensor_mtf});
