@@ -81,18 +81,23 @@ addSliderParameter(
 
 Never perform heavy computations in the UI thread. Use the `TaskQueue` and `WorkerBase` system.
 
-### 1. Implementing a Worker
-
-Inherit from `WorkerBase` to implement a specific task.
+Inherit from `WorkerBase` or `QObject` to implement a specific task. Use `QThread` to move the worker off the main thread.
 
 ```cpp
-class MyWorker : public colorscreen::WorkerBase {
+class MyWorker : public QObject {
     Q_OBJECT
 public:
-    void run() override {
-        // Perform computation...
-        // Use reportProgress(fraction, message)
-        emit finished();
+    void run() {
+        while (!m_progress->cancelled()) {
+            // Perform chunk of work...
+            emit partialResultReady(data);
+            
+            // Check throttling logic here
+            if (shouldUpdateGui()) {
+                emit progressUpdated(m_progress);
+            }
+        }
+        emit finished(true);
     }
 };
 ```
@@ -108,9 +113,35 @@ taskQueue->requestRender(renderParams, priority);
 
 The `TaskQueue` emits signals like `triggerRender` or `progressStarted`, which `MainWindow` listens to to spawn the actual worker threads (usually managed via `QThread`).
 
+### 3. Iterative Workers and Throttling
+
+When a worker provides incremental updates (e.g., finding registration points in a loop), follow these best practices to maintain UI responsiveness:
+
+- **Signal Throttling**: Avoid sending signals for every tiny change. Implement a throttling mechanism based on time (e.g., every 5 seconds) or progress percentage (e.g., 10% change).
+- **Partial Updates**: Workers should emit signals like `pointsReady` or `intermediateResult` while continuing their work.
+- **Final Sync**: Always emit a final update when the worker finishes to ensure no pending data is lost.
+- **Undo Integration**: Each emitted signal that modifies the `ParameterState` should be pushed to the `QUndoStack` in `MainWindow`.
+
+### 4. Cancellation
+
+Workers must periodically check `m_progress->cancelled()` and exit gracefully. In `MainWindow`, ensure the worker's thread is tracked so it can be requested to stop when the user clicks "Cancel" in the progress bar.
+
 ---
 
-## Detachable Sections
+## Viewport and Coordinate Systems
+
+The `ImageWidget` handles mapping between three main coordinate systems:
+1.  **Scan Coordinates**: Raw pixel indices of the input image.
+2.  **Transformed Coordinates**: Coordinates after rotation, cropping, and mirroring.
+3.  **Widget Coordinates**: Screen pixels relative to the `ImageWidget` top-left.
+
+### Smooth Transitions
+
+Use `smoothFitToView()` or `smoothZoomTo()` for automated view changes.
+
+- **`m_panAnimationActive`**: Set this flag when you want the view to smoothly pan towards `m_exploreTargetX/Y`. 
+- **`m_zoomFocusCenter`**: When true, the view zooms towards the center of the screen.
+- **Absolute Targets**: Always set `m_exploreTargetX/Y` to absolute image coordinates to ensure the animation converges correctly even during concurrent zooming.
 
 If a panel contains a complex widget (like a chart) that a user might want to see in a separate window or dock, use `createDetachableSection`.
 
