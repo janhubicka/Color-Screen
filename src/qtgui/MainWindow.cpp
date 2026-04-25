@@ -3758,12 +3758,31 @@ void MainWindow::onAutomaticallyAddPointsRequested() {
   // Connect to our slot to handle results
   connect(
       worker, &FinetuneMisregisteredWorker::pointsReady, this,
-      [this, thread, progress](
+      [this, progress](
           std::vector<colorscreen::solver_parameters::solver_point_t> points) {
-        onFinetuneFinished(true, points, thread, progress);
+        if (progress && progress->cancelled())
+          return;
+
+        if (!points.empty()) {
+          ParameterState oldState = getCurrentState();
+          for (const auto &point : points) {
+            m_solverParams.add_or_modify_point(point.img, point.scr,
+                                               point.color);
+          }
+          m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
+                                          &m_detectParams, &m_renderTypeParams,
+                                          &m_solverParams);
+          m_imageWidget->update();
+          ParameterState newState = getCurrentState();
+          m_undoStack->push(new ChangeParametersCommand(
+              this, oldState, newState, "Add registration points"));
+          updateRegistrationActions();
+        }
       });
   connect(worker, &FinetuneMisregisteredWorker::geometryReady, this,
-          [this](colorscreen::scr_to_img_parameters result) {
+          [this, progress](colorscreen::scr_to_img_parameters result) {
+            if (progress && progress->cancelled())
+              return;
             ParameterState newState = getCurrentState();
             newState.scrToImg.merge_solver_solution(result);
             changeParameters(newState,
@@ -3771,8 +3790,16 @@ void MainWindow::onAutomaticallyAddPointsRequested() {
           });
   connect(worker, &FinetuneMisregisteredWorker::finished, this,
           [this, thread, progress](bool success) {
-            if (!success) {
-              onFinetuneFinished(false, {}, thread, progress);
+            removeProgress(progress);
+            auto it = std::find(m_finetuneThreads.begin(),
+                                m_finetuneThreads.end(), thread);
+            if (it != m_finetuneThreads.end()) {
+              m_finetuneThreads.erase(it);
+            }
+
+            if (!success && (!progress || !progress->cancelled())) {
+              QMessageBox::warning(this, "Optimization Failed",
+                                   "Automatically add points failed.");
             }
           });
 
