@@ -3894,6 +3894,37 @@ finetune_misregistered_area (solver_parameters *solver,
         }
       if (progress && progress->cancel_requested ())
         return false;
+
+      scr_to_img map;
+      if (!map.set_parameters (param, img))
+        return false;
+      /* Now prune points that are too far.  */
+      if (size_t i = 0; i < res.size ())
+	{
+          finetune_result &r = res[i];
+	  bool ok = r.success;
+	  if (ok)
+	    {
+              point_t transformed = map.to_scr (r.solver_point_img_location);
+              ok = transformed.dist_from (r.solver_point_screen_location) < 0.05;
+	      int px
+		  = (r.solver_point_img_location.x - area.x) / (coord_t)xsubstep;
+	      int py
+		  = (r.solver_point_img_location.y - area.y) / (coord_t)ysubstep;
+	      if (verbose)
+		printf ("found grid: %i %i transformed: %f %f finetuned: %f %f %s\n", px, py, transformed.x,
+			transformed.y, r.solver_point_screen_location.x,
+			r.solver_point_screen_location.y,
+			ok ? "in threshold" : "out of threshold");
+	    }
+	  if (!ok)
+	    {
+	      res[i] = std::move (res.back ());
+	      res.pop_back ();
+	    }
+	  else
+	    i++;
+	}
       /* If we have many points; rule out uncertain ones.  Let the value only
          drop in each wave.  */
       if (points.size () > 5)
@@ -3904,9 +3935,6 @@ finetune_misregistered_area (solver_parameters *solver,
           max_uncertainty = std::min (max_uncertainty,
                                       res[points.size () * 0.2].uncertainty);
         }
-      scr_to_img map;
-      if (!map.set_parameters (param, img))
-        return false;
 
       /* Clear info about points to be computed.  */
       for (int i = 0; i < xsubsteps * ysubsteps; i++)
@@ -3915,7 +3943,7 @@ finetune_misregistered_area (solver_parameters *solver,
       npoints = 0;
 
       /* Look for coputed points.  */
-      for (size_t i = 0; i < points.size (); i++)
+      for (size_t i = 0; i < res.size (); i++)
         {
           finetune_result &r = res[i];
           point_t transformed = map.to_scr (r.solver_point_img_location);
@@ -3923,10 +3951,6 @@ finetune_misregistered_area (solver_parameters *solver,
               = (r.solver_point_img_location.x - area.x) / (coord_t)xsubstep;
           int py
               = (r.solver_point_img_location.y - area.y) / (coord_t)ysubstep;
-          if (verbose)
-            printf ("found %i %i %f %f %f %f\n", px, py, transformed.x,
-                    transformed.y, r.solver_point_screen_location.x,
-                    r.solver_point_screen_location.y);
           if (r.success && r.uncertainty <= max_uncertainty
               && transformed.dist_from (r.solver_point_screen_location) < 0.05)
             {
