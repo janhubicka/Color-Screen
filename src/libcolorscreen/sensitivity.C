@@ -48,15 +48,15 @@ const struct film_sensitivity::hd_curve_description
               2.2031926841007543, 3.409735279961495, 0.34393951548211144,
               3.9904123215145204, 0.13004572437028772, true } },
 #endif
-          { "paget-coorection1",
+          { "paget-correction1",
             "Paget correction 1 (to linear)",
             { -2.274010, 3.400111, -1.341965, 1.402846, -0.789100, 0.927726,
               -0.437047, -0.003900 } },
-          { "paget-coorection2",
+          { "paget-correction2",
             "Paget correction 2 (to linear)",
             { -2.500011, 4.610400, -1.003162, 1.374261, -0.718547, 1.165326,
               -0.255926, -0.118284 } } };
-struct hd_curve film_sensitivity::ilfrod_galerie_FB1{
+struct hd_curve film_sensitivity::ilfrod_galerie_FB1 (
   (luminosity_t[]){ 1.493581907, 1.576100244, 1.661369193, 1.754889976,
                     1.878667482, 1.994193154, 2.159229829, 2.269254279,
                     2.503056235, 2.640586797, 2.758863081, 2.849633252,
@@ -68,9 +68,9 @@ struct hd_curve film_sensitivity::ilfrod_galerie_FB1{
                     2.010989011, 2.087912088, 2.151098901, 2.195054945,
                     2.217032967, 2.21978022 },
   18
-};
+);
 
-struct hd_curve film_sensitivity::kodachrome_25_red{
+struct hd_curve film_sensitivity::kodachrome_25_red (
   (luminosity_t[]){ -1.780479400552193, -1.722698984008314, -1.664909191262774,
                     -1.607110022315574, -1.549295510492928, -1.496721916562256,
                     -1.454650304395721, -1.417829067502056, -1.381003365750458,
@@ -117,8 +117,8 @@ struct hd_curve film_sensitivity::kodachrome_25_red{
       0.27450354458907134, 0.24829654342942842, 0.2196475744758697,
       0.18535543606395644 },
   64
-};
-struct hd_curve film_sensitivity::kodachrome_25_green{
+);
+struct hd_curve film_sensitivity::kodachrome_25_green (
   (luminosity_t[]){
       -1.780105204867728, -1.722313707358250, -1.664514254283727,
       -1.606704856752897, -1.551512271867407, -1.501561425686157,
@@ -160,8 +160,8 @@ struct hd_curve film_sensitivity::kodachrome_25_green{
       0.3273086151504505,  0.2982677560150435,  0.2847070894987249,
       0.25743934971547544, 0.23106784898318722, 0.20042782906233736 },
   57
-};
-struct hd_curve film_sensitivity::kodachrome_25_blue{
+);
+struct hd_curve film_sensitivity::kodachrome_25_blue (
   (luminosity_t[]){
       -1.779987576155984, -1.722197783410444, -1.664399750972536,
       -1.606591489950997, -1.551399444907421, -1.500407284715054,
@@ -201,10 +201,10 @@ struct hd_curve film_sensitivity::kodachrome_25_blue{
       0.32081747074065925, 0.2955026827663674,  0.26980025816798037,
       0.24358191221022318, 0.21344393850427723, 0.18060862235171227 },
   54
-};
+);
 
 struct hd_curve
-    film_sensitivity::fujicolor_crystal_archive_digital_pearl_paper{
+    film_sensitivity::fujicolor_crystal_archive_digital_pearl_paper (
       (luminosity_t[]){ 0.944085027726432,
                         1.0854898336414,
                         1.26016635859519,
@@ -234,16 +234,16 @@ struct hd_curve
           2.2952182952183,   2.42827442827443,  2.48232848232848,
           2.51975051975052,  2.53222453222453 },
       20
-    };
+    );
 
 /* exposure is 5000/65535....5000 linear that is  -inf to 3.69 */
-struct hd_curve film_sensitivity::linear_sensitivity{
+struct hd_curve film_sensitivity::linear_sensitivity (
 #if 0
   (luminosity_t[]){-2, 4+2},
   (luminosity_t[]){0.32, 6},
 #endif
   (luminosity_t[]){ -1.11, 3.7 }, (luminosity_t[]){ -1.11, 3.7 }, 2
-};
+);
 #if 0
 struct synthetic_hd_curve_parameters input_curve = {-2.3, 0.3,
 						    -1.0, 0.32,

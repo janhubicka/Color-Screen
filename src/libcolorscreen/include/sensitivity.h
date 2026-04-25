@@ -16,6 +16,15 @@ struct hd_curve
   luminosity_t *ys;
   /* Number of points.  */
   int n;
+  /* Constructor for HD_CURVE.  */
+  constexpr hd_curve (luminosity_t *new_xs, luminosity_t *new_ys, int new_n)
+    : xs (new_xs), ys (new_ys), n (new_n)
+  {
+  }
+  /* Default constructor for HD_CURVE.  */
+  constexpr hd_curve () : xs (nullptr), ys (nullptr), n (0)
+  {
+  }
 
   /* Return curve in position in.  */
   luminosity_t
@@ -34,21 +43,21 @@ struct hd_curve
       }
     return ys[n - 1];
   }
-  /* Get minimal value multiplied by boost.  */
-  luminosity_t
-  get_fog (luminosity_t boost)
+  /* Get minimal value multiplied by BOOST.  */
+  constexpr luminosity_t
+  get_fog (luminosity_t boost) const
   {
-    luminosity_t min = ys[0] * boost;
-    for (int i = 1; i <= n; i++)
-      min = std::min (min, ys[i]) * boost;
-    return min;
+    luminosity_t min = ys[0];
+    for (int i = 1; i < n; i++)
+      min = std::min (min, ys[i]);
+    return min * boost;
   }
   /* Get maximal value.  */
-  luminosity_t
-  get_max ()
+  constexpr luminosity_t
+  get_max () const
   {
     luminosity_t max = ys[0];
-    for (int i = 1; i <= n; i++)
+    for (int i = 1; i < n; i++)
       max = std::max (max, ys[i]);
     return max;
   }
@@ -384,6 +393,7 @@ public:
 
   static const DLL_PUBLIC struct hd_curve_description hd_curves_properties[];
 
+  /* Precompute values used for scaling.  */
   void
   precompute ()
   {
@@ -391,8 +401,6 @@ public:
       Dfog = m_curve->get_fog (m_boost);
     else
       Dfog = 0;
-    Dmax = m_curve->get_max ();
-    mid = m_curve->apply (Dmax / 2);
     if (m_curve->n < 2)
       abort ();
   }
@@ -466,7 +474,7 @@ private:
   luminosity_t m_exposure;
   bool m_clip;
 
-  luminosity_t Dfog, Dmax, mid;
+  luminosity_t Dfog;
 };
 }
 #endif
