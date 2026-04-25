@@ -18,6 +18,7 @@
 #include <exiv2/exiv2.hpp>
 
 
+#define HAVE_LIBRAW
 #ifdef HAVE_LIBRAW
 #include <libraw/libraw.h>
 #endif

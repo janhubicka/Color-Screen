@@ -24,9 +24,6 @@
 /* Define to 1 if you have the 'm' library (-lm). */
 #undef HAVE_LIBM
 
-/* Define if you have LibRaw */
-#undef HAVE_LIBRAW
-
 /* Define to 1 if you have the <malloc.h> header file. */
 #undef HAVE_MALLOC_H
 

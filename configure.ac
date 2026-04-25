@@ -79,7 +79,8 @@ AC_ARG_WITH(libraw,
 if test -n "$with_libraw"; then echo "option: with_libraw $with_libraw"; fi
 
 if test "$with_libraw" != "no"; then
-  PKG_CHECK_MODULES([LIBRAW], [libraw >= 0.21.0], [AC_DEFINE([HAVE_LIBRAW], [1], [Define if you have LibRaw])])
+AC_SEARCH_LIBS(libraw_init,[raw],[check_libraw_h="libraw.h"],
+ [ echo " * * * try option --with-libraw=PATH"])
 fi
 
 AC_ARG_WITH(libzip,
