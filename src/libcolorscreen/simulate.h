@@ -6,6 +6,7 @@
 #include "include/scr-to-img.h"
 #include "screen.h"
 #include "lru-cache.h"
+#include "cubic-interpolate.h"
 
 namespace colorscreen
 {

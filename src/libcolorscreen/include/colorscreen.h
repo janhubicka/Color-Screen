@@ -177,27 +177,26 @@ struct has_regular_screen_ret
   coord_t period;
   coord_t perc;
 };
-DLL_PUBLIC struct has_regular_screen_ret has_regular_screen (image_data &scan, const has_regular_screen_params &params, progress_info *progress = NULL);
-DLL_PUBLIC bool save_csp (FILE *f, scr_to_img_parameters *param,
-                          scr_detect_parameters *dparam,
-                          render_parameters *rparam,
-                          solver_parameters *sparam);
-DLL_PUBLIC bool load_csp (FILE *f, scr_to_img_parameters *param,
-                          scr_detect_parameters *dparam,
-                          render_parameters *rparam, solver_parameters *sparam,
-                          const char **error);
-DLL_PUBLIC bool render_to_file (image_data &scan, scr_to_img_parameters &param,
-                                scr_detect_parameters &dparam,
-                                render_parameters &rparam,
-                                render_to_file_params rfarams,
-                                render_type_parameters &rtparam,
-                                progress_info *progress, const char **error);
-DLL_PUBLIC bool render_tile (image_data &scan, scr_to_img_parameters &param,
-                             scr_detect_parameters &dparam,
-                             render_parameters &rparam,
-                             render_type_parameters &rtparam,
-                             tile_parameters &tile,
-                             progress_info *progress = NULL);
+nodiscard_attr DLL_PUBLIC struct has_regular_screen_ret
+has_regular_screen(image_data &scan, const has_regular_screen_params &params,
+                   progress_info *progress = NULL);
+nodiscard_attr DLL_PUBLIC bool
+save_csp(FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
+         render_parameters *rparam, solver_parameters *sparam);
+nodiscard_attr DLL_PUBLIC bool
+load_csp(FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
+         render_parameters *rparam, solver_parameters *sparam,
+         const char **error);
+nodiscard_attr DLL_PUBLIC bool
+render_to_file(image_data &scan, scr_to_img_parameters &param,
+               scr_detect_parameters &dparam, render_parameters &rparam,
+               render_to_file_params rfarams, render_type_parameters &rtparam,
+               progress_info *progress, const char **error);
+nodiscard_attr DLL_PUBLIC bool
+render_tile(image_data &scan, scr_to_img_parameters &param,
+            scr_detect_parameters &dparam, render_parameters &rparam,
+            render_type_parameters &rtparam, tile_parameters &tile,
+            progress_info *progress = NULL);
 enum render_screen_tile_type
 {
   original_screen,
@@ -211,31 +210,30 @@ enum render_screen_tile_type
   corrected_full_screen,
   dot_spread,
 };
-DLL_PUBLIC bool render_screen_tile (tile_parameters &tile,
-				    scr_type type,
-				    const render_parameters &rparam,
-				    coord_t pixel_size,
-				    enum render_screen_tile_type,
-				    progress_info *p);
-DLL_PUBLIC bool complete_rendered_file_parameters
-				  (render_type_parameters &rtparams,
-                                   scr_to_img_parameters &param,
-                                   image_data &scan, render_to_file_params *p);
-DLL_PUBLIC bool complete_rendered_file_parameters (
-    render_type_parameters *rtparams, scr_to_img_parameters *param,
-    image_data *scan, stitch_project *stitch, render_to_file_params *p);
-DLL_PUBLIC rgbdata get_linearized_pixel (const image_data &img,
-                                         render_parameters &rparam, int x,
-                                         int y, int range = 4,
-                                         progress_info *progress = NULL);
-DLL_PUBLIC bool dump_patch_density (FILE *out, image_data &scan,
-                                    scr_to_img_parameters &param,
-                                    render_parameters &rparam,
-                                    progress_info *progress = NULL);
-DLL_PUBLIC bool render_preview (image_data &scan, scr_to_img_parameters &param,
-                                render_parameters &rparams,
-                                unsigned char *pixels, int width, int height,
-                                int rowstride, progress_info *progress = NULL);
+nodiscard_attr DLL_PUBLIC bool
+render_screen_tile(tile_parameters &tile, scr_type type,
+                   const render_parameters &rparam, coord_t pixel_size,
+                   enum render_screen_tile_type, progress_info *p);
+nodiscard_attr DLL_PUBLIC bool
+complete_rendered_file_parameters(render_type_parameters &rtparams,
+                                  scr_to_img_parameters &param,
+                                  image_data &scan, render_to_file_params *p);
+nodiscard_attr DLL_PUBLIC bool
+complete_rendered_file_parameters(render_type_parameters *rtparams,
+                                  scr_to_img_parameters *param,
+                                  image_data *scan, stitch_project *stitch,
+                                  render_to_file_params *p);
+DLL_PUBLIC rgbdata get_linearized_pixel(const image_data &img,
+                                        render_parameters &rparam, int x, int y,
+                                        int range = 4,
+                                        progress_info *progress = NULL);
+nodiscard_attr DLL_PUBLIC bool
+dump_patch_density(FILE *out, image_data &scan, scr_to_img_parameters &param,
+                   render_parameters &rparam, progress_info *progress = NULL);
+nodiscard_attr DLL_PUBLIC bool
+render_preview(image_data &scan, scr_to_img_parameters &param,
+               render_parameters &rparams, unsigned char *pixels, int width,
+               int height, int rowstride, progress_info *progress = NULL);
 DLL_PUBLIC rgbdata analyze_color_proportions (
     scr_detect_parameters param, render_parameters &rparam, image_data &img,
     scr_to_img_parameters *map_param, int xmin, int ymin, int xmax, int ymax,
@@ -259,13 +257,17 @@ DLL_PUBLIC color_matrix determine_color_matrix (
     int dark_point_elts = 0, std::vector<color_match> *report = NULL,
     render *r = NULL, rgbdata proportions = { 1, 1, 1 },
     progress_info *progress = NULL);
-DLL_PUBLIC bool optimize_color_model_colors (scr_to_img_parameters *param,
-                                             image_data &img,
-                                             render_parameters &rparam,
-                                             std::vector<point_t> &points,
-                                             std::vector<color_match> *report,
-                                             progress_info *progress);
-DLL_PUBLIC bool compare_deltae (image_data &img, scr_to_img_parameters &param1, render_parameters &rparam1, scr_to_img_parameters &param2, render_parameters &rparam2, const char *cmpname, double *, double *, progress_info *progress = NULL);
+nodiscard_attr DLL_PUBLIC bool
+optimize_color_model_colors(scr_to_img_parameters *param, image_data &img,
+                            render_parameters &rparam,
+                            std::vector<point_t> &points,
+                            std::vector<color_match> *report,
+                            progress_info *progress);
+nodiscard_attr DLL_PUBLIC bool
+compare_deltae(image_data &img, scr_to_img_parameters &param1,
+               render_parameters &rparam1, scr_to_img_parameters &param2,
+               render_parameters &rparam2, const char *cmpname, double *,
+               double *, progress_info *progress = NULL);
 enum hd_axis_type { hd_axis_hd, hd_axis_gamma10, hd_axis_gamma22 };
 
 static inline double

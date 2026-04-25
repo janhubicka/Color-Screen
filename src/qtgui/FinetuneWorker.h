@@ -1,10 +1,9 @@
 #pragma once
 
+#include "../libcolorscreen/include/progress-info.h"
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
 #include "../libcolorscreen/include/solver-parameters.h"
-#include "../libcolorscreen/include/progress-info.h"
-#include "../libcolorscreen/include/base.h"
 #include <QObject>
 #include <memory>
 #include <vector>
@@ -28,7 +27,8 @@ public slots:
 
 signals:
   void finished(bool success);
-  void pointsReady(std::vector<colorscreen::solver_parameters::solver_point_t> points);
+  void pointsReady(
+      std::vector<colorscreen::solver_parameters::solver_point_t> points);
 
 private:
   colorscreen::solver_parameters m_solverParams;

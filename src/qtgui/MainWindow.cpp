@@ -1,45 +1,44 @@
 #include "MainWindow.h"
-#include "AdaptiveSharpeningChart.h" // Added
-#include "AdaptiveSharpeningWorker.h"
-#include "FinetuneWorker.h"
-#include "DetectScreenWorker.h"
 #include "../libcolorscreen/include/base.h"
 #include "../libcolorscreen/include/finetune.h"
 #include "../libcolorscreen/include/histogram.h"
-#include "../libcolorscreen/include/scr-to-img.h"
 #include "../libcolorscreen/include/render-parameters.h"
+#include "../libcolorscreen/include/scr-to-img.h"
 #include "../libcolorscreen/include/stitch.h"
-#include "ImageWidget.h"
-#include "NavigationView.h"
-#include "ScreenPanel.h"
+#include "AdaptiveSharpeningChart.h" // Added
+#include "AdaptiveSharpeningWorker.h"
+#include "ColorOptimizerWorker.h"
+#include "DetectScreenWorker.h"
+#include "FinetuneWorker.h"
+#include "FocusAnalysisWorker.h"
 #include "GeometryPanel.h"
 #include "GeometrySolverWorker.h"
-#include "ColorOptimizerWorker.h"
+#include "ImageWidget.h"
+#include "NavigationView.h"
+#include "RenderDialog.h"
+#include "ScreenPanel.h"
 #include "mesh.h"
 #include <QAction>
+#include <QActionGroup>
 #include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
-#include <QStandardPaths>
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QTextStream>
-#include <QComboBox>
-#include "FocusAnalysisWorker.h"
-#include "RenderDialog.h"
-#include <QElapsedTimer>
-#include <QDateTime>   // Added QDateTime include
-#include <QDockWidget> // Added
-#include <QDoubleSpinBox>
-#include <QFileDialog>
-#include <QFormLayout>
-#include <QFutureWatcher>
-#include <QHBoxLayout>
 #include <QColorDialog>
 #include <QColorSpace>
+#include <QComboBox>
+#include <QDateTime> // Added QDateTime include
+#include <QDir>
+#include <QDockWidget> // Added
+#include <QDoubleSpinBox>
+#include <QElapsedTimer>
+#include <QFile>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QFormLayout>
+#include <QFrame>
+#include <QFutureWatcher>
+#include <QHBoxLayout>
 #include <QLabel>
-#include <QMessageBox>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -47,20 +46,20 @@
 #include <QPushButton>
 #include <QScreen>
 #include <QSettings>
+#include <QSizeGrip>
 #include <QSplitter>
-#include <QActionGroup>
+#include <QStandardPaths>
 #include <QStatusBar>
+#include <QSvgRenderer>
 #include <QTabWidget>
+#include <QTextStream>
 #include <QTimer>
 #include <QToolBar>
 #include <QUndoCommand>
 #include <QUndoStack>
 #include <QVBoxLayout>
-#include <QFrame>
-#include <QSizeGrip>
 #include <QWindow>
 #include <QtConcurrent>
-#include <QSvgRenderer>
 
 // Undo/Redo Implementation
 
@@ -135,7 +134,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
           &MainWindow::onProgressTimer);
 
   // Initialize crash recovery directory
-  m_recoveryDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+  m_recoveryDir =
+      QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
   // Use "colorscreen" instead of app name "colorscreen-qt"
   m_recoveryDir.replace("/colorscreen-qt", "/colorscreen");
   QDir().mkpath(m_recoveryDir);
@@ -147,7 +147,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
         "The application did not exit cleanly last time.\n"
         "Would you like to restore your previous session?",
         QMessageBox::Yes | QMessageBox::No);
-    
+
     if (reply == QMessageBox::Yes) {
       loadRecoveryState();
     } else {
@@ -158,7 +158,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   // Set up recovery auto-save timer (30 seconds)
   m_recoveryTimer = new QTimer(this);
   m_recoveryTimer->setInterval(30000); // 30 seconds
-  connect(m_recoveryTimer, &QTimer::timeout, this, &MainWindow::saveRecoveryState);
+  connect(m_recoveryTimer, &QTimer::timeout, this,
+          &MainWindow::saveRecoveryState);
   m_recoveryTimer->start();
 
   loadRecentFiles();
@@ -176,12 +177,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   m_solverWorker->moveToThread(m_solverThread);
   m_solverThread->start();
 
-  connect(m_solverWorker, &GeometrySolverWorker::finished, this, &MainWindow::onSolverFinished);
-  
+  connect(m_solverWorker, &GeometrySolverWorker::finished, this,
+          &MainWindow::onSolverFinished);
+
   // Solver Queue connections
-  connect(&m_solverQueue, &TaskQueue::triggerRender, this, &MainWindow::onTriggerSolve);
-  connect(&m_solverQueue, &TaskQueue::progressStarted, this, &MainWindow::addProgress);
-  connect(&m_solverQueue, &TaskQueue::progressFinished, this, &MainWindow::removeProgress);
+  connect(&m_solverQueue, &TaskQueue::triggerRender, this,
+          &MainWindow::onTriggerSolve);
+  connect(&m_solverQueue, &TaskQueue::progressStarted, this,
+          &MainWindow::addProgress);
+  connect(&m_solverQueue, &TaskQueue::progressFinished, this,
+          &MainWindow::removeProgress);
 
   // Initialize Color Optimizer Worker
   m_colorOptimizerThread = new QThread(this);
@@ -189,21 +194,22 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   m_colorOptimizerWorker->moveToThread(m_colorOptimizerThread);
   m_colorOptimizerThread->start();
 
-  connect(m_colorOptimizerWorker, &ColorOptimizerWorker::finished,
-          this, &MainWindow::onColorOptimizerFinished);
-  connect(&m_colorOptimizerQueue, &TaskQueue::triggerRender,
-          this, &MainWindow::onTriggerColorOptimize);
-  connect(&m_colorOptimizerQueue, &TaskQueue::progressStarted,
-          this, &MainWindow::addProgress);
-  connect(&m_colorOptimizerQueue, &TaskQueue::progressFinished,
-          this, &MainWindow::removeProgress);
+  connect(m_colorOptimizerWorker, &ColorOptimizerWorker::finished, this,
+          &MainWindow::onColorOptimizerFinished);
+  connect(&m_colorOptimizerQueue, &TaskQueue::triggerRender, this,
+          &MainWindow::onTriggerColorOptimize);
+  connect(&m_colorOptimizerQueue, &TaskQueue::progressStarted, this,
+          &MainWindow::addProgress);
+  connect(&m_colorOptimizerQueue, &TaskQueue::progressFinished, this,
+          &MainWindow::removeProgress);
 
   updateWindowTitle();
 }
 
 MainWindow::~MainWindow() {
-  // Hide window first to avoid invalid accessibility/focus events during destruction
-  // This is a known workaround for MacOS crashes on exit (QTBUG-71850)
+  // Hide window first to avoid invalid accessibility/focus events during
+  // destruction This is a known workaround for MacOS crashes on exit
+  // (QTBUG-71850)
   hide();
 
   if (m_solverThread) {
@@ -219,29 +225,41 @@ MainWindow::~MainWindow() {
     delete m_colorOptimizerWorker;
     m_colorOptimizerWorker = nullptr;
   }
-  
-  // Explicitly delete UI components that might access member variables (callbacks)
-  // This ensures they are destroyed BEFORE members like m_rparams or m_scan.
-  // We delete the main splitter which contains the panels.
+
+  // Explicitly delete UI components that might access member variables
+  // (callbacks) This ensures they are destroyed BEFORE members like m_rparams
+  // or m_scan. We delete the main splitter which contains the panels.
   if (m_mainSplitter) {
-      m_mainSplitter->setParent(nullptr); // Detach first
-      delete m_mainSplitter;
-      m_mainSplitter = nullptr; 
+    m_mainSplitter->setParent(nullptr); // Detach first
+    delete m_mainSplitter;
+    m_mainSplitter = nullptr;
   }
 
   // Also manually delete docks as they might hold detached panels
-  if (m_mtfDock) delete m_mtfDock;
-  if (m_dotSpreadDock) delete m_dotSpreadDock;
-  if (m_spectraDock) delete m_spectraDock;
-  if (m_tilesDock) delete m_tilesDock;
-  if (m_colorTilesDock) delete m_colorTilesDock;
-  if (m_correctedColorTilesDock) delete m_correctedColorTilesDock;
-  if (m_screenPreviewDock) delete m_screenPreviewDock;
-  if (m_deformationDock) delete m_deformationDock;
-  if (m_lensDock) delete m_lensDock;
-  if (m_perspectiveDock) delete m_perspectiveDock;
-  if (m_nonlinearDock) delete m_nonlinearDock;
-  if (m_gamutDock) delete m_gamutDock;
+  if (m_mtfDock)
+    delete m_mtfDock;
+  if (m_dotSpreadDock)
+    delete m_dotSpreadDock;
+  if (m_spectraDock)
+    delete m_spectraDock;
+  if (m_tilesDock)
+    delete m_tilesDock;
+  if (m_colorTilesDock)
+    delete m_colorTilesDock;
+  if (m_correctedColorTilesDock)
+    delete m_correctedColorTilesDock;
+  if (m_screenPreviewDock)
+    delete m_screenPreviewDock;
+  if (m_deformationDock)
+    delete m_deformationDock;
+  if (m_lensDock)
+    delete m_lensDock;
+  if (m_perspectiveDock)
+    delete m_perspectiveDock;
+  if (m_nonlinearDock)
+    delete m_nonlinearDock;
+  if (m_gamutDock)
+    delete m_gamutDock;
 }
 
 void MainWindow::setupUi() {
@@ -252,7 +270,7 @@ void MainWindow::setupUi() {
   // Left: Image Widget
   m_imageWidget = new ImageWidget(this);
   m_mainSplitter->addWidget(m_imageWidget);
-  
+
   createMenus();
 
   // Connect ImageWidget progress signals
@@ -292,57 +310,78 @@ void MainWindow::setupUi() {
   m_configTabs = new MultiLineTabWidget(this);
 
   // Create Sharpness Panel
-  m_sharpnessPanel = new SharpnessPanel(
-      [this]() { return getCurrentState(); },
-      [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
-      [this]() { return m_scan; }, this);
+  m_sharpnessPanel =
+      new SharpnessPanel([this]() { return getCurrentState(); },
+                         [this](const ParameterState &s, const QString &desc) {
+                           changeParameters(s, desc);
+                         },
+                         [this]() { return m_scan; }, this);
 
   // Create Screen Panel
   m_screenPanel =
       new ScreenPanel([this]() { return getCurrentState(); },
-                      [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
+                      [this](const ParameterState &s, const QString &desc) {
+                        changeParameters(s, desc);
+                      },
                       [this]() { return m_scan; }, this);
 
   // Create Color Panel (after Sharpness)
   // Create Color Panel (after Sharpness)
-  m_contactCopyPanel = 
-      new ContactCopyPanel([this]() { return getCurrentState(); },
-                        [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
-                        [this]() { return m_scan; }, this);
+  m_contactCopyPanel = new ContactCopyPanel(
+      [this]() { return getCurrentState(); },
+      [this](const ParameterState &s, const QString &desc) {
+        changeParameters(s, desc);
+      },
+      [this]() { return m_scan; }, this);
 
   m_colorPanel =
       new ColorPanel([this]() { return getCurrentState(); },
-                     [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
+                     [this](const ParameterState &s, const QString &desc) {
+                       changeParameters(s, desc);
+                     },
                      [this]() { return m_scan; }, this);
 
   // Create Profile Panel
   m_profilePanel =
       new ProfilePanel([this]() { return getCurrentState(); },
-                       [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
+                       [this](const ParameterState &s, const QString &desc) {
+                         changeParameters(s, desc);
+                       },
                        [this]() { return m_scan; }, this);
 
   // Create Tiles Panel
   m_tilesPanel =
       new TilesPanel([this]() { return getCurrentState(); },
-                     [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
+                     [this](const ParameterState &s, const QString &desc) {
+                       changeParameters(s, desc);
+                     },
                      [this]() { return m_scan; }, this);
 
   // Create Image Layer Panel
   m_imageLayerPanel =
       new ImageLayerPanel([this]() { return getCurrentState(); },
-                          [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
+                          [this](const ParameterState &s, const QString &desc) {
+                            changeParameters(s, desc);
+                          },
                           [this]() { return m_scan; }, this);
 
   // Connect Progress Signals from Panels
-  connect(m_sharpnessPanel, &SharpnessPanel::progressStarted, this, &MainWindow::addProgress);
-  connect(m_sharpnessPanel, &SharpnessPanel::progressFinished, this, &MainWindow::removeProgress);
-  
-  connect(m_screenPanel, &ScreenPanel::progressStarted, this, &MainWindow::addProgress);
-  connect(m_screenPanel, &ScreenPanel::progressFinished, this, &MainWindow::removeProgress);
-  connect(m_screenPanel, &ScreenPanel::autodetectRequested, this, &MainWindow::onAutodetectScreen);
-  
-  connect(m_colorPanel, &ColorPanel::progressStarted, this, &MainWindow::addProgress);
-  connect(m_colorPanel, &ColorPanel::progressFinished, this, &MainWindow::removeProgress);
+  connect(m_sharpnessPanel, &SharpnessPanel::progressStarted, this,
+          &MainWindow::addProgress);
+  connect(m_sharpnessPanel, &SharpnessPanel::progressFinished, this,
+          &MainWindow::removeProgress);
+
+  connect(m_screenPanel, &ScreenPanel::progressStarted, this,
+          &MainWindow::addProgress);
+  connect(m_screenPanel, &ScreenPanel::progressFinished, this,
+          &MainWindow::removeProgress);
+  connect(m_screenPanel, &ScreenPanel::autodetectRequested, this,
+          &MainWindow::onAutodetectScreen);
+
+  connect(m_colorPanel, &ColorPanel::progressStarted, this,
+          &MainWindow::addProgress);
+  connect(m_colorPanel, &ColorPanel::progressFinished, this,
+          &MainWindow::removeProgress);
 
   m_configTabs->setObjectName("ConfigTabs");
   m_mtfDock = new QDockWidget("MTF Chart", this);
@@ -409,7 +448,7 @@ void MainWindow::setupUi() {
   m_deformationDock->setObjectName("DeformationDock");
   addDockWidget(Qt::RightDockWidgetArea, m_deformationDock);
   m_deformationDock->hide();
-  
+
   m_toneCurveDock = new QDockWidget("Tone Curve", this);
   m_toneCurveDock->setObjectName("ToneCurveDock");
   addDockWidget(Qt::RightDockWidgetArea, m_toneCurveDock);
@@ -435,8 +474,10 @@ void MainWindow::setupUi() {
   m_backlightDock->setVisible(false);
   addDockWidget(Qt::RightDockWidgetArea, m_backlightDock);
 
-  m_finetuneImagesDock = new QDockWidget("Finetune Diagnostic Images (Geometry)", this);
-  m_sharpnessFinetuneImagesDock = new QDockWidget("Finetune Diagnostic Images (Sharpness)", this);
+  m_finetuneImagesDock =
+      new QDockWidget("Finetune Diagnostic Images (Geometry)", this);
+  m_sharpnessFinetuneImagesDock =
+      new QDockWidget("Finetune Diagnostic Images (Sharpness)", this);
   m_finetuneImagesDock->setObjectName("FinetuneImagesDock");
   m_finetuneImagesDock->setVisible(false);
   addDockWidget(Qt::RightDockWidgetArea, m_finetuneImagesDock);
@@ -470,16 +511,16 @@ void MainWindow::setupUi() {
     connect(panel, detachSignal, this, [dock](QWidget *w) {
       if (!w)
         return;
-      
+
       // Wrap widget in a frame to provide better resize borders
       QFrame *wrapper = new QFrame();
       wrapper->setObjectName("DetachedWrapper");
       wrapper->setFrameStyle(QFrame::Box | QFrame::Plain);
       wrapper->setLineWidth(1);
       // Modern sleek border
-      wrapper->setStyleSheet(
-          "QFrame#DetachedWrapper { border: 1px solid #555; background: Palette(Window); }");
-      
+      wrapper->setStyleSheet("QFrame#DetachedWrapper { border: 1px solid #555; "
+                             "background: Palette(Window); }");
+
       QVBoxLayout *outerLayout = new QVBoxLayout(wrapper);
       outerLayout->setContentsMargins(1, 1, 1, 1);
       outerLayout->setSpacing(0);
@@ -488,9 +529,9 @@ void MainWindow::setupUi() {
       QGridLayout *gLayout = new QGridLayout(container);
       gLayout->setContentsMargins(0, 0, 0, 0);
       gLayout->setSpacing(0);
-      
+
       gLayout->addWidget(w, 0, 0);
-      
+
       QSizeGrip *grip = new QSizeGrip(container);
       gLayout->addWidget(grip, 0, 0, Qt::AlignRight | Qt::AlignBottom);
 
@@ -500,11 +541,11 @@ void MainWindow::setupUi() {
       w->show(); // Ensure widget is visible
       dock->setFloating(true);
       dock->show();
-      
+
       // Use size hint of the original widget + some margins
       if (w->sizeHint().isValid()) {
-          QSize s = w->sizeHint();
-          dock->resize(s.width() + 4, s.height() + 4);
+        QSize s = w->sizeHint();
+        dock->resize(s.width() + 4, s.height() + 4);
       }
     });
 
@@ -515,19 +556,21 @@ void MainWindow::setupUi() {
             // Find the original widget inside the wrapper
             QWidget *wrapper = dock->widget();
             QWidget *originalWidget = nullptr;
-            // The structure is Wrapper -> QVBoxLayout -> Container -> QGridLayout -> Widget
+            // The structure is Wrapper -> QVBoxLayout -> Container ->
+            // QGridLayout -> Widget
             if (wrapper->layout() && wrapper->layout()->count() > 0) {
-                QLayoutItem *containerItem = wrapper->layout()->itemAt(0);
-                if (containerItem && containerItem->widget() && containerItem->widget()->layout()) {
-                    QLayout *gLayout = containerItem->widget()->layout();
-                    for (int i = 0; i < gLayout->count(); ++i) {
-                        QWidget *child = gLayout->itemAt(i)->widget();
-                        if (child && !qobject_cast<QSizeGrip*>(child)) {
-                            originalWidget = child;
-                            break;
-                        }
-                    }
+              QLayoutItem *containerItem = wrapper->layout()->itemAt(0);
+              if (containerItem && containerItem->widget() &&
+                  containerItem->widget()->layout()) {
+                QLayout *gLayout = containerItem->widget()->layout();
+                for (int i = 0; i < gLayout->count(); ++i) {
+                  QWidget *child = gLayout->itemAt(i)->widget();
+                  if (child && !qobject_cast<QSizeGrip *>(child)) {
+                    originalWidget = child;
+                    break;
+                  }
                 }
+              }
             }
 
             if (originalWidget) {
@@ -548,7 +591,7 @@ void MainWindow::setupUi() {
   m_dotSpreadDock->setObjectName("DotSpreadDock");
   m_dotSpreadDock->setVisible(false);
   addDockWidget(Qt::BottomDockWidgetArea, m_dotSpreadDock);
-  
+
   setupDock(m_dotSpreadDock, m_sharpnessPanel,
             &SharpnessPanel::detachDotSpreadRequested,
             &SharpnessPanel::reattachDotSpread);
@@ -568,8 +611,7 @@ void MainWindow::setupUi() {
             &ColorPanel::detachSpectraChartRequested,
             &ColorPanel::reattachSpectraChart);
 
-  setupDock(m_gamutDock, m_colorPanel,
-            &ColorPanel::detachGamutChartRequested,
+  setupDock(m_gamutDock, m_colorPanel, &ColorPanel::detachGamutChartRequested,
             &ColorPanel::reattachGamutChart);
 
   setupDock(m_correctedGamutDock, m_colorPanel,
@@ -590,27 +632,27 @@ void MainWindow::setupUi() {
   setupDock(m_screenPreviewDock, m_screenPanel,
             &ScreenPanel::detachPreviewRequested,
             &ScreenPanel::reattachPreview);
-            
-
 
   // Create Digital Capture Panel
-  m_capturePanel = new CapturePanel(
-      [this]() { return getCurrentState(); },
-      [this](const ParameterState &s, const QString &desc) {
-        changeParameters(s, desc);
-      },
-      [this]() { return m_scan; },
-      [this]() { 
-        if (!m_currentImageFile.isEmpty()) {
-          loadFile(m_currentImageFile, true); 
-        }
-      },
-      this);
+  m_capturePanel =
+      new CapturePanel([this]() { return getCurrentState(); },
+                       [this](const ParameterState &s, const QString &desc) {
+                         changeParameters(s, desc);
+                       },
+                       [this]() { return m_scan; },
+                       [this]() {
+                         if (!m_currentImageFile.isEmpty()) {
+                           loadFile(m_currentImageFile, true);
+                         }
+                       },
+                       this);
 
   // Create Geometry Panel
   m_geometryPanel =
       new GeometryPanel([this]() { return getCurrentState(); },
-                        [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
+                        [this](const ParameterState &s, const QString &desc) {
+                          changeParameters(s, desc);
+                        },
                         [this]() { return m_scan; }, this);
 
   setupDock(m_deformationDock, m_geometryPanel,
@@ -643,33 +685,39 @@ void MainWindow::setupUi() {
 
   m_configTabs->addTab(m_capturePanel, "Digital capture");
   m_configTabs->addTab(m_tilesPanel, "Tiles");
-  connect(m_capturePanel, &CapturePanel::cropRequested, this, &MainWindow::onCropRequested);
-  connect(m_capturePanel, &CapturePanel::flatFieldRequested, this, &MainWindow::onFlatFieldRequested);
-  connect(m_capturePanel, &CapturePanel::autodetectRequested, this, &MainWindow::onAutodetectScreen);
+  connect(m_capturePanel, &CapturePanel::cropRequested, this,
+          &MainWindow::onCropRequested);
+  connect(m_capturePanel, &CapturePanel::flatFieldRequested, this,
+          &MainWindow::onFlatFieldRequested);
+  connect(m_capturePanel, &CapturePanel::autodetectRequested, this,
+          &MainWindow::onAutodetectScreen);
   setupDock(m_backlightDock, m_capturePanel,
             &CapturePanel::detachBacklightRequested,
             &CapturePanel::reattachBacklight);
 
-  connect(m_imageWidget, &ImageWidget::interactionModeChanged, this, [this](ImageWidget::InteractionMode mode) {
-      if (m_capturePanel) {
-          m_capturePanel->setCropChecked(mode == ImageWidget::CropMode);
-      }
-      if (mode != ImageWidget::GenericAreaMode && m_areaSelectionCallback) {
-          // If user switches tool during selection (abandoning generic area selection)
-          m_areaSelectionCallback = nullptr;
-          if (m_imageLayerPanel) {
-              m_imageLayerPanel->setNeutralAreaChecked(false);
-              m_imageLayerPanel->setInfraredAreaChecked(false);
-              m_imageLayerPanel->setDarkAreaChecked(false);
-              m_imageLayerPanel->updateUI();
-          }
-          if (m_colorPanel) {
-              m_colorPanel->setNeutralAreaChecked(false);
-              m_colorPanel->setAutoLevelsChecked(false);
-              m_colorPanel->updateUI();
-          }
-      }
-  });
+  connect(m_imageWidget, &ImageWidget::interactionModeChanged, this,
+          [this](ImageWidget::InteractionMode mode) {
+            if (m_capturePanel) {
+              m_capturePanel->setCropChecked(mode == ImageWidget::CropMode);
+            }
+            if (mode != ImageWidget::GenericAreaMode &&
+                m_areaSelectionCallback) {
+              // If user switches tool during selection (abandoning generic area
+              // selection)
+              m_areaSelectionCallback = nullptr;
+              if (m_imageLayerPanel) {
+                m_imageLayerPanel->setNeutralAreaChecked(false);
+                m_imageLayerPanel->setInfraredAreaChecked(false);
+                m_imageLayerPanel->setDarkAreaChecked(false);
+                m_imageLayerPanel->updateUI();
+              }
+              if (m_colorPanel) {
+                m_colorPanel->setNeutralAreaChecked(false);
+                m_colorPanel->setAutoLevelsChecked(false);
+                m_colorPanel->updateUI();
+              }
+            }
+          });
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
   m_configTabs->addTab(m_imageLayerPanel, "Image Layer");
   m_configTabs->addTab(m_contactCopyPanel, "Contact copy");
@@ -678,22 +726,32 @@ void MainWindow::setupUi() {
   m_configTabs->addTab(m_colorPanel, "Color");
   m_configTabs->addTab(m_profilePanel, "Profile");
 
-  m_configTabs->setTabToolTip(0, "Configure demosaicking, resolution, sensor parameters, and image gamma.");
-  m_configTabs->setTabToolTip(1, "Manage per-tile adjustments (exposure, dark point) for stitched images.");
-  m_configTabs->setTabToolTip(2, "Configure sharpening algorithms (Wiener, Richardson-Lucy, USM) and MTF models.");
-  m_configTabs->setTabToolTip(3, "Configure simulated mixing and layer-based adjustments (infrared, dark area).");
-  m_configTabs->setTabToolTip(4, "Simulate photographic contact printing on glass plate emulsions using the H&D curve.");
-  m_configTabs->setTabToolTip(5, "Select the physical color screen type and configure reconstruction algorithms.");
-  m_configTabs->setTabToolTip(6, "Align the screen and image geometry, including rotation, tilt, and lens correction.");
-  m_configTabs->setTabToolTip(7, "Adjust white balance, black point, presaturation, and dye model parameters.");
-  m_configTabs->setTabToolTip(8, "Apply color correction profiles and manage calibration spots.");
+  m_configTabs->setTabToolTip(0, "Configure demosaicking, resolution, sensor "
+                                 "parameters, and image gamma.");
+  m_configTabs->setTabToolTip(1, "Manage per-tile adjustments (exposure, dark "
+                                 "point) for stitched images.");
+  m_configTabs->setTabToolTip(2, "Configure sharpening algorithms (Wiener, "
+                                 "Richardson-Lucy, USM) and MTF models.");
+  m_configTabs->setTabToolTip(3, "Configure simulated mixing and layer-based "
+                                 "adjustments (infrared, dark area).");
+  m_configTabs->setTabToolTip(4, "Simulate photographic contact printing on "
+                                 "glass plate emulsions using the H&D curve.");
+  m_configTabs->setTabToolTip(5, "Select the physical color screen type and "
+                                 "configure reconstruction algorithms.");
+  m_configTabs->setTabToolTip(6,
+                              "Align the screen and image geometry, including "
+                              "rotation, tilt, and lens correction.");
+  m_configTabs->setTabToolTip(7, "Adjust white balance, black point, "
+                                 "presaturation, and dye model parameters.");
+  m_configTabs->setTabToolTip(
+      8, "Apply color correction profiles and manage calibration spots.");
 
-  connect(m_profilePanel, &ProfilePanel::optimizeColorRequested,
-          this, &MainWindow::onColorOptimizeRequested);
-  connect(m_profilePanel, &ProfilePanel::addSpotModeRequested,
-          this, &MainWindow::onAddSpotModeRequested);
-  connect(m_profilePanel, &ProfilePanel::showProfileSpotsChanged,
-          m_imageWidget, &ImageWidget::setShowProfileSpots);
+  connect(m_profilePanel, &ProfilePanel::optimizeColorRequested, this,
+          &MainWindow::onColorOptimizeRequested);
+  connect(m_profilePanel, &ProfilePanel::addSpotModeRequested, this,
+          &MainWindow::onAddSpotModeRequested);
+  connect(m_profilePanel, &ProfilePanel::showProfileSpotsChanged, m_imageWidget,
+          &ImageWidget::setShowProfileSpots);
 
   // ImageWidget::pointAdded is routed to onPointAdded; profile spot
   // handling is done there when m_addingProfileSpot is true.
@@ -710,187 +768,239 @@ void MainWindow::setupUi() {
   m_panels.push_back(m_colorPanel);
   m_panels.push_back(m_profilePanel);
 
-  connect(m_imageLayerPanel, &ImageLayerPanel::neutralAreaRequested, this, [this]() {
-      startAreaSelection(tr("Select neutral area for simulated mixing"), [this](QRect area) {
-          if (area.width() <= 0 || area.height() <= 0) return;
-          
-          auto progress = std::make_shared<colorscreen::progress_info>();
-          progress->set_task("Calculating neutral mix parameters", 1);
-          colorscreen::sub_task task(progress.get());
-          addProgress(progress);
-          if (m_imageLayerPanel) m_imageLayerPanel->setNeutralAreaEnabled(false);
-          
-          auto scan = m_scan;
-          auto state = getCurrentState();
-          
-          QFutureWatcher<ParameterState>* watcher = new QFutureWatcher<ParameterState>(this);
-          connect(watcher, &QFutureWatcher<ParameterState>::finished, this, [this, watcher, progress]() {
-              ParameterState newState = watcher->result();
-              changeParameters(newState, tr("Set simulated mix parameters by neutral area"));
-              removeProgress(progress);
-              if (m_imageLayerPanel) m_imageLayerPanel->setNeutralAreaChecked(false);
-              watcher->deleteLater();
-          });
-          
-          QFuture<ParameterState> future = QtConcurrent::run(
-              [scan, state, area, progress]() mutable -> ParameterState {
-                  state.rparams.auto_mix_weights(*scan, state.scrToImg, area.left(), area.top(), area.right(), area.bottom(), progress.get());
-                  return state;
-              }
-          );
-          watcher->setFuture(future);
-      });
-  });
+  connect(
+      m_imageLayerPanel, &ImageLayerPanel::neutralAreaRequested, this,
+      [this]() {
+        startAreaSelection(
+            tr("Select neutral area for simulated mixing"), [this](QRect area) {
+              if (area.width() <= 0 || area.height() <= 0)
+                return;
 
-  connect(m_imageLayerPanel, &ImageLayerPanel::infraredAreaRequested, this, [this]() {
-      startAreaSelection(tr("Select area to set simulated mix parameters using infrared"), [this](QRect area) {
-          if (area.width() <= 0 || area.height() <= 0) return;
-          
-          auto progress = std::make_shared<colorscreen::progress_info>();
-          progress->set_task("Calculating IR mix parameters", 1);
-          colorscreen::sub_task task(progress.get());
-          addProgress(progress);
-          if (m_imageLayerPanel) m_imageLayerPanel->setInfraredAreaEnabled(false);
-          
-          auto scan = m_scan;
-          auto state = getCurrentState();
-          
-          QFutureWatcher<ParameterState>* watcher = new QFutureWatcher<ParameterState>(this);
-          connect(watcher, &QFutureWatcher<ParameterState>::finished, this, [this, watcher, progress]() {
-              ParameterState newState = watcher->result();
-              changeParameters(newState, tr("Set simulated mix parameters using infrared"));
-              removeProgress(progress);
-              if (m_imageLayerPanel) m_imageLayerPanel->setInfraredAreaChecked(false);
-              watcher->deleteLater();
-          });
-          
-          QFuture<ParameterState> future = QtConcurrent::run(
-              [scan, state, area, progress]() mutable -> ParameterState {
-                  state.rparams.auto_mix_weights_using_ir(*scan, state.scrToImg, area.left(), area.top(), area.right(), area.bottom(), progress.get());
-                  return state;
-              }
-          );
-          watcher->setFuture(future);
-      });
-  });
+              auto progress = std::make_shared<colorscreen::progress_info>();
+              progress->set_task("Calculating neutral mix parameters", 1);
+              colorscreen::sub_task task(progress.get());
+              addProgress(progress);
+              if (m_imageLayerPanel)
+                m_imageLayerPanel->setNeutralAreaEnabled(false);
 
-  connect(m_imageLayerPanel, &ImageLayerPanel::darkAreaRequested, this, [this]() {
-      startAreaSelection(tr("Select dark area for simulated mixing"), [this](QRect area) {
-          if (area.width() <= 0 || area.height() <= 0) return;
-          
-          auto progress = std::make_shared<colorscreen::progress_info>();
-          progress->set_task("Calculating dark mix parameters", 1);
-          colorscreen::sub_task task(progress.get());
-          addProgress(progress);
-          if (m_imageLayerPanel) m_imageLayerPanel->setDarkAreaEnabled(false);
-          
-          auto scan = m_scan;
-          auto state = getCurrentState();
-          
-          QFutureWatcher<ParameterState>* watcher = new QFutureWatcher<ParameterState>(this);
-          connect(watcher, &QFutureWatcher<ParameterState>::finished, this, [this, watcher, progress]() {
-              ParameterState newState = watcher->result();
-              changeParameters(newState, tr("Set dark mix parameters by area"));
-              removeProgress(progress);
-              if (m_imageLayerPanel) m_imageLayerPanel->setDarkAreaChecked(false);
-              watcher->deleteLater();
-          });
-          
-          QFuture<ParameterState> future = QtConcurrent::run(
-              [scan, state, area, progress]() mutable -> ParameterState {
-                  state.rparams.auto_mix_dark(*scan, state.scrToImg, area.left(), area.top(), area.right(), area.bottom(), progress.get());
-                  return state;
-              }
-          );
-          watcher->setFuture(future);
+              auto scan = m_scan;
+              auto state = getCurrentState();
+
+              QFutureWatcher<ParameterState> *watcher =
+                  new QFutureWatcher<ParameterState>(this);
+              connect(watcher, &QFutureWatcher<ParameterState>::finished, this,
+                      [this, watcher, progress]() {
+                        ParameterState newState = watcher->result();
+                        changeParameters(
+                            newState,
+                            tr("Set simulated mix parameters by neutral area"));
+                        removeProgress(progress);
+                        if (m_imageLayerPanel)
+                          m_imageLayerPanel->setNeutralAreaChecked(false);
+                        watcher->deleteLater();
+                      });
+
+              QFuture<ParameterState> future = QtConcurrent::run(
+                  [scan, state, area, progress]() mutable -> ParameterState {
+                    state.rparams.auto_mix_weights(
+                        *scan, state.scrToImg, area.left(), area.top(),
+                        area.right(), area.bottom(), progress.get());
+                    return state;
+                  });
+              watcher->setFuture(future);
+            });
       });
-  });
+
+  connect(
+      m_imageLayerPanel, &ImageLayerPanel::infraredAreaRequested, this,
+      [this]() {
+        startAreaSelection(
+            tr("Select area to set simulated mix parameters using infrared"),
+            [this](QRect area) {
+              if (area.width() <= 0 || area.height() <= 0)
+                return;
+
+              auto progress = std::make_shared<colorscreen::progress_info>();
+              progress->set_task("Calculating IR mix parameters", 1);
+              colorscreen::sub_task task(progress.get());
+              addProgress(progress);
+              if (m_imageLayerPanel)
+                m_imageLayerPanel->setInfraredAreaEnabled(false);
+
+              auto scan = m_scan;
+              auto state = getCurrentState();
+
+              QFutureWatcher<ParameterState> *watcher =
+                  new QFutureWatcher<ParameterState>(this);
+              connect(watcher, &QFutureWatcher<ParameterState>::finished, this,
+                      [this, watcher, progress]() {
+                        ParameterState newState = watcher->result();
+                        changeParameters(
+                            newState,
+                            tr("Set simulated mix parameters using infrared"));
+                        removeProgress(progress);
+                        if (m_imageLayerPanel)
+                          m_imageLayerPanel->setInfraredAreaChecked(false);
+                        watcher->deleteLater();
+                      });
+
+              QFuture<ParameterState> future = QtConcurrent::run(
+                  [scan, state, area, progress]() mutable -> ParameterState {
+                    state.rparams.auto_mix_weights_using_ir(
+                        *scan, state.scrToImg, area.left(), area.top(),
+                        area.right(), area.bottom(), progress.get());
+                    return state;
+                  });
+              watcher->setFuture(future);
+            });
+      });
+
+  connect(
+      m_imageLayerPanel, &ImageLayerPanel::darkAreaRequested, this, [this]() {
+        startAreaSelection(
+            tr("Select dark area for simulated mixing"), [this](QRect area) {
+              if (area.width() <= 0 || area.height() <= 0)
+                return;
+
+              auto progress = std::make_shared<colorscreen::progress_info>();
+              progress->set_task("Calculating dark mix parameters", 1);
+              colorscreen::sub_task task(progress.get());
+              addProgress(progress);
+              if (m_imageLayerPanel)
+                m_imageLayerPanel->setDarkAreaEnabled(false);
+
+              auto scan = m_scan;
+              auto state = getCurrentState();
+
+              QFutureWatcher<ParameterState> *watcher =
+                  new QFutureWatcher<ParameterState>(this);
+              connect(watcher, &QFutureWatcher<ParameterState>::finished, this,
+                      [this, watcher, progress]() {
+                        ParameterState newState = watcher->result();
+                        changeParameters(newState,
+                                         tr("Set dark mix parameters by area"));
+                        removeProgress(progress);
+                        if (m_imageLayerPanel)
+                          m_imageLayerPanel->setDarkAreaChecked(false);
+                        watcher->deleteLater();
+                      });
+
+              QFuture<ParameterState> future = QtConcurrent::run(
+                  [scan, state, area, progress]() mutable -> ParameterState {
+                    state.rparams.auto_mix_dark(
+                        *scan, state.scrToImg, area.left(), area.top(),
+                        area.right(), area.bottom(), progress.get());
+                    return state;
+                  });
+              watcher->setFuture(future);
+            });
+      });
 
   connect(m_colorPanel, &ColorPanel::neutralAreaRequested, this, [this]() {
-      startAreaSelection(tr("Select neutral area for white balance"), [this](QRect area) {
-          if (area.width() <= 0 || area.height() <= 0) return;
-          
+    startAreaSelection(
+        tr("Select neutral area for white balance"), [this](QRect area) {
+          if (area.width() <= 0 || area.height() <= 0)
+            return;
+
           auto progress = std::make_shared<colorscreen::progress_info>();
           progress->set_task("Calculating white balance parameters", 1);
           colorscreen::sub_task task(progress.get());
           addProgress(progress);
-          if (m_colorPanel) m_colorPanel->setNeutralAreaEnabled(false);
-          
+          if (m_colorPanel)
+            m_colorPanel->setNeutralAreaEnabled(false);
+
           auto scan = m_scan;
           auto state = getCurrentState();
-          
-          QFutureWatcher<ParameterState>* watcher = new QFutureWatcher<ParameterState>(this);
-          connect(watcher, &QFutureWatcher<ParameterState>::finished, this, [this, watcher, progress]() {
-              ParameterState newState = watcher->result();
-              changeParameters(newState, tr("Set white balance by neutral area"));
-              removeProgress(progress);
-              if (m_colorPanel) m_colorPanel->setNeutralAreaChecked(false);
-              watcher->deleteLater();
-          });
-          
+
+          QFutureWatcher<ParameterState> *watcher =
+              new QFutureWatcher<ParameterState>(this);
+          connect(watcher, &QFutureWatcher<ParameterState>::finished, this,
+                  [this, watcher, progress]() {
+                    ParameterState newState = watcher->result();
+                    changeParameters(newState,
+                                     tr("Set white balance by neutral area"));
+                    removeProgress(progress);
+                    if (m_colorPanel)
+                      m_colorPanel->setNeutralAreaChecked(false);
+                    watcher->deleteLater();
+                  });
+
           QFuture<ParameterState> future = QtConcurrent::run(
               [scan, state, area, progress]() mutable -> ParameterState {
-                  state.rparams.auto_white_balance(*scan, state.scrToImg, area.left(), area.top(), area.right(), area.bottom(), progress.get());
-                  return state;
-              }
-          );
+                state.rparams.auto_white_balance(
+                    *scan, state.scrToImg, area.left(), area.top(),
+                    area.right(), area.bottom(), progress.get());
+                return state;
+              });
           watcher->setFuture(future);
-      });
+        });
   });
 
   connect(m_colorPanel, &ColorPanel::autoLevelsRequested, this, [this]() {
-      startAreaSelection(tr("Select area for auto levels"), [this](QRect area) {
-          if (area.width() <= 0 || area.height() <= 0) return;
-          
-          auto progress = std::make_shared<colorscreen::progress_info>();
-          progress->set_task("Calculating auto levels parameters", 1);
-          colorscreen::sub_task task(progress.get());
-          addProgress(progress);
-          if (m_colorPanel) m_colorPanel->setAutoLevelsEnabled(false);
-          
-          auto scan = m_scan;
-          auto state = getCurrentState();
-          
-          QFutureWatcher<ParameterState>* watcher = new QFutureWatcher<ParameterState>(this);
-          connect(watcher, &QFutureWatcher<ParameterState>::finished, this, [this, watcher, progress]() {
-              ParameterState newState = watcher->result();
-              changeParameters(newState, tr("Set auto levels by parameter area"));
-              removeProgress(progress);
-              if (m_colorPanel) m_colorPanel->setAutoLevelsChecked(false);
-              watcher->deleteLater();
+    startAreaSelection(tr("Select area for auto levels"), [this](QRect area) {
+      if (area.width() <= 0 || area.height() <= 0)
+        return;
+
+      auto progress = std::make_shared<colorscreen::progress_info>();
+      progress->set_task("Calculating auto levels parameters", 1);
+      colorscreen::sub_task task(progress.get());
+      addProgress(progress);
+      if (m_colorPanel)
+        m_colorPanel->setAutoLevelsEnabled(false);
+
+      auto scan = m_scan;
+      auto state = getCurrentState();
+
+      QFutureWatcher<ParameterState> *watcher =
+          new QFutureWatcher<ParameterState>(this);
+      connect(watcher, &QFutureWatcher<ParameterState>::finished, this,
+              [this, watcher, progress]() {
+                ParameterState newState = watcher->result();
+                changeParameters(newState,
+                                 tr("Set auto levels by parameter area"));
+                removeProgress(progress);
+                if (m_colorPanel)
+                  m_colorPanel->setAutoLevelsChecked(false);
+                watcher->deleteLater();
+              });
+
+      QFuture<ParameterState> future = QtConcurrent::run(
+          [scan, state, area, progress]() mutable -> ParameterState {
+            state.rparams.auto_dark_brightness(
+                *scan, state.scrToImg, area.left(), area.top(), area.right(),
+                area.bottom(), progress.get());
+            return state;
           });
-          
-          QFuture<ParameterState> future = QtConcurrent::run(
-              [scan, state, area, progress]() mutable -> ParameterState {
-                  state.rparams.auto_dark_brightness(*scan, state.scrToImg, area.left(), area.top(), area.right(), area.bottom(), progress.get());
-                  return state;
-              }
-          );
-          watcher->setFuture(future);
-      });
+      watcher->setFuture(future);
+    });
   });
 
   // Already pushed above
 
   // Connect Adaptive Sharpening signal from Sharpness Panel
-  connect(m_sharpnessPanel, &SharpnessPanel::adaptiveSharpeningRequested, this, &MainWindow::onAdaptiveSharpeningRequested);
+  connect(m_sharpnessPanel, &SharpnessPanel::adaptiveSharpeningRequested, this,
+          &MainWindow::onAdaptiveSharpeningRequested);
 
   // Link Geometry Panel signals
   connect(m_geometryPanel, &GeometryPanel::optimizeRequested, this,
           &MainWindow::onOptimizeGeometry);
   connect(m_geometryPanel, &GeometryPanel::nonlinearToggled, this,
           &MainWindow::onNonlinearToggled);
-  connect(m_geometryPanel, &GeometryPanel::centerOnRequested, m_imageWidget, &ImageWidget::centerOn);
+  connect(m_geometryPanel, &GeometryPanel::centerOnRequested, m_imageWidget,
+          &ImageWidget::centerOn);
 
   // Connect visualization sliders
-  connect(m_geometryPanel, &GeometryPanel::heatmapToleranceChanged, m_imageWidget, &ImageWidget::setHeatmapTolerance);
-  connect(m_geometryPanel, &GeometryPanel::exaggerateChanged, m_imageWidget, &ImageWidget::setExaggerate);
-  connect(m_geometryPanel, &GeometryPanel::maxArrowLengthChanged, m_imageWidget, &ImageWidget::setMaxArrowLength);
+  connect(m_geometryPanel, &GeometryPanel::heatmapToleranceChanged,
+          m_imageWidget, &ImageWidget::setHeatmapTolerance);
+  connect(m_geometryPanel, &GeometryPanel::exaggerateChanged, m_imageWidget,
+          &ImageWidget::setExaggerate);
+  connect(m_geometryPanel, &GeometryPanel::maxArrowLengthChanged, m_imageWidget,
+          &ImageWidget::setMaxArrowLength);
 
   // Synchronization for Registration Points visibility
   m_registrationPointsAction->setChecked(
       m_imageWidget->registrationPointsVisible());
-  
+
   // Link View menu -> ImageWidget
   connect(m_registrationPointsAction, &QAction::toggled, m_imageWidget,
           &ImageWidget::setShowRegistrationPoints);
@@ -904,10 +1014,12 @@ void MainWindow::setupUi() {
           m_geometryPanel, &GeometryPanel::setRegistrationPointsVisible);
 
   // Connect fullscreen exit signal
-  connect(m_imageWidget, &ImageWidget::exitFullscreenRequested, this, &MainWindow::toggleFullscreen);
+  connect(m_imageWidget, &ImageWidget::exitFullscreenRequested, this,
+          &MainWindow::toggleFullscreen);
 
   // Link GeometryPanel checkbox -> ImageWidget
-  QCheckBox *regBox = m_geometryPanel->findChild<QCheckBox *>("showRegistrationPointsBox");
+  QCheckBox *regBox =
+      m_geometryPanel->findChild<QCheckBox *>("showRegistrationPointsBox");
   if (regBox) {
     connect(regBox, &QCheckBox::toggled, m_imageWidget,
             &ImageWidget::setShowRegistrationPoints);
@@ -916,9 +1028,10 @@ void MainWindow::setupUi() {
   }
 
   // Auto solver trigger
-  connect(m_imageWidget, &ImageWidget::pointManipulationStarted, this, &MainWindow::onPointManipulationStarted);
-  connect(m_imageWidget, &ImageWidget::pointsChanged, this, &MainWindow::maybeTriggerAutoSolver);
-
+  connect(m_imageWidget, &ImageWidget::pointManipulationStarted, this,
+          &MainWindow::onPointManipulationStarted);
+  connect(m_imageWidget, &ImageWidget::pointsChanged, this,
+          &MainWindow::maybeTriggerAutoSolver);
 
   // Nonlinear corrections checkbox
   QCheckBox *nlBox = m_geometryPanel->findChild<QCheckBox *>("nonLinearBox");
@@ -928,12 +1041,15 @@ void MainWindow::setupUi() {
   }
 
   // Sync Auto Optimize checkbox with GeometryPanel
-  QCheckBox *autoSolverBox = m_geometryPanel->findChild<QCheckBox *>("autoSolverBox");
+  QCheckBox *autoSolverBox =
+      m_geometryPanel->findChild<QCheckBox *>("autoSolverBox");
   if (autoSolverBox && m_autoOptimizeAction) {
     // GeometryPanel -> Menu
-    connect(autoSolverBox, &QCheckBox::toggled, m_autoOptimizeAction, &QAction::setChecked);
+    connect(autoSolverBox, &QCheckBox::toggled, m_autoOptimizeAction,
+            &QAction::setChecked);
     // Menu -> GeometryPanel
-    connect(m_autoOptimizeAction, &QAction::toggled, autoSolverBox, &QCheckBox::setChecked);
+    connect(m_autoOptimizeAction, &QAction::toggled, autoSolverBox,
+            &QCheckBox::setChecked);
     // Initialize state
     m_autoOptimizeAction->setChecked(autoSolverBox->isChecked());
   }
@@ -997,67 +1113,70 @@ void MainWindow::setupUi() {
   createToolbar(); // Initialize toolbar
 }
 
-// Helper to manually load and recolor symbolic icons on Windows where auto-recoloring fails
-// Helper to manually load and recolor symbolic icons
+// Helper to manually load and recolor symbolic icons on Windows where
+// auto-recoloring fails Helper to manually load and recolor symbolic icons
 QIcon getSymbolicIcon(const QString &name) {
   // If it is a resource, use it directly (Qt handles SVG scaling properly)
   // We assume resources are already correct color (white)
   if (name.startsWith(":/")) {
-      return QIcon(name);
+    return QIcon(name);
   }
 
   QString path;
 #ifdef Q_OS_WIN
-      // Fallback logic for Windows specific paths if needed, 
-      // but mostly we should use resources or standard theme.
-      // Keeping existing logic for finding files if they are not resources.
-      static QStringList subdirs = {"actions", "devices", "places", "status", "ui",
-                                    "legacy", "categories", "apps", "mimetypes"};
-      QString appDir = QCoreApplication::applicationDirPath();
-      QStringList bases = {appDir + "/share/icons/Adwaita/symbolic",
-                           appDir + "/../share/icons/Adwaita/symbolic"};
-    
-      for (const auto &base : bases) {
-        for (const auto &subdir : subdirs) {
-          QString tryPath = base + "/" + subdir + "/" + name + ".svg";
-          if (QFile::exists(tryPath)) {
-             path = tryPath;
-             break;
-          }
-          tryPath = base + "/" + subdir + "/" + name + ".symbolic.svg";
-          if (QFile::exists(tryPath)) {
-             path = tryPath;
-             break;
-          }
-        }
-        if (!path.isEmpty()) break;
+  // Fallback logic for Windows specific paths if needed,
+  // but mostly we should use resources or standard theme.
+  // Keeping existing logic for finding files if they are not resources.
+  static QStringList subdirs = {"actions",    "devices", "places",
+                                "status",     "ui",      "legacy",
+                                "categories", "apps",    "mimetypes"};
+  QString appDir = QCoreApplication::applicationDirPath();
+  QStringList bases = {appDir + "/share/icons/Adwaita/symbolic",
+                       appDir + "/../share/icons/Adwaita/symbolic"};
+
+  for (const auto &base : bases) {
+    for (const auto &subdir : subdirs) {
+      QString tryPath = base + "/" + subdir + "/" + name + ".svg";
+      if (QFile::exists(tryPath)) {
+        path = tryPath;
+        break;
       }
+      tryPath = base + "/" + subdir + "/" + name + ".symbolic.svg";
+      if (QFile::exists(tryPath)) {
+        path = tryPath;
+        break;
+      }
+    }
+    if (!path.isEmpty())
+      break;
+  }
 #endif
 
   if (!path.isEmpty()) {
     QIcon icon;
     QSvgRenderer renderer(path);
-    if (!renderer.isValid()) return QIcon::fromTheme(name);
-    
+    if (!renderer.isValid())
+      return QIcon::fromTheme(name);
+
     // Generate multiple sizes for DPI
     QList<int> sizes = {16, 24, 32, 48, 64, 96, 128};
     for (int size : sizes) {
       QPixmap pix(size, size);
       pix.fill(Qt::transparent);
-      
+
       QPainter p(&pix);
       renderer.render(&p);
-      
+
       // Recolor to white
       p.setCompositionMode(QPainter::CompositionMode_SourceIn);
       p.fillRect(pix.rect(), Qt::white);
       p.end();
-      
+
       icon.addPixmap(pix);
     }
     return icon;
   }
-  
+
   return QIcon::fromTheme(name); // Fallback to system theme
 }
 
@@ -1086,7 +1205,7 @@ void MainWindow::createToolbar() {
 
   // Interaction Tools - Pan in View group
   QActionGroup *toolGroup = new QActionGroup(this);
-  
+
   m_panAction = new QAction(getSymbolicIcon(":/icons/hand.svg"), "Pan", this);
   m_panAction->setActionGroup(toolGroup);
   m_panAction->setCheckable(true);
@@ -1110,16 +1229,17 @@ void MainWindow::createToolbar() {
   QAction *rotRightAction = m_toolbar->addAction(
       getSymbolicIcon(":/icons/rotate-right.svg"), "Rotate Right");
   connect(rotRightAction, &QAction::triggered, this, &MainWindow::rotateRight);
-  
+
   if (m_mirrorAction) {
-      m_toolbar->addAction(m_mirrorAction);
+    m_toolbar->addAction(m_mirrorAction);
   }
 
   // === REGISTRATION GROUP ===
   QAction *regSeparator = m_toolbar->addSeparator();
   m_registrationActions.append(regSeparator);
 
-  m_selectAction = new QAction(getSymbolicIcon(":/icons/arrow.svg"), "Select", this);
+  m_selectAction =
+      new QAction(getSymbolicIcon(":/icons/arrow.svg"), "Select", this);
   m_selectAction->setActionGroup(toolGroup);
   m_selectAction->setCheckable(true);
   m_selectAction->setToolTip("Select Tool (S)");
@@ -1128,7 +1248,8 @@ void MainWindow::createToolbar() {
   m_toolbar->addAction(m_selectAction);
   m_registrationActions.append(m_selectAction);
 
-  m_addPointAction = new QAction(getSymbolicIcon(":/icons/plus.svg"), "Add Point", this);
+  m_addPointAction =
+      new QAction(getSymbolicIcon(":/icons/plus.svg"), "Add Point", this);
   m_addPointAction->setActionGroup(toolGroup);
   m_addPointAction->setCheckable(true);
   m_addPointAction->setToolTip("Add Registration Point (A)");
@@ -1137,7 +1258,8 @@ void MainWindow::createToolbar() {
   m_toolbar->addAction(m_addPointAction);
   m_registrationActions.append(m_addPointAction);
 
-  m_setCenterAction = new QAction(getSymbolicIcon(":/icons/crosshair.svg"), "Screen coordinates", this);
+  m_setCenterAction = new QAction(getSymbolicIcon(":/icons/crosshair.svg"),
+                                  "Screen coordinates", this);
   m_setCenterAction->setActionGroup(toolGroup);
   m_setCenterAction->setCheckable(true);
   m_setCenterAction->setToolTip("Set Screen Coordinates (C)");
@@ -1145,7 +1267,7 @@ void MainWindow::createToolbar() {
   m_setCenterAction->setShortcutContext(Qt::ApplicationShortcut);
   m_toolbar->addAction(m_setCenterAction);
   m_registrationActions.append(m_setCenterAction);
-  
+
   // Lock toggle (visible only when Set Center is active)
   m_toolbar->addAction(m_lockRelativeCoordinatesAction);
   m_lockRelativeCoordinatesAction->setVisible(false);
@@ -1157,7 +1279,8 @@ void MainWindow::createToolbar() {
   m_registrationActions.append(m_optimizeCoordinatesAction);
 
   connect(m_panAction, &QAction::toggled, this, [this](bool checked) {
-    if (checked) m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+    if (checked)
+      m_imageWidget->setInteractionMode(ImageWidget::PanMode);
   });
   connect(m_selectAction, &QAction::toggled, this, [this](bool checked) {
     if (checked) {
@@ -1179,38 +1302,48 @@ void MainWindow::createToolbar() {
   });
   connect(m_setCenterAction, &QAction::toggled, this, [this](bool checked) {
     if (checked) {
-        m_imageWidget->setInteractionMode(ImageWidget::SetCenterMode);
+      m_imageWidget->setInteractionMode(ImageWidget::SetCenterMode);
     }
     m_lockRelativeCoordinatesAction->setVisible(checked);
     m_optimizeCoordinatesAction->setVisible(checked);
   });
-  
-  connect(m_imageWidget, &ImageWidget::selectionChanged, this, &MainWindow::updateRegistrationActions);
-  connect(m_imageWidget, &ImageWidget::registrationPointsVisibilityChanged, this, &MainWindow::updateRegistrationActions);
-  connect(m_imageWidget, &ImageWidget::pointAdded, this, &MainWindow::onPointAdded);
-  connect(m_imageWidget, &ImageWidget::profileSpotRemoveRequested, this, [this](int index) {
-    if (!m_addingProfileSpot) return;
-    ParameterState newState = getCurrentState();
-    if (index >= 0 && index < (int)newState.profileSpots.size()) {
-      newState.profileSpots.erase(newState.profileSpots.begin() + index);
-      changeParameters(newState, "Remove profile spot");
-    }
-  });
-  connect(m_imageWidget, &ImageWidget::areaSelected, this, &MainWindow::onAreaSelected);
-  connect(m_imageWidget, &ImageWidget::setCenterRequested, this, &MainWindow::onSetCenter);
-  connect(m_imageWidget, &ImageWidget::coordinateSystemChanged, this, &MainWindow::onCoordinateSystemChanged);
+
+  connect(m_imageWidget, &ImageWidget::selectionChanged, this,
+          &MainWindow::updateRegistrationActions);
+  connect(m_imageWidget, &ImageWidget::registrationPointsVisibilityChanged,
+          this, &MainWindow::updateRegistrationActions);
+  connect(m_imageWidget, &ImageWidget::pointAdded, this,
+          &MainWindow::onPointAdded);
+  connect(m_imageWidget, &ImageWidget::profileSpotRemoveRequested, this,
+          [this](int index) {
+            if (!m_addingProfileSpot)
+              return;
+            ParameterState newState = getCurrentState();
+            if (index >= 0 && index < (int)newState.profileSpots.size()) {
+              newState.profileSpots.erase(newState.profileSpots.begin() +
+                                          index);
+              changeParameters(newState, "Remove profile spot");
+            }
+          });
+  connect(m_imageWidget, &ImageWidget::areaSelected, this,
+          &MainWindow::onAreaSelected);
+  connect(m_imageWidget, &ImageWidget::setCenterRequested, this,
+          &MainWindow::onSetCenter);
+  connect(m_imageWidget, &ImageWidget::coordinateSystemChanged, this,
+          &MainWindow::onCoordinateSystemChanged);
 
   // Initially hide registration group
   updateRegistrationGroupVisibility();
   createModeShortcuts();
   updateModeMenu();
-  
+
   QAction *exploreModeAction = new QAction("Explore Mode", this);
   exploreModeAction->setShortcut(QKeySequence("Ctrl+M"));
   exploreModeAction->setShortcutContext(Qt::ApplicationShortcut);
   connect(exploreModeAction, &QAction::triggered, this, [this]() {
     if (m_imageWidget) {
-      m_imageWidget->setExploreMode(m_imageWidget->interactionMode() != ImageWidget::ExploreMode);
+      m_imageWidget->setExploreMode(m_imageWidget->interactionMode() !=
+                                    ImageWidget::ExploreMode);
     }
   });
   addAction(exploreModeAction);
@@ -1236,31 +1369,31 @@ void MainWindow::createModeShortcuts() {
 void MainWindow::rotateLeft() {
   if (!m_scan)
     return;
-  
+
   // Get current state and modify rotation
   ParameterState newState = getCurrentState();
   int oldRot = (int)newState.rparams.scan_rotation;
   int newRot = (oldRot - 1 + 4) % 4;
   newState.rparams.scan_rotation = newRot;
-  
+
   // Pivot viewport before applying state
   if (m_imageWidget) {
     m_imageWidget->pivotViewport(oldRot, newRot);
   }
-  
+
   changeParameters(newState, "Rotate Left");
 }
 
 void MainWindow::rotateRight() {
   if (!m_scan)
     return;
-    
+
   // Get current state and modify rotation
   ParameterState newState = getCurrentState();
   int oldRot = (int)newState.rparams.scan_rotation;
   int newRot = (oldRot + 1) % 4;
   newState.rparams.scan_rotation = newRot;
-  
+
   // Pivot viewport before applying state
   if (m_imageWidget) {
     m_imageWidget->pivotViewport(oldRot, newRot);
@@ -1272,10 +1405,10 @@ void MainWindow::rotateRight() {
 void MainWindow::onMirrorHorizontally(bool checked) {
   if (!m_scan)
     return;
-    
+
   ParameterState newState = getCurrentState();
   newState.rparams.scan_mirror = checked;
-  
+
   changeParameters(newState, "Mirror Horizontally");
 }
 
@@ -1283,22 +1416,22 @@ void MainWindow::toggleFullscreen() {
   if (m_imageWidget->isFullScreen()) {
     // Exit fullscreen: Block adaptive resize during reparenting glitches
     QSize fullscreenSize = m_imageWidget->size();
-    m_imageWidget->setLastSize(QSize()); 
-    
+    m_imageWidget->setLastSize(QSize());
+
     m_imageWidget->setParent(m_mainSplitter);
     m_imageWidget->showNormal();
     m_fullscreenAction->setChecked(false);
-    
+
     // Re-add to splitter (insert at index 0, before right column)
     m_mainSplitter->insertWidget(0, m_imageWidget);
     m_imageWidget->show();
-    
+
     // Restore splitter sizes after a short delay
     // We use the fullscreen size as the reference for the final jump
-    if (!m_splitterSizesBeforeFullscreen.isEmpty() && 
+    if (!m_splitterSizesBeforeFullscreen.isEmpty() &&
         m_splitterSizesBeforeFullscreen.size() == 2) {
       QList<int> savedSizes = m_splitterSizesBeforeFullscreen;
-      
+
       QTimer::singleShot(10, this, [this, fullscreenSize, savedSizes]() {
         m_imageWidget->setLastSize(fullscreenSize);
         m_mainSplitter->setSizes(savedSizes);
@@ -1308,26 +1441,26 @@ void MainWindow::toggleFullscreen() {
   } else {
     // Save current splitter sizes BEFORE removing the widget
     m_splitterSizesBeforeFullscreen = m_mainSplitter->sizes();
-    
+
     // Capture current size and block intermediate resizes
     QSize baseSize = m_imageWidget->size();
     m_imageWidget->setLastSize(QSize());
 
     // Enter fullscreen on the same screen as the main window
     m_imageWidget->setParent(nullptr);
-    
+
     // Get the screen where the main window is located
     QScreen *targetScreen = screen();
     if (targetScreen) {
       // Move the widget to the target screen before going fullscreen
       m_imageWidget->setGeometry(targetScreen->geometry());
     }
-    
+
     // Set reference size just before the big resize
     m_imageWidget->setLastSize(baseSize);
 
     m_imageWidget->showFullScreen();
-    m_imageWidget->setFocus(); // Set focus so key events work
+    m_imageWidget->setFocus();       // Set focus so key events work
     m_imageWidget->activateWindow(); // Also activate the window
     m_fullscreenAction->setChecked(true);
   }
@@ -1386,18 +1519,19 @@ void MainWindow::updateModeMenu() {
     // m_scan->rgbdata is NULL.
     if (prop.flags & render_type_property::NEEDS_RGB) {
       // Check m_scan
-      if (!m_scan || !m_scan->has_rgb ()) {
+      if (!m_scan || !m_scan->has_rgb()) {
         show = false;
       }
     }
-    if ((prop.flags & render_type_property::NEEDS_CORRECTION_PROFILE)
-	&& !m_rparams.has_correction_profile ())
+    if ((prop.flags & render_type_property::NEEDS_CORRECTION_PROFILE) &&
+        !m_rparams.has_correction_profile())
       show = false;
 
     if (show) {
       m_modeComboBox->addItem(prop.pretty_name, QVariant(i));
       if (prop.help)
-        m_modeComboBox->setItemData (i, QString::fromUtf8 (prop.help), Qt::ToolTipRole);
+        m_modeComboBox->setItemData(i, QString::fromUtf8(prop.help),
+                                    Qt::ToolTipRole);
     }
   }
 
@@ -1417,12 +1551,13 @@ void MainWindow::updateModeMenu() {
     if (i < m_modeComboBox->count()) {
       m_modeActions[i]->setEnabled(true);
       QString hotkeyStr = QString::number((i + 1) % 10);
-      
+
       QString help = m_modeComboBox->itemData(i, Qt::ToolTipRole).toString();
       if (help.isEmpty()) {
-          help = m_modeComboBox->itemText(i);
+        help = m_modeComboBox->itemText(i);
       }
-      m_modeComboBox->setItemData(i, QString("[%1] %2").arg(hotkeyStr, help), Qt::ToolTipRole);
+      m_modeComboBox->setItemData(i, QString("[%1] %2").arg(hotkeyStr, help),
+                                  Qt::ToolTipRole);
     } else {
       m_modeActions[i]->setEnabled(false);
     }
@@ -1447,8 +1582,8 @@ QIcon MainWindow::renderScreenIcon(colorscreen::scr_type type) {
 
   colorscreen::render_parameters rparams;
 
-  bool ok = colorscreen::render_screen_tile(tile, type, rparams, 1.0, colorscreen::original_screen,
-                               nullptr);
+  bool ok = colorscreen::render_screen_tile(
+      tile, type, rparams, 1.0, colorscreen::original_screen, nullptr);
 
   if (ok) {
     QImage img(buffer.data(), w, h, w * 3, QImage::Format_RGB888);
@@ -1491,7 +1626,8 @@ void MainWindow::createMenus() {
   updateRecentFileActions();
 
   QAction *openParamsAction = fileMenu->addAction("Open &Parameters...");
-  openParamsAction->setToolTip("Load rendering and geometry settings from a parameter (.par) file.");
+  openParamsAction->setToolTip(
+      "Load rendering and geometry settings from a parameter (.par) file.");
   connect(openParamsAction, &QAction::triggered, this,
           &MainWindow::onOpenParameters);
 
@@ -1501,16 +1637,19 @@ void MainWindow::createMenus() {
   fileMenu->addSeparator();
 
   m_saveAction = fileMenu->addAction("&Save Parameters");
-  m_saveAction->setToolTip("Save all current parameters to the current .par file.");
+  m_saveAction->setToolTip(
+      "Save all current parameters to the current .par file.");
   m_saveAction->setShortcut(QKeySequence::Save); // Ctrl+S
   m_saveAction->setShortcutContext(Qt::ApplicationShortcut);
-  connect(m_saveAction, &QAction::triggered, this, &MainWindow::onSaveParameters);
+  connect(m_saveAction, &QAction::triggered, this,
+          &MainWindow::onSaveParameters);
 
   m_saveAsAction = fileMenu->addAction("Save Parameters &As...");
   m_saveAsAction->setToolTip("Save current parameters to a new .par file.");
   m_saveAsAction->setShortcut(QKeySequence::SaveAs); // Ctrl+Shift+S
   m_saveAsAction->setShortcutContext(Qt::ApplicationShortcut);
-  connect(m_saveAsAction, &QAction::triggered, this, &MainWindow::onSaveParametersAs);
+  connect(m_saveAsAction, &QAction::triggered, this,
+          &MainWindow::onSaveParametersAs);
 
   fileMenu->addSeparator();
 
@@ -1541,14 +1680,17 @@ void MainWindow::createMenus() {
 
   m_zoomInAction = m_viewMenu->addAction("Zoom &In");
   m_zoomInAction->setIcon(getSymbolicIcon(":/icons/zoom-in.svg"));
-  m_zoomInAction->setShortcuts({QKeySequence::ZoomIn, QKeySequence(Qt::Key_Plus), QKeySequence(Qt::Key_Equal)}); // Ctrl++, +, =
+  m_zoomInAction->setShortcuts({QKeySequence::ZoomIn,
+                                QKeySequence(Qt::Key_Plus),
+                                QKeySequence(Qt::Key_Equal)}); // Ctrl++, +, =
   m_zoomInAction->setShortcutContext(Qt::ApplicationShortcut);
   m_zoomInAction->setToolTip("Increase view magnification.");
   connect(m_zoomInAction, &QAction::triggered, this, &MainWindow::onZoomIn);
 
   m_zoomOutAction = new QAction(tr("Zoom &Out"), this);
   m_zoomOutAction->setIcon(getSymbolicIcon(":/icons/zoom-out.svg"));
-  m_zoomOutAction->setShortcuts({QKeySequence::ZoomOut, QKeySequence(Qt::Key_Minus)}); // Ctrl+-, -
+  m_zoomOutAction->setShortcuts(
+      {QKeySequence::ZoomOut, QKeySequence(Qt::Key_Minus)}); // Ctrl+-, -
   m_zoomOutAction->setShortcutContext(Qt::ApplicationShortcut);
   m_zoomOutAction->setStatusTip(tr("Zoom out"));
   m_zoomOutAction->setToolTip("Decrease view magnification.");
@@ -1568,7 +1710,8 @@ void MainWindow::createMenus() {
   m_zoomFitAction->setIcon(getSymbolicIcon(":/icons/zoom-fit.svg"));
   m_zoomFitAction->setShortcut(Qt::CTRL | Qt::Key_0);
   m_zoomFitAction->setShortcutContext(Qt::ApplicationShortcut);
-  m_zoomFitAction->setToolTip("Adjust zoom to fit the entire image in the viewer.");
+  m_zoomFitAction->setToolTip(
+      "Adjust zoom to fit the entire image in the viewer.");
   connect(m_zoomFitAction, &QAction::triggered, this, &MainWindow::onZoomFit);
   m_viewMenu->addAction(m_zoomFitAction);
 
@@ -1576,7 +1719,8 @@ void MainWindow::createMenus() {
   m_gamutWarningAction = new QAction(tr("Gamut Warning"), this);
   m_gamutWarningAction->setCheckable(true);
   m_gamutWarningAction->setChecked(false);
-  m_gamutWarningAction->setToolTip("Highlight colors that cannot be accurately represented in the target color space.");
+  m_gamutWarningAction->setToolTip("Highlight colors that cannot be accurately "
+                                   "represented in the target color space.");
   connect(m_gamutWarningAction, &QAction::toggled, this,
           &MainWindow::onGamutWarningToggled);
   m_viewMenu->addAction(m_gamutWarningAction);
@@ -1593,21 +1737,26 @@ void MainWindow::createMenus() {
   // Ctrl+L and Ctrl+R.
   m_rotateLeftAction->setShortcut(Qt::CTRL | Qt::Key_L);
   m_rotateLeftAction->setShortcutContext(Qt::ApplicationShortcut);
-  m_rotateLeftAction->setToolTip("Rotate the digital scan 90 degrees counter-clockwise.");
+  m_rotateLeftAction->setToolTip(
+      "Rotate the digital scan 90 degrees counter-clockwise.");
   connect(m_rotateLeftAction, &QAction::triggered, this,
           &MainWindow::rotateLeft);
 
   m_rotateRightAction = m_viewMenu->addAction("Rotate &Right");
   m_rotateRightAction->setShortcut(Qt::CTRL | Qt::Key_R);
   m_rotateRightAction->setShortcutContext(Qt::ApplicationShortcut);
-  m_rotateRightAction->setToolTip("Rotate the digital scan 90 degrees clockwise.");
+  m_rotateRightAction->setToolTip(
+      "Rotate the digital scan 90 degrees clockwise.");
   connect(m_rotateRightAction, &QAction::triggered, this,
           &MainWindow::rotateRight);
-          
-  m_mirrorAction = m_viewMenu->addAction(getSymbolicIcon(":/icons/mirror.svg"), "Mirror \u0026Horizontally");
+
+  m_mirrorAction = m_viewMenu->addAction(getSymbolicIcon(":/icons/mirror.svg"),
+                                         "Mirror \u0026Horizontally");
   m_mirrorAction->setCheckable(true);
-  m_mirrorAction->setToolTip("Flip the image horizontally (useful for glass plates scanned from the wrong side).");
-  connect(m_mirrorAction, &QAction::triggered, this, &MainWindow::onMirrorHorizontally);
+  m_mirrorAction->setToolTip("Flip the image horizontally (useful for glass "
+                             "plates scanned from the wrong side).");
+  connect(m_mirrorAction, &QAction::triggered, this,
+          &MainWindow::onMirrorHorizontally);
 
   m_viewMenu->addSeparator();
 
@@ -1616,23 +1765,31 @@ void MainWindow::createMenus() {
   m_fullscreenAction->setShortcut(Qt::Key_F11);
   m_fullscreenAction->setShortcutContext(Qt::ApplicationShortcut);
   m_fullscreenAction->setToolTip("Toggle fullscreen image display.");
-  connect(m_fullscreenAction, &QAction::triggered, this, &MainWindow::toggleFullscreen);
+  connect(m_fullscreenAction, &QAction::triggered, this,
+          &MainWindow::toggleFullscreen);
 
   // Registration Menu
   m_registrationMenu = menuBar()->addMenu("&Registration");
 
-  m_lockRelativeCoordinatesAction = new QAction(QIcon::fromTheme("system-lock-screen-symbolic"), tr("Lock relative coordinates"), this);
+  m_lockRelativeCoordinatesAction =
+      new QAction(QIcon::fromTheme("system-lock-screen-symbolic"),
+                  tr("Lock relative coordinates"), this);
   m_lockRelativeCoordinatesAction->setCheckable(true);
   m_lockRelativeCoordinatesAction->setChecked(true); // Default ON
-  m_lockRelativeCoordinatesAction->setToolTip("Maintain relative positions of registration points when the grid size changes.");
-  connect(m_lockRelativeCoordinatesAction, &QAction::toggled, m_imageWidget, &ImageWidget::setLockRelativeCoordinates);
+  m_lockRelativeCoordinatesAction->setToolTip(
+      "Maintain relative positions of registration points when the grid size "
+      "changes.");
+  connect(m_lockRelativeCoordinatesAction, &QAction::toggled, m_imageWidget,
+          &ImageWidget::setLockRelativeCoordinates);
   m_registrationMenu->addAction(m_lockRelativeCoordinatesAction);
 
-  m_registrationPointsAction = new QAction(tr("Show Registration &Points"), this);
+  m_registrationPointsAction =
+      new QAction(tr("Show Registration &Points"), this);
   m_registrationPointsAction->setCheckable(true);
   m_registrationPointsAction->setChecked(false);
-  m_registrationPointsAction->setToolTip("Show or hide dots indicating registration points and their errors.");
-  
+  m_registrationPointsAction->setToolTip(
+      "Show or hide dots indicating registration points and their errors.");
+
   // Visibility toggle at the top
   m_registrationMenu->addAction(m_registrationPointsAction);
   m_registrationMenu->addSeparator();
@@ -1641,59 +1798,80 @@ void MainWindow::createMenus() {
   m_selectAllAction->setShortcut(QKeySequence::SelectAll); // Ctrl+A
   m_selectAllAction->setShortcutContext(Qt::ApplicationShortcut);
   m_selectAllAction->setToolTip("Select all registration points.");
-  connect(m_selectAllAction, &QAction::triggered, this, &MainWindow::onSelectAll);
+  connect(m_selectAllAction, &QAction::triggered, this,
+          &MainWindow::onSelectAll);
 
   m_deselectAllAction = m_registrationMenu->addAction("&Deselect All");
   m_deselectAllAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
   m_deselectAllAction->setShortcutContext(Qt::ApplicationShortcut);
   m_deselectAllAction->setToolTip("Clear current point selection.");
-  connect(m_deselectAllAction, &QAction::triggered, this, &MainWindow::onDeselectAll);
+  connect(m_deselectAllAction, &QAction::triggered, this,
+          &MainWindow::onDeselectAll);
 
-  m_deleteSelectedAction = m_registrationMenu->addAction("&Remove Selected Points");
-  m_deleteSelectedAction->setShortcuts({QKeySequence::Delete, QKeySequence(Qt::Key_Backspace)});
+  m_deleteSelectedAction =
+      m_registrationMenu->addAction("&Remove Selected Points");
+  m_deleteSelectedAction->setShortcuts(
+      {QKeySequence::Delete, QKeySequence(Qt::Key_Backspace)});
   m_deleteSelectedAction->setShortcutContext(Qt::ApplicationShortcut);
-  m_deleteSelectedAction->setToolTip("Delete the currently selected registration points.");
-  connect(m_deleteSelectedAction, &QAction::triggered, this, &MainWindow::onDeleteSelected);
+  m_deleteSelectedAction->setToolTip(
+      "Delete the currently selected registration points.");
+  connect(m_deleteSelectedAction, &QAction::triggered, this,
+          &MainWindow::onDeleteSelected);
 
-  m_pruneMisplacedAction = m_registrationMenu->addAction("&Prune Misplaced Points");
-  m_pruneMisplacedAction->setShortcuts({QKeySequence("Ctrl+Delete"), QKeySequence("Ctrl+Backspace")});
+  m_pruneMisplacedAction =
+      m_registrationMenu->addAction("&Prune Misplaced Points");
+  m_pruneMisplacedAction->setShortcuts(
+      {QKeySequence("Ctrl+Delete"), QKeySequence("Ctrl+Backspace")});
   m_pruneMisplacedAction->setShortcutContext(Qt::ApplicationShortcut);
-  m_pruneMisplacedAction->setToolTip("Automatically delete points with high registration error scores.");
-  connect(m_pruneMisplacedAction, &QAction::triggered, this, &MainWindow::onPruneMisplaced);
+  m_pruneMisplacedAction->setToolTip(
+      "Automatically delete points with high registration error scores.");
+  connect(m_pruneMisplacedAction, &QAction::triggered, this,
+          &MainWindow::onPruneMisplaced);
 
   m_registrationMenu->addSeparator();
 
-  m_optimizeGeometryAction = m_registrationMenu->addAction("&Optimize Geometry");
-  m_optimizeGeometryAction->setToolTip("Run the geometry solver to align screen and image using the current registration points.");
-  connect(m_optimizeGeometryAction, &QAction::triggered, this, [this]() {
-    onOptimizeGeometry(m_autoOptimizeAction->isChecked());
-  });
+  m_optimizeGeometryAction =
+      m_registrationMenu->addAction("&Optimize Geometry");
+  m_optimizeGeometryAction->setToolTip(
+      "Run the geometry solver to align screen and image using the current "
+      "registration points.");
+  connect(m_optimizeGeometryAction, &QAction::triggered, this,
+          [this]() { onOptimizeGeometry(m_autoOptimizeAction->isChecked()); });
 
   m_autoOptimizeAction = new QAction(tr("Auto &Optimize"), this);
   m_autoOptimizeAction->setCheckable(true);
   m_autoOptimizeAction->setChecked(false);
-  m_autoOptimizeAction->setToolTip("Automatically run the geometry solver whenever points are added or moved.");
+  m_autoOptimizeAction->setToolTip("Automatically run the geometry solver "
+                                   "whenever points are added or moved.");
   m_registrationMenu->addAction(m_autoOptimizeAction);
 
   m_registrationMenu->addSeparator();
 
   // Connect toggle to update tool state
-  connect(m_registrationPointsAction, &QAction::toggled, this, &MainWindow::updateRegistrationActions);
+  connect(m_registrationPointsAction, &QAction::toggled, this,
+          &MainWindow::updateRegistrationActions);
 
-  m_optimizeCoordinatesAction = new QAction(QIcon::fromTheme("system-run"), tr("Optimize Coordinates"), this);
+  m_optimizeCoordinatesAction = new QAction(QIcon::fromTheme("system-run"),
+                                            tr("Optimize Coordinates"), this);
   m_optimizeCoordinatesAction->setToolTip("Optimize Coordinates");
-  connect(m_optimizeCoordinatesAction, &QAction::triggered, this, &MainWindow::onOptimizeCoordinates);
+  connect(m_optimizeCoordinatesAction, &QAction::triggered, this,
+          &MainWindow::onOptimizeCoordinates);
 
-  // Dynamically manage zoom shortcuts for ExploreMode to allow continuous hold-to-zoom
-  connect(m_imageWidget, &ImageWidget::interactionModeChanged, this, [this](ImageWidget::InteractionMode mode) {
-      if (mode == ImageWidget::ExploreMode) {
-          m_zoomInAction->setShortcuts({});
-          m_zoomOutAction->setShortcuts({});
-      } else {
-          m_zoomInAction->setShortcuts({QKeySequence::ZoomIn, QKeySequence(Qt::Key_Plus), QKeySequence(Qt::Key_Equal)});
-          m_zoomOutAction->setShortcuts({QKeySequence::ZoomOut, QKeySequence(Qt::Key_Minus)});
-      }
-  });
+  // Dynamically manage zoom shortcuts for ExploreMode to allow continuous
+  // hold-to-zoom
+  connect(m_imageWidget, &ImageWidget::interactionModeChanged, this,
+          [this](ImageWidget::InteractionMode mode) {
+            if (mode == ImageWidget::ExploreMode) {
+              m_zoomInAction->setShortcuts({});
+              m_zoomOutAction->setShortcuts({});
+            } else {
+              m_zoomInAction->setShortcuts({QKeySequence::ZoomIn,
+                                            QKeySequence(Qt::Key_Plus),
+                                            QKeySequence(Qt::Key_Equal)});
+              m_zoomOutAction->setShortcuts(
+                  {QKeySequence::ZoomOut, QKeySequence(Qt::Key_Minus)});
+            }
+          });
 }
 
 void MainWindow::onOpenParameters() {
@@ -1701,7 +1879,7 @@ void MainWindow::onOpenParameters() {
   if (!maybeSave()) {
     return;
   }
-  
+
   QString fileName = QFileDialog::getOpenFileName(
       this, "Open Parameters", QString(), "Parameters (*.par);;All Files (*)");
   if (fileName.isEmpty())
@@ -1716,56 +1894,59 @@ void MainWindow::onOpenParameters() {
 
     const char *error = nullptr;
 
+    // Store previous state for comparison
+    ParameterState old = {m_rparams, m_scrToImgParams, m_detectParams,
+                          m_solverParams};
 
-  // Store previous state for comparison
-  ParameterState old = {m_rparams, m_scrToImgParams, m_detectParams, m_solverParams};
+    // load_csp merges parameters in; reset first.
+    colorscreen::scr_to_img_parameters emptyScrToImg;
+    m_scrToImgParams = emptyScrToImg;
+    colorscreen::scr_detect_parameters emptyScrDetect;
+    m_detectParams = emptyScrDetect;
+    colorscreen::render_parameters emptyRparams;
+    m_rparams = emptyRparams;
+    colorscreen::solver_parameters emptySolver;
+    m_solverParams = emptySolver;
 
-  // load_csp merges parameters in; reset first.
-  colorscreen::scr_to_img_parameters emptyScrToImg;
-  m_scrToImgParams = emptyScrToImg;
-  colorscreen::scr_detect_parameters emptyScrDetect;
-  m_detectParams = emptyScrDetect;
-  colorscreen::render_parameters emptyRparams;
-  m_rparams = emptyRparams;
-  colorscreen::solver_parameters emptySolver;
-  m_solverParams = emptySolver;
-
-  if (!colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams, &m_rparams,
-                             &m_solverParams, &error)) {
-    fclose(f);
-    QString errStr =
-        error ? QString::fromUtf8(error) : "Unknown error loading parameters.";
-    QMessageBox::critical(this, "Error Loading Parameters", errStr);
-    m_scrToImgParams = old.scrToImg;
-    m_detectParams = old.detect;
-    m_rparams = old.rparams;
-    m_solverParams = old.solver;
-    return;
-  }
-  fclose(f);
-
-  ParameterState new_params = {m_rparams, m_scrToImgParams, m_detectParams, m_solverParams};
-  bool changed = old != new_params;
-
-  if (changed) {
-    if (m_scan) {
-      // Re-set image to re-create renderer with new params
-      m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                              &m_detectParams, &m_renderTypeParams,
-                              &m_solverParams);
+    if (!colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams,
+                               &m_rparams, &m_solverParams, &error)) {
+      fclose(f);
+      QString errStr = error ? QString::fromUtf8(error)
+                             : "Unknown error loading parameters.";
+      QMessageBox::critical(this, "Error Loading Parameters", errStr);
+      m_scrToImgParams = old.scrToImg;
+      m_detectParams = old.detect;
+      m_rparams = old.rparams;
+      m_solverParams = old.solver;
+      return;
     }
-  }
-  m_undoStack->clear();
-  updateModeMenu();
-  updateUIFromState(getCurrentState());
+    fclose(f);
 
-  addToRecentParams(fileName);
-  m_currentParamsFile = QFileInfo(fileName).absoluteFilePath(); // Track current file for Save
+    ParameterState new_params = {m_rparams, m_scrToImgParams, m_detectParams,
+                                 m_solverParams};
+    bool changed = old != new_params;
+
+    if (changed) {
+      if (m_scan) {
+        // Re-set image to re-create renderer with new params
+        m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
+                                &m_detectParams, &m_renderTypeParams,
+                                &m_solverParams);
+      }
+    }
+    m_undoStack->clear();
+    updateModeMenu();
+    updateUIFromState(getCurrentState());
+
+    addToRecentParams(fileName);
+    m_currentParamsFile =
+        QFileInfo(fileName).absoluteFilePath(); // Track current file for Save
   });
 }
 
 void MainWindow::onSaveParameters() {
-  // If we don't have a current file OR it's a weak suggestion, fall back to Save As
+  // If we don't have a current file OR it's a weak suggestion, fall back to
+  // Save As
   if (m_currentParamsFile.isEmpty() || m_currentParamsFileIsWeak) {
     onSaveParametersAs();
     return;
@@ -1773,25 +1954,27 @@ void MainWindow::onSaveParameters() {
 
   FILE *f = fopen(m_currentParamsFile.toUtf8().constData(), "wt");
   if (!f) {
-    QMessageBox::critical(this, "Error", 
-                          QString("Could not open file for writing: %1").arg(m_currentParamsFile));
+    QMessageBox::critical(this, "Error",
+                          QString("Could not open file for writing: %1")
+                              .arg(m_currentParamsFile));
     return;
   }
 
   // Save parameters using save_csp
   // Pass scan detection params only if we have RGB data (matching GTK behavior)
   bool has_rgb = m_scan && m_scan->has_rgb();
-  if (!colorscreen::save_csp(f, &m_scrToImgParams, 
-                             has_rgb ? &m_detectParams : nullptr,
-                             &m_rparams, &m_solverParams)) {
+  if (!colorscreen::save_csp(f, &m_scrToImgParams,
+                             has_rgb ? &m_detectParams : nullptr, &m_rparams,
+                             &m_solverParams)) {
     fclose(f);
     QMessageBox::critical(this, "Error", "Failed to save parameters.");
     return;
   }
 
   fclose(f);
-  statusBar()->showMessage(QString("Parameters saved to %1").arg(m_currentParamsFile), 3000);
-  
+  statusBar()->showMessage(
+      QString("Parameters saved to %1").arg(m_currentParamsFile), 3000);
+
   // Mark as saved (clean state)
   if (m_undoStack) {
     m_undoStack->setClean();
@@ -1800,9 +1983,10 @@ void MainWindow::onSaveParameters() {
 
 void MainWindow::onSaveParametersAs() {
   QString fileName = QFileDialog::getSaveFileName(
-      this, "Save Parameters", m_currentParamsFile.isEmpty() ? QString() : m_currentParamsFile,
+      this, "Save Parameters",
+      m_currentParamsFile.isEmpty() ? QString() : m_currentParamsFile,
       "Parameters (*.par);;All Files (*)");
-  
+
   if (fileName.isEmpty())
     return;
 
@@ -1815,38 +1999,40 @@ void MainWindow::onSaveParametersAs() {
 
     FILE *f = fopen(saveFileName.toUtf8().constData(), "wt");
     if (!f) {
-      QMessageBox::critical(this, "Error", 
-                            QString("Could not open file for writing: %1").arg(saveFileName));
+      QMessageBox::critical(
+          this, "Error",
+          QString("Could not open file for writing: %1").arg(saveFileName));
       return;
     }
 
     // Save parameters using save_csp
-    // Pass scan detection params only if we have RGB data (matching GTK behavior)
+    // Pass scan detection params only if we have RGB data (matching GTK
+    // behavior)
     bool has_rgb = m_scan && m_scan->has_rgb();
-    if (!colorscreen::save_csp(f, &m_scrToImgParams, 
-                               has_rgb ? &m_detectParams : nullptr,
-                               &m_rparams, &m_solverParams)) {
+    if (!colorscreen::save_csp(f, &m_scrToImgParams,
+                               has_rgb ? &m_detectParams : nullptr, &m_rparams,
+                               &m_solverParams)) {
       fclose(f);
       QMessageBox::critical(this, "Error", "Failed to save parameters.");
       return;
     }
 
     fclose(f);
-    
+
     // Update current file path and add to recent
     m_currentParamsFile = QFileInfo(fileName).absoluteFilePath();
     m_currentParamsFileIsWeak = false; // Now it's a real file, not a suggestion
     addToRecentParams(fileName);
-    
-    statusBar()->showMessage(QString("Parameters saved to %1").arg(fileName), 3000);
-    
+
+    statusBar()->showMessage(QString("Parameters saved to %1").arg(fileName),
+                             3000);
+
     // Mark as saved (clean state)
     if (m_undoStack) {
       m_undoStack->setClean();
     }
   });
 }
-
 
 void MainWindow::onOpenImage() {
   QString fileName = QFileDialog::getOpenFileName(
@@ -1860,9 +2046,7 @@ void MainWindow::onOpenImage() {
   // Defer loadFile to allow the event loop to spin and clean up
   // KIO jobs from the file dialog before we pop up another dialog (QMessageBox)
   // in loadFile(). Otherwise, KJob::kill can crash in KF6KIOGui.
-  QTimer::singleShot(0, this, [this, fileName]() {
-    loadFile(fileName);
-  });
+  QTimer::singleShot(0, this, [this, fileName]() { loadFile(fileName); });
 }
 
 void MainWindow::addProgress(std::shared_ptr<colorscreen::progress_info> info) {
@@ -2001,43 +2185,47 @@ void MainWindow::onProgressTimer() {
         task->info->get_status();
 
     if (statusStack.empty()) {
-       m_statusLabel->setText("no progress info (yet)");
-       m_progressBar->setValue(0);
-       m_progressBar->setRange(0, 0);
+      m_statusLabel->setText("no progress info (yet)");
+      m_progressBar->setValue(0);
+      m_progressBar->setRange(0, 0);
     } else {
       QStringList tasks;
       float percent = -1;
 
       for (const auto &s : statusStack) {
         if (s.task && s.task[0]) {
-           QString taskName = QString::fromUtf8(s.task);
-           if (s.progress >= 0 && &s != &statusStack.back()) {
-               taskName += QString(" (%1%)").arg((int)s.progress);
-           }
-           tasks.append(taskName);
+          QString taskName = QString::fromUtf8(s.task);
+          if (s.progress >= 0 && &s != &statusStack.back()) {
+            taskName += QString(" (%1%)").arg((int)s.progress);
+          }
+          tasks.append(taskName);
         }
         // Use the progress of the most specific task that has progress
         if (s.progress >= 0) {
-           percent = s.progress;
+          percent = s.progress;
         }
       }
 
       QString statusText = tasks.join(" > ");
-      
+
       // Time estimation for long running tasks
       qint64 elapsedMs = task->startTime.elapsed();
-      if (elapsedMs > 20000 && percent > 0.1f) { // > 20s and at least 0.1% progress to avoid huge estimates
-          double doneFraction = (double)percent / 100.0;
-          if (doneFraction > 0.0) {
-              qint64 totalEstimatedMs = (double)elapsedMs / doneFraction;
-              qint64 remainingMs = totalEstimatedMs - elapsedMs;
-              
-              if (remainingMs > 0) {
-                  int remainingSec = (remainingMs / 1000) % 60;
-                  int remainingMin = (remainingMs / 60000);
-                  statusText += QString(" (ETR: %1:%2)").arg(remainingMin).arg(remainingSec, 2, 10, QChar('0'));
-              }
+      if (elapsedMs > 20000 &&
+          percent > 0.1f) { // > 20s and at least 0.1% progress to avoid huge
+                            // estimates
+        double doneFraction = (double)percent / 100.0;
+        if (doneFraction > 0.0) {
+          qint64 totalEstimatedMs = (double)elapsedMs / doneFraction;
+          qint64 remainingMs = totalEstimatedMs - elapsedMs;
+
+          if (remainingMs > 0) {
+            int remainingSec = (remainingMs / 1000) % 60;
+            int remainingMin = (remainingMs / 60000);
+            statusText += QString(" (ETR: %1:%2)")
+                              .arg(remainingMin)
+                              .arg(remainingSec, 2, 10, QChar('0'));
           }
+        }
       }
 
       m_statusLabel->setText(statusText);
@@ -2047,7 +2235,7 @@ void MainWindow::onProgressTimer() {
         m_progressBar->setValue((int)percent);
       } else {
         // Indeterminate progress (animated busy indicator)
-        m_progressBar->setRange(0, 0); 
+        m_progressBar->setRange(0, 0);
       }
     }
   }
@@ -2066,8 +2254,7 @@ void MainWindow::onCancelClicked() {
     auto renderProgress = m_renderProgress.lock();
     if (renderProgress && renderProgress == currentProgress) {
       auto ret = QMessageBox::question(
-          this, tr("Cancel Rendering"),
-          tr("Cancel the current rendering?"),
+          this, tr("Cancel Rendering"), tr("Cancel the current rendering?"),
           QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
       if (ret != QMessageBox::Yes)
         return;
@@ -2233,15 +2420,15 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
         FILE *f = fopen(parFile.toUtf8().constData(), "r");
         if (f) {
           const char *error = nullptr;
-	  // load_csp merges parameters in; reset first.
-	  colorscreen::scr_to_img_parameters emptyScrToImg;
-	  m_scrToImgParams = emptyScrToImg;
-	  colorscreen::scr_detect_parameters emptyScrDetect;
-	  m_detectParams = emptyScrDetect;
-	  colorscreen::render_parameters emptyRparams;
-	  m_rparams = emptyRparams;
-	  colorscreen::solver_parameters emptySolver;
-	  m_solverParams = emptySolver;
+          // load_csp merges parameters in; reset first.
+          colorscreen::scr_to_img_parameters emptyScrToImg;
+          m_scrToImgParams = emptyScrToImg;
+          colorscreen::scr_detect_parameters emptyScrDetect;
+          m_detectParams = emptyScrDetect;
+          colorscreen::render_parameters emptyRparams;
+          m_rparams = emptyRparams;
+          colorscreen::solver_parameters emptySolver;
+          m_solverParams = emptySolver;
           if (!colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams,
                                      &m_rparams, &m_solverParams, &error)) {
             QMessageBox::warning(this, "Error Loading Parameters",
@@ -2250,13 +2437,15 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           } else {
             m_prevScrToImgParams = m_scrToImgParams;
             m_prevDetectParams = m_detectParams;
-            
+
             // Track the loaded parameter file
             m_currentParamsFile = parFile;
-            m_currentParamsFileIsWeak = false; // This is a real file, not a suggestion
+            m_currentParamsFileIsWeak =
+                false; // This is a real file, not a suggestion
             addToRecentParams(parFile);
-            
-            // If we have a valid screen type, default to formatted (interpolated) view
+
+            // If we have a valid screen type, default to formatted
+            // (interpolated) view
             if (m_scrToImgParams.type != colorscreen::Random) {
               m_renderTypeParams.type = colorscreen::render_type_interpolated;
             }
@@ -2266,20 +2455,22 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
       } else {
         // User declined to load parameters - suggest filename
         QFileInfo fileInfo(fileName);
-        m_currentParamsFile = fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
+        m_currentParamsFile =
+            fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
         m_currentParamsFileIsWeak = true;
       }
     } else {
       // No parameter file exists - suggest filename
       QFileInfo fileInfo(m_currentImageFile);
-      m_currentParamsFile = fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
+      m_currentParamsFile =
+          fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
       m_currentParamsFileIsWeak = true;
     }
   }
 
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Opening image", 0);
-  colorscreen::sub_task task (progress.get ());  /* Keep so tasks are nested.  */
+  colorscreen::sub_task task(progress.get()); /* Keep so tasks are nested.  */
   addProgress(progress);
 
   std::shared_ptr<colorscreen::image_data> tempScan =
@@ -2287,72 +2478,71 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   // Access m_rparams carefully. It's a member.
   colorscreen::image_data::demosaicing_t demosaic = m_rparams.demosaic;
 
-  bool isCsprj = fileName.endsWith(QLatin1String(".csprj"), Qt::CaseInsensitive);
+  bool isCsprj =
+      fileName.endsWith(QLatin1String(".csprj"), Qt::CaseInsensitive);
 
   QFutureWatcher<std::pair<bool, QString>> *watcher =
       new QFutureWatcher<std::pair<bool, QString>>(this);
-  connect(watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
-          [this, watcher, tempScan, progress, fileName, isCsprj]() {
-            std::pair<bool, QString> result = watcher->result();
-            removeProgress(progress);
-            watcher->deleteLater();
+  connect(
+      watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
+      [this, watcher, tempScan, progress, fileName, isCsprj]() {
+        std::pair<bool, QString> result = watcher->result();
+        removeProgress(progress);
+        watcher->deleteLater();
 
-            if (result.first) {
-              m_scan = tempScan;
+        if (result.first) {
+          m_scan = tempScan;
 
-              if ((int)m_scan->gamma != -2 && m_scan->gamma > 0 &&
-                  m_rparams.gamma == -1) // Update only if unknown
-                m_rparams.gamma = m_scan->gamma;
-              else if (m_rparams.gamma == -1)
-                m_rparams.gamma = -1;
+          if ((int)m_scan->gamma != -2 && m_scan->gamma > 0 &&
+              m_rparams.gamma == -1) // Update only if unknown
+            m_rparams.gamma = m_scan->gamma;
+          else if (m_rparams.gamma == -1)
+            m_rparams.gamma = -1;
 
-              m_undoStack->clear();
+          m_undoStack->clear();
 
-              // If this is a stitched project, disable all tiles initially so
-              // the UI is responsive while tiles load in the background.
-              if (isCsprj && m_scan->stitch) {
-                colorscreen::stitch_project *stitch = m_scan->stitch;
-                int w = stitch->params.width;
-                int h = stitch->params.height;
-                m_rparams.set_tile_adjustments_dimensions(w, h);
-                for (int y = 0; y < h; y++)
-                  for (int x = 0; x < w; x++)
-                    m_rparams.get_tile_adjustment(x, y).enabled = false;
-              }
+          // If this is a stitched project, disable all tiles initially so
+          // the UI is responsive while tiles load in the background.
+          if (isCsprj && m_scan->stitch) {
+            colorscreen::stitch_project *stitch = m_scan->stitch;
+            int w = stitch->params.width;
+            int h = stitch->params.height;
+            m_rparams.set_tile_adjustments_dimensions(w, h);
+            for (int y = 0; y < h; y++)
+              for (int x = 0; x < w; x++)
+                m_rparams.get_tile_adjustment(x, y).enabled = false;
+          }
 
-              m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                                      &m_detectParams, &m_renderTypeParams,
-                                      &m_solverParams);
-              onImageLoaded();
+          m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
+                                  &m_detectParams, &m_renderTypeParams,
+                                  &m_solverParams);
+          onImageLoaded();
 
-              // Add to recent files
-              addToRecentFiles(m_currentImageFile);
+          // Add to recent files
+          addToRecentFiles(m_currentImageFile);
 
-              // Launch background tile loading for stitch projects.
-              if (isCsprj && m_scan->stitch) {
-                colorscreen::stitch_project *stitch = m_scan->stitch;
-                int w = stitch->params.width;
-                int h = stitch->params.height;
+          // Launch background tile loading for stitch projects.
+          if (isCsprj && m_scan->stitch) {
+            colorscreen::stitch_project *stitch = m_scan->stitch;
+            int w = stitch->params.width;
+            int h = stitch->params.height;
 
-                for (int ty = 0; ty < h; ty++) {
-                  for (int tx = 0; tx < w; tx++) {
-                    auto tileProgress =
-                        std::make_shared<colorscreen::progress_info>();
-                    tileProgress->set_task(
-                        qPrintable(tr("Loading tile %1,%2").arg(tx).arg(ty)),
-                        1);
-                    addProgress(tileProgress);
+            for (int ty = 0; ty < h; ty++) {
+              for (int tx = 0; tx < w; tx++) {
+                auto tileProgress =
+                    std::make_shared<colorscreen::progress_info>();
+                tileProgress->set_task(
+                    qPrintable(tr("Loading tile %1,%2").arg(tx).arg(ty)), 1);
+                addProgress(tileProgress);
 
-                    auto scanRef   = m_scan;   // keep scan alive
-                    int  capturedX = tx;
-                    int  capturedY = ty;
+                auto scanRef = m_scan; // keep scan alive
+                int capturedX = tx;
+                int capturedY = ty;
 
-                    auto *tileWatcher =
-                        new QFutureWatcher<bool>(this);
-                    connect(
-                        tileWatcher, &QFutureWatcher<bool>::finished, this,
-                        [this, tileWatcher, tileProgress, scanRef,
-                         capturedX, capturedY]() {
+                auto *tileWatcher = new QFutureWatcher<bool>(this);
+                connect(tileWatcher, &QFutureWatcher<bool>::finished, this,
+                        [this, tileWatcher, tileProgress, scanRef, capturedX,
+                         capturedY]() {
                           bool ok = tileWatcher->result();
                           removeProgress(tileProgress);
                           tileWatcher->deleteLater();
@@ -2360,8 +2550,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                           if (ok) {
                             // Enable the tile and trigger a re-render.
                             ParameterState state = getCurrentState();
-                            state.rparams.get_tile_adjustment(capturedX,
-                                                              capturedY)
+                            state.rparams
+                                .get_tile_adjustment(capturedX, capturedY)
                                 .enabled = true;
                             changeParameters(state, tr("Tile loaded %1,%2")
                                                         .arg(capturedX)
@@ -2369,38 +2559,36 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                           }
                         });
 
-                    QFuture<bool> tileFuture = QtConcurrent::run(
-                        [scanRef, capturedX, capturedY,
-                         tileProgress]() -> bool {
-                          if (!scanRef || !scanRef->stitch)
-                            return false;
-                          const char *err = nullptr;
-                          bool ok = scanRef->stitch
-                                        ->images[capturedY][capturedX]
-                                        .load_img(&err, tileProgress.get());
-                          return ok;
-                        });
-                    tileWatcher->setFuture(tileFuture);
-                  }
-                }
-              }
-
-            } else {
-              if (progress->cancelled()) {
-              } else {
-                QMessageBox::critical(this, "Error Loading Image",
-                                      result.second.isEmpty()
-                                          ? "Failed to load image."
-                                          : result.second);
+                QFuture<bool> tileFuture = QtConcurrent::run(
+                    [scanRef, capturedX, capturedY, tileProgress]() -> bool {
+                      if (!scanRef || !scanRef->stitch)
+                        return false;
+                      const char *err = nullptr;
+                      bool ok = scanRef->stitch->images[capturedY][capturedX]
+                                    .load_img(&err, tileProgress.get());
+                      return ok;
+                    });
+                tileWatcher->setFuture(tileFuture);
               }
             }
-          });
+          }
+
+        } else {
+          if (progress->cancelled()) {
+          } else {
+            QMessageBox::critical(this, "Error Loading Image",
+                                  result.second.isEmpty()
+                                      ? "Failed to load image."
+                                      : result.second);
+          }
+        }
+      });
 
   QString absolutePath = m_currentImageFile;
-  QFuture<std::pair<bool, QString>> future =
-      QtConcurrent::run([tempScan, absolutePath, progress, demosaic, isCsprj]() {
+  QFuture<std::pair<bool, QString>> future = QtConcurrent::run(
+      [tempScan, absolutePath, progress, demosaic, isCsprj]() {
         const char *error = nullptr;
-	colorscreen::sub_task task (progress.get ());
+        colorscreen::sub_task task(progress.get());
         bool res = tempScan->load(absolutePath.toUtf8().constData(),
                                   /*preload_all=*/!isCsprj, &error,
                                   progress.get(), demosaic);
@@ -2413,7 +2601,6 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
   watcher->setFuture(future);
 }
-
 
 void MainWindow::loadRecentFiles() {
   QSettings settings;
@@ -2436,7 +2623,7 @@ void MainWindow::applyState(const ParameterState &state) {
   m_detectParams = state.detect;
   m_solverParams = state.solver; // Manually copy logic if needed? Struct copy
   m_profileSpots = state.profileSpots;
-                                 // should work if fields are copyable.
+  // should work if fields are copyable.
   // solver_parameters has vector, copy constructor should be fine
   // (std::vector).
 
@@ -2472,7 +2659,7 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
     QSignalBlocker blocker(nlBox);
     nlBox->setChecked(state.scrToImg.mesh_trans != nullptr);
   }
-  
+
   // Update deformation chart
   if (m_geometryPanel) {
     m_geometryPanel->updateDeformationChart();
@@ -2481,13 +2668,15 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
   // Handle backlight dock visibility
   if (m_backlightDock) {
     bool hasBacklight = state.rparams.backlight_correction != nullptr;
-    m_backlightDock->setVisible(hasBacklight && m_backlightDock->widget() != nullptr);
+    m_backlightDock->setVisible(hasBacklight &&
+                                m_backlightDock->widget() != nullptr);
   }
-  
+
   updateRegistrationGroupVisibility();
 
   if (m_sharpnessPanel && m_sharpnessPanel->getAdaptiveChart()) {
-      m_sharpnessPanel->getAdaptiveChart()->setCorrection(state.rparams.scanner_blur_correction);
+    m_sharpnessPanel->getAdaptiveChart()->setCorrection(
+        state.rparams.scanner_blur_correction);
   }
 }
 
@@ -2501,12 +2690,14 @@ ParameterState MainWindow::getCurrentState() const {
   return state;
 }
 
-void MainWindow::changeParameters(const ParameterState &newState, const QString &description) {
+void MainWindow::changeParameters(const ParameterState &newState,
+                                  const QString &description) {
   ParameterState currentState = getCurrentState();
   if (currentState == newState)
     return;
 
-  m_undoStack->push(new ChangeParametersCommand(this, currentState, newState, description));
+  m_undoStack->push(
+      new ChangeParametersCommand(this, currentState, newState, description));
 }
 
 // Helper to check for unsaved changes and prompt to save
@@ -2555,14 +2746,14 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 
   // Cancel all active processes
   for (const auto &progress : m_activeProgresses) {
-      if (progress.info) {
-          progress.info->cancel();
-      }
+    if (progress.info) {
+      progress.info->cancel();
+    }
   }
 
   // Clean up recovery files on normal exit
   clearRecoveryFiles();
-  
+
   saveWindowState();
   saveRecentFiles();
   saveRecentParams();
@@ -2640,7 +2831,7 @@ void MainWindow::restoreWindowState() {
     fixDockVisibility(m_tilesDock);
     fixDockVisibility(m_colorTilesDock);
     fixDockVisibility(m_correctedColorTilesDock);
-    
+
     // Add missing chart docks
     fixDockVisibility(m_spectraDock);
     fixDockVisibility(m_deformationDock);
@@ -2800,7 +2991,8 @@ void MainWindow::onNonlinearToggled(bool checked) {
   if (checked) {
     // If not already set, trigger optimization
     if (!m_scrToImgParams.mesh_trans) {
-       onOptimizeGeometry(false); // pass false for Auto assuming button is manual
+      onOptimizeGeometry(
+          false); // pass false for Auto assuming button is manual
     }
   } else {
     // If set, clear it
@@ -2812,9 +3004,9 @@ void MainWindow::onNonlinearToggled(bool checked) {
   }
 }
 
-void MainWindow::onZoomFit() { 
+void MainWindow::onZoomFit() {
   if (m_imageWidget) {
-    m_imageWidget->smoothFitToView(); 
+    m_imageWidget->smoothFitToView();
   }
 }
 
@@ -2830,24 +3022,26 @@ void MainWindow::onOptimizeGeometry(bool autoChecked) {
   data.scrToImg = m_scrToImgParams;
   data.solver = m_solverParams;
   data.computeMesh = m_geometryPanel->isNonlinearEnabled();
-  
+
   // Request new solve task with captured data
   m_solverQueue.requestRender(QVariant::fromValue(data));
 }
 
-void MainWindow::onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData) {
+void MainWindow::onTriggerSolve(
+    int reqId, std::shared_ptr<colorscreen::progress_info> progress,
+    const QVariant &userData) {
   if (!m_scan || !m_solverWorker || !userData.canConvert<SolverRequestData>()) {
     m_solverQueue.reportFinished(reqId, false);
     return;
   }
-  
+
   SolverRequestData data = userData.value<SolverRequestData>();
 
   if (progress) {
-      progress->set_task("Optimizing geometry", 1);
+    progress->set_task("Optimizing geometry", 1);
   }
-  //colorscreen::sub_task task (progress.get ());
-  
+  // colorscreen::sub_task task (progress.get ());
+
   // Invoke solver in worker
   QMetaObject::invokeMethod(
       m_solverWorker, "solve", Qt::QueuedConnection, Q_ARG(int, reqId),
@@ -2857,7 +3051,9 @@ void MainWindow::onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress
       Q_ARG(bool, data.computeMesh));
 }
 
-void MainWindow::onSolverFinished(int reqId, colorscreen::scr_to_img_parameters result, bool success, bool cancelled) {
+void MainWindow::onSolverFinished(int reqId,
+                                  colorscreen::scr_to_img_parameters result,
+                                  bool success, bool cancelled) {
   // Report back to queue
   m_solverQueue.reportFinished(reqId, success);
 
@@ -2868,7 +3064,8 @@ void MainWindow::onSolverFinished(int reqId, colorscreen::scr_to_img_parameters 
   } else {
     // Only show error if not cancelled
     if (!cancelled) {
-        QMessageBox::warning(this, "Optimization Failed", "The geometry solver failed to find a solution.");
+      QMessageBox::warning(this, "Optimization Failed",
+                           "The geometry solver failed to find a solution.");
     }
   }
 }
@@ -2912,7 +3109,7 @@ void MainWindow::updateRegistrationGroupVisibility() {
   // 1. Image is loaded
   // 2. Screen type is not Random
   bool shouldShow = m_scan && (m_scrToImgParams.type != colorscreen::Random);
-  
+
   for (QAction *action : m_registrationActions) {
     action->setVisible(shouldShow);
   }
@@ -2930,14 +3127,15 @@ void MainWindow::updateRegistrationGroupVisibility() {
     }
     int profileIndex = m_configTabs->indexOf(m_profilePanel);
     if (profileIndex != -1) {
-      m_configTabs->setTabVisible(profileIndex, shouldShow && m_scan->has_rgb());
+      m_configTabs->setTabVisible(profileIndex,
+                                  shouldShow && m_scan->has_rgb());
     }
   }
-  
+
   // If hiding and a registration tool is active, switch to Pan
-  if (!shouldShow && (m_selectAction->isChecked() || 
-                      m_addPointAction->isChecked() || 
-                      m_setCenterAction->isChecked())) {
+  if (!shouldShow &&
+      (m_selectAction->isChecked() || m_addPointAction->isChecked() ||
+       m_setCenterAction->isChecked())) {
     m_panAction->setChecked(true);
   }
 }
@@ -2984,11 +3182,11 @@ void MainWindow::saveRecoveryState() {
   if (f) {
     bool has_rgb = m_scan && m_scan->has_rgb();
     colorscreen::save_csp(f, &m_scrToImgParams,
-                          has_rgb ? &m_detectParams : nullptr,
-                          &m_rparams, &m_solverParams);
+                          has_rgb ? &m_detectParams : nullptr, &m_rparams,
+                          &m_solverParams);
     fclose(f);
   }
-  
+
   // Save parameter file path and weak flag
   QString paramsMetaPath = m_recoveryDir + "/recovery_params_meta.txt";
   QFile metaFile(paramsMetaPath);
@@ -3004,7 +3202,7 @@ void MainWindow::loadRecoveryState() {
   // Load image path
   QString imagePath = m_recoveryDir + "/recovery_image.txt";
   QString imageToLoad;
-  
+
   QFile imageFile(imagePath);
   if (imageFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
     QTextStream in(&imageFile);
@@ -3018,17 +3216,18 @@ void MainWindow::loadRecoveryState() {
     FILE *f = fopen(paramsPath.toUtf8().constData(), "r");
     if (f) {
       const char *error = nullptr;
-      colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams,
-                            &m_rparams, &m_solverParams, &error);
+      colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams, &m_rparams,
+                            &m_solverParams, &error);
       fclose(f);
-      
+
       if (error) {
-        QMessageBox::warning(this, "Recovery Warning",
-                            QString("Error loading parameters: %1").arg(error));
+        QMessageBox::warning(
+            this, "Recovery Warning",
+            QString("Error loading parameters: %1").arg(error));
       }
     }
   }
-  
+
   // Load parameter file path and weak flag
   QString paramsMetaPath = m_recoveryDir + "/recovery_params_meta.txt";
   QFile metaFile(paramsMetaPath);
@@ -3042,10 +3241,11 @@ void MainWindow::loadRecoveryState() {
 
   // Load image if path was saved
   if (!imageToLoad.isEmpty() && QFile::exists(imageToLoad)) {
-    loadFile(imageToLoad, true);  // Suppress param prompt during recovery
+    loadFile(imageToLoad, true); // Suppress param prompt during recovery
   } else if (!imageToLoad.isEmpty()) {
-    QMessageBox::warning(this, "Recovery Warning",
-                        QString("Could not find image file: %1").arg(imageToLoad));
+    QMessageBox::warning(
+        this, "Recovery Warning",
+        QString("Could not find image file: %1").arg(imageToLoad));
   }
 
   // Update UI with recovered parameters
@@ -3055,45 +3255,39 @@ void MainWindow::loadRecoveryState() {
 void MainWindow::clearRecoveryFiles() {
   QString imagePath = m_recoveryDir + "/recovery_image.txt";
   QString paramsPath = m_recoveryDir + "/recovery_params.par";
-  
+
   QFile::remove(imagePath);
   QFile::remove(paramsPath);
 }
-void MainWindow::onSelectAll() {
-  m_imageWidget->selectAll();
-}
+void MainWindow::onSelectAll() { m_imageWidget->selectAll(); }
 
-void MainWindow::onDeselectAll() {
-  m_imageWidget->clearSelection();
-}
+void MainWindow::onDeselectAll() { m_imageWidget->clearSelection(); }
 
-void MainWindow::onDeleteSelected() {
-  m_imageWidget->deleteSelectedPoints();
-}
+void MainWindow::onDeleteSelected() { m_imageWidget->deleteSelectedPoints(); }
 
 void MainWindow::onPruneMisplaced() {
   if (!m_scan || !m_imageWidget) {
     return;
   }
-  
+
   const auto &selectedPoints = m_imageWidget->selectedPoints();
   if (selectedPoints.empty()) {
     return;
   }
-  
+
   // Create map for current geometry
   colorscreen::scr_to_img map;
   map.set_parameters(m_scrToImgParams, *m_scan);
-  
+
   // Build histogram of distances
   colorscreen::histogram hist;
-  
+
   // First pass: pre-account all distances
   for (const auto &sp : selectedPoints) {
     if (sp.type == ImageWidget::SelectedPoint::RegistrationPoint &&
         sp.index < m_solverParams.points.size()) {
       const auto &point = m_solverParams.points[sp.index];
-      
+
       colorscreen::coord_t dist;
       if (!colorscreen::screen_with_vertical_strips_p(m_scrToImgParams.type)) {
         colorscreen::point_t predicted = map.to_img(point.scr);
@@ -3105,15 +3299,15 @@ void MainWindow::onPruneMisplaced() {
       hist.pre_account(dist);
     }
   }
-  
+
   hist.finalize_range(65536);
-  
+
   // Second pass: account distances
   for (const auto &sp : selectedPoints) {
     if (sp.type == ImageWidget::SelectedPoint::RegistrationPoint &&
         sp.index < m_solverParams.points.size()) {
       const auto &point = m_solverParams.points[sp.index];
-      
+
       colorscreen::coord_t dist;
       if (!colorscreen::screen_with_vertical_strips_p(m_scrToImgParams.type)) {
         colorscreen::point_t predicted = map.to_img(point.scr);
@@ -3125,20 +3319,20 @@ void MainWindow::onPruneMisplaced() {
       hist.account(dist);
     }
   }
-  
+
   hist.finalize();
   colorscreen::coord_t threshold = hist.find_max(0.1);
-  
+
   // Remove points exceeding threshold
   ParameterState oldState = getCurrentState();
-  
+
   // Collect indices to remove (in reverse order to avoid index shifting issues)
   std::vector<size_t> indicesToRemove;
   for (const auto &sp : selectedPoints) {
     if (sp.type == ImageWidget::SelectedPoint::RegistrationPoint &&
         sp.index < m_solverParams.points.size()) {
       const auto &point = m_solverParams.points[sp.index];
-      
+
       colorscreen::coord_t dist;
       if (!colorscreen::screen_with_vertical_strips_p(m_scrToImgParams.type)) {
         colorscreen::point_t predicted = map.to_img(point.scr);
@@ -3147,28 +3341,32 @@ void MainWindow::onPruneMisplaced() {
         colorscreen::point_t predicted = map.to_scr(point.img);
         dist = fabs(predicted.x - point.scr.x);
       }
-      
+
       if (dist > threshold) {
         indicesToRemove.push_back(sp.index);
       }
     }
   }
-  
+
   // Sort in descending order and remove
-  std::sort(indicesToRemove.begin(), indicesToRemove.end(), std::greater<size_t>());
+  std::sort(indicesToRemove.begin(), indicesToRemove.end(),
+            std::greater<size_t>());
   for (size_t idx : indicesToRemove) {
     m_solverParams.remove_point(idx);
   }
-  
+
   // Update UI
-  m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams, &m_solverParams);
+  m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
+                                  &m_detectParams, &m_renderTypeParams,
+                                  &m_solverParams);
   m_imageWidget->clearSelection();
   m_imageWidget->update();
-  
+
   // Create undo command
   ParameterState newState = getCurrentState();
-  m_undoStack->push(new ChangeParametersCommand(this, oldState, newState, "Prune misplaced points"));
-  
+  m_undoStack->push(new ChangeParametersCommand(this, oldState, newState,
+                                                "Prune misplaced points"));
+
   // Trigger auto solver if enabled
   if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
     size_t count = m_imageWidget->registrationPointCount();
@@ -3180,9 +3378,11 @@ void MainWindow::onPruneMisplaced() {
 }
 
 void MainWindow::updateRegistrationActions() {
-  bool hasPoints = m_imageWidget && m_imageWidget->registrationPointsVisible() && m_imageWidget->registrationPointCount() > 0;
+  bool hasPoints = m_imageWidget &&
+                   m_imageWidget->registrationPointsVisible() &&
+                   m_imageWidget->registrationPointCount() > 0;
   bool hasSelection = m_imageWidget && !m_imageWidget->selectedPoints().empty();
-  
+
   // Disable selection actions if registration points aren't visible
   if (m_selectAllAction) {
     m_selectAllAction->setEnabled(hasPoints);
@@ -3196,8 +3396,9 @@ void MainWindow::updateRegistrationActions() {
   if (m_pruneMisplacedAction) {
     m_pruneMisplacedAction->setEnabled(hasSelection);
   }
-  
-  // Disable Add Point and Set Center tools when screen type is Random or no scan loaded
+
+  // Disable Add Point and Set Center tools when screen type is Random or no
+  // scan loaded
   if (m_addPointAction) {
     bool canAddPoints = m_scan && m_scrToImgParams.type != colorscreen::Random;
     m_addPointAction->setEnabled(canAddPoints);
@@ -3214,7 +3415,7 @@ void MainWindow::updateRegistrationActions() {
       m_panAction->setChecked(true);
     }
   }
-  
+
   // Disable/enable optimize geometry and select all based on point count
   size_t count = m_imageWidget ? m_imageWidget->registrationPointCount() : 0;
   if (m_selectAllAction) {
@@ -3226,11 +3427,14 @@ void MainWindow::updateRegistrationActions() {
 
   // Update buttons in GeometryPanel
   if (m_geometryPanel) {
-    QPushButton *optBtn = m_geometryPanel->findChild<QPushButton *>("optimizeButton");
-    if (optBtn) optBtn->setEnabled(count >= 3);
+    QPushButton *optBtn =
+        m_geometryPanel->findChild<QPushButton *>("optimizeButton");
+    if (optBtn)
+      optBtn->setEnabled(count >= 3);
 
     QCheckBox *nlBox = m_geometryPanel->findChild<QCheckBox *>("nonlinearBox");
-    if (nlBox) nlBox->setEnabled(count >= 5);
+    if (nlBox)
+      nlBox->setEnabled(count >= 5);
   }
 }
 
@@ -3241,7 +3445,8 @@ void MainWindow::onPointManipulationStarted() {
 void MainWindow::maybeTriggerAutoSolver() {
   ParameterState newState = getCurrentState();
   if (newState != m_undoSnapshot) {
-    m_undoStack->push(new ChangeParametersCommand(this, m_undoSnapshot, newState, "Move registration point"));
+    m_undoStack->push(new ChangeParametersCommand(
+        this, m_undoSnapshot, newState, "Move registration point"));
     m_undoSnapshot = newState;
   }
 
@@ -3254,8 +3459,11 @@ void MainWindow::maybeTriggerAutoSolver() {
   updateRegistrationActions();
 }
 
-void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t scrPos, colorscreen::point_t color) {
-  if (!m_scan) return;
+void MainWindow::onPointAdded(colorscreen::point_t imgPos,
+                              colorscreen::point_t scrPos,
+                              colorscreen::point_t color) {
+  if (!m_scan)
+    return;
 
   // Profile spot mode: convert img coords → screen coords and store
   if (m_addingProfileSpot) {
@@ -3290,14 +3498,16 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t 
     worker->moveToThread(thread);
 
     connect(thread, &QThread::started, worker, &FocusAnalysisWorker::run);
-    connect(worker, &FocusAnalysisWorker::finished, this, [this, worker, thread, progress](bool success, colorscreen::finetune_result result) {
-        onFocusAnalysisFinished(success, result);
-        removeProgress(progress);
-        worker->deleteLater();
-        thread->quit();
-        thread->wait();
-        thread->deleteLater();
-    });
+    connect(worker, &FocusAnalysisWorker::finished, this,
+            [this, worker, thread,
+             progress](bool success, colorscreen::finetune_result result) {
+              onFocusAnalysisFinished(success, result);
+              removeProgress(progress);
+              worker->deleteLater();
+              thread->quit();
+              thread->wait();
+              thread->deleteLater();
+            });
 
     thread->start();
     m_finetuneThreads.push_back(thread);
@@ -3307,38 +3517,47 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t 
   // Run finetune to get the accurate screen location and color
   colorscreen::finetune_parameters fparam;
   fparam.multitile = 3;
-  fparam.flags |= colorscreen::finetune_position | colorscreen::finetune_bw | colorscreen::finetune_verbose | colorscreen::finetune_use_srip_widths | colorscreen::finetune_produce_images;
-  
+  fparam.flags |= colorscreen::finetune_position | colorscreen::finetune_bw |
+                  colorscreen::finetune_verbose |
+                  colorscreen::finetune_use_srip_widths |
+                  colorscreen::finetune_produce_images;
+
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Adding control points", 0);
-  colorscreen::sub_task task (progress.get ());  /* Keep so tasks are nested.  */
+  colorscreen::sub_task task(progress.get()); /* Keep so tasks are nested.  */
   addProgress(progress);
-  
-  colorscreen::finetune_result res = colorscreen::finetune(m_rparams, m_scrToImgParams, *m_scan, 
-                                                            {{imgPos.x, imgPos.y}}, nullptr, fparam, progress.get());
-  
+
+  colorscreen::finetune_result res = colorscreen::finetune(
+      m_rparams, m_scrToImgParams, *m_scan, {{imgPos.x, imgPos.y}}, nullptr,
+      fparam, progress.get());
+
   removeProgress(progress);
-  
+
   if (res.success) {
     // Snapshot state for undo
     ParameterState oldState = getCurrentState();
-    
+
     // Add the point to solver parameters
-    m_solverParams.add_point(res.solver_point_img_location, res.solver_point_screen_location, res.solver_point_color);
-    
+    m_solverParams.add_point(res.solver_point_img_location,
+                             res.solver_point_screen_location,
+                             res.solver_point_color);
+
     // Update the image widget
-    m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams, &m_solverParams);
+    m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
+                                    &m_detectParams, &m_renderTypeParams,
+                                    &m_solverParams);
     m_imageWidget->update();
-    
+
     // Create undo command with correct description
     ParameterState newState = getCurrentState();
-    m_undoStack->push(new ChangeParametersCommand(this, oldState, newState, "Add registration point"));
-    
+    m_undoStack->push(new ChangeParametersCommand(this, oldState, newState,
+                                                  "Add registration point"));
+
     // Update finetune diagnostic images
     if (m_geometryPanel) {
       m_geometryPanel->updateFinetuneImages(res);
     }
-    
+
     // Trigger auto solver if enabled
     if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
       size_t count = m_imageWidget->registrationPointCount();
@@ -3351,37 +3570,42 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t 
 }
 
 void MainWindow::onCropRequested() {
-  if (!m_scan) return;
+  if (!m_scan)
+    return;
 
   if (m_imageWidget->interactionMode() == ImageWidget::CropMode) {
-      m_imageWidget->setInteractionMode(ImageWidget::PanMode);
-      statusBar()->clearMessage();
-      return;
+    m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+    statusBar()->clearMessage();
+    return;
   }
 
   // Preserve center across crop state change
-  colorscreen::point_t center = m_imageWidget->widgetToImage(m_imageWidget->rect().center());
+  colorscreen::point_t center =
+      m_imageWidget->widgetToImage(m_imageWidget->rect().center());
 
   ParameterState state = getCurrentState();
   if (state.rparams.scan_crop.set) {
-      state.rparams.scan_crop.set = false;
-      changeParameters(state, "Clear crop for re-cropping");
-      m_imageWidget->centerOn(center);
+    state.rparams.scan_crop.set = false;
+    changeParameters(state, "Clear crop for re-cropping");
+    m_imageWidget->centerOn(center);
   }
 
   m_imageWidget->setInteractionMode(ImageWidget::CropMode);
   statusBar()->showMessage("Select crop");
 }
 
-void MainWindow::startAreaSelection(const QString &message, std::function<void(QRect)> callback) {
-  if (!m_scan) return;
+void MainWindow::startAreaSelection(const QString &message,
+                                    std::function<void(QRect)> callback) {
+  if (!m_scan)
+    return;
 
   if (m_imageWidget->interactionMode() == ImageWidget::GenericAreaMode) {
-      m_imageWidget->setInteractionMode(ImageWidget::PanMode);
-      statusBar()->clearMessage();
-      m_areaSelectionCallback = nullptr;
-      if (m_imageLayerPanel) m_imageLayerPanel->setNeutralAreaChecked(false);
-      return;
+    m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+    statusBar()->clearMessage();
+    m_areaSelectionCallback = nullptr;
+    if (m_imageLayerPanel)
+      m_imageLayerPanel->setNeutralAreaChecked(false);
+    return;
   }
 
   m_areaSelectionCallback = callback;
@@ -3390,7 +3614,8 @@ void MainWindow::startAreaSelection(const QString &message, std::function<void(Q
 }
 
 QRect MainWindow::getImageArea(QRect area) {
-  if (!m_scan) return QRect();
+  if (!m_scan)
+    return QRect();
 
   // Convert widget coordinates to image coordinates
   // Get the four corners and find min/max
@@ -3398,13 +3623,13 @@ QRect MainWindow::getImageArea(QRect area) {
   colorscreen::point_t p2 = m_imageWidget->widgetToImage(area.topRight());
   colorscreen::point_t p3 = m_imageWidget->widgetToImage(area.bottomLeft());
   colorscreen::point_t p4 = m_imageWidget->widgetToImage(area.bottomRight());
-  
+
   // Find bounding box in image coordinates
   int xmin = std::min({p1.x, p2.x, p3.x, p4.x});
   int xmax = std::max({p1.x, p2.x, p3.x, p4.x});
   int ymin = std::min({p1.y, p2.y, p3.y, p4.y});
   int ymax = std::max({p1.y, p2.y, p3.y, p4.y});
-  
+
   // Clamp to image bounds
   xmin = std::max(0, xmin);
   ymin = std::max(0, ymin);
@@ -3420,110 +3645,122 @@ void MainWindow::onAreaSelected(QRect area) {
   }
 
   QRect imgArea = getImageArea(area);
-  if (imgArea.width() <= 0 || imgArea.height() <= 0) return;
+  if (imgArea.width() <= 0 || imgArea.height() <= 0)
+    return;
 
   if (m_imageWidget->interactionMode() == ImageWidget::GenericAreaMode) {
-      auto cb = m_areaSelectionCallback;
-      m_areaSelectionCallback = nullptr; // Clear first so interactionModeChanged doesn't uncheck
-      m_imageWidget->setInteractionMode(ImageWidget::PanMode);
-      statusBar()->clearMessage();
-      if (cb) {
-          cb(imgArea);
-      }
-      return;
+    auto cb = m_areaSelectionCallback;
+    m_areaSelectionCallback =
+        nullptr; // Clear first so interactionModeChanged doesn't uncheck
+    m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+    statusBar()->clearMessage();
+    if (cb) {
+      cb(imgArea);
+    }
+    return;
   }
 
   if (m_imageWidget->interactionMode() == ImageWidget::CropMode) {
-      // Preserve center
-      colorscreen::point_t center = m_imageWidget->widgetToImage(m_imageWidget->rect().center());
+    // Preserve center
+    colorscreen::point_t center =
+        m_imageWidget->widgetToImage(m_imageWidget->rect().center());
 
-      ParameterState state = getCurrentState();
-      state.rparams.scan_crop.x = imgArea.x();
-      state.rparams.scan_crop.y = imgArea.y();
-      state.rparams.scan_crop.width = imgArea.width();
-      state.rparams.scan_crop.height = imgArea.height();
-      state.rparams.scan_crop.set = true;
+    ParameterState state = getCurrentState();
+    state.rparams.scan_crop.x = imgArea.x();
+    state.rparams.scan_crop.y = imgArea.y();
+    state.rparams.scan_crop.width = imgArea.width();
+    state.rparams.scan_crop.height = imgArea.height();
+    state.rparams.scan_crop.set = true;
 
-      changeParameters(state, "Set Crop Area");
-      
-      // Keep center
-      m_imageWidget->centerOn(center);
+    changeParameters(state, "Set Crop Area");
 
-      m_imageWidget->setInteractionMode(ImageWidget::PanMode);
-      statusBar()->clearMessage();
-      return;
+    // Keep center
+    m_imageWidget->centerOn(center);
+
+    m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+    statusBar()->clearMessage();
+    return;
   }
-  
+
   // Create progress info
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Finding registration points", 1);
-  colorscreen::sub_task task (progress.get ());  /* Keep so tasks are nested.  */
+  colorscreen::sub_task task(progress.get()); /* Keep so tasks are nested.  */
   addProgress(progress);
-  
+
   // Create worker and thread
-  FinetuneWorker *worker = new FinetuneWorker(m_solverParams, m_rparams, m_scrToImgParams,
-                                              m_scan, {imgArea.left(), imgArea.top(), imgArea.width(), imgArea.height()}, progress);
+  FinetuneWorker *worker = new FinetuneWorker(
+      m_solverParams, m_rparams, m_scrToImgParams, m_scan,
+      {imgArea.x(), imgArea.y(), imgArea.width(), imgArea.height()}, progress);
   QThread *thread = new QThread();
   worker->moveToThread(thread);
-  
+
   // Connect signals
   connect(thread, &QThread::started, worker, &FinetuneWorker::run);
   connect(worker, &FinetuneWorker::finished, thread, &QThread::quit);
   connect(worker, &FinetuneWorker::finished, worker, &QObject::deleteLater);
   connect(thread, &QThread::finished, thread, &QObject::deleteLater);
-  
+
   // Connect to our slot to handle results
-  connect(worker, &FinetuneWorker::pointsReady, this,
-          [this, thread, progress](std::vector<colorscreen::solver_parameters::solver_point_t> points) {
-            onFinetuneFinished(true, points, thread, progress);
-          });
+  connect(
+      worker, &FinetuneWorker::pointsReady, this,
+      [this, thread, progress](
+          std::vector<colorscreen::solver_parameters::solver_point_t> points) {
+        onFinetuneFinished(true, points, thread, progress);
+      });
   connect(worker, &FinetuneWorker::finished, this,
           [this, thread, progress](bool success) {
             if (!success) {
               onFinetuneFinished(false, {}, thread, progress);
             }
           });
-  
+
   // Track thread
   m_finetuneThreads.push_back(thread);
-  
+
   // Start thread
   thread->start();
 }
 
-void MainWindow::onFinetuneFinished(bool success, std::vector<colorscreen::solver_parameters::solver_point_t> points,
-                                    QThread *thread, std::shared_ptr<colorscreen::progress_info> progress) {
+void MainWindow::onFinetuneFinished(
+    bool success,
+    std::vector<colorscreen::solver_parameters::solver_point_t> points,
+    QThread *thread, std::shared_ptr<colorscreen::progress_info> progress) {
   // Remove progress
   removeProgress(progress);
-  
+
   // Remove thread from tracking
-  auto it = std::find(m_finetuneThreads.begin(), m_finetuneThreads.end(), thread);
+  auto it =
+      std::find(m_finetuneThreads.begin(), m_finetuneThreads.end(), thread);
   if (it != m_finetuneThreads.end()) {
     m_finetuneThreads.erase(it);
   }
-  
+
   // Check if cancelled
   if (progress && progress->cancelled()) {
     return;
   }
-  
+
   // Add points if successful
   if (success && !points.empty()) {
     ParameterState oldState = getCurrentState();
-    
+
     // Add all points using add_or_modify_point
     for (const auto &point : points) {
       m_solverParams.add_or_modify_point(point.img, point.scr, point.color);
     }
-    
+
     // Update UI
-    m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams, &m_solverParams);
+    m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
+                                    &m_detectParams, &m_renderTypeParams,
+                                    &m_solverParams);
     m_imageWidget->update();
-    
+
     // Create undo command
     ParameterState newState = getCurrentState();
-    m_undoStack->push(new ChangeParametersCommand(this, oldState, newState, "Add registration points"));
-    
+    m_undoStack->push(new ChangeParametersCommand(this, oldState, newState,
+                                                  "Add registration points"));
+
     // Trigger auto solver if enabled
     if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
       size_t count = m_imageWidget->registrationPointCount();
@@ -3539,199 +3776,221 @@ void MainWindow::onAutodetectScreen() {
   if (!m_scan) {
     return;
   }
-  
+
   // Create progress info
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Detecting screen", 1);
-  colorscreen::sub_task task (progress.get ());  /* Keep so tasks appear nested.  */
+  colorscreen::sub_task task(progress.get()); /* Keep so tasks appear nested. */
   addProgress(progress);
-  
+
   // Create worker and thread
-  DetectScreenWorker *worker = new DetectScreenWorker(
-      m_detectParams, m_solverParams, m_scrToImgParams, m_scan, progress, m_rparams.gamma);
+  DetectScreenWorker *worker =
+      new DetectScreenWorker(m_detectParams, m_solverParams, m_scrToImgParams,
+                             m_scan, progress, m_rparams.gamma);
   QThread *thread = new QThread();
   worker->moveToThread(thread);
-  
+
   // Connect signals
   connect(thread, &QThread::started, worker, &DetectScreenWorker::detect);
   connect(worker, &DetectScreenWorker::finished, thread, &QThread::quit);
   connect(worker, &DetectScreenWorker::finished, worker, &QObject::deleteLater);
   connect(thread, &QThread::finished, thread, &QObject::deleteLater);
-  
+
   // Connect to our slot to handle results
   connect(worker, &DetectScreenWorker::finished, this,
-          [this, progress](bool success, colorscreen::detected_screen result, colorscreen::solver_parameters solverParams) {
+          [this, progress](bool success, colorscreen::detected_screen result,
+                           colorscreen::solver_parameters solverParams) {
             onDetectScreenFinished(success, result, solverParams);
             removeProgress(progress);
           });
-  
+
   // Store thread reference
   m_detectScreenThread = thread;
-  
+
   // Start thread
   thread->start();
 }
 
-void MainWindow::onDetectScreenFinished(bool success, colorscreen::detected_screen result, colorscreen::solver_parameters solverParams) {
+void MainWindow::onDetectScreenFinished(
+    bool success, colorscreen::detected_screen result,
+    colorscreen::solver_parameters solverParams) {
   // Clean up thread reference
   m_detectScreenThread = nullptr;
-  
+
   if (!success || !result.success) {
     QMessageBox::warning(this, "Screen Detection", "Screen detection failed.");
     return;
   }
-  
+
   // Store detected mesh for later restoration
   m_detectedMesh = result.mesh_trans;
-  
+
   // Ask user about color model
   bool updateColorModel = false;
-  
+
   // Determine what the auto color model would be
   colorscreen::render_parameters tempParams = m_rparams;
   tempParams.auto_color_model(result.param.type);
-  
+
   // Always ask if detected dye differs from current
   QString currentDye = QString::fromUtf8(
-      colorscreen::render_parameters::color_model_properties[m_rparams.color_model].pretty_name);
+      colorscreen::render_parameters::color_model_properties[m_rparams
+                                                                 .color_model]
+          .pretty_name);
   QString detectedDye = QString::fromUtf8(
-      colorscreen::render_parameters::color_model_properties[tempParams.color_model].pretty_name);
+      colorscreen::render_parameters::color_model_properties[tempParams
+                                                                 .color_model]
+          .pretty_name);
   QString detectedScreen = QString::fromUtf8(
       colorscreen::scr_names[(int)result.param.type].pretty_name);
-  
+
   QMessageBox msgBox(this);
   msgBox.setWindowTitle("Screen Detection");
   msgBox.setIconPixmap(renderScreenIcon(result.param.type).pixmap(128, 128));
-  
+
   if (currentDye != detectedDye) {
     msgBox.setText(QString("Detected Screen: <b>%1</b>").arg(detectedScreen));
-    msgBox.setInformativeText(QString("Change color model (Dyes) from %1 to %2?")
-                              .arg(currentDye).arg(detectedDye));
+    msgBox.setInformativeText(
+        QString("Change color model (Dyes) from %1 to %2?")
+            .arg(currentDye)
+            .arg(detectedDye));
     msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
     msgBox.setDefaultButton(QMessageBox::Yes);
     updateColorModel = (msgBox.exec() == QMessageBox::Yes);
   } else {
-    msgBox.setText(QString("Detected Screen: <b>%1</b> successfully.").arg(detectedScreen));
+    msgBox.setText(QString("Detected Screen: <b>%1</b> successfully.")
+                       .arg(detectedScreen));
     msgBox.setStandardButtons(QMessageBox::Ok);
     msgBox.exec();
   }
-  
+
   // Create undo snapshot before making changes
   ParameterState oldState = getCurrentState();
-  
+
   // Update parameters
   m_scrToImgParams.type = result.param.type;
   if (result.mesh_trans)
     m_scrToImgParams.mesh_trans = result.mesh_trans;
-  
+
   // Update color model if requested
   if (updateColorModel) {
     m_rparams.auto_color_model(result.param.type);
   }
-  
-  
+
   // Copy the modified solver points from the worker's local copy
   m_solverParams.points = solverParams.points;
-  
+
   // Change render type to interpolated after successful autodetection
   m_renderTypeParams.type = colorscreen::render_type_interpolated;
-  
+
   // Update UI
-  m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams, &m_solverParams);
-  m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams);
+  m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
+                                  &m_detectParams, &m_renderTypeParams,
+                                  &m_solverParams);
+  m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams,
+                                     &m_detectParams);
   updateUIFromState(getCurrentState());
   updateRegistrationActions();
   updateModeMenu();
-  
-  // Always trigger geometry solver with computeMesh=false to preserve detected mesh
-  // The solver will update center, coordinates, lens parameters, etc.
-    // Request solver with explicit mesh computation disabled to preserve detected pattern
-    m_solverQueue.requestRender(false);
-  
+
+  // Always trigger geometry solver with computeMesh=false to preserve detected
+  // mesh The solver will update center, coordinates, lens parameters, etc.
+  // Request solver with explicit mesh computation disabled to preserve detected
+  // pattern
+  m_solverQueue.requestRender(false);
+
   // Create undo command
   ParameterState newState = getCurrentState();
-  m_undoStack->push(new ChangeParametersCommand(this, oldState, newState, "Autodetect screen"));
+  m_undoStack->push(new ChangeParametersCommand(this, oldState, newState,
+                                                "Autodetect screen"));
 }
 
 void MainWindow::onAdaptiveSharpeningRequested(int xsteps) {
-    if (!m_scan) return;
+  if (!m_scan)
+    return;
 
-    // Create progress info
-    auto progress = std::make_shared<colorscreen::progress_info>();
-    progress->set_task("Adaptive sharpening analysis", 1);
-    addProgress(progress);
+  // Create progress info
+  auto progress = std::make_shared<colorscreen::progress_info>();
+  progress->set_task("Adaptive sharpening analysis", 1);
+  addProgress(progress);
 
-    // Create worker
-    AdaptiveSharpeningWorker *worker = new AdaptiveSharpeningWorker(
-        m_scrToImgParams,
-        m_rparams,
-        m_scan,
-        xsteps,
-        progress
-    );
+  // Create worker
+  AdaptiveSharpeningWorker *worker = new AdaptiveSharpeningWorker(
+      m_scrToImgParams, m_rparams, m_scan, xsteps, progress);
 
-    QThread *thread = new QThread;
-    worker->moveToThread(thread);
+  QThread *thread = new QThread;
+  worker->moveToThread(thread);
 
-    connect(thread, &QThread::started, worker, &AdaptiveSharpeningWorker::run);
-    
-    // Connect visualization signals
-    if (m_sharpnessPanel && m_sharpnessPanel->getAdaptiveChart()) {
-        AdaptiveSharpeningChart *chart = m_sharpnessPanel->getAdaptiveChart();
-        
-        // Calculate ysteps similar to logic in analyze_scanner_blur_worker::step1
-        int ysteps = (xsteps * m_scan->height + m_scan->width / 2) / m_scan->width;
-        if (ysteps < 1) ysteps = 1;
-        
-        chart->initialize(xsteps, ysteps);
-        
-        connect(worker, &AdaptiveSharpeningWorker::stripAnalyzed, chart, &AdaptiveSharpeningChart::updateStrip);
-        connect(worker, &AdaptiveSharpeningWorker::blurAnalysisStarted, chart, [chart](int w, int h) {
-             // Re-initialize for high-res blur analysis
-             chart->initialize(w, h);
-        });
-        connect(worker, &AdaptiveSharpeningWorker::blurAnalyzed, chart, &AdaptiveSharpeningChart::updateBlur);
-    }
-    
-    // Connect finished signal using lambda to capture thread and progress
-    connect(worker, &AdaptiveSharpeningWorker::finished, this, 
-        [this, worker, thread, progress](bool success, std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result) {
+  connect(thread, &QThread::started, worker, &AdaptiveSharpeningWorker::run);
+
+  // Connect visualization signals
+  if (m_sharpnessPanel && m_sharpnessPanel->getAdaptiveChart()) {
+    AdaptiveSharpeningChart *chart = m_sharpnessPanel->getAdaptiveChart();
+
+    // Calculate ysteps similar to logic in analyze_scanner_blur_worker::step1
+    int ysteps = (xsteps * m_scan->height + m_scan->width / 2) / m_scan->width;
+    if (ysteps < 1)
+      ysteps = 1;
+
+    chart->initialize(xsteps, ysteps);
+
+    connect(worker, &AdaptiveSharpeningWorker::stripAnalyzed, chart,
+            &AdaptiveSharpeningChart::updateStrip);
+    connect(worker, &AdaptiveSharpeningWorker::blurAnalysisStarted, chart,
+            [chart](int w, int h) {
+              // Re-initialize for high-res blur analysis
+              chart->initialize(w, h);
+            });
+    connect(worker, &AdaptiveSharpeningWorker::blurAnalyzed, chart,
+            &AdaptiveSharpeningChart::updateBlur);
+  }
+
+  // Connect finished signal using lambda to capture thread and progress
+  connect(worker, &AdaptiveSharpeningWorker::finished, this,
+          [this, worker, thread, progress](
+              bool success,
+              std::shared_ptr<colorscreen::scanner_blur_correction_parameters>
+                  result) {
             onAdaptiveSharpeningFinished(success, result);
             removeProgress(progress); // Ensure progress is removed
             worker->deleteLater();
             thread->quit();
             thread->wait();
             thread->deleteLater();
-        });
+          });
 
-    thread->start();
+  thread->start();
 }
 
-void MainWindow::onAdaptiveSharpeningFinished(bool success, std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result) {
-    if (!success || !result) {
-        if (!success) {
-             QMessageBox::warning(this, tr("Adaptive Sharpening"), tr("Analysis failed or cancelled."));
-        }
-        return;
+void MainWindow::onAdaptiveSharpeningFinished(
+    bool success,
+    std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result) {
+  if (!success || !result) {
+    if (!success) {
+      QMessageBox::warning(this, tr("Adaptive Sharpening"),
+                           tr("Analysis failed or cancelled."));
     }
+    return;
+  }
 
-    ParameterState oldState = getCurrentState();
-    ParameterState newState = oldState;
-    newState.rparams.scanner_blur_correction = result;
+  ParameterState oldState = getCurrentState();
+  ParameterState newState = oldState;
+  newState.rparams.scanner_blur_correction = result;
 
-    m_undoStack->push(new ChangeParametersCommand(this, oldState, newState, "Adaptive Sharpening Analysis"));
-    
-    // Update UI
-    updateUIFromState(newState);
+  m_undoStack->push(new ChangeParametersCommand(
+      this, oldState, newState, "Adaptive Sharpening Analysis"));
 
-    // Explicitly update chart
-    if (m_sharpnessPanel && m_sharpnessPanel->getAdaptiveChart()) {
-         m_sharpnessPanel->getAdaptiveChart()->setCorrection(result);
-    }
+  // Update UI
+  updateUIFromState(newState);
 
-    QMessageBox::information(this, tr("Adaptive Sharpening"), tr("Analysis completed successfully."));
+  // Explicitly update chart
+  if (m_sharpnessPanel && m_sharpnessPanel->getAdaptiveChart()) {
+    m_sharpnessPanel->getAdaptiveChart()->setCorrection(result);
+  }
+
+  QMessageBox::information(this, tr("Adaptive Sharpening"),
+                           tr("Analysis completed successfully."));
 }
-
 
 void MainWindow::onSetCenter(colorscreen::point_t imgPos) {
   if (!m_scan) {
@@ -3740,9 +3999,9 @@ void MainWindow::onSetCenter(colorscreen::point_t imgPos) {
 
   // Set the screen center to the clicked position
   m_scrToImgParams.center = imgPos;
-  
+
   onCoordinateSystemChanged();
-  
+
   m_imageWidget->update();
 }
 
@@ -3752,12 +4011,11 @@ void MainWindow::onOptimizeCoordinates() {
 
   colorscreen::finetune_parameters fparams;
   fparams.flags = colorscreen::finetune_position |
-                  colorscreen::finetune_coordinates |
-                  colorscreen::finetune_bw |
+                  colorscreen::finetune_coordinates | colorscreen::finetune_bw |
                   colorscreen::finetune_use_srip_widths;
 
   std::vector<colorscreen::point_t> locs;
-  
+
   statusBar()->showMessage("Optimizing coordinates...");
   QApplication::setOverrideCursor(Qt::WaitCursor);
   QApplication::processEvents(); // Ensure UI updates
@@ -3769,51 +4027,65 @@ void MainWindow::onOptimizeCoordinates() {
   statusBar()->clearMessage();
 
   if (ret.success) {
-      // Update parameters
-      m_scrToImgParams.center = ret.center;
-      m_scrToImgParams.coordinate1 = ret.coordinate1;
-      m_scrToImgParams.coordinate2 = ret.coordinate2;
-      
-      // Update UI
-      changeParameters(getCurrentState(), "Optimize Coordinates");
-      m_imageWidget->update();
-      
-      QMessageBox::information(this, "Optimization", "Coordinates optimized successfully.");
+    // Update parameters
+    m_scrToImgParams.center = ret.center;
+    m_scrToImgParams.coordinate1 = ret.coordinate1;
+    m_scrToImgParams.coordinate2 = ret.coordinate2;
+
+    // Update UI
+    changeParameters(getCurrentState(), "Optimize Coordinates");
+    m_imageWidget->update();
+
+    QMessageBox::information(this, "Optimization",
+                             "Coordinates optimized successfully.");
   } else {
-      QMessageBox::warning(this, "Optimization", "Optimization failed: " + QString::fromStdString(ret.err));
+    QMessageBox::warning(this, "Optimization",
+                         "Optimization failed: " +
+                             QString::fromStdString(ret.err));
   }
 }
 
 void MainWindow::onCoordinateSystemChanged() {
-  if (!m_scan) return;
-  
-  // Navigation View always needs update because it uses FAST mode (which relies on ScrToImg) 
-  m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams);
+  if (!m_scan)
+    return;
+
+  // Navigation View always needs update because it uses FAST mode (which relies
+  // on ScrToImg)
+  m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams,
+                                     &m_detectParams);
 
   // Main area: checks flag
   // Using colorscreen::render_type_max to safe check
   if (m_renderTypeParams.type < colorscreen::render_type_max) {
-      const auto &prop = colorscreen::render_type_properties[m_renderTypeParams.type];
-      if (prop.flags & colorscreen::render_type_property::NEEDS_SCR_TO_IMG) {
-          m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, 
-                                          &m_renderTypeParams, &m_solverParams);
-      }
+    const auto &prop =
+        colorscreen::render_type_properties[m_renderTypeParams.type];
+    if (prop.flags & colorscreen::render_type_property::NEEDS_SCR_TO_IMG) {
+      m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
+                                      &m_detectParams, &m_renderTypeParams,
+                                      &m_solverParams);
+    }
   }
 }
 void MainWindow::onFlatFieldRequested() {
-  QString filters = "Images (*.tif *.tiff *.jpg *.jpeg *.raw *.dng *.iiq *.nef *.NEF *.cr2 "
-                    "*.CR2 *.eip *.arw *.ARW *.raf *.RAF *.arq *.ARQ *.csprj);;All Files "
-                    "(*)";
-  QString whiteFile = QFileDialog::getOpenFileName(this, "Choose White Reference", m_currentImageFile, filters);
-  if (whiteFile.isEmpty()) return;
+  QString filters =
+      "Images (*.tif *.tiff *.jpg *.jpeg *.raw *.dng *.iiq *.nef *.NEF *.cr2 "
+      "*.CR2 *.eip *.arw *.ARW *.raf *.RAF *.arq *.ARQ *.csprj);;All Files "
+      "(*)";
+  QString whiteFile = QFileDialog::getOpenFileName(
+      this, "Choose White Reference", m_currentImageFile, filters);
+  if (whiteFile.isEmpty())
+    return;
 
   QTimer::singleShot(0, this, [this, filters, whiteFile]() {
     QString blackFile;
-    if (QMessageBox::question(this, "Flat Field", "Do you want to provide a black reference image (optional)?",
-                              QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
-      blackFile = QFileDialog::getOpenFileName(this, "Choose Black Reference", m_currentImageFile, filters);
+    if (QMessageBox::question(
+            this, "Flat Field",
+            "Do you want to provide a black reference image (optional)?",
+            QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
+      blackFile = QFileDialog::getOpenFileName(this, "Choose Black Reference",
+                                               m_currentImageFile, filters);
     }
-    
+
     // Create progress info
     auto progress = std::make_shared<colorscreen::progress_info>();
     progress->set_task("Flat field analysis", 100);
@@ -3833,7 +4105,10 @@ void MainWindow::onFlatFieldRequested() {
 
     // Connect results
     connect(worker, &FlatFieldWorker::finished, this,
-            [this, progress](bool success, std::shared_ptr<colorscreen::backlight_correction_parameters> result) {
+            [this, progress](
+                bool success,
+                std::shared_ptr<colorscreen::backlight_correction_parameters>
+                    result) {
               onFlatFieldFinished(success, result);
               removeProgress(progress);
             });
@@ -3843,7 +4118,9 @@ void MainWindow::onFlatFieldRequested() {
   });
 }
 
-void MainWindow::onFlatFieldFinished(bool success, std::shared_ptr<colorscreen::backlight_correction_parameters> result) {
+void MainWindow::onFlatFieldFinished(
+    bool success,
+    std::shared_ptr<colorscreen::backlight_correction_parameters> result) {
   m_flatFieldThread = nullptr;
 
   if (!success || !result) {
@@ -3854,10 +4131,11 @@ void MainWindow::onFlatFieldFinished(bool success, std::shared_ptr<colorscreen::
   // Update parameters with undo support
   ParameterState newState = getCurrentState();
   newState.rparams.backlight_correction = result;
-  
+
   changeParameters(newState, "Flat field");
-  
-  QMessageBox::information(this, "Flat Field", "Flat field analysis successful.");
+
+  QMessageBox::information(this, "Flat Field",
+                           "Flat field analysis successful.");
 }
 void MainWindow::onFocusAnalysisRequested(bool checked, uint64_t flags) {
   if (!m_imageWidget)
@@ -3873,7 +4151,8 @@ void MainWindow::onFocusAnalysisRequested(bool checked, uint64_t flags) {
   }
 }
 
-void MainWindow::onFocusAnalysisFinished(bool success, colorscreen::finetune_result res) {
+void MainWindow::onFocusAnalysisFinished(bool success,
+                                         colorscreen::finetune_result res) {
   if (m_sharpnessPanel) {
     m_sharpnessPanel->setFocusAnalysisChecked(false);
   }
@@ -3885,8 +4164,8 @@ void MainWindow::onFocusAnalysisFinished(bool success, colorscreen::finetune_res
     m_rparams.sharpen.scanner_mtf.blur_diameter = res.scanner_mtf_blur_diameter;
 
     ParameterState newState = getCurrentState();
-    m_undoStack->push(
-        new ChangeParametersCommand(this, oldState, newState, "Focus analysis"));
+    m_undoStack->push(new ChangeParametersCommand(this, oldState, newState,
+                                                  "Focus analysis"));
     m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
                                     &m_detectParams, &m_renderTypeParams,
                                     &m_solverParams);
@@ -3927,91 +4206,92 @@ void MainWindow::onRender() {
     if (dlg.exec() != QDialog::Accepted)
       return;
 
-  // Snapshot current parameters (render runs in background)
-  auto scan = m_scan;
-  colorscreen::scr_to_img_parameters scrParams = m_scrToImgParams;
-  colorscreen::scr_detect_parameters detectParams = m_detectParams;
-  colorscreen::render_parameters rparams = m_rparams;
-  colorscreen::render_type_parameters rtparams = dlg.renderTypeParams();
-  rparams.output_profile = dlg.outputProfile();
-  std::string outputPathStd = outputPath.toStdString();
+    // Snapshot current parameters (render runs in background)
+    auto scan = m_scan;
+    colorscreen::scr_to_img_parameters scrParams = m_scrToImgParams;
+    colorscreen::scr_detect_parameters detectParams = m_detectParams;
+    colorscreen::render_parameters rparams = m_rparams;
+    colorscreen::render_type_parameters rtparams = dlg.renderTypeParams();
+    rparams.output_profile = dlg.outputProfile();
+    std::string outputPathStd = outputPath.toStdString();
 
-  auto progress = std::make_shared<colorscreen::progress_info>();
-  m_renderProgress = progress;  // track so close/cancel can ask for confirmation
-  addProgress(progress);
+    auto progress = std::make_shared<colorscreen::progress_info>();
+    m_renderProgress =
+        progress; // track so close/cancel can ask for confirmation
+    addProgress(progress);
 
-  // Run render in background thread
-  auto *watcher = new QFutureWatcher<bool>(this);
-  connect(watcher, &QFutureWatcher<bool>::finished, this,
-          [this, watcher, progress, outputPath]() {
-            bool success = watcher->result();
-            bool cancelled = progress->cancelled();
-            m_renderProgress.reset();   // no longer active
-            removeProgress(progress);
-            watcher->deleteLater();
-            if (cancelled || !success) {
-              // Remove the incomplete output file
-              if (QFile::exists(outputPath))
-                QFile::remove(outputPath);
-            }
-            if (cancelled) {
-              statusBar()->showMessage(tr("Render cancelled"), 3000);
-            } else if (success) {
-              statusBar()->showMessage(
-                  tr("Rendered to %1").arg(outputPath), 5000);
-            } else {
-              QMessageBox::critical(this, tr("Render Failed"),
-                                    tr("Failed to render to:\n%1").arg(outputPath));
-            }
-          });
+    // Run render in background thread
+    auto *watcher = new QFutureWatcher<bool>(this);
+    connect(watcher, &QFutureWatcher<bool>::finished, this,
+            [this, watcher, progress, outputPath]() {
+              bool success = watcher->result();
+              bool cancelled = progress->cancelled();
+              m_renderProgress.reset(); // no longer active
+              removeProgress(progress);
+              watcher->deleteLater();
+              if (cancelled || !success) {
+                // Remove the incomplete output file
+                if (QFile::exists(outputPath))
+                  QFile::remove(outputPath);
+              }
+              if (cancelled) {
+                statusBar()->showMessage(tr("Render cancelled"), 3000);
+              } else if (success) {
+                statusBar()->showMessage(tr("Rendered to %1").arg(outputPath),
+                                         5000);
+              } else {
+                QMessageBox::critical(
+                    this, tr("Render Failed"),
+                    tr("Failed to render to:\n%1").arg(outputPath));
+              }
+            });
 
-  // Extract all dialog results before spawning the background thread
-  // (QDialog is stack-allocated; capturing it by reference would be unsafe)
-  bool renderHdr = dlg.hdr();
-  int renderDepth = dlg.depth();
-  auto renderGeometry = dlg.geometry();
-  int renderAntialias = dlg.antialias();
-  double renderScale = dlg.scale();
-  double renderScreenScale = dlg.screenScale();
-  int renderWidth  = dlg.outputWidth();
-  int renderHeight = dlg.outputHeight();
+    // Extract all dialog results before spawning the background thread
+    // (QDialog is stack-allocated; capturing it by reference would be unsafe)
+    bool renderHdr = dlg.hdr();
+    int renderDepth = dlg.depth();
+    auto renderGeometry = dlg.geometry();
+    int renderAntialias = dlg.antialias();
+    double renderScale = dlg.scale();
+    double renderScreenScale = dlg.screenScale();
+    int renderWidth = dlg.outputWidth();
+    int renderHeight = dlg.outputHeight();
 
-  QFuture<bool> future = QtConcurrent::run(
-      [scan, scrParams, detectParams, rparams, rtparams, outputPathStd, isDng,
-       progress, renderHdr, renderDepth, renderGeometry, renderAntialias,
-       renderScale, renderScreenScale, renderWidth, renderHeight]() mutable -> bool {
-        colorscreen::render_to_file_params rfparams;
-        rfparams.filename     = outputPathStd.c_str();
-        rfparams.verbose      = false;
-        rfparams.dng          = isDng;
-        rfparams.hdr          = renderHdr;
-        rfparams.depth        = renderDepth;
-        rfparams.geometry     = renderGeometry;
-        rfparams.antialias    = renderAntialias;
-        rfparams.scale        = renderScale;
-        rfparams.screen_scale = renderScreenScale;
-        rfparams.width        = renderWidth;
-        rfparams.height       = renderHeight;
+    QFuture<bool> future = QtConcurrent::run(
+        [scan, scrParams, detectParams, rparams, rtparams, outputPathStd, isDng,
+         progress, renderHdr, renderDepth, renderGeometry, renderAntialias,
+         renderScale, renderScreenScale, renderWidth,
+         renderHeight]() mutable -> bool {
+          colorscreen::render_to_file_params rfparams;
+          rfparams.filename = outputPathStd.c_str();
+          rfparams.verbose = false;
+          rfparams.dng = isDng;
+          rfparams.hdr = renderHdr;
+          rfparams.depth = renderDepth;
+          rfparams.geometry = renderGeometry;
+          rfparams.antialias = renderAntialias;
+          rfparams.scale = renderScale;
+          rfparams.screen_scale = renderScreenScale;
+          rfparams.width = renderWidth;
+          rfparams.height = renderHeight;
 
-        const char *error = nullptr;
-        return colorscreen::render_to_file(*scan, scrParams, detectParams,
-                                           rparams, rfparams, rtparams,
-                                           progress.get(), &error);
-      });
+          const char *error = nullptr;
+          return colorscreen::render_to_file(*scan, scrParams, detectParams,
+                                             rparams, rfparams, rtparams,
+                                             progress.get(), &error);
+        });
 
-  watcher->setFuture(future);
+    watcher->setFuture(future);
   });
 }
 
-void MainWindow::onAddSpotModeRequested(bool active)
-{
+void MainWindow::onAddSpotModeRequested(bool active) {
   m_addingProfileSpot = active;
-  m_imageWidget->setInteractionMode(
-      active ? ImageWidget::AddPointMode : ImageWidget::PanMode);
+  m_imageWidget->setInteractionMode(active ? ImageWidget::AddPointMode
+                                           : ImageWidget::PanMode);
 }
 
-void MainWindow::onColorOptimizeRequested(bool /*autoMode*/)
-{
+void MainWindow::onColorOptimizeRequested(bool /*autoMode*/) {
   if (!m_scan || !m_colorOptimizerWorker)
     return;
   ParameterState state = getCurrentState();
@@ -4019,15 +4299,15 @@ void MainWindow::onColorOptimizeRequested(bool /*autoMode*/)
     return;
 
   // Pack request data and hand it to the queue.
-  // If an optimization is already running the queue cancels it and starts a new one.
+  // If an optimization is already running the queue cancels it and starts a new
+  // one.
   ColorOptimizerRequestData d{m_scrToImgParams, m_rparams, state.profileSpots};
   m_colorOptimizerQueue.requestRender(QVariant::fromValue(d));
 }
 
-void MainWindow::onTriggerColorOptimize(int reqId,
-    std::shared_ptr<colorscreen::progress_info> progress,
-    const QVariant &userData)
-{
+void MainWindow::onTriggerColorOptimize(
+    int reqId, std::shared_ptr<colorscreen::progress_info> progress,
+    const QVariant &userData) {
   if (!m_scan || !m_colorOptimizerWorker ||
       !userData.canConvert<ColorOptimizerRequestData>()) {
     m_colorOptimizerQueue.reportFinished(reqId, false);
@@ -4040,26 +4320,24 @@ void MainWindow::onTriggerColorOptimize(int reqId,
 
   QMetaObject::invokeMethod(
       m_colorOptimizerWorker, "optimize", Qt::QueuedConnection,
-      Q_ARG(int, reqId),
-      Q_ARG(colorscreen::scr_to_img_parameters, d.scrParams),
+      Q_ARG(int, reqId), Q_ARG(colorscreen::scr_to_img_parameters, d.scrParams),
       Q_ARG(colorscreen::render_parameters, d.rparams),
       Q_ARG(std::vector<colorscreen::point_t>, d.spots),
       Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
 }
 
-void MainWindow::onColorOptimizerFinished(int reqId,
-    colorscreen::render_parameters updatedRparams,
-    std::vector<colorscreen::color_match> results,
-    bool success, bool cancelled)
-{
+void MainWindow::onColorOptimizerFinished(
+    int reqId, colorscreen::render_parameters updatedRparams,
+    std::vector<colorscreen::color_match> results, bool success,
+    bool cancelled) {
   m_colorOptimizerQueue.reportFinished(reqId, success);
 
   if (success) {
     ParameterState newState = getCurrentState();
-    newState.rparams.profiled_dark  = updatedRparams.profiled_dark;
-    newState.rparams.profiled_red   = updatedRparams.profiled_red;
+    newState.rparams.profiled_dark = updatedRparams.profiled_dark;
+    newState.rparams.profiled_red = updatedRparams.profiled_red;
     newState.rparams.profiled_green = updatedRparams.profiled_green;
-    newState.rparams.profiled_blue  = updatedRparams.profiled_blue;
+    newState.rparams.profiled_blue = updatedRparams.profiled_blue;
     changeParameters(newState, tr("Optimize color"));
 
     m_profileSpotResults = results;
@@ -4073,4 +4351,3 @@ void MainWindow::onColorOptimizerFinished(int reqId,
     statusBar()->showMessage(tr("Color optimization failed"), 4000);
   }
 }
-

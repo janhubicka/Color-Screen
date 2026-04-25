@@ -3,8 +3,8 @@
 #include "base.h"
 #include "color.h"
 #include "colorscreen.h"
-#include <string>
 #include <memory>
+#include <string>
 namespace colorscreen
 {
 class screen;
@@ -52,73 +52,70 @@ struct finetune_parameters
   const char *merged_file = nullptr;
   const char *collected_file = nullptr;
   const char *dot_spread_file = nullptr;
-  finetune_parameters ()
-  {
-  }
+  finetune_parameters () {}
 };
 struct finetune_result
 {
   bool success = false;
-  point_t tile_pos = {-1, -1};
+  point_t tile_pos = { -1, -1 };
   coord_t badness = 12345;
   coord_t uncertainity = 12345;
   coord_t screen_blur_radius = -1;
-  rgbdata screen_channel_blur_radius = {-1, -1, -1};
+  rgbdata screen_channel_blur_radius = { -1, -1, -1 };
   luminosity_t scanner_mtf_sigma = -1;
   luminosity_t scanner_mtf_blur_diameter = -1;
   luminosity_t scanner_mtf_defocus = -1;
-  rgbdata scanner_mtf_channel_defocus_or_blur = {-1, -1, -1};
+  rgbdata scanner_mtf_channel_defocus_or_blur = { -1, -1, -1 };
   coord_t emulsion_blur_radius = -1;
   coord_t red_strip_width = -1;
   coord_t green_strip_width = -1;
-  point_t screen_coord_adjust = {-1, -1};
-  point_t emulsion_coord_adjust = {-1, -1};
-  rgbdata color = {-1, -1, -1};
-  rgbdata screen_red = {-1, -1, -1}, screen_green = {-1, -1, -1}, screen_blue = {-1, -1, -1};
-  rgbdata fog = {0, 0, 0};
-  rgbdata mix_weights = {-1, -1, -1};
-  rgbdata mix_dark = {-1, -1, -1};
+  point_t screen_coord_adjust = { -1, -1 };
+  point_t emulsion_coord_adjust = { -1, -1 };
+  rgbdata color = { -1, -1, -1 };
+  rgbdata screen_red = { -1, -1, -1 }, screen_green = { -1, -1, -1 },
+          screen_blue = { -1, -1, -1 };
+  rgbdata fog = { 0, 0, 0 };
+  rgbdata mix_weights = { -1, -1, -1 };
+  rgbdata mix_dark = { -1, -1, -1 };
   std::string err;
 
   /* Solver point data.  */
-  point_t solver_point_img_location = {-1, -1};
-  point_t solver_point_screen_location = {-1, -1};
-  enum solver_parameters::point_color solver_point_color = solver_parameters::max_point_color;
+  point_t solver_point_img_location = { -1, -1 };
+  point_t solver_point_screen_location = { -1, -1 };
+  enum solver_parameters::point_color solver_point_color
+      = solver_parameters::max_point_color;
 
-  point_t center = {0, 0}, coordinate1 = {0, 0}, coordinate2 = {0, 0};
+  point_t center = { 0, 0 }, coordinate1 = { 0, 0 }, coordinate2 = { 0, 0 };
 
   /* Solver images  */
-  std::shared_ptr <simple_image> diff;
-  std::shared_ptr <simple_image> simulated;
-  std::shared_ptr <simple_image> sharpened;
-  std::shared_ptr <simple_image> orig;
-  std::shared_ptr <simple_image> screen;
-  std::shared_ptr <simple_image> blured_screen;
-  std::shared_ptr <simple_image> emulsion_screen;
-  std::shared_ptr <simple_image> merged_screen;
-  std::shared_ptr <simple_image> collected_screen;
-  std::shared_ptr <simple_image> dot_spread;
+  std::shared_ptr<simple_image> diff;
+  std::shared_ptr<simple_image> simulated;
+  std::shared_ptr<simple_image> sharpened;
+  std::shared_ptr<simple_image> orig;
+  std::shared_ptr<simple_image> screen;
+  std::shared_ptr<simple_image> blured_screen;
+  std::shared_ptr<simple_image> emulsion_screen;
+  std::shared_ptr<simple_image> merged_screen;
+  std::shared_ptr<simple_image> collected_screen;
+  std::shared_ptr<simple_image> dot_spread;
 
-  finetune_result ()
-    {
-    }
-  
-  //finetune_result(finetune_result&&) = default;
-  //finetune_result& operator=(finetune_result&&) = default;
+  finetune_result () {}
+
+  // finetune_result(finetune_result&&) = default;
+  // finetune_result& operator=(finetune_result&&) = default;
 };
 DLL_PUBLIC finetune_result
 finetune (render_parameters &rparam, const scr_to_img_parameters &param,
           const image_data &img, const std::vector<point_t> &locs,
           const std::vector<finetune_result> *results,
           const finetune_parameters &fparams, progress_info *progress);
-DLL_PUBLIC bool finetune_area (solver_parameters *sparam,
-                               render_parameters &rparam,
-                               const scr_to_img_parameters &param,
-                               const image_data &img, int_image_area area,
-                               progress_info *progress);
+nodiscard_attr DLL_PUBLIC bool
+finetune_area (solver_parameters *sparam, render_parameters &rparam,
+               const scr_to_img_parameters &param, const image_data &img,
+               int_image_area area, progress_info *progress);
 DLL_PUBLIC void render_screen (image_data &img, scr_to_img_parameters &param,
                                render_parameters &rparam,
                                scr_detect_parameters &dparam, int width,
                                int height);
-}
+} // namespace colorscreen
 #endif

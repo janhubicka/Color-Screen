@@ -1,20 +1,19 @@
 #include <memory>
 #define HAVE_INLINE
 #define GSL_RANGE_CHECK_OFF
-#include <gsl/gsl_multifit.h>
+#include "bitmap.h"
+#include "deconvolve.h"
+#include "icc.h"
 #include "include/colorscreen.h"
+#include "include/dufaycolor.h"
 #include "include/finetune.h"
 #include "include/histogram.h"
 #include "include/stitch.h"
-#include "include/dufaycolor.h"
 #include "include/tiff-writer.h"
-#include "include/colorscreen.h"
+#include "nmsimplex.h"
 #include "render-interpolate.h"
 #include "sharpen.h"
-#include "nmsimplex.h"
-#include "bitmap.h"
-#include "icc.h"
-#include "deconvolve.h"
+#include <gsl/gsl_multifit.h>
 namespace colorscreen
 {
 namespace
@@ -36,9 +35,8 @@ sign (point_t p1, point_t p2, point_t p3)
   return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
 }
 
-/* Compute a, b such that
-   x1 + dx1 * a = x2 + dx2 * b
-   y1 + dy1 * a = y2 + dy2 * b  */
+/* Intersect two vectors starting at [X1, Y1] with direction [DX1, DY1]
+   and [X2, Y2] with direction [DX2, DY2].  Store result in [A, B].  */
 void
 intersect_vectors (coord_t x1, coord_t y1, coord_t dx1, coord_t dy1,
                    coord_t x2, coord_t y2, coord_t dx2, coord_t dy2,
@@ -49,7 +47,7 @@ intersect_vectors (coord_t x1, coord_t y1, coord_t dx1, coord_t dy1,
   m.apply_to_vector (x2 - x1, y2 - y1, a, b);
 }
 
-/* Force v to be in range between min and max.  */
+/* Clamp value V to range [MIN, MAX].  */
 
 inline void
 to_range (coord_t &v, coord_t min, coord_t max)
@@ -63,7 +61,6 @@ to_range (coord_t &v, coord_t min, coord_t max)
 
   v = std::clamp (v, min, max);
 }
-
 
 /* v is in range 0...1 expand it to minv...maxv.
    Finetuning works well if values are generaly kept
@@ -111,15 +108,13 @@ public:
     /* Tile position  */
     point_t *pos = nullptr;
     /* If we do not finetune offsets, fix one. Usually 0,0.  */
-    point_t fixed_offset = {-10, -10}, fixed_emulsion_offset = {-10, -10};
+    point_t fixed_offset = { -10, -10 }, fixed_emulsion_offset = { -10, -10 };
     /* Screen merging emulsion and unblurred screen.  */
     screen *merged_scr = nullptr;
     /* Blured screen used to render simulated scan.  */
     screen *scr = nullptr;
 
-    tile_data ()
-    {
-    }
+    tile_data () {}
     ~tile_data ()
     {
       delete[] color;
@@ -151,8 +146,8 @@ public:
     friend finetune_solver;
 
     /* Remember last settings, so we do not recompute screens uselessly.  */
-    rgbdata last_emulsion_intensities = {-1, -1, -1};
-    point_t last_emulsion_offset = {-10, -10};
+    rgbdata last_emulsion_intensities = { -1, -1, -1 };
+    point_t last_emulsion_offset = { -10, -10 };
     /* Simulation of screen.  */
     rgbdata *simulated_screen = nullptr;
   };
@@ -162,7 +157,7 @@ private:
   /* Least squares solver for optimizing parameters that behaves linearly.  */
   gsl_multifit_linear_workspace *gsl_work = nullptr;
   gsl_matrix *gsl_X = nullptr;
-  gsl_vector *gsl_y[3] = {nullptr, nullptr, nullptr};
+  gsl_vector *gsl_y[3] = { nullptr, nullptr, nullptr };
   gsl_vector *gsl_c = nullptr;
   gsl_matrix *gsl_cov = nullptr;
   bool least_squares_initialized;
@@ -205,9 +200,7 @@ public:
   std::shared_ptr<screen> emulsion_scr;
   sharpen_parameters render_sharpen_params;
 
-  finetune_solver ()
-  {
-  }
+  finetune_solver () {}
   int n_tiles;
   /* All tiles have same width and height.  */
   int twidth, theight;
@@ -235,7 +228,7 @@ public:
   /* Screens with strips have strips with offset 1/3.
      Shifting too far may make us to mix up the strips.
      Be sure we do not move more than -1/6 to 1/6  */
-  constexpr static const coord_t strips_range = 1/6.0;
+  constexpr static const coord_t strips_range = 1 / 6.0;
 
   coord_t pixel_size;
   scr_type type;
@@ -246,9 +239,11 @@ public:
   bool optimize_position;
   /* Try adjusting coordinate1 (rotation/scale)  */
   bool optimize_coordinate1;
-  /* Try to optimize scanner mtf sigma (gaussian blur) (othervise fixed_mtf is used, if any).  */
+  /* Try to optimize scanner mtf sigma (gaussian blur) (othervise fixed_mtf is
+   * used, if any).  */
   bool optimize_scanner_mtf_sigma;
-  /* Try to optimize screen blur attribute (othervise fixed_defocus is used, if any).  */
+  /* Try to optimize screen blur attribute (othervise fixed_defocus is used, if
+   * any).  */
   bool optimize_scanner_mtf_defocus;
   /* Same but per-cannel.  */
   bool optimize_scanner_mtf_channel_defocus;
@@ -345,7 +340,8 @@ public:
   int
   sample_points ()
   {
-    return (twidth - 2 * border) * (theight - 2 * border) * n_tiles - noutliers;
+    return (twidth - 2 * border) * (theight - 2 * border) * n_tiles
+           - noutliers;
   }
 
   /* Return correction to the scr-to-img map.  */
@@ -365,7 +361,7 @@ public:
       return { v[tileid] * strips_range, 0 };
   }
 
-  /* Set correction to the scr-to-img-map.  Should be inverse of get_offset.  */
+  /* Set correction to the scr-to-img-map.  Should be inverse of get_offset. */
   void
   set_offset (coord_t *v, int tileid, point_t off)
   {
@@ -376,9 +372,9 @@ public:
       }
     if (!screen_with_vertical_strips_p (type))
       {
-	coord_t range = dufay_like_screen_p (type) ? dufay_range : paget_range;
-	v[2 * tileid] = off.x / range;
-	v[2 * tileid + 1] = off.y / range;
+        coord_t range = dufay_like_screen_p (type) ? dufay_range : paget_range;
+        v[2 * tileid] = off.x / range;
+        v[2 * tileid + 1] = off.y / range;
       }
     else
       v[tileid] = off.x / strips_range;
@@ -395,18 +391,18 @@ public:
       return tiles[tileid].fixed_emulsion_offset;
     if (!screen_with_vertical_strips_p (type))
       {
-	coord_t range = dufay_like_screen_p (type) ? dufay_range : paget_range;
-	/* Reduce range if is not removable and can only be
-	   adjusted by angle of scanner.  On the other hand
-	   increase the range for non-removable screens since there is
-	   lesser change to make off-by-one error when we have color of the
-	   patch.  */
-	if (integrated_screen_p (type))
-	  range /= 2;
-	else
-	  range *= 2;
-	return { v[emulsion_offset_index + 2 * tileid] * range,
-		 v[emulsion_offset_index + 2 * tileid + 1] * range };
+        coord_t range = dufay_like_screen_p (type) ? dufay_range : paget_range;
+        /* Reduce range if is not removable and can only be
+           adjusted by angle of scanner.  On the other hand
+           increase the range for non-removable screens since there is
+           lesser change to make off-by-one error when we have color of the
+           patch.  */
+        if (integrated_screen_p (type))
+          range /= 2;
+        else
+          range *= 2;
+        return { v[emulsion_offset_index + 2 * tileid] * range,
+                 v[emulsion_offset_index + 2 * tileid + 1] * range };
       }
     else
       return { v[emulsion_offset_index + tileid] * (strips_range * 2), 0 };
@@ -422,15 +418,15 @@ public:
       }
     if (!screen_with_vertical_strips_p (type))
       {
-	coord_t range = dufay_like_screen_p (type) ? dufay_range : paget_range;
-	/* Reduce range if is not removable and can only be
-	   adjusted by angle of scanner.  */
-	if (integrated_screen_p (type))
-	  range /= 2;
-	else
-	  range *= 2;
-	v[emulsion_offset_index + 2 * tileid] = off.x / range;
-	v[emulsion_offset_index + 2 * tileid + 1] = off.y / range;
+        coord_t range = dufay_like_screen_p (type) ? dufay_range : paget_range;
+        /* Reduce range if is not removable and can only be
+           adjusted by angle of scanner.  */
+        if (integrated_screen_p (type))
+          range /= 2;
+        else
+          range *= 2;
+        v[emulsion_offset_index + 2 * tileid] = off.x / range;
+        v[emulsion_offset_index + 2 * tileid + 1] = off.y / range;
       }
     else
       v[emulsion_offset_index + tileid] = off.x / (2 * strips_range);
@@ -491,9 +487,13 @@ public:
   get_scanner_mtf_defocus (coord_t *v)
   {
     if (!optimize_scanner_mtf_defocus && !optimize_scanner_mtf_channel_defocus)
-      return render_sharpen_params.scanner_mtf.simulate_difraction_p () ? render_sharpen_params.scanner_mtf.defocus : render_sharpen_params.scanner_mtf.blur_diameter;
+      return render_sharpen_params.scanner_mtf.simulate_difraction_p ()
+                 ? render_sharpen_params.scanner_mtf.defocus
+                 : render_sharpen_params.scanner_mtf.blur_diameter;
     if (optimize_scanner_mtf_channel_defocus)
-      return (v[mtf_defocus_index] + v[mtf_defocus_index + 1] + v[mtf_defocus_index + 2]) * (1/(coord_t)3);
+      return (v[mtf_defocus_index] + v[mtf_defocus_index + 1]
+              + v[mtf_defocus_index + 2])
+             * (1 / (coord_t)3);
     return v[mtf_defocus_index];
   }
   /* Return blur radius of screen. */
@@ -502,15 +502,19 @@ public:
   {
     if (!optimize_scanner_mtf_defocus && !optimize_scanner_mtf_channel_defocus)
       {
-	auto r = render_sharpen_params.scanner_mtf.simulate_difraction_p () ? render_sharpen_params.scanner_mtf.defocus : render_sharpen_params.scanner_mtf.blur_diameter;
-	return { (luminosity_t)r, (luminosity_t)r, (luminosity_t)r };
+        auto r = render_sharpen_params.scanner_mtf.simulate_difraction_p ()
+                     ? render_sharpen_params.scanner_mtf.defocus
+                     : render_sharpen_params.scanner_mtf.blur_diameter;
+        return { (luminosity_t)r, (luminosity_t)r, (luminosity_t)r };
       }
     if (!optimize_scanner_mtf_channel_defocus)
       {
         luminosity_t b = v[mtf_defocus_index];
         return { b, b, b };
       }
-    return { (luminosity_t)v[mtf_defocus_index], (luminosity_t)v[mtf_defocus_index + 1], (luminosity_t)v[mtf_defocus_index + 2] };
+    return { (luminosity_t)v[mtf_defocus_index],
+             (luminosity_t)v[mtf_defocus_index + 1],
+             (luminosity_t)v[mtf_defocus_index + 2] };
   }
 
   /* Return blur radius of screen. */
@@ -543,13 +547,15 @@ public:
   get_channel_blur_radius (coord_t *v)
   {
     if (!optimize_screen_blur && !optimize_screen_channel_blurs)
-      return { (luminosity_t)fixed_blur, (luminosity_t)fixed_blur, (luminosity_t)fixed_blur };
+      return { (luminosity_t)fixed_blur, (luminosity_t)fixed_blur,
+               (luminosity_t)fixed_blur };
     if (!optimize_screen_channel_blurs)
       {
         coord_t b = pixel_blur (v[screen_index]);
         return { (luminosity_t)b, (luminosity_t)b, (luminosity_t)b };
       }
-    return { (luminosity_t)pixel_blur (v[screen_index]), (luminosity_t)pixel_blur (v[screen_index + 1]),
+    return { (luminosity_t)pixel_blur (v[screen_index]),
+             (luminosity_t)pixel_blur (v[screen_index + 1]),
              (luminosity_t)pixel_blur (v[screen_index + 2]) };
   }
 
@@ -632,9 +638,11 @@ public:
       printf (" mix_dark");
     printf ("\n");
     if (least_squares)
-      printf (" Estimating color using least squares %s\n", fog_by_least_squares ? "(includin fog)" : "");
+      printf (" Estimating color using least squares %s\n",
+              fog_by_least_squares ? "(includin fog)" : "");
     if (data_collection)
-      printf (" Estimating color using data collection with threshold %f\n", collection_threshold);
+      printf (" Estimating color using data collection with threshold %f\n",
+              collection_threshold);
     if (normalize)
       printf (" Normalizing colors to eliminate image layer\n");
     if (simulate_infrared)
@@ -643,7 +651,8 @@ public:
       printf (" Image layer is simulated from RGB scan\n");
     printf ("\n");
     if (sharpen_index >= 0)
-      printf ("sharpen radius %f and amount %f\n", get_sharpen_radius (v), get_sharpen_amount (v));
+      printf ("sharpen radius %f and amount %f\n", get_sharpen_radius (v),
+              get_sharpen_amount (v));
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
         if (optimize_position)
@@ -671,19 +680,23 @@ public:
       printf ("Scanner mtf sigma %f px\n", get_scanner_mtf_sigma (v));
     if (optimize_scanner_mtf_defocus)
       {
-	if (!render_sharpen_params.scanner_mtf.simulate_difraction_p ())
-          printf ("Scanner mtf blur diameter %f px\n", get_scanner_mtf_defocus (v));
-	else
+        if (!render_sharpen_params.scanner_mtf.simulate_difraction_p ())
+          printf ("Scanner mtf blur diameter %f px\n",
+                  get_scanner_mtf_defocus (v));
+        else
           printf ("Scanner mtf defocus %f mm\n", get_scanner_mtf_defocus (v));
       }
     if (optimize_scanner_mtf_channel_defocus)
       {
         rgbdata b = get_scanner_mtf_channel_defocus (v);
-	if (!render_sharpen_params.scanner_mtf.simulate_difraction_p ())
-          printf ("Scanner mtf blur diameter %f px (red) %f px (green) %f px (blue)\n",
-		  b.red, b.green, b.blue);
-	else
-          printf ("Scanner mtf defocus %f mm (red) %f mm (green) %f mm (blue)\n", b.red, b.green, b.blue);
+        if (!render_sharpen_params.scanner_mtf.simulate_difraction_p ())
+          printf ("Scanner mtf blur diameter %f px (red) %f px (green) %f px "
+                  "(blue)\n",
+                  b.red, b.green, b.blue);
+        else
+          printf (
+              "Scanner mtf defocus %f mm (red) %f mm (green) %f mm (blue)\n",
+              b.red, b.green, b.blue);
       }
     if (optimize_screen_channel_blurs)
       {
@@ -735,15 +748,15 @@ public:
               printf ("Emulsion intensities tile %i ", tileid);
               get_emulsion_intensities (v, tileid).print (stdout);
             }
-	if (!normalize)
-	  {
-	    printf ("Mix weights ");
-	    get_mix_weights (v).print (stdout);
-	    if (optimize_mix_dark)
-	      {
-		printf ("Mix dark: %f\n", get_mix_dark (v));
-	      }
-	  }
+        if (!normalize)
+          {
+            printf ("Mix weights ");
+            get_mix_weights (v).print (stdout);
+            if (optimize_mix_dark)
+              {
+                printf ("Mix dark: %f\n", get_mix_dark (v));
+              }
+          }
       }
     if (tiles[0].bw)
       {
@@ -763,56 +776,56 @@ public:
     /* x and y adjustments.  */
     if (optimize_position)
       {
-	/* Two dimensional screens has two coordinates.  */
-	if (!screen_with_vertical_strips_p (type))
-	  for (int tileid = 0; tileid < n_tiles; tileid++)
-	    {
-	      to_range (v[tileid * 2 + 0], -1, 1);
-	      to_range (v[tileid * 2 + 1], -1, 1);
-	    }
-	/* One dimensional screens just one.  */
-	else
-	  for (int tileid = 0; tileid < n_tiles; tileid++)
-	    to_range (v[tileid], -1, 1);
+        /* Two dimensional screens has two coordinates.  */
+        if (!screen_with_vertical_strips_p (type))
+          for (int tileid = 0; tileid < n_tiles; tileid++)
+            {
+              to_range (v[tileid * 2 + 0], -1, 1);
+              to_range (v[tileid * 2 + 1], -1, 1);
+            }
+        /* One dimensional screens just one.  */
+        else
+          for (int tileid = 0; tileid < n_tiles; tileid++)
+            to_range (v[tileid], -1, 1);
       }
     if (optimize_emulsion_offset)
       {
-	/* Two dimensional screens has two coordinates.  */
-	if (!screen_with_vertical_strips_p (type))
-	  for (int tileid = 0; tileid < n_tiles; tileid++)
-	    {
-	      to_range (v[emulsion_offset_index + 2 * tileid + 0], -1, 1);
-	      to_range (v[emulsion_offset_index + 2 * tileid + 1], -1, 1);
-	    }
-	/* One dimensional screens just one.  */
-	else
-	  for (int tileid = 0; tileid < n_tiles; tileid++)
-	    to_range (v[emulsion_offset_index + tileid], -1, 1);
+        /* Two dimensional screens has two coordinates.  */
+        if (!screen_with_vertical_strips_p (type))
+          for (int tileid = 0; tileid < n_tiles; tileid++)
+            {
+              to_range (v[emulsion_offset_index + 2 * tileid + 0], -1, 1);
+              to_range (v[emulsion_offset_index + 2 * tileid + 1], -1, 1);
+            }
+        /* One dimensional screens just one.  */
+        else
+          for (int tileid = 0; tileid < n_tiles; tileid++)
+            to_range (v[emulsion_offset_index + tileid], -1, 1);
       }
     if (fog_index >= 0)
       {
-	assert (!colorscreen_checking || optimize_fog);
-        to_range (v[fog_index + 0], -0.1/fog_range.red, 1);
-        to_range (v[fog_index + 1], -0.1/fog_range.green, 1);
-        to_range (v[fog_index + 2], -0.1/fog_range.blue, 1);
+        assert (!colorscreen_checking || optimize_fog);
+        to_range (v[fog_index + 0], -0.1 / fog_range.red, 1);
+        to_range (v[fog_index + 1], -0.1 / fog_range.green, 1);
+        to_range (v[fog_index + 2], -0.1 / fog_range.blue, 1);
       }
     if (tiles[0].bw && !least_squares && !data_collection)
       {
-	/* If infrared channel is simulated, negative values may be possible
-	   and it is kind of hard to constrain to reasonable bounds.
-	   Still allow values somewhat out of range to account for possible
-	   over-exposure or cropping  */
-	if (!bw_is_simulated_infrared)
-	  {
-	    to_range (v[color_index + 0], -0.1, 1.1);
-	    to_range (v[color_index + 1], -0.1, 1.1);
-	    to_range (v[color_index + 2], -0.1, 1.1);
-	  }
+        /* If infrared channel is simulated, negative values may be possible
+           and it is kind of hard to constrain to reasonable bounds.
+           Still allow values somewhat out of range to account for possible
+           over-exposure or cropping  */
+        if (!bw_is_simulated_infrared)
+          {
+            to_range (v[color_index + 0], -0.1, 1.1);
+            to_range (v[color_index + 1], -0.1, 1.1);
+            to_range (v[color_index + 2], -0.1, 1.1);
+          }
       }
     if (sharpen_index >= 0)
       {
-	to_range (v[sharpen_index], 0, 5); // radius
-	to_range (v[sharpen_index + 1], 0, 1000); // amount
+        to_range (v[sharpen_index], 0, 5);        // radius
+        to_range (v[sharpen_index + 1], 0, 1000); // amount
       }
     if (optimize_emulsion_blur)
       to_range (v[emulsion_blur_index], 0, 1);
@@ -830,9 +843,9 @@ public:
       to_range (v[mtf_defocus_index], 0, 20);
     if (optimize_scanner_mtf_channel_defocus)
       {
-	to_range (v[mtf_defocus_index], 0, 20);
-	to_range (v[mtf_defocus_index+1], 0, 20);
-	to_range (v[mtf_defocus_index+2], 0, 20);
+        to_range (v[mtf_defocus_index], 0, 20);
+        to_range (v[mtf_defocus_index + 1], 0, 20);
+        to_range (v[mtf_defocus_index + 2], 0, 20);
       }
     if (optimize_screen_channel_blurs)
       {
@@ -844,38 +857,38 @@ public:
     if (optimize_strips)
       {
         /* strip widths.  */
-	if (type == Dufay)
-	  {
-	    /* Dufay screen is
-	       RR
-	       BG
+        if (type == Dufay)
+          {
+            /* Dufay screen is
+               RR
+               BG
 
-	       Red strip width is more narrow in Dufay screens
-	       so overall coverage of colors is equal.  */
-	    to_range (v[strips_index + 0], 0.1, 0.6);
-	    /* Green strip width approx 0.5 in Dufay screens.  */
-	    to_range (v[strips_index + 1], 0.3, 0.7);
-	  }
-	/* Dioptichrome screens come in various combinations
-	   and strip widths.  */
-	else if (dufay_like_screen_p (type))
-	  {
-	    to_range (v[strips_index + 0], 0.1, 0.7);
-	    to_range (v[strips_index + 1], 0.1, 0.7);
-	  }
-	/* Widths of red, green and blue strip needs to sub to 1
-	   when we have screens with vertical strips.
-	   Constrain the to min width of 0.1.
-	 
+               Red strip width is more narrow in Dufay screens
+               so overall coverage of colors is equal.  */
+            to_range (v[strips_index + 0], 0.1, 0.6);
+            /* Green strip width approx 0.5 in Dufay screens.  */
+            to_range (v[strips_index + 1], 0.3, 0.7);
+          }
+        /* Dioptichrome screens come in various combinations
+           and strip widths.  */
+        else if (dufay_like_screen_p (type))
+          {
+            to_range (v[strips_index + 0], 0.1, 0.7);
+            to_range (v[strips_index + 1], 0.1, 0.7);
+          }
+        /* Widths of red, green and blue strip needs to sub to 1
+           when we have screens with vertical strips.
+           Constrain the to min width of 0.1.
+
            TODO: Warner powrie screens seems to have 4 strips with
- 	   green second tiny green strip between red and blue.  */
-	else if (screen_with_vertical_strips_p (type))
-	  {
-	    to_range (v[strips_index + 0], 0.1, 0.7);
-	    to_range (v[strips_index + 1], 0.1, 0.9 - v[strips_index + 0]);
-	  }
-	else
-	  abort ();
+           green second tiny green strip between red and blue.  */
+        else if (screen_with_vertical_strips_p (type))
+          {
+            to_range (v[strips_index + 0], 0.1, 0.7);
+            to_range (v[strips_index + 1], 0.1, 0.9 - v[strips_index + 0]);
+          }
+        else
+          abort ();
       }
   }
 
@@ -918,68 +931,81 @@ public:
        green is screen's green color
        blue is screen's blue color
 
-       ss.red * red.red     + ss.green * green.red   + ss.blue * blue.red   = tile.red
-       ss.green * red.green + ss.green * green.green + ss.blue * blue.green = tile.green
-       ss.blue * red.blue   + ss.blue * green.blue   + ss.blue * blue.blue  = tile.blue
+       ss.red * red.red     + ss.green * green.red   + ss.blue * blue.red   =
+       tile.red ss.green * red.green + ss.green * green.green + ss.blue *
+       blue.green = tile.green ss.blue * red.blue   + ss.blue * green.blue   +
+       ss.blue * blue.blue  = tile.blue
 
-       So there are 3 independent equations with 3 variables (red.*, green.*, blue.*) each.
-       Tile can be normalized or after fog applied.  If we apply fog, then we
-       need to compute RHS each time, otherwise RHS is invariant and computed
-       once.
+       So there are 3 independent equations with 3 variables (red.*, green.*,
+       blue.*) each. Tile can be normalized or after fog applied.  If we apply
+       fog, then we need to compute RHS each time, otherwise RHS is invariant
+       and computed once.
 
        If fog is optimized we do:
 
-       ss.red * red.red     + ss.green * green.red   + ss.blue * blue.red   + fog.red   = tile.red
-       ss.green * red.green + ss.green * green.green + ss.blue * blue.green + fog.green = tile.green
-       ss.blue * red.blue   + ss.blue * green.blue   + ss.blue * blue.blue  + fog.blue  = tile.blue
+       ss.red * red.red     + ss.green * green.red   + ss.blue * blue.red   +
+       fog.red   = tile.red ss.green * red.green + ss.green * green.green +
+       ss.blue * blue.green + fog.green = tile.green ss.blue * red.blue   +
+       ss.blue * green.blue   + ss.blue * blue.blue  + fog.blue  = tile.blue
 
-       In this case there are 3 independent equations with 4 variables. We also add
+       In this case there are 3 independent equations with 4 variables. We also
+       add
 
        fog.red   = 0;
        fog.green = 0;
        fog.blue  = 0;
 
-       Now if infrared is simulated we first we use non-linear solver to guess mix_weights and fog.
-       Image layer (simulated infrared) intensity is computed by:
+       Now if infrared is simulated we first we use non-linear solver to guess
+       mix_weights and fog. Image layer (simulated infrared) intensity is
+       computed by:
 
-       c = tile.red * mix_weights.red + tile.green * mix_weights.green + tile.blue * mix_weights.blue
+       c = tile.red * mix_weights.red + tile.green * mix_weights.green +
+       tile.blue * mix_weights.blue
 
-       We know that screen colors should have all the same intensity when scalled by the formula above. So we have:
+       We know that screen colors should have all the same intensity when
+       scalled by the formula above. So we have:
 
-       red.red   * mix_weights.red + red.green   * mix_weights.green + red.blue   * mix_weights.blue = cst
-       green.red * mix_weights.red + green.green * mix_weights.green + green.blue * mix_weights.blue = cst
-       blue.red  * mix_weights.red + blue.green  * mix_weights.green + blue.blue  * mix_weights.blue = cst
+       red.red   * mix_weights.red + red.green   * mix_weights.green + red.blue
+       * mix_weights.blue = cst green.red * mix_weights.red + green.green *
+       mix_weights.green + green.blue * mix_weights.blue = cst blue.red  *
+       mix_weights.red + blue.green  * mix_weights.green + blue.blue  *
+       mix_weights.blue = cst
 
        (We put cst=1.) Consequently:
 
-       red.blue = (cst - red.red * mix_weights.red - red.green * mix_weights.green) / mix_weights.blue  
-       green.blue = (cst - green.red * mix_weights.red - green.green * mix_weights.green) / mix_weights.blue
-       blue.blue = (cst - blue.red * mix_weights.red - blue.green * mix_weights.green) / mix_weights.blue
+       red.blue = (cst - red.red * mix_weights.red - red.green *
+       mix_weights.green) / mix_weights.blue green.blue = (cst - green.red *
+       mix_weights.red - green.green * mix_weights.green) / mix_weights.blue
+       blue.blue = (cst - blue.red * mix_weights.red - blue.green *
+       mix_weights.green) / mix_weights.blue
 
        We want to optimize:
 
-       ss.red * c * red.red + ss.green * c * green.red + ss.blue * c * blue.red = tile.red - fog.red
-       ss.green * c * red.green + ss.green * c * green.green + ss.blue * c * blue.green = tile.green - fog.green
-       ss.blue * c * red.blue + ss.green * c * green.blue + ss.blue * c * blue.blue = tile.blue - fog.blue
+       ss.red * c * red.red + ss.green * c * green.red + ss.blue * c * blue.red
+       = tile.red - fog.red ss.green * c * red.green + ss.green * c *
+       green.green + ss.blue * c * blue.green = tile.green - fog.green ss.blue
+       * c * red.blue + ss.green * c * green.blue + ss.blue * c * blue.blue =
+       tile.blue - fog.blue
 
-       There are 6 unknowns: red.red, red.green, green.red, green.green, blue.red and blue.green.
-       Variables red.blue/green.blue/blue.blue are substituted by the identity above.
-       We no longer can treat individual channels by independent equations.  */
+       There are 6 unknowns: red.red, red.green, green.red, green.green,
+       blue.red and blue.green. Variables red.blue/green.blue/blue.blue are
+       substituted by the identity above. We no longer can treat individual
+       channels by independent equations.  */
 
     if (tiles[0].color)
       {
-	if (!simulate_infrared)
-	  {
-	    matrixw = 3;
-	    if (fog_by_least_squares)
-	      matrixw++;
-	  }
-	else
-	  {
-	    matrixw = 6;
-	    if (fog_by_least_squares)
-	      matrixw += 3;
-	  }
+        if (!simulate_infrared)
+          {
+            matrixw = 3;
+            if (fog_by_least_squares)
+              matrixw++;
+          }
+        else
+          {
+            matrixw = 6;
+            if (fog_by_least_squares)
+              matrixw += 3;
+          }
       }
     /* In BW mode we guess intensity.  */
     else
@@ -1003,7 +1029,7 @@ public:
   /* Initialize least square.
      Only those values which do not change during optimization are computed.
      Rest is done later.
-   
+
      In most settings we do not use least squares here and base everything on
      data collection.  */
   void
@@ -1011,19 +1037,21 @@ public:
   {
     last_fog = { 0, 0, 0 };
 
-    /* In color we solve 3 independent equaltions for red, green and blue channel.
-       Initialize RHS sides which are invariant.  */
+    /* In color we solve 3 independent equaltions for red, green and blue
+       channel. Initialize RHS sides which are invariant.  */
     if (tiles[0].color && !simulate_infrared)
       {
         int e = 0;
 
-	/* RHS side of all equations should expect the tile's color.  */
+        /* RHS side of all equations should expect the tile's color.  */
         for (int tileid = 0; tileid < n_tiles; tileid++)
           for (int y = border; y < theight - border; y++)
             for (int x = border; x < twidth - border; x++)
               if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
                 {
-                  rgbdata d = fog_by_least_squares ? get_pixel_nofog (tileid, {x, y}) : get_pixel (v, tileid, {x, y});
+                  rgbdata d = fog_by_least_squares
+                                  ? get_pixel_nofog (tileid, { x, y })
+                                  : get_pixel (v, tileid, { x, y });
                   gsl_vector_set (gsl_y[0], e, d.red);
                   gsl_vector_set (gsl_y[1], e, d.green);
                   gsl_vector_set (gsl_y[2], e, d.blue);
@@ -1053,7 +1081,8 @@ public:
               if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
                 {
                   gsl_vector_set (gsl_y[0], e,
-                                  bw_get_pixel (tileid, {x, y}) / (2 * maxgray));
+                                  bw_get_pixel (tileid, { x, y })
+                                      / (2 * maxgray));
                   e++;
                 }
         if (e != (int)gsl_y[0]->size)
@@ -1087,10 +1116,11 @@ public:
               = map.to_scr ({ cur_txmin + x + 0.5, cur_tymin + y + 0.5 });
           if (tiles[tileid].color)
             tiles[tileid].color[y * twidth + x]
-                = render.get_unadjusted_rgb_pixel ({x + cur_txmin, y + cur_tymin});
+                = render.get_unadjusted_rgb_pixel (
+                    { x + cur_txmin, y + cur_tymin });
           if (tiles[tileid].bw)
-            tiles[tileid].bw[y * twidth + x]
-                = render.get_unadjusted_data ({x + cur_txmin, y + cur_tymin});
+            tiles[tileid].bw[y * twidth + x] = render.get_unadjusted_data (
+                { x + cur_txmin, y + cur_tymin });
         }
     return true;
   }
@@ -1098,8 +1128,7 @@ public:
   /* Init solver.   */
   void
   init (uint64_t flags, coord_t blur_radius, coord_t red_strip_width,
-        coord_t green_strip_height, bool sim_infrared,
-	bool is_tile_sharpened,
+        coord_t green_strip_height, bool sim_infrared, bool is_tile_sharpened,
         const std::vector<finetune_result> *results)
   {
     bw_is_simulated_infrared = sim_infrared;
@@ -1111,11 +1140,14 @@ public:
     optimize_screen_blur = flags & finetune_screen_blur;
     optimize_scanner_mtf_sigma = flags & finetune_scanner_mtf_sigma;
     optimize_scanner_mtf_defocus = flags & finetune_scanner_mtf_defocus;
-    optimize_scanner_mtf_channel_defocus = flags & finetune_scanner_mtf_channel_defocus;
+    optimize_scanner_mtf_channel_defocus
+        = flags & finetune_scanner_mtf_channel_defocus;
     optimize_screen_channel_blurs = flags & finetune_screen_channel_blurs;
     optimize_emulsion_blur = flags & finetune_emulsion_blur;
-    optimize_strips = (flags & finetune_strips) && screen_with_varying_strips_p (type);
-    /* Strips needs to be optimized only for some screens, like Dufay, Joly or Powrie.  */
+    optimize_strips
+        = (flags & finetune_strips) && screen_with_varying_strips_p (type);
+    /* Strips needs to be optimized only for some screens, like Dufay, Joly or
+     * Powrie.  */
     if (!screen_with_varying_strips_p (type))
       optimize_strips = false;
     /* For one tile the effect of fog can always be simulated by adjusting the
@@ -1125,19 +1157,22 @@ public:
     /* Colors can be determined either by data collection, least squares
        or using nonlinear solver.  Data collection is fastest, but only works
        if threshold and blurs are meaningful.  Second two should be equivalent
-       with least sequares being faster and more robust (avoiding local minima).
+       with least sequares being faster and more robust (avoiding local
+       minima).
 
        We later use at most one of least squares and data collection.  Mode
        that does not make sense is turned off.  */
     least_squares = !(flags & finetune_no_least_squares);
     data_collection = !(flags & finetune_no_data_collection);
     simulate_infrared = (flags & finetune_simulate_infrared) && tiles[0].color;
-    optimize_sharpening = (flags & finetune_sharpening) && tiles[0].color != nullptr;
+    optimize_sharpening
+        = (flags & finetune_sharpening) && tiles[0].color != nullptr;
     optimize_mix_weights = false;
     optimize_mix_dark = false;
     optimize_emulsion_offset = false;
     /* TODO; We probably can sharpen and normalize.  */
-    normalize = !(flags & finetune_no_normalize) && !optimize_sharpening && tiles[0].color;
+    normalize = !(flags & finetune_no_normalize) && !optimize_sharpening
+                && tiles[0].color;
     /* Normalization turns every color of every pixel to have sum of 1.
        This simplifies the optimization since it effectively removes
        the image layer and we can more easily esimate screen position and
@@ -1153,14 +1188,14 @@ public:
     if (simulate_infrared)
       {
         data_collection = normalize = optimize_emulsion_blur = false;
-	if (least_squares)
-	  optimize_mix_weights = optimize_mix_dark = true;
+        if (least_squares)
+          optimize_mix_weights = optimize_mix_dark = true;
       }
     /* When finetuning emulsion blur, tune also offset carefully.  */
     if (tiles[0].color && optimize_emulsion_blur
         && (optimize_screen_blur || optimize_screen_channel_blurs
             || optimize_scanner_mtf_sigma || optimize_scanner_mtf_defocus
-	    || optimize_scanner_mtf_channel_defocus))
+            || optimize_scanner_mtf_channel_defocus))
       {
         optimize_emulsion_intensities = true;
         optimize_emulsion_offset = true;
@@ -1173,11 +1208,14 @@ public:
        is already known and use it or try to simulate everything including
        intensities.  */
     if (optimize_emulsion_blur && !optimize_emulsion_intensities)
-      optimize_screen_blur = optimize_screen_channel_blurs = optimize_scanner_mtf_sigma = optimize_scanner_mtf_defocus = optimize_scanner_mtf_channel_defocus = false;
-    /* When simulating infrared fog needs to be subtracted before applying mixing weights.
-       This makes equations non-linear.  */
-    fog_by_least_squares = (optimize_fog && !normalize && least_squares) && !simulate_infrared;
-    //fog_by_least_squares = 0;
+      optimize_screen_blur = optimize_screen_channel_blurs
+          = optimize_scanner_mtf_sigma = optimize_scanner_mtf_defocus
+          = optimize_scanner_mtf_channel_defocus = false;
+    /* When simulating infrared fog needs to be subtracted before applying
+       mixing weights. This makes equations non-linear.  */
+    fog_by_least_squares
+        = (optimize_fog && !normalize && least_squares) && !simulate_infrared;
+    // fog_by_least_squares = 0;
 
     /* Data collection is faster, so if available preffer it over least
        squares.  */
@@ -1192,33 +1230,35 @@ public:
     if (optimize_position)
       n_values += (1 + !screen_with_vertical_strips_p (type)) * n_tiles;
 
-    /* When optimizing sharpening, be ready for borders of the tile to not be right.
-       Also allocate the memory buffer.  */
+    /* When optimizing sharpening, be ready for borders of the tile to not be
+       right. Also allocate the memory buffer.  */
     if (optimize_sharpening)
       {
         sharpen_index = n_values;
-	border = 10;
-	n_values += 2;
+        border = 10;
+        n_values += 2;
         for (int i = 0; i < n_tiles; i++)
-	  tiles[i].sharpened_color = (rgbdata *)malloc (twidth * theight * sizeof (rgbdata));
+          tiles[i].sharpened_color
+              = (rgbdata *)malloc (twidth * theight * sizeof (rgbdata));
 #if 0
 	/* Determine minmal meaningful sharpening radius.  */
 	for (min_nonone_clen = 0; fir_blur::convolve_matrix_length (min_nonone_clen) <= 1; min_nonone_clen += 0.00001)
 		;
 #endif
-	/* Smaller sharpen radius than 0.3 makes essentially no difference on the image,
-	   so we waste effort optimizing amount.  */
-	min_nonone_clen = 0.3;
+        /* Smaller sharpen radius than 0.3 makes essentially no difference on
+           the image, so we waste effort optimizing amount.  */
+        min_nonone_clen = 0.3;
       }
     else
       {
         sharpen_index = -1;
-	border = 0;
+        border = 0;
         for (int i = 0; i < n_tiles; i++)
-	  tiles[i].sharpened_color = tiles[i].color;
+          tiles[i].sharpened_color = tiles[i].color;
       }
 
-    /* When not doing data collection or least squares, we need to optimize colors.  */
+    /* When not doing data collection or least squares, we need to optimize
+     * colors.  */
     if (!least_squares && !data_collection)
       {
         color_index = n_values;
@@ -1260,7 +1300,7 @@ public:
     if (optimize_mix_dark)
       {
         mix_dark_index = n_values;
-        n_values ++;
+        n_values++;
       }
     else
       mix_dark_index = -1;
@@ -1298,7 +1338,7 @@ public:
         screen_index = n_values;
         optimize_screen_blur = false;
         n_values += 3;
-	assert (!optimize_screen_blur);
+        assert (!optimize_screen_blur);
       }
     else if (optimize_screen_blur)
       {
@@ -1311,18 +1351,18 @@ public:
     if (optimize_scanner_mtf_sigma)
       {
         mtf_sigma_index = n_values;
-        n_values ++;
+        n_values++;
       }
     if (optimize_scanner_mtf_channel_defocus)
       {
         mtf_defocus_index = n_values;
-	optimize_scanner_mtf_defocus = false;
+        optimize_scanner_mtf_defocus = false;
         n_values += 3;
       }
     else if (optimize_scanner_mtf_defocus)
       {
         mtf_defocus_index = n_values;
-        n_values ++;
+        n_values++;
       }
 
     if (optimize_strips)
@@ -1332,7 +1372,6 @@ public:
       }
     else
       strips_index = -1;
-
 
     /* We know number of values to optimize; allocate them and get initial
        values.  */
@@ -1359,7 +1398,7 @@ public:
     /* Set up cached values.   */
     last_blur = { -1, -1, -1 };
     last_scanner_mtf_sigma = -1;
-    last_scanner_mtf_defocus = {-1, -1, -1};
+    last_scanner_mtf_defocus = { -1, -1, -1 };
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
         tiles[tileid].last_emulsion_intensities = { -1, -1, -1 };
@@ -1390,8 +1429,8 @@ public:
        to pick up very large values.  */
     if (sharpen_index >= 0)
       {
-	start[sharpen_index] = 0;
-	start[sharpen_index + 1] = 0;
+        start[sharpen_index] = 0;
+        start[sharpen_index + 1] = 0;
       }
 
     /* Start with color being red, green and blue. */
@@ -1423,7 +1462,8 @@ public:
       for (int tileid = 0; tileid < 3 * n_tiles - 1; tileid++)
         start[emulsion_intensity_index + tileid] = 1 / 3.0;
     /* Starting from small blur seems to work better, since other parameters
-       are then more relevant.  Sane scanner lens blurs close to Nqyist frequency.  */
+       are then more relevant.  Sane scanner lens blurs close to Nqyist
+       frequency.  */
     if (optimize_emulsion_blur)
       {
         coord_t blur = 0.03;
@@ -1482,54 +1522,55 @@ public:
       }
     if (optimize_scanner_mtf_sigma)
       {
-	start[mtf_sigma_index] = 0;
+        start[mtf_sigma_index] = 0;
       }
     if (optimize_scanner_mtf_defocus)
       {
-	start[mtf_defocus_index] = 0;
+        start[mtf_defocus_index] = 0;
       }
     if (optimize_scanner_mtf_channel_defocus)
       {
-	start[mtf_defocus_index] = 0;
-	start[mtf_defocus_index+1] = 0;
-	start[mtf_defocus_index+2] = 0;
+        start[mtf_defocus_index] = 0;
+        start[mtf_defocus_index + 1] = 0;
+        start[mtf_defocus_index + 2] = 0;
       }
-    /* TODO: Maybe we want to use previous results and start from params by default.  */
+    /* TODO: Maybe we want to use previous results and start from params by
+     * default.  */
     if (flags & finetune_use_srip_widths)
       {
-	set_red_strip_width (start, red_strip_width);
-	set_green_strip_width (start, green_strip_height);
+        set_red_strip_width (start, red_strip_width);
+        set_green_strip_width (start, green_strip_height);
       }
     /* Default Dufaycolor strip widths.  */
     else if (type == Dufay)
       {
-	set_red_strip_width (start, dufaycolor::red_strip_width);
-	set_green_strip_width (start, dufaycolor::green_strip_width);
+        set_red_strip_width (start, dufaycolor::red_strip_width);
+        set_green_strip_width (start, dufaycolor::green_strip_width);
       }
     /* Dioptichromes seems to be printed with strips of equal widths.  */
     else if (dufay_like_screen_p (type))
       {
-	set_red_strip_width (start, 0.5);
-	set_green_strip_width (start, 0.5);
+        set_red_strip_width (start, 0.5);
+        set_green_strip_width (start, 0.5);
       }
     /* Joly and Warner-Powrie should be approx 1/3 each.  */
     else
       {
-	set_red_strip_width (start, 1.0/3);
-	set_green_strip_width (start, 1.0/3);
+        set_red_strip_width (start, 1.0 / 3);
+        set_green_strip_width (start, 1.0 / 3);
       }
     if (fog_index >= 0)
       {
-	start[fog_index + 0] = 0;
-	start[fog_index + 1] = 0;
-	start[fog_index + 2] = 0;
+        start[fog_index + 0] = 0;
+        start[fog_index + 1] = 0;
+        start[fog_index + 2] = 0;
       }
     if (mix_weights_index >= 0)
       {
-	start[mix_weights_index + 0] = 1.0/3;
-	start[mix_weights_index + 1] = 1.0/3;
-	if (least_squares)
-	  start[mix_weights_index + 2] = 1.0/3;
+        start[mix_weights_index + 0] = 1.0 / 3;
+        start[mix_weights_index + 1] = 1.0 / 3;
+        if (least_squares)
+          start[mix_weights_index + 2] = 1.0 / 3;
       }
     if (mix_dark_index >= 0)
       start[mix_dark_index] = 0;
@@ -1539,23 +1580,23 @@ public:
       for (int i = 0; i < n_values; i++)
         assert (start[i] != INT_MAX);
 
-    /* Once values are set up, be sure they are in range.  This should be NOOP most
-       of time unless we get mad input.  */
+    /* Once values are set up, be sure they are in range.  This should be NOOP
+       most of time unless we get mad input.  */
     constrain (start);
 
-    /* Maxgray is used to normalize equations for least squares to reduce numeric
-       errors.  */
+    /* Maxgray is used to normalize equations for least squares to reduce
+       numeric errors.  */
     maxgray = mingray = 0;
     if (tiles[0].bw)
       {
-	mingray = maxgray = bw_get_pixel (0, {0, 0});
-	for (int tileid = 0; tileid < n_tiles; tileid++)
-	  for (int y = 0; y < theight; y++)
-	    for (int x = 0; x < twidth; x++)
-	      {
-		maxgray = std::max (maxgray, bw_get_pixel (tileid, {x, y}));
-		mingray = std::min (mingray, bw_get_pixel (tileid, {x, y}));
-	      }
+        mingray = maxgray = bw_get_pixel (0, { 0, 0 });
+        for (int tileid = 0; tileid < n_tiles; tileid++)
+          for (int y = 0; y < theight; y++)
+            for (int x = 0; x < twidth; x++)
+              {
+                maxgray = std::max (maxgray, bw_get_pixel (tileid, { x, y }));
+                mingray = std::min (mingray, bw_get_pixel (tileid, { x, y }));
+              }
       }
 
     /* Fog should not be much greater than minimal vale in the tile.  */
@@ -1573,12 +1614,12 @@ public:
               hist.account (tiles[tileid].color[y * twidth + x]);
         hist.finalize ();
         fog_range = hist.find_min (0.1);
-	if (!(fog_range.red > 0))
-	  fog_range.red = 4.0 / 65536;
-	if (!(fog_range.green > 0))
-	  fog_range.green = 4.0 / 65536;
-	if (!(fog_range.blue > 0))
-	  fog_range.blue = 4.0 / 65536;
+        if (!(fog_range.red > 0))
+          fog_range.red = 4.0 / 65536;
+        if (!(fog_range.green > 0))
+          fog_range.green = 4.0 / 65536;
+        if (!(fog_range.blue > 0))
+          fog_range.blue = 4.0 / 65536;
       }
     else
       assert (!colorscreen_checking || fog_index == -1);
@@ -1687,57 +1728,58 @@ public:
       }
 
     if ((optimize_scanner_mtf_sigma || optimize_scanner_mtf_defocus)
-	|| (!optimize_screen_blur && !optimize_screen_channel_blurs))
+        || (!optimize_screen_blur && !optimize_screen_channel_blurs))
       {
-	sharpen_parameters sp, sp_green, sp_blue;
-	sharpen_parameters *vs[3] = {&sp, &sp, &sp};
-	sp = render_sharpen_params;
-	//sp.scanner_mtf = mtf_params;
-	sp.scanner_mtf.sigma = get_scanner_mtf_sigma (v);
-	sp.scanner_mtf_scale *= pixel_size;
-	//sp.mode = sharpen_parameters::none;
-	if (sp.scanner_mtf.simulate_difraction_p ())
-	  {
-	    sp.scanner_mtf.defocus = get_scanner_mtf_defocus (v);
-	    if (tiles[0].color)
-	      sp.scanner_mtf.wavelength = 550;
-	    if (/*tiles[0].color ||*/ optimize_scanner_mtf_channel_defocus)
-	      {
-		vs[0] = &sp;
-		sp_green = sp;
-		vs[1] = &sp_green;
-		sp_blue = sp;
-		vs[2] = &sp_blue;
+        sharpen_parameters sp, sp_green, sp_blue;
+        sharpen_parameters *vs[3] = { &sp, &sp, &sp };
+        sp = render_sharpen_params;
+        // sp.scanner_mtf = mtf_params;
+        sp.scanner_mtf.sigma = get_scanner_mtf_sigma (v);
+        sp.scanner_mtf_scale *= pixel_size;
+        // sp.mode = sharpen_parameters::none;
+        if (sp.scanner_mtf.simulate_difraction_p ())
+          {
+            sp.scanner_mtf.defocus = get_scanner_mtf_defocus (v);
+            if (tiles[0].color)
+              sp.scanner_mtf.wavelength = 550;
+            if (/*tiles[0].color ||*/ optimize_scanner_mtf_channel_defocus)
+              {
+                vs[0] = &sp;
+                sp_green = sp;
+                vs[1] = &sp_green;
+                sp_blue = sp;
+                vs[2] = &sp_blue;
 
-		rgbdata defocus = get_scanner_mtf_channel_defocus (v);
-		sp.scanner_mtf.defocus = defocus.red;
-		sp_green.scanner_mtf.defocus = defocus.green;
-		sp_blue.scanner_mtf.defocus = defocus.blue;
+                rgbdata defocus = get_scanner_mtf_channel_defocus (v);
+                sp.scanner_mtf.defocus = defocus.red;
+                sp_green.scanner_mtf.defocus = defocus.green;
+                sp_blue.scanner_mtf.defocus = defocus.blue;
 #if 0
 	        /* TODO: We should defocus only after applying scanner reaction to screen colors.  */
 		sp.scanner_mtf.wavelength = 466;
 		sp_green.scanner_mtf.wavelength = 526;
 		sp_blue.scanner_mtf.wavelength = 653;
 #endif
-	      }
-	  }
-	else
-	  {
-	    sp.scanner_mtf.blur_diameter = get_scanner_mtf_defocus (v);
-	    if (optimize_scanner_mtf_channel_defocus)
-	      {
-		vs[0] = &sp;
-		sp_green = sp;
-		vs[1] = &sp_green;
-		sp_blue = sp;
-		vs[2] = &sp_blue;
-		rgbdata blur_diameter = get_scanner_mtf_channel_defocus (v);
-		sp.scanner_mtf.blur_diameter = blur_diameter.red;
-		sp_green.scanner_mtf.blur_diameter = blur_diameter.green;
-		sp_blue.scanner_mtf.blur_diameter = blur_diameter.blue;
-	      }
-	  }
-	dst_scr->initialize_with_sharpen_parameters (*src_scr, vs, tile_sharpened, parallel);
+              }
+          }
+        else
+          {
+            sp.scanner_mtf.blur_diameter = get_scanner_mtf_defocus (v);
+            if (optimize_scanner_mtf_channel_defocus)
+              {
+                vs[0] = &sp;
+                sp_green = sp;
+                vs[1] = &sp_green;
+                sp_blue = sp;
+                vs[2] = &sp_blue;
+                rgbdata blur_diameter = get_scanner_mtf_channel_defocus (v);
+                sp.scanner_mtf.blur_diameter = blur_diameter.red;
+                sp_green.scanner_mtf.blur_diameter = blur_diameter.green;
+                sp_blue.scanner_mtf.blur_diameter = blur_diameter.blue;
+              }
+          }
+        dst_scr->initialize_with_sharpen_parameters (*src_scr, vs,
+                                                     tile_sharpened, parallel);
       }
     else
       dst_scr->initialize_with_blur (*src_scr, blur * pixel_size);
@@ -1777,9 +1819,8 @@ public:
       for (int t = 0; t < n_tiles; t++)
         tiles[t].last_emulsion_offset = { -10, -10 };
 
-    if (blur != last_blur
-	|| scanner_mtf_sigma != last_scanner_mtf_sigma
-	|| scanner_mtf_defocus != last_scanner_mtf_defocus
+    if (blur != last_blur || scanner_mtf_sigma != last_scanner_mtf_sigma
+        || scanner_mtf_defocus != last_scanner_mtf_defocus
         || tiles[tileid].last_emulsion_intensities != intensities
         || tiles[tileid].last_emulsion_offset != emulsion_offset)
       {
@@ -1790,8 +1831,8 @@ public:
                     optimize_emulsion_intensities ? emulsion_scr.get ()
                                                   : nullptr);
         last_blur = blur;
-	last_scanner_mtf_sigma = scanner_mtf_sigma;
-	last_scanner_mtf_defocus = scanner_mtf_defocus;
+        last_scanner_mtf_sigma = scanner_mtf_sigma;
+        last_scanner_mtf_defocus = scanner_mtf_defocus;
         tiles[tileid].last_emulsion_intensities = intensities;
         tiles[tileid].last_emulsion_offset = emulsion_offset;
       }
@@ -1825,15 +1866,16 @@ public:
   /* Evaulate pixel at (x,y) using RGB values v and offsets offx, offy
      compensating coordates stored in tole_pos.  */
   pure_attr inline rgbdata
-  evaulate_pixel (coord_t *v, int tileid, double_rgbdata red, double_rgbdata green,
-                  double_rgbdata blue, int x, int y, point_t off, double_rgbdata mix_weights, double mix_dark)
+  evaulate_pixel (coord_t *v, int tileid, double_rgbdata red,
+                  double_rgbdata green, double_rgbdata blue, int x, int y,
+                  point_t off, double_rgbdata mix_weights, double mix_dark)
   {
-    rgbdata m = get_simulated_screen_pixel (tileid, {x, y});
+    rgbdata m = get_simulated_screen_pixel (tileid, { x, y });
     rgbdata c = ((red * m.red + green * m.green + blue * m.blue)
                  * ((coord_t)1.0 / rgbscale));
     if (simulate_infrared)
       {
-        rgbdata p = get_pixel (v, tileid, {x, y});
+        rgbdata p = get_pixel (v, tileid, { x, y });
         luminosity_t intensity = p.red * mix_weights.red
                                  + p.green * mix_weights.green
                                  + p.blue * mix_weights.blue - mix_dark;
@@ -1856,9 +1898,10 @@ public:
   /* Evaulate pixel at (x,y) using RGB values v and offsets offx, offy
      compensating coordates stored in tole_pos.  */
   pure_attr inline luminosity_t
-  bw_evaulate_pixel (int tileid, double_rgbdata color, int x, int y, point_t off)
+  bw_evaulate_pixel (int tileid, double_rgbdata color, int x, int y,
+                     point_t off)
   {
-    rgbdata m = get_simulated_screen_pixel (tileid, {x, y});
+    rgbdata m = get_simulated_screen_pixel (tileid, { x, y });
     return ((m.red * color.red + m.green * color.green
              + m.blue * color.blue) /** (2 * maxgray)*/);
   }
@@ -1889,7 +1932,8 @@ public:
   {
     if (!optimize_fog)
       return tiles[tileid].sharpened_color[p.y * twidth + p.x];
-    rgbdata d = tiles[tileid].sharpened_color[p.y * twidth + p.x] - get_fog (v);
+    rgbdata d
+        = tiles[tileid].sharpened_color[p.y * twidth + p.x] - get_fog (v);
     if (normalize)
       {
         luminosity_t ssum = fabs (d.red + d.green + d.blue);
@@ -1913,7 +1957,7 @@ public:
     /* Use double_rgbdata to avoid cummulation of roundoff error.  */
     double_rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
     double_rgbdata color_red = { 0, 0, 0 }, color_green = { 0, 0, 0 },
-            color_blue = { 0, 0, 0 };
+                   color_blue = { 0, 0, 0 };
     luminosity_t threshold = collection_threshold;
     /* Use double to avoid cummulation of roundoff error.  */
     double wr = 0, wg = 0, wb = 0;
@@ -1923,8 +1967,8 @@ public:
         for (int x = border; x < twidth - border; x++)
           if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
             {
-              rgbdata m = get_simulated_screen_pixel (tileid, {x, y});
-              rgbdata d = get_pixel (v, tileid, {x, y});
+              rgbdata m = get_simulated_screen_pixel (tileid, { x, y });
+              rgbdata d = get_pixel (v, tileid, { x, y });
               if (m.red > threshold)
                 {
                   coord_t val = m.red - threshold;
@@ -1962,11 +2006,12 @@ public:
     // sum /= n;
     // sum.print (stdout);
     double_rgbdata cred = (double_rgbdata){ red.red, green.red, blue.red };
-    double_rgbdata cgreen = (double_rgbdata){ red.green, green.green, blue.green };
+    double_rgbdata cgreen
+        = (double_rgbdata){ red.green, green.green, blue.green };
     double_rgbdata cblue = (double_rgbdata){ red.blue, green.blue, blue.blue };
     matrix4x4<double> sat (cred.red, cgreen.red, cblue.red, 0, cred.green,
-                      cgreen.green, cblue.green, 0, cred.blue, cgreen.blue,
-                      cblue.blue, 0, 0, 0, 0, 1);
+                           cgreen.green, cblue.green, 0, cred.blue,
+                           cgreen.blue, cblue.blue, 0, 0, 0, 0, 1);
     sat = sat.invert ();
     // sat.apply_to_rgb (color.red / (2 * maxgray), color.green / (2 *
     // maxgray), color.blue / (2 * maxgray), &color.red, &color.green,
@@ -1993,7 +2038,8 @@ public:
 
   coord_t
   determine_colors_using_least_squares (coord_t *v, double_rgbdata *red,
-                                        double_rgbdata *green, double_rgbdata *blue)
+                                        double_rgbdata *green,
+                                        double_rgbdata *blue)
   {
     /* Use double to not cummulate errors.  */
     double sqsum = 0;
@@ -2004,188 +2050,238 @@ public:
     int e = 0;
     if (simulate_infrared)
       {
-	rgbdata mix_weights = get_mix_weights (v);
-	luminosity_t mix_dark = get_mix_dark (v);
-        luminosity_t sum = /*v[mix_weights_index + 3]*/1;
+        rgbdata mix_weights = get_mix_weights (v);
+        luminosity_t mix_dark = get_mix_dark (v);
+        luminosity_t sum = /*v[mix_weights_index + 3]*/ 1;
 
-	/* See below.  */
-	assert (!fog_by_least_squares);
-	for (int tileid = 0; tileid < n_tiles; tileid++)
-	  for (int y = border; y < theight - border; y++)
-	    for (int x = border; x < twidth - border; x++)
-	      if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
-		{
-		  rgbdata c = get_simulated_screen_pixel (tileid, {x, y});
-                  rgbdata d = fog_by_least_squares ? get_pixel_nofog (tileid, {x, y}) : get_pixel (v, tileid, {x, y});
-		  /* ??? This is not right when fog is optimized by least squares.
-		     For this reason we use non-linear solver to optimize fog.  */
-		  c *= d.red * mix_weights.red + d.green * mix_weights.green + d.blue * mix_weights.blue - mix_dark;
-		  gsl_matrix_set (gsl_X, e, 0, c.red); /* red.red */
-		  gsl_matrix_set (gsl_X, e, 1, c.green); /* green.red */
-		  gsl_matrix_set (gsl_X, e, 2, c.blue); /* blue.red */
-		  gsl_matrix_set (gsl_X, e, 3, 0); /* red.green */
-		  gsl_matrix_set (gsl_X, e, 4, 0); /* green.green */
-		  gsl_matrix_set (gsl_X, e, 5, 0); /* blue.green  */
-		  if (fog_by_least_squares)
-		    {
-		      gsl_matrix_set (gsl_X, e, 6, 1);
-		      gsl_matrix_set (gsl_X, e, 7, 0);
-		      gsl_matrix_set (gsl_X, e, 8, 0);
-		    }
+        /* See below.  */
+        assert (!fog_by_least_squares);
+        for (int tileid = 0; tileid < n_tiles; tileid++)
+          for (int y = border; y < theight - border; y++)
+            for (int x = border; x < twidth - border; x++)
+              if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
+                {
+                  rgbdata c = get_simulated_screen_pixel (tileid, { x, y });
+                  rgbdata d = fog_by_least_squares
+                                  ? get_pixel_nofog (tileid, { x, y })
+                                  : get_pixel (v, tileid, { x, y });
+                  /* ??? This is not right when fog is optimized by least
+                     squares. For this reason we use non-linear solver to
+                     optimize fog.  */
+                  c *= d.red * mix_weights.red + d.green * mix_weights.green
+                       + d.blue * mix_weights.blue - mix_dark;
+                  gsl_matrix_set (gsl_X, e, 0, c.red);   /* red.red */
+                  gsl_matrix_set (gsl_X, e, 1, c.green); /* green.red */
+                  gsl_matrix_set (gsl_X, e, 2, c.blue);  /* blue.red */
+                  gsl_matrix_set (gsl_X, e, 3, 0);       /* red.green */
+                  gsl_matrix_set (gsl_X, e, 4, 0);       /* green.green */
+                  gsl_matrix_set (gsl_X, e, 5, 0);       /* blue.green  */
+                  if (fog_by_least_squares)
+                    {
+                      gsl_matrix_set (gsl_X, e, 6, 1);
+                      gsl_matrix_set (gsl_X, e, 7, 0);
+                      gsl_matrix_set (gsl_X, e, 8, 0);
+                    }
                   gsl_vector_set (gsl_y[0], e, d.red);
-		  e++;
-		  gsl_matrix_set (gsl_X, e, 0, 0); /* red.red */
-		  gsl_matrix_set (gsl_X, e, 1, 0); /* green.red */
-		  gsl_matrix_set (gsl_X, e, 2, 0); /* blue.red */
-		  gsl_matrix_set (gsl_X, e, 3, c.red); /* red.green */
-		  gsl_matrix_set (gsl_X, e, 4, c.green); /* green.green */
-		  gsl_matrix_set (gsl_X, e, 5, c.blue); /* blue.green  */
-		  if (fog_by_least_squares)
-		    {
-		      gsl_matrix_set (gsl_X, e, 6, 0);
-		      gsl_matrix_set (gsl_X, e, 7, 1);
-		      gsl_matrix_set (gsl_X, e, 8, 0);
-		    }
+                  e++;
+                  gsl_matrix_set (gsl_X, e, 0, 0);       /* red.red */
+                  gsl_matrix_set (gsl_X, e, 1, 0);       /* green.red */
+                  gsl_matrix_set (gsl_X, e, 2, 0);       /* blue.red */
+                  gsl_matrix_set (gsl_X, e, 3, c.red);   /* red.green */
+                  gsl_matrix_set (gsl_X, e, 4, c.green); /* green.green */
+                  gsl_matrix_set (gsl_X, e, 5, c.blue);  /* blue.green  */
+                  if (fog_by_least_squares)
+                    {
+                      gsl_matrix_set (gsl_X, e, 6, 0);
+                      gsl_matrix_set (gsl_X, e, 7, 1);
+                      gsl_matrix_set (gsl_X, e, 8, 0);
+                    }
                   gsl_vector_set (gsl_y[0], e, d.green);
-		  e++;
+                  e++;
 
-		  /* red.red * mix_weights.red + red.green + mix_weights.green + red.blue + mix_weigts.blue = sum
-		     gives:
-		     red.blue = (sum - red.red * mix_weights.red - red.green * mix_weights.green) / mix_weights.blue  
+                  /* red.red * mix_weights.red + red.green + mix_weights.green
+                     + red.blue + mix_weigts.blue = sum gives: red.blue = (sum
+                     - red.red * mix_weights.red - red.green *
+                     mix_weights.green) / mix_weights.blue
 
-		     Analogously:
-		     green.blue = (sum - green.red * mix_weights.red - green.green * mix_weights.green) / mix_weights.blue
-		     blue.blue = (sum - blue.red * mix_weights.red - blue.green * mix_weights.green) / mix_weights.blue  */
-		   
-		  gsl_matrix_set (gsl_X, e, 0, -c.red * (mix_weights.red/mix_weights.blue)); /* red.red */
-		  gsl_matrix_set (gsl_X, e, 1, -c.green * (mix_weights.red/mix_weights.blue)); /* green.red */
-		  gsl_matrix_set (gsl_X, e, 2, -c.blue * (mix_weights.red/mix_weights.blue)); /* blue.red */
-		  gsl_matrix_set (gsl_X, e, 3, -c.red * (mix_weights.green/mix_weights.blue)); /* red.green */
-		  gsl_matrix_set (gsl_X, e, 4, -c.green * (mix_weights.green/mix_weights.blue)); /* green.green */
-		  gsl_matrix_set (gsl_X, e, 5, -c.blue * (mix_weights.green/mix_weights.blue)); /* blue.green  */
-		  if (fog_by_least_squares)
-		    {
-		      gsl_matrix_set (gsl_X, e, 6, 0);
-		      gsl_matrix_set (gsl_X, e, 7, 0);
-		      gsl_matrix_set (gsl_X, e, 8, 1);
-		    }
-                  gsl_vector_set (gsl_y[0], e, d.blue - sum * (c.red + c.green + c.blue)/mix_weights.blue);
-		  e++;
-		}
-	if (fog_by_least_squares)
-	  {
-	    gsl_matrix_set (gsl_X, e, 0, 0);
-	    gsl_matrix_set (gsl_X, e, 1, 0);
-	    gsl_matrix_set (gsl_X, e, 2, 0);
-	    gsl_matrix_set (gsl_X, e, 3, 0);
-	    gsl_matrix_set (gsl_X, e, 4, 0);
-	    gsl_matrix_set (gsl_X, e, 5, 0);
-	    gsl_matrix_set (gsl_X, e, 6, sample_points () * ((double)4 / 65546));
-	    gsl_matrix_set (gsl_X, e, 7, 0);
-	    gsl_matrix_set (gsl_X, e, 8, 0);
+                     Analogously:
+                     green.blue = (sum - green.red * mix_weights.red -
+                     green.green * mix_weights.green) / mix_weights.blue
+                     blue.blue = (sum - blue.red * mix_weights.red - blue.green
+                     * mix_weights.green) / mix_weights.blue  */
+
+                  gsl_matrix_set (gsl_X, e, 0,
+                                  -c.red
+                                      * (mix_weights.red
+                                         / mix_weights.blue)); /* red.red */
+                  gsl_matrix_set (gsl_X, e, 1,
+                                  -c.green
+                                      * (mix_weights.red
+                                         / mix_weights.blue)); /* green.red */
+                  gsl_matrix_set (gsl_X, e, 2,
+                                  -c.blue
+                                      * (mix_weights.red
+                                         / mix_weights.blue)); /* blue.red */
+                  gsl_matrix_set (gsl_X, e, 3,
+                                  -c.red
+                                      * (mix_weights.green
+                                         / mix_weights.blue)); /* red.green */
+                  gsl_matrix_set (
+                      gsl_X, e, 4,
+                      -c.green
+                          * (mix_weights.green
+                             / mix_weights.blue)); /* green.green */
+                  gsl_matrix_set (gsl_X, e, 5,
+                                  -c.blue
+                                      * (mix_weights.green
+                                         / mix_weights.blue)); /* blue.green */
+                  if (fog_by_least_squares)
+                    {
+                      gsl_matrix_set (gsl_X, e, 6, 0);
+                      gsl_matrix_set (gsl_X, e, 7, 0);
+                      gsl_matrix_set (gsl_X, e, 8, 1);
+                    }
+                  gsl_vector_set (gsl_y[0], e,
+                                  d.blue
+                                      - sum * (c.red + c.green + c.blue)
+                                            / mix_weights.blue);
+                  e++;
+                }
+        if (fog_by_least_squares)
+          {
+            gsl_matrix_set (gsl_X, e, 0, 0);
+            gsl_matrix_set (gsl_X, e, 1, 0);
+            gsl_matrix_set (gsl_X, e, 2, 0);
+            gsl_matrix_set (gsl_X, e, 3, 0);
+            gsl_matrix_set (gsl_X, e, 4, 0);
+            gsl_matrix_set (gsl_X, e, 5, 0);
+            gsl_matrix_set (gsl_X, e, 6,
+                            sample_points () * ((double)4 / 65546));
+            gsl_matrix_set (gsl_X, e, 7, 0);
+            gsl_matrix_set (gsl_X, e, 8, 0);
             gsl_vector_set (gsl_y[0], e, 0);
-	    e++;
-	    gsl_matrix_set (gsl_X, e, 0, 0);
-	    gsl_matrix_set (gsl_X, e, 1, 0);
-	    gsl_matrix_set (gsl_X, e, 2, 0);
-	    gsl_matrix_set (gsl_X, e, 3, 0);
-	    gsl_matrix_set (gsl_X, e, 4, 0);
-	    gsl_matrix_set (gsl_X, e, 5, 0);
-	    gsl_matrix_set (gsl_X, e, 6, 0);
-	    gsl_matrix_set (gsl_X, e, 7, sample_points () * ((double)4 / 65546));
-	    gsl_matrix_set (gsl_X, e, 8, 0);
+            e++;
+            gsl_matrix_set (gsl_X, e, 0, 0);
+            gsl_matrix_set (gsl_X, e, 1, 0);
+            gsl_matrix_set (gsl_X, e, 2, 0);
+            gsl_matrix_set (gsl_X, e, 3, 0);
+            gsl_matrix_set (gsl_X, e, 4, 0);
+            gsl_matrix_set (gsl_X, e, 5, 0);
+            gsl_matrix_set (gsl_X, e, 6, 0);
+            gsl_matrix_set (gsl_X, e, 7,
+                            sample_points () * ((double)4 / 65546));
+            gsl_matrix_set (gsl_X, e, 8, 0);
             gsl_vector_set (gsl_y[0], e, 0);
-	    e++;
-	    gsl_matrix_set (gsl_X, e, 0, 0);
-	    gsl_matrix_set (gsl_X, e, 1, 0);
-	    gsl_matrix_set (gsl_X, e, 2, 0);
-	    gsl_matrix_set (gsl_X, e, 3, 0);
-	    gsl_matrix_set (gsl_X, e, 4, 0);
-	    gsl_matrix_set (gsl_X, e, 5, 0);
-	    gsl_matrix_set (gsl_X, e, 6, 0);
-	    gsl_matrix_set (gsl_X, e, 7, 0);
-	    gsl_matrix_set (gsl_X, e, 8, sample_points () * ((double)4 / 65546));
+            e++;
+            gsl_matrix_set (gsl_X, e, 0, 0);
+            gsl_matrix_set (gsl_X, e, 1, 0);
+            gsl_matrix_set (gsl_X, e, 2, 0);
+            gsl_matrix_set (gsl_X, e, 3, 0);
+            gsl_matrix_set (gsl_X, e, 4, 0);
+            gsl_matrix_set (gsl_X, e, 5, 0);
+            gsl_matrix_set (gsl_X, e, 6, 0);
+            gsl_matrix_set (gsl_X, e, 7, 0);
+            gsl_matrix_set (gsl_X, e, 8,
+                            sample_points () * ((double)4 / 65546));
             gsl_vector_set (gsl_y[0], e, 0);
-	    e++;
-	  }
-	double chisq;
-	gsl_multifit_linear (gsl_X, gsl_y[0], gsl_c, gsl_cov, &chisq,
-			     gsl_work);
-	/* Colors should be real reactions of scanner, so no negative values
-	   and also no excessively large values. Allow some overexposure.  */
-	(*red).red = gsl_vector_get (gsl_c, 0);
-	//to_range ((*red).red, -0.2, 2);
-	(*green).red = gsl_vector_get (gsl_c, 1);
-	//to_range ((*green).red, -0.2, 2);
-	(*blue).red = gsl_vector_get (gsl_c, 2);
-	//to_range ((*blue).red, -0.2, 2);
+            e++;
+          }
+        double chisq;
+        gsl_multifit_linear (gsl_X, gsl_y[0], gsl_c, gsl_cov, &chisq,
+                             gsl_work);
+        /* Colors should be real reactions of scanner, so no negative values
+           and also no excessively large values. Allow some overexposure.  */
+        (*red).red = gsl_vector_get (gsl_c, 0);
+        // to_range ((*red).red, -0.2, 2);
+        (*green).red = gsl_vector_get (gsl_c, 1);
+        // to_range ((*green).red, -0.2, 2);
+        (*blue).red = gsl_vector_get (gsl_c, 2);
+        // to_range ((*blue).red, -0.2, 2);
 
-	(*red).green = gsl_vector_get (gsl_c, 3);
-	//to_range ((*red).green, -0.2, 2);
-	(*green).green = gsl_vector_get (gsl_c, 4);
-	//to_range ((*green).green, -0.2, 2);
-	(*blue).green = gsl_vector_get (gsl_c, 5);
-	//to_range ((*blue).green, -0.2, 2);
+        (*red).green = gsl_vector_get (gsl_c, 3);
+        // to_range ((*red).green, -0.2, 2);
+        (*green).green = gsl_vector_get (gsl_c, 4);
+        // to_range ((*green).green, -0.2, 2);
+        (*blue).green = gsl_vector_get (gsl_c, 5);
+        // to_range ((*blue).green, -0.2, 2);
 
-	(*red).blue = (sum - (*red).red * mix_weights.red - (*red).green * mix_weights.green) / mix_weights.blue;
-	//to_range ((*red).blue, 0, 2);
-	(*green).blue = (sum - (*green).red * mix_weights.red - (*green).green * mix_weights.green) / mix_weights.blue;
-	//to_range ((*green).blue, 0, 2);
-	(*blue).blue = (sum - (*blue).red * mix_weights.red - (*blue).green * mix_weights.green) / mix_weights.blue;
-	//to_range ((*blue).blue, 0, 2);
+        (*red).blue = (sum - (*red).red * mix_weights.red
+                       - (*red).green * mix_weights.green)
+                      / mix_weights.blue;
+        // to_range ((*red).blue, 0, 2);
+        (*green).blue = (sum - (*green).red * mix_weights.red
+                         - (*green).green * mix_weights.green)
+                        / mix_weights.blue;
+        // to_range ((*green).blue, 0, 2);
+        (*blue).blue = (sum - (*blue).red * mix_weights.red
+                        - (*blue).green * mix_weights.green)
+                       / mix_weights.blue;
+        // to_range ((*blue).blue, 0, 2);
 
-	if (fog_by_least_squares)
-	  {
-	    last_fog.red = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 6), /*-fog_range.red*/(luminosity_t)-0.1, fog_range.red);
-	    last_fog.green = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 7), /*-fog_range.green*/(luminosity_t)-0.1, fog_range.green);
-	    last_fog.blue = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 8), /*-fog_range.blue*/(luminosity_t)-0.1, fog_range.blue);
-	  }
-         return chisq;
+        if (fog_by_least_squares)
+          {
+            last_fog.red = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 6),
+                                       /*-fog_range.red*/ (luminosity_t)-0.1,
+                                       fog_range.red);
+            last_fog.green = std::clamp (
+                (luminosity_t)gsl_vector_get (gsl_c, 7),
+                /*-fog_range.green*/ (luminosity_t)-0.1, fog_range.green);
+            last_fog.blue = std::clamp (
+                (luminosity_t)gsl_vector_get (gsl_c, 8),
+                /*-fog_range.blue*/ (luminosity_t)-0.1, fog_range.blue);
+          }
+        return chisq;
       }
     else
       {
-	for (int tileid = 0; tileid < n_tiles; tileid++)
-	  for (int y = border; y < theight - border; y++)
-	    for (int x = border; x < twidth - border; x++)
-	      if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
-		{
-		  rgbdata c = get_simulated_screen_pixel (tileid, {x, y});
-		  gsl_matrix_set (gsl_X, e, 0, c.red);
-		  gsl_matrix_set (gsl_X, e, 1, c.green);
-		  gsl_matrix_set (gsl_X, e, 2, c.blue);
-		  if (fog_by_least_squares)
-		    gsl_matrix_set (gsl_X, e, 3, 1);
-		  e++;
-		}
-	if (fog_by_least_squares)
-	  {
-	    gsl_matrix_set (gsl_X, e, 0, 0);
-	    gsl_matrix_set (gsl_X, e, 1, 0);
-	    gsl_matrix_set (gsl_X, e, 2, 0);
-	    gsl_matrix_set (gsl_X, e, 3, sample_points () * ((double)4 / 65546));
-	    e++;
-	  }
-	if (e != (int)gsl_X->size1)
-	  abort ();
-	for (int ch = 0; ch < 3; ch++)
-	  {
-	    double chisq;
-	    gsl_multifit_linear (gsl_X, gsl_y[ch], gsl_c, gsl_cov, &chisq,
-				 gsl_work);
-	    sqsum += chisq;
-	    /* Colors should be real reactions of scanner, so no negative values
-	       and also no excessively large values. Allow some overexposure.  */
-	    (*red)[ch] = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 0), (luminosity_t)0, (luminosity_t)2);
-	    (*green)[ch] = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 1), (luminosity_t)0, (luminosity_t)2);
-	    (*blue)[ch] = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 2), (luminosity_t)0, (luminosity_t)2);
-	    if (fog_by_least_squares)
-	      {
-		last_fog[ch] = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 3), (luminosity_t)-0.1, fog_range[ch]);
-	      }
-	  }
-	return sqsum;
+        for (int tileid = 0; tileid < n_tiles; tileid++)
+          for (int y = border; y < theight - border; y++)
+            for (int x = border; x < twidth - border; x++)
+              if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
+                {
+                  rgbdata c = get_simulated_screen_pixel (tileid, { x, y });
+                  gsl_matrix_set (gsl_X, e, 0, c.red);
+                  gsl_matrix_set (gsl_X, e, 1, c.green);
+                  gsl_matrix_set (gsl_X, e, 2, c.blue);
+                  if (fog_by_least_squares)
+                    gsl_matrix_set (gsl_X, e, 3, 1);
+                  e++;
+                }
+        if (fog_by_least_squares)
+          {
+            gsl_matrix_set (gsl_X, e, 0, 0);
+            gsl_matrix_set (gsl_X, e, 1, 0);
+            gsl_matrix_set (gsl_X, e, 2, 0);
+            gsl_matrix_set (gsl_X, e, 3,
+                            sample_points () * ((double)4 / 65546));
+            e++;
+          }
+        if (e != (int)gsl_X->size1)
+          abort ();
+        for (int ch = 0; ch < 3; ch++)
+          {
+            double chisq;
+            gsl_multifit_linear (gsl_X, gsl_y[ch], gsl_c, gsl_cov, &chisq,
+                                 gsl_work);
+            sqsum += chisq;
+            /* Colors should be real reactions of scanner, so no negative
+               values and also no excessively large values. Allow some
+               overexposure.  */
+            (*red)[ch] = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 0),
+                                     (luminosity_t)0, (luminosity_t)2);
+            (*green)[ch] = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 1),
+                                       (luminosity_t)0, (luminosity_t)2);
+            (*blue)[ch] = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 2),
+                                      (luminosity_t)0, (luminosity_t)2);
+            if (fog_by_least_squares)
+              {
+                last_fog[ch]
+                    = std::clamp ((luminosity_t)gsl_vector_get (gsl_c, 3),
+                                  (luminosity_t)-0.1, fog_range[ch]);
+              }
+          }
+        return sqsum;
       }
-
   }
 
   rgbdata
@@ -2207,8 +2303,8 @@ public:
         for (int x = border; x < twidth - border; x++)
           if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
             {
-              rgbdata m = get_simulated_screen_pixel (tileid, {x, y});
-              luminosity_t l = bw_get_pixel (tileid, {x, y});
+              rgbdata m = get_simulated_screen_pixel (tileid, { x, y });
+              luminosity_t l = bw_get_pixel (tileid, { x, y });
               if (m.red > threshold)
                 {
                   coord_t val = m.red - threshold;
@@ -2242,11 +2338,12 @@ public:
     color.blue /= wb;
 
     double_rgbdata cred = (double_rgbdata){ red.red, green.red, blue.red };
-    double_rgbdata cgreen = (double_rgbdata){ red.green, green.green, blue.green };
+    double_rgbdata cgreen
+        = (double_rgbdata){ red.green, green.green, blue.green };
     double_rgbdata cblue = (double_rgbdata){ red.blue, green.blue, blue.blue };
     matrix4x4<double> sat (cred.red, cgreen.red, cblue.red, 0, cred.green,
-                      cgreen.green, cblue.green, 0, cred.blue, cgreen.blue,
-                      cblue.blue, 0, 0, 0, 0, 1);
+                           cgreen.green, cblue.green, 0, cred.blue,
+                           cgreen.blue, cblue.blue, 0, 0, 0, 0, 1);
     sat = sat.invert ();
     sat.apply_to_rgb (color.red, color.green, color.blue, &color.red,
                       &color.green, &color.blue);
@@ -2256,9 +2353,9 @@ public:
        over-exposure or cropping  */
     if (!bw_is_simulated_infrared)
       {
-	color.red = std::clamp (color.red, (double)-0.1, (double)1.1);
-	color.green = std::clamp (color.green, (double)-0.1, (double)1.1);
-	color.blue = std::clamp (color.blue, (double)-0.1, (double)1.1);
+        color.red = std::clamp (color.red, (double)-0.1, (double)1.1);
+        color.green = std::clamp (color.green, (double)-0.1, (double)1.1);
+        color.blue = std::clamp (color.blue, (double)-0.1, (double)1.1);
       }
     return color;
   }
@@ -2274,7 +2371,7 @@ public:
         for (int x = border; x < twidth - border; x++)
           if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
             {
-              rgbdata c = get_simulated_screen_pixel (tileid, {x, y});
+              rgbdata c = get_simulated_screen_pixel (tileid, { x, y });
               gsl_matrix_set (gsl_X, e, 0, c.red);
               gsl_matrix_set (gsl_X, e, 1, c.green);
               gsl_matrix_set (gsl_X, e, 2, c.blue);
@@ -2286,18 +2383,22 @@ public:
       abort ();
     double chisq;
     gsl_multifit_linear (gsl_X, gsl_y[0], gsl_c, gsl_cov, &chisq, gsl_work);
-    rgbdata color = { (luminosity_t)gsl_vector_get (gsl_c, 0) * (2 * maxgray),
-                      (luminosity_t)gsl_vector_get (gsl_c, 1) * (2 * maxgray),
-                      (luminosity_t)gsl_vector_get (gsl_c, 2) * (2 * maxgray) };
+    rgbdata color
+        = { (luminosity_t)gsl_vector_get (gsl_c, 0) * (2 * maxgray),
+            (luminosity_t)gsl_vector_get (gsl_c, 1) * (2 * maxgray),
+            (luminosity_t)gsl_vector_get (gsl_c, 2) * (2 * maxgray) };
     /* If infrared channel is simulated, negative values may be possible
        and it is kind of hard to constrain to reasonable bounds.
        Still allow values somewhat out of range to account for possible
        over-exposure or cropping  */
     if (!bw_is_simulated_infrared)
       {
-	color.red = std::clamp (color.red, (luminosity_t)-0.1, (luminosity_t)1.1);
-	color.green = std::clamp (color.green, (luminosity_t)-0.1, (luminosity_t)1.1);
-	color.blue = std::clamp (color.blue, (luminosity_t)-0.1, (luminosity_t)1.1);
+        color.red
+            = std::clamp (color.red, (luminosity_t)-0.1, (luminosity_t)1.1);
+        color.green
+            = std::clamp (color.green, (luminosity_t)-0.1, (luminosity_t)1.1);
+        color.blue
+            = std::clamp (color.blue, (luminosity_t)-0.1, (luminosity_t)1.1);
       }
     return color;
   }
@@ -2310,7 +2411,8 @@ public:
     if (fog_by_least_squares)
       return last_fog;
     assert (!colorscreen_checking || fog_index >= 0);
-    return { (luminosity_t)v[fog_index] * fog_range.red, (luminosity_t)v[fog_index + 1] * fog_range.green,
+    return { (luminosity_t)v[fog_index] * fog_range.red,
+             (luminosity_t)v[fog_index + 1] * fog_range.green,
              (luminosity_t)v[fog_index + 2] * fog_range.blue };
   }
 
@@ -2358,17 +2460,21 @@ public:
   {
     if (mix_weights_index >= 0)
       {
-	if (!least_squares)
-	  return {(luminosity_t)v[mix_weights_index], (luminosity_t)v[mix_weights_index + 1], 1 - (luminosity_t)v[mix_weights_index] - (luminosity_t)v[mix_weights_index + 1]};
-	else
-	  return {(luminosity_t)v[mix_weights_index], (luminosity_t)v[mix_weights_index + 1], (luminosity_t)v[mix_weights_index + 2]};
+        if (!least_squares)
+          return { (luminosity_t)v[mix_weights_index],
+                   (luminosity_t)v[mix_weights_index + 1],
+                   1 - (luminosity_t)v[mix_weights_index]
+                       - (luminosity_t)v[mix_weights_index + 1] };
+        else
+          return { (luminosity_t)v[mix_weights_index],
+                   (luminosity_t)v[mix_weights_index + 1],
+                   (luminosity_t)v[mix_weights_index + 2] };
       }
     double_rgbdata red, green, blue;
     get_colors (v, &red, &green, &blue);
-    color_matrix process_colors (red.red, red.green, red.blue, 0,
-				 green.red, green.green, green.blue, 0,
-				 blue.red, blue.green, blue.blue,
-				 0, 0, 0, 0, 1);
+    color_matrix process_colors (red.red, red.green, red.blue, 0, green.red,
+                                 green.green, green.blue, 0, blue.red,
+                                 blue.green, blue.blue, 0, 0, 0, 0, 1);
     rgbdata ret;
     process_colors.invert ().apply_to_rgb (1, 1, 1, &ret.red, &ret.green,
                                            &ret.blue);
@@ -2401,7 +2507,8 @@ public:
     return last_color;
   }
   void
-  get_colors (coord_t *v, double_rgbdata *red, double_rgbdata *green, double_rgbdata *blue)
+  get_colors (coord_t *v, double_rgbdata *red, double_rgbdata *green,
+              double_rgbdata *blue)
   {
     if (!least_squares && !data_collection)
       {
@@ -2430,9 +2537,14 @@ public:
     double sum = 0;
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
-        /* FIXME: parallelism is disabled because sometimes we are called form parallel block.  */
-	if (tiles[tileid].sharpened_color && tiles[tileid].sharpened_color != tiles[tileid].color)
-          sharpen<rgbdata, rgbdata, rgbdata *,int, getdata_helper> (tiles[tileid].sharpened_color, tiles[tileid].color, theight, twidth, theight, get_sharpen_radius (v), get_sharpen_amount (v), nullptr, false);
+        /* FIXME: parallelism is disabled because sometimes we are called form
+         * parallel block.  */
+        if (tiles[tileid].sharpened_color
+            && tiles[tileid].sharpened_color != tiles[tileid].color)
+          sharpen<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
+              tiles[tileid].sharpened_color, tiles[tileid].color, theight,
+              twidth, theight, get_sharpen_radius (v), get_sharpen_amount (v),
+              nullptr, false);
         init_screen (v, tileid);
         simulate_screen (v, tileid);
       }
@@ -2446,8 +2558,8 @@ public:
     luminosity_t mix_dark = 0;
     if (simulate_infrared)
       {
-	mix_weights = get_mix_weights (v);
-	mix_dark = get_mix_dark (v);
+        mix_weights = get_mix_weights (v);
+        mix_dark = get_mix_dark (v);
       }
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
@@ -2460,7 +2572,7 @@ public:
                   {
                     rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x,
                                                 y, off, mix_weights, mix_dark);
-                    rgbdata d = get_pixel (v, tileid, {x, y});
+                    rgbdata d = get_pixel (v, tileid, { x, y });
 
                     /* Bayer pattern. */
                     if (!(x & 1) && !(y & 1))
@@ -2485,7 +2597,7 @@ public:
                   {
                     luminosity_t c
                         = bw_evaulate_pixel (tileid, color, x, y, off);
-                    luminosity_t d = bw_get_pixel (tileid, {x, y});
+                    luminosity_t d = bw_get_pixel (tileid, { x, y });
                     sum += my_fabs (c - d);
                   }
             sum /= maxgray;
@@ -2523,9 +2635,12 @@ public:
                      & (screen::size - 1);
             if (tiles[tileid].color)
               {
-                s->mult[yy][xx][0] = tiles[tileid].sharpened_color[y * twidth + x].red;
-                s->mult[yy][xx][1] = tiles[tileid].sharpened_color[y * twidth + x].green;
-                s->mult[yy][xx][2] = tiles[tileid].sharpened_color[y * twidth + x].blue;
+                s->mult[yy][xx][0]
+                    = tiles[tileid].sharpened_color[y * twidth + x].red;
+                s->mult[yy][xx][1]
+                    = tiles[tileid].sharpened_color[y * twidth + x].green;
+                s->mult[yy][xx][2]
+                    = tiles[tileid].sharpened_color[y * twidth + x].blue;
               }
             else
               {
@@ -2579,8 +2694,8 @@ public:
 
     if (simulate_infrared)
       {
-	mix_weights = get_mix_weights (v);
-	mix_dark = get_mix_dark (v);
+        mix_weights = get_mix_weights (v);
+        mix_dark = get_mix_dark (v);
       }
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
@@ -2591,7 +2706,7 @@ public:
             {
               rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y,
                                           off, mix_weights, mix_dark);
-              rgbdata d = get_pixel (v, tileid, {x, y});
+              rgbdata d = get_pixel (v, tileid, { x, y });
               coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green)
                             + fabs (c.blue - d.blue);
               hist.pre_account (err);
@@ -2602,7 +2717,7 @@ public:
             {
               rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y,
                                           off, mix_weights, mix_dark);
-              rgbdata d = get_pixel (v, tileid, {x, y});
+              rgbdata d = get_pixel (v, tileid, { x, y });
               coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green)
                             + fabs (c.blue - d.blue);
               hist.account (err);
@@ -2615,7 +2730,7 @@ public:
             {
               rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y,
                                           off, mix_weights, mix_dark);
-              rgbdata d = get_pixel (v, tileid, {x, y});
+              rgbdata d = get_pixel (v, tileid, { x, y });
               coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green)
                             + fabs (c.blue - d.blue);
               if (err > merr)
@@ -2649,7 +2764,7 @@ public:
           for (int x = border; x < twidth - border; x++)
             {
               luminosity_t c = bw_evaulate_pixel (tileid, color, x, y, off);
-              luminosity_t d = bw_get_pixel (tileid, {x, y});
+              luminosity_t d = bw_get_pixel (tileid, { x, y });
               coord_t err = fabs (c - d);
               hist.pre_account (err);
             }
@@ -2658,7 +2773,7 @@ public:
           for (int x = border; x < twidth - border; x++)
             {
               luminosity_t c = bw_evaulate_pixel (tileid, color, x, y, off);
-              luminosity_t d = bw_get_pixel (tileid, {x, y});
+              luminosity_t d = bw_get_pixel (tileid, { x, y });
               coord_t err = fabs (c - d);
               hist.account (err);
             }
@@ -2669,7 +2784,7 @@ public:
           for (int x = border; x < twidth - border; x++)
             {
               luminosity_t c = bw_evaulate_pixel (tileid, color, x, y, off);
-              luminosity_t d = bw_get_pixel (tileid, {x, y});
+              luminosity_t d = bw_get_pixel (tileid, { x, y });
               coord_t err = fabs (c - d);
               if (err > merr)
                 {
@@ -2695,7 +2810,7 @@ public:
     init_screen (v, tileid);
     point_t off = get_offset (v, tileid);
 
-    std::unique_ptr<simple_image> img = std::make_unique <simple_image> ();
+    std::unique_ptr<simple_image> img = std::make_unique<simple_image> ();
     if (!img || !img->allocate (twidth, theight))
       return img;
 
@@ -2703,13 +2818,13 @@ public:
       {
         luminosity_t rmax = 0, gmax = 0, bmax = 0;
         double_rgbdata red, green, blue;
-        rgbdata mix_weights = {0, 0, 0};
-	luminosity_t mix_dark = 0;
+        rgbdata mix_weights = { 0, 0, 0 };
+        luminosity_t mix_dark = 0;
         if (simulate_infrared)
-	  {
-	    mix_weights = get_mix_weights (v);
-	    mix_dark = get_mix_dark (v);
-	  }
+          {
+            mix_weights = get_mix_weights (v);
+            mix_dark = get_mix_dark (v);
+          }
         get_colors (v, &red, &green, &blue);
         for (int y = 0; y < theight; y++)
           for (int x = 0; x < twidth; x++)
@@ -2719,7 +2834,7 @@ public:
               rmax = std::max (c.red, rmax);
               gmax = std::max (c.green, gmax);
               bmax = std::max (c.blue, bmax);
-              rgbdata d = get_pixel (v, tileid, {x, y});
+              rgbdata d = get_pixel (v, tileid, { x, y });
               rmax = std::max (d.red, rmax);
               gmax = std::max (d.green, gmax);
               bmax = std::max (d.blue, bmax);
@@ -2734,34 +2849,46 @@ public:
                   {
                   case 0:
                     {
-                      rgbdata c = evaulate_pixel (v, tileid, red, green, blue,
-                                                  x, y, off, mix_weights, mix_dark);
-                      img->put_linear_pixel (x, y, {c.red / rmax, c.green / gmax, c.blue / bmax});
+                      rgbdata c
+                          = evaulate_pixel (v, tileid, red, green, blue, x, y,
+                                            off, mix_weights, mix_dark);
+                      img->put_linear_pixel (
+                          x, y,
+                          { c.red / rmax, c.green / gmax, c.blue / bmax });
                     }
                     break;
                   case 1:
                     {
-                      rgbdata d = get_orig_pixel (v, tileid, {x, y});
-                      img->put_linear_pixel (x, y, {d.red / rmax, d.green / gmax, d.blue / bmax});
+                      rgbdata d = get_orig_pixel (v, tileid, { x, y });
+                      img->put_linear_pixel (
+                          x, y,
+                          { d.red / rmax, d.green / gmax, d.blue / bmax });
                     }
                     break;
                   case 2:
                     {
-                      rgbdata c = evaulate_pixel (v, tileid, red, green, blue,
-                                                  x, y, off, mix_weights, mix_dark);
-                      rgbdata d = c - get_pixel (v, tileid, {x, y});
-                      img->put_linear_pixel (x, y, {d.red / rmax + (luminosity_t)0.5, d.green / gmax + (luminosity_t)0.5, d.blue / bmax + (luminosity_t)0.5});
+                      rgbdata c
+                          = evaulate_pixel (v, tileid, red, green, blue, x, y,
+                                            off, mix_weights, mix_dark);
+                      rgbdata d = c - get_pixel (v, tileid, { x, y });
+                      img->put_linear_pixel (
+                          x, y,
+                          { d.red / rmax + (luminosity_t)0.5,
+                            d.green / gmax + (luminosity_t)0.5,
+                            d.blue / bmax + (luminosity_t)0.5 });
                     }
                     break;
                   case 3:
                     {
-                      rgbdata d = get_pixel (v, tileid, {x, y});
-                      img->put_linear_pixel (x, y, {d.red / rmax, d.green / gmax, d.blue / bmax});
+                      rgbdata d = get_pixel (v, tileid, { x, y });
+                      img->put_linear_pixel (
+                          x, y,
+                          { d.red / rmax, d.green / gmax, d.blue / bmax });
                     }
-		    break;
+                    break;
                   }
               else
-                img->put_pixel (x, y, {0, 0, 0});
+                img->put_pixel (x, y, { 0, 0, 0 });
           }
       }
     if (tiles[tileid].bw)
@@ -2773,7 +2900,7 @@ public:
             {
               lmax = std::max (bw_evaulate_pixel (tileid, color, x, y, off),
                                lmax);
-              lmax = std::max (bw_get_pixel (tileid, {x, y}), lmax);
+              lmax = std::max (bw_get_pixel (tileid, { x, y }), lmax);
             }
 
         for (int y = 0; y < theight; y++)
@@ -2786,27 +2913,29 @@ public:
                   case 0:
                     {
                       luminosity_t c
-                          = bw_evaulate_pixel (tileid, color, x, y, off) / lmax;
-                      img->put_linear_pixel (x, y, {c, c, c});
+                          = bw_evaulate_pixel (tileid, color, x, y, off)
+                            / lmax;
+                      img->put_linear_pixel (x, y, { c, c, c });
                     }
                     break;
                   case 1:
                     {
-                      luminosity_t d = bw_get_pixel (tileid, {x, y}) / lmax;
-                      img->put_linear_pixel (x, y, {d, d, d});
+                      luminosity_t d = bw_get_pixel (tileid, { x, y }) / lmax;
+                      img->put_linear_pixel (x, y, { d, d, d });
                     }
                     break;
                   case 2:
                     {
                       luminosity_t c
                           = bw_evaulate_pixel (tileid, color, x, y, off);
-                      luminosity_t d = (c - bw_get_pixel (tileid, {x, y})) / lmax + 0.5;
-                      img->put_linear_pixel (x, y, {d, d, d});
+                      luminosity_t d
+                          = (c - bw_get_pixel (tileid, { x, y })) / lmax + 0.5;
+                      img->put_linear_pixel (x, y, { d, d, d });
                     }
                     break;
                   }
               else
-                img->put_pixel (x, y, {0, 0, 0});
+                img->put_pixel (x, y, { 0, 0, 0 });
           }
       }
     return img;
@@ -2817,19 +2946,19 @@ public:
   {
     init_screen (v, tileid);
     point_t off = get_offset (v, tileid);
-    //void *buffer;
-    //size_t len = create_linear_srgb_profile (&buffer);
+    // void *buffer;
+    // size_t len = create_linear_srgb_profile (&buffer);
 
     tiff_writer_params p;
     p.filename = name;
     p.width = twidth;
-    //p.icc_profile = buffer;
-    //p.icc_profile_len = len;
+    // p.icc_profile = buffer;
+    // p.icc_profile_len = len;
     p.height = theight;
     p.depth = 16;
     const char *error;
     tiff_writer rendered (p, &error);
-    //free (buffer);
+    // free (buffer);
     if (error)
       return false;
 
@@ -2837,13 +2966,13 @@ public:
       {
         luminosity_t rmax = 0, gmax = 0, bmax = 0;
         double_rgbdata red, green, blue;
-        rgbdata mix_weights = {0, 0, 0};
-	luminosity_t mix_dark = 0;
+        rgbdata mix_weights = { 0, 0, 0 };
+        luminosity_t mix_dark = 0;
         if (simulate_infrared)
-	  {
-	    mix_weights = get_mix_weights (v);
-	    mix_dark = get_mix_dark (v);
-	  }
+          {
+            mix_weights = get_mix_weights (v);
+            mix_dark = get_mix_dark (v);
+          }
         get_colors (v, &red, &green, &blue);
         for (int y = 0; y < theight; y++)
           for (int x = 0; x < twidth; x++)
@@ -2853,7 +2982,7 @@ public:
               rmax = std::max (c.red, rmax);
               gmax = std::max (c.green, gmax);
               bmax = std::max (c.blue, bmax);
-              rgbdata d = get_pixel (v, tileid, {x, y});
+              rgbdata d = get_pixel (v, tileid, { x, y });
               rmax = std::max (d.red, rmax);
               gmax = std::max (d.green, gmax);
               bmax = std::max (d.blue, bmax);
@@ -2868,26 +2997,30 @@ public:
                   {
                   case 0:
                     {
-                      rgbdata c = evaulate_pixel (v, tileid, red, green, blue,
-                                                  x, y, off, mix_weights, mix_dark);
-                      rendered.put_pixel (x, invert_gamma (c.red / rmax, -1) * 65535,
-                                          invert_gamma (c.green / gmax, -1) * 65535,
-                                          invert_gamma (c.blue / bmax, -1) * 65535);
+                      rgbdata c
+                          = evaulate_pixel (v, tileid, red, green, blue, x, y,
+                                            off, mix_weights, mix_dark);
+                      rendered.put_pixel (
+                          x, invert_gamma (c.red / rmax, -1) * 65535,
+                          invert_gamma (c.green / gmax, -1) * 65535,
+                          invert_gamma (c.blue / bmax, -1) * 65535);
                     }
                     break;
                   case 1:
                     {
-                      rgbdata d = get_orig_pixel (v, tileid, {x, y});
-                      rendered.put_pixel (x, invert_gamma (d.red / rmax, -1) * 65535,
-                                          invert_gamma (d.green / gmax, -1) * 65535,
-                                          invert_gamma (d.blue / bmax, -1) * 65535);
+                      rgbdata d = get_orig_pixel (v, tileid, { x, y });
+                      rendered.put_pixel (
+                          x, invert_gamma (d.red / rmax, -1) * 65535,
+                          invert_gamma (d.green / gmax, -1) * 65535,
+                          invert_gamma (d.blue / bmax, -1) * 65535);
                     }
                     break;
                   case 2:
                     {
-                      rgbdata c = evaulate_pixel (v, tileid, red, green, blue,
-                                                  x, y, off, mix_weights, mix_dark);
-                      rgbdata d = get_pixel (v, tileid, {x, y});
+                      rgbdata c
+                          = evaulate_pixel (v, tileid, red, green, blue, x, y,
+                                            off, mix_weights, mix_dark);
+                      rgbdata d = get_pixel (v, tileid, { x, y });
                       rendered.put_pixel (
                           x, (c.red - d.red) * 65535 / rmax + 65536 / 2,
                           (c.green - d.green) * 65535 / gmax + 65536 / 2,
@@ -2896,12 +3029,12 @@ public:
                     break;
                   case 3:
                     {
-                      rgbdata d = get_pixel (v, tileid, {x, y});
+                      rgbdata d = get_pixel (v, tileid, { x, y });
                       rendered.put_pixel (x, d.red * 65535 / rmax,
                                           d.green * 65535 / gmax,
                                           d.blue * 65535 / bmax);
                     }
-		    break;
+                    break;
                   }
               else
                 rendered.put_pixel (x, 0, 0, 0);
@@ -2918,7 +3051,7 @@ public:
             {
               lmax = std::max (bw_evaulate_pixel (tileid, color, x, y, off),
                                lmax);
-              lmax = std::max (bw_get_pixel (tileid, {x, y}), lmax);
+              lmax = std::max (bw_get_pixel (tileid, { x, y }), lmax);
             }
 
         for (int y = 0; y < theight; y++)
@@ -2938,7 +3071,7 @@ public:
                     break;
                   case 1:
                     {
-                      luminosity_t d = bw_get_pixel (tileid, {x, y});
+                      luminosity_t d = bw_get_pixel (tileid, { x, y });
                       rendered.put_pixel (x, d * 65535 / lmax,
                                           d * 65535 / lmax, d * 65535 / lmax);
                     }
@@ -2947,7 +3080,7 @@ public:
                     {
                       luminosity_t c
                           = bw_evaulate_pixel (tileid, color, x, y, off);
-                      luminosity_t d = bw_get_pixel (tileid, {x, y});
+                      luminosity_t d = bw_get_pixel (tileid, { x, y });
                       rendered.put_pixel (x,
                                           (c - d) * 65535 / lmax + 65536 / 2,
                                           (c - d) * 65535 / lmax + 65536 / 2,
@@ -2965,7 +3098,7 @@ public:
   }
   void
   set_results (finetune_result &ret, scr_to_img_parameters param,
-	       render_parameters &rparam, bool verbose,
+               render_parameters &rparam, bool verbose,
                progress_info *progress)
   {
     ret.badness = objfunc (start);
@@ -2983,15 +3116,17 @@ public:
     ret.coordinate2 = param.coordinate2;
     if (render_sharpen_params.scanner_mtf.simulate_difraction_p ())
       {
-	ret.scanner_mtf_defocus = get_scanner_mtf_defocus (start);
-	ret.scanner_mtf_blur_diameter = render_sharpen_params.scanner_mtf.blur_diameter;
+        ret.scanner_mtf_defocus = get_scanner_mtf_defocus (start);
+        ret.scanner_mtf_blur_diameter
+            = render_sharpen_params.scanner_mtf.blur_diameter;
       }
     else
       {
-	ret.scanner_mtf_blur_diameter = get_scanner_mtf_defocus (start);
-	ret.scanner_mtf_defocus = render_sharpen_params.scanner_mtf.defocus;
+        ret.scanner_mtf_blur_diameter = get_scanner_mtf_defocus (start);
+        ret.scanner_mtf_defocus = render_sharpen_params.scanner_mtf.defocus;
       }
-    ret.scanner_mtf_channel_defocus_or_blur = get_scanner_mtf_channel_defocus (start);
+    ret.scanner_mtf_channel_defocus_or_blur
+        = get_scanner_mtf_channel_defocus (start);
     ret.screen_blur_radius = get_blur_radius (start);
     ret.screen_channel_blur_radius = get_channel_blur_radius (start);
     if (tiles[0].color)
@@ -3024,17 +3159,17 @@ public:
         int tileid = 0;
         /* Construct solver point.  Try to get closest point to the center of
          * analyzed tile.  */
-        int fsx
-            = nearest_int (get_pos (start, tileid, {twidth / 2, theight / 2}).x);
-        int fsy
-            = nearest_int (get_pos (start, tileid, {twidth / 2, theight / 2}).y);
+        int fsx = nearest_int (
+            get_pos (start, tileid, { twidth / 2, theight / 2 }).x);
+        int fsy = nearest_int (
+            get_pos (start, tileid, { twidth / 2, theight / 2 }).y);
         int bx = -1, by = -1;
         coord_t bdist = 0;
         for (int y = 0; y < theight; y++)
           {
             for (int x = 0; x < twidth; x++)
               {
-                point_t p = get_pos (start, tileid, {x, y});
+                point_t p = get_pos (start, tileid, { x, y });
                 // printf ("  %-5.2f,%-5.2f", p.x, p.y);
                 coord_t dist = fabs (p.x - fsx) + fabs (p.y - fsy);
                 if (bx < 0 || dist < bdist)
@@ -3068,10 +3203,10 @@ public:
             {
               /* Determine cell corners.  */
               point_t p = { (coord_t)fsx, (coord_t)fsy };
-              point_t p1 = get_pos (start, tileid, {x, y});
-              point_t p2 = get_pos (start, tileid, {x + 1, y});
-              point_t p3 = get_pos (start, tileid, {x, y + 1});
-              point_t p4 = get_pos (start, tileid, {x + 1, y + 1});
+              point_t p1 = get_pos (start, tileid, { x, y });
+              point_t p2 = get_pos (start, tileid, { x + 1, y });
+              point_t p3 = get_pos (start, tileid, { x, y + 1 });
+              point_t p4 = get_pos (start, tileid, { x + 1, y + 1 });
               /* Check if point is above or bellow diagonal.  */
               coord_t sgn1 = sign (p, p1, p4);
               if (sgn1 > 0)
@@ -3114,14 +3249,18 @@ public:
           }
         ret.solver_point_img_location = { fp.x + tiles[tileid].txmin + 0.5,
                                           fp.y + tiles[tileid].tymin + 0.5 };
-	//printf ("New location %f %f %f %f  %f %f\n", fp.x + tiles[tileid].txmin + 0.5, fp.y + tiles[tileid].tymin + 0.5, bx + tiles[tileid].txmin + 0.5, by + tiles[tileid].tymin + 0.05, get_pos (start, tileid, {bx, by}).x, get_pos (start, tileid, {bx, by}).y);
+        // printf ("New location %f %f %f %f  %f %f\n", fp.x +
+        // tiles[tileid].txmin
+        // + 0.5, fp.y + tiles[tileid].tymin + 0.5, bx + tiles[tileid].txmin +
+        // 0.5, by + tiles[tileid].tymin + 0.05, get_pos (start, tileid, {bx,
+        // by}).x, get_pos (start, tileid, {bx, by}).y);
         ret.solver_point_screen_location = { (coord_t)fsx, (coord_t)fsy };
         ret.solver_point_color = solver_parameters::green;
       }
     ret.success = true;
   }
 };
-}
+} // namespace
 
 /* Finetune parameters and update RPARAM.  */
 
@@ -3138,21 +3277,21 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   if (fparams.flags & finetune_coordinates)
     {
       if (n_tiles)
-	{
-	  ret.err = "did not expect tiles";
-	  return ret;
-	}
+        {
+          ret.err = "did not expect tiles";
+          return ret;
+        }
       n_tiles = 1;
     }
   else
     {
       if (n_tiles > finetune_solver::max_tiles)
-	n_tiles = finetune_solver::max_tiles;
+        n_tiles = finetune_solver::max_tiles;
       if (!n_tiles)
-	{
-	  ret.err = "no tile locations";
-	  return ret;
-	}
+        {
+          ret.err = "no tile locations";
+          return ret;
+        }
     }
   const image_data *imgp[finetune_solver::max_tiles];
   scr_to_img *mapp[finetune_solver::max_tiles];
@@ -3168,15 +3307,15 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   for (int tileid = 0; tileid < n_tiles; tileid++)
     {
       if (fparams.flags & finetune_coordinates)
-	{
-	  x[tileid] = param.center.x;
-	  y[tileid] = param.center.y;
-	}
+        {
+          x[tileid] = param.center.x;
+          y[tileid] = param.center.y;
+        }
       else
-	{
-	  x[tileid] = locs[tileid].x;
-	  y[tileid] = locs[tileid].y;
-	}
+        {
+          x[tileid] = locs[tileid].x;
+          y[tileid] = locs[tileid].y;
+        }
       imgp[tileid] = &img;
       if (img.stitch)
         {
@@ -3230,8 +3369,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
      finetuning is not very stressed to pick reasonable solution.  */
   if (screen_with_vertical_strips_p (param.type))
     {
-      //test_yrange *= 6;
-      //test_xrange *= 2;
+      // test_yrange *= 6;
+      // test_xrange *= 2;
       test_yrange *= 3;
     }
   point_t p = mapp[0]->to_img ({ (coord_t)sx, (coord_t)sy });
@@ -3299,14 +3438,16 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
      simulation.  */
   if (bw)
     {
-      if (fparams.flags & (finetune_screen_blur | finetune_screen_channel_blurs | finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus))
-	rparam2.sharpen.mode = sharpen_parameters::none;
+      if (fparams.flags
+          & (finetune_screen_blur | finetune_screen_channel_blurs
+             | finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus))
+        rparam2.sharpen.mode = sharpen_parameters::none;
       else
-	tile_sharpened = true;
+        tile_sharpened = true;
     }
 
   /* TODO: shall we reset contact copy?  */
-  //rparam2.invert = 0;
+  // rparam2.invert = 0;
   int maxtiles = fparams.multitile;
   if (maxtiles < 1)
     maxtiles = 1;
@@ -3336,7 +3477,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
       //if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, rxmin, rymin, rxmax + 1, rymax + 1, !(fparams.flags & finetune_no_progress_report) ? progress : nullptr))
 #endif
       if (bw && (rparam2.ignore_infrared || !imgp[0]->data))
-	bw_is_simulated_infrared = true;
+        bw_is_simulated_infrared = true;
       if (!render.precompute_all (
               bw /*grayscale*/, false /*normalized*/,
               patch_proportions (param.type, &rparam2),
@@ -3367,7 +3508,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
 #pragma omp parallel for default(none) collapse(2) schedule(dynamic)          \
     shared(fparams, maxtiles, rparam, pixel_size, best_uncertainity, verbose, \
                std::nothrow, imgp, twidth, theight, txmin, tymin, bw,         \
-               progress, mapp, render, failed, best_solver, results, bw_is_simulated_infrared, tile_sharpened)
+               progress, mapp, render, failed, best_solver, results,          \
+               bw_is_simulated_infrared, tile_sharpened)
       for (int ty = 0; ty < maxtiles; ty++)
         for (int tx = 0; tx < maxtiles; tx++)
           {
@@ -3389,9 +3531,9 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
             solver.twidth = twidth;
             solver.theight = theight;
             solver.pixel_size = pixel_size;
-	    solver.render_sharpen_params = rparam.sharpen;
+            solver.render_sharpen_params = rparam.sharpen;
             solver.collection_threshold = rparam.collection_threshold;
-	    solver.parallel = !(fparams.flags & finetune_no_progress_report);
+            solver.parallel = !(fparams.flags & finetune_no_progress_report);
             if (!solver.init_tile (0, cur_txmin, cur_tymin, bw, *mapp[0],
                                    render))
               {
@@ -3399,8 +3541,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
                 continue;
               }
             solver.init (fparams.flags, rparam.screen_blur_radius,
-                         rparam.red_strip_width,
-                         rparam.green_strip_width, bw_is_simulated_infrared, tile_sharpened, results);
+                         rparam.red_strip_width, rparam.green_strip_width,
+                         bw_is_simulated_infrared, tile_sharpened, results);
             if (progress && progress->cancel_requested ())
               continue;
             coord_t uncertainity = solver.solve (
@@ -3441,8 +3583,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
           int cur_tymin = std::min (std::max (y[tileid] - theight / 2, 0),
                                     imgp[tileid]->height - theight - 1)
                           & ~1;
-	  if (bw && (rparam2.ignore_infrared || !imgp[tileid]->data))
-	    bw_is_simulated_infrared = true;
+          if (bw && (rparam2.ignore_infrared || !imgp[tileid]->data))
+            bw_is_simulated_infrared = true;
           /* FIXME: We only use render_to_scr since we eventually want to know
              pixel size. For stitched projects this is wrong.  */
           render render (*imgp[tileid], rparam2, 256);
@@ -3473,9 +3615,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
             }
         }
       best_solver.init (fparams.flags, rparam.screen_blur_radius,
-                        rparam.red_strip_width,
-			rparam.green_strip_width, bw_is_simulated_infrared,
-			tile_sharpened, results);
+                        rparam.red_strip_width, rparam.green_strip_width,
+                        bw_is_simulated_infrared, tile_sharpened, results);
       /* FIXME: For parallel solving this will yield race condition  */
       gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
       best_uncertainity = best_solver.solve (
@@ -3595,7 +3736,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
                const scr_to_img_parameters &param, const image_data &img,
                int_image_area area, progress_info *progress)
 {
-  area = area.intersect ({0, 0, img.width, img.height});
+  area = area.intersect ({ 0, 0, img.width, img.height });
   if (area.empty_p ())
     return false;
   const int steps = 100;
@@ -3616,8 +3757,8 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
   std::vector<finetune_result> res (xsteps * ysteps);
   if (progress)
     progress->set_task ("finetuning grid", ysteps * xsteps);
-    /* We are going to initialize render inside of nested region.
-       TODO: We probably want to set omp_nested on proper place.  */
+  /* We are going to initialize render inside of nested region.
+     TODO: We probably want to set omp_nested on proper place.  */
 #ifdef _OPENMP
   omp_set_max_active_levels (3);
 #endif
@@ -3625,7 +3766,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
     {
 #pragma omp parallel for default(none) collapse(2) schedule(dynamic)          \
     shared(xsteps, ysteps, rparam, param, progress, img, solver, res, area,   \
-           xstep, ystep)
+               xstep, ystep)
       for (int x = 0; x < xsteps; x++)
         for (int y = 0; y < ysteps; y++)
           {
@@ -3647,17 +3788,17 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
     {
       finetune_parameters fparam;
       fparam.flags |= finetune_position /*| finetune_multitile*/ | finetune_bw;
-      res[0] = finetune (rparam, param, img,
-                         { { area.x + (0.5) * xstep, area.y + (0.5) * ystep } },
-                         nullptr, fparam, progress);
+      res[0]
+          = finetune (rparam, param, img,
+                      { { area.x + (0.5) * xstep, area.y + (0.5) * ystep } },
+                      nullptr, fparam, progress);
       progress->inc_progress ();
     }
   if (progress && progress->cancel_requested ())
     return false;
   std::sort (res.begin (), res.end (),
-             [] (finetune_result &a, finetune_result &b) {
-               return a.uncertainity > b.uncertainity;
-             });
+             [] (finetune_result &a, finetune_result &b)
+               { return a.uncertainity > b.uncertainity; });
   coord_t max_uncertainity = res[(xsteps * ysteps) * 0.2].uncertainity;
   for (int x = 0; x < xsteps; x++)
     for (int y = 0; y < ysteps; y++)
@@ -3681,11 +3822,10 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
 bool
 determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                       screen &scr, screen &collection_scr,
-		      simulated_screen *simulated_screen,
-                      luminosity_t threshold, 
-		      const sharpen_parameters &sharpen_param,
-		      scr_to_img &map, int xmin,
-                      int ymin, int xmax, int ymax)
+                      simulated_screen *simulated_screen,
+                      luminosity_t threshold,
+                      const sharpen_parameters &sharpen_param, scr_to_img &map,
+                      int xmin, int ymin, int xmax, int ymax)
 {
   double_rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
   double wr = 0, wg = 0, wb = 0;
@@ -3702,12 +3842,12 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
     {
 #pragma omp declare reduction(+ : double_rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
-    shared(ymin, ymax, xmin, xmax, threshold, simulated_screen)       \
+    shared(ymin, ymax, xmin, xmax, threshold, simulated_screen)               \
     reduction(+ : wr, wg, wb, red, green, blue)
       for (int y = ymin; y <= ymax; y++)
         for (int x = xmin; x <= xmax; x++)
           {
-	    /* Collection and screen colors are the same.  */
+            /* Collection and screen colors are the same.  */
             rgbdata m = simulated_screen->get_pixel (y, x);
             if (m.red > threshold)
               {
@@ -3741,16 +3881,16 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       for (int y = ymin; y <= ymax; y++)
         for (int x = xmin; x <= xmax; x++)
           {
-	    point_t p;
+            point_t p;
             rgbdata am;
-	    /* Scanner MTF already esimtates sensor loss; so we should not need
-	       to antialias.  */
-	    if (!antialias)
-	      am = noantialias_screen (scr, map, x, y, &p);
-	    else
-	      am = antialias_screen (scr, map, x, y, &p);
-	    /* Data collection does not antialias.  So just take pixel in the
-	       middle  */
+            /* Scanner MTF already esimtates sensor loss; so we should not need
+               to antialias.  */
+            if (!antialias)
+              am = noantialias_screen (scr, map, x, y, &p);
+            else
+              am = antialias_screen (scr, map, x, y, &p);
+            /* Data collection does not antialias.  So just take pixel in the
+               middle  */
             rgbdata m = collection_scr.noninterpolated_mult (p);
             if (m.red > threshold)
               {
@@ -3776,109 +3916,120 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
     {
       int ext;
       if (sharpen_param.deconvolution_p ())
-	{
-	  std::shared_ptr<mtf> cur_mtf = mtf::get_mtf (sharpen_param.scanner_mtf, nullptr);
-	  if (!cur_mtf->precompute ())
-	    return false;
-	  ext = cur_mtf->psf_size ( sharpen_param.scanner_mtf_scale);
-	}
+        {
+          std::shared_ptr<mtf> cur_mtf
+              = mtf::get_mtf (sharpen_param.scanner_mtf, nullptr);
+          if (!cur_mtf->precompute ())
+            return false;
+          ext = cur_mtf->psf_size (sharpen_param.scanner_mtf_scale);
+        }
       else
-	ext = fir_blur::convolve_matrix_length (sharpen_param.usm_radius) / 2;
+        ext = fir_blur::convolve_matrix_length (sharpen_param.usm_radius) / 2;
       int xsize = xmax - xmin + 2 * ext + 1;
       int ysize = ymax - ymin + 2 * ext + 1;
       std::vector<rgbdata> rendered (xsize * ysize);
 
       /* Render screen.
-         Scanner MTF already esimtates sensor loss; so we should not need to antialias.  */
+         Scanner MTF already esimtates sensor loss; so we should not need to
+         antialias.  */
       if (sharpen_param.scanner_mtf_scale)
-	for (int y = ymin - ext; y <= ymax + ext; y++)
-	  for (int x = xmin - ext; x <= xmax + ext; x++)
-	    rendered[(y - ymin + ext) * xsize + x - xmin + ext]
-		= noantialias_screen (scr, map, x, y);
+        for (int y = ymin - ext; y <= ymax + ext; y++)
+          for (int x = xmin - ext; x <= xmax + ext; x++)
+            rendered[(y - ymin + ext) * xsize + x - xmin + ext]
+                = noantialias_screen (scr, map, x, y);
       else
-	for (int y = ymin - ext; y <= ymax + ext; y++)
-	  for (int x = xmin - ext; x <= xmax + ext; x++)
-	    rendered[(y - ymin + ext) * xsize + x - xmin + ext]
-		= antialias_screen (scr, map, x, y);
+        for (int y = ymin - ext; y <= ymax + ext; y++)
+          for (int x = xmin - ext; x <= xmax + ext; x++)
+            rendered[(y - ymin + ext) * xsize + x - xmin + ext]
+                = antialias_screen (scr, map, x, y);
 
       /* Sharpen it  */
       std::vector<rgbdata> rendered2 (xsize * ysize);
-      /* FIXME: parallelism is disabled because sometimes we are called form parallel block.  */
+      /* FIXME: parallelism is disabled because sometimes we are called form
+       * parallel block.  */
       if (!sharpen_param.deconvolution_p ())
-	sharpen<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
-	    rendered2.data (), rendered.data (), xsize, ysize, ysize,
-	    sharpen_param.usm_radius, sharpen_param.usm_amount, nullptr, false);
+        sharpen<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
+            rendered2.data (), rendered.data (), xsize, ysize, ysize,
+            sharpen_param.usm_radius, sharpen_param.usm_amount, nullptr,
+            false);
       else
-	{
-	  deconvolve_rgb<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
-	      rendered2.data (), rendered.data (), xsize, ysize, ysize,
-	      sharpen_param, nullptr, false);
-	}
+        {
+          deconvolve_rgb<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
+              rendered2.data (), rendered.data (), xsize, ysize, ysize,
+              sharpen_param, nullptr, false);
+        }
 
       if (debugfiles)
-	{
-	  tiff_writer_params p;
-	  void *buffer;
-	  size_t len = create_linear_srgb_profile (&buffer);
-	  p.icc_profile = buffer;
-	  p.icc_profile_len = len;
-	  p.filename = "/tmp/sharpened.tif";
-	  p.width = xsize;
-	  p.height = ysize;
-	  p.depth = 16;
-	  const char *error;
-	  {
-	    tiff_writer renderedt (p, &error);
-	    for (int y = ymin - ext; y <= ymax + ext; y++)
-	      {
-		for (int x = xmin - ext; x <= xmax + ext; x++)
-		  {
-		    rgbdata d
-			= rendered2[(y - ymin + ext) * xsize + x - xmin + ext];
-		    if (x == xmin - 1 || y == ymin - 1 || x == xmax + 1 || y == ymax + 1)
-		      d = {1,1,1};
-		    renderedt.put_pixel (x - xmin + ext, std::clamp (d.red, (luminosity_t)0, (luminosity_t)1) * 65535, std::clamp (d.green, (luminosity_t)0, (luminosity_t)1) * 65535,
-					 std::clamp (d.blue, (luminosity_t)0, (luminosity_t)1) * 65535);
-		  }
-		if (!renderedt.write_row ())
-		  return false;
-	      }
-	  }
-	  {
-	    p.filename = "/tmp/unsharpened.tif";
-	    tiff_writer renderedt (p, &error);
-	    for (int y = ymin - ext; y <= ymax + ext; y++)
-	      {
-		for (int x = xmin - ext; x <= xmax + ext; x++)
-		  {
-		    rgbdata d
-			= rendered[(y - ymin + ext) * xsize + x - xmin + ext];
-		    renderedt.put_pixel (x - xmin + ext, d.red * 65535, d.green * 65535,
-					 d.blue * 65535);
-		  }
-		if (!renderedt.write_row ())
-		  return false;
-	      }
-	  }
-	  {
-	    p.filename = "/tmp/collection.tif";
-	    tiff_writer renderedu (p, &error);
-	    for (int y = ymin - ext; y <= ymax + ext; y++)
-	      {
-		for (int x = xmin - ext; x <= xmax + ext; x++)
-		  {
-		    point_t p
-			= map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
-		    rgbdata m = collection_scr.noninterpolated_mult (p);
-		    renderedu.put_pixel (x - xmin + ext, m.red * 65535, m.green * 65535,
-					 m.blue * 65535);
-		  }
-		if (!renderedu.write_row ())
-		  return false;
-	      }
-	  }
-	  free (buffer);
-	}
+        {
+          tiff_writer_params p;
+          void *buffer;
+          size_t len = create_linear_srgb_profile (&buffer);
+          p.icc_profile = buffer;
+          p.icc_profile_len = len;
+          p.filename = "/tmp/sharpened.tif";
+          p.width = xsize;
+          p.height = ysize;
+          p.depth = 16;
+          const char *error;
+          {
+            tiff_writer renderedt (p, &error);
+            for (int y = ymin - ext; y <= ymax + ext; y++)
+              {
+                for (int x = xmin - ext; x <= xmax + ext; x++)
+                  {
+                    rgbdata d
+                        = rendered2[(y - ymin + ext) * xsize + x - xmin + ext];
+                    if (x == xmin - 1 || y == ymin - 1 || x == xmax + 1
+                        || y == ymax + 1)
+                      d = { 1, 1, 1 };
+                    renderedt.put_pixel (
+                        x - xmin + ext,
+                        std::clamp (d.red, (luminosity_t)0, (luminosity_t)1)
+                            * 65535,
+                        std::clamp (d.green, (luminosity_t)0, (luminosity_t)1)
+                            * 65535,
+                        std::clamp (d.blue, (luminosity_t)0, (luminosity_t)1)
+                            * 65535);
+                  }
+                if (!renderedt.write_row ())
+                  return false;
+              }
+          }
+          {
+            p.filename = "/tmp/unsharpened.tif";
+            tiff_writer renderedt (p, &error);
+            for (int y = ymin - ext; y <= ymax + ext; y++)
+              {
+                for (int x = xmin - ext; x <= xmax + ext; x++)
+                  {
+                    rgbdata d
+                        = rendered[(y - ymin + ext) * xsize + x - xmin + ext];
+                    renderedt.put_pixel (x - xmin + ext, d.red * 65535,
+                                         d.green * 65535, d.blue * 65535);
+                  }
+                if (!renderedt.write_row ())
+                  return false;
+              }
+          }
+          {
+            p.filename = "/tmp/collection.tif";
+            tiff_writer renderedu (p, &error);
+            for (int y = ymin - ext; y <= ymax + ext; y++)
+              {
+                for (int x = xmin - ext; x <= xmax + ext; x++)
+                  {
+                    point_t p
+                        = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
+                    rgbdata m = collection_scr.noninterpolated_mult (p);
+                    renderedu.put_pixel (x - xmin + ext, m.red * 65535,
+                                         m.green * 65535, m.blue * 65535);
+                  }
+                if (!renderedu.write_row ())
+                  return false;
+              }
+          }
+          free (buffer);
+        }
 
       /* Collect data  */
       for (int y = ymin; y <= ymax; y++)
@@ -3908,12 +4059,12 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
           }
     }
   if (!(wr > 0 && wg > 0 && wb > 0))
-  {
-    *ret_red = {1, 0, 0};
-    *ret_green = {0, 1, 0};
-    *ret_blue = {0, 0, 1};
-    return false;
-  }
+    {
+      *ret_red = { 1, 0, 0 };
+      *ret_green = { 0, 1, 0 };
+      *ret_blue = { 0, 0, 1 };
+      return false;
+    }
   red /= wr;
   green /= wg;
   blue /= wb;
@@ -3922,9 +4073,12 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
   *ret_green = green;
   *ret_blue = blue;
 #else
-  *ret_red = (rgbdata){ (luminosity_t)red.red, (luminosity_t)green.red, (luminosity_t)blue.red };
-  *ret_green = (rgbdata){ (luminosity_t)red.green, (luminosity_t)green.green, (luminosity_t)blue.green };
-  *ret_blue = (rgbdata){ (luminosity_t)red.blue, (luminosity_t)green.blue, (luminosity_t)blue.blue };
+  *ret_red = (rgbdata){ (luminosity_t)red.red, (luminosity_t)green.red,
+                        (luminosity_t)blue.red };
+  *ret_green = (rgbdata){ (luminosity_t)red.green, (luminosity_t)green.green,
+                          (luminosity_t)blue.green };
+  *ret_blue = (rgbdata){ (luminosity_t)red.blue, (luminosity_t)green.blue,
+                         (luminosity_t)blue.blue };
 #endif
 #if 0
   printf ("Color loss info\n");
@@ -3938,6 +4092,9 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 /* Render screen to IMG.  This is used for unit-testing of the screen
    discovery.  */
 
+/* Render simulated screen pattern to IMG using parameters PARAM, RPARAM and
+   DPARAM.  The image is rendered in resolution WIDTH x HEIGHT.  */
+
 void
 render_screen (image_data &img, scr_to_img_parameters &param,
                render_parameters &rparam, scr_detect_parameters &dparam,
@@ -3945,16 +4102,15 @@ render_screen (image_data &img, scr_to_img_parameters &param,
 {
   scr_to_img map;
   img.set_dimensions (width, height, true, false);
-  map.set_parameters (param, img);
+  if (!map.set_parameters (param, img))
+    return;
   coord_t pixel_size = map.pixel_size (width, height);
   sharpen_parameters sharpen = rparam.sharpen;
   sharpen.usm_radius = rparam.screen_blur_radius * pixel_size;
   sharpen.scanner_mtf_scale *= pixel_size;
   std::shared_ptr<screen> scr = render_to_scr::get_screen (
-      param.type, false,
-      false,
-      sharpen,
-      rparam.red_strip_width, rparam.green_strip_width);
+      param.type, false, false, sharpen, rparam.red_strip_width,
+      rparam.green_strip_width);
   for (int y = 0; y < height; y++)
     for (int x = 0; x < width; x++)
       {
@@ -3973,4 +4129,4 @@ render_screen (image_data &img, scr_to_img_parameters &param,
         };
       }
 }
-}
+} // namespace colorscreen

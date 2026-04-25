@@ -1,5 +1,10 @@
 #ifndef BITMAP_H
 #define BITMAP_H
+#include <cassert>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include "include/base.h"
 namespace colorscreen
 {
 /* Constanly sized bitmap datastructure.  */
