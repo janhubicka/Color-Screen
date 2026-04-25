@@ -79,7 +79,8 @@ jobs:
         echo "Final PATH=$PATH"
         echo "MOC=$MOC"
 
-        CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS=" -L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp " CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS  --enable-qtgui --disable-static-link  MOC="$MOC"
+        # -fopenmp is rejected by Apple's clang. As a hack enable it by hand.
+        CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS=" -L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp " CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS  --enable-qtgui  MOC="$MOC"
     - name: Upload config.log
       uses: actions/upload-artifact@v4
       if: always()
