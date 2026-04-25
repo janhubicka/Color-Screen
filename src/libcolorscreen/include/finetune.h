@@ -109,11 +109,11 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
           const image_data &img, const std::vector<point_t> &locs,
           const std::vector<finetune_result> *results,
           const finetune_parameters &fparams, progress_info *progress);
-nodiscard_attr DLL_PUBLIC bool
+DLL_PUBLIC nodiscard_attr bool
 finetune_area (solver_parameters *sparam, render_parameters &rparam,
                const scr_to_img_parameters &param, const image_data &img,
                int_image_area area, progress_info *progress);
-nodiscard_attr DLL_PUBLIC bool
+DLL_PUBLIC nodiscard_attr bool
 finetune_misregistered_area (solver_parameters *solver, render_parameters &rparam,
 			     const scr_to_img_parameters &param, const image_data &img,
 			     int_image_area area, progress_info *progress);
