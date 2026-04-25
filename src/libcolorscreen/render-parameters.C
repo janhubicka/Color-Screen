@@ -599,15 +599,15 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	}
       if (dye_density.green != 1)
 	{
-	  dyes(0, 0) = my_pow (dyes(0, 0), dye_density.green);
-	  dyes(1, 0) = my_pow (dyes(1, 0), dye_density.green);
-	  dyes(2, 0) = my_pow (dyes(2, 0), dye_density.green);
+	  dyes(0, 1) = my_pow (dyes(0, 1), dye_density.green);
+	  dyes(1, 1) = my_pow (dyes(1, 1), dye_density.green);
+	  dyes(2, 1) = my_pow (dyes(2, 1), dye_density.green);
 	}
       if (dye_density.blue != 1)
 	{
-	  dyes(0, 0) = my_pow (dyes(0, 0), dye_density.blue);
-	  dyes(1, 0) = my_pow (dyes(1, 0), dye_density.blue);
-	  dyes(2, 0) = my_pow (dyes(2, 0), dye_density.blue);
+	  dyes(0, 2) = my_pow (dyes(0, 2), dye_density.blue);
+	  dyes(1, 2) = my_pow (dyes(1, 2), dye_density.blue);
+	  dyes(2, 2) = my_pow (dyes(2, 2), dye_density.blue);
 	}
 	
       //printf (" Dye :");
@@ -704,7 +704,6 @@ render_parameters::get_balanced_dyes_matrix (const image_data *img, bool normali
 	      rgbdata scales;
 	      dyes.invert ().apply_to_rgb (white.x, white.y, white.z, &scales.red, &scales.green, &scales.blue);
 	      scales /= screen_whitepoint;
-	      dyes.apply_to_rgb (scales.red,scales.green,scales.blue, &white.x, &white.y, &white.z);
 	      dyes.scale_channels (scales.red, scales.green, scales.blue);
 	    }
 	    break;
