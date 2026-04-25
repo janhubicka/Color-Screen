@@ -3595,25 +3595,8 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
                const scr_to_img_parameters &param, const image_data &img,
                int_image_area area, progress_info *progress)
 {
-  if (area.x < 0)
-    {
-      area.width += area.x;
-      area.x = 0;
-    }
-  if (area.x > img.width - 1)
-    return false;
-  if (area.y < 0)
-    {
-      area.height += area.y;
-      area.y = 0;
-    }
-  if (area.y > img.height - 1)
-    return false;
-  if (area.x + area.width > img.width)
-    area.width = img.width - area.x;
-  if (area.y + area.height > img.height)
-    area.height = img.height - area.y;
-  if (area.width <= 0 || area.height <= 0)
+  area = area.intersect ({0, 0, img.width, img.height});
+  if (area.empty_p ())
     return false;
   const int steps = 100;
   int overall_xsteps = steps;
@@ -3705,7 +3688,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                       int ymin, int xmax, int ymax)
 {
   double_rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
-  coord_t wr = 0, wg = 0, wb = 0;
+  double wr = 0, wg = 0, wb = 0;
   const bool debugfiles = false;
 
   if (debugfiles)
