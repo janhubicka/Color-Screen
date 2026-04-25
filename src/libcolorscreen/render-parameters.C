@@ -113,7 +113,8 @@ const property_t render_parameters::demosaiced_scaling_names []  = {
 /* Return portion of screen occupied by red, green and blue patches for
    screen of type T and rendering parameters RPARAM.  The sum of individual
    portions should be at most 1.  */
-rgbdata patch_proportions (enum scr_type t, const render_parameters *rparam)
+rgbdata
+patch_proportions (enum scr_type t, const render_parameters *rparam)
 {
   switch (t)
     {
@@ -186,8 +187,7 @@ print_mid_white (color_matrix m)
 }
 #endif
 
-/* Return true if dye balance applies to the model.  */
-
+/* Return true if dye balance applies to COLOR_MODEL.  */
 static bool
 apply_balance_to_model (render_parameters::color_model_t color_model)
 {
@@ -542,14 +542,14 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	{
 	  *spectrum_based = true;
 	  if (dye_density.red != 1)
-            for (int i = 0; i < SPECTRUM_SIZE; i++)
-	      spect->red[i] = my_pow (spect->red[i], dye_density.red);
+            for (luminosity_t &r : spect->red)
+	      r = my_pow (r, dye_density.red);
 	  if (dye_density.green != 1)
-            for (int i = 0; i < SPECTRUM_SIZE; i++)
-	      spect->green[i] = my_pow (spect->green[i], dye_density.green);
+            for (luminosity_t &g : spect->green)
+	      g = my_pow (g, dye_density.green);
 	  if (dye_density.blue != 1)
-            for (int i = 0; i < SPECTRUM_SIZE; i++)
-	      spect->blue[i] = my_pow (spect->blue[i], dye_density.blue);
+            for (luminosity_t &b : spect->blue)
+	      b = my_pow (b, dye_density.blue);
 	  dyes = spect->xyz_matrix ();
 	  if (transmission_data)
 	    {
@@ -627,9 +627,9 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
   return dyes;
 }
 
-/* data is expected to have initialized min_freq and max_freq and all vectors
-   of equal size. Then the vectors are filled by transmitance data in regular
-   steps from min_freq to max_freq.
+/* Data is expected to have initialized MIN_FREQ and MAX_FREQ and all vectors
+   of equal size in DATA. Then the vectors are filled by transmittance data
+   in regular steps from MIN_FREQ to MAX_FREQ.
    Function return false when no data are present.  */
 bool
 render_parameters::get_transmission_data (transmission_data &data) const
@@ -657,7 +657,7 @@ render_parameters::get_balanced_dyes_matrix (const image_data *img, bool normali
   bool correct_whitepoints = true;
   color_matrix dyes = get_dyes_matrix (&spectrum_based, &optimized, img);
 
-  /* If dyes are normalised, we need to scale primaries to match their proportions in actual sreen.  */
+  /* If dyes are normalised, we need to scale primaries to match their proportions in actual screen.  */
   if (normalized_patches)
     dyes.scale_channels (patch_proportions.red, patch_proportions.green, patch_proportions.blue);
   dyes.verify_last_row_0001 ();
@@ -709,7 +709,7 @@ render_parameters::get_balanced_dyes_matrix (const image_data *img, bool normali
 	    }
 	    break;
 
-	  /* Scale final XYZ values to obtain wihtepoint.  This is probably always
+	  /* Scale final XYZ values to obtain whitepoint.  This is probably always
 	     worse than Bradford correction.  */
 	  case render_parameters::dye_balance_whitepoint:
 	    for (int i = 0; i < 4; i++)
@@ -812,13 +812,12 @@ render_parameters::get_icc_profile (void **buffer, image_data *img, bool normali
 void
 render_parameters::set_tile_adjustments_dimensions (int w, int h)
 {
-  static tile_adjustment default_tile_adjustment;
-  tile_adjustments.resize (0);
+  tile_adjustments.clear ();
   tile_adjustments.resize (w * h);
-  for (int x = 0; x < w * h; x++)
+  for (tile_adjustment &adj : tile_adjustments)
     {
-      tile_adjustments[x] = default_tile_adjustment;
-      assert (tile_adjustments[x].enabled);
+      adj = tile_adjustment ();
+      assert (adj.enabled);
     }
   tile_adjustments_width = w;
   tile_adjustments_height = h;
@@ -850,7 +849,7 @@ render_parameters::get_tile_adjustment (int x, int y)
   return tile_adjustments[y * tile_adjustments_width + x];
 }
 
-/* Set reasonable color model for screen of TYPE.  */
+/* Choose best color model for given screen TYPE.  */
 bool
 render_parameters::auto_color_model (enum scr_type type)
 {
@@ -940,7 +939,7 @@ render_parameters::auto_dark_brightness (image_data &img,
       brightness *= 1 - 1.0 / 65536;
       n++;
     }
-    //printf ("Color %f attepts %i\n",get_max_color (img, *this, param, maxvals, progress), n);
+    //printf ("Color %f attempts %i\n",get_max_color (img, *this, param, maxvals, progress), n);
   }
 #if 0
   {
@@ -1197,7 +1196,7 @@ render_parameters::auto_mix_weights_using_ir (image_data &img,
   gsl_vector *w = gsl_vector_alloc (nequations);
   gsl_vector *c = gsl_vector_alloc (nvariables);
   gsl_matrix *cov = gsl_matrix_alloc (nvariables, nvariables);
-  /* TODO: Impleent for stitched projects.  */
+  /* TODO: Implement for stitched projects.  */
   if (img.stitch)
     return false;
 
@@ -1350,6 +1349,7 @@ render_parameters::adjust_for (render_type_parameters &rtparam, render_parameter
   else
     *this = rparam;
 }
+/* Compute mixing weights for given PATCH_PROPORTIONS.  */
 void
 render_parameters::compute_mix_weights (rgbdata patch_proportions)
 {
@@ -1395,7 +1395,10 @@ render_parameters::compute_mix_weights (rgbdata patch_proportions)
     }
 }
 /* Initialize render parameters for showing original scan.
-   In this case we do not want to apply color models etc.  */
+   In this case we do not want to apply color models etc.
+   RPARAM are the original parameters.
+   COLOR is true if color scan should be shown.
+   PROFILED is true if scanner profile should be applied.  */
 void
 render_parameters::original_render_from (render_parameters &rparam, bool color, bool profiled)
 {
@@ -1462,9 +1465,11 @@ render_parameters::get_profile_matrix (rgbdata patch_proportions)
   return ret;
 }
 
-/* Set invert, exposure and dark_point for a given range of values
+/* Set exposure and dark_point for a given range of values
    in input scan.  Used to interpret old gray_range parameter
-   and can be removed eventually.  */
+   and can be removed eventually.
+   GRAY_MIN and GRAY_MAX are values in the scan.
+   MAXVAL is maximal value possible in scan.  */
 void 
 render_parameters::set_gray_range (int gray_min, int gray_max, int maxval)
 {
@@ -1488,10 +1493,16 @@ render_parameters::set_gray_range (int gray_min, int gray_max, int maxval)
       // invert = true;
     }
 }
+
+/* Get exposure and dark_point for a given range of values
+   in input scan.  Used to interpret old gray_range parameter
+   and can be removed eventually.
+   MIN and MAX are returned values in the scan.
+   MAXVAL is maximal value possible in scan.  */
 void
 render_parameters::get_gray_range (int *min, int *max, int maxval)
 {
-  if (/*!invert*/0)
+  if (true)
     {
       *min = invert_gamma (dark_point, gamma) * maxval - 0.5;
       *max = invert_gamma (dark_point + 1 / scan_exposure, gamma) * maxval

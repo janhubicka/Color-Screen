@@ -40,7 +40,7 @@ struct contact_copy_parameters
   constexpr contact_copy_parameters () = default;
 
   /* Return true if THIS and O are equal.  */
-  bool
+  pure_attr bool
   operator== (const contact_copy_parameters &o) const
   {
     return simulate == o.simulate
@@ -82,7 +82,7 @@ struct sharpen_parameters
   luminosity_t scanner_mtf_scale = 1;
 
   /* Number of iterations of Richardson-Lucy deconvolution sharpening.
-     If 0, much faster Weiner filter will be used.  */
+     If 0, much faster Wiener filter will be used.  */
   int richardson_lucy_iterations = 0;
 
   /* Dampening parameter sigma.  */
@@ -92,7 +92,7 @@ struct sharpen_parameters
   int supersample = 2;
 
   /* Return effective sharpening mode.  */
-  enum sharpen_mode get_mode () const
+  pure_attr enum sharpen_mode get_mode () const
   {
     switch (mode)
     {
@@ -114,7 +114,7 @@ struct sharpen_parameters
   };
 
   /* Return true if sharpening mode is a deconvolution.  */
-  bool deconvolution_p () const
+  pure_attr bool deconvolution_p () const
   {
     enum sharpen_mode mode = get_mode ();
     return mode == wiener_deconvolution || mode == richardson_lucy_deconvolution
@@ -125,7 +125,7 @@ struct sharpen_parameters
      Used for caching.
      
      Allow small differences in scale since screen may change during editing.  */
-  bool
+  pure_attr bool
   operator== (const sharpen_parameters &o) const
   {
     enum sharpen_mode mode = get_mode ();
@@ -159,7 +159,7 @@ struct sharpen_parameters
   }
 
   /* Return true if THIS and O have same data.  */
-  bool equal_p (const sharpen_parameters &o) const
+  pure_attr bool equal_p (const sharpen_parameters &o) const
   {
     return mode == o.mode
 	   && usm_radius == o.usm_radius
@@ -277,7 +277,7 @@ struct render_parameters
     constexpr tile_adjustment () = default;
 
     /* Return true if THIS and OTHER are equal.  */
-    bool
+    pure_attr bool
     operator== (const tile_adjustment &other) const
     {
       return enabled == other.enabled && dark_point == other.dark_point
@@ -286,7 +286,7 @@ struct render_parameters
     }
 
     /* Return true if THIS and OTHER are not equal.  */
-    bool
+    pure_attr bool
     operator!= (const tile_adjustment &other) const
     {
       return !(*this == other);
@@ -570,7 +570,7 @@ struct render_parameters
   DLL_PUBLIC tile_adjustment &get_tile_adjustment (int x, int y);
 
   /* Return true if THIS and OTHER are equal.  */
-  bool
+  pure_attr bool
   operator== (const render_parameters &other) const
   {
     if (tile_adjustments.size () != other.tile_adjustments.size ()
@@ -603,7 +603,7 @@ struct render_parameters
            && scanner_red == other.scanner_red
            && scanner_green == other.scanner_green
            && scanner_blue == other.scanner_blue && age == other.age
-	   && dye_density == other.dye_density
+ 	   && dye_density == other.dye_density
            && backlight_temperature == other.backlight_temperature
            && dark_point == other.dark_point
            && scan_exposure == other.scan_exposure
@@ -623,7 +623,7 @@ struct render_parameters
 	   && white_balance == other.white_balance;
   }
   /* Return true if THIS and OTHER are not equal.  */
-  bool
+  pure_attr bool
   operator!= (render_parameters &other) const
   {
     return !(*this == other);
@@ -661,7 +661,7 @@ struct render_parameters
      PARAM are screen registration parameters.
      AREA is area to analyze.
      PROGRESS is progress info.  */
-  DLL_PUBLIC bool auto_mix_weights (image_data &img,
+  nodiscard_attr DLL_PUBLIC bool auto_mix_weights (image_data &img,
                                     scr_to_img_parameters &param,
                                     int_image_area area,
                                     progress_info *progress);
@@ -669,7 +669,7 @@ struct render_parameters
      PARAM are screen registration parameters.
      AREA is area to analyze.
      PROGRESS is progress info.  */
-  DLL_PUBLIC bool auto_mix_dark (image_data &img,
+  nodiscard_attr DLL_PUBLIC bool auto_mix_dark (image_data &img,
                                  scr_to_img_parameters &param,
                                  int_image_area area,
                                  progress_info *progress);
@@ -677,7 +677,7 @@ struct render_parameters
      PARAM are screen registration parameters.
      AREA is area to analyze.
      PROGRESS is progress info.  */
-  DLL_PUBLIC bool auto_mix_weights_using_ir (image_data &img,
+  nodiscard_attr DLL_PUBLIC bool auto_mix_weights_using_ir (image_data &img,
                                              scr_to_img_parameters &param,
                                              int_image_area area,
                                              progress_info *progress);
@@ -709,7 +709,7 @@ struct render_parameters
     std::vector<luminosity_t> backlight;
   };
   /* Return transmission data in DATA.  Return false if not available.  */
-  DLL_PUBLIC bool get_transmission_data (transmission_data &data) const;
+  nodiscard_attr DLL_PUBLIC bool get_transmission_data (transmission_data &data) const;
 
   /* Initialize render parameters for showing original scan.
      In this case we do not want to apply color models etc.
@@ -734,7 +734,7 @@ struct render_parameters
 
   /* Return crop of the scan in image coordinates.
      IMG_WIDTH and IMG_HEIGHT are dimensions of the image.  */
-  int_image_area
+  pure_attr int_image_area
   get_scan_crop (int img_width, int img_height) const
   {
     int_image_area img (0, 0, img_width, img_height);
@@ -747,7 +747,7 @@ struct render_parameters
   }
 
   /* Return effective capture type for CAPTURE_TYPE and SCAN.  */
-  static enum capture_type
+  pure_attr static enum capture_type
   get_capture_type (enum capture_type capture_type, image_data *scan)
   {
     if (!scan)
@@ -788,14 +788,14 @@ struct render_parameters
       }
   }
   /* Return effective capture type for this and SCAN.  */
-  enum capture_type
+  pure_attr enum capture_type
   get_capture_type (image_data *scan)
   {
     return get_capture_type (capture_type, scan);
   }
 
   /* Return true if profile is set.  */
-  bool has_correction_profile () const
+  pure_attr bool has_correction_profile () const
   {
     rgbdata dark = {0,0,0};
     rgbdata red = {1,0,0};
@@ -821,7 +821,7 @@ struct render_parameters
   };
   /* Return gamut for given color screen TYPE.  CORRECTED is true if
      profile should be applied.  */
-  DLL_PUBLIC gamut get_gamut (bool corrected, scr_type type) const;
+  pure_attr DLL_PUBLIC gamut get_gamut (bool corrected, scr_type type) const;
 
 private:
   /* If true, enable debugging checks.  */
