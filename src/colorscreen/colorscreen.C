@@ -929,9 +929,11 @@ render_cmd (int argc, char **argv)
   if (detect_color_model)
     rparam.auto_color_model (param.type);
   if (detect_brightness)
-    rparam.auto_dark_brightness (scan, param, scan.width / 10,
-                                 scan.height / 10, 9 * scan.width / 10,
-                                 9 * scan.height / 10, &progress);
+    rparam.auto_dark_brightness (
+        scan, param,
+        { (int)(scan.width / 10), (int)(scan.height / 10),
+          (int)(8 * scan.width / 10), (int)(8 * scan.height / 10) },
+        &progress);
 
   /* Apply command line parameters.  */
   if (age != -100)
@@ -1138,9 +1140,11 @@ autodetect (int argc, char **argv)
           printf ("Detecting levels\n");
           progress.resume_stdout ();
         }
-      rparam.auto_dark_brightness (scan, param, scan.width / 10,
-                                   scan.height / 10, 9 * scan.width / 10,
-                                   9 * scan.height / 10, &progress);
+      rparam.auto_dark_brightness (
+          scan, param,
+          { (int)(scan.width / 10), (int)(scan.height / 10),
+            (int)(8 * scan.width / 10), (int)(8 * scan.height / 10) },
+          &progress);
     }
   if (verbose)
     {
