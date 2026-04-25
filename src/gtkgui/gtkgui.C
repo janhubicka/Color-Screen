@@ -857,8 +857,13 @@ extern "C"
         if (k == 'i' && (event->state & GDK_CONTROL_MASK))
           {
             file_progress_info progress (stdout);
-            if (rparams.auto_mix_weights_using_ir (scan, current, sel1x, sel1y,
-                                                   sel2x, sel2y, &progress))
+            int xmin = std::min (sel1x, sel2x);
+            int ymin = std::min (sel1y, sel2y);
+            int xmax = std::max (sel1x, sel2x);
+            int ymax = std::max (sel1y, sel2y);
+            if (rparams.auto_mix_weights_using_ir (
+                    scan, current, { xmin, ymin, xmax - xmin, ymax - ymin },
+                    &progress))
               {
                 display_scheduled = true;
                 setvals ();
@@ -892,15 +897,18 @@ extern "C"
                   rparams.auto_color_model (current.type);
                 if (!scan.data || rparams.ignore_infrared)
                   {
-                    rparams.auto_mix_weights (scan, current, xmin, ymin, xmax,
-                                              ymax, &progress);
+                    rparams.auto_mix_weights (
+                        scan, current, { xmin, ymin, xmax - xmin, ymax - ymin },
+                        &progress);
                     setvals ();
                   }
                 // if (rparams.dark_point == 0 && rparams.brightness == 1)
                 {
                   rparams.auto_dark_brightness (
-                      scan, current, scan.width / 10, scan.height / 10,
-                      9 * scan.width / 10, 9 * scan.height / 10, &progress);
+                      scan, current,
+                      { (int)(scan.width / 10), (int)(scan.height / 10),
+                        (int)(8 * scan.width / 10), (int)(8 * scan.height / 10) },
+                      &progress);
                   setvals ();
                 }
                 if (!display_type)
@@ -923,8 +931,9 @@ extern "C"
                     rparams.brightness);
             {
               file_progress_info progress (stdout);
-              ret = rparams.auto_dark_brightness (scan, current, xmin, ymin,
-                                                  xmax, ymax, &progress);
+              ret = rparams.auto_dark_brightness (
+                  scan, current, { xmin, ymin, xmax - xmin, ymax - ymin },
+                  &progress);
             }
             if (ret)
               {
@@ -946,8 +955,9 @@ extern "C"
             printf ("Auto mix weights in selection %i %i %i %i\n", xmin, ymin,
                     xmax, ymax);
             file_progress_info progress (stdout);
-            rparams.auto_mix_weights (scan, current, xmin, ymin, xmax, ymax,
-                                      &progress);
+            rparams.auto_mix_weights (
+                scan, current, { xmin, ymin, xmax - xmin, ymax - ymin },
+                &progress);
             setvals ();
             display_scheduled = true;
             preview_display_scheduled = true;
@@ -961,8 +971,9 @@ extern "C"
             printf ("Auto mix dark in selection %i %i %i %i\n", xmin, ymin,
                     xmax, ymax);
             file_progress_info progress (stdout);
-            rparams.auto_mix_dark (scan, current, xmin, ymin, xmax, ymax,
-                                   &progress);
+            rparams.auto_mix_dark (
+                scan, current, { xmin, ymin, xmax - xmin, ymax - ymin },
+                &progress);
             setvals ();
             display_scheduled = true;
             preview_display_scheduled = true;
@@ -1109,8 +1120,13 @@ extern "C"
           {
             file_progress_info progress (stdout);
             printf ("Auto white balance in selection\n");
-            if (rparams.auto_white_balance (scan, current, sel1x, sel1y, sel2x,
-                                            sel2y, &progress))
+            int xmin = std::min (sel1x, sel2x);
+            int ymin = std::min (sel1y, sel2y);
+            int xmax = std::max (sel1x, sel2x);
+            int ymax = std::max (sel1y, sel2y);
+            if (rparams.auto_white_balance (
+                    scan, current, { xmin, ymin, xmax - xmin, ymax - ymin },
+                    &progress))
               {
                 display_scheduled = true;
                 setvals ();

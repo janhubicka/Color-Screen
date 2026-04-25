@@ -803,9 +803,10 @@ void MainWindow::setupUi() {
 
               QFuture<ParameterState> future = QtConcurrent::run(
                   [scan, state, area, progress]() mutable -> ParameterState {
-                    state.rparams.auto_mix_weights(
-                        *scan, state.scrToImg, area.left(), area.top(),
-                        area.right(), area.bottom(), progress.get());
+                    state.rparams.auto_mix_weights (
+                        *scan, state.scrToImg,
+                        { area.x (), area.y (), area.width (), area.height () },
+                        progress.get ());
                     return state;
                   });
               watcher->setFuture(future);
@@ -847,9 +848,10 @@ void MainWindow::setupUi() {
 
               QFuture<ParameterState> future = QtConcurrent::run(
                   [scan, state, area, progress]() mutable -> ParameterState {
-                    state.rparams.auto_mix_weights_using_ir(
-                        *scan, state.scrToImg, area.left(), area.top(),
-                        area.right(), area.bottom(), progress.get());
+                    state.rparams.auto_mix_weights_using_ir (
+                        *scan, state.scrToImg,
+                        { area.x (), area.y (), area.width (), area.height () },
+                        progress.get ());
                     return state;
                   });
               watcher->setFuture(future);
@@ -888,9 +890,10 @@ void MainWindow::setupUi() {
 
               QFuture<ParameterState> future = QtConcurrent::run(
                   [scan, state, area, progress]() mutable -> ParameterState {
-                    state.rparams.auto_mix_dark(
-                        *scan, state.scrToImg, area.left(), area.top(),
-                        area.right(), area.bottom(), progress.get());
+                    state.rparams.auto_mix_dark (
+                        *scan, state.scrToImg,
+                        { area.x (), area.y (), area.width (), area.height () },
+                        progress.get ());
                     return state;
                   });
               watcher->setFuture(future);
@@ -928,9 +931,10 @@ void MainWindow::setupUi() {
 
           QFuture<ParameterState> future = QtConcurrent::run(
               [scan, state, area, progress]() mutable -> ParameterState {
-                state.rparams.auto_white_balance(
-                    *scan, state.scrToImg, area.left(), area.top(),
-                    area.right(), area.bottom(), progress.get());
+                state.rparams.auto_white_balance (
+                    *scan, state.scrToImg,
+                    { area.x (), area.y (), area.width (), area.height () },
+                    progress.get ());
                 return state;
               });
           watcher->setFuture(future);
@@ -967,9 +971,10 @@ void MainWindow::setupUi() {
 
       QFuture<ParameterState> future = QtConcurrent::run(
           [scan, state, area, progress]() mutable -> ParameterState {
-            state.rparams.auto_dark_brightness(
-                *scan, state.scrToImg, area.left(), area.top(), area.right(),
-                area.bottom(), progress.get());
+            state.rparams.auto_dark_brightness (
+                *scan, state.scrToImg,
+                { area.x (), area.y (), area.width (), area.height () },
+                progress.get ());
             return state;
           });
       watcher->setFuture(future);

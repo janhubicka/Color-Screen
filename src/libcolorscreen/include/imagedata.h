@@ -91,6 +91,11 @@ public:
 
   pure_attr DLL_PUBLIC bool has_rgb () const;
   pure_attr DLL_PUBLIC bool has_grayscale_or_ir () const;
+  pure_attr inline int_image_area
+  get_area () const
+  {
+    return int_image_area (0, 0, width, height);
+  }
 
   xyY primary_red;
   xyY primary_green;

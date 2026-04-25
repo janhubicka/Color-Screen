@@ -648,48 +648,47 @@ struct render_parameters
   DLL_PUBLIC bool auto_color_model (enum scr_type type);
   /* Automatically choose dark and brightness point for image IMG.
      PAR are screen registration parameters.
-     XMIN, YMIN, XMAX, YMAX is area to analyze.
+     AREA is area to analyze.
      PROGRESS is progress info.
      DARK_CUT and LIGHT_CUT are percentages of pixels to be cut.  */
   DLL_PUBLIC bool auto_dark_brightness (image_data &img,
-                                        scr_to_img_parameters &par, int xmin,
-                                        int ymin, int xmax, int ymax,
+                                        scr_to_img_parameters &par,
+                                        int_image_area area,
                                         progress_info *progress = NULL,
                                         luminosity_t dark_cut = 0.01,
                                         luminosity_t light_cut = 0.001);
   /* Automatically choose mixing weights for image IMG.
      PARAM are screen registration parameters.
-     XMIN, YMIN, XMAX, YMAX is area to analyze.
+     AREA is area to analyze.
      PROGRESS is progress info.  */
   DLL_PUBLIC bool auto_mix_weights (image_data &img,
-                                    scr_to_img_parameters &param, int xmin,
-                                    int ymin, int xmax, int ymax,
+                                    scr_to_img_parameters &param,
+                                    int_image_area area,
                                     progress_info *progress);
   /* Automatically choose mixing dark point for image IMG.
      PARAM are screen registration parameters.
-     XMIN, YMIN, XMAX, YMAX is area to analyze.
+     AREA is area to analyze.
      PROGRESS is progress info.  */
   DLL_PUBLIC bool auto_mix_dark (image_data &img,
-                                 scr_to_img_parameters &param, int xmin,
-                                 int ymin, int xmax, int ymax,
+                                 scr_to_img_parameters &param,
+                                 int_image_area area,
                                  progress_info *progress);
   /* Automatically choose mixing weights using infrared channel for image IMG.
      PARAM are screen registration parameters.
-     XMIN, YMIN, XMAX, YMAX is area to analyze.
+     AREA is area to analyze.
      PROGRESS is progress info.  */
   DLL_PUBLIC bool auto_mix_weights_using_ir (image_data &img,
                                              scr_to_img_parameters &param,
-                                             int xmin, int ymin, int xmax,
-                                             int ymax,
+                                             int_image_area area,
                                              progress_info *progress);
   /* Automatically white balance image IMG.
      PAR are screen registration parameters.
-     XMIN, YMIN, XMAX, YMAX is area to analyze.
+     AREA is area to analyze.
      PROGRESS is progress info.
      DARK_CUT and LIGHT_CUT are percentages of pixels to be cut.  */
   DLL_PUBLIC bool auto_white_balance (image_data &img,
-                                      scr_to_img_parameters &par, int xmin,
-                                      int ymin, int xmax, int ymax,
+                                      scr_to_img_parameters &par,
+                                      int_image_area area,
                                       progress_info *progress = NULL,
                                       luminosity_t dark_cut = 0.01,
                                       luminosity_t light_cut = 0.001);

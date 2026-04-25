@@ -884,11 +884,16 @@ get_max_color (image_data &img, render_parameters &rparam, scr_to_img_parameters
 /* Determine black and brightness by analysing tile of a scan.
    IMG is the scan to analyze.
    PARAM are screen to image parameters.
-   XMIN, YMIN, XMAX, YMAX is the area to analyze.
+   AREA is the area to analyze.
    PROGRESS is used to report progress.
    DARK_CUT and LIGHT_CUT are thresholds for dark and light points.  */
 bool
-render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress, luminosity_t dark_cut, luminosity_t light_cut)
+render_parameters::auto_dark_brightness (image_data &img,
+					 scr_to_img_parameters &param,
+					 int_image_area area,
+					 progress_info *progress,
+					 luminosity_t dark_cut,
+					 luminosity_t light_cut)
 {
   render_parameters rparam = *this;
   rparam.collection_quality = render_parameters::simple_screen_collection;
@@ -901,8 +906,7 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
 			    return true;
 			  },
 			  "determining value ranges",
-			  img, rparam, param, false,
-			  {-xmin, -ymin, xmax - xmin, ymax - ymin}, progress))
+			  img, rparam, param, false, area, progress))
       return false;
     hist.finalize_range (65536*256);
     if (!analyze_patches ([&] (coord_t x, coord_t y, rgbdata c)
@@ -911,8 +915,7 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
 			    return true;
 			  },
 			  "producing histograms",
-			  img, rparam, param, false,
-			  {-xmin, -ymin, xmax - xmin, ymax - ymin}, progress))
+			  img, rparam, param, false, area, progress))
       return false;
     hist.finalize ();
 
@@ -1016,10 +1019,13 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
 /* Determine mix weights by analysing tile of a scan.
    IMG is the scan to analyze.
    PARAM are screen to image parameters.
-   XMIN, YMIN, XMAX, YMAX is the area to analyze.
+   AREA is the area to analyze.
    PROGRESS is used to report progress.  */
-bool 
-render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
+bool
+render_parameters::auto_mix_weights (image_data &img,
+				     scr_to_img_parameters &param,
+				     int_image_area area,
+				     progress_info *progress)
 {
   render_parameters rparam = *this;
   rparam.collection_quality = render_parameters::simple_screen_collection;
@@ -1032,8 +1038,7 @@ render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &par
 			      return true;
 			    },
 			    "determining RGB value ranges",
-			    img, rparam, param, false,
-			    {-xmin, -ymin, xmax - xmin, ymax - ymin}, progress))
+			    img, rparam, param, false, area, progress))
     return false;
   hist_red.finalize_range (65536);
   hist_green.finalize_range (65536);
@@ -1046,8 +1051,7 @@ render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &par
 			      return true;
 			    },
 			    "determining RGB value ranges",
-			    img, rparam, param, false,
-			    {-xmin, -ymin, xmax - xmin, ymax - ymin}, progress))
+			    img, rparam, param, false, area, progress))
     return false;
   hist_red.finalize ();
   hist_green.finalize ();
@@ -1098,30 +1102,24 @@ render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &par
 /* Determine black mix by analysing tile of a scan.
    IMG is the scan to analyze.
    PARAM are screen to image parameters.
-   XMIN, YMIN, XMAX, YMAX is the area to analyze.
+   AREA is the area to analyze.
    PROGRESS is used to report progress.  */
 bool
-render_parameters::auto_mix_dark (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
+render_parameters::auto_mix_dark (image_data &img, scr_to_img_parameters &param,
+				  int_image_area area, progress_info *progress)
 {
   render_parameters rparam = *this;
   rparam.collection_quality = render_parameters::simple_screen_collection;
   rgb_histogram hist;
-  if (ymin < 0)
-    ymin = 0;
-  if (xmin < 0)
-    xmin = 0;
-  if (xmax >= img.width)
-    xmax = img.width - 1;
-  if (ymax >= img.height)
-    ymax = img.height - 1;
-  if (ymax <= ymin || xmax <= xmin)
+  area = area.intersect (img.get_area ());
+  if (area.empty_p ())
     return false;
   /* TODO: Implement for stitched projects.  */
   if (img.stitch)
     return false;
   {
     if (progress)
-      progress->set_task ("collecting color", (ymax - ymin + 1) * 2);
+      progress->set_task ("collecting color", (area.height) * 2);
     render_parameters rparam = *this;
     rparam.ignore_infrared = 0;
     /* Disable sharpening.  */
@@ -1132,23 +1130,23 @@ render_parameters::auto_mix_dark (image_data &img, scr_to_img_parameters &param,
     if (!render.precompute_all (false, false, {1/3.0, 1/3.0, 1/3.0}, progress))
       return false;
 #pragma omp parallel for reduction(rgb_histogram_range : hist)
-    for (int yy = 0; yy <= ymax - ymin; yy++)
+    for (int yy = 0; yy < area.height; yy++)
       {
         if (!progress || !progress->cancel_requested ())
-          for (int xx = 0; xx <= xmax - xmin; xx++)
+          for (int xx = 0; xx < area.width; xx++)
             {
-              rgbdata c = render.get_unadjusted_rgb_pixel ({xx + xmin, yy + ymin});
+              rgbdata c = render.get_unadjusted_rgb_pixel ({xx + area.x, yy + area.y});
               hist.pre_account (c);
             }
       }
     hist.finalize_range (65536*256);
 #pragma omp parallel for reduction(rgb_histogram_entries : hist)
-    for (int yy = 0; yy <= ymax - ymin; yy++)
+    for (int yy = 0; yy < area.height; yy++)
       {
         if (!progress || !progress->cancel_requested ())
-          for (int xx = 0; xx <= xmax - xmin; xx++)
+          for (int xx = 0; xx < area.width; xx++)
             {
-              rgbdata c = render.get_unadjusted_rgb_pixel ({xx + xmin, yy + ymin});
+              rgbdata c = render.get_unadjusted_rgb_pixel ({xx + area.x, yy + area.y});
               hist.account (c);
             }
       }
@@ -1173,36 +1171,26 @@ render_parameters::auto_mix_dark (image_data &img, scr_to_img_parameters &param,
 /* Determine mix weights using infrared channel by analysing tile of a scan.
    IMG is the scan to analyze.
    PARAM are screen to image parameters.
-   XMIN, YMIN, XMAX, YMAX is the area to analyze.
+   AREA is the area to analyze.
    PROGRESS is used to report progress.  */
 
 bool 
-render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
+render_parameters::auto_mix_weights_using_ir (image_data &img,
+					      scr_to_img_parameters &param,
+					      int_image_area area,
+					      progress_info *progress)
 {
-  xmin = std::max (0, xmin);
-  xmax = std::min (img.width, xmax);
-  ymin = std::max (0, ymin);
-  ymax = std::min (img.height, ymax);
-  if (ymin < 0)
-    ymin = 0;
-  if (xmin < 0)
-    xmin = 0;
-  if (xmax >= img.width)
-    xmax = img.width - 1;
-  if (ymax >= img.height)
-    ymax = img.height - 1;
-  if (!img.data || !img.rgbdata || xmax <= xmin || ymax <= ymin)
+  area = area.intersect (img.get_area ());
+  if (!img.data || !img.rgbdata || area.empty_p ())
     return false;
-  xmax++;
-  ymax++;
   int nvariables = 4;
-  long nequations = (((long)xmax - xmin) * ((long)ymax - ymin));
+  long nequations = ((long)area.width * area.height);
   int step = 1;
   const int maxpoints = 10000000;
   if (nequations > maxpoints)
     step = sqrt (nequations / maxpoints);
-  int xsteps = (xmax - xmin + step - 1) / step;
-  int ysteps = (ymax - ymin + step - 1) / step;
+  int xsteps = (area.width + step - 1) / step;
+  int ysteps = (area.height + step - 1) / step;
   nequations =  ((long)xsteps) * ysteps;
   gsl_matrix *X = gsl_matrix_alloc (nequations, nvariables);
   gsl_vector *y = gsl_vector_alloc (nequations);
@@ -1225,14 +1213,14 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
     if (!render.precompute_all (true, false, {1/3.0, 1/3.0, 1/3.0}, progress))
       return false;
 
-#pragma omp parallel for default(none) shared(progress, xmin, ymin, xsteps, ysteps, step, X, y, w, render)
+#pragma omp parallel for default(none) shared(progress, area, xsteps, ysteps, step, X, y, w, render)
     for (int yy = 0; yy < ysteps; yy ++)
       {
 	if (!progress || !progress->cancel_requested ())
 	  for (int xx = 0; xx < xsteps; xx ++)
 	    {
-	      int cx = xx * step + xmin;
-	      int cy = yy * step + ymin;
+	      int cx = xx * step + area.x;
+	      int cy = yy * step + area.y;
 	      luminosity_t l = render.get_unadjusted_data ({cx, cy});
 	      rgbdata c = render.get_unadjusted_rgb_pixel ({cx, cy});
 	      int n = yy * xsteps + xx;
@@ -1242,7 +1230,6 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
 	      gsl_matrix_set (X, n, 3, c.blue);
 	      gsl_vector_set (y, n, l);
 	      gsl_vector_set (w, n, l > 0 ? 1/l : 1);
-	      n++;
 	    }
 	if (progress)
 	  progress->inc_progress ();
@@ -1282,11 +1269,16 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
 /* Determine white balance by analysing tile of a scan.
    IMG is the scan to analyze.
    PARAM are screen to image parameters.
-   XMIN, YMIN, XMAX, YMAX is the area to analyze.
+   AREA is the area to analyze.
    PROGRESS is used to report progress.
    DARK_CUT and LIGHT_CUT are thresholds for dark and light points.  */
 bool
-render_parameters::auto_white_balance (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress, luminosity_t dark_cut, luminosity_t light_cut)
+render_parameters::auto_white_balance (image_data &img,
+				       scr_to_img_parameters &param,
+				       int_image_area area,
+				       progress_info *progress,
+				       luminosity_t dark_cut,
+				       luminosity_t light_cut)
 {
   render_parameters rparam = *this;
   /* Produce histogram.  */
@@ -1297,8 +1289,7 @@ render_parameters::auto_white_balance (image_data &img, scr_to_img_parameters &p
 			  return true;
 			},
 			"determining value ranges",
-			img, rparam, param, false,
-			{-xmin, -ymin, xmax - xmin, ymax - ymin}, progress))
+			img, rparam, param, false, area, progress))
     return false;
   hist.finalize_range (65536*256);
   if (!analyze_patches ([&] (coord_t x, coord_t y, rgbdata c)
@@ -1307,8 +1298,7 @@ render_parameters::auto_white_balance (image_data &img, scr_to_img_parameters &p
 			  return true;
 			},
 			"producing histograms",
-			img, rparam, param, false,
-			{-xmin, -ymin, xmax - xmin, ymax - ymin}, progress))
+			img, rparam, param, false, area, progress))
     return false;
   hist.finalize ();
 
