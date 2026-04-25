@@ -303,9 +303,8 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
               if (determine_color_loss (
                       &cred, &cgreen, &cblue, *scr, *m_screen,
                       m_simulated_screen.get (), m_params.collection_threshold,
-                      m_params.sharpen, m_scr_to_img, m_img.width / 2 - 100,
-                      m_img.height / 2 - 100, m_img.width / 2 + 100,
-                      m_img.height / 2 + 100))
+                      m_params.sharpen, m_scr_to_img,
+		      {m_img.width / 2 - 100, m_img.height / 2 - 100, 200, 200}))
                 {
 		  color_matrix sat (cred.red, cgreen.red, cblue.red,
 				    (luminosity_t)0,

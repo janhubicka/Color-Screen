@@ -243,8 +243,8 @@ saturation_loss_table::saturation_loss_table (
 		/* TODO: No support for adaptive sharpening/blurring of simulated
 		   screens yet.  */
                 *collection_screen, NULL,
-	       	collection_threshold, sharpen, *map, xp - 100,
-                yp - 100, xp + 100, yp + 100))
+	       	collection_threshold, sharpen, *map,
+		{xp - 100, yp - 100, 200, 200}))
           {
             color_matrix sat (cred.red, cgreen.red, cblue.red, (luminosity_t)0.0,
 			      cred.green, cgreen.green, cblue.green, (luminosity_t)0.0,

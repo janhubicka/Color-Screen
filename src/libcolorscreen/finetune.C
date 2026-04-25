@@ -3856,8 +3856,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
    SCR is screen used to render the pattern, while COLLECTION_SCR is used to do
    the data collection.  SIMULATED_SCREEN is optional simulated screen.
    THRESHOLD is the collection threshold.  SHARPEN_PARAM are sharpen
-   parameters. MAP is the scr-to-img map.  XMIN, YMIN, XMAX, YMAX define the
-   area.  */
+   parameters. MAP is the scr-to-img map.  AREA defines the area.  */
 
 bool
 determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
@@ -3865,7 +3864,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                       simulated_screen *simulated_screen,
                       luminosity_t threshold,
                       const sharpen_parameters &sharpen_param, scr_to_img &map,
-                      int xmin, int ymin, int xmax, int ymax)
+                      int_image_area area)
 {
   double_rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
   double wr = 0, wg = 0, wb = 0;
@@ -3882,10 +3881,10 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
     {
 #pragma omp declare reduction(+ : double_rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
-    shared(ymin, ymax, xmin, xmax, threshold, simulated_screen)               \
+    shared(area, threshold, simulated_screen)                                 \
     reduction(+ : wr, wg, wb, red, green, blue)
-      for (int y = ymin; y <= ymax; y++)
-        for (int x = xmin; x <= xmax; x++)
+      for (int y = area.y; y < area.y + area.height; y++)
+        for (int x = area.x; x < area.x + area.width; x++)
           {
             /* Collection and screen colors are the same.  */
             rgbdata m = simulated_screen->get_pixel (y, x);
@@ -3916,10 +3915,10 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       bool antialias = !sharpen_param.scanner_mtf_scale;
 #pragma omp declare reduction(+ : double_rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
-    shared(ymin, ymax, xmin, xmax, threshold, map, scr, collection_scr)       \
+    shared(area, threshold, map, scr, collection_scr)                         \
     reduction(+ : wr, wg, wb, red, green, blue, antialias)
-      for (int y = ymin; y <= ymax; y++)
-        for (int x = xmin; x <= xmax; x++)
+      for (int y = area.y; y < area.y + area.height; y++)
+        for (int x = area.x; x < area.x + area.width; x++)
           {
             point_t p;
             rgbdata am;
@@ -3966,22 +3965,22 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
         }
       else
         ext = fir_blur::convolve_matrix_length (sharpen_param.usm_radius) / 2;
-      int xsize = xmax - xmin + 2 * ext + 1;
-      int ysize = ymax - ymin + 2 * ext + 1;
+      int xsize = area.width + 2 * ext;
+      int ysize = area.height + 2 * ext;
       std::vector<rgbdata> rendered (xsize * ysize);
 
       /* Render screen.
          Scanner MTF already estimates sensor loss; so we should not need to
          antialias.  */
       if (sharpen_param.scanner_mtf_scale)
-        for (int y = ymin - ext; y <= ymax + ext; y++)
-          for (int x = xmin - ext; x <= xmax + ext; x++)
-            rendered[(y - ymin + ext) * xsize + x - xmin + ext]
+        for (int y = area.y - ext; y < area.y + area.height + ext; y++)
+          for (int x = area.x - ext; x < area.x + area.width + ext; x++)
+            rendered[(y - area.y + ext) * xsize + x - area.x + ext]
                 = noantialias_screen (scr, map, x, y);
       else
-        for (int y = ymin - ext; y <= ymax + ext; y++)
-          for (int x = xmin - ext; x <= xmax + ext; x++)
-            rendered[(y - ymin + ext) * xsize + x - xmin + ext]
+        for (int y = area.y - ext; y < area.y + area.height + ext; y++)
+          for (int x = area.x - ext; x < area.x + area.width + ext; x++)
+            rendered[(y - area.y + ext) * xsize + x - area.x + ext]
                 = antialias_screen (scr, map, x, y);
 
       /* Sharpen it  */
@@ -4014,17 +4013,17 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
           const char *error;
           {
             tiff_writer renderedt (p, &error);
-            for (int y = ymin - ext; y <= ymax + ext; y++)
+            for (int y = area.y - ext; y < area.y + area.height + ext; y++)
               {
-                for (int x = xmin - ext; x <= xmax + ext; x++)
+                for (int x = area.x - ext; x < area.x + area.width + ext; x++)
                   {
                     rgbdata d
-                        = rendered2[(y - ymin + ext) * xsize + x - xmin + ext];
-                    if (x == xmin - 1 || y == ymin - 1 || x == xmax + 1
-                        || y == ymax + 1)
+                        = rendered2[(y - area.y + ext) * xsize + x - area.x + ext];
+                    if (x == area.x - 1 || y == area.y - 1 || x == area.x + area.width
+                        || y == area.y + area.height)
                       d = { 1, 1, 1 };
                     renderedt.put_pixel (
-                        x - xmin + ext,
+                        x - area.x + ext,
                         std::clamp (d.red, (luminosity_t)0, (luminosity_t)1)
                             * (luminosity_t)65535,
                         std::clamp (d.green, (luminosity_t)0, (luminosity_t)1)
@@ -4039,13 +4038,13 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
           {
             p.filename = "/tmp/unsharpened.tif";
             tiff_writer renderedt (p, &error);
-            for (int y = ymin - ext; y <= ymax + ext; y++)
+            for (int y = area.y - ext; y < area.y + area.height + ext; y++)
               {
-                for (int x = xmin - ext; x <= xmax + ext; x++)
+                for (int x = area.x - ext; x < area.x + area.width + ext; x++)
                   {
                     rgbdata d
-                        = rendered[(y - ymin + ext) * xsize + x - xmin + ext];
-                    renderedt.put_pixel (x - xmin + ext, d.red * (luminosity_t)65535,
+                        = rendered[(y - area.y + ext) * xsize + x - area.x + ext];
+                    renderedt.put_pixel (x - area.x + ext, d.red * (luminosity_t)65535,
                                          d.green * (luminosity_t)65535, d.blue * (luminosity_t)65535);
                   }
                 if (!renderedt.write_row ())
@@ -4055,14 +4054,14 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
           {
             p.filename = "/tmp/collection.tif";
             tiff_writer renderedu (p, &error);
-            for (int y = ymin - ext; y <= ymax + ext; y++)
+            for (int y = area.y - ext; y < area.y + area.height + ext; y++)
               {
-                for (int x = xmin - ext; x <= xmax + ext; x++)
+                for (int x = area.x - ext; x < area.x + area.width + ext; x++)
                   {
                     point_t p
                         = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
                     rgbdata m = collection_scr.noninterpolated_mult (p);
-                    renderedu.put_pixel (x - xmin + ext, m.red * (luminosity_t)65535,
+                    renderedu.put_pixel (x - area.x + ext, m.red * (luminosity_t)65535,
                                          m.green * (luminosity_t)65535, m.blue * (luminosity_t)65535);
                   }
                 if (!renderedu.write_row ())
@@ -4073,12 +4072,12 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
         }
 
       /* Collect data  */
-      for (int y = ymin; y <= ymax; y++)
-        for (int x = xmin; x <= xmax; x++)
+      for (int y = area.y; y < area.y + area.height; y++)
+        for (int x = area.x; x < area.x + area.width; x++)
           {
             point_t p = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
             rgbdata m = collection_scr.noninterpolated_mult (p);
-            rgbdata am = rendered2[(y - ymin + ext) * xsize + x - xmin + ext];
+            rgbdata am = rendered2[(y - area.y + ext) * xsize + x - area.x + ext];
             if (m.red > threshold)
               {
                 coord_t val = m.red - threshold;

@@ -9,6 +9,6 @@ bool determine_color_loss(rgbdata *ret_red, rgbdata *ret_green,
                           simulated_screen *simulated_screen,
                           luminosity_t threshold,
                           const sharpen_parameters &sharpen, scr_to_img &map,
-                          int xmin, int ymin, int xmax, int ymax);
+                          int_image_area area);
 }
 #endif
