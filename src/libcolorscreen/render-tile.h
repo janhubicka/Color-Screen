@@ -1,19 +1,27 @@
+/* Rendering logic for individual tiles and stitched images.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #include <stdlib.h>
 #include <pthread.h>
 #include <sys/time.h>
 #include <mutex>
 #include "include/colorscreen.h"
 #include "include/stitch.h"
+
 namespace colorscreen
 {
+/* Anonymous namespace for internal rendering utilities.  */
 namespace
 {
 static int stats __attribute__((unused)) = -1;
 std::mutex global_rendering_lock;
 
+/* Set pixel at X, Y in PIXELS buffer with color R, G, B.
+   PIXELBYTES is the number of bytes per pixel, ROWSTRIDE is the number of bytes per row.  */
 static inline void
 putpixel (unsigned char *pixels, int pixelbytes, int rowstride, int x, int y,
-       	  int r, int g, int b)
+	  int r, int g, int b)
 {
   *(pixels + y * rowstride + x * pixelbytes) = r;
   *(pixels + y * rowstride + x * pixelbytes + 1) = g;
@@ -23,7 +31,12 @@ putpixel (unsigned char *pixels, int pixelbytes, int rowstride, int x, int y,
 }
 
 /* Template for normal rendering, which calls render_pixel on every pixel.
-   Main motivation to do rendering cores as templates is to get things nicely inlined.   */
+   Main motivation to do rendering cores as templates is to get things nicely inlined.
+   RTPARAM specifies rendering type, PARAM is the screen-to-image mapping parameters,
+   IMG is the image data, RPARAM is the rendering parameters, PIXELS is the output buffer,
+   PIXELBYTES is the bytes per pixel, ROWSTRIDE is the row stride, WIDTH and HEIGHT are
+   tile dimensions, XOFFSET and YOFFSET are coordinates in the output image,
+   STEP is the sampling step, and PROGRESS is used for progress reporting.  */
 template<typename T, typename P, typename RP>
 bool render_img_normal(render_type_parameters rtparam,
 		       P &param, image_data &img,
@@ -63,6 +76,13 @@ bool render_img_normal(render_type_parameters rtparam,
     }
   return true;
 }
+
+/* Template for downscaled rendering, which precomputes color data for the whole tile.
+   RTPARAM specifies rendering type, PARAM is the screen-to-image mapping parameters,
+   IMG is the image data, RPARAM is the rendering parameters, PIXELS is the output buffer,
+   PIXELBYTES is the bytes per pixel, ROWSTRIDE is the row stride, WIDTH and HEIGHT are
+   tile dimensions, XOFFSET and YOFFSET are coordinates in the output image,
+   STEP is the sampling step, and PROGRESS is used for progress reporting.  */
 template<typename T, typename P,typename RP>
 bool render_img_downscale(render_type_parameters rtparam,
 			  P &param, image_data &img,
@@ -109,6 +129,13 @@ bool render_img_downscale(render_type_parameters rtparam,
   free (data);
   return true;
 }
+
+/* Template for grayscale downscaled rendering.
+   RTPARAM specifies rendering type, PARAM is the screen-to-image mapping parameters,
+   IMG is the image data, RPARAM is the rendering parameters, PIXELS is the output buffer,
+   PIXELBYTES is the bytes per pixel, ROWSTRIDE is the row stride, WIDTH and HEIGHT are
+   tile dimensions, XOFFSET and YOFFSET are coordinates in the output image,
+   STEP is the sampling step, and PROGRESS is used for progress reporting.  */
 template<typename T>
 bool render_img_gray_downscale(render_type_parameters rtparam,
 			       scr_to_img_parameters &param, image_data &img,
@@ -156,6 +183,10 @@ bool render_img_gray_downscale(render_type_parameters rtparam,
   return true;
 }
 
+/* Initialize renderer for screen coordinates.
+   RTPARAM specifies rendering type, MY_RPARAM is the rendering parameters,
+   IMG is the image data, PARAM is the screen-to-image mapping parameters,
+   OPARAM is the outer parameters, and PROGRESS is used for progress reporting.  */
 template<typename T,typename P,typename RP> T*
 init_render_scr (RP &rtparam, render_parameters &my_rparam, image_data &img, scr_to_img_parameters &param, P &oparam, progress_info *progress)
 {
@@ -168,6 +199,11 @@ init_render_scr (RP &rtparam, render_parameters &my_rparam, image_data &img, scr
     }
   return r;
 }
+
+/* Initialize renderer for image coordinates.
+   RTPARAM specifies rendering type, MY_RPARAM is the rendering parameters,
+   IMG is the image data, PARAM is the screen-to-image mapping parameters,
+   OPARAM is the outer parameters, and PROGRESS is used for progress reporting.  */
 template<typename T,typename P,typename RP> T*
 init_render_img (RP &rtparam, render_parameters &my_rparam, image_data &img, scr_to_img_parameters &param, P &oparam, progress_info *progress)
 {
@@ -182,8 +218,8 @@ init_render_img (RP &rtparam, render_parameters &my_rparam, image_data &img, scr
 }
 
 /* Sample pixel on screen coordinates X and Y of size STEP with ANTIALIAS.
-   This is used for render engines which does their own translation of scr to img coordinates
-   (inherited from render_scr)  */
+   This is used for render engines which do their own translation of scr to img coordinates
+   (inherited from render_scr).  RENDER is the rendering engine.  */
 template<typename T> inline rgbdata
 render_loop_scr (T &render, scr_to_img &, int antialias, coord_t x, coord_t y, coord_t step)
 {
@@ -205,7 +241,9 @@ render_loop_scr (T &render, scr_to_img &, int antialias, coord_t x, coord_t y, c
   return d;
 }
 
-/* Same but for render engines which handle only image coordinates.  */
+/* Same as render_loop_scr but for render engines which handle only image coordinates.
+   RENDER is the rendering engine, MAP is the screen-to-image map, ANTIALIAS is the
+   anti-aliasing factor, X and Y are screen coordinates, and STEP is the sampling step.  */
 template<typename T> inline rgbdata
 render_loop_img (T &render, scr_to_img &map, int antialias, coord_t x, coord_t y, coord_t step)
 {
@@ -234,7 +272,13 @@ render_loop_img (T &render, scr_to_img &map, int antialias, coord_t x, coord_t y
 }
 
 
-/* Render from stitched project.  We do not try todo antialiasing, since it would be slow.  */
+/* Render from stitched project.  We do not try to do antialiasing, since it would be slow.
+   RTPARAM specifies rendering type, OUTER_PARAM is the outer parameters, IMG is the image data,
+   RPARAM is the rendering parameters, PIXELS is the output buffer, PIXELBYTES is the bytes
+   per pixel, ROWSTRIDE is the row stride, WIDTH and HEIGHT are tile dimensions,
+   XOFFSET and YOFFSET are coordinates in the output image, STEP is the sampling step,
+   DO_ANTIALIAS specifies if anti-aliasing should be performed, and PROGRESS is used
+   for progress reporting.  */
 template<typename T, typename P,typename RP,
 	 /* Function to render pixel at a given coordinates and with a given anti-aliasing.  */
        	 rgbdata (render_loop) (T &, scr_to_img &, int, coord_t, coord_t, coord_t),
@@ -260,7 +304,7 @@ void render_stitched(RP &rtparam, P &outer_param,
 	    antialias = 4;
   }
 
-  /* We initialize renderes to individual images on demand.  */
+  /* We initialize renderers to individual images on demand.  */
   assert (stitch.params.width * stitch.params.height < 256);
   //std::atomic<T *> renders[256];
   T * renders[256];
@@ -406,7 +450,12 @@ void render_stitched(RP &rtparam, P &outer_param,
     }
 }
 
-/* Main entry to rendering.   */
+/* Main entry to rendering.
+   RTPARAM specifies rendering type, PARAM is the screen-to-image mapping parameters,
+   IMG is the image data, RPARAM is the rendering parameters, PIXELS is the output buffer,
+   PIXELBYTES is the bytes per pixel, ROWSTRIDE is the row stride, WIDTH and HEIGHT are
+   tile dimensions, XOFFSET and YOFFSET are coordinates in the output image,
+   STEP is the sampling step, and PROGRESS is used for progress reporting.  */
 template<typename T>
 bool do_render_tile(render_type_parameters &rtparam,
 		    scr_to_img_parameters &param,
@@ -431,7 +480,13 @@ bool do_render_tile(render_type_parameters &rtparam,
   else
     return render_img_normal<T> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
 }
-/* Main entry to rendering if graydata needs to be handled specially.   */
+
+/* Main entry to rendering if graydata needs to be handled specially.
+   RTPARAM specifies rendering type, PARAM is the screen-to-image mapping parameters,
+   IMG is the image data, RPARAM is the rendering parameters, PIXELS is the output buffer,
+   PIXELBYTES is the bytes per pixel, ROWSTRIDE is the row stride, WIDTH and HEIGHT are
+   tile dimensions, XOFFSET and YOFFSET are coordinates in the output image,
+   STEP is the sampling step, and PROGRESS is used for progress reporting.  */
 template<typename T>
 bool do_render_tile_with_gray(render_type_parameters &rtparam,
 			      scr_to_img_parameters &param,
@@ -461,6 +516,13 @@ bool do_render_tile_with_gray(render_type_parameters &rtparam,
   else
     return render_img_normal<T> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
 }
+
+/* Main entry to rendering for image detection.
+   RTPARAM specifies rendering type, PARAM is the screen detection parameters,
+   IMG is the image data, RPARAM is the rendering parameters, PIXELS is the output buffer,
+   PIXELBYTES is the bytes per pixel, ROWSTRIDE is the row stride, WIDTH and HEIGHT are
+   tile dimensions, XOFFSET and YOFFSET are coordinates in the output image,
+   STEP is the sampling step, and PROGRESS is used for progress reporting.  */
 template<typename T>
 bool do_render_tile_img(render_type_parameters &rtparam,
 			scr_detect_parameters &param,
@@ -485,5 +547,6 @@ bool do_render_tile_img(render_type_parameters &rtparam,
   else
     return render_img_normal<T> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
 }
-}
-}
+} // namespace anonymous
+} // namespace colorscreen
+

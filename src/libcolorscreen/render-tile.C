@@ -1,3 +1,7 @@
+/* Implementation of tile-based rendering and file output.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #include "config.h"
 #include "include/colorscreen.h"
 #include "render-interpolate.h"
@@ -12,12 +16,14 @@
 #include "render-screen.h"
 #include "render-fast.h"
 #include "render-scr-detect.h"
+
 namespace colorscreen
 {
+/* Properties of individual rendering types.  */
 const constexpr render_type_property render_type_properties[render_type_max] =
 {
    {"original", "Original digital capture", render_type_property::OUTPUTS_SCAN_PROFILE /*| render_type_property::SUPPORTS_IR_RGB_SWITCH*/ | render_type_property::SCAN_RESOLUTION},
-   {"interpolated", "Image layrer + screen filter demosaiced",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::PATCH_RESOLUTION},
+   {"interpolated", "Image layer + screen filter demosaiced",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::PATCH_RESOLUTION},
    {"interpolated-predictive", "Image layer + screen filter demosaiced with detail recovery",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
    {"image-layer", "Image layer", render_type_property::OUTPUTS_SCAN_PROFILE | render_type_property::SCAN_RESOLUTION},
    {"screen", "Screen filter", render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS | render_type_property::OUTPUTS_SRGB_PROFILE},
@@ -35,10 +41,14 @@ const constexpr render_type_property render_type_properties[render_type_max] =
    {"detected-interpolated", "Image layer + auto-detected screen filter demosaiced",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
    {"detected-interpolated-scaled", "Image layer + auto-detected screen filter demosaiced assuming irregular element size",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
    {"detected-relaxation-scaled", "Image layer + auto-detected screen filter demosaiced assuming irregular element size and interpolated",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
-   {"profiled-original", "Original capture with correction profile", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG /* currently only to compute patch propertions, but we have no profiling otherwise yeet */| render_type_property::NEEDS_RGB  | render_type_property::NEEDS_CORRECTION_PROFILE | render_type_property::SCAN_RESOLUTION},
+   {"profiled-original", "Original capture with correction profile", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG /* currently only to compute patch proportions, but we have no profiling otherwise yet */| render_type_property::NEEDS_RGB  | render_type_property::NEEDS_CORRECTION_PROFILE | render_type_property::SCAN_RESOLUTION},
    {"interpolated-profiled-original", "Original capture demosaiced with correction profile",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::PATCH_RESOLUTION | render_type_property::NEEDS_CORRECTION_PROFILE},
    {"interpolated-diff", "Difference between profile and image layer", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::PATCH_RESOLUTION | render_type_property::NEEDS_CORRECTION_PROFILE},
 };
+
+/* Sanitize rendering parameters RTPARAM according to screen-to-image mapping
+   parameters PARAM and image data IMG.  This ensures that requested rendering
+   type is compatible with available data.  */
 static void
 sanitize_render_parameters (render_type_parameters &rtparam, scr_to_img_parameters &param, image_data &img)
 {
@@ -70,6 +80,12 @@ sanitize_render_parameters (render_type_parameters &rtparam, scr_to_img_paramete
 #endif
 }
 
+/* Render tile of image to screen buffer PIXELS.  RTPARAM specifies rendering type,
+   PARAM is the screen-to-image mapping parameters, IMG is the image data,
+   RPARAM is the rendering parameters, PIXELBYTES is the bytes per pixel,
+   ROWSTRIDE is the row stride, WIDTH and HEIGHT are tile dimensions,
+   XOFFSET and YOFFSET are coordinates in the output image, STEP is the sampling step,
+   and PROGRESS is used for progress reporting.  */
 bool
 render_to_scr::render_tile (render_type_parameters rtparam,
 			    scr_to_img_parameters &param, image_data &img,
@@ -88,7 +104,7 @@ render_to_scr::render_tile (render_type_parameters rtparam,
       && rtparam.type != render_type_profiled_original)
     rtparam.type = render_type_original;
 
-  /* Avoid rendering outside of image area.  This saves some time but also ugly artifacts.  */
+  /* Avoid rendering outside of image area.  This saves some time and prevents ugly artifacts.  */
   if ((int)xoffset < 0)
     {
       int border = -xoffset;
@@ -211,7 +227,7 @@ render_to_scr::render_tile (render_type_parameters rtparam,
       if (prev_time_set)
 	{
 	  double time2 = end_time.tv_sec + end_time.tv_usec/1000000.0 - prev_time.tv_sec - prev_time.tv_usec/1000000.0;
-          printf (" last run %.3f ago overall fps:%.3f\n", time2, 1/(time2+time));
+          printf (" last run %.3f s ago overall FPS:%.3f\n", time2, 1/(time2+time));
 	}
       else
         printf ("\n");
@@ -223,6 +239,12 @@ render_to_scr::render_tile (render_type_parameters rtparam,
     global_rendering_lock.unlock ();
   return (!progress || !progress->cancelled ()) && ok;
 }
+
+/* Render whole image to a file.  RFPARAMS specifies file output parameters,
+   RTPARAM specifies rendering type, PARAM is the screen-to-image mapping
+   parameters, RPARAM is the rendering parameters, IMG is the image data,
+   BLACK specifies if black border should be rendered, and PROGRESS is used
+   for progress reporting.  */
 const char *
 render_to_scr::render_to_file (render_to_file_params &rfparams, render_type_parameters rtparam, scr_to_img_parameters param, render_parameters rparam, image_data &img, int black, progress_info *progress)
 {
@@ -266,6 +288,11 @@ render_to_scr::render_to_file (render_to_file_params &rfparams, render_type_para
       abort ();
     }
 }
+
+/* Global entry point for rendering a tile.  SCAN is the scanned image data,
+   PARAM is the screen-to-image mapping parameters, DPARAM is the screen detection
+   parameters, RPARAM is the rendering parameters, RTPARAM specifies rendering type,
+   TILE is the tile parameters, and PROGRESS is used for progress reporting.  */
 DLL_PUBLIC bool
 render_tile(image_data &scan, scr_to_img_parameters &param, scr_detect_parameters &dparam, render_parameters &rparam,
 	    render_type_parameters &rtparam, tile_parameters &tile, progress_info *progress)
@@ -278,4 +305,4 @@ render_tile(image_data &scan, scr_to_img_parameters &param, scr_detect_parameter
 					   tile.pixels, tile.pixelbytes, tile.rowstride, tile.width, tile.height, tile.pos.x, tile.pos.y, tile.step, progress);
 
 }
-}
+} // namespace colorscreen
