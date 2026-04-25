@@ -1,3 +1,7 @@
+/* Rendering parameters.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #define HAVE_INLINE
 #define GSL_RANGE_CHECK_OFF
 #include <memory>
@@ -15,10 +19,10 @@ namespace colorscreen
 const render_parameters::color_model_property render_parameters::color_model_properties[] = {
   { "sRGB", "sRGB", "Same primaries as in sRGB color space", 0 },
   { "red", "red", "Block all but red", 0 },
-  { "green", "green", "Block all bug green", 0 },
-  { "blue", "blue", "Block all bug green", 0 },
+  { "green", "green", "Block all but green", 0 },
+  { "blue", "blue", "Block all but blue", 0 },
   { "Miethe_Goerz_reconstructed_by_Wagner", "Miethe Goerz reconstructed by Wagner", "", 0 },
-  { "Miethe_Goerz_mesured_by_Wagner", "Miethe Goerz mesured by Wagner", "", 0 },
+  { "Miethe_Goerz_measured_by_Wagner", "Miethe Goerz measured by Wagner", "", 0 },
   { "Wratten_25_58_47_xyz", "Wratten trichromatic set 25 58 47 xyz", "", 0 },
   { "Wratten_25_58_47_spectra", "Wratten trichromatic set 25 58 47 spectra", "", SPECTRA_BASED },
   { "dufaycolor_reseau_by_dufaycolor_manual", "Dufaycolor reseau by dufaycolor manual", "", SPECTRA_BASED },
@@ -81,15 +85,15 @@ const property_t sharpen_parameters::sharpen_mode_names []  = {
 };
 const property_t render_parameters::collection_quality_names []  = {
   { "fast", "Fast", "Sample each patch in its center" },
-  { "simple-screen", "Simple-screen", "Collect denisty of patches on multiple pixels.  Do fast estimation on sharpened srceen filter." },
-  { "simulated-screen", "Simulated-screen", "Collect denisty of patches on multiple pixels.  Render blured screen filter and sharpen it." },
+  { "simple-screen", "Simple-screen", "Collect density of patches on multiple pixels.  Do fast estimation on sharpened screen filter." },
+  { "simulated-screen", "Simulated-screen", "Collect density of patches on multiple pixels.  Render blurred screen filter and sharpen it." },
 };
 const property_t render_parameters::screen_demosaic_names []  = {
   { "default", "Best for given rendering mode and screen", "Choose best algorithm automatically" },
   { "nearest", "Nearest neighbour", "Do not interpolate (fastest)" },
   { "linear", "Linear", "Linear interpolation" },
   { "bicubic", "Bicubic", "Bicubic interpolation" },
-  { "hamilton-adams", "Hamilton-adams, Paget/Finlay only", "Popular demosaicing algorithm (currently imlemented only for Paget-type screens)" },
+  { "hamilton-adams", "Hamilton-adams, Paget/Finlay only", "Popular demosaicing algorithm (currently implemented only for Paget-type screens)" },
   { "ahd", "AHD (Adaptive Homogeneity-Directed), Paget/Finlay only", "Slower, more advanced algorithm" },
   { "amaze", "AMaZE (Aliasing Minimization and Zipper Elimination), Paget/Finlay only", "High quality algorithm based on adaptive color ratios and variance analysis" },
   { "rcd", "RCD (Ratio Corrected Demosaicing), Paget/Finlay only", "Fast, high quality algorithm using ratio-corrected color interpolation" },
@@ -106,8 +110,9 @@ const property_t render_parameters::demosaiced_scaling_names []  = {
 };
 
 
-/* patch_portions describes how much percent of screen is occupied by red, green and blue
-   patches respectively. It should have sum at most 1.  */
+/* Return portion of screen occupied by red, green and blue patches for
+   screen of type T and rendering parameters RPARAM.  The sum of individual
+   portions should be at most 1.  */
 rgbdata patch_proportions (enum scr_type t, const render_parameters *rparam)
 {
   switch (t)
@@ -193,12 +198,12 @@ apply_balance_to_model (render_parameters::color_model_t color_model)
 	  && color_model != render_parameters::color_model_blue);
 }
 
-/* Return matrix that translate RGB values in the color process space into RGB or XYZ.
-   If SPECTRUM_BASED is true, the the matrix is based on actual spectra of dyes and
-   thus backlight_temeperature parameter is handled correctly.
-
-   If OPTIMIZED is true, then the matrix is optimized camera matrix construted from
-   process simulation and both temperature and backlight_temperature parameters are handled correctly.  */
+/* Return matrix that translates RGB values in the color process space into RGB or XYZ.
+   SPECTRUM_BASED is set to true if the result is based on actual spectra of dyes.
+   OPTIMIZED is set to true if the matrix is optimized camera matrix constructed
+   from process simulation.
+   IMG is the image being rendered.
+   TRANSMISSION_DATA is optionally filled with transmittance data.  */
 color_matrix
 render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const image_data *img, transmission_data *transmission_data) const
 {
@@ -636,16 +641,13 @@ render_parameters::get_transmission_data (transmission_data &data) const
   return spectrum_based;
 }
 
-/* Return matrix which contains the color of dyes either as rgb or xyz.
-   PATCH_PORTIONS describes how much percent of screen is occupied by red, green and blue
-   patches respectively. It should have sum at most 1.
-     
-   If NORMALIZED_PATCHES is true, the rgbdata represents patch intensities regardless of their
-   size (as in interpolated rendering) and the dye matrix channels needs to be scaled by
-   patch_portions.
-   
-   TARGET_WHITEPOINT is a whitepoint of the target color space,
-   default is D50 for XYZ_D50.  */
+/* Return matrix which contains the color of dyes either as RGB or XYZ.
+   IMG is the image being rendered.
+   NORMALIZED_PATCHES is true if the RGB data represents patch intensities
+   regardless of their size.
+   PATCH_PROPORTIONS describes how much percent of screen is occupied by red,
+   green and blue patches respectively.
+   TARGET_WHITEPOINT is the whitepoint of the target color space.  */
 
 color_matrix
 render_parameters::get_balanced_dyes_matrix (const image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint) const
@@ -745,7 +747,10 @@ render_parameters::get_balanced_dyes_matrix (const image_data *img, bool normali
   return dyes;
 }
 
-/* Return matrix adjusting RGB values read from the scan.  */
+/* Return matrix adjusting RGB values read from the scan.
+   NORMALIZED_PATCHES is true if color information is collected on
+   pre-interpolated screen.
+   PATCH_PROPORTIONS describes portions of individual patches.  */
 color_matrix
 render_parameters::get_rgb_adjustment_matrix (bool normalized_patches, rgbdata patch_proportions)
 {
@@ -762,12 +767,12 @@ render_parameters::get_rgb_adjustment_matrix (bool normalized_patches, rgbdata p
   return color;
 }
 
-/* PATCH_PORTIONS describes how much percent of screen is occupied by red, green and blue
-   patches respectively. It should have sum at most 1.
-   
-   If NORMALIZED_PATCHES is true, the rgbdata represents patch intensities regardless of their
-   size (as in interpolated rendering) and the dye matrix channels needs to be scaled by
-   PATCH_PROPORTIONS.  */
+/* Return matrix transforming RGB values of scanner into XYZ or sRGB.
+   IMG is the image being rendered.
+   NORMALIZED_PATCHES is true if color information is collected on
+   pre-interpolated screen.
+   PATCH_PROPORTIONS describes portions of individual patches.
+   TARGET_WHITEPOINT is the whitepoint of target color space.  */
 color_matrix
 render_parameters::get_rgb_to_xyz_matrix (const image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint)
 {
@@ -788,6 +793,10 @@ render_parameters::get_rgb_to_xyz_matrix (const image_data *img, bool normalized
   return color;
 }
 
+/* Return ICC profile for given rendering parameters.
+   BUFFER is pointer to buffer where profile will be stored.
+   IMG is the image being rendered.
+   NORMALIZED_PATCHES is true if dyes are normalized.  */
 size_t
 render_parameters::get_icc_profile (void **buffer, image_data *img, bool normalized_patches)
 {
@@ -799,6 +808,7 @@ render_parameters::get_icc_profile (void **buffer, image_data *img, bool normali
   return create_profile(color_model_properties[color_model].name, r, g, b, observer_whitepoint, output_gamma, buffer);
 }
 
+/* Set dimensions of tile adjustments vector to W x H.  */
 void
 render_parameters::set_tile_adjustments_dimensions (int w, int h)
 {
@@ -871,7 +881,12 @@ get_max_color (image_data &img, render_parameters &rparam, scr_to_img_parameters
   return std::max (c.red, std::max (c.green, c.blue));
 }
 
-/* Determine black and brightness by analysing tile of a scan.  */
+/* Determine black and brightness by analysing tile of a scan.
+   IMG is the scan to analyze.
+   PARAM are screen to image parameters.
+   XMIN, YMIN, XMAX, YMAX is the area to analyze.
+   PROGRESS is used to report progress.
+   DARK_CUT and LIGHT_CUT are thresholds for dark and light points.  */
 bool
 render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress, luminosity_t dark_cut, luminosity_t light_cut)
 {
@@ -998,6 +1013,11 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
   return true;
 }
 
+/* Determine mix weights by analysing tile of a scan.
+   IMG is the scan to analyze.
+   PARAM are screen to image parameters.
+   XMIN, YMIN, XMAX, YMAX is the area to analyze.
+   PROGRESS is used to report progress.  */
 bool 
 render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
 {
@@ -1075,6 +1095,11 @@ render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &par
   return true;
 }
 
+/* Determine black mix by analysing tile of a scan.
+   IMG is the scan to analyze.
+   PARAM are screen to image parameters.
+   XMIN, YMIN, XMAX, YMAX is the area to analyze.
+   PROGRESS is used to report progress.  */
 bool
 render_parameters::auto_mix_dark (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
 {
@@ -1145,7 +1170,11 @@ render_parameters::auto_mix_dark (image_data &img, scr_to_img_parameters &param,
   return true;
 }
 
-/* Use IR to tune mixing weights to simulate IR channel from RGB to match actual IR channel.  */
+/* Determine mix weights using infrared channel by analysing tile of a scan.
+   IMG is the scan to analyze.
+   PARAM are screen to image parameters.
+   XMIN, YMIN, XMAX, YMAX is the area to analyze.
+   PROGRESS is used to report progress.  */
 
 bool 
 render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
@@ -1250,6 +1279,12 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
   return true;
 }
 
+/* Determine white balance by analysing tile of a scan.
+   IMG is the scan to analyze.
+   PARAM are screen to image parameters.
+   XMIN, YMIN, XMAX, YMAX is the area to analyze.
+   PROGRESS is used to report progress.
+   DARK_CUT and LIGHT_CUT are thresholds for dark and light points.  */
 bool
 render_parameters::auto_white_balance (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress, luminosity_t dark_cut, luminosity_t light_cut)
 {
@@ -1411,7 +1446,7 @@ render_parameters::original_render_from (render_parameters &rparam, bool color, 
       mix_blue = rparam.mix_blue;
     }
   sharpen = rparam.sharpen;
-  gammut_warning = rparam.gammut_warning;
+  gamut_warning = rparam.gamut_warning;
 
   /* Copy setup of interpolated rendering algorithm.  */
   collection_quality = rparam.collection_quality;
@@ -1419,6 +1454,8 @@ render_parameters::original_render_from (render_parameters &rparam, bool color, 
   screen_blur_radius = rparam.screen_blur_radius;
 }
 
+/* Return matrix transforming scanner RGB values to profiled RGB values.
+   PATCH_PROPORTIONS describes portions of individual patches.  */
 color_matrix
 render_parameters::get_profile_matrix (rgbdata patch_proportions)
 {
@@ -1479,6 +1516,8 @@ render_parameters::get_gray_range (int *min, int *max, int maxval)
     }
 }
 
+/* Return gamut for given color screen T.  CORRECTED is true if profile
+   should be applied.  */
 render_parameters::gamut
 render_parameters::get_gamut (bool corrected, scr_type t) const
 {
