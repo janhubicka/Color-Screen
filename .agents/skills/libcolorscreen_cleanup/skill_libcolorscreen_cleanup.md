@@ -53,7 +53,7 @@ Do **not mass reformat** while files; we can do that in a separate commit.
 ## 3. API andinternal datastructures cleanups
 - **Use rgbdata, int_rgbdata, point_t and int_point_t**: Suggest changes to use `rgbdata`, `int_rgbdata`, `point_t` and `int_point_t` to pass and return values that are rgb and points of a given type. Always ask in plan. Pass by value; use const modifiers where appropriate.  The datastructures provides standard operations (addition, scalar multiplication etc). Update existing code to use it. Also update code that uses separate variables such as `x`, `y`, `r`, `g`, `b` to use corresponding new type. `base.h and `color.h` provides various operations on colors and points/vector. Use them rather than doing everything by hand.
 - **typos in identifiers**: Suggest fixes for typos in identifier names. Use `snake_case`.
-- **int_image_area**: Use `int_image_area` instead of `xshit/yship/width/height`. Keep in mind that `xshift=-xmin` and `yshit=-ymin`. `base.h` provides various operations and checks on areas. Use them rather than doing everything by hand. Always ask in plan.
+- **int_image_area**: Use `int_image_area` instead of `xshit/yship/width/height`. Keep in mind that the constructor is `{left, top, width, height}`. Code often uses `xmin` for `left`, `ymin` for `top`. `xshift=-xmin` and `yshit=-ymin`. `base.h` provides various operations and checks on areas. Use them rather than doing everything by hand. Always ask in plan.
 
 ## 4. Progress info
 - **lowercase in set_task**: Set task messages should be in lowercase
