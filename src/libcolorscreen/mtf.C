@@ -686,15 +686,27 @@ mtf_parameters::stokseth_defocus_mtf (double pixel_freq) const
 
   // 3. Stokseth B Parameter
   // Scales the defocus impact by frequency.
-  // Standard approximation: B = 8 * pi * (w20 / lambda) * s * (1 - s)
+  // Original approximation: B = 4 * pi * (w20 / lambda) * s * (1 - s)
   double B
-      = (8.0 * M_PI * w20 * s) * (1.0 - s) / wavelength_mm;
+      = (4.0 * M_PI * w20 * s) * (1.0 - s) / wavelength_mm;
 
   // 4. Defocus MTF using Bessel J1
   // 2*J1(B)/B is the optical transfer of a circular blur
   double j_term = (my_fabs (B) < 1e-8) ? 1.0 : 2.0 * get_j1 (B) / B;
 
-  return my_fabs (j_term);
+  // 5. Full Stokseth Polynomial Correction (1 - 0.6s + 0.4s^2)
+  double stokseth_poly = 1.0 - 0.6 * s + 0.4 * s * s;
+
+  // 6. Empirical Correction (1 - 0.6s)
+  // Interpolate between diffraction limit and Stokseth model based on defocus.
+  double phase_error_ratio = w20 / (wavelength_mm * 0.25);
+  double weight = std::clamp (phase_error_ratio, 0.0, 1.0);
+
+  // Apply correction: if weight is 0 (perfect focus), factor is 1.0.
+  // If weight is 1 (significant defocus), factor is the Stokseth polynomial.
+  double final_correction = (1.0 - weight) + (weight * stokseth_poly);
+
+  return my_fabs (j_term) * final_correction;
 }
 
 /* Simulate lens MTF.
@@ -756,8 +768,7 @@ mtf::compute_lsf (std::vector<psf_t, fft_allocator<psf_t>> &lsf,
     }
   std::vector<psf_t, fft_allocator<psf_t>> mtf_half (size);
   auto plan = fft_plan_r2r_1d<psf_t> (size, FFTW_REDFT00, mtf_half.data (), lsf.data ());
-  /* FFTW_REDFT00 (DCT-I) corresponds to a symmetric DFT of length 2*(size - 1).  */
-  psf_t scale = 1.0 / ((size - 1) * subsample * 2);
+  psf_t scale = 1.0 / (size * subsample * 2);
 
   /* Mirror mtf.  */
   for (int i = 0; i < size; i++)
