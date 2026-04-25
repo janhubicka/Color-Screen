@@ -34,8 +34,15 @@ struct hd_curve
   /* Default constructor for HD_CURVE.  */
   constexpr hd_curve () = default;
 
-  /* Destructor for HD_CURVE.  Frees memory if owned.  */
-  DLL_PUBLIC virtual ~hd_curve ();
+  /* Destructor for HD_CURVE.  DELETE[] the arrays if they are owned.  */
+  DLL_PUBLIC virtual ~hd_curve ()
+  {
+    if (m_owns_memory)
+      {
+        delete[] xs;
+        delete[] ys;
+      }
+  }
 
   /* Return density for given exposure IN.  */
   luminosity_t

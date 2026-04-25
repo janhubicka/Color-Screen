@@ -240,15 +240,6 @@ struct hd_curve
       20
     );
 
-/* Destructor for HD_CURVE.  DELETE[] the arrays if they are owned.  */
-hd_curve::~hd_curve ()
-{
-  if (m_owns_memory)
-    {
-      delete[] xs;
-      delete[] ys;
-    }
-}
 
 /* exposure is 5000/65535....5000 linear that is  -inf to 3.69 */
 struct hd_curve film_sensitivity::linear_sensitivity (
@@ -302,25 +293,17 @@ hd_to_richards_curve_parameters (const hd_curve_parameters &p)
   auto fit = [&] (luminosity_t in1, luminosity_t in2, luminosity_t out1,
                   luminosity_t out2, luminosity_t a, luminosity_t k)
     {
-      if (std::abs (out1 - a) < eps)
-        out1 = a + (k > a ? eps : -eps);
-      if (std::abs (out1 - k) < eps)
-        out1 = k - (k > a ? eps : -eps);
-      if (std::abs (out2 - a) < eps)
-        out2 = a + (k > a ? eps : -eps);
-      if (std::abs (out2 - k) < eps)
-        out2 = k - (k > a ? eps : -eps);
+      luminosity_t min_out = std::min (a, k) + eps;
+      luminosity_t max_out = std::max (a, k) - eps;
+      out1 = std::clamp (out1, min_out, max_out);
+      out2 = std::clamp (out2, min_out, max_out);
 
       luminosity_t vv1 = std::pow ((k - a) / (out1 - a), v) - 1.0;
       luminosity_t vv2 = std::pow ((k - a) / (out2 - a), v) - 1.0;
-      if (vv1 > 1e30 || std::isinf (vv1))
-        vv1 = 1e30;
-      if (vv2 > 1e30 || std::isinf (vv2))
-        vv2 = 1e30;
-      if (vv1 <= 0)
-        vv1 = eps;
-      if (vv2 <= 0)
-        vv2 = eps;
+
+      /* Clamp to avoid log of zero or extreme values.  */
+      vv1 = std::clamp (vv1, eps, (luminosity_t)1e15);
+      vv2 = std::clamp (vv2, eps, (luminosity_t)1e15);
 
       luminosity_t L1 = std::log (vv1);
       luminosity_t L2 = std::log (vv2);
@@ -330,9 +313,13 @@ hd_to_richards_curve_parameters (const hd_curve_parameters &p)
         denom = (denom >= 0 ? eps : -eps);
 
       B = (L2 - L1) / denom;
+      /* Clamp B and M to reasonable ranges to avoid numerical instability.  */
+      B = std::clamp (B, (luminosity_t)-100.0, (luminosity_t)100.0);
       if (std::abs (B) < eps)
-        B = eps;
+        B = (B >= 0 ? eps : -eps);
+
       M = in1 + L1 / B;
+      M = std::clamp (M, (luminosity_t)-100.0, (luminosity_t)100.0);
     };
 
   if (!is_inverse)
