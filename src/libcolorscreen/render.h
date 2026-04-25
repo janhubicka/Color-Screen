@@ -425,7 +425,7 @@ render::get_img_pixel (point_t p) const noexcept
 
 /* Determine RGB value at position XP, YP in the image using bicubic interpolation
    without adjustments.  */
-pure_attr inline rgbdata always_inline_attr
+pure_attr inline rgbdata //always_inline_attr
 render::get_unadjusted_img_rgb_pixel (point_t p) const noexcept
 {
   /* Center of pixel [0,0] is [0.5,0.5].  */

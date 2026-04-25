@@ -3801,7 +3801,7 @@ finetune_misregistered_area (solver_parameters *solver,
   int xstep, ystep;
   get_steps (img, area, param, &xstep, &ystep);
   int xsubstep = xstep / 3;
-  int ysubstep = xstep / 3;
+  int ysubstep = ystep / 3;
   int xsubsteps = (area.width + xsubstep - 1) / xsubstep;
   int ysubsteps = (area.height + ysubstep - 1) / ysubstep;
   int npoints;
@@ -3837,6 +3837,9 @@ finetune_misregistered_area (solver_parameters *solver,
         }
     }
 
+  /* This is essentialy an floodfill.  If there is 3x3 tile
+     with no known data such that just outside of it exists
+     known point; enqueue its center for finetuning.  */
   do
     {
 
@@ -3942,17 +3945,15 @@ finetune_misregistered_area (solver_parameters *solver,
           tiles[i] = unknown;
       npoints = 0;
 
-      /* Look for coputed points.  */
+      /* Now add computed points to solver and update tiles.  */
       for (size_t i = 0; i < res.size (); i++)
         {
           finetune_result &r = res[i];
-          point_t transformed = map.to_scr (r.solver_point_img_location);
           int px
               = (r.solver_point_img_location.x - area.x) / (coord_t)xsubstep;
           int py
               = (r.solver_point_img_location.y - area.y) / (coord_t)ysubstep;
-          if (r.success && r.uncertainty <= max_uncertainty
-              && transformed.dist_from (r.solver_point_screen_location) < 0.05)
+          if (r.success && r.uncertainty <= max_uncertainty)
             {
               solver->add_point (r.solver_point_img_location,
                                  r.solver_point_screen_location,

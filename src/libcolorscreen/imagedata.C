@@ -32,7 +32,7 @@ const property_t image_data::demosaic_names[(int)demosaic_max]
   { "default", "Default", "Automatically choose demosaicing algorithm" },
   { "half", "Reduce image size to half and avoid demosaicing", "" },
   { "monochromatic", "Monochromatic", "" },
-  { "monochromatic_bayer_corrected", "Monochromatic with Bayer filter compensated" },
+  { "monochromatic_bayer_corrected", "Monochromatic with Bayer filter compensated." },
   { "linear", "Linear interpolation", "" },
   { "VNG", "Variable number of gradients interpolation (VNG)", "Variable number of gradients (VNG)[6] interpolation computes gradients near the pixel of interest and uses the lower gradients (representing smoother and more similar parts of the image) to make an estimate. It is used in first versions of dcraw, and suffers from color artifacts." },
   { "PPG", "Pixel grouping (PPG)", "Pixel grouping (PPG)[7] uses assumptions about natural scenery in making estimates. It has fewer color artifacts on natural images than the Variable Number of Gradients method." },
@@ -137,7 +137,7 @@ private:
   std::shared_ptr<backlight_correction_parameters> m_backlight_corr;
   image_data *m_img;
   void *m_buffer;
-  /* Do not put it on stack since it is rather large.  */
+  /* Do not put it on the stack since it is rather large.  */
   std::unique_ptr<LibRaw> m_processor;
   bool monochromatic;
   bool bayer_correction;
@@ -202,6 +202,7 @@ image_data::~image_data ()
   prune_render_scr_detect_caches ();
 }
 
+/* Return true if grayscale allocation is needed.  */
 bool
 image_data::allocate_grayscale ()
 {
@@ -211,6 +212,7 @@ image_data::allocate_grayscale ()
   return loader->grayscale;
 }
 
+/* Return true if RGB allocation is needed.  */
 bool
 image_data::allocate_rgb ()
 {
@@ -220,6 +222,7 @@ image_data::allocate_rgb ()
   return loader->rgb;
 }
 
+/* Allocate memory for image data.  Return true on success.  */
 bool
 image_data::allocate ()
 {
@@ -282,10 +285,14 @@ warning_handler (const char *module, const char *fmt, va_list ap)
 {
 }
 
+/* Initialize TIFF loader for file NAME.
+   On failure, set ERROR to the error message.
+   PROGRESS is used for progress reporting.
+   DEMOSAIC is the demosaicing algorithm to use (ignored for TIFF).  */
 bool
 tiff_image_data_loader::init_loader (const char *name, const char **error,
-                                     progress_info *,
-                                     image_data::demosaicing_t)
+                                     progress_info *progress,
+                                     image_data::demosaicing_t demosaic)
 {
   if (debug)
     printf ("TIFFopen\n");
@@ -379,9 +386,13 @@ tiff_image_data_loader::init_loader (const char *name, const char **error,
   return true;
 }
 
+/* Load part of the TIFF image.
+   Update PERMILLE with progress (0-1000).
+   On failure, set ERROR to the error message.
+   PROGRESS is used for progress reporting.  */
 bool
 tiff_image_data_loader::load_part (int *permille, const char **error,
-                                   progress_info *)
+                                   progress_info *progress)
 {
   if ((int)m_row < m_img->height)
     {
@@ -471,9 +482,13 @@ tiff_image_data_loader::load_part (int *permille, const char **error,
   return true;
 }
 
+/* Initialize JPEG loader for file NAME.
+   On failure, set ERROR to the error message.
+   PROGRESS is used for progress reporting.
+   DEMOSAIC is the demosaicing algorithm to use (ignored for JPEG).  */
 bool
 jpg_image_data_loader::init_loader (const char *name, const char **error,
-                                    progress_info *, image_data::demosaicing_t)
+                                    progress_info *progress, image_data::demosaicing_t demosaic)
 {
   FILE *jpegFile;
   if ((jpegFile = fopen (name, "rb")) == NULL)
@@ -560,9 +575,13 @@ jpg_image_data_loader::init_loader (const char *name, const char **error,
   return true;
 }
 
+/* Load part of the JPEG image.
+   Update PERMILLE with progress (0-1000).
+   On failure, set ERROR to the error message.
+   PROGRESS is used for progress reporting.  */
 bool
 jpg_image_data_loader::load_part (int *permille, const char **error,
-                                  progress_info *)
+                                  progress_info *progress)
 {
   int width = m_img->width;
   int height = m_img->height;
@@ -594,6 +613,10 @@ has_suffix (const char *name, const char *suffix)
   return !strcasecmp (suffix, name + l1 - l2);
 }
 
+/* Initialize RAW loader for file NAME.
+   On failure, set ERROR to the error message.
+   PROGRESS is used for progress reporting.
+   DEMOSAIC is the demosaicing algorithm to use.  */
 bool
 raw_image_data_loader::init_loader (const char *name, const char **error,
                                     progress_info *progress,
@@ -840,11 +863,11 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
   m_img->height = m_processor->imgdata.sizes.height;
   m_img->maxval = 65535;
 
-  /* For acromatic back we need no camera matrix.  */
+  /* For achromatic back we need no camera matrix.  */
   if (m_processor->imgdata.idata.colors == 3)
     {
       bool nonzero = false;
-      /* some RAW files has empty camera matrix.  */
+      /* Some RAW files have empty camera matrix.  */
       for (int i = 0; i < 3; i++)
         for (int j = 0; j < 3; j++)
           if (m_processor->imgdata.color.cam_xyz[i][j])
@@ -899,14 +922,18 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
   return true;
 }
 
+/* Load part of the RAW image.
+   Update PERMILLE with progress (0-1000).
+   On failure, set ERROR to the error message.
+   PROGRESS is used for progress reporting.  */
 bool
 raw_image_data_loader::load_part (int *permille, const char **error,
-                                  progress_info *)
+                                  progress_info *progress)
 {
   histogram rhistogram, bhistogram;
   const luminosity_t range = 5;
 
-  /* Supress mosaic pattern.  We only want to find good scaling factor.  */
+  /* Suppress mosaic pattern.  We only want to find good scaling factor.  */
   if (monochromatic)
     {
       float bscale = 1, rscale = 1;
@@ -1027,6 +1054,10 @@ raw_image_data_loader::load_part (int *permille, const char **error,
   return true;
 }
 
+/* Initialize stitch project loader for file NAME.
+   On failure, set ERROR to the error message.
+   PROGRESS is used for progress reporting.
+   DEMOSAIC is the demosaicing algorithm to use for component images.  */
 bool
 stitch_image_data_loader::init_loader (const char *name, const char **error,
                                        progress_info *progress,
@@ -1034,7 +1065,7 @@ stitch_image_data_loader::init_loader (const char *name, const char **error,
 {
   m_demosaic = demosaic;
   if (progress)
-    progress->set_task ("opening stich project", 1);
+    progress->set_task ("opening stitch project", 1);
   FILE *f = fopen (name, "rt");
   if (!f)
     {
@@ -1042,7 +1073,7 @@ stitch_image_data_loader::init_loader (const char *name, const char **error,
       return false;
     }
   if (progress)
-    progress->set_task ("loading stich project", 1);
+    progress->set_task ("loading stitch project", 1);
   m_img->stitch = new stitch_project ();
   m_img->stitch->set_path_by_filename (name);
   if (!m_img->stitch->load (f, error))
@@ -1081,6 +1112,10 @@ stitch_image_data_loader::init_loader (const char *name, const char **error,
   return true;
 }
 
+/* Load part of the stitch project.
+   Update PERMILLE with progress (0-1000).
+   On failure, set ERROR to the error message.
+   PROGRESS is used for progress reporting.  */
 bool
 stitch_image_data_loader::load_part (int *permille, const char **error,
                                      progress_info *progress)
@@ -1167,6 +1202,11 @@ stitch_image_data_loader::load_part (int *permille, const char **error,
   return true;
 }
 
+/* Initialize image loader for file NAME.
+   PRELOAD_ALL is true if all images in a project should be preloaded.
+   On failure, set ERROR to the error message.
+   PROGRESS is used for progress reporting.
+   DEMOSAIC is the demosaicing algorithm to use.  */
 bool
 image_data::init_loader (const char *name, bool preload_all,
                          const char **error, progress_info *progress,
@@ -1209,6 +1249,10 @@ image_data::init_loader (const char *name, bool preload_all,
   return ret;
 }
 
+/* Load part of the image.
+   Update PERMILLE with progress (0-1000).
+   On failure, set ERROR to the error message.
+   PROGRESS is used for progress reporting.  */
 bool
 image_data::load_part (int *permille, const char **error,
                        progress_info *progress)
@@ -1293,6 +1337,8 @@ image_data::load_part (int *permille, const char **error,
   return ret;
 }
 
+/* Parse ICC profile for the image.
+   PROGRESS is used for progress reporting.  */
 bool
 image_data::parse_icc_profile (progress_info *progress)
 {
@@ -1439,6 +1485,11 @@ image_data::parse_icc_profile (progress_info *progress)
   return true;
 }
 
+/* Load image from file NAME.
+   PRELOAD_ALL is true if all images in a project should be preloaded.
+   On failure, set ERROR to the error message.
+   PROGRESS is used for progress reporting.
+   DEMOSAIC is the demosaicing algorithm to use.  */
 bool
 image_data::load (const char *name, bool preload_all, const char **error,
                   progress_info *progress, demosaicing_t demosaic)
@@ -1475,6 +1526,7 @@ image_data::load (const char *name, bool preload_all, const char **error,
   return false;
 }
 
+/* Set DPI of the image to NEW_XDPI and NEW_YDPI.  */
 void
 image_data::set_dpi (coord_t new_xdpi, coord_t new_ydpi)
 {
@@ -1484,6 +1536,7 @@ image_data::set_dpi (coord_t new_xdpi, coord_t new_ydpi)
     stitch->set_dpi (new_xdpi, new_ydpi);
 }
 
+/* Return true if the image has RGB data.  */
 bool
 image_data::has_rgb () const
 {
@@ -1492,6 +1545,7 @@ image_data::has_rgb () const
   return rgbdata != NULL;
 }
 
+/* Return true if the image has grayscale or infrared data.  */
 bool
 image_data::has_grayscale_or_ir () const
 {
@@ -1500,6 +1554,9 @@ image_data::has_grayscale_or_ir () const
   return data != NULL;
 }
 
+/* Set dimensions of the image to W x H.
+   If ALLOCATE_RGB is true, allocate RGB data.
+   If ALLOCATE_GRAYSCALE is true, allocate grayscale data.  */
 void
 image_data::set_dimensions (int w, int h, bool allocate_rgb,
                             bool allocate_grayscale)
@@ -1554,7 +1611,9 @@ image_data::set_dimensions (int w, int h, bool allocate_rgb,
   maxval = 65535;
 }
 
-/* Save image to tiff file.  Intended mostly for debugging.  */
+/* Save image to TIFF file FILENAME.  Intended mostly for debugging.
+   PROGRESS is used for progress reporting.
+   Return true on success.  */
 bool
 image_data::save_tiff (const char *filename, progress_info *progress)
 {
@@ -1574,7 +1633,7 @@ image_data::save_tiff (const char *filename, progress_info *progress)
   if (error)
     return false;
   if (progress)
-    progress->set_task ("Writting tiff file", height);
+    progress->set_task ("Writing tiff file", height);
   for (int y = 0; y < height; y++)
     {
       for (int x = 0; x < height; x++)
@@ -1590,6 +1649,7 @@ image_data::save_tiff (const char *filename, progress_info *progress)
 }
 
 
+/* Load EXIF metadata from file NAME.  */
 void
 image_data::load_exif (const char *name)
 {

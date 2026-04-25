@@ -62,7 +62,7 @@ public:
   coord_t exif_xdpi, exif_ydpi;
   stitch_project *stitch;
 
-  /* Begining of the viewport of stitched object.  */
+  /* Beginning of the viewport of stitched object.  */
   int xmin, ymin;
 
   /* Initialize loader for NAME.  Return true on success.
@@ -72,7 +72,7 @@ public:
   /* True if grayscale allocation is needed
      (used after init_loader and before load_part).  */
   DLL_PUBLIC bool allocate_grayscale ();
-  /* True if rgballocation is needed
+  /* True if rgb allocation is needed
      (used after init_loader and before load_part).  */
   DLL_PUBLIC bool allocate_rgb ();
   /* Load part of image. Initialize PERMILLE to status.
@@ -84,7 +84,7 @@ public:
   DLL_PUBLIC bool allocate ();
   /* Load image data from file with auto-detection.  */
   DLL_PUBLIC bool load (const char *name, bool preload_all, const char **error, progress_info *progress = NULL, demosaicing_t demosaic = demosaic_default);
-  /* set dimensions of the image.  This can be used to produce image_data without loading it.  */
+  /* Set dimensions of the image.  This can be used to produce image_data without loading it.  */
   DLL_PUBLIC void set_dimensions (int w, int h,
 				  bool allocate_rgb = false, bool allocate_grayscale = false);
   DLL_PUBLIC bool save_tiff (const char *name, progress_info *progress = NULL);
@@ -105,7 +105,7 @@ public:
   DLL_PUBLIC void set_dpi (coord_t xdpi, coord_t ydpi);
   /* Gamma, -2 if unknown.  */
   luminosity_t gamma;
-  /* Data about camera setup, all -2 if unknown. */
+  /* Data about camera setup, all -2 if unknown.  */
   luminosity_t f_stop;
   luminosity_t focal_plane_x_resolution;
   luminosity_t focal_plane_y_resolution;
@@ -123,7 +123,7 @@ public:
   DLL_PUBLIC void load_exif (const char *name);
 private:
   std::unique_ptr <image_data_loader> loader;
-  /* True of the data is owned by the structure.  */
+  /* True if the data is owned by the structure.  */
   bool own;
   bool m_preload_all;
 
