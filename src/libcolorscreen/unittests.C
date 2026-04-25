@@ -1187,6 +1187,7 @@ test_spectrum_dyes_to_xyz ()
 {
   spectrum_dyes_to_xyz dyes;
   dyes.set_backlight (spectrum_dyes_to_xyz::il_D, 5000);
+  dyes.set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography);
   xyz wp;
   
   bool ok = true;
