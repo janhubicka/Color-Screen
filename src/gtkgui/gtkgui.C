@@ -378,7 +378,7 @@ extern "C"
         "q Q - control age                             v V - tone curve       "
         "             I - ignore/use infrared\n"
         "G   - optimize tile adjustments          ctrl G   - reset tile "
-        "adjustments        w - toggle gammut warning\n");
+        "adjustments        w - toggle gamut warning\n");
   }
 
   /* Render image into the main window.  */
@@ -539,9 +539,9 @@ extern "C"
     if (k == 'w')
       {
         display_scheduled = true;
-        rparams.gammut_warning = !rparams.gammut_warning;
-        printf ("Gammut warning %s\n",
-                rparams.gammut_warning ? "enabled" : "disabled");
+        rparams.gamut_warning = !rparams.gamut_warning;
+        printf ("Gamut warning %s\n",
+                rparams.gamut_warning ? "enabled" : "disabled");
       }
     if (k == 'W')
       {

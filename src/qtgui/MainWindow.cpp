@@ -2954,7 +2954,7 @@ void MainWindow::openRecentParams() {
     // Sync Gamut Warning Button
     if (m_gamutWarningAction) {
       bool signalBlocked = m_gamutWarningAction->blockSignals(true);
-      m_gamutWarningAction->setChecked(m_rparams.gammut_warning);
+      m_gamutWarningAction->setChecked(m_rparams.gamut_warning);
       m_gamutWarningAction->blockSignals(signalBlocked);
     }
 
@@ -3148,8 +3148,8 @@ void MainWindow::updateRegistrationGroupVisibility() {
 }
 
 void MainWindow::onGamutWarningToggled(bool checked) {
-  if (m_rparams.gammut_warning != checked) {
-    m_rparams.gammut_warning = checked;
+  if (m_rparams.gamut_warning != checked) {
+    m_rparams.gamut_warning = checked;
 
     // Trigger update
     if (m_scan) {

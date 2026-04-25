@@ -57,7 +57,7 @@ out_color_adjustments::precompute (render_parameters &m_params,
 				   progress_info *progress)
 {
   m_output_gamma = m_params.output_gamma;
-  m_gamut_warning = m_params.gammut_warning;
+  m_gamut_warning = m_params.gamut_warning;
 
   out_lookup_table_params out_par = { m_dst_maxval, m_params.output_gamma };
   m_out_lookup_table = out_lookup_table_cache.get (out_par, progress);
