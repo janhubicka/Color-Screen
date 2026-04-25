@@ -240,13 +240,13 @@ struct hd_curve
       20
     );
 
-/* Destructor for HD_CURVE.  FREE the arrays if they are owned.  */
+/* Destructor for HD_CURVE.  DELETE[] the arrays if they are owned.  */
 hd_curve::~hd_curve ()
 {
   if (m_owns_memory)
     {
-      free (xs);
-      free (ys);
+      delete[] xs;
+      delete[] ys;
     }
 }
 
@@ -467,15 +467,8 @@ synthetic_hd_curve::synthetic_hd_curve (int points,
   int n1 = dostart ? points : 1;
   n = n1 + (doend ? points : 1);
   m_owns_memory = true;
-  xs = (luminosity_t *)malloc (n * sizeof (*xs));
-  if (!xs)
-    abort ();
-  ys = (luminosity_t *)malloc (n * sizeof (*ys));
-  if (!ys)
-    {
-      free (xs);
-      abort ();
-    }
+  xs = new luminosity_t[n];
+  ys = new luminosity_t[n];
   luminosity_t slope
       = p.linear2y != p.linear1y
             ? (p.linear2x - p.linear1x) / (p.linear2y - p.linear1y)
@@ -582,15 +575,8 @@ richards_hd_curve::richards_hd_curve (int points,
                                       const struct hd_curve_parameters &p)
     : hd_curve (nullptr, nullptr, points, true)
 {
-  xs = (luminosity_t *)malloc (n * sizeof (*xs));
-  if (!xs)
-    abort ();
-  ys = (luminosity_t *)malloc (n * sizeof (*ys));
-  if (!ys)
-    {
-      free (xs);
-      abort ();
-    }
+  xs = new luminosity_t[n];
+  ys = new luminosity_t[n];
 
   richards_curve_parameters rp = hd_to_richards_curve_parameters (p);
   sample (rp, p.minx, p.maxx, rp.is_inverse, p.miny, p.maxy);
@@ -601,15 +587,8 @@ richards_hd_curve::richards_hd_curve (
     int points, const struct richards_curve_parameters &rp)
     : hd_curve (nullptr, nullptr, points, true)
 {
-  xs = (luminosity_t *)malloc (n * sizeof (*xs));
-  if (!xs)
-    abort ();
-  ys = (luminosity_t *)malloc (n * sizeof (*ys));
-  if (!ys)
-    {
-      free (xs);
-      abort ();
-    }
+  xs = new luminosity_t[n];
+  ys = new luminosity_t[n];
 
   sample (rp, std::min (rp.A, rp.K), std::max (rp.A, rp.K));
 }
