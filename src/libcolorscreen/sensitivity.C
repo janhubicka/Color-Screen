@@ -1,3 +1,7 @@
+/* Characteristic curves and sensitivity models for film and digital sensors.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #include <include/sensitivity.h>
 namespace colorscreen
 {
@@ -236,6 +240,16 @@ struct hd_curve
       20
     );
 
+/* Destructor for HD_CURVE.  FREE the arrays if they are owned.  */
+hd_curve::~hd_curve ()
+{
+  if (m_owns_memory)
+    {
+      free (xs);
+      free (ys);
+    }
+}
+
 /* exposure is 5000/65535....5000 linear that is  -inf to 3.69 */
 struct hd_curve film_sensitivity::linear_sensitivity (
 #if 0
@@ -452,8 +466,16 @@ synthetic_hd_curve::synthetic_hd_curve (int points,
       = p.minx <= p.linear1x && p.linear1x < p.linear2x && p.linear2x < p.maxx;
   int n1 = dostart ? points : 1;
   n = n1 + (doend ? points : 1);
+  m_owns_memory = true;
   xs = (luminosity_t *)malloc (n * sizeof (*xs));
+  if (!xs)
+    abort ();
   ys = (luminosity_t *)malloc (n * sizeof (*ys));
+  if (!ys)
+    {
+      free (xs);
+      abort ();
+    }
   luminosity_t slope
       = p.linear2y != p.linear1y
             ? (p.linear2x - p.linear1x) / (p.linear2y - p.linear1y)
@@ -558,10 +580,17 @@ richards_hd_curve::eval_richards (const richards_curve_parameters &p,
 /* Initialize Richards curve by sampling POINTS from HD_CURVE_PARAMETERS P.  */
 richards_hd_curve::richards_hd_curve (int points,
                                       const struct hd_curve_parameters &p)
+    : hd_curve (nullptr, nullptr, points, true)
 {
-  n = points;
   xs = (luminosity_t *)malloc (n * sizeof (*xs));
+  if (!xs)
+    abort ();
   ys = (luminosity_t *)malloc (n * sizeof (*ys));
+  if (!ys)
+    {
+      free (xs);
+      abort ();
+    }
 
   richards_curve_parameters rp = hd_to_richards_curve_parameters (p);
   sample (rp, p.minx, p.maxx, rp.is_inverse, p.miny, p.maxy);
@@ -570,10 +599,17 @@ richards_hd_curve::richards_hd_curve (int points,
    RICHARDS_CURVE_PARAMETERS RP.  */
 richards_hd_curve::richards_hd_curve (
     int points, const struct richards_curve_parameters &rp)
+    : hd_curve (nullptr, nullptr, points, true)
 {
-  n = points;
   xs = (luminosity_t *)malloc (n * sizeof (*xs));
+  if (!xs)
+    abort ();
   ys = (luminosity_t *)malloc (n * sizeof (*ys));
+  if (!ys)
+    {
+      free (xs);
+      abort ();
+    }
 
   sample (rp, std::min (rp.A, rp.K), std::max (rp.A, rp.K));
 }

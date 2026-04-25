@@ -1,9 +1,14 @@
+/* Characteristic curves and sensitivity models for film and digital sensors.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #ifndef SENSITIVITY_H
 #define SENSITIVITY_H
 #include "color.h"
 #include "dllpublic.h"
 #include <cmath>
 #include <tuple>
+#include <algorithm>
 namespace colorscreen
 {
 /* Hurter–Driffield characteristic curve based on data points
@@ -11,21 +16,26 @@ namespace colorscreen
 struct hd_curve
 {
   /* x coordinates of measured values  */
-  luminosity_t *xs;
+  luminosity_t *xs = nullptr;
   /* y coordinates of measured values  */
-  luminosity_t *ys;
+  luminosity_t *ys = nullptr;
   /* Number of points.  */
-  int n;
-  /* Constructor for HD_CURVE.  Initialize with arrays of XS and YS of length
-     N.  */
-  constexpr hd_curve (luminosity_t *new_xs, luminosity_t *new_ys, int new_n)
-    : xs (new_xs), ys (new_ys), n (new_n)
+  int n = 0;
+  /* If true, memory for XS and YS is owned and should be freed.  */
+  bool m_owns_memory = false;
+
+  /* Constructor for HD_CURVE.  Initialize with arrays of NEW_XS and NEW_YS of
+     length NEW_N.  If OWNS is true, the arrays are owned by the class.  */
+  constexpr hd_curve (luminosity_t *new_xs, luminosity_t *new_ys, int new_n,
+                      bool owns = false)
+    : xs (new_xs), ys (new_ys), n (new_n), m_owns_memory (owns)
   {
   }
   /* Default constructor for HD_CURVE.  */
-  constexpr hd_curve () : xs (nullptr), ys (nullptr), n (0)
-  {
-  }
+  constexpr hd_curve () = default;
+
+  /* Destructor for HD_CURVE.  Frees memory if owned.  */
+  DLL_PUBLIC virtual ~hd_curve ();
 
   /* Return density for given exposure IN.  */
   luminosity_t
@@ -92,20 +102,20 @@ interpolate (luminosity_t n1, luminosity_t n2, luminosity_t perc)
 struct richards_curve_parameters
 {
   /* Lower asymptote. In direct mode, this represents the minimal density.  */
-  luminosity_t A;
+  luminosity_t A = 0;
   /* Upper asymptote. In direct mode, this represents the maximal density.  */
-  luminosity_t K;
+  luminosity_t K = 0;
   /* Growth rate or slope factor. Controls the steepness of the curve.  */
-  luminosity_t B;
+  luminosity_t B = 0;
   /* Horizontal shift or offset. Corresponds to the center of the linear
    * region.  */
-  luminosity_t M;
+  luminosity_t M = 0;
   /* Asymmetry parameter. Controls where the inflection point occurs relative
      to the asymptotes. v=1 gives the standard symmetric logistic curve.  */
-  luminosity_t v;
+  luminosity_t v = 1;
   /* If true, the curve defines X as a function of Y. This helps maintain
      numerical stability for extremely steep characteristic curves.  */
-  bool is_inverse;
+  bool is_inverse = false;
 
   constexpr richards_curve_parameters (luminosity_t new_A, luminosity_t new_K,
                                        luminosity_t new_B, luminosity_t new_M,
@@ -114,6 +124,7 @@ struct richards_curve_parameters
         is_inverse (new_inverse)
   {
   }
+  constexpr richards_curve_parameters () = default;
 
   bool
   operator== (const richards_curve_parameters &o) const
@@ -317,12 +328,9 @@ extern DLL_PUBLIC struct hd_curve_parameters safe_output_curve_params,
 class synthetic_hd_curve : public hd_curve
 {
 public:
-  synthetic_hd_curve (int points, struct hd_curve_parameters p);
-  ~synthetic_hd_curve ()
-  {
-    free (xs);
-    free (ys);
-  }
+  /* Initialize synthetic HD curve with given number of POINTS and
+     parameters P.  */
+  DLL_PUBLIC synthetic_hd_curve (int points, struct hd_curve_parameters p);
 };
 
 /* Produce a Richard's HD curve.  */
@@ -338,11 +346,6 @@ public:
 
   DLL_PUBLIC richards_hd_curve (int points,
                                 const struct richards_curve_parameters &rp);
-  ~richards_hd_curve ()
-  {
-    free (xs);
-    free (ys);
-  }
 
 private:
   void sample (const richards_curve_parameters &p, luminosity_t min_x,
