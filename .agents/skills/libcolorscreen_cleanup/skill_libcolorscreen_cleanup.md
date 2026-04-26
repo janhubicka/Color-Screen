@@ -51,7 +51,7 @@ Do **not mass reformat** while files; we can do that in a separate commit.
 - **Error Handling**: Functions returning `bool` as an error indicator must have their return values checked by the caller. Systematically identify and fix missing checks.
 
 ## 3. API andinternal datastructures cleanups
-- **Use rgbdata, int_rgbdata, point_t and int_point_t**: Suggest changes to use `rgbdata`, `int_rgbdata`, `point_t` and `int_point_t` to pass and return values that are rgb and points of a given type. Always ask in plan. Pass by value; use const modifiers where appropriate.  The datastructures provides standard operations (addition, scalar multiplication etc). Update existing code to use it. Also update code that uses separate variables such as `x`, `y`, `r`, `g`, `b` to use corresponding new type. `base.h and `color.h` provides various operations on colors and points/vector. Use them rather than doing everything by hand.
+- **Use rgbdata, int_rgbdata, point_t and int_point_t**: Suggest changes to use `rgbdata`, `int_rgbdata`, `point_t` and `int_point_t` to pass and return values that are rgb and points of a given type. Always ask in plan. Pass by value; use const modifiers where appropriate.  The datastructures provides standard operations (addition, scalar multiplication etc). Update existing code to use it. Also update code that uses separate variables such as `x`, `y`, `r`, `g`, `b` to use corresponding new type. `base.h` and `color.h` provides various operations on colors and points/vector. Use them rather than doing everything by hand.
 - **typos in identifiers**: Suggest fixes for typos in identifier names. Use `snake_case`.
 - **int_image_area**: Use `int_image_area` instead of `xshit/yship/width/height`. Keep in mind that the constructor is `{left, top, width, height}`. Code often uses `xmin` for `left`, `ymin` for `top`. `xshift=-xmin` and `yshit=-ymin`. `base.h` provides various operations and checks on areas. Use them rather than doing everything by hand. Always ask in plan.
 
@@ -61,7 +61,8 @@ Do **not mass reformat** while files; we can do that in a separate commit.
 
 ## 3. Template & Performance Modernization
 
-- **Constancy**: Proactively add missing `const`, `constexpr`, `pure_attr`, and `const_attr` to functions, function parameters and variables where possible.
+- **Constancy**: Proactively add missing `const`, `constexpr` to functions, variables and functions parameters.
+- **attributes**: Add `pure_attr`, and `const_attr` to functions where this property can not be easily determined by the compiler (it is exported in header)
 - **OpenMP**: Identify opportunities for parallelization. Suggest OpenMP improvements (e.g., `#pragma omp parallel for`) in the implementation plan.
 - **noexcept**: Mark API functions as `noexcept` where possible. Do not do that in case compiler can work it out itself (anonymous namespace and inline). Always ask in plan.
 - **pure_attr**, **const_attr**: Suggest use of these attributes in performance critical functions. Always ask in plan.
