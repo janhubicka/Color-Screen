@@ -90,16 +90,16 @@ public:
   /* Access green channel luminosity at (X, Y).  */
   pure_attr inline luminosity_t & green (int x, int y) noexcept
     {
-      x = std::min (std::max (x, 0), (m_area.width << m_ghscl) - 1);
-      y = std::min (std::max (y, 0), (m_area.height << m_bhscl) - 1);
+      x = std::min (std::max (x, 0), (m_area.width << m_gwscl) - 1);
+      y = std::min (std::max (y, 0), (m_area.height << m_ghscl) - 1);
       return m_green [y * (m_area.width << m_gwscl) + x];
     }
 
   /* Access green channel luminosity at (X, Y) (const version).  */
   pure_attr inline luminosity_t green (int x, int y) const noexcept
     {
-      x = std::min (std::max (x, 0), (m_area.width << m_ghscl) - 1);
-      y = std::min (std::max (y, 0), (m_area.height << m_bhscl) - 1);
+      x = std::min (std::max (x, 0), (m_area.width << m_gwscl) - 1);
+      y = std::min (std::max (y, 0), (m_area.height << m_ghscl) - 1);
       return m_green [y * (m_area.width << m_gwscl) + x];
     }
 
@@ -138,16 +138,16 @@ public:
   /* Access green channel RGB data at (X, Y).  */
   pure_attr inline rgbdata & rgb_green (int x, int y) noexcept
     {
-      x = std::min (std::max (x, 0), (m_area.width << m_ghscl) - 1);
-      y = std::min (std::max (y, 0), (m_area.height << m_bhscl) - 1);
+      x = std::min (std::max (x, 0), (m_area.width << m_gwscl) - 1);
+      y = std::min (std::max (y, 0), (m_area.height << m_ghscl) - 1);
       return m_rgb_green [y * (m_area.width << m_gwscl) + x];
     }
 
   /* Access green channel RGB data at (X, Y) (const version).  */
   pure_attr inline rgbdata rgb_green (int x, int y) const noexcept
     {
-      x = std::min (std::max (x, 0), (m_area.width << m_ghscl) - 1);
-      y = std::min (std::max (y, 0), (m_area.height << m_bhscl) - 1);
+      x = std::min (std::max (x, 0), (m_area.width << m_gwscl) - 1);
+      y = std::min (std::max (y, 0), (m_area.height << m_ghscl) - 1);
       return m_rgb_green [y * (m_area.width << m_gwscl) + x];
     }
 
@@ -198,8 +198,8 @@ public:
   /* Return average green channel luminosity at patch (X, Y).  */
   pure_attr inline luminosity_t green_avg (int x, int y) const noexcept
     {
-      x = std::min (std::max (x, 0), (m_area.width << m_gwscl) - 1);
-      y = std::min (std::max (y, 0), (m_area.height << m_ghscl) - 1);
+      x = std::min (std::max (x, 0), (m_area.width) - 1);
+      y = std::min (std::max (y, 0), (m_area.height) - 1);
       if (!m_ghscl)
 	{
 	  if (!m_gwscl)
@@ -720,7 +720,7 @@ analyze_base_worker<GEOMETRY>::populate_demosaiced_data (std::vector<rgbdata> &d
 
   /* Step 1: Populate demosaic with the mosaiced data.
      Each pixel gets only its known channel value; others remain 0.  */
-#pragma omp parallel shared(progress,area,r,demosaic) default(none)
+#pragma omp parallel for shared(progress,area,r,demosaic) default(none)
   for (int y = 0; y < area.height; y++)
     {
       if (!progress || !progress->cancel_requested ())

@@ -824,7 +824,7 @@ analyze_base_worker<GEOMETRY>::analyze_fast (render_to_scr *render,
 {
   int size2 = (openmp_min_size + m_area.width - 1) / m_area.width;
 #pragma omp parallel for default(none)                                        \
-    shared(progress, render, size2) if (size2 > m_area.height)
+    shared(progress, render, size2) if (m_area.height > size2)
   for (int y = 0; y < m_area.height; y++)
     {
       if (!progress || !progress->cancel_requested ())
