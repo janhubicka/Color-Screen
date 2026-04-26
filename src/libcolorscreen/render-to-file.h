@@ -1,64 +1,110 @@
+/* Render to file implementation for libcolorscreen.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #include <atomic>
 #include "include/tiff-writer.h"
+
 namespace colorscreen
 {
 namespace
 {
 
+/* Coordinate Systems:
+   - Image Coordinates: Raw coordinates in the source digitized scan.
+   - Screen Coordinates: Coordinates on the simulated screen filter overlay.
+   - Final Coordinates: Screen coordinates after final geometric transformations
+     (scaling, rotation, skewing) for the output image.  */
 
+/** Sample pixel from rendering engine RENDER at FINAL coordinates X, Y
+    translated to image coordinates via MAP.
+    FINAL_XSHIFT and FINAL_YSHIFT are offsets in final coordinates.  */
 template<typename T>
 inline rgbdata
-sample_data_final_by_img (T &render, scr_to_img &map,coord_t x, coord_t y, int final_xshift, int final_yshift)
+sample_data_final_by_img (T &render, scr_to_img &map, coord_t x, coord_t y, int final_xshift, int final_yshift)
 {
   point_t p = map.final_to_img ({x - final_xshift, y - final_yshift});
   return render.sample_pixel_img (p);
 }
+
+/** Sample pixel from rendering engine RENDER at FINAL coordinates X, Y
+    translated to screen coordinates via MAP.
+    FINAL_XSHIFT and FINAL_YSHIFT are offsets in final coordinates.  */
 template<typename T>
 inline rgbdata
-sample_data_final_by_scr (T &render, scr_to_img &map,coord_t x, coord_t y, int final_xshift, int final_yshift)
+sample_data_final_by_scr (T &render, scr_to_img &map, coord_t x, coord_t y, int final_xshift, int final_yshift)
 {
   point_t p = map.final_to_scr ({x - final_xshift, y - final_yshift});
   return render.sample_pixel_scr (p);
 }
+
+/** Sample pixel from rendering engine RENDER at FINAL coordinates X, Y
+    directly in final coordinates.  */
 template<typename T>
 inline rgbdata
-sample_data_final_by_final (T &render, scr_to_img &,coord_t x, coord_t y, int final_xshift, int final_yshift)
+sample_data_final_by_final (T &render, scr_to_img &, coord_t x, coord_t y, int, int)
 {
   return render.sample_pixel_final ({x, y});
 }
+
+/** Sample pixel from rendering engine RENDER at SCREEN coordinates X, Y
+    directly in screen coordinates.  */
 template<typename T>
 inline rgbdata
-sample_data_scr_by_scr (T &render, scr_to_img &map,coord_t x, coord_t y)
+sample_data_scr_by_scr (T &render, scr_to_img &, coord_t x, coord_t y)
 {
   return render.sample_pixel_scr ({x, y});
 }
+
+/** Sample pixel from rendering engine RENDER at SCREEN coordinates X, Y
+    translated to image coordinates via MAP.  */
 template<typename T>
 inline rgbdata
-sample_data_scr_by_img (T &render, scr_to_img &map,coord_t x, coord_t y)
+sample_data_scr_by_img (T &render, scr_to_img &map, coord_t x, coord_t y)
 {
   point_t p = map.to_img ({x, y});
   return render.sample_pixel_img (p);
 }
 
+/* Sampling Policy Macros:
+   These macros are used as template arguments to produce_file to select
+   the appropriate sampling functions based on rendering engine capabilities.
+   Each macro provides two functions:
+   1. Final coordinate sampler.
+   2. Screen coordinate sampler.  */
+
+/* Engine supports sampling in final coordinates directly.  */
 #define supports_final sample_data_final_by_final, sample_data_scr_by_scr
+/* Engine supports sampling in screen coordinates; map from final to screen.  */
 #define supports_scr sample_data_final_by_scr, sample_data_scr_by_scr
+/* Engine supports sampling in image coordinates; map from final/screen to image.  */
 #define supports_img sample_data_final_by_img, sample_data_scr_by_img
 
+/** Core function to render an image to a TIFF file.
+    P - rendering parameters.
+    PARAM - screen to image parameters.
+    IMG - source image data.
+    RENDER - rendering engine instance.
+    BLACK - black level for DNG output.
+    PROGRESS - progress reporting object.  */
 template<typename T, rgbdata (sample_data_final)(T &render, scr_to_img &map, coord_t x, coord_t y, int, int), rgbdata (sample_data_scr)(T &render, scr_to_img &map, coord_t x, coord_t y)>
 const char *
 produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data &img, T &render, int black, progress_info *progress)
 {
-  const char *error = NULL;
+  const char *error = nullptr;
   scr_to_img map;
-  int final_xshift = 0, final_yshift = 0, final_width = img.width,
-      final_height = img.height;
+  int_image_area final_range (0, 0, img.width, img.height);
+
   if (p.geometry == render_to_file_params::screen_geometry)
     {
-      map.set_parameters (param, img);
-      int_image_area range = map.get_final_range (img.width, img.height);
-      final_xshift = range.xshift (), final_yshift = range.yshift (),
-      final_width = range.width, final_height = range.height;
+      if (!map.set_parameters (param, img))
+	return "Screen parameters out of range";
+      final_range = map.get_final_range (img.width, img.height);
     }
+
+  int final_xshift = final_range.x, final_yshift = final_range.y,
+      final_width = final_range.width, final_height = final_range.height;
+
   tiff_writer_params tp;
   tp.parallel = true;
   tp.filename = p.filename;
@@ -66,12 +112,12 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
   tp.height = p.height;
   if (p.dng)
     {
-      p.depth=16;
+      p.depth = 16;
       p.hdr = false;
       tp.dng = true; 
       // TODO: Handle normalized patches and screen proportions correctly.
-      tp.dye_to_xyz = render.get_rgb_to_xyz_matrix (true, {1/3.0,1/3.0,1/3.0});
-      tp.black= black;
+      tp.dye_to_xyz = render.get_rgb_to_xyz_matrix (true, {1/3.0, 1/3.0, 1/3.0});
+      tp.black = black;
     }
   tp.hdr = p.hdr;
   tp.depth = p.depth;
@@ -87,7 +133,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
       tp.alpha = true;
     }
   if (progress)
-    progress->set_task ("Opening tiff file", 1);
+    progress->set_task ("opening tiff file", 1);
   tiff_writer out(tp, &error);
   if (error)
     return error;
@@ -99,7 +145,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 	      p.height, p.depth,
 	      render_to_file_params::geometry_names [(int)p.geometry].pretty_name);
       if (p.antialias)
-	printf (", antialias %ix%i", p.antialias,p.antialias);
+	printf (", antialias %ix%i", p.antialias, p.antialias);
       if (p.hdr)
 	printf (", HDR");
       if (p.xdpi && p.xdpi == p.ydpi)
@@ -117,13 +163,14 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
         progress->resume_stdout ();
     }
   if (progress)
-    progress->set_task ("Rendering and saving", p.height * 2);
+    progress->set_task ("rendering and saving", p.height * 2);
+
   for (int y = 0; y < p.height;)
     {
       if (p.antialias == 1)
 	{
 	  if (p.tile)
-#pragma omp parallel for default(none) shared(p,render,y,out,map,progress) collapse (2)
+#pragma omp parallel for default(none) shared(p, render, y, out, map, progress) collapse (2)
 	    for (int row = 0; row < out.get_n_rows (); row++)
 	      for (int x = 0; x < p.width; x++)
 		{
@@ -154,7 +201,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		    progress->inc_progress ();
 		}
 	  else if (p.geometry == render_to_file_params::screen_geometry)
-#pragma omp parallel for default(none) shared(p,render,y,out,map,final_xshift, final_yshift,progress) collapse (2)
+#pragma omp parallel for default(none) shared(p, render, y, out, map, final_xshift, final_yshift, progress) collapse (2)
 	    for (int row = 0; row < out.get_n_rows (); row++)
 	      for (int x = 0; x < p.width; x++)
 		{
@@ -175,13 +222,12 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		    progress->inc_progress ();
 		}
 	  else
-#pragma omp parallel for default(none) shared(p,render,y,out,final_xshift, final_yshift,progress) collapse (2)
+#pragma omp parallel for default(none) shared(p, render, y, out, final_xshift, final_yshift, progress) collapse (2)
 	    for (int row = 0; row < out.get_n_rows (); row++)
 	      for (int x = 0; x < p.width; x++)
 		{
 		  coord_t xx = x * p.xstep + p.xstart;
 		  coord_t yy = (y + row) * p.ystep + p.ystart;
-		  //rgbdata d = render.sample_pixel_img (xx - final_xshift + 0.5, yy - final_yshift + 0.5);
 		  rgbdata d = render.fast_sample_pixel_img ({(int)(xx - final_xshift), (int)(yy - final_yshift)});
 		  if (!p.hdr)
 		    {
@@ -203,7 +249,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 	  coord_t asy = p.ystep / p.antialias;
 	  luminosity_t sc = 1.0 / (p.antialias * p.antialias);
 	  if (p.tile)
-#pragma omp parallel for default(none) shared(p,render,y,out,asx,asy,sc,map,final_xshift, final_yshift,progress) collapse (2)
+#pragma omp parallel for default(none) shared(p, render, y, out, asx, asy, sc, map, final_xshift, final_yshift, progress) collapse (2)
 	    for (int row = 0; row < out.get_n_rows (); row++)
 	      for (int x = 0; x < p.width; x++)
 		{
@@ -223,7 +269,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 			for (int ax = 0 ; ax < p.antialias; ax++)
 			  {
 			    scr = p.common_map->final_to_scr ({finalp.x + (ax + 0.5) * asx, finalp.y + (ay + 0.5) * asy}) - (point_t){p.xpos, p.ypos};
-			    d += sample_data_scr (render, map, scr.x /*+ ax * asx*/, scr.y /*+ ay * asy*/);
+			    d += sample_data_scr (render, map, scr.x, scr.y);
 			  }
 		      d.red *= sc;
 		      d.green *= sc;
@@ -243,7 +289,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		    progress->inc_progress ();
 		}
 	  else if (p.geometry == render_to_file_params::screen_geometry)
-#pragma omp parallel for default(none) shared(p,render,y,out,asx,asy,sc,map,final_xshift,final_yshift,progress) collapse (2)
+#pragma omp parallel for default(none) shared(p, render, y, out, asx, asy, sc, map, final_xshift, final_yshift, progress) collapse (2)
 	    for (int row = 0; row < out.get_n_rows (); row++)
 	      for (int x = 0; x < p.width; x++)
 		{
@@ -269,8 +315,8 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		  if (x == p.width - 1 && progress)
 		    progress->inc_progress ();
 		}
-         else
-#pragma omp parallel for default(none) shared(p,render,y,out,asx,asy,sc,final_xshift,final_yshift,progress) collapse (2)
+	  else
+#pragma omp parallel for default(none) shared(p, render, y, out, asx, asy, sc, final_xshift, final_yshift, progress) collapse (2)
 	    for (int row = 0; row < out.get_n_rows (); row++)
 	      for (int x = 0; x < p.width; x++)
 		{
@@ -296,19 +342,23 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		  if (x == p.width - 1 && progress)
 		    progress->inc_progress ();
 		}
-	    }
+	}
       y += out.get_n_rows ();
-      bool ret;
-      ret = out.write_rows (progress);
+      bool ret = out.write_rows (progress);
       if (progress && progress->cancel_requested ())
 	return "Cancelled";
       if (!ret)
 	return "Write error";
     }
   if (progress)
-    progress->set_task ("Closing tiff file", 1);
-  return NULL;
+    progress->set_task ("closing tiff file", 1);
+  return nullptr;
 }
+
+/** Wrapper function to instantiate rendering engine and call produce_file.
+    T - rendering engine type.
+    SAMPLE_DATA_FINAL, SAMPLE_DATA_SCR - sampling policy functions.
+    P - implementation-specific parameters for T.  */
 template<typename T, rgbdata (sample_data_final)(T &render, scr_to_img &map, coord_t x, coord_t y, int, int), rgbdata (sample_data_scr)(T &render, scr_to_img &map, coord_t x, coord_t y), typename P>
 const char *
 produce_file (render_to_file_params &rfparams,

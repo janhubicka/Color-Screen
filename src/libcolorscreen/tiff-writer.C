@@ -1,8 +1,15 @@
+/* TIFF writer for libcolorscreen.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #include <stdlib.h>
+#include <cstdio>
 #include "include/tiff-writer.h"
 #include "include/progress-info.h"
+
 extern const unsigned char sRGB_icc[];
 extern const unsigned int sRGB_icc_len;
+
 namespace colorscreen
 {
 /* Needed to build at ubuntu-latest.  */
@@ -18,9 +25,11 @@ static const TIFFFieldInfo tiffFields[] = {
 	{TIFFTAG_PROFILETONECURVE, -1, -1, TIFF_SRATIONAL, FIELD_CUSTOM, 1, 1, (char *)"ToneCurve"},
 };
     /* end DNG tags */
+/** Initialize TIFF writer with parameters P.
+    If error occurs, ERROR is set to a descriptive string.  */
 tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
 {
-  *error = NULL;
+  *error = nullptr;
   if (p.hdr)
     {
       if (p.depth == 16)
@@ -29,7 +38,7 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
 	pixel_format = !p.alpha ? pixel_32bit_hdr : pixel_16bit_hdr_alpha;
       else
 	{
-	  *error = "unduported bit depth in HDR tiff file";
+	  *error = "unsupported bit depth in HDR tiff file";
 	  return;
 	}
     }
@@ -41,17 +50,16 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
 	pixel_format = !p.alpha ? pixel_16bit : pixel_16bit_alpha;
       else
 	{
-	  *error = "unduported bit depth in HDR tiff file";
+	  *error = "unsupported bit depth in TIFF file";
 	  return;
 	}
     }
   out = TIFFOpen (p.filename, "wb");
-  outrow = 0;
   y = 0;
   
   if (!out)
     {
-      *error = "can not open tiff file";
+      *error = "cannot open tiff file";
       return;
     }
   static uint16_t extras[] = {EXTRASAMPLE_UNASSALPHA};
@@ -74,7 +82,7 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
     {
       *error = "write error";
       TIFFClose (out);
-      out = NULL;
+      out = nullptr;
       return;
     }
   if (!p.dng)
@@ -84,7 +92,7 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
        {
 	 *error = "write error";
 	 TIFFClose (out);
-	 out = NULL;
+	 out = nullptr;
 	 return;
        }
    }
@@ -97,7 +105,7 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
 	{
 	  *error = "write error";
 	  TIFFClose (out);
-	  out = NULL;
+	  out = nullptr;
 	  return;
 	}
     }
@@ -114,15 +122,11 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
         (float)m(0, 0), (float)m(0, 1), (float)m(0, 2),
         (float)m(1, 0), (float)m(1, 1), (float)m(1, 2),
         (float)m(2, 0), (float)m(2, 1), (float)m(2, 2)};
-      ///*= { /*0.807133, 1.0, 0.913289*/ };
-      //luminosity_t n0, n1, n2;
-      //p.dye_to_xyz.apply_to_rgb (1,1,1, &n0, &n1, &n2);
-      //float neutral[3] = {(float)n0, (float)n1, (float)n2};
-      float neutral[3] = {1,1,1};
-      //float neutralxy[2] =
-      float tonecurve[] = {0,0,1,1};
-      short black[] = {(short)p.black, (short)p.black, (short)p.black, (short)p.black};
-      printf ("Black :%i\n", p.black);
+      float neutral[3] = {1, 1, 1};
+      float tonecurve[] = {0, 0, 1, 1};
+      short black_level[] = {(short)p.black, (short)p.black, (short)p.black, (short)p.black};
+      if (p.parallel)
+	printf ("Black level: %i\n", p.black);
       /* TODO: Thumbnail should be subfiletype 1.  */
       if (!TIFFSetField (out, TIFFTAG_SUBFILETYPE, 0)
 	  || !TIFFSetField (out, TIFFTAG_DNGVERSION, "\001\004\0\0")
@@ -134,13 +138,13 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
 	  || !TIFFSetField (out, TIFFTAG_MODEL, "Really old camera")
 	  || !TIFFSetField (out, TIFFTAG_UNIQUECAMERAMODEL, "Long forgotten")
 	  || !TIFFSetField (out, TIFFTAG_CALIBRATIONILLUMINANT1, 21 /*21 is D65, 17 is IL A*/)
-	  || !TIFFSetField (out, TIFFTAG_BLACKLEVEL, samplesperpixel, &black)
+	  || !TIFFSetField (out, TIFFTAG_BLACKLEVEL, samplesperpixel, &black_level)
 	  || !TIFFSetField (out, TIFFTAG_WHITELEVEL, samplesperpixel, &white)
-	  || !TIFFSetField (out, TIFFTAG_PROFILETONECURVE, 4,tonecurve))
+	  || !TIFFSetField (out, TIFFTAG_PROFILETONECURVE, 4, tonecurve))
 	{
 	  *error = "write error";
 	  TIFFClose (out);
-	  out = NULL;
+	  out = nullptr;
 	  return;
 	}
     }
@@ -157,15 +161,10 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
     }
   else
     n_rows = 1;
-  outrow = malloc (bytestride * n_rows);
-  if (!outrow)
-    {
-      *error = "Out of memory allocating output buffer";
-      TIFFClose (out);
-      out = NULL;
-      return;
-    }
+  outrow = std::make_unique<uint8_t[]> (bytestride * n_rows);
 }
+/** Write multiple rows to the file, reporting progress via PROGRESS.
+    Returns true on success.  */
 bool
 tiff_writer::write_rows (progress_info *progress)
 {
@@ -173,10 +172,10 @@ tiff_writer::write_rows (progress_info *progress)
     {
       if (progress && progress->cancel_requested ())
 	return false;
-      if (TIFFWriteScanline (out, (void *)((char *)outrow + bytestride * i), y++, 0) < 0)
+      if (TIFFWriteScanline (out, (void *)(outrow.get () + bytestride * i), y++, 0) < 0)
 	{
 	  TIFFClose (out);
-	  out = NULL;
+	  out = nullptr;
 	  return false;
 	}
       if (progress)
@@ -187,22 +186,21 @@ tiff_writer::write_rows (progress_info *progress)
     n_rows = height - y;
   return true;
 }
+/** Write current row to the file.  Returns true on success.  */
 bool
 tiff_writer::write_row ()
 {
   assert (!colorscreen_checking || get_n_rows () == 1);
   return write_rows ();
 }
+/** Finalize TIFF file and free resources.  */
 tiff_writer::~tiff_writer()
 {
-  //progress->set_task ("Closing tile output file", 1);
   if (out)
     {
       TIFFWriteDirectory(out);
       TIFFClose (out);
     }
-  out = NULL;
-  free (outrow);
-  outrow = NULL;
+  out = nullptr;
 }
 }

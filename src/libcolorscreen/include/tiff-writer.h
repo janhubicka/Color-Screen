@@ -1,12 +1,20 @@
+/* TIFF writer for libcolorscreen.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #ifndef TIFFWRITER_H
 #define TIFFWRITER_H
 #include <tiffio.h>
+#include <memory>
 #include "base.h"
 #include "color.h"
 #include "dllpublic.h"
+
 namespace colorscreen {
 class progress_info;
 
+/** Convert a 32-bit float F to a 16-bit half-precision float.
+    This is used for HDR TIFF output when 16-bit depth is requested.  */
 inline uint16_t
 float_to_half (float f)
 {
@@ -50,92 +58,112 @@ float_to_half (float f)
   return (uint16_t)(lsign | (exponent << 10) | (mantissa >> 13));
 }
 
+/** Parameters for tiff_writer class.  */
 struct tiff_writer_params
 {
   /* Fields that must be always filled in.  */
-  const char *filename;
-  int width, height;
+  const char *filename = nullptr;
+  int width = 0;
+  int height = 0;
   /* Depth will always default to 16bit.  */
-  int depth;
+  int depth = 16;
   /* DPI.  0 means unknown.  */
-  double xdpi, ydpi;
+  double xdpi = 0;
+  double ydpi = 0;
   /* True if alpha channel should be used.  Defaults to false.  */
-  bool alpha;
+  bool alpha = false;
   /* True if HDR should be used.  Defaults to false.  */
-  bool hdr;
+  bool hdr = false;
   /* True if we xoffset and yoffset should be stored in file.  */
-  bool tile;
-  /* ICC profile.  NULL will lead to embedding sRGB.  */
-  const void *icc_profile;
-  size_t icc_profile_len;
+  bool tile = false;
+  /* ICC profile.  nullptr will lead to embedding sRGB.  */
+  const void *icc_profile = nullptr;
+  size_t icc_profile_len = 0;
   /* Offset of the tile.  */
-  int xoffset, yoffset;
-  bool dng;
+  int xoffset = 0;
+  int yoffset = 0;
+  bool dng = false;
   color_matrix dye_to_xyz;
-  int black;
-  /* True if parlallelism is done.  In this case multiple rows will be
+  int black = 0;
+  /* True if parallelism is done.  In this case multiple rows will be
      written at once.  */
-  bool parallel;
-  tiff_writer_params ()
-      : filename (NULL), width (0), height (0), depth (16), xdpi (0), ydpi (0),
-        alpha (false), hdr (false), tile (false), icc_profile (NULL),
-        icc_profile_len (0), dng (false), black (0), parallel (false)
-  {
-  }
+  bool parallel = false;
+
+  tiff_writer_params () = default;
 };
+
+/** Class to write TIFF files, possibly in parallel.  */
 class tiff_writer
 {
 public:
+  /** Initialize TIFF writer with parameters P.
+      If error occurs, ERROR is set to a descriptive string.  */
   DLL_PUBLIC tiff_writer (tiff_writer_params &p, const char **error);
   DLL_PUBLIC ~tiff_writer ();
+
+  /** Write current row to the file.  Returns true on success.  */
   DLL_PUBLIC bool write_row ();
-  DLL_PUBLIC bool write_rows (progress_info *progress = NULL);
+
+  /** Write multiple rows to the file, reporting progress via PROGRESS.
+      Returns true on success.  */
+  DLL_PUBLIC bool write_rows (progress_info *progress = nullptr);
+
+  /** Return number of rows in the buffer.  */
   int
-  get_n_rows ()
+  get_n_rows () const
   {
     return n_rows;
   }
 
-  /* API exists in two forms.  For users which sets parallel == false
-     we do not need to know row number since there is always 1.
-     For users supporting prallelism we have extra paraleter specifying
-     row.  */
+  /** Return pointer to 16-bit row data for row N.  */
   uint16_t *
   row16bit (int n)
   {
     assert (!colorscreen_checking || ((n >= 0) && (n <= get_n_rows ())));
-    return ((uint16_t *)outrow + stride * n);
+    return ((uint16_t *)outrow.get () + stride * n);
   }
+
+  /** Return pointer to 16-bit row data for the only row in buffer.  */
   uint16_t *
   row16bit ()
   {
     assert (!colorscreen_checking || get_n_rows () == 1);
     return (row16bit (0));
   }
+
+  /** Return pointer to 8-bit row data for row N.  */
   uint8_t *
   row8bit (int n)
   {
     assert (!colorscreen_checking || ((n >= 0) && (n <= get_n_rows ())));
-    return ((uint8_t *)outrow + stride * n);
+    return ((uint8_t *)outrow.get () + stride * n);
   }
+
+  /** Return pointer to 8-bit row data for the only row in buffer.  */
   uint8_t *
   row8bit ()
   {
     assert (!colorscreen_checking || get_n_rows () == 1);
     return (row8bit (0));
   }
+
+  /** Return pointer to 32-bit float row data for row N.  */
   float *
   row32bit_float (int n)
   {
     assert (!colorscreen_checking || ((n >= 0) && (n <= get_n_rows ())));
-    return ((float *)outrow + stride * n);
+    return ((float *)outrow.get () + stride * n);
   }
+
+  /** Return pointer to 32-bit float row data for the only row in buffer.  */
   float *
   row32bit_float ()
   {
     assert (!colorscreen_checking || get_n_rows () == 1);
     return row32bit_float (0);
   }
+
+  /** Put pixel with color R, G, B at position X in ROW.  */
   void
   put_pixel (int x, int row, int r, int g, int b)
   {
@@ -168,12 +196,16 @@ public:
     else
       abort ();
   }
+
+  /** Put pixel with color R, G, B at position X in the only row.  */
   void
   put_pixel (int x, int r, int g, int b)
   {
     assert (!colorscreen_checking || get_n_rows () == 1);
     return (put_pixel (x, 0, r, g, b));
   }
+
+  /** Mark pixel at position X in ROW as transparent.  */
   void
   kill_pixel (int x, int row)
   {
@@ -194,12 +226,16 @@ public:
     else
       abort ();
   }
+
+  /** Mark pixel at position X in the only row as transparent.  */
   void
   kill_pixel (int x)
   {
     assert (!colorscreen_checking || get_n_rows () == 1);
     return (kill_pixel (x, 0));
   }
+
+  /** Put HDR pixel with color R, G, B at position X in ROW.  */
   void
   put_hdr_pixel (int x, int row, luminosity_t r, luminosity_t g, luminosity_t b)
   {
@@ -232,12 +268,16 @@ public:
     else
       abort ();
   }
+
+  /** Put HDR pixel with color R, G, B at position X in the only row.  */
   void
   put_hdr_pixel (int x, luminosity_t r, luminosity_t g, luminosity_t b)
   {
     assert (!colorscreen_checking || get_n_rows () == 1);
     return (put_hdr_pixel (x, 0, r, g, b));
   }
+
+  /** Mark HDR pixel at position X in ROW as transparent.  */
   void
   kill_hdr_pixel (int x, int row)
   {
@@ -258,6 +298,8 @@ public:
     else
       abort ();
   }
+
+  /** Mark HDR pixel at position X in the only row as transparent.  */
   void
   kill_hdr_pixel (int x)
   {
@@ -278,7 +320,7 @@ private:
     pixel_16bit_hdr_alpha
   } pixel_format;
   TIFF *out;
-  void *outrow;
+  std::unique_ptr<uint8_t[]> outrow;
   int y;
   int n_rows;
   int stride;

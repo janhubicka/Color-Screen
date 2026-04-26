@@ -1,5 +1,10 @@
+/* Render to file implementation for libcolorscreen.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #include <stdlib.h>
 #include <sys/time.h>
+#include <cstdio>
 #include "icc-srgb.h"
 #include "include/tiff-writer.h"
 #include "include/colorscreen.h"
@@ -13,6 +18,7 @@
 #include "extra-render/render-extra.h"
 #endif
 #include "render-fast.h"
+
 namespace colorscreen
 {
 
@@ -21,6 +27,14 @@ const property_t render_to_file_params::geometry_names []  = {
   { "scan", "Scan", "" },
   { "default", "Default", "" },
 };
+
+/** Complete rendering parameters based on scan data and rendering type.
+    RTPARAMS - rendering type parameters.
+    PARAM - screen to image parameters.
+    SCAN - source scan data.
+    STITCH - stitch project data (if any).
+    P - output rendering to file parameters.
+    Returns true on success.  */
 bool
 complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_parameters * param, image_data *scan, stitch_project *stitch, render_to_file_params *p)
 {
@@ -28,7 +42,7 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
   if (scan && scan->stitch)
     {
       stitch = scan->stitch;
-      scan = NULL;
+      scan = nullptr;
     }
   const render_type_property &prop = render_type_properties [(int)rtparams->type];
 
@@ -42,8 +56,7 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
     p->geometry = render_to_file_params::screen_geometry;
   
   /* Do we render using scr_to_img map?  */
-  if (/*prop.flags & (render_type_property::SCAN_RESOLUTION | render_type_property::SCREEN_RESOLUTION */
-      p->geometry == render_to_file_params::screen_geometry)
+  if (p->geometry == render_to_file_params::screen_geometry)
     {
       coord_t render_width, render_height;
       if (!stitch)
@@ -65,10 +78,11 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
 	{
 	  int xmin, xmax, ymin, ymax;
 	  stitch->determine_viewport (xmin, xmax, ymin, ymax);
-	  render_width = xmax - xmin;
-	  render_height = ymax - ymin;
-	  p->xpos = xmin;
-	  p->ypos = ymin;
+	  int_image_area viewport (xmin, ymin, xmax - xmin, ymax - ymin);
+	  render_width = viewport.width;
+	  render_height = viewport.height;
+	  p->xpos = viewport.x;
+	  p->ypos = viewport.y;
 	  if (!p->pixel_size)
 	    {
 	      p->pixel_size = stitch->pixel_size;
@@ -124,16 +138,15 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
       if ((!p->xdpi || !p->ydpi) && scan && scan->xdpi && scan->ydpi)
 	{
 	  scr_to_img map;
-	  map.set_parameters (*param, *scan);
+	  if (!map.set_parameters (*param, *scan))
+	    return false;
 	  point_t c = map.img_to_final ({(coord_t)(scan->width / 2), (coord_t)(scan->height / 2)});
 	  point_t z = map.final_to_img (c);
 	  point_t imgp = map.final_to_img ({c.x + p->xstep, c.y});
-	  //fprintf (stderr, "%f %f %f %f\n",zx,zy,xx,yy);
 	  imgp.x = (imgp.x - z.x) / scan->xdpi;
 	  imgp.y = (imgp.y - z.y) / scan->ydpi;
 	  coord_t len = my_sqrt (imgp.x * imgp.x + imgp.y * imgp.y);
-	  //fprintf (stderr, "%f %f %f %f %f\n", scan.xdpi, len, p->xstep, xx, yy);
-	  /* This is approximate for deformated screens, so take average of X and Y resolution.  */
+	  /* This is approximate for deformed screens, so take average of X and Y resolution.  */
 	  if (len && !p->xdpi)
 	    {
 	      coord_t xdpi = 1 / len;
@@ -141,10 +154,10 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
 	      imgp = map.final_to_img ({c.x, c.y + p->ystep});
 	      imgp.x = (imgp.x - z.x) / scan->xdpi;
 	      imgp.y = (imgp.y - z.y) / scan->ydpi;
-	      coord_t len = my_sqrt (imgp.x * imgp.x + imgp.y * imgp.y);
-	      if (len && !p->ydpi)
+	      coord_t len2 = my_sqrt (imgp.x * imgp.x + imgp.y * imgp.y);
+	      if (len2 && !p->ydpi)
 		{
-		  p->xdpi = p->ydpi = (xdpi + 1 / len) / 2;
+		  p->xdpi = p->ydpi = (xdpi + 1 / len2) / 2;
 		}
 	    }
 	}
@@ -187,13 +200,24 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
     }
   return true;
 }
+
+/** Complete rendering parameters (wrapper).  */
 bool
 complete_rendered_file_parameters (render_type_parameters &rtparams, scr_to_img_parameters & param, image_data &scan, render_to_file_params *p)
 {
-  return complete_rendered_file_parameters (&rtparams, &param, &scan, NULL, p);
+  return complete_rendered_file_parameters (&rtparams, &param, &scan, nullptr, p);
 }
 
-/* Render image to TIFF file OUTFNAME.  */
+/** Main entry point for rendering an image to a file.
+    SCAN - source scan data.
+    PARAM - screen to image parameters.
+    DPARAM - screen detection parameters.
+    IN_RPARAM - rendering parameters.
+    RFPARAMS - render to file specific parameters.
+    RTPARAM - rendering type parameters.
+    PROGRESS - progress reporting object.
+    ERROR - set to error string if rendering fails.
+    Returns true on success.  */
 bool
 render_to_file (image_data & scan, scr_to_img_parameters & param,
 		scr_detect_parameters & dparam, render_parameters &in_rparam,
@@ -224,8 +248,8 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
       if (progress)
         progress->resume_stdout ();
     }
-  void *icc_profile /*= sRGB_icc*/ = NULL;
-  size_t icc_profile_len = /*sRGB_icc_len =*/ 0;
+  void *icc_profile = nullptr;
+  size_t icc_profile_len = 0;
 
   const render_type_property &prop = render_type_properties [(int)rtparam.type];
   if ((prop.flags & render_type_property::NEEDS_RGB) && !scan.has_rgb ())
