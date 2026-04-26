@@ -1,3 +1,7 @@
+/* MTF based deconvolution.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #include "fft.h"
 #include "deconvolve.h"
 #include "render.h"
@@ -14,7 +18,9 @@ static const bool taper_edges = true;
 namespace
 {
 
-/* Lanczos sharpening.  */
+/* Lanczos resample LINE of length IN_LEN and with given SUPERSAMPLE factor
+   into OUTPUT of length OUT_LEN with OUT_STRIDE.  KERNELS are precomputed
+   Lanczos kernels of size A.  */
 
 template <typename T>
 inline __attribute__ ((always_inline))
@@ -24,17 +30,17 @@ resample_line (T *output,
                int out_stride,
 	       int in_len,
 	       int supersample,
-	       const std::vector<T,fft_allocator<T>>& kernels,
+	       const std::vector<T, fft_allocator<T>>& kernels,
 	       int a = 3)
 {
   /* Let compiler know that supersample is small integer.  */
   if (supersample <= 1 || supersample > 1024)
     __builtin_unreachable ();
-  /* We do mirroring on the edges of image; special case first few itratoins.  */
+  /* We do mirroring on the edges of image; special case first few iterations.  */
 #pragma omp simd
-  for (int i = 0; i < std::min (a*supersample,out_len); ++i)
+  for (int i = 0; i < std::min (a * supersample, out_len); ++i)
     {
-      /* Map output pixel to input space center  */
+      /* Map output pixel to input space center.  */
       int center = (2 * i + 1) - supersample;
       int start = center / (2 * supersample) - a + 1;
       int io = (center / 2) % supersample;
@@ -46,7 +52,7 @@ resample_line (T *output,
       for (int jj = 0; jj < 2 * a; ++jj)
         {
 	  int j = start + jj;
-          /* Mirror padding for boundaries */
+          /* Mirror padding for boundaries. */
           int index = j;
           if (index < 0)
             index = -index;
@@ -59,9 +65,9 @@ resample_line (T *output,
       output[i * out_stride] = sum;
     }
 #pragma omp simd
-  for (int i = a*supersample; i < std::min (out_len - a*supersample,out_len); ++i)
+  for (int i = a * supersample; i < std::min (out_len - a * supersample, out_len); ++i)
     {
-      /* Map output pixel to input space center  */
+      /* Map output pixel to input space center.  */
       int center = (2 * i + 1) - supersample;
       int start = center / (2 * supersample) - a + 1;
       int io = (center / 2) % supersample;
@@ -79,9 +85,9 @@ resample_line (T *output,
       output[i * out_stride] = sum;
     }
 #pragma omp simd
-  for (int i = std::max (out_len - a*supersample, a*supersample); i < out_len; ++i)
+  for (int i = std::max (out_len - a * supersample, a * supersample); i < out_len; ++i)
     {
-      /* Map output pixel to input space center  */
+      /* Map output pixel to input space center.  */
       int center = (2 * i + 1) - supersample;
       int start = center / (2 * supersample) - a + 1;
       int io = (center / 2) % supersample;
@@ -93,7 +99,7 @@ resample_line (T *output,
       for (int jj = 0; jj < 2 * a; ++jj)
         {
 	  int j = start + jj;
-          /* Mirror padding for boundaries */
+          /* Mirror padding for boundaries. */
           int index = j;
           if (index >= in_len)
             index = 2 * in_len - index - 1;
@@ -105,23 +111,25 @@ resample_line (T *output,
 }
 }
 
+/* Set up deconvolution for given MTF and MTF_SCALE.  SNR specifies signal to
+   noise ratio for Weiner filter.  SIGMA specifies dampening parameter for
+   Richardson-Lucy.  MAX_THREADS specifies number of threads.  MODE is
+   deconvolution mode.  ITERATIONS specifies number of iterations for
+   Richardson-Lucy.  SUPERSAMPLE specifies supersampling factor.  */
 template <typename T>
 deconvolution<T>::deconvolution (mtf *mtf, luminosity_t mtf_scale,
-                              luminosity_t snr, luminosity_t sigma,
-                              int max_threads, enum mode mode, int iterations,
-                              int supersample)
-    : m_border_size (0), m_taper_size (0), m_tile_size (1),
-  m_enlarged_tile_size (1), m_supersample (supersample),
-      m_blur_kernel (nullptr), m_sigma (sigma),
-      m_iterations (iterations), m_plans_exists (false)
+                                 luminosity_t snr, luminosity_t sigma,
+                                 int max_threads, enum mode mode,
+                                 int iterations, int supersample)
+    : m_supersample (supersample), m_sigma ((T)sigma),
+      m_iterations (iterations)
 {
   mtf->precompute ();
-  T k_const = 1.0f / snr;
+  T k_const = (T)1.0 / (T)snr;
   m_border_size = mtf->psf_radius (mtf_scale);
   if (m_supersample && m_border_size == 0)
     m_border_size = 1;
-  // printf ("Border size %i scale %f\n", mtf->psf_size (mtf_scale),
-  // mtf_scale); deconvolute_border_size (mtf);
+
   if (taper_edges)
     {
       m_taper_size = m_border_size * m_supersample;
@@ -133,60 +141,53 @@ deconvolution<T>::deconvolution (mtf *mtf, luminosity_t mtf_scale,
   m_tile_size = (m_enlarged_tile_size + m_supersample - 1) / m_supersample;
 
   m_data.resize (max_threads);
-  for (int i = 0; i < max_threads; i++)
-    m_data[i].initialized = false;
-  /* Result of real fft is symmetric.  We need only N /2 + 1 complex values.
+  /* Result of real fft is symmetric.  We need only N / 2 + 1 complex values.
      Moreover point spread functions we compute are symmetric real functions so
      the FFT result is again a real function (all complex values should be 0 up
      to roundoff errors).  */
   m_fft_size = m_enlarged_tile_size / 2 + 1;
   m_blur_kernel = fft_alloc_complex<T> (m_enlarged_tile_size * m_fft_size);
-  T scale
-      = 1.0 / (m_enlarged_tile_size * m_enlarged_tile_size);
-  T rev_tile_size
-      = m_supersample * mtf_scale / (T)m_enlarged_tile_size;
+  T scale = (T)1.0 / (T)(m_enlarged_tile_size * m_enlarged_tile_size);
+  T rev_tile_size = (T)m_supersample * (T)mtf_scale / (T)m_enlarged_tile_size;
 #pragma omp parallel for shared(scale,mtf,rev_tile_size,mode,k_const) default(none) collapse(2)
   for (int y = 0; y < m_fft_size; y++)
     for (int x = 0; x < m_fft_size; x++)
       {
-        std::complex ker (
+        std::complex<T> ker (
             std::clamp (
                 (T)mtf->get_mtf (x, y, rev_tile_size),
                 (T)0, (T)1),
             (T)0);
 
-        // If sharpening, apply Wiener Filter
-        // Result = Img * conj(Ker) / (|Ker|^2 + 1/SNR)
+        /* If sharpening, apply Wiener Filter.
+           Result = Img * conj(Ker) / (|Ker|^2 + 1/SNR).  */
         if (mode == sharpen)
-          ker = conj (ker) / (std::norm (ker) + k_const);
-        // ker = ((T)1)/ker;
-        // if (mode != richardson_lucy_sharpen)
+          ker = std::conj (ker) / (std::norm (ker) + k_const);
         ker = ker * scale;
-        m_blur_kernel[y * m_fft_size + x][0] = real (ker);
-        m_blur_kernel[y * m_fft_size + x][1] = imag (ker);
+        m_blur_kernel[y * m_fft_size + x][0] = ker.real ();
+        m_blur_kernel[y * m_fft_size + x][1] = ker.imag ();
         if (y)
           {
             m_blur_kernel[(m_enlarged_tile_size - y) * m_fft_size + x][0]
-                = real (ker);
+                = ker.real ();
             m_blur_kernel[(m_enlarged_tile_size - y) * m_fft_size + x][1]
-                = imag (ker);
+                = ker.imag ();
           }
       }
   T sc = scale / m_blur_kernel[0][0];
-  //printf ("sc %f\n", sc);
-  if (sc != 1)
+  if (sc != (T)1)
     for (int x = 0; x < m_fft_size * m_enlarged_tile_size; x++)
       {
 	m_blur_kernel[x][0] *= sc;
 	m_blur_kernel[x][1] *= sc;
       }
-  m_richardson_lucy = mode == richardson_lucy_sharpen;
+  m_richardson_lucy = (mode == richardson_lucy_sharpen);
   if (taper_edges)
     {
       m_weights.resize (m_taper_size);
       for (int i = 0; i < m_taper_size; i++)
-        // Cosine bell curve: 0.0 at edge, 1.0 at taper_width
-        m_weights[i] = 0.5f * (1.0f - cosf (M_PI * i / m_taper_size));
+        /* Cosine bell curve: 0.0 at edge, 1.0 at taper_width.  */
+        m_weights[i] = (T)0.5 * ((T)1.0 - std::cos ((T)M_PI * (T)i / (T)m_taper_size));
     }
   if (m_supersample > 1)
     {
@@ -196,14 +197,14 @@ deconvolution<T>::deconvolution (mtf *mtf, luminosity_t mtf_scale,
 	  T sum = 0;
 	  for (int i = 0 ; i < lanczos_a * 2; i++)
 	    sum += m_lanczos_kernels[off * lanczos_a * 2 + i]
-	      = lanczos_kernel (i - lanczos_a + (off + 0.5) / (T)m_supersample, lanczos_a);
+	      = lanczos_kernel ((T)i - (T)lanczos_a + ((T)off + (T)0.5) / (T)m_supersample, lanczos_a);
 	  for (int i = 0 ; i < lanczos_a * 2; i++)
-	    m_lanczos_kernels[off * lanczos_a * 2 + i] *= (1 / sum);
+	    m_lanczos_kernels[off * lanczos_a * 2 + i] *= ((T)1 / sum);
 	}
     }
 }
 
-/* Allocate memory for tiles and initialize fftw plans for given thread.  */
+/* Allocate memory for tiles and initialize fftw plans for given THREAD_ID.  */
 template <typename T>
 void
 deconvolution<T>::init (int thread_id)
@@ -231,35 +232,27 @@ deconvolution<T>::init (int thread_id)
   if (!m_plans_exists)
     {
       m_plan_2d_inv = fft_plan_c2r_2d<T> (m_enlarged_tile_size,
-                                               m_enlarged_tile_size,
-                                               m_data[thread_id].in.get (),
-                                               m_data[thread_id].enlarged_tile->data ());
+                                                m_enlarged_tile_size,
+                                                m_data[thread_id].in.get (),
+                                                m_data[thread_id].enlarged_tile->data ());
       m_plan_2d = fft_plan_r2c_2d<T> (m_enlarged_tile_size,
-                                           m_enlarged_tile_size,
-                                           m_data[thread_id].enlarged_tile->data (),
-                                           m_data[thread_id].in.get ());
+                                            m_enlarged_tile_size,
+                                            m_data[thread_id].enlarged_tile->data (),
+                                            m_data[thread_id].in.get ());
       m_plans_exists = true;
     }
 }
 
-/* Apply the kernel.  */
+/* Apply the deconvolution kernel for given THREAD_ID.  */
 template <typename T>
 void
 deconvolution<T>::process_tile (int thread_id)
 {
-#if 0
-  if (m_supersample > 1)
-    {
-      for (int y = 0; y < m_enlarged_tile_size; y++)
-        for (int x = 0; x < m_enlarged_tile_size; x++)
-	  put_enlarged_pixel (thread_id, x, y, get_pixel (thread_id, x / m_supersample, y / m_supersample));
-    }
-#else
   if (m_supersample > 1)
     {
       for (int y = 0; y < m_tile_size; y++)
         resample_line (m_data[thread_id].enlarged_tile->data ()
-                           + y * m_enlarged_tile_size,
+                            + y * m_enlarged_tile_size,
                        m_data[thread_id].tile.data () + y * m_tile_size,
                        m_enlarged_tile_size, 1, m_tile_size,
 		       m_supersample, m_lanczos_kernels,
@@ -277,12 +270,11 @@ deconvolution<T>::process_tile (int thread_id)
 			 lanczos_a);
         }
     }
-#endif
   if (taper_edges)
     {
       T sum = 0;
 
-      /* Compute average pixel */
+      /* Compute average pixel.  */
       for (int y = 0; y < m_taper_size; y++)
         for (int x = 0; x < m_enlarged_tile_size; x++)
           sum += get_enlarged_pixel (thread_id, x, y);
@@ -298,12 +290,12 @@ deconvolution<T>::process_tile (int thread_id)
             sum += get_enlarged_pixel (
                 thread_id, x + m_enlarged_tile_size - m_taper_size, y);
         }
-      sum /= m_enlarged_tile_size * m_taper_size * 2
-             + (m_enlarged_tile_size - 2 * m_taper_size) * m_taper_size * 2;
-      /* Taper top edge  */
+      sum /= (T)(m_enlarged_tile_size * m_taper_size * 2
+             + (m_enlarged_tile_size - 2 * m_taper_size) * m_taper_size * 2);
+      /* Taper top edge.  */
       for (int y = 0; y < m_taper_size; y++)
         {
-          float weight = m_weights[y];
+          T weight = m_weights[y];
 #pragma omp simd
           for (int x = 0; x < y; x++)
             put_enlarged_pixel (
@@ -324,7 +316,7 @@ deconvolution<T>::process_tile (int thread_id)
                     + (get_enlarged_pixel (thread_id, x, y) - sum)
                           * m_weights[m_enlarged_tile_size - 1 - x]);
         }
-      /* Taper left and right edge  */
+      /* Taper left and right edge.  */
       for (int y = m_taper_size; y < m_enlarged_tile_size - m_taper_size; y++)
         {
 #pragma omp simd
@@ -343,12 +335,12 @@ deconvolution<T>::process_tile (int thread_id)
                     + (get_enlarged_pixel (thread_id, x, y) - sum)
                           * m_weights[m_enlarged_tile_size - 1 - x]);
         }
-      /* Taper bottom edge  */
+      /* Taper bottom edge.  */
       for (int y = m_enlarged_tile_size - m_taper_size;
            y < m_enlarged_tile_size; y++)
         {
           int d = m_enlarged_tile_size - 1 - y;
-          float weight = m_weights[d];
+          T weight = m_weights[d];
 #pragma omp simd
           for (int x = 0; x < d; x++)
             put_enlarged_pixel (
@@ -389,14 +381,14 @@ deconvolution<T>::process_tile (int thread_id)
     }
   else
     {
-      std::vector<T,fft_allocator<T>> &observed = m_data[thread_id].observed;
+      std::vector<T, fft_allocator<T>> &observed = m_data[thread_id].observed;
       std::copy (m_data[thread_id].enlarged_tile->begin (),
                  m_data[thread_id].enlarged_tile->end (),
                  observed.begin ());
-      std::vector<T,fft_allocator<T>> &estimate
+      std::vector<T, fft_allocator<T>> &estimate
           = *m_data[thread_id].enlarged_tile;
-      std::vector<T,fft_allocator<T>> &ratios = m_data[thread_id].ratios;
-      T scale = 1;
+      std::vector<T, fft_allocator<T>> &ratios = m_data[thread_id].ratios;
+      T scale = (T)1;
       typename fft_complex_t<T>::type *in = m_data[thread_id].in.get ();
       T sigma = m_sigma;
       for (int iteration = 0; iteration < m_iterations; iteration++)
@@ -417,25 +409,24 @@ deconvolution<T>::process_tile (int thread_id)
             }
           m_plan_2d_inv.execute_c2r (in, ratios.data ());
 
-          /* Step B: ratio = observed / (re-blurred + epsilon)  */
+          /* Step B: ratio = observed / (re-blurred + epsilon).  */
 
-          T epsilon = 1e-12 /*1e-7 for float*/;
-          // printf ("sigma :%f\n",sigma);
+          T epsilon = (T)1e-12;
 
-          /* RATIOS is now blurred ESTIMATE; compute ratios  */
-          if (sigma > 0)
+          /* RATIOS is now blurred ESTIMATE; compute ratios.  */
+          if (sigma > (T)0)
 #pragma omp simd
             for (int i = 0; i < m_enlarged_tile_size * m_enlarged_tile_size;
                  i++)
               {
                 T reblurred = ratios[i] * scale;
                 T diff = observed[i] - reblurred;
-                if (reblurred > epsilon && std::abs (diff) > 2 * sigma)
-                  ratios[i] = 1.0
-                              + (reblurred * diff)
-                                    / (reblurred * reblurred + sigma * sigma);
+                if (reblurred > epsilon && std::abs (diff) > (T)2 * sigma)
+                  ratios[i] = (T)1.0
+                               + (reblurred * diff)
+                                     / (reblurred * reblurred + sigma * sigma);
                 else
-                  ratios[i] = 1.0;
+                  ratios[i] = (T)1.0;
               }
           else
 #pragma omp simd
@@ -446,16 +437,16 @@ deconvolution<T>::process_tile (int thread_id)
                 if (reblurred > epsilon)
                   ratios[i] = observed[i] / reblurred;
                 else
-                  ratios[i] = 1.0;
+                  ratios[i] = (T)1.0;
               }
 
           /* Step C: Update estimate
              FFT(ratio) -> multiply by FFT(PSF_flipped) -> IFFT
-             estimate = estimate * result_of_Step_C  */
+             estimate = estimate * result_of_Step_C.  */
 
-          /* Do FFT of ratio */
+          /* Do FFT of ratio. */
           m_plan_2d.execute_r2c (ratios.data (), in);
-          /* Scale by complex conjugate of blur kernel  */
+          /* Scale by complex conjugate of blur kernel.  */
 #pragma omp simd
           for (int i = 0; i < m_fft_size * m_enlarged_tile_size; i++)
             {
@@ -463,16 +454,13 @@ deconvolution<T>::process_tile (int thread_id)
               T vi = in[i][1];
               T wr = m_blur_kernel[i][0];
               T wi = -m_blur_kernel[i][1];
-              ///* Blurred kernel is pre-scalled taking into account the
-              ///inverse FFT.  */
-              // w *= m_tile_size * m_tile_size;
               in[i][0] = vr * wr - vi * wi;
               in[i][1] = vr * wi + vi * wr;
             }
-          /* Now initialize ratios  */
+          /* Now initialize ratios.  */
           m_plan_2d_inv.execute_c2r (in, ratios.data ());
 
-          /* estimate = estimate * result_of_Step_C  */
+          /* estimate = estimate * result_of_Step_C.  */
 #pragma omp simd
           for (int i = 0; i < m_enlarged_tile_size * m_enlarged_tile_size; i++)
             estimate[i] *= ratios[i] * scale;
@@ -493,32 +481,30 @@ deconvolution<T>::process_tile (int thread_id)
                     enlarged_ptr[(sy - 1) * m_enlarged_tile_size + sx - 1],
                     enlarged_ptr[(sy) * m_enlarged_tile_size + sx - 1],
                     enlarged_ptr[(sy + 1) * m_enlarged_tile_size + sx - 1],
-                    enlarged_ptr[(sy + 2) * m_enlarged_tile_size + sx - 1], 0.5),
+                    enlarged_ptr[(sy + 2) * m_enlarged_tile_size + sx - 1], (T)0.5),
                 cubic_interpolate (
                     enlarged_ptr[(sy - 1) * m_enlarged_tile_size + sx - 0],
                     enlarged_ptr[(sy) * m_enlarged_tile_size + sx - 0],
                     enlarged_ptr[(sy + 1) * m_enlarged_tile_size + sx - 0],
-                    enlarged_ptr[(sy + 2) * m_enlarged_tile_size + sx - 0], 0.5),
+                    enlarged_ptr[(sy + 2) * m_enlarged_tile_size + sx - 0], (T)0.5),
                 cubic_interpolate (
                     enlarged_ptr[(sy - 1) * m_enlarged_tile_size + sx + 1],
                     enlarged_ptr[(sy) * m_enlarged_tile_size + sx + 1],
                     enlarged_ptr[(sy + 1) * m_enlarged_tile_size + sx + 1],
-                    enlarged_ptr[(sy + 2) * m_enlarged_tile_size + sx + 1], 0.5),
+                    enlarged_ptr[(sy + 2) * m_enlarged_tile_size + sx + 1], (T)0.5),
                 cubic_interpolate (
                     enlarged_ptr[(sy - 1) * m_enlarged_tile_size + sx + 2],
                     enlarged_ptr[(sy) * m_enlarged_tile_size + sx + 2],
                     enlarged_ptr[(sy + 1) * m_enlarged_tile_size + sx + 2],
-                    enlarged_ptr[(sy + 2) * m_enlarged_tile_size + sx + 2], 0.5),
-                0.5);
+                    enlarged_ptr[(sy + 2) * m_enlarged_tile_size + sx + 2], (T)0.5),
+                (T)0.5);
 	    put_pixel (thread_id, x, y, val);
-             //put_pixel (thread_id, x, y, get_enlarged_pixel (thread_id, x,  y));
           }
     }
   /* Bigger upscaling is unlikely to be useful.  */
   else if (m_supersample > 1)
     {
-      T scale
-          = 1 / ((T)m_supersample * m_supersample);
+      T scale = (T)1 / (T)(m_supersample * m_supersample);
       for (int y = m_border_size; y < m_tile_size - m_border_size; y++)
         for (int x = m_border_size; x < m_tile_size - m_border_size; x++)
           {
@@ -528,11 +514,11 @@ deconvolution<T>::process_tile (int thread_id)
                 sum += get_enlarged_pixel (thread_id, x * m_supersample + xx,
                                            y * m_supersample + yy);
             put_pixel (thread_id, x, y, sum * scale);
-             //put_pixel (thread_id, x, y, get_enlarged_pixel (thread_id, x,  y));
           }
     }
 }
 
+/* Destructor.  */
 template <typename T>
 deconvolution<T>::~deconvolution ()
 {
