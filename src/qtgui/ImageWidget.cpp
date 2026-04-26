@@ -70,7 +70,7 @@ ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent), m_lastSize(0, 0) {
       else m_activeAnim = m_hurleyAnim;
   }
 
-  setMouseTracking(false); // Only track when dragging
+  setMouseTracking(true);
   setContextMenuPolicy(Qt::NoContextMenu); // Allow right-click for our custom handling
   setFocusPolicy(Qt::StrongFocus); // Ensure widget can receive all mouse events
   m_showRegistrationPoints = false;
@@ -374,7 +374,7 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
       double dot_period = sqrt(c1.x * c1.x + c1.y * c1.y);
       if (dot_period < 0.1) dot_period = 10.0;
       double threshold = dot_period * m_heatmapTolerance;
-      double amp_scale = m_exaggerate / (dot_period / 2.0);
+      double amp_scale = (m_scale > 1.0) ? 1.0 : (m_exaggerate / (dot_period / 2.0));
 
       // Viewport culling: expand rect to include displacement arrows
       // Displacement arrow amplification is m_exaggerate / (dot_period / 2.0).
@@ -436,7 +436,7 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
         double dy_w = end.y() - start.y();
         double dist_w2 = dx_w * dx_w + dy_w * dy_w;
 
-        if (dist_w2 > 1.0) {
+        if (dist_w2 > 25.0) { // Only draw arrow if at least 5 pixels long
           // Cap arrow length to m_maxArrowLength pixels
           if (dist_w2 > m_maxArrowLength * m_maxArrowLength) {
             double dist_w = sqrt(dist_w2);
@@ -1002,6 +1002,22 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
 }
 
 void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
+  // Check for hover over registration points
+  if (!m_isDragging && m_showRegistrationPoints && m_solver) {
+    bool found = false;
+    for (size_t i = 0; i < m_solver->points.size(); ++i) {
+      QPointF p_widget = imageToWidget(m_solver->points[i].img);
+      if (QLineF(event->position(), p_widget).length() < 10) {
+        setCursor(Qt::PointingHandCursor);
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+        setCursor(Qt::ArrowCursor);
+    }
+  }
+
   if (m_interactionMode == PanMode && m_isDragging) {
     QPoint delta = event->pos() - m_lastMousePos;
     m_lastMousePos = event->pos();

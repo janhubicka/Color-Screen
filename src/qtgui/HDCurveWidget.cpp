@@ -290,11 +290,13 @@ void HDCurveWidget::drawControlPoints(QPainter &painter, const QRectF &rect) {
         painter.drawEllipse(pts[i], 4, 4);
     }
 
-    // Middle point (square, black inside)
+    // Middle point (square, black inside, white border)
     if (m_dragPointIndex == 4) painter.setBrush(Qt::red);
     else painter.setBrush(Qt::black);
+    painter.setPen(QPen(Qt::white, 1));
     painter.drawRect(QRectF(p_mid.x() - 4, p_mid.y() - 4, 8, 8));
 }
+
 
 void HDCurveWidget::mousePressEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton) {

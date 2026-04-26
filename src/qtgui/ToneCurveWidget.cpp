@@ -169,13 +169,33 @@ void ToneCurveWidget::drawPlot(QPainter &painter, const QRectF &rect) {
 
 void ToneCurveWidget::drawControlPoints(QPainter &painter, const QRectF &rect) {
     if (m_type != colorscreen::tone_curve::tone_curve_custom) return;
-    
-    painter.setPen(QPen(Qt::black, 1));
     for (size_t i = 0; i < m_controlPoints.size(); i++) {
+        QPointF p = mapToWidget(m_controlPoints[i].x, m_controlPoints[i].y);
+        QPointF p_orig = mapToWidget(m_controlPoints[i].x, m_controlPoints[i].x);
+
+        double dx = p.x() - p_orig.x();
+        double dy = p.y() - p_orig.y();
+        double dist2 = dx*dx + dy*dy;
+        if (dist2 > 25.0) {
+            QColor arrowColor(0, 255, 255, 180);
+            painter.setPen(QPen(Qt::black, 3));
+            painter.drawLine(p_orig, p);
+            painter.setPen(QPen(arrowColor, 1));
+            painter.drawLine(p_orig, p);
+
+            double angle = std::atan2(dy, dx);
+            double headLen = 6.0;
+            QPointF h1(p.x() - headLen * std::cos(angle - M_PI/6), p.y() - headLen * std::sin(angle - M_PI/6));
+            QPointF h2(p.x() - headLen * std::cos(angle + M_PI/6), p.y() - headLen * std::sin(angle + M_PI/6));
+            painter.setPen(QPen(Qt::black, 3));
+            painter.drawLine(p, h1); painter.drawLine(p, h2);
+            painter.setPen(QPen(arrowColor, 1));
+            painter.drawLine(p, h1); painter.drawLine(p, h2);
+        }
+
         if ((int)i == m_dragPointIndex) painter.setBrush(Qt::red);
         else painter.setBrush(Qt::white);
-        
-        QPointF p = mapToWidget(m_controlPoints[i].x, m_controlPoints[i].y);
+        painter.setPen(QPen(Qt::black, 1));
         painter.drawEllipse(p, 4, 4);
     }
 }
@@ -199,6 +219,18 @@ void ToneCurveWidget::mousePressEvent(QMouseEvent *event) {
 }
 
 void ToneCurveWidget::mouseMoveEvent(QMouseEvent *event) {
+    if (m_dragPointIndex == -1) {
+        bool found = false;
+        for (size_t i = 0; i < m_controlPoints.size(); i++) {
+            QPointF p = mapToWidget(m_controlPoints[i].x, m_controlPoints[i].y);
+            if (QLineF(event->position(), p).length() < 10) {
+                setCursor(Qt::PointingHandCursor);
+                found = true;
+                break;
+            }
+        }
+        if (!found) setCursor(Qt::ArrowCursor);
+    }
     if (m_dragPointIndex != -1) {
         auto [plotX, plotY] = widgetToPlot(event->position());
         double logicX = plotToLogicX(plotX);
