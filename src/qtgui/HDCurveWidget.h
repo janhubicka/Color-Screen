@@ -53,7 +53,8 @@ private:
     std::vector<uint64_t> m_histogram;
     double m_histMinX = 0, m_histMaxX = 0;
     
-    int m_dragPointIndex = -1; // 0: min, 1: linear1, 2: linear2, 3: max
+    int m_dragPointIndex = -1; // 0: min, 1: linear1, 2: linear2, 3: max, 4: middle, 5: dmin, 6: dmax, 7: xmin, 8: xmax
+    double m_lastLogicX = 0, m_lastLogicY = 0;
 };
 
 #endif // HD_CURVE_WIDGET_H

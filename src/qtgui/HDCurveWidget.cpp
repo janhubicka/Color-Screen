@@ -240,16 +240,43 @@ void HDCurveWidget::drawPlot(QPainter &painter, const QRectF &rect) {
 }
 
 void HDCurveWidget::drawControlPoints(QPainter &painter, const QRectF &rect) {
-    Q_UNUSED(rect);
+    // Draw limit lines first (so they are under the points)
+    QPointF p_min = mapToWidget(m_params.minx, m_params.miny);
+    QPointF p_max = mapToWidget(m_params.maxx, m_params.maxy);
+    
+    // Dmin, Dmax (horizontal)
+    if (m_dragPointIndex == 5) painter.setPen(QPen(Qt::yellow, 1, Qt::SolidLine));
+    else painter.setPen(QPen(QColor(200, 200, 200, 180), 1, Qt::DashLine));
+    painter.drawLine(QPointF(rect.left(), p_min.y()), QPointF(rect.right(), p_min.y()));
+    
+    if (m_dragPointIndex == 6) painter.setPen(QPen(Qt::yellow, 1, Qt::SolidLine));
+    else painter.setPen(QPen(QColor(200, 200, 200, 180), 1, Qt::DashLine));
+    painter.drawLine(QPointF(rect.left(), p_max.y()), QPointF(rect.right(), p_max.y()));
+    
+    // Xmin, Xmax (vertical)
+    if (m_dragPointIndex == 7) painter.setPen(QPen(Qt::yellow, 1, Qt::SolidLine));
+    else painter.setPen(QPen(QColor(200, 200, 200, 180), 1, Qt::DashLine));
+    painter.drawLine(QPointF(p_min.x(), rect.top()), QPointF(p_min.x(), rect.bottom()));
+    
+    if (m_dragPointIndex == 8) painter.setPen(QPen(Qt::yellow, 1, Qt::SolidLine));
+    else painter.setPen(QPen(QColor(200, 200, 200, 180), 1, Qt::DashLine));
+    painter.drawLine(QPointF(p_max.x(), rect.top()), QPointF(p_max.x(), rect.bottom()));
+
+    // Draw points
     painter.setBrush(Qt::white);
     painter.setPen(QPen(Qt::black, 1));
     
     QPointF pts[4] = {
-        mapToWidget(m_params.minx, m_params.miny),
+        p_min,
         mapToWidget(m_params.linear1x, m_params.linear1y),
         mapToWidget(m_params.linear2x, m_params.linear2y),
-        mapToWidget(m_params.maxx, m_params.maxy)
+        p_max
     };
+    
+    // Middle point
+    double midX = (m_params.linear1x + m_params.linear2x) / 2.0;
+    double midY = (m_params.linear1y + m_params.linear2y) / 2.0;
+    QPointF p_mid = mapToWidget(midX, midY);
     
     for (int i = 0; i < 4; ++i) {
         if (m_dragPointIndex == i) {
@@ -259,26 +286,52 @@ void HDCurveWidget::drawControlPoints(QPainter &painter, const QRectF &rect) {
         }
         painter.drawEllipse(pts[i], 4, 4);
     }
+
+    // Middle point (square)
+    if (m_dragPointIndex == 4) painter.setBrush(Qt::red);
+    else painter.setBrush(Qt::white);
+    painter.drawRect(QRectF(p_mid.x() - 4, p_mid.y() - 4, 8, 8));
 }
 
 void HDCurveWidget::mousePressEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton) {
-        QPointF pts[4] = {
-            mapToWidget(m_params.minx, m_params.miny),
-            mapToWidget(m_params.linear1x, m_params.linear1y),
-            mapToWidget(m_params.linear2x, m_params.linear2y),
-            mapToWidget(m_params.maxx, m_params.maxy)
-        };
+        // 1. Check points (highest priority)
+        QPointF p_min = mapToWidget(m_params.minx, m_params.miny);
+        QPointF p_l1 = mapToWidget(m_params.linear1x, m_params.linear1y);
+        QPointF p_l2 = mapToWidget(m_params.linear2x, m_params.linear2y);
+        QPointF p_max = mapToWidget(m_params.maxx, m_params.maxy);
+        
+        double midX = (m_params.linear1x + m_params.linear2x) / 2.0;
+        double midY = (m_params.linear1y + m_params.linear2y) / 2.0;
+        QPointF p_mid = mapToWidget(midX, midY);
+        
+        QPointF pts[5] = { p_min, p_l1, p_l2, p_max, p_mid };
         
         m_dragPointIndex = -1;
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < 5; ++i) {
             if (QLineF(event->position(), pts[i]).length() < 10) {
                 m_dragPointIndex = i;
                 break;
             }
         }
         
+        // 2. Check lines if no point hit
+        if (m_dragPointIndex == -1) {
+            QPointF pos = event->position();
+            // dmin line (y = p_min.y())
+            if (std::abs(pos.y() - p_min.y()) < 5) m_dragPointIndex = 5;
+            // dmax line (y = p_max.y())
+            else if (std::abs(pos.y() - p_max.y()) < 5) m_dragPointIndex = 6;
+            // xmin line (x = p_min.x())
+            else if (std::abs(pos.x() - p_min.x()) < 5) m_dragPointIndex = 7;
+            // xmax line (x = p_max.x())
+            else if (std::abs(pos.x() - p_max.x()) < 5) m_dragPointIndex = 8;
+        }
+        
         if (m_dragPointIndex != -1) {
+            auto [lx, ly] = mapFromWidget(event->position());
+            m_lastLogicX = lx;
+            m_lastLogicY = ly;
             update();
             return;
         }
@@ -288,22 +341,81 @@ void HDCurveWidget::mousePressEvent(QMouseEvent *event) {
 
 void HDCurveWidget::mouseMoveEvent(QMouseEvent *event) {
     if (m_dragPointIndex != -1) {
-        QRectF rect = getChartRect();
-        double nx = qBound(0.0, (double)(event->position().x() - rect.left()) / rect.width(), 1.0);
-        double ny = qBound(0.0, (double)(rect.bottom() - event->position().y()) / rect.height(), 1.0);
-        
-        double plotX = m_minX + nx * (m_maxX - m_minX);
-        double plotY = m_minY + ny * (m_maxY - m_minY);
-        
-        double logicX = colorscreen::hd_axis_x_to_log_exposure(plotX, m_displayMode);
-        double logicY = colorscreen::hd_axis_y_to_density(plotY, m_densityBoost, m_displayMode);
+        auto [logicX, logicY] = mapFromWidget(event->position());
+        double dx = logicX - m_lastLogicX;
+        double dy = logicY - m_lastLogicY;
         
         switch (m_dragPointIndex) {
-            case 0: logicX = qMin(logicX, m_params.linear1x); m_params.minx = logicX; m_params.miny = logicY; break;
-            case 1: logicX = qBound(m_params.minx, logicX, m_params.linear2x); m_params.linear1x = logicX; m_params.linear1y = logicY; break;
-            case 2: logicX = qBound(m_params.linear1x, logicX, m_params.maxx); m_params.linear2x = logicX; m_params.linear2y = logicY; break;
-            case 3: logicX = qMax(logicX, m_params.linear2x); m_params.maxx = logicX; m_params.maxy = logicY; break;
+            case 0: // min point
+                logicX = qMin(logicX, m_params.linear1x);
+                m_params.minx = logicX; m_params.miny = logicY;
+                break;
+            case 1: // linear1 point
+                logicX = qBound(m_params.minx, logicX, m_params.linear2x);
+                m_params.linear1x = logicX; m_params.linear1y = logicY;
+                break;
+            case 2: // linear2 point
+                logicX = qBound(m_params.linear1x, logicX, m_params.maxx);
+                m_params.linear2x = logicX; m_params.linear2y = logicY;
+                break;
+            case 3: // max point
+                logicX = qMax(logicX, m_params.linear2x);
+                m_params.maxx = logicX; m_params.maxy = logicY;
+                break;
+            case 4: // middle point (move all)
+                m_params.minx += dx; m_params.miny += dy;
+                m_params.linear1x += dx; m_params.linear1y += dy;
+                m_params.linear2x += dx; m_params.linear2y += dy;
+                m_params.maxx += dx; m_params.maxy += dy;
+                break;
+            case 5: { // dmin line scale
+                double oldRange = m_params.maxy - m_params.miny;
+                double newRange = m_params.maxy - logicY;
+                if (std::abs(oldRange) > 1e-9) {
+                    double scale = newRange / oldRange;
+                    m_params.linear1y = m_params.maxy - (m_params.maxy - m_params.linear1y) * scale;
+                    m_params.linear2y = m_params.maxy - (m_params.maxy - m_params.linear2y) * scale;
+                    m_params.miny = logicY;
+                }
+                break;
+            }
+            case 6: { // dmax line scale
+                double oldRange = m_params.maxy - m_params.miny;
+                double newRange = logicY - m_params.miny;
+                if (std::abs(oldRange) > 1e-9) {
+                    double scale = newRange / oldRange;
+                    m_params.linear1y = m_params.miny + (m_params.linear1y - m_params.miny) * scale;
+                    m_params.linear2y = m_params.miny + (m_params.linear2y - m_params.miny) * scale;
+                    m_params.maxy = logicY;
+                }
+                break;
+            }
+            case 7: { // xmin line scale
+                double oldRange = m_params.maxx - m_params.minx;
+                double newRange = m_params.maxx - logicX;
+                if (std::abs(oldRange) > 1e-9) {
+                    double scale = newRange / oldRange;
+                    m_params.linear1x = m_params.maxx - (m_params.maxx - m_params.linear1x) * scale;
+                    m_params.linear2x = m_params.maxx - (m_params.maxx - m_params.linear2x) * scale;
+                    m_params.minx = logicX;
+                }
+                break;
+            }
+            case 8: { // xmax line scale
+                double oldRange = m_params.maxx - m_params.minx;
+                double newRange = logicX - m_params.minx;
+                if (std::abs(oldRange) > 1e-9) {
+                    double scale = newRange / oldRange;
+                    m_params.linear1x = m_params.minx + (m_params.linear1x - m_params.minx) * scale;
+                    m_params.linear2x = m_params.minx + (m_params.linear2x - m_params.minx) * scale;
+                    m_params.maxx = logicX;
+                }
+                break;
+            }
         }
+        
+        m_lastLogicX = logicX;
+        m_lastLogicY = logicY;
         
         updateCurve();
         update();
