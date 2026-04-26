@@ -61,7 +61,7 @@ Do **not mass reformat** while files; we can do that in a separate commit.
 
 ## 3. Template & Performance Modernization
 
-- **Constancy**: Proactively add missing `const`, `constexpr` to functions, variables and functions parameters.
+- **Constancy**: Proactively add missing `const`, `constexpr` to functions, variables and functions parameters.  Do not use `const` on scalar automatic variables wehre this can be easily determined by compiler.
 - **attributes**: Add `pure_attr`, and `const_attr` to functions where this property can not be easily determined by the compiler (it is exported in header)
 - **OpenMP**: Identify opportunities for parallelization. Suggest OpenMP improvements (e.g., `#pragma omp parallel for`) in the implementation plan.
 - **noexcept**: Mark API functions as `noexcept` where possible. Do not do that in case compiler can work it out itself (anonymous namespace and inline). Always ask in plan.
