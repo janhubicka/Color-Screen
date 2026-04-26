@@ -3901,8 +3901,14 @@ finetune_misregistered_area (solver_parameters *solver,
       scr_to_img map;
       if (!map.set_parameters (param, img))
         return false;
+
+      /* Clear info about points to be computed.  */
+      for (int i = 0; i < xsubsteps * ysubsteps; i++)
+        if (tiles[i] == to_be_computed)
+          tiles[i] = unknown;
+      npoints = 0;
       /* Now prune points that are too far.  */
-      if (size_t i = 0; i < res.size ())
+      for (size_t i = 0; i < res.size ();)
 	{
           finetune_result &r = res[i];
 	  bool ok = r.success;
@@ -3914,6 +3920,8 @@ finetune_misregistered_area (solver_parameters *solver,
 		  = (r.solver_point_img_location.x - area.x) / (coord_t)xsubstep;
 	      int py
 		  = (r.solver_point_img_location.y - area.y) / (coord_t)ysubstep;
+	      if (!ok)
+		tiles[py * xsubsteps + px] = bad;
 	      if (verbose)
 		printf ("found grid: %i %i transformed: %f %f finetuned: %f %f %s\n", px, py, transformed.x,
 			transformed.y, r.solver_point_screen_location.x,
@@ -3930,20 +3938,14 @@ finetune_misregistered_area (solver_parameters *solver,
 	}
       /* If we have many points; rule out uncertain ones.  Let the value only
          drop in each wave.  */
-      if (points.size () > 5)
+      if (res.size () > 5)
         {
           std::sort (res.begin (), res.end (),
                      [] (finetune_result &a, finetune_result &b)
                        { return a.uncertainty > b.uncertainty; });
           max_uncertainty = std::min (max_uncertainty,
-                                      res[points.size () * 0.2].uncertainty);
+                                      res[res.size () * 0.2].uncertainty);
         }
-
-      /* Clear info about points to be computed.  */
-      for (int i = 0; i < xsubsteps * ysubsteps; i++)
-        if (tiles[i] == to_be_computed)
-          tiles[i] = unknown;
-      npoints = 0;
 
       /* Now add computed points to solver and update tiles.  */
       for (size_t i = 0; i < res.size (); i++)
@@ -3953,7 +3955,7 @@ finetune_misregistered_area (solver_parameters *solver,
               = (r.solver_point_img_location.x - area.x) / (coord_t)xsubstep;
           int py
               = (r.solver_point_img_location.y - area.y) / (coord_t)ysubstep;
-          if (r.success && r.uncertainty <= max_uncertainty)
+          if (r.uncertainty <= max_uncertainty)
             {
               solver->add_point (r.solver_point_img_location,
                                  r.solver_point_screen_location,

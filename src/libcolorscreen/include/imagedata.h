@@ -7,6 +7,8 @@
 #include "progress-info.h"
 #include "backlight-correction-parameters.h"
 #include <string>
+#include <vector>
+#include <array>
 namespace colorscreen
 {
 
@@ -34,7 +36,7 @@ public:
     demosaic_none,
     demosaic_max
   };
-  demosaicing_t demosaic;
+  demosaicing_t demosaic = demosaic_default;
   DLL_PUBLIC static const property_t demosaic_names[(int)demosaic_max];
 
   typedef unsigned short gray;
@@ -43,27 +45,27 @@ public:
     gray r, g, b;
   };
   /* Grayscale scan.  */
-  gray **data;
+  gray **data = nullptr;
   /* Optional color scan.  */
-  pixel **rgbdata;
-  void *icc_profile;
-  std::vector<luminosity_t> to_linear[3];
+  pixel **rgbdata = nullptr;
+  void *icc_profile = nullptr;
+  std::array<std::vector<luminosity_t>, 3> to_linear;
 
   DLL_PUBLIC image_data ();
   DLL_PUBLIC_EXP ~image_data ();
   /* Dimensions of image data.  */
-  int width, height;
+  int width = 0, height = 0;
   /* Maximal value of the image data.  */
-  int maxval;
-  uint32_t icc_profile_size;
+  int maxval = 0;
+  uint32_t icc_profile_size = 0;
   /* Unique id of the image (used for caching).  */
-  uint64_t id;
-  coord_t xdpi, ydpi;
-  coord_t exif_xdpi, exif_ydpi;
-  stitch_project *stitch;
+  uint64_t id = 0;
+  coord_t xdpi = 0, ydpi = 0;
+  coord_t exif_xdpi = 0, exif_ydpi = 0;
+  stitch_project *stitch = nullptr;
 
   /* Beginning of the viewport of stitched object.  */
-  int xmin, ymin;
+  int xmin = 0, ymin = 0;
 
   /* Initialize loader for NAME.  Return true on success.
      If false is returned ERROR is initialized to error
@@ -97,26 +99,26 @@ public:
     return int_image_area (0, 0, width, height);
   }
 
-  xyY primary_red;
-  xyY primary_green;
-  xyY primary_blue;
-  xyz whitepoint;
-  std::shared_ptr<backlight_correction_parameters> backlight_corr;
+  xyY primary_red = { 0.6400, 0.3300, 0.2126 };
+  xyY primary_green = { 0.3000, 0.6000, 0.7152 };
+  xyY primary_blue = { 0.1500, 0.0600, 0.0722 };
+  xyz whitepoint = { 0.312700492, 0.329000939, 1.0 };
+  std::shared_ptr<backlight_correction_parameters> backlight_corr = nullptr;
   DLL_PUBLIC void set_dpi (coord_t xdpi, coord_t ydpi);
   /* Gamma, -2 if unknown.  */
-  luminosity_t gamma;
+  luminosity_t gamma = -2;
   /* Data about camera setup, all -2 if unknown.  */
-  luminosity_t f_stop;
-  luminosity_t focal_plane_x_resolution;
-  luminosity_t focal_plane_y_resolution;
-  luminosity_t focal_length;
-  luminosity_t focal_length_in_35mm;
-  luminosity_t pixel_pitch;
-  luminosity_t sensor_fill_factor;
-  luminosity_t wavelengths[4];
-  int rotation;
-  int mirror;
-  demosaicing_t demosaiced_by;
+  luminosity_t f_stop = -2;
+  luminosity_t focal_plane_x_resolution = -2;
+  luminosity_t focal_plane_y_resolution = -2;
+  luminosity_t focal_length = -2;
+  luminosity_t focal_length_in_35mm = -2;
+  luminosity_t pixel_pitch = -2;
+  luminosity_t sensor_fill_factor = -2;
+  std::array<luminosity_t, 4> wavelengths = {-2, -2, -2, -2};
+  int rotation = -1;
+  int mirror = -1;
+  demosaicing_t demosaiced_by = demosaic_max;
   std::string camera_model;
   std::string lens;
   std::string software;
@@ -124,8 +126,8 @@ public:
 private:
   std::unique_ptr <image_data_loader> loader;
   /* True if the data is owned by the structure.  */
-  bool own;
-  bool m_preload_all;
+  bool own = false;
+  bool m_preload_all = false;
 
   bool parse_icc_profile(progress_info *);
 };

@@ -54,10 +54,12 @@ public:
                           progress_info *progress)
       = 0;
   virtual ~image_data_loader () {}
-  bool grayscale;
-  bool rgb;
+  bool grayscale = false;
+  bool rgb = false;
 };
 
+namespace
+{
 class jpg_image_data_loader : public image_data_loader
 {
 public:
@@ -139,8 +141,8 @@ private:
   void *m_buffer;
   /* Do not put it on the stack since it is rather large.  */
   std::unique_ptr<LibRaw> m_processor;
-  bool monochromatic;
-  bool bayer_correction;
+  bool monochromatic = false;
+  bool bayer_correction = false;
 };
 
 class stitch_image_data_loader : public image_data_loader
@@ -160,21 +162,14 @@ public:
 private:
   image_data *m_img;
   bool m_preload_all;
-  int m_curr_img;
-  int m_max_img;
+  int m_curr_img = 0;
+  int m_max_img = 0;
   image_data::demosaicing_t m_demosaic;
 };
+}
 
 image_data::image_data ()
-    : data (NULL), rgbdata (NULL), icc_profile (NULL), width (0), height (0),
-      maxval (0), icc_profile_size (0), id (lru_caches::get ()), xdpi (0),
-      ydpi (0), exif_xdpi (0), exif_ydpi (0), stitch (NULL), primary_red{ 0.6400, 0.3300, 0.2126 },
-      primary_green{ 0.3000, 0.6000, 0.7152 },
-      primary_blue{ 0.1500, 0.0600, 0.0722 },
-      whitepoint{ 0.312700492, 0.329000939, 1.0 }, backlight_corr (nullptr), gamma (-2),
-      f_stop (-2), focal_plane_x_resolution (-2), focal_plane_y_resolution (-2),
-      focal_length (-2), focal_length_in_35mm (-2), pixel_pitch (-2), sensor_fill_factor (-2),
-      wavelengths {-2, -2, -2, -2}, rotation (-1), mirror (-1), demosaiced_by (demosaic_max), own (false)
+    : id (lru_caches::get ())
 {
 }
 
