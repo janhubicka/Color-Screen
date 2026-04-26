@@ -62,9 +62,6 @@ jobs:
       shell: msys2 {0}
       run: make install
 
-    - name: print dlls dll
-      shell: msys2 {0}
-      run: ldd /c/Color-Screen-install/bin/libcolorscreen*dll
     - name: copy dlls
       shell: msys2 {0}
       run: bash os/windows/deploy_dlls.sh /c/Color-Screen-install/bin /${{matrix.sys}}
