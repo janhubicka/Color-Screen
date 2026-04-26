@@ -22,7 +22,7 @@ class analyze_base
 {
 protected:
   /* Enable debug checks if COLORSCREEN_CHECKING is defined.  */
-  static constexpr const bool debug = colorscreen_checking;
+  static constexpr bool debug = colorscreen_checking;
 public:
   /* Information about min and max luminosity in a region.  */
   struct contrast_info
@@ -51,7 +51,7 @@ public:
     m_known_pixels.reset (bitmap);
     for (int y = 0; y < m_area.height; y++)
       for (int x = 0; x < m_area.width; x++)
-	if (bitmap->test_bit (x,y))
+	if (bitmap->test_bit (x, y))
 	  m_n_known_pixels++;
   }
 
@@ -161,15 +161,15 @@ public:
 	  if (!m_bwscl)
 	    return m_blue [y * m_area.width + x];
 	  else
-	    return (m_blue [y * m_area.width * 2 + 2 * x] + m_blue [y * m_area.width * 2 + 2 * x + 1]) * (luminosity_t)0.5;
+	    return (m_blue [y * m_area.width * 2 + 2 * x] + m_blue [y * m_area.width * 2 + 2 * x + 1]) * (luminosity_t) 0.5;
 	}
       else
 	{
 	  if (!m_bwscl)
-	    return (m_blue [2 * y * m_area.width + x] + m_blue [2 * (y + 1) * m_area.width + x]) * (luminosity_t)0.5;
+	    return (m_blue [2 * y * m_area.width + x] + m_blue [2 * (y + 1) * m_area.width + x]) * (luminosity_t) 0.5;
 	  else
 	    return (m_blue [4 * y * m_area.width + 2 * x] + m_blue [4 * y * m_area.width + 2 * x + 1]
-	            + m_blue [2 * (2 * y + 1) * m_area.width + 2 * x] + m_blue [2 * (2 * y + 1) * m_area.width + 2 * x + 1]) * (luminosity_t)0.25;
+	            + m_blue [2 * (2 * y + 1) * m_area.width + 2 * x] + m_blue [2 * (2 * y + 1) * m_area.width + 2 * x + 1]) * (luminosity_t) 0.25;
 	}
     }
 
@@ -183,15 +183,15 @@ public:
 	  if (!m_rwscl)
 	    return m_red [y * m_area.width + x];
 	  else
-	    return (m_red [y * m_area.width * 2 + 2 * x] + m_red [y * m_area.width * 2 + 2 * x + 1]) * (luminosity_t)0.5;
+	    return (m_red [y * m_area.width * 2 + 2 * x] + m_red [y * m_area.width * 2 + 2 * x + 1]) * (luminosity_t) 0.5;
 	}
       else
 	{
 	  if (!m_rwscl)
-	    return (m_red [2 * y * m_area.width + x] + m_red [2 * (y + 1) * m_area.width + x]) * (luminosity_t)0.5;
+	    return (m_red [2 * y * m_area.width + x] + m_red [2 * (y + 1) * m_area.width + x]) * (luminosity_t) 0.5;
 	  else
 	    return (m_red [4 * y * m_area.width + 2 * x] + m_red [4 * y * m_area.width + 2 * x + 1]
-	            + m_red [2 * (2 * y + 1) * m_area.width + 2 * x] + m_red [2 * (2 * y + 1) * m_area.width + 2 * x + 1]) * (luminosity_t)0.25;
+	            + m_red [2 * (2 * y + 1) * m_area.width + 2 * x] + m_red [2 * (2 * y + 1) * m_area.width + 2 * x + 1]) * (luminosity_t) 0.25;
 	}
     }
 
@@ -205,15 +205,15 @@ public:
 	  if (!m_gwscl)
 	    return m_green [y * m_area.width + x];
 	  else
-	    return (m_green [y * m_area.width * 2 + 2 * x] + m_green [y * m_area.width * 2 + 2 * x + 1]) * (luminosity_t)0.5;
+	    return (m_green [y * m_area.width * 2 + 2 * x] + m_green [y * m_area.width * 2 + 2 * x + 1]) * (luminosity_t) 0.5;
 	}
       else
 	{
 	  if (!m_gwscl)
-	    return (m_green [2 * y * m_area.width + x] + m_green [2 * (y + 1) * m_area.width + x]) * (luminosity_t)0.5;
+	    return (m_green [2 * y * m_area.width + x] + m_green [2 * (y + 1) * m_area.width + x]) * (luminosity_t) 0.5;
 	  else
 	    return (m_green [4 * y * m_area.width + 2 * x] + m_green [4 * y * m_area.width + 2 * x + 1]
-	            + m_green [2 * (2 * y + 1) * m_area.width + 2 * x] + m_green [2 * (2 * y + 1) * m_area.width + 2 * x + 1]) * (luminosity_t)0.25;
+	            + m_green [2 * (2 * y + 1) * m_area.width + 2 * x] + m_green [2 * (2 * y + 1) * m_area.width + 2 * x + 1]) * (luminosity_t) 0.25;
 	}
     }
 
@@ -238,14 +238,27 @@ public:
   /* Return area of the demosaiced image.  */
   virtual int_image_area demosaiced_area () const = 0;
 
-  /* Find best match between this and OTHER scan.  */
-  virtual int find_best_match (int percentake, int max_percentage, analyze_base &other, int cpfind, coord_t *xshift, coord_t *yshift, int direction, scr_to_img &map, scr_to_img &other_map, FILE *report_file, progress_info *progress = nullptr);
+  /* Find best match between this and OTHER scan.
+     PERCENTAGE and MAX_PERCENTAGE define the required overlap.
+     OTHER is the other scan to match against.
+     CPFIND specifies whether to use cpfind tool.
+     XSHIFT and YSHIFT are the resulting shifts.
+     DIRECTION is the direction of matching.
+     MAP and OTHER_MAP are the screen to image maps.
+     REPORT_FILE is the file to write the report to.
+     PROGRESS is the progress info object.  */
+  virtual int find_best_match (int percentage, int max_percentage, analyze_base &other, int cpfind, coord_t *xshift, coord_t *yshift, int direction, scr_to_img &map, scr_to_img &other_map, FILE *report_file, progress_info *progress = nullptr);
 
   /* Analyze the range of luminosity values.  */
   void analyze_range (luminosity_t *rrmin, luminosity_t *rrmax, luminosity_t *rgmin, luminosity_t *rgmax, luminosity_t *rbmin, luminosity_t *rbmax);
 
-  /* Write the analyzed screen to a file.  */
-  virtual bool write_screen (const char *filename, bitmap_2d *known_pixels, const char **error, progress_info *progress = nullptr, luminosity_t rmin = (luminosity_t)0, luminosity_t rmax = (luminosity_t)1, luminosity_t gmin = (luminosity_t)0, luminosity_t gmax = (luminosity_t)1, luminosity_t bmin = (luminosity_t)0, luminosity_t bmax = (luminosity_t)1);
+  /* Write the analyzed screen to a file.
+     FILENAME is the name of the file to write to.
+     KNOWN_PIXELS is the bitmap of known pixels.
+     ERROR is the error message if any.
+     PROGRESS is the progress info object.
+     RMIN, RMAX, GMIN, GMAX, BMIN, BMAX define the luminosity range.  */
+  virtual bool write_screen (const char *filename, bitmap_2d *known_pixels, const char **error, progress_info *progress = nullptr, luminosity_t rmin = (luminosity_t) 0, luminosity_t rmax = (luminosity_t) 1, luminosity_t gmin = (luminosity_t) 0, luminosity_t gmax = (luminosity_t) 1, luminosity_t bmin = (luminosity_t) 0, luminosity_t bmax = (luminosity_t) 1);
 
   typedef int_point_t data_entry;
 
@@ -263,9 +276,10 @@ public:
 
 protected:
   /* Minimum size for OpenMP parallelization.  */
-  static constexpr const size_t openmp_min_size = 128 * 1024;
+  static constexpr size_t openmp_min_size = 128 * 1024;
 
-  /* Initialize analyzer with scales.  */
+  /* Initialize analyzer with scales.
+     RWSCL, RHSCL, GWSCL, GHSCL, BWSCL, BHSCL are the scales for the channels.  */
   analyze_base (int rwscl, int rhscl, int gwscl, int ghscl, int bwscl, int bhscl)
   : m_rwscl (rwscl), m_rhscl (rhscl), m_gwscl (gwscl), m_ghscl (ghscl), m_bwscl (bwscl), m_bhscl (bhscl)
   {
@@ -404,15 +418,15 @@ public:
     for (int yy = 0; yy < GEOMETRY::red_height_scale; yy++)
       for (int xx = 0; xx < GEOMETRY::red_width_scale; xx++)
 	ret.red += fast_red (x * GEOMETRY::red_width_scale + xx, y * GEOMETRY::red_height_scale + yy);
-    ret.red *= ((luminosity_t)1.0 / (GEOMETRY::red_height_scale * GEOMETRY::red_width_scale));
+    ret.red *= ((luminosity_t) 1.0 / (GEOMETRY::red_height_scale * GEOMETRY::red_width_scale));
     for (int yy = 0; yy < GEOMETRY::green_height_scale; yy++)
       for (int xx = 0; xx < GEOMETRY::green_width_scale; xx++)
 	ret.green += fast_green (x * GEOMETRY::green_width_scale + xx, y * GEOMETRY::green_height_scale + yy);
-    ret.green *= ((luminosity_t)1.0 / (GEOMETRY::green_height_scale * GEOMETRY::green_width_scale));
+    ret.green *= ((luminosity_t) 1.0 / (GEOMETRY::green_height_scale * GEOMETRY::green_width_scale));
     for (int yy = 0; yy < GEOMETRY::blue_height_scale; yy++)
       for (int xx = 0; xx < GEOMETRY::blue_width_scale; xx++)
 	ret.blue += fast_blue (x * GEOMETRY::blue_width_scale + xx, y * GEOMETRY::blue_height_scale + yy);
-    ret.blue *= ((luminosity_t)1.0 / (GEOMETRY::blue_height_scale * GEOMETRY::blue_width_scale));
+    ret.blue *= ((luminosity_t) 1.0 / (GEOMETRY::blue_height_scale * GEOMETRY::blue_width_scale));
     return ret;
   }
 
@@ -424,17 +438,17 @@ public:
     for (int yy = 0; yy < GEOMETRY::red_width_scale; yy++)
       for (int xx = 0; xx < GEOMETRY::red_height_scale; xx++)
 	red_ret += fast_rgb_red (x * GEOMETRY::red_width_scale + xx, y * GEOMETRY::red_height_scale + yy);
-    red_ret *= ((luminosity_t)1.0 / (GEOMETRY::red_height_scale * GEOMETRY::red_width_scale));
+    red_ret *= ((luminosity_t) 1.0 / (GEOMETRY::red_height_scale * GEOMETRY::red_width_scale));
     green_ret = {0, 0, 0};
     for (int yy = 0; yy < GEOMETRY::green_width_scale; yy++)
       for (int xx = 0; xx < GEOMETRY::green_height_scale; xx++)
 	green_ret += fast_rgb_green (x * GEOMETRY::green_width_scale + xx, y * GEOMETRY::green_height_scale + yy);
-    green_ret *= ((luminosity_t)1.0 / (GEOMETRY::green_height_scale * GEOMETRY::green_width_scale));
+    green_ret *= ((luminosity_t) 1.0 / (GEOMETRY::green_height_scale * GEOMETRY::green_width_scale));
     blue_ret = {0, 0, 0};
     for (int yy = 0; yy < GEOMETRY::blue_width_scale; yy++)
       for (int xx = 0; xx < GEOMETRY::blue_height_scale; xx++)
 	blue_ret += fast_rgb_blue (x * GEOMETRY::blue_width_scale + xx, y * GEOMETRY::blue_height_scale + yy);
-    blue_ret *= ((luminosity_t)1.0 / (GEOMETRY::blue_height_scale * GEOMETRY::blue_width_scale));
+    blue_ret *= ((luminosity_t) 1.0 / (GEOMETRY::blue_height_scale * GEOMETRY::blue_width_scale));
   }
 
   /* Populate demosaiced data vector.  */
@@ -454,15 +468,17 @@ protected:
   bool analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, const simulated_screen *simulated, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int_image_area area, progress_info *progress);
   /* Analysis of original scanner colors.  */
   bool analyze_color (scr_to_img *scr_to_img, render_to_scr *render, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int_image_area area, progress_info *progress);
-  /* Fast analysis from patch centers.  */
-  bool analyze_fast (render_to_scr *render,progress_info *progress);
+  /* Fast analysis from patch centers.
+     RENDER is the renderer.
+     PROGRESS is the progress info object.  */
+  bool analyze_fast (render_to_scr *render, progress_info *progress);
 
 };
 
 /* Linear interpolation between A and B with offset OFF.  */
 inline luminosity_t linear_interpolate (luminosity_t a, luminosity_t b, luminosity_t off)
 {
-  return a * ((luminosity_t)1 - off) + b * off;
+  return a * ((luminosity_t) 1 - off) + b * off;
 }
 
 /* 2D linear interpolation between V1, V2, V3, V4 with offset OFF.  */
@@ -556,7 +572,7 @@ analyze_base_worker<GEOMETRY>::nearest_bw_interpolate (point_t scr) const
   /* Paget needs -3 for miny because of diagonal coordinates.  */
   int64_t red_minx = -2, red_miny = -3, green_minx = -2, green_miny = -3, blue_minx = -2, blue_miny = -2;
   int64_t red_maxx = 2, red_maxy = 3, green_maxx = 2, green_maxy = 3, blue_maxx = 2, blue_maxy = 2;
-  rgbdata ret = {(luminosity_t)1, (luminosity_t)0, (luminosity_t)0};
+  rgbdata ret = {(luminosity_t) 1, (luminosity_t) 0, (luminosity_t) 0};
 
   scr.x += (coord_t)m_area.xshift ();
   scr.y += (coord_t)m_area.yshift ();
@@ -566,7 +582,7 @@ analyze_base_worker<GEOMETRY>::nearest_bw_interpolate (point_t scr) const
       && e.y + red_miny >= 0 && e.y + red_maxy < m_area.height * GEOMETRY::red_height_scale)
     {
 #define get_red_p(xx, yy) fast_red (GEOMETRY::offset_for_interpolation_red (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_red (e, {xx, yy}).y)
-      ret.red = get_red_p (off.x > (coord_t)0.5, off.y > (coord_t)0.5);
+      ret.red = get_red_p (off.x > (coord_t) 0.5, off.y > (coord_t) 0.5);
 #undef get_red_p
     }
   e = GEOMETRY::green_scr_to_entry (scr, &off);
@@ -574,7 +590,7 @@ analyze_base_worker<GEOMETRY>::nearest_bw_interpolate (point_t scr) const
       && e.y + green_miny >= 0 && e.y + green_maxy < m_area.height * GEOMETRY::green_height_scale)
     {
 #define get_green_p(xx, yy) fast_green (GEOMETRY::offset_for_interpolation_green (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_green (e, {xx, yy}).y)
-      ret.green = get_green_p (off.x > (coord_t)0.5, off.y > (coord_t)0.5);
+      ret.green = get_green_p (off.x > (coord_t) 0.5, off.y > (coord_t) 0.5);
 #undef get_green_p
     }
   e = GEOMETRY::blue_scr_to_entry (scr, &off);
@@ -582,7 +598,7 @@ analyze_base_worker<GEOMETRY>::nearest_bw_interpolate (point_t scr) const
       && e.y + blue_miny >= 0 && e.y + blue_maxy < m_area.height * GEOMETRY::blue_height_scale)
     {
 #define get_blue_p(xx, yy) fast_blue (GEOMETRY::offset_for_interpolation_blue (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_blue (e, {xx, yy}).y)
-      ret.blue = get_blue_p (off.x > (coord_t)0.5, off.y > (coord_t)0.5);
+      ret.blue = get_blue_p (off.x > (coord_t) 0.5, off.y > (coord_t) 0.5);
 #undef get_blue_p
     }
   return ret;
@@ -594,7 +610,7 @@ analyze_base_worker<GEOMETRY>::linear_bw_interpolate (point_t scr) const
   /* Paget needs -3 for miny because of diagonal coordinates.  */
   int64_t red_minx = -2, red_miny = -3, green_minx = -2, green_miny = -3, blue_minx = -2, blue_miny = -2;
   int64_t red_maxx = 2, red_maxy = 3, green_maxx = 2, green_maxy = 3, blue_maxx = 2, blue_maxy = 2;
-  rgbdata ret = {(luminosity_t)1, (luminosity_t)0, (luminosity_t)0};
+  rgbdata ret = {(luminosity_t) 1, (luminosity_t) 0, (luminosity_t) 0};
 
   scr.x += (coord_t)m_area.xshift ();
   scr.y += (coord_t)m_area.yshift ();
@@ -633,7 +649,7 @@ analyze_base_worker<GEOMETRY>::bicubic_bw_interpolate (point_t scr) const
   /* Paget needs -3 for miny because of diagonal coordinates.  */
   int64_t red_minx = -2, red_miny = -3, green_minx = -2, green_miny = -3, blue_minx = -2, blue_miny = -2;
   int64_t red_maxx = 2, red_maxy = 3, green_maxx = 2, green_maxy = 3, blue_maxx = 2, blue_maxy = 2;
-  rgbdata ret = {(luminosity_t)1, (luminosity_t)0, (luminosity_t)0};
+  rgbdata ret = {(luminosity_t) 1, (luminosity_t) 0, (luminosity_t) 0};
 
   scr.x += (coord_t)m_area.xshift ();
   scr.y += (coord_t)m_area.yshift ();
@@ -715,7 +731,7 @@ analyze_base_worker<GEOMETRY>::populate_demosaiced_data (std::vector<rgbdata> &d
 	    p.y += (coord_t)m_area.yshift ();
 	    point_t off;
 	    data_entry e = GEOMETRY::red_scr_to_entry (p, &off);
-	    if (my_fabs (off.x) < (coord_t)0.01 && my_fabs (off.y) < (coord_t)0.01)
+	    if (my_fabs (off.x) < (coord_t) 0.01 && my_fabs (off.y) < (coord_t) 0.01)
 	      {
 		demosaic [y * area.width + x].red =  /*std::max (red (e.x, e.y), (luminosity_t) 0)*/ r->adjust_luminosity_ir (red (e.x, e.y));
 		assert (!debug
@@ -724,7 +740,7 @@ analyze_base_worker<GEOMETRY>::populate_demosaiced_data (std::vector<rgbdata> &d
 		continue;
 	      }
 	    e = GEOMETRY::green_scr_to_entry (p, &off);
-	    if (my_fabs (off.x) < (coord_t)0.01 && my_fabs (off.y) < (coord_t)0.01)
+	    if (my_fabs (off.x) < (coord_t) 0.01 && my_fabs (off.y) < (coord_t) 0.01)
 	      {
 		demosaic [y * area.width + x].green = /*std::max (green (e.x, e.y), (luminosity_t) 0)*/ r->adjust_luminosity_ir (green (e.x, e.y));
 		assert (!debug
@@ -737,7 +753,7 @@ analyze_base_worker<GEOMETRY>::populate_demosaiced_data (std::vector<rgbdata> &d
 	    assert (!debug
 		    || GEOMETRY::demosaic_entry_color (x + area.x, y + area.y)
 		       == base_geometry::blue);
-	    assert (my_fabs (off.x) < (coord_t)0.01 && my_fabs (off.y) < (coord_t)0.01);
+	    assert (my_fabs (off.x) < (coord_t) 0.01 && my_fabs (off.y) < (coord_t) 0.01);
 	  }
       if (progress)
 	progress->inc_progress ();

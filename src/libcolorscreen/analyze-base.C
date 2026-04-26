@@ -6,10 +6,10 @@
 namespace colorscreen
 {
 static void
-add (unsigned char ov[256][256][3], int c, double x, double y)
+add (unsigned char ov[256][256][3], int c, coord_t x, coord_t y)
 {
-  int xx = x * 255.5;
-  int yy = y * 255.5;
+  int xx = x * (coord_t) 255.5;
+  int yy = y * (coord_t) 255.5;
   if (xx < 0)
     xx = 0;
   if (xx > 255)
@@ -83,12 +83,11 @@ analyze_base::find_best_match_using_cpfind (
       if (progress)
         progress->set_task ("executing cpfind", 1);
       char cmd[256];
-      cmd[255] = 0;
-      snprintf (cmd, 254,
-                "cpfind --fullscale %s project-cpfind-%s.pto -o "
-                "project-cpfind-%s-out.pto >cpfind.out",
-                m ? "" : "--ransacmode=rpy", direction ? "vert" : "hor",
-                direction ? "vert" : "hor");
+      std::snprintf (cmd, sizeof (cmd),
+                     "cpfind --fullscale %s project-cpfind-%s.pto -o "
+                     "project-cpfind-%s-out.pto >cpfind.out",
+                     m ? "" : "--ransacmode=rpy", direction ? "vert" : "hor",
+                     direction ? "vert" : "hor");
       // if (system (direction ? "cpfind --fullscale --ransacmode=rpy
       // project-cpfind-vert.pto -o project-cpfind-vert-out.pto >cpfind.out":
       // "cpfind --fullscale --ransacmode=rpy project-cpfind-hor.pto -o
@@ -138,7 +137,7 @@ analyze_base::find_best_match_using_cpfind (
                 c = fgetc (f);
               continue;
             }
-          float x1, y1, x2, y2;
+          coord_t x1, y1, x2, y2;
           npoints++;
           if (fscanf (f, "%f", &x1) != 1)
             {
@@ -216,8 +215,8 @@ analyze_base::find_best_match_using_cpfind (
           int yo = round (y2 - y1);
           if (direction >= 0)
             {
-              int xx = -xo / (coord_t)scale - (m_area.xshift () - other.m_area.xshift ());
-              int yy = -yo / (coord_t)scale - (m_area.yshift () - other.m_area.yshift ());
+              int xx = -xo / (coord_t) scale - (m_area.xshift () - other.m_area.xshift ());
+              int yy = -yo / (coord_t) scale - (m_area.yshift () - other.m_area.yshift ());
               point_t imgp = map.to_img ({ l.x + xx, l.y + yy });
 
               if ((direction == 0
@@ -233,7 +232,7 @@ analyze_base::find_best_match_using_cpfind (
                   continue;
                 }
             }
-          if (fabs ((x2 - x1) - xo) > 0.3 || fabs ((y2 - y1) - yo) > 0.3)
+          if (my_fabs ((x2 - x1) - (coord_t) xo) > (coord_t) 0.3 || my_fabs ((y2 - y1) - (coord_t) yo) > (coord_t) 0.3)
             {
               if (report_file)
                 fprintf (report_file,
@@ -281,14 +280,14 @@ analyze_base::find_best_match_using_cpfind (
               max = o;
           int real_n = max.n;
           for (bad_offsets &o : bad_off)
-            if (fabs (o.x - max.x) < 0.5 && fabs (o.y - max.y) < 0.5)
+            if (my_fabs (o.x - (coord_t) max.x) < (coord_t) 0.5 && my_fabs (o.y - (coord_t) max.y) < (coord_t) 0.5)
               real_n++;
           if (real_n > std::min (npoints / 3, 2))
             {
               *xshift_ret
-                  = -max.x / (coord_t)scale - (m_area.xshift () - other.m_area.xshift ());
+                  = -max.x / (coord_t) scale - (m_area.xshift () - other.m_area.xshift ());
               *yshift_ret
-                  = -max.y / (coord_t)scale - (m_area.yshift () - other.m_area.yshift ());
+                  = -max.y / (coord_t) scale - (m_area.yshift () - other.m_area.yshift ());
               if (report_file)
                 fprintf (report_file,
                          "Best offset %f %f with %i points, shifts %i %i\n",
@@ -432,14 +431,14 @@ analyze_base::find_best_match (int percentage, int max_percentage,
     fprintf (report_file, "cpfind output: %f,%f out of range\n", *xshift_ret,
              *yshift_ret);
 
-  rgbdata *sums = (rgbdata *)malloc (sizeof (rgbdata) * m_area.width * m_area.height);
-  rgbdata *other_sums
-      = (rgbdata *)malloc (sizeof (rgbdata) * other.m_area.width * other.m_area.height);
+  std::unique_ptr<rgbdata[]> sums = std::make_unique<rgbdata[]> ((size_t) m_area.width * m_area.height);
+  std::unique_ptr<rgbdata[]> other_sums
+      = std::make_unique<rgbdata[]> ((size_t) other.m_area.width * other.m_area.height);
   if (!sums || !other_sums)
     {
       if (progress)
         progress->pause_stdout ();
-      printf ("Out of memory allocating density summary\n");
+      std::printf ("Out of memory allocating density summary\n");
       if (progress)
         progress->resume_stdout ();
       return false;
@@ -697,10 +696,10 @@ analyze_base::find_best_match (int percentage, int max_percentage,
           luminosity_t rscale = rsum1 > 0 ? rsum2 / rsum1 : 1;
           luminosity_t gscale = gsum1 > 0 ? gsum2 / gsum1 : 1;
           luminosity_t bscale = bsum1 > 0 ? bsum2 / bsum1 : 1;
-          const luminosity_t exposure_tolerance = 2.6;
-          if (fabs (rscale - 1) > exposure_tolerance
-              || fabs (gscale - 1) > exposure_tolerance
-              || fabs (bscale - 1) > exposure_tolerance)
+          const luminosity_t exposure_tolerance = (luminosity_t) 2.6;
+          if (my_fabs (rscale - (luminosity_t) 1) > exposure_tolerance
+              || my_fabs (gscale - (luminosity_t) 1) > exposure_tolerance
+              || my_fabs (bscale - (luminosity_t) 1) > exposure_tolerance)
             {
               if (is_cpfind)
                 fprintf (report_file,
@@ -791,8 +790,6 @@ analyze_base::find_best_match (int percentage, int max_percentage,
             }
         }
     }
-  free (sums);
-  free (other_sums);
   point_t finalp
       = map.scr_to_final ({ (coord_t)best_xshift, (coord_t)best_yshift });
   if (found && report_file)
@@ -832,8 +829,7 @@ analyze_base::find_best_match (int percentage, int max_percentage,
     {
       static int fn;
       char name[256];
-      name[255] = 0;
-      snprintf (name, 255, "overlap%i%c.tif", fn, direction ? 'v' : 'h');
+      std::snprintf (name, sizeof (name), "overlap%i%c.tif", fn, direction ? 'v' : 'h');
       unsigned char ov[256][256][3];
       memset (ov, 0, 256 * 256 * 3);
       fn++;
@@ -930,9 +926,9 @@ analyze_base::write_screen (const char *filename, bitmap_2d *known_pixels,
   // progress->pause_stdout ();
   // printf ("Saving screen to %s in resolution %ix%i\n", filename, m_area.width,
   // m_area.height); progress->resume_stdout ();
-  luminosity_t rscale = rmax > rmin ? 1 / (rmax - rmin) : 1;
-  luminosity_t gscale = gmax > gmin ? 1 / (gmax - gmin) : 1;
-  luminosity_t bscale = bmax > bmin ? 1 / (bmax - bmin) : 1;
+  luminosity_t rscale = rmax > rmin ? (luminosity_t) 1 / (rmax - rmin) : (luminosity_t) 1;
+  luminosity_t gscale = gmax > gmin ? (luminosity_t) 1 / (gmax - gmin) : (luminosity_t) 1;
+  luminosity_t bscale = bmax > bmin ? (luminosity_t) 1 / (bmax - bmin) : (luminosity_t) 1;
   for (int y = 0; y < m_area.height; y++)
     {
       for (int x = 0; x < m_area.width; x++)
@@ -993,12 +989,12 @@ analyze_base::analyze_range (luminosity_t *rrmin, luminosity_t *rrmax,
         }
   if (!rvec.size ())
     {
-      *rrmin = 0;
-      *rrmax = 1;
-      *rgmin = 0;
-      *rgmax = 1;
-      *rbmin = 0;
-      *rbmax = 1;
+      *rrmin = (luminosity_t) 0;
+      *rrmax = (luminosity_t) 1;
+      *rgmin = (luminosity_t) 0;
+      *rgmax = (luminosity_t) 1;
+      *rbmin = (luminosity_t) 0;
+      *rbmax = (luminosity_t) 1;
       return;
     }
   sort (rvec.begin (), rvec.end ());

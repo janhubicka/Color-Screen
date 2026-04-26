@@ -7,18 +7,16 @@
 namespace colorscreen
 {
 
-/**
- * Collect luminosity of individual color patches.
- *
- * SCR_TO_IMG is the map from image to screen.
- * RENDER is the renderer.
- * SCREEN is the screen geometry.
- * SIMULATED_SCREEN is the simulated screen if any.
- * COLLECTION_THRESHOLD is the threshold for luminosity collection.
- * W_RED, W_GREEN, W_BLUE are the weights for the channels.
- * MINX, MINY, MAXX, MAXY define the region to analyze.
- * PROGRESS is the progress info object.
- */
+/* Collect luminosity of individual color patches.
+
+   SCR_TO_IMG is the map from image to screen.
+   RENDER is the renderer.
+   SCREEN is the screen geometry.
+   SIMULATED_SCREEN is the simulated screen if any.
+   COLLECTION_THRESHOLD is the threshold for luminosity collection.
+   W_RED, W_GREEN, W_BLUE are the weights for the channels.
+   AREA is the region to analyze.
+   PROGRESS is the progress info object.  */
 template <typename GEOMETRY>
 bool
 analyze_base_worker<GEOMETRY>::analyze_precise (
@@ -33,7 +31,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
 #pragma omp parallel shared(                                                  \
         progress, render, scr_to_img, screen, collection_threshold, w_blue,   \
             w_red, w_green, area, simulated_screen) default(none) \
-	    if (area.height > size || this -> m_area.height > size2)
+	    if (area.height > size || this->m_area.height > size2)
   {
 #pragma omp for
     for (int y = area.y; y < area.y + area.height; y++)
@@ -42,16 +40,16 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
           for (int x = area.x; x < area.x + area.width; x++)
             {
               point_t scr = scr_to_img->to_scr (
-                  { x + (coord_t)0.5, y + (coord_t)0.5 });
+                  { x + (coord_t) 0.5, y + (coord_t) 0.5 });
               scr += { (coord_t)m_area.xshift (), (coord_t)m_area.yshift () };
               /* Dufay analyzer shifts red strip and some pixels gets accounted
                  to neighbouring screen tile; add extra bffer of 1 screen tile
                  to be sure we do not access uninitialized memory.  */
               if (!GEOMETRY::check_range
-                  && (scr.x <= (coord_t)0
-                      || scr.x >= (coord_t)m_area.width - 1
-                      || scr.y <= (coord_t)0
-                      || scr.y >= (coord_t)m_area.height - 1))
+                  && (scr.x <= (coord_t) 0
+                      || scr.x >= (coord_t) m_area.width - (coord_t) 1
+                      || scr.y <= (coord_t) 0
+                      || scr.y >= (coord_t) m_area.height - (coord_t) 1))
                 continue;
 
               luminosity_t l = render->get_unadjusted_data ({ x, y });
@@ -70,7 +68,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
                           && e.y < m_area.height
                                        * GEOMETRY::red_height_scale))
                     {
-                      if (debug)
+                      if constexpr (debug)
                         assert (e.x >= 0 && e.y >= 0
                                 && e.x < m_area.width
                                              * GEOMETRY::red_width_scale
@@ -99,7 +97,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
                           && e.y < m_area.height
                                        * GEOMETRY::green_height_scale))
                     {
-                      if (debug)
+                      if constexpr (debug)
                         assert (e.x >= 0 && e.y >= 0
                                 && e.x < m_area.width
                                              * GEOMETRY::green_width_scale
@@ -129,7 +127,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
                           && e.y < m_area.height
                                        * GEOMETRY::blue_height_scale))
                     {
-                      if (debug)
+                      if constexpr (debug)
                         assert (e.x >= 0 && e.y >= 0
                                 && e.x < m_area.width
                                              * GEOMETRY::blue_width_scale
@@ -166,7 +164,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
                     data_entry e = { x, y * GEOMETRY::red_height_scale + yy };
                     int idx = e.y * m_area.width * GEOMETRY::red_width_scale
                               + e.x;
-                    if (w_red[idx] != (luminosity_t)0)
+                    if (w_red[idx] != (luminosity_t) 0)
                       m_red[idx] /= w_red[idx];
                     else
                       {
@@ -192,7 +190,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
                         = { x, y * GEOMETRY::green_height_scale + yy };
                     int idx = e.y * m_area.width * GEOMETRY::green_width_scale
                               + e.x;
-                    if (w_green[idx] != (luminosity_t)0)
+                    if (w_green[idx] != (luminosity_t) 0)
                       m_green[idx] /= w_green[idx];
                     else
                       {
@@ -217,7 +215,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
                     data_entry e = { x, y * GEOMETRY::blue_height_scale + yy };
                     int idx = e.y * m_area.width * GEOMETRY::blue_width_scale
                               + e.x;
-                    if (w_blue[idx] != (luminosity_t)0)
+                    if (w_blue[idx] != (luminosity_t) 0)
                       m_blue[idx] /= w_blue[idx];
                     else
                       {
@@ -245,7 +243,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
    SIMULATED_SCREEN is the simulated screen if any.
    COLLECTION_THRESHOLD is the threshold for luminosity collection.
    W_RED, W_GREEN, W_BLUE are the weights for the channels.
-   MINX, MINY, MAXX, MAXY define the region to analyze.
+   AREA is the region to analyze.
    PROGRESS is the progress info object.  */
 template <typename GEOMETRY>
 bool
@@ -261,7 +259,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
 #pragma omp parallel shared(                                                  \
         progress, render, scr_to_img, screen, collection_threshold, w_blue,   \
             w_red, w_green, area, simulated_screen) default(none) \
-	    if (area.height > size || this -> m_area.height > size2)
+	    if (area.height > size || this->m_area.height > size2)
   {
 #pragma omp for
     for (int y = area.y; y < area.y + area.height; y++)
@@ -270,11 +268,11 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
           for (int x = area.x; x < area.x + area.width; x++)
             {
               point_t scr = scr_to_img->to_scr (
-                  { x + (coord_t)0.5, y + (coord_t)0.5 });
+                  { x + (coord_t) 0.5, y + (coord_t) 0.5 });
               scr += { (coord_t)m_area.xshift (), (coord_t)m_area.yshift () };
               if (!GEOMETRY::check_range
-                  && (scr.x < (coord_t)0 || scr.x > (coord_t)m_area.width - 1
-                      || scr.y < (coord_t)0
+                  && (scr.x < (coord_t) 0 || scr.x > (coord_t)m_area.width - 1
+                      || scr.y < (coord_t) 0
                       || scr.y > (coord_t)m_area.height - 1))
                 continue;
 
@@ -294,7 +292,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
                           && e.y < m_area.height
                                        * GEOMETRY::red_height_scale))
                     {
-                      if (debug)
+                      if constexpr (debug)
                         assert (e.x >= 0 && e.y >= 0
                                 && e.x < m_area.width
                                              * GEOMETRY::red_width_scale
@@ -327,7 +325,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
                           && e.y < m_area.height
                                        * GEOMETRY::green_height_scale))
                     {
-                      if (debug)
+                      if constexpr (debug)
                         assert (e.x >= 0 && e.y >= 0
                                 && e.x < m_area.width
                                              * GEOMETRY::green_width_scale
@@ -361,7 +359,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
                           && e.y < m_area.height
                                        * GEOMETRY::blue_height_scale))
                     {
-                      if (debug)
+                      if constexpr (debug)
                         assert (e.x >= 0 && e.y >= 0
                                 && e.x < m_area.width
                                              * GEOMETRY::blue_width_scale
@@ -402,7 +400,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
                     data_entry e = { x, y * GEOMETRY::red_height_scale + yy };
                     int idx = e.y * m_area.width * GEOMETRY::red_width_scale
                               + e.x;
-                    if (w_red[idx] != (luminosity_t)0)
+                    if (w_red[idx] != (luminosity_t) 0)
                       m_rgb_red[idx] /= w_red[idx];
                     else
                       {
@@ -428,7 +426,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
                         = { x, y * GEOMETRY::green_height_scale + yy };
                     int idx = e.y * m_area.width * GEOMETRY::green_width_scale
                               + e.x;
-                    if (w_green[idx] != (luminosity_t)0)
+                    if (w_green[idx] != (luminosity_t) 0)
                       m_rgb_green[idx] /= w_green[idx];
                     else
                       {
@@ -453,7 +451,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
                     data_entry e = { x, y * GEOMETRY::blue_height_scale + yy };
                     int idx = e.y * m_area.width * GEOMETRY::blue_width_scale
                               + e.x;
-                    if (w_blue[idx] != (luminosity_t)0)
+                    if (w_blue[idx] != (luminosity_t) 0)
                       m_rgb_blue[idx] /= w_blue[idx];
                     else
                       {
@@ -478,7 +476,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
    SCR_TO_IMG is the map from image to screen.
    RENDER is the renderer.
    W_RED, W_GREEN, W_BLUE are the weights for the channels.
-   MINX, MINY, MAXX, MAXY define the region to analyze.
+   AREA is the region to analyze.
    PROGRESS is the progress info object.  */
 template <typename GEOMETRY>
 bool
@@ -495,15 +493,15 @@ analyze_base_worker<GEOMETRY>::analyze_color (
   /* FIXME: technically not right for paget where diagonal coordinates are not
      of same size as normal ones.  */
   coord_t pixel_size = render->pixel_size ();
-  coord_t left = (coord_t)128 - (pixel_size / (coord_t)2) * (coord_t)256;
-  coord_t right = (coord_t)128 + (pixel_size / (coord_t)2) * (coord_t)256;
-  coord_t half_left = (coord_t)128 - (pixel_size / (coord_t)4) * (coord_t)256;
-  coord_t half_right = (coord_t)128 + (pixel_size / (coord_t)4) * (coord_t)256;
+  coord_t left = (coord_t) 128 - (pixel_size / (coord_t) 2) * (coord_t) 256;
+  coord_t right = (coord_t) 128 + (pixel_size / (coord_t) 2) * (coord_t) 256;
+  coord_t half_left = (coord_t) 128 - (pixel_size / (coord_t) 4) * (coord_t) 256;
+  coord_t half_right = (coord_t) 128 + (pixel_size / (coord_t) 4) * (coord_t) 256;
 
   for (int i = 0; i < 256; i++)
     {
       if ((coord_t)i <= left)
-        weights[i] = (luminosity_t)0;
+        weights[i] = (luminosity_t) 0;
       else if ((coord_t)i >= right)
         weights[i] = (luminosity_t)1;
       else
@@ -511,7 +509,7 @@ analyze_base_worker<GEOMETRY>::analyze_color (
             = (luminosity_t)((coord_t)i - left) / (luminosity_t)(right - left);
 
       if ((coord_t)i <= half_left)
-        half_weights[i] = (luminosity_t)0;
+        half_weights[i] = (luminosity_t) 0;
       else if ((coord_t)i >= half_right)
         half_weights[i] = (luminosity_t)1;
       else
@@ -522,7 +520,7 @@ analyze_base_worker<GEOMETRY>::analyze_color (
         progress, render, scr_to_img, w_blue, w_red, w_green, area,           \
             half_weights,                                                     \
             weights) default(none) if (area.height > size                     \
-                                           || this -> m_area.height > size2)
+                                           || this->m_area.height > size2)
   {
 #pragma omp for
     for (int y = area.y; y < area.y + area.height; y++)
@@ -535,11 +533,11 @@ analyze_base_worker<GEOMETRY>::analyze_color (
           for (int x = area.x; x < area.x + area.width; x++)
             {
               point_t scr = scr_to_img->to_scr (
-                  { x + (coord_t)0.5, y + (coord_t)0.5 });
+                  { x + (coord_t) 0.5, y + (coord_t) 0.5 });
               scr += { (coord_t)m_area.xshift (), (coord_t)m_area.yshift () };
               if (!GEOMETRY::check_range
-                  && (scr.x < (coord_t)0 || scr.x > (coord_t)m_area.width - 1
-                      || scr.y < (coord_t)0
+                  && (scr.x < (coord_t) 0 || scr.x > (coord_t)m_area.width - 1
+                      || scr.y < (coord_t) 0
                       || scr.y > (coord_t)m_area.height - 1))
                 continue;
               rgbdata d = render->get_unadjusted_rgb_pixel ({ x, y });
@@ -769,7 +767,7 @@ analyze_base_worker<GEOMETRY>::analyze_color (
                     data_entry e = { x, y * GEOMETRY::red_height_scale + yy };
                     int idx = e.y * m_area.width * GEOMETRY::red_width_scale
                               + e.x;
-                    if (w_red[idx] != (luminosity_t)0)
+                    if (w_red[idx] != (luminosity_t) 0)
                       m_red[idx] /= w_red[idx];
                   }
             if (progress)
@@ -787,7 +785,7 @@ analyze_base_worker<GEOMETRY>::analyze_color (
                         = { x, y * GEOMETRY::green_height_scale + yy };
                     int idx = e.y * m_area.width * GEOMETRY::green_width_scale
                               + e.x;
-                    if (w_green[idx] != (luminosity_t)0)
+                    if (w_green[idx] != (luminosity_t) 0)
                       m_green[idx] /= w_green[idx];
                   }
             if (progress)
@@ -804,7 +802,7 @@ analyze_base_worker<GEOMETRY>::analyze_color (
                     data_entry e = { x, y * GEOMETRY::blue_height_scale + yy };
                     int idx = e.y * m_area.width * GEOMETRY::blue_width_scale
                               + e.x;
-                    if (w_blue[idx] != (luminosity_t)0)
+                    if (w_blue[idx] != (luminosity_t) 0)
                       m_blue[idx] /= w_blue[idx];
                   }
             if (progress)
@@ -912,62 +910,66 @@ analyze_base_worker<GEOMETRY>::analyze (
           * (GEOMETRY::blue_width_scale * GEOMETRY::blue_height_scale));
       if (!m_red || !m_green || !m_blue)
         return false;
-      memset (m_red.get (), 0,
-              (size_t)m_area.width * m_area.height
-                  * (GEOMETRY::red_width_scale * GEOMETRY::red_height_scale)
-                  * sizeof (luminosity_t));
-      memset (
-          m_green.get (), 0,
-          (size_t)m_area.width * m_area.height
-              * (GEOMETRY::green_width_scale * GEOMETRY::green_height_scale)
-              * sizeof (luminosity_t));
-      memset (m_blue.get (), 0,
-              (size_t)m_area.width * m_area.height
-                  * (GEOMETRY::blue_width_scale * GEOMETRY::blue_height_scale)
-                  * sizeof (luminosity_t));
+      std::fill (m_red.get (),
+                 m_red.get () + (size_t) m_area.width * m_area.height
+                                    * (GEOMETRY::red_width_scale
+                                       * GEOMETRY::red_height_scale),
+                 (luminosity_t) 0);
+      std::fill (m_green.get (),
+                 m_green.get () + (size_t) m_area.width * m_area.height
+                                      * (GEOMETRY::green_width_scale
+                                         * GEOMETRY::green_height_scale),
+                 (luminosity_t) 0);
+      std::fill (m_blue.get (),
+                 m_blue.get () + (size_t) m_area.width * m_area.height
+                                     * (GEOMETRY::blue_width_scale
+                                        * GEOMETRY::blue_height_scale),
+                 (luminosity_t) 0);
     }
   else
     {
       m_rgb_red = std::make_unique<rgbdata[]> (
-          (size_t)m_area.width * m_area.height
+          (size_t) m_area.width * m_area.height
           * (GEOMETRY::red_width_scale * GEOMETRY::red_height_scale));
       m_rgb_green = std::make_unique<rgbdata[]> (
-          (size_t)m_area.width * m_area.height
+          (size_t) m_area.width * m_area.height
           * (GEOMETRY::green_width_scale * GEOMETRY::green_height_scale));
       m_rgb_blue = std::make_unique<rgbdata[]> (
-          (size_t)m_area.width * m_area.height
+          (size_t) m_area.width * m_area.height
           * (GEOMETRY::blue_width_scale * GEOMETRY::blue_height_scale));
       if (!m_rgb_red || !m_rgb_green || !m_rgb_blue)
         return false;
-      memset (m_rgb_red.get (), 0,
-              (size_t)m_area.width * m_area.height
-                  * (GEOMETRY::red_width_scale * GEOMETRY::red_height_scale)
-                  * sizeof (rgbdata));
-      memset (
-          m_rgb_green.get (), 0,
-          (size_t)m_area.width * m_area.height
-              * (GEOMETRY::green_width_scale * GEOMETRY::green_height_scale)
-              * sizeof (rgbdata));
-      memset (m_rgb_blue.get (), 0,
-              (size_t)m_area.width * m_area.height
-                  * (GEOMETRY::blue_width_scale * GEOMETRY::blue_height_scale)
-                  * sizeof (rgbdata));
+      std::fill (m_rgb_red.get (),
+                 m_rgb_red.get () + (size_t) m_area.width * m_area.height
+                                        * (GEOMETRY::red_width_scale
+                                           * GEOMETRY::red_height_scale),
+                 rgbdata{ 0, 0, 0 });
+      std::fill (m_rgb_green.get (),
+                 m_rgb_green.get () + (size_t) m_area.width * m_area.height
+                                          * (GEOMETRY::green_width_scale
+                                             * GEOMETRY::green_height_scale),
+                 rgbdata{ 0, 0, 0 });
+      std::fill (m_rgb_blue.get (),
+                 m_rgb_blue.get () + (size_t) m_area.width * m_area.height
+                                         * (GEOMETRY::blue_width_scale
+                                            * GEOMETRY::blue_height_scale),
+                 rgbdata{ 0, 0, 0 });
     }
   bool ok = false;
   if (mode == precise || mode == precise_rgb || mode == color)
     {
-      std::unique_ptr<luminosity_t[]> w_red_ptr
-          = std::make_unique<luminosity_t[]> (
-              (size_t)m_area.width * m_area.height
-              * (GEOMETRY::red_width_scale * GEOMETRY::red_height_scale));
-      std::unique_ptr<luminosity_t[]> w_green_ptr
-          = std::make_unique<luminosity_t[]> (
-              (size_t)m_area.width * m_area.height
-              * (GEOMETRY::green_width_scale * GEOMETRY::green_height_scale));
-      std::unique_ptr<luminosity_t[]> w_blue_ptr
-          = std::make_unique<luminosity_t[]> (
-              (size_t)m_area.width * m_area.height
-              * (GEOMETRY::blue_width_scale * GEOMETRY::blue_height_scale));
+      std::unique_ptr<luminosity_t[]> w_red_ptr = std::make_unique<
+          luminosity_t[]> ((size_t) m_area.width * m_area.height
+                           * (GEOMETRY::red_width_scale
+                              * GEOMETRY::red_height_scale));
+      std::unique_ptr<luminosity_t[]> w_green_ptr = std::make_unique<
+          luminosity_t[]> ((size_t) m_area.width * m_area.height
+                           * (GEOMETRY::green_width_scale
+                              * GEOMETRY::green_height_scale));
+      std::unique_ptr<luminosity_t[]> w_blue_ptr = std::make_unique<
+          luminosity_t[]> ((size_t) m_area.width * m_area.height
+                           * (GEOMETRY::blue_width_scale
+                              * GEOMETRY::blue_height_scale));
       if (!w_red_ptr || !w_green_ptr || !w_blue_ptr)
         return false;
 
@@ -975,34 +977,43 @@ analyze_base_worker<GEOMETRY>::analyze (
       luminosity_t *w_green = w_green_ptr.get ();
       luminosity_t *w_blue = w_blue_ptr.get ();
 
-      memset (w_red, 0,
-              (size_t)m_area.width * m_area.height
-                  * (GEOMETRY::red_width_scale * GEOMETRY::red_height_scale)
-                  * sizeof (luminosity_t));
-      memset (
-          w_green, 0,
-          (size_t)m_area.width * m_area.height
-              * (GEOMETRY::green_width_scale * GEOMETRY::green_height_scale)
-              * sizeof (luminosity_t));
-      memset (w_blue, 0,
-              (size_t)m_area.width * m_area.height
-                  * (GEOMETRY::blue_width_scale * GEOMETRY::blue_height_scale)
-                  * sizeof (luminosity_t));
+      std::fill (w_red,
+                 w_red + (size_t) m_area.width * m_area.height
+                             * (GEOMETRY::red_width_scale
+                                * GEOMETRY::red_height_scale),
+                 (luminosity_t) 0);
+      std::fill (w_green,
+                 w_green + (size_t) m_area.width * m_area.height
+                               * (GEOMETRY::green_width_scale
+                                  * GEOMETRY::green_height_scale),
+                 (luminosity_t) 0);
+      std::fill (w_blue,
+                 w_blue + (size_t) m_area.width * m_area.height
+                              * (GEOMETRY::blue_width_scale
+                                 * GEOMETRY::blue_height_scale),
+                 (luminosity_t) 0);
 
       /* Determine region in image that is covered by screen.  */
-      point_t corners[4] = {
-        scr_to_img->to_img (point_t {(coord_t)m_area.top_left ().x, (coord_t)m_area.top_left ().y}),
-        scr_to_img->to_img (point_t {(coord_t)m_area.top_right ().x, (coord_t)m_area.top_right ().y}),
-        scr_to_img->to_img (point_t {(coord_t)m_area.bottom_left ().x, (coord_t)m_area.bottom_left ().y}),
-        scr_to_img->to_img (point_t {(coord_t)m_area.bottom_right ().x, (coord_t)m_area.bottom_right ().y})
-      };
-      int_image_area img_area (int_point_t {(int64_t)my_floor (corners[0].x), (int64_t)my_floor (corners[0].y)});
+      point_t corners[4]
+          = { scr_to_img->to_img (point_t{ (coord_t) m_area.top_left ().x,
+                                          (coord_t) m_area.top_left ().y }),
+              scr_to_img->to_img (point_t{ (coord_t) m_area.top_right ().x,
+                                          (coord_t) m_area.top_right ().y }),
+              scr_to_img->to_img (point_t{ (coord_t) m_area.bottom_left ().x,
+                                          (coord_t) m_area.bottom_left ().y }),
+              scr_to_img->to_img (point_t{
+                  (coord_t) m_area.bottom_right ().x,
+                  (coord_t) m_area.bottom_right ().y }) };
+      int_image_area img_area (int_point_t{ (int64_t) my_floor (corners[0].x),
+                                            (int64_t) my_floor (corners[0].y) });
       for (int i = 0; i < 4; i++)
         {
-          img_area.extend (int_point_t {(int64_t)my_floor (corners[i].x), (int64_t)my_floor (corners[i].y)});
-          img_area.extend (int_point_t {(int64_t)my_ceil (corners[i].x), (int64_t)my_ceil (corners[i].y)});
+          img_area.extend (int_point_t{ (int64_t) my_floor (corners[i].x),
+                                        (int64_t) my_floor (corners[i].y) });
+          img_area.extend (int_point_t{ (int64_t) my_ceil (corners[i].x),
+                                        (int64_t) my_ceil (corners[i].y) });
         }
-      img_area = img_area.intersect ({0, 0, img->width, img->height});
+      img_area = img_area.intersect ({ 0, 0, img->width, img->height });
       if (img_area.empty_p ())
         return true;
 
@@ -1024,15 +1035,15 @@ analyze_base_worker<GEOMETRY>::analyze (
 
       if (mode == precise)
         ok = analyze_precise (scr_to_img, render, screen, simulated_scr,
-                              collection_threshold, w_red, w_green, w_blue,
-                              img_area, progress);
+                               collection_threshold, w_red, w_green, w_blue,
+                               img_area, progress);
       else if (mode == precise_rgb)
-        ok = analyze_precise_rgb (scr_to_img, render, screen, simulated_scr,
-                                  collection_threshold, w_red, w_green, w_blue,
-                                  img_area, progress);
+        ok = analyze_precise_rgb (scr_to_img, render, screen,
+                                   simulated_scr, collection_threshold,
+                                   w_red, w_green, w_blue, img_area, progress);
       else
-        ok = analyze_color (scr_to_img, render, w_red, w_green, w_blue, img_area,
-                            progress);
+        ok = analyze_color (scr_to_img, render, w_red, w_green, w_blue,
+                            img_area, progress);
     }
   else
     {
