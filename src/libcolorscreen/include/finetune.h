@@ -117,9 +117,9 @@ nodiscard_attr DLL_PUBLIC bool
 finetune_misregistered_area (solver_parameters *solver, render_parameters &rparam,
 			     const scr_to_img_parameters &param, const image_data &img,
 			     int_image_area area, progress_info *progress);
-DLL_PUBLIC void render_screen (image_data &img, scr_to_img_parameters &param,
-                               render_parameters &rparam,
-                               scr_detect_parameters &dparam, int width,
-                               int height);
+nodiscard_attr DLL_PUBLIC bool
+render_screen (image_data &img, const scr_to_img_parameters &param,
+               const render_parameters &rparam, const scr_detect_parameters &dparam,
+	       int width, int height);
 } // namespace colorscreen
 #endif

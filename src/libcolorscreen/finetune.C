@@ -3786,7 +3786,9 @@ get_steps (const image_data &img, int_image_area area, const scr_to_img_paramete
 }
 
 /* Finetune SOLVER parameters in given AREA using RPARAM and PARAM in IMG.
-   PROGRESS is used to report progress.  */
+   PROGRESS is used to report progress.  
+   Assume the registration is correct only in existing points in AREA.
+   Start from these and try to carefully insert new points.  */
 
 DLL_PUBLIC bool
 finetune_misregistered_area (solver_parameters *solver,
@@ -3805,7 +3807,8 @@ finetune_misregistered_area (solver_parameters *solver,
   int xsubsteps = (area.width + xsubstep - 1) / xsubstep;
   int ysubsteps = (area.height + ysubstep - 1) / ysubstep;
   int npoints;
-  const bool verbose = false; 
+  int nfound = 0;
+  const bool verbose = false;
   coord_t max_uncertainty = 10000;
   if (!xsubsteps || !ysubsteps)
     return false;
@@ -3868,7 +3871,7 @@ finetune_misregistered_area (solver_parameters *solver,
               printf ("Will compute %i %i\n", x, y);
           }
       if (!points.size ())
-        return false;
+        return nfound;
       if (progress)
         progress->set_task ("finetuning points nearby known points",
                             points.size ());
@@ -3909,33 +3912,36 @@ finetune_misregistered_area (solver_parameters *solver,
       npoints = 0;
       /* Now prune points that are too far.  */
       for (size_t i = 0; i < res.size ();)
-	{
+        {
           finetune_result &r = res[i];
-	  bool ok = r.success;
-	  if (ok)
-	    {
+          bool ok = r.success;
+          if (ok)
+            {
               point_t transformed = map.to_scr (r.solver_point_img_location);
-              ok = transformed.dist_from (r.solver_point_screen_location) < 0.05;
-	      int px
-		  = (r.solver_point_img_location.x - area.x) / (coord_t)xsubstep;
-	      int py
-		  = (r.solver_point_img_location.y - area.y) / (coord_t)ysubstep;
-	      if (!ok)
-		tiles[py * xsubsteps + px] = bad;
-	      if (verbose)
-		printf ("found grid: %i %i transformed: %f %f finetuned: %f %f %s\n", px, py, transformed.x,
-			transformed.y, r.solver_point_screen_location.x,
-			r.solver_point_screen_location.y,
-			ok ? "in threshold" : "out of threshold");
-	    }
-	  if (!ok)
-	    {
-	      res[i] = std::move (res.back ());
-	      res.pop_back ();
-	    }
-	  else
-	    i++;
-	}
+              ok = transformed.dist_from (r.solver_point_screen_location)
+                   < 0.05;
+              int px = (r.solver_point_img_location.x - area.x)
+                       / (coord_t)xsubstep;
+              int py = (r.solver_point_img_location.y - area.y)
+                       / (coord_t)ysubstep;
+              if (!ok)
+                tiles[py * xsubsteps + px] = bad;
+              if (verbose)
+                printf ("found grid: %i %i transformed: %f %f finetuned: %f "
+                        "%f %s\n",
+                        px, py, transformed.x, transformed.y,
+                        r.solver_point_screen_location.x,
+                        r.solver_point_screen_location.y,
+                        ok ? "in threshold" : "out of threshold");
+            }
+          if (!ok)
+            {
+              res[i] = std::move (res.back ());
+              res.pop_back ();
+            }
+          else
+            i++;
+        }
       /* If we have many points; rule out uncertain ones.  Let the value only
          drop in each wave.  */
       if (res.size () > 5)
@@ -3943,8 +3949,8 @@ finetune_misregistered_area (solver_parameters *solver,
           std::sort (res.begin (), res.end (),
                      [] (finetune_result &a, finetune_result &b)
                        { return a.uncertainty > b.uncertainty; });
-          max_uncertainty = std::min (max_uncertainty,
-                                      res[res.size () * 0.2].uncertainty);
+          max_uncertainty
+              = std::min (max_uncertainty, res[res.size () * 0.2].uncertainty);
         }
 
       /* Now add computed points to solver and update tiles.  */
@@ -3960,10 +3966,12 @@ finetune_misregistered_area (solver_parameters *solver,
               solver->add_point (r.solver_point_img_location,
                                  r.solver_point_screen_location,
                                  r.solver_point_color);
-              tiles[py * xsubsteps + px] = known;
+	      if (py >= 0 && px >= 0 && py < ysubsteps && px < xsubsteps)
+                tiles[py * xsubsteps + px] = known;
+	      nfound++;
               npoints++;
             }
-          else
+          else if (py >= 0 && px >= 0 && py < ysubsteps && px < xsubsteps)
             tiles[py * xsubsteps + px] = bad;
         }
     }
@@ -4332,15 +4340,16 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 /* Render simulated screen pattern to IMG using parameters PARAM, RPARAM and
    DPARAM.  The image is rendered in resolution WIDTH x HEIGHT.  */
 
-void
-render_screen (image_data &img, scr_to_img_parameters &param,
-               render_parameters &rparam, scr_detect_parameters &dparam,
+bool
+render_screen (image_data &img, const scr_to_img_parameters &param,
+               const render_parameters &rparam, const scr_detect_parameters &dparam,
                int width, int height)
 {
   scr_to_img map;
-  img.set_dimensions (width, height, true, false);
+  if (!img.set_dimensions (width, height, true, false))
+    return false;
   if (!map.set_parameters (param, img))
-    return;
+    return false;
   coord_t pixel_size = map.pixel_size (width, height);
   sharpen_parameters sharpen = rparam.sharpen;
   sharpen.usm_radius = rparam.screen_blur_radius * pixel_size;
@@ -4365,5 +4374,6 @@ render_screen (image_data &img, scr_to_img_parameters &param,
           (unsigned short)(invert_gamma (d.blue, rparam.gamma) * 65535)
         });
       }
+  return true;
 }
 } // namespace colorscreen
