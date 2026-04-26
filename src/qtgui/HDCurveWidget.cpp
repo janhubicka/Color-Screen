@@ -244,22 +244,25 @@ void HDCurveWidget::drawControlPoints(QPainter &painter, const QRectF &rect) {
     QPointF p_min = mapToWidget(m_params.minx, m_params.miny);
     QPointF p_max = mapToWidget(m_params.maxx, m_params.maxy);
     
+    // Green color for limit lines
+    QColor greenLine(0, 150, 0, 180);
+
     // Dmin, Dmax (horizontal)
     if (m_dragPointIndex == 5) painter.setPen(QPen(Qt::yellow, 1, Qt::SolidLine));
-    else painter.setPen(QPen(QColor(200, 200, 200, 180), 1, Qt::DashLine));
+    else painter.setPen(QPen(greenLine, 1, Qt::DashLine));
     painter.drawLine(QPointF(rect.left(), p_min.y()), QPointF(rect.right(), p_min.y()));
     
     if (m_dragPointIndex == 6) painter.setPen(QPen(Qt::yellow, 1, Qt::SolidLine));
-    else painter.setPen(QPen(QColor(200, 200, 200, 180), 1, Qt::DashLine));
+    else painter.setPen(QPen(greenLine, 1, Qt::DashLine));
     painter.drawLine(QPointF(rect.left(), p_max.y()), QPointF(rect.right(), p_max.y()));
     
     // Xmin, Xmax (vertical)
     if (m_dragPointIndex == 7) painter.setPen(QPen(Qt::yellow, 1, Qt::SolidLine));
-    else painter.setPen(QPen(QColor(200, 200, 200, 180), 1, Qt::DashLine));
+    else painter.setPen(QPen(greenLine, 1, Qt::DashLine));
     painter.drawLine(QPointF(p_min.x(), rect.top()), QPointF(p_min.x(), rect.bottom()));
     
     if (m_dragPointIndex == 8) painter.setPen(QPen(Qt::yellow, 1, Qt::SolidLine));
-    else painter.setPen(QPen(QColor(200, 200, 200, 180), 1, Qt::DashLine));
+    else painter.setPen(QPen(greenLine, 1, Qt::DashLine));
     painter.drawLine(QPointF(p_max.x(), rect.top()), QPointF(p_max.x(), rect.bottom()));
 
     // Draw points
@@ -287,9 +290,9 @@ void HDCurveWidget::drawControlPoints(QPainter &painter, const QRectF &rect) {
         painter.drawEllipse(pts[i], 4, 4);
     }
 
-    // Middle point (square)
+    // Middle point (square, black inside)
     if (m_dragPointIndex == 4) painter.setBrush(Qt::red);
-    else painter.setBrush(Qt::white);
+    else painter.setBrush(Qt::black);
     painter.drawRect(QRectF(p_mid.x() - 4, p_mid.y() - 4, 8, 8));
 }
 
@@ -340,8 +343,10 @@ void HDCurveWidget::mousePressEvent(QMouseEvent *event) {
 }
 
 void HDCurveWidget::mouseMoveEvent(QMouseEvent *event) {
+    auto [logicX, logicY] = mapFromWidget(event->position());
+    QPointF pos = event->position();
+
     if (m_dragPointIndex != -1) {
-        auto [logicX, logicY] = mapFromWidget(event->position());
         double dx = logicX - m_lastLogicX;
         double dy = logicY - m_lastLogicY;
         
@@ -349,24 +354,29 @@ void HDCurveWidget::mouseMoveEvent(QMouseEvent *event) {
             case 0: // min point
                 logicX = qMin(logicX, m_params.linear1x);
                 m_params.minx = logicX; m_params.miny = logicY;
+                setCursor(Qt::ClosedHandCursor);
                 break;
             case 1: // linear1 point
                 logicX = qBound(m_params.minx, logicX, m_params.linear2x);
                 m_params.linear1x = logicX; m_params.linear1y = logicY;
+                setCursor(Qt::ClosedHandCursor);
                 break;
             case 2: // linear2 point
                 logicX = qBound(m_params.linear1x, logicX, m_params.maxx);
                 m_params.linear2x = logicX; m_params.linear2y = logicY;
+                setCursor(Qt::ClosedHandCursor);
                 break;
             case 3: // max point
                 logicX = qMax(logicX, m_params.linear2x);
                 m_params.maxx = logicX; m_params.maxy = logicY;
+                setCursor(Qt::ClosedHandCursor);
                 break;
             case 4: // middle point (move all)
                 m_params.minx += dx; m_params.miny += dy;
                 m_params.linear1x += dx; m_params.linear1y += dy;
                 m_params.linear2x += dx; m_params.linear2y += dy;
                 m_params.maxx += dx; m_params.maxy += dy;
+                setCursor(Qt::SizeAllCursor);
                 break;
             case 5: { // dmin line scale
                 double oldRange = m_params.maxy - m_params.miny;
@@ -377,6 +387,7 @@ void HDCurveWidget::mouseMoveEvent(QMouseEvent *event) {
                     m_params.linear2y = m_params.maxy - (m_params.maxy - m_params.linear2y) * scale;
                     m_params.miny = logicY;
                 }
+                setCursor(Qt::SizeVerCursor);
                 break;
             }
             case 6: { // dmax line scale
@@ -388,6 +399,7 @@ void HDCurveWidget::mouseMoveEvent(QMouseEvent *event) {
                     m_params.linear2y = m_params.miny + (m_params.linear2y - m_params.miny) * scale;
                     m_params.maxy = logicY;
                 }
+                setCursor(Qt::SizeVerCursor);
                 break;
             }
             case 7: { // xmin line scale
@@ -399,6 +411,7 @@ void HDCurveWidget::mouseMoveEvent(QMouseEvent *event) {
                     m_params.linear2x = m_params.maxx - (m_params.maxx - m_params.linear2x) * scale;
                     m_params.minx = logicX;
                 }
+                setCursor(Qt::SizeHorCursor);
                 break;
             }
             case 8: { // xmax line scale
@@ -410,6 +423,7 @@ void HDCurveWidget::mouseMoveEvent(QMouseEvent *event) {
                     m_params.linear2x = m_params.minx + (m_params.linear2x - m_params.minx) * scale;
                     m_params.maxx = logicX;
                 }
+                setCursor(Qt::SizeHorCursor);
                 break;
             }
         }
@@ -421,6 +435,35 @@ void HDCurveWidget::mouseMoveEvent(QMouseEvent *event) {
         update();
         emit parametersChanged(m_params);
     } else {
+        // Hover logic
+        QPointF p_min = mapToWidget(m_params.minx, m_params.miny);
+        QPointF p_l1 = mapToWidget(m_params.linear1x, m_params.linear1y);
+        QPointF p_l2 = mapToWidget(m_params.linear2x, m_params.linear2y);
+        QPointF p_max = mapToWidget(m_params.maxx, m_params.maxy);
+        double midX = (m_params.linear1x + m_params.linear2x) / 2.0;
+        double midY = (m_params.linear1y + m_params.linear2y) / 2.0;
+        QPointF p_mid = mapToWidget(midX, midY);
+        
+        QPointF pts[5] = { p_min, p_l1, p_l2, p_max, p_mid };
+        bool hitPoint = false;
+        for (int i = 0; i < 5; ++i) {
+            if (QLineF(pos, pts[i]).length() < 10) {
+                if (i == 4) setCursor(Qt::SizeAllCursor);
+                else setCursor(Qt::PointingHandCursor);
+                hitPoint = true;
+                break;
+            }
+        }
+        
+        if (!hitPoint) {
+            if (std::abs(pos.y() - p_min.y()) < 5 || std::abs(pos.y() - p_max.y()) < 5) {
+                setCursor(Qt::SizeVerCursor);
+            } else if (std::abs(pos.x() - p_min.x()) < 5 || std::abs(pos.x() - p_max.x()) < 5) {
+                setCursor(Qt::SizeHorCursor);
+            } else {
+                setCursor(Qt::ArrowCursor);
+            }
+        }
         InteractiveChartWidget::mouseMoveEvent(event);
     }
 }
