@@ -42,7 +42,7 @@ public:
   };
 
   /* Determine the robust maximum value in the demosaiced image using a
-     histogram. PROGRESS can be used to report progress and check for
+     histogram.  PROGRESS can be used to report progress and check for
      cancellation.  */
   luminosity_t
   find_robust_max (progress_info *progress)
@@ -107,6 +107,9 @@ protected:
   };
 };
 
+/* Base class for demosaicing implementations providing common
+   interpolation kernels and data accessors.  GEOMETRY specifies
+   the CFA pattern.  */
 template <typename GEOMETRY> class demosaic_base : public demosaic_generic_base
 {
   inline pure_attr rgbdata
@@ -814,13 +817,13 @@ protected:
                                 * (luminosity_t)0.5;
               pbv[x] = bv;
 
-              luminosity_t h = fabs (2 * c00 - c0_2 - c02)
-                               + 2 * fabs (g0_1 - g01)
-                               + fabs (2 * (c00 + bh) - g0_1 - g01);
+              luminosity_t h = my_abs (2 * c00 - c0_2 - c02)
+                               + 2 * my_abs (g0_1 - g01)
+                               + my_abs (2 * (c00 + bh) - g0_1 - g01);
 
-              luminosity_t v = fabs (2 * c00 - c_20 - c20)
-                               + 2 * fabs (g_10 - g10)
-                               + fabs (2 * (c00 + bv) - g_10 - g10);
+              luminosity_t v = my_abs (2 * c00 - c_20 - c20)
+                               + 2 * my_abs (g_10 - g10)
+                               + my_abs (2 * (c00 + bv) - g_10 - g10);
 
               if (h < TL && v < TL)
                 {
@@ -928,8 +931,8 @@ protected:
         luminosity_t r1_1 = dch (x + 1, y - 1, ah_chn);
         luminosity_t r_11 = dch (x - 1, y + 1, ah_chn);
 
-        luminosity_t dn = fabs (2 * g00 - g_1_1 - g11) + fabs (r_1_1 - r11);
-        luminosity_t dp = fabs (2 * g00 - g_11 - g1_1) + fabs (r_11 - r1_1);
+        luminosity_t dn = my_abs (2 * g00 - g_1_1 - g11) + my_abs (r_1_1 - r11);
+        luminosity_t dp = my_abs (2 * g00 - g_11 - g1_1) + my_abs (r_11 - r1_1);
         if (dn < dp)
           d (x, y)[(int)ah_chn]
               = (r_1_1 + r11 + 2 * g00 - g_1_1 - g11) * (luminosity_t)0.5;
@@ -984,6 +987,10 @@ protected:
      macros). We intentionally omit interpolation clipping here to preserve
      overblown HDR highlight peaks and robust linear profiles.
    */
+  /* Internal helper to interpolate missing color channel CH using
+     evaluated dominating channel G_DIR at position [X, Y].
+     This uses green-channel-guided color-difference bilinear interpolation
+     without clipping, preserving HDR highlights.  */
   luminosity_t
   interp (int x, int y, int ch, const std::vector<luminosity_t> &G_dir)
   {
@@ -2497,25 +2504,25 @@ protected:
                - |same_channel_at_distance_2 - same_channel_at_distance_4|
                This provides a 4-pixel-deep edge measure.  */
             luminosity_t n_grad = eps
-                                  + fabs (known (x, y - 1) - known (x, y + 1))
-                                  + fabs (cfa_i - known (x, y - 2))
-                                  + fabs (known (x, y - 1) - known (x, y - 3))
-                                  + fabs (known (x, y - 2) - known (x, y - 4));
+                                  + my_abs (known (x, y - 1) - known (x, y + 1))
+                                  + my_abs (cfa_i - known (x, y - 2))
+                                  + my_abs (known (x, y - 1) - known (x, y - 3))
+                                  + my_abs (known (x, y - 2) - known (x, y - 4));
             luminosity_t s_grad = eps
-                                  + fabs (known (x, y + 1) - known (x, y - 1))
-                                  + fabs (cfa_i - known (x, y + 2))
-                                  + fabs (known (x, y + 1) - known (x, y + 3))
-                                  + fabs (known (x, y + 2) - known (x, y + 4));
+                                  + my_abs (known (x, y + 1) - known (x, y - 1))
+                                  + my_abs (cfa_i - known (x, y + 2))
+                                  + my_abs (known (x, y + 1) - known (x, y + 3))
+                                  + my_abs (known (x, y + 2) - known (x, y + 4));
             luminosity_t w_grad = eps
-                                  + fabs (known (x - 1, y) - known (x + 1, y))
-                                  + fabs (cfa_i - known (x - 2, y))
-                                  + fabs (known (x - 1, y) - known (x - 3, y))
-                                  + fabs (known (x - 2, y) - known (x - 4, y));
+                                  + my_abs (known (x - 1, y) - known (x + 1, y))
+                                  + my_abs (cfa_i - known (x - 2, y))
+                                  + my_abs (known (x - 1, y) - known (x - 3, y))
+                                  + my_abs (known (x - 2, y) - known (x - 4, y));
             luminosity_t e_grad = eps
-                                  + fabs (known (x + 1, y) - known (x - 1, y))
-                                  + fabs (cfa_i - known (x + 2, y))
-                                  + fabs (known (x + 1, y) - known (x + 3, y))
-                                  + fabs (known (x + 2, y) - known (x + 4, y));
+                                  + my_abs (known (x + 1, y) - known (x - 1, y))
+                                  + my_abs (cfa_i - known (x + 2, y))
+                                  + my_abs (known (x + 1, y) - known (x + 3, y))
+                                  + my_abs (known (x + 2, y) - known (x + 4, y));
 
             /* Ratio-corrected cardinal estimates.
                Each uses: neighbor * (2 * lpf_here) / (lpf_here +
@@ -2561,8 +2568,8 @@ protected:
                      + vh_dir[(y + 1) * w + (x - 1)]
                      + vh_dir[(y + 1) * w + (x + 1)]);
             luminosity_t vh_disc
-                = (fabs ((luminosity_t)0.5 - vh_central)
-                   < fabs ((luminosity_t)0.5 - vh_neighbourhood))
+                = (my_abs ((luminosity_t)0.5 - vh_central)
+                   < my_abs ((luminosity_t)0.5 - vh_neighbourhood))
                       ? vh_neighbourhood
                       : vh_central;
 
@@ -2709,8 +2716,8 @@ protected:
                      + pq_dir[(y + 1) * w + (x - 1)]
                      + pq_dir[(y + 1) * w + (x + 1)]);
             luminosity_t pq_disc
-                = (fabs ((luminosity_t)0.5 - pq_central)
-                   < fabs ((luminosity_t)0.5 - pq_neighbourhood))
+                = (my_abs ((luminosity_t)0.5 - pq_central)
+                   < my_abs ((luminosity_t)0.5 - pq_neighbourhood))
                       ? pq_neighbourhood
                       : pq_central;
             pq_disc = std::clamp (pq_disc, (luminosity_t)0, (luminosity_t)1);
@@ -2722,21 +2729,21 @@ protected:
                - dominating channel curvature in the same direction  */
             luminosity_t g_here = d (x, y)[(int)ah_green];
             luminosity_t nw_grad
-                = eps + fabs (dch (x - 1, y - 1, c) - dch (x + 1, y + 1, c))
-                  + fabs (dch (x - 1, y - 1, c) - dch (x - 3, y - 3, c))
-                  + fabs (g_here - d (x - 2, y - 2)[(int)ah_green]);
+                = eps + my_abs (dch (x - 1, y - 1, c) - dch (x + 1, y + 1, c))
+                  + my_abs (dch (x - 1, y - 1, c) - dch (x - 3, y - 3, c))
+                  + my_abs (g_here - d (x - 2, y - 2)[(int)ah_green]);
             luminosity_t ne_grad
-                = eps + fabs (dch (x + 1, y - 1, c) - dch (x - 1, y + 1, c))
-                  + fabs (dch (x + 1, y - 1, c) - dch (x + 3, y - 3, c))
-                  + fabs (g_here - d (x + 2, y - 2)[(int)ah_green]);
+                = eps + my_abs (dch (x + 1, y - 1, c) - dch (x - 1, y + 1, c))
+                  + my_abs (dch (x + 1, y - 1, c) - dch (x + 3, y - 3, c))
+                  + my_abs (g_here - d (x + 2, y - 2)[(int)ah_green]);
             luminosity_t sw_grad
-                = eps + fabs (dch (x + 1, y - 1, c) - dch (x - 1, y + 1, c))
-                  + fabs (dch (x - 1, y + 1, c) - dch (x - 3, y + 3, c))
-                  + fabs (g_here - d (x - 2, y + 2)[(int)ah_green]);
+                = eps + my_abs (dch (x + 1, y - 1, c) - dch (x - 1, y + 1, c))
+                  + my_abs (dch (x - 1, y + 1, c) - dch (x - 3, y + 3, c))
+                  + my_abs (g_here - d (x - 2, y + 2)[(int)ah_green]);
             luminosity_t se_grad
-                = eps + fabs (dch (x - 1, y - 1, c) - dch (x + 1, y + 1, c))
-                  + fabs (dch (x + 1, y + 1, c) - dch (x + 3, y + 3, c))
-                  + fabs (g_here - d (x + 2, y + 2)[(int)ah_green]);
+                = eps + my_abs (dch (x - 1, y - 1, c) - dch (x + 1, y + 1, c))
+                  + my_abs (dch (x + 1, y + 1, c) - dch (x + 3, y + 3, c))
+                  + my_abs (g_here - d (x + 2, y + 2)[(int)ah_green]);
 
             /* Diagonal color differences (C - G at diagonal neighbor).  */
             luminosity_t nw_est
@@ -2801,8 +2808,8 @@ protected:
                      + vh_dir[(y + 1) * w + (x - 1)]
                      + vh_dir[(y + 1) * w + (x + 1)]);
             luminosity_t vh_disc
-                = (fabs ((luminosity_t)0.5 - vh_central)
-                   < fabs ((luminosity_t)0.5 - vh_neighbourhood))
+                = (my_abs ((luminosity_t)0.5 - vh_central)
+                   < my_abs ((luminosity_t)0.5 - vh_neighbourhood))
                       ? vh_neighbourhood
                       : vh_central;
             vh_disc = std::clamp (vh_disc, (luminosity_t)0, (luminosity_t)1);
@@ -2811,13 +2818,13 @@ protected:
 
             /* Green second-order differences for gradient computation.  */
             luminosity_t n_1
-                = eps + fabs (g_here - d (x, y - 2)[(int)ah_green]);
+                = eps + my_abs (g_here - d (x, y - 2)[(int)ah_green]);
             luminosity_t s_1
-                = eps + fabs (g_here - d (x, y + 2)[(int)ah_green]);
+                = eps + my_abs (g_here - d (x, y + 2)[(int)ah_green]);
             luminosity_t w_1
-                = eps + fabs (g_here - d (x - 2, y)[(int)ah_green]);
+                = eps + my_abs (g_here - d (x - 2, y)[(int)ah_green]);
             luminosity_t e_1
-                = eps + fabs (g_here - d (x + 2, y)[(int)ah_green]);
+                = eps + my_abs (g_here - d (x + 2, y)[(int)ah_green]);
 
             /* Green values at cardinal neighbors.  */
             luminosity_t g_n = d (x, y - 1)[(int)ah_green];
@@ -3591,23 +3598,23 @@ protected:
                   continue;
                 int idx = y * w + x;
                 luminosity_t dL = 1
-                                  / (1 + fabs (rgb[c][idx - 2] - rgb[c][idx])
-                                     + fabs (rgb[ah_green][idx + 1]
-                                             - rgb[ah_green][idx - 1]));
+                                  / (1 + my_abs (rgb[c][idx - 2] - rgb[c][idx])
+                                     + my_abs (rgb[ah_green][idx + 1]
+                                               - rgb[ah_green][idx - 1]));
                 luminosity_t dR = 1
-                                  / (1 + fabs (rgb[c][idx + 2] - rgb[c][idx])
-                                     + fabs (rgb[ah_green][idx + 1]
-                                             - rgb[ah_green][idx - 1]));
+                                  / (1 + my_abs (rgb[c][idx + 2] - rgb[c][idx])
+                                     + my_abs (rgb[ah_green][idx + 1]
+                                               - rgb[ah_green][idx - 1]));
                 luminosity_t dU
                     = 1
-                      / (1 + fabs (rgb[c][idx - 2 * w] - rgb[c][idx])
-                         + fabs (rgb[ah_green][idx + w]
-                                 - rgb[ah_green][idx - w]));
+                      / (1 + my_abs (rgb[c][idx - 2 * w] - rgb[c][idx])
+                         + my_abs (rgb[ah_green][idx + w]
+                                   - rgb[ah_green][idx - w]));
                 luminosity_t dD
                     = 1
-                      / (1 + fabs (rgb[c][idx + 2 * w] - rgb[c][idx])
-                         + fabs (rgb[ah_green][idx + w]
-                                 - rgb[ah_green][idx - w]));
+                      / (1 + my_abs (rgb[c][idx + 2 * w] - rgb[c][idx])
+                         + my_abs (rgb[ah_green][idx + w]
+                                   - rgb[ah_green][idx - w]));
                 rgb[ah_green][idx]
                     = rgb[c][idx]
                       + ((rgb[ah_green][idx - 1] - rgb[c][idx - 1]) * dL
@@ -3635,27 +3642,27 @@ protected:
                     luminosity_t dL
                         = 1
                           / (1
-                             + fabs (rgb[ah_green][idx - 2]
-                                     - rgb[ah_green][idx])
-                             + fabs (rgb[cc][idx + 1] - rgb[cc][idx - 1]));
+                             + my_abs (rgb[ah_green][idx - 2]
+                                       - rgb[ah_green][idx])
+                             + my_abs (rgb[cc][idx + 1] - rgb[cc][idx - 1]));
                     luminosity_t dR
                         = 1
                           / (1
-                             + fabs (rgb[ah_green][idx + 2]
-                                     - rgb[ah_green][idx])
-                             + fabs (rgb[cc][idx + 1] - rgb[cc][idx - 1]));
+                             + my_abs (rgb[ah_green][idx + 2]
+                                       - rgb[ah_green][idx])
+                             + my_abs (rgb[cc][idx + 1] - rgb[cc][idx - 1]));
                     luminosity_t dU
                         = 1
                           / (1
-                             + fabs (rgb[ah_green][idx - 2 * w]
-                                     - rgb[ah_green][idx])
-                             + fabs (rgb[cc][idx + w] - rgb[cc][idx - w]));
+                             + my_abs (rgb[ah_green][idx - 2 * w]
+                                       - rgb[ah_green][idx])
+                             + my_abs (rgb[cc][idx + w] - rgb[cc][idx - w]));
                     luminosity_t dD
                         = 1
                           / (1
-                             + fabs (rgb[ah_green][idx + 2 * w]
-                                     - rgb[ah_green][idx])
-                             + fabs (rgb[cc][idx + w] - rgb[cc][idx - w]));
+                             + my_abs (rgb[ah_green][idx + 2 * w]
+                                       - rgb[ah_green][idx])
+                             + my_abs (rgb[cc][idx + w] - rgb[cc][idx - w]));
                     rgb[cc][idx]
                         = rgb[ah_green][idx]
                           - ((rgb[ah_green][idx - 1] - rgb[cc][idx - 1]) * dL
@@ -3681,23 +3688,23 @@ protected:
                 int c_other = (c == ah_red) ? ah_blue : ah_red;
                 int idx = y * w + x;
                 luminosity_t d_l = 1
-                                   / (1 + fabs (rgb[c][idx - 2] - rgb[c][idx])
-                                      + fabs (rgb[ah_green][idx + 1]
-                                              - rgb[ah_green][idx - 1]));
+                                   / (1 + my_abs (rgb[c][idx - 2] - rgb[c][idx])
+                                      + my_abs (rgb[ah_green][idx + 1]
+                                                - rgb[ah_green][idx - 1]));
                 luminosity_t d_r = 1
-                                   / (1 + fabs (rgb[c][idx + 2] - rgb[c][idx])
-                                      + fabs (rgb[ah_green][idx + 1]
-                                              - rgb[ah_green][idx - 1]));
+                                   / (1 + my_abs (rgb[c][idx + 2] - rgb[c][idx])
+                                      + my_abs (rgb[ah_green][idx + 1]
+                                                - rgb[ah_green][idx - 1]));
                 luminosity_t d_u
                     = 1
-                      / (1 + fabs (rgb[c][idx - 2 * w] - rgb[c][idx])
-                         + fabs (rgb[ah_green][idx + w]
-                                 - rgb[ah_green][idx - w]));
+                      / (1 + my_abs (rgb[c][idx - 2 * w] - rgb[c][idx])
+                         + my_abs (rgb[ah_green][idx + w]
+                                   - rgb[ah_green][idx - w]));
                 luminosity_t d_d
                     = 1
-                      / (1 + fabs (rgb[c][idx + 2 * w] - rgb[c][idx])
-                         + fabs (rgb[ah_green][idx + w]
-                                 - rgb[ah_green][idx - w]));
+                      / (1 + my_abs (rgb[c][idx + 2 * w] - rgb[c][idx])
+                         + my_abs (rgb[ah_green][idx + w]
+                                   - rgb[ah_green][idx - w]));
                 rgb[c_other][idx]
                     = rgb[ah_green][idx]
                       - ((rgb[ah_green][idx - 1] - rgb[c_other][idx - 1]) * d_l
@@ -3740,6 +3747,10 @@ protected:
     return !progress || !progress->cancelled ();
   }
 
+  /* Internal helper to interpolate missing color channel CH using
+     evaluated dominating channel G_DIR at position [X, Y], following
+     the dcraw interpolation logic with clipping.
+     LIMIT_MAX specifies the maximum allowed luminosity value.  */
   template <int ah_green>
   always_inline_attr luminosity_t
   interp_dcraw (int x, int y, int ch, const std::vector<luminosity_t> &G_dir,
@@ -4070,6 +4081,8 @@ protected:
   }
 };
 
+/* Paget screen demosaicing implementation.  The Paget screen uses a
+   rotated Bayer-like pattern where blue is the dominating channel.  */
 class demosaic_paget : public demosaic_base<paget_geometry>
 {
 public:
