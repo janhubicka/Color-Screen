@@ -1,19 +1,31 @@
+/* Demosaicing algorithms for early color processes.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #ifndef DEMOSAIC_H
 #define DEMOSAIC_H
 #include "bitmap.h"
+#include "bspline.h"
 #include "include/color.h"
 #include "include/progress-info.h"
-#include "bspline.h"
 
+template <typename T>
+static inline T
+my_abs (T x)
+{
+  return x < 0 ? -x : x;
+}
 namespace colorscreen
 {
+/* Base class for all demosaicing implementations providing common
+   data structures and basic accessors.  */
 class demosaic_generic_base
 {
 protected:
   static constexpr const bool debug = colorscreen_checking;
 
 public:
-  /* Basic access to demosaiced data.  */
+  /* Return reference to demosaiced data at [X, Y] with bounds clamping.  */
   rgbdata &
   demosaiced_data (int x, int y)
   {
@@ -22,19 +34,23 @@ public:
     return m_demosaiced[y * m_area.width + x];
   };
 
-  /* Basic access to demosaiced data; no clamping.  */
+  /* Return reference to demosaiced data at [X, Y] without clamping.  */
   rgbdata &
   fast_demosaiced_data (int x, int y)
   {
     return m_demosaiced[y * m_area.width + x];
   };
 
+  /* Determine the robust maximum value in the demosaiced image using a
+     histogram. PROGRESS can be used to report progress and check for
+     cancellation.  */
   luminosity_t
   find_robust_max (progress_info *progress)
   {
     histogram h;
     if (progress)
-      progress->set_task ("Determining demosaiced value range", m_area.height * 2);
+      progress->set_task ("determining demosaiced value range",
+                          m_area.height * 2);
 
 #pragma omp parallel for reduction(histogram_range : h)
     for (int y = 0; y < m_area.height; y++)
@@ -80,8 +96,8 @@ public:
 protected:
   int_image_area m_area;
 
-  /* Accessor shorcut used in the demosaicing algorithm
-     implementation.  */
+  /* Internal accessor shortcut used in demosaicing algorithms.
+     Returns reference to data at [X, Y] with clamping.  */
   always_inline_attr rgbdata &
   d (int x, int y)
   {
@@ -375,13 +391,14 @@ protected:
         return m_demosaiced[cy * m_area.width + cx].blue;
       }
   };
-  /* Formely AI generation experiment for demosaicing of non-bayer filters.
-     Step 1 - interpolation of dominating pattern.
-
-     For each non-green pixel, check which cardinal and diagonal
-     neighbors are green and interpolate accordingly.
-     The Laplacian correction uses the known channel at the current
-     pixel and same-color pixels at distance 2.  */
+  /* Step 1 of the generic demosaicing algorithm: interpolate the dominating
+     pattern (usually green). For each non-green pixel, check cardinal and
+     diagonal neighbors and interpolate accordingly. The Laplacian correction
+     uses the known channel at the current pixel and same-color pixels at
+     distance 2.
+     PROGRESS can be used to report progress and check for cancellation.
+     AH_GREEN is the dominating channel.
+     SMOOTHEN specifies whether to apply post-processing smoothing.  */
   template <int ah_green, bool smoothen>
   bool
   generic_dominating_channel (progress_info *progress)
@@ -390,45 +407,6 @@ protected:
 #pragma omp parallel shared(progress, h, w) default(none)
     for (int y = 0; y < h; y++)
       {
-        /* Accessor for the demosaiced array with bounds clamping (read/write).
-         */
-        const auto d = [&] (int x, int y) -> rgbdata &
-          {
-            x = std::clamp (x, 0, w - 1);
-            y = std::clamp (y, 0, h - 1);
-            return m_demosaiced[y * w + x];
-          };
-        /* Read-only accessor for mosaiced channel data.  Use bounds clamping
-           (border replication) for out-of-bounds coordinates — returning 0
-           would bias the Laplacian correction at image boundaries.
-           Assert that the pixel at the given position is the expected color
-           (only when coordinates are in-bounds).  */
-        auto dch = [&] (int x, int y, int ch) -> luminosity_t
-          {
-            int cx = std::clamp (x, 0, w - 1);
-            int cy = std::clamp (y, 0, h - 1);
-            assert (!debug || cx != x || cy != y
-                    || (int)GEOMETRY::demosaic_entry_color (x, y) == ch);
-            return m_demosaiced[cy * w + cx][ch];
-          };
-        /* Return the known (mosaiced) channel value at position (x,y).
-           The color is determined by GEOMETRY.  Uses clamping for
-           out-of-bounds to provide smooth boundary behavior.  */
-        auto known = [&] (int x, int y) -> luminosity_t
-          {
-            int cx = std::clamp (x, 0, w - 1);
-            int cy = std::clamp (y, 0, h - 1);
-            switch (GEOMETRY::demosaic_entry_color (x, y))
-              {
-              case base_geometry::red:
-                return m_demosaiced[cy * w + cx].red;
-              case base_geometry::green:
-                return m_demosaiced[cy * w + cx].green;
-              default:
-                return m_demosaiced[cy * w + cx].blue;
-              }
-          };
-
         if (!progress || !progress->cancel_requested ())
           for (int x = 0; x < w; x++)
             {
@@ -462,10 +440,10 @@ protected:
                   luminosity_t ku2 = known (x, y - 2);
                   luminosity_t kd2 = known (x, y + 2);
 
-                  luminosity_t grad_h = fabs (g_left - g_right)
-                                        + fabs (2 * known_val - kl2 - kr2);
-                  luminosity_t grad_v = fabs (g_up - g_down)
-                                        + fabs (2 * known_val - ku2 - kd2);
+                  luminosity_t grad_h = my_abs (g_left - g_right)
+                                        + my_abs (2 * known_val - kl2 - kr2);
+                  luminosity_t grad_v = my_abs (g_up - g_down)
+                                        + my_abs (2 * known_val - ku2 - kd2);
                   luminosity_t lapl_h
                       = (2 * known_val - kl2 - kr2) * (luminosity_t)0.25;
                   luminosity_t lapl_v
@@ -558,11 +536,14 @@ protected:
     return !progress || !progress->cancelled ();
   }
 
-  /* Basic interpolation for non-dominating color formely AI experiment.
-
-     Now green is fully populated.  We use green-channel-guided
-     color-difference interpolation: interpolate (C-G) from
-     positions where C is known, then add local green.  */
+  /* Step 2 of the generic demosaicing algorithm: interpolate the remaining
+     channels (red and blue). Green is assumed to be fully populated.
+     We use green-channel-guided color-difference interpolation:
+     interpolate (C-G) from positions where C is known, then add local green.
+     PROGRESS can be used to report progress and check for cancellation.
+     AH_GREEN is the dominating channel.
+     AH_RED is the red channel index.
+     AH_BLUE is the blue channel index.  */
   template <int ah_green, int ah_red, int ah_blue>
   bool
   generic_interpolation_remaining_channels (progress_info *progress)
@@ -571,14 +552,6 @@ protected:
 #pragma omp parallel shared(progress, h, w) default(none)
     for (int y = 0; y < h; y++)
       {
-        /* Accessor for the demosaiced array with bounds clamping (read/write).
-         */
-        const auto d = [&] (int x, int y) -> rgbdata &
-          {
-            x = std::clamp (x, 0, w - 1);
-            y = std::clamp (y, 0, h - 1);
-            return m_demosaiced[y * w + x];
-          };
         if (!progress || !progress->cancel_requested ())
           for (int x = 0; x < w; x++)
             {
@@ -610,8 +583,8 @@ protected:
                                          - d (x, y - 1)[(int)ah_green];
                       luminosity_t rdd = d (x, y + 1)[(int)ah_red]
                                          - d (x, y + 1)[(int)ah_green];
-                      luminosity_t rgh = fabs (rdl - rdr);
-                      luminosity_t rgv = fabs (rdu - rdd);
+                      luminosity_t rgh = my_abs (rdl - rdr);
+                      luminosity_t rgv = my_abs (rdu - rdd);
                       if (rgh < rgv)
                         d (x, y)[(int)ah_red]
                             = g_here + (rdl + rdr) * (luminosity_t)0.5;
@@ -708,8 +681,8 @@ protected:
                                          - d (x, y - 1)[(int)ah_green];
                       luminosity_t bdd = d (x, y + 1)[(int)ah_blue]
                                          - d (x, y + 1)[(int)ah_green];
-                      luminosity_t bgh = fabs (bdl - bdr);
-                      luminosity_t bgv = fabs (bdu - bdd);
+                      luminosity_t bgh = my_abs (bdl - bdr);
+                      luminosity_t bgv = my_abs (bdu - bdd);
                       if (bgh < bgv)
                         d (x, y)[(int)ah_blue]
                             = g_here + (bdl + bdr) * (luminosity_t)0.5;
@@ -787,29 +760,28 @@ protected:
     return !progress || !progress->cancelled ();
   }
 
-  /* Step 1 on hamiltom-adams algorithm; the dominating channel (green) is
-     assumed to form a chess board and is interpolated first.
-
-     For each non-green pixel, check which cardinal and diagonal
-     neighbors are green and interpolate accordingly.
-     The Laplacian correction uses the known channel at the current
-     pixel and same-color pixels at distance 2.
-
-     Optional step 2: smoothening of the dominating channel.  */
+  /* Step 1 of the Hamilton-Adams demosaicing algorithm: interpolate the
+     dominating channel (usually green). For each non-green pixel, check
+     cardinal and diagonal neighbors and interpolate accordingly. The Laplacian
+     correction uses the known channel at the current pixel and same-color
+     pixels at distance 2.
+     PROGRESS can be used to report progress and check for cancellation.
+     AH_GREEN is the dominating channel.
+     SMOOTHEN specifies whether to apply post-processing smoothing.  */
   template <int ah_green, bool smoothen>
   bool
-  hamiltom_adams_interpolation_dominating_channel (progress_info *progress)
+  hamilton_adams_interpolation_dominating_channel (progress_info *progress)
   {
     int w = m_area.width, h = m_area.height;
     luminosity_t range = find_robust_max (progress);
     if (progress && progress->cancelled ())
       return false;
-    luminosity_t TL = 0.1 * range;
-    luminosity_t TH = 0.8 * range;
+    luminosity_t TL = (luminosity_t)0.1 * range;
+    luminosity_t TH = (luminosity_t)0.8 * range;
 
     bitmap_2d predA (smoothen ? w : 0, smoothen ? h : 0);
     if (progress)
-      progress->set_task ("Demosaicing dominating channel (Hamilton-Adams)",
+      progress->set_task ("demosaicing dominating channel (hamilton-adams)",
                           h);
     /* Real hamilton adams can not be parallelized.  */
     std::vector<luminosity_t> pbv (w);
@@ -850,12 +822,11 @@ protected:
                                + 2 * fabs (g_10 - g10)
                                + fabs (2 * (c00 + bv) - g_10 - g10);
 
-
               if (h < TL && v < TL)
                 {
                   d (x, y)[(int)ah_green]
                       = (g_10 + g10 + g0_1 + g01) * (luminosity_t)0.25;
-		  if (smoothen)
+                  if (smoothen)
                     predA.set_bit (x, y);
                 }
               else if (h > TH && v > TH)
@@ -880,8 +851,8 @@ protected:
     if (smoothen)
       {
         if (progress)
-          progress->set_task ("Smoothening noisy areas in the dominating "
-                              "channel (Hamilton-Adams)",
+          progress->set_task ("smoothening noisy areas in the dominating "
+                              "channel (hamilton-adams)",
                               h);
 #pragma omp parallel shared(progress, h, w, predA) default(none)
         for (int y = 1; y < h - 1; y++)
@@ -909,7 +880,11 @@ protected:
     return !progress || !progress->cancelled ();
   }
 
-  /* Basic interpolation logic of Hamilton-Adams for non-dominating color.  */
+  /* Basic interpolation logic of Hamilton-Adams for non-dominating color.
+     G_HERE is the dominating channel value at the current pixel.
+     X and Y are the coordinates of the pixel.
+     AH_GREEN is the index of the dominating channel.
+     AH_CHN is the index of the channel being interpolated.  */
   template <int ah_green, int ah_chn>
   always_inline_attr void
   hamilton_adams_interpolate_color (luminosity_t g_here, int x, int y)
@@ -967,18 +942,19 @@ protected:
                                   * (luminosity_t)0.25;
       }
   };
-  /* Step 3: Interpolate red and blue at positions where they are missing.
-
-     Now green is fully populated.  We use green-channel-guided
-     color-difference interpolation: interpolate (C-G) from
-     positions where C is known, then add local green.  */
+  /* Step 3 of the Hamilton-Adams algorithm: interpolate red and blue
+     channels at positions where they are missing.
+     PROGRESS can be used to report progress and check for cancellation.
+     AH_GREEN is the index of the dominating channel.
+     AH_RED is the index of the red channel.
+     AH_BLUE is the index of the blue channel.  */
   template <int ah_green, int ah_red, int ah_blue>
   bool
-  hamiltom_adams_interpolation_remaining_channels (progress_info *progress)
+  hamilton_adams_interpolation_remaining_channels (progress_info *progress)
   {
     int h = m_area.height, w = m_area.width;
     if (progress)
-      progress->set_task ("Demosaicing remaining chanels (Hamilton-Adams)", h);
+      progress->set_task ("demosaicing remaining chanels (hamilton-adams)", h);
 #pragma omp parallel shared(progress, h, w) default(none)
     for (int y = 0; y < h; y++)
       {
@@ -1001,15 +977,15 @@ protected:
     return !progress || !progress->cancelled ();
   }
   /* DIFFERENCE TO DCRAW:
-     This interpolation algorithm shares the fundamental structural mathematics 
-     found in `dcraw`'s secondary step (bilinear averaging of color differences 
-     against the evaluated Green channel). However, `dcraw` strictly bounds 
-     these results utilizing minimum and maximum limits (its `CLIP` and `ULIM` macros).
-     We intentionally omit interpolation clipping here to preserve overblown HDR
-     highlight peaks and robust linear profiles.
+     This interpolation algorithm shares the fundamental structural mathematics
+     found in `dcraw`'s secondary step (bilinear averaging of color differences
+     against the evaluated Green channel). However, `dcraw` strictly bounds
+     these results utilizing minimum and maximum limits (its `CLIP` and `ULIM`
+     macros). We intentionally omit interpolation clipping here to preserve
+     overblown HDR highlight peaks and robust linear profiles.
    */
   luminosity_t
-  interp (int x, int y, int ch, const std::vector<luminosity_t> &G_dir) 
+  interp (int x, int y, int ch, const std::vector<luminosity_t> &G_dir)
   {
     int w = m_area.width, h = m_area.height;
     x = std::clamp (x, 0, w - 1);
@@ -1026,80 +1002,85 @@ protected:
 
     if (l_c && r_c)
       {
-	int xl = std::clamp (x - 1, 0, w - 1);
-	int xr = std::clamp (x + 1, 0, w - 1);
-	return g_here
-	       + (dch (x - 1, y, ch) - G_dir[y * w + xl]
-		  + dch (x + 1, y, ch) - G_dir[y * w + xr])
-		     * (luminosity_t)0.5;
+        int xl = std::clamp (x - 1, 0, w - 1);
+        int xr = std::clamp (x + 1, 0, w - 1);
+        return g_here
+               + (dch (x - 1, y, ch) - G_dir[y * w + xl] + dch (x + 1, y, ch)
+                  - G_dir[y * w + xr])
+                     * (luminosity_t)0.5;
       }
     else if (u_c && d_c)
       {
-	int yu = std::clamp (y - 1, 0, h - 1);
-	int yd = std::clamp (y + 1, 0, h - 1);
-	return g_here
-	       + (dch (x, y - 1, ch) - G_dir[yu * w + x]
-		  + dch (x, y + 1, ch) - G_dir[yd * w + x])
-		     * (luminosity_t)0.5;
+        int yu = std::clamp (y - 1, 0, h - 1);
+        int yd = std::clamp (y + 1, 0, h - 1);
+        return g_here
+               + (dch (x, y - 1, ch) - G_dir[yu * w + x] + dch (x, y + 1, ch)
+                  - G_dir[yd * w + x])
+                     * (luminosity_t)0.5;
       }
     else if (l_c)
-      return g_here + dch (x - 1, y, ch) - G_dir[y * w + std::clamp (x - 1, 0, w - 1)];
+      return g_here + dch (x - 1, y, ch)
+             - G_dir[y * w + std::clamp (x - 1, 0, w - 1)];
     else if (r_c)
-      return g_here + dch (x + 1, y, ch) - G_dir[y * w + std::clamp (x + 1, 0, w - 1)];
+      return g_here + dch (x + 1, y, ch)
+             - G_dir[y * w + std::clamp (x + 1, 0, w - 1)];
     else if (u_c)
-      return g_here + dch (x, y - 1, ch) - G_dir[std::clamp (y - 1, 0, h - 1) * w + x];
+      return g_here + dch (x, y - 1, ch)
+             - G_dir[std::clamp (y - 1, 0, h - 1) * w + x];
     else if (d_c)
-      return g_here + dch (x, y + 1, ch) - G_dir[std::clamp (y + 1, 0, h - 1) * w + x];
+      return g_here + dch (x, y + 1, ch)
+             - G_dir[std::clamp (y + 1, 0, h - 1) * w + x];
     else
       {
-	bool tl = GEOMETRY::demosaic_entry_color (x - 1, y - 1) == ch;
-	bool tr = GEOMETRY::demosaic_entry_color (x + 1, y - 1) == ch;
-	bool bl = GEOMETRY::demosaic_entry_color (x - 1, y + 1) == ch;
-	bool br = GEOMETRY::demosaic_entry_color (x + 1, y + 1) == ch;
-	int cnt = 0;
-	luminosity_t sum = 0;
-	if (tl)
-	  {
-	    int cx = std::clamp (x - 1, 0, w - 1);
-	    int cy = std::clamp (y - 1, 0, h - 1);
-	    sum += dch (x - 1, y - 1, ch) - G_dir[cy * w + cx];
-	    cnt++;
-	  }
-	if (tr)
-	  {
-	    int cx = std::clamp (x + 1, 0, w - 1);
-	    int cy = std::clamp (y - 1, 0, h - 1);
-	    sum += dch (x + 1, y - 1, ch) - G_dir[cy * w + cx];
-	    cnt++;
-	  }
-	if (bl)
-	  {
-	    int cx = std::clamp (x - 1, 0, w - 1);
-	    int cy = std::clamp (y + 1, 0, h - 1);
-	    sum += dch (x - 1, y + 1, ch) - G_dir[cy * w + cx];
-	    cnt++;
-	  }
-	if (br)
-	  {
-	    int cx = std::clamp (x + 1, 0, w - 1);
-	    int cy = std::clamp (y + 1, 0, h - 1);
-	    sum += dch (x + 1, y + 1, ch) - G_dir[cy * w + cx];
-	    cnt++;
-	  }
-	if (cnt > 0)
-	  return g_here + sum / (luminosity_t)cnt;
+        bool tl = GEOMETRY::demosaic_entry_color (x - 1, y - 1) == ch;
+        bool tr = GEOMETRY::demosaic_entry_color (x + 1, y - 1) == ch;
+        bool bl = GEOMETRY::demosaic_entry_color (x - 1, y + 1) == ch;
+        bool br = GEOMETRY::demosaic_entry_color (x + 1, y + 1) == ch;
+        int cnt = 0;
+        luminosity_t sum = 0;
+        if (tl)
+          {
+            int cx = std::clamp (x - 1, 0, w - 1);
+            int cy = std::clamp (y - 1, 0, h - 1);
+            sum += dch (x - 1, y - 1, ch) - G_dir[cy * w + cx];
+            cnt++;
+          }
+        if (tr)
+          {
+            int cx = std::clamp (x + 1, 0, w - 1);
+            int cy = std::clamp (y - 1, 0, h - 1);
+            sum += dch (x + 1, y - 1, ch) - G_dir[cy * w + cx];
+            cnt++;
+          }
+        if (bl)
+          {
+            int cx = std::clamp (x - 1, 0, w - 1);
+            int cy = std::clamp (y + 1, 0, h - 1);
+            sum += dch (x - 1, y + 1, ch) - G_dir[cy * w + cx];
+            cnt++;
+          }
+        if (br)
+          {
+            int cx = std::clamp (x + 1, 0, w - 1);
+            int cy = std::clamp (y + 1, 0, h - 1);
+            sum += dch (x + 1, y + 1, ch) - G_dir[cy * w + cx];
+            cnt++;
+          }
+        if (cnt > 0)
+          return g_here + sum / (luminosity_t)cnt;
       }
     return g_here;
   };
-  /* AHD (Adaptive Homogeneity-Directed) interpolation for the dominating channel.
-     This algorithm performs directional interpolations (horizontal and vertical) for the
-     dominating channel. It interpolates the remaining channels in those directions if
-     using the slow mode. It evaluates a homogeneity metric and selects the direction
-     with the greatest homogeneity. The fast version uses a simple color difference
-     variance metric. The slow version computes true CIELAB homogeneity mapped across
-     a 3x3 window using the full color delta metrics.
-     Template parameters allow its application on arbitrary geometries where color channels
-     can be exchanged.
+  /* AHD (Adaptive Homogeneity-Directed) interpolation for the dominating
+     channel. This algorithm performs directional interpolations (horizontal
+     and vertical) for the dominating channel. It interpolates the remaining
+     channels in those directions if using the slow mode. It evaluates a
+     homogeneity metric and selects the direction with the greatest
+     homogeneity. The fast version uses a simple color difference variance
+     metric. The slow version computes true CIELAB homogeneity mapped across a
+     3x3 window using the full color delta metrics. Template parameters allow
+     its application on arbitrary geometries where color channels can be
+     exchanged.
    */
   template <int ah_green, int ah_red, int ah_blue, bool fast, bool smoothen>
   bool
@@ -1107,28 +1088,35 @@ protected:
   {
     int w = m_area.width, h = m_area.height;
     if (progress)
-      progress->set_task (fast ? "Demosaicing dominating channel (AHD fast)" :
-                                 "Demosaicing dominating channel (AHD slow)",
-                          fast ? (smoothen ? h * 2 : h) : (smoothen ? h * 5 : h * 4));
+      progress->set_task (fast ? "demosaicing dominating channel (ahd fast)"
+                               : "demosaicing dominating channel (ahd slow)",
+                          fast ? (smoothen ? h * 2 : h)
+                               : (smoothen ? h * 5 : h * 4));
 
     std::vector<luminosity_t> Green_H (w * h);
     std::vector<luminosity_t> Green_V (w * h);
 
     /* Real AHD requires filling Green_H and Green_V fully first.
-       
+
        DIFFERENCE TO DCRAW:
-       `dcraw` uses the same mathematical interpolation for Green (Hamilton-Adams base)
-       but it aggressively clamps the result to strictly within the physical neighboring bounds 
-       using a `ULIM` macro to avoid overshoot artifacts:
+       `dcraw` uses the same mathematical interpolation for Green
+       (Hamilton-Adams base) but it aggressively clamps the result to strictly
+       within the physical neighboring bounds using a `ULIM` macro to avoid
+       overshoot artifacts:
 
        [dcraw snippet]
-       val = ((pix[-1][1] + pix[0][c] + pix[1][1]) * 2 - pix[-2][c] - pix[2][c]) >> 2;
-       rgb[0][row-top][col-left][1] = ULIM(val,pix[-1][1],pix[1][1]);
-       
-       Our implementation favors maintaining the full un-clamped signal to preserve 
-       micro-contrast and gradient curves.
+       for (i=0; i < 4; i++)
+         FORC3 cpixels[i][c] = ULIM(cpixels[i][c], val1, val2);
     */
-#pragma omp parallel shared(progress, h, w, Green_H, Green_V) default(none)
+    if (progress)
+      progress->set_task (fast ? "demosaicing dominating channel (ahd fast)"
+                               : "demosaicing dominating channel (ahd slow)",
+                          fast ? (smoothen ? h * 2 : h)
+                               : (smoothen ? h * 5 : h * 4));
+    std::vector<luminosity_t> green_h (w * h);
+    std::vector<luminosity_t> green_v (w * h);
+
+#pragma omp parallel shared(progress, h, w, green_h, green_v) default(none)
     for (int y = 0; y < h; y++)
       {
         if (!progress || !progress->cancel_requested ())
@@ -1137,8 +1125,8 @@ protected:
               int color = GEOMETRY::demosaic_entry_color (x, y);
               if (color == ah_green)
                 {
-                  Green_H[y * w + x] = known (x, y);
-                  Green_V[y * w + x] = known (x, y);
+                  green_h[y * w + x] = known (x, y);
+                  green_v[y * w + x] = known (x, y);
                   continue;
                 }
 
@@ -1153,10 +1141,10 @@ protected:
               luminosity_t c0_2 = known (x, y - 2);
               luminosity_t c02 = known (x, y + 2);
 
-              Green_H[y * w + x]
+              green_h[y * w + x]
                   = (g_10 + g10) * (luminosity_t)0.5
                     + (2 * c00 - c_20 - c20) * (luminosity_t)0.25;
-              Green_V[y * w + x]
+              green_v[y * w + x]
                   = (g0_1 + g01) * (luminosity_t)0.5
                     + (2 * c00 - c0_2 - c02) * (luminosity_t)0.25;
             }
@@ -1166,10 +1154,10 @@ protected:
     if (progress && progress->cancelled ())
       return false;
 
-    std::vector<rgbdata> RGB_H;
-    std::vector<rgbdata> RGB_V;
-    std::vector<cie_lab> LAB_H;
-    std::vector<cie_lab> LAB_V;
+    std::vector<rgbdata> rgb_h;
+    std::vector<rgbdata> rgb_v;
+    std::vector<cie_lab> lab_h;
+    std::vector<cie_lab> lab_v;
 
     if (!fast)
       {
@@ -1179,24 +1167,24 @@ protected:
         if (range <= 0)
           range = 1.0f;
 
-        RGB_H.resize (w * h);
-        RGB_V.resize (w * h);
-        
+        rgb_h.resize (w * h);
+        rgb_v.resize (w * h);
 
-#pragma omp parallel shared(progress, h, w, RGB_H, RGB_V, LAB_H, LAB_V, Green_H, Green_V) default(none)
+#pragma omp parallel shared(progress, h, w, rgb_h, rgb_v, green_h,            \
+                                green_v) default(none)
         for (int y = 0; y < h; y++)
           {
             if (!progress || !progress->cancel_requested ())
               for (int x = 0; x < w; x++)
                 {
                   int idx = y * w + x;
-                  RGB_H[idx][ah_green] = Green_H[idx];
-                  RGB_H[idx][ah_red] = interp (x, y, ah_red, Green_H);
-                  RGB_H[idx][ah_blue] = interp (x, y, ah_blue, Green_H);
+                  rgb_h[idx][ah_green] = green_h[idx];
+                  rgb_h[idx][ah_red] = interp (x, y, ah_red, green_h);
+                  rgb_h[idx][ah_blue] = interp (x, y, ah_blue, green_h);
 
-                  RGB_V[idx][ah_green] = Green_V[idx];
-                  RGB_V[idx][ah_red] = interp (x, y, ah_red, Green_V);
-                  RGB_V[idx][ah_blue] = interp (x, y, ah_blue, Green_V);
+                  rgb_v[idx][ah_green] = green_v[idx];
+                  rgb_v[idx][ah_red] = interp (x, y, ah_red, green_v);
+                  rgb_v[idx][ah_blue] = interp (x, y, ah_blue, green_v);
                 }
             if (progress)
               progress->inc_progress ();
@@ -1204,30 +1192,35 @@ protected:
         if (progress && progress->cancelled ())
           return false;
 
-        // Convert to Lab sequentially to avoid omp initialization/sizing overhead
-        LAB_H.resize (w * h, cie_lab(xyz(0,0,0), srgb_white));
-        LAB_V.resize (w * h, cie_lab(xyz(0,0,0), srgb_white));
-#pragma omp parallel for shared(progress, h, w, range, RGB_H, RGB_V, LAB_H, LAB_V, srgb_white) default(none)
+        // Convert to Lab sequentially to avoid omp initialization/sizing
+        // overhead
+        lab_h.resize (w * h, cie_lab (xyz (0, 0, 0), srgb_white));
+        lab_v.resize (w * h, cie_lab (xyz (0, 0, 0), srgb_white));
+#pragma omp parallel for shared(progress, h, w, range, rgb_h, rgb_v, lab_h,   \
+                                    lab_v, srgb_white) default(none)
         for (int i = 0; i < h * w; i++)
           {
-            xyz xyz_h = xyz::from_srgb (std::clamp(RGB_H[i].red / range, 0.0f, 1.0f),
-                                        std::clamp(RGB_H[i].green / range, 0.0f, 1.0f),
-                                        std::clamp(RGB_H[i].blue / range, 0.0f, 1.0f));
-            LAB_H[i] = cie_lab (xyz_h, srgb_white);
+            xyz xyz_h = xyz::from_srgb (
+                std::clamp ((float)(rgb_h[i].red / range), 0.0f, 1.0f),
+                std::clamp ((float)(rgb_h[i].green / range), 0.0f, 1.0f),
+                std::clamp ((float)(rgb_h[i].blue / range), 0.0f, 1.0f));
+            lab_h[i] = cie_lab (xyz_h, srgb_white);
 
-            xyz xyz_v = xyz::from_srgb (std::clamp(RGB_V[i].red / range, 0.0f, 1.0f),
-                                        std::clamp(RGB_V[i].green / range, 0.0f, 1.0f),
-                                        std::clamp(RGB_V[i].blue / range, 0.0f, 1.0f));
-            LAB_V[i] = cie_lab (xyz_v, srgb_white);
+            xyz xyz_v = xyz::from_srgb (
+                std::clamp ((float)(rgb_v[i].red / range), 0.0f, 1.0f),
+                std::clamp ((float)(rgb_v[i].green / range), 0.0f, 1.0f),
+                std::clamp ((float)(rgb_v[i].blue / range), 0.0f, 1.0f));
+            lab_v[i] = cie_lab (xyz_v, srgb_white);
           }
       }
 
     bitmap_2d predA (smoothen ? w : 0, smoothen ? h : 0);
 
-    std::vector<luminosity_t> H_scores (w * h, 0);
-    std::vector<luminosity_t> V_scores (w * h, 0);
+    std::vector<luminosity_t> h_scores (w * h, 0);
+    std::vector<luminosity_t> v_scores (w * h, 0);
 
-#pragma omp parallel shared(progress, h, w, Green_H, Green_V, LAB_H, LAB_V, H_scores, V_scores) default(none)
+#pragma omp parallel shared(progress, h, w, green_h, green_v, lab_h, lab_v,   \
+                                h_scores, v_scores) default(none)
     for (int y = 0; y < h; y++)
       {
         if (!progress || !progress->cancel_requested ())
@@ -1239,46 +1232,55 @@ protected:
 
               if (fast)
                 {
-                  // Fast variance metric utilizing robust HA gradient calculations
-                  luminosity_t gh = Green_H[y * w + x];
-                  luminosity_t gv = Green_V[y * w + x];
+                  // Fast variance metric utilizing robust HA gradient
+                  // calculations
+                  luminosity_t gh = green_h[y * w + x];
+                  luminosity_t gv = green_v[y * w + x];
                   luminosity_t c00 = known (x, y);
-                  
+
                   luminosity_t g_10 = dch (x - 1, y, ah_green);
                   luminosity_t g10 = dch (x + 1, y, ah_green);
                   luminosity_t g0_1 = dch (x, y - 1, ah_green);
                   luminosity_t g01 = dch (x, y + 1, ah_green);
-                  
+
                   luminosity_t c_20 = known (x - 2, y);
                   luminosity_t c20 = known (x + 2, y);
                   luminosity_t c0_2 = known (x, y - 2);
                   luminosity_t c02 = known (x, y + 2);
 
-                  // H_scores is the penalty for horizontal interpolation (measures horizontal variance)
-                  H_scores[y * w + x] = fabs (2 * c00 - c_20 - c20) + 2 * fabs (g_10 - g10) + fabs(2 * gh - g_10 - g10);
-                  // V_scores is the penalty for vertical interpolation (measures vertical variance)
-                  V_scores[y * w + x] = fabs (2 * c00 - c0_2 - c02) + 2 * fabs (g0_1 - g01) + fabs(2 * gv - g0_1 - g01);
+                  // h_scores is the penalty for horizontal interpolation
+                  // (measures horizontal variance)
+                  h_scores[y * w + x] = my_abs (2 * c00 - c_20 - c20)
+                                        + 2 * my_abs (g_10 - g10)
+                                        + my_abs (2 * gh - g_10 - g10);
+                  // v_scores is the penalty for vertical interpolation
+                  // (measures vertical variance)
+                  v_scores[y * w + x] = my_abs (2 * c00 - c0_2 - c02)
+                                        + 2 * my_abs (g0_1 - g01)
+                                        + my_abs (2 * gv - g0_1 - g01);
                 }
               else
                 {
                   // Slow CIELAB homogeneity metric
-                  /* 
+                  /*
                     DIFFERENCE TO DCRAW:
-                    `dcraw` assesses homogeneity by scanning only 4 cardinal neighbors
-                    and checking if their differences fall within a dynamically constructed
-                    threshold based on the Min/Max variations of the opposing directions.
-                    It checks Luma (ldiff) and Chroma (abdiff) spaces independently:
+                    `dcraw` assesses homogeneity by scanning only 4 cardinal
+                    neighbors and checking if their differences fall within a
+                    dynamically constructed threshold based on the Min/Max
+                    variations of the opposing directions. It checks Luma
+                    (ldiff) and Chroma (abdiff) spaces independently:
 
                     [dcraw snippet]
-                    leps = MIN(MAX(ldiff[0][0],ldiff[0][1]), MAX(ldiff[1][2],ldiff[1][3]));
-                    abeps = MIN(MAX(abdiff[0][0],abdiff[0][1]), MAX(abdiff[1][2],abdiff[1][3]));
-                    for (d=0; d < 2; d++)
-                      for (i=0; i < 4; i++)
-                        if (ldiff[d][i] <= leps && abdiff[d][i] <= abeps)
-                          homo[d][tr][tc]++;
-                    
-                    Our implementation utilizes a true 3x3 surrounding window (all 8 neighbors)
-                    and evaluates the standard perceptual CIEDE2000-esque geometric threshold constraint
+                    leps = MIN(MAX(ldiff[0][0],ldiff[0][1]),
+                    MAX(ldiff[1][2],ldiff[1][3])); abeps =
+                    MIN(MAX(abdiff[0][0],abdiff[0][1]),
+                    MAX(abdiff[1][2],abdiff[1][3])); for (d=0; d < 2; d++) for
+                    (i=0; i < 4; i++) if (ldiff[d][i] <= leps && abdiff[d][i]
+                    <= abeps) homo[d][tr][tc]++;
+
+                    Our implementation utilizes a true 3x3 surrounding window
+                    (all 8 neighbors) and evaluates the standard perceptual
+                    CIEDE2000-esque geometric threshold constraint
                     (`deltaE < 2.0f`).
                   */
                   int h_homo = 0;
@@ -1290,23 +1292,25 @@ protected:
                       {
                         int nx = std::clamp (x + dx, 0, w - 1);
                         int ny = std::clamp (y + dy, 0, h - 1);
-                        
-                        if (deltaE (LAB_H[y * w + x], LAB_H[ny * w + nx]) < 2.0f)
+
+                        if (deltaE (lab_h[y * w + x], lab_h[ny * w + nx])
+                            < 2.0f)
                           h_homo++;
-                        if (deltaE (LAB_V[y * w + x], LAB_V[ny * w + nx]) < 2.0f)
+                        if (deltaE (lab_v[y * w + x], lab_v[ny * w + nx])
+                            < 2.0f)
                           v_homo++;
                       }
-                  
-                  // Inverting the score so a lower score consistently means 'better'
-                  H_scores[y * w + x] = -h_homo;
-                  V_scores[y * w + x] = -v_homo;
+
+                  // Inverting the score so a lower score consistently means
+                  // 'better'
+                  h_scores[y * w + x] = -h_homo;
+                  v_scores[y * w + x] = -v_homo;
                 }
             }
       }
 
-
-
-#pragma omp parallel shared(progress, h, w, predA, Green_H, Green_V, H_scores, V_scores) default(none)
+#pragma omp parallel shared(progress, h, w, predA, green_h, green_v,          \
+                                h_scores, v_scores) default(none)
     for (int y = 0; y < h; y++)
       {
         if (!progress || !progress->cancel_requested ())
@@ -1316,51 +1320,53 @@ protected:
               if (color == ah_green)
                 continue;
 
-              // Spatially smooth the decision map to reduce checkerboard/blocking artifacts
-              /* 
+              // Spatially smooth the decision map to reduce
+              // checkerboard/blocking artifacts
+              /*
                  DIFFERENCE TO DCRAW:
-                 `dcraw` effectively does the exact same 3x3 sum mapping to apply spatial
-                 smoothing over the homogeneity array. However, our implementation forces
-                 a hard binary decision (`<=`), while `dcraw` explicitly identifies ties
-                 (`hm[0] == hm[1]`) and manually blends the horizontal and vertical models
-                 instead of biasing direction:
+                 `dcraw` effectively does the exact same 3x3 sum mapping to
+                 apply spatial smoothing over the homogeneity array. However,
+                 our implementation forces a hard binary decision (`<=`), while
+                 `dcraw` explicitly identifies ties
+                 (`hm[0] == hm[1]`) and manually blends the horizontal and
+                 vertical models instead of biasing direction:
 
                  [dcraw snippet]
                  for (d=0; d < 2; d++)
                    for (hm[d]=0, i=tr-1; i <= tr+1; i++)
                      for (j=tc-1; j <= tc+1; j++)
                        hm[d] += homo[d][i][j];
-                 
+
                  if (hm[0] != hm[1])
-                   FORC3 image[row*width+col][c] = rgb[hm[1] > hm[0]][tr][tc][c];
-                 else
-                   FORC3 image[row*width+col][c] = (rgb[0][tr][tc][c] + rgb[1][tr][tc][c]) >> 1;
+                   FORC3 image[row*width+col][c] = rgb[hm[1] >
+                 hm[0]][tr][tc][c]; else FORC3 image[row*width+col][c] =
+                 (rgb[0][tr][tc][c] + rgb[1][tr][tc][c]) >> 1;
               */
-              luminosity_t smoothed_H = 0;
-              luminosity_t smoothed_V = 0;
+              luminosity_t smoothed_h = 0;
+              luminosity_t smoothed_v = 0;
 
               for (int dy = -1; dy <= 1; dy++)
                 for (int dx = -1; dx <= 1; dx++)
                   {
                     int nx = std::clamp (x + dx, 0, w - 1);
                     int ny = std::clamp (y + dy, 0, h - 1);
-                    
+
                     if (GEOMETRY::demosaic_entry_color (nx, ny) != ah_green)
                       {
-                        smoothed_H += H_scores[ny * w + nx];
-                        smoothed_V += V_scores[ny * w + nx];
+                        smoothed_h += h_scores[ny * w + nx];
+                        smoothed_v += v_scores[ny * w + nx];
                       }
                   }
 
-              if (smoothed_H <= smoothed_V)
+              if (smoothed_h <= smoothed_v)
                 {
-                  d (x, y)[ah_green] = Green_H[y * w + x];
-		  if (smoothen)
+                  d (x, y)[ah_green] = green_h[y * w + x];
+                  if (smoothen)
                     predA.set_bit (x, y);
                 }
               else
                 {
-                  d (x, y)[ah_green] = Green_V[y * w + x];
+                  d (x, y)[ah_green] = green_v[y * w + x];
                 }
             }
         if (progress)
@@ -1372,8 +1378,8 @@ protected:
     if (smoothen)
       {
         if (progress)
-          progress->set_task ("Smoothening noisy areas in the dominating "
-                              "channel (AHD)",
+          progress->set_task ("smoothening noisy areas in the dominating "
+                              "channel (ahd)",
                               h);
 #pragma omp parallel shared(progress, h, w, predA) default(none)
         for (int y = 1; y < h - 1; y++)
@@ -1401,18 +1407,21 @@ protected:
     return !progress || !progress->cancelled ();
   }
 
-  /* Step 2: Interpolate red and blue at positions where they are missing.
-
-     Now green is fully populated by AHD. We use a parallel color difference strategy
-     that mirrors Hamilton-Adams's residual calculation for remaining channels. 
-   */
+  /* Step 2 of the AHD algorithm: interpolate red and blue channels at
+     positions where they are missing. Now green is fully populated by AHD.
+     We use a parallel color difference strategy that mirrors Hamilton-Adams's
+     residual calculation for remaining channels.
+     PROGRESS can be used to report progress and check for cancellation.
+     AH_GREEN is the dominating channel.
+     AH_RED is the red channel.
+     AH_BLUE is the blue channel.  */
   template <int ah_green, int ah_red, int ah_blue>
   bool
   ahd_interpolation_remaining_channels (progress_info *progress)
   {
     int h = m_area.height, w = m_area.width;
     if (progress)
-      progress->set_task ("Demosaicing remaining chanels (AHD)", h);
+      progress->set_task ("demosaicing remaining channels (ahd)", h);
 #pragma omp parallel shared(progress, h, w) default(none)
     for (int y = 0; y < h; y++)
       {
@@ -1423,9 +1432,11 @@ protected:
               luminosity_t g_here = d (x, y)[(int)ah_green];
 
               if (color != ah_red)
-                hamilton_adams_interpolate_color<ah_green, ah_red> (g_here, x, y);
+                hamilton_adams_interpolate_color<ah_green, ah_red> (g_here, x,
+                                                                    y);
               if (color != ah_blue)
-                hamilton_adams_interpolate_color<ah_green, ah_blue> (g_here, x, y);
+                hamilton_adams_interpolate_color<ah_green, ah_blue> (g_here, x,
+                                                                     y);
             }
         if (progress)
           progress->inc_progress ();
@@ -1438,8 +1449,7 @@ protected:
   static always_inline_attr luminosity_t
   median3 (luminosity_t a, luminosity_t b, luminosity_t c)
   {
-    return std::max (std::min (a, b),
-                     std::min (std::max (a, b), c));
+    return std::max (std::min (a, b), std::min (std::max (a, b), c));
   }
 
   /* Hamilton-Adams green estimate from one cardinal direction.
@@ -1462,10 +1472,11 @@ protected:
     return g_neighbor + (c_here - c_far) * (luminosity_t)0.5;
   }
 
-  /* AMaZE (Aliasing Minimization and Zipper Elimination) demosaicing.
+  /* AMaZE (Aliasing Minimization and Zipper Elimination) demosaicing
+     algorithm.
 
      Based on the algorithm by Emil Martinec, incorporating ideas from
-     Luis Sanz Rodrigues and Paul Lee.  This implementation follows the
+     Luis Sanz Rodrigues and Paul Lee. This implementation follows the
      RawTherapee reference implementation closely, adapted to work with
      the GEOMETRY template and floating-point linear data in the range
      0...find_robust_max.
@@ -1485,7 +1496,7 @@ protected:
        AH_GREEN  - the dominating channel (plays role of "green" in Bayer)
        AH_RED    - first non-dominating channel
        AH_BLUE   - second non-dominating channel
-       NYQUIST   - if true, enable Nyquist texture detection and handling
+       DO_NYQUIST - if true, enable Nyquist texture detection and handling
 
      Possible improvements:
        - SIMD vectorization of the inner loops
@@ -1515,7 +1526,7 @@ protected:
     constexpr luminosity_t eps = (luminosity_t)1e-5;
     constexpr luminosity_t epssq = (luminosity_t)1e-10;
 
-    /* Adaptive ratio threshold: if |1 - color_ratio| < arthresh,
+    /* Adaptive ratio threshold: if |1 - color_ratio| < ARTHRESH,
        use the ratio-based interpolation; otherwise fall back to HA.
        The ratio method works well when the color ratio is close to 1,
        i.e., when adjacent pixels have similar values.  When the ratio
@@ -1525,52 +1536,48 @@ protected:
        local noise estimation.  */
     constexpr luminosity_t arthresh = (luminosity_t)0.75;
 
-    /* Gaussian kernel for Nyquist texture test on 5x5 quincunx,
-       sigma=1.2.  */
-    constexpr luminosity_t gaussodd[4]
-        = { 0.14659727707323927f, 0.103592713382435f,
-            0.0732036125103057f, 0.0365543548389495f };
+    /* Gaussian kernel for Nyquist texture test on 5x5 quincunx, sigma=1.2.  */
+    constexpr luminosity_t gauss_odd[4]
+        = { 0.14659727707323927f, 0.103592713382435f, 0.0732036125103057f,
+            0.0365543548389495f };
 
     /* Nyquist test threshold.  */
-    constexpr luminosity_t nyqthresh = (luminosity_t)0.5;
+    constexpr luminosity_t nyq_thresh = (luminosity_t)0.5;
 
     /* Gaussian kernel for gradient weighting, pre-multiplied with
-       nyqthresh.  */
-    constexpr luminosity_t gaussgrad[6]
-        = { nyqthresh * 0.07384411893421103f,
-            nyqthresh * 0.06207511968171489f,
-            nyqthresh * 0.0521818194747806f,
-            nyqthresh * 0.03687419286733595f,
-            nyqthresh * 0.03099732204057846f,
-            nyqthresh * 0.018413194161458882f };
+       NYQ_THRESH.  */
+    constexpr luminosity_t gauss_grad[6] = {
+      nyq_thresh * 0.07384411893421103f, nyq_thresh * 0.06207511968171489f,
+      nyq_thresh * 0.0521818194747806f,  nyq_thresh * 0.03687419286733595f,
+      nyq_thresh * 0.03099732204057846f, nyq_thresh * 0.018413194161458882f
+    };
 
     /* Count total progress steps across all phases.  */
     if (progress)
-      progress->set_task ("Demosaicing (AMaZE)", h * 6);
+      progress->set_task ("demosaicing (amaze)", h * 6);
 
     /* Allocate working arrays.
-
-       dirwts0/dirwts1: directional gradient weights (vertical/horizontal).
+       dir_wts_v/h: directional gradient weights (vertical/horizontal).
        vcd/hcd: vertical/horizontal color differences (G-C).
-       dgintv/dginth: squared differences between opposing directional
-       interpolations.
-       hvwt: the final per-pixel weight for combining horizontal and
-       vertical interpolations (0 = pure horizontal, 1 = pure vertical).
+       dg_int_v/h: squared differences between opposing directional
+       interpolations. hv_wt: the final per-pixel weight for combining
+       horizontal and vertical interpolations (0 = pure horizontal, 1 = pure
+       vertical).
 
        Possible improvement: use a tile-based approach to reduce peak
        memory usage, processing the image in overlapping tiles as
        RawTherapee does.  */
-    std::vector<luminosity_t> dirwts0 (w * h);
-    std::vector<luminosity_t> dirwts1 (w * h);
-    std::vector<luminosity_t> vcd_arr (w * h);
-    std::vector<luminosity_t> hcd_arr (w * h);
-    std::vector<luminosity_t> dgintv_arr (w * h);
-    std::vector<luminosity_t> dginth_arr (w * h);
-    std::vector<luminosity_t> hvwt_arr (w * h);
+    std::vector<luminosity_t> dir_wts_v (w * h);
+    std::vector<luminosity_t> dir_wts_h (w * h);
+    std::vector<luminosity_t> vcd (w * h);
+    std::vector<luminosity_t> hcd (w * h);
+    std::vector<luminosity_t> dg_int_v (w * h);
+    std::vector<luminosity_t> dg_int_h (w * h);
+    std::vector<luminosity_t> hv_wt (w * h);
 
     /* Nyquist-specific working arrays (allocated only if needed).  */
-    std::vector<luminosity_t> delhvsqsum (do_nyquist ? w * h : 0);
-    std::vector<luminosity_t> cddiffsq_arr (do_nyquist ? w * h : 0);
+    std::vector<luminosity_t> del_hv_sq_sum (do_nyquist ? w * h : 0);
+    std::vector<luminosity_t> cd_diff_sq (do_nyquist ? w * h : 0);
     std::vector<uint8_t> nyquist_flags (do_nyquist ? w * h : 0);
 
     /* ================================================================
@@ -1592,18 +1599,16 @@ protected:
           {
             int idx = y * w + x;
             luminosity_t c00 = known (x, y);
-            luminosity_t delh
-                = fabs (known (x + 1, y) - known (x - 1, y));
-            luminosity_t delv
-                = fabs (known (x, y + 1) - known (x, y - 1));
+            luminosity_t delh = my_abs (known (x + 1, y) - known (x - 1, y));
+            luminosity_t delv = my_abs (known (x, y + 1) - known (x, y - 1));
 
-            dirwts0[idx] = eps + fabs (known (x, y - 2) - c00)
-                           + fabs (c00 - known (x, y + 2)) + delv;
-            dirwts1[idx] = eps + fabs (known (x - 2, y) - c00)
-                           + fabs (c00 - known (x + 2, y)) + delh;
+            dir_wts_v[idx] = eps + my_abs (known (x, y - 2) - c00)
+                             + my_abs (c00 - known (x, y + 2)) + delv;
+            dir_wts_h[idx] = eps + my_abs (known (x - 2, y) - c00)
+                             + my_abs (c00 - known (x + 2, y)) + delh;
 
             if (do_nyquist)
-              delhvsqsum[idx] = delh * delh + delv * delv;
+              del_hv_sq_sum[idx] = delh * delh + delv * delv;
           }
         if (progress)
           progress->inc_progress ();
@@ -1639,14 +1644,16 @@ protected:
             luminosity_t c00 = known (x, y);
 
             /* Safely retrieve directional weights with clamping.  */
-            auto wt0 = [&] (int xx, int yy) -> luminosity_t {
-              return dirwts0[std::clamp (yy, 0, h - 1) * w
-                             + std::clamp (xx, 0, w - 1)];
-            };
-            auto wt1 = [&] (int xx, int yy) -> luminosity_t {
-              return dirwts1[std::clamp (yy, 0, h - 1) * w
-                             + std::clamp (xx, 0, w - 1)];
-            };
+            auto wt_v = [&] (int xx, int yy) -> luminosity_t
+              {
+                return dir_wts_v[std::clamp (yy, 0, h - 1) * w
+                                 + std::clamp (xx, 0, w - 1)];
+              };
+            auto wt_h = [&] (int xx, int yy) -> luminosity_t
+              {
+                return dir_wts_h[std::clamp (yy, 0, h - 1) * w
+                                 + std::clamp (xx, 0, w - 1)];
+              };
 
             /* CFA values at cardinal and distance-2 neighbors.  */
             luminosity_t cu1 = known (x, y - 1);
@@ -1660,99 +1667,80 @@ protected:
 
             /* Color ratios in each cardinal direction.
                Weighted by directional gradients for robustness.  */
-            luminosity_t cru = cu1 * (wt0 (x, y - 2) + wt0 (x, y))
-                               / (wt0 (x, y - 2) * (eps + c00)
-                                  + wt0 (x, y) * (eps + cu2));
-            luminosity_t crd = cd1 * (wt0 (x, y + 2) + wt0 (x, y))
-                               / (wt0 (x, y + 2) * (eps + c00)
-                                  + wt0 (x, y) * (eps + cd2));
-            luminosity_t crl = cl1 * (wt1 (x - 2, y) + wt1 (x, y))
-                               / (wt1 (x - 2, y) * (eps + c00)
-                                  + wt1 (x, y) * (eps + cl2));
-            luminosity_t crr = cr1 * (wt1 (x + 2, y) + wt1 (x, y))
-                               / (wt1 (x + 2, y) * (eps + c00)
-                                  + wt1 (x, y) * (eps + cr2));
+            luminosity_t cru = cu1 * (wt_v (x, y - 2) + wt_v (x, y))
+                               / (wt_v (x, y - 2) * (eps + c00)
+                                  + wt_v (x, y) * (eps + cu2));
+            luminosity_t crd = cd1 * (wt_v (x, y + 2) + wt_v (x, y))
+                               / (wt_v (x, y + 2) * (eps + c00)
+                                  + wt_v (x, y) * (eps + cd2));
+            luminosity_t crl = cl1 * (wt_h (x - 2, y) + wt_h (x, y))
+                               / (wt_h (x - 2, y) * (eps + c00)
+                                  + wt_h (x, y) * (eps + cl2));
+            luminosity_t crr = cr1 * (wt_h (x + 2, y) + wt_h (x, y))
+                               / (wt_h (x + 2, y) * (eps + c00)
+                                  + wt_h (x, y) * (eps + cr2));
 
             /* HA green estimates in four cardinal directions.  */
-            luminosity_t guha
-                = ha_green_one_direction (cu1, c00, cu2);
-            luminosity_t gdha
-                = ha_green_one_direction (cd1, c00, cd2);
-            luminosity_t glha
-                = ha_green_one_direction (cl1, c00, cl2);
-            luminosity_t grha
-                = ha_green_one_direction (cr1, c00, cr2);
+            luminosity_t guha = ha_green_one_direction (cu1, c00, cu2);
+            luminosity_t gdha = ha_green_one_direction (cd1, c00, cd2);
+            luminosity_t glha = ha_green_one_direction (cl1, c00, cl2);
+            luminosity_t grha = ha_green_one_direction (cr1, c00, cr2);
 
             /* Adaptive ratio green estimates: use ratio if close to 1
                (smooth area), otherwise fall back to HA.  */
-            luminosity_t guar
-                = fabs (1 - cru) < arthresh ? c00 * cru : guha;
-            luminosity_t gdar
-                = fabs (1 - crd) < arthresh ? c00 * crd : gdha;
-            luminosity_t glar
-                = fabs (1 - crl) < arthresh ? c00 * crl : glha;
-            luminosity_t grar
-                = fabs (1 - crr) < arthresh ? c00 * crr : grha;
+            luminosity_t guar = my_abs (1 - cru) < arthresh ? c00 * cru : guha;
+            luminosity_t gdar = my_abs (1 - crd) < arthresh ? c00 * crd : gdha;
+            luminosity_t glar = my_abs (1 - crl) < arthresh ? c00 * crl : glha;
+            luminosity_t grar = my_abs (1 - crr) < arthresh ? c00 * crr : grha;
 
             /* Adaptive weights for combining up/down and left/right.  */
-            luminosity_t hwt
-                = wt1 (x - 1, y) / (wt1 (x - 1, y) + wt1 (x + 1, y));
-            luminosity_t vwt
-                = wt0 (x, y - 1) / (wt0 (x, y + 1) + wt0 (x, y - 1));
+            luminosity_t wt_h_val
+                = wt_h (x - 1, y) / (wt_h (x - 1, y) + wt_h (x + 1, y));
+            luminosity_t wt_v_val
+                = wt_v (x, y - 1) / (wt_v (x, y + 1) + wt_v (x, y - 1));
 
             /* HA-only blended estimates (alternative).  */
-            luminosity_t Gintvha = vwt * gdha + (1 - vwt) * guha;
-            luminosity_t Ginthha = hwt * grha + (1 - hwt) * glha;
+            luminosity_t g_int_v_ha = wt_v_val * gdha + (1 - wt_v_val) * guha;
+            luminosity_t g_int_h_ha = wt_h_val * grha + (1 - wt_h_val) * glha;
 
-            /* Primary and alternative color differences.
-               Convention matching RawTherapee scalar code:
-                 At R/B pixels: vcd = G_estimate - CFA  (positive when G > R/B)
-                 At G pixels:   vcd = CFA - G_estimate
-               Phase 5 reconstruction: G_written = CFA + Dgrb.
-                 R/B: G = R + (G_est - R) = G_est  (correct)
-                 G sites are not written in Phase 5 (already initialized).  */
-            luminosity_t vcd_val, hcd_val, vcdalt, hcdalt;
+            /* Primary and alternative color differences.  */
+            luminosity_t vcd_val, hcd_val, vcd_alt, hcd_alt;
             if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
               {
-                vcd_val = c00 - (vwt * gdar + (1 - vwt) * guar);
-                hcd_val = c00 - (hwt * grar + (1 - hwt) * glar);
-                vcdalt = c00 - Gintvha;
-                hcdalt = c00 - Ginthha;
+                vcd_val = c00 - (wt_v_val * gdar + (1 - wt_v_val) * guar);
+                hcd_val = c00 - (wt_h_val * grar + (1 - wt_h_val) * glar);
+                vcd_alt = c00 - g_int_v_ha;
+                hcd_alt = c00 - g_int_h_ha;
               }
             else
               {
-                vcd_val = (vwt * gdar + (1 - vwt) * guar) - c00;
-                hcd_val = (hwt * grar + (1 - hwt) * glar) - c00;
-                vcdalt = Gintvha - c00;
-                hcdalt = Ginthha - c00;
+                vcd_val = (wt_v_val * gdar + (1 - wt_v_val) * guar) - c00;
+                hcd_val = (wt_h_val * grar + (1 - wt_h_val) * glar) - c00;
+                vcd_alt = g_int_v_ha - c00;
+                hcd_alt = g_int_h_ha - c00;
               }
 
-            /* Near highlights, fall back to HA.
-
-               Possible improvement: smooth transition instead of a
-               hard threshold.  */
-            if (c00 > clip_pt8 || Gintvha > clip_pt8
-                || Ginthha > clip_pt8)
+            /* Near highlights, fall back to HA.  */
+            if (c00 > clip_pt8 || g_int_v_ha > clip_pt8
+                || g_int_h_ha > clip_pt8)
               {
                 guar = guha;
                 gdar = gdha;
                 glar = glha;
                 grar = grha;
-                vcd_val = vcdalt;
-                hcd_val = hcdalt;
+                vcd_val = vcd_alt;
+                hcd_val = hcd_alt;
               }
 
-            vcd_arr[idx] = vcd_val;
-            hcd_arr[idx] = hcd_val;
+            vcd[idx] = vcd_val;
+            hcd[idx] = hcd_val;
 
             /* Differences of interpolations in opposing directions.
                Uses minimum of HA and adaptive-ratio differences.  */
-            dgintv_arr[idx]
-                = std::min ((guha - gdha) * (guha - gdha),
-                            (guar - gdar) * (guar - gdar));
-            dginth_arr[idx]
-                = std::min ((glha - grha) * (glha - grha),
-                            (glar - grar) * (glar - grar));
+            dg_int_v[idx] = std::min ((guha - gdha) * (guha - gdha),
+                                      (guar - gdar) * (guar - gdar));
+            dg_int_h[idx] = std::min ((glha - grha) * (glha - grha),
+                                      (glar - grar) * (glar - grar));
           }
         if (progress)
           progress->inc_progress ();
@@ -1762,10 +1750,6 @@ protected:
 
     /* ================================================================
        Phase 2b: Bound color differences in regions of high saturation.
-
-       Apply a median clamp to prevent overshooting near highlights.
-
-       Then compute squared color-difference for Nyquist detection.
        ================================================================ */
 #pragma omp parallel for schedule(dynamic, 16)
     for (int y = 0; y < h; y++)
@@ -1775,107 +1759,105 @@ protected:
         for (int x = 0; x < w; x++)
           {
             int idx = y * w + x;
-            bool is_green = (GEOMETRY::demosaic_entry_color (x, y) == ah_green);
+            bool is_green
+                = (GEOMETRY::demosaic_entry_color (x, y) == ah_green);
             luminosity_t c00 = known (x, y);
 
-            /* Bound horizontal color difference.
-               Convention: at R/B sites, hcd = G_estimate - C (positive normal).
-               At G sites, hcd = C - G_estimate (negative normal).
-               Ginth reconstructs the G estimate: C + hcd for R/B, C - hcd for G.
-               Bounding fires when the difference overshoots:  
-                 R/B: hcd < 0 means G_est < C (suspicious, should be G > R/B).
-                 G:   hcd > 0 means G_est < G (suspicious over-correction).  */
-            luminosity_t hcd_val = hcd_arr[idx];
+            luminosity_t hcd_val = hcd[idx];
             if (is_green)
               {
-                /* At G sites: Ginth = c00 - hcd (the estimated other channel).  */
-                luminosity_t Ginth = c00 - hcd_val;
+                /* At G sites: g_int_h = c00 - hcd (the estimated other
+                 * channel).  */
+                luminosity_t g_int_h = c00 - hcd_val;
                 luminosity_t h_med
-                    = median3 (Ginth, known (x - 1, y), known (x + 1, y));
+                    = median3 (g_int_h, known (x - 1, y), known (x + 1, y));
                 if (hcd_val > 0)
                   {
-                    /* Over-correcting toward lower G_est.  */
+                    /* Over-correcting toward lower g_int_h.  */
                     luminosity_t bound = c00 - h_med;
-                    if (3 * hcd_val > (Ginth + c00))
+                    if (3 * hcd_val > (g_int_h + c00))
                       hcd_val = bound;
                     else
                       {
-                        luminosity_t w2 = 1 - 3 * hcd_val / (eps + Ginth + c00);
+                        luminosity_t w2
+                            = 1 - 3 * hcd_val / (eps + g_int_h + c00);
                         hcd_val = w2 * hcd_val + (1 - w2) * bound;
                       }
                   }
-                if (Ginth > clip_pt)
+                if (g_int_h > clip_pt)
                   hcd_val = c00 - h_med;
               }
             else
               {
-                /* At R/B sites: Ginth = c00 + hcd (the estimated G).  */
-                luminosity_t Ginth = c00 + hcd_val;
+                /* At R/B sites: g_int_h = c00 + hcd (the estimated G).  */
+                luminosity_t g_int_h = c00 + hcd_val;
                 luminosity_t h_med
-                    = median3 (Ginth, known (x - 1, y), known (x + 1, y));
+                    = median3 (g_int_h, known (x - 1, y), known (x + 1, y));
                 if (hcd_val < 0)
                   {
                     /* G_estimate is below CFA value: suspicious.  */
                     luminosity_t bound = h_med - c00;
-                    if (3 * (-hcd_val) > (Ginth + c00))
+                    if (3 * (-hcd_val) > (g_int_h + c00))
                       hcd_val = bound;
                     else
                       {
-                        luminosity_t w2 = 1 + 3 * hcd_val / (eps + Ginth + c00);
+                        luminosity_t w2
+                            = 1 + 3 * hcd_val / (eps + g_int_h + c00);
                         hcd_val = w2 * hcd_val + (1 - w2) * bound;
                       }
                   }
-                if (Ginth > clip_pt)
+                if (g_int_h > clip_pt)
                   hcd_val = h_med - c00;
               }
-            hcd_arr[idx] = hcd_val;
+            hcd[idx] = hcd_val;
 
             /* Bound vertical color difference (same structure).  */
-            luminosity_t vcd_val = vcd_arr[idx];
+            luminosity_t vcd_val = vcd[idx];
             if (is_green)
               {
-                luminosity_t Gintv = c00 - vcd_val;
+                luminosity_t g_int_v = c00 - vcd_val;
                 luminosity_t v_med
-                    = median3 (Gintv, known (x, y - 1), known (x, y + 1));
+                    = median3 (g_int_v, known (x, y - 1), known (x, y + 1));
                 if (vcd_val > 0)
                   {
                     luminosity_t bound = c00 - v_med;
-                    if (3 * vcd_val > (Gintv + c00))
+                    if (3 * vcd_val > (g_int_v + c00))
                       vcd_val = bound;
                     else
                       {
-                        luminosity_t w2 = 1 - 3 * vcd_val / (eps + Gintv + c00);
+                        luminosity_t w2
+                            = 1 - 3 * vcd_val / (eps + g_int_v + c00);
                         vcd_val = w2 * vcd_val + (1 - w2) * bound;
                       }
                   }
-                if (Gintv > clip_pt)
+                if (g_int_v > clip_pt)
                   vcd_val = c00 - v_med;
               }
             else
               {
-                luminosity_t Gintv = c00 + vcd_val;
+                luminosity_t g_int_v = c00 + vcd_val;
                 luminosity_t v_med
-                    = median3 (Gintv, known (x, y - 1), known (x, y + 1));
+                    = median3 (g_int_v, known (x, y - 1), known (x, y + 1));
                 if (vcd_val < 0)
                   {
                     luminosity_t bound = v_med - c00;
-                    if (3 * (-vcd_val) > (Gintv + c00))
+                    if (3 * (-vcd_val) > (g_int_v + c00))
                       vcd_val = bound;
                     else
                       {
-                        luminosity_t w2 = 1 + 3 * vcd_val / (eps + Gintv + c00);
+                        luminosity_t w2
+                            = 1 + 3 * vcd_val / (eps + g_int_v + c00);
                         vcd_val = w2 * vcd_val + (1 - w2) * bound;
                       }
                   }
-                if (Gintv > clip_pt)
+                if (g_int_v > clip_pt)
                   vcd_val = v_med - c00;
               }
-            vcd_arr[idx] = vcd_val;
+            vcd[idx] = vcd_val;
 
             /* Squared color-difference for Nyquist detection.  */
             if (do_nyquist)
-              cddiffsq_arr[idx]
-                  = (vcd_val - hcd_val) * (vcd_val - hcd_val);
+              cd_diff_sq[idx] = (vcd_val - hcd_val) * (vcd_val - hcd_val);
           }
         if (progress)
           progress->inc_progress ();
@@ -1885,15 +1867,6 @@ protected:
 
     /* ================================================================
        Phase 3: Compute direction weights from variance analysis.
-
-       hvwt_arr determines how much to favor vertical vs horizontal
-       interpolation.  Computed from two independent metrics:
-       (a) Color-difference variance over 4-pixel directional windows.
-       (b) Interpolation fluctuation (disagreement between up/down or
-           left/right estimates).
-
-       Possible improvement: weight variance by local noise estimate
-       for better performance in noisy images.
        ================================================================ */
 #pragma omp parallel for schedule(dynamic, 16)
     for (int y = 0; y < h; y++)
@@ -1905,125 +1878,118 @@ protected:
             int idx = y * w + x;
             if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
               {
-                hvwt_arr[idx] = (luminosity_t)0.5;
+                hv_wt[idx] = (luminosity_t)0.5;
                 continue;
               }
 
             /* Clamped accessors for the working arrays.  */
-            auto vcd_at = [&] (int xx, int yy) -> luminosity_t {
-              return vcd_arr[std::clamp (yy, 0, h - 1) * w
-                             + std::clamp (xx, 0, w - 1)];
-            };
-            auto hcd_at = [&] (int xx, int yy) -> luminosity_t {
-              return hcd_arr[std::clamp (yy, 0, h - 1) * w
-                             + std::clamp (xx, 0, w - 1)];
-            };
-            auto dgv_at = [&] (int xx, int yy) -> luminosity_t {
-              return dgintv_arr[std::clamp (yy, 0, h - 1) * w
+            auto vcd_at = [&] (int xx, int yy) -> luminosity_t
+              {
+                return vcd[std::clamp (yy, 0, h - 1) * w
+                           + std::clamp (xx, 0, w - 1)];
+              };
+            auto hcd_at = [&] (int xx, int yy) -> luminosity_t
+              {
+                return hcd[std::clamp (yy, 0, h - 1) * w
+                           + std::clamp (xx, 0, w - 1)];
+              };
+            auto dgv_at = [&] (int xx, int yy) -> luminosity_t
+              {
+                return dg_int_v[std::clamp (yy, 0, h - 1) * w
                                 + std::clamp (xx, 0, w - 1)];
-            };
-            auto dgh_at = [&] (int xx, int yy) -> luminosity_t {
-              return dginth_arr[std::clamp (yy, 0, h - 1) * w
+              };
+            auto dgh_at = [&] (int xx, int yy) -> luminosity_t
+              {
+                return dg_int_h[std::clamp (yy, 0, h - 1) * w
                                 + std::clamp (xx, 0, w - 1)];
-            };
-            auto wt0 = [&] (int xx, int yy) -> luminosity_t {
-              return dirwts0[std::clamp (yy, 0, h - 1) * w
-                             + std::clamp (xx, 0, w - 1)];
-            };
-            auto wt1 = [&] (int xx, int yy) -> luminosity_t {
-              return dirwts1[std::clamp (yy, 0, h - 1) * w
-                             + std::clamp (xx, 0, w - 1)];
-            };
+              };
+            auto wt_v = [&] (int xx, int yy) -> luminosity_t
+              {
+                return dir_wts_v[std::clamp (yy, 0, h - 1) * w
+                                 + std::clamp (xx, 0, w - 1)];
+              };
+            auto wt_h = [&] (int xx, int yy) -> luminosity_t
+              {
+                return dir_wts_h[std::clamp (yy, 0, h - 1) * w
+                                 + std::clamp (xx, 0, w - 1)];
+              };
 
-            luminosity_t hwt
-                = wt1 (x - 1, y) / (wt1 (x - 1, y) + wt1 (x + 1, y));
-            luminosity_t vwt
-                = wt0 (x, y - 1) / (wt0 (x, y + 1) + wt0 (x, y - 1));
+            luminosity_t wt_h_val
+                = wt_h (x - 1, y) / (wt_h (x - 1, y) + wt_h (x + 1, y));
+            luminosity_t wt_v_val
+                = wt_v (x, y - 1) / (wt_v (x, y + 1) + wt_v (x, y - 1));
 
             /* Color-difference variance in four cardinal directions,
                computed over a 4-pixel window in each direction.  */
             luminosity_t vcd0 = vcd_at (x, y);
-            luminosity_t uave = vcd0 + vcd_at (x, y - 1)
-                                + vcd_at (x, y - 2) + vcd_at (x, y - 3);
-            luminosity_t dave = vcd0 + vcd_at (x, y + 1)
-                                + vcd_at (x, y + 2) + vcd_at (x, y + 3);
-            luminosity_t Dgrbvvaru
+            luminosity_t uave = vcd0 + vcd_at (x, y - 1) + vcd_at (x, y - 2)
+                                + vcd_at (x, y - 3);
+            luminosity_t dave = vcd0 + vcd_at (x, y + 1) + vcd_at (x, y + 2)
+                                + vcd_at (x, y + 3);
+            luminosity_t dgrb_v_var_u
                 = (vcd0 - uave) * (vcd0 - uave)
-                  + (vcd_at (x, y - 1) - uave)
-                        * (vcd_at (x, y - 1) - uave)
-                  + (vcd_at (x, y - 2) - uave)
-                        * (vcd_at (x, y - 2) - uave)
-                  + (vcd_at (x, y - 3) - uave)
-                        * (vcd_at (x, y - 3) - uave);
-            luminosity_t Dgrbvvard
+                  + (vcd_at (x, y - 1) - uave) * (vcd_at (x, y - 1) - uave)
+                  + (vcd_at (x, y - 2) - uave) * (vcd_at (x, y - 2) - uave)
+                  + (vcd_at (x, y - 3) - uave) * (vcd_at (x, y - 3) - uave);
+            luminosity_t dgrb_v_var_d
                 = (vcd0 - dave) * (vcd0 - dave)
-                  + (vcd_at (x, y + 1) - dave)
-                        * (vcd_at (x, y + 1) - dave)
-                  + (vcd_at (x, y + 2) - dave)
-                        * (vcd_at (x, y + 2) - dave)
-                  + (vcd_at (x, y + 3) - dave)
-                        * (vcd_at (x, y + 3) - dave);
+                  + (vcd_at (x, y + 1) - dave) * (vcd_at (x, y + 1) - dave)
+                  + (vcd_at (x, y + 2) - dave) * (vcd_at (x, y + 2) - dave)
+                  + (vcd_at (x, y + 3) - dave) * (vcd_at (x, y + 3) - dave);
 
             luminosity_t hcd0 = hcd_at (x, y);
-            luminosity_t lave = hcd0 + hcd_at (x - 1, y)
-                                + hcd_at (x - 2, y) + hcd_at (x - 3, y);
-            luminosity_t rave = hcd0 + hcd_at (x + 1, y)
-                                + hcd_at (x + 2, y) + hcd_at (x + 3, y);
-            luminosity_t Dgrbhvarl
+            luminosity_t lave = hcd0 + hcd_at (x - 1, y) + hcd_at (x - 2, y)
+                                + hcd_at (x - 3, y);
+            luminosity_t rave = hcd0 + hcd_at (x + 1, y) + hcd_at (x + 2, y)
+                                + hcd_at (x + 3, y);
+            luminosity_t dgrb_h_var_l
                 = (hcd0 - lave) * (hcd0 - lave)
-                  + (hcd_at (x - 1, y) - lave)
-                        * (hcd_at (x - 1, y) - lave)
-                  + (hcd_at (x - 2, y) - lave)
-                        * (hcd_at (x - 2, y) - lave)
-                  + (hcd_at (x - 3, y) - lave)
-                        * (hcd_at (x - 3, y) - lave);
-            luminosity_t Dgrbhvarr
+                  + (hcd_at (x - 1, y) - lave) * (hcd_at (x - 1, y) - lave)
+                  + (hcd_at (x - 2, y) - lave) * (hcd_at (x - 2, y) - lave)
+                  + (hcd_at (x - 3, y) - lave) * (hcd_at (x - 3, y) - lave);
+            luminosity_t dgrb_h_var_r
                 = (hcd0 - rave) * (hcd0 - rave)
-                  + (hcd_at (x + 1, y) - rave)
-                        * (hcd_at (x + 1, y) - rave)
-                  + (hcd_at (x + 2, y) - rave)
-                        * (hcd_at (x + 2, y) - rave)
-                  + (hcd_at (x + 3, y) - rave)
-                        * (hcd_at (x + 3, y) - rave);
+                  + (hcd_at (x + 1, y) - rave) * (hcd_at (x + 1, y) - rave)
+                  + (hcd_at (x + 2, y) - rave) * (hcd_at (x + 2, y) - rave)
+                  + (hcd_at (x + 3, y) - rave) * (hcd_at (x + 3, y) - rave);
 
             /* Directionally-weighted variance.  */
-            luminosity_t vcdvar
-                = epssq + vwt * Dgrbvvard + (1 - vwt) * Dgrbvvaru;
-            luminosity_t hcdvar
-                = epssq + hwt * Dgrbhvarr + (1 - hwt) * Dgrbhvarl;
+            luminosity_t vcd_var = epssq + wt_v_val * dgrb_v_var_d
+                                   + (1 - wt_v_val) * dgrb_v_var_u;
+            luminosity_t hcd_var = epssq + wt_h_val * dgrb_h_var_r
+                                   + (1 - wt_h_val) * dgrb_h_var_l;
 
             /* Interpolation fluctuation in each direction.  */
-            luminosity_t Dgrbvvaru2
+            luminosity_t dgrb_v_var_u2
                 = dgv_at (x, y) + dgv_at (x, y - 1) + dgv_at (x, y - 2);
-            luminosity_t Dgrbvvard2
+            luminosity_t dgrb_v_var_d2
                 = dgv_at (x, y) + dgv_at (x, y + 1) + dgv_at (x, y + 2);
-            luminosity_t Dgrbhvarl2
+            luminosity_t dgrb_h_var_l2
                 = dgh_at (x, y) + dgh_at (x - 1, y) + dgh_at (x - 2, y);
-            luminosity_t Dgrbhvarr2
+            luminosity_t dgrb_h_var_r2
                 = dgh_at (x, y) + dgh_at (x + 1, y) + dgh_at (x + 2, y);
 
-            luminosity_t vcdvar1
-                = epssq + dgv_at (x, y)
-                  + vwt * Dgrbvvard2 + (1 - vwt) * Dgrbvvaru2;
-            luminosity_t hcdvar1
-                = epssq + dgh_at (x, y)
-                  + hwt * Dgrbhvarr2 + (1 - hwt) * Dgrbhvarl2;
+            luminosity_t vcd_var1 = epssq + dgv_at (x, y)
+                                    + wt_v_val * dgrb_v_var_d2
+                                    + (1 - wt_v_val) * dgrb_v_var_u2;
+            luminosity_t hcd_var1 = epssq + dgh_at (x, y)
+                                    + wt_h_val * dgrb_h_var_r2
+                                    + (1 - wt_h_val) * dgrb_h_var_l2;
 
             /* Two direction weights.  */
-            luminosity_t varwt = hcdvar / (vcdvar + hcdvar);
-            luminosity_t diffwt = hcdvar1 / (vcdvar1 + hcdvar1);
+            luminosity_t var_wt = hcd_var / (vcd_var + hcd_var);
+            luminosity_t diff_wt = hcd_var1 / (vcd_var1 + hcd_var1);
 
             /* If both metrics agree AND fluctuation metric has weaker
                discrimination, use variance metric (more reliable).
                Otherwise use fluctuation metric.  */
-            if (((luminosity_t)0.5 - varwt)
-                        * ((luminosity_t)0.5 - diffwt)
+            if (((luminosity_t)0.5 - var_wt) * ((luminosity_t)0.5 - diff_wt)
                     > 0
-                && fabs ((luminosity_t)0.5 - diffwt)
-                       < fabs ((luminosity_t)0.5 - varwt))
-              hvwt_arr[idx] = varwt;
+                && my_abs ((luminosity_t)0.5 - diff_wt)
+                       < my_abs ((luminosity_t)0.5 - var_wt))
+              hv_wt[idx] = var_wt;
             else
-              hvwt_arr[idx] = diffwt;
+              hv_wt[idx] = diff_wt;
           }
         if (progress)
           progress->inc_progress ();
@@ -2032,10 +1998,10 @@ protected:
       return false;
 
     /* Free phase 2 temporary arrays.  */
-    dgintv_arr.clear ();
-    dgintv_arr.shrink_to_fit ();
-    dginth_arr.clear ();
-    dginth_arr.shrink_to_fit ();
+    dg_int_v.clear ();
+    dg_int_v.shrink_to_fit ();
+    dg_int_h.clear ();
+    dg_int_h.shrink_to_fit ();
 
     /* ================================================================
        Phase 4: Nyquist texture detection (optional).
@@ -2060,56 +2026,50 @@ protected:
                 if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
                   continue;
 
-                auto cdq = [&] (int xx, int yy) -> luminosity_t {
-                  return cddiffsq_arr[std::clamp (yy, 0, h - 1) * w
+                auto cdq = [&] (int xx, int yy) -> luminosity_t
+                  {
+                    return cd_diff_sq[std::clamp (yy, 0, h - 1) * w
                                       + std::clamp (xx, 0, w - 1)];
-                };
-                auto dhv = [&] (int xx, int yy) -> luminosity_t {
-                  return delhvsqsum[std::clamp (yy, 0, h - 1) * w
-                                    + std::clamp (xx, 0, w - 1)];
-                };
+                  };
+                auto dhv = [&] (int xx, int yy) -> luminosity_t
+                  {
+                    return del_hv_sq_sum[std::clamp (yy, 0, h - 1) * w
+                                         + std::clamp (xx, 0, w - 1)];
+                  };
 
                 luminosity_t val
-                    = gaussodd[0] * cdq (x, y)
-                      + gaussodd[1]
+                    = gauss_odd[0] * cdq (x, y)
+                      + gauss_odd[1]
                             * (cdq (x - 1, y + 1) + cdq (x + 1, y - 1)
-                               + cdq (x + 1, y + 1)
-                               + cdq (x - 1, y - 1))
-                      + gaussodd[2]
-                            * (cdq (x, y - 2) + cdq (x - 2, y)
-                               + cdq (x + 2, y) + cdq (x, y + 2))
-                      + gaussodd[3]
+                               + cdq (x + 1, y + 1) + cdq (x - 1, y - 1))
+                      + gauss_odd[2]
+                            * (cdq (x, y - 2) + cdq (x - 2, y) + cdq (x + 2, y)
+                               + cdq (x, y + 2))
+                      + gauss_odd[3]
                             * (cdq (x - 2, y + 2) + cdq (x + 2, y - 2)
-                               + cdq (x - 2, y - 2)
-                               + cdq (x + 2, y + 2));
+                               + cdq (x - 2, y - 2) + cdq (x + 2, y + 2));
 
                 luminosity_t grad_val
-                    = gaussgrad[0] * dhv (x, y)
-                      + gaussgrad[1]
-                            * (dhv (x, y - 1) + dhv (x - 1, y)
-                               + dhv (x + 1, y) + dhv (x, y + 1))
-                      + gaussgrad[2]
+                    = gauss_grad[0] * dhv (x, y)
+                      + gauss_grad[1]
+                            * (dhv (x, y - 1) + dhv (x - 1, y) + dhv (x + 1, y)
+                               + dhv (x, y + 1))
+                      + gauss_grad[2]
                             * (dhv (x - 1, y - 1) + dhv (x + 1, y - 1)
-                               + dhv (x - 1, y + 1)
-                               + dhv (x + 1, y + 1))
-                      + gaussgrad[3]
-                            * (dhv (x, y - 2) + dhv (x - 2, y)
-                               + dhv (x + 2, y) + dhv (x, y + 2))
-                      + gaussgrad[4]
+                               + dhv (x - 1, y + 1) + dhv (x + 1, y + 1))
+                      + gauss_grad[3]
+                            * (dhv (x, y - 2) + dhv (x - 2, y) + dhv (x + 2, y)
+                               + dhv (x, y + 2))
+                      + gauss_grad[4]
                             * (dhv (x - 1, y - 2) + dhv (x + 1, y - 2)
-                               + dhv (x - 2, y - 1)
-                               + dhv (x + 2, y - 1)
-                               + dhv (x - 2, y + 1)
-                               + dhv (x + 2, y + 1)
-                               + dhv (x - 1, y + 2)
-                               + dhv (x + 1, y + 2))
-                      + gaussgrad[5]
+                               + dhv (x - 2, y - 1) + dhv (x + 2, y - 1)
+                               + dhv (x - 2, y + 1) + dhv (x + 2, y + 1)
+                               + dhv (x - 1, y + 2) + dhv (x + 1, y + 2))
+                      + gauss_grad[5]
                             * (dhv (x - 2, y - 2) + dhv (x + 2, y - 2)
-                               + dhv (x - 2, y + 2)
-                               + dhv (x + 2, y + 2));
+                               + dhv (x - 2, y + 2) + dhv (x + 2, y + 2));
 
-                nyquist_flags[y * w + x]
-                    = (val - grad_val > 0) ? 1 : 0;
+                nyquist_flags[y * w + x] = (val - grad_val > 0) ? 1 : 0;
               }
           }
 
@@ -2120,20 +2080,19 @@ protected:
             {
               if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
                 continue;
-              auto nf = [&] (int xx, int yy) -> int {
-                return nyquist_flags[std::clamp (yy, 0, h - 1) * w
-                                     + std::clamp (xx, 0, w - 1)];
-              };
-              int sum = nf (x, y - 2) + nf (x - 1, y - 1)
-                        + nf (x + 1, y - 1) + nf (x - 2, y)
-                        + nf (x + 2, y) + nf (x - 1, y + 1)
+              auto nf = [&] (int xx, int yy) -> int
+                {
+                  return nyquist_flags[std::clamp (yy, 0, h - 1) * w
+                                       + std::clamp (xx, 0, w - 1)];
+                };
+              int sum = nf (x, y - 2) + nf (x - 1, y - 1) + nf (x + 1, y - 1)
+                        + nf (x - 2, y) + nf (x + 2, y) + nf (x - 1, y + 1)
                         + nf (x + 1, y + 1) + nf (x, y + 2);
-              nyquist2[y * w + x]
-                  = sum > 4 ? 1 : (sum < 4 ? 0 : nf (x, y));
+              nyquist2[y * w + x] = sum > 4 ? 1 : (sum < 4 ? 0 : nf (x, y));
             }
         nyquist_flags = std::move (nyquist2);
 
-        /* In Nyquist regions, recompute hvwt using area-based
+        /* In Nyquist regions, recompute hv_wt using area-based
            interpolation over a 7x7 same-color window.  */
         for (int y = 3; y < h - 3; y++)
           for (int x = 3; x < w - 3; x++)
@@ -2145,7 +2104,7 @@ protected:
 
               luminosity_t sumcfa = 0, sumh = 0, sumv = 0;
               luminosity_t sumsqh = 0, sumsqv = 0;
-              luminosity_t areawt = 0;
+              luminosity_t area_wt = 0;
 
               for (int dy = -6; dy <= 6; dy += 2)
                 for (int dx = -6; dx <= 6; dx += 2)
@@ -2158,10 +2117,8 @@ protected:
 
                     luminosity_t cf = known (nx, ny);
                     sumcfa += cf;
-                    luminosity_t nh = known (nx - 1, ny)
-                                      + known (nx + 1, ny);
-                    luminosity_t nv = known (nx, ny - 1)
-                                      + known (nx, ny + 1);
+                    luminosity_t nh = known (nx - 1, ny) + known (nx + 1, ny);
+                    luminosity_t nv = known (nx, ny - 1) + known (nx, ny + 1);
                     sumh += nh;
                     sumv += nv;
                     sumsqh += (cf - known (nx - 1, ny))
@@ -2172,28 +2129,28 @@ protected:
                                   * (cf - known (nx, ny - 1))
                               + (cf - known (nx, ny + 1))
                                     * (cf - known (nx, ny + 1));
-                    areawt += 1;
+                    area_wt += 1;
                   }
 
-              if (areawt > 0)
+              if (area_wt > 0)
                 {
                   sumh = sumcfa - sumh * (luminosity_t)0.5;
                   sumv = sumcfa - sumv * (luminosity_t)0.5;
-                  areawt *= (luminosity_t)0.5;
-                  luminosity_t hcdvar
-                      = epssq + fabs (areawt * sumsqh - sumh * sumh);
-                  luminosity_t vcdvar
-                      = epssq + fabs (areawt * sumsqv - sumv * sumv);
-                  hvwt_arr[y * w + x] = hcdvar / (vcdvar + hcdvar);
+                  area_wt *= (luminosity_t)0.5;
+                  luminosity_t hcd_var
+                      = epssq + my_abs (area_wt * sumsqh - sumh * sumh);
+                  luminosity_t vcd_var
+                      = epssq + my_abs (area_wt * sumsqv - sumv * sumv);
+                  hv_wt[y * w + x] = hcd_var / (vcd_var + hcd_var);
                 }
             }
       }
 
     /* Free Nyquist-specific working arrays.  */
-    delhvsqsum.clear ();
-    delhvsqsum.shrink_to_fit ();
-    cddiffsq_arr.clear ();
-    cddiffsq_arr.shrink_to_fit ();
+    del_hv_sq_sum.clear ();
+    del_hv_sq_sum.shrink_to_fit ();
+    cd_diff_sq.clear ();
+    cd_diff_sq.shrink_to_fit ();
     nyquist_flags.clear ();
     nyquist_flags.shrink_to_fit ();
 
@@ -2219,28 +2176,26 @@ protected:
             int idx = y * w + x;
 
             /* Check if nearby same-type sites provide stronger
-               directional discrimination.  Average hvwt from the four
-               diagonal neighbors (which are non-dominating).  */
-            auto hw = [&] (int xx, int yy) -> luminosity_t {
-              return hvwt_arr[std::clamp (yy, 0, h - 1) * w
-                              + std::clamp (xx, 0, w - 1)];
-            };
-            luminosity_t hvwtalt
-                = (hw (x - 1, y - 1) + hw (x + 1, y - 1)
-                   + hw (x - 1, y + 1) + hw (x + 1, y + 1))
-                  * (luminosity_t)0.25;
+               directional discrimination.  */
+            auto hw = [&] (int xx, int yy) -> luminosity_t
+              {
+                return hv_wt[std::clamp (yy, 0, h - 1) * w
+                             + std::clamp (xx, 0, w - 1)];
+              };
+            luminosity_t hv_wt_alt = (hw (x - 1, y - 1) + hw (x + 1, y - 1)
+                                      + hw (x - 1, y + 1) + hw (x + 1, y + 1))
+                                     * (luminosity_t)0.25;
 
-            if (fabs ((luminosity_t)0.5 - hvwt_arr[idx])
-                < fabs ((luminosity_t)0.5 - hvwtalt))
-              hvwt_arr[idx] = hvwtalt;
+            if (my_abs ((luminosity_t)0.5 - hv_wt[idx])
+                < my_abs ((luminosity_t)0.5 - hv_wt_alt))
+              hv_wt[idx] = hv_wt_alt;
 
             /* Blend vertical and horizontal color differences.  */
-            luminosity_t Dgrb
-                = hvwt_arr[idx] * vcd_arr[idx]
-                  + (1 - hvwt_arr[idx]) * hcd_arr[idx];
+            luminosity_t dgrb
+                = hv_wt[idx] * vcd[idx] + (1 - hv_wt[idx]) * hcd[idx];
 
             /* Write the dominating channel value.  */
-            d (x, y)[(int)ah_green] = known (x, y) + Dgrb;
+            d (x, y)[(int)ah_green] = known (x, y) + dgrb;
           }
         if (progress)
           progress->inc_progress ();
@@ -2249,31 +2204,30 @@ protected:
       return false;
 
     /* Free remaining phase working arrays.  */
-    vcd_arr.clear ();
-    vcd_arr.shrink_to_fit ();
-    hcd_arr.clear ();
-    hcd_arr.shrink_to_fit ();
-    hvwt_arr.clear ();
-    hvwt_arr.shrink_to_fit ();
-    dirwts0.clear ();
-    dirwts0.shrink_to_fit ();
-    dirwts1.clear ();
-    dirwts1.shrink_to_fit ();
+    dir_wts_v.clear ();
+    dir_wts_v.shrink_to_fit ();
+    dir_wts_h.clear ();
+    dir_wts_h.shrink_to_fit ();
+    vcd.clear ();
+    vcd.shrink_to_fit ();
+    hcd.clear ();
+    hcd.shrink_to_fit ();
+    hv_wt.clear ();
+    hv_wt.shrink_to_fit ();
 
     /* ================================================================
-       Phase 6: Interpolate non-dominating channels (red and blue).
+       Phase 6: Interpolate remaining channels.
 
-       Now that the dominating channel is fully populated, reuse the
-       existing Hamilton-Adams color-difference interpolation.  This
-       avoids code duplication and gives good results since the
-       dominating channel is already high quality.
+       With the dominating channel (G) fully populated, we interpolate
+       the remaining channels (R and B) using the existing Hamilton-Adams
+       color-difference method.
 
-       Possible improvement: implement full diagonal chrominance
-       interpolation as in the RawTherapee AMaZE for higher quality
+       Possible improvement: use full diagonal chrominance interpolation
+       for R/B instead of HA, which would further improve quality
        near diagonal edges.
        ================================================================ */
     if (progress)
-      progress->set_task ("AMaZE: remaining channels", h);
+      progress->set_task ("demosaicing (amaze: remaining channels)", h);
 #pragma omp parallel for schedule(dynamic, 16)
     for (int y = 0; y < h; y++)
       {
@@ -2285,11 +2239,11 @@ protected:
             luminosity_t g_here = d (x, y)[(int)ah_green];
 
             if (color != ah_red)
-              hamilton_adams_interpolate_color<ah_green, ah_red> (
-                  g_here, x, y);
+              hamilton_adams_interpolate_color<ah_green, ah_red> (g_here, x,
+                                                                  y);
             if (color != ah_blue)
-              hamilton_adams_interpolate_color<ah_green, ah_blue> (
-                  g_here, x, y);
+              hamilton_adams_interpolate_color<ah_green, ah_blue> (g_here, x,
+                                                                   y);
           }
         if (progress)
           progress->inc_progress ();
@@ -2300,9 +2254,9 @@ protected:
   /* RCD (Ratio Corrected Demosaicing) algorithm.
 
      Based on the algorithm by Luis Sanz Rodríguez, release 2.3.
-     This implementation follows the darktable reference (src/iop/demosaicing/rcd.c)
-     closely, adapted to work with the GEOMETRY template and floating-point
-     linear data.
+     This implementation follows the darktable reference
+     (src/iop/demosaicing/rcd.c) closely, adapted to work with the GEOMETRY
+     template and floating-point linear data.
 
      The algorithm operates in five main steps:
        1. Compute vertical and horizontal directional discrimination by
@@ -2350,7 +2304,7 @@ protected:
     /* Total progress: step1(h) + step2(h) + step3(h) + step4diag(h)
        + step4.2(h) + step4.3(h) = 6*h.  */
     if (progress)
-      progress->set_task ("Demosaicing (RCD)", h * 6);
+      progress->set_task ("demosaicing (rcd)", h * 6);
 
     /* ================================================================
        Step 1: Find vertical and horizontal interpolation directions.
@@ -2372,20 +2326,20 @@ protected:
        Possible improvement: use a Gaussian-weighted accumulation instead
        of a box filter over 3 rows for smoother transitions.
        ================================================================ */
-    std::vector<luminosity_t> VH_Dir (w * h, 0);
+    std::vector<luminosity_t> vh_dir (w * h, 0);
     {
       /* Temporary buffers for squared vertical HPF values.
          We use a rolling buffer of 3 rows to avoid storing the full
          image of squared HPF values.  */
-      std::vector<luminosity_t> Vsq_row0 (w, 0);
-      std::vector<luminosity_t> Vsq_row1 (w, 0);
-      std::vector<luminosity_t> Vsq_row2 (w, 0);
+      std::vector<luminosity_t> v_sq_row_0 (w, 0);
+      std::vector<luminosity_t> v_sq_row_1 (w, 0);
+      std::vector<luminosity_t> v_sq_row_2 (w, 0);
 
       /* Pre-fill the rolling buffer for rows 3 and 4.  */
       for (int init_row = 3; init_row <= 4; init_row++)
         {
           luminosity_t *target
-              = (init_row == 3) ? Vsq_row0.data () : Vsq_row1.data ();
+              = (init_row == 3) ? v_sq_row_0.data () : v_sq_row_1.data ();
           for (int x = 4; x < w - 4; x++)
             {
               /* Vertical 6th-order HPF.  */
@@ -2404,16 +2358,15 @@ protected:
             break;
 
           /* Compute squared vertical HPF for row y+1 into the oldest
-             slot (Vsq_row2 will be rotated to become the new "next").  */
+             slot (v_sq_row_2 will be rotated to become the new "next").  */
           for (int x = 4; x < w - 4; x++)
             {
               int yr = y + 1;
-              luminosity_t v
-                  = (known (x, yr - 3) - known (x, yr - 1)
-                     - known (x, yr + 1) + known (x, yr + 3))
-                    - 3 * (known (x, yr - 2) + known (x, yr + 2))
-                    + 6 * known (x, yr);
-              Vsq_row2[x] = v * v;
+              luminosity_t v = (known (x, yr - 3) - known (x, yr - 1)
+                                - known (x, yr + 1) + known (x, yr + 3))
+                               - 3 * (known (x, yr - 2) + known (x, yr + 2))
+                               + 6 * known (x, yr);
+              v_sq_row_2[x] = v * v;
             }
 
           /* Compute horizontal HPF and accumulate both directions.  */
@@ -2421,32 +2374,31 @@ protected:
              We accumulate col-1, col, col+1 horizontally
              (in the darktable code these are bufferH[col-4], bufferH[col-3],
              bufferH[col-2] which corresponds to a 3-sample window).  */
-          std::vector<luminosity_t> Hsq (w, 0);
+          std::vector<luminosity_t> h_sq (w, 0);
           for (int x = 3; x < w - 3; x++)
             {
-              luminosity_t hv
-                  = (known (x - 3, y) - known (x - 1, y)
-                     - known (x + 1, y) + known (x + 3, y))
-                    - 3 * (known (x - 2, y) + known (x + 2, y))
-                    + 6 * known (x, y);
-              Hsq[x] = hv * hv;
+              luminosity_t hv = (known (x - 3, y) - known (x - 1, y)
+                                 - known (x + 1, y) + known (x + 3, y))
+                                - 3 * (known (x - 2, y) + known (x + 2, y))
+                                + 6 * known (x, y);
+              h_sq[x] = hv * hv;
             }
 
           for (int x = 4; x < w - 4; x++)
             {
               /* Accumulate 3-row vertical and 3-column horizontal
                  statistics.  */
-              luminosity_t V_Stat = std::max (
-                  epssq, Vsq_row0[x] + Vsq_row1[x] + Vsq_row2[x]);
-              luminosity_t H_Stat = std::max (
-                  epssq, Hsq[x - 1] + Hsq[x] + Hsq[x + 1]);
-              VH_Dir[y * w + x] = V_Stat / (V_Stat + H_Stat);
+              luminosity_t v_stat = std::max (
+                  epssq, v_sq_row_0[x] + v_sq_row_1[x] + v_sq_row_2[x]);
+              luminosity_t h_stat
+                  = std::max (epssq, h_sq[x - 1] + h_sq[x] + h_sq[x + 1]);
+              vh_dir[y * w + x] = v_stat / (v_stat + h_stat);
             }
 
           /* Roll the buffers: row0 <- row1, row1 <- row2,
              row2 <- row0 (to be overwritten next iteration).  */
-          std::swap (Vsq_row0, Vsq_row1);
-          std::swap (Vsq_row1, Vsq_row2);
+          std::swap (v_sq_row_0, v_sq_row_1);
+          std::swap (v_sq_row_1, v_sq_row_2);
 
           if (progress)
             progress->inc_progress ();
@@ -2534,7 +2486,7 @@ protected:
             if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
               continue;
 
-            luminosity_t cfai = known (x, y);
+            luminosity_t cfa_i = known (x, y);
             int idx = y * w + x;
 
             /* Cardinal gradients.
@@ -2544,32 +2496,33 @@ protected:
                - |neighbor1 - same_channel_at_distance_3|
                - |same_channel_at_distance_2 - same_channel_at_distance_4|
                This provides a 4-pixel-deep edge measure.  */
-            luminosity_t N_Grad
-                = eps + fabs (known (x, y - 1) - known (x, y + 1))
-                  + fabs (cfai - known (x, y - 2))
-                  + fabs (known (x, y - 1) - known (x, y - 3))
-                  + fabs (known (x, y - 2) - known (x, y - 4));
-            luminosity_t S_Grad
-                = eps + fabs (known (x, y + 1) - known (x, y - 1))
-                  + fabs (cfai - known (x, y + 2))
-                  + fabs (known (x, y + 1) - known (x, y + 3))
-                  + fabs (known (x, y + 2) - known (x, y + 4));
-            luminosity_t W_Grad
-                = eps + fabs (known (x - 1, y) - known (x + 1, y))
-                  + fabs (cfai - known (x - 2, y))
-                  + fabs (known (x - 1, y) - known (x - 3, y))
-                  + fabs (known (x - 2, y) - known (x - 4, y));
-            luminosity_t E_Grad
-                = eps + fabs (known (x + 1, y) - known (x - 1, y))
-                  + fabs (cfai - known (x + 2, y))
-                  + fabs (known (x + 1, y) - known (x + 3, y))
-                  + fabs (known (x + 2, y) - known (x + 4, y));
+            luminosity_t n_grad = eps
+                                  + fabs (known (x, y - 1) - known (x, y + 1))
+                                  + fabs (cfa_i - known (x, y - 2))
+                                  + fabs (known (x, y - 1) - known (x, y - 3))
+                                  + fabs (known (x, y - 2) - known (x, y - 4));
+            luminosity_t s_grad = eps
+                                  + fabs (known (x, y + 1) - known (x, y - 1))
+                                  + fabs (cfa_i - known (x, y + 2))
+                                  + fabs (known (x, y + 1) - known (x, y + 3))
+                                  + fabs (known (x, y + 2) - known (x, y + 4));
+            luminosity_t w_grad = eps
+                                  + fabs (known (x - 1, y) - known (x + 1, y))
+                                  + fabs (cfa_i - known (x - 2, y))
+                                  + fabs (known (x - 1, y) - known (x - 3, y))
+                                  + fabs (known (x - 2, y) - known (x - 4, y));
+            luminosity_t e_grad = eps
+                                  + fabs (known (x + 1, y) - known (x - 1, y))
+                                  + fabs (cfa_i - known (x + 2, y))
+                                  + fabs (known (x + 1, y) - known (x + 3, y))
+                                  + fabs (known (x + 2, y) - known (x + 4, y));
 
             /* Ratio-corrected cardinal estimates.
-               Each uses: neighbor * (2 * lpf_here) / (lpf_here + lpf_neighbor).
-               This ratio correction is the core innovation of RCD—it adapts
-               the interpolation to local luminance ratios instead of using
-               additive Laplacian corrections like Hamilton-Adams.
+               Each uses: neighbor * (2 * lpf_here) / (lpf_here +
+               lpf_neighbor). This ratio correction is the core innovation of
+               RCD—it adapts the interpolation to local luminance ratios
+               instead of using additive Laplacian corrections like
+               Hamilton-Adams.
 
                IMPORTANT: The LPF is only stored at non-dominating (R/B)
                sites.  The cardinal neighbors at distance 1 are dominating
@@ -2579,49 +2532,47 @@ protected:
                in half-res = distance 2 in full-res).  */
             luminosity_t lpfi = lpf[idx];
             luminosity_t lpf2 = lpfi + lpfi;
-            luminosity_t N_Est = known (x, y - 1) * lpf2
+            luminosity_t n_est = known (x, y - 1) * lpf2
                                  / (eps + lpfi + lpf[(y - 2) * w + x]);
-            luminosity_t S_Est = known (x, y + 1) * lpf2
+            luminosity_t s_est = known (x, y + 1) * lpf2
                                  / (eps + lpfi + lpf[(y + 2) * w + x]);
-            luminosity_t W_Est = known (x - 1, y) * lpf2
+            luminosity_t w_est = known (x - 1, y) * lpf2
                                  / (eps + lpfi + lpf[y * w + (x - 2)]);
-            luminosity_t E_Est = known (x + 1, y) * lpf2
+            luminosity_t e_est = known (x + 1, y) * lpf2
                                  / (eps + lpfi + lpf[y * w + (x + 2)]);
 
             /* Vertical and horizontal estimates.
                Cross-gradient weighting: the estimate from the direction with
                less gradient (smoother) gets more weight.  */
-            luminosity_t V_Est
-                = (S_Grad * N_Est + N_Grad * S_Est) / (N_Grad + S_Grad);
-            luminosity_t H_Est
-                = (W_Grad * E_Est + E_Grad * W_Est) / (E_Grad + W_Grad);
+            luminosity_t v_est
+                = (s_grad * n_est + n_grad * s_est) / (n_grad + s_grad);
+            luminosity_t h_est
+                = (w_grad * e_est + e_grad * w_est) / (e_grad + w_grad);
 
             /* Refined VH directional discrimination.
-               Compare the local VH_Dir with the average of the four
+               Compare the local vh_dir with the average of the four
                diagonal neighbors.  Use whichever has stronger
                discrimination (farther from 0.5).  */
-            luminosity_t VH_Central = VH_Dir[idx];
-            luminosity_t VH_Neighbourhood
+            luminosity_t vh_central = vh_dir[idx];
+            luminosity_t vh_neighbourhood
                 = (luminosity_t)0.25
-                  * (VH_Dir[(y - 1) * w + (x - 1)]
-                     + VH_Dir[(y - 1) * w + (x + 1)]
-                     + VH_Dir[(y + 1) * w + (x - 1)]
-                     + VH_Dir[(y + 1) * w + (x + 1)]);
-            luminosity_t VH_Disc
-                = (fabs ((luminosity_t)0.5 - VH_Central)
-                   < fabs ((luminosity_t)0.5 - VH_Neighbourhood))
-                      ? VH_Neighbourhood
-                      : VH_Central;
+                  * (vh_dir[(y - 1) * w + (x - 1)]
+                     + vh_dir[(y - 1) * w + (x + 1)]
+                     + vh_dir[(y + 1) * w + (x - 1)]
+                     + vh_dir[(y + 1) * w + (x + 1)]);
+            luminosity_t vh_disc
+                = (fabs ((luminosity_t)0.5 - vh_central)
+                   < fabs ((luminosity_t)0.5 - vh_neighbourhood))
+                      ? vh_neighbourhood
+                      : vh_central;
 
-            /* Clamp VH_Disc to [0, 1] for safe interpolation.  */
-            VH_Disc = std::clamp (VH_Disc, (luminosity_t)0,
-                                  (luminosity_t)1);
+            /* Clamp vh_disc to [0, 1] for safe interpolation.  */
+            vh_disc = std::clamp (vh_disc, (luminosity_t)0, (luminosity_t)1);
 
             /* G@R or G@B: blend V and H estimates.
-               VH_Disc near 1 => prefer H_Est (horizontal is smoother)
-               VH_Disc near 0 => prefer V_Est (vertical is smoother)  */
-            d (x, y)[(int)ah_green]
-                = VH_Disc * H_Est + (1 - VH_Disc) * V_Est;
+               vh_disc near 1 => prefer h_est (horizontal is smoother)
+               vh_disc near 0 => prefer v_est (vertical is smoother)  */
+            d (x, y)[(int)ah_green] = vh_disc * h_est + (1 - vh_disc) * v_est;
           }
         if (progress)
           progress->inc_progress ();
@@ -2646,9 +2597,8 @@ protected:
        memory usage—the PQ_Dir values are only needed at non-dominating
        sites.
        ================================================================ */
-
     /* Step 4.0-4.1: Diagonal directional discrimination.  */
-    std::vector<luminosity_t> PQ_Dir (w * h, (luminosity_t)0.5);
+    std::vector<luminosity_t> pq_dir (w * h, (luminosity_t)0.5);
     {
       /* Compute squared diagonal HPF at ALL sites (both dominating and
          non-dominating).  In the darktable half-resolution approach,
@@ -2657,8 +2607,8 @@ protected:
          full-resolution storage we simply compute at every pixel.
          The P-diagonal HPF uses offsets along the NW-SE direction.
          The Q-diagonal HPF uses the NE-SW direction.  */
-      std::vector<luminosity_t> P_CDiff_Hpf (w * h, 0);
-      std::vector<luminosity_t> Q_CDiff_Hpf (w * h, 0);
+      std::vector<luminosity_t> p_cdiff_hpf (w * h, 0);
+      std::vector<luminosity_t> q_cdiff_hpf (w * h, 0);
 
 #pragma omp parallel for schedule(dynamic, 16)
       for (int y = 3; y < h - 3; y++)
@@ -2673,7 +2623,7 @@ protected:
                      - known (x + 1, y + 1) + known (x + 3, y + 3))
                     - 3 * (known (x - 2, y - 2) + known (x + 2, y + 2))
                     + 6 * known (x, y);
-              P_CDiff_Hpf[y * w + x] = p * p;
+              p_cdiff_hpf[y * w + x] = p * p;
 
               /* Q diagonal (NE-SW): offsets (+3,-3)..(-3,+3).  */
               luminosity_t q
@@ -2681,11 +2631,11 @@ protected:
                      - known (x - 1, y + 1) + known (x - 3, y + 3))
                     - 3 * (known (x + 2, y - 2) + known (x - 2, y + 2))
                     + 6 * known (x, y);
-              Q_CDiff_Hpf[y * w + x] = q * q;
+              q_cdiff_hpf[y * w + x] = q * q;
             }
         }
 
-      /* Accumulate 3-sample diagonal statistics.  */
+        /* Accumulate 3-sample diagonal statistics.  */
 #pragma omp parallel for schedule(dynamic, 16)
       for (int y = 4; y < h - 4; y++)
         {
@@ -2700,15 +2650,15 @@ protected:
                  half-resolution grid of the same color, which maps to
                  positions shifted by (-1,-1), (0,0), (+1,+1) in the
                  dominating-channel grid.  */
-              luminosity_t P_Stat = std::max (
-                  epssq, P_CDiff_Hpf[(y - 1) * w + (x - 1)]
-                             + P_CDiff_Hpf[y * w + x]
-                             + P_CDiff_Hpf[(y + 1) * w + (x + 1)]);
-              luminosity_t Q_Stat = std::max (
-                  epssq, Q_CDiff_Hpf[(y - 1) * w + (x + 1)]
-                             + Q_CDiff_Hpf[y * w + x]
-                             + Q_CDiff_Hpf[(y + 1) * w + (x - 1)]);
-              PQ_Dir[y * w + x] = P_Stat / (P_Stat + Q_Stat);
+              luminosity_t p_stat
+                  = std::max (epssq, p_cdiff_hpf[(y - 1) * w + (x - 1)]
+                                         + p_cdiff_hpf[y * w + x]
+                                         + p_cdiff_hpf[(y + 1) * w + (x + 1)]);
+              luminosity_t q_stat
+                  = std::max (epssq, q_cdiff_hpf[(y - 1) * w + (x + 1)]
+                                         + q_cdiff_hpf[y * w + x]
+                                         + q_cdiff_hpf[(y + 1) * w + (x - 1)]);
+              pq_dir[y * w + x] = p_stat / (p_stat + q_stat);
             }
         }
     }
@@ -2751,20 +2701,19 @@ protected:
             int idx = y * w + x;
 
             /* Refined PQ directional discrimination.  */
-            luminosity_t PQ_Central = PQ_Dir[idx];
-            luminosity_t PQ_Neighbourhood
+            luminosity_t pq_central = pq_dir[idx];
+            luminosity_t pq_neighbourhood
                 = (luminosity_t)0.25
-                  * (PQ_Dir[(y - 1) * w + (x - 1)]
-                     + PQ_Dir[(y - 1) * w + (x + 1)]
-                     + PQ_Dir[(y + 1) * w + (x - 1)]
-                     + PQ_Dir[(y + 1) * w + (x + 1)]);
-            luminosity_t PQ_Disc
-                = (fabs ((luminosity_t)0.5 - PQ_Central)
-                   < fabs ((luminosity_t)0.5 - PQ_Neighbourhood))
-                      ? PQ_Neighbourhood
-                      : PQ_Central;
-            PQ_Disc = std::clamp (PQ_Disc, (luminosity_t)0,
-                                  (luminosity_t)1);
+                  * (pq_dir[(y - 1) * w + (x - 1)]
+                     + pq_dir[(y - 1) * w + (x + 1)]
+                     + pq_dir[(y + 1) * w + (x - 1)]
+                     + pq_dir[(y + 1) * w + (x + 1)]);
+            luminosity_t pq_disc
+                = (fabs ((luminosity_t)0.5 - pq_central)
+                   < fabs ((luminosity_t)0.5 - pq_neighbourhood))
+                      ? pq_neighbourhood
+                      : pq_central;
+            pq_disc = std::clamp (pq_disc, (luminosity_t)0, (luminosity_t)1);
 
             /* Diagonal gradients.
                Each incorporates:
@@ -2772,50 +2721,43 @@ protected:
                - second-order same-channel difference (distance 3)
                - dominating channel curvature in the same direction  */
             luminosity_t g_here = d (x, y)[(int)ah_green];
-            luminosity_t NW_Grad
-                = eps
-                  + fabs (dch (x - 1, y - 1, c) - dch (x + 1, y + 1, c))
+            luminosity_t nw_grad
+                = eps + fabs (dch (x - 1, y - 1, c) - dch (x + 1, y + 1, c))
                   + fabs (dch (x - 1, y - 1, c) - dch (x - 3, y - 3, c))
                   + fabs (g_here - d (x - 2, y - 2)[(int)ah_green]);
-            luminosity_t NE_Grad
-                = eps
-                  + fabs (dch (x + 1, y - 1, c) - dch (x - 1, y + 1, c))
+            luminosity_t ne_grad
+                = eps + fabs (dch (x + 1, y - 1, c) - dch (x - 1, y + 1, c))
                   + fabs (dch (x + 1, y - 1, c) - dch (x + 3, y - 3, c))
                   + fabs (g_here - d (x + 2, y - 2)[(int)ah_green]);
-            luminosity_t SW_Grad
-                = eps
-                  + fabs (dch (x + 1, y - 1, c) - dch (x - 1, y + 1, c))
+            luminosity_t sw_grad
+                = eps + fabs (dch (x + 1, y - 1, c) - dch (x - 1, y + 1, c))
                   + fabs (dch (x - 1, y + 1, c) - dch (x - 3, y + 3, c))
                   + fabs (g_here - d (x - 2, y + 2)[(int)ah_green]);
-            luminosity_t SE_Grad
-                = eps
-                  + fabs (dch (x - 1, y - 1, c) - dch (x + 1, y + 1, c))
+            luminosity_t se_grad
+                = eps + fabs (dch (x - 1, y - 1, c) - dch (x + 1, y + 1, c))
                   + fabs (dch (x + 1, y + 1, c) - dch (x + 3, y + 3, c))
                   + fabs (g_here - d (x + 2, y + 2)[(int)ah_green]);
 
             /* Diagonal color differences (C - G at diagonal neighbor).  */
-            luminosity_t NW_Est = dch (x - 1, y - 1, c)
-                                  - d (x - 1, y - 1)[(int)ah_green];
-            luminosity_t NE_Est = dch (x + 1, y - 1, c)
-                                  - d (x + 1, y - 1)[(int)ah_green];
-            luminosity_t SW_Est = dch (x - 1, y + 1, c)
-                                  - d (x - 1, y + 1)[(int)ah_green];
-            luminosity_t SE_Est = dch (x + 1, y + 1, c)
-                                  - d (x + 1, y + 1)[(int)ah_green];
+            luminosity_t nw_est
+                = dch (x - 1, y - 1, c) - d (x - 1, y - 1)[(int)ah_green];
+            luminosity_t ne_est
+                = dch (x + 1, y - 1, c) - d (x + 1, y - 1)[(int)ah_green];
+            luminosity_t sw_est
+                = dch (x - 1, y + 1, c) - d (x - 1, y + 1)[(int)ah_green];
+            luminosity_t se_est
+                = dch (x + 1, y + 1, c) - d (x + 1, y + 1)[(int)ah_green];
 
             /* P (NW-SE) and Q (NE-SW) diagonal estimates.
                Cross-gradient weighting as in Step 3.  */
-            luminosity_t P_Est
-                = (NW_Grad * SE_Est + SE_Grad * NW_Est)
-                  / (NW_Grad + SE_Grad);
-            luminosity_t Q_Est
-                = (NE_Grad * SW_Est + SW_Grad * NE_Est)
-                  / (NE_Grad + SW_Grad);
+            luminosity_t p_est
+                = (nw_grad * se_est + se_grad * nw_est) / (nw_grad + se_grad);
+            luminosity_t q_est
+                = (ne_grad * sw_est + sw_grad * ne_est) / (ne_grad + sw_grad);
 
             /* R@B or B@R: G + interpolated(C-G).  */
             d (x, y)[(int)c]
-                = g_here
-                  + PQ_Disc * Q_Est + (1 - PQ_Disc) * P_Est;
+                = g_here + pq_disc * q_est + (1 - pq_disc) * p_est;
           }
         if (progress)
           progress->inc_progress ();
@@ -2851,32 +2793,31 @@ protected:
             int idx = y * w + x;
 
             /* Refined VH directional discrimination (same as Step 3).  */
-            luminosity_t VH_Central = VH_Dir[idx];
-            luminosity_t VH_Neighbourhood
+            luminosity_t vh_central = vh_dir[idx];
+            luminosity_t vh_neighbourhood
                 = (luminosity_t)0.25
-                  * (VH_Dir[(y - 1) * w + (x - 1)]
-                     + VH_Dir[(y - 1) * w + (x + 1)]
-                     + VH_Dir[(y + 1) * w + (x - 1)]
-                     + VH_Dir[(y + 1) * w + (x + 1)]);
-            luminosity_t VH_Disc
-                = (fabs ((luminosity_t)0.5 - VH_Central)
-                   < fabs ((luminosity_t)0.5 - VH_Neighbourhood))
-                      ? VH_Neighbourhood
-                      : VH_Central;
-            VH_Disc = std::clamp (VH_Disc, (luminosity_t)0,
-                                  (luminosity_t)1);
+                  * (vh_dir[(y - 1) * w + (x - 1)]
+                     + vh_dir[(y - 1) * w + (x + 1)]
+                     + vh_dir[(y + 1) * w + (x - 1)]
+                     + vh_dir[(y + 1) * w + (x + 1)]);
+            luminosity_t vh_disc
+                = (fabs ((luminosity_t)0.5 - vh_central)
+                   < fabs ((luminosity_t)0.5 - vh_neighbourhood))
+                      ? vh_neighbourhood
+                      : vh_central;
+            vh_disc = std::clamp (vh_disc, (luminosity_t)0, (luminosity_t)1);
 
             luminosity_t g_here = d (x, y)[(int)ah_green];
 
             /* Green second-order differences for gradient computation.  */
-            luminosity_t N1 = eps + fabs (g_here
-                                          - d (x, y - 2)[(int)ah_green]);
-            luminosity_t S1 = eps + fabs (g_here
-                                          - d (x, y + 2)[(int)ah_green]);
-            luminosity_t W1 = eps + fabs (g_here
-                                          - d (x - 2, y)[(int)ah_green]);
-            luminosity_t E1 = eps + fabs (g_here
-                                          - d (x + 2, y)[(int)ah_green]);
+            luminosity_t n_1
+                = eps + fabs (g_here - d (x, y - 2)[(int)ah_green]);
+            luminosity_t s_1
+                = eps + fabs (g_here - d (x, y + 2)[(int)ah_green]);
+            luminosity_t w_1
+                = eps + fabs (g_here - d (x - 2, y)[(int)ah_green]);
+            luminosity_t e_1
+                = eps + fabs (g_here - d (x + 2, y)[(int)ah_green]);
 
             /* Green values at cardinal neighbors.  */
             luminosity_t g_n = d (x, y - 1)[(int)ah_green];
@@ -2888,39 +2829,40 @@ protected:
             for (int c = ah_red; c <= ah_blue; c += (ah_blue - ah_red))
               {
                 /* Same-channel absolute differences for gradients.  */
-                luminosity_t SNabs = fabs (dch (x, y - 1, c)
-                                           - dch (x, y + 1, c));
-                luminosity_t EWabs = fabs (dch (x - 1, y, c)
-                                           - dch (x + 1, y, c));
+                luminosity_t sn_abs
+                    = fabs (dch (x, y - 1, c) - dch (x, y + 1, c));
+                luminosity_t ew_abs
+                    = fabs (dch (x - 1, y, c) - dch (x + 1, y, c));
 
                 /* Cardinal gradients.  */
-                luminosity_t N_Grad = N1 + SNabs
-                    + fabs (dch (x, y - 1, c) - dch (x, y - 3, c));
-                luminosity_t S_Grad = S1 + SNabs
-                    + fabs (dch (x, y + 1, c) - dch (x, y + 3, c));
-                luminosity_t W_Grad = W1 + EWabs
-                    + fabs (dch (x - 1, y, c) - dch (x - 3, y, c));
-                luminosity_t E_Grad = E1 + EWabs
-                    + fabs (dch (x + 1, y, c) - dch (x + 3, y, c));
+                luminosity_t n_grad
+                    = n_1 + sn_abs
+                      + fabs (dch (x, y - 1, c) - dch (x, y - 3, c));
+                luminosity_t s_grad
+                    = s_1 + sn_abs
+                      + fabs (dch (x, y + 1, c) - dch (x, y + 3, c));
+                luminosity_t w_grad
+                    = w_1 + ew_abs
+                      + fabs (dch (x - 1, y, c) - dch (x - 3, y, c));
+                luminosity_t e_grad
+                    = e_1 + ew_abs
+                      + fabs (dch (x + 1, y, c) - dch (x + 3, y, c));
 
                 /* Cardinal color differences (C - G at neighbors).  */
-                luminosity_t N_Est = dch (x, y - 1, c) - g_n;
-                luminosity_t S_Est = dch (x, y + 1, c) - g_s;
-                luminosity_t W_Est = dch (x - 1, y, c) - g_w;
-                luminosity_t E_Est = dch (x + 1, y, c) - g_e;
+                luminosity_t n_est = dch (x, y - 1, c) - g_n;
+                luminosity_t s_est = dch (x, y + 1, c) - g_s;
+                luminosity_t w_est = dch (x - 1, y, c) - g_w;
+                luminosity_t e_est = dch (x + 1, y, c) - g_e;
 
                 /* V and H estimates with cross-gradient weighting.  */
-                luminosity_t V_Est
-                    = (N_Grad * S_Est + S_Grad * N_Est)
-                      / (N_Grad + S_Grad);
-                luminosity_t H_Est
-                    = (E_Grad * W_Est + W_Grad * E_Est)
-                      / (E_Grad + W_Grad);
+                luminosity_t v_est
+                    = (n_grad * s_est + s_grad * n_est) / (n_grad + s_grad);
+                luminosity_t h_est
+                    = (e_grad * w_est + w_grad * e_est) / (e_grad + w_grad);
 
                 /* R@G or B@G: G + interpolated(C-G).  */
                 d (x, y)[(int)c]
-                    = g_here
-                      + VH_Disc * H_Est + (1 - VH_Disc) * V_Est;
+                    = g_here + vh_disc * h_est + (1 - vh_disc) * v_est;
               }
           }
         if (progress)
@@ -2992,23 +2934,23 @@ protected:
        Possible improvement: use a noise-adaptive gamma that varies
        the toe slope based on estimated read noise.  */
     auto gamma_fwd = [] (luminosity_t x) -> luminosity_t
-    {
-      x = std::max (x, (luminosity_t)0);
-      return (x <= (luminosity_t)0.001867)
-                 ? x * (luminosity_t)17.0
-                 : (luminosity_t)1.044445
-                       * std::exp (std::log (x) / (luminosity_t)2.4)
-                   - (luminosity_t)0.044445;
-    };
+      {
+        x = std::max (x, (luminosity_t)0);
+        return (x <= (luminosity_t)0.001867)
+                   ? x * (luminosity_t)17.0
+                   : (luminosity_t)1.044445
+                             * std::exp (std::log (x) / (luminosity_t)2.4)
+                         - (luminosity_t)0.044445;
+      };
     auto gamma_inv = [] (luminosity_t x) -> luminosity_t
-    {
-      x = std::max (x, (luminosity_t)0);
-      return (x <= (luminosity_t)0.031746)
-                 ? x / (luminosity_t)17.0
-                 : std::exp (std::log ((x + (luminosity_t)0.044445)
-                                       / (luminosity_t)1.044445)
-                             * (luminosity_t)2.4);
-    };
+      {
+        x = std::max (x, (luminosity_t)0);
+        return (x <= (luminosity_t)0.031746)
+                   ? x / (luminosity_t)17.0
+                   : std::exp (std::log ((x + (luminosity_t)0.044445)
+                                         / (luminosity_t)1.044445)
+                               * (luminosity_t)2.4);
+      };
 
     /* Find robust max for normalization.  */
     luminosity_t range = find_robust_max (progress);
@@ -3021,17 +2963,17 @@ protected:
     /* 9-tap Gaussian kernel weights for low-pass filtering.
        sigma^2 = 8, so weights are exp(-k^2 / (2*8)) = exp(-k^2/8).
        The kernel is applied in 1D along the interpolation direction.  */
-    luminosity_t gh0 = 1;
-    luminosity_t gh1 = std::exp ((luminosity_t)(-1.0 / 8.0));
-    luminosity_t gh2 = std::exp ((luminosity_t)(-4.0 / 8.0));
-    luminosity_t gh3 = std::exp ((luminosity_t)(-9.0 / 8.0));
-    luminosity_t gh4 = std::exp ((luminosity_t)(-16.0 / 8.0));
-    luminosity_t ghs = gh0 + 2 * (gh1 + gh2 + gh3 + gh4);
-    gh0 /= ghs;
-    gh1 /= ghs;
-    gh2 /= ghs;
-    gh3 /= ghs;
-    gh4 /= ghs;
+    luminosity_t gh_0 = 1;
+    luminosity_t gh_1 = std::exp ((luminosity_t)(-1.0 / 8.0));
+    luminosity_t gh_2 = std::exp ((luminosity_t)(-4.0 / 8.0));
+    luminosity_t gh_3 = std::exp ((luminosity_t)(-9.0 / 8.0));
+    luminosity_t gh_4 = std::exp ((luminosity_t)(-16.0 / 8.0));
+    luminosity_t gh_s = gh_0 + 2 * (gh_1 + gh_2 + gh_3 + gh_4);
+    gh_0 /= gh_s;
+    gh_1 /= gh_s;
+    gh_2 /= gh_s;
+    gh_3 /= gh_s;
+    gh_4 /= gh_s;
 
     /* Total progress:
        gamma(h) + GR_diff(h) + LP(h) + LMMSE(h) + copy(h) +
@@ -3039,18 +2981,18 @@ protected:
        + writeback(h) = ~10*h to ~16*h depending on passes.
        We use 12*h as a reasonable estimate.  */
     if (progress)
-      progress->set_task ("Demosaicing (LMMSE)", h * 12);
+      progress->set_task ("demosaicing (lmmse)", h * 12);
 
     /* Allocate working buffers.
        cfa     - gamma-corrected CFA mosaic values
-       hdiff   - horizontal G-R(B) color difference
-       vdiff   - vertical G-R(B) color difference
-       hlp     - LP-filtered hdiff
-       vlp     - LP-filtered vdiff
+       h_diff  - horizontal G-R(B) color difference
+       v_diff  - vertical G-R(B) color difference
+       h_lp    - LP-filtered h_diff
+       v_lp    - LP-filtered v_diff
        rgb[3]  - reconstructed channels in gamma space  */
     std::vector<luminosity_t> cfa (w * h, 0);
-    std::vector<luminosity_t> hdiff (w * h, 0);
-    std::vector<luminosity_t> vdiff (w * h, 0);
+    std::vector<luminosity_t> h_diff (w * h, 0);
+    std::vector<luminosity_t> v_diff (w * h, 0);
 
     /* ================================================================
        Step 1: Gamma correction.
@@ -3075,8 +3017,8 @@ protected:
 
        At non-dominating (R or B) sites:
          hdiff = horizontal interpolation of G-R(B)
-               = -0.25*(cfa[x-2] + cfa[x+2]) + 0.5*(cfa[x-1] + cfa[x] + cfa[x+1])
-         This is a 5-tap filter that estimates the dominating channel
+               = -0.25*(cfa[x-2] + cfa[x+2]) + 0.5*(cfa[x-1] + cfa[x] +
+       cfa[x+1]) This is a 5-tap filter that estimates the dominating channel
          from horizontal neighbors, then subtracts the non-dominating CFA.
 
          A clipping guard handles values near highlights where the
@@ -3085,8 +3027,8 @@ protected:
 
        At dominating (G) sites:
          hdiff = interpolation of R(B)-G from horizontal neighbors
-               = 0.25*(cfa[x-2] + cfa[x+2]) - 0.5*(cfa[x-1] + cfa[x] + cfa[x+1])
-         Note the opposite sign convention.  This is clamped to [-1, 0]
+               = 0.25*(cfa[x-2] + cfa[x+2]) - 0.5*(cfa[x-1] + cfa[x] +
+       cfa[x+1]) Note the opposite sign convention.  This is clamped to [-1, 0]
          then added back to cfa to produce: cfa + clamp(R-G, -1, 0).
 
        Possible improvement: use a 7-tap or 9-tap interpolation filter
@@ -3106,26 +3048,25 @@ protected:
             luminosity_t c = cfa[idx];
 
             /* Local average incorporating diagonal and center values.  */
-            luminosity_t v0
-                = (luminosity_t)0.0625
-                      * (cfa[(y - 1) * w + (x - 1)] + cfa[(y - 1) * w + (x + 1)]
-                         + cfa[(y + 1) * w + (x - 1)]
-                         + cfa[(y + 1) * w + (x + 1)])
-                  + (luminosity_t)0.25 * c;
+            luminosity_t v0 = (luminosity_t)0.0625
+                                  * (cfa[(y - 1) * w + (x - 1)]
+                                     + cfa[(y - 1) * w + (x + 1)]
+                                     + cfa[(y + 1) * w + (x - 1)]
+                                     + cfa[(y + 1) * w + (x + 1)])
+                              + (luminosity_t)0.25 * c;
 
             /* Horizontal G-R(B) estimate.  */
             luminosity_t hd
                 = (luminosity_t)(-0.25) * (cfa[idx - 2] + cfa[idx + 2])
-                  + (luminosity_t)0.5
-                        * (cfa[idx - 1] + c + cfa[idx + 1]);
-            luminosity_t Y0 = v0 + (luminosity_t)0.5 * hd;
+                  + (luminosity_t)0.5 * (cfa[idx - 1] + c + cfa[idx + 1]);
+            luminosity_t y_0 = v0 + (luminosity_t)0.5 * hd;
             /* Highlight guard: if CFA value is much brighter than
                expected, the linear interpolation overshoots.
                Fall back to median of three horizontal neighbors.  */
-            hd = (c > (luminosity_t)1.75 * Y0)
+            hd = (c > (luminosity_t)1.75 * y_0)
                      ? median3 (hd, cfa[idx - 1], cfa[idx + 1])
                      : std::max (hd, (luminosity_t)0);
-            hdiff[idx] = hd - c;
+            h_diff[idx] = hd - c;
 
             /* Vertical G-R(B) estimate.  */
             luminosity_t vd
@@ -3133,12 +3074,11 @@ protected:
                       * (cfa[(y - 2) * w + x] + cfa[(y + 2) * w + x])
                   + (luminosity_t)0.5
                         * (cfa[(y - 1) * w + x] + c + cfa[(y + 1) * w + x]);
-            luminosity_t Y1 = v0 + (luminosity_t)0.5 * vd;
-            vd = (c > (luminosity_t)1.75 * Y1)
-                     ? median3 (vd, cfa[(y - 1) * w + x],
-                                cfa[(y + 1) * w + x])
+            luminosity_t y_1 = v0 + (luminosity_t)0.5 * vd;
+            vd = (c > (luminosity_t)1.75 * y_1)
+                     ? median3 (vd, cfa[(y - 1) * w + x], cfa[(y + 1) * w + x])
                      : std::max (vd, (luminosity_t)0);
-            vdiff[idx] = vd - c;
+            v_diff[idx] = vd - c;
           }
 
         /* Dominating sites: -(R(B)-G) color difference.  */
@@ -3151,15 +3091,14 @@ protected:
 
             luminosity_t hd
                 = (luminosity_t)0.25 * (cfa[idx - 2] + cfa[idx + 2])
-                  - (luminosity_t)0.5
-                        * (cfa[idx - 1] + c + cfa[idx + 1]);
+                  - (luminosity_t)0.5 * (cfa[idx - 1] + c + cfa[idx + 1]);
             luminosity_t vd
                 = (luminosity_t)0.25
                       * (cfa[(y - 2) * w + x] + cfa[(y + 2) * w + x])
                   - (luminosity_t)0.5
                         * (cfa[(y - 1) * w + x] + c + cfa[(y + 1) * w + x]);
-            hdiff[idx] = std::min (hd, (luminosity_t)0) + c;
-            vdiff[idx] = std::min (vd, (luminosity_t)0) + c;
+            h_diff[idx] = std::min (hd, (luminosity_t)0) + c;
+            v_diff[idx] = std::min (vd, (luminosity_t)0) + c;
           }
         if (progress)
           progress->inc_progress ();
@@ -3178,8 +3117,8 @@ protected:
        Possible improvement: use a 2D separable filter for better
        isotropy, or an edge-preserving filter (e.g., bilateral).
        ================================================================ */
-    std::vector<luminosity_t> hlp (w * h, 0);
-    std::vector<luminosity_t> vlp (w * h, 0);
+    std::vector<luminosity_t> h_lp (w * h, 0);
+    std::vector<luminosity_t> v_lp (w * h, 0);
 
 #pragma omp parallel for schedule(dynamic, 16)
     for (int y = 4; y < h - 4; y++)
@@ -3190,17 +3129,17 @@ protected:
           {
             int idx = y * w + x;
             /* Horizontal LP: 9-tap Gaussian along the row.  */
-            hlp[idx] = gh0 * hdiff[idx]
-                       + gh1 * (hdiff[idx - 1] + hdiff[idx + 1])
-                       + gh2 * (hdiff[idx - 2] + hdiff[idx + 2])
-                       + gh3 * (hdiff[idx - 3] + hdiff[idx + 3])
-                       + gh4 * (hdiff[idx - 4] + hdiff[idx + 4]);
+            h_lp[idx] = gh_0 * h_diff[idx]
+                        + gh_1 * (h_diff[idx - 1] + h_diff[idx + 1])
+                        + gh_2 * (h_diff[idx - 2] + h_diff[idx + 2])
+                        + gh_3 * (h_diff[idx - 3] + h_diff[idx + 3])
+                        + gh_4 * (h_diff[idx - 4] + h_diff[idx + 4]);
             /* Vertical LP: 9-tap Gaussian along the column.  */
-            vlp[idx] = gh0 * vdiff[idx]
-                       + gh1 * (vdiff[idx - w] + vdiff[idx + w])
-                       + gh2 * (vdiff[idx - 2 * w] + vdiff[idx + 2 * w])
-                       + gh3 * (vdiff[idx - 3 * w] + vdiff[idx + 3 * w])
-                       + gh4 * (vdiff[idx - 4 * w] + vdiff[idx + 4 * w]);
+            v_lp[idx] = gh_0 * v_diff[idx]
+                        + gh_1 * (v_diff[idx - w] + v_diff[idx + w])
+                        + gh_2 * (v_diff[idx - 2 * w] + v_diff[idx + 2 * w])
+                        + gh_3 * (v_diff[idx - 3 * w] + v_diff[idx + 3 * w])
+                        + gh_4 * (v_diff[idx - 4 * w] + v_diff[idx + 4 * w]);
           }
         if (progress)
           progress->inc_progress ();
@@ -3249,103 +3188,98 @@ protected:
 
             /* Horizontal LMMSE.  */
             /* Collect 9 LP-filtered samples along the row.  */
-            luminosity_t p1 = hlp[idx - 4];
-            luminosity_t p2 = hlp[idx - 3];
-            luminosity_t p3 = hlp[idx - 2];
-            luminosity_t p4 = hlp[idx - 1];
-            luminosity_t p5 = hlp[idx];
-            luminosity_t p6 = hlp[idx + 1];
-            luminosity_t p7 = hlp[idx + 2];
-            luminosity_t p8 = hlp[idx + 3];
-            luminosity_t p9 = hlp[idx + 4];
+            luminosity_t p_1 = h_lp[idx - 4];
+            luminosity_t p_2 = h_lp[idx - 3];
+            luminosity_t p_3 = h_lp[idx - 2];
+            luminosity_t p_4 = h_lp[idx - 1];
+            luminosity_t p_5 = h_lp[idx];
+            luminosity_t p_6 = h_lp[idx + 1];
+            luminosity_t p_7 = h_lp[idx + 2];
+            luminosity_t p_8 = h_lp[idx + 3];
+            luminosity_t p_9 = h_lp[idx + 4];
 
             /* Signal variance: Var(LP samples).  */
             luminosity_t mu
-                = (p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9)
+                = (p_1 + p_2 + p_3 + p_4 + p_5 + p_6 + p_7 + p_8 + p_9)
                   / (luminosity_t)9;
             luminosity_t vx
-                = (luminosity_t)1e-7
-                  + (p1 - mu) * (p1 - mu) + (p2 - mu) * (p2 - mu)
-                  + (p3 - mu) * (p3 - mu) + (p4 - mu) * (p4 - mu)
-                  + (p5 - mu) * (p5 - mu) + (p6 - mu) * (p6 - mu)
-                  + (p7 - mu) * (p7 - mu) + (p8 - mu) * (p8 - mu)
-                  + (p9 - mu) * (p9 - mu);
+                = (luminosity_t)1e-7 + (p_1 - mu) * (p_1 - mu)
+                  + (p_2 - mu) * (p_2 - mu) + (p_3 - mu) * (p_3 - mu)
+                  + (p_4 - mu) * (p_4 - mu) + (p_5 - mu) * (p_5 - mu)
+                  + (p_6 - mu) * (p_6 - mu) + (p_7 - mu) * (p_7 - mu)
+                  + (p_8 - mu) * (p_8 - mu) + (p_9 - mu) * (p_9 - mu);
 
             /* Noise variance: Var(LP - raw).  */
-            p1 -= hdiff[idx - 4];
-            p2 -= hdiff[idx - 3];
-            p3 -= hdiff[idx - 2];
-            p4 -= hdiff[idx - 1];
-            p5 -= hdiff[idx];
-            p6 -= hdiff[idx + 1];
-            p7 -= hdiff[idx + 2];
-            p8 -= hdiff[idx + 3];
-            p9 -= hdiff[idx + 4];
-            luminosity_t vn
-                = (luminosity_t)1e-7
-                  + p1 * p1 + p2 * p2 + p3 * p3 + p4 * p4 + p5 * p5
-                  + p6 * p6 + p7 * p7 + p8 * p8 + p9 * p9;
+            p_1 -= h_diff[idx - 4];
+            p_2 -= h_diff[idx - 3];
+            p_3 -= h_diff[idx - 2];
+            p_4 -= h_diff[idx - 1];
+            p_5 -= h_diff[idx];
+            p_6 -= h_diff[idx + 1];
+            p_7 -= h_diff[idx + 2];
+            p_8 -= h_diff[idx + 3];
+            p_9 -= h_diff[idx + 4];
+            luminosity_t vn = (luminosity_t)1e-7 + p_1 * p_1 + p_2 * p_2
+                              + p_3 * p_3 + p_4 * p_4 + p_5 * p_5 + p_6 * p_6
+                              + p_7 * p_7 + p_8 * p_8 + p_9 * p_9;
 
             /* LMMSE horizontal estimate.  */
-            luminosity_t xh
-                = (hdiff[idx] * vx + hlp[idx] * vn) / (vx + vn);
-            luminosity_t vh = vx * vn / (vx + vn);
+            luminosity_t x_h = (h_diff[idx] * vx + h_lp[idx] * vn) / (vx + vn);
+            luminosity_t v_h = vx * vn / (vx + vn);
 
             /* Vertical LMMSE.  */
-            p1 = vlp[idx - 4 * w];
-            p2 = vlp[idx - 3 * w];
-            p3 = vlp[idx - 2 * w];
-            p4 = vlp[idx - w];
-            p5 = vlp[idx];
-            p6 = vlp[idx + w];
-            p7 = vlp[idx + 2 * w];
-            p8 = vlp[idx + 3 * w];
-            p9 = vlp[idx + 4 * w];
+            p_1 = v_lp[idx - 4 * w];
+            p_2 = v_lp[idx - 3 * w];
+            p_3 = v_lp[idx - 2 * w];
+            p_4 = v_lp[idx - w];
+            p_5 = v_lp[idx];
+            p_6 = v_lp[idx + w];
+            p_7 = v_lp[idx + 2 * w];
+            p_8 = v_lp[idx + 3 * w];
+            p_9 = v_lp[idx + 4 * w];
 
-            mu = (p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9)
+            mu = (p_1 + p_2 + p_3 + p_4 + p_5 + p_6 + p_7 + p_8 + p_9)
                  / (luminosity_t)9;
-            vx = (luminosity_t)1e-7
-                 + (p1 - mu) * (p1 - mu) + (p2 - mu) * (p2 - mu)
-                 + (p3 - mu) * (p3 - mu) + (p4 - mu) * (p4 - mu)
-                 + (p5 - mu) * (p5 - mu) + (p6 - mu) * (p6 - mu)
-                 + (p7 - mu) * (p7 - mu) + (p8 - mu) * (p8 - mu)
-                 + (p9 - mu) * (p9 - mu);
+            vx = (luminosity_t)1e-7 + (p_1 - mu) * (p_1 - mu)
+                 + (p_2 - mu) * (p_2 - mu) + (p_3 - mu) * (p_3 - mu)
+                 + (p_4 - mu) * (p_4 - mu) + (p_5 - mu) * (p_5 - mu)
+                 + (p_6 - mu) * (p_6 - mu) + (p_7 - mu) * (p_7 - mu)
+                 + (p_8 - mu) * (p_8 - mu) + (p_9 - mu) * (p_9 - mu);
 
-            p1 -= vdiff[idx - 4 * w];
-            p2 -= vdiff[idx - 3 * w];
-            p3 -= vdiff[idx - 2 * w];
-            p4 -= vdiff[idx - w];
-            p5 -= vdiff[idx];
-            p6 -= vdiff[idx + w];
-            p7 -= vdiff[idx + 2 * w];
-            p8 -= vdiff[idx + 3 * w];
-            p9 -= vdiff[idx + 4 * w];
-            vn = (luminosity_t)1e-7
-                 + p1 * p1 + p2 * p2 + p3 * p3 + p4 * p4 + p5 * p5
-                 + p6 * p6 + p7 * p7 + p8 * p8 + p9 * p9;
+            p_1 -= v_diff[idx - 4 * w];
+            p_2 -= v_diff[idx - 3 * w];
+            p_3 -= v_diff[idx - 2 * w];
+            p_4 -= v_diff[idx - w];
+            p_5 -= v_diff[idx];
+            p_6 -= v_diff[idx + w];
+            p_7 -= v_diff[idx + 2 * w];
+            p_8 -= v_diff[idx + 3 * w];
+            p_9 -= v_diff[idx + 4 * w];
+            vn = (luminosity_t)1e-7 + p_1 * p_1 + p_2 * p_2 + p_3 * p_3
+                 + p_4 * p_4 + p_5 * p_5 + p_6 * p_6 + p_7 * p_7 + p_8 * p_8
+                 + p_9 * p_9;
 
-            luminosity_t xv
-                = (vdiff[idx] * vx + vlp[idx] * vn) / (vx + vn);
-            luminosity_t vv = vx * vn / (vx + vn);
+            luminosity_t x_v = (v_diff[idx] * vx + v_lp[idx] * vn) / (vx + vn);
+            luminosity_t v_v = vx * vn / (vx + vn);
 
             /* Combine H and V using the same LMMSE weighting:
                the direction with more "signal" (higher LP variance)
                gets more weight.  */
-            interp[idx] = (xh * vv + xv * vh) / (vh + vv);
+            interp[idx] = (x_h * v_v + x_v * v_h) / (v_h + v_v);
           }
         if (progress)
           progress->inc_progress ();
       }
 
     /* Free LP buffers no longer needed.  */
-    hlp.clear ();
-    hlp.shrink_to_fit ();
-    vlp.clear ();
-    vlp.shrink_to_fit ();
-    hdiff.clear ();
-    hdiff.shrink_to_fit ();
-    vdiff.clear ();
-    vdiff.shrink_to_fit ();
+    h_lp.clear ();
+    h_lp.shrink_to_fit ();
+    v_lp.clear ();
+    v_lp.shrink_to_fit ();
+    h_diff.clear ();
+    h_diff.shrink_to_fit ();
+    v_diff.clear ();
+    v_diff.shrink_to_fit ();
 
     if (progress && progress->cancelled ())
       return false;
@@ -3440,20 +3374,16 @@ protected:
               rgb[c_horiz][idx]
                   = g
                     + (luminosity_t)0.5
-                          * (rgb[c_horiz][idx - 1]
-                             - rgb[ah_green][idx - 1]
-                             + rgb[c_horiz][idx + 1]
-                             - rgb[ah_green][idx + 1]);
+                          * (rgb[c_horiz][idx - 1] - rgb[ah_green][idx - 1]
+                             + rgb[c_horiz][idx + 1] - rgb[ah_green][idx + 1]);
 
             /* Vertical neighbor's channel: bilinear from N and S.  */
             if (c_vert != ah_green)
               rgb[c_vert][idx]
                   = g
                     + (luminosity_t)0.5
-                          * (rgb[c_vert][idx - w]
-                             - rgb[ah_green][idx - w]
-                             + rgb[c_vert][idx + w]
-                             - rgb[ah_green][idx + w]);
+                          * (rgb[c_vert][idx - w] - rgb[ah_green][idx - w]
+                             + rgb[c_vert][idx + w] - rgb[ah_green][idx + w]);
           }
         if (progress)
           progress->inc_progress ();
@@ -3484,10 +3414,8 @@ protected:
                   + (luminosity_t)0.25
                         * (rgb[c_other][(y - 1) * w + x]
                            - rgb[ah_green][(y - 1) * w + x]
-                           + rgb[c_other][idx - 1]
-                           - rgb[ah_green][idx - 1]
-                           + rgb[c_other][idx + 1]
-                           - rgb[ah_green][idx + 1]
+                           + rgb[c_other][idx - 1] - rgb[ah_green][idx - 1]
+                           + rgb[c_other][idx + 1] - rgb[ah_green][idx + 1]
                            + rgb[c_other][(y + 1) * w + x]
                            - rgb[ah_green][(y + 1) * w + x]);
           }
@@ -3507,7 +3435,7 @@ protected:
        color differences.
 
        Possible improvement: make the number of passes configurable.
-       ================================================================ */
+        ================================================================ */
     for (int pass = 0; pass < 3; pass++)
       {
         /* Compute median(C-G) in temporary buffers.
@@ -3525,67 +3453,67 @@ protected:
                 int idx = y * w + x;
 
                 /* Median of 3x3 (R-G) differences.  */
-                luminosity_t pr[9];
-                luminosity_t pb[9];
+                luminosity_t p_r[9];
+                luminosity_t p_b[9];
                 int n = 0;
                 for (int dy = -1; dy <= 1; dy++)
                   for (int dx = -1; dx <= 1; dx++)
                     {
                       int i = (y + dy) * w + (x + dx);
-                      pr[n] = rgb[ah_red][i] - rgb[ah_green][i];
-                      pb[n] = rgb[ah_blue][i] - rgb[ah_green][i];
+                      p_r[n] = rgb[ah_red][i] - rgb[ah_green][i];
+                      p_b[n] = rgb[ah_blue][i] - rgb[ah_green][i];
                       n++;
                     }
                 /* Sort to find median of 9 values.
                    Use a sorting network for efficiency.  */
-                auto sort2 = [] (luminosity_t &a, luminosity_t &b)
-                {
-                  if (a > b)
-                    std::swap (a, b);
-                };
+                auto sort_2 = [] (luminosity_t &a, luminosity_t &b)
+                  {
+                    if (a > b)
+                      std::swap (a, b);
+                  };
                 /* Bose-Nelson sorting network for 9 elements,
                    extracting only the median (element [4]).  */
-                sort2 (pr[1], pr[2]);
-                sort2 (pr[4], pr[5]);
-                sort2 (pr[7], pr[8]);
-                sort2 (pr[0], pr[1]);
-                sort2 (pr[3], pr[4]);
-                sort2 (pr[6], pr[7]);
-                sort2 (pr[1], pr[2]);
-                sort2 (pr[4], pr[5]);
-                sort2 (pr[7], pr[8]);
-                sort2 (pr[0], pr[3]);
-                sort2 (pr[5], pr[8]);
-                sort2 (pr[4], pr[7]);
-                sort2 (pr[3], pr[6]);
-                sort2 (pr[1], pr[4]);
-                sort2 (pr[2], pr[5]);
-                sort2 (pr[4], pr[7]);
-                sort2 (pr[4], pr[2]);
-                sort2 (pr[6], pr[4]);
-                sort2 (pr[4], pr[2]);
-                corr_r[idx] = pr[4];
+                sort_2 (p_r[1], p_r[2]);
+                sort_2 (p_r[4], p_r[5]);
+                sort_2 (p_r[7], p_r[8]);
+                sort_2 (p_r[0], p_r[1]);
+                sort_2 (p_r[3], p_r[4]);
+                sort_2 (p_r[6], p_r[7]);
+                sort_2 (p_r[1], p_r[2]);
+                sort_2 (p_r[4], p_r[5]);
+                sort_2 (p_r[7], p_r[8]);
+                sort_2 (p_r[0], p_r[3]);
+                sort_2 (p_r[5], p_r[8]);
+                sort_2 (p_r[4], p_r[7]);
+                sort_2 (p_r[3], p_r[6]);
+                sort_2 (p_r[1], p_r[4]);
+                sort_2 (p_r[2], p_r[5]);
+                sort_2 (p_r[4], p_r[7]);
+                sort_2 (p_r[4], p_r[2]);
+                sort_2 (p_r[6], p_r[4]);
+                sort_2 (p_r[4], p_r[2]);
+                corr_r[idx] = p_r[4];
 
-                sort2 (pb[1], pb[2]);
-                sort2 (pb[4], pb[5]);
-                sort2 (pb[7], pb[8]);
-                sort2 (pb[0], pb[1]);
-                sort2 (pb[3], pb[4]);
-                sort2 (pb[6], pb[7]);
-                sort2 (pb[1], pb[2]);
-                sort2 (pb[4], pb[5]);
-                sort2 (pb[7], pb[8]);
-                sort2 (pb[0], pb[3]);
-                sort2 (pb[5], pb[8]);
-                sort2 (pb[4], pb[7]);
-                sort2 (pb[3], pb[6]);
-                sort2 (pb[1], pb[4]);
-                sort2 (pb[2], pb[5]);
-                sort2 (pb[4], pb[7]);
-                sort2 (pb[4], pb[2]);
-                sort2 (pb[6], pb[4]);
-                sort2 (pb[4], pb[2]);
-                corr_b[idx] = pb[4];
+                sort_2 (p_b[1], p_b[2]);
+                sort_2 (p_b[4], p_b[5]);
+                sort_2 (p_b[7], p_b[8]);
+                sort_2 (p_b[0], p_b[1]);
+                sort_2 (p_b[3], p_b[4]);
+                sort_2 (p_b[6], p_b[7]);
+                sort_2 (p_b[1], p_b[2]);
+                sort_2 (p_b[4], p_b[5]);
+                sort_2 (p_b[7], p_b[8]);
+                sort_2 (p_b[0], p_b[3]);
+                sort_2 (p_b[5], p_b[8]);
+                sort_2 (p_b[4], p_b[7]);
+                sort_2 (p_b[3], p_b[6]);
+                sort_2 (p_b[1], p_b[4]);
+                sort_2 (p_b[2], p_b[5]);
+                sort_2 (p_b[4], p_b[7]);
+                sort_2 (p_b[4], p_b[2]);
+                sort_2 (p_b[6], p_b[4]);
+                sort_2 (p_b[4], p_b[2]);
+                corr_b[idx] = p_b[4];
               }
           }
 
@@ -3601,10 +3529,8 @@ protected:
                   {
                     /* At G sites: R = G + median(R-G),
                                    B = G + median(B-G).  */
-                    rgb[ah_red][idx]
-                        = rgb[ah_green][idx] + corr_r[idx];
-                    rgb[ah_blue][idx]
-                        = rgb[ah_green][idx] + corr_b[idx];
+                    rgb[ah_red][idx] = rgb[ah_green][idx] + corr_r[idx];
+                    rgb[ah_blue][idx] = rgb[ah_green][idx] + corr_b[idx];
                   }
                 else
                   {
@@ -3615,12 +3541,10 @@ protected:
                     int c_other = (c == ah_red) ? ah_blue : ah_red;
                     rgb[c_other][idx]
                         = rgb[ah_green][idx]
-                          + ((c_other == ah_red) ? corr_r[idx]
-                                                 : corr_b[idx]);
-                    rgb[ah_green][idx]
-                        = (luminosity_t)0.5
-                          * (rgb[ah_red][idx] - corr_r[idx]
-                             + rgb[ah_blue][idx] - corr_b[idx]);
+                          + ((c_other == ah_red) ? corr_r[idx] : corr_b[idx]);
+                    rgb[ah_green][idx] = (luminosity_t)0.5
+                                         * (rgb[ah_red][idx] - corr_r[idx]
+                                            + rgb[ah_blue][idx] - corr_b[idx]);
                   }
               }
             if (progress)
@@ -3648,7 +3572,7 @@ protected:
 
        Edge Enhanced Color Interpolation reinforces each channel by
        using gradient-weighted directional color-difference averaging.
-       
+
        NOTE: Disabled (0 passes) to strictly follow the RawTherapee /
        Darktable default behavior. While EECI can sharpen axial edges,
        it often slightly distorts 45-degree diagonal contours.
@@ -3666,37 +3590,31 @@ protected:
                 if (c == ah_green)
                   continue;
                 int idx = y * w + x;
-                luminosity_t dL
-                    = 1 / (1 + fabs (rgb[c][idx - 2] - rgb[c][idx])
-                            + fabs (rgb[ah_green][idx + 1]
-                                    - rgb[ah_green][idx - 1]));
-                luminosity_t dR
-                    = 1 / (1 + fabs (rgb[c][idx + 2] - rgb[c][idx])
-                            + fabs (rgb[ah_green][idx + 1]
-                                    - rgb[ah_green][idx - 1]));
+                luminosity_t dL = 1
+                                  / (1 + fabs (rgb[c][idx - 2] - rgb[c][idx])
+                                     + fabs (rgb[ah_green][idx + 1]
+                                             - rgb[ah_green][idx - 1]));
+                luminosity_t dR = 1
+                                  / (1 + fabs (rgb[c][idx + 2] - rgb[c][idx])
+                                     + fabs (rgb[ah_green][idx + 1]
+                                             - rgb[ah_green][idx - 1]));
                 luminosity_t dU
                     = 1
-                      / (1
-                         + fabs (rgb[c][idx - 2 * w] - rgb[c][idx])
+                      / (1 + fabs (rgb[c][idx - 2 * w] - rgb[c][idx])
                          + fabs (rgb[ah_green][idx + w]
                                  - rgb[ah_green][idx - w]));
                 luminosity_t dD
                     = 1
-                      / (1
-                         + fabs (rgb[c][idx + 2 * w] - rgb[c][idx])
+                      / (1 + fabs (rgb[c][idx + 2 * w] - rgb[c][idx])
                          + fabs (rgb[ah_green][idx + w]
                                  - rgb[ah_green][idx - w]));
                 rgb[ah_green][idx]
                     = rgb[c][idx]
-                      + ((rgb[ah_green][idx - 1] - rgb[c][idx - 1])
-                             * dL
-                         + (rgb[ah_green][idx + 1] - rgb[c][idx + 1])
-                               * dR
-                         + (rgb[ah_green][idx - w] - rgb[c][idx - w])
-                               * dU
-                         + (rgb[ah_green][idx + w] - rgb[c][idx + w])
-                               * dD)
-                        / (dL + dR + dU + dD);
+                      + ((rgb[ah_green][idx - 1] - rgb[c][idx - 1]) * dL
+                         + (rgb[ah_green][idx + 1] - rgb[c][idx + 1]) * dR
+                         + (rgb[ah_green][idx - w] - rgb[c][idx - w]) * dU
+                         + (rgb[ah_green][idx + w] - rgb[c][idx + w]) * dD)
+                            / (dL + dR + dU + dD);
               }
           }
 
@@ -3719,43 +3637,33 @@ protected:
                           / (1
                              + fabs (rgb[ah_green][idx - 2]
                                      - rgb[ah_green][idx])
-                             + fabs (rgb[cc][idx + 1]
-                                     - rgb[cc][idx - 1]));
+                             + fabs (rgb[cc][idx + 1] - rgb[cc][idx - 1]));
                     luminosity_t dR
                         = 1
                           / (1
                              + fabs (rgb[ah_green][idx + 2]
                                      - rgb[ah_green][idx])
-                             + fabs (rgb[cc][idx + 1]
-                                     - rgb[cc][idx - 1]));
+                             + fabs (rgb[cc][idx + 1] - rgb[cc][idx - 1]));
                     luminosity_t dU
                         = 1
                           / (1
                              + fabs (rgb[ah_green][idx - 2 * w]
                                      - rgb[ah_green][idx])
-                             + fabs (rgb[cc][idx + w]
-                                     - rgb[cc][idx - w]));
+                             + fabs (rgb[cc][idx + w] - rgb[cc][idx - w]));
                     luminosity_t dD
                         = 1
                           / (1
                              + fabs (rgb[ah_green][idx + 2 * w]
                                      - rgb[ah_green][idx])
-                             + fabs (rgb[cc][idx + w]
-                                     - rgb[cc][idx - w]));
+                             + fabs (rgb[cc][idx + w] - rgb[cc][idx - w]));
                     rgb[cc][idx]
                         = rgb[ah_green][idx]
-                          - ((rgb[ah_green][idx - 1] - rgb[cc][idx - 1])
-                                 * dL
-                             + (rgb[ah_green][idx + 1]
-                                - rgb[cc][idx + 1])
-                                   * dR
-                             + (rgb[ah_green][idx - w]
-                                - rgb[cc][idx - w])
-                                   * dU
-                             + (rgb[ah_green][idx + w]
-                                - rgb[cc][idx + w])
+                          - ((rgb[ah_green][idx - 1] - rgb[cc][idx - 1]) * dL
+                             + (rgb[ah_green][idx + 1] - rgb[cc][idx + 1]) * dR
+                             + (rgb[ah_green][idx - w] - rgb[cc][idx - w]) * dU
+                             + (rgb[ah_green][idx + w] - rgb[cc][idx + w])
                                    * dD)
-                            / (dL + dR + dU + dD);
+                                / (dL + dR + dU + dD);
                   }
               }
           }
@@ -3772,41 +3680,34 @@ protected:
                   continue;
                 int c_other = (c == ah_red) ? ah_blue : ah_red;
                 int idx = y * w + x;
-                luminosity_t dL
-                    = 1 / (1 + fabs (rgb[c][idx - 2] - rgb[c][idx])
-                            + fabs (rgb[ah_green][idx + 1]
-                                    - rgb[ah_green][idx - 1]));
-                luminosity_t dR
-                    = 1 / (1 + fabs (rgb[c][idx + 2] - rgb[c][idx])
-                            + fabs (rgb[ah_green][idx + 1]
-                                    - rgb[ah_green][idx - 1]));
-                luminosity_t dU
+                luminosity_t d_l = 1
+                                   / (1 + fabs (rgb[c][idx - 2] - rgb[c][idx])
+                                      + fabs (rgb[ah_green][idx + 1]
+                                              - rgb[ah_green][idx - 1]));
+                luminosity_t d_r = 1
+                                   / (1 + fabs (rgb[c][idx + 2] - rgb[c][idx])
+                                      + fabs (rgb[ah_green][idx + 1]
+                                              - rgb[ah_green][idx - 1]));
+                luminosity_t d_u
                     = 1
-                      / (1
-                         + fabs (rgb[c][idx - 2 * w] - rgb[c][idx])
+                      / (1 + fabs (rgb[c][idx - 2 * w] - rgb[c][idx])
                          + fabs (rgb[ah_green][idx + w]
                                  - rgb[ah_green][idx - w]));
-                luminosity_t dD
+                luminosity_t d_d
                     = 1
-                      / (1
-                         + fabs (rgb[c][idx + 2 * w] - rgb[c][idx])
+                      / (1 + fabs (rgb[c][idx + 2 * w] - rgb[c][idx])
                          + fabs (rgb[ah_green][idx + w]
                                  - rgb[ah_green][idx - w]));
                 rgb[c_other][idx]
                     = rgb[ah_green][idx]
-                      - ((rgb[ah_green][idx - 1]
-                          - rgb[c_other][idx - 1])
-                             * dL
-                         + (rgb[ah_green][idx + 1]
-                            - rgb[c_other][idx + 1])
-                               * dR
-                         + (rgb[ah_green][idx - w]
-                            - rgb[c_other][idx - w])
-                               * dU
-                         + (rgb[ah_green][idx + w]
-                            - rgb[c_other][idx + w])
-                               * dD)
-                        / (dL + dR + dU + dD);
+                      - ((rgb[ah_green][idx - 1] - rgb[c_other][idx - 1]) * d_l
+                         + (rgb[ah_green][idx + 1] - rgb[c_other][idx + 1])
+                               * d_r
+                         + (rgb[ah_green][idx - w] - rgb[c_other][idx - w])
+                               * d_u
+                         + (rgb[ah_green][idx + w] - rgb[c_other][idx + w])
+                               * d_d)
+                            / (d_l + d_r + d_u + d_d);
               }
           }
         if (progress)
@@ -3826,15 +3727,12 @@ protected:
         for (int x = 0; x < w; x++)
           {
             int idx = y * w + x;
-            d (x, y)[(int)ah_red]
-                = std::max ((luminosity_t)0,
-                            range * gamma_inv (rgb[ah_red][idx]));
-            d (x, y)[(int)ah_green]
-                = std::max ((luminosity_t)0,
-                            range * gamma_inv (rgb[ah_green][idx]));
-            d (x, y)[(int)ah_blue]
-                = std::max ((luminosity_t)0,
-                            range * gamma_inv (rgb[ah_blue][idx]));
+            d (x, y)[(int)ah_red] = std::max (
+                (luminosity_t)0, range * gamma_inv (rgb[ah_red][idx]));
+            d (x, y)[(int)ah_green] = std::max (
+                (luminosity_t)0, range * gamma_inv (rgb[ah_green][idx]));
+            d (x, y)[(int)ah_blue] = std::max (
+                (luminosity_t)0, range * gamma_inv (rgb[ah_blue][idx]));
           }
         if (progress)
           progress->inc_progress ();
@@ -3844,7 +3742,8 @@ protected:
 
   template <int ah_green>
   always_inline_attr luminosity_t
-  interp_dcraw (int x, int y, int ch, const std::vector<luminosity_t> &G_dir, luminosity_t limit_max)
+  interp_dcraw (int x, int y, int ch, const std::vector<luminosity_t> &G_dir,
+                luminosity_t limit_max)
   {
     int w = m_area.width, h = m_area.height;
     if (GEOMETRY::demosaic_entry_color (x, y) == ch)
@@ -3863,27 +3762,31 @@ protected:
         int xl = std::clamp (x - 1, 0, w - 1);
         int xr = std::clamp (x + 1, 0, w - 1);
         val = g_here
-               + (dch (x - 1, y, ch) - G_dir[y * w + xl]
-                  + dch (x + 1, y, ch) - G_dir[y * w + xr])
-                     * (luminosity_t)0.5;
+              + (dch (x - 1, y, ch) - G_dir[y * w + xl] + dch (x + 1, y, ch)
+                 - G_dir[y * w + xr])
+                    * (luminosity_t)0.5;
       }
     else if (u_c && d_c)
       {
         int yu = std::clamp (y - 1, 0, h - 1);
         int yd = std::clamp (y + 1, 0, h - 1);
         val = g_here
-               + (dch (x, y - 1, ch) - G_dir[yu * w + x]
-                  + dch (x, y + 1, ch) - G_dir[yd * w + x])
-                     * (luminosity_t)0.5;
+              + (dch (x, y - 1, ch) - G_dir[yu * w + x] + dch (x, y + 1, ch)
+                 - G_dir[yd * w + x])
+                    * (luminosity_t)0.5;
       }
     else if (l_c)
-      val = g_here + dch (x - 1, y, ch) - G_dir[y * w + std::clamp (x - 1, 0, w - 1)];
+      val = g_here + dch (x - 1, y, ch)
+            - G_dir[y * w + std::clamp (x - 1, 0, w - 1)];
     else if (r_c)
-      val = g_here + dch (x + 1, y, ch) - G_dir[y * w + std::clamp (x + 1, 0, w - 1)];
+      val = g_here + dch (x + 1, y, ch)
+            - G_dir[y * w + std::clamp (x + 1, 0, w - 1)];
     else if (u_c)
-      val = g_here + dch (x, y - 1, ch) - G_dir[std::clamp (y - 1, 0, h - 1) * w + x];
+      val = g_here + dch (x, y - 1, ch)
+            - G_dir[std::clamp (y - 1, 0, h - 1) * w + x];
     else if (d_c)
-      val = g_here + dch (x, y + 1, ch) - G_dir[std::clamp (y + 1, 0, h - 1) * w + x];
+      val = g_here + dch (x, y + 1, ch)
+            - G_dir[std::clamp (y + 1, 0, h - 1) * w + x];
     else
       {
         bool tl = GEOMETRY::demosaic_entry_color (x - 1, y - 1) == ch;
@@ -3923,17 +3826,25 @@ protected:
         if (cnt > 0)
           val = g_here + sum / (luminosity_t)cnt;
       }
-      
-    return std::clamp(val, (luminosity_t)0.0, limit_max);
-  };
 
+    return std::clamp (val, (luminosity_t)0.0, limit_max);
+  }
+
+  /* Adaptive Homogeneity-Directed (AHD) demosaicing algorithm (dcraw variant).
+     This version follows the homogeneity assessment logic from dcraw,
+     which uses a different metric than the standard AHD implementation.
+     PROGRESS can be used to report progress and check for cancellation.
+     AH_GREEN is the dominating channel.
+     AH_RED is the red channel index.
+     AH_BLUE is the blue channel index.  */
   template <int ah_green, int ah_red, int ah_blue>
   bool
   ahd_interpolation_dominating_channel_dcraw (progress_info *progress)
   {
     int w = m_area.width, h = m_area.height;
     if (progress)
-      progress->set_task ("Demosaicing dominating channel (AHD dcraw variant)", h * 4);
+      progress->set_task ("demosaicing dominating channel (ahd dcraw variant)",
+                          h * 4);
 
     luminosity_t range = find_robust_max (progress);
     if (progress && progress->cancelled ())
@@ -3941,10 +3852,11 @@ protected:
     if (range <= 0)
       range = 1.0f;
 
-    std::vector<luminosity_t> Green_H (w * h);
-    std::vector<luminosity_t> Green_V (w * h);
+    std::vector<luminosity_t> green_h (w * h);
+    std::vector<luminosity_t> green_v (w * h);
 
-#pragma omp parallel shared(progress, h, w, range, Green_H, Green_V) default(none)
+#pragma omp parallel shared(progress, h, w, range, green_h,                   \
+                                green_v) default(none)
     for (int y = 0; y < h; y++)
       {
         if (!progress || !progress->cancel_requested ())
@@ -3953,8 +3865,8 @@ protected:
               int color = GEOMETRY::demosaic_entry_color (x, y);
               if (color == ah_green)
                 {
-                  Green_H[y * w + x] = known (x, y);
-                  Green_V[y * w + x] = known (x, y);
+                  green_h[y * w + x] = known (x, y);
+                  green_v[y * w + x] = known (x, y);
                   continue;
                 }
 
@@ -3970,12 +3882,14 @@ protected:
               luminosity_t c02 = known (x, y + 2);
 
               luminosity_t gh = (g_10 + g10) * (luminosity_t)0.5
-                              + (2 * c00 - c_20 - c20) * (luminosity_t)0.25;
-              Green_H[y * w + x] = std::clamp(gh, std::min(g_10, g10), std::max(g_10, g10));
+                                + (2 * c00 - c_20 - c20) * (luminosity_t)0.25;
+              green_h[y * w + x] = std::clamp (gh, std::min (g_10, g10),
+                                               std::max (g_10, g10));
 
               luminosity_t gv = (g0_1 + g01) * (luminosity_t)0.5
-                              + (2 * c00 - c0_2 - c02) * (luminosity_t)0.25;
-              Green_V[y * w + x] = std::clamp(gv, std::min(g0_1, g01), std::max(g0_1, g01));
+                                + (2 * c00 - c0_2 - c02) * (luminosity_t)0.25;
+              green_v[y * w + x] = std::clamp (gv, std::min (g0_1, g01),
+                                               std::max (g0_1, g01));
             }
         if (progress)
           progress->inc_progress ();
@@ -3983,25 +3897,31 @@ protected:
     if (progress && progress->cancelled ())
       return false;
 
-    std::vector<rgbdata> RGB_H(w * h);
-    std::vector<rgbdata> RGB_V(w * h);
-    std::vector<cie_lab> LAB_H(w * h, cie_lab(xyz(0,0,0), srgb_white));
-    std::vector<cie_lab> LAB_V(w * h, cie_lab(xyz(0,0,0), srgb_white));
+    std::vector<rgbdata> rgb_h (w * h);
+    std::vector<rgbdata> rgb_v (w * h);
+    std::vector<cie_lab> lab_h (w * h, cie_lab (xyz (0, 0, 0), srgb_white));
+    std::vector<cie_lab> lab_v (w * h, cie_lab (xyz (0, 0, 0), srgb_white));
 
-#pragma omp parallel shared(progress, h, w, range, RGB_H, RGB_V, LAB_H, LAB_V, Green_H, Green_V, srgb_white) default(none)
+#pragma omp parallel shared(progress, h, w, range, rgb_h, rgb_v, lab_h,       \
+                                lab_v, green_h, green_v,                      \
+                                srgb_white) default(none)
     for (int y = 0; y < h; y++)
       {
         if (!progress || !progress->cancel_requested ())
           for (int x = 0; x < w; x++)
             {
               int idx = y * w + x;
-              RGB_H[idx][ah_green] = Green_H[idx];
-              RGB_H[idx][ah_red] = interp_dcraw<ah_green> (x, y, ah_red, Green_H, range);
-              RGB_H[idx][ah_blue] = interp_dcraw<ah_green> (x, y, ah_blue, Green_H, range);
+              rgb_h[idx][ah_green] = green_h[idx];
+              rgb_h[idx][ah_red]
+                  = interp_dcraw<ah_green> (x, y, ah_red, green_h, range);
+              rgb_h[idx][ah_blue]
+                  = interp_dcraw<ah_green> (x, y, ah_blue, green_h, range);
 
-              RGB_V[idx][ah_green] = Green_V[idx];
-              RGB_V[idx][ah_red] = interp_dcraw<ah_green> (x, y, ah_red, Green_V, range);
-              RGB_V[idx][ah_blue] = interp_dcraw<ah_green> (x, y, ah_blue, Green_V, range);
+              rgb_v[idx][ah_green] = green_v[idx];
+              rgb_v[idx][ah_red]
+                  = interp_dcraw<ah_green> (x, y, ah_red, green_v, range);
+              rgb_v[idx][ah_blue]
+                  = interp_dcraw<ah_green> (x, y, ah_blue, green_v, range);
             }
         if (progress)
           progress->inc_progress ();
@@ -4009,100 +3929,124 @@ protected:
     if (progress && progress->cancelled ())
       return false;
 
-#pragma omp parallel for shared(progress, h, w, range, RGB_H, RGB_V, LAB_H, LAB_V, srgb_white) default(none)
+#pragma omp parallel for shared(progress, h, w, range, rgb_h, rgb_v, lab_h,   \
+                                    lab_v, srgb_white) default(none)
     for (int i = 0; i < h * w; i++)
       {
-        xyz xyz_h = xyz::from_srgb (std::clamp((float)(RGB_H[i][ah_red] / range), 0.0f, 1.0f),
-                                    std::clamp((float)(RGB_H[i][ah_green] / range), 0.0f, 1.0f),
-                                    std::clamp((float)(RGB_H[i][ah_blue] / range), 0.0f, 1.0f));
-        LAB_H[i] = cie_lab (xyz_h, srgb_white);
+        xyz xyz_h = xyz::from_srgb (
+            std::clamp ((float)(rgb_h[i][ah_red] / range), 0.0f, 1.0f),
+            std::clamp ((float)(rgb_h[i][ah_green] / range), 0.0f, 1.0f),
+            std::clamp ((float)(rgb_h[i][ah_blue] / range), 0.0f, 1.0f));
+        lab_h[i] = cie_lab (xyz_h, srgb_white);
 
-        xyz xyz_v = xyz::from_srgb (std::clamp((float)(RGB_V[i][ah_red] / range), 0.0f, 1.0f),
-                                    std::clamp((float)(RGB_V[i][ah_green] / range), 0.0f, 1.0f),
-                                    std::clamp((float)(RGB_V[i][ah_blue] / range), 0.0f, 1.0f));
-        LAB_V[i] = cie_lab (xyz_v, srgb_white);
+        xyz xyz_v = xyz::from_srgb (
+            std::clamp ((float)(rgb_v[i][ah_red] / range), 0.0f, 1.0f),
+            std::clamp ((float)(rgb_v[i][ah_green] / range), 0.0f, 1.0f),
+            std::clamp ((float)(rgb_v[i][ah_blue] / range), 0.0f, 1.0f));
+        lab_v[i] = cie_lab (xyz_v, srgb_white);
       }
 
-    std::vector<int> homo_H (w * h, 0);
-    std::vector<int> homo_V (w * h, 0);
+    std::vector<int> homo_h (w * h, 0);
+    std::vector<int> homo_v (w * h, 0);
 
-#pragma omp parallel shared(progress, h, w, LAB_H, LAB_V, homo_H, homo_V) default(none)
+#pragma omp parallel shared(progress, h, w, lab_h, lab_v, homo_h,             \
+                                homo_v) default(none)
     for (int y = 0; y < h; y++)
       {
         if (!progress || !progress->cancel_requested ())
           for (int x = 0; x < w; x++)
             {
               int ldiff[2][4], abdiff[2][4];
-              int dirs[4][2] = { {-1, 0}, {1, 0}, {0, -1}, {0, 1} };
+              int dirs[4][2] = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } };
 
               for (int d = 0; d < 2; d++)
                 {
-                  const cie_lab& center = (d == 0) ? LAB_H[y * w + x] : LAB_V[y * w + x];
+                  const cie_lab &center
+                      = (d == 0) ? lab_h[y * w + x] : lab_v[y * w + x];
                   for (int i = 0; i < 4; i++)
                     {
-                      int nx = std::clamp((int)x + dirs[i][0], 0, w - 1);
-                      int ny = std::clamp((int)y + dirs[i][1], 0, h - 1);
-                      const cie_lab& neigh = (d == 0) ? LAB_H[ny * w + nx] : LAB_V[ny * w + nx];
-                      
-                      ldiff[d][i] = std::abs((int)(center.l * 100.0f) - (int)(neigh.l * 100.0f));
-                      abdiff[d][i] = ((int)(center.a * 100.0f) - (int)(neigh.a * 100.0f)) * ((int)(center.a * 100.0f) - (int)(neigh.a * 100.0f)) +
-                                     ((int)(center.b * 100.0f) - (int)(neigh.b * 100.0f)) * ((int)(center.b * 100.0f) - (int)(neigh.b * 100.0f));
+                      int nx = std::clamp ((int)x + dirs[i][0], 0, w - 1);
+                      int ny = std::clamp ((int)y + dirs[i][1], 0, h - 1);
+                      const cie_lab &neigh
+                          = (d == 0) ? lab_h[ny * w + nx] : lab_v[ny * w + nx];
+
+                      ldiff[d][i] = my_abs ((int)(center.l * 100.0f)
+                                            - (int)(neigh.l * 100.0f));
+                      abdiff[d][i] = ((int)(center.a * 100.0f)
+                                      - (int)(neigh.a * 100.0f))
+                                         * ((int)(center.a * 100.0f)
+                                            - (int)(neigh.a * 100.0f))
+                                     + ((int)(center.b * 100.0f)
+                                        - (int)(neigh.b * 100.0f))
+                                           * ((int)(center.b * 100.0f)
+                                              - (int)(neigh.b * 100.0f));
                     }
                 }
 
-              int leps = std::min(std::max(ldiff[0][0], ldiff[0][1]), std::max(ldiff[1][2], ldiff[1][3]));
-              int abeps = std::min(std::max(abdiff[0][0], abdiff[0][1]), std::max(abdiff[1][2], abdiff[1][3]));
+              int leps = std::min (std::max (ldiff[0][0], ldiff[0][1]),
+                                   std::max (ldiff[1][2], ldiff[1][3]));
+              int abeps = std::min (std::max (abdiff[0][0], abdiff[0][1]),
+                                    std::max (abdiff[1][2], abdiff[1][3]));
 
               for (int d = 0; d < 2; d++)
                 for (int i = 0; i < 4; i++)
                   if (ldiff[d][i] <= leps && abdiff[d][i] <= abeps)
                     {
-                      if (d == 0) homo_H[y * w + x]++;
-                      else homo_V[y * w + x]++;
+                      if (d == 0)
+                        homo_h[y * w + x]++;
+                      else
+                        homo_v[y * w + x]++;
                     }
             }
         if (progress)
           progress->inc_progress ();
       }
-      
+
     if (progress && progress->cancelled ())
       return false;
 
-#pragma omp parallel shared(progress, h, w, RGB_H, RGB_V, homo_H, homo_V) default(none)
+#pragma omp parallel shared(progress, h, w, rgb_h, rgb_v, homo_h,             \
+                                homo_v) default(none)
     for (int y = 0; y < h; y++)
       {
         if (!progress || !progress->cancel_requested ())
           for (int x = 0; x < w; x++)
             {
-              int hm_H = 0;
-              int hm_V = 0;
+              int hm_h = 0;
+              int hm_v = 0;
 
               for (int dy = -1; dy <= 1; dy++)
                 for (int dx = -1; dx <= 1; dx++)
                   {
                     int nx = std::clamp (x + dx, 0, w - 1);
                     int ny = std::clamp (y + dy, 0, h - 1);
-                    hm_H += homo_H[ny * w + nx];
-                    hm_V += homo_V[ny * w + nx];
+                    hm_h += homo_h[ny * w + nx];
+                    hm_v += homo_v[ny * w + nx];
                   }
 
-              if (hm_V > hm_H)
+              if (hm_v > hm_h)
                 {
-                  d (x, y)[ah_green] = RGB_V[y * w + x][ah_green];
-                  d (x, y)[ah_red]   = RGB_V[y * w + x][ah_red];
-                  d (x, y)[ah_blue]  = RGB_V[y * w + x][ah_blue];
+                  d (x, y)[ah_green] = rgb_v[y * w + x][ah_green];
+                  d (x, y)[ah_red] = rgb_v[y * w + x][ah_red];
+                  d (x, y)[ah_blue] = rgb_v[y * w + x][ah_blue];
                 }
-              else if (hm_H > hm_V)
+              else if (hm_h > hm_v)
                 {
-                  d (x, y)[ah_green] = RGB_H[y * w + x][ah_green];
-                  d (x, y)[ah_red]   = RGB_H[y * w + x][ah_red];
-                  d (x, y)[ah_blue]  = RGB_H[y * w + x][ah_blue];
+                  d (x, y)[ah_green] = rgb_h[y * w + x][ah_green];
+                  d (x, y)[ah_red] = rgb_h[y * w + x][ah_red];
+                  d (x, y)[ah_blue] = rgb_h[y * w + x][ah_blue];
                 }
               else
                 {
-                  d (x, y)[ah_green] = (RGB_H[y * w + x][ah_green] + RGB_V[y * w + x][ah_green]) * (luminosity_t)0.5;
-                  d (x, y)[ah_red]   = (RGB_H[y * w + x][ah_red] + RGB_V[y * w + x][ah_red]) * (luminosity_t)0.5;
-                  d (x, y)[ah_blue]  = (RGB_H[y * w + x][ah_blue] + RGB_V[y * w + x][ah_blue]) * (luminosity_t)0.5;
+                  d (x, y)[ah_green] = (rgb_h[y * w + x][ah_green]
+                                        + rgb_v[y * w + x][ah_green])
+                                       * (luminosity_t)0.5;
+                  d (x, y)[ah_red]
+                      = (rgb_h[y * w + x][ah_red] + rgb_v[y * w + x][ah_red])
+                        * (luminosity_t)0.5;
+                  d (x, y)[ah_blue]
+                      = (rgb_h[y * w + x][ah_blue] + rgb_v[y * w + x][ah_blue])
+                        * (luminosity_t)0.5;
                 }
             }
         if (progress)
@@ -4112,11 +4056,17 @@ protected:
     return !progress || !progress->cancelled ();
   }
 
+  /* Step 2 of the AHD algorithm (dcraw variant): interpolate red and blue
+     channels at positions where they are missing.
+     PROGRESS can be used to report progress and check for cancellation.
+     AH_GREEN is the dominating channel.
+     AH_RED is the red channel.
+     AH_BLUE is the blue channel.  */
   template <int ah_green, int ah_red, int ah_blue>
   bool
   ahd_interpolation_remaining_channels_dcraw (progress_info *progress)
   {
-      return !progress || !progress->cancelled ();
+    return !progress || !progress->cancelled ();
   }
 };
 
@@ -4124,7 +4074,8 @@ class demosaic_paget : public demosaic_base<paget_geometry>
 {
 public:
   bool
-  demosaic (analyze_paget *analyze, render *r, render_parameters::screen_demosaic_t alg, progress_info *progress)
+  demosaic (analyze_paget *analyze, render *r,
+            render_parameters::screen_demosaic_t alg, progress_info *progress)
   {
     if (!initialize (analyze))
       return false;
@@ -4133,45 +4084,50 @@ public:
     switch (alg)
       {
       case render_parameters::hamilton_adams_demosaic:
-	if (!hamiltom_adams_interpolation_dominating_channel<base_geometry::blue,
-							     true> (progress))
-	  return false;
-	if (!hamiltom_adams_interpolation_remaining_channels<
-		base_geometry::blue, base_geometry::red, base_geometry::green> (
-		progress))
-	  return false;
-	break;
+        if (!hamilton_adams_interpolation_dominating_channel<
+                base_geometry::blue, true> (progress))
+          return false;
+        if (!hamilton_adams_interpolation_remaining_channels<
+                base_geometry::blue, base_geometry::red,
+                base_geometry::green> (progress))
+          return false;
+        break;
       case render_parameters::ahd_demosaic:
-	//if (!ahd_interpolation_dominating_channel<base_geometry::blue, base_geometry::red, base_geometry::green, false, false> (progress))
-	  //return false;
-	if (!ahd_interpolation_dominating_channel_dcraw<base_geometry::blue, base_geometry::red, base_geometry::green> (progress))
-	  return false;
-	if (!ahd_interpolation_remaining_channels<
-		base_geometry::blue, base_geometry::red, base_geometry::green> (
-		progress))
-	  return false;
-	break;
+        // if (!ahd_interpolation_dominating_channel<base_geometry::blue,
+        // base_geometry::red, base_geometry::green, false, false> (progress))
+        // return false;
+        if (!ahd_interpolation_dominating_channel_dcraw<base_geometry::blue,
+                                                        base_geometry::red,
+                                                        base_geometry::green> (
+                progress))
+          return false;
+        if (!ahd_interpolation_remaining_channels<base_geometry::blue,
+                                                  base_geometry::red,
+                                                  base_geometry::green> (
+                progress))
+          return false;
+        break;
       case render_parameters::amaze_demosaic:
-	if (!amaze_interpolation<base_geometry::blue, base_geometry::red,
-				 base_geometry::green, true> (progress))
-	  return false;
-	break;
+        if (!amaze_interpolation<base_geometry::blue, base_geometry::red,
+                                 base_geometry::green, true> (progress))
+          return false;
+        break;
       case render_parameters::rcd_demosaic:
-	if (!rcd_interpolation<base_geometry::blue, base_geometry::red,
-			       base_geometry::green> (progress))
-	  return false;
-	break;
+        if (!rcd_interpolation<base_geometry::blue, base_geometry::red,
+                               base_geometry::green> (progress))
+          return false;
+        break;
       case render_parameters::lmmse_demosaic:
-	if (!lmmse_interpolation<base_geometry::blue, base_geometry::red,
-				 base_geometry::green> (progress))
-	  return false;
-	break;
+        if (!lmmse_interpolation<base_geometry::blue, base_geometry::red,
+                                 base_geometry::green> (progress))
+          return false;
+        break;
       default:
-	break;
+        break;
       }
     return true;
   }
 };
 
-}
+} // namespace colorscreen
 #endif
