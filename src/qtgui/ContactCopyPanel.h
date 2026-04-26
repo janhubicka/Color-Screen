@@ -18,6 +18,10 @@ public:
   ContactCopyPanel(StateGetter stateGetter, StateSetter stateSetter,
                 ImageGetter imageGetter, QWidget *parent = nullptr);
   ~ContactCopyPanel() override;
+  void updateUI() override;
+
+protected:
+  void showEvent(QShowEvent *event) override;
 
 signals:
   void detachHDCurveRequested(QWidget *widget);

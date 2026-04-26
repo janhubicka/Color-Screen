@@ -1,3 +1,4 @@
+#include <QShowEvent>
 #include "ContactCopyPanel.h"
 #include "HDCurveWidget.h"
 #include <QDoubleSpinBox>
@@ -31,6 +32,14 @@ ContactCopyPanel::~ContactCopyPanel() {
     m_workerThread.wait();
 }
 
+void ContactCopyPanel::updateUI() {
+    ParameterPanel::updateUI();
+}
+
+void ContactCopyPanel::showEvent(QShowEvent *event) {
+    ParameterPanel::showEvent(event);
+    updateUI();
+}
 void ContactCopyPanel::setupUi() {
   addCheckboxParameter(
       "Contact copy simulation",
