@@ -172,8 +172,8 @@ public:
 				       progress_info *progress = NULL,
 				       demosaicing_t demosaic = demosaic_default);
   /* Set dimensions of the image.  This can be used to produce image_data
-   * without loading it.  */
-  nodiscard_attr DLL_PUBLIC void set_dimensions (int w, int h, bool allocate_rgb = false,
+     without loading it.  */
+  nodiscard_attr DLL_PUBLIC bool set_dimensions (int w, int h, bool allocate_rgb = false,
 						 bool allocate_grayscale = false);
   DLL_PUBLIC bool save_tiff (const char *name, progress_info *progress = NULL);
 
@@ -188,7 +188,6 @@ public:
   xyY primary_red = { 0.6400, 0.3300, 0.2126 };
   xyY primary_green = { 0.3000, 0.6000, 0.7152 };
   xyY primary_blue = { 0.1500, 0.0600, 0.0722 };
-  xyz whitepoint = { 0.95047, 1.0, 1.08883 };
   std::shared_ptr<backlight_correction_parameters> backlight_corr = nullptr;
   DLL_PUBLIC void set_dpi (coord_t xdpi, coord_t ydpi);
   /* Gamma, -2 if unknown.  */

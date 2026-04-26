@@ -37,9 +37,9 @@ const property_t image_data::demosaic_names[(int)demosaic_max]
      = {
   { "default", "Default", "Automatically choose demosaicing algorithm" },
   { "half", "Reduce image size to half and avoid demosaicing", "" },
-  { "monochromatic", "Monochromatic", "" },
-  { "monochromatic_bayer_corrected", "Monochromatic with Bayer filter compensated." },
-  { "linear", "Linear interpolation", "" },
+  { "monochromatic", "Monochromatic", "Assume that every pixel in the RAW file represents intensity of a monochromatic capture (disable deosaicing completely)." },
+  { "monochromatic_bayer_corrected", "Monochromatic with Bayer filter compensated", "Many monochromatic captures are still done through Bayer filter or with camera that sitll do in-camera processing assuming the Bayer filter.  In this case Monochromataic demosaicing leads to regular checkerboard pattern that is eliminated by this mode" },
+  { "linear", "Linear interpolation", "Easiest demosaicing algorithm" },
   { "VNG", "Variable number of gradients interpolation (VNG)", "Variable number of gradients (VNG)[6] interpolation computes gradients near the pixel of interest and uses the lower gradients (representing smoother and more similar parts of the image) to make an estimate. It is used in first versions of dcraw, and suffers from color artifacts." },
   { "PPG", "Pixel grouping (PPG)", "Pixel grouping (PPG)[7] uses assumptions about natural scenery in making estimates. It has fewer color artifacts on natural images than the Variable Number of Gradients method." },
   { "AHD", "Adaptive homogeneity-directed (AHD)", "Adaptive homogeneity-directed (AHD) is widely used in the industry. It selects the direction of interpolation so as to maximize a homogeneity metric, thus typically minimizing color artifacts." },
@@ -1607,7 +1607,7 @@ image_data::has_grayscale_or_ir () const
 /* Set dimensions of the image to W x H.
    If ALLOCATE_RGB is true, allocate RGB data.
    If ALLOCATE_GRAYSCALE is true, allocate grayscale data.  */
-void
+bool
 image_data::set_dimensions (int w, int h, bool allocate_rgb,
                              bool allocate_grayscale)
 {
@@ -1622,7 +1622,7 @@ image_data::set_dimensions (int w, int h, bool allocate_rgb,
         {
           free (m_data);
           m_data = NULL;
-          return;
+          return false;
         }
     }
   if (allocate_rgb)
@@ -1634,10 +1634,12 @@ image_data::set_dimensions (int w, int h, bool allocate_rgb,
         {
           MapAlloc::Free (m_data);
           m_data = NULL;
+	  return false;
         }
     }
   own = true;
   maxval = 65535;
+  return true;
 }
 
 /* Save image to TIFF file FILENAME.  Intended mostly for debugging.
