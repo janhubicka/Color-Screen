@@ -328,23 +328,23 @@ struct getdata_params
 /* Helper for sharpening template for images with gray data with no correction.
    Fetch pixel from GRAYDATA at X, Y using parameters D.  */
 inline luminosity_t
-getdata_helper_no_correction (unsigned short **graydata, int_point_t p, int,
+getdata_helper_no_correction (unsigned short *graydata, int_point_t p, int,
                               getdata_params &d)
 {
   if (colorscreen_checking)
     assert (p.x >= 0 && p.x < d.width && p.y >= 0 && p.y < d.height);
-  return d.table[graydata[p.y][p.x]];
+  return d.table[*(graydata+p.y * (uint64_t)d.width + p.x)];
 }
 
 /* Helper for sharpening template for images with gray data with correction.
    Fetch pixel from GRAYDATA at X, Y using parameters D.  */
 inline luminosity_t
-getdata_helper_correction (unsigned short **graydata, int_point_t p, int,
+getdata_helper_correction (uint16_t *graydata, int_point_t p, int,
                            getdata_params &d)
 {
   if (colorscreen_checking)
     assert (p.x >= 0 && p.x < d.width && p.y >= 0 && p.y < d.height);
-  luminosity_t v = d.table[graydata[p.y][p.x]];
+  luminosity_t v = d.table[*(graydata+p.y * (uint64_t)d.width + p.x)];
   v = d.correction->apply (v, p.x, p.y, backlight_correction_parameters::ir);
   return v;
 }
@@ -389,29 +389,29 @@ get_new_gray_sharpened_data (gray_and_sharpen_params &p,
           if (p.sp.deconvolution_p ())
             {
               ok = deconvolve<luminosity_t, mem_luminosity_t,
-                                unsigned short **, getdata_params &,
+                                uint16_t *, getdata_params &,
                                 getdata_helper_correction> (
-                  out, (unsigned short **)p.gp.img->get_data_ptr (), d, p.gp.img->width, p.gp.img->height,
+                  out, (uint16_t *)p.gp.img->get_data_ptr (), d, p.gp.img->width, p.gp.img->height,
 		  p.sp, progress, true);
             }
           else
-            ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **,
+            ok = sharpen<luminosity_t, mem_luminosity_t, uint16_t *,
                          getdata_params &, getdata_helper_correction> (
-                out, (unsigned short **)p.gp.img->get_data_ptr (), d, p.gp.img->width, p.gp.img->height,
+                out, (uint16_t *)p.gp.img->get_data_ptr (), d, p.gp.img->width, p.gp.img->height,
                 p.sp.get_mode () == sharpen_parameters::none ? 0 : p.sp.usm_radius,
 	       	p.sp.usm_amount, progress);
         }
       else if (p.sp.deconvolution_p ())
         {
-          ok = deconvolve<luminosity_t, mem_luminosity_t, unsigned short **,
+          ok = deconvolve<luminosity_t, mem_luminosity_t, uint16_t *,
                            getdata_params &, getdata_helper_no_correction> (
-              out, (unsigned short **)p.gp.img->get_data_ptr (), d, p.gp.img->width, p.gp.img->height,
+              out, p.gp.img->get_data_ptr (), d, p.gp.img->width, p.gp.img->height,
 	      p.sp, progress, true);
         }
       else
-        ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **,
+        ok = sharpen<luminosity_t, mem_luminosity_t, uint16_t *,
                      getdata_params &, getdata_helper_no_correction> (
-            out, (unsigned short **)p.gp.img->get_data_ptr (), d, p.gp.img->width, p.gp.img->height,
+            out, p.gp.img->get_data_ptr (), d, p.gp.img->width, p.gp.img->height,
             p.sp.get_mode () == sharpen_parameters::none ? 0 : p.sp.usm_radius,
             p.sp.usm_amount, progress);
     }

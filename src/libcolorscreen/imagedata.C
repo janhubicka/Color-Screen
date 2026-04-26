@@ -246,13 +246,11 @@ image_data::~image_data ()
     return;
   if (m_data)
     {
-      MapAlloc::Free (*m_data);
-      free (m_data);
+      MapAlloc::Free (m_data);
     }
   if (m_rgbdata)
     {
-      MapAlloc::Free (*m_rgbdata);
-      free (m_rgbdata);
+      MapAlloc::Free (m_rgbdata);
     }
   /* if (backlight_corr)
     delete backlight_corr; */
@@ -286,51 +284,19 @@ image_data::allocate ()
 {
   if (allocate_grayscale ())
     {
-      assert (!m_data);
-      m_data = (gray **)malloc (sizeof (*m_data) * height);
-      if (!m_data)
-        return false;
-      m_data[0] = (gray *)MapAlloc::Alloc (width * height * sizeof (**m_data),
+      m_data = (gray *)MapAlloc::Alloc (width * (uint64_t) height * sizeof (*m_data),
                                           "grayscale data");
-      if (!m_data[0])
-        {
-          free (m_data);
-          m_data = NULL;
-          return false;
-        }
-      for (int i = 1; i < height; i++)
-        m_data[i] = m_data[0] + i * width;
     }
   if (allocate_rgb ())
     {
       assert (!m_rgbdata);
-      m_rgbdata = (pixel **)malloc (sizeof (*m_rgbdata) * height);
-      if (!m_rgbdata)
+      m_rgbdata = (pixel *)MapAlloc::Alloc (
+          width * (uint64_t) height * sizeof (*m_rgbdata), "RGB data");
+      if (!m_rgbdata && m_data)
         {
-          if (m_data)
-            {
-              MapAlloc::Free (*m_data);
-              free (m_data);
-            }
+          MapAlloc::Free (m_data);
           m_data = NULL;
-          return false;
         }
-      m_rgbdata[0] = (pixel *)MapAlloc::Alloc (
-          width * height * sizeof (**m_rgbdata), "RGB data");
-      if (!m_rgbdata[0])
-        {
-          if (m_data)
-            {
-              MapAlloc::Free (*m_data);
-              free (m_data);
-            }
-          m_data = NULL;
-          free (m_rgbdata);
-          m_rgbdata = NULL;
-          return false;
-        }
-      for (int i = 1; i < height; i++)
-        m_rgbdata[i] = m_rgbdata[0] + i * width;
     }
   own = true;
   return true;
@@ -661,7 +627,7 @@ jpg_image_data_loader::load_part (int *permille, const char **error,
 	image_data::gray *row = m_img->get_row (y);
 	if (row)
 	  for (int x = 0; x < width; x++)
-	    row[x] = m_img_buf[y * width + x];
+	    row[x] = m_img_buf[y * (uint64_t) width + x];
       }
   else
     for (int y = 0; y < height; y++)
@@ -670,9 +636,9 @@ jpg_image_data_loader::load_part (int *permille, const char **error,
 	if (row)
 	  for (int x = 0; x < width; x++)
 	    {
-	      row[x].r = m_img_buf[y * width * 3 + x * 3 + 0];
-	      row[x].g = m_img_buf[y * width * 3 + x * 3 + 1];
-	      row[x].b = m_img_buf[y * width * 3 + x * 3 + 2];
+	      row[x].r = m_img_buf[y * (uint64_t) width * 3 + x * 3 + 0];
+	      row[x].g = m_img_buf[y * (uint64_t) width * 3 + x * 3 + 1];
+	      row[x].b = m_img_buf[y * (uint64_t) width * 3 + x * 3 + 2];
 	    }
       }
   *permille = 1000;
@@ -1650,50 +1616,25 @@ image_data::set_dimensions (int w, int h, bool allocate_rgb,
   if (allocate_grayscale)
     {
       assert (!m_data);
-      m_data = (gray **)malloc (sizeof (*m_data) * height);
-      if (!m_data)
-        return;
-      m_data[0] = (gray *)MapAlloc::Alloc (width * height * sizeof (**m_data),
+      m_data = (gray *)MapAlloc::Alloc (width * height * sizeof (*m_data),
                                          "grayscale data");
-      if (!m_data[0])
+      if (!m_data)
         {
           free (m_data);
           m_data = NULL;
           return;
         }
-      for (int i = 1; i < height; i++)
-        m_data[i] = m_data[0] + i * width;
     }
   if (allocate_rgb)
     {
       assert (!m_rgbdata);
-      m_rgbdata = (pixel **)malloc (sizeof (*m_rgbdata) * height);
-      if (!m_rgbdata)
+      m_rgbdata = (pixel *)MapAlloc::Alloc (
+          width * height * sizeof (*m_rgbdata), "RGB data");
+      if (!m_rgbdata && m_data)
         {
-          if (m_data)
-            {
-              MapAlloc::Free (*m_data);
-              free (m_data);
-              m_data = NULL;
-            }
-          return;
+          MapAlloc::Free (m_data);
+          m_data = NULL;
         }
-      m_rgbdata[0] = (pixel *)MapAlloc::Alloc (
-          width * height * sizeof (**m_rgbdata), "RGB data");
-      if (!m_rgbdata[0])
-        {
-          if (m_data)
-            {
-              MapAlloc::Free (*m_data);
-              free (m_data);
-              m_data = NULL;
-            }
-          free (m_rgbdata);
-          m_rgbdata = NULL;
-          return;
-        }
-      for (int i = 1; i < height; i++)
-        m_rgbdata[i] = m_rgbdata[0] + i * width;
     }
   own = true;
   maxval = 65535;
@@ -2009,7 +1950,7 @@ jp2_image_data_loader::load_part (int *permille, const char **error,
 	  image_data::gray *row = m_img->get_row (y);
 	  if (row)
 	    for (int x = 0; x < width; x++)
-	      row[x] = l_image->comps[0].data[y * width + x];
+	      row[x] = l_image->comps[0].data[y * (uint64_t) width + x];
 	}
     }
   else if (l_image->numcomps == 3)
@@ -2020,9 +1961,9 @@ jp2_image_data_loader::load_part (int *permille, const char **error,
 	  if (row)
 	    for (int x = 0; x < width; x++)
 	      {
-		row[x].r = l_image->comps[0].data[y * width + x];
-		row[x].g = l_image->comps[1].data[y * width + x];
-		row[x].b = l_image->comps[2].data[y * width + x];
+		row[x].r = l_image->comps[0].data[y * (uint64_t) width + x];
+		row[x].g = l_image->comps[1].data[y * (uint64_t) width + x];
+		row[x].b = l_image->comps[2].data[y * (uint64_t) width + x];
 	      }
 	}
     }
@@ -2036,12 +1977,12 @@ jp2_image_data_loader::load_part (int *permille, const char **error,
 	    {
 	      if (rgbrow)
 		{
-		  rgbrow[x].r = l_image->comps[0].data[y * width + x];
-		  rgbrow[x].g = l_image->comps[1].data[y * width + x];
-		  rgbrow[x].b = l_image->comps[2].data[y * width + x];
+		  rgbrow[x].r = l_image->comps[0].data[y * (uint64_t) width + x];
+		  rgbrow[x].g = l_image->comps[1].data[y * (uint64_t) width + x];
+		  rgbrow[x].b = l_image->comps[2].data[y * (uint64_t) width + x];
 		}
 	      if (row)
-		row[x] = l_image->comps[3].data[y * width + x];
+		row[x] = l_image->comps[3].data[y * (uint64_t) width + x];
 	    }
 	}
     }
