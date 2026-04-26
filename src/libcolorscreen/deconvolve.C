@@ -246,8 +246,10 @@ deconvolution<T>::init (int thread_id)
 /* Apply the deconvolution kernel for given THREAD_ID.  */
 template <typename T>
 void
-deconvolution<T>::process_tile (int thread_id)
+deconvolution<T>::process_tile (int thread_id, progress_info *progress)
 {
+  if (progress && progress->cancelled ())
+    return false;
   if (m_supersample > 1)
     {
       for (int y = 0; y < m_tile_size; y++)
@@ -269,6 +271,8 @@ deconvolution<T>::process_tile (int thread_id)
 			 m_supersample, m_lanczos_kernels,
 			 lanczos_a);
         }
+      if (progress && progress->cancelled ())
+	return false;
     }
   if (taper_edges)
     {
@@ -362,6 +366,8 @@ deconvolution<T>::process_tile (int thread_id)
                           * m_weights[m_enlarged_tile_size - 1 - x]);
         }
     }
+  if (progress && progress->cancelled ())
+    return false;
 
   if (!m_richardson_lucy)
     {
@@ -393,6 +399,8 @@ deconvolution<T>::process_tile (int thread_id)
       T sigma = m_sigma;
       for (int iteration = 0; iteration < m_iterations; iteration++)
         {
+	  if (progress && progress->cancelled ())
+	    return false;
           /* Step A: Re-blur the current estimate.  */
 
           /* Blur current estimate to IN.  */
@@ -504,6 +512,8 @@ deconvolution<T>::process_tile (int thread_id)
   /* Bigger upscaling is unlikely to be useful.  */
   else if (m_supersample > 1)
     {
+      if (progress && progress->cancelled ())
+	return false;
       T scale = (T)1 / (T)(m_supersample * m_supersample);
       for (int y = m_border_size; y < m_tile_size - m_border_size; y++)
         for (int x = m_border_size; x < m_tile_size - m_border_size; x++)

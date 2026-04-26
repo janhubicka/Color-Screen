@@ -88,7 +88,7 @@ public:
   }
 
   /* Apply sharpening/blurring to the tile for given THREAD_ID.  */
-  void process_tile (int thread_id);
+  void process_tile (int thread_id, progress_info *progress);
 
 
 private:
@@ -242,7 +242,7 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
               py = std::clamp (py, 0, height - 1);
               d.put_pixel (id, xx, yy, getdata (data, {px, py}, width, param));
             }
-        d.process_tile (id);
+        d.process_tile (id, progress);
         for (int yy = 0; yy < d.get_basic_tile_size (); yy++)
           for (int xx = 0; xx < d.get_basic_tile_size (); xx++)
             if (y + yy < height && x + xx < width)
@@ -341,9 +341,9 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
               d.put_pixel (3 * id + 1, xx, yy, pixel.green);
               d.put_pixel (3 * id + 2, xx, yy, pixel.blue);
             }
-        d.process_tile (3 * id);
-        d.process_tile (3 * id + 1);
-        d.process_tile (3 * id + 2);
+        d.process_tile (3 * id, progress);
+        d.process_tile (3 * id + 1, progress);
+        d.process_tile (3 * id + 2, progress);
         for (int yy = 0; yy < d.get_basic_tile_size (); yy++)
           for (int xx = 0; xx < d.get_basic_tile_size (); xx++)
             if (y + yy < height && x + xx < width)
