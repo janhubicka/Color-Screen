@@ -2482,7 +2482,6 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Opening image", 0);
-  colorscreen::sub_task task(progress.get()); /* Keep so tasks are nested.  */
   addProgress(progress);
 
   std::shared_ptr<colorscreen::image_data> tempScan =
