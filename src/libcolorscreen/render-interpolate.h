@@ -104,7 +104,7 @@ public:
   /* Set original color mode. If PROFILED is true, apply profiling.  */
   void original_color (bool profiled)
   {
-    if (m_img.rgbdata)
+    if (m_img.has_rgb ())
       {
 	m_original_color = true;
 	if (profiled)

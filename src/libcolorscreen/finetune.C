@@ -3382,7 +3382,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   bool bw = fparams.flags & finetune_bw;
   bool verbose = fparams.flags & finetune_verbose;
 
-  if (!bw && !imgp[0]->rgbdata)
+  if (!bw && !imgp[0]->has_rgb ())
     bw = true;
 
   /* Determine tile to analyze.  */
@@ -3508,7 +3508,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
 	}
       //if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, rxmin, rymin, rxmax + 1, rymax + 1, !(fparams.flags & finetune_no_progress_report) ? progress : nullptr))
 #endif
-      if (bw && (rparam2.ignore_infrared || !imgp[0]->data))
+      if (bw && (rparam2.ignore_infrared || !imgp[0]->has_grayscale_or_ir ()))
         bw_is_simulated_infrared = true;
       if (!render.precompute_all (
               bw /*grayscale*/, false /*normalized*/,
@@ -3612,7 +3612,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
           int cur_tymin = std::min (std::max (y[tileid] - theight / 2, 0),
                                     imgp[tileid]->height - theight - 1)
                           & ~1;
-          if (bw && (rparam2.ignore_infrared || !imgp[tileid]->data))
+          if (bw && (rparam2.ignore_infrared || !imgp[tileid]->has_grayscale_or_ir ()))
             bw_is_simulated_infrared = true;
           /* FIXME: We only use render_to_scr since we eventually want to know
              pixel size. For stitched projects this is wrong.  */
@@ -4359,11 +4359,11 @@ render_screen (image_data &img, scr_to_img_parameters &param,
                 map.to_scr ({ x + (xx + 1) / (coord_t)(steps + 1),
                               y + (yy + 1) / (coord_t)(steps + 1) }));
         d *= (coord_t)1 / (coord_t)(steps * steps);
-        img.rgbdata[y][x] = {
+        img.put_rgb_pixel (x, y, {
           (unsigned short)(invert_gamma (d.red, rparam.gamma) * 65535),
           (unsigned short)(invert_gamma (d.green, rparam.gamma) * 65535),
           (unsigned short)(invert_gamma (d.blue, rparam.gamma) * 65535)
-        };
+        });
       }
 }
 } // namespace colorscreen

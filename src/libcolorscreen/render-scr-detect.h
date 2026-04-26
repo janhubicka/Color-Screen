@@ -251,13 +251,15 @@ public:
   pure_attr inline rgbdata fast_nonprecomputed_get_adjusted_pixel (int_point_t p) const
   {
     rgbdata d;
-    m_scr_detect.adjust_color (m_img.rgbdata[p.y][p.x].r, m_img.rgbdata[p.y][p.x].g, m_img.rgbdata[p.y][p.x].b, &d.red, &d.green, &d.blue);
+    image_data::pixel p_pixel = m_img.get_rgb_pixel (p.x, p.y);
+    m_scr_detect.adjust_color (p_pixel.r, p_pixel.g, p_pixel.b, &d.red, &d.green, &d.blue);
     return d;
   }
   pure_attr inline rgbdata fast_nonprecomputed_get_normalized_pixel (int_point_t p) const
   {
     rgbdata d;
-    m_scr_detect.adjust_color (m_img.rgbdata[p.y][p.x].r, m_img.rgbdata[p.y][p.x].g, m_img.rgbdata[p.y][p.x].b, &d.red, &d.green, &d.blue);
+    image_data::pixel p_pixel = m_img.get_rgb_pixel (p.x, p.y);
+    m_scr_detect.adjust_color (p_pixel.r, p_pixel.g, p_pixel.b, &d.red, &d.green, &d.blue);
     return normalize_color (d);
   }
   pure_attr inline rgbdata fast_get_adjusted_pixel (int_point_t p) const

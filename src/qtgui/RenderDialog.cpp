@@ -83,7 +83,7 @@ RenderDialog::RenderDialog(
         scrParams.type == colorscreen::Random)
       show = false;
     if ((prop.flags & render_type_property::NEEDS_RGB) &&
-        (!scan || !scan->rgbdata))
+        (!scan || !scan->has_rgb ()))
       show = false;
     if ((prop.flags & render_type_property::NEEDS_CORRECTION_PROFILE)
 	&& !rparams.has_correction_profile ())

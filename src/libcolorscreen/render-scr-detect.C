@@ -80,10 +80,13 @@ std::unique_ptr<color_class_map> get_color_class_map(color_class_params &p, prog
 				p.precomputed_rgbdata[y * img.width + x].blue));
 	  else
 	    for (int x = 0; x < img.width; x++)
-	      map->set_class (x, y,
-			      p.d->classify_color (img.rgbdata[y][x].r,
-						   img.rgbdata[y][x].g,
-						   img.rgbdata[y][x].b));
+	      {
+		image_data::pixel p_pixel = img.get_rgb_pixel (x, y);
+		map->set_class (x, y,
+				p.d->classify_color (p_pixel.r,
+						     p_pixel.g,
+						     p_pixel.b));
+	      }
 	}
        if (progress)
 	 progress->inc_progress ();

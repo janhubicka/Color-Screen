@@ -869,7 +869,7 @@ extern "C"
                 setvals ();
               }
           }
-        if (k == 'D' && scan.rgbdata)
+        if (k == 'D' && scan.has_rgb ())
           {
             save_parameters ();
             file_progress_info progress (stdout);
@@ -895,7 +895,7 @@ extern "C"
                 current.mesh_trans = current_mesh;
                 if (rparams.color_model == render_parameters::color_model_none)
                   rparams.auto_color_model (current.type);
-                if (!scan.data || rparams.ignore_infrared)
+                if (!scan.has_grayscale_or_ir () || rparams.ignore_infrared)
                   {
                     rparams.auto_mix_weights (
                         scan, current, { xmin, ymin, xmax - xmin, ymax - ymin },
@@ -1987,15 +1987,10 @@ extern "C"
                 setcolor = 0;
                 return;
               }
-            luminosity_t r
-                = scan.rgbdata[py][px].r / (luminosity_t)scan.maxval;
-            ;
-            luminosity_t g
-                = scan.rgbdata[py][px].g / (luminosity_t)scan.maxval;
-            ;
-            luminosity_t b
-                = scan.rgbdata[py][px].b / (luminosity_t)scan.maxval;
-            ;
+            image_data::pixel p_pixel = scan.get_rgb_pixel (px, py);
+            luminosity_t r = p_pixel.r / (luminosity_t)scan.maxval;
+            luminosity_t g = p_pixel.g / (luminosity_t)scan.maxval;
+            luminosity_t b = p_pixel.b / (luminosity_t)scan.maxval;
             if (setcolor == 1)
               {
                 current_scr_detect.black.red = r;

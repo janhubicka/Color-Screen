@@ -1179,7 +1179,10 @@ render_parameters::auto_mix_weights_using_ir (image_data &img,
 					      progress_info *progress)
 {
   area = area.intersect (img.get_area ());
-  if (!img.data || !img.rgbdata || area.empty_p ())
+  /* TODO: Implement for stitched projects.  */
+  if (img.stitch)
+    return false;
+  if (!img.has_grayscale_or_ir () || !img.has_rgb () || area.empty_p ())
     return false;
   int nvariables = 4;
   long nequations = ((long)area.width * area.height);
@@ -1195,9 +1198,6 @@ render_parameters::auto_mix_weights_using_ir (image_data &img,
   gsl_vector *w = gsl_vector_alloc (nequations);
   gsl_vector *c = gsl_vector_alloc (nvariables);
   gsl_matrix *cov = gsl_matrix_alloc (nvariables, nvariables);
-  /* TODO: Implement for stitched projects.  */
-  if (img.stitch)
-    return false;
 
   {
     if (progress)

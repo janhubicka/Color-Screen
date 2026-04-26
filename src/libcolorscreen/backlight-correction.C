@@ -62,9 +62,11 @@ backlight_correction_parameters::analyze_scan (image_data &scan,
   const int width = 111;
   const int height = 84;
   bool enabled[4] = { 0, 0, 0, 0 };
-  if (scan.data)
+  if (scan.stitch)
+    return NULL;
+  if (scan.has_grayscale_or_ir ())
     enabled[(int)ir] = true;
-  if (scan.rgbdata)
+  if (scan.has_rgb ())
     enabled[(int)red] = enabled[(int)green] = enabled[(int)blue] = true;
   std::shared_ptr <backlight_correction_parameters> ret
       = std::make_shared<backlight_correction_parameters> ();
@@ -89,13 +91,14 @@ backlight_correction_parameters::analyze_scan (image_data &scan,
 	    for (int yy = ystart; yy < ystart + ysize; yy++)
 	      for (int xx = xstart; xx < xstart + xsize; xx++)
 		{
-		  if (black->data)
-		    values[ir].push_back (black->data[yy][xx]);
-		  if (black->rgbdata)
+		  if (black->has_grayscale_or_ir ())
+		    values[ir].push_back (black->get_pixel (xx, yy));
+		  if (black->has_rgb ())
 		    {
-		      values[red].push_back (black->rgbdata[yy][xx].r);
-		      values[green].push_back (black->rgbdata[yy][xx].g);
-		      values[blue].push_back (black->rgbdata[yy][xx].b);
+		      image_data::pixel p = black->get_rgb_pixel (xx, yy);
+		      values[red].push_back (p.r);
+		      values[green].push_back (p.g);
+		      values[blue].push_back (p.b);
 		    }
 		}
 	    for (int i = 0; i < 4; i++)
@@ -140,13 +143,14 @@ backlight_correction_parameters::analyze_scan (image_data &scan,
         for (int yy = ystart; yy < ystart + ysize; yy++)
           for (int xx = xstart; xx < xstart + xsize; xx++)
             {
-              if (scan.data)
-                values[ir].push_back (scan.data[yy][xx]);
-              if (scan.rgbdata)
+              if (scan.has_grayscale_or_ir ())
+                values[ir].push_back (scan.get_pixel (xx, yy));
+              if (scan.has_rgb ())
                 {
-                  values[red].push_back (scan.rgbdata[yy][xx].r);
-                  values[green].push_back (scan.rgbdata[yy][xx].g);
-                  values[blue].push_back (scan.rgbdata[yy][xx].b);
+                  image_data::pixel p = scan.get_rgb_pixel (xx, yy);
+                  values[red].push_back (p.r);
+                  values[green].push_back (p.g);
+                  values[blue].push_back (p.b);
                 }
             }
         for (int i = 0; i < 4; i++)

@@ -60,7 +60,7 @@ public:
   void
   set_color_display ()
   {
-    if (m_img.rgbdata)
+    if (m_img.has_rgb ())
       m_color = 1;
   }
   bool get_color_data (rgbdata *data, point_t p, int width,

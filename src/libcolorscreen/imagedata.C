@@ -244,15 +244,15 @@ image_data::~image_data ()
     free (icc_profile);
   if (!own)
     return;
-  if (data)
+  if (m_data)
     {
-      MapAlloc::Free (*data);
-      free (data);
+      MapAlloc::Free (*m_data);
+      free (m_data);
     }
-  if (rgbdata)
+  if (m_rgbdata)
     {
-      MapAlloc::Free (*rgbdata);
-      free (rgbdata);
+      MapAlloc::Free (*m_rgbdata);
+      free (m_rgbdata);
     }
   /* if (backlight_corr)
     delete backlight_corr; */
@@ -286,51 +286,51 @@ image_data::allocate ()
 {
   if (allocate_grayscale ())
     {
-      assert (!data);
-      data = (gray **)malloc (sizeof (*data) * height);
-      if (!data)
+      assert (!m_data);
+      m_data = (gray **)malloc (sizeof (*m_data) * height);
+      if (!m_data)
         return false;
-      data[0] = (gray *)MapAlloc::Alloc (width * height * sizeof (**data),
-                                         "grayscale data");
-      if (!data[0])
+      m_data[0] = (gray *)MapAlloc::Alloc (width * height * sizeof (**m_data),
+                                          "grayscale data");
+      if (!m_data[0])
         {
-          free (data);
-          data = NULL;
+          free (m_data);
+          m_data = NULL;
           return false;
         }
       for (int i = 1; i < height; i++)
-        data[i] = data[0] + i * width;
+        m_data[i] = m_data[0] + i * width;
     }
   if (allocate_rgb ())
     {
-      assert (!rgbdata);
-      rgbdata = (pixel **)malloc (sizeof (*rgbdata) * height);
-      if (!rgbdata)
+      assert (!m_rgbdata);
+      m_rgbdata = (pixel **)malloc (sizeof (*m_rgbdata) * height);
+      if (!m_rgbdata)
         {
-          if (data)
+          if (m_data)
             {
-              MapAlloc::Free (*data);
-              free (data);
+              MapAlloc::Free (*m_data);
+              free (m_data);
             }
-          data = NULL;
+          m_data = NULL;
           return false;
         }
-      rgbdata[0] = (pixel *)MapAlloc::Alloc (
-          width * height * sizeof (**rgbdata), "RGB data");
-      if (!rgbdata[0])
+      m_rgbdata[0] = (pixel *)MapAlloc::Alloc (
+          width * height * sizeof (**m_rgbdata), "RGB data");
+      if (!m_rgbdata[0])
         {
-          if (data)
+          if (m_data)
             {
-              MapAlloc::Free (*data);
-              free (data);
+              MapAlloc::Free (*m_data);
+              free (m_data);
             }
-          data = NULL;
-          free (rgbdata);
-          rgbdata = NULL;
+          m_data = NULL;
+          free (m_rgbdata);
+          m_rgbdata = NULL;
           return false;
         }
       for (int i = 1; i < height; i++)
-        rgbdata[i] = rgbdata[0] + i * width;
+        m_rgbdata[i] = m_rgbdata[0] + i * width;
     }
   own = true;
   return true;
@@ -456,8 +456,8 @@ tiff_image_data_loader::load_part (int *permille, const char **error,
     {
       uint32_t row = m_row;
       uint32_t w = m_img->width;
-      image_data::gray **data = m_img->data;
-      image_data::pixel **rgbdata = m_img->rgbdata;
+      image_data::gray *data = m_img->get_row (row);
+      image_data::pixel *rgbdata = m_img->get_rgb_row (row);
 
       if (debug)
         printf ("Decoding scanline %i\n", row);
@@ -469,55 +469,67 @@ tiff_image_data_loader::load_part (int *permille, const char **error,
       if (m_bitspersample == 8 && m_samples == 1)
         {
           uint8_t *buf2 = (uint8_t *)m_buf;
-          for (uint32_t x = 0; x < w; x++)
-            data[row][x] = buf2[x];
+          if (data)
+            for (uint32_t x = 0; x < w; x++)
+              data[x] = buf2[x];
         }
       else if (m_bitspersample == 8 && m_samples == 3)
         {
           uint8_t *buf2 = (uint8_t *)m_buf;
-          for (uint32_t x = 0; x < w; x++)
-            {
-              rgbdata[row][x].r = buf2[3 * x + 0];
-              rgbdata[row][x].g = buf2[3 * x + 1];
-              rgbdata[row][x].b = buf2[3 * x + 2];
-            }
+          if (rgbdata)
+            for (uint32_t x = 0; x < w; x++)
+              {
+                rgbdata[x].r = buf2[3 * x + 0];
+                rgbdata[x].g = buf2[3 * x + 1];
+                rgbdata[x].b = buf2[3 * x + 2];
+              }
         }
       else if (m_bitspersample == 8 && m_samples == 4)
         {
           uint8_t *buf2 = (uint8_t *)m_buf;
           for (uint32_t x = 0; x < w; x++)
             {
-              rgbdata[row][x].r = buf2[4 * x + 0];
-              rgbdata[row][x].g = buf2[4 * x + 1];
-              rgbdata[row][x].b = buf2[4 * x + 2];
-              data[row][x] = buf2[4 * x + 3];
+              if (rgbdata)
+                {
+                  rgbdata[x].r = buf2[4 * x + 0];
+                  rgbdata[x].g = buf2[4 * x + 1];
+                  rgbdata[x].b = buf2[4 * x + 2];
+                }
+              if (data)
+                data[x] = buf2[4 * x + 3];
             }
         }
       else if (m_bitspersample == 16 && m_samples == 1)
         {
           uint16_t *buf2 = (uint16_t *)m_buf;
-          for (uint32_t x = 0; x < w; x++)
-            data[row][x] = buf2[x];
+          if (data)
+            for (uint32_t x = 0; x < w; x++)
+              data[x] = buf2[x];
         }
       else if (m_bitspersample == 16 && m_samples == 3)
         {
           uint16_t *buf2 = (uint16_t *)m_buf;
-          for (uint32_t x = 0; x < w; x++)
-            {
-              rgbdata[row][x].r = buf2[3 * x + 0];
-              rgbdata[row][x].g = buf2[3 * x + 1];
-              rgbdata[row][x].b = buf2[3 * x + 2];
-            }
+          if (rgbdata)
+            for (uint32_t x = 0; x < w; x++)
+              {
+                rgbdata[x].r = buf2[3 * x + 0];
+                rgbdata[x].g = buf2[3 * x + 1];
+                rgbdata[x].b = buf2[3 * x + 2];
+              }
         }
       else if (m_bitspersample == 16 && m_samples == 4)
         {
           uint16_t *buf2 = (uint16_t *)m_buf;
           for (uint32_t x = 0; x < w; x++)
             {
-              rgbdata[row][x].r = buf2[4 * x + 0];
-              rgbdata[row][x].g = buf2[4 * x + 1];
-              rgbdata[row][x].b = buf2[4 * x + 2];
-              data[row][x] = buf2[4 * x + 3];
+              if (rgbdata)
+                {
+                  rgbdata[x].r = buf2[4 * x + 0];
+                  rgbdata[x].g = buf2[4 * x + 1];
+                  rgbdata[x].b = buf2[4 * x + 2];
+                }
+              if (data)
+                data[x] = buf2[4 * x + 3];
             }
         }
       else
@@ -643,21 +655,26 @@ jpg_image_data_loader::load_part (int *permille, const char **error,
 {
   int width = m_img->width;
   int height = m_img->height;
-  image_data::gray **data = m_img->data;
-  image_data::pixel **rgbdata = m_img->rgbdata;
-
   if (!rgb)
     for (int y = 0; y < height; y++)
-      for (int x = 0; x < width; x++)
-        data[y][x] = m_img_buf[y * width + x];
+      {
+	image_data::gray *row = m_img->get_row (y);
+	if (row)
+	  for (int x = 0; x < width; x++)
+	    row[x] = m_img_buf[y * width + x];
+      }
   else
     for (int y = 0; y < height; y++)
-      for (int x = 0; x < width; x++)
-        {
-          rgbdata[y][x].r = m_img_buf[y * width * 3 + x * 3 + 0];
-          rgbdata[y][x].g = m_img_buf[y * width * 3 + x * 3 + 1];
-          rgbdata[y][x].b = m_img_buf[y * width * 3 + x * 3 + 2];
-        }
+      {
+	image_data::pixel *row = m_img->get_rgb_row (y);
+	if (row)
+	  for (int x = 0; x < width; x++)
+	    {
+	      row[x].r = m_img_buf[y * width * 3 + x * 3 + 0];
+	      row[x].g = m_img_buf[y * width * 3 + x * 3 + 1];
+	      row[x].b = m_img_buf[y * width * 3 + x * 3 + 2];
+	    }
+      }
   *permille = 1000;
   return true;
 }
@@ -1076,37 +1093,48 @@ raw_image_data_loader::load_part (int *permille, const char **error,
 #pragma omp parallel for default(none)                                        \
     shared(m_img, m_processor, bscale, rscale)
       for (int y = 0; y < m_img->height; y++)
-        for (int x = 0; x < m_img->width; x++)
-          {
-            int i = y * m_img->width + x;
-            m_img->data[y][x] = std::clamp (
-                m_processor->imgdata.image[i][0] * rscale
-                    + m_processor->imgdata.image[i][1]
-                    + m_processor->imgdata.image[i][2] * bscale + (float)0.5,
-                (float)0, (float)65535);
-          }
+	{
+	  image_data::gray *row = m_img->get_row (y);
+	  if (row)
+	    for (int x = 0; x < m_img->width; x++)
+	      {
+		int i = y * m_img->width + x;
+		row[x] = std::clamp (
+		    m_processor->imgdata.image[i][0] * rscale
+			+ m_processor->imgdata.image[i][1]
+			+ m_processor->imgdata.image[i][2] * bscale + (float)0.5,
+		    (float)0, (float)65535);
+	      }
+	}
     }
-  else if (m_img->rgbdata)
+  else if (m_img->has_rgb ())
     {
 #pragma omp parallel for default(none) shared(m_img, m_processor)
       for (int y = 0; y < m_img->height; y++)
-        for (int x = 0; x < m_img->width; x++)
-          {
-            int i = y * m_img->width + x;
-            m_img->rgbdata[y][x].r = m_processor->imgdata.image[i][0];
-            m_img->rgbdata[y][x].g = m_processor->imgdata.image[i][1];
-            m_img->rgbdata[y][x].b = m_processor->imgdata.image[i][2];
-          }
+	{
+	  image_data::pixel *row = m_img->get_rgb_row (y);
+	  if (row)
+	    for (int x = 0; x < m_img->width; x++)
+	      {
+		int i = y * m_img->width + x;
+		row[x].r = m_processor->imgdata.image[i][0];
+		row[x].g = m_processor->imgdata.image[i][1];
+		row[x].b = m_processor->imgdata.image[i][2];
+	      }
+	}
     }
   else
     {
 #pragma omp parallel for default(none) shared(m_img, m_processor)
       for (int y = 0; y < m_img->height; y++)
-        for (int x = 0; x < m_img->width; x++)
-          {
-            int i = y * m_img->width + x;
-            m_img->data[y][x] = m_processor->imgdata.image[i][0];
-          }
+	{
+	  image_data::gray *row = m_img->get_row (y);
+	  for (int x = 0; x < m_img->width; x++)
+	    {
+	      int i = y * m_img->width + x;
+	      row[x] = m_processor->imgdata.image[i][0];
+	    }
+	}
     }
   *permille = 1000;
   return true;
@@ -1598,7 +1626,7 @@ image_data::has_rgb () const
 {
   if (stitch)
     return stitch->images[0][0].img->has_rgb ();
-  return rgbdata != NULL;
+  return m_rgbdata != NULL;
 }
 
 /* Return true if the image has grayscale or infrared data.  */
@@ -1607,7 +1635,7 @@ image_data::has_grayscale_or_ir () const
 {
   if (stitch)
     return stitch->images[0][0].img->has_grayscale_or_ir ();
-  return data != NULL;
+  return m_data != NULL;
 }
 
 /* Set dimensions of the image to W x H.
@@ -1615,53 +1643,57 @@ image_data::has_grayscale_or_ir () const
    If ALLOCATE_GRAYSCALE is true, allocate grayscale data.  */
 void
 image_data::set_dimensions (int w, int h, bool allocate_rgb,
-                            bool allocate_grayscale)
+                             bool allocate_grayscale)
 {
   width = w;
   height = h;
   if (allocate_grayscale)
     {
-      assert (!data);
-      data = (gray **)malloc (sizeof (*data) * height);
-      if (!data)
+      assert (!m_data);
+      m_data = (gray **)malloc (sizeof (*m_data) * height);
+      if (!m_data)
         return;
-      data[0] = (gray *)MapAlloc::Alloc (width * height * sizeof (**data),
+      m_data[0] = (gray *)MapAlloc::Alloc (width * height * sizeof (**m_data),
                                          "grayscale data");
-      if (!data[0])
+      if (!m_data[0])
         {
-          free (data);
-          data = NULL;
+          free (m_data);
+          m_data = NULL;
           return;
         }
       for (int i = 1; i < height; i++)
-        data[i] = data[0] + i * width;
+        m_data[i] = m_data[0] + i * width;
     }
   if (allocate_rgb)
     {
-      assert (!rgbdata);
-      rgbdata = (pixel **)malloc (sizeof (*rgbdata) * height);
-      if (!rgbdata)
+      assert (!m_rgbdata);
+      m_rgbdata = (pixel **)malloc (sizeof (*m_rgbdata) * height);
+      if (!m_rgbdata)
         {
-          free (*data);
-          if (data)
-            free (data);
-          data = NULL;
+          if (m_data)
+            {
+              MapAlloc::Free (*m_data);
+              free (m_data);
+              m_data = NULL;
+            }
           return;
         }
-      rgbdata[0] = (pixel *)MapAlloc::Alloc (
-          width * height * sizeof (**rgbdata), "RGB data");
-      if (!rgbdata[0])
+      m_rgbdata[0] = (pixel *)MapAlloc::Alloc (
+          width * height * sizeof (**m_rgbdata), "RGB data");
+      if (!m_rgbdata[0])
         {
-          free (*data);
-          if (data)
-            free (data);
-          data = NULL;
-          free (rgbdata);
-          rgbdata = NULL;
+          if (m_data)
+            {
+              MapAlloc::Free (*m_data);
+              free (m_data);
+              m_data = NULL;
+            }
+          free (m_rgbdata);
+          m_rgbdata = NULL;
           return;
         }
       for (int i = 1; i < height; i++)
-        rgbdata[i] = rgbdata[0] + i * width;
+        m_rgbdata[i] = m_rgbdata[0] + i * width;
     }
   own = true;
   maxval = 65535;
@@ -1692,8 +1724,11 @@ image_data::save_tiff (const char *filename, progress_info *progress)
     progress->set_task ("Writing tiff file", height);
   for (int y = 0; y < height; y++)
     {
-      for (int x = 0; x < height; x++)
-        out.put_pixel (x, rgbdata[y][x].r, rgbdata[y][x].g, rgbdata[y][x].b);
+      for (int x = 0; x < width; x++)
+        {
+          image_data::pixel p = get_rgb_pixel (x, y);
+          out.put_pixel (x, p.r, p.g, p.b);
+        }
       if (!out.write_rows (progress))
         return false;
       if (progress && progress->cancel_requested ())
@@ -1970,29 +2005,45 @@ jp2_image_data_loader::load_part (int *permille, const char **error,
   if (l_image->numcomps == 1)
     {
       for (int y = 0; y < height; y++)
-        for (int x = 0; x < width; x++)
-          m_img->data[y][x] = l_image->comps[0].data[y * width + x];
+	{
+	  image_data::gray *row = m_img->get_row (y);
+	  if (row)
+	    for (int x = 0; x < width; x++)
+	      row[x] = l_image->comps[0].data[y * width + x];
+	}
     }
   else if (l_image->numcomps == 3)
     {
       for (int y = 0; y < height; y++)
-        for (int x = 0; x < width; x++)
-          {
-            m_img->rgbdata[y][x].r = l_image->comps[0].data[y * width + x];
-            m_img->rgbdata[y][x].g = l_image->comps[1].data[y * width + x];
-            m_img->rgbdata[y][x].b = l_image->comps[2].data[y * width + x];
-          }
+	{
+	  image_data::pixel *row = m_img->get_rgb_row (y);
+	  if (row)
+	    for (int x = 0; x < width; x++)
+	      {
+		row[x].r = l_image->comps[0].data[y * width + x];
+		row[x].g = l_image->comps[1].data[y * width + x];
+		row[x].b = l_image->comps[2].data[y * width + x];
+	      }
+	}
     }
   else if (l_image->numcomps == 4)
     {
       for (int y = 0; y < height; y++)
-        for (int x = 0; x < width; x++)
-          {
-            m_img->rgbdata[y][x].r = l_image->comps[0].data[y * width + x];
-            m_img->rgbdata[y][x].g = l_image->comps[1].data[y * width + x];
-            m_img->rgbdata[y][x].b = l_image->comps[2].data[y * width + x];
-            m_img->data[y][x] = l_image->comps[3].data[y * width + x];
-          }
+	{
+	  image_data::pixel *rgbrow = m_img->get_rgb_row (y);
+	  image_data::gray *row = m_img->get_row (y);
+	  for (int x = 0; x < width; x++)
+	    {
+	      if (rgbrow)
+		{
+		  rgbrow[x].r = l_image->comps[0].data[y * width + x];
+		  rgbrow[x].g = l_image->comps[1].data[y * width + x];
+		  rgbrow[x].b = l_image->comps[2].data[y * width + x];
+		}
+	      if (row)
+		row[x] = l_image->comps[3].data[y * width + x];
+	    }
+	}
     }
 
   opj_image_destroy (l_image);
@@ -2143,17 +2194,20 @@ png_image_data_loader::load_part (int *permille, const char **error,
       int channels = png_get_channels (png_ptr, info_ptr);
       for (int y = 0; y < height; y++)
         {
+	  image_data::gray *dest_row = m_img->get_row (y);
           if (bit_depth == 16)
             {
               unsigned short *row = (unsigned short *)row_pointers[y];
-              for (int x = 0; x < width; x++)
-                m_img->data[y][x] = row[x * channels];
+	      if (dest_row)
+		for (int x = 0; x < width; x++)
+		  dest_row[x] = row[x * channels];
             }
           else
             {
               png_bytep row = row_pointers[y];
-              for (int x = 0; x < width; x++)
-                m_img->data[y][x] = row[x * channels];
+	      if (dest_row)
+		for (int x = 0; x < width; x++)
+		  dest_row[x] = row[x * channels];
             }
         }
     }
@@ -2163,25 +2217,28 @@ png_image_data_loader::load_part (int *permille, const char **error,
       int channels = png_get_channels (png_ptr, info_ptr);
       for (int y = 0; y < height; y++)
         {
+	  image_data::pixel *dest_row = m_img->get_rgb_row (y);
           if (bit_depth == 16)
             {
               unsigned short *row = (unsigned short *)row_pointers[y];
-              for (int x = 0; x < width; x++)
-                {
-                  m_img->rgbdata[y][x].r = row[x * channels];
-                  m_img->rgbdata[y][x].g = row[x * channels + 1];
-                  m_img->rgbdata[y][x].b = row[x * channels + 2];
-                }
+	      if (dest_row)
+		for (int x = 0; x < width; x++)
+		  {
+		    dest_row[x].r = row[x * channels];
+		    dest_row[x].g = row[x * channels + 1];
+		    dest_row[x].b = row[x * channels + 2];
+		  }
             }
           else
             {
               png_bytep row = row_pointers[y];
-              for (int x = 0; x < width; x++)
-                {
-                  m_img->rgbdata[y][x].r = row[x * channels];
-                  m_img->rgbdata[y][x].g = row[x * channels + 1];
-                  m_img->rgbdata[y][x].b = row[x * channels + 2];
-                }
+	      if (dest_row)
+		for (int x = 0; x < width; x++)
+		  {
+		    dest_row[x].r = row[x * channels];
+		    dest_row[x].g = row[x * channels + 1];
+		    dest_row[x].b = row[x * channels + 2];
+		  }
             }
         }
     }

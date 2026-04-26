@@ -72,7 +72,7 @@ stitch_image::load_part (int *permille, const char **error, progress_info *progr
 	img->xdpi = m_prj->params.scan_xdpi;
       if (m_prj->params.scan_ydpi && !img->ydpi)
 	img->ydpi = m_prj->params.scan_ydpi;
-      if (!img->rgbdata)
+      if (!img->has_rgb ())
 	{
 	  *error = "source image is not having color channels";
 	  img = NULL;
@@ -958,14 +958,16 @@ stitch_image::compare_contrast_with (stitch_image &other, progress_info *progres
 	  int xx = x + x1 - range / 2;
 	  if (yy >= 0 && yy < img->height && xx >= 0 && xx <= img->width)
 	    {
-	      outrow[x*3] = img->rgbdata[yy][xx].r;
-	      outrow[x*3+1] = img->rgbdata[yy][xx].g;
-	      outrow[x*3+2] = img->rgbdata[yy][xx].b;
+	      image_data::pixel p_pixel = img->get_rgb_pixel (xx, yy);
+	      outrow[x*3] = p_pixel.r;
+	      outrow[x*3+1] = p_pixel.g;
+	      outrow[x*3+2] = p_pixel.b;
 	      if (x < range/2)
 		{
-		  outrow[range * 6 + x*3] = img->rgbdata[yy][xx].r;
-		  outrow[range * 6 + x*3+1] = img->rgbdata[yy][xx].g;
-		  outrow[range * 6 + x*3+2] = img->rgbdata[yy][xx].b;
+		  image_data::pixel p_pixel = img->get_rgb_pixel (xx, yy);
+		  outrow[range * 6 + x*3] = p_pixel.r;
+		  outrow[range * 6 + x*3+1] = p_pixel.g;
+		  outrow[range * 6 + x*3+2] = p_pixel.b;
 		}
 	    }
 	  else
@@ -984,14 +986,16 @@ stitch_image::compare_contrast_with (stitch_image &other, progress_info *progres
 	  xx = x + x2 - range / 2;
 	  if (yy >= 0 && yy < other.img->height && xx >= 0 && xx <= other.img->width)
 	    {
-	      outrow[range * 3 + x*3] = other.img->rgbdata[yy][xx].r;
-	      outrow[range * 3 + x*3+1] = other.img->rgbdata[yy][xx].g;
-	      outrow[range * 3 + x*3+2] = other.img->rgbdata[yy][xx].b;
+	      image_data::pixel p_pixel = other.img->get_rgb_pixel (xx, yy);
+	      outrow[range * 3 + x*3] = p_pixel.r;
+	      outrow[range * 3 + x*3+1] = p_pixel.g;
+	      outrow[range * 3 + x*3+2] = p_pixel.b;
 	      if (x >= range/2)
 		{
-		  outrow[range * 6 + x*3] = other.img->rgbdata[yy][xx].r;
-		  outrow[range * 6 + x*3+1] = other.img->rgbdata[yy][xx].g;
-		  outrow[range * 6 + x*3+2] = other.img->rgbdata[yy][xx].b;
+		  image_data::pixel p_pixel = other.img->get_rgb_pixel (xx, yy);
+		  outrow[range * 6 + x*3] = p_pixel.r;
+		  outrow[range * 6 + x*3+1] = p_pixel.g;
+		  outrow[range * 6 + x*3+2] = p_pixel.b;
 		}
 	    }
 	  else
@@ -1370,14 +1374,14 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
 		    && other.load_img (error, progress))
 		  {
 		    render1 = new render (*img, rparams, 255);
-		    if (!render1->precompute_all (img->data != NULL, false, {1.0/3.0, 1.0/3.0, 1.0/3.0}, progress))
+		    if (!render1->precompute_all (img->has_grayscale_or_ir (), false, {1.0/3.0, 1.0/3.0, 1.0/3.0}, progress))
 		      {
 			*error = "precomputation failed";
 			delete render1;
 			render1 = 0;
 		      }
 		    render2 = new render (*other.img, rparams, 255);
-		    if (!render2->precompute_all (img->data != NULL, false, {1.0/3.0, 1.0/3.0, 1.0/3.0}, progress))
+		    if (!render2->precompute_all (img->has_grayscale_or_ir (), false, {1.0/3.0, 1.0/3.0, 1.0/3.0}, progress))
 		      {
 			*error = "precomputation failed";
 			delete render1;
@@ -1389,7 +1393,7 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
 	    if (!render2)
 	      break;
 	    struct common_sample sample = {(coord_t)xx,(coord_t)yy,imgp.x,imgp.y,{0,0,0,0},{0,0,0,0},weight};
-	    if (img->rgbdata)
+	    if (img->has_rgb ())
 	      {
 		rgbdata d1 =  sample_image_area (img.get (), render1, xx, yy, range);
 		rgbdata d2 =  sample_image_area (other.img.get (), render2, imgp.x, imgp.y, range);
@@ -1402,7 +1406,7 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
 		sample.channel2[2] = d2.blue;
 	      }
 	    /* Implement collection of IR channel.  */
-	    if (img->data)
+	    if (img->has_grayscale_or_ir ())
 	      abort ();
 #pragma omp critical
 	     samples.push_back (sample);

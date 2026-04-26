@@ -148,9 +148,10 @@ public:
   {
     if (colorscreen_checking)
       assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
-    rgbdata d = {m_rgb_lookup_table [0][m_img.rgbdata[p.y][p.x].r],
-		 m_rgb_lookup_table [1][m_img.rgbdata[p.y][p.x].g],
-		 m_rgb_lookup_table [2][m_img.rgbdata[p.y][p.x].b]};
+    image_data::pixel pxl = m_img.get_rgb_pixel (p.x, p.y);
+    rgbdata d = {m_rgb_lookup_table [0][pxl.r],
+		 m_rgb_lookup_table [1][pxl.g],
+		 m_rgb_lookup_table [2][pxl.b]};
     return d;
   }
 
@@ -274,7 +275,7 @@ protected:
   std::shared_ptr<class sharpened_data> m_sharpened_data_holder = nullptr;
 
   /* Maximal value in M_IMG.  */
-  int m_maxval = m_img.data ? m_img.maxval : 65535;
+  int m_maxval = m_img.has_grayscale_or_ir () ? m_img.maxval : 65535;
 
   /* Translates input rgb channel values into normalized range.  */
   std::shared_ptr<luminosity_t[]> m_rgb_lookup_table[3];
@@ -323,7 +324,7 @@ render::get_linearized_data_red (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
     assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
-  return m_rgb_lookup_table [0][m_img.rgbdata[p.y][p.x].r];
+  return m_rgb_lookup_table [0][m_img.get_rgb_pixel (p.x, p.y).r];
 }
 
 /* Get linearized green channel value at index X, Y.  */
@@ -332,7 +333,7 @@ render::get_linearized_data_green (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
     assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
-  return m_rgb_lookup_table [1][m_img.rgbdata[p.y][p.x].g];
+  return m_rgb_lookup_table [1][m_img.get_rgb_pixel (p.x, p.y).g];
 }
 
 /* Get linearized blue channel value at index X, Y.  */
@@ -341,7 +342,7 @@ render::get_linearized_data_blue (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
     assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
-  return m_rgb_lookup_table [2][m_img.rgbdata[p.y][p.x].b];
+  return m_rgb_lookup_table [2][m_img.get_rgb_pixel (p.x, p.y).b];
 }
 
 /* Get sharpened red channel value at index X, Y.  */
@@ -350,7 +351,7 @@ render::get_data_red (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
     assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
-  luminosity_t v = m_rgb_lookup_table [0][m_img.rgbdata[p.y][p.x].r];
+  luminosity_t v = m_rgb_lookup_table [0][m_img.get_rgb_pixel (p.x, p.y).r];
   if (m_backlight_correction)
     v = m_backlight_correction->apply (v, p.x, p.y, backlight_correction_parameters::red, true);
   v = (v - m_params.dark_point) * m_params.scan_exposure;
@@ -363,7 +364,7 @@ render::get_data_green (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
     assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
-  luminosity_t v = m_rgb_lookup_table [1][m_img.rgbdata[p.y][p.x].g];
+  luminosity_t v = m_rgb_lookup_table [1][m_img.get_rgb_pixel (p.x, p.y).g];
   if (m_backlight_correction)
     v = m_backlight_correction->apply (v, p.x, p.y, backlight_correction_parameters::green, true);
   v = (v - m_params.dark_point) * m_params.scan_exposure;
@@ -376,7 +377,7 @@ render::get_data_blue (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
     assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
-  luminosity_t v = m_rgb_lookup_table [2][m_img.rgbdata[p.y][p.x].b];
+  luminosity_t v = m_rgb_lookup_table [2][m_img.get_rgb_pixel (p.x, p.y).b];
   if (m_backlight_correction)
     v = m_backlight_correction->apply (v, p.x, p.y, backlight_correction_parameters::blue, true);
   v = (v - m_params.dark_point) * m_params.scan_exposure;

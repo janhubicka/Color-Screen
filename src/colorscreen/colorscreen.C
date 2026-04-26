@@ -892,7 +892,7 @@ render_cmd (int argc, char **argv)
       printf ("\n");
       progress.resume_stdout ();
     }
-  if (detect_geometry && scan.rgbdata)
+  if (detect_geometry && scan.has_rgb ())
     {
       if (verbose)
         {
@@ -1069,7 +1069,7 @@ autodetect (int argc, char **argv)
       if (dsparams.scanner_type == max_scanner_type)
         dsparams.scanner_type = fixed_lens;
     }
-  if (!scan.rgbdata && !scan.stitch)
+  if (!scan.has_rgb () && !scan.stitch)
     {
       progress.pause_stdout ();
       fprintf (stderr, "Autodetection is only implemented for RGB scans and "
@@ -1077,7 +1077,7 @@ autodetect (int argc, char **argv)
       return 1;
     }
   rparam.gamma = dsparams.gamma;
-  if (scan.rgbdata)
+  if (scan.has_rgb () && !scan.stitch)
     {
       FILE *report = NULL;
       if (repname && !(report = fopen (repname, "wt")))
@@ -2266,19 +2266,19 @@ digital_laboratory (int argc, char **argv)
 	  exit (1);
         }
       progress.set_task ("comparing data", 1);
-      if (scan.data)
+      if (scan.has_grayscale_or_ir ())
         {
 	  float max_diff = 0;
-	  if (!scan2.data)
+	  if (!scan2.has_grayscale_or_ir ())
 	    {
 	      fprintf (stderr, "One image has BW/IR channel while other does not\n");
 	      exit (1);
 	    }
 	  for (int y = 0; y < scan.height; y++)
-	    for (int x = 0; x < scan.height; x++)
+	    for (int x = 0; x < scan.width; x++)
 	    {
-	      float diff = fabs (scan.data[y][x] / (float)scan.maxval -
-				 scan2.data[y][x] / (float)scan2.maxval);
+	      float diff = fabs (scan.get_pixel (x, y) / (float)scan.maxval -
+				 scan2.get_pixel (x, y) / (float)scan2.maxval);
 	      max_diff = std::max (max_diff, diff);
 	    }
 	  if (max_diff * 2 * 65536 > 1)
@@ -2287,28 +2287,28 @@ digital_laboratory (int argc, char **argv)
 	      exit (1);
 	    }
         }
-      if (scan.rgbdata)
+      if (scan.has_rgb ())
         {
 	  float max_diff = 0;
-	  if (!scan2.rgbdata)
+	  if (!scan2.has_rgb ())
 	    {
 	      fprintf (stderr, "One image has RGB channel while other does not\n");
 	      exit (1);
 	    }
 	  for (int y = 0; y < scan.height; y++)
-	    for (int x = 0; x < scan.height; x++)
+	    for (int x = 0; x < scan.width; x++)
 	    {
-	      float diff = fabs (scan.rgbdata[y][x].r / (float)scan.maxval -
-				 scan2.rgbdata[y][x].r / (float)scan2.maxval);
+	      float diff = fabs (scan.get_rgb_pixel (x, y).r / (float)scan.maxval -
+				 scan2.get_rgb_pixel (x, y).r / (float)scan2.maxval);
 	      max_diff = std::max (max_diff, diff);
-	      diff = fabs (scan.rgbdata[y][x].g / (float)scan.maxval -
-			   scan2.rgbdata[y][x].g / (float)scan2.maxval);
+	      diff = fabs (scan.get_rgb_pixel (x, y).g / (float)scan.maxval -
+			   scan2.get_rgb_pixel (x, y).g / (float)scan2.maxval);
 	      max_diff = std::max (max_diff, diff);
-	      diff = fabs (scan.rgbdata[y][x].b / (float)scan.maxval -
-			   scan2.rgbdata[y][x].b / (float)scan2.maxval);
+	      diff = fabs (scan.get_rgb_pixel (x, y).b / (float)scan.maxval -
+			   scan2.get_rgb_pixel (x, y).b / (float)scan2.maxval);
 	      max_diff = std::max (max_diff, diff);
 	    }
-	  if (max_diff * 2 * 65536 >1)
+	  if (max_diff * 2 * 65536 > 1)
 	    {
 	      fprintf (stderr, "Images differs; max difference is %f\n", max_diff);
 	      exit (1);
@@ -2803,7 +2803,7 @@ finetune (int argc, char **argv)
             }
         }
     }
-  if (scan.rgbdata && !(flags & finetune_bw))
+  if (scan.has_rgb () && !(flags & finetune_bw))
     {
       for (int c = 0; c < 3; c++)
 	{

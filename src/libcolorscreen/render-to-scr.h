@@ -283,7 +283,7 @@ public:
   void
   set_color_display (bool profiled = false)
   {
-    if (m_img.rgbdata)
+    if (m_img.has_rgb ())
       {
         m_color = 1;
         m_profiled = profiled;

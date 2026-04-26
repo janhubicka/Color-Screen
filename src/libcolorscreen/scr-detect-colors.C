@@ -29,9 +29,10 @@ get_pixel (struct imgtile *sec, int_point_t pt, int, int)
   pt.y += sec->ystart;
   if (pt.x < 0 || pt.y < 0 || pt.x >= sec->img->width || pt.y >= sec->img->height)
     return ret;
-  ret.red = sec->lookup_table[0] [sec->img->rgbdata[pt.y][pt.x].r];
-  ret.green = sec->lookup_table[1] [sec->img->rgbdata[pt.y][pt.x].g];
-  ret.blue = sec->lookup_table[2] [sec->img->rgbdata[pt.y][pt.x].b];
+  image_data::pixel p_pixel = sec->img->get_rgb_pixel (pt.x, pt.y);
+  ret.red = sec->lookup_table[0] [p_pixel.r];
+  ret.green = sec->lookup_table[1] [p_pixel.g];
+  ret.blue = sec->lookup_table[2] [p_pixel.b];
   return ret;
 }
 
@@ -83,15 +84,14 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type,
 	  point_t p = m->apply ({(coord_t)x, (coord_t)y});
 	  ix = p.x;
 	  iy = p.y;
-	  if (nng < samples && ix >= 0 && iy >= 0 && ix < img->width && iy < img->height
-	      && (img->rgbdata[(int)iy][(int)ix].r
-		  || img->rgbdata[(int)iy][(int)ix].g
-		  || img->rgbdata[(int)iy][(int)ix].b))
-
+	  image_data::pixel p_pixel = img->get_rgb_pixel ((int)ix, (int)iy);
+	  if (nng < samples
+	      && ix >= 0 && iy >= 0 && ix < img->width && iy < img->height
+	      && (p_pixel.r || p_pixel.g || p_pixel.b))
 	    {
-	      greens[nng].red = lookup_table[0][img->rgbdata[(int)iy][(int)ix].r];
-	      greens[nng].green = lookup_table[1][img->rgbdata[(int)iy][(int)ix].g];
-	      greens[nng].blue = lookup_table[2][img->rgbdata[(int)iy][(int)ix].b];
+	      greens[nng].red = lookup_table[0][p_pixel.r];
+	      greens[nng].green = lookup_table[1][p_pixel.g];
+	      greens[nng].blue = lookup_table[2][p_pixel.b];
 	      nng++;
 	    }
 	  if (type == Dufay)
@@ -100,27 +100,26 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type,
 	    p = m->apply ({(x)+0.25, y + 0.25});
 	  ix = p.x;
 	  iy = p.y;
-	  if (nnb < samples && ix >= 0 && iy >= 0 && ix < img->width && iy < img->height
-	      && (img->rgbdata[(int)iy][(int)ix].r
-		  || img->rgbdata[(int)iy][(int)ix].g
-		  || img->rgbdata[(int)iy][(int)ix].b))
+	  p_pixel = img->get_rgb_pixel ((int)ix, (int)iy);
+	  if (nnb < samples
+	      && ix >= 0 && iy >= 0 && ix < img->width && iy < img->height
+	      && (p_pixel.r || p_pixel.g || p_pixel.b))
 	    {
-	      blues[nnb].red = lookup_table[0][img->rgbdata[(int)iy][(int)ix].r];
-	      blues[nnb].green = lookup_table[1][img->rgbdata[(int)iy][(int)ix].g];
-	      blues[nnb].blue = lookup_table[2][img->rgbdata[(int)iy][(int)ix].b];
+	      blues[nnb].red = lookup_table[0][p_pixel.r];
+	      blues[nnb].green = lookup_table[1][p_pixel.g];
+	      blues[nnb].blue = lookup_table[2][p_pixel.b];
 	      nnb++;
 	    }
 	  p = m->apply ({(coord_t)(x), y + 0.5});
 	  ix = p.x;
 	  iy = p.y;
+	  p_pixel = img->get_rgb_pixel ((int)ix, (int)iy);
 	  if (nnr < samples * 2 && ix >= 0 && iy >= 0 && ix < img->width && iy < img->height
-	      && (img->rgbdata[(int)iy][(int)ix].r
-		  || img->rgbdata[(int)iy][(int)ix].g
-		  || img->rgbdata[(int)iy][(int)ix].b))
+	      && (p_pixel.r || p_pixel.g || p_pixel.b))
 	    {
-	      reds[nnr].red = lookup_table[0][img->rgbdata[(int)iy][(int)ix].r];
-	      reds[nnr].green = lookup_table[1][img->rgbdata[(int)iy][(int)ix].g];
-	      reds[nnr].blue = lookup_table[2][img->rgbdata[(int)iy][(int)ix].b];
+	      reds[nnr].red = lookup_table[0][p_pixel.r];
+	      reds[nnr].green = lookup_table[1][p_pixel.g];
+	      reds[nnr].blue = lookup_table[2][p_pixel.b];
 	      nnr++;
 	    }
 	  if (type == Dufay)
@@ -129,14 +128,13 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type,
 	    p = m->apply ({(x) + (coord_t)0.5, (coord_t)y});
 	  ix = p.x;
 	  iy = p.y;
+	  p_pixel = img->get_rgb_pixel ((int)ix, (int)iy);
 	  if (nnr < samples * 2 && ix >= 0 && iy >= 0 && ix < img->width && iy < img->height
-	      && (img->rgbdata[(int)iy][(int)ix].r
-		  || img->rgbdata[(int)iy][(int)ix].g
-		  || img->rgbdata[(int)iy][(int)ix].b))
+	      && (p_pixel.r || p_pixel.g || p_pixel.b))
 	    {
-	      reds[nnr].red = lookup_table[0][img->rgbdata[(int)iy][(int)ix].r];
-	      reds[nnr].green = lookup_table[1][img->rgbdata[(int)iy][(int)ix].g];
-	      reds[nnr].blue = lookup_table[2][img->rgbdata[(int)iy][(int)ix].b];
+	      reds[nnr].red = lookup_table[0][p_pixel.r];
+	      reds[nnr].green = lookup_table[1][p_pixel.g];
+	      reds[nnr].blue = lookup_table[2][p_pixel.b];
 	      nnr++;
 	    }
 	}

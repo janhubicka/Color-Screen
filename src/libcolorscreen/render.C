@@ -354,9 +354,10 @@ getdata_helper_correction (unsigned short **graydata, int_point_t p, int,
 inline luminosity_t
 getdata_helper2 (const image_data *img, int_point_t p, int, gray_data_tables &t)
 {
+  image_data::pixel pxl = img->get_rgb_pixel (p.x, p.y);
   return compute_gray_data (
-      t, p.x, p.y, img->rgbdata[p.y][p.x].r,
-      img->rgbdata[p.y][p.x].g, img->rgbdata[p.y][p.x].b);
+      t, p.x, p.y, pxl.r,
+      pxl.g, pxl.b);
 }
 
 /* Create new grayscale and sharpened data using parameters P.
@@ -371,7 +372,7 @@ get_new_gray_sharpened_data (gray_and_sharpen_params &p,
   mem_luminosity_t *out = ret->m_data;
 
   bool ok;
-  if (p.gp.img->data && !p.gp.ignore_infrared)
+  if (p.gp.img->has_grayscale_or_ir () && !p.gp.ignore_infrared)
     {
       lookup_table_params par;
       getdata_params d;
@@ -390,13 +391,13 @@ get_new_gray_sharpened_data (gray_and_sharpen_params &p,
               ok = deconvolve<luminosity_t, mem_luminosity_t,
                                 unsigned short **, getdata_params &,
                                 getdata_helper_correction> (
-                  out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
+                  out, (unsigned short **)p.gp.img->get_data_ptr (), d, p.gp.img->width, p.gp.img->height,
 		  p.sp, progress, true);
             }
           else
             ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **,
                          getdata_params &, getdata_helper_correction> (
-                out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
+                out, (unsigned short **)p.gp.img->get_data_ptr (), d, p.gp.img->width, p.gp.img->height,
                 p.sp.get_mode () == sharpen_parameters::none ? 0 : p.sp.usm_radius,
 	       	p.sp.usm_amount, progress);
         }
@@ -404,13 +405,13 @@ get_new_gray_sharpened_data (gray_and_sharpen_params &p,
         {
           ok = deconvolve<luminosity_t, mem_luminosity_t, unsigned short **,
                            getdata_params &, getdata_helper_no_correction> (
-              out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
+              out, (unsigned short **)p.gp.img->get_data_ptr (), d, p.gp.img->width, p.gp.img->height,
 	      p.sp, progress, true);
         }
       else
         ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **,
                      getdata_params &, getdata_helper_no_correction> (
-            out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
+            out, (unsigned short **)p.gp.img->get_data_ptr (), d, p.gp.img->width, p.gp.img->height,
             p.sp.get_mode () == sharpen_parameters::none ? 0 : p.sp.usm_radius,
             p.sp.usm_amount, progress);
     }
@@ -479,7 +480,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
       if (!m_backlight_correction)
         return false;
     }
-  if (m_img.rgbdata)
+  if (m_img.has_rgb ())
     {
       lookup_table_params par;
       par.maxval = m_img.maxval;
@@ -711,13 +712,13 @@ get_linearized_pixel (const image_data &img, render_parameters &rparam, int xx,
       imgp = img.stitch->images[ty][tx].img.get ();
     }
   render r (*imgp, rparam, 255);
-  if (!r.precompute_all (!img.rgbdata, false, { 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f }, progress))
+  if (!r.precompute_all (!img.has_rgb (), false, { 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f }, progress))
     return rgbdata(0, 0, 0);
   for (int y = yy - range; y < yy + range; y++)
     for (int x = xx - range; x < xx + range; x++)
       if (x >= 0 && x < img.width && y >= 0 && y < img.height)
         {
-          if (img.rgbdata)
+          if (img.has_rgb ())
             color += r.get_linearized_rgb_pixel ({x, y});
           else
             {

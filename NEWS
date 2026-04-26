@@ -65,6 +65,7 @@ Changes in version 1.1
    - simulated screen collection
      In this mode screen filter scan is simulated by first rendering unsharp
      image (using scanner_mtf data) and then applying selected sharpening algorithm
+ - JPEG2000 and PNG support
  - Infrastructure improvements:
    - `make check` now executes unit tests for
       - matrix implementation

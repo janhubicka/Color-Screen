@@ -44,10 +44,25 @@ public:
   {
     gray r, g, b;
   };
-  /* Grayscale scan.  */
-  gray **data = nullptr;
-  /* Optional color scan.  */
-  pixel **rgbdata = nullptr;
+
+  /* Grayscale scan API.  */
+  inline gray get_pixel (int x, int y) const { return m_data ? m_data[y][x] : gray{}; }
+  inline void put_pixel (int x, int y, gray val) { if (m_data) m_data[y][x] = val; }
+  inline gray* get_row (int y) { return m_data ? m_data[y] : nullptr; }
+  inline const gray* get_row (int y) const { return m_data ? m_data[y] : nullptr; }
+
+  /* RGB scan API.  */
+  inline pixel get_rgb_pixel (int x, int y) const { return m_rgbdata ? m_rgbdata[y][x] : pixel{}; }
+  inline void put_rgb_pixel (int x, int y, pixel val) { if (m_rgbdata) m_rgbdata[y][x] = val; }
+  inline pixel* get_rgb_row (int y) { return m_rgbdata ? m_rgbdata[y] : nullptr; }
+  inline const pixel* get_rgb_row (int y) const { return m_rgbdata ? m_rgbdata[y] : nullptr; }
+
+  /* Raw data access (legacy/performance).  */
+  inline gray** get_data_ptr () { return m_data; }
+  inline gray* const* get_data_ptr () const { return m_data; }
+  inline pixel** get_rgb_data_ptr () { return m_rgbdata; }
+  inline pixel* const* get_rgb_data_ptr () const { return m_rgbdata; }
+
   void *icc_profile = nullptr;
   std::array<std::vector<luminosity_t>, 3> to_linear;
 
@@ -103,6 +118,7 @@ public:
   xyY primary_green = { 0.3000, 0.6000, 0.7152 };
   xyY primary_blue = { 0.1500, 0.0600, 0.0722 };
   xyz whitepoint = { 0.312700492, 0.329000939, 1.0 };
+  xyz whitepoint_xyz = { 0.95047, 1.0, 1.08883 };
   std::shared_ptr<backlight_correction_parameters> backlight_corr = nullptr;
   DLL_PUBLIC void set_dpi (coord_t xdpi, coord_t ydpi);
   /* Gamma, -2 if unknown.  */
@@ -130,6 +146,11 @@ private:
   bool m_preload_all = false;
 
   bool parse_icc_profile(progress_info *);
+
+  /* Grayscale scan.  */
+  gray **m_data = nullptr;
+  /* Optional color scan.  */
+  pixel **m_rgbdata = nullptr;
 };
 }
 #endif

@@ -1060,11 +1060,7 @@ test_render_linearity ()
   image_data img;
   img.set_dimensions (65536, 1, true, false);
   for (int i = 0; i < 65536; i++)
-    {
-      img.rgbdata[0][i].r=i;
-      img.rgbdata[0][i].g=i;
-      img.rgbdata[0][i].b=i;
-    }
+    img.put_rgb_pixel (i, 0, {(image_data::gray)i, (image_data::gray)i, (image_data::gray)i});
   bool ok = true;
   luminosity_t gammas[] = {-1, 1, 1.8, 2.2, 2.8};
 
