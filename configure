@@ -661,6 +661,10 @@ HOST_WIN32_TRUE
 WIN_NO_UNDEFINED
 EXIV2_LIBS
 EXIV2_CFLAGS
+LIBPNG_LIBS
+LIBPNG_CFLAGS
+OPENJPEG_LIBS
+OPENJPEG_CFLAGS
 OPENMP_CXXFLAGS
 HAVE_CXX17
 PKG_CONFIG_LIBDIR
@@ -820,6 +824,8 @@ with_libjpeg
 with_libraw
 with_libzip
 with_liblcms2
+with_openjpeg
+with_libpng
 enable_16bit_float
 enable_checking
 enable_gtkgui
@@ -843,6 +849,10 @@ CXXCPP
 PKG_CONFIG
 PKG_CONFIG_PATH
 PKG_CONFIG_LIBDIR
+OPENJPEG_CFLAGS
+OPENJPEG_LIBS
+LIBPNG_CFLAGS
+LIBPNG_LIBS
 EXIV2_CFLAGS
 EXIV2_LIBS
 GTKGUI_BIN_CFLAGS
@@ -1518,6 +1528,8 @@ Optional Packages:
   --with-libraw=PATH      enter the PATH to libraw package
   --with-libzip=PATH      enter the PATH to libzip package
   --with-liblcms2=PATH      enter the PATH to liblcms2 package
+  --with-openjpeg=PATH      enter the PATH to openjpeg package
+  --with-libpng=PATH      enter the PATH to libpng package
 
 Some influential environment variables:
   CC          C compiler command
@@ -1537,6 +1549,13 @@ Some influential environment variables:
               directories to add to pkg-config's search path
   PKG_CONFIG_LIBDIR
               path overriding pkg-config's built-in search path
+  OPENJPEG_CFLAGS
+              C compiler flags for OPENJPEG, overriding pkg-config
+  OPENJPEG_LIBS
+              linker flags for OPENJPEG, overriding pkg-config
+  LIBPNG_CFLAGS
+              C compiler flags for LIBPNG, overriding pkg-config
+  LIBPNG_LIBS linker flags for LIBPNG, overriding pkg-config
   EXIV2_CFLAGS
               C compiler flags for EXIV2, overriding pkg-config
   EXIV2_LIBS  linker flags for EXIV2, overriding pkg-config
@@ -21851,6 +21870,452 @@ esac
 fi
 
 fi
+
+
+# Check whether --with-openjpeg was given.
+if test ${with_openjpeg+y}
+then :
+  withval=$with_openjpeg;  if test "$withval" != "no"; then
+    LDFLAGS="-L$withval/lib $LDFLAGS";\
+   fi
+fi
+
+
+if test "$with_openjpeg" != "no"; then
+
+pkg_failed=no
+{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking for libopenjp2" >&5
+printf %s "checking for libopenjp2... " >&6; }
+
+if test -n "$OPENJPEG_CFLAGS"; then
+    pkg_cv_OPENJPEG_CFLAGS="$OPENJPEG_CFLAGS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libopenjp2\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "libopenjp2") 2>&5
+  ac_status=$?
+  printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_OPENJPEG_CFLAGS=`$PKG_CONFIG --cflags "libopenjp2" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+if test -n "$OPENJPEG_LIBS"; then
+    pkg_cv_OPENJPEG_LIBS="$OPENJPEG_LIBS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libopenjp2\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "libopenjp2") 2>&5
+  ac_status=$?
+  printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_OPENJPEG_LIBS=`$PKG_CONFIG --libs "libopenjp2" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+
+
+
+if test $pkg_failed = yes; then
+        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf '%s\n' "no" >&6; }
+
+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+        _pkg_short_errors_supported=yes
+else
+        _pkg_short_errors_supported=no
+fi
+        if test $_pkg_short_errors_supported = yes; then
+                OPENJPEG_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libopenjp2" 2>&1`
+        else
+                OPENJPEG_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libopenjp2" 2>&1`
+        fi
+        # Put the nasty error message in config.log where it belongs
+        echo "$OPENJPEG_PKG_ERRORS" >&5
+
+
+    { printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking for library containing opj_decode" >&5
+printf %s "checking for library containing opj_decode... " >&6; }
+if test ${ac_cv_search_opj_decode+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e) ac_func_search_save_LIBS=$LIBS
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+namespace conftest {
+  extern "C" int opj_decode ();
+}
+int
+main (void)
+{
+return conftest::opj_decode ();
+  ;
+  return 0;
+}
+_ACEOF
+for ac_lib in '' openjp2
+do
+  if test -z "$ac_lib"; then
+    ac_res="none required"
+  else
+    ac_res=-l$ac_lib
+    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
+  fi
+  if ac_fn_cxx_try_link "$LINENO"
+then :
+  ac_cv_search_opj_decode=$ac_res
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext
+  if test ${ac_cv_search_opj_decode+y}
+then :
+  break
+fi
+done
+if test ${ac_cv_search_opj_decode+y}
+then :
+
+else case e in #(
+  e) ac_cv_search_opj_decode=no ;;
+esac
+fi
+rm conftest.$ac_ext
+LIBS=$ac_func_search_save_LIBS ;;
+esac
+fi
+{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_opj_decode" >&5
+printf '%s\n' "$ac_cv_search_opj_decode" >&6; }
+ac_res=$ac_cv_search_opj_decode
+if test "$ac_res" != no
+then :
+  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
+
+
+printf '%s\n' "#define HAVE_OPENJPEG 1" >>confdefs.h
+
+      check_libopenjp2_h="openjpeg.h"
+
+fi
+
+
+elif test $pkg_failed = untried; then
+        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf '%s\n' "no" >&6; }
+
+    { printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking for library containing opj_decode" >&5
+printf %s "checking for library containing opj_decode... " >&6; }
+if test ${ac_cv_search_opj_decode+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e) ac_func_search_save_LIBS=$LIBS
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+namespace conftest {
+  extern "C" int opj_decode ();
+}
+int
+main (void)
+{
+return conftest::opj_decode ();
+  ;
+  return 0;
+}
+_ACEOF
+for ac_lib in '' openjp2
+do
+  if test -z "$ac_lib"; then
+    ac_res="none required"
+  else
+    ac_res=-l$ac_lib
+    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
+  fi
+  if ac_fn_cxx_try_link "$LINENO"
+then :
+  ac_cv_search_opj_decode=$ac_res
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext
+  if test ${ac_cv_search_opj_decode+y}
+then :
+  break
+fi
+done
+if test ${ac_cv_search_opj_decode+y}
+then :
+
+else case e in #(
+  e) ac_cv_search_opj_decode=no ;;
+esac
+fi
+rm conftest.$ac_ext
+LIBS=$ac_func_search_save_LIBS ;;
+esac
+fi
+{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_opj_decode" >&5
+printf '%s\n' "$ac_cv_search_opj_decode" >&6; }
+ac_res=$ac_cv_search_opj_decode
+if test "$ac_res" != no
+then :
+  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
+
+
+printf '%s\n' "#define HAVE_OPENJPEG 1" >>confdefs.h
+
+      check_libopenjp2_h="openjpeg.h"
+
+fi
+
+
+else
+        OPENJPEG_CFLAGS=$pkg_cv_OPENJPEG_CFLAGS
+        OPENJPEG_LIBS=$pkg_cv_OPENJPEG_LIBS
+        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf '%s\n' "yes" >&6; }
+
+
+printf '%s\n' "#define HAVE_OPENJPEG 1" >>confdefs.h
+
+    check_libopenjp2_h="openjpeg.h"
+
+fi
+fi
+
+
+
+
+# Check whether --with-libpng was given.
+if test ${with_libpng+y}
+then :
+  withval=$with_libpng;  if test "$withval" != "no"; then
+    LDFLAGS="-L$withval/lib $LDFLAGS";\
+   fi
+fi
+
+
+if test "$with_libpng" != "no"; then
+
+pkg_failed=no
+{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking for libpng" >&5
+printf %s "checking for libpng... " >&6; }
+
+if test -n "$LIBPNG_CFLAGS"; then
+    pkg_cv_LIBPNG_CFLAGS="$LIBPNG_CFLAGS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libpng\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "libpng") 2>&5
+  ac_status=$?
+  printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_LIBPNG_CFLAGS=`$PKG_CONFIG --cflags "libpng" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+if test -n "$LIBPNG_LIBS"; then
+    pkg_cv_LIBPNG_LIBS="$LIBPNG_LIBS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libpng\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "libpng") 2>&5
+  ac_status=$?
+  printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_LIBPNG_LIBS=`$PKG_CONFIG --libs "libpng" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+
+
+
+if test $pkg_failed = yes; then
+        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf '%s\n' "no" >&6; }
+
+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+        _pkg_short_errors_supported=yes
+else
+        _pkg_short_errors_supported=no
+fi
+        if test $_pkg_short_errors_supported = yes; then
+                LIBPNG_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libpng" 2>&1`
+        else
+                LIBPNG_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libpng" 2>&1`
+        fi
+        # Put the nasty error message in config.log where it belongs
+        echo "$LIBPNG_PKG_ERRORS" >&5
+
+
+    { printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking for library containing png_create_read_struct" >&5
+printf %s "checking for library containing png_create_read_struct... " >&6; }
+if test ${ac_cv_search_png_create_read_struct+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e) ac_func_search_save_LIBS=$LIBS
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+namespace conftest {
+  extern "C" int png_create_read_struct ();
+}
+int
+main (void)
+{
+return conftest::png_create_read_struct ();
+  ;
+  return 0;
+}
+_ACEOF
+for ac_lib in '' png
+do
+  if test -z "$ac_lib"; then
+    ac_res="none required"
+  else
+    ac_res=-l$ac_lib
+    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
+  fi
+  if ac_fn_cxx_try_link "$LINENO"
+then :
+  ac_cv_search_png_create_read_struct=$ac_res
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext
+  if test ${ac_cv_search_png_create_read_struct+y}
+then :
+  break
+fi
+done
+if test ${ac_cv_search_png_create_read_struct+y}
+then :
+
+else case e in #(
+  e) ac_cv_search_png_create_read_struct=no ;;
+esac
+fi
+rm conftest.$ac_ext
+LIBS=$ac_func_search_save_LIBS ;;
+esac
+fi
+{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_png_create_read_struct" >&5
+printf '%s\n' "$ac_cv_search_png_create_read_struct" >&6; }
+ac_res=$ac_cv_search_png_create_read_struct
+if test "$ac_res" != no
+then :
+  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
+
+
+printf '%s\n' "#define HAVE_LIBPNG 1" >>confdefs.h
+
+      check_libpng_h="png.h"
+
+fi
+
+
+elif test $pkg_failed = untried; then
+        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf '%s\n' "no" >&6; }
+
+    { printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking for library containing png_create_read_struct" >&5
+printf %s "checking for library containing png_create_read_struct... " >&6; }
+if test ${ac_cv_search_png_create_read_struct+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e) ac_func_search_save_LIBS=$LIBS
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+namespace conftest {
+  extern "C" int png_create_read_struct ();
+}
+int
+main (void)
+{
+return conftest::png_create_read_struct ();
+  ;
+  return 0;
+}
+_ACEOF
+for ac_lib in '' png
+do
+  if test -z "$ac_lib"; then
+    ac_res="none required"
+  else
+    ac_res=-l$ac_lib
+    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
+  fi
+  if ac_fn_cxx_try_link "$LINENO"
+then :
+  ac_cv_search_png_create_read_struct=$ac_res
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext
+  if test ${ac_cv_search_png_create_read_struct+y}
+then :
+  break
+fi
+done
+if test ${ac_cv_search_png_create_read_struct+y}
+then :
+
+else case e in #(
+  e) ac_cv_search_png_create_read_struct=no ;;
+esac
+fi
+rm conftest.$ac_ext
+LIBS=$ac_func_search_save_LIBS ;;
+esac
+fi
+{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_png_create_read_struct" >&5
+printf '%s\n' "$ac_cv_search_png_create_read_struct" >&6; }
+ac_res=$ac_cv_search_png_create_read_struct
+if test "$ac_res" != no
+then :
+  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
+
+
+printf '%s\n' "#define HAVE_LIBPNG 1" >>confdefs.h
+
+      check_libpng_h="png.h"
+
+fi
+
+
+else
+        LIBPNG_CFLAGS=$pkg_cv_LIBPNG_CFLAGS
+        LIBPNG_LIBS=$pkg_cv_LIBPNG_LIBS
+        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf '%s\n' "yes" >&6; }
+
+
+printf '%s\n' "#define HAVE_LIBPNG 1" >>confdefs.h
+
+    check_libpng_h="png.h"
+
+fi
+fi
+
+
 
 
 pkg_failed=no

@@ -107,6 +107,46 @@ AC_SEARCH_LIBS(cmsCreateRGBProfile,[lcms2],[check_liblcms2_h="lcms2.h"],
  [ echo " * * * try option --with-liblcms2=PATH"])
 fi
 
+AC_ARG_WITH(openjpeg,
+ [  --with-openjpeg=PATH      enter the PATH to openjpeg package],
+ [ if test "$withval" != "no"; then
+    LDFLAGS="-L$withval/lib $LDFLAGS";\
+   fi ])
+
+if test "$with_openjpeg" != "no"; then
+  PKG_CHECK_MODULES([OPENJPEG], [libopenjp2], [
+    AC_DEFINE([HAVE_OPENJPEG], [1], [Define if OpenJPEG is available])
+    check_libopenjp2_h="openjpeg.h"
+  ], [
+    AC_SEARCH_LIBS(opj_decode,[openjp2],[
+      AC_DEFINE([HAVE_OPENJPEG], [1], [Define if OpenJPEG is available])
+      check_libopenjp2_h="openjpeg.h"
+    ])
+  ])
+fi
+AC_SUBST([OPENJPEG_CFLAGS])
+AC_SUBST([OPENJPEG_LIBS])
+
+AC_ARG_WITH(libpng,
+ [  --with-libpng=PATH      enter the PATH to libpng package],
+ [ if test "$withval" != "no"; then
+    LDFLAGS="-L$withval/lib $LDFLAGS";\
+   fi ])
+
+if test "$with_libpng" != "no"; then
+  PKG_CHECK_MODULES([LIBPNG], [libpng], [
+    AC_DEFINE([HAVE_LIBPNG], [1], [Define if libpng is available])
+    check_libpng_h="png.h"
+  ], [
+    AC_SEARCH_LIBS(png_create_read_struct,[png],[
+      AC_DEFINE([HAVE_LIBPNG], [1], [Define if libpng is available])
+      check_libpng_h="png.h"
+    ])
+  ])
+fi
+AC_SUBST([LIBPNG_CFLAGS])
+AC_SUBST([LIBPNG_LIBS])
+
 PKG_CHECK_MODULES([EXIV2], [exiv2])
 
 fi

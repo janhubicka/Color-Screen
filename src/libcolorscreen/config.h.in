@@ -24,11 +24,17 @@
 /* Define to 1 if you have the 'm' library (-lm). */
 #undef HAVE_LIBM
 
+/* Define if libpng is available */
+#undef HAVE_LIBPNG
+
 /* Define to 1 if you have the <malloc.h> header file. */
 #undef HAVE_MALLOC_H
 
 /* Define to 1 if you have the 'memalign' function. */
 #undef HAVE_MEMALIGN
+
+/* Define if OpenJPEG is available */
+#undef HAVE_OPENJPEG
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #undef HAVE_STDINT_H

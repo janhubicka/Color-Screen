@@ -15,6 +15,12 @@
 #include <tiffio.h>
 #include <turbojpeg.h>
 #include <zip.h>
+#ifdef HAVE_OPENJPEG
+#include <openjpeg.h>
+#endif
+#ifdef HAVE_LIBPNG
+#include <png.h>
+#endif
 #include <exiv2/exiv2.hpp>
 
 
@@ -166,6 +172,63 @@ private:
   int m_max_img = 0;
   image_data::demosaicing_t m_demosaic;
 };
+
+#ifdef HAVE_OPENJPEG
+static void
+opj_error_callback (const char *msg, void *)
+{
+  (void)msg;
+}
+static void
+opj_warning_callback (const char *msg, void *)
+{
+  (void)msg;
+}
+static void
+opj_info_callback (const char *msg, void *)
+{
+  (void)msg;
+}
+
+class jp2_image_data_loader : public image_data_loader
+{
+public:
+  jp2_image_data_loader (image_data *img) : m_img (img) {}
+  virtual bool init_loader (const char *name, const char **error,
+                            progress_info *,
+                            image_data::demosaicing_t demosaic);
+  virtual bool load_part (int *permille, const char **error,
+                          progress_info *progress);
+  virtual ~jp2_image_data_loader () {}
+
+private:
+  image_data *m_img;
+  std::string m_filename;
+};
+#endif
+
+#ifdef HAVE_LIBPNG
+class png_image_data_loader : public image_data_loader
+{
+public:
+  png_image_data_loader (image_data *img) : m_img (img), m_fp (nullptr) {}
+  virtual bool init_loader (const char *name, const char **error,
+                            progress_info *,
+                            image_data::demosaicing_t demosaic);
+  virtual bool load_part (int *permille, const char **error,
+                          progress_info *progress);
+  virtual ~png_image_data_loader ()
+  {
+    if (m_fp)
+      fclose (m_fp);
+  }
+
+private:
+  image_data *m_img;
+  FILE *m_fp;
+  std::string m_filename;
+};
+#endif
 }
 
 image_data::image_data ()
@@ -1214,23 +1277,21 @@ image_data::init_loader (const char *name, bool preload_all,
   else if (has_suffix (name, ".jpg") || has_suffix (name, ".jpeg"))
     loader = std::make_unique<jpg_image_data_loader> (this);
   else if (has_suffix (name, ".raw") || has_suffix (name, ".dng")
-           || has_suffix (name, ".iiq") || has_suffix (name, ".NEF")
-           || has_suffix (name, ".cr2") || has_suffix (name, ".CR2"))
+           || has_suffix (name, ".iiq") || has_suffix (name, ".nef")
+           || has_suffix (name, ".cr2") || has_suffix (name, ".eip")
+           || has_suffix (name, ".arw") || has_suffix (name, ".raf")
+           || has_suffix (name, ".arq"))
     loader = std::make_unique<raw_image_data_loader> (this);
-  else if (has_suffix (name, ".eip"))
-    loader = std::make_unique<raw_image_data_loader> (this);
-  else if (has_suffix (name, ".arw"))
-    loader = std::make_unique<raw_image_data_loader> (this);
-  else if (has_suffix (name, ".ARW"))
-    loader = std::make_unique<raw_image_data_loader> (this);
-  else if (has_suffix (name, ".raf"))
-    loader = std::make_unique<raw_image_data_loader> (this);
-  else if (has_suffix (name, ".RAF"))
-    loader = std::make_unique<raw_image_data_loader> (this);
-  else if (has_suffix (name, ".arq"))
-    loader = std::make_unique<raw_image_data_loader> (this);
-  else if (has_suffix (name, ".ARQ"))
-    loader = std::make_unique<raw_image_data_loader> (this);
+#ifdef HAVE_OPENJPEG
+  else if (has_suffix (name, ".jp2") || has_suffix (name, ".j2k")
+           || has_suffix (name, ".jpc") || has_suffix (name, ".jpf")
+           || has_suffix (name, ".jpx"))
+    loader = std::make_unique<jp2_image_data_loader> (this);
+#endif
+#ifdef HAVE_LIBPNG
+  else if (has_suffix (name, ".png"))
+    loader = std::make_unique<png_image_data_loader> (this);
+#endif
   else if (has_suffix (name, ".csprj"))
     loader = std::make_unique<stitch_image_data_loader> (this, preload_all);
   if (!loader)
@@ -1784,4 +1845,355 @@ image_data::load_exif (const char *name)
     }
 }
 
+#ifdef HAVE_OPENJPEG
+bool
+jp2_image_data_loader::init_loader (const char *name, const char **error,
+                                    progress_info *, image_data::demosaicing_t)
+{
+  m_filename = name;
+
+  opj_codec_t *l_codec = NULL;
+  opj_image_t *l_image = NULL;
+  opj_stream_t *l_stream = NULL;
+
+  l_stream = opj_stream_create_default_file_stream (name, OPJ_TRUE);
+  if (!l_stream)
+    {
+      *error = "failed to open JP2 stream";
+      return false;
+    }
+
+  if (has_suffix (name, ".jp2"))
+    l_codec = opj_create_decompress (OPJ_CODEC_JP2);
+  else
+    l_codec = opj_create_decompress (OPJ_CODEC_J2K);
+
+  opj_set_error_handler (l_codec, opj_error_callback, NULL);
+  opj_set_warning_handler (l_codec, opj_warning_callback, NULL);
+  opj_set_info_handler (l_codec, opj_info_callback, NULL);
+
+  opj_dparameters_t l_params;
+  opj_set_default_decoder_parameters (&l_params);
+  if (!opj_setup_decoder (l_codec, &l_params))
+    {
+      *error = "failed to setup JP2 decoder";
+      opj_stream_destroy (l_stream);
+      opj_destroy_codec (l_codec);
+      return false;
+    }
+
+  if (!opj_read_header (l_stream, l_codec, &l_image))
+    {
+      *error = "failed to read JP2 header";
+      opj_stream_destroy (l_stream);
+      opj_destroy_codec (l_codec);
+      return false;
+    }
+
+  m_img->width = l_image->x1 - l_image->x0;
+  m_img->height = l_image->y1 - l_image->y0;
+  m_img->maxval = (1 << l_image->comps[0].prec) - 1;
+
+  if (l_image->numcomps == 1)
+    {
+      grayscale = true;
+      rgb = false;
+    }
+  else if (l_image->numcomps == 3)
+    {
+      grayscale = false;
+      rgb = true;
+    }
+  else if (l_image->numcomps == 4)
+    {
+      grayscale = true;
+      rgb = true;
+    }
+  else
+    {
+      *error = "unsupported number of components in JP2 file";
+      opj_image_destroy (l_image);
+      opj_stream_destroy (l_stream);
+      opj_destroy_codec (l_codec);
+      return false;
+    }
+
+  opj_image_destroy (l_image);
+  opj_stream_destroy (l_stream);
+  opj_destroy_codec (l_codec);
+  return true;
+}
+
+bool
+jp2_image_data_loader::load_part (int *permille, const char **error,
+                                  progress_info *)
+{
+  opj_dparameters_t l_params;
+  opj_set_default_decoder_parameters (&l_params);
+
+  opj_codec_t *l_codec = NULL;
+  if (has_suffix (m_filename.c_str (), ".jp2"))
+    l_codec = opj_create_decompress (OPJ_CODEC_JP2);
+  else
+    l_codec = opj_create_decompress (OPJ_CODEC_J2K);
+
+  opj_stream_t *l_stream
+      = opj_stream_create_default_file_stream (m_filename.c_str (), OPJ_TRUE);
+  opj_image_t *l_image = NULL;
+
+  if (!l_stream)
+    {
+      *error = "failed to open JP2 stream";
+      if (l_codec)
+        opj_destroy_codec (l_codec);
+      return false;
+    }
+
+  if (!opj_setup_decoder (l_codec, &l_params)
+      || !opj_read_header (l_stream, l_codec, &l_image)
+      || !opj_decode (l_codec, l_stream, l_image)
+      || !opj_end_decompress (l_codec, l_stream))
+    {
+      *error = "JP2 decoding failed";
+      if (l_image)
+        opj_image_destroy (l_image);
+      if (l_stream)
+        opj_stream_destroy (l_stream);
+      if (l_codec)
+        opj_destroy_codec (l_codec);
+      return false;
+    }
+
+  int width = m_img->width;
+  int height = m_img->height;
+
+  if (l_image->numcomps == 1)
+    {
+      for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+          m_img->data[y][x] = l_image->comps[0].data[y * width + x];
+    }
+  else if (l_image->numcomps == 3)
+    {
+      for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+          {
+            m_img->rgbdata[y][x].r = l_image->comps[0].data[y * width + x];
+            m_img->rgbdata[y][x].g = l_image->comps[1].data[y * width + x];
+            m_img->rgbdata[y][x].b = l_image->comps[2].data[y * width + x];
+          }
+    }
+  else if (l_image->numcomps == 4)
+    {
+      for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+          {
+            m_img->rgbdata[y][x].r = l_image->comps[0].data[y * width + x];
+            m_img->rgbdata[y][x].g = l_image->comps[1].data[y * width + x];
+            m_img->rgbdata[y][x].b = l_image->comps[2].data[y * width + x];
+            m_img->data[y][x] = l_image->comps[3].data[y * width + x];
+          }
+    }
+
+  opj_image_destroy (l_image);
+  opj_stream_destroy (l_stream);
+  opj_destroy_codec (l_codec);
+
+  *permille = 1000;
+  return true;
+}
+#endif
+#ifdef HAVE_LIBPNG
+bool
+png_image_data_loader::init_loader (const char *name, const char **error,
+                                    progress_info *, image_data::demosaicing_t)
+{
+  m_filename = name;
+  m_fp = fopen (name, "rb");
+  if (!m_fp)
+    {
+      *error = "failed to open PNG file";
+      return false;
+    }
+
+  unsigned char header[8];
+  if (fread (header, 1, 8, m_fp) != 8 || png_sig_cmp (header, 0, 8))
+    {
+      *error = "not a PNG file";
+      fclose (m_fp);
+      m_fp = NULL;
+      return false;
+    }
+
+  png_structp png_ptr
+      = png_create_read_struct (PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+  if (!png_ptr)
+    {
+      fclose (m_fp);
+      m_fp = NULL;
+      return false;
+    }
+  png_infop info_ptr = png_create_info_struct (png_ptr);
+  if (!info_ptr)
+    {
+      png_destroy_read_struct (&png_ptr, NULL, NULL);
+      fclose (m_fp);
+      m_fp = NULL;
+      return false;
+    }
+
+  if (setjmp (png_jmpbuf (png_ptr)))
+    {
+      png_destroy_read_struct (&png_ptr, &info_ptr, NULL);
+      fclose (m_fp);
+      m_fp = NULL;
+      return false;
+    }
+
+  png_init_io (png_ptr, m_fp);
+  png_set_sig_bytes (png_ptr, 8);
+  png_read_info (png_ptr, info_ptr);
+
+  m_img->width = png_get_image_width (png_ptr, info_ptr);
+  m_img->height = png_get_image_height (png_ptr, info_ptr);
+  int color_type = png_get_color_type (png_ptr, info_ptr);
+  int bit_depth = png_get_bit_depth (png_ptr, info_ptr);
+
+  m_img->maxval = (1 << bit_depth) - 1;
+
+  if (color_type == PNG_COLOR_TYPE_GRAY)
+    {
+      grayscale = true;
+      rgb = false;
+    }
+  else if (color_type == PNG_COLOR_TYPE_RGB
+           || color_type == PNG_COLOR_TYPE_RGB_ALPHA)
+    {
+      grayscale = false;
+      rgb = true;
+    }
+  else if (color_type == PNG_COLOR_TYPE_GRAY_ALPHA)
+    {
+      grayscale = true;
+      rgb = false;
+    }
+  else
+    {
+      *error = "unsupported PNG color type";
+      png_destroy_read_struct (&png_ptr, &info_ptr, NULL);
+      fclose (m_fp);
+      m_fp = NULL;
+      return false;
+    }
+
+  png_destroy_read_struct (&png_ptr, &info_ptr, NULL);
+  fclose (m_fp);
+  m_fp = NULL;
+  return true;
+}
+
+bool
+png_image_data_loader::load_part (int *permille, const char **error,
+                                  progress_info *)
+{
+  m_fp = fopen (m_filename.c_str (), "rb");
+  if (!m_fp)
+    {
+      *error = "failed to open PNG file";
+      return false;
+    }
+  png_structp png_ptr
+      = png_create_read_struct (PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+  png_infop info_ptr = png_create_info_struct (png_ptr);
+  if (setjmp (png_jmpbuf (png_ptr)))
+    {
+      png_destroy_read_struct (&png_ptr, &info_ptr, NULL);
+      fclose (m_fp);
+      m_fp = NULL;
+      return false;
+    }
+  png_init_io (png_ptr, m_fp);
+  png_read_info (png_ptr, info_ptr);
+
+  int bit_depth = png_get_bit_depth (png_ptr, info_ptr);
+  if (bit_depth < 8)
+    png_set_packing (png_ptr);
+  if (bit_depth == 16)
+    {
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+      png_set_swap (png_ptr);
+#endif
+    }
+
+  png_read_update_info (png_ptr, info_ptr);
+
+  int width = m_img->width;
+  int height = m_img->height;
+  int rowbytes = png_get_rowbytes (png_ptr, info_ptr);
+  png_bytep *row_pointers = (png_bytep *)malloc (sizeof (png_bytep) * height);
+  for (int y = 0; y < height; y++)
+    row_pointers[y] = (png_byte *)malloc (rowbytes);
+
+  png_read_image (png_ptr, row_pointers);
+
+  int color_type = png_get_color_type (png_ptr, info_ptr);
+  if (color_type == PNG_COLOR_TYPE_GRAY
+      || color_type == PNG_COLOR_TYPE_GRAY_ALPHA)
+    {
+      int channels = png_get_channels (png_ptr, info_ptr);
+      for (int y = 0; y < height; y++)
+        {
+          if (bit_depth == 16)
+            {
+              unsigned short *row = (unsigned short *)row_pointers[y];
+              for (int x = 0; x < width; x++)
+                m_img->data[y][x] = row[x * channels];
+            }
+          else
+            {
+              png_bytep row = row_pointers[y];
+              for (int x = 0; x < width; x++)
+                m_img->data[y][x] = row[x * channels];
+            }
+        }
+    }
+  else if (color_type == PNG_COLOR_TYPE_RGB
+           || color_type == PNG_COLOR_TYPE_RGB_ALPHA)
+    {
+      int channels = png_get_channels (png_ptr, info_ptr);
+      for (int y = 0; y < height; y++)
+        {
+          if (bit_depth == 16)
+            {
+              unsigned short *row = (unsigned short *)row_pointers[y];
+              for (int x = 0; x < width; x++)
+                {
+                  m_img->rgbdata[y][x].r = row[x * channels];
+                  m_img->rgbdata[y][x].g = row[x * channels + 1];
+                  m_img->rgbdata[y][x].b = row[x * channels + 2];
+                }
+            }
+          else
+            {
+              png_bytep row = row_pointers[y];
+              for (int x = 0; x < width; x++)
+                {
+                  m_img->rgbdata[y][x].r = row[x * channels];
+                  m_img->rgbdata[y][x].g = row[x * channels + 1];
+                  m_img->rgbdata[y][x].b = row[x * channels + 2];
+                }
+            }
+        }
+    }
+
+  for (int y = 0; y < height; y++)
+    free (row_pointers[y]);
+  free (row_pointers);
+  png_destroy_read_struct (&png_ptr, &info_ptr, NULL);
+  fclose (m_fp);
+  m_fp = NULL;
+  *permille = 1000;
+  return true;
+}
+#endif
 }

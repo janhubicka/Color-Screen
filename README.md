@@ -36,6 +36,8 @@ additional libraries:
  - [libraw](https://www.libraw.org/)
  - [liblcms2](https://www.littlecms.com/)
  - [libfftw3](https://www.fftw.org/)
+ - [openjpeg](https://www.openjpeg.org/)
+ - [libpng](http://www.libpng.org/)
 
 If you wish to develop colorscreen, additional packages are recommended
 
@@ -67,7 +69,7 @@ Easiest way to install on Windows is to use [MSYS2](https://www.msys2.org/).
 Then start MSYS2 WINGW64 from Windows start menu.  Install all necessary
 packages
 
-    pacman -S make mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-libtiff mingw-w64-ucrt-x86_64-libjpeg-turbo git mingw-w64-ucrt-x86_64-pkg-config mingw-w64-ucrt-x86_64-libraw mingw-w64-ucrt-x86_64-lcms2  mingw-w64-ucrt-x86_64-libzip mingw-w64-ucrt-x86_64-gsl diffutils autoconf-archive mingw-w64-ucrt-x86_64-autotools  mingw-w64-ucrt-x86_64-fftw mingw-w64-ucrt-x86_64-qt6-base mingw-w64-ucrt-x86_64-qt6-tools mingw-w64-ucrt-x86_64-adwaita-icon-theme mingw-w64-ucrt-x86_64-qt6-svg mingw-w64-ucrt-x86_64-nsis mingw-w64-ucrt-x86_64-imagemagick mingw-w64-ucrt-x86_64-exiv2
+    pacman -S make mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-libtiff mingw-w64-ucrt-x86_64-libjpeg-turbo git mingw-w64-ucrt-x86_64-pkg-config mingw-w64-ucrt-x86_64-libraw mingw-w64-ucrt-x86_64-lcms2  mingw-w64-ucrt-x86_64-libzip mingw-w64-ucrt-x86_64-gsl diffutils autoconf-archive mingw-w64-ucrt-x86_64-autotools  mingw-w64-ucrt-x86_64-fftw mingw-w64-ucrt-x86_64-qt6-base mingw-w64-ucrt-x86_64-qt6-tools mingw-w64-ucrt-x86_64-adwaita-icon-theme mingw-w64-ucrt-x86_64-qt6-svg mingw-w64-ucrt-x86_64-nsis mingw-w64-ucrt-x86_64-imagemagick mingw-w64-ucrt-x86_64-exiv2 mingw-w64-ucrt-x86_64-openjpeg2 mingw-w64-ucrt-x86_64-libpng
 
 
 Then close the terminal emulation window and open MSYS2 MINGW64 again
@@ -132,6 +134,6 @@ information.
 
 Finally you may try to build also `colorscreen-gtk` which is a deprecated GTK
 based gui application. Invoke it with `colorscreen-gtk <scan file>`. Scan must
-be either in tiff or jpeg file format.
+be in tiff, jpeg, jpeg2000 or png file format.
 
 Jan Hubička (hubicka@ucw.cz)
