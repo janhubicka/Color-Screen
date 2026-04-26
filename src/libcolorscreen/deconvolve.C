@@ -124,7 +124,7 @@ deconvolution<T>::deconvolution (mtf *mtf, luminosity_t mtf_scale,
     : m_supersample (supersample), m_sigma ((T)sigma),
       m_iterations (iterations)
 {
-  mtf->precompute ();
+  (void)mtf->precompute ();
   T k_const = (T)1.0 / (T)snr;
   m_border_size = mtf->psf_radius (mtf_scale);
   if (m_supersample && m_border_size == 0)
@@ -249,7 +249,7 @@ void
 deconvolution<T>::process_tile (int thread_id, progress_info *progress)
 {
   if (progress && progress->cancelled ())
-    return false;
+    return;
   if (m_supersample > 1)
     {
       for (int y = 0; y < m_tile_size; y++)
@@ -272,11 +272,11 @@ deconvolution<T>::process_tile (int thread_id, progress_info *progress)
 			 lanczos_a);
         }
       if (progress && progress->cancelled ())
-	return false;
+	return;
     }
   if (taper_edges)
     {
-      T sum = 0;
+      double sum = 0;
 
       /* Compute average pixel.  */
       for (int y = 0; y < m_taper_size; y++)
@@ -294,7 +294,7 @@ deconvolution<T>::process_tile (int thread_id, progress_info *progress)
             sum += get_enlarged_pixel (
                 thread_id, x + m_enlarged_tile_size - m_taper_size, y);
         }
-      sum /= (T)(m_enlarged_tile_size * m_taper_size * 2
+      sum /= (double)(m_enlarged_tile_size * m_taper_size * 2
              + (m_enlarged_tile_size - 2 * m_taper_size) * m_taper_size * 2);
       /* Taper top edge.  */
       for (int y = 0; y < m_taper_size; y++)
@@ -367,7 +367,7 @@ deconvolution<T>::process_tile (int thread_id, progress_info *progress)
         }
     }
   if (progress && progress->cancelled ())
-    return false;
+    return;
 
   if (!m_richardson_lucy)
     {
@@ -400,7 +400,7 @@ deconvolution<T>::process_tile (int thread_id, progress_info *progress)
       for (int iteration = 0; iteration < m_iterations; iteration++)
         {
 	  if (progress && progress->cancelled ())
-	    return false;
+	    return;
           /* Step A: Re-blur the current estimate.  */
 
           /* Blur current estimate to IN.  */
@@ -513,7 +513,7 @@ deconvolution<T>::process_tile (int thread_id, progress_info *progress)
   else if (m_supersample > 1)
     {
       if (progress && progress->cancelled ())
-	return false;
+	return;
       T scale = (T)1 / (T)(m_supersample * m_supersample);
       for (int y = m_border_size; y < m_tile_size - m_border_size; y++)
         for (int x = m_border_size; x < m_tile_size - m_border_size; x++)
