@@ -206,38 +206,3 @@ The parent panel should implement a "reattach" mechanism to handle when the user
 2. **Responsiveness**: Always use background workers for any task taking > 50ms.
 3. **Helpfulness**: Always provide tooltips for parameters using the `tooltip` argument in `ParameterPanel` helpers.
 4. **Validation**: Use the `enabledCheck` lambdas to disable controls that are not applicable in the current state.
-
----
-
-## Maintaining UI Integrity and Encapsulation
-
-To ensure the codebase remains maintainable as the number of panels and UI variants grows, follow these architectural principles:
-
-### 1. Enforce Panel Encapsulation
-Panels should be the "source of truth" for their own internal widget states. 
-- **Avoid `findChild`**: `MainWindow` should ideally not reach into panels using `findChild<T>("objectName")` to call `setEnabled()` or `setVisible()`.
-- **Prefer Public API**: If `MainWindow` needs to trigger a state update in a panel, call a public method (e.g., `updateRegistrationPointInfo()`).
-- **Internal Logic**: Logic for disabling a checkbox based on point counts should live inside the panel, usually triggered by `onParametersRefreshed`.
-
-### 2. Centralize Logic Thresholds
-Never hardcode business logic constants (like "3 points needed for optimization") in the UI layer.
-- **Library as Source**: Always use static methods from `libcolorscreen` (e.g., `colorscreen::solver_parameters::min_points(type)`) to determine thresholds. Suggest updates to libcolorsreen API in the plan.
-
-### 3. Standardized Object Naming
-When `findChild` is unavoidable (e.g., for global shortcuts or synchronization between distinct UI modules):
-- **Document Names**: Use a consistent naming convention (e.g., `lowerCamelCase` with a descriptive suffix like `Box` or `Btn`).
-- **Sync across Variants**: Ensure all variants of a panel (e.g., `flp/GeometryPanel` and `GeometryPanel`) use the exact same `objectName` for corresponding controls.
-
-### 4. Explicit Feedback
-When a control is disabled due to missing data (like registration points):
-- **Explain Why**: Instead of just graying out the control, provide a companion `QLabel` explaining the requirement (e.g., "5 additional points needed for lens correction").
-- **Real-time Updates**: Ensure these labels update immediately as the state changes (e.g., as the user adds points in the viewer).
-
-### 5. Favor Composition over Duplication
-Avoid creating entirely separate subdirectories (like `flp/` or `bck/`) for UI variants that share significant logic.
-- **Maintenance Burden**: Duplicating `MainWindow.cpp` and `GeometryPanel.cpp` creates a massive technical debt where a bug fix or feature improvement must be manually ported to 3+ places.
-- **Alternative**: Use inheritance or composition. Create a base `GeometryPanel` that handles 90% of the logic, and use lightweight subclasses or conditional layout logic in `setupUi` to handle the specific differences between "Fixed Lens" or "Backlight" variants.
-
-### 6. Documentation
-- **Document function**: Add block comments to function
-- **Document design decisions**: Keep comments in the source which helps later understanding of the design of inidvidual parts.
