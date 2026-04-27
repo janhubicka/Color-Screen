@@ -3707,7 +3707,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
     best_solver.write_file (best_solver.start.data (), fparams.sharpened_file, 0, 3);
   if (fparams.diff_file)
     best_solver.write_file (best_solver.start.data (), fparams.diff_file, 0, 2);
-  if (results)
+  if (fparams.flags & finetune_produce_images)
     {
       ret.simulated = best_solver.produce_image (best_solver.start.data (), 0, 0);
       ret.orig = best_solver.produce_image (best_solver.start.data (), 0, 1);
@@ -4202,9 +4202,10 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
             false);
       else
         {
-          deconvolve_rgb<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
-              rendered2.data (), rendered.data (), xsize, ysize, ysize,
-              sharpen_param, nullptr, false);
+          if (!deconvolve_rgb<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
+		      rendered2.data (), rendered.data (), xsize, ysize, ysize,
+		      sharpen_param, nullptr, false))
+	    return false;
         }
 
       if (debugfiles)
