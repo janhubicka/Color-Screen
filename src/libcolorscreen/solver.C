@@ -475,7 +475,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
         solver_parameters &sparam, progress_info *progress)
 {
   /* 3 points may be enough for strips; we only solve homography on 1d.  */
-  if (sparam.n_points () < solver_parameters::min_mesh_points (param->type))
+  if (sparam.n_points () < solver_parameters::min_points (param->type))
     return 0;
 
   param->mesh_trans = nullptr;
