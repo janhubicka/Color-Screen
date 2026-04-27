@@ -467,10 +467,9 @@ void SharpnessPanel::setupUi() {
 
   // Finetune diagnostic images section (initially hidden)
   m_finetuneImagesPanel = new FinetuneImagesPanel();
-  m_finetuneImagesPanel->hide();
 
-  QWidget *fiWrapper = new QWidget();
-  m_finetuneImagesContainer = new QVBoxLayout(fiWrapper);
+  m_finetuneImagesWrapper = new QWidget();
+  m_finetuneImagesContainer = new QVBoxLayout(m_finetuneImagesWrapper);
   m_finetuneImagesContainer->setContentsMargins(0, 0, 0, 0);
 
   QWidget *detachableFI =
@@ -478,11 +477,13 @@ void SharpnessPanel::setupUi() {
         emit detachFinetuneImagesRequested(m_finetuneImagesPanel);
       });
   m_finetuneImagesContainer->addWidget(detachableFI);
+  
+  m_finetuneImagesWrapper->hide();
 
   if (m_currentGroupForm)
-    m_currentGroupForm->addRow(fiWrapper);
+    m_currentGroupForm->addRow(m_finetuneImagesWrapper);
   else
-    m_form->addRow(fiWrapper);
+    m_form->addRow(m_finetuneImagesWrapper);
 
   addSeparator("Adaptive sharpening");
   
@@ -497,16 +498,22 @@ void SharpnessPanel::setupUi() {
 
   m_adaptiveChart = new AdaptiveSharpeningChart(this);
   m_adaptiveChart->initialize(10, 10); // Default size until real data comes
-  // Ideally, chart should handle empty state gracefully (it does clears in paintEvent)
+  
+  m_adaptiveChartWrapper = new QWidget();
+  m_adaptiveChartContainer = new QVBoxLayout(m_adaptiveChartWrapper);
+  m_adaptiveChartContainer->setContentsMargins(0, 0, 0, 0);
   
   QWidget *detachableChart = createDetachableSection("Adaptive Sharpening Chart", m_adaptiveChart, [this]() {
       emit detachAdaptiveChartRequested(m_adaptiveChart);
   });
   
+  m_adaptiveChartContainer->addWidget(detachableChart);
+  m_adaptiveChartWrapper->hide();
+  
   if (m_currentGroupForm)
-      m_currentGroupForm->addRow(detachableChart);
+      m_currentGroupForm->addRow(m_adaptiveChartWrapper);
   else
-      m_form->addRow(detachableChart);
+      m_form->addRow(m_adaptiveChartWrapper);
 }
 
 void SharpnessPanel::updateMTFChart() {
@@ -579,6 +586,15 @@ void SharpnessPanel::onParametersRefreshed(const ParameterState &state) {
   updateMeasurementList();
   updateMTFChart();
   updateScreenTiles();
+
+  // Update Adaptive Sharpening Chart visibility
+  bool hasAdaptiveData = state.rparams.scanner_blur_correction != nullptr;
+  if (m_adaptiveChartWrapper) {
+    // Only hide if not already visible (to avoid hiding it while analysis is running)
+    // or if we explicitly want to follow the state.
+    // If we have data, we show it. If not, we only hide if we're not expecting data soon.
+    m_adaptiveChartWrapper->setVisible(hasAdaptiveData);
+  }
 }
 
 // Methods removed as they are now in TilePreviewPanel or handled by it
@@ -868,10 +884,9 @@ void SharpnessPanel::updateFinetuneImages(const colorscreen::finetune_result& re
     if (m_finetuneImagesPanel) {
         m_finetuneImagesPanel->setFinetuneResult(result);
         m_finetuneImagesPanel->show();
-        // Force layout update of the section container
-        if (m_finetuneImagesPanel->parentWidget()) {
-            m_finetuneImagesPanel->parentWidget()->show();
-        }
+    }
+    if (m_finetuneImagesWrapper) {
+        m_finetuneImagesWrapper->show();
     }
 }
 
@@ -904,6 +919,12 @@ void SharpnessPanel::reattachFinetuneImages(QWidget *widget) {
       }
     }
   }
+}
+
+void SharpnessPanel::showAdaptiveChart() {
+    if (m_adaptiveChartWrapper) {
+        m_adaptiveChartWrapper->show();
+    }
 }
 
 void SharpnessPanel::setFocusAnalysisChecked(bool checked) {

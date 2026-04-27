@@ -43,6 +43,7 @@ public:
   void reattachDotSpread(QWidget *widget);
   void reattachAdaptiveChart(QWidget *widget);
   AdaptiveSharpeningChart *getAdaptiveChart() const { return m_adaptiveChart; }
+  void showAdaptiveChart();
 
 public slots:
   void onAnalyzeDisplacements();
@@ -77,6 +78,7 @@ private:
   QVBoxLayout *m_mtfContainer = nullptr; // Container Layout
   QVBoxLayout *m_measurementsLayout = nullptr;
   FinetuneImagesPanel *m_finetuneImagesPanel = nullptr;
+  QWidget *m_finetuneImagesWrapper = nullptr;
   QVBoxLayout *m_finetuneImagesContainer = nullptr;
   std::vector<colorscreen::mtf_measurement> m_lastMeasurements;
 
@@ -92,6 +94,8 @@ private:
   uint64_t m_finetuneFlags = 0;
   class TilePreviewPanel *m_dotSpreadPanel = nullptr;
   AdaptiveSharpeningChart *m_adaptiveChart = nullptr;
+  QWidget *m_adaptiveChartWrapper = nullptr;
+  QVBoxLayout *m_adaptiveChartContainer = nullptr;
 };
 
 #endif // SHARPNESS_PANEL_H

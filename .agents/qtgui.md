@@ -4,11 +4,25 @@ This document provides technical details for developing the Qt6-based graphical 
 
 ## Architecture Overview
 
-The GUI is built using **Qt6** and follows a modular panel-based architecture. The main window (`MainWindow`) serves as a shell that integrates multiple functional panels.
+The GUI is built using **Qt6** and follows a modular panel-based architecture.
+The main window (`MainWindow`) serves as a shell that integrates multiple
+functional panels.  It is a frontend for `libcolorscreen`.
+
+The application is essentially a special purpose non-destructive image editor.
+Main functionality is loading an image `m_scan` along with parameters saved in
+`ParameterState`. Main window consists of standard menu, toolbar, statusbar and
+three main components: `ImageWIdget`, `Navigationview` and Panels. The status
+bar is integrated with libcolorscreen's `progress_info` which makes it possible
+to visualise progress on tasks and subtasks as well as cancel individual tasks.
+Rendering and analysis may be slow and it is important to keep GUI responsive.
 
 ### Key Components
 
 - **`MainWindow`**: The top-level window. It manages the lifecycle of the image data, the TaskQueue, and connects signals between panels and the main application logic.
+- **`NavigationView`**: This shows the whole image and indicates zoom and position of ImageWidget.
+It lets user to effectively move around the image
+- **`ImageWidget`**: This displays the image and lets user to quickly pan and zoom in it,
+edit control points, select areas etc.
 - **`ParameterPanel`**: The abstract base class for all UI panels (e.g., `CapturePanel`, `ColorPanel`, `SharpnessPanel`). It provides a rich set of helper methods to create consistent UI controls that are linked to the application state.
 - **`ParameterState`**: A structured object containing all render and project-level parameters. It is used as the single source of truth for the UI.
 - **`TaskQueue`**: Manages background worker threads to ensure the UI remains responsive during heavy computations like rendering or optimization.
@@ -154,6 +168,35 @@ m_form->addRow(section);
 ```
 
 The parent panel should implement a "reattach" mechanism to handle when the user closes the dock widget.
+
++## Widget Visibility Implementation
++
++To handle optional UI sections that should only appear when data is available (e.g., diagnostic images or analysis charts), follow this pattern:
++
++1. **Wrap in a Container**: Wrap the detachable section in a `QWidget` wrapper with a `QVBoxLayout`.
++2. **Initial Hide**: Hide the wrapper in `setupUi`.
++3. **Add to Row**: Add the wrapper (not the internal widget) to the form row.
++4. **Conditional Show**: Show the wrapper when data becomes available (e.g., in `onParametersRefreshed` or specialized update methods).
++
++Example:
++```cpp
++// In setupUi
++m_wrapper = new QWidget();
++m_container = new QVBoxLayout(m_wrapper);
++m_container->setContentsMargins(0, 0, 0, 0);
++
++QWidget *detachable = createDetachableSection("Title", m_contentWidget, [this](){ ... });
++m_container->addWidget(detachable);
++m_wrapper->hide();
++m_form->addRow(m_wrapper);
++
++// In update method
++void MyPanel::updateData(const Data &data) {
++    m_contentWidget->setData(data);
++    m_wrapper->show();
++}
++```
++
 
 ---
 

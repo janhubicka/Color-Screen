@@ -4021,6 +4021,7 @@ void MainWindow::onAdaptiveSharpeningRequested(int xsteps) {
 
   // Connect visualization signals
   if (m_sharpnessPanel && m_sharpnessPanel->getAdaptiveChart()) {
+    m_sharpnessPanel->showAdaptiveChart();
     AdaptiveSharpeningChart *chart = m_sharpnessPanel->getAdaptiveChart();
 
     // Calculate ysteps similar to logic in analyze_scanner_blur_worker::step1
