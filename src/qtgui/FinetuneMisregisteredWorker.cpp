@@ -52,7 +52,7 @@ void FinetuneMisregisteredWorker::run() {
       }
 
       // Invoke geometry solver same way as in GeometrySolverWorker.cpp
-      bool nonlinear = m_computeMesh && localSolver.points.size () > 10;
+      bool nonlinear = m_computeMesh && (int) localSolver.n_points () > colorscreen::solver_parameters::min_mesh_points (localScrToImg.type);
 
       // Lens optimization is slow. Disable it for nonlinear transforms
       colorscreen::solver_parameters solverParamsCopy = localSolver;

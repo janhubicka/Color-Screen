@@ -190,6 +190,56 @@ solver (scr_to_img_parameters *param, image_data &img_data,
     }
   return (coord_t)chisq;
 }
+
+/* Pick N nearest points from POINTS to P.  If SCREEN is true use screen coordinates,
+   otherwise use image coordinates.  Store results in OUT.  */
+
+void
+pick_nearest_points (std::vector<solver_parameters::solver_point_t> &out,
+		     const std::vector<solver_parameters::solver_point_t> &points,
+		     point_t p, int n, bool screen)
+{
+  if ((int)points.size () <= n)
+    {
+      out = points;
+      return;
+    }
+  struct entry
+  {
+    int index;
+    coord_t dist_sq;
+    bool operator< (const entry &other) const
+    {
+      return dist_sq < other.dist_sq;
+    }
+  };
+  std::vector<entry> heap;
+  heap.reserve (n);
+
+  for (int i = 0; i < (int)points.size (); i++)
+    {
+      coord_t d = screen ? points[i].scr.dist_sq2_from (p)
+			 : points[i].img.dist_sq2_from (p);
+      if ((int)heap.size () < n)
+	{
+	  heap.push_back ({ i, d });
+	  if ((int)heap.size () == n)
+	    std::make_heap (heap.begin (), heap.end ());
+	}
+      else if (d < heap.front ().dist_sq)
+	{
+	  std::pop_heap (heap.begin (), heap.end ());
+	  heap.back () = { i, d };
+	  std::push_heap (heap.begin (), heap.end ());
+	}
+    }
+
+  out.clear ();
+  out.reserve (n);
+  for (const auto &e : heap)
+    out.push_back (points[e.index]);
+}
+
 /* Nonlinear optimizer for determining radial lens warp parameters.  */
 class lens_solver
 {
@@ -425,14 +475,14 @@ solver (scr_to_img_parameters *param, image_data &img_data,
         solver_parameters &sparam, progress_info *progress)
 {
   /* 3 points may be enough for strips; we only solve homography on 1d.  */
-  if (sparam.n_points () < (screen_with_vertical_strips_p (param->type) ? 4 : 3))
+  if (sparam.n_points () < solver_parameters::min_mesh_points (param->type))
     return 0;
 
   param->mesh_trans = nullptr;
 
   /* Require more points for strips; we only can verify 1d info.  */
-  bool optimize_lens = sparam.optimize_lens && (sparam.n_points () > (screen_with_vertical_strips_p (param->type) ? 200 : 100));
-  bool optimize_rotation = sparam.optimize_tilt && (sparam.n_points () > (screen_with_vertical_strips_p (param->type) ? 20 : 10));
+  bool optimize_lens = sparam.optimize_lens && (sparam.n_points () > solver_parameters::min_lens_points (param->type));
+  bool optimize_rotation = sparam.optimize_tilt && (sparam.n_points () > solver_parameters::min_perspective_points (param->type));
 
   if (optimize_lens)
     {
@@ -483,11 +533,20 @@ compute_mesh_point (solver_parameters &sparam, scanner_type type,
 {
   int_point_t e = { x, y };
   point_t scrp = mesh_trans->get_screen_point (e);
+  const std::vector<solver_parameters::solver_point_t> *points = &sparam.points;
+  std::vector<solver_parameters::solver_point_t> local_points;
+
+  if (sparam.points.size () > 100)
+    {
+      pick_nearest_points (local_points, sparam.points, scrp, 100, true);
+      points = &local_points;
+    }
+
   trans_4d_matrix h = homography::get_matrix (
-      sparam.points,
+      *points,
       homography::
           solve_screen_weights /*homography::solve_limit_ransac_iterations
-                                  | homography::solve_free_rotation*/
+                                   | homography::solve_free_rotation*/
       ,
       type, nullptr, scrp, nullptr);
   point_t imgp;
@@ -502,8 +561,10 @@ compute_mesh_point (solver_parameters &sparam, scanner_type type,
       for (i = 0; i < 100; i++)
         {
           point_t last_imgp = imgp;
+	  if (sparam.points.size () > 100)
+	    pick_nearest_points (local_points, sparam.points, imgp, 100, false);
           trans_4d_matrix h = homography::get_matrix (
-              sparam.points, homography::solve_image_weights,
+              *points, homography::solve_image_weights,
               /*homography::solve_limit_ransac_iterations |
                  homography::solve_free_rotation*/
               type, nullptr, imgp, nullptr);
@@ -524,7 +585,7 @@ std::unique_ptr <mesh>
 solver_mesh (scr_to_img_parameters *param, image_data &img_data,
              solver_parameters &sparam, progress_info *progress)
 {
-  if (sparam.n_points () < 10)
+  if (sparam.n_points () < solver_parameters::min_mesh_points (param->type))
     return nullptr;
   int step = 10;
   if (param->mesh_trans)

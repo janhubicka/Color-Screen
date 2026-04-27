@@ -58,6 +58,25 @@ struct solver_parameters
     }
   };
 
+  /* Minimal number of points for nonlinear solver to work.  */
+  static int min_mesh_points (enum scr_type type)
+  {
+    return screen_with_vertical_strips_p (type) ? 20 : 10;
+  }
+  static int min_lens_points (enum scr_type type)
+  {
+    return screen_with_vertical_strips_p (type) ? 200 : 100;
+  }
+  static int min_perspective_points (enum scr_type type)
+  {
+    return screen_with_vertical_strips_p (type) ? 20 : 10;
+  }
+  /* Minimal number of points for geometry solver to work.  */
+  static int min_points (enum scr_type type)
+  {
+    return screen_with_vertical_strips_p (type) ? 4 : 3;
+  }
+
   /* Vector holding points.  */
   std::vector<solver_point_t> points;
   /* If true, lens parameters are auto-optimized.  */
