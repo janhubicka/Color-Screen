@@ -120,7 +120,12 @@ public:
   void print (FILE *f) const;
 
   /* Precompute inverse lookup table.  */
-  DLL_PUBLIC void precompute_inverse ();
+  DLL_PUBLIC void precompute_inverse () const;
+
+  /* Compute an inverse mesh. If AREA is provided and set, the inverse mesh covers the specified area in image coordinates.
+     Otherwise, it computes the inverse mesh for the bounding box of the whole original mesh target coordinates.
+     XSTEPS and YSTEPS are automatically chosen to be reasonably precise without increasing the mesh size by more than 32 times. */
+  DLL_PUBLIC std::unique_ptr<mesh> compute_inverse (int_optional_image_area area = {}) const;
 
   /* Grow mesh by given number of points to LEFT, RIGHT, TOP and BOTTOM.  */
   bool grow (int left, int right, int top, int bottom);
@@ -201,13 +206,13 @@ private:
   std::vector<mesh_point> m_data;
 
   /* Inverse lookup data.  */
-  std::vector<mesh_inverse> m_invdata;
+  mutable std::vector<mesh_inverse> m_invdata;
 
   mesh_coord_t m_xshift, m_yshift, m_xstep, m_ystep, m_xstepinv, m_ystepinv;
   int m_width, m_height;
-  mesh_coord_t m_invxshift, m_invyshift, m_invxstep, m_invystep, m_invxstepinv,
+  mutable mesh_coord_t m_invxshift, m_invyshift, m_invxstep, m_invystep, m_invxstepinv,
       m_invystepinv;
-  int m_invwidth, m_invheight;
+  mutable int m_invwidth, m_invheight;
 
   /* Return true if entry E is useful for image range [XMIN, XMAX, YMIN, YMAX].  */
   inline bool

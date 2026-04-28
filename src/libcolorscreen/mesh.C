@@ -53,7 +53,7 @@ mesh::print (FILE *f) const
 /* Precompute indices for inverse lookup.  This speeds up invert() by mapping
    output coordinates back to mesh cells.  */
 void
-mesh::precompute_inverse ()
+mesh::precompute_inverse () const
 {
   if (m_data.empty () || !m_invdata.empty ())
     return;
@@ -453,6 +453,79 @@ mesh::need_to_grow_bottom (int width, int height) const
     if (entry_useful_p ({x, yo}, 0, width - 1, 0, height - 1))
       return true;
   return false;
+}
+
+/* Compute an inverse mesh covering the given AREA or the full bounding box of original mesh target coordinates.  */
+std::unique_ptr<mesh>
+mesh::compute_inverse (int_optional_image_area area) const
+{
+  if (m_width == 0 || m_height == 0 || (area.set && area.empty_p ()))
+    return std::make_unique<mesh> (0, 0, 1.0f, 1.0f, 0, 0);
+
+  mesh_coord_t minx = std::numeric_limits<mesh_coord_t>::max ();
+  mesh_coord_t maxx = std::numeric_limits<mesh_coord_t>::lowest ();
+  mesh_coord_t miny = std::numeric_limits<mesh_coord_t>::max ();
+  mesh_coord_t maxy = std::numeric_limits<mesh_coord_t>::lowest ();
+
+  if (area.set)
+    {
+      minx = area.x;
+      maxx = area.x + area.width - 1;
+      miny = area.y;
+      maxy = area.y + area.height - 1;
+    }
+  else
+    {
+      for (int i = 0; i < (int)m_data.size (); i++)
+        {
+          minx = std::min (m_data[i].x, minx);
+          maxx = std::max (m_data[i].x, maxx);
+          miny = std::min (m_data[i].y, miny);
+          maxy = std::max (m_data[i].y, maxy);
+        }
+    }
+
+  /* Handle meshes with single point in a dimension to avoid division by zero.  */
+  mesh_coord_t invxstep = (m_width > 1) ? (maxx - minx) / (m_width - 1) : 1.0f;
+  mesh_coord_t invystep = (m_height > 1) ? (maxy - miny) / (m_height - 1) : 1.0f;
+
+  if (invxstep <= 0.0f)
+    invxstep = 1.0f;
+  if (invystep <= 0.0f)
+    invystep = 1.0f;
+
+  int invwidth = my_ceil ((maxx - minx) / invxstep) + 1;
+  int invheight = my_ceil ((maxy - miny) / invystep) + 1;
+
+  int64_t max_size = (int64_t)m_width * m_height * 32;
+  if ((int64_t)invwidth * invheight > max_size)
+    {
+      double factor = std::sqrt ((double)((int64_t)invwidth * invheight) / max_size);
+      invxstep *= factor;
+      invystep *= factor;
+      invwidth = my_ceil ((maxx - minx) / invxstep) + 1;
+      invheight = my_ceil ((maxy - miny) / invystep) + 1;
+    }
+
+  if (invwidth < 2)
+    invwidth = 2;
+  if (invheight < 2)
+    invheight = 2;
+
+  precompute_inverse ();
+
+  auto inv_mesh = std::make_unique<mesh> (-minx, -miny, invxstep, invystep, invwidth, invheight);
+
+#pragma omp parallel for collapse(2)
+  for (int y = 0; y < invheight; y++)
+    for (int x = 0; x < invwidth; x++)
+      {
+        point_t ip = { (coord_t)(minx + x * invxstep), (coord_t)(miny + y * invystep) };
+        point_t src = invert (ip);
+        inv_mesh->set_point ({(int64_t)x, (int64_t)y}, src);
+      }
+
+  return inv_mesh;
 }
 
 } // namespace colorscreen
