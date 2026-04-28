@@ -309,6 +309,15 @@ scr_to_img::set_parameters_for_early_correction (
     int width, int height)
 {
   m_param = param;
+
+  if (m_param.mesh_trans)
+    {
+      m_scr_to_img_mesh = m_param.mesh_trans;
+      return false;
+    }
+  else
+    m_scr_to_img_mesh = nullptr;
+  m_img_to_scr_mesh = nullptr;
   
   m_inverted_projection_distance = (coord_t)1 / m_param.projection_distance;
   m_nwarnings = 0;
@@ -345,6 +354,16 @@ scr_to_img::set_parameters (const scr_to_img_parameters &param,
   m_rotation_adjustment = rotation_adjustment;
   if (!scr_to_img::set_parameters_for_early_correction (param, width, height))
     return false;
+
+  if (m_scr_to_img_mesh)
+    {
+      int_image_area area = {0, 0, width, height};
+      m_img_to_scr_mesh = m_scr_to_img_mesh->compute_inverse (area);
+      if (!m_img_to_scr_mesh)
+        return false;
+      return true;
+    }
+
   if (!m_lens_correction.precompute_inverse ())
     return false;
   m_early_correction_precomputed = true;
@@ -353,7 +372,7 @@ scr_to_img::set_parameters (const scr_to_img_parameters &param,
 }
 
 /* Update map for new parameters.  It can only differ in those describing the
- * linear transforms.  */
+   linear transforms.  */
 void
 scr_to_img::update_linear_parameters (scr_to_img_parameters &param)
 {
@@ -370,7 +389,7 @@ scr_to_img::update_linear_parameters (scr_to_img_parameters &param)
 int_image_area
 scr_to_img::get_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) const noexcept
 {
-  if (!m_param.mesh_trans)
+  if (!m_scr_to_img_mesh)
     {
       /* Compute all the corners.  */
       int_image_area area (int_point_t {(int64_t)my_floor (to_scr ({ x1, y1 }).x), (int64_t)my_floor (to_scr ({ x1, y1 }).y)});
@@ -413,7 +432,7 @@ scr_to_img::get_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) const noe
     {
       coord_t minx, miny, maxx, maxy;
       matrix2x2<coord_t> identity;
-      m_param.mesh_trans->get_range (identity, x1, y1, x2, y2, &minx, &maxx,
+      m_scr_to_img_mesh->get_range (identity, x1, y1, x2, y2, &minx, &maxx,
                                      &miny, &maxy);
       return int_image_area ((int)minx + 1, (int)miny + 1, (int)(maxx - minx) + 2, (int)(maxy - miny) + 2);
     }
@@ -430,7 +449,7 @@ scr_to_img::get_range (int img_width, int img_height) const noexcept
 int_image_area
 scr_to_img::get_final_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) const noexcept
 {
-  if (!m_param.mesh_trans)
+  if (!m_scr_to_img_mesh)
     {
       /* Compute all the corners.  */
       int_image_area area (int_point_t {(int64_t)my_floor (img_to_final ({ x1, y1 }).x), (int64_t)my_floor (img_to_final ({ x1, y1 }).y)});
@@ -444,7 +463,7 @@ scr_to_img::get_final_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) con
 
       /* If we correct lens distortion the corners may not be extremes.  */
       if (!m_lens_correction.is_noop () || m_param.tilt_x || m_param.tilt_y
-          || m_param.mesh_trans)
+          || m_scr_to_img_mesh)
         {
           const int steps = 16 * 1024;
           for (int i = 1; i < steps; i++)
@@ -468,7 +487,7 @@ scr_to_img::get_final_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) con
   else
     {
       coord_t minx, miny, maxx, maxy;
-      m_param.mesh_trans->get_range (m_scr_to_final_matrix, x1, y1, x2, y2,
+      m_scr_to_img_mesh->get_range (m_scr_to_final_matrix, x1, y1, x2, y2,
                                      &minx, &maxx, &miny, &maxy);
       /* Determine the coordinates.  */
       const int min_x = (int)my_floor (minx);
@@ -496,7 +515,7 @@ void
 scr_to_img::dump (FILE *f) const
 {
   fprintf (f, "scr to img dump:\n");
-  if (m_param.mesh_trans)
+  if (m_scr_to_img_mesh)
     fprintf (f, "have mesh trans\n");
   save_csp (f, const_cast<scr_to_img_parameters *> (&m_param), NULL, NULL, NULL);
 }

@@ -1470,13 +1470,88 @@ test_darkroom ()
 
   return ok;
 }
+static bool
+test_mesh_inversion ()
+{
+  bool ok = true;
+  /* Create a mesh with non-trivial warp.  */
+  int width = 10;
+  int height = 10;
+  coord_t xshift = 0;
+  coord_t yshift = 0;
+  coord_t xstep = 10.0;
+  coord_t ystep = 10.0;
+  
+  std::unique_ptr<mesh> m (new mesh(xshift, yshift, xstep, ystep, width, height));
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      {
+         /* Add some non-linear distortion. */
+         coord_t target_x = x * xstep + std::sin(y * 0.5) * 1.0;
+         coord_t target_y = y * ystep + std::cos(x * 0.5) * 1.0;
+         m->set_point({(int64_t)x, (int64_t)y}, {target_x, target_y});
+      }
+      
+  /* Precompute inverse to use m->invert(ip).  */
+  m->precompute_inverse();
+  
+  /* Get the cached inverse mesh covering the bounding box. */
+  std::shared_ptr<mesh> inv_m = m->compute_inverse();
+  
+  /* Test inversion precision by verifying roundtrip. */
+  for (int y = 1; y < height - 2; y++)
+    for (int x = 1; x < width - 2; x++)
+      {
+         point_t src = {(coord_t)(x * xstep + xstep / 2.0), (coord_t)(y * ystep + ystep / 2.0)};
+         point_t target = m->apply(src);
+         point_t expected_src = m->invert(target);
+         point_t recovered_src = inv_m->apply(target);
+         
+         if (src.dist_from(expected_src) > 0.05)
+           {
+             printf("FAILED: m->invert error too large at %f, %f: recovered %f, %f\n", 
+                 src.x, src.y, expected_src.x, expected_src.y);
+             ok = false;
+           }
+
+         if (src.dist_from(recovered_src) > 1.0)
+           {
+             printf("FAILED: inv_m->apply roundtrip error too large at %f, %f: recovered %f, %f\n", 
+                 src.x, src.y, recovered_src.x, recovered_src.y);
+             ok = false;
+           }
+      }
+      
+  /* Test optional area caching. */
+  int_optional_image_area area;
+  area.set = true;
+  area.x = 20;
+  area.y = 20;
+  area.width = 40;
+  area.height = 40;
+  
+  std::shared_ptr<mesh> inv_m_area = m->compute_inverse(area);
+  
+  point_t target = {40, 40};
+  point_t recovered_src_area = inv_m_area->apply(target);
+  point_t expected_src = m->invert(target);
+  
+  if (recovered_src_area.dist_from(expected_src) > 0.5)
+    {
+      printf("FAILED: Mesh inversion area mismatch at %f, %f: expected %f, %f, got %f, %f\n", 
+          target.x, target.y, expected_src.x, expected_src.y, recovered_src_area.x, recovered_src_area.y);
+      ok = false;
+    }
+  
+  return ok;
+}
 }
 
 
 int
 main ()
 {
-  printf ("1..25\n");
+  printf ("1..26\n");
 
   test_matrix ();
   report ("matrix tests", true);
@@ -1505,5 +1580,6 @@ main ()
   report ("spectrum to xyz tests", test_spectrum_dyes_to_xyz ());
   report ("whitepoint consistency tests", test_whitepoint_constants ());
   report ("darkroom simulation tests", test_darkroom ());
+  report ("mesh inversion tests", test_mesh_inversion ());
   return error_found;
 }

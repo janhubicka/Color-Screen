@@ -537,6 +537,9 @@ public:
   constexpr optional_image_area_base ()
   : set (false)
   { }
+  constexpr optional_image_area_base (const image_area_base<T,P> &area)
+  : image_area_base<T,P> (area), set (true)
+  { }
   bool
   operator== (const optional_image_area_base &other) const
   {

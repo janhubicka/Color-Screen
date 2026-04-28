@@ -69,7 +69,7 @@ public:
   pure_attr point_t
   apply_early_correction (point_t p) const noexcept
   {
-    assert (!debug || m_early_correction_precomputed);
+    assert (!debug || (m_early_correction_precomputed && !m_scr_to_img_mesh));
     return apply_lens_correction (p)
            * m_inverted_projection_distance;
   }
@@ -99,25 +99,27 @@ public:
   pure_attr inline point_t
   to_img (point_t p) const noexcept
   {
-    if (m_param.mesh_trans)
-      return m_param.mesh_trans->apply (p);
+    if (m_scr_to_img_mesh)
+      return m_scr_to_img_mesh->apply (p);
     p = m_scr_to_img_homography_matrix.perspective_transform (p);
     return inverse_early_correction (p);
   }
   pure_attr inline bool
   to_img_in_mesh_range (point_t p) const noexcept
   {
-    if (!m_param.mesh_trans)
+    if (!m_scr_to_img_mesh)
       return true;
-    return m_param.mesh_trans->in_range_p (p.x, p.y);
+    return m_scr_to_img_mesh->in_range_p (p.x, p.y);
   }
   /* Map image coordinates to screen.  */
   pure_attr inline point_t
   to_scr (point_t p) const noexcept
   {
     point_t inp = p;
-    if (m_param.mesh_trans)
-      return m_param.mesh_trans->invert (p);
+    if (m_img_to_scr_mesh)
+      return m_img_to_scr_mesh->apply (p);
+    //if (m_scr_to_img_mesh)
+      //return m_scr_to_img_mesh->invert (p);
     else
       {
         p = apply_early_correction (p);
@@ -241,6 +243,9 @@ private:
   coord_t m_rotation_adjustment = 0;
   /* Lens correction logic.  */
   lens_warp_correction m_lens_correction;
+
+  std::shared_ptr<mesh> m_scr_to_img_mesh;
+  std::shared_ptr<mesh> m_img_to_scr_mesh;
 
   /* Return inverse lens correction for scan point SP.  */
   pure_attr point_t

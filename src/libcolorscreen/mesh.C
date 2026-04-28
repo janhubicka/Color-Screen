@@ -9,6 +9,28 @@
 namespace colorscreen
 {
 
+namespace {
+  struct mesh_inverse_params
+  {
+    const mesh *m;
+    uint64_t id;
+    int_optional_image_area area;
+
+    bool operator== (const mesh_inverse_params &other) const
+    {
+      return id == other.id && area == other.area;
+    }
+  };
+
+  std::unique_ptr<mesh>
+  get_inverse_mesh (mesh_inverse_params &params, progress_info *progress)
+  {
+    return params.m->compute_inverse_uncached (params.area, progress);
+  }
+
+  lru_cache<mesh_inverse_params, mesh, get_inverse_mesh, 16> inverse_mesh_cache ("inverse_meshes");
+}
+
 /* Initialize 2D mesh transformation.  XSHIFT and YSHIFT are the range shifts,
    XSTEP and YSTEP are the grid step sizes.  WIDTH and HEIGHT are dimensions
    of the mesh in points.  */
@@ -457,7 +479,7 @@ mesh::need_to_grow_bottom (int width, int height) const
 
 /* Compute an inverse mesh covering the given AREA or the full bounding box of original mesh target coordinates.  */
 std::unique_ptr<mesh>
-mesh::compute_inverse (int_optional_image_area area) const
+mesh::compute_inverse_uncached (int_optional_image_area area, progress_info *progress) const
 {
   if (m_width == 0 || m_height == 0 || (area.set && area.empty_p ()))
     return std::make_unique<mesh> (0, 0, 1.0f, 1.0f, 0, 0);
@@ -520,12 +542,24 @@ mesh::compute_inverse (int_optional_image_area area) const
   for (int y = 0; y < invheight; y++)
     for (int x = 0; x < invwidth; x++)
       {
+        if (progress && progress->cancel_requested ())
+          continue;
         point_t ip = { (coord_t)(minx + x * invxstep), (coord_t)(miny + y * invystep) };
         point_t src = invert (ip);
         inv_mesh->set_point ({(int64_t)x, (int64_t)y}, src);
       }
 
+  if (progress && progress->cancel_requested ())
+    return nullptr;
+
   return inv_mesh;
+}
+
+std::shared_ptr<mesh>
+mesh::compute_inverse (int_optional_image_area area, progress_info *progress) const
+{
+  mesh_inverse_params p = { this, id, area };
+  return inverse_mesh_cache.get (p, progress);
 }
 
 } // namespace colorscreen

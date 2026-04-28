@@ -125,7 +125,10 @@ public:
   /* Compute an inverse mesh. If AREA is provided and set, the inverse mesh covers the specified area in image coordinates.
      Otherwise, it computes the inverse mesh for the bounding box of the whole original mesh target coordinates.
      XSTEPS and YSTEPS are automatically chosen to be reasonably precise without increasing the mesh size by more than 32 times. */
-  DLL_PUBLIC std::unique_ptr<mesh> compute_inverse (int_optional_image_area area = {}) const;
+  DLL_PUBLIC std::shared_ptr<mesh> compute_inverse (int_optional_image_area area = {}, class progress_info *progress = nullptr) const;
+
+  /* Helper to perform the actual inverse mesh computation without using the cache.  */
+  DLL_PUBLIC std::unique_ptr<mesh> compute_inverse_uncached (int_optional_image_area area = {}, class progress_info *progress = nullptr) const;
 
   /* Grow mesh by given number of points to LEFT, RIGHT, TOP and BOTTOM.  */
   bool grow (int left, int right, int top, int bottom);
