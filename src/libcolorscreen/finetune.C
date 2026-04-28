@@ -3802,8 +3802,9 @@ finetune_misregistered_area (solver_parameters *solver,
     return false;
   int xstep, ystep;
   get_steps (img, area, param, &xstep, &ystep);
-  int xsubstep = xstep / 3;
-  int ysubstep = ystep / 3;
+  const int range = 3;
+  int xsubstep = xstep / range;
+  int ysubstep = ystep / range;
   int xsubsteps = (area.width + xsubstep - 1) / xsubstep;
   int ysubsteps = (area.height + ysubstep - 1) / ysubstep;
   int npoints;
@@ -3847,19 +3848,43 @@ finetune_misregistered_area (solver_parameters *solver,
     {
 
       std::vector<int_point_t> points;
-      for (int y = 2; y < ysubsteps - 2; y++)
-        for (int x = 2; x < xsubsteps - 2; x++)
+      for (int y = range; y < ysubsteps - range - 1; y++)
+        for (int x = range; x < xsubsteps - range - 1; x++)
           {
             bool ok = true;
-            for (int yy = y - 1; yy <= y + 1 && ok; yy++)
-              for (int xx = x - 1; xx <= x + 1 && ok; xx++)
+	    /* If range is 3 we search
+	      
+	       b b b b b b b
+	       b . . . . . p
+	       b . . . . . p
+	       b . . p . . p
+	       b . . . . . p
+	       b . . . . . p
+	       b b b b b b b  
+	       
+	       p is the tile we consider to compute points n.
+	       . is required to have no control point
+	       b is required to have at least one control point.
+
+	       So at the end, the computed points should approximately
+	       make grid with spacing of 3
+
+	       p . . p . . p
+	       . . . . . . .
+	       . . . . . . .
+	       p . . p . . p
+	       . . . . . . .
+	       . . . . . . .
+	       p . . p . . p */
+            for (int yy = y - range - 1; yy <= y + range - 1 && ok; yy++)
+              for (int xx = x - range - 1; xx <= x + range + 1 && ok; xx++)
                 if (tiles[yy * xsubsteps + xx] != unknown)
                   ok = false;
             if (!ok)
               continue;
             int nknown = 0;
-            for (int yy = y - 2; yy <= y + 2 && ok; yy++)
-              for (int xx = x - 2; xx <= x + 2 && ok; xx++)
+            for (int yy = y - range; yy <= y + range && ok; yy++)
+              for (int xx = x - range; xx <= x + range && ok; xx++)
                 if (tiles[yy * xsubsteps + xx] == known)
                   nknown++;
             if (!nknown)
@@ -4098,19 +4123,19 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
             rgbdata m = simulated_screen->get_pixel (y, x);
             if (m.red > threshold)
               {
-                coord_t val = m.red - threshold;
+                luminosity_t val = m.red - threshold;
                 wr += val;
                 red += m * val;
               }
             if (m.green > threshold)
               {
-                coord_t val = m.green - threshold;
+                luminosity_t val = m.green - threshold;
                 wg += val;
                 green += m * val;
               }
             if (m.blue > threshold)
               {
-                coord_t val = m.blue - threshold;
+                luminosity_t val = m.blue - threshold;
                 wb += val;
                 blue += m * val;
               }
@@ -4142,19 +4167,19 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
             rgbdata m = collection_scr.noninterpolated_mult (p);
             if (m.red > threshold)
               {
-                coord_t val = m.red - threshold;
+                luminosity_t val = m.red - threshold;
                 wr += val;
                 red += am * val;
               }
             if (m.green > threshold)
               {
-                coord_t val = m.green - threshold;
+                luminosity_t val = m.green - threshold;
                 wg += val;
                 green += am * val;
               }
             if (m.blue > threshold)
               {
-                coord_t val = m.blue - threshold;
+                luminosity_t val = m.blue - threshold;
                 wb += val;
                 blue += am * val;
               }
@@ -4289,19 +4314,19 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
             rgbdata am = rendered2[(y - area.y + ext) * xsize + x - area.x + ext];
             if (m.red > threshold)
               {
-                coord_t val = m.red - threshold;
+                luminosity_t val = m.red - threshold;
                 wr += val;
                 red += am * val;
               }
             if (m.green > threshold)
               {
-                coord_t val = m.green - threshold;
+                luminosity_t val = m.green - threshold;
                 wg += val;
                 green += am * val;
               }
             if (m.blue > threshold)
               {
-                coord_t val = m.blue - threshold;
+                luminosity_t val = m.blue - threshold;
                 wb += val;
                 blue += am * val;
               }
