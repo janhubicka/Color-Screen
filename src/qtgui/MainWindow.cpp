@@ -116,6 +116,8 @@ Q_DECLARE_METATYPE(colorscreen::render_parameters)
 Q_DECLARE_METATYPE(colorscreen::scr_to_img_parameters)
 Q_DECLARE_METATYPE(std::vector<colorscreen::point_t>)
 Q_DECLARE_METATYPE(std::vector<colorscreen::color_match>)
+Q_DECLARE_METATYPE(std::vector<colorscreen::solver_parameters::solver_point_t>)
+Q_DECLARE_METATYPE(std::vector<colorscreen::solver_parameters::solver_point_t>*)
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   qRegisterMetaType<MainWindow::SolverRequestData>();
@@ -124,6 +126,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   qRegisterMetaType<colorscreen::scr_to_img_parameters>();
   qRegisterMetaType<std::vector<colorscreen::point_t>>();
   qRegisterMetaType<std::vector<colorscreen::color_match>>();
+  qRegisterMetaType<std::vector<colorscreen::solver_parameters::solver_point_t>>();
+  qRegisterMetaType<std::vector<colorscreen::solver_parameters::solver_point_t>*>();
   m_undoStack = new QUndoStack(this);
 
   setupUi();
@@ -3790,6 +3794,10 @@ void MainWindow::onAutomaticallyAddPointsRequested() {
             changeParameters(newState,
                              "Automatically add points (Geometry update)");
           });
+  connect(worker, &FinetuneMisregisteredWorker::requestCurrentPoints, this,
+          [this](std::vector<colorscreen::solver_parameters::solver_point_t> *points) {
+            if (points) *points = m_solverParams.points;
+          }, Qt::BlockingQueuedConnection);
   connect(worker, &FinetuneMisregisteredWorker::finished, this,
           [this, thread, progress](bool success) {
             removeProgress(progress);

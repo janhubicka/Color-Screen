@@ -31,6 +31,7 @@ signals:
   void pointsReady(
       std::vector<colorscreen::solver_parameters::solver_point_t> points);
   void geometryReady(colorscreen::scr_to_img_parameters result);
+  void requestCurrentPoints(std::vector<colorscreen::solver_parameters::solver_point_t> *points);
 
 private:
   colorscreen::solver_parameters m_solverParams;

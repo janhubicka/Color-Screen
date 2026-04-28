@@ -59,6 +59,22 @@ void FinetuneMisregisteredWorker::run() {
       if (nonlinear || localSolver.points.size () < 30)
 	solverParamsCopy.optimize_lens = false;
 
+      // Check if we should send updates to GUI
+      bool timeThreshold = lastUpdateTime.elapsed() >= 5000;
+      bool countThreshold = localSolver.points.size() >= (size_t)(pointsAtLastUpdate * 1.1 + 0.5);
+
+      // Send points if they are desired.  Do this before solving so we receive user updates
+      // earlier
+      if (timeThreshold || countThreshold) {
+	if (!accumulatedPoints.empty()) {
+	  emit pointsReady(accumulatedPoints);
+	  accumulatedPoints.clear();
+	}
+	std::vector<colorscreen::solver_parameters::solver_point_t> currentPoints = localSolver.points;
+	emit requestCurrentPoints(&currentPoints);
+	localSolver.points = currentPoints;
+      }
+
       // colorscreen::solver modifies params in place
       colorscreen::solver(&localScrToImg, *m_scan, solverParamsCopy,
 			  m_progress.get());
@@ -80,17 +96,25 @@ void FinetuneMisregisteredWorker::run() {
 	break;
 
       // Check if we should send updates to GUI
-      bool timeThreshold = lastUpdateTime.elapsed() >= 5000;
-      bool countThreshold = localSolver.points.size() >= (size_t)(pointsAtLastUpdate * 1.1 + 0.5);
+      if (!timeThreshold && !countThreshold)
+        {
+          timeThreshold = lastUpdateTime.elapsed() >= 5000;
+          countThreshold = localSolver.points.size() >= (size_t)(pointsAtLastUpdate * 1.1 + 0.5);
+	}
 
       if (timeThreshold || countThreshold) {
 	if (!accumulatedPoints.empty()) {
 	  emit pointsReady(accumulatedPoints);
-	  emit geometryReady(localScrToImg);
 	  accumulatedPoints.clear();
-	  pointsAtLastUpdate = localSolver.points.size();
-	  lastUpdateTime.restart();
 	}
+        emit geometryReady(localScrToImg);
+	
+	std::vector<colorscreen::solver_parameters::solver_point_t> currentPoints = localSolver.points;
+	emit requestCurrentPoints(&currentPoints);
+	localSolver.points = currentPoints;
+	
+	pointsAtLastUpdate = localSolver.points.size();
+	lastUpdateTime.restart();
       }
     }
   } catch (...) {
