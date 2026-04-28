@@ -42,7 +42,7 @@ void GeometrySolverWorker::solve(
       success = false;
       cancelled = true;
     } else {
-      if (computeMesh) {
+      if (computeMesh && (int)solverParams.n_points () > colorscreen::solver_parameters::min_mesh_points (params.type)) {
         params.mesh_trans = colorscreen::solver_mesh(&params, *m_scan, solverParams, progress.get());
         if (!params.mesh_trans) {
           success = false;
