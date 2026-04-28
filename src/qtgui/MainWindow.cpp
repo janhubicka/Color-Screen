@@ -3381,7 +3381,7 @@ void MainWindow::onPruneMisplaced() {
   // Trigger auto solver if enabled
   if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
     size_t count = m_imageWidget->registrationPointCount();
-    if (count >= 3) {
+    if (count >= (size_t)colorscreen::solver_parameters::min_points(m_scrToImgParams.type)) {
       onOptimizeGeometry(true);
     }
   }
@@ -3429,23 +3429,17 @@ void MainWindow::updateRegistrationActions() {
 
   // Disable/enable optimize geometry and select all based on point count
   size_t count = m_imageWidget ? m_imageWidget->registrationPointCount() : 0;
+  int min_points = colorscreen::solver_parameters::min_points(m_scrToImgParams.type);
   if (m_selectAllAction) {
     m_selectAllAction->setEnabled(count > 0);
   }
   if (m_optimizeGeometryAction) {
-    m_optimizeGeometryAction->setEnabled(count >= 3);
+    m_optimizeGeometryAction->setEnabled(count >= (size_t)min_points);
   }
 
-  // Update buttons in GeometryPanel
+  // Update buttons in GeometryPanel is now handled by the panel itself
   if (m_geometryPanel) {
-    QPushButton *optBtn =
-        m_geometryPanel->findChild<QPushButton *>("optimizeButton");
-    if (optBtn)
-      optBtn->setEnabled(count >= 3);
-
-    QCheckBox *nlBox = m_geometryPanel->findChild<QCheckBox *>("nonlinearBox");
-    if (nlBox)
-      nlBox->setEnabled(count >= 5);
+    m_geometryPanel->updateRegistrationPointInfo(getCurrentState());
   }
 }
 
@@ -3463,7 +3457,7 @@ void MainWindow::maybeTriggerAutoSolver() {
 
   if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
     size_t count = m_imageWidget->registrationPointCount();
-    if (count >= 3) {
+    if (count >= (size_t)colorscreen::solver_parameters::min_points(m_scrToImgParams.type)) {
       onOptimizeGeometry(true); // Trigger solver (auto=true)
     }
   }
@@ -3572,7 +3566,7 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
     // Trigger auto solver if enabled
     if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
       size_t count = m_imageWidget->registrationPointCount();
-      if (count >= 3) {
+      if (count >= (size_t)colorscreen::solver_parameters::min_points(m_scrToImgParams.type)) {
         onOptimizeGeometry(true);
       }
     }
@@ -3860,7 +3854,7 @@ void MainWindow::onFinetuneFinished(
     // Trigger auto solver if enabled
     if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
       size_t count = m_imageWidget->registrationPointCount();
-      if (count >= 3) {
+      if (count >= (size_t)colorscreen::solver_parameters::min_points(m_scrToImgParams.type)) {
         onOptimizeGeometry(true);
       }
     }

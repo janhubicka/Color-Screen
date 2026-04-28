@@ -52,18 +52,26 @@ protected:
   bool shouldUpdateTiles(const ParameterState &state) override {
     if ((int)state.scrToImg.type != m_lastScrType)
       return true;
+    if (state.rparams.red_strip_width != m_lastRedStripWidth)
+      return true;
+    if (state.rparams.green_strip_width != m_lastGreenStripWidth)
+      return true;
     return false;
   }
 
   void onTileUpdateScheduled() override {
     ParameterState state = m_stateGetter();
     m_lastScrType = (int)state.scrToImg.type;
+    m_lastRedStripWidth = state.rparams.red_strip_width;
+    m_lastGreenStripWidth = state.rparams.green_strip_width;
   }
 
   bool requiresScan() const override { return false; }
 
 private:
   int m_lastScrType = -1;
+  double m_lastRedStripWidth = -1.0;
+  double m_lastGreenStripWidth = -1.0;
 };
 } // namespace
 

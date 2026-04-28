@@ -4,6 +4,7 @@
 #include "ParameterPanel.h"
 
 class QCheckBox;
+class QLabel;
 class DeformationChartWidget;
 class FinetuneImagesPanel;
 
@@ -37,6 +38,7 @@ signals:
 public:
   bool isAutoEnabled() const;
   bool isNonlinearEnabled() const;
+  void updateRegistrationPointInfo(const ParameterState &state);
   void updateDeformationChart();
   void reattachDeformationChart(QWidget *widget);
   void reattachLensChart(QWidget *widget);
@@ -47,7 +49,10 @@ public:
   void setRegistrationPointsVisible(bool visible);
 
 protected:
-  void onParametersRefreshed(const ParameterState &state) override { updateDeformationChart(); }
+  void onParametersRefreshed(const ParameterState &state) override { 
+      updateRegistrationPointInfo(state);
+      updateDeformationChart(); 
+  }
 
 private:
   void setupUi();
@@ -66,6 +71,18 @@ private:
   QSlider *m_heatmapToleranceSlider = nullptr;
   QWidget *m_exaggerateSliderContainer = nullptr;
   QWidget *m_maxArrowLengthSliderContainer = nullptr;
+
+  QCheckBox *m_showRegistrationPointsBox = nullptr;
+  QPushButton *m_optimizeButton = nullptr;
+  QCheckBox *m_autoOptimizeBox = nullptr;
+  QCheckBox *m_lensCb = nullptr;
+  QCheckBox *m_tiltCb = nullptr;
+  QCheckBox *m_nlCb = nullptr;
+
+  QLabel *m_lensMessageLabel = nullptr;
+  QLabel *m_tiltMessageLabel = nullptr;
+  QLabel *m_nonlinearMessageLabel = nullptr;
+  QLabel *m_optimizationMessageLabel = nullptr;
 };
 
 #endif // GEOMETRY_PANEL_H

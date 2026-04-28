@@ -36,11 +36,11 @@ void GeometryPanel::setupUi() {
       {colorscreen::lens_move_vertically, "Lens moves vertically"}
   };
 
-  QCheckBox *showBox = new QCheckBox("Show registration points");
-  addToPanel(showBox);
+  m_showRegistrationPointsBox = new QCheckBox("Show registration points");
+  addToPanel(m_showRegistrationPointsBox);
   
   // To make it easy for MainWindow to sync, let's give it an object name
-  showBox->setObjectName("showRegistrationPointsBox");
+  m_showRegistrationPointsBox->setObjectName("showRegistrationPointsBox");
   
   m_exaggerateSliderContainer = addSlider("Exaggerate", 1.0, 10000.0, 100.0, 1, "x", "", 200.0,
             [this](double v) {
@@ -52,14 +52,14 @@ void GeometryPanel::setupUi() {
                 emit maxArrowLengthChanged(v);
             }, 1.0, false, "Maximum length of the arrows displaying registration errors on the image viewer.");
 
-  connect(showBox, &QCheckBox::toggled, this, [this](bool checked){
+  connect(m_showRegistrationPointsBox, &QCheckBox::toggled, this, [this](bool checked){
       if (m_exaggerateSliderContainer) m_exaggerateSliderContainer->setEnabled(checked);
       if (m_maxArrowLengthSliderContainer) m_maxArrowLengthSliderContainer->setEnabled(checked);
   });
-
+ 
   // Initial state sync
-  m_exaggerateSliderContainer->setEnabled(showBox->isChecked());
-  m_maxArrowLengthSliderContainer->setEnabled(showBox->isChecked());
+  m_exaggerateSliderContainer->setEnabled(m_showRegistrationPointsBox->isChecked());
+  m_maxArrowLengthSliderContainer->setEnabled(m_showRegistrationPointsBox->isChecked());
 
   addButtonParameter("Registration points", "Automatically add points", [this]() {
       emit automaticallyAddPointsRequested();
@@ -76,39 +76,55 @@ void GeometryPanel::setupUi() {
 
   addSeparator("Optimization");
 
-  QCheckBox *autoBtn = addCheckboxParameter("Auto optimize",
+  m_autoOptimizeBox = addCheckboxParameter("Auto optimize",
       [this](const ParameterState &){ return isAutoEnabled(); },
       [](ParameterState &, bool){ /* Handled by checkbox toggle signal */ },
       nullptr, "Automatically trigger a geometry optimization whenever registration points are added or moved.");
-  autoBtn->setObjectName("autoSolverBox");
+  m_autoOptimizeBox->setObjectName("autoSolverBox");
+  m_autoOptimizeBox->setChecked(true);
 
-  addButtonParameter("Optimization", "Optimize geometry", [this, autoBtn]() {
-      emit optimizeRequested(autoBtn->isChecked());
+  m_optimizeButton = addButtonParameter("Optimization", "Optimize geometry", [this]() {
+      emit optimizeRequested(m_autoOptimizeBox->isChecked());
   }, nullptr, "Run the solver to optimize the geometry parameters (rotation, tilt, lens) to match the registration points.");
 
-  connect(autoBtn, &QCheckBox::toggled, this, [this](bool checked){
+  connect(m_autoOptimizeBox, &QCheckBox::toggled, this, [this](bool checked){
       if (checked) emit optimizeRequested(true);
   });
 
-  auto triggerIfAuto = [this, autoBtn]() {
-      if (autoBtn->isChecked()) emit optimizeRequested(true);
+  auto triggerIfAuto = [this]() {
+      if (m_autoOptimizeBox->isChecked()) emit optimizeRequested(true);
   };
 
-  QCheckBox *lensCb = addCheckboxWithReset("Optimize lens correction",
+  m_optimizationMessageLabel = new QLabel();
+  m_optimizationMessageLabel->setStyleSheet("font-size: 10px; color: #888; margin-left: 20px;");
+  m_optimizationMessageLabel->setVisible(false);
+  m_form->addRow(m_optimizationMessageLabel);
+
+  m_lensCb = addCheckboxWithReset("Optimize lens correction",
       [](const ParameterState &s){ return s.solver.optimize_lens; },
       [](ParameterState &s, bool v){ s.solver.optimize_lens = v; },
       [](ParameterState &s){ s.scrToImg.lens_correction = colorscreen::lens_warp_correction_parameters(); },
       nullptr, "Include lens distortion parameters in the optimization solver.");
-  connect(lensCb, &QCheckBox::toggled, this, triggerIfAuto);
+  connect(m_lensCb, &QCheckBox::toggled, this, triggerIfAuto);
 
-  QCheckBox *tiltCb = addCheckboxWithReset("Optimize tilt",
+  m_lensMessageLabel = new QLabel();
+  m_lensMessageLabel->setStyleSheet("font-size: 10px; color: #888; margin-left: 20px;");
+  m_lensMessageLabel->setVisible(false);
+  m_form->addRow(m_lensMessageLabel);
+
+  m_tiltCb = addCheckboxWithReset("Optimize tilt",
       [](const ParameterState &s){ return s.solver.optimize_tilt; },
       [](ParameterState &s, bool v){ s.solver.optimize_tilt = v; },
       [](ParameterState &s){ s.scrToImg.tilt_x = 0; s.scrToImg.tilt_y = 0; },
       nullptr, "Include perspective tilt parameters in the optimization solver.");
-  connect(tiltCb, &QCheckBox::toggled, this, triggerIfAuto);
+  connect(m_tiltCb, &QCheckBox::toggled, this, triggerIfAuto);
 
-  QCheckBox *nlCb = addCheckboxParameter("Nonlinear corrections",
+  m_tiltMessageLabel = new QLabel();
+  m_tiltMessageLabel->setStyleSheet("font-size: 10px; color: #888; margin-left: 20px;");
+  m_tiltMessageLabel->setVisible(false);
+  m_form->addRow(m_tiltMessageLabel);
+
+  m_nlCb = addCheckboxParameter("Nonlinear corrections",
       [this](const ParameterState &s){
           return m_nonlinearEnabled || (s.scrToImg.mesh_trans != nullptr);
       },
@@ -116,8 +132,13 @@ void GeometryPanel::setupUi() {
           m_nonlinearEnabled = v;
       },
       nullptr, "Enable higher-order mesh-based corrections for complex dewarping (only active after successful optimization).");
-  nlCb->setObjectName("nonlinearBox");
-  connect(nlCb, &QCheckBox::toggled, this, &GeometryPanel::nonlinearToggled);
+  m_nlCb->setObjectName("nonlinearBox");
+  connect(m_nlCb, &QCheckBox::toggled, this, &GeometryPanel::nonlinearToggled);
+
+  m_nonlinearMessageLabel = new QLabel();
+  m_nonlinearMessageLabel->setStyleSheet("font-size: 10px; color: #888; margin-left: 20px;");
+  m_nonlinearMessageLabel->setVisible(false);
+  m_form->addRow(m_nonlinearMessageLabel);
 
   addEnumParameter("Scanner/camera geometry", pretty_scanner_type_names,
       [](const ParameterState &s){ return (int)s.scrToImg.scanner_type; },
@@ -209,8 +230,34 @@ void GeometryPanel::setupUi() {
 }
 
 bool GeometryPanel::isAutoEnabled() const {
-  QCheckBox *cb = findChild<QCheckBox *>("autoSolverBox");
-  return cb && cb->isChecked();
+  return m_autoOptimizeBox && m_autoOptimizeBox->isChecked();
+}
+
+void GeometryPanel::updateRegistrationPointInfo(const ParameterState &state) {
+  int numPoints = state.solver.points.size();
+  colorscreen::scr_type type = state.scrToImg.type;
+
+  if (m_showRegistrationPointsBox) {
+      m_showRegistrationPointsBox->setText(QString("Show registration points (%1 points)").arg(numPoints));
+  }
+
+  auto updateMsg = [numPoints](QLabel *label, int threshold, const QString &task) {
+      if (!label) return;
+      if (numPoints < threshold) {
+          label->setText(QString("%1 additional registration points needed for %2").arg(threshold - numPoints).arg(task));
+          label->show();
+      } else {
+          label->hide();
+      }
+  };
+
+  updateMsg(m_optimizationMessageLabel, colorscreen::solver_parameters::min_points(type), "basic optimization");
+  updateMsg(m_lensMessageLabel, colorscreen::solver_parameters::min_lens_points(type), "lens correction");
+  updateMsg(m_tiltMessageLabel, colorscreen::solver_parameters::min_perspective_points(type), "perspective correction");
+  updateMsg(m_nonlinearMessageLabel, colorscreen::solver_parameters::min_mesh_points(type), "nonlinear correction");
+
+  bool canOptimize = numPoints >= colorscreen::solver_parameters::min_points(type);
+  if (m_optimizeButton) m_optimizeButton->setEnabled(canOptimize);
 }
 
 bool GeometryPanel::isNonlinearEnabled() const {
@@ -352,11 +399,10 @@ void GeometryPanel::reattachFinetuneImages(QWidget *widget) {
 }
 
 void GeometryPanel::setRegistrationPointsVisible(bool visible) {
-    QCheckBox *cb = findChild<QCheckBox*>("showRegistrationPointsBox");
-    if (cb) {
-        cb->blockSignals(true);
-        cb->setChecked(visible);
-        cb->blockSignals(false);
+    if (m_showRegistrationPointsBox) {
+        m_showRegistrationPointsBox->blockSignals(true);
+        m_showRegistrationPointsBox->setChecked(visible);
+        m_showRegistrationPointsBox->blockSignals(false);
     }
     if (m_exaggerateSliderContainer) m_exaggerateSliderContainer->setEnabled(visible);
     if (m_maxArrowLengthSliderContainer) m_maxArrowLengthSliderContainer->setEnabled(visible);
