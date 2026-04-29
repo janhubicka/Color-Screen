@@ -58,8 +58,8 @@ get_positional_color_contrast (scr_type type, rgbdata c)
   if (paget_like_screen_p (type)
       || screen_with_vertical_strips_p (type))
     {
-      luminosity_t mmin = std::min (std::min (c.red, c.green), c.blue);
-      luminosity_t mmax = std::max (std::max (c.red, c.green), c.blue);
+      luminosity_t mmin = std::min ({c.red, c.green, c.blue});
+      luminosity_t mmax = std::max ({c.red, c.green, c.blue});
       return mmax - mmin;
     }
   /* Dufaycolor has green and blue squares, red strips.

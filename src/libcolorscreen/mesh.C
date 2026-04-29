@@ -171,8 +171,8 @@ point_t
 mesh::invert (point_t ip) const
 {
   mesh_point p = { (mesh_coord_t)ip.x, (mesh_coord_t)ip.y };
-  int ix = floor ((ip.x + m_invxshift) * m_invxstepinv);
-  int iy = floor ((ip.y + m_invyshift) * m_invystepinv);
+  int ix = std::clamp ((int)((ip.x + m_invxshift) * m_invxstepinv), 0, m_invwidth - 1);
+  int iy = std::clamp ((int)((ip.y + m_invyshift) * m_invystepinv), 0, m_invheight - 1);
   if (ix >= 0 && iy >= 0 && ix < m_invwidth && iy < m_invheight && !m_invdata.empty ())
     {
       int pp = iy * m_invwidth + ix;
