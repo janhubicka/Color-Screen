@@ -250,6 +250,7 @@ saturation_loss_table::saturation_loss_table (
 			      cred.green, cgreen.green, cblue.green, (luminosity_t)0.0,
 			      cred.blue, cgreen.blue, cblue.blue, (luminosity_t)0.0,
 			      (luminosity_t)0.0, (luminosity_t)0.0, (luminosity_t)0.0, (luminosity_t)1.0);
+	    sat.transpose ();
             m_saturation_loss_table[idx] = sat.invert ();
           }
         else

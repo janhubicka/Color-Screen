@@ -19,8 +19,9 @@ void FinetuneWorker::run() {
   size_t initialPointCount = localSolver.points.size();
 
   // Call finetune_area
+  struct colorscreen::finetune_area_parameters fparam;
   bool success = colorscreen::finetune_area(&localSolver, m_rparams, m_scrToImg,
-                                            *m_scan, m_area, m_progress.get());
+                                            *m_scan, m_area, fparam, m_progress.get());
 
   // Check if cancelled
   if (m_progress && m_progress->cancelled()) {

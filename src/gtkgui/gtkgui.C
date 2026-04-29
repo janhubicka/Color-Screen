@@ -995,10 +995,11 @@ extern "C"
                 xmax = scan.width;
                 ymax = scan.height;
               }
+	    struct finetune_area_parameters fparam;
             if (!scan.stitch
                 && finetune_area (&current_solver, rparams, current, scan,
                                   { xmin, ymin, xmax - xmin, ymax - ymin },
-                                  &progress))
+                                  fparam, &progress))
               {
                 autosolving = true;
                 display_scheduled = true;

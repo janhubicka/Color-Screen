@@ -36,9 +36,10 @@ void FinetuneMisregisteredWorker::run() {
       size_t initialPointCount = localSolver.points.size();
 
       // Call finetune_misregistered_area
+      struct colorscreen::finetune_area_parameters fparam;
       bool found = colorscreen::finetune_misregistered_area(
 	  &localSolver, m_rparams, localScrToImg, *m_scan, m_area,
-	  m_progress.get());
+	  fparam, m_progress.get());
 
       if (m_progress && m_progress->cancelled())
 	break;

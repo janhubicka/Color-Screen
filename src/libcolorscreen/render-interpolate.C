@@ -313,6 +313,7 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
 				    cred.blue, cgreen.blue, cblue.blue,
 				    (luminosity_t)0,
 				    (luminosity_t)0, (luminosity_t)0, (luminosity_t)0, (luminosity_t)1);
+		  sat.transpose ();
 		  m_saturation_matrix = sat.invert ();
                 }
             }

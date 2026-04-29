@@ -1726,6 +1726,7 @@ public:
       uncertainty = std::min (uncertainty / contrast, (coord_t)(10000000));
     else
       uncertainty = 100000000;
+    printf ("%f\n",uncertainty);
     free_least_squares ();
     return uncertainty;
   }
@@ -3870,10 +3871,12 @@ DLL_PUBLIC bool
 finetune_misregistered_area (solver_parameters *solver,
                              render_parameters &rparam,
                              const scr_to_img_parameters &param,
-                             const image_data &img, int_image_area area,
+                             const image_data &img,
+			     const int_image_area &in_area,
+			     const finetune_area_parameters &fparam,
                              progress_info *progress)
 {
-  area = area.intersect ({ 0, 0, img.width, img.height });
+  int_image_area area = in_area.intersect ({ 0, 0, img.width, img.height });
   if (area.empty_p ())
     return false;
   int xstep, ystep;
@@ -4020,7 +4023,7 @@ finetune_misregistered_area (solver_parameters *solver,
             {
               point_t transformed = map.to_scr (r.solver_point_img_location);
               ok = transformed.dist_from (r.solver_point_screen_location)
-                   < 0.05;
+                   < fparam.max_displacement;
               int px = (r.solver_point_img_location.x - area.x)
                        / (coord_t)xsubstep;
               int py = (r.solver_point_img_location.y - area.y)
@@ -4051,7 +4054,7 @@ finetune_misregistered_area (solver_parameters *solver,
                      [] (finetune_result &a, finetune_result &b)
                        { return a.uncertainty > b.uncertainty; });
           max_uncertainty
-              = std::min (max_uncertainty, res[res.size () * 0.2].uncertainty);
+              = std::min (max_uncertainty, res[(res.size () - 1) * (1 - fparam.uncertainty_ratio)].uncertainty);
         }
 
       /* Now add computed points to solver and update tiles.  */
@@ -4086,9 +4089,11 @@ finetune_misregistered_area (solver_parameters *solver,
 DLL_PUBLIC bool
 finetune_area (solver_parameters *solver, render_parameters &rparam,
                const scr_to_img_parameters &param, const image_data &img,
-               int_image_area area, progress_info *progress)
+               const int_image_area &in_area,
+	       const finetune_area_parameters &fparam,
+	       progress_info *progress)
 {
-  area = area.intersect ({ 0, 0, img.width, img.height });
+  int_image_area area = in_area.intersect ({ 0, 0, img.width, img.height });
   if (area.empty_p ())
     return false;
   int xstep, ystep;
@@ -4121,7 +4126,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
                    | finetune_no_progress_report;
             res[x + y * xsteps] = finetune (
                 rparam, param, img,
-                { { area.x + (x + 0.5) * xstep, area.y + (y + 0.5) * ystep } },
+                { { (coord_t)area.x + (x /*+ 0.5*/) * xstep, (coord_t)area.y + (y /*+ 0.5*/) * ystep } },
                 nullptr, fparam, progress);
             if (progress)
               progress->inc_progress ();
@@ -4133,7 +4138,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
       fparam.flags |= finetune_position /*| finetune_multitile*/ | finetune_bw;
       res[0]
           = finetune (rparam, param, img,
-                      { { area.x + (0.5) * xstep, area.y + (0.5) * ystep } },
+                      { { (coord_t)area.x + /*(0.5) **/ xstep, (coord_t)area.y /*+ (0.5) * ystep*/ } },
                       nullptr, fparam, progress);
       if (progress)
         progress->inc_progress ();
@@ -4143,7 +4148,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
   std::sort (res.begin (), res.end (),
              [] (finetune_result &a, finetune_result &b)
                { return a.uncertainty > b.uncertainty; });
-  coord_t max_uncertainty = res[(xsteps * ysteps) * 0.2].uncertainty;
+  coord_t max_uncertainty = res[(xsteps * ysteps - 1) * (1 - fparam.uncertainty_ratio)].uncertainty;
   for (int x = 0; x < xsteps; x++)
     for (int y = 0; y < ysteps; y++)
       {

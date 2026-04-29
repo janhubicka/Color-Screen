@@ -110,14 +110,52 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
           const image_data &img, const std::vector<point_t> &locs,
           const std::vector<finetune_result> *results,
           const finetune_parameters &fparams, progress_info *progress);
+
+struct finetune_area_parameters
+{
+  int grid_width = 0;
+  int grid_height = 0;
+  luminosity_t min_contrast = 1/1024.0;
+  luminosity_t uncertainty_ratio = 0.8;
+  luminosity_t max_displacement = 0.05;
+
+  /* Determine gris WIDTH and HEIGHT for given CROP and PARAM.  */
+  void
+  get_grid_dimensions (const int_image_area &crop, const scr_to_img_parameters &param, int *width, int *height)
+  {
+    int grid_w = grid_width;
+    int grid_h = grid_height;
+    int scalex = 1, scaley = 1;
+    if (param.scanner_type == lens_move_horizontally
+	|| param.scanner_type == fixed_lens_sensor_move_horizontally)
+      scalex *= 3;
+    else if (param.scanner_type == lens_move_vertically
+	     || param.scanner_type == fixed_lens_sensor_move_vertically)
+      scaley *= 3;
+    if (!grid_w && !grid_h)
+      {
+        const int n = 100;
+        if (crop.width > crop.height)
+	  grid_w = n * scalex;
+	else
+	  grid_h = n * scaley;
+      }
+    if (!grid_w)
+      grid_w = nearest_int (grid_h * (luminosity_t)crop.width / crop.height / scalex * scaley);
+    if (!grid_h)
+      grid_h = nearest_int (grid_w * (luminosity_t)crop.height / crop.width / scaley * scalex);
+    *width = grid_w;
+    *height = grid_h;
+  }
+};
 nodiscard_attr DLL_PUBLIC bool
 finetune_area (solver_parameters *sparam, render_parameters &rparam,
                const scr_to_img_parameters &param, const image_data &img,
-               int_image_area area, progress_info *progress);
+               const int_image_area &area, const finetune_area_parameters &fparam, progress_info *progress);
 nodiscard_attr DLL_PUBLIC bool
 finetune_misregistered_area (solver_parameters *solver, render_parameters &rparam,
 			     const scr_to_img_parameters &param, const image_data &img,
-			     int_image_area area, progress_info *progress);
+			     const int_image_area &area, const struct finetune_area_parameters &fparam, progress_info *progress);
 nodiscard_attr DLL_PUBLIC bool
 render_screen (image_data &img, const scr_to_img_parameters &param,
                const render_parameters &rparam, const scr_detect_parameters &dparam,
