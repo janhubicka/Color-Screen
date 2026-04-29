@@ -47,6 +47,41 @@ struct gsl_vector_deleter
   }
 };
 
+/* Return contrast which is useful for registration.  */
+luminosity_t
+get_positional_color_contrast (scr_type type, rgbdata c)
+{
+  /* In Paget like screens any difference is good since each color
+     forms a grid.
+     For screen with strips we only determine one direction and that one
+     is also always good.  */
+  if (paget_like_screen_p (type)
+      || screen_with_vertical_strips_p (type))
+    {
+      luminosity_t mmin = std::min (std::min (c.red, c.green), c.blue);
+      luminosity_t mmax = std::max (std::max (c.red, c.green), c.blue);
+      return mmax - mmin;
+    }
+  /* Dufaycolor has green and blue squares, red strips.
+     We need contrast between the squares to determine position in both
+     directions.  */
+  if (dufay_like_screen_p (type))
+    {
+      if (type == Dufay)
+	;
+      else if (type == DioptichromeB)
+	std::swap (c.red, c.green);
+      else if (type == ImprovedDioptichromeB || type == Omnicolore)
+	std::swap (c.red, c.blue);
+      else
+	abort ();
+      luminosity_t mmin = std::min (c.blue, c.green);
+      luminosity_t mmax = std::max (c.blue, c.green);
+      return mmax - mmin;
+    }
+  abort ();
+}
+
 /* Callback used for sharpening.  Fetch data from buffer R at point P.
    WIDTH and HEIGHT are dimensions of the buffer.  */
 rgbdata
@@ -303,6 +338,9 @@ public:
 
   /* Threshold for data collection.  */
   luminosity_t collection_threshold;
+
+  /* Contrast determined.  */
+  luminosity_t contrast;
 
   /* Optimized values of red, green, blue for RGB simulation
      and optimized intensities for BW simulation.
@@ -1679,15 +1717,15 @@ public:
     coord_t uncertainty = simplex<coord_t, finetune_solver> (
         *this, "finetuning", progress, report);
     if (!tiles[0].bw.empty ())
-      {
-        rgbdata c = last_color;
-        coord_t mmin = std::min (std::min (c.red, c.green), c.blue);
-        coord_t mmax = std::max (std::max (c.red, c.green), c.blue);
-        if (mmin != mmax)
-          uncertainty /= (mmax - mmin);
-        else
-          uncertainty = 100000000;
-      }
+      contrast = get_positional_color_contrast (type, last_color);
+    else
+      contrast = std::max ({get_positional_color_contrast (type, {(luminosity_t)last_red.red, (luminosity_t)last_green.red, (luminosity_t)last_blue.red}),
+			    get_positional_color_contrast (type, {(luminosity_t)last_red.green, (luminosity_t)last_green.green, (luminosity_t)last_blue.green}),
+			    get_positional_color_contrast (type, {(luminosity_t)last_red.blue, (luminosity_t)last_green.blue, (luminosity_t)last_blue.blue}),});
+    if (contrast > 1 / (luminosity_t)65535)
+      uncertainty = std::min (uncertainty / contrast, (coord_t)(10000000));
+    else
+      uncertainty = 100000000;
     free_least_squares ();
     return uncertainty;
   }
@@ -1824,6 +1862,32 @@ public:
         last_width = red_strip_width;
         last_height = green_strip_width;
         global_updated = true;
+      }
+
+    /* Fast path: If everything is fixed, use screen cache. We will not
+       fill it with temporary screens then.  */
+    if (!optimize_scanner_mtf_sigma && !optimize_scanner_mtf_defocus
+	&& !optimize_scanner_mtf_channel_defocus
+       	&& !optimize_screen_blur && !optimize_screen_channel_blurs
+       	&& !optimize_strips && !optimize_emulsion_blur
+	&& !optimize_emulsion_intensities && !optimize_emulsion_offset)
+      {
+	if (global_updated)
+	  screen_revision++;
+	if (tiles[tileid].last_screen_revision != screen_revision)
+	  {
+	    sharpen_parameters sp = render_sharpen_params;
+	    sp.scanner_mtf_scale *= pixel_size;
+	    std::shared_ptr <screen> scr = render_to_scr::get_screen (type, false,
+								 tile_sharpened,
+								 sp,
+								 red_strip_width,
+								 green_strip_width,
+								 NULL);
+	    memcpy (tiles[tileid].scr.get (), scr.get (), sizeof (screen));
+	    return true;
+	  }
+	return false;
       }
 
     if (optimize_emulsion_blur
@@ -3848,8 +3912,8 @@ finetune_misregistered_area (solver_parameters *solver,
     {
 
       std::vector<int_point_t> points;
-      for (int y = range; y < ysubsteps - range - 1; y++)
-        for (int x = range; x < xsubsteps - range - 1; x++)
+      for (int y = range; y < ysubsteps - range; y++)
+        for (int x = range; x < xsubsteps - range; x++)
           {
             bool ok = true;
 	    /* If range is 3 we search
@@ -3876,8 +3940,8 @@ finetune_misregistered_area (solver_parameters *solver,
 	       . . . . . . .
 	       . . . . . . .
 	       p . . p . . p */
-            for (int yy = y - range - 1; yy <= y + range - 1 && ok; yy++)
-              for (int xx = x - range - 1; xx <= x + range + 1 && ok; xx++)
+            for (int yy = y - range + 1; yy <= y + range - 1 && ok; yy++)
+              for (int xx = x - range + 1; xx <= x + range - 1 && ok; xx++)
                 if (tiles[yy * xsubsteps + xx] != unknown)
                   ok = false;
             if (!ok)

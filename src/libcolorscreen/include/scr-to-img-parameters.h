@@ -155,6 +155,7 @@ struct scr_to_img_parameters
   coord_t final_ratio = 1;
 
   std::shared_ptr<mesh> mesh_trans = nullptr;
+  bool mesh_trans_is_scr_to_img = false;
 
   enum scr_type type = Random;
   enum scanner_type scanner_type = fixed_lens;
@@ -173,7 +174,8 @@ struct scr_to_img_parameters
            && tilt_y == other.tilt_y && type == other.type
            && scanner_type == other.scanner_type
            && lens_correction == other.lens_correction
-           && mesh_trans == other.mesh_trans;
+           && mesh_trans == other.mesh_trans
+ 	   && mesh_trans_is_scr_to_img == other.mesh_trans_is_scr_to_img;
   }
   /* Merge solution from solver into the parameters.
      OTHER is the solution from the solver.  */
@@ -188,6 +190,7 @@ struct scr_to_img_parameters
     lens_correction = other.lens_correction;
     projection_distance = other.projection_distance;
     mesh_trans = other.mesh_trans;
+    mesh_trans_is_scr_to_img = other.mesh_trans_is_scr_to_img;
   }
 
   /* Return true if OTHER is not equal to this.  */

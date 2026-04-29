@@ -346,6 +346,7 @@ void GeometryPanel::updateDeformationChart() {
   // 3. Nonlinear Chart: Perspective vs Nonlinear
   colorscreen::scr_to_img_parameters p3 = p2;
   p3.mesh_trans = state.scrToImg.mesh_trans;
+  p3.mesh_trans_is_scr_to_img = state.scrToImg.mesh_trans_is_scr_to_img;
   if (m_nonlinearChart) m_nonlinearChart->setDeformationData(p3, p2, w, h, mirror, rotation, ox, oy, fw, fh);
   
   // 4. Final: Undeformed vs Current

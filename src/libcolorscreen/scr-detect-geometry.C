@@ -2273,6 +2273,7 @@ we simply try both cmaps.  */
               sparam.add_point (imgp, p, solver_parameters::green);
           }
       ret.mesh_trans = m;
+      ret.param.mesh_trans_is_scr_to_img = true;
       ret.param.mesh_trans = m;
       summarise_quality (img, smap.get (), ret.param, "mesh", report_file,
                          progress);

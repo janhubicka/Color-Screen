@@ -29,12 +29,16 @@ void GeometrySolverWorker::solve(
       solverParams.optimize_lens = false;
     
     auto originalMesh = params.mesh_trans;
+    bool oriignalIsScrToImg = params.mesh_trans_is_scr_to_img;
 
     // colorscreen::solver modifies params in place and returns sum of squares of error
     colorscreen::coord_t error_sq = colorscreen::solver(&params, *m_scan, solverParams, progress.get());
 
     if (!computeMesh)
+    {
       params.mesh_trans = originalMesh;
+      params.mesh_trans_is_scr_to_img = oriignalIsScrToImg;
+    }
 
     qDebug() << "Geometry solver finished with error squared:" << error_sq << " nonlinear " << computeMesh;
 
@@ -44,6 +48,7 @@ void GeometrySolverWorker::solve(
     } else {
       if (computeMesh && (int)solverParams.n_points () > colorscreen::solver_parameters::min_mesh_points (params.type)) {
         params.mesh_trans = colorscreen::solver_mesh(&params, *m_scan, solverParams, progress.get());
+	params.mesh_trans_is_scr_to_img = false;
         if (!params.mesh_trans) {
           success = false;
           if (!progress->cancelled())

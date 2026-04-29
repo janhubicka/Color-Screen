@@ -527,6 +527,8 @@ solver (scr_to_img_parameters *param, image_data &img_data,
                  true);
 }
 
+#if 0
+
 static void
 compute_mesh_point (solver_parameters &sparam, scanner_type type,
                     mesh *mesh_trans, int x, int y)
@@ -670,6 +672,75 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
       if (progress)
         progress->resume_stdout ();
     }
+  if (progress && progress->cancel_requested ())
+    return nullptr;
+  // mesh_trans->print (stdout);
+  if (progress)
+    progress->set_task ("inverting mesh", 1);
+  mesh_trans->precompute_inverse ();
+  return mesh_trans;
+}
+#endif
+
+static void
+compute_img_to_scr_mesh_point (solver_parameters &sparam, scanner_type type,
+                    mesh *mesh_trans, int_point_t e)
+{
+  point_t imgp = mesh_trans->get_screen_point (e);
+  const std::vector<solver_parameters::solver_point_t> *points = &sparam.points;
+  std::vector<solver_parameters::solver_point_t> local_points;
+
+  if (sparam.points.size () > 100)
+    {
+      pick_nearest_points (local_points, sparam.points, imgp, 100, false);
+      points = &local_points;
+    }
+
+  trans_4d_matrix h = homography::get_matrix (
+      *points,
+      homography::
+          solve_image_weights /*homography::solve_limit_ransac_iterations
+                                   | homography::solve_free_rotation*/
+      ,
+      type, nullptr, imgp, nullptr);
+  point_t scrp = h.inverse_perspective_transform (imgp);
+  mesh_trans->set_point (e, scrp);
+}
+
+/* Determine mesh transformation for PARAM.  IMG_DATA is the source image.
+   SPARAM contains solver points.  PROGRESS is used for progress reporting.  */
+
+std::unique_ptr <mesh>
+solver_mesh (scr_to_img_parameters *param, image_data &img_data,
+             solver_parameters &sparam, progress_info *progress)
+{
+  if (sparam.n_points () < solver_parameters::min_mesh_points (param->type))
+    return nullptr;
+  if (param->mesh_trans)
+    abort ();
+  scr_to_img map;
+  if (!map.set_parameters (*param, img_data))
+    return NULL;
+  int_image_area r1 = {0, 0, img_data.width, img_data.height};
+  const int steps = 200;
+  int step = std::max (r1.width / steps, r1.height / steps);
+  if (!step)
+    return NULL;
+  int width = (r1.width + step - 1) / step, height = (r1.height + step - 1) / step;
+  if (progress)
+    progress->set_task ("computing mesh", width * height);
+  std::unique_ptr <mesh> mesh_trans = std::make_unique<mesh> (r1, step, step);
+#pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
+    shared(progress, r1, step, width, height, sparam, img_data,               \
+               mesh_trans, param)
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      if (!progress || !progress->cancel_requested ())
+        {
+          compute_img_to_scr_mesh_point (sparam, param->scanner_type, mesh_trans.get (), {x, y});
+          if (progress)
+            progress->inc_progress ();
+        }
   if (progress && progress->cancel_requested ())
     return nullptr;
   // mesh_trans->print (stdout);

@@ -3968,7 +3968,11 @@ void MainWindow::onDetectScreenFinished(
   // Update parameters
   m_scrToImgParams.type = result.param.type;
   if (result.mesh_trans)
-    m_scrToImgParams.mesh_trans = result.mesh_trans;
+    {
+      m_scrToImgParams.merge_solver_solution (result.param);
+      m_scrToImgParams.mesh_trans = result.mesh_trans;
+      m_scrToImgParams.mesh_trans_is_scr_to_img = true;
+    }
 
   // Update color model if requested
   if (updateColorModel) {

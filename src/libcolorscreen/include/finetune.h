@@ -104,6 +104,7 @@ struct finetune_result
   // finetune_result(finetune_result&&) = default;
   // finetune_result& operator=(finetune_result&&) = default;
 };
+
 DLL_PUBLIC finetune_result
 finetune (render_parameters &rparam, const scr_to_img_parameters &param,
           const image_data &img, const std::vector<point_t> &locs,

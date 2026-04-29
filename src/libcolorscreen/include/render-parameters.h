@@ -231,6 +231,8 @@ struct render_parameters
   bool scan_mirror = false;
   /* Crop of scan (in image coordinates).  */
   int_optional_image_area scan_crop;
+  /* Area of scan containing the actual image (no bordrs).  */
+  int_optional_image_area image_area;
   
   /* Parameters for backlight correction.
      TODO; Invert is applied before backlight correction which is wrong.  */
@@ -587,6 +589,7 @@ struct render_parameters
 	   && scan_rotation == other.scan_rotation
 	   && scan_mirror == other.scan_mirror
 	   && scan_crop == other.scan_crop
+	   && image_area == other.image_area
 	   && sharpen.equal_p (other.sharpen)
            && presaturation == other.presaturation
 	   && gamut_warning == other.gamut_warning
@@ -741,6 +744,19 @@ struct render_parameters
     if (!scan_crop.set)
       return img;
     int_image_area intersection = scan_crop.intersect (img);
+    if (intersection.empty_p ())
+      return img;
+    return intersection;
+  }
+  /* Return crop of the scan in image coordinates.
+     IMG_WIDTH and IMG_HEIGHT are dimensions of the image.  */
+  pure_attr int_image_area
+  get_image_area (int img_width, int img_height) const
+  {
+    int_image_area img (0, 0, img_width, img_height);
+    if (!image_area.set)
+      return get_scan_crop (img_width, img_height);
+    int_image_area intersection = image_area.intersect (img);
     if (intersection.empty_p ())
       return img;
     return intersection;

@@ -925,6 +925,7 @@ render_cmd (int argc, char **argv)
       if (param.mesh_trans)
         param.mesh_trans = NULL;
       param.mesh_trans = solver_mesh (&param, scan, solver_param);
+      param.mesh_trans_is_scr_to_img = false;
     }
   if (detect_color_model)
     rparam.auto_color_model (param.type);
@@ -1104,6 +1105,7 @@ autodetect (int argc, char **argv)
                                              &dsparams, &progress, report);
       param = detected.param;
       param.mesh_trans = detected.mesh_trans;
+      param.mesh_trans_is_scr_to_img = true;
       if (report)
         fclose (report);
       if (!detected.success)

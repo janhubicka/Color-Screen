@@ -205,13 +205,13 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
   if (progress)
     {
       if (mode == deconvolution<DT>::sharpen)
-        progress->set_task ("deconvolution sharpening (weiner filter)",
+        progress->set_task ("deconvolution sharpening (Weiner filter)",
                             xtiles * ytiles);
       else if (mode == deconvolution<DT>::blur)
         progress->set_task ("deconvolution blurring",
                             xtiles * ytiles);
       else
-        progress->set_task ("deconvolution sharpening (richardson-lucy)",
+        progress->set_task ("deconvolution sharpening (Richardson-Lucy)",
                             xtiles * ytiles);
     }
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2) shared(  \

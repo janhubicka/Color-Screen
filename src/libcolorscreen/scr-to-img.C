@@ -312,7 +312,10 @@ scr_to_img::set_parameters_for_early_correction (
 
   if (m_param.mesh_trans)
     {
-      m_scr_to_img_mesh = m_param.mesh_trans;
+      if (m_param.mesh_trans_is_scr_to_img)
+        m_scr_to_img_mesh = m_param.mesh_trans;
+      else
+	m_img_to_scr_mesh = m_param.mesh_trans;
       return true;
     }
   else
@@ -359,6 +362,14 @@ scr_to_img::set_parameters (const scr_to_img_parameters &param,
     {
       int_image_area area = {0, 0, width, height};
       m_img_to_scr_mesh = m_scr_to_img_mesh->compute_inverse (area);
+      if (!m_img_to_scr_mesh)
+        return false;
+      update_scr_to_final_parameters (m_param.final_ratio, m_param.final_angle);
+      return true;
+    }
+  if (m_img_to_scr_mesh)
+    {
+      m_scr_to_img_mesh = m_img_to_scr_mesh->compute_inverse ();
       if (!m_img_to_scr_mesh)
         return false;
       update_scr_to_final_parameters (m_param.final_ratio, m_param.final_angle);

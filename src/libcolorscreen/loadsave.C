@@ -114,7 +114,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
         return false;
       if (param->mesh_trans)
         {
-          if (fprintf (f, "mesh: yes\n") < 0)
+          if (fprintf (f, param->mesh_trans_is_scr_to_img ? "mesh: yes\n" : "img_to_scr_mesh: yes\n") < 0)
             return false;
           if (!param->mesh_trans->save (f))
             return false;
@@ -1755,7 +1755,8 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
               return false;
             }
         }
-      else if (!strcmp (buf, "mesh"))
+      else if (!strcmp (buf, "mesh")
+	       || !strcmp (buf, "img_to_scr_mesh"))
         {
           bool b;
           if (!parse_bool (f, &b))
@@ -1771,6 +1772,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
               if (param)
                 {
                   m->precompute_inverse ();
+		  param->mesh_trans_is_scr_to_img = !strcmp (buf, "mesh");
                   param->mesh_trans = std::move (m);
                 }
             }

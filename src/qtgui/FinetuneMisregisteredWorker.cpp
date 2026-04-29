@@ -85,6 +85,7 @@ void FinetuneMisregisteredWorker::run() {
       if (nonlinear) {
 	localScrToImg.mesh_trans = colorscreen::solver_mesh(
 	    &localScrToImg, *m_scan, solverParamsCopy, m_progress.get());
+	localScrToImg.mesh_trans_is_scr_to_img = false;
 	if (!localScrToImg.mesh_trans) {
 	  if (!m_progress->cancelled())
 	    emit finished(false);
