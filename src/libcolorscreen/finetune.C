@@ -3273,9 +3273,11 @@ public:
           {
             if (verbose)
               {
-                progress->pause_stdout ();
+                if (progress)
+                  progress->pause_stdout ();
                 printf ("Solver point is out of tile\n");
-                progress->resume_stdout ();
+                if (progress)
+                  progress->resume_stdout ();
               }
             ret.err = "Solver point is out of tile";
             return;
@@ -3328,9 +3330,11 @@ public:
           {
             if (verbose)
               {
-                progress->pause_stdout ();
+                if (progress)
+                  progress->pause_stdout ();
                 printf ("Failed to find solver point\n");
-                progress->resume_stdout ();
+                if (progress)
+                  progress->resume_stdout ();
               }
             ret.err = "Failed to find solver point";
             return;
@@ -3506,10 +3510,12 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
     {
       if (verbose)
         {
-          progress->pause_stdout ();
+          if (progress)
+            progress->pause_stdout ();
           fprintf (stderr, "Too small tile %i-%i %i-%i\n", txmin, txmax, tymin,
                    tymax);
-          progress->resume_stdout ();
+          if (progress)
+            progress->resume_stdout ();
         }
       ret.err = "too small tile";
       return ret;
@@ -3517,10 +3523,12 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   int twidth = txmax - txmin + 1, theight = tymax - tymin + 1;
   if (verbose)
     {
-      progress->pause_stdout ();
+      if (progress)
+        progress->pause_stdout ();
       fprintf (stderr, "Tile size %ix%i; %i tiles\n", twidth, theight,
                n_tiles);
-      progress->resume_stdout ();
+      if (progress)
+        progress->resume_stdout ();
     }
   finetune_solver best_solver;
   coord_t best_uncertainty = -1;
@@ -3582,10 +3590,12 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
         {
           if (verbose)
             {
-              progress->pause_stdout ();
+              if (progress)
+                progress->pause_stdout ();
               fprintf (stderr, "Precomputing failed. Tile: %i-%i %i-%i\n",
                        txmin, txmax, tymin, tymax);
-              progress->resume_stdout ();
+              if (progress)
+                progress->resume_stdout ();
             }
           ret.err = "precomputing failed";
           return ret;
@@ -3597,7 +3607,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
         }
 
       if (maxtiles * maxtiles > 1
-          && !(fparams.flags & finetune_no_progress_report))
+          && !(fparams.flags & finetune_no_progress_report) && progress)
         progress->set_task ("finetuning samples", maxtiles * maxtiles);
 
       gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
@@ -3757,9 +3767,11 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   ret.uncertainty = best_uncertainty;
   if (verbose)
     {
-      progress->pause_stdout ();
+      if (progress)
+        progress->pause_stdout ();
       best_solver.print_values (best_solver.start.data ());
-      progress->resume_stdout ();
+      if (progress)
+        progress->resume_stdout ();
     }
   best_solver.set_results (ret, param, rparam, verbose, progress);
 
@@ -4123,7 +4135,8 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
           = finetune (rparam, param, img,
                       { { area.x + (0.5) * xstep, area.y + (0.5) * ystep } },
                       nullptr, fparam, progress);
-      progress->inc_progress ();
+      if (progress)
+        progress->inc_progress ();
     }
   if (progress && progress->cancel_requested ())
     return false;
