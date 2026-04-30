@@ -65,6 +65,7 @@ struct finetune_result
   luminosity_t scanner_mtf_sigma = -1;
   luminosity_t scanner_mtf_blur_diameter = -1;
   luminosity_t scanner_mtf_defocus = -1;
+  luminosity_t contrast = 0;
   rgbdata scanner_mtf_channel_defocus_or_blur = { -1, -1, -1 };
   coord_t emulsion_blur_radius = -1;
   coord_t red_strip_width = -1;
@@ -141,9 +142,9 @@ struct finetune_area_parameters
 	  grid_h = n * scaley;
       }
     if (!grid_w)
-      grid_w = nearest_int (grid_h * (luminosity_t)crop.width / crop.height / scalex * scaley);
+      grid_w = nearest_int (grid_h * (luminosity_t)crop.width / crop.height * scalex / scaley);
     if (!grid_h)
-      grid_h = nearest_int (grid_w * (luminosity_t)crop.height / crop.width / scaley * scalex);
+      grid_h = nearest_int (grid_w * (luminosity_t)crop.height / crop.width * scaley / scalex);
     *width = grid_w;
     *height = grid_h;
   }

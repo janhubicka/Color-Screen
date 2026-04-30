@@ -3326,6 +3326,7 @@ public:
     ret.red_strip_width = get_red_strip_width (start.data ());
     ret.green_strip_width = get_green_strip_width (start.data ());
     ret.scanner_mtf_sigma = get_scanner_mtf_sigma (start.data ());
+    ret.contrast = get_positional_color_contrast (type, last_color);
 
     if (optimize_coordinates)
       {
@@ -4067,8 +4068,9 @@ finetune_misregistered_area (solver_parameters *solver,
         printf ("Finetuning area failed since xsteps or ysteps is 0\n");
       return false;
     }
-  int xstep = std::max (1, area.width / xsteps);
-  int ystep = std::max (1, area.height / ysteps);
+  int_image_area crop = rparam.get_scan_crop (img.width, img.height);
+  int xstep = std::max (1, crop.width / xsteps);
+  int ystep = std::max (1, crop.height / ysteps);
   int max_points = 10000;
 
   if (!solver->points.size ())
@@ -4142,10 +4144,10 @@ finetune_misregistered_area (solver_parameters *solver,
   /* Too small step will lead to re-solving existing points only.  */
   xstep = std::max (xstep,
 		    (int)my_ceil (std::max (fabs (param.coordinate1.x),
-					    fabs (param.coordinate2.x))));
+					    fabs (param.coordinate2.x)) * 2));
   ystep = std::max (ystep,
 		    (int)my_ceil (std::max (fabs (param.coordinate1.y),
-					    fabs (param.coordinate2.y))));
+					    fabs (param.coordinate2.y)) * 2));
 
   const int range = 3;
   int xsubstep = std::max (1, xstep / range);
@@ -4166,22 +4168,32 @@ finetune_misregistered_area (solver_parameters *solver,
 
   std::vector<elt> tiles (xsubsteps * ysubsteps, unknown);
 
+  auto get_cell = [area,xsubstep,ysubstep] (point_t p) -> int_point_t
+  {
+    return {(int64_t)((p.x - area.x) / (coord_t)xsubstep),
+	    (int64_t)((p.y - area.y) / (coord_t)ysubstep)};
+  };
+  auto get_cellp = [get_cell] (int_point_t p) -> int_point_t
+  {
+    return get_cell ((point_t){(coord_t)p.x, (coord_t)p.y});
+  };
+  auto in_range = [xsubsteps,ysubsteps] (int_point_t p) -> bool
+  {
+    return p.x >= 0 && p.x < xsubsteps && p.y >= 0 && p.y < ysubsteps;
+  };
+  auto set_cell = [in_range,&tiles,xsubsteps] (int_point_t p, enum elt value) -> void
+  {
+    if (in_range (p))
+      tiles[p.y * xsubsteps + p.x] = value;
+  };
+
   if (verbose)
     printf ("Adding points to area with top left (%i,%i) width %i height %i, "
             "steps %i %i size %i %i with known points %i\n",
             area.x, area.y, area.width, area.height, xsubsteps, ysubsteps,
             xsubstep, ysubstep, (int)solver->points.size ());
   for (auto p : solver->points)
-    {
-      int px = nearest_int ((p.img.x - area.x) / (coord_t)xsubstep);
-      int py = nearest_int ((p.img.y - area.y) / (coord_t)ysubstep);
-      if (px >= 0 && px < xsubsteps && py >= 0 && py < ysubsteps)
-        {
-          if (verbose && 0)
-            printf ("Existing point on %i %i\n", px, py);
-          tiles[py * xsubsteps + px] = known;
-        }
-    }
+    set_cell (get_cell (p.img), known);
 
   /* This is essentialy an floodfill.  If there is 3x3 tile
      with no known data such that just outside of it exists
@@ -4231,9 +4243,10 @@ finetune_misregistered_area (solver_parameters *solver,
                   nknown++;
             if (!nknown)
               continue;
-            tiles[y * xsubsteps + x] = to_be_computed;
+	    set_cell ({x, y}, to_be_computed);
             points.push_back ({ nearest_int ((x + 0.5) * xsubstep) + area.x,
                                 nearest_int ((y + 0.5) * ysubstep) + area.y });
+	    assert ((get_cellp (points.back ()) == (int_point_t){x,y}));
             if (verbose && 0)
               printf ("Will compute %i %i\n", x, y);
           }
@@ -4288,41 +4301,49 @@ finetune_misregistered_area (solver_parameters *solver,
       npoints = 0;
       if (verbose)
         printf ("Will consider %i results\n", (int)res.size ());
-      /* Now prune points that are too far.  */
+      /* Now prune points that seems badr.  */
       for (size_t i = 0; i < res.size ();)
         {
           finetune_result &r = res[i];
           bool ok = r.success;
           if (ok)
             {
-              int px = nearest_int ((r.solver_point_img_location.x - area.x)
-                                    / (coord_t)xsubstep);
-              int py = nearest_int ((r.solver_point_img_location.y - area.y)
-                                    / (coord_t)ysubstep);
+	      int_point_t cell = get_cell (r.solver_point_img_location);
+	      /* Point must be new.  */
               if (solver->find_point (r.solver_point_screen_location) >= 0)
                 {
                   if (verbose)
                     printf ("found grid: %f %f which already exists\n",
                             r.solver_point_img_location.x,
                             r.solver_point_img_location.y);
-                  if (py >= 0 && px >= 0 && py < ysubsteps && px < xsubsteps)
-                    tiles[py * xsubsteps + px] = known;
+		  set_cell (cell, known);
                   ok = false;
                 }
+	      /* Check contrast to be within threshold.  */
+	      else if (r.contrast < fparam.min_contrast)
+	        {
+                  if (verbose)
+                    printf ("found grid: %f %f with too small contrast %f\n",
+                            r.solver_point_img_location.x,
+                            r.solver_point_img_location.y,
+			    r.contrast);
+		  set_cell (cell, bad);
+                  ok = false;
+	        }
+	      /* Check distance threshold.  */
               else
                 {
                   point_t transformed
                       = map.to_scr (r.solver_point_img_location);
                   ok = transformed.dist_from (r.solver_point_screen_location)
                        < fparam.max_displacement;
-                  if (!ok && py >= 0 && px >= 0 && py < ysubsteps
-                      && px < xsubsteps)
-                    tiles[py * xsubsteps + px] = bad;
+		  if (!ok)
+		    set_cell (cell, bad);
                   if (verbose)
                     printf (
                         "found grid: %i %i transformed: %f %f finetuned: %f "
                         "%f displacement %f %s\n",
-                        px, py, transformed.x, transformed.y,
+                        (int)cell.x, (int)cell.y, transformed.x, transformed.y,
                         r.solver_point_screen_location.x,
                         r.solver_point_screen_location.y,
                         transformed.dist_from (r.solver_point_screen_location),
@@ -4356,17 +4377,14 @@ finetune_misregistered_area (solver_parameters *solver,
       for (size_t i = 0; i < res.size (); i++)
         {
           finetune_result &r = res[i];
-          int px = nearest_int ((r.solver_point_img_location.x - area.x)
-                                / (coord_t)xsubstep);
-          int py = nearest_int ((r.solver_point_img_location.y - area.y)
-                                / (coord_t)ysubstep);
-          if (r.uncertainty <= max_uncertainty)
+	  int_point_t cell = get_cell (r.solver_point_img_location);
+          if (r.uncertainty <= max_uncertainty
+	      && solver->find_point (r.solver_point_screen_location) < 0)
             {
               solver->add_point (r.solver_point_img_location,
                                  r.solver_point_screen_location,
                                  r.solver_point_color);
-              if (py >= 0 && px >= 0 && py < ysubsteps && px < xsubsteps)
-                tiles[py * xsubsteps + px] = known;
+	      set_cell (cell, known);
               nfound++;
               npoints++;
               if (nfound > max_points)
@@ -4376,8 +4394,8 @@ finetune_misregistered_area (solver_parameters *solver,
                   return true;
                 }
             }
-          else if (py >= 0 && px >= 0 && py < ysubsteps && px < xsubsteps)
-            tiles[py * xsubsteps + px] = bad;
+	  else
+	    set_cell (cell, bad);
         }
     }
   while (npoints);
@@ -4403,8 +4421,9 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
   fparam.get_grid_dimensions (area, param, &xsteps, &ysteps);
   if (!xsteps || !ysteps)
     return false;
-  int xstep = std::max (1, area.width / xsteps);
-  int ystep = std::max (1, area.height / ysteps);
+  int_image_area crop = rparam.get_scan_crop (img.width, img.height);
+  int xstep = std::max (1, crop.width / xsteps);
+  int ystep = std::max (1, crop.height / ysteps);
   xsteps = (area.width + xstep - 1) / xstep;
   ysteps = (area.height + ystep - 1) / ystep;
   if (!xsteps || !ysteps)
@@ -4460,7 +4479,8 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
     for (int y = 0; y < ysteps; y++)
       {
         finetune_result &r = res[x + y * xsteps];
-        if (r.success && r.uncertainty <= max_uncertainty)
+        if (r.success && r.uncertainty <= max_uncertainty
+	    && solver->find_point (r.solver_point_screen_location) < 0)
 	  {
 	    solver->add_point (r.solver_point_img_location,
 			       r.solver_point_screen_location,
