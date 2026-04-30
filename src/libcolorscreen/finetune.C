@@ -4170,12 +4170,8 @@ finetune_misregistered_area (solver_parameters *solver,
 
   const auto get_cell_pos = [area,xsubstep,ysubstep] (point_t p) -> int_point_t
   {
-    return {(int64_t)((p.x - area.x) / (coord_t)xsubstep),
-	    (int64_t)((p.y - area.y) / (coord_t)ysubstep)};
-  };
-  const auto get_cellp = [get_cell_pos] (int_point_t p) -> int_point_t
-  {
-    return get_cell_pos ((point_t){(coord_t)p.x, (coord_t)p.y});
+    return {(int64_t)my_floor ((p.x - area.x) / (coord_t)xsubstep),
+	    (int64_t)my_floor ((p.y - area.y) / (coord_t)ysubstep)};
   };
   const auto in_range = [xsubsteps,ysubsteps] (int_point_t p) -> bool
   {
@@ -4205,8 +4201,7 @@ finetune_misregistered_area (solver_parameters *solver,
      known point; enqueue its center for finetuning.  */
   do
     {
-
-      std::vector<int_point_t> points;
+      std::vector<point_t> points;
       for (int y = range; y < ysubsteps - range; y++)
         for (int x = range; x < xsubsteps - range; x++)
           {
@@ -4249,9 +4244,9 @@ finetune_misregistered_area (solver_parameters *solver,
             if (!nknown)
               continue;
 	    set_cell ({x, y}, to_be_computed);
-            points.push_back ({ nearest_int ((x + 0.5) * xsubstep) + area.x,
-                                nearest_int ((y + 0.5) * ysubstep) + area.y });
-	    assert ((get_cellp (points.back ()) == (int_point_t){x,y}));
+            points.push_back ({ ((x + (coord_t)0.5) * xsubstep) + area.x,
+                                ((y + (coord_t)0.5) * ysubstep) + area.y });
+	    assert ((get_cell_pos (points.back ()) == (int_point_t){x,y}));
             if (verbose && 0)
               printf ("Will compute %i %i\n", x, y);
           }
@@ -4278,7 +4273,7 @@ finetune_misregistered_area (solver_parameters *solver,
                  | finetune_no_progress_report;
           res[i]
               = finetune (rparam, param, img,
-                          { { (coord_t)points[i].x, (coord_t)points[i].y } },
+                          { points[i] },
                           nullptr, fparam, progress);
           if (progress)
             progress->inc_progress ();
@@ -4311,50 +4306,49 @@ finetune_misregistered_area (solver_parameters *solver,
         {
           finetune_result &r = res[i];
           bool ok = r.success;
-          if (ok)
-            {
+	  if (!r.success)
+	    ok = false;
+	  /* Point must be new.  */
+	  else if (solver->find_point (r.solver_point_screen_location) >= 0)
+	    {
+	      if (verbose)
+		printf ("found grid: %f %f which already exists\n",
+			r.solver_point_img_location.x,
+			r.solver_point_img_location.y);
+	      set_cell (get_cell_pos (r.solver_point_img_location), known);
+	      ok = false;
+	    }
+	  /* Check contrast to be within threshold.  */
+	  else if (r.contrast < fparam.min_contrast)
+	    {
+	      if (verbose)
+		printf ("found grid: %f %f with too small contrast %f\n",
+			r.solver_point_img_location.x,
+			r.solver_point_img_location.y,
+			r.contrast);
+	      set_cell (get_cell_pos (r.solver_point_img_location), bad);
+	      ok = false;
+	    }
+	  /* Check distance threshold.  */
+	  else
+	    {
+	      point_t transformed
+		  = map.to_scr (r.solver_point_img_location);
+	      ok = transformed.dist_from (r.solver_point_screen_location)
+		   < fparam.max_displacement;
 	      int_point_t cell = get_cell_pos (r.solver_point_img_location);
-	      /* Point must be new.  */
-              if (solver->find_point (r.solver_point_screen_location) >= 0)
-                {
-                  if (verbose)
-                    printf ("found grid: %f %f which already exists\n",
-                            r.solver_point_img_location.x,
-                            r.solver_point_img_location.y);
-		  set_cell (cell, known);
-                  ok = false;
-                }
-	      /* Check contrast to be within threshold.  */
-	      else if (r.contrast < fparam.min_contrast)
-	        {
-                  if (verbose)
-                    printf ("found grid: %f %f with too small contrast %f\n",
-                            r.solver_point_img_location.x,
-                            r.solver_point_img_location.y,
-			    r.contrast);
-		  set_cell (cell, bad);
-                  ok = false;
-	        }
-	      /* Check distance threshold.  */
-              else
-                {
-                  point_t transformed
-                      = map.to_scr (r.solver_point_img_location);
-                  ok = transformed.dist_from (r.solver_point_screen_location)
-                       < fparam.max_displacement;
-		  if (!ok)
-		    set_cell (cell, bad);
-                  if (verbose)
-                    printf (
-                        "found grid: %i %i transformed: %f %f finetuned: %f "
-                        "%f displacement %f %s\n",
-                        (int)cell.x, (int)cell.y, transformed.x, transformed.y,
-                        r.solver_point_screen_location.x,
-                        r.solver_point_screen_location.y,
-                        transformed.dist_from (r.solver_point_screen_location),
-                        ok ? "in threshold" : "out of threshold");
-                }
-            }
+	      if (!ok)
+		set_cell (cell, bad);
+	      if (verbose)
+		printf (
+		    "found grid: %i %i transformed: %f %f finetuned: %f "
+		    "%f displacement %f %s\n",
+		    (int)cell.x, (int)cell.y, transformed.x, transformed.y,
+		    r.solver_point_screen_location.x,
+		    r.solver_point_screen_location.y,
+		    transformed.dist_from (r.solver_point_screen_location),
+		    ok ? "in threshold" : "out of threshold");
+	    }
           if (!ok)
             {
               res[i] = std::move (res.back ());
