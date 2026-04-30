@@ -4039,25 +4039,95 @@ finetune_misregistered_area (solver_parameters *solver,
                              progress_info *progress)
 {
   int_image_area area = in_area.intersect ({ 0, 0, img.width, img.height });
-  if (area.empty_p ())
-    return false;
+  const bool verbose = true;
+  if (area.empty_p () || param.type == Random)
+    {
+      if (verbose)
+	printf ("Finetuning area failed since area is empty or screen is Random\n");
+      return false;
+    }
   int xsteps, ysteps;
   fparam.get_grid_dimensions (area, param, &xsteps, &ysteps);
   if (!xsteps || !ysteps)
-    return false;
+    {
+      if (verbose)
+	printf ("Finetuning area failed since xsteps or ysteps is 0\n");
+      return false;
+    }
   int xstep = std::max (1, area.width / xsteps);
   int ystep = std::max (1, area.height / ysteps);
+  int max_points = 10000;
+
+  if (!solver->points.size ())
+    {
+      /* If registration seem to make sense, try to expand it.  */
+      if (!area.contains_p ({(int)param.center.x, (int)param.center.y})
+	  || param.coordinate1.length () < 3
+	  || param.coordinate2.length () < 3)
+	{
+	  if (verbose)
+	    printf ("Finetuning area failed since there are no solver points and coordinate system starts elsewhere\n");
+	  return false;
+	}
+      finetune_parameters fparam;
+      fparam.flags
+	  |= finetune_position /*| finetune_multitile*/ | finetune_bw
+	     | finetune_no_progress_report;
+      finetune_result res = finetune (rparam, param, img, {param.center}, nullptr, fparam, progress);
+      finetune_result res2 = finetune (rparam, param, img, {param.center + param.coordinate1}, nullptr, fparam, progress);
+      finetune_result res3 = finetune (rparam, param, img, {param.center + param.coordinate2}, nullptr, fparam, progress);
+      if (!res.success || !res2.success || !res3.success)
+	{
+	  if (verbose)
+	    printf ("Finetuning area failed since we failed to identify 3 basis points\n");
+	  return false;
+	}
+      solver->add_point (res.solver_point_img_location,
+			 res.solver_point_screen_location,
+			 res.solver_point_color);
+      solver->add_or_modify_point (res2.solver_point_img_location,
+			 res2.solver_point_screen_location,
+			 res2.solver_point_color);
+      solver->add_or_modify_point (res3.solver_point_img_location,
+			 res3.solver_point_screen_location,
+			 res3.solver_point_color);
+      max_points = 50;
+      xstep = my_floor (std::max (fabs (param.coordinate1.x), fabs (param.coordinate2.x)));
+      ystep = my_floor (std::max (fabs (param.coordinate1.y), fabs (param.coordinate2.y)));
+      if (verbose)
+	printf ("Finetuning area started by adding basis, steps %i %i\n", xstep, ystep);
+    }
+  else
+    {
+      point_t pmin = {INT_MAX, INT_MAX}, pmax = {INT_MIN, INT_MIN};
+      for (auto p : solver->points)
+	{
+	  pmin.x = std::min (pmin.x, p.img.x);
+	  pmax.x = std::max (pmax.x, p.img.x);
+	  pmin.y = std::min (pmin.y, p.img.y);
+	  pmax.y = std::max (pmax.y, p.img.y);
+	}
+      if (xstep > (pmax.x - pmin.x) / 10)
+	{
+	  xstep = (pmax.x - pmin.x + 9) / 10;
+	  max_points = 50;
+	}
+      if (ystep > (pmax.y - pmin.y) / 10)
+	{
+	  ystep = (pmax.y - pmin.y + 9) / 10;
+	  max_points = 50;
+	}
+    }
+
+
   const int range = 3;
   int xsubstep = std::max (1, xstep / range);
   int ysubstep = std::max (1, ystep / range);
-  int xsubsteps = (area.width + xsubstep - 1) / xsubstep;
-  int ysubsteps = (area.height + ysubstep - 1) / ysubstep;
+  int xsubsteps = std::max (1, (area.width + xsubstep - 1) / xsubstep);
+  int ysubsteps = std::max (1, (area.height + ysubstep - 1) / ysubstep);
   int npoints;
   int nfound = 0;
-  const bool verbose = false;
   coord_t max_uncertainty = 10000;
-  if (!xsubsteps || !ysubsteps)
-    return false;
 
   enum elt
   {
@@ -4072,8 +4142,8 @@ finetune_misregistered_area (solver_parameters *solver,
   if (verbose)
     printf ("Adding points to area with top left (%i,%i) width %i height %i, "
             "steps %i %i size %i %i with known points %i\n",
-            area.x, area.y, area.width, area.height, xsubstep, ysubstep,
-            xsubsteps, ysubsteps, (int)solver->points.size ());
+            area.x, area.y, area.width, area.height, xsubsteps, ysubsteps,
+            xsubstep, ysubstep, (int)solver->points.size ());
   for (auto p : solver->points)
     {
       int px = nearest_int ((p.img.x - area.x) / (coord_t)xsubstep);
@@ -4141,7 +4211,11 @@ finetune_misregistered_area (solver_parameters *solver,
               printf ("Will compute %i %i\n", x, y);
           }
       if (!points.size ())
-        return nfound;
+	{
+	  if (verbose)
+	    printf ("Finetuning area failed since area contains no points\n");
+	  return false;
+	}
       if (progress)
         progress->set_task ("finetuning points nearby known points",
                             points.size ());
@@ -4169,17 +4243,27 @@ finetune_misregistered_area (solver_parameters *solver,
             progress->inc_progress ();
         }
       if (progress && progress->cancel_requested ())
-        return false;
+        {
+	  if (verbose)
+	    printf ("Finetuning area cancelled\n");
+          return false;
+        }
 
       scr_to_img map;
       if (!map.set_parameters (param, img))
-        return false;
+	{
+	  if (verbose)
+	    printf ("Finetuning area failed since it failed to initialize scr-to-img\n");
+	  return false;
+	}
 
       /* Clear info about points to be computed.  */
       for (int i = 0; i < xsubsteps * ysubsteps; i++)
         if (tiles[i] == to_be_computed)
           tiles[i] = unknown;
       npoints = 0;
+      if (verbose)
+	printf ("Will consider %i results\n", (int)res.size ());
       /* Now prune points that are too far.  */
       for (size_t i = 0; i < res.size ();)
         {
@@ -4187,22 +4271,34 @@ finetune_misregistered_area (solver_parameters *solver,
           bool ok = r.success;
           if (ok)
             {
-              point_t transformed = map.to_scr (r.solver_point_img_location);
-              ok = transformed.dist_from (r.solver_point_screen_location)
-                   < fparam.max_displacement;
               int px = (r.solver_point_img_location.x - area.x)
                        / (coord_t)xsubstep;
               int py = (r.solver_point_img_location.y - area.y)
                        / (coord_t)ysubstep;
-              if (!ok && py >= 0 && px >= 0 && py < ysubsteps && px < xsubsteps)
-                tiles[py * xsubsteps + px] = bad;
-              if (verbose)
-                printf ("found grid: %i %i transformed: %f %f finetuned: %f "
-                        "%f %s\n",
-                        px, py, transformed.x, transformed.y,
-                        r.solver_point_screen_location.x,
-                        r.solver_point_screen_location.y,
-                        ok ? "in threshold" : "out of threshold");
+	      if (solver->find_point (r.solver_point_screen_location) >= 0)
+		{
+		  if (verbose)
+		    printf ("found grid: %f %f which already exists\n",
+			    r.solver_point_img_location.x, r.solver_point_img_location.y);
+		  tiles[py * xsubsteps + px] = known;
+		  ok = false;
+		}
+	      else
+		{
+		  point_t transformed = map.to_scr (r.solver_point_img_location);
+		  ok = transformed.dist_from (r.solver_point_screen_location)
+		       < fparam.max_displacement;
+		  if (!ok && py >= 0 && px >= 0 && py < ysubsteps && px < xsubsteps)
+		    tiles[py * xsubsteps + px] = bad;
+		  if (verbose)
+		    printf ("found grid: %i %i transformed: %f %f finetuned: %f "
+			    "%f displacement %f %s\n",
+			    px, py, transformed.x, transformed.y,
+			    r.solver_point_screen_location.x,
+			    r.solver_point_screen_location.y,
+			    transformed.dist_from (r.solver_point_screen_location),
+			    ok ? "in threshold" : "out of threshold");
+		}
             }
           if (!ok)
             {
@@ -4240,12 +4336,20 @@ finetune_misregistered_area (solver_parameters *solver,
                 tiles[py * xsubsteps + px] = known;
 	      nfound++;
               npoints++;
+	      if (nfound > max_points)
+		{
+		  if (verbose)
+		    printf ("reached max points of %i\n", max_points);
+		  return true;
+		}
             }
           else if (py >= 0 && px >= 0 && py < ysubsteps && px < xsubsteps)
             tiles[py * xsubsteps + px] = bad;
         }
     }
   while (npoints);
+  if (verbose)
+    printf ("found %i points\n", npoints);
   return true;
 }
 

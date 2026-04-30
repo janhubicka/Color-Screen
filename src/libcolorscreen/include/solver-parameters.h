@@ -123,6 +123,14 @@ struct solver_parameters
     points.push_back ({ img, screen, color });
     return (int)n_points ();
   }
+  DLL_PUBLIC_EXP int
+  find_point (point_t screen)
+  {
+    for (size_t n = 0; n < n_points (); n++)
+      if (points[n].scr.almost_eq (screen, 0.5))
+	return n;
+    return -1;
+  }
 
   DLL_PUBLIC_EXP void
   remove_point (size_t n)
