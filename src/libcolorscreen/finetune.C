@@ -4119,31 +4119,10 @@ finetune_misregistered_area (solver_parameters *solver,
         printf ("Finetuning area started by adding basis, steps %i %i\n",
                 xstep, ystep);
     }
-  /* Adjust step.  Too large step when points are close to a line
-     likely leads to misregistering (skipping a period).  */
+  /* See if points are corelated around a line.  In this case the current
+     solution is probably quite iffy and we need to expand slowly.  */
   else if (solver->points.size () < 10000)
     {
-#if 0
-      point_t pmin = {INT_MAX, INT_MAX}, pmax = {INT_MIN, INT_MIN};
-
-      for (auto p : solver->points)
-	{
-	  pmin.x = std::min (pmin.x, p.img.x);
-	  pmax.x = std::max (pmax.x, p.img.x);
-	  pmin.y = std::min (pmin.y, p.img.y);
-	  pmax.y = std::max (pmax.y, p.img.y);
-	}
-      if (xstep > (pmax.x - pmin.x) / 10)
-	{
-	  xstep = (pmax.x - pmin.x + 9) / 10;
-	  max_points = 50;
-	}
-      if (ystep > (pmax.y - pmin.y) / 10)
-	{
-	  ystep = (pmax.y - pmin.y + 9) / 10;
-	  max_points = 50;
-	}
-#endif
       point_t origin, dir;
       double line_width = solver->fit_line (origin, dir);
       printf ("line width: %f\n", line_width);
@@ -4158,13 +4137,15 @@ finetune_misregistered_area (solver_parameters *solver,
           ystep = my_ceil ((line_width) / ratio);
           max_points = 50;
         }
-      xstep = std::max (xstep,
-                        (int)my_ceil (std::max (fabs (param.coordinate1.x),
-                                                fabs (param.coordinate2.x))));
-      ystep = std::max (ystep,
-                        (int)my_ceil (std::max (fabs (param.coordinate1.y),
-                                                fabs (param.coordinate2.y))));
     }
+
+  /* Too small step will lead to re-solving existing points only.  */
+  xstep = std::max (xstep,
+		    (int)my_ceil (std::max (fabs (param.coordinate1.x),
+					    fabs (param.coordinate2.x))));
+  ystep = std::max (ystep,
+		    (int)my_ceil (std::max (fabs (param.coordinate1.y),
+					    fabs (param.coordinate2.y))));
 
   const int range = 3;
   int xsubstep = std::max (1, xstep / range);
