@@ -911,7 +911,7 @@ public:
     if (optimize_coordinates)
       {
         to_range (v[coordinate_index], -1, 1);
-        to_range (v[coordinate_index], -1, 1);
+        to_range (v[coordinate_index + 1], -1, 1);
       }
     /* x and y adjustments.  */
     if (optimize_position)
