@@ -4113,18 +4113,16 @@ void MainWindow::onOptimizeCoordinates() {
     return;
 
   colorscreen::finetune_parameters fparams;
-  fparams.flags = colorscreen::finetune_position |
+  fparams.flags = colorscreen::finetune_position | colorscreen::finetune_verbose |
                   colorscreen::finetune_coordinates | colorscreen::finetune_bw |
-                  colorscreen::finetune_use_strip_widths;
-
-  std::vector<colorscreen::point_t> locs;
+                  colorscreen::finetune_use_strip_widths | colorscreen::finetune_produce_images;
 
   statusBar()->showMessage("Optimizing coordinates...");
   QApplication::setOverrideCursor(Qt::WaitCursor);
   QApplication::processEvents(); // Ensure UI updates
 
   colorscreen::finetune_result ret = colorscreen::finetune(
-      m_rparams, m_scrToImgParams, *m_scan, locs, nullptr, fparams, nullptr);
+      m_rparams, m_scrToImgParams, *m_scan, {}, nullptr, fparams, nullptr);
 
   QApplication::restoreOverrideCursor();
   statusBar()->clearMessage();
@@ -4139,8 +4137,10 @@ void MainWindow::onOptimizeCoordinates() {
     changeParameters(getCurrentState(), "Optimize Coordinates");
     m_imageWidget->update();
 
-    QMessageBox::information(this, "Optimization",
-                             "Coordinates optimized successfully.");
+    // Update finetune diagnostic images
+    if (m_geometryPanel) {
+      m_geometryPanel->updateFinetuneImages(ret);
+    }
   } else {
     QMessageBox::warning(this, "Optimization",
                          "Optimization failed: " +

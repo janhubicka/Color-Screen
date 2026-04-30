@@ -704,7 +704,7 @@ public:
   {
     if (!optimize_coordinates)
       return 1;
-    return v[coordinate_index] + 1;
+    return v[coordinate_index] * 0.3 + 1;
   }
 
   /* Rotation of coordinate system for V.  */
@@ -713,7 +713,7 @@ public:
   {
     if (!optimize_coordinates)
       return 0;
-    return v[coordinate_index + 1];
+    return v[coordinate_index + 1] * 25;
   }
 
   /* Get screen coordinates of a given pixel P of a given tile TILEID.
@@ -793,6 +793,8 @@ public:
             printf ("Screen offset %f %f (in pixels %f %f)\n", p.x, p.y,
                     p.x / pixel_size, p.y / pixel_size);
           }
+	if (optimize_coordinates)
+	  printf ("Scale %f rotation %f degrees\n", get_scale (v), get_rotation (v));
         if (optimize_emulsion_offset)
           {
             point_t p = get_emulsion_offset (v, tileid);
@@ -906,6 +908,11 @@ public:
   void
   constrain (coord_t *v)
   {
+    if (optimize_coordinates)
+      {
+        to_range (v[coordinate_index], -1, 1);
+        to_range (v[coordinate_index], -1, 1);
+      }
     /* x and y adjustments.  */
     if (optimize_position)
       {
@@ -3312,7 +3319,7 @@ public:
         point_t p1_img = {(coord_t)tiles[0].txmin, (coord_t)tiles[0].tymin};
         point_t p1_scr = get_pos (start.data (), 0, {0, 0});
         point_t p2_scr = get_pos (start.data (), 0, {twidth - 1, 0});
-        point_t p3_scr = get_pos (start.data (), 0, {theight - 1, 0});
+        point_t p3_scr = get_pos (start.data (), 0, {0, theight - 1});
 
         coord_t dx_scr1_x = p2_scr.x - p1_scr.x;
         coord_t dx_scr1_y = p2_scr.y - p1_scr.y;
@@ -3328,6 +3335,7 @@ public:
             ret.coordinate2.y = (theight - 1) * dx_scr1_x / det;
             ret.center.x = p1_img.x - ret.coordinate1.x * p1_scr.x - ret.coordinate2.x * p1_scr.y;
             ret.center.y = p1_img.y - ret.coordinate1.y * p1_scr.x - ret.coordinate2.y * p1_scr.y;
+	    printf ("Center %f %f to %f %f; Coordinates %f %f to %f %f; %f %f to %f %f\n", param.center.x, param.center.y, ret.center.x, ret.center.y, param.coordinate1.x, param.coordinate1.y, ret.coordinate1.x, ret.coordinate1.y, param.coordinate2.x, param.coordinate2.y, ret.coordinate2.x, ret.coordinate2.y);
           }
         else
           {
