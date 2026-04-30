@@ -3638,65 +3638,77 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   int sx = nearest_int (tp.x);
   int sy = nearest_int (tp.y);
 
-  coord_t test_xrange
-      = fparams.range
-            ? fparams.range
-            : ((fparams.flags & finetune_no_normalize) || bw ? (coord_t)1 : (coord_t)2);
+  coord_t def_xrange = 2;
+  /* When not normalizing we want to avoid image in the tile.  */
+  if ((fparams.flags & finetune_no_normalize) || bw)
+    def_xrange = 1;
+  if (fparams.flags & finetune_coordinates)
+    def_xrange = 3;
+
+  coord_t test_xrange = fparams.range ? fparams.range : def_xrange;
   coord_t test_yrange = test_xrange;
 
   /* If screen tile is far from rectangular, compensate.
      Also screen with strips has too few elements, so
      finetuning is not very stressed to pick reasonable solution.  */
   if (screen_with_vertical_strips_p (param.type))
+    test_yrange *= 3;
+  int iterations = 0;
+  int txmin, txmax, tymin, tymax;
+  do
     {
-      // test_yrange *= 6;
-      // test_xrange *= 2;
-      test_yrange *= 3;
-    }
-  point_t p = mapp[0]->to_img ({ (coord_t)sx, (coord_t)sy });
-  coord_t sxmin = p.x, sxmax = p.x, symin = p.y, symax = p.y;
-  p = mapp[0]->to_img ({ sx - test_xrange, sy - test_yrange });
-  sxmin = std::min (sxmin, p.x);
-  sxmax = std::max (sxmax, p.x);
-  symin = std::min (symin, p.y);
-  symax = std::max (symax, p.y);
-  p = mapp[0]->to_img ({ sx + test_xrange, sy - test_yrange });
-  sxmin = std::min (sxmin, p.x);
-  sxmax = std::max (sxmax, p.x);
-  symin = std::min (symin, p.y);
-  symax = std::max (symax, p.y);
-  p = mapp[0]->to_img ({ sx + test_xrange, sy + test_yrange });
-  sxmin = std::min (sxmin, p.x);
-  sxmax = std::max (sxmax, p.x);
-  symin = std::min (symin, p.y);
-  symax = std::max (symax, p.y);
-  p = mapp[0]->to_img ({ sx - test_xrange, sy + test_yrange });
-  sxmin = std::min (sxmin, p.x);
-  sxmax = std::max (sxmax, p.x);
-  symin = std::min (symin, p.y);
-  symax = std::max (symax, p.y);
+      if (iterations)
+	test_xrange++, test_yrange++;
+      point_t p = mapp[0]->to_img ({ (coord_t)sx, (coord_t)sy });
+      coord_t sxmin = p.x, sxmax = p.x, symin = p.y, symax = p.y;
+      p = mapp[0]->to_img ({ sx - test_xrange, sy - test_yrange });
+      sxmin = std::min (sxmin, p.x);
+      sxmax = std::max (sxmax, p.x);
+      symin = std::min (symin, p.y);
+      symax = std::max (symax, p.y);
+      p = mapp[0]->to_img ({ sx + test_xrange, sy - test_yrange });
+      sxmin = std::min (sxmin, p.x);
+      sxmax = std::max (sxmax, p.x);
+      symin = std::min (symin, p.y);
+      symax = std::max (symax, p.y);
+      p = mapp[0]->to_img ({ sx + test_xrange, sy + test_yrange });
+      sxmin = std::min (sxmin, p.x);
+      sxmax = std::max (sxmax, p.x);
+      symin = std::min (symin, p.y);
+      symax = std::max (symax, p.y);
+      p = mapp[0]->to_img ({ sx - test_xrange, sy + test_yrange });
+      sxmin = std::min (sxmin, p.x);
+      sxmax = std::max (sxmax, p.x);
+      symin = std::min (symin, p.y);
+      symax = std::max (symax, p.y);
 
-  int txmin = my_floor (sxmin), tymin = my_floor (symin), txmax = my_ceil (sxmax),
+      txmin = my_floor (sxmin);
+      tymin = my_floor (symin);
+      txmax = my_ceil (sxmax);
       tymax = my_ceil (symax);
-  if (txmin < 0)
-    txmin = 0;
-  if (txmax > imgp[0]->width)
-    txmax = imgp[0]->width;
-  if (tymin < 0)
-    tymin = 0;
-  if (tymax > imgp[0]->height)
-    tymax = imgp[0]->height;
+      if (txmin < 0)
+	txmin = 0;
+      if (txmax > imgp[0]->width)
+	txmax = imgp[0]->width;
+      if (tymin < 0)
+	tymin = 0;
+      if (tymax > imgp[0]->height)
+	tymax = imgp[0]->height;
+      iterations++;
+    }
+  while (iterations < 10 && (txmin + 10 > txmax || tymin + 10 > tymax));
+
   if (txmin + 10 > txmax || tymin + 10 > tymax)
     {
       if (verbose)
-        {
-          if (progress)
-            progress->pause_stdout ();
-          fprintf (stderr, "Too small tile %i-%i %i-%i\n", txmin, txmax, tymin,
-                   tymax);
-          if (progress)
-            progress->resume_stdout ();
-        }
+	{
+	  if (progress)
+	    progress->pause_stdout ();
+	  fprintf (stderr, "Too small tile %i-%i %i-%i\n", txmin, txmax, tymin,
+		   tymax);
+	  if (progress)
+	    progress->resume_stdout ();
+	}
       ret.err = "too small tile";
       return ret;
     }
@@ -4100,6 +4112,7 @@ finetune_misregistered_area (solver_parameters *solver,
   else
     {
       point_t pmin = {INT_MAX, INT_MAX}, pmax = {INT_MIN, INT_MIN};
+
       for (auto p : solver->points)
 	{
 	  pmin.x = std::min (pmin.x, p.img.x);
