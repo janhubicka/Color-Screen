@@ -318,16 +318,22 @@ public:
     if (n == 2)
       {
         if (vals[1] < (coord_t)-10)
-          vals[1] = (coord_t)-1;
-        if (vals[1] > (coord_t)1)
-          vals[1] = (coord_t)1;
+          vals[1] = (coord_t)-10;
+        if (vals[1] > (coord_t)10)
+          vals[1] = (coord_t)10;
       }
-    for (int i = n; i < n + 3; i++)
+    /*
+       Coefficient	Typical Range	  Extreme Range 
+       k1 (3rd Order)   ±0.001-±0.05      ±0.15
+       k2 (5th Order)   ±0.0001-±0.01     ±0.05
+       k3 (7th Order)   ≈0 (often unused) ±0.01  */
+    constexpr coord_t range [3] = {0.15, 0.05, 0.01};
+    for (int i = n, j = 0; i < n + 3; i++, j++)
       {
-        if (vals[i] < (coord_t)-0.1 * scale_kr)
-          vals[i] = (coord_t)-0.1 * scale_kr;
-        if (vals[i] > (coord_t)0.1 * scale_kr)
-          vals[i] = (coord_t)0.1 * scale_kr;
+        if (vals[i] < (coord_t)-range[j] * scale_kr)
+          vals[i] = (coord_t)-range[j] * scale_kr;
+        if (vals[i] > (coord_t)range[j] * scale_kr)
+          vals[i] = (coord_t)range[j] * scale_kr;
       }
   }
 
