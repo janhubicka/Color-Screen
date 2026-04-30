@@ -4163,7 +4163,7 @@ finetune_misregistered_area (solver_parameters *solver,
       int py = nearest_int ((p.img.y - area.y) / (coord_t)ysubstep);
       if (px >= 0 && px < xsubsteps && py >= 0 && py < ysubsteps)
         {
-          if (verbose)
+          if (verbose && 0)
             printf ("Existing point on %i %i\n", px, py);
           tiles[py * xsubsteps + px] = known;
         }
@@ -4220,7 +4220,7 @@ finetune_misregistered_area (solver_parameters *solver,
             tiles[y * xsubsteps + x] = to_be_computed;
             points.push_back ({ nearest_int ((x + 0.5) * xsubstep) + area.x,
                                 nearest_int ((y + 0.5) * ysubstep) + area.y });
-            if (verbose)
+            if (verbose && 0)
               printf ("Will compute %i %i\n", x, y);
           }
       if (!points.size ())
