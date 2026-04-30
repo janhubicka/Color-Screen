@@ -4168,23 +4168,28 @@ finetune_misregistered_area (solver_parameters *solver,
 
   std::vector<elt> tiles (xsubsteps * ysubsteps, unknown);
 
-  auto get_cell = [area,xsubstep,ysubstep] (point_t p) -> int_point_t
+  const auto get_cell_pos = [area,xsubstep,ysubstep] (point_t p) -> int_point_t
   {
     return {(int64_t)((p.x - area.x) / (coord_t)xsubstep),
 	    (int64_t)((p.y - area.y) / (coord_t)ysubstep)};
   };
-  auto get_cellp = [get_cell] (int_point_t p) -> int_point_t
+  const auto get_cellp = [get_cell_pos] (int_point_t p) -> int_point_t
   {
-    return get_cell ((point_t){(coord_t)p.x, (coord_t)p.y});
+    return get_cell_pos ((point_t){(coord_t)p.x, (coord_t)p.y});
   };
-  auto in_range = [xsubsteps,ysubsteps] (int_point_t p) -> bool
+  const auto in_range = [xsubsteps,ysubsteps] (int_point_t p) -> bool
   {
     return p.x >= 0 && p.x < xsubsteps && p.y >= 0 && p.y < ysubsteps;
   };
-  auto set_cell = [in_range,&tiles,xsubsteps] (int_point_t p, enum elt value) -> void
+  const auto set_cell = [in_range,&tiles,xsubsteps] (int_point_t p, enum elt value) -> void
   {
     if (in_range (p))
       tiles[p.y * xsubsteps + p.x] = value;
+  };
+  const auto get_cell = [in_range,&tiles,xsubsteps] (int_point_t p) -> elt
+  {
+    assert (in_range (p));
+    return tiles[p.y * xsubsteps + p.x];
   };
 
   if (verbose)
@@ -4193,7 +4198,7 @@ finetune_misregistered_area (solver_parameters *solver,
             area.x, area.y, area.width, area.height, xsubsteps, ysubsteps,
             xsubstep, ysubstep, (int)solver->points.size ());
   for (auto p : solver->points)
-    set_cell (get_cell (p.img), known);
+    set_cell (get_cell_pos (p.img), known);
 
   /* This is essentialy an floodfill.  If there is 3x3 tile
      with no known data such that just outside of it exists
@@ -4232,14 +4237,14 @@ finetune_misregistered_area (solver_parameters *solver,
                p . . p . . p */
             for (int yy = y - range + 1; yy <= y + range - 1 && ok; yy++)
               for (int xx = x - range + 1; xx <= x + range - 1 && ok; xx++)
-                if (tiles[yy * xsubsteps + xx] != unknown)
+                if (get_cell ({xx, yy}) != unknown)
                   ok = false;
             if (!ok)
               continue;
             int nknown = 0;
-            for (int yy = y - range; yy <= y + range && ok; yy++)
-              for (int xx = x - range; xx <= x + range && ok; xx++)
-                if (tiles[yy * xsubsteps + xx] == known)
+            for (int yy = y - range; yy <= y + range; yy++)
+              for (int xx = x - range; xx <= x + range; xx++)
+                if (get_cell ({xx, yy}) == known)
                   nknown++;
             if (!nknown)
               continue;
@@ -4308,7 +4313,7 @@ finetune_misregistered_area (solver_parameters *solver,
           bool ok = r.success;
           if (ok)
             {
-	      int_point_t cell = get_cell (r.solver_point_img_location);
+	      int_point_t cell = get_cell_pos (r.solver_point_img_location);
 	      /* Point must be new.  */
               if (solver->find_point (r.solver_point_screen_location) >= 0)
                 {
@@ -4377,7 +4382,7 @@ finetune_misregistered_area (solver_parameters *solver,
       for (size_t i = 0; i < res.size (); i++)
         {
           finetune_result &r = res[i];
-	  int_point_t cell = get_cell (r.solver_point_img_location);
+	  int_point_t cell = get_cell_pos (r.solver_point_img_location);
           if (r.uncertainty <= max_uncertainty
 	      && solver->find_point (r.solver_point_screen_location) < 0)
             {
