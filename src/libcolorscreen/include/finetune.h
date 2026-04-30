@@ -134,7 +134,7 @@ struct finetune_area_parameters
       scaley *= 3;
     if (!grid_w && !grid_h)
       {
-        const int n = 200;
+        const int n = 100;
         if (crop.width > crop.height)
 	  grid_w = n * scalex;
 	else
