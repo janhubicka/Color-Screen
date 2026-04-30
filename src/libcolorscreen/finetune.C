@@ -1726,7 +1726,6 @@ public:
       uncertainty = std::min (uncertainty / contrast, (coord_t)(10000000));
     else
       uncertainty = 100000000;
-    printf ("%f\n",uncertainty);
     free_least_squares ();
     return uncertainty;
   }
@@ -3845,23 +3844,6 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   return ret;
 }
 
-static void
-get_steps (const image_data &img, int_image_area area, const scr_to_img_parameters &param, int *xstep, int *ystep)
-{
-  const int steps = 100;
-  int overall_xsteps = steps;
-  int overall_ysteps = steps;
-  if (param.scanner_type == lens_move_horizontally
-      || param.scanner_type == fixed_lens_sensor_move_horizontally)
-    overall_xsteps *= 3, overall_ysteps /= 3;
-  else if (param.scanner_type == lens_move_vertically
-           || param.scanner_type == fixed_lens_sensor_move_vertically)
-    overall_ysteps *= 3, overall_xsteps /= 3;
-  int w = std::max (img.width, img.height);
-  *xstep = w / overall_xsteps;
-  *ystep = w / overall_ysteps;
-}
-
 /* Finetune SOLVER parameters in given AREA using RPARAM and PARAM in IMG.
    PROGRESS is used to report progress.  
    Assume the registration is correct only in existing points in AREA.
@@ -3879,11 +3861,15 @@ finetune_misregistered_area (solver_parameters *solver,
   int_image_area area = in_area.intersect ({ 0, 0, img.width, img.height });
   if (area.empty_p ())
     return false;
-  int xstep, ystep;
-  get_steps (img, area, param, &xstep, &ystep);
+  int xsteps, ysteps;
+  fparam.get_grid_dimensions (area, param, &xsteps, &ysteps);
+  if (!xsteps || !ysteps)
+    return false;
+  int xstep = std::max (1, area.width / xsteps);
+  int ystep = std::max (1, area.height / ysteps);
   const int range = 3;
-  int xsubstep = xstep / range;
-  int ysubstep = ystep / range;
+  int xsubstep = std::max (1, xstep / range);
+  int ysubstep = std::max (1, ystep / range);
   int xsubsteps = (area.width + xsubstep - 1) / xsubstep;
   int ysubsteps = (area.height + ysubstep - 1) / ysubstep;
   int npoints;
@@ -4028,7 +4014,7 @@ finetune_misregistered_area (solver_parameters *solver,
                        / (coord_t)xsubstep;
               int py = (r.solver_point_img_location.y - area.y)
                        / (coord_t)ysubstep;
-              if (!ok)
+              if (!ok && py >= 0 && px >= 0 && py < ysubsteps && px < xsubsteps)
                 tiles[py * xsubsteps + px] = bad;
               if (verbose)
                 printf ("found grid: %i %i transformed: %f %f finetuned: %f "
@@ -4096,10 +4082,14 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
   int_image_area area = in_area.intersect ({ 0, 0, img.width, img.height });
   if (area.empty_p ())
     return false;
-  int xstep, ystep;
-  get_steps (img, area, param, &xstep, &ystep);
-  int xsteps = (area.width + xstep - 1) / xstep;
-  int ysteps = (area.height + ystep - 1) / ystep;
+  int xsteps, ysteps;
+  fparam.get_grid_dimensions (area, param, &xsteps, &ysteps);
+  if (!xsteps || !ysteps)
+    return false;
+  int xstep = std::max (1, area.width / xsteps);
+  int ystep = std::max (1, area.height / ysteps);
+  xsteps = (area.width + xstep - 1) / xstep;
+  ysteps = (area.height + ystep - 1) / ystep;
   if (!xsteps || !ysteps)
     return false;
   std::vector<finetune_result> res (xsteps * ysteps);

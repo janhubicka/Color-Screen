@@ -370,7 +370,7 @@ scr_to_img::set_parameters (const scr_to_img_parameters &param,
   if (m_img_to_scr_mesh)
     {
       m_scr_to_img_mesh = m_img_to_scr_mesh->compute_inverse ();
-      if (!m_img_to_scr_mesh)
+      if (!m_scr_to_img_mesh)
         return false;
       update_scr_to_final_parameters (m_param.final_ratio, m_param.final_angle);
       return true;

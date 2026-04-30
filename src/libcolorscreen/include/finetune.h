@@ -121,7 +121,7 @@ struct finetune_area_parameters
 
   /* Determine gris WIDTH and HEIGHT for given CROP and PARAM.  */
   void
-  get_grid_dimensions (const int_image_area &crop, const scr_to_img_parameters &param, int *width, int *height)
+  get_grid_dimensions (const int_image_area &crop, const scr_to_img_parameters &param, int *width, int *height) const
   {
     int grid_w = grid_width;
     int grid_h = grid_height;
