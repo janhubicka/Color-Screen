@@ -4321,6 +4321,8 @@ finetune_misregistered_area (solver_parameters *solver,
           else
             i++;
         }
+      if (verbose)
+	printf ("Will consider %i meaningful results\n", (int)res.size ());
       /* If we have many points; rule out uncertain ones.  Let the value only
          drop in each wave.  */
       if (res.size () > 5)
