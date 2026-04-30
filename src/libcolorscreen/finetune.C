@@ -4104,12 +4104,14 @@ finetune_misregistered_area (solver_parameters *solver,
 			 res3.solver_point_screen_location,
 			 res3.solver_point_color);
       max_points = 50;
-      xstep = my_floor (std::max (fabs (param.coordinate1.x), fabs (param.coordinate2.x)));
-      ystep = my_floor (std::max (fabs (param.coordinate1.y), fabs (param.coordinate2.y)));
+      xstep = my_ceil (std::max (fabs (param.coordinate1.x), fabs (param.coordinate2.x)));
+      ystep = my_ceil (std::max (fabs (param.coordinate1.y), fabs (param.coordinate2.y)));
       if (verbose)
 	printf ("Finetuning area started by adding basis, steps %i %i\n", xstep, ystep);
     }
-  else
+  /* Adjust step.  Too large step when points are close to a line
+     likely leads to misregistering (skipping a period).  */
+  else if (solver->points.size () < 10000)
     {
       point_t pmin = {INT_MAX, INT_MAX}, pmax = {INT_MIN, INT_MIN};
 
@@ -4130,6 +4132,21 @@ finetune_misregistered_area (solver_parameters *solver,
 	  ystep = (pmax.y - pmin.y + 9) / 10;
 	  max_points = 50;
 	}
+      point_t origin, dir;
+      double line_width = solver->fit_line (origin, dir);
+      printf ("line width: %f\n", line_width);
+      if (xstep > line_width / 10)
+	{
+	  xstep = (line_width + 9) / 10;
+	  max_points = 50;
+	}
+      if (ystep > line_width / 10)
+	{
+	  ystep = (line_width + 9) / 10;
+	  max_points = 50;
+	}
+      xstep = std::max (xstep, (int)my_ceil (std::max (fabs (param.coordinate1.x), fabs (param.coordinate2.x))));
+      ystep = std::max (ystep, (int)my_ceil (std::max (fabs (param.coordinate1.y), fabs (param.coordinate2.y))));
     }
 
 
@@ -4224,11 +4241,7 @@ finetune_misregistered_area (solver_parameters *solver,
               printf ("Will compute %i %i\n", x, y);
           }
       if (!points.size ())
-	{
-	  if (verbose)
-	    printf ("Finetuning area failed since area contains no points\n");
-	  return false;
-	}
+        break;
       if (progress)
         progress->set_task ("finetuning points nearby known points",
                             points.size ());
@@ -4284,16 +4297,17 @@ finetune_misregistered_area (solver_parameters *solver,
           bool ok = r.success;
           if (ok)
             {
-              int px = (r.solver_point_img_location.x - area.x)
-                       / (coord_t)xsubstep;
-              int py = (r.solver_point_img_location.y - area.y)
-                       / (coord_t)ysubstep;
+		  int px = nearest_int ((r.solver_point_img_location.x - area.x)
+				       / (coord_t)xsubstep);
+		  int py = nearest_int ((r.solver_point_img_location.y - area.y)
+				       / (coord_t)ysubstep);
 	      if (solver->find_point (r.solver_point_screen_location) >= 0)
 		{
 		  if (verbose)
 		    printf ("found grid: %f %f which already exists\n",
 			    r.solver_point_img_location.x, r.solver_point_img_location.y);
-		  tiles[py * xsubsteps + px] = known;
+		  if (py >= 0 && px >= 0 && py < ysubsteps && px < xsubsteps)
+		    tiles[py * xsubsteps + px] = known;
 		  ok = false;
 		}
 	      else
@@ -4339,9 +4353,9 @@ finetune_misregistered_area (solver_parameters *solver,
         {
           finetune_result &r = res[i];
           int px
-              = (r.solver_point_img_location.x - area.x) / (coord_t)xsubstep;
+              = nearest_int ((r.solver_point_img_location.x - area.x) / (coord_t)xsubstep);
           int py
-              = (r.solver_point_img_location.y - area.y) / (coord_t)ysubstep;
+              = nearest_int ((r.solver_point_img_location.y - area.y) / (coord_t)ysubstep);
           if (r.uncertainty <= max_uncertainty)
             {
               solver->add_point (r.solver_point_img_location,
@@ -4364,7 +4378,7 @@ finetune_misregistered_area (solver_parameters *solver,
     }
   while (npoints);
   if (verbose)
-    printf ("found %i points\n", npoints);
+    printf ("found %i points\n", nfound);
   return true;
 }
 

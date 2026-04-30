@@ -8,6 +8,8 @@
 #include <array>
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_linalg.h>
+#include <gsl/gsl_eigen.h>
+#include <algorithm>
 #include "gsl-utils.h"
 #include "include/colorscreen.h"
 #include "include/screen-map.h"
@@ -982,9 +984,77 @@ solver_parameters::get_point_locations (enum scr_type type, int *n)
       return WarnerPowrie_points;
     case Joly:
       *n = sizeof (Joly_points) / sizeof (point_location);
-      return Joly_points;
+  return Joly_points;
     default:
       abort ();
     }
+}
+
+/* Fit points to a line and return distance threshold for 90% of points.  */
+double
+solver_parameters::fit_line (point_t &origin, point_t &dir)
+{
+  if (points.empty ())
+    return 0;
+  if (points.size () == 1)
+    {
+      origin = points[0].img;
+      dir = { 1, 0 };
+      return 0;
+    }
+
+  double mean_x = 0, mean_y = 0;
+  for (const auto &p : points)
+    {
+      mean_x += p.img.x;
+      mean_y += p.img.y;
+    }
+  mean_x /= points.size ();
+  mean_y /= points.size ();
+  origin = { (coord_t)mean_x, (coord_t)mean_y };
+
+  double mxx = 0, myy = 0, mxy = 0;
+  for (const auto &p : points)
+    {
+      double dx = p.img.x - mean_x;
+      double dy = p.img.y - mean_y;
+      mxx += dx * dx;
+      myy += dy * dy;
+      mxy += dx * dy;
+    }
+
+  gsl_matrix *m = gsl_matrix_alloc (2, 2);
+  gsl_matrix_set (m, 0, 0, mxx);
+  gsl_matrix_set (m, 0, 1, mxy);
+  gsl_matrix_set (m, 1, 0, mxy);
+  gsl_matrix_set (m, 1, 1, myy);
+
+  gsl_vector *eval = gsl_vector_alloc (2);
+  gsl_matrix *evec = gsl_matrix_alloc (2, 2);
+  gsl_eigen_symmv_workspace *w = gsl_eigen_symmv_alloc (2);
+  gsl_eigen_symmv (m, eval, evec, w);
+  gsl_eigen_symmv_sort (eval, evec, GSL_EIGEN_SORT_VAL_DESC);
+
+  dir.x = gsl_matrix_get (evec, 0, 0);
+  dir.y = gsl_matrix_get (evec, 1, 0);
+
+  point_t normal = { (coord_t)gsl_matrix_get (evec, 0, 1),
+                     (coord_t)gsl_matrix_get (evec, 1, 1) };
+
+  gsl_eigen_symmv_free (w);
+  gsl_matrix_free (m);
+  gsl_vector_free (eval);
+  gsl_matrix_free (evec);
+
+  std::vector<double> dists;
+  dists.reserve (points.size ());
+  for (const auto &p : points)
+    {
+      double dx = p.img.x - mean_x;
+      double dy = p.img.y - mean_y;
+      dists.push_back (fabs (dx * normal.x + dy * normal.y));
+    }
+  std::sort (dists.begin (), dists.end ());
+  return dists[(size_t)(dists.size () * 0.9)];
 }
 }

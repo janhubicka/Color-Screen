@@ -167,6 +167,8 @@ struct solver_parameters
   }
   /* Names of colors in enum point_color.  */
   DLL_PUBLIC static const char *const point_color_names[(int)max_point_color];
+  /* Fit points to a line and return distance threshold for 90% of points.  */
+  DLL_PUBLIC_EXP double fit_line (point_t &origin, point_t &dir);
 };
 }
 #endif
