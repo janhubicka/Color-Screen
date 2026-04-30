@@ -718,8 +718,8 @@ public:
 
   /* Get screen coordinates of a given pixel P of a given tile TILEID.
      Values are in vector V.  */
-  point_t
-  get_pos (coord_t *v, int tileid, int_point_t p)
+  pure_attr point_t
+  get_pos (coord_t *v, int tileid, int_point_t p) const
   {
     if (optimize_coordinates)
       return transformation.apply (tiles[tileid].pos[p.y * twidth + p.x]);
@@ -2019,11 +2019,23 @@ public:
     return false;
   }
 
-  /* Evaluate screen pixel for TILEID at X,Y with offset OFF.  */
+  /* Evaluate screen pixel for TILEID at X,Y with offset OFF.
+     Fast version that does not assume scaling/rotation.  */
   pure_attr inline rgbdata
-  evaluate_screen_pixel (int tileid, int x, int y, point_t off) const
+  evaluate_screen_pixel_fast (int tileid, int x, int y, point_t off) const
   {
     point_t p = tiles[tileid].pos[y * twidth + x] + off;
+    /* When using scanner mtf, the screen is already blurred to
+       estimate sensor mtf as well.  No need for antialiasing
+       then.  */
+    return tiles[tileid].scr->interpolated_mult (p);
+  }
+
+  /* Evaluate screen pixel for TILEID at X,Y with offset OFF.  */
+  pure_attr inline rgbdata
+  evaluate_screen_pixel_slow (coord_t *v, int tileid, int x, int y) const
+  {
+    point_t  p = get_pos (v, tileid, {x, y});
     /* When using scanner mtf, the screen is already blurred to
        estimate sensor mtf as well.  No need for antialiasing
        then.  */
@@ -2037,7 +2049,7 @@ public:
   pure_attr inline rgbdata
   evaluate_pixel (coord_t *v, int tileid, double_rgbdata red,
                   double_rgbdata green, double_rgbdata blue, int x, int y,
-                  point_t off, double_rgbdata mix_weights, double mix_dark)
+                  double_rgbdata mix_weights, double mix_dark)
   {
     rgbdata m = get_simulated_screen_pixel (tileid, { x, y });
     rgbdata c = ((red * m.red + green * m.green + blue * m.blue)
@@ -2059,22 +2071,29 @@ public:
   simulate_screen (coord_t *v, int tileid, bool force = false)
   {
     double_rgbdata red, green, blue;
-    point_t off = get_offset (v, tileid);
-    if (!force && tiles[tileid].last_simulated_offset == off)
-      return false;
-    for (int y = 0; y < theight; y++)
-      for (int x = 0; x < twidth; x++)
-        tiles[tileid].simulated_screen[y * simulated_screen_width + x]
-            = evaluate_screen_pixel (tileid, x, y, off);
-    tiles[tileid].last_simulated_offset = off;
+    if (!optimize_coordinates)
+      {
+	point_t off = get_offset (v, tileid);
+	if (!force && tiles[tileid].last_simulated_offset == off)
+	  return false;
+	for (int y = 0; y < theight; y++)
+	  for (int x = 0; x < twidth; x++)
+	    tiles[tileid].simulated_screen[y * simulated_screen_width + x]
+		= evaluate_screen_pixel_fast (tileid, x, y, off);
+	tiles[tileid].last_simulated_offset = off;
+      }
+    else
+      for (int y = 0; y < theight; y++)
+	for (int x = 0; x < twidth; x++)
+	  tiles[tileid].simulated_screen[y * simulated_screen_width + x]
+	      = evaluate_screen_pixel_slow (v, tileid, x, y);
     return true;
   }
 
   /* Evaluate pixel at (X,Y) using COLOR and offset OFF for TILEID.
      This is used for black and white mode.  */
   pure_attr inline luminosity_t
-  bw_evaluate_pixel (int tileid, double_rgbdata color, int x, int y,
-                     point_t off)
+  bw_evaluate_pixel (int tileid, double_rgbdata color, int x, int y)
   {
     rgbdata m = get_simulated_screen_pixel (tileid, { x, y });
     return ((m.red * color.red + m.green * color.green
@@ -2716,7 +2735,7 @@ public:
       {
 	point_t center = tiles[0].pos[(theight/2) * twidth + twidth/2];
 	/* First move center to 0.  */
-	matrix3x3 trans = translation_3x3matrix (center * -1);
+	matrix3x3 trans = translation_3x3matrix ((center + get_offset (v, 0)) * -1);
 	/* Next apply rotation.  */
 	trans = trans * rotation_3x3matrix (get_rotation (v));
 	/* Next apply scale  */
@@ -2763,7 +2782,6 @@ public:
       }
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
-        point_t off = get_offset (v, tileid);
         if (!tiles[0].color.empty ())
           {
             for (int y = border; y < theight - border; y++)
@@ -2771,7 +2789,7 @@ public:
                 if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
                   {
                     rgbdata c = evaluate_pixel (v, tileid, red, green, blue, x,
-                                                y, off, mix_weights, mix_dark);
+                                                y, mix_weights, mix_dark);
                     rgbdata d = get_pixel (v, tileid, { x, y });
 
                     /* Bayer pattern.
@@ -2799,7 +2817,7 @@ public:
                 if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
                   {
                     luminosity_t c
-                        = bw_evaluate_pixel (tileid, color, x, y, off);
+                        = bw_evaluate_pixel (tileid, color, x, y);
                     luminosity_t d = bw_get_pixel (tileid, { x, y });
                     sum += my_fabs (c - d);
                   }
@@ -2819,7 +2837,6 @@ public:
   void
   collect_screen (screen *s, coord_t *v, int tileid)
   {
-    point_t off = get_offset (v, tileid);
     for (int y = 0; y < screen::size; y++)
       for (int x = 0; x < screen::size; x++)
         for (int c = 0; c < 3; c++)
@@ -2831,7 +2848,7 @@ public:
       for (int x = border; x < twidth - border; x++)
         if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
           {
-            point_t p = tiles[tileid].pos[y * twidth + x] + off;
+	    point_t p = get_pos (v, tileid, {x, y});
             int xx = ((int64_t)nearest_int (p.x * screen::size))
                      & (screen::size - 1);
             int yy = ((int64_t)nearest_int (p.y * screen::size))
@@ -2903,12 +2920,11 @@ public:
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
         histogram hist;
-        point_t off = get_offset (v, tileid);
         for (int y = border; y < theight - border; y++)
           for (int x = border; x < twidth - border; x++)
             {
               rgbdata c = evaluate_pixel (v, tileid, red, green, blue, x, y,
-                                          off, mix_weights, mix_dark);
+                                          mix_weights, mix_dark);
               rgbdata d = get_pixel (v, tileid, { x, y });
               coord_t err = my_fabs (c.red - d.red) + my_fabs (c.green - d.green)
                             + my_fabs (c.blue - d.blue);
@@ -2919,7 +2935,7 @@ public:
           for (int x = border; x < twidth - border; x++)
             {
               rgbdata c = evaluate_pixel (v, tileid, red, green, blue, x, y,
-                                          off, mix_weights, mix_dark);
+                                          mix_weights, mix_dark);
               rgbdata d = get_pixel (v, tileid, { x, y });
               coord_t err = my_fabs (c.red - d.red) + my_fabs (c.green - d.green)
                             + my_fabs (c.blue - d.blue);
@@ -2932,7 +2948,7 @@ public:
           for (int x = border; x < twidth - border; x++)
             {
               rgbdata c = evaluate_pixel (v, tileid, red, green, blue, x, y,
-                                          off, mix_weights, mix_dark);
+                                          mix_weights, mix_dark);
               rgbdata d = get_pixel (v, tileid, { x, y });
               coord_t err = my_fabs (c.red - d.red) + my_fabs (c.green - d.green)
                             + my_fabs (c.blue - d.blue);
@@ -2962,11 +2978,10 @@ public:
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
         histogram hist;
-        point_t off = get_offset (v, tileid);
         for (int y = border; y < theight - border; y++)
           for (int x = border; x < twidth - border; x++)
             {
-              luminosity_t c = bw_evaluate_pixel (tileid, color, x, y, off);
+              luminosity_t c = bw_evaluate_pixel (tileid, color, x, y);
               luminosity_t d = bw_get_pixel (tileid, { x, y });
               coord_t err = my_fabs (c - d);
               hist.pre_account (err);
@@ -2975,7 +2990,7 @@ public:
         for (int y = border; y < theight - border; y++)
           for (int x = border; x < twidth - border; x++)
             {
-              luminosity_t c = bw_evaluate_pixel (tileid, color, x, y, off);
+              luminosity_t c = bw_evaluate_pixel (tileid, color, x, y);
               luminosity_t d = bw_get_pixel (tileid, { x, y });
               coord_t err = my_fabs (c - d);
               hist.account (err);
@@ -2986,7 +3001,7 @@ public:
         for (int y = border; y < theight - border; y++)
           for (int x = border; x < twidth - border; x++)
             {
-              luminosity_t c = bw_evaluate_pixel (tileid, color, x, y, off);
+              luminosity_t c = bw_evaluate_pixel (tileid, color, x, y);
               luminosity_t d = bw_get_pixel (tileid, { x, y });
               coord_t err = my_fabs (c - d);
               if (err > merr)
@@ -3011,7 +3026,6 @@ public:
   produce_image (coord_t *v, int tileid, int type)
   {
     init_screen (v, tileid);
-    point_t off = get_offset (v, tileid);
 
     std::unique_ptr<simple_image> img = std::make_unique<simple_image> ();
     if (!img || !img->allocate (twidth, theight))
@@ -3033,7 +3047,7 @@ public:
           for (int x = 0; x < twidth; x++)
             {
               rgbdata c = evaluate_pixel (v, tileid, red, green, blue, x, y,
-                                          off, mix_weights, mix_dark);
+                                          mix_weights, mix_dark);
               rmax = std::max (c.red, rmax);
               gmax = std::max (c.green, gmax);
               bmax = std::max (c.blue, bmax);
@@ -3054,7 +3068,7 @@ public:
                     {
                       rgbdata c
                           = evaluate_pixel (v, tileid, red, green, blue, x, y,
-                                            off, mix_weights, mix_dark);
+                                            mix_weights, mix_dark);
                       img->put_linear_pixel (
                           x, y,
                           { c.red / rmax, c.green / gmax, c.blue / bmax });
@@ -3072,7 +3086,7 @@ public:
                     {
                       rgbdata c
                           = evaluate_pixel (v, tileid, red, green, blue, x, y,
-                                            off, mix_weights, mix_dark);
+                                            mix_weights, mix_dark);
                       rgbdata d = c - get_pixel (v, tileid, { x, y });
                       img->put_linear_pixel (
                           x, y,
@@ -3101,7 +3115,7 @@ public:
         for (int y = 0; y < theight; y++)
           for (int x = 0; x < twidth; x++)
             {
-              lmax = std::max (bw_evaluate_pixel (tileid, color, x, y, off),
+              lmax = std::max (bw_evaluate_pixel (tileid, color, x, y),
                                lmax);
               lmax = std::max (bw_get_pixel (tileid, { x, y }), lmax);
             }
@@ -3116,7 +3130,7 @@ public:
                   case 0:
                     {
                       luminosity_t c
-                          = bw_evaluate_pixel (tileid, color, x, y, off)
+                          = bw_evaluate_pixel (tileid, color, x, y)
                             / lmax;
                       img->put_linear_pixel (x, y, { c, c, c });
                     }
@@ -3130,7 +3144,7 @@ public:
                   case 2:
                     {
                       luminosity_t c
-                          = bw_evaluate_pixel (tileid, color, x, y, off);
+                          = bw_evaluate_pixel (tileid, color, x, y);
                       luminosity_t d
                           = (c - bw_get_pixel (tileid, { x, y })) / lmax + (luminosity_t)0.5;
                       img->put_linear_pixel (x, y, { d, d, d });
@@ -3148,7 +3162,6 @@ public:
   write_file (coord_t *v, const char *name, int tileid, int type)
   {
     init_screen (v, tileid);
-    point_t off = get_offset (v, tileid);
     // void *buffer;
     // size_t len = create_linear_srgb_profile (&buffer);
 
@@ -3181,7 +3194,7 @@ public:
           for (int x = 0; x < twidth; x++)
             {
               rgbdata c = evaluate_pixel (v, tileid, red, green, blue, x, y,
-                                          off, mix_weights, mix_dark);
+                                          mix_weights, mix_dark);
               rmax = std::max (c.red, rmax);
               gmax = std::max (c.green, gmax);
               bmax = std::max (c.blue, bmax);
@@ -3202,7 +3215,7 @@ public:
                     {
                       rgbdata c
                           = evaluate_pixel (v, tileid, red, green, blue, x, y,
-                                            off, mix_weights, mix_dark);
+                                            mix_weights, mix_dark);
                       rendered.put_pixel (
                           x, invert_gamma (c.red / rmax, -1) * 65535,
                           invert_gamma (c.green / gmax, -1) * 65535,
@@ -3222,7 +3235,7 @@ public:
                     {
                       rgbdata c
                           = evaluate_pixel (v, tileid, red, green, blue, x, y,
-                                            off, mix_weights, mix_dark);
+                                            mix_weights, mix_dark);
                       rgbdata d = get_pixel (v, tileid, { x, y });
                       rendered.put_pixel (
                           x, (c.red - d.red) * (luminosity_t)65535 / rmax + (luminosity_t)32768,
@@ -3252,7 +3265,7 @@ public:
         for (int y = 0; y < theight; y++)
           for (int x = 0; x < twidth; x++)
             {
-              lmax = std::max (bw_evaluate_pixel (tileid, color, x, y, off),
+              lmax = std::max (bw_evaluate_pixel (tileid, color, x, y),
                                lmax);
               lmax = std::max (bw_get_pixel (tileid, { x, y }), lmax);
             }
@@ -3267,7 +3280,7 @@ public:
                   case 0:
                     {
                       luminosity_t c
-                          = bw_evaluate_pixel (tileid, color, x, y, off);
+                          = bw_evaluate_pixel (tileid, color, x, y);
                       rendered.put_pixel (x, c * (luminosity_t)65535 / lmax,
                                           c * (luminosity_t)65535 / lmax, c * (luminosity_t)65535 / lmax);
                     }
@@ -3282,7 +3295,7 @@ public:
                   case 2:
                     {
                       luminosity_t c
-                          = bw_evaluate_pixel (tileid, color, x, y, off);
+                          = bw_evaluate_pixel (tileid, color, x, y);
                       luminosity_t d = bw_get_pixel (tileid, { x, y });
                       rendered.put_pixel (x,
                                           (c - d) * (luminosity_t)65535 / lmax + (luminosity_t)32768,
@@ -3335,7 +3348,30 @@ public:
             ret.coordinate2.y = (theight - 1) * dx_scr1_x / det;
             ret.center.x = p1_img.x - ret.coordinate1.x * p1_scr.x - ret.coordinate2.x * p1_scr.y;
             ret.center.y = p1_img.y - ret.coordinate1.y * p1_scr.x - ret.coordinate2.y * p1_scr.y;
-	    printf ("Center %f %f to %f %f; Coordinates %f %f to %f %f; %f %f to %f %f\n", param.center.x, param.center.y, ret.center.x, ret.center.y, param.coordinate1.x, param.coordinate1.y, ret.coordinate1.x, ret.coordinate1.y, param.coordinate2.x, param.coordinate2.y, ret.coordinate2.x, ret.coordinate2.y);
+#ifdef COLORSCREEN_CHECKING
+            {
+              scr_to_img_parameters test_p;
+              test_p.center = ret.center;
+              test_p.coordinate1 = ret.coordinate1;
+              test_p.coordinate2 = ret.coordinate2;
+              scr_to_img test_map;
+              test_map.set_parameters (test_p, 1, 1);
+              point_t p1_scr_test = test_map.to_scr (p1_img);
+              point_t p2_scr_test = test_map.to_scr ({(coord_t)tiles[0].txmin + twidth - 1, (coord_t)tiles[0].tymin});
+              point_t p3_scr_test = test_map.to_scr ({(coord_t)tiles[0].txmin, (coord_t)tiles[0].tymin + theight - 1});
+              if (p1_scr_test.dist_from (p1_scr) > 1e-4
+                  || p2_scr_test.dist_from (p2_scr) > 1e-4
+                  || p3_scr_test.dist_from (p3_scr) > 1e-4)
+                {
+                  printf ("VERIFICATION FAILED:\n");
+                  printf ("  p1: %f %f -> %f %f (should be %f %f)\n", p1_img.x, p1_img.y, p1_scr_test.x, p1_scr_test.y, p1_scr.x, p1_scr.y);
+                  printf ("  p2: %f %f -> %f %f (should be %f %f)\n", (coord_t)tiles[0].txmin + twidth - 1, (coord_t)tiles[0].tymin, p2_scr_test.x, p2_scr_test.y, p2_scr.x, p2_scr.y);
+                  printf ("  p3: %f %f -> %f %f (should be %f %f)\n", (coord_t)tiles[0].txmin, (coord_t)tiles[0].tymin + theight - 1, p3_scr_test.x, p3_scr_test.y, p3_scr.x, p3_scr.y);
+		  printf ("Center %f %f to %f %f; Coordinates %f %f to %f %f; %f %f to %f %f\n", param.center.x, param.center.y, ret.center.x, ret.center.y, param.coordinate1.x, param.coordinate1.y, ret.coordinate1.x, ret.coordinate1.y, param.coordinate2.x, param.coordinate2.y, ret.coordinate2.x, ret.coordinate2.y);
+		  abort ();
+                }
+            }
+#endif
           }
         else
           {
@@ -4317,7 +4353,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 {
   double_rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
   double wr = 0, wg = 0, wb = 0;
-  const bool debugfiles = false;
+  const bool debugfiles = true;
 
   if (debugfiles)
     {
@@ -4328,10 +4364,13 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
   sharpen_parameters::sharpen_mode sharpen_mode = sharpen_param.get_mode ();
   if (simulated_screen)
     {
+// FIXME: prallelism here seems to cause instability (race condition)
+#if 0
 #pragma omp declare reduction(+ : double_rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
     shared(area, threshold, simulated_screen)                                 \
     reduction(+ : wr, wg, wb, red, green, blue)
+#endif
       for (int y = area.y; y < area.y + area.height; y++)
         for (int x = area.x; x < area.x + area.width; x++)
           {
@@ -4362,10 +4401,13 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
   else if (sharpen_mode == sharpen_parameters::none)
     {
       bool antialias = !sharpen_param.scanner_mtf_scale;
+// FIXME: prallelism here seems to cause instability (race condition)
+#if 0
 #pragma omp declare reduction(+ : double_rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
-    shared(area, threshold, map, scr, collection_scr)                         \
-    reduction(+ : wr, wg, wb, red, green, blue, antialias)
+    shared(area, threshold, map, scr, collection_scr,antialias)               \
+    reduction(+ : wr, wg, wb, red, green, blue)
+#endif
       for (int y = area.y; y < area.y + area.height; y++)
         for (int x = area.x; x < area.x + area.width; x++)
           {
@@ -4522,6 +4564,13 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
         }
 
       /* Collect data  */
+// FIXME: prallelism here seems to cause instability (race condition)
+#if 0
+#pragma omp declare reduction(+ : double_rgbdata : omp_out = omp_out + omp_in)
+#pragma omp parallel for default(none) collapse(2)                            \
+    shared(area, threshold, map, scr, collection_scr,rendered2,ext,xsize)     \
+    reduction(+ : wr, wg, wb, red, green, blue)
+#endif
       for (int y = area.y; y < area.y + area.height; y++)
         for (int x = area.x; x < area.x + area.width; x++)
           {
@@ -4571,7 +4620,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                          (luminosity_t)blue.blue };
 #endif
 #if 0
-  printf ("Color loss info\n");
+  printf ("Color loss info %i %i %i %i %f\n", area.x, area.y, area.width, area.height, map.pixel_size (area.x,area.y));
   ret_red->print (stdout);
   ret_green->print (stdout);
   ret_blue->print (stdout);
