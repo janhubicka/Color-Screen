@@ -47,6 +47,46 @@ struct gsl_vector_deleter
   }
 };
 
+/* Translate center to given coordinates (x,y).  */
+class translation_3x3matrix : public matrix3x3<coord_t>
+{
+public:
+  /* Initialize translation to CENTER.  */
+  translation_3x3matrix (point_t center)
+  {
+    (*this)(0, 2) = center.x;
+    (*this)(1, 2) = center.y;
+  }
+};
+
+/* Rotate by given angle.  */
+class rotation_3x3matrix : public matrix3x3<coord_t>
+{
+public:
+  /* Initialize rotation by ROTATION degrees.  */
+  rotation_3x3matrix (coord_t rotation)
+  {
+    rotation *= (coord_t)M_PI / 180;
+    const coord_t s = std::sin (rotation);
+    const coord_t c = std::cos (rotation);
+    (*this)(0, 0) = c; (*this)(0, 1) = -s;
+    (*this)(1, 0) = s; (*this)(1, 1) = c;
+    (*this)(2, 2) = 1; 
+  }
+};
+
+/* Rotate by given angle.  */
+class scale_3x3matrix : public matrix3x3<coord_t>
+{
+public:
+  /* Initialize rotation by ROTATION degrees.  */
+  scale_3x3matrix (coord_t scale)
+  {
+    (*this)(0, 0) = scale;
+    (*this)(1, 1) = scale;
+  }
+};
+
 /* Return contrast which is useful for registration.  */
 luminosity_t
 get_positional_color_contrast (scr_type type, rgbdata c)
@@ -201,6 +241,9 @@ public:
   tile_data tiles[max_tiles];
 
 private:
+  /* Matrix for scaling & rotation */
+  matrix3x3<coord_t> transformation;
+
   /* Least squares solver for optimizing parameters that behaves linearly.  */
   std::unique_ptr<gsl_multifit_linear_workspace, gsl_work_deleter> gsl_work;
   std::unique_ptr<gsl_matrix, gsl_matrix_deleter> gsl_X;
@@ -213,6 +256,7 @@ private:
   int noutliers = 0;
 
   /* Indexes into optimized values array to fetch individual parameters  */
+  int coordinate_index;
   int fog_index;
   int color_index;
   int emulsion_intensity_index;
@@ -281,6 +325,8 @@ public:
   coord_t pixel_size;
   scr_type type;
 
+  /* True if we optimize coordinate system.  */
+  bool optimize_coordinates;
   /* True if tile is already sharpened.  */
   bool tile_sharpened;
   /* Try to adjust position of center of the patches (+- range)  */
@@ -652,11 +698,31 @@ public:
       v[strips_index + 1] = w;
   }
 
+  /* Scale of coordinate system for V.  */
+  coord_t
+  get_scale (coord_t *v)
+  {
+    if (!optimize_coordinates)
+      return 1;
+    return v[coordinate_index] + 1;
+  }
+
+  /* Rotation of coordinate system for V.  */
+  coord_t
+  get_rotation (coord_t *v)
+  {
+    if (!optimize_coordinates)
+      return 0;
+    return v[coordinate_index + 1];
+  }
+
   /* Get screen coordinates of a given pixel P of a given tile TILEID.
      Values are in vector V.  */
   point_t
   get_pos (coord_t *v, int tileid, int_point_t p)
   {
+    if (optimize_coordinates)
+      return transformation.apply (tiles[tileid].pos[p.y * twidth + p.x]);
     return tiles[tileid].pos[p.y * twidth + p.x] + get_offset (v, tileid);
   }
 
@@ -672,6 +738,8 @@ public:
   print_values (coord_t *v)
   {
     printf ("\n\nOptimizing %i values:", num_values ());
+    if (optimize_coordinates)
+      printf (" coordinates");
     if (optimize_position)
       printf (" position");
     if (optimize_scanner_mtf_sigma)
@@ -1192,6 +1260,7 @@ public:
 
     /* First decide on what to optimize.  */
     tile_sharpened = is_tile_sharpened;
+    optimize_coordinates = flags & finetune_coordinates;
     optimize_position = flags & finetune_position;
     optimize_coordinate1 = flags & finetune_coordinates;
     optimize_screen_blur = flags & finetune_screen_blur;
@@ -1286,6 +1355,14 @@ public:
        is 2d or 1d.  */
     if (optimize_position)
       n_values += (1 + !screen_with_vertical_strips_p (type)) * n_tiles;
+
+    if (optimize_coordinates)
+      {
+        coordinate_index = n_values;
+        n_values += 2;
+      }
+    else
+      coordinate_index = -1;
 
     /* When optimizing sharpening, be ready for borders of the tile to not be
        right. Also allocate the memory buffer.  */
@@ -1478,6 +1555,13 @@ public:
           set_emulsion_offset (start.data (), tileid,
                                (*results)[tileid].emulsion_coord_adjust);
         }
+    if (optimize_coordinates)
+      {
+        /* scale = 1 */
+        start [coordinate_index] = 0;
+	/* rotation = 1 */
+        start [coordinate_index + 1] = 0;
+      }
 
     /* Always start from scratch with sharpening; otherwise the optimizer tends
        to pick up very large values.  */
@@ -2618,6 +2702,24 @@ public:
     last_blue = *blue;
   }
 
+  void
+  update_transformation (coord_t *v)
+  {
+    if (optimize_coordinates)
+      {
+	point_t center = tiles[0].pos[(theight/2) * twidth + twidth/2];
+	/* First move center to 0.  */
+	matrix3x3 trans = translation_3x3matrix (center * -1);
+	/* Next apply rotation.  */
+	trans = trans * rotation_3x3matrix (get_rotation (v));
+	/* Next apply scale  */
+	trans = trans * scale_3x3matrix (get_scale (v));
+	/* Now translate back.  */
+	trans = trans * translation_3x3matrix (center);
+	transformation = trans;
+      }
+  }
+
   /* Objective function to minimize difference between simulated and actual
      scan.  V is vector of parameters.  */
   coord_t
@@ -2625,6 +2727,7 @@ public:
   {
     /* Use double to avoid accumulation of round-off error.  */
     double sum = 0;
+    update_transformation (v);
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
         /* FIXME: parallelism is disabled because sometimes we are called from
@@ -3204,9 +3307,42 @@ public:
     ret.green_strip_width = get_green_strip_width (start.data ());
     ret.scanner_mtf_sigma = get_scanner_mtf_sigma (start.data ());
 
-    ret.center = param.center + get_offset (start.data (), 0);
-    ret.coordinate1 = param.coordinate1;
-    ret.coordinate2 = param.coordinate2;
+    if (optimize_coordinates)
+      {
+        point_t p1_img = {(coord_t)tiles[0].txmin, (coord_t)tiles[0].tymin};
+        point_t p1_scr = get_pos (start.data (), 0, {0, 0});
+        point_t p2_scr = get_pos (start.data (), 0, {twidth - 1, 0});
+        point_t p3_scr = get_pos (start.data (), 0, {theight - 1, 0});
+
+        coord_t dx_scr1_x = p2_scr.x - p1_scr.x;
+        coord_t dx_scr1_y = p2_scr.y - p1_scr.y;
+        coord_t dx_scr2_x = p3_scr.x - p1_scr.x;
+        coord_t dx_scr2_y = p3_scr.y - p1_scr.y;
+        coord_t det = dx_scr1_x * dx_scr2_y - dx_scr1_y * dx_scr2_x;
+
+        if (det != 0)
+          {
+            ret.coordinate1.x = (twidth - 1) * dx_scr2_y / det;
+            ret.coordinate2.x = -(twidth - 1) * dx_scr2_x / det;
+            ret.coordinate1.y = -(theight - 1) * dx_scr1_y / det;
+            ret.coordinate2.y = (theight - 1) * dx_scr1_x / det;
+            ret.center.x = p1_img.x - ret.coordinate1.x * p1_scr.x - ret.coordinate2.x * p1_scr.y;
+            ret.center.y = p1_img.y - ret.coordinate1.y * p1_scr.x - ret.coordinate2.y * p1_scr.y;
+          }
+        else
+          {
+            ret.center = param.center;
+            ret.coordinate1 = param.coordinate1;
+            ret.coordinate2 = param.coordinate2;
+          }
+      }
+    else
+      {
+        ret.center = param.center;
+        ret.coordinate1 = param.coordinate1;
+        ret.coordinate2 = param.coordinate2;
+      }
+
     if (optimize_scanner_mtf_defocus || optimize_scanner_mtf_channel_defocus)
       {
         ret.scanner_mtf_defocus = get_scanner_mtf_defocus (start.data ());
