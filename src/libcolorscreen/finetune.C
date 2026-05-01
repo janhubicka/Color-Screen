@@ -3605,6 +3605,15 @@ public:
   }
 };
 } // namespace
+ 
+/* Produce elemnt of geometric sequence from MIN to MAX having STEPS
+   elements of index I.  */
+static coord_t
+geom_sequence (coord_t min, coord_t max, int steps, int i)
+{
+  double r = std::pow(max / min, 1.0 / steps);
+  return min * std::pow (r, i);
+}
 
 /* Finetune parameters and update RPARAM.
    PARAM is scr-to-img parameters.  IMG is the image data.
@@ -3787,7 +3796,6 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
         tymin = 0;
       if (tymax > imgp[0]->height)
         tymax = imgp[0]->height;
-      printf ("tile %i %i %i %i; %f %f\n",txmin, txmax, tymin, tymax, param.center.x, param.center.y);
     }
 
   if (txmin + 10 > txmax || tymin + 10 > tymax)
@@ -4015,9 +4023,9 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
         fparams, rparam, pixel_size, best_uncertainty, verbose, imgp, twidth, \
             theight, txmin, tymin, bw, progress, mapp, failed, best_solver,   \
             results, bw_is_simulated_infrared, tile_sharpened)
-          for (int i = 3; i < 50; i++)
+          for (int i = 0; i < 50; i++)
             {
-              for (int rot = -90; rot < 80; rot += 10)
+              for (int rot = -40; rot < 30; rot += 10)
                 {
                   finetune_solver solver;
                   solver.n_tiles = 1;
@@ -4034,8 +4042,8 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                   r = solver.copy_tile (0, best_solver);
                   if (!r)
                     failed = true;
-                  solver.min_scale = 1.0 / i;
-                  solver.max_scale = 1.0 / (i + 1);
+                  solver.min_scale = geom_sequence (1/50.0, 1/3.0, 50, i);
+                  solver.max_scale = geom_sequence (1/50.0, 1/3.0, 50, i+1);
                   solver.min_rotate = rot;
                   solver.max_rotate = rot + 10;
                   solver.init (
@@ -5064,6 +5072,15 @@ render_screen (image_data &img, const scr_to_img_parameters &param,
   return true;
 }
 
+static bool
+similar_solution_p (finetune_result &res1, int type, finetune_result &res2, int type2)
+{
+  if (type != type2)
+    return false;
+  return res1.coordinate1.dist_from (res2.coordinate1) < 1
+	 && res1.coordinate2.dist_from (res2.coordinate2) < 1;
+}
+
 /* Try to brute-force finetuning and detect screen coordinates.  */
 
 bool
@@ -5113,19 +5130,100 @@ autodetect_coordinates (const image_data &img, scr_to_img_parameters &param,
             if (progress)
               progress->inc_progress ();
           }
-  luminosity_t best_u = INT_MAX;
+
   int best_i = -1;
+  int best_n;
+  double best_sum;
+
   for (int i = 0; i < (int)res.size (); i++)
-    if (res[i].success && (best_i < 0 || best_u > res[i].uncertainty))
+    if (res[i].success && res[i].contrast > 1/1280.0)
       {
-        best_i = i;
-        best_u = res[i].uncertainty;
+	int n = 0;
+	double sum = 0;
+	double unc = 0;
+	int bi = -1;
+        for (int j = 0; j < (int)res.size (); j++)
+          if (res[j].success && res[j].contrast > 1/1280.0
+	      && similar_solution_p (res[i], screens > 1 ? i % screens : 1,
+				     res[j], screens > 1 ? j % screens : 1))
+	  {
+	    n++;
+	    sum += 1/res[j].uncertainty;
+	    if (bi == -1 || unc > res[j].uncertainty)
+	      {
+		bi = j;
+		unc = res[j].uncertainty;
+	      }
+	  }
+	if (best_i == -1 || best_sum < sum)
+	  {
+	    best_i = bi;
+	    best_sum = sum;
+	    best_n = n;
+	  }
       }
-  if (best_i < 0)
+#if 0
+  struct group {
+    scr_type type;
+    point_t c1, c2;
+    double weight;
+    int best_index;
+    luminosity_t best_u;
+  };
+  std::vector<group> groups;
+  for (int i = 0; i < (int)res.size (); i++)
+    if (res[i].success)
+      {
+	scr_type type = (param.type == Random) ? supported_screns[i % screens] : param.type;
+	int found = -1;
+	for (int g = 0; g < (int)groups.size (); g++)
+	  if (groups[g].type == type
+	      && res[i].coordinate1.dist_from (groups[g].c1) < 0.1
+	      && res[i].coordinate2.dist_from (groups[g].c2) < 0.1)
+	    {
+	      found = g;
+	      break;
+	    }
+	if (found != -1)
+	  {
+	    groups[found].weight += 1.0 / std::max ((coord_t)1e-6, (coord_t)res[i].uncertainty);
+	    if (res[i].uncertainty < groups[found].best_u)
+	      {
+		groups[found].best_u = res[i].uncertainty;
+		groups[found].best_index = i;
+	      }
+	  }
+	else
+	  groups.push_back ({type, res[i].coordinate1, res[i].coordinate2,
+			     1.0 / std::max ((coord_t)1e-6, (coord_t)res[i].uncertainty), i, res[i].uncertainty});
+      }
+
+  int best_g = -1;
+  double max_w = -1;
+  for (int g = 0; g < (int)groups.size (); g++)
+    if (groups[g].weight > max_w)
+      {
+	max_w = groups[g].weight;
+	best_g = g;
+      }
+
+  if (best_g < 0)
     return false;
+  int best_i = groups[best_g].best_index;
   param.center = res[best_i].center;
   param.coordinate1 = res[best_i].coordinate1;
   param.coordinate2 = res[best_i].coordinate2;
+  param.type = groups[best_g].type;
+  return true;
+#endif
+  if (best_i < 0)
+    return false;
+  printf ("Best sum %f, n %i\n", best_sum, best_n);
+  param.center = res[best_i].center;
+  param.coordinate1 = res[best_i].coordinate1;
+  param.coordinate2 = res[best_i].coordinate2;
+  if (param.type == Random)
+    param.type = supported_screns[best_i % screens];
   return true;
 }
 } // namespace colorscreen

@@ -154,7 +154,7 @@ struct solver_parameters
   };
   DLL_PUBLIC static point_location *get_point_locations (enum scr_type type,
                                                          int *n);
-  DLL_PUBLIC void dump (FILE *out);
+  DLL_PUBLIC void dump (FILE *out) const;
   bool operator== (const solver_parameters &other) const
   {
     return optimize_lens == other.optimize_lens &&
@@ -170,7 +170,9 @@ struct solver_parameters
   /* Names of colors in enum point_color.  */
   DLL_PUBLIC static const char *const point_color_names[(int)max_point_color];
   /* Fit points to a line and return distance threshold for 90% of points.  */
-  DLL_PUBLIC_EXP double fit_line (point_t &origin, point_t &dir);
+  DLL_PUBLIC_EXP double fit_line (point_t &origin, point_t &dir) const;
+  /* Return a const reference to the underlying points vector.  */
+  const std::vector<solver_point_t>& read_points () const { return points.read (); }
 };
 }
 #endif

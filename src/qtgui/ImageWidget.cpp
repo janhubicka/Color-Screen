@@ -1645,8 +1645,9 @@ void ImageWidget::schedulePointsOverlayRender ()
         std::vector<DrawPoint> visible;
         visible.reserve (std::min (points.size (), (size_t)8192));
 
-        for (size_t i = 0; i < points.size (); ++i) {
-          const auto &xi    = points[i].img;
+        const auto &pointsVec = points.read ();
+        for (size_t i = 0; i < pointsVec.size (); ++i) {
+          const auto &xi    = pointsVec[i].img;
           QPointF     start = toWidget (xi);
 
           /* Culling. */
@@ -1655,7 +1656,7 @@ void ImageWidget::schedulePointsOverlayRender ()
             continue;
 
           /* Compute simulated location. */
-          colorscreen::point_t scr_p = points[i].scr;
+          colorscreen::point_t scr_p = pointsVec[i].scr;
           if (isVerticalStrips) {
             colorscreen::point_t scr2 = map.to_scr (xi);
             scr_p.y = scr2.y;
