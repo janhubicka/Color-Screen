@@ -48,8 +48,9 @@ void FinetuneMisregisteredWorker::run() {
 	break;
 
       // Accumulate the new points that were added
-      for (size_t i = initialPointCount; i < localSolver.points.size(); ++i) {
-	accumulatedPoints.push_back(localSolver.points[i]);
+      const auto &points = localSolver.points;
+      for (size_t i = initialPointCount; i < points.size(); ++i) {
+	accumulatedPoints.push_back(points[i]);
       }
 
       // Invoke geometry solver same way as in GeometrySolverWorker.cpp

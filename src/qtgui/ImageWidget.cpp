@@ -834,8 +834,9 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
       // Hit-test points
       int hitIndex = -1;
       if (m_showRegistrationPoints && m_solver) {
-        for (size_t i = 0; i < m_solver->points.size(); ++i) {
-          QPointF pos = imageToWidget(m_solver->points[i].img);
+        const auto &points = m_solver->points;
+        for (size_t i = 0; i < points.size(); ++i) {
+          QPointF pos = imageToWidget(points[i].img);
           if (QLineF(pos, event->position()).length() < 10) {
             hitIndex = i;
             break;
@@ -923,8 +924,9 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
   // Check for hover over registration points
   if (!m_isDragging && m_showRegistrationPoints && m_solver) {
     bool found = false;
-    for (size_t i = 0; i < m_solver->points.size(); ++i) {
-      QPointF p_widget = imageToWidget(m_solver->points[i].img);
+    const auto &points = m_solver->points;
+    for (size_t i = 0; i < points.size(); ++i) {
+      QPointF p_widget = imageToWidget(points[i].img);
       if (QLineF(event->position(), p_widget).length() < 10) {
         setCursor(Qt::PointingHandCursor);
         found = true;
@@ -1089,8 +1091,9 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
         bool changed = false;
 
         if (m_showRegistrationPoints && m_solver) {
-          for (size_t i = 0; i < m_solver->points.size(); ++i) {
-            QPointF pos = imageToWidget(m_solver->points[i].img);
+          const auto &points = m_solver->points;
+          for (size_t i = 0; i < points.size(); ++i) {
+            QPointF pos = imageToWidget(points[i].img);
             if (rect.contains(pos.toPoint())) {
               SelectedPoint sp = {i, SelectedPoint::RegistrationPoint};
               if (!m_selectedPoints.count(sp)) {
@@ -1583,7 +1586,7 @@ void ImageWidget::schedulePointsOverlayRender ()
   auto   scrToImg       = *m_scrToImg;
   auto   scan           = m_scan;
   auto   rparams        = *m_rparams; /* Snapshot rotation/mirror/crop state. */
-  auto   points         = m_solver->points; /* Deep copy of registration points. */
+  const auto points     = m_solver->points; /* Shallow copy of registration points. */
   auto   selected       = m_selectedPoints; /* Copy selection set. */
   double heatmapTol     = m_heatmapTolerance;
   double exaggerate     = m_exaggerate;

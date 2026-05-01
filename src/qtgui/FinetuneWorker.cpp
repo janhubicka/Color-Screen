@@ -32,8 +32,9 @@ void FinetuneWorker::run() {
   // If successful, extract the new points that were added
   if (success && localSolver.points.size() > initialPointCount) {
     std::vector<colorscreen::solver_parameters::solver_point_t> newPoints;
-    for (size_t i = initialPointCount; i < localSolver.points.size(); ++i) {
-      newPoints.push_back(localSolver.points[i]);
+    const auto &points = localSolver.points;
+    for (size_t i = initialPointCount; i < points.size(); ++i) {
+      newPoints.push_back(points[i]);
     }
     emit pointsReady(newPoints);
   }

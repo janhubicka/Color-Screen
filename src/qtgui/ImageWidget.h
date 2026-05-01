@@ -142,7 +142,7 @@ public:
   InteractionMode interactionMode() const { return m_interactionMode; }
   bool registrationPointsVisible() const { return m_showRegistrationPoints; }
   size_t registrationPointCount() const {
-    return m_solver ? m_solver->points.size() : 0;
+    return m_solver ? m_solver->points.read().size() : 0;
   }
   const std::set<SelectedPoint>& selectedPoints() const { return m_selectedPoints; }
 

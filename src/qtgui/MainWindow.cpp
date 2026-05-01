@@ -3297,11 +3297,13 @@ void MainWindow::onPruneMisplaced() {
   // Build histogram of distances
   colorscreen::histogram hist;
 
+  const auto &points = m_solverParams.points;
+
   // First pass: pre-account all distances
   for (const auto &sp : selectedPoints) {
     if (sp.type == ImageWidget::SelectedPoint::RegistrationPoint &&
-        sp.index < m_solverParams.points.size()) {
-      const auto &point = m_solverParams.points[sp.index];
+        sp.index < points.size()) {
+      const auto &point = points[sp.index];
 
       colorscreen::coord_t dist;
       if (!colorscreen::screen_with_vertical_strips_p(m_scrToImgParams.type)) {
@@ -3320,8 +3322,8 @@ void MainWindow::onPruneMisplaced() {
   // Second pass: account distances
   for (const auto &sp : selectedPoints) {
     if (sp.type == ImageWidget::SelectedPoint::RegistrationPoint &&
-        sp.index < m_solverParams.points.size()) {
-      const auto &point = m_solverParams.points[sp.index];
+        sp.index < points.size()) {
+      const auto &point = points[sp.index];
 
       colorscreen::coord_t dist;
       if (!colorscreen::screen_with_vertical_strips_p(m_scrToImgParams.type)) {
@@ -3345,8 +3347,8 @@ void MainWindow::onPruneMisplaced() {
   std::vector<size_t> indicesToRemove;
   for (const auto &sp : selectedPoints) {
     if (sp.type == ImageWidget::SelectedPoint::RegistrationPoint &&
-        sp.index < m_solverParams.points.size()) {
-      const auto &point = m_solverParams.points[sp.index];
+        sp.index < points.size()) {
+      const auto &point = points[sp.index];
 
       colorscreen::coord_t dist;
       if (!colorscreen::screen_with_vertical_strips_p(m_scrToImgParams.type)) {
