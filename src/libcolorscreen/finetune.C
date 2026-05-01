@@ -4042,8 +4042,8 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                   r = solver.copy_tile (0, best_solver);
                   if (!r)
                     failed = true;
-                  solver.min_scale = geom_sequence (1/50.0, 1/3.0, 50, i);
-                  solver.max_scale = geom_sequence (1/50.0, 1/3.0, 50, i+1);
+                  solver.min_scale = geom_sequence (1/50.0, 1/1.5, 50, i);
+                  solver.max_scale = geom_sequence (1/50.0, 1/1.5, 50, i+1);
                   solver.min_rotate = rot;
                   solver.max_rotate = rot + 10;
                   solver.init (
