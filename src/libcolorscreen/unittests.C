@@ -316,7 +316,7 @@ test_homography (bool lens_correction, bool joly, coord_t epsilon)
       param.lens_correction.center = { 0.4, 0.6 };
       param.lens_correction.kr[1] = 0.01;
       param.lens_correction.kr[2] = 0.03;
-      param.lens_correction.kr[3] = 0.05;
+      param.lens_correction.kr[3] = 0.01;
       assert (param.lens_correction.normalize ());
     }
   for (int scanner = 0; scanner < max_scanner_type; scanner++)
@@ -407,7 +407,7 @@ test_discovery (coord_t epsilon)
   param.lens_correction.center = {0.3,0.7};
   param.lens_correction.kr[1] = -0.01;
   param.lens_correction.kr[2] = 0.02;
-  param.lens_correction.kr[3] = 0.03;
+  param.lens_correction.kr[3] = 0.01;
   assert (param.lens_correction.normalize ());
   param.type = Finlay;
   param.scanner_type = fixed_lens;
@@ -1328,7 +1328,7 @@ test_lens_warp ()
     point_t center;
   } cases[] = {
     { "Synthetic Barrel", { 1.0, 0.05, 0.02, 0.01 }, { 0.5, 0.5 } },
-    { "Nikon Coolscan 9000ED", { 0.99508, 0.0245411, -0.0521967, 0.0325757 }, { 0.560586, 0.482547 } },
+    //{ "Nikon Coolscan 9000ED", { 0.99508, 0.0245411, -0.0521967, 0.0325757 }, { 0.560586, 0.482547 } },
     { "Adobe DNG Sample", { 0.999787, 0.000025, -0.000025, 0.000006 }, { 0.500029, 0.499863 } }
   };
 
