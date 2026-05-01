@@ -3404,7 +3404,6 @@ public:
         point_t p1_scr = get_pos (start.data (), 0, {0, 0});
         point_t p2_scr = get_pos (start.data (), 0, {twidth - 1, 0});
         point_t p3_scr = get_pos (start.data (), 0, {0, theight - 1});
-        printf ("p1 %f %f scr %f %f, %f %f, %f %f\n", p1_img.x, p1_img.y, p1_scr.x, p1_scr.y, p2_scr.x, p2_scr.y, p3_scr.x, p3_scr.y);
 
         coord_t dx_scr1_x = p2_scr.x - p1_scr.x;
         coord_t dx_scr1_y = p2_scr.y - p1_scr.y;
@@ -3788,6 +3787,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
         tymin = 0;
       if (tymax > imgp[0]->height)
         tymax = imgp[0]->height;
+      printf ("tile %i %i %i %i; %f %f\n",txmin, txmax, tymin, tymax, param.center.x, param.center.y);
     }
 
   if (txmin + 10 > txmax || tymin + 10 > tymax)
@@ -4045,7 +4045,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                   coord_t u = solver.solve (
                       progress,
                       !(fparams.flags & finetune_no_progress_report));
-                  printf ("step %i rotate %i %f %f %f\n", i, rot, u, solver.get_scale (solver.start.data ()), solver.get_rotation (solver.start.data ()));
+                  //printf ("step %i rotate %i %f %f %f\n", i, rot, u, solver.get_scale (solver.start.data ()), solver.get_rotation (solver.start.data ()));
 #pragma omp critical
                   {
                     if (best_uncertainty < 0 || best_uncertainty > u)
@@ -4292,7 +4292,6 @@ finetune_misregistered_area (solver_parameters *solver,
     {
       point_t origin, dir;
       double line_width = solver->fit_line (origin, dir);
-      printf ("line width: %f\n", line_width);
       const int ratio = 5;
       if (xstep > line_width / ratio)
 	{
@@ -5065,37 +5064,63 @@ render_screen (image_data &img, const scr_to_img_parameters &param,
   return true;
 }
 
+/* Try to brute-force finetuning and detect screen coordinates.  */
+
 bool
 autodetect_coordinates (const image_data &img, scr_to_img_parameters &param,
-		        const render_parameters &rparam, progress_info *progress)
+                        const render_parameters &rparam,
+                        progress_info *progress)
 {
-  int steps = 5;
-  finetune_result res[steps * steps];
+  int steps = 11;
   finetune_parameters fparams;
-  fparams.flags = colorscreen::finetune_position |
-                  colorscreen::finetune_guess_coordinates | colorscreen::finetune_bw;
+  /* What screens are autodetected well.
+     TODO: For improved dioptichrome we need to add support for angle between
+     elements; Normal dioptichrome will be misdetected as Dufay since geometry
+     is same, but colors are different.  Similarly for Joly/Warner-Powrie etc.
+     We may want to add combined screen types and let user to choose in GUI. */
+  constexpr scr_type supported_screns[] = { Paget, Dufay, Joly };
+  constexpr int n_supported_types
+      = sizeof (supported_screns) / sizeof (scr_type);
+  int screens = 1;
+  if (param.type == Random)
+    screens = n_supported_types;
+  std::vector<finetune_result> res (steps * steps * screens);
+  fparams.flags = colorscreen::finetune_position
+                  | colorscreen::finetune_guess_coordinates
+                  | colorscreen::finetune_bw;
   if (progress)
-    progress->set_task ("autodetecting coordinates in multiple samples", steps * steps);
+    progress->set_task ("autodetecting coordinates in multiple samples",
+                        steps * steps * screens);
   for (int y = 0; y < steps; y++)
     for (int x = 0; x < steps; x++)
-      if (!progress || !progress->cancel_requested ())
-	{
-	  scr_to_img_parameters p;
-	  p.type = param.type;
-	  int_image_area area = rparam.get_image_area (img.width, img.height);
-	  p.center = {area.x + (0.5 + x) * area.width, area.y + (0.5 + y) * area.height};
-	    {
-	      sub_task task (progress);
-	      res[y * steps + x] = finetune (rparam, param, img, {}, nullptr, fparams, progress);
-	    }
-	  if (progress)
-	    progress->inc_progress ();
-	}
+      for (int scr = 0; scr < screens; scr++)
+        if (!progress || !progress->cancel_requested ())
+          {
+            scr_to_img_parameters p;
+            if (param.type == Random)
+              p.type = supported_screns[scr];
+            else
+              p.type = param.type;
+            int_image_area area
+                = rparam.get_image_area (img.width, img.height);
+            p.center = { area.x + (0.5 + x) * area.width / steps,
+                         area.y + (0.5 + y) * area.height / steps };
+            {
+              sub_task task (progress);
+              res[y * steps * screens + x * screens + scr]
+                  = finetune (rparam, p, img, {}, nullptr, fparams, progress);
+            }
+            if (progress)
+              progress->inc_progress ();
+          }
   luminosity_t best_u = INT_MAX;
   int best_i = -1;
-  for (int i = 0; i < 1000; i++)
-    if (res[i].success && (best_i < 0 || best_u <res[i].uncertainty))
-      best_i = i;
+  for (int i = 0; i < (int)res.size (); i++)
+    if (res[i].success && (best_i < 0 || best_u > res[i].uncertainty))
+      {
+        best_i = i;
+        best_u = res[i].uncertainty;
+      }
   if (best_i < 0)
     return false;
   param.center = res[best_i].center;
