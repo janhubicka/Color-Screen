@@ -94,6 +94,9 @@ addSliderParameter(
 ## Background Tasks and Concurrency
 
 Never perform heavy computations in the UI thread. Use the `TaskQueue` and `WorkerBase` system.
+`TaskQueue` should be used when running multiple threads is desired for user response when parameters are
+changed rapidly (such as rendering the image). While ohter tasks that should be run only once can be
+handled separately.
 
 Inherit from `WorkerBase` or `QObject` to implement a specific task. Use `QThread` to move the worker off the main thread.
 
@@ -169,34 +172,34 @@ m_form->addRow(section);
 
 The parent panel should implement a "reattach" mechanism to handle when the user closes the dock widget.
 
-+## Widget Visibility Implementation
-+
-+To handle optional UI sections that should only appear when data is available (e.g., diagnostic images or analysis charts), follow this pattern:
-+
-+1. **Wrap in a Container**: Wrap the detachable section in a `QWidget` wrapper with a `QVBoxLayout`.
-+2. **Initial Hide**: Hide the wrapper in `setupUi`.
-+3. **Add to Row**: Add the wrapper (not the internal widget) to the form row.
-+4. **Conditional Show**: Show the wrapper when data becomes available (e.g., in `onParametersRefreshed` or specialized update methods).
-+
-+Example:
-+```cpp
-+// In setupUi
-+m_wrapper = new QWidget();
-+m_container = new QVBoxLayout(m_wrapper);
-+m_container->setContentsMargins(0, 0, 0, 0);
-+
-+QWidget *detachable = createDetachableSection("Title", m_contentWidget, [this](){ ... });
-+m_container->addWidget(detachable);
-+m_wrapper->hide();
-+m_form->addRow(m_wrapper);
-+
-+// In update method
-+void MyPanel::updateData(const Data &data) {
-+    m_contentWidget->setData(data);
-+    m_wrapper->show();
-+}
-+```
-+
+## Widget Visibility Implementation
+
+To handle optional UI sections that should only appear when data is available (e.g., diagnostic images or analysis charts), follow this pattern:
+
+1. **Wrap in a Container**: Wrap the detachable section in a `QWidget` wrapper with a `QVBoxLayout`.
+2. **Initial Hide**: Hide the wrapper in `setupUi`.
+3. **Add to Row**: Add the wrapper (not the internal widget) to the form row.
+4. **Conditional Show**: Show the wrapper when data becomes available (e.g., in `onParametersRefreshed` or specialized update methods).
+
+Example:
+```cpp
+// In setupUi
+m_wrapper = new QWidget();
+m_container = new QVBoxLayout(m_wrapper);
+m_container->setContentsMargins(0, 0, 0, 0);
+
+QWidget *detachable = createDetachableSection("Title", m_contentWidget, [this](){ ... });
+m_container->addWidget(detachable);
+m_wrapper->hide();
+m_form->addRow(m_wrapper);
+
+// In update method
+void MyPanel::updateData(const Data &data) {
+    m_contentWidget->setData(data);
+    m_wrapper->show();
+}
+```
+
 
 ---
 
@@ -234,9 +237,7 @@ When a control is disabled due to missing data (like registration points):
 - **Real-time Updates**: Ensure these labels update immediately as the state changes (e.g., as the user adds points in the viewer).
 
 ### 5. Favor Composition over Duplication
-Avoid creating entirely separate subdirectories (like `flp/` or `bck/`) for UI variants that share significant logic.
-- **Maintenance Burden**: Duplicating `MainWindow.cpp` and `GeometryPanel.cpp` creates a massive technical debt where a bug fix or feature improvement must be manually ported to 3+ places.
-- **Alternative**: Use inheritance or composition. Create a base `GeometryPanel` that handles 90% of the logic, and use lightweight subclasses or conditional layout logic in `setupUi` to handle the specific differences between "Fixed Lens" or "Backlight" variants.
+Avoid code duplication
 
 ### 6. Documentation
 - **Document function**: Add block comments to function
