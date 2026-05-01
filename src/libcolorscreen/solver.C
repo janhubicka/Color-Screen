@@ -919,13 +919,14 @@ solver_mesh (const scr_to_img_parameters *param, const image_data &img_data,
 /* Dump solver points to file OUT.  */
 
 void
-solver_parameters::dump (FILE *out)
+solver_parameters::dump (FILE *out) const
 {
-  for (size_t i = 0; i < (size_t)n_points (); i++)
+  const auto &pointsVec = points.read ();
+  for (size_t i = 0; i < pointsVec.size (); i++)
     {
       fprintf (out, "point %zu img %f %f maps to scr %f %f color %i\n", i,
-               points[i].img.x, points[i].img.y, points[i].scr.x,
-               points[i].scr.y, (int)points[i].color);
+               pointsVec[i].img.x, pointsVec[i].img.y, pointsVec[i].scr.x,
+               pointsVec[i].scr.y, (int)pointsVec[i].color);
     }
 }
 
@@ -1008,29 +1009,30 @@ solver_parameters::get_point_locations (enum scr_type type, int *n)
 
 /* Fit points to a line and return distance threshold for 90% of points.  */
 double
-solver_parameters::fit_line (point_t &origin, point_t &dir)
+solver_parameters::fit_line (point_t &origin, point_t &dir) const
 {
   if (points.empty ())
     return 0;
-  if (points.size () == 1)
+  const auto &pointsVec = points.read ();
+  if (pointsVec.size () == 1)
     {
-      origin = points[0].img;
+      origin = pointsVec[0].img;
       dir = { 1, 0 };
       return 0;
     }
 
   double mean_x = 0, mean_y = 0;
-  for (const auto &p : points)
+  for (const auto &p : pointsVec)
     {
       mean_x += p.img.x;
       mean_y += p.img.y;
     }
-  mean_x /= points.size ();
-  mean_y /= points.size ();
+  mean_x /= pointsVec.size ();
+  mean_y /= pointsVec.size ();
   origin = { (coord_t)mean_x, (coord_t)mean_y };
 
   double mxx = 0, myy = 0, mxy = 0;
-  for (const auto &p : points)
+  for (const auto &p : pointsVec)
     {
       double dx = p.img.x - mean_x;
       double dy = p.img.y - mean_y;
@@ -1063,8 +1065,8 @@ solver_parameters::fit_line (point_t &origin, point_t &dir)
   gsl_matrix_free (evec);
 
   std::vector<double> dists;
-  dists.reserve (points.size ());
-  for (const auto &p : points)
+  dists.reserve (pointsVec.size ());
+  for (const auto &p : pointsVec)
     {
       double dx = p.img.x - mean_x;
       double dy = p.img.y - mean_y;
