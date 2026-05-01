@@ -1,6 +1,8 @@
 #ifndef SOLVER_PARAMETERS_H
 #define SOLVER_PARAMETERS_H
 #include <vector>
+#include "cow-vector.h"
+
 #include "dllpublic.h"
 #include "base.h"
 #include "color.h"
@@ -78,7 +80,7 @@ struct solver_parameters
   }
 
   /* Vector holding points.  */
-  std::vector<solver_point_t> points;
+  cow_vector<solver_point_t> points;
   /* If true, lens parameters are auto-optimized.  */
   bool optimize_lens;
   /* If true, image tilt is auto-optimized.  */

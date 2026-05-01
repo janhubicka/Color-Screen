@@ -1545,13 +1545,45 @@ test_mesh_inversion ()
   
   return ok;
 }
+bool
+test_cow_points ()
+{
+  solver_parameters sp1;
+  sp1.add_point ({1, 1}, {2, 2}, solver_parameters::red);
+
+  solver_parameters sp2 = sp1;
+  /* They should share the same data.  */
+  if (sp1.points.raw_data () != sp2.points.raw_data ())
+    {
+      printf ("FAILED: sp1 and sp2 do not share points array after copy\n");
+      return false;
+    }
+
+  /* Modifying sp2 should trigger COW.  */
+  sp2.add_point ({3, 3}, {4, 4}, solver_parameters::blue);
+  if (sp1.points.raw_data () == sp2.points.raw_data ())
+    {
+      printf ("FAILED: sp1 and sp2 still share points array after modification\n");
+      return false;
+    }
+
+  if (sp1.n_points () != 1 || sp2.n_points () != 2)
+    {
+      printf ("FAILED: points count mismatch after COW\n");
+      return false;
+    }
+
+  return true;
 }
+}
+
 
 
 int
 main ()
 {
-  printf ("1..26\n");
+  printf ("1..27\n");
+
 
   test_matrix ();
   report ("matrix tests", true);
@@ -1581,5 +1613,7 @@ main ()
   report ("whitepoint consistency tests", test_whitepoint_constants ());
   report ("darkroom simulation tests", test_darkroom ());
   report ("mesh inversion tests", test_mesh_inversion ());
+  report ("cow points tests", test_cow_points ());
+
   return error_found;
 }

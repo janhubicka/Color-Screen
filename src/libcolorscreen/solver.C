@@ -468,7 +468,8 @@ simple_solver (scr_to_img_parameters *param, image_data &img_data,
 {
   if (progress)
     progress->set_task ("determining geometry by linear regression", 1);
-  return solver (param, img_data, sparam.points, sparam.center,
+  return solver (param, img_data, sparam.points.read (), sparam.center,
+
                  (sparam.weighted ? homography::solve_image_weights : 0),
                  true);
 }
@@ -529,7 +530,8 @@ solver (scr_to_img_parameters *param, image_data &img_data,
     }
   if (progress)
     progress->set_task ("optimizing perspective correction", 1);
-  return solver (param, img_data, sparam.points, sparam.center,
+  return solver (param, img_data, sparam.points.read (), sparam.center,
+
                  (sparam.weighted ? homography::solve_image_weights : 0)
                      | (optimize_rotation ? homography::solve_rotation : 0),
                  true);
@@ -695,7 +697,8 @@ compute_img_to_scr_mesh_point (solver_parameters &sparam, scanner_type type,
                     mesh *mesh_trans, int_point_t e)
 {
   point_t imgp = mesh_trans->get_screen_point (e);
-  const std::vector<solver_parameters::solver_point_t> *points = &sparam.points;
+  const std::vector<solver_parameters::solver_point_t> *points = &sparam.points.read ();
+
   std::vector<solver_parameters::solver_point_t> local_points;
 
   if (sparam.points.size () > 100)
@@ -776,7 +779,8 @@ compute_mesh_point (screen_map &smap, solver_parameters &sparam,
   point_t scrp = mesh_trans->get_screen_point (e);
   smap.get_solver_points_nearby (scrp.x, scrp.y, 100, sparam);
   trans_4d_matrix h = homography::get_matrix (
-      sparam.points, homography::solve_screen_weights, lparam.scanner_type,
+      sparam.points.read (), homography::solve_screen_weights, lparam.scanner_type,
+
       nullptr, scrp, nullptr);
   point_t imgp;
   imgp = h.perspective_transform (scrp);
@@ -790,7 +794,8 @@ compute_mesh_point (screen_map &smap, solver_parameters &sparam,
         {
           point_t last_imgp = imgp;
           trans_4d_matrix h = homography::get_matrix (
-              sparam.points, homography::solve_image_weights,
+              sparam.points.read (), homography::solve_image_weights,
+
               lparam.scanner_type, nullptr, imgp, nullptr);
           imgp = h.perspective_transform (scrp);
           if (last_imgp.almost_eq (imgp, 0.5))
