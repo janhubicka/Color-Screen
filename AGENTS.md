@@ -70,7 +70,7 @@ The project uses GitHub Actions for automated testing. Workflows are defined in 
 - `src/libcolorscreen/`: Core rendering and processing library.
 - `src/libcolorscreen/include`: Public API of the library.
 - `src/colorscreen`: Command line utility accessing main functions of the library.
-- `src/qtgui/`: Qt6-based graphical user interface. [See Developer Docs](file:///home/jh/barveni/.agents/qtgui.md)
+- `src/qtgui/`: Qt6-based graphical user interface. [See Developer Docs](.agents/qtgui.md)
 - `src/gtkgui/`: Legacy GTK-based interface (if enabled) to be deprecated soon.
 - `testsuite/`: Unit tests and verification suites (Check tests/Makefile.am for test registration).
 - `m4/`: Autoconf macros

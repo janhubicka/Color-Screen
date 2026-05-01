@@ -57,6 +57,7 @@ class GeometryPanel;
 class GeometrySolverWorker;
 class ColorOptimizerWorker;
 class AdaptiveSharpeningWorker;
+class CoordinateOptimizationWorker;
 class AdaptiveSharpeningChart; // Added
 class QUndoStack; // Forward decl
 
@@ -135,6 +136,10 @@ private slots:
   void onAdaptiveSharpeningRequested(int xsteps);
   void onAdaptiveSharpeningFinished(bool success, std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result);
   void onAutomaticallyAddPointsRequested(const colorscreen::finetune_area_parameters &params);
+  void onAutodetectCoordinatesRequested();
+  void onOptimizeCoordinatesRequested();
+  void onAutodetectCoordinatesFinished(int reqId, colorscreen::scr_to_img_parameters result, std::shared_ptr<colorscreen::progress_info> progress, bool success, bool cancelled);
+  void onOptimizeCoordinatesFinished(int reqId, colorscreen::finetune_result result, std::shared_ptr<colorscreen::progress_info> progress, bool success, bool cancelled);
 
   // Recent Files
   // Recent Files
@@ -394,6 +399,10 @@ private:
   // Solver Queue
   TaskQueue m_solverQueue;
   
+  // Coordinate Optimization Worker
+  CoordinateOptimizationWorker *m_coordOptimizationWorker = nullptr;
+  QThread *m_coordOptimizationThread = nullptr;
+
   // Finetune threads (allow multiple concurrent)
   std::vector<QThread*> m_finetuneThreads;
   

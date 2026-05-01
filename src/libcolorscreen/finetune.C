@@ -4207,7 +4207,7 @@ finetune_misregistered_area (solver_parameters *solver,
 			     progress_info *progress)
 {
   int_image_area area = in_area.intersect ({ 0, 0, img.width, img.height });
-  const bool verbose = true;
+  const bool verbose = false;
   if (area.empty_p () || param.type == Random)
     {
       if (verbose)
@@ -4744,7 +4744,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 {
   double_rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
   double wr = 0, wg = 0, wb = 0;
-  const bool debugfiles = true;
+  const bool debugfiles = false;
 
   if (debugfiles)
     {

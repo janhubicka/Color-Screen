@@ -72,6 +72,14 @@ void GeometryPanel::setupUi() {
 
   addSeparator("Automatic registration");
 
+  addButtonParameter("Automatic registration", "Autodetect coordinates", [this]() {
+      emit autodetectCoordinatesRequested();
+  }, nullptr, "Automatically detect the screen pattern and update the coordinate system (center, coordinates, and screen type).");
+
+  addButtonParameter("Automatic registration", "Optimize coordinates", [this]() {
+      emit optimizeCoordinatesRequested();
+  }, nullptr, "Refine the current coordinate system using the image data. This is useful for correcting small misalignments.");
+
   addButtonParameter("Automatic registration", "Automatically add points", [this]() {
       emit automaticallyAddPointsRequested(m_finetuneAreaParams);
   }, nullptr, "Automatically identify and add missing registration points within the current crop area.");

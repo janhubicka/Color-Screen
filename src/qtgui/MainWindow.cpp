@@ -8,6 +8,7 @@
 #include "AdaptiveSharpeningChart.h" // Added
 #include "AdaptiveSharpeningWorker.h"
 #include "ColorOptimizerWorker.h"
+#include "CoordinateOptimizationWorker.h"
 #include "DetectScreenWorker.h"
 #include "FinetuneWorker.h"
 #include "FinetuneMisregisteredWorker.h"
@@ -118,6 +119,8 @@ Q_DECLARE_METATYPE(std::vector<colorscreen::point_t>)
 Q_DECLARE_METATYPE(std::vector<colorscreen::color_match>)
 Q_DECLARE_METATYPE(std::vector<colorscreen::solver_parameters::solver_point_t>)
 Q_DECLARE_METATYPE(std::vector<colorscreen::solver_parameters::solver_point_t>*)
+Q_DECLARE_METATYPE(std::shared_ptr<colorscreen::progress_info>)
+Q_DECLARE_METATYPE(colorscreen::finetune_result)
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   qRegisterMetaType<MainWindow::SolverRequestData>();
@@ -128,6 +131,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   qRegisterMetaType<std::vector<colorscreen::color_match>>();
   qRegisterMetaType<std::vector<colorscreen::solver_parameters::solver_point_t>>();
   qRegisterMetaType<std::vector<colorscreen::solver_parameters::solver_point_t>*>();
+  qRegisterMetaType<colorscreen::finetune_result>();
+  qRegisterMetaType<std::shared_ptr<colorscreen::progress_info>>();
   m_undoStack = new QUndoStack(this);
 
   setupUi();
@@ -208,6 +213,17 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   connect(&m_colorOptimizerQueue, &TaskQueue::progressFinished, this,
           &MainWindow::removeProgress);
 
+  // Initialize Coordinate Optimization Worker
+  m_coordOptimizationThread = new QThread(this);
+  m_coordOptimizationWorker = new CoordinateOptimizationWorker(m_scan);
+  m_coordOptimizationWorker->moveToThread(m_coordOptimizationThread);
+  m_coordOptimizationThread->start();
+
+  connect(m_coordOptimizationWorker, &CoordinateOptimizationWorker::autodetectFinished, this,
+          &MainWindow::onAutodetectCoordinatesFinished);
+  connect(m_coordOptimizationWorker, &CoordinateOptimizationWorker::optimizeFinished, this,
+          &MainWindow::onOptimizeCoordinatesFinished);
+
   updateWindowTitle();
 }
 
@@ -222,6 +238,13 @@ MainWindow::~MainWindow() {
     m_solverThread->wait();
     delete m_solverWorker;
     m_solverWorker = nullptr;
+  }
+  
+  if (m_coordOptimizationThread) {
+    m_coordOptimizationThread->quit();
+    m_coordOptimizationThread->wait();
+    delete m_coordOptimizationWorker;
+    m_coordOptimizationWorker = nullptr;
   }
 
   if (m_colorOptimizerThread) {
@@ -1008,6 +1031,10 @@ void MainWindow::setupUi() {
           &ImageWidget::setExaggerate);
   connect(m_geometryPanel, &GeometryPanel::maxArrowLengthChanged, m_imageWidget,
           &ImageWidget::setMaxArrowLength);
+  connect(m_geometryPanel, &GeometryPanel::autodetectCoordinatesRequested, this,
+          &MainWindow::onAutodetectCoordinatesRequested);
+  connect(m_geometryPanel, &GeometryPanel::optimizeCoordinatesRequested, this,
+          &MainWindow::onOptimizeCoordinatesRequested);
 
   // Synchronization for Registration Points visibility
   m_registrationPointsAction->setChecked(
@@ -2328,6 +2355,8 @@ void MainWindow::onImageLoaded() {
       m_solverWorker->setScan(m_scan);
     if (m_colorOptimizerWorker)
       m_colorOptimizerWorker->setScan(m_scan);
+    if (m_coordOptimizationWorker)
+      m_coordOptimizationWorker->setScan(m_scan);
     m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                                &m_detectParams);
     m_navigationView->setMinScale(m_imageWidget->getMinScale());
@@ -4111,26 +4140,82 @@ void MainWindow::onSetCenter(colorscreen::point_t imgPos) {
   m_imageWidget->update();
 }
 
-void MainWindow::onOptimizeCoordinates() {
-  if (!m_scan)
+void MainWindow::onAutodetectCoordinatesRequested() {
+  if (!m_scan || !m_coordOptimizationWorker)
     return;
 
-  colorscreen::finetune_parameters fparams;
-  fparams.flags = colorscreen::finetune_position | colorscreen::finetune_verbose |
-                  colorscreen::finetune_coordinates | colorscreen::finetune_bw |
-                  colorscreen::finetune_use_strip_widths | colorscreen::finetune_produce_images;
+  m_coordOptimizationWorker->setScan(m_scan);
 
-  statusBar()->showMessage("Optimizing coordinates...");
-  QApplication::setOverrideCursor(Qt::WaitCursor);
-  QApplication::processEvents(); // Ensure UI updates
+  // Create progress info
+  auto progress = std::make_shared<colorscreen::progress_info>();
+  progress->set_task("Autodetecting coordinates", 1);
+  addProgress(progress);
 
-  colorscreen::finetune_result ret = colorscreen::finetune(
-      m_rparams, m_scrToImgParams, *m_scan, {}, nullptr, fparams, nullptr);
+  QMetaObject::invokeMethod(
+      m_coordOptimizationWorker, "autodetect", Qt::QueuedConnection,
+      Q_ARG(int, 0), Q_ARG(colorscreen::scr_to_img_parameters, m_scrToImgParams),
+      Q_ARG(colorscreen::render_parameters, m_rparams),
+      Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
+}
 
-  QApplication::restoreOverrideCursor();
-  statusBar()->clearMessage();
+void MainWindow::onOptimizeCoordinatesRequested() {
+  onOptimizeCoordinates();
+}
 
-  if (ret.success) {
+void MainWindow::onAutodetectCoordinatesFinished(
+    int /*reqId*/, colorscreen::scr_to_img_parameters result,
+    std::shared_ptr<colorscreen::progress_info> progress, bool success,
+    bool cancelled) {
+  if (progress)
+    removeProgress(progress);
+
+  if (cancelled)
+    return;
+
+  if (success) {
+    ParameterState oldState = getCurrentState();
+    m_scrToImgParams = result;
+
+    // Update UI
+    updateUIFromState(getCurrentState());
+    changeParameters(getCurrentState(), "Autodetect Coordinates");
+    m_imageWidget->update();
+    statusBar()->showMessage("Autodetect coordinates finished", 3000);
+  } else {
+    QMessageBox::warning(this, "Autodetect Coordinates",
+                         "Autodetect coordinates failed.");
+  }
+}
+
+void MainWindow::onOptimizeCoordinates() {
+  if (!m_scan || !m_coordOptimizationWorker)
+    return;
+
+  m_coordOptimizationWorker->setScan(m_scan);
+
+  // Create progress info
+  auto progress = std::make_shared<colorscreen::progress_info>();
+  progress->set_task("Optimizing coordinates", 1);
+  addProgress(progress);
+
+  QMetaObject::invokeMethod(
+      m_coordOptimizationWorker, "optimize", Qt::QueuedConnection,
+      Q_ARG(int, 0), Q_ARG(colorscreen::scr_to_img_parameters, m_scrToImgParams),
+      Q_ARG(colorscreen::render_parameters, m_rparams),
+      Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
+}
+
+void MainWindow::onOptimizeCoordinatesFinished(
+    int /*reqId*/, colorscreen::finetune_result ret,
+    std::shared_ptr<colorscreen::progress_info> progress, bool success,
+    bool cancelled) {
+  if (progress)
+    removeProgress(progress);
+
+  if (cancelled)
+    return;
+
+  if (success) {
     // Update parameters
     m_scrToImgParams.center = ret.center;
     m_scrToImgParams.coordinate1 = ret.coordinate1;
@@ -4144,6 +4229,7 @@ void MainWindow::onOptimizeCoordinates() {
     if (m_geometryPanel) {
       m_geometryPanel->updateFinetuneImages(ret);
     }
+    statusBar()->showMessage("Optimize coordinates finished", 3000);
   } else {
     QMessageBox::warning(this, "Optimization",
                          "Optimization failed: " +
