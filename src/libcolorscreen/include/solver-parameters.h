@@ -91,13 +91,13 @@ struct solver_parameters
   point_t center;
 
   size_t
-  n_points ()
+  n_points () const
   {
     return points.size ();
   }
 
   DLL_PUBLIC_EXP int
-  find_img (point_t img)
+  find_img (point_t img) const
   {
     for (size_t n = 0; n < n_points (); n++)
       if (points[n].img.almost_eq (img, 0.1))
@@ -126,7 +126,7 @@ struct solver_parameters
     return (int)n_points ();
   }
   DLL_PUBLIC_EXP int
-  find_point (point_t screen)
+  find_point (point_t screen) const
   {
     for (size_t n = 0; n < n_points (); n++)
       if (points[n].scr.almost_eq (screen, 0.5))

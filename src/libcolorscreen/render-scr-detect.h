@@ -99,7 +99,7 @@ struct render_to_file_params;
 class render_scr_detect : public render
 {
 public:
-  render_scr_detect (scr_detect_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
+  render_scr_detect (const scr_detect_parameters &param, const image_data &img, const render_parameters &rparam, int dstmaxval)
     : render (img, rparam, dstmaxval),
       m_precomputed_rgbdata (NULL), m_precomputed_rgbdata_holder (),
       m_color_class_map ()

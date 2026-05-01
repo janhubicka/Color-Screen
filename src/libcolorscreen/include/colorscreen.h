@@ -181,8 +181,8 @@ nodiscard_attr DLL_PUBLIC struct has_regular_screen_ret
 has_regular_screen(image_data &scan, const has_regular_screen_params &params,
                    progress_info *progress = NULL);
 nodiscard_attr DLL_PUBLIC bool
-save_csp(FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
-         render_parameters *rparam, solver_parameters *sparam);
+save_csp(FILE *f, const scr_to_img_parameters *param, const scr_detect_parameters *dparam,
+         const render_parameters *rparam, const solver_parameters *sparam);
 nodiscard_attr DLL_PUBLIC bool
 load_csp(FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
          render_parameters *rparam, solver_parameters *sparam,
@@ -239,17 +239,17 @@ DLL_PUBLIC rgbdata analyze_color_proportions (
     scr_to_img_parameters *map_param, int xmin, int ymin, int xmax, int ymax,
     progress_info *p = NULL);
 
-DLL_PUBLIC coord_t solver (scr_to_img_parameters *param, image_data &img_data,
-                           solver_parameters &sparam,
+DLL_PUBLIC coord_t solver (scr_to_img_parameters *param, const image_data &img_data,
+                           const solver_parameters &sparam,
                            progress_info *progress = NULL);
-DLL_PUBLIC std::unique_ptr<mesh> solver_mesh (scr_to_img_parameters *param,
-                                              image_data &img_data,
-                                              solver_parameters &sparam,
+DLL_PUBLIC std::unique_ptr<mesh> solver_mesh (const scr_to_img_parameters *param,
+                                              const image_data &img_data,
+                                              const solver_parameters &sparam,
                                               progress_info *progress = NULL);
 DLL_PUBLIC detected_screen detect_regular_screen (
-    image_data &img, scr_detect_parameters &dparam,
+    const image_data &img, scr_detect_parameters &dparam,
     solver_parameters &sparam,
-    detect_regular_screen_params *dsparams,
+    const detect_regular_screen_params *dsparams,
     progress_info *progress = NULL,
     FILE *report_file = NULL);
 DLL_PUBLIC color_matrix determine_color_matrix (

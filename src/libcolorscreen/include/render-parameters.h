@@ -565,11 +565,12 @@ struct render_parameters
      NORMALIZED_DYES is true if dyes are normalized.  */
   size_t get_icc_profile (void **buf, image_data *img, bool normalized_dyes);
   /* Return tile adjustment for given tile (X, Y) in STITCH project.  */
-  DLL_PUBLIC const tile_adjustment &get_tile_adjustment (stitch_project *stitch, int x, int y) const;
+  DLL_PUBLIC const tile_adjustment &get_tile_adjustment (const stitch_project *stitch, int x, int y) const;
   /* Return tile adjustment reference for given tile (X, Y) in STITCH project.  */
-  tile_adjustment &get_tile_adjustment_ref (stitch_project *stitch, int x, int y);
+  tile_adjustment &get_tile_adjustment_ref (const stitch_project *stitch, int x, int y);
   /* Return tile adjustment for given tile (X, Y).  */
   DLL_PUBLIC tile_adjustment &get_tile_adjustment (int x, int y);
+  DLL_PUBLIC const tile_adjustment &get_tile_adjustment (int x, int y) const;
 
   /* Return true if THIS and OTHER are equal.  */
   pure_attr bool

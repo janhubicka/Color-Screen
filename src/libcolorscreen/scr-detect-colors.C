@@ -16,9 +16,9 @@ namespace {
 /* Helper for sharpening part of the scan.  */
 struct imgtile
 {
-  luminosity_t *lookup_table[3];
+  const luminosity_t *lookup_table[3];
   int xstart, ystart;
-  image_data *img;
+  const image_data *img;
 };
 
 static rgbdata
@@ -54,8 +54,8 @@ compare_priorities(struct entry &e1, struct entry &e2)
    M, SHIFT, KNOWN_PATCHES are results of screen analysis.  */
 void
 optimize_screen_colors (scr_detect_parameters *param, scr_type type,
-                        image_data *img, mesh *m, int_point_t shift,
-                        bitmap_2d *known_patches, luminosity_t gamma,
+                        const image_data *img, const mesh *m, int_point_t shift,
+                        const bitmap_2d *known_patches, luminosity_t gamma,
                         progress_info *progress, FILE *report)
 {
   int count = 0;
@@ -150,7 +150,7 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type,
 /* Optimize screen colors using detected color patches in image IMG.
    AREA is the area to optimize.  */
 bool
-optimize_screen_colors (scr_detect_parameters *param, image_data *img,
+optimize_screen_colors (scr_detect_parameters *param, const image_data *img,
                         luminosity_t gamma, int_image_area area,
                         progress_info *progress, FILE *report)
 {

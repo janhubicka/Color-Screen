@@ -112,7 +112,7 @@ class render_to_scr : public render
 public:
   /* Initialize renderer for PARAM, IMG, RPARAM and DSTMAXVAL.  */
   render_to_scr (const scr_to_img_parameters &param, const image_data &img,
-                 render_parameters &rparam, int dstmaxval)
+                 const render_parameters &rparam, int dstmaxval)
       : render (img, rparam, dstmaxval),
 	m_scr_to_img_param (param),
 	m_screen_table (), m_saturation_loss_table (),

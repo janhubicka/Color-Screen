@@ -35,9 +35,9 @@ bool debug = colorscreen_checking;
    If FINAL_RUN is true output info on results.  */
 
 nodiscard_attr coord_t
-solver (scr_to_img_parameters *param, image_data &img_data,
+solver (scr_to_img_parameters *param, const image_data &img_data,
         const std::vector<solver_parameters::solver_point_t> &points,
-        point_t w_center, int flags, bool final_run = false)
+        const point_t w_center, int flags, bool final_run = false)
 {
   if (debug_output && final_run)
     {
@@ -246,8 +246,8 @@ pick_nearest_points (std::vector<solver_parameters::solver_point_t> &out,
 class lens_solver
 {
 public:
-  lens_solver (scr_to_img_parameters &param, image_data &img_data,
-               solver_parameters &sparam, progress_info *progress)
+  lens_solver (scr_to_img_parameters &param, const image_data &img_data,
+               const solver_parameters &sparam, progress_info *progress)
       : m_param (param), m_img_data (img_data), m_sparam (sparam),
         m_progress (progress), m_start{ (coord_t)0.5, (coord_t)0.5, (coord_t)0, (coord_t)0, (coord_t)0 }
   {
@@ -255,8 +255,8 @@ public:
       m_start[1] = 0;
   }
   scr_to_img_parameters &m_param;
-  image_data &m_img_data;
-  solver_parameters &m_sparam;
+  const image_data &m_img_data;
+  const solver_parameters &m_sparam;
   progress_info *m_progress;
   static constexpr coord_t scale_kr = 128;
 
@@ -463,8 +463,8 @@ public:
    PROGRESS is used for progress reporting.  */
 
 coord_t
-simple_solver (scr_to_img_parameters *param, image_data &img_data,
-               solver_parameters &sparam, progress_info *progress)
+simple_solver (scr_to_img_parameters *param, const image_data &img_data,
+               const solver_parameters &sparam, progress_info *progress)
 {
   if (progress)
     progress->set_task ("determining geometry by linear regression", 1);
@@ -480,8 +480,8 @@ simple_solver (scr_to_img_parameters *param, image_data &img_data,
    PROGRESS is used for progress reporting.  */
 
 coord_t
-solver (scr_to_img_parameters *param, image_data &img_data,
-        solver_parameters &sparam, progress_info *progress)
+solver (scr_to_img_parameters *param,const  image_data &img_data,
+        const solver_parameters &sparam, progress_info *progress)
 {
   /* 3 points may be enough for strips; we only solve homography on 1d.  */
   if (sparam.n_points () < solver_parameters::min_points (param->type))
@@ -693,8 +693,8 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
 #endif
 
 static void
-compute_img_to_scr_mesh_point (solver_parameters &sparam, scanner_type type,
-                    mesh *mesh_trans, int_point_t e)
+compute_img_to_scr_mesh_point (const solver_parameters &sparam, scanner_type type,
+			       mesh *mesh_trans, int_point_t e)
 {
   point_t imgp = mesh_trans->get_screen_point (e);
   const std::vector<solver_parameters::solver_point_t> *points = &sparam.points.read ();
@@ -722,8 +722,8 @@ compute_img_to_scr_mesh_point (solver_parameters &sparam, scanner_type type,
    SPARAM contains solver points.  PROGRESS is used for progress reporting.  */
 
 std::unique_ptr <mesh>
-solver_mesh (scr_to_img_parameters *param, image_data &img_data,
-             solver_parameters &sparam, progress_info *progress)
+solver_mesh (const scr_to_img_parameters *param, const image_data &img_data,
+             const solver_parameters &sparam, progress_info *progress)
 {
   if (sparam.n_points () < solver_parameters::min_mesh_points (param->type))
     return nullptr;
@@ -771,8 +771,8 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
    LPARAM determines the scanner geometry.  */
 
 static void
-compute_mesh_point (screen_map &smap, solver_parameters &sparam,
-                    const scr_to_img_parameters &lparam, image_data &img_data,
+compute_mesh_point (const screen_map &smap, solver_parameters &sparam,
+                    const scr_to_img_parameters &lparam, const image_data &img_data,
                     mesh *mesh_trans, int x, int y)
 {
   int_point_t e = { x, y };
@@ -812,8 +812,8 @@ compute_mesh_point (screen_map &smap, solver_parameters &sparam,
    PROGRESS is used for progress reporting.  */
 
 std::unique_ptr <mesh>
-solver_mesh (scr_to_img_parameters *param, image_data &img_data,
-             solver_parameters &sparam2, screen_map &smap,
+solver_mesh (const scr_to_img_parameters *param, const image_data &img_data,
+             const solver_parameters &sparam2, const screen_map &smap,
              progress_info *progress)
 {
   const int step = 10;

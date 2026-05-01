@@ -8,8 +8,8 @@ namespace colorscreen
 class render_screen : public render_to_scr
 {
 public:
-  inline render_screen (scr_to_img_parameters &param, image_data &data,
-                        render_parameters &rparam, int dst_maxval)
+  inline render_screen (const scr_to_img_parameters &param, const image_data &data,
+                        const render_parameters &rparam, int dst_maxval)
       : render_to_scr (param, data, rparam, dst_maxval), m_screen ()
   {
   }

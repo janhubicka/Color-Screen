@@ -148,9 +148,9 @@ private:
   };
   coord_entry *map;
 };
-std::unique_ptr<mesh> solver_mesh (scr_to_img_parameters *param,
-                                   image_data &img_data,
-                                   solver_parameters &sparam2,
-                                   screen_map &smap, progress_info *progress);
+std::unique_ptr<mesh> solver_mesh (const scr_to_img_parameters *param,
+                                   const image_data &img_data,
+                                   const solver_parameters &sparam2,
+                                   const screen_map &smap, progress_info *progress);
 }
 #endif

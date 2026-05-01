@@ -69,7 +69,7 @@ private:
 class color_class_map
 {
 public:
-  color_class_map ()
+  constexpr color_class_map ()
   : data (NULL), width (0), height (0)
   {
   }
@@ -98,8 +98,8 @@ public:
     data[pos / 4u] &= cm;
     data[pos / 4u] |= cc;
   }
-  scr_detect::color_class
-  get_class (int x, int y)
+  pure_attr scr_detect::color_class
+  get_class (int x, int y) const
   {
     if (x < 0 || y < 0 || x >= width || y>= height)
       return scr_detect::unknown;
@@ -119,19 +119,19 @@ public:
     *b = rgbtable[(int)t][2];
   }
   luminosity_t
-  get_color_red (int x, int y)
+  get_color_red (int x, int y) const
   {
     scr_detect::color_class t = get_class (x, y);
     return t == scr_detect::red /*|| t == scr_detect::unknown*/;
   }
   luminosity_t
-  get_color_green (int x, int y)
+  get_color_green (int x, int y) const
   {
     scr_detect::color_class t = get_class (x, y);
     return t == scr_detect::green /*|| t == scr_detect::unknown*/;
   }
   luminosity_t
-  get_color_blue (int x, int y)
+  get_color_blue (int x, int y) const
   {
     scr_detect::color_class t = get_class (x, y);
     return t == scr_detect::blue /*|| t == scr_detect::unknown*/;

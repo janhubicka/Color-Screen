@@ -27,6 +27,18 @@ public:
   {
   }
 
+  /* Copy constructor and assignment.  */
+  cow_vector (const cow_vector &other) = default;
+  cow_vector &operator= (const cow_vector &other) = default;
+
+  /* Assignment from std::vector.  */
+  cow_vector &
+  operator= (const std::vector<T> &v)
+  {
+    data = std::make_shared<std::vector<T>> (v);
+    return *this;
+  }
+
   /* Return a const reference to the underlying vector for reading.  */
   const std::vector<T> &
   read () const

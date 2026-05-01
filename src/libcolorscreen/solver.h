@@ -20,8 +20,8 @@ class bitmap_2d;
    IMG_DATA is the source image.
    SPARAM contains solver points.
    PROGRESS is used for progress reporting.  */
-nodiscard_attr coord_t simple_solver (scr_to_img_parameters *param, image_data &img_data,
-                       solver_parameters &sparam,
+nodiscard_attr coord_t simple_solver (scr_to_img_parameters *param, const image_data &img_data,
+                       const solver_parameters &sparam,
                        progress_info *progress = nullptr);
 
 /* Optimize screen colors using detected color patches.
@@ -46,8 +46,8 @@ void optimize_screen_colors (scr_detect_parameters *param, color_t *reds,
    PROGRESS is used for progress reporting.
    REPORT is file where report is written.  */
 void optimize_screen_colors (scr_detect_parameters *param, scr_type type,
-                             image_data *img, mesh *m, int_point_t shift,
-                             bitmap_2d *known_patches, luminosity_t gamma,
+                             const image_data *img, const mesh *m, int_point_t shift,
+                             const bitmap_2d *known_patches, luminosity_t gamma,
                              progress_info *progress = nullptr,
                              FILE *report = nullptr);
 
@@ -58,7 +58,7 @@ void optimize_screen_colors (scr_detect_parameters *param, scr_type type,
    AREA is the area to optimize.
    PROGRESS is used for progress reporting.
    REPORT is file where report is written.  */
-nodiscard_attr bool optimize_screen_colors (scr_detect_parameters *param, image_data *img,
+nodiscard_attr bool optimize_screen_colors (scr_detect_parameters *param, const image_data *img,
                              luminosity_t gamma, int_image_area area,
                              progress_info *progress = nullptr,
                              FILE *report = nullptr);

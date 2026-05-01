@@ -823,7 +823,7 @@ render_parameters::set_tile_adjustments_dimensions (int w, int h)
 }
 
 const render_parameters::tile_adjustment&
-render_parameters::get_tile_adjustment (stitch_project *stitch, int x, int y) const
+render_parameters::get_tile_adjustment (const stitch_project *stitch, int x, int y) const
 {
   static tile_adjustment default_tile_adjustment;
   assert (default_tile_adjustment.enabled);
@@ -834,7 +834,7 @@ render_parameters::get_tile_adjustment (stitch_project *stitch, int x, int y) co
 }
 
 render_parameters::tile_adjustment&
-render_parameters::get_tile_adjustment_ref (stitch_project *stitch, int x, int y)
+render_parameters::get_tile_adjustment_ref (const stitch_project *stitch, int x, int y)
 {
   assert (x >= 0 && x < stitch->params.width && y >= 0 && y < stitch->params.height);
   if (tile_adjustments_width != stitch->params.width || tile_adjustments_height != stitch->params.height)
@@ -843,6 +843,13 @@ render_parameters::get_tile_adjustment_ref (stitch_project *stitch, int x, int y
 }
 render_parameters::tile_adjustment&
 render_parameters::get_tile_adjustment (int x, int y)
+{
+  assert (x >= 0 && x < tile_adjustments_width && y >= 0 && y < tile_adjustments_height);
+  return tile_adjustments[y * tile_adjustments_width + x];
+}
+
+const render_parameters::tile_adjustment&
+render_parameters::get_tile_adjustment (int x, int y) const
 {
   assert (x >= 0 && x < tile_adjustments_width && y >= 0 && y < tile_adjustments_height);
   return tile_adjustments[y * tile_adjustments_width + x];

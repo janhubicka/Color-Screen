@@ -27,7 +27,7 @@ struct patch_entry
    pixels that belings to already known patches.  If PERMANENT then bitmap is
    updated to mark all pixels of the patch as visited.  */
 int
-find_patch (color_class_map &color_map, scr_detect::color_class c, int x,
+find_patch (const color_class_map &color_map, scr_detect::color_class c, int x,
             int y, int max_patch_size, patch_entry *entries,
             bitmap_2d *visited, bool permanent)
 {
@@ -96,7 +96,7 @@ patch_center (patch_entry *entries, int size, coord_t *x, coord_t *y)
    This is done by checking that there is patch of maximal size.  */
 
 bool
-confirm_strip (color_class_map *color_map, coord_t x, coord_t y,
+confirm_strip (const color_class_map *color_map, coord_t x, coord_t y,
                scr_detect::color_class c, int min_patch_size, int *priority,
                bitmap_2d *visited)
 {
@@ -153,7 +153,7 @@ struct patch_info
    */
 
 bool
-try_guess_screen (FILE *report_file, scr_type type, color_class_map &color_map,
+try_guess_screen (FILE *report_file, scr_type type, const color_class_map &color_map,
                   solver_parameters &sparam, int x, int y, bitmap_2d *visited,
                   progress_info *progress)
 {
@@ -375,7 +375,7 @@ try_guess_screen (FILE *report_file, scr_type type, color_class_map &color_map,
    G B G B
    */
 bool
-try_guess_paget_screen (FILE *report_file, color_class_map &color_map,
+try_guess_paget_screen (FILE *report_file, const color_class_map &color_map,
                         solver_parameters &sparam, int x, int y,
                         bitmap_2d *visited, progress_info *progress)
 {
@@ -698,7 +698,7 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map,
    of size in range of MIN_PATCH_SIZE and MAX_PATCH_SIZE.  */
 
 bool
-confirm_patch (FILE *report_file, color_class_map *color_map, coord_t x,
+confirm_patch (FILE *report_file, const color_class_map *color_map, coord_t x,
                coord_t y, scr_detect::color_class c, int min_patch_size,
                int max_patch_size, coord_t max_distance, coord_t *cx,
                coord_t *cy, int *priority, bitmap_2d *visited)
@@ -757,7 +757,7 @@ confirm_patch (FILE *report_file, color_class_map *color_map, coord_t x,
 #define N_PRIORITIES 8
 
 bool
-confirm (render_scr_detect *render, point_t coordinate1, point_t coordinate2,
+confirm (const render_scr_detect *render, point_t coordinate1, point_t coordinate2,
          coord_t x, coord_t y, scr_detect::color_class t, int width,
          int height, coord_t max_distance, coord_t *rcx, coord_t *rcy,
          int *priority, coord_t sum_range, coord_t patch_xscale,
@@ -1224,10 +1224,10 @@ diagonal_coordinates_to_color (int x, int y)
 
 std::unique_ptr<screen_map>
 flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx,
-            coord_t greeny, scr_to_img_parameters &param, image_data &img,
-            render_scr_detect *render, color_class_map *color_map,
+            coord_t greeny, const scr_to_img_parameters &param, const image_data &img,
+            const render_scr_detect *render, const color_class_map *color_map,
             solver_parameters *sparam, bitmap_2d *visited, int *npatches,
-            detect_regular_screen_params *dsparams, progress_info *progress)
+            const detect_regular_screen_params *dsparams, progress_info *progress)
 {
   double screen_xsize = sqrt (param.coordinate1.x * param.coordinate1.x
                               + param.coordinate1.y * param.coordinate1.y);
@@ -1747,8 +1747,8 @@ check_points (int xsteps, int ysteps)
 }
 
 void
-summarise_quality (image_data &img, screen_map *smap,
-                   scr_to_img_parameters &param, const char *type,
+summarise_quality (const image_data &img, const screen_map *smap,
+                   const scr_to_img_parameters &param, const char *type,
                    FILE *report_file, progress_info *progress)
 {
   coord_t max_distance[3] = { 0, 0, 0 };
@@ -1800,9 +1800,9 @@ summarise_quality (image_data &img, screen_map *smap,
 }
 
 detected_screen
-detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam,
+detect_regular_screen_1 (const image_data &img, scr_detect_parameters &dparam,
                          solver_parameters &sparam,
-                         detect_regular_screen_params *dsparams,
+                         const detect_regular_screen_params *dsparams,
                          progress_info *progress, FILE *report_file)
 {
   /* Try both screen types; it is cheap to do so and seems to work quite
@@ -2351,9 +2351,9 @@ we simply try both cmaps.  */
 }
 
 detected_screen
-detect_regular_screen (image_data &img, scr_detect_parameters &dparam,
+detect_regular_screen (const image_data &img, scr_detect_parameters &dparam,
                        solver_parameters &sparam,
-                       detect_regular_screen_params *dsparams,
+                       const detect_regular_screen_params *dsparams,
                        progress_info *progress, FILE *report_file)
 {
   // dsparams->slow_floodfill = false;

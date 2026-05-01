@@ -72,8 +72,8 @@ write_escaped_string (FILE *f, const char *input)
    detection parameters, RPARAM the rendering parameters and SPARAM the solver
    parameters.  */
 bool
-save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
-          render_parameters *rparam, solver_parameters *sparam)
+save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_parameters *dparam,
+          const render_parameters *rparam, const solver_parameters *sparam)
 {
   if (fprintf (f, "%s\n", HEADER) < 0)
     return false;

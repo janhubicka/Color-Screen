@@ -19,8 +19,8 @@ public:
     data = (uint8_t *)calloc ((size + 7) / 8, 1);
   }
   ~bitmap () { free (data); }
-  bool
-  test_bit (size_t p)
+  pure_attr bool
+  test_bit (size_t p) const
   {
     if (colorscreen_checking)
       assert (p >= 0 && p < size);
@@ -70,15 +70,15 @@ public:
   {
   }
   ~bitmap_2d () {}
-  bool
-  test_bit (int64_t x, int64_t y)
+  pure_attr bool
+  test_bit (int64_t x, int64_t y) const
   {
     if (colorscreen_checking)
       assert (x >= 0 && y >= 0 && (size_t)x <= width && (size_t)y <= height);
     return bitmap::test_bit (y * width + x);
   }
-  bool
-  test_bit (int_point_t p)
+  pure_attr bool
+  test_bit (int_point_t p) const
   {
     if (colorscreen_checking)
       assert (p.x >= 0 && p.y >= 0 && (size_t)p.x <= width
@@ -114,8 +114,8 @@ public:
       assert (p.x >= 0 && p.y >= 0 && (size_t)p.x <= width && (size_t)p.y <= height);
     return bitmap::clear_bit (p.y * width + p.x);
   }
-  bool
-  test_range (int_point_t p, int r)
+  pure_attr bool
+  test_range (int_point_t p, int r) const
   {
     if (p.x < (int)r || p.y < (int)r || (size_t)p.x + r >= (size_t)width
         || (size_t)p.y + r >= (size_t)height)
