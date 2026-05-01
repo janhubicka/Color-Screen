@@ -614,14 +614,14 @@ scr_to_img::get_img_range (int_image_area a) const noexcept
   if (!m_scr_to_img_mesh && !m_img_to_scr_mesh)
     {
       /* Compute all the corners.  */
-      int_image_area area (int_point_t {(int64_t)my_floor (to_img ({ x1, y1 }).x), (int64_t)my_floor (to_scr ({ x1, y1 }).y)});
-      area.extend (int_point_t {(int64_t)my_ceil (to_img ({ x1, y1 }).x), (int64_t)my_ceil (to_scr ({ x1, y1 }).y)});
-      area.extend (int_point_t {(int64_t)my_floor (to_img ({ x2, y1 }).x), (int64_t)my_floor (to_scr ({ x2, y1 }).y)});
-      area.extend (int_point_t {(int64_t)my_ceil (to_img ({ x2, y1 }).x), (int64_t)my_ceil (to_scr ({ x2, y1 }).y)});
-      area.extend (int_point_t {(int64_t)my_floor (to_img ({ x1, y2 }).x), (int64_t)my_floor (to_scr ({ x1, y2 }).y)});
-      area.extend (int_point_t {(int64_t)my_ceil (to_img ({ x1, y2 }).x), (int64_t)my_ceil (to_scr ({ x1, y2 }).y)});
-      area.extend (int_point_t {(int64_t)my_floor (to_img ({ x2, y2 }).x), (int64_t)my_floor (to_scr ({ x2, y2 }).y)});
-      area.extend (int_point_t {(int64_t)my_ceil (to_img ({ x2, y2 }).x), (int64_t)my_ceil (to_scr ({ x2, y2 }).y)});
+      int_image_area area (int_point_t {(int64_t)my_floor (to_img ({ x1, y1 }).x), (int64_t)my_floor (to_img ({ x1, y1 }).y)});
+      area.extend (int_point_t {(int64_t)my_ceil (to_img ({ x1, y1 }).x), (int64_t)my_ceil (to_img ({ x1, y1 }).y)});
+      area.extend (int_point_t {(int64_t)my_floor (to_img ({ x2, y1 }).x), (int64_t)my_floor (to_img ({ x2, y1 }).y)});
+      area.extend (int_point_t {(int64_t)my_ceil (to_img ({ x2, y1 }).x), (int64_t)my_ceil (to_img ({ x2, y1 }).y)});
+      area.extend (int_point_t {(int64_t)my_floor (to_img ({ x1, y2 }).x), (int64_t)my_floor (to_img ({ x1, y2 }).y)});
+      area.extend (int_point_t {(int64_t)my_ceil (to_img ({ x1, y2 }).x), (int64_t)my_ceil (to_img ({ x1, y2 }).y)});
+      area.extend (int_point_t {(int64_t)my_floor (to_img ({ x2, y2 }).x), (int64_t)my_floor (to_img ({ x2, y2 }).y)});
+      area.extend (int_point_t {(int64_t)my_ceil (to_img ({ x2, y2 }).x), (int64_t)my_ceil (to_img ({ x2, y2 }).y)});
 
       /* If we correct lens distortion the corners may not be extremes.  */
       if (!m_lens_correction.is_noop () || m_param.tilt_x || m_param.tilt_y)
