@@ -3383,8 +3383,8 @@ public:
     return true;
   }
   void
-  set_results (finetune_result &ret, scr_to_img_parameters param,
-               render_parameters &rparam, bool verbose,
+  set_results (finetune_result &ret, const scr_to_img_parameters &param,
+               const render_parameters &rparam, bool verbose,
                progress_info *progress)
   {
     ret.badness = objfunc (start.data ());
@@ -3613,7 +3613,7 @@ public:
    FPARAMS are finetune parameters.  PROGRESS is used to report progress.  */
 
 finetune_result
-finetune (render_parameters &rparam, const scr_to_img_parameters &param,
+finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
           const image_data &img, const std::vector<point_t> &locs,
           const std::vector<finetune_result> *results,
           const finetune_parameters &fparams, progress_info *progress)
@@ -5062,6 +5062,45 @@ render_screen (image_data &img, const scr_to_img_parameters &param,
           (unsigned short)(invert_gamma (d.blue, rparam.gamma) * 65535)
         });
       }
+  return true;
+}
+
+bool
+autodetect_coordinates (const image_data &img, scr_to_img_parameters &param,
+		        const render_parameters &rparam, progress_info *progress)
+{
+  int steps = 5;
+  finetune_result res[steps * steps];
+  finetune_parameters fparams;
+  fparams.flags = colorscreen::finetune_position |
+                  colorscreen::finetune_guess_coordinates | colorscreen::finetune_bw;
+  if (progress)
+    progress->set_task ("autodetecting coordinates in multiple samples", steps * steps);
+  for (int y = 0; y < steps; y++)
+    for (int x = 0; x < steps; x++)
+      if (!progress || !progress->cancel_requested ())
+	{
+	  scr_to_img_parameters p;
+	  p.type = param.type;
+	  int_image_area area = rparam.get_image_area (img.width, img.height);
+	  p.center = {area.x + (0.5 + x) * area.width, area.y + (0.5 + y) * area.height};
+	    {
+	      sub_task task (progress);
+	      res[y * steps + x] = finetune (rparam, param, img, {}, nullptr, fparams, progress);
+	    }
+	  if (progress)
+	    progress->inc_progress ();
+	}
+  luminosity_t best_u = INT_MAX;
+  int best_i = -1;
+  for (int i = 0; i < 1000; i++)
+    if (res[i].success && (best_i < 0 || best_u <res[i].uncertainty))
+      best_i = i;
+  if (best_i < 0)
+    return false;
+  param.center = res[best_i].center;
+  param.coordinate1 = res[best_i].coordinate1;
+  param.coordinate2 = res[best_i].coordinate2;
   return true;
 }
 } // namespace colorscreen

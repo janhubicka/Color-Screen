@@ -108,7 +108,7 @@ struct finetune_result
 };
 
 DLL_PUBLIC finetune_result
-finetune (render_parameters &rparam, const scr_to_img_parameters &param,
+finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
           const image_data &img, const std::vector<point_t> &locs,
           const std::vector<finetune_result> *results,
           const finetune_parameters &fparams, progress_info *progress);
@@ -170,5 +170,8 @@ nodiscard_attr DLL_PUBLIC bool
 render_screen (image_data &img, const scr_to_img_parameters &param,
                const render_parameters &rparam, const scr_detect_parameters &dparam,
 	       int width, int height);
+nodiscard_attr DLL_PUBLIC bool
+autodetect_coordinates (const image_data &img, scr_to_img_parameters &param,
+		        const render_parameters &rparam, progress_info *progress);
 } // namespace colorscreen
 #endif

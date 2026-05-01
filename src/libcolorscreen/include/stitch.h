@@ -276,7 +276,7 @@ public:
     release_images = false;
   }
   bool
-  tile_for_scr (render_parameters *rparams, coord_t sx, coord_t sy, int *x,
+  tile_for_scr (const render_parameters *rparams, coord_t sx, coord_t sy, int *x,
                 int *y, bool only_loaded)
   {
 #if 0
