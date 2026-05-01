@@ -5000,7 +5000,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       *ret_blue = { 0, 0, 1 };
       return false;
     }
-  printf ("Color loss info %f %f %f\n", wr, wg, wb);
+  //printf ("Color loss info %f %f %f\n", wr, wg, wb);
   red /= wr;
   green /= wg;
   blue /= wb;

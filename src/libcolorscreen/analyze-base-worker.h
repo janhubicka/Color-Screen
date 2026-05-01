@@ -993,27 +993,7 @@ analyze_base_worker<GEOMETRY>::analyze (
                                  * GEOMETRY::blue_height_scale),
                  (luminosity_t) 0);
 
-      /* Determine region in image that is covered by screen.  */
-      point_t corners[4]
-          = { scr_to_img->to_img (point_t{ (coord_t) m_area.top_left ().x,
-                                          (coord_t) m_area.top_left ().y }),
-              scr_to_img->to_img (point_t{ (coord_t) m_area.top_right ().x,
-                                          (coord_t) m_area.top_right ().y }),
-              scr_to_img->to_img (point_t{ (coord_t) m_area.bottom_left ().x,
-                                          (coord_t) m_area.bottom_left ().y }),
-              scr_to_img->to_img (point_t{
-                  (coord_t) m_area.bottom_right ().x,
-                  (coord_t) m_area.bottom_right ().y }) };
-      int_image_area img_area (int_point_t{ (int64_t) my_floor (corners[0].x),
-                                            (int64_t) my_floor (corners[0].y) });
-      for (int i = 0; i < 4; i++)
-        {
-          img_area.extend (int_point_t{ (int64_t) my_floor (corners[i].x),
-                                        (int64_t) my_floor (corners[i].y) });
-          img_area.extend (int_point_t{ (int64_t) my_ceil (corners[i].x),
-                                        (int64_t) my_ceil (corners[i].y) });
-        }
-      img_area = img_area.intersect ({ 0, 0, img->width, img->height });
+      int_image_area img_area = scr_to_img->get_img_range (area).intersect ({ 0, 0, img->width, img->height });
       if (img_area.empty_p ())
         return true;
 

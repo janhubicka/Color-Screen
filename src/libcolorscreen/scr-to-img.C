@@ -579,4 +579,85 @@ scr_to_img::pixel_size (int_image_area area) const noexcept
   hist.finalize ();
   return hist.find_avg (0.2, 0.2);
 }
+
+
+int_image_area
+scr_to_img::get_img_range (int_image_area a) const noexcept
+{
+  coord_t x1 = a.x;
+  coord_t y1 = a.y;
+  coord_t x2 = a.x + a.width - 1;
+  coord_t y2 = a.y + a.height - 1;
+#if 0
+  /* Determine region in image that is covered by screen.  */
+  point_t corners[4]
+      = { to_img (point_t{ (coord_t) m_area.top_left ().x,
+			  (coord_t) m_area.top_left ().y }),
+	  to_img (point_t{ (coord_t) m_area.top_right ().x,
+			  (coord_t) m_area.top_right ().y }),
+	  to_img (point_t{ (coord_t) m_area.bottom_left ().x,
+			  (coord_t) m_area.bottom_left ().y }),
+	  to_img (point_t{
+	      (coord_t) m_area.bottom_right ().x,
+	      (coord_t) m_area.bottom_right ().y }) };
+  int_image_area img_area (int_point_t{ (int64_t) my_floor (corners[0].x),
+					(int64_t) my_floor (corners[0].y) });
+  for (int i = 0; i < 4; i++)
+    {
+      img_area.extend (int_point_t{ (int64_t) my_floor (corners[i].x),
+				    (int64_t) my_floor (corners[i].y) });
+      img_area.extend (int_point_t{ (int64_t) my_ceil (corners[i].x),
+				    (int64_t) my_ceil (corners[i].y) });
+    }
+  return img_area;
+#endif
+  if (!m_scr_to_img_mesh && !m_img_to_scr_mesh)
+    {
+      /* Compute all the corners.  */
+      int_image_area area (int_point_t {(int64_t)my_floor (to_img ({ x1, y1 }).x), (int64_t)my_floor (to_scr ({ x1, y1 }).y)});
+      area.extend (int_point_t {(int64_t)my_ceil (to_img ({ x1, y1 }).x), (int64_t)my_ceil (to_scr ({ x1, y1 }).y)});
+      area.extend (int_point_t {(int64_t)my_floor (to_img ({ x2, y1 }).x), (int64_t)my_floor (to_scr ({ x2, y1 }).y)});
+      area.extend (int_point_t {(int64_t)my_ceil (to_img ({ x2, y1 }).x), (int64_t)my_ceil (to_scr ({ x2, y1 }).y)});
+      area.extend (int_point_t {(int64_t)my_floor (to_img ({ x1, y2 }).x), (int64_t)my_floor (to_scr ({ x1, y2 }).y)});
+      area.extend (int_point_t {(int64_t)my_ceil (to_img ({ x1, y2 }).x), (int64_t)my_ceil (to_scr ({ x1, y2 }).y)});
+      area.extend (int_point_t {(int64_t)my_floor (to_img ({ x2, y2 }).x), (int64_t)my_floor (to_scr ({ x2, y2 }).y)});
+      area.extend (int_point_t {(int64_t)my_ceil (to_img ({ x2, y2 }).x), (int64_t)my_ceil (to_scr ({ x2, y2 }).y)});
+
+      /* If we correct lens distortion the corners may not be extremes.  */
+      if (!m_lens_correction.is_noop () || m_param.tilt_x || m_param.tilt_y)
+        {
+          const int steps = 16 * 1024;
+          for (int i = 1; i < steps; i++)
+            {
+              point_t p = to_img ({ x1 + (x2 - x1) * i / steps, y1 });
+              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
+              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
+              p = to_img ({ x1 + (x2 - x1) * i / steps, y2 });
+              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
+              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
+              p = to_img ({ x1, y1 + (y2 - y1) * i / steps });
+              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
+              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
+              p = to_img ({ x2, y1 + (y2 - y1) * i / steps });
+              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
+              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
+            }
+        }
+      /* Adjust slightly to be safe.  */
+      area.x -= 1;
+      area.y -= 1;
+      area.width += 2;
+      area.height += 2;
+      return area;
+    }
+  else
+    {
+      coord_t minx, miny, maxx, maxy;
+      matrix2x2<coord_t> identity;
+      m_img_to_scr_mesh->get_range (identity, x1, y1, x2, y2, &minx, &maxx,
+                                     &miny, &maxy);
+      return int_image_area ((int)minx + 1, (int)miny + 1, (int)(maxx - minx) + 2, (int)(maxy - miny) + 2);
+    }
+}
+
 }

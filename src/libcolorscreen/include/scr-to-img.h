@@ -54,6 +54,9 @@ public:
   /* Determine rectangular section of the final coordinates to which image section
      from (X1, Y1) to (X2, Y2) fits.  */
   int_image_area get_final_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) const noexcept;
+
+  /* Get area of image to which screen area fits.  */
+  int_image_area get_img_range (int_image_area area) const noexcept;
   /* Return current rotation adjustment.  */
   pure_attr coord_t
   get_rotation_adjustment () const noexcept
