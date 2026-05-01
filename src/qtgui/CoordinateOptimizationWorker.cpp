@@ -11,9 +11,11 @@ void CoordinateOptimizationWorker::autodetect(
     colorscreen::render_parameters rparams,
     std::shared_ptr<colorscreen::progress_info> progress) {
   if (!m_scan) {
+    qWarning() << "CoordinateOptimizationWorker::autodetect: no scan!";
     emit autodetectFinished(reqId, params, progress, false, false);
     return;
   }
+  qDebug() << "CoordinateOptimizationWorker::autodetect starting";
 
   bool success = false;
   bool cancelled = false;
@@ -42,10 +44,12 @@ void CoordinateOptimizationWorker::optimize(
     colorscreen::render_parameters rparams,
     std::shared_ptr<colorscreen::progress_info> progress) {
   if (!m_scan) {
+    qWarning() << "CoordinateOptimizationWorker::optimize: no scan!";
     emit optimizeFinished(reqId, colorscreen::finetune_result(), progress, false,
                           false);
     return;
   }
+  qDebug() << "CoordinateOptimizationWorker::optimize starting";
 
   colorscreen::finetune_result result;
   bool success = false;
