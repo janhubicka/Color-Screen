@@ -61,10 +61,6 @@ void GeometryPanel::setupUi() {
   m_exaggerateSliderContainer->setEnabled(m_showRegistrationPointsBox->isChecked());
   m_maxArrowLengthSliderContainer->setEnabled(m_showRegistrationPointsBox->isChecked());
 
-  addButtonParameter("Registration points", "Automatically add points", [this]() {
-      emit automaticallyAddPointsRequested();
-  }, nullptr, "Automatically identify and add missing registration points within the current crop area.");
-
   addSlider("Heatmap tolerance", 0.0, 1.0, 1000.0, 3, "", "", 0.1,
             [this](double v) {
                 if (m_deformationChart) m_deformationChart->setHeatmapTolerance(v);
@@ -73,6 +69,31 @@ void GeometryPanel::setupUi() {
                 if (m_nonlinearChart) m_nonlinearChart->setHeatmapTolerance(v);
                 emit heatmapToleranceChanged(v);
             }, 1.0, false, "The threshold for color-coding deformation errors in the diagnostic charts. Lower values make the heatmap more sensitive to small errors.");
+
+  addSeparator("Automatic registration");
+
+  addButtonParameter("Automatic registration", "Automatically add points", [this]() {
+      emit automaticallyAddPointsRequested(m_finetuneAreaParams);
+  }, nullptr, "Automatically identify and add missing registration points within the current crop area.");
+
+  auto setupFinetuneSlider = [this](const QString &label, double min, double max, double scale, int decimals, double initial, auto member, double gamma = 1.0, bool logarithmic = false, const QString &tooltip = QString()) {
+      QWidget *container = addSlider(label, min, max, scale, decimals, "", "", initial, [this, member](double v) {
+          using MemberType = std::remove_reference_t<decltype(m_finetuneAreaParams.*member)>;
+          (m_finetuneAreaParams.*member) = static_cast<MemberType>(v);
+          updateRegistrationPointInfo(m_stateGetter());
+      }, gamma, logarithmic, tooltip);
+      QDoubleSpinBox *spin = container->findChild<QDoubleSpinBox*>();
+      if (spin) spin->setMinimumWidth(110);
+      return spin;
+  };
+
+  m_gridWidthSpin = setupFinetuneSlider("Grid width", 0, 2000, 1, 0, 0, &colorscreen::finetune_area_parameters::grid_width, 1.0, false, "Number of grid columns for automatic registration. 0 uses a default value based on image size.");
+  m_gridHeightSpin = setupFinetuneSlider("Grid height", 0, 2000, 1, 0, 0, &colorscreen::finetune_area_parameters::grid_height, 1.0, false, "Number of grid rows for automatic registration. 0 uses a default value based on image size.");
+  
+  setupFinetuneSlider("Min contrast", 0, 0.0625, 1024, 4, 1.0/1024.0, &colorscreen::finetune_area_parameters::min_contrast, 1.0, true, "Minimum contrast required for a point to be accepted for automatic registration. Higher values filter out low-contrast areas.");
+  setupFinetuneSlider("Uncertainty ratio", 0, 1, 100, 2, 0.8, &colorscreen::finetune_area_parameters::uncertainty_ratio, 1.0, false, "Threshold for discarding uncertain results. Lower values are more selective.");
+  setupFinetuneSlider("Max displacement", 0, 0.5, 100, 2, 0.05, &colorscreen::finetune_area_parameters::max_displacement, 3.0, false, "Maximum allowed displacement for a point to be accepted. Measured in screen units.");
+
 
   addSeparator("Optimization");
 
@@ -258,6 +279,20 @@ void GeometryPanel::updateRegistrationPointInfo(const ParameterState &state) {
 
   bool canOptimize = numPoints >= colorscreen::solver_parameters::min_points(type);
   if (m_optimizeButton) m_optimizeButton->setEnabled(canOptimize);
+
+  if (m_gridWidthSpin && m_gridHeightSpin) {
+      auto scan = m_imageGetter();
+      if (scan && scan->width > 0 && scan->height > 0) {
+          colorscreen::int_image_area crop = state.rparams.get_scan_crop(scan->width, scan->height);
+          int defW, defH;
+          m_finetuneAreaParams.get_grid_dimensions(crop, state.scrToImg, &defW, &defH);
+          m_gridWidthSpin->setSpecialValueText(QString("Default (%1)").arg(defW));
+          m_gridHeightSpin->setSpecialValueText(QString("Default (%1)").arg(defH));
+      } else {
+          m_gridWidthSpin->setSpecialValueText("Default");
+          m_gridHeightSpin->setSpecialValueText("Default");
+      }
+  }
 }
 
 bool GeometryPanel::isNonlinearEnabled() const {

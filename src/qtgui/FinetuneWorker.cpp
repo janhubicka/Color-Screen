@@ -7,9 +7,10 @@ FinetuneWorker::FinetuneWorker(
     colorscreen::scr_to_img_parameters scrToImg,
     std::shared_ptr<colorscreen::image_data> scan,
     colorscreen::int_image_area area,
-    std::shared_ptr<colorscreen::progress_info> progress)
+    std::shared_ptr<colorscreen::progress_info> progress,
+    colorscreen::finetune_area_parameters fparams)
     : m_solverParams(solverParams), m_rparams(rparams), m_scrToImg(scrToImg),
-      m_scan(scan), m_area(area), m_progress(progress) {}
+      m_scan(scan), m_area(area), m_progress(progress), m_fparams(fparams) {}
 
 void FinetuneWorker::run() {
   // Create a local copy of solver parameters to work with
@@ -19,9 +20,8 @@ void FinetuneWorker::run() {
   size_t initialPointCount = localSolver.points.size();
 
   // Call finetune_area
-  struct colorscreen::finetune_area_parameters fparam;
   bool success = colorscreen::finetune_area(&localSolver, m_rparams, m_scrToImg,
-                                            *m_scan, m_area, fparam, m_progress.get());
+                                            *m_scan, m_area, m_fparams, m_progress.get());
 
   // Check if cancelled
   if (m_progress && m_progress->cancelled()) {

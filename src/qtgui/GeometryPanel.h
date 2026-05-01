@@ -2,6 +2,8 @@
 #define GEOMETRY_PANEL_H
 
 #include "ParameterPanel.h"
+#include "../libcolorscreen/include/finetune.h"
+#include <QDoubleSpinBox>
 
 class QCheckBox;
 class QLabel;
@@ -33,7 +35,7 @@ signals:
   void heatmapToleranceChanged(double tol);
   void exaggerateChanged(double ex);
   void maxArrowLengthChanged(double len);
-  void automaticallyAddPointsRequested();
+  void automaticallyAddPointsRequested(const colorscreen::finetune_area_parameters &params);
 
 public:
   bool isAutoEnabled() const;
@@ -47,6 +49,7 @@ public:
   void updateFinetuneImages(const colorscreen::finetune_result& result);
   void reattachFinetuneImages(QWidget *widget);
   void setRegistrationPointsVisible(bool visible);
+  colorscreen::finetune_area_parameters finetuneAreaParams() const { return m_finetuneAreaParams; }
 
 protected:
   void onParametersRefreshed(const ParameterState &state) override { 
@@ -83,6 +86,9 @@ private:
   QLabel *m_tiltMessageLabel = nullptr;
   QLabel *m_nonlinearMessageLabel = nullptr;
   QLabel *m_optimizationMessageLabel = nullptr;
+  colorscreen::finetune_area_parameters m_finetuneAreaParams;
+  QDoubleSpinBox *m_gridWidthSpin = nullptr;
+  QDoubleSpinBox *m_gridHeightSpin = nullptr;
 };
 
 #endif // GEOMETRY_PANEL_H

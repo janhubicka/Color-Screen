@@ -3700,7 +3700,8 @@ void MainWindow::onAreaSelected(QRect area) {
   // Create worker and thread
   FinetuneWorker *worker = new FinetuneWorker(
       m_solverParams, m_rparams, m_scrToImgParams, m_scan,
-      {imgArea.x(), imgArea.y(), imgArea.width(), imgArea.height()}, progress);
+      {imgArea.x(), imgArea.y(), imgArea.width(), imgArea.height()}, progress,
+      m_geometryPanel->finetuneAreaParams());
   QThread *thread = new QThread();
   worker->moveToThread(thread);
 
@@ -3731,7 +3732,7 @@ void MainWindow::onAreaSelected(QRect area) {
   thread->start();
 }
 
-void MainWindow::onAutomaticallyAddPointsRequested() {
+void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_area_parameters &params) {
   if (!m_scan) {
     return;
   }
@@ -3749,7 +3750,7 @@ void MainWindow::onAutomaticallyAddPointsRequested() {
   // Create worker and thread
   FinetuneMisregisteredWorker *worker = new FinetuneMisregisteredWorker(
       m_solverParams, m_rparams, m_scrToImgParams, m_scan, crop, progress,
-      m_geometryPanel->isNonlinearEnabled());
+      params, m_geometryPanel->isNonlinearEnabled());
   QThread *thread = new QThread();
   worker->moveToThread(thread);
 

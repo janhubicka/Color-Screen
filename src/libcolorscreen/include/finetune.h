@@ -115,10 +115,15 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
 
 struct finetune_area_parameters
 {
+  /* Set width of grid to be defined.  If 0, its value will be determined by get_grid_dimension.  */
   int grid_width = 0;
+  /* Set height.  */
   int grid_height = 0;
+  /* Minimal contrast of color to accept fo auto-detection. Meaningul range is 0...1/16.  */
   luminosity_t min_contrast = 1/1024.0;
+  /* Throwaway this many most uncertain results.  */
   luminosity_t uncertainty_ratio = 0.8;
+  /* Max displacement to be accepted for registration.  Meaningful range is 0..0.2.  */
   luminosity_t max_displacement = 0.05;
 
   /* Determine gris WIDTH and HEIGHT for given CROP and PARAM.  */
@@ -139,7 +144,7 @@ struct finetune_area_parameters
         int n = 100;
 	/* Dufaycolor has flexible base that is prone to defomrations.  */
 	if (param.type == Dufay)
-	  n = 400;
+	  n = 300;
         if (crop.width > crop.height)
 	  grid_w = n * scalex;
 	else

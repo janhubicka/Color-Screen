@@ -10,9 +10,10 @@ FinetuneMisregisteredWorker::FinetuneMisregisteredWorker(
     std::shared_ptr<colorscreen::image_data> scan,
     colorscreen::int_image_area area,
     std::shared_ptr<colorscreen::progress_info> progress,
+    colorscreen::finetune_area_parameters fparams,
     bool computeMesh)
     : m_solverParams(solverParams), m_rparams(rparams), m_scrToImg(scrToImg),
-      m_scan(scan), m_area(area), m_progress(progress),
+      m_scan(scan), m_area(area), m_progress(progress), m_fparams(fparams),
       m_computeMesh(computeMesh) {}
 
 void FinetuneMisregisteredWorker::run() {
@@ -36,10 +37,9 @@ void FinetuneMisregisteredWorker::run() {
       size_t initialPointCount = localSolver.points.size();
 
       // Call finetune_misregistered_area
-      struct colorscreen::finetune_area_parameters fparam;
       bool found = colorscreen::finetune_misregistered_area(
 	  &localSolver, m_rparams, localScrToImg, *m_scan, m_area,
-	  fparam, m_progress.get());
+	  m_fparams, m_progress.get());
 
       if (m_progress && m_progress->cancelled())
 	break;
