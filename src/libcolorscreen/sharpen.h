@@ -8,7 +8,8 @@ namespace colorscreen
    Flattened so avoid doing unnecessary stuff.  */
 
 template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int_point_t p, int width, P param)>
-flatten_attr void
+//flatten_attr
+void
 non_sharpen(mem_O *out, T data, P param, int width, int height, progress_info *progress)
 {
 #pragma omp parallel for shared(progress,out,width, height, param, data) default(none) if (width * height > 128 * 1024)
@@ -38,7 +39,8 @@ do_unsharp_mask_loop(mem_O *out, O *hblur, int clen, luminosity_t *rotated_cmatr
 /* Kernel for actual sharpening.
    Flattened so avoid doing unnecessary stuff.  */
 template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int_point_t p, int width, P param)>
-flatten_attr void
+//flatten_attr
+void
 do_unsharp_mask(mem_O *out, T data, P param, int width, int height, int clen, luminosity_t *cmatrix, luminosity_t amount, progress_info *progress, bool maybe_parallel = true)
 {
   bool parallel = width * height > 1024 * 128 && maybe_parallel;
