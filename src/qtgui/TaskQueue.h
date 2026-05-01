@@ -6,6 +6,9 @@
 #include <QMutex>
 #include <QElapsedTimer>
 #include <QVariant>
+#include <QFutureWatcher>
+#include <QtConcurrent>
+#include <functional>
 #include <memory>
 #include <optional>
 #include "../libcolorscreen/include/progress-info.h"
@@ -26,6 +29,14 @@ public:
 
   // Cancels all pending and active tasks.
   void cancelAll();
+
+  // Submit a task that runs WORKER on a background thread pool thread.
+  // WORKER receives the task's progress_info* for cancellation checking.
+  // DONE is invoked on the GUI thread after the worker completes.
+  // Participates in normal queue concurrency management (max 2 concurrent).
+  void runAsync (std::function<void (colorscreen::progress_info *)> worker,
+                 std::function<void ()> done,
+                 const QVariant &userData = {});
 
   // Returns true if there are any active or pending tasks.
   bool hasActiveTasks() const;

@@ -9,6 +9,7 @@
 #include "Renderer.h"
 #include <QDebug>
 #include "Logging.h"
+#include <QHash>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
@@ -205,6 +206,8 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
 
   // Cancel current progress if exists
   m_renderQueue.cancelAll();
+  m_pointsQueue.cancelAll();
+  m_pointsRenderPending = false;
 
   // Clear old scan to release it from memory
   m_scan = nullptr;
@@ -233,7 +236,7 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
 
 
   m_scan = scan;
-  m_simulatedPointsDirty = true;
+  m_pointsOverlayDirty = true;
   if (m_rparams) {
       m_lastScanCrop = m_rparams->scan_crop;
       m_lastRotation = m_rparams->scan_rotation;
@@ -300,7 +303,7 @@ void ImageWidget::updateParameters(
 
   // Selective invalidation: only dirty if scrToImg parameters changed
   if (scrToImg && *scrToImg != m_lastScrToImg) {
-    m_simulatedPointsDirty = true;
+    m_pointsOverlayDirty = true;
     m_lastScrToImg = *scrToImg;
   }
 
@@ -363,117 +366,31 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
     
     p.drawImage(targetRect, m_pixmap, QRectF(0, 0, m_pixmap.width(), m_pixmap.height()));
 
+
     if (m_showRegistrationPoints && m_solver && m_scan && m_scrToImg) {
-      p.setRenderHint(QPainter::Antialiasing);
+      /* Schedule a background re-render of the points overlay whenever
+         parameters, view, or point data changed.  Non-blocking — returns
+         immediately; update() is called when the new overlay is ready.  */
+      if (m_pointsOverlayDirty)
+        schedulePointsOverlayRender ();
 
-      if (m_simulatedPointsDirty || m_simulatedPoints.size() != m_solver->points.size()) {
-        updateSimulatedPoints();
-      }
-
-      colorscreen::point_t c1 = m_scrToImg->coordinate1;
-      double dot_period = sqrt(c1.x * c1.x + c1.y * c1.y);
-      if (dot_period < 0.1) dot_period = 10.0;
-      double threshold = dot_period * m_heatmapTolerance;
-      double amp_scale = (m_scale > 1.0) ? 1.0 : (m_exaggerate / (dot_period / 2.0));
-
-      // Viewport culling: expand rect to include displacement arrows
-      // Displacement arrow amplification is m_exaggerate / (dot_period / 2.0).
-      // Max pixel length is m_maxArrowLength.
-      double margin = m_maxArrowLength / m_scale + 20.0;
-      QRectF visibleRect(m_viewX - margin, m_viewY - margin, 
-                         width() / m_scale + 2 * margin, height() / m_scale + 2 * margin);
-
-
-      for (size_t i = 0; i < m_solver->points.size(); ++i) {
-        const auto &xi = m_solver->points[i].img;
-
-        QPointF p_widget = imageToWidget(xi);
-        
-        double marginPixels = m_maxArrowLength + 20.0 * m_scale;
-        
-        if (p_widget.x() < -marginPixels || p_widget.x() > width() + marginPixels ||
-            p_widget.y() < -marginPixels || p_widget.y() > height() + marginPixels) {
-            continue;
-        }
-
-        const auto &p_sim = m_simulatedPoints[i];
-
-        // Calculate displacement magnitude in image space
-        double dx_img = p_sim.x - xi.x;
-        double dy_img = p_sim.y - xi.y;
-        double dist_img = sqrt(dx_img * dx_img + dy_img * dy_img);
-
-        // Heat map color calculation
-        QColor color = getHeatMapColor(dist_img, threshold);
-
-        // Widget coordinates (start/simulated)
-        QPointF start = imageToWidget(xi);
-        QPointF simulated = imageToWidget(p_sim);
-
-        // Highlight selected points
-        bool isSelected = m_selectedPoints.count(SelectedPoint{i, SelectedPoint::RegistrationPoint});
-        if (isSelected) {
-            p.setPen(QPen(Qt::cyan, 6, Qt::SolidLine, Qt::RoundCap));
-            p.setBrush(Qt::NoBrush);
-            p.drawEllipse(start, 8, 8);
-        }
-
-        // Draw intended location
-        p.setPen(QPen(Qt::black, 4));
-        p.setBrush(Qt::NoBrush);
-        p.drawEllipse(start, 4, 4);
-        p.setPen(QPen(color, 2));
-        p.drawEllipse(start, 4, 4);
-
-        // Displacement arrow math
-        colorscreen::point_t xi_displaced = {
-            xi.x + dx_img * amp_scale,
-            xi.y + dy_img * amp_scale
-        };
-        QPointF end = imageToWidget(xi_displaced);
-
-        double dx_w = end.x() - start.x();
-        double dy_w = end.y() - start.y();
-        double dist_w2 = dx_w * dx_w + dy_w * dy_w;
-
-        if (dist_w2 > 25.0) { // Only draw arrow if at least 5 pixels long
-          // Cap arrow length to m_maxArrowLength pixels
-          if (dist_w2 > m_maxArrowLength * m_maxArrowLength) {
-            double dist_w = sqrt(dist_w2);
-            dx_w *= m_maxArrowLength / dist_w;
-            dy_w *= m_maxArrowLength / dist_w;
-            end = QPointF(start.x() + dx_w, start.y() + dy_w);
-          }
-
-          double arrowAngle = std::atan2(dy_w, dx_w);
-          double headLen = 8.0;
-          double cosA = std::cos(arrowAngle - M_PI / 6);
-          double sinA = std::sin(arrowAngle - M_PI / 6);
-          double cosB = std::cos(arrowAngle + M_PI / 6);
-          double sinB = std::sin(arrowAngle + M_PI / 6);
-          
-          QPointF h1(end.x() - headLen * cosA, end.y() - headLen * sinA);
-          QPointF h2(end.x() - headLen * cosB, end.y() - headLen * sinB);
-          QPointF head[] = {h1, end, h2};
-
-          // Draw displacement line
-          p.setPen(QPen(Qt::black, 5));
-          p.drawLine(start, end);
-          p.drawPolyline(head, 3);
-
-          p.setPen(QPen(color, 3));
-          p.drawLine(start, end);
-          p.drawPolyline(head, 3);
-        }
-        
-        // Draw simulated location dot
-        p.setPen(Qt::NoPen);
-        p.setBrush(Qt::black);
-        p.drawEllipse(simulated, 3, 3);
-        p.setBrush(color);
-        p.drawEllipse(simulated, 2, 2);
+      /* Composite the pre-rendered overlay on top of the image.  The overlay
+         was rendered at (m_lastPointsScale, m_lastPointsX, m_lastPointsY)
+         and contains one pixel-per-widget-pixel at that view state.
+         Use the same stretch / offset math as the main pixmap so that panning
+         and zooming still look reasonable while a new overlay is computing.  */
+      if (!m_pointsOverlay.isNull ()) {
+        double scaleFactor = m_scale / m_lastPointsScale;
+        double xPos = (m_lastPointsX - m_viewX) * m_scale;
+        double yPos = (m_lastPointsY - m_viewY) * m_scale;
+        double targetW = m_pointsOverlay.width ()  * scaleFactor;
+        double targetH = m_pointsOverlay.height () * scaleFactor;
+        p.drawImage (QRectF (xPos, yPos, targetW, targetH), m_pointsOverlay);
       }
     }
+
+
+
 
     // Draw profile spots: always while in AddPointMode (like gtkgui.C's color_profiling mode),
     // or when the show_profile_spots flag is set.
@@ -941,6 +858,7 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
             m_selectedPoints.insert(sp);
           }
         }
+        m_pointsOverlayDirty = true;
         emit selectionChanged();
         update();
       } else {
@@ -1037,7 +955,7 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
       colorscreen::point_t imgPos = widgetToImage(event->position());
       if (m_solver && (size_t)m_draggedPointIndex < m_solver->points.size()) {
         m_solver->points[m_draggedPointIndex].img = imgPos;
-        m_simulatedPointsDirty = true;
+        m_pointsOverlayDirty = true;
         update();
       }
     } else if (m_rubberBand && m_rubberBand->isVisible()) {
@@ -1184,6 +1102,7 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
         }
 
         if (changed) {
+          m_pointsOverlayDirty = true;
           emit selectionChanged();
           update();
         }
@@ -1582,6 +1501,7 @@ void ImageWidget::selectAll() {
   }
   
   if (changed) {
+    m_pointsOverlayDirty = true;
     emit selectionChanged();
     update();
   }
@@ -1611,7 +1531,7 @@ void ImageWidget::deleteSelectedPoints() {
   }
   
   m_selectedPoints.clear();
-  m_simulatedPointsDirty = true;
+  m_pointsOverlayDirty = true;
   emit selectionChanged();
   emit pointsChanged();
   update();
@@ -1628,33 +1548,257 @@ void ImageWidget::setInteractionMode(InteractionMode mode) {
 void ImageWidget::clearSelection() {
   if (!m_selectedPoints.empty()) {
     m_selectedPoints.clear();
+    m_pointsOverlayDirty = true;
     emit selectionChanged();
     update();
   }
 }
 
-void ImageWidget::updateSimulatedPoints() {
-  if (!m_solver || !m_scan || !m_rparams || !m_scrToImg) return;
-  
-  m_simulatedPoints.resize(m_solver->points.size());
-  
-  colorscreen::scr_to_img map;
-  map.set_parameters(*m_scrToImg, *m_scan);
-  
-  bool isVerticalStrips = colorscreen::screen_with_vertical_strips_p(m_scrToImg->type);
-  
-  for (size_t i = 0; i < m_solver->points.size(); ++i) {
-    const auto &pt = m_solver->points[i];
-    colorscreen::point_t scr_p = pt.scr;
+/* Schedule a background render of the registration-point overlay image.
+   The resulting QImage is composited on top of the main pixmap in paintEvent.
+   This allows the GUI to remain responsive while points are re-rendered
+   after view changes or parameter updates.  */
+void ImageWidget::schedulePointsOverlayRender ()
+{
+  if (!m_solver || !m_scan || !m_rparams || !m_scrToImg || width () <= 0
+      || height () <= 0)
+    return;
 
-    if (isVerticalStrips) {
-      colorscreen::point_t scr2 = map.to_scr(pt.img);
-      scr_p.y = scr2.y;
-    }
-    m_simulatedPoints[i] = map.to_img(scr_p);
+  if (m_pointsRenderPending) {
+    m_pointsOverlayDirty = true;
+    return;
   }
-  
-  m_simulatedPointsDirty = false;
+
+  m_pointsRenderPending = true;
+  m_pointsOverlayDirty  = false;
+
+  /* Snapshot current view state and data for the background worker.
+     We render the overlay at the current widget size with the current
+     scale and pan.  */
+  double viewX          = m_viewX;
+  double viewY          = m_viewY;
+  double scale          = m_scale;
+  int    w              = width ();
+  int    h              = height ();
+  auto   scrToImg       = *m_scrToImg;
+  auto   scan           = m_scan;
+  auto   rparams        = *m_rparams; /* Snapshot rotation/mirror/crop state. */
+  auto   points         = m_solver->points; /* Deep copy of registration points. */
+  auto   selected       = m_selectedPoints; /* Copy selection set. */
+  double heatmapTol     = m_heatmapTolerance;
+  double exaggerate     = m_exaggerate;
+  double maxArrowLen    = m_maxArrowLength;
+
+  auto result = std::make_shared<QImage> ();
+
+  m_pointsQueue.runAsync (
+      [=, result] (colorscreen::progress_info *) mutable
+      {
+        QImage overlay (w, h, QImage::Format_ARGB32_Premultiplied);
+        overlay.fill (Qt::transparent);
+
+        if (points.empty ()) {
+          *result = std::move (overlay);
+          return;
+        }
+
+        QPainter p (&overlay);
+        p.setRenderHint (QPainter::Antialiasing);
+
+        colorscreen::scr_to_img map;
+        map.set_parameters (scrToImg, *scan);
+
+        /* Background-safe equivalent of imageToWidget.
+           Must account for rotation/mirror via CoordinateTransformer.  */
+        CoordinateTransformer transformer(scan.get(), rparams);
+        auto toWidget = [viewX, viewY, scale, transformer] (const colorscreen::point_t &img)
+        { 
+          colorscreen::point_t tr = transformer.scanToTransformedCrop(img);
+          return QPointF ((tr.x - viewX) * scale, (tr.y - viewY) * scale); 
+        };
+
+        colorscreen::point_t c1 = scrToImg.coordinate1;
+        double dot_period = sqrt (c1.x * c1.x + c1.y * c1.y);
+        if (dot_period < 0.1) dot_period = 10.0;
+        double threshold  = dot_period * heatmapTol;
+        double amp_scale  = (scale > 1.0) ? 1.0 : (exaggerate / (dot_period / 2.0));
+        double marginPixels = maxArrowLen + 20.0 * scale;
+
+        bool isVerticalStrips
+            = colorscreen::screen_with_vertical_strips_p (scrToImg.type);
+
+        struct DrawPoint
+        {
+          QPointF start;
+          QPointF simulated;
+          QPointF arrowEnd;
+          double  arrowAngle;
+          QColor  color;
+          bool    hasArrow;
+          bool    isSelected;
+        };
+
+        std::vector<DrawPoint> visible;
+        visible.reserve (std::min (points.size (), (size_t)8192));
+
+        for (size_t i = 0; i < points.size (); ++i) {
+          const auto &xi    = points[i].img;
+          QPointF     start = toWidget (xi);
+
+          /* Culling. */
+          if (start.x () < -marginPixels || start.x () > w + marginPixels
+              || start.y () < -marginPixels || start.y () > h + marginPixels)
+            continue;
+
+          /* Compute simulated location. */
+          colorscreen::point_t scr_p = points[i].scr;
+          if (isVerticalStrips) {
+            colorscreen::point_t scr2 = map.to_scr (xi);
+            scr_p.y = scr2.y;
+          }
+          colorscreen::point_t p_sim_img = map.to_img (scr_p);
+          QPointF              simulated = toWidget (p_sim_img);
+
+          double dx_img   = p_sim_img.x - xi.x;
+          double dy_img   = p_sim_img.y - xi.y;
+          double dist_img = sqrt (dx_img * dx_img + dy_img * dy_img);
+
+          /* Heatmap color calculation. */
+          QColor color;
+          double t = (threshold > 0) ? dist_img / threshold : 1.0;
+          if (t <= 0) color = Qt::green;
+          else if (t >= 1.0) color = Qt::red;
+          else {
+            int r_val, g_val;
+            if (t < 0.5) {
+              r_val = static_cast<int> (255 * (t / 0.5));
+              g_val = 255;
+            } else {
+              r_val = 255;
+              g_val = static_cast<int> (255 * (1.0 - (t - 0.5) / 0.5));
+            }
+            color = QColor (r_val, g_val, 0);
+          }
+
+          /* Arrow geometry. */
+          colorscreen::point_t xi_d = { xi.x + dx_img * amp_scale,
+                                        xi.y + dy_img * amp_scale };
+          QPointF arrowEnd = toWidget (xi_d);
+          double  dx_w     = arrowEnd.x () - start.x ();
+          double  dy_w     = arrowEnd.y () - start.y ();
+          double  dist_w2  = dx_w * dx_w + dy_w * dy_w;
+          bool    hasArrow = dist_w2 > 25.0;
+          double  arrowAngle = 0.0;
+
+          if (hasArrow) {
+            if (dist_w2 > maxArrowLen * maxArrowLen) {
+              double dist_w = sqrt (dist_w2);
+              dx_w *= maxArrowLen / dist_w;
+              dy_w *= maxArrowLen / dist_w;
+              arrowEnd = QPointF (start.x () + dx_w, start.y () + dy_w);
+            }
+            arrowAngle = std::atan2 (dy_w, dx_w);
+          }
+
+          bool isSelected = selected.count (
+              SelectedPoint{ i, SelectedPoint::RegistrationPoint });
+          visible.push_back ({ start, simulated, arrowEnd, arrowAngle, color,
+                               hasArrow, isSelected });
+        }
+
+        /* Batched rendering passes. */
+        
+        /* Pass 2: Selected halos. */
+        {
+          bool any = false;
+          for (const auto &d : visible) if (d.isSelected) { any = true; break; }
+          if (any) {
+            p.setPen (QPen (Qt::cyan, 6, Qt::SolidLine, Qt::RoundCap));
+            p.setBrush (Qt::NoBrush);
+            for (const auto &d : visible) if (d.isSelected) p.drawEllipse (d.start, 8, 8);
+          }
+        }
+
+        /* Pass 3: Actual locations (black shadow). */
+        {
+          QList<QPointF> pts; pts.reserve (visible.size ());
+          for (const auto &d : visible) pts << d.start;
+          p.setPen (QPen (Qt::black, 8, Qt::SolidLine, Qt::RoundCap));
+          p.drawPoints (pts.constData (), pts.size ());
+        }
+
+        /* Pass 4: Actual locations (colored core). */
+        {
+          QHash<QRgb, QList<QPointF>> buckets;
+          for (const auto &d : visible) buckets[d.color.rgba ()] << d.start;
+          for (auto it = buckets.cbegin (); it != buckets.cend (); ++it) {
+            p.setPen (QPen (QColor::fromRgba (it.key ()), 4, Qt::SolidLine, Qt::RoundCap));
+            p.drawPoints (it->constData (), it->size ());
+          }
+        }
+
+        /* Pass 5: Arrows. */
+        {
+          QList<QLineF> bLines, bH1, bH2;
+          QHash<QRgb, QList<QLineF>> cLines, cH1, cH2;
+          for (const auto &d : visible) {
+            if (!d.hasArrow) continue;
+            bLines << QLineF (d.start, d.arrowEnd);
+            double headLen = 8.0;
+            double cosA = std::cos (d.arrowAngle - M_PI / 6);
+            double sinA = std::sin (d.arrowAngle - M_PI / 6);
+            double cosB = std::cos (d.arrowAngle + M_PI / 6);
+            double sinB = std::sin (d.arrowAngle + M_PI / 6);
+            QPointF h1 (d.arrowEnd.x () - headLen * cosA, d.arrowEnd.y () - headLen * sinA);
+            QPointF h2 (d.arrowEnd.x () - headLen * cosB, d.arrowEnd.y () - headLen * sinB);
+            bH1 << QLineF (h1, d.arrowEnd); bH2 << QLineF (h2, d.arrowEnd);
+            QRgb rgb = d.color.rgba ();
+            cLines[rgb] << QLineF (d.start, d.arrowEnd);
+            cH1[rgb] << QLineF (h1, d.arrowEnd); cH2[rgb] << QLineF (h2, d.arrowEnd);
+          }
+          if (!bLines.isEmpty ()) {
+            p.setPen (QPen (Qt::black, 5));
+            p.drawLines (bLines); p.drawLines (bH1); p.drawLines (bH2);
+            for (auto it = cLines.cbegin (); it != cLines.cend (); ++it) {
+              p.setPen (QPen (QColor::fromRgba (it.key ()), 3));
+              p.drawLines (*it); p.drawLines (cH1[it.key ()]); p.drawLines (cH2[it.key ()]);
+            }
+          }
+        }
+
+        /* Pass 6: Simulated locations. */
+        {
+          QList<QPointF> pts; pts.reserve (visible.size ());
+          for (const auto &d : visible) pts << d.simulated;
+          p.setPen (QPen (Qt::black, 6, Qt::SolidLine, Qt::RoundCap));
+          p.drawPoints (pts.constData (), pts.size ());
+
+          QHash<QRgb, QList<QPointF>> buckets;
+          for (const auto &d : visible) buckets[d.color.rgba ()] << d.simulated;
+          for (auto it = buckets.cbegin (); it != buckets.cend (); ++it) {
+            p.setPen (QPen (QColor::fromRgba (it.key ()), 4, Qt::SolidLine, Qt::RoundCap));
+            p.drawPoints (it->constData (), it->size ());
+          }
+        }
+
+        p.end ();
+        *result = std::move (overlay);
+      },
+      [this, result, viewX, viewY, scale] ()
+      {
+        m_pointsRenderPending = false;
+        m_pointsOverlay       = std::move (*result);
+        m_lastPointsX         = viewX;
+        m_lastPointsY         = viewY;
+        m_lastPointsScale     = scale;
+        if (m_pointsOverlayDirty)
+          schedulePointsOverlayRender ();
+        update ();
+      });
+}
+
+void ImageWidget::updateSimulatedPoints() {
+  /* No longer used - kept as stub to avoid build breaks in other files if any. */
 }
 
 void ImageWidget::setExploreMode(bool enable) {
@@ -1771,9 +1915,10 @@ void ImageWidget::exploreTick() {
 }
 
 // Request a new render job (non-blocking)
-void ImageWidget::requestRender()
-{
-    if (!m_scan || !m_rparams) return;
+void ImageWidget::requestRender() {
+  m_pointsOverlayDirty = true;
+  m_renderQueue.cancelAll();
+  if (!m_scan || !m_rparams) return;
 
     RenderRequestData data;
     

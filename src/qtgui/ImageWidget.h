@@ -194,8 +194,11 @@ private:
   double m_exaggerate = 200.0;
   double m_maxArrowLength = 100.0;
 
-  // Concurrent Rendering
-  TaskQueue m_renderQueue; // Manages IDs and progress notifications
+  // Concurrent Rendering — image and points overlay run in parallel.
+  TaskQueue m_renderQueue;  // image tile rendering
+  TaskQueue m_pointsQueue;  // points overlay pre-rendering
+  bool m_pointsRenderPending = false;
+
   
   // Last successfully rendered state to compare against updates
   double m_lastRenderedScale = 1.0;
@@ -208,9 +211,15 @@ private:
   bool m_isDragging = false;
   InteractionMode m_interactionMode = PanMode;
   std::set<SelectedPoint> m_selectedPoints;
-  std::vector<colorscreen::point_t> m_simulatedPoints;
-  bool m_simulatedPointsDirty = true;
+  /* Pre-rendered points overlay image and the view state it was rendered at.
+     Composited on top of m_pixmap in paintEvent — same stretch logic.  */
+  QImage  m_pointsOverlay;
+  double  m_lastPointsScale = 1.0;
+  double  m_lastPointsX = 0.0;
+  double  m_lastPointsY = 0.0;
+  bool    m_pointsOverlayDirty = true;
   colorscreen::scr_to_img_parameters m_lastScrToImg;
+
   colorscreen::int_optional_image_area m_lastScanCrop;
   int m_lastRotation = 0;
   bool m_lastMirror = false;
@@ -232,6 +241,9 @@ private:
   double m_keyboardZoomVelocity = 0.0;
 
   void updateSimulatedPoints();
+  // Schedule a background render of the points overlay image.
+  void schedulePointsOverlayRender();
+
   
   // Animations for when no image loaded
   ThamesAnimation *m_thamesAnim = nullptr;

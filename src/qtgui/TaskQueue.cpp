@@ -141,6 +141,59 @@ bool TaskQueue::hasActiveTasks() const {
   return !m_tasks.isEmpty() || m_pendingReqId.has_value();
 }
 
+void TaskQueue::runAsync (std::function<void (colorscreen::progress_info *)> worker,
+                          std::function<void ()> done,
+                          const QVariant &userData)
+{
+  /* Pre-allocate the request ID so we can capture it in the lambda BEFORE
+     calling requestRender().  requestRender() → startTask() → emit
+     triggerRender() happens synchronously, so the connection must already
+     be live when that emit fires.
+
+     Qt::QueuedConnection guarantees the lambda runs from the event loop
+     even when sender and receiver share a thread, so it always executes
+     after this function returns and the connection is fully established.  */
+  int reqId = m_nextReqId;  /* peek — requestRender() will assign the same ID */
+
+  auto connHolder = std::make_shared<QMetaObject::Connection> ();
+
+  *connHolder = connect (
+      this, &TaskQueue::triggerRender, this,
+      [this, reqId,
+       worker = std::move (worker),
+       done   = std::move (done),
+       connHolder]
+      (int firedId, std::shared_ptr<colorscreen::progress_info> progress,
+       const QVariant &) mutable
+      {
+        if (firedId != reqId)
+          return;
+
+        /* One-shot: disconnect immediately so later tasks don't re-trigger.  */
+        disconnect (*connHolder);
+        connHolder.reset ();
+
+        /* Launch worker on Qt thread-pool; progress is read-only in worker.  */
+        auto *watcher = new QFutureWatcher<void> (this);
+        connect (watcher, &QFutureWatcher<void>::finished, this,
+                 [this, reqId, watcher, done = std::move (done)] () mutable
+                 {
+                   watcher->deleteLater ();
+                   done ();
+                   reportFinished (reqId, true);
+                 });
+        watcher->setFuture (
+            QtConcurrent::run (
+                [w = std::move (worker), progress] () mutable
+                { w (progress.get ()); }));
+      },
+      Qt::QueuedConnection);
+
+  /* Now request the render — this will emit triggerRender(reqId, ...) which
+     is queued and delivered on the next event-loop iteration.  */
+  requestRender (userData);
+}
+
 QString TaskQueue::formatQueueState() const
 {
     QString state;
