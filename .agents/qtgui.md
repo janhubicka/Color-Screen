@@ -25,7 +25,7 @@ It lets user to effectively move around the image
 edit control points, select areas etc.
 - **`ParameterPanel`**: The abstract base class for all UI panels (e.g., `CapturePanel`, `ColorPanel`, `SharpnessPanel`). It provides a rich set of helper methods to create consistent UI controls that are linked to the application state.
 - **`ParameterState`**: A structured object containing all render and project-level parameters. It is used as the single source of truth for the UI.
-- **`TaskQueue`**: Manages background worker threads to ensure the UI remains responsive during heavy computations like rendering or optimization.
+- **`TaskQueue`**: Manages background worker threads. It utilizes multiple specialized queues (e.g., `m_renderQueue` for image tiles and `m_pointsQueue` for registration overlays) to ensure that heavy computations like point rendering do not block the main GUI thread or interfere with image tile generation.
 
 ---
 
@@ -119,16 +119,34 @@ public:
 };
 ```
 
-### 2. Requesting a Task via TaskQueue
+### 2. TaskQueue and runAsync
 
-The `TaskQueue` coordinates when tasks run.
+The `TaskQueue` coordinates when tasks run and provides a specialized `runAsync` API for non-blocking operations that need to return results to the GUI thread.
+
+#### runAsync Pattern
+This pattern is ideal for tasks like rendering overlays or performing quick background math:
 
 ```cpp
-// In MainWindow or a controller
-taskQueue->requestRender(renderParams, priority);
+m_pointsQueue.runAsync(
+    [=](colorscreen::progress_info *p) mutable {
+        // Worker code - Runs on a background thread
+        // e.g., Render 10,000 points into a QImage
+        return result; 
+    },
+    [this](ResultType result) {
+        // Done callback - Runs on the GUI thread
+        // Safely update UI or store results
+        update();
+    }
+);
 ```
 
-The `TaskQueue` emits signals like `triggerRender` or `progressStarted`, which `MainWindow` listens to to spawn the actual worker threads (usually managed via `QThread`).
+#### Dual-Queue Architecture
+To prevent UI "stutters" during complex interactions, `ImageWidget` uses two parallel queues:
+- **`m_renderQueue`**: Handles the heavy lifting of image tile rendering and demosaicing.
+- **`m_pointsQueue`**: Handles registration point overlays and simulated position updates.
+
+Running these in separate queues ensures that the registration points can be re-rendered instantly (e.g., during a drag or zoom) without waiting for the main image render to catch up.
 
 ### 3. Iterative Workers and Throttling
 
@@ -151,6 +169,15 @@ The `ImageWidget` handles mapping between three main coordinate systems:
 1.  **Scan Coordinates**: Raw pixel indices of the input image.
 2.  **Transformed Coordinates**: Coordinates after rotation, cropping, and mirroring.
 3.  **Widget Coordinates**: Screen pixels relative to the `ImageWidget` top-left.
+
+### Non-Blocking Overlay Rendering
+
+To handle thousands of registration points without blocking the UI, `ImageWidget` uses a **Composite Overlay Model**:
+
+- **Pre-rendered Overlay**: Registration points are rendered into a `QImage` in the background.
+- **Compositing**: The `paintEvent` simply draws this `QImage` on top of the main pixmap.
+- **Interpolation**: While a new overlay is being rendered (e.g., during a zoom), the current overlay is stretched or translated in real-time to maintain visual alignment, providing 60fps feedback even while the background compute is catching up.
+- **Style**: Registration points use a distinct style (Source: circle outline, Target: filled disk) and are automatically culled if they are too close to each other to reduce visual noise.
 
 ### Smooth Transitions
 
