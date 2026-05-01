@@ -1592,7 +1592,7 @@ void ImageWidget::schedulePointsOverlayRender ()
   auto result = std::make_shared<QImage> ();
 
   m_pointsQueue.runAsync (
-      [=, result] (colorscreen::progress_info *) mutable
+      [=] (colorscreen::progress_info *) mutable
       {
         QImage overlay (w, h, QImage::Format_ARGB32_Premultiplied);
         overlay.fill (Qt::transparent);
@@ -1636,6 +1636,7 @@ void ImageWidget::schedulePointsOverlayRender ()
           QColor  color;
           bool    hasArrow;
           bool    isSelected;
+          bool    isTargetVisible;
         };
 
         std::vector<DrawPoint> visible;
@@ -1700,10 +1701,15 @@ void ImageWidget::schedulePointsOverlayRender ()
             arrowAngle = std::atan2 (dy_w, dx_w);
           }
 
+          /* Only draw the simulated target if it's shifted from the source. */
+          double dx_w_sim = simulated.x () - start.x ();
+          double dy_w_sim = simulated.y () - start.y ();
+          bool   isTargetVisible = (dx_w_sim * dx_w_sim + dy_w_sim * dy_w_sim) > 0.25;
+
           bool isSelected = selected.count (
               SelectedPoint{ i, SelectedPoint::RegistrationPoint });
           visible.push_back ({ start, simulated, arrowEnd, arrowAngle, color,
-                               hasArrow, isSelected });
+                               hasArrow, isSelected, isTargetVisible });
         }
 
         /* Batched rendering passes. */
@@ -1719,21 +1725,20 @@ void ImageWidget::schedulePointsOverlayRender ()
           }
         }
 
-        /* Pass 3: Actual locations (black shadow). */
+        /* Pass 3: Actual locations (black circle outline). */
         {
-          QList<QPointF> pts; pts.reserve (visible.size ());
-          for (const auto &d : visible) pts << d.start;
-          p.setPen (QPen (Qt::black, 8, Qt::SolidLine, Qt::RoundCap));
-          p.drawPoints (pts.constData (), pts.size ());
+          p.setPen (QPen (Qt::black, 4));
+          p.setBrush (Qt::NoBrush);
+          for (const auto &d : visible) p.drawEllipse (d.start, 4, 4);
         }
 
-        /* Pass 4: Actual locations (colored core). */
+        /* Pass 4: Actual locations (colored circle outline). */
         {
           QHash<QRgb, QList<QPointF>> buckets;
           for (const auto &d : visible) buckets[d.color.rgba ()] << d.start;
           for (auto it = buckets.cbegin (); it != buckets.cend (); ++it) {
-            p.setPen (QPen (QColor::fromRgba (it.key ()), 4, Qt::SolidLine, Qt::RoundCap));
-            p.drawPoints (it->constData (), it->size ());
+            p.setPen (QPen (QColor::fromRgba (it.key ()), 2));
+            for (const auto &pt : it.value()) p.drawEllipse (pt, 4, 4);
           }
         }
 
@@ -1766,18 +1771,25 @@ void ImageWidget::schedulePointsOverlayRender ()
           }
         }
 
-        /* Pass 6: Simulated locations. */
+        /* Pass 6: Simulated locations (filled disks). */
         {
           QList<QPointF> pts; pts.reserve (visible.size ());
-          for (const auto &d : visible) pts << d.simulated;
-          p.setPen (QPen (Qt::black, 6, Qt::SolidLine, Qt::RoundCap));
-          p.drawPoints (pts.constData (), pts.size ());
+          for (const auto &d : visible) if (d.isTargetVisible) pts << d.simulated;
+          
+          if (!pts.isEmpty ()) {
+            /* Black disk shadow. */
+            p.setPen (QPen (Qt::black, 6, Qt::SolidLine, Qt::RoundCap));
+            p.drawPoints (pts.constData (), pts.size ());
 
-          QHash<QRgb, QList<QPointF>> buckets;
-          for (const auto &d : visible) buckets[d.color.rgba ()] << d.simulated;
-          for (auto it = buckets.cbegin (); it != buckets.cend (); ++it) {
-            p.setPen (QPen (QColor::fromRgba (it.key ()), 4, Qt::SolidLine, Qt::RoundCap));
-            p.drawPoints (it->constData (), it->size ());
+            /* Colored disk core. */
+            QHash<QRgb, QList<QPointF>> buckets;
+            for (const auto &d : visible) {
+              if (d.isTargetVisible) buckets[d.color.rgba ()] << d.simulated;
+            }
+            for (auto it = buckets.cbegin (); it != buckets.cend (); ++it) {
+              p.setPen (QPen (QColor::fromRgba (it.key ()), 4, Qt::SolidLine, Qt::RoundCap));
+              p.drawPoints (it->constData (), it->size ());
+            }
           }
         }
 
