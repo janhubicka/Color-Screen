@@ -10,6 +10,7 @@
 #include "homography.h"
 #include "render-to-scr.h"
 #include "spline.h"
+#include "include/histogram.h"
 namespace colorscreen
 {
 std::atomic_ulong scr_to_img::m_nwarnings;
@@ -401,7 +402,7 @@ scr_to_img::update_linear_parameters (scr_to_img_parameters &param)
 int_image_area
 scr_to_img::get_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) const noexcept
 {
-  if (!m_scr_to_img_mesh)
+  if (!m_scr_to_img_mesh && !m_img_to_scr_mesh)
     {
       /* Compute all the corners.  */
       int_image_area area (int_point_t {(int64_t)my_floor (to_scr ({ x1, y1 }).x), (int64_t)my_floor (to_scr ({ x1, y1 }).y)});
@@ -551,5 +552,31 @@ scr_to_img_parameters::estimate_dpi (coord_t pixel_size) const
 	return -1;
 	break;
     }
+}
+/* Estimate pixel size for area.  */
+pure_attr coord_t
+scr_to_img::pixel_size (int_image_area area) const noexcept
+{
+  histogram hist;
+  int steps = 11;
+  for (int y = 0; y < 5; y++)
+    for (int x = 0; x < 5; x++)
+      {
+        coord_t bx = area.x + (x+(coord_t)0.5) * area.width * (1 / (coord_t)steps);
+        coord_t by = area.y + (y+(coord_t)0.5) * area.height * (1 / (coord_t)steps);
+        coord_t sz = to_scr ({ bx + 0, by + 0 }).dist_from (to_scr ({ bx + 1, by + 0 }));
+	hist.pre_account (sz);
+      }
+  hist.finalize_range (256);
+  for (int y = 0; y < 5; y++)
+    for (int x = 0; x < 5; x++)
+      {
+        coord_t bx = area.x + (x+(coord_t)0.5) * area.width * (1 / (coord_t)steps);
+        coord_t by = area.y + (y+(coord_t)0.5) * area.height * (1 / (coord_t)steps);
+        coord_t sz = to_scr ({ bx + 0, by + 0 }).dist_from (to_scr ({ bx + 1, by + 0 }));
+	hist.account (sz);
+      }
+  hist.finalize ();
+  return hist.find_avg (0.2, 0.2);
 }
 }

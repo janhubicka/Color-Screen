@@ -34,7 +34,8 @@ enum finetune_flags : uint64_t
   finetune_sharpening = 1 << 17,
   finetune_scanner_mtf_channel_defocus = 1 << 18,
   finetune_coordinates = 1 << 19,
-  finetune_produce_images = 1 << 20
+  finetune_guess_coordinates = 1 << 20,
+  finetune_produce_images = 1 << 21
 };
 struct finetune_parameters
 {
@@ -135,7 +136,10 @@ struct finetune_area_parameters
       scaley *= 3;
     if (!grid_w && !grid_h)
       {
-        const int n = 100;
+        int n = 100;
+	/* Dufaycolor has flexible base that is prone to defomrations.  */
+	if (param.type == Dufay)
+	  n = 400;
         if (crop.width > crop.height)
 	  grid_w = n * scalex;
 	else

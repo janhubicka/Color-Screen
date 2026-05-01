@@ -89,8 +89,15 @@ public:
 
 /* Return contrast which is useful for registration.  */
 luminosity_t
-get_positional_color_contrast (scr_type type, rgbdata c)
+get_positional_color_contrast (scr_type type, rgbdata c, bool robust)
 {
+  /* Robust mode is used to detect coordinates and screen type completely.
+     Here we insist on getting difference between all three chanels.  */
+  if (robust)
+    {
+      return std::min ({my_fabs (c.red - c.green), my_fabs (c.red - c.blue),
+		        my_fabs (c.blue - c.green)});
+    }
   /* In Paget like screens any difference is good since each color
      forms a grid.
      For screen with strips we only determine one direction and that one
@@ -325,8 +332,8 @@ public:
   coord_t pixel_size;
   scr_type type;
 
-  /* True if we optimize coordinate system.  */
-  bool optimize_coordinates;
+  /* 1 if we optimize coordinate system; 2 if we want to guess it copletely.  */
+  int optimize_coordinates;
   /* True if tile is already sharpened.  */
   bool tile_sharpened;
   /* Try to adjust position of center of the patches (+- range)  */
@@ -384,6 +391,10 @@ public:
 
   /* Threshold for data collection.  */
   luminosity_t collection_threshold;
+
+  /* Scale for coordinate guess.  */
+  coord_t min_scale, max_scale;
+  coord_t min_rotate, max_rotate;
 
   /* Contrast determined.  */
   luminosity_t contrast;
@@ -449,6 +460,12 @@ public:
   {
     if (!optimize_position)
       return tiles[tileid].fixed_offset;
+    /* Increase search range when we guess coordinates completely.  */
+    if (optimize_coordinates == 1)
+      {
+	luminosity_t range = 0.5;
+        return { v[2 * tileid] * range, v[2 * tileid + 1] * range};
+      }
     /* Screens with two-dimensional structure needs two offsets.  */
     if (!screen_with_vertical_strips_p (type))
       {
@@ -700,20 +717,24 @@ public:
 
   /* Scale of coordinate system for V.  */
   coord_t
-  get_scale (coord_t *v)
+  get_scale (coord_t *v) const
   {
     if (!optimize_coordinates)
       return 1;
-    return v[coordinate_index] * 0.3 + 1;
+    if (optimize_coordinates == 1)
+      return v[coordinate_index] * 0.3 + 1;
+    return (1 + v[coordinate_index]) * 0.5 * (max_scale - min_scale) + min_scale;
   }
 
   /* Rotation of coordinate system for V.  */
   coord_t
-  get_rotation (coord_t *v)
+  get_rotation (coord_t *v) const
   {
     if (!optimize_coordinates)
       return 0;
-    return v[coordinate_index + 1] * 25;
+    if (optimize_coordinates == 1)
+      return v[coordinate_index + 1] * 25;
+    return (1 + v[coordinate_index + 1]) * 0.5 * (max_rotate - min_rotate) + min_rotate;
   }
 
   /* Get screen coordinates of a given pixel P of a given tile TILEID.
@@ -721,6 +742,8 @@ public:
   pure_attr point_t
   get_pos (coord_t *v, int tileid, int_point_t p) const
   {
+    if (optimize_coordinates == 2)
+      return transformation.apply ({(coord_t)p.x, (coord_t)p.y});
     if (optimize_coordinates)
       return transformation.apply (tiles[tileid].pos[p.y * twidth + p.x]);
     return tiles[tileid].pos[p.y * twidth + p.x] + get_offset (v, tileid);
@@ -738,8 +761,10 @@ public:
   print_values (coord_t *v)
   {
     printf ("\n\nOptimizing %i values:", num_values ());
-    if (optimize_coordinates)
+    if (optimize_coordinates == 1)
       printf (" coordinates");
+    if (optimize_coordinates == 2)
+      printf (" guess_coordinates");
     if (optimize_position)
       printf (" position");
     if (optimize_scanner_mtf_sigma)
@@ -1240,17 +1265,31 @@ public:
       return false;
     for (int y = 0; y < theight; y++)
       for (int x = 0; x < twidth; x++)
-        {
-          tiles[tileid].pos[y * twidth + x]
-              = map.to_scr ({ cur_txmin + x + (coord_t)0.5, cur_tymin + y + (coord_t)0.5 });
-          if (!tiles[tileid].color.empty ())
-            tiles[tileid].color[y * twidth + x]
-                = render.get_unadjusted_rgb_pixel (
-                    { x + cur_txmin, y + cur_tymin });
-          if (!tiles[tileid].bw.empty ())
-            tiles[tileid].bw[y * twidth + x] = render.get_unadjusted_data (
-                { x + cur_txmin, y + cur_tymin });
-        }
+	{
+	  tiles[tileid].pos[y * twidth + x]
+	      = map.to_scr ({ cur_txmin + x + (coord_t)0.5, cur_tymin + y + (coord_t)0.5 });
+	  if (!tiles[tileid].color.empty ())
+	    tiles[tileid].color[y * twidth + x]
+		= render.get_unadjusted_rgb_pixel (
+		    { x + cur_txmin, y + cur_tymin });
+	  if (!tiles[tileid].bw.empty ())
+	    tiles[tileid].bw[y * twidth + x] = render.get_unadjusted_data (
+		{ x + cur_txmin, y + cur_tymin });
+	}
+    return true;
+  }
+
+  /* This is hack used for coordinate discovery experiment.
+     We should avoid need to copy everything from main solver. */
+  bool
+  copy_tile (int tileid, finetune_solver &other)
+  {
+    tiles[tileid].txmin = other.tiles[tileid].txmin;
+    tiles[tileid].tymin = other.tiles[tileid].tymin;
+    type = other.type;
+    tiles[tileid].pos = other.tiles[tileid].pos;
+    tiles[tileid].color = other.tiles[tileid].color;
+    tiles[tileid].bw = other.tiles[tileid].bw;
     return true;
   }
 
@@ -1267,7 +1306,12 @@ public:
 
     /* First decide on what to optimize.  */
     tile_sharpened = is_tile_sharpened;
-    optimize_coordinates = flags & finetune_coordinates;
+    if (flags & finetune_guess_coordinates)
+      optimize_coordinates = 2;
+    else if (flags & finetune_coordinates)
+      optimize_coordinates = 1;
+    else
+      optimize_coordinates = 0;
     optimize_position = flags & finetune_position;
     optimize_coordinate1 = flags & finetune_coordinates;
     optimize_screen_blur = flags & finetune_screen_blur;
@@ -1564,9 +1608,13 @@ public:
         }
     if (optimize_coordinates)
       {
+	if (optimize_coordinates == 2)
+        /* scale = (min_scale + max_scale)/2 */
+          start [coordinate_index] = 0;
+	else
         /* scale = 1 */
-        start [coordinate_index] = 0;
-	/* rotation = 1 */
+          start [coordinate_index] = 0;
+	/* rotation = (min_rotation + max_rotation)/2  */
         start [coordinate_index + 1] = 0;
       }
 
@@ -1797,6 +1845,17 @@ public:
           simulated_screen_width * simulated_screen_height);
   }
 
+  void
+  compute_contrast ()
+  {
+    if (!tiles[0].bw.empty ())
+      contrast = get_positional_color_contrast (type, last_color, finetune_coordinates == 2);
+    else
+      contrast = std::max ({get_positional_color_contrast (type, {(luminosity_t)last_red.red, (luminosity_t)last_green.red, (luminosity_t)last_blue.red}, finetune_coordinates == 2),
+			    get_positional_color_contrast (type, {(luminosity_t)last_red.green, (luminosity_t)last_green.green, (luminosity_t)last_blue.green}, finetune_coordinates == 2),
+			    get_positional_color_contrast (type, {(luminosity_t)last_red.blue, (luminosity_t)last_green.blue, (luminosity_t)last_blue.blue}, finetune_coordinates == 2)});
+  }
+
   /* Invoke solver.  If REPORT is true, set progress report.
      PROGRESS is used to report progress.
      This may be disabled if we run in OpenMP parallel.  */
@@ -1807,12 +1866,7 @@ public:
     // solver.print_values (solver.start);
     coord_t uncertainty = simplex<coord_t, finetune_solver> (
         *this, "finetuning", progress, report);
-    if (!tiles[0].bw.empty ())
-      contrast = get_positional_color_contrast (type, last_color);
-    else
-      contrast = std::max ({get_positional_color_contrast (type, {(luminosity_t)last_red.red, (luminosity_t)last_green.red, (luminosity_t)last_blue.red}),
-			    get_positional_color_contrast (type, {(luminosity_t)last_red.green, (luminosity_t)last_green.green, (luminosity_t)last_blue.green}),
-			    get_positional_color_contrast (type, {(luminosity_t)last_red.blue, (luminosity_t)last_green.blue, (luminosity_t)last_blue.blue}),});
+    compute_contrast ();
     if (contrast > 1 / (luminosity_t)65535)
       uncertainty = std::min (uncertainty / contrast, (coord_t)(10000000));
     else
@@ -2070,7 +2124,6 @@ public:
   bool
   simulate_screen (coord_t *v, int tileid, bool force = false)
   {
-    double_rgbdata red, green, blue;
     if (!optimize_coordinates)
       {
 	point_t off = get_offset (v, tileid);
@@ -2731,18 +2784,34 @@ public:
   void
   update_transformation (coord_t *v)
   {
-    if (optimize_coordinates)
+    if (optimize_coordinates == 1)
       {
-	point_t center = tiles[0].pos[(theight/2) * twidth + twidth/2];
+	point_t center = tiles[0].pos[(twidth / 2) * twidth + theight / 2];
 	/* First move center to 0.  */
-	matrix3x3 trans = translation_3x3matrix ((center + get_offset (v, 0)) * -1);
-	/* Next apply rotation.  */
-	trans = trans * rotation_3x3matrix (get_rotation (v));
+	matrix3x3 trans = translation_3x3matrix (center * -1);
 	/* Next apply scale  */
-	trans = trans * scale_3x3matrix (get_scale (v));
+	trans = scale_3x3matrix (get_scale (v)) * trans;
+	/* Next apply offset.  */
+	trans = translation_3x3matrix (get_offset (v, 0)) * trans;
+	/* Next apply rotation.  */
+	trans = rotation_3x3matrix (get_rotation (v)) * trans;
 	/* Now translate back.  */
-	trans = trans * translation_3x3matrix (center);
+	trans = translation_3x3matrix (center) * trans;
 	transformation = trans;
+      }
+    else if (optimize_coordinates == 2)
+      {
+	point_t center = {(coord_t)(-theight/2), (coord_t)(-twidth/2)};
+	/* First move center to 0.  */
+	matrix3x3 trans = translation_3x3matrix (center);
+	/* Next apply scale  */
+	trans = scale_3x3matrix (get_scale (v)) * trans;
+	/* Next apply offset.  */
+	trans = translation_3x3matrix (get_offset (v, 0)) * trans;
+	/* Next apply rotation.  */
+	trans = rotation_3x3matrix (get_rotation (v)) * trans;
+	transformation = trans;
+	//printf ("offet %f %f, rotation %f, scale %f  %f tl %f %f; tr %f %f; bl %f %f; br%f %f centr %f %f\n", get_offset (v, 0).x, get_offset (v, 0).y, get_rotation (v), get_scale (v), (get_pos (v, 0, {0, 0}) - get_pos (v, 0, {0,1})).length (), get_pos (v,0,{0,0}).x,  get_pos (v,0,{0,0}).y, get_pos (v,0,{twidth,0}).x, get_pos (v,0,{twidth,0}).y, get_pos (v,0,{0,theight}).x, get_pos (v,0,{0,theight}).y,get_pos (v,0,{twidth,theight}).x, get_pos (v,0,{twidth,theight}).y,get_pos (v,0,{twidth/2,theight/2}).x, get_pos (v,0,{twidth/2,theight/2}).y);
       }
   }
 
@@ -2828,10 +2897,11 @@ public:
     /* Avoid solver from increasing blur past point it is no longer useful.
        Otherwise it will pick solutions with too large blur and very contrasty
        colors.  */
+    //compute_contrast ();
     return (sum / sample_points ())
            * ((coord_t)1
               + get_blur_radius (v)
-                    * (coord_t)0.01) /** (1 + get_emulsion_blur_radius (v) * 0.0001)*/;
+                    * (coord_t)0.01) /*/ std::max (contrast, (luminosity_t)0.0000001)*/; /** (1 + get_emulsion_blur_radius (v) * 0.0001)*/;
   }
 
   void
@@ -3326,7 +3396,7 @@ public:
     ret.red_strip_width = get_red_strip_width (start.data ());
     ret.green_strip_width = get_green_strip_width (start.data ());
     ret.scanner_mtf_sigma = get_scanner_mtf_sigma (start.data ());
-    ret.contrast = get_positional_color_contrast (type, last_color);
+    ret.contrast = get_positional_color_contrast (type, last_color, optimize_coordinates == 2);
 
     if (optimize_coordinates)
       {
@@ -3334,6 +3404,7 @@ public:
         point_t p1_scr = get_pos (start.data (), 0, {0, 0});
         point_t p2_scr = get_pos (start.data (), 0, {twidth - 1, 0});
         point_t p3_scr = get_pos (start.data (), 0, {0, theight - 1});
+        printf ("p1 %f %f scr %f %f, %f %f, %f %f\n", p1_img.x, p1_img.y, p1_scr.x, p1_scr.y, p2_scr.x, p2_scr.y, p3_scr.x, p3_scr.y);
 
         coord_t dx_scr1_x = p2_scr.x - p1_scr.x;
         coord_t dx_scr1_y = p2_scr.y - p1_scr.y;
@@ -3551,7 +3622,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   bool tile_sharpened = false;
 
   int n_tiles = locs.size ();
-  if (fparams.flags & finetune_coordinates)
+  if (fparams.flags & (finetune_coordinates | finetune_guess_coordinates))
     {
       if (n_tiles)
         {
@@ -3583,7 +3654,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   y[0] = 0;
   for (int tileid = 0; tileid < n_tiles; tileid++)
     {
-      if (fparams.flags & finetune_coordinates)
+      if (fparams.flags & (finetune_coordinates | finetune_guess_coordinates))
         {
           x[tileid] = param.center.x;
           y[tileid] = param.center.y;
@@ -3618,12 +3689,13 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
           if (!tileid)
             {
               if (!map.set_parameters (param, *imgp[tileid]))
-	        {
-		  ret.err = "failed to convert screen to image coordinates";
-		  return ret;
-	        }
+                {
+                  ret.err = "failed to convert screen to image coordinates";
+                  return ret;
+                }
+	      /* TODO: determine correct pixel size area.  */
               pixel_size
-                  = map.pixel_size (imgp[tileid]->width, imgp[tileid]->height);
+                  = map.pixel_size ({0, 0, imgp[tileid]->width, imgp[tileid]->height});
             }
           mapp[tileid] = &map;
         }
@@ -3634,82 +3706,101 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   if (!bw && !imgp[0]->has_rgb ())
     bw = true;
 
-  /* Determine tile to analyze.  */
-  point_t tp = mapp[0]->to_scr ({ (coord_t)x[0], (coord_t)y[0] });
-  int sx = nearest_int (tp.x);
-  int sy = nearest_int (tp.y);
-
-  coord_t def_xrange = 2;
-  /* When not normalizing we want to avoid image in the tile.  */
-  if ((fparams.flags & finetune_no_normalize) || bw)
-    def_xrange = 1;
-  if (fparams.flags & finetune_coordinates)
-    def_xrange = 3;
-
-  coord_t test_xrange = fparams.range ? fparams.range : def_xrange;
-  coord_t test_yrange = test_xrange;
-
-  /* If screen tile is far from rectangular, compensate.
-     Also screen with strips has too few elements, so
-     finetuning is not very stressed to pick reasonable solution.  */
-  if (screen_with_vertical_strips_p (param.type))
-    test_yrange *= 3;
   int iterations = 0;
   int txmin, txmax, tymin, tymax;
-  do
+  if (!(fparams.flags & finetune_guess_coordinates))
     {
-      if (iterations)
-	test_xrange++, test_yrange++;
-      point_t p = mapp[0]->to_img ({ (coord_t)sx, (coord_t)sy });
-      coord_t sxmin = p.x, sxmax = p.x, symin = p.y, symax = p.y;
-      p = mapp[0]->to_img ({ sx - test_xrange, sy - test_yrange });
-      sxmin = std::min (sxmin, p.x);
-      sxmax = std::max (sxmax, p.x);
-      symin = std::min (symin, p.y);
-      symax = std::max (symax, p.y);
-      p = mapp[0]->to_img ({ sx + test_xrange, sy - test_yrange });
-      sxmin = std::min (sxmin, p.x);
-      sxmax = std::max (sxmax, p.x);
-      symin = std::min (symin, p.y);
-      symax = std::max (symax, p.y);
-      p = mapp[0]->to_img ({ sx + test_xrange, sy + test_yrange });
-      sxmin = std::min (sxmin, p.x);
-      sxmax = std::max (sxmax, p.x);
-      symin = std::min (symin, p.y);
-      symax = std::max (symax, p.y);
-      p = mapp[0]->to_img ({ sx - test_xrange, sy + test_yrange });
-      sxmin = std::min (sxmin, p.x);
-      sxmax = std::max (sxmax, p.x);
-      symin = std::min (symin, p.y);
-      symax = std::max (symax, p.y);
+      /* Determine tile to analyze.  */
+      point_t tp = mapp[0]->to_scr ({ (coord_t)x[0], (coord_t)y[0] });
+      int sx = nearest_int (tp.x);
+      int sy = nearest_int (tp.y);
 
-      txmin = my_floor (sxmin);
-      tymin = my_floor (symin);
-      txmax = my_ceil (sxmax);
-      tymax = my_ceil (symax);
-      if (txmin < 0)
-	txmin = 0;
-      if (txmax > imgp[0]->width)
-	txmax = imgp[0]->width;
-      if (tymin < 0)
-	tymin = 0;
-      if (tymax > imgp[0]->height)
-	tymax = imgp[0]->height;
-      iterations++;
+      coord_t def_xrange = 2;
+      /* When not normalizing we want to avoid image in the tile.  */
+      if ((fparams.flags & finetune_no_normalize) || bw)
+        def_xrange = 1;
+      /* To determine rotation we need quite large context especially for Dufaycolor.  */
+      if (fparams.flags & finetune_coordinates)
+        def_xrange = param.type == Dufay ? 8 : 5;
+
+      coord_t test_xrange = fparams.range ? fparams.range : def_xrange;
+      coord_t test_yrange = test_xrange;
+      /* If screen tile is far from rectangular, compensate.
+         Also screen with strips has too few elements, so
+         finetuning is not very stressed to pick reasonable solution.  */
+      if (screen_with_vertical_strips_p (param.type))
+        test_yrange *= 3;
+      do
+        {
+          if (iterations)
+            test_xrange++, test_yrange++;
+          point_t p = mapp[0]->to_img ({ (coord_t)sx, (coord_t)sy });
+          coord_t sxmin = p.x, sxmax = p.x, symin = p.y, symax = p.y;
+          p = mapp[0]->to_img ({ sx - test_xrange, sy - test_yrange });
+          sxmin = std::min (sxmin, p.x);
+          sxmax = std::max (sxmax, p.x);
+          symin = std::min (symin, p.y);
+          symax = std::max (symax, p.y);
+          p = mapp[0]->to_img ({ sx + test_xrange, sy - test_yrange });
+          sxmin = std::min (sxmin, p.x);
+          sxmax = std::max (sxmax, p.x);
+          symin = std::min (symin, p.y);
+          symax = std::max (symax, p.y);
+          p = mapp[0]->to_img ({ sx + test_xrange, sy + test_yrange });
+          sxmin = std::min (sxmin, p.x);
+          sxmax = std::max (sxmax, p.x);
+          symin = std::min (symin, p.y);
+          symax = std::max (symax, p.y);
+          p = mapp[0]->to_img ({ sx - test_xrange, sy + test_yrange });
+          sxmin = std::min (sxmin, p.x);
+          sxmax = std::max (sxmax, p.x);
+          symin = std::min (symin, p.y);
+          symax = std::max (symax, p.y);
+
+          txmin = my_floor (sxmin);
+          tymin = my_floor (symin);
+          txmax = my_ceil (sxmax);
+          tymax = my_ceil (symax);
+          if (txmin < 0)
+            txmin = 0;
+          if (txmax > imgp[0]->width)
+            txmax = imgp[0]->width;
+          if (tymin < 0)
+            tymin = 0;
+          if (tymax > imgp[0]->height)
+            tymax = imgp[0]->height;
+          iterations++;
+        }
+      while (iterations < 10 && (txmin + 10 > txmax || tymin + 10 > tymax));
     }
-  while (iterations < 10 && (txmin + 10 > txmax || tymin + 10 > tymax));
+  else
+    {
+      const int sz = 100;
+      txmin = param.center.x - sz / 2;
+      txmax = param.center.x + sz / 2;
+      tymin = param.center.y - sz / 2;
+      tymax = param.center.y + sz / 2;
+      if (txmin < 0)
+        txmin = 0;
+      if (txmax > imgp[0]->width)
+        txmax = imgp[0]->width;
+      if (tymin < 0)
+        tymin = 0;
+      if (tymax > imgp[0]->height)
+        tymax = imgp[0]->height;
+    }
 
   if (txmin + 10 > txmax || tymin + 10 > tymax)
     {
       if (verbose)
-	{
-	  if (progress)
-	    progress->pause_stdout ();
-	  fprintf (stderr, "Too small tile %i-%i %i-%i\n", txmin, txmax, tymin,
-		   tymax);
-	  if (progress)
-	    progress->resume_stdout ();
-	}
+        {
+          if (progress)
+            progress->pause_stdout ();
+          fprintf (stderr, "Too small tile %i-%i %i-%i\n", txmin, txmax, tymin,
+                   tymax);
+          if (progress)
+            progress->resume_stdout ();
+        }
       ret.err = "too small tile";
       return ret;
     }
@@ -3879,7 +3970,9 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
           int cur_tymin = std::min (std::max (y[tileid] - theight / 2, 0),
                                     imgp[tileid]->height - theight - 1)
                           & ~1;
-          if (bw && (rparam2.ignore_infrared || !imgp[tileid]->has_grayscale_or_ir ()))
+          if (bw
+              && (rparam2.ignore_infrared
+                  || !imgp[tileid]->has_grayscale_or_ir ()))
             bw_is_simulated_infrared = true;
           /* FIXME: We only use render_to_scr since we eventually want to know
              pixel size. For stitched projects this is wrong.  */
@@ -3913,10 +4006,65 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
       best_solver.init (fparams.flags, rparam.screen_blur_radius,
                         rparam.red_strip_width, rparam.green_strip_width,
                         bw_is_simulated_infrared, tile_sharpened, results);
-      /* FIXME: For parallel solving this will yield race condition  */
       gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
-      best_uncertainty = best_solver.solve (
-          progress, !(fparams.flags & finetune_no_progress_report));
+      /* Wild guessing needs brute forcing scale and rotation.  */
+      if (best_solver.optimize_coordinates == 2)
+        {
+          best_uncertainty = -1;
+#pragma omp parallel for default(none) schedule(dynamic) collapse(2) shared(  \
+        fparams, rparam, pixel_size, best_uncertainty, verbose, imgp, twidth, \
+            theight, txmin, tymin, bw, progress, mapp, failed, best_solver,   \
+            results, bw_is_simulated_infrared, tile_sharpened)
+          for (int i = 3; i < 50; i++)
+            {
+              for (int rot = -90; rot < 80; rot += 10)
+                {
+                  finetune_solver solver;
+                  solver.n_tiles = 1;
+                  solver.twidth = twidth;
+                  solver.theight = theight;
+                  solver.collection_threshold = rparam.collection_threshold;
+                  solver.render_sharpen_params = rparam.sharpen;
+                  solver.pixel_size = pixel_size;
+                  solver.parallel
+                      = !(fparams.flags & finetune_no_progress_report);
+
+                  bool r;
+#pragma omp critical
+                  r = solver.copy_tile (0, best_solver);
+                  if (!r)
+                    failed = true;
+                  solver.min_scale = 1.0 / i;
+                  solver.max_scale = 1.0 / (i + 1);
+                  solver.min_rotate = rot;
+                  solver.max_rotate = rot + 10;
+                  solver.init (
+                      fparams.flags, rparam.screen_blur_radius,
+                      rparam.red_strip_width, rparam.green_strip_width,
+                      bw_is_simulated_infrared, tile_sharpened, results);
+                  coord_t u = solver.solve (
+                      progress,
+                      !(fparams.flags & finetune_no_progress_report));
+                  printf ("step %i rotate %i %f %f %f\n", i, rot, u, solver.get_scale (solver.start.data ()), solver.get_rotation (solver.start.data ()));
+#pragma omp critical
+                  {
+                    if (best_uncertainty < 0 || best_uncertainty > u)
+                      {
+                        best_solver = std::move (solver);
+                        best_uncertainty = u;
+                      }
+                  }
+                }
+            }
+          if (failed)
+            {
+              ret.err = "out of memory";
+              return ret;
+            }
+        }
+      else
+        best_uncertainty = best_solver.solve (
+            progress, !(fparams.flags & finetune_no_progress_report));
       gsl_set_error_handler (old_handler);
     }
   if (progress && progress->cancel_requested ())
@@ -3969,28 +4117,35 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   best_solver.set_results (ret, param, rparam, verbose, progress);
 
   if (fparams.simulated_file)
-    best_solver.write_file (best_solver.start.data (), fparams.simulated_file, 0, 0);
+    best_solver.write_file (best_solver.start.data (), fparams.simulated_file,
+                            0, 0);
   if (fparams.orig_file)
-    best_solver.write_file (best_solver.start.data (), fparams.orig_file, 0, 1);
+    best_solver.write_file (best_solver.start.data (), fparams.orig_file, 0,
+                            1);
   if (fparams.sharpened_file)
-    best_solver.write_file (best_solver.start.data (), fparams.sharpened_file, 0, 3);
+    best_solver.write_file (best_solver.start.data (), fparams.sharpened_file,
+                            0, 3);
   if (fparams.diff_file)
-    best_solver.write_file (best_solver.start.data (), fparams.diff_file, 0, 2);
+    best_solver.write_file (best_solver.start.data (), fparams.diff_file, 0,
+                            2);
   if (fparams.flags & finetune_produce_images)
     {
-      ret.simulated = best_solver.produce_image (best_solver.start.data (), 0, 0);
+      ret.simulated
+          = best_solver.produce_image (best_solver.start.data (), 0, 0);
       ret.orig = best_solver.produce_image (best_solver.start.data (), 0, 1);
       if (best_solver.optimize_sharpening)
-        ret.sharpened = best_solver.produce_image (best_solver.start.data (), 0, 3);
+        ret.sharpened
+            = best_solver.produce_image (best_solver.start.data (), 0, 3);
       ret.diff = best_solver.produce_image (best_solver.start.data (), 0, 2);
       if (fparams.screen_blur_file)
         {
           screen tmp;
           best_solver.collect_screen (&tmp, best_solver.start.data (), 0);
           screen scr, scr1;
-          scr.initialize (best_solver.type,
-                          best_solver.get_red_strip_width (best_solver.start.data ()),
-                          best_solver.get_green_strip_width (best_solver.start.data ()));
+          scr.initialize (
+              best_solver.type,
+              best_solver.get_red_strip_width (best_solver.start.data ()),
+              best_solver.get_green_strip_width (best_solver.start.data ()));
           best_solver.apply_blur (best_solver.start.data (), 0, &scr, &scr1);
           ret.dot_spread = scr.get_image (true, 1);
         }
@@ -4044,20 +4199,20 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
 
 DLL_PUBLIC bool
 finetune_misregistered_area (solver_parameters *solver,
-                             render_parameters &rparam,
-                             const scr_to_img_parameters &param,
-                             const image_data &img,
-                             const int_image_area &in_area,
-                             const finetune_area_parameters &fparam,
-                             progress_info *progress)
+			     render_parameters & rparam,
+			     const scr_to_img_parameters & param,
+			     const image_data & img,
+			     const int_image_area & in_area,
+			     const finetune_area_parameters & fparam,
+			     progress_info *progress)
 {
   int_image_area area = in_area.intersect ({ 0, 0, img.width, img.height });
   const bool verbose = true;
   if (area.empty_p () || param.type == Random)
     {
       if (verbose)
-        printf ("Finetuning area failed since area is empty or screen is "
-                "Random\n");
+	printf ("Finetuning area failed since area is empty or screen is "
+		"Random\n");
       return false;
     }
   int xsteps, ysteps;
@@ -4065,61 +4220,71 @@ finetune_misregistered_area (solver_parameters *solver,
   if (!xsteps || !ysteps)
     {
       if (verbose)
-        printf ("Finetuning area failed since xsteps or ysteps is 0\n");
+	printf ("Finetuning area failed since xsteps or ysteps is 0\n");
       return false;
     }
   int_image_area crop = rparam.get_scan_crop (img.width, img.height);
   int xstep = std::max (1, crop.width / xsteps);
   int ystep = std::max (1, crop.height / ysteps);
+  if (verbose)
+    printf ("Aiming for %ix%i grid, steps %ix%i\n", xsteps, ysteps, xstep,
+	    ystep);
+
   int max_points = 10000;
 
   if (!solver->points.size ())
     {
       /* If registration seem to make sense, try to expand it.  */
-      if (!area.contains_p ({ (int)param.center.x, (int)param.center.y })
-          || param.coordinate1.length () < 3
-          || param.coordinate2.length () < 3)
-        {
-          if (verbose)
-            printf ("Finetuning area failed since there are no solver points "
-                    "and coordinate system starts elsewhere\n");
-          return false;
-        }
+      if (!area.contains_p (
+			     {
+			     (int) param.center.x, (int) param.center.y})
+	  || param.coordinate1.length () < 3
+	  || param.coordinate2.length () < 3)
+	{
+	  if (verbose)
+	    printf ("Finetuning area failed since there are no solver points "
+		    "and coordinate system starts elsewhere\n");
+	  return false;
+	}
       finetune_parameters fparam;
-      fparam.flags |= finetune_position /*| finetune_multitile*/ | finetune_bw
-                      | finetune_no_progress_report;
+      fparam.flags |= finetune_position /*| finetune_multitile */  | finetune_bw
+	| finetune_no_progress_report;
       finetune_result res = finetune (rparam, param, img, { param.center },
-                                      nullptr, fparam, progress);
+				      nullptr, fparam, progress);
       finetune_result res2
-          = finetune (rparam, param, img, { param.center + param.coordinate1 },
-                      nullptr, fparam, progress);
+	= finetune (rparam, param, img, { param.center + param.coordinate1 },
+		    nullptr, fparam, progress);
       finetune_result res3
-          = finetune (rparam, param, img, { param.center + param.coordinate2 },
-                      nullptr, fparam, progress);
+	= finetune (rparam, param, img, { param.center + param.coordinate2 },
+		    nullptr, fparam, progress);
       if (!res.success || !res2.success || !res3.success)
-        {
-          if (verbose)
-            printf ("Finetuning area failed since we failed to identify 3 "
-                    "basis points\n");
-          return false;
-        }
+	{
+	  if (verbose)
+	    printf ("Finetuning area failed since we failed to identify 3 "
+		    "basis points\n");
+	  return false;
+	}
       solver->add_point (res.solver_point_img_location,
-                         res.solver_point_screen_location,
-                         res.solver_point_color);
+			 res.solver_point_screen_location,
+			 res.solver_point_color);
       solver->add_or_modify_point (res2.solver_point_img_location,
-                                   res2.solver_point_screen_location,
-                                   res2.solver_point_color);
+				   res2.solver_point_screen_location,
+				   res2.solver_point_color);
       solver->add_or_modify_point (res3.solver_point_img_location,
-                                   res3.solver_point_screen_location,
-                                   res3.solver_point_color);
+				   res3.solver_point_screen_location,
+				   res3.solver_point_color);
       max_points = 50;
-      xstep = my_ceil (
-          std::max (fabs (param.coordinate1.x), fabs (param.coordinate2.x)));
-      ystep = my_ceil (
-          std::max (fabs (param.coordinate1.y), fabs (param.coordinate2.y)));
+      xstep =
+	my_ceil (std::
+		 max (fabs (param.coordinate1.x),
+		      fabs (param.coordinate2.x)));
+      ystep =
+	my_ceil (std::
+		 max (fabs (param.coordinate1.y),
+		      fabs (param.coordinate2.y)));
       if (verbose)
-        printf ("Finetuning area started by adding basis, steps %i %i\n",
-                xstep, ystep);
+	printf ("Finetuning area started by adding basis, steps %i %i\n",
+		xstep, ystep);
     }
   /* See if points are corelated around a line.  In this case the current
      solution is probably quite iffy and we need to expand slowly.  */
@@ -4130,24 +4295,57 @@ finetune_misregistered_area (solver_parameters *solver,
       printf ("line width: %f\n", line_width);
       const int ratio = 5;
       if (xstep > line_width / ratio)
-        {
-          xstep = my_ceil ((line_width) / ratio);
-          max_points = 50;
-        }
+	{
+	  xstep = my_ceil ((line_width) / ratio);
+	  max_points = 50;
+	}
       if (ystep > line_width / ratio)
-        {
-          ystep = my_ceil ((line_width) / ratio);
-          max_points = 50;
-        }
+	{
+	  ystep = my_ceil ((line_width) / ratio);
+	  max_points = 50;
+	}
     }
 
   /* Too small step will lead to re-solving existing points only.  */
   xstep = std::max (xstep,
-		    (int)my_ceil (std::max (fabs (param.coordinate1.x),
-					    fabs (param.coordinate2.x)) * 2));
-  ystep = std::max (ystep,
-		    (int)my_ceil (std::max (fabs (param.coordinate1.y),
-					    fabs (param.coordinate2.y)) * 2));
+		    (int) my_ceil (std::max (fabs (param.coordinate1.x),
+					     fabs (param.coordinate2.x)) *
+				   2));
+  ystep =
+    std::max (ystep,
+	      (int) my_ceil (std::
+			     max (fabs (param.coordinate1.y),
+				  fabs (param.coordinate2.y)) * 2));
+
+  /* We may end up with very large grid; limit it to maximal search distance
+     so we do not end up allocating very large grid.  */
+  if (max_points < 1000)
+    {
+      int xmin = INT_MAX;
+      int ymin = INT_MAX;
+      int xmax = INT_MIN;
+      int ymax = INT_MIN;
+    for (auto p:solver->points)
+	if (area.contains_p (
+			      {
+			      (int) p.img.x, (int) p.img.y}))
+	{
+	  xmin = std::min (xmin, (int) p.img.x);
+	  ymin = std::min (ymin, (int) p.img.y);
+	  xmax = std::max (xmax, (int) p.img.x);
+	  ymax = std::max (ymax, (int) p.img.y);
+	}
+      int_image_area max_search_range
+      {
+      xmin - xstep * max_points, ymin - ystep * max_points,
+	  xmax - xmin + xstep * max_points * 2,
+	  ymax - ymin + ystep * max_points * 2};
+      if (verbose)
+	printf ("Intersecting with range %i %i %i %i\n", max_search_range.x,
+		max_search_range.y, max_search_range.width,
+		max_search_range.height);
+      area = area.intersect (max_search_range);
+    }
 
   const int range = 3;
   int xsubstep = std::max (1, xstep / range);
@@ -4166,34 +4364,31 @@ finetune_misregistered_area (solver_parameters *solver,
     bad
   };
 
-  std::vector<elt> tiles (xsubsteps * ysubsteps, unknown);
+  std::vector < elt > tiles (xsubsteps * ysubsteps, unknown);
 
-  const auto get_cell_pos = [area,xsubstep,ysubstep] (point_t p) -> int_point_t
-  {
-    return {(int64_t)my_floor ((p.x - area.x) / (coord_t)xsubstep),
-	    (int64_t)my_floor ((p.y - area.y) / (coord_t)ysubstep)};
+  const auto get_cell_pos =[area, xsubstep, ysubstep] (point_t p)->int_point_t {
+    return {(int64_t) my_floor ((p.x - area.x) / (coord_t) xsubstep),
+	    (int64_t) my_floor ((p.y - area.y) / (coord_t) ysubstep)};
   };
-  const auto in_range = [xsubsteps,ysubsteps] (int_point_t p) -> bool
-  {
+  const auto in_range =[xsubsteps, ysubsteps] (int_point_t p)->bool {
     return p.x >= 0 && p.x < xsubsteps && p.y >= 0 && p.y < ysubsteps;
   };
-  const auto set_cell = [in_range,&tiles,xsubsteps] (int_point_t p, enum elt value) -> void
-  {
+  const auto set_cell =
+    [in_range, &tiles, xsubsteps] (int_point_t p, enum elt value)->void {
     if (in_range (p))
       tiles[p.y * xsubsteps + p.x] = value;
   };
-  const auto get_cell = [in_range,&tiles,xsubsteps] (int_point_t p) -> elt
-  {
+  const auto get_cell =[in_range, &tiles, xsubsteps] (int_point_t p)->elt {
     assert (in_range (p));
     return tiles[p.y * xsubsteps + p.x];
   };
 
   if (verbose)
     printf ("Adding points to area with top left (%i,%i) width %i height %i, "
-            "steps %i %i size %i %i with known points %i\n",
-            area.x, area.y, area.width, area.height, xsubsteps, ysubsteps,
-            xsubstep, ysubstep, (int)solver->points.size ());
-  for (auto p : solver->points)
+	    "steps %i %i size %i %i with known points %i\n",
+	    area.x, area.y, area.width, area.height, xsubsteps, ysubsteps,
+	    xsubstep, ysubstep, (int) solver->points.size ());
+for (auto p:solver->points)
     set_cell (get_cell_pos (p.img), known);
 
   /* This is essentialy an floodfill.  If there is 3x3 tile
@@ -4201,61 +4396,76 @@ finetune_misregistered_area (solver_parameters *solver,
      known point; enqueue its center for finetuning.  */
   do
     {
-      std::vector<point_t> points;
+      std::vector < point_t > points;
       for (int y = range; y < ysubsteps - range; y++)
-        for (int x = range; x < xsubsteps - range; x++)
-          {
-            bool ok = true;
-            /* If range is 3 we search
+	for (int x = range; x < xsubsteps - range; x++)
+	  {
+	    bool ok = true;
+	    /* If range is 3 we search
 
-               b b b b b b b
-               b . . . . . p
-               b . . . . . p
-               b . . p . . p
-               b . . . . . p
-               b . . . . . p
-               b b b b b b b
+	       b b b b b b b
+	       b . . . . . p
+	       b . . . . . p
+	       b . . p . . p
+	       b . . . . . p
+	       b . . . . . p
+	       b b b b b b b
 
-               p is the tile we consider to compute points n.
-               . is required to have no control point
-               b is required to have at least one control point.
+	       p is the tile we consider to compute points n.
+	       . is required to have no control point
+	       b is required to have at least one control point.
 
-               So at the end, the computed points should approximately
-               make grid with spacing of 3
+	       So at the end, the computed points should approximately
+	       make grid with spacing of 3
 
-               p . . p . . p
-               . . . . . . .
-               . . . . . . .
-               p . . p . . p
-               . . . . . . .
-               . . . . . . .
-               p . . p . . p */
-            for (int yy = y - range + 1; yy <= y + range - 1 && ok; yy++)
-              for (int xx = x - range + 1; xx <= x + range - 1 && ok; xx++)
-                if (get_cell ({xx, yy}) != unknown)
-                  ok = false;
-            if (!ok)
-              continue;
-            int nknown = 0;
-            for (int yy = y - range; yy <= y + range; yy++)
-              for (int xx = x - range; xx <= x + range; xx++)
-                if (get_cell ({xx, yy}) == known)
-                  nknown++;
-            if (!nknown)
-              continue;
-	    set_cell ({x, y}, to_be_computed);
-            points.push_back ({ ((x + (coord_t)0.5) * xsubstep) + area.x,
-                                ((y + (coord_t)0.5) * ysubstep) + area.y });
-	    assert ((get_cell_pos (points.back ()) == (int_point_t){x,y}));
-            if (verbose && 0)
-              printf ("Will compute %i %i\n", x, y);
-          }
+	       p . . p . . p
+	       . . . . . . .
+	       . . . . . . .
+	       p . . p . . p
+	       . . . . . . .
+	       . . . . . . .
+	       p . . p . . p */
+	    for (int yy = y - range + 1; yy <= y + range - 1 && ok; yy++)
+	      for (int xx = x - range + 1; xx <= x + range - 1 && ok; xx++)
+		if (get_cell (
+			       {
+			       xx, yy}
+		    ) != unknown)
+	      ok = false;
+	    if (!ok)
+	      continue;
+	    int nknown = 0;
+	    for (int yy = y - range; yy <= y + range; yy++)
+	      for (int xx = x - range; xx <= x + range; xx++)
+		if (get_cell (
+			       {
+			       xx, yy}
+		    ) == known)
+	      nknown++;
+	    if (!nknown)
+	      continue;
+	    set_cell (
+		       {
+		       x, y}
+		       , to_be_computed);
+	    points.push_back (
+			       {
+			       ((x + (coord_t) 0.5) * xsubstep) + area.x,
+			       ((y + (coord_t) 0.5) * ysubstep) + area.y}
+	    );
+	    assert ((get_cell_pos (points.back ()) == (int_point_t)
+		     {
+		     x, y}
+		    ));
+	    if (verbose && 0)
+	      printf ("Will compute %i %i\n", x, y);
+	  }
       if (!points.size ())
-        break;
+	break;
       if (progress)
-        progress->set_task ("finetuning points nearby known points",
-                            points.size ());
-      std::vector<finetune_result> res (points.size ());
+	progress->set_task ("finetuning points nearby known points",
+			    points.size ());
+      std::vector < finetune_result > res (points.size ());
       /* We are going to initialize render inside of nested region.
          TODO: We probably want to set omp_nested on proper place.  */
 #ifdef _OPENMP
@@ -4264,55 +4474,71 @@ finetune_misregistered_area (solver_parameters *solver,
 #pragma omp parallel for default(none) schedule(dynamic)                      \
     shared(rparam, param, progress, img, solver, res, points)
       for (size_t i = 0; i < points.size (); i++)
-        {
-          if (progress && progress->cancel_requested ())
-            continue;
-          finetune_parameters fparam;
-          fparam.flags
-              |= finetune_position /*| finetune_multitile*/ | finetune_bw
-                 | finetune_no_progress_report;
-          res[i]
-              = finetune (rparam, param, img,
-                          { points[i] },
-                          nullptr, fparam, progress);
-          if (progress)
-            progress->inc_progress ();
-        }
+	{
+	  if (progress && progress->cancel_requested ())
+	    continue;
+	  finetune_parameters fparam;
+	  fparam.flags |= finetune_position /*| finetune_multitile */  | finetune_bw
+	    | finetune_no_progress_report;
+	  res[i] = finetune (rparam, param, img,
+			     {
+			     points[i]}
+			     , nullptr, fparam, progress);
+	  if (progress)
+	    progress->inc_progress ();
+	}
       if (progress && progress->cancel_requested ())
-        {
-          if (verbose)
-            printf ("Finetuning area cancelled\n");
-          return false;
-        }
+	{
+	  if (verbose)
+	    printf ("Finetuning area cancelled\n");
+	  return false;
+	}
+      if (progress)
+	progress->set_task ("processing points found", 1);
 
       scr_to_img map;
       if (!map.set_parameters (param, img))
-        {
-          if (verbose)
-            printf ("Finetuning area failed since it failed to initialize "
-                    "scr-to-img\n");
-          return false;
-        }
+	{
+	  if (verbose)
+	    printf ("Finetuning area failed since it failed to initialize "
+		    "scr-to-img\n");
+	  return false;
+	}
 
       /* Clear info about points to be computed.  */
       for (int i = 0; i < xsubsteps * ysubsteps; i++)
-        if (tiles[i] == to_be_computed)
-          tiles[i] = unknown;
+	if (tiles[i] == to_be_computed)
+	  tiles[i] = unknown;
       npoints = 0;
       if (verbose)
-        printf ("Will consider %i results\n", (int)res.size ());
+	printf ("Will consider %i results\n", (int) res.size ());
       /* Now prune points that seems badr.  */
       for (size_t i = 0; i < res.size ();)
-        {
-          finetune_result &r = res[i];
-          bool ok = r.success;
+	{
+	  finetune_result & r = res[i];
+	  bool ok = r.success;
 	  if (!r.success)
 	    ok = false;
+	  else
+	    if (fabs
+		(get_cell_pos (r.solver_point_img_location).x -
+		 get_cell_pos (points[i]).x) > 3
+		|| fabs (get_cell_pos (r.solver_point_img_location).y -
+			 get_cell_pos (points[i]).y) > 3)
+	    {
+	      if (verbose)
+		printf
+		  ("found point: %f %f which is too far from desired location %f %f\n",
+		   r.solver_point_img_location.x,
+		   r.solver_point_img_location.y, points[i].x, points[i].y);
+	      set_cell (get_cell_pos (r.solver_point_img_location), bad);
+	      ok = false;
+	    }
 	  /* Point must be new.  */
 	  else if (solver->find_point (r.solver_point_screen_location) >= 0)
 	    {
 	      if (verbose)
-		printf ("found grid: %f %f which already exists\n",
+		printf ("found point: %f %f which already exists\n",
 			r.solver_point_img_location.x,
 			r.solver_point_img_location.y);
 	      set_cell (get_cell_pos (r.solver_point_img_location), known);
@@ -4322,80 +4548,88 @@ finetune_misregistered_area (solver_parameters *solver,
 	  else if (r.contrast < fparam.min_contrast)
 	    {
 	      if (verbose)
-		printf ("found grid: %f %f with too small contrast %f\n",
+		printf ("found point: %f %f with too small contrast %f\n",
 			r.solver_point_img_location.x,
-			r.solver_point_img_location.y,
-			r.contrast);
+			r.solver_point_img_location.y, r.contrast);
 	      set_cell (get_cell_pos (r.solver_point_img_location), bad);
 	      ok = false;
 	    }
 	  /* Check distance threshold.  */
 	  else
 	    {
-	      point_t transformed
-		  = map.to_scr (r.solver_point_img_location);
+	      point_t transformed = map.to_scr (r.solver_point_img_location);
 	      ok = transformed.dist_from (r.solver_point_screen_location)
-		   < fparam.max_displacement;
+		< fparam.max_displacement;
 	      int_point_t cell = get_cell_pos (r.solver_point_img_location);
 	      if (!ok)
 		set_cell (cell, bad);
 	      if (verbose)
-		printf (
-		    "found grid: %i %i transformed: %f %f finetuned: %f "
-		    "%f displacement %f %s\n",
-		    (int)cell.x, (int)cell.y, transformed.x, transformed.y,
-		    r.solver_point_screen_location.x,
-		    r.solver_point_screen_location.y,
-		    transformed.dist_from (r.solver_point_screen_location),
-		    ok ? "in threshold" : "out of threshold");
+		printf ("found grid: %i %i transformed: %f %f finetuned: %f "
+			"%f displacement %f %s\n",
+			(int) cell.x, (int) cell.y, transformed.x,
+			transformed.y, r.solver_point_screen_location.x,
+			r.solver_point_screen_location.y,
+			transformed.dist_from (r.
+					       solver_point_screen_location),
+			ok ? "in threshold" : "out of threshold");
 	    }
-          if (!ok)
-            {
-              res[i] = std::move (res.back ());
-              res.pop_back ();
-            }
-          else
-            i++;
-        }
+	  if (!ok)
+	    {
+	      res[i] = std::move (res.back ());
+	      res.pop_back ();
+	      points[i] = std::move (points.back ());
+	      points.pop_back ();
+	    }
+	  else
+	    i++;
+	}
       if (verbose)
-        printf ("Will consider %i meaningful results\n", (int)res.size ());
+	printf ("Will consider %i meaningful results\n", (int) res.size ());
       /* If we have many points; rule out uncertain ones.  Let the value only
          drop in each wave.  */
       if (res.size () > 5)
-        {
-          std::sort (res.begin (), res.end (),
-                     [] (finetune_result &a, finetune_result &b)
-                       { return a.uncertainty > b.uncertainty; });
-          max_uncertainty = std::min (
-              max_uncertainty,
-              res[(res.size () - 1) * (1 - fparam.uncertainty_ratio)]
-                  .uncertainty);
-        }
+	{
+	  std::sort (res.begin (), res.end (),
+		     [](finetune_result & a, finetune_result & b)
+		     {
+		     return a.uncertainty > b.uncertainty;
+		     }
+	  );
+	  max_uncertainty = std::min (max_uncertainty,
+				      res[(res.size () - 1) * (1 -
+							       fparam.
+							       uncertainty_ratio)].
+				      uncertainty);
+	}
 
       /* Now add computed points to solver and update tiles.  */
       for (size_t i = 0; i < res.size (); i++)
-        {
-          finetune_result &r = res[i];
+	{
+	  finetune_result & r = res[i];
 	  int_point_t cell = get_cell_pos (r.solver_point_img_location);
-          if (r.uncertainty <= max_uncertainty
+	  if (r.uncertainty <= max_uncertainty
 	      && solver->find_point (r.solver_point_screen_location) < 0)
-            {
-              solver->add_point (r.solver_point_img_location,
-                                 r.solver_point_screen_location,
-                                 r.solver_point_color);
+	    {
+	      solver->add_point (r.solver_point_img_location,
+				 r.solver_point_screen_location,
+				 r.solver_point_color);
 	      set_cell (cell, known);
-              nfound++;
-              npoints++;
-              if (nfound > max_points)
-                {
-                  if (verbose)
-                    printf ("reached max points of %i\n", max_points);
-                  return true;
-                }
-            }
+	      nfound++;
+	      npoints++;
+	    }
 	  else
-	    set_cell (cell, bad);
-        }
+	    {
+	      if (verbose)
+		printf ("Bad point %f %f %i\n", r.uncertainty, max_uncertainty,solver->find_point (r.solver_point_screen_location));
+	      set_cell (cell, bad);
+	    }
+	}
+      if (nfound > max_points)
+	{
+	  if (verbose)
+	    printf ("reached max points of %i\n", max_points);
+	  return true;
+	}
     }
   while (npoints);
   if (verbose)
@@ -4479,6 +4713,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
       {
         finetune_result &r = res[x + y * xsteps];
         if (r.success && r.uncertainty <= max_uncertainty
+	    && r.contrast > fparam.min_contrast
 	    && solver->find_point (r.solver_point_screen_location) < 0)
 	  {
 	    solver->add_point (r.solver_point_img_location,
@@ -4709,8 +4944,13 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                     point_t p
                         = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
                     rgbdata m = collection_scr.noninterpolated_mult (p);
-                    renderedu.put_pixel (x - area.x + ext, m.red * (luminosity_t)65535,
-                                         m.green * (luminosity_t)65535, m.blue * (luminosity_t)65535);
+                    renderedu.put_pixel (x - area.x + ext,
+                        std::clamp (m.red, (luminosity_t)0, (luminosity_t)1)
+                            * (luminosity_t)65535,
+                        std::clamp (m.green, (luminosity_t)0, (luminosity_t)1)
+                            * (luminosity_t)65535,
+                        std::clamp (m.blue, (luminosity_t)0, (luminosity_t)1)
+                            * (luminosity_t)65535);
                   }
                 if (!renderedu.write_row ())
                   return false;
@@ -4760,6 +5000,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       *ret_blue = { 0, 0, 1 };
       return false;
     }
+  printf ("Color loss info %f %f %f\n", wr, wg, wb);
   red /= wr;
   green /= wg;
   blue /= wb;
@@ -4797,7 +5038,7 @@ render_screen (image_data &img, const scr_to_img_parameters &param,
     return false;
   if (!map.set_parameters (param, img))
     return false;
-  coord_t pixel_size = map.pixel_size (width, height);
+  coord_t pixel_size = map.pixel_size ({0, 0, width, height});
   sharpen_parameters sharpen = rparam.sharpen;
   sharpen.usm_radius = rparam.screen_blur_radius * pixel_size;
   sharpen.scanner_mtf_scale *= pixel_size;

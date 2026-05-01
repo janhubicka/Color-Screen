@@ -535,7 +535,7 @@ void SharpnessPanel::updateMTFChart() {
   if (img && state.scrToImg.type != colorscreen::Random) {
       colorscreen::scr_to_img scrToImgObj;
       scrToImgObj.set_parameters(state.scrToImg, *img);
-      double pixel_size = scrToImgObj.pixel_size(img->width, img->height);
+      double pixel_size = scrToImgObj.pixel_size({0, 0, img->width, img->height});
       screenFreq = colorscreen::scr_names[(int)state.scrToImg.type].frequency * pixel_size;
   }
 

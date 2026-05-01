@@ -191,12 +191,7 @@ public:
     return colorscreen::patch_proportions (m_param.type, rparam);
   }
   /* Estimate pixel size for image of dimensions IMG_WIDTH x IMG_HEIGHT.  */
-  pure_attr coord_t
-  pixel_size (int img_width, int img_height) const noexcept
-  {
-    coord_t bx = (coord_t)img_width / 2, by = (coord_t)img_height / 2;
-    return to_scr ({ bx + 0, by + 0 }).dist_from (to_scr ({ bx + 1, by + 0 }));
-  }
+  pure_attr coord_t pixel_size (int_image_area area) const noexcept;
   /* Initialize the mapping with given parameters for IMG.
      ROTATION_ADJUSTMENT can be used to adjust the rotation.
      Return true on success.  */

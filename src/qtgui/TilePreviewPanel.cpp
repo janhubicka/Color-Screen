@@ -128,7 +128,7 @@ TilePreviewPanel::TilePreviewPanel(StateGetter stateGetter,
         req.scanHeight = scan->height;
         scr_to_img scrToImgObj;
         scrToImgObj.set_parameters(state.scrToImg, scan->width, scan->height);
-        req.pixelSize = scrToImgObj.pixel_size(scan->width, scan->height);
+        req.pixelSize = scrToImgObj.pixel_size({0,0,scan->width, scan->height});
       } else {
         req.scanWidth = 0; req.scanHeight = 0; req.pixelSize = 1.0;
       }

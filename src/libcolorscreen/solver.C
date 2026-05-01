@@ -737,7 +737,12 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
   int width = (r1.width + step - 1) / step, height = (r1.height + step - 1) / step;
   if (progress)
     progress->set_task ("computing mesh", width * height);
-  std::unique_ptr <mesh> mesh_trans = std::make_unique<mesh> (r1, step, step);
+
+  /* Expand the range so inversion is not using out of range points.  */
+  int_image_area r2 = {-step, -step, img_data.width + 2*step, img_data.height + 2*step};
+  std::unique_ptr <mesh> mesh_trans = std::make_unique<mesh> (r2, step, step);
+  width = mesh_trans->get_width ();
+  height = mesh_trans->get_height ();
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
     shared(progress, r1, step, width, height, sparam, img_data,               \
                mesh_trans, param)

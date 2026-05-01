@@ -224,11 +224,7 @@ rgbdata
 render_interpolate::compensate_saturation_loss_scr (point_t p, rgbdata c) const
 {
   if (!m_saturation_loss_table)
-    {
-      m_saturation_matrix.apply_to_rgb (c.red, c.green, c.blue, &c.red,
-                                         &c.green, &c.blue);
-      return c;
-    }
+    return m_saturation_matrix.apply_to_rgb (c);
   return m_saturation_loss_table->compensate_saturation_loss_img (
       m_scr_to_img.to_img (p), c);
 }
@@ -313,14 +309,26 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
 				    cred.blue, cgreen.blue, cblue.blue,
 				    (luminosity_t)0,
 				    (luminosity_t)0, (luminosity_t)0, (luminosity_t)0, (luminosity_t)1);
+		  /* cred is result of data collection of red element; this means cred.blue is amount
+		     of blue collected to red.  So when screen is fully red, we will account
+		     cred.red, cgreen.red, cblue.red.   This is why we need to transpose.  */
 		  sat.transpose ();
 		  m_saturation_matrix = sat.invert ();
+#if 0
+		  m_saturation_matrix.apply_to_rgb (rgbdata(1,0,0)).print (stdout);
+		  m_saturation_matrix.print (stdout);
+		  m_saturation_matrix.apply_to_rgb (cred).print (stdout);
+		  m_saturation_matrix.apply_to_rgb (cgreen).print (stdout);
+		  m_saturation_matrix.apply_to_rgb (cblue).print (stdout);
+#endif
                 }
             }
         }
     }
   int_image_area full_range = m_scr_to_img.get_range (0, 0, m_img.width, m_img.height);
   int_image_area analysis_area = area;
+  //printf ("full %i %i %i %i\n", full_range.x, full_range.y, full_range.width, full_range.height);
+  //printf ("area %i %i %i %i\n", area.x, area.y, area.width, area.height);
 
   /* If area is significantly larger then half of image, just compute whole image.  */
   if (analysis_area.width * analysis_area.height > full_range.width * full_range.height / 2)

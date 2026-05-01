@@ -309,10 +309,10 @@ analyze_scanner_blur_worker::step3 ()
   std::unique_ptr<scanner_blur_correction_parameters> scanner_blur_correction
       = std::make_unique<scanner_blur_correction_parameters> ();
   scanner_blur_correction->alloc (xsteps, ysteps, mode);
-  coord_t pixel_size;
   scr_to_img map;
   map.set_parameters (param, scan);
-  pixel_size = map.pixel_size (scan.width, scan.height);
+  /* TODO: get correct tile.  */
+  coord_t pixel_size = map.pixel_size ({0, 0, scan.width, scan.height});
   progress->set_task ("summarizing results", 1);
   bool fail = false;
   for (int y = 0; y < ysteps; y++)

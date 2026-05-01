@@ -158,7 +158,7 @@ void CapturePanel::setupUi()
         if (img && img->width > 0 && img->height > 0) {
             colorscreen::scr_to_img map;
             map.set_parameters(state.scrToImg, *img);
-            double pixel_size = map.pixel_size(img->width, img->height);
+            double pixel_size = map.pixel_size({0, 0, img->width, img->height});
             double estimated_dpi = state.scrToImg.estimate_dpi(pixel_size);
             onUseRes(estimated_dpi);
         }
@@ -396,7 +396,7 @@ void CapturePanel::setupUi()
             if (img && img->width > 0 && img->height > 0) {
                 colorscreen::scr_to_img map;
                 map.set_parameters(state.scrToImg, *img);
-                double pixel_size = map.pixel_size(img->width, img->height);
+                double pixel_size = map.pixel_size({0, 0, img->width, img->height});
                 double estimated_dpi = state.scrToImg.estimate_dpi(pixel_size);
                 if (estimated_dpi > 0) {
                     showScreenRes = true;

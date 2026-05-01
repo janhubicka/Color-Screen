@@ -121,6 +121,8 @@ public:
   {
     /* Initialize early so we can determine ranges before precomputing.  */
     m_ok = m_scr_to_img.set_parameters (param, img);
+    if (m_ok)
+      m_pixel_size = m_scr_to_img.pixel_size (rparam.get_image_area (img.width, img.height));
   }
   ~render_to_scr ();
 
@@ -265,6 +267,7 @@ protected:
 private:
   int_image_area m_final_range;
   bool m_ok;
+  coord_t m_pixel_size = -1;
 };
 
 /* Do no rendering of color screen.  */
