@@ -299,24 +299,23 @@ mesh::get_src_range (image_area area_in) const noexcept
   int iy1 = floor ((area_in.y + m_yshift) * m_ystepinv);
   int iy2 = floor ((area_in.y + area_in.height + m_yshift) * m_ystepinv);
 
+  ix1 = std::clamp (ix1, -1, m_width - 1);
+  ix2 = std::clamp (ix2, -1, m_width - 1);
+  iy1 = std::clamp (iy1, -1, m_height - 1);
+  iy2 = std::clamp (iy2, -1, m_height - 1);
+
   /* 2. Account for intersections of AREA_IN boundaries with grid lines.  */
   /* Top and bottom boundaries.  */
   for (int ix = ix1 + 1; ix <= ix2; ix++)
     {
-      if (ix >= 0 && ix < m_width)
-	{
-	  area.extend (apply ({ix * m_xstep - m_xshift, area_in.y}));
-	  area.extend (apply ({ix * m_xstep - m_xshift, area_in.y + area_in.height}));
-	}
+      area.extend (apply ({ix * m_xstep - m_xshift, area_in.y}));
+      area.extend (apply ({ix * m_xstep - m_xshift, area_in.y + area_in.height}));
     }
   /* Left and right boundaries.  */
   for (int iy = iy1 + 1; iy <= iy2; iy++)
     {
-      if (iy >= 0 && iy < m_height)
-	{
-	  area.extend (apply ({area_in.x, iy * m_ystep - m_yshift}));
-	  area.extend (apply ({area_in.x + area_in.width, iy * m_ystep - m_yshift}));
-	}
+      area.extend (apply ({area_in.x, iy * m_ystep - m_yshift}));
+      area.extend (apply ({area_in.x + area_in.width, iy * m_ystep - m_yshift}));
     }
 
   /* 3. Account for interior grid points.  */
