@@ -50,6 +50,11 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
                       std::shared_ptr<colorscreen::progress_info> progress,
                       const char* taskName) 
 {
+    if (progress && progress->cancel_requested()) {
+        emit imageReady(reqId, QImage(), xOffset, yOffset, scale, false);
+        return;
+    }
+    if (progress) progress->set_task ("Queuing render task", 1);
     // Capture necessary state under lock
     colorscreen::scr_to_img_parameters scrToImg;
     colorscreen::scr_detect_parameters scrDetect;
@@ -62,6 +67,8 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
         renderType = m_renderType;
     }
 
+    if (progress) progress->set_task ("Queuing to thread pool", 1);
+
     // Run actual rendering in thread pool
     // Clean up finished futures to prevent unbounded growth
     m_activeFutures.removeIf([](const QFuture<void>& f) { return f.isFinished(); });
@@ -71,6 +78,13 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
                        frameParams, progress, taskName,
                        scrToImg, scrDetect, renderType]() mutable {
         
+        if (progress && progress->cancel_requested()) {
+            emit imageReady(reqId, QImage(), xOffset, yOffset, scale, false);
+            return;
+        }
+        if (progress) progress->set_task ("Render task started", 1);
+        if (progress) progress->set_task ("Calculating transformation", 1);
+
         if (!m_scan || (!m_scan->has_grayscale_or_ir () && !m_scan->has_rgb ())) {
             emit imageReady(reqId, QImage(), xOffset, yOffset, scale, true);
             return;
@@ -132,6 +146,10 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
            progress->set_task(taskName, 1);
         }
 
+        if (progress && progress->cancel_requested()) {
+            emit imageReady(reqId, QImage(), xOffset, yOffset, scale, false);
+            return;
+        }
         colorscreen::sub_task task (progress.get ());
         try {
             qCDebug(lcRenderSync) << "  Task ID:" << reqId << " starts rendering tile";

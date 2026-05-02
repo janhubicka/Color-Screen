@@ -1973,6 +1973,7 @@ void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progre
 
     qCDebug(lcRenderSync) << "ImageWidget::onTriggerRender - Starting render ID:" << reqId << " scale:" << data.scale;
     
+    progress->set_task ("Invoking renderer", 1);
     // Trigger generic render
     bool result = QMetaObject::invokeMethod(m_renderer, "render", Qt::QueuedConnection,
                               Q_ARG(int, reqId),
