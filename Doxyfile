@@ -1,0 +1,41 @@
+# Doxyfile for Color-Screen
+PROJECT_NAME           = "Color-Screen"
+PROJECT_BRIEF          = "High-performance color screening and image processing application"
+OUTPUT_DIRECTORY       = doc
+GENERATE_LATEX         = NO
+GENERATE_MAN           = NO
+GENERATE_RTF           = NO
+CASE_SENSE_NAMES       = YES
+INPUT                  = src/libcolorscreen \
+                         src/qtgui \
+                         src/colorscreen \
+                         README.md
+FILE_PATTERNS          = *.C \
+                         *.cpp \
+                         *.h \
+                         *.md
+RECURSIVE              = YES
+USE_MDFILE_AS_MAINPAGE = README.md
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+HTML_DYNAMIC_MENUS     = YES
+HTML_DYNAMIC_SECTIONS  = YES
+HTML_INDEX_NUM_ENTRIES = 100
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+FULL_PATH_NAMES        = YES
+STRIP_FROM_PATH        = src
+STRIP_FROM_INC_PATH    = src/libcolorscreen/include
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = NO
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+HAVE_DOT               = NO
