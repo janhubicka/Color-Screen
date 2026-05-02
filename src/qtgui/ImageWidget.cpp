@@ -445,328 +445,13 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
     
     p.drawImage(targetRect, m_pixmap, QRectF(0, 0, m_pixmap.width(), m_pixmap.height()));
 
-
-    if (m_showRegistrationPoints && m_solver && m_scan && m_scrToImg) {
-      /* Schedule a background re-render of the points overlay whenever
-         parameters, view, or point data changed.  Non-blocking — returns
-         immediately; update() is called when the new overlay is ready.  */
-      if (m_pointsOverlayDirty)
-        schedulePointsOverlayRender ();
-
-      /* Composite the pre-rendered overlay on top of the image.  The overlay
-         was rendered at (m_lastPointsScale, m_lastPointsX, m_lastPointsY)
-         and contains one pixel-per-widget-pixel at that view state.
-         Use the same stretch / offset math as the main pixmap so that panning
-         and zooming still look reasonable while a new overlay is computing.  */
-      if (!m_pointsOverlay.isNull ()) {
-        double scaleFactor = m_scale / m_lastPointsScale;
-        double xPos = (m_lastPointsX - m_viewX) * m_scale;
-        double yPos = (m_lastPointsY - m_viewY) * m_scale;
-        double targetW = m_pointsOverlay.width ()  * scaleFactor;
-        double targetH = m_pointsOverlay.height () * scaleFactor;
-        p.drawImage (QRectF (xPos, yPos, targetW, targetH), m_pointsOverlay);
-      }
-    }
-
-
-
-
-    // Draw profile spots: always while in AddPointMode (like gtkgui.C's color_profiling mode),
-    // or when the show_profile_spots flag is set.
-    bool showSpots = m_profileSpots && !m_profileSpots->empty() && m_scan && m_scrToImg &&
-                     (m_interactionMode == AddPointMode || m_showProfileSpots);
-    if (showSpots) {
-      p.setRenderHint(QPainter::Antialiasing);
-
-      colorscreen::scr_to_img map;
-      map.set_parameters(*m_scrToImg, *m_scan);
-      
-      colorscreen::bradford_whitepoint_adaptation_matrix m_bradford(colorscreen::d50_white, colorscreen::srgb_white);
-
-      for (size_t i = 0; i < m_profileSpots->size(); ++i) {
-        colorscreen::point_t scrPos = (*m_profileSpots)[i];
-        
-        // Use stitch mapped coords if relevant (same logic as gtkgui.C)
-        colorscreen::point_t imgPos;
-        if (!m_scan->stitch) {
-            imgPos = map.to_img(scrPos);
-        } else {
-            imgPos = m_scan->stitch->common_scr_to_img.scr_to_final(scrPos);
-            imgPos.x -= m_scan->xmin;
-            imgPos.y -= m_scan->ymin;
-        }
-        
-        QPointF p_widget = imageToWidget(imgPos);
-
-        // Viewport culling
-        double marginPixels = 120.0 * m_scale;
-        if (p_widget.x() < -marginPixels || p_widget.x() > width() + marginPixels ||
-            p_widget.y() < -marginPixels || p_widget.y() > height() + marginPixels) {
-            continue;
-        }
-
-        // Calculate size based on expected dot size in widget space
-        double radiusWidget = 20.0; // Default base size
-        
-        bool hasResult = m_profileSpotResults && i < m_profileSpotResults->size();
-        
-        colorscreen::rgbdata c1 = {1, 1, 1}; // Target (inner)
-        colorscreen::rgbdata c2 = {1, 0, 0}; // Profiled (outer)
-        
-        if (hasResult) {
-            const auto &match = (*m_profileSpotResults)[i];
-            
-            colorscreen::xyz c = match.target;
-            m_bradford.apply_to_rgb(c.x, c.y, c.z, &c.x, &c.y, &c.z);
-            c.to_srgb(&c1.red, &c1.green, &c1.blue);
-            c1 = c1.clamp();
-            
-            c = match.profiled;
-            m_bradford.apply_to_rgb(c.x, c.y, c.z, &c.x, &c.y, &c.z);
-            c.to_srgb(&c2.red, &c2.green, &c2.blue);
-            c2 = c2.clamp();
-        }
-
-        // Draw outer ring (profiled)
-        p.setPen(QPen(Qt::white, 2));
-        p.setBrush(QColor::fromRgbF(c2.red, c2.green, c2.blue));
-        p.drawEllipse(p_widget, radiusWidget, radiusWidget);
-
-        // Draw inner ring (target)
-        p.setPen(Qt::NoPen);
-        p.setBrush(QColor::fromRgbF(c1.red, c1.green, c1.blue));
-        p.drawEllipse(p_widget, radiusWidget * 0.5, radiusWidget * 0.5);
-
-        // Draw dE text
-        if (hasResult) {
-            const auto &match = (*m_profileSpotResults)[i];
-            QString text = QString("%1ΔE2k").arg(match.deltaE, 0, 'f', 1);
-            
-            p.setPen(Qt::black); // Shadow
-            p.drawText(p_widget + QPointF(radiusWidget + 2, 2), text);
-            p.setPen(Qt::white); // Text
-            p.drawText(p_widget + QPointF(radiusWidget, 0), text);
-        }
-      }
-    }
-
-    // Draw screen coordinate system when SetCenterMode is active
-    if (m_interactionMode == SetCenterMode && m_scrToImg) {
-      // Get color from first point location
-      int npoints = 0;
-      colorscreen::solver_parameters::point_location *points = 
-        colorscreen::solver_parameters::get_point_locations(m_scrToImg->type, &npoints);
-      
-      QColor dotColor = Qt::blue; // Default
-      if (points && npoints > 0) {
-        switch (points[0].color) {
-          case colorscreen::solver_parameters::red:
-            dotColor = Qt::red;
-            break;
-          case colorscreen::solver_parameters::green:
-            dotColor = Qt::green;
-            break;
-          case colorscreen::solver_parameters::blue:
-            dotColor = Qt::blue;
-            break;
-          default:
-            dotColor = Qt::blue;
-            break;
-        }
-      }
-      
-      QPointF centerWidget = imageToWidget(m_scrToImg->center);
-      
-      // Calculate viewport bounds in image coordinates
-      colorscreen::point_t topLeft = widgetToImage(QPointF(0, 0));
-      colorscreen::point_t bottomRight = widgetToImage(QPointF(width(), height()));
-      double minX = qMin(topLeft.x, bottomRight.x);
-      double maxX = qMax(topLeft.x, bottomRight.x);
-      double minY = qMin(topLeft.y, bottomRight.y);
-      double maxY = qMax(topLeft.y, bottomRight.y);
-      
-      // Draw X axis (coordinate1) - extend to viewport edges
-      colorscreen::point_t xDir = {m_scrToImg->coordinate1.x, m_scrToImg->coordinate1.y};
-      double xLen = sqrt(xDir.x * xDir.x + xDir.y * xDir.y);
-      if (xLen > 0) {
-        xDir.x /= xLen;
-        xDir.y /= xLen;
-        
-        // Find intersection with viewport
-        double tMax = qMax(qMax((maxX - m_scrToImg->center.x) / xDir.x,
-                                 (minX - m_scrToImg->center.x) / xDir.x),
-                           qMax((maxY - m_scrToImg->center.y) / xDir.y,
-                                 (minY - m_scrToImg->center.y) / xDir.y));
-        double tMin = qMin(qMin((maxX - m_scrToImg->center.x) / xDir.x,
-                                 (minX - m_scrToImg->center.x) / xDir.x),
-                           qMin((maxY - m_scrToImg->center.y) / xDir.y,
-                                 (minY - m_scrToImg->center.y) / xDir.y));
-        
-        colorscreen::point_t xStart = {m_scrToImg->center.x + xDir.x * tMin,
-                                        m_scrToImg->center.y + xDir.y * tMin};
-        colorscreen::point_t xEnd = {m_scrToImg->center.x + xDir.x * tMax,
-                                      m_scrToImg->center.y + xDir.y * tMax};
-        
-        QPointF xStartWidget = imageToWidget(xStart);
-        QPointF xEndWidget = imageToWidget(xEnd);
-        
-        // Calculate dash length based on coordinate1 vector length (not whole axis)
-        colorscreen::point_t coord1End = {
-          m_scrToImg->center.x + m_scrToImg->coordinate1.x,
-          m_scrToImg->center.y + m_scrToImg->coordinate1.y
-        };
-        QPointF centerWidget = imageToWidget(m_scrToImg->center);
-        QPointF coord1Widget = imageToWidget(coord1End);
-        double coord1LengthWidget = QLineF(centerWidget, coord1Widget).length();
-        double dashLengthPixels = qMax(9.0, coord1LengthWidget / 3.0);
-        double penWidth = 3.0;
-        double dashLength = dashLengthPixels / penWidth;  // Dash pattern is in pen-width units
-        
-        // Calculate offset using coordinate1 (X-axis vector)
-        // Correct phase math: anchor pattern to center point
-        // Pattern at distance 'd' should be 0 (start of pattern).
-        // Qt uses (x/pen + offset). So d/pen + offset = 0 (mod period).
-        // offset = period - (d/pen % period).
-        double distToCenter = QLineF(xStartWidget, centerWidget).length();
-        double distInPenWidths = distToCenter / penWidth;
-        double period = dashLength * 2.0;
-        double centerOffset = period - fmod(distInPenWidths, period);
-        
-        // Draw axis with alternating black/white dashed pattern
-        QPen dashedPen(Qt::white, penWidth);
-        dashedPen.setStyle(Qt::CustomDashLine);
-        dashedPen.setDashPattern({dashLength, dashLength});
-        dashedPen.setDashOffset(centerOffset);
-        p.setPen(dashedPen);
-        p.drawLine(xStartWidget, xEndWidget);
-        
-        dashedPen.setColor(Qt::black);
-        dashedPen.setDashOffset(centerOffset - dashLength);  // Offset for alternating
-        p.setPen(dashedPen);
-        p.drawLine(xStartWidget, xEndWidget);
-      }
-      
-      // Draw Y axis (coordinate2) - extend to viewport edges
-      colorscreen::point_t yDir = {m_scrToImg->coordinate2.x, m_scrToImg->coordinate2.y};
-      double yLen = sqrt(yDir.x * yDir.x + yDir.y * yDir.y);
-      if (yLen > 0) {
-        yDir.x /= yLen;
-        yDir.y /= yLen;
-        
-        // Find intersection with viewport
-        double tMax = qMax(qMax((maxX - m_scrToImg->center.x) / yDir.x,
-                                 (minX - m_scrToImg->center.x) / yDir.x),
-                           qMax((maxY - m_scrToImg->center.y) / yDir.y,
-                                 (minY - m_scrToImg->center.y) / yDir.y));
-        double tMin = qMin(qMin((maxX - m_scrToImg->center.x) / yDir.x,
-                                 (minX - m_scrToImg->center.x) / yDir.x),
-                           qMin((maxY - m_scrToImg->center.y) / yDir.y,
-                                 (minY - m_scrToImg->center.y) / yDir.y));
-        
-        colorscreen::point_t yStart = {m_scrToImg->center.x + yDir.x * tMin,
-                                        m_scrToImg->center.y + yDir.y * tMin};
-        colorscreen::point_t yEnd = {m_scrToImg->center.x + yDir.x * tMax,
-                                      m_scrToImg->center.y + yDir.y * tMax};
-        
-        QPointF yStartWidget = imageToWidget(yStart);
-        QPointF yEndWidget = imageToWidget(yEnd);
-        
-        // Calculate dash length based on coordinate2 vector length (not whole axis)
-        colorscreen::point_t coord2End = {
-          m_scrToImg->center.x + m_scrToImg->coordinate2.x,
-          m_scrToImg->center.y + m_scrToImg->coordinate2.y
-        };
-        QPointF centerWidget = imageToWidget(m_scrToImg->center);
-        QPointF coord2Widget = imageToWidget(coord2End);
-        double coord2LengthWidget = QLineF(centerWidget, coord2Widget).length();
-        double dashLengthPixels = qMax(9.0, coord2LengthWidget / 3.0);
-        double penWidth = 3.0;
-        double dashLength = dashLengthPixels / penWidth;  // Dash pattern is in pen-width units
-        
-        // Calculate offset using coordinate2 (Y-axis vector)
-        // Correct phase math: anchor pattern to center point
-        centerWidget = imageToWidget(m_scrToImg->center);
-        double distToCenter = QLineF(yStartWidget, centerWidget).length();
-        double distInPenWidths = distToCenter / penWidth;
-        double period = dashLength * 2.0;
-        double centerOffset = period - fmod(distInPenWidths, period);
-        
-        // Draw axis with alternating black/white dashed pattern
-        QPen dashedPen(Qt::white, penWidth);
-        dashedPen.setStyle(Qt::CustomDashLine);
-        dashedPen.setDashPattern({dashLength, dashLength});
-        dashedPen.setDashOffset(centerOffset);
-        p.setPen(dashedPen);
-        p.drawLine(yStartWidget, yEndWidget);
-        
-        dashedPen.setColor(Qt::black);
-        dashedPen.setDashOffset(centerOffset - dashLength);  // Offset for alternating
-        p.setPen(dashedPen);
-        p.drawLine(yStartWidget, yEndWidget);
-      }
-      
-      // Draw dots at center and axis endpoints (all same color)
-      colorscreen::point_t xAxisEnd = {
-        m_scrToImg->center.x + m_scrToImg->coordinate1.x,
-        m_scrToImg->center.y + m_scrToImg->coordinate1.y
-      };
-      colorscreen::point_t yAxisEnd = {
-        m_scrToImg->center.x + m_scrToImg->coordinate2.x,
-        m_scrToImg->center.y + m_scrToImg->coordinate2.y
-      };
-      
-      QPointF xWidget = imageToWidget(xAxisEnd);
-      QPointF yWidget = imageToWidget(yAxisEnd);
-      
-      // Draw center point
-      p.setPen(QPen(Qt::black, 2));
-      p.setBrush(dotColor);
-      p.drawEllipse(centerWidget, 6, 6);
-      
-      // Draw X axis endpoint
-      p.drawEllipse(xWidget, 6, 6);
-      
-      // Draw Y axis endpoint  
-      p.drawEllipse(yWidget, 6, 6);
-
-      // Draw labels with outline and orthogonal placement
-      auto drawLabel = [&](QPointF endPos, QPointF center, QString text) {
-          QPointF dir = endPos - center;
-          double len = sqrt(dir.x()*dir.x() + dir.y()*dir.y());
-          if (len > 0) {
-              // Rotate 90 degrees (orthogonal)
-              // (x, y) -> (-y, x)
-              QPointF perp(-dir.y() / len, dir.x() / len);
-              
-              // Offset by 25 pixels orthogonal, plus a bit forward along axis to clear dot
-              QPointF labelPos = endPos + perp * 25.0 + (dir / len) * 10.0;
-              
-              QRectF r(labelPos.x() - 15, labelPos.y() - 15, 30, 30);
-              
-              // Draw black outline
-              p.setPen(Qt::black);
-              for (int dx = -1; dx <= 1; ++dx) {
-                  for (int dy = -1; dy <= 1; ++dy) {
-                      if (dx != 0 || dy != 0)
-                          p.drawText(r.translated(dx, dy), Qt::AlignCenter, text);
-                  }
-              }
-              // Draw yellow fill
-              p.setPen(Qt::yellow);
-              p.drawText(r, Qt::AlignCenter, text);
-          }
-      };
-
-      QFont f = p.font();
-      f.setBold(true);
-      f.setPointSize(14);
-      p.setFont(f);
-
-      drawLabel(xWidget, centerWidget, "X");
-      drawLabel(yWidget, centerWidget, "Y");
-    }
+    drawPointsOverlay(p);
+    drawProfileSpots(p);
+    drawScreenCoordinateSystem(p);
+    drawMeasurement(p);
 
     // Hide animations when we have an image
+
     if (m_thamesAnim && !m_thamesAnim->isHidden()) {
       m_thamesAnim->stopAnimation();
       m_thamesAnim->hide();
@@ -806,11 +491,357 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
   if (m_activeAnim) {
     m_activeAnim->setGeometry(rect());
   }
+}
 
+/**
+ * @brief Draws the registration points overlay.
+ * 
+ * @param p The QPainter to use.
+ */
+void ImageWidget::drawPointsOverlay(QPainter &p) {
+  if (m_showRegistrationPoints && m_solver && m_scan && m_scrToImg) {
+    /* Schedule a background re-render of the points overlay whenever
+       parameters, view, or point data changed.  Non-blocking — returns
+       immediately; update() is called when the new overlay is ready.  */
+    if (m_pointsOverlayDirty)
+      schedulePointsOverlayRender ();
+
+    /* Composite the pre-rendered overlay on top of the image.  The overlay
+       was rendered at (m_lastPointsScale, m_lastPointsX, m_lastPointsY)
+       and contains one pixel-per-widget-pixel at that view state.
+       Use the same stretch / offset math as the main pixmap so that panning
+       and zooming still look reasonable while a new overlay is computing.  */
+    if (!m_pointsOverlay.isNull ()) {
+      double scaleFactor = m_scale / m_lastPointsScale;
+      double xPos = (m_lastPointsX - m_viewX) * m_scale;
+      double yPos = (m_lastPointsY - m_viewY) * m_scale;
+      double targetW = m_pointsOverlay.width ()  * scaleFactor;
+      double targetH = m_pointsOverlay.height () * scaleFactor;
+      p.drawImage (QRectF (xPos, yPos, targetW, targetH), m_pointsOverlay);
+    }
+  }
+}
+
+/**
+ * @brief Draws the color profile spots and their ΔE results.
+ * 
+ * @param p The QPainter to use.
+ */
+void ImageWidget::drawProfileSpots(QPainter &p) {
+  // Draw profile spots: always while in AddPointMode (like gtkgui.C's color_profiling mode),
+  // or when the show_profile_spots flag is set.
+  bool showSpots = m_profileSpots && !m_profileSpots->empty() && m_scan && m_scrToImg &&
+                   (m_interactionMode == AddPointMode || m_showProfileSpots);
+  if (!showSpots) return;
+
+  p.save();
+  p.setRenderHint(QPainter::Antialiasing);
+
+  colorscreen::scr_to_img map;
+  (void)map.set_parameters(*m_scrToImg, *m_scan);
+  
+  colorscreen::bradford_whitepoint_adaptation_matrix m_bradford(colorscreen::d50_white, colorscreen::srgb_white);
+
+  for (size_t i = 0; i < m_profileSpots->size(); ++i) {
+    colorscreen::point_t scrPos = (*m_profileSpots)[i];
+    
+    // Use stitch mapped coords if relevant (same logic as gtkgui.C)
+    colorscreen::point_t imgPos;
+    if (!m_scan->stitch) {
+        imgPos = map.to_img(scrPos);
+    } else {
+        imgPos = m_scan->stitch->common_scr_to_img.scr_to_final(scrPos);
+        imgPos.x -= m_scan->xmin;
+        imgPos.y -= m_scan->ymin;
+    }
+    
+    QPointF p_widget = imageToWidget(imgPos);
+
+    // Viewport culling
+    double marginPixels = 120.0 * m_scale;
+    if (p_widget.x() < -marginPixels || p_widget.x() > width() + marginPixels ||
+        p_widget.y() < -marginPixels || p_widget.y() > height() + marginPixels) {
+        continue;
+    }
+
+    // Calculate size based on expected dot size in widget space
+    double radiusWidget = 20.0; // Default base size
+    
+    bool hasResult = m_profileSpotResults && i < m_profileSpotResults->size();
+    
+    colorscreen::rgbdata c1 = {1, 1, 1}; // Target (inner)
+    colorscreen::rgbdata c2 = {1, 0, 0}; // Profiled (outer)
+    
+    if (hasResult) {
+        const auto &match = (*m_profileSpotResults)[i];
+        
+        colorscreen::xyz c = match.target;
+        m_bradford.apply_to_rgb(c.x, c.y, c.z, &c.x, &c.y, &c.z);
+        c.to_srgb(&c1.red, &c1.green, &c1.blue);
+        c1 = c1.clamp();
+        
+        c = match.profiled;
+        m_bradford.apply_to_rgb(c.x, c.y, c.z, &c.x, &c.y, &c.z);
+        c.to_srgb(&c2.red, &c2.green, &c2.blue);
+        c2 = c2.clamp();
+    }
+
+    // Draw outer ring (profiled)
+    p.setPen(QPen(Qt::white, 2));
+    p.setBrush(QColor::fromRgbF(c2.red, c2.green, c2.blue));
+    p.drawEllipse(p_widget, radiusWidget, radiusWidget);
+
+    // Draw inner ring (target)
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor::fromRgbF(c1.red, c1.green, c1.blue));
+    p.drawEllipse(p_widget, radiusWidget * 0.5, radiusWidget * 0.5);
+
+    // Draw dE text
+    if (hasResult) {
+        const auto &match = (*m_profileSpotResults)[i];
+        QString text = QString("%1ΔE2k").arg(match.deltaE, 0, 'f', 1);
+        
+        p.setPen(Qt::black); // Shadow
+        p.drawText(p_widget + QPointF(radiusWidget + 2, 2), text);
+        p.setPen(Qt::white); // Text
+        p.drawText(p_widget + QPointF(radiusWidget, 0), text);
+    }
+  }
+  p.restore();
+}
+
+/**
+ * @brief Draws the screen coordinate system center and axes.
+ * 
+ * @param p The QPainter to use.
+ */
+void ImageWidget::drawScreenCoordinateSystem(QPainter &p) {
+  // Draw screen coordinate system when SetCenterMode is active
+  if (m_interactionMode != SetCenterMode || !m_scrToImg) return;
+
+  p.save();
+  p.setRenderHint(QPainter::Antialiasing);
+
+  // Get color from first point location
+  int npoints = 0;
+  colorscreen::solver_parameters::point_location *points = 
+    colorscreen::solver_parameters::get_point_locations(m_scrToImg->type, &npoints);
+  
+  QColor dotColor = Qt::blue; // Default
+  if (points && npoints > 0) {
+    switch (points[0].color) {
+      case colorscreen::solver_parameters::red:
+        dotColor = Qt::red;
+        break;
+      case colorscreen::solver_parameters::green:
+        dotColor = Qt::green;
+        break;
+      case colorscreen::solver_parameters::blue:
+        dotColor = Qt::blue;
+        break;
+      default:
+        dotColor = Qt::blue;
+        break;
+    }
+  }
+  
+  QPointF centerWidget = imageToWidget(m_scrToImg->center);
+  
+  // Calculate viewport bounds in image coordinates
+  colorscreen::point_t topLeft = widgetToImage(QPointF(0, 0));
+  colorscreen::point_t bottomRight = widgetToImage(QPointF(width(), height()));
+  double minX = qMin(topLeft.x, bottomRight.x);
+  double maxX = qMax(topLeft.x, bottomRight.x);
+  double minY = qMin(topLeft.y, bottomRight.y);
+  double maxY = qMax(topLeft.y, bottomRight.y);
+  
+  // Draw X axis (coordinate1) - extend to viewport edges
+  colorscreen::point_t xDir = {m_scrToImg->coordinate1.x, m_scrToImg->coordinate1.y};
+  double xLen = sqrt(xDir.x * xDir.x + xDir.y * xDir.y);
+  if (xLen > 0) {
+    xDir.x /= xLen;
+    xDir.y /= xLen;
+    
+    // Find intersection with viewport
+    double tMax = qMax(qMax((maxX - m_scrToImg->center.x) / xDir.x,
+                             (minX - m_scrToImg->center.x) / xDir.x),
+                       qMax((maxY - m_scrToImg->center.y) / xDir.y,
+                             (minY - m_scrToImg->center.y) / xDir.y));
+    double tMin = qMin(qMin((maxX - m_scrToImg->center.x) / xDir.x,
+                             (minX - m_scrToImg->center.x) / xDir.x),
+                       qMin((maxY - m_scrToImg->center.y) / xDir.y,
+                             (minY - m_scrToImg->center.y) / xDir.y));
+    
+    colorscreen::point_t xStart = {m_scrToImg->center.x + xDir.x * tMin,
+                                    m_scrToImg->center.y + xDir.y * tMin};
+    colorscreen::point_t xEnd = {m_scrToImg->center.x + xDir.x * tMax,
+                                  m_scrToImg->center.y + xDir.y * tMax};
+    
+    QPointF xStartWidget = imageToWidget(xStart);
+    QPointF xEndWidget = imageToWidget(xEnd);
+    
+    // Calculate dash length based on coordinate1 vector length (not whole axis)
+    colorscreen::point_t coord1End = {
+      m_scrToImg->center.x + m_scrToImg->coordinate1.x,
+      m_scrToImg->center.y + m_scrToImg->coordinate1.y
+    };
+    QPointF coord1Widget = imageToWidget(coord1End);
+    double coord1LengthWidget = QLineF(centerWidget, coord1Widget).length();
+    double dashLengthPixels = qMax(9.0, coord1LengthWidget / 3.0);
+    double penWidth = 3.0;
+    double dashLength = dashLengthPixels / penWidth;  // Dash pattern is in pen-width units
+    
+    // Calculate offset using coordinate1 (X-axis vector)
+    // Correct phase math: anchor pattern to center point
+    double distToCenter = QLineF(xStartWidget, centerWidget).length();
+    double distInPenWidths = distToCenter / penWidth;
+    double period = dashLength * 2.0;
+    double centerOffset = period - fmod(distInPenWidths, period);
+    
+    // Draw axis with alternating black/white dashed pattern
+    QPen dashedPen(Qt::white, penWidth);
+    dashedPen.setStyle(Qt::CustomDashLine);
+    dashedPen.setDashPattern({dashLength, dashLength});
+    dashedPen.setDashOffset(centerOffset);
+    p.setPen(dashedPen);
+    p.drawLine(xStartWidget, xEndWidget);
+    
+    dashedPen.setColor(Qt::black);
+    dashedPen.setDashOffset(centerOffset - dashLength);  // Offset for alternating
+    p.setPen(dashedPen);
+    p.drawLine(xStartWidget, xEndWidget);
+  }
+  
+  // Draw Y axis (coordinate2) - extend to viewport edges
+  colorscreen::point_t yDir = {m_scrToImg->coordinate2.x, m_scrToImg->coordinate2.y};
+  double yLen = sqrt(yDir.x * yDir.x + yDir.y * yDir.y);
+  if (yLen > 0) {
+    yDir.x /= yLen;
+    yDir.y /= yLen;
+    
+    // Find intersection with viewport
+    double tMax = qMax(qMax((maxX - m_scrToImg->center.x) / yDir.x,
+                             (minX - m_scrToImg->center.x) / yDir.x),
+                       qMax((maxY - m_scrToImg->center.y) / yDir.y,
+                             (minY - m_scrToImg->center.y) / yDir.y));
+    double tMin = qMin(qMin((maxX - m_scrToImg->center.x) / yDir.x,
+                             (minX - m_scrToImg->center.x) / yDir.x),
+                       qMin((maxY - m_scrToImg->center.y) / yDir.y,
+                             (minY - m_scrToImg->center.y) / yDir.y));
+    
+    colorscreen::point_t yStart = {m_scrToImg->center.x + yDir.x * tMin,
+                                    m_scrToImg->center.y + yDir.y * tMin};
+    colorscreen::point_t yEnd = {m_scrToImg->center.x + yDir.x * tMax,
+                                  m_scrToImg->center.y + yDir.y * tMax};
+    
+    QPointF yStartWidget = imageToWidget(yStart);
+    QPointF yEndWidget = imageToWidget(yEnd);
+    
+    // Calculate dash length based on coordinate2 vector length (not whole axis)
+    colorscreen::point_t coord2End = {
+      m_scrToImg->center.x + m_scrToImg->coordinate2.x,
+      m_scrToImg->center.y + m_scrToImg->coordinate2.y
+    };
+    QPointF coord2Widget = imageToWidget(coord2End);
+    double coord2LengthWidget = QLineF(centerWidget, coord2Widget).length();
+    double dashLengthPixels = qMax(9.0, coord2LengthWidget / 3.0);
+    double penWidth = 3.0;
+    double dashLength = dashLengthPixels / penWidth;  // Dash pattern is in pen-width units
+    
+    // Calculate offset using coordinate2 (Y-axis vector)
+    // Correct phase math: anchor pattern to center point
+    double distToCenter = QLineF(yStartWidget, centerWidget).length();
+    double distInPenWidths = distToCenter / penWidth;
+    double period = dashLength * 2.0;
+    double centerOffset = period - fmod(distInPenWidths, period);
+    
+    // Draw axis with alternating black/white dashed pattern
+    QPen dashedPen(Qt::white, penWidth);
+    dashedPen.setStyle(Qt::CustomDashLine);
+    dashedPen.setDashPattern({dashLength, dashLength});
+    dashedPen.setDashOffset(centerOffset);
+    p.setPen(dashedPen);
+    p.drawLine(yStartWidget, yEndWidget);
+    
+    dashedPen.setColor(Qt::black);
+    dashedPen.setDashOffset(centerOffset - dashLength);  // Offset for alternating
+    p.setPen(dashedPen);
+    p.drawLine(yStartWidget, yEndWidget);
+  }
+  
+  // Draw dots at center and axis endpoints (all same color)
+  colorscreen::point_t xAxisEnd = {
+    m_scrToImg->center.x + m_scrToImg->coordinate1.x,
+    m_scrToImg->center.y + m_scrToImg->coordinate1.y
+  };
+  colorscreen::point_t yAxisEnd = {
+    m_scrToImg->center.x + m_scrToImg->coordinate2.x,
+    m_scrToImg->center.y + m_scrToImg->coordinate2.y
+  };
+  
+  QPointF xWidget = imageToWidget(xAxisEnd);
+  QPointF yWidget = imageToWidget(yAxisEnd);
+  
+  // Draw center point
+  p.setPen(QPen(Qt::black, 2));
+  p.setBrush(dotColor);
+  p.drawEllipse(centerWidget, 6, 6);
+  
+  // Draw X axis endpoint
+  p.drawEllipse(xWidget, 6, 6);
+  
+  // Draw Y axis endpoint  
+  p.drawEllipse(yWidget, 6, 6);
+
+  // Draw labels with outline and orthogonal placement
+  auto drawLabel = [&](QPointF endPos, QPointF center, QString text) {
+      QPointF dir = endPos - center;
+      double len = sqrt(dir.x()*dir.x() + dir.y()*dir.y());
+      if (len > 0) {
+          // Rotate 90 degrees (orthogonal)
+          // (x, y) -> (-y, x)
+          QPointF perp(-dir.y() / len, dir.x() / len);
+          
+          // Offset by 25 pixels orthogonal, plus a bit forward along axis to clear dot
+          QPointF labelPos = endPos + perp * 25.0 + (dir / len) * 10.0;
+          
+          QRectF r(labelPos.x() - 15, labelPos.y() - 15, 30, 30);
+          
+          // Draw black outline
+          p.setPen(Qt::black);
+          for (int dx = -1; dx <= 1; ++dx) {
+              for (int dy = -1; dy <= 1; ++dy) {
+                  if (dx != 0 || dy != 0)
+                      p.drawText(r.translated(dx, dy), Qt::AlignCenter, text);
+              }
+          }
+          // Draw yellow fill
+          p.setPen(Qt::yellow);
+          p.drawText(r, Qt::AlignCenter, text);
+      }
+  };
+
+  QFont f = p.font();
+  f.setBold(true);
+  f.setPointSize(14);
+  p.setFont(f);
+
+  drawLabel(xWidget, centerWidget, "X");
+  drawLabel(yWidget, centerWidget, "Y");
+  p.restore();
+}
+
+/**
+ * @brief Draws the measurement line and text.
+ * 
+ * @param p The QPainter to use.
+ */
+void ImageWidget::drawMeasurement(QPainter &p) {
   if (m_interactionMode == MeasureMode && m_isMeasuring) {
     QPointF p1 = imageToWidget(m_measureStart);
     QPointF p2 = imageToWidget(m_measureEnd);
     
+    p.save();
     p.setRenderHint(QPainter::Antialiasing);
     p.setPen(QPen(Qt::yellow, 2, Qt::SolidLine, Qt::RoundCap));
     p.drawLine(p1, p2);
@@ -831,6 +862,7 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
         p.drawText(QRectF(p1.x(), p1.y(), p2.x() - p1.x(), p2.y() - p1.y()).normalized(), 
                   Qt::AlignCenter, QString("%1 px").arg(qRound(distPixels)));
     }
+    p.restore();
   }
 }
 
@@ -1007,7 +1039,7 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
     // Find nearest profile spot to remove
     if (m_profileSpots && !m_profileSpots->empty() && m_scrToImg && m_scan) {
       colorscreen::scr_to_img map;
-      map.set_parameters(*m_scrToImg, *m_scan);
+      (void)map.set_parameters(*m_scrToImg, *m_scan);
       
       int bestIdx = -1;
       double bestDistSq = 1e9;
@@ -1684,6 +1716,7 @@ void ImageWidget::setShowRegistrationPoints(bool show) {
   m_showRegistrationPoints = show;
   if (!show) {
     clearSelection();
+    m_pointsQueue.cancelAll();
   }
   update();
   emit registrationPointsVisibilityChanged(show);
@@ -1786,7 +1819,7 @@ void ImageWidget::clearSelection() {
  */
 void ImageWidget::schedulePointsOverlayRender ()
 {
-  if (!m_solver || !m_scan || !m_rparams || !m_scrToImg || width () <= 0
+  if (!m_showRegistrationPoints || !m_solver || !m_scan || !m_rparams || !m_scrToImg || width () <= 0
       || height () <= 0)
     return;
 
@@ -1832,7 +1865,7 @@ void ImageWidget::schedulePointsOverlayRender ()
         p.setRenderHint (QPainter::Antialiasing);
 
         colorscreen::scr_to_img map;
-        map.set_parameters (scrToImg, *scan);
+        (void)map.set_parameters (scrToImg, *scan);
 
         /* Background-safe equivalent of imageToWidget.
            Must account for rotation/mirror via CoordinateTransformer.  */
