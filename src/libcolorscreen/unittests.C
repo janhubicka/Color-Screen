@@ -1689,7 +1689,7 @@ test_image_area ()
 int
 main ()
 {
-  printf ("1..28\n");
+  printf ("1..29\n");
 
 
   test_matrix ();

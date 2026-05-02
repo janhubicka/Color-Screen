@@ -746,7 +746,7 @@ solver_mesh (const scr_to_img_parameters *param, const image_data &img_data,
     progress->set_task ("computing mesh", width * height);
 
   /* Expand the range so inversion is not using out of range points.  */
-  int_image_area r2 = {-step, -step, img_data.width + 2*step, img_data.height + 2*step};
+  int_image_area r2 = {-2*step, -2*step, img_data.width + 4*step, img_data.height + 4*step};
   std::unique_ptr <mesh> mesh_trans = std::make_unique<mesh> (r2, step, step);
   width = mesh_trans->get_width ();
   height = mesh_trans->get_height ();
