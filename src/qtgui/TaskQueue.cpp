@@ -22,7 +22,8 @@ TaskQueue::~TaskQueue()
  *    - Cancels the youngest active task to make room for the new one (if not already cancelling).
  * 3. Starts the task immediately if a slot is available.
  */
-int TaskQueue::requestRender(const QVariant &userData)
+int TaskQueue::requestRender(const QVariant &userData, 
+                             std::function<void(int reqId, std::shared_ptr<colorscreen::progress_info>)> onStart)
 {
     QMutexLocker locker(&m_mutex);
     int newReqId = m_nextReqId++;
@@ -44,13 +45,9 @@ int TaskQueue::requestRender(const QVariant &userData)
     // 2. Check concurrency limit
     if (m_tasks.size() >= MAX_CONCURRENT_TASKS) {
         // Are we already cancelling something?
-        bool alreadyCancelling = false;
-        for (const auto &info : m_tasks) {
-            if (info.progress && info.progress->pool_cancel()) {
-                alreadyCancelling = true;
-                break;
-            }
-        }
+        bool alreadyCancelling = std::any_of(m_tasks.begin(), m_tasks.end(), [](const TaskInfo &info) {
+            return info.progress && info.progress->pool_cancel();
+        });
 
         if (!alreadyCancelling) {
             auto lastIt = m_tasks.end();
@@ -69,19 +66,21 @@ int TaskQueue::requestRender(const QVariant &userData)
         qCDebug(lcRenderSync) << "  Queueing new task ID:" << newReqId;
         m_pendingReqId = newReqId;
         m_pendingUserData = userData;
+        m_pendingOnStart = std::move(onStart);
         return newReqId;
     }
 
     // 3. Start immediately if slot available
-    startTask(newReqId, userData);
+    startTask(newReqId, userData, onStart);
     return newReqId;
 }
 
 /**
- * @brief Internal helper to initialize and emit a task start.
+ * @brief Internal helper to initialize and start a task.
  * @note Must be called with m_mutex held.
  */
-void TaskQueue::startTask(int reqId, const QVariant &userData)
+void TaskQueue::startTask(int reqId, const QVariant &userData, 
+                          std::function<void(int reqId, std::shared_ptr<colorscreen::progress_info>)> onStart)
 {
     qCDebug(lcRenderSync) << "TaskQueue::startTask - Starting ID:" << reqId << "Active:" << formatQueueState();
     TaskInfo info;
@@ -95,7 +94,12 @@ void TaskQueue::startTask(int reqId, const QVariant &userData)
     m_tasks[reqId] = info;
     
     emit progressStarted(info.progress);
-    emit triggerRender(reqId, info.progress, userData);
+    
+    if (onStart) {
+        onStart(reqId, info.progress);
+    } else {
+        emit triggerRender(reqId, info.progress, userData);
+    }
 }
 
 /**
@@ -136,10 +140,12 @@ void TaskQueue::processPending()
     if (m_pendingReqId.has_value() && m_tasks.size() < MAX_CONCURRENT_TASKS) {
         int reqId = m_pendingReqId.value();
         QVariant userData = m_pendingUserData;
+        auto onStart = std::move(m_pendingOnStart);
         qCDebug(lcRenderSync) << "TaskQueue::processPending - Starting pending task ID:" << reqId;
         m_pendingReqId.reset();
         m_pendingUserData = QVariant();
-        startTask(reqId, userData);
+        m_pendingOnStart = nullptr;
+        startTask(reqId, userData, onStart);
     }
 }
 
@@ -151,6 +157,7 @@ void TaskQueue::cancelAll()
     QMutexLocker locker(&m_mutex);
     m_pendingReqId.reset();
     m_pendingUserData = QVariant();
+    m_pendingOnStart = nullptr;
     for (auto it = m_tasks.begin(); it != m_tasks.end(); ++it) {
         if (it->progress) {
              it->progress->cancel();
@@ -168,55 +175,26 @@ bool TaskQueue::hasActiveTasks() const {
 
 /**
  * @brief Runs a one-shot worker task through the queue.
- * 
- * Uses a complex connection strategy to ensure that the triggerRender signal
- * is only delivered to the specific instance of the worker request.
  */
 void TaskQueue::runAsync (std::function<void (colorscreen::progress_info *)> worker,
                           std::function<void ()> done,
                           const QVariant &userData)
 {
-  int reqId;
-  {
-    QMutexLocker locker(&m_mutex);
-    reqId = m_nextReqId;
-  }
-
-  auto connHolder = std::make_shared<QMetaObject::Connection> ();
-
-  *connHolder = connect (
-      this, &TaskQueue::triggerRender, this,
-      [this, reqId,
-       worker = std::move (worker),
-       done   = std::move (done),
-       connHolder]
-      (int firedId, std::shared_ptr<colorscreen::progress_info> progress,
-       const QVariant &) mutable
-      {
-        if (firedId != reqId)
-          return;
-
-        /* One-shot: disconnect immediately so later tasks don't re-trigger.  */
-        disconnect (*connHolder);
-        connHolder.reset ();
-
-        /* Launch worker on Qt thread-pool; progress is read-only in worker.  */
-        auto *watcher = new QFutureWatcher<void> (this);
-        connect (watcher, &QFutureWatcher<void>::finished, this,
-                 [this, reqId, watcher, done = std::move (done)] () mutable
-                 {
-                   watcher->deleteLater ();
-                   done ();
-                   reportFinished (reqId, true);
-                 });
-        watcher->setFuture (
-            QtConcurrent::run (
-                [w = std::move (worker), progress] () mutable
-                { w (progress.get ()); }));
-      },
-      Qt::QueuedConnection);
-
-  requestRender (userData);
+  requestRender(userData, [this, worker = std::move(worker), done = std::move(done)](int reqId, std::shared_ptr<colorscreen::progress_info> progress) mutable {
+    /* Launch worker on Qt thread-pool; progress is read-only in worker.  */
+    auto *watcher = new QFutureWatcher<void> (this);
+    connect (watcher, &QFutureWatcher<void>::finished, this,
+             [this, reqId, watcher, done = std::move (done)] () mutable
+             {
+               watcher->deleteLater ();
+               done ();
+               reportFinished (reqId, true);
+             });
+    watcher->setFuture (
+        QtConcurrent::run (
+            [w = std::move (worker), progress] () mutable
+            { w (progress.get ()); }));
+  });
 }
 
 /**
@@ -236,3 +214,4 @@ QString TaskQueue::formatQueueState() const
     }
     return state;
 }
+

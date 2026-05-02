@@ -3,7 +3,7 @@
 
 #include <QObject>
 #include <QMap>
-#include <QMutex>
+#include <QRecursiveMutex>
 #include <QElapsedTimer>
 #include <QVariant>
 #include <QFutureWatcher>
@@ -40,12 +40,14 @@ public:
   /**
    * @brief Requests a new render task.
    * @param userData Optional metadata associated with the request (e.g., tile coordinates).
+   * @param onStart Optional callback invoked when the task officially starts. If null, triggerRender is emitted.
    * @return The assigned request ID.
    *
    * If the queue is at capacity, the request will be queued as "pending",
    * potentially cancelling an older active task if it has timed out.
    */
-  int requestRender(const QVariant &userData = QVariant());
+  int requestRender(const QVariant &userData = QVariant(), 
+                    std::function<void(int reqId, std::shared_ptr<colorscreen::progress_info>)> onStart = nullptr);
 
   /**
    * @brief Reports that a task has finished.
@@ -89,7 +91,7 @@ signals:
 
 private:
   /** Internal helper to initialize and start a task. */
-  void startTask(int reqId, const QVariant &userData);
+  void startTask(int reqId, const QVariant &userData, std::function<void(int reqId, std::shared_ptr<colorscreen::progress_info>)> onStart);
   /** Internal helper to move a pending request into the active slot if available. */
   void processPending();
   /** Formats the current queue state for debugging purposes. */
@@ -110,9 +112,10 @@ private:
   
   std::optional<int> m_pendingReqId;
   QVariant m_pendingUserData;
+  std::function<void(int reqId, std::shared_ptr<colorscreen::progress_info>)> m_pendingOnStart;
 
-  /** Mutex to protect internal state across threads. */
-  mutable QMutex m_mutex;
+  /** Recursive mutex to protect internal state across threads and handle re-entrant calls. */
+  mutable QRecursiveMutex m_mutex;
 };
 
 #endif // TASK_QUEUE_H
