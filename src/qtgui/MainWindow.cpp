@@ -4268,9 +4268,18 @@ void MainWindow::onAutodetectCoordinatesFinished(
     ParameterState oldState = getCurrentState();
     m_scrToImgParams = result;
 
+    // Automatically switch to interpolated mode
+    m_renderTypeParams.type = colorscreen::render_type_interpolated;
+
     // Update UI
     updateUIFromState(getCurrentState());
     changeParameters(getCurrentState(), "Autodetect Coordinates");
+
+    // Enable "Set screen coordinates" tool
+    if (m_addPointAction) {
+      m_addPointAction->setChecked(true);
+    }
+
     m_imageWidget->update();
     statusBar()->showMessage("Autodetect coordinates finished", 3000);
   } else {
