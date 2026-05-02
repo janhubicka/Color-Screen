@@ -469,7 +469,10 @@ public:
   pure_attr inline constexpr bool
   empty_p () const
   {
-    return width < 0 || height < 0;
+    if constexpr (std::is_integral<T>::value)
+      return width <= 0 || height <= 0;
+    else
+      return width < 0 || height < 0;
   }
 
   /* Return intersection of this area and OTHER.  */
