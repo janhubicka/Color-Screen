@@ -1,5 +1,6 @@
 #include "TaskQueue.h"
 #include <QDebug>
+#include <QMutexLocker>
 #include "Logging.h"
 
 TaskQueue::TaskQueue(QObject *parent) : QObject(parent)
@@ -11,16 +12,25 @@ TaskQueue::~TaskQueue()
     cancelAll();
 }
 
+/**
+ * @brief Handles a request for a new render task.
+ * 
+ * This method implements the core of the "Two-Task Scheme":
+ * 1. Checks for tasks that have exceeded TASK_TIMEOUT_MS and cancels them.
+ * 2. If the active task list is at MAX_CONCURRENT_TASKS, it either:
+ *    - Replaces the current pending request if one exists.
+ *    - Cancels the youngest active task to make room for the new one (if not already cancelling).
+ * 3. Starts the task immediately if a slot is available.
+ */
 int TaskQueue::requestRender(const QVariant &userData)
 {
+    QMutexLocker locker(&m_mutex);
     int newReqId = m_nextReqId++;
     
-    // qDebug() << "TaskQueue::requestRender - Requesting ID:" << newReqId << " Queue Size:" << m_tasks.size();
-
-    // 1. Cancel tasks running too long (> 5000ms)
+    // 1. Cancel tasks running too long
     for (auto it = m_tasks.begin(); it != m_tasks.end(); ) {
-        if (it->active && it->startTime.elapsed() > 5000) {
-            qCDebug(lcRenderSync) << "  Task ID:" << it->reqId << " timed out (>5000ms). Cancelling. State:" << formatQueueState();
+        if (it->active && it->startTime.elapsed() > TASK_TIMEOUT_MS) {
+            qCDebug(lcRenderSync) << "  Task ID:" << it->reqId << " timed out. Cancelling. State:" << formatQueueState();
             if (it->progress && !it->progress->pool_cancel()) {
                 it->progress->cancel();
                 emit progressFinished(it->progress);
@@ -31,8 +41,8 @@ int TaskQueue::requestRender(const QVariant &userData)
         ++it;
     }
 
-    // 2. Check concurrency limit (max 2 active)
-    if (m_tasks.size() >= 2) {
+    // 2. Check concurrency limit
+    if (m_tasks.size() >= MAX_CONCURRENT_TASKS) {
         // Are we already cancelling something?
         bool alreadyCancelling = false;
         for (const auto &info : m_tasks) {
@@ -67,6 +77,10 @@ int TaskQueue::requestRender(const QVariant &userData)
     return newReqId;
 }
 
+/**
+ * @brief Internal helper to initialize and emit a task start.
+ * @note Must be called with m_mutex held.
+ */
 void TaskQueue::startTask(int reqId, const QVariant &userData)
 {
     qCDebug(lcRenderSync) << "TaskQueue::startTask - Starting ID:" << reqId << "Active:" << formatQueueState();
@@ -84,8 +98,12 @@ void TaskQueue::startTask(int reqId, const QVariant &userData)
     emit triggerRender(reqId, info.progress, userData);
 }
 
+/**
+ * @brief Cleans up a finished task and potentially starts a pending one.
+ */
 void TaskQueue::reportFinished(int reqId, bool success)
 {
+    QMutexLocker locker(&m_mutex);
     qCDebug(lcRenderSync) << "TaskQueue::reportFinished - Finished ID:" << reqId << " Success:" << success;
     auto it = m_tasks.find(reqId);
     if (it != m_tasks.end()) {
@@ -93,14 +111,13 @@ void TaskQueue::reportFinished(int reqId, bool success)
         m_tasks.erase(it);
     }
     
-    // "If task finishes and there are older tasks in queue, they should be cancelled."
-    // (Older active tasks)
+    // If task finishes and there are older tasks in queue, they should be cancelled.
     if (success)
       for (auto it = m_tasks.begin(); it != m_tasks.end(); ) {
 	  if (it->reqId < reqId) {
 	       qCDebug(lcRenderSync) << "  Cancelling older task ID:" << it->reqId << " as newer task finished. State:" << formatQueueState();
 	       if (it->progress) it->progress->cancel();
-	       emit progressFinished(it->progress); // Optimistic cleanup
+	       emit progressFinished(it->progress);
 	       it = m_tasks.erase(it);
 	  } else {
 	       ++it;
@@ -110,10 +127,13 @@ void TaskQueue::reportFinished(int reqId, bool success)
     processPending();
 }
 
+/**
+ * @brief Internal helper to promote a pending task to active status.
+ * @note Must be called with m_mutex held.
+ */
 void TaskQueue::processPending()
 {
-    // If we have a pending task and a slot is free (size < 2)
-    if (m_pendingReqId.has_value() && m_tasks.size() < 2) {
+    if (m_pendingReqId.has_value() && m_tasks.size() < MAX_CONCURRENT_TASKS) {
         int reqId = m_pendingReqId.value();
         QVariant userData = m_pendingUserData;
         qCDebug(lcRenderSync) << "TaskQueue::processPending - Starting pending task ID:" << reqId;
@@ -123,9 +143,12 @@ void TaskQueue::processPending()
     }
 }
 
+/**
+ * @brief Cancels everything in the queue.
+ */
 void TaskQueue::cancelAll()
 {
-    // qDebug() << "TaskQueue::cancelAll - Cancelling all tasks.";
+    QMutexLocker locker(&m_mutex);
     m_pendingReqId.reset();
     m_pendingUserData = QVariant();
     for (auto it = m_tasks.begin(); it != m_tasks.end(); ++it) {
@@ -137,23 +160,27 @@ void TaskQueue::cancelAll()
     m_tasks.clear();
 }
 
+/** @return True if there is any work being tracked. */
 bool TaskQueue::hasActiveTasks() const {
+  QMutexLocker locker(&m_mutex);
   return !m_tasks.isEmpty() || m_pendingReqId.has_value();
 }
 
+/**
+ * @brief Runs a one-shot worker task through the queue.
+ * 
+ * Uses a complex connection strategy to ensure that the triggerRender signal
+ * is only delivered to the specific instance of the worker request.
+ */
 void TaskQueue::runAsync (std::function<void (colorscreen::progress_info *)> worker,
                           std::function<void ()> done,
                           const QVariant &userData)
 {
-  /* Pre-allocate the request ID so we can capture it in the lambda BEFORE
-     calling requestRender().  requestRender() → startTask() → emit
-     triggerRender() happens synchronously, so the connection must already
-     be live when that emit fires.
-
-     Qt::QueuedConnection guarantees the lambda runs from the event loop
-     even when sender and receiver share a thread, so it always executes
-     after this function returns and the connection is fully established.  */
-  int reqId = m_nextReqId;  /* peek — requestRender() will assign the same ID */
+  int reqId;
+  {
+    QMutexLocker locker(&m_mutex);
+    reqId = m_nextReqId;
+  }
 
   auto connHolder = std::make_shared<QMetaObject::Connection> ();
 
@@ -189,11 +216,12 @@ void TaskQueue::runAsync (std::function<void (colorscreen::progress_info *)> wor
       },
       Qt::QueuedConnection);
 
-  /* Now request the render — this will emit triggerRender(reqId, ...) which
-     is queued and delivered on the next event-loop iteration.  */
   requestRender (userData);
 }
 
+/**
+ * @brief Formats the current queue contents into a debug string.
+ */
 QString TaskQueue::formatQueueState() const
 {
     QString state;
