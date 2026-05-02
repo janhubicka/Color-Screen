@@ -847,213 +847,71 @@ void MainWindow::setupUi() {
   connect(
       m_imageLayerPanel, &ImageLayerPanel::neutralAreaRequested, this,
       [this]() {
-        startAreaSelection(
-            tr("Select neutral area for simulated mixing"), [this](QRect area) {
-              if (area.width() <= 0 || area.height() <= 0)
-                return;
-
-              auto progress = std::make_shared<colorscreen::progress_info>();
-              progress->set_task("Calculating neutral mix parameters", 1);
-              colorscreen::sub_task task(progress.get());
-              addProgress(progress);
-              if (m_imageLayerPanel)
-                m_imageLayerPanel->setNeutralAreaEnabled(false);
-
-              auto scan = m_scan;
-              auto state = getCurrentState();
-
-              QFutureWatcher<ParameterState> *watcher =
-                  new QFutureWatcher<ParameterState>(this);
-              connect(watcher, &QFutureWatcher<ParameterState>::finished, this,
-                      [this, watcher, progress]() {
-                        ParameterState newState = watcher->result();
-                        changeParameters(
-                            newState,
-                            tr("Set simulated mix parameters by neutral area"));
-                        removeProgress(progress);
-                        if (m_imageLayerPanel)
-                          m_imageLayerPanel->setNeutralAreaChecked(false);
-                        watcher->deleteLater();
-                      });
-
-              QFuture<ParameterState> future = QtConcurrent::run(
-                  [scan, state, area, progress]() mutable -> ParameterState {
-                    state.rparams.auto_mix_weights (
-                        *scan, state.scrToImg,
-                        { area.x (), area.y (), area.width (), area.height () },
-                        progress.get ());
-                    return state;
-                  });
-              watcher->setFuture(future);
+        runAreaComputation(
+            tr("Select neutral area for simulated mixing"),
+            tr("Set simulated mix parameters by neutral area"),
+            [this]() { m_imageLayerPanel->setNeutralAreaEnabled(false); },
+            [this]() { m_imageLayerPanel->setNeutralAreaChecked(false); },
+            [](ParameterState &s, colorscreen::image_data &scan,
+               const colorscreen::int_image_area &area,
+               colorscreen::progress_info *p) {
+              s.rparams.auto_mix_weights(scan, s.scrToImg, area, p);
             });
       });
 
   connect(
       m_imageLayerPanel, &ImageLayerPanel::infraredAreaRequested, this,
       [this]() {
-        startAreaSelection(
+        runAreaComputation(
             tr("Select area to set simulated mix parameters using infrared"),
-            [this](QRect area) {
-              if (area.width() <= 0 || area.height() <= 0)
-                return;
-
-              auto progress = std::make_shared<colorscreen::progress_info>();
-              progress->set_task("Calculating IR mix parameters", 1);
-              colorscreen::sub_task task(progress.get());
-              addProgress(progress);
-              if (m_imageLayerPanel)
-                m_imageLayerPanel->setInfraredAreaEnabled(false);
-
-              auto scan = m_scan;
-              auto state = getCurrentState();
-
-              QFutureWatcher<ParameterState> *watcher =
-                  new QFutureWatcher<ParameterState>(this);
-              connect(watcher, &QFutureWatcher<ParameterState>::finished, this,
-                      [this, watcher, progress]() {
-                        ParameterState newState = watcher->result();
-                        changeParameters(
-                            newState,
-                            tr("Set simulated mix parameters using infrared"));
-                        removeProgress(progress);
-                        if (m_imageLayerPanel)
-                          m_imageLayerPanel->setInfraredAreaChecked(false);
-                        watcher->deleteLater();
-                      });
-
-              QFuture<ParameterState> future = QtConcurrent::run(
-                  [scan, state, area, progress]() mutable -> ParameterState {
-                    state.rparams.auto_mix_weights_using_ir (
-                        *scan, state.scrToImg,
-                        { area.x (), area.y (), area.width (), area.height () },
-                        progress.get ());
-                    return state;
-                  });
-              watcher->setFuture(future);
+            tr("Set simulated mix parameters using infrared"),
+            [this]() { m_imageLayerPanel->setInfraredAreaEnabled(false); },
+            [this]() { m_imageLayerPanel->setInfraredAreaChecked(false); },
+            [](ParameterState &s, colorscreen::image_data &scan,
+               const colorscreen::int_image_area &area,
+               colorscreen::progress_info *p) {
+              s.rparams.auto_mix_weights_using_ir(scan, s.scrToImg, area, p);
             });
       });
 
   connect(
       m_imageLayerPanel, &ImageLayerPanel::darkAreaRequested, this, [this]() {
-        startAreaSelection(
-            tr("Select dark area for simulated mixing"), [this](QRect area) {
-              if (area.width() <= 0 || area.height() <= 0)
-                return;
-
-              auto progress = std::make_shared<colorscreen::progress_info>();
-              progress->set_task("Calculating dark mix parameters", 1);
-              colorscreen::sub_task task(progress.get());
-              addProgress(progress);
-              if (m_imageLayerPanel)
-                m_imageLayerPanel->setDarkAreaEnabled(false);
-
-              auto scan = m_scan;
-              auto state = getCurrentState();
-
-              QFutureWatcher<ParameterState> *watcher =
-                  new QFutureWatcher<ParameterState>(this);
-              connect(watcher, &QFutureWatcher<ParameterState>::finished, this,
-                      [this, watcher, progress]() {
-                        ParameterState newState = watcher->result();
-                        changeParameters(newState,
-                                         tr("Set dark mix parameters by area"));
-                        removeProgress(progress);
-                        if (m_imageLayerPanel)
-                          m_imageLayerPanel->setDarkAreaChecked(false);
-                        watcher->deleteLater();
-                      });
-
-              QFuture<ParameterState> future = QtConcurrent::run(
-                  [scan, state, area, progress]() mutable -> ParameterState {
-                    state.rparams.auto_mix_dark (
-                        *scan, state.scrToImg,
-                        { area.x (), area.y (), area.width (), area.height () },
-                        progress.get ());
-                    return state;
-                  });
-              watcher->setFuture(future);
+        runAreaComputation(
+            tr("Select dark area for simulated mixing"),
+            tr("Set dark mix parameters by area"),
+            [this]() { m_imageLayerPanel->setDarkAreaEnabled(false); },
+            [this]() { m_imageLayerPanel->setDarkAreaChecked(false); },
+            [](ParameterState &s, colorscreen::image_data &scan,
+               const colorscreen::int_image_area &area,
+               colorscreen::progress_info *p) {
+              s.rparams.auto_mix_dark(scan, s.scrToImg, area, p);
             });
       });
 
   connect(m_colorPanel, &ColorPanel::neutralAreaRequested, this, [this]() {
-    startAreaSelection(
-        tr("Select neutral area for white balance"), [this](QRect area) {
-          if (area.width() <= 0 || area.height() <= 0)
-            return;
-
-          auto progress = std::make_shared<colorscreen::progress_info>();
-          progress->set_task("Calculating white balance parameters", 1);
-          colorscreen::sub_task task(progress.get());
-          addProgress(progress);
-          if (m_colorPanel)
-            m_colorPanel->setNeutralAreaEnabled(false);
-
-          auto scan = m_scan;
-          auto state = getCurrentState();
-
-          QFutureWatcher<ParameterState> *watcher =
-              new QFutureWatcher<ParameterState>(this);
-          connect(watcher, &QFutureWatcher<ParameterState>::finished, this,
-                  [this, watcher, progress]() {
-                    ParameterState newState = watcher->result();
-                    changeParameters(newState,
-                                     tr("Set white balance by neutral area"));
-                    removeProgress(progress);
-                    if (m_colorPanel)
-                      m_colorPanel->setNeutralAreaChecked(false);
-                    watcher->deleteLater();
-                  });
-
-          QFuture<ParameterState> future = QtConcurrent::run(
-              [scan, state, area, progress]() mutable -> ParameterState {
-                state.rparams.auto_white_balance (
-                    *scan, state.scrToImg,
-                    { area.x (), area.y (), area.width (), area.height () },
-                    progress.get ());
-                return state;
-              });
-          watcher->setFuture(future);
+    runAreaComputation(
+        tr("Select neutral area for white balance"),
+        tr("Set white balance by neutral area"),
+        [this]() { m_colorPanel->setNeutralAreaEnabled(false); },
+        [this]() { m_colorPanel->setNeutralAreaChecked(false); },
+        [](ParameterState &s, colorscreen::image_data &scan,
+           const colorscreen::int_image_area &area,
+           colorscreen::progress_info *p) {
+          s.rparams.auto_white_balance(scan, s.scrToImg, area, p);
         });
   });
 
   connect(m_colorPanel, &ColorPanel::autoLevelsRequested, this, [this]() {
-    startAreaSelection(tr("Select area for auto levels"), [this](QRect area) {
-      if (area.width() <= 0 || area.height() <= 0)
-        return;
-
-      auto progress = std::make_shared<colorscreen::progress_info>();
-      progress->set_task("Calculating auto levels parameters", 1);
-      colorscreen::sub_task task(progress.get());
-      addProgress(progress);
-      if (m_colorPanel)
-        m_colorPanel->setAutoLevelsEnabled(false);
-
-      auto scan = m_scan;
-      auto state = getCurrentState();
-
-      QFutureWatcher<ParameterState> *watcher =
-          new QFutureWatcher<ParameterState>(this);
-      connect(watcher, &QFutureWatcher<ParameterState>::finished, this,
-              [this, watcher, progress]() {
-                ParameterState newState = watcher->result();
-                changeParameters(newState,
-                                 tr("Set auto levels by parameter area"));
-                removeProgress(progress);
-                if (m_colorPanel)
-                  m_colorPanel->setAutoLevelsChecked(false);
-                watcher->deleteLater();
-              });
-
-      QFuture<ParameterState> future = QtConcurrent::run(
-          [scan, state, area, progress]() mutable -> ParameterState {
-            state.rparams.auto_dark_brightness (
-                *scan, state.scrToImg,
-                { area.x (), area.y (), area.width (), area.height () },
-                progress.get ());
-            return state;
-          });
-      watcher->setFuture(future);
-    });
+    runAreaComputation(
+        tr("Select area for auto levels"),
+        tr("Set auto levels by area"),
+        [this]() { m_colorPanel->setAutoLevelsEnabled(false); },
+        [this]() { m_colorPanel->setAutoLevelsChecked(false); },
+        [](ParameterState &s, colorscreen::image_data &scan,
+           const colorscreen::int_image_area &area,
+           colorscreen::progress_info *p) {
+          s.rparams.auto_dark_brightness(scan, s.scrToImg, area, p);
+        });
   });
 
   // Already pushed above
@@ -1109,8 +967,7 @@ void MainWindow::setupUi() {
           &MainWindow::toggleFullscreen);
 
   // Link GeometryPanel checkbox -> ImageWidget
-  QCheckBox *regBox =
-      m_geometryPanel->findChild<QCheckBox *>("showRegistrationPointsBox");
+  QCheckBox *regBox = m_geometryPanel->registrationPointsCheckBox();
   if (regBox) {
     connect(regBox, &QCheckBox::toggled, m_imageWidget,
             &ImageWidget::setShowRegistrationPoints);
@@ -1125,15 +982,10 @@ void MainWindow::setupUi() {
           &MainWindow::maybeTriggerAutoSolver);
 
   // Nonlinear corrections checkbox
-  QCheckBox *nlBox = m_geometryPanel->findChild<QCheckBox *>("nonLinearBox");
-  if (nlBox) {
-    QSignalBlocker blocker(nlBox);
-    nlBox->setChecked(m_scrToImgParams.mesh_trans != nullptr);
-  }
+  m_geometryPanel->setNonlinearChecked(m_scrToImgParams.mesh_trans != nullptr);
 
   // Sync Auto Optimize checkbox with GeometryPanel
-  QCheckBox *autoSolverBox =
-      m_geometryPanel->findChild<QCheckBox *>("autoSolverBox");
+  QCheckBox *autoSolverBox = m_geometryPanel->autoOptimizeCheckBox();
   if (autoSolverBox && m_autoOptimizeAction) {
     // GeometryPanel -> Menu
     connect(autoSolverBox, &QCheckBox::toggled, m_autoOptimizeAction,
@@ -2043,61 +1895,12 @@ void MainWindow::onOpenParameters() {
     return;
 
   QTimer::singleShot(0, this, [this, fileName]() {
-    FILE *f = fopen(fileName.toUtf8().constData(), "r");
-    if (!f) {
-      QMessageBox::critical(this, "Error", "Could not open file.");
-      return;
+    if (loadParameterFile(fileName)) {
+      m_currentParamsFile = QFileInfo(fileName).absoluteFilePath();
+      m_currentParamsFileIsWeak = false;
+      statusBar()->showMessage(QString("Parameters loaded from %1").arg(fileName),
+                               3000);
     }
-
-    const char *error = nullptr;
-
-    // Store previous state for comparison
-    ParameterState old = {m_rparams, m_scrToImgParams, m_detectParams,
-                          m_solverParams};
-
-    // load_csp merges parameters in; reset first.
-    colorscreen::scr_to_img_parameters emptyScrToImg;
-    m_scrToImgParams = emptyScrToImg;
-    colorscreen::scr_detect_parameters emptyScrDetect;
-    m_detectParams = emptyScrDetect;
-    colorscreen::render_parameters emptyRparams;
-    m_rparams = emptyRparams;
-    colorscreen::solver_parameters emptySolver;
-    m_solverParams = emptySolver;
-
-    if (!colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams,
-                               &m_rparams, &m_solverParams, &error)) {
-      fclose(f);
-      QString errStr = error ? QString::fromUtf8(error)
-                             : "Unknown error loading parameters.";
-      QMessageBox::critical(this, "Error Loading Parameters", errStr);
-      m_scrToImgParams = old.scrToImg;
-      m_detectParams = old.detect;
-      m_rparams = old.rparams;
-      m_solverParams = old.solver;
-      return;
-    }
-    fclose(f);
-
-    ParameterState new_params = {m_rparams, m_scrToImgParams, m_detectParams,
-                                 m_solverParams};
-    bool changed = old != new_params;
-
-    if (changed) {
-      if (m_scan) {
-        // Re-set image to re-create renderer with new params
-        m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                                &m_detectParams, &m_renderTypeParams,
-                                &m_solverParams);
-      }
-    }
-    m_undoStack->clear();
-    updateModeMenu();
-    updateUIFromState(getCurrentState());
-
-    addToRecentParams(fileName);
-    m_currentParamsFile =
-        QFileInfo(fileName).absoluteFilePath(); // Track current file for Save
   });
 }
 
@@ -2884,12 +2687,7 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
   }
 
   // Sync nonlinear checkbox in GeometryPanel
-  // Sync nonlinear checkbox in GeometryPanel
-  QCheckBox *nlBox = m_geometryPanel->findChild<QCheckBox *>("nonLinearBox");
-  if (nlBox) {
-    QSignalBlocker blocker(nlBox);
-    nlBox->setChecked(state.scrToImg.mesh_trans != nullptr);
-  }
+  m_geometryPanel->setNonlinearChecked(state.scrToImg.mesh_trans != nullptr);
 
   // Update deformation chart
   if (m_geometryPanel) {
@@ -3202,60 +3000,12 @@ void MainWindow::openRecentParams() {
   QAction *action = qobject_cast<QAction *>(sender());
   if (action) {
     QString fileName = action->data().toString();
-
-    FILE *f = fopen(fileName.toUtf8().constData(), "r");
-    if (!f) {
-      QMessageBox::critical(this, "Error", "Could not open file.");
-      return;
+    if (loadParameterFile(fileName)) {
+      m_currentParamsFile = QFileInfo(fileName).absoluteFilePath();
+      m_currentParamsFileIsWeak = false;
+      statusBar()->showMessage(QString("Parameters loaded from %1").arg(fileName),
+                               3000);
     }
-
-    const char *error = nullptr;
-
-    // load_csp merges parameters in; reset first.
-    colorscreen::scr_to_img_parameters emptyScrToImg;
-    m_scrToImgParams = emptyScrToImg;
-    colorscreen::scr_detect_parameters emptyScrDetect;
-    m_detectParams = emptyScrDetect;
-    colorscreen::render_parameters emptyRparams;
-    m_rparams = emptyRparams;
-    colorscreen::solver_parameters emptySolver;
-    m_solverParams = emptySolver;
-    if (!colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams,
-                               &m_rparams, &m_solverParams, &error)) {
-      fclose(f);
-      QString errStr = error ? QString::fromUtf8(error)
-                             : "Unknown error loading parameters.";
-      QMessageBox::critical(this, "Error Loading Parameters", errStr);
-      return;
-    }
-    fclose(f);
-
-    // Update UI/Renderer
-    if (m_scan) {
-      // Set image to widget
-      m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                              &m_detectParams, &m_renderTypeParams,
-                              &m_solverParams);
-      m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileSpotResults);
-      // Also update navigation view image
-      m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                                 &m_detectParams);
-
-      updateColorCheckBoxState();
-    }
-
-    // Sync Gamut Warning Button
-    if (m_gamutWarningAction) {
-      bool signalBlocked = m_gamutWarningAction->blockSignals(true);
-      m_gamutWarningAction->setChecked(m_rparams.gamut_warning);
-      m_gamutWarningAction->blockSignals(signalBlocked);
-    }
-
-    m_undoStack->clear();
-    updateModeMenu();
-    updateUIFromState(getCurrentState());
-
-    addToRecentParams(fileName);
   }
 }
 
@@ -3996,6 +3746,123 @@ void MainWindow::startAreaSelection(const QString &message,
   saveInteractionMode();
   m_imageWidget->setInteractionMode(ImageWidget::GenericAreaMode);
   statusBar()->showMessage(message);
+}
+
+/** Launch an area-based parameter computation.
+   Enters area selection mode with MESSAGE in the status bar.  When the user
+   draws a rectangle, calls ON_START, creates a progress tracker, runs WORKER
+   in a background thread, then pushes the modified state as an undoable change
+   with DESCRIPTION.  Calls ON_DONE on completion regardless of success.  */
+void MainWindow::runAreaComputation(
+    const QString &message,
+    const QString &description,
+    std::function<void()> onStart,
+    std::function<void()> onDone,
+    std::function<void(ParameterState &, colorscreen::image_data &,
+                       const colorscreen::int_image_area &,
+                       colorscreen::progress_info *)> worker) {
+  startAreaSelection(message, [this, description, onStart, onDone,
+                               worker](QRect area) {
+    if (area.width() <= 0 || area.height() <= 0)
+      return;
+
+    auto progress = std::make_shared<colorscreen::progress_info>();
+    progress->set_task(description.toUtf8().constData(), 1);
+    colorscreen::sub_task task(progress.get());
+    addProgress(progress);
+    if (onStart)
+      onStart();
+
+    auto scan = m_scan;
+    auto state = getCurrentState();
+
+    QFutureWatcher<ParameterState> *watcher =
+        new QFutureWatcher<ParameterState>(this);
+    connect(watcher, &QFutureWatcher<ParameterState>::finished, this,
+            [this, watcher, progress, description, onDone]() {
+              ParameterState newState = watcher->result();
+              changeParameters(newState, description);
+              removeProgress(progress);
+              if (onDone)
+                onDone();
+              watcher->deleteLater();
+            });
+
+    QFuture<ParameterState> future = QtConcurrent::run(
+        [scan, state, area, progress, worker]() mutable -> ParameterState {
+          worker(state, *scan,
+                 {area.x(), area.y(), area.width(), area.height()},
+                 progress.get());
+          return state;
+        });
+    watcher->setFuture(future);
+  });
+}
+
+/** Load parameters from a .par file and update all UI components.
+   Resets parameters to defaults before loading (as load_csp merges into
+   existing values).  Updates ImageWidget, NavigationView, gamut warning,
+   undo history, and all panels.  Returns true on success.  */
+bool MainWindow::loadParameterFile(const QString &fileName) {
+  FILE *f = fopen(fileName.toUtf8().constData(), "r");
+  if (!f) {
+    QMessageBox::critical(this, "Error", "Could not open file.");
+    return false;
+  }
+
+  const char *error = nullptr;
+
+  // Store previous state in case load fails
+  ParameterState oldState = getCurrentState();
+
+  // load_csp merges parameters in; reset first to ensure clean load.
+  m_scrToImgParams = colorscreen::scr_to_img_parameters();
+  m_detectParams = colorscreen::scr_detect_parameters();
+  m_rparams = colorscreen::render_parameters();
+  m_solverParams = colorscreen::solver_parameters();
+
+  if (!colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams, &m_rparams,
+                             &m_solverParams, &error)) {
+    fclose(f);
+    QString errStr =
+        error ? QString::fromUtf8(error) : "Unknown error loading parameters.";
+    QMessageBox::critical(this, "Error Loading Parameters", errStr);
+
+    // Restore previous state
+    m_scrToImgParams = oldState.scrToImg;
+    m_detectParams = oldState.detect;
+    m_rparams = oldState.rparams;
+    m_solverParams = oldState.solver;
+    return false;
+  }
+  fclose(f);
+
+  // Update UI/Renderer
+  if (m_scan) {
+    m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
+                            &m_detectParams, &m_renderTypeParams,
+                            &m_solverParams);
+    m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileSpotResults);
+    m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
+                               &m_detectParams);
+    updateColorCheckBoxState();
+  }
+
+  // Sync Gamut Warning Button
+  if (m_gamutWarningAction) {
+    QSignalBlocker blocker(m_gamutWarningAction);
+    m_gamutWarningAction->setChecked(m_rparams.gamut_warning);
+  }
+
+  if (m_undoStack) {
+    m_undoStack->clear();
+  }
+
+  updateModeMenu();
+  updateUIFromState(getCurrentState());
+  addToRecentParams(fileName);
+
+  return true;
 }
 
 /** Convert a widget-space rectangle to an image-space rectangle.

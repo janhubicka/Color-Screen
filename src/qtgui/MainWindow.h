@@ -168,6 +168,27 @@ private:
   void updateModeMenu(); // Updates combo box items
   QIcon renderScreenIcon(colorscreen::scr_type type);
 
+  /** Launch an area-based parameter computation.
+      Shows MESSAGE in the status bar, enters area selection mode, and when
+      the user draws a rectangle, runs WORKER in a background thread.
+      WORKER modifies a ParameterState in-place; the result is pushed as an
+      undoable change with DESCRIPTION.
+      ON_START is called before launching (to disable UI), ON_DONE after
+      completion (to uncheck toggle buttons).  */
+  void runAreaComputation(
+      const QString &message,
+      const QString &description,
+      std::function<void()> onStart,
+      std::function<void()> onDone,
+      std::function<void(ParameterState &, colorscreen::image_data &,
+                         const colorscreen::int_image_area &,
+                         colorscreen::progress_info *)> worker);
+
+  /** Load parameters from a .par file and update all UI.
+      Resets params to defaults before loading (load_csp merges).
+      Returns true on success.  */
+  bool loadParameterFile(const QString &fileName);
+
   /**
    * @brief Saves the current interaction mode (if not a temporary mode like GenericAreaMode).
    * This is used before switching to a temporary mode (like crop or area selection)

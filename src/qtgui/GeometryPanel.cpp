@@ -459,3 +459,9 @@ void GeometryPanel::setRegistrationPointsVisible(bool visible) {
     if (m_exaggerateSliderContainer) m_exaggerateSliderContainer->setEnabled(visible);
     if (m_maxArrowLengthSliderContainer) m_maxArrowLengthSliderContainer->setEnabled(visible);
 }
+void GeometryPanel::setNonlinearChecked(bool checked) {
+    if (m_nlCb) {
+        QSignalBlocker blocker(m_nlCb);
+        m_nlCb->setChecked(checked);
+    }
+}

@@ -53,6 +53,9 @@ public:
   void updateFinetuneImages(const colorscreen::finetune_result& result);
   void reattachFinetuneImages(QWidget *widget);
   void setRegistrationPointsVisible(bool visible);
+  void setNonlinearChecked(bool checked);
+  QCheckBox *autoOptimizeCheckBox() const { return m_autoOptimizeBox; }
+  QCheckBox *registrationPointsCheckBox() const { return m_showRegistrationPointsBox; }
   colorscreen::finetune_area_parameters finetuneAreaParams() const { return m_finetuneAreaParams; }
 
 protected:
