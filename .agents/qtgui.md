@@ -225,6 +225,37 @@ The UI uses a **signal-based synchronization** pattern. `MainWindow` connects to
 
 ---
 
+## Undo/Redo Architecture
+
+The application uses a centralized `QUndoStack` in `MainWindow` to track all parameter changes.
+
+### 1. applyChange Helper
+Most state modifications should go through `ParameterPanel::applyChange`. This method:
+1. Captures the current `ParameterState`.
+2. Applies a modifier lambda to create the new state.
+3. Passes the new state and a human-readable description to `MainWindow::m_stateSetter`.
+4. `MainWindow` then creates a `SetParametersCommand` and pushes it to the undo stack.
+
+### 2. Command Merging
+To prevent the undo stack from becoming bloated by slider movements, the `SetParametersCommand` supports merging. Rapid successive changes with the same description (e.g., "Adjust Gamma") are merged into a single undo step.
+
+---
+
+## Progress and Status Bar
+
+`MainWindow` provides a multi-tasking progress tracking system integrated into the status bar.
+
+### 1. Registering Progress
+When starting a background task, create a `std::shared_ptr<colorscreen::progress_info>` and pass it to `MainWindow::addProgress()`.
+- **Progress Container**: The status bar displays a progress bar, a status label, and navigation buttons (`Prev`/`Next`) if multiple tasks are active.
+- **Auto-Selection**: By default, the status bar shows the task with the lowest progress percentage (longest remaining time).
+- **Manual Override**: Users can cycle through active tasks using the arrows in the status bar.
+
+### 2. Cancellation
+Clicking the "X" button in the progress container calls `onCancelClicked()`, which triggers `progress_info::cancel()`. Workers must check this flag to exit safely.
+
+---
+
 ## Custom Panels and Detachable Sections
 If a panel contains a complex widget (like a chart) that a user might want to see in a separate window or dock, use `createDetachableSection`.
 
