@@ -49,6 +49,17 @@ public:
 
   // Use shared_ptr and pointer for rparams (we will copy rparams when
   // requesting render)
+  /**
+   * @brief Sets the image and rendering parameters.
+   * Initializing this will create the background Renderer thread.
+   * 
+   * @param scan Shared pointer to the image data.
+   * @param rparams Core rendering parameters (crop, rotation, etc).
+   * @param scrToImg Screen-to-image mapping parameters.
+   * @param scrDetect Screen detection parameters.
+   * @param renderType Parameters for specific renderers (e.g. Paget, Thames).
+   * @param solver Parameters for the registration solver.
+   */
   void setImage(std::shared_ptr<colorscreen::image_data> scan,
                 colorscreen::render_parameters *rparams,
                 colorscreen::scr_to_img_parameters *scrToImg,
@@ -56,26 +67,78 @@ public:
                 colorscreen::render_type_parameters *renderType,
                 colorscreen::solver_parameters *solver);
 
-  // Update parameters without recreating renderer (non-blocking)
+  /**
+   * @brief Updates rendering parameters without recreating the renderer.
+   * @param rparams Core rendering parameters.
+   * @param scrToImg Screen-to-image mapping parameters.
+   * @param scrDetect Screen detection parameters.
+   * @param renderType Renderer-specific parameters.
+   * @param solver Solver parameters.
+   */
   void
   updateParameters(colorscreen::render_parameters *rparams,
                    colorscreen::scr_to_img_parameters *scrToImg,
                    colorscreen::scr_detect_parameters *scrDetect,
                    colorscreen::render_type_parameters *renderType = nullptr,
                    colorscreen::solver_parameters *solver = nullptr);
+
+  /**
+   * @brief Sets the profile spots to be displayed.
+   * @param spots Vector of spot coordinates.
+   * @param results Vector of color matching results for these spots.
+   */
   void setProfileSpots(const std::vector<colorscreen::point_t> *spots,
                        const std::vector<colorscreen::color_match> *results);
 
+  /**
+   * @brief Toggles the visibility of registration points.
+   * @param show True to show.
+   */
   void setShowRegistrationPoints(bool show);
+
+  /**
+   * @brief Toggles the visibility of profile spots.
+   * @param show True to show.
+   */
   void setShowProfileSpots(bool show);
+
+  /**
+   * @brief Clears the current selection.
+   */
   void clearSelection();
   
   // Coordinate System options
+  /**
+   * @brief Sets whether relative coordinates should be locked during manipulation.
+   * @param lock True to lock.
+   */
   void setLockRelativeCoordinates(bool lock) { m_lockRelativeCoordinates = lock; }
+
+  /**
+   * @brief Selects all registration points.
+   */
   void selectAll();
+
+  /**
+   * @brief Deletes all currently selected points.
+   */
   void deleteSelectedPoints();
 
-  enum InteractionMode { PanMode, SelectMode, AddPointMode, SetCenterMode, CropMode, GenericAreaMode, ExploreMode, MeasureMode };
+  enum InteractionMode {
+    PanMode,         ///< Panning and zooming
+    SelectMode,      ///< Selecting and moving registration points
+    AddPointMode,    ///< Adding new registration points or selecting areas
+    SetCenterMode,   ///< Adjusting the screen coordinate system center and axes
+    CropMode,        ///< Selecting crop area
+    GenericAreaMode, ///< Generic area selection
+    ExploreMode,     ///< Precision navigation mode with auto-centering
+    MeasureMode      ///< Distance measurement tool
+  };
+
+  /**
+   * @brief Sets the current interaction mode.
+   * @param mode The new interaction mode.
+   */
   void setInteractionMode(InteractionMode mode);
 
   struct SelectedPoint {
@@ -88,22 +151,92 @@ public:
   };
 
 public slots:
+  /**
+   * @brief Sets the zoom level (scale factor).
+   * @param scale The new scale.
+   */
   void setZoom(double scale);
+
+  /**
+   * @brief Animates a relative zoom change.
+   * @param factor Zoom factor (e.g. 1.1 for 10% zoom in).
+   */
   void smoothZoomBy(double factor);
+
+  /**
+   * @brief Animates zoom to a specific target scale.
+   * @param targetScale The target scale.
+   * @param fast If true, use a faster animation.
+   */
   void smoothZoomTo(double targetScale, bool fast = false);
+
+  /**
+   * @brief Sets the pan position (top-left of the view in image coordinates).
+   * @param x X coordinate.
+   * @param y Y coordinate.
+   */
   void setPan(double x, double y);
+
+  /**
+   * @brief Centers the view on a specific image coordinate.
+   * @param imgPos The point to center on.
+   */
   void centerOn(colorscreen::point_t imgPos);
+
+  /**
+   * @brief Internal helper to track the widget size.
+   * @param s New size.
+   */
   void setLastSize(QSize s) { m_lastSize = s; }
-  void fitToView(); // New slot
-  void smoothFitToView(); // Smoothly animate to fit view
+
+  /**
+   * @brief Instantly fits the image to the current widget size.
+   */
+  void fitToView();
+
+  /**
+   * @brief Smoothly animates the image to fit the current widget size.
+   */
+  void smoothFitToView();
+  /**
+   * @brief Rotates the image viewport 90 degrees counter-clockwise.
+   */
   void rotateLeft();
+
+  /**
+   * @brief Rotates the image viewport 90 degrees clockwise.
+   */
   void rotateRight();
+
+  /**
+   * @brief Internal helper to pivot the viewport around its center during rotation.
+   * @param oldRotIdx Previous rotation index.
+   * @param newRotIdx New rotation index.
+   */
   void pivotViewport(int oldRotIdx, int newRotIdx);
 
+  /**
+   * @brief Toggles explore mode (precision navigation).
+   * @param enable True to enable.
+   */
   void setExploreMode(bool enable);
 
+  /**
+   * @brief Sets the tolerance for the registration error heatmap.
+   * @param tol Tolerance value (typically in pixels/units).
+   */
   void setHeatmapTolerance(double tol);
+
+  /**
+   * @brief Sets the exaggeration factor for error arrows.
+   * @param ex Exaggeration factor.
+   */
   void setExaggerate(double ex);
+
+  /**
+   * @brief Sets the maximum length for error arrows in pixels.
+   * @param len Maximum length.
+   */
   void setMaxArrowLength(double len);
 
 protected:
@@ -137,18 +270,82 @@ signals:
   void exitFullscreenRequested();
   void profileSpotRemoveRequested(int index);
 
+private:
+  // Drawing helpers to keep paintEvent clean
+  void drawPointsOverlay(QPainter &p);
+  void drawProfileSpots(QPainter &p);
+  void drawScreenCoordinateSystem(QPainter &p);
+  void drawMeasurement(QPainter &p);
+
+  // Interaction handlers
+  void handleSetCenterPress(QMouseEvent *event);
+  void handleSelectPress(QMouseEvent *event);
+  void handleAreaPress(QMouseEvent *event);
+  void handleMeasurePress(QMouseEvent *event);
+
+  void handleSetCenterMove(QMouseEvent *event);
+  void handleSelectMove(QMouseEvent *event);
+  void handleExploreMove(QMouseEvent *event);
+  void handleMeasureMove(QMouseEvent *event);
+
+  void handleSetCenterRelease(QMouseEvent *event);
+  void handleSelectRelease(QMouseEvent *event);
+  void handleAreaRelease(QMouseEvent *event);
+  void handleMeasureRelease(QMouseEvent *event);
+
 public:
-  double getMinScale() const; // Returns scale that fits image to view
+  /**
+   * @brief Returns the minimum scale that fits the image to the view.
+   * @return Minimum scale factor.
+   */
+  double getMinScale() const;
+
+  /**
+   * @brief Returns the current zoom level.
+   * @return Scale factor.
+   */
   double getZoom() const { return m_scale; }
+
+  /**
+   * @brief Returns the current interaction mode.
+   * @return The interaction mode.
+   */
   InteractionMode interactionMode() const { return m_interactionMode; }
+  /**
+   * @brief Checks if registration points are currently visible.
+   * @return true if visible.
+   */
   bool registrationPointsVisible() const { return m_showRegistrationPoints; }
+
+  /**
+   * @brief Gets the number of registration points in the current solver.
+   * @return The point count.
+   */
   size_t registrationPointCount() const {
     return m_solver ? m_solver->points.read().size() : 0;
   }
+
+  /**
+   * @brief Returns the set of currently selected points.
+   * @return Reference to the selection set.
+   */
   const std::set<SelectedPoint>& selectedPoints() const { return m_selectedPoints; }
 
   // Coordinate mapping API
+  /**
+   * @brief Converts image coordinates to widget coordinates.
+   * Accounts for current zoom, pan, and image transformations (rotation/mirror/crop).
+   * @param p Point in image coordinates.
+   * @return Point in widget (pixel) coordinates.
+   */
   QPointF imageToWidget(colorscreen::point_t p) const;
+
+  /**
+   * @brief Converts widget coordinates to image coordinates.
+   * Inverse of imageToWidget.
+   * @param p Point in widget (pixel) coordinates.
+   * @return Point in image coordinates.
+   */
   colorscreen::point_t widgetToImage(QPointF p) const;
 
 private slots:

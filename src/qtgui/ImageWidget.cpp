@@ -23,6 +23,12 @@ Q_DECLARE_METATYPE(std::shared_ptr<colorscreen::progress_info>)
 Q_DECLARE_METATYPE(colorscreen::render_parameters)
 Q_DECLARE_METATYPE(ImageWidget::RenderRequestData)
 
+/**
+ * @brief Constructor for ImageWidget.
+ * Initializes the widget, animations, and internal timers.
+ * 
+ * @param parent Optional parent widget.
+ */
 ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent), m_lastSize(0, 0) {
   qRegisterMetaType<std::shared_ptr<colorscreen::progress_info>>();
   qRegisterMetaType<colorscreen::render_parameters>();
@@ -89,8 +95,16 @@ ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent), m_lastSize(0, 0) {
   connect(m_exploreTimer, &QTimer::timeout, this, &ImageWidget::exploreTick);
 }
 
+/**
+ * @brief Returns the minimum scale that fits the image to the current view.
+ */
 double ImageWidget::getMinScale() const { return m_minScale; }
 
+/**
+ * @brief Sets the zoom level and adjusts the view to zoom around the center of the widget.
+ * 
+ * @param scale The target scale factor.
+ */
 void ImageWidget::setZoom(double scale) {
   if (qAbs(scale - m_scale) > 0.000001 && scale > 1e-9) {
     // Keep center? For now just zoom.
@@ -123,6 +137,11 @@ void ImageWidget::setZoom(double scale) {
   }
 }
 
+/**
+ * @brief Starts a smooth zoom animation by a relative factor.
+ * 
+ * @param factor The zoom factor to apply to the current target scale.
+ */
 void ImageWidget::smoothZoomBy(double factor) {
   m_exploreTargetScale *= factor;
   m_exploreZoomSpeed = 0.15;
@@ -130,6 +149,12 @@ void ImageWidget::smoothZoomBy(double factor) {
   if (!m_exploreTimer->isActive()) m_exploreTimer->start();
 }
 
+/**
+ * @brief Starts a smooth zoom animation to a specific target scale.
+ * 
+ * @param targetScale The target scale factor.
+ * @param fast Whether to use a faster animation speed.
+ */
 void ImageWidget::smoothZoomTo(double targetScale, bool fast) {
   m_exploreTargetScale = targetScale;
   m_exploreZoomSpeed = fast ? 0.35 : 0.15;
@@ -137,6 +162,9 @@ void ImageWidget::smoothZoomTo(double targetScale, bool fast) {
   if (!m_exploreTimer->isActive()) m_exploreTimer->start();
 }
 
+/**
+ * @brief Smoothly animates the view to fit the entire image (or crop) within the widget.
+ */
 void ImageWidget::smoothFitToView() {
   if (!m_scan || m_scan->width <= 0) return;
   double w = width();
@@ -163,6 +191,12 @@ void ImageWidget::smoothFitToView() {
   }
 }
 
+/**
+ * @brief Sets the pan position in image coordinates.
+ * 
+ * @param x The new X coordinate for the top-left of the view.
+ * @param y The new Y coordinate for the top-left of the view.
+ */
 void ImageWidget::setPan(double x, double y) {
   if (qAbs(x - m_viewX) > 0.1 || qAbs(y - m_viewY) > 0.1) {
     m_viewX = x;
@@ -179,6 +213,10 @@ void ImageWidget::setPan(double x, double y) {
   }
 }
 
+/**
+ * @brief Destructor for ImageWidget.
+ * Ensures the rendering thread is properly terminated.
+ */
 ImageWidget::~ImageWidget() {
   if (m_renderThread) {
     m_renderThread->requestInterruption();
@@ -187,6 +225,17 @@ ImageWidget::~ImageWidget() {
   }
 }
 
+/**
+ * @brief Sets the image and all associated rendering parameters.
+ * Recreates the background Renderer and starts the rendering thread.
+ * 
+ * @param scan The image data.
+ * @param rparams Core rendering parameters.
+ * @param scrToImg Screen-to-image mapping.
+ * @param scrDetect Screen detection parameters.
+ * @param renderType Parameters for specific render types.
+ * @param solver Solver parameters for registration points.
+ */
 void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
                            colorscreen::render_parameters *rparams,
                            colorscreen::scr_to_img_parameters *scrToImg,
@@ -272,6 +321,15 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
   update();
 }
 
+/**
+ * @brief Updates the rendering parameters without restarting the renderer thread.
+ * 
+ * @param rparams Core rendering parameters.
+ * @param scrToImg Screen-to-image mapping.
+ * @param scrDetect Screen detection parameters.
+ * @param renderType Renderer-specific parameters.
+ * @param solver Solver parameters.
+ */
 void ImageWidget::updateParameters(
     colorscreen::render_parameters *rparams,
     colorscreen::scr_to_img_parameters *scrToImg,
@@ -321,6 +379,11 @@ void ImageWidget::updateParameters(
   requestRender();
 }
 
+/**
+ * @brief Sets the tolerance for the registration heatmap display.
+ * 
+ * @param tol The tolerance in pixels/units.
+ */
 void ImageWidget::setHeatmapTolerance(double tol) {
   if (qAbs(m_heatmapTolerance - tol) > 1e-6) {
     m_heatmapTolerance = tol;
@@ -328,6 +391,11 @@ void ImageWidget::setHeatmapTolerance(double tol) {
   }
 }
 
+/**
+ * @brief Sets the exaggeration factor for visualizing registration errors.
+ * 
+ * @param ex The exaggeration factor.
+ */
 void ImageWidget::setExaggerate(double ex) {
   if (qAbs(m_exaggerate - ex) > 1e-6) {
     m_exaggerate = ex;
@@ -335,6 +403,11 @@ void ImageWidget::setExaggerate(double ex) {
   }
 }
 
+/**
+ * @brief Sets the maximum length for error visualization arrows.
+ * 
+ * @param len The maximum length in pixels.
+ */
 void ImageWidget::setMaxArrowLength(double len) {
   if (qAbs(m_maxArrowLength - len) > 1e-6) {
     m_maxArrowLength = len;
@@ -346,6 +419,12 @@ void ImageWidget::setMaxArrowLength(double len) {
 
 
 
+/**
+ * @brief Main paint event handler.
+ * Draws the rendered image, registration points, profile spots, and other overlays.
+ * 
+ * @param event The paint event.
+ */
 void ImageWidget::paintEvent(QPaintEvent *event) {
   QPainter p(this);
   if (!m_pixmap.isNull()) {
@@ -755,6 +834,12 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
   }
 }
 
+/**
+ * @brief Handles widget resize events.
+ * Adjusts the view scale and position to maintain a consistent zoom relative to the image.
+ * 
+ * @param event The resize event.
+ */
 void ImageWidget::resizeEvent(QResizeEvent *event) {
   QSize oldSize = m_lastSize;
   QSize newSize = event->size();
@@ -802,6 +887,12 @@ void ImageWidget::resizeEvent(QResizeEvent *event) {
       QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
 }
 
+/**
+ * @brief Handles mouse press events.
+ * Manages dragging, point selection, and coordinate system manipulation based on current mode.
+ * 
+ * @param event The mouse event.
+ */
 void ImageWidget::mousePressEvent(QMouseEvent *event) {
   if (m_interactionMode == SetCenterMode) {
     bool ctrl = event->modifiers() & Qt::ControlModifier;
@@ -951,6 +1042,12 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
   }
 }
 
+/**
+ * @brief Handles mouse move events.
+ * Manages viewport panning, point dragging, and cursor updates.
+ * 
+ * @param event The mouse event.
+ */
 void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
   // Check for hover over registration points
   if (!m_isDragging && m_showRegistrationPoints && m_solver) {
@@ -1112,6 +1209,12 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
   }
 }
 
+/**
+ * @brief Handles mouse release events.
+ * Finalizes point placement, area selection, or coordinate system adjustments.
+ * 
+ * @param event The mouse event.
+ */
 void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
     if (m_interactionMode == PanMode) {
@@ -1297,6 +1400,12 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
   }
 }
 
+/**
+ * @brief Handles mouse wheel events for zooming.
+ * Zooms the view in or out around the current cursor position.
+ * 
+ * @param event The wheel event.
+ */
 void ImageWidget::wheelEvent(QWheelEvent *event) {
   double numDegrees = event->angleDelta().y() / 8.0;
   double numSteps = numDegrees / 15.0;
@@ -1312,6 +1421,12 @@ void ImageWidget::wheelEvent(QWheelEvent *event) {
   }
 }
 
+/**
+ * @brief Handles key press events.
+ * Manages keyboard shortcuts for zooming, mode switching, and fullscreen exit.
+ * 
+ * @param event The key event.
+ */
 void ImageWidget::keyPressEvent(QKeyEvent *event) {
   if (m_interactionMode == ExploreMode) {
       if (event->key() == Qt::Key_Plus || event->key() == Qt::Key_Equal || 
@@ -1374,6 +1489,11 @@ void ImageWidget::keyPressEvent(QKeyEvent *event) {
   QWidget::keyPressEvent(event);
 }
 
+/**
+ * @brief Handles key release events.
+ * 
+ * @param event The key event.
+ */
 void ImageWidget::keyReleaseEvent(QKeyEvent *event) {
   if (event->isAutoRepeat()) {
       QWidget::keyReleaseEvent(event);
@@ -1391,6 +1511,12 @@ void ImageWidget::keyReleaseEvent(QKeyEvent *event) {
   QWidget::keyReleaseEvent(event);
 }
 
+/**
+ * @brief Converts a point from widget (pixel) coordinates to image coordinates.
+ * 
+ * @param p Point in widget coordinates.
+ * @return Point in image coordinates.
+ */
 colorscreen::point_t ImageWidget::widgetToImage(QPointF p) const {
   if (!m_scan || !m_scrToImg)
     return {p.x(), p.y()};
@@ -1404,6 +1530,12 @@ colorscreen::point_t ImageWidget::widgetToImage(QPointF p) const {
   return transformer.transformedToScanCrop({xr, yr});
 }
 
+/**
+ * @brief Converts a point from image coordinates to widget (pixel) coordinates.
+ * 
+ * @param p Point in image coordinates.
+ * @return Point in widget coordinates.
+ */
 QPointF ImageWidget::imageToWidget(colorscreen::point_t p) const {
   if (!m_scan || !m_scrToImg)
     return QPointF(p.x, p.y);
@@ -1416,6 +1548,9 @@ QPointF ImageWidget::imageToWidget(colorscreen::point_t p) const {
   return QPointF((tr.x - m_viewX) * m_scale, (tr.y - m_viewY) * m_scale);
 }
 
+/**
+ * @brief Rotates the image viewport 90 degrees to the left.
+ */
 void ImageWidget::rotateLeft() {
     if (!m_rparams) return;
     int oldRot = (int)m_rparams->scan_rotation;
@@ -1425,6 +1560,9 @@ void ImageWidget::rotateLeft() {
     requestRender();
 }
 
+/**
+ * @brief Rotates the image viewport 90 degrees to the right.
+ */
 void ImageWidget::rotateRight() {
     if (!m_rparams) return;
     int oldRot = (int)m_rparams->scan_rotation;
@@ -1434,6 +1572,11 @@ void ImageWidget::rotateRight() {
     requestRender();
 }
 
+/**
+ * @brief Centers the view on a specific image coordinate.
+ * 
+ * @param imgPos The target point in image coordinates.
+ */
 void ImageWidget::centerOn(colorscreen::point_t imgPos) {
   if (!m_scan || !m_rparams) return;
   CoordinateTransformer transformer(m_scan.get(), *m_rparams);
@@ -1446,6 +1589,12 @@ void ImageWidget::centerOn(colorscreen::point_t imgPos) {
   emit viewStateChanged(QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
 }
 
+/**
+ * @brief Adjusts the viewport position during rotation to keep the center stable.
+ * 
+ * @param oldRotIdx Previous rotation index.
+ * @param newRotIdx New rotation index.
+ */
 void ImageWidget::pivotViewport(int oldRotIdx, int newRotIdx) {
     if (!m_scan) return;
     
@@ -1484,6 +1633,9 @@ void ImageWidget::pivotViewport(int oldRotIdx, int newRotIdx) {
     m_minScale = qMin(scaleX, scaleY);
 }
 
+/**
+ * @brief Instantly fits the image within the current widget size.
+ */
 void ImageWidget::fitToView() {
   if (!m_scan || m_scan->width <= 0)
     return;
@@ -1523,6 +1675,11 @@ void ImageWidget::fitToView() {
       QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
 }
 
+/**
+ * @brief Sets whether registration points are displayed.
+ * 
+ * @param show True to show points.
+ */
 void ImageWidget::setShowRegistrationPoints(bool show) {
   m_showRegistrationPoints = show;
   if (!show) {
@@ -1532,11 +1689,19 @@ void ImageWidget::setShowRegistrationPoints(bool show) {
   emit registrationPointsVisibilityChanged(show);
 }
 
+/**
+ * @brief Sets whether profile spots are displayed.
+ * 
+ * @param show True to show spots.
+ */
 void ImageWidget::setShowProfileSpots(bool show) {
   m_showProfileSpots = show;
   update();
 }
 
+/**
+ * @brief Selects all registration points.
+ */
 void ImageWidget::selectAll() {
   if (!m_solver || m_solver->points.empty()) return;
   
@@ -1553,6 +1718,9 @@ void ImageWidget::selectAll() {
   }
 }
 
+/**
+ * @brief Deletes the currently selected registration points.
+ */
 void ImageWidget::deleteSelectedPoints() {
   if (!m_solver || m_selectedPoints.empty()) return;
   
@@ -1583,6 +1751,11 @@ void ImageWidget::deleteSelectedPoints() {
   update();
 }
 
+/**
+ * @brief Sets the active interaction mode.
+ * 
+ * @param mode The new interaction mode.
+ */
 void ImageWidget::setInteractionMode(InteractionMode mode) {
   if (m_interactionMode == mode) return;
   m_interactionMode = mode;
@@ -1591,6 +1764,9 @@ void ImageWidget::setInteractionMode(InteractionMode mode) {
   update();
 }
 
+/**
+ * @brief Clears the current selection of points.
+ */
 void ImageWidget::clearSelection() {
   if (!m_selectedPoints.empty()) {
     m_selectedPoints.clear();
@@ -1604,6 +1780,10 @@ void ImageWidget::clearSelection() {
    The resulting QImage is composited on top of the main pixmap in paintEvent.
    This allows the GUI to remain responsive while points are re-rendered
    after view changes or parameter updates.  */
+/**
+ * @brief Schedules a background render of the registration-point overlay image.
+ * This runs asynchronously to keep the UI responsive.
+ */
 void ImageWidget::schedulePointsOverlayRender ()
 {
   if (!m_solver || !m_scan || !m_rparams || !m_scrToImg || width () <= 0
@@ -1856,10 +2036,18 @@ void ImageWidget::schedulePointsOverlayRender ()
       });
 }
 
+/**
+ * @brief Kept for backward compatibility.
+ */
 void ImageWidget::updateSimulatedPoints() {
   /* No longer used - kept as stub to avoid build breaks in other files if any. */
 }
 
+/**
+ * @brief Toggles the explore mode (precision navigation).
+ * 
+ * @param enable True to enable explore mode.
+ */
 void ImageWidget::setExploreMode(bool enable) {
   if (enable && m_interactionMode != ExploreMode) {
       m_interactionMode = ExploreMode;
@@ -1882,6 +2070,9 @@ void ImageWidget::setExploreMode(bool enable) {
   }
 }
 
+/**
+ * @brief Periodic timer tick for animations and explore mode updates.
+ */
 void ImageWidget::exploreTick() {
   bool needsUpdate = false;
   
@@ -1974,6 +2165,9 @@ void ImageWidget::exploreTick() {
 }
 
 // Request a new render job (non-blocking)
+/**
+ * @brief Requests a new asynchronous render of the image tile.
+ */
 void ImageWidget::requestRender() {
   m_pointsOverlayDirty = true;
   m_renderQueue.cancelAll();
@@ -2004,6 +2198,13 @@ void ImageWidget::requestRender() {
     qCDebug(lcRenderSync) << "ImageWidget::requestRender - Created ID:" << reqId << " scale:" << m_scale;
 }
 
+/**
+ * @brief Callback from TaskQueue to initiate the actual rendering on the background thread.
+ * 
+ * @param reqId The unique request ID.
+ * @param progress Progress information object.
+ * @param userData User data containing RenderRequestData.
+ */
 void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData)
 {
     progress->set_task ("Preparing renderer", 1);
@@ -2043,6 +2244,16 @@ void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progre
         }
     }
 }
+/**
+ * @brief Handles the completion of a rendering job.
+ * 
+ * @param reqId The request ID.
+ * @param image The rendered QImage.
+ * @param xOffset X offset of the rendered tile.
+ * @param yOffset Y offset of the rendered tile.
+ * @param scale Scale factor of the rendered tile.
+ * @param success Whether the rendering was successful.
+ */
 void ImageWidget::handleImageReady(int reqId, QImage image, double xOffset, double yOffset, double scale, bool success)
 {
     qCDebug(lcRenderSync) << "ImageWidget::handleImageReady - Received ID:" << reqId << " success:" << success << " m_lastCompletedReqId:" << m_lastCompletedReqId;
@@ -2068,6 +2279,12 @@ void ImageWidget::handleImageReady(int reqId, QImage image, double xOffset, doub
     }
 }
 
+/**
+ * @brief Sets the profile spots and their results for display.
+ * 
+ * @param spots Vector of spot points.
+ * @param results Vector of color matching results.
+ */
 void ImageWidget::setProfileSpots(const std::vector<colorscreen::point_t> *spots,
                                   const std::vector<colorscreen::color_match> *results) {
   m_profileSpots = spots;
