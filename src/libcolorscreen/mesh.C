@@ -278,20 +278,62 @@ mesh::get_range (matrix2x2<coord_t> trans, image_area area_in) const noexcept
   return area;
 }
 
-/* Determine range in src coordinates covering AREA of target.  */
+/* Determine range in target coordinates covering AREA_IN of source.  */
 image_area
 mesh::get_src_range (image_area area_in) const noexcept
 {
   image_area area;
 
-  int xmin = std::clamp ((int)my_floor ((area_in.x + m_xshift) * m_xstepinv), 0, m_width);
-  int xmax = std::clamp ((int)my_ceil ((area_in.x + area_in.width + m_xshift) * m_xstepinv), 0, m_width);
-  int ymin = std::clamp ((int)my_floor ((area_in.y + m_yshift) * m_ystepinv), 0, m_height);
-  int ymax = std::clamp ((int)my_ceil ((area_in.y + area_in.height + m_yshift) * m_ystepinv), 0, m_height);
+  if (m_width < 1 || m_height < 1)
+    return area;
 
-  for (int x = xmin; x <= xmax; x++)
-    for (int y = ymin; y <= ymax; y++)
-      area.extend (m_data[y * m_width + x]);
+  /* 1. Account for the 4 corners of AREA_IN.  */
+  area.extend (apply ({area_in.x, area_in.y}));
+  area.extend (apply ({area_in.x + area_in.width, area_in.y}));
+  area.extend (apply ({area_in.x, area_in.y + area_in.height}));
+  area.extend (apply ({area_in.x + area_in.width, area_in.y + area_in.height}));
+
+  /* Find the range of grid indices.  */
+  int ix1 = floor ((area_in.x + m_xshift) * m_xstepinv);
+  int ix2 = floor ((area_in.x + area_in.width + m_xshift) * m_xstepinv);
+  int iy1 = floor ((area_in.y + m_yshift) * m_ystepinv);
+  int iy2 = floor ((area_in.y + area_in.height + m_yshift) * m_ystepinv);
+
+  /* 2. Account for intersections of AREA_IN boundaries with grid lines.  */
+  /* Top and bottom boundaries.  */
+  for (int ix = ix1 + 1; ix <= ix2; ix++)
+    {
+      if (ix >= 0 && ix < m_width)
+	{
+	  area.extend (apply ({ix * m_xstep - m_xshift, area_in.y}));
+	  area.extend (apply ({ix * m_xstep - m_xshift, area_in.y + area_in.height}));
+	}
+    }
+  /* Left and right boundaries.  */
+  for (int iy = iy1 + 1; iy <= iy2; iy++)
+    {
+      if (iy >= 0 && iy < m_height)
+	{
+	  area.extend (apply ({area_in.x, iy * m_ystep - m_yshift}));
+	  area.extend (apply ({area_in.x + area_in.width, iy * m_ystep - m_yshift}));
+	}
+    }
+
+  /* 3. Account for interior grid points.  */
+  int gx1 = ceil ((area_in.x + m_xshift) * m_xstepinv);
+  int gx2 = floor ((area_in.x + area_in.width + m_xshift) * m_xstepinv);
+  int gy1 = ceil ((area_in.y + m_yshift) * m_ystepinv);
+  int gy2 = floor ((area_in.y + area_in.height + m_yshift) * m_ystepinv);
+
+  gx1 = std::clamp (gx1, 0, m_width - 1);
+  gx2 = std::clamp (gx2, 0, m_width - 1);
+  gy1 = std::clamp (gy1, 0, m_height - 1);
+  gy2 = std::clamp (gy2, 0, m_height - 1);
+
+  for (int ix = gx1; ix <= gx2; ix++)
+    for (int iy = gy1; iy <= gy2; iy++)
+      area.extend (m_data[iy * m_width + ix]);
+
   return area;
 }
 

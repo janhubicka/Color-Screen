@@ -1480,6 +1480,53 @@ test_darkroom ()
   return ok;
 }
 static bool
+test_get_src_range ()
+{
+  bool ok = true;
+  /* Create a simple 2x2 cell mesh (3x3 points).  */
+  int width = 3;
+  int height = 3;
+  coord_t xshift = 0;
+  coord_t yshift = 0;
+  coord_t xstep = 10.0;
+  coord_t ystep = 10.0;
+
+  std::unique_ptr<mesh> m (new mesh (xshift, yshift, xstep, ystep, width, height));
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      m->set_point ({(int64_t)x, (int64_t)y}, {(coord_t)(x * xstep), (coord_t)(y * ystep)});
+
+  /* Input area in source coordinates: [5, 15] x [5, 15].
+     This covers parts of all 4 cells.
+     The corners of the area are at (5,5), (15,5), (5,15), (15,15).
+     The target coordinates should be the same as source for this mesh.
+     So result range should be [5, 15] x [5, 15].  */
+  image_area area_in (5.0, 5.0, 10.0, 10.0);
+  image_area result = m->get_src_range (area_in);
+
+  if (fabs (result.x - 5.0) > 0.001 || fabs (result.y - 5.0) > 0.001
+      || fabs (result.width - 10.0) > 0.001 || fabs (result.height - 10.0) > 0.001)
+    {
+      printf ("FAILED: get_src_range clipping failed: got [%f, %f] %fx%f, expected [5, 5] 10x10\n",
+              result.x, result.y, result.width, result.height);
+      ok = false;
+    }
+
+  /* Test with area entirely inside one cell.  */
+  image_area area_in2 (2.0, 2.0, 1.0, 1.0);
+  image_area result2 = m->get_src_range (area_in2);
+  if (fabs (result2.x - 2.0) > 0.001 || fabs (result2.y - 2.0) > 0.001
+      || fabs (result2.width - 1.0) > 0.001 || fabs (result2.height - 1.0) > 0.001)
+    {
+      printf ("FAILED: get_src_range inner clipping failed: got [%f, %f] %fx%f, expected [2, 2] 1x1\n",
+              result2.x, result2.y, result2.width, result2.height);
+      ok = false;
+    }
+
+  return ok;
+}
+
+static bool
 test_mesh_inversion ()
 {
   bool ok = true;
@@ -1672,6 +1719,7 @@ main ()
   report ("spectrum to xyz tests", test_spectrum_dyes_to_xyz ());
   report ("whitepoint consistency tests", test_whitepoint_constants ());
   report ("darkroom simulation tests", test_darkroom ());
+  report ("mesh get_src_range tests", test_get_src_range ());
   report ("mesh inversion tests", test_mesh_inversion ());
   report ("cow points tests", test_cow_points ());
   report ("image area tests", test_image_area ());
