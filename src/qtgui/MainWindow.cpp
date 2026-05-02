@@ -67,6 +67,10 @@
 
 // Undo/Redo Implementation
 
+/* Undo command that captures a full ParameterState snapshot before and after
+   a change.  Successive commands within a 500 ms window are merged into a
+   single undo step so that slider drags produce one undo entry rather than
+   dozens.  All parameter changes share id()==1 which enables the merging.  */
 class ChangeParametersCommand : public QUndoCommand {
 public:
   ChangeParametersCommand(MainWindow *window, const ParameterState &oldState,
@@ -124,6 +128,12 @@ Q_DECLARE_METATYPE(std::vector<colorscreen::solver_parameters::solver_point_t>*)
 Q_DECLARE_METATYPE(std::shared_ptr<colorscreen::progress_info>)
 Q_DECLARE_METATYPE(colorscreen::finetune_result)
 
+/* Construct the main window.
+   Registers Qt meta-types needed for cross-thread signal/slot connections,
+   sets up the UI (panels, docks, toolbar, menus), initialises crash recovery,
+   creates persistent background worker threads for the geometry solver,
+   color optimizer, and coordinate optimization, and restores the previous
+   window layout from QSettings.  */
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   qRegisterMetaType<MainWindow::SolverRequestData>();
   qRegisterMetaType<MainWindow::ColorOptimizerRequestData>();
@@ -229,6 +239,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   updateWindowTitle();
 }
 
+/* Destroy the main window.
+   Hides the window first to prevent stale accessibility events on macOS
+   (QTBUG-71850).  Shuts down all background worker threads (solver, color
+   optimizer, coordinate optimizer) and waits for them to finish.  Explicitly
+   deletes the main splitter before member variables are destroyed so that
+   panel callbacks don't access freed data.  Finally cleans up any floating
+   dock widgets that may hold detached chart views.  */
 MainWindow::~MainWindow() {
   // Hide window first to avoid invalid accessibility/focus events during
   // destruction This is a known workaround for MacOS crashes on exit
@@ -292,6 +309,14 @@ MainWindow::~MainWindow() {
     delete m_gamutDock;
 }
 
+/* Build the entire main window UI.
+   Creates the horizontal splitter (image widget | right column), the right
+   column (navigation view + tab widget with all panels), all dock widgets
+   for detachable charts and diagnostic images, the status bar with progress
+   reporting, and wires up the extensive network of signal/slot connections
+   between panels, ImageWidget, NavigationView, and MainWindow.  The dock
+   wiring uses a generic setupDock lambda that handles detach (wrapping the
+   widget in a resizable frame) and reattach (via DockCloseEventFilter).  */
 void MainWindow::setupUi() {
 
   m_mainSplitter = new QSplitter(Qt::Horizontal, this);
@@ -1181,6 +1206,11 @@ void MainWindow::setupUi() {
 
 // Helper to manually load and recolor symbolic icons on Windows where
 // auto-recoloring fails Helper to manually load and recolor symbolic icons
+/* Load an SVG icon by name with cross-platform support.
+   On Windows, searches Adwaita icon directories and re-colors the SVG to
+   white for visibility on dark toolbars, generating pixmaps at multiple
+   DPI-aware sizes.  On other platforms and for Qt resource paths (":/"),
+   delegates to QIcon or QIcon::fromTheme.  */
 QIcon getSymbolicIcon(const QString &name) {
   // If it is a resource, use it directly (Qt handles SVG scaling properly)
   // We assume resources are already correct color (white)
@@ -1246,6 +1276,13 @@ QIcon getSymbolicIcon(const QString &name) {
   return QIcon::fromTheme(name); // Fallback to system theme
 }
 
+/* Create the main toolbar.
+   Adds the render mode combo box, color (IR/RGB) checkbox, interaction tool
+   actions (Pan, Select, Add Point, Set Center) as a mutually exclusive
+   QActionGroup, zoom and rotation buttons, and the registration-specific
+   tools (lock coordinates, optimize coordinates).  Connects each tool
+   action to set the corresponding ImageWidget interaction mode and wires
+   up explore mode shortcut (Ctrl+M).  */
 void MainWindow::createToolbar() {
   m_toolbar = addToolBar("Main Toolbar");
   m_toolbar->setObjectName("MainToolbar"); // Fix state saving warning
@@ -1419,6 +1456,10 @@ void MainWindow::createToolbar() {
   addAction(exploreModeAction);
 }
 
+/* Create keyboard shortcuts 1–0 mapped to the first 10 render modes.
+   Each shortcut triggers the corresponding index in m_modeComboBox.
+   Actions are initially disabled and enabled dynamically as modes
+   are added to the combo box by updateModeMenu().  */
 void MainWindow::createModeShortcuts() {
   for (int i = 0; i < 10; ++i) {
     int key = (i + 1) % 10;
@@ -1436,6 +1477,9 @@ void MainWindow::createModeShortcuts() {
   }
 }
 
+/* Rotate the scan image 90° counter-clockwise.
+   Updates scan_rotation in the parameter state, adjusts the viewport
+   pivot so the visible area stays centered, and pushes an undo command.  */
 void MainWindow::rotateLeft() {
   if (!m_scan)
     return;
@@ -1454,6 +1498,8 @@ void MainWindow::rotateLeft() {
   changeParameters(newState, "Rotate Left");
 }
 
+/* Rotate the scan image 90° clockwise.
+   Same logic as rotateLeft but increments rotation instead.  */
 void MainWindow::rotateRight() {
   if (!m_scan)
     return;
@@ -1472,6 +1518,8 @@ void MainWindow::rotateRight() {
   changeParameters(newState, "Rotate Right");
 }
 
+/* Toggle horizontal mirroring of the scan image.
+   Useful for glass plates that may have been scanned from the wrong side.  */
 void MainWindow::onMirrorHorizontally(bool checked) {
   if (!m_scan)
     return;
@@ -1482,6 +1530,12 @@ void MainWindow::onMirrorHorizontally(bool checked) {
   changeParameters(newState, "Mirror Horizontally");
 }
 
+/* Toggle fullscreen mode for the ImageWidget.
+   When entering fullscreen, detaches ImageWidget from the splitter, saves
+   the splitter sizes, moves the widget to the main window's screen, and
+   shows it fullscreen.  When exiting, re-parents the widget back into the
+   splitter and restores the saved splitter sizes.  Blocks adaptive resize
+   during the transition to prevent glitches.  */
 void MainWindow::toggleFullscreen() {
   if (m_imageWidget->isFullScreen()) {
     // Exit fullscreen: Block adaptive resize during reparenting glitches
@@ -1536,6 +1590,11 @@ void MainWindow::toggleFullscreen() {
   }
 }
 
+/* Handle the color (IR/RGB) checkbox toggle.
+   Updates m_renderTypeParams.color and triggers a re-render of the image
+   without resetting the current viewport.  The checkbox is only visible
+   and enabled when RGB data is available and the current render type
+   supports the IR/RGB switch.  */
 void MainWindow::onColorCheckBoxChanged(bool checked) {
   // Update the color field in render_type_parameters
   m_renderTypeParams.color = checked;
@@ -1548,6 +1607,12 @@ void MainWindow::onColorCheckBoxChanged(bool checked) {
   }
 }
 
+/* Rebuild the render mode combo box from the static render_type_properties
+   table in libcolorscreen.  Filters out modes that are hidden, require
+   screen-to-image mapping when none is set (Random type), need RGB data
+   that isn't available, or need a correction profile that doesn't exist.
+   After populating, re-selects the current mode, updates 1-0 hotkey
+   tooltips, and refreshes the color checkbox state.  */
 void MainWindow::updateModeMenu() {
   m_modeComboBox->blockSignals(true);
   m_modeComboBox->clear();
@@ -1636,6 +1701,9 @@ void MainWindow::updateModeMenu() {
   m_modeComboBox->blockSignals(false);
 }
 
+/* Render a 64×64 preview icon of a screen type pattern.
+   Uses libcolorscreen's render_screen_tile to produce a small RGB buffer,
+   converts it to a QIcon for display in the autodetection result dialog.  */
 QIcon MainWindow::renderScreenIcon(colorscreen::scr_type type) {
   int w = 64;
   int h = 64;
@@ -1663,6 +1731,10 @@ QIcon MainWindow::renderScreenIcon(colorscreen::scr_type type) {
   return QIcon();
 }
 
+/* Handle render mode combo box selection change.
+   Updates the render type in m_renderTypeParams and triggers a re-render
+   of the image widget.  Also refreshes the color checkbox state since
+   different render types may or may not support the IR/RGB switch.  */
 void MainWindow::onModeChanged(int index) {
   if (index < 0)
     return;
@@ -1685,6 +1757,15 @@ void MainWindow::onModeChanged(int index) {
   }
 }
 
+/* Create all application menus: File, Edit, View, and Registration.
+   File menu: Open/Save/Render with recent file/param submenus.
+   Edit menu: Undo/Redo from QUndoStack.
+   View menu: Zoom controls, rotation, mirror, fullscreen, gamut warning.
+   Registration menu: Point selection, deletion, pruning, geometry
+   optimization, coordinate lock/optimize, auto-optimize toggle.
+   Also sets up the ExploreMode zoom shortcut management that disables
+   global zoom shortcuts while ExploreMode is active to allow continuous
+   hold-to-zoom.  */
 void MainWindow::createMenus() {
   QMenu *fileMenu = menuBar()->addMenu("&File");
   m_openAction = fileMenu->addAction("&Open Image...");
@@ -1944,6 +2025,12 @@ void MainWindow::createMenus() {
           });
 }
 
+/* Open a .par parameter file chosen by the user.
+   Prompts for unsaved changes first, then resets all parameter structs to
+   defaults before loading (load_csp merges into existing values, so a reset
+   is needed for clean loading).  On success, re-initialises the image widget
+   and renderer with new parameters, clears undo history, and refreshes the
+   UI.  On error, restores the previous parameter values.  */
 void MainWindow::onOpenParameters() {
   // Check for unsaved changes before loading new parameters
   if (!maybeSave()) {
@@ -2014,6 +2101,11 @@ void MainWindow::onOpenParameters() {
   });
 }
 
+/* Save parameters to the current .par file.
+   If no file has been explicitly chosen (m_currentParamsFile is empty or
+   "weak" — i.e. auto-suggested), falls back to Save As.  Uses save_csp
+   from libcolorscreen; detection parameters are only written when RGB
+   scan data is available (matching GTK GUI behaviour).  */
 void MainWindow::onSaveParameters() {
   // If we don't have a current file OR it's a weak suggestion, fall back to
   // Save As
@@ -2051,6 +2143,9 @@ void MainWindow::onSaveParameters() {
   }
 }
 
+/* Save parameters to a new .par file chosen by the user.
+   Appends ".par" extension if missing, updates the current file path,
+   marks it as non-weak, and adds it to the recent params list.  */
 void MainWindow::onSaveParametersAs() {
   QString fileName = QFileDialog::getSaveFileName(
       this, "Save Parameters",
@@ -2104,6 +2199,10 @@ void MainWindow::onSaveParametersAs() {
   });
 }
 
+/* Show a file dialog and open an image.
+   Uses QTimer::singleShot(0) to defer the actual loadFile call so that
+   the event loop can clean up KIO jobs from the file dialog before any
+   QMessageBox is shown — prevents crashes in KF6KIOGui on KDE.  */
 void MainWindow::onOpenImage() {
   QString fileName = QFileDialog::getOpenFileName(
       this, "Open Image", QString(),
@@ -2119,6 +2218,9 @@ void MainWindow::onOpenImage() {
   QTimer::singleShot(0, this, [this, fileName]() { loadFile(fileName); });
 }
 
+/* Register a new background task for progress tracking.
+   Adds it to the active list and starts the periodic progress timer
+   if not already running.  */
 void MainWindow::addProgress(std::shared_ptr<colorscreen::progress_info> info) {
   ProgressEntry entry;
   entry.info = info;
@@ -2130,6 +2232,10 @@ void MainWindow::addProgress(std::shared_ptr<colorscreen::progress_info> info) {
   }
 }
 
+/* Remove a completed or cancelled background task from progress tracking.
+   Adjusts the manually selected progress index to keep it valid after
+   the removal.  When the last progress is removed, stops the timer and
+   hides the progress container in the status bar.  */
 void MainWindow::removeProgress(
     std::shared_ptr<colorscreen::progress_info> info) {
   int removedIndex = -1;
@@ -2166,6 +2272,10 @@ void MainWindow::removeProgress(
   }
 }
 
+/* Find the most relevant task to display in the progress bar.
+   Prefers the task with the longest elapsed time that has non-zero
+   progress (indicating active work).  Falls back to the oldest task
+   overall if none have reported progress yet.  */
 ProgressEntry *MainWindow::getLongestRunningTask() {
   ProgressEntry *oldestActive = nullptr;
   ProgressEntry *oldestAny = nullptr;
@@ -2197,6 +2307,13 @@ ProgressEntry *MainWindow::getLongestRunningTask() {
   return oldestActive ? oldestActive : oldestAny;
 }
 
+/* Periodic timer callback (100 ms) that updates the status bar progress.
+   Shows the task name chain (nested subtasks joined by " > "), progress
+   percentage, estimated time remaining (after 20 s with >0.1% progress),
+   and prev/next buttons when multiple tasks are active.  Uses a 300 ms
+   grace period before showing the progress container to avoid flicker
+   for very short tasks.  Supports manual selection via onPrevProgress/
+   onNextProgress or auto-selects via getLongestRunningTask().  */
 void MainWindow::onProgressTimer() {
   if (m_activeProgresses.empty()) {
     // No active tasks, hide progress
@@ -2311,6 +2428,11 @@ void MainWindow::onProgressTimer() {
   }
 }
 
+/* Cancel the currently displayed progress task.
+   For render tasks, shows a confirmation dialog first since renders
+   can be expensive.  Uses a local shared_ptr copy to keep the progress_info
+   alive across the dialog's event loop in case removeProgress() is called
+   concurrently.  */
 void MainWindow::onCancelClicked() {
   // Cancel the currently displayed progress (not necessarily the longest
   // running)
@@ -2333,6 +2455,9 @@ void MainWindow::onCancelClicked() {
   }
 }
 
+/* Switch the progress display to the previous task in the active list.
+   If no manual selection has been made yet, starts from the current
+   auto-selected task.  Wraps around circularly.  */
 void MainWindow::onPrevProgress() {
   if (m_activeProgresses.size() <= 1)
     return;
@@ -2354,6 +2479,8 @@ void MainWindow::onPrevProgress() {
       m_activeProgresses.size();
 }
 
+/* Switch the progress display to the next task in the active list.
+   Mirrors onPrevProgress() but increments the index.  */
 void MainWindow::onNextProgress() {
   if (m_activeProgresses.size() <= 1)
     return;
@@ -2374,6 +2501,12 @@ void MainWindow::onNextProgress() {
       (m_manuallySelectedProgressIndex + 1) % m_activeProgresses.size();
 }
 
+/* Post-load initialisation after a new image has been opened.
+   Updates the render mode menu, sets the scan reference on all background
+   workers, feeds the image to NavigationView, shows/hides the Tiles tab
+   based on stitch data, shows/hides Profile and ImageLayer tabs based on
+   RGB availability, refreshes all panel state, and enables the Render
+   action.  */
 void MainWindow::onImageLoaded() {
   // Update UI components that depend on loaded image
   updateModeMenu();
@@ -2421,6 +2554,9 @@ void MainWindow::onImageLoaded() {
 
 // Recent Files Implementation
 
+/* Add a file path to the most-recently-used image files list.
+   Moves it to the front, caps the list at MaxRecentFiles, rebuilds
+   the menu, and persists to QSettings.  */
 void MainWindow::addToRecentFiles(const QString &filePath) {
   QString absolutePath = QFileInfo(filePath).absoluteFilePath();
   m_recentFiles.removeAll(absolutePath);
@@ -2433,6 +2569,8 @@ void MainWindow::addToRecentFiles(const QString &filePath) {
   saveRecentFiles();
 }
 
+/* Rebuild the "Open Recent" submenu from the m_recentFiles list.
+   Adds a "Clear Recent Files" action at the bottom.  */
 void MainWindow::updateRecentFileActions() {
   m_recentFilesMenu->clear();
   m_recentFileActions.clear();
@@ -2460,6 +2598,8 @@ void MainWindow::updateRecentFileActions() {
   }
 }
 
+/* Slot invoked when a recent file menu item is clicked.
+   Extracts the file path from the action's data and loads it.  */
 void MainWindow::openRecentFile() {
   QAction *action = qobject_cast<QAction *>(sender());
   if (action) {
@@ -2468,6 +2608,13 @@ void MainWindow::openRecentFile() {
   }
 }
 
+/* Load an image file and optionally its associated .par parameter file.
+   If SUPPRESSPARAMPROMPT is false, checks for a .par file alongside the
+   image and offers to load it.  If the user declines or no .par file exists,
+   a weak (suggested) parameter filename is set for later Save.
+   The actual image loading runs asynchronously via QtConcurrent::run; on
+   completion, the scan is set on ImageWidget, stitch tile loading is launched
+   in parallel for .csprj projects, and undo history is cleared.  */
 void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   if (fileName.isEmpty())
     return;
@@ -2673,12 +2820,14 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   watcher->setFuture(future);
 }
 
+/* Load the recent image files list from QSettings on startup.  */
 void MainWindow::loadRecentFiles() {
   QSettings settings;
   m_recentFiles = settings.value("recentFiles").toStringList();
   updateRecentFileActions();
 }
 
+/* Persist the recent image files list to QSettings.  */
 void MainWindow::saveRecentFiles() {
   QSettings settings;
   settings.setValue("recentFiles", m_recentFiles);
@@ -2686,6 +2835,11 @@ void MainWindow::saveRecentFiles() {
 
 // Undo/Redo Implementation
 
+/* Apply a full ParameterState to the application.
+   Copies all parameter structs (render, scr-to-img, detect, solver,
+   profile spots) to member variables, updates ImageWidget and
+   NavigationView, refreshes all panels, and rebuilds the mode menu.
+   Called by undo/redo commands and by changeParameters().  */
 void MainWindow::applyState(const ParameterState &state) {
   // User requested rotation is not part of parameters.
   // Preserve current rotation when applying state.
@@ -2713,6 +2867,12 @@ void MainWindow::applyState(const ParameterState &state) {
   updateModeMenu();
 }
 
+/* Refresh all UI panels and toolbar state from a ParameterState.
+   Calls updateUI() on every registered panel, syncs the mirror toggle,
+   nonlinear corrections checkbox, deformation chart, backlight dock
+   visibility, adaptive sharpening chart, and registration group
+   visibility.  Does not update ImageWidget or NavigationView directly
+   (that is done by applyState).  */
 void MainWindow::updateUIFromState(const ParameterState &state) {
   for (auto panel : m_panels) {
     if (panel)
@@ -2751,6 +2911,10 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
   }
 }
 
+/* Create a snapshot of the current application parameters.
+   Bundles render_parameters, scr_to_img_parameters, scr_detect_parameters,
+   solver_parameters, and profile spots into a ParameterState struct for
+   use in undo commands and state comparisons.  */
 ParameterState MainWindow::getCurrentState() const {
   ParameterState state;
   state.rparams = m_rparams;
@@ -2761,6 +2925,12 @@ ParameterState MainWindow::getCurrentState() const {
   return state;
 }
 
+/* Push an undoable parameter change.
+   Compares the current state with NEWSTATE; if different, creates a
+   ChangeParametersCommand and pushes it onto the undo stack.
+   The DESCRIPTION string appears in the Edit > Undo/Redo menu text.
+   Successive calls within 500 ms are automatically merged by the
+   command's mergeWith() into a single undo step.  */
 void MainWindow::changeParameters(const ParameterState &newState,
                                   const QString &description) {
   ParameterState currentState = getCurrentState();
@@ -2772,6 +2942,9 @@ void MainWindow::changeParameters(const ParameterState &newState,
 }
 
 // Helper to check for unsaved changes and prompt to save
+/* Check for unsaved parameter changes and prompt the user.
+   Returns true if it's safe to proceed (user saved, discarded, or there
+   were no changes).  Returns false if the user cancelled.  */
 bool MainWindow::maybeSave() {
   // Only prompt if there are unsaved changes (undo stack is not clean)
   if (!m_undoStack || m_undoStack->isClean()) {
@@ -2796,6 +2969,10 @@ bool MainWindow::maybeSave() {
   }
 }
 
+/* Handle window close event.
+   Prompts for unsaved changes, asks to cancel any active render, cancels
+   all remaining background tasks, cleans up crash recovery files, and
+   saves window state and recent file lists.  */
 void MainWindow::closeEvent(QCloseEvent *event) {
   // Check for unsaved changes
   if (!maybeSave()) {
@@ -2831,6 +3008,8 @@ void MainWindow::closeEvent(QCloseEvent *event) {
   event->accept();
 }
 
+/* Update the window title to show the application version and the
+   currently loaded image filename.  */
 void MainWindow::updateWindowTitle() {
   QString title = "Color-Screen " PACKAGE_VERSION;
   if (!m_currentImageFile.isEmpty()) {
@@ -2876,6 +3055,8 @@ void MainWindow::restoreInteractionMode() {
 }
 
 
+/* Save window geometry, state, splitter positions, and current desktop
+   size to QSettings for restoration on next launch.  */
 void MainWindow::saveWindowState() {
   QSettings settings;
 
@@ -2896,6 +3077,11 @@ void MainWindow::saveWindowState() {
   }
 }
 
+/* Restore window geometry and splitter positions from QSettings.
+   Validates that the desktop size hasn't changed significantly (>100 px)
+   since the layout was saved; if it has, falls back to a default size.
+   After restoring, fixes any docks that were saved as visible but have
+   no widget content (they would appear as empty floating windows).  */
 void MainWindow::restoreWindowState() {
   QSettings settings;
 
@@ -2966,6 +3152,8 @@ void MainWindow::restoreWindowState() {
 
 // Recent Parameters Implementation
 
+/* Add a file path to the most-recently-used parameter files list.
+   Same pattern as addToRecentFiles.  */
 void MainWindow::addToRecentParams(const QString &filePath) {
   QString absolutePath = QFileInfo(filePath).absoluteFilePath();
   m_recentParams.removeAll(absolutePath);
@@ -2978,6 +3166,7 @@ void MainWindow::addToRecentParams(const QString &filePath) {
   saveRecentParams();
 }
 
+/* Rebuild the "Open Recent Parameters" submenu.  */
 void MainWindow::updateRecentParamsActions() {
   m_recentParamsMenu->clear();
   m_recentParamsActions.clear();
@@ -3006,6 +3195,9 @@ void MainWindow::updateRecentParamsActions() {
   }
 }
 
+/* Slot invoked when a recent parameter menu item is clicked.
+   Loads the .par file (reset + merge), updates the renderer and UI,
+   syncs gamut warning state, and clears undo history.  */
 void MainWindow::openRecentParams() {
   QAction *action = qobject_cast<QAction *>(sender());
   if (action) {
@@ -3067,34 +3259,43 @@ void MainWindow::openRecentParams() {
   }
 }
 
+/* Load the recent parameter files list from QSettings on startup.  */
 void MainWindow::loadRecentParams() {
   QSettings settings;
   m_recentParams = settings.value("recentParams").toStringList();
   updateRecentParamsActions();
 }
 
+/* Persist the recent parameter files list to QSettings.  */
 void MainWindow::saveRecentParams() {
   QSettings settings;
   settings.setValue("recentParams", m_recentParams);
 }
 
+/* Zoom in by 25% with smooth animation.  */
 void MainWindow::onZoomIn() {
   if (m_imageWidget) {
     m_imageWidget->smoothZoomBy(1.25);
   }
 }
 
+/* Zoom out by ~10% with smooth animation.  */
 void MainWindow::onZoomOut() {
   if (m_imageWidget) {
     m_imageWidget->smoothZoomBy(1.0 / 1.1); // Zoom out by 10%
   }
 }
 
+/* Zoom to 100% (1:1 pixel scale) with smooth animation.  */
 void MainWindow::onZoom100() {
   if (m_imageWidget) {
     m_imageWidget->smoothZoomTo(1.0, true);
   }
 }
+/* Toggle nonlinear mesh corrections.
+   When enabling: if no mesh exists yet, triggers a full geometry
+   optimization to compute one.  When disabling: clears the mesh_trans
+   pointer and pushes an undo command.  */
 void MainWindow::onNonlinearToggled(bool checked) {
   if (checked) {
     // If not already set, trigger optimization
@@ -3112,16 +3313,22 @@ void MainWindow::onNonlinearToggled(bool checked) {
   }
 }
 
+/* Zoom to fit the entire image in the viewer with smooth animation.  */
 void MainWindow::onZoomFit() {
   if (m_imageWidget) {
     m_imageWidget->smoothFitToView();
   }
 }
 
+/* Toggle visibility of registration points in the ImageWidget.  */
 void MainWindow::onRegistrationPointsToggled(bool checked) {
   m_imageWidget->setShowRegistrationPoints(checked);
 }
 
+/* Request a geometry optimisation via the solver queue.
+   Captures the current scr_to_img and solver parameters along with
+   the nonlinear mesh flag, and submits them to m_solverQueue which
+   will cancel any in-flight solve and start a new one.  */
 void MainWindow::onOptimizeGeometry(bool autoChecked) {
   if (!m_scan || !m_solverWorker)
     return;
@@ -3135,6 +3342,11 @@ void MainWindow::onOptimizeGeometry(bool autoChecked) {
   m_solverQueue.requestRender(QVariant::fromValue(data));
 }
 
+/* TaskQueue callback that dispatches the solver request to the
+   GeometrySolverWorker running in m_solverThread.
+   Called on the main thread when the queue is ready to execute.
+   Invokes the worker's solve() method via QMetaObject for thread-safe
+   cross-thread invocation.  */
 void MainWindow::onTriggerSolve(
     int reqId, std::shared_ptr<colorscreen::progress_info> progress,
     const QVariant &userData) {
@@ -3159,6 +3371,10 @@ void MainWindow::onTriggerSolve(
       Q_ARG(bool, data.computeMesh));
 }
 
+/* Handle geometry solver completion.
+   On success, merges the solver's optimised parameters (center, tilt,
+   lens, perspective, mesh) into the current state and pushes an undo
+   command.  On failure, shows a warning unless the solver was cancelled.  */
 void MainWindow::onSolverFinished(int reqId,
                                   colorscreen::scr_to_img_parameters result,
                                   bool success, bool cancelled) {
@@ -3178,6 +3394,11 @@ void MainWindow::onSolverFinished(int reqId,
   }
 }
 
+/* Update the color (IR/RGB) checkbox visibility and enabled state.
+   Visible only when RGB scan data is available.  Enabled only when the
+   current render type supports the IR/RGB switch.  Syncs the checked
+   state with m_renderTypeParams.color while blocking signals to prevent
+   recursive updates.  */
 void MainWindow::updateColorCheckBoxState() {
   if (!m_colorCheckBox || !m_colorCheckBoxAction)
     return;
@@ -3212,6 +3433,10 @@ void MainWindow::updateColorCheckBoxState() {
   m_colorCheckBox->blockSignals(false);
 }
 
+/* Show or hide the registration-related toolbar actions, menu, and tabs.
+   Registration tools are visible only when an image is loaded and the
+   screen type is not Random (which has no geometric mapping).  If hiding
+   while a registration tool is active, switches back to Pan mode.  */
 void MainWindow::updateRegistrationGroupVisibility() {
   // Show registration group only if:
   // 1. Image is loaded
@@ -3248,6 +3473,9 @@ void MainWindow::updateRegistrationGroupVisibility() {
   }
 }
 
+/* Toggle the gamut warning overlay.
+   When enabled, out-of-gamut colors are highlighted in the rendered image.
+   Updates m_rparams.gamut_warning and triggers a re-render.  */
 void MainWindow::onGamutWarningToggled(bool checked) {
   if (m_rparams.gamut_warning != checked) {
     m_rparams.gamut_warning = checked;
@@ -3263,12 +3491,17 @@ void MainWindow::onGamutWarningToggled(bool checked) {
 
 // Crash Recovery Methods
 
+/* Check whether crash recovery files exist in the cache directory.  */
 bool MainWindow::hasRecoveryFiles() {
   QString imagePath = m_recoveryDir + "/recovery_image.txt";
   QString paramsPath = m_recoveryDir + "/recovery_params.par";
   return QFile::exists(imagePath) || QFile::exists(paramsPath);
 }
 
+/* Auto-save current state to the crash recovery directory.
+   Called by a 30-second periodic timer.  Saves the image file path,
+   all parameters as a .par file, and the current .par filename/weak
+   flag metadata.  Only saves if an image is loaded.  */
 void MainWindow::saveRecoveryState() {
   // Only save if we have an image loaded
   if (!m_scan) {
@@ -3306,6 +3539,10 @@ void MainWindow::saveRecoveryState() {
   }
 }
 
+/* Restore the application state from crash recovery files.
+   Loads the parameter file, the image path metadata (param file name
+   and weak flag), and re-opens the image if it still exists on disk.
+   Shows a warning if the image file is missing.  */
 void MainWindow::loadRecoveryState() {
   // Load image path
   QString imagePath = m_recoveryDir + "/recovery_image.txt";
@@ -3360,6 +3597,8 @@ void MainWindow::loadRecoveryState() {
   updateUIFromState(getCurrentState());
 }
 
+/* Delete the crash recovery files from the cache directory.
+   Called on clean exit to prevent spurious recovery prompts.  */
 void MainWindow::clearRecoveryFiles() {
   QString imagePath = m_recoveryDir + "/recovery_image.txt";
   QString paramsPath = m_recoveryDir + "/recovery_params.par";
@@ -3367,12 +3606,20 @@ void MainWindow::clearRecoveryFiles() {
   QFile::remove(imagePath);
   QFile::remove(paramsPath);
 }
+/* Select all registration points in the ImageWidget.  */
 void MainWindow::onSelectAll() { m_imageWidget->selectAll(); }
 
+/* Clear the current registration point selection.  */
 void MainWindow::onDeselectAll() { m_imageWidget->clearSelection(); }
 
+/* Delete all currently selected registration points.  */
 void MainWindow::onDeleteSelected() { m_imageWidget->deleteSelectedPoints(); }
 
+/* Remove registration points with high error from the selection.
+   Builds a histogram of point-to-predicted-position distances, finds
+   a threshold at the 10% tail, and removes all selected points
+   exceeding that threshold.  Pushes an undo command and triggers
+   auto-solver if enabled.  */
 void MainWindow::onPruneMisplaced() {
   if (!m_scan || !m_imageWidget) {
     return;
@@ -3487,6 +3734,11 @@ void MainWindow::onPruneMisplaced() {
   updateRegistrationActions();
 }
 
+/* Update enabled state of all registration-related menu actions.
+   Enables select/delete/prune based on current selection, enables
+   optimize based on minimum point count for the current screen type,
+   and calls GeometryPanel::updateRegistrationPointInfo() to refresh
+   the panel's status display.  */
 void MainWindow::updateRegistrationActions() {
   bool hasPoints = m_imageWidget &&
                    m_imageWidget->registrationPointsVisible() &&
@@ -3542,10 +3794,16 @@ void MainWindow::updateRegistrationActions() {
   }
 }
 
+/* Save a state snapshot before a point drag operation begins.
+   This snapshot becomes the "old state" for the undo command that
+   is created when the drag finishes in maybeTriggerAutoSolver().  */
 void MainWindow::onPointManipulationStarted() {
   m_undoSnapshot = getCurrentState();
 }
 
+/* Called after a point drag or point addition via ImageWidget.
+   Creates an undo command if the state changed, then triggers
+   the auto-solver if enabled and enough points exist.  */
 void MainWindow::maybeTriggerAutoSolver() {
   ParameterState newState = getCurrentState();
   if (newState != m_undoSnapshot) {
@@ -3563,6 +3821,16 @@ void MainWindow::maybeTriggerAutoSolver() {
   updateRegistrationActions();
 }
 
+/* Handle a new point added by clicking in the ImageWidget.
+   Three mutually exclusive behaviours:
+   1. Profile spot mode (m_addingProfileSpot): converts the image position
+      to screen coordinates and adds it as a color calibration spot.
+   2. Focus analysis mode (m_focusAnalysisPending): launches a
+      FocusAnalysisWorker at the clicked position to measure MTF.
+   3. Normal mode: runs synchronous finetune to snap the click to the
+      nearest screen element, adds the resulting registration point to
+      solver_parameters, updates the image widget, creates an undo
+      command, and triggers auto-solver if enabled.  */
 void MainWindow::onPointAdded(colorscreen::point_t imgPos,
                               colorscreen::point_t scrPos,
                               colorscreen::point_t color) {
@@ -3673,6 +3941,11 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
   }
 }
 
+/* Enter or exit crop mode.
+   If already in crop mode, restores the previous tool.  Otherwise, clears
+   any existing crop (so the full image is visible for re-selection),
+   saves the current interaction mode, and enters CropMode.  Preserves
+   the viewport center across the crop state change.  */
 void MainWindow::onCropRequested() {
   if (m_imageWidget->interactionMode() == ImageWidget::CropMode) {
     restoreInteractionMode();
@@ -3699,6 +3972,12 @@ void MainWindow::onCropRequested() {
   statusBar()->showMessage("Select crop");
 }
 
+/* Enter generic area selection mode with a callback.
+   Saves the current tool, switches to GenericAreaMode, and shows MESSAGE
+   in the status bar.  When the user draws a rectangle, onAreaSelected()
+   invokes the CALLBACK with the image-space rectangle.  If called while
+   already in GenericAreaMode, cancels the selection and restores the
+   previous tool.  */
 void MainWindow::startAreaSelection(const QString &message,
                                     std::function<void(QRect)> callback) {
   if (!m_scan)
@@ -3719,6 +3998,10 @@ void MainWindow::startAreaSelection(const QString &message,
   statusBar()->showMessage(message);
 }
 
+/* Convert a widget-space rectangle to an image-space rectangle.
+   Maps all four corners through ImageWidget::widgetToImage (which
+   accounts for rotation, zoom, and pan), finds the axis-aligned
+   bounding box, and clamps it to the scan dimensions.  */
 QRect MainWindow::getImageArea(QRect area) {
   if (!m_scan)
     return QRect();
@@ -3745,6 +4028,13 @@ QRect MainWindow::getImageArea(QRect area) {
   return QRect(xmin, ymin, xmax - xmin + 1, ymax - ymin + 1);
 }
 
+/* Dispatch a drawn rectangle to the appropriate handler based on the
+   current interaction mode.
+   - GenericAreaMode: invokes the m_areaSelectionCallback and restores
+     the previous tool.
+   - CropMode: sets the crop rectangle in the parameter state.
+   - SelectMode/AddPointMode: launches a FinetuneWorker to find
+     registration points in the selected area.  */
 void MainWindow::onAreaSelected(QRect area) {
   if (!m_scan) {
     return;
@@ -3829,12 +4119,21 @@ void MainWindow::onAreaSelected(QRect area) {
   thread->start();
 }
 
+/* Swap the color assignments of registration points.
+   Delegates to scr_to_img_parameters::alternate_colors() which cycles
+   through colour channel interpretations.  Pushes an undo command.  */
 void MainWindow::onAlternateColorsRequested() {
   ParameterState state = getCurrentState();
   state.scrToImg.alternate_colors(state.solver);
   changeParameters(state, tr("Alternate colors"));
 }
 
+/* Handle request to automatically add registration points in a
+   user-selected area.  Enters area selection mode; when the user draws
+   a rectangle, launches a FinetuneMisregisteredWorker that iteratively
+   detects points, solves geometry, and repeats.
+   PARAMS contains grid spacing and tolerance settings from GeometryPanel.
+   Results arrive incrementally via pointsReady and geometryReady signals.  */
 void MainWindow::onAutomaticallyAddPointsInAreaRequested(
     const colorscreen::finetune_area_parameters &params) {
   if (!m_scan) {
@@ -3917,6 +4216,14 @@ void MainWindow::onAutomaticallyAddPointsInAreaRequested(
       });
 }
 
+/* Handle request to automatically add registration points across the
+   entire cropped image area.  Similar to the area-restricted variant
+   but uses the full scan crop as the search region.
+   The worker reports results incrementally: pointsReady batches add
+   new registration points; geometryReady updates trigger immediate
+   re-optimisation.  The requestCurrentPoints signal uses a blocking
+   queued connection so the worker can read the latest point set from
+   the main thread.  */
 void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_area_parameters &params) {
   if (!m_scan) {
     return;
@@ -4006,6 +4313,10 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
   thread->start();
 }
 
+/* Handle completion of a single-area finetune (rectangle selection).
+   Adds all discovered points using add_or_modify_point (which updates
+   existing points if they're close to a new detection), creates an
+   undo command, and triggers auto-solver if enabled.  */
 void MainWindow::onFinetuneFinished(
     bool success,
     std::vector<colorscreen::solver_parameters::solver_point_t> points,
@@ -4056,6 +4367,10 @@ void MainWindow::onFinetuneFinished(
   }
 }
 
+/* Launch the automatic screen type detection worker.
+   Creates a DetectScreenWorker running in a new thread, which analyses
+   the scan to determine the colour screen type, initial geometry, and
+   registration points.  Results are handled by onDetectScreenFinished.  */
 void MainWindow::onAutodetectScreen() {
   if (!m_scan) {
     return;
@@ -4095,6 +4410,13 @@ void MainWindow::onAutodetectScreen() {
   thread->start();
 }
 
+/* Handle completion of automatic screen detection.
+   Shows the detected screen type with a preview icon.  If the detected
+   dye model differs from the current one, prompts the user to switch.
+   Applies the detected screen type, geometry, mesh, and solver points,
+   switches to interpolated render mode, and queues a geometry solve
+   to refine the detected parameters (without recomputing the mesh,
+   to preserve the detected pattern).  */
 void MainWindow::onDetectScreenFinished(
     bool success, colorscreen::detected_screen result,
     colorscreen::solver_parameters solverParams) {
@@ -4193,6 +4515,12 @@ void MainWindow::onDetectScreenFinished(
                                                 "Autodetect screen"));
 }
 
+/* Launch adaptive sharpening analysis.
+   Creates an AdaptiveSharpeningWorker that analyses scanner blur across
+   the image in a grid of XSTEPS columns.  Connects incremental results
+   (stripAnalyzed, blurAnalyzed) to the AdaptiveSharpeningChart for
+   real-time visualisation.  The final result is a
+   scanner_blur_correction_parameters object applied in onAdaptiveSharpeningFinished.  */
 void MainWindow::onAdaptiveSharpeningRequested(int xsteps) {
   if (!m_scan)
     return;
@@ -4251,6 +4579,9 @@ void MainWindow::onAdaptiveSharpeningRequested(int xsteps) {
   thread->start();
 }
 
+/* Handle completion of adaptive sharpening analysis.
+   On success, wraps the computed scanner_blur_correction in an undo command
+   and updates the chart widget.  Shows a success info or failure warning.  */
 void MainWindow::onAdaptiveSharpeningFinished(
     bool success,
     std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result) {
@@ -4281,6 +4612,9 @@ void MainWindow::onAdaptiveSharpeningFinished(
                            tr("Analysis completed successfully."));
 }
 
+/* Set the screen coordinate system center to the clicked image position.
+   Updates m_scrToImgParams.center and propagates the change via
+   onCoordinateSystemChanged().  */
 void MainWindow::onSetCenter(colorscreen::point_t imgPos) {
   if (!m_scan) {
     return;
@@ -4294,6 +4628,10 @@ void MainWindow::onSetCenter(colorscreen::point_t imgPos) {
   m_imageWidget->update();
 }
 
+/* Launch autodetection of screen coordinates (center, coordinate1,
+   coordinate2).  Invokes the CoordinateOptimizationWorker's autodetect
+   method in its background thread.  Results arrive at
+   onAutodetectCoordinatesFinished.  */
 void MainWindow::onAutodetectCoordinatesRequested() {
   if (!m_scan || !m_coordOptimizationWorker)
     return;
@@ -4312,10 +4650,15 @@ void MainWindow::onAutodetectCoordinatesRequested() {
       Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
 }
 
+/* Forward coordinate optimisation request to onOptimizeCoordinates.  */
 void MainWindow::onOptimizeCoordinatesRequested() {
   onOptimizeCoordinates();
 }
 
+/* Handle completion of coordinate autodetection.
+   On success, applies the detected coordinates, switches to interpolated
+   render mode, activates the AddPoint tool, and pushes an undo command.
+   On failure, shows a warning.  */
 void MainWindow::onAutodetectCoordinatesFinished(
     int /*reqId*/, colorscreen::scr_to_img_parameters result,
     std::shared_ptr<colorscreen::progress_info> progress, bool success,
@@ -4350,6 +4693,10 @@ void MainWindow::onAutodetectCoordinatesFinished(
   }
 }
 
+/* Launch coordinate optimisation.
+   Invokes the CoordinateOptimizationWorker's optimize method in its
+   background thread to refine center, coordinate1, and coordinate2
+   using finetune-based analysis.  */
 void MainWindow::onOptimizeCoordinates() {
   if (!m_scan || !m_coordOptimizationWorker)
     return;
@@ -4368,6 +4715,10 @@ void MainWindow::onOptimizeCoordinates() {
       Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
 }
 
+/* Handle completion of coordinate optimisation.
+   On success, applies the refined center and coordinates, clears any
+   mesh_trans (since coordinates changed), pushes an undo command, and
+   updates the finetune diagnostic images.  */
 void MainWindow::onOptimizeCoordinatesFinished(
     int /*reqId*/, colorscreen::finetune_result ret,
     std::shared_ptr<colorscreen::progress_info> progress, bool success,
@@ -4401,6 +4752,10 @@ void MainWindow::onOptimizeCoordinatesFinished(
   }
 }
 
+/* Propagate coordinate system parameter changes to the renderer.
+   Always updates NavigationView (which uses FAST mode depending on
+   scr_to_img).  Only triggers ImageWidget re-render if the current
+   render type requires screen-to-image mapping.  */
 void MainWindow::onCoordinateSystemChanged() {
   if (!m_scan)
     return;
@@ -4422,16 +4777,22 @@ void MainWindow::onCoordinateSystemChanged() {
     }
   }
 }
+/* Snapshot state before a grid drag operation for undo bookkeeping.  */
 void MainWindow::onCoordinateSystemManipulationStarted() {
   m_gridManipulationOldState = getCurrentState();
 }
 
+/* Create an undo command after a grid drag operation completes.  */
 void MainWindow::onCoordinateSystemManipulationFinished() {
   ParameterState newState = getCurrentState();
   m_undoStack->push(new ChangeParametersCommand(
       this, m_gridManipulationOldState, newState, "Modify coordinate system"));
 }
 
+/* Open file dialogs for white and optional black reference images,
+   then launch a FlatFieldWorker to compute backlight correction
+   parameters.  The worker runs in a background thread; results
+   arrive at onFlatFieldFinished.  */
 void MainWindow::onFlatFieldRequested() {
   QString filters =
       "Images (*.tif *.tiff *.jpg *.jpeg *.raw *.dng *.iiq *.nef *.NEF *.cr2 "
@@ -4484,6 +4845,9 @@ void MainWindow::onFlatFieldRequested() {
   });
 }
 
+/* Handle completion of flat field analysis.
+   On success, stores the backlight_correction in the parameter state
+   with undo support and shows a success message.  */
 void MainWindow::onFlatFieldFinished(
     bool success,
     std::shared_ptr<colorscreen::backlight_correction_parameters> result) {
@@ -4503,6 +4867,11 @@ void MainWindow::onFlatFieldFinished(
   QMessageBox::information(this, "Flat Field",
                            "Flat field analysis successful.");
 }
+/* Toggle focus analysis mode.
+   When CHECKED is true, saves the current tool, switches to AddPoint
+   mode, and sets a flag so the next point-add triggers a focus analysis
+   worker instead of adding a registration point.  FLAGS controls which
+   finetune features to run (e.g. strip widths).  */
 void MainWindow::onFocusAnalysisRequested(bool checked, uint64_t flags) {
   if (!m_imageWidget)
     return;
@@ -4518,6 +4887,10 @@ void MainWindow::onFocusAnalysisRequested(bool checked, uint64_t flags) {
   }
 }
 
+/* Handle completion of focus analysis.
+   On success, applies the measured scanner MTF parameters (sigma, defocus,
+   blur_diameter) to the render parameters and pushes an undo command.
+   Updates the sharpness panel's finetune diagnostic images.  */
 void MainWindow::onFocusAnalysisFinished(bool success,
                                          colorscreen::finetune_result res) {
   if (m_sharpnessPanel) {
@@ -4544,6 +4917,13 @@ void MainWindow::onFocusAnalysisFinished(bool success,
   }
 }
 
+/* Render the current image to a TIFF or DNG file.
+   Shows a render settings dialog (RenderDialog) for output format,
+   scale, geometry, and antialiasing options.  Runs the render in a
+   background thread via QtConcurrent::run, tracking it with
+   m_renderProgress so the cancel button can prompt before aborting.
+   On completion, shows a status message or error; on cancellation,
+   removes the incomplete output file.  */
 void MainWindow::onRender() {
   if (!m_scan) {
     QMessageBox::warning(this, tr("Render"),
@@ -4652,6 +5032,10 @@ void MainWindow::onRender() {
   });
 }
 
+/* Enter or exit profile spot adding mode.
+   When ACTIVE is true, saves the current tool and switches to AddPoint
+   mode.  The m_addingProfileSpot flag causes onPointAdded to add
+   profile calibration spots instead of registration points.  */
 void MainWindow::onAddSpotModeRequested(bool active) {
   m_addingProfileSpot = active;
   if (active) {
@@ -4662,6 +5046,10 @@ void MainWindow::onAddSpotModeRequested(bool active) {
   }
 }
 
+/* Handle profile color optimisation request from ProfilePanel.
+   Packs the current scr_to_img, render params, and profile spots
+   into a request and submits it to m_colorOptimizerQueue.  If an
+   optimisation is already running, the queue cancels it first.  */
 void MainWindow::onColorOptimizeRequested(bool /*autoMode*/) {
   if (!m_scan || !m_colorOptimizerWorker)
     return;
@@ -4676,6 +5064,9 @@ void MainWindow::onColorOptimizeRequested(bool /*autoMode*/) {
   m_colorOptimizerQueue.requestRender(QVariant::fromValue(d));
 }
 
+/* TaskQueue callback that dispatches the color optimisation request to
+   the ColorOptimizerWorker running in m_colorOptimizerThread.
+   Invoked on the main thread when the queue is ready.  */
 void MainWindow::onTriggerColorOptimize(
     int reqId, std::shared_ptr<colorscreen::progress_info> progress,
     const QVariant &userData) {
@@ -4697,6 +5088,10 @@ void MainWindow::onTriggerColorOptimize(
       Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
 }
 
+/* Handle completion of color profile optimisation.
+   On success, applies the profiled dark/red/green/blue corrections,
+   pushes an undo command, and updates the profile panel and image
+   widget with spot match results for visual feedback.  */
 void MainWindow::onColorOptimizerFinished(
     int reqId, colorscreen::render_parameters updatedRparams,
     std::vector<colorscreen::color_match> results, bool success,
@@ -4723,12 +5118,21 @@ void MainWindow::onColorOptimizerFinished(
   }
 }
 
+/* Enter measurement mode for DPI calculation.
+   Saves the current tool and switches to MeasureMode.  The user
+   click-drags to define a distance; ImageWidget emits distanceMeasured
+   which is handled by onDistanceMeasured.  */
 void MainWindow::onMeasureRequested() {
   saveInteractionMode();
   m_imageWidget->setInteractionMode(ImageWidget::MeasureMode);
   statusBar()->showMessage(tr("Click and drag to measure distance for DPI calculation"), 5000);
 }
 
+/* Handle a completed distance measurement.
+   Restores the previous tool, calculates the pixel distance between
+   the two measured points, and opens MeasureDialog where the user
+   enters the physical distance and unit to compute the scan DPI.
+   If accepted, updates scan_dpi in the parameter state.  */
 void MainWindow::onDistanceMeasured(colorscreen::point_t p1, colorscreen::point_t p2) {
   restoreInteractionMode();
   statusBar()->clearMessage();
