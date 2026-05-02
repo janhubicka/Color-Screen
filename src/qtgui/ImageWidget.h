@@ -75,7 +75,7 @@ public:
   void selectAll();
   void deleteSelectedPoints();
 
-  enum InteractionMode { PanMode, SelectMode, AddPointMode, SetCenterMode, CropMode, GenericAreaMode, ExploreMode };
+  enum InteractionMode { PanMode, SelectMode, AddPointMode, SetCenterMode, CropMode, GenericAreaMode, ExploreMode, MeasureMode };
   void setInteractionMode(InteractionMode mode);
 
   struct SelectedPoint {
@@ -127,6 +127,7 @@ signals:
                   colorscreen::point_t color);
   void setCenterRequested(colorscreen::point_t imgPos);
   void areaSelected(QRect area);
+  void distanceMeasured(colorscreen::point_t p1, colorscreen::point_t p2);
   void coordinateSystemChanged();
   void coordinateSystemManipulationStarted();
   void coordinateSystemManipulationFinished();
@@ -226,6 +227,9 @@ private:
   QRubberBand *m_rubberBand = nullptr;
   QPoint m_rubberBandOrigin;
   int m_draggedPointIndex = -1;
+  colorscreen::point_t m_measureStart;
+  colorscreen::point_t m_measureEnd;
+  bool m_isMeasuring = false;
 
   QTimer *m_exploreTimer = nullptr;
   double m_exploreTargetX = 0.0;

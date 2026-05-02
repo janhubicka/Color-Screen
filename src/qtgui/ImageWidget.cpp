@@ -727,6 +727,32 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
   if (m_activeAnim) {
     m_activeAnim->setGeometry(rect());
   }
+
+  if (m_interactionMode == MeasureMode && m_isMeasuring) {
+    QPointF p1 = imageToWidget(m_measureStart);
+    QPointF p2 = imageToWidget(m_measureEnd);
+    
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(QPen(Qt::yellow, 2, Qt::SolidLine, Qt::RoundCap));
+    p.drawLine(p1, p2);
+    
+    QLineF line(p1, p2);
+    QLineF norm = line.normalVector().unitVector();
+    norm.setLength(10);
+    
+    QPointF offset = norm.p2() - norm.p1();
+    p.drawLine(p1 + offset, p1 - offset);
+    p.drawLine(p2 + offset, p2 - offset);
+    
+    // Draw distance in pixels as well
+    double distPixels = sqrt(pow(m_measureEnd.x - m_measureStart.x, 2) + 
+                             pow(m_measureEnd.y - m_measureStart.y, 2));
+    if (line.length() > 20) {
+        p.setPen(Qt::white);
+        p.drawText(QRectF(p1.x(), p1.y(), p2.x() - p1.x(), p2.y() - p1.y()).normalized(), 
+                  Qt::AlignCenter, QString("%1 px").arg(qRound(distPixels)));
+    }
+  }
 }
 
 void ImageWidget::resizeEvent(QResizeEvent *event) {
@@ -880,6 +906,11 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
       }
       m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, QSize()));
       m_rubberBand->show();
+    } else if (m_interactionMode == MeasureMode) {
+      m_isMeasuring = true;
+      m_measureStart = widgetToImage(event->position());
+      m_measureEnd = m_measureStart;
+      update();
     }
   } else if (event->button() == Qt::RightButton && m_interactionMode == AddPointMode) {
     // Find nearest profile spot to remove
@@ -1056,6 +1087,11 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
         update();
       }
     }
+  } else if (m_interactionMode == MeasureMode) {
+    if (m_isMeasuring) {
+      m_measureEnd = widgetToImage(event->position());
+      update();
+    }
   } else if (m_interactionMode == ExploreMode) {
     if (m_ignoreNextMouseMove) {
         m_ignoreNextMouseMove = false;
@@ -1133,6 +1169,13 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
         QRect rect = m_rubberBand->geometry();
         m_rubberBand->hide();
         emit areaSelected(rect);
+      }
+    } else if (m_interactionMode == MeasureMode) {
+      if (m_isMeasuring) {
+        m_isMeasuring = false;
+        m_measureEnd = widgetToImage(event->position());
+        emit distanceMeasured(m_measureStart, m_measureEnd);
+        update();
       }
     }
   }

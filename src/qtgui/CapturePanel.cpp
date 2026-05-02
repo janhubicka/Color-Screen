@@ -144,6 +144,8 @@ void CapturePanel::setupUi()
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.scan_dpi = v;
         }, 1.0, nullptr, false, "Scanner or camera resolution in Pixels Per Inch (PPI). Crucial for MTF-based sharpening.");
+    
+    addButtonParameter("Resolution", "Measure", [this]() { emit measureRequested(); });
 
     // 4. Image resolution (Label) + Use
     addValueWithUseButton("Image resolution", &m_imageResolutionValue, &m_useImageResBtn, [this, onUseRes]() {

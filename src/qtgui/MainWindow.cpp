@@ -31,6 +31,8 @@
 #include <QDateTime> // Added QDateTime include
 #include <QDir>
 #include <QDockWidget> // Added
+#include "BacklightChartWidget.h"
+#include "MeasureDialog.h"
 #include <QDoubleSpinBox>
 #include <QElapsedTimer>
 #include <QFile>
@@ -715,6 +717,8 @@ void MainWindow::setupUi() {
   m_configTabs->addTab(m_tilesPanel, "Tiles");
   connect(m_capturePanel, &CapturePanel::cropRequested, this,
           &MainWindow::onCropRequested);
+  connect(m_capturePanel, &CapturePanel::measureRequested, this,
+          &MainWindow::onMeasureRequested);
   connect(m_capturePanel, &CapturePanel::flatFieldRequested, this,
           &MainWindow::onFlatFieldRequested);
   connect(m_capturePanel, &CapturePanel::autodetectRequested, this,
@@ -764,6 +768,7 @@ void MainWindow::setupUi() {
               }
             }
           });
+  connect(m_imageWidget, &ImageWidget::distanceMeasured, this, &MainWindow::onDistanceMeasured);
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
   m_configTabs->addTab(m_imageLayerPanel, "Image Layer");
   m_configTabs->addTab(m_contactCopyPanel, "Contact copy");
@@ -4715,5 +4720,31 @@ void MainWindow::onColorOptimizerFinished(
     }
   } else if (!cancelled) {
     statusBar()->showMessage(tr("Color optimization failed"), 4000);
+  }
+}
+
+void MainWindow::onMeasureRequested() {
+  saveInteractionMode();
+  m_imageWidget->setInteractionMode(ImageWidget::MeasureMode);
+  statusBar()->showMessage(tr("Click and drag to measure distance for DPI calculation"), 5000);
+}
+
+void MainWindow::onDistanceMeasured(colorscreen::point_t p1, colorscreen::point_t p2) {
+  restoreInteractionMode();
+  statusBar()->clearMessage();
+
+  double dx = p1.x - p2.x;
+  double dy = p1.y - p2.y;
+  double distPixels = sqrt(dx * dx + dy * dy);
+
+  if (distPixels < 1.0)
+    return;
+
+  MeasureDialog dlg(distPixels, m_rparams.sharpen.scanner_mtf.scan_dpi, this);
+  if (dlg.exec() == QDialog::Accepted) {
+    double newDpi = dlg.getResultDpi();
+    ParameterState state = getCurrentState();
+    state.rparams.sharpen.scanner_mtf.scan_dpi = newDpi;
+    changeParameters(state, tr("Set DPI by measurement"));
   }
 }

@@ -25,9 +25,10 @@ public:
 
 signals:
     void cropRequested();
-  void flatFieldRequested();
-  void detachBacklightRequested(QWidget *w);
-  void autodetectRequested();
+    void measureRequested();
+    void flatFieldRequested();
+    void detachBacklightRequested(QWidget *w);
+    void autodetectRequested();
 
 public:
   void reattachBacklight(QWidget *w);

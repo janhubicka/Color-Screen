@@ -50,7 +50,8 @@ colorscreen_qt_SOURCES = \
     ColorOptimizerWorker.cpp \
     CoordinateOptimizationWorker.cpp \
     TilesPanel.cpp \
-    ImageLayerPanel.cpp
+    ImageLayerPanel.cpp \
+    MeasureDialog.cpp
 
 # MOC Generation
 # We need to explicitly run moc on headers that have Q_OBJECT
@@ -99,9 +100,10 @@ MOC_SOURCES = \
     moc_RenderDialog.cpp \
     moc_ProfilePanel.cpp \
     moc_TilesPanel.cpp \
-    moc_ImageLayerPanel.cpp
+    moc_ImageLayerPanel.cpp \
+    moc_MeasureDialog.cpp
 
-EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h FinetuneImagesPanel.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h FinetuneMisregisteredWorker.h WorkerBase.h ContactCopyPanel.h HDCurveWidget.h InteractiveChartWidget.h ToneCurveWidget.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h HurleyAnimation.h TaskQueue.h SubtitleOverlay.h Logging.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg AdaptiveSharpeningWorker.h AdaptiveSharpeningChart.h RenderDialog.h ProfilePanel.h CoordinateOptimizationWorker.h TilesPanel.h ImageLayerPanel.h
+EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h FinetuneImagesPanel.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h FinetuneMisregisteredWorker.h WorkerBase.h ContactCopyPanel.h HDCurveWidget.h InteractiveChartWidget.h ToneCurveWidget.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h HurleyAnimation.h TaskQueue.h SubtitleOverlay.h Logging.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg AdaptiveSharpeningWorker.h AdaptiveSharpeningChart.h RenderDialog.h ProfilePanel.h CoordinateOptimizationWorker.h TilesPanel.h ImageLayerPanel.h MeasureDialog.h
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
