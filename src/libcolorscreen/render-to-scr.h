@@ -165,7 +165,7 @@ public:
   compute_final_range ()
   {
     if (m_final_range.empty_p ())
-        m_final_range = m_scr_to_img.get_final_range (m_img.width, m_img.height);
+        m_final_range = int_image_area (m_scr_to_img.get_final_range (m_img.width, m_img.height));
   }
 
   /* Return screen coordinate width of rendered output.  */

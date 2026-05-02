@@ -325,7 +325,7 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
             }
         }
     }
-  int_image_area full_range = m_scr_to_img.get_range (0, 0, m_img.width, m_img.height);
+  int_image_area full_range (m_scr_to_img.get_range (m_img.width, m_img.height));
   int_image_area analysis_area = area;
   //printf ("full %i %i %i %i\n", full_range.x, full_range.y, full_range.width, full_range.height);
   //printf ("area %i %i %i %i\n", area.x, area.y, area.width, area.height);

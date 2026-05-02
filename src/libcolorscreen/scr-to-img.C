@@ -399,20 +399,26 @@ scr_to_img::update_linear_parameters (scr_to_img_parameters &param)
    The section is returned as an int_image_area where x/y is the minimum
    screen coordinate and width/height cover all screen coordinates mapped
    from the image.  */
-int_image_area
-scr_to_img::get_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) const noexcept
+image_area
+scr_to_img::get_range (image_area area_in) const noexcept
 {
-  if (!m_scr_to_img_mesh && !m_img_to_scr_mesh)
+  if (m_scr_to_img_mesh)
     {
-      /* Compute all the corners.  */
-      int_image_area area (int_point_t {(int64_t)my_floor (to_scr ({ x1, y1 }).x), (int64_t)my_floor (to_scr ({ x1, y1 }).y)});
-      area.extend (int_point_t {(int64_t)my_ceil (to_scr ({ x1, y1 }).x), (int64_t)my_ceil (to_scr ({ x1, y1 }).y)});
-      area.extend (int_point_t {(int64_t)my_floor (to_scr ({ x2, y1 }).x), (int64_t)my_floor (to_scr ({ x2, y1 }).y)});
-      area.extend (int_point_t {(int64_t)my_ceil (to_scr ({ x2, y1 }).x), (int64_t)my_ceil (to_scr ({ x2, y1 }).y)});
-      area.extend (int_point_t {(int64_t)my_floor (to_scr ({ x1, y2 }).x), (int64_t)my_floor (to_scr ({ x1, y2 }).y)});
-      area.extend (int_point_t {(int64_t)my_ceil (to_scr ({ x1, y2 }).x), (int64_t)my_ceil (to_scr ({ x1, y2 }).y)});
-      area.extend (int_point_t {(int64_t)my_floor (to_scr ({ x2, y2 }).x), (int64_t)my_floor (to_scr ({ x2, y2 }).y)});
-      area.extend (int_point_t {(int64_t)my_ceil (to_scr ({ x2, y2 }).x), (int64_t)my_ceil (to_scr ({ x2, y2 }).y)});
+      matrix2x2<coord_t> identity;
+      return m_scr_to_img_mesh->get_range (identity, area_in);
+    }
+  else
+    {
+      image_area area;
+      coord_t x1 = area_in.x;
+      coord_t y1 = area_in.y;
+      coord_t x2 = area_in.x + area_in.width;
+      coord_t y2 = area_in.y + area_in.height;
+
+      area.extend (to_scr ({ x1, y1 }));
+      area.extend (to_scr ({ x2, y1 }));
+      area.extend (to_scr ({ x1, y2 }));
+      area.extend (to_scr ({ x2, y2 }));
 
       /* If we correct lens distortion the corners may not be extremes.  */
       if (!m_lens_correction.is_noop () || m_param.tilt_x || m_param.tilt_y)
@@ -420,18 +426,10 @@ scr_to_img::get_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) const noe
           const int steps = 16 * 1024;
           for (int i = 1; i < steps; i++)
             {
-              point_t p = to_scr ({ x1 + (x2 - x1) * i / steps, y1 });
-              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
-              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
-              p = to_scr ({ x1 + (x2 - x1) * i / steps, y2 });
-              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
-              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
-              p = to_scr ({ x1, y1 + (y2 - y1) * i / steps });
-              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
-              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
-              p = to_scr ({ x2, y1 + (y2 - y1) * i / steps });
-              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
-              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
+              area.extend (to_scr ({ x1 + (x2 - x1) * i / steps, y1 }));
+              area.extend (to_scr ({ x1 + (x2 - x1) * i / steps, y2 }));
+              area.extend (to_scr ({ x1, y1 + (y2 - y1) * i / steps }));
+              area.extend (to_scr ({ x2, y1 + (y2 - y1) * i / steps }));
             }
         }
       /* Adjust slightly to be safe.  */
@@ -441,38 +439,33 @@ scr_to_img::get_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) const noe
       area.height += 2;
       return area;
     }
-  else
-    {
-      coord_t minx, miny, maxx, maxy;
-      matrix2x2<coord_t> identity;
-      m_scr_to_img_mesh->get_range (identity, x1, y1, x2, y2, &minx, &maxx,
-                                     &miny, &maxy);
-      return int_image_area ((int)minx + 1, (int)miny + 1, (int)(maxx - minx) + 2, (int)(maxy - miny) + 2);
-    }
 }
 /* Determine rectangular section of the screen to which the whole image
    with dimension img_width x img_height fits.  */
-int_image_area
+image_area
 scr_to_img::get_range (int img_width, int img_height) const noexcept
 {
-  return get_range (0.0, 0.0, (coord_t)img_width, (coord_t)img_height);
+  return get_range (image_area (0.0, 0.0, (coord_t)img_width, (coord_t)img_height));
 }
 /* Determine rectangular section of the final coordinates to which image section
    from (X1, Y1) to (X2, Y2) fits.  */
-int_image_area
-scr_to_img::get_final_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) const noexcept
+image_area
+scr_to_img::get_final_range (image_area area_in) const noexcept
 {
-  if (!m_scr_to_img_mesh)
+  if (m_scr_to_img_mesh)
+    return m_scr_to_img_mesh->get_range (m_scr_to_final_matrix, area_in);
+  else
     {
-      /* Compute all the corners.  */
-      int_image_area area (int_point_t {(int64_t)my_floor (img_to_final ({ x1, y1 }).x), (int64_t)my_floor (img_to_final ({ x1, y1 }).y)});
-      area.extend (int_point_t {(int64_t)my_ceil (img_to_final ({ x1, y1 }).x), (int64_t)my_ceil (img_to_final ({ x1, y1 }).y)});
-      area.extend (int_point_t {(int64_t)my_floor (img_to_final ({ x2, y1 }).x), (int64_t)my_floor (img_to_final ({ x2, y1 }).y)});
-      area.extend (int_point_t {(int64_t)my_ceil (img_to_final ({ x2, y1 }).x), (int64_t)my_ceil (img_to_final ({ x2, y1 }).y)});
-      area.extend (int_point_t {(int64_t)my_floor (img_to_final ({ x1, y2 }).x), (int64_t)my_floor (img_to_final ({ x1, y2 }).y)});
-      area.extend (int_point_t {(int64_t)my_ceil (img_to_final ({ x1, y2 }).x), (int64_t)my_ceil (img_to_final ({ x1, y2 }).y)});
-      area.extend (int_point_t {(int64_t)my_floor (img_to_final ({ x2, y2 }).x), (int64_t)my_floor (img_to_final ({ x2, y2 }).y)});
-      area.extend (int_point_t {(int64_t)my_ceil (img_to_final ({ x2, y2 }).x), (int64_t)my_ceil (img_to_final ({ x2, y2 }).y)});
+      image_area area;
+      coord_t x1 = area_in.x;
+      coord_t y1 = area_in.y;
+      coord_t x2 = area_in.x + area_in.width;
+      coord_t y2 = area_in.y + area_in.height;
+
+      area.extend (img_to_final ({ x1, y1 }));
+      area.extend (img_to_final ({ x2, y1 }));
+      area.extend (img_to_final ({ x1, y2 }));
+      area.extend (img_to_final ({ x2, y2 }));
 
       /* If we correct lens distortion the corners may not be extremes.  */
       if (!m_lens_correction.is_noop () || m_param.tilt_x || m_param.tilt_y
@@ -481,46 +474,22 @@ scr_to_img::get_final_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) con
           const int steps = 16 * 1024;
           for (int i = 1; i < steps; i++)
             {
-              point_t p = img_to_final ({ x1 + (x2 - x1) * i / steps, y1 });
-              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
-              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
-              p = img_to_final ({ x1 + (x2 - x1) * i / steps, y2 });
-              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
-              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
-              p = img_to_final ({ x1, y1 + (y2 - y1) * i / steps });
-              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
-              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
-              p = img_to_final ({ x2, y1 + (y2 - y1) * i / steps });
-              area.extend (int_point_t {(int64_t)my_floor (p.x), (int64_t)my_floor (p.y)});
-              area.extend (int_point_t {(int64_t)my_ceil (p.x), (int64_t)my_ceil (p.y)});
+              area.extend (img_to_final ({ x1 + (x2 - x1) * i / steps, y1 }));
+              area.extend (img_to_final ({ x1 + (x2 - x1) * i / steps, y2 }));
+              area.extend (img_to_final ({ x1, y1 + (y2 - y1) * i / steps }));
+              area.extend (img_to_final ({ x2, y1 + (y2 - y1) * i / steps }));
             }
         }
       return area;
-    }
-  else
-    {
-      coord_t minx, miny, maxx, maxy;
-      m_scr_to_img_mesh->get_range (m_scr_to_final_matrix, x1, y1, x2, y2,
-                                     &minx, &maxx, &miny, &maxy);
-      /* Determine the coordinates.  */
-      const int min_x = (int)my_floor (minx);
-      const int min_y = (int)my_floor (miny);
-      int width = (int)my_ceil (maxx - (coord_t)min_x);
-      if (width <= 0)
-        width = 1;
-      int height = (int)my_ceil (maxy - (coord_t)min_y);
-      if (height <= 0)
-        height = 1;
-      return int_image_area (min_x, min_y, width, height);
     }
 }
 
 /* Determine rectangular section of the final coordinates to which the whole
    image with dimension img_width x img_height fits.  */
-int_image_area
+image_area
 scr_to_img::get_final_range (int img_width, int img_height) const noexcept
 {
-  return get_final_range (0, 0, (coord_t)img_width, (coord_t)img_height);
+  return get_final_range (image_area (0, 0, (coord_t)img_width, (coord_t)img_height));
 }
 
 /* Dump mapping state to file F.  */
@@ -669,11 +638,8 @@ scr_to_img::get_img_range (int_image_area a) const noexcept
     }
   else
     {
-      coord_t minx, miny, maxx, maxy;
       matrix2x2<coord_t> identity;
-      m_img_to_scr_mesh->get_range (identity, x1, y1, x2, y2, &minx, &maxx,
-                                     &miny, &maxy);
-      return int_image_area ((int)minx + 1, (int)miny + 1, (int)(maxx - minx) + 2, (int)(maxy - miny) + 2);
+      return int_image_area (m_img_to_scr_mesh->get_range (identity, image_area (a)));
     }
 }
 

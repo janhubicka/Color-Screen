@@ -247,15 +247,15 @@ mesh::push_to_range (int x, int y, coord_t x1, coord_t y1, coord_t x2,
   return invert ({ xx, yy });
 }
 
-/* Get rectangular range of source coordinates which covers range given by
-   X1, Y1, X2, Y2 transformed by TRANS in image coordinates.  Result is 
-   stored in XMIN, XMAX, YMIN, YMAX.  */
-void
-mesh::get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1, coord_t x2,
-                 coord_t y2, coord_t *xmin, coord_t *xmax, coord_t *ymin,
-                 coord_t *ymax) const
+/* Determine range in image coordinates covering AREA transformed by TRANS.  */
+image_area
+mesh::get_range (matrix2x2<coord_t> trans, image_area area_in) const
 {
   image_area area;
+  coord_t x1 = area_in.x;
+  coord_t y1 = area_in.y;
+  coord_t x2 = area_in.x + area_in.width;
+  coord_t y2 = area_in.y + area_in.height;
 
   for (int y = 0; y < m_height - 1; y++)
     for (int x = 0; x < m_width - 1; x++)
@@ -289,15 +289,7 @@ mesh::get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1, coord_t x2,
               area.extend ({px, py});
             }
       }
-  if (area.empty_p ())
-    *xmin = *xmax = *ymin = *ymax = 0;
-  else
-    {
-      *xmin = area.x;
-      *xmax = area.x + area.width;
-      *ymin = area.y;
-      *ymax = area.y + area.height;
-    }
+  return area;
 }
 
 /* Save mesh dimensions, shifts, steps and point grid to file F.  */

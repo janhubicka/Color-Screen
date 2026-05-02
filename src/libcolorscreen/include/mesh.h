@@ -110,11 +110,7 @@ public:
   point_t pure_attr
   DLL_PUBLIC invert (point_t ip) const;
 
-  /* Determine range in image coordinates covering [X1, Y1]..[X2, Y2]
-     transformed by TRANS. Result is stored in XMIN, XMAX, YMIN, YMAX.  */
-  void get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1,
-                  coord_t x2, coord_t y2, coord_t *xmin,
-                  coord_t *xmax, coord_t *ymin, coord_t *ymax) const;
+  image_area get_range (matrix2x2<coord_t> trans, image_area area_in) const;
 
   /* Print mesh content to file F.  */
   void print (FILE *f) const;

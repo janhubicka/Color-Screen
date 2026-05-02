@@ -69,7 +69,7 @@ public:
   /* Precompute whole image range.  */
   nodiscard_attr bool precompute_all (progress_info *progress)
   {
-    return precompute (m_scr_to_img.get_range (0, 0, (coord_t)m_img.width, (coord_t)m_img.height), progress);
+    return precompute (int_image_area (m_scr_to_img.get_range (m_img.width, m_img.height)), progress);
   }
 
   /* Precompute whole image range with additional options.  */
@@ -81,7 +81,7 @@ public:
   /* Precompute image range for given AREA.  */
   nodiscard_attr bool precompute_img_range (int_image_area area, progress_info *progress) 
   {
-     return precompute (m_scr_to_img.get_range (area.x, area.y, area.x + area.width, area.y + area.height), progress);
+     return precompute (int_image_area (m_scr_to_img.get_range (image_area (area))), progress);
   }
 
   /* Sample pixel at screen coordinate P and return its color.  */

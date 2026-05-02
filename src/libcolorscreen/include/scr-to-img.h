@@ -44,16 +44,16 @@ public:
                                        coord_t final_angle);
   /* Determine rectangular section of the screen to which image
      with dimensions IMG_WIDTH x IMG_HEIGHT fits.  */
-  int_image_area get_range (int img_width, int img_height) const noexcept;
+  image_area get_range (int img_width, int img_height) const noexcept;
   /* Determine rectangular section of the screen to which image section
-     from (X1, Y1) to (X2, Y2) fits.  */
-  int_image_area get_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) const noexcept;
+     AREA fits.  */
+  image_area get_range (image_area area) const noexcept;
   /* Determine rectangular section of the final coordinates to which image
      with dimensions IMG_WIDTH x IMG_HEIGHT fits.  */
-  int_image_area get_final_range (int img_width, int img_height) const noexcept;
+  image_area get_final_range (int img_width, int img_height) const noexcept;
   /* Determine rectangular section of the final coordinates to which image section
-     from (X1, Y1) to (X2, Y2) fits.  */
-  int_image_area get_final_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2) const noexcept;
+     AREA fits.  */
+  image_area get_final_range (image_area area) const noexcept;
 
   /* Get area of image to which screen area fits.  */
   int_image_area get_img_range (int_image_area area) const noexcept;

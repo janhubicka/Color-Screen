@@ -608,7 +608,7 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
   scr_to_img map;
   if (!map.set_parameters (*param, img_data))
     return nullptr;
-  int_image_area r1 = map.get_range (img_data.width, img_data.height);
+  int_image_area r1 (map.get_range (img_data.width, img_data.height));
   int width = (r1.width + step - 1) / step, height = (r1.height + step - 1) / step;
   if (progress)
     progress->set_task ("computing mesh", width * height);
@@ -826,7 +826,7 @@ solver_mesh (const scr_to_img_parameters *param, const image_data &img_data,
   scr_to_img map;
   if (!map.set_parameters (*param, img_data))
     return nullptr;
-  int_image_area r2 = map.get_range (img_data.width, img_data.height);
+  int_image_area r2 (map.get_range (img_data.width, img_data.height));
   int width = (r2.width + step - 1) / step, height = (r2.height + step - 1) / step;
   if (progress)
     progress->set_task ("computing mesh from detected points", width * height);

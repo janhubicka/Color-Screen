@@ -99,7 +99,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
     {
       if (!map.set_parameters (param, img))
 	return "Screen parameters out of range";
-      final_range = map.get_final_range (img.width, img.height);
+      final_range = int_image_area (map.get_final_range (img.width, img.height));
     }
 
   int final_xshift = final_range.x, final_yshift = final_range.y;
