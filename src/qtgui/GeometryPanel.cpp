@@ -72,17 +72,25 @@ void GeometryPanel::setupUi() {
 
   addSeparator("Automatic registration");
 
-  addButtonParameter("Automatic registration", "Autodetect coordinates", [this]() {
+  addButtonParameter("Step 1", "Autodetect coordinates", [this]() {
       emit autodetectCoordinatesRequested();
   }, nullptr, "Automatically detect the screen pattern and update the coordinate system (center, coordinates, and screen type).");
+  
+  addButtonParameter("Correction", "Alternate colors", [this]() {
+      emit alternateColorsRequested();
+  }, nullptr, "Adjust registration so symmetric colors get exchanged. Use this if colors looks alien");
 
-  addButtonParameter("Automatic registration", "Optimize coordinates", [this]() {
+  addButtonParameter("Step 2", "Optimize coordinates", [this]() {
       emit optimizeCoordinatesRequested();
   }, nullptr, "Refine the current coordinate system using the image data. This is useful for correcting small misalignments.");
 
-  addButtonParameter("Automatic registration", "Automatically add points", [this]() {
+  addButtonParameter("Step 3", "Automatically add points", [this]() {
       emit automaticallyAddPointsRequested(m_finetuneAreaParams);
   }, nullptr, "Automatically identify and add missing registration points within the current crop area.");
+  
+  addButtonParameter("", "Automatically add points in area", [this]() {
+      emit automaticallyAddPointsInAreaRequested(m_finetuneAreaParams);
+  }, nullptr, "Automatically identify and add missing registration points within a user-selected area.");
 
   auto setupFinetuneSlider = [this](const QString &label, double min, double max, double scale, int decimals, double initial, auto member, double gamma = 1.0, bool logarithmic = false, const QString &tooltip = QString()) {
       QWidget *container = addSlider(label, min, max, scale, decimals, "", "", initial, [this, member](double v) {

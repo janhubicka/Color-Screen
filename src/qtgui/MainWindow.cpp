@@ -1019,6 +1019,8 @@ void MainWindow::setupUi() {
           &MainWindow::onOptimizeGeometry);
   connect(m_geometryPanel, &GeometryPanel::automaticallyAddPointsRequested, this,
           &MainWindow::onAutomaticallyAddPointsRequested);
+  connect(m_geometryPanel, &GeometryPanel::automaticallyAddPointsInAreaRequested, this,
+          &MainWindow::onAutomaticallyAddPointsInAreaRequested);
   connect(m_geometryPanel, &GeometryPanel::nonlinearToggled, this,
           &MainWindow::onNonlinearToggled);
   connect(m_geometryPanel, &GeometryPanel::centerOnRequested, m_imageWidget,
@@ -1033,6 +1035,8 @@ void MainWindow::setupUi() {
           &ImageWidget::setMaxArrowLength);
   connect(m_geometryPanel, &GeometryPanel::autodetectCoordinatesRequested, this,
           &MainWindow::onAutodetectCoordinatesRequested);
+  connect(m_geometryPanel, &GeometryPanel::alternateColorsRequested, this,
+          &MainWindow::onAlternateColorsRequested);
   connect(m_geometryPanel, &GeometryPanel::optimizeCoordinatesRequested, this,
           &MainWindow::onOptimizeCoordinatesRequested);
 
@@ -3761,6 +3765,94 @@ void MainWindow::onAreaSelected(QRect area) {
 
   // Start thread
   thread->start();
+}
+
+void MainWindow::onAlternateColorsRequested() {
+  ParameterState state = getCurrentState();
+  state.scrToImg.alternate_colors(state.solver);
+  changeParameters(state, tr("Alternate colors"));
+}
+
+void MainWindow::onAutomaticallyAddPointsInAreaRequested(
+    const colorscreen::finetune_area_parameters &params) {
+  if (!m_scan) {
+    return;
+  }
+
+  startAreaSelection(
+      tr("Select area to add points"), [this, params](QRect area) {
+        if (area.width() <= 0 || area.height() <= 0)
+          return;
+
+        colorscreen::int_image_area crop = { area.x (), area.y (), area.width (),
+                                             area.height () };
+
+        // Create progress info
+        auto progress = std::make_shared<colorscreen::progress_info> ();
+        progress->set_task ("Finding missing registration points", 1);
+        colorscreen::sub_task task (progress.get ());
+        addProgress (progress);
+
+        // Create worker and thread
+        FinetuneMisregisteredWorker *worker = new FinetuneMisregisteredWorker (
+            m_solverParams, m_rparams, m_scrToImgParams, m_scan, crop, progress,
+            params, m_geometryPanel->isNonlinearEnabled ());
+        QThread *thread = new QThread ();
+        worker->moveToThread (thread);
+
+        // Connect signals
+        connect (thread, &QThread::started, worker,
+                 &FinetuneMisregisteredWorker::run);
+        connect (worker, &FinetuneMisregisteredWorker::finished, thread,
+                 &QThread::quit);
+        connect (worker, &FinetuneMisregisteredWorker::finished, worker,
+                 &QObject::deleteLater);
+        connect (thread, &QThread::finished, thread, &QObject::deleteLater);
+
+        // Connect to our slot to handle results
+        connect (
+            worker, &FinetuneMisregisteredWorker::pointsReady, this,
+            [this, progress] (
+                std::vector<colorscreen::solver_parameters::solver_point_t>
+                    points) {
+              if (progress && progress->cancelled ())
+                return;
+
+              if (!points.empty ())
+                {
+                  ParameterState oldState = getCurrentState ();
+                  for (const auto &point : points)
+                    {
+                      m_solverParams.add_or_modify_point (point.img, point.scr,
+                                                          point.color);
+                    }
+                  m_imageWidget->updateParameters (
+                      &m_rparams, &m_scrToImgParams, &m_detectParams,
+                      &m_renderTypeParams, &m_solverParams);
+                  m_imageWidget->update ();
+                  ParameterState newState = getCurrentState ();
+                  m_undoStack->push (new ChangeParametersCommand (
+                      this, oldState, newState, "Add registration points"));
+                  updateRegistrationActions ();
+                }
+              removeProgress (progress);
+            });
+        connect (worker, &FinetuneMisregisteredWorker::geometryReady, this,
+                 [this, progress] (colorscreen::scr_to_img_parameters result) {
+                   if (progress && progress->cancelled ())
+                     return;
+                   ParameterState oldState = getCurrentState ();
+                   m_scrToImgParams.merge_solver_solution (result);
+                   m_imageWidget->updateParameters (
+                       &m_rparams, &m_scrToImgParams, &m_detectParams,
+                       &m_renderTypeParams, &m_solverParams);
+                   m_imageWidget->update ();
+                   ParameterState newState = getCurrentState ();
+                   m_undoStack->push (new ChangeParametersCommand (
+                       this, oldState, newState, "Optimize geometry"));
+                 });
+        thread->start ();
+      });
 }
 
 void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_area_parameters &params) {

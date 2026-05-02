@@ -36,7 +36,9 @@ signals:
   void exaggerateChanged(double ex);
   void maxArrowLengthChanged(double len);
   void automaticallyAddPointsRequested(const colorscreen::finetune_area_parameters &params);
+  void automaticallyAddPointsInAreaRequested(const colorscreen::finetune_area_parameters &params);
   void autodetectCoordinatesRequested();
+  void alternateColorsRequested();
   void optimizeCoordinatesRequested();
 
 public:

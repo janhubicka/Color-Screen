@@ -136,7 +136,9 @@ private slots:
   void onAdaptiveSharpeningRequested(int xsteps);
   void onAdaptiveSharpeningFinished(bool success, std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result);
   void onAutomaticallyAddPointsRequested(const colorscreen::finetune_area_parameters &params);
+  void onAutomaticallyAddPointsInAreaRequested(const colorscreen::finetune_area_parameters &params);
   void onAutodetectCoordinatesRequested();
+  void onAlternateColorsRequested();
   void onOptimizeCoordinatesRequested();
   void onAutodetectCoordinatesFinished(int reqId, colorscreen::scr_to_img_parameters result, std::shared_ptr<colorscreen::progress_info> progress, bool success, bool cancelled);
   void onOptimizeCoordinatesFinished(int reqId, colorscreen::finetune_result result, std::shared_ptr<colorscreen::progress_info> progress, bool success, bool cancelled);
