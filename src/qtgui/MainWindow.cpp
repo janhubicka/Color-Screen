@@ -725,6 +725,24 @@ void MainWindow::setupUi() {
 
   connect(m_imageWidget, &ImageWidget::interactionModeChanged, this,
           [this](ImageWidget::InteractionMode mode) {
+            // Update toolbar actions to match the widget mode
+            if (m_panAction) {
+              QSignalBlocker blocker(m_panAction);
+              m_panAction->setChecked(mode == ImageWidget::PanMode);
+            }
+            if (m_selectAction) {
+              QSignalBlocker blocker(m_selectAction);
+              m_selectAction->setChecked(mode == ImageWidget::SelectMode);
+            }
+            if (m_addPointAction) {
+              QSignalBlocker blocker(m_addPointAction);
+              m_addPointAction->setChecked(mode == ImageWidget::AddPointMode);
+            }
+            if (m_setCenterAction) {
+              QSignalBlocker blocker(m_setCenterAction);
+              m_setCenterAction->setChecked(mode == ImageWidget::SetCenterMode);
+            }
+
             if (m_capturePanel) {
               m_capturePanel->setCropChecked(mode == ImageWidget::CropMode);
             }
@@ -2816,6 +2834,43 @@ void MainWindow::updateWindowTitle() {
   setWindowTitle(title);
 }
 
+// Save the current interaction mode so it can be restored later.
+// We ignore GenericAreaMode to avoid "saving" a temporary selection state.
+void MainWindow::saveInteractionMode() {
+  if (m_imageWidget->interactionMode() != ImageWidget::GenericAreaMode)
+    m_previousInteractionMode = m_imageWidget->interactionMode();
+}
+
+// Return to the interaction mode that was active before a temporary operation
+// started. This handles both setting the ImageWidget mode and updating the
+// checked state of the corresponding toolbar actions.
+void MainWindow::restoreInteractionMode() {
+  if (m_previousInteractionMode == ImageWidget::PanMode) {
+    if (m_panAction)
+      m_panAction->setChecked(true);
+    else
+      m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+  } else if (m_previousInteractionMode == ImageWidget::SelectMode) {
+    if (m_selectAction)
+      m_selectAction->setChecked(true);
+    else
+      m_imageWidget->setInteractionMode(ImageWidget::SelectMode);
+  } else if (m_previousInteractionMode == ImageWidget::AddPointMode) {
+    if (m_addPointAction)
+      m_addPointAction->setChecked(true);
+    else
+      m_imageWidget->setInteractionMode(ImageWidget::AddPointMode);
+  } else if (m_previousInteractionMode == ImageWidget::SetCenterMode) {
+    if (m_setCenterAction)
+      m_setCenterAction->setChecked(true);
+    else
+      m_imageWidget->setInteractionMode(ImageWidget::SetCenterMode);
+  } else {
+    m_imageWidget->setInteractionMode(m_previousInteractionMode);
+  }
+}
+
+
 void MainWindow::saveWindowState() {
   QSettings settings;
 
@@ -3522,7 +3577,7 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
 
   if (m_focusAnalysisPending) {
     m_focusAnalysisPending = false;
-    m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+    restoreInteractionMode();
 
     colorscreen::finetune_parameters fparam;
     fparam.multitile = 3;
@@ -3614,14 +3669,14 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
 }
 
 void MainWindow::onCropRequested() {
-  if (!m_scan)
-    return;
-
   if (m_imageWidget->interactionMode() == ImageWidget::CropMode) {
-    m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+    restoreInteractionMode();
     statusBar()->clearMessage();
     return;
   }
+
+  if (!m_scan)
+    return;
 
   // Preserve center across crop state change
   colorscreen::point_t center =
@@ -3634,6 +3689,7 @@ void MainWindow::onCropRequested() {
     m_imageWidget->centerOn(center);
   }
 
+  saveInteractionMode();
   m_imageWidget->setInteractionMode(ImageWidget::CropMode);
   statusBar()->showMessage("Select crop");
 }
@@ -3644,7 +3700,7 @@ void MainWindow::startAreaSelection(const QString &message,
     return;
 
   if (m_imageWidget->interactionMode() == ImageWidget::GenericAreaMode) {
-    m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+    restoreInteractionMode();
     statusBar()->clearMessage();
     m_areaSelectionCallback = nullptr;
     if (m_imageLayerPanel)
@@ -3653,6 +3709,7 @@ void MainWindow::startAreaSelection(const QString &message,
   }
 
   m_areaSelectionCallback = callback;
+  saveInteractionMode();
   m_imageWidget->setInteractionMode(ImageWidget::GenericAreaMode);
   statusBar()->showMessage(message);
 }
@@ -3696,7 +3753,7 @@ void MainWindow::onAreaSelected(QRect area) {
     auto cb = m_areaSelectionCallback;
     m_areaSelectionCallback =
         nullptr; // Clear first so interactionModeChanged doesn't uncheck
-    m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+    restoreInteractionMode();
     statusBar()->clearMessage();
     if (cb) {
       cb(imgArea);
@@ -3721,7 +3778,7 @@ void MainWindow::onAreaSelected(QRect area) {
     // Keep center
     m_imageWidget->centerOn(center);
 
-    m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+    restoreInteractionMode();
     statusBar()->clearMessage();
     return;
   }
@@ -4447,10 +4504,11 @@ void MainWindow::onFocusAnalysisRequested(bool checked, uint64_t flags) {
   m_focusAnalysisPending = checked;
   m_focusAnalysisFlags = flags;
   if (checked) {
+    saveInteractionMode();
     m_imageWidget->setInteractionMode(ImageWidget::AddPointMode);
     statusBar()->showMessage(tr("Select point for focus analysis"), 5000);
   } else {
-    m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+    restoreInteractionMode();
     statusBar()->clearMessage();
   }
 }
@@ -4591,8 +4649,12 @@ void MainWindow::onRender() {
 
 void MainWindow::onAddSpotModeRequested(bool active) {
   m_addingProfileSpot = active;
-  m_imageWidget->setInteractionMode(active ? ImageWidget::AddPointMode
-                                           : ImageWidget::PanMode);
+  if (active) {
+    saveInteractionMode();
+    m_imageWidget->setInteractionMode(ImageWidget::AddPointMode);
+  } else {
+    m_imageWidget->setInteractionMode(m_previousInteractionMode);
+  }
 }
 
 void MainWindow::onColorOptimizeRequested(bool /*autoMode*/) {

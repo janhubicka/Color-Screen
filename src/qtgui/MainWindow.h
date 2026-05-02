@@ -26,7 +26,8 @@ class QToolBar;    // Added
 class QComboBox;   // Added
 class QCheckBox;   // Added
 class QVBoxLayout; // Added for Linearization tab
-class ImageWidget;
+#include "ImageWidget.h"
+
 class NavigationView;
 class QProgressBar;
 class QLabel;
@@ -164,7 +165,22 @@ private:
   void createModeShortcuts(); // Create 1-0 hotkeys for modes
   void updateModeMenu(); // Updates combo box items
   QIcon renderScreenIcon(colorscreen::scr_type type);
+
+  /**
+   * @brief Saves the current interaction mode (if not a temporary mode like GenericAreaMode).
+   * This is used before switching to a temporary mode (like crop or area selection)
+   * so that the user's previous tool (e.g., Select, Pan) can be restored later.
+   */
+  void saveInteractionMode();
+
+  /**
+   * @brief Restores the interaction mode saved by saveInteractionMode().
+   * This also ensures that the toolbar buttons are synchronized with the restored mode.
+   */
+  void restoreInteractionMode();
+
   void updateWindowTitle(); // Helper to update window title
+
 
   // Window state management
   void saveWindowState();
@@ -254,6 +270,8 @@ private:
   QString m_lastSaveDir;
 
   std::function<void(QRect)> m_areaSelectionCallback = nullptr;
+  ImageWidget::InteractionMode m_previousInteractionMode = ImageWidget::PanMode;
+
 
   std::shared_ptr<colorscreen::image_data> m_scan;
   colorscreen::render_parameters m_rparams;

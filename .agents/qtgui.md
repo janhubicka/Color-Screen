@@ -187,6 +187,26 @@ Use `smoothFitToView()` or `smoothZoomTo()` for automated view changes.
 - **`m_zoomFocusCenter`**: When true, the view zooms towards the center of the screen.
 - **Absolute Targets**: Always set `m_exploreTargetX/Y` to absolute image coordinates to ensure the animation converges correctly even during concurrent zooming.
 
+### Interaction Modes and Tool State Management
+
+The application supports several interaction modes (e.g., Pan, Select, Add Point, Set Center, Crop). Some of these are "persistent" (selected from the toolbar) while others are "temporary" (triggered by a specific action and returning to the previous tool once finished).
+
+#### Persistent vs. Temporary Modes
+- **Persistent Tools**: Pan, Select, Add Point, Set Center. These are managed via `QActionGroup` in the toolbar.
+- **Temporary Modes**: `CropMode`, `GenericAreaMode`. These are usually triggered by buttons in panels (e.g., "Set by neutral area" or "Crop").
+
+#### State Persistence Logic
+To maintain a smooth user workflow, `MainWindow` tracks the user's active tool using `saveInteractionMode()` and `restoreInteractionMode()`:
+- **`saveInteractionMode()`**: Captures the current mode before entering a temporary mode. It avoids saving `GenericAreaMode` to prevent state corruption.
+- **`restoreInteractionMode()`**: Returns to the previously saved mode. Crucially, it synchronizes the toolbar state by updating the `checked` property of the corresponding `QAction`.
+
+#### Toolbar Synchronization
+The UI uses a **signal-based synchronization** pattern. `MainWindow` connects to `ImageWidget::interactionModeChanged` to ensure that any programmatic change to the interaction mode is reflected in the toolbar. 
+- When the mode changes, `MainWindow` blocks signals on the toolbar actions, updates their `checked` state, and then unblocks signals to avoid infinite recursion.
+
+---
+
+## Custom Panels and Detachable Sections
 If a panel contains a complex widget (like a chart) that a user might want to see in a separate window or dock, use `createDetachableSection`.
 
 ```cpp
