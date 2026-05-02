@@ -1584,6 +1584,57 @@ test_cow_points ()
 
   return true;
 }
+bool
+test_image_area ()
+{
+  bool ok = true;
+  /* Test int_image_area (exclusive).  */
+  int_image_area ia_int (0, 0, 1, 1); // [0, 1) x [0, 1)
+  if (ia_int.empty_p ())
+    {
+      printf ("FAILED: int_image_area incorrectly reported as empty\n");
+      ok = false;
+    }
+  if (!ia_int.contains_p (int_point_t{0, 0}))
+    {
+      printf ("FAILED: int_image_area does not contain its origin\n");
+      ok = false;
+    }
+  if (ia_int.contains_p (int_point_t{1, 0}))
+    {
+      printf ("FAILED: int_image_area incorrectly contains exclusive upper bound\n");
+      ok = false;
+    }
+
+  /* Test image_area (inclusive).  */
+  image_area ia_fp (0.0, 0.0, 1.0, 1.0); // [0, 1] x [0, 1]
+  if (ia_fp.empty_p ())
+    {
+      printf ("FAILED: image_area incorrectly reported as empty\n");
+      ok = false;
+    }
+  if (!ia_fp.contains_p (point_t{0.0, 0.0}))
+    {
+      printf ("FAILED: image_area does not contain its origin\n");
+      ok = false;
+    }
+  if (!ia_fp.contains_p (point_t{1.0, 1.0}))
+    {
+      printf ("FAILED: image_area does not contain inclusive upper bound\n");
+      ok = false;
+    }
+
+  /* Test conversion and rounding.  */
+  image_area fp_area (0.1, 0.2, 0.9, 0.8); // [0.1, 1.0] x [0.2, 1.0]
+  int_image_area int_area (fp_area);
+  if (int_area.x != 0 || int_area.y != 0 || int_area.width != 2 || int_area.height != 2)
+    {
+      printf ("FAILED: conversion from image_area to int_image_area failed rounding requirements\n");
+      ok = false;
+    }
+
+  return ok;
+}
 }
 
 
@@ -1591,7 +1642,7 @@ test_cow_points ()
 int
 main ()
 {
-  printf ("1..27\n");
+  printf ("1..28\n");
 
 
   test_matrix ();
@@ -1623,6 +1674,7 @@ main ()
   report ("darkroom simulation tests", test_darkroom ());
   report ("mesh inversion tests", test_mesh_inversion ());
   report ("cow points tests", test_cow_points ());
+  report ("image area tests", test_image_area ());
 
   return error_found;
 }

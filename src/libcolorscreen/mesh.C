@@ -255,8 +255,7 @@ mesh::get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1, coord_t x2,
                  coord_t y2, coord_t *xmin, coord_t *xmax, coord_t *ymin,
                  coord_t *ymax) const
 {
-  coord_t ixmin = 0, ixmax = 0, iymin = 0, iymax = 0;
-  bool found = false;
+  image_area area;
 
   for (int y = 0; y < m_height - 1; y++)
     for (int x = 0; x < m_width - 1; x++)
@@ -284,28 +283,21 @@ mesh::get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1, coord_t x2,
         for (int dy = 0; dy <= 1; dy++)
           for (int dx = 0; dx <= 1; dx++)
             {
-              coord_t px, py;
               point_t p = push_to_range (x + dx, y + dy, x1, y1, x2, y2);
+              coord_t px, py;
               trans.apply_to_vector (p.x, p.y, &px, &py);
-              if (!found)
-                {
-                  ixmin = ixmax = px;
-                  iymin = iymax = py;
-                  found = true;
-                }
-              else
-                {
-                  ixmin = std::min (ixmin, px);
-                  ixmax = std::max (ixmax, px);
-                  iymin = std::min (iymin, py);
-                  iymax = std::max (iymax, py);
-                }
+              area.extend ({px, py});
             }
       }
-  *xmin = ixmin;
-  *xmax = ixmax;
-  *ymin = iymin;
-  *ymax = iymax;
+  if (area.empty_p ())
+    *xmin = *xmax = *ymin = *ymax = 0;
+  else
+    {
+      *xmin = area.x;
+      *xmax = area.x + area.width;
+      *ymin = area.y;
+      *ymax = area.y + area.height;
+    }
 }
 
 /* Save mesh dimensions, shifts, steps and point grid to file F.  */

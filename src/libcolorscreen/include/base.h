@@ -3,6 +3,7 @@
 #include <cmath>
 #include <algorithm>
 #include <cstdint>
+#include <type_traits>
 #include "colorscreen-config.h"
 namespace colorscreen
 {
@@ -417,26 +418,58 @@ public:
   /* Size */
   T width, height;
   constexpr image_area_base ()
-  : x (0), y (0), width (0), height (0)
+  : x (0), y (0), width (-1), height (-1)
   { }
   constexpr image_area_base (T nx, T ny, T nwidth, T nheight)
   : x (nx), y (ny), width (nwidth), height (nheight)
   { }
   constexpr image_area_base (P topleft, P bottomright)
-  : x (topleft.x), y (topleft.y), width (bottomright.x-topleft.x+1), height (bottomright.y-topleft.y+1)
+  : x (topleft.x), y (topleft.y),
+    width (std::is_integral<T>::value ? bottomright.x - topleft.x + 1 : bottomright.x - topleft.x),
+    height (std::is_integral<T>::value ? bottomright.y - topleft.y + 1 : bottomright.y - topleft.y)
   { }
   constexpr image_area_base (P topleft, T nwidth, T nheight)
   : x (topleft.x), y (topleft.y), width (nwidth), height (nheight)
   { }
   constexpr image_area_base (P p)
-  : x (p.x), y (p.y), width (1), height (1)
+  : x (p.x), y (p.y),
+    width (std::is_integral<T>::value ? 1 : 0),
+    height (std::is_integral<T>::value ? 1 : 0)
   { }
+
+  /* Convert from other image area.  */
+  template<typename T2, typename P2>
+  explicit constexpr image_area_base (const image_area_base<T2, P2> &other)
+  {
+    if constexpr (std::is_integral<T>::value && !std::is_integral<T2>::value)
+      {
+	if (other.empty_p ())
+	  {
+	    x = y = 0;
+	    width = height = -1;
+	  }
+	else
+	  {
+	    x = my_floor (other.x);
+	    y = my_floor (other.y);
+	    width = my_floor (other.x + other.width) + 1 - x;
+	    height = my_floor (other.y + other.height) + 1 - y;
+	  }
+      }
+    else
+      {
+	x = other.x;
+	y = other.y;
+	width = other.width;
+	height = other.height;
+      }
+  }
 
   /* Return true if the area is empty.  */
   pure_attr inline constexpr bool
   empty_p () const
   {
-    return width <= 0 || height <= 0;
+    return width < 0 || height < 0;
   }
 
   /* Return intersection of this area and OTHER.  */
@@ -470,7 +503,19 @@ public:
   pure_attr inline constexpr bool
   contains_p (P p) const
   {
-    return p.x >= x && p.x < x + width && p.y >= y && p.y < y + height;
+    if constexpr (std::is_integral<T>::value)
+      return p.x >= x && p.x < x + width && p.y >= y && p.y < y + height;
+    else
+      return p.x >= x && p.x <= x + width && p.y >= y && p.y <= y + height;
+  }
+  template<typename P2>
+  pure_attr inline constexpr bool
+  contains_p (P2 p) const
+  {
+    if constexpr (std::is_integral<T>::value)
+      return p.x >= x && p.x < x + width && p.y >= y && p.y < y + height;
+    else
+      return p.x >= x && p.x <= x + width && p.y >= y && p.y <= y + height;
   }
   pure_attr inline constexpr bool
   contains_p (const image_area_base &other) const
@@ -481,12 +526,25 @@ public:
   /* Extend the area to contain point P.  */
   inline void extend (P p)
   {
+    extend<P> (p);
+  }
+  template<typename P2>
+  inline void extend (P2 p)
+  {
     if (empty_p ())
       {
 	x = p.x;
 	y = p.y;
-	width = 1;
-	height = 1;
+	if constexpr (std::is_integral<T>::value)
+	  {
+	    width = 1;
+	    height = 1;
+	  }
+	else
+	  {
+	    width = 0;
+	    height = 0;
+	  }
       }
     else
       {
@@ -495,15 +553,32 @@ public:
 	    width += x - p.x;
 	    x = p.x;
 	  }
-	else if (p.x >= x + width)
-	  width = p.x - x + 1;
+	else if (std::is_integral<T>::value)
+	  {
+	    if (p.x >= x + width)
+	      width = p.x - x + 1;
+	  }
+	else
+	  {
+	    if (p.x > x + width)
+	      width = p.x - x;
+	  }
+
 	if (p.y < y)
 	  {
 	    height += y - p.y;
 	    y = p.y;
 	  }
-	else if (p.y >= y + height)
-	  height = p.y - y + 1;
+	else if (std::is_integral<T>::value)
+	  {
+	    if (p.y >= y + height)
+	      height = p.y - y + 1;
+	  }
+	else
+	  {
+	    if (p.y > y + height)
+	      height = p.y - y;
+	  }
       }
   }
   pure_attr inline constexpr P
@@ -517,15 +592,24 @@ public:
   }
   constexpr P top_right () const
   {
-    return {x + width - 1, y};
+    if constexpr (std::is_integral<T>::value)
+      return {x + width - 1, y};
+    else
+      return {x + width, y};
   }
   constexpr P bottom_left () const
   {
-    return {x, y + height - 1};
+    if constexpr (std::is_integral<T>::value)
+      return {x, y + height - 1};
+    else
+      return {x, y + height};
   }
   constexpr P bottom_right () const
   {
-    return {x + width - 1, y + height - 1};
+    if constexpr (std::is_integral<T>::value)
+      return {x + width - 1, y + height - 1};
+    else
+      return {x + width, y + height};
   }
 };
 /* Optinally hold area of an image. */
@@ -547,6 +631,7 @@ public:
   }
 };
 
+typedef image_area_base<coord_t, point_t> image_area;
 typedef image_area_base<int, int_point_t> int_image_area;
 typedef optional_image_area_base<int, int_point_t> int_optional_image_area;
 
