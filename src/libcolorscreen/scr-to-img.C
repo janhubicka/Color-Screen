@@ -405,7 +405,10 @@ scr_to_img::get_range (image_area area_in) const noexcept
   if (m_scr_to_img_mesh)
     {
       matrix2x2<coord_t> identity;
-      return m_scr_to_img_mesh->get_range (identity, area_in);
+      if (m_param.mesh_trans_is_scr_to_img)
+        return m_scr_to_img_mesh->get_range (identity, area_in);
+      else
+        return m_img_to_scr_mesh->get_src_range (area_in);
     }
   else
     {
@@ -639,7 +642,10 @@ scr_to_img::get_img_range (int_image_area a) const noexcept
   else
     {
       matrix2x2<coord_t> identity;
-      return int_image_area (m_img_to_scr_mesh->get_range (identity, image_area (a)));
+      if (m_param.mesh_trans_is_scr_to_img)
+        return int_image_area (m_scr_to_img_mesh->get_src_range (image_area (a)));
+      else
+        return int_image_area (m_img_to_scr_mesh->get_range (identity, image_area (a)));
     }
 }
 

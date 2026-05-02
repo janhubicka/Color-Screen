@@ -250,7 +250,7 @@ mesh::push_to_range (int x, int y, image_area area) const
   return invert ({ xx, yy });
 }
 
-/* Determine range in image coordinates covering AREA transformed by TRANS.  */
+/* Determine range in target coordinates covering AREA transformed by TRANS.  */
 image_area
 mesh::get_range (matrix2x2<coord_t> trans, image_area area_in) const noexcept
 {
@@ -272,11 +272,26 @@ mesh::get_range (matrix2x2<coord_t> trans, image_area area_in) const noexcept
           for (int dx = 0; dx <= 1; dx++)
             {
               point_t p = push_to_range (x + dx, y + dy, area_in);
-              coord_t px, py;
-              trans.apply_to_vector (p.x, p.y, &px, &py);
-              area.extend ({px, py});
+              area.extend (trans.apply_to_vector (p));
             }
       }
+  return area;
+}
+
+/* Determine range in src coordinates covering AREA of target.  */
+image_area
+mesh::get_src_range (image_area area_in) const noexcept
+{
+  image_area area;
+
+  int xmin = std::clamp ((int)my_floor ((area_in.x + m_xshift) * m_xstepinv), 0, m_width);
+  int xmax = std::clamp ((int)my_ceil ((area_in.x + area_in.width + m_xshift) * m_xstepinv), 0, m_width);
+  int ymin = std::clamp ((int)my_floor ((area_in.y + m_yshift) * m_ystepinv), 0, m_height);
+  int ymax = std::clamp ((int)my_ceil ((area_in.y + area_in.height + m_yshift) * m_ystepinv), 0, m_height);
+
+  for (int x = xmin; x <= xmax; x++)
+    for (int y = ymin; y <= ymax; y++)
+      area.extend (m_data[y * m_width + x]);
   return area;
 }
 

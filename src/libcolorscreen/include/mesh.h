@@ -111,6 +111,7 @@ public:
   DLL_PUBLIC invert (point_t ip) const;
 
   image_area get_range (matrix2x2<coord_t> trans, image_area area_in) const noexcept;
+  image_area get_src_range (image_area area_in) const noexcept;
 
   /* Print mesh content to file F.  */
   void print (FILE *f) const;
