@@ -5154,8 +5154,8 @@ autodetect_coordinates (const image_data &img, scr_to_img_parameters &param,
           }
 
   int best_i = -1;
-  int best_n;
-  double best_sum;
+  int best_n = 0;
+  double best_sum = 0;
 
   for (int i = 0; i < (int)res.size (); i++)
     if (res[i].success && res[i].contrast > 1/1280.0)

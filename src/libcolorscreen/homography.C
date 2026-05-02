@@ -434,7 +434,6 @@ get_matrix_ransac (const std::vector <solver_parameters::solver_point_t> &points
   int max_inliers = 0;
   double min_chisq = INT_MAX;
   double min_inlier_chisq = INT_MAX;
-  int iteration;
   coord_t dist = 1;
   int n = points.size ();
   coord_t scr_dist = 0.1;

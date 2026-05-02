@@ -487,14 +487,14 @@ solver (scr_to_img_parameters *param,const  image_data &img_data,
         const solver_parameters &sparam, progress_info *progress)
 {
   /* 3 points may be enough for strips; we only solve homography on 1d.  */
-  if (sparam.n_points () < solver_parameters::min_points (param->type))
+  if ((int)sparam.n_points () < solver_parameters::min_points (param->type))
     return 1e30;
 
   param->mesh_trans = nullptr;
 
   /* Require more points for strips; we only can verify 1d info.  */
-  bool optimize_lens = sparam.optimize_lens && (sparam.n_points () > solver_parameters::min_lens_points (param->type));
-  bool optimize_rotation = sparam.optimize_tilt && (sparam.n_points () > solver_parameters::min_perspective_points (param->type));
+  bool optimize_lens = sparam.optimize_lens && ((int)sparam.n_points () > solver_parameters::min_lens_points (param->type));
+  bool optimize_rotation = sparam.optimize_tilt && ((int)sparam.n_points () > solver_parameters::min_perspective_points (param->type));
 
   if (optimize_lens)
     {
@@ -600,7 +600,7 @@ std::unique_ptr <mesh>
 solver_mesh (scr_to_img_parameters *param, image_data &img_data,
              solver_parameters &sparam, progress_info *progress)
 {
-  if (sparam.n_points () < solver_parameters::min_mesh_points (param->type))
+  if ((int)sparam.n_points () < solver_parameters::min_mesh_points (param->type))
     return nullptr;
   int step = 10;
   if (param->mesh_trans)
@@ -729,7 +729,7 @@ std::unique_ptr <mesh>
 solver_mesh (const scr_to_img_parameters *param, const image_data &img_data,
              const solver_parameters &sparam, progress_info *progress)
 {
-  if (sparam.n_points () < solver_parameters::min_mesh_points (param->type))
+  if ((int)sparam.n_points () < solver_parameters::min_mesh_points (param->type))
     return nullptr;
   if (param->mesh_trans)
     abort ();

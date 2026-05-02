@@ -663,7 +663,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
                                     progress_info *progress,
                                     image_data::demosaicing_t demosaic)
 {
-  size_t buffer_size;
+  size_t buffer_size = 0;
   m_buffer = NULL;
   if (has_suffix (name, ".eip"))
     {

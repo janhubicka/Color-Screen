@@ -139,7 +139,7 @@ analyze_base::find_best_match_using_cpfind (
             }
           coord_t x1, y1, x2, y2;
           npoints++;
-          if (fscanf (f, "%f", &x1) != 1)
+          if (fscanf (f, "%lf", &x1) != 1)
             {
               if (progress)
                 progress->pause_stdout ();
@@ -157,7 +157,7 @@ analyze_base::find_best_match_using_cpfind (
                 progress->resume_stdout ();
               return false;
             }
-          if (fscanf (f, "%f", &y1) != 1)
+          if (fscanf (f, "%lf", &y1) != 1)
             {
               if (progress)
                 progress->pause_stdout ();
@@ -175,7 +175,7 @@ analyze_base::find_best_match_using_cpfind (
                 progress->resume_stdout ();
               return false;
             }
-          if (fscanf (f, "%f", &x2) != 1)
+          if (fscanf (f, "%lf", &x2) != 1)
             {
               if (progress)
                 progress->pause_stdout ();
@@ -193,7 +193,7 @@ analyze_base::find_best_match_using_cpfind (
                 progress->resume_stdout ();
               return false;
             }
-          if (fscanf (f, "%f", &y2) != 1)
+          if (fscanf (f, "%lf", &y2) != 1)
             {
               if (progress)
                 progress->pause_stdout ();

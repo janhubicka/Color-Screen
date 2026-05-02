@@ -609,7 +609,7 @@ hd_curve_parameters::adjust_v (double old_v, double new_v, double B, double M)
     };
 
   // 1. Move knots using precise formula
-  double old_l1, old_l2, new_l1, new_l2, old_min, old_max, new_min, new_max;
+  double old_l1, old_l2, new_l1, new_l2, old_min, old_max;
   if (is_inverted_p ())
     {
       old_l1 = linear1y;

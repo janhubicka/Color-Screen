@@ -1148,7 +1148,7 @@ mtf::precompute (progress_info *progress, bool parallel)
                     - m_mtf.apply (i * step))
               > 0.0001)
             {
-              printf ("Mismatch (model) %f %f %i\n",
+              printf ("Mismatch (model) %f %f %f\n",
                       m_params.system_mtf (i * step),
                       m_mtf.apply (i * step), step);
               abort ();
