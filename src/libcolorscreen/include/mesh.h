@@ -110,7 +110,7 @@ public:
   point_t pure_attr
   DLL_PUBLIC invert (point_t ip) const;
 
-  image_area get_range (matrix2x2<coord_t> trans, image_area area_in) const;
+  image_area get_range (matrix2x2<coord_t> trans, image_area area_in) const noexcept;
 
   /* Print mesh content to file F.  */
   void print (FILE *f) const;
@@ -288,7 +288,7 @@ private:
   }
 
   /* Find coordinate in range [X1, Y1]..[X2, Y2] that is close to entry (X, Y).  */
-  point_t push_to_range (int x, int y, coord_t x1, coord_t y1, coord_t x2, coord_t y2) const;
+  point_t push_to_range (int x, int y, image_area area) const;
 };
 }
 #endif

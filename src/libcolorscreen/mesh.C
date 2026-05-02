@@ -229,9 +229,12 @@ mesh::invert (point_t ip) const
 
 /* Small helper to push mesh entry (X, Y) to image range [X1, Y1]..[X2, Y2].  */
 point_t
-mesh::push_to_range (int x, int y, coord_t x1, coord_t y1, coord_t x2,
-                     coord_t y2) const
+mesh::push_to_range (int x, int y, image_area area) const
 {
+  coord_t x1 = area.x;
+  coord_t y1 = area.y;
+  coord_t x2 = area.x + area.width;
+  coord_t y2 = area.y + area.height;
   coord_t xx = m_data[y * m_width + x].x;
   coord_t yy = m_data[y * m_width + x].y;
   if (xx >= x1 && xx <= x2 && yy >= y1 && yy <= y2)
@@ -249,41 +252,26 @@ mesh::push_to_range (int x, int y, coord_t x1, coord_t y1, coord_t x2,
 
 /* Determine range in image coordinates covering AREA transformed by TRANS.  */
 image_area
-mesh::get_range (matrix2x2<coord_t> trans, image_area area_in) const
+mesh::get_range (matrix2x2<coord_t> trans, image_area area_in) const noexcept
 {
   image_area area;
-  coord_t x1 = area_in.x;
-  coord_t y1 = area_in.y;
-  coord_t x2 = area_in.x + area_in.width;
-  coord_t y2 = area_in.y + area_in.height;
 
   for (int y = 0; y < m_height - 1; y++)
     for (int x = 0; x < m_width - 1; x++)
       {
-        mesh_coord_t mminx = m_data[y * m_width + x].x;
-        mesh_coord_t mmaxx = mminx;
-        mesh_coord_t mminy = m_data[y * m_width + x].y;
-        mesh_coord_t mmaxy = mminy;
-
+        image_area mesh_cell_area;
         for (int dy = 0; dy <= 1; dy++)
           for (int dx = 0; dx <= 1; dx++)
-            {
-              mminx = std::min (m_data[(y + dy) * m_width + x + dx].x, mminx);
-              mmaxx = std::max (m_data[(y + dy) * m_width + x + dx].x, mmaxx);
-              mminy = std::min (m_data[(y + dy) * m_width + x + dx].y, mminy);
-              mmaxy = std::max (m_data[(y + dy) * m_width + x + dx].y, mmaxy);
-            }
+            mesh_cell_area.extend (m_data[(y + dy) * m_width + x + dx]);
 
-        if (x1 > mmaxx || y1 > mmaxy)
-            continue;
-        if (x2 < mminx || y2 < mminy)
+        if (!mesh_cell_area.overlap_p (area_in))
           continue;
 
         /* For overlapping cells, transform corners to source coordinates.  */
         for (int dy = 0; dy <= 1; dy++)
           for (int dx = 0; dx <= 1; dx++)
             {
-              point_t p = push_to_range (x + dx, y + dy, x1, y1, x2, y2);
+              point_t p = push_to_range (x + dx, y + dy, area_in);
               coord_t px, py;
               trans.apply_to_vector (p.x, p.y, &px, &py);
               area.extend ({px, py});

@@ -475,6 +475,18 @@ public:
       return width < 0 || height < 0;
   }
 
+  /* Return true if this area overlaps with OTHER.  */
+  pure_attr inline constexpr bool
+  overlap_p (image_area_base other) const
+  {
+    if constexpr (std::is_integral<T>::value)
+      return x < other.x + other.width && x + width > other.x
+	     && y < other.y + other.height && y + height > other.y;
+    else
+      return x <= other.x + other.width && x + width >= other.x
+	     && y <= other.y + other.height && y + height >= other.y;
+  }
+
   /* Return intersection of this area and OTHER.  */
   pure_attr inline constexpr image_area_base<T, P>
   intersect (image_area_base other) const
