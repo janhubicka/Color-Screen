@@ -32,7 +32,8 @@ stitch_project::initialize ()
   scr_param.type = Random;
   data.width=1000;
   data.height=1000;
-  common_scr_to_img.set_parameters (scr_param, data, rotation_adjustment);
+  if (!common_scr_to_img.set_parameters (scr_param, data, rotation_adjustment))
+    return false;
 
   if ((params.width == 1 || params.height == 1) && params.outer_tile_border > 40)
     {
@@ -411,7 +412,10 @@ stitch_project::determine_angle ()
   image_data data;
   data.width=1000;
   data.height=1000;
-  common_scr_to_img.set_parameters (scr_param, data, rotation_adjustment);
+  if (!common_scr_to_img.set_parameters (scr_param, data, rotation_adjustment))
+    {
+      /* Ignore failure.  */
+    }
 }
 #define HEADER "color_screen_stitch_project_version: 1"
 
@@ -1447,7 +1451,10 @@ stitch_project::stitch (progress_info *progress, detect_regular_screen_params *d
       if (report_file)
 	{
 	  fprintf (report_file, "Color screen parameters:\n");
-	  save_csp (report_file, &param, &dparam, &rparam, &solver_param);
+	  if (!save_csp (report_file, &param, &dparam, &rparam, &solver_param))
+	    {
+	      /* Ignore failure.  */
+	    }
 	}
       if (!analyze_images (dsparam, progress))
 	{

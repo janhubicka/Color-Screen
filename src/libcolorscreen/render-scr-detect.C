@@ -426,7 +426,8 @@ render_scr_detect::analyze_color_proportions (scr_to_img_parameters *param, int 
   if (param)
     {
       s = std::make_unique <scr_to_img> ();
-      s->set_parameters (*param, m_img);
+      if (!s->set_parameters (*param, m_img))
+	return {1/3.0, 1/3.0, 1/3.0};
     }
   if (xmin < 0)
     xmin = 0;
@@ -492,7 +493,8 @@ analyze_color_proportions (scr_detect_parameters param, render_parameters &rpara
   //param.min_ratio = 1.3;
   //param.min_luminosity = 0.01;
   render_scr_detect r (param, img, rparam, 256);
-  r.precompute_all (false, false, progress);
+  if (!r.precompute_all (false, false, progress))
+    return {1/3.0, 1/3.0, 1/3.0};
   return r.analyze_color_proportions (map_param, xmin, ymin, xmax, ymax, progress);
 }
 

@@ -403,7 +403,8 @@ optimize_color_model_colors_collect (scr_to_img_parameters *param,
 
   /* Set up scr-to-img map.  */
   scr_to_img map;
-  map.set_parameters (*param, *cimg);
+  if (!map.set_parameters (*param, *cimg))
+    return;
   proportions = map.patch_proportions (&my_rparam);
 
   /* First renderer is interpolated with normal data collection with unadjusted
@@ -419,8 +420,10 @@ optimize_color_model_colors_collect (scr_to_img_parameters *param,
   r2.set_unadjusted ();
   r2.original_color (false);
 
-  r.precompute_all (progress);
-  r2.precompute_all (progress);
+  if (!r.precompute_all (progress))
+    return;
+  if (!r2.precompute_all (progress))
+    return;
 
   for (size_t i = 0; i < points.size (); i++)
     {

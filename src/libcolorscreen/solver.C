@@ -59,7 +59,8 @@ solver (scr_to_img_parameters *param, const image_data &img_data,
   /* This map applies only non-linear part of corrections (that are not
      optimized).  */
   scr_to_img map;
-  map.set_parameters (*param, img_data);
+  if (!map.set_parameters (*param, img_data))
+    return 1e30;
 
   double chisq;
   if (screen_with_vertical_strips_p (param->type))
@@ -94,7 +95,8 @@ solver (scr_to_img_parameters *param, const image_data &img_data,
       coord_t tilt_y_min = -0.003, tilt_y_max = 0.003;
       int tilt_y_steps = 21;
       scr_to_img map2;
-      map2.set_parameters (*param, img_data);
+      if (!map2.set_parameters (*param, img_data))
+	return 1e30;
       for (int i = 0; i < 10; i++)
         {
           coord_t txstep = (tilt_x_max - tilt_x_min) / (tilt_x_steps - 1);
@@ -147,7 +149,8 @@ solver (scr_to_img_parameters *param, const image_data &img_data,
   if (final_run && ((debug || debug_output)))
     {
       scr_to_img map2;
-      map2.set_parameters (*param, img_data);
+      if (!map2.set_parameters (*param, img_data))
+	return 1e30;
       // map2.m_matrix.print (stdout);
       bool found = false;
       /* For vertical strips we need to compare screen coordinates only,
@@ -485,7 +488,7 @@ solver (scr_to_img_parameters *param,const  image_data &img_data,
 {
   /* 3 points may be enough for strips; we only solve homography on 1d.  */
   if (sparam.n_points () < solver_parameters::min_points (param->type))
-    return 0;
+    return 1e30;
 
   param->mesh_trans = nullptr;
 
@@ -526,7 +529,7 @@ solver (scr_to_img_parameters *param,const  image_data &img_data,
       param->lens_correction.kr[3]
           = s.start[n + 2] * (1 / lens_solver::scale_kr);
       if (!param->lens_correction.normalize ())
-        return false;
+        return 1e30;
     }
   if (progress)
     progress->set_task ("optimizing perspective correction", 1);
@@ -603,7 +606,8 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
   if (param->mesh_trans)
     abort ();
   scr_to_img map;
-  map.set_parameters (*param, img_data);
+  if (!map.set_parameters (*param, img_data))
+    return nullptr;
   int_image_area r1 = map.get_range (img_data.width, img_data.height);
   int width = (r1.width + step - 1) / step, height = (r1.height + step - 1) / step;
   if (progress)
@@ -820,7 +824,8 @@ solver_mesh (const scr_to_img_parameters *param, const image_data &img_data,
   if (param->mesh_trans)
     abort ();
   scr_to_img map;
-  map.set_parameters (*param, img_data);
+  if (!map.set_parameters (*param, img_data))
+    return nullptr;
   int_image_area r2 = map.get_range (img_data.width, img_data.height);
   int width = (r2.width + step - 1) / step, height = (r2.height + step - 1) / step;
   if (progress)

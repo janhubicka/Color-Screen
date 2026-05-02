@@ -254,9 +254,15 @@ compare_scr_to_img (const char *test_name, scr_to_img_parameters & param,
   if (!ok)
     {
       printf ("\nInput:\n");
-      save_csp (stdout, &param, NULL, NULL, sparam);
+      if (!save_csp (stdout, &param, NULL, NULL, sparam))
+	{
+	  /* Ignore failure.  */
+	}
       printf ("\nSolution:\n");
-      save_csp (stdout, &param2, NULL, NULL, NULL);
+      if (!save_csp (stdout, &param2, NULL, NULL, NULL))
+	{
+	  /* Ignore failure.  */
+	}
     }
   fflush (stdout);
   return ok;
@@ -269,7 +275,8 @@ do_test_homography (scr_to_img_parameters &param, int width, int height,
   scr_to_img map;
   image_data img;
   unsigned int g_seed = 0;
-  img.set_dimensions (width, height);
+  if (!img.set_dimensions (width, height))
+    return false;
   if (!map.set_parameters (param, img))
     {
       printf ("Set parameters failed\n");
@@ -336,7 +343,8 @@ do_test_discovery (scr_to_img_parameters &param, int width, int height, coord_t 
   rparam.gamma = 1.0;
   rparam.screen_blur_radius = 1;
   rparam.sharpen.scanner_mtf_scale = 0;
-  render_screen (img, param, rparam, dparam, width, height);
+  if (!render_screen (img, param, rparam, dparam, width, height))
+    return false;
   detect_regular_screen_params dsparams;
   dsparams.min_screen_percentage=90;
 
@@ -1058,7 +1066,8 @@ test_render_linearity ()
 {
   render_parameters rparam;
   image_data img;
-  img.set_dimensions (65536, 1, true, false);
+  if (!img.set_dimensions (65536, 1, true, false))
+    return false;
   for (int i = 0; i < 65536; i++)
     img.put_rgb_pixel (i, 0, {(image_data::gray)i, (image_data::gray)i, (image_data::gray)i});
   bool ok = true;

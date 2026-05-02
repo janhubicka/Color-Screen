@@ -467,7 +467,10 @@ optimize_screen_colors (scr_detect_parameters *param,
   if (report)
     {
       fprintf (report, "After screen color detection:\n");
-      save_csp (report, NULL, param, NULL, NULL);
+      if (!save_csp (report, NULL, param, NULL, NULL))
+	{
+	  /* Ignore failure.  */
+	}
     }
   if (report)
     fflush (report);

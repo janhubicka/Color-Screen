@@ -1768,13 +1768,15 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 	  luminosity_t snr = sharpen[c]->scanner_snr;
           screen_fft_t k_const = snr > 0 ? 1.0f / snr : 0;
 	  std::shared_ptr<mtf> cur_mtf = mtf::get_mtf (sharpen[c]->scanner_mtf, NULL);
-	  cur_mtf->precompute (NULL, parallel);
+	  if (!cur_mtf->precompute (NULL, parallel))
+	    return;
 	  int this_psf_size = cur_mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
 	  //printf ("screen step %f %f psf size %i\n", step, screen::size * step, this_psf_size);
 	  /* PSF may revisit this_psf_size.  */
 	  if (this_psf_size > screen::size)
 	    {
-	      cur_mtf->precompute_psf (NULL, parallel);
+	      if (!cur_mtf->precompute_psf (NULL, parallel))
+		return;
 	      this_psf_size = cur_mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
 	    }
 

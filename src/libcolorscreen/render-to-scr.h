@@ -314,7 +314,7 @@ public:
 
   /* Precompute all data needed for rendering.  Update PROGRESS.  */
   nodiscard_attr bool
-  nodiscard_attr precompute_all (progress_info *progress = NULL)
+  precompute_all (progress_info *progress = NULL)
   {
     if (!render_to_scr::precompute_all (!m_color, m_profiled, progress))
       return false;
@@ -330,7 +330,7 @@ public:
 
   /* Precompute all data needed for rendering in AREA.  Update PROGRESS.  */
   nodiscard_attr bool
-  nodiscard_attr precompute_img_range (int_image_area area, progress_info *progress = NULL)
+  precompute_img_range (int_image_area area, progress_info *progress = NULL)
   {
     (void)area;
     return precompute_all (progress);

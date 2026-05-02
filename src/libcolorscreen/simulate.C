@@ -31,7 +31,8 @@ render_simulated_screen (simulated_screen &img,
                          progress_info *progress)
 {
   scr_to_img map;
-  map.set_parameters (p.params, p.width, p.height);
+  if (!map.set_parameters (p.params, p.width, p.height))
+    return;
   struct get_pixel_data pd = { p.scr, map };
   //printf ("Simulating %f\n", p.sharpen.scanner_mtf_scale);
   if (progress)
@@ -47,9 +48,12 @@ render_simulated_screen (simulated_screen &img,
                         p.sharpen.usm_amount, progress, true);
   else
     {
-      deconvolve_rgb<rgbdata, simulated_screen_pixel, get_pixel_data *, int,
+      if (!deconvolve_rgb<rgbdata, simulated_screen_pixel, get_pixel_data *, int,
                     get_pixel> (img.data (), &pd, 0, p.width, p.height,
-                                p.sharpen, progress, true);
+                                p.sharpen, progress, true))
+	{
+	  /* Ignore failure.  */
+	}
     }
   //for (size_t y = 0; y < (size_t)p.height; y++)
     //for (size_t x = 0; x < (size_t)p.width; x++)

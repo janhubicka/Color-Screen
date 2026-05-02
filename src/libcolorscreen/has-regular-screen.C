@@ -211,7 +211,11 @@ has_regular_screen (image_data &scan, const has_regular_screen_params &params, p
   else if (scan.gamma > 0)
     rparams.gamma = scan.gamma;
   render render (scan, rparams, 256);
-  render.precompute_all (true, false, (rgbdata){1.0/3, 1.0/3, 1.0/3}, progress);
+  if (!render.precompute_all (true, false, (rgbdata){1.0/3, 1.0/3, 1.0/3}, progress))
+    {
+      ret.error = "precompute_all failed";
+      return ret;
+    }
   if (progress)
     progress->set_task ("analyzing samples", params.ntilesy * params.ntilesx);
   for (int y = 0; y < params.ntilesy; y++)

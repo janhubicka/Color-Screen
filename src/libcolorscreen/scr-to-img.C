@@ -530,7 +530,10 @@ scr_to_img::dump (FILE *f) const
   fprintf (f, "scr to img dump:\n");
   if (m_scr_to_img_mesh)
     fprintf (f, "have mesh trans\n");
-  save_csp (f, const_cast<scr_to_img_parameters *> (&m_param), NULL, NULL, NULL);
+  if (!save_csp (f, const_cast<scr_to_img_parameters *> (&m_param), NULL, NULL, NULL))
+    {
+      /* Ignore failure.  */
+    }
 }
 
 

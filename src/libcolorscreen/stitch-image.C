@@ -701,7 +701,8 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
   my_rparam.mix_blue = 1;
   param.mesh_trans = mesh_trans;
   render_to_scr render (param, *img, my_rparam, 256);
-  render.precompute_all (true, false, progress);
+  if (!render.precompute_all (true, false, progress))
+    return false;
   if (!m_prj->my_screen)
     {
       m_prj->pixel_size = detected.pixel_size;
@@ -720,7 +721,8 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
   m_prj->my_screen = render_to_scr::get_screen (param.type, false,
 						true, sharpen,
 					       	0, 0, progress);
-  scr_to_img_map.set_parameters (param, *img, m_prj->rotation_adjustment);
+  if (!scr_to_img_map.set_parameters (param, *img, m_prj->rotation_adjustment))
+    return false;
   m_prj->rotation_adjustment = scr_to_img_map.get_rotation_adjustment ();
   
   if (!m_prj->stitch_info_scale)
@@ -734,13 +736,15 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
   if (!m_prj->params.load_registration)
     {
       delete detected.smap;
-      basic_scr_to_img_map.set_parameters (detected.param, *img);
+      if (!basic_scr_to_img_map.set_parameters (detected.param, *img))
+	return false;
     }
   else
     {
       scr_to_img_parameters p = param;
       p.mesh_trans = NULL;
-      basic_scr_to_img_map.set_parameters (p, *img);
+      if (!basic_scr_to_img_map.set_parameters (p, *img))
+	return false;
       known_pixels = (std::unique_ptr<bitmap_2d>)(compute_known_pixels (scr_to_img_map, 0, 0, 0, 0, NULL));
     }
   render.compute_final_range ();
@@ -1254,11 +1258,13 @@ stitch_image::load (stitch_project *prj, FILE *f, const char **error)
   data.height=1000;
   //param.mesh_trans = mesh_trans;
   //param.mesh_trans = NULL;
-  scr_to_img_map.set_parameters (param, data, m_prj->rotation_adjustment);
+  if (!scr_to_img_map.set_parameters (param, data, m_prj->rotation_adjustment))
+    return false;
   m_prj->rotation_adjustment = scr_to_img_map.get_rotation_adjustment ();
   mesh_trans = param.mesh_trans;
   param.mesh_trans = NULL;
-  basic_scr_to_img_map.set_parameters (param, data, m_prj->rotation_adjustment);
+  if (!basic_scr_to_img_map.set_parameters (param, data, m_prj->rotation_adjustment))
+    return false;
   param.mesh_trans = mesh_trans;
   known_pixels = (std::unique_ptr<bitmap_2d>)(compute_known_pixels (scr_to_img_map, 0,0,0,0, NULL));
   analyzed = true;

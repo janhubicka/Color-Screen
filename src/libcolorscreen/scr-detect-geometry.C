@@ -1253,7 +1253,8 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx,
     return NULL;
 
   scr_to_img scr_map;
-  scr_map.set_parameters (param, img);
+  if (!scr_map.set_parameters (param, img))
+    return NULL;
 
   int max_patch_size = floor (screen_xsize * screen_ysize / 1.5);
   int min_patch_size = (int)(screen_xsize * screen_ysize / 8);
@@ -1534,7 +1535,8 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx,
     sparam2.optimize_lens = sparam2.optimize_tilt = false;
   map->determine_solver_points (*npatches, &sparam2);
   param2 = param;
-  simple_solver (&param2, img, sparam2, progress);
+  if (simple_solver (&param2, img, sparam2, progress) > 1e20)
+    return NULL;
   if (progress && progress->cancel_requested ())
     return NULL;
   screen_xsize = sqrt (param2.coordinate1.x * param2.coordinate1.x
@@ -1546,7 +1548,8 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx,
 
   /* Check for large unanalyzed areas.  */
   scr_to_img map2;
-  map2.set_parameters (param2, img);
+  if (!map2.set_parameters (param2, img))
+    return NULL;
   int xmin, ymin, xmax, ymax;
   map->get_known_range (&xmin, &ymin, &xmax, &ymax);
   int snexpected = (paget_like_screen_p (param.type) ? 8 : 2) * (xmax - xmin)
@@ -1757,7 +1760,8 @@ summarise_quality (const image_data &img, const screen_map *smap,
   int one_num[3] = { 0, 0, 0 };
   int four_num[3] = { 0, 0, 0 };
   scr_to_img map;
-  map.set_parameters (param, img);
+  if (!map.set_parameters (param, img))
+    return;
   for (int y = -smap->yshift; y < smap->height - smap->yshift; y++)
     for (int x = -smap->xshift; x < smap->width - smap->xshift; x++)
       if (smap->known_and_not_fake_p ({ x, y }))
@@ -2036,7 +2040,11 @@ we simply try both cmaps.  */
                         }
                       visited.clear ();
                       param.type = current_type;
-                      simple_solver (&param, img, sparam, progress);
+                      if (simple_solver (&param, img, sparam, progress) > 1e20)
+			{
+			  nattempts++;
+			  continue;
+			}
                       smap = flood_fill (
                           report_file, dsparams->slow_floodfill,
                           dsparams->fast_floodfill, sparam.points[0].img.x,
@@ -2154,10 +2162,12 @@ we simply try both cmaps.  */
       return ret;
     }
 
-  if (report_file)
     {
       fprintf (report_file, "Detected geometry\n");
-      save_csp (report_file, &ret.param, NULL, NULL, NULL);
+      if (!save_csp (report_file, &ret.param, NULL, NULL, NULL))
+	{
+	  /* Ignore failure, but at least we checked it.  */
+	}
     }
   {
     render_to_scr render (ret.param, img, empty, 256);
@@ -2192,7 +2202,8 @@ we simply try both cmaps.  */
           || dsparams->bottom))
     {
       scr_to_img map;
-      map.set_parameters (ret.param, img);
+      if (!map.set_parameters (ret.param, img))
+	return ret;
       const int range = 10;
       if (progress)
         progress->set_task ("Straightening corners", smap->height);
