@@ -93,10 +93,29 @@ addSliderParameter(
 
 ## Background Tasks and Concurrency
 
-Never perform heavy computations in the UI thread. Use the `TaskQueue` and `WorkerBase` system.
-`TaskQueue` should be used when running multiple threads is desired for user response when parameters are
-changed rapidly (such as rendering the image). While ohter tasks that should be run only once can be
-handled separately.
+Never perform heavy computations in the UI thread. The `qtgui` component uses three distinct concurrency patterns based on task lifecycle:
+
+### 1. Progressive Updates (TaskQueue)
+The `TaskQueue` implements a **two-task scheme** for long-running computations where progressive results are desirable.
+- **When to Use**: Situations where a user changes parameters rapidly (e.g., dragging a slider) and needs visual feedback as soon as possible, but it is acceptable to cancel an in-flight computation if even fresher parameters arrive.
+- **Examples**: Image tile rendering, registration point overlays, geometry solver, color optimizer.
+- **Behavior**: New requests automatically cancel or supersede pending/active tasks in the same queue.
+
+### 2. One-Shot Cancellable Tasks
+Tasks that run in the background and report a final result (or series of intermediate results).
+- **When to Use**: Computations that should work with the freshest data; if the data changes significantly, the old task should be cancelled and a new one started.
+- **Implementation**: Can use `QThread + moveToThread` (if custom signal/slot communication is needed) or `QtConcurrent::run` (for simple functional tasks).
+- **Examples**: FinetuneWorker, DetectScreenWorker, FlatFieldWorker, FocusAnalysisWorker, AdaptiveSharpeningWorker, area-based computations (white balance, auto levels).
+- **Behavior**: Tracked via `progress_info` for manual or automatic cancellation.
+
+### 3. Independent Exports (Render to File)
+- **When to Use**: Tasks that are independent of ongoing UI parameter tweaks once started and should run to completion.
+- **Examples**: `onRender()` (rendering to a final file).
+- **Behavior**: Not automatically cancelled by state changes; usually requires explicit user confirmation to abort.
+
+---
+
+### Implementation Details
 
 Inherit from `WorkerBase` or `QObject` to implement a specific task. Use `QThread` to move the worker off the main thread.
 
@@ -284,8 +303,18 @@ When a control is disabled due to missing data (like registration points):
 - **Real-time Updates**: Ensure these labels update immediately as the state changes (e.g., as the user adds points in the viewer).
 
 ### 5. Favor Composition over Duplication
-Avoid code duplication
+Avoid code duplication by extracting shared UI patterns into helper methods in `MainWindow`.
 
-### 6. Documentation
-- **Document function**: Add block comments to function
-- **Document design decisions**: Keep comments in the source which helps later understanding of the design of inidvidual parts.
+### 6. Use Centralized Helpers
+To maintain consistency across different UI actions, use the following standardized helpers in `MainWindow`:
+- **`runAreaComputation()`**: Use this for any task that involves: 
+    1. Status bar instruction.
+    2. Area selection on the image.
+    3. Background computation with progress tracking.
+    4. Pushing an undoable parameter change.
+- **`loadParameterFile()`**: Use this for all parameter loading operations (from dialogs, recent files, or drag-and-drop). It ensures consistent state reset, UI refresh, and undo history management.
+
+### 7. Documentation
+- **Document function**: Add block comments to functions using Doxygen-style (`/** ... */`) to allow for automated documentation generation.
+- **Document design decisions**: Keep comments in the source which helps later understanding of the design of individual parts.
+- **Sync with .agents**: Ensure that any major architectural changes (like new threading patterns or global helpers) are reflected in this document.
