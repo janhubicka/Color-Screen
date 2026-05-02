@@ -4321,6 +4321,7 @@ void MainWindow::onOptimizeCoordinatesFinished(
     m_scrToImgParams.center = ret.center;
     m_scrToImgParams.coordinate1 = ret.coordinate1;
     m_scrToImgParams.coordinate2 = ret.coordinate2;
+    m_scrToImgParams.mesh_trans = NULL;
 
     // Update UI
     changeParameters(getCurrentState(), "Optimize Coordinates");

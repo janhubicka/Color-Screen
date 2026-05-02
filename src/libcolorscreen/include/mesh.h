@@ -130,6 +130,9 @@ public:
   /* Helper to perform the actual inverse mesh computation without using the cache.  */
   DLL_PUBLIC std::unique_ptr<mesh> compute_inverse_uncached (int_optional_image_area area = {}, class progress_info *progress = nullptr) const;
 
+  /* Apply matrix TRANS to every point in the mesh and return a new mesh.  */
+  DLL_PUBLIC std::unique_ptr<mesh> transformed (matrix3x3<coord_t> trans) const;
+
   /* Grow mesh by given number of points to LEFT, RIGHT, TOP and BOTTOM.  */
   bool grow (int left, int right, int top, int bottom);
 

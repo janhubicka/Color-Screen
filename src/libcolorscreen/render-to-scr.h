@@ -142,7 +142,7 @@ public:
      GRAYSCALE_NEEDED specifies if grayscale only rendering is sufficient.
      NORMALIZED_PATCHES specifies if patches should be normalized.
      PATCH_PROPORTIONS specifies proportions of R, G and B patches.  */
-  DLL_PUBLIC bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress)
+  nodiscard_attr DLL_PUBLIC bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress)
   {
     abort ();
   }
@@ -150,12 +150,12 @@ public:
   /* Precompute all data needed for rendering.  Update PROGRESS.
      GRAYSCALE_NEEDED specifies if grayscale only rendering is sufficient.
      NORMALIZED_PATCHES specifies if patches should be normalized.  */
-  DLL_PUBLIC bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress);
+  nodiscard_attr DLL_PUBLIC bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress);
 
   /* Precompute all data needed for rendering in AREA.  Update PROGRESS.
      GRAYSCALE_NEEDED specifies if grayscale only rendering is sufficient.
      NORMALIZED_PATCHES specifies if patches should be normalized.  */
-  DLL_PUBLIC bool precompute_img_range (bool grayscale_needed, bool normalized_patches, int_image_area area, progress_info *progress);
+  nodiscard_attr DLL_PUBLIC bool precompute_img_range (bool grayscale_needed, bool normalized_patches, int_image_area area, progress_info *progress);
 
   /* Simulate screen rendering for PROGRESS.  */
   void simulate_screen (progress_info *progress);
@@ -314,7 +314,7 @@ public:
 
   /* Precompute all data needed for rendering.  Update PROGRESS.  */
   nodiscard_attr bool
-  precompute_all (progress_info *progress = NULL)
+  nodiscard_attr precompute_all (progress_info *progress = NULL)
   {
     if (!render_to_scr::precompute_all (!m_color, m_profiled, progress))
       return false;
@@ -330,7 +330,7 @@ public:
 
   /* Precompute all data needed for rendering in AREA.  Update PROGRESS.  */
   nodiscard_attr bool
-  precompute_img_range (int_image_area area, progress_info *progress = NULL)
+  nodiscard_attr precompute_img_range (int_image_area area, progress_info *progress = NULL)
   {
     (void)area;
     return precompute_all (progress);

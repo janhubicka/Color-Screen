@@ -30,7 +30,7 @@ public:
   render_interpolate (const scr_to_img_parameters &param, const image_data &img, render_parameters &rparam, int dst_maxval);
 
   /* Precompute internal data structures for AREA. PROGRESS is used for progress reporting.  */
-  bool precompute (int_image_area area, progress_info *progress);
+  nodiscard_attr bool precompute (int_image_area area, progress_info *progress);
 
   /* Sample pixel at screen coordinate P and return its color in final coordinates.  */
   pure_attr inline rgbdata sample_pixel_final (point_t p) const
@@ -67,19 +67,19 @@ public:
   }
 
   /* Precompute whole image range.  */
-  bool precompute_all (progress_info *progress)
+  nodiscard_attr bool precompute_all (progress_info *progress)
   {
     return precompute (m_scr_to_img.get_range (0, 0, (coord_t)m_img.width, (coord_t)m_img.height), progress);
   }
 
   /* Precompute whole image range with additional options.  */
-  bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress)
+  nodiscard_attr bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress)
   {
     abort ();
   }
 
   /* Precompute image range for given AREA.  */
-  bool precompute_img_range (int_image_area area, progress_info *progress) 
+  nodiscard_attr bool precompute_img_range (int_image_area area, progress_info *progress) 
   {
      return precompute (m_scr_to_img.get_range (area.x, area.y, area.x + area.width, area.y + area.height), progress);
   }

@@ -555,6 +555,21 @@ mesh::compute_inverse_uncached (int_optional_image_area area, progress_info *pro
   return inv_mesh;
 }
 
+/* Apply matrix TRANS to every point in the mesh and return a new mesh.  */
+std::unique_ptr<mesh>
+mesh::transformed (matrix3x3<coord_t> trans) const
+{
+  auto ret = std::make_unique<mesh> (m_xshift, m_yshift, m_xstep, m_ystep, m_width, m_height);
+#pragma omp parallel for
+  for (int i = 0; i < (int)m_data.size (); i++)
+    {
+      point_t p = { (coord_t)m_data[i].x, (coord_t)m_data[i].y };
+      p = trans.apply (p);
+      ret->m_data[i] = { (mesh_coord_t)p.x, (mesh_coord_t)p.y };
+    }
+  return ret;
+}
+
 std::shared_ptr<mesh>
 mesh::compute_inverse (int_optional_image_area area, progress_info *progress) const
 {

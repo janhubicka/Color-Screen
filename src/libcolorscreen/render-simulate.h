@@ -36,9 +36,8 @@ public:
   set_render_type (render_type_parameters rtparam)
   {
   }
-  bool precompute_all (progress_info *progress);
-  bool
-  precompute_img_range (int_image_area area, progress_info *progress = NULL)
+  nodiscard_attr bool precompute_all (progress_info *progress);
+  nodiscard_attr bool precompute_img_range (int_image_area area, progress_info *progress = NULL)
   {
     (void)area;
     return precompute_all (progress);

@@ -205,6 +205,11 @@ public:
   {
     return set_parameters (param, img.width, img.height, rotation_adjustment);
   }
+
+  /* Apply given matrix to the transformation.
+     Used to adjust colors after auto-detection.  */
+  void transform_solution (matrix3x3<coord_t> trans);
+
   /* Dump state of the mapping to file F.  */
   void dump (FILE *f) const;
 

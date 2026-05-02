@@ -7,6 +7,7 @@
 #include "base.h"
 #include "color.h"
 #include "scr-to-img-parameters.h"
+#include "matrix.h"
 namespace colorscreen
 {
 struct solver_parameters
@@ -173,6 +174,8 @@ struct solver_parameters
   DLL_PUBLIC_EXP double fit_line (point_t &origin, point_t &dir) const;
   /* Return a const reference to the underlying points vector.  */
   const std::vector<solver_point_t>& read_points () const { return points.read (); }
+  /* Apply matrix TRANS to screen coordinates of all solver points in-place.  */
+  DLL_PUBLIC_EXP void transform_solution (matrix3x3<coord_t> trans);
 };
 }
 #endif

@@ -12,6 +12,7 @@
 namespace colorscreen
 {
 class mesh;
+struct solver_parameters;
 
 /* Windows does not seem to define this by default.  */
 #ifndef M_PI
@@ -239,6 +240,12 @@ struct scr_to_img_parameters
 
   /* Estimate DPI for a given PIXEL_SIZE.  */
   DLL_PUBLIC coord_t estimate_dpi (coord_t pixel_size) const;
+  /* Apply given matrix to the transformation.  */
+  void transform_solution (matrix3x3<coord_t> trans);
+
+  /* Shift solution to exchange colors.
+     Also update solver parameters.  */
+  DLL_PUBLIC void alternate_colors (solver_parameters &params);
 };
 } // namespace colorscreen
 #endif

@@ -1075,4 +1075,13 @@ solver_parameters::fit_line (point_t &origin, point_t &dir) const
   std::sort (dists.begin (), dists.end ());
   return dists[(size_t)(dists.size () * 0.9)];
 }
+
+/* Apply matrix TRANS to screen coordinates of all solver points in-place.  */
+void
+solver_parameters::transform_solution (matrix3x3<coord_t> trans)
+{
+  for (size_t i = 0; i < points.size (); i++)
+    points[i].scr = trans.apply (points[i].scr);
+}
+
 }

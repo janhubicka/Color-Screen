@@ -11,11 +11,11 @@ public:
   set_render_type (render_type_parameters)
   {
   }
-  bool precompute_all (progress_info *progress)
+  nodiscard_attr bool precompute_all (progress_info *progress)
   {
     return render_to_scr::precompute_all (true, true, progress);
   }
-  bool precompute_img_range (int_image_area area, progress_info *progress)
+  nodiscard_attr bool precompute_img_range (int_image_area area, progress_info *progress)
   {
     return render_to_scr::precompute_img_range (true, true, area, progress);
   }

@@ -533,6 +533,43 @@ scr_to_img::dump (FILE *f) const
   save_csp (f, const_cast<scr_to_img_parameters *> (&m_param), NULL, NULL, NULL);
 }
 
+
+/* Apply given matrix to the transformation.  */
+void
+scr_to_img_parameters::transform_solution (matrix3x3<coord_t> trans)
+{
+  change_of_basis_3x3matrix m {coordinate1, coordinate2};
+
+  printf ("Basis\n");
+  m.print (stdout);
+  printf ("Trans\n");
+  trans.print (stdout);
+  matrix3x3<coord_t> trans2 = m * trans * m.invert ();
+  printf ("Combind\n");
+  trans2.print (stdout);
+
+  center = trans2.apply (center);
+  point_t shift = trans.apply ({(coord_t)0, (coord_t)0});
+  coordinate1 = trans.apply (coordinate1) - shift;
+  coordinate2 = trans.apply (coordinate2) - shift;
+  if (mesh_trans)
+    {
+      if (mesh_trans_is_scr_to_img)
+	mesh_trans = nullptr;
+      else
+	mesh_trans = mesh_trans->transformed (trans);
+    }
+}
+
+/* Transform solution so the colors alternate.  */
+void
+scr_to_img_parameters::alternate_colors (solver_parameters &params)
+{
+  translation_3x3matrix m({0.0, 0.5});
+  transform_solution (m);
+  params.transform_solution (m);
+}
+
 /* Estimate DPI for given pixel size.  */
 coord_t
 scr_to_img_parameters::estimate_dpi (coord_t pixel_size) const
@@ -588,29 +625,6 @@ scr_to_img::get_img_range (int_image_area a) const noexcept
   coord_t y1 = a.y;
   coord_t x2 = a.x + a.width - 1;
   coord_t y2 = a.y + a.height - 1;
-#if 0
-  /* Determine region in image that is covered by screen.  */
-  point_t corners[4]
-      = { to_img (point_t{ (coord_t) m_area.top_left ().x,
-			  (coord_t) m_area.top_left ().y }),
-	  to_img (point_t{ (coord_t) m_area.top_right ().x,
-			  (coord_t) m_area.top_right ().y }),
-	  to_img (point_t{ (coord_t) m_area.bottom_left ().x,
-			  (coord_t) m_area.bottom_left ().y }),
-	  to_img (point_t{
-	      (coord_t) m_area.bottom_right ().x,
-	      (coord_t) m_area.bottom_right ().y }) };
-  int_image_area img_area (int_point_t{ (int64_t) my_floor (corners[0].x),
-					(int64_t) my_floor (corners[0].y) });
-  for (int i = 0; i < 4; i++)
-    {
-      img_area.extend (int_point_t{ (int64_t) my_floor (corners[i].x),
-				    (int64_t) my_floor (corners[i].y) });
-      img_area.extend (int_point_t{ (int64_t) my_ceil (corners[i].x),
-				    (int64_t) my_ceil (corners[i].y) });
-    }
-  return img_area;
-#endif
   if (!m_scr_to_img_mesh && !m_img_to_scr_mesh)
     {
       /* Compute all the corners.  */

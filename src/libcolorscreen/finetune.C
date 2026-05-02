@@ -4019,13 +4019,35 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
       if (best_solver.optimize_coordinates == 2)
         {
           best_uncertainty = -1;
+	  /* Limit angles and assume that original is scanned in sane position.  */
+	  static constexpr coord_t paget_angles[][2]={{-5,5},{-15,-5},{5,15},{-25,-15},{15,25}};
+	  const int n_paget_angles = sizeof (paget_angles) / sizeof (coord_t[2]);
+
+	  /* Dufay is rotated by 23 degrees and it is not symmetric.  */
+	  constexpr coord_t dufay_a = 23;
+	  static constexpr coord_t dufay_angles[][2]
+		  ={{dufay_a-5,dufay_a+5}, {dufay_a-15,dufay_a-5}, {dufay_a+5,dufay_a+15},
+		    {dufay_a-5+90,dufay_a+5+90}, {dufay_a-15+90,dufay_a-5+90}, {dufay_a+5+90,dufay_a+15+90}};
+
+	  const int n_dufay_angles = sizeof (dufay_angles) / sizeof (coord_t[2]);
+
+	  const coord_t (*angles)[2] = paget_angles;
+	  int n_angles = n_paget_angles;
+
+	  if (param.type == Dufay)
+	    {
+	      angles = dufay_angles;
+	      n_angles = n_dufay_angles;
+	    }
+	      
+
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2) shared(  \
         fparams, rparam, pixel_size, best_uncertainty, verbose, imgp, twidth, \
             theight, txmin, tymin, bw, progress, mapp, failed, best_solver,   \
-            results, bw_is_simulated_infrared, tile_sharpened)
+            results, bw_is_simulated_infrared, tile_sharpened, n_angles, angles)
           for (int i = 0; i < 50; i++)
             {
-              for (int rot = -40; rot < 30; rot += 10)
+              for (int rot = 0; rot < n_angles; rot ++)
                 {
                   finetune_solver solver;
                   solver.n_tiles = 1;
@@ -4044,8 +4066,8 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                     failed = true;
                   solver.min_scale = geom_sequence (1/50.0, 1/1.5, 50, i);
                   solver.max_scale = geom_sequence (1/50.0, 1/1.5, 50, i+1);
-                  solver.min_rotate = rot;
-                  solver.max_rotate = rot + 10;
+                  solver.min_rotate = angles[rot][0];
+                  solver.max_rotate = angles[rot][1];
                   solver.init (
                       fparams.flags, rparam.screen_blur_radius,
                       rparam.red_strip_width, rparam.green_strip_width,
@@ -5104,7 +5126,7 @@ autodetect_coordinates (const image_data &img, scr_to_img_parameters &param,
   std::vector<finetune_result> res (steps * steps * screens);
   fparams.flags = colorscreen::finetune_position
                   | colorscreen::finetune_guess_coordinates
-                  | colorscreen::finetune_bw;
+                  | colorscreen::finetune_bw /*| finetune_screen_blur*/;
   if (progress)
     progress->set_task ("autodetecting coordinates in multiple samples",
                         steps * steps * screens);
