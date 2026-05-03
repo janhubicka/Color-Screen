@@ -8,6 +8,7 @@ description: Guidelines for modernizing and refactoring the core libcolorscreen 
 This skill provides guidelines for maintaining, refactoring, and modernizing the `libcolorscreen` C++ library. Follow these rules to ensure performance, correctness, and consistency.
 If changes gets too involved suggest doing simpler ones first and proceed with more involved ones incrementally.
 Do **not mass reformat** while files; we can do that in a separate commit.
+If possible, split task to **incremental steps** and let each step to be **tested and reviewed** after completion.
 
 ## 1. Documentation & Coding Style
 
