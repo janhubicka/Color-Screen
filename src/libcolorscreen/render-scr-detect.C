@@ -1,3 +1,7 @@
+/* Rendering using auto-detected screen.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #include <stdlib.h>
 #include <sys/time.h>
 #include "render-scr-detect.h"
@@ -7,26 +11,38 @@
 #include "render-tile.h"
 #include "render-to-file.h"
 #include "mapalloc.h"
+
 namespace colorscreen
 {
+/* Internal structure for storing color data for each channel.  */
 struct color_data
 {
+  /* Pointers to data for each RGB channel.  */
   luminosity_t *m_data[3];
+  /* Width of the image.  */
   int width;
+
+  /* Initialize color data for given WIDTH and HEIGHT.  */
   color_data (int width, int height);
+  /* Free allocated memory.  */
   ~color_data ();
+
+  /* Get luminosity value for given COLOR channel at (X, Y).  */
   luminosity_t get_luminosity (int color, int x, int y)
     {
       return m_data[color][y * width + x];
     }
 };
 
+/* Implementation of color_data constructor.  */
 color_data::color_data(int width, int height)
   : width(width)
 {
   for (int color = 0; color < 3; color++)
     m_data[color] = (luminosity_t *)MapAlloc::Alloc (width * height * sizeof (luminosity_t), "Color relaxation");
 }
+
+/* Implementation of color_data destructor.  */
 color_data::~color_data()
 {
   for (int i = 0; i < 3; i++)
@@ -39,31 +55,37 @@ color_data::~color_data()
 class precomputed_rgbdata
 {
 public:
+  /* Precomputed RGB data.  */
   render_scr_detect::my_mem_rgbdata *m_data;
+
+  /* Initialize precomputed RGB data for given WIDTH and HEIGHT.  */
   precomputed_rgbdata (int width, int height);
+  /* Free allocated memory.  */
   ~precomputed_rgbdata();
 };
 
+/* Implementation of precomputed_rgbdata constructor.  */
 precomputed_rgbdata::precomputed_rgbdata (int width, int height)
 {
    m_data = (render_scr_detect::my_mem_rgbdata *)MapAlloc::Alloc (width * height * sizeof (render_scr_detect::my_mem_rgbdata), "HDR RGB data");
 }
+
+/* Implementation of precomputed_rgbdata destructor.  */
 precomputed_rgbdata::~precomputed_rgbdata ()
 {
   if (m_data)
     MapAlloc::Free (m_data);
-  m_data = NULL;
+  m_data = nullptr;
 }
 
-/* Lookup table translates raw input data into linear values.  */
-
-
+/* Cache helper for color class map.
+   P specifies parameters for the map.
+   PROGRESS is used to report progress and check for cancellation.  */
 std::unique_ptr<color_class_map> get_color_class_map(color_class_params &p, progress_info *progress)
 {
   const image_data &img = *p.img;
   auto map = std::make_unique<color_class_map> ();
   map->allocate (img.width, img.height);
-  //printf ("New color map\n");
   if (progress)
     progress->set_task ("computing screen", p.img->height);
 #pragma omp parallel for default(none) shared(progress,img,map,p)
@@ -97,19 +119,22 @@ std::unique_ptr<color_class_map> get_color_class_map(color_class_params &p, prog
     }
   return map;
 }
-static color_class_cache_t
-    color_class_cache ("color tables");
 
-/* Lookup table translates raw input data into linear values.  */
+/* Cache for color class maps.  */
+static color_class_cache_t color_class_cache ("color tables");
 
-
+/* Helper for sharpening.
+   R specifies the renderer.
+   P specifies the point.  */
 rgbdata
 getdata_helper (render_scr_detect &r, int_point_t p, int, int)
 {
   return r.fast_get_adjusted_pixel (p);
 }
 
-
+/* Cache helper for precomputed RGB data.
+   P specifies parameters for the data.
+   PROGRESS is used to report progress and check for cancellation.  */
 std::unique_ptr<precomputed_rgbdata>
 get_precomputed_rgbdata(precomputed_rgbdata_params &p, progress_info *progress)
 {
@@ -143,12 +168,13 @@ get_precomputed_rgbdata(precomputed_rgbdata_params &p, progress_info *progress)
     }
   return my_precomputed_rgbdata;
 }
-static precomputed_rgbdata_cache_t
-    precomputed_rgbdata_cache ("precomputed data");
 
-/* Lookup table translates raw input data into linear values.  */
+/* Cache for precomputed RGB data.  */
+static precomputed_rgbdata_cache_t precomputed_rgbdata_cache ("precomputed data");
 
-/* TODO: progress info  */
+/* Cache helper for screen patches.
+   P specifies parameters for patches.
+   PROGRESS is used to report progress and check for cancellation.  */
 std::unique_ptr<patches> get_patches(patches_cache_params &p, progress_info *progress)
 {
   auto pat = std::make_unique<patches> (*p.img, *p.r, *p.map, 16, progress);
@@ -158,13 +184,13 @@ std::unique_ptr<patches> get_patches(patches_cache_params &p, progress_info *pro
     }
   return pat;
 }
-static patches_cache_t
-    patches_cache ("patches");
 
-/* Lookup table translates raw input data into linear values.  */
+/* Cache for screen patches.  */
+static patches_cache_t patches_cache ("patches");
 
-
-/* Do relaxation and demosaic color data.  TODO:progress  */
+/* Cache helper for color data (relaxation).
+   P specifies parameters for color data.
+   PROGRESS is used to report progress and check for cancellation.  */
 std::unique_ptr<color_data>
 get_new_color_data (struct color_data_params &p, progress_info *progress)
 {
@@ -267,8 +293,9 @@ get_new_color_data (struct color_data_params &p, progress_info *progress)
     }
   return data;
 }
-static color_data_cache_t
-    color_data_cache ("color data");
+
+/* Cache for color data (relaxation).  */
+static color_data_cache_t color_data_cache ("color data");
 
 class distance_list distance_list;
 
@@ -310,10 +337,10 @@ render_scr_detect::render_tile (render_type_parameters &rtparam,
   if (width <= 0 || height <= 0)
     return true;
   if (stats == -1)
-    stats = getenv ("CSSTATS") != NULL;
+    stats = getenv ("CSSTATS") != nullptr;
   struct timeval start_time;
   if (stats)
-    gettimeofday (&start_time, NULL);
+    gettimeofday (&start_time, nullptr);
   if (progress)
     progress->set_task ("precomputing", 1);
   scr_to_img_parameters dummy;
@@ -416,8 +443,11 @@ render_scr_detect::precompute_rgbdata (progress_info *progress)
   return m_precomputed_rgbdata;
 }
 
-/* Analyze proportion of screen that is red, green and blue.  If PARAM is non-NULL expect that we know
-   the screen geomery and only analyze whole screen patches.  */
+/* Analyze proportion of screen that is red, green and blue.  If PARAM is non-nullptr expect that we know
+   the screen geomery and only analyze whole screen patches.
+   PARAM specifies screen geometry mapping.
+   XMIN, YMIN, XMAX, YMAX specifies the range in scan coordinates.
+   PROGRESS is used to report progress and check for cancellation.  */
 rgbdata
 render_scr_detect::analyze_color_proportions (scr_to_img_parameters *param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
 {
@@ -485,6 +515,13 @@ render_scr_detect::analyze_color_proportions (scr_to_img_parameters *param, int 
   return ret;
 }
 
+/* Global helper for color proportion analysis.
+   PARAM specifies screen detection parameters.
+   RPARAM specifies rendering parameters.
+   IMG is the input scan data.
+   MAP_PARAM specifies screen geometry mapping.
+   XMIN, YMIN, XMAX, YMAX specifies the range in scan coordinates.
+   PROGRESS is used to report progress and check for cancellation.  */
 rgbdata
 analyze_color_proportions (scr_detect_parameters param, render_parameters &rparam, image_data &img, scr_to_img_parameters *map_param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
 {
@@ -498,10 +535,12 @@ analyze_color_proportions (scr_detect_parameters param, render_parameters &rpara
   return r.analyze_color_proportions (map_param, xmin, ymin, xmax, ymax, progress);
 }
 
+/* Destroy screen detection renderer.  */
 render_scr_detect::~render_scr_detect ()
 {
 }
 
+/* Comparison function for qsort.  */
 int cmp_entry(const void *p1, const void *p2)
 {
   distance_list::entry *e1 = (distance_list::entry *)p1;
@@ -513,13 +552,14 @@ int cmp_entry(const void *p1, const void *p2)
    return (e1->y * 2 * distance_list::max_distance + e1->x) -  (e2->y * 2 * distance_list::max_distance + e2->x);
 }
 
+/* Initialize distance list for nearest neighbor searches.  */
 distance_list::distance_list ()
 {
   num = 0;
   for (int x = -max_distance; x <= max_distance; x++)
     for (int y = -max_distance; y <= max_distance; y++)
       {
-	coord_t dist = sqrt ((x*x) + (y*y));
+	coord_t dist = my_sqrt ((double)(x*x) + (y*y));
 	if (dist > max_distance)
 	  continue;
 	list[num].x = x;
@@ -531,10 +571,13 @@ distance_list::distance_list ()
   qsort (list, num, sizeof (struct entry), cmp_entry);
 }
 
+/* Destroy scaled nearest neighbor renderer.  */
 render_scr_nearest_scaled::~render_scr_nearest_scaled ()
 {
 }
 
+/* Precompute data for scaled nearest neighbor rendering.
+   PROGRESS is used to report progress and check for cancellation.  */
 bool
 render_scr_nearest_scaled::precompute_all (progress_info *progress)
 {
@@ -545,6 +588,8 @@ render_scr_nearest_scaled::precompute_all (progress_info *progress)
   return (bool)m_patches;
 }
 
+/* Precompute data for relaxation rendering.
+   PROGRESS is used to report progress and check for cancellation.  */
 bool
 render_scr_relax::precompute_all (progress_info *progress)
 {
@@ -559,12 +604,15 @@ render_scr_relax::precompute_all (progress_info *progress)
     cdata[color] = m_color_data_handle->m_data[color];
   return true;
 }
+/* Destroy relaxation renderer.  */
 render_scr_relax::~render_scr_relax()
 {
 }
 /* Prune render scr detect cache.  We need to do this so destruction order of MapAlloc and
    the cache does not yield an segfault.  */
 
+/* Prune all caches used by screen detection rendering.
+   This is called to ensure proper destruction order.  */
 void
 prune_render_scr_detect_caches ()
 {
