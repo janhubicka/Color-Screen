@@ -360,6 +360,7 @@ public:
     //rgbdata d = fast_get_normalized_pixel (xx, yy);
     return  fast_get_normalized_pixel ({xx, yy});
   }
+  /* Get the density of a patch of color C at position (X, Y).  */
   inline pure_attr luminosity_t
   get_patch_density (int x, int y, scr_detect::color_class c) const
   {
@@ -438,6 +439,11 @@ done:
      XMIN, YMIN, XMAX, YMAX specifies the range in scan coordinates.
      P is used to report progress and check for cancellation.  */
   rgbdata analyze_color_proportions (scr_to_img_parameters *param, int xmin, int ymin, int xmax, int ymax, progress_info *p);
+  /* Return color class map used by this renderer.  */
+  color_class_map *get_color_class_map ()
+  {
+    return m_color_class_map.get ();
+  }
 protected:
   /* Precomputed RGB data.  */
   my_mem_rgbdata *m_precomputed_rgbdata = nullptr;
