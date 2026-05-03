@@ -5107,7 +5107,7 @@ similar_solution_p (finetune_result &res1, int type, finetune_result &res2, int 
 
 bool
 autodetect_coordinates (const image_data &img, scr_to_img_parameters &param,
-                        const render_parameters &rparam,
+                        const render_parameters &rparam_1,
                         progress_info *progress)
 {
   int steps = 11;
@@ -5121,6 +5121,8 @@ autodetect_coordinates (const image_data &img, scr_to_img_parameters &param,
   constexpr int n_supported_types
       = sizeof (supported_screns) / sizeof (scr_type);
   int screens = 1;
+  render_parameters rparam = rparam_1;
+  rparam.sharpen.mode = sharpen_parameters::none;
   if (param.type == Random)
     screens = n_supported_types;
   std::vector<finetune_result> res (steps * steps * screens);
@@ -5184,63 +5186,9 @@ autodetect_coordinates (const image_data &img, scr_to_img_parameters &param,
 	    best_n = n;
 	  }
       }
-#if 0
-  struct group {
-    scr_type type;
-    point_t c1, c2;
-    double weight;
-    int best_index;
-    luminosity_t best_u;
-  };
-  std::vector<group> groups;
-  for (int i = 0; i < (int)res.size (); i++)
-    if (res[i].success)
-      {
-	scr_type type = (param.type == Random) ? supported_screns[i % screens] : param.type;
-	int found = -1;
-	for (int g = 0; g < (int)groups.size (); g++)
-	  if (groups[g].type == type
-	      && res[i].coordinate1.dist_from (groups[g].c1) < 0.1
-	      && res[i].coordinate2.dist_from (groups[g].c2) < 0.1)
-	    {
-	      found = g;
-	      break;
-	    }
-	if (found != -1)
-	  {
-	    groups[found].weight += 1.0 / std::max ((coord_t)1e-6, (coord_t)res[i].uncertainty);
-	    if (res[i].uncertainty < groups[found].best_u)
-	      {
-		groups[found].best_u = res[i].uncertainty;
-		groups[found].best_index = i;
-	      }
-	  }
-	else
-	  groups.push_back ({type, res[i].coordinate1, res[i].coordinate2,
-			     1.0 / std::max ((coord_t)1e-6, (coord_t)res[i].uncertainty), i, res[i].uncertainty});
-      }
-
-  int best_g = -1;
-  double max_w = -1;
-  for (int g = 0; g < (int)groups.size (); g++)
-    if (groups[g].weight > max_w)
-      {
-	max_w = groups[g].weight;
-	best_g = g;
-      }
-
-  if (best_g < 0)
-    return false;
-  int best_i = groups[best_g].best_index;
-  param.center = res[best_i].center;
-  param.coordinate1 = res[best_i].coordinate1;
-  param.coordinate2 = res[best_i].coordinate2;
-  param.type = groups[best_g].type;
-  return true;
-#endif
   if (best_i < 0)
     return false;
-  printf ("Best sum %f, n %i\n", best_sum, best_n);
+  //printf ("Best sum %f, n %i\n", best_sum, best_n);
   param.center = res[best_i].center;
   param.coordinate1 = res[best_i].coordinate1;
   param.coordinate2 = res[best_i].coordinate2;
