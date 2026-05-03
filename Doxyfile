@@ -1,6 +1,6 @@
 # Doxyfile for Color-Screen
 PROJECT_NAME           = "Color-Screen"
-PROJECT_BRIEF          = "High-performance color screening and image processing application"
+PROJECT_BRIEF          = "Tool to digitally reconstruct colors of early color photographs"
 OUTPUT_DIRECTORY       = doc
 GENERATE_LATEX         = NO
 GENERATE_MAN           = NO
