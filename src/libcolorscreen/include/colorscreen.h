@@ -236,8 +236,8 @@ render_preview(image_data &scan, scr_to_img_parameters &param,
                int height, int rowstride, progress_info *progress = NULL);
 DLL_PUBLIC rgbdata analyze_color_proportions (
     scr_detect_parameters param, render_parameters &rparam, image_data &img,
-    scr_to_img_parameters *map_param, int xmin, int ymin, int xmax, int ymax,
-    progress_info *p = NULL);
+    scr_to_img_parameters *map_param, int_image_area area,
+    progress_info *p = nullptr);
 
 DLL_PUBLIC coord_t solver (scr_to_img_parameters *param, const image_data &img_data,
                            const solver_parameters &sparam,

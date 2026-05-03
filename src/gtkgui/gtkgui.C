@@ -1400,8 +1400,8 @@ extern "C"
                 = std::min ((int)((shift_y + pysize) / scale_y), scan.height);
             file_progress_info progress (stdout);
             analyze_color_proportions (current_scr_detect, rparams, scan,
-                                       k == 'O' ? &current : NULL, minx, miny,
-                                       maxx, maxy, &progress);
+                                       k == 'O' ? &current : nullptr,
+                                       {minx, miny, maxx - minx, maxy - miny}, &progress);
           }
       }
 

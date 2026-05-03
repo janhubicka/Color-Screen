@@ -139,24 +139,23 @@ public:
       m_precomputed_rgbdata (nullptr), m_precomputed_rgbdata_holder (),
       m_color_class_map ()
   {
-    /* TODO: Move to precomputation and also check return value, pass progress.  */
-    m_scr_detect.set_parameters (param, rparam.gamma, &m_img);
+    m_scr_detect.m_param = param;
   }
   ~render_scr_detect ();
   void set_render_type (render_type_parameters)
   {
   }
-  /* Classify pixel at position P.
-     Return the color class of the pixel or unknown if it is not a screen pixel.  */
-  scr_detect::color_class classify_pixel (int_point_t p)
+  /* Return the color class of the pixel or unknown if it is not a screen pixel at position P.  */
+  pure_attr scr_detect::color_class classify_pixel (int_point_t p) const noexcept
   {
-    if (p.x < 0 || p.x >= m_img.width || p.y < 0 || p.y >= m_img.height)
+    int_image_area area (0, 0, m_img.width, m_img.height);
+    if (!area.contains_p (p))
       return scr_detect::unknown;
     scr_detect::color_class t = m_color_class_map->get_class (p.x, p.y);
     if (t == scr_detect::unknown)
       return scr_detect::unknown;
-    for (int yy = std::max (p.y - 1, (int64_t)0); yy <= std::min (p.y + 1, (int64_t)m_img.height); yy++)
-      for (int xx = std::max (p.x - 1, (int64_t)0); xx <= std::min (p.x + 1, (int64_t)m_img.width); xx++)
+    for (int yy = std::max (p.y - 1, (int64_t)0); yy <= std::min (p.y + 1, (int64_t)m_img.height - 1); yy++)
+      for (int xx = std::max (p.x - 1, (int64_t)0); xx <= std::min (p.x + 1, (int64_t)m_img.width - 1); xx++)
 	if (xx != p.x || yy != p.y)
 	  {
 	    scr_detect::color_class q = m_color_class_map->get_class (xx, yy);
@@ -167,7 +166,7 @@ public:
   }
   /* Get the color of the screen at position P.  */
   pure_attr inline rgbdata
-  get_screen_color (point_t p) const
+  get_screen_color (point_t p) const noexcept
   {
     /* Center of pixel [0,0] is [0.5,0.5].  */
     coord_t xp = p.x - (coord_t)0.5;
@@ -194,7 +193,9 @@ public:
 			       cubic_interpolate (m_color_class_map->get_color_blue ( sx+1, sy-1), m_color_class_map->get_color_blue (sx+1, sy), m_color_class_map->get_color_blue (sx+1, sy+1), m_color_class_map->get_color_blue (sx+1, sy+2), ry),
 			       cubic_interpolate (m_color_class_map->get_color_blue ( sx+2, sy-1), m_color_class_map->get_color_blue (sx+2, sy), m_color_class_map->get_color_blue (sx+2, sy+1), m_color_class_map->get_color_blue (sx+2, sy+2), ry),
 			       rx);
-	return {std::min (std::max (r, (luminosity_t)0), (luminosity_t)1), std::min (std::max (g, (luminosity_t)0), (luminosity_t)1), std::min (std::max (b, (luminosity_t)0), (luminosity_t)1)};
+	return {std::clamp (r, (luminosity_t)0, (luminosity_t)1),
+                std::clamp (g, (luminosity_t)0, (luminosity_t)1),
+                std::clamp (b, (luminosity_t)0, (luminosity_t)1)};
      }
     else
      return {0, 0, 0};
@@ -207,7 +208,11 @@ public:
      GRAYSCALE_NEEDED specifies if grayscale data is needed.
      NORMALIZED_PATCHES specifies if patches should be normalized.
      PROGRESS is used to report progress and check for cancellation.  */
-  bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress);
+  /* Precompute all data needed for rendering.
+     GRAYSCALE_NEEDED is true if grayscale data is needed.
+     NORMALIZED_PATCHES is true if patch proportions should be normalized.
+     PROGRESS is used to report progress and check for cancellation.  */
+  nodiscard_attr bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress);
   /* Precompute adjusted RGB data.
      PROGRESS is used to report progress and check for cancellation.  */
   bool precompute_rgbdata (progress_info *progress);
@@ -436,9 +441,9 @@ done:
   static const char *render_to_file (render_to_file_params &rfparams, render_type_parameters rtparam, scr_to_img_parameters &param, scr_detect_parameters &dparam, render_parameters rparam, image_data &img, int black, progress_info *progress);
   /* Analyze color proportions in a given range.
      PARAM specifies screen geometry mapping.
-     XMIN, YMIN, XMAX, YMAX specifies the range in scan coordinates.
+     AREA specifies the range in scan coordinates.
      P is used to report progress and check for cancellation.  */
-  rgbdata analyze_color_proportions (scr_to_img_parameters *param, int xmin, int ymin, int xmax, int ymax, progress_info *p);
+  rgbdata analyze_color_proportions (scr_to_img_parameters *param, int_image_area area, progress_info *p);
   /* Return color class map used by this renderer.  */
   color_class_map *get_color_class_map ()
   {

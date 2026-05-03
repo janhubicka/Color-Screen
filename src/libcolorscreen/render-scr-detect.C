@@ -417,6 +417,8 @@ render_scr_detect::render_to_file (render_to_file_params &rfparams, render_type_
 bool
 render_scr_detect::precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress)
 {
+  if (!m_scr_detect.set_parameters (m_scr_detect.m_param, m_params.gamma, &m_img, progress))
+    return false;
   if (m_scr_detect.m_param.sharpen_radius > 0 || m_scr_detect.m_param.sharpen_amount > 0)
     {
       if (!precompute_rgbdata (progress))
@@ -446,10 +448,10 @@ render_scr_detect::precompute_rgbdata (progress_info *progress)
 /* Analyze proportion of screen that is red, green and blue.  If PARAM is non-nullptr expect that we know
    the screen geomery and only analyze whole screen patches.
    PARAM specifies screen geometry mapping.
-   XMIN, YMIN, XMAX, YMAX specifies the range in scan coordinates.
+   AREA specifies the range in scan coordinates.
    PROGRESS is used to report progress and check for cancellation.  */
 rgbdata
-render_scr_detect::analyze_color_proportions (scr_to_img_parameters *param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
+render_scr_detect::analyze_color_proportions (scr_to_img_parameters *param, int_image_area area, progress_info *progress)
 {
   uint64_t rcount[4] = {0, 0, 0, 0};
   std::unique_ptr <scr_to_img> s;
@@ -459,21 +461,19 @@ render_scr_detect::analyze_color_proportions (scr_to_img_parameters *param, int 
       if (!s->set_parameters (*param, m_img))
 	return {1/3.0, 1/3.0, 1/3.0};
     }
-  if (xmin < 0)
-    xmin = 0;
-  if (ymin < 0)
-    ymin = 0;
-  if (xmax >= m_img.width)
-    xmax = m_img.width - 1;
-  if (ymax >= m_img.height)
-    ymax = m_img.height - 1;
+
+  int_image_area clip (0, 0, m_img.width, m_img.height);
+  area = area.intersect (clip);
+  if (area.empty_p ())
+    return {1/3.0, 1/3.0, 1/3.0};
+
   if (progress)
-    progress->set_task ("analyzing screen proportions", ymax - ymin);
-  for (int y = ymin; y <= ymax; y++)
+    progress->set_task ("analyzing screen proportions", area.height);
+  for (int y = area.y; y < area.y + area.height; y++)
     {
       if (!progress || !progress->cancel_requested ())
 	{
-	  for (int x = xmin; x <= xmax; x++)
+	  for (int x = area.x; x < area.x + area.width; x++)
 	    {
 	      if (s)
 	        {
@@ -481,16 +481,16 @@ render_scr_detect::analyze_color_proportions (scr_to_img_parameters *param, int 
 		  int isx = my_floor (scr.x);
 		  int isy = my_floor (scr.y);
 		  point_t ip = s->to_img ({(coord_t)isx, (coord_t)isy});
-		  if (ip.x < xmin || ip.x > xmax || ip.y < ymin || ip.y > ymax)
+		  if (!area.contains_p (ip))
 		    continue;
 		  ip = s->to_img ({(coord_t)(isx + 1), (coord_t)isy});
-		  if (ip.x < xmin || ip.x > xmax || ip.y < ymin || ip.y > ymax)
+		  if (!area.contains_p (ip))
 		    continue;
 		  ip = s->to_img ({(coord_t)isx, (coord_t)(isy + 1)});
-		  if (ip.x < xmin || ip.x > xmax || ip.y < ymin || ip.y > ymax)
+		  if (!area.contains_p (ip))
 		    continue;
 		  ip = s->to_img ({(coord_t)(isx + 1), (coord_t)(isy + 1)});
-		  if (ip.x < xmin || ip.x > xmax || ip.y < ymin || ip.y > ymax)
+		  if (!area.contains_p (ip))
 		    continue;
 	        }
 	      rcount[(int)m_color_class_map->get_class (x, y)]++;
@@ -509,7 +509,7 @@ render_scr_detect::analyze_color_proportions (scr_to_img_parameters *param, int 
   if (progress)
     progress->pause_stdout ();
   printf ("Pixel counts red %" PRIu64 " (%.2f%%) green %" PRIu64 " (%.2f%%) blue %" PRIu64 " (%.2f%%) unknown %" PRIu64 " (%.2f%%)\n",
-	  rcount[0], ret.red * 100, rcount[1], ret.green * 100, rcount[2], ret.blue * 100, rcount[3], rcount[3] / (luminosity_t)(((uint64_t)xmax - xmin) * (ymax - ymin)) * 100);
+	  rcount[0], ret.red * 100, rcount[1], ret.green * 100, rcount[2], ret.blue * 100, rcount[3], rcount[3] / (luminosity_t)((uint64_t)area.width * area.height) * 100);
   if (progress)
     progress->resume_stdout ();
   return ret;
@@ -523,7 +523,7 @@ render_scr_detect::analyze_color_proportions (scr_to_img_parameters *param, int 
    XMIN, YMIN, XMAX, YMAX specifies the range in scan coordinates.
    PROGRESS is used to report progress and check for cancellation.  */
 rgbdata
-analyze_color_proportions (scr_detect_parameters param, render_parameters &rparam, image_data &img, scr_to_img_parameters *map_param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
+analyze_color_proportions (scr_detect_parameters param, render_parameters &rparam, image_data &img, scr_to_img_parameters *map_param, int_image_area area, progress_info *progress)
 {
   /* Sharpening changes screen proportions.  Lets hope that no sharpening yields to most realistic results.  */
   //param.sharpen_amount = 0;
@@ -532,7 +532,7 @@ analyze_color_proportions (scr_detect_parameters param, render_parameters &rpara
   render_scr_detect r (param, img, rparam, 256);
   if (!r.precompute_all (false, false, progress))
     return {1/3.0, 1/3.0, 1/3.0};
-  return r.analyze_color_proportions (map_param, xmin, ymin, xmax, ymax, progress);
+  return r.analyze_color_proportions (map_param, area, progress);
 }
 
 /* Destroy screen detection renderer.  */
