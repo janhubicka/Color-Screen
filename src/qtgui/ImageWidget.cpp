@@ -927,116 +927,23 @@ void ImageWidget::resizeEvent(QResizeEvent *event) {
  */
 void ImageWidget::mousePressEvent(QMouseEvent *event) {
   if (m_interactionMode == SetCenterMode) {
-    bool ctrl = event->modifiers() & Qt::ControlModifier;
-    bool alt = event->modifiers() & Qt::AltModifier; 
-
-    // Determine target based on button/modifiers
-    if (event->button() == Qt::LeftButton && !ctrl && !alt) {
-      // Start dragging center
-      m_dragTarget = DragTarget::Center;
-      m_dragStartWidget = event->position();
-      m_dragStartImg = widgetToImage(event->position());
-      if (m_scrToImg) {
-        m_pressParams = *m_scrToImg;
-        emit coordinateSystemManipulationStarted();
-      }
-    } else if (event->button() == Qt::RightButton || (event->button() == Qt::LeftButton && ctrl)) {
-      // Start dragging Axis 1 (X)
-      m_dragTarget = DragTarget::Axis1;
-      m_dragStartWidget = event->position();
-      m_dragStartImg = widgetToImage(event->position());
-      if (m_scrToImg) {
-        m_pressParams = *m_scrToImg;
-        emit coordinateSystemManipulationStarted();
-      }
-      grabMouse();
-      event->accept();
-    } else if (event->button() == Qt::MiddleButton || (event->button() == Qt::LeftButton && alt)) {
-      // Start dragging Axis 2 (Y)
-      m_dragTarget = DragTarget::Axis2;
-      m_dragStartWidget = event->position();
-      m_dragStartImg = widgetToImage(event->position());
-      if (m_scrToImg) {
-        m_pressParams = *m_scrToImg;
-        emit coordinateSystemManipulationStarted();
-      }
-      grabMouse();
-      event->accept();
-    }
-    return;
-  }
-
-  if (m_interactionMode == ExploreMode) {
-    // Ignore clicks in Explore mode, or maybe leave by clicking?
-    // Let's just consume them.
+    handleSetCenterPress(event);
+  } else if (m_interactionMode == ExploreMode) {
+    // Ignore clicks in Explore mode
     event->accept();
-    return;
-  }
-
-  if (event->button() == Qt::LeftButton) {
+  } else if (event->button() == Qt::LeftButton) {
     if (m_interactionMode == PanMode) {
       m_isDragging = true;
       m_lastMousePos = event->pos();
     } else if (m_interactionMode == SelectMode) {
-      bool ctrl = event->modifiers() & Qt::ControlModifier;
-      
-      // Hit-test points
-      int hitIndex = -1;
-      if (m_showRegistrationPoints && m_solver) {
-        const auto &points = m_solver->points;
-        for (size_t i = 0; i < points.size(); ++i) {
-          QPointF pos = imageToWidget(points[i].img);
-          if (QLineF(pos, event->position()).length() < 10) {
-            hitIndex = i;
-            break;
-          }
-        }
-      }
-
-      if (hitIndex != -1) {
-        emit pointManipulationStarted();
-        m_draggedPointIndex = hitIndex;
-        SelectedPoint sp = {(size_t)hitIndex, SelectedPoint::RegistrationPoint};
-        if (ctrl) {
-          if (m_selectedPoints.count(sp)) m_selectedPoints.erase(sp);
-          else m_selectedPoints.insert(sp);
-        } else {
-          // If already selected, don't clear (to allow dragging multiple if implemented later, 
-          // but for now we just drag one).
-          if (m_selectedPoints.count(sp) == 0) {
-            m_selectedPoints.clear();
-            m_selectedPoints.insert(sp);
-          }
-        }
-        m_pointsOverlayDirty = true;
-        emit selectionChanged();
-        update();
-      } else {
-        // Start rubber band
-        if (!ctrl) clearSelection();
-        m_rubberBandOrigin = event->pos();
-        if (!m_rubberBand) {
-          m_rubberBand = new QRubberBand(QRubberBand::Rectangle, this);
-        }
-        m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, QSize()));
-        m_rubberBand->show();
-      }
+      handleSelectPress(event);
     } else if (m_interactionMode == AddPointMode || m_interactionMode == CropMode || m_interactionMode == GenericAreaMode) {
-      // Start rubber band for area selection
-      m_rubberBandOrigin = event->pos();
-      if (!m_rubberBand) {
-        m_rubberBand = new QRubberBand(QRubberBand::Rectangle, this);
-      }
-      m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, QSize()));
-      m_rubberBand->show();
+      handleAreaPress(event);
     } else if (m_interactionMode == MeasureMode) {
-      m_isMeasuring = true;
-      m_measureStart = widgetToImage(event->position());
-      m_measureEnd = m_measureStart;
-      update();
+      handleMeasurePress(event);
     }
   } else if (event->button() == Qt::RightButton && m_interactionMode == AddPointMode) {
-    // Find nearest profile spot to remove
+    // Right-click removal of profile spots
     if (m_profileSpots && !m_profileSpots->empty() && m_scrToImg && m_scan) {
       colorscreen::scr_to_img map;
       (void)map.set_parameters(*m_scrToImg, *m_scan);
@@ -1075,6 +982,103 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
 }
 
 /**
+ * @brief Handles mouse press in SetCenterMode (adjusting coordinate system).
+ */
+void ImageWidget::handleSetCenterPress(QMouseEvent *event) {
+  bool ctrl = event->modifiers() & Qt::ControlModifier;
+  bool alt = event->modifiers() & Qt::AltModifier; 
+
+  if (event->button() == Qt::LeftButton && !ctrl && !alt) {
+    m_dragTarget = DragTarget::Center;
+  } else if (event->button() == Qt::RightButton || (event->button() == Qt::LeftButton && ctrl)) {
+    m_dragTarget = DragTarget::Axis1;
+    grabMouse();
+  } else if (event->button() == Qt::MiddleButton || (event->button() == Qt::LeftButton && alt)) {
+    m_dragTarget = DragTarget::Axis2;
+    grabMouse();
+  } else {
+    return;
+  }
+
+  m_dragStartWidget = event->position();
+  m_dragStartImg = widgetToImage(event->position());
+  if (m_scrToImg) {
+    m_pressParams = *m_scrToImg;
+    emit coordinateSystemManipulationStarted();
+  }
+  event->accept();
+}
+
+/**
+ * @brief Handles mouse press in SelectMode (selecting registration points).
+ */
+void ImageWidget::handleSelectPress(QMouseEvent *event) {
+  bool ctrl = event->modifiers() & Qt::ControlModifier;
+  
+  // Hit-test points
+  int hitIndex = -1;
+  if (m_showRegistrationPoints && m_solver) {
+    const auto &points = m_solver->points;
+    for (size_t i = 0; i < points.size(); ++i) {
+      QPointF pos = imageToWidget(points[i].img);
+      if (QLineF(pos, event->position()).length() < 10) {
+        hitIndex = i;
+        break;
+      }
+    }
+  }
+
+  if (hitIndex != -1) {
+    emit pointManipulationStarted();
+    m_draggedPointIndex = hitIndex;
+    SelectedPoint sp = {(size_t)hitIndex, SelectedPoint::RegistrationPoint};
+    if (ctrl) {
+      if (m_selectedPoints.count(sp)) m_selectedPoints.erase(sp);
+      else m_selectedPoints.insert(sp);
+    } else {
+      if (m_selectedPoints.count(sp) == 0) {
+        m_selectedPoints.clear();
+        m_selectedPoints.insert(sp);
+      }
+    }
+    m_pointsOverlayDirty = true;
+    emit selectionChanged();
+    update();
+  } else {
+    // Start rubber band
+    if (!ctrl) clearSelection();
+    m_rubberBandOrigin = event->pos();
+    if (!m_rubberBand) {
+      m_rubberBand = new QRubberBand(QRubberBand::Rectangle, this);
+    }
+    m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, QSize()));
+    m_rubberBand->show();
+  }
+}
+
+/**
+ * @brief Handles mouse press for area selection (Crop, AddPoint, Generic).
+ */
+void ImageWidget::handleAreaPress(QMouseEvent *event) {
+  m_rubberBandOrigin = event->pos();
+  if (!m_rubberBand) {
+    m_rubberBand = new QRubberBand(QRubberBand::Rectangle, this);
+  }
+  m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, QSize()));
+  m_rubberBand->show();
+}
+
+/**
+ * @brief Handles mouse press in MeasureMode.
+ */
+void ImageWidget::handleMeasurePress(QMouseEvent *event) {
+  m_isMeasuring = true;
+  m_measureStart = widgetToImage(event->position());
+  m_measureEnd = m_measureStart;
+  update();
+}
+
+/**
  * @brief Handles mouse move events.
  * Manages viewport panning, point dragging, and cursor updates.
  * 
@@ -1098,11 +1102,14 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
     }
   }
 
-  if (m_interactionMode == PanMode && m_isDragging) {
+  if (m_interactionMode == SetCenterMode) {
+    handleSetCenterMove(event);
+  } else if (m_interactionMode == ExploreMode) {
+    handleExploreMove(event);
+  } else if (m_interactionMode == PanMode && m_isDragging) {
     QPoint delta = event->pos() - m_lastMousePos;
     m_lastMousePos = event->pos();
 
-    // Move view opposite to drag (m_viewX/Y are in transformed space already)
     m_viewX -= delta.x() / m_scale;
     m_viewY -= delta.y() / m_scale;
     m_exploreTargetX = m_viewX;
@@ -1114,132 +1121,155 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
         m_scale);
   } else if (m_interactionMode == SelectMode || m_interactionMode == AddPointMode || m_interactionMode == CropMode || m_interactionMode == GenericAreaMode) {
     if (m_interactionMode == SelectMode && m_draggedPointIndex != -1) {
-      colorscreen::point_t imgPos = widgetToImage(event->position());
-      if (m_solver && (size_t)m_draggedPointIndex < m_solver->points.size()) {
-        m_solver->points[m_draggedPointIndex].img = imgPos;
-        m_pointsOverlayDirty = true;
-        update();
-      }
+      handleSelectMove(event);
     } else if (m_rubberBand && m_rubberBand->isVisible()) {
       m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, event->pos()).normalized());
     }
-  } else if (m_interactionMode == SetCenterMode) {
-    if (m_dragTarget == DragTarget::Center && m_scrToImg) {
-      // Drag center: translate by offset
-      colorscreen::point_t currentImg = widgetToImage(event->position());
-      double xOffset = currentImg.x - m_dragStartImg.x;
-      double yOffset = currentImg.y - m_dragStartImg.y;
-      m_scrToImg->center.x = m_pressParams.center.x + xOffset;
-      m_scrToImg->center.y = m_pressParams.center.y + yOffset;
-      emit coordinateSystemChanged();
-      update();
-    } else if ((m_dragTarget == DragTarget::Axis1 || m_dragTarget == DragTarget::Axis2) && m_scrToImg) {
-      // Drag axes: rotate and scale
-      colorscreen::point_t currentImg = widgetToImage(event->position());
-      double x1 = m_dragStartImg.x - m_pressParams.center.x;
-      double y1 = m_dragStartImg.y - m_pressParams.center.y;
-      double x2 = currentImg.x - m_pressParams.center.x;  // Use press params center, not current
-      double y2 = currentImg.y - m_pressParams.center.y;
-      
-      double startDist = sqrt((x1 * x1) + (y1 * y1));
-      double currentDist = sqrt((x2 * x2) + (y2 * y2));
-      double scale = (startDist > 1e-9) ? currentDist / startDist : 1.0;
-
-      if (event->modifiers() & Qt::ShiftModifier) {
-        scale = 1.0;
-      }
-      
-      // Enforce minimum length of 2.0
-      double len1 = sqrt(m_pressParams.coordinate1.x*m_pressParams.coordinate1.x + 
-                         m_pressParams.coordinate1.y*m_pressParams.coordinate1.y);
-      double len2 = sqrt(m_pressParams.coordinate2.x*m_pressParams.coordinate2.x + 
-                         m_pressParams.coordinate2.y*m_pressParams.coordinate2.y);
-      
-      if (m_lockRelativeCoordinates) {
-          // Both axes scale together, use stricter limit
-          double minScale1 = (len1 > 1e-9) ? 2.0 / len1 : 0.0;
-          double minScale2 = (len2 > 1e-9) ? 2.0 / len2 : 0.0;
-          double minScale = std::max(minScale1, minScale2);
-          if (scale < minScale) scale = minScale;
-      } else {
-          // Independent scaling
-          if (m_dragTarget == DragTarget::Axis1) {
-              double minScale1 = (len1 > 1e-9) ? 2.0 / len1 : 0.0;
-              if (scale < minScale1) scale = minScale1;
-          } else {
-              double minScale2 = (len2 > 1e-9) ? 2.0 / len2 : 0.0;
-              if (scale < minScale2) scale = minScale2;
-          }
-      }
-
-      double angle = atan2(y2, x2) - atan2(y1, x1);
-      
-      if (angle != 0.0 || scale != 1.0) {
-        double cosAngle = cos(angle);
-        double sinAngle = sin(angle);
-        
-        if (m_lockRelativeCoordinates) {
-            // Standard behavior: Rotate/Scale BOTH axes
-            m_scrToImg->coordinate1.x = (m_pressParams.coordinate1.x * cosAngle 
-                                         - m_pressParams.coordinate1.y * sinAngle) * scale;
-            m_scrToImg->coordinate1.y = (m_pressParams.coordinate1.x * sinAngle 
-                                         + m_pressParams.coordinate1.y * cosAngle) * scale;
-            
-            m_scrToImg->coordinate2.x = (m_pressParams.coordinate2.x * cosAngle 
-                                         - m_pressParams.coordinate2.y * sinAngle) * scale;
-            m_scrToImg->coordinate2.y = (m_pressParams.coordinate2.x * sinAngle 
-                                         + m_pressParams.coordinate2.y * cosAngle) * scale;
-        } else {
-            // Independent behavior: Only affect the dragged axis
-            // While we calculate 'angle' and 'scale' based on the drag, we only apply the transformation
-            // to the dragged axis. The other axis should strictly remain at its CURRENT state (or initial state?).
-            // If we use m_pressParams, we are essentially 'resetting' the non-dragged axis to its initial state 
-            // if we were to assign it. But if we DON'T touch it, it remains as is. 
-            // Since we might have moved it in a previous step?
-            // Wait, m_scrToImg is the source of truth. If DragTarget::Axis1, we modify coordinate1.
-            // We should NOT touch coordinate2.
-            
-            if (m_dragTarget == DragTarget::Axis1) {
-                m_scrToImg->coordinate1.x = (m_pressParams.coordinate1.x * cosAngle 
-                                             - m_pressParams.coordinate1.y * sinAngle) * scale;
-                m_scrToImg->coordinate1.y = (m_pressParams.coordinate1.x * sinAngle 
-                                             + m_pressParams.coordinate1.y * cosAngle) * scale;
-            } else {
-                m_scrToImg->coordinate2.x = (m_pressParams.coordinate2.x * cosAngle 
-                                             - m_pressParams.coordinate2.y * sinAngle) * scale;
-                m_scrToImg->coordinate2.y = (m_pressParams.coordinate2.x * sinAngle 
-                                             + m_pressParams.coordinate2.y * cosAngle) * scale;
-            }
-        }
-        
-        emit coordinateSystemChanged();
-        update();
-      }
-    }
   } else if (m_interactionMode == MeasureMode) {
-    if (m_isMeasuring) {
-      m_measureEnd = widgetToImage(event->position());
-      update();
-    }
-  } else if (m_interactionMode == ExploreMode) {
-    if (m_ignoreNextMouseMove) {
-        m_ignoreNextMouseMove = false;
-        return;
-    }
-    
-    QPoint center = rect().center();
-    QPoint delta = event->pos() - center;
-    if (delta.isNull()) return;
-
-    // Accumulate target distance
-    m_exploreTargetX -= delta.x() / m_scale;
-    m_exploreTargetY -= delta.y() / m_scale;
-    
-    // Warp mouse back to center immediately
-    m_ignoreNextMouseMove = true;
-    QCursor::setPos(mapToGlobal(center));
+    handleMeasureMove(event);
   }
 }
+
+/**
+ * @brief Handles mouse move in SetCenterMode (dragging center or axes).
+ */
+void ImageWidget::handleSetCenterMove(QMouseEvent *event) {
+  if (m_dragTarget == DragTarget::None || !m_scrToImg) return;
+
+  if (m_dragTarget == DragTarget::Center) {
+    // Drag center: translate by offset
+    colorscreen::point_t currentImg = widgetToImage(event->position());
+    double xOffset = currentImg.x - m_dragStartImg.x;
+    double yOffset = currentImg.y - m_dragStartImg.y;
+    m_scrToImg->center.x = m_pressParams.center.x + xOffset;
+    m_scrToImg->center.y = m_pressParams.center.y + yOffset;
+    emit coordinateSystemChanged();
+    update();
+  } else if (m_dragTarget == DragTarget::Axis1 || m_dragTarget == DragTarget::Axis2) {
+    // Drag axes: rotate and scale
+    colorscreen::point_t currentImg = widgetToImage(event->position());
+    double x1 = m_dragStartImg.x - m_pressParams.center.x;
+    double y1 = m_dragStartImg.y - m_pressParams.center.y;
+    double x2 = currentImg.x - m_pressParams.center.x;
+    double y2 = currentImg.y - m_pressParams.center.y;
+    
+    double startDist = sqrt((x1 * x1) + (y1 * y1));
+    double currentDist = sqrt((x2 * x2) + (y2 * y2));
+    double scale = (startDist > 1e-9) ? currentDist / startDist : 1.0;
+
+    if (event->modifiers() & Qt::ShiftModifier) {
+      scale = 1.0;
+    }
+    
+    // Enforce minimum length of 2.0
+    double len1 = sqrt(m_pressParams.coordinate1.x*m_pressParams.coordinate1.x + 
+                       m_pressParams.coordinate1.y*m_pressParams.coordinate1.y);
+    double len2 = sqrt(m_pressParams.coordinate2.x*m_pressParams.coordinate2.x + 
+                       m_pressParams.coordinate2.y*m_pressParams.coordinate2.y);
+    
+    if (m_lockRelativeCoordinates) {
+        // Both axes scale together, use stricter limit
+        double minScale1 = (len1 > 1e-9) ? 2.0 / len1 : 0.0;
+        double minScale2 = (len2 > 1e-9) ? 2.0 / len2 : 0.0;
+        double minScale = std::max(minScale1, minScale2);
+        if (scale < minScale) scale = minScale;
+    } else {
+        // Independent scaling
+        if (m_dragTarget == DragTarget::Axis1) {
+            double minScale1 = (len1 > 1e-9) ? 2.0 / len1 : 0.0;
+            if (scale < minScale1) scale = minScale1;
+        } else {
+            double minScale2 = (len2 > 1e-9) ? 2.0 / len2 : 0.0;
+            if (scale < minScale2) scale = minScale2;
+        }
+    }
+
+    double angle = atan2(y2, x2) - atan2(y1, x1);
+    
+    if (angle != 0.0 || scale != 1.0) {
+      double cosAngle = cos(angle);
+      double sinAngle = sin(angle);
+      
+      if (m_lockRelativeCoordinates) {
+          // Standard behavior: Rotate/Scale BOTH axes
+          m_scrToImg->coordinate1.x = (m_pressParams.coordinate1.x * cosAngle 
+                                       - m_pressParams.coordinate1.y * sinAngle) * scale;
+          m_scrToImg->coordinate1.y = (m_pressParams.coordinate1.x * sinAngle 
+                                       + m_pressParams.coordinate1.y * cosAngle) * scale;
+          
+          m_scrToImg->coordinate2.x = (m_pressParams.coordinate2.x * cosAngle 
+                                       - m_pressParams.coordinate2.y * sinAngle) * scale;
+          m_scrToImg->coordinate2.y = (m_pressParams.coordinate2.x * sinAngle 
+                                       + m_pressParams.coordinate2.y * cosAngle) * scale;
+      } else {
+          // Independent behavior: Only affect the dragged axis
+          if (m_dragTarget == DragTarget::Axis1) {
+              m_scrToImg->coordinate1.x = (m_pressParams.coordinate1.x * cosAngle 
+                                           - m_pressParams.coordinate1.y * sinAngle) * scale;
+              m_scrToImg->coordinate1.y = (m_pressParams.coordinate1.x * sinAngle 
+                                           + m_pressParams.coordinate1.y * cosAngle) * scale;
+          } else {
+              m_scrToImg->coordinate2.x = (m_pressParams.coordinate2.x * cosAngle 
+                                           - m_pressParams.coordinate2.y * sinAngle) * scale;
+              m_scrToImg->coordinate2.y = (m_pressParams.coordinate2.x * sinAngle 
+                                           + m_pressParams.coordinate2.y * cosAngle) * scale;
+          }
+      }
+      
+      emit coordinateSystemChanged();
+      update();
+    }
+  }
+}
+
+/**
+ * @brief Handles mouse move in SelectMode (dragging points or rubber band).
+ */
+void ImageWidget::handleSelectMove(QMouseEvent *event) {
+  if (m_draggedPointIndex != -1 && m_solver) {
+    colorscreen::point_t imgPos = widgetToImage(event->position());
+    if ((size_t)m_draggedPointIndex < m_solver->points.size()) {
+      m_solver->points[m_draggedPointIndex].img = imgPos;
+      m_pointsOverlayDirty = true;
+      update();
+    }
+  } else if (m_rubberBand && m_rubberBand->isVisible()) {
+    m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, event->pos()).normalized());
+  }
+}
+
+/**
+ * @brief Handles mouse move in ExploreMode (precision navigation).
+ */
+void ImageWidget::handleExploreMove(QMouseEvent *event) {
+  if (m_ignoreNextMouseMove) {
+      m_ignoreNextMouseMove = false;
+      return;
+  }
+  
+  QPoint center = rect().center();
+  QPoint delta = event->pos() - center;
+  if (delta.isNull()) return;
+
+  // Accumulate target distance
+  m_exploreTargetX -= delta.x() / m_scale;
+  m_exploreTargetY -= delta.y() / m_scale;
+  
+  // Warp mouse back to center immediately
+  m_ignoreNextMouseMove = true;
+  QCursor::setPos(mapToGlobal(center));
+}
+
+/**
+ * @brief Handles mouse move in MeasureMode (updating end point).
+ */
+void ImageWidget::handleMeasureMove(QMouseEvent *event) {
+  if (m_isMeasuring) {
+    m_measureEnd = widgetToImage(event->position());
+    update();
+  }
+}
+
 
 /**
  * @brief Handles mouse release events.
@@ -1252,183 +1282,206 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
     if (m_interactionMode == PanMode) {
       m_isDragging = false;
     } else if (m_interactionMode == SelectMode) {
-      if (m_draggedPointIndex != -1) {
-        m_draggedPointIndex = -1;
-        emit pointsChanged();
-      } else if (m_rubberBand && m_rubberBand->isVisible()) {
-        QRect rect = m_rubberBand->geometry();
-        m_rubberBand->hide();
-        
-        bool changed = false;
-
-        if (m_showRegistrationPoints && m_solver) {
-          const auto &points = m_solver->points;
-          for (size_t i = 0; i < points.size(); ++i) {
-            QPointF pos = imageToWidget(points[i].img);
-            if (rect.contains(pos.toPoint())) {
-              SelectedPoint sp = {i, SelectedPoint::RegistrationPoint};
-              if (!m_selectedPoints.count(sp)) {
-                m_selectedPoints.insert(sp);
-                changed = true;
-              }
-            }
-          }
-        }
-
-        if (changed) {
-          m_pointsOverlayDirty = true;
-          emit selectionChanged();
-          update();
-        }
-      }
-    } else if (m_interactionMode == AddPointMode) {
-      if (m_rubberBand && m_rubberBand->isVisible()) {
-        QRect rect = m_rubberBand->geometry();
-        m_rubberBand->hide();
-        
-        // Check if this was a small movement (single click) or area selection
-        QPoint dragDistance = event->pos() - m_rubberBandOrigin;
-        bool isClick = dragDistance.manhattanLength() < 5;
-        
-        if (isClick) {
-          // Single point click - emit pointAdded signal
-          colorscreen::point_t imgPos = widgetToImage(event->position());
-          emit pointAdded(imgPos, colorscreen::point_t{0, 0}, colorscreen::point_t{0, 0});
-        } else {
-          // Area selection - emit areaSelected signal
-          emit areaSelected(rect);
-        }
-      }
-    } else if (m_interactionMode == CropMode || m_interactionMode == GenericAreaMode) {
-      if (m_rubberBand && m_rubberBand->isVisible()) {
-        QRect rect = m_rubberBand->geometry();
-        m_rubberBand->hide();
-        emit areaSelected(rect);
-      }
+      handleSelectRelease(event);
+    } else if (m_interactionMode == AddPointMode || m_interactionMode == CropMode || m_interactionMode == GenericAreaMode) {
+      handleAreaRelease(event);
     } else if (m_interactionMode == MeasureMode) {
-      if (m_isMeasuring) {
-        m_isMeasuring = false;
-        m_measureEnd = widgetToImage(event->position());
-        emit distanceMeasured(m_measureStart, m_measureEnd);
-        update();
-      }
+      handleMeasureRelease(event);
     }
+  } else if (m_interactionMode == SetCenterMode) {
+    handleSetCenterRelease(event);
+  }
+}
+
+
+/**
+ * @brief Handles mouse release in SetCenterMode (finishing drag or setting coordinates).
+ */
+void ImageWidget::handleSetCenterRelease(QMouseEvent *event) {
+  if (m_dragTarget == DragTarget::Axis1 || m_dragTarget == DragTarget::Axis2) {
+    releaseMouse(); // Release the grab
   }
 
-  // Handle SetCenterMode
-  if (m_interactionMode == SetCenterMode) {
-    if (m_dragTarget == DragTarget::Axis1 || m_dragTarget == DragTarget::Axis2) {
-      releaseMouse(); // Release the grab
+  // Handle click logic (only if it was a small movement)
+  QPointF dragDistance = event->position() - m_dragStartWidget;
+  bool isClick = dragDistance.manhattanLength() < 5;
+
+  if (m_dragTarget == DragTarget::Center && isClick && m_scrToImg) {
+     // Set center to this specific point.
+     m_scrToImg->center = widgetToImage(event->position());
+     emit coordinateSystemChanged();
+     update();
+  } else if (m_dragTarget == DragTarget::Axis1 && isClick && m_scrToImg) {
+     // Set Coordinate1
+     colorscreen::point_t clickImg = widgetToImage(event->position());
+     colorscreen::point_t center = m_scrToImg->center;
+
+     double newC1x = clickImg.x - center.x;
+     double newC1y = clickImg.y - center.y;
+
+     double newLenSq = newC1x*newC1x + newC1y*newC1y;
+
+     if (newLenSq > 4.0) {
+         if (m_lockRelativeCoordinates) {
+             // Update Coordinate1 and coordinate 2 to preserve relative
+             double oldC1x = m_pressParams.coordinate1.x;
+             double oldC1y = m_pressParams.coordinate1.y;
+             double oldLen = sqrt(oldC1x*oldC1x + oldC1y*oldC1y);
+             double newLen = sqrt(newLenSq);
+             
+             double angleC1Old = atan2(oldC1y, oldC1x);
+             double angleC2Old = atan2(m_pressParams.coordinate2.y, m_pressParams.coordinate2.x);
+             double angleC1New = atan2(newC1y, newC1x);
+
+             double relAngle = angleC2Old - angleC1Old;
+             double angleC2New = angleC1New + relAngle;
+
+             double oldLenC2 = sqrt(m_pressParams.coordinate2.x*m_pressParams.coordinate2.x + 
+                                    m_pressParams.coordinate2.y*m_pressParams.coordinate2.y);
+             double scaleRatio = (oldLen > 1e-9) ? oldLenC2 / oldLen : 1.0;
+             double newLenC2 = newLen * scaleRatio;
+
+             if (newLenC2 >= 2.0) {
+                 m_scrToImg->coordinate1.x = newC1x;
+                 m_scrToImg->coordinate1.y = newC1y;
+                 m_scrToImg->coordinate2.x = newLenC2 * cos(angleC2New);
+                 m_scrToImg->coordinate2.y = newLenC2 * sin(angleC2New);
+                 emit coordinateSystemChanged();
+                 update();
+             }
+         } else {
+             // Independent update
+             m_scrToImg->coordinate1.x = newC1x;
+             m_scrToImg->coordinate1.y = newC1y;
+             emit coordinateSystemChanged();
+             update();
+         }
+     }
+  } else if (m_dragTarget == DragTarget::Axis2 && isClick && m_scrToImg) {
+     // Set Coordinate2
+     colorscreen::point_t clickImg = widgetToImage(event->position());
+     colorscreen::point_t center = m_scrToImg->center;
+
+     double newC2x = clickImg.x - center.x;
+     double newC2y = clickImg.y - center.y;
+
+     double newLenC2Sq = newC2x*newC2x + newC2y*newC2y;
+
+     if (newLenC2Sq > 4.0) {
+         if (m_lockRelativeCoordinates) {
+             double oldC2x = m_pressParams.coordinate2.x;
+             double oldC2y = m_pressParams.coordinate2.y;
+             double oldLenC2 = sqrt(oldC2x*oldC2x + oldC2y*oldC2y);
+             double newLenC2 = sqrt(newLenC2Sq);
+             
+             double angleC1Old = atan2(m_pressParams.coordinate1.y, m_pressParams.coordinate1.x);
+             double angleC2Old = atan2(oldC2y, oldC2x);
+             double angleC2New = atan2(newC2y, newC2x);
+             
+             double relAngle = angleC2Old - angleC1Old;
+             double angleC1New = angleC2New - relAngle;
+             
+             double oldLenC1 = sqrt(m_pressParams.coordinate1.x*m_pressParams.coordinate1.x + 
+                                    m_pressParams.coordinate1.y*m_pressParams.coordinate1.y);
+             double scaleRatioNum = (oldLenC1 > 1e-9) ? oldLenC2 / oldLenC1 : 1.0;
+             double newLenC1 = (scaleRatioNum > 1e-9) ? newLenC2 / scaleRatioNum : newLenC2;
+             
+             if (newLenC1 >= 2.0) {
+                 m_scrToImg->coordinate2.x = newC2x;
+                 m_scrToImg->coordinate2.y = newC2y;
+                 m_scrToImg->coordinate1.x = newLenC1 * cos(angleC1New);
+                 m_scrToImg->coordinate1.y = newLenC1 * sin(angleC1New);
+                 emit coordinateSystemChanged();
+                 update();
+             }
+         } else {
+             // Independent update
+             m_scrToImg->coordinate2.x = newC2x;
+             m_scrToImg->coordinate2.y = newC2y;
+             emit coordinateSystemChanged();
+             update();
+         }
+     }
+  }
+
+  if (m_dragTarget != DragTarget::None) {
+      emit coordinateSystemManipulationFinished();
+  }
+  // Reset drag target
+  m_dragTarget = DragTarget::None;
+  event->accept();
+}
+
+/**
+ * @brief Handles mouse release in SelectMode (finishing selection or drag).
+ */
+void ImageWidget::handleSelectRelease(QMouseEvent *event) {
+  if (m_draggedPointIndex != -1) {
+    m_draggedPointIndex = -1;
+    emit pointsChanged();
+  } else if (m_rubberBand && m_rubberBand->isVisible()) {
+    QRect rect = m_rubberBand->geometry();
+    m_rubberBand->hide();
+    
+    bool changed = false;
+
+    if (m_showRegistrationPoints && m_solver) {
+      const auto &points = m_solver->points;
+      for (size_t i = 0; i < points.size(); ++i) {
+        QPointF pos = imageToWidget(points[i].img);
+        if (rect.contains(pos.toPoint())) {
+          SelectedPoint sp = {i, SelectedPoint::RegistrationPoint};
+          if (!m_selectedPoints.count(sp)) {
+            m_selectedPoints.insert(sp);
+            changed = true;
+          }
+        }
+      }
     }
 
-    // Handle click logic (only if it was a small movement)
-    QPointF dragDistance = event->position() - m_dragStartWidget;
+    if (changed) {
+      m_pointsOverlayDirty = true;
+      emit selectionChanged();
+      update();
+    }
+  }
+}
+
+/**
+ * @brief Handles mouse release for area selection (Crop, AddPoint, Generic).
+ */
+void ImageWidget::handleAreaRelease(QMouseEvent *event) {
+  if (m_rubberBand && m_rubberBand->isVisible()) {
+    QRect rect = m_rubberBand->geometry();
+    m_rubberBand->hide();
+    
+    QPoint dragDistance = event->pos() - m_rubberBandOrigin;
     bool isClick = dragDistance.manhattanLength() < 5;
-
-    if (m_dragTarget == DragTarget::Center && isClick && m_scrToImg) {
-       // Set center to this specific point.
-       m_scrToImg->center = widgetToImage(event->position());
-       emit coordinateSystemChanged();
-       update();
-    } else if (m_dragTarget == DragTarget::Axis1 && isClick && m_scrToImg) {
-       // Set Coordinate1
-       colorscreen::point_t clickImg = widgetToImage(event->position());
-       colorscreen::point_t center = m_scrToImg->center;
-
-       double newC1x = clickImg.x - center.x;
-       double newC1y = clickImg.y - center.y;
-
-       double newLenSq = newC1x*newC1x + newC1y*newC1y;
-
-       if (newLenSq > 4.0) {
-           if (m_lockRelativeCoordinates) {
-               // Update Coordinate1 and coordinate 2 to preserve relative
-               double oldC1x = m_pressParams.coordinate1.x;
-               double oldC1y = m_pressParams.coordinate1.y;
-               double oldLen = sqrt(oldC1x*oldC1x + oldC1y*oldC1y);
-               double newLen = sqrt(newLenSq);
-               
-               double angleC1Old = atan2(oldC1y, oldC1x);
-               double angleC2Old = atan2(m_pressParams.coordinate2.y, m_pressParams.coordinate2.x);
-               double angleC1New = atan2(newC1y, newC1x);
-
-               double relAngle = angleC2Old - angleC1Old;
-               double angleC2New = angleC1New + relAngle;
-
-               double oldLenC2 = sqrt(m_pressParams.coordinate2.x*m_pressParams.coordinate2.x + 
-                                      m_pressParams.coordinate2.y*m_pressParams.coordinate2.y);
-               double scaleRatio = (oldLen > 1e-9) ? oldLenC2 / oldLen : 1.0;
-               double newLenC2 = newLen * scaleRatio;
-
-               if (newLenC2 >= 2.0) {
-                   m_scrToImg->coordinate1.x = newC1x;
-                   m_scrToImg->coordinate1.y = newC1y;
-                   m_scrToImg->coordinate2.x = newLenC2 * cos(angleC2New);
-                   m_scrToImg->coordinate2.y = newLenC2 * sin(angleC2New);
-                   emit coordinateSystemChanged();
-                   update();
-               }
-           } else {
-               // Independent update
-               m_scrToImg->coordinate1.x = newC1x;
-               m_scrToImg->coordinate1.y = newC1y;
-               emit coordinateSystemChanged();
-               update();
-           }
-       }
-    } else if (m_dragTarget == DragTarget::Axis2 && isClick && m_scrToImg) {
-       // Set Coordinate2
-       colorscreen::point_t clickImg = widgetToImage(event->position());
-       colorscreen::point_t center = m_scrToImg->center;
-
-       double newC2x = clickImg.x - center.x;
-       double newC2y = clickImg.y - center.y;
-
-       double newLenC2Sq = newC2x*newC2x + newC2y*newC2y;
-
-       if (newLenC2Sq > 4.0) {
-           if (m_lockRelativeCoordinates) {
-               double oldC2x = m_pressParams.coordinate2.x;
-               double oldC2y = m_pressParams.coordinate2.y;
-               double oldLenC2 = sqrt(oldC2x*oldC2x + oldC2y*oldC2y);
-               double newLenC2 = sqrt(newLenC2Sq);
-               
-               double angleC1Old = atan2(m_pressParams.coordinate1.y, m_pressParams.coordinate1.x);
-               double angleC2Old = atan2(oldC2y, oldC2x);
-               double angleC2New = atan2(newC2y, newC2x);
-               
-               double relAngle = angleC2Old - angleC1Old;
-               double angleC1New = angleC2New - relAngle;
-               
-               double oldLenC1 = sqrt(m_pressParams.coordinate1.x*m_pressParams.coordinate1.x + 
-                                      m_pressParams.coordinate1.y*m_pressParams.coordinate1.y);
-               double scaleRatioNum = (oldLenC1 > 1e-9) ? oldLenC2 / oldLenC1 : 1.0;
-               double newLenC1 = (scaleRatioNum > 1e-9) ? newLenC2 / scaleRatioNum : newLenC2;
-               
-               if (newLenC1 >= 2.0) {
-                   m_scrToImg->coordinate2.x = newC2x;
-                   m_scrToImg->coordinate2.y = newC2y;
-                   m_scrToImg->coordinate1.x = newLenC1 * cos(angleC1New);
-                   m_scrToImg->coordinate1.y = newLenC1 * sin(angleC1New);
-                   emit coordinateSystemChanged();
-                   update();
-               }
-           } else {
-               // Independent update
-               m_scrToImg->coordinate2.x = newC2x;
-               m_scrToImg->coordinate2.y = newC2y;
-               emit coordinateSystemChanged();
-               update();
-           }
-       }
+    
+    if (m_interactionMode == AddPointMode) {
+      if (isClick) {
+        // Single point click - emit pointAdded signal
+        colorscreen::point_t imgPos = widgetToImage(event->position());
+        emit pointAdded(imgPos, colorscreen::point_t{0, 0}, colorscreen::point_t{0, 0});
+      } else {
+        // Area selection - emit areaSelected signal
+        emit areaSelected(rect);
+      }
+    } else if (m_interactionMode == CropMode || m_interactionMode == GenericAreaMode) {
+      emit areaSelected(rect);
     }
+  }
+}
 
-    if (m_dragTarget != DragTarget::None) {
-        emit coordinateSystemManipulationFinished();
-    }
-    // Reset drag target
-    m_dragTarget = DragTarget::None;
-    event->accept();
+/**
+ * @brief Handles mouse release in MeasureMode (finishing measurement).
+ */
+void ImageWidget::handleMeasureRelease(QMouseEvent *event) {
+  if (m_isMeasuring) {
+    m_isMeasuring = false;
+    m_measureEnd = widgetToImage(event->position());
+    emit distanceMeasured(m_measureStart, m_measureEnd);
+    update();
   }
 }
 

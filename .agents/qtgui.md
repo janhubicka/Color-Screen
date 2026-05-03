@@ -21,8 +21,7 @@ Rendering and analysis may be slow and it is important to keep GUI responsive.
 - **`MainWindow`**: The top-level window. It manages the lifecycle of the image data, the TaskQueue, and connects signals between panels and the main application logic.
 - **`NavigationView`**: This shows the whole image and indicates zoom and position of ImageWidget.
 It lets user to effectively move around the image
-- **`ImageWidget`**: This displays the image and lets user to quickly pan and zoom in it,
-edit control points, select areas etc.
+- **`ImageWidget`**: This displays the image and provides high-performance interaction. It uses a modular architecture for rendering and event handling to manage complex interaction modes (Pan, Select, SetCenter, etc.).
 - **`ParameterPanel`**: The abstract base class for all UI panels (e.g., `CapturePanel`, `ColorPanel`, `SharpnessPanel`). It provides a rich set of helper methods to create consistent UI controls that are linked to the application state.
 - **`ParameterState`**: A structured object containing all render and project-level parameters. It is used as the single source of truth for the UI.
 - **`TaskQueue`**: Manages background worker threads. It utilizes multiple specialized queues (e.g., `m_renderQueue` for image tiles and `m_pointsQueue` for registration overlays) to ensure that heavy computations like point rendering do not block the main GUI thread or interfere with image tile generation.
@@ -36,6 +35,7 @@ The `qtgui` component follows a **Qt-like style**:
 - **Naming**: Use `CamelCase` for classes and `camelCase` for methods and variables.
 - **Signals/Slots**: Use the modern `connect()` syntax with lambdas or member function pointers.
 - **Documentation**: Document methods in the header files using standard Doxygen-style comments.
+- **Implementation Comments**: Each method implementation should have a comment block explaining its purpose and parameters in the implementation file.
 
 ---
 
@@ -191,16 +191,45 @@ The `ImageWidget` handles mapping between three main coordinate systems:
 
 ### Non-Blocking Overlay Rendering
 
-To handle thousands of registration points without blocking the UI, `ImageWidget` uses a **Composite Overlay Model**:
+To handle thousands of registration points without blocking the UI, `ImageWidget` uses a **Composite Overlay Model** paired with **Visibility Culling**:
 
-- **Pre-rendered Overlay**: Registration points are rendered into a `QImage` in the background.
-- **Compositing**: The `paintEvent` simply draws this `QImage` on top of the main pixmap.
-- **Interpolation**: While a new overlay is being rendered (e.g., during a zoom), the current overlay is stretched or translated in real-time to maintain visual alignment, providing 60fps feedback even while the background compute is catching up.
-- **Style**: Registration points use a distinct style (Source: circle outline, Target: filled disk) and are automatically culled if they are too close to each other to reduce visual noise.
+- **Pre-rendered Overlay**: Registration points are rendered into a `QImage` in the background via `TaskQueue`.
+- **Compositing**: The `paintEvent` draws this `QImage` on top of the main pixmap using a simple bit-blit or scaled draw.
+- **Interpolation**: While a new overlay is being rendered, the current overlay is stretched in real-time.
+- **Style**: Registration points use a distinct style and are culled if too close to each other.
+- **Visibility Culling**: Always check visibility flags (e.g., `m_showRegistrationPoints`) before scheduling background tasks. If visibility is toggled off, cancel any active background rendering tasks (`m_pointsQueue.cancelAll()`) to save CPU resources.
 
-### Smooth Transitions
+---
 
-Use `smoothFitToView()` or `smoothZoomTo()` for automated view changes.
+## Modular Event Handling in ImageWidget
+
+To maintain a clean and extensible viewer, monolithic event handlers must be decomposed into specific helper methods.
+
+### 1. Drawing Helpers (`paintEvent`)
+The `paintEvent` should only coordinate high-level drawing. Specific overlay logic belongs in `draw...` methods:
+- `drawPointsOverlay(QPainter &p)`
+- `drawProfileSpots(QPainter &p)`
+- `drawScreenCoordinateSystem(QPainter &p)`
+- `drawMeasurement(QPainter &p)`
+
+### 2. Interaction Handlers (`mouse...Event`)
+Mouse interaction logic is delegated based on `InteractionMode`. This ensures that complex tools like `SetCenterMode` do not pollute the core `PanMode` logic.
+
+**Naming Convention:** `handle[Mode][Event]`
+- `handleSetCenterPress(QMouseEvent *event)`
+- `handleSelectMove(QMouseEvent *event)`
+- `handleAreaRelease(QMouseEvent *event)`
+
+**Implementation Rules:**
+- Keep the main event handler (`mousePressEvent`) as a simple switch/if-else block.
+- Always accept or ignore events appropriately in the handlers to maintain event propagation.
+- Grab/Release the mouse explicitly in handlers that require persistent dragging (e.g., coordinate axis manipulation).
+
+---
+
+## Smooth Transitions
+
+Use `smoothFitToView()` or `smoothZoomTo()` for automated view changes. These rely on a high-frequency `exploreTick` timer.
 
 - **`m_panAnimationActive`**: Set this flag when you want the view to smoothly pan towards `m_exploreTargetX/Y`. 
 - **`m_zoomFocusCenter`**: When true, the view zooms towards the center of the screen.

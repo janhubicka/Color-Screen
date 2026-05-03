@@ -29,6 +29,7 @@ protected:
   void paintEvent(QPaintEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;
   void keyPressEvent(QKeyEvent *event) override;
+  void keyReleaseEvent(QKeyEvent *event) override;
   void mousePressEvent(QMouseEvent *event) override;
   void mouseMoveEvent(QMouseEvent *event) override;
   void mouseReleaseEvent(QMouseEvent *event) override;
@@ -67,7 +68,9 @@ private:
     Team team;
     bool isHero = false;   // The one big white plane
     int health;            // Hits remaining
-    double shootCooldown;  // Seconds until next shot
+    double frontShootCooldown; // Seconds until next front shot
+    double rearShootCooldown;  // Seconds until next rear shot
+    double bombCooldown;       // Seconds until next bomb drop
     double jinkTimer;      // Seconds until next jink / direction change
     double spinAngle;      // When falling: independent tumble angle (degrees)
     PlaneState state = PlaneState::Flying;
@@ -189,6 +192,7 @@ private:
   bool   m_heroManualControl;
   double m_autopilotMessageTimer;
   bool   m_heroManualFire;
+  bool   m_heroSpaceFire;
   bool   m_isMouseDown;
   QPoint m_mousePos;
   double m_autoFireMessageTimer;
@@ -235,7 +239,8 @@ private:
   void updateCamera(double dt);
 
   // Shoot
-  void fireFromPlane(int planeIdx);
+  void fireFrontFromPlane(int planeIdx);
+  void fireRearFromPlane(int planeIdx);
   void spawnSmoke(double x, double y, double vx, double vy, int count, bool isFire = false);
   void spawnPilot(const Airplane &plane);
   void spawnPilotGuaranteed(Airplane &airplane);
