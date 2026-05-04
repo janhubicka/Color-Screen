@@ -1,6 +1,12 @@
+/* Screen patches detection and manipulation.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #ifndef PATCHES_H
 #define PATCHES_H
+
 #include <vector>
+#include <memory>
 #include "include/progress-info.h"
 #include "include/imagedata.h"
 #include "scr-detect.h"
@@ -8,12 +14,22 @@
 
 namespace colorscreen
 {
+/* Class representing a set of screen patches detected in an image.  */
 class patches
 {
   public:
+    /* Index of a patch.  */
     typedef int patch_index_t;
-    patches (const image_data &, render &, color_class_map &map, int max_patch_size, progress_info *progress);
+
+    /* Initialize patches for given image IMG using RENDER and COLOR_MAP.
+       MAX_PATCH_SIZE is the maximum size of a patch to be considered.
+       PROGRESS is used to report progress and check for cancellation.  */
+    patches (const image_data &img, render &render, color_class_map &color_map,
+	     int max_patch_size, progress_info *progress);
+    /* Free allocated memory.  */
     ~patches ();
+
+    /* Descriptor of a single patch.  */
     struct patch
       {
 	/* A pixel containing the patch.  */
@@ -27,38 +43,65 @@ class patches
 	/* Sum of luminosities of pixels belonging to the patch.  */
 	luminosity_t luminosity_sum;
       };
+
+    /* Return reference to patch with given INDEX.  */
     struct patch &
     get_patch (patch_index_t index)
     {
       return m_vec[index - 1];
     }
-    int
-    get_patch_color (int x, int y)
+    /* Return reference to patch with given INDEX.  */
+    const struct patch &
+    get_patch (patch_index_t index) const
     {
-      return m_map[y * m_width + x] & 3;
+      return m_vec[index - 1];
     }
-    patch_index_t
-    get_patch_index (int x,int y)
+
+    /* Return color class of pixel at position P.  */
+    pure_attr int
+    get_patch_color (int_point_t p) const noexcept
     {
-      return m_map[y * m_width + x] >> 2;
+      return m_map[p.y * m_width + p.x] & 3;
     }
-    patch_index_t
-    num_patches ()
+
+    /* Return index of patch at position P.  */
+    pure_attr patch_index_t
+    get_patch_index (int_point_t p) const noexcept
+    {
+      return m_map[p.y * m_width + p.x] >> 2;
+    }
+
+    /* Return number of detected patches.  */
+    const_attr patch_index_t
+    num_patches () const noexcept
     {
       return m_vec.size ();
     }
-    /* Find coordinates of nearest patch in each color.  Set to -1 if patch is not found.  */
-    bool nearest_patches (coord_t x, coord_t y, int *rx, int *ry, patch_index_t *rp);
-    bool fast_nearest_patches (int x, int y, int *rx, int *ry, patch_index_t *rp);
+
+    /* Find coordinates of nearest patch in each color for position P.
+       Set RP to patch indices and RX, RY to coordinates.
+       Return true if patches were found.  */
+    bool nearest_patches (point_t p, int *rx, int *ry, patch_index_t *rp) const;
+
+    /* Fast version of nearest_patches for integer position P.  */
+    bool fast_nearest_patches (int_point_t p, int *rx, int *ry, patch_index_t *rp) const;
+
 private:
-    int m_width, m_height;
+    /* Dimensions of the image.  */
+    int m_width = 0, m_height = 0;
+
+    /* Set patch index for pixel at position P.  */
     void
-    set_patch_index (int x, int y, patch_index_t index, int color)
+    set_patch_index (int_point_t p, patch_index_t index, int color)
     {
-      m_map[y * m_width + x] = (index << 2) + color;
+      m_map[p.y * m_width + p.x] = (index << 2) + color;
     }
+
+    /* Vector of all detected patches.  */
     std::vector<patch> m_vec;
-    patch_index_t *m_map;
+    /* Map of patch indices for each pixel.  */
+    std::unique_ptr<patch_index_t[]> m_map;
+    /* Enable debugging output.  */
     static const bool debug = false;
 };
 }

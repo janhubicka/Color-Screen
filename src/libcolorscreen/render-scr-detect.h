@@ -807,16 +807,16 @@ public:
   {
     int rx[3], ry[3];
     patches::patch_index_t ri[3];
-    if (m_patches->nearest_patches (p.x, p.y, rx, ry, ri))
+    if (m_patches->nearest_patches (p, rx, ry, ri))
       {
 #if 1
-	patches::patch p1 = m_patches->get_patch (ri[0]);
+	const patches::patch &p1 = m_patches->get_patch (ri[0]);
 	rgbdata ret;
 	ret.red = p1.luminosity_sum / (luminosity_t) p1.overall_pixels;
-	p1 = m_patches->get_patch (ri[1]);
-	ret.green = p1.luminosity_sum / (luminosity_t) p1.overall_pixels;
-	p1 = m_patches->get_patch (ri[2]);
-	ret.blue = p1.luminosity_sum / (luminosity_t) p1.overall_pixels;
+	const patches::patch &p2 = m_patches->get_patch (ri[1]);
+	ret.green = p2.luminosity_sum / (luminosity_t) p2.overall_pixels;
+	const patches::patch &p3 = m_patches->get_patch (ri[2]);
+	ret.blue = p3.luminosity_sum / (luminosity_t) p3.overall_pixels;
 	return ret;
 #else
 	luminosity_t rr;
@@ -825,7 +825,7 @@ public:
 #endif
 #if 0
 	luminosity_t rr;
-	if (!m_patches->get_patch_color (p.x, p.y))
+	if (!m_patches->get_patch_color ({(int)p.x, (int)p.y}))
 	  rr = ((ri[0] & 15) + 1) / 17.0;
 	else
 	  rr = 0;
