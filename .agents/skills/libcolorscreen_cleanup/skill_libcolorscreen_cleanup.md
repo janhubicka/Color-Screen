@@ -16,6 +16,7 @@ If possible, split task to **incremental steps** and let each step to be **teste
 - **Function Comments**: Every function must have a comment explaining its purpose and all its parameters. 
     - **Parameter Documentation**: Parameters within comments must be in **UPPERCASE**.
     - **Consistency**: Add missing comments to legacy functions when refactoring.
+    - **No doxygen markers**: Do not use `@brief` and `**`.
 - **File comments**: Every source file should start with a brief comment on what it is doing. Use
 ```
 /* Brief description
@@ -63,6 +64,7 @@ If possible, split task to **incremental steps** and let each step to be **teste
 ## 3. Template & Performance Modernization
 
 - **Constancy**: Proactively add missing `const`, `constexpr` to functions, variables and functions parameters.  Do not use `const` on scalar automatic variables wehre this can be easily determined by compiler.  Almost all use of `image_data` should be const. The image is only loaded by the library.  If there is non-const refenrece document reason why it is modified or ask in plan for details.
+- **Non-const references or pointers**: If function takes non-const refernece, it should modify object in place.  Document what modification it does and if it does not suggest turning it const (possibly propagating constness further in codebase). Ask in plan for details.
 - **attributes**: Add `pure_attr`, and `const_attr` to functions where this property can not be easily determined by the compiler (it is exported in header)
 - **OpenMP**: Identify opportunities for parallelization. Suggest OpenMP improvements (e.g., `#pragma omp parallel for`) in the implementation plan.
 - **noexcept**: Mark API functions as `noexcept` where possible. Do not do that in case compiler can work it out itself (anonymous namespace and inline). Always ask in plan.
@@ -87,6 +89,9 @@ If possible, split task to **incremental steps** and let each step to be **teste
     - **DO NOT** implement new tests automatically; wait for user approval of the test plan.
 - **Regression Testing**: Always run `make check` or `./unittests` to verify functional parity.
 
-## 7. Tools
+## 7. Performance
+- **avoid unnecesary initializations of large or hot arrays**: `std::vector` and `std::array` initialize the block to 0.  For large vectors (of size proportional to the image) be sure that this initialization is not happening with no reason.  Also watch unnecesary initialization of smaller arrays/vectors in the inner loops
+
+## 8. Tools
 - **clang-refactor**: You can use `clang-refactor` and other clang tools for refactoring
 - **tools**: You can suggest use of other open-source tools to speed up refactoring
