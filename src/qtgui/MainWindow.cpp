@@ -2089,9 +2089,8 @@ ProgressEntry *MainWindow::getLongestRunningTask() {
     qint64 elapsed = entry.startTime.elapsed();
 
     // Check if this task has non-zero progress
-    const char *tName = "";
     float percent = 0;
-    entry.info->get_status(&tName, &percent);
+    entry.info->get_status(&percent);
 
     // Track oldest task with non-zero progress
     if (percent > 0 && elapsed > maxActiveTime) {
@@ -2183,8 +2182,8 @@ void MainWindow::onProgressTimer() {
       float percent = -1;
 
       for (const auto &s : statusStack) {
-        if (s.task && s.task[0]) {
-          QString taskName = QString::fromUtf8(s.task);
+        if (!s.task.empty()) {
+          QString taskName = QString::fromUtf8(s.task.c_str());
           if (s.progress >= 0 && &s != &statusStack.back()) {
             taskName += QString(" (%1%)").arg((int)s.progress);
           }

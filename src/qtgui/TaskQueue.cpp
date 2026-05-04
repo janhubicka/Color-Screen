@@ -204,9 +204,9 @@ QString TaskQueue::formatQueueState() const
 {
     QString state;
     for (auto it = m_tasks.begin(); it != m_tasks.end(); ++it) {
-        const char *t;
-	float s;
-	it.value().progress->get_status (&t, &s);
+        auto status = it.value().progress->get_status();
+        const char *t = status.empty() ? "" : status.back().task.c_str();
+        float s = status.empty() ? -1 : status.back().progress;
         state += QString(" [%1: %2ms %3 %4%%%5]").arg(it.key()).arg(it.value().startTime.elapsed()).arg(t).arg(s).arg(it.value().progress->pool_cancel () ? "canceling" : "");
     }
     if (m_pendingReqId.has_value()) {
