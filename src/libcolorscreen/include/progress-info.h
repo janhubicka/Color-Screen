@@ -276,6 +276,7 @@ public:
   DLL_PUBLIC virtual void resume_stdout () final;
 
   DLL_PUBLIC virtual void set_task (const char *name, uint64_t max) final;
+  DLL_PUBLIC virtual void set_task (std::string name, uint64_t max) final;
   DLL_PUBLIC virtual void wait (const char *name) final;
   DLL_PUBLIC virtual void pop (int expected = -1, bool safe = false) final;
 

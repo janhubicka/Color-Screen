@@ -426,12 +426,47 @@ file_progress_info::set_task (const char *name, uint64_t max)
       if (!s.empty ())
         {
           pause_stdout ();
-          std::lock_guard<std::mutex> lock (m_lock);
-          print_task (m_file, s, &stack.back().start_time.wall);
+          {
+            std::lock_guard<std::mutex> lock (m_lock);
+            print_task (m_file, s, &stack.back ().start_time.wall);
+          }
           paused = true;
         }
     }
   progress_info::set_task (name, max);
+  if (m_print_all_tasks)
+    {
+      auto s = get_status ();
+      if (!s.empty ())
+        {
+          if (!paused)
+            pause_stdout ();
+          print_task (m_file, s, nullptr);
+          paused = true;
+        }
+    }
+  if (paused)
+    resume_stdout ();
+}
+
+void
+file_progress_info::set_task (std::string name, uint64_t max)
+{
+  bool paused = false;
+  if (m_print_all_tasks && m_max >= 0)
+    {
+      auto s = get_status ();
+      if (!s.empty ())
+        {
+          pause_stdout ();
+          {
+            std::lock_guard<std::mutex> lock (m_lock);
+            print_task (m_file, s, &stack.back ().start_time.wall);
+          }
+          paused = true;
+        }
+    }
+  progress_info::set_task (std::move (name), max);
   if (m_print_all_tasks)
     {
       auto s = get_status ();
@@ -457,8 +492,10 @@ file_progress_info::wait (const char *name)
       if (!s.empty ())
         {
           pause_stdout ();
-          std::lock_guard<std::mutex> lock (m_lock);
-          print_task (m_file, s, &stack.back().start_time.wall);
+          {
+            std::lock_guard<std::mutex> lock (m_lock);
+            print_task (m_file, s, &stack.back ().start_time.wall);
+          }
           paused = true;
         }
     }
@@ -477,8 +514,10 @@ file_progress_info::pop (int expected, bool safe)
       if (!s.empty ())
         {
           pause_stdout ();
-          std::lock_guard<std::mutex> lock (m_lock);
-          print_task (m_file, s, &stack.back().start_time.wall);
+          {
+            std::lock_guard<std::mutex> lock (m_lock);
+            print_task (m_file, s, &stack.back ().start_time.wall);
+          }
           paused = true;
         }
     }
