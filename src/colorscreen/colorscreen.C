@@ -1,3 +1,7 @@
+/* Color-Screen command line utility
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #include <string>
 #include <unistd.h>
 #include <sys/time.h>
@@ -56,17 +60,17 @@ print_help (char *err = NULL)
   fprintf (stderr, "      --help                    print help\n");
   fprintf (stderr, "      --verbose                 enable verbose output\n");
   fprintf (stderr, "      --version                 print version\n");
-  fprintf (stderr, "      --threads=n               setnumber of threads\n");
+  fprintf (stderr, "      --threads=n               set number of threads\n");
   fprintf (stderr, "      --time-report             report time spent in tasks\n");
   if (subhelp == help_render || subhelp == help_basic)
     {
-      fprintf (stderr, "  render <scan> <pareters> <output> [<args>]\n");
+      fprintf (stderr, "  render <scan> <parameters> <output> [<args>]\n");
       fprintf (stderr, "    render scan into tiff\n");
     }
   if (subhelp == help_render)
     {
       fprintf (stderr, "    <scan> is image, <parameters> is the ColorScreen "
-                       "parametr file\n");
+                       "parameter file\n");
       fprintf (stderr, "    <output> is tiff file to be produced\n");
       fprintf (stderr, "    Supported args:\n");
       fprintf (stderr, "      --mode=mode               select one of output modes:");
@@ -82,7 +86,7 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --hdr                     output HDR tiff\n");
       fprintf (stderr, "      --dng                     output DNG\n");
       fprintf (stderr, "      --output-profile=profile  specify output profile\n");
-      fprintf (stderr, "                                suported profiles:");
+      fprintf (stderr, "                                supported profiles:");
       for (int j = 0; j < render_parameters::output_profile_max; j++)
         fprintf (stderr, " %s", render_parameters::output_profile_names[j]);
       fprintf (stderr, "\n");
@@ -94,8 +98,7 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --auto-levels             automatically choose "
                        "brightness and dark point\n");
       fprintf (stderr, "      --dye-balance=mode        force dye balance\n");
-      fprintf (stderr, "                                suported modes:");
-      for (int j = 0; j < render_parameters::dye_balance_max; j++)
+      fprintf (stderr, "                                supported modes:");
         fprintf (stderr, " %s", render_parameters::dye_balance_names[j].name);
       fprintf (stderr, "\n");
       fprintf (stderr, "      --output-gamma=gamma      set gamma correction "
@@ -140,7 +143,7 @@ print_help (char *err = NULL)
   if (subhelp == help_analyze_scanner_blur)
     {
       fprintf (stderr, "    Supported args:\n");
-      fprintf (stderr, "      --out=name.par            save parameters to a given file instead of overwritting original\n");
+      fprintf (stderr, "      --out=name.par            save parameters to a given file instead of overwriting original\n");
       fprintf (stderr, "      --out-tiff=name.tif       save resulting table also as tiff file\n");
       fprintf (stderr, "      --strip-width=n           number of horizontal samples used to detec strip widths\n");
       fprintf (stderr, "      --strip-height=n          number of vertical samples used to detect strip widths\n");
@@ -149,7 +152,7 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --height=n                height of the correction table\n");
       fprintf (stderr, "      --xsamples=n              number of horizontal samples to analyze for every entry in table\n");
       fprintf (stderr, "      --ysamples=n              number of vertical samples to analyze for every entry in table\n");
-      fprintf (stderr, "      --toerance=max            maximal difference between minimal and maximal blur radius in robust average\n");
+      fprintf (stderr, "      --tolerance=max           maximal difference between minimal and maximal blur radius in robust average\n");
       fprintf (stderr, "      --optimize-fog            enable finetuning of fog (dark point)\n");
       fprintf (stderr, "      --simulate-infrared       simuate infrared layer\n");
       fprintf (stderr, "      --normalize               normalize colors\n");
@@ -205,11 +208,11 @@ print_help (char *err = NULL)
                        "in contrast over this threshold\n");
       fprintf (stderr, "      --max-avg-distance=npixels maximal average distance of "
                "real screen patches to estimated ones via affine transform\n");
-      fprintf (stderr, "      --max-max-distance=npixels maximal maximal distance of "
+      fprintf (stderr, "      --max-max-distance=npixels maximum distance of "
                "real screen patches to estimated ones via affine transform\n");
       fprintf (stderr, "      --geometry-info            store info about "
-                       "goemetry mismatches to tiff files\n");
-      fprintf (stderr, "      --individual-geometry-info store info about goemetry "
+                       "geometry mismatches to tiff files\n");
+      fprintf (stderr, "      --individual-geometry-info store info about geometry "
                "mismatches to tiff files; produce file for each pair\n");
       fprintf (stderr, "      --outlier-info             store info about outliers\n");
       fprintf (stderr, "     hugin output:\n");
@@ -233,13 +236,13 @@ print_help (char *err = NULL)
     }
   if (subhelp == help_dump_patch_density || subhelp == help_basic)
     {
-      fprintf (stderr, "  dump-patch-density <scan> <prameters> <output>\n");
+      fprintf (stderr, "  dump-patch-density <scan> <parameters> <output>\n");
       fprintf (stderr, "    dump patch densities in text format for external "
                "processing (requires parameters with screen geometry)\n");
     }
   if (subhelp == help_finetune || subhelp == help_basic)
     {
-      fprintf (stderr, "  finetune <scan> <prameters> <output> [<args>]\n");
+      fprintf (stderr, "  finetune <scan> <parameters> <output> [<args>]\n");
       fprintf (stderr, "    finetune parameters of different parts of the input scan. "
                "Requires parameters with screen geometry\n");
     }
@@ -247,7 +250,7 @@ print_help (char *err = NULL)
     {
       fprintf (stderr, "    Supported args:\n");
       fprintf (stderr, "      --width=n                 analyze n samples horizontally "
-          "(number of vertical samples depeends on aspect ratio)\n");
+          "(number of vertical samples depends on aspect ratio)\n");
       fprintf (stderr, "      --optimize-position       enable finetuning of "
                        "screen registration\n");
       fprintf (stderr, "      --optimize-fog            enable finetuning of "
@@ -261,26 +264,26 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --optimize-scanner-mtf-defocus enable finetuning of "
                        "scanner MTF defocus\n");
       fprintf (stderr, "      --optimize-scanner-mtf-channel-defocus enable finetuning of "
-                       "scanner MTF defocus indiviually for each channel\n");
+                       "scanner MTF defocus individually for each channel\n");
       fprintf (stderr, "      --optimize-emulsion-blur  enable finetuning of "
                        "emulsion blur radius\n");
       fprintf (stderr, "      --optimize-sharpening     enable finetuning of image sharpening\n");
-      fprintf (stderr, "                                requres known screen blur, "
-               "mixing weights in input file and monochrome chanel use\n");
+      fprintf (stderr, "                                requires known screen blur, "
+               "mixing weights in input file and monochrome channel use\n");
       fprintf (stderr, "      --optimize-strips         enable finetuning of "
                        "strip widths used to print dufay or screens with strips\n");
-      fprintf (stderr, "      --use-monochrome-channel  analyse using "
+      fprintf (stderr, "      --use-monochrome-channel  analyze using "
                        "monochrome channel even when RGB is available\n");
       fprintf (stderr, "      --no-data-collection      do not determine "
                        "colors by data collection\n");
       fprintf (stderr, "      --no-least-squares        do not use least "
                        "squares to optimize screen colors\n");
-      fprintf (stderr, "      --multi-tile=n            analyse n times n "
+      fprintf (stderr, "      --multi-tile=n            analyze n times n "
                        "samples and choose best result on each spot\n");
       fprintf (stderr,
                "      --no-normalize            do not normalize colors\n");
       fprintf (stderr,
-               "      --simulate-infrared       simuate infrared layer\n");
+               "      --simulate-infrared       simulate infrared layer\n");
       fprintf (stderr, "      --blur-tiff=name          write finetuned blur "
                        "radius (either screen, screen channel or emulsion) "
                        "parameters as tiff file\n");
@@ -297,20 +300,20 @@ print_help (char *err = NULL)
                        "tiles into tiff files <name>-y-x.tif\n");
       fprintf (stderr, "      --diff-tiff-base=name     write diff between "
                        "original and simultated tiles to <name>-y-x.tif\n");
-      fprintf (stderr, "      --simulate-infrared       simuate infrared layer\n");
+      fprintf (stderr, "      --simulate-infrared       simulate infrared layer\n");
     }
   if (subhelp == help_lab || subhelp == help_basic)
     {
-      fprintf (stderr, "  lab <subcommnad>\n");
+      fprintf (stderr, "  lab <subcommand>\n");
       fprintf (stderr, "    various commands useful for testing.\n");
     }
   if (subhelp == help_lab)
     {
       fprintf (stderr, "    Supported commands are:\n");
-      fprintf (stderr, "      dufay-xyY: print report about Dufaycolor resau "
+      fprintf (stderr, "      dufay-xyY: print report about Dufaycolor reseau "
                        "xyY table from Color Cinematography book\n");
       fprintf (stderr, "      dufay-spectra: print report about Dufaycolor "
-                       "resau spectra\n");
+                       "reseau spectra\n");
       fprintf (stderr, "      dufay-synthetic: print report about mixing "
                        "Dufaycolor reseau from known dyes\n");
       fprintf (stderr, "      wratten-xyz: print report about Wratten "
@@ -328,8 +331,8 @@ print_help (char *err = NULL)
                        "characteristic H&D (Hurter and Driffield) curve\n");
       fprintf (stderr, "      save-dyes: save spectra of dyes\n");
       fprintf (stderr, "      save-responses: save responses of filter+emulsion\n");
-      fprintf (stderr, "      save-ssf-jason: save spectral sensitivity "
-                       "functions to jsason file for dcamprof\n");
+      fprintf (stderr, "      save-ssf-json: save spectral sensitivity "
+                       "functions to json file for dcamprof\n");
       fprintf (stderr, "      render-target: render color target\n");
       fprintf (stderr, "      render-wb-target: render color target with auto "
                        "white balance\n");
@@ -341,8 +344,7 @@ print_help (char *err = NULL)
                "      render-tone-curve: save tone curve in linear gamma\n");
       fprintf (stderr,
                "      render-tone-hd-curve: save tone curve as hd curve\n");
-      fprintf (stderr,
-               "      scan-primaries: produce matrix profile specialized for "
+      fprintf (stderr, "      scan-primaries: produce matrix profile specialized for "
                "given backlight, response and process dyes\n");
       fprintf (stderr, "    Each subcommand has its own help.\n");
     }
@@ -351,7 +353,7 @@ print_help (char *err = NULL)
       fprintf (stderr,
                "  read-chemcad-spectra <out_filename> <in_filename>\n");
       fprintf (stderr,
-               "    read spectrum in checad database format and output it in "
+               "    read spectrum in chemcad database format and output it in "
                "format that can be built into libcolorscreen\n");
     }
   if (subhelp == help_has_regular_screen || subhelp == help_basic)
@@ -365,7 +367,7 @@ print_help (char *err = NULL)
     {
       fprintf (stderr, "      --save-tiles=base         save tiles analyzed to tiff\n");
       fprintf (stderr, "      --save-fft=base           save FFT of tiles analyzed to tiff\n");
-      fprintf (stderr, "      --threshold=n             threshold needed to consier tile to have regular screen\n");
+      fprintf (stderr, "      --threshold=n             threshold needed to consider tile to have regular screen\n");
       fprintf (stderr, "      --tile-threshold=n        percentage of tiles needed to agree on given period\n");
       fprintf (stderr, "      --gamma=n                 gamma of input scan (2.2 is default)\n");
       fprintf (stderr, "      --xtiles                  number of tiles to analyze in horizontal direction\n");
@@ -382,7 +384,7 @@ print_help (char *err = NULL)
     {
       fprintf (stderr, "     parameters of screen geometry detection:\n");
       fprintf (stderr, "      --scanner-type=type       specify scanner type\n");
-      fprintf (stderr, "                                suported scanner types:");
+      fprintf (stderr, "                                supported scanner types:");
       for (int j = 0; j < max_scanner_type; j++)
         {
           if (!(j % 4))
@@ -392,7 +394,7 @@ print_help (char *err = NULL)
       fprintf (stderr, "\n");
       fprintf (stderr, "      --screen-type=type       specify scanner type\n");
       fprintf (stderr,
-               "                                suported scanner types:");
+               "                                supported scanner types:");
       for (int j = 0; j < max_scr_type; j++)
         {
           if (!(j % 4))
@@ -409,7 +411,7 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --no-optimize-colors      do not automatically "
                        "optimize colors of patches for screen discovery\n");
       fprintf (stderr, "      --min-screen-percentage   specify minimum "
-                       "perdentage of screen to be detected\n");
+                       "percentage of screen to be detected\n");
       fprintf (stderr, "      --max-unknown-screen-range maximum range of screen with undetected patches considered to be acceptable.\n");
       fprintf (stderr, "      --min-patch-contrast      specify minimum "
                        "contrast for patch detection\n");
@@ -424,7 +426,7 @@ print_help (char *err = NULL)
     }
   if (subhelp == help_autodetect)
     {
-      fprintf (stderr, "      --top/bottom/left/right   asume that given part "
+      fprintf (stderr, "      --top/bottom/left/right   assume that given part "
                        "of scan is not part of an image and insert fake point "
                        "to improve geometry of binding tape\n");
       fprintf (stderr, "      --border-top=percent      assume that given percent from the "
@@ -444,15 +446,15 @@ print_help (char *err = NULL)
     {
       fprintf (stderr, "      --save-csv=name.csv       save MTF (or match) in CSV format\n");
       fprintf (stderr, "      --save-psf=name.tif       save point spread function to TIF\n");
-      fprintf (stderr, "      --load-quickmtf=name.txt  Load masured MTF data in quickmtf format\n");
+      fprintf (stderr, "      --load-quickmtf=name.txt  Load measured MTF data in quickmtf format\n");
       fprintf (stderr, "      --match  		        match measured MTF with parameters\n");
       fprintf (stderr, "      --save-matched-psf=n.tif  save point spread function of matched parameters to TIF\n");
       fprintf (stderr, "      --sigma=pixel_sigma       specify lens sigma (gaussian blur) in pixels\n");
-      fprintf (stderr, "      --blur-diamete=pixels     specify lens blur diameter (used only when there is no info for difraction model)\n");
-      fprintf (stderr, "      --pixel-ptch=um 		specify sensor's pixel size in micrometers\n");
+      fprintf (stderr, "      --blur-diameter=pixels    specify lens blur diameter (used only when there is no info for difraction model)\n");
+      fprintf (stderr, "      --pixel-pitch=um 		specify sensor's pixel size in micrometers\n");
       fprintf (stderr, "      --wavelength=nm 		specify light wavelength in nanometers\n");
       fprintf (stderr, "      --f-stop=f 		specify lens nominal f-stop\n");
-      fprintf (stderr, "      --defocus=mm 		specify defocus from sensor plane in milimenters\n");
+      fprintf (stderr, "      --defocus=mm 		specify defocus from sensor plane in millimeters\n");
       fprintf (stderr, "      --scan-dpi=dpi 		specify scanned DPI (needed to compute magnification)\n");
     }
   fprintf (stderr, "\n");
@@ -482,6 +484,9 @@ parse_enum (const char *arg, const char *errmsg)
 }
 
 
+/* Parse ARG according to NAMES of length MAX and return its value.
+   On error, use ERRMSG to print error.  */
+
 template <typename T, typename P, const P names[], int max>
 T
 parse_enum_property (const char *arg, const char *errmsg)
@@ -498,14 +503,14 @@ parse_enum_property (const char *arg, const char *errmsg)
   return (T)max;
 }
 
-/* Parse output mode.  */
+/* Parse output mode MODE.  */
 static enum render_type_t
 parse_mode (const char *mode)
 {
   for (int i = 0; i < render_type_max; i++)
     if (!strcmp (mode, render_type_properties[i].name))
       return (render_type_t)i;
-  fprintf (stderr, "Unkonwn rendering mode:%s\n", mode);
+  fprintf (stderr, "Unknown rendering mode:%s\n", mode);
   fprintf (stderr, "Possible values are: ");
   for (int i = 0; i < render_type_max; i++)
     fprintf (stderr, " %s", render_type_properties[i].name);
@@ -514,17 +519,17 @@ parse_mode (const char *mode)
   return render_type_max;
 }
 
-/* Parse output mode.  */
+/* Parse output profile PROFILE.  */
 static enum render_parameters::output_profile_t
 parse_output_profile (const char *profile)
 {
   return parse_enum<enum render_parameters::output_profile_t,
                     render_parameters::output_profile_names,
                     (int)render_parameters::output_profile_max> (
-      profile, "Unkonwn output profile:%s\n");
+      profile, "Unknown output profile:%s\n");
 }
 
-/* Parse color model.  */
+/* Parse color model MODEL.  */
 static enum render_parameters::color_model_t
 parse_color_model (const char *model)
 {
@@ -532,10 +537,10 @@ parse_color_model (const char *model)
                              render_parameters::color_model_property,
                              render_parameters::color_model_properties,
                              (int)render_parameters::color_model_max> (
-      model, "Unkonwn color model:%s\n");
+      model, "Unknown color model:%s\n");
 }
 
-/* Parse demosaicing algorithm.  */
+/* Parse demosaicing algorithm MODEL.  */
 static enum image_data::demosaicing_t
 parse_demosaic (const char *model)
 {
@@ -543,22 +548,25 @@ parse_demosaic (const char *model)
                     property_t,
                     image_data::demosaic_names,
                     (int)image_data::demosaic_max> (
-      model, "Unkonwn demosaicing algorithm:%s\n");
+      model, "Unknown demosaicing algorithm:%s\n");
 }
 
+/* Parse scanner type MODEL.  */
 static scanner_type
 parse_scanner_type (const char *model)
 {
   return parse_enum_property<scanner_type, property_t, scanner_type_names,
-                    (int)max_scanner_type> (model, "Unkonwn scanner type:%s\n");
+                    (int)max_scanner_type> (model, "Unknown scanner type:%s\n");
 }
+/* Parse screen type MODEL.  */
 static enum scr_type
 parse_scr_type (const char *model)
 {
   return parse_enum_property<scr_type, scr_type_property_t, scr_names, (int)max_scr_type> (
-      model, "Unkonwn screen type:%s\n");
+      model, "Unknown screen type:%s\n");
 }
 
+/* Parse dye balance MODEL.  */
 static enum render_parameters::dye_balance_t
 parse_dye_balance (const char *model)
 {
@@ -566,12 +574,12 @@ parse_dye_balance (const char *model)
                     property_t,
                     render_parameters::dye_balance_names,
                     (int)render_parameters::dye_balance_max> (
-      model, "Unkonwn dye balance:%s\n");
+      model, "Unknown dye balance:%s\n");
 }
 
-/* If there is --arg param or --arg=param at the command line
-   position *i, return non-NULL and in the first case increment
-   *i.  */
+/* If there is --ARG param or --ARG=PARAM at the command line
+   position *I, return non-NULL and in the first case increment *I.
+   ARGC and ARGV are standard command line arguments.  */
 
 static char *
 arg_with_param (int argc, char **argv, int *i, const char *arg)
@@ -592,6 +600,8 @@ arg_with_param (int argc, char **argv, int *i, const char *arg)
   return NULL;
 }
 
+/* Parse float parameter ARG with value VAL in range MIN...MAX.
+   ARGC and ARGV are standard command line arguments and I is current position.  */
 static bool
 parse_float_param (int argc, char **argv, int *i, const char *arg, float &val,
                    float min, float max)
@@ -612,6 +622,8 @@ parse_float_param (int argc, char **argv, int *i, const char *arg, float &val,
     }
   return true;
 }
+/* Parse int parameter ARG with value VAL in range MIN...MAX.
+   ARGC and ARGV are standard command line arguments and I is current position.  */
 static bool
 parse_int_param (int argc, char **argv, int *i, const char *arg, int &val,
                  int min, int max)
@@ -633,6 +645,7 @@ parse_int_param (int argc, char **argv, int *i, const char *arg, int &val,
   return true;
 }
 
+/* Parse common flags in ARGC/ARGV at position I.  */
 bool
 parse_common_flags (int argc, char **argv, int *i)
 {
@@ -676,6 +689,9 @@ parse_common_flags (int argc, char **argv, int *i)
   return false;
 }
 
+/* Parse regular screen detection parameters in DSPARAMS.
+   IN_PANORAMA is true if we are in panorama mode.
+   ARGC, ARGV and I are standard command line arguments.  */
 static bool
 parse_detect_regular_screen_params (detect_regular_screen_params &dsparams,
                                     bool in_panorama, int argc, char **argv,
@@ -736,6 +752,7 @@ parse_detect_regular_screen_params (detect_regular_screen_params &dsparams,
   return true;
 }
 
+/* Parse geometry PROFILE.  */
 static enum render_to_file_params::output_geometry
 parse_geometry (const char *profile)
 {
@@ -743,9 +760,10 @@ parse_geometry (const char *profile)
                     property_t,
                     render_to_file_params::geometry_names,
                     render_to_file_params::max_geometry>
-		    (profile, "Unkonwn geometry:%s\n");
+		    (profile, "Unknown geometry:%s\n");
 }
 
+/* Implement "render" command with ARGC and ARGV.  */
 static int
 render_cmd (int argc, char **argv)
 {
@@ -967,6 +985,7 @@ render_cmd (int argc, char **argv)
   return 0;
 }
 
+/* Implement "autodetect" command with ARGC and ARGV.  */
 static int
 autodetect (int argc, char **argv)
 {
@@ -1170,6 +1189,7 @@ autodetect (int argc, char **argv)
   return 0;
 }
 
+/* Implement "analyze-backlight" command with ARGC and ARGV.  */
 void
 analyze_backlight (int argc, char **argv)
 {
@@ -1221,23 +1241,23 @@ analyze_backlight (int argc, char **argv)
       if (!blacks_scan->load (blacks, false, &error, &progress, demosaic == image_data::demosaic_monochromatic_bayer_corrected ? image_data::demosaic_monochromatic : demosaic))
 	{
 	  progress.pause_stdout ();
-	  fprintf (stderr, "Can not load black reference %s: %s\n", blacks, error);
+	  fprintf (stderr, "Cannot load black reference %s: %s\n", blacks, error);
 	  exit (1);
 	}
     }
   progress.set_task ("analyzing backlight", 1);
   auto cor = backlight_correction_parameters::analyze_scan (scan, gamma, blacks_scan.get ());
-  progress.set_task ("writting output", 1);
+  progress.set_task ("writing output", 1);
   FILE *out = fopen (out_file, "wt");
   if (!out)
     {
       progress.pause_stdout ();
-      perror ("Can not open output file");
+      perror ("Cannot open output file");
       exit (1);
     }
   if (!cor->save (out))
     {
-      fprintf (stderr, "Can not write %s\n", out_file);
+      fprintf (stderr, "Cannot write %s\n", out_file);
       exit (1);
     }
   fclose (out);
@@ -1252,6 +1272,7 @@ analyze_backlight (int argc, char **argv)
     }
 }
 
+/* Return correction factor for given MODE and RES.  */
 coord_t
 get_correction (scanner_blur_correction_parameters::correction_mode mode, finetune_result &res)
 {
@@ -1272,6 +1293,14 @@ get_correction (scanner_blur_correction_parameters::correction_mode mode, finetu
   abort ();
 }
 
+/* Analyze scanner blur in SCAN using parameters PARAM and RPARAM.
+   STRIP_XSTEPS, STRIP_YSTEPS, XSTEPS, YSTEPS, XSUBSTEPS, YSUBSTEPS specify
+   sampling density.
+   FLAGS specify optimization flags.
+   REOPTIMIZE_STRIP_WIDTHS enables strip width optimization.
+   SKIPMIN and SKIPMAX specify ranges to skip.
+   TOLERANCE is robust average tolerance.
+   PROGRESS is progress info.  */
 std::unique_ptr <scanner_blur_correction_parameters>
 analyze_scanner_blur_img (scr_to_img_parameters &param, 
 			  render_parameters &rparam,
@@ -1317,6 +1346,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
   return worker.step3 ();
 }
 
+/* Implement "analyze-scanner-blur" command with ARGC and ARGV.  */
 static bool
 analyze_scanner_blur (int argc, char **argv)
 {
@@ -1428,7 +1458,7 @@ analyze_scanner_blur (int argc, char **argv)
   if (!scan.load (infname, false, &error, &progress))
     {
       progress.pause_stdout ();
-      fprintf (stderr, "Can not load %s: %s\n", infname, error);
+      fprintf (stderr, "Cannot load %s: %s\n", infname, error);
       return 1;
     }
   /* Load color screen and rendering parameters.  */
@@ -1452,7 +1482,7 @@ analyze_scanner_blur (int argc, char **argv)
   if (!load_csp (in, &param, &dparam, &rparam, &solver_param, &error))
     {
       progress.pause_stdout ();
-      fprintf (stderr, "Can not load %s: %s\n", cspname, error);
+      fprintf (stderr, "Cannot load %s: %s\n", cspname, error);
       return 1;
     }
   fclose (in);
@@ -1474,7 +1504,7 @@ analyze_scanner_blur (int argc, char **argv)
       if (rparam.tile_adjustments_width != scan.stitch->params.width
 	  || rparam.tile_adjustments_height != scan.stitch->params.height)
 	rparam.set_tile_adjustments_dimensions (scan.stitch->params.width, scan.stitch->params.height);
-      progress.set_task ("analyzig tiles", scan.stitch->params.width * scan.stitch->params.height);
+      progress.set_task ("analyzing tiles", scan.stitch->params.width * scan.stitch->params.height);
       for (int y = 0; y < scan.stitch->params.height; y++)
         for (int x = 0; x < scan.stitch->params.width; x++)
 	  {
@@ -1511,7 +1541,7 @@ analyze_scanner_blur (int argc, char **argv)
 
   if (!outcspname)
     outcspname = cspname;
-  progress.set_task ("writting parameters", 1);
+  progress.set_task ("writing parameters", 1);
   FILE *out = fopen (outcspname, "wt");
   if (verbose)
     {
@@ -1528,7 +1558,7 @@ analyze_scanner_blur (int argc, char **argv)
   if (!save_csp (out, &param, &dparam, &rparam, &solver_param))
     {
       progress.pause_stdout ();
-      fprintf (stderr, "Can not save %s\n", outcspname);
+      fprintf (stderr, "Cannot save %s\n", outcspname);
       return 1;
     }
   fclose (out);
@@ -1563,6 +1593,7 @@ analyze_scanner_blur (int argc, char **argv)
   return 0;
 }
 
+/* Implement "dump-lcc" command with ARGC and ARGV.  */
 bool
 dump_lcc (int argc, char **argv)
 {
@@ -1585,6 +1616,7 @@ dump_lcc (int argc, char **argv)
   return 0;
 }
 
+/* Implement "export-lcc" command with ARGC and ARGV.  */
 void
 export_lcc (int argc, char **argv)
 {
@@ -1597,7 +1629,7 @@ export_lcc (int argc, char **argv)
   if (!scan.load (argv[0], false, &error, &progress))
     {
       progress.pause_stdout ();
-      fprintf (stderr, "Can not load %s: %s\n", argv[0], error);
+      fprintf (stderr, "Cannot load %s: %s\n", argv[0], error);
       exit (1);
     }
   if (!scan.backlight_corr)
@@ -1611,12 +1643,12 @@ export_lcc (int argc, char **argv)
   if (!out)
     {
       progress.pause_stdout ();
-      perror ("Can not open output file");
+      perror ("Cannot open output file");
       exit (1);
     }
   if (!cor->save (out))
     {
-      fprintf (stderr, "Can not write %s\n", argv[1]);
+      fprintf (stderr, "Cannot write %s\n", argv[1]);
       exit (1);
     }
   fclose (out);
@@ -1632,6 +1664,7 @@ export_lcc (int argc, char **argv)
   // delete cor; // shared_ptr handles this
 }
 
+/* Implement "read-chemcad-spectra" command with ARGC and ARGV.  */
 void
 read_chemcad (int argc, char **argv)
 {
@@ -1649,7 +1682,7 @@ read_chemcad (int argc, char **argv)
     f = fopen (argv[0], "rt");
   if (!f)
     {
-      perror ("can not open input file");
+      perror ("cannot open input file");
       exit (1);
     }
   while (getc (f) != '\n')
@@ -1684,14 +1717,16 @@ read_chemcad (int argc, char **argv)
     }
 }
 
+/* Parse dye type PROFILE.  */
 static enum spectrum_dyes_to_xyz::dyes
 parse_dyes (const char *profile)
 {
   return parse_enum_property<enum spectrum_dyes_to_xyz::dyes, property_t,
                     spectrum_dyes_to_xyz::dyes_names,
                     (int)spectrum_dyes_to_xyz::dyes_max> (profile,
-                                                          "Unkonwn dye:%s\n");
+                                                          "Unknown dye:%s\n");
 }
+/* Parse illuminant IL and return its temperature in TEMPERATURE.  */
 static enum spectrum_dyes_to_xyz::illuminants
 parse_illuminant (const char *il, luminosity_t *temperature)
 {
@@ -1725,22 +1760,25 @@ parse_illuminant (const char *il, luminosity_t *temperature)
   fprintf (stderr, "\n");
   exit (1);
 }
+/* Parse tone curve PROFILE.  */
 static enum tone_curve::tone_curves
 parse_tone_curve (const char *profile)
 {
   return parse_enum_property<enum tone_curve::tone_curves, property_t,
-                             tone_curve::tone_curve_names,
-                             (int)tone_curve::tone_curve_max> (
-      profile, "Unkonwn tone curve:%s\n");
+                              tone_curve::tone_curve_names,
+                              (int)tone_curve::tone_curve_max> (
+      profile, "Unknown tone curve:%s\n");
 }
+/* Parse film response PROFILE.  */
 static enum spectrum_dyes_to_xyz::responses
 parse_response (const char *profile)
 {
   return parse_enum_property<enum spectrum_dyes_to_xyz::responses, property_t,
                     spectrum_dyes_to_xyz::responses_names,
                     (int)spectrum_dyes_to_xyz::responses_max> (
-      profile, "Unkonwn film response:%s\n");
+      profile, "Unknown film response:%s\n");
 }
+/* Parse characteristic curve PROFILE.  */
 static enum spectrum_dyes_to_xyz::characteristic_curves
 parse_characteristic_curve (const char *profile)
 {
@@ -1748,9 +1786,12 @@ parse_characteristic_curve (const char *profile)
                     property_t,
                     spectrum_dyes_to_xyz::characteristic_curve_names,
                     (int)spectrum_dyes_to_xyz::characteristic_curves_max> (
-      profile, "Unkonwn film characteristic curve:%s\n");
+      profile, "Unknown film characteristic curve:%s\n");
 }
 
+/* Parse filename and camera setup from ARGC/ARGV.
+   Return result in FILENAME and SPEC.
+   If PATCH_SIZES is true, parse patch sizes as well.  */
 void
 parse_filename_and_camera_setup (int argc, char **argv, const char **filename,
                                  spectrum_dyes_to_xyz &spec,
@@ -1761,7 +1802,7 @@ parse_filename_and_camera_setup (int argc, char **argv, const char **filename,
     {
       fprintf (stderr,
                "Expected parameters <filename> <backlight> <dyes> "
-               "<film-sensitivity> <film-characteristic-cuve>%s\n",
+               "<film-sensitivity> <film-characteristic-curve>%s\n",
                patch_sizes ? " <rscal> <gscale> <bscale>" : "");
       if (patch_sizes)
         fprintf (stderr,
@@ -1789,6 +1830,7 @@ parse_filename_and_camera_setup (int argc, char **argv, const char **filename,
     }
 }
 
+/* Implement "digital-laboratory" command with ARGC and ARGV.  */
 void
 digital_laboratory (int argc, char **argv)
 {
@@ -1845,8 +1887,8 @@ digital_laboratory (int argc, char **argv)
       if (argc != 3 && argc != 5)
         {
           printf ("Expected <red-file> <green-file> <blue-file> "
-                  "<film-characterstic-curve>\n");
-          printf ("         or <red-file> <film-characterstic-curve>\n");
+                  "<film-characteristic-curve>\n");
+          printf ("         or <red-file> <film-characteristic-curve>\n");
           print_help ();
         }
       spectrum_dyes_to_xyz spec;
@@ -1860,8 +1902,8 @@ digital_laboratory (int argc, char **argv)
       if (argc != 3 && argc != 5)
         {
           printf ("Expected <red-file> <green-file> <blue-file> "
-                  "<film-characterstic-curve>\n");
-          printf ("         or <red-file> <film-characterstic-curve>\n");
+                  "<film-characteristic-curve>\n");
+          printf ("         or <red-file> <film-characteristic-curve>\n");
           print_help ();
         }
       spectrum_dyes_to_xyz spec;
@@ -1874,7 +1916,7 @@ digital_laboratory (int argc, char **argv)
     {
       if (argc != 3)
         {
-          printf ("Expected <illuminat_filename> <illuminant>\n");
+          printf ("Expected <illuminant_filename> <illuminant>\n");
           print_help ();
         }
       spectrum_dyes_to_xyz spec;
@@ -1901,7 +1943,7 @@ digital_laboratory (int argc, char **argv)
       if (argc != 6)
         {
           printf ("Expected <red_filename> <green_filename> <blue_filename> "
-                  "<dyes> <respnse>\n");
+                  "<dyes> <response>\n");
           exit (1);
         }
       spectrum_dyes_to_xyz spec;
@@ -1914,7 +1956,7 @@ digital_laboratory (int argc, char **argv)
     {
       if (argc != 4)
         {
-          printf ("Expected <filename> <dyes> <respnse>\n");
+          printf ("Expected <filename> <dyes> <response>\n");
           exit (1);
         }
       spectrum_dyes_to_xyz spec;
@@ -1961,7 +2003,7 @@ digital_laboratory (int argc, char **argv)
       parse_filename_and_camera_setup (argc - 1, argv + 1, &filename, spec);
       if (!spec.tiff_with_spectra_photo (filename))
         {
-          fprintf (stderr, "Error writting %s\n", filename);
+          fprintf (stderr, "Error writing %s\n", filename);
           exit (1);
         }
     }
@@ -2175,7 +2217,7 @@ digital_laboratory (int argc, char **argv)
       if (!scan.load (argv[1], false, &error, &progress))
 	{
 	  progress.pause_stdout ();
-	  fprintf (stderr, "Can not load %s: %s\n", argv[1], error);
+	  fprintf (stderr, "Cannot load %s: %s\n", argv[1], error);
 	  exit(1);
 	}
       FILE *in = fopen (argv[2], "rt");
@@ -2194,7 +2236,7 @@ digital_laboratory (int argc, char **argv)
       if (!load_csp (in, &param1, NULL, &rparam1, NULL, &error))
 	{
 	  progress.pause_stdout ();
-	  fprintf (stderr, "Can not load %s: %s\n", argv[2], error);
+	  fprintf (stderr, "Cannot load %s: %s\n", argv[2], error);
 	  exit(1);
 	}
       fclose (in);
@@ -2214,14 +2256,14 @@ digital_laboratory (int argc, char **argv)
       if (!load_csp (in, &param2, NULL, &rparam2, NULL, &error))
 	{
 	  progress.pause_stdout ();
-	  fprintf (stderr, "Can not load %s: %s\n", argv[3], error);
+	  fprintf (stderr, "Cannot load %s: %s\n", argv[3], error);
 	  exit(1);
 	}
       fclose (in);
       double deltae_avg, deltae_max;
       if (!compare_deltae (scan, param1, rparam1, param2, rparam2, argc == 4 ? NULL : argv[4], &deltae_avg, &deltae_max, &progress))
         {
-	  fprintf (stderr, "Comparsion failed\n");
+	  fprintf (stderr, "Comparison failed\n");
 	  exit (1);
         }
       progress.pause_stdout ();
@@ -2246,24 +2288,24 @@ digital_laboratory (int argc, char **argv)
       if (!scan.load (argv[1], false, &error, &progress))
 	{
 	  progress.pause_stdout ();
-	  fprintf (stderr, "Can not load %s: %s\n", argv[1], error);
+	  fprintf (stderr, "Cannot load %s: %s\n", argv[1], error);
 	  exit(1);
 	}
       if (verbose)
 	{
 	  progress.pause_stdout ();
-	  printf ("Loading image %s\n", argv[1]);
+	  printf ("Loading image %s\n", argv[2]);
 	  progress.resume_stdout ();
 	}
       if (!scan2.load (argv[2], false, &error, &progress))
 	{
 	  progress.pause_stdout ();
-	  fprintf (stderr, "Can not load %s: %s\n", argv[2], error);
+	  fprintf (stderr, "Cannot load %s: %s\n", argv[2], error);
 	  exit(1);
 	}
       if (scan.width != scan2.width || scan.height != scan2.height)
         {
-	  fprintf (stderr, "Image dimensions differs: %ix%i compared to %ix%i\n",
+	  fprintf (stderr, "Image dimensions differ: %ix%i compared to %ix%i\n",
 		   scan.width, scan.height, scan2.width, scan2.height);
 	  exit (1);
         }
@@ -2273,7 +2315,7 @@ digital_laboratory (int argc, char **argv)
 	  float max_diff = 0;
 	  if (!scan2.has_grayscale_or_ir ())
 	    {
-	      fprintf (stderr, "One image has BW/IR channel while other does not\n");
+	      fprintf (stderr, "One image has BW/IR channel while the other does not\n");
 	      exit (1);
 	    }
 	  for (int y = 0; y < scan.height; y++)
@@ -2285,7 +2327,7 @@ digital_laboratory (int argc, char **argv)
 	    }
 	  if (max_diff * 2 * 65536 > 1)
 	    {
-	      fprintf (stderr, "Images differs; max difference is %f\n", max_diff);
+	      fprintf (stderr, "Images differ; max difference is %f\n", max_diff);
 	      exit (1);
 	    }
         }
@@ -2294,7 +2336,7 @@ digital_laboratory (int argc, char **argv)
 	  float max_diff = 0;
 	  if (!scan2.has_rgb ())
 	    {
-	      fprintf (stderr, "One image has RGB channel while other does not\n");
+	      fprintf (stderr, "One image has RGB channel while the other does not\n");
 	      exit (1);
 	    }
 	  for (int y = 0; y < scan.height; y++)
@@ -2312,7 +2354,7 @@ digital_laboratory (int argc, char **argv)
 	    }
 	  if (max_diff * 2 * 65536 > 1)
 	    {
-	      fprintf (stderr, "Images differs; max difference is %f\n", max_diff);
+	      fprintf (stderr, "Images differ; max difference is %f\n", max_diff);
 	      exit (1);
 	    }
         }
@@ -2322,8 +2364,9 @@ digital_laboratory (int argc, char **argv)
     print_help ();
 }
 
+/* Return screen channel C from result R.  */
 static rgbdata
-get_screen_chanel (finetune_result &r, int c)
+get_screen_channel (finetune_result &r, int c)
 {
 	if (c == 0)
 		return r.screen_red;
@@ -2332,6 +2375,7 @@ get_screen_chanel (finetune_result &r, int c)
 	return r.screen_blue;
 }
 
+/* Implement "finetune" command with ARGC and ARGV.  */
 static void
 finetune (int argc, char **argv)
 {
@@ -2452,7 +2496,7 @@ finetune (int argc, char **argv)
   if (!scan.load (infname, true, &error, &progress))
     {
       progress.pause_stdout ();
-      fprintf (stderr, "Can not load %s: %s\n", infname, error);
+      fprintf (stderr, "Cannot load %s: %s\n", infname, error);
       exit (1);
     }
 
@@ -2469,7 +2513,7 @@ finetune (int argc, char **argv)
   if (!load_csp (in, &param, NULL, &rparam, NULL, &error))
     {
       progress.pause_stdout ();
-      fprintf (stderr, "Can not load %s: %s\n", cspname, error);
+      fprintf (stderr, "Cannot load %s: %s\n", cspname, error);
       exit (1);
     }
   fclose (in);
@@ -2653,7 +2697,7 @@ finetune (int argc, char **argv)
         }
       else if (flags & finetune_scanner_mtf_channel_defocus)
         {
-          printf ("Detected screen chanel blurs\n");
+          printf ("Detected screen channel blurs\n");
           for (int y = 0; y < ysteps; y++)
             {
               for (int x = 0; x < xsteps; x++)
@@ -2682,7 +2726,7 @@ finetune (int argc, char **argv)
         }
       else if (flags & finetune_screen_channel_blurs)
         {
-          printf ("Detected screen chanel blurs\n");
+          printf ("Detected screen channel blurs\n");
           for (int y = 0; y < ysteps; y++)
             {
               for (int x = 0; x < xsteps; x++)
@@ -2739,7 +2783,7 @@ finetune (int argc, char **argv)
           if (error)
             {
               progress.pause_stdout ();
-              fprintf (stderr, "Can not open tiff file %s: %s\n",
+              fprintf (stderr, "Cannot open tiff file %s: %s\n",
                        screen_blur_tiff_name, error);
               exit (1);
             }
@@ -2799,7 +2843,7 @@ finetune (int argc, char **argv)
               if (!sharpness.write_row ())
                 {
                   progress.pause_stdout ();
-                  fprintf (stderr, "Error writting tiff file %s\n", argv[2]);
+                  fprintf (stderr, "Error writing tiff file %s\n", argv[2]);
                   exit (1);
                 }
             }
@@ -2815,7 +2859,7 @@ finetune (int argc, char **argv)
 	    {
 	      for (int x = 0; x < xsteps; x++)
 		if (results[y * xsteps + x].success)
-		  get_screen_chanel (results[y * xsteps + x],c).print (stdout);
+		  get_screen_channel (results[y * xsteps + x],c).print (stdout);
 		else
 		  printf ("  ------");
 	      printf ("\n");
@@ -2835,7 +2879,7 @@ finetune (int argc, char **argv)
 	      if (error)
 		{
 		  progress.pause_stdout ();
-		  fprintf (stderr, "Can not open tiff file %s: %s\n",
+		  fprintf (stderr, "Cannot open tiff file %s: %s\n",
 			   screen_blur_tiff_name, error);
 		  exit (1);
 		}
@@ -2846,13 +2890,13 @@ finetune (int argc, char **argv)
 		      sharpness.put_hdr_pixel (x, 1, 0, 0);
 		    else
 		      sharpness.put_hdr_pixel (
-			  x, get_screen_chanel (results[y * xsteps + x], c).red * 1,
-			  get_screen_chanel (results[y * xsteps + x], c).green * 1,
-			  get_screen_chanel (results[y * xsteps + x], c).blue * 1);
+			  x, get_screen_channel (results[y * xsteps + x], c).red * 1,
+			  get_screen_channel (results[y * xsteps + x], c).green * 1,
+			  get_screen_channel (results[y * xsteps + x], c).blue * 1);
 		  if (!sharpness.write_row ())
 		    {
 		      progress.pause_stdout ();
-		      fprintf (stderr, "Error writting tiff file %s\n", argv[2]);
+		      fprintf (stderr, "Error writing tiff file %s\n", argv[2]);
 		      exit (1);
 		    }
 		}
@@ -2884,7 +2928,7 @@ finetune (int argc, char **argv)
           if (error)
             {
               progress.pause_stdout ();
-              fprintf (stderr, "Can not open tiff file %s: %s\n",
+              fprintf (stderr, "Cannot open tiff file %s: %s\n",
                        screen_blur_tiff_name, error);
               exit (1);
             }
@@ -2901,7 +2945,7 @@ finetune (int argc, char **argv)
               if (!sharpness.write_row ())
                 {
                   progress.pause_stdout ();
-                  fprintf (stderr, "Error writting tiff file %s\n", argv[2]);
+                  fprintf (stderr, "Error writing tiff file %s\n", argv[2]);
                   exit (1);
                 }
             }
@@ -2961,7 +3005,7 @@ finetune (int argc, char **argv)
           if (error)
             {
               progress.pause_stdout ();
-              fprintf (stderr, "Can not open tiff file %s: %s\n",
+              fprintf (stderr, "Cannot open tiff file %s: %s\n",
                        strip_width_tiff_name, error);
               exit (1);
             }
@@ -2983,7 +3027,7 @@ finetune (int argc, char **argv)
               if (!sharpness.write_row ())
                 {
                   progress.pause_stdout ();
-                  fprintf (stderr, "Error writting tiff file %s\n", argv[2]);
+                  fprintf (stderr, "Error writing tiff file %s\n", argv[2]);
                   exit (1);
                 }
             }
@@ -3015,7 +3059,7 @@ finetune (int argc, char **argv)
           if (error)
             {
               progress.pause_stdout ();
-              fprintf (stderr, "Can not open tiff file %s: %s\n",
+              fprintf (stderr, "Cannot open tiff file %s: %s\n",
                        position_tiff_name, error);
               exit (1);
             }
@@ -3040,7 +3084,7 @@ finetune (int argc, char **argv)
               if (!sharpness.write_row ())
                 {
                   progress.pause_stdout ();
-                  fprintf (stderr, "Error writting tiff file %s\n", argv[2]);
+                  fprintf (stderr, "Error writing tiff file %s\n", argv[2]);
                   exit (1);
                 }
             }
@@ -3048,6 +3092,7 @@ finetune (int argc, char **argv)
     }
 }
 
+/* Implement "dump-patch-density" command with ARGC and ARGV.  */
 int
 dump_patch_density (int argc, char **argv)
 {
@@ -3062,7 +3107,7 @@ dump_patch_density (int argc, char **argv)
   if (!scan.load (argv[0], false, &error, &progress))
     {
       progress.pause_stdout ();
-      fprintf (stderr, "Can not load %s: %s\n", argv[0], error);
+      fprintf (stderr, "Cannot load %s: %s\n", argv[0], error);
       return 1;
     }
 
@@ -3079,7 +3124,7 @@ dump_patch_density (int argc, char **argv)
   if (!load_csp (in, &param, NULL, &rparam, NULL, &error))
     {
       progress.pause_stdout ();
-      fprintf (stderr, "Can not load %s: %s\n", argv[1], error);
+      fprintf (stderr, "Cannot load %s: %s\n", argv[1], error);
       return 1;
     }
   fclose (in);
@@ -3102,6 +3147,7 @@ dump_patch_density (int argc, char **argv)
 static const char *save_project_filename;
 static const char *load_project_filename;
 
+/* Implement "stitch" command with ARGC and ARGV.  */
 int
 stitch (int argc, char **argv)
 {
@@ -3143,7 +3189,7 @@ stitch (int argc, char **argv)
         prj->params.screen_tiles = true;
       else if (!strcmp (argv[i], "--known-screen-tiles"))
         prj->params.known_screen_tiles = true;
-      else if (!strcmp (argv[i], "--vrbose"))
+      else if (!strcmp (argv[i], "--verbose"))
         verbose = true;
       else if (!strcmp (argv[i], "--panorama-map"))
         prj->params.panorama_map = true;
@@ -3230,7 +3276,7 @@ stitch (int argc, char **argv)
           if (fnames[0].length () != fnames[1].length ())
             {
               fprintf (stderr,
-                       "Can not determine organization of tiles in '%s'.  "
+                       "Cannot determine organization of tiles in '%s'.  "
                        "Expect filenames of kind <name>yx<suffix>.tif\n",
                        fnames[0].c_str ());
               return 1;
@@ -3244,7 +3290,7 @@ stitch (int argc, char **argv)
           if (fnames[0][indexpos] != '1' || fnames[0][indexpos + 1] != '1')
             {
               fprintf (stderr,
-                       "Can not determine organization of tiles in '%s'.  "
+                       "Cannot determine organization of tiles in '%s'.  "
                        "Expect filenames of kind <name>yx<suffix>.tif\n",
                        fnames[0].c_str ());
               return 1;
@@ -3316,6 +3362,7 @@ stitch (int argc, char **argv)
   return 0;
 }
 
+/* Implement "mtf" command with ARGC and ARGV.  */
 int
 do_mtf (int argc, char **argv)
 {
@@ -3358,7 +3405,7 @@ do_mtf (int argc, char **argv)
 	sigma = flt;
       else if (parse_float_param (argc, argv, &i, "blur-diameter", flt, 0, 10))
 	blur_diameter = flt;
-      else if (parse_float_param (argc, argv, &i, "pixel-ptch", flt, 0, 1000))
+      else if (parse_float_param (argc, argv, &i, "pixel-pitch", flt, 0, 1000))
 	pixel_pitch = flt;
       else if (parse_float_param (argc, argv, &i, "wavelength", flt, 300, 2000))
 	wavelength = flt;
@@ -3397,7 +3444,7 @@ do_mtf (int argc, char **argv)
 	}
       if (!load_csp (in, NULL, NULL, &rparam, NULL, &error))
 	{
-	  fprintf (stderr, "Can not load %s: %s\n", cspname, error);
+	  fprintf (stderr, "Cannot load %s: %s\n", cspname, error);
 	  return 1;
 	}
       fclose (in);
@@ -3460,7 +3507,7 @@ do_mtf (int argc, char **argv)
 	}
       progress.pause_stdout ();
       if (verbose)
-        printf ("Average error sqare: %f\n\n", sqsum / rparam.sharpen.scanner_mtf.measurements.size ());
+        printf ("Average error square: %f\n\n", sqsum / rparam.sharpen.scanner_mtf.measurements.size ());
       printf ("scanner_mtf_sigma_px: %f\n", estimated.sigma);
       printf ("scanner_mtf_blur_diameter_px: %f\n", estimated.blur_diameter);
       printf ("scanner_mtf_pixel_pitch_um: %f\n", estimated.pixel_pitch);
@@ -3511,6 +3558,7 @@ do_mtf (int argc, char **argv)
   return 0;
 }
 
+/* Implement "adjust-par" command with ARGC and ARGV.  */
 int
 do_adjust_par (int argc, char **argv)
 {
@@ -3600,6 +3648,7 @@ do_adjust_par (int argc, char **argv)
   return 0;
 }
 
+/* Implement "has-regular-screen" command with ARGC and ARGV.  */
 int
 do_has_regular_screen (int argc, char **argv)
 {
@@ -3736,7 +3785,7 @@ do_has_regular_screen (int argc, char **argv)
 	      fflush (errors);
 	    }
 	  progress.pause_stdout ();
-	  fprintf (stderr, "Can not load %s: %s\n", filenames[i], error);
+	  fprintf (stderr, "Cannot load %s: %s\n", filenames[i], error);
 	  progress.resume_stdout ();
 	  error_found = true;
 	  if (filenames.size () > 1)
@@ -3823,6 +3872,7 @@ do_has_regular_screen (int argc, char **argv)
   return error_found ? -1 : found ? 1 : 0;
 }
 
+/* Entry point for colorscreen.  */
 int
 main (int argc, char **argv)
 {
