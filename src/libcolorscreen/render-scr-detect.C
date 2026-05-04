@@ -428,6 +428,8 @@ render_scr_detect::precompute_all (bool grayscale_needed, bool normalized_patche
   if (progress && progress->cancel_requested ())
     return false;
   m_color_class_map = color_class_cache.get (p, progress, &m_color_class_map_id);
+  if (!m_color_class_map)
+    return false;
   if (progress && progress->cancel_requested ())
     return false;
   return render::precompute_all (grayscale_needed, normalized_patches, {1/3.0, 1/3.0, 1/3.0}, progress);
@@ -441,6 +443,8 @@ render_scr_detect::precompute_rgbdata (progress_info *progress)
     return true;
   struct precomputed_rgbdata_params p = {m_img.id, m_scr_detect.m_param, m_params.gamma, &m_img, &m_scr_detect, this};
   m_precomputed_rgbdata_holder = precomputed_rgbdata_cache.get (p, progress, &m_precomputed_rgbdata_id);
+  if (!m_precomputed_rgbdata_holder)
+    return false;
   m_precomputed_rgbdata = m_precomputed_rgbdata_holder->m_data;
   return m_precomputed_rgbdata;
 }
