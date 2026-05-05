@@ -3,6 +3,8 @@
    This file is part of Color-Screen.  */
 
 #include <string>
+#include <string_view>
+#include <charconv>
 #include <unistd.h>
 #include <sys/time.h>
 #ifdef _OPENMP
@@ -99,6 +101,7 @@ print_help (char *err = NULL)
                        "brightness and dark point\n");
       fprintf (stderr, "      --dye-balance=mode        force dye balance\n");
       fprintf (stderr, "                                supported modes:");
+      for (int j = 0; j < (int)render_parameters::dye_balance_max; j++)
         fprintf (stderr, " %s", render_parameters::dye_balance_names[j].name);
       fprintf (stderr, "\n");
       fprintf (stderr, "      --output-gamma=gamma      set gamma correction "
@@ -582,22 +585,26 @@ parse_dye_balance (const char *model)
    ARGC and ARGV are standard command line arguments.  */
 
 static char *
-arg_with_param (int argc, char **argv, int *i, const char *arg)
+arg_with_param (int argc, char **argv, int *i, std::string_view arg)
 {
-  char *cargv = argv[*i];
-  if (cargv[0] != '-' || cargv[1] != '-')
-    return NULL;
-  if (!strcmp (cargv + 2, arg))
+  std::string_view cargv (argv[*i]);
+  if (cargv.size() < 2 || cargv[0] != '-' || cargv[1] != '-')
+    return nullptr;
+  
+  std::string_view opt = cargv.substr (2);
+  if (opt.size() >= arg.size() && opt.substr(0, arg.size()) == arg)
     {
-      if (*i == argc - 1)
-        print_help ();
-      (*i)++;
-      return argv[*i];
+      if (opt.size() == arg.size())
+        {
+          if (*i == argc - 1)
+            print_help ();
+          (*i)++;
+          return argv[*i];
+        }
+      if (opt[arg.size()] == '=')
+        return argv[*i] + arg.size() + 3;
     }
-  size_t len = strlen (arg);
-  if (!strncmp (cargv + 2, arg, len) && cargv[len + 2] == '=')
-    return cargv + len + 3;
-  return NULL;
+  return nullptr;
 }
 
 /* Parse float parameter ARG with value VAL in range MIN...MAX.
@@ -609,9 +616,13 @@ parse_float_param (int argc, char **argv, int *i, const char *arg, float &val,
   const char *param = arg_with_param (argc, argv, i, arg);
   if (!param)
     return false;
-  if (!sscanf (param, "%f", &val))
+
+  std::string_view s (param);
+  auto [ptr, ec] = std::from_chars (s.data (), s.data () + s.size (), val);
+
+  if (ec != std::errc ())
     {
-      fprintf (stderr, "invalid parameter of %s\n", param);
+      fprintf (stderr, "invalid parameter of %s: %s\n", arg, param);
       print_help ();
     }
   if (val < min || val > max)
@@ -631,9 +642,13 @@ parse_int_param (int argc, char **argv, int *i, const char *arg, int &val,
   const char *param = arg_with_param (argc, argv, i, arg);
   if (!param)
     return false;
-  if (!sscanf (param, "%i", &val))
+
+  std::string_view s (param);
+  auto [ptr, ec] = std::from_chars (s.data (), s.data () + s.size (), val);
+
+  if (ec != std::errc ())
     {
-      fprintf (stderr, "invalid parameter of %s\n", param);
+      fprintf (stderr, "invalid parameter of %s: %s\n", arg, param);
       print_help ();
     }
   if (val < min || val > max)
@@ -649,42 +664,43 @@ parse_int_param (int argc, char **argv, int *i, const char *arg, int &val,
 bool
 parse_common_flags (int argc, char **argv, int *i)
 {
-  int threads = -1;
-  if (!strcmp (argv[*i], "--help") || !strcmp (argv[*i], "-h"))
+  std::string_view arg (argv[*i]);
+  if (arg == "--help" || arg == "-h")
     {
       print_help ();
-      return true;
+      exit (0);
     }
-  else if (!strcmp (argv[*i], "--verbose"))
+  if (arg == "--version")
+    {
+      printf ("colorscreen version %s\n", PACKAGE_VERSION);
+      exit (0);
+    }
+  if (arg == "--verbose")
     {
       verbose = true;
       return true;
     }
-  else if (!strcmp (argv[*i], "--version") || !strcmp (argv[*i], "-v"))
-    {
-      printf ("Color-Screen version %s\nDeveloped by Jan Hubicka\nhttps://github.com/janhubicka/Color-Screen/wiki\n", PACKAGE_VERSION);
-      exit (0);
-    }
-  else if (!strcmp (argv[*i], "--verbose-tasks"))
+  if (arg == "--verbose-tasks")
     {
       verbose_tasks = true;
       return true;
     }
-  else if (parse_int_param (argc, argv, i, "threads", threads, 1, 1024 * 1024))
-    {
-#ifdef _OPENMP
-      omp_set_num_threads (threads);
-#else
-      if (threads != 1)
-        fprintf (stderr, "Warning: libcolorscreen is compiled without OpenMP "
-                         "requires for multithreading\n");
-#endif
-      return true;
-    }
-  else if (!strcmp (argv[*i], "--time-report"))
+  if (arg == "--time-report")
     {
       colorscreen::time_report = true;
       return true;
+    }
+  if (const char *param = arg_with_param (argc, argv, i, "threads"))
+    {
+      int nthreads;
+      std::string_view s (param);
+      if (std::from_chars (s.data (), s.data () + s.size (), nthreads).ec == std::errc ())
+        {
+#ifdef _OPENMP
+          omp_set_num_threads (nthreads);
+#endif
+          return true;
+        }
     }
   return false;
 }
@@ -792,6 +808,7 @@ render_cmd (int argc, char **argv)
 
   for (int i = 0; i < argc; i++)
     {
+      std::string_view arg (argv[i]);
       if (parse_common_flags (argc, argv, &i))
         ;
       else if (parse_detect_regular_screen_params (dsparams, false, argc, argv,
@@ -799,13 +816,13 @@ render_cmd (int argc, char **argv)
         ;
       else if (const char *str = arg_with_param (argc, argv, &i, "mode"))
         rtparam.type = parse_mode (str);
-      else if (!strcmp (argv[i], "--hdr"))
+      else if (arg == "--hdr")
         rfparams.hdr = true;
-      else if (!strcmp (argv[i], "--dng"))
+      else if (arg == "--dng")
         rfparams.dng = true;
-      else if (!strcmp (argv[i], "--solver"))
+      else if (arg == "--solver")
         solver = true;
-      else if (!strcmp (argv[i], "--ignore-infrared"))
+      else if (arg == "--ignore-infrared")
         ignore_infrared = true;
       else if (const char *str
                = arg_with_param (argc, argv, &i, "output-profile"))
@@ -823,11 +840,11 @@ render_cmd (int argc, char **argv)
       else if (const char *str
                = arg_with_param (argc, argv, &i, "color-model"))
         color_model = parse_color_model (str);
-      else if (!strcmp (argv[i], "--detect-geometry"))
+      else if (arg == "--detect-geometry")
         detect_geometry = true;
-      else if (!strcmp (argv[i], "--auto-color-model"))
+      else if (arg == "--auto-color-model")
         detect_color_model = true;
-      else if (!strcmp (argv[i], "--auto-levels"))
+      else if (arg == "--auto-levels")
         detect_brightness = true;
       else if (const char *str
                = arg_with_param (argc, argv, &i, "dye-balance"))
@@ -1001,6 +1018,7 @@ autodetect (int argc, char **argv)
   subhelp = help_autodetect;
   for (int i = 0; i < argc; i++)
     {
+      std::string_view arg (argv[i]);
       if (parse_common_flags (argc, argv, &i))
         ;
       else if (parse_detect_regular_screen_params (dsparams, false, argc, argv,
@@ -1010,13 +1028,13 @@ autodetect (int argc, char **argv)
         cspname = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "report"))
         repname = str;
-      else if (!strcmp (argv[i], "--auto-color-model"))
+      else if (arg == "--auto-color-model")
         detect_color_model = true;
-      else if (!strcmp (argv[i], "--no-auto-color-model"))
+      else if (arg == "--no-auto-color-model")
         detect_color_model = false;
-      else if (!strcmp (argv[i], "--auto-levels"))
+      else if (arg == "--auto-levels")
         detect_brightness = true;
-      else if (!strcmp (argv[i], "--no-auto-levels"))
+      else if (arg == "--no-auto-levels")
         detect_brightness = false;
       else if (!infname)
         infname = argv[i];
@@ -1367,49 +1385,50 @@ analyze_scanner_blur (int argc, char **argv)
 
   for (int i = 0; i < argc; i++)
     {
+      std::string_view arg (argv[i]);
       if (parse_common_flags (argc, argv, &i))
         ;
       else if (const char *str = arg_with_param (argc, argv, &i, "out"))
         outcspname = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "out-tiff"))
         outtifname = str;
-      else if (!strcmp (argv[i], "--reoptimize-strip-widths"))
+      else if (arg == "--reoptimize-strip-widths")
         reoptimize_strip_widths = true;
-      else if (!strcmp (argv[i], "--no-reoptimize-strip-widths"))
+      else if (arg == "--no-reoptimize-strip-widths")
         reoptimize_strip_widths = false;
-      else if (!strcmp (argv[i], "--optimize-screen-blur"))
+      else if (arg == "--optimize-screen-blur")
         {
           flags &= ~(finetune_screen_channel_blurs | finetune_screen_blur | finetune_scanner_mtf_defocus | finetune_scanner_mtf_channel_defocus);
           flags |= finetune_screen_blur;
         }
-      else if (!strcmp (argv[i], "--optimize-screen-channel-blur"))
+      else if (arg == "--optimize-screen-channel-blur")
         {
           flags &= ~(finetune_screen_channel_blurs | finetune_screen_blur | finetune_scanner_mtf_defocus | finetune_scanner_mtf_channel_defocus);
           flags |= finetune_screen_channel_blurs;
         }
-      else if (!strcmp (argv[i], "--optimize-scanner-mtf-defocus"))
+      else if (arg == "--optimize-scanner-mtf-defocus")
         {
           flags &= ~(finetune_screen_channel_blurs | finetune_screen_blur | finetune_scanner_mtf_defocus | finetune_scanner_mtf_channel_defocus);
           flags |= finetune_scanner_mtf_defocus;
         }
-      else if (!strcmp (argv[i], "--optimize-scanner-mtf-channel-defocus"))
+      else if (arg == "--optimize-scanner-mtf-channel-defocus")
         {
           flags &= ~(finetune_screen_channel_blurs | finetune_screen_blur | finetune_scanner_mtf_defocus | finetune_scanner_mtf_channel_defocus);
           flags |= finetune_scanner_mtf_channel_defocus;
         }
-      else if (!strcmp (argv[i], "--optimize-fog"))
+      else if (arg == "--optimize-fog")
         flags |= finetune_fog;
-      else if (!strcmp (argv[i], "--no-optimize-fog"))
+      else if (arg == "--no-optimize-fog")
         flags &= ~finetune_fog;
-      else if (!strcmp (argv[i], "--simulate-infrared"))
+      else if (arg == "--simulate-infrared")
         flags |= finetune_simulate_infrared;
-      else if (!strcmp (argv[i], "--normalize"))
+      else if (arg == "--normalize")
         flags &= ~finetune_no_normalize;
-      else if (!strcmp (argv[i], "--no-normalize"))
+      else if (arg == "--no-normalize")
         flags |= finetune_no_normalize;
-      else if (!strcmp (argv[i], "--data-collection"))
+      else if (arg == "--data-collection")
         flags &= ~finetune_no_data_collection;
-      else if (!strcmp (argv[i], "--no-data-collection"))
+      else if (arg == "--no-data-collection")
         flags |= finetune_no_data_collection;
       else if (parse_int_param (argc, argv, &i, "width", xsteps, 1,
                                 1024 * 1024))
@@ -2400,37 +2419,38 @@ finetune (int argc, char **argv)
 
   for (int i = 0; i < argc; i++)
     {
+      std::string_view arg (argv[i]);
       if (parse_common_flags (argc, argv, &i))
         ;
-      else if (!strcmp (argv[i], "--optimize-position"))
+      else if (arg == "--optimize-position")
         flags |= finetune_position;
-      else if (!strcmp (argv[i], "--optimize-fog"))
+      else if (arg == "--optimize-fog")
         flags |= finetune_fog;
-      else if (!strcmp (argv[i], "--optimize-screen-blur"))
+      else if (arg == "--optimize-screen-blur")
         flags |= finetune_screen_blur;
-      else if (!strcmp (argv[i], "--optimize-scanner-mtf-sigma"))
+      else if (arg == "--optimize-scanner-mtf-sigma")
         flags |= finetune_scanner_mtf_sigma;
-      else if (!strcmp (argv[i], "--optimize-scanner-mtf-defocus"))
+      else if (arg == "--optimize-scanner-mtf-defocus")
         flags |= finetune_scanner_mtf_defocus;
-      else if (!strcmp (argv[i], "--optimize-scanner-mtf-channel-defocus"))
+      else if (arg == "--optimize-scanner-mtf-channel-defocus")
         flags |= finetune_scanner_mtf_channel_defocus;
-      else if (!strcmp (argv[i], "--optimize-screen-channel-blur"))
+      else if (arg == "--optimize-screen-channel-blur")
         flags |= finetune_screen_channel_blurs;
-      else if (!strcmp (argv[i], "--optimize-emulsion-blur"))
+      else if (arg == "--optimize-emulsion-blur")
         flags |= finetune_emulsion_blur;
-      else if (!strcmp (argv[i], "--use-monochrome-channel"))
+      else if (arg == "--use-monochrome-channel")
         flags |= finetune_bw;
-      else if (!strcmp (argv[i], "--optimize-strips"))
+      else if (arg == "--optimize-strips")
         flags |= finetune_strips;
-      else if (!strcmp (argv[i], "--optimize-sharpening"))
+      else if (arg == "--optimize-sharpening")
         flags |= finetune_sharpening;
-      else if (!strcmp (argv[i], "--no-normalize"))
+      else if (arg == "--no-normalize")
         flags |= finetune_no_normalize;
-      else if (!strcmp (argv[i], "--no-least-squares"))
+      else if (arg == "--no-least-squares")
         flags |= finetune_no_least_squares;
-      else if (!strcmp (argv[i], "--no-data-collection"))
+      else if (arg == "--no-data-collection")
         flags |= finetune_no_data_collection;
-      else if (!strcmp (argv[i], "--simulate-infrared"))
+      else if (arg == "--simulate-infrared")
         flags |= finetune_simulate_infrared;
       else if (parse_int_param (argc, argv, &i, "multitile", multitile, 1,
                                 100))
@@ -3160,6 +3180,7 @@ stitch (int argc, char **argv)
 
   for (int i = 0; i < argc; i++)
     {
+      std::string_view arg (argv[i]);
       float flt;
       if (parse_common_flags (argc, argv, &i))
         ;
@@ -3177,27 +3198,27 @@ stitch (int argc, char **argv)
       else if (const char *str
                = arg_with_param (argc, argv, &i, "load-project"))
         load_project_filename = str;
-      else if (!strcmp (argv[i], "--no-cpfind"))
+      else if (arg == "--no-cpfind")
         prj->params.cpfind = 0;
-      else if (!strcmp (argv[i], "--cpfind"))
+      else if (arg == "--cpfind")
         prj->params.cpfind = 1;
-      else if (!strcmp (argv[i], "--cpfind-verification"))
+      else if (arg == "--cpfind-verification")
         prj->params.cpfind = 2;
-      else if (!strcmp (argv[i], "--load-registration"))
+      else if (arg == "--load-registration")
         prj->params.load_registration = true;
-      else if (!strcmp (argv[i], "--screen-tiles"))
+      else if (arg == "--screen-tiles")
         prj->params.screen_tiles = true;
-      else if (!strcmp (argv[i], "--known-screen-tiles"))
+      else if (arg == "--known-screen-tiles")
         prj->params.known_screen_tiles = true;
-      else if (!strcmp (argv[i], "--verbose"))
+      else if (arg == "--verbose")
         verbose = true;
-      else if (!strcmp (argv[i], "--panorama-map"))
+      else if (arg == "--panorama-map")
         prj->params.panorama_map = true;
-      else if (!strcmp (argv[i], "--reoptimize-colors"))
+      else if (arg == "--reoptimize-colors")
         prj->params.reoptimize_colors = true;
-      else if (!strcmp (argv[i], "--limit-directions"))
+      else if (arg == "--limit-directions")
         prj->params.limit_directions = true;
-      else if (!strcmp (argv[i], "--no-limit-directions"))
+      else if (arg == "--no-limit-directions")
         prj->params.limit_directions = false;
       else if (parse_float_param (argc, argv, &i, "outer-tile-border", flt, 0,
                                   100))
@@ -3226,15 +3247,15 @@ stitch (int argc, char **argv)
       else if (parse_float_param (argc, argv, &i, "max-max-distance", flt, 0,
                                   100000))
         prj->params.max_max_distance = flt;
-      else if (!strcmp (argv[i], "--geometry-info"))
+      else if (arg == "--geometry-info")
         prj->params.geometry_info = true;
-      else if (!strcmp (argv[i], "--individual-geometry-info"))
+      else if (arg == "--individual-geometry-info")
         prj->params.individual_geometry_info = true;
-      else if (!strcmp (argv[i], "--outliers-info"))
+      else if (arg == "--outliers-info")
         prj->params.outliers_info = true;
-      else if (!strcmp (argv[i], "--diffs"))
+      else if (arg == "--diffs")
         prj->params.diffs = true;
-      else if (!strncmp (argv[i], "--", 2))
+      else if (arg.size() >= 2 && arg[0] == '-' && arg[1] == '-')
         {
           fprintf (stderr, "Unknown parameter: %s\n", argv[i]);
           print_help (argv[i]);
@@ -3378,20 +3399,21 @@ do_mtf (int argc, char **argv)
   render_parameters rparam;
   for (int i = 0; i < argc; i++)
     {
+      std::string_view arg (argv[i]);
       float flt;
       if (parse_common_flags (argc, argv, &i))
         ;
-      else if (!strcmp (argv[i], "--match"))
+      else if (arg == "--match")
 	match = true;
-      else if (!strcmp (argv[i], "--simplex"))
+      else if (arg == "--simplex")
 	flags |= mtf_parameters::estimate_use_nmsimplex;
-      else if (!strcmp (argv[i], "--no-simplex"))
+      else if (arg == "--no-simplex")
 	flags &= ~mtf_parameters::estimate_use_nmsimplex;
-      else if (!strcmp (argv[i], "--multifit"))
+      else if (arg == "--multifit")
 	flags |= mtf_parameters::estimate_use_multifit;
-      else if (!strcmp (argv[i], "--no-multifit"))
+      else if (arg == "--no-multifit")
 	flags &= ~mtf_parameters::estimate_use_multifit;
-      else if (!strcmp (argv[i], "--verbose-solving"))
+      else if (arg == "--verbose-solving")
 	flags |= mtf_parameters::estimate_verbose_solving;
       else if (const char *str = arg_with_param (argc, argv, &i, "save-csv"))
         csvname = str;
@@ -3664,6 +3686,7 @@ do_has_regular_screen (int argc, char **argv)
 
   for (int i = 0; i < argc; i++)
     {
+      std::string_view arg (argv[i]);
       float flt;
       if (parse_common_flags (argc, argv, &i))
         ;
@@ -3685,7 +3708,7 @@ do_has_regular_screen (int argc, char **argv)
 	param.min_period = flt;
       else if (parse_float_param (argc, argv, &i, "max-period", flt, 2, 128))
 	param.max_period = flt;
-      else if (!strcmp (argv[i], "--must-match"))
+      else if (arg == "--must-match")
 	must_match = true;
       else if (parse_float_param (argc, argv, &i, "gamma", flt, 0, 2))
 	param.gamma = flt;
@@ -3888,37 +3911,47 @@ main (int argc, char **argv)
       break;
   argv += i;
   argc -= i;
+
   if (argc == 0)
-    print_help ();
-  else if (!strcmp (argv[0], "render"))
-    ret = render_cmd (argc - 1, argv + 1);
-  else if (!strcmp (argv[0], "autodetect"))
-    ret = autodetect (argc - 1, argv + 1);
-  else if (!strcmp (argv[0], "analyze-backlight"))
-    analyze_backlight (argc - 1, argv + 1);
-  else if (!strcmp (argv[0], "analyze-scanner-blur"))
-    ret = analyze_scanner_blur (argc - 1, argv + 1);
-  else if (!strcmp (argv[0], "finetune"))
-    finetune (argc - 1, argv + 1);
-  else if (!strcmp (argv[0], "export-lcc"))
-    export_lcc (argc - 1, argv + 1);
-  else if (!strcmp (argv[0], "dump-lcc"))
-    dump_lcc (argc - 1, argv + 1);
-  else if (!strcmp (argv[0], "stitch"))
-    ret = stitch (argc - 1, argv + 1);
-  else if (!strcmp (argv[0], "dump-patch-density"))
-    ret = dump_patch_density (argc - 1, argv + 1);
-  else if (!strcmp (argv[0], "digital-laboratory") || !strcmp (argv[0], "lab"))
-    digital_laboratory (argc - 1, argv + 1);
-  else if (!strcmp (argv[0], "read-chemcad-spectra"))
-    read_chemcad (argc - 1, argv + 1);
-  else if (!strcmp (argv[0], "has-regular-screen"))
-    ret = do_has_regular_screen (argc - 1, argv + 1);
-  else if (!strcmp (argv[0], "mtf"))
-    ret = do_mtf (argc - 1, argv + 1);
-  else if (!strcmp (argv[0], "adjust-par"))
-    ret = do_adjust_par (argc - 1, argv + 1);
-  else
-    print_help ();
-  return ret;
+    {
+      print_help ();
+      return 0;
+    }
+
+  std::string_view cmd (argv[0]);
+  
+  struct command_t {
+    std::string_view name;
+    int (*func)(int, char **);
+    std::string_view alias;
+  };
+
+  static const command_t commands[] = {
+    {"render", [](int ac, char **av) { return render_cmd (ac, av); }, ""},
+    {"autodetect", [](int ac, char **av) { return autodetect (ac, av); }, ""},
+    {"analyze-backlight", [](int ac, char **av) { analyze_backlight (ac, av); return 0; }, ""},
+    {"analyze-scanner-blur", [](int ac, char **av) { return (int)analyze_scanner_blur (ac, av); }, ""},
+    {"finetune", [](int ac, char **av) { finetune (ac, av); return 0; }, ""},
+    {"export-lcc", [](int ac, char **av) { export_lcc (ac, av); return 0; }, ""},
+    {"dump-lcc", [](int ac, char **av) { return (int)dump_lcc (ac, av); }, ""},
+    {"stitch", [](int ac, char **av) { return stitch (ac, av); }, ""},
+    {"dump-patch-density", [](int ac, char **av) { return dump_patch_density (ac, av); }, ""},
+    {"digital-laboratory", [](int ac, char **av) { digital_laboratory (ac, av); return 0; }, "lab"},
+    {"read-chemcad-spectra", [](int ac, char **av) { read_chemcad (ac, av); return 0; }, ""},
+    {"has-regular-screen", [](int ac, char **av) { return do_has_regular_screen (ac, av); }, ""},
+    {"mtf", [](int ac, char **av) { return do_mtf (ac, av); }, ""},
+    {"adjust-par", [](int ac, char **av) { return do_adjust_par (ac, av); }, ""}
+  };
+
+  for (const auto &c : commands)
+    {
+      if (cmd == c.name || (!c.alias.empty() && cmd == c.alias))
+        {
+          ret = c.func (argc - 1, argv + 1);
+          return ret;
+        }
+    }
+
+  print_help ();
+  return 0;
 }
