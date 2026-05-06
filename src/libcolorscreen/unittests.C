@@ -1691,49 +1691,67 @@ static luminosity_t get_test_gray(image_data *img, int_point_t p, int, void *)
 
 static bool test_slanted_edge_mtf()
 {
-  printf("Testing slanted edge MTF...\n");
-  int w = 512, h = 512;
-  image_data img;
-  if (!img.set_dimensions(w, h, false, true))
-    return false;
+  printf("Testing slanted edge MTF (realistic anti-aliased model)...\n");
+  int w = 128, h = 128;
+  int scale = 16;
+  int w_hi = w * scale, h_hi = h * scale;
   
-  // Render slanted edge (step function)
+  image_data img_hi;
+  if (!img_hi.set_dimensions(w_hi, h_hi, false, true))
+    return false;
+  img_hi.maxval = 65535;
+  
   double angle = 5.0 * M_PI / 180.0;
   double cos_a = std::cos(angle);
   double sin_a = std::sin(angle);
-  for (int y = 0; y < h; y++)
-    for (int x = 0; x < w; x++)
+  for (int y = 0; y < h_hi; y++)
+    for (int x = 0; x < w_hi; x++)
       {
-        double d = (x - w/2) * cos_a + (y - h/2) * sin_a;
-        img.put_pixel(x, y, d > 0 ? 60000 : 5000);
+        double d = (x - w_hi/2.0) * cos_a + (y - h_hi/2.0) * sin_a;
+        img_hi.put_pixel(x, y, d > 0 ? 60000 : 5000);
       }
       
-  // Setup blur parameters
-  sharpen_parameters sp;
-  sp.mode = sharpen_parameters::blur_deconvolution;
-  sp.scanner_mtf.f_stop = 8;
-  sp.scanner_mtf.scan_dpi = 4000;
-  sp.scanner_mtf.defocus = 0.01; // 10 microns displacement
-  sp.scanner_mtf.pixel_pitch = 3.76;
-  sp.scanner_mtf.wavelength = 550;
-  sp.scanner_mtf_scale = 1.0;
-  sp.supersample = 1;
+  // Setup blur parameters for 16x resolution
+  sharpen_parameters sp_hi;
+  sp_hi.mode = sharpen_parameters::blur_deconvolution;
+  sp_hi.scanner_mtf.f_stop = 8;
+  sp_hi.scanner_mtf.scan_dpi = 4000 * scale; // 64000 DPI
+  sp_hi.scanner_mtf.defocus = 0.01; // 10 microns displacement
+  sp_hi.scanner_mtf.pixel_pitch = 3.76;
+  sp_hi.scanner_mtf.wavelength = 550;
+  sp_hi.scanner_mtf_scale = 1.0;
+  sp_hi.supersample = 1;
 
-  std::vector<float> blurred_data(w * h);
+  std::vector<float> blurred_hi(w_hi * h_hi);
   
   if (!deconvolve<luminosity_t, float, image_data *, void *, get_test_gray, float>(
-        blurred_data.data(), &img, nullptr, w, h, sp, nullptr, true))
+        blurred_hi.data(), &img_hi, nullptr, w_hi, h_hi, sp_hi, nullptr, true))
     {
       printf("Blurring failed\n");
       return false;
     }
 
   image_data blurred;
-  if (!blurred.set_dimensions(w, h, false, true))
+  if (!blurred.set_dimensions(w, h, true, true))
     return false;
-  for (int i = 0; i < w * h; i++)
-    blurred.put_pixel(i % w, i / w, (uint16_t)std::clamp(blurred_data[i] * 65535.0f, 0.0f, 65535.0f));
+  blurred.maxval = 65535;
+  
+  // Downscale by averaging 16x16 blocks
+  for (int y = 0; y < h; y++)
+    for (int x = 0; x < w; x++)
+      {
+        double sum = 0;
+        for (int dy = 0; dy < scale; dy++)
+          for (int dx = 0; dx < scale; dx++)
+            sum += blurred_hi[(y * scale + dy) * w_hi + (x * scale + dx)];
+        uint16_t val = (uint16_t)std::clamp(sum / (scale * scale) * 65535.0, 0.0, 65535.0);
+        blurred.put_pixel(x, y, val);
+        blurred.put_rgb_pixel(x, y, {val, val, val});
+      }
     
+  blurred.save_tiff("slanted_edge_test_realistic.tif");
+  printf("Saved test image to slanted_edge_test_realistic.tif\n");
+
   // Analyze edge
   render_parameters rparam;
   rparam.gamma = 1.0;
@@ -1765,8 +1783,8 @@ static bool test_slanted_edge_mtf()
       return false;
     }
     
-  // Check some MTF values (should be roughly decreasing)
-  printf("Freq 0.1: %f, Freq 0.4: %f\n", 
+  // Check some MTF values (should be in percentage 0..100)
+  printf("Freq 0.1: %f%%, Freq 0.4: %f%%\n", 
          (double)measurement.get_contrast(measurement.size() / 10), 
          (double)measurement.get_contrast(4 * measurement.size() / 10));
          
@@ -1775,10 +1793,18 @@ static bool test_slanted_edge_mtf()
       printf("MTF is not decreasing!\n");
       return false;
     }
+
+  if (measurement.get_contrast(1) < 50.0)
+    {
+      printf("MTF values seem too low (expecting percentages 0..100)\n");
+      return false;
+    }
     
   return true;
 }
 }
+
+
 
 
 

@@ -68,7 +68,7 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
               weights.push_back(w);
               if (w > max_w) max_w = w;
             }
-          if (max_w > 100)
+          if (max_w > 0.01)
             {
               for (int x = r_left + 1; x < r_right - 1; x++)
                 {
@@ -101,7 +101,7 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
               weights.push_back(w);
               if (w > max_w) max_w = w;
             }
-          if (max_w > 100)
+          if (max_w > 0.01)
             {
               for (int y = r_top + 1; y < r_bottom - 1; y++)
                 {
@@ -319,7 +319,7 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
       double freq = i * Fs / N;
       if (freq > 0.5) // Usually only care up to Nyquist
         break;
-      measurement.add_value(freq, mtf[i]);
+      measurement.add_value(freq, mtf[i] * 100.0);
     }
 
   rparam.sharpen.scanner_mtf.measurements.push_back(measurement);
