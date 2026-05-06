@@ -92,10 +92,6 @@ public:
     return m_params.sigma;
   }
 
-  void print_psf (FILE *);
-
-  void print_mtf (FILE *);
-
   static std::unique_ptr<mtf> get_new_mtf (struct mtf_parameters &, progress_info *);
   typedef lru_cache<mtf_parameters, mtf, get_new_mtf, 10> mtf_cache_t;
 

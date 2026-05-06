@@ -1691,113 +1691,142 @@ static luminosity_t get_test_gray(image_data *img, int_point_t p, int, void *)
 
 static bool test_slanted_edge_mtf()
 {
-  printf("Testing slanted edge MTF (realistic anti-aliased model)...\n");
-  int w = 128, h = 128;
-  int scale = 16;
-  int w_hi = w * scale, h_hi = h * scale;
-  
-  image_data img_hi;
-  if (!img_hi.set_dimensions(w_hi, h_hi, false, true))
-    return false;
-  img_hi.maxval = 65535;
-  
-  double angle = 5.0 * M_PI / 180.0;
-  double cos_a = std::cos(angle);
-  double sin_a = std::sin(angle);
-  for (int y = 0; y < h_hi; y++)
-    for (int x = 0; x < w_hi; x++)
-      {
-        double d = (x - w_hi/2.0) * cos_a + (y - h_hi/2.0) * sin_a;
-        img_hi.put_pixel(x, y, d > 0 ? 60000 : 5000);
-      }
+  bool verbose = false;
+  if (verbose)
+    printf("Testing slanted edge MTF (realistic anti-aliased model)...\n");
+  for (int disp = 0 ; disp < 10; disp++)
+    {
+      int w = 128, h = 128;
+      int scale = 16;
+      int w_hi = w * scale, h_hi = h * scale;
       
-  // Setup blur parameters for 16x resolution
-  sharpen_parameters sp_hi;
-  sp_hi.mode = sharpen_parameters::blur_deconvolution;
-  sp_hi.scanner_mtf.f_stop = 8;
-  sp_hi.scanner_mtf.scan_dpi = 4000 * scale; // 64000 DPI
-  sp_hi.scanner_mtf.defocus = 0.01; // 10 microns displacement
-  sp_hi.scanner_mtf.pixel_pitch = 3.76;
-  sp_hi.scanner_mtf.wavelength = 550;
-  sp_hi.scanner_mtf_scale = 1.0;
-  sp_hi.supersample = 1;
+      image_data img_hi;
+      if (!img_hi.set_dimensions(w_hi, h_hi, false, true))
+	return false;
+      img_hi.maxval = 65535;
+      
+      double angle = 5.0 * M_PI / 180.0;
+      double cos_a = std::cos(angle);
+      double sin_a = std::sin(angle);
+      for (int y = 0; y < h_hi; y++)
+	for (int x = 0; x < w_hi; x++)
+	  {
+	    double d = (x - w_hi/2.0) * cos_a + (y - h_hi/2.0) * sin_a;
+	    img_hi.put_pixel(x, y, d > 0 ? 10000 : 5000);
+	  }
+	  
+      // Setup blur parameters for 16x resolution
+      sharpen_parameters sp_hi;
+      sp_hi.mode = sharpen_parameters::blur_deconvolution;
+      sp_hi.scanner_mtf.f_stop = 8;
+      sp_hi.scanner_mtf.scan_dpi = 4000; 
+      sp_hi.scanner_mtf.defocus = 0.01 * disp; // 10 microns displacement
+      sp_hi.scanner_mtf.pixel_pitch = 3.76;
+      sp_hi.scanner_mtf.wavelength = 750; // IR lifht
+      sp_hi.scanner_mtf_scale = scale;
+      sp_hi.supersample = 1;
 
-  std::vector<float> blurred_hi(w_hi * h_hi);
-  
-  if (!deconvolve<luminosity_t, float, image_data *, void *, get_test_gray, float>(
-        blurred_hi.data(), &img_hi, nullptr, w_hi, h_hi, sp_hi, nullptr, true))
-    {
-      printf("Blurring failed\n");
-      return false;
-    }
+      std::vector<float> blurred_hi(w_hi * h_hi);
+      
+      if (!deconvolve<luminosity_t, float, image_data *, void *, get_test_gray, float>(
+	    blurred_hi.data(), &img_hi, nullptr, w_hi, h_hi, sp_hi, nullptr, true))
+	{
+	  printf("Blurring failed\n");
+	  return false;
+	}
 
-  image_data blurred;
-  if (!blurred.set_dimensions(w, h, true, true))
-    return false;
-  blurred.maxval = 65535;
-  
-  // Downscale by averaging 16x16 blocks
-  for (int y = 0; y < h; y++)
-    for (int x = 0; x < w; x++)
-      {
-        double sum = 0;
-        for (int dy = 0; dy < scale; dy++)
-          for (int dx = 0; dx < scale; dx++)
-            sum += blurred_hi[(y * scale + dy) * w_hi + (x * scale + dx)];
-        uint16_t val = (uint16_t)std::clamp(sum / (scale * scale) * 65535.0, 0.0, 65535.0);
-        blurred.put_pixel(x, y, val);
-        blurred.put_rgb_pixel(x, y, {val, val, val});
-      }
-    
-  blurred.save_tiff("slanted_edge_test_realistic.tif");
-  printf("Saved test image to slanted_edge_test_realistic.tif\n");
+      image_data blurred;
+      if (!blurred.set_dimensions(w, h, true, true))
+	return false;
+      blurred.maxval = 65535;
+      
+      // Downscale by averaging 16x16 blocks
+      for (int y = 0; y < h; y++)
+	for (int x = 0; x < w; x++)
+	  {
+	    double sum = 0;
+	    for (int dy = 0; dy < scale; dy++)
+	      for (int dx = 0; dx < scale; dx++)
+		sum += blurred_hi[(y * scale + dy) * w_hi + (x * scale + dx)];
+	    uint16_t val = (uint16_t)std::clamp(sum / (scale * scale) * 65535.0, 0.0, 65535.0);
+	    blurred.put_pixel(x, y, val);
+	    blurred.put_rgb_pixel(x, y, {val, val, val});
+	  }
+	
+      // Analyze edge
+      render_parameters rparam;
+      rparam.gamma = 1.0;
+      
+      slanted_edge_parameters params;
+      slanted_edge_results res = slanted_edge_mtf(rparam, blurred, blurred.get_area(), params, nullptr);
+      
+      if (!res.success)
+	{
+	  printf("Slanted edge detection failed\n");
+	  return false;
+	}
+	
+      if (verbose)
+        printf("Edge found: (%f,%f) - (%f,%f)\n", (double)res.edge_p1.x, (double)res.edge_p1.y, (double)res.edge_p2.x, (double)res.edge_p2.y);
+      
+      // Verify MTF
+      if (rparam.sharpen.scanner_mtf.measurements.empty())
+	{
+	  printf("No MTF measurement generated\n");
+	  return false;
+	}
+	
+      auto &measurement = rparam.sharpen.scanner_mtf.measurements[0];
+      if (verbose)
+        printf("MTF size: %zu\n", measurement.size());
+      
+      if (measurement.size() < 10)
+	{
+	  printf("MTF too small\n");
+	  return false;
+	}
 
-  // Analyze edge
-  render_parameters rparam;
-  rparam.gamma = 1.0;
-  
-  slanted_edge_parameters params;
-  slanted_edge_results res = slanted_edge_mtf(rparam, blurred, blurred.get_area(), params, nullptr);
-  
-  if (!res.success)
-    {
-      printf("Slanted edge detection failed\n");
-      return false;
-    }
-    
-  printf("Edge found: (%f,%f) - (%f,%f)\n", (double)res.edge_p1.x, (double)res.edge_p1.y, (double)res.edge_p2.x, (double)res.edge_p2.y);
-  
-  // Verify MTF
-  if (rparam.sharpen.scanner_mtf.measurements.empty())
-    {
-      printf("No MTF measurement generated\n");
-      return false;
-    }
-    
-  auto &measurement = rparam.sharpen.scanner_mtf.measurements[0];
-  printf("MTF size: %zu\n", measurement.size());
-  
-  if (measurement.size() < 10)
-    {
-      printf("MTF too small\n");
-      return false;
-    }
-    
-  // Check some MTF values (should be in percentage 0..100)
-  printf("Freq 0.1: %f%%, Freq 0.4: %f%%\n", 
-         (double)measurement.get_contrast(measurement.size() / 10), 
-         (double)measurement.get_contrast(4 * measurement.size() / 10));
-         
-  if (measurement.get_contrast(measurement.size() / 10) < measurement.get_contrast(4 * measurement.size() / 10))
-    {
-      printf("MTF is not decreasing!\n");
-      return false;
-    }
+      mtf m (sp_hi.scanner_mtf);
+      if (! m.precompute (NULL))
+	{
+	  printf("MTF precomputation\n");
+	  return false;
+	}
+	
+      bool ok = true;
+      for (size_t i = 0; i < measurement.size () && ok; i++)
+	if (fabs (measurement.get_contrast (i) - m.get_mtf (measurement.get_freq (i)) * 100) > 5)
+	  ok = false;
+      if (!ok)
+	{
+	  for (size_t i = 0; i < measurement.size (); i++)
+	     printf ("Freq %.3f %f.1%% should be %f.1%%, diff %f.1%%\n", measurement.get_freq (i),
+		     measurement.get_contrast (i), m.get_mtf (measurement.get_freq (i)) * 100,
+		     fabs (measurement.get_contrast (i) - m.get_mtf (measurement.get_freq (i)) * 100));
+	  blurred.save_tiff("slanted_edge_test_realistic.tif");
+	  printf("Saved test image to slanted_edge_test_realistic.tif\n");
+	  return false;
+	}
+#if 0
+      // Check some MTF values (should be in percentage 0..100)
+      printf("Freq 0.1: %f%% should be %f%%, Freq 0.4: %f%% should be %f%%\n", 
+	     (double)measurement.get_contrast(measurement.size() / 10), 
+	     (double)m.get_mtf (measurement.get_freq (measurement.size() / 10)) * 100.0,
+	     (double)measurement.get_contrast(4 * measurement.size() / 10),
+	     (double)m.get_mtf (measurement.get_freq (4 * measurement.size() / 10)) * 100.0);
+#endif
+	     
+      if (measurement.get_contrast(measurement.size() / 10) < measurement.get_contrast(4 * measurement.size() / 10))
+	{
+	  printf("MTF is not decreasing!\n");
+	  return false;
+	}
 
-  if (measurement.get_contrast(1) < 50.0)
-    {
-      printf("MTF values seem too low (expecting percentages 0..100)\n");
-      return false;
+      if (measurement.get_contrast(1) < 50.0)
+	{
+	  printf("MTF values seem too low (expecting percentages 0..100)\n");
+	  return false;
+	}
     }
     
   return true;

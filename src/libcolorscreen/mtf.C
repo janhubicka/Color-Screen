@@ -1184,15 +1184,6 @@ mtf::precompute_psf (progress_info *progress, bool parallel, const char *filenam
   return true;
 }
 
-void
-mtf::print_psf (FILE *f)
-{
-  luminosity_t scale = get_psf (0);
-  printf ("psf radius %f\n", m_psf_radius);
-  for (int i = 0; i < m_psf_radius * 10; i++)
-    fprintf (f, "%1.3f %1.3f\n", i * 0.1, get_psf (i * 0.1) / scale);
-}
-
 std::unique_ptr<mtf>
 mtf::get_new_mtf (struct mtf_parameters &p, progress_info *)
 {
