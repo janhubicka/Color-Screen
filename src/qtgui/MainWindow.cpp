@@ -5023,19 +5023,25 @@ void MainWindow::onDistanceMeasured(colorscreen::point_t p1, colorscreen::point_
 
 void MainWindow::onMeasureMtfRequested(bool checked) {
   if (checked) {
+    auto success = std::make_shared<bool>(false);
     runAreaComputation(
         tr("Select an area containing a slanted edge to compute its MTF"),
         tr("Measure MTF of a slanted edge"),
         [this]() { m_sharpnessPanel->setMeasureMtfEnabled(false); },
-        [this]() { 
+        [this, success]() { 
+            if (!*success) {
+              QMessageBox::warning(this, tr("MTF Measurement"), 
+                                   tr("Edge not found or too blurred. Try selecting a larger area or an area with higher contrast."));
+            }
             m_sharpnessPanel->setMeasureMtfChecked(false);
             m_sharpnessPanel->setMeasureMtfEnabled(true);
         },
-        [](ParameterState &s, colorscreen::image_data &scan,
+        [success](ParameterState &s, colorscreen::image_data &scan,
            const colorscreen::int_image_area &area,
            colorscreen::progress_info *p) {
           colorscreen::slanted_edge_parameters params;
-          colorscreen::slanted_edge_mtf(s.rparams, scan, area, params, p);
+          auto res = colorscreen::slanted_edge_mtf(s.rparams, scan, area, params, p);
+          *success = res.success;
         });
   } else {
     if (m_imageWidget->interactionMode() == ImageWidget::GenericAreaMode) {

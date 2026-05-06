@@ -17,6 +17,7 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
                   const slanted_edge_parameters &params, progress_info *progress)
 {
   slanted_edge_results res;
+  res.success = false;
   res.edge_p1.x = 0;
   res.edge_p1.y = 0;
   res.edge_p2.x = 0;
@@ -59,12 +60,25 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
         {
           double centroid = 0;
           double sum_w = 0;
+          double max_w = 0;
+          std::vector<double> weights;
           for (int x = r_left + 1; x < r_right - 1; x++)
             {
-              double w = r.get_unadjusted_data({x + 1, y}) - r.get_unadjusted_data({x - 1, y});
-              w = std::abs(w);
-              centroid += x * w;
-              sum_w += w;
+              double w = std::abs(r.get_unadjusted_data({x + 1, y}) - r.get_unadjusted_data({x - 1, y}));
+              weights.push_back(w);
+              if (w > max_w) max_w = w;
+            }
+          if (max_w > 100)
+            {
+              for (int x = r_left + 1; x < r_right - 1; x++)
+                {
+                  double w = weights[x - (r_left + 1)];
+                  if (w > 0.1 * max_w)
+                    {
+                      centroid += x * w;
+                      sum_w += w;
+                    }
+                }
             }
           if (sum_w > 0)
             {
@@ -79,12 +93,25 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
         {
           double centroid = 0;
           double sum_w = 0;
+          double max_w = 0;
+          std::vector<double> weights;
           for (int y = r_top + 1; y < r_bottom - 1; y++)
             {
-              double w = r.get_unadjusted_data({x, y + 1}) - r.get_unadjusted_data({x, y - 1});
-              w = std::abs(w);
-              centroid += y * w;
-              sum_w += w;
+              double w = std::abs(r.get_unadjusted_data({x, y + 1}) - r.get_unadjusted_data({x, y - 1}));
+              weights.push_back(w);
+              if (w > max_w) max_w = w;
+            }
+          if (max_w > 100)
+            {
+              for (int y = r_top + 1; y < r_bottom - 1; y++)
+                {
+                  double w = weights[y - (r_top + 1)];
+                  if (w > 0.1 * max_w)
+                    {
+                      centroid += y * w;
+                      sum_w += w;
+                    }
+                }
             }
           if (sum_w > 0)
             {
@@ -94,7 +121,7 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
         }
     }
 
-  if (edge_pos.size() < 5)
+  if (edge_pos.size() < 10)
     return res;
 
   // Linear regression: pos = A * coord + B
@@ -114,6 +141,18 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
 
   double A = (n * sum_cp - sum_c * sum_p) / det;
   double B = (sum_cc * sum_p - sum_c * sum_cp) / det;
+
+  // Compute R-squared to check fit quality
+  double ss_res = 0, ss_tot = 0;
+  double mean_p = sum_p / n;
+  for (int i = 0; i < n; i++)
+    {
+      double pred = A * line_coord[i] + B;
+      ss_res += (edge_pos[i] - pred) * (edge_pos[i] - pred);
+      ss_tot += (edge_pos[i] - mean_p) * (edge_pos[i] - mean_p);
+    }
+  if (ss_tot > 0 && ss_res / ss_tot > 0.1) // Too much noise in edge detection
+    return res;
 
   // Set the actual detected edge coordinates
   if (is_vertical)
@@ -207,6 +246,9 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
   for (int i = 0; i < num_bins; i++)
     res.edge_histogram.push_back(esf[i]);
 
+  if (num_bins < 4)
+    return res;
+
   // Derivative to get LSF (Line Spread Function)
   // Use central difference [1, 0, -1] / 2
   std::vector<double> lsf(num_bins, 0);
@@ -229,12 +271,15 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
   int win_half = std::min(peak_idx, num_bins - 1 - peak_idx);
   int win_len = 2 * win_half + 1;
   
+  if (win_len < 4)
+    return res;
+  
   // Create FFT input array
   int N = 1;
   while (N < num_bins) N <<= 1;
   N <<= 1; // zero padding for smoother MTF
 
-  std::vector<double> in_vec(N, 0);
+  std::vector<double, fft_allocator<double>> in_vec(N, 0.0);
   for (int i = 0; i < win_len; i++)
     {
       double hamming = 0.54 - 0.46 * std::cos(2.0 * M_PI * i / (win_len - 1));
@@ -256,11 +301,11 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
 
   // Normalize MTF
   double mtf_zero = mtf[0];
-  if (mtf_zero > 0)
-    {
-      for (int i = 0; i <= N / 2; i++)
-        mtf[i] /= mtf_zero;
-    }
+  if (mtf_zero < 1e-9)
+    return res;
+
+  for (int i = 0; i <= N / 2; i++)
+    mtf[i] /= mtf_zero;
 
   double Fs = oversampling;
   
@@ -279,6 +324,7 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
 
   rparam.sharpen.scanner_mtf.measurements.push_back(measurement);
 
+  res.success = true;
   return res;
 }
 

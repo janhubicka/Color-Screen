@@ -346,6 +346,8 @@ struct slanted_edge_parameters
 
 struct slanted_edge_results
 {
+  /* True if edge was successfully found and analyzed. */
+  bool success;
   /* Actual detected edge coordinates. */
   point_t edge_p1;
   point_t edge_p2;
