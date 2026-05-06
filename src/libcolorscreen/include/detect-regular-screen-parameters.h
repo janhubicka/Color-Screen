@@ -47,7 +47,7 @@ struct detected_screen
   bool success;
   std::shared_ptr <mesh> mesh_trans;
   scr_to_img_parameters param;
-  int xmin, ymin, xmax, ymax;
+  int_image_area range;
   int patches_found;
   coord_t pixel_size;
 

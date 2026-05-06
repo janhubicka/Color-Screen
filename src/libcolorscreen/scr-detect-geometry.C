@@ -2175,7 +2175,9 @@ we simply try both cmaps.  */
     if (report_file)
       fprintf (report_file, "pixel size: %f\n", ret.pixel_size);
   }
-  smap->get_known_range (&ret.xmin, &ret.ymin, &ret.xmax, &ret.ymax);
+  int xmin_r, ymin_r, xmax_r, ymax_r;
+  smap->get_known_range (&xmin_r, &ymin_r, &xmax_r, &ymax_r);
+  ret.range = { xmin_r, ymin_r, xmax_r - xmin_r, ymax_r - ymin_r };
   if (progress)
     progress->set_task ("Checking screen consistency", 1);
   int errs;
@@ -2234,10 +2236,10 @@ we simply try both cmaps.  */
                     point_t scrp = smap->get_screen_coord ({ x, y });
                     point_t imgp = map.to_img (scrp);
                     last_seen = 0;
-                    if ((imgp.x <= ret.xmin && dsparams->left)
-                        || (imgp.y < ret.ymin && dsparams->top)
-                        || (imgp.x >= ret.xmax && dsparams->right)
-                        || (imgp.y >= ret.ymax && dsparams->bottom))
+                    if ((imgp.x <= ret.range.x && dsparams->left)
+                        || (imgp.y < ret.range.y && dsparams->top)
+                        || (imgp.x >= ret.range.x + ret.range.width && dsparams->right)
+                        || (imgp.y >= ret.range.y + ret.range.height && dsparams->bottom))
                       smap->set_coord ({ x, y }, imgp);
                   }
                 // else
@@ -2349,8 +2351,8 @@ we simply try both cmaps.  */
     fprintf (
         report_file,
         "Unalanyzed border left: %f%%, right %f%%, top %f%%, bottom %f%%\n",
-        ret.xmin * 100.0 / img.width, 100 - ret.xmax * 100.0 / img.width,
-        ret.ymin * 100.0 / img.height, 100 - ret.ymax * 100.0 / img.height);
+        ret.range.x * 100.0 / img.width, 100 - (ret.range.x + ret.range.width) * 100.0 / img.width,
+        ret.range.y * 100.0 / img.height, 100 - (ret.range.y + ret.range.height) * 100.0 / img.height);
   if (progress)
     progress->resume_stdout ();
 

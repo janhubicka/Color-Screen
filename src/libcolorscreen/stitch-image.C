@@ -1133,11 +1133,10 @@ stitch_image::write_tile (render_parameters rparam, int stitch_xmin, int stitch_
   rfparams.xoffset = floor (xoffset);
   rfparams.yoffset = floor (yoffset);
   /* Compensate sub-pixel differences.  */
-  rfparams.xstart = xmin + (xmin - stitch_xmin) - rfparams.xoffset * rfparams.xstep;
-  rfparams.ystart = ymin + (ymin - stitch_ymin) - rfparams.yoffset * rfparams.ystep;
+  rfparams.start = { xmin + (xmin - stitch_xmin) - rfparams.xoffset * rfparams.xstep,
+                     ymin + (ymin - stitch_ymin) - rfparams.yoffset * rfparams.ystep };
   rfparams.common_map = &m_prj->common_scr_to_img;
-  rfparams.xpos = pos.x;
-  rfparams.ypos = pos.y;
+  rfparams.pos = pos;
   rfparams.width = final_width / rfparams.xstep;
   rfparams.height = final_height / rfparams.ystep;
   /* TODO, handle by flags.  Is it still needed? */

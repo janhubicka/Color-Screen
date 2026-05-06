@@ -51,7 +51,7 @@ struct render_to_file_params
   int width, height;
   bool tile;
   /* Specifies top left corner in coordinates.  */
-  coord_t xstart, ystart;
+  point_t start;
   /* Size of single pixel.  If 0 default is computed using output mode and
      scale. */
   coord_t xstep, ystep;
@@ -65,12 +65,13 @@ struct render_to_file_params
   /* Common map used for stitching project.  */
   scr_to_img *common_map;
   /* Position of rendered image in the project.  */
-  coord_t xpos, ypos;
+  point_t pos;
   render_to_file_params ()
       : filename (NULL), depth (16), verbose (false), hdr (false), dng (false),
         scale (1), screen_scale (0), icc_profile (NULL), icc_profile_len (0), antialias (0),
-        xdpi (0), ydpi (0), geometry (default_geometry), width (0), height (0), tile (0), xstart (0),
-        ystart (0), xstep (0), ystep (0), pixel_size (0)
+        xdpi (0), ydpi (0), geometry (default_geometry), width (0), height (0), tile (0),
+        start ({ 0, 0 }), xstep (0), ystep (0), pixel_size (0), xoffset (0), yoffset (0),
+        common_map (NULL), pos ({ 0, 0 })
   {
   }
 };
@@ -334,6 +335,27 @@ hd_axis_y_to_linear (double axisY, double boost, hd_axis_type axis)
     return axisY;
   return std::pow (std::max (0.0000001, axisY), 2.2);
 }
+
+struct slanted_edge_parameters
+{
+  /* Supersampling rate for the Edge Spread Function.
+     Default is 4x as recommended by standard ISO 12233.
+     Higher values like 8x or 16x can be used for superior quality if the edge is long enough. */
+  int oversampling = 4;
+};
+
+struct slanted_edge_results
+{
+  /* Actual detected edge coordinates. */
+  point_t edge_p1;
+  point_t edge_p2;
+  /* Edge Spread Function (histogram) for visualization in GUI. */
+  std::vector<luminosity_t> edge_histogram;
+};
+
+DLL_PUBLIC slanted_edge_results
+slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_area roi,
+                  const slanted_edge_parameters &params, progress_info *progress = NULL);
 
 DLL_PUBLIC std::vector <rgbdata>
 hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity_t maxy, rgbdata patch_proportions, hd_axis_type axis_type = hd_axis_hd);

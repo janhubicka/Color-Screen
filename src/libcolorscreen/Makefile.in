@@ -187,7 +187,8 @@ am_libcolorscreen_la_OBJECTS = libcolorscreen_la-render.lo \
 	libcolorscreen_la-fft.lo \
 	libcolorscreen_la-analyze-scanner-blur.lo \
 	libcolorscreen_la-render-simulate.lo \
-	libcolorscreen_la-out-color-adjustments.lo
+	libcolorscreen_la-out-color-adjustments.lo \
+	libcolorscreen_la-slanted-edge.lo
 am__dirstamp = $(am__leading_dot)dirstamp
 @RENDER_EXTRA_TRUE@nodist_libcolorscreen_la_OBJECTS = render-extra/libcolorscreen_la-render-extra.lo
 libcolorscreen_la_OBJECTS = $(am_libcolorscreen_la_OBJECTS) \
@@ -265,6 +266,7 @@ am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-analyze-base.Plo \
 	./$(DEPDIR)/libcolorscreen_la-screen.Plo \
 	./$(DEPDIR)/libcolorscreen_la-sensitivity.Plo \
 	./$(DEPDIR)/libcolorscreen_la-simulate.Plo \
+	./$(DEPDIR)/libcolorscreen_la-slanted-edge.Plo \
 	./$(DEPDIR)/libcolorscreen_la-solver.Plo \
 	./$(DEPDIR)/libcolorscreen_la-spectrum-dyes.Plo \
 	./$(DEPDIR)/libcolorscreen_la-spectrum-illuminants.Plo \
@@ -478,7 +480,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h include/matrix.h include/scr-to-img.h  include/dllpublic.h include/scr-detect-parameters.h include/spectrum-to-xyz.h include/progress-info.h include/sensitivity.h include/precomputed-function.h include/mesh.h include/base.h include/tiff-writer.h include/stitch.h include/lens-correction.h include/tone-curve.h include/finetune.h include/histogram.h include/colorscreen-config.h include/dufaycolor.h  include/wratten.h include/screen-map.h  include/paget.h include/render-type-parameters.h include/render-parameters.h include/solver-parameters.h include/detect-regular-screen-parameters.h include/scr-to-img-parameters.h include/lens-warp-correction-parameters.h include/backlight-correction-parameters.h include/scanner-blur-correction-parameters.h include/strips.h include/mtf-parameters.h include/analyze-scanner-blur.h include/cow-vector.h
 lib_LTLIBRARIES = libcolorscreen.la
-libcolorscreen_la_SOURCES = render.C render-to-scr.C render-fast.C render-interpolate.C screen.C scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C color.C sensitivity.C solver.C mesh.C scr-detect-geometry.C analyze-dufay.C analyze-paget.C analyze-strips.C screen-map.C analyze-base.C tiff-writer.C backlight-correction.C stitch-image.C stitch-project.C icc.C render-parameters.C mapalloc.C parse-captureone-lcc.C dufaycolor.C wratten.C spectrum.C spectrum-dyes.C spectrum-illuminants.C spectrum-responses.C tone-curve.C lens-warp-correction.C matrix-profile.C scr-detect-colors.C finetune.C homography.C gsl-utils.C scanner-blur-correction.C simulate.C has-regular-screen.C deconvolve.C mtf.C fft.C analyze-scanner-blur.C render-simulate.C out-color-adjustments.C
+libcolorscreen_la_SOURCES = render.C render-to-scr.C render-fast.C render-interpolate.C screen.C scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C color.C sensitivity.C solver.C mesh.C scr-detect-geometry.C analyze-dufay.C analyze-paget.C analyze-strips.C screen-map.C analyze-base.C tiff-writer.C backlight-correction.C stitch-image.C stitch-project.C icc.C render-parameters.C mapalloc.C parse-captureone-lcc.C dufaycolor.C wratten.C spectrum.C spectrum-dyes.C spectrum-illuminants.C spectrum-responses.C tone-curve.C lens-warp-correction.C matrix-profile.C scr-detect-colors.C finetune.C homography.C gsl-utils.C scanner-blur-correction.C simulate.C has-regular-screen.C deconvolve.C mtf.C fft.C analyze-scanner-blur.C render-simulate.C out-color-adjustments.C slanted-edge.C
 EXTRA_DIST = lru-cache.h analyze-base-worker.h gaussian-blur.h icc-srgb.h  render-diff.h render-tile.h sharpen.h gsl-utils.h gsl-solver.h loadsave.h mapalloc.h render-interpolate.h render-to-file.h spectrum-dyes.h icc.h nmsimplex.h render-superposeimg.h spectrum.h analyze-dufay.h analyze-paget.h analyze-strips.h analyze-base.h  bitmap.h render-fast.h spline.h screen.h render-scr-detect.h patches.h render-to-scr.h render.h solver.h scr-detect.h backlight-correction.h mem-luminosity.h homography.h simulate.h deconvolve.h mtf.h finetune-int.h fft.h render-screen.h render-simulate.h lanczos.h out-color-adjustments.h demosaic.h bspline.h cubic-interpolate.h
 @RENDER_EXTRA_TRUE@nodist_libcolorscreen_la_SOURCES = render-extra/render-extra.C
 # -no-undefined is needed in order to build DLL on Windows.
@@ -644,6 +646,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-screen.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-sensitivity.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-simulate.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-slanted-edge.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-solver.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-spectrum-dyes.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-spectrum-illuminants.Plo@am__quote@ # am--include-marker
@@ -1073,6 +1076,13 @@ libcolorscreen_la-out-color-adjustments.lo: out-color-adjustments.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-out-color-adjustments.lo `test -f 'out-color-adjustments.C' || echo '$(srcdir)/'`out-color-adjustments.C
 
+libcolorscreen_la-slanted-edge.lo: slanted-edge.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT libcolorscreen_la-slanted-edge.lo -MD -MP -MF $(DEPDIR)/libcolorscreen_la-slanted-edge.Tpo -c -o libcolorscreen_la-slanted-edge.lo `test -f 'slanted-edge.C' || echo '$(srcdir)/'`slanted-edge.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libcolorscreen_la-slanted-edge.Tpo $(DEPDIR)/libcolorscreen_la-slanted-edge.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='slanted-edge.C' object='libcolorscreen_la-slanted-edge.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-slanted-edge.lo `test -f 'slanted-edge.C' || echo '$(srcdir)/'`slanted-edge.C
+
 render-extra/libcolorscreen_la-render-extra.lo: render-extra/render-extra.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT render-extra/libcolorscreen_la-render-extra.lo -MD -MP -MF render-extra/$(DEPDIR)/libcolorscreen_la-render-extra.Tpo -c -o render-extra/libcolorscreen_la-render-extra.lo `test -f 'render-extra/render-extra.C' || echo '$(srcdir)/'`render-extra/render-extra.C
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) render-extra/$(DEPDIR)/libcolorscreen_la-render-extra.Tpo render-extra/$(DEPDIR)/libcolorscreen_la-render-extra.Plo
@@ -1296,6 +1306,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-screen.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-sensitivity.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-simulate.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-slanted-edge.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-solver.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-spectrum-dyes.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-spectrum-illuminants.Plo
@@ -1398,6 +1409,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-screen.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-sensitivity.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-simulate.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-slanted-edge.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-solver.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-spectrum-dyes.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-spectrum-illuminants.Plo

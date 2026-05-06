@@ -596,7 +596,7 @@ stitch_project::write_tiles (render_parameters rparam, render_to_file_params *rf
 
 	    sub_task task (progress);
 
-	    if (!images[y][x].write_tile (rparam, rfparams2.xpos, rfparams2.ypos, rfparams2, rtparam, error, progress))
+	    if (!images[y][x].write_tile (rparam, rfparams2.pos.x, rfparams2.pos.y, rfparams2, rtparam, error, progress))
 	      return false;
 	  }
 	if (progress)

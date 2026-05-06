@@ -2411,8 +2411,9 @@ finetune (int argc, char **argv)
   const char *diff_tiff_base = NULL;
   const char *screen_color_tiff_base = NULL;
   int multitile = 1;
-  int xsteps = 32;
+  int_point_t steps = { 32, 0 };
   int border = 5;
+  int steps_x_tmp = steps.x;
   uint64_t flags = 0;
   //*finetune_no_progress_report | finetune_screen_blur| finetune_dufay_strips;
   subhelp = help_finetune;
@@ -2477,8 +2478,8 @@ finetune (int argc, char **argv)
       else if (const char *str
                = arg_with_param (argc, argv, &i, "diff-tiff-base"))
         diff_tiff_base = str;
-      else if (parse_int_param (argc, argv, &i, "width", xsteps, 1, 65536 / 2))
-        ;
+      else if (parse_int_param (argc, argv, &i, "width", steps_x_tmp, 1, 65536 / 2))
+        steps.x = steps_x_tmp;
       else if (!infname)
         infname = argv[i];
       else if (!cspname)
@@ -2538,23 +2539,22 @@ finetune (int argc, char **argv)
     }
   fclose (in);
 
-  int ysteps = (xsteps * scan.height + scan.width / 2) / scan.width;
-  if (!ysteps)
-    ysteps = 1;
+  steps.y = (steps.x * scan.height + scan.width / 2) / scan.width;
+  if (!steps.y)
+    steps.y = 1;
 
-  std::vector<finetune_result> results (ysteps * xsteps);
-  progress.set_task ("analyzing samples", ysteps * xsteps);
+  std::vector<finetune_result> results (steps.y * steps.x);
+  progress.set_task ("analyzing samples", steps.y * steps.x);
 #pragma omp parallel for default(none) collapse(2) schedule(dynamic)          \
-    shared(xsteps, ysteps, rparam, scan, flags, border, progress, param,      \
+    shared(steps, rparam, scan, flags, border, progress, param,               \
                orig_tiff_base, simulated_tiff_base, diff_tiff_base, results,  \
                multitile)
-  for (int y = 0; y < ysteps; y++)
-    for (int x = 0; x < xsteps; x++)
+  for (int y = 0; y < steps.y; y++)
+    for (int x = 0; x < steps.x; x++)
       {
-        int xborder = scan.width * border / 100;
-        int yborder = scan.height * border / 100;
-        int xpos = xborder + x * (scan.width - 2 * xborder) / xsteps;
-        int ypos = yborder + y * (scan.height - 2 * yborder) / ysteps;
+        int_point_t border_px = { scan.width * border / 100, scan.height * border / 100 };
+        point_t sample_pos = { (coord_t)(border_px.x + x * (scan.width - 2 * border_px.x) / steps.x),
+                               (coord_t)(border_px.y + y * (scan.height - 2 * border_px.y) / steps.y) };
         char pos[256];
         std::string orig_file;
         std::string simulated_file;
@@ -2579,21 +2579,21 @@ finetune (int argc, char **argv)
             diff_file = (std::string)diff_tiff_base + (std::string)pos;
             fparam.diff_file = diff_file.c_str ();
           }
-        results[y * xsteps + x] = finetune (
-            rparam, param, scan, { { (coord_t)xpos, (coord_t)ypos } }, NULL,
+        results[y * steps.x + x] = finetune (
+            rparam, param, scan, { sample_pos }, NULL,
             fparam, &progress);
         progress.inc_progress ();
       }
   int nok = 0;
-  for (int y = 0; y < ysteps; y++)
-    for (int x = 0; x < xsteps; x++)
-      if (results[y * xsteps + x].success)
+  for (int y = 0; y < steps.y; y++)
+    for (int x = 0; x < steps.x; x++)
+      if (results[y * steps.x + x].success)
         nok++;
       else
         {
           progress.pause_stdout ();
           fprintf (stderr, "Failed to analyze sample %i %i:%s\n", x, y,
-                   results[y * xsteps + x].err.c_str ());
+                   results[y * steps.x + x].err.c_str ());
           progress.resume_stdout ();
         }
   if (!nok)
@@ -2604,21 +2604,21 @@ finetune (int argc, char **argv)
     }
   progress.pause_stdout ();
   printf ("Badness\n");
-  for (int y = 0; y < ysteps; y++)
+  for (int y = 0; y < steps.y; y++)
     {
-      for (int x = 0; x < xsteps; x++)
-        if (results[y * xsteps + x].success)
-          printf ("  %6.3f", results[y * xsteps + x].badness);
+      for (int x = 0; x < steps.x; x++)
+        if (results[y * steps.x + x].success)
+          printf ("  %6.3f", results[y * steps.x + x].badness);
         else
           printf ("  ------");
       printf ("\n");
     }
   printf ("Uncertainity\n");
-  for (int y = 0; y < ysteps; y++)
+  for (int y = 0; y < steps.y; y++)
     {
-      for (int x = 0; x < xsteps; x++)
-        if (results[y * xsteps + x].success)
-          printf ("  %6.3f", results[y * xsteps + x].uncertainty);
+      for (int x = 0; x < steps.x; x++)
+        if (results[y * steps.x + x].success)
+          printf ("  %6.3f", results[y * steps.x + x].uncertainty);
         else
           printf ("  ------");
       printf ("\n");
@@ -2630,28 +2630,28 @@ finetune (int argc, char **argv)
     {
       histogram hist, emulsion_hist;
       rgb_histogram channel_hist;
-      for (int y = 0; y < ysteps; y++)
-        for (int x = 0; x < xsteps; x++)
-          if (results[y * xsteps + x].success)
+      for (int y = 0; y < steps.y; y++)
+        for (int x = 0; x < steps.x; x++)
+          if (results[y * steps.x + x].success)
             {
-              hist.pre_account (results[y * xsteps + x].screen_blur_radius);
+              hist.pre_account (results[y * steps.x + x].screen_blur_radius);
               emulsion_hist.pre_account (
-                  results[y * xsteps + x].emulsion_blur_radius);
+                  results[y * steps.x + x].emulsion_blur_radius);
               channel_hist.pre_account (
-                  results[y * xsteps + x].screen_channel_blur_radius);
+                  results[y * steps.x + x].screen_channel_blur_radius);
             }
       hist.finalize_range (65536);
       emulsion_hist.finalize_range (65536);
       channel_hist.finalize_range (65536);
-      for (int y = 0; y < ysteps; y++)
-        for (int x = 0; x < xsteps; x++)
-          if (results[y * xsteps + x].success)
+      for (int y = 0; y < steps.y; y++)
+        for (int x = 0; x < steps.x; x++)
+          if (results[y * steps.x + x].success)
             {
-              hist.account (results[y * xsteps + x].screen_blur_radius);
+              hist.account (results[y * steps.x + x].screen_blur_radius);
               emulsion_hist.account (
-                  results[y * xsteps + x].emulsion_blur_radius);
+                  results[y * steps.x + x].emulsion_blur_radius);
               channel_hist.account (
-                  results[y * xsteps + x].screen_channel_blur_radius);
+                  results[y * steps.x + x].screen_channel_blur_radius);
             }
       hist.finalize ();
       emulsion_hist.finalize ();
@@ -2659,12 +2659,12 @@ finetune (int argc, char **argv)
       if (flags & (finetune_scanner_mtf_sigma))
         {
           printf ("Detected scanner mtf sigma (pixels)\n");
-          for (int y = 0; y < ysteps; y++)
+          for (int y = 0; y < steps.y; y++)
             {
-              for (int x = 0; x < xsteps; x++)
-                if (results[y * xsteps + x].success)
+              for (int x = 0; x < steps.x; x++)
+                if (results[y * steps.x + x].success)
                   printf ("  %1.3f",
-                          results[y * xsteps + x].scanner_mtf_sigma);
+                          results[y * steps.x + x].scanner_mtf_sigma);
                 else
                   printf ("  -----");
               printf ("\n");
@@ -2673,12 +2673,12 @@ finetune (int argc, char **argv)
       else if (flags & (finetune_scanner_mtf_defocus) && rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
         {
           printf ("Detected scanner mtf defocus (mm)\n");
-          for (int y = 0; y < ysteps; y++)
+          for (int y = 0; y < steps.y; y++)
             {
-              for (int x = 0; x < xsteps; x++)
-                if (results[y * xsteps + x].success)
+              for (int x = 0; x < steps.x; x++)
+                if (results[y * steps.x + x].success)
                   printf ("  %1.3f",
-                          results[y * xsteps + x].scanner_mtf_defocus);
+                          results[y * steps.x + x].scanner_mtf_defocus);
                 else
                   printf ("  -----");
               printf ("\n");
@@ -2687,12 +2687,12 @@ finetune (int argc, char **argv)
       else if (flags & (finetune_scanner_mtf_defocus) && !rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
         {
           printf ("Detected scanner mtf blur diameter (pixels)\n");
-          for (int y = 0; y < ysteps; y++)
+          for (int y = 0; y < steps.y; y++)
             {
-              for (int x = 0; x < xsteps; x++)
-                if (results[y * xsteps + x].success)
+              for (int x = 0; x < steps.x; x++)
+                if (results[y * steps.x + x].success)
                   printf ("  %1.3f",
-                          results[y * xsteps + x].scanner_mtf_blur_diameter);
+                          results[y * steps.x + x].scanner_mtf_blur_diameter);
                 else
                   printf ("  -----");
               printf ("\n");
@@ -2701,12 +2701,12 @@ finetune (int argc, char **argv)
       else if (flags & finetune_screen_blur)
         {
           printf ("Detected screen blurs\n");
-          for (int y = 0; y < ysteps; y++)
+          for (int y = 0; y < steps.y; y++)
             {
-              for (int x = 0; x < xsteps; x++)
-                if (results[y * xsteps + x].success)
+              for (int x = 0; x < steps.x; x++)
+                if (results[y * steps.x + x].success)
                   printf ("  %6.3f",
-                          results[y * xsteps + x].screen_blur_radius);
+                          results[y * steps.x + x].screen_blur_radius);
                 else
                   printf ("  ------");
               printf ("\n");
@@ -2718,15 +2718,15 @@ finetune (int argc, char **argv)
       else if (flags & finetune_scanner_mtf_channel_defocus)
         {
           printf ("Detected screen channel blurs\n");
-          for (int y = 0; y < ysteps; y++)
+          for (int y = 0; y < steps.y; y++)
             {
-              for (int x = 0; x < xsteps; x++)
-                if (results[y * xsteps + x].success)
+              for (int x = 0; x < steps.x; x++)
+                if (results[y * steps.x + x].success)
                   printf (
                       "  %6.3f,%6.3f,%6.3f",
-                      results[y * xsteps + x].scanner_mtf_channel_defocus_or_blur.red,
-                      results[y * xsteps + x].scanner_mtf_channel_defocus_or_blur.green,
-                      results[y * xsteps + x].scanner_mtf_channel_defocus_or_blur.blue);
+                      results[y * steps.x + x].scanner_mtf_channel_defocus_or_blur.red,
+                      results[y * steps.x + x].scanner_mtf_channel_defocus_or_blur.green,
+                      results[y * steps.x + x].scanner_mtf_channel_defocus_or_blur.blue);
                 else
                   printf ("  ------");
               printf ("\n");
@@ -2747,15 +2747,15 @@ finetune (int argc, char **argv)
       else if (flags & finetune_screen_channel_blurs)
         {
           printf ("Detected screen channel blurs\n");
-          for (int y = 0; y < ysteps; y++)
+          for (int y = 0; y < steps.y; y++)
             {
-              for (int x = 0; x < xsteps; x++)
-                if (results[y * xsteps + x].success)
+              for (int x = 0; x < steps.x; x++)
+                if (results[y * steps.x + x].success)
                   printf (
                       "  %6.3f,%6.3f,%6.3f",
-                      results[y * xsteps + x].screen_channel_blur_radius.red,
-                      results[y * xsteps + x].screen_channel_blur_radius.green,
-                      results[y * xsteps + x].screen_channel_blur_radius.blue);
+                      results[y * steps.x + x].screen_channel_blur_radius.red,
+                      results[y * steps.x + x].screen_channel_blur_radius.green,
+                      results[y * steps.x + x].screen_channel_blur_radius.blue);
                 else
                   printf ("  ------");
               printf ("\n");
@@ -2776,12 +2776,12 @@ finetune (int argc, char **argv)
       else
         {
           printf ("Detected emulsion blurs\n");
-          for (int y = 0; y < ysteps; y++)
+          for (int y = 0; y < steps.y; y++)
             {
-              for (int x = 0; x < xsteps; x++)
-                if (results[y * xsteps + x].success)
+              for (int x = 0; x < steps.x; x++)
+                if (results[y * steps.x + x].success)
                   printf ("  %6.3f",
-                          results[y * xsteps + x].emulsion_blur_radius);
+                          results[y * steps.x + x].emulsion_blur_radius);
                 else
                   printf ("  ------");
               printf ("\n");
@@ -2795,8 +2795,8 @@ finetune (int argc, char **argv)
         {
           tiff_writer_params p;
           p.filename = screen_blur_tiff_name;
-          p.width = xsteps;
-          p.height = ysteps;
+          p.width = steps.x;
+          p.height = steps.y;
           p.depth = 16;
           const char *error;
           tiff_writer sharpness (p, &error);
@@ -2807,22 +2807,22 @@ finetune (int argc, char **argv)
                        screen_blur_tiff_name, error);
               exit (1);
             }
-          for (int y = 0; y < ysteps; y++)
+          for (int y = 0; y < steps.y; y++)
             {
-              for (int x = 0; x < xsteps; x++)
-                if (!results[y * xsteps + x].success)
+              for (int x = 0; x < steps.x; x++)
+                if (!results[y * steps.x + x].success)
                   sharpness.put_pixel (x, 65535, 0, 0);
                 else if (flags & (finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus))
                   {
                     int vr
-                        = std::min (results[y * xsteps + x].scanner_mtf_sigma
+                        = std::min (results[y * steps.x + x].scanner_mtf_sigma
                                         * 0.5 * 65535,
                                     (coord_t)65535);
 		    double def;
 		    if (rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
-		      def = results[y * xsteps + x].scanner_mtf_defocus;
+		      def = results[y * steps.x + x].scanner_mtf_defocus;
 		    else
-		      def = results[y * xsteps + x].scanner_mtf_blur_diameter;
+		      def = results[y * steps.x + x].scanner_mtf_blur_diameter;
                     int vg
                         = std::min (def * 65535, (coord_t)65535);
                     int vb = 0;
@@ -2831,23 +2831,23 @@ finetune (int argc, char **argv)
                 else if (flags & finetune_screen_blur)
                   {
                     int v = std::min (
-                        results[y * xsteps + x].screen_blur_radius / 2 * 65535,
+                        results[y * steps.x + x].screen_blur_radius / 2 * 65535,
                         (coord_t)65535);
                     sharpness.put_pixel (x, v, v, v);
                   }
                 else if (flags & finetune_screen_channel_blurs)
                   {
                     int vr = std::min (
-                        results[y * xsteps + x].screen_channel_blur_radius.red
+                        results[y * steps.x + x].screen_channel_blur_radius.red
                             / 2 * 65535,
                         (luminosity_t)65535);
                     int vg
-                        = std::min (results[y * xsteps + x]
+                        = std::min (results[y * steps.x + x]
                                             .screen_channel_blur_radius.green
                                         / 2 * 65535,
                                     (luminosity_t)65535);
                     int vb = std::min (
-                        results[y * xsteps + x].screen_channel_blur_radius.blue
+                        results[y * steps.x + x].screen_channel_blur_radius.blue
                             / 2 * 65535,
                         (luminosity_t)65535);
                     sharpness.put_pixel (x, vr, vg, vb);
@@ -2855,7 +2855,7 @@ finetune (int argc, char **argv)
                 else
                   {
                     int v = std::min (
-                        results[y * xsteps + x].emulsion_blur_radius / 2
+                        results[y * steps.x + x].emulsion_blur_radius / 2
                             * 65535,
                         (coord_t)65535);
                     sharpness.put_pixel (x, v, v, v);
@@ -2875,11 +2875,11 @@ finetune (int argc, char **argv)
 	{
 	  const char *cname[3]={"red", "green", "blue"};
 	  printf ("Detected screen %s\n", cname[c]);
-	  for (int y = 0; y < ysteps; y++)
+	  for (int y = 0; y < steps.y; y++)
 	    {
-	      for (int x = 0; x < xsteps; x++)
-		if (results[y * xsteps + x].success)
-		  get_screen_channel (results[y * xsteps + x],c).print (stdout);
+	      for (int x = 0; x < steps.x; x++)
+		if (results[y * steps.x + x].success)
+		  get_screen_channel (results[y * steps.x + x],c).print (stdout);
 		else
 		  printf ("  ------");
 	      printf ("\n");
@@ -2890,8 +2890,8 @@ finetune (int argc, char **argv)
 	      tiff_writer_params p;
 	      std::string name = (std::string)screen_color_tiff_base + "-" + cname[c] + ".tif";
 	      p.filename = name.c_str ();
-	      p.width = xsteps;
-	      p.height = ysteps;
+	      p.width = steps.x;
+	      p.height = steps.y;
 	      p.hdr = true;
 	      p.depth = 32;
 	      const char *error;
@@ -2903,16 +2903,16 @@ finetune (int argc, char **argv)
 			   screen_blur_tiff_name, error);
 		  exit (1);
 		}
-	      for (int y = 0; y < ysteps; y++)
+	      for (int y = 0; y < steps.y; y++)
 		{
-		  for (int x = 0; x < xsteps; x++)
-		    if (!results[y * xsteps + x].success)
+		  for (int x = 0; x < steps.x; x++)
+		    if (!results[y * steps.x + x].success)
 		      sharpness.put_hdr_pixel (x, 1, 0, 0);
 		    else
 		      sharpness.put_hdr_pixel (
-			  x, get_screen_channel (results[y * xsteps + x], c).red * 1,
-			  get_screen_channel (results[y * xsteps + x], c).green * 1,
-			  get_screen_channel (results[y * xsteps + x], c).blue * 1);
+			  x, get_screen_channel (results[y * steps.x + x], c).red * 1,
+			  get_screen_channel (results[y * steps.x + x], c).green * 1,
+			  get_screen_channel (results[y * steps.x + x], c).blue * 1);
 		  if (!sharpness.write_row ())
 		    {
 		      progress.pause_stdout ();
@@ -2926,11 +2926,11 @@ finetune (int argc, char **argv)
   if (flags & finetune_fog)
     {
       printf ("Detected fog\n");
-      for (int y = 0; y < ysteps; y++)
+      for (int y = 0; y < steps.y; y++)
         {
-          for (int x = 0; x < xsteps; x++)
-            if (results[y * xsteps + x].success)
-              results[y * xsteps + x].fog.print (stdout);
+          for (int x = 0; x < steps.x; x++)
+            if (results[y * steps.x + x].success)
+              results[y * steps.x + x].fog.print (stdout);
             else
               printf ("  ------");
           printf ("\n");
@@ -2939,8 +2939,8 @@ finetune (int argc, char **argv)
         {
           tiff_writer_params p;
           p.filename = fog_tiff_name;
-          p.width = xsteps;
-          p.height = ysteps;
+          p.width = steps.x;
+          p.height = steps.y;
 	  p.hdr = true;
           p.depth = 32;
           const char *error;
@@ -2952,16 +2952,16 @@ finetune (int argc, char **argv)
                        screen_blur_tiff_name, error);
               exit (1);
             }
-          for (int y = 0; y < ysteps; y++)
+          for (int y = 0; y < steps.y; y++)
             {
-              for (int x = 0; x < xsteps; x++)
-                if (!results[y * xsteps + x].success)
+              for (int x = 0; x < steps.x; x++)
+                if (!results[y * steps.x + x].success)
                   sharpness.put_hdr_pixel (x, 1, 0, 0);
                 else
                   sharpness.put_hdr_pixel (
-                      x, results[y * xsteps + x].fog.red * 1,
-                      results[y * xsteps + x].fog.green * 1,
-                      results[y * xsteps + x].fog.blue * 1);
+                      x, results[y * steps.x + x].fog.red * 1,
+                      results[y * steps.x + x].fog.green * 1,
+                      results[y * steps.x + x].fog.blue * 1);
               if (!sharpness.write_row ())
                 {
                   progress.pause_stdout ();
@@ -2976,23 +2976,23 @@ finetune (int argc, char **argv)
       printf ("Detected screen strip widths (red, green)\n");
       histogram histr;
       histogram histg;
-      for (int y = 0; y < ysteps; y++)
-        for (int x = 0; x < xsteps; x++)
-          if (results[y * xsteps + x].success)
+      for (int y = 0; y < steps.y; y++)
+        for (int x = 0; x < steps.x; x++)
+          if (results[y * steps.x + x].success)
             {
               histr.pre_account (
-                  results[y * xsteps + x].red_strip_width);
+                  results[y * steps.x + x].red_strip_width);
               histg.pre_account (
-                  results[y * xsteps + x].green_strip_width);
+                  results[y * steps.x + x].green_strip_width);
             }
       histr.finalize_range (65536);
       histg.finalize_range (65536);
-      for (int y = 0; y < ysteps; y++)
-        for (int x = 0; x < xsteps; x++)
-          if (results[y * xsteps + x].success)
+      for (int y = 0; y < steps.y; y++)
+        for (int x = 0; x < steps.x; x++)
+          if (results[y * steps.x + x].success)
             {
-              histr.account (results[y * xsteps + x].red_strip_width);
-              histg.account (results[y * xsteps + x].green_strip_width);
+              histr.account (results[y * steps.x + x].red_strip_width);
+              histg.account (results[y * steps.x + x].green_strip_width);
             }
       histr.finalize ();
       histg.finalize ();
@@ -3002,13 +3002,13 @@ finetune (int argc, char **argv)
       printf ("Green strip width robust min %f, avg %f, max %f\n",
               histg.find_min (0.1), histg.find_avg (0.1, 0.1),
               histg.find_max (0.1));
-      for (int y = 0; y < ysteps; y++)
+      for (int y = 0; y < steps.y; y++)
         {
-          for (int x = 0; x < xsteps; x++)
-            if (results[y * xsteps + x].success)
+          for (int x = 0; x < steps.x; x++)
+            if (results[y * steps.x + x].success)
               printf ("  %.3f,%.3f",
-                      results[y * xsteps + x].red_strip_width,
-                      results[y * xsteps + x].green_strip_width);
+                      results[y * steps.x + x].red_strip_width,
+                      results[y * steps.x + x].green_strip_width);
             else
               printf ("  ------");
           printf ("\n");
@@ -3017,8 +3017,8 @@ finetune (int argc, char **argv)
         {
           tiff_writer_params p;
           p.filename = strip_width_tiff_name;
-          p.width = xsteps;
-          p.height = ysteps;
+          p.width = steps.x;
+          p.height = steps.y;
           p.depth = 16;
           const char *error;
           tiff_writer sharpness (p, &error);
@@ -3029,16 +3029,16 @@ finetune (int argc, char **argv)
                        strip_width_tiff_name, error);
               exit (1);
             }
-          for (int y = 0; y < ysteps; y++)
+          for (int y = 0; y < steps.y; y++)
             {
-              for (int x = 0; x < xsteps; x++)
-                if (results[y * xsteps + x].success)
+              for (int x = 0; x < steps.x; x++)
+                if (results[y * steps.x + x].success)
                   {
-                    coord_t r = results[y * xsteps + x].red_strip_width;
-                    coord_t g = results[y * xsteps + x].green_strip_width
+                    coord_t r = results[y * steps.x + x].red_strip_width;
+                    coord_t g = results[y * steps.x + x].green_strip_width
                                 * (1 - r);
                     coord_t b
-                        = (1 - results[y * xsteps + x].green_strip_width)
+                        = (1 - results[y * steps.x + x].green_strip_width)
                           * (1 - r);
                     sharpness.put_pixel (x, r * 65535, g * 65535, b * 65535);
                   }
@@ -3056,13 +3056,13 @@ finetune (int argc, char **argv)
   if ((flags & finetune_position))
     {
       printf ("Detected position adjustment (in screen coordinates)\n");
-      for (int y = 0; y < ysteps; y++)
+      for (int y = 0; y < steps.y; y++)
         {
-          for (int x = 0; x < xsteps; x++)
-            if (results[y * xsteps + x].success)
+          for (int x = 0; x < steps.x; x++)
+            if (results[y * steps.x + x].success)
               printf ("  %.3f,%.3f",
-                      results[y * xsteps + x].screen_coord_adjust.x,
-                      results[y * xsteps + x].screen_coord_adjust.y);
+                      results[y * steps.x + x].screen_coord_adjust.x,
+                      results[y * steps.x + x].screen_coord_adjust.y);
             else
               printf ("  ------");
           printf ("\n");
@@ -3071,8 +3071,8 @@ finetune (int argc, char **argv)
         {
           tiff_writer_params p;
           p.filename = position_tiff_name;
-          p.width = xsteps;
-          p.height = ysteps;
+          p.width = steps.x;
+          p.height = steps.y;
           p.depth = 16;
           const char *error;
           tiff_writer sharpness (p, &error);
@@ -3083,19 +3083,19 @@ finetune (int argc, char **argv)
                        position_tiff_name, error);
               exit (1);
             }
-          for (int y = 0; y < ysteps; y++)
+          for (int y = 0; y < steps.y; y++)
             {
-              for (int x = 0; x < xsteps; x++)
-                if (!results[y * xsteps + x].success)
+              for (int x = 0; x < steps.x; x++)
+                if (!results[y * steps.x + x].success)
                   sharpness.put_pixel (x, 65535, 0, 1);
                 else
                   {
                     coord_t r = std::min (
-                        fabs (results[y * xsteps + x].screen_coord_adjust.x
+                        fabs (results[y * steps.x + x].screen_coord_adjust.x
                               * 10),
                         (coord_t)1);
                     coord_t g = std::min (
-                        fabs (results[y * xsteps + x].screen_coord_adjust.y
+                        fabs (results[y * steps.x + x].screen_coord_adjust.y
                               * 10),
                         (coord_t)1);
                     coord_t b = 0;

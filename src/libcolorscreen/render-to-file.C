@@ -81,8 +81,7 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
 	  int_image_area viewport (xmin, ymin, xmax - xmin, ymax - ymin);
 	  render_width = viewport.width;
 	  render_height = viewport.height;
-	  p->xpos = viewport.x;
-	  p->ypos = viewport.y;
+	  p->pos = { (coord_t)viewport.x, (coord_t)viewport.y };
 	  if (!p->pixel_size)
 	    {
 	      p->pixel_size = stitch->pixel_size;
