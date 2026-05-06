@@ -38,8 +38,9 @@ public:
   void updateFinetuneImages(const colorscreen::finetune_result& result);
   void reattachFinetuneImages(QWidget *widget);
   void setFocusAnalysisChecked(bool checked);
+  void setMeasureMtfChecked(bool checked);
+  void setMeasureMtfEnabled(bool enabled);
 
-  
   void reattachDotSpread(QWidget *widget);
   void reattachAdaptiveChart(QWidget *widget);
   AdaptiveSharpeningChart *getAdaptiveChart() const { return m_adaptiveChart; }
@@ -56,6 +57,7 @@ signals:
   void detachFinetuneImagesRequested(QWidget *widget);
   void autodetectRequested();
   void focusAnalysisRequested(bool checked, uint64_t flags);
+  void measureMtfRequested(bool checked);
 
 protected:
   // TilePreviewPanel overrides
@@ -91,6 +93,7 @@ private:
   double m_lastRedStripWidth = 0.0;
   double m_lastGreenStripWidth = 0.0;
   class QPushButton *m_analyzeAreaBtn = nullptr;
+  class QPushButton *m_measureMtfBtn = nullptr;
   uint64_t m_finetuneFlags = 0;
   class TilePreviewPanel *m_dotSpreadPanel = nullptr;
   AdaptiveSharpeningChart *m_adaptiveChart = nullptr;

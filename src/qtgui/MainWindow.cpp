@@ -683,6 +683,8 @@ void MainWindow::setupUi() {
 
   connect(m_sharpnessPanel, &SharpnessPanel::focusAnalysisRequested, this,
           &MainWindow::onFocusAnalysisRequested);
+  connect(m_sharpnessPanel, &SharpnessPanel::measureMtfRequested, this,
+          &MainWindow::onMeasureMtfRequested);
 
   setupDock(m_screenPreviewDock, m_screenPanel,
             &ScreenPanel::detachPreviewRequested,
@@ -5016,5 +5018,30 @@ void MainWindow::onDistanceMeasured(colorscreen::point_t p1, colorscreen::point_
     ParameterState state = getCurrentState();
     state.rparams.sharpen.scanner_mtf.scan_dpi = newDpi;
     changeParameters(state, tr("Set DPI by measurement"));
+  }
+}
+
+void MainWindow::onMeasureMtfRequested(bool checked) {
+  if (checked) {
+    runAreaComputation(
+        tr("Select an area containing a slanted edge to compute its MTF"),
+        tr("Measure MTF of a slanted edge"),
+        [this]() { m_sharpnessPanel->setMeasureMtfEnabled(false); },
+        [this]() { 
+            m_sharpnessPanel->setMeasureMtfChecked(false);
+            m_sharpnessPanel->setMeasureMtfEnabled(true);
+        },
+        [](ParameterState &s, colorscreen::image_data &scan,
+           const colorscreen::int_image_area &area,
+           colorscreen::progress_info *p) {
+          colorscreen::slanted_edge_parameters params;
+          colorscreen::slanted_edge_mtf(s.rparams, scan, area, params, p);
+        });
+  } else {
+    if (m_imageWidget->interactionMode() == ImageWidget::GenericAreaMode) {
+      restoreInteractionMode();
+      statusBar()->clearMessage();
+      m_areaSelectionCallback = nullptr;
+    }
   }
 }

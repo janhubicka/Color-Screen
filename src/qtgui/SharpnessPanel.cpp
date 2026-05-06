@@ -317,6 +317,11 @@ void SharpnessPanel::setupUi() {
       }, false, "Simulates a uniform \"box\" blur of a specific diameter in pixels. Used when diffraction simulation is disabled.");
 
 
+  // Measure MTF button
+  m_measureMtfBtn = addToggleButtonParameter("", "Measure mtf of an edge", [this](bool checked) {
+    emit measureMtfRequested(checked);
+  }, nullptr, nullptr, "Select an area containing a slanted edge to compute its MTF.");
+
   // Add "Match measured data" button (visible only if measured data exists)
   addButtonParameter("", "Match measured data", 
     [this]() {
@@ -932,6 +937,20 @@ void SharpnessPanel::setFocusAnalysisChecked(bool checked) {
         m_analyzeAreaBtn->blockSignals(true);
         m_analyzeAreaBtn->setChecked(checked);
         m_analyzeAreaBtn->blockSignals(false);
+    }
+}
+
+void SharpnessPanel::setMeasureMtfChecked(bool checked) {
+    if (m_measureMtfBtn) {
+        m_measureMtfBtn->blockSignals(true);
+        m_measureMtfBtn->setChecked(checked);
+        m_measureMtfBtn->blockSignals(false);
+    }
+}
+
+void SharpnessPanel::setMeasureMtfEnabled(bool enabled) {
+    if (m_measureMtfBtn) {
+        m_measureMtfBtn->setEnabled(enabled);
     }
 }
 

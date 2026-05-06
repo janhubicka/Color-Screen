@@ -144,6 +144,7 @@ private slots:
   void onAutodetectCoordinatesFinished(int reqId, colorscreen::scr_to_img_parameters result, std::shared_ptr<colorscreen::progress_info> progress, bool success, bool cancelled);
   void onOptimizeCoordinatesFinished(int reqId, colorscreen::finetune_result result, std::shared_ptr<colorscreen::progress_info> progress, bool success, bool cancelled);
   void onMeasureRequested();
+  void onMeasureMtfRequested(bool checked);
   void onDistanceMeasured(colorscreen::point_t p1, colorscreen::point_t p2);
 
   // Recent Files
