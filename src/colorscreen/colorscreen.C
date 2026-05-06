@@ -47,7 +47,8 @@ static enum subhelp {
   help_lab,
   help_read_chemcad_spectra,
   help_has_regular_screen,
-  help_mtf
+  help_mtf,
+  help_slanted_edge
 } subhelp
     = help_basic;
 
@@ -64,6 +65,18 @@ print_help (char *err = NULL)
   fprintf (stderr, "      --version                 print version\n");
   fprintf (stderr, "      --threads=n               set number of threads\n");
   fprintf (stderr, "      --time-report             report time spent in tasks\n");
+  if (subhelp == help_slanted_edge || subhelp == help_basic)
+    {
+      fprintf (stderr, "  slanted-edge <image-file> [<args>]\n");
+      fprintf (stderr, "    run slanted edge analysis on an image\n");
+    }
+  if (subhelp == help_slanted_edge)
+    {
+      fprintf (stderr, "    Supported args:\n");
+      fprintf (stderr, "      --gamma=val               set gamma correction of input file (default 1.0)\n");
+      fprintf (stderr, "      --save-mtf=file           save measured MTF to a file in QuickMTF format\n");
+      fprintf (stderr, "      --compare-with=file tol   compare measured MTF with reference and fail if difference > tol\n");
+    }
   if (subhelp == help_render || subhelp == help_basic)
     {
       fprintf (stderr, "  render <scan> <parameters> <output> [<args>]\n");
@@ -3895,6 +3908,175 @@ do_has_regular_screen (int argc, char **argv)
   return error_found ? -1 : found ? 1 : 0;
 }
 
+/* Implement "slanted-edge" command with ARGC and ARGV.  */
+int
+do_slanted_edge (int argc, char **argv)
+{
+  const char *filename = NULL;
+  const char *mtfname = NULL;
+  const char *compare_mtf = NULL;
+  float tolerance = 0.05;
+  float gamma = 1.0;
+  slanted_edge_parameters params;
+  subhelp = help_slanted_edge;
+
+  for (int i = 0; i < argc; i++)
+    {
+      std::string_view arg (argv[i]);
+      float flt;
+      if (parse_common_flags (argc, argv, &i))
+        ;
+      else if (parse_float_param (argc, argv, &i, "gamma", flt, 0.1, 10))
+        gamma = flt;
+      else if (const char *str = arg_with_param (argc, argv, &i, "save-mtf"))
+        mtfname = str;
+      else if (arg == "--compare-with")
+        {
+          if (i + 2 >= argc)
+            {
+              fprintf (stderr, "--compare-with requires two parameters: <file> <tolerance>\n");
+              return 1;
+            }
+          compare_mtf = argv[++i];
+          tolerance = atof (argv[++i]);
+        }
+      else if (argv[i][0] == '-')
+        {
+          print_help (argv[i]);
+          return 1;
+        }
+      else
+        filename = argv[i];
+    }
+
+  if (!filename)
+    {
+      fprintf (stderr, "No image file specified\n");
+      return 1;
+    }
+
+  image_data img;
+  const char *error = NULL;
+  file_progress_info progress (stdout, verbose);
+  if (!img.load (filename, false, &error, &progress))
+    {
+      fprintf (stderr, "Cannot load %s: %s\n", filename, error);
+      return 1;
+    }
+
+  render_parameters rparam;
+  rparam.gamma = gamma;
+
+  slanted_edge_results res = slanted_edge_mtf (rparam, img, img.get_area(), params, &progress);
+  if (!res.success)
+    {
+      fprintf (stderr, "Slanted edge analysis failed\n");
+      return 1;
+    }
+
+  if (verbose)
+    {
+      progress.pause_stdout ();
+      printf ("Detected edge: (%.2f, %.2f) - (%.2f, %.2f)\n", 
+              (double)res.edge_p1.x, (double)res.edge_p1.y, 
+              (double)res.edge_p2.x, (double)res.edge_p2.y);
+      progress.resume_stdout ();
+    }
+
+  if (rparam.sharpen.scanner_mtf.measurements.empty())
+    {
+      fprintf (stderr, "No MTF measurement produced\n");
+      return 1;
+    }
+
+  auto &m = rparam.sharpen.scanner_mtf.measurements[0];
+
+  if (verbose)
+    {
+      progress.pause_stdout ();
+      printf ("Measured MTF:\n");
+      for (size_t i = 0; i < m.size(); i += std::max((size_t)1, m.size() / 20))
+        printf ("  Freq %.3f: %.3f%%\n", m.get_freq(i), (double)m.get_contrast(i));
+      progress.resume_stdout ();
+    }
+
+  if (mtfname)
+    {
+      FILE *f = fopen (mtfname, "wt");
+      if (!f)
+        {
+          perror (mtfname);
+          return 1;
+        }
+      for (size_t i = 0; i < m.size(); i++)
+        {
+          double fq = m.get_freq(i);
+          double c = m.get_contrast(i);
+          fprintf (f, "%.3f\t%.3f\t%.3f\t%.3f\t%.3f\n", fq, c, c, c, c);
+        }
+      fclose (f);
+    }
+
+  if (compare_mtf)
+    {
+      FILE *f = fopen (compare_mtf, "rt");
+      if (!f)
+        {
+          perror (compare_mtf);
+          return 1;
+        }
+      std::vector<std::pair<double, double>> ref_mtf;
+      char line[1024];
+      while (fgets (line, sizeof(line), f))
+        {
+          double fq, r, g, b, l;
+          if (sscanf (line, "%lf %lf %lf %lf %lf", &fq, &r, &g, &b, &l) == 5)
+            ref_mtf.push_back ({fq, l});
+        }
+      fclose (f);
+
+      if (ref_mtf.empty())
+        {
+          fprintf (stderr, "Reference MTF file %s is empty or invalid\n", compare_mtf);
+          return 1;
+        }
+
+      double max_err = 0;
+      for (size_t i = 0; i < m.size(); i++)
+        {
+          double fq = m.get_freq(i);
+          double c = m.get_contrast(i);
+          
+          // Interpolate ref_mtf
+          if (fq < ref_mtf.front().first || fq > ref_mtf.back().first)
+            continue;
+            
+          auto it = std::lower_bound(ref_mtf.begin(), ref_mtf.end(), std::make_pair(fq, 0.0),
+                                     [](const std::pair<double, double>& a, const std::pair<double, double>& b) {
+                                       return a.first < b.first;
+                                     });
+          if (it == ref_mtf.begin()) continue;
+          auto prev = std::prev(it);
+          double t = (fq - prev->first) / (it->first - prev->first);
+          double ref_c = prev->second * (1.0 - t) + it->second * t;
+          
+          double err = std::abs(c - ref_c);
+          if (err > max_err) max_err = err;
+        }
+      
+      if (verbose)
+        printf("Max MTF error: %.3f%%\n", max_err);
+        
+      if (max_err > tolerance)
+        {
+          fprintf (stderr, "MTF comparison failed: max error %.3f%% > tolerance %.3f%%\n", max_err, tolerance);
+          return 1;
+        }
+    }
+
+  return 0;
+}
+
 /* Entry point for colorscreen.  */
 int
 main (int argc, char **argv)
@@ -3940,7 +4122,8 @@ main (int argc, char **argv)
     {"read-chemcad-spectra", [](int ac, char **av) { read_chemcad (ac, av); return 0; }, ""},
     {"has-regular-screen", [](int ac, char **av) { return do_has_regular_screen (ac, av); }, ""},
     {"mtf", [](int ac, char **av) { return do_mtf (ac, av); }, ""},
-    {"adjust-par", [](int ac, char **av) { return do_adjust_par (ac, av); }, ""}
+    {"adjust-par", [](int ac, char **av) { return do_adjust_par (ac, av); }, ""},
+    {"slanted-edge", [](int ac, char **av) { return do_slanted_edge (ac, av); }, ""}
   };
 
   for (const auto &c : commands)
