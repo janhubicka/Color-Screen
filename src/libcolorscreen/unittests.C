@@ -21,6 +21,7 @@
 #include "include/spectrum-to-xyz.h"
 #include "lru-cache.h"
 #include "include/histogram.h"
+#include "deconvolve.h"
 
 
 using namespace colorscreen;
@@ -1682,6 +1683,101 @@ test_image_area ()
 
   return ok;
 }
+
+static luminosity_t get_test_gray(image_data *img, int_point_t p, int, void *)
+{
+  return (luminosity_t)img->get_pixel(p.x, p.y) / 65535.0f;
+}
+
+static bool test_slanted_edge_mtf()
+{
+  printf("Testing slanted edge MTF...\n");
+  int w = 512, h = 512;
+  image_data img;
+  if (!img.set_dimensions(w, h, false, true))
+    return false;
+  
+  // Render slanted edge (step function)
+  double angle = 5.0 * M_PI / 180.0;
+  double cos_a = std::cos(angle);
+  double sin_a = std::sin(angle);
+  for (int y = 0; y < h; y++)
+    for (int x = 0; x < w; x++)
+      {
+        double d = (x - w/2) * cos_a + (y - h/2) * sin_a;
+        img.put_pixel(x, y, d > 0 ? 60000 : 5000);
+      }
+      
+  // Setup blur parameters
+  sharpen_parameters sp;
+  sp.mode = sharpen_parameters::blur_deconvolution;
+  sp.scanner_mtf.f_stop = 8;
+  sp.scanner_mtf.scan_dpi = 4000;
+  sp.scanner_mtf.defocus = 0.01; // 10 microns displacement
+  sp.scanner_mtf.pixel_pitch = 3.76;
+  sp.scanner_mtf.wavelength = 550;
+  sp.scanner_mtf_scale = 1.0;
+  sp.supersample = 1;
+
+  std::vector<float> blurred_data(w * h);
+  
+  if (!deconvolve<luminosity_t, float, image_data *, void *, get_test_gray, float>(
+        blurred_data.data(), &img, nullptr, w, h, sp, nullptr, true))
+    {
+      printf("Blurring failed\n");
+      return false;
+    }
+
+  image_data blurred;
+  if (!blurred.set_dimensions(w, h, false, true))
+    return false;
+  for (int i = 0; i < w * h; i++)
+    blurred.put_pixel(i % w, i / w, (uint16_t)std::clamp(blurred_data[i] * 65535.0f, 0.0f, 65535.0f));
+    
+  // Analyze edge
+  render_parameters rparam;
+  rparam.gamma = 1.0;
+  
+  slanted_edge_parameters params;
+  slanted_edge_results res = slanted_edge_mtf(rparam, blurred, blurred.get_area(), params, nullptr);
+  
+  if (!res.success)
+    {
+      printf("Slanted edge detection failed\n");
+      return false;
+    }
+    
+  printf("Edge found: (%f,%f) - (%f,%f)\n", (double)res.edge_p1.x, (double)res.edge_p1.y, (double)res.edge_p2.x, (double)res.edge_p2.y);
+  
+  // Verify MTF
+  if (rparam.sharpen.scanner_mtf.measurements.empty())
+    {
+      printf("No MTF measurement generated\n");
+      return false;
+    }
+    
+  auto &measurement = rparam.sharpen.scanner_mtf.measurements[0];
+  printf("MTF size: %zu\n", measurement.size());
+  
+  if (measurement.size() < 10)
+    {
+      printf("MTF too small\n");
+      return false;
+    }
+    
+  // Check some MTF values (should be roughly decreasing)
+  printf("Freq 0.1: %f, Freq 0.4: %f\n", 
+         (double)measurement.get_contrast(measurement.size() / 10), 
+         (double)measurement.get_contrast(4 * measurement.size() / 10));
+         
+  if (measurement.get_contrast(measurement.size() / 10) < measurement.get_contrast(4 * measurement.size() / 10))
+    {
+      printf("MTF is not decreasing!\n");
+      return false;
+    }
+    
+  return true;
+}
 }
 
 
@@ -1689,7 +1785,7 @@ test_image_area ()
 int
 main ()
 {
-  printf ("1..29\n");
+  printf ("1..30\n");
 
 
   test_matrix ();
@@ -1723,6 +1819,7 @@ main ()
   report ("mesh inversion tests", test_mesh_inversion ());
   report ("cow points tests", test_cow_points ());
   report ("image area tests", test_image_area ());
+  report ("slanted edge MTF tests", test_slanted_edge_mtf ());
 
   return error_found;
 }
