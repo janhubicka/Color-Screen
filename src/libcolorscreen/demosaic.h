@@ -2904,6 +2904,25 @@ protected:
      The algorithm follows the same five steps as standard RCD but uses
      larger offsets and search kernels to handle the sparsity.
   */
+  /**
+   * RCD (Ratio-Corrected Demosaicing) specialized for 4x4 sparse screen patterns.
+   * 
+   * This implementation extends standard RCD to handle screen geometries like 
+   * Dufaycolor, where color samples are not present in every row/column.
+   * 
+   * The process consists of 4 main steps:
+   * 1. Directional Discrimination: Find local edge orientation using 
+   *    distance-normalized gradients on the dominating channel.
+   * 2. Phase-Invariant LPF: Compute a local luminosity average using a 12x12
+   *    window to avoid pattern-beating artifacts.
+   * 3. Dominating Channel Interpolation: Fill the dominating channel using
+   *    adaptive inverse-distance weighting (IDW) based on local edges.
+   * 4. Remaining Channels Interpolation: Fill R/B channels by interpolating
+   *    color differences (C - G) along detected edges.
+   * 
+   * AH_GREEN, AH_RED, AH_BLUE are the channel indices. AH_GREEN should be 
+   * the channel with highest density (e.g., Red for Dufay, Blue for Paget).
+   */
   template <int ah_green, int ah_red, int ah_blue>
   bool
   rcd_interpolation_4x4 (progress_info *progress)
@@ -2933,7 +2952,9 @@ protected:
               auto get_grad = [&](int dx, int dy) {
                 luminosity_t v1 = 0, v2 = 0;
                 int d1 = 0, d2 = 0;
-                /* Search for nearest dots of dominating channel in a "fat" band.  */
+                /* Search for nearest dots of dominating channel in a "fat" band.
+                   We search perpendicular to the search direction (j in [-2, 2])
+                   to reliably find samples in sparse patterns.  */
                 for (int i = 1; i <= 8; i++) {
                    for (int j = -2; j <= 2; j++) {
                       int nx = x + i*dx + j*dy;
@@ -2948,7 +2969,8 @@ protected:
                       }
                    }
                 }
-                /* Normalize gradient by the total distance to make cardinal directions comparable.  */
+                /* Normalize gradient by the total distance to make cardinal directions comparable.
+                   This is critical when samples are found at different distances.  */
                 return (d1 && d2) ? fabs(v1 - v2) / (luminosity_t)(d1 + d2) : (luminosity_t)0;
               };
               v_grad[y * w + x] = get_grad(0, 1);
@@ -2982,6 +3004,9 @@ protected:
     /* ================================================================
        Step 2: Compute the low-pass filter (LPF).
        We use a weighted average over a 12x12 window (multiple of 4).
+       A 12x12 window is phase-invariant for 4x4 patterns, meaning the 
+       luminosity estimate doesn't fluctuate based on the window's 
+       alignment with the Dufay grid.
        ================================================================ */
     std::vector<luminosity_t> lpf (w * h, 0);
 #pragma omp parallel for schedule(dynamic, 16)
@@ -3041,8 +3066,9 @@ protected:
                   int ny = y + i*dy + j*dx;
                   if (GEOMETRY::demosaic_entry_color (nx, ny) == ah_green) {
                     luminosity_t g = known (nx, ny);
-                    /* Gradient normalized by distance.  */
+                    /* Local gradient for directional weighting.  */
                     luminosity_t grad = fabs (g - known (nx + i*dx, ny + i*dy)) / (luminosity_t)i;
+                    /* Ratio-based estimate: G_interpolated = G_sample * LPF_here / LPF_sample.  */
                     luminosity_t est = g * lpf2 / (eps + lpfi + lpf[ny * w + nx]);
                     /* Inverse weight proportional to 1/(grad*dist).  */
                     return {est, (grad + eps) * (luminosity_t)i};
