@@ -4318,15 +4318,19 @@ protected:
 template <typename ANALYZER = analyze_base_worker<paget_geometry>>
 class demosaic_paget_base : public demosaic_base<paget_geometry, ANALYZER>
 {
+  using demosaic_base<paget_geometry, ANALYZER>::initialize;
+  using demosaic_base<paget_geometry, ANALYZER>::m_area;
+  using demosaic_base<paget_geometry, ANALYZER>::m_demosaiced;
+
 public:
   bool
   demosaic (ANALYZER *analyze, render *r,
             render_parameters::screen_demosaic_t alg,
             denoise_parameters denoise_params, progress_info *progress)
   {
-    if (!this->initialize (analyze))
+    if (!initialize (analyze))
       return false;
-    if (!analyze->populate_demosaiced_data (this->m_demosaiced, r, this->m_area, progress))
+    if (!analyze->populate_demosaiced_data (m_demosaiced, r, m_area, progress))
       return false;
     switch (alg)
       {
@@ -4361,7 +4365,7 @@ public:
         break;
       case render_parameters::rcd_demosaic:
         if (!this->template rcd_interpolation<base_geometry::blue, base_geometry::red,
-                               base_geometry::green> (progress))
+                                base_geometry::green> (progress))
           return false;
         break;
       case render_parameters::lmmse_demosaic:
@@ -4375,12 +4379,12 @@ public:
     if (denoise_params.get_mode () != denoise_parameters::none)
       {
         return denoise_rgb<luminosity_t> (
-            this->m_area.width, this->m_area.height,
+            m_area.width, m_area.height,
             [&] (int x, int y) {
-              return this->m_demosaiced[y * this->m_area.width + x];
+              return m_demosaiced[y * m_area.width + x];
             },
             [&] (int x, int y, rgbdata pixel) {
-              this->m_demosaiced[y * this->m_area.width + x] = pixel;
+              m_demosaiced[y * m_area.width + x] = pixel;
             },
             denoise_params, progress);
       }
@@ -4394,15 +4398,19 @@ class demosaic_paget : public demosaic_paget_base<> {};
 template <typename ANALYZER = analyze_base_worker<dufay_geometry>>
 class demosaic_dufay_base : public demosaic_base<dufay_geometry, ANALYZER>
 {
+  using demosaic_base<dufay_geometry, ANALYZER>::initialize;
+  using demosaic_base<dufay_geometry, ANALYZER>::m_area;
+  using demosaic_base<dufay_geometry, ANALYZER>::m_demosaiced;
+
 public:
   bool
   demosaic (ANALYZER *analyze, render *r,
             render_parameters::screen_demosaic_t alg,
             denoise_parameters denoise_params, progress_info *progress)
   {
-    if (!this->initialize (analyze))
+    if (!initialize (analyze))
       return false;
-    if (!analyze->populate_demosaiced_data (this->m_demosaiced, r, this->m_area, progress))
+    if (!analyze->populate_demosaiced_data (m_demosaiced, r, m_area, progress))
       return false;
     switch (alg)
       {
@@ -4436,7 +4444,7 @@ public:
 #endif
       case render_parameters::rcd_demosaic:
         if (!this->template rcd_interpolation_4x4<base_geometry::red, base_geometry::green,
-                               base_geometry::blue> (progress))
+                                base_geometry::blue> (progress))
           return false;
         break;
 #if 0
@@ -4452,12 +4460,12 @@ public:
     if (denoise_params.get_mode () != denoise_parameters::none)
       {
         return denoise_rgb<luminosity_t> (
-            this->m_area.width, this->m_area.height,
+            m_area.width, m_area.height,
             [&] (int x, int y) {
-              return this->m_demosaiced[y * this->m_area.width + x];
+              return m_demosaiced[y * m_area.width + x];
             },
             [&] (int x, int y, rgbdata pixel) {
-              this->m_demosaiced[y * this->m_area.width + x] = pixel;
+              m_demosaiced[y * m_area.width + x] = pixel;
             },
             denoise_params, progress);
       }
