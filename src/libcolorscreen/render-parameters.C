@@ -83,6 +83,12 @@ const property_t sharpen_parameters::sharpen_mode_names []  = {
   { "Richardson-Lucy-deconvolution", "Richardson-Lucy deconvolution", "Reverse sharpness loss using Modulation Transfer Function estimate in multiple steps for better precision." },
   { "blur-deconvolution", "Blur deconvolution.", "" },
 };
+const property_t denoise_parameters::denoise_mode_names []  = {
+  { "none", "None", "No denoising." },
+  { "bilateral", "Bilateral filter", "Fast edge-preserving smoothing filter." },
+  { "nl-means", "Non-local means", "High quality denoising algorithm preserving details and suppressing periodic patterns." },
+  { "nl-fast", "Non-local means (fast)", "Optimized version of non-local means denoising." },
+};
 const property_t render_parameters::collection_quality_names []  = {
   { "fast", "Fast", "Sample each patch in its center" },
   { "simple-screen", "Simple-screen", "Collect density of patches on multiple pixels.  Do fast estimation on sharpened screen filter." },
@@ -1445,6 +1451,8 @@ render_parameters::original_render_from (render_parameters &rparam, bool color, 
       mix_blue = rparam.mix_blue;
     }
   sharpen = rparam.sharpen;
+  denoise = rparam.denoise;
+  screen_denoise = rparam.screen_denoise;
   gamut_warning = rparam.gamut_warning;
 
   /* Copy setup of interpolated rendering algorithm.  */

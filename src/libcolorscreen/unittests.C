@@ -22,6 +22,7 @@
 #include "lru-cache.h"
 #include "include/histogram.h"
 #include "deconvolve.h"
+#include "denoise.h"
 
 
 using namespace colorscreen;
@@ -1831,6 +1832,74 @@ static bool test_slanted_edge_mtf()
     
   return true;
 }
+
+static bool
+test_denoise ()
+{
+  const int width = 64;
+  const int height = 64;
+  std::vector<float> original (width * height);
+  std::vector<float> noisy (width * height);
+
+  unsigned int seed = 123;
+  /* Create a simple gradient image.  */
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      {
+        float val = (float)x / width;
+        original[y * width + x] = val;
+        /* Add some noise.  */
+        float noise = (float)(fast_rand16 (&seed) % 100) / 1000.0f;
+        noisy[y * width + x] = val + noise;
+      }
+
+  auto get_float_pixel = [] (const std::vector<float> &data, int_point_t p, int width, void *) -> float
+  {
+    return data[p.y * width + p.x];
+  };
+
+  denoise_parameters::denoise_mode modes[] = {
+    denoise_parameters::bilateral,
+    denoise_parameters::nl_means,
+    denoise_parameters::nl_fast
+  };
+
+  for (auto mode : modes)
+    {
+      std::vector<float> denoised (width * height);
+      denoise_parameters params;
+      params.mode = mode;
+      params.strength = 0.1f;
+      params.patch_radius = 1;
+      params.search_radius = 3;
+      params.bilateral_sigma_s = 2.0f;
+      params.bilateral_sigma_r = 0.1f;
+
+      if (!denoise<float, float, const std::vector<float> &, void *, get_float_pixel, float> (
+              denoised.data (), noisy, NULL, width, height, params, NULL, false))
+        return false;
+
+      /* Calculate MSE for noisy and denoised images.  */
+      double mse_noisy = 0;
+      double mse_denoised = 0;
+      for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+          {
+            double diff_noisy = noisy[y * width + x] - original[y * width + x];
+            double diff_denoised = denoised[y * width + x] - original[y * width + x];
+            mse_noisy += diff_noisy * diff_noisy;
+            mse_denoised += diff_denoised * diff_denoised;
+          }
+
+      if (mse_denoised >= mse_noisy)
+        {
+          printf ("Denoising mode %i failed to reduce MSE: noisy %f, denoised %f\n", (int)mode, mse_noisy, mse_denoised);
+          return false;
+        }
+    }
+
+  return true;
+}
 }
 
 
@@ -1875,6 +1944,7 @@ main ()
   report ("cow points tests", test_cow_points ());
   report ("image area tests", test_image_area ());
   report ("slanted edge MTF tests", test_slanted_edge_mtf ());
+  report ("denoising tests", test_denoise ());
 
   return error_found;
 }

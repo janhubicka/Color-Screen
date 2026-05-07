@@ -676,6 +676,7 @@ struct base_geometry
     red,
     green,
     blue,
+    none,
   };
 
   /* Default color pattern.  */

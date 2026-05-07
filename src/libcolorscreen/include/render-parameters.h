@@ -176,6 +176,79 @@ struct sharpen_parameters
   sharpen_parameters () = default;
 };
 
+struct denoise_parameters
+{
+  /* Supported denoising modes.  */
+  enum denoise_mode
+  {
+    none,
+    bilateral,
+    nl_means,
+    nl_fast,
+    denoise_mode_max
+  };
+  DLL_PUBLIC static const property_t denoise_mode_names[(int)denoise_mode_max];
+
+  /* Denoising mode.  */
+  enum denoise_mode mode = none;
+
+  /* Strength of filtering (h) for NL-means.  */
+  luminosity_t strength = 0;
+
+  /* Patch radius for NL-means.  */
+  int patch_radius = 1;
+
+  /* Search radius for NL-means.  */
+  int search_radius = 6;
+
+  /* Bilateral filter spatial sigma.  */
+  luminosity_t bilateral_sigma_s = 2.0;
+
+  /* Bilateral filter range sigma.  */
+  luminosity_t bilateral_sigma_r = 0.1;
+
+  /* Return effective denoising mode.  */
+  pure_attr enum denoise_mode get_mode () const
+  {
+    if (mode == bilateral)
+      return (bilateral_sigma_s > 0 && bilateral_sigma_r > 0) ? bilateral : none;
+    if (strength <= 0)
+      return none;
+    return mode;
+  };
+
+  /* Return true if THIS and O will produce same image.  */
+  pure_attr bool
+  operator== (const denoise_parameters &o) const
+  {
+    enum denoise_mode mode = get_mode ();
+    if (o.get_mode () != mode)
+      return false;
+    if (mode == none)
+      return true;
+    if (mode == bilateral)
+      return bilateral_sigma_s == o.bilateral_sigma_s
+	     && bilateral_sigma_r == o.bilateral_sigma_r;
+    return strength == o.strength
+	   && patch_radius == o.patch_radius
+	   && search_radius == o.search_radius;
+  }
+
+  /* Return true if THIS and O have same data.  */
+  pure_attr bool equal_p (const denoise_parameters &o) const
+  {
+    return mode == o.mode
+	   && strength == o.strength
+	   && patch_radius == o.patch_radius
+	   && search_radius == o.search_radius
+	   && bilateral_sigma_s == o.bilateral_sigma_s
+	   && bilateral_sigma_r == o.bilateral_sigma_r;
+  }
+
+  /* Default constructor.  */
+  denoise_parameters () = default;
+};
+
 /* Parameters of rendering algorithms.  */
 struct render_parameters
 {
@@ -257,6 +330,9 @@ struct render_parameters
 
   /* Sharpening parameters.  */
   sharpen_parameters sharpen;
+
+  /* Denoising parameters.  */
+  denoise_parameters denoise;
 
   /***** Tile Adjustment (used to adjust parameters of individual tiles) *****/
 
@@ -366,6 +442,10 @@ struct render_parameters
 
   /* Radius (in image pixels) the screen should be blurred.  */
   coord_t screen_blur_radius = 0.5;
+
+  /* Screen denoising parameters.  */
+  denoise_parameters screen_denoise;
+
   /* Threshold for collecting color information.  */
   luminosity_t collection_threshold = 0.2;
 
@@ -592,6 +672,8 @@ struct render_parameters
 	   && scan_crop == other.scan_crop
 	   && image_area == other.image_area
 	   && sharpen.equal_p (other.sharpen)
+	   && denoise.equal_p (other.denoise)
+	   && screen_denoise.equal_p (other.screen_denoise)
            && presaturation == other.presaturation
 	   && gamut_warning == other.gamut_warning
            && saturation == other.saturation && brightness == other.brightness

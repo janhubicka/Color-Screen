@@ -249,8 +249,67 @@ void ScreenPanel::setupUi() {
   );
 
 
-  // Placeholder for future parameters (scr_to_img_parameters,
-  // scr_detect_parameters, solver_parameters)
+  addSeparator("Denoising");
+
+  // Screen Denoise Mode
+  addEnumParameter("Denoise Mode",
+      denoise_parameters::denoise_mode_names,
+      (int)denoise_parameters::denoise_mode_max,
+      [](const ParameterState &s) { return (int)s.rparams.screen_denoise.mode; },
+      [](ParameterState &s, int v) { s.rparams.screen_denoise.mode = (denoise_parameters::denoise_mode)v; },
+      nullptr, "Select denoising algorithm to reduce noise in the reconstructed image."
+  );
+
+  // Strength (h)
+  addSliderParameter(
+      "Strength", 0.0, 1.0, 100.0, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.screen_denoise.strength; },
+      [](ParameterState &s, double v) { s.rparams.screen_denoise.strength = v; },
+      1.0,
+      [](const ParameterState &s) {
+        return s.rparams.screen_denoise.mode == denoise_parameters::nl_means ||
+               s.rparams.screen_denoise.mode == denoise_parameters::nl_fast;
+      }, false, "Filtering strength for Non-local means denoising. Larger values remove more noise but may blur details.");
+
+  // Patch Radius
+  addSliderParameter(
+      "Patch Radius", 1, 10, 1, 0, "", "",
+      [](const ParameterState &s) { return (double)s.rparams.screen_denoise.patch_radius; },
+      [](ParameterState &s, double v) { s.rparams.screen_denoise.patch_radius = (int)v; },
+      1.0,
+      [](const ParameterState &s) {
+        return s.rparams.screen_denoise.mode == denoise_parameters::nl_means ||
+               s.rparams.screen_denoise.mode == denoise_parameters::nl_fast;
+      }, false, "Radius of the patch used for similarity comparison in Non-local means.");
+
+  // Search Radius
+  addSliderParameter(
+      "Search Radius", 1, 30, 1, 0, "", "",
+      [](const ParameterState &s) { return (double)s.rparams.screen_denoise.search_radius; },
+      [](ParameterState &s, double v) { s.rparams.screen_denoise.search_radius = (int)v; },
+      1.0,
+      [](const ParameterState &s) {
+        return s.rparams.screen_denoise.mode == denoise_parameters::nl_means ||
+               s.rparams.screen_denoise.mode == denoise_parameters::nl_fast;
+      }, false, "Radius of the search window for Non-local means. Larger values are slower but may produce better results.");
+
+  // Bilateral Sigma S
+  addSliderParameter(
+      "Bilateral Spatial Sigma", 0.1, 10.0, 10.0, 1, "", "",
+      [](const ParameterState &s) { return s.rparams.screen_denoise.bilateral_sigma_s; },
+      [](ParameterState &s, double v) { s.rparams.screen_denoise.bilateral_sigma_s = v; },
+      1.0,
+      [](const ParameterState &s) { return s.rparams.screen_denoise.mode == denoise_parameters::bilateral; },
+      false, "Spatial standard deviation for Bilateral filter. Controls the size of the smoothing neighborhood.");
+
+  // Bilateral Sigma R
+  addSliderParameter(
+      "Bilateral Range Sigma", 0.01, 1.0, 100.0, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.screen_denoise.bilateral_sigma_r; },
+      [](ParameterState &s, double v) { s.rparams.screen_denoise.bilateral_sigma_r = v; },
+      1.0,
+      [](const ParameterState &s) { return s.rparams.screen_denoise.mode == denoise_parameters::bilateral; },
+      false, "Range standard deviation for Bilateral filter. Controls how much intensity difference is allowed while smoothing.");
 
   updateUI();
 }

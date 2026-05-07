@@ -55,6 +55,7 @@ Changes in version 1.1
      - nearest neighbour
    - New contact copy (darkroom) simulator replacing former invert, film-gamma,
      target-film-gamma and output-curve parameters.
+   - Slanted edge MTF computation
  - Scanner MTF can now be specified for more precise handling of sharpness of
    the scanner lens.  This curve can be measured using slanted edge method, i.e
    using quickMTF

@@ -8,6 +8,8 @@
 #include "bspline.h"
 #include "include/color.h"
 #include "include/progress-info.h"
+#include "include/render-parameters.h"
+#include "denoise.h"
 
 template <typename T>
 static inline T
@@ -4088,7 +4090,8 @@ class demosaic_paget : public demosaic_base<paget_geometry>
 public:
   bool
   demosaic (analyze_paget *analyze, render *r,
-            render_parameters::screen_demosaic_t alg, progress_info *progress)
+            render_parameters::screen_demosaic_t alg,
+            denoise_parameters denoise_params, progress_info *progress)
   {
     if (!initialize (analyze))
       return false;
@@ -4137,6 +4140,93 @@ public:
         break;
       default:
         break;
+      }
+    if (denoise_params.get_mode () != denoise_parameters::none)
+      {
+        return denoise_rgb<luminosity_t> (
+            m_area.width, m_area.height,
+            [&] (int x, int y) {
+              return m_demosaiced[y * m_area.width + x];
+            },
+            [&] (int x, int y, rgbdata pixel) {
+              m_demosaiced[y * m_area.width + x] = pixel;
+            },
+            denoise_params, progress);
+      }
+    return true;
+  }
+};
+/* Paget screen demosaicing implementation.  The Paget screen uses a
+   rotated Bayer-like pattern where blue is the dominating channel.  */
+class demosaic_dufay : public demosaic_base<dufay_geometry>
+{
+public:
+  bool
+  demosaic (analyze_dufay *analyze, render *r,
+            render_parameters::screen_demosaic_t alg,
+            denoise_parameters denoise_params, progress_info *progress)
+  {
+    if (!initialize (analyze))
+      return false;
+    if (!analyze->populate_demosaiced_data (m_demosaiced, r, m_area, progress))
+      return false;
+#if 0
+    switch (alg)
+      {
+      case render_parameters::hamilton_adams_demosaic:
+        if (!hamilton_adams_interpolation_dominating_channel<
+                base_geometry::blue, true> (progress))
+          return false;
+        if (!hamilton_adams_interpolation_remaining_channels<
+                base_geometry::blue, base_geometry::red,
+                base_geometry::green> (progress))
+          return false;
+        break;
+      case render_parameters::ahd_demosaic:
+        // if (!ahd_interpolation_dominating_channel<base_geometry::blue,
+        // base_geometry::red, base_geometry::green, false, false> (progress))
+        // return false;
+        if (!ahd_interpolation_dominating_channel_dcraw<base_geometry::blue,
+                                                        base_geometry::red,
+                                                        base_geometry::green> (
+                progress))
+          return false;
+        if (!ahd_interpolation_remaining_channels<base_geometry::blue,
+                                                  base_geometry::red,
+                                                  base_geometry::green> (
+                progress))
+          return false;
+        break;
+      case render_parameters::amaze_demosaic:
+        if (!amaze_interpolation<base_geometry::blue, base_geometry::red,
+                                 base_geometry::green, true> (progress))
+          return false;
+        break;
+      case render_parameters::rcd_demosaic:
+        if (!rcd_interpolation<base_geometry::blue, base_geometry::red,
+                               base_geometry::green> (progress))
+          return false;
+        break;
+      case render_parameters::lmmse_demosaic:
+        if (!lmmse_interpolation<base_geometry::blue, base_geometry::red,
+                                 base_geometry::green> (progress))
+          return false;
+        break;
+      default:
+        break;
+      }
+#endif
+    if (denoise_params.get_mode () != denoise_parameters::none)
+      {
+        return denoise_rgb<luminosity_t> (
+            m_area.width, m_area.height,
+            [&] (int x, int y) {
+              return m_demosaiced[y * m_area.width + x];
+            },
+            [&] (int x, int y, rgbdata pixel) {
+              m_demosaiced[y * m_area.width + x] = pixel;
+            },
+            denoise_params, progress);
       }
     return true;
   }

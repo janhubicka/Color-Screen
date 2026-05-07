@@ -270,6 +270,42 @@ struct dufay_geometry : public base_geometry
   {
     return {e.x + (coord_t)0.5, (coord_t)e.y};
   }
+  /* Convert demosaiced coordinates to screen coordinates.  */
+  inline static point_t from_demosaiced_coordinates (point_t p)
+  {
+    return p * (coord_t)0.25;
+  }
+  /* Convert screen coordinates to demosaiced coordinates.  */
+  inline static point_t to_demosaiced_coordinates (point_t p)
+  {
+    return p * 4;
+  }
+  inline static int demosaic_period_x ()
+  {
+    return 4;
+  }
+  inline static int demosaic_period_y ()
+  {
+    return 4;
+  }
+  /* Dufaycolor pattern.  Since we collect red pixels shifted by half
+     of the square (to avoid interference with green/blue, we have
+     G.B.
+     ....
+     .R.R
+     ....  */
+  inline static int demosaic_entry_color (int x, int y)
+  {
+    x &= 3;
+    y &= 3;
+    if (x == 0 && y == 0)
+      return green;
+    if (x == 2 && y == 0)
+      return blue;
+    if ((x == 1 || x == 3) && y == 2)
+      return red;
+    return none;
+  }
 };
 
 void report_illuminant (class spectrum_dyes_to_xyz &spec, const char *name, const char *filename, const char *filename2 = NULL);
