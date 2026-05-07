@@ -389,8 +389,9 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
       m_paget = paget_analyzer_cache.get (p, analysis_area, progress, &id);
       if (!m_paget)
         return false;
-      if ((int)m_params.screen_demosaic >= (int)render_parameters::hamilton_adams_demosaic
+      if (((int)m_params.screen_demosaic >= (int)render_parameters::hamilton_adams_demosaic
 	  || m_params.screen_demosaic == render_parameters::default_demosaic)
+	  && !m_original_color)
         {
 	  struct demosaiced_params<analyze_paget> pp = {
 	    id, m_params.dark_point, m_params.scan_exposure, m_params.contact_copy,
@@ -411,8 +412,9 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
       m_dufay = dufay_analyzer_cache.get (p, analysis_area, progress, &id);
       if (!m_dufay)
         return false;
-      if ((int)m_params.screen_demosaic >= (int)render_parameters::hamilton_adams_demosaic
+      if (((int)m_params.screen_demosaic >= (int)render_parameters::hamilton_adams_demosaic
 	  || m_params.screen_demosaic == render_parameters::default_demosaic)
+	  && !m_original_color)
         {
 	  struct demosaiced_params<analyze_dufay> pp = {
 	    id, m_params.dark_point, m_params.scan_exposure, m_params.contact_copy,

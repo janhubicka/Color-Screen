@@ -10,6 +10,7 @@
 #include "include/progress-info.h"
 #include "include/render-parameters.h"
 #include "denoise.h"
+#include <utility>
 
 template <typename T>
 static inline T
@@ -2880,6 +2881,216 @@ protected:
     return !progress || !progress->cancelled ();
   }
 
+  /* RCD (Ratio Corrected Demosaicing) variant for 4x4 sparse CFA.
+
+     This variant is optimized for patterns where the dominating channel
+     is a 2x4 grid and non-dominating channels are 4x4 grids, with empty
+     pixels in between, such as in Dufaycolor reseau:
+        R . B .
+        . . . .
+        . G . G
+        . . . .
+
+     The algorithm follows the same five steps as standard RCD but uses
+     larger offsets and search kernels to handle the sparsity.
+  */
+  template <int ah_green, int ah_red, int ah_blue>
+  bool
+  rcd_interpolation_4x4 (progress_info *progress)
+  {
+    int w = m_area.width, h = m_area.height;
+    constexpr luminosity_t eps = (luminosity_t)1e-5;
+    constexpr luminosity_t epssq = (luminosity_t)1e-10;
+
+    if (progress)
+      progress->set_task ("demosaicing (rcd 4x4)", h * 6);
+
+    /* ================================================================
+       Step 1: Find vertical and horizontal interpolation directions.
+       We use a distance-2 high-pass filter to skip empty pixels.
+       ================================================================ */
+    std::vector<luminosity_t> vh_dir (w * h, (luminosity_t)0.5);
+    {
+      std::vector<luminosity_t> v_sq (w * h, 0);
+      std::vector<luminosity_t> h_sq (w * h, 0);
+
+#pragma omp parallel for schedule(dynamic, 16)
+      for (int y = 6; y < h - 6; y++)
+        {
+          if (progress && progress->cancel_requested ())
+            continue;
+          for (int x = 6; x < w - 6; x++)
+            {
+              /* Vertical 6th-order HPF with distance 2.  */
+              luminosity_t v
+                  = (known (x, y - 6) - known (x, y - 2) - known (x, y + 2)
+                     + known (x, y + 6))
+                    - 3 * (known (x, y - 4) + known (x, y + 4)) + 6 * known (x, y);
+              v_sq[y * w + x] = v * v;
+
+              /* Horizontal 6th-order HPF with distance 2.  */
+              luminosity_t hv
+                  = (known (x - 6, y) - known (x - 2, y) - known (x + 2, y)
+                     + known (x + 6, y))
+                    - 3 * (known (x - 4, y) + known (x + 4, y)) + 6 * known (x, y);
+              h_sq[y * w + x] = hv * hv;
+            }
+        }
+
+#pragma omp parallel for schedule(dynamic, 16)
+      for (int y = 8; y < h - 8; y++)
+        {
+          if (progress && progress->cancel_requested ())
+            continue;
+          for (int x = 8; x < w - 8; x++)
+            {
+              /* Accumulate statistics over a larger area due to sparsity.  */
+              luminosity_t v_stat = epssq;
+              luminosity_t h_stat = epssq;
+              for (int dy = -4; dy <= 4; dy += 2)
+                for (int dx = -4; dx <= 4; dx += 2)
+                  {
+                    v_stat += v_sq[(y + dy) * w + (x + dx)];
+                    h_stat += h_sq[(y + dy) * w + (x + dx)];
+                  }
+              vh_dir[y * w + x] = v_stat / (v_stat + h_stat);
+            }
+          if (progress)
+            progress->inc_progress ();
+        }
+    }
+
+    /* ================================================================
+       Step 2: Compute the low-pass filter (LPF).
+       We use a 7x7 box filter to ensure we hit all colors in the sparse grid.
+       ================================================================ */
+    std::vector<luminosity_t> lpf (w * h, 0);
+#pragma omp parallel for schedule(dynamic, 16)
+    for (int y = 3; y < h - 3; y++)
+      {
+        if (progress && progress->cancel_requested ())
+          continue;
+        for (int x = 3; x < w - 3; x++)
+          {
+            luminosity_t sum = 0;
+            int count = 0;
+            for (int dy = -3; dy <= 3; dy++)
+              for (int dx = -3; dx <= 3; dx++)
+                {
+                  if (GEOMETRY::demosaic_entry_color (x + dx, y + dy) != base_geometry::none)
+                    {
+                      sum += known (x + dx, y + dy);
+                      count++;
+                    }
+                }
+            lpf[y * w + x] = count > 0 ? sum / count : 0;
+          }
+        if (progress)
+          progress->inc_progress ();
+      }
+
+    /* ================================================================
+       Step 3: Populate the dominating channel (ah_green) at all sites.
+       ================================================================ */
+#pragma omp parallel for schedule(dynamic, 16)
+    for (int y = 8; y < h - 8; y++)
+      {
+        if (progress && progress->cancel_requested ())
+          continue;
+        for (int x = 8; x < w - 8; x++)
+          {
+            if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
+              {
+                d (x, y)[(int)ah_green] = known (x, y);
+                continue;
+              }
+
+            int idx = y * w + x;
+            luminosity_t lpfi = lpf[idx];
+            luminosity_t lpf2 = lpfi + lpfi;
+
+            /* Find nearest green neighbors in each cardinal direction.
+               In 4x4 pattern, they are at most distance 3.  */
+            auto get_est = [&](int dx, int dy) -> std::pair<luminosity_t, luminosity_t> {
+              for (int i = 1; i <= 4; i++) {
+                if (GEOMETRY::demosaic_entry_color (x + i*dx, y + i*dy) == ah_green) {
+                  luminosity_t g = known (x + i*dx, y + i*dy);
+                  luminosity_t grad = fabs (g - known (x + 2*i*dx, y + 2*i*dy));
+                  luminosity_t est = g * lpf2 / (eps + lpfi + lpf[(y + i*dy) * w + (x + i*dx)]);
+                  return {est, grad + eps};
+                }
+              }
+              return {0, 1e10};
+            };
+
+            auto n = get_est (0, -1);
+            auto s = get_est (0, 1);
+            auto w_ = get_est (-1, 0);
+            auto e = get_est (1, 0);
+
+            luminosity_t v_est = (n.second * s.first + s.second * n.first) / (n.second + s.second);
+            luminosity_t h_est = (w_.second * e.first + e.second * w_.first) / (w_.second + e.second);
+
+            /* Directional blend.  */
+            luminosity_t vh_disc = vh_dir[idx];
+            d (x, y)[(int)ah_green] = vh_disc * h_est + (1 - vh_disc) * v_est;
+          }
+        if (progress)
+          progress->inc_progress ();
+      }
+
+    /* ================================================================
+       Step 4: Populate non-dominating channels (R and B).
+       We use cardinal color-difference interpolation guided by G.
+       ================================================================ */
+#pragma omp parallel for schedule(dynamic, 16)
+    for (int y = 8; y < h - 8; y++)
+      {
+        if (progress && progress->cancel_requested ())
+          continue;
+        for (int x = 8; x < w - 8; x++)
+          {
+            luminosity_t g_here = d (x, y)[(int)ah_green];
+
+            for (int c : {ah_red, ah_blue})
+              {
+                if (GEOMETRY::demosaic_entry_color (x, y) == c)
+                  {
+                    d (x, y)[c] = known (x, y);
+                    continue;
+                  }
+
+                auto get_cdiff_est = [&](int dx, int dy) -> std::pair<luminosity_t, luminosity_t> {
+                  for (int i = 1; i <= 4; i++) {
+                    if (GEOMETRY::demosaic_entry_color (x + i*dx, y + i*dy) == c) {
+                      luminosity_t val = known (x + i*dx, y + i*dy);
+                      luminosity_t cd = val - d (x + i*dx, y + i*dy)[(int)ah_green];
+                      luminosity_t grad = fabs (val - known (x + 2*i*dx, y + 2*i*dy));
+                      return {cd, grad + eps};
+                    }
+                  }
+                  return {0, 1e10};
+                };
+
+                auto n = get_cdiff_est (0, -1);
+                auto s = get_cdiff_est (0, 1);
+                auto w_ = get_cdiff_est (-1, 0);
+                auto e = get_cdiff_est (1, 0);
+
+                luminosity_t v_cd = (n.second * s.first + s.second * n.first) / (n.second + s.second);
+                luminosity_t h_cd = (w_.second * e.first + e.second * w_.first) / (w_.second + e.second);
+
+                luminosity_t vh_disc = vh_dir[y * w + x];
+                d (x, y)[c] = g_here + vh_disc * h_cd + (1 - vh_disc) * v_cd;
+              }
+          }
+        if (progress)
+          progress->inc_progress ();
+      }
+
+    return !progress || !progress->cancelled ();
+  }
+
   /* LMMSE (Linear Minimum Mean Square Error) demosaicing.
 
      Based on the algorithm by Lei Zhang and Xiaolin Wu:
@@ -4170,52 +4381,47 @@ public:
       return false;
     if (!analyze->populate_demosaiced_data (m_demosaiced, r, m_area, progress))
       return false;
-#if 0
     switch (alg)
       {
       case render_parameters::hamilton_adams_demosaic:
         if (!hamilton_adams_interpolation_dominating_channel<
-                base_geometry::blue, true> (progress))
+                base_geometry::red, true> (progress))
           return false;
         if (!hamilton_adams_interpolation_remaining_channels<
-                base_geometry::blue, base_geometry::red,
-                base_geometry::green> (progress))
+                base_geometry::red, base_geometry::green,
+                base_geometry::blue> (progress))
           return false;
         break;
       case render_parameters::ahd_demosaic:
-        // if (!ahd_interpolation_dominating_channel<base_geometry::blue,
-        // base_geometry::red, base_geometry::green, false, false> (progress))
-        // return false;
-        if (!ahd_interpolation_dominating_channel_dcraw<base_geometry::blue,
-                                                        base_geometry::red,
-                                                        base_geometry::green> (
+        if (!ahd_interpolation_dominating_channel_dcraw<base_geometry::red,
+                                                        base_geometry::green,
+                                                        base_geometry::blue> (
                 progress))
           return false;
-        if (!ahd_interpolation_remaining_channels<base_geometry::blue,
-                                                  base_geometry::red,
-                                                  base_geometry::green> (
+        if (!ahd_interpolation_remaining_channels<base_geometry::red,
+                                                  base_geometry::green,
+                                                  base_geometry::blue> (
                 progress))
           return false;
         break;
       case render_parameters::amaze_demosaic:
-        if (!amaze_interpolation<base_geometry::blue, base_geometry::red,
-                                 base_geometry::green, true> (progress))
+        if (!amaze_interpolation<base_geometry::red, base_geometry::green,
+                                 base_geometry::blue, true> (progress))
           return false;
         break;
       case render_parameters::rcd_demosaic:
-        if (!rcd_interpolation<base_geometry::blue, base_geometry::red,
-                               base_geometry::green> (progress))
+        if (!rcd_interpolation_4x4<base_geometry::red, base_geometry::green,
+                               base_geometry::blue> (progress))
           return false;
         break;
       case render_parameters::lmmse_demosaic:
-        if (!lmmse_interpolation<base_geometry::blue, base_geometry::red,
-                                 base_geometry::green> (progress))
+        if (!lmmse_interpolation<base_geometry::red, base_geometry::green,
+                                 base_geometry::blue> (progress))
           return false;
         break;
       default:
         break;
       }
-#endif
     if (denoise_params.get_mode () != denoise_parameters::none)
       {
         return denoise_rgb<luminosity_t> (
