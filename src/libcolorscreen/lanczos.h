@@ -2,6 +2,7 @@
 #define LANZCOS_H
 #include <cmath>
 #include "include/precomputed-function.h"
+#include "cubic-interpolate.h"
 
 namespace colorscreen
 {

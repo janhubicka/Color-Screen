@@ -23,6 +23,8 @@
 #include "include/histogram.h"
 #include "deconvolve.h"
 #include "denoise.h"
+#include "include/dufaycolor.h"
+#include "demosaic.h"
 
 
 using namespace colorscreen;
@@ -1900,6 +1902,87 @@ test_denoise ()
 
   return true;
 }
+/* Unit test for Dufaycolor RCD demosaicing.  */
+class fake_analyze_dufay
+{
+public:
+  int_image_area m_area;
+  fake_analyze_dufay (int w, int h) : m_area ({ 0, 0, w, h }) {}
+
+  int_image_area
+  demosaiced_area () const
+  {
+    return m_area;
+  }
+
+  bool
+  populate_demosaiced_data (std::vector<rgbdata> &data, render *r,
+                            int_image_area area, progress_info *progress)
+  {
+    for (int y = 0; y < m_area.height; y++)
+      for (int x = 0; x < m_area.width; x++)
+        {
+          int color = dufay_geometry::demosaic_entry_color (x, y);
+          if (color != base_geometry::none)
+            {
+              int tx = x / 16;
+              int ty = y / 16;
+              /* Each 16x16 tile has a unique solid color.  */
+              rgbdata tile_color;
+              tile_color.red = (luminosity_t)((tx * 17) % 256) / 255.0;
+              tile_color.green = (luminosity_t)((ty * 23) % 256) / 255.0;
+              tile_color.blue = (luminosity_t)(((tx + ty) * 11) % 256) / 255.0;
+
+              if (color == base_geometry::red)
+                data[y * m_area.width + x].red = tile_color.red;
+              else if (color == base_geometry::green)
+                data[y * m_area.width + x].green = tile_color.green;
+              else if (color == base_geometry::blue)
+                data[y * m_area.width + x].blue = tile_color.blue;
+            }
+        }
+    return true;
+  }
+};
+
+bool
+test_demosaic_dufay ()
+{
+  int w = 128, h = 128;
+  fake_analyze_dufay fake (w, h);
+  demosaic_dufay_base<fake_analyze_dufay> demosaicer;
+  denoise_parameters denoise_params;
+  
+  if (!demosaicer.demosaic (&fake, NULL, render_parameters::rcd_demosaic, denoise_params, NULL))
+    return false;
+
+  bool ok = true;
+  for (int ty = 0; ty < h / 16; ty++)
+    for (int tx = 0; tx < w / 16; tx++)
+      {
+        rgbdata expected;
+        expected.red = (luminosity_t)((tx * 17) % 256) / 255.0;
+        expected.green = (luminosity_t)((ty * 23) % 256) / 255.0;
+        expected.blue = (luminosity_t)(((tx + ty) * 11) % 256) / 255.0;
+
+        /* Check the middle 8x8 of each 16x16 tile.  */
+        for (int y = ty * 16 + 4; y < ty * 16 + 12; y++)
+          for (int x = tx * 16 + 4; x < tx * 16 + 12; x++)
+            {
+              rgbdata actual = demosaicer.demosaiced_data (x, y);
+              if (fabs (actual.red - expected.red) > 0.01
+                  || fabs (actual.green - expected.green) > 0.01
+                  || fabs (actual.blue - expected.blue) > 0.01)
+                {
+                  printf ("Demosaic mismatch at (%i, %i): expected (%f, %f, %f), got (%f, %f, %f)\n",
+                          x, y, expected.red, expected.green, expected.blue,
+                          actual.red, actual.green, actual.blue);
+                  ok = false;
+                }
+            }
+      }
+  return ok;
+}
 }
 
 
@@ -1907,44 +1990,73 @@ test_denoise ()
 
 
 int
-main ()
+main (int argc, char **argv)
 {
-  printf ("1..31\n");
+  struct test_entry
+  {
+    const char *name;
+    const char *description;
+    bool (*func) ();
+  };
 
+  test_entry tests[] = {
+    { "matrix", "matrix tests", [] () { test_matrix (); return true; } },
+    { "color", "color tests", [] () { test_color (); return true; } },
+    { "linearity", "render linearity tests", [] () { return (bool)test_render_linearity (); } },
+    { "blur", "screen blur tests", [] () { return test_screen_blur (); } },
+    { "sharpening", "screen sharpening tests", [] () { return test_screen_sharpening (); } },
+    { "homography", "homography tests", [] () { return (bool)test_homography (false, false, 0.000001); } },
+    { "warp", "lens warp tests", [] () { return test_lens_warp (); } },
+    { "lens_correction", "lens correction tests", [] () { return (bool)test_homography (true, false, 0.15); } },
+    { "1d_homography", "1d homography and lens correction tests", [] () { return (bool)test_homography (true, true, 0.15); } },
+    { "discovery", "screen discovery tests", [] () { return (bool)test_discovery (1.8); } },
+    { "precomputed", "precomputed function tests", [] () { return test_precomputed_function (); } },
+    { "histogram", "histogram parallel tests", [] () { return test_histogram_parallel (); } },
+    { "richards", "richards curve tests", [] () { return test_richards_curve (); } },
+    { "richards_symmetry", "richards symmetry tests", [] () { return test_richards_symmetry (); } },
+    { "richards_reversibility", "richards reversibility tests", [] () { return test_richards_reversibility (); } },
+    { "richards_functional_inverse", "richards functional inverse tests", [] () { return test_richards_functional_inverse (); } },
+    { "hd_reversibility", "hd reversibility tests", [] () { return test_hd_reversibility (); } },
+    { "hd_incremental", "hd incremental update tests", [] () { return test_hd_incremental_update (); } },
+    { "hd_validity", "hd validity tests", [] () { return test_hd_validity (); } },
+    { "hd_sorting", "hd sorting tests", [] () { return test_hd_sorting (); } },
+    { "tone_curve", "custom tone curve tests", [] () { return test_custom_tone_curve (); } },
+    { "lru_cache", "lru cache concurrency tests", [] () { return test_lru_cache_concurrency (); } },
+    { "spectrum", "spectrum to xyz tests", [] () { return test_spectrum_dyes_to_xyz (); } },
+    { "whitepoint", "whitepoint consistency tests", [] () { return test_whitepoint_constants (); } },
+    { "darkroom", "darkroom simulation tests", [] () { return test_darkroom (); } },
+    { "mesh_src_range", "mesh get_src_range tests", [] () { return test_get_src_range (); } },
+    { "mesh_inversion", "mesh inversion tests", [] () { return test_mesh_inversion (); } },
+    { "cow_points", "cow points tests", [] () { return test_cow_points (); } },
+    { "image_area", "image area tests", [] () { return test_image_area (); } },
+    { "slanted_edge", "slanted edge MTF tests", [] () { return test_slanted_edge_mtf (); } },
+    { "denoising", "denoising tests", [] () { return test_denoise (); } },
+    { "demosaic", "dufay demosaicing tests", [] () { return test_demosaic_dufay (); } },
+    { NULL, NULL, NULL }
+  };
 
-  test_matrix ();
-  report ("matrix tests", true);
-  test_color ();
-  report ("color tests", true);
-  report ("render linearity tests", test_render_linearity ());
-  report ("screen blur tests", test_screen_blur ());
-  report ("screen sharpening tests", test_screen_sharpening ());
-  report ("homography tests", test_homography (false, false, 0.000001));
-  report ("lens warp tests", test_lens_warp ());
-  report ("lens correction tests", test_homography (true, false, 0.15));
-  report ("1d homography and lens correction tests", test_homography (true, true, 0.15));
-  report ("screen discovery tests", test_discovery (1.8));
-  report ("precomputed function tests", test_precomputed_function ());
-  report ("histogram parallel tests", test_histogram_parallel ());
-  report ("richards curve tests", test_richards_curve ());
-  report ("richards symmetry tests", test_richards_symmetry ());
-  report ("richards reversibility tests", test_richards_reversibility ());
-  report ("richards functional inverse tests", test_richards_functional_inverse ());
-  report ("hd reversibility tests", test_hd_reversibility ());
-  report ("hd incremental update tests", test_hd_incremental_update ());
-  report ("hd validity tests", test_hd_validity ());
-  report ("hd sorting tests", test_hd_sorting ());
-  report ("custom tone curve tests", test_custom_tone_curve ());
-  report ("lru cache concurrency tests", test_lru_cache_concurrency ());
-  report ("spectrum to xyz tests", test_spectrum_dyes_to_xyz ());
-  report ("whitepoint consistency tests", test_whitepoint_constants ());
-  report ("darkroom simulation tests", test_darkroom ());
-  report ("mesh get_src_range tests", test_get_src_range ());
-  report ("mesh inversion tests", test_mesh_inversion ());
-  report ("cow points tests", test_cow_points ());
-  report ("image area tests", test_image_area ());
-  report ("slanted edge MTF tests", test_slanted_edge_mtf ());
-  report ("denoising tests", test_denoise ());
+  int num_to_run = 0;
+  for (int i = 0; tests[i].name; i++)
+    {
+      bool run = (argc == 1);
+      for (int j = 1; j < argc; j++)
+        if (strcmp (argv[j], tests[i].name) == 0)
+          run = true;
+      if (run)
+        num_to_run++;
+    }
+
+  printf ("1..%i\n", num_to_run);
+
+  for (int i = 0; tests[i].name; i++)
+    {
+      bool run = (argc == 1);
+      for (int j = 1; j < argc; j++)
+        if (strcmp (argv[j], tests[i].name) == 0)
+          run = true;
+      if (run)
+        report (tests[i].description, tests[i].func ());
+    }
 
   return error_found;
 }

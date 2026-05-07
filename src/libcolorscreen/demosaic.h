@@ -10,6 +10,8 @@
 #include "include/progress-info.h"
 #include "include/render-parameters.h"
 #include "denoise.h"
+#include "cubic-interpolate.h"
+#include "lanczos.h"
 #include <utility>
 
 template <typename T>
@@ -20,6 +22,13 @@ my_abs (T x)
 }
 namespace colorscreen
 {
+template <typename GEOMETRY> class analyze_base_worker;
+class analyze_paget;
+class analyze_dufay;
+class dufay_geometry;
+class paget_geometry;
+class render;
+
 /* Base class for all demosaicing implementations providing common
    data structures and basic accessors.  */
 class demosaic_generic_base
@@ -113,7 +122,8 @@ protected:
 /* Base class for demosaicing implementations providing common
    interpolation kernels and data accessors.  GEOMETRY specifies
    the CFA pattern.  */
-template <typename GEOMETRY> class demosaic_base : public demosaic_generic_base
+template <typename GEOMETRY, typename ANALYZER = analyze_base_worker<GEOMETRY>>
+class demosaic_base : public demosaic_generic_base
 {
   inline pure_attr rgbdata
   lanczos3_demosaiced_interpolate (point_t scr)
@@ -362,7 +372,7 @@ public:
 
 protected:
   bool
-  initialize (analyze_base_worker<GEOMETRY> *analysis)
+  initialize (ANALYZER *analysis)
   {
     m_area = analysis->demosaiced_area ();
     m_demosaiced.resize ((size_t)m_area.width * m_area.height);
@@ -4305,25 +4315,26 @@ protected:
 
 /* Paget screen demosaicing implementation.  The Paget screen uses a
    rotated Bayer-like pattern where blue is the dominating channel.  */
-class demosaic_paget : public demosaic_base<paget_geometry>
+template <typename ANALYZER = analyze_base_worker<paget_geometry>>
+class demosaic_paget_base : public demosaic_base<paget_geometry, ANALYZER>
 {
 public:
   bool
-  demosaic (analyze_paget *analyze, render *r,
+  demosaic (ANALYZER *analyze, render *r,
             render_parameters::screen_demosaic_t alg,
             denoise_parameters denoise_params, progress_info *progress)
   {
-    if (!initialize (analyze))
+    if (!this->initialize (analyze))
       return false;
-    if (!analyze->populate_demosaiced_data (m_demosaiced, r, m_area, progress))
+    if (!analyze->populate_demosaiced_data (this->m_demosaiced, r, this->m_area, progress))
       return false;
     switch (alg)
       {
       case render_parameters::hamilton_adams_demosaic:
-        if (!hamilton_adams_interpolation_dominating_channel<
+        if (!this->template hamilton_adams_interpolation_dominating_channel<
                 base_geometry::blue, true> (progress))
           return false;
-        if (!hamilton_adams_interpolation_remaining_channels<
+        if (!this->template hamilton_adams_interpolation_remaining_channels<
                 base_geometry::blue, base_geometry::red,
                 base_geometry::green> (progress))
           return false;
@@ -4332,29 +4343,29 @@ public:
         // if (!ahd_interpolation_dominating_channel<base_geometry::blue,
         // base_geometry::red, base_geometry::green, false, false> (progress))
         // return false;
-        if (!ahd_interpolation_dominating_channel_dcraw<base_geometry::blue,
+        if (!this->template ahd_interpolation_dominating_channel_dcraw<base_geometry::blue,
                                                         base_geometry::red,
                                                         base_geometry::green> (
                 progress))
           return false;
-        if (!ahd_interpolation_remaining_channels<base_geometry::blue,
+        if (!this->template ahd_interpolation_remaining_channels<base_geometry::blue,
                                                   base_geometry::red,
                                                   base_geometry::green> (
                 progress))
           return false;
         break;
       case render_parameters::amaze_demosaic:
-        if (!amaze_interpolation<base_geometry::blue, base_geometry::red,
+        if (!this->template amaze_interpolation<base_geometry::blue, base_geometry::red,
                                  base_geometry::green, true> (progress))
           return false;
         break;
       case render_parameters::rcd_demosaic:
-        if (!rcd_interpolation<base_geometry::blue, base_geometry::red,
+        if (!this->template rcd_interpolation<base_geometry::blue, base_geometry::red,
                                base_geometry::green> (progress))
           return false;
         break;
       case render_parameters::lmmse_demosaic:
-        if (!lmmse_interpolation<base_geometry::blue, base_geometry::red,
+        if (!this->template lmmse_interpolation<base_geometry::blue, base_geometry::red,
                                  base_geometry::green> (progress))
           return false;
         break;
@@ -4364,31 +4375,34 @@ public:
     if (denoise_params.get_mode () != denoise_parameters::none)
       {
         return denoise_rgb<luminosity_t> (
-            m_area.width, m_area.height,
+            this->m_area.width, this->m_area.height,
             [&] (int x, int y) {
-              return m_demosaiced[y * m_area.width + x];
+              return this->m_demosaiced[y * this->m_area.width + x];
             },
             [&] (int x, int y, rgbdata pixel) {
-              m_demosaiced[y * m_area.width + x] = pixel;
+              this->m_demosaiced[y * this->m_area.width + x] = pixel;
             },
             denoise_params, progress);
       }
     return true;
   }
 };
+class demosaic_paget : public demosaic_paget_base<> {};
 /* Paget screen demosaicing implementation.  The Paget screen uses a
    rotated Bayer-like pattern where blue is the dominating channel.  */
-class demosaic_dufay : public demosaic_base<dufay_geometry>
+/* Dufaycolor screen demosaicing implementation.  */
+template <typename ANALYZER = analyze_base_worker<dufay_geometry>>
+class demosaic_dufay_base : public demosaic_base<dufay_geometry, ANALYZER>
 {
 public:
   bool
-  demosaic (analyze_dufay *analyze, render *r,
+  demosaic (ANALYZER *analyze, render *r,
             render_parameters::screen_demosaic_t alg,
             denoise_parameters denoise_params, progress_info *progress)
   {
-    if (!initialize (analyze))
+    if (!this->initialize (analyze))
       return false;
-    if (!analyze->populate_demosaiced_data (m_demosaiced, r, m_area, progress))
+    if (!analyze->populate_demosaiced_data (this->m_demosaiced, r, this->m_area, progress))
       return false;
     switch (alg)
       {
@@ -4421,7 +4435,7 @@ public:
         break;
 #endif
       case render_parameters::rcd_demosaic:
-        if (!rcd_interpolation_4x4<base_geometry::red, base_geometry::green,
+        if (!this->template rcd_interpolation_4x4<base_geometry::red, base_geometry::green,
                                base_geometry::blue> (progress))
           return false;
         break;
@@ -4438,18 +4452,19 @@ public:
     if (denoise_params.get_mode () != denoise_parameters::none)
       {
         return denoise_rgb<luminosity_t> (
-            m_area.width, m_area.height,
+            this->m_area.width, this->m_area.height,
             [&] (int x, int y) {
-              return m_demosaiced[y * m_area.width + x];
+              return this->m_demosaiced[y * this->m_area.width + x];
             },
             [&] (int x, int y, rgbdata pixel) {
-              m_demosaiced[y * m_area.width + x] = pixel;
+              this->m_demosaiced[y * this->m_area.width + x] = pixel;
             },
             denoise_params, progress);
       }
     return true;
   }
 };
+class demosaic_dufay : public demosaic_dufay_base<> {};
 
 } // namespace colorscreen
 #endif

@@ -12,6 +12,7 @@
 #include "render-to-scr.h"
 #include "screen.h"
 #include "bitmap.h"
+#include "cubic-interpolate.h"
 #include "lanczos.h"
 
 namespace colorscreen {
@@ -475,20 +476,8 @@ protected:
 
 };
 
-/* Linear interpolation between A and B with offset OFF.  */
-inline luminosity_t linear_interpolate (luminosity_t a, luminosity_t b, luminosity_t off)
-{
-  return a * ((luminosity_t) 1 - off) + b * off;
-}
-
-/* 2D linear interpolation between V1, V2, V3, V4 with offset OFF.  */
-inline flatten_attr pure_attr luminosity_t always_inline_attr
-do_linear_interpolate (luminosity_t v1, luminosity_t v2, luminosity_t v3, luminosity_t v4, point_t off)
-{
-  luminosity_t a = linear_interpolate (v1,v2, (luminosity_t)off.x);
-  luminosity_t b = linear_interpolate (v3,v4, (luminosity_t)off.x);
-  return linear_interpolate (a,b, (luminosity_t)off.y);
-}
+#include "cubic-interpolate.h"
+#include "lanczos.h"
 
 template<typename GEOMETRY>
 inline pure_attr rgbdata

@@ -407,6 +407,7 @@ point_t::modf (int_point_t *val) const
   return ret;
 }
 
+
 /* Hold coordinates of a rectangular tile within a bigger image.  */
 template<typename T,typename P>
 class image_area_base
