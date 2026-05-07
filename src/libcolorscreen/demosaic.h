@@ -2949,32 +2949,25 @@ protected:
             continue;
           for (int x = 8; x < w - 8; x++)
             {
-              auto get_grad = [&](int dx, int dy) {
-                luminosity_t v1 = 0, v2 = 0;
-                int d1 = 0, d2 = 0;
-                /* Search for nearest dots of dominating channel in a "fat" band.
-                   We search perpendicular to the search direction (j in [-2, 2])
-                   to reliably find samples in sparse patterns.  */
-                for (int i = 1; i <= 8; i++) {
-                   for (int j = -2; j <= 2; j++) {
-                      int nx = x + i*dx + j*dy;
-                      int ny = y + i*dy + j*dx;
-                      if (!d1 && GEOMETRY::demosaic_entry_color(nx, ny) == ah_green) {
-                         v1 = known(nx, ny); d1 = i;
-                      }
-                      int mx = x - i*dx + j*dy;
-                      int my = y - i*dy + j*dx;
-                      if (!d2 && GEOMETRY::demosaic_entry_color(mx, my) == ah_green) {
-                         v2 = known(mx, my); d2 = i;
-                      }
-                   }
-                }
-                /* Normalize gradient by the total distance to make cardinal directions comparable.
-                   This is critical when samples are found at different distances.  */
-                return (d1 && d2) ? fabs(v1 - v2) / (luminosity_t)(d1 + d2) : (luminosity_t)0;
-              };
-              v_grad[y * w + x] = get_grad(0, 1);
-              h_grad[y * w + x] = get_grad(1, 0);
+              luminosity_t hg = 0;
+              luminosity_t vg = 0;
+
+              /* Horizontal gradients: specialized for Dufay-like 2x4 grid.  */
+              if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
+                hg = fabs (known (x - 2, y) - known (x + 2, y)) / 4.0;
+              else if (GEOMETRY::demosaic_entry_color (x - 1, y) == ah_green
+                       && GEOMETRY::demosaic_entry_color (x + 1, y) == ah_green)
+                hg = fabs (known (x - 1, y) - known (x + 1, y)) / 2.0;
+
+              /* Vertical gradients: specialized for Dufay-like 2x4 grid.  */
+              if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
+                vg = fabs (known (x, y - 4) - known (x, y + 4)) / 8.0;
+              else if (GEOMETRY::demosaic_entry_color (x, y - 2) == ah_green
+                       && GEOMETRY::demosaic_entry_color (x, y + 2) == ah_green)
+                vg = fabs (known (x, y - 2) - known (x, y + 2)) / 4.0;
+
+              v_grad[y * w + x] = vg;
+              h_grad[y * w + x] = hg;
             }
         }
 
