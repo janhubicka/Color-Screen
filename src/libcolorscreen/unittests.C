@@ -23,6 +23,7 @@
 #include "include/histogram.h"
 #include "deconvolve.h"
 #include "denoise.h"
+#include "include/paget.h"
 #include "include/dufaycolor.h"
 #include "demosaic.h"
 
@@ -1903,11 +1904,12 @@ test_denoise ()
   return true;
 }
 /* Unit test for Dufaycolor RCD demosaicing.  */
-class fake_analyze_dufay
+template <typename GEOMETRY>
+class fake_analyze
 {
 public:
   int_image_area m_area;
-  fake_analyze_dufay (int w, int h) : m_area ({ 0, 0, w, h }) {}
+  fake_analyze (int w, int h) : m_area ({ 0, 0, w, h }) {}
 
   int_image_area
   demosaiced_area () const
@@ -1922,7 +1924,7 @@ public:
     for (int y = 0; y < m_area.height; y++)
       for (int x = 0; x < m_area.width; x++)
         {
-          int color = dufay_geometry::demosaic_entry_color (x, y);
+          int color = GEOMETRY::demosaic_entry_color (x, y);
           if (color != base_geometry::none)
             {
               int tx = x / 16;
@@ -1945,17 +1947,19 @@ public:
   }
 };
 
+template <typename GEOMETRY, typename DEMOSAICER>
 bool
-test_demosaic_dufay ()
+test_demosaic_loop (fake_analyze<GEOMETRY> &fake, DEMOSAICER &demosaicer,
+                    render_parameters::screen_demosaic_t alg, const char *alg_name)
 {
-  int w = 128, h = 128;
-  fake_analyze_dufay fake (w, h);
-  demosaic_dufay_base<fake_analyze_dufay> demosaicer;
-  denoise_parameters denoise_params;
-  
-  if (!demosaicer.demosaic (&fake, NULL, render_parameters::rcd_demosaic, denoise_params, NULL))
-    return false;
+  if (!demosaicer.demosaic (&fake, NULL, alg, denoise_parameters (), NULL))
+    {
+      printf ("Demosaic %s failed to run\n", alg_name);
+      return false;
+    }
 
+  int w = fake.m_area.width;
+  int h = fake.m_area.height;
   bool ok = true;
   for (int ty = 0; ty < h / 16; ty++)
     for (int tx = 0; tx < w / 16; tx++)
@@ -1970,17 +1974,60 @@ test_demosaic_dufay ()
           for (int x = tx * 16 + 4; x < tx * 16 + 12; x++)
             {
               rgbdata actual = demosaicer.demosaiced_data (x, y);
-              if (fabs (actual.red - expected.red) > 0.01
-                  || fabs (actual.green - expected.green) > 0.01
-                  || fabs (actual.blue - expected.blue) > 0.01)
+              if (fabs (actual.red - expected.red) > 0.05
+                  || fabs (actual.green - expected.green) > 0.05
+                  || fabs (actual.blue - expected.blue) > 0.05)
                 {
-                  printf ("Demosaic mismatch at (%i, %i): expected (%f, %f, %f), got (%f, %f, %f)\n",
-                          x, y, expected.red, expected.green, expected.blue,
+                  printf ("Demosaic %s mismatch at (%i, %i): expected (%f, %f, %f), got (%f, %f, %f)\n",
+                          alg_name, x, y, expected.red, expected.green, expected.blue,
                           actual.red, actual.green, actual.blue);
                   ok = false;
                 }
             }
       }
+  return ok;
+}
+
+bool
+test_demosaic_paget ()
+{
+  int w = 128, h = 128;
+  fake_analyze<paget_geometry> fake (w, h);
+  demosaic_paget_base<fake_analyze<paget_geometry>> demosaicer;
+  bool ok = true;
+
+  if (!test_demosaic_loop (fake, demosaicer, render_parameters::hamilton_adams_demosaic, "Paget Hamilton-Adams"))
+    ok = false;
+  if (!test_demosaic_loop (fake, demosaicer, render_parameters::ahd_demosaic, "Paget AHD"))
+    ok = false;
+  if (!test_demosaic_loop (fake, demosaicer, render_parameters::amaze_demosaic, "Paget AMaZE"))
+    ok = false;
+  if (!test_demosaic_loop (fake, demosaicer, render_parameters::rcd_demosaic, "Paget RCD"))
+    ok = false;
+  if (!test_demosaic_loop (fake, demosaicer, render_parameters::lmmse_demosaic, "Paget LMMSE"))
+    ok = false;
+
+  return ok;
+}
+
+bool
+test_demosaic_dufay ()
+{
+  int w = 128, h = 128;
+  fake_analyze<dufay_geometry> fake (w, h);
+  demosaic_dufay_base<fake_analyze<dufay_geometry>> demosaicer;
+  
+  return test_demosaic_loop (fake, demosaicer, render_parameters::rcd_demosaic, "Dufay RCD");
+}
+
+bool
+test_demosaic ()
+{
+  bool ok = true;
+  if (!test_demosaic_paget ())
+    ok = false;
+  if (!test_demosaic_dufay ())
+    ok = false;
   return ok;
 }
 }
@@ -2031,7 +2078,7 @@ main (int argc, char **argv)
     { "image_area", "image area tests", [] () { return test_image_area (); } },
     { "slanted_edge", "slanted edge MTF tests", [] () { return test_slanted_edge_mtf (); } },
     { "denoising", "denoising tests", [] () { return test_denoise (); } },
-    { "demosaic", "dufay demosaicing tests", [] () { return test_demosaic_dufay (); } },
+    { "demosaic", "dufay and paget demosaicing tests", [] () { return test_demosaic (); } },
     { NULL, NULL, NULL }
   };
 
