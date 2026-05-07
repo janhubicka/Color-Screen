@@ -1909,7 +1909,7 @@ test_denoise ()
 int
 main ()
 {
-  printf ("1..30\n");
+  printf ("1..31\n");
 
 
   test_matrix ();
