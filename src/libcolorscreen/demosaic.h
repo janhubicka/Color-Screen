@@ -2966,8 +2966,51 @@ protected:
       progress->set_task ("demosaicing (rcd 4x4)", h * 6);
 
     /* ================================================================
-       Step 1: Find vertical and horizontal interpolation directions.
-       We use a search-based gradient to handle sparse patterns.
+       Step 1: Low-Pass Filter (LPF) for normalization.
+       A 4x4 window is phase-invariant for 4x4 patterns.
+       ================================================================ */
+    std::vector<luminosity_t> lpf (w * h, 0);
+#pragma omp parallel for schedule(dynamic, 16)
+    for (int y = 8; y < h - 8; y++)
+      {
+        if (progress && progress->cancel_requested ())
+          continue;
+        for (int x = 8; x < w - 8; x++)
+          {
+            luminosity_t r_sum = 0, g_sum = 0, b_sum = 0;
+            int r_cnt = 0, g_cnt = 0, b_cnt = 0;
+            /* 4x4 window is phase-invariant for 4x4 pattern.  */
+            for (int dy = -2; dy <= 1; dy++)
+              for (int dx = -2; dx <= 1; dx++)
+                {
+                  int color = GEOMETRY::demosaic_entry_color (x + dx, y + dy);
+                  if (color == base_geometry::red)
+                    {
+                      r_sum += dch (x + dx, y + dy, base_geometry::red);
+                      r_cnt++;
+                    }
+                  else if (color == base_geometry::green)
+                    {
+                      g_sum += dch (x + dx, y + dy, base_geometry::green);
+                      g_cnt++;
+                    }
+                  else if (color == base_geometry::blue)
+                    {
+                      b_sum += dch (x + dx, y + dy, base_geometry::blue);
+                      b_cnt++;
+                    }
+                }
+            luminosity_t r_avg = r_cnt > 0 ? r_sum / r_cnt : 0;
+            luminosity_t g_avg = g_cnt > 0 ? g_sum / g_cnt : 0;
+            luminosity_t b_avg = b_cnt > 0 ? b_sum / b_cnt : 0;
+
+            int active = (r_cnt > 0) + (g_cnt > 0) + (b_cnt > 0);
+            lpf[y * w + x] = active > 0 ? (r_avg + g_avg + b_avg) / active : 0;
+          }
+      }
+
+    /* ================================================================
+       Step 2: Robust Directional Discrimination.
        ================================================================ */
     std::vector<luminosity_t> vh_dir (w * h, (luminosity_t)0.5);
     {
@@ -2985,84 +3028,50 @@ protected:
 
               int color = GEOMETRY::demosaic_entry_color (x, y);
 
-              /* Horizontal gradients: specialized 2nd order HPF for Dufay.  */
               if (color != base_geometry::none)
                 {
-                  if (GEOMETRY::demosaic_entry_color (x - 2, y) == color
-                      && GEOMETRY::demosaic_entry_color (x + 2, y) == color)
-                    hg = (dch (x - 2, y, color) - 2 * dch (x, y, color)
-                          + dch (x + 2, y, color))
-                         / 4.0;
-                  else if (GEOMETRY::demosaic_entry_color (x - 4, y) == color
-                           && GEOMETRY::demosaic_entry_color (x + 4, y) == color)
-                    hg = (dch (x - 4, y, color) - 2 * dch (x, y, color)
-                          + dch (x + 4, y, color))
-                         / 16.0;
-                }
-              if (hg == 0)
-                {
-                  for (int c : {ah_green, ah_red, ah_blue})
-                    {
-                      if (GEOMETRY::demosaic_entry_color (x - 1, y) == c
-                          && GEOMETRY::demosaic_entry_color (x + 1, y) == c)
-                        {
-                          hg = (dch (x - 1, y, c) - dch (x + 1, y, c)) / 2.0;
-                          break;
-                        }
-                      if (GEOMETRY::demosaic_entry_color (x - 2, y) == c
-                          && GEOMETRY::demosaic_entry_color (x + 2, y) == c)
-                        {
-                          hg = (dch (x - 2, y, c) - dch (x + 2, y, c)) / 4.0;
-                          break;
-                        }
+                  /* Use LPF-normalized high-frequency component for gradients.  */
+                  luminosity_t diff = dch (x, y, color) - lpf[y * w + x];
+                  
+                  /* Horizontal normalized gradient (try distance 1 then 2).  */
+                  for (int dx : {1, 2}) {
+                    int c_left = GEOMETRY::demosaic_entry_color (x - dx, y);
+                    int c_right = GEOMETRY::demosaic_entry_color (x + dx, y);
+                    if (c_left != base_geometry::none && c_right != base_geometry::none) {
+                      hg = (dch (x - dx, y, c_left) - lpf[y * w + x - dx] 
+                            + dch (x + dx, y, c_right) - lpf[y * w + x + dx] - 2 * diff) / (2.0 * dx * dx);
+                      break;
                     }
+                  }
+
+                  /* Vertical normalized gradient (try distance 1 then 2).  */
+                  for (int dy : {1, 2}) {
+                    int c_up = GEOMETRY::demosaic_entry_color (x, y - dy);
+                    int c_down = GEOMETRY::demosaic_entry_color (x, y + dy);
+                    if (c_up != base_geometry::none && c_down != base_geometry::none) {
+                      vg = (dch (x, y - dy, c_up) - lpf[(y - dy) * w + x] 
+                            + dch (x, y + dy, c_down) - lpf[(y + dy) * w + x] - 2 * diff) / (2.0 * dy * dy);
+                      break;
+                    }
+                  }
                 }
 
-              /* Vertical gradients: specialized 2nd order HPF for Dufay.  */
-              if (color != base_geometry::none)
-                {
-                  if (GEOMETRY::demosaic_entry_color (x, y - 4) == color
-                      && GEOMETRY::demosaic_entry_color (x, y + 4) == color)
-                    vg = (dch (x, y - 4, color) - 2 * dch (x, y, color)
-                          + dch (x, y + 4, color))
-                         / 16.0;
-                }
-              if (vg == 0)
-                {
-                  for (int c : {ah_green, ah_red, ah_blue})
-                    {
-                      if (GEOMETRY::demosaic_entry_color (x, y - 2) == c
-                          && GEOMETRY::demosaic_entry_color (x, y + 2) == c)
-                        {
-                          vg = (dch (x, y - 2, c) - dch (x, y + 2, c)) / 4.0;
-                          break;
-                        }
-                      if (GEOMETRY::demosaic_entry_color (x, y - 4) == c
-                          && GEOMETRY::demosaic_entry_color (x, y + 4) == c)
-                        {
-                          vg = (dch (x, y - 4, c) - dch (x, y + 4, c)) / 8.0;
-                          break;
-                        }
-                    }
-                }
-
-              /* Use squared gradients to amplify directional selectivity (standard RCD style).  */
               v_grad[y * w + x] = vg * vg;
               h_grad[y * w + x] = hg * hg;
             }
         }
 #pragma omp parallel for schedule(dynamic, 16)
-      for (int y = 10; y < h - 10; y++)
+      for (int y = 8; y < h - 8; y++)
         {
           if (progress && progress->cancel_requested ())
             continue;
-          for (int x = 10; x < w - 10; x++)
+          for (int x = 8; x < w - 8; x++)
             {
-              /* Use a 4x4 window (multiple of 4) to avoid phase beating.  */
+              /* Use a 2x2 window for sharper decisions.  */
               luminosity_t v_stat = eps;
               luminosity_t h_stat = eps;
-              for (int dy = -2; dy <= 1; dy++)
-                for (int dx = -2; dx <= 1; dx++)
+              for (int dy = -1; dy <= 0; dy++)
+                for (int dx = -1; dx <= 0; dx++)
                   {
                     v_stat += v_grad[(y + dy) * w + (x + dx)];
                     h_stat += h_grad[(y + dy) * w + (x + dx)];
@@ -3073,43 +3082,6 @@ protected:
             progress->inc_progress ();
         }
     }
-
-    /* ================================================================
-       Step 2: Compute the low-pass filter (LPF).
-       We use a weighted average over a 12x12 window (multiple of 4).
-       A 12x12 window is phase-invariant for 4x4 patterns, meaning the 
-       luminosity estimate doesn't fluctuate based on the window's 
-       alignment with the Dufay grid.
-       ================================================================ */
-    std::vector<luminosity_t> lpf (w * h, 0);
-#pragma omp parallel for schedule(dynamic, 16)
-    for (int y = 8; y < h - 8; y++)
-      {
-        if (progress && progress->cancel_requested ())
-          continue;
-        for (int x = 8; x < w - 8; x++)
-          {
-            luminosity_t r_sum = 0, g_sum = 0, b_sum = 0;
-            int r_cnt = 0, g_cnt = 0, b_cnt = 0;
-            /* 4x4 window is phase-invariant for 4x4 pattern.  */
-            for (int dy = -2; dy <= 1; dy++)
-              for (int dx = -2; dx <= 1; dx++)
-                {
-                  int color = GEOMETRY::demosaic_entry_color (x + dx, y + dy);
-                  if (color == base_geometry::red) { r_sum += dch(x + dx, y + dy, base_geometry::red); r_cnt++; }
-                  else if (color == base_geometry::green) { g_sum += dch(x + dx, y + dy, base_geometry::green); g_cnt++; }
-                  else if (color == base_geometry::blue) { b_sum += dch(x + dx, y + dy, base_geometry::blue); b_cnt++; }
-                }
-            luminosity_t r_avg = r_cnt > 0 ? r_sum / r_cnt : 0;
-            luminosity_t g_avg = g_cnt > 0 ? g_sum / g_cnt : 0;
-            luminosity_t b_avg = b_cnt > 0 ? b_sum / b_cnt : 0;
-            
-            int active = (r_cnt > 0) + (g_cnt > 0) + (b_cnt > 0);
-            lpf[y * w + x] = active > 0 ? (r_avg + g_avg + b_avg) / active : 0;
-          }
-        if (progress)
-          progress->inc_progress ();
-      }
 
     /* ================================================================
        Step 3: Populate the dominating channel (ah_green) at all sites.
@@ -3140,17 +3112,17 @@ protected:
 
               for (int i = 1; i <= 8; i++) {
                 for (int j = -2; j <= 2; j++) {
-                  int nx = x + i*dx + j*dy;
-                  int ny = y + i*dy + j*dx;
+                  int nx = x + i * dx + j * dy;
+                  int ny = y + i * dy + j * dx;
                   if (GEOMETRY::demosaic_entry_color (nx, ny) == ah_green) {
                     luminosity_t g = dch (nx, ny, ah_green);
                     /* Use period-based gradient for same-color comparison.  */
-                    luminosity_t grad = fabs (g - dch (nx + px*dx, ny + py*dy, ah_green))
+                    luminosity_t grad = fabs (g - dch (nx + px * dx, ny + py * dy, ah_green))
                                         / (luminosity_t)(px * abs (dx) + py * abs (dy));
-                    /* Ratio-based estimate: G_interpolated = G_sample * LPF_here / LPF_sample.  */
-                    luminosity_t est = g * lpf2 / (eps + lpfi + lpf[ny * w + nx]);
-                    /* Inverse weight proportional to 1/(grad^2*dist).  */
-                    luminosity_t weight = (grad * grad + eps) * sqrt (i * i + j * j);
+                    /* Dominating channel: use sample value directly to avoid overshoots.  */
+                    luminosity_t est = g;
+                    /* Stronger distance penalty to keep transitions sharp.  */
+                    luminosity_t weight = (grad * grad + eps) * (i * i + j * j);
                     if (weight < best_weight) {
                       best_weight = weight;
                       best_est = est;
@@ -3161,18 +3133,22 @@ protected:
               }
               return {0, 1e10};
             };
-
-            auto n = get_est (0, -1);
-            auto s = get_est (0, 1);
-            auto w_ = get_est (-1, 0);
-            auto e = get_est (1, 0);
-
-            luminosity_t v_est = (n.second * s.first + s.second * n.first) / (n.second + s.second);
-            luminosity_t h_est = (w_.second * e.first + e.second * w_.first) / (w_.second + e.second);
-
-            /* Directional blend.  */
-            luminosity_t vh_disc = vh_dir[idx];
-            d (x, y)[(int)ah_green] = vh_disc * h_est + (1 - vh_disc) * v_est;
+            /* 8-way Inverse Distance Weighting (IDW) with gradients.  */
+            luminosity_t sum_val = 0;
+            luminosity_t sum_weight = 0;
+            for (int dy = -1; dy <= 1; dy++)
+              for (int dx = -1; dx <= 1; dx++)
+                {
+                  if (dx == 0 && dy == 0) continue;
+                  auto est = get_est (dx, dy);
+                  if (est.second < 1e10)
+                    {
+                      luminosity_t w = 1.0 / est.second;
+                      sum_val += est.first * w;
+                      sum_weight += w;
+                    }
+                }
+            d (x, y)[(int)ah_green] = sum_weight > 0 ? sum_val / sum_weight : 0;
           }
         if (progress)
           progress->inc_progress ();
@@ -3212,10 +3188,10 @@ protected:
                         luminosity_t val = dch (nx, ny, c);
                         luminosity_t cd = val - d (nx, ny)[(int)ah_green];
                         /* Use period-based gradient for same-color comparison.  */
-                        luminosity_t grad = fabs (val - dch (nx + px*dx, ny + py*dy, c))
+                        luminosity_t grad = fabs (val - dch (nx + px * dx, ny + py * dy, c))
                                             / (luminosity_t)(px * abs (dx) + py * abs (dy));
-                        /* Inverse weight proportional to 1/(grad^2*dist).  */
-                        luminosity_t weight = (grad * grad + eps) * sqrt (i * i + j * j);
+                        /* Inverse weight proportional to 1/(grad^2*dist^2).  */
+                        luminosity_t weight = (grad * grad + eps) * (i * i + j * j);
                         if (weight < best_weight) {
                           best_weight = weight;
                           best_est = cd;
@@ -3227,16 +3203,22 @@ protected:
                   return {0, 1e10};
                 };
 
-                auto n = get_cdiff_est (0, -1);
-                auto s = get_cdiff_est (0, 1);
-                auto w_ = get_cdiff_est (-1, 0);
-                auto e = get_cdiff_est (1, 0);
-
-                luminosity_t v_cd = (n.second * s.first + s.second * n.first) / (n.second + s.second);
-                luminosity_t h_cd = (w_.second * e.first + e.second * w_.first) / (w_.second + e.second);
-
-                luminosity_t vh_disc = vh_dir[y * w + x];
-                d (x, y)[c] = g_here + vh_disc * h_cd + (1 - vh_disc) * v_cd;
+                /* 8-way Inverse Distance Weighting (IDW) for color differences.  */
+                luminosity_t sum_cd = 0;
+                luminosity_t sum_weight = 0;
+                for (int dy = -1; dy <= 1; dy++)
+                  for (int dx = -1; dx <= 1; dx++)
+                    {
+                      if (dx == 0 && dy == 0) continue;
+                      auto est = get_cdiff_est (dx, dy);
+                      if (est.second < 1e10)
+                        {
+                          luminosity_t w = 1.0 / est.second;
+                          sum_cd += est.first * w;
+                          sum_weight += w;
+                        }
+                    }
+                d (x, y)[c] = g_here + (sum_weight > 0 ? sum_cd / sum_weight : 0);
               }
           }
         if (progress)
