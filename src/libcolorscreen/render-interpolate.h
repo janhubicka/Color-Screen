@@ -149,6 +149,7 @@ private:
   std::shared_ptr<analyze_paget> m_paget;
   std::shared_ptr<analyze_strips> m_strips;
   std::shared_ptr<demosaic_paget> m_demosaic_paget;
+  std::shared_ptr<demosaic_dufay> m_demosaic_dufay;
   color_matrix m_saturation_matrix;
   color_matrix profile_matrix;
   // Proportions after permutations we do to handle screen variants.

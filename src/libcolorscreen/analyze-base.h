@@ -730,46 +730,25 @@ analyze_base_worker<GEOMETRY>::populate_demosaiced_data (std::vector<rgbdata> &d
 	    p.x += (coord_t)m_area.xshift ();
 	    p.y += (coord_t)m_area.yshift ();
 	    point_t off;
-	    data_entry e = GEOMETRY::red_scr_to_entry (p, &off);
+	    data_entry e;
+
 	    switch (GEOMETRY::demosaic_entry_color (x + area.x, y + area.y))
 	    {
 	      case base_geometry::red:
+		e = GEOMETRY::red_scr_to_entry (p, &off);
 	        demosaic [y * area.width + x].red = r->adjust_luminosity_ir (red (e.x, e.y));
 		break;
 	      case base_geometry::green:
+		e = GEOMETRY::green_scr_to_entry (p, &off);
 	        demosaic [y * area.width + x].green = r->adjust_luminosity_ir (green (e.x, e.y));
 		break;
 	      case base_geometry::blue:
-	        demosaic [y * area.width + x].green = r->adjust_luminosity_ir (blue (e.x, e.y));
+		e = GEOMETRY::blue_scr_to_entry (p, &off);
+	        demosaic [y * area.width + x].blue = r->adjust_luminosity_ir (blue (e.x, e.y));
 		break;
 	      case base_geometry::none:
 		break;
 	    }
-#if 0
-	    if (my_fabs (off.x) < (coord_t) 0.01 && my_fabs (off.y) < (coord_t) 0.01)
-	      {
-		demosaic [y * area.width + x].red =  /*std::max (red (e.x, e.y), (luminosity_t) 0)*/ r->adjust_luminosity_ir (red (e.x, e.y));
-		assert (!debug
-			|| GEOMETRY::demosaic_entry_color (x + area.x, y + area.y)
-			   == base_geometry::red);
-		continue;
-	      }
-	    e = GEOMETRY::green_scr_to_entry (p, &off);
-	    if (my_fabs (off.x) < (coord_t) 0.01 && my_fabs (off.y) < (coord_t) 0.01)
-	      {
-		demosaic [y * area.width + x].green = /*std::max (green (e.x, e.y), (luminosity_t) 0)*/ r->adjust_luminosity_ir (green (e.x, e.y));
-		assert (!debug
-			|| GEOMETRY::demosaic_entry_color (x + area.x, y + area.y)
-			   == base_geometry::green);
-		continue;
-	      }
-	    e = GEOMETRY::blue_scr_to_entry (p, &off);
-	    demosaic [y * area.width + x].blue = /*std::max (blue (e.x, e.y), (luminosity_t) 0)*/ r->adjust_luminosity_ir (blue (e.x, e.y));
-	    assert (!debug
-		    || GEOMETRY::demosaic_entry_color (x + area.x, y + area.y)
-		       == base_geometry::blue);
-	    assert (my_fabs (off.x) < (coord_t) 0.01 && my_fabs (off.y) < (coord_t) 0.01);
-#endif
 	  }
       if (progress)
 	progress->inc_progress ();

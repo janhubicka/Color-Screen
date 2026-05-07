@@ -156,6 +156,18 @@ get_new_demosaic_paget (demosaiced_params<analyze_paget> &p, progress_info *prog
   return ret;
 }
 
+/* Factory function for Dufay demosaicing.  */
+std::unique_ptr<demosaic_dufay>
+get_new_demosaic_dufay (demosaiced_params<analyze_dufay> &p, progress_info *progress)
+{
+  auto ret = std::make_unique<demosaic_dufay> ();
+  if (!ret->demosaic (p.analyzer, (render_to_scr *)p.r, p.alg, p.screen_denoise, progress))
+    {
+      return nullptr;
+    }
+  return ret;
+}
+
 /* Factory function for strips color analysis.  */
 std::unique_ptr<analyze_strips>
 get_new_strips_analysis (struct analyzer_params &p, int_image_area area,
@@ -190,11 +202,13 @@ typedef lru_tile_cache<analyzer_params, analyze_dufay, get_new_dufay_analysis, 2
 typedef lru_tile_cache<analyzer_params, analyze_paget, get_new_paget_analysis, 2> paget_analyzer_cache_t;
 typedef lru_tile_cache<analyzer_params, analyze_strips, get_new_strips_analysis, 2> strips_analyzer_cache_t;
 typedef lru_cache<demosaiced_params<analyze_paget>, demosaic_paget, get_new_demosaic_paget, 2> demosaic_paget_cache_t;
+typedef lru_cache<demosaiced_params<analyze_dufay>, demosaic_dufay, get_new_demosaic_dufay, 2> demosaic_dufay_cache_t;
 
 static dufay_analyzer_cache_t dufay_analyzer_cache ("dufay analyzer");
 static paget_analyzer_cache_t paget_analyzer_cache ("paget analyzer");
 static strips_analyzer_cache_t strips_analyzer_cache ("strips analyzer");
 static demosaic_paget_cache_t demosaic_paget_cache ("paget demosaic");
+static demosaic_dufay_cache_t demosaic_dufay_cache ("dufay demosaic");
 
 }
 
@@ -393,9 +407,25 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
     }
   else if (dufay_like_screen_p (m_scr_to_img.get_type ()))
     {
-      m_dufay = dufay_analyzer_cache.get (p, analysis_area, progress);
+      uint64_t id;
+      m_dufay = dufay_analyzer_cache.get (p, analysis_area, progress, &id);
       if (!m_dufay)
         return false;
+      if ((int)m_params.screen_demosaic >= (int)render_parameters::hamilton_adams_demosaic
+	  || m_params.screen_demosaic == render_parameters::default_demosaic)
+        {
+	  struct demosaiced_params<analyze_dufay> pp = {
+	    id, m_params.dark_point, m_params.scan_exposure, m_params.contact_copy,
+	    m_params.screen_demosaic == render_parameters::default_demosaic
+	    ? (m_screen_compensation ? render_parameters::rcd_demosaic : render_parameters::amaze_demosaic)
+	    : m_params.screen_demosaic,
+	    m_params.screen_denoise,
+	    m_dufay.get (), this
+	  };
+	  m_demosaic_dufay = demosaic_dufay_cache.get (pp, progress);
+	  if (!m_demosaic_dufay)
+	    return false;
+        }
     }
   else if (screen_with_vertical_strips_p (m_scr_to_img.get_type ()))
     {
@@ -455,7 +485,16 @@ render_interpolate::sample_pixel_scr (point_t p) const
     }
   else
     {
-      c = m_dufay->interpolate ({ x, y }, m_interpolation_proportions, m_params.screen_demosaic);
+      if (m_demosaic_dufay)
+	{
+	  c = m_demosaic_dufay->interpolate ({x, y}, m_interpolation_proportions, 
+			  m_params.demosaiced_scaling == render_parameters::default_scaling
+			  ? (m_screen_compensation ? render_parameters::bspline_scaling : render_parameters::lanczos3_scaling)
+			  : m_params.demosaiced_scaling);
+	  adjusted = true;
+	}
+      else
+        c = m_dufay->interpolate ({ x, y }, m_interpolation_proportions, m_params.screen_demosaic);
       if (m_original_color)
         ;
       else if (m_scr_to_img.get_type () == DioptichromeB)
