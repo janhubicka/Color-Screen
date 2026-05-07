@@ -13,12 +13,13 @@
 #include "analyze-paget.h"
 #include "analyze-strips.h"
 #include "include/imagedata.h"
-#include "demosaic.h"
 #include "include/scr-to-img-parameters.h"
 
 namespace colorscreen
 {
 
+class demosaic_paget;
+class demosaic_dufay;
 typedef std::function <bool (coord_t, coord_t, rgbdata)> analyzer;
 typedef std::function <bool (coord_t, coord_t, rgbdata, rgbdata, rgbdata)> rgb_analyzer;
 

@@ -2907,35 +2907,12 @@ protected:
 
     /* ================================================================
        Step 1: Find vertical and horizontal interpolation directions.
-       We use a distance-2 high-pass filter to skip empty pixels.
+       We use a search-based gradient to handle sparse patterns.
        ================================================================ */
     std::vector<luminosity_t> vh_dir (w * h, (luminosity_t)0.5);
     {
-      std::vector<luminosity_t> v_sq (w * h, 0);
-      std::vector<luminosity_t> h_sq (w * h, 0);
-
-#pragma omp parallel for schedule(dynamic, 16)
-      for (int y = 6; y < h - 6; y++)
-        {
-          if (progress && progress->cancel_requested ())
-            continue;
-          for (int x = 6; x < w - 6; x++)
-            {
-              /* Vertical 6th-order HPF with distance 2.  */
-              luminosity_t v
-                  = (known (x, y - 6) - known (x, y - 2) - known (x, y + 2)
-                     + known (x, y + 6))
-                    - 3 * (known (x, y - 4) + known (x, y + 4)) + 6 * known (x, y);
-              v_sq[y * w + x] = v * v;
-
-              /* Horizontal 6th-order HPF with distance 2.  */
-              luminosity_t hv
-                  = (known (x - 6, y) - known (x - 2, y) - known (x + 2, y)
-                     + known (x + 6, y))
-                    - 3 * (known (x - 4, y) + known (x + 4, y)) + 6 * known (x, y);
-              h_sq[y * w + x] = hv * hv;
-            }
-        }
+      std::vector<luminosity_t> v_grad (w * h, 0);
+      std::vector<luminosity_t> h_grad (w * h, 0);
 
 #pragma omp parallel for schedule(dynamic, 16)
       for (int y = 8; y < h - 8; y++)
@@ -2944,14 +2921,39 @@ protected:
             continue;
           for (int x = 8; x < w - 8; x++)
             {
-              /* Accumulate statistics over a larger area due to sparsity.  */
-              luminosity_t v_stat = epssq;
-              luminosity_t h_stat = epssq;
-              for (int dy = -4; dy <= 4; dy += 2)
-                for (int dx = -4; dx <= 4; dx += 2)
+              auto get_grad = [&](int dx, int dy) {
+                luminosity_t v1 = 0, v2 = 0;
+                bool f1 = false, f2 = false;
+                for (int i = 1; i <= 6; i++) {
+                   if (!f1 && GEOMETRY::demosaic_entry_color(x + i*dx, y + i*dy) == ah_green) {
+                      v1 = known(x + i*dx, y + i*dy); f1 = true;
+                   }
+                   if (!f2 && GEOMETRY::demosaic_entry_color(x - i*dx, y - i*dy) == ah_green) {
+                      v2 = known(x - i*dx, y - i*dy); f2 = true;
+                   }
+                }
+                return f1 && f2 ? fabs(v1 - v2) : (luminosity_t)0;
+              };
+              v_grad[y * w + x] = get_grad(0, 1);
+              h_grad[y * w + x] = get_grad(1, 0);
+            }
+        }
+
+#pragma omp parallel for schedule(dynamic, 16)
+      for (int y = 10; y < h - 10; y++)
+        {
+          if (progress && progress->cancel_requested ())
+            continue;
+          for (int x = 10; x < w - 10; x++)
+            {
+              /* Use a 8x8 window (multiple of 4) to avoid phase beating.  */
+              luminosity_t v_stat = eps;
+              luminosity_t h_stat = eps;
+              for (int dy = -4; dy <= 3; dy++)
+                for (int dx = -4; dx <= 3; dx++)
                   {
-                    v_stat += v_sq[(y + dy) * w + (x + dx)];
-                    h_stat += h_sq[(y + dy) * w + (x + dx)];
+                    v_stat += v_grad[(y + dy) * w + (x + dx)];
+                    h_stat += h_grad[(y + dy) * w + (x + dx)];
                   }
               vh_dir[y * w + x] = v_stat / (v_stat + h_stat);
             }
@@ -2962,28 +2964,33 @@ protected:
 
     /* ================================================================
        Step 2: Compute the low-pass filter (LPF).
-       We use a 7x7 box filter to ensure we hit all colors in the sparse grid.
+       We use a weighted average over a 12x12 window (multiple of 4).
        ================================================================ */
     std::vector<luminosity_t> lpf (w * h, 0);
 #pragma omp parallel for schedule(dynamic, 16)
-    for (int y = 3; y < h - 3; y++)
+    for (int y = 8; y < h - 8; y++)
       {
         if (progress && progress->cancel_requested ())
           continue;
-        for (int x = 3; x < w - 3; x++)
+        for (int x = 8; x < w - 8; x++)
           {
-            luminosity_t sum = 0;
-            int count = 0;
-            for (int dy = -3; dy <= 3; dy++)
-              for (int dx = -3; dx <= 3; dx++)
+            luminosity_t r_sum = 0, g_sum = 0, b_sum = 0;
+            int r_cnt = 0, g_cnt = 0, b_cnt = 0;
+            /* 12x12 window is phase-invariant for 4x4 pattern.  */
+            for (int dy = -6; dy <= 5; dy++)
+              for (int dx = -6; dx <= 5; dx++)
                 {
-                  if (GEOMETRY::demosaic_entry_color (x + dx, y + dy) != base_geometry::none)
-                    {
-                      sum += known (x + dx, y + dy);
-                      count++;
-                    }
+                  int color = GEOMETRY::demosaic_entry_color (x + dx, y + dy);
+                  if (color == base_geometry::red) { r_sum += known(x + dx, y + dy); r_cnt++; }
+                  else if (color == base_geometry::green) { g_sum += known(x + dx, y + dy); g_cnt++; }
+                  else if (color == base_geometry::blue) { b_sum += known(x + dx, y + dy); b_cnt++; }
                 }
-            lpf[y * w + x] = count > 0 ? sum / count : 0;
+            luminosity_t r_avg = r_cnt > 0 ? r_sum / r_cnt : 0;
+            luminosity_t g_avg = g_cnt > 0 ? g_sum / g_cnt : 0;
+            luminosity_t b_avg = b_cnt > 0 ? b_sum / b_cnt : 0;
+            
+            int active = (r_cnt > 0) + (g_cnt > 0) + (b_cnt > 0);
+            lpf[y * w + x] = active > 0 ? (r_avg + g_avg + b_avg) / active : 0;
           }
         if (progress)
           progress->inc_progress ();
@@ -3012,7 +3019,7 @@ protected:
             /* Find nearest green neighbors in each cardinal direction.
                In 4x4 pattern, they are at most distance 3.  */
             auto get_est = [&](int dx, int dy) -> std::pair<luminosity_t, luminosity_t> {
-              for (int i = 1; i <= 4; i++) {
+              for (int i = 1; i <= 8; i++) {
                 if (GEOMETRY::demosaic_entry_color (x + i*dx, y + i*dy) == ah_green) {
                   luminosity_t g = known (x + i*dx, y + i*dy);
                   luminosity_t grad = fabs (g - known (x + 2*i*dx, y + 2*i*dy));
@@ -3061,7 +3068,7 @@ protected:
                   }
 
                 auto get_cdiff_est = [&](int dx, int dy) -> std::pair<luminosity_t, luminosity_t> {
-                  for (int i = 1; i <= 4; i++) {
+                  for (int i = 1; i <= 8; i++) {
                     if (GEOMETRY::demosaic_entry_color (x + i*dx, y + i*dy) == c) {
                       luminosity_t val = known (x + i*dx, y + i*dy);
                       luminosity_t cd = val - d (x + i*dx, y + i*dy)[(int)ah_green];
@@ -4383,6 +4390,7 @@ public:
       return false;
     switch (alg)
       {
+#if 0
       case render_parameters::hamilton_adams_demosaic:
         if (!hamilton_adams_interpolation_dominating_channel<
                 base_geometry::red, true> (progress))
@@ -4409,16 +4417,19 @@ public:
                                  base_geometry::blue, true> (progress))
           return false;
         break;
+#endif
       case render_parameters::rcd_demosaic:
         if (!rcd_interpolation_4x4<base_geometry::red, base_geometry::green,
                                base_geometry::blue> (progress))
           return false;
         break;
+#if 0
       case render_parameters::lmmse_demosaic:
         if (!lmmse_interpolation<base_geometry::red, base_geometry::green,
                                  base_geometry::blue> (progress))
           return false;
         break;
+#endif
       default:
         break;
       }

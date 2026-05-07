@@ -12,6 +12,7 @@
 #include "include/stitch.h"
 #include "render-interpolate.h"
 #include "finetune-int.h"
+#include "demosaic.h"
 
 namespace colorscreen
 {
