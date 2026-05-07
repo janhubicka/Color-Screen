@@ -2037,8 +2037,7 @@ test_demosaic_dufay ()
   demosaic_dufay_base<fake_analyze<dufay_geometry>> demosaicer;
   
   bool ok = test_demosaic_loop (fake, demosaicer, render_parameters::rcd_demosaic, "Dufay RCD");
-  if (ok)
-    demosaicer.save_tiff ("dufay_rcd_test.tiff", NULL);
+  demosaicer.save_tiff ("dufay_rcd_test.tiff", NULL);
   return ok;
 }
 
