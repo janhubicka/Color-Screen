@@ -2973,7 +2973,6 @@ protected:
     {
       std::vector<luminosity_t> v_grad (w * h, 0);
       std::vector<luminosity_t> h_grad (w * h, 0);
-
 #pragma omp parallel for schedule(dynamic, 16)
       for (int y = 8; y < h - 8; y++)
         {
@@ -2984,26 +2983,74 @@ protected:
               luminosity_t hg = 0;
               luminosity_t vg = 0;
 
+              int color = GEOMETRY::demosaic_entry_color (x, y);
+
               /* Horizontal gradients: specialized 2nd order HPF for Dufay.  */
-              if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
-                hg = (known (x - 2, y) - 2 * known (x, y) + known (x + 2, y)) / 4.0;
-              else if (GEOMETRY::demosaic_entry_color (x - 1, y) == ah_green
-                       && GEOMETRY::demosaic_entry_color (x + 1, y) == ah_green)
-                hg = (known (x - 1, y) - known (x + 1, y)) / 2.0;
+              if (color != base_geometry::none)
+                {
+                  if (GEOMETRY::demosaic_entry_color (x - 2, y) == color
+                      && GEOMETRY::demosaic_entry_color (x + 2, y) == color)
+                    hg = (dch (x - 2, y, color) - 2 * dch (x, y, color)
+                          + dch (x + 2, y, color))
+                         / 4.0;
+                  else if (GEOMETRY::demosaic_entry_color (x - 4, y) == color
+                           && GEOMETRY::demosaic_entry_color (x + 4, y) == color)
+                    hg = (dch (x - 4, y, color) - 2 * dch (x, y, color)
+                          + dch (x + 4, y, color))
+                         / 16.0;
+                }
+              if (hg == 0)
+                {
+                  for (int c : {ah_green, ah_red, ah_blue})
+                    {
+                      if (GEOMETRY::demosaic_entry_color (x - 1, y) == c
+                          && GEOMETRY::demosaic_entry_color (x + 1, y) == c)
+                        {
+                          hg = (dch (x - 1, y, c) - dch (x + 1, y, c)) / 2.0;
+                          break;
+                        }
+                      if (GEOMETRY::demosaic_entry_color (x - 2, y) == c
+                          && GEOMETRY::demosaic_entry_color (x + 2, y) == c)
+                        {
+                          hg = (dch (x - 2, y, c) - dch (x + 2, y, c)) / 4.0;
+                          break;
+                        }
+                    }
+                }
 
               /* Vertical gradients: specialized 2nd order HPF for Dufay.  */
-              if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
-                vg = (known (x, y - 4) - 2 * known (x, y) + known (x, y + 4)) / 16.0;
-              else if (GEOMETRY::demosaic_entry_color (x, y - 2) == ah_green
-                       && GEOMETRY::demosaic_entry_color (x, y + 2) == ah_green)
-                vg = (known (x, y - 2) - known (x, y + 2)) / 4.0;
+              if (color != base_geometry::none)
+                {
+                  if (GEOMETRY::demosaic_entry_color (x, y - 4) == color
+                      && GEOMETRY::demosaic_entry_color (x, y + 4) == color)
+                    vg = (dch (x, y - 4, color) - 2 * dch (x, y, color)
+                          + dch (x, y + 4, color))
+                         / 16.0;
+                }
+              if (vg == 0)
+                {
+                  for (int c : {ah_green, ah_red, ah_blue})
+                    {
+                      if (GEOMETRY::demosaic_entry_color (x, y - 2) == c
+                          && GEOMETRY::demosaic_entry_color (x, y + 2) == c)
+                        {
+                          vg = (dch (x, y - 2, c) - dch (x, y + 2, c)) / 4.0;
+                          break;
+                        }
+                      if (GEOMETRY::demosaic_entry_color (x, y - 4) == c
+                          && GEOMETRY::demosaic_entry_color (x, y + 4) == c)
+                        {
+                          vg = (dch (x, y - 4, c) - dch (x, y + 4, c)) / 8.0;
+                          break;
+                        }
+                    }
+                }
 
               /* Use squared gradients to amplify directional selectivity (standard RCD style).  */
               v_grad[y * w + x] = vg * vg;
               h_grad[y * w + x] = hg * hg;
             }
         }
-
 #pragma omp parallel for schedule(dynamic, 16)
       for (int y = 10; y < h - 10; y++)
         {
@@ -3076,7 +3123,7 @@ protected:
           {
             if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
               {
-                d (x, y)[(int)ah_green] = known (x, y);
+                d (x, y)[(int)ah_green] = dch (x, y, ah_green);
                 continue;
               }
 
@@ -3086,20 +3133,31 @@ protected:
 
             /* Inverse Distance Weighting (IDW) with gradients.  */
             auto get_est = [&](int dx, int dy) -> std::pair<luminosity_t, luminosity_t> {
+              luminosity_t best_est = 0;
+              luminosity_t best_weight = 1e20;
+              int px = GEOMETRY::demosaic_period_x ();
+              int py = GEOMETRY::demosaic_period_y ();
+
               for (int i = 1; i <= 8; i++) {
                 for (int j = -2; j <= 2; j++) {
                   int nx = x + i*dx + j*dy;
                   int ny = y + i*dy + j*dx;
                   if (GEOMETRY::demosaic_entry_color (nx, ny) == ah_green) {
-                    luminosity_t g = known (nx, ny);
-                    /* Squared gradient for sharper directional weighting.  */
-                    luminosity_t grad = fabs (g - known (nx + i*dx, ny + i*dy)) / (luminosity_t)i;
+                    luminosity_t g = dch (nx, ny, ah_green);
+                    /* Use period-based gradient for same-color comparison.  */
+                    luminosity_t grad = fabs (g - dch (nx + px*dx, ny + py*dy, ah_green))
+                                        / (luminosity_t)(px * abs (dx) + py * abs (dy));
                     /* Ratio-based estimate: G_interpolated = G_sample * LPF_here / LPF_sample.  */
                     luminosity_t est = g * lpf2 / (eps + lpfi + lpf[ny * w + nx]);
                     /* Inverse weight proportional to 1/(grad^2*dist).  */
-                    return {est, (grad * grad + eps) * (luminosity_t)i};
+                    luminosity_t weight = (grad * grad + eps) * sqrt (i * i + j * j);
+                    if (weight < best_weight) {
+                      best_weight = weight;
+                      best_est = est;
+                    }
                   }
                 }
+                if (best_weight < 1e10) return {best_est, best_weight};
               }
               return {0, 1e10};
             };
@@ -3136,24 +3194,35 @@ protected:
               {
                 if (GEOMETRY::demosaic_entry_color (x, y) == c)
                   {
-                    d (x, y)[c] = known (x, y);
+                    d (x, y)[c] = dch (x, y, c);
                     continue;
                   }
 
                 auto get_cdiff_est = [&](int dx, int dy) -> std::pair<luminosity_t, luminosity_t> {
+                  luminosity_t best_est = 0;
+                  luminosity_t best_weight = 1e20;
+                  int px = GEOMETRY::demosaic_period_x ();
+                  int py = GEOMETRY::demosaic_period_y ();
+
                   for (int i = 1; i <= 8; i++) {
                     for (int j = -2; j <= 2; j++) {
                       int nx = x + i*dx + j*dy;
                       int ny = y + i*dy + j*dx;
                       if (GEOMETRY::demosaic_entry_color (nx, ny) == c) {
-                        luminosity_t val = known (nx, ny);
+                        luminosity_t val = dch (nx, ny, c);
                         luminosity_t cd = val - d (nx, ny)[(int)ah_green];
-                        /* Squared gradient for sharper directional weighting.  */
-                        luminosity_t grad = fabs (val - known (nx + i*dx, ny + i*dy)) / (luminosity_t)i;
+                        /* Use period-based gradient for same-color comparison.  */
+                        luminosity_t grad = fabs (val - dch (nx + px*dx, ny + py*dy, c))
+                                            / (luminosity_t)(px * abs (dx) + py * abs (dy));
                         /* Inverse weight proportional to 1/(grad^2*dist).  */
-                        return {cd, (grad * grad + eps) * (luminosity_t)i};
+                        luminosity_t weight = (grad * grad + eps) * sqrt (i * i + j * j);
+                        if (weight < best_weight) {
+                          best_weight = weight;
+                          best_est = cd;
+                        }
                       }
                     }
+                    if (best_weight < 1e10) return {best_est, best_weight};
                   }
                   return {0, 1e10};
                 };
