@@ -12,7 +12,9 @@
 #include "denoise.h"
 #include "cubic-interpolate.h"
 #include "lanczos.h"
+#include "include/tiff-writer.h"
 #include <utility>
+#include <algorithm>
 
 template <typename T>
 static inline T
@@ -52,6 +54,34 @@ public:
   {
     return m_demosaiced[y * m_area.width + x];
   };
+
+  /* Save demosaiced image to TIFF file for debugging.  */
+  bool save_tiff (const char *filename, progress_info *progress)
+  {
+    tiff_writer_params tp;
+    const char *error = NULL;
+    tp.filename = filename;
+    tp.width = m_area.width;
+    tp.height = m_area.height;
+    tp.depth = 16;
+    tp.xdpi = 300;
+    tp.ydpi = 300;
+    tiff_writer out (tp, &error);
+    if (error) return false;
+    for (int y = 0; y < m_area.height; y++)
+    {
+      for (int x = 0; x < m_area.width; x++)
+      {
+        rgbdata p = m_demosaiced[y * m_area.width + x];
+        /* Scale [0, 1] to [0, 65535].  */
+        out.put_pixel (x, std::clamp((int)(p.red * 65535.0), 0, 65535),
+                          std::clamp((int)(p.green * 65535.0), 0, 65535),
+                          std::clamp((int)(p.blue * 65535.0), 0, 65535));
+      }
+      if (!out.write_rows (progress)) return false;
+    }
+    return true;
+  }
 
   /* Determine the robust maximum value in the demosaiced image using a
      histogram.  PROGRESS can be used to report progress and check for
@@ -2952,22 +2982,23 @@ protected:
               luminosity_t hg = 0;
               luminosity_t vg = 0;
 
-              /* Horizontal gradients: specialized for Dufay-like 2x4 grid.  */
+              /* Horizontal gradients: specialized 2nd order HPF for Dufay.  */
               if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
-                hg = fabs (known (x - 2, y) - known (x + 2, y)) / 4.0;
+                hg = (known (x - 2, y) - 2 * known (x, y) + known (x + 2, y)) / 4.0;
               else if (GEOMETRY::demosaic_entry_color (x - 1, y) == ah_green
                        && GEOMETRY::demosaic_entry_color (x + 1, y) == ah_green)
-                hg = fabs (known (x - 1, y) - known (x + 1, y)) / 2.0;
+                hg = (known (x - 1, y) - known (x + 1, y)) / 2.0;
 
-              /* Vertical gradients: specialized for Dufay-like 2x4 grid.  */
+              /* Vertical gradients: specialized 2nd order HPF for Dufay.  */
               if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
-                vg = fabs (known (x, y - 4) - known (x, y + 4)) / 8.0;
+                vg = (known (x, y - 4) - 2 * known (x, y) + known (x, y + 4)) / 16.0;
               else if (GEOMETRY::demosaic_entry_color (x, y - 2) == ah_green
                        && GEOMETRY::demosaic_entry_color (x, y + 2) == ah_green)
-                vg = fabs (known (x, y - 2) - known (x, y + 2)) / 4.0;
+                vg = (known (x, y - 2) - known (x, y + 2)) / 4.0;
 
-              v_grad[y * w + x] = vg;
-              h_grad[y * w + x] = hg;
+              /* Use squared gradients to amplify directional selectivity (standard RCD style).  */
+              v_grad[y * w + x] = vg * vg;
+              h_grad[y * w + x] = hg * hg;
             }
         }
 
@@ -3059,12 +3090,12 @@ protected:
                   int ny = y + i*dy + j*dx;
                   if (GEOMETRY::demosaic_entry_color (nx, ny) == ah_green) {
                     luminosity_t g = known (nx, ny);
-                    /* Local gradient for directional weighting.  */
+                    /* Squared gradient for sharper directional weighting.  */
                     luminosity_t grad = fabs (g - known (nx + i*dx, ny + i*dy)) / (luminosity_t)i;
                     /* Ratio-based estimate: G_interpolated = G_sample * LPF_here / LPF_sample.  */
                     luminosity_t est = g * lpf2 / (eps + lpfi + lpf[ny * w + nx]);
-                    /* Inverse weight proportional to 1/(grad*dist).  */
-                    return {est, (grad + eps) * (luminosity_t)i};
+                    /* Inverse weight proportional to 1/(grad^2*dist).  */
+                    return {est, (grad * grad + eps) * (luminosity_t)i};
                   }
                 }
               }
@@ -3115,8 +3146,10 @@ protected:
                       if (GEOMETRY::demosaic_entry_color (nx, ny) == c) {
                         luminosity_t val = known (nx, ny);
                         luminosity_t cd = val - d (nx, ny)[(int)ah_green];
+                        /* Squared gradient for sharper directional weighting.  */
                         luminosity_t grad = fabs (val - known (nx + i*dx, ny + i*dy)) / (luminosity_t)i;
-                        return {cd, (grad + eps) * (luminosity_t)i};
+                        /* Inverse weight proportional to 1/(grad^2*dist).  */
+                        return {cd, (grad * grad + eps) * (luminosity_t)i};
                       }
                     }
                   }

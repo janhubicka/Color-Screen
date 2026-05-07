@@ -2006,16 +2006,25 @@ test_demosaic_paget ()
   demosaic_paget_base<fake_analyze<paget_geometry>> demosaicer;
   bool ok = true;
 
-  if (!test_demosaic_loop (fake, demosaicer, render_parameters::hamilton_adams_demosaic, "Paget Hamilton-Adams"))
-    ok = false;
-  if (!test_demosaic_loop (fake, demosaicer, render_parameters::ahd_demosaic, "Paget AHD"))
-    ok = false;
-  if (!test_demosaic_loop (fake, demosaicer, render_parameters::amaze_demosaic, "Paget AMaZE"))
-    ok = false;
-  if (!test_demosaic_loop (fake, demosaicer, render_parameters::rcd_demosaic, "Paget RCD"))
-    ok = false;
-  if (!test_demosaic_loop (fake, demosaicer, render_parameters::lmmse_demosaic, "Paget LMMSE"))
-    ok = false;
+  if (test_demosaic_loop (fake, demosaicer, render_parameters::hamilton_adams_demosaic, "Paget Hamilton-Adams"))
+    demosaicer.save_tiff ("paget_ha_test.tiff", NULL);
+  else ok = false;
+  
+  if (test_demosaic_loop (fake, demosaicer, render_parameters::ahd_demosaic, "Paget AHD"))
+    demosaicer.save_tiff ("paget_ahd_test.tiff", NULL);
+  else ok = false;
+
+  if (test_demosaic_loop (fake, demosaicer, render_parameters::amaze_demosaic, "Paget AMaZE"))
+    demosaicer.save_tiff ("paget_amaze_test.tiff", NULL);
+  else ok = false;
+
+  if (test_demosaic_loop (fake, demosaicer, render_parameters::rcd_demosaic, "Paget RCD"))
+    demosaicer.save_tiff ("paget_rcd_test.tiff", NULL);
+  else ok = false;
+
+  if (test_demosaic_loop (fake, demosaicer, render_parameters::lmmse_demosaic, "Paget LMMSE"))
+    demosaicer.save_tiff ("paget_lmmse_test.tiff", NULL);
+  else ok = false;
 
   return ok;
 }
@@ -2027,7 +2036,10 @@ test_demosaic_dufay ()
   fake_analyze<dufay_geometry> fake (w, h);
   demosaic_dufay_base<fake_analyze<dufay_geometry>> demosaicer;
   
-  return test_demosaic_loop (fake, demosaicer, render_parameters::rcd_demosaic, "Dufay RCD");
+  bool ok = test_demosaic_loop (fake, demosaicer, render_parameters::rcd_demosaic, "Dufay RCD");
+  if (ok)
+    demosaicer.save_tiff ("dufay_rcd_test.tiff", NULL);
+  return ok;
 }
 
 bool
