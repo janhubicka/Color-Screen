@@ -25,7 +25,10 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
 
   render r(img, rparam, 65535);
   if (!r.precompute_all(true, false, {1, 1, 1}, progress))
-    return res;
+    {
+      if (progress) fprintf(stderr, "Slanted-edge failed: precompute_all failed\n");
+      return res;
+    }
 
   // Make sure ROI is within image bounds
   roi = roi.intersect (int_image_area (0, 0, img.width, img.height));
@@ -50,6 +53,9 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
       }
 
   bool is_vertical = sum_gx > sum_gy;
+  if (progress)
+    fprintf(stderr, "Slanted-edge: orientation %s, gx=%.4f, gy=%.4f\n", 
+            is_vertical ? "vertical" : "horizontal", sum_gx, sum_gy);
 
   std::vector<double> edge_pos;
   std::vector<double> line_coord;
@@ -60,30 +66,33 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
         {
           double centroid = 0;
           double sum_w = 0;
-          double max_w = 0;
-          std::vector<double> weights;
+          double max_w = -1;
+          int max_w_x = -1;
           for (int x = r_left + 1; x < r_right - 1; x++)
             {
               double w = std::abs(r.get_unadjusted_data({x + 1, y}) - r.get_unadjusted_data({x - 1, y}));
-              weights.push_back(w);
-              if (w > max_w) max_w = w;
-            }
-          if (max_w > 0.01)
-            {
-              for (int x = r_left + 1; x < r_right - 1; x++)
+              if (w > max_w)
                 {
-                  double w = weights[x - (r_left + 1)];
-                  if (w > 0.1 * max_w)
-                    {
-                      centroid += x * w;
-                      sum_w += w;
-                    }
+                  max_w = w;
+                  max_w_x = x;
                 }
             }
-          if (sum_w > 0)
+          if (max_w > 0.0001)
             {
-              edge_pos.push_back(centroid / sum_w);
-              line_coord.push_back(y);
+              double sum_w = 0;
+              double sum_pos_w = 0;
+              for (int x = std::max(r_left, max_w_x - 10); x <= std::min(r_right - 1, max_w_x + 10); x++)
+                {
+                  double w = std::abs(r.get_unadjusted_data({x + 1, y}) - r.get_unadjusted_data({x - 1, y}));
+                  sum_w += w;
+                  sum_pos_w += w * x;
+                }
+              if (sum_w > 0)
+                {
+                  double edge_p = sum_pos_w / sum_w;
+                  edge_pos.push_back(edge_p);
+                  line_coord.push_back(y);
+                }
             }
         }
     }
@@ -91,32 +100,33 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
     {
       for (int x = r_left; x < r_right; x++)
         {
-          double centroid = 0;
-          double sum_w = 0;
-          double max_w = 0;
-          std::vector<double> weights;
+          double max_w = -1;
+          int max_w_y = -1;
           for (int y = r_top + 1; y < r_bottom - 1; y++)
             {
               double w = std::abs(r.get_unadjusted_data({x, y + 1}) - r.get_unadjusted_data({x, y - 1}));
-              weights.push_back(w);
-              if (w > max_w) max_w = w;
-            }
-          if (max_w > 0.01)
-            {
-              for (int y = r_top + 1; y < r_bottom - 1; y++)
+              if (w > max_w)
                 {
-                  double w = weights[y - (r_top + 1)];
-                  if (w > 0.1 * max_w)
-                    {
-                      centroid += y * w;
-                      sum_w += w;
-                    }
+                  max_w = w;
+                  max_w_y = y;
                 }
             }
-          if (sum_w > 0)
+          if (max_w > 0.0001)
             {
-              edge_pos.push_back(centroid / sum_w);
-              line_coord.push_back(x);
+              double sum_w = 0;
+              double sum_pos_w = 0;
+              for (int y = std::max(r_top, max_w_y - 10); y <= std::min(r_bottom - 1, max_w_y + 10); y++)
+                {
+                  double w = std::abs(r.get_unadjusted_data({x, y + 1}) - r.get_unadjusted_data({x, y - 1}));
+                  sum_w += w;
+                  sum_pos_w += w * y;
+                }
+              if (sum_w > 0)
+                {
+                  double edge_p = sum_pos_w / sum_w;
+                  edge_pos.push_back(edge_p);
+                  line_coord.push_back(x);
+                }
             }
         }
     }
@@ -152,7 +162,10 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
       ss_tot += (edge_pos[i] - mean_p) * (edge_pos[i] - mean_p);
     }
   if (ss_tot > 0 && ss_res / ss_tot > 0.1) // Too much noise in edge detection
-    return res;
+    {
+      if (progress) fprintf(stderr, "Slanted-edge failed: too much noise in edge fit (res/tot = %.4f)\n", ss_res / ss_tot);
+      return res;
+    }
 
   // Set the actual detected edge coordinates
   if (is_vertical)
@@ -201,7 +214,7 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
         max_d = std::max(max_d, d);
       }
 
-  int oversampling = params.oversampling > 0 ? params.oversampling : 4;
+  int oversampling = params.oversampling > 0 ? params.oversampling : 10;
   int num_bins = std::ceil((max_d - min_d) * oversampling) + 1;
   std::vector<double> esf_sum(num_bins, 0);
   std::vector<int> esf_count(num_bins, 0);
@@ -243,47 +256,63 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
         }
     }
 
+  double min_esf = 1e9, max_esf = -1e9;
   for (int i = 0; i < num_bins; i++)
-    res.edge_histogram.push_back(esf[i]);
+    {
+      res.edge_histogram.push_back(esf[i]);
+      if (esf[i] < min_esf) min_esf = (double)esf[i];
+      if (esf[i] > max_esf) max_esf = (double)esf[i];
+    }
+
+  if (progress)
+    {
+      fprintf(stderr, "Slanted-edge: ESF range [%.4f, %.4f], contrast %.4f\n", min_esf, max_esf, max_esf - min_esf);
+      fflush(stderr);
+    }
 
   if (num_bins < 4)
-    return res;
+    {
+      if (progress)
+        fprintf(stderr, "Slanted-edge failed: too few bins (%d)\n", num_bins);
+      return res;
+    }
 
-  // Derivative to get LSF (Line Spread Function)
-  // Use central difference [1, 0, -1] / 2
-  std::vector<double> lsf(num_bins, 0);
-  for (int i = 1; i < num_bins - 1; i++)
-    lsf[i] = std::abs(esf[i+1] - esf[i-1]) / 2.0;
-  lsf[0] = std::abs(esf[1] - esf[0]);
-  lsf[num_bins - 1] = std::abs(esf[num_bins - 1] - esf[num_bins - 2]);
-
-  // Find LSF peak
-  int peak_idx = 0;
-  double peak_val = -1;
-  for (int i = 0; i < num_bins; i++)
-    if (lsf[i] > peak_val)
-      {
-        peak_val = lsf[i];
-        peak_idx = i;
-      }
-
-  // Apply Hamming window centered at peak
-  int win_half = std::min(peak_idx, num_bins - 1 - peak_idx);
-  int win_len = 2 * win_half + 1;
-  
-  if (win_len < 4)
-    return res;
-  
   // Create FFT input array
   int N = 1;
   while (N < num_bins) N <<= 1;
   N <<= 1; // zero padding for smoother MTF
 
-  std::vector<double, fft_allocator<double>> in_vec(N, 0.0);
-  for (int i = 0; i < win_len; i++)
+  if (progress)
+    fprintf(stderr, "Slanted-edge: num_bins=%d, oversampling=%d, N=%d\n", num_bins, oversampling, N);
+
+  std::vector<double> lsf(num_bins, 0);
+  int peak_idx = 0;
+  double max_lsf = -1;
+  // Use [-1, 0, 1] central difference as in QuickMTF
+  for (int i = 1; i < num_bins - 1; i++)
     {
-      double hamming = 0.54 - 0.46 * std::cos(2.0 * M_PI * i / (win_len - 1));
-      in_vec[i] = lsf[peak_idx - win_half + i] * hamming;
+      lsf[i] = (esf[i+1] - esf[i-1]) / 2.0;
+      if (std::abs(lsf[i]) > max_lsf)
+        {
+          max_lsf = std::abs(lsf[i]);
+          peak_idx = i;
+        }
+    }
+  lsf[0] = esf[1] - esf[0];
+  lsf[num_bins - 1] = esf[num_bins - 1] - esf[num_bins - 2];
+
+  std::vector<double, fft_allocator<double>> in_vec(N, 0.0);
+  for (int i = 0; i < N; i++)
+    {
+      // Apply Hann window centered at the peak
+      int dist = i - peak_idx;
+      int window_idx = dist + N / 2;
+      double w = 0;
+      if (window_idx >= 0 && window_idx < N)
+        w = 0.5 * (1.0 - std::cos(2.0 * M_PI * window_idx / (N - 1)));
+      
+      if (i < num_bins)
+        in_vec[i] = lsf[i] * w;
     }
 
   auto out = fft_alloc_complex<double>(N / 2 + 1);

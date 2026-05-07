@@ -3914,6 +3914,7 @@ do_slanted_edge (int argc, char **argv)
 {
   const char *filename = NULL;
   const char *mtfname = NULL;
+  const char *esfname = NULL;
   const char *compare_mtf = NULL;
   float tolerance = 0.05;
   float gamma = 1.0;
@@ -3930,6 +3931,8 @@ do_slanted_edge (int argc, char **argv)
         gamma = flt;
       else if (const char *str = arg_with_param (argc, argv, &i, "save-mtf"))
         mtfname = str;
+      else if (const char *str = arg_with_param (argc, argv, &i, "save-esf"))
+        esfname = str;
       else if (arg == "--compare-with")
         {
           if (i + 2 >= argc)
@@ -3980,6 +3983,7 @@ do_slanted_edge (int argc, char **argv)
       printf ("Detected edge: (%.2f, %.2f) - (%.2f, %.2f)\n", 
               (double)res.edge_p1.x, (double)res.edge_p1.y, 
               (double)res.edge_p2.x, (double)res.edge_p2.y);
+      fflush (stdout);
       progress.resume_stdout ();
     }
 
@@ -3997,24 +4001,22 @@ do_slanted_edge (int argc, char **argv)
       printf ("Measured MTF:\n");
       for (size_t i = 0; i < m.size(); i += std::max((size_t)1, m.size() / 20))
         printf ("  Freq %.3f: %.3f%%\n", m.get_freq(i), (double)m.get_contrast(i));
+      fflush (stdout);
       progress.resume_stdout ();
     }
 
   if (mtfname)
+    rparam.sharpen.scanner_mtf.write_table (mtfname, &error);
+
+  if (esfname)
     {
-      FILE *f = fopen (mtfname, "wt");
-      if (!f)
+      FILE *f = fopen (esfname, "w");
+      if (f)
         {
-          perror (mtfname);
-          return 1;
+          for (size_t i = 0; i < res.edge_histogram.size(); i++)
+            fprintf (f, "%.4f\t%.6f\n", (double)i / params.oversampling, res.edge_histogram[i]);
+          fclose (f);
         }
-      for (size_t i = 0; i < m.size(); i++)
-        {
-          double fq = m.get_freq(i);
-          double c = m.get_contrast(i);
-          fprintf (f, "%.3f\t%.3f\t%.3f\t%.3f\t%.3f\n", fq, c, c, c, c);
-        }
-      fclose (f);
     }
 
   if (compare_mtf)

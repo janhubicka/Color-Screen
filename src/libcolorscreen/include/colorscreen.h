@@ -341,7 +341,7 @@ struct slanted_edge_parameters
   /* Supersampling rate for the Edge Spread Function.
      Default is 4x as recommended by standard ISO 12233.
      Higher values like 8x or 16x can be used for superior quality if the edge is long enough. */
-  int oversampling = 4;
+  int oversampling = 10;
 };
 
 struct slanted_edge_results

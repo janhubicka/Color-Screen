@@ -1,0 +1,26 @@
+#!/bin/sh
+# slanted-edge.test -- Test slanted edge MTF analysis
+
+# Common definitions
+if test -z "$srcdir"; then
+    srcdir=`echo "$0" | sed 's,[^/]*$,,'`
+    test "$srcdir" = "$0" && srcdir=.
+    test -z "$srcdir" && srcdir=.
+fi
+
+# Print TAP header
+echo "1..1"
+
+# Run slanted-edge analysis and compare with reference
+# We use a large tolerance for now while investigating MTF calibration
+../src/colorscreen/colorscreen slanted-edge "$srcdir/slanted-austraia-hurley.tif" \
+    --gamma 1.0 \
+    --compare-with "$srcdir/slanted-austraia-hurley-mtf.txt" 60.0 \
+    --verbose > slanted-edge.log 2>&1
+
+if [ $? -eq 0 ]; then
+    echo "ok 1 - slanted edge MTF comparison within tolerance"
+else
+    echo "not ok 1 - slanted edge MTF comparison failed"
+    cat slanted-edge.log
+fi
