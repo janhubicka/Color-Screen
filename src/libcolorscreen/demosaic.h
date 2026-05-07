@@ -2923,16 +2923,18 @@ protected:
             {
               auto get_grad = [&](int dx, int dy) {
                 luminosity_t v1 = 0, v2 = 0;
-                bool f1 = false, f2 = false;
-                for (int i = 1; i <= 6; i++) {
-                   if (!f1 && GEOMETRY::demosaic_entry_color(x + i*dx, y + i*dy) == ah_green) {
-                      v1 = known(x + i*dx, y + i*dy); f1 = true;
+                int d1 = 0, d2 = 0;
+                /* Search for nearest dots of dominating channel.  */
+                for (int i = 1; i <= 8; i++) {
+                   if (!d1 && GEOMETRY::demosaic_entry_color(x + i*dx, y + i*dy) == ah_green) {
+                      v1 = known(x + i*dx, y + i*dy); d1 = i;
                    }
-                   if (!f2 && GEOMETRY::demosaic_entry_color(x - i*dx, y - i*dy) == ah_green) {
-                      v2 = known(x - i*dx, y - i*dy); f2 = true;
+                   if (!d2 && GEOMETRY::demosaic_entry_color(x - i*dx, y - i*dy) == ah_green) {
+                      v2 = known(x - i*dx, y - i*dy); d2 = i;
                    }
                 }
-                return f1 && f2 ? fabs(v1 - v2) : (luminosity_t)0;
+                /* Normalize gradient by the total distance to make cardinal directions comparable.  */
+                return (d1 && d2) ? fabs(v1 - v2) / (luminosity_t)(d1 + d2) : (luminosity_t)0;
               };
               v_grad[y * w + x] = get_grad(0, 1);
               h_grad[y * w + x] = get_grad(1, 0);
@@ -3016,15 +3018,16 @@ protected:
             luminosity_t lpfi = lpf[idx];
             luminosity_t lpf2 = lpfi + lpfi;
 
-            /* Find nearest green neighbors in each cardinal direction.
-               In 4x4 pattern, they are at most distance 3.  */
+            /* Inverse Distance Weighting (IDW) with gradients.  */
             auto get_est = [&](int dx, int dy) -> std::pair<luminosity_t, luminosity_t> {
               for (int i = 1; i <= 8; i++) {
                 if (GEOMETRY::demosaic_entry_color (x + i*dx, y + i*dy) == ah_green) {
                   luminosity_t g = known (x + i*dx, y + i*dy);
-                  luminosity_t grad = fabs (g - known (x + 2*i*dx, y + 2*i*dy));
+                  /* Gradient normalized by distance.  */
+                  luminosity_t grad = fabs (g - known (x + 2*i*dx, y + 2*i*dy)) / (luminosity_t)i;
                   luminosity_t est = g * lpf2 / (eps + lpfi + lpf[(y + i*dy) * w + (x + i*dx)]);
-                  return {est, grad + eps};
+                  /* Inverse weight proportional to 1/(grad*dist).  */
+                  return {est, (grad + eps) * (luminosity_t)i};
                 }
               }
               return {0, 1e10};
@@ -3048,7 +3051,6 @@ protected:
 
     /* ================================================================
        Step 4: Populate non-dominating channels (R and B).
-       We use cardinal color-difference interpolation guided by G.
        ================================================================ */
 #pragma omp parallel for schedule(dynamic, 16)
     for (int y = 8; y < h - 8; y++)
@@ -3072,8 +3074,8 @@ protected:
                     if (GEOMETRY::demosaic_entry_color (x + i*dx, y + i*dy) == c) {
                       luminosity_t val = known (x + i*dx, y + i*dy);
                       luminosity_t cd = val - d (x + i*dx, y + i*dy)[(int)ah_green];
-                      luminosity_t grad = fabs (val - known (x + 2*i*dx, y + 2*i*dy));
-                      return {cd, grad + eps};
+                      luminosity_t grad = fabs (val - known (x + 2*i*dx, y + 2*i*dy)) / (luminosity_t)i;
+                      return {cd, (grad + eps) * (luminosity_t)i};
                     }
                   }
                   return {0, 1e10};
