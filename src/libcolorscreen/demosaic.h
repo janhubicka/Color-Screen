@@ -2910,7 +2910,6 @@ protected:
   {
     int w = m_area.width, h = m_area.height;
     constexpr luminosity_t eps = (luminosity_t)1e-5;
-    constexpr luminosity_t epssq = (luminosity_t)1e-10;
 
     if (progress)
       progress->set_task ("demosaicing (rcd 4x4)", h * 6);
@@ -2934,13 +2933,19 @@ protected:
               auto get_grad = [&](int dx, int dy) {
                 luminosity_t v1 = 0, v2 = 0;
                 int d1 = 0, d2 = 0;
-                /* Search for nearest dots of dominating channel.  */
+                /* Search for nearest dots of dominating channel in a "fat" band.  */
                 for (int i = 1; i <= 8; i++) {
-                   if (!d1 && GEOMETRY::demosaic_entry_color(x + i*dx, y + i*dy) == ah_green) {
-                      v1 = known(x + i*dx, y + i*dy); d1 = i;
-                   }
-                   if (!d2 && GEOMETRY::demosaic_entry_color(x - i*dx, y - i*dy) == ah_green) {
-                      v2 = known(x - i*dx, y - i*dy); d2 = i;
+                   for (int j = -2; j <= 2; j++) {
+                      int nx = x + i*dx + j*dy;
+                      int ny = y + i*dy + j*dx;
+                      if (!d1 && GEOMETRY::demosaic_entry_color(nx, ny) == ah_green) {
+                         v1 = known(nx, ny); d1 = i;
+                      }
+                      int mx = x - i*dx + j*dy;
+                      int my = y - i*dy + j*dx;
+                      if (!d2 && GEOMETRY::demosaic_entry_color(mx, my) == ah_green) {
+                         v2 = known(mx, my); d2 = i;
+                      }
                    }
                 }
                 /* Normalize gradient by the total distance to make cardinal directions comparable.  */
@@ -3031,13 +3036,17 @@ protected:
             /* Inverse Distance Weighting (IDW) with gradients.  */
             auto get_est = [&](int dx, int dy) -> std::pair<luminosity_t, luminosity_t> {
               for (int i = 1; i <= 8; i++) {
-                if (GEOMETRY::demosaic_entry_color (x + i*dx, y + i*dy) == ah_green) {
-                  luminosity_t g = known (x + i*dx, y + i*dy);
-                  /* Gradient normalized by distance.  */
-                  luminosity_t grad = fabs (g - known (x + 2*i*dx, y + 2*i*dy)) / (luminosity_t)i;
-                  luminosity_t est = g * lpf2 / (eps + lpfi + lpf[(y + i*dy) * w + (x + i*dx)]);
-                  /* Inverse weight proportional to 1/(grad*dist).  */
-                  return {est, (grad + eps) * (luminosity_t)i};
+                for (int j = -2; j <= 2; j++) {
+                  int nx = x + i*dx + j*dy;
+                  int ny = y + i*dy + j*dx;
+                  if (GEOMETRY::demosaic_entry_color (nx, ny) == ah_green) {
+                    luminosity_t g = known (nx, ny);
+                    /* Gradient normalized by distance.  */
+                    luminosity_t grad = fabs (g - known (nx + i*dx, ny + i*dy)) / (luminosity_t)i;
+                    luminosity_t est = g * lpf2 / (eps + lpfi + lpf[ny * w + nx]);
+                    /* Inverse weight proportional to 1/(grad*dist).  */
+                    return {est, (grad + eps) * (luminosity_t)i};
+                  }
                 }
               }
               return {0, 1e10};
@@ -3081,11 +3090,15 @@ protected:
 
                 auto get_cdiff_est = [&](int dx, int dy) -> std::pair<luminosity_t, luminosity_t> {
                   for (int i = 1; i <= 8; i++) {
-                    if (GEOMETRY::demosaic_entry_color (x + i*dx, y + i*dy) == c) {
-                      luminosity_t val = known (x + i*dx, y + i*dy);
-                      luminosity_t cd = val - d (x + i*dx, y + i*dy)[(int)ah_green];
-                      luminosity_t grad = fabs (val - known (x + 2*i*dx, y + 2*i*dy)) / (luminosity_t)i;
-                      return {cd, (grad + eps) * (luminosity_t)i};
+                    for (int j = -2; j <= 2; j++) {
+                      int nx = x + i*dx + j*dy;
+                      int ny = y + i*dy + j*dx;
+                      if (GEOMETRY::demosaic_entry_color (nx, ny) == c) {
+                        luminosity_t val = known (nx, ny);
+                        luminosity_t cd = val - d (nx, ny)[(int)ah_green];
+                        luminosity_t grad = fabs (val - known (nx + i*dx, ny + i*dy)) / (luminosity_t)i;
+                        return {cd, (grad + eps) * (luminosity_t)i};
+                      }
                     }
                   }
                   return {0, 1e10};
