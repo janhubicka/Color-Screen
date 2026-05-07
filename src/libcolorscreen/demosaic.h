@@ -3058,11 +3058,11 @@ protected:
             continue;
           for (int x = 10; x < w - 10; x++)
             {
-              /* Use a 8x8 window (multiple of 4) to avoid phase beating.  */
+              /* Use a 4x4 window (multiple of 4) to avoid phase beating.  */
               luminosity_t v_stat = eps;
               luminosity_t h_stat = eps;
-              for (int dy = -4; dy <= 3; dy++)
-                for (int dx = -4; dx <= 3; dx++)
+              for (int dy = -2; dy <= 1; dy++)
+                for (int dx = -2; dx <= 1; dx++)
                   {
                     v_stat += v_grad[(y + dy) * w + (x + dx)];
                     h_stat += h_grad[(y + dy) * w + (x + dx)];
@@ -3091,14 +3091,14 @@ protected:
           {
             luminosity_t r_sum = 0, g_sum = 0, b_sum = 0;
             int r_cnt = 0, g_cnt = 0, b_cnt = 0;
-            /* 12x12 window is phase-invariant for 4x4 pattern.  */
-            for (int dy = -6; dy <= 5; dy++)
-              for (int dx = -6; dx <= 5; dx++)
+            /* 4x4 window is phase-invariant for 4x4 pattern.  */
+            for (int dy = -2; dy <= 1; dy++)
+              for (int dx = -2; dx <= 1; dx++)
                 {
                   int color = GEOMETRY::demosaic_entry_color (x + dx, y + dy);
-                  if (color == base_geometry::red) { r_sum += known(x + dx, y + dy); r_cnt++; }
-                  else if (color == base_geometry::green) { g_sum += known(x + dx, y + dy); g_cnt++; }
-                  else if (color == base_geometry::blue) { b_sum += known(x + dx, y + dy); b_cnt++; }
+                  if (color == base_geometry::red) { r_sum += dch(x + dx, y + dy, base_geometry::red); r_cnt++; }
+                  else if (color == base_geometry::green) { g_sum += dch(x + dx, y + dy, base_geometry::green); g_cnt++; }
+                  else if (color == base_geometry::blue) { b_sum += dch(x + dx, y + dy, base_geometry::blue); b_cnt++; }
                 }
             luminosity_t r_avg = r_cnt > 0 ? r_sum / r_cnt : 0;
             luminosity_t g_avg = g_cnt > 0 ? g_sum / g_cnt : 0;
