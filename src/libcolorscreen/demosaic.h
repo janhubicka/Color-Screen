@@ -36,7 +36,7 @@ class render;
 class demosaic_generic_base
 {
 protected:
-  static constexpr const bool debug = /*colorscreen_checking*/true;
+  static constexpr const bool debug = colorscreen_checking;
 
 public:
   /* Return reference to demosaiced data at [X, Y] with bounds clamping.  */
@@ -433,8 +433,10 @@ protected:
         return m_demosaiced[cy * m_area.width + cx].red;
       case base_geometry::green:
         return m_demosaiced[cy * m_area.width + cx].green;
-      default:
+      case base_geometry::blue:
         return m_demosaiced[cy * m_area.width + cx].blue;
+      default:
+	abort ();
       }
   };
   /* Step 1 of the generic demosaicing algorithm: interpolate the dominating
