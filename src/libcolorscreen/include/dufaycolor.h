@@ -270,6 +270,40 @@ struct dufay_geometry : public base_geometry
   {
     return {e.x + (coord_t)0.5, (coord_t)e.y};
   }
+
+  /* Coordinates are
+     dem  real        col dem  real        col  dem  real        col  dem  real        col 
+     0,0  0.00, 0.00  G   1,0  0.25, 0.50  R    2,0  0.50, 1.00  B    3,0  0.75, 1.50  R
+     0,1  0.25,-0.50  R   1,1  0.50, 0.00  B    2,1  0.75, 0.50  R    3,1  1.00, 1.00  G
+     0,2  0.50,-1.00  B   1,2  0.75,-0.50  R    2,2  1.00, 0.00  G    3,2  1.25, 0.50  R
+     0,3  0.75,-1.50  R   1,3  1.00,-1.00  G    2,3  1.25,-0.50  R    3,3  1.50, 0.00  B
+
+     Dufaycolor pattern transfrmed:
+
+     GRBR
+     RBRG
+     BRGR
+     RGRB  */
+  inline static int demosaic_entry_color (int x, int y)
+  {
+    if ((x+y)&1)
+      return red;
+    if (!((x+y)&3))
+      return green;
+    return blue;
+  }
+
+
+  inline static point_t to_demosaiced_coordinates (point_t p)
+  {
+    return {2*p.x + p.y, 2*p.x - p.y};
+  }
+  inline static point_t from_demosaiced_coordinates (point_t p)
+  {
+    return {(p.x + p.y) * 0.25, (p.x - p.y) * 0.5};
+  }
+
+#if 0
   /* Convert demosaiced coordinates to screen coordinates.  */
   inline static point_t from_demosaiced_coordinates (point_t p)
   {
@@ -279,14 +313,6 @@ struct dufay_geometry : public base_geometry
   inline static point_t to_demosaiced_coordinates (point_t p)
   {
     return p * 4;
-  }
-  inline static int demosaic_period_x ()
-  {
-    return 4;
-  }
-  inline static int demosaic_period_y ()
-  {
-    return 4;
   }
   /* Dufaycolor pattern.  Since we collect red pixels shifted by half
      of the square (to avoid interference with green/blue, we have
@@ -306,6 +332,7 @@ struct dufay_geometry : public base_geometry
       return red;
     return none;
   }
+#endif
 };
 
 void report_illuminant (class spectrum_dyes_to_xyz &spec, const char *name, const char *filename, const char *filename2 = NULL);

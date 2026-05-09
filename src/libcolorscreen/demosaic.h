@@ -2957,7 +2957,7 @@ protected:
    */
   template <int ah_green, int ah_red, int ah_blue>
   bool
-  rcd_interpolation_4x4 (progress_info *progress)
+  rcd_interpolation_4x4_dufay1 (progress_info *progress)
   {
     int w = m_area.width, h = m_area.height;
     constexpr luminosity_t eps = (luminosity_t)1e-5;
@@ -3286,6 +3286,11 @@ protected:
       }
 
     return !progress || !progress->cancelled ();
+  }
+  template <int ah_green, int ah_red, int ah_blue>
+  bool
+  rcd_interpolation_4x4 (progress_info *progress)
+  {
   }
 
   /* LMMSE (Linear Minimum Mean Square Error) demosaicing.
