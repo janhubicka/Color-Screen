@@ -3291,6 +3291,228 @@ protected:
   bool
   rcd_interpolation_4x4 (progress_info *progress)
   {
+    int w = m_area.width, h = m_area.height;
+    constexpr luminosity_t eps = (luminosity_t)1e-5;
+    constexpr luminosity_t epssq = (luminosity_t)1e-10;
+    constexpr int border = 8;
+
+    if (progress)
+      progress->set_task ("demosaicing (rcd 4x4 new)", h * 5);
+
+    /* ================================================================
+       Step 1: Directional discrimination using the standard Bayer
+       6th-order HPF on raw CFA values.  Valid since the dominating
+       channel (Red) is a true checkerboard, identical density to Bayer.
+       ================================================================ */
+    std::vector<luminosity_t> vh_dir (w * h, 0);
+    {
+      std::vector<luminosity_t> v_sq_row_0 (w, 0);
+      std::vector<luminosity_t> v_sq_row_1 (w, 0);
+      std::vector<luminosity_t> v_sq_row_2 (w, 0);
+
+      for (int init_row = 3; init_row <= 4; init_row++)
+        {
+          luminosity_t *tgt = (init_row == 3) ? v_sq_row_0.data () : v_sq_row_1.data ();
+          for (int x = 4; x < w - 4; x++)
+            {
+              luminosity_t v = (known (x, init_row-3) - known (x, init_row-1)
+                                - known (x, init_row+1) + known (x, init_row+3))
+                               - 3*(known (x, init_row-2) + known (x, init_row+2))
+                               + 6*known (x, init_row);
+              tgt[x] = v * v;
+            }
+        }
+      for (int y = 4; y < h - 4; y++)
+        {
+          if (progress && progress->cancel_requested ()) break;
+          for (int x = 4; x < w - 4; x++)
+            {
+              luminosity_t v = (known (x, y+1-3) - known (x, y+1-1)
+                                - known (x, y+1+1) + known (x, y+1+3))
+                               - 3*(known (x, y+1-2) + known (x, y+1+2))
+                               + 6*known (x, y+1);
+              v_sq_row_2[x] = v * v;
+            }
+          std::vector<luminosity_t> h_sq (w, 0);
+          for (int x = 3; x < w - 3; x++)
+            {
+              luminosity_t hv = (known (x-3,y) - known (x-1,y)
+                                 - known (x+1,y) + known (x+3,y))
+                                - 3*(known (x-2,y) + known (x+2,y))
+                                + 6*known (x,y);
+              h_sq[x] = hv * hv;
+            }
+          for (int x = 4; x < w - 4; x++)
+            {
+              luminosity_t v_stat = std::max (epssq, v_sq_row_0[x] + v_sq_row_1[x] + v_sq_row_2[x]);
+              luminosity_t h_stat = std::max (epssq, h_sq[x-1] + h_sq[x] + h_sq[x+1]);
+              vh_dir[y * w + x] = v_stat / (v_stat + h_stat);
+            }
+          std::swap (v_sq_row_0, v_sq_row_1);
+          std::swap (v_sq_row_1, v_sq_row_2);
+          if (progress) progress->inc_progress ();
+        }
+    }
+
+    /* ================================================================
+       Step 2: LPF at non-Red sites.  Standard 3x3 raw-CFA kernel is
+       valid: cardinal neighbors of any pixel are all Red, diagonals
+       are the other non-Red color.
+       Also compute lpf_sharp (Red-only Gaussian, sigma^2=8) for
+       gradient steering in Steps 3 and 4.
+       ================================================================ */
+    std::vector<luminosity_t> lpf (w * h, 0);
+    std::vector<luminosity_t> lpf_sharp (w * h, 0);
+#pragma omp parallel for schedule(dynamic, 16)
+    for (int y = border; y < h - border; y++)
+      {
+        if (progress && progress->cancel_requested ()) continue;
+        for (int x = border; x < w - border; x++)
+          {
+            if (GEOMETRY::demosaic_entry_color (x, y) != ah_green)
+              lpf[y * w + x] = known (x,y)
+                  + (luminosity_t)0.5
+                        * (known (x,y-1) + known (x,y+1)
+                           + known (x-1,y) + known (x+1,y))
+                  + (luminosity_t)0.25
+                        * (known (x-1,y-1) + known (x+1,y-1)
+                           + known (x-1,y+1) + known (x+1,y+1));
+            luminosity_t sum_s = 0, wt_s = 0;
+            for (int i = -3; i <= 3; i++)
+              for (int j = -3; j <= 3; j++)
+                if (GEOMETRY::demosaic_entry_color (x+j, y+i) == ah_green)
+                  {
+                    luminosity_t gw = std::exp (-(j*j + i*i) / (luminosity_t)8);
+                    sum_s += dch (x+j, y+i, ah_green) * gw;
+                    wt_s += gw;
+                  }
+            lpf_sharp[y * w + x] = sum_s / (wt_s + eps);
+          }
+        if (progress) progress->inc_progress ();
+      }
+
+    /* ================================================================
+       Step 3: Interpolate dominating channel (Red) at non-Red sites.
+
+       At any non-Red (Green or Blue) pixel:
+         - Cardinal neighbors at distance 1: all Red.
+         - Cardinal neighbors at distance 2: the OTHER non-Red color.
+           (Green->Blue at ±2; Blue->Green at ±2.)
+         - Same-color cardinal at distance 4.
+
+       Gradient uses only valid-color terms: distances 1/3 (Red) and
+       4 (same non-Red color).  Skip Bayer's distance-2 same-color
+       terms (wrong color here).  LPF ratio references use distance 4.
+       ================================================================ */
+#pragma omp parallel for schedule(dynamic, 16)
+    for (int y = border; y < h - border; y++)
+      {
+        if (progress && progress->cancel_requested ()) continue;
+        for (int x = border; x < w - border; x++)
+          {
+            if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
+              {
+                d (x, y)[(int)ah_green] = dch (x, y, ah_green);
+                continue;
+              }
+
+            luminosity_t cfa_i = known (x, y);
+            int idx = y * w + x;
+
+            luminosity_t n_grad = eps
+                + my_abs (known (x,y-1) - known (x,y+1))
+                + my_abs (cfa_i - known (x,y-4))
+                + my_abs (known (x,y-1) - known (x,y-3));
+            luminosity_t s_grad = eps
+                + my_abs (known (x,y+1) - known (x,y-1))
+                + my_abs (cfa_i - known (x,y+4))
+                + my_abs (known (x,y+1) - known (x,y+3));
+            luminosity_t w_grad = eps
+                + my_abs (known (x-1,y) - known (x+1,y))
+                + my_abs (cfa_i - known (x-4,y))
+                + my_abs (known (x-1,y) - known (x-3,y));
+            luminosity_t e_grad = eps
+                + my_abs (known (x+1,y) - known (x-1,y))
+                + my_abs (cfa_i - known (x+4,y))
+                + my_abs (known (x+1,y) - known (x+3,y));
+
+            luminosity_t lpfi = lpf[idx];
+            luminosity_t lpf2 = lpfi + lpfi;
+            luminosity_t n_est = known (x,y-1) * lpf2 / (eps + lpfi + lpf[(y-4)*w+x]);
+            luminosity_t s_est = known (x,y+1) * lpf2 / (eps + lpfi + lpf[(y+4)*w+x]);
+            luminosity_t w_est = known (x-1,y) * lpf2 / (eps + lpfi + lpf[y*w+(x-4)]);
+            luminosity_t e_est = known (x+1,y) * lpf2 / (eps + lpfi + lpf[y*w+(x+4)]);
+
+            luminosity_t v_est = (s_grad * n_est + n_grad * s_est) / (n_grad + s_grad);
+            luminosity_t h_est = (w_grad * e_est + e_grad * w_est) / (e_grad + w_grad);
+
+            luminosity_t vh_central = vh_dir[idx];
+            luminosity_t vh_nbh
+                = (luminosity_t)0.25
+                  * (vh_dir[(y-1)*w+(x-1)] + vh_dir[(y-1)*w+(x+1)]
+                     + vh_dir[(y+1)*w+(x-1)] + vh_dir[(y+1)*w+(x+1)]);
+            luminosity_t vh_disc
+                = (my_abs ((luminosity_t)0.5 - vh_central)
+                   < my_abs ((luminosity_t)0.5 - vh_nbh))
+                      ? vh_nbh : vh_central;
+            vh_disc = std::clamp (vh_disc, (luminosity_t)0, (luminosity_t)1);
+
+            d (x,y)[(int)ah_green] = vh_disc * h_est + (1 - vh_disc) * v_est;
+          }
+        if (progress) progress->inc_progress ();
+      }
+
+    /* ================================================================
+       Step 4: Interpolate sparse G/B strips using Steerable Kernel.
+       ================================================================ */
+#pragma omp parallel for schedule(dynamic, 16)
+    for (int y = border; y < h - border; y++)
+      {
+        if (progress && progress->cancel_requested ())
+          continue;
+        for (int x = border; x < w - border; x++)
+          {
+            luminosity_t g_here = d (x, y)[(int)ah_green];
+            int idx = y * w + x;
+            luminosity_t gx = lpf_sharp[idx + 1] - lpf_sharp[idx - 1];
+            luminosity_t gy = lpf_sharp[idx + w] - lpf_sharp[idx - w];
+            luminosity_t g2 = gx * gx + gy * gy + eps;
+
+            for (int c : {ah_red, ah_blue})
+              {
+                if (GEOMETRY::demosaic_entry_color (x, y) == c)
+                  {
+                    d (x, y)[c] = dch (x, y, c);
+                    continue;
+                  }
+
+                luminosity_t sum_cd = 0, sum_wt = 0;
+                for (int dy = -8; dy <= 8; dy++)
+                  for (int dx = -8; dx <= 8; dx++)
+                    {
+                      int nx = x + dx, ny = y + dy;
+                      if (GEOMETRY::demosaic_entry_color (nx, ny) != c)
+                        continue;
+                      
+                      luminosity_t cd = dch (nx, ny, c) - d (nx, ny)[(int)ah_green];
+                      luminosity_t dot = (dx * gx + dy * gy);
+                      luminosity_t dist_across_2 = (dot * dot) / g2;
+                      luminosity_t dist_along_2 = (luminosity_t)(dx * dx + dy * dy) - dist_across_2;
+                      if (dist_along_2 < 0) dist_along_2 = 0;
+                      
+                      /* σ_across²=8, σ_along²=32 to bridge the sparse diagonal gaps.  */
+                      luminosity_t swt = std::exp (-dist_across_2 / (luminosity_t)8 
+                                                 - dist_along_2 / (luminosity_t)32);
+                      sum_cd += cd * swt;
+                      sum_wt += swt;
+                    }
+                d (x, y)[c] = g_here + (sum_wt > 0 ? sum_cd / sum_wt : 0);
+              }
+          }
+        if (progress) progress->inc_progress ();
+      }
+
+    return !progress || !progress->cancelled ();
   }
 
   /* LMMSE (Linear Minimum Mean Square Error) demosaicing.
