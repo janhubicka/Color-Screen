@@ -3466,8 +3466,10 @@ protected:
        Step 4a: Non-Red pixels — interpolate the other non-Red channel.
 
        Green pixel needs Blue (or Blue needs Green). The nearest same-color
-       neighbors are at diagonal distance √2: (±1,±1) with same x+y parity.
-       These ARE centrosymmetric, so the steerable kernel works correctly.
+       neighbors are at diagonal distance √2: (-1,-1) and (1,1).
+       There are NO missing-color neighbors on the other diagonal.
+       Therefore, we perform a 1D gradient-weighted color-difference 
+       interpolation along the NW-SE diagonal.
        ================================================================ */
 #pragma omp parallel for schedule(dynamic, 16)
     for (int y = border; y < h - border; y++)
@@ -3480,12 +3482,6 @@ protected:
             if (my_color == ah_green)
               continue;  /* Red pixel: handled in Step 4b.  */
 
-            luminosity_t g_here = d (x, y)[(int)ah_green];
-            int idx = y * w + x;
-            luminosity_t gx = lpf_sharp[idx + 1] - lpf_sharp[idx - 1];
-            luminosity_t gy = lpf_sharp[idx + w] - lpf_sharp[idx - w];
-            luminosity_t g2 = gx * gx + gy * gy + eps;
-
             /* Determine which non-Red channel we need.  */
             int c = (my_color == ah_red) ? ah_blue : ah_red;
             if (GEOMETRY::demosaic_entry_color (x, y) == c)
@@ -3494,27 +3490,25 @@ protected:
                 continue;
               }
 
-            /* Collect color differences from nearby c-pixels.
-               The centrosymmetric kernel is unbiased here.  */
-            luminosity_t sum_cd = 0, sum_wt = 0;
-            for (int dy = -8; dy <= 8; dy++)
-              for (int dx = -8; dx <= 8; dx++)
-                {
-                  int nx = x + dx, ny = y + dy;
-                  if (GEOMETRY::demosaic_entry_color (nx, ny) != c)
-                    continue;
+            /* Get sharp Red luminance at center and neighbors.
+               ah_green is the DOMINANT channel (Red). */
+            luminosity_t g_here = d (x, y)[(int)ah_green];
+            luminosity_t nw_g = d (x - 1, y - 1)[(int)ah_green];
+            luminosity_t se_g = d (x + 1, y + 1)[(int)ah_green];
 
-                  luminosity_t cd = dch (nx, ny, c) - d (nx, ny)[(int)ah_green];
-                  luminosity_t dot = (dx * gx + dy * gy);
-                  luminosity_t dist_across_2 = (dot * dot) / g2;
-                  luminosity_t dist_along_2 = (luminosity_t)(dx * dx + dy * dy) - dist_across_2;
-                  if (dist_along_2 < 0) dist_along_2 = 0;
-                  luminosity_t swt = std::exp (-dist_across_2 / (luminosity_t)4
-                                             - dist_along_2 / (luminosity_t)32);
-                  sum_cd += cd * swt;
-                  sum_wt += swt;
-                }
-            d (x, y)[c] = g_here + (sum_wt > 0 ? sum_cd / sum_wt : 0);
+            /* Color differences (C - R) at the two neighbors. */
+            luminosity_t nw_cd = dch (x - 1, y - 1, c) - nw_g;
+            luminosity_t se_cd = dch (x + 1, y + 1, c) - se_g;
+
+            /* 1D gradients along the P diagonal using the Red channel. */
+            luminosity_t nw_grad = eps + my_abs (g_here - d (x - 2, y - 2)[(int)ah_green]);
+            luminosity_t se_grad = eps + my_abs (g_here - d (x + 2, y + 2)[(int)ah_green]);
+
+            /* Gradient-weighted interpolation of the color difference. 
+               Smaller gradient means smoother, gets higher weight. */
+            luminosity_t cd_est = (nw_cd * se_grad + se_cd * nw_grad) / (nw_grad + se_grad);
+
+            d (x, y)[c] = g_here + cd_est;
           }
         if (progress) progress->inc_progress ();
       }
