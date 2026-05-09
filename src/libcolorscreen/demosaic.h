@@ -2995,44 +2995,52 @@ protected:
                 continue;
               luminosity_t val = dch (x, y, ah_green);
 
-              /* Horizontal energy: average right-neighbor and left-neighbor
-                 squared gradient, normalized by distance.  */
+              /* Horizontal energy: search for nearest neighbors in the grid.
+                 For Red in Dufay, nearest H-neighbors are at distance 2.  */
               luminosity_t h_en_r = 0, h_en_l = 0;
-              for (int dx = 1; dx <= 4; dx++)
-                if (GEOMETRY::demosaic_entry_color (x + dx, y) == ah_green)
-                  {
-                    luminosity_t diff = val - dch (x + dx, y, ah_green);
-                    h_en_r = (diff * diff) / (luminosity_t)(dx * dx + 0.1);
-                    break;
-                  }
-              for (int dx = 1; dx <= 4; dx++)
-                if (GEOMETRY::demosaic_entry_color (x - dx, y) == ah_green)
-                  {
-                    luminosity_t diff = val - dch (x - dx, y, ah_green);
-                    h_en_l = (diff * diff) / (luminosity_t)(dx * dx + 0.1);
-                    break;
-                  }
+              for (int dx : {2, 4})
+                {
+                  if (GEOMETRY::demosaic_entry_color (x + dx, y) == ah_green)
+                    {
+                      luminosity_t diff = val - dch (x + dx, y, ah_green);
+                      h_en_r = (diff * diff) / (luminosity_t)(dx * dx + 0.1);
+                      break;
+                    }
+                }
+              for (int dx : {2, 4})
+                {
+                  if (GEOMETRY::demosaic_entry_color (x - dx, y) == ah_green)
+                    {
+                      luminosity_t diff = val - dch (x - dx, y, ah_green);
+                      h_en_l = (diff * diff) / (luminosity_t)(dx * dx + 0.1);
+                      break;
+                    }
+                }
               if (h_en_r > 0 && h_en_l > 0)
                 h_energy[y * w + x] = (h_en_r + h_en_l) * (luminosity_t)0.5;
               else
-                h_energy[y * w + x] = h_en_r + h_en_l; /* whichever is non-zero */
+                h_energy[y * w + x] = h_en_r + h_en_l;
 
-              /* Vertical energy: average down-neighbor and up-neighbor.  */
+              /* Vertical energy: nearest V-neighbors are at distance 4.  */
               luminosity_t v_en_d = 0, v_en_u = 0;
-              for (int dy = 1; dy <= 4; dy++)
-                if (GEOMETRY::demosaic_entry_color (x, y + dy) == ah_green)
-                  {
-                    luminosity_t diff = val - dch (x, y + dy, ah_green);
-                    v_en_d = (diff * diff) / (luminosity_t)(dy * dy + 0.1);
-                    break;
-                  }
-              for (int dy = 1; dy <= 4; dy++)
-                if (GEOMETRY::demosaic_entry_color (x, y - dy) == ah_green)
-                  {
-                    luminosity_t diff = val - dch (x, y - dy, ah_green);
-                    v_en_u = (diff * diff) / (luminosity_t)(dy * dy + 0.1);
-                    break;
-                  }
+              for (int dy : {4, 8})
+                {
+                  if (GEOMETRY::demosaic_entry_color (x, y + dy) == ah_green)
+                    {
+                      luminosity_t diff = val - dch (x, y + dy, ah_green);
+                      v_en_d = (diff * diff) / (luminosity_t)(dy * dy + 0.1);
+                      break;
+                    }
+                }
+              for (int dy : {4, 8})
+                {
+                  if (GEOMETRY::demosaic_entry_color (x, y - dy) == ah_green)
+                    {
+                      luminosity_t diff = val - dch (x, y - dy, ah_green);
+                      v_en_u = (diff * diff) / (luminosity_t)(dy * dy + 0.1);
+                      break;
+                    }
+                }
               if (v_en_d > 0 && v_en_u > 0)
                 v_energy[y * w + x] = (v_en_d + v_en_u) * (luminosity_t)0.5;
               else
@@ -3076,18 +3084,17 @@ protected:
               v_sum /= v_gw_sum;
               vh_dir[y * w + x] = v_sum / (v_sum + h_sum + eps);
             }
-          if (progress)
-            progress->inc_progress ();
-        }
+        if (progress)
+          progress->inc_progress ();
+      }
     }
 
     /* ================================================================
        Step 2: Compute two low-pass filters of the dominating channel.
 
        - lpf (wide, sigma^2=24): used for ratio-corrected estimates.
-         Phase-invariant for period-4 grid over 12x12 window.
-       - lpf_sharp (narrow, sigma^2=4): used for gradient/edge detection.
-         Much smaller kernel, retains sharp edge transitions.
+         Symmetric 17x17 window to avoid phase bias.
+       - lpf_sharp (narrow, sigma^2=8): used for gradient/edge detection.
        ================================================================ */
     std::vector<luminosity_t> lpf (w * h, 0);
     std::vector<luminosity_t> lpf_sharp (w * h, 0);
@@ -3100,16 +3107,20 @@ protected:
           {
             luminosity_t sum_w = 0, weight_w = 0;
             luminosity_t sum_s = 0, weight_s = 0;
-            for (int i = -6; i <= 5; i++)
-              for (int j = -6; j <= 5; j++)
+            for (int i = -8; i <= 8; i++)
+              for (int j = -8; j <= 8; j++)
                 {
                   if (GEOMETRY::demosaic_entry_color (x + j, y + i) == ah_green)
                     {
-                      luminosity_t d2 = (luminosity_t)(i * i + j * j);
+                      /* Broad Anisotropic LPF: Vertical smoothing (sigma^2=64) is
+                         stronger than Horizontal (sigma^2=32) to fully
+                         neutralize the sparse 4x4 red grid periodicity.  */
                       luminosity_t gw_wide
-                          = std::exp (-d2 / (luminosity_t)24);
+                          = std::exp (-(luminosity_t)(j * j) / (luminosity_t)32
+                                     - (luminosity_t)(i * i) / (luminosity_t)64);
                       luminosity_t gw_sharp
-                          = std::exp (-d2 / (luminosity_t)8);
+                          = std::exp (-(luminosity_t)(j * j) / (luminosity_t)16
+                                     - (luminosity_t)(i * i) / (luminosity_t)32);
                       luminosity_t v = dch (x + j, y + i, ah_green);
                       sum_w += v * gw_wide;
                       weight_w += gw_wide;
@@ -3147,7 +3158,11 @@ protected:
 
             int idx = y * w + x;
             luminosity_t lpfi = lpf[idx];
-            luminosity_t lpf2 = lpfi + lpfi;
+
+            /* Compute local gradient for kernel steering.  */
+            luminosity_t gx = lpf_sharp[idx + 1] - lpf_sharp[idx - 1];
+            luminosity_t gy = lpf_sharp[idx + w] - lpf_sharp[idx - w];
+            luminosity_t g2 = gx * gx + gy * gy + eps;
 
             /* Collect weighted estimates from nearby ah_green samples.
                Use Gaussian spatial weighting (sigma=2) combined with
@@ -3159,8 +3174,8 @@ protected:
                diagonal samples and thus ineffective.  */
             luminosity_t sum_est = 0, sum_wt = 0;
 
-            for (int dy = -6; dy <= 6; dy++)
-              for (int dx = -6; dx <= 6; dx++)
+            for (int dy = -8; dy <= 8; dy++)
+              for (int dx = -8; dx <= 8; dx++)
                 {
                   int nx = x + dx, ny = y + dy;
                   if (GEOMETRY::demosaic_entry_color (nx, ny) != ah_green)
@@ -3171,20 +3186,22 @@ protected:
 
                   luminosity_t val = dch (nx, ny, ah_green);
                   luminosity_t lpf_n = lpf[ny * w + nx];
-                  /* Ratio-corrected estimate: adjust for local luminance.  */
-                  luminosity_t est = val * lpf2 / (eps + lpfi + lpf_n);
-                  /* Use sharp LPF difference for gradient: smaller kernel
-                     tracks edge transitions much better than wide LPF.  */
-                  luminosity_t sharp_i = lpf_sharp[idx];
-                  luminosity_t sharp_n = lpf_sharp[ny * w + nx];
-                  luminosity_t grad = my_abs (sharp_i - sharp_n);
+                  /* Further dampened ratio correction (25%) to eliminate overshoot.  */
+                  luminosity_t ratio = (lpfi + lpfi) / (eps + lpfi + lpf_n);
+                  luminosity_t est = val * (1.0 + (ratio - 1.0) * (luminosity_t)0.25);
+
+                  /* Steerable weighting:
+                     Projection of sample vector (dx, dy) onto gradient direction.  */
+                  luminosity_t dot = (dx * gx + dy * gy);
+                  luminosity_t dist_across_2 = (dot * dot) / g2;
+                  luminosity_t dist_along_2 = (luminosity_t)dist2 - dist_across_2;
+                  if (dist_along_2 < 0) dist_along_2 = 0;
                   
-                  luminosity_t sw = std::exp (-(luminosity_t)dist2 / (luminosity_t)8);
-                  /* Gradient suppression: high value (500) to decisively
-                     exclude samples on the far side of any edge.  */
-                  luminosity_t gradient_wt = 1.0 / (1.0 + grad * 500.0);
+                  /* Across-edge: sigma^2=6 (sharp but stable). 
+                     Along-edge: sigma^2=32 (very smooth to fight 4x4 staircase).  */
+                  luminosity_t sample_wt = std::exp (-dist_across_2 / (luminosity_t)6 
+                                                   - dist_along_2 / (luminosity_t)32);
                   
-                  luminosity_t sample_wt = sw * gradient_wt;
                   sum_est += est * sample_wt;
                   sum_wt += sample_wt;
                 }
@@ -3223,14 +3240,15 @@ protected:
                   }
 
                 /* Collect weighted color-difference estimates from nearby C samples.
-                   Use lpf_sharp gradient (not interpolated G) for edge detection —
-                   the sharp LPF is more reliable than interpolated G at boundary pixels
-                   where G itself may contain errors.  */
+                   Use steerable Gaussian based on local gradient.  */
                 luminosity_t sum_cd = 0, sum_wt = 0;
-                luminosity_t sharp_here = lpf_sharp[y * w + x];
+                int idx = y * w + x;
+                luminosity_t gx = lpf_sharp[idx + 1] - lpf_sharp[idx - 1];
+                luminosity_t gy = lpf_sharp[idx + w] - lpf_sharp[idx - w];
+                luminosity_t g2 = gx * gx + gy * gy + eps;
 
-                for (int dy = -6; dy <= 6; dy++)
-                  for (int dx = -6; dx <= 6; dx++)
+                for (int dy = -8; dy <= 8; dy++)
+                  for (int dx = -8; dx <= 8; dx++)
                     {
                       int nx = x + dx, ny = y + dy;
                       if (GEOMETRY::demosaic_entry_color (nx, ny) != c)
@@ -3242,14 +3260,15 @@ protected:
                       luminosity_t val = dch (nx, ny, c);
                       luminosity_t g_there = d (nx, ny)[(int)ah_green];
                       luminosity_t cd = val - g_there;
-                      /* Use sharp LPF gradient for reliable edge detection.  */
-                      luminosity_t sharp_n = lpf_sharp[ny * w + nx];
-                      luminosity_t grad = my_abs (sharp_here - sharp_n);
+
+                      luminosity_t dot = (dx * gx + dy * gy);
+                      luminosity_t dist_across_2 = (dot * dot) / g2;
+                      luminosity_t dist_along_2 = (luminosity_t)dist2 - dist_across_2;
+                      if (dist_along_2 < 0) dist_along_2 = 0;
                       
-                      luminosity_t sw = std::exp (-(luminosity_t)dist2 / (luminosity_t)8);
-                      luminosity_t gradient_wt = 1.0 / (1.0 + grad * 500.0);
+                      luminosity_t sample_wt = std::exp (-dist_across_2 / (luminosity_t)6 
+                                                       - dist_along_2 / (luminosity_t)32);
                       
-                      luminosity_t sample_wt = sw * gradient_wt;
                       sum_cd += cd * sample_wt;
                       sum_wt += sample_wt;
                     }
