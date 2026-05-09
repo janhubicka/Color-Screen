@@ -36,7 +36,7 @@ class render;
 class demosaic_generic_base
 {
 protected:
-  static constexpr const bool debug = colorscreen_checking;
+  static constexpr const bool debug = /*colorscreen_checking*/ true;
 
 public:
   /* Return reference to demosaiced data at [X, Y] with bounds clamping.  */
@@ -2928,10 +2928,10 @@ protected:
      This variant is optimized for patterns where the dominating channel
      is a 2x4 grid and non-dominating channels are 4x4 grids, with empty
      pixels in between, such as in Dufaycolor reseau:
-        R . B .
-        . . . .
-        . G . G
-        . . . .
+        R G B G
+        G B G R
+        B G R G
+        G R G B
 
      The algorithm follows the same five steps as standard RCD but uses
      larger offsets and search kernels to handle the sparsity.
@@ -2955,338 +2955,6 @@ protected:
    * AH_GREEN, AH_RED, AH_BLUE are the channel indices. AH_GREEN should be 
    * the channel with highest density (e.g., Red for Dufay, Blue for Paget).
    */
-  template <int ah_green, int ah_red, int ah_blue>
-  bool
-  rcd_interpolation_4x4_dufay1 (progress_info *progress)
-  {
-    int w = m_area.width, h = m_area.height;
-    constexpr luminosity_t eps = (luminosity_t)1e-5;
-    constexpr int border = 8;
-
-    if (progress)
-      progress->set_task ("demosaicing (rcd 4x4)", h * 5);
-
-    /* ================================================================
-       Step 1: Find vertical and horizontal interpolation directions.
-
-       At each ah_green site, compute distance-normalized finite
-       differences to the nearest horizontal and vertical ah_green
-       neighbor.  These squared gradients are stored per-site.
-       Then we smooth with a Gaussian window to produce a stable
-       directional discrimination at every pixel.
-       ================================================================ */
-    std::vector<luminosity_t> vh_dir (w * h, (luminosity_t)0.5);
-    {
-      std::vector<luminosity_t> h_energy (w * h, 0);
-      std::vector<luminosity_t> v_energy (w * h, 0);
-
-      /* Compute per-site gradient energy at each ah_green pixel.
-         Search in BOTH directions along each axis to avoid asymmetry
-         (searching only right+down caused top-left diagonal edges to behave
-         differently from bottom-right diagonal edges).  */
-#pragma omp parallel for schedule(dynamic, 16)
-      for (int y = border; y < h - border; y++)
-        {
-          if (progress && progress->cancel_requested ())
-            continue;
-          for (int x = border; x < w - border; x++)
-            {
-              if (GEOMETRY::demosaic_entry_color (x, y) != ah_green)
-                continue;
-              luminosity_t val = dch (x, y, ah_green);
-
-              /* Horizontal energy: search for nearest neighbors in the grid.
-                 For Red in Dufay, nearest H-neighbors are at distance 2.  */
-              luminosity_t h_en_r = 0, h_en_l = 0;
-              for (int dx : {2, 4})
-                {
-                  if (GEOMETRY::demosaic_entry_color (x + dx, y) == ah_green)
-                    {
-                      luminosity_t diff = val - dch (x + dx, y, ah_green);
-                      h_en_r = (diff * diff) / (luminosity_t)(dx * dx);
-                      break;
-                    }
-                }
-              for (int dx : {2, 4})
-                {
-                  if (GEOMETRY::demosaic_entry_color (x - dx, y) == ah_green)
-                    {
-                      luminosity_t diff = val - dch (x - dx, y, ah_green);
-                      h_en_l = (diff * diff) / (luminosity_t)(dx * dx);
-                      break;
-                    }
-                }
-              if (h_en_r > 0 && h_en_l > 0)
-                h_energy[y * w + x] = (h_en_r + h_en_l) * (luminosity_t)0.5;
-              else
-                h_energy[y * w + x] = h_en_r + h_en_l;
-
-              /* Vertical energy: nearest V-neighbors are at distance 4.  */
-              luminosity_t v_en_d = 0, v_en_u = 0;
-              for (int dy : {4, 8})
-                {
-                  if (GEOMETRY::demosaic_entry_color (x, y + dy) == ah_green)
-                    {
-                      luminosity_t diff = val - dch (x, y + dy, ah_green);
-                      v_en_d = (diff * diff) / (luminosity_t)(dy * dy);
-                      break;
-                    }
-                }
-              for (int dy : {4, 8})
-                {
-                  if (GEOMETRY::demosaic_entry_color (x, y - dy) == ah_green)
-                    {
-                      luminosity_t diff = val - dch (x, y - dy, ah_green);
-                      v_en_u = (diff * diff) / (luminosity_t)(dy * dy);
-                      break;
-                    }
-                }
-              if (v_en_d > 0 && v_en_u > 0)
-                v_energy[y * w + x] = (v_en_d + v_en_u) * (luminosity_t)0.5;
-              else
-                v_energy[y * w + x] = v_en_d + v_en_u;
-            }
-        }
-
-      /* Smooth gradient energies with Gaussian window and compute
-         vh_dir at every pixel.  Sigma^2 ~ 9 covers ~6 pixels at 2σ,
-         spanning at least one full period of the sparse grid.  */
-#pragma omp parallel for schedule(dynamic, 16)
-      for (int y = border; y < h - border; y++)
-        {
-          if (progress && progress->cancel_requested ())
-            continue;
-          for (int x = border; x < w - border; x++)
-            {
-              luminosity_t h_sum = 0;
-              luminosity_t h_gw_sum = eps;
-              luminosity_t v_sum = 0;
-              luminosity_t v_gw_sum = eps;
-              for (int dy = -6; dy <= 6; dy++)
-                for (int dx = -6; dx <= 6; dx++)
-                  {
-                    luminosity_t gw
-                        = std::exp (-(luminosity_t)(dx * dx + dy * dy)
-                                   / (luminosity_t)18);
-                    int idx = (y + dy) * w + (x + dx);
-                    if (h_energy[idx] > 0)
-                      {
-                        h_sum += h_energy[idx] * gw;
-                        h_gw_sum += gw;
-                      }
-                    if (v_energy[idx] > 0)
-                      {
-                        v_sum += v_energy[idx] * gw;
-                        v_gw_sum += gw;
-                      }
-                  }
-              h_sum /= h_gw_sum;
-              v_sum /= v_gw_sum;
-              vh_dir[y * w + x] = v_sum / (v_sum + h_sum + eps);
-            }
-        if (progress)
-          progress->inc_progress ();
-      }
-    }
-
-    /* ================================================================
-       Step 2: Compute two low-pass filters of the dominating channel.
-
-       - lpf (wide, sigma^2=24): used for ratio-corrected estimates.
-         Symmetric 17x17 window to avoid phase bias.
-       - lpf_sharp (narrow, sigma^2=8): used for gradient/edge detection.
-       ================================================================ */
-    std::vector<luminosity_t> lpf (w * h, 0);
-    std::vector<luminosity_t> lpf_sharp (w * h, 0);
-#pragma omp parallel for schedule(dynamic, 16)
-    for (int y = border; y < h - border; y++)
-      {
-        if (progress && progress->cancel_requested ())
-          continue;
-        for (int x = border; x < w - border; x++)
-          {
-            luminosity_t sum_w = 0, weight_w = 0;
-            luminosity_t sum_s = 0, weight_s = 0;
-            /* Use phase-invariant Box LPFs for the sparse 4x4 grid.
-               Wide: 16x16 (4x4 periods). Sharp: 8x8 (2x2 periods).
-               This eliminates vertical intensity ripples in the LPF.  */
-            for (int i = -8; i <= 8; i++)
-              for (int j = -8; j <= 8; j++)
-                {
-                  if (GEOMETRY::demosaic_entry_color (x + j, y + i) == ah_green)
-                    {
-                      luminosity_t v = dch (x + j, y + i, ah_green);
-                      /* 16x16 Box wide */
-                      if (i >= -8 && i < 8 && j >= -8 && j < 8)
-                        {
-                          sum_w += v;
-                          weight_w += 1.0;
-                        }
-                      /* 8x8 Box sharp */
-                      if (i >= -4 && i < 4 && j >= -4 && j < 4)
-                        {
-                          sum_s += v;
-                          weight_s += 1.0;
-                        }
-                    }
-                }
-            lpf[y * w + x] = weight_w > 0 ? sum_w / weight_w : 0;
-            lpf_sharp[y * w + x] = weight_s > 0 ? sum_s / weight_s : 0;
-          }
-        if (progress)
-          progress->inc_progress ();
-      }
-
-    /* ================================================================
-       Step 3: Populate the dominating channel (ah_green) at all sites.
-
-       For each non-ah_green pixel, collect all nearby ah_green samples
-       in each cardinal half (N, S, W, E).  Use inverse-distance-weighted
-       ratio-corrected estimates with cross-gradient weighting between
-       the vertical (N+S) and horizontal (W+E) estimates.
-       ================================================================ */
-#pragma omp parallel for schedule(dynamic, 16)
-    for (int y = border; y < h - border; y++)
-      {
-        if (progress && progress->cancel_requested ())
-          continue;
-        for (int x = border; x < w - border; x++)
-          {
-            if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
-              {
-                d (x, y)[(int)ah_green] = dch (x, y, ah_green);
-                continue;
-              }
-
-            int idx = y * w + x;
-            luminosity_t lpfi = lpf[idx];
-
-            /* Compute local gradient for kernel steering.  */
-            luminosity_t gx = lpf_sharp[idx + 1] - lpf_sharp[idx - 1];
-            luminosity_t gy = lpf_sharp[idx + w] - lpf_sharp[idx - w];
-            luminosity_t g2 = gx * gx + gy * gy + eps;
-
-            /* Collect weighted estimates from nearby ah_green samples.
-               Use Gaussian spatial weighting (sigma=2) combined with
-               gradient-guided sample suppression.  The gradient weight
-               suppresses samples across strong edges in *any* direction
-               (horizontal, vertical, or diagonal) without needing to
-               classify the edge orientation explicitly.  This avoids the
-               broken directional-weight formula which was always ≈0.5 for
-               diagonal samples and thus ineffective.  */
-            luminosity_t sum_est = 0, sum_wt = 0;
-
-            for (int dy = -8; dy <= 8; dy++)
-              for (int dx = -8; dx <= 8; dx++)
-                {
-                  int nx = x + dx, ny = y + dy;
-                  if (GEOMETRY::demosaic_entry_color (nx, ny) != ah_green)
-                    continue;
-                  int dist2 = dx * dx + dy * dy;
-                  if (dist2 == 0)
-                    continue;
-
-                  luminosity_t val = dch (nx, ny, ah_green);
-                  luminosity_t lpf_n = lpf[ny * w + nx];
-                  /* Further dampened ratio correction (25%) to eliminate overshoot.  */
-                  luminosity_t ratio = (lpfi + lpfi) / (eps + lpfi + lpf_n);
-                  luminosity_t est = val * (1.0 + (ratio - 1.0) * (luminosity_t)0.25);
-
-                  /* Steerable weighting:
-                     Projection of sample vector (dx, dy) onto gradient direction.  */
-                  luminosity_t dot = (dx * gx + dy * gy);
-                  luminosity_t dist_across_2 = (dot * dot) / g2;
-                  luminosity_t dist_along_2 = (luminosity_t)dist2 - dist_across_2;
-                  if (dist_along_2 < 0) dist_along_2 = 0;
-                  
-                  /* Across-edge: sigma^2=6 (sharp but stable). 
-                     Along-edge: sigma^2=32 (very smooth to fight 4x4 staircase).  */
-                  luminosity_t sample_wt = std::exp (-dist_across_2 / (luminosity_t)6 
-                                                   - dist_along_2 / (luminosity_t)32);
-                  
-                  sum_est += est * sample_wt;
-                  sum_wt += sample_wt;
-                }
-
-            if (sum_wt > 0)
-              d (x, y)[(int)ah_green] = sum_est / sum_wt;
-            else
-              d (x, y)[(int)ah_green] = lpfi;
-          }
-        if (progress)
-          progress->inc_progress ();
-      }
-
-    /* ================================================================
-       Step 4: Populate non-dominating channels (R and B).
-
-       For each pixel where color C is not known, collect nearby C samples,
-       compute color differences (C - G_interpolated), and interpolate
-       guided by the now-complete dominating channel and vh_dir.
-       ================================================================ */
-#pragma omp parallel for schedule(dynamic, 16)
-    for (int y = border; y < h - border; y++)
-      {
-        if (progress && progress->cancel_requested ())
-          continue;
-        for (int x = border; x < w - border; x++)
-          {
-            luminosity_t g_here = d (x, y)[(int)ah_green];
-
-            for (int c : {ah_red, ah_blue})
-              {
-                if (GEOMETRY::demosaic_entry_color (x, y) == c)
-                  {
-                    d (x, y)[c] = dch (x, y, c);
-                    continue;
-                  }
-
-                /* Collect weighted color-difference estimates from nearby C samples.
-                   Use steerable Gaussian based on local gradient.  */
-                luminosity_t sum_cd = 0, sum_wt = 0;
-                int idx = y * w + x;
-                luminosity_t gx = lpf_sharp[idx + 1] - lpf_sharp[idx - 1];
-                luminosity_t gy = lpf_sharp[idx + w] - lpf_sharp[idx - w];
-                luminosity_t g2 = gx * gx + gy * gy + eps;
-
-                for (int dy = -8; dy <= 8; dy++)
-                  for (int dx = -8; dx <= 8; dx++)
-                    {
-                      int nx = x + dx, ny = y + dy;
-                      if (GEOMETRY::demosaic_entry_color (nx, ny) != c)
-                        continue;
-                      int dist2 = dx * dx + dy * dy;
-                      if (dist2 == 0)
-                        continue;
-
-                      luminosity_t val = dch (nx, ny, c);
-                      luminosity_t g_there = d (nx, ny)[(int)ah_green];
-                      luminosity_t cd = val - g_there;
-
-                      luminosity_t dot = (dx * gx + dy * gy);
-                      luminosity_t dist_across_2 = (dot * dot) / g2;
-                      luminosity_t dist_along_2 = (luminosity_t)dist2 - dist_across_2;
-                      if (dist_along_2 < 0) dist_along_2 = 0;
-                      
-                      luminosity_t sample_wt = std::exp (-dist_across_2 / (luminosity_t)6 
-                                                       - dist_along_2 / (luminosity_t)32);
-                      
-                      sum_cd += cd * sample_wt;
-                      sum_wt += sample_wt;
-                    }
-
-                if (sum_wt > 0)
-                  d (x, y)[c] = g_here + sum_cd / sum_wt;
-                else
-                  d (x, y)[c] = g_here;
-              }
-          }
-        if (progress)
-          progress->inc_progress ();
-      }
-
-    return !progress || !progress->cancelled ();
-  }
   template <int ah_green, int ah_red, int ah_blue>
   bool
   rcd_interpolation_4x4 (progress_info *progress)
@@ -3564,9 +3232,22 @@ protected:
             luminosity_t cd_b_v = dch (bx_v, by_v, ah_blue)
                                   - d (bx_v, by_v)[(int)ah_green];
 
-            /* VH blend: vh≈1 → prefer H, vh≈0 → prefer V.  */
-            d (x, y)[(int)ah_red]  = r_here + vh * cd_g_h + (1 - vh) * cd_g_v;
-            d (x, y)[(int)ah_blue] = r_here + vh * cd_b_h + (1 - vh) * cd_b_v;
+            /* Gradients of the dominating channel to the neighbours. */
+            luminosity_t grad_g_h = eps + my_abs(r_here - d(gx_h, gy_h)[(int)ah_green]);
+            luminosity_t grad_g_v = eps + my_abs(r_here - d(gx_v, gy_v)[(int)ah_green]);
+            luminosity_t grad_b_h = eps + my_abs(r_here - d(bx_h, by_h)[(int)ah_green]);
+            luminosity_t grad_b_v = eps + my_abs(r_here - d(bx_v, by_v)[(int)ah_green]);
+
+            /* VH blend combined with gradient steering.
+               vh≈1 → prefer H, vh≈0 → prefer V.
+               Gradient steering handles diagonal edges where H and V cross the edge. */
+            luminosity_t w_g_h = vh / grad_g_h;
+            luminosity_t w_g_v = (1.0 - vh) / grad_g_v;
+            d (x, y)[(int)ah_red] = r_here + (w_g_h * cd_g_h + w_g_v * cd_g_v) / (w_g_h + w_g_v + eps);
+
+            luminosity_t w_b_h = vh / grad_b_h;
+            luminosity_t w_b_v = (1.0 - vh) / grad_b_v;
+            d (x, y)[(int)ah_blue] = r_here + (w_b_h * cd_b_h + w_b_v * cd_b_v) / (w_b_h + w_b_v + eps);
           }
         if (progress) progress->inc_progress ();
       }

@@ -23,7 +23,7 @@ class analyze_base
 {
 protected:
   /* Enable debug checks if COLORSCREEN_CHECKING is defined.  */
-  static constexpr bool debug = colorscreen_checking;
+  static constexpr bool debug = /*colorscreen_checking*/ true;
 public:
   /* Information about min and max luminosity in a region.  */
   struct contrast_info
@@ -720,19 +720,23 @@ analyze_base_worker<GEOMETRY>::populate_demosaiced_data (std::vector<rgbdata> &d
 	    p.y += (coord_t)m_area.yshift ();
 	    point_t off;
 	    data_entry e;
+	    demosaic [y * area.width + x] = {0.0, 0.0, 0.0};
 
 	    switch (GEOMETRY::demosaic_entry_color (x + area.x, y + area.y))
 	    {
 	      case base_geometry::red:
 		e = GEOMETRY::red_scr_to_entry (p, &off);
+		assert (!debug || off.length () < 0.1);
 	        demosaic [y * area.width + x].red = r->adjust_luminosity_ir (red (e.x, e.y));
 		break;
 	      case base_geometry::green:
 		e = GEOMETRY::green_scr_to_entry (p, &off);
+		assert (!debug || off.length () < 0.1);
 	        demosaic [y * area.width + x].green = r->adjust_luminosity_ir (green (e.x, e.y));
 		break;
 	      case base_geometry::blue:
 		e = GEOMETRY::blue_scr_to_entry (p, &off);
+		assert (!debug || off.length () < 0.1);
 	        demosaic [y * area.width + x].blue = r->adjust_luminosity_ir (blue (e.x, e.y));
 		break;
 	      case base_geometry::none:
