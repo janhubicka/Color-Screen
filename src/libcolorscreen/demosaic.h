@@ -3003,7 +3003,7 @@ protected:
                   if (GEOMETRY::demosaic_entry_color (x + dx, y) == ah_green)
                     {
                       luminosity_t diff = val - dch (x + dx, y, ah_green);
-                      h_en_r = (diff * diff) / (luminosity_t)(dx * dx + 0.1);
+                      h_en_r = (diff * diff) / (luminosity_t)(dx * dx);
                       break;
                     }
                 }
@@ -3012,7 +3012,7 @@ protected:
                   if (GEOMETRY::demosaic_entry_color (x - dx, y) == ah_green)
                     {
                       luminosity_t diff = val - dch (x - dx, y, ah_green);
-                      h_en_l = (diff * diff) / (luminosity_t)(dx * dx + 0.1);
+                      h_en_l = (diff * diff) / (luminosity_t)(dx * dx);
                       break;
                     }
                 }
@@ -3028,7 +3028,7 @@ protected:
                   if (GEOMETRY::demosaic_entry_color (x, y + dy) == ah_green)
                     {
                       luminosity_t diff = val - dch (x, y + dy, ah_green);
-                      v_en_d = (diff * diff) / (luminosity_t)(dy * dy + 0.1);
+                      v_en_d = (diff * diff) / (luminosity_t)(dy * dy);
                       break;
                     }
                 }
@@ -3037,7 +3037,7 @@ protected:
                   if (GEOMETRY::demosaic_entry_color (x, y - dy) == ah_green)
                     {
                       luminosity_t diff = val - dch (x, y - dy, ah_green);
-                      v_en_u = (diff * diff) / (luminosity_t)(dy * dy + 0.1);
+                      v_en_u = (diff * diff) / (luminosity_t)(dy * dy);
                       break;
                     }
                 }
@@ -3107,25 +3107,27 @@ protected:
           {
             luminosity_t sum_w = 0, weight_w = 0;
             luminosity_t sum_s = 0, weight_s = 0;
+            /* Use phase-invariant Box LPFs for the sparse 4x4 grid.
+               Wide: 16x16 (4x4 periods). Sharp: 8x8 (2x2 periods).
+               This eliminates vertical intensity ripples in the LPF.  */
             for (int i = -8; i <= 8; i++)
               for (int j = -8; j <= 8; j++)
                 {
                   if (GEOMETRY::demosaic_entry_color (x + j, y + i) == ah_green)
                     {
-                      /* Broad Anisotropic LPF: Vertical smoothing (sigma^2=64) is
-                         stronger than Horizontal (sigma^2=32) to fully
-                         neutralize the sparse 4x4 red grid periodicity.  */
-                      luminosity_t gw_wide
-                          = std::exp (-(luminosity_t)(j * j) / (luminosity_t)32
-                                     - (luminosity_t)(i * i) / (luminosity_t)64);
-                      luminosity_t gw_sharp
-                          = std::exp (-(luminosity_t)(j * j) / (luminosity_t)16
-                                     - (luminosity_t)(i * i) / (luminosity_t)32);
                       luminosity_t v = dch (x + j, y + i, ah_green);
-                      sum_w += v * gw_wide;
-                      weight_w += gw_wide;
-                      sum_s += v * gw_sharp;
-                      weight_s += gw_sharp;
+                      /* 16x16 Box wide */
+                      if (i >= -8 && i < 8 && j >= -8 && j < 8)
+                        {
+                          sum_w += v;
+                          weight_w += 1.0;
+                        }
+                      /* 8x8 Box sharp */
+                      if (i >= -4 && i < 4 && j >= -4 && j < 4)
+                        {
+                          sum_s += v;
+                          weight_s += 1.0;
+                        }
                     }
                 }
             lpf[y * w + x] = weight_w > 0 ? sum_w / weight_w : 0;
