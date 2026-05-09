@@ -3522,21 +3522,15 @@ protected:
     /* ================================================================
        Step 4b: Red pixels — interpolate Green and Blue.
 
-       From a Red pixel, the nearest Green pixels are at knight-move
-       distance (√5). CRITICALLY, the specific knight-move directions
-       differ by phase:
-         Phase (x+y)≡1 mod4: Green at (±1,±2),(±2,±1) — the 4 with
-           dx+dy≡3 or ≡-1 (mod4).
-         Phase (x+y)≡3 mod4: Green at the complementary 4 directions.
-
-       Using a steerable Gaussian over all ±8 would pull phase-1 and
-       phase-3 Red toward OPPOSITE Green strips, creating period-4 banding.
-
-       Fix: split the 4 knight-move neighbors into two groups by which
-       x+y strip they belong to (higher vs lower x+y relative to current).
-       Average each group, then blend with cross-gradient weighting in the
-       strip-normal direction (gradient of x+y = gx+gy).  This is
-       phase-invariant and analogous to RCD's cardinal v/h cross-weighting.
+       Every Red pixel has exactly 2 cardinal Green neighbours and 2
+       cardinal Blue neighbours, all at distance 1:
+         Phase (x+y)≡1 mod4: Green at W=(x-1,y) and N=(x,y-1);
+                              Blue  at E=(x+1,y) and S=(x,y+1).
+         Phase (x+y)≡3 mod4: Green at E=(x+1,y) and S=(x,y+1);
+                              Blue  at W=(x-1,y) and N=(x,y-1).
+       Use the vh_dir VH discriminant from Step 1 to blend between the
+       horizontal (H) and vertical (V) cardinal estimates.  This is the
+       direct analogue of RCD Step 4 (R@G / B@G) with roles reversed.
        ================================================================ */
 #pragma omp parallel for schedule(dynamic, 16)
     for (int y = border; y < h - border; y++)
@@ -3548,62 +3542,37 @@ protected:
             if (GEOMETRY::demosaic_entry_color (x, y) != ah_green)
               continue;  /* Non-Red: already done in Step 4a.  */
 
-            luminosity_t g_here = d (x, y)[(int)ah_green];
-            int idx = y * w + x;
-            /* Strip-normal gradient: gx+gy measures change along x+y direction.
-               Strip-parallel gradient: gx-gy measures change along x-y.  */
-            luminosity_t gn = (lpf_sharp[idx + 1] - lpf_sharp[idx - 1])
-                              + (lpf_sharp[idx + w] - lpf_sharp[idx - w]);
-            /* Gradient magnitude in each half-strip direction.  */
-            luminosity_t pos_grad = eps + my_abs (gn);
-            luminosity_t neg_grad = eps + my_abs (gn);
+            luminosity_t r_here = d (x, y)[(int)ah_green];
+            luminosity_t vh = vh_dir[y * w + x];
 
-            /* The 8 knight-move offsets from any pixel.  For the current Red
-               pixel's phase, exactly 4 land on Green and 4 on Blue.  */
-            static const int kx[8] = { 1, 2, 1,-2,-1,-2,-1, 2};
-            static const int ky[8] = { 2, 1,-2, 1, 2,-1,-2,-1};
+            /* Determine which cardinal direction gives Green vs Blue.
+               (x+y)&2 == 0 → phase 1: W/N=Green, E/S=Blue
+               (x+y)&2 == 2 → phase 3: E/S=Green, W/N=Blue       */
+            bool phase1 = !((x + y) & 2);
 
-            for (int c : {ah_red, ah_blue})
-              {
-                /* Collect color differences, split by which x+y strip.
-                   Also accumulate gradient proxies from dominating-channel
-                   values at each side's knight-move positions.  */
-                luminosity_t cd_hi = 0, wt_hi = 0;
-                luminosity_t cd_lo = 0, wt_lo = 0;
-                luminosity_t g_hi = 0, g_lo = 0;  /* gradient proxies */
-                int my_sum = x + y;
-                luminosity_t g_here = d (x, y)[(int)ah_green];
+            /* Cardinal neighbors in H (W or E) and V (N or S in screen). */
+            int gx_h = phase1 ? x - 1 : x + 1;   /* Green in H direction */
+            int gy_h = y;
+            int gx_v = x;
+            int gy_v = phase1 ? y - 1 : y + 1;   /* Green in V direction */
+            int bx_h = phase1 ? x + 1 : x - 1;   /* Blue  in H direction */
+            int by_h = y;
+            int bx_v = x;
+            int by_v = phase1 ? y + 1 : y - 1;   /* Blue  in V direction */
 
-                for (int k = 0; k < 8; k++)
-                  {
-                    int nx = x + kx[k], ny = y + ky[k];
-                    if (GEOMETRY::demosaic_entry_color (nx, ny) != c)
-                      continue;
-                    int ns = nx + ny;
-                    luminosity_t cd = dch (nx, ny, c) - d (nx, ny)[(int)ah_green];
-                    /* Gradient proxy: how different is this side from center.  */
-                    luminosity_t g_step = my_abs (d (nx, ny)[(int)ah_green] - g_here);
-                    if (ns > my_sum)
-                      { cd_hi += cd; wt_hi++; g_hi += g_step; }
-                    else
-                      { cd_lo += cd; wt_lo++; g_lo += g_step; }
-                  }
+            /* Color differences at cardinal neighbours (already have Red). */
+            luminosity_t cd_g_h = dch (gx_h, gy_h, ah_red)
+                                  - d (gx_h, gy_h)[(int)ah_green];
+            luminosity_t cd_g_v = dch (gx_v, gy_v, ah_red)
+                                  - d (gx_v, gy_v)[(int)ah_green];
+            luminosity_t cd_b_h = dch (bx_h, by_h, ah_blue)
+                                  - d (bx_h, by_h)[(int)ah_green];
+            luminosity_t cd_b_v = dch (bx_v, by_v, ah_blue)
+                                  - d (bx_v, by_v)[(int)ah_green];
 
-                /* Cross-gradient blend: steep-gradient side gets less weight.  */
-                luminosity_t est_hi = (wt_hi > 0) ? cd_hi / wt_hi : 0;
-                luminosity_t est_lo = (wt_lo > 0) ? cd_lo / wt_lo : 0;
-                luminosity_t gw_hi = eps + (wt_hi > 0 ? g_hi / wt_hi : 0);
-                luminosity_t gw_lo = eps + (wt_lo > 0 ? g_lo / wt_lo : 0);
-                luminosity_t cd_est;
-                if (wt_hi > 0 && wt_lo > 0)
-                  cd_est = (gw_lo * est_hi + gw_hi * est_lo) / (gw_hi + gw_lo);
-                else if (wt_hi > 0)
-                  cd_est = est_hi;
-                else
-                  cd_est = est_lo;
-
-                d (x, y)[c] = g_here + cd_est;
-              }
+            /* VH blend: vh≈1 → prefer H, vh≈0 → prefer V.  */
+            d (x, y)[(int)ah_red]  = r_here + vh * cd_g_h + (1 - vh) * cd_g_v;
+            d (x, y)[(int)ah_blue] = r_here + vh * cd_b_h + (1 - vh) * cd_b_v;
           }
         if (progress) progress->inc_progress ();
       }
