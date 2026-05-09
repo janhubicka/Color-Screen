@@ -3463,7 +3463,11 @@ protected:
       }
 
     /* ================================================================
-       Step 4: Interpolate sparse G/B strips using Steerable Kernel.
+       Step 4a: Non-Red pixels — interpolate the other non-Red channel.
+
+       Green pixel needs Blue (or Blue needs Green). The nearest same-color
+       neighbors are at diagonal distance √2: (±1,±1) with same x+y parity.
+       These ARE centrosymmetric, so the steerable kernel works correctly.
        ================================================================ */
 #pragma omp parallel for schedule(dynamic, 16)
     for (int y = border; y < h - border; y++)
@@ -3472,41 +3476,133 @@ protected:
           continue;
         for (int x = border; x < w - border; x++)
           {
+            int my_color = GEOMETRY::demosaic_entry_color (x, y);
+            if (my_color == ah_green)
+              continue;  /* Red pixel: handled in Step 4b.  */
+
             luminosity_t g_here = d (x, y)[(int)ah_green];
             int idx = y * w + x;
             luminosity_t gx = lpf_sharp[idx + 1] - lpf_sharp[idx - 1];
             luminosity_t gy = lpf_sharp[idx + w] - lpf_sharp[idx - w];
             luminosity_t g2 = gx * gx + gy * gy + eps;
 
+            /* Determine which non-Red channel we need.  */
+            int c = (my_color == ah_red) ? ah_blue : ah_red;
+            if (GEOMETRY::demosaic_entry_color (x, y) == c)
+              {
+                d (x, y)[c] = dch (x, y, c);
+                continue;
+              }
+
+            /* Collect color differences from nearby c-pixels.
+               The centrosymmetric kernel is unbiased here.  */
+            luminosity_t sum_cd = 0, sum_wt = 0;
+            for (int dy = -8; dy <= 8; dy++)
+              for (int dx = -8; dx <= 8; dx++)
+                {
+                  int nx = x + dx, ny = y + dy;
+                  if (GEOMETRY::demosaic_entry_color (nx, ny) != c)
+                    continue;
+
+                  luminosity_t cd = dch (nx, ny, c) - d (nx, ny)[(int)ah_green];
+                  luminosity_t dot = (dx * gx + dy * gy);
+                  luminosity_t dist_across_2 = (dot * dot) / g2;
+                  luminosity_t dist_along_2 = (luminosity_t)(dx * dx + dy * dy) - dist_across_2;
+                  if (dist_along_2 < 0) dist_along_2 = 0;
+                  luminosity_t swt = std::exp (-dist_across_2 / (luminosity_t)4
+                                             - dist_along_2 / (luminosity_t)32);
+                  sum_cd += cd * swt;
+                  sum_wt += swt;
+                }
+            d (x, y)[c] = g_here + (sum_wt > 0 ? sum_cd / sum_wt : 0);
+          }
+        if (progress) progress->inc_progress ();
+      }
+
+    /* ================================================================
+       Step 4b: Red pixels — interpolate Green and Blue.
+
+       From a Red pixel, the nearest Green pixels are at knight-move
+       distance (√5). CRITICALLY, the specific knight-move directions
+       differ by phase:
+         Phase (x+y)≡1 mod4: Green at (±1,±2),(±2,±1) — the 4 with
+           dx+dy≡3 or ≡-1 (mod4).
+         Phase (x+y)≡3 mod4: Green at the complementary 4 directions.
+
+       Using a steerable Gaussian over all ±8 would pull phase-1 and
+       phase-3 Red toward OPPOSITE Green strips, creating period-4 banding.
+
+       Fix: split the 4 knight-move neighbors into two groups by which
+       x+y strip they belong to (higher vs lower x+y relative to current).
+       Average each group, then blend with cross-gradient weighting in the
+       strip-normal direction (gradient of x+y = gx+gy).  This is
+       phase-invariant and analogous to RCD's cardinal v/h cross-weighting.
+       ================================================================ */
+#pragma omp parallel for schedule(dynamic, 16)
+    for (int y = border; y < h - border; y++)
+      {
+        if (progress && progress->cancel_requested ())
+          continue;
+        for (int x = border; x < w - border; x++)
+          {
+            if (GEOMETRY::demosaic_entry_color (x, y) != ah_green)
+              continue;  /* Non-Red: already done in Step 4a.  */
+
+            luminosity_t g_here = d (x, y)[(int)ah_green];
+            int idx = y * w + x;
+            /* Strip-normal gradient: gx+gy measures change along x+y direction.
+               Strip-parallel gradient: gx-gy measures change along x-y.  */
+            luminosity_t gn = (lpf_sharp[idx + 1] - lpf_sharp[idx - 1])
+                              + (lpf_sharp[idx + w] - lpf_sharp[idx - w]);
+            /* Gradient magnitude in each half-strip direction.  */
+            luminosity_t pos_grad = eps + my_abs (gn);
+            luminosity_t neg_grad = eps + my_abs (gn);
+
+            /* The 8 knight-move offsets from any pixel.  For the current Red
+               pixel's phase, exactly 4 land on Green and 4 on Blue.  */
+            static const int kx[8] = { 1, 2, 1,-2,-1,-2,-1, 2};
+            static const int ky[8] = { 2, 1,-2, 1, 2,-1,-2,-1};
+
             for (int c : {ah_red, ah_blue})
               {
-                if (GEOMETRY::demosaic_entry_color (x, y) == c)
+                /* Collect color differences, split by which x+y strip.
+                   Also accumulate gradient proxies from dominating-channel
+                   values at each side's knight-move positions.  */
+                luminosity_t cd_hi = 0, wt_hi = 0;
+                luminosity_t cd_lo = 0, wt_lo = 0;
+                luminosity_t g_hi = 0, g_lo = 0;  /* gradient proxies */
+                int my_sum = x + y;
+                luminosity_t g_here = d (x, y)[(int)ah_green];
+
+                for (int k = 0; k < 8; k++)
                   {
-                    d (x, y)[c] = dch (x, y, c);
-                    continue;
+                    int nx = x + kx[k], ny = y + ky[k];
+                    if (GEOMETRY::demosaic_entry_color (nx, ny) != c)
+                      continue;
+                    int ns = nx + ny;
+                    luminosity_t cd = dch (nx, ny, c) - d (nx, ny)[(int)ah_green];
+                    /* Gradient proxy: how different is this side from center.  */
+                    luminosity_t g_step = my_abs (d (nx, ny)[(int)ah_green] - g_here);
+                    if (ns > my_sum)
+                      { cd_hi += cd; wt_hi++; g_hi += g_step; }
+                    else
+                      { cd_lo += cd; wt_lo++; g_lo += g_step; }
                   }
 
-                luminosity_t sum_cd = 0, sum_wt = 0;
-                for (int dy = -8; dy <= 8; dy++)
-                  for (int dx = -8; dx <= 8; dx++)
-                    {
-                      int nx = x + dx, ny = y + dy;
-                      if (GEOMETRY::demosaic_entry_color (nx, ny) != c)
-                        continue;
-                      
-                      luminosity_t cd = dch (nx, ny, c) - d (nx, ny)[(int)ah_green];
-                      luminosity_t dot = (dx * gx + dy * gy);
-                      luminosity_t dist_across_2 = (dot * dot) / g2;
-                      luminosity_t dist_along_2 = (luminosity_t)(dx * dx + dy * dy) - dist_across_2;
-                      if (dist_along_2 < 0) dist_along_2 = 0;
-                      
-                      /* σ_across²=8, σ_along²=32 to bridge the sparse diagonal gaps.  */
-                      luminosity_t swt = std::exp (-dist_across_2 / (luminosity_t)8 
-                                                 - dist_along_2 / (luminosity_t)32);
-                      sum_cd += cd * swt;
-                      sum_wt += swt;
-                    }
-                d (x, y)[c] = g_here + (sum_wt > 0 ? sum_cd / sum_wt : 0);
+                /* Cross-gradient blend: steep-gradient side gets less weight.  */
+                luminosity_t est_hi = (wt_hi > 0) ? cd_hi / wt_hi : 0;
+                luminosity_t est_lo = (wt_lo > 0) ? cd_lo / wt_lo : 0;
+                luminosity_t gw_hi = eps + (wt_hi > 0 ? g_hi / wt_hi : 0);
+                luminosity_t gw_lo = eps + (wt_lo > 0 ? g_lo / wt_lo : 0);
+                luminosity_t cd_est;
+                if (wt_hi > 0 && wt_lo > 0)
+                  cd_est = (gw_lo * est_hi + gw_hi * est_lo) / (gw_hi + gw_lo);
+                else if (wt_hi > 0)
+                  cd_est = est_hi;
+                else
+                  cd_est = est_lo;
+
+                d (x, y)[c] = g_here + cd_est;
               }
           }
         if (progress) progress->inc_progress ();
