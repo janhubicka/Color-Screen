@@ -23,7 +23,7 @@ class analyze_base
 {
 protected:
   /* Enable debug checks if COLORSCREEN_CHECKING is defined.  */
-  static constexpr bool debug = /*colorscreen_checking*/ true;
+  static constexpr bool debug = colorscreen_checking;
 public:
   /* Information about min and max luminosity in a region.  */
   struct contrast_info
@@ -706,6 +706,8 @@ analyze_base_worker<GEOMETRY>::populate_demosaiced_data (std::vector<rgbdata> &d
 {
   if (progress)
     progress->set_task ("populating demosaiced data", area.height);
+  assert (!(area.x & (GEOMETRY::demosaic_period_x () -1)));
+  assert (!(area.y & (GEOMETRY::demosaic_period_y () -1)));
 
   /* Step 1: Populate demosaic with the mosaiced data.
      Each pixel gets only its known channel value; others remain 0.  */
@@ -722,7 +724,8 @@ analyze_base_worker<GEOMETRY>::populate_demosaiced_data (std::vector<rgbdata> &d
 	    data_entry e;
 	    demosaic [y * area.width + x] = {0.0, 0.0, 0.0};
 
-	    switch (GEOMETRY::demosaic_entry_color (x + area.x, y + area.y))
+	    assert (!debug || GEOMETRY::demosaic_entry_color (x,y) == GEOMETRY::demosaic_entry_color (x + area.x, y + area.y));
+	    switch (GEOMETRY::demosaic_entry_color (/*x + area.x, y + area.y*/x,y))
 	    {
 	      case base_geometry::red:
 		e = GEOMETRY::red_scr_to_entry (p, &off);

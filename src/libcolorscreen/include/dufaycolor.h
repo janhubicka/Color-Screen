@@ -270,6 +270,14 @@ struct dufay_geometry : public base_geometry
   {
     return {e.x + (coord_t)0.5, (coord_t)e.y};
   }
+  inline static int demosaic_period_x ()
+  {
+    return 4;
+  }
+  inline static int demosaic_period_y ()
+  {
+    return 4;
+  }
 
   /* Coordinates are
      dem  real        col dem  real        col  dem  real        col  dem  real        col 

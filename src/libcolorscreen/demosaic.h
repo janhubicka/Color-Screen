@@ -29,7 +29,7 @@ class render;
    data structures and basic accessors.  */
 class demosaic_generic_base {
 protected:
-  static constexpr const bool debug = /*colorscreen_checking*/ true;
+  static constexpr const bool debug = colorscreen_checking;
 
 public:
   /* Return reference to demosaiced data at [X, Y] with bounds clamping.  */
@@ -2766,7 +2766,6 @@ protected:
         continue;
       for (int x = border; x < w - border; x++) {
         if (GEOMETRY::demosaic_entry_color(x, y) == ah_green) {
-          d(x, y)[(int)ah_green] = dch(x, y, ah_green);
           continue;
         }
 
@@ -2814,6 +2813,7 @@ protected:
         vh_disc = std::clamp(vh_disc, (luminosity_t)0, (luminosity_t)1);
 
         d(x, y)[(int)ah_green] = vh_disc * h_est + (1 - vh_disc) * v_est;
+	//printf ("%f\n", d(x,y));
       }
       if (progress)
         progress->inc_progress();
@@ -2839,10 +2839,12 @@ protected:
 
         /* Determine which non-Red channel we need.  */
         int c = (my_color == ah_red) ? ah_blue : ah_red;
+#if 0
         if (GEOMETRY::demosaic_entry_color(x, y) == c) {
           d(x, y)[c] = dch(x, y, c);
           continue;
         }
+#endif
 
         /* Get sharp Red luminance at center and neighbors.
            ah_green is the DOMINANT channel (Red). */
@@ -2865,6 +2867,7 @@ protected:
         luminosity_t cd_est =
             (nw_cd * se_grad + se_cd * nw_grad) / (nw_grad + se_grad);
 
+	//printf ("%f %f\n", g_here, cd_est);
         d(x, y)[c] = g_here + cd_est;
       }
       if (progress)
@@ -4158,7 +4161,11 @@ public:
           return false;
         break;
 #endif
+    case render_parameters::hamilton_adams_demosaic:
+    case render_parameters::ahd_demosaic:
+    case render_parameters::amaze_demosaic:
     case render_parameters::rcd_demosaic:
+    case render_parameters::lmmse_demosaic:
       if (!this->template rcd_interpolation_4x4<
               base_geometry::red, base_geometry::green, base_geometry::blue>(
               progress))
