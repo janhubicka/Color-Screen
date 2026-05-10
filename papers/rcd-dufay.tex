@@ -467,16 +467,16 @@ The $V/H$ and $P/Q$ discriminants are calculated on the raw CFA data. Because Re
 \subsubsection{Cardinal Discriminants ($V/H$)}
 In the Dufay $4\times4$ reseau, any horizontal or vertical line through a Red pixel alternates between Red and a non-dominant color (either Green or Blue). For example, a horizontal line through an $R_1$ pixel ($s=1$) follows the sequence $G, R, B, R, G, \dots$. 
 
-As in standard Bayer RCD, the $6^{\text{th}}$-order HPF is specifically designed to cancel linear color differences between the dominant and non-dominant channels. In the Dufay pattern, this cancellation is only mathematically robust when the filter is **centered on a Red (dominant) pixel**.
+As in standard Bayer RCD, the $6^{\text{th}}$-order HPF is designed to cancel linear color differences between the dominant and non-dominant channels. In the Dufay pattern, however, the sparse channels (Green and Blue) are arranged in staggered strips, meaning that a 1D horizontal or vertical line through a Red pixel is not perfectly symmetric in its non-dominant neighbors.
 
-In this case, the non-dominant neighbors at $x\pm1$ and $x\pm3$ always contain a balanced pair of Green and Blue samples (due to the anti-diagonal stagger). Evaluating $H_{\rm HPF}$ centered on a Red pixel yields:
+For a horizontal line through a Red pixel at phase $s=1$, the sequence is $\dots, R, B, R, \underline{R}, B, R, G, \dots$. Centered on the Red pixel ($s=3$), the sequence is $G, R, B, R, G, R, B$. Evaluating $H_{\rm HPF}$ in this sequence yields:
 \begin{align*}
     H_{\rm HPF}(x) &= [G(x-3) - B(x-1) - B(x+1) + G(x+3)] \\
                    &- 3[R(x-2) + R(x+2)] + 6R(x)
 \end{align*}
-Assuming $\nabla^2 G \approx \nabla^2 B \approx \nabla^2 R$, the terms in the first bracket sum to zero at structural edges, isolating the structural Laplacian of the Red channel. 
+Because of the staggered layout, the terms in the first bracket ($G-B-B+G$) do not sum to exactly zero in a static environment, unlike the Bayer $G-R-R+G$ case. However, the implementation leverages the fact that the **second derivative of the dominant channel (Red)** is captured by the $-3, +6, -3$ coefficients, while the non-dominant residuals are minimized by the statistical accumulation over the 3-pixel window and refined by diagonal averaging. 
 
-Conversely, when the filter is **centered on a non-dominant (Green or Blue) pixel**, the heavy coefficients ($-3, +6, -3$) fall on a mix of dominant and non-dominant samples, making it impossible to reject the color-filter modulation without knowing the already reconstructed values. The implementation therefore restricts the directional discrimination pass exclusively to the Red checkerboard sites.
+Conversely, when the filter is **centered on a non-dominant pixel** (e.g., Green), the line is monochromatic in that channel ($G, R, R, G, R, R, G$), and the filter response is dominated by the target color, making structural discrimination impossible. The algorithm therefore restricts evaluation to the Red checkerboard sites.
 
 \begin{center}
 \begin{tikzpicture}[scale=0.8, every node/.style={font=\tiny}]
@@ -486,25 +486,25 @@ Conversely, when the filter is **centered on a non-dominant (Green or Blue) pixe
   }
   
   \begin{scope}[yshift=2.5cm]
-      \node[anchor=west, font=\small\bfseries] at (-1, 1.2) {A) Filter Centered on Red (Valid Cancellation)};
+      \node[anchor=west, font=\small\bfseries] at (-1, 1.2) {A) Filter Centered on Red ($s=3$)};
       \node[pixel, fill=cfagreen!60] (p0) at (0, 0)   {$x-3$\\(G)};
       \node[pixel, fill=cfared!60]   (p1) at (1.4, 0) {$x-2$\\(R)};
       \node[pixel, fill=cfablue!60]  (p2) at (2.8, 0) {$x-1$\\(B)};
       \node[pixel, fill=cfared!60]   (p3) at (4.2, 0) {$x$\\(R)};
-      \node[pixel, fill=cfablue!60]  (p4) at (5.6, 0) {$x+1$\\(B)};
+      \node[pixel, fill=cfagreen!60] (p4) at (5.6, 0) {$x+1$\\(G)};
       \node[pixel, fill=cfared!60]   (p5) at (7.0, 0) {$x+2$\\(R)};
-      \node[pixel, fill=cfagreen!60] (p6) at (8.4, 0) {$x+3$\\(G)};
+      \node[pixel, fill=cfablue!60]  (p6) at (8.4, 0) {$x+3$\\(B)};
       
       \node[weight] at (p0.south) {$+1$}; \node[weight] at (p1.south) {$-3$};
       \node[weight] at (p2.south) {$-1$}; \node[weight] at (p3.south) {$+6$};
       \node[weight] at (p4.south) {$-1$}; \node[weight] at (p5.south) {$-3$};
       \node[weight] at (p6.south) {$+1$};
       
-      \node[anchor=west, align=left] at (9.5, 0) {Non-dominant sum:\\$+1G - 1B - 1B + 1G \approx 0$\\(Valid Laplacian)};
+      \node[anchor=west, align=left] at (9.5, 0) {Non-dominant sum:\\$+1G - 1B - 1G + 1B = 0$\\(Balanced Laplacian)};
   \end{scope}
   
   \begin{scope}[yshift=0cm]
-      \node[anchor=west, font=\small\bfseries] at (-1, 1.2) {B) Filter Centered on Green (Invalid Cancellation)};
+      \node[anchor=west, font=\small\bfseries] at (-1, 1.2) {B) Filter Centered on Green ($s=0$)};
       \node[pixel, fill=cfared!60]   (q0) at (0, 0)   {$x-3$\\(R)};
       \node[pixel, fill=cfablue!60]  (q1) at (1.4, 0) {$x-2$\\(B)};
       \node[pixel, fill=cfared!60]   (q2) at (2.8, 0) {$x-1$\\(R)};
@@ -518,7 +518,7 @@ Conversely, when the filter is **centered on a non-dominant (Green or Blue) pixe
       \node[weight] at (q4.south) {$-1$}; \node[weight] at (q5.south) {$-3$};
       \node[weight] at (q6.south) {$+1$};
       
-      \node[anchor=west, align=left, text=red] at (9.5, 0) {Dominant sequence:\\$+1R - 1R + 6G - 1R + 1R$\\$ = 6G$ (No cancellation)};
+      \node[anchor=west, align=left, text=red] at (9.5, 0) {Mixed sequence:\\$+1R - 3B - 1R + 6G - 1R - 3B + 1R \neq 0$\\(No cancellation)};
   \end{scope}
 \end{tikzpicture}
 \end{center}
