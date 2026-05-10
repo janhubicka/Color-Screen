@@ -471,12 +471,12 @@ As in standard Bayer RCD, the $6^{\text{th}}$-order HPF is designed to cancel li
 
 For a horizontal line through a Red pixel at phase $s=1$, the sequence is $B, R, G, R, B, R, G$. Centered on the Red pixel ($s=3$), the sequence is $G, R, B, R, G, R, B$. Evaluating $H_{\rm HPF}$ in this sequence yields:
 \begin{align*}
-    H_{\rm HPF}(x) &= [G(x-3) - B(x-1) - B(x+1) + G(x+3)] \\
+    H_{\rm HPF}(x) &= [G(x-3) - B(x-1) - G(x+1) + B(x+3)] \\
                    &- 3[R(x-2) + R(x+2)] + 6R(x)
 \end{align*}
-Because of the staggered layout, the terms in the first bracket ($G-B-B+G$) do not sum to exactly zero in a static environment, unlike the Bayer $G-R-R+G$ case. However, the implementation leverages the fact that the **second derivative of the dominant channel (Red)** is captured by the $-3, +6, -3$ coefficients, while the non-dominant residuals are minimized by the statistical accumulation over the 3-pixel window and refined by diagonal averaging. 
+Because of the staggered layout, the terms in the first bracket ($G-B-G+B$) do not sum to exactly zero in a static environment, unlike the Bayer $G-R-R+G$ case. However, the implementation leverages the fact that the **second derivative of the dominant channel (Red)** is captured by the $-3, +6, -3$ coefficients, while the non-dominant residuals are minimized by the statistical accumulation over the 3-pixel window and refined by diagonal averaging. 
 
-Conversely, when the filter is **centered on a non-dominant pixel** (e.g., Green), the line is monochromatic in that channel ($G, R, R, G, R, R, G$), and the filter response is dominated by the target color, making structural discrimination impossible. The algorithm therefore restricts evaluation to the Red checkerboard sites.
+Conversely, when the filter is **centered on a non-dominant pixel** (e.g., Green), the line follows the sequence $R, B, R, G, R, B, R$, and the filter response is dominated by the target color, making structural discrimination impossible. The algorithm therefore restricts evaluation to the Red checkerboard sites.
 
 \begin{center}
 \begin{tikzpicture}[scale=0.8, every node/.style={font=\tiny}]
