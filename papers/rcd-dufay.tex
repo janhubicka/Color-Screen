@@ -469,7 +469,7 @@ In the Dufay $4\times4$ reseau, any horizontal or vertical line through a Red pi
 
 As in standard Bayer RCD, the $6^{\text{th}}$-order HPF is designed to cancel linear color differences between the dominant and non-dominant channels. In the Dufay pattern, however, the sparse channels (Green and Blue) are arranged in staggered strips, meaning that a 1D horizontal or vertical line through a Red pixel is not perfectly symmetric in its non-dominant neighbors.
 
-For a horizontal line through a Red pixel at phase $s=1$, the sequence is $\dots, R, B, R, \underline{R}, B, R, G, \dots$. Centered on the Red pixel ($s=3$), the sequence is $G, R, B, R, G, R, B$. Evaluating $H_{\rm HPF}$ in this sequence yields:
+For a horizontal line through a Red pixel at phase $s=1$, the sequence is $B, R, G, R, B, R, G$. Centered on the Red pixel ($s=3$), the sequence is $G, R, B, R, G, R, B$. Evaluating $H_{\rm HPF}$ in this sequence yields:
 \begin{align*}
     H_{\rm HPF}(x) &= [G(x-3) - B(x-1) - B(x+1) + G(x+3)] \\
                    &- 3[R(x-2) + R(x+2)] + 6R(x)
