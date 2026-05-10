@@ -467,16 +467,26 @@ The $V/H$ and $P/Q$ discriminants are calculated on the raw CFA data. Because Re
 \subsubsection{Cardinal Discriminants ($V/H$)}
 In the Dufay $4\times4$ reseau, any horizontal or vertical line through a Red pixel alternates between Red and a non-dominant color (either Green or Blue). For example, a horizontal line through an $R_1$ pixel ($s=1$) follows the sequence $G, R, B, R, G, \dots$. 
 
-As in standard Bayer RCD, the $6^{\text{th}}$-order HPF is designed to cancel linear color differences between the dominant and non-dominant channels. In the Dufay pattern, however, the sparse channels (Green and Blue) are arranged in staggered strips, meaning that a 1D horizontal or vertical line through a Red pixel is not perfectly symmetric in its non-dominant neighbors.
+As in standard Bayer RCD, the $6^{\text{th}}$-order HPF relies on the matching of colors across specific weight pairs to cancel the color signal: the central weight ($+6$) and the inner neighbors ($-3$) should fall on the same channel, while the outer neighbors ($+1, -1$) should fall on the other. 
 
-For a horizontal line through a Red pixel at phase $s=1$, the sequence is $B, R, G, R, B, R, G$. Centered on the Red pixel ($s=3$), the sequence is $G, R, B, R, G, R, B$. Evaluating $H_{\rm HPF}$ in this sequence yields:
-\begin{align*}
-    H_{\rm HPF}(x) &= [G(x-3) - B(x-1) - G(x+1) + B(x+3)] \\
-                   &- 3[R(x-2) + R(x+2)] + 6R(x)
-\end{align*}
-Because of the staggered layout, the terms in the first bracket ($G-B-G+B$) do not sum to exactly zero in a static environment, unlike the Bayer $G-R-R+G$ case. However, the implementation leverages the fact that the **second derivative of the dominant channel (Red)** is captured by the $-3, +6, -3$ coefficients, while the non-dominant residuals are minimized by the statistical accumulation over the 3-pixel window and refined by diagonal averaging. 
+In the Dufay pattern, this cancellation is inherently imperfect due to the staggered $G/B$ strips. We distinguish two cases:
 
-Conversely, when the filter is **centered on a non-dominant pixel** (e.g., Green), the line follows the sequence $R, B, R, G, R, B, R$, and the filter response is dominated by the target color, making structural discrimination impossible. The algorithm therefore restricts evaluation to the Red checkerboard sites.
+\begin{itemize}
+    \item \textbf{Case A (Centered on Red):} The filter is centered on the dominant channel. The heavy weights ($+6, -3$) fall on Red pixels, successfully isolating the Red Laplacian. However, the light weights ($\pm1$) fall on a \emph{mixed} sequence of non-dominant colors ($G, B, \dots$). Evaluating $H_{\rm HPF}$ centered on a Red pixel yields:
+    \begin{align*}
+        H_{\rm HPF}(x) &= [G(x-3) - B(x-1) - G(x+1) + B(x+3)] \\
+                       &- 3[R(x-2) + R(x+2)] + 6R(x)
+    \end{align*}
+    While the color differences cancel globally, a **directional bias** is introduced in a single 1D estimate because the $\pm1$ and $\pm3$ samples do not share the same color. The RCD implementation resolves this by accumulating the squared responses over a **3-pixel moving window**:
+    \begin{equation*}
+        E_{H}(x,y) = \sum_{i=-1}^{1} H_{\rm HPF}(x+i, y)^2, \quad E_{V}(x,y) = \sum_{i=-1}^{1} V_{\rm HPF}(x, y+i)^2
+    \end{equation*}
+    By integrating over three consecutive sites, the algorithm effectively samples multiple phases of the $4\times4$ reseau. This ensures that the asymmetric contributions of Green and Blue pixels are balanced across the accumulation window, producing a robust structural estimate that is independent of the local $G/B$ stagger.
+    
+    \item \textbf{Case B (Centered on Green/Blue):} The filter is centered on a non-dominant channel. Here, the heavy weights fall on a mix of colors (e.g., $+6G$ and $-3B$ or $-3R$), meaning the dominant Red signal is **not cancelled**. The filter response is contaminated by the structural signal of the target color, making it useless for directional discrimination. 
+\end{itemize}
+
+The algorithm therefore restricts evaluation to the Red checkerboard sites, where the dominant structural signal can be reliably isolated.
 
 \begin{center}
 \begin{tikzpicture}[scale=0.8, every node/.style={font=\tiny}]
