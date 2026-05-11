@@ -486,7 +486,7 @@ render_to_scr::get_simulated_screen_pixel (point_t p) const noexcept
 
 /* Determine image pixel X,Y in screen filter SCR using MAP.
    Do antialiasing.  Return screen position in RETP.  */
-pure_attr inline rgbdata
+inline rgbdata
 antialias_screen (const screen &scr, const scr_to_img &map,
 		  int x, int y, point_t *retp = NULL) noexcept
 {
@@ -507,7 +507,7 @@ antialias_screen (const screen &scr, const scr_to_img &map,
 
 /* Determine image pixel X,Y in screen filter SCR using MAP.
    Do no antialiasing.  Return screen position in RETP.  */
-pure_attr inline rgbdata
+inline rgbdata
 noantialias_screen (const screen &scr, const scr_to_img &map,
 		    int x, int y, point_t *retp = NULL) noexcept
 {

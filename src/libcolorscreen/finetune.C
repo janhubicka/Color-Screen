@@ -4774,6 +4774,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
   double_rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
   double wr = 0, wg = 0, wb = 0;
   const bool debugfiles = false;
+  printf ("Determining color loss\n");
 
   if (debugfiles)
     {
@@ -4785,7 +4786,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
   if (simulated_screen)
     {
 // FIXME: prallelism here seems to cause instability (race condition)
-#if 0
+#if 1
 #pragma omp declare reduction(+ : double_rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
     shared(area, threshold, simulated_screen)                                 \
@@ -4822,7 +4823,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
     {
       bool antialias = !sharpen_param.scanner_mtf_scale;
 // FIXME: prallelism here seems to cause instability (race condition)
-#if 0
+#if 1
 #pragma omp declare reduction(+ : double_rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
     shared(area, threshold, map, scr, collection_scr,antialias)               \
@@ -4990,7 +4991,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 
       /* Collect data  */
 // FIXME: prallelism here seems to cause instability (race condition)
-#if 0
+#if 1
 #pragma omp declare reduction(+ : double_rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
     shared(area, threshold, map, scr, collection_scr,rendered2,ext,xsize)     \
@@ -5046,7 +5047,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                          (luminosity_t)blue.blue };
 #endif
 #if 0
-  printf ("Color loss info %i %i %i %i %f\n", area.x, area.y, area.width, area.height, map.pixel_size (area.x,area.y));
+  printf ("Color loss info %i %i %i %i %f\n", area.x, area.y, area.width, area.height, map.pixel_size (area));
   ret_red->print (stdout);
   ret_green->print (stdout);
   ret_blue->print (stdout);
