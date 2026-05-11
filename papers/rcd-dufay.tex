@@ -15,6 +15,40 @@
 \definecolor{cfablue}{RGB}{60,100,200}
 \definecolor{cfagrey}{RGB}{180,180,180}
 
+% --- CFA Visualization Macros ---
+\newcommand{\tile}[6][]{%
+  \if#4r\def\tilecol{cfared}\else
+    \if#4g\def\tilecol{cfagreen}\else
+      \if#4b\def\tilecol{cfablue}\else
+        \def\tilecol{cfagrey}\fi\fi\fi
+  \node[cfa-tile, fill=\tilecol!60, #1] (T#2#3) at (#2*0.8, -#3*0.8) {};
+  \ifx&#5&\else\node[cfa-coords, above=0pt of T#2#3] {#5};\fi
+  \ifx&#6&\else\node[cfa-weight] at (T#2#3) {#6};\fi
+}
+
+\newcommand{\dufaytile}[5][]{%
+  \pgfmathtruncatemacro{\cfas}{mod(int(#2)+int(#3),4)}%
+  \ifcase\cfas\tile[#1]{#2}{#3}{g}{#4}{#5}%
+  \or\tile[#1]{#2}{#3}{r}{#4}{#5}%
+  \or\tile[#1]{#2}{#3}{b}{#4}{#5}%
+  \or\tile[#1]{#2}{#3}{r}{#4}{#5}\fi
+}
+
+\tikzset{
+  cfa-tile/.style={
+    draw, thick, minimum size=0.8cm, inner sep=0pt, outer sep=0pt,
+    font=\small\bfseries
+  },
+  unused/.style={fill opacity=0.2},
+  active/.style={fill opacity=1.0},
+  cfa-weight/.style={
+    circle, draw, fill=white, inner sep=1pt, font=\tiny\bfseries, minimum size=0.45cm
+  },
+  cfa-coords/.style={
+    font=\tiny, text=black!80, inner sep=2pt
+  }
+}
+
 \title{RCD Demosaicing for the Rotated Dufaycolor 4$\times$4 CFA}
 \author{}
 \date{}
@@ -76,34 +110,16 @@ $y\backslash x$ & 0 & 1 & 2 & 3 \\\hline
 
 
 \begin{center}
-\begin{tikzpicture}[scale=0.9]
-  % Screen convention: y=0 at top, y increases downward.
-  % TikZ y-axis is inverted: TikZ row (3-y_screen) = y_screen.
-  % Screen row 0 (GRBR) at TikZ y=3 (visual top); row 3 (RGRB) at TikZ y=0 (bottom).
-  % Screen y=0, TikZ y=3: G R B R
-  \fill[cfagreen!60](0,3) rectangle (1,4); \node[font=\bfseries] at (0.5,3.5) {G};
-  \fill[cfared!60]  (1,3) rectangle (2,4); \node[font=\bfseries] at (1.5,3.5) {R};
-  \fill[cfablue!60] (2,3) rectangle (3,4); \node[font=\bfseries] at (2.5,3.5) {B};
-  \fill[cfared!60]  (3,3) rectangle (4,4); \node[font=\bfseries] at (3.5,3.5) {R};
-  % Screen y=1, TikZ y=2: R B R G
-  \fill[cfared!60]  (0,2) rectangle (1,3); \node[font=\bfseries] at (0.5,2.5) {R};
-  \fill[cfablue!60] (1,2) rectangle (2,3); \node[font=\bfseries] at (1.5,2.5) {B};
-  \fill[cfared!60]  (2,2) rectangle (3,3); \node[font=\bfseries] at (2.5,2.5) {R};
-  \fill[cfagreen!60](3,2) rectangle (4,3); \node[font=\bfseries] at (3.5,2.5) {G};
-  % Screen y=2, TikZ y=1: B R G R
-  \fill[cfablue!60] (0,1) rectangle (1,2); \node[font=\bfseries] at (0.5,1.5) {B};
-  \fill[cfared!60]  (1,1) rectangle (2,2); \node[font=\bfseries] at (1.5,1.5) {R};
-  \fill[cfagreen!60](2,1) rectangle (3,2); \node[font=\bfseries] at (2.5,1.5) {G};
-  \fill[cfared!60]  (3,1) rectangle (4,2); \node[font=\bfseries] at (3.5,1.5) {R};
-  % Screen y=3, TikZ y=0: R G R B
-  \fill[cfared!60]  (0,0) rectangle (1,1); \node[font=\bfseries] at (0.5,0.5) {R};
-  \fill[cfagreen!60](1,0) rectangle (2,1); \node[font=\bfseries] at (1.5,0.5) {G};
-  \fill[cfared!60]  (2,0) rectangle (3,1); \node[font=\bfseries] at (2.5,0.5) {R};
-  \fill[cfablue!60] (3,0) rectangle (4,1); \node[font=\bfseries] at (3.5,0.5) {B};
-  \draw[thick] (0,0) grid (4,4);
-  \draw[very thick] (0,0) rectangle (4,4);
-  \node[above] at (2,4.2) {$x\rightarrow$};
-  \node[right,rotate=-90] at (4.2,2) {$y\downarrow$};
+\begin{tikzpicture}%[scale=1.1]
+  \foreach \y in {0,...,3} {
+    \foreach \x in {0,...,3} {
+      \dufaytile{\x}{\y}{}{}
+    }
+  }
+  
+  % Labels
+  \node[above] at (1.5*0.8, 0.5) {$x\rightarrow$};
+  \node[right, rotate=-90] at (3.5*0.8, -1.5*0.8) {$y\downarrow$};
 \end{tikzpicture}
 \end{center}
 
@@ -140,69 +156,43 @@ Three structural observations are key to the demosaicing strategy:
 \subsection{Strip structure visualised}
 
 \begin{center}
-\begin{tikzpicture}[scale=0.55]
-  % Screen convention: colour at screen(x,y) = mod(x+y,4).
-  % TikZ y_tikz = 7 - y_screen, so s = mod(x + 7 - y_tikz, 4).
-  \foreach \x in {0,...,7}
-    \foreach \y in {0,...,7}{
-      \pgfmathtruncatemacro\s{mod(\x + 7 - \y, 4)}
-      \ifcase\s
-        \fill[cfagreen!50] (\x,\y) rectangle +(1,1);
-      \or
-        \fill[cfared!40]   (\x,\y) rectangle +(1,1);
-      \or
-        \fill[cfablue!50]  (\x,\y) rectangle +(1,1);
-      \or
-        \fill[cfared!40]   (\x,\y) rectangle +(1,1);
-      \fi
+\begin{tikzpicture}%[scale=0.7]
+  \foreach \y in {0,...,7} {
+    \foreach \x in {0,...,7} {
+      \dufaytile[unused]{\x}{\y}{}{}
     }
-  \draw (0,0) grid (8,8);
-  % Highlight screen strip x+y_screen=4: y_tikz = x+3
-  \foreach \x in {0,...,4}{
-    \pgfmathtruncatemacro\yt{\x+3}
-    \draw[very thick,cfagreen] (\x,\yt) rectangle +(1,1);
   }
-  \node[below,font=\small] at (4,-0.5) {green strip $x{+}y{=}4$ highlighted};
+  
+  % Highlight green strip x+y=4
+  \foreach \x in {0,...,4}{
+    \pgfmathtruncatemacro\y{4-\x}
+    \dufaytile{\x}{\y}{}{}
+  }
+  \node[below] at (3.5*0.8, -7.5*0.8) {green strip $x{+}y{=}4$ highlighted};
 \end{tikzpicture}
 \quad
-\begin{tikzpicture}[scale=0.55]
-  % Background CFA, screen convention: s = mod(x + 7 - y_tikz, 4)
-  \foreach \x in {0,...,7}
-    \foreach \y in {0,...,7}{
-      \pgfmathtruncatemacro\s{mod(\x + 7 - \y, 4)}
-      \ifcase\s
-        \fill[cfagreen!30] (\x,\y) rectangle +(1,1);
-      \or
-        \fill[cfared!20]   (\x,\y) rectangle +(1,1);
-      \or
-        \fill[cfablue!30]  (\x,\y) rectangle +(1,1);
-      \or
-        \fill[cfared!20]   (\x,\y) rectangle +(1,1);
-      \fi
+\begin{tikzpicture}%[scale=0.7]
+  \foreach \y in {0,...,7} {
+    \foreach \x in {0,...,7} {
+      \dufaytile[unused]{\x}{\y}{}{}
     }
-  \draw (0,0) grid (8,8);
+  }
   
-  % Phase 1 Red pixel: screen(2,3) -> s=(2+3)=5 = 1 mod 4. TikZ y = 7-3 = 4.
-  \fill[cfared] (2,4) rectangle (3,5);
-  \node[white,font=\bfseries\small] at (2.5,4.5) {R$_1$};
-  % Green neighbours (West, North in screen). TikZ y: North is y+1.
-  \draw[->,very thick,cfagreen!80!black] (2.5,4.5)--(1.5,4.5); % West
-  \draw[->,very thick,cfagreen!80!black] (2.5,4.5)--(2.5,5.5); % North
-  % Blue neighbours (East, South in screen). TikZ y: South is y-1.
-  \draw[->,very thick,cfablue!80!black] (2.5,4.5)--(3.5,4.5); % East
-  \draw[->,very thick,cfablue!80!black] (2.5,4.5)--(2.5,3.5); % South
+  % Phase 1 Red pixel at (2,3) -> s=1
+  \dufaytile{2}{3}{}{R$_1$}
+  \draw[->, very thick, cfagreen!80!black] (T23.center) -- (T13.center); % West
+  \draw[->, very thick, cfagreen!80!black] (T23.center) -- (T22.center); % North
+  \draw[->, very thick, cfablue!80!black]  (T23.center) -- (T33.center); % East
+  \draw[->, very thick, cfablue!80!black]  (T23.center) -- (T24.center); % South
 
-  % Phase 3 Red pixel: screen(4,3) -> s=(4+3)=7 = 3 mod 4. TikZ y = 7-3 = 4.
-  \fill[cfared] (4,4) rectangle (5,5);
-  \node[white,font=\bfseries\small] at (4.5,4.5) {R$_3$};
-  % Green neighbours (East, South in screen).
-  \draw[->,very thick,cfagreen!80!black] (4.5,4.5)--(5.5,4.5); % East
-  \draw[->,very thick,cfagreen!80!black] (4.5,4.5)--(4.5,3.5); % South
-  % Blue neighbours (West, North in screen).
-  \draw[->,very thick,cfablue!80!black] (4.5,4.5)--(3.5,4.5); % West
-  \draw[->,very thick,cfablue!80!black] (4.5,4.5)--(4.5,5.5); % North
+  % Phase 3 Red pixel at (4,3) -> s=3
+  \dufaytile{4}{3}{}{R$_3$}
+  \draw[->, very thick, cfagreen!80!black] (T43.center) -- (T53.center); % East
+  \draw[->, very thick, cfagreen!80!black] (T43.center) -- (T44.center); % South
+  \draw[->, very thick, cfablue!80!black]  (T43.center) -- (T33.center); % West
+  \draw[->, very thick, cfablue!80!black]  (T43.center) -- (T42.center); % North
 
-  \node[below,font=\small] at (4,-0.5) {cardinal neighbours of R$_1$ and R$_3$};
+  \node[below] at (3.5*0.8, -7.5*0.8) {cardinal neighbours of R$_1$ and R$_3$};
 \end{tikzpicture}
 \end{center}
 \noindent\textit{Left:} 8$\times$8 portion of the CFA; the thick border highlights a single
@@ -224,20 +214,16 @@ in both horizontal and vertical directions:
 \]
 
 \begin{center}
-\begin{tikzpicture}[scale=0.9, every node/.style={font=\small}]
-  \tikzset{
-    pixel/.style={draw, thick, minimum width=1.4cm, minimum height=1.2cm, align=center}
-  }
-  
-  \node[pixel, fill=cfared!60]   (pM3) at (0,0)   {$x-3$\\\textbf{+1}};
-  \node[pixel, fill=cfagreen!60] (pM2) at (1.4,0) {$x-2$\\\textbf{--3}};
-  \node[pixel, fill=cfared!60]   (pM1) at (2.8,0) {$x-1$\\\textbf{--1}};
-  \node[pixel, fill=cfagreen!60] (p0)  at (4.2,0) {$x$\\\textbf{+6}};
-  \node[pixel, fill=cfared!60]   (pP1) at (5.6,0) {$x+1$\\\textbf{--1}};
-  \node[pixel, fill=cfagreen!60] (pP2) at (7.0,0) {$x+2$\\\textbf{--3}};
-  \node[pixel, fill=cfared!60]   (pP3) at (8.4,0) {$x+3$\\\textbf{+1}};
+\begin{tikzpicture}%[scale=0.9, every node/.style={font=\small}]
+  \tile{0}{0}{r}{$x-3$}{+1}
+  \tile{1}{0}{g}{$x-2$}{--3}
+  \tile{2}{0}{r}{$x-1$}{--1}
+  \tile{3}{0}{g}{$x$}{+6}
+  \tile{4}{0}{r}{$x+1$}{--1}
+  \tile{5}{0}{g}{$x+2$}{--3}
+  \tile{6}{0}{r}{$x+3$}{+1}
 
-  \node[below=0.3cm of p0, font=\itshape] {1D cross-section aligning coefficients with the Bayer CFA (red squares may also be blue)};
+  \node[below=0.4cm of T30, font=\itshape] {1D cross-section aligning coefficients with the Bayer CFA (red squares may also be blue)};
 \end{tikzpicture}
 \end{center}
 
@@ -267,27 +253,20 @@ In the implementation, this weight is further refined by comparing the local pix
 At each non-dominant pixel, a luminance estimate is computed by summing the $3\times3$ CFA neighbourhood with weights $1, \tfrac12, \tfrac14$ for centre, cardinal, and diagonal neighbours respectively. Crucially, in the implementation, this LPF value is **only calculated and stored at non-dominant (Red or Blue) sites**, serving as a sparse normalisation reference for the dominant channel recovery in Step 3. At dominant (Green) sites, the LPF value is zeroed and unused.
 
 \begin{center}
-\begin{tikzpicture}[scale=0.9, every node/.style={font=\small}]
-  \tikzset{
-    pixel/.style={draw, thick, text width=1.6cm, minimum height=1.4cm, align=center}
-  }
+\begin{tikzpicture}%[scale=0.9, every node/.style={font=\small}]
+  \tile{0}{0}{b}{$x-1, y-1$}{1/4}
+  \tile{1}{0}{g}{$x, y-1$}{1/2}
+  \tile{2}{0}{b}{$x+1, y-1$}{1/4}
   
-  % Top row
-  \node[pixel, fill=cfablue!60]   (pNW) at (0, 2.8)   {$x-1, y-1$\\\textbf{1/4}};
-  \node[pixel, fill=cfagreen!60]  (pN)  at (1.8, 2.8) {$x, y-1$\\\textbf{1/2}};
-  \node[pixel, fill=cfablue!60]   (pNE) at (3.6, 2.8) {$x+1, y-1$\\\textbf{1/4}};
+  \tile{0}{1}{g}{$x-1, y$}{1/2}
+  \tile{1}{1}{r}{$x, y$}{1}
+  \tile{2}{1}{g}{$x+1, y$}{1/2}
   
-  % Middle row
-  \node[pixel, fill=cfagreen!60]  (pW)  at (0, 1.4)   {$x-1, y$\\\textbf{1/2}};
-  \node[pixel, fill=cfared!60]    (pC)  at (1.8, 1.4) {$x, y$\\\textbf{1}};
-  \node[pixel, fill=cfagreen!60]  (pE)  at (3.6, 1.4) {$x+1, y$\\\textbf{1/2}};
-  
-  % Bottom row
-  \node[pixel, fill=cfablue!60]   (pSW) at (0, 0)     {$x-1, y+1$\\\textbf{1/4}};
-  \node[pixel, fill=cfagreen!60]  (pS)  at (1.8, 0)   {$x, y+1$\\\textbf{1/2}};
-  \node[pixel, fill=cfablue!60]   (pSE) at (3.6, 0)   {$x+1, y+1$\\\textbf{1/4}};
+  \tile{0}{2}{b}{$x-1, y+1$}{1/4}
+  \tile{1}{2}{g}{$x, y+1$}{1/2}
+  \tile{2}{2}{b}{$x+1, y+1$}{1/4}
 
-  \node[below=0.4cm of pS, font=\itshape] {3$\times$3 LPF weights centered on a Red pixel in Bayer CFA (Blue is symmetric)};
+  \node[below=0.4cm of T12, font=\itshape] {3$\times$3 LPF weights centered on a Red pixel in Bayer CFA (Blue is symmetric)};
 \end{tikzpicture}
 \end{center}
 
@@ -309,20 +288,16 @@ where $\hat{G}_N = G_N \cdot \frac{2\,L_0}{L_0 + L_{-2}}$ is the ratio-corrected
 \]
 
 \begin{center}
-\begin{tikzpicture}[scale=0.9, every node/.style={font=\small}]
-  \tikzset{
-    pixel/.style={draw, thick, text width=1.8cm, minimum height=1.4cm, align=center}
-  }
+\begin{tikzpicture}%[scale=1.0, every node/.style={font=\small}]
+  \tile{0}{0}{r}{$y-2$}{$L_{-2}$}
+  \tile{0}{1}{g}{$y-1$}{$G_N$}
+  \tile{0}{2}{r}{$y$}{$L_0$}
   
-  \node[pixel, fill=cfared!60]   (pN2) at (0, 3.2)  {$y-2$\\(Red)\\\textbf{$L_{-2}$}};
-  \node[pixel, fill=cfagreen!60] (pN1) at (0, 1.6)  {$y-1$\\(Green)\\\textbf{$G_N$}};
-  \node[pixel, fill=cfared!60]   (pC)  at (0, 0)    {$y$ (Centre)\\(Red)\\\textbf{$L_0$}};
+  \draw[->, thick, dashed] (T00.east) .. controls +(2.5,0) and +(2.5,0) .. node[right, align=left] {1. Compute low-frequency \\ luminance ratio:\\$R = \frac{2 L_0}{L_0 + L_{-2}}$} (T02.east);
   
-  \draw[->, thick, dashed] (pN2.east) .. controls +(2.5,0) and +(2.5,0) .. node[right, align=left] {1. Compute low-frequency \\ luminance ratio:\\$R = \frac{2 L_0}{L_0 + L_{-2}}$} (pC.east);
-  
-  \draw[->, thick] (pN1.west) .. controls +(-2,0) and +(-2,0) .. node[left, align=right] {2. Apply ratio to \\ raw Green value:\\$\hat{G}_N = G_N \cdot R$} (pC.west);
+  \draw[->, thick] (T01.west) .. controls +(-2,0) and +(-2,0) .. node[left, align=right] {2. Apply ratio to \\ raw Green value:\\$\hat{G}_N = G_N \cdot R$} (T02.west);
 
-  \node[below=0.6cm of pC, font=\itshape] {1D vertical cross-section illustrating ratio-corrected interpolation for the North neighbour};
+  \node[below=0.6cm of T02, font=\itshape] {1D vertical cross-section illustrating ratio-corrected interpolation for the North neighbour};
 \end{tikzpicture}
 \end{center}
 
@@ -340,49 +315,45 @@ The missing red and blue values are recovered in two sub-steps:
 In both cases, the already-reconstructed Green channel is used as the structural guide.
 
 \begin{center}
-\begin{tikzpicture}[scale=0.8, every node/.style={font=\small}]
-  \tikzset{
-    pixel/.style={draw, thick, minimum width=1.2cm, minimum height=1.2cm, align=center}
-  }
-  
+\begin{tikzpicture}%[scale=0.9, every node/.style={font=\small}]
   % Left figure: Step 4a (R@B)
   \begin{scope}[xshift=0cm]
-    \node[pixel, fill=cfared!60]   at (0, 2.4) {$R_{NW}$};
-    \node[pixel, fill=cfagreen!60] at (1.2, 2.4) {};
-    \node[pixel, fill=cfared!60]   at (2.4, 2.4) {$R_{NE}$};
+    \tile{0}{0}{r}{$R_{NW}$}{}
+    \tile{1}{0}{g}{}{}
+    \tile{2}{0}{r}{$R_{NE}$}{}
     
-    \node[pixel, fill=cfagreen!60] at (0, 1.2) {};
-    \node[pixel, fill=cfablue!60]  (B) at (1.2, 1.2) {$B_C$};
-    \node[pixel, fill=cfagreen!60] at (2.4, 1.2) {};
+    \tile{0}{1}{g}{}{}
+    \tile{1}{1}{b}{$B_C$}{}
+    \tile{2}{1}{g}{}{}
     
-    \node[pixel, fill=cfared!60]   at (0, 0) {$R_{SW}$};
-    \node[pixel, fill=cfagreen!60] at (1.2, 0) {};
-    \node[pixel, fill=cfared!60]   at (2.4, 0) {$R_{SE}$};
+    \tile{0}{2}{r}{$R_{SW}$}{}
+    \tile{1}{2}{g}{}{}
+    \tile{2}{2}{r}{$R_{SE}$}{}
 
-    \draw[<->, thick, dashed] (-0.3, 2.7) -- (2.7, -0.3) node[below right=-3pt] {$P$};
-    \draw[<->, thick, dashed] (2.7, 2.7) -- (-0.3, -0.3) node[below left=-3pt] {$Q$};
+    \draw[<->, thick, dashed] (T00.north west) -- (T22.south east) node[below right=-3pt] {$P$};
+    \draw[<->, thick, dashed] (T20.north east) -- (T02.south west) node[below left=-3pt] {$Q$};
     
-    \node[below=0.6cm of B, font=\itshape, align=center] {Step 4a: R@B \\ Diagonal interpolation \\ using P/Q discriminant};
+    \node[below=0.6cm of T12, font=\itshape, align=center] {Step 4a: R@B \\ Diagonal interpolation \\ using P/Q discriminant};
   \end{scope}
 
   % Right figure: Step 4b (R@G)
-  \begin{scope}[xshift=6cm]
-    \node[pixel, fill=cfagreen!60] at (0, 2.4) {};
-    \node[pixel, fill=cfablue!60]  at (1.2, 2.4) {$B_N$};
-    \node[pixel, fill=cfagreen!60] at (2.4, 2.4) {};
+  \begin{scope}[xshift=5cm]
+    \tile{0}{0}{g}{}{}
+    \tile{1}{0}{b}{$B_N$}{}
+    \tile{2}{0}{g}{}{}
     
-    \node[pixel, fill=cfared!60]   at (0, 1.2) {$R_W$};
-    \node[pixel, fill=cfagreen!60] (G) at (1.2, 1.2) {$G_C$};
-    \node[pixel, fill=cfared!60]   at (2.4, 1.2) {$R_E$};
+    \tile{0}{1}{r}{$R_W$}{}
+    \tile{1}{1}{g}{$G_C$}{}
+    \tile{2}{1}{r}{$R_E$}{}
     
-    \node[pixel, fill=cfagreen!60] at (0, 0) {};
-    \node[pixel, fill=cfablue!60]  at (1.2, 0) {$B_S$};
-    \node[pixel, fill=cfagreen!60] at (2.4, 0) {};
+    \tile{0}{2}{g}{}{}
+    \tile{1}{2}{b}{$B_S$}{}
+    \tile{2}{2}{g}{}{}
 
-    \draw[<->, thick, dashed] (-0.3, 1.2) -- (2.7, 1.2) node[right=-2pt] {$H$};
-    \draw[<->, thick, dashed] (1.2, 2.7) -- (1.2, -0.3) node[below=-2pt] {$V$};
+    \draw[<->, thick, dashed] (T01.west) -- (T21.east) node[right=-2pt] {$H$};
+    \draw[<->, thick, dashed] (T10.north) -- (T12.south) node[below=-2pt] {$V$};
     
-    \node[below=0.6cm of G, font=\itshape, align=center] {Step 4b: R@G (and B@G)\\ Cardinal interpolation \\ using V/H discriminant};
+    \node[below=0.6cm of T12, font=\itshape, align=center] {Step 4b: R@G (and B@G)\\ Cardinal interpolation \\ using V/H discriminant};
   \end{scope}
 \end{tikzpicture}
 \end{center}
@@ -403,24 +374,20 @@ The squared magnitudes of diagonal 6th-order HPFs are accumulated over a local 3
 where the gradients use the same 4-pixel deep logic as in Step 3. The final color value is $\hat{C} = G_C + \text{blend}(\hat{\Delta}_P, \hat{\Delta}_Q)$.
 
 \begin{center}
-\begin{tikzpicture}[scale=0.7, every node/.style={font=\tiny}]
-  \tikzset{
-    pixel/.style={draw, thick, minimum width=0.8cm, minimum height=0.8cm, align=center}
-  }
-  
+\begin{tikzpicture}%[scale=0.75, every node/.style={font=\tiny}]
   % P-diagonal (NW-SE)
   \begin{scope}[xshift=0cm]
     \foreach \y in {-3,...,3} {
       \foreach \x in {-3,...,3} {
-        \pgfmathparse{int(abs(mod(\x+\y,2))) == 1 ? "cfagreen!60" : (int(abs(mod(\x,2))) == 1 ? "cfared!60" : "cfablue!60")}
-        \edef\fillcol{\pgfmathresult}
-        \node[pixel, fill=\fillcol] (P\x\y) at (\x*0.8, -\y*0.8) {};
+        \pgfmathsetmacro{\scol}{int(mod(abs(\x+\y),2)) == 1 ? "g" : (int(mod(abs(\x),2)) == 1 ? "r" : "b")}
+        \tile[unused]{\x}{\y}{\scol}{}{}
       }
     }
-    \node at (P-3-3) {\textbf{+1}}; \node at (P-2-2) {\textbf{--3}}; \node at (P-1-1) {\textbf{--1}};
-    \node at (P00)   {\textbf{+6}};   \node at (P11)   {\textbf{--1}}; \node at (P22)   {\textbf{--3}};
-    \node at (P33)   {\textbf{+1}};
-    \draw[->, thick, dashed] (-3.5*0.8, 3.5*0.8) -- (3.5*0.8, -3.5*0.8) node[below right=-2pt] {$P$};
+    \tile{-3}{-3}{r}{}{+1} \tile{-2}{-2}{g}{}{--3} \tile{-1}{-1}{r}{}{--1}
+    \tile{0}{0}{g}{}{+6}   \tile{1}{1}{r}{}{--1}   \tile{2}{2}{g}{}{--3}
+    \tile{3}{3}{r}{}{+1}
+    
+    \draw[->, thick, dashed] (T-3-3.north west) -- (T33.south east) node[below right=-2pt] {$P$};
     \node[below=3.2cm] at (0,0) {P-diagonal HPF on Bayer grid};
   \end{scope}
 
@@ -428,15 +395,15 @@ where the gradients use the same 4-pixel deep logic as in Step 3. The final colo
   \begin{scope}[xshift=7.5cm]
     \foreach \y in {-3,...,3} {
       \foreach \x in {-3,...,3} {
-        \pgfmathparse{int(abs(mod(\x+\y,2))) == 1 ? "cfagreen!60" : (int(abs(mod(\x,2))) == 1 ? "cfared!60" : "cfablue!60")}
-        \edef\fillcol{\pgfmathresult}
-        \node[pixel, fill=\fillcol] (Q\x\y) at (\x*0.8, -\y*0.8) {};
+        \pgfmathsetmacro{\scol}{int(mod(abs(\x+\y),2)) == 1 ? "g" : (int(mod(abs(\x),2)) == 1 ? "r" : "b")}
+        \tile[unused]{\x}{\y}{\scol}{}{}
       }
     }
-    \node at (Q3-3) {\textbf{+1}}; \node at (Q2-2) {\textbf{--3}}; \node at (Q1-1) {\textbf{--1}};
-    \node at (Q00)   {\textbf{+6}};   \node at (Q-11)  {\textbf{--1}}; \node at (Q-22)  {\textbf{--3}};
-    \node at (Q-33)  {\textbf{+1}};
-    \draw[->, thick, dashed] (3.5*0.8, 3.5*0.8) -- (-3.5*0.8, -3.5*0.8) node[below left=-2pt] {$Q$};
+    \tile{3}{-3}{r}{}{+1}  \tile{2}{-2}{g}{}{--3}  \tile{1}{-1}{r}{}{--1}
+    \tile{0}{0}{g}{}{+6}   \tile{-1}{1}{r}{}{--1}  \tile{-2}{2}{g}{}{--3}
+    \tile{-3}{3}{r}{}{+1}
+    
+    \draw[->, thick, dashed] (T3-3.north east) -- (T-33.south west) node[below left=-2pt] {$Q$};
     \node[below=3.2cm] at (0,0) {Q-diagonal HPF on Bayer grid};
   \end{scope}
 \end{tikzpicture}
@@ -489,46 +456,31 @@ In the Dufay pattern, this cancellation is inherently imperfect due to the stagg
 The algorithm therefore restricts evaluation to the Red checkerboard sites, where the dominant structural signal can be reliably isolated.
 
 \begin{center}
-\begin{tikzpicture}[scale=0.8, every node/.style={font=\tiny}]
-  \tikzset{
-      pixel/.style={draw, thick, minimum width=1.4cm, minimum height=1.2cm, align=center, font=\bfseries},
-      weight/.style={circle, draw, fill=white, inner sep=1pt, font=\tiny\bfseries, minimum size=0.5cm}
-  }
-  
-  \begin{scope}[yshift=2.5cm]
-      \node[anchor=west, font=\small\bfseries] at (-1, 1.2) {A) Filter Centered on Red ($s=3$)};
-      \node[pixel, fill=cfagreen!60] (p0) at (0, 0)   {$x-3$\\(G)};
-      \node[pixel, fill=cfared!60]   (p1) at (1.4, 0) {$x-2$\\(R)};
-      \node[pixel, fill=cfablue!60]  (p2) at (2.8, 0) {$x-1$\\(B)};
-      \node[pixel, fill=cfared!60]   (p3) at (4.2, 0) {$x$\\(R)};
-      \node[pixel, fill=cfagreen!60] (p4) at (5.6, 0) {$x+1$\\(G)};
-      \node[pixel, fill=cfared!60]   (p5) at (7.0, 0) {$x+2$\\(R)};
-      \node[pixel, fill=cfablue!60]  (p6) at (8.4, 0) {$x+3$\\(B)};
+\begin{tikzpicture}%[scale=0.9, every node/.style={font=\tiny}]
+  \begin{scope}[yshift=1.5cm]
+      \node[anchor=west, font=\small\bfseries] at (-0.5*0.8, 0.8) {A) Filter Centered on Red ($s=3$)};
+      \tile{0}{0}{g}{$x-3$}{+1}
+      \tile{1}{0}{r}{$x-2$}{--3}
+      \tile{2}{0}{b}{$x-1$}{--1}
+      \tile{3}{0}{r}{$x$}{+6}
+      \tile{4}{0}{g}{$x+1$}{--1}
+      \tile{5}{0}{r}{$x+2$}{--3}
+      \tile{6}{0}{b}{$x+3$}{+1}
       
-      \node[weight] at (p0.south) {$+1$}; \node[weight] at (p1.south) {$-3$};
-      \node[weight] at (p2.south) {$-1$}; \node[weight] at (p3.south) {$+6$};
-      \node[weight] at (p4.south) {$-1$}; \node[weight] at (p5.south) {$-3$};
-      \node[weight] at (p6.south) {$+1$};
-      
-      \node[anchor=west, align=left] at (9.5, 0) {Non-dominant sum:\\$+1G - 1B - 1G + 1B = 0$\\(Balanced Laplacian)};
+      \node[anchor=west, align=left, font=\small] at (7.5*0.8, 0) {Non-dominant sum:\\$+1G - 1B - 1G + 1B = 0$\\(Balanced Laplacian)};
   \end{scope}
   
-  \begin{scope}[yshift=0cm]
-      \node[anchor=west, font=\small\bfseries] at (-1, 1.2) {B) Filter Centered on Green ($s=0$)};
-      \node[pixel, fill=cfared!60]   (q0) at (0, 0)   {$x-3$\\(R)};
-      \node[pixel, fill=cfablue!60]  (q1) at (1.4, 0) {$x-2$\\(B)};
-      \node[pixel, fill=cfared!60]   (q2) at (2.8, 0) {$x-1$\\(R)};
-      \node[pixel, fill=cfagreen!60] (q3) at (4.2, 0) {$x$\\(G)};
-      \node[pixel, fill=cfared!60]   (q4) at (5.6, 0) {$x+1$\\(R)};
-      \node[pixel, fill=cfablue!60]  (q5) at (7.0, 0) {$x+2$\\(B)};
-      \node[pixel, fill=cfared!60]   (q6) at (8.4, 0) {$x+3$\\(R)};
+  \begin{scope}[yshift=-1.5cm]
+      \node[anchor=west, font=\small\bfseries] at (-0.5*0.8, 0.8) {B) Filter Centered on Green ($s=0$)};
+      \tile{0}{0}{r}{$x-3$}{+1}
+      \tile{1}{0}{b}{$x-2$}{--3}
+      \tile{2}{0}{r}{$x-1$}{--1}
+      \tile{3}{0}{g}{$x$}{+6}
+      \tile{4}{0}{r}{$x+1$}{--1}
+      \tile{5}{0}{b}{$x+2$}{--3}
+      \tile{6}{0}{r}{$x+3$}{+1}
       
-      \node[weight] at (q0.south) {$+1$}; \node[weight] at (q1.south) {$-3$};
-      \node[weight] at (q2.south) {$-1$}; \node[weight] at (q3.south) {$+6$};
-      \node[weight] at (q4.south) {$-1$}; \node[weight] at (q5.south) {$-3$};
-      \node[weight] at (q6.south) {$+1$};
-      
-      \node[anchor=west, align=left, text=red] at (9.5, 0) {Mixed sequence:\\$+1R - 3B - 1R + 6G - 1R - 3B + 1R \neq 0$\\(No cancellation)};
+      \node[anchor=west, align=left, font=\small, text=red] at (7.5*0.8, 0) {Mixed sequence:\\$+1R - 3B - 1R + 6G - 1R - 3B + 1R \neq 0$\\(No cancellation)};
   \end{scope}
 \end{tikzpicture}
 \end{center}
@@ -536,31 +488,26 @@ The algorithm therefore restricts evaluation to the Red checkerboard sites, wher
 Critically, the phase of the red pixel determines whether the cardinal neighbors are Green (H) and Blue (V) or vice versa. The implementation calculates the directional energies $E_H$ and $E_V$ at each Red site and accumulates them using a local window. This accumulation is weighted based on the local neighborhood to prioritize valid Red-centered gradients.
 
 \begin{center}
-\begin{tikzpicture}[scale=0.8, every node/.style={font=\tiny}]
-  \tikzset{
-      pixel/.style={draw, thick, minimum width=1.4cm, minimum height=1.2cm, align=center, font=\bfseries},
-      weight/.style={circle, draw, fill=white, inner sep=1pt, font=\tiny\bfseries, minimum size=0.5cm}
-  }
-  
+\begin{tikzpicture}%[scale=0.9, every node/.style={font=\tiny}]
   \begin{scope}[xshift=0cm]
-      \node[anchor=south, font=\small\bfseries, align=center] at (0, 2.2) {Filter Centered\\on Red Pixel};
-      \node[pixel, fill=cfagreen!60] (p0) at (0, 1.4)  {G\\(Inv)};
-      \node[pixel, fill=cfared!60]   (p1) at (0, 0)    {R\\($V^2_0$)};
-      \node[pixel, fill=cfagreen!60] (p2) at (0, -1.4) {G\\(Inv)};
-      \node[weight, right=0.1cm of p0] (w0) {$\times 1$};
-      \node[weight, right=0.1cm of p1] (w1) {$\times 2$};
-      \node[weight, right=0.1cm of p2] (w2) {$\times 1$};
+      \node[anchor=south, font=\small\bfseries, align=center] at (0, 0.8) {Filter Centered\\on Red Pixel};
+      \tile[unused]{0}{0}{g}{}{(Inv)}
+      \tile{0}{1}{r}{}{$V^2_0$}
+      \tile[unused]{0}{2}{g}{}{(Inv)}
+      \node[right=0.2cm] at (T01.east) {$\times 2$};
+      \node[right=0.2cm] at (T00.east) {$\times 1$};
+      \node[right=0.2cm] at (T02.east) {$\times 1$};
       \node[anchor=north, align=center] at (0, -2.2) {Sum: $1(0) + 2(V^2_0) + 1(0)$\\$ = \mathbf{2 V^2_0}$};
   \end{scope}
   
-  \begin{scope}[xshift=5.5cm]
-      \node[anchor=south, font=\small\bfseries, align=center] at (0, 2.2) {Filter Centered\\on Green Pixel};
-      \node[pixel, fill=cfared!60]   (q0) at (0, 1.4)  {R\\($V^2_1$)};
-      \node[pixel, fill=cfagreen!60] (q1) at (0, 0)    {G\\(Inv)};
-      \node[pixel, fill=cfared!60]   (q2) at (0, -1.4) {R\\($V^2_2$)};
-      \node[weight, right=0.1cm of q0] (w0_2) {$\times 1$};
-      \node[weight, right=0.1cm of q1] (w1_2) {$\times 2$};
-      \node[weight, right=0.1cm of q2] (w2_2) {$\times 1$};
+  \begin{scope}[xshift=5cm]
+      \node[anchor=south, font=\small\bfseries, align=center] at (0, 0.8) {Filter Centered\\on Green Pixel};
+      \tile{0}{0}{r}{}{$V^2_1$}
+      \tile[unused]{0}{1}{g}{}{(Inv)}
+      \tile{0}{2}{r}{}{$V^2_2$}
+      \node[right=0.2cm] at (T01.east) {$\times 2$};
+      \node[right=0.2cm] at (T00.east) {$\times 1$};
+      \node[right=0.2cm] at (T02.east) {$\times 1$};
       \node[anchor=north, align=center] at (0, -2.2) {Sum: $1(V^2_1) + 2(0) + 1(V^2_2)$\\$ = \mathbf{V^2_1 + V^2_2}$};
   \end{scope}
 \end{tikzpicture}
@@ -581,63 +528,59 @@ In the Dufay $4\times4$ reseau, the diagonal lines exhibit asymmetric behavior d
 Crucially, the $6^{\text{th}}$-order HPF only cancels color differences when centered on a Red pixel in an alternating sequence (like standard Bayer $R, G, R, B$). In the Dufay $P$-direction, the $G/B$ alternating lines \emph{contain no Red pixels}. Thus, the HPF cannot be evaluated on those lines. The implementation therefore restricts the HPF evaluation to the Red checkerboard pixels ($x+y$ is odd), ensuring that every computed gradient is either monochromatic or a valid Red-centered alternating sequence.
 
 \begin{center}
-\begin{tikzpicture}[scale=0.7, every node/.style={font=\footnotesize}]
-  \tikzset{
-    pixel/.style={draw, thick, minimum width=0.9cm, minimum height=0.9cm, align=center}
-  }
-
+\begin{tikzpicture}%[scale=0.8, every node/.style={font=\footnotesize}]
   % --- ROW 1: Q-Diagonal (Anti-diagonal) ---
   \begin{scope}[yshift=0cm]
-    \node[anchor=south, font=\small\bfseries] at (2.7, 1.0) {Q-Diagonal (Aligned, Blue strip)};
+    \node[anchor=south, font=\small\bfseries] at (3*0.8, 0.5) {Q-Diagonal (Aligned, Blue strip)};
     \foreach \y in {0,...,6} {
       \foreach \x in {0,...,6} {
-        \pgfmathsetmacro{\s}{int(mod(\x+\y,4))}
-        \ifcase\s \edef\fillcol{cfagreen!60} \or \edef\fillcol{cfared!60} \or \edef\fillcol{cfablue!60} \or \edef\fillcol{cfared!60} \fi
-        \node[pixel, fill=\fillcol] (Q\x\y) at (\x*0.9, -\y*0.9) {};
+        \dufaytile[unused]{\x}{\y}{}{}
       }
     }
+    
     % Q-Diagonal weights. Center (4,2) s=2(Blue). 
-    \node at (Q15) {\textbf{+1}}; \node at (Q24) {\textbf{--3}}; \node at (Q33) {\textbf{--1}};
-    \node at (Q42) {\textbf{+6}};
-    \node at (Q51) {\textbf{--1}}; \node at (Q60) {\textbf{--3}};
-    \draw[blue, line width=1.5pt, dashed] (Q15.center) -- (Q60.center);
-    \node[below=6.5cm, align=center, text width=6cm] {Sequence: B--B--B--B--B\\Monochromatic};
+    \dufaytile{1}{5}{}{+1} \dufaytile{2}{4}{}{--3} \dufaytile{3}{3}{}{--1}
+    \dufaytile{4}{2}{}{+6}
+    \dufaytile{5}{1}{}{--1} \dufaytile{6}{0}{}{--3}
+    
+    \draw[blue, line width=1.5pt, dashed] (T15.center) -- (T60.center);
+    \node[below=6.2*0.8cm, align=center, text width=6cm] {Sequence: B--B--B--B--B\\Monochromatic};
   \end{scope}
 
   % --- ROW 2: P-Diagonal Case 1 (All Red) ---
-  \begin{scope}[yshift=-10.5cm, xshift=0cm]
-    \node[anchor=south, font=\small\bfseries] at (3.15, 1.0) {P-Diagonal (All Red)};
+  \begin{scope}[yshift=-6.5cm, xshift=0cm]
+    \node[anchor=south, font=\small\bfseries] at (3.5*0.8, 0.5) {P-Diagonal (All Red)};
     \foreach \y in {0,...,6} {
       \foreach \x in {0,...,7} {
-        \pgfmathsetmacro{\s}{int(mod(\x+\y,4))}
-        \ifcase\s \edef\fillcol{cfagreen!60} \or \edef\fillcol{cfared!60} \or \edef\fillcol{cfablue!60} \or \edef\fillcol{cfared!60} \fi
-        \node[pixel, fill=\fillcol] (P1\x\y) at (\x*0.9, -\y*0.9) {};
+        \dufaytile[unused]{\x}{\y}{}{}
       }
     }
+        
     % P-Diagonal weights (All Red). Center (4,3) s=3(Red).
-    \node at (P110) {\textbf{+1}}; \node at (P121) {\textbf{--3}}; \node at (P132) {\textbf{--1}};
-    \node at (P143) {\textbf{+6}};
-    \node at (P154) {\textbf{--1}}; \node at (P165) {\textbf{--3}}; \node at (P176) {\textbf{+1}};
-    \draw[red, line width=1.5pt, dashed] (P110.center) -- (P176.center);
-    \node[below=6.5cm, align=center, text width=6cm] {Sequence: R--R--R--R--R\\Monochromatic};
+    \dufaytile{1}{0}{}{+1} \dufaytile{2}{1}{}{--3} \dufaytile{3}{2}{}{--1}
+    \dufaytile{4}{3}{}{+6}
+    \dufaytile{5}{4}{}{--1} \dufaytile{6}{5}{}{--3} \dufaytile{7}{6}{}{+1}
+    
+    \draw[red, line width=1.5pt, dashed] (T10.center) -- (T76.center);
+    \node[below=6.2*0.8cm, align=center, text width=6cm] {Sequence: R--R--R--R--R\\Monochromatic};
   \end{scope}
 
   % --- ROW 2: P-Diagonal Case 2 (Alt G/B) ---
-  \begin{scope}[yshift=-10.5cm, xshift=9.5cm]
-    \node[anchor=south, font=\small\bfseries] at (2.7, 1.0) {P-Diagonal (Alt G/B)};
+  \begin{scope}[yshift=-6.5cm, xshift=7.5cm]
+    \node[anchor=south, font=\small\bfseries] at (3*0.8, 0.5) {P-Diagonal (Alt G/B)};
     \foreach \y in {0,...,6} {
       \foreach \x in {0,...,6} {
-        \pgfmathsetmacro{\s}{int(mod(\x+\y,4))}
-        \ifcase\s \edef\fillcol{cfagreen!60} \or \edef\fillcol{cfared!60} \or \edef\fillcol{cfablue!60} \or \edef\fillcol{cfared!60} \fi
-        \node[pixel, fill=\fillcol] (P2\x\y) at (\x*0.9, -\y*0.9) {};
+        \dufaytile[unused]{\x}{\y}{}{}
       }
     }
+        
     % P-Diagonal weights (Alt G/B). Center (3,3) s=2(Blue).
-    \node at (P200) {\textbf{+1}}; \node at (P211) {\textbf{--3}}; \node at (P222) {\textbf{--1}};
-    \node at (P233) {\textbf{+6}};
-    \node at (P244) {\textbf{--1}}; \node at (P255) {\textbf{--3}}; \node at (P266) {\textbf{+1}};
-    \draw[green!60!black, line width=1.5pt, dashed] (P200.center) -- (P266.center);
-    \node[below=6.5cm, align=center, text width=6cm] {Sequence: G--B--G--B--G\\Cannot be canceled};
+    \dufaytile{0}{0}{}{+1} \dufaytile{1}{1}{}{--3} \dufaytile{2}{2}{}{--1}
+    \dufaytile{3}{3}{}{+6}
+    \dufaytile{4}{4}{}{--1} \dufaytile{5}{5}{}{--3} \dufaytile{6}{6}{}{+1}
+    
+    \draw[green!60!black, line width=1.5pt, dashed] (T00.center) -- (T66.center);
+    \node[below=6.2*0.8cm, align=center, text width=6cm] {Sequence: G--B--G--B--G\\Cannot be canceled};
   \end{scope}
 \end{tikzpicture}
 \end{center}
@@ -650,28 +593,21 @@ In Step 2, a local luminance estimate $L$ is computed to facilitate ratio-correc
 At each non-dominant (Green or Blue) site, a local luminance estimate $L$ is computed using a $3\times3$ cardinal neighborhood. In the Dufay $4\times4$ reseau, a key geometric property is that the cardinal neighbors of any non-dominant pixel are \textbf{all Red}. This provides a highly robust and uniform luma reference for ratio correction, as the dominant channel is sampled at every adjacent position.
 
 \begin{center}
-\begin{tikzpicture}[scale=0.9, every node/.style={font=\small}]
-  \tikzset{
-    pixel/.style={draw, thick, text width=1.6cm, minimum height=1.4cm, align=center}
-  }
+\begin{tikzpicture}%[scale=1.0, every node/.style={font=\small}]
+  % Phase: RBR row. Let center be (1,1) -> s=2 -> Blue.
+  \dufaytile{0}{0}{NW}{1/4}
+  \dufaytile{1}{0}{N}{1/2}
+  \dufaytile{2}{0}{NE}{1/4}
   
-  % Grid: GRB / RBR / BRG (centered on Blue RBR)
-  % Top row
-  \node[pixel, fill=cfagreen!60]   (pNW) at (0, 2.8)   {Green\\NW\\\textbf{1/4}};
-  \node[pixel, fill=cfared!60]     (pN)  at (1.8, 2.8) {Red\\N\\\textbf{1/2}};
-  \node[pixel, fill=cfablue!60]    (pNE) at (3.6, 2.8) {Blue\\NE\\\textbf{1/4}};
+  \dufaytile{0}{1}{W}{1/2}
+  \dufaytile{1}{1}{Center}{1}
+  \dufaytile{2}{1}{E}{1/2}
   
-  % Middle row
-  \node[pixel, fill=cfared!60]     (pW)  at (0, 1.4)   {Red\\W\\\textbf{1/2}};
-  \node[pixel, fill=cfablue!60]    (pC)  at (1.8, 1.4) {Blue\\Center\\\textbf{1}};
-  \node[pixel, fill=cfared!60]     (pE)  at (3.6, 1.4) {Red\\E\\\textbf{1/2}};
-  
-  % Bottom row
-  \node[pixel, fill=cfablue!60]    (pSW) at (0, 0)     {Blue\\SW\\\textbf{1/4}};
-  \node[pixel, fill=cfared!60]     (pS)  at (1.8, 0)   {Red\\S\\\textbf{1/2}};
-  \node[pixel, fill=cfagreen!60]   (pSE) at (3.6, 0)   {Green\\SE\\\textbf{1/4}};
+  \dufaytile{0}{2}{SW}{1/4}
+  \dufaytile{1}{2}{S}{1/2}
+  \dufaytile{2}{2}{SE}{1/4}
 
-  \node[below=0.4cm of pS, font=\itshape] {Dufay 3$\times$3 LPF centered on Blue (Phase: $RBR$ row)};
+  \node[below=0.4cm of T12, font=\itshape] {Dufay 3$\times$3 LPF centered on Blue (Phase: $RBR$ row)};
 \end{tikzpicture}
 \end{center}
 
@@ -693,20 +629,16 @@ The algorithm uses the $V/H$ discriminant computed in Step 1 to blend between ho
 where $f(x,y-1)$ is a raw Red sample and $L$ is the $3\times3$ LPF value calculated at Red sites at distance 2.
 
 \begin{center}
-\begin{tikzpicture}[scale=0.9, every node/.style={font=\small}]
-  \tikzset{
-    pixel/.style={draw, thick, text width=1.8cm, minimum height=1.4cm, align=center}
-  }
+\begin{tikzpicture}%[scale=1.0, every node/.style={font=\small}]
+  \tile{0}{0}{b}{$y-2$}{$L_{-2}$}
+  \tile{0}{1}{r}{$y-1$}{$R_N$}
+  \tile{0}{2}{b}{$y$}{$L_0$}
   
-  \node[pixel, fill=cfared!60]   (pN2) at (0, 3.2)  {$y-2$\\(Blue)\\\textbf{$L_{-2}$}};
-  \node[pixel, fill=cfagreen!60] (pN1) at (0, 1.6)  {$y-1$\\(Red)\\\textbf{$R_N$}};
-  \node[pixel, fill=cfablue!60]  (pC)  at (0, 0)    {$y$ (Centre)\\(Blue)\\\textbf{$L_0$}};
+  \draw[->, thick, dashed] (T00.east) .. controls +(2.5,0) and +(2.5,0) .. node[right, align=left] {1. Compute luminance \\ ratio:\\$R = \frac{2 L_0}{L_0 + L_{-2}}$} (T02.east);
   
-  \draw[->, thick, dashed] (pN2.east) .. controls +(2.5,0) and +(2.5,0) .. node[right, align=left] {1. Compute luminance \\ ratio:\\$R = \frac{2 L_0}{L_0 + L_{-2}}$} (pC.east);
-  
-  \draw[->, thick] (pN1.west) .. controls +(-2,0) and +(-2,0) .. node[left, align=right] {2. Apply ratio to \\ raw Red value:\\$\hat{R}_{\rm est} = R_N \cdot R$} (pC.west);
+  \draw[->, thick] (T01.west) .. controls +(-2,0) and +(-2,0) .. node[left, align=right] {2. Apply ratio to \\ raw Red value:\\$\hat{R}_{\rm est} = R_N \cdot R$} (T02.west);
 
-  \node[below=0.6cm of pC, font=\itshape] {Ratio-corrected interpolation of Red at a Blue pixel (vertical direction)};
+  \node[below=0.6cm of T02, font=\itshape] {Ratio-corrected interpolation of Red at a Blue pixel (vertical direction)};
 \end{tikzpicture}
 \end{center}
 
@@ -718,31 +650,23 @@ Every pixel now has a reconstructed Red value. In Step 4, we recover the missing
 This step populates the Green channel at Blue pixels and the Blue channel at Green pixels. Because these non-dominant channels form sparse diagonal strips, they only have same-color neighbors along the anti-diagonals. The algorithm calculates diagonal color-difference estimates ($\Delta = C - R$) steered by the $P/Q$ discriminants, using the fully recovered Red channel as the structural guide.
 
 \begin{center}
-\begin{tikzpicture}[scale=0.7, every node/.style={font=\tiny}]
-  \tikzset{
-    pixel/.style={draw, thick, minimum width=0.85cm, minimum height=0.85cm, align=center}
-  }
-  
-  % Step 4.2 Diagram: G at B site
+\begin{tikzpicture}%[scale=0.9, every node/.style={font=\tiny}]
   \foreach \y in {-2,...,2} {
     \foreach \x in {-2,...,2} {
-      % center (0,0) s=10 mod 4 = 2 (Blue)
-      \pgfmathsetmacro{\s}{int(mod(\x+\y+10,4))}
-      \ifcase\s \edef\fillcol{cfagreen!60} \or \edef\fillcol{cfared!60} \or \edef\fillcol{cfablue!60} \or \edef\fillcol{cfared!60} \fi
-      \node[pixel, fill=\fillcol] (N\x\y) at (\x*0.85, -\y*0.85) {};
+      \dufaytile[unused]{\x}{\y}{}{}
     }
   }
   
-  \node[white] at (N00) {\bf B$_C$};
-  \node at (N-1-1) {G$_{NW}$};
-  \node at (N11)   {G$_{SE}$};
-  \node at (N1-1)  {R$_{NE}$};
-  \node at (N-11)  {R$_{SW}$};
+  \dufaytile{1}{1}{}{$B_C$}
+  \dufaytile{0}{0}{}{$G_{NW}$}
+  \dufaytile{2}{2}{}{$G_{SE}$}
+  \dufaytile{2}{0}{}{$R_{NE}$}
+  \dufaytile{0}{2}{}{$R_{SW}$}
 
-  \draw[<->, very thick, cfagreen!80!black, dashed] (N-1-1.center) -- (N11.center) node[right=4pt] {$P$};
-  \draw[<->, thick, cfared!80!black, dashed] (N1-1.center) -- (N-11.center) node[left=4pt] {$Q$};
+  \draw[<->, very thick, cfagreen!80!black, dashed] (T00.center) -- (T22.center) node[right=4pt] {$P$};
+  \draw[<->, thick, cfared!80!black, dashed] (T20.center) -- (T02.center) node[left=4pt] {$Q$};
 
-  \node[below=2.2cm, align=center, text width=6cm] {Step 4.2: Interpolating Green at Blue pixel\\(Neighbors at NW/SE are Green)};
+  \node[below=2.2cm, align=center] at (T12.south) {Step 4.2: Interpolating Green at Blue pixel\\(Neighbors at NW/SE are Green)};
 \end{tikzpicture}
 \end{center}
 
@@ -762,48 +686,44 @@ The directional weight $pq\_disc$ is near 1 when the structure is aligned with t
 To interpolate Green and Blue at Red sites, the cardinal neighbors are used. 
 
 \begin{center}
-\begin{tikzpicture}[scale=0.8, every node/.style={font=\footnotesize}]
-  \tikzset{
-    pixel/.style={draw, thick, minimum width=1.2cm, minimum height=1.2cm, align=center}
-  }
-  
-  % Left figure: Step 4.3 (Green at Blue site - restored but renamed)
+\begin{tikzpicture}%[scale=0.9, every node/.style={font=\footnotesize}]
+  % Left figure: Step 4.2 Detail
   \begin{scope}[xshift=0cm]
-    \node[pixel, fill=cfagreen!60] (NW) at (0, 2.4) {$G_{NW}$};
-    \node[pixel, fill=cfared!60]   at (1.2, 2.4) {$R_N$};
-    \node[pixel, fill=cfablue!60]  at (2.4, 2.4) {$B_{NE}$};
+    \dufaytile{0}{0}{}{$G_{NW}$}
+    \dufaytile{1}{0}{}{$R_N$}
+    \dufaytile{2}{0}{}{$B_{NE}$}
     
-    \node[pixel, fill=cfared!60]   at (0, 1.2) {$R_W$};
-    \node[pixel, fill=cfablue!60]  (B) at (1.2, 1.2) {$B_C$};
-    \node[pixel, fill=cfared!60]   at (2.4, 1.2) {$R_E$};
+    \dufaytile{0}{1}{}{$R_W$}
+    \dufaytile{1}{1}{}{$B_C$}
+    \dufaytile{2}{1}{}{$R_E$}
     
-    \node[pixel, fill=cfablue!60]  at (0, 0) {$B_{SW}$};
-    \node[pixel, fill=cfared!60]   at (1.2, 0) {$R_S$};
-    \node[pixel, fill=cfagreen!60] (SE) at (2.4, 0) {$G_{SE}$};
+    \dufaytile{0}{2}{}{$B_{SW}$}
+    \dufaytile{1}{2}{}{$R_S$}
+    \dufaytile{2}{2}{}{$G_{SE}$}
 
-    \draw[<->, very thick, cfagreen!80!black, dashed] (NW.center) -- (SE.center);
+    \draw[<->, very thick, cfagreen!80!black, dashed] (T00.center) -- (T22.center);
     
-    \node[below=0.6cm of B, font=\itshape, align=center] {Step 4.2 Detail:\\Diagonal Neighbors};
+    \node[below=0.6cm of T12, font=\itshape, align=center] {Step 4.2 Detail:\\Diagonal Neighbors};
   \end{scope}
 
   % Right figure: Step 4.3 (Cardinal)
-  \begin{scope}[xshift=6cm]
-    \node[pixel, fill=cfared!60]   at (0, 2.4) {$R_{NW}$};
-    \node[pixel, fill=cfagreen!60] at (1.2, 2.4) {$G_N$};
-    \node[pixel, fill=cfared!60]   at (2.4, 2.4) {$R_{NE}$};
+  \begin{scope}[xshift=5cm]
+    \dufaytile{0}{0}{}{$R_{NW}$}
+    \dufaytile{1}{0}{}{$G_N$}
+    \dufaytile{2}{0}{}{$R_{NE}$}
     
-    \node[pixel, fill=cfagreen!60] at (0, 1.2) {$G_W$};
-    \node[pixel, fill=cfared!60]   (R) at (1.2, 1.2) {$R_C$};
-    \node[pixel, fill=cfablue!60]  at (2.4, 1.2) {$B_E$};
+    \dufaytile{0}{1}{}{$G_W$}
+    \dufaytile{1}{1}{}{$R_C$}
+    \dufaytile{2}{1}{}{$B_E$}
     
-    \node[pixel, fill=cfared!60]   at (0, 0) {$R_{SW}$};
-    \node[pixel, fill=cfablue!60]  at (1.2, 0) {$B_S$};
-    \node[pixel, fill=cfared!60]   at (2.4, 0) {$R_{SE}$};
+    \dufaytile{0}{2}{}{$R_{SW}$}
+    \dufaytile{1}{2}{}{$B_S$}
+    \dufaytile{2}{2}{}{$R_{SE}$}
 
-    \draw[<->, thick, dashed] (-0.3, 1.2) -- (2.7, 1.2) node[right=-2pt] {$H$};
-    \draw[<->, thick, dashed] (1.2, 2.7) -- (1.2, -0.3) node[below=-2pt] {$V$};
+    \draw[<->, thick, dashed] (T01.west) -- (T21.east) node[right=-2pt] {$H$};
+    \draw[<->, thick, dashed] (T10.north) -- (T12.south) node[below=-2pt] {$V$};
     
-    \node[below=0.6cm of R, font=\itshape, align=center] {Step 4.3: G/B at Red site\\Cardinal Interpolation};
+    \node[below=0.6cm of T12, font=\itshape, align=center] {Step 4.3: R@G (and B@G)\\ Cardinal interpolation};
   \end{scope}
 \end{tikzpicture}
 \end{center}
