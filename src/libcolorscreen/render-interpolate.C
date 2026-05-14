@@ -32,6 +32,7 @@ struct analyzer_params
   luminosity_t collection_threshold;
   uint64_t mesh_trans_id;
   scr_to_img_parameters params;
+  denoise_parameters denoise;
 
   const image_data *img;
   const screen *scr;
@@ -46,7 +47,8 @@ struct analyzer_params
     if (mode != o.mode || mesh_trans_id != o.mesh_trans_id
 	|| simulated_screen_id != o.simulated_screen_id
         || (!mesh_trans_id && params != o.params)
-        || params.type != o.params.type)
+        || params.type != o.params.type
+	|| !denoise.equal_p (o.denoise))
       return false;
     if (mode == analyze_base::color || mode == analyze_base::precise_rgb)
       {
@@ -89,6 +91,26 @@ struct demosaiced_params
 	   && screen_denoise.equal_p (o.screen_denoise);
   }
 };
+bool
+denoise_analyzer (analyze_base *ret, const denoise_parameters &params,
+                  analyze_base::mode mode, progress_info *progress)
+{
+  if (params.get_mode () == denoise_parameters::none)
+    return true;
+  if (mode == analyze_base::precise_rgb)
+    {
+      if (!ret->denoise_rgb_red (params, progress)) return false;
+      if (!ret->denoise_rgb_green (params, progress)) return false;
+      if (!ret->denoise_rgb_blue (params, progress)) return false;
+    }
+  else
+    {
+      if (!ret->denoise_red (params, progress)) return false;
+      if (!ret->denoise_green (params, progress)) return false;
+      if (!ret->denoise_blue (params, progress)) return false;
+    }
+  return true;
+}
 
 /* Factory function for Dufay color analysis.  */
 std::unique_ptr<analyze_dufay>
@@ -127,7 +149,11 @@ get_new_dufay_analysis (struct analyzer_params &p, int_image_area area,
     if (ret->analyze (p.render, p.img, p.scr_to_img_map, s, p.simulated_screen_ptr,
                       area, p.mode,
                       p.collection_threshold, progress))
-      return ret;
+      {
+	if (!denoise_analyzer (ret.get (), p.denoise, p.mode, progress))
+	  return nullptr;
+        return ret;
+      }
   }
   return nullptr;
 }
@@ -141,7 +167,11 @@ get_new_paget_analysis (struct analyzer_params &p, int_image_area area,
   if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, p.simulated_screen_ptr,
                     area, p.mode,
                     p.collection_threshold, progress))
-    return ret;
+    {
+      if (!denoise_analyzer (ret.get (), p.denoise, p.mode, progress))
+	return nullptr;
+      return ret;
+    }
   return nullptr;
 }
 
@@ -194,7 +224,11 @@ get_new_strips_analysis (struct analyzer_params &p, int_image_area area,
     if (ret->analyze (p.render, p.img, p.scr_to_img_map, s, p.simulated_screen_ptr,
                       area, p.mode,
                       p.collection_threshold, progress))
-      return ret;
+      {
+	if (!denoise_analyzer (ret.get (), p.denoise, p.mode, progress))
+	  return nullptr;
+        return ret;
+      }
   }
   return nullptr;
 }
@@ -378,6 +412,7 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
         ? m_scr_to_img.get_param ().mesh_trans->id
         : 0,
     m_scr_to_img.get_param (),
+    m_params.screen_denoise,
     &m_img,
     m_screen.get (),
     this,

@@ -4774,7 +4774,6 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
   double_rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
   double wr = 0, wg = 0, wb = 0;
   const bool debugfiles = false;
-  printf ("Determining color loss\n");
 
   if (debugfiles)
     {
@@ -4785,13 +4784,10 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
   sharpen_parameters::sharpen_mode sharpen_mode = sharpen_param.get_mode ();
   if (simulated_screen)
     {
-// FIXME: prallelism here seems to cause instability (race condition)
-#if 1
 #pragma omp declare reduction(+ : double_rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
     shared(area, threshold, simulated_screen)                                 \
     reduction(+ : wr, wg, wb, red, green, blue)
-#endif
       for (int y = area.y; y < area.y + area.height; y++)
         for (int x = area.x; x < area.x + area.width; x++)
           {
@@ -4822,13 +4818,10 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
   else if (sharpen_mode == sharpen_parameters::none)
     {
       bool antialias = !sharpen_param.scanner_mtf_scale;
-// FIXME: prallelism here seems to cause instability (race condition)
-#if 1
 #pragma omp declare reduction(+ : double_rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
     shared(area, threshold, map, scr, collection_scr,antialias)               \
     reduction(+ : wr, wg, wb, red, green, blue)
-#endif
       for (int y = area.y; y < area.y + area.height; y++)
         for (int x = area.x; x < area.x + area.width; x++)
           {
@@ -4990,13 +4983,10 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
         }
 
       /* Collect data  */
-// FIXME: prallelism here seems to cause instability (race condition)
-#if 1
 #pragma omp declare reduction(+ : double_rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
     shared(area, threshold, map, scr, collection_scr,rendered2,ext,xsize)     \
     reduction(+ : wr, wg, wb, red, green, blue)
-#endif
       for (int y = area.y; y < area.y + area.height; y++)
         for (int x = area.x; x < area.x + area.width; x++)
           {

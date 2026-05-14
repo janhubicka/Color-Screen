@@ -2991,8 +2991,8 @@ protected:
           for (int x = 4; x < w - 4; x++)
             {
               luminosity_t v
-                  = (known (x, init_row - 3) - known (x, init_row - 1)
-                     - known (x, init_row + 1) + known (x, init_row + 3))
+                  = //(known (x, init_row - 3) - known (x, init_row - 1)
+                    // - known (x, init_row + 1) + known (x, init_row + 3))
                     - 3 * (known (x, init_row - 2) + known (x, init_row + 2))
                     + 6 * known (x, init_row);
               tgt[x] = (GEOMETRY::demosaic_entry_color (x, init_row) == ah_red)
@@ -3007,8 +3007,8 @@ protected:
           for (int x = 4; x < w - 4; x++)
             {
               luminosity_t v
-                  = (known (x, y + 1 - 3) - known (x, y + 1 - 1)
-                     - known (x, y + 1 + 1) + known (x, y + 1 + 3))
+                  = //(known (x, y + 1 - 3) - known (x, y + 1 - 1)
+                     //- known (x, y + 1 + 1) + known (x, y + 1 + 3))
                     - 3 * (known (x, y + 1 - 2) + known (x, y + 1 + 2))
                     + 6 * known (x, y + 1);
               v_sq_row_2[x]
@@ -3019,8 +3019,8 @@ protected:
           std::vector<luminosity_t> h_sq (w, 0);
           for (int x = 3; x < w - 3; x++)
             {
-              luminosity_t hv = (known (x - 3, y) - known (x - 1, y)
-                                 - known (x + 1, y) + known (x + 3, y))
+              luminosity_t hv = //(known (x - 3, y) - known (x - 1, y)
+                                 //- known (x + 1, y) + known (x + 3, y))
                                 - 3 * (known (x - 2, y) + known (x + 2, y))
                                 + 6 * known (x, y);
               h_sq[x] = (GEOMETRY::demosaic_entry_color (x, y) == ah_red)
@@ -4575,6 +4575,7 @@ public:
       default:
         break;
       }
+#if 0
     if (denoise_params.get_mode () != denoise_parameters::none)
       {
         return denoise_rgb<luminosity_t> (
@@ -4584,6 +4585,7 @@ public:
               { m_demosaiced[y * m_area.width + x] = pixel; }, denoise_params,
             progress);
       }
+#endif
     return true;
   }
 };
@@ -4661,6 +4663,7 @@ public:
       default:
         break;
       }
+#if 0
     if (denoise_params.get_mode () != denoise_parameters::none)
       {
         return denoise_rgb<luminosity_t> (
@@ -4670,6 +4673,7 @@ public:
               { m_demosaiced[y * m_area.width + x] = pixel; }, denoise_params,
             progress);
       }
+#endif
     return true;
   }
 };

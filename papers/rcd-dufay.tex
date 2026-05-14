@@ -87,6 +87,48 @@ the raw modulated image; a demosaicing step is then required to
 reconstruct a conventional RGB image, exactly as is done for digital
 camera raw files.
 
+\subsection{The original Dufaycolor reseau}
+The physical Dufaycolor reseau is formed by alternating horizontal stripes. A red stripe alternates with a stripe containing green and blue patches. This results in a basic repeating structure:
+\begin{center}
+\begin{tikzpicture}[scale=1.1]
+  \tile{0}{0}{g}{}{}
+  \tile{1}{0}{b}{}{}
+  \tile{0}{1}{r}{}{}
+  \tile{1}{1}{r}{}{}
+  
+  \node[anchor=south] at (0.4, 0.5) {GB};
+  \node[anchor=north] at (0.4, -1.3) {RR};
+\end{tikzpicture}
+\end{center}
+To avoid visual interference between the red and green/blue elements, the red line is sampled in squares shifted by half the size of the patches. This staggering ensures that the dominant red channel does not perfectly align its boundaries with the non-dominant channels, reducing scanning artifacts.
+
+\begin{center}
+\begin{tikzpicture}[scale=1.1]
+  % Row 0: Green/Blue
+  \tile{0}{0}{g}{}{}
+  \tile{1}{0}{b}{}{}
+  \tile{2}{0}{g}{}{}
+  \tile{3}{0}{b}{}{}
+
+  % Row 1: Staggered Red
+  \begin{scope}[xshift=0.4cm]
+    \tile{0}{1}{r}{}{}
+    \tile{1}{1}{r}{}{}
+    \tile{2}{1}{r}{}{}
+  \end{scope}
+
+  % Row 2: Green/Blue
+  \tile{0}{2}{g}{}{}
+  \tile{1}{2}{b}{}{}
+  \tile{2}{2}{g}{}{}
+  \tile{3}{2}{b}{}{}
+  
+  \node[below=0.2cm] at (1.5*0.8, -2.5*0.8) {Original staggered reseau};
+\end{tikzpicture}
+\end{center}
+
+Applying a skew transformation and rotation maps this physical geometry to a square-aligned $4\times4$ repeating tile, which is more convenient for digital image processing while preserving the topological relationships between channels.
+
 \subsection{The rotated 4$\times$4 pattern}
 
 We work with a computationally convenient rotation of the original

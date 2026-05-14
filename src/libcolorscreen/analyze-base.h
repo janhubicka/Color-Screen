@@ -253,6 +253,14 @@ public:
   /* Analyze the range of luminosity values.  */
   void analyze_range (luminosity_t *rrmin, luminosity_t *rrmax, luminosity_t *rgmin, luminosity_t *rgmax, luminosity_t *rbmin, luminosity_t *rbmax);
 
+  /* Denoise individual channels.  */
+  bool denoise_red (const denoise_parameters &params, progress_info *progress);
+  bool denoise_green (const denoise_parameters &params, progress_info *progress);
+  bool denoise_blue (const denoise_parameters &params, progress_info *progress);
+  bool denoise_rgb_red (const denoise_parameters &params, progress_info *progress);
+  bool denoise_rgb_green (const denoise_parameters &params, progress_info *progress);
+  bool denoise_rgb_blue (const denoise_parameters &params, progress_info *progress);
+
   /* Write the analyzed screen to a file.
      FILENAME is the name of the file to write to.
      KNOWN_PIXELS is the bitmap of known pixels.
