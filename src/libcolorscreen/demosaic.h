@@ -2887,29 +2887,29 @@ protected:
               {
                 /* Same-channel absolute differences for gradients.  */
                 luminosity_t sn_abs
-                    = fabs (dch (x, y - 1, c) - dch (x, y + 1, c));
+                    = fabs (d (x, y - 1)[c] - d (x, y + 1)[c]);
                 luminosity_t ew_abs
-                    = fabs (dch (x - 1, y, c) - dch (x + 1, y, c));
+                    = fabs (d (x - 1, y)[c] - d (x + 1, y)[c]);
 
                 /* Cardinal gradients.  */
                 luminosity_t n_grad
                     = n_1 + sn_abs
-                      + fabs (dch (x, y - 1, c) - dch (x, y - 3, c));
+                      + fabs (d (x, y - 1)[c] - d (x, y - 3)[c]);
                 luminosity_t s_grad
                     = s_1 + sn_abs
-                      + fabs (dch (x, y + 1, c) - dch (x, y + 3, c));
+                      + fabs (d (x, y + 1)[c] - d (x, y + 3)[c]);
                 luminosity_t w_grad
                     = w_1 + ew_abs
-                      + fabs (dch (x - 1, y, c) - dch (x - 3, y, c));
+                      + fabs (d (x - 1, y)[c] - d (x - 3, y)[c]);
                 luminosity_t e_grad
                     = e_1 + ew_abs
-                      + fabs (dch (x + 1, y, c) - dch (x + 3, y, c));
+                      + fabs (d (x + 1, y)[c] - d (x + 3, y)[c]);
 
                 /* Cardinal color differences (C - G at neighbors).  */
-                luminosity_t n_est = dch (x, y - 1, c) - g_n;
-                luminosity_t s_est = dch (x, y + 1, c) - g_s;
-                luminosity_t w_est = dch (x - 1, y, c) - g_w;
-                luminosity_t e_est = dch (x + 1, y, c) - g_e;
+                luminosity_t n_est = d (x, y - 1)[c] - g_n;
+                luminosity_t s_est = d (x, y + 1)[c] - g_s;
+                luminosity_t w_est = d (x - 1, y)[c] - g_w;
+                luminosity_t e_est = d (x + 1, y)[c] - g_e;
 
                 /* V and H estimates with cross-gradient weighting.  */
                 luminosity_t v_est

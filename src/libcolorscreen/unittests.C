@@ -2074,13 +2074,8 @@ bool
 test_demosaic ()
 {
   bool ok = true;
-  /* TODO: Paget HA triggers a dch() assertion due to a pre-existing bug
-     in the Hamilton-Adams algorithm for non-Bayer geometries.
-     Skipping for now to test Dufay improvements.  */
-#if 0
   if (!test_demosaic_paget ())
     ok = false;
-#endif
   if (!test_demosaic_dufay ())
     ok = false;
   return ok;
