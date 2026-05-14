@@ -1939,8 +1939,8 @@ public:
               else if (y < 2 * m_area.height / 3)
                 {
                   /* 45-degree rotated squares.  */
-                  int tx = (x + y) / 16;
-                  int ty = (x - y + m_area.width) / 16;
+                  int tx = (x + y) / 64;
+                  int ty = (x - y + m_area.width) / 64;
                   expected.red = (luminosity_t)((tx * 31) % 256) / 255.0;
                   expected.green = (luminosity_t)((ty * 37) % 256) / 255.0;
                   expected.blue = (luminosity_t)(((tx + ty) * 41) % 256) / 255.0;
@@ -1984,24 +1984,38 @@ test_demosaic_loop (fake_analyze<GEOMETRY> &fake, DEMOSAICER &demosaicer,
     for (int x = 20; x < width - 20; x++)
       {
         rgbdata expected;
+	const char *section;
         if (y < height / 3)
           {
             int tx = x / 32;
             int ty = y / 32;
+	    section = "squares";
+	    /* Ignore borders.  */
+	    if (x - tx * 32 < 3 || x - tx * 32 >29
+		|| y - ty * 32 < 3 || y - ty * 32 >29)
+	      continue;
             expected.red = (luminosity_t)((tx * 17) % 256) / 255.0;
             expected.green = (luminosity_t)((ty * 23) % 256) / 255.0;
             expected.blue = (luminosity_t)(((tx + ty) * 11) % 256) / 255.0;
           }
         else if (y < 2 * height / 3)
           {
-            int tx = (x + y) / 16;
-            int ty = (x - y + width) / 16;
+            int tx = (x + y) / 64;
+            int ty = (x - y + width) / 64;
+	    /* Ignore borders.  */
+	    section = "diagonal squares";
+	    if ((x+y) - tx * 64 < 3 || x + y - tx * 64 > 61
+		|| (x - y + width) - ty * 64 < 3 || (x - y + width) - ty * 32 > 61)
+	      continue;
             expected.red = (luminosity_t)((tx * 31) % 256) / 255.0;
             expected.green = (luminosity_t)((ty * 37) % 256) / 255.0;
             expected.blue = (luminosity_t)(((tx + ty) * 41) % 256) / 255.0;
           }
         else
           {
+	    if (y < 2 * height / 3 + 3)
+	      continue;
+	    section = "gradient";
             expected.red = (luminosity_t)x / (width - 1);
             expected.green = (luminosity_t)y / (height - 1);
             expected.blue = (luminosity_t)(x + y) / (width + height - 2);
@@ -2012,13 +2026,12 @@ test_demosaic_loop (fake_analyze<GEOMETRY> &fake, DEMOSAICER &demosaicer,
           skip = true;
 
         rgbdata actual = demosaicer.demosaiced_data (x, y);
-        /* 0.3 tolerance is reasonable for 4x4 sparse patterns with diagonals.  */
-        if (!skip && (fabs (actual.red - expected.red) > 0.3
-                      || fabs (actual.green - expected.green) > 0.3
-                      || fabs (actual.blue - expected.blue) > 0.3))
+        if (!skip && (fabs (actual.red - expected.red) > 0.05
+                      || fabs (actual.green - expected.green) > 0.05
+                      || fabs (actual.blue - expected.blue) > 0.05))
           {
-            printf ("Demosaic %s mismatch at (%i, %i): expected (%f, %f, %f), got (%f, %f, %f)\n",
-                    alg_name, x, y, expected.red, expected.green, expected.blue,
+            printf ("Demosaic %s, section %s mismatch at (%i, %i): expected (%f, %f, %f), got (%f, %f, %f)\n",
+                    alg_name, section, x, y, expected.red, expected.green, expected.blue,
                     actual.red, actual.green, actual.blue);
             ok = false;
             break;
