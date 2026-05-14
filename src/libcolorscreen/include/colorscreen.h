@@ -232,8 +232,8 @@ nodiscard_attr DLL_PUBLIC bool
 dump_patch_density(FILE *out, image_data &scan, scr_to_img_parameters &param,
                    render_parameters &rparam, progress_info *progress = NULL);
 nodiscard_attr DLL_PUBLIC bool
-render_preview(image_data &scan, scr_to_img_parameters &param,
-               render_parameters &rparams, unsigned char *pixels, int width,
+render_preview(image_data &scan, const scr_to_img_parameters &param,
+               const render_parameters &rparams, unsigned char *pixels, int width,
                int height, int rowstride, progress_info *progress = NULL);
 DLL_PUBLIC rgbdata analyze_color_proportions (
     scr_detect_parameters param, render_parameters &rparam, image_data &img,
