@@ -1,5 +1,25 @@
 #!/bin/sh
-# slanted-edge.test -- Test slanted edge MTF analysis
+# slanted-edge.test -- Test slanted edge MTF analysis against mtfmapper reference
+#
+# Test images were generated with MTF Mapper's mtf_generate_rectangle tool
+# using known Gaussian PSFs.  The reference MTF files contain the analytical
+# MTF curves computed from mtfmapper's formula:  MTF(f) = exp(K * f^2).
+#
+# This validates that colorscreen's slanted-edge implementation produces
+# results consistent with mtfmapper for lenses typical of high-resolution
+# (4000 PPI) macro captures with PhaseOne cameras.
+#
+# Image generation commands (require Wine + MTF Mapper):
+#   gaussian-vsharp (sigma=0.5px, MTF50=0.375):
+#     mtf_generate_rectangle.exe -a 5 -d 800 --b16 --linear -n 0 -p gaussian -b 0.5
+#   gaussian-sharp (sigma=0.8px, MTF50=0.234):
+#     mtf_generate_rectangle.exe -a 5 -d 800 --b16 --linear -n 0 -p gaussian -b 0.8
+#   gaussian-medium (sigma=1.2px, MTF50=0.156):
+#     mtf_generate_rectangle.exe -a 5 -d 800 --b16 --linear -n 0 -p gaussian -b 1.2
+#   gaussian-soft (sigma=2.0px, MTF50=0.094):
+#     mtf_generate_rectangle.exe -a 5 -d 800 --b16 --linear -n 0 -p gaussian -b 2.0
+#   Each image is then cropped to a 200x734 region containing a single vertical edge.
+#   See generate-slanted-edge-tests.sh for full details.
 
 # Common definitions
 if test -z "$srcdir"; then
@@ -8,19 +28,65 @@ if test -z "$srcdir"; then
     test -z "$srcdir" && srcdir=.
 fi
 
-# Print TAP header
-echo "1..1"
+COLORSCREEN=../src/colorscreen/colorscreen
 
-# Run slanted-edge analysis and compare with reference
-# We use a large tolerance for now while investigating MTF calibration
-../src/colorscreen/colorscreen slanted-edge "$srcdir/slanted-austraia-hurley.tif" \
-    --gamma 1.0 \
-    --compare-with "$srcdir/slanted-austraia-hurley-mtf.txt" 60.0 \
-    --verbose > slanted-edge.log 2>&1
+# Number of test cases: 4 synthetic + 1 legacy
+echo "1..5"
 
-if [ $? -eq 0 ]; then
-    echo "ok 1 - slanted edge MTF comparison within tolerance"
-else
-    echo "not ok 1 - slanted edge MTF comparison failed"
-    cat slanted-edge.log
-fi
+failed=0
+testnum=0
+
+# Run a single slanted-edge test against an analytical reference MTF.
+# TESTNAME IMAGE REFERENCE TOLERANCE DESCRIPTION
+run_test() {
+    testnum=$((testnum + 1))
+    local image="$1"
+    local reference="$2"
+    local tolerance="$3"
+    local desc="$4"
+
+    $COLORSCREEN slanted-edge "$image" --gamma 1.0 \
+        --compare-with "$reference" "$tolerance" \
+        --verbose > slanted-edge-${testnum}.log 2>&1
+
+    if [ $? -eq 0 ]; then
+        echo "ok $testnum - $desc"
+    else
+        echo "not ok $testnum - $desc"
+        cat slanted-edge-${testnum}.log
+        failed=$((failed + 1))
+    fi
+}
+
+# Test 1: Very sharp Gaussian (sigma=0.5px)
+# Near-perfect optics, stress test for high MTF50 detection.
+# Ensures we don't misinterpret sharp lenses.
+run_test "$srcdir/slanted-gaussian-vsharp.tif" \
+         "$srcdir/slanted-gaussian-vsharp-mtf.txt" 2.0 \
+         "very sharp Gaussian PSF (sigma=0.5, MTF50=0.375) vs mtfmapper analytical"
+
+# Test 2: Sharp Gaussian (sigma=0.8px)
+# Good quality macro lens at optimal aperture (Schneider 120mm Makro at f/5.6).
+run_test "$srcdir/slanted-gaussian-sharp.tif" \
+         "$srcdir/slanted-gaussian-sharp-mtf.txt" 2.0 \
+         "sharp Gaussian PSF (sigma=0.8, MTF50=0.234) vs mtfmapper analytical"
+
+# Test 3: Medium Gaussian (sigma=1.2px)
+# Average macro lens or good lens slightly stopped down.
+# Typical for 4000 PPI PhaseOne workflow.
+run_test "$srcdir/slanted-gaussian-medium.tif" \
+         "$srcdir/slanted-gaussian-medium-mtf.txt" 2.0 \
+         "medium Gaussian PSF (sigma=1.2, MTF50=0.156) vs mtfmapper analytical"
+
+# Test 4: Soft Gaussian (sigma=2.0px)
+# Soft lens or significant defocus.
+run_test "$srcdir/slanted-gaussian-soft.tif" \
+         "$srcdir/slanted-gaussian-soft-mtf.txt" 2.0 \
+         "soft Gaussian PSF (sigma=2.0, MTF50=0.094) vs mtfmapper analytical"
+
+# Test 5: Legacy test with real scan from Australia (Hurley)
+run_test "$srcdir/slanted-austraia-hurley.tif" \
+         "$srcdir/slanted-austraia-hurley-mtf.txt" 60.0 \
+         "legacy real scan (Australia Hurley)"
+
+exit $failed

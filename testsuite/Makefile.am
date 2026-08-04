@@ -10,7 +10,16 @@ EXTRA_DIST              = defs.sh $(TESTS) \
 			  slanted-austraia-hurley.tif \
 			  slanted-austraia-hurley-mtf.txt \
 			  slanted-austraia-hurley-esf.txt \
-			  slanted-austraia-hurley-lsf.txt
+			  slanted-austraia-hurley-lsf.txt \
+			  slanted-gaussian-vsharp.tif \
+			  slanted-gaussian-vsharp-mtf.txt \
+			  slanted-gaussian-sharp.tif \
+			  slanted-gaussian-sharp-mtf.txt \
+			  slanted-gaussian-medium.tif \
+			  slanted-gaussian-medium-mtf.txt \
+			  slanted-gaussian-soft.tif \
+			  slanted-gaussian-soft-mtf.txt \
+			  generate-slanted-edge-tests.sh
 
 TEST_LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) \
 			  $(top_srcdir)/build-aux/tap-driver.sh
