@@ -143,6 +143,9 @@ void ImageWidget::setZoom(double scale) {
  * @param factor The zoom factor to apply to the current target scale.
  */
 void ImageWidget::smoothZoomBy(double factor) {
+  m_panAnimationActive = false;
+  m_exploreTargetX = m_viewX;
+  m_exploreTargetY = m_viewY;
   m_exploreTargetScale *= factor;
   m_exploreZoomSpeed = 0.15;
   m_zoomFocusCenter = true;
@@ -156,6 +159,9 @@ void ImageWidget::smoothZoomBy(double factor) {
  * @param fast Whether to use a faster animation speed.
  */
 void ImageWidget::smoothZoomTo(double targetScale, bool fast) {
+  m_panAnimationActive = false;
+  m_exploreTargetX = m_viewX;
+  m_exploreTargetY = m_viewY;
   m_exploreTargetScale = targetScale;
   m_exploreZoomSpeed = fast ? 0.35 : 0.15;
   m_zoomFocusCenter = true;
@@ -2203,8 +2209,14 @@ void ImageWidget::exploreTick() {
       
       m_viewX += shiftX;
       m_viewY += shiftY;
-      m_exploreTargetX += shiftX;
-      m_exploreTargetY += shiftY;
+      /* Only shift the pan target when no animation is driving it to an
+         absolute destination (e.g. smoothFitToView).  During interactive
+         zoom the target must track the view so the pan loop does not
+         fight the zoom correction.  */
+      if (!m_panAnimationActive) {
+          m_exploreTargetX += shiftX;
+          m_exploreTargetY += shiftY;
+      }
       needsUpdate = true;
   } else {
       m_scale = m_exploreTargetScale;
