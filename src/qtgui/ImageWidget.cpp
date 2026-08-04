@@ -847,12 +847,14 @@ void ImageWidget::drawMeasurement(QPainter &p) {
     p.drawLine(p1, p2);
     
     QLineF line(p1, p2);
-    QLineF norm = line.normalVector().unitVector();
-    norm.setLength(10);
-    
-    QPointF offset = norm.p2() - norm.p1();
-    p.drawLine(p1 + offset, p1 - offset);
-    p.drawLine(p2 + offset, p2 - offset);
+    if (line.length() > 1e-9) {
+      QLineF norm = line.normalVector().unitVector();
+      norm.setLength(10);
+      
+      QPointF offset = norm.p2() - norm.p1();
+      p.drawLine(p1 + offset, p1 - offset);
+      p.drawLine(p2 + offset, p2 - offset);
+    }
     
     // Draw distance in pixels as well
     double distPixels = sqrt(pow(m_measureEnd.x - m_measureStart.x, 2) + 

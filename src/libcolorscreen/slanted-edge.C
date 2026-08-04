@@ -306,10 +306,10 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
     {
       // Apply Hann window centered at the peak
       int dist = i - peak_idx;
-      int window_idx = dist + N / 2;
+      int window_idx = dist + num_bins / 2;
       double w = 0;
-      if (window_idx >= 0 && window_idx < N)
-        w = 0.5 * (1.0 - std::cos(2.0 * M_PI * window_idx / (N - 1)));
+      if (window_idx >= 0 && window_idx < num_bins)
+        w = 0.5 * (1.0 - std::cos(2.0 * M_PI * window_idx / (num_bins - 1)));
       
       if (i < num_bins)
         in_vec[i] = lsf[i] * w;
@@ -348,7 +348,23 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
       double freq = i * Fs / N;
       if (freq > 0.5) // Usually only care up to Nyquist
         break;
-      measurement.add_value(freq, mtf[i] * 100.0);
+      
+      double mtf_val = mtf[i];
+      if (freq > 0.0)
+        {
+          double w_bin = M_PI * freq / Fs;
+          double w_deriv = 2.0 * M_PI * freq / Fs;
+          
+          double correction = 1.0;
+          // Binning correction (rect convolution)
+          correction *= w_bin / std::sin(w_bin);
+          // Derivative correction (central difference)
+          correction *= w_deriv / std::sin(w_deriv);
+          
+          mtf_val *= correction;
+        }
+
+      measurement.add_value(freq, mtf_val * 100.0);
     }
 
   rparam.sharpen.scanner_mtf.measurements.push_back(measurement);
