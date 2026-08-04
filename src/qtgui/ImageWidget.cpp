@@ -2233,10 +2233,12 @@ void ImageWidget::exploreTick() {
           m_viewY += moveY;
           needsUpdate = true;
       } else {
-          m_viewX = m_exploreTargetX;
-          m_viewY = m_exploreTargetY;
+          if (m_viewX != m_exploreTargetX || m_viewY != m_exploreTargetY) {
+              m_viewX = m_exploreTargetX;
+              m_viewY = m_exploreTargetY;
+              needsUpdate = true;
+          }
           m_panAnimationActive = false;
-          needsUpdate = true;
       }
   }
 
@@ -2260,7 +2262,6 @@ void ImageWidget::exploreTick() {
  */
 void ImageWidget::requestRender() {
   m_pointsOverlayDirty = true;
-  m_renderQueue.cancelAll();
   if (!m_scan || !m_rparams) return;
 
     RenderRequestData data;
