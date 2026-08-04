@@ -2203,6 +2203,8 @@ void ImageWidget::exploreTick() {
       
       m_viewX += shiftX;
       m_viewY += shiftY;
+      m_exploreTargetX += shiftX;
+      m_exploreTargetY += shiftY;
       needsUpdate = true;
   } else {
       m_scale = m_exploreTargetScale;
