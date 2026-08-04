@@ -794,7 +794,10 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
       analyzer = (std::unique_ptr <analyze_base>) (paget);
     }
   if (m_prj->params.max_contrast >= 0 && dufay_like_screen_p (param.type))
-    dufay->analyze_contrast (&render, img.get(), &scr_to_img_map, progress);
+    {
+      if (!dufay->analyze_contrast (&render, img.get(), &scr_to_img_map, progress))
+        return false;
+    }
   get_analyzer().set_known_pixels (compute_known_pixels (scr_to_img_map, skiptop, skipbottom, skipleft, skipright, progress) /*screen_detected_patches*/);
   screen_filename = (std::string)"screen"+(std::string)filename;
   known_screen_filename = (std::string)"known_screen"+(std::string)filename;
@@ -878,16 +881,15 @@ stitch_image::write_row (TIFF * out, int y, uint16_t * outrow, const char **erro
 void
 stitch_image::compare_contrast_with (stitch_image &other, progress_info *progress)
 {
-  int x1, y1, x2, y2;
-  int xs = other.pos.x - pos.x;
-  int ys = other.pos.y - pos.y;
+  int_point_t pt1, pt2;
+  int_point_t offset = {(int64_t)(other.pos.x - pos.x), (int64_t)(other.pos.y - pos.y)};
   if (!m_prj)
     return;
   if (m_prj->params.max_contrast < 0)
     return;
   analyze_dufay *dufay = static_cast <analyze_dufay *>(analyzer.get ());
   analyze_dufay *other_dufay = static_cast <analyze_dufay *>(other.analyzer.get ());
-  luminosity_t ratio = dufay->compare_contrast (*other_dufay, xs, ys, &x1, &y1, &x2, &y2, scr_to_img_map, other.scr_to_img_map, progress);
+  luminosity_t ratio = dufay->compare_contrast (*other_dufay, offset, pt1, pt2, scr_to_img_map, other.scr_to_img_map, progress);
   if (ratio < 0)
     {
       if (progress)
@@ -958,8 +960,8 @@ stitch_image::compare_contrast_with (stitch_image &other, progress_info *progres
     {
       for (int x =0 ; x < range; x++)
         {
-	  int yy = y + y1 - range / 2;
-	  int xx = x + x1 - range / 2;
+	  int yy = y + pt1.y - range / 2;
+	  int xx = x + pt1.x - range / 2;
 	  if (yy >= 0 && yy < img->height && xx >= 0 && xx <= img->width)
 	    {
 	      image_data::pixel p_pixel = img->get_rgb_pixel (xx, yy);
@@ -986,8 +988,8 @@ stitch_image::compare_contrast_with (stitch_image &other, progress_info *progres
 		  outrow[range * 6 + x*3+2] = 0;
 		}
 	    }
-	  yy = y + y2 - range / 2;
-	  xx = x + x2 - range / 2;
+	  yy = y + pt2.y - range / 2;
+	  xx = x + pt2.x - range / 2;
 	  if (yy >= 0 && yy < other.img->height && xx >= 0 && xx <= other.img->width)
 	    {
 	      image_data::pixel p_pixel = other.img->get_rgb_pixel (xx, yy);

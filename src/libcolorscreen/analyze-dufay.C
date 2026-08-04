@@ -25,11 +25,8 @@ analyze_dufay::analyze_contrast (render_to_scr *render, const image_data *img, s
 	for (int x = 0; x < img->width; x++)
 	  {
             point_t scr = scr_to_img->to_scr ({x + (coord_t)0.5, y + (coord_t)0.5});
-	    scr += {(coord_t)m_area.xshift (), (coord_t)m_area.yshift ()};
-	    int ix = floor (scr.x);
-	    int iy = floor (scr.y);
-	    ix += m_area.xshift ();
-	    iy += m_area.yshift ();
+            int ix = my_floor (scr.x) + m_area.xshift ();
+            int iy = my_floor (scr.y) + m_area.yshift ();
 	    if (ix >= 0 && ix < m_area.width && iy >= 0 && iy < m_area.height)
 	      {
 		luminosity_t d = render->get_data_red ({x, y});
@@ -47,7 +44,7 @@ analyze_dufay::analyze_contrast (render_to_scr *render, const image_data *img, s
 }
 
 luminosity_t
-analyze_dufay::compare_contrast (analyze_dufay &other, int xpos, int ypos, int *x1, int *y1, int *x2, int *y2, scr_to_img &map, scr_to_img &other_map, progress_info *progress)
+analyze_dufay::compare_contrast (const analyze_dufay &other, int_point_t pos, int_point_t &pt1, int_point_t &pt2, const scr_to_img &map, const scr_to_img &other_map, progress_info *progress)
 {
   const int tile_size = 10;
   luminosity_t max_ratio = 0;
@@ -56,19 +53,15 @@ analyze_dufay::compare_contrast (analyze_dufay &other, int xpos, int ypos, int *
     progress->set_task ("comparing contrast", m_area.height);
   for (int y = 0; y < m_area.height - tile_size; y++)
     {
-      int y2 = y - m_area.yshift () - ypos + other.m_area.yshift ();
+      int y2 = y - m_area.yshift () - pos.y + other.m_area.yshift ();
       if (y2 >= 0 && y2 < other.m_area.height - tile_size)
         for (int x = 0; x < m_area.width - tile_size; x++)
 	  {
-	    int x2 = x - m_area.xshift () - xpos + other.m_area.xshift ();
+	    int x2 = x - m_area.xshift () - pos.x + other.m_area.xshift ();
 	    if (x2 >= 0 && x2 < other.m_area.width - tile_size)
 	      {
 		bool skip = false;
-#if 0
-		luminosity_t wsum = 0;
-#endif
 		luminosity_t ratsum1 = 0, ratsum2 = 0;
-		//luminosity_t diffsum1 = 0, diffsum2 = 0, rsum1 = 0, rsum2 = 0;
 		const luminosity_t threshold = 0.1;
 		const luminosity_t minthreshold = 0.01;
 		int n = 0;
@@ -80,21 +73,13 @@ analyze_dufay::compare_contrast (analyze_dufay &other, int xpos, int ypos, int *
 			skip = true;
 		      else
 			{
-			  //diffsum1 += get_contrast (x + xx, y + yy).max - get_contrast (x + xx, y + yy).min;
-			  //diffsum2 += other.get_contrast (x2 + xx, y2 + yy).max - other.get_contrast (x2 + xx, y2 + yy).min;
-			  //rsum1 += red ((x + xx)*2, y + yy);
-			  //rsum2 += other.red ((x2 + xx)*2, y2 + yy);
 			  if (get_contrast (x + xx, y + yy).max > threshold && other.get_contrast (x2 + xx, y2 + yy).max > threshold
 			      && get_contrast (x + xx, y + yy).min > minthreshold && other.get_contrast (x2 + xx, y2 + yy).min > minthreshold)
 			    {
 				n++;
-				luminosity_t w =  /*= get_contrast (x + xx, y + yy).max*/ 1;
-				//luminosity_t ratio = (get_contrast (x + xx, y + yy).max - get_contrast (x + xx, y + yy).min) / (other.get_contrast (x2 + xx, y2 + yy).max - other.get_contrast (x2 + xx, y2 + yy).min);
+				luminosity_t w = 1;
 				luminosity_t ratio1 = (get_contrast (x + xx, y + yy).max / get_contrast (x + xx, y + yy).min);
 				luminosity_t ratio2 = (other.get_contrast (x2 + xx, y2 + yy).max / other.get_contrast (x2 + xx, y2 + yy).min);
-#if 0
-				wsum += w;
-#endif
 				ratsum1 += ratio1 * w;
 				ratsum2 += ratio2 * w;
 			    }
@@ -102,9 +87,7 @@ analyze_dufay::compare_contrast (analyze_dufay &other, int xpos, int ypos, int *
 		    }
 		if (!skip && n > tile_size * tile_size / 10)
 		  {
-		    //luminosity_t ratio = rsum / wsum;
 		    luminosity_t ratio = ratsum1 / ratsum2;
-		    //luminosity_t ratio = (diffsum1/rsum1) / (diffsum2/rsum2);
 		    if (ratio < 1)
 		      ratio = 1 / ratio;
 		    if (ratio > max_ratio)
@@ -122,18 +105,18 @@ analyze_dufay::compare_contrast (analyze_dufay &other, int xpos, int ypos, int *
   if (!max_ratio)
     return -1;
   point_t imgp = map.to_img ({maxx + tile_size / (coord_t)2 - m_area.xshift (), maxy + tile_size / (coord_t)2 - m_area.yshift ()});
-  *x1 = imgp.x;
-  *y1 = imgp.y;
-  imgp = other_map.to_img ({maxx + tile_size / (coord_t)2 - m_area.xshift () -xpos, maxy + tile_size / (coord_t)2 - m_area.yshift () - ypos});
-  *x2 = imgp.x;
-  *y2 = imgp.y;
+  pt1.x = imgp.x;
+  pt1.y = imgp.y;
+  imgp = other_map.to_img ({maxx + tile_size / (coord_t)2 - m_area.xshift () - pos.x, maxy + tile_size / (coord_t)2 - m_area.yshift () - pos.y});
+  pt2.x = imgp.x;
+  pt2.y = imgp.y;
   return max_ratio;
 }
 
 bool
 analyze_dufay::dump_patch_density (FILE *out)
 {
-  fprintf (out, "Paget dimenstion: %i %i\n", m_area.width, m_area.height);
+  fprintf (out, "Dufay dimension: %i %i\n", m_area.width, m_area.height);
   fprintf (out, "LeftDot %i %i\n", m_area.width , m_area.height);
   for (int y = 0; y < m_area.height; y++)
     {
