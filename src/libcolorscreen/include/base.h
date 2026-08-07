@@ -3,6 +3,8 @@
 #include <cmath>
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
+#include <limits>
 #include <type_traits>
 #include "colorscreen-config.h"
 namespace colorscreen
@@ -31,6 +33,36 @@ static constexpr const bool colorscreen_checking = false;
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+/* The bit-level finite tests below intentionally rely on the IEC 559 binary32
+   and binary64 layouts used by every supported Color-Screen platform.  */
+static_assert (std::numeric_limits<float>::is_iec559
+               && sizeof (float) == sizeof (uint32_t));
+static_assert (std::numeric_limits<double>::is_iec559
+               && sizeof (double) == sizeof (uint64_t));
+
+/* Return true if X is a finite single-precision value.  Test the exponent bits
+   directly because -Ofast implies -ffinite-math-only, under which compilers
+   are allowed to fold std::isfinite (X) to true even when X is an infinity or
+   NaN supplied at run time.  */
+static inline bool
+my_isfinite (float x)
+{
+  uint32_t bits;
+  std::memcpy (&bits, &x, sizeof (bits));
+  return (bits & UINT32_C (0x7f800000)) != UINT32_C (0x7f800000);
+}
+
+/* Return true if X is a finite double-precision value.  See the
+   single-precision overload for why this must not use std::isfinite.  */
+static inline bool
+my_isfinite (double x)
+{
+  uint64_t bits;
+  std::memcpy (&bits, &x, sizeof (bits));
+  return (bits & UINT64_C (0x7ff0000000000000))
+         != UINT64_C (0x7ff0000000000000);
+}
 
 /* Prevent conversion to wrong data type when doing math.  */
 static inline float

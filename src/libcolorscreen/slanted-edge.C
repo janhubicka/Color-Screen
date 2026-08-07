@@ -6,11 +6,30 @@
 #include "include/mtf-parameters.h"
 #include "fft.h"
 #include "render.h"
+#include <climits>
 #include <cmath>
 #include <vector>
 #include <numeric>
 
 namespace colorscreen {
+namespace {
+
+constexpr int default_slanted_edge_oversampling = 10;
+constexpr int max_slanted_edge_oversampling = 64;
+constexpr int max_slanted_edge_bins = 8 * 1024 * 1024;
+
+/* Return the reciprocal of sin (X) / X without losing accuracy near zero.  */
+static inline double
+inverse_sinc (double x)
+{
+  double x2 = x * x;
+  if (x2 < 1.0e-12)
+    return 1.0 + x2 / 6.0 + 7.0 * x2 * x2 / 360.0;
+  return x / std::sin (x);
+}
+
+} // anonymous namespace
+
 
 slanted_edge_results
 slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_area roi,
@@ -23,17 +42,36 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
   res.edge_p2.x = 0;
   res.edge_p2.y = 0;
 
-  render r(img, rparam, 65535);
-  if (!r.precompute_all(true, false, {1, 1, 1}, progress))
+  int oversampling = params.oversampling > 0
+                     ? params.oversampling
+                     : default_slanted_edge_oversampling;
+  if (oversampling < 2 || oversampling > max_slanted_edge_oversampling)
     {
-      if (progress) fprintf(stderr, "Slanted-edge failed: precompute_all failed\n");
+      if (progress)
+        fprintf (stderr,
+                 "Slanted-edge failed: oversampling %d is outside "
+                 "the supported range 2..%d\n",
+                 oversampling, max_slanted_edge_oversampling);
       return res;
     }
 
-  // Make sure ROI is within image bounds
+  // Make sure ROI is within image bounds before expensive precomputation.
   roi = roi.intersect (int_image_area (0, 0, img.width, img.height));
   if (roi.empty_p () || roi.width < 10 || roi.height < 10)
     return res;
+
+  /* Measure the input image, not an image already modified by unsharp masking
+     or deconvolution.  Preserve linearization and backlight correction while
+     disabling sharpening only in the private render used for measurement.  */
+  render_parameters measurement_rparam = rparam;
+  measurement_rparam.sharpen.mode = sharpen_parameters::none;
+  render r (img, measurement_rparam, 65535);
+  if (!r.precompute_all (true, false, {1, 1, 1}, progress))
+    {
+      if (progress)
+        fprintf (stderr, "Slanted-edge failed: precompute_all failed\n");
+      return res;
+    }
 
   int r_top = roi.y;
   int r_bottom = roi.y + roi.height;
@@ -64,8 +102,6 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
     {
       for (int y = r_top; y < r_bottom; y++)
         {
-          double centroid = 0;
-          double sum_w = 0;
           double max_w = -1;
           int max_w_x = -1;
           for (int x = r_left + 1; x < r_right - 1; x++)
@@ -81,7 +117,8 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
             {
               double sum_w = 0;
               double sum_pos_w = 0;
-              for (int x = std::max(r_left, max_w_x - 10); x <= std::min(r_right - 1, max_w_x + 10); x++)
+              for (int x = std::max (r_left + 1, max_w_x - 10);
+                   x <= std::min (r_right - 2, max_w_x + 10); x++)
                 {
                   double w = std::abs(r.get_unadjusted_data({x + 1, y}) - r.get_unadjusted_data({x - 1, y}));
                   sum_w += w;
@@ -115,7 +152,8 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
             {
               double sum_w = 0;
               double sum_pos_w = 0;
-              for (int y = std::max(r_top, max_w_y - 10); y <= std::min(r_bottom - 1, max_w_y + 10); y++)
+              for (int y = std::max (r_top + 1, max_w_y - 10);
+                   y <= std::min (r_bottom - 2, max_w_y + 10); y++)
                 {
                   double w = std::abs(r.get_unadjusted_data({x, y + 1}) - r.get_unadjusted_data({x, y - 1}));
                   sum_w += w;
@@ -172,15 +210,15 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
     {
       res.edge_p1.x = (coord_t)(A * r_top + B);
       res.edge_p1.y = (coord_t)r_top;
-      res.edge_p2.x = (coord_t)(A * r_bottom + B);
-      res.edge_p2.y = (coord_t)r_bottom;
+      res.edge_p2.x = (coord_t)(A * (r_bottom - 1) + B);
+      res.edge_p2.y = (coord_t)(r_bottom - 1);
     }
   else
     {
       res.edge_p1.x = (coord_t)r_left;
       res.edge_p1.y = (coord_t)(A * r_left + B);
-      res.edge_p2.x = (coord_t)r_right;
-      res.edge_p2.y = (coord_t)(A * r_right + B);
+      res.edge_p2.x = (coord_t)(r_right - 1);
+      res.edge_p2.y = (coord_t)(A * (r_right - 1) + B);
     }
 
   // Calculate ESF using super-sampling
@@ -214,8 +252,17 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
         max_d = std::max(max_d, d);
       }
 
-  int oversampling = params.oversampling > 0 ? params.oversampling : 10;
-  int num_bins = std::ceil((max_d - min_d) * oversampling) + 1;
+  double num_bins_d = std::ceil ((max_d - min_d) * oversampling) + 1.0;
+  if (!my_isfinite (num_bins_d) || num_bins_d < 4
+      || num_bins_d > max_slanted_edge_bins)
+    {
+      if (progress)
+        fprintf (stderr,
+                 "Slanted-edge failed: invalid or excessive ESF size %.0f\n",
+                 num_bins_d);
+      return res;
+    }
+  int num_bins = (int)num_bins_d;
   std::vector<double> esf_sum(num_bins, 0);
   std::vector<int> esf_count(num_bins, 0);
 
@@ -264,22 +311,33 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
       if (esf[i] > max_esf) max_esf = (double)esf[i];
     }
 
+  double contrast = max_esf - min_esf;
   if (progress)
     {
-      fprintf(stderr, "Slanted-edge: ESF range [%.4f, %.4f], contrast %.4f\n", min_esf, max_esf, max_esf - min_esf);
-      fflush(stderr);
+      fprintf (stderr,
+               "Slanted-edge: ESF range [%.4f, %.4f], contrast %.4f\n",
+               min_esf, max_esf, contrast);
+      fflush (stderr);
     }
 
-  if (num_bins < 4)
+  if (!my_isfinite (contrast) || contrast <= 1.0e-9)
     {
       if (progress)
-        fprintf(stderr, "Slanted-edge failed: too few bins (%d)\n", num_bins);
+        fprintf (stderr,
+                 "Slanted-edge failed: zero or non-finite edge contrast\n");
       return res;
     }
 
   // Create FFT input array
   int N = 1;
-  while (N < num_bins) N <<= 1;
+  while (N < num_bins)
+    {
+      if (N > INT_MAX / 2)
+        return res;
+      N <<= 1;
+    }
+  if (N > INT_MAX / 2)
+    return res;
   N <<= 1; // zero padding for smoother MTF
 
   if (progress)
@@ -290,16 +348,22 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
   double max_lsf = -1;
   // Use [-1, 0, 1] central difference as in QuickMTF
   for (int i = 1; i < num_bins - 1; i++)
-    {
-      lsf[i] = (esf[i+1] - esf[i-1]) / 2.0;
-      if (std::abs(lsf[i]) > max_lsf)
-        {
-          max_lsf = std::abs(lsf[i]);
-          peak_idx = i;
-        }
-    }
+    lsf[i] = (esf[i+1] - esf[i-1]) / 2.0;
   lsf[0] = esf[1] - esf[0];
   lsf[num_bins - 1] = esf[num_bins - 1] - esf[num_bins - 2];
+
+  for (int i = 0; i < num_bins; i++)
+    if (std::abs (lsf[i]) > max_lsf)
+      {
+        max_lsf = std::abs (lsf[i]);
+        peak_idx = i;
+      }
+  if (!my_isfinite (max_lsf) || max_lsf <= 1.0e-12)
+    {
+      if (progress)
+        fprintf (stderr, "Slanted-edge failed: zero or non-finite LSF\n");
+      return res;
+    }
 
   std::vector<double, fft_allocator<double>> in_vec(N, 0.0);
   for (int i = 0; i < N; i++)
@@ -330,7 +394,7 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
 
   // Normalize MTF
   double mtf_zero = mtf[0];
-  if (mtf_zero < 1e-9)
+  if (!my_isfinite (mtf_zero) || mtf_zero < 1e-9)
     return res;
 
   for (int i = 0; i <= N / 2; i++)
@@ -357,13 +421,19 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_ar
           
           double correction = 1.0;
           // Binning correction (rect convolution)
-          correction *= w_bin / std::sin(w_bin);
+          correction *= inverse_sinc (w_bin);
           // Derivative correction (central difference)
-          correction *= w_deriv / std::sin(w_deriv);
+          correction *= inverse_sinc (w_deriv);
           
           mtf_val *= correction;
         }
 
+      if (!my_isfinite (mtf_val))
+        {
+          if (progress)
+            fprintf (stderr, "Slanted-edge failed: non-finite MTF value\n");
+          return res;
+        }
       measurement.add_value(freq, mtf_val * 100.0);
     }
 

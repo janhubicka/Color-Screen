@@ -339,8 +339,9 @@ hd_axis_y_to_linear (double axisY, double boost, hd_axis_type axis)
 struct slanted_edge_parameters
 {
   /* Supersampling rate for the Edge Spread Function.
-     Default is 4x as recommended by standard ISO 12233.
-     Higher values like 8x or 16x can be used for superior quality if the edge is long enough. */
+     The implementation defaults to 10x; 4x is the traditional ISO-style rate.
+     Values from 2x through 64x are accepted.  Nonpositive values select the
+     default.  */
   int oversampling = 10;
 };
 

@@ -5,6 +5,7 @@
 #ifndef RENDER_PARAMETERS_H
 #define RENDER_PARAMETERS_H
 #include <array>
+#include <cmath>
 #include "base.h"
 #include "color.h"
 #include "progress-info.h"
@@ -75,7 +76,9 @@ struct sharpen_parameters
   /* MTF curve of scanner.  */
   mtf_parameters scanner_mtf;
 
-  /* Signal to noise ratio of the scanner.  */
+  /* Effective signal/noise power ratio used by the scalar Wiener model.
+     This is a regularization control rather than necessarily the headline
+     scanner SNR: lower values suppress more unmodelled high-frequency noise.  */
   luminosity_t scanner_snr = 2000;
 
   /* Scale of scanner mtf. 0 disables deconvolution sharpening.  */
@@ -101,13 +104,23 @@ struct sharpen_parameters
       case unsharp_mask:
 	return usm_radius > 0 && usm_amount > 0 ? unsharp_mask : none;
       case wiener_deconvolution:
-        return scanner_mtf_scale > 0 ? wiener_deconvolution : none;
+        return my_isfinite ((double)scanner_mtf_scale)
+                       && scanner_mtf_scale > 0
+                       && my_isfinite ((double)scanner_snr)
+                       && scanner_snr > 0
+                   ? wiener_deconvolution
+                   : none;
       case richardson_lucy_deconvolution:
-        return scanner_mtf_scale > 0 && richardson_lucy_iterations
-	       ? richardson_lucy_deconvolution : none;
+        return my_isfinite ((double)scanner_mtf_scale)
+                       && scanner_mtf_scale > 0
+                       && richardson_lucy_iterations > 0
+                   ? richardson_lucy_deconvolution
+                   : none;
       case blur_deconvolution:
-        return scanner_mtf_scale > 0 
-	       ? blur_deconvolution : none;
+        return my_isfinite ((double)scanner_mtf_scale)
+                       && scanner_mtf_scale > 0
+                   ? blur_deconvolution
+                   : none;
       default:
 	abort ();
     }
@@ -151,7 +164,8 @@ struct sharpen_parameters
 	       && supersample == o.supersample;
       case blur_deconvolution:
         return scanner_mtf == o.scanner_mtf
-	       && fabs (scanner_mtf_scale - o.scanner_mtf_scale) < 0.001;
+	       && fabs (scanner_mtf_scale - o.scanner_mtf_scale) < 0.001
+               && supersample == o.supersample;
       default:
 	abort ();
       }

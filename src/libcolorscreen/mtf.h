@@ -5,6 +5,8 @@
 #ifndef MTF_H
 #define MTF_H
 #include "config.h"
+#include <algorithm>
+#include <cmath>
 #include <fftw3.h>
 #include <mutex>
 #ifdef HAVE_MALLOC_H
@@ -21,13 +23,21 @@
 namespace colorscreen
 {
 
+/* Radially symmetric, zero-phase optical transfer model.  A measured MTF
+   supplies only transfer magnitudes; consequently this class assumes that the
+   corresponding point-spread function is centered and rotationally symmetric.
+   It cannot reconstruct directional or phase information absent from the
+   measurement.  */
 class mtf
 {
 public:
-  nodiscard_attr bool precompute (progress_info *progress = nullptr, bool parallel = true);
+  nodiscard_attr bool precompute (progress_info *progress = nullptr,
+                                   bool parallel = true);
   /* Precompute psf, psf_radius and psf_size estimate may be revisited.  */
-  nodiscard_attr bool precompute_psf (progress_info *progress = nullptr, bool parallel = true,
-				      const char *filename = nullptr, const char **error = nullptr);
+  nodiscard_attr bool precompute_psf (progress_info *progress = nullptr,
+                                       bool parallel = true,
+                                       const char *filename = nullptr,
+                                       const char **error = nullptr);
   /* Return 1d MTF value.  */
   inline double
   get_mtf (luminosity_t val) const
@@ -74,12 +84,14 @@ public:
   inline int
   psf_radius (luminosity_t scale) const
   {
-    return my_ceil (m_psf_radius * scale);
+    return my_isfinite ((double)scale) && scale > 0
+               ? std::max ((int)my_ceil (m_psf_radius * scale), 0)
+               : 0;
   }
   inline int
   psf_size (luminosity_t scale) const
   {
-    return psf_radius (scale) * 2 - 1;
+    return std::max (psf_radius (scale) * 2 - 1, 1);
   }
 
   mtf (const mtf_parameters &params) : m_params (params)
@@ -92,10 +104,12 @@ public:
     return m_params.sigma;
   }
 
-  static std::unique_ptr<mtf> get_new_mtf (struct mtf_parameters &, progress_info *);
+  static std::unique_ptr<mtf> get_new_mtf (struct mtf_parameters &,
+                                           progress_info *);
   typedef lru_cache<mtf_parameters, mtf, get_new_mtf, 10> mtf_cache_t;
 
-  static std::shared_ptr<mtf> get_mtf (const mtf_parameters &mtfp, progress_info *p);
+  static std::shared_ptr<mtf> get_mtf (const mtf_parameters &mtfp,
+                                       progress_info *p);
   typedef float psf_t;
   std::vector<psf_t, fft_allocator<psf_t>>
   compute_2d_psf (int psf_size, luminosity_t subscale,
@@ -111,7 +125,8 @@ private:
   bool m_precomputed = false;
   bool m_precomputed_psf = false;
   std::mutex m_lock;
-  double estimate_psf_size (luminosity_t min_threshold = 0.001, luminosity_t sum_threshold = 1.0 / 65535) const;
+  double estimate_psf_size (luminosity_t min_threshold = 0.001,
+                            luminosity_t sum_threshold = 1.0 / 65535) const;
   bool compute_psf (luminosity_t max_radius, luminosity_t subsample,
                     const char *filename, const char **error, bool parallel = true);
   void compute_lsf (std::vector<psf_t, fft_allocator<psf_t>> &lsf,

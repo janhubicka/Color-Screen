@@ -13,39 +13,62 @@
 #include "fft.h"
 #include <mutex>
 #include <omp.h>
+#include <vector>
 namespace colorscreen
 {
+
+/* Reflect COORDINATE into [0, SIZE).  The left edge follows the historical
+   deconvolution convention -1 -> 1, while the right edge is repeated once,
+   SIZE -> SIZE - 1.  The periodic form remains correct when the requested
+   border is wider than the complete image.  */
+inline int
+reflect_deconvolution_coordinate (long long coordinate, int size)
+{
+  if (size <= 1)
+    return 0;
+  const long long period = (long long)2 * size - 1;
+  coordinate %= period;
+  if (coordinate < 0)
+    coordinate = -coordinate;
+  if (coordinate >= size)
+    coordinate = period - coordinate;
+  return (int)coordinate;
+}
 
 /* Class managing deconvolution process.
    T is the data type (float or double).  */
 template <typename T>
 class deconvolution
 {
-  /* Size of Lanczos kernel.  */
-  static constexpr int lanczos_a = 3;
+  /* Lanczos support.  A shorter three-lobe kernel visibly attenuates valid
+     near-Nyquist diagonal frequencies during the upsample/filter/downsample
+     round trip.  */
+  static constexpr int lanczos_a = 8;
 public:
   /* Supported deconvolution modes.  */
   enum mode
   {
     /* Blur the image using the MTF.  */
     blur,
-    /* Sharpen the image using Weiner filter.  */
+    /* Sharpen the image using Wiener filter.  */
     sharpen,
     /* Sharpen the image using Richardson-Lucy deconvolution.  */
     richardson_lucy_sharpen,
     /* Same as blur.  */
     blur_deconvolution
   };
-  /* Set up deconvolution for given MTF and MTF_SCALE.
-     SNR specifies signal to noise ratio for Weiner filter.
-     SIGMA specifies dampening parameter for Richardson-Lucy.
+  /* Set up deconvolution for given MTF and MTF_SCALE.  MTF is interpreted as
+     a radial, zero-phase transfer magnitude.  SNR is the effective
+     signal/noise power ratio in the scalar Wiener regularizer; lower values
+     suppress more high-frequency noise.
+     SIGMA specifies damping parameter for Richardson-Lucy.
      MAX_THREADS specifies number of threads.
-     MODE is deconvolution mode.
+     FILTER_MODE is deconvolution mode.
      ITERATIONS specifies number of iterations for Richardson-Lucy.
      SUPERSAMPLE specifies supersampling factor.  */
   deconvolution (mtf *mtf, luminosity_t mtf_scale,
 		 luminosity_t snr, luminosity_t sigma, int max_threads,
-                 enum mode mode, int iterations, int supersample);
+                 enum mode filter_mode, int iterations, int supersample);
   /* Destructor.  */
   ~deconvolution ();
 
@@ -108,7 +131,7 @@ private:
   }
   /* Size of border that is not sharpened correctly (in original tile).  */
   int m_border_size = 0;
-  /* Size of taping along edges (in enlarged tile).  */
+  /* Size of tapering along edges (in enlarged tile).  */
   int m_taper_size = 0;
   /* Size of original tile being sharpened (including borders).  */
   int m_tile_size = 1;
@@ -118,7 +141,7 @@ private:
   int m_fft_size = 0;
   /* Supersampling factor. */
   int m_supersample = 1;
-  /* Kernel for bluring or sharpening.  */
+  /* Kernel for blurring or sharpening.  */
   fft_unique_ptr<T> m_blur_kernel = nullptr;
 
   /* True if Richardson-Lucy deconvolution is used.  */
@@ -136,8 +159,8 @@ private:
 
   /* FFT plans.  */
   fft_plan<T> m_plan_2d_inv, m_plan_2d;
-  /* True if plans exists.  */
-  bool m_plans_exists = false;
+  /* Initialize shared FFT plans exactly once.  */
+  std::once_flag m_plan_once;
 
   /* Data for a single tile.  */
   struct tile_data
@@ -174,6 +197,8 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
             const sharpen_parameters &sharpen, progress_info *progress,
             bool parallel = true)
 {
+  if (!out || width <= 0 || height <= 0)
+    return false;
   int nthreads = parallel ? omp_get_max_threads () : 1;
   typename deconvolution<DT>::mode mode;
   if (progress)
@@ -193,6 +218,8 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
       abort ();
     }
   std::shared_ptr<mtf> scanner_mtf = mtf::get_mtf (sharpen.scanner_mtf, progress);
+  if (!scanner_mtf || !scanner_mtf->precompute (progress, parallel))
+    return false;
   deconvolution<DT> d (scanner_mtf.get (), sharpen.scanner_mtf_scale,
                    sharpen.scanner_snr, sharpen.richardson_lucy_sigma,
                    nthreads, mode, sharpen.richardson_lucy_iterations,
@@ -205,7 +232,7 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
   if (progress)
     {
       if (mode == deconvolution<DT>::sharpen)
-        progress->set_task ("deconvolution sharpening (Weiner filter)",
+        progress->set_task ("deconvolution sharpening (Wiener filter)",
                             xtiles * ytiles);
       else if (mode == deconvolution<DT>::blur)
         progress->set_task ("deconvolution blurring",
@@ -229,17 +256,10 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
               int px = x + xx - d.get_border_size ();
               int py = y + yy - d.get_border_size ();
 
-              /* Do mirroring to avoid sharp edge at the border of image.  */
-              if (px < 0)
-                px = -px;
-              if (py < 0)
-                py = -py;
-              if (px >= width)
-                px = width - (px - width) - 1;
-              if (py >= height)
-                py = height - (py - height) - 1;
-              px = std::clamp (px, 0, width - 1);
-              py = std::clamp (py, 0, height - 1);
+              /* Mirror repeatedly when the deconvolution border is wider
+                 than the image itself.  */
+              px = reflect_deconvolution_coordinate (px, width);
+              py = reflect_deconvolution_coordinate (py, height);
               d.put_pixel (id, xx, yy, getdata (data, {px, py}, width, param));
             }
         d.process_tile (id, progress);
@@ -270,6 +290,8 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
 		progress_info *progress,
 		bool parallel = true)
 {
+  if (!out || width <= 0 || height <= 0)
+    return false;
   int nthreads = parallel ? omp_get_max_threads () : 1;
   typename deconvolution<DT>::mode mode;
   if (progress)
@@ -289,6 +311,8 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
       abort ();
     }
   std::shared_ptr<mtf> scanner_mtf = mtf::get_mtf (sharpen.scanner_mtf, progress);
+  if (!scanner_mtf || !scanner_mtf->precompute (progress, parallel))
+    return false;
   deconvolution<DT> d (scanner_mtf.get (), sharpen.scanner_mtf_scale,
 		   sharpen.scanner_snr, sharpen.richardson_lucy_sigma, nthreads * 3, mode,
 		   sharpen.richardson_lucy_iterations,
@@ -303,9 +327,9 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
       if (mode == deconvolution<DT>::blur)
         progress->set_task ("deconvolution blurring", xtiles * ytiles);
       else if (mode == deconvolution<DT>::sharpen)
-        progress->set_task ("deconvolution sharpening (weiner filter)", xtiles * ytiles);
+        progress->set_task ("deconvolution sharpening (Wiener filter)", xtiles * ytiles);
       else
-        progress->set_task ("deconvolution sharpening (richardson-lucy)", xtiles * ytiles);
+        progress->set_task ("deconvolution sharpening (Richardson-Lucy)", xtiles * ytiles);
     }
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
     shared (width, height,d,progress,out,param,parallel,data) if (parallel)
@@ -325,17 +349,10 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
 	      int px = x + xx - d.get_border_size ();
 	      int py = y + yy - d.get_border_size ();
 
-	      /* Do mirroring to avoid sharp edge at the border of image.  */
-	      if (px < 0)
-		px = -px;
-	      if (py < 0)
-		py = -py;
-	      if (px >= width)
-		px = width - (px - width) - 1;
-	      if (py >= height)
-		py = height - (py - height) - 1;
-	      px = std::clamp (px, 0, width - 1);
-	      py = std::clamp (py, 0, height - 1);
+              /* Mirror repeatedly when the deconvolution border is wider
+                 than the image itself.  */
+              px = reflect_deconvolution_coordinate (px, width);
+              py = reflect_deconvolution_coordinate (py, height);
               O pixel = getdata (data, {px, py}, width, param);
               d.put_pixel (3 * id, xx, yy, pixel.red);
               d.put_pixel (3 * id + 1, xx, yy, pixel.green);

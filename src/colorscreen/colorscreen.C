@@ -75,6 +75,7 @@ print_help (char *err = NULL)
       fprintf (stderr, "    Supported args:\n");
       fprintf (stderr, "      --gamma=val               set gamma correction of input file (default 1.0)\n");
       fprintf (stderr, "      --save-mtf=file           save measured MTF to a file in QuickMTF format\n");
+      fprintf (stderr, "      --save-esf=file           save the supersampled edge-spread function\n");
       fprintf (stderr, "      --compare-with=file tol   compare measured MTF with reference and fail if difference > tol\n");
     }
   if (subhelp == help_render || subhelp == help_basic)
@@ -3993,7 +3994,7 @@ do_slanted_edge (int argc, char **argv)
       return 1;
     }
 
-  auto &m = rparam.sharpen.scanner_mtf.measurements[0];
+  auto &m = rparam.sharpen.scanner_mtf.measurements.back();
 
   if (verbose)
     {

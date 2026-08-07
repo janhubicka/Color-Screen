@@ -4,8 +4,9 @@
 
 #ifndef MTF_PARAMETERS_H
 #define MTF_PARAMETERS_H
-#include <string>
 #include <array>
+#include <string>
+#include <vector>
 #include "base.h"
 #include "color.h"
 #include "progress-info.h"
@@ -129,7 +130,10 @@ struct mtf_parameters
       {
 	if (!o.use_measured_mtf ())
 	  return false;
-	return measurements[measured_mtf_idx] == o.measurements[o.measured_mtf_idx];
+	return measurements[measured_mtf_idx]
+               == o.measurements[o.measured_mtf_idx]
+           && sigma == o.sigma
+           && blur_diameter == o.blur_diameter;
       }
     else if (o.use_measured_mtf ())
       return false;

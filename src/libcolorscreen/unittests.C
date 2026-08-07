@@ -562,6 +562,510 @@ test_screen_sharpening ()
   return true;
 }
 
+
+/* Fill FILTER tile zero with VALUE (X, Y), process it, and leave the result
+   available through FILTER.  T is the deconvolution sample type and FUNCTION
+   is the callable type of VALUE.  */
+template <typename T, typename Function>
+static void
+fill_deconvolution_tile (deconvolution<T> &filter, Function value)
+{
+  filter.init (0);
+  const int border = filter.get_border_size ();
+  const int tile_size = filter.get_tile_size_with_borders ();
+  for (int y = 0; y < tile_size; y++)
+    for (int x = 0; x < tile_size; x++)
+      filter.put_pixel (0, x, y, (T)value (x - border, y - border));
+  filter.process_tile (0, nullptr);
+}
+
+/* Return root-mean-square error between processed FILTER and EXPECTED (X, Y),
+   excluding a small interior margin.  T is FILTER's sample type and FUNCTION
+   is the callable type of EXPECTED.  */
+template <typename T, typename Function>
+static double
+deconvolution_tile_rmse (deconvolution<T> &filter, Function expected)
+{
+  const int border = filter.get_border_size ();
+  const int basic_size = filter.get_basic_tile_size ();
+  const int margin = std::min (8, basic_size / 8);
+  long double squared_error = 0;
+  size_t n = 0;
+  for (int y = margin; y < basic_size - margin; y++)
+    for (int x = margin; x < basic_size - margin; x++)
+      {
+        const double got = filter.get_pixel (0, x + border, y + border);
+        if (!my_isfinite (got))
+          return INFINITY;
+        const double error = got - expected (x, y);
+        squared_error += error * error;
+        n++;
+      }
+  return n ? std::sqrt ((double)(squared_error / n)) : INFINITY;
+}
+
+/* Return the fitted horizontal cosine amplitude in FILTER at FREQUENCY after
+   subtracting MEAN.  T is FILTER's sample type.  */
+template <typename T>
+static double
+deconvolution_cosine_amplitude (const deconvolution<T> &filter,
+                                double frequency, double mean)
+{
+  const int border = filter.get_border_size ();
+  const int basic_size = filter.get_basic_tile_size ();
+  const int margin = std::min (8, basic_size / 8);
+  long double sum = 0;
+  long double norm = 0;
+  for (int y = margin; y < basic_size - margin; y++)
+    for (int x = margin; x < basic_size - margin; x++)
+      {
+        const double sample
+            = filter.get_pixel (0, x + border, y + border) - mean;
+        const double cosine = std::cos (2 * M_PI * frequency * x);
+        sum += sample * cosine;
+        norm += cosine * cosine;
+      }
+  return norm ? (double)(sum / norm) : 0;
+}
+
+/* Return the fitted two-dimensional cosine amplitude in FILTER at
+   (FREQUENCY_X, FREQUENCY_Y) after subtracting MEAN.  T is FILTER's sample
+   type.  */
+template <typename T>
+static double
+deconvolution_cosine_amplitude_2d (const deconvolution<T> &filter,
+                                   double frequency_x, double frequency_y,
+                                   double mean)
+{
+  const int border = filter.get_border_size ();
+  const int basic_size = filter.get_basic_tile_size ();
+  const int margin = std::min (8, basic_size / 8);
+  long double sum = 0;
+  long double norm = 0;
+  for (int y = margin; y < basic_size - margin; y++)
+    for (int x = margin; x < basic_size - margin; x++)
+      {
+        const double sample
+            = filter.get_pixel (0, x + border, y + border) - mean;
+        const double cosine
+            = std::cos (2 * M_PI * (frequency_x * x + frequency_y * y));
+        sum += sample * cosine;
+        norm += cosine * cosine;
+      }
+  return norm ? (double)(sum / norm) : 0;
+}
+
+/* Build measured-MTF parameters from POINTS containing frequency and contrast
+   percentage pairs.  */
+static mtf_parameters
+make_measured_mtf (const std::vector<std::pair<double, double>> &points)
+{
+  mtf_parameters parameters;
+  mtf_measurement measurement;
+  for (const auto &point : points)
+    measurement.add_value (point.first, point.second);
+  parameters.measurements.push_back (measurement);
+  parameters.measured_mtf_idx = 0;
+  return parameters;
+}
+
+/* Verify interpolation of measured data and the complete measured-MTF blur /
+   deconvolution path.  In particular, exercise every supersampling phase: the
+   old code read before the Lanczos table at factors 3 and 4.  */
+static bool
+test_mtf_deconvolution ()
+{
+  bool ok = true;
+
+  /* A three-point irregular table used to be silently treated as equidistant.  */
+  mtf_parameters irregular_parameters
+      = make_measured_mtf ({{0, 100}, {0.4, 40}, {0.5, 0}});
+  mtf irregular (irregular_parameters);
+  if (!irregular.precompute (nullptr, false)
+      || std::abs (irregular.get_mtf (0.2) - 0.7) > 0.002
+      || std::abs (irregular.get_mtf (0.4) - 0.4) > 0.002)
+    {
+      fprintf (stderr, "Irregular measured MTF interpolation failed\n");
+      ok = false;
+    }
+
+  /* MTF is relative to DC; normalize a non-100-percent measured DC value.  */
+  mtf_parameters normalized_parameters
+      = make_measured_mtf ({{0, 80}, {0.25, 40}, {0.5, 0}});
+  mtf normalized (normalized_parameters);
+  if (!normalized.precompute (nullptr, false)
+      || std::abs (normalized.get_mtf (0) - 1) > 0.000001
+      || std::abs (normalized.get_mtf (0.25) - 0.5) > 0.002)
+    {
+      fprintf (stderr, "Measured MTF DC normalization failed\n");
+      ok = false;
+    }
+
+  /* Corrections to a measured MTF and supersampling affect cached output.  */
+  mtf_parameters corrected_parameters = irregular_parameters;
+  corrected_parameters.sigma = 0.25;
+  if (corrected_parameters == irregular_parameters)
+    {
+      fprintf (stderr, "Measured MTF cache key ignores sigma\n");
+      ok = false;
+    }
+  sharpen_parameters sharpen1, sharpen2;
+  sharpen1.mode = sharpen_parameters::blur_deconvolution;
+  sharpen1.scanner_mtf = irregular_parameters;
+  sharpen1.scanner_mtf_scale = 1;
+  sharpen1.supersample = 2;
+  sharpen2 = sharpen1;
+  sharpen2.supersample = 3;
+  if (sharpen1 == sharpen2)
+    {
+      fprintf (stderr, "Deconvolution cache key ignores supersampling\n");
+      ok = false;
+    }
+
+  /* Repeated reflection must remain in bounds even when the requested optical
+     border is wider than a small image.  */
+  if (reflect_deconvolution_coordinate (-1, 4) != 1
+      || reflect_deconvolution_coordinate (4, 4) != 3
+      || reflect_deconvolution_coordinate (-7, 4) != 0
+      || reflect_deconvolution_coordinate (8, 4) != 1)
+    {
+      fprintf (stderr, "Repeated deconvolution reflection failed\n");
+      ok = false;
+    }
+
+  /* An axial slanted-edge table reaches 0.5 cycles/pixel, whereas a 2-D image
+     has valid diagonal frequencies out to sqrt (2) / 2.  The curve must taper
+     conservatively over that interval instead of dropping to zero one table
+     step after 0.5.  */
+  std::vector<std::pair<double, double>> dense_nyquist_points;
+  for (int i = 0; i <= 100; i++)
+    dense_nyquist_points.push_back ({i / 200.0, 100});
+  mtf_parameters diagonal_parameters
+      = make_measured_mtf (dense_nyquist_points);
+  mtf diagonal_mtf (diagonal_parameters);
+  constexpr double diagonal_frequency_x = 0.4;
+  constexpr double diagonal_frequency_y = 0.4;
+  const double diagonal_frequency
+      = std::hypot (diagonal_frequency_x, diagonal_frequency_y);
+  const double diagonal_nyquist = std::sqrt (0.5);
+  const double expected_diagonal_tail
+      = (diagonal_nyquist - diagonal_frequency)
+        / (diagonal_nyquist - 0.5);
+  if (!diagonal_mtf.precompute (nullptr, false)
+      || std::abs (diagonal_mtf.get_mtf (diagonal_frequency)
+                   - expected_diagonal_tail)
+             > 0.003)
+    {
+      fprintf (stderr, "Measured MTF diagonal-Nyquist tail failed\n");
+      ok = false;
+    }
+  else
+    {
+      auto diagonal_signal = [] (int x, int y) {
+        return 0.5
+               + 0.2
+                     * std::cos (2 * M_PI
+                                 * (diagonal_frequency_x * x
+                                    + diagonal_frequency_y * y));
+      };
+      deconvolution<double> diagonal_filter (
+          &diagonal_mtf, 1, 1000, 0, 1,
+          deconvolution<double>::blur, 0, 2);
+      fill_deconvolution_tile (diagonal_filter, diagonal_signal);
+      const double diagonal_response
+          = deconvolution_cosine_amplitude_2d (
+                diagonal_filter, diagonal_frequency_x,
+                diagonal_frequency_y, 0.5)
+            / 0.2;
+      if (!(diagonal_response > 0.55 && diagonal_response < 0.75))
+        {
+          fprintf (stderr,
+                   "Diagonal-frequency response was lost (%g)\n",
+                   diagonal_response);
+          ok = false;
+        }
+    }
+
+  /* The test signal is entirely inside the flat passband.  Blur mode must
+     therefore be an identity operation apart from tiny resampling error.  */
+  mtf_parameters flat_parameters
+      = make_measured_mtf ({{0, 100}, {0.25, 100}, {0.5, 0}});
+  mtf flat (flat_parameters);
+  auto smooth_signal = [] (int x, int y) {
+    return 0.5 + 0.17 * std::sin (2 * M_PI * 0.03125 * x)
+           + 0.11 * std::cos (2 * M_PI * 0.046875 * y);
+  };
+  for (int supersample : {1, 2, 3, 4, 5, 8, 16})
+    {
+      deconvolution<double> filter (&flat, 1, 1000, 0, 1,
+                                    deconvolution<double>::blur, 0,
+                                    supersample);
+      fill_deconvolution_tile (filter, smooth_signal);
+      const double error = deconvolution_tile_rmse (filter, smooth_signal);
+      if (!(error < 0.00005))
+        {
+          fprintf (stderr,
+                   "Identity MTF failed at supersampling %i (RMSE %g)\n",
+                   supersample, error);
+          ok = false;
+        }
+    }
+
+  /* A nonpositive SNR must not divide by zero or create NaNs.  The public
+     parameter path disables this mode, while the low-level class is hardened
+     to an identity filter as well.  */
+  deconvolution<double> zero_snr (&flat, 1, 0, 0, 1,
+                                  deconvolution<double>::sharpen, 0, 2);
+  fill_deconvolution_tile (zero_snr, smooth_signal);
+  const double zero_snr_error
+      = deconvolution_tile_rmse (zero_snr, smooth_signal);
+  if (!(zero_snr_error < 0.00005))
+    {
+      fprintf (stderr, "Zero-SNR Wiener filter is not finite identity (%g)\n",
+               zero_snr_error);
+      ok = false;
+    }
+  sharpen_parameters disabled_wiener;
+  disabled_wiener.mode = sharpen_parameters::wiener_deconvolution;
+  disabled_wiener.scanner_mtf_scale = 1;
+  disabled_wiener.scanner_snr = 0;
+  if (disabled_wiener.get_mode () != sharpen_parameters::none)
+    {
+      fprintf (stderr, "Public zero-SNR Wiener mode was not disabled\n");
+      ok = false;
+    }
+  disabled_wiener.scanner_snr = INFINITY;
+  if (disabled_wiener.get_mode () != sharpen_parameters::none)
+    {
+      fprintf (stderr, "Public nonfinite-SNR Wiener mode was not disabled\n");
+      ok = false;
+    }
+
+  /* Zero Richardson-Lucy iterations likewise mean no processing, both in the
+     public parameter layer and in the low-level worker.  */
+  sharpen_parameters disabled_richardson_lucy;
+  disabled_richardson_lucy.mode
+      = sharpen_parameters::richardson_lucy_deconvolution;
+  disabled_richardson_lucy.scanner_mtf_scale = 1;
+  disabled_richardson_lucy.richardson_lucy_iterations = 0;
+  if (disabled_richardson_lucy.get_mode () != sharpen_parameters::none)
+    {
+      fprintf (stderr,
+               "Public zero-iteration Richardson-Lucy mode was not disabled\n");
+      ok = false;
+    }
+  deconvolution<double> zero_iteration_richardson_lucy (
+      &flat, 1, 1000, 0, 1,
+      deconvolution<double>::richardson_lucy_sharpen, 0, 2);
+  fill_deconvolution_tile (zero_iteration_richardson_lucy, smooth_signal);
+  const double zero_iteration_error = deconvolution_tile_rmse (
+      zero_iteration_richardson_lucy, smooth_signal);
+  if (!(zero_iteration_error < 0.00005))
+    {
+      fprintf (stderr,
+               "Zero-iteration Richardson-Lucy is not identity (%g)\n",
+               zero_iteration_error);
+      ok = false;
+    }
+
+  /* Build a sampled Gaussian MTF like one obtained by a slanted-edge
+     measurement, then verify both forward blur and inverse filters against its
+     analytical response at one spatial frequency.  */
+  constexpr double sigma = 1.15;
+  constexpr double frequency = 0.0625;
+  constexpr double amplitude = 0.2;
+  constexpr double mean = 0.5;
+  constexpr double snr = 2000;
+  std::vector<std::pair<double, double>> gaussian_points;
+  for (int i = 0; i <= 150; i++)
+    {
+      const double f = i / 100.0;
+      const double response
+          = std::exp (-2 * M_PI * M_PI * sigma * sigma * f * f);
+      gaussian_points.push_back ({f, response * 100});
+    }
+  mtf_parameters gaussian_parameters = make_measured_mtf (gaussian_points);
+  mtf gaussian (gaussian_parameters);
+  const double expected_response
+      = std::exp (-2 * M_PI * M_PI * sigma * sigma * frequency * frequency);
+  auto original_signal = [] (int x, int) {
+    return mean + amplitude * std::cos (2 * M_PI * frequency * x);
+  };
+  auto blurred_signal = [expected_response] (int x, int) {
+    return mean + amplitude * expected_response
+                      * std::cos (2 * M_PI * frequency * x);
+  };
+
+  deconvolution<double> blur (&gaussian, 1, snr, 0, 1,
+                              deconvolution<double>::blur, 0, 2);
+  fill_deconvolution_tile (blur, original_signal);
+  const double measured_response
+      = deconvolution_cosine_amplitude (blur, frequency, mean) / amplitude;
+
+  deconvolution<double> wiener (&gaussian, 1, snr, 0, 1,
+                                deconvolution<double>::sharpen, 0, 2);
+  fill_deconvolution_tile (wiener, blurred_signal);
+  const double wiener_response
+      = deconvolution_cosine_amplitude (wiener, frequency, mean) / amplitude;
+
+  deconvolution<double> richardson_lucy (
+      &gaussian, 1, snr, 0, 1,
+      deconvolution<double>::richardson_lucy_sharpen, 25, 2);
+  fill_deconvolution_tile (richardson_lucy, blurred_signal);
+  const double richardson_lucy_response
+      = deconvolution_cosine_amplitude (richardson_lucy, frequency, mean)
+        / amplitude;
+
+  if (std::abs (measured_response - expected_response) > 0.015
+      || std::abs (wiener_response - 1) > 0.025
+      || std::abs (richardson_lucy_response - 1) > 0.04)
+    {
+      fprintf (stderr,
+               "Measured-MTF deconvolution failed: expected blur %g, got %g; "
+               "Wiener %g; Richardson-Lucy %g\n",
+               expected_response, measured_response, wiener_response,
+               richardson_lucy_response);
+      ok = false;
+    }
+
+  /* Exercise the production single-precision path with an MTF broad enough to
+     require a 4096 by 4096 FFT at SCALE.  FFTW stores the normalized DC
+     coefficient as 1 / N^2; at N = 4096 this is smaller than float epsilon.
+     The coefficient must nevertheless be recognized as a valid unit-DC MTF,
+     rather than causing the complete optical kernel to be replaced by an
+     identity filter.  Build the table from the Phase One / macro-lens model so
+     this test also follows the measured-MTF input path used after calibration.  */
+  mtf_parameters phase_one_model_parameters;
+  phase_one_model_parameters.f_stop = 8;
+  phase_one_model_parameters.scan_dpi = 4000;
+  phase_one_model_parameters.pixel_pitch = 3.76;
+  phase_one_model_parameters.wavelength = 750;
+  mtf phase_one_model (phase_one_model_parameters);
+  if (!phase_one_model.precompute (nullptr, false))
+    {
+      fprintf (stderr, "Phase One reference MTF precomputation failed\n");
+      ok = false;
+    }
+  else
+    {
+      std::vector<std::pair<double, double>> phase_one_points;
+      for (int i = 0; i <= 200; i++)
+        {
+          const double f = i / 200.0;
+          phase_one_points.push_back ({f, phase_one_model.get_mtf (f) * 100});
+        }
+      mtf_parameters phase_one_measured_parameters
+          = make_measured_mtf (phase_one_points);
+      mtf phase_one_measured (phase_one_measured_parameters);
+      constexpr double phase_one_scale = 16;
+      constexpr double phase_one_frequency = 0.1;
+      constexpr double high_resolution_frequency
+          = phase_one_frequency / phase_one_scale;
+      const double phase_one_expected
+          = phase_one_model.get_mtf (phase_one_frequency);
+      auto phase_one_signal = [] (int x, int) {
+        return mean
+               + amplitude
+                     * std::cos (2 * M_PI * high_resolution_frequency * x);
+      };
+      deconvolution<float> phase_one_blur (
+          &phase_one_measured, phase_one_scale, snr, 0, 1,
+          deconvolution<float>::blur, 0, 1);
+      if (phase_one_blur.get_tile_size_with_borders () < 4096)
+        {
+          fprintf (stderr,
+                   "Single-precision large-FFT regression uses only %i pixels\n",
+                   phase_one_blur.get_tile_size_with_borders ());
+          ok = false;
+        }
+      else
+        {
+          fill_deconvolution_tile (phase_one_blur, phase_one_signal);
+          const double phase_one_response
+              = deconvolution_cosine_amplitude (
+                    phase_one_blur, high_resolution_frequency, mean)
+                / amplitude;
+          if (std::abs (phase_one_response - phase_one_expected) > 0.015)
+            {
+              fprintf (stderr,
+                       "Single-precision 4096-FFT MTF failed: expected %g, "
+                       "got %g\n",
+                       phase_one_expected, phase_one_response);
+              ok = false;
+            }
+        }
+    }
+
+  /* The spatial PSF reconstructed from the same Gaussian MTF should have
+     the expected radial Gaussian shape.  This also exercises PSF support
+     estimation and the precompute_psf locking path.  */
+  const char *psf_error = nullptr;
+  const double expected_psf_ratio
+      = std::exp (-1 / (2 * sigma * sigma));
+  if (!gaussian.precompute_psf (nullptr, false, nullptr, &psf_error)
+      || psf_error || gaussian.psf_radius (1) <= 0
+      || !my_isfinite (gaussian.get_psf (0))
+      || gaussian.get_psf (0) <= 0
+      || std::abs (gaussian.get_psf (1) / gaussian.get_psf (0)
+                   - expected_psf_ratio)
+             > 0.02)
+    {
+      fprintf (stderr, "Measured-MTF PSF reconstruction failed%s%s\n",
+               psf_error ? ": " : "", psf_error ? psf_error : "");
+      ok = false;
+    }
+
+  /* SNR is a scalar regularization control.  At a suitably conservative value
+     it must suppress high-frequency contamination while restoring the blurred
+     low-frequency signal.  */
+  auto noisy_blurred_signal = [expected_response] (int x, int y) {
+    return mean + amplitude * expected_response
+                      * std::cos (2 * M_PI * frequency * x)
+           + 0.0035 * std::cos (2 * M_PI * 0.3125 * x + 0.7)
+           + 0.0035
+                 * std::cos (2 * M_PI * (0.28125 * x + 0.21875 * y));
+  };
+  deconvolution<double> regularized_wiener (
+      &gaussian, 1, 10, 0, 1, deconvolution<double>::sharpen, 0, 2);
+  fill_deconvolution_tile (regularized_wiener, noisy_blurred_signal);
+  const int regularized_border = regularized_wiener.get_border_size ();
+  const int regularized_size = regularized_wiener.get_basic_tile_size ();
+  const int regularized_margin = std::min (8, regularized_size / 8);
+  long double noisy_error_squared = 0;
+  long double restored_error_squared = 0;
+  size_t regularized_samples = 0;
+  for (int y = regularized_margin;
+       y < regularized_size - regularized_margin; y++)
+    for (int x = regularized_margin;
+         x < regularized_size - regularized_margin; x++)
+      {
+        const double expected = original_signal (x, y);
+        const double noisy_error = noisy_blurred_signal (x, y) - expected;
+        const double restored_error
+            = regularized_wiener.get_pixel (
+                  0, x + regularized_border, y + regularized_border)
+              - expected;
+        noisy_error_squared += noisy_error * noisy_error;
+        restored_error_squared += restored_error * restored_error;
+        regularized_samples++;
+      }
+  const double noisy_error
+      = std::sqrt ((double)(noisy_error_squared / regularized_samples));
+  const double regularized_error
+      = std::sqrt ((double)(restored_error_squared / regularized_samples));
+  if (!my_isfinite (regularized_error)
+      || regularized_error >= noisy_error * 0.6)
+    {
+      fprintf (stderr,
+               "Regularized Wiener filtering failed: input RMSE %g, "
+               "output RMSE %g\n",
+               noisy_error, regularized_error);
+      ok = false;
+    }
+
+  return ok;
+}
+
 /* Internal unit test for the precomputed_function class.  */
 static bool
 test_precomputed_function ()
@@ -1688,12 +2192,18 @@ test_image_area ()
   return ok;
 }
 
-static luminosity_t get_test_gray(image_data *img, int_point_t p, int, void *)
+/* Return normalized grayscale pixel P from IMG.  The unnamed width and opaque
+   callback parameters are unused by this image_data accessor.  */
+static luminosity_t
+get_test_gray (image_data *img, int_point_t p, int, void *)
 {
-  return (luminosity_t)img->get_pixel(p.x, p.y) / 65535.0f;
+  return (luminosity_t)img->get_pixel (p.x, p.y) / 65535.0f;
 }
 
-static bool test_slanted_edge_mtf()
+/* Verify the slanted-edge MTF estimator against realistic optical blurs
+   generated at high resolution and subsequently integrated to sensor pixels.  */
+static bool
+test_slanted_edge_mtf ()
 {
   bool verbose = false;
   if (verbose)
@@ -2115,6 +2625,8 @@ main (int argc, char **argv)
     { "linearity", "render linearity tests", [] () { return (bool)test_render_linearity (); } },
     { "blur", "screen blur tests", [] () { return test_screen_blur (); } },
     { "sharpening", "screen sharpening tests", [] () { return test_screen_sharpening (); } },
+    { "mtf_deconvolution", "measured MTF deconvolution tests",
+      [] () { return test_mtf_deconvolution (); } },
     { "homography", "homography tests", [] () { return (bool)test_homography (false, false, 0.000001); } },
     { "warp", "lens warp tests", [] () { return test_lens_warp (); } },
     { "lens_correction", "lens correction tests", [] () { return (bool)test_homography (true, false, 0.15); } },

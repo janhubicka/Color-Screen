@@ -550,13 +550,12 @@ get_psf_radius (mtf::psf_t *psf, int size, bool *ok = nullptr)
   for (int i = 0; i < size; i++)
     {
       // iprintf ("%i %f\n", i, psf[i]);
-      if (psf[i] > peak)
-        peak = psf[i];
+      peak = std::max (peak, (double)my_fabs (psf[i]));
     }
   int this_psf_radius = 1;
   /* Center of the PSF kernel is at 0  */
   for (int i = 1; i < size / 2 - 1; i++)
-    if (psf[i] > peak * 0.0001f)
+    if (my_fabs (psf[i]) > peak * 0.0001f)
       this_psf_radius = i + 1;
 
   /* This may be solved by iteratively reducing subsampling.  */
@@ -580,7 +579,7 @@ mtf_parameters::sensor_mtf (double pixel_freq) const
   return my_fabs (sinc (pixel_freq * my_sqrt (sensor_fill_factor)));
 }
 
-/* The effective f-fstop changes in macro photography based on magnification.
+/* The effective f-stop changes in macro photography based on magnification.
  */
 
 double
@@ -734,7 +733,7 @@ mtf_parameters::lens_mtf (double pixel_freq) const
            * defocus_mtf (pixel_freq, blur_diameter);
 }
 
-/* Adjustment factor to measured mtf basd on
+/* Adjustment factor to measured MTF based on
     - gaussian blur (sigma)
     - defocus (defocus_mm)
  */
@@ -863,9 +862,10 @@ mtf::estimate_psf_size (luminosity_t min_threshold,
       compute_lsf (lsf, subscale);
       psf_t max = 0;
       for (auto v : lsf)
-        max = std::max (max, v);
-      /* Not good enough.  */
-      if (lsf.back () > max * min_threshold)
+        max = std::max (max, my_fabs (v));
+      /* Not good enough.  Include negative ringing introduced by a measured
+         or sharply truncated MTF when determining the required support.  */
+      if (my_fabs (lsf.back ()) > max * min_threshold)
         {
           if (lsf_size < 4096)
             lsf_size *= 2;
@@ -875,7 +875,7 @@ mtf::estimate_psf_size (luminosity_t min_threshold,
         }
       int radius = 1;
       for (int v = 2; v < lsf_size; v++)
-        if (lsf[v] > max * min_threshold)
+        if (my_fabs (lsf[v]) > max * min_threshold)
           radius = v + 1;
 #if 0
       if (sum_threshold)
@@ -926,12 +926,21 @@ mtf::compute_psf (luminosity_t max_radius, luminosity_t subscale, const char *fi
       if (!ok && iterations < 10)
         {
           if (psf_size < 1024)
-            psf_size *= 2;
+            psf_size = std::min (psf_size * 2, 1024);
           else
-            subscale /= 2;
+            /* At the FFT size cap, increase the physical extent at lower
+               spatial resolution.  Dividing SUBSCALE made the support smaller
+               and could never resolve a PSF that already reached the edge.  */
+            subscale *= 2;
 	  //printf ("Iterating PSF computation %i %i %f\n", iterations, psf_size, subscale);
           iterations++;
           continue;
+        }
+      if (!ok)
+        {
+          if (error)
+            *error = "Failed to determine finite PSF support";
+          return false;
         }
       m_psf_radius = radius * subscale;
 
@@ -954,11 +963,15 @@ mtf::compute_psf (luminosity_t max_radius, luminosity_t subscale, const char *fi
           const int lsf_size = 100;
           pp.height = height + lsf_size;
           pp.depth = 16;
-          const char *error;
+          const char *tiff_error = nullptr;
           pp.filename = filename;
-          tiff_writer renderedu (pp, &error);
-          if (error)
-            return false;
+          tiff_writer renderedu (pp, &tiff_error);
+          if (tiff_error)
+            {
+              if (error)
+                *error = tiff_error;
+              return false;
+            }
           double err = 0, m = 0;
           for (int y = 0; y < psf_size / 2; y++)
             for (int x = 0; x < psf_size / 2; x++)
@@ -1049,83 +1062,135 @@ mtf::precompute (progress_info *progress, bool parallel)
   /* Use actual MTF data.  */
   if (m_params.use_measured_mtf ())
     {
-      bool monotone = true;
-      mtf_measurement &measurement = m_params.measurements[m_params.measured_mtf_idx];
-      for (size_t i = 1; i < measurement.size () && monotone; i++)
+      const mtf_measurement &measurement
+          = m_params.measurements[m_params.measured_mtf_idx];
+      const size_t measured_size = measurement.size ();
+      if (measured_size < 3)
+        return false;
+
+      for (size_t i = 0; i < measured_size; i++)
         {
-          if (!(measurement.get_freq (i - 1) < measurement.get_freq (i)))
+          const double frequency = measurement.get_freq (i);
+          const double contrast = measurement.get_contrast (i);
+          if (!my_isfinite (frequency) || !my_isfinite (contrast)
+              || frequency < 0 || contrast < 0
+              || (i && !(measurement.get_freq (i - 1) < frequency)))
             {
-              printf ("Sorry, unimplemented: MTF freqs are not in increasing "
-                      "order.\n");
-              monotone = false;
-              abort ();
+              fprintf (stderr,
+                       "Invalid measured MTF: frequencies must be finite, "
+                       "nonnegative and strictly increasing, and contrasts "
+                       "must be finite and nonnegative.\n");
+              return false;
             }
         }
 
-      /* See if the MTF table has regular steps. In this case we can initialize
-         precomputed function exactly.  */
-      bool regular_steps = true;
-      luminosity_t step
-          = (measurement.get_freq (measurement.size () - 1) - measurement.get_freq (0)) / (measurement.size () - 1);
-      for (size_t i = 1; i < measurement.size () - 2 && regular_steps; i++)
-        if (my_fabs (measurement.get_freq (i) - measurement.get_freq (0) - i * step) > 0.0006)
-          regular_steps = false;
+      std::vector<luminosity_t> frequencies;
+      std::vector<luminosity_t> contrasts;
+      frequencies.reserve (measured_size + 3);
+      contrasts.reserve (measured_size + 3);
 
-      if (!regular_steps)
+      /* MTF is a relative transfer function and therefore has unit response
+         at DC.  Normalize a measured DC value; if the table starts above DC,
+         add the physically required point (0, 1).  */
+      constexpr double dc_frequency_epsilon = 1e-9;
+      const bool has_measured_dc
+          = measurement.get_freq (0) <= dc_frequency_epsilon;
+      double dc = 1;
+      if (has_measured_dc)
         {
-          std::vector<luminosity_t> contrasts (measurement.size ()
-                                          + 2);
-          std::vector<luminosity_t> freqs (measurement.size ()
-                                                                   + 2);
-          for (size_t i = 0; i < measurement.size (); i++)
+          dc = measurement.get_contrast (0) * 0.01
+               * m_params.measured_mtf_correction (0);
+          if (!my_isfinite (dc) || dc <= 0)
             {
-              luminosity_t freq = measurement.get_freq (i);
-              contrasts[i] = measurement.get_contrast (i) * 0.01
-                             * m_params.measured_mtf_correction (freq);
-              freqs[i] = freq;
+              fprintf (stderr,
+                       "Invalid measured MTF: the DC response must be "
+                       "positive and finite.\n");
+              return false;
             }
-          contrasts[measurement.size ()] = 0;
-          contrasts[measurement.size () + 1] = 0;
-          freqs[measurement.size ()] = freqs[measurement.size () - 1] + step;
-          freqs[measurement.size () + 1] = freqs[measurement.size () - 1] + 2 * step;
-          m_mtf.set_range (measurement.get_freq (0), measurement.get_freq (measurement.size () - 1) + 2 * step);
-          m_mtf.init_by_x_y_values (freqs.data (), contrasts.data (),
-                                    measurement.size () + 2, 1024);
         }
       else
         {
-          std::vector<luminosity_t> contrasts (measurement.size ()
-                                                                       + 2);
-          for (size_t i = 0; i < measurement.size (); i++)
-            {
-              luminosity_t freq = measurement.get_freq (i);
-              contrasts[i] = measurement.get_contrast (i) * 0.01
-                             * m_params.measured_mtf_correction (freq);
-            }
-          /* Be sure that MTF trails in 0.  */
-          contrasts[measurement.size ()] = 0;
-          contrasts[measurement.size () + 1] = 0;
-          m_mtf.set_range (measurement.get_freq (0), measurement.get_freq (measurement.size () - 1) + 2 * step);
-          m_mtf.init_by_y_values (contrasts.data (), measurement.size () + 2);
+          frequencies.push_back (0);
+          contrasts.push_back (1);
         }
+
+      for (size_t i = 0; i < measured_size; i++)
+        {
+          double frequency = measurement.get_freq (i);
+          if (i == 0 && has_measured_dc)
+            frequency = 0;
+          double value = measurement.get_contrast (i) * 0.01
+                         * m_params.measured_mtf_correction (frequency) / dc;
+          if (!my_isfinite (value))
+            {
+              fprintf (stderr,
+                       "Invalid measured MTF: corrected contrast is not "
+                       "finite.\n");
+              return false;
+            }
+          frequencies.push_back (frequency);
+          contrasts.push_back (
+              std::clamp ((luminosity_t)value, (luminosity_t)0,
+                          (luminosity_t)1));
+        }
+
+      /* Extend the curve by two zero points.  Frequencies outside the table
+         then remain zero because precomputed_function clamps to its final
+         (zero-to-zero) segment.  */
+      const size_t curve_size = frequencies.size ();
+      double step = (frequencies.back () - frequencies.front ())
+                    / (curve_size - 1);
+      if (!(step > 0) || !my_isfinite (step))
+        return false;
+      /* A two-dimensional sampled image has valid Fourier samples out to
+         diagonal Nyquist, sqrt (2) / 2 cycles per pixel.  Slanted-edge tables
+         conventionally stop at the axial Nyquist frequency 0.5.  Dropping to
+         zero one tiny table step later would erase all diagonal frequencies
+         with |f| > 0.5 and create a sharply ringing PSF.  When the measurement
+         reaches axial Nyquist, conservatively taper its final value to zero at
+         diagonal Nyquist instead.  */
+      constexpr double axial_nyquist = 0.5;
+      const double diagonal_nyquist = std::sqrt (0.5);
+      const double regular_zero_frequency = frequencies.back () + step;
+      double zero_frequency = regular_zero_frequency;
+      if (frequencies.back () >= axial_nyquist - 0.01)
+        zero_frequency = std::max (zero_frequency, diagonal_nyquist);
+      frequencies.push_back (zero_frequency);
+      contrasts.push_back (0);
+      frequencies.push_back (zero_frequency + step);
+      contrasts.push_back (0);
+
+      /* Use the exact equidistant representation when every interior point is
+         regular.  The old loop skipped the final interior points and therefore
+         misinterpreted short or partly irregular measured tables.  */
+      bool regular_steps = true;
+      const double regular_step
+          = (frequencies[curve_size - 1] - frequencies.front ())
+            / (curve_size - 1);
+      for (size_t i = 1; i + 1 < curve_size && regular_steps; i++)
+        if (my_fabs (frequencies[i] - frequencies.front ()
+                     - i * regular_step)
+            > 0.0006)
+          regular_steps = false;
+
+      m_mtf.set_range (frequencies.front (), frequencies.back ());
+      if (regular_steps
+          && my_fabs (zero_frequency - regular_zero_frequency) <= 0.0006)
+        m_mtf.init_by_y_values (contrasts.data (), contrasts.size ());
+      else
+        m_mtf.init_by_x_y_values (frequencies.data (), contrasts.data (),
+                                  frequencies.size (), 4096);
+
       if (colorscreen_checking)
-        for (size_t i = 0; i < measurement.size (); i++)
-          {
-            luminosity_t freq = measurement.get_freq (i);
-            if (my_fabs (measurement.get_contrast (i) * 0.01
-                          * m_params.measured_mtf_correction (freq)
-                      - get_mtf (freq))
-                > 0.01)
-              {
-                printf (
-                    "Mismatch (measured) %i freq %f table %f precomputed %f\n",
-                    (int)i, freq,
-                    measurement.get_contrast (i) * 0.01
-                        * m_params.measured_mtf_correction (freq),
-                    m_mtf.apply (freq));
-                abort ();
-              }
-          }
+        for (size_t i = 0; i < frequencies.size () - 2; i++)
+          if (my_fabs (contrasts[i] - get_mtf (frequencies[i])) > 0.01)
+            {
+              printf ("Mismatch (measured) %i freq %f table %f "
+                      "precomputed %f\n",
+                      (int)i, (double)frequencies[i], (double)contrasts[i],
+                      (double)m_mtf.apply (frequencies[i]));
+              abort ();
+            }
 
       if (progress)
         progress->set_task ("computing point spread function", 1);
@@ -1168,7 +1233,7 @@ mtf::precompute (progress_info *progress, bool parallel)
 bool
 mtf::precompute_psf (progress_info *progress, bool parallel, const char *filename, const char **error)
 {
-  if (!precompute (progress))
+  if (!precompute (progress, parallel))
     return false;
   std::lock_guard<std::mutex> lock (m_lock);
   if (m_precomputed_psf)
@@ -1176,10 +1241,7 @@ mtf::precompute_psf (progress_info *progress, bool parallel, const char *filenam
       return true;
     }
   if (!compute_psf (psf_size (1), 1 / 32.0, filename, error, parallel))
-    {
-      m_lock.unlock ();
-      return false;
-    }
+    return false;
   m_precomputed_psf = true;
   return true;
 }

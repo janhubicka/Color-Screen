@@ -4,9 +4,13 @@
 
 #include "fft.h"
 #include "deconvolve.h"
-#include "render.h"
+#include "cubic-interpolate.h"
 #include "lanczos.h"
+#include <algorithm>
+#include <cmath>
 #include <complex>
+#include <limits>
+#include <vector>
 namespace colorscreen
 {
 
@@ -18,116 +22,87 @@ static const bool taper_edges = true;
 namespace
 {
 
-/* Lanczos resample LINE of length IN_LEN and with given SUPERSAMPLE factor
-   into OUTPUT of length OUT_LEN with OUT_STRIDE.  KERNELS are precomputed
-   Lanczos kernels of size A.  */
+/* Return floor (NUMERATOR / DENOMINATOR) for positive DENOMINATOR.  C++
+   integer division truncates toward zero and therefore needs adjustment for
+   negative coordinates.  */
+
+inline int
+floor_div (int numerator, int denominator)
+{
+  int quotient = numerator / denominator;
+  if (numerator < 0 && numerator % denominator)
+    quotient--;
+  return quotient;
+}
+
+/* Lanczos resample LINE of length IN_LEN into OUTPUT of length OUT_LEN and
+   with OUT_STRIDE.  SUPERSAMPLE is the ratio between output and input sample
+   spacing.  KERNELS contains one normalized 2*A-tap kernel for every output
+   phase.  */
 
 template <typename T>
 inline __attribute__ ((always_inline))
 void
-resample_line (T *output,
-               const T *input, int out_len,
-               int out_stride,
-	       int in_len,
-	       int supersample,
-	       const std::vector<T, fft_allocator<T>>& kernels,
-	       int a = 3)
+resample_line (T *output, const T *input, int out_len, int out_stride,
+               int in_len, int supersample,
+               const std::vector<T, fft_allocator<T>> &kernels, int a = 3)
 {
-  /* Let compiler know that supersample is small integer.  */
-  if (supersample <= 1 || supersample > 1024)
-    __builtin_unreachable ();
-  /* We do mirroring on the edges of image; special case first few iterations.  */
-#pragma omp simd
-  for (int i = 0; i < std::min (a * supersample, out_len); ++i)
+  if (supersample <= 1 || supersample > 1024 || in_len <= 0 || out_len < 0)
+    abort ();
+
+  for (int i = 0; i < out_len; i++)
     {
-      /* Map output pixel to input space center.  */
-      int center = (2 * i + 1) - supersample;
-      int start = center / (2 * supersample) - a + 1;
-      int io = (center / 2) % supersample;
+      /* Input sample centers are at J + 0.5.  Output sample centers, in input
+         coordinates, are at (I + 0.5) / SUPERSAMPLE.  */
+      int base = floor_div (2 * i + 1 - supersample, 2 * supersample);
+      int start = base - a + 1;
+      const T *kernel = kernels.data () + (i % supersample) * 2 * a;
+      T sum = 0;
 
-      T sum = 0.0;
-      const T *k = kernels.data () + io * a * 2;
-
-#pragma omp simd
-      for (int jj = 0; jj < 2 * a; ++jj)
+      if (start >= 0 && start + 2 * a <= in_len)
         {
-	  int j = start + jj;
-          /* Mirror padding for boundaries. */
-          int index = j;
-          if (index < 0)
-            index = -index;
-          if (index >= in_len)
-            index = 2 * in_len - index - 1;
-
-          sum += input[index] * k[jj];
+#pragma omp simd reduction(+:sum)
+          for (int tap = 0; tap < 2 * a; tap++)
+            sum += input[start + tap] * kernel[tap];
         }
+      else
+        for (int tap = 0; tap < 2 * a; tap++)
+          sum += input[reflect_deconvolution_coordinate (start + tap,
+                                                         in_len)]
+                 * kernel[tap];
 
-      output[i * out_stride] = sum;
-    }
-#pragma omp simd
-  for (int i = a * supersample; i < std::min (out_len - a * supersample, out_len); ++i)
-    {
-      /* Map output pixel to input space center.  */
-      int center = (2 * i + 1) - supersample;
-      int start = center / (2 * supersample) - a + 1;
-      int io = (center / 2) % supersample;
-
-      T sum = 0.0;
-      const T *k = kernels.data () + io * a * 2;
-
-#pragma omp simd
-      for (int jj = 0; jj < 2 * a; ++jj)
-        {
-	  int j = start + jj;
-          sum += input[j] * k[jj];
-	}
-
-      output[i * out_stride] = sum;
-    }
-#pragma omp simd
-  for (int i = std::max (out_len - a * supersample, a * supersample); i < out_len; ++i)
-    {
-      /* Map output pixel to input space center.  */
-      int center = (2 * i + 1) - supersample;
-      int start = center / (2 * supersample) - a + 1;
-      int io = (center / 2) % supersample;
-
-      T sum = 0.0;
-      const T *k = kernels.data () + io * a * 2;
-
-#pragma omp simd
-      for (int jj = 0; jj < 2 * a; ++jj)
-        {
-	  int j = start + jj;
-          /* Mirror padding for boundaries. */
-          int index = j;
-          if (index >= in_len)
-            index = 2 * in_len - index - 1;
-
-          sum += input[index] * k[jj];
-        }
       output[i * out_stride] = sum;
     }
 }
 }
 
 /* Set up deconvolution for given MTF and MTF_SCALE.  SNR specifies signal to
-   noise ratio for Weiner filter.  SIGMA specifies dampening parameter for
-   Richardson-Lucy.  MAX_THREADS specifies number of threads.  MODE is
+   noise ratio for Wiener filter.  SIGMA specifies damping parameter for
+   Richardson-Lucy.  MAX_THREADS specifies number of threads.  FILTER_MODE is
    deconvolution mode.  ITERATIONS specifies number of iterations for
    Richardson-Lucy.  SUPERSAMPLE specifies supersampling factor.  */
 template <typename T>
 deconvolution<T>::deconvolution (mtf *mtf, luminosity_t mtf_scale,
                                  luminosity_t snr, luminosity_t sigma,
-                                 int max_threads, enum mode mode,
+                                 int max_threads, enum mode filter_mode,
                                  int iterations, int supersample)
-    : m_supersample (supersample), m_sigma ((T)sigma),
-      m_iterations (iterations)
+    : m_supersample (std::clamp (supersample, 1, 16)),
+      m_sigma (my_isfinite ((double)sigma) && sigma > 0 ? (T)sigma : (T)0),
+      m_iterations (std::max (iterations, 0))
 {
-  (void)mtf->precompute ();
-  T k_const = (T)1.0 / (T)snr;
-  m_border_size = mtf->psf_radius (mtf_scale);
-  if (m_supersample && m_border_size == 0)
+  if (!mtf || !mtf->precompute ())
+    abort ();
+
+  const luminosity_t effective_mtf_scale
+      = my_isfinite ((double)mtf_scale) && mtf_scale > 0 ? mtf_scale : 0;
+  const bool apply_wiener
+      = filter_mode == sharpen && my_isfinite ((double)snr) && snr > 0;
+  const bool apply_richardson_lucy
+      = filter_mode == richardson_lucy_sharpen && m_iterations > 0;
+  const T k_const = apply_wiener ? (T)1 / (T)snr : (T)0;
+
+  m_border_size = std::max (mtf->psf_radius (effective_mtf_scale), 0);
+  if (m_border_size == 0)
     m_border_size = 1;
 
   if (taper_edges)
@@ -135,75 +110,133 @@ deconvolution<T>::deconvolution (mtf *mtf, luminosity_t mtf_scale,
       m_taper_size = m_border_size * m_supersample;
       m_border_size *= 2;
     }
+  /* The copied output region must also be separated from the tile boundary by
+     the support of the interpolation filter.  Otherwise supersampling can use
+     reflected tile-edge samples at every tile seam even when the optical PSF
+     itself is very small.  */
+  if (m_supersample > 1)
+    m_border_size = std::max (m_border_size, lanczos_a);
 
   while (m_enlarged_tile_size < m_border_size * 4 * m_supersample)
     m_enlarged_tile_size *= 2;
   m_tile_size = (m_enlarged_tile_size + m_supersample - 1) / m_supersample;
 
-  m_data.resize (max_threads);
-  /* Result of real fft is symmetric.  We need only N / 2 + 1 complex values.
-     Moreover point spread functions we compute are symmetric real functions so
-     the FFT result is again a real function (all complex values should be 0 up
-     to roundoff errors).  */
+  m_data.resize (std::max (max_threads, 1));
+  /* The result of a real FFT is Hermitian.  We need only N / 2 + 1 complex
+     values per row.  The assumed optical transfer function is rotationally
+     symmetric and has zero phase, so its entries are real up to roundoff.  */
   m_fft_size = m_enlarged_tile_size / 2 + 1;
   m_blur_kernel = fft_alloc_complex<T> (m_enlarged_tile_size * m_fft_size);
-  T scale = (T)1.0 / (T)(m_enlarged_tile_size * m_enlarged_tile_size);
-  T rev_tile_size = (T)m_supersample * (T)mtf_scale / (T)m_enlarged_tile_size;
-#pragma omp parallel for shared(scale,mtf,rev_tile_size,mode,k_const) default(none) collapse(2)
+  const T fft_scale
+      = (T)1 / (T)(m_enlarged_tile_size * m_enlarged_tile_size);
+  const T frequency_step = (T)m_supersample * (T)effective_mtf_scale
+                           / (T)m_enlarged_tile_size;
+#pragma omp parallel for default(none) collapse(2) \
+  shared(fft_scale, mtf, frequency_step, filter_mode, k_const, apply_wiener, \
+         apply_richardson_lucy)
   for (int y = 0; y < m_fft_size; y++)
     for (int x = 0; x < m_fft_size; x++)
       {
-        std::complex<T> ker (
-            std::clamp (
-                (T)mtf->get_mtf (x, y, rev_tile_size),
-                (T)0, (T)1),
-            (T)0);
+        T transfer = (T)mtf->get_mtf (x, y, frequency_step);
+        if (!my_isfinite ((double)transfer))
+          transfer = 0;
+        transfer = std::clamp (transfer, (T)0, (T)1);
+        std::complex<T> kernel (transfer, (T)0);
 
-        /* If sharpening, apply Wiener Filter.
-           Result = Img * conj(Ker) / (|Ker|^2 + 1/SNR).  */
-        if (mode == sharpen)
-          ker = std::conj (ker) / (std::norm (ker) + k_const);
-        ker = ker * scale;
-        m_blur_kernel[y * m_fft_size + x][0] = ker.real ();
-        m_blur_kernel[y * m_fft_size + x][1] = ker.imag ();
+        /* Wiener inverse filter:
+             estimate = image * conj (H) / (|H|^2 + 1 / SNR).
+           A nonpositive or nonfinite SNR disables sharpening and therefore
+           gives the identity transfer function.  */
+        if (filter_mode == sharpen)
+          kernel = apply_wiener
+                       ? std::conj (kernel)
+                             / (std::norm (kernel) + k_const)
+                       : std::complex<T> ((T)1, (T)0);
+        else if (filter_mode == richardson_lucy_sharpen
+                 && !apply_richardson_lucy)
+          kernel = std::complex<T> ((T)1, (T)0);
+        kernel *= fft_scale;
+        m_blur_kernel[y * m_fft_size + x][0] = kernel.real ();
+        m_blur_kernel[y * m_fft_size + x][1] = kernel.imag ();
         if (y)
           {
             m_blur_kernel[(m_enlarged_tile_size - y) * m_fft_size + x][0]
-                = ker.real ();
+                = kernel.real ();
             m_blur_kernel[(m_enlarged_tile_size - y) * m_fft_size + x][1]
-                = ker.imag ();
+                = kernel.imag ();
           }
       }
-  T sc = scale / m_blur_kernel[0][0];
-  if (sc != (T)1)
-    for (int x = 0; x < m_fft_size * m_enlarged_tile_size; x++)
+
+  /* Preserve the image mean and prevent invalid MTF data from turning the
+     complete image into NaNs.  M_BLUR_KERNEL already contains FFT_SCALE, so
+     validate the unscaled DC transfer.  For a 4096 by 4096 single-precision
+     FFT, FFT_SCALE is smaller than float epsilon even when the physical DC
+     response is exactly one; testing the stored coefficient against epsilon
+     would therefore replace a perfectly valid optical kernel by identity.  */
+  const T dc_transfer = m_blur_kernel[0][0] / fft_scale;
+  if (!my_isfinite ((double)dc_transfer)
+      || std::abs (dc_transfer) <= std::numeric_limits<T>::epsilon ())
+    for (int i = 0; i < m_fft_size * m_enlarged_tile_size; i++)
       {
-	m_blur_kernel[x][0] *= sc;
-	m_blur_kernel[x][1] *= sc;
+        m_blur_kernel[i][0] = fft_scale;
+        m_blur_kernel[i][1] = 0;
       }
-  m_richardson_lucy = (mode == richardson_lucy_sharpen);
+  else
+    {
+      const T normalization = (T)1 / dc_transfer;
+      if (normalization != (T)1)
+        for (int i = 0; i < m_fft_size * m_enlarged_tile_size; i++)
+          {
+            m_blur_kernel[i][0] *= normalization;
+            m_blur_kernel[i][1] *= normalization;
+          }
+    }
+
+  m_richardson_lucy = apply_richardson_lucy;
   if (taper_edges)
     {
       m_weights.resize (m_taper_size);
       for (int i = 0; i < m_taper_size; i++)
-        /* Cosine bell curve: 0.0 at edge, 1.0 at taper_width.  */
-        m_weights[i] = (T)0.5 * ((T)1.0 - std::cos ((T)M_PI * (T)i / (T)m_taper_size));
+        /* Cosine bell curve: 0 at the edge and 1 immediately after the
+           taper.  */
+        m_weights[i]
+            = (T)0.5
+              * ((T)1 - std::cos ((T)M_PI * (T)i / (T)m_taper_size));
     }
+
   if (m_supersample > 1)
     {
       m_lanczos_kernels.resize (lanczos_a * 2 * m_supersample);
-      for (int off = 0; off < m_supersample; off++)
-	{
-	  T sum = 0;
-	  for (int i = 0 ; i < lanczos_a * 2; i++)
-	    sum += m_lanczos_kernels[off * lanczos_a * 2 + i]
-	      = lanczos_kernel ((T)i - (T)lanczos_a + ((T)off + (T)0.5) / (T)m_supersample, lanczos_a);
-	  for (int i = 0 ; i < lanczos_a * 2; i++)
-	    m_lanczos_kernels[off * lanczos_a * 2 + i] *= ((T)1 / sum);
-	}
+      for (int phase = 0; phase < m_supersample; phase++)
+        {
+          /* Express the fine-grid phase as an exact rational number before
+             converting it to T.  Computing
+
+               (PHASE + 0.5) / SUPERSAMPLE - 0.5
+
+             directly in floating point is unsafe with -ffast-math.  For
+             example, GCC can evaluate the exact zero for phase 1 at 3x as a
+             tiny negative number; floor then changes from 0 to -1 and shifts
+             the Lanczos kernel by one fine-grid sample.  Keep BASE consistent
+             with RESAMPLE_LINE by using the same integer floor division, and
+             convert only the nonnegative fractional remainder to T.  */
+          const int numerator = 2 * phase + 1 - m_supersample;
+          const int denominator = 2 * m_supersample;
+          const int base = floor_div (numerator, denominator);
+          const int remainder = numerator - base * denominator;
+          const T fraction = (T)remainder / (T)denominator;
+          T sum = 0;
+          for (int tap = 0; tap < lanczos_a * 2; tap++)
+            sum += m_lanczos_kernels[phase * lanczos_a * 2 + tap]
+                = lanczos_kernel ((T)tap - (T)lanczos_a + (T)1 - fraction,
+                                  lanczos_a);
+          if (std::abs (sum) <= std::numeric_limits<T>::epsilon ())
+            abort ();
+          for (int tap = 0; tap < lanczos_a * 2; tap++)
+            m_lanczos_kernels[phase * lanczos_a * 2 + tap] /= sum;
+        }
     }
 }
-
 /* Allocate memory for tiles and initialize fftw plans for given THREAD_ID.  */
 template <typename T>
 void
@@ -228,19 +261,17 @@ deconvolution<T>::init (int thread_id)
       m_data[thread_id].observed.resize (m_enlarged_tile_size
                                          * m_enlarged_tile_size);
     }
+  std::call_once (m_plan_once, [this, thread_id] {
+    m_plan_2d_inv
+        = fft_plan_c2r_2d<T> (m_enlarged_tile_size, m_enlarged_tile_size,
+                              m_data[thread_id].in.get (),
+                              m_data[thread_id].enlarged_tile->data ());
+    m_plan_2d
+        = fft_plan_r2c_2d<T> (m_enlarged_tile_size, m_enlarged_tile_size,
+                              m_data[thread_id].enlarged_tile->data (),
+                              m_data[thread_id].in.get ());
+  });
   m_data[thread_id].initialized = true;
-  if (!m_plans_exists)
-    {
-      m_plan_2d_inv = fft_plan_c2r_2d<T> (m_enlarged_tile_size,
-                                                m_enlarged_tile_size,
-                                                m_data[thread_id].in.get (),
-                                                m_data[thread_id].enlarged_tile->data ());
-      m_plan_2d = fft_plan_r2c_2d<T> (m_enlarged_tile_size,
-                                            m_enlarged_tile_size,
-                                            m_data[thread_id].enlarged_tile->data (),
-                                            m_data[thread_id].in.get ());
-      m_plans_exists = true;
-    }
 }
 
 /* Apply the deconvolution kernel for given THREAD_ID.  */
@@ -388,11 +419,15 @@ deconvolution<T>::process_tile (int thread_id, progress_info *progress)
   else
     {
       std::vector<T, fft_allocator<T>> &observed = m_data[thread_id].observed;
-      std::copy (m_data[thread_id].enlarged_tile->begin (),
-                 m_data[thread_id].enlarged_tile->end (),
-                 observed.begin ());
       std::vector<T, fft_allocator<T>> &estimate
           = *m_data[thread_id].enlarged_tile;
+      for (size_t i = 0; i < estimate.size (); i++)
+        {
+          T value = estimate[i];
+          value = my_isfinite ((double)value) && value > (T)0 ? value : (T)0;
+          estimate[i] = value;
+          observed[i] = value;
+        }
       std::vector<T, fft_allocator<T>> &ratios = m_data[thread_id].ratios;
       T scale = (T)1;
       typename fft_complex_t<T>::type *in = m_data[thread_id].in.get ();
@@ -419,7 +454,8 @@ deconvolution<T>::process_tile (int thread_id, progress_info *progress)
 
           /* Step B: ratio = observed / (re-blurred + epsilon).  */
 
-          T epsilon = (T)1e-12;
+          const T epsilon
+              = std::max ((T)1e-12, std::numeric_limits<T>::epsilon () * (T)16);
 
           /* RATIOS is now blurred ESTIMATE; compute ratios.  */
           if (sigma > (T)0)
@@ -468,63 +504,77 @@ deconvolution<T>::process_tile (int thread_id, progress_info *progress)
           /* Now initialize ratios.  */
           m_plan_2d_inv.execute_c2r (in, ratios.data ());
 
-          /* estimate = estimate * result_of_Step_C.  */
+          /* Richardson-Lucy is defined for nonnegative intensities.  Keep
+             roundoff or a non-positive reconstructed PSF from creating NaNs
+             or negative estimates that poison later iterations.  */
 #pragma omp simd
           for (int i = 0; i < m_enlarged_tile_size * m_enlarged_tile_size; i++)
-            estimate[i] *= ratios[i] * scale;
+            {
+              T updated = estimate[i] * ratios[i] * scale;
+              estimate[i] = my_isfinite ((double)updated) && updated > (T)0
+                                ? updated
+                                : (T)0;
+            }
         }
     }
-  /* Use bicubic interpolation for upscaling by 2.  */
-  if (m_supersample == 2)
-    {
-      const T* enlarged_ptr = m_data[thread_id].enlarged_tile->data();
-      for (int y = m_border_size; y < m_tile_size - m_border_size; y++)
-#pragma omp simd
-        for (int x = m_border_size; x < m_tile_size - m_border_size; x++)
-          {
-            int sx = x * 2;
-            int sy = y * 2;
-            T val = cubic_interpolate (
-                cubic_interpolate (
-                    enlarged_ptr[(sy - 1) * m_enlarged_tile_size + sx - 1],
-                    enlarged_ptr[(sy) * m_enlarged_tile_size + sx - 1],
-                    enlarged_ptr[(sy + 1) * m_enlarged_tile_size + sx - 1],
-                    enlarged_ptr[(sy + 2) * m_enlarged_tile_size + sx - 1], (T)0.5),
-                cubic_interpolate (
-                    enlarged_ptr[(sy - 1) * m_enlarged_tile_size + sx - 0],
-                    enlarged_ptr[(sy) * m_enlarged_tile_size + sx - 0],
-                    enlarged_ptr[(sy + 1) * m_enlarged_tile_size + sx - 0],
-                    enlarged_ptr[(sy + 2) * m_enlarged_tile_size + sx - 0], (T)0.5),
-                cubic_interpolate (
-                    enlarged_ptr[(sy - 1) * m_enlarged_tile_size + sx + 1],
-                    enlarged_ptr[(sy) * m_enlarged_tile_size + sx + 1],
-                    enlarged_ptr[(sy + 1) * m_enlarged_tile_size + sx + 1],
-                    enlarged_ptr[(sy + 2) * m_enlarged_tile_size + sx + 1], (T)0.5),
-                cubic_interpolate (
-                    enlarged_ptr[(sy - 1) * m_enlarged_tile_size + sx + 2],
-                    enlarged_ptr[(sy) * m_enlarged_tile_size + sx + 2],
-                    enlarged_ptr[(sy + 1) * m_enlarged_tile_size + sx + 2],
-                    enlarged_ptr[(sy + 2) * m_enlarged_tile_size + sx + 2], (T)0.5),
-                (T)0.5);
-	    put_pixel (thread_id, x, y, val);
-          }
-    }
-  /* Bigger upscaling is unlikely to be useful.  */
-  else if (m_supersample > 1)
+  /* Sample the processed fine grid at the centers of the original pixels.
+     For odd supersampling factors the center is a fine-grid sample.  For even
+     factors it lies halfway between four samples and is reconstructed with
+     the same bicubic interpolator previously used for 2x supersampling.  */
+  if (m_supersample > 1)
     {
       if (progress && progress->cancelled ())
-	return;
-      T scale = (T)1 / (T)(m_supersample * m_supersample);
-      for (int y = m_border_size; y < m_tile_size - m_border_size; y++)
-        for (int x = m_border_size; x < m_tile_size - m_border_size; x++)
-          {
-            T sum = 0;
-            for (int yy = 0; yy < m_supersample; yy++)
-              for (int xx = 0; xx < m_supersample; xx++)
-                sum += get_enlarged_pixel (thread_id, x * m_supersample + xx,
-                                           y * m_supersample + yy);
-            put_pixel (thread_id, x, y, sum * scale);
-          }
+        return;
+      const T *enlarged = m_data[thread_id].enlarged_tile->data ();
+      if (m_supersample & 1)
+        {
+          const int center = m_supersample / 2;
+          for (int y = m_border_size; y < m_tile_size - m_border_size; y++)
+#pragma omp simd
+            for (int x = m_border_size; x < m_tile_size - m_border_size; x++)
+              put_pixel (thread_id, x, y,
+                         enlarged[(y * m_supersample + center)
+                                      * m_enlarged_tile_size
+                                  + x * m_supersample + center]);
+        }
+      else
+        {
+          const int center_left = m_supersample / 2 - 1;
+          for (int y = m_border_size; y < m_tile_size - m_border_size; y++)
+#pragma omp simd
+            for (int x = m_border_size; x < m_tile_size - m_border_size; x++)
+              {
+                int sx = x * m_supersample + center_left;
+                int sy = y * m_supersample + center_left;
+                T value = cubic_interpolate (
+                    cubic_interpolate (
+                        enlarged[(sy - 1) * m_enlarged_tile_size + sx - 1],
+                        enlarged[sy * m_enlarged_tile_size + sx - 1],
+                        enlarged[(sy + 1) * m_enlarged_tile_size + sx - 1],
+                        enlarged[(sy + 2) * m_enlarged_tile_size + sx - 1],
+                        (T)0.5),
+                    cubic_interpolate (
+                        enlarged[(sy - 1) * m_enlarged_tile_size + sx],
+                        enlarged[sy * m_enlarged_tile_size + sx],
+                        enlarged[(sy + 1) * m_enlarged_tile_size + sx],
+                        enlarged[(sy + 2) * m_enlarged_tile_size + sx],
+                        (T)0.5),
+                    cubic_interpolate (
+                        enlarged[(sy - 1) * m_enlarged_tile_size + sx + 1],
+                        enlarged[sy * m_enlarged_tile_size + sx + 1],
+                        enlarged[(sy + 1) * m_enlarged_tile_size + sx + 1],
+                        enlarged[(sy + 2) * m_enlarged_tile_size + sx + 1],
+                        (T)0.5),
+                    cubic_interpolate (
+                        enlarged[(sy - 1) * m_enlarged_tile_size + sx + 2],
+                        enlarged[sy * m_enlarged_tile_size + sx + 2],
+                        enlarged[(sy + 1) * m_enlarged_tile_size + sx + 2],
+                        enlarged[(sy + 2) * m_enlarged_tile_size + sx + 2],
+                        (T)0.5),
+                    (T)0.5);
+                put_pixel (thread_id, x, y, value);
+              }
+        }
     }
 }
 
