@@ -125,12 +125,12 @@ echo ""
 
 # Test 1: Gaussian blur, sigma=0.8 px
 # Good quality macro lens at optimal aperture.
-# MTF50 ~ 0.375 cy/px.  Realistic for Schneider 120mm Makro at f/5.6.
+# MTF50 ~ 0.234 cy/px.  Realistic for Schneider 120mm Makro at f/5.6.
 generate_edge "gaussian-sharp" -p gaussian -b 0.8
 
 # Test 2: Gaussian blur, sigma=1.2 px
 # Average macro lens or good lens slightly stopped down.
-# MTF50 ~ 0.25 cy/px.  Typical for 4000 PPI PhaseOne workflow.
+# MTF50 ~ 0.156 cy/px.  Typical for 4000 PPI PhaseOne workflow.
 generate_edge "gaussian-medium" -p gaussian -b 1.2
 
 # Test 3: Gaussian blur, sigma=2.0 px

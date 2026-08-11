@@ -9,8 +9,10 @@
 #include "nmsimplex.h"
 #include "gsl-solver.h"
 #include "include/colorscreen.h"
+#include <array>
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <memory>
 namespace colorscreen
 {
@@ -18,6 +20,7 @@ namespace colorscreen
 namespace
 {
 
+/* Return the first-order Bessel function J1 evaluated at X.  */
 double
 get_j1 (double x)
 {
@@ -31,19 +34,19 @@ get_j1 (double x)
 #endif
 }
 
-/* Return MTF of circular blur.
+/* Return MTF of a uniformly illuminated circular blur.
    FREQ is the spatial frequency.
    BLUR_CIRCLE_DIAMETER is the diameter of the blur circle.
-   This is model for small defocus that does not seem to work that well.
-   See Hopkins model below.  */
+   This geometric fallback is used only when the physical diffraction model
+   cannot be constructed from capture metadata.  */
 double
-defocus_mtf (double freq, double blur_circle_diameter)
+circular_blur_mtf (double freq, double blur_circle_diameter)
 {
-  /* If perfectly in focus or frequency is almost 0, return 1  */
-  if (blur_circle_diameter < 1e-9 || freq < 1e-6)
+  /* If perfectly in focus or frequency is almost zero, return one.  */
+  if (blur_circle_diameter < 1e-12 || my_fabs (freq) < 1e-12)
     return 1;
 
-  /* The transfer function of a circular blur is 2*J1(x)/x  */
+  /* The transfer function of a circular blur is 2*J1(X)/X.  */
   double arg = M_PI * freq * blur_circle_diameter;
   return my_fabs (2.0 * get_j1 (arg) / arg);
 }
@@ -57,316 +60,399 @@ gaussian_blur_mtf (double freq, double sigma)
   return std::exp (-2.0 * M_PI * M_PI * sigma * sigma * freq * freq);
 }
 
-/* Normalized sinc function: sin(pi * x) / (pi * x)
-   Used to model the sensor's pixel aperture effect. */
+/* Return normalized sinc sin (pi * X) / (pi * X).
+   This is used to model the sensor pixel-aperture effect.  */
 double
 sinc (double x)
 {
-  x = my_fabs (x);
-  if (x < 1e-6)
-    return 1.0; /* Avoid division by zero (Taylor expansion limit)  */
-  return my_sin (M_PI * x) / (M_PI * x);
+  double pi_x = M_PI * x;
+  double pi_x2 = pi_x * pi_x;
+  if (pi_x2 < 1.0e-8)
+    return 1.0 - pi_x2 / 6.0 + pi_x2 * pi_x2 / 120.0;
+  return my_sin (pi_x) / pi_x;
 }
 
-#if 0
-/**
-     * Estimates MTF contribution of the Bayer sensor.
-     * @param freq_lp_mm Spatial frequency.
-     * @param channel "green" (high density) or "red_blue" (low density).
-     * @param algorithm_softness 1.0 = perfect reconstruction, 1.5 = typical soft demosaic.
-     */
-    double calculate_mtf(double freq_lp_mm, std::string channel, double algorithm_softness = 1.2) {
-        // 1. Pixel Aperture MTF (The "Box" filter of the physical pixel)
-        // Most modern sensors have a high fill factor, so aperture width approx = pitch.
-        double arg_aperture = std::numbers::pi * freq_lp_mm * pitch;
-        double mtf_aperture = (arg_aperture < 1e-9) ? 1.0 : std::abs(std::sin(arg_aperture) / arg_aperture);
+/* Return the diffraction-limited incoherent OTF of an unobstructed circular
+   pupil at normalized spatial frequency Q.  Q is frequency divided by the
+   diffraction cutoff.  */
+double
+circular_pupil_diffraction_otf (double q)
+{
+  if (q <= 0)
+    return 1;
+  if (q >= 1)
+    return 0;
 
-        // 2. Sampling & Demosaic MTF
-        // The effective sampling pitch changes based on the Bayer pattern.
-        double effective_sampling_pitch = pitch;
-        if (channel == "green") {
-            // Green pixels are in a quincunx grid; diagonal distance is pitch * sqrt(2)
-            // but horizontal/vertical sampling is effectively 'pitch'.
-            effective_sampling_pitch = pitch * algorithm_softness;
-        } else {
-            // Red and Blue are sampled at 2x the pitch distance.
-            effective_sampling_pitch = pitch * 2.0 * algorithm_softness;
-        }
-
-        double arg_sampling = std::numbers::pi * freq_lp_mm * effective_sampling_pitch;
-        double mtf_sampling = (arg_sampling < 1e-9) ? 1.0 : std::abs(std::sin(arg_sampling) / arg_sampling);
-
-        return mtf_aperture * mtf_sampling;
+  /* Writing Q=cos (THETA) avoids the least stable form sqrt (1-Q*Q).
+     Near the cutoff THETA and sin (THETA)*cos (THETA) nearly cancel, so use
+     the series of THETA-sin(2*THETA)/2 in that small interval.  */
+  double theta = my_acos (q);
+  if (theta < 0.1)
+    {
+      double theta2 = theta * theta;
+      double correction
+          = 1.0 - theta2 / 5.0 + 2.0 * theta2 * theta2 / 105.0
+            - theta2 * theta2 * theta2 / 945.0;
+      return (4.0 / (3.0 * M_PI)) * theta * theta2 * correction;
     }
+  return (2.0 / M_PI)
+         * (theta - q * my_sqrt ((1.0 - q) * (1.0 + q)));
+}
+
+/* Nodes and weights of the positive half of the 16-point Gauss--Legendre
+   quadrature rule.  Long double accumulation keeps the pupil integral more
+   accurate than the float image FFT which consumes the resulting table.  */
+constexpr std::array<long double, 8> gauss_legendre_16_nodes = {
+  0.095012509837637440185319335424958063L,
+  0.281603550779258913230460501460496106L,
+  0.458016777657227386342419442983577574L,
+  0.617876244402643748446671764048791019L,
+  0.755404408355003033895101194847442268L,
+  0.865631202387831743880467897712393132L,
+  0.944575023073232576077988415534608345L,
+  0.989400934991649932596154173450332627L
 };
-#endif
 
-#if 0
-double get_polychromatic_mtf(double freq, double defocus_center) {
-    // Weights for human vision / Bayer sensitivity
-    struct SpectralComponent { double lambda; double weight; double focal_shift; };
-    std::vector<SpectralComponent> spectrum = {
-        {0.000450, 0.25, 0.002}, // Blue (shifted slightly)
-        {0.000550, 0.50, 0.000}, // Green (reference)
-        {0.000650, 0.25, -0.002} // Red (shifted slightly)
-    };
+constexpr std::array<long double, 8> gauss_legendre_16_weights = {
+  0.189450610455068496285396723208283105L,
+  0.182603415044923588866763667969219939L,
+  0.169156519395002538189312079030359962L,
+  0.149595988816576732081501730547478549L,
+  0.124628971255533872052476282192016420L,
+  0.095158511682492784809925107602246226L,
+  0.062253523938647892862843836994377694L,
+  0.027152459411754094851780572456018104L
+};
 
-    double total_mtf = 0;
-    for (auto& s : spectrum) {
-        total_mtf += s.weight * get_system_mtf(freq, defocus_center + s.focal_shift, s.lambda);
+/* Evaluate the regularized circular-pupil overlap integral.
+   OVERLAP is 1-Q, where Q is normalized spatial frequency.
+   EDGE_PHASE is the defocus phase difference at the end of the overlap lens.
+
+   The substitution x=(1-Q)*(1-u^2) removes the square-root endpoint from the
+   direct pupil-autocorrelation integral.  Panels are added for oscillatory
+   cases so one panel covers no more than approximately one phase half-cycle.  */
+long double
+defocused_pupil_integral (long double overlap, long double edge_phase)
+{
+  constexpr long double pi
+      = 3.141592653589793238462643383279502884L;
+  constexpr int max_panels = 4096;
+  long double phase = std::fabs (edge_phase);
+
+  /* Beyond this point the normalized integral is below the precision useful
+     for an image MTF, while evaluating tens of thousands of oscillatory panels
+     could make an accidental parameter value unreasonably expensive.  */
+  if (phase > max_panels * pi)
+    return 0;
+
+  int panels = std::max (1, (int)std::ceil (phase / pi));
+  long double sum = 0;
+  for (int panel = 0; panel < panels; panel++)
+    {
+      long double left = panel / (long double)panels;
+      long double right = (panel + 1) / (long double)panels;
+      long double center = (left + right) * 0.5L;
+      long double half_width = (right - left) * 0.5L;
+      long double panel_sum = 0;
+      for (size_t i = 0; i < gauss_legendre_16_nodes.size (); i++)
+        for (int sign : {-1, 1})
+          {
+            long double u
+                = center + sign * half_width * gauss_legendre_16_nodes[i];
+            long double u2 = u * u;
+            long double amplitude
+                = u2 * std::sqrt (2.0L - overlap * u2);
+            panel_sum += gauss_legendre_16_weights[i] * amplitude
+                         * std::cos (edge_phase * (1.0L - u2));
+          }
+      sum += half_width * panel_sum;
     }
-    return total_mtf;
+  return sum;
 }
 
-/* Pixel pitch of PhaseOne 150MP camera in mm.  */
-#define pixel_size (3.76 / 1000)
-
-/* Calculates the MTF of a lens including defocus effects.
-   FREQ Spatial frequency in lp/mm.
-   F_NUM The f-number of the lens.
-   WAVELENGTH_NM Wavelength in nanometers.
-   DEFOCUS_MM Displacement from the focal plane in millimeters.
- */
-double calculate_defocused_mtf(double freq, double f_num, double wavelength_nm, double defocus_mm) {
-    /* Convert wavelength from nm to mm.  */
-    double wavelength_mm = wavelength_nm / 1e6;
-    /* Calculate the cut-off frequency (fc) */
-    double cutoff_freq = 1.0 / (wavelength_mm * f_num);
-    /* Calculate the cut-off frequency (fc) */
-    double s = freq / cutoff_freq;
-
-    if (s >= 1.0) return 0.0;
-    if (s <= 0.0) return 1.0;
-
-    // 1. Diffraction-limited component
-    double mtf_diff = (2.0 / M_PI) * (std::acos(s) - s * sqrt(1.0 - s * s));
-
-    // 2. Defocus component (Geometric Approximation)
-    // Blur circle diameter D = defocus / f_number
-    double blur_diameter = std::abs(defocus_mm) / f_num;
-    
-    // If perfectly in focus, return diffraction limit
-    if (blur_diameter < 1e-9) return mtf_diff;
-
-    // The transfer function of a circular blur is 2*J1(x)/x
-    double arg = M_PI * freq * blur_diameter;
-    double mtf_defocus = std::abs(2.0 * /*std::*/j1(arg) / arg);
-
-    return mtf_diff * mtf_defocus;
-}
-
-/* Computes MTF at frequency f (cycles per unit distance)  */
+/* Return the signed exact defocus factor of an incoherent circular pupil.
+   Q is normalized spatial frequency and EDGE_PHASE is the phase difference at
+   the end of the pupil-overlap lens.  The diffraction-limited OTF is factored
+   out, so the zero-defocus result and the cutoff limit are both one.  */
 double
-system_mtf (double f, double lens_sigma)
+circular_pupil_defocus_factor (double q, double edge_phase)
 {
-  /* 1. Lens Component (Gaussian)
-     MTF_lens = exp(-2 * pi^2 * sigma^2 * f^2)  */
-  const double pi = 3.141592653589793;
-#if 0
-  double lens_mtf
-      = std::exp (-2.0 * pi * pi * lens_sigma * lens_sigma * f * f);
-#endif
-  double lens_mtf = calculate_defocused_mtf (f/pixel_size, 8, 720, lens_sigma);
-  double gaussian_mtf = std::exp (-2.0 * pi * pi * lens_sigma * lens_sigma * f * f);
+  if (q <= 0 || q >= 1 || my_fabs (edge_phase) < 1.0e-12)
+    return 1;
+  if (!my_isfinite (q) || !my_isfinite (edge_phase))
+    return 0;
 
-  /* 2. Sensor Component (Sinc)
-     The aperture width is the pixel pitch d.
-     MTF_sensor = |sinc(d * f)|  */
-  double sensor_mtf = std::abs (sinc (/*pixel_pitch **/ f, lens_sigma));
-
-  // 3. System MTF is the product
-  return lens_mtf * gaussian_mtf * sensor_mtf;
+  long double overlap = 1.0L - (long double)q;
+  long double numerator
+      = defocused_pupil_integral (overlap, (long double)edge_phase);
+  long double denominator = defocused_pupil_integral (overlap, 0);
+  if (!(denominator > 0))
+    return 0;
+  return (double)(numerator / denominator);
 }
-#endif
 
-#if 0
-/* Calculates the Gaussian LSF value at a given pixel offset x */
-double
-calculate_lsf (double x, double sigma)
+/* Return authoritative wavelength metadata for MEASUREMENT in PARAMS, or
+   zero when neither the measurement, its labelled channel, nor the global
+   narrow-band setting supplies a positive finite wavelength.  */
+static double
+measurement_wavelength (const mtf_parameters &params,
+                        const mtf_measurement &measurement)
 {
-  double coefficient = 1.0 / (sigma * std::sqrt (2.0 * M_PI));
-  double exponent = -(x * x) / (2.0 * sigma * sigma);
-  return coefficient * std::exp (exponent);
+  if (my_isfinite (measurement.wavelength) && measurement.wavelength > 0)
+    return measurement.wavelength;
+  if (measurement.channel >= 0 && measurement.channel < 4
+      && my_isfinite (params.wavelengths[measurement.channel])
+      && params.wavelengths[measurement.channel] > 0)
+    return params.wavelengths[measurement.channel];
+  if (my_isfinite (params.wavelength) && params.wavelength > 0)
+    return params.wavelength;
+  return 0;
 }
-#endif
 
-#if 0
-void
-debug_data (double freq, double v1, double v2)
+/* Return true when MODEL is one of the public MTF_MODEL enumerators.  This
+   protects project files and front ends which pass the enum through an integer
+   representation.  */
+static bool
+valid_mtf_model_p (mtf_model model)
 {
-  int len = 60;
-  int p1 = v1 * len / 100;
-  int p2 = v2 * len / 100;
-  printf ("freq %1.2f measured %2.2f obtained %2.2f ", freq, v1, v2);
-  for (int j = 0; j < len + 1; j++)
-    if (j == p1 && j == p2)
-      printf ("E");
-    else if (j == p1)
-      printf ("m");
-    else if (j == p2)
-      printf ("e");
-    else
-      printf (" ");
-  printf ("|\n");
+  return model == mtf_model::automatic_legacy
+         || model == mtf_model::physical_diffraction
+         || model == mtf_model::empirical_fallback;
 }
-#endif
 
+/* Lower and upper limits of a wavelength estimated from an MTF curve.  Fixed
+   metadata may lie outside this interval, but the inverse problem is too weak
+   to search an unrestricted spectral range safely.  */
+constexpr double fitted_wavelength_min_nm = 380;
+constexpr double fitted_wavelength_max_nm = 1000;
+
+/* Historical wavelength ranges used by the compatibility fitting API.  The
+   old interface fitted one shared coordinate for all unknown curves carrying
+   the same channel label.  */
+constexpr std::array<double, 8> legacy_channel_wavelength_ranges = {
+  580, 750,  /* Red range.  */
+  480, 580,  /* Green range.  */
+  380, 480,  /* Blue range.  */
+  750, 1000, /* Infrared range.  */
+};
+
+/* Fit the physical or fallback MTF model to one or more measured curves.  */
 class mtf_solver
 {
-  /* We can optimize
-     - pixel sigma
-     - wavelength
-     - distance / blur radius  */
-  static constexpr const int maxvals = 3;
-  static constexpr const double nanometers_min = 380;
-  static constexpr const double nanometers_max = 1000;
-
 public:
-  mtf_solver (const mtf_parameters &params, const std::vector <mtf_measurement> &measured, 
-              progress_info *progress, bool verbose)
-      : m_measurements (measured), m_params (params), m_progress (progress),
-        be_verbose (verbose), start_vec (), start (nullptr), diffraction (false), 
-	nvalues (0), n_observations (0), sigma_index (-1), fill_factor_index (-1),
-	wavelength_index (), channel_wavelength_index (), blur_index (),
-	f_stop_index (-1)
+  /* Construct a solver for PARAMS and MEASURED curves according to OPTIONS.
+     PROGRESS receives progress updates and VERBOSE enables iteration
+     diagnostics.  Numeric zeroes remain ordinary values; OPTIONS alone
+     decides which coordinates are fitted.  */
+  mtf_solver (const mtf_parameters &params,
+              const std::vector<mtf_measurement> &measured,
+              const mtf_estimation_options &options,
+              progress_info *progress, bool verbose,
+              bool legacy_channel_wavelengths)
+      : m_measurements (measured), m_params (params), m_options (options),
+        m_progress (progress), be_verbose (verbose), start_vec (),
+        start (nullptr), diffraction (false),
+        m_legacy_channel_wavelengths (legacy_channel_wavelengths), nvalues (0),
+        n_observations (0), sigma_index (-1), fill_factor_index (-1),
+        wavelength_index (), channel_wavelength_index (), blur_index (),
+        f_stop_index (-1), halo_fraction_index (-1), halo_sigma_index (-1)
   {
-    channel_wavelength_index.fill(-1);
+    channel_wavelength_index.fill (-1);
     m_params.measured_mtf_idx = -1;
     m_params.clear_data ();
-    if (!params.pixel_pitch || !params.scan_dpi)
+    mtf_model requested_model = options.model == mtf_model::automatic_legacy
+                                    ? params.model
+                                    : options.model;
+    diffraction = requested_model == mtf_model::physical_diffraction
+                  || (requested_model == mtf_model::automatic_legacy
+                      && my_isfinite (params.pixel_pitch)
+                      && params.pixel_pitch > 0
+                      && my_isfinite (params.scan_dpi)
+                      && params.scan_dpi > 0);
+    m_params.model = diffraction ? mtf_model::physical_diffraction
+                                 : mtf_model::empirical_fallback;
+
+    wavelength_index.assign (m_measurements.size (), -1);
+    blur_index.assign (m_measurements.size (), -1);
+
+    if (options.optimize_sigma)
       {
-        if (!m_params.sigma)
-	  {
-	    start_vec.push_back (0);
-            sigma_index = nvalues++;
-	  }
-        else
-          sigma_index = -1;
-    int cur_blur_index = -1;
-    for (const auto &measurement : m_measurements)
-      {
-        if (!measurement.same_capture)
-          cur_blur_index = -1;
-        wavelength_index.push_back (-1);
-        if (!m_params.blur_diameter)
-          {
-            if (cur_blur_index == -1)
-              {
-                start_vec.push_back (0);
-                cur_blur_index = nvalues;
-                blur_index.push_back (nvalues++);
-              }
-            else
-              blur_index.push_back (cur_blur_index);
-          }
-        else
-          blur_index.push_back(-1);
-      }
-    diffraction = false;
-  }
-  else
-  {
-    diffraction = true;
-    if (!m_params.f_stop)
-      {
-        start_vec.push_back (8);
-        f_stop_index = nvalues++;
-      }
-    else
-      f_stop_index = -1;
-    if (!m_params.sigma)
-      {
-        start_vec.push_back (0);
+        start_vec.push_back (my_isfinite (m_params.sigma)
+                                 && m_params.sigma >= 0
+                             ? m_params.sigma
+                             : 0.0);
         sigma_index = nvalues++;
       }
-    else
-      sigma_index = -1;
-    int cur_defocus_index = -1;
-    for (const auto &measurement : m_measurements)
+
+    if (diffraction)
       {
-        if (!measurement.same_capture)
-          cur_defocus_index = -1;
-        if (!m_params.defocus)
+        if (options.optimize_f_stop)
           {
-            if (cur_defocus_index == -1)
+            start_vec.push_back (my_isfinite (m_params.f_stop)
+                                     && m_params.f_stop > 0
+                                 ? m_params.f_stop
+                                 : 8.0);
+            f_stop_index = nvalues++;
+          }
+
+        int current_defocus_index = -1;
+        for (size_t measurement = 0; measurement < m_measurements.size ();
+             measurement++)
+          {
+            if (!m_measurements[measurement].same_capture)
+              current_defocus_index = -1;
+            if (!m_options.include_measurement_p (measurement))
+              continue;
+
+            if (options.optimize_defocus)
               {
-                start_vec.push_back (0);
-                cur_defocus_index = nvalues;
-                blur_index.push_back (nvalues++);
+                if (current_defocus_index < 0)
+                  {
+                    start_vec.push_back (my_isfinite (m_params.defocus)
+                                             && m_params.defocus >= 0
+                                         ? m_params.defocus
+                                         : 0.0);
+                    current_defocus_index = nvalues++;
+                  }
+                blur_index[measurement] = current_defocus_index;
               }
-            else
-              blur_index.push_back (cur_defocus_index);
-          }
-        else
-          blur_index.push_back (-1);
-        if (measurement.channel >= 0)
-          {
-            int c = measurement.channel;
-            wavelength_index.push_back (-1);
-            if (m_params.wavelengths[c] > 0
-                || channel_wavelength_index[c] >= 0)
-              ;
-            else
+
+            if (options.optimize_measurement_wavelength_p (measurement))
               {
-                start_vec.push_back (0.5);
-                channel_wavelength_index [c] = nvalues++;
+                const int channel = m_measurements[measurement].channel;
+                if (m_legacy_channel_wavelengths && channel >= 0
+                    && channel < 4)
+                  {
+                    /* Preserve the historical API: one unknown wavelength was
+                       shared by all measurements with the same channel label,
+                       and each channel used its own conservative search range.  */
+                    if (channel_wavelength_index[channel] < 0)
+                      {
+                        start_vec.push_back (0.5);
+                        channel_wavelength_index[channel] = nvalues++;
+                      }
+                    wavelength_index[measurement]
+                        = channel_wavelength_index[channel];
+                  }
+                else
+                  {
+                    double wavelength = fixed_wavelength (measurement);
+                    if (!(my_isfinite (wavelength) && wavelength > 0))
+                      wavelength = channel == 3 ? 850.0 : 550.0;
+                    wavelength
+                        = std::clamp (wavelength, fitted_wavelength_min_nm,
+                                     fitted_wavelength_max_nm);
+                    start_vec.push_back (
+                        (wavelength - fitted_wavelength_min_nm)
+                        / (fitted_wavelength_max_nm
+                           - fitted_wavelength_min_nm));
+                    wavelength_index[measurement] = nvalues++;
+                  }
               }
           }
-        else if (!measurement.wavelength)
+
+        if (options.optimize_sensor_fill_factor)
           {
-            start_vec.push_back (0.5);
-            wavelength_index.push_back (nvalues++);
+            start_vec.push_back (my_isfinite (m_params.sensor_fill_factor)
+                                     && m_params.sensor_fill_factor > 0
+                                 ? m_params.sensor_fill_factor
+                                 : 1.0);
+            fill_factor_index = nvalues++;
           }
-        else
-          wavelength_index.push_back (-1);
-      }
-    if (!m_params.sensor_fill_factor)
-      {
-        start_vec.push_back (1);
-        fill_factor_index = nvalues++;
+
+        if (options.optimize_halo_fraction)
+          {
+            start_vec.push_back (my_isfinite (m_params.halo_fraction)
+                                     && m_params.halo_fraction >= 0
+                                     && m_params.halo_fraction <= 0.95
+                                 ? m_params.halo_fraction
+                                 : 0.1);
+            halo_fraction_index = nvalues++;
+          }
+        if (options.optimize_halo_sigma)
+          {
+            start_vec.push_back (my_isfinite (m_params.halo_sigma)
+                                     && m_params.halo_sigma > 0
+                                 ? m_params.halo_sigma
+                                 : 5.0);
+            halo_sigma_index = nvalues++;
+          }
       }
     else
-      fill_factor_index = -1;
-  }
-    n_observations = 0;
-    for (size_t m = 0; m < m_measurements.size (); m++)
       {
-	auto &measurement = m_measurements[m];
-	for (size_t i = 0; i < measurement.size (); i++)
-	  if (measurement.get_freq (i) <= 0.5)
-	    n_observations++;
+        int current_blur_index = -1;
+        for (size_t measurement = 0; measurement < m_measurements.size ();
+             measurement++)
+          {
+            if (!m_measurements[measurement].same_capture)
+              current_blur_index = -1;
+            if (!m_options.include_measurement_p (measurement))
+              continue;
+            if (options.optimize_blur_diameter)
+              {
+                if (current_blur_index < 0)
+                  {
+                    start_vec.push_back (my_isfinite (m_params.blur_diameter)
+                                             && m_params.blur_diameter >= 0
+                                         ? m_params.blur_diameter
+                                         : 0.0);
+                    current_blur_index = nvalues++;
+                  }
+                blur_index[measurement] = current_blur_index;
+              }
+          }
       }
+
+    for (size_t measurement = 0; measurement < m_measurements.size ();
+         measurement++)
+      if (m_options.include_measurement_p (measurement))
+        for (size_t i = 0; i < m_measurements[measurement].size (); i++)
+          if (m_measurements[measurement].get_freq (i) <= 0.5)
+            n_observations++;
+
     start = start_vec.data ();
-    sums.resize (m_measurements.size ());
+    sums.assign (m_measurements.size (), 0.0);
     assert (nvalues == (int)start_vec.size ());
   }
+
+  /* Return the number of independently fitted scalar values.  */
   int
   num_values () const
   {
     return nvalues;
   }
-  luminosity_t
+
+  /* Return the objective-value tolerance used by the simplex solver.  */
+  double
   epsilon () const
   {
     return 0.0000001;
   }
-  luminosity_t
+
+  /* Return the finite-difference step used by the least-squares solver.  */
+  double
   derivative_perturbation () const
   {
-    return 0.0001;  // Increased from 0.00001 for more robust gradient estimation
+    return 0.0001;
   }
+
+  /* Return true when solver iteration diagnostics are requested.  */
   bool
   verbose () const
   {
     return be_verbose;
   }
-  luminosity_t
+
+  /* Return the common parameter scale expected by the generic solvers.  */
+  double
   scale () const
   {
     return 1;
   }
+
+  /* Project optimization vector VALS onto the physically allowed ranges.  */
   void
-  constrain (luminosity_t *vals)
+  constrain (double *vals)
   {
     if (fill_factor_index >= 0 && vals[fill_factor_index] < 0.1)
       vals[fill_factor_index] = 0.1;
@@ -374,93 +460,208 @@ public:
       vals[fill_factor_index] = 32;
     if (sigma_index >= 0 && vals[sigma_index] < 0)
       vals[sigma_index] = 0;
-    for (int c = 0; c < 4; c++)
-      if (channel_wavelength_index[c] >= 0)
-	vals[channel_wavelength_index[c]] = std::clamp (vals[channel_wavelength_index[c]], (luminosity_t)0, (luminosity_t)1);
+    if (sigma_index >= 0 && vals[sigma_index] > 20)
+      vals[sigma_index] = 20;
+    if (halo_fraction_index >= 0)
+      vals[halo_fraction_index]
+          = std::clamp (vals[halo_fraction_index], 0.0, 0.95);
+    if (halo_sigma_index >= 0)
+      {
+        /* Keep the optional component identifiable as a broad halo rather
+           than allowing it to exchange labels with the residual core
+           Gaussian.  This constraint applies only while fitting a missing
+           halo width; an explicitly supplied value is left untouched.  */
+        const double core_sigma
+            = sigma_index >= 0 ? vals[sigma_index] : m_params.sigma;
+        const double minimum_halo_sigma
+            = std::min (std::max (1.0, 2.0 * core_sigma), 256.0);
+        vals[halo_sigma_index]
+            = std::clamp (vals[halo_sigma_index], minimum_halo_sigma, 256.0);
+      }
     for (int e : blur_index)
-      if (e >= 0 && vals[e] < 0)
-        vals[e] = 0;
+      if (e >= 0)
+        vals[e] = std::clamp (vals[e], 0.0, diffraction ? 20.0 : 64.0);
     for (int e : wavelength_index)
       if (e >= 0)
-	vals[e] = std::clamp (vals[e], (luminosity_t)0, (luminosity_t)1);
+	vals[e] = std::clamp (vals[e], 0.0, 1.0);
     if (f_stop_index >= 0)
       vals[f_stop_index] = std::clamp (vals[f_stop_index],
-                                           (luminosity_t)0.5, (luminosity_t)16);
+                                      0.5, 128.0);
   }
-  luminosity_t
-  get_fill_factor (const luminosity_t *vals)
+
+  /* Return sensor fill factor from optimization vector VALS.  */
+  double
+  get_fill_factor (const double *vals)
   {
     if (fill_factor_index < 0)
       return m_params.sensor_fill_factor;
     return vals[fill_factor_index];
   }
-  luminosity_t
-  get_channel_wavelength (int c, const luminosity_t *vals)
+
+  /* Return the fixed wavelength metadata for MEASUREMENT, or zero when no
+     authoritative per-measurement, channel, or global value is available.  */
+  double
+  fixed_wavelength (size_t measurement) const
   {
-    static const constexpr luminosity_t ranges[8] = {
-	    580, 750,  /* Red range.  */
-	    480, 580,  /* Green range.  */
-	    380, 480,  /* Blue blue range.  */
-	    750, 1000, /* IR between 750 and 1000. */
-    };
-    if (channel_wavelength_index[c] >= 0)
-      return vals[channel_wavelength_index[c]] * (ranges[2*c+1] - ranges[2*c])
-	     + ranges[2*c];
-    else
+    return measurement_wavelength (m_params, m_measurements[measurement]);
+  }
+
+  /* Return true when wavelength of MEASUREMENT is represented by a free
+     coordinate in the optimization vector.  */
+  bool
+  wavelength_estimated_p (size_t measurement) const
+  {
+    return wavelength_index[measurement] >= 0;
+  }
+
+  /* Return true when MEASUREMENT participates in the objective.  */
+  bool
+  measurement_included_p (size_t measurement) const
+  {
+    return m_options.include_measurement_p (measurement);
+  }
+
+  /* Return the lower wavelength search bound for MEASUREMENT.  */
+  double
+  wavelength_min (size_t measurement) const
+  {
+    const int channel = m_measurements[measurement].channel;
+    if (m_legacy_channel_wavelengths && channel >= 0 && channel < 4)
+      return legacy_channel_wavelength_ranges[2 * channel];
+    return fitted_wavelength_min_nm;
+  }
+
+  /* Return the upper wavelength search bound for MEASUREMENT.  */
+  double
+  wavelength_max (size_t measurement) const
+  {
+    const int channel = m_measurements[measurement].channel;
+    if (m_legacy_channel_wavelengths && channel >= 0 && channel < 4)
+      return legacy_channel_wavelength_ranges[2 * channel + 1];
+    return fitted_wavelength_max_nm;
+  }
+
+  /* Return wavelength for MEASUREMENT from optimization vector VALS.  */
+  double
+  get_wavelength (size_t measurement, const double *vals) const
+  {
+    if (wavelength_index[measurement] >= 0)
+      {
+        const double minimum = wavelength_min (measurement);
+        const double maximum = wavelength_max (measurement);
+        return vals[wavelength_index[measurement]] * (maximum - minimum)
+               + minimum;
+      }
+    return fixed_wavelength (measurement);
+  }
+
+  /* Return true when legacy channel C has one shared wavelength coordinate.  */
+  bool
+  channel_wavelength_estimated_p (int c) const
+  {
+    return c >= 0 && c < 4 && channel_wavelength_index[c] >= 0;
+  }
+
+  /* Return fitted or fixed wavelength for legacy channel C.  */
+  double
+  get_channel_wavelength (int c, const double *vals) const
+  {
+    if (channel_wavelength_estimated_p (c))
+      return vals[channel_wavelength_index[c]]
+                 * (legacy_channel_wavelength_ranges[2 * c + 1]
+                    - legacy_channel_wavelength_ranges[2 * c])
+             + legacy_channel_wavelength_ranges[2 * c];
+    if (m_params.wavelengths[c] > 0)
       return m_params.wavelengths[c];
+    return m_params.wavelength;
   }
-  luminosity_t
-  get_wavelength (int measurement, const luminosity_t *vals)
+
+  /* Return a representative wavelength for the fitted physical model.  The
+     first included curve is used because one scalar MTF_PARAMETERS instance
+     can display only one current optical wavelength at a time.  */
+  double
+  first_wavelength (const double *vals) const
   {
-    if (m_measurements[measurement].wavelength > 0)
-      return m_measurements[measurement].wavelength;
-    if (m_measurements[measurement].channel >= 0)
-      return get_channel_wavelength (m_measurements[measurement].channel, vals);
-    if (wavelength_index[measurement] < 0)
-      return m_params.wavelength;
-    return vals[wavelength_index[measurement]] * (nanometers_max - nanometers_min)
-           + nanometers_min;
+    for (size_t measurement = 0; measurement < m_measurements.size ();
+         measurement++)
+      if (measurement_included_p (measurement))
+        return get_wavelength (measurement, vals);
+    return m_params.wavelength;
   }
-  luminosity_t
-  get_f_stop (const luminosity_t *vals)
+
+  /* Return marked f-number from optimization vector VALS.  */
+  double
+  get_f_stop (const double *vals)
   {
     if (f_stop_index < 0)
       return m_params.f_stop;
     return vals[f_stop_index];
   }
-  luminosity_t
-  get_sigma (const luminosity_t *vals)
+
+  /* Return residual Gaussian sigma from optimization vector VALS.  */
+  double
+  get_sigma (const double *vals)
   {
     if (sigma_index < 0)
       return m_params.sigma;
     return vals[sigma_index];
   }
-  luminosity_t
-  get_defocus (int measurement, const luminosity_t *vals)
+  /* Return halo energy fraction from optimization vector VALS.  */
+  double
+  get_halo_fraction (const double *vals)
+  {
+    if (halo_fraction_index < 0)
+      return m_params.halo_fraction;
+    return vals[halo_fraction_index];
+  }
+  /* Return halo Gaussian radius in pixels from optimization vector VALS.  */
+  double
+  get_halo_sigma (const double *vals)
+  {
+    if (halo_sigma_index < 0)
+      return m_params.halo_sigma;
+    return vals[halo_sigma_index];
+  }
+
+  /* Return image-plane defocus for MEASUREMENT from vector VALS.  */
+  double
+  get_defocus (int measurement, const double *vals)
   {
     if (!diffraction || blur_index[measurement] < 0)
       return m_params.defocus;
     return vals[blur_index[measurement]];
   }
-  luminosity_t
-  get_blur_diameter (int measurement, const luminosity_t *vals)
+
+  /* Return fallback blur diameter for MEASUREMENT from vector VALS.  */
+  double
+  get_blur_diameter (int measurement, const double *vals)
   {
     if (diffraction || blur_index[measurement] < 0)
       return m_params.blur_diameter;
     return vals[blur_index[measurement]];
   }
-  luminosity_t
-  objfunc (const luminosity_t *vals, luminosity_t *f_vec = nullptr)
+
+  /* Return sum of squared residuals for vector VALS.  If F_VEC is non-null,
+     also store each residual for the least-squares solver.  */
+  double
+  objfunc (const double *vals, double *f_vec = nullptr)
   {
     /* Use double to avoid accumulation of an error */
     double sum = 0;
     mtf_parameters p = m_params;
     p.sigma = get_sigma (vals);
+    p.halo_fraction = get_halo_fraction (vals);
+    p.halo_sigma = get_halo_sigma (vals);
     p.f_stop = get_f_stop (vals);
     p.sensor_fill_factor = get_fill_factor (vals);
     int out_idx = 0;
     for (size_t m = 0; m < m_measurements.size (); m++)
       {
+	if (!measurement_included_p (m))
+	  {
+	    sums[m] = 0;
+	    continue;
+	  }
 	auto &measurement = m_measurements[m];
 	p.wavelength = get_wavelength (m, vals);
 	if (diffraction)
@@ -468,21 +669,22 @@ public:
 	else
 	  p.blur_diameter = get_blur_diameter (m, vals);
 	assert (diffraction == p.simulate_diffraction_p ());
-	/* Use double to avoid accumulation of an error */
+	/* Use double to avoid accumulation error in long measured curves.  */
 	double msum = 0;
 	for (size_t i = 0; i < measurement.size (); i++)
 	  {
-	    luminosity_t freq = measurement.get_freq (i);
+	    double freq = measurement.get_freq (i);
 	    /* Do not care about values above Nyquist.  */
 	    if (freq > 0.5)
 	      continue;
-	    luminosity_t contrast = measurement.get_contrast (i);
-	    luminosity_t contrast2 = p.system_mtf (freq) * 100;
-	    msum += (contrast - contrast2) * (contrast - contrast2);
+	    double contrast = measurement.get_contrast (i);
+	    double contrast2 = p.system_mtf (freq) * 100;
+	    double residual = contrast - contrast2;
+	    msum += residual * residual;
 	    if (f_vec)
 	      { 
 		assert (out_idx < n_observations);
-		f_vec[out_idx++] = contrast - contrast2;
+		f_vec[out_idx++] = residual;
 	      }
 #if 0
 	    if (be_verbose)
@@ -493,8 +695,14 @@ public:
 	  {
 	    if (m_progress)
 	      m_progress->pause_stdout ();
-	    printf ("measurement %zu fill factor %f, f-stop %f (%f) gaussian blur sigma %f, wavelength %f, defocus %f, blur_diameter %f, sqsum %f\n",
-		    m, p.sensor_fill_factor, p.f_stop, p.effective_f_stop (), p.sigma, p.wavelength, p.defocus, p.blur_diameter, msum);
+	    printf ("measurement %zu fill factor %f, f-stop %f (%f) "
+	            "gaussian blur sigma %f, halo fraction %f, halo "
+	            "sigma %f, wavelength %f, defocus %f, "
+	            "blur_diameter %f, sqsum %f\n",
+	            m, p.sensor_fill_factor, p.f_stop,
+	            p.effective_f_stop (), p.sigma, p.halo_fraction,
+	            p.halo_sigma, p.wavelength, p.defocus,
+	            p.blur_diameter, msum);
 	    if (m_progress)
 	      m_progress->resume_stdout ();
 	  }
@@ -518,33 +726,41 @@ public:
   {
     return n_observations;
   }
+
+  /* Store residual vector for VALS in F_VEC and return a GSL status.  */
   int
-  residuals (const luminosity_t *vals, luminosity_t *f_vec)
+  residuals (const double *vals, double *f_vec)
   {
     objfunc (vals, f_vec);
     return GSL_SUCCESS;
   }
   const std::vector <mtf_measurement> &m_measurements;
   mtf_parameters m_params;
+  mtf_estimation_options m_options;
   progress_info *m_progress;
   bool be_verbose;
-  std::vector<luminosity_t> start_vec;
-  std::vector<luminosity_t> sums;
-  luminosity_t *start;
+  std::vector<double> start_vec;
+  std::vector<double> sums;
+  double *start;
   bool diffraction;
+  /* True only for the old zero-sentinel API, whose unknown channel-labelled
+     measurements share one fitted wavelength per channel.  */
+  bool m_legacy_channel_wavelengths;
   int nvalues;
   int n_observations;
   int sigma_index;
   int fill_factor_index;
   std::vector<int> wavelength_index;
-  std::array<int,4> channel_wavelength_index;
+  std::array<int, 4> channel_wavelength_index;
   std::vector<int> blur_index;
   int f_stop_index;
+  int halo_fraction_index;
+  int halo_sigma_index;
 };
 
 /* Determine PSF kernel radius.  */
 static int
-get_psf_radius (mtf::psf_t *psf, int size, bool *ok = nullptr)
+get_psf_radius (const mtf::psf_t *psf, int size, bool *ok = nullptr)
 {
   double peak = 0;
   for (int i = 0; i < size; i++)
@@ -572,185 +788,162 @@ get_psf_radius (mtf::psf_t *psf, int size, bool *ok = nullptr)
 }
 
 /* Return sensor MTF at given pixel frequency.
-   PIXEL_FREQ is the spatial frequency in cycles per pixel.  */
+   PIXEL_FREQ is the spatial frequency in cycles per pixel.  The first-cut
+   model is radial, as requested; SENSOR_FILL_FACTOR is interpreted as active
+   pixel area, so its square root is the active linear aperture.  */
 double
 mtf_parameters::sensor_mtf (double pixel_freq) const
 {
+  if (!(sensor_fill_factor > 0) || !my_isfinite (sensor_fill_factor))
+    return 1;
   return my_fabs (sinc (pixel_freq * my_sqrt (sensor_fill_factor)));
 }
 
-/* The effective f-stop changes in macro photography based on magnification.
- */
+/* Return the capture magnification inferred from sensor pitch and scan DPI.
+   The result assumes one output image pixel corresponds to one sensor pixel;
+   callers must adjust SCAN_DPI when the camera image was resampled.  */
+double
+mtf_parameters::magnification () const
+{
+  if (!(scan_dpi > 0) || !(pixel_pitch > 0) || !my_isfinite (scan_dpi)
+      || !my_isfinite (pixel_pitch))
+    return 0;
+  double object_pixel_pitch_um = 25400.0 / scan_dpi;
+  return pixel_pitch / object_pixel_pitch_um;
+}
 
+/* Return the image-side working f-number for macro capture.
+   The relation N*(1+M) assumes pupil magnification one.  It is exact for the
+   thin symmetric-lens convention and is the documented approximation used
+   until lens-specific pupil magnification is available.  */
 double
 mtf_parameters::effective_f_stop () const
 {
-  if (!scan_dpi || !f_stop)
+  if (!(f_stop > 0) || !my_isfinite (f_stop))
     return f_stop;
-  double scan_pixel_pitch_um = 25400.0 / scan_dpi;
-  double magnification = pixel_pitch / scan_pixel_pitch_um;
-  // printf ("Magnification %f\n", magnification);
-  return f_stop * (1 + magnification);
+  return f_stop * (1.0 + magnification ());
 }
 
-/* Return normalized frequency (nu).
-   PIXEL_FREQ is the spatial frequency in cycles per pixel.
-   nu needs to be in range 0 to 1. 1 is the absolute resolution of the lens. */
+/* Return normalized optical frequency NU.
+   PIXEL_FREQ is spatial frequency in cycles per sensor/output pixel.  NU is
+   zero at DC and one at the incoherent diffraction cutoff.  */
 double
 mtf_parameters::nu (double pixel_freq) const
 {
-  double freq = pixel_freq / (pixel_pitch * (1.0 / 1000));
-  double wavelength_mm = wavelength / 1e6;
-  double cutoff_freq = 1.0 / (wavelength_mm * effective_f_stop ());
-  return std::clamp (freq / cutoff_freq, 0.0, 1.0);
+  if (!can_simulate_diffraction_p () || !my_isfinite (pixel_freq))
+    return 0;
+  double frequency_per_mm = my_fabs (pixel_freq) / (pixel_pitch * 0.001);
+  double wavelength_mm = wavelength * 1.0e-6;
+  double cutoff_per_mm = 1.0 / (wavelength_mm * effective_f_stop ());
+  return std::clamp (frequency_per_mm / cutoff_per_mm, 0.0, 1.0);
 }
 
-/* Return MTF of perfect diffraction limited lens.
-   PIXEL_FREQ is the spatial frequency in cycles per pixel.  */
-
+/* Return the diffraction-limited MTF of a perfect circular pupil.
+   PIXEL_FREQ is spatial frequency in cycles per pixel.  */
 double
 mtf_parameters::lens_diffraction_mtf (double pixel_freq) const
 {
-  /* If we have measured MTF data, diffraction is already included.  */
-  double s = nu (pixel_freq);
-  return (2.0 / M_PI) * (my_acos (s) - s * my_sqrt (1.0 - s * s));
+  return circular_pupil_diffraction_otf (nu (pixel_freq));
 }
 
-/* Estimate lens blur using Hopkins model.  */
+/* Return the exact defocus factor for the diffraction model.
+   PIXEL_FREQ is spatial frequency in cycles per pixel.  DEFOCUS is image-plane
+   displacement in millimeters.  The function evaluates the incoherent pupil
+   autocorrelation and returns its magnitude relative to the in-focus OTF.  */
 double
-mtf_parameters::hopkins_defocus_mtf (double pixel_freq) const
+mtf_parameters::lens_defocus_mtf (double pixel_freq) const
 {
-  double ef_stop = effective_f_stop ();
-  double s = nu (pixel_freq);
-  double freq = pixel_freq / (pixel_pitch * (1.0 / 1000));
-  double wavelength_mm = wavelength / 1e6;
-  /* Slight defocus model; not seem to be working in practice.  */
-  if (0)
-    {
-      double blur_diameter = my_fabs (defocus) / effective_f_stop ();
-      return defocus_mtf (freq, blur_diameter);
-    }
-  if (s <= 0 || s >= 1)
+  double q = nu (pixel_freq);
+  if (q <= 0 || q >= 1 || my_fabs (defocus) < 1.0e-15)
     return 1;
 
-  /* Calculate Wavefront Defocus (W_{020}). This converts physical
-     distance to wavefront error.
-
-    W_{20} = delta_z / (8 * f_number^2)  */
-  double w20 = defocus / (8.0 * ef_stop * ef_stop);
-
-#if 0
-  /* Hopkins Defocus Factor
-     This is a simplified wave-optical approximation for slight defocus  */
-  double arg = 4.0 * M_PI * w20 * s * (1.0 - s) / wavelength_mm;
-  return (my_fabs(arg) < 1e-9) ? 1.0 : std::sin(arg) / arg;
-#endif
-
-  /* Hopkins Defocus Factor
-     Z = (2 * pi / wavelength) * w20 * 4 * nu * (1 - nu)  */
-  double Z = (2.0 * M_PI / wavelength_mm) * w20 * 4.0 * s * (1.0 - s);
-
-  /* Apply the Defocus Transfer Function using Bessel J1
-     Handle the limit where Z -> 0 to avoid division by zero  */
-  /* Ringing effect of defocus is modeled by Bessel function.  */
-  if (my_fabs (Z) > 1e-9)
-    return my_fabs (2.0 * get_j1 (Z) / Z);
-  // return my_fabs (2.0 * j1 (Z) / Z);
-  return 1;
+  double wavelength_mm = wavelength * 1.0e-6;
+  double working_f_stop = effective_f_stop ();
+  double edge_phase
+      = M_PI * defocus * q * (1.0 - q)
+        / (wavelength_mm * working_f_stop * working_f_stop);
+  /* The magnitude cannot exceed the in-focus OTF by the triangle inequality.
+     Clamp only roundoff outside that invariant; the signed internal result is
+     retained for validation across phase reversals.  */
+  return std::clamp (
+      my_fabs (circular_pupil_defocus_factor (q, edge_phase)), 0.0, 1.0);
 }
 
-/* Calculates the Stokseth approximation for the MTF of a defocused lens.
-   PIXEL_FREQ is the spatial frequency in cycles per pixel.
-   Returns the MTF value as a product of diffraction and defocus effects.  */
-
+/* Return the historical Stokseth/Bessel defocus approximation.
+   PIXEL_FREQ is spatial frequency in cycles per pixel.  This function is kept
+   only for diagnostics and regression comparison; LENS_MTF uses the exact
+   pupil-autocorrelation factor returned by LENS_DEFOCUS_MTF.  */
 double
 mtf_parameters::stokseth_defocus_mtf (double pixel_freq) const
 {
-  double ef_stop = effective_f_stop ();
-  double freq = pixel_freq / (pixel_pitch * (1.0 / 1000));
-  // 1. Calculate Diffraction Cutoff (fc)
-  double wavelength_mm = wavelength / 1e6;
-  double cutoff_freq = 1.0 / (wavelength_mm * ef_stop);
+  double q = nu (pixel_freq);
+  if (q <= 0 || q >= 1 || my_fabs (defocus) < 1.0e-15)
+    return 1;
 
-  if (freq <= 0.0)
-    return 1.0;
-  if (freq >= cutoff_freq)
-    return 0.0;
-
-  double s = freq / cutoff_freq; // Normalized frequency (0 to 1)
-
-  // 2. Calculate Wavefront Aberration W20 (in mm)
-  // Formula: delta_z / (8 * N_eff^2)
-  double w20 = defocus / (8.0 * my_pow (ef_stop, 2));
-
-  // 3. Stokseth B Parameter
-  // Scales the defocus impact by frequency.
-  // Original approximation: B = 4 * pi * (w20 / lambda) * s * (1 - s)
-  // Standard approximation: B = 8 * pi * (w20 / lambda) * s * (1 - s)
-  double B
-      = (8.0 * M_PI * w20 * s) * (1.0 - s) / wavelength_mm;
-
-  // 4. Defocus MTF using Bessel J1
-  // 2*J1(B)/B is the optical transfer of a circular blur
-  double j_term = (my_fabs (B) < 1e-8) ? 1.0 : 2.0 * get_j1 (B) / B;
-
-  /* This seems to be incorrect.  */
-  if (0)
-    {
-      // 5. Full Stokseth Polynomial Correction (1 - 0.6s + 0.4s^2)
-      double stokseth_poly = 1.0 - 0.6 * s + 0.4 * s * s;
-
-      // 6. Empirical Correction (1 - 0.6s)
-      // Interpolate between diffraction limit and Stokseth model based on defocus.
-      double phase_error_ratio = w20 / (wavelength_mm * 0.25);
-      double weight = std::clamp (phase_error_ratio, 0.0, 1.0);
-
-      // Apply correction: if weight is 0 (perfect focus), factor is 1.0.
-      // If weight is 1 (significant defocus), factor is the Stokseth polynomial.
-      double final_correction = (1.0 - weight) + (weight * stokseth_poly);
-
-      return my_fabs (j_term) * final_correction;
-    }
-  return my_fabs (j_term);
+  double wavelength_mm = wavelength * 1.0e-6;
+  double working_f_stop = effective_f_stop ();
+  double edge_phase
+      = M_PI * defocus * q * (1.0 - q)
+        / (wavelength_mm * working_f_stop * working_f_stop);
+  if (my_fabs (edge_phase) < 1.0e-8)
+    return 1;
+  return my_fabs (2.0 * get_j1 (edge_phase) / edge_phase);
 }
 
-/* Simulate lens MTF.
-   PIXEL_FREQ is the spatial frequency in cycles per pixel.
-   Simulates lens as a combination of:
-    - diffraction limit (pixel_pitch, wavelength_mm, f_stop)
-    - gaussian blur (sigma)
-    - defocus (defocus_mm)
- */
+/* Return the legacy approximate defocus factor.
+   PIXEL_FREQ is spatial frequency in cycles per pixel.  */
+double
+mtf_parameters::hopkins_defocus_mtf (double pixel_freq) const
+{
+  return stokseth_defocus_mtf (pixel_freq);
+}
 
+/* Return the transfer factor of the optional broad scattering halo.
+   PIXEL_FREQ is spatial frequency in cycles per output pixel.  A fraction
+   HALO_FRACTION of the core image is convolved with a Gaussian of standard
+   deviation HALO_SIGMA, while the remaining energy stays in the core.  */
+double
+mtf_parameters::halo_mtf (double pixel_freq) const
+{
+  if (!(my_isfinite (halo_fraction) && halo_fraction > 0
+        && my_isfinite (halo_sigma) && halo_sigma > 0))
+    return 1;
+
+  double fraction = std::clamp (halo_fraction, 0.0, 1.0);
+  return (1.0 - fraction)
+         + fraction * gaussian_blur_mtf (pixel_freq, halo_sigma);
+}
+
+/* Return lens MTF at PIXEL_FREQ cycles per pixel.
+   The primary path combines exact circular-pupil diffraction and defocus with
+   optional residual Gaussian blur and broad scattering halo.  The geometric
+   circular-blur model is a metadata-free fallback only.  */
 double
 mtf_parameters::lens_mtf (double pixel_freq) const
 {
+  double core;
   if (simulate_diffraction_p ())
-    return stokseth_defocus_mtf (pixel_freq) * lens_diffraction_mtf (pixel_freq)
+    core = lens_diffraction_mtf (pixel_freq)
+           * lens_defocus_mtf (pixel_freq)
            * gaussian_blur_mtf (pixel_freq, sigma);
   else
     return gaussian_blur_mtf (pixel_freq, sigma)
-           * defocus_mtf (pixel_freq, blur_diameter);
+           * circular_blur_mtf (pixel_freq, blur_diameter);
+  return core * halo_mtf (pixel_freq);
 }
 
-/* Adjustment factor to measured MTF based on
-    - gaussian blur (sigma)
-    - defocus (defocus_mm)
- */
-
+/* Return an optional correction applied on top of a measured MTF.
+   PIXEL_FREQ is spatial frequency in cycles per pixel.  A measurement already
+   contains diffraction and capture defocus, so only the metadata-free residual
+   Gaussian/circular adjustment is applied here.  */
 double
 mtf_parameters::measured_mtf_correction (double pixel_freq) const
 {
-  if (simulate_diffraction_p ())
-    return stokseth_defocus_mtf (pixel_freq)
-           * gaussian_blur_mtf (pixel_freq, sigma);
-  else
-    return gaussian_blur_mtf (pixel_freq, sigma)
-           * defocus_mtf (pixel_freq, blur_diameter);
+  return gaussian_blur_mtf (pixel_freq, sigma)
+         * circular_blur_mtf (pixel_freq, blur_diameter);
 }
 
-/* Simulate system as a combination of sensor MTF and lens MTF.  */
-
+/* Return complete radial system MTF at PIXEL_FREQ cycles per pixel.  */
 double
 mtf_parameters::system_mtf (double pixel_freq) const
 {
@@ -773,7 +966,7 @@ mtf::compute_lsf (std::vector<psf_t, fft_allocator<psf_t>> &lsf,
     }
   std::vector<psf_t, fft_allocator<psf_t>> mtf_half (size);
   auto plan = fft_plan_r2r_1d<psf_t> (size, FFTW_REDFT00, mtf_half.data (), lsf.data ());
-  psf_t scale = 1.0 / (size * subsample * 2);
+  double scale = 1.0 / ((double)size * subsample * 2.0);
 
   /* Mirror mtf.  */
   for (int i = 0; i < size; i++)
@@ -785,7 +978,7 @@ mtf::compute_lsf (std::vector<psf_t, fft_allocator<psf_t>> &lsf,
   double sum = 0;
   for (int i = 0; i < size; i++)
     sum += lsf[i];
-  psf_t fin_scale = 1.0 / sum;
+  double fin_scale = 1.0 / sum;
   for (int i = 0; i < size; i++)
     lsf[i] *= fin_scale;
 }
@@ -795,7 +988,7 @@ mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
                      progress_info *progress, bool parallel)
 {
   int fft_size = psf_size / 2 + 1;
-  const psf_t psf_step = 1 / (psf_size * subscale);
+  const double psf_step = 1.0 / ((double)psf_size * subscale);
   // Use unique_ptr with FFTW allocator for fftw_complex array
   auto mtf_kernel = fft_alloc_complex<psf_t> (psf_size * fft_size);
   std::vector<psf_t, fft_allocator<psf_t>> psf_data (psf_size * psf_size);
@@ -1084,8 +1277,8 @@ mtf::precompute (progress_info *progress, bool parallel)
             }
         }
 
-      std::vector<luminosity_t> frequencies;
-      std::vector<luminosity_t> contrasts;
+      std::vector<double> frequencies;
+      std::vector<double> contrasts;
       frequencies.reserve (measured_size + 3);
       contrasts.reserve (measured_size + 3);
 
@@ -1129,9 +1322,7 @@ mtf::precompute (progress_info *progress, bool parallel)
               return false;
             }
           frequencies.push_back (frequency);
-          contrasts.push_back (
-              std::clamp ((luminosity_t)value, (luminosity_t)0,
-                          (luminosity_t)1));
+          contrasts.push_back (std::clamp (value, 0.0, 1.0));
         }
 
       /* Extend the curve by two zero points.  Frequencies outside the table
@@ -1199,7 +1390,7 @@ mtf::precompute (progress_info *progress, bool parallel)
   else
     {
       const int entries = 512;
-      std::vector<luminosity_t> contrasts (entries);
+      std::vector<double> contrasts (entries);
       double step = 1.0 / (entries - 2);
       for (int i = 0; i < entries - 2; i++)
         contrasts[i] = m_params.system_mtf (i * step);
@@ -1269,20 +1460,25 @@ mtf_parameters::save_psf (progress_info *progress, const char *write_table,
   return mtf.precompute_psf (progress, true, write_table, error);
 }
 
+/* Write the shared component-curve header to F.  */
 bool
 mtf_parameters::print_csv_header (FILE *f) const
 {
   return fprintf (
              f,
-             "diffraction f-stop 0/%.0f (effective 0/%.0f) wavelength %f.0nm "
-             "magnification %f pixel pitch %f	defocus %.5fmm	"
-             "sigma=%.2fpx	lens	sensor fill factor %.1f	estimated\n",
-             f_stop, effective_f_stop (), wavelength,
-             pixel_pitch / (25400.0 / scan_dpi), pixel_pitch, defocus, sigma,
+             "diffraction f-stop 0/%.8g (effective 0/%.8g) wavelength %.8gnm "
+             "magnification %.10g pixel pitch %.8gum\texact defocus "
+             "%.10gmm\tlegacy Bessel defocus\tcore sigma=%.8gpx\thalo "
+             "fraction %.8g sigma %.8gpx\tlens\tsensor fill factor "
+             "%.8g\tsystem\n",
+             f_stop, effective_f_stop (), wavelength, magnification (),
+             pixel_pitch, defocus, sigma, halo_fraction, halo_sigma,
              sensor_fill_factor)
          >= 0;
 }
 
+/* Write model component curves to WRITE_TABLE and report errors through
+   ERROR.  */
 bool
 mtf_parameters::write_table (const char *write_table, const char **error) const
 {
@@ -1291,47 +1487,61 @@ mtf_parameters::write_table (const char *write_table, const char **error) const
       FILE *f = fopen (write_table, "wt");
       if (!f)
         {
-          *error = "failed to open output file";
+          if (error)
+            *error = "failed to open output file";
           return false;
         }
-      if (fprintf (f, "frequency	") < 0 || !print_csv_header (f))
+      if (fprintf (f, "frequency\t") < 0 || !print_csv_header (f))
         {
-          *error = "write error";
+          if (error)
+            *error = "write error";
+          fclose (f);
           return false;
         }
       for (size_t i = 0; i < 400; i++)
         {
-          luminosity_t freq = i / 400.0;
+          double freq = i / 400.0;
           if (fprintf (f,
-                       "%1.3f	%2.2f	%2.2f	%2.2f	%2.2f	%2.2f	"
-                       "%2.2f\n",
+                       "%.17g\t%.12g\t%.12g\t%.12g\t%.12g\t%.12g\t"
+                       "%.12g\t%.12g\t%.12g\n",
                        freq, lens_diffraction_mtf (freq) * 100,
+                       lens_defocus_mtf (freq) * 100,
                        stokseth_defocus_mtf (freq) * 100,
                        gaussian_blur_mtf (freq, sigma) * 100,
-                       lens_mtf (freq) * 100, sensor_mtf (freq) * 100,
+                       halo_mtf (freq) * 100, lens_mtf (freq) * 100,
+                       sensor_mtf (freq) * 100,
                        system_mtf (freq) * 100)
               < 0)
             {
-              *error = "write error";
+              if (error)
+                *error = "write error";
+              fclose (f);
               return false;
             }
         }
       if (fclose (f))
         {
-          *error = "error closing output file";
+          if (error)
+            *error = "error closing output file";
           return false;
         }
     }
   return true;
 }
 
+/* Return STEPS uniformly sampled component curves over zero to one cycle per
+   pixel.  An empty result is returned for nonpositive STEPS.  */
 mtf_parameters::computed_mtf
 mtf_parameters::compute_curves (int steps) const
 {
   computed_mtf result;
+  if (steps <= 0)
+    return result;
   result.system_mtf.reserve (steps);
   result.sensor_mtf.reserve (steps);
   result.gaussian_blur_mtf.reserve (steps);
+  result.halo_mtf.reserve (steps);
+  result.lens_defocus_mtf.reserve (steps);
   result.stokseth_defocus_mtf.reserve (steps);
   result.lens_diffraction_mtf.reserve (steps);
   result.lens_mtf.reserve (steps);
@@ -1339,57 +1549,419 @@ mtf_parameters::compute_curves (int steps) const
 
   for (int i = 0; i < steps; i++)
     {
-      double freq = i / (double)(steps - 1);
+      double freq = steps == 1 ? 0.0 : i / (double)(steps - 1);
       result.lens_diffraction_mtf.push_back (lens_diffraction_mtf (freq));
-      result.stokseth_defocus_mtf.push_back (stokseth_defocus_mtf (freq));
+      result.lens_defocus_mtf.push_back (lens_defocus_mtf (freq));
+      result.stokseth_defocus_mtf.push_back (
+          stokseth_defocus_mtf (freq));
       result.gaussian_blur_mtf.push_back (gaussian_blur_mtf (freq, sigma));
+      result.halo_mtf.push_back (halo_mtf (freq));
       result.lens_mtf.push_back (lens_mtf (freq));
       result.sensor_mtf.push_back (sensor_mtf (freq));
       result.system_mtf.push_back (system_mtf (freq));
-      result.hopkins_blur_mtf.push_back (defocus_mtf (freq, blur_diameter));
+      result.hopkins_blur_mtf.push_back (
+          circular_blur_mtf (freq, blur_diameter));
     }
 
   return result;
 }
 
+/* Return true when OPTIONS selects the physical diffraction model for PAR.
+   AUTOMATIC_LEGACY preserves the former geometry-based model selection used by
+   the compatibility estimate_parameters overload.  */
+static bool
+physical_estimation_model_p (const mtf_parameters &par,
+                             const mtf_estimation_options &options)
+{
+  const mtf_model model = options.model == mtf_model::automatic_legacy
+                              ? par.model
+                              : options.model;
+  if (model == mtf_model::physical_diffraction)
+    return true;
+  if (model == mtf_model::empirical_fallback)
+    return false;
+  return my_isfinite (par.pixel_pitch) && par.pixel_pitch > 0
+         && my_isfinite (par.scan_dpi) && par.scan_dpi > 0;
+}
+
+/* Validate an explicit fitting request OPTIONS for parameter values PAR.
+   ERROR receives a static diagnostic on failure.  The library owns these
+   rules so command-line and graphical front ends cannot silently disagree.  */
+bool
+mtf_parameters::validate_estimation_options (
+    const mtf_parameters &par, const mtf_estimation_options &options,
+    const char **error)
+{
+  if (error)
+    *error = nullptr;
+  auto fail = [error] (const char *message) {
+    if (error)
+      *error = message;
+    return false;
+  };
+
+  if (!valid_mtf_model_p (options.model)
+      || (options.model == mtf_model::automatic_legacy
+          && !valid_mtf_model_p (par.model)))
+    return fail ("invalid MTF model selection");
+
+  if (!options.include_measurements.empty ()
+      && options.include_measurements.size () != par.measurements.size ())
+    return fail ("MTF measurement-selection vector has the wrong size");
+  if (options.optimize_measurement_wavelengths.size ()
+      > par.measurements.size ())
+    return fail ("MTF wavelength-selection vector has the wrong size");
+
+  size_t observations = 0;
+  size_t included = 0;
+  size_t variables = 0;
+  size_t fitted_wavelengths = 0;
+  size_t fixed_wavelengths = 0;
+  bool any_wavelength_fitted = false;
+  bool capture_has_variable = false;
+  const bool physical = physical_estimation_model_p (par, options);
+
+  for (size_t measurement = 0; measurement < par.measurements.size ();
+       measurement++)
+    {
+      const mtf_measurement &value = par.measurements[measurement];
+      if (!value.same_capture)
+        capture_has_variable = false;
+      if (!options.include_measurement_p (measurement))
+        continue;
+
+      if (options.optimize_measurement_wavelength_p (measurement))
+        any_wavelength_fitted = true;
+
+      included++;
+      size_t measurement_observations = 0;
+      double previous_frequency = -1;
+      for (size_t i = 0; i < value.size (); i++)
+        {
+          const double frequency = value.get_freq (i);
+          const double contrast = value.get_contrast (i);
+          if (!my_isfinite (frequency) || !my_isfinite (contrast)
+              || frequency < 0 || contrast < 0
+              || (i && !(frequency > previous_frequency)))
+            return fail ("MTF measurements must be finite, nonnegative, and "
+                         "strictly increasing in frequency");
+          previous_frequency = frequency;
+          if (frequency <= 0.5)
+            measurement_observations++;
+        }
+      if (measurement_observations < 3)
+        return fail ("every selected MTF measurement needs at least three "
+                     "samples through Nyquist");
+      observations += measurement_observations;
+
+      if (physical)
+        {
+          if (options.optimize_measurement_wavelength_p (measurement))
+            {
+              const double initial_wavelength
+                  = measurement_wavelength (par, value);
+              if (initial_wavelength > 0
+                  && (initial_wavelength < fitted_wavelength_min_nm
+                      || initial_wavelength > fitted_wavelength_max_nm))
+                return fail ("an optimized wavelength starting value must be "
+                             "between 380 and 1000 nm");
+              variables++;
+              fitted_wavelengths++;
+            }
+          else if (measurement_wavelength (par, value) > 0)
+            fixed_wavelengths++;
+          else
+            return fail ("every selected physical MTF measurement needs a "
+                         "positive wavelength or wavelength optimization");
+
+          if (options.optimize_defocus && !capture_has_variable)
+            {
+              variables++;
+              capture_has_variable = true;
+            }
+        }
+      else if (options.optimize_blur_diameter && !capture_has_variable)
+        {
+          variables++;
+          capture_has_variable = true;
+        }
+    }
+
+  if (!included)
+    return fail ("no MTF measurement is selected for fitting");
+
+  if (!my_isfinite (par.sigma) || par.sigma < 0)
+    {
+      if (!options.optimize_sigma)
+        return fail ("Gaussian sigma must be finite and nonnegative or "
+                     "enabled for optimization");
+    }
+  if (options.optimize_sigma)
+    variables++;
+
+  if (physical)
+    {
+      if (options.optimize_blur_diameter)
+        return fail ("fallback blur diameter cannot be optimized by the "
+                     "physical diffraction model");
+      if (!(my_isfinite (par.pixel_pitch) && par.pixel_pitch > 0))
+        return fail ("physical MTF fitting requires a positive sensor pixel "
+                     "pitch");
+      if (!(my_isfinite (par.scan_dpi) && par.scan_dpi > 0))
+        return fail ("physical MTF fitting requires a positive scan "
+                     "resolution");
+
+      if (options.optimize_f_stop)
+        variables++;
+      else if (!(my_isfinite (par.f_stop) && par.f_stop > 0))
+        return fail ("f-number must be positive or enabled for optimization");
+
+      if (!options.optimize_defocus
+          && !(my_isfinite (par.defocus) && par.defocus >= 0))
+        return fail ("defocus must be finite and nonnegative or enabled for "
+                     "optimization");
+
+      if (options.optimize_sensor_fill_factor)
+        variables++;
+      else if (!(my_isfinite (par.sensor_fill_factor)
+                 && par.sensor_fill_factor >= 0
+                 && par.sensor_fill_factor <= 32))
+        return fail ("sensor fill factor must be between zero and 32 or "
+                     "enabled for optimization");
+
+      if (options.optimize_halo_fraction)
+        variables++;
+      else if (!(my_isfinite (par.halo_fraction)
+                 && par.halo_fraction >= 0 && par.halo_fraction <= 0.95))
+        return fail ("halo fraction must be between zero and 0.95 or enabled "
+                     "for optimization");
+
+      const bool halo_can_be_present
+          = options.optimize_halo_fraction || par.halo_fraction > 0;
+      if (options.optimize_halo_sigma)
+        {
+          if (!halo_can_be_present)
+            return fail ("halo radius cannot be optimized while halo fraction "
+                         "is fixed at zero");
+          variables++;
+        }
+      else if (halo_can_be_present
+               && !(my_isfinite (par.halo_sigma) && par.halo_sigma > 0))
+        return fail ("halo radius must be positive or enabled for "
+                     "optimization when a halo is fitted");
+
+      /* Diffraction cutoff mainly constrains WAVELENGTH*F_STOP.  Fitting the
+         f-number and every wavelength simultaneously leaves no scale anchor.  */
+      if (options.optimize_f_stop && fitted_wavelengths
+          && !fixed_wavelengths)
+        return fail ("fix the f-number or at least one measurement wavelength; "
+                     "optimizing both is underdetermined");
+    }
+  else
+    {
+      if (options.optimize_f_stop || options.optimize_defocus
+          || options.optimize_sensor_fill_factor
+          || options.optimize_halo_fraction || options.optimize_halo_sigma
+          || any_wavelength_fitted)
+        return fail ("physical parameters cannot be optimized by the "
+                     "empirical fallback model");
+      if (!options.optimize_blur_diameter
+          && !(my_isfinite (par.blur_diameter)
+               && par.blur_diameter >= 0))
+        return fail ("fallback blur diameter must be finite and nonnegative "
+                     "or enabled for optimization");
+    }
+
+  if (variables >= observations)
+    return fail ("the selected MTF curves contain too few observations for "
+                 "the requested number of free parameters");
+  return true;
+}
+
+/* Construct explicit OPTIONS which reproduce the historical zero-sentinel
+   interface.  This helper exists only for source compatibility; new callers,
+   especially the GUI, should construct MTF_ESTIMATION_OPTIONS directly.  */
+static mtf_estimation_options
+legacy_estimation_options (const mtf_parameters &par, int flags)
+{
+  mtf_estimation_options options;
+  options.model = mtf_model::automatic_legacy;
+  options.optimize_sigma = !(my_isfinite (par.sigma) && par.sigma != 0);
+  options.optimize_measurement_wavelengths.assign (par.measurements.size (),
+                                                    false);
+
+  const bool physical = physical_estimation_model_p (par, options);
+  if (physical)
+    {
+      options.optimize_f_stop
+          = !(my_isfinite (par.f_stop) && par.f_stop != 0);
+      options.optimize_defocus
+          = !(my_isfinite (par.defocus) && par.defocus != 0);
+      options.optimize_sensor_fill_factor
+          = !(my_isfinite (par.sensor_fill_factor)
+              && par.sensor_fill_factor != 0);
+      options.optimize_halo_fraction
+          = (flags & mtf_parameters::estimate_halo)
+            && !(my_isfinite (par.halo_fraction) && par.halo_fraction > 0);
+      options.optimize_halo_sigma
+          = (flags & mtf_parameters::estimate_halo)
+            && !(my_isfinite (par.halo_sigma) && par.halo_sigma > 0);
+      for (size_t measurement = 0; measurement < par.measurements.size ();
+           measurement++)
+        options.optimize_measurement_wavelengths[measurement]
+            = measurement_wavelength (par, par.measurements[measurement]) <= 0;
+    }
+  else
+    options.optimize_blur_diameter
+        = !(my_isfinite (par.blur_diameter) && par.blur_diameter != 0);
+  return options;
+}
+
+/* Fit the physical or fallback model using the historical zero-sentinel
+   convention.  New code should call the explicit overload below.  */
 double
 mtf_parameters::estimate_parameters (mtf_parameters &par,
                                      const char *write_table,
                                      progress_info *progress,
                                      const char **error, int flags)
 {
-  *this = par;
+  return estimate_parameters_internal (par, nullptr, write_table, progress,
+                                       error, flags);
+}
 
-  mtf_solver s (*this, par.measurements, progress, flags & estimate_verbose_solving);
-  if (flags & estimate_use_multifit)
-    gsl_multifit<luminosity_t, mtf_solver> (s, "optimizing system mtf (multifit 1)",
-				       progress);
-  if (flags & estimate_use_nmsimplex)
-    simplex<luminosity_t, mtf_solver> (s, "optimizing system mtf (simplex)",
-				       progress, true, 1000); 
-  if (flags & estimate_use_multifit)
-    gsl_multifit<luminosity_t, mtf_solver> (s, "optimizing system mtf (multifit)",
-				       progress);
-  wavelength = s.get_wavelength (0, s.start);
-  wavelengths[0] = s.get_channel_wavelength (0, s.start);
-  wavelengths[1] = s.get_channel_wavelength (1, s.start);
-  wavelengths[2] = s.get_channel_wavelength (2, s.start);
-  wavelengths[3] = s.get_channel_wavelength (3, s.start);
-  f_stop = s.get_f_stop (s.start);
-  sigma = s.get_sigma (s.start);
-  defocus = s.get_defocus (0, s.start);
-  blur_diameter = s.get_blur_diameter (0, s.start);
-  sensor_fill_factor = s.get_fill_factor (s.start);
-  if ((flags & estimate_verbose))
+/* Fit this object to measurements in PAR using explicit free-variable
+   OPTIONS.  Numeric zeroes remain ordinary fixed values unless their matching
+   option is enabled.  */
+double
+mtf_parameters::estimate_parameters (mtf_parameters &par,
+                                     const mtf_estimation_options &options,
+                                     const char *write_table,
+                                     progress_info *progress,
+                                     const char **error, int flags)
+{
+  return estimate_parameters_internal (par, &options, write_table, progress,
+                                       error, flags);
+}
+
+/* Fit this object to measurements in PAR.  EXPLICIT_OPTIONS is null only for
+   the compatibility interface, where zero retains its historical request-to-
+   optimize meaning.  WRITE_TABLE optionally receives component curves,
+   PROGRESS reports solver work, ERROR receives a static diagnostic, and FLAGS
+   selects numerical solvers.  */
+double
+mtf_parameters::estimate_parameters_internal (
+    mtf_parameters &par, const mtf_estimation_options *explicit_options,
+    const char *write_table, progress_info *progress, const char **error,
+    int flags)
+{
+  if (error)
+    *error = nullptr;
+
+  const mtf_estimation_options options
+      = explicit_options ? *explicit_options
+                         : legacy_estimation_options (par, flags);
+  if (explicit_options
+      && !validate_estimation_options (par, options, error))
+    return -1;
+
+  /* Retain the useful historical diagnostic for compatibility callers.  The
+     explicit interface performs the more detailed per-curve validation above.  */
+  if (!explicit_options
+      && (par.measurements.empty () || par.measurements[0].size () < 3))
+    {
+      if (error)
+        *error = "no measured MTF curve to fit";
+      return -1;
+    }
+
+  *this = par;
+  mtf_solver solver (par, par.measurements, options, progress,
+                     flags & estimate_verbose_solving,
+                     explicit_options == nullptr);
+  if (solver.num_values () > 0)
+    {
+      /* Pure defocus is even around the in-focus starting point, so its first
+         derivative vanishes there.  Find the correct basin with a
+         derivative-free simplex before local least-squares refinement.  */
+      if (flags & estimate_use_nmsimplex)
+        simplex<double, mtf_solver> (solver,
+                                    "optimizing system mtf (simplex)",
+                                    progress, true, 1000);
+      if (flags & estimate_use_multifit)
+        gsl_multifit<double, mtf_solver> (solver,
+                                         "optimizing system mtf (multifit)",
+                                         progress);
+    }
+
+  const bool physical = physical_estimation_model_p (par, options);
+  if (explicit_options)
+    {
+      /* A successful explicit fit selects the fitted analytical model for
+         sharpening.  Leaving a measured curve selected here would make all
+         newly fitted physical parameters appear to have no effect.  */
+      model = physical ? mtf_model::physical_diffraction
+                       : mtf_model::empirical_fallback;
+      measured_mtf_idx = -1;
+    }
+  else if (options.model != mtf_model::automatic_legacy)
+    model = options.model;
+  f_stop = solver.get_f_stop (solver.start);
+  sigma = solver.get_sigma (solver.start);
+  halo_fraction = solver.get_halo_fraction (solver.start);
+  halo_sigma = solver.get_halo_sigma (solver.start);
+  sensor_fill_factor = solver.get_fill_factor (solver.start);
+  measurements = par.measurements;
+
+  int first_measurement = -1;
+  for (size_t measurement = 0; measurement < par.measurements.size ();
+       measurement++)
+    if (solver.measurement_included_p (measurement))
+      {
+        if (first_measurement < 0)
+          first_measurement = (int)measurement;
+        /* Explicit fits make every participating physical curve
+           self-contained.  The compatibility API instead retains its former
+           global and per-channel storage convention.  */
+        if (physical && explicit_options)
+          measurements[measurement].wavelength
+              = solver.get_wavelength (measurement, solver.start);
+      }
+
+  if (physical && !explicit_options)
+    {
+      wavelength = par.wavelength > 0
+                       ? par.wavelength
+                       : solver.get_wavelength (0, solver.start);
+      wavelengths = par.wavelengths;
+      for (int channel = 0; channel < 4; channel++)
+        if (solver.channel_wavelength_estimated_p (channel))
+          wavelengths[channel]
+              = solver.get_channel_wavelength (channel, solver.start);
+    }
+
+  if (first_measurement >= 0)
+    {
+      defocus = solver.get_defocus (first_measurement, solver.start);
+      blur_diameter
+          = solver.get_blur_diameter (first_measurement, solver.start);
+      if (physical && explicit_options)
+        wavelength = solver.first_wavelength (solver.start);
+    }
+  const double final_objective = solver.objfunc (solver.start);
+
+  if (flags & estimate_verbose)
     {
       if (progress)
-	progress->pause_stdout ();
-      for (size_t m = 0; m < par.measurements.size (); m++)
-        {
-	  printf ("Measurement %s defocus %f sum %f\n", par.measurements[m].name.c_str (), s.get_defocus (m, s.start), s.sums[m]);
-        }
+        progress->pause_stdout ();
+      for (size_t measurement = 0; measurement < par.measurements.size ();
+           measurement++)
+        if (solver.measurement_included_p (measurement))
+          printf ("Measurement %s defocus %.12g sum %.12g\n",
+                  par.measurements[measurement].name.c_str (),
+                  solver.get_defocus (measurement, solver.start),
+                  solver.sums[measurement]);
       if (progress)
-	progress->resume_stdout ();
+        progress->resume_stdout ();
     }
 
   if (write_table)
@@ -1397,99 +1969,169 @@ mtf_parameters::estimate_parameters (mtf_parameters &par,
       FILE *f = fopen (write_table, "wt");
       if (!f)
         {
-          *error = "failed to open CSV file for writting";
+          if (error)
+            *error = "failed to open CSV file for writing";
           return -1;
         }
-      if (fprintf (f, "frequency	measured MTF	") < 0
+      if (fprintf (f, "frequency\tmeasured MTF\t") < 0
           || !print_csv_header (f))
         {
-          *error = "write error in CSV file";
+          if (error)
+            *error = "write error in CSV file";
+          fclose (f);
           return -1;
         }
-      for (size_t m = 0; m < par.measurements.size (); m++)
-      {
-	auto &measurement = par.measurements[m];
-	for (size_t i = 0; i < measurement.size (); i++)
-	  {
-	    luminosity_t freq = measurement.get_freq (i);
-	    luminosity_t c = measurement.get_contrast (i);
-	    if (fprintf (f,
-			 "%1.3f	%2.2f	%2.2f	%2.2f	%2.2f	%2.2f	"
-			 "%2.2f	%2.2f\n",
-			 freq, c, lens_diffraction_mtf (freq) * 100,
-			 stokseth_defocus_mtf (freq) * 100,
-			 gaussian_blur_mtf (freq, sigma) * 100,
-			 lens_mtf (freq) * 100, sensor_mtf (freq) * 100,
-			 system_mtf (freq) * 100)
-		< 0)
-	      {
-		*error = "write error in CSV file";
-		return -1;
-	      }
-	  }
-	fprintf (f,"\n");
-      }
+      for (size_t measurement_index = 0;
+           measurement_index < par.measurements.size (); measurement_index++)
+        {
+          if (!solver.measurement_included_p (measurement_index))
+            continue;
+          const mtf_measurement &measurement
+              = par.measurements[measurement_index];
+          mtf_parameters fitted_curve = *this;
+          fitted_curve.measured_mtf_idx = -1;
+          fitted_curve.model = physical ? mtf_model::physical_diffraction
+                                        : mtf_model::empirical_fallback;
+          if (physical)
+            {
+              fitted_curve.wavelength
+                  = solver.get_wavelength (measurement_index, solver.start);
+              fitted_curve.defocus
+                  = solver.get_defocus (measurement_index, solver.start);
+            }
+          else
+            fitted_curve.blur_diameter
+                = solver.get_blur_diameter (measurement_index, solver.start);
+
+          for (size_t i = 0; i < measurement.size (); i++)
+            {
+              const double freq = measurement.get_freq (i);
+              const double contrast = measurement.get_contrast (i);
+              if (fprintf (f,
+                           "%.17g\t%.12g\t%.12g\t%.12g\t%.12g\t%.12g\t"
+                           "%.12g\t%.12g\t%.12g\t%.12g\n",
+                           freq, contrast,
+                           fitted_curve.lens_diffraction_mtf (freq) * 100,
+                           fitted_curve.lens_defocus_mtf (freq) * 100,
+                           fitted_curve.stokseth_defocus_mtf (freq) * 100,
+                           gaussian_blur_mtf (freq, fitted_curve.sigma) * 100,
+                           fitted_curve.halo_mtf (freq) * 100,
+                           fitted_curve.lens_mtf (freq) * 100,
+                           fitted_curve.sensor_mtf (freq) * 100,
+                           fitted_curve.system_mtf (freq) * 100)
+                  < 0)
+                {
+                  if (error)
+                    *error = "write error in CSV file";
+                  fclose (f);
+                  return -1;
+                }
+            }
+          if (fputc ('\n', f) == EOF)
+            {
+              if (error)
+                *error = "write error in CSV file";
+              fclose (f);
+              return -1;
+            }
+        }
       if (fclose (f))
         {
-          *error = "error closing CSV file";
+          if (error)
+            *error = "error closing CSV file";
           return -1;
         }
     }
 
-  return s.objfunc (s.start);
+  return final_objective;
 }
 
+/* Load a QuickMTF five-column table from IN, label it NAME, append the parsed
+   measurements, and report parse errors through ERROR.  */
 int
 mtf_parameters::load_csv (FILE *in, std::string name, const char **error)
 {
-  struct row {float freq; float contrast[4];};
+  /* QuickMTF stores frequency, blue, green, red and combined contrast.  */
+  struct row
+  {
+    double freq;
+    std::array<double, 4> contrast;
+  };
+
+  if (!in)
+    {
+      if (error)
+        *error = "invalid QuickMTF input file";
+      return -1;
+    }
+
   bool rgb = false;
   std::vector<row> data;
   char line[1024];
-  float v1, v2, v3, v4, v5;
-  char extra;
-  while (fgets(line, sizeof(line), in)) {
-    int itemsFound = sscanf(line, "%f\t%f\t%f\t%f\t%f %c", &v1, &v2, &v3, &v4, &v5, &extra);
-    /* Data are saved in order freq, red, green, blue, combined  */
-    if (itemsFound >= 5) 
-      {
-	if (v2 != v3 || v3 != v4 || v4 != v5)
-	  rgb = true;
-        data.push_back ({v1,{v2,v3,v4,v5}});
-      }
-  }
-  if (data.empty())
+  while (fgets (line, sizeof (line), in))
     {
-	*error = "Quickmtf output file should contain 5 tab separated values on every line:\n"
-		"pixel_frequency	blue_contrast	green_constrast	red_contrast	combined_contrast\n"
-		"contrasts are in percents.\n";
-	return -1;
+      double freq;
+      double blue;
+      double green;
+      double red;
+      double combined;
+      int items_found = sscanf (line, "%lf%lf%lf%lf%lf", &freq, &blue,
+                                &green, &red, &combined);
+      if (items_found != 5)
+        continue;
+      if (!my_isfinite (freq) || !my_isfinite (blue)
+          || !my_isfinite (green) || !my_isfinite (red)
+          || !my_isfinite (combined) || freq < 0 || blue < 0 || green < 0
+          || red < 0 || combined < 0
+          || (!data.empty () && !(data.back ().freq < freq)))
+        {
+          if (error)
+            *error = "invalid or non-increasing QuickMTF data";
+          return -1;
+        }
+      if (blue != green || green != red || red != combined)
+        rgb = true;
+      data.push_back ({ freq, { blue, green, red, combined } });
     }
-  for (int c = rgb ? 0 : 3; c < (rgb ? 3 : 4); c++)
+
+  if (data.empty ())
     {
-      mtf_measurement m;
-      const char *color[3]={"red","green","blue"};
-      /* Seems the order is blue, green, red*/
-      const int chanel_map[3]={2,1,0};
-      if (rgb)
-	{
-	  m.name = name + " " + color[chanel_map[c]];
-	  /* It seems that it is blue/green/red  */
-	  m.channel = chanel_map[c];
-	  if (c)
-	    m.same_capture = true;
-	}
-      else
-	{
-	  m.name = name;
-	  m.channel = -1;
-	}
-      for (size_t i = 0; i < data.size (); i++)
-	m.add_value (data[i].freq, data[i].contrast[c]);
-      printf ("size %zu %zu\n", m.size (), data.size ());
-      measurements.push_back (m);
+      if (error)
+        *error = "QuickMTF output should contain five whitespace-separated "
+                 "values on every data line:\n"
+                 "pixel_frequency blue_contrast green_contrast "
+                 "red_contrast combined_contrast\n"
+                 "Contrasts are percentages.";
+      return -1;
     }
-  printf ("File loaded %d\n", (int)rgb);
+
+  std::vector<mtf_measurement> loaded;
+  if (rgb)
+    {
+      static constexpr std::array<int, 3> channels = { 2, 1, 0 };
+      static constexpr std::array<const char *, 3> names
+          = { "blue", "green", "red" };
+      for (size_t column = 0; column < channels.size (); column++)
+        {
+          mtf_measurement measurement;
+          measurement.name = name + " " + names[column];
+          measurement.channel = channels[column];
+          measurement.same_capture = column != 0;
+          for (const row &value : data)
+            measurement.add_value (value.freq, value.contrast[column]);
+          loaded.push_back (std::move (measurement));
+        }
+    }
+  else
+    {
+      mtf_measurement measurement;
+      measurement.name = std::move (name);
+      for (const row &value : data)
+        measurement.add_value (value.freq, value.contrast[3]);
+      loaded.push_back (std::move (measurement));
+    }
+
+  measurements.insert (measurements.end (), loaded.begin (), loaded.end ());
   return rgb ? 3 : 1;
 }
 

@@ -33,6 +33,7 @@
 #include <QDockWidget> // Added
 #include "BacklightChartWidget.h"
 #include "MeasureDialog.h"
+#include "SlantedEdgeDialog.h"
 #include <QDoubleSpinBox>
 #include <QElapsedTimer>
 #include <QFile>
@@ -5021,27 +5022,61 @@ void MainWindow::onDistanceMeasured(colorscreen::point_t p1, colorscreen::point_
   }
 }
 
+/** Configure a slanted-edge measurement and, when CHECKED, ask the user for
+    its image area.  Analysis settings are chosen before the edge is measured
+    because oversampling, LSF support and windowing change the stored curve and
+    cannot be altered later by the model-fitting dialog.  */
 void MainWindow::onMeasureMtfRequested(bool checked) {
   if (checked) {
-    auto success = std::make_shared<bool>(false);
+    ParameterState currentState = getCurrentState();
+    const colorscreen::mtf_parameters &currentMtf =
+        currentState.rparams.sharpen.scanner_mtf;
+    colorscreen::slanted_edge_parameters defaults = m_slantedEdgeParameters;
+    if (defaults.wavelength <= 0) {
+      if (!currentMtf.measurements.empty()
+          && currentMtf.measurements.back().wavelength > 0)
+        defaults.wavelength = currentMtf.measurements.back().wavelength;
+      else if (currentMtf.wavelength > 0)
+        defaults.wavelength = currentMtf.wavelength;
+    }
+    if (!currentMtf.measurements.empty() && defaults.channel < 0)
+      defaults.channel = currentMtf.measurements.back().channel;
+
+    SlantedEdgeDialog dialog(defaults, !currentMtf.measurements.empty(), this);
+    if (dialog.exec() != QDialog::Accepted) {
+      m_sharpnessPanel->setMeasureMtfChecked(false);
+      return;
+    }
+    const colorscreen::slanted_edge_parameters measurementParameters =
+        dialog.parameters();
+    m_slantedEdgeParameters = measurementParameters;
+
+    auto result = std::make_shared<colorscreen::slanted_edge_results>();
     runAreaComputation(
         tr("Select an area containing a slanted edge to compute its MTF"),
         tr("Measure MTF of a slanted edge"),
         [this]() { m_sharpnessPanel->setMeasureMtfEnabled(false); },
-        [this, success]() { 
-            if (!*success) {
-              QMessageBox::warning(this, tr("MTF Measurement"), 
-                                   tr("Edge not found or too blurred. Try selecting a larger area or an area with higher contrast."));
-            }
-            m_sharpnessPanel->setMeasureMtfChecked(false);
-            m_sharpnessPanel->setMeasureMtfEnabled(true);
+        [this, result]() {
+          if (!result->success) {
+            QString reason = result->error.empty()
+                                 ? tr("No usable single slanted edge was found.")
+                                 : QString::fromStdString(result->error);
+            QMessageBox::warning(
+                this, tr("MTF Measurement Failed"),
+                tr("%1\n\nSelect one straight, isolated edge with clear "
+                   "plateaus on both sides. Avoid dust, texture, multiple "
+                   "edges, and edges parallel to the pixel grid.")
+                    .arg(reason));
+          }
+          m_sharpnessPanel->setMeasureMtfChecked(false);
+          m_sharpnessPanel->setMeasureMtfEnabled(true);
         },
-        [success](ParameterState &s, colorscreen::image_data &scan,
+        [result, measurementParameters](ParameterState &s,
+           colorscreen::image_data &scan,
            const colorscreen::int_image_area &area,
            colorscreen::progress_info *p) {
-          colorscreen::slanted_edge_parameters params;
-          auto res = colorscreen::slanted_edge_mtf(s.rparams, scan, area, params, p);
-          *success = res.success;
+          *result = colorscreen::slanted_edge_mtf(
+              s.rparams, scan, area, measurementParameters, p);
         });
   } else {
     if (m_imageWidget->interactionMode() == ImageWidget::GenericAreaMode) {

@@ -2,15 +2,14 @@
 #define SHARPNESS_PANEL_H
 
 #include "ParameterPanel.h"
+#include "TaskQueue.h"
 
 class MTFChartWidget;
 class QLabel;
 class QWidget;
 class QImage;
-class QTimer;
 class QVBoxLayout;
 class FinetuneImagesPanel;
-template <typename T> class QFutureWatcher;
 
 namespace colorscreen {
 struct progress_info;
@@ -72,6 +71,9 @@ private:
   void updateScreenTiles(); // Wrapper to schedule
   void applyChange(std::function<void(ParameterState &)> modifier, const QString &description = QString()) override;
   void loadMTF();
+  /** Open the explicit fit dialog and run the selected MTF fit off the GUI
+      thread.  */
+  void fitMeasuredMtf();
   void updateMeasurementList();
   void onParametersRefreshed(const ParameterState &state) override;
 
@@ -94,6 +96,11 @@ private:
   double m_lastGreenStripWidth = 0.0;
   class QPushButton *m_analyzeAreaBtn = nullptr;
   class QPushButton *m_measureMtfBtn = nullptr;
+  class QPushButton *m_fitMtfBtn = nullptr;
+  /** Queue dedicated to one-shot MTF fits so tile rendering stays responsive.  */
+  TaskQueue m_mtfFitQueue;
+  /** True while M_MTF_FIT_QUEUE is processing a submitted fit.  */
+  bool m_mtfFitRunning = false;
   uint64_t m_finetuneFlags = 0;
   class TilePreviewPanel *m_dotSpreadPanel = nullptr;
   AdaptiveSharpeningChart *m_adaptiveChart = nullptr;

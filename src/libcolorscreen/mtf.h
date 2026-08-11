@@ -40,23 +40,23 @@ public:
                                        const char **error = nullptr);
   /* Return 1d MTF value.  */
   inline double
-  get_mtf (luminosity_t val) const
+  get_mtf (double val) const
   {
     return m_mtf.apply (val);
   }
 
   /* Return 2d MTF value at point P.  */
   inline double
-  get_mtf (point_t p, luminosity_t scale = 1) const
+  get_mtf (point_t p, double scale = 1) const
   {
     return m_mtf.apply (p.length () * scale);
   }
 
-  /* Return 2d MTF value.  */
+  /* Return 2d MTF value at coordinates X and Y, multiplied by SCALE.  */
   inline double
-  get_mtf (luminosity_t x, luminosity_t y, luminosity_t scale = 1) const
+  get_mtf (double x, double y, double scale = 1) const
   {
-    return m_mtf.apply (my_sqrt (x * x + y * y) * scale);
+    return m_mtf.apply (std::hypot (x, y) * scale);
   }
 
   /* Return PSF value.  */
@@ -119,7 +119,9 @@ public:
 
 private:
   mtf_parameters m_params;
-  precomputed_function<luminosity_t> m_mtf;
+  /* The MTF table is small, while an interpolation error is multiplied by an
+     inverse filter.  Keep it in double even though large image FFTs use float.  */
+  precomputed_function<double> m_mtf;
   precomputed_function<psf_t> m_psf;
   double m_psf_radius = 0;
   bool m_precomputed = false;

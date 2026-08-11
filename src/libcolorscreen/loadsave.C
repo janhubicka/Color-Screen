@@ -45,6 +45,28 @@ static const char *const bool_names[2] = { "no", "yes" };
 static const char *const channel_names[5]
     = { "unknown", "red", "green", "blue", "ir" };
 
+/* Stable project-file names for MTF model selection.  */
+static const char *const mtf_model_names[3]
+    = { "automatic", "physical-diffraction", "empirical-fallback" };
+
+/* Return the stable project-file spelling of MODEL.  Invalid in-memory enum
+   values are serialized as the backwards-compatible automatic selection
+   rather than indexing outside MTF_MODEL_NAMES.  */
+static const char *
+mtf_model_name (mtf_model model)
+{
+  switch (model)
+    {
+    case mtf_model::automatic_legacy:
+      return mtf_model_names[0];
+    case mtf_model::physical_diffraction:
+      return mtf_model_names[1];
+    case mtf_model::empirical_fallback:
+      return mtf_model_names[2];
+    }
+  return mtf_model_names[0];
+}
+
 /* Write INPUT string to F with escaped characters.  */
 static bool
 write_escaped_string (FILE *f, const char *input)
@@ -181,8 +203,8 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
           || fprintf (f, "scanner_mtf_scale: %f\n",
                       rparam->sharpen.scanner_mtf_scale)
                  < 0
-          || fprintf (f, "scanner_use_mtf_measurement: %zu\n",
-                      (size_t)rparam->sharpen.scanner_mtf.measured_mtf_idx)
+          || fprintf (f, "scanner_use_mtf_measurement: %d\n",
+                      rparam->sharpen.scanner_mtf.measured_mtf_idx)
                  < 0
           || fprintf (f, "richardson_lucy_iterations: %zu\n",
                       (size_t)rparam->sharpen.richardson_lucy_iterations)
@@ -200,7 +222,8 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
                 || fprintf (f, "scanner_mtf_measurement_channel: %s\n",
                             channel_names[measurement.channel + 1])
                        < 0
-                || fprintf (f, "scanner_mtf_measurement_wavelength_nm: %f\n",
+                || fprintf (f,
+                            "scanner_mtf_measurement_wavelength_nm: %.17g\n",
                             measurement.wavelength)
                        < 0
                 || fprintf (f, "scanner_mtf_measurement_same_capture: %s\n",
@@ -213,42 +236,53 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
               return false;
             for (size_t i = 0; i < measurement.size (); i++)
               {
-                if (fprintf (f, "scanner_mtf_point: %f %f\n",
+                if (fprintf (f, "scanner_mtf_point: %.17g %.17g\n",
                              measurement.get_freq (i),
                              measurement.get_contrast (i))
                     < 0)
                   return false;
               }
           }
-      if (fprintf (f, "scanner_mtf_sigma_px: %f\n",
-                   rparam->sharpen.scanner_mtf.sigma)
+      if (fprintf (f, "scanner_mtf_model: %s\n",
+                   mtf_model_name (rparam->sharpen.scanner_mtf.model))
               < 0
-          || fprintf (f, "scanner_mtf_blur_diameter_px: %f\n",
+          || fprintf (f, "scanner_mtf_sigma_px: %.17g\n",
+                      rparam->sharpen.scanner_mtf.sigma)
+              < 0
+          || fprintf (f, "scanner_mtf_halo_fraction: %.17g\n",
+                      rparam->sharpen.scanner_mtf.halo_fraction)
+                 < 0
+          || fprintf (f, "scanner_mtf_halo_sigma_px: %.17g\n",
+                      rparam->sharpen.scanner_mtf.halo_sigma)
+                 < 0
+          || fprintf (f, "scanner_mtf_blur_diameter_px: %.17g\n",
                       rparam->sharpen.scanner_mtf.blur_diameter)
                  < 0
-          || fprintf (f, "scanner_mtf_pixel_pitch_um: %f\n",
+          || fprintf (f, "scanner_mtf_pixel_pitch_um: %.17g\n",
                       rparam->sharpen.scanner_mtf.pixel_pitch)
                  < 0
-          || fprintf (f, "scanner_mtf_sensor_fill_factor: %f\n",
+          || fprintf (f, "scanner_mtf_sensor_fill_factor: %.17g\n",
                       rparam->sharpen.scanner_mtf.sensor_fill_factor)
                  < 0
-          || fprintf (f, "scanner_mtf_wavelength_nm: %f\n",
+          || fprintf (f, "scanner_mtf_wavelength_nm: %.17g\n",
                       rparam->sharpen.scanner_mtf.wavelength)
                  < 0
-          || fprintf (f, "scanner_mtf_channel_wavelengths_nm: %f %f %f %f\n",
+          || fprintf (
+                 f,
+                 "scanner_mtf_channel_wavelengths_nm: %.17g %.17g %.17g "
+                 "%.17g\n",
                       rparam->sharpen.scanner_mtf.wavelengths[0],
                       rparam->sharpen.scanner_mtf.wavelengths[1],
                       rparam->sharpen.scanner_mtf.wavelengths[2],
                       rparam->sharpen.scanner_mtf.wavelengths[3])
                  < 0
-          || fprintf (f, "scanner_mtf_f_stop: %f\n",
+          || fprintf (f, "scanner_mtf_f_stop: %.17g\n",
                       rparam->sharpen.scanner_mtf.f_stop)
                  < 0
-          /* Use %g; small values matters.  */
-          || fprintf (f, "scanner_mtf_defocus_mm: %g\n",
+          || fprintf (f, "scanner_mtf_defocus_mm: %.17g\n",
                       rparam->sharpen.scanner_mtf.defocus)
                  < 0
-          || fprintf (f, "scan_dpi: %f\n",
+          || fprintf (f, "scan_dpi: %.17g\n",
                       rparam->sharpen.scanner_mtf.scan_dpi)
                  < 0)
         return false;
@@ -1103,19 +1137,19 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
               *error = "error parsing scanner_mtf_measurement";
               return false;
             }
+          if (m != measurement + 1)
+            {
+              *error = "wrong measurement index";
+              return false;
+            }
           if (rparam)
             {
-              if (m != measurement + 1)
-                {
-                  *error = "wrong measurement index";
-                  return false;
-                }
               if (m == 0)
                 rparam->sharpen.scanner_mtf.clear_data ();
               mtf_measurement empty;
               rparam->sharpen.scanner_mtf.measurements.push_back (empty);
-              measurement++;
             }
+          measurement++;
         }
       else if (!strcmp (buf, "scan_rotation"))
         {
@@ -1792,17 +1826,36 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
       else if (!strcmp (buf, "scanner_mtf_point"))
         {
           double freq;
-          luminosity_t contrast;
+          double contrast;
           if (measurement == -1)
             {
-              rparam->sharpen.scanner_mtf.clear_data ();
-              mtf_measurement empty;
-              rparam->sharpen.scanner_mtf.measurements.push_back (empty);
+              if (rparam)
+                {
+                  rparam->sharpen.scanner_mtf.clear_data ();
+                  mtf_measurement empty;
+                  rparam->sharpen.scanner_mtf.measurements.push_back (empty);
+                }
               measurement = 0;
             }
-          if (!read_double (f, &freq) || !read_luminosity (f, &contrast))
+          if (!read_double (f, &freq) || !read_double (f, &contrast))
             {
               *error = "error parsing scanner_mtf_point";
+              return false;
+            }
+          if (!my_isfinite (freq) || !my_isfinite (contrast) || freq < 0
+              || contrast < 0
+              || (rparam
+                  && rparam->sharpen.scanner_mtf.measurements[measurement]
+                         .size ()
+                  && !(rparam->sharpen.scanner_mtf.measurements[measurement]
+                               .get_freq (
+                                   rparam->sharpen.scanner_mtf
+                                           .measurements[measurement]
+                                           .size ()
+                                       - 1)
+                       < freq)))
+            {
+              *error = "invalid or non-increasing scanner_mtf_point";
               return false;
             }
           if (rparam)
@@ -1849,9 +1902,12 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
                        "scanner_mtf_measurement";
               return false;
             }
-          if (!read_double (
-                  f, &rparam->sharpen.scanner_mtf.measurements[measurement]
-                          .wavelength))
+          double *wavelength
+              = rparam
+                    ? &rparam->sharpen.scanner_mtf.measurements[measurement]
+                           .wavelength
+                    : nullptr;
+          if (!read_double (f, wavelength))
             {
               *error = "Error parsing scanner_mtf_measurement_wavelength";
               return false;
@@ -1878,33 +1934,32 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
                     "scanner_mtf_measurement";
               return false;
             }
-          if (!parse_bool (
-                  f, &rparam->sharpen.scanner_mtf.measurements[measurement]
-                          .same_capture))
+          bool *same_capture
+              = rparam
+                    ? &rparam->sharpen.scanner_mtf.measurements[measurement]
+                           .same_capture
+                    : nullptr;
+          if (!parse_bool (f, same_capture))
             {
               *error = "error parsing scanner_mtf_measurement_same_capture";
               return false;
             }
         }
-      else if (!strcmp (buf, "scanner_mtf_point"))
+      else if (!strcmp (buf, "scanner_mtf_model"))
         {
-          double freq;
-          luminosity_t contrast;
-          if (measurement == -1)
+          get_keyword (f, buf2);
+          int model;
+          for (model = 0; model < 3; model++)
+            if (!strcmp (buf2, mtf_model_names[model]))
+              break;
+          if (model == 3)
             {
-              rparam->sharpen.scanner_mtf.clear_data ();
-              mtf_measurement empty;
-              rparam->sharpen.scanner_mtf.measurements.push_back (empty);
-              measurement = 0;
-            }
-          if (!read_double (f, &freq) || !read_luminosity (f, &contrast))
-            {
-              *error = "error parsing scanner_mtf_point";
+              *error = "unknown scanner_mtf_model";
               return false;
             }
           if (rparam)
-            rparam->sharpen.scanner_mtf.measurements[measurement].add_value (
-                freq, contrast);
+            rparam->sharpen.scanner_mtf.model
+                = static_cast<mtf_model> (model);
         }
       else if (!strcmp (buf, "scanner_mtf_sigma")
                || !strcmp (buf, "scanner_mtf_sigma_px"))
@@ -1912,6 +1967,24 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
           if (!read_double (f, rparam_check (sharpen.scanner_mtf.sigma)))
             {
               *error = "error parsing scanner_mtf_sigma";
+              return false;
+            }
+        }
+      else if (!strcmp (buf, "scanner_mtf_halo_fraction"))
+        {
+          if (!read_double (
+                  f, rparam_check (sharpen.scanner_mtf.halo_fraction)))
+            {
+              *error = "error parsing scanner_mtf_halo_fraction";
+              return false;
+            }
+        }
+      else if (!strcmp (buf, "scanner_mtf_halo_sigma_px"))
+        {
+          if (!read_double (f,
+                            rparam_check (sharpen.scanner_mtf.halo_sigma)))
+            {
+              *error = "error parsing scanner_mtf_halo_sigma_px";
               return false;
             }
         }

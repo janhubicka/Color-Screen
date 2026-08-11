@@ -35,17 +35,30 @@ floor_div (int numerator, int denominator)
   return quotient;
 }
 
+/* Interpolate the midpoint of P0, P1, P2 and P3 with the Catmull--Rom
+   cubic used by CUBIC_INTERPOLATE.  The exact midpoint weights are
+   (-1, 9, 9, -1) / 16.  Accumulating in double prevents the generic
+   luminosity_t helper from truncating a deconvolution<double> path to float.  */
+template <typename T>
+inline double
+cubic_midpoint (T p0, T p1, T p2, T p3)
+{
+  return (-(double)p0 + 9.0 * (double)p1 + 9.0 * (double)p2
+          - (double)p3)
+         / 16.0;
+}
+
 /* Lanczos resample LINE of length IN_LEN into OUTPUT of length OUT_LEN and
    with OUT_STRIDE.  SUPERSAMPLE is the ratio between output and input sample
    spacing.  KERNELS contains one normalized 2*A-tap kernel for every output
-   phase.  */
-
+   phase, and A is the Lanczos radius.  */
 template <typename T>
 inline __attribute__ ((always_inline))
 void
 resample_line (T *output, const T *input, int out_len, int out_stride,
                int in_len, int supersample,
-               const std::vector<T, fft_allocator<T>> &kernels, int a = 3)
+               const std::vector<double, fft_allocator<double>> &kernels,
+               int a = 3)
 {
   if (supersample <= 1 || supersample > 1024 || in_len <= 0 || out_len < 0)
     abort ();
@@ -56,22 +69,22 @@ resample_line (T *output, const T *input, int out_len, int out_stride,
          coordinates, are at (I + 0.5) / SUPERSAMPLE.  */
       int base = floor_div (2 * i + 1 - supersample, 2 * supersample);
       int start = base - a + 1;
-      const T *kernel = kernels.data () + (i % supersample) * 2 * a;
-      T sum = 0;
+      const double *kernel = kernels.data () + (i % supersample) * 2 * a;
+      double sum = 0;
 
       if (start >= 0 && start + 2 * a <= in_len)
         {
 #pragma omp simd reduction(+:sum)
           for (int tap = 0; tap < 2 * a; tap++)
-            sum += input[start + tap] * kernel[tap];
+            sum += (double)input[start + tap] * kernel[tap];
         }
       else
         for (int tap = 0; tap < 2 * a; tap++)
-          sum += input[reflect_deconvolution_coordinate (start + tap,
-                                                         in_len)]
+          sum += (double)input[reflect_deconvolution_coordinate (
+                               start + tap, in_len)]
                  * kernel[tap];
 
-      output[i * out_stride] = sum;
+      output[i * out_stride] = (T)sum;
     }
 }
 }
@@ -93,13 +106,15 @@ deconvolution<T>::deconvolution (mtf *mtf, luminosity_t mtf_scale,
   if (!mtf || !mtf->precompute ())
     abort ();
 
-  const luminosity_t effective_mtf_scale
-      = my_isfinite ((double)mtf_scale) && mtf_scale > 0 ? mtf_scale : 0;
+  const double effective_mtf_scale
+      = my_isfinite ((double)mtf_scale) && mtf_scale > 0
+            ? (double)mtf_scale
+            : 0.0;
   const bool apply_wiener
       = filter_mode == sharpen && my_isfinite ((double)snr) && snr > 0;
   const bool apply_richardson_lucy
       = filter_mode == richardson_lucy_sharpen && m_iterations > 0;
-  const T k_const = apply_wiener ? (T)1 / (T)snr : (T)0;
+  const double k_const = apply_wiener ? 1.0 / (double)snr : 0.0;
 
   m_border_size = std::max (mtf->psf_radius (effective_mtf_scale), 0);
   if (m_border_size == 0)
@@ -127,43 +142,44 @@ deconvolution<T>::deconvolution (mtf *mtf, luminosity_t mtf_scale,
      symmetric and has zero phase, so its entries are real up to roundoff.  */
   m_fft_size = m_enlarged_tile_size / 2 + 1;
   m_blur_kernel = fft_alloc_complex<T> (m_enlarged_tile_size * m_fft_size);
-  const T fft_scale
-      = (T)1 / (T)(m_enlarged_tile_size * m_enlarged_tile_size);
-  const T frequency_step = (T)m_supersample * (T)effective_mtf_scale
-                           / (T)m_enlarged_tile_size;
+  const double fft_scale
+      = 1.0 / ((double)m_enlarged_tile_size * m_enlarged_tile_size);
+  const double frequency_step
+      = (double)m_supersample * effective_mtf_scale / m_enlarged_tile_size;
 #pragma omp parallel for default(none) collapse(2) \
   shared(fft_scale, mtf, frequency_step, filter_mode, k_const, apply_wiener, \
          apply_richardson_lucy)
   for (int y = 0; y < m_fft_size; y++)
     for (int x = 0; x < m_fft_size; x++)
       {
-        T transfer = (T)mtf->get_mtf (x, y, frequency_step);
-        if (!my_isfinite ((double)transfer))
+        /* Prepare the optical transfer and Wiener denominator in double.  The
+           large image transform may use FFTW single precision, but rounding a
+           weak MTF before regularization needlessly changes the inverse gain.  */
+        double transfer = mtf->get_mtf ((double)x, (double)y, frequency_step);
+        if (!my_isfinite (transfer))
           transfer = 0;
-        transfer = std::clamp (transfer, (T)0, (T)1);
-        std::complex<T> kernel (transfer, (T)0);
+        transfer = std::clamp (transfer, 0.0, 1.0);
+        double kernel = transfer;
 
         /* Wiener inverse filter:
-             estimate = image * conj (H) / (|H|^2 + 1 / SNR).
-           A nonpositive or nonfinite SNR disables sharpening and therefore
-           gives the identity transfer function.  */
+             estimate = image * H / (H^2 + 1 / SNR).
+           The radial model is real and zero-phase.  A nonpositive or nonfinite
+           SNR disables sharpening and therefore gives the identity transfer.  */
         if (filter_mode == sharpen)
           kernel = apply_wiener
-                       ? std::conj (kernel)
-                             / (std::norm (kernel) + k_const)
-                       : std::complex<T> ((T)1, (T)0);
+                       ? transfer / (transfer * transfer + k_const)
+                       : 1.0;
         else if (filter_mode == richardson_lucy_sharpen
                  && !apply_richardson_lucy)
-          kernel = std::complex<T> ((T)1, (T)0);
-        kernel *= fft_scale;
-        m_blur_kernel[y * m_fft_size + x][0] = kernel.real ();
-        m_blur_kernel[y * m_fft_size + x][1] = kernel.imag ();
+          kernel = 1.0;
+        const T stored_kernel = (T)(kernel * fft_scale);
+        m_blur_kernel[y * m_fft_size + x][0] = stored_kernel;
+        m_blur_kernel[y * m_fft_size + x][1] = 0;
         if (y)
           {
             m_blur_kernel[(m_enlarged_tile_size - y) * m_fft_size + x][0]
-                = kernel.real ();
-            m_blur_kernel[(m_enlarged_tile_size - y) * m_fft_size + x][1]
-                = kernel.imag ();
+                = stored_kernel;
+            m_blur_kernel[(m_enlarged_tile_size - y) * m_fft_size + x][1] = 0;
           }
       }
 
@@ -173,22 +189,24 @@ deconvolution<T>::deconvolution (mtf *mtf, luminosity_t mtf_scale,
      FFT, FFT_SCALE is smaller than float epsilon even when the physical DC
      response is exactly one; testing the stored coefficient against epsilon
      would therefore replace a perfectly valid optical kernel by identity.  */
-  const T dc_transfer = m_blur_kernel[0][0] / fft_scale;
-  if (!my_isfinite ((double)dc_transfer)
+  const double dc_transfer = (double)m_blur_kernel[0][0] / fft_scale;
+  if (!my_isfinite (dc_transfer)
       || std::abs (dc_transfer) <= std::numeric_limits<T>::epsilon ())
     for (int i = 0; i < m_fft_size * m_enlarged_tile_size; i++)
       {
-        m_blur_kernel[i][0] = fft_scale;
+        m_blur_kernel[i][0] = (T)fft_scale;
         m_blur_kernel[i][1] = 0;
       }
   else
     {
-      const T normalization = (T)1 / dc_transfer;
-      if (normalization != (T)1)
+      const double normalization = 1.0 / dc_transfer;
+      if (normalization != 1.0)
         for (int i = 0; i < m_fft_size * m_enlarged_tile_size; i++)
           {
-            m_blur_kernel[i][0] *= normalization;
-            m_blur_kernel[i][1] *= normalization;
+            m_blur_kernel[i][0]
+                = (T)((double)m_blur_kernel[i][0] * normalization);
+            m_blur_kernel[i][1]
+                = (T)((double)m_blur_kernel[i][1] * normalization);
           }
     }
 
@@ -200,8 +218,8 @@ deconvolution<T>::deconvolution (mtf *mtf, luminosity_t mtf_scale,
         /* Cosine bell curve: 0 at the edge and 1 immediately after the
            taper.  */
         m_weights[i]
-            = (T)0.5
-              * ((T)1 - std::cos ((T)M_PI * (T)i / (T)m_taper_size));
+            = (T)(0.5
+                  * (1.0 - std::cos (M_PI * (double)i / m_taper_size)));
     }
 
   if (m_supersample > 1)
@@ -224,16 +242,22 @@ deconvolution<T>::deconvolution (mtf *mtf, luminosity_t mtf_scale,
           const int denominator = 2 * m_supersample;
           const int base = floor_div (numerator, denominator);
           const int remainder = numerator - base * denominator;
-          const T fraction = (T)remainder / (T)denominator;
-          T sum = 0;
+          const double fraction = (double)remainder / denominator;
+          double sum = 0;
           for (int tap = 0; tap < lanczos_a * 2; tap++)
-            sum += m_lanczos_kernels[phase * lanczos_a * 2 + tap]
-                = lanczos_kernel ((T)tap - (T)lanczos_a + (T)1 - fraction,
-                                  lanczos_a);
-          if (std::abs (sum) <= std::numeric_limits<T>::epsilon ())
+            {
+              double coefficient
+                  = lanczos_kernel ((double)tap - lanczos_a + 1 - fraction,
+                                    lanczos_a);
+              m_lanczos_kernels[phase * lanczos_a * 2 + tap]
+                  = coefficient;
+              sum += coefficient;
+            }
+          if (std::abs (sum) <= std::numeric_limits<double>::epsilon ())
             abort ();
           for (int tap = 0; tap < lanczos_a * 2; tap++)
-            m_lanczos_kernels[phase * lanczos_a * 2 + tap] /= sum;
+            m_lanczos_kernels[phase * lanczos_a * 2 + tap]
+                /= sum;
         }
     }
 }
@@ -546,33 +570,29 @@ deconvolution<T>::process_tile (int thread_id, progress_info *progress)
               {
                 int sx = x * m_supersample + center_left;
                 int sy = y * m_supersample + center_left;
-                T value = cubic_interpolate (
-                    cubic_interpolate (
-                        enlarged[(sy - 1) * m_enlarged_tile_size + sx - 1],
-                        enlarged[sy * m_enlarged_tile_size + sx - 1],
-                        enlarged[(sy + 1) * m_enlarged_tile_size + sx - 1],
-                        enlarged[(sy + 2) * m_enlarged_tile_size + sx - 1],
-                        (T)0.5),
-                    cubic_interpolate (
-                        enlarged[(sy - 1) * m_enlarged_tile_size + sx],
-                        enlarged[sy * m_enlarged_tile_size + sx],
-                        enlarged[(sy + 1) * m_enlarged_tile_size + sx],
-                        enlarged[(sy + 2) * m_enlarged_tile_size + sx],
-                        (T)0.5),
-                    cubic_interpolate (
-                        enlarged[(sy - 1) * m_enlarged_tile_size + sx + 1],
-                        enlarged[sy * m_enlarged_tile_size + sx + 1],
-                        enlarged[(sy + 1) * m_enlarged_tile_size + sx + 1],
-                        enlarged[(sy + 2) * m_enlarged_tile_size + sx + 1],
-                        (T)0.5),
-                    cubic_interpolate (
-                        enlarged[(sy - 1) * m_enlarged_tile_size + sx + 2],
-                        enlarged[sy * m_enlarged_tile_size + sx + 2],
-                        enlarged[(sy + 1) * m_enlarged_tile_size + sx + 2],
-                        enlarged[(sy + 2) * m_enlarged_tile_size + sx + 2],
-                        (T)0.5),
-                    (T)0.5);
-                put_pixel (thread_id, x, y, value);
+                const double column0 = cubic_midpoint (
+                    enlarged[(sy - 1) * m_enlarged_tile_size + sx - 1],
+                    enlarged[sy * m_enlarged_tile_size + sx - 1],
+                    enlarged[(sy + 1) * m_enlarged_tile_size + sx - 1],
+                    enlarged[(sy + 2) * m_enlarged_tile_size + sx - 1]);
+                const double column1 = cubic_midpoint (
+                    enlarged[(sy - 1) * m_enlarged_tile_size + sx],
+                    enlarged[sy * m_enlarged_tile_size + sx],
+                    enlarged[(sy + 1) * m_enlarged_tile_size + sx],
+                    enlarged[(sy + 2) * m_enlarged_tile_size + sx]);
+                const double column2 = cubic_midpoint (
+                    enlarged[(sy - 1) * m_enlarged_tile_size + sx + 1],
+                    enlarged[sy * m_enlarged_tile_size + sx + 1],
+                    enlarged[(sy + 1) * m_enlarged_tile_size + sx + 1],
+                    enlarged[(sy + 2) * m_enlarged_tile_size + sx + 1]);
+                const double column3 = cubic_midpoint (
+                    enlarged[(sy - 1) * m_enlarged_tile_size + sx + 2],
+                    enlarged[sy * m_enlarged_tile_size + sx + 2],
+                    enlarged[(sy + 1) * m_enlarged_tile_size + sx + 2],
+                    enlarged[(sy + 2) * m_enlarged_tile_size + sx + 2]);
+                put_pixel (thread_id, x, y,
+                           (T)cubic_midpoint (column0, column1, column2,
+                                              column3));
               }
         }
     }

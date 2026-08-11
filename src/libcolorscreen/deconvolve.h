@@ -154,8 +154,10 @@ private:
   /* Weights of edge tapering.  */
   std::vector<T, fft_allocator<T>> m_weights;
 
-  /* Lanczos kernels for resampling.  */
-  std::vector<T, fft_allocator<T>> m_lanczos_kernels;
+  /* Lanczos kernels for resampling.  Coefficients are kept in double even for
+     the single-precision image FFT; the table is tiny and its rounding error
+     would otherwise be accumulated for every resampled pixel.  */
+  std::vector<double, fft_allocator<double>> m_lanczos_kernels;
 
   /* FFT plans.  */
   fft_plan<T> m_plan_2d_inv, m_plan_2d;

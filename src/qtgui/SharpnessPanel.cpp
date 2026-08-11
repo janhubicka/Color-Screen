@@ -3,8 +3,12 @@
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/scr-to-img.h"
 #include "MTFChartWidget.h"
+#include "MTFFitDialog.h"
 #include "FinetuneImagesPanel.h"
 #include <QDebug>
+#include <cmath>
+#include <exception>
+#include <string>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
@@ -37,6 +41,18 @@ using namespace colorscreen;
 using sharpen_mode = colorscreen::sharpen_parameters::sharpen_mode;
 
 namespace {
+
+/** Result transferred from the MTF fitting worker to the GUI thread.  */
+struct MtfFitResult {
+  colorscreen::mtf_parameters baseline;
+  colorscreen::mtf_parameters input;
+  colorscreen::mtf_parameters fitted;
+  double objective = -1;
+  size_t observations = 0;
+  std::string error;
+  bool cancelled = false;
+};
+
 // Helper for drag and drop reordering
 class DragHandle : public QLabel {
 public:
@@ -168,7 +184,12 @@ private:
 
 SharpnessPanel::SharpnessPanel(StateGetter stateGetter, StateSetter stateSetter,
                                ImageGetter imageGetter, QWidget *parent)
-    : TilePreviewPanel(stateGetter, stateSetter, imageGetter, parent) {
+    : TilePreviewPanel(stateGetter, stateSetter, imageGetter, parent),
+      m_mtfFitQueue() {
+  connect(&m_mtfFitQueue, &TaskQueue::progressStarted, this,
+          &SharpnessPanel::progressStarted);
+  connect(&m_mtfFitQueue, &TaskQueue::progressFinished, this,
+          &SharpnessPanel::progressFinished);
   m_finetuneFlags = colorscreen::finetune_scanner_mtf_sigma |
                     colorscreen::finetune_scanner_mtf_defocus;
   setDebounceInterval(5);
@@ -253,7 +274,7 @@ void SharpnessPanel::setupUi() {
       },
       [](const ParameterState &s) {
         return s.rparams.sharpen.scanner_mtf.measurements.size();
-      }, "Use the Modulation Transfer Function (MTF) data imported from QuickMTF instead of the synthetic model (Sigma/Defocus).");
+      }, "Use a measured MTF curve directly instead of the fitted analytical physical or fallback model.");
 
 
   // Gaussian blur (Sigma)
@@ -269,7 +290,7 @@ void SharpnessPanel::setupUi() {
       },
       [](ParameterState &s, double v) {
         s.rparams.sharpen.scanner_mtf.sigma = v;
-      }, 1.0, nullptr, false, "Synthetic model parameter for camera sensor and scanner blur. Higher values simulate more blurring of fine details.");
+      }, 1.0, nullptr, false, "Residual compact Gaussian blur. In the physical model it is applied after diffraction and defocus; in the empirical fallback it is the compact core blur.");
 
   // Wavelength
   // Range 0.0 - 1200.0 (0.0 = unknown)
@@ -297,7 +318,42 @@ void SharpnessPanel::setupUi() {
       2.0, // Gamma
       [](const ParameterState &s) {
         return s.rparams.sharpen.scanner_mtf.simulate_diffraction_p();
-      }, false, "Simulates optical defocus in millimeters. This affects the MTF by introducing a sinc-like suppression of high frequencies.");
+      }, false, "Image-plane focus displacement in millimeters. The physical model evaluates the signed incoherent OTF of a defocused circular pupil.");
+
+  /* Broad halo parameters fitted by the physical model.  They are placed next
+     to the other optical parameters so the result of the fitting dialog is
+     immediately visible and can be adjusted without reopening the optimizer.
+     A zero fraction disables the halo; the stored radius is then inactive but
+     remains available as a starting value for a later fit.  */
+  addSliderParameter(
+      "Halo fraction", 0.0, 0.95, 10000.0, 4, "", "none",
+      [](const ParameterState &s) {
+        return s.rparams.sharpen.scanner_mtf.halo_fraction;
+      },
+      [](ParameterState &s, double v) {
+        s.rparams.sharpen.scanner_mtf.halo_fraction = v;
+      },
+      1.0,
+      [](const ParameterState &s) {
+        return s.rparams.sharpen.scanner_mtf.simulate_diffraction_p();
+      },
+      false,
+      "Fraction of optical energy redistributed into the broad symmetric halo. Zero disables the halo without discarding its radius.");
+
+  addSliderParameter(
+      "Halo radius", 0.0, 256.0, 1000.0, 3, "pixels", "not set",
+      [](const ParameterState &s) {
+        return s.rparams.sharpen.scanner_mtf.halo_sigma;
+      },
+      [](ParameterState &s, double v) {
+        s.rparams.sharpen.scanner_mtf.halo_sigma = v;
+      },
+      2.0,
+      [](const ParameterState &s) {
+        return s.rparams.sharpen.scanner_mtf.simulate_diffraction_p();
+      },
+      false,
+      "Gaussian standard deviation of the broad symmetric halo in output pixels. It has no effect while the halo fraction is zero.");
 
   // Blur diameter
   // Range 0.0 - 20.0 pixels
@@ -322,21 +378,18 @@ void SharpnessPanel::setupUi() {
     emit measureMtfRequested(checked);
   }, nullptr, nullptr, "Select an area containing a slanted edge to compute its MTF.");
 
-  // Add "Match measured data" button (visible only if measured data exists)
-  addButtonParameter("", "Match measured data", 
-    [this]() {
-      applyChange([](ParameterState &s) {
-        const char *error = nullptr;
-        s.rparams.sharpen.scanner_mtf.estimate_parameters(
-            s.rparams.sharpen.scanner_mtf, nullptr, nullptr, &error);
-      });
-    },
-    [this, separatorToggle](const ParameterState &s) {
-       bool visible = s.rparams.sharpen.scanner_mtf.measurements.size() > 0;
-       if (separatorToggle && !separatorToggle->isChecked())
-         visible = false;
-       return visible;
-    }, "Automatically find Sigma and Defocus parameters that best fit the currently loaded QuickMTF measurements.");
+  // Add the explicit model-fitting dialog when measured data is available.
+  m_fitMtfBtn = addButtonParameter(
+      "", "Fit measured MTF model", [this]() { fitMeasuredMtf(); },
+      [this, separatorToggle](const ParameterState &s) {
+        bool visible = !s.rparams.sharpen.scanner_mtf.measurements.empty();
+        if (separatorToggle && !separatorToggle->isChecked())
+          visible = false;
+        return visible && !m_mtfFitRunning;
+      },
+      "Choose the physical diffraction model, edit capture metadata, and "
+      "explicitly select which values should be optimized. Numeric zero is "
+      "never interpreted implicitly by this dialog.");
 
   // MTF Scale
   // Range 0.0 - 2.0 (0.0 = no MTF)
@@ -684,6 +737,128 @@ void SharpnessPanel::onAnalyzeDisplacements() {
 }
 
 // reattachTiles removed (in base)
+/** Open the explicit fit dialog and run its numerical optimization in a
+    background task.  The worker operates on a snapshot and the completed
+    result is committed as one undoable parameter-state change.  */
+void SharpnessPanel::fitMeasuredMtf() {
+  const ParameterState state = m_stateGetter();
+  const colorscreen::mtf_parameters &current =
+      state.rparams.sharpen.scanner_mtf;
+  MTFFitDialog dialog(current, this);
+  if (dialog.exec() != QDialog::Accepted)
+    return;
+
+  const colorscreen::mtf_parameters input = dialog.parameters();
+  const colorscreen::mtf_estimation_options options = dialog.options();
+  const int flags = dialog.estimationFlags();
+  auto result = std::make_shared<MtfFitResult>();
+  result->baseline = current;
+  result->input = input;
+  result->fitted = input;
+  m_mtfFitRunning = true;
+  if (m_fitMtfBtn)
+    m_fitMtfBtn->setEnabled(false);
+
+  m_mtfFitQueue.runAsync(
+      [result, options, flags](colorscreen::progress_info *progress) {
+        for (size_t measurement = 0;
+             measurement < result->input.measurements.size(); measurement++) {
+          if (!options.include_measurement_p(measurement))
+            continue;
+          const colorscreen::mtf_measurement &curve =
+              result->input.measurements[measurement];
+          for (size_t sample = 0; sample < curve.size(); sample++)
+            if (curve.get_freq(static_cast<int>(sample)) <= 0.5)
+              result->observations++;
+        }
+
+        try {
+          const char *error = nullptr;
+          result->objective = result->fitted.estimate_parameters(
+              result->input, options, nullptr, progress, &error, flags);
+          result->cancelled = progress
+                              && (progress->cancelled()
+                                  || progress->pool_cancel());
+          if (error)
+            result->error = error;
+        } catch (const std::exception &exception) {
+          result->error = exception.what();
+        } catch (...) {
+          result->error = "unexpected exception during MTF fitting";
+        }
+      },
+      [this, result]() {
+        m_mtfFitRunning = false;
+        /* Re-run all panel availability predicates instead of unconditionally
+           enabling the button.  Measurements or the containing section may
+           have changed while the background fit was running.  */
+        updateUI();
+        if (result->cancelled)
+          return;
+        if (result->objective < 0 || !result->error.empty()) {
+          QMessageBox::warning(
+              this, tr("MTF model fit"),
+              tr("The MTF model could not be fitted: %1")
+                  .arg(QString::fromStdString(
+                      result->error.empty() ? "unknown fitting error"
+                                            : result->error)));
+          return;
+        }
+
+        /* Do not silently overwrite measurements or model metadata edited
+           while a long-running fit was in progress.  The dialog values are
+           applied only when the underlying scanner-MTF state is still the
+           snapshot from which the fit was started.  */
+        const ParameterState currentState = m_stateGetter();
+        const colorscreen::mtf_parameters &currentMtf =
+            currentState.rparams.sharpen.scanner_mtf;
+        if (!currentMtf.equal_p(result->baseline)) {
+          QMessageBox::warning(
+              this, tr("MTF model fit"),
+              tr("The MTF measurements or model parameters changed while the "
+                 "fit was running. The completed result was not applied; "
+                 "start the fit again from the current values."));
+          return;
+        }
+
+        const colorscreen::mtf_parameters fitted = result->fitted;
+        applyChange(
+            [fitted](ParameterState &updated) {
+              updated.rparams.sharpen.scanner_mtf = fitted;
+            },
+            tr("Fit measured MTF model"));
+
+        const double rms = result->observations
+                               ? std::sqrt(result->objective
+                                           / result->observations)
+                               : 0.0;
+        QString details =
+            tr("The selected model was fitted successfully.\n\n"
+               "RMS residual: %1 percentage points\n"
+               "Gaussian sigma: %2 px")
+                .arg(rms, 0, 'g', 6)
+                .arg(fitted.sigma, 0, 'g', 8);
+        if (fitted.model == colorscreen::mtf_model::physical_diffraction)
+          {
+            details += tr("\nDefocus: %1 mm\nMarked f-number: %2"
+                          "\nSensor fill factor: %3\nHalo fraction: %4")
+                         .arg(fitted.defocus, 0, 'g', 8)
+                         .arg(fitted.f_stop, 0, 'g', 8)
+                         .arg(fitted.sensor_fill_factor, 0, 'g', 8)
+                         .arg(fitted.halo_fraction, 0, 'g', 8);
+            if (fitted.halo_fraction > 0)
+              details += tr("\nHalo radius: %1 px")
+                             .arg(fitted.halo_sigma, 0, 'g', 8);
+            else
+              details += tr("\nHalo radius: inactive");
+          }
+        else
+          details += tr("\nFallback blur diameter: %1 px")
+                         .arg(fitted.blur_diameter, 0, 'g', 8);
+        QMessageBox::information(this, tr("MTF model fit"), details);
+      });
+}
+
 void SharpnessPanel::loadMTF() {
   QStringList fileNames = QFileDialog::getOpenFileNames(
       this, tr("Load QuickMTF measurements"), "",
@@ -849,9 +1024,11 @@ void SharpnessPanel::updateMeasurementList() {
         waveSpin->setRange(0, 2000);
         waveSpin->setValue(m.wavelength);
         waveSpin->setSuffix(" nm");
-        waveSpin->setDecimals(1);
+        waveSpin->setDecimals(3);
         waveSpin->setSpecialValueText(tr("unknown"));
-        waveSpin->setEnabled(m.channel == -1);
+        waveSpin->setToolTip(
+            tr("Authoritative wavelength of this measured edge. Channel is "
+               "only a label and does not disable this field."));
         waveSpin->setFixedWidth(120);
         connect(waveSpin, &QDoubleSpinBox::editingFinished, this, [this, i, waveSpin]() {
             double val = waveSpin->value();
@@ -866,7 +1043,9 @@ void SharpnessPanel::updateMeasurementList() {
         // Same capture
         QCheckBox *sameCheck = new QCheckBox();
         sameCheck->setFixedWidth(50);
-        sameCheck->setToolTip(tr("If enabled solver will assume that measurement come from the same capture as prevoius one and will use the same focus displacement"));
+        sameCheck->setToolTip(
+            tr("Share the fitted focus displacement with the preceding "
+               "measurement because both curves came from the same capture."));
         sameCheck->setChecked(m.same_capture);
         if (i == 0) {
             sameCheck->setChecked(false);

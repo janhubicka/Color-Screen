@@ -30,8 +30,8 @@ fi
 
 COLORSCREEN=../src/colorscreen/colorscreen
 
-# Number of test cases: 4 synthetic + 1 legacy
-echo "1..5"
+# Number of test cases: 4 synthetic + 1 legacy + 1 rejection
+echo "1..6"
 
 failed=0
 testnum=0
@@ -45,11 +45,15 @@ run_test() {
     local tolerance="$3"
     local desc="$4"
 
-    $COLORSCREEN slanted-edge "$image" --gamma 1.0 \
+    $COLORSCREEN slanted-edge "$image" --gamma 1.0 --wavelength=750 \
+        --oversampling=10 --edge-half-width=0 --edge-window=hann \
         --compare-with "$reference" "$tolerance" \
         --verbose > slanted-edge-${testnum}.log 2>&1
 
-    if [ $? -eq 0 ]; then
+    status=$?
+    if [ $status -eq 0 ] \
+       && grep -q "Measurement wavelength: 750 nm" \
+            slanted-edge-${testnum}.log; then
         echo "ok $testnum - $desc"
     else
         echo "not ok $testnum - $desc"
@@ -88,5 +92,25 @@ run_test "$srcdir/slanted-gaussian-soft.tif" \
 run_test "$srcdir/slanted-austraia-hurley.tif" \
          "$srcdir/slanted-austraia-hurley-mtf.txt" 60.0 \
          "legacy real scan (Australia Hurley)"
+
+
+# Test 6: A checkerboard contains many competing edges and must be rejected.
+testnum=$((testnum + 1))
+invalid_mtf=slanted-edge-invalid-mtf.txt
+rm -f "$invalid_mtf"
+$COLORSCREEN slanted-edge "$srcdir/checkerboard.tif" --gamma 1.0 \
+    --wavelength=750 --oversampling=10 --edge-half-width=0 \
+    --edge-window=hann --save-mtf="$invalid_mtf" --verbose \
+    > slanted-edge-${testnum}.log 2>&1
+status=$?
+if [ $status -ne 0 ] \
+   && grep -q "Slanted edge analysis failed:" slanted-edge-${testnum}.log \
+   && [ ! -e "$invalid_mtf" ]; then
+    echo "ok $testnum - reject ROI containing many competing edges"
+else
+    echo "not ok $testnum - reject ROI containing many competing edges"
+    cat slanted-edge-${testnum}.log
+    failed=$((failed + 1))
+fi
 
 exit $failed

@@ -669,6 +669,605 @@ make_measured_mtf (const std::vector<std::pair<double, double>> &points)
   return parameters;
 }
 
+/* Verify the physical diffraction model, its unit conversions and the
+   optional broad-scatter residual on the Hurley capture geometry.  */
+static bool
+test_mtf_physical_model ()
+{
+  bool ok = true;
+  mtf_parameters hurley;
+  hurley.scan_dpi = 1887;
+  hurley.f_stop = 8;
+  hurley.wavelength = 750;
+  hurley.pixel_pitch = 3.760;
+  if (hurley.get_channel_wavelength (3) != 750)
+    {
+      fprintf (stderr, "Global narrow-band wavelength was not used for IR\n");
+      ok = false;
+    }
+
+  const double expected_magnification = 0.27933543307086614;
+  const double expected_effective_f_stop = 10.234683464566929;
+  const double expected_cutoff = 0.48983765357177734;
+  if (std::abs (hurley.magnification () - expected_magnification) > 1e-14
+      || std::abs (hurley.effective_f_stop () - expected_effective_f_stop)
+             > 1e-13
+      || std::abs (hurley.nu (expected_cutoff) - 1) > 2e-14)
+    {
+      fprintf (stderr,
+               "Hurley MTF unit conversion failed: m=%0.17g N=%0.17g "
+               "nu(fc)=%0.17g\n",
+               hurley.magnification (), hurley.effective_f_stop (),
+               hurley.nu (expected_cutoff));
+      ok = false;
+    }
+
+  const double half_cutoff = expected_cutoff * 0.5;
+  const double expected_half_cutoff_mtf = 0.39100221895577064;
+  if (std::abs (hurley.lens_diffraction_mtf (half_cutoff)
+                - expected_half_cutoff_mtf)
+          > 2e-13
+      /* EXPECTED_CUTOFF is a rounded decimal reference.  Under -Ofast its
+         independently evaluated ratio can land a few ulps below one, so test
+         the physical zero rather than bitwise equality.  */
+      || hurley.lens_diffraction_mtf (expected_cutoff) > 1e-20)
+    {
+      fprintf (stderr,
+               "Circular-pupil diffraction MTF failed: half=%0.17g "
+               "cutoff=%0.17g\n",
+               hurley.lens_diffraction_mtf (half_cutoff),
+               hurley.lens_diffraction_mtf (expected_cutoff));
+      ok = false;
+    }
+
+  hurley.defocus = 0.17939247226072069;
+  const double defocus_q10
+      = hurley.lens_defocus_mtf (expected_cutoff * 0.1);
+  const double defocus_q50
+      = hurley.lens_defocus_mtf (expected_cutoff * 0.5);
+  if (std::abs (defocus_q10 - 0.94938728640116945) > 3e-12
+      || std::abs (defocus_q50 - 0.66524440281563219) > 3e-12)
+    {
+      fprintf (stderr,
+               "Exact circular-pupil defocus failed: q=.1 %0.17g, "
+               "q=.5 %0.17g\n",
+               defocus_q10, defocus_q50);
+      ok = false;
+    }
+
+  hurley.halo_fraction = 0.16;
+  hurley.halo_sigma = 5.2;
+  if (hurley.halo_mtf (0) != 1
+      || !(hurley.halo_mtf (0.02) < 1 && hurley.halo_mtf (0.02) > 0.84)
+      || std::abs (hurley.halo_mtf (0.5) - 0.84) > 1e-10)
+    {
+      fprintf (stderr,
+               "Broad-scatter halo normalization failed: DC=%0.17g, "
+               "f=.02 %0.17g, f=.5 %0.17g\n",
+               hurley.halo_mtf (0), hurley.halo_mtf (0.02),
+               hurley.halo_mtf (0.5));
+      ok = false;
+    }
+
+  /* The metadata-free fallback remains a separate model and must not silently
+     enable diffraction.  */
+  mtf_parameters fallback;
+  fallback.sigma = 0.8;
+  fallback.blur_diameter = 2.0;
+  fallback.halo_fraction = 0.3;
+  fallback.halo_sigma = 5.0;
+  const double fallback_frequency = 0.1;
+  const double gaussian
+      = std::exp (-2 * M_PI * M_PI * fallback.sigma * fallback.sigma
+                  * fallback_frequency * fallback_frequency);
+  const double argument
+      = M_PI * fallback_frequency * fallback.blur_diameter;
+  const double disk = 2 * std::cyl_bessel_j (1, argument) / argument;
+  if (fallback.simulate_diffraction_p ()
+      || std::abs (fallback.lens_mtf (fallback_frequency)
+                   - gaussian * std::abs (disk))
+             > 2e-13)
+    {
+      fprintf (stderr, "Metadata-free fallback MTF changed unexpectedly\n");
+      ok = false;
+    }
+
+  /* Supplied global wavelength metadata must remain fixed for both an
+     unlabelled monochrome edge and an explicitly infrared edge.  Earlier the
+     fitter treated 750 nm as unknown and moved it to its 1000 nm boundary.  */
+  mtf_parameters source = hurley;
+  source.sigma = 0.72;
+  source.defocus = 0.12;
+  source.halo_fraction = 0.15;
+  source.halo_sigma = 5.0;
+  mtf_measurement grayscale;
+  grayscale.name = "synthetic Hurley grayscale";
+  mtf_measurement infrared;
+  infrared.name = "synthetic Hurley infrared";
+  infrared.channel = 3;
+  for (int i = 0; i <= 100; i++)
+    {
+      const double frequency = i / 200.0;
+      const double contrast = source.system_mtf (frequency) * 100;
+      grayscale.add_value (frequency, contrast);
+      infrared.add_value (frequency, contrast);
+    }
+  for (const mtf_measurement *measurement : {&grayscale, &infrared})
+    {
+      mtf_parameters input = source;
+      input.measurements = {*measurement};
+      mtf_parameters estimated;
+      const char *error = nullptr;
+      const double objective
+          = estimated.estimate_parameters (input, nullptr, nullptr, &error, 0);
+      if (error || objective < 0 || objective > 1e-8
+          || estimated.wavelength != 750
+          || estimated.wavelengths != input.wavelengths)
+        {
+          fprintf (stderr,
+                   "Known 750 nm wavelength was not preserved: wavelength "
+                   "%0.17g IR override %0.17g objective %g%s%s\n",
+                   estimated.wavelength, estimated.wavelengths[3], objective,
+                   error ? ": " : "", error ? error : "");
+          ok = false;
+        }
+    }
+
+  /* Preserve the old API's storage and sharing convention for unknown
+     channel-labelled wavelengths.  Two red curves use one common fitted
+     coordinate, and the result is written to the red channel override rather
+     than rewriting the measurements themselves.  */
+  mtf_parameters legacy_source = source;
+  legacy_source.wavelength = 650;
+  legacy_source.wavelengths = {0, 0, 0, 0};
+  mtf_measurement legacy_red_first;
+  legacy_red_first.name = "legacy shared red wavelength 1";
+  legacy_red_first.channel = 0;
+  mtf_measurement legacy_red_second;
+  legacy_red_second.name = "legacy shared red wavelength 2";
+  legacy_red_second.channel = 0;
+  legacy_red_second.same_capture = true;
+  for (int i = 0; i <= 100; i++)
+    {
+      const double frequency = i / 200.0;
+      const double contrast = legacy_source.system_mtf (frequency) * 100;
+      legacy_red_first.add_value (frequency, contrast);
+      legacy_red_second.add_value (frequency, contrast);
+    }
+  mtf_parameters legacy_input = legacy_source;
+  legacy_input.wavelength = 0;
+  legacy_input.measurements = {legacy_red_first, legacy_red_second};
+  mtf_parameters legacy_result;
+  const char *legacy_error = nullptr;
+  const double legacy_objective = legacy_result.estimate_parameters (
+      legacy_input, nullptr, nullptr, &legacy_error,
+      mtf_parameters::estimate_use_nmsimplex
+          | mtf_parameters::estimate_use_multifit);
+  if (legacy_error || legacy_objective < 0 || legacy_objective > 1e-7
+      || std::abs (legacy_result.wavelengths[0] - 650) > 1e-3
+      || std::abs (legacy_result.wavelength - 650) > 1e-3
+      || legacy_result.measurements[0].wavelength != 0
+      || legacy_result.measurements[1].wavelength != 0)
+    {
+      fprintf (stderr,
+               "Legacy shared channel wavelength changed: global %g red %g "
+               "stored %g/%g objective %g%s%s\n",
+               legacy_result.wavelength, legacy_result.wavelengths[0],
+               legacy_result.measurements[0].wavelength,
+               legacy_result.measurements[1].wavelength, legacy_objective,
+               legacy_error ? ": " : "", legacy_error ? legacy_error : "");
+      ok = false;
+    }
+
+  /* Explicit fit options separate values from optimization intent.  In
+     particular, zero sigma and zero defocus are valid fixed values even when
+     the selected measurement was generated with nonzero residual blur.  */
+  mtf_parameters fixed_zero_input = source;
+  fixed_zero_input.sigma = 0;
+  fixed_zero_input.defocus = 0;
+  fixed_zero_input.measurements = {grayscale};
+  mtf_estimation_options fixed_zero_options;
+  fixed_zero_options.model = mtf_model::physical_diffraction;
+  fixed_zero_options.optimize_sigma = false;
+  fixed_zero_options.optimize_defocus = false;
+  mtf_parameters fixed_zero_result;
+  const char *fixed_zero_error = nullptr;
+  const double fixed_zero_objective = fixed_zero_result.estimate_parameters (
+      fixed_zero_input, fixed_zero_options, nullptr, nullptr,
+      &fixed_zero_error, 0);
+  if (fixed_zero_error || fixed_zero_objective <= 0.1
+      || fixed_zero_result.sigma != 0 || fixed_zero_result.defocus != 0)
+    {
+      fprintf (stderr,
+               "Explicit fixed-zero fit failed: sigma %g defocus %g "
+               "objective %g%s%s\n",
+               fixed_zero_result.sigma, fixed_zero_result.defocus,
+               fixed_zero_objective, fixed_zero_error ? ": " : "",
+               fixed_zero_error ? fixed_zero_error : "");
+      ok = false;
+    }
+
+  mtf_estimation_options free_core_options = fixed_zero_options;
+  free_core_options.optimize_sigma = true;
+  free_core_options.optimize_defocus = true;
+  mtf_parameters free_core_result;
+  const char *free_core_error = nullptr;
+  const double free_core_objective = free_core_result.estimate_parameters (
+      fixed_zero_input, free_core_options, nullptr, nullptr,
+      &free_core_error,
+      mtf_parameters::estimate_use_nmsimplex
+          | mtf_parameters::estimate_use_multifit);
+  if (free_core_error || free_core_objective < 0
+      || free_core_objective >= fixed_zero_objective * 0.01)
+    {
+      fprintf (stderr,
+               "Explicit free-core fit failed: objective %g versus fixed "
+               "%g%s%s\n",
+               free_core_objective, fixed_zero_objective,
+               free_core_error ? ": " : "",
+               free_core_error ? free_core_error : "");
+      ok = false;
+    }
+
+  /* The empirical model remains an explicit fallback, and its zero-valued
+     starting estimates are fitted only when their checkboxes request it.  */
+  mtf_parameters optimized_fallback_source;
+  optimized_fallback_source.model = mtf_model::empirical_fallback;
+  optimized_fallback_source.sigma = 0.65;
+  optimized_fallback_source.blur_diameter = 2.1;
+  mtf_measurement optimized_fallback_measurement;
+  optimized_fallback_measurement.name = "synthetic empirical fallback";
+  for (int i = 0; i <= 100; i++)
+    {
+      const double frequency = i / 200.0;
+      optimized_fallback_measurement.add_value (
+          frequency, optimized_fallback_source.system_mtf (frequency) * 100);
+    }
+  mtf_parameters optimized_fallback_input = optimized_fallback_source;
+  optimized_fallback_input.sigma = 0;
+  optimized_fallback_input.blur_diameter = 0;
+  optimized_fallback_input.measurements = {optimized_fallback_measurement};
+  mtf_estimation_options optimized_fallback_options;
+  optimized_fallback_options.model = mtf_model::empirical_fallback;
+  optimized_fallback_options.optimize_sigma = true;
+  optimized_fallback_options.optimize_blur_diameter = true;
+  mtf_parameters optimized_fallback_result;
+  const char *optimized_fallback_error = nullptr;
+  const double optimized_fallback_objective
+      = optimized_fallback_result.estimate_parameters (
+          optimized_fallback_input, optimized_fallback_options, nullptr,
+          nullptr, &optimized_fallback_error,
+          mtf_parameters::estimate_use_nmsimplex
+              | mtf_parameters::estimate_use_multifit);
+  if (optimized_fallback_error || optimized_fallback_objective < 0
+      || optimized_fallback_objective > 1e-7
+      || optimized_fallback_result.model != mtf_model::empirical_fallback)
+    {
+      fprintf (stderr,
+               "Explicit empirical fallback fit failed: sigma %g blur %g "
+               "objective %g%s%s\n",
+               optimized_fallback_result.sigma,
+               optimized_fallback_result.blur_diameter,
+               optimized_fallback_objective,
+               optimized_fallback_error ? ": " : "",
+               optimized_fallback_error ? optimized_fallback_error : "");
+      ok = false;
+    }
+
+  /* A positive per-measurement wavelength is authoritative even when global
+     and channel fallbacks disagree.  An explicit fit also selects the fitted
+     analytical model instead of leaving the source measurement active.  */
+  mtf_parameters authoritative_input = source;
+  authoritative_input.wavelength = 640;
+  authoritative_input.wavelengths[3] = 850;
+  mtf_measurement authoritative_measurement = infrared;
+  authoritative_measurement.wavelength = 750;
+  authoritative_input.measurements = {authoritative_measurement};
+  authoritative_input.measured_mtf_idx = 0;
+  mtf_parameters authoritative_result;
+  const char *authoritative_error = nullptr;
+  const double authoritative_objective
+      = authoritative_result.estimate_parameters (
+          authoritative_input, fixed_zero_options, nullptr, nullptr,
+          &authoritative_error, 0);
+  if (authoritative_error || authoritative_objective < 0
+      || authoritative_objective > 1e-8
+      || authoritative_result.wavelength != 750
+      || authoritative_result.measurements[0].wavelength != 750
+      || authoritative_result.model != mtf_model::physical_diffraction
+      || authoritative_result.measured_mtf_idx != -1)
+    {
+      fprintf (stderr,
+               "Authoritative measurement wavelength or model activation "
+               "failed: wavelength %g stored %g model %i selected %i "
+               "objective %g%s%s\n",
+               authoritative_result.wavelength,
+               authoritative_result.measurements[0].wavelength,
+               (int)authoritative_result.model,
+               authoritative_result.measured_mtf_idx,
+               authoritative_objective, authoritative_error ? ": " : "",
+               authoritative_error ? authoritative_error : "");
+      ok = false;
+    }
+
+  /* Excluded measurements do not constrain validation.  This permits users
+     to retain an unfinished or legacy curve in the project while fitting a
+     well-described subset.  */
+  mtf_parameters selected_input = authoritative_input;
+  mtf_measurement incomplete_measurement;
+  incomplete_measurement.name = "excluded incomplete curve";
+  incomplete_measurement.add_value (0, 100);
+  selected_input.measurements.push_back (incomplete_measurement);
+  mtf_estimation_options selected_options = fixed_zero_options;
+  selected_options.include_measurements = {true, false};
+  selected_options.optimize_measurement_wavelengths = {false, true};
+  const char *selected_error = nullptr;
+  if (!mtf_parameters::validate_estimation_options (
+          selected_input, selected_options, &selected_error))
+    {
+      fprintf (stderr, "Excluded MTF curve affected validation: %s\n",
+               selected_error ? selected_error : "unknown error");
+      ok = false;
+    }
+
+  mtf_estimation_options invalid_model_options = fixed_zero_options;
+  invalid_model_options.model = (mtf_model)99;
+  if (mtf_parameters::validate_estimation_options (
+          authoritative_input, invalid_model_options, &selected_error))
+    {
+      fprintf (stderr, "Invalid explicit MTF model was accepted\n");
+      ok = false;
+    }
+
+  /* Front ends pass index-aligned vectors to the library.  Reject malformed
+     selections before a solver can silently include or optimize the wrong
+     curve.  */
+  mtf_estimation_options malformed_selection = fixed_zero_options;
+  malformed_selection.include_measurements = {true, false};
+  if (mtf_parameters::validate_estimation_options (
+          authoritative_input, malformed_selection, &selected_error))
+    {
+      fprintf (stderr, "Wrong-sized MTF inclusion vector was accepted\n");
+      ok = false;
+    }
+  malformed_selection = fixed_zero_options;
+  malformed_selection.optimize_measurement_wavelengths = {false, false};
+  if (mtf_parameters::validate_estimation_options (
+          authoritative_input, malformed_selection, &selected_error))
+    {
+      fprintf (stderr, "Wrong-sized MTF wavelength vector was accepted\n");
+      ok = false;
+    }
+
+  /* Diffraction cutoff constrains approximately wavelength times f-number.
+     With no fixed wavelength, fitting both scales is underdetermined and must
+     be rejected rather than producing an arbitrary boundary solution.  */
+  mtf_estimation_options unanchored_options = fixed_zero_options;
+  unanchored_options.optimize_f_stop = true;
+  unanchored_options.optimize_measurement_wavelengths = {true};
+  if (mtf_parameters::validate_estimation_options (
+          authoritative_input, unanchored_options, &selected_error))
+    {
+      fprintf (stderr, "Unanchored f-number/wavelength fit was accepted\n");
+      ok = false;
+    }
+
+  /* The empirical model remains an explicit backup even when unrelated
+     physical metadata happens to be present in the parameter object.  */
+  mtf_parameters fallback_source = fallback;
+  fallback_source.pixel_pitch = 3.760;
+  fallback_source.scan_dpi = 1887;
+  fallback_source.f_stop = 8;
+  fallback_source.wavelength = 750;
+  fallback_source.model = mtf_model::empirical_fallback;
+  mtf_measurement fallback_measurement;
+  for (int i = 0; i <= 100; i++)
+    {
+      const double frequency = i / 200.0;
+      fallback_measurement.add_value (
+          frequency, fallback_source.system_mtf (frequency) * 100);
+    }
+  fallback_source.measurements = {fallback_measurement};
+  fallback_source.measured_mtf_idx = 0;
+  mtf_estimation_options fallback_options;
+  fallback_options.model = mtf_model::empirical_fallback;
+  mtf_parameters fallback_result;
+  const char *fallback_error = nullptr;
+  const double fallback_objective = fallback_result.estimate_parameters (
+      fallback_source, fallback_options, nullptr, nullptr, &fallback_error, 0);
+  if (fallback_error || fallback_objective < 0 || fallback_objective > 1e-8
+      || fallback_result.model != mtf_model::empirical_fallback
+      || fallback_result.simulate_diffraction_p ()
+      || fallback_result.measured_mtf_idx != -1)
+    {
+      fprintf (stderr,
+               "Explicit empirical fallback failed: model %i diffraction %i "
+               "selected %i objective %g%s%s\n",
+               (int)fallback_result.model,
+               fallback_result.simulate_diffraction_p (),
+               fallback_result.measured_mtf_idx, fallback_objective,
+               fallback_error ? ": " : "",
+               fallback_error ? fallback_error : "");
+      ok = false;
+    }
+
+  /* Invalid fit-capable metadata must either be optimized or rejected.  The
+     physical geometry itself remains mandatory and is never inferred from a
+     single radial MTF curve.  */
+  mtf_parameters invalid_metadata = source;
+  invalid_metadata.measurements = {grayscale};
+  invalid_metadata.f_stop = 0;
+  const char *validation_error = nullptr;
+  if (mtf_parameters::validate_estimation_options (
+          invalid_metadata, fixed_zero_options, &validation_error))
+    {
+      fprintf (stderr, "Missing fixed f-number was accepted\n");
+      ok = false;
+    }
+  mtf_estimation_options fitted_f_stop_options = fixed_zero_options;
+  fitted_f_stop_options.optimize_f_stop = true;
+  if (!mtf_parameters::validate_estimation_options (
+          invalid_metadata, fitted_f_stop_options, &validation_error))
+    {
+      fprintf (stderr, "Optimized missing f-number was rejected: %s\n",
+               validation_error ? validation_error : "unknown error");
+      ok = false;
+    }
+
+  invalid_metadata = source;
+  invalid_metadata.wavelength = 0;
+  invalid_metadata.wavelengths = {0, 0, 0, 0};
+  invalid_metadata.measurements = {grayscale};
+  if (mtf_parameters::validate_estimation_options (
+          invalid_metadata, fixed_zero_options, &validation_error))
+    {
+      fprintf (stderr, "Missing fixed measurement wavelength was accepted\n");
+      ok = false;
+    }
+  mtf_estimation_options fitted_wavelength_options = fixed_zero_options;
+  fitted_wavelength_options.optimize_measurement_wavelengths = {true};
+  if (!mtf_parameters::validate_estimation_options (
+          invalid_metadata, fitted_wavelength_options, &validation_error))
+    {
+      fprintf (stderr, "Optimized missing wavelength was rejected: %s\n",
+               validation_error ? validation_error : "unknown error");
+      ok = false;
+    }
+
+  /* Fit only the optional halo against a noiseless physical curve.  Core
+     diffraction, defocus, residual Gaussian blur and sensor aperture remain
+     fixed by supplied metadata.  */
+  mtf_parameters halo_input = source;
+  halo_input.halo_fraction = 0;
+  halo_input.halo_sigma = 0;
+  halo_input.measurements = {grayscale};
+  mtf_parameters halo_estimated;
+  const char *halo_error = nullptr;
+  const int halo_flags = mtf_parameters::estimate_use_nmsimplex
+                         | mtf_parameters::estimate_use_multifit
+                         | mtf_parameters::estimate_halo;
+  const double halo_objective = halo_estimated.estimate_parameters (
+      halo_input, nullptr, nullptr, &halo_error, halo_flags);
+  if (halo_error || halo_objective < 0 || halo_objective > 1e-8
+      || std::abs (halo_estimated.halo_fraction - source.halo_fraction) > 2e-4
+      || std::abs (halo_estimated.halo_sigma - source.halo_sigma) > 0.01)
+    {
+      fprintf (stderr,
+               "Synthetic halo fit failed: fraction %0.17g sigma %0.17g "
+               "objective %g%s%s\n",
+               halo_estimated.halo_fraction, halo_estimated.halo_sigma,
+               halo_objective, halo_error ? ": " : "",
+               halo_error ? halo_error : "");
+      ok = false;
+    }
+
+  /* Mirror the GUI's default physical fit on a curve which contains no broad
+     halo.  Making the two halo parameters free by default must permit an exact
+     zero-energy result rather than forcing the optional component into an
+     otherwise complete diffraction, defocus and compact-blur model.  */
+  mtf_parameters no_halo_source = source;
+  no_halo_source.halo_fraction = 0;
+  no_halo_source.halo_sigma = 0;
+  mtf_measurement no_halo_measurement;
+  no_halo_measurement.name = "synthetic halo-free physical MTF";
+  no_halo_measurement.wavelength = no_halo_source.wavelength;
+  for (int i = 0; i <= 100; i++)
+    {
+      const double frequency = i / 200.0;
+      no_halo_measurement.add_value (
+          frequency, no_halo_source.system_mtf (frequency) * 100);
+    }
+  mtf_parameters default_fit_input = no_halo_source;
+  default_fit_input.measurements = {no_halo_measurement};
+  mtf_estimation_options default_fit_options;
+  default_fit_options.model = mtf_model::physical_diffraction;
+  default_fit_options.optimize_sigma = true;
+  default_fit_options.optimize_defocus = true;
+  default_fit_options.optimize_halo_fraction = true;
+  default_fit_options.optimize_halo_sigma = true;
+  mtf_parameters default_fit_result;
+  const char *default_fit_error = nullptr;
+  const double default_fit_objective
+      = default_fit_result.estimate_parameters (
+          default_fit_input, default_fit_options, nullptr, nullptr,
+          &default_fit_error,
+          mtf_parameters::estimate_use_nmsimplex
+              | mtf_parameters::estimate_use_multifit);
+  if (default_fit_error || default_fit_objective < 0
+      || default_fit_objective > 1e-8
+      || default_fit_result.halo_fraction > 1e-6
+      || std::abs (default_fit_result.sigma - no_halo_source.sigma) > 1e-5
+      || std::abs (default_fit_result.defocus - no_halo_source.defocus)
+             > 1e-5)
+    {
+      fprintf (stderr,
+               "Default halo-enabled fit invented a halo: fraction %0.17g "
+               "radius %0.17g sigma %0.17g defocus %0.17g objective %g%s%s\n",
+               default_fit_result.halo_fraction,
+               default_fit_result.halo_sigma, default_fit_result.sigma,
+               default_fit_result.defocus, default_fit_objective,
+               default_fit_error ? ": " : "",
+               default_fit_error ? default_fit_error : "");
+      ok = false;
+    }
+
+  /* Contrast samples are retained as double; this catches an accidental
+     reintroduction of float storage in long measured curves.  */
+  mtf_measurement precision_measurement;
+  const double precise_contrast = 99.123456789012345;
+  precision_measurement.add_value (0.123456789012345, precise_contrast);
+  if (precision_measurement.get_contrast (0) != precise_contrast)
+    {
+      fprintf (stderr, "Measured MTF contrast lost double precision\n");
+      ok = false;
+    }
+
+  /* Project files must round-trip the explicit model and authoritative
+     per-measurement metadata without losing double precision.  */
+  render_parameters saved_render;
+  mtf_parameters &saved_mtf = saved_render.sharpen.scanner_mtf;
+  saved_mtf = source;
+  saved_mtf.model = mtf_model::physical_diffraction;
+  saved_mtf.wavelength = 750.12345678901238;
+  saved_mtf.wavelengths
+      = {620.12345678901238, 540.23456789012345, 460.34567890123457,
+         750.45678901234567};
+  saved_mtf.measured_mtf_idx = 0;
+  mtf_measurement saved_measurement;
+  saved_measurement.channel = 3;
+  saved_measurement.wavelength = 750.56789012345678;
+  saved_measurement.same_capture = false;
+  saved_measurement.name = "quoted \"IR\" measurement \\ path";
+  saved_measurement.add_value (0.012345678901234568,
+                               99.123456789012351);
+  saved_measurement.add_value (0.23456789012345678,
+                               54.234567890123456);
+  saved_measurement.add_value (0.5, 4.3456789012345679);
+  saved_mtf.measurements = {saved_measurement};
+
+  FILE *project = tmpfile ();
+  render_parameters loaded_render;
+  const char *project_error = nullptr;
+  const bool project_saved
+      = project && save_csp (project, nullptr, nullptr, &saved_render, nullptr);
+  const bool project_loaded
+      = project_saved && !fseek (project, 0, SEEK_SET)
+        && load_csp (project, nullptr, nullptr, &loaded_render, nullptr,
+                     &project_error);
+  if (project)
+    fclose (project);
+  if (!project_loaded
+      || !loaded_render.sharpen.scanner_mtf.equal_p (saved_mtf))
+    {
+      fprintf (stderr, "MTF project-file round trip failed%s%s\n",
+               project_error ? ": " : "",
+               project_error ? project_error : "");
+      ok = false;
+    }
+
+  return ok;
+}
+
 /* Verify interpolation of measured data and the complete measured-MTF blur /
    deconvolution path.  In particular, exercise every supersampling phase: the
    old code read before the Lanczos table at factors 3 and 4.  */
@@ -2272,6 +2871,9 @@ test_slanted_edge_mtf ()
       rparam.gamma = 1.0;
       
       slanted_edge_parameters params;
+      params.wavelength = 750;
+      params.channel = 3;
+      params.name = "synthetic infrared edge";
       slanted_edge_results res = slanted_edge_mtf(rparam, blurred, blurred.get_area(), params, nullptr);
       
       if (!res.success)
@@ -2291,6 +2893,13 @@ test_slanted_edge_mtf ()
 	}
 	
       auto &measurement = rparam.sharpen.scanner_mtf.measurements[0];
+      if (measurement.wavelength != params.wavelength
+          || measurement.channel != params.channel
+          || measurement.name != params.name)
+	{
+	  printf ("Slanted-edge measurement metadata was not preserved\n");
+	  return false;
+	}
       if (verbose)
         printf("MTF size: %zu\n", measurement.size());
       
@@ -2343,6 +2952,116 @@ test_slanted_edge_mtf ()
 	}
     }
     
+  /* Invalid ROIs must be rejected rather than converted into plausible but
+     unrelated MTF curves.  DESCRIPTION identifies the adversarial geometry
+     and PIXEL_VALUE supplies one deterministic 16-bit grayscale sample.  */
+  auto expect_rejected
+      = [] (const char *description, auto pixel_value)
+        {
+          constexpr int width = 192;
+          constexpr int height = 192;
+          image_data test_image;
+          if (!test_image.set_dimensions (width, height, true, true))
+            return false;
+          test_image.maxval = 65535;
+          for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+              {
+                uint16_t value = pixel_value (x, y);
+                test_image.put_pixel (x, y, value);
+                test_image.put_rgb_pixel (x, y, {value, value, value});
+              }
+
+          render_parameters test_parameters;
+          test_parameters.gamma = 1.0;
+          slanted_edge_parameters edge_parameters;
+          edge_parameters.wavelength = 750;
+          slanted_edge_results result
+              = slanted_edge_mtf (test_parameters, test_image,
+                                  test_image.get_area (), edge_parameters,
+                                  nullptr);
+          if (result.success
+              || result.failure == slanted_edge_failure_none
+              || result.error.empty ()
+              || !result.edge_histogram.empty ()
+              || !test_parameters.sharpen.scanner_mtf.measurements.empty ())
+            {
+              printf ("FAILED: invalid slanted-edge ROI accepted: %s",
+                      description);
+              if (!result.error.empty ())
+                printf (" (%s)", result.error.c_str ());
+              printf ("\n");
+              return false;
+            }
+          return true;
+        };
+
+  if (!expect_rejected (
+          "edge parallel to the pixel grid",
+          [] (int x, int) -> uint16_t
+            { return x < 96 ? 10000 : 50000; })
+      || !expect_rejected (
+          "periodic stripe pattern with many competing edges",
+          [] (int x, int) -> uint16_t
+            { return ((x / 8) & 1) ? 50000 : 10000; })
+      || !expect_rejected (
+          "smooth illumination gradient without an isolated transition",
+          [] (int x, int) -> uint16_t
+            { return 5000 + (uint16_t)(50000.0 * x / 191.0); })
+      || !expect_rejected (
+          "two parallel slanted transitions",
+          [] (int x, int y) -> uint16_t
+            {
+              double slope = std::tan (5.0 * M_PI / 180.0);
+              double first_edge = 55.0 + slope * y;
+              double second_edge = 120.0 + slope * y;
+              return x >= first_edge && x < second_edge ? 50000 : 10000;
+            })
+      || !expect_rejected (
+          "curved transition that cannot be represented by one line",
+          [] (int x, int y) -> uint16_t
+            {
+              double edge_x
+                  = 96.0 + 8.0 * std::sin (2.0 * M_PI * y / 64.0);
+              return x < edge_x ? 10000 : 50000;
+            })
+      || !expect_rejected (
+          "deterministic random texture without an edge",
+          [] (int x, int y) -> uint16_t
+            {
+              unsigned int value
+                  = (unsigned int)x * 0x9e3779b9U
+                    ^ (unsigned int)y * 0x85ebca6bU;
+              value ^= value >> 16;
+              value *= 0x7feb352dU;
+              value ^= value >> 15;
+              return (uint16_t)(5000 + value % 55001);
+            })
+      || !expect_rejected (
+          "low-contrast edge buried in deterministic noise",
+          [] (int x, int y) -> uint16_t
+            {
+              unsigned int value
+                  = (unsigned int)x * 0x9e3779b9U
+                    ^ (unsigned int)y * 0x85ebca6bU;
+              value ^= value >> 16;
+              value *= 0x7feb352dU;
+              value ^= value >> 15;
+              int noise = (int)(value % 8001) - 4000;
+              double edge_x
+                  = 88.0 + std::tan (5.0 * M_PI / 180.0) * y;
+              int sample = (x < edge_x ? 30000 : 32000) + noise;
+              return (uint16_t)std::clamp (sample, 0, 65535);
+            })
+      || !expect_rejected (
+          "slanted edge too close to an ROI boundary",
+          [] (int x, int y) -> uint16_t
+            {
+              double edge_x = 4.5 + std::tan (5.0 * M_PI / 180.0) * y;
+              return x < edge_x ? 10000 : 50000;
+            }))
+    return false;
+
   return true;
 }
 
@@ -2625,6 +3344,8 @@ main (int argc, char **argv)
     { "linearity", "render linearity tests", [] () { return (bool)test_render_linearity (); } },
     { "blur", "screen blur tests", [] () { return test_screen_blur (); } },
     { "sharpening", "screen sharpening tests", [] () { return test_screen_sharpening (); } },
+    { "mtf_model", "physical MTF model tests",
+      [] () { return test_mtf_physical_model (); } },
     { "mtf_deconvolution", "measured MTF deconvolution tests",
       [] () { return test_mtf_deconvolution (); } },
     { "homography", "homography tests", [] () { return (bool)test_homography (false, false, 0.000001); } },

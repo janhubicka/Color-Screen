@@ -95,9 +95,10 @@ static QColor wavelengthToRGB(double wavelength) {
 std::vector<MTFChartWidget::LegendItem> MTFChartWidget::getLegendItems() const {
     std::vector<LegendItem> items;
     items.push_back({"Diffraction", QColor(255, 100, 100), 2, m_canSimulateDiffraction, &m_data.lens_diffraction_mtf});
-    items.push_back({"Defocus", QColor(255, 165, 0), 2, m_canSimulateDiffraction, &m_data.stokseth_defocus_mtf});
+    items.push_back({"Defocus", QColor(255, 165, 0), 2, m_canSimulateDiffraction, &m_data.lens_defocus_mtf});
     items.push_back({"Hopkins blur", QColor(139, 69, 19), 2, !m_canSimulateDiffraction, &m_data.hopkins_blur_mtf});
     items.push_back({"Gaussian blur", QColor(100, 200, 100), 2, true, &m_data.gaussian_blur_mtf});
+    items.push_back({"Broad halo", QColor(180, 120, 220), 2, true, &m_data.halo_mtf});
     items.push_back({"Lens", Qt::blue, 2, true, &m_data.lens_mtf});
     items.push_back({"Sensor", Qt::gray, 2, true, &m_data.sensor_mtf});
     items.push_back({"System", Qt::white, 4, true, &m_data.system_mtf});
@@ -105,9 +106,8 @@ std::vector<MTFChartWidget::LegendItem> MTFChartWidget::getLegendItems() const {
     if (m_hasMeasuredData) {
         for (const auto &m : m_measurements) {
             double wl = m.wavelength;
-            if (m.channel >= 0 && m.channel < 4) {
+            if (wl <= 0 && m.channel >= 0 && m.channel < 4)
                 wl = m_channelWavelengths[m.channel];
-            }
             QColor col = (wl > 0) ? wavelengthToRGB(wl) : Qt::white;
             items.push_back({QString::fromStdString(m.name), col, 2, true, nullptr, &m});
         }

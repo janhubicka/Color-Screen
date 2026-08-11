@@ -76,6 +76,10 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --gamma=val               set gamma correction of input file (default 1.0)\n");
       fprintf (stderr, "      --save-mtf=file           save measured MTF to a file in QuickMTF format\n");
       fprintf (stderr, "      --save-esf=file           save the supersampled edge-spread function\n");
+      fprintf (stderr, "      --wavelength=nm           label the measured data with its wavelength\n");
+      fprintf (stderr, "      --oversampling=2..64      set ESF supersampling (default 10)\n");
+      fprintf (stderr, "      --edge-half-width=pixels  retain this LSF radius; zero uses the full ROI\n");
+      fprintf (stderr, "      --edge-window=name        use hann, hamming, or rectangular window\n");
       fprintf (stderr, "      --compare-with=file tol   compare measured MTF with reference and fail if difference > tol\n");
     }
   if (subhelp == help_render || subhelp == help_basic)
@@ -459,19 +463,22 @@ print_help (char *err = NULL)
       fprintf (stderr,
                "    various operations with scanner MTF settings\n");
     }
-  if (subhelp == help_has_regular_screen)
+  if (subhelp == help_mtf)
     {
       fprintf (stderr, "      --save-csv=name.csv       save MTF (or match) in CSV format\n");
       fprintf (stderr, "      --save-psf=name.tif       save point spread function to TIF\n");
       fprintf (stderr, "      --load-quickmtf=name.txt  Load measured MTF data in quickmtf format\n");
       fprintf (stderr, "      --match  		        match measured MTF with parameters\n");
       fprintf (stderr, "      --save-matched-psf=n.tif  save point spread function of matched parameters to TIF\n");
-      fprintf (stderr, "      --sigma=pixel_sigma       specify lens sigma (gaussian blur) in pixels\n");
-      fprintf (stderr, "      --blur-diameter=pixels    specify lens blur diameter (used only when there is no info for difraction model)\n");
+      fprintf (stderr, "      --sigma=pixel_sigma       specify residual core Gaussian sigma in pixels\n");
+      fprintf (stderr, "      --halo-fraction=f        specify broad-scatter energy fraction (0..0.95)\n");
+      fprintf (stderr, "      --halo-sigma=pixels      specify broad-scatter Gaussian sigma in pixels\n");
+      fprintf (stderr, "      --fit-halo               estimate missing broad-scatter parameters\n");
+      fprintf (stderr, "      --blur-diameter=pixels    specify fallback geometric blur diameter\n");
       fprintf (stderr, "      --pixel-pitch=um 		specify sensor's pixel size in micrometers\n");
       fprintf (stderr, "      --wavelength=nm 		specify light wavelength in nanometers\n");
       fprintf (stderr, "      --f-stop=f 		specify lens nominal f-stop\n");
-      fprintf (stderr, "      --defocus=mm 		specify defocus from sensor plane in millimeters\n");
+      fprintf (stderr, "      --defocus=mm 		specify image-plane displacement in millimeters\n");
       fprintf (stderr, "      --scan-dpi=dpi 		specify scanned DPI (needed to compute magnification)\n");
     }
   fprintf (stderr, "\n");
@@ -621,11 +628,13 @@ arg_with_param (int argc, char **argv, int *i, std::string_view arg)
   return nullptr;
 }
 
-/* Parse float parameter ARG with value VAL in range MIN...MAX.
-   ARGC and ARGV are standard command line arguments and I is current position.  */
+/* Parse floating-point parameter ARG into VAL in range MIN...MAX.
+   ARGC and ARGV are standard command-line arguments and I is the current
+   position.  */
+template <typename T>
 static bool
-parse_float_param (int argc, char **argv, int *i, const char *arg, float &val,
-                   float min, float max)
+parse_floating_param (int argc, char **argv, int *i, const char *arg, T &val,
+                      T min, T max)
 {
   const char *param = arg_with_param (argc, argv, i, arg);
   if (!param)
@@ -634,18 +643,40 @@ parse_float_param (int argc, char **argv, int *i, const char *arg, float &val,
   std::string_view s (param);
   auto [ptr, ec] = std::from_chars (s.data (), s.data () + s.size (), val);
 
-  if (ec != std::errc ())
+  if (ec != std::errc () || ptr != s.data () + s.size ()
+      || !my_isfinite ((double)val))
     {
       fprintf (stderr, "invalid parameter of %s: %s\n", arg, param);
       print_help ();
     }
   if (val < min || val > max)
     {
-      fprintf (stderr, "parameter %s=%f is out of range %f...%f\n", arg, val,
-               min, max);
+      fprintf (stderr,
+               "parameter %s=%.17g is out of range %.17g...%.17g\n", arg,
+               (double)val, (double)min, (double)max);
       print_help ();
     }
   return true;
+}
+
+/* Parse float parameter ARG into VAL in range MIN...MAX.
+   ARGC and ARGV are standard command-line arguments and I is the current
+   position.  */
+static bool
+parse_float_param (int argc, char **argv, int *i, const char *arg, float &val,
+                   float min, float max)
+{
+  return parse_floating_param (argc, argv, i, arg, val, min, max);
+}
+
+/* Parse double parameter ARG into VAL in range MIN...MAX.
+   ARGC and ARGV are standard command-line arguments and I is the current
+   position.  */
+static bool
+parse_double_param (int argc, char **argv, int *i, const char *arg,
+                    double &val, double min, double max)
+{
+  return parse_floating_param (argc, argv, i, arg, val, min, max);
 }
 /* Parse int parameter ARG with value VAL in range MIN...MAX.
    ARGC and ARGV are standard command line arguments and I is current position.  */
@@ -3406,7 +3437,24 @@ do_mtf (int argc, char **argv)
   const char *psfname = NULL;
   const char *psfname2 = NULL;
   const char *quickmtfname = NULL;
-  float sigma = 0, blur_diameter = 0, pixel_pitch = 0, wavelength = 0, f_stop = 0, defocus = 0, scan_dpi = 0;
+  double sigma = 0;
+  double halo_fraction = 0;
+  double halo_sigma = 0;
+  double blur_diameter = 0;
+  double pixel_pitch = 0;
+  double wavelength = 0;
+  double f_stop = 0;
+  double defocus = 0;
+  double scan_dpi = 0;
+  bool sigma_set = false;
+  bool halo_fraction_set = false;
+  bool halo_sigma_set = false;
+  bool blur_diameter_set = false;
+  bool pixel_pitch_set = false;
+  bool wavelength_set = false;
+  bool f_stop_set = false;
+  bool defocus_set = false;
+  bool scan_dpi_set = false;
   bool match = false;
   int flags = mtf_parameters::estimate_use_nmsimplex | mtf_parameters::estimate_use_multifit;
 
@@ -3414,11 +3462,12 @@ do_mtf (int argc, char **argv)
   for (int i = 0; i < argc; i++)
     {
       std::string_view arg (argv[i]);
-      float flt;
       if (parse_common_flags (argc, argv, &i))
         ;
       else if (arg == "--match")
 	match = true;
+      else if (arg == "--fit-halo")
+        flags |= mtf_parameters::estimate_halo;
       else if (arg == "--simplex")
 	flags |= mtf_parameters::estimate_use_nmsimplex;
       else if (arg == "--no-simplex")
@@ -3437,20 +3486,34 @@ do_mtf (int argc, char **argv)
         psfname = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "save-matched-psf"))
         psfname2 = str;
-      else if (parse_float_param (argc, argv, &i, "sigma", flt, 0, 10))
-	sigma = flt;
-      else if (parse_float_param (argc, argv, &i, "blur-diameter", flt, 0, 10))
-	blur_diameter = flt;
-      else if (parse_float_param (argc, argv, &i, "pixel-pitch", flt, 0, 1000))
-	pixel_pitch = flt;
-      else if (parse_float_param (argc, argv, &i, "wavelength", flt, 300, 2000))
-	wavelength = flt;
-      else if (parse_float_param (argc, argv, &i, "f-stop", flt, 0, 1000))
-	f_stop = flt;
-      else if (parse_float_param (argc, argv, &i, "defocus", flt, 0, 10))
-	defocus = flt;
-      else if (parse_float_param (argc, argv, &i, "dpi", flt, 0, 10))
-	scan_dpi = flt;
+      else if (parse_double_param (argc, argv, &i, "sigma", sigma, 0, 20))
+	sigma_set = true;
+      else if (parse_double_param (argc, argv, &i, "halo-fraction",
+                                   halo_fraction, 0, 0.95))
+        halo_fraction_set = true;
+      else if (parse_double_param (argc, argv, &i, "halo-sigma", halo_sigma,
+                                   0.01, 256))
+        halo_sigma_set = true;
+      else if (parse_double_param (argc, argv, &i, "blur-diameter",
+                                   blur_diameter, 0, 64))
+	blur_diameter_set = true;
+      else if (parse_double_param (argc, argv, &i, "pixel-pitch",
+                                   pixel_pitch, 0.01, 1000))
+	pixel_pitch_set = true;
+      else if (parse_double_param (argc, argv, &i, "wavelength", wavelength,
+                                   300, 2000))
+	wavelength_set = true;
+      else if (parse_double_param (argc, argv, &i, "f-stop", f_stop, 0.5,
+                                   128))
+	f_stop_set = true;
+      else if (parse_double_param (argc, argv, &i, "defocus", defocus, 0,
+                                   20))
+	defocus_set = true;
+      else if (parse_double_param (argc, argv, &i, "scan-dpi", scan_dpi, 1,
+                                   100000)
+               || parse_double_param (argc, argv, &i, "dpi", scan_dpi, 1,
+                                      100000))
+	scan_dpi_set = true;
       else
 	{
 	  if (!cspname)
@@ -3461,7 +3524,9 @@ do_mtf (int argc, char **argv)
     }
   if (verbose)
     flags |= mtf_parameters::estimate_verbose;
-  if (!cspname && !quickmtfname && !sigma && !blur_diameter && !pixel_pitch)
+  if (!cspname && !quickmtfname && !sigma_set && !halo_fraction_set
+      && !halo_sigma_set && !blur_diameter_set && !pixel_pitch_set
+      && !wavelength_set && !f_stop_set && !defocus_set && !scan_dpi_set)
     {
       fprintf (stderr, "No filename given and no MTF parameters specified\n");
       exit (-1);
@@ -3485,19 +3550,23 @@ do_mtf (int argc, char **argv)
 	}
       fclose (in);
     }
-  if (sigma)
+  if (sigma_set)
     rparam.sharpen.scanner_mtf.sigma = sigma;
-  if (blur_diameter)
+  if (halo_fraction_set)
+    rparam.sharpen.scanner_mtf.halo_fraction = halo_fraction;
+  if (halo_sigma_set)
+    rparam.sharpen.scanner_mtf.halo_sigma = halo_sigma;
+  if (blur_diameter_set)
     rparam.sharpen.scanner_mtf.blur_diameter = blur_diameter;
-  if (pixel_pitch)
+  if (pixel_pitch_set)
     rparam.sharpen.scanner_mtf.pixel_pitch = pixel_pitch;
-  if (wavelength)
+  if (wavelength_set)
     rparam.sharpen.scanner_mtf.wavelength = wavelength;
-  if (f_stop)
+  if (f_stop_set)
     rparam.sharpen.scanner_mtf.f_stop = f_stop;
-  if (defocus)
+  if (defocus_set)
     rparam.sharpen.scanner_mtf.defocus = defocus;
-  if (scan_dpi)
+  if (scan_dpi_set)
     rparam.sharpen.scanner_mtf.scan_dpi = scan_dpi;
   if (quickmtfname)
     {
@@ -3508,9 +3577,15 @@ do_mtf (int argc, char **argv)
 	}
       if (!in)
 	{
-	  perror (cspname);
+	  perror (quickmtfname);
 	  return 1;
 	}
+      if (rparam.sharpen.scanner_mtf.load_csv (in, quickmtfname, &error) < 0)
+        {
+          fprintf (stderr, "Cannot load %s: %s\n", quickmtfname, error);
+          fclose (in);
+          return 1;
+        }
       fclose (in);
     }
   file_progress_info progress (stdout, verbose, verbose_tasks);
@@ -3533,7 +3608,8 @@ do_mtf (int argc, char **argv)
 	  progress.resume_stdout ();
 	  return 1;
 	}
-      double sqsum = estimated.estimate_parameters (rparam.sharpen.scanner_mtf, csvname, &progress, &error, flags);
+      double sqsum = estimated.estimate_parameters (
+          rparam.sharpen.scanner_mtf, csvname, &progress, &error, flags);
       if (error)
 	{
           progress.pause_stdout ();
@@ -3543,16 +3619,34 @@ do_mtf (int argc, char **argv)
 	}
       progress.pause_stdout ();
       if (verbose)
-        printf ("Average error square: %f\n\n", sqsum / rparam.sharpen.scanner_mtf.measurements.size ());
-      printf ("scanner_mtf_sigma_px: %f\n", estimated.sigma);
-      printf ("scanner_mtf_blur_diameter_px: %f\n", estimated.blur_diameter);
-      printf ("scanner_mtf_pixel_pitch_um: %f\n", estimated.pixel_pitch);
-      printf ("scanner_mtf_sensor_fill_factor: %f\n", estimated.sensor_fill_factor);
-      printf ("scanner_mtf_wavelength_nm: %f\n", estimated.wavelength);
-      printf ("scanner_mtf_channel_wavelengths_nm: %f %f %f %f\n", estimated.wavelengths[0], estimated.wavelengths[1], estimated.wavelengths[2], estimated.wavelengths[3]);
-      printf ("scanner_mtf_f_stop: %f\n", estimated.f_stop);
-      printf ("scanner_mtf_defocus_mm: %g\n", estimated.defocus);
-      printf ("scan_dpi: %f\n", estimated.scan_dpi);
+        {
+          size_t observations = 0;
+          for (const auto &measurement
+               : rparam.sharpen.scanner_mtf.measurements)
+            for (size_t i = 0; i < measurement.size (); i++)
+              if (measurement.get_freq (i) <= 0.5)
+                observations++;
+          printf ("Mean squared percentage-point error: %.17g\n\n",
+                  observations ? sqsum / observations : sqsum);
+        }
+      printf ("scanner_mtf_sigma_px: %.17g\n", estimated.sigma);
+      printf ("scanner_mtf_halo_fraction: %.17g\n",
+              estimated.halo_fraction);
+      printf ("scanner_mtf_halo_sigma_px: %.17g\n",
+              estimated.halo_sigma);
+      printf ("scanner_mtf_blur_diameter_px: %.17g\n",
+              estimated.blur_diameter);
+      printf ("scanner_mtf_pixel_pitch_um: %.17g\n", estimated.pixel_pitch);
+      printf ("scanner_mtf_sensor_fill_factor: %.17g\n",
+              estimated.sensor_fill_factor);
+      printf ("scanner_mtf_wavelength_nm: %.17g\n", estimated.wavelength);
+      printf ("scanner_mtf_channel_wavelengths_nm: %.17g %.17g %.17g "
+              "%.17g\n",
+              estimated.wavelengths[0], estimated.wavelengths[1],
+              estimated.wavelengths[2], estimated.wavelengths[3]);
+      printf ("scanner_mtf_f_stop: %.17g\n", estimated.f_stop);
+      printf ("scanner_mtf_defocus_mm: %.17g\n", estimated.defocus);
+      printf ("scan_dpi: %.17g\n", estimated.scan_dpi);
       if (psfname2 && verbose)
 	  printf ("Saving estimated PSF to tiff file: %s\n", psfname2);
       if (psfname2 && !estimated.save_psf (NULL, psfname2, &error))
@@ -3917,19 +4011,46 @@ do_slanted_edge (int argc, char **argv)
   const char *mtfname = NULL;
   const char *esfname = NULL;
   const char *compare_mtf = NULL;
-  float tolerance = 0.05;
-  float gamma = 1.0;
+  double tolerance = 0.05;
+  double gamma = 1.0;
   slanted_edge_parameters params;
   subhelp = help_slanted_edge;
 
   for (int i = 0; i < argc; i++)
     {
       std::string_view arg (argv[i]);
-      float flt;
+      double value;
       if (parse_common_flags (argc, argv, &i))
         ;
-      else if (parse_float_param (argc, argv, &i, "gamma", flt, 0.1, 10))
-        gamma = flt;
+      else if (parse_double_param (argc, argv, &i, "gamma", value, 0.1, 10))
+        gamma = value;
+      else if (parse_double_param (argc, argv, &i, "wavelength",
+                                   params.wavelength, 1, 2000))
+        ;
+      else if (parse_int_param (argc, argv, &i, "oversampling",
+                                params.oversampling, 2, 64))
+        ;
+      else if (parse_double_param (argc, argv, &i, "edge-half-width", value,
+                                   0, 100000))
+        params.lsf_half_width = value;
+      else if (const char *str
+                   = arg_with_param (argc, argv, &i, "edge-window"))
+        {
+          if (!strcmp (str, "hann"))
+            params.window = slanted_edge_parameters::window_hann;
+          else if (!strcmp (str, "hamming"))
+            params.window = slanted_edge_parameters::window_hamming;
+          else if (!strcmp (str, "rectangular") || !strcmp (str, "rect"))
+            params.window = slanted_edge_parameters::window_rectangular;
+          else
+            {
+              fprintf (stderr,
+                       "Unknown edge window %s; expected hann, hamming, or "
+                       "rectangular\n",
+                       str);
+              return 1;
+            }
+        }
       else if (const char *str = arg_with_param (argc, argv, &i, "save-mtf"))
         mtfname = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "save-esf"))
@@ -3974,16 +4095,24 @@ do_slanted_edge (int argc, char **argv)
   slanted_edge_results res = slanted_edge_mtf (rparam, img, img.get_area(), params, &progress);
   if (!res.success)
     {
-      fprintf (stderr, "Slanted edge analysis failed\n");
+      fprintf (stderr, "Slanted edge analysis failed: %s\n",
+               res.error.empty () ? "unknown measurement error"
+                                  : res.error.c_str ());
       return 1;
     }
 
   if (verbose)
     {
       progress.pause_stdout ();
-      printf ("Detected edge: (%.2f, %.2f) - (%.2f, %.2f)\n", 
-              (double)res.edge_p1.x, (double)res.edge_p1.y, 
+      printf ("Detected edge: (%.2f, %.2f) - (%.2f, %.2f)\n",
+              (double)res.edge_p1.x, (double)res.edge_p1.y,
               (double)res.edge_p2.x, (double)res.edge_p2.y);
+      printf ("Edge quality: angle %.3f degrees, fit RMS %.4f px, "
+              "contrast %.6g, SNR %.2f, phase coverage %.1f%%\n",
+              res.edge_angle, res.edge_fit_rms, res.edge_contrast,
+              res.edge_snr, res.phase_coverage * 100);
+      if (params.wavelength > 0)
+        printf ("Measurement wavelength: %.12g nm\n", params.wavelength);
       fflush (stdout);
       progress.resume_stdout ();
     }
@@ -4007,15 +4136,37 @@ do_slanted_edge (int argc, char **argv)
     }
 
   if (mtfname)
-    rparam.sharpen.scanner_mtf.write_table (mtfname, &error);
+    {
+      FILE *f = fopen (mtfname, "w");
+      if (!f)
+        {
+          perror (mtfname);
+          return 1;
+        }
+      for (size_t i = 0; i < m.size (); i++)
+        {
+          double frequency = m.get_freq (i);
+          double contrast = m.get_contrast (i);
+          fprintf (f, "%.17g\t%.17g\t%.17g\t%.17g\t%.17g\n",
+                   frequency, contrast, contrast, contrast, contrast);
+        }
+      if (fclose (f) != 0)
+        {
+          perror (mtfname);
+          return 1;
+        }
+    }
 
   if (esfname)
     {
       FILE *f = fopen (esfname, "w");
       if (f)
         {
-          for (size_t i = 0; i < res.edge_histogram.size(); i++)
-            fprintf (f, "%.4f\t%.6f\n", (double)i / params.oversampling, res.edge_histogram[i]);
+          for (size_t i = 0; i < res.edge_histogram.size (); i++)
+            fprintf (f, "%.17g\t%.17g\n",
+                     res.edge_histogram_origin
+                         + i * res.edge_histogram_step,
+                     (double)res.edge_histogram[i]);
           fclose (f);
         }
     }

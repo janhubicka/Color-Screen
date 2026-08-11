@@ -316,7 +316,8 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
 	}
 
       double final_resid = gsl_blas_dnrm2 (w->f);
-      if (initial_resid < final_resid && std::isfinite (initial_resid))
+      /* std::isfinite may be folded to true by -ffinite-math-only.  */
+      if (initial_resid < final_resid && my_isfinite (initial_resid))
 	{
 	  if (c.verbose ())
 	    {

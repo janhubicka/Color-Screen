@@ -47,6 +47,8 @@ set(SOURCES
     ParameterPanel.cpp
     TilePreviewPanel.cpp
     SharpnessPanel.cpp
+    MTFFitDialog.cpp
+    SlantedEdgeDialog.cpp
     ScreenPanel.cpp
     ColorPanel.cpp
     MTFChartWidget.cpp
@@ -74,6 +76,8 @@ set(HEADERS
     ParameterPanel.h
     TilePreviewPanel.h
     SharpnessPanel.h
+    MTFFitDialog.h
+    SlantedEdgeDialog.h
     ScreenPanel.h
     ColorPanel.h
     MTFChartWidget.h

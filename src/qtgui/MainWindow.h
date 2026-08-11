@@ -302,6 +302,10 @@ private:
   colorscreen::scr_detect_parameters m_detectParams;
   colorscreen::scr_to_img_parameters m_scrToImgParams;
   colorscreen::solver_parameters m_solverParams;
+  /** Last slanted-edge setup used in this session.  Each accepted measurement
+      stores an independent copy of its metadata, while the numerical controls
+      determine the generated curve.  */
+  colorscreen::slanted_edge_parameters m_slantedEdgeParameters;
   std::vector<colorscreen::point_t> m_profileSpots;
   ParameterState m_undoSnapshot; // Added
   ParameterState m_gridManipulationOldState;

@@ -19,7 +19,8 @@ EXTRA_DIST              = defs.sh $(TESTS) \
 			  slanted-gaussian-medium-mtf.txt \
 			  slanted-gaussian-soft.tif \
 			  slanted-gaussian-soft-mtf.txt \
-			  generate-slanted-edge-tests.sh
+			  generate-slanted-edge-tests.sh \
+			  validate-mtf-physical-model.py
 
 TEST_LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) \
 			  $(top_srcdir)/build-aux/tap-driver.sh

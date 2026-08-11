@@ -336,24 +336,111 @@ hd_axis_y_to_linear (double axisY, double boost, hd_axis_type axis)
   return std::pow (std::max (0.0000001, axisY), 2.2);
 }
 
+/* Parameters controlling slanted-edge SFR measurement.  */
 struct slanted_edge_parameters
 {
-  /* Supersampling rate for the Edge Spread Function.
+  /* Window applied to the line-spread function before its Fourier transform.  */
+  enum window_type
+  {
+    window_hann,
+    window_hamming,
+    window_rectangular
+  };
+
+  /* Supersampling rate for the edge-spread function.
      The implementation defaults to 10x; 4x is the traditional ISO-style rate.
      Values from 2x through 64x are accepted.  Nonpositive values select the
      default.  */
   int oversampling = 10;
+
+  /* Half-width of the retained line-spread function in input pixels.
+     Zero keeps the complete region of interest and preserves the historical
+     Color-Screen measurement.  A finite value makes the measurement aperture
+     explicit and is useful when comparing with programs that truncate the LSF.  */
+  double lsf_half_width = 0;
+
+  /* Window used on the retained LSF support.  */
+  window_type window = window_hann;
+
+  /* Wavelength in nanometers associated with the measured edge.  Zero means
+     unknown.  This metadata is copied to the appended MTF measurement and is
+     not used by the slanted-edge numerical calculation itself.  */
+  double wavelength = 0;
+
+  /* Measurement channel: -1 unknown, 0 red, 1 green, 2 blue, or 3 infrared.  */
+  int channel = -1;
+
+  /* Human-readable name stored with the appended MTF measurement.  */
+  std::string name = "Slanted edge MTF";
+
+  /* True when this edge belongs to the same capture as the preceding stored
+     measurement and should therefore share fitted defocus.  */
+  bool same_capture = false;
 };
 
+/* Reason why a slanted-edge measurement was rejected.  A failed
+   measurement never appends an MTF curve to the render parameters.  */
+enum slanted_edge_failure
+{
+  slanted_edge_failure_none,
+  slanted_edge_failure_invalid_parameters,
+  slanted_edge_failure_invalid_roi,
+  slanted_edge_failure_precomputation,
+  slanted_edge_failure_no_single_edge,
+  slanted_edge_failure_nonlinear_edge,
+  slanted_edge_failure_unsuitable_angle,
+  slanted_edge_failure_edge_near_boundary,
+  slanted_edge_failure_phase_coverage,
+  slanted_edge_failure_low_contrast,
+  slanted_edge_failure_unstable_esf,
+  slanted_edge_failure_invalid_numerics,
+  slanted_edge_failure_nonphysical_mtf
+};
+
+/* Result of slanted-edge SFR measurement.  */
 struct slanted_edge_results
 {
-  /* True if edge was successfully found and analyzed. */
-  bool success;
-  /* Actual detected edge coordinates. */
+  /* True if edge was successfully found, qualified, and analyzed.  */
+  bool success = false;
+
+  /* Failure category.  This is SLANTED_EDGE_FAILURE_NONE on success.  */
+  slanted_edge_failure failure = slanted_edge_failure_none;
+
+  /* Human-readable explanation of a failure, including the measured quantity
+     that caused rejection where useful.  This is empty on success.  */
+  std::string error;
+
+  /* Actual detected edge coordinates.  These remain zero on failure.  */
   point_t edge_p1;
   point_t edge_p2;
-  /* Edge Spread Function (histogram) for visualization in GUI. */
+
+  /* Angle of the detected edge from the nearest image axis, in degrees.  */
+  double edge_angle = 0;
+
+  /* RMS residual of accepted line centroids from the fitted edge, in pixels.  */
+  double edge_fit_rms = 0;
+
+  /* Robust difference between the two edge plateaus in normalized image
+     intensity.  */
+  double edge_contrast = 0;
+
+  /* Robust plateau signal-to-noise ratio used to qualify the ROI.  */
+  double edge_snr = 0;
+
+  /* Fraction of supersampled ESF bins populated by real pixels before empty
+     bins are interpolated.  */
+  double phase_coverage = 0;
+
+  /* Edge-spread function for visualization and export.  This remains empty on
+     failure so callers cannot accidentally use an unqualified curve.  */
   std::vector<luminosity_t> edge_histogram;
+
+  /* Coordinate of EDGE_HISTOGRAM[0] in input pixels relative to the fitted
+     edge line.  */
+  double edge_histogram_origin = 0;
+
+  /* Distance between adjacent EDGE_HISTOGRAM samples in input pixels.  */
+  double edge_histogram_step = 0;
 };
 
 DLL_PUBLIC slanted_edge_results
