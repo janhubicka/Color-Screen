@@ -1,5 +1,8 @@
 #ifndef GAUSSIAN_BLUR_H
 #define GAUSSIAN_BLUR_H
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <functional>
 namespace colorscreen
 {
@@ -14,6 +17,9 @@ namespace colorscreen
 class fir_blur
 {
 public:
+  /* Allocate a normalized one-dimensional Gaussian convolution kernel for
+     SIGMA in *CMATRIX.  Return its odd length, or zero if CMATRIX is null or
+     allocation fails.  The caller owns the returned allocation.  */
   __attribute__ ((always_inline))
   static inline int
   gen_convolve_matrix (luminosity_t sigma, luminosity_t **cmatrix)
@@ -21,10 +27,12 @@ public:
       int    clen;
       luminosity_t *cmatrix_p;
 
+      if (!cmatrix)
+	return 0;
       clen = convolve_matrix_length (sigma);
 
       *cmatrix  = (luminosity_t *) malloc (sizeof (luminosity_t) * clen);
-      if (!cmatrix)
+      if (!*cmatrix)
 	return 0;
       cmatrix_p = *cmatrix;
 

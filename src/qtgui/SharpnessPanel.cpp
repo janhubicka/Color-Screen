@@ -39,6 +39,8 @@
 
 using namespace colorscreen;
 using sharpen_mode = colorscreen::sharpen_parameters::sharpen_mode;
+using resampling_kernel
+    = colorscreen::sharpen_parameters::resampling_kernel;
 
 namespace {
 
@@ -435,6 +437,26 @@ void SharpnessPanel::setupUi() {
       [](ParameterState &s, double v) {
         s.rparams.sharpen.supersample = (int)v;
       }, 1.0, nullptr, false, "Process the sharpening at a higher resolution than the original scan to reduce aliasing artifacts. Increases computation time significantly.");
+
+  // Reconstruction kernel used only when supersampling is active. Lanczos 3
+  // is the practical default for lens-limited scans; Lanczos 8 is retained for
+  // data whose useful spectrum extends close to two-dimensional Nyquist.
+  addEnumParameter<resampling_kernel,
+                   sharpen_parameters::resampling_kernel_names,
+                   (int)resampling_kernel::resampling_kernel_max>(
+      "Supersampling kernel",
+      [](const ParameterState &s) {
+        return (int)s.rparams.sharpen.resampling;
+      },
+      [](ParameterState &s, int v) {
+        s.rparams.sharpen.resampling = (resampling_kernel)v;
+      },
+      [](const ParameterState &s) {
+        return s.rparams.sharpen.supersample > 1;
+      },
+      "Select the reconstruction filter used before deconvolution. Lanczos 3 "
+      "is faster and normally sufficient for lens-limited scans; Lanczos 8 "
+      "better preserves frequencies very close to two-dimensional Nyquist.");
 
   addSeparator("Wiener filter");
 

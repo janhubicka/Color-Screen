@@ -83,6 +83,14 @@ const property_t sharpen_parameters::sharpen_mode_names []  = {
   { "Richardson-Lucy-deconvolution", "Richardson-Lucy deconvolution", "Reverse sharpness loss using Modulation Transfer Function estimate in multiple steps for better precision." },
   { "blur-deconvolution", "Blur deconvolution.", "" },
 };
+const property_t sharpen_parameters::resampling_kernel_names [] = {
+  { "lanczos3", "Lanczos 3 (faster)",
+    "Three-lobe Lanczos reconstruction. Recommended for lens-limited scans; "
+    "it is substantially faster while preserving their useful passband." },
+  { "lanczos8", "Lanczos 8 (maximum precision)",
+    "Eight-lobe Lanczos reconstruction. Better near two-dimensional Nyquist, "
+    "but slower and usually unnecessary for 2000-5000 PPI lens-limited scans." },
+};
 const property_t denoise_parameters::denoise_mode_names []  = {
   { "none", "None", "No denoising." },
   { "bilateral", "Bilateral filter", "Fast edge-preserving smoothing filter." },

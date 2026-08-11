@@ -4792,7 +4792,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
         for (int x = area.x; x < area.x + area.width; x++)
           {
             /* Collection and screen colors are the same.  */
-            rgbdata m = simulated_screen->get_pixel (y, x);
+            rgbdata m = simulated_screen->get_pixel (x, y);
             if (m.red > threshold)
               {
                 luminosity_t val = m.red - threshold;

@@ -26,6 +26,8 @@
 #include "include/paget.h"
 #include "include/dufaycolor.h"
 #include "demosaic.h"
+#include "finetune-int.h"
+#include "gaussian-blur.h"
 
 
 using namespace colorscreen;
@@ -500,6 +502,9 @@ test_screen_sharpening ()
   std::unique_ptr <screen> scr (new screen);
   std::unique_ptr <screen> mstr (new screen);
   mstr->initialize (Paget);
+  mstr->add[7][11][0] = (luminosity_t)0.125;
+  mstr->add[7][11][1] = (luminosity_t)0.25;
+  mstr->add[7][11][2] = (luminosity_t)0.5;
 
   sharpen_parameters sp;
   sp.scanner_mtf.f_stop = 8;
@@ -536,6 +541,15 @@ test_screen_sharpening ()
 	  sp.scanner_mtf.defocus = defocus;
 	  scr->initialize_with_sharpen_parameters (*mstr, par, m != 2, true);
 
+	  for (int c = 0; c < 3; c++)
+	    if (scr->add[7][11][c] != mstr->add[7][11][c])
+	      {
+		fprintf (stderr,
+			 "MTF screen filtering did not preserve ADD channel %i\n",
+			 c);
+		return false;
+	      }
+
 	  /* Disable debug tiffs */
 	  if (0)
 	    {
@@ -560,6 +574,247 @@ test_screen_sharpening ()
 	}
     }
   return true;
+}
+
+/* Test finite screen-simulation storage, cache identity, display
+   normalization, coordinate ordering, and degenerate-screen handling.  */
+bool
+test_screen_simulation ()
+{
+  bool ok = true;
+
+  /* A finite rendered image is part of the cache value.  Its dimensions and
+     exact sharpening parameters must therefore be part of the cache key.  */
+  screen source;
+  source.empty ();
+  simulated_screen_params first = {};
+  first.screen_id = 17;
+  first.width = 3;
+  first.height = 2;
+  first.scr = &source;
+  simulated_screen_params second = first;
+  second.width++;
+  if (first == second)
+    {
+      fprintf (stderr, "Simulated-screen cache ignored image width\n");
+      ok = false;
+    }
+  second = first;
+  second.height++;
+  if (first == second)
+    {
+      fprintf (stderr, "Simulated-screen cache ignored image height\n");
+      ok = false;
+    }
+  second = first;
+  second.sharpen.scanner_mtf_scale
+      = first.sharpen.scanner_mtf_scale + (luminosity_t)0.0005;
+  if (first == second)
+    {
+      fprintf (stderr,
+               "Simulated-screen cache used approximate MTF-scale equality\n");
+      ok = false;
+    }
+
+  /* Invalid dimensions or a missing periodic source must fail before an
+     incomplete image can reach the cache.  */
+  simulated_screen_params invalid = {};
+  if (get_new_simulated_screen (invalid, nullptr))
+    {
+      fprintf (stderr, "Invalid simulated-screen request succeeded\n");
+      ok = false;
+    }
+
+  /* Populate a non-square finite image with an affine RGB ramp.  Clamping at
+     all four borders and bilinear interpolation have analytical results.  */
+  simulated_screen finite (3, 2);
+  for (int y = 0; y < 2; y++)
+    for (int x = 0; x < 3; x++)
+      finite.put_pixel (
+          x, y,
+          { (luminosity_t)(1 + x + 10 * y),
+            (luminosity_t)(2 + 2 * x + 20 * y),
+            (luminosity_t)(3 + 3 * x + 30 * y) });
+
+  const struct
+  {
+    point_t point;
+    rgbdata expected;
+    const char *name;
+  } interpolation_tests[] = {
+    { { -10, (coord_t)0.5 }, finite.get_pixel (0, 0), "left border" },
+    { { 10, (coord_t)0.5 }, finite.get_pixel (2, 0), "right border" },
+    { { (coord_t)0.5, -10 }, finite.get_pixel (0, 0), "top border" },
+    { { (coord_t)0.5, 10 }, finite.get_pixel (0, 1), "bottom border" },
+    { { 1, 1 },
+      (finite.get_pixel (0, 0) + finite.get_pixel (1, 0)
+       + finite.get_pixel (0, 1) + finite.get_pixel (1, 1))
+          * (luminosity_t)0.25,
+      "boundary bilinear interpolation" }
+  };
+  for (const auto &test : interpolation_tests)
+    {
+      const rgbdata actual
+          = finite.get_interpolated_pixel (test.point.x, test.point.y);
+      if (!actual.almost_equal_p (test.expected, (luminosity_t)1e-6))
+        {
+          fprintf (stderr,
+                   "Simulated-screen %s mismatch: got %g %g %g, expected "
+                   "%g %g %g\n",
+                   test.name, actual.red, actual.green, actual.blue,
+                   test.expected.red, test.expected.green,
+                   test.expected.blue);
+          ok = false;
+        }
+    }
+
+  /* Normalize each display channel independently.  The historical code used
+     the red maximum for green and blue as well.  */
+  screen display;
+  for (int y = 0; y < screen::size; y++)
+    for (int x = 0; x < screen::size; x++)
+      for (int c = 0; c < 3; c++)
+        {
+          display.mult[y][x][c] = 0;
+          display.add[y][x][c] = 0;
+        }
+  display.mult[0][0][0] = 1;
+  display.mult[0][0][1] = (luminosity_t)0.5;
+  display.mult[0][0][2] = (luminosity_t)0.25;
+  std::unique_ptr<simple_image> normalized = display.get_image (true, 1);
+  if (!normalized)
+    {
+      fprintf (stderr, "Normalized screen preview allocation failed\n");
+      ok = false;
+    }
+  else
+    {
+      simple_image::rgb pixel = normalized->get_pixel (0, 0);
+      if (pixel.red != 255 || pixel.green != 255 || pixel.blue != 255)
+        {
+          fprintf (stderr,
+                   "Per-channel screen normalization failed: %i %i %i\n",
+                   pixel.red, pixel.green, pixel.blue);
+          ok = false;
+        }
+    }
+
+  display.mult[0][0][0] = 0;
+  display.mult[0][0][1] = 0;
+  display.mult[0][0][2] = 0;
+  normalized = display.get_image (true, 1);
+  if (!normalized)
+    {
+      fprintf (stderr, "Zero-screen preview allocation failed\n");
+      ok = false;
+    }
+  else
+    {
+      simple_image::rgb pixel = normalized->get_pixel (0, 0);
+      if (pixel.red || pixel.green || pixel.blue)
+        {
+          fprintf (stderr, "Zero screen did not normalize to black\n");
+          ok = false;
+        }
+    }
+
+  rgbdata proportions = display.patch_proportions ();
+  if (proportions != rgbdata (0, 0, 0))
+    {
+      fprintf (stderr, "Zero screen produced nonzero patch proportions\n");
+      ok = false;
+    }
+  for (int y = 0; y < screen::size; y++)
+    for (int x = 0; x < screen::size; x++)
+      {
+        display.mult[y][x][0] = 1;
+        display.mult[y][x][1] = 2;
+        display.mult[y][x][2] = 3;
+      }
+  proportions = display.patch_proportions ();
+  const rgbdata expected_proportions
+      = { (luminosity_t)(1.0 / 6.0), (luminosity_t)(2.0 / 6.0),
+          (luminosity_t)(3.0 / 6.0) };
+  if (!proportions.almost_equal_p (expected_proportions,
+                                   (luminosity_t)1e-6))
+    {
+      fprintf (stderr,
+               "Patch proportions mismatch: got %g %g %g, expected %g %g "
+               "%g\n",
+               proportions.red, proportions.green, proportions.blue,
+               expected_proportions.red, expected_proportions.green,
+               expected_proportions.blue);
+      ok = false;
+    }
+
+  /* The simulated-screen branch of colour-loss estimation must read finite
+     pixels as (X, Y).  Use a non-square image and an asymmetric vertical
+     selection so exchanging the coordinates changes the result.  */
+  simulated_screen collected (3, 2);
+  for (int y = 0; y < 2; y++)
+    for (int x = 0; x < 3; x++)
+      collected.put_pixel (x, y, { (luminosity_t)0.2,
+                                   (luminosity_t)0.2,
+                                   (luminosity_t)0.2 });
+  collected.put_pixel (1, 0, { 1, (luminosity_t)0.5,
+                                (luminosity_t)0.25 });
+  collected.put_pixel (1, 1, { (luminosity_t)0.5, 1,
+                                (luminosity_t)0.75 });
+  collected.put_pixel (0, 1, { (luminosity_t)0.9,
+                                (luminosity_t)0.1,
+                                (luminosity_t)0.4 });
+
+  auto expected_collected_color = [&collected] (int channel)
+    {
+      double_rgbdata sum;
+      double weight = 0;
+      for (int y = 0; y < 2; y++)
+        {
+          const rgbdata value = collected.get_pixel (1, y);
+          const double sample_weight = value[channel];
+          weight += sample_weight;
+          sum.red += (double)value.red * sample_weight;
+          sum.green += (double)value.green * sample_weight;
+          sum.blue += (double)value.blue * sample_weight;
+        }
+      return rgbdata ((luminosity_t)(sum.red / weight),
+                      (luminosity_t)(sum.green / weight),
+                      (luminosity_t)(sum.blue / weight));
+    };
+  const rgbdata expected_red = expected_collected_color (0);
+  const rgbdata expected_green = expected_collected_color (1);
+  const rgbdata expected_blue = expected_collected_color (2);
+  rgbdata actual_red, actual_green, actual_blue;
+  screen dummy_screen;
+  dummy_screen.empty ();
+  scr_to_img dummy_map;
+  sharpen_parameters no_sharpening;
+  if (!determine_color_loss (&actual_red, &actual_green, &actual_blue,
+                             dummy_screen, dummy_screen, &collected, 0,
+                             no_sharpening, dummy_map,
+                             {1, 0, 1, 2}))
+    {
+      fprintf (stderr, "Finite colour-loss simulation failed\n");
+      ok = false;
+    }
+  else if (!actual_red.almost_equal_p (expected_red, (luminosity_t)1e-6)
+           || !actual_green.almost_equal_p (expected_green,
+                                            (luminosity_t)1e-6)
+           || !actual_blue.almost_equal_p (expected_blue,
+                                           (luminosity_t)1e-6))
+    {
+      fprintf (stderr,
+               "Finite colour-loss simulation exchanged X and Y\n");
+      ok = false;
+    }
+
+  if (fir_blur::gen_convolve_matrix (1, nullptr) != 0)
+    {
+      fprintf (stderr, "FIR kernel accepted a null output pointer\n");
+      ok = false;
+    }
+
+  return ok;
 }
 
 
@@ -1232,6 +1487,9 @@ test_mtf_physical_model ()
   saved_mtf.wavelengths
       = {620.12345678901238, 540.23456789012345, 460.34567890123457,
          750.45678901234567};
+  saved_render.sharpen.supersample = 5;
+  saved_render.sharpen.resampling
+      = sharpen_parameters::lanczos8_resampling;
   saved_mtf.measured_mtf_idx = 0;
   mtf_measurement saved_measurement;
   saved_measurement.channel = 3;
@@ -1257,11 +1515,44 @@ test_mtf_physical_model ()
   if (project)
     fclose (project);
   if (!project_loaded
-      || !loaded_render.sharpen.scanner_mtf.equal_p (saved_mtf))
+      || !loaded_render.sharpen.scanner_mtf.equal_p (saved_mtf)
+      || loaded_render.sharpen.supersample
+             != saved_render.sharpen.supersample
+      || loaded_render.sharpen.resampling
+             != saved_render.sharpen.resampling)
     {
       fprintf (stderr, "MTF project-file round trip failed%s%s\n",
                project_error ? ": " : "",
                project_error ? project_error : "");
+      ok = false;
+    }
+
+  /* A project written before the kernel selector existed must retain the old
+     hard-coded Lanczos-8 rendering.  New parameter objects still default to
+     Lanczos 3, but silently changing an old project's output is undesirable.  */
+  FILE *legacy_project = tmpfile ();
+  render_parameters legacy_render;
+  const char *legacy_kernel_error = nullptr;
+  const char legacy_text[]
+      = "screen_alignment_version: 1\n"
+        "deconvolution_supersample: 2\n"
+        "screen_alignment_end\n";
+  const bool legacy_loaded
+      = legacy_project
+        && fwrite (legacy_text, 1, sizeof (legacy_text) - 1, legacy_project)
+               == sizeof (legacy_text) - 1
+        && !fseek (legacy_project, 0, SEEK_SET)
+        && load_csp (legacy_project, nullptr, nullptr, &legacy_render,
+                     nullptr, &legacy_kernel_error);
+  if (legacy_project)
+    fclose (legacy_project);
+  if (!legacy_loaded
+      || legacy_render.sharpen.resampling
+             != sharpen_parameters::lanczos8_resampling)
+    {
+      fprintf (stderr, "Legacy deconvolution kernel compatibility failed%s%s\n",
+               legacy_kernel_error ? ": " : "",
+               legacy_kernel_error ? legacy_kernel_error : "");
       ok = false;
     }
 
@@ -1320,6 +1611,22 @@ test_mtf_deconvolution ()
       fprintf (stderr, "Deconvolution cache key ignores supersampling\n");
       ok = false;
     }
+  sharpen2 = sharpen1;
+  sharpen2.resampling = sharpen_parameters::lanczos8_resampling;
+  if (sharpen1 == sharpen2)
+    {
+      fprintf (stderr, "Deconvolution cache key ignores resampling kernel\n");
+      ok = false;
+    }
+  sharpen1.supersample = 1;
+  sharpen2 = sharpen1;
+  sharpen2.resampling = sharpen_parameters::lanczos8_resampling;
+  if (!(sharpen1 == sharpen2))
+    {
+      fprintf (stderr,
+               "Inactive resampling kernel unnecessarily invalidates cache\n");
+      ok = false;
+    }
 
   /* Repeated reflection must remain in bounds even when the requested optical
      border is wider than a small image.  */
@@ -1369,18 +1676,32 @@ test_mtf_deconvolution ()
       };
       deconvolution<double> diagonal_filter (
           &diagonal_mtf, 1, 1000, 0, 1,
-          deconvolution<double>::blur, 0, 2);
+          deconvolution<double>::blur, 0, 2,
+          sharpen_parameters::lanczos8_resampling);
       fill_deconvolution_tile (diagonal_filter, diagonal_signal);
       const double diagonal_response
           = deconvolution_cosine_amplitude_2d (
                 diagonal_filter, diagonal_frequency_x,
                 diagonal_frequency_y, 0.5)
             / 0.2;
-      if (!(diagonal_response > 0.55 && diagonal_response < 0.75))
+      deconvolution<double> fast_diagonal_filter (
+          &diagonal_mtf, 1, 1000, 0, 1,
+          deconvolution<double>::blur, 0, 2,
+          sharpen_parameters::lanczos3_resampling);
+      fill_deconvolution_tile (fast_diagonal_filter, diagonal_signal);
+      const double fast_diagonal_response
+          = deconvolution_cosine_amplitude_2d (
+                fast_diagonal_filter, diagonal_frequency_x,
+                diagonal_frequency_y, 0.5)
+            / 0.2;
+      if (!(diagonal_response > 0.55 && diagonal_response < 0.75
+            && fast_diagonal_response > 0.35
+            && diagonal_response > fast_diagonal_response + 0.04))
         {
           fprintf (stderr,
-                   "Diagonal-frequency response was lost (%g)\n",
-                   diagonal_response);
+                   "Resampling-kernel diagonal responses are unexpected "
+                   "(Lanczos 3 %g, Lanczos 8 %g)\n",
+                   fast_diagonal_response, diagonal_response);
           ok = false;
         }
     }
@@ -1394,20 +1715,33 @@ test_mtf_deconvolution ()
     return 0.5 + 0.17 * std::sin (2 * M_PI * 0.03125 * x)
            + 0.11 * std::cos (2 * M_PI * 0.046875 * y);
   };
-  for (int supersample : {1, 2, 3, 4, 5, 8, 16})
+  for (enum sharpen_parameters::resampling_kernel kernel
+       : {sharpen_parameters::lanczos3_resampling,
+          sharpen_parameters::lanczos8_resampling})
+    for (int supersample : {1, 2, 3, 4, 5, 8, 16})
+      {
+        deconvolution<double> filter (&flat, 1, 1000, 0, 1,
+                                      deconvolution<double>::blur, 0,
+                                      supersample, kernel);
+        fill_deconvolution_tile (filter, smooth_signal);
+        const double error = deconvolution_tile_rmse (filter, smooth_signal);
+        if (!(error < 0.00005))
+          {
+            fprintf (stderr,
+                     "Identity MTF failed for %s at supersampling %i "
+                     "(RMSE %g)\n",
+                     sharpen_parameters::resampling_kernel_names[(int)kernel]
+                         .name,
+                     supersample, error);
+            ok = false;
+          }
+      }
+
+  if (sharpen_parameters ().resampling
+      != sharpen_parameters::lanczos3_resampling)
     {
-      deconvolution<double> filter (&flat, 1, 1000, 0, 1,
-                                    deconvolution<double>::blur, 0,
-                                    supersample);
-      fill_deconvolution_tile (filter, smooth_signal);
-      const double error = deconvolution_tile_rmse (filter, smooth_signal);
-      if (!(error < 0.00005))
-        {
-          fprintf (stderr,
-                   "Identity MTF failed at supersampling %i (RMSE %g)\n",
-                   supersample, error);
-          ok = false;
-        }
+      fprintf (stderr, "Fast resampling kernel is not the default\n");
+      ok = false;
     }
 
   /* A nonpositive SNR must not divide by zero or create NaNs.  The public
@@ -1418,7 +1752,10 @@ test_mtf_deconvolution ()
   fill_deconvolution_tile (zero_snr, smooth_signal);
   const double zero_snr_error
       = deconvolution_tile_rmse (zero_snr, smooth_signal);
-  if (!(zero_snr_error < 0.00005))
+  /* Even supersampling returns to the original pixel center through the common
+     bicubic midpoint reconstruction.  Lanczos 3 therefore has a small but
+     bounded round-trip error even when the Fourier transfer is identity.  */
+  if (!(zero_snr_error < 0.00007))
     {
       fprintf (stderr, "Zero-SNR Wiener filter is not finite identity (%g)\n",
                zero_snr_error);
@@ -1459,7 +1796,7 @@ test_mtf_deconvolution ()
   fill_deconvolution_tile (zero_iteration_richardson_lucy, smooth_signal);
   const double zero_iteration_error = deconvolution_tile_rmse (
       zero_iteration_richardson_lucy, smooth_signal);
-  if (!(zero_iteration_error < 0.00005))
+  if (!(zero_iteration_error < 0.00007))
     {
       fprintf (stderr,
                "Zero-iteration Richardson-Lucy is not identity (%g)\n",
@@ -3344,6 +3681,8 @@ main (int argc, char **argv)
     { "linearity", "render linearity tests", [] () { return (bool)test_render_linearity (); } },
     { "blur", "screen blur tests", [] () { return test_screen_blur (); } },
     { "sharpening", "screen sharpening tests", [] () { return test_screen_sharpening (); } },
+    { "screen_simulation", "screen simulation tests",
+      [] () { return test_screen_simulation (); } },
     { "mtf_model", "physical MTF model tests",
       [] () { return test_mtf_physical_model (); } },
     { "mtf_deconvolution", "measured MTF deconvolution tests",

@@ -67,6 +67,21 @@ struct sharpen_parameters
   };
   DLL_PUBLIC static const property_t sharpen_mode_names[(int)sharpen_mode_max];
 
+  /* Resampling kernels used when deconvolution is supersampled.  */
+  enum resampling_kernel
+  {
+    /* Three-lobe Lanczos kernel.  This is the faster default and is precise
+       over the useful passband of the lens-limited scans Color-Screen normally
+       processes.  */
+    lanczos3_resampling,
+    /* Eight-lobe Lanczos kernel.  This better preserves frequencies very close
+       to two-dimensional Nyquist, at a substantial processing-time cost.  */
+    lanczos8_resampling,
+    resampling_kernel_max
+  };
+  DLL_PUBLIC static const property_t
+      resampling_kernel_names[(int)resampling_kernel_max];
+
   /* Sharpening mode.  */
   enum sharpen_mode mode = none;
 
@@ -93,6 +108,9 @@ struct sharpen_parameters
 
   /* Supersampling for deconvolution sharpening.  */
   int supersample = 2;
+
+  /* Reconstruction kernel used to create the supersampled image.  */
+  enum resampling_kernel resampling = lanczos3_resampling;
 
   /* Return effective sharpening mode.  */
   pure_attr enum sharpen_mode get_mode () const
@@ -155,17 +173,20 @@ struct sharpen_parameters
 	return scanner_mtf == o.scanner_mtf
 	       && fabs (scanner_mtf_scale - o.scanner_mtf_scale) < 0.001
 	       && scanner_snr == o.scanner_snr
-	       && supersample == o.supersample;
+	       && supersample == o.supersample
+	       && (supersample <= 1 || resampling == o.resampling);
       case richardson_lucy_deconvolution:
         return scanner_mtf == o.scanner_mtf
 	       && fabs (scanner_mtf_scale - o.scanner_mtf_scale) < 0.001
 	       && richardson_lucy_iterations == o.richardson_lucy_iterations
 	       && richardson_lucy_sigma == o.richardson_lucy_sigma
-	       && supersample == o.supersample;
+	       && supersample == o.supersample
+	       && (supersample <= 1 || resampling == o.resampling);
       case blur_deconvolution:
         return scanner_mtf == o.scanner_mtf
 	       && fabs (scanner_mtf_scale - o.scanner_mtf_scale) < 0.001
-               && supersample == o.supersample;
+               && supersample == o.supersample
+               && (supersample <= 1 || resampling == o.resampling);
       default:
 	abort ();
       }
@@ -183,7 +204,8 @@ struct sharpen_parameters
 	   && scanner_mtf_scale == o.scanner_mtf_scale
 	   && richardson_lucy_iterations == o.richardson_lucy_iterations
 	   && richardson_lucy_sigma == o.richardson_lucy_sigma
-	   && supersample == o.supersample;
+	   && supersample == o.supersample
+	   && resampling == o.resampling;
   }
 
   /* Default constructor.  */

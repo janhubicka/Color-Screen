@@ -1,3 +1,7 @@
+/* Periodic transmission screens and their optical filtering operations.
+   Copyright (C) 2014-2026 Jan Hubicka
+   This file is part of Color-Screen.  */
+
 #ifndef SCREEN_H
 #define SCREEN_H
 #include "include/color.h"
@@ -7,8 +11,13 @@
 namespace colorscreen {
 struct sharpen_parameters;
 template<typename T> class precomputed_function;
-/* Representation of the screen wich can then be superposed to the image
-   using render_superpose_img.  */
+
+/* Periodic linear-light representation of a historical color screen.
+
+   MULT contains multiplicative transmission and is the quantity affected by
+   optical blur, capture MTF, and sharpening.  ADD is presentation-only data
+   used by preview patterns; optical filtering preserves it unchanged.  Both
+   arrays represent one periodic unit cell sampled on a SIZE by SIZE grid.  */
 class screen
 {
 public:
@@ -16,12 +25,12 @@ public:
   static const int size=128;
   /* blur radius is in screen coordiates. 0.25 makes almost invisible.  */
   constexpr static const coord_t max_blur_radius = 0.25;
-  /* Mult specify how much one should multiply, add how much add
-     and keep how much keep in the color.  */
+  /* Multiplicative transmission and additive preview contribution.  */
   luminosity_t mult[size][size][3];
   luminosity_t add[size][size][3];
 
-  /* Return multiplicative factor of point p with bilinear interpolation.  */
+  /* Return multiplicative transmission at periodic screen coordinate P using
+     bilinear interpolation.  */
   __attribute__ ((always_inline)) inline pure_attr rgbdata
   interpolated_mult (point_t p) const
   {
@@ -40,7 +49,7 @@ public:
     rgbdata i2 = dd1 * (1 - rx) + dd2 * rx;
     return i1 * (1 - ry) + i2 * ry;
   }
-  /* Return multiplicative factor of point p with bilinear interpolation.  */
+  /* Return multiplicative transmission at the nearest periodic sample to P.  */
   inline pure_attr rgbdata
   noninterpolated_mult (point_t p) const
   {
@@ -80,16 +89,34 @@ public:
   DLL_PUBLIC void initialize_with_blur (screen &scr, coord_t blur_radius, blur_alg alg = blur_auto);
   /* Same but specify different blur for each color.  */
   DLL_PUBLIC void initialize_with_blur (screen &scr, rgbdata blur_radius, blur_alg alg = blur_auto);
-  DLL_PUBLIC void initialize_with_sharpen_parameters (screen &scr, sharpen_parameters *sharpen[3], bool anticipate_sharpening, bool parallel = true);
+  /* Initialize THIS from SCR after applying the capture transfer described by
+     SHARPEN.  ANTICIPATE_SHARPENING additionally applies the selected digital
+     inverse filter; when false, only the forward capture blur is applied.
+     PARALLEL permits OpenMP in expensive PSF construction.  ADD is copied
+     unchanged from SCR.  */
+  DLL_PUBLIC void
+  initialize_with_sharpen_parameters (screen &scr,
+                                      sharpen_parameters *sharpen[3],
+                                      bool anticipate_sharpening,
+                                      bool parallel = true);
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
   void strip (coord_t first_strip_width, coord_t second_strip_width, int color1, int color2, int color3);
   void preview_strip (coord_t first_strip_width, coord_t second_strip_width, int color1, int color2, int color3);
   DLL_PUBLIC bool save_tiff (const char *filename, bool normalize = false, int tiles = 3) const;
   DLL_PUBLIC std::unique_ptr<simple_image> get_image (bool normalize = false, int tiles = 3) const;
+  /* Clamp every multiplicative channel sample to the physical range 0..1.  */
   DLL_PUBLIC void clamp ();
+
+  /* Return normalized total red, green, and blue transmission.  Return zero
+     for an empty or nonfinite screen.  */
   DLL_PUBLIC rgbdata patch_proportions () const;
-  void initialize_with_point_spread (screen &scr, precomputed_function<luminosity_t> *point_spread[3], rgbdata scale);
+
+  /* Initialize THIS by filtering SCR with the three radial POINT_SPREAD
+     functions at per-channel SCALE.  ADD is copied unchanged from SCR.  */
+  void initialize_with_point_spread (
+      screen &scr, precomputed_function<luminosity_t> *point_spread[3],
+      rgbdata scale);
 private:
   /* Initialize screen to the thames screen plate.  */
   void thames ();

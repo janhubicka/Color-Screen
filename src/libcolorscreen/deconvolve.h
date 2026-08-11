@@ -40,10 +40,6 @@ reflect_deconvolution_coordinate (long long coordinate, int size)
 template <typename T>
 class deconvolution
 {
-  /* Lanczos support.  A shorter three-lobe kernel visibly attenuates valid
-     near-Nyquist diagonal frequencies during the upsample/filter/downsample
-     round trip.  */
-  static constexpr int lanczos_a = 8;
 public:
   /* Supported deconvolution modes.  */
   enum mode
@@ -65,10 +61,14 @@ public:
      MAX_THREADS specifies number of threads.
      FILTER_MODE is deconvolution mode.
      ITERATIONS specifies number of iterations for Richardson-Lucy.
-     SUPERSAMPLE specifies supersampling factor.  */
+     SUPERSAMPLE specifies supersampling factor.
+     RESAMPLING specifies the reconstruction kernel used to create the
+     supersampled image.  */
   deconvolution (mtf *mtf, luminosity_t mtf_scale,
 		 luminosity_t snr, luminosity_t sigma, int max_threads,
-                 enum mode filter_mode, int iterations, int supersample);
+		 enum mode filter_mode, int iterations, int supersample,
+		 enum sharpen_parameters::resampling_kernel resampling
+		     = sharpen_parameters::lanczos3_resampling);
   /* Destructor.  */
   ~deconvolution ();
 
@@ -141,6 +141,14 @@ private:
   int m_fft_size = 0;
   /* Supersampling factor. */
   int m_supersample = 1;
+  /* Reconstruction kernel selected for supersampling.  */
+  enum sharpen_parameters::resampling_kernel m_resampling
+      = sharpen_parameters::lanczos3_resampling;
+  /* Number of nonzero samples on either side of the Lanczos kernel.  */
+  int m_kernel_support = 3;
+  /* Number of coefficient slots per phase.  Lanczos 3 is padded from six to
+     eight slots so its inner loop maps efficiently to SIMD vector widths.  */
+  int m_kernel_stride = 8;
   /* Kernel for blurring or sharpening.  */
   fft_unique_ptr<T> m_blur_kernel = nullptr;
 
@@ -154,10 +162,10 @@ private:
   /* Weights of edge tapering.  */
   std::vector<T, fft_allocator<T>> m_weights;
 
-  /* Lanczos kernels for resampling.  Coefficients are kept in double even for
-     the single-precision image FFT; the table is tiny and its rounding error
-     would otherwise be accumulated for every resampled pixel.  */
-  std::vector<double, fft_allocator<double>> m_lanczos_kernels;
+  /* Reconstruction kernels for resampling.  Coefficients are kept in double
+     even for the single-precision image FFT; the table is tiny and its
+     rounding error would otherwise be accumulated for every resampled pixel.  */
+  std::vector<double, fft_allocator<double>> m_resampling_kernels;
 
   /* FFT plans.  */
   fft_plan<T> m_plan_2d_inv, m_plan_2d;
@@ -175,6 +183,10 @@ private:
     std::vector<T, fft_allocator<T>> *enlarged_tile = nullptr;
     /* Enlarged tile data.  */
     std::vector<T, fft_allocator<T>> enlarged_tile_data;
+    /* Horizontally resampled rows.  The second, vertical pass reads this buffer
+       row-wise instead of gathering and scattering one cache-unfriendly column
+       at a time.  */
+    std::vector<T, fft_allocator<T>> resample_intermediate;
     /* Buffers for Richardson-Lucy.  */
     std::vector<T, fft_allocator<T>> ratios;
     std::vector<T, fft_allocator<T>> observed;
@@ -225,7 +237,7 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
   deconvolution<DT> d (scanner_mtf.get (), sharpen.scanner_mtf_scale,
                    sharpen.scanner_snr, sharpen.richardson_lucy_sigma,
                    nthreads, mode, sharpen.richardson_lucy_iterations,
-		   sharpen.supersample);
+		   sharpen.supersample, sharpen.resampling);
 
   int xtiles
       = (width + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();
@@ -318,7 +330,7 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
   deconvolution<DT> d (scanner_mtf.get (), sharpen.scanner_mtf_scale,
 		   sharpen.scanner_snr, sharpen.richardson_lucy_sigma, nthreads * 3, mode,
 		   sharpen.richardson_lucy_iterations,
-		   sharpen.supersample);
+		   sharpen.supersample, sharpen.resampling);
 
   int xtiles
       = (width + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();

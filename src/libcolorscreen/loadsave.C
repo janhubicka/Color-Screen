@@ -67,6 +67,24 @@ mtf_model_name (mtf_model model)
   return mtf_model_names[0];
 }
 
+/* Return the stable project-file spelling of KERNEL.  Invalid in-memory enum
+   values fall back to the fast default rather than indexing outside
+   RESAMPLING_KERNEL_NAMES.  */
+static const char *
+resampling_kernel_name (enum sharpen_parameters::resampling_kernel kernel)
+{
+  switch (kernel)
+    {
+    case sharpen_parameters::lanczos3_resampling:
+      return sharpen_parameters::resampling_kernel_names[0].name;
+    case sharpen_parameters::lanczos8_resampling:
+      return sharpen_parameters::resampling_kernel_names[1].name;
+    case sharpen_parameters::resampling_kernel_max:
+      break;
+    }
+  return sharpen_parameters::resampling_kernel_names[0].name;
+}
+
 /* Write INPUT string to F with escaped characters.  */
 static bool
 write_escaped_string (FILE *f, const char *input)
@@ -211,6 +229,12 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
                  < 0
           || fprintf (f, "richardson_lucy_sigma: %f\n",
                       rparam->sharpen.richardson_lucy_sigma)
+                 < 0
+          || fprintf (f, "deconvolution_supersample: %d\n",
+                      rparam->sharpen.supersample)
+                 < 0
+          || fprintf (f, "deconvolution_resampling_kernel: %s\n",
+                      resampling_kernel_name (rparam->sharpen.resampling))
                  < 0)
         return false;
       if (rparam->sharpen.scanner_mtf.measurements.size ())
@@ -711,6 +735,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
   int gray_max = -1;
   int measurement = -1;
   bool first_control_point = true;
+  bool resampling_kernel_seen = false;
   if (fread (buf, 1, strlen (HEADER), f) < 0
       || memcmp (buf, HEADER, strlen (HEADER)))
     {
@@ -1177,6 +1202,38 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
               *error = "error parsing richardson_lucy_sigma";
               return false;
             }
+        }
+      else if (!strcmp (buf, "deconvolution_supersample"))
+        {
+          int supersample;
+          if (!read_int (f, &supersample) || supersample < 1
+              || supersample > 16)
+            {
+              *error = "error parsing deconvolution_supersample";
+              return false;
+            }
+          if (rparam)
+            rparam->sharpen.supersample = supersample;
+        }
+      else if (!strcmp (buf, "deconvolution_resampling_kernel"))
+        {
+          get_keyword (f, buf2);
+          int kernel;
+          for (kernel = 0;
+               kernel < sharpen_parameters::resampling_kernel_max; kernel++)
+            if (!strcmp (
+                    buf2,
+                    sharpen_parameters::resampling_kernel_names[kernel].name))
+              break;
+          if (kernel == sharpen_parameters::resampling_kernel_max)
+            {
+              *error = "unknown deconvolution resampling kernel";
+              return false;
+            }
+          if (rparam)
+            rparam->sharpen.resampling
+                = (enum sharpen_parameters::resampling_kernel)kernel;
+          resampling_kernel_seen = true;
         }
       /* Handle typo which was present in old save implementation.  */
       else if (!strcmp (buf, "scren_blur_radius")
@@ -2088,6 +2145,11 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
     }
   if (rparam && gray_min >= 0)
     rparam->set_gray_range (gray_min, gray_max, 65535);
+  /* Before reconstruction kernels became selectable, the supersampling path
+     always used Lanczos 8.  Preserve the rendering of old project files while
+     keeping Lanczos 3 as the faster default for newly created projects.  */
+  if (rparam && !resampling_kernel_seen)
+    rparam->sharpen.resampling = sharpen_parameters::lanczos8_resampling;
   return true;
 }
 } // namespace colorscreen

@@ -19,6 +19,45 @@ namespace colorscreen
 {
 /* TODO: Work out in what cases using floats is good.  */
 typedef double screen_fft_t;
+
+/* Return per-channel divisors used to normalize SCR for display.  When
+   NORMALIZE is false, return unit divisors.  Empty, nonpositive, or nonfinite
+   channels also use a unit divisor so an all-zero screen stays finite.  */
+static rgbdata
+screen_normalization_divisors (const screen &scr, bool normalize)
+{
+  if (!normalize)
+    return {1, 1, 1};
+
+  double_rgbdata maximum;
+  for (int y = 0; y < screen::size; y++)
+    for (int x = 0; x < screen::size; x++)
+      for (int c = 0; c < 3; c++)
+        {
+          const double value = scr.mult[y][x][c];
+          if (my_isfinite (value) && value > maximum[c])
+            maximum[c] = value;
+        }
+
+  rgbdata divisors;
+  for (int c = 0; c < 3; c++)
+    divisors[c] = maximum[c] > 0 ? (luminosity_t)maximum[c] : 1;
+  return divisors;
+}
+
+/* Return VALUE divided by DIVISOR and clamped to the displayable linear-light
+   range.  Nonfinite inputs produce black rather than reaching gamma conversion
+   or an integer conversion.  */
+static luminosity_t
+normalized_screen_value (luminosity_t value,
+                         luminosity_t divisor) noexcept
+{
+  const double normalized = (double)value / (double)divisor;
+  if (!my_isfinite (normalized))
+    return 0;
+  return (luminosity_t)std::clamp (normalized, 0.0, 1.0);
+}
+
 /* Produce empty screen.  */
 void
 screen::empty ()
@@ -529,8 +568,20 @@ screen::initialize_with_gaussian_blur (screen &scr, coord_t blur_radius,
   if (blur_radius >= max_blur_radius)
     blur_radius = max_blur_radius;
 
-  luminosity_t *cmatrix;
+  luminosity_t *cmatrix = nullptr;
   int clen = fir_blur::gen_convolve_matrix (blur_radius * size, &cmatrix);
+  if (!clen)
+    {
+      /* This API cannot report allocation failure.  Preserve the unblurred
+         optical data rather than dereferencing a null kernel or producing a
+         partially initialized screen.  */
+      for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++)
+          for (int channel = cmin; channel <= cmax; channel++)
+            mult[y][x][channel] = scr.mult[y][x][channel];
+      memcpy (add, scr.add, sizeof (add));
+      return;
+    }
   luminosity_t hblur[size][size]; //= (luminosity_t *)malloc (size * size *
                                   // sizeof (luminosity_t));
   /* Finetuning solver keeps recomputing screens with different blurs.
@@ -938,38 +989,35 @@ template <typename T>
 static void
 gaussian_blur_mtf_fast (coord_t blur_radius, typename fft_complex_t<T>::type *out)
 {
-  luminosity_t *cmatrix;
-  // blur_radius = 0;
+  luminosity_t *cmatrix = nullptr;
   int clen = fir_blur::gen_convolve_matrix (blur_radius, &cmatrix);
-  int half_clen = clen / 2;
-  /* There is a bug in direct computation; it does not pass the unit test.  */
-  if (half_clen >= screen::size / 2 || 1)
+  if (!clen)
     {
-      // luminosity_t nrm = std::sqrt(screen::size);
-      std::vector<T, fft_allocator<T>> in (screen::size, 0);
-      auto plan = fft_plan_r2c_1d<T> (screen::size, NULL /* Do not overwtie */, out);
-      // be sure that after plan initialization value is 0
-      for (int i = 0; i < clen; i++)
-	{
-	  int idx = (i - half_clen /*+ screen::size / 4*/) & (screen::size - 1);
-	  in[idx] += cmatrix[i] /** nrm*/;
-	}
-      plan.execute_r2c (in.data (), out);
-      // for (int i = 0; i < fft_size; i++)
-      // printf ("%i: %f %f\n", i, out[i][0], out[i][1]);
-      free (cmatrix);
+      /* The caller has no failure channel.  Use an identity transfer instead
+         of transforming an empty kernel after allocation failure.  */
+      for (int i = 0; i < fft_size; i++)
+        {
+          out[i][0] = 1;
+          out[i][1] = 0;
+        }
+      return;
     }
-  else
-    for (int i = 0; i < fft_size; i++)
-      {
-	//screen_fft_t exponent = constant_factor * (i * i);
-	//printf (" %f:", out[i][0]);
-	//out[i][0] = std::exp (exponent);
-	coord_t freq = i / (coord_t)screen::size;
-	out[i][0] = std::exp (-2.0 * M_PI * M_PI * blur_radius * blur_radius * freq * freq);
-	out[i][1] = 0;
-      }
-    //printf ("\n");
+  int half_clen = clen / 2;
+  /* Transform the same finite FIR kernel used by the direct implementation.
+     An analytical Gaussian has a different tail truncation and consequently
+     does not agree with the direct path closely enough for blur regression
+     tests.  */
+  std::vector<T, fft_allocator<T>> in (screen::size, 0);
+  auto plan
+      = fft_plan_r2c_1d<T> (screen::size, NULL /* Do not overwrite */, out);
+  /* FFT planning may overwrite its input.  Fill IN after creating PLAN.  */
+  for (int i = 0; i < clen; i++)
+    {
+      int idx = (i - half_clen) & (screen::size - 1);
+      in[idx] += cmatrix[i];
+    }
+  plan.execute_r2c (in.data (), out);
+  free (cmatrix);
 }
 
 template <typename T>
@@ -1060,7 +1108,7 @@ initialize_with_2D_fft_fast (screen &out_scr, const screen &scr,
         for (int x = 0; x < screen::size; x++)
           out[y * screen::size + x] = scr.mult[y][x][c];
       plan_2d.execute_r2c (out.data (), in.get ());
-      scale_by_weights<screen_fft_t> (in.get (), weights);
+      scale_by_weights<T> (in.get (), weights);
       plan_2d_inv.execute_c2r (in.get (), out.data ());
       for (int y = 0; y < screen::size; y++)
         for (int x = 0; x < screen::size; x++)
@@ -1096,7 +1144,7 @@ initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
 
       /* First blur the screen.  */
       plan_2d.execute_r2c (observed.data (), in.get ());
-      scale_by_weights<screen_fft_t> (in.get (), weights);
+      scale_by_weights<T> (in.get (), weights);
       plan_2d_inv.execute_c2r (in.get (), observed.data ());
 
       /* Now start sharpening back.  */
@@ -1107,7 +1155,7 @@ initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
 	{
 	  /* Step A: Re-blur the current estimate.  */
 	  plan_2d.execute_r2c (estimate.data (), in.get ());
-	  scale_by_weights<screen_fft_t> (in.get (), weights);
+	  scale_by_weights<T> (in.get (), weights);
 	  plan_2d_inv.execute_c2r (in.get (), ratios.data ());
 
 	  /* Step B: ratio = observed / (re-blurred + epsilon)  */
@@ -1662,19 +1710,9 @@ bool
 screen::save_tiff (const char *filename, bool normalize, int tiles) const
 {
   tiff_writer_params p;
-  rgbdata max = { 0, 0, 0 };
+  const rgbdata divisors = screen_normalization_divisors (*this, normalize);
   //void *buffer;
   //size_t len = create_linear_srgb_profile (&buffer);
-  if (!normalize)
-    max.red = max.green = max.blue = 1;
-  else
-    for (int y = 0; y < size; y++)
-      for (int x = 0; x < size; x++)
-        {
-          max.red = std::max (mult[y][x][0], max.red);
-          max.green = std::max (mult[y][x][1], max.green);
-          max.blue = std::max (mult[y][x][2], max.blue);
-        }
   p.filename = filename;
   p.width = size * tiles;
   p.height = size * tiles;
@@ -1690,17 +1728,29 @@ screen::save_tiff (const char *filename, bool normalize, int tiles) const
     {
       for (int x = 0; x < size * tiles; x++)
         {
-          int r = invert_gamma (mult[y % size][x % size][0] / max.red, -1) * 65536;
+          int r = invert_gamma (
+                      normalized_screen_value (
+                          mult[y % size][x % size][0], divisors.red),
+                      -1)
+                  * 65536;
           if (r < 0)
             r = 0;
           if (r > 65535)
             r = 65535;
-          int g = invert_gamma (mult[y % size][x % size][1] / max.green, -1) * 65536;
+          int g = invert_gamma (
+                      normalized_screen_value (
+                          mult[y % size][x % size][1], divisors.green),
+                      -1)
+                  * 65536;
           if (g < 0)
             g = 0;
           if (g > 65535)
             g = 65535;
-          int b = invert_gamma (mult[y % size][x % size][2] / max.blue, -1) * 65536;
+          int b = invert_gamma (
+                      normalized_screen_value (
+                          mult[y % size][x % size][2], divisors.blue),
+                      -1)
+                  * 65536;
           if (b < 0)
             b = 0;
           if (b > 65535)
@@ -1719,25 +1769,19 @@ std::unique_ptr <simple_image>
 screen::get_image (bool normalize, int tiles) const
 {
   std::unique_ptr <simple_image> img = std::make_unique <simple_image> ();
-  rgbdata max = { 0, 0, 0 };
-  if (!normalize)
-    max.red = max.green = max.blue = 1;
-  else
-    for (int y = 0; y < size; y++)
-      for (int x = 0; x < size; x++)
-        {
-          max.red = std::max (mult[y][x][0], max.red);
-          max.green = std::max (mult[y][x][1], max.green);
-          max.blue = std::max (mult[y][x][2], max.blue);
-        }
+  const rgbdata divisors = screen_normalization_divisors (*this, normalize);
   if (!img->allocate (size * tiles, size * tiles))
-	  return NULL;
+    return NULL;
   for (int y = 0; y < size * tiles; y++)
-      for (int x = 0; x < size * tiles; x++)
-          img->put_linear_pixel (x, y,
-	    {std::clamp (mult[y % size][x % size][0] / max.red, (luminosity_t)0, (luminosity_t)1),
-	     std::clamp (mult[y % size][x % size][1] / max.red, (luminosity_t)0, (luminosity_t)1),
-	     std::clamp (mult[y % size][x % size][2] / max.red, (luminosity_t)0, (luminosity_t)1)});
+    for (int x = 0; x < size * tiles; x++)
+      img->put_linear_pixel (
+          x, y,
+          { normalized_screen_value (mult[y % size][x % size][0],
+                                     divisors.red),
+            normalized_screen_value (mult[y % size][x % size][1],
+                                     divisors.green),
+            normalized_screen_value (mult[y % size][x % size][2],
+                                     divisors.blue) });
   return img;
 }
 
@@ -1749,6 +1793,9 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 					    sharpen_parameters *sharpen[3],
 					    bool anticipate_sharpening, bool parallel)
 {
+  /* ADD is presentation data rather than optical transmission.  Preserve it
+     while filtering the multiplicative transmission in MULT.  */
+  memcpy (add, scr.add, sizeof (add));
   auto fft = fft_alloc_complex<screen_fft_t> (screen::size * fft_size);
   bool all = *sharpen[0] == *sharpen[1] && *sharpen[0] == *sharpen[2];
 #if 0
@@ -1948,6 +1995,8 @@ screen::initialize_with_point_spread (
     screen &scr, precomputed_function<luminosity_t> *point_spread[3],
     rgbdata scale)
 {
+  /* Point-spread filtering affects multiplicative transmission only.  */
+  memcpy (add, scr.add, sizeof (add));
   auto mtf = fft_alloc_complex<screen_fft_t> (screen::size * fft_size);
   for (int c = 0; c < 3; c++)
     {
@@ -1980,14 +2029,16 @@ screen::clamp ()
 rgbdata
 screen::patch_proportions () const
 {
-  rgbdata sum;
   double_rgbdata sum_d;
   for (int yy = 0; yy < size; yy++)
     for (int xx = 0; xx < size; xx++)
       sum_d += mult[yy][xx];
-  sum = sum_d;
-  double s = sum.red + sum.green + sum.blue;
-  sum /= s;
-  return sum;
+  const double total = sum_d.red + sum_d.green + sum_d.blue;
+  if (!my_isfinite (sum_d.red) || !my_isfinite (sum_d.green)
+      || !my_isfinite (sum_d.blue) || !my_isfinite (total) || total <= 0)
+    return {0, 0, 0};
+  return { (luminosity_t)(sum_d.red / total),
+           (luminosity_t)(sum_d.green / total),
+           (luminosity_t)(sum_d.blue / total) };
 }
 }

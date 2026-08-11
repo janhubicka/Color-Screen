@@ -157,7 +157,10 @@ public:
      NORMALIZED_PATCHES specifies if patches should be normalized.  */
   nodiscard_attr DLL_PUBLIC bool precompute_img_range (bool grayscale_needed, bool normalized_patches, int_image_area area, progress_info *progress);
 
-  /* Simulate screen rendering for PROGRESS.  */
+  /* Build the finite capture-space simulation used by precise collection and
+     screen compensation.  PROGRESS reports the operation.  The periodic
+     screen receives the pre-sampling capture transfer first; digital
+     sharpening is applied after finite-image sampling.  */
   void simulate_screen (progress_info *progress);
 
   /* Compute range of the final image.  */
@@ -470,11 +473,11 @@ render_to_scr::get_unadjusted_rgb_pixel_scr (point_t p) const noexcept
   return get_unadjusted_img_rgb_pixel (pi);
 }
 
-/* Return simulated screen RGB value at position P in image coordinates (integer coordinates).  */
+/* Return the simulated-screen RGB value at integer image coordinate P.  */
 pure_attr inline rgbdata
 render_to_scr::get_simulated_screen_pixel_fast (int_point_t p) const noexcept
 {
-  return m_simulated_screen->get_pixel (p.y, p.x);
+  return m_simulated_screen->get_pixel (p.x, p.y);
 }
 
 /* Return simulated screen RGB value at position P in image coordinates.  */
@@ -484,8 +487,14 @@ render_to_scr::get_simulated_screen_pixel (point_t p) const noexcept
   return m_simulated_screen->get_interpolated_pixel (p.x, p.y);
 }
 
-/* Determine image pixel X,Y in screen filter SCR using MAP.
-   Do antialiasing.  Return screen position in RETP.  */
+/* Determine capture pixel (X, Y) in periodic screen filter SCR using MAP.
+   Integrate a five-by-five approximation of the capture-pixel footprint and
+   optionally return the center screen coordinate in RETP.
+
+   FIXME(SIM-001): callers must eventually select this integration explicitly.
+   It is correct only when SCR does not already contain sensor-aperture loss.
+   Measured MTF data and the physical MTF with SENSOR_FILL_FACTOR enabled
+   already contain that loss.  See doc/screen-simulation-pipeline.md.  */
 inline rgbdata
 antialias_screen (const screen &scr, const scr_to_img &map,
 		  int x, int y, point_t *retp = NULL) noexcept
