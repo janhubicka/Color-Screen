@@ -229,6 +229,19 @@ parameters, so the fitted result is visible and can be tuned without reopening
 the optimizer. A zero fraction disables the halo while preserving the stored
 radius as a possible future starting value.
 
+The MTF chart always displays the analytical model independently of the
+`Use measured MTF` sharpening switch.  Measured slanted-edge curves are plotted
+as positive magnitudes and the model's system MTF is `abs(system OTF)`.  A
+diagnostic `Show signed physical OTF` checkbox overlays the signed analytical
+system transfer and expands the vertical chart range to -100..100%.  Negative
+lobes are predictions of the fitted physical model; phase is never inferred
+from the slanted-edge samples themselves.
+
+When a broad halo is enabled, the fitter first combines the signed compact-core
+OTF and the positive broad Gaussian halo component as an energy-weighted PSF
+mixture.  Only then does it take the magnitude for the residual.  This keeps
+halo fitting consistent with phase reversals predicted by defocus.
+
 ## 7. Capture grouping and current storage limitation
 
 `same_capture` groups adjacent measurements. Curves in one group share a fitted

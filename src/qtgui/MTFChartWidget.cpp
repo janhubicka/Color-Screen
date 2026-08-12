@@ -32,6 +32,15 @@ void MTFChartWidget::setMeasuredMTF(const std::vector<colorscreen::mtf_measureme
   update();
 }
 
+/** Show the signed analytical OTF when SHOW is true. */
+void MTFChartWidget::setShowSignedOTF(bool show) {
+  if (m_showSignedOtf == show)
+    return;
+  m_showSignedOtf = show;
+  updateGeometry();
+  update();
+}
+
 void MTFChartWidget::clear() {
   m_hasData = false;
   m_hasMeasuredData = false;
@@ -98,10 +107,13 @@ std::vector<MTFChartWidget::LegendItem> MTFChartWidget::getLegendItems() const {
     items.push_back({"Defocus", QColor(255, 165, 0), 2, m_canSimulateDiffraction, &m_data.lens_defocus_mtf});
     items.push_back({"Hopkins blur", QColor(139, 69, 19), 2, !m_canSimulateDiffraction, &m_data.hopkins_blur_mtf});
     items.push_back({"Gaussian blur", QColor(100, 200, 100), 2, true, &m_data.gaussian_blur_mtf});
-    items.push_back({"Broad halo", QColor(180, 120, 220), 2, true, &m_data.halo_mtf});
+    items.push_back({"Halo component", QColor(180, 120, 220), 2, true, &m_data.halo_mtf});
     items.push_back({"Lens", Qt::blue, 2, true, &m_data.lens_mtf});
     items.push_back({"Sensor", Qt::gray, 2, true, &m_data.sensor_mtf});
     items.push_back({"System", Qt::white, 4, true, &m_data.system_mtf});
+    if (m_showSignedOtf && m_canSimulateDiffraction)
+        items.push_back({"Signed OTF", QColor(80, 200, 255), 2, true,
+                         &m_data.system_otf, nullptr, true});
 
     if (m_hasMeasuredData) {
         for (const auto &m : m_measurements) {
@@ -211,6 +223,14 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
 
   LayoutInfo layout = calculateLayout(width(), height());
   QRect chartRect = layout.chartRect;
+  const bool signedScale = m_showSignedOtf && m_canSimulateDiffraction;
+  const double yMin = signedScale ? -1.0 : 0.0;
+  const double yMax = 1.0;
+
+  auto mapY = [&](double value) {
+    const double relative = (value - yMin) / (yMax - yMin);
+    return chartRect.bottom() - (int)(relative * chartRect.height());
+  };
 
   if (chartRect.width() < 10 || chartRect.height() < 10)
     return;
@@ -225,19 +245,25 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
   painter.setPen(QPen(palette().text().color(), 1));
   painter.drawRect(chartRect);
 
-  // Y-axis labels (0-100%)
+  // Y-axis labels.  Showing a signed physical OTF expands the scale to
+  // -100..100%; ordinary MTF display retains the historical 0..100% scale.
   painter.setFont(baseFont);
   for (int i = 0; i <= 10; i++) {
-    int y = chartRect.bottom() - (chartRect.height() * i / 10);
+    const double value = yMin + (yMax - yMin) * i / 10.0;
+    int y = mapY(value);
     painter.drawLine(chartRect.left() - 5, y, chartRect.left(), y);
 
-    QString label = QString::number(i * 10);
+    QString label = QString::number((int)std::lround(value * 100.0));
     QRect textRect(0, y - 10, layout.marginLeft - 10, 20);
     painter.drawText(textRect, Qt::AlignRight | Qt::AlignVCenter, label);
 
     // Grid line
     if (i > 0 && i < 10) {
-      painter.setPen(QPen(palette().mid().color(), 1, Qt::DotLine));
+      const bool zeroLine = signedScale && std::abs(value) < 1e-12;
+      painter.setPen(QPen(zeroLine ? palette().text().color()
+                                  : palette().mid().color(),
+                           zeroLine ? 2 : 1,
+                           zeroLine ? Qt::SolidLine : Qt::DotLine));
       painter.drawLine(chartRect.left(), y, chartRect.right(), y);
       painter.setPen(QPen(palette().text().color(), 1));
     }
@@ -322,7 +348,8 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
   // Move MTF title further left for larger fonts
   painter.translate(std::max(10, layout.marginLeft - 75), (chartRect.top() + chartRect.bottom()) / 2);
   painter.rotate(-90);
-  painter.drawText(-100, 0, 200, 30, Qt::AlignCenter, "MTF (%)");
+  painter.drawText(-100, 0, 200, 30, Qt::AlignCenter,
+                   signedScale ? "Transfer (%)" : "MTF (%)");
   painter.restore();
 
   // Helper function to draw a curve
@@ -336,10 +363,10 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
 
     for (size_t i = 0; i < data.size(); ++i) {
       double freq = i / (double)(data.size() - 1);
-      double value = data[i] * 100.0; // Scale to percentage
+      double value = data[i];
 
       int x = chartRect.left() + (int)(freq * chartRect.width());
-      int y = chartRect.bottom() - (int)((value / 100.0) * chartRect.height());
+      int y = mapY(value);
 
       if (i == 0)
         path.moveTo(x, y);
@@ -358,7 +385,8 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
 
     // Standard curves
     if (item.data) {
-      drawCurve(*item.data, item.color, item.width);
+      drawCurve(*item.data, item.color, item.width,
+                item.dashed ? Qt::DashLine : Qt::SolidLine);
     } else if (item.measurement) {
         // Measured MTFs
         painter.setPen(QPen(item.color, 2, Qt::DotLine));
@@ -368,7 +396,7 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
             double value = item.measurement->get_contrast(i) * 0.01;
             if (freq < 0.0 || freq > 1.0) continue;
             int x = chartRect.left() + (int)(freq * chartRect.width());
-            int y = chartRect.bottom() - (int)(value * chartRect.height());
+            int y = mapY(value);
             if (i == 0)
                 path.moveTo(x, y);
             else
@@ -451,7 +479,10 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
         itemColor.setAlpha(80);
     }
     
-    painter.setPen(QPen(itemColor, item.width, item.measurement ? Qt::DotLine : Qt::SolidLine));
+    painter.setPen(QPen(itemColor, item.width,
+                        item.measurement ? Qt::DotLine
+                                         : (item.dashed ? Qt::DashLine
+                                                        : Qt::SolidLine)));
     painter.drawLine(x, legendY + layout.lineHeight / 2, x + 20,
                      legendY + layout.lineHeight / 2);
 

@@ -268,25 +268,32 @@ is not a direct estimate of a single physical lens aberration.
 ## 6. Optional broad-scatter halo
 
 The Hurley curves have a low-frequency shoulder that cannot be reproduced well
-by one compact diffraction/defocus/Gaussian core. Color-Screen now has an
-optional, explicitly enabled broad component
+by one compact diffraction/defocus/Gaussian core. Color-Screen therefore has
+an optional broad Gaussian PSF component
 
 \[
-S(f)=(1-h)+h\exp(-2\pi^2\sigma_h^2f^2),
+H_h(f)=\exp(-2\pi^2\sigma_h^2f^2),
 \]
 
 where \(h\) is the scattered energy fraction and \(\sigma_h\) is a broad radius
-in output pixels. The physical lens MTF becomes
+in output pixels. If \(H_c(f)\) is the signed compact-core OTF, the complete
+physical lens OTF is
 
 \[
-H_\mathrm{lens,total}(f)=H_\mathrm{lens,core}(f)S(f).
+H_\mathrm{lens}(f)=(1-h)H_c(f)+hH_h(f).
 \]
 
-In PSF terms, this means the core image is convolved with
+Equivalently, the lens PSF is the energy-weighted sum
 
 \[
-(1-h)\delta+hG_{\sigma_h}.
+p_\mathrm{lens}=(1-h)p_c+hG_{\sigma_h}.
 \]
+
+The order here is important when defocus produces an OTF phase reversal.  The
+signed core and positive halo are mixed **before** the magnitude is taken for
+comparison with a slanted-edge measurement.  Computing
+`(1-h)*abs(H_c)+h*H_h` would invent positive phase for the reversed core and
+would move or remove real OTF zero crossings.
 
 This can represent weak flare, scattering, cover-glass diffusion, target or
 illumination halo, or another broad shift-invariant component. Command-line
@@ -306,6 +313,24 @@ target edge, veiling flare, local illumination gradient, nonlinear tone curve,
 or slanted-edge analysis convention can create a similar low-frequency shape.
 It is best regarded as an optional residual component whose stability should be
 checked across several edges and captures.
+
+### Fitting MTF magnitude while retaining model phase
+
+A slanted-edge measurement supplies MTF magnitude, not the sign of a real
+zero-phase OTF after a phase reversal.  The physical fitter therefore compares
+
+\[
+M_\mathrm{measured}(f)
+\quad\hbox{with}\quad
+\left|H_\mathrm{system}(f;\theta)\right|.
+\]
+
+The fitted analytical model retains the signed `H_system` for forward blur,
+Wiener filtering, Richardson--Lucy PSF construction, and screen simulation.
+Thus phase reversal is inferred from the optical model rather than guessed
+from the measured edge.  Frequencies close to an OTF zero are still poorly
+conditioned for deconvolution; knowing the sign does not restore contrast that
+the capture system transmitted with nearly zero amplitude.
 
 ## 7. Sensor aperture
 

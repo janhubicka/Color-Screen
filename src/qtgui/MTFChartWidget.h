@@ -13,6 +13,9 @@ public:
     
     void setMTFData(const colorscreen::mtf_parameters::computed_mtf &data, bool canSimulateDiffraction, double scanDpi, double screenFreq = -1);
     void setMeasuredMTF(const std::vector<colorscreen::mtf_measurement> &measurements, const std::array<double, 4> &channelWavelengths);
+    /** Show or hide the signed analytical system OTF.  Measured slanted-edge
+        curves remain magnitude-only.  */
+    void setShowSignedOTF(bool show);
     void clear();
     
     QSize sizeHint() const override;
@@ -52,6 +55,7 @@ private:
         bool visible;
         const std::vector<double> *data = nullptr;
         const colorscreen::mtf_measurement *measurement = nullptr;
+        bool dashed = false;
     };
     
     std::vector<LegendItem> getLegendItems() const;
@@ -66,6 +70,7 @@ private:
     std::vector<colorscreen::mtf_measurement> m_measurements;
     std::array<double, 4> m_channelWavelengths;
     bool m_hasMeasuredData = false;
+    bool m_showSignedOtf = false;
 
     std::set<QString> m_hiddenItems;
 };

@@ -1306,6 +1306,43 @@ test_mtf_physical_model ()
       ok = false;
     }
 
+  /* Component curves supplied to the GUI must expose both the nonnegative
+     model MTF and the signed analytical OTF.  This lets the chart display
+     measured magnitude and fitted phase reversal without changing the
+     sharpening model or inventing phase for measured data.  */
+  const mtf_parameters::computed_mtf reversed_curves
+      = reversed.compute_curves (201);
+  bool saw_negative_curve = false;
+  if (reversed_curves.system_otf.size ()
+          != reversed_curves.system_mtf.size ())
+    {
+      fprintf (stderr, "Signed OTF chart curve has the wrong size\n");
+      ok = false;
+    }
+  else
+    for (size_t i = 0; i < reversed_curves.system_otf.size (); i++)
+      {
+        if (reversed_curves.system_otf[i] < -0.001)
+          saw_negative_curve = true;
+        if (reversed_curves.system_mtf[i] < 0
+            || std::abs (reversed_curves.system_mtf[i]
+                         - std::abs (reversed_curves.system_otf[i]))
+                   > 2e-13)
+          {
+            fprintf (stderr,
+                     "GUI MTF/OTF curve magnitude mismatch at %zu: %g %g\n",
+                     i, reversed_curves.system_otf[i],
+                     reversed_curves.system_mtf[i]);
+            ok = false;
+            break;
+          }
+      }
+  if (!saw_negative_curve)
+    {
+      fprintf (stderr, "Signed GUI OTF curve lost all negative lobes\n");
+      ok = false;
+    }
+
   /* A measured slanted-edge curve contains magnitude only.  Even if its
      samples match the magnitude of a reversed physical OTF, PRECOMPUTE must
      not invent a negative phase.  */
@@ -1324,14 +1361,94 @@ test_mtf_physical_model ()
   hurley.halo_fraction = 0.16;
   hurley.halo_sigma = 5.2;
   if (hurley.halo_mtf (0) != 1
-      || !(hurley.halo_mtf (0.02) < 1 && hurley.halo_mtf (0.02) > 0.84)
-      || std::abs (hurley.halo_mtf (0.5) - 0.84) > 1e-10)
+      || !(hurley.halo_mtf (0.02) < 1 && hurley.halo_mtf (0.02) > 0)
+      || hurley.halo_mtf (0.5) > 1e-20)
     {
       fprintf (stderr,
-               "Broad-scatter halo normalization failed: DC=%0.17g, "
+               "Broad-scatter halo component failed: DC=%0.17g, "
                "f=.02 %0.17g, f=.5 %0.17g\n",
                hurley.halo_mtf (0), hurley.halo_mtf (0.02),
                hurley.halo_mtf (0.5));
+      ok = false;
+    }
+
+  /* The broad halo is a separate positive PSF component.  It must be mixed
+     with the signed compact core before MTF magnitude is taken.  Otherwise a
+     defocus phase reversal is incorrectly turned positive before the halo is
+     added, which moves or removes physical OTF zero crossings.  */
+  mtf_parameters reversed_with_halo = reversed;
+  reversed_with_halo.halo_fraction = 0.2;
+  reversed_with_halo.halo_sigma = 5.0;
+  const double core_otf
+      = reversed_with_halo.lens_diffraction_otf (reversed_frequency)
+        * reversed_with_halo.lens_defocus_otf (reversed_frequency)
+        * std::exp (-2 * M_PI * M_PI * reversed_with_halo.sigma
+                    * reversed_with_halo.sigma * reversed_frequency
+                    * reversed_frequency);
+  const double halo_component
+      = reversed_with_halo.halo_mtf (reversed_frequency);
+  const double mixed_otf
+      = 0.8 * core_otf + 0.2 * halo_component;
+  const double magnitude_before_mix
+      = 0.8 * std::abs (core_otf) + 0.2 * halo_component;
+  if (std::abs (reversed_with_halo.lens_otf (reversed_frequency) - mixed_otf)
+          > 2e-13
+      || std::abs (reversed_with_halo.lens_mtf (reversed_frequency)
+                   - std::abs (mixed_otf))
+             > 2e-13
+      || std::abs (mixed_otf - magnitude_before_mix) < 1e-3)
+    {
+      fprintf (stderr,
+               "Halo was not mixed with signed core before magnitude: "
+               "core=%0.17g halo=%0.17g otf=%0.17g mtf=%0.17g\n",
+               core_otf, halo_component,
+               reversed_with_halo.lens_otf (reversed_frequency),
+               reversed_with_halo.lens_mtf (reversed_frequency));
+      ok = false;
+    }
+
+  /* A slanted-edge curve supplies only |OTF|.  Verify that fitting defocus to
+     a synthetic curve which crosses a physical OTF zero recovers the signed
+     model parameter instead of trying to fit the negative lobe directly to
+     positive measured contrast.  */
+  mtf_parameters reversal_fit_source = reversed_with_halo;
+  reversal_fit_source.halo_fraction = 0.12;
+  reversal_fit_source.halo_sigma = 5.0;
+  mtf_measurement reversal_measurement;
+  reversal_measurement.name = "synthetic phase-reversing physical MTF";
+  reversal_measurement.wavelength = reversal_fit_source.wavelength;
+  for (int i = 0; i <= 100; i++)
+    {
+      const double frequency = i / 200.0;
+      reversal_measurement.add_value (
+          frequency, reversal_fit_source.system_mtf (frequency) * 100);
+    }
+  mtf_parameters reversal_fit_input = reversal_fit_source;
+  reversal_fit_input.defocus = 0.35;
+  reversal_fit_input.measurements = {reversal_measurement};
+  mtf_estimation_options reversal_fit_options;
+  reversal_fit_options.model = mtf_model::physical_diffraction;
+  reversal_fit_options.optimize_defocus = true;
+  mtf_parameters reversal_fit_result;
+  const char *reversal_fit_error = nullptr;
+  const double reversal_fit_objective
+      = reversal_fit_result.estimate_parameters (
+          reversal_fit_input, reversal_fit_options, nullptr, nullptr,
+          &reversal_fit_error,
+          mtf_parameters::estimate_use_nmsimplex
+              | mtf_parameters::estimate_use_multifit);
+  if (reversal_fit_error || reversal_fit_objective < 0
+      || reversal_fit_objective > 1e-6
+      || std::abs (reversal_fit_result.defocus
+                   - reversal_fit_source.defocus)
+             > 1e-4)
+    {
+      fprintf (stderr,
+               "Magnitude-only fit across OTF reversal failed: defocus "
+               "%0.17g expected %0.17g objective %g%s%s\n",
+               reversal_fit_result.defocus, reversal_fit_source.defocus,
+               reversal_fit_objective, reversal_fit_error ? ": " : "",
+               reversal_fit_error ? reversal_fit_error : "");
       ok = false;
     }
 

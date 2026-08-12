@@ -242,6 +242,15 @@ void SharpnessPanel::setupUi() {
       });
   m_mtfContainer->addWidget(detachableMTF);
 
+  m_showSignedOtfCheck = new QCheckBox(tr("Show signed physical OTF"), mtfWrapper);
+  m_showSignedOtfCheck->setToolTip(
+      tr("Show the signed analytical system transfer predicted by the physical "
+         "lens model. Measured slanted-edge curves remain MTF magnitudes; "
+         "negative lobes are inferred from the fitted optical model."));
+  connect(m_showSignedOtfCheck, &QCheckBox::toggled, m_mtfChart,
+          &MTFChartWidget::setShowSignedOTF);
+  m_mtfContainer->addWidget(m_showSignedOtfCheck);
+
   if (m_currentGroupForm)
     m_currentGroupForm->addRow(mtfWrapper);
   else
@@ -602,13 +611,20 @@ void SharpnessPanel::updateMTFChart() {
 
   ParameterState state = m_stateGetter();
 
-  // Compute MTF curves with 100 steps
-  mtf_parameters::computed_mtf curves =
-      state.rparams.sharpen.scanner_mtf.compute_curves(100);
+  /* Always plot the fitted/modelled transfer independently of whether the
+     user currently selected a measured MTF for sharpening.  A measured curve
+     contains magnitude only and must not suppress the physical model that was
+     fitted from it.  */
+  mtf_parameters chartParameters = state.rparams.sharpen.scanner_mtf;
+  chartParameters.measured_mtf_idx = -1;
+
+  // Compute model curves with 100 steps.
+  mtf_parameters::computed_mtf curves = chartParameters.compute_curves(100);
 
   // Pass simulation flag to chart
-  bool canSimulateDifraction =
-      state.rparams.sharpen.scanner_mtf.simulate_diffraction_p();
+  bool canSimulateDifraction
+      = chartParameters.model != colorscreen::mtf_model::empirical_fallback
+        && chartParameters.can_simulate_diffraction_p();
   // Calculate screen frequency if applicable
   double screenFreq = -1;
   auto img = m_imageGetter();
@@ -622,6 +638,8 @@ void SharpnessPanel::updateMTFChart() {
   m_mtfChart->setMTFData(curves, canSimulateDifraction,
                          state.rparams.sharpen.scanner_mtf.scan_dpi,
                          screenFreq);
+  if (m_showSignedOtfCheck)
+    m_showSignedOtfCheck->setEnabled(canSimulateDifraction);
 
   // Pass all measured MTF data if available
   const auto &scanner_mtf = state.rparams.sharpen.scanner_mtf;

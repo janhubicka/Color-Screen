@@ -678,7 +678,11 @@ public:
 	    if (freq > 0.5)
 	      continue;
 	    double contrast = measurement.get_contrast (i);
-	    double contrast2 = p.system_mtf (freq) * 100;
+	    /* A slanted-edge measurement contains MTF magnitude only.  Fit it to
+	       the magnitude of the complete signed physical OTF; the analytical
+	       model, not the measurement, supplies the sign after a phase reversal.  */
+	    const double predicted_otf = p.system_otf (freq);
+	    double contrast2 = my_fabs (predicted_otf) * 100;
 	    double residual = contrast - contrast2;
 	    msum += residual * residual;
 	    if (f_vec)
@@ -922,33 +926,40 @@ mtf_parameters::hopkins_defocus_mtf (double pixel_freq) const
   return stokseth_defocus_mtf (pixel_freq);
 }
 
-/* Return the transfer factor of the optional broad scattering halo.
-   PIXEL_FREQ is spatial frequency in cycles per output pixel.  A fraction
-   HALO_FRACTION of the core image is convolved with a Gaussian of standard
-   deviation HALO_SIGMA, while the remaining energy stays in the core.  */
+/* Return the normalized MTF of the broad scattering halo component.
+   PIXEL_FREQ is spatial frequency in cycles per output pixel.  The halo is a
+   separate broad Gaussian PSF component; LENS_OTF mixes it with the signed
+   compact optical core before taking any magnitude.  */
 double
 mtf_parameters::halo_mtf (double pixel_freq) const
 {
-  if (!(my_isfinite (halo_fraction) && halo_fraction > 0
-        && my_isfinite (halo_sigma) && halo_sigma > 0))
+  if (!(my_isfinite (halo_sigma) && halo_sigma > 0))
     return 1;
-
-  double fraction = std::clamp (halo_fraction, 0.0, 1.0);
-  return (1.0 - fraction)
-         + fraction * gaussian_blur_mtf (pixel_freq, halo_sigma);
+  return gaussian_blur_mtf (pixel_freq, halo_sigma);
 }
 
 /* Return signed complete lens OTF at PIXEL_FREQ cycles per pixel.  The
    empirical fallback has no independently known phase model and therefore
-   remains nonnegative.  */
+   remains nonnegative.  For the physical model the broad halo is an additive
+   PSF component: mix the signed compact-core OTF with the positive broad-halo
+   OTF first, and take the magnitude only later in LENS_MTF/SYSTEM_MTF.  This
+   preserves and correctly shifts physical phase reversals.  */
 double
 mtf_parameters::lens_otf (double pixel_freq) const
 {
   if (simulate_diffraction_p ())
-    return lens_diffraction_otf (pixel_freq)
-           * lens_defocus_otf (pixel_freq)
-           * gaussian_blur_mtf (pixel_freq, sigma)
-           * halo_mtf (pixel_freq);
+    {
+      const double core_otf
+          = lens_diffraction_otf (pixel_freq)
+            * lens_defocus_otf (pixel_freq)
+            * gaussian_blur_mtf (pixel_freq, sigma);
+      if (!(my_isfinite (halo_fraction) && halo_fraction > 0
+            && my_isfinite (halo_sigma) && halo_sigma > 0))
+        return core_otf;
+      const double fraction = std::clamp (halo_fraction, 0.0, 1.0);
+      return (1.0 - fraction) * core_otf
+             + fraction * halo_mtf (pixel_freq);
+    }
   return gaussian_blur_mtf (pixel_freq, sigma)
          * circular_blur_mtf (pixel_freq, blur_diameter);
 }
@@ -1507,7 +1518,7 @@ mtf_parameters::print_csv_header (FILE *f) const
              "diffraction f-stop 0/%.8g (effective 0/%.8g) wavelength %.8gnm "
              "magnification %.10g pixel pitch %.8gum\texact defocus "
              "%.10gmm\tlegacy Bessel defocus\tcore sigma=%.8gpx\thalo "
-             "fraction %.8g sigma %.8gpx\tlens\tsensor fill factor "
+             "component fraction %.8g sigma %.8gpx\tlens\tsensor fill factor "
              "%.8g\tsystem\n",
              f_stop, effective_f_stop (), wavelength, magnification (),
              pixel_pitch, defocus, sigma, halo_fraction, halo_sigma,
@@ -1575,6 +1586,7 @@ mtf_parameters::compute_curves (int steps) const
   computed_mtf result;
   if (steps <= 0)
     return result;
+  result.system_otf.reserve (steps);
   result.system_mtf.reserve (steps);
   result.sensor_mtf.reserve (steps);
   result.gaussian_blur_mtf.reserve (steps);
@@ -1596,6 +1608,7 @@ mtf_parameters::compute_curves (int steps) const
       result.halo_mtf.push_back (halo_mtf (freq));
       result.lens_mtf.push_back (lens_mtf (freq));
       result.sensor_mtf.push_back (sensor_mtf (freq));
+      result.system_otf.push_back (system_otf (freq));
       result.system_mtf.push_back (system_mtf (freq));
       result.hopkins_blur_mtf.push_back (
           circular_blur_mtf (freq, blur_diameter));

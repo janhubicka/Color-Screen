@@ -146,14 +146,14 @@ struct mtf_parameters
   /* Sigma (in pixels) used to estimate gaussian blur.  */
   double sigma = 0;
 
-  /* Fraction of the optical energy redistributed into a broad scattering
-     halo.  Zero disables the halo.  The remaining 1-HALO_FRACTION of the
-     energy stays in the diffraction/defocus core.  */
+  /* Fraction of optical PSF energy assigned to a broad scattering halo.
+     Zero disables the halo.  The remaining 1-HALO_FRACTION stays in the
+     signed diffraction/defocus/compact-blur core.  */
   double halo_fraction = 0;
 
-  /* Standard deviation of the additional broad halo in output pixels.  The
-     halo is modelled as a Gaussian convolution applied to HALO_FRACTION of
-     the otherwise physical optical core.  */
+  /* Standard deviation of the broad Gaussian halo PSF component in output
+     pixels.  The physical OTF is the energy-weighted sum of the signed core
+     OTF and this positive halo OTF.  */
   double halo_sigma = 0;
 
   /* Size of blur diameter (in pixels) used to estimate defocus.
@@ -306,7 +306,9 @@ struct mtf_parameters
   pure_attr double lens_defocus_mtf (double pixel_freq) const;
   /* Return historical Stokseth/Bessel factor at PIXEL_FREQ.  */
   pure_attr double stokseth_defocus_mtf (double pixel_freq) const;
-  /* Return broad-scatter halo factor at PIXEL_FREQ.  */
+  /* Return the normalized broad-scatter halo MTF at PIXEL_FREQ.  This is the
+     transfer of the broad Gaussian halo component itself, before it is mixed
+     with the signed compact optical core.  */
   pure_attr double halo_mtf (double pixel_freq) const;
   /* Return signed complete lens OTF at PIXEL_FREQ.  This is meaningful only
      for the known analytical physical model; measured curves do not carry
@@ -328,6 +330,10 @@ struct mtf_parameters
   /* Component curves used by the chart and diagnostic CSV output.  */
   struct computed_mtf
   {
+    /* Signed analytical system OTF used by forward blur and deconvolution.
+       Measured slanted-edge data is never inserted here because it carries
+       magnitude only.  */
+    std::vector<double> system_otf;
     std::vector<double> system_mtf;
     std::vector<double> sensor_mtf;
     std::vector<double> gaussian_blur_mtf;

@@ -288,19 +288,38 @@ five-point Gauss--Legendre rule over `[-1/2,+1/2]` in both dimensions, retaining
 the same 25 periodic-screen evaluations while greatly improving aperture MTF
 accuracy.
 
-### SIM-003 — signed physical OTF is clipped in the small-PSF path
+### SIM-003 — signed physical OTF was clipped to an MTF magnitude
 
 **Severity:** high for sufficiently defocused captures
 
-**Status:** open; deferred to an OTF-semantics patch
+**Status:** fixed by the signed-OTF patch
 
-`screen::initialize_with_sharpen_parameters()` currently clamps the direct
-small-PSF transfer to `[0, 1]`.  A known symmetric physical defocus model has a
-signed OTF and can cross zero.  A measured slanted-edge MTF contains magnitude
-only and must remain nonnegative.
+The exact circular-pupil calculation already produced a signed pupil
+autocorrelation, but `lens_defocus_mtf()` took its absolute value before the
+transfer reached the filtering code.  The small periodic-screen FFT, the
+large-image deconvolver, and PSF reconstruction then also clamped transfer
+coefficients to `[0,1]`.  A sufficiently defocused known pupil therefore lost
+real phase reversals.
 
-The API should distinguish a signed known OTF from a measured MTF explicitly,
-rather than making callers infer the semantics of `get_mtf()`.
+The public model now separates the two semantics explicitly:
+
+- `lens_defocus_otf()`, `lens_otf()`, `sensor_otf()` and `system_otf()` return
+  the signed, real zero-phase transfer of the analytical model;
+- the corresponding `*_mtf()` accessors return magnitudes for fitting, charting
+  and comparison with slanted-edge data.
+
+`mtf::precompute()` stores the signed `system_otf()` only when evaluating the
+known analytical model.  Measured slanted-edge tables still enter the cache as
+nonnegative magnitudes and no phase is invented for them.  All FFT consumers
+accept the physical range `[-1,+1]`.  The Wiener inverse therefore uses the
+correct signed relation `H/(H^2+K)`, while forward blur naturally reverses the
+contrast of a sinusoid in a negative OTF lobe.
+
+A regression using the Hurley capture geometry with 0.5 mm image-plane
+defocus verifies a negative lobe near 0.1875 cycles/pixel through both the
+large-image deconvolver and the 128 x 128 periodic-screen FFT.  A matching
+synthetic measured MTF remains nonnegative.  A 128 x 128 PSF reconstructed from
+the same signed analytical OTF is finite and nonnegative in the tested case.
 
 ### SIM-004 — cache key omitted finite dimensions
 
@@ -540,8 +559,12 @@ stage contract is changed further.
 2. **Stage ownership, complete:** explicit point versus integrated sampling,
    cache-key update, full-footprint Gauss--Legendre integration, and shared
    ownership in colour-loss estimation.
-3. **OTF semantics:** separate known signed physical OTF from measured
-   nonnegative MTF and make screen filtering transactional.
-4. **Precision validation:** quantify the periodic-table interpolation MTF,
+3. **OTF semantics, complete:** separate known signed physical OTF from
+   measured nonnegative MTF and preserve physical phase reversals in every FFT
+   path.
+4. **Filtering robustness:** make periodic-screen filtering transactional so a
+   failed per-channel MTF/PSF calculation cannot leave a partially filtered
+   screen.
+5. **Precision validation:** quantify the periodic-table interpolation MTF,
    local mapping scale, and representative Phase One / Schneider screen
    harmonics.

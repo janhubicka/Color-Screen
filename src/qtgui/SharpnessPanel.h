@@ -6,6 +6,7 @@
 
 class MTFChartWidget;
 class QLabel;
+class QCheckBox;
 class QWidget;
 class QImage;
 class QVBoxLayout;
@@ -78,6 +79,7 @@ private:
   void onParametersRefreshed(const ParameterState &state) override;
 
   MTFChartWidget *m_mtfChart = nullptr;
+  QCheckBox *m_showSignedOtfCheck = nullptr;
   class QLabel *m_diffractionNotice = nullptr;
   QVBoxLayout *m_mtfContainer = nullptr; // Container Layout
   QVBoxLayout *m_measurementsLayout = nullptr;
