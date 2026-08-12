@@ -1522,6 +1522,117 @@ test_mtf_physical_model ()
       ok = false;
     }
 
+  /* Repeated edges from one capture share physical defocus, so their absolute
+     uncertainty is meaningful relative to one another.  Give a clean curve
+     0.25-percentage-point uncertainty and a conflicting curve 5 percentage
+     points: their raw residual weights are 4 and 0.2, a 20:1 ratio.  With the
+     former per-curve normalization these constants both became unit weights and
+     the fit was the same as the explicitly uniform two-curve fit.  Capture-wide
+     normalization must instead keep the solution close to the precise curve.
+
+     A mixed uncertainty-aware/legacy capture intentionally falls back to the
+     per-curve rule rather than inventing uncertainty for the legacy curve.  */
+  mtf_parameters conflicting_source = weighted_source;
+  conflicting_source.defocus = 0.30;
+  mtf_measurement precise_capture_measurement;
+  precise_capture_measurement.name = "synthetic precise same-capture MTF";
+  precise_capture_measurement.wavelength = weighted_source.wavelength;
+  mtf_measurement uncertain_capture_measurement;
+  uncertain_capture_measurement.name = "synthetic uncertain same-capture MTF";
+  uncertain_capture_measurement.wavelength = weighted_source.wavelength;
+  uncertain_capture_measurement.same_capture = true;
+  mtf_measurement uniform_precise_capture_measurement;
+  uniform_precise_capture_measurement.name
+      = "synthetic uniform precise same-capture MTF";
+  uniform_precise_capture_measurement.wavelength = weighted_source.wavelength;
+  mtf_measurement uniform_conflicting_capture_measurement;
+  uniform_conflicting_capture_measurement.name
+      = "synthetic uniform conflicting same-capture MTF";
+  uniform_conflicting_capture_measurement.wavelength
+      = weighted_source.wavelength;
+  uniform_conflicting_capture_measurement.same_capture = true;
+  for (int i = 0; i <= 100; i++)
+    {
+      const double frequency = i / 200.0;
+      const double precise_contrast
+          = weighted_source.system_mtf (frequency) * 100;
+      const double conflicting_contrast
+          = conflicting_source.system_mtf (frequency) * 100;
+      precise_capture_measurement.add_value (frequency, precise_contrast, 0.25);
+      uncertain_capture_measurement.add_value (frequency, conflicting_contrast,
+                                                5.0);
+      uniform_precise_capture_measurement.add_value (frequency,
+                                                     precise_contrast);
+      uniform_conflicting_capture_measurement.add_value (frequency,
+                                                         conflicting_contrast);
+    }
+  auto fit_shared_defocus
+      = [&] (const std::vector<mtf_measurement> &measurements,
+             const std::vector<bool> &included, double *defocus)
+        {
+          mtf_parameters input = weighted_source;
+          input.defocus = 0.08;
+          input.measurements = measurements;
+          mtf_estimation_options options = weighted_options;
+          options.include_measurements = included;
+          mtf_parameters result;
+          const char *error = nullptr;
+          const double objective = result.estimate_parameters (
+              input, options, nullptr, nullptr, &error,
+              mtf_parameters::estimate_use_nmsimplex
+                  | mtf_parameters::estimate_use_multifit);
+          if (error || objective < 0)
+            return false;
+          *defocus = result.defocus;
+          return true;
+        };
+  double capture_weighted_defocus = 0;
+  double capture_uniform_defocus = 0;
+  double capture_mixed_defocus = 0;
+  if (!fit_shared_defocus (
+          {precise_capture_measurement, uncertain_capture_measurement}, {},
+          &capture_weighted_defocus)
+      || !fit_shared_defocus ({uniform_precise_capture_measurement,
+                               uniform_conflicting_capture_measurement},
+                              {}, &capture_uniform_defocus)
+      || !fit_shared_defocus ({precise_capture_measurement,
+                               uniform_conflicting_capture_measurement},
+                              {}, &capture_mixed_defocus)
+      || std::abs (capture_weighted_defocus - weighted_source.defocus) > 0.01
+      || std::abs (capture_weighted_defocus - weighted_source.defocus)
+             >= 0.25
+                    * std::abs (capture_uniform_defocus
+                                - weighted_source.defocus)
+      || std::abs (capture_mixed_defocus - capture_uniform_defocus) > 1e-5)
+    {
+      fprintf (stderr,
+               "Same-capture uncertainty weighting failed: weighted %.12g, "
+               "uniform %.12g, mixed legacy %.12g, expected %.12g\n",
+               capture_weighted_defocus, capture_uniform_defocus,
+               capture_mixed_defocus, weighted_source.defocus);
+      ok = false;
+    }
+  /* An excluded legacy curve is not part of the objective and therefore must
+     not disable joint normalization of the two included uncertainty-aware
+     curves in its capture group.  */
+  mtf_measurement excluded_legacy = uniform_conflicting_capture_measurement;
+  excluded_legacy.name = "synthetic excluded legacy same-capture MTF";
+  double capture_with_excluded_legacy_defocus = 0;
+  if (!fit_shared_defocus ({precise_capture_measurement,
+                            uncertain_capture_measurement, excluded_legacy},
+                           {true, true, false},
+                           &capture_with_excluded_legacy_defocus)
+      || std::abs (capture_with_excluded_legacy_defocus
+                   - capture_weighted_defocus)
+             > 1e-5)
+    {
+      fprintf (stderr,
+               "Excluded legacy curve changed same-capture weighting: "
+               "%.12g versus %.12g\n",
+               capture_with_excluded_legacy_defocus,
+               capture_weighted_defocus);
+      ok = false;
+    }
   /* The metadata-free fallback remains a separate model and must not silently
      enable diffraction.  */
   mtf_parameters fallback;

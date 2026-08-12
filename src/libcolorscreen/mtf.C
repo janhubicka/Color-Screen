@@ -404,6 +404,9 @@ public:
       }
 
     fit_weights.resize (m_measurements.size ());
+    std::vector<double> uncertainty_medians (m_measurements.size (), 0.0);
+    std::vector<double> uncertainty_floors (m_measurements.size (), 0.0);
+    std::vector<bool> has_uncertainty_weights (m_measurements.size (), false);
     for (size_t measurement = 0; measurement < m_measurements.size ();
          measurement++)
       {
@@ -425,9 +428,12 @@ public:
         /* New slanted-edge curves can carry a one-sigma uncertainty for each
            MTF sample.  Use it only when enough samples define a stable scale.
            A 0.25 percentage-point systematic floor prevents DC and accidental
-           low-variance bins from dominating the physical fit.  Normalize the
-           RMS weight to one so weighting only redistributes influence within a
-           curve and does not change that curve's overall importance.  */
+           low-variance bins from dominating the physical fit.  Start with
+           per-curve RMS normalization; this is the compatibility fallback for
+           isolated curves and for capture groups which contain a legacy curve
+           without usable uncertainty metadata.  A complete repeated-capture
+           group is renormalized jointly below so absolute uncertainty can also
+           redistribute influence between its curves.  */
         if (uncertainties.size () >= 3)
           {
             const size_t middle = uncertainties.size () / 2;
@@ -435,10 +441,13 @@ public:
                               uncertainties.begin () + middle,
                               uncertainties.end ());
             const double median_uncertainty = uncertainties[middle];
+            uncertainty_medians[measurement] = median_uncertainty;
             const double uncertainty_floor
                 = std::max (0.25, 0.25 * median_uncertainty);
+            uncertainty_floors[measurement] = uncertainty_floor;
+            has_uncertainty_weights[measurement] = true;
             long double sum_weights_squared = 0;
-            int weighted_points = 0;
+            size_t weighted_points = 0;
             for (size_t i = 0; i < curve.size (); i++)
               if (curve.get_freq (i) <= 0.5)
                 {
@@ -462,6 +471,75 @@ public:
                     fit_weights[measurement][i] *= normalization;
               }
           }
+      }
+    /* SAME_CAPTURE marks a curve as belonging to the same physical capture as
+       the preceding curve.  When two or more included curves in such a group
+       all have usable uncertainty metadata, retain their raw inverse-sigma
+       ratio and apply one normalization to the whole capture.  In particular,
+       constant 0.25- and 5-percentage-point uncertainties keep a 20:1 residual
+       weight ratio instead of each curve being separately normalized back to
+       unit RMS weight.  The common normalization keeps sum(w^2) equal to the
+       number of included observations, so the capture's overall scale remains
+       comparable with the historical uniformly weighted objective.  */
+    for (size_t first = 0; first < m_measurements.size ();)
+      {
+        size_t last = first + 1;
+        while (last < m_measurements.size ()
+               && m_measurements[last].same_capture)
+          last++;
+
+        size_t included_curves = 0;
+        bool complete_uncertainty = true;
+        for (size_t measurement = first; measurement < last; measurement++)
+          if (m_options.include_measurement_p (measurement))
+            {
+              included_curves++;
+              complete_uncertainty
+                  = complete_uncertainty
+                    && has_uncertainty_weights[measurement];
+            }
+
+        if (included_curves >= 2 && complete_uncertainty)
+          {
+            long double sum_weights_squared = 0;
+            size_t weighted_points = 0;
+            for (size_t measurement = first; measurement < last; measurement++)
+              if (m_options.include_measurement_p (measurement))
+                {
+                  const mtf_measurement &curve = m_measurements[measurement];
+                  for (size_t i = 0; i < curve.size (); i++)
+                    if (curve.get_freq (i) <= 0.5)
+                      {
+                        double uncertainty = curve.get_uncertainty (i);
+                        if (!(my_isfinite (uncertainty) && uncertainty > 0))
+                          uncertainty = uncertainty_medians[measurement];
+                        const double weight
+                            = 1.0 / std::max (
+                                        uncertainty,
+                                        uncertainty_floors[measurement]);
+                        fit_weights[measurement][i] = weight;
+                        sum_weights_squared
+                            += (long double)weight * (long double)weight;
+                        weighted_points++;
+                      }
+                }
+            if (sum_weights_squared > 0 && weighted_points)
+              {
+                const double normalization
+                    = my_sqrt ((double)((long double)weighted_points
+                                        / sum_weights_squared));
+                for (size_t measurement = first; measurement < last;
+                     measurement++)
+                  if (m_options.include_measurement_p (measurement))
+                    {
+                      const mtf_measurement &curve = m_measurements[measurement];
+                      for (size_t i = 0; i < curve.size (); i++)
+                        if (curve.get_freq (i) <= 0.5)
+                          fit_weights[measurement][i] *= normalization;
+                    }
+              }
+          }
+        first = last;
       }
 
     start = start_vec.data ();
@@ -799,8 +877,11 @@ public:
   progress_info *m_progress;
   bool be_verbose;
   std::vector<double> start_vec;
-  /* Per-sample normalized inverse-uncertainty weights.  Curves without
-     uncertainty estimates contain unit weights.  */
+  /* Per-sample inverse-uncertainty weights.  Complete repeated-capture groups
+     share one RMS normalization so absolute uncertainty controls their relative
+     influence.  Isolated and legacy/mixed groups retain per-curve
+     normalization, and curves without uncertainty estimates contain unit
+     weights.  */
   std::vector<std::vector<double>> fit_weights;
   std::vector<double> sums;
   double *start;
