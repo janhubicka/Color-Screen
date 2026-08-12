@@ -1834,8 +1834,8 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		for (int x = 0; x < fft_size; x++)
 		  {
 		    std::complex ker (
-			std::clamp ((screen_fft_t)cur_mtf->get_mtf (x, y, step),
-				    (screen_fft_t)0, (screen_fft_t)1),
+			std::clamp ((screen_fft_t)cur_mtf->get_transfer (x, y, step),
+				    (screen_fft_t)-1, (screen_fft_t)1),
 			(screen_fft_t)0);
 		    if (mode == sharpen_parameters::wiener_deconvolution)
 		      ker = ker * (std::conj (ker) / (std::norm (ker) + k_const));

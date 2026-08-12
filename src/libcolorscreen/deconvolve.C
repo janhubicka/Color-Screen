@@ -255,16 +255,18 @@ deconvolution<T>::deconvolution (mtf *mtf, luminosity_t mtf_scale,
         /* Prepare the optical transfer and Wiener denominator in double.  The
            large image transform may use FFTW single precision, but rounding a
            weak MTF before regularization needlessly changes the inverse gain.  */
-        double transfer = mtf->get_mtf ((double)x, (double)y, frequency_step);
+        double transfer = mtf->get_transfer ((double)x, (double)y, frequency_step);
         if (!my_isfinite (transfer))
           transfer = 0;
-        transfer = std::clamp (transfer, 0.0, 1.0);
+        transfer = std::clamp (transfer, -1.0, 1.0);
         double kernel = transfer;
 
         /* Wiener inverse filter:
              estimate = image * H / (H^2 + 1 / SNR).
-           The radial model is real and zero-phase.  A nonpositive or nonfinite
-           SNR disables sharpening and therefore gives the identity transfer.  */
+           The analytical radial model is real and may contain known sign
+           reversals; measured MTF data remains magnitude-only.  A nonpositive
+           or nonfinite SNR disables sharpening and therefore gives the
+           identity transfer.  */
         if (filter_mode == sharpen)
           kernel = apply_wiener
                        ? transfer / (transfer * transfer + k_const)

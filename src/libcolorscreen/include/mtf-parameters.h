@@ -291,21 +291,36 @@ struct mtf_parameters
   pure_attr double effective_f_stop () const;
   /* Return PIXEL_FREQ normalized by the incoherent diffraction cutoff.  */
   pure_attr double nu (double pixel_freq) const;
-  /* Return diffraction-limited circular-pupil MTF at PIXEL_FREQ.  */
+  /* Return diffraction-limited circular-pupil OTF at PIXEL_FREQ.  For an
+     unaberrated circular pupil this is nonnegative, but the OTF naming keeps
+     the distinction from magnitude-only measured data explicit.  */
+  pure_attr double lens_diffraction_otf (double pixel_freq) const;
+  /* Return diffraction-limited circular-pupil MTF magnitude at PIXEL_FREQ.  */
   pure_attr double lens_diffraction_mtf (double pixel_freq) const;
   /* Return the legacy approximate defocus factor at PIXEL_FREQ.  */
   pure_attr double hopkins_defocus_mtf (double pixel_freq) const;
-  /* Return exact circular-pupil defocus factor at PIXEL_FREQ.  */
+  /* Return exact signed circular-pupil defocus OTF factor at PIXEL_FREQ.  */
+  pure_attr double lens_defocus_otf (double pixel_freq) const;
+  /* Return magnitude of the exact circular-pupil defocus factor at
+     PIXEL_FREQ.  */
   pure_attr double lens_defocus_mtf (double pixel_freq) const;
   /* Return historical Stokseth/Bessel factor at PIXEL_FREQ.  */
   pure_attr double stokseth_defocus_mtf (double pixel_freq) const;
   /* Return broad-scatter halo factor at PIXEL_FREQ.  */
   pure_attr double halo_mtf (double pixel_freq) const;
-  /* Return complete lens MTF at PIXEL_FREQ.  */
+  /* Return signed complete lens OTF at PIXEL_FREQ.  This is meaningful only
+     for the known analytical physical model; measured curves do not carry
+     phase/sign information.  */
+  pure_attr double lens_otf (double pixel_freq) const;
+  /* Return complete lens MTF magnitude at PIXEL_FREQ.  */
   pure_attr double lens_mtf (double pixel_freq) const;
-  /* Return lens times sensor MTF at PIXEL_FREQ.  */
+  /* Return signed lens times sensor OTF at PIXEL_FREQ.  */
+  pure_attr double system_otf (double pixel_freq) const;
+  /* Return lens times sensor MTF magnitude at PIXEL_FREQ.  */
   pure_attr double system_mtf (double pixel_freq) const;
-  /* Return radial first-cut sensor aperture MTF at PIXEL_FREQ.  */
+  /* Return signed radial first-cut sensor-aperture OTF at PIXEL_FREQ.  */
+  pure_attr double sensor_otf (double pixel_freq) const;
+  /* Return radial first-cut sensor-aperture MTF magnitude at PIXEL_FREQ.  */
   pure_attr double sensor_mtf (double pixel_freq) const;
   /* Return optional residual correction at PIXEL_FREQ for measured data.  */
   pure_attr double measured_mtf_correction (double pixel_freq) const;

@@ -23,11 +23,12 @@
 namespace colorscreen
 {
 
-/* Radially symmetric, zero-phase optical transfer model.  A measured MTF
-   supplies only transfer magnitudes; consequently this class assumes that the
-   corresponding point-spread function is centered and rotationally symmetric.
-   It cannot reconstruct directional or phase information absent from the
-   measurement.  */
+/* Radially symmetric optical transfer model.  For the analytical physical
+   model the table stores the signed, real zero-phase OTF so known defocus
+   reversals survive forward blur and deconvolution.  A measured slanted-edge
+   curve supplies magnitudes only, so measured entries remain nonnegative and
+   assume an unknown phase of zero.  Directional or phase information absent
+   from a measurement cannot be reconstructed.  */
 class mtf
 {
 public:
@@ -38,25 +39,54 @@ public:
                                        bool parallel = true,
                                        const char *filename = nullptr,
                                        const char **error = nullptr);
-  /* Return 1d MTF value.  */
+  /* Return one-dimensional signed transfer coefficient at VAL.  Analytical
+     physical models may be negative after a known defocus reversal; measured
+     MTFs are magnitude-only and therefore remain nonnegative.  */
   inline double
-  get_mtf (double val) const
+  get_transfer (double val) const
   {
     return m_mtf.apply (val);
   }
 
-  /* Return 2d MTF value at point P.  */
+  /* Return two-dimensional signed transfer coefficient at point P.  SCALE
+     converts the caller's frequency units to cycles per modeled pixel.  */
   inline double
-  get_mtf (point_t p, double scale = 1) const
+  get_transfer (point_t p, double scale = 1) const
   {
     return m_mtf.apply (p.length () * scale);
   }
 
-  /* Return 2d MTF value at coordinates X and Y, multiplied by SCALE.  */
+  /* Return two-dimensional signed transfer coefficient at coordinates X and
+     Y.  SCALE converts the caller's frequency units to cycles per modeled
+     pixel.  */
+  inline double
+  get_transfer (double x, double y, double scale = 1) const
+  {
+    return m_mtf.apply (std::hypot (x, y) * scale);
+  }
+
+  /* Return one-dimensional MTF magnitude at VAL.  This accessor is intended
+     for charts, fitting diagnostics and comparison with measured MTF data.  */
+  inline double
+  get_mtf (double val) const
+  {
+    return my_fabs (get_transfer (val));
+  }
+
+  /* Return two-dimensional MTF magnitude at point P.  SCALE converts the
+     caller's frequency units to cycles per modeled pixel.  */
+  inline double
+  get_mtf (point_t p, double scale = 1) const
+  {
+    return my_fabs (get_transfer (p, scale));
+  }
+
+  /* Return two-dimensional MTF magnitude at coordinates X and Y.  SCALE
+     converts the caller's frequency units to cycles per modeled pixel.  */
   inline double
   get_mtf (double x, double y, double scale = 1) const
   {
-    return m_mtf.apply (std::hypot (x, y) * scale);
+    return my_fabs (get_transfer (x, y, scale));
   }
 
   /* Return PSF value.  */

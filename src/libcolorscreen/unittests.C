@@ -574,6 +574,60 @@ test_screen_sharpening ()
 	    }
 	}
     }
+  /* Exercise the periodic SCREEN fast path with a synthetic cosine whose
+     physical defocus OTF is negative.  A magnitude clamp here used to turn
+     the expected contrast reversal into a positive response.  */
+  screen signed_source, signed_result;
+  constexpr int signed_bin = 24;
+  constexpr double signed_frequency = signed_bin / (double)screen::size;
+  for (int y = 0; y < screen::size; y++)
+    for (int x = 0; x < screen::size; x++)
+      for (int c = 0; c < 3; c++)
+        {
+          signed_source.mult[y][x][c]
+              = (luminosity_t)(0.5
+                               + 0.2
+                                     * std::cos (2 * M_PI * signed_bin * x
+                                                 / screen::size));
+          signed_source.add[y][x][c] = 0;
+        }
+
+  sharpen_parameters signed_sp;
+  signed_sp.mode = sharpen_parameters::blur_deconvolution;
+  signed_sp.scanner_mtf.scan_dpi = 1887;
+  signed_sp.scanner_mtf.f_stop = 8;
+  signed_sp.scanner_mtf.wavelength = 750;
+  signed_sp.scanner_mtf.pixel_pitch = 3.760;
+  signed_sp.scanner_mtf.sensor_fill_factor = 0;
+  signed_sp.scanner_mtf.defocus = 0.5;
+  signed_sp.scanner_mtf_scale = 1.0 / screen::size;
+  sharpen_parameters *signed_par[3] = {&signed_sp, &signed_sp, &signed_sp};
+  signed_result.initialize_with_sharpen_parameters (signed_source, signed_par,
+                                                     false, false);
+
+  double signed_sum = 0;
+  double signed_norm = 0;
+  for (int y = 0; y < screen::size; y++)
+    for (int x = 0; x < screen::size; x++)
+      {
+        const double cosine
+            = std::cos (2 * M_PI * signed_bin * x / screen::size);
+        signed_sum += ((double)signed_result.mult[y][x][0] - 0.5) * cosine;
+        signed_norm += cosine * cosine;
+      }
+  const double signed_response = signed_sum / signed_norm / 0.2;
+  const double expected_signed_response
+      = signed_sp.scanner_mtf.system_otf (signed_frequency);
+  if (!(expected_signed_response < -0.01 && signed_response < -0.01)
+      || std::abs (signed_response - expected_signed_response) > 0.004)
+    {
+      fprintf (stderr,
+               "Periodic screen filtering lost physical OTF sign: expected "
+               "%g got %g\n",
+               expected_signed_response, signed_response);
+      return false;
+    }
+
   return true;
 }
 
@@ -1206,6 +1260,64 @@ test_mtf_physical_model ()
                "Exact circular-pupil defocus failed: q=.1 %0.17g, "
                "q=.5 %0.17g\n",
                defocus_q10, defocus_q50);
+      ok = false;
+    }
+
+  /* A sufficiently defocused known pupil has real OTF phase reversals.  MTF
+     magnitudes used for fitting must stay positive, while the physical OTF
+     supplied to forward blur and deconvolution must retain the sign.  */
+  mtf_parameters reversed = hurley;
+  reversed.defocus = 0.5;
+  reversed.sensor_fill_factor = 0;
+  reversed.sigma = 0;
+  reversed.halo_fraction = 0;
+  const double reversed_frequency = expected_cutoff * 0.4;
+  const double reversed_defocus
+      = reversed.lens_defocus_otf (reversed_frequency);
+  if (std::abs (reversed_defocus + 0.09507351131732263) > 4e-12
+      || reversed.lens_defocus_mtf (reversed_frequency) <= 0
+      || std::abs (reversed.lens_defocus_mtf (reversed_frequency)
+                   + reversed_defocus)
+             > 4e-12
+      || reversed.system_otf (reversed_frequency) >= 0
+      || reversed.system_mtf (reversed_frequency) <= 0)
+    {
+      fprintf (stderr,
+               "Signed physical OTF reversal failed: defocus=%0.17g "
+               "system OTF=%0.17g MTF=%0.17g\n",
+               reversed_defocus, reversed.system_otf (reversed_frequency),
+               reversed.system_mtf (reversed_frequency));
+      ok = false;
+    }
+
+  mtf reversed_mtf (reversed);
+  if (!reversed_mtf.precompute (nullptr, false)
+      || reversed_mtf.get_transfer (reversed_frequency) >= 0
+      || std::abs (reversed_mtf.get_transfer (reversed_frequency)
+                   - reversed.system_otf (reversed_frequency))
+             > 0.002
+      || reversed_mtf.get_mtf (reversed_frequency) <= 0)
+    {
+      fprintf (stderr,
+               "Precomputed physical OTF lost the defocus sign: table=%g "
+               "model=%g\n",
+               reversed_mtf.get_transfer (reversed_frequency),
+               reversed.system_otf (reversed_frequency));
+      ok = false;
+    }
+
+  /* A measured slanted-edge curve contains magnitude only.  Even if its
+     samples match the magnitude of a reversed physical OTF, PRECOMPUTE must
+     not invent a negative phase.  */
+  mtf_parameters measured_reversal = make_measured_mtf (
+      {{0, 100}, {reversed_frequency,
+                  reversed.system_mtf (reversed_frequency) * 100},
+       {0.5, 0}});
+  mtf measured_reversal_mtf (measured_reversal);
+  if (!measured_reversal_mtf.precompute (nullptr, false)
+      || measured_reversal_mtf.get_mtf (reversed_frequency) < 0)
+    {
+      fprintf (stderr, "Measured MTF unexpectedly acquired a phase sign\n");
       ok = false;
     }
 
@@ -1923,6 +2035,41 @@ test_mtf_deconvolution ()
                    fast_diagonal_response, diagonal_response);
           ok = false;
         }
+    }
+
+  /* Forward blur of a known physical OTF must also preserve a phase reversal
+     through the actual FFT filtering path.  Use an exactly periodic cosine so
+     the sign of the recovered coefficient is unambiguous.  */
+  mtf_parameters signed_blur_parameters;
+  signed_blur_parameters.scan_dpi = 1887;
+  signed_blur_parameters.f_stop = 8;
+  signed_blur_parameters.wavelength = 750;
+  signed_blur_parameters.pixel_pitch = 3.760;
+  signed_blur_parameters.sensor_fill_factor = 0;
+  signed_blur_parameters.defocus = 0.5;
+  mtf signed_blur_mtf (signed_blur_parameters);
+  constexpr double signed_frequency = 0.1875;
+  const double expected_signed_transfer
+      = signed_blur_parameters.system_otf (signed_frequency);
+  auto signed_signal = [] (int x, int) {
+    return 0.5 + 0.2 * std::cos (2 * M_PI * signed_frequency * x);
+  };
+  deconvolution<double> signed_filter (
+      &signed_blur_mtf, 1, 1000, 0, 1, deconvolution<double>::blur, 0, 1,
+      sharpen_parameters::lanczos3_resampling);
+  fill_deconvolution_tile (signed_filter, signed_signal);
+  const double signed_response
+      = deconvolution_cosine_amplitude_2d (signed_filter, signed_frequency, 0,
+                                           0.5)
+        / 0.2;
+  if (!(expected_signed_transfer < -0.01 && signed_response < -0.01)
+      || std::abs (signed_response - expected_signed_transfer) > 0.02)
+    {
+      fprintf (stderr,
+               "Physical OTF sign was lost by forward filtering: expected "
+               "%g got %g\n",
+               expected_signed_transfer, signed_response);
+      ok = false;
     }
 
   /* The test signal is entirely inside the flat passband.  Blur mode must

@@ -787,16 +787,24 @@ get_psf_radius (const mtf::psf_t *psf, int size, bool *ok = nullptr)
 
 }
 
-/* Return sensor MTF at given pixel frequency.
-   PIXEL_FREQ is the spatial frequency in cycles per pixel.  The first-cut
-   model is radial, as requested; SENSOR_FILL_FACTOR is interpreted as active
-   pixel area, so its square root is the active linear aperture.  */
+/* Return signed radial sensor-aperture OTF at PIXEL_FREQ cycles per pixel.
+   The first-cut model is radial, as requested; SENSOR_FILL_FACTOR is
+   interpreted as active pixel area, so its square root is the active linear
+   aperture.  A scanner aperture wider than one pixel may legitimately cross a
+   sinc zero, so keep the sign here.  */
 double
-mtf_parameters::sensor_mtf (double pixel_freq) const
+mtf_parameters::sensor_otf (double pixel_freq) const
 {
   if (!(sensor_fill_factor > 0) || !my_isfinite (sensor_fill_factor))
     return 1;
-  return my_fabs (sinc (pixel_freq * my_sqrt (sensor_fill_factor)));
+  return sinc (pixel_freq * my_sqrt (sensor_fill_factor));
+}
+
+/* Return radial sensor-aperture MTF magnitude at PIXEL_FREQ cycles per pixel.  */
+double
+mtf_parameters::sensor_mtf (double pixel_freq) const
+{
+  return my_fabs (sensor_otf (pixel_freq));
 }
 
 /* Return the capture magnification inferred from sensor pitch and scan DPI.
@@ -838,20 +846,29 @@ mtf_parameters::nu (double pixel_freq) const
   return std::clamp (frequency_per_mm / cutoff_per_mm, 0.0, 1.0);
 }
 
-/* Return the diffraction-limited MTF of a perfect circular pupil.
-   PIXEL_FREQ is spatial frequency in cycles per pixel.  */
+/* Return diffraction-limited circular-pupil OTF at PIXEL_FREQ cycles per
+   pixel.  The unaberrated circular-pupil OTF is real and nonnegative.  */
 double
-mtf_parameters::lens_diffraction_mtf (double pixel_freq) const
+mtf_parameters::lens_diffraction_otf (double pixel_freq) const
 {
   return circular_pupil_diffraction_otf (nu (pixel_freq));
 }
 
-/* Return the exact defocus factor for the diffraction model.
-   PIXEL_FREQ is spatial frequency in cycles per pixel.  DEFOCUS is image-plane
-   displacement in millimeters.  The function evaluates the incoherent pupil
-   autocorrelation and returns its magnitude relative to the in-focus OTF.  */
+/* Return diffraction-limited circular-pupil MTF magnitude at PIXEL_FREQ
+   cycles per pixel.  */
 double
-mtf_parameters::lens_defocus_mtf (double pixel_freq) const
+mtf_parameters::lens_diffraction_mtf (double pixel_freq) const
+{
+  return my_fabs (lens_diffraction_otf (pixel_freq));
+}
+
+/* Return the exact signed defocus OTF factor for the diffraction model.
+   PIXEL_FREQ is spatial frequency in cycles per pixel.  DEFOCUS is image-plane
+   displacement in millimeters.  Negative values are physical phase reversals
+   of the known circular-pupil transfer and must survive forward blur and
+   deconvolution.  */
+double
+mtf_parameters::lens_defocus_otf (double pixel_freq) const
 {
   double q = nu (pixel_freq);
   if (q <= 0 || q >= 1 || my_fabs (defocus) < 1.0e-15)
@@ -862,11 +879,18 @@ mtf_parameters::lens_defocus_mtf (double pixel_freq) const
   double edge_phase
       = M_PI * defocus * q * (1.0 - q)
         / (wavelength_mm * working_f_stop * working_f_stop);
-  /* The magnitude cannot exceed the in-focus OTF by the triangle inequality.
-     Clamp only roundoff outside that invariant; the signed internal result is
-     retained for validation across phase reversals.  */
-  return std::clamp (
-      my_fabs (circular_pupil_defocus_factor (q, edge_phase)), 0.0, 1.0);
+  /* By the triangle inequality the magnitude cannot exceed the in-focus OTF.
+     Clamp only roundoff outside the physical bound and preserve the sign.  */
+  return std::clamp (circular_pupil_defocus_factor (q, edge_phase), -1.0,
+                     1.0);
+}
+
+/* Return magnitude of the exact circular-pupil defocus factor at PIXEL_FREQ.
+   This is the quantity comparable with a measured slanted-edge MTF.  */
+double
+mtf_parameters::lens_defocus_mtf (double pixel_freq) const
+{
+  return my_fabs (lens_defocus_otf (pixel_freq));
 }
 
 /* Return the historical Stokseth/Bessel defocus approximation.
@@ -914,22 +938,26 @@ mtf_parameters::halo_mtf (double pixel_freq) const
          + fraction * gaussian_blur_mtf (pixel_freq, halo_sigma);
 }
 
-/* Return lens MTF at PIXEL_FREQ cycles per pixel.
-   The primary path combines exact circular-pupil diffraction and defocus with
-   optional residual Gaussian blur and broad scattering halo.  The geometric
-   circular-blur model is a metadata-free fallback only.  */
+/* Return signed complete lens OTF at PIXEL_FREQ cycles per pixel.  The
+   empirical fallback has no independently known phase model and therefore
+   remains nonnegative.  */
+double
+mtf_parameters::lens_otf (double pixel_freq) const
+{
+  if (simulate_diffraction_p ())
+    return lens_diffraction_otf (pixel_freq)
+           * lens_defocus_otf (pixel_freq)
+           * gaussian_blur_mtf (pixel_freq, sigma)
+           * halo_mtf (pixel_freq);
+  return gaussian_blur_mtf (pixel_freq, sigma)
+         * circular_blur_mtf (pixel_freq, blur_diameter);
+}
+
+/* Return complete lens MTF magnitude at PIXEL_FREQ cycles per pixel.  */
 double
 mtf_parameters::lens_mtf (double pixel_freq) const
 {
-  double core;
-  if (simulate_diffraction_p ())
-    core = lens_diffraction_mtf (pixel_freq)
-           * lens_defocus_mtf (pixel_freq)
-           * gaussian_blur_mtf (pixel_freq, sigma);
-  else
-    return gaussian_blur_mtf (pixel_freq, sigma)
-           * circular_blur_mtf (pixel_freq, blur_diameter);
-  return core * halo_mtf (pixel_freq);
+  return my_fabs (lens_otf (pixel_freq));
 }
 
 /* Return an optional correction applied on top of a measured MTF.
@@ -943,11 +971,21 @@ mtf_parameters::measured_mtf_correction (double pixel_freq) const
          * circular_blur_mtf (pixel_freq, blur_diameter);
 }
 
-/* Return complete radial system MTF at PIXEL_FREQ cycles per pixel.  */
+/* Return signed complete radial system OTF at PIXEL_FREQ cycles per pixel.
+   This is meaningful for the analytical physical model, where the pupil phase
+   is known.  Measured slanted-edge data is magnitude-only and is handled
+   separately by MTF::PRECOMPUTE.  */
+double
+mtf_parameters::system_otf (double pixel_freq) const
+{
+  return sensor_otf (pixel_freq) * lens_otf (pixel_freq);
+}
+
+/* Return complete radial system MTF magnitude at PIXEL_FREQ cycles per pixel.  */
 double
 mtf_parameters::system_mtf (double pixel_freq) const
 {
-  return sensor_mtf (pixel_freq) * lens_mtf (pixel_freq);
+  return my_fabs (system_otf (pixel_freq));
 }
 
 /* Compute right half of LSF.
@@ -970,7 +1008,7 @@ mtf::compute_lsf (std::vector<psf_t, fft_allocator<psf_t>> &lsf,
 
   /* Mirror mtf.  */
   for (int i = 0; i < size; i++)
-    mtf_half[i] = get_mtf (i * scale);
+    mtf_half[i] = get_transfer (i * scale);
 
   plan.execute_r2r (mtf_half.data (), lsf.data ());
 
@@ -995,8 +1033,8 @@ mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
   auto plan = fft_plan_c2r_2d<psf_t> (psf_size, psf_size, mtf_kernel.get (), psf_data.data ());
   for (int x = 0; x < fft_size; x++)
     {
-      std::complex ker (std::clamp ((double)get_mtf (x, 0, psf_step),
-				    0.0, 1.0),
+      std::complex ker (std::clamp ((double)get_transfer (x, 0, psf_step),
+				    -1.0, 1.0),
 			0.0);
       mtf_kernel.get ()[x][0] = std::real (ker);
       mtf_kernel.get ()[x][1] = std::imag (ker);
@@ -1009,8 +1047,8 @@ mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
       for (int y = 1; y < fft_size; y++)
 	for (int x = 0; x < fft_size; x++)
 	  {
-	    std::complex ker (std::clamp ((double)get_mtf (x, y, psf_step),
-					  0.0, 1.0),
+	    std::complex ker (std::clamp ((double)get_transfer (x, y, psf_step),
+					  -1.0, 1.0),
 			      0.0);
 	    mtf_kernel.get ()[y * fft_size + x][0] = std::real (ker);
 	    mtf_kernel.get ()[y * fft_size + x][1] = std::imag (ker);
@@ -1025,7 +1063,7 @@ mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
     for (int y = 1; y < fft_size; y++)
       for (int x = 0; x < fft_size; x++)
 	{
-	  std::complex ker (std::clamp ((double)get_mtf (x, y, psf_step),
+	  std::complex ker (std::clamp ((double)get_transfer (x, y, psf_step),
 					0.0, 1.0),
 			    0.0);
 	  mtf_kernel.get ()[y * fft_size + x][0] = std::real (ker);
@@ -1374,7 +1412,7 @@ mtf::precompute (progress_info *progress, bool parallel)
 
       if (colorscreen_checking)
         for (size_t i = 0; i < frequencies.size () - 2; i++)
-          if (my_fabs (contrasts[i] - get_mtf (frequencies[i])) > 0.01)
+          if (my_fabs (contrasts[i] - get_transfer (frequencies[i])) > 0.01)
             {
               printf ("Mismatch (measured) %i freq %f table %f "
                       "precomputed %f\n",
@@ -1393,19 +1431,19 @@ mtf::precompute (progress_info *progress, bool parallel)
       std::vector<double> contrasts (entries);
       double step = 1.0 / (entries - 2);
       for (int i = 0; i < entries - 2; i++)
-        contrasts[i] = m_params.system_mtf (i * step);
+        contrasts[i] = m_params.system_otf (i * step);
       contrasts[entries - 2] = contrasts[entries - 1] = 0;
       m_mtf.set_range (0, 1 + step);
       m_mtf.init_by_y_values (contrasts.data (), entries);
 
       if (colorscreen_checking)
         for (int i = 0; i < entries - 1; i++)
-          if (my_fabs (m_params.system_mtf (i * step)
+          if (my_fabs (m_params.system_otf (i * step)
                     - m_mtf.apply (i * step))
               > 0.0001)
             {
               printf ("Mismatch (model) %f %f %f\n",
-                      m_params.system_mtf (i * step),
+                      m_params.system_otf (i * step),
                       m_mtf.apply (i * step), step);
               abort ();
             }
