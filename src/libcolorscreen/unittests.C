@@ -1646,7 +1646,20 @@ test_mtf_physical_model ()
                   * fallback_frequency * fallback_frequency);
   const double argument
       = M_PI * fallback_frequency * fallback.blur_diameter;
-  const double disk = 2 * std::cyl_bessel_j (1, argument) / argument;
+  /* Keep the reference calculation independent of the platform Bessel API.
+     Production uses get_j1(), which selects the C++ special function, MSVCRT _j1 or
+     libc j1 according to the available C/C++ runtime.  At this small argument
+     the power series for J1 converges rapidly and gives a portable independent
+     check of that compatibility path.  */
+  const double argument_squared_quarter = argument * argument * 0.25;
+  double j1_term = argument * 0.5;
+  double j1_reference = j1_term;
+  for (int k = 1; k < 12; k++)
+    {
+      j1_term *= -argument_squared_quarter / (k * (k + 1.0));
+      j1_reference += j1_term;
+    }
+  const double disk = 2 * j1_reference / argument;
   if (fallback.simulate_diffraction_p ()
       || std::abs (fallback.lens_mtf (fallback_frequency)
                    - gaussian * std::abs (disk))
