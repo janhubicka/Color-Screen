@@ -35,11 +35,14 @@ struct mtf_measurement
   /* Name.  */
   std::string name;
 
-  /* Append one sample at FREQ cycles per pixel with CONTRAST in percent.  */
+  /* Append one sample at FREQ cycles per pixel with CONTRAST in percent.
+     UNCERTAINTY is the estimated one-standard-deviation uncertainty of
+     CONTRAST in percentage points.  Zero means that no uncertainty estimate
+     is available and preserves the historical uniformly weighted fit.  */
   void
-  add_value (double freq, double contrast)
+  add_value (double freq, double contrast, double uncertainty = 0)
   {
-    m_data.push_back ({freq, contrast});
+    m_data.push_back ({freq, contrast, uncertainty});
   }
   /* Return number of stored samples.  */
   size_t
@@ -59,6 +62,13 @@ struct mtf_measurement
   {
     return m_data[i].contrast;
   }
+  /* Return one-standard-deviation uncertainty of sample I in percentage
+     points.  Zero means that no uncertainty estimate is available.  */
+  double
+  get_uncertainty (int i) const
+  {
+    return m_data[i].uncertainty;
+  }
   /* Return true when this measurement equals O exactly.  */
   bool
   operator== (const mtf_measurement &o) const
@@ -68,16 +78,18 @@ struct mtf_measurement
            && m_data == o.m_data;
   }
 private:
-  /* One measured frequency/contrast pair.  */
+  /* One measured frequency/contrast pair and its optional uncertainty.  */
   struct entry
   {
     double freq;
     double contrast;
+    double uncertainty;
 
     /* Return true when this entry equals O exactly.  */
     bool operator== (const entry &o) const
     {
-      return freq == o.freq && contrast == o.contrast;
+      return freq == o.freq && contrast == o.contrast
+             && uncertainty == o.uncertainty;
     }
   };
   std::vector <entry> m_data;

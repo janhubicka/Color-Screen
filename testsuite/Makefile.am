@@ -11,6 +11,18 @@ EXTRA_DIST              = defs.sh $(TESTS) \
 			  slanted-austraia-hurley-mtf.txt \
 			  slanted-austraia-hurley-esf.txt \
 			  slanted-austraia-hurley-lsf.txt \
+			  ON_558_001_004_ISA-bottomlefth.tif \
+			  ON_558_001_004_ISA-bottomleftv.tif \
+			  ON_558_001_004_ISA-bottomrighth.tif \
+			  ON_558_001_004_ISA-bottomrightv.tif \
+			  ON_558_001_004_ISA-centerh.tif \
+			  ON_558_001_004_ISA-centerv.tif \
+			  ON_558_001_004_ISA-circles.tif \
+			  ON_558_001_004_ISA-toplefth.tif \
+			  ON_558_001_004_ISA-topleftv.tif \
+			  ON_558_001_004_ISA-toprighth.tif \
+			  ON_558_001_004_ISA-toprightv.tif \
+			  ON_558_001_004_ISA-README.md \
 			  slanted-gaussian-vsharp.tif \
 			  slanted-gaussian-vsharp-mtf.txt \
 			  slanted-gaussian-sharp.tif \

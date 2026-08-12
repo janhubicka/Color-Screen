@@ -93,8 +93,10 @@ public:
      SHARPEN.  ANTICIPATE_SHARPENING additionally applies the selected digital
      inverse filter; when false, only the forward capture blur is applied.
      PARALLEL permits OpenMP in expensive PSF construction.  ADD is copied
-     unchanged from SCR.  */
-  DLL_PUBLIC void
+     unchanged from SCR.  Return false if transfer/PSF construction fails.
+     On failure THIS may be only partly initialized; the caller must discard or
+     otherwise ignore it rather than attempting to preserve the old contents.  */
+  nodiscard_attr DLL_PUBLIC bool
   initialize_with_sharpen_parameters (screen &scr,
                                       sharpen_parameters *sharpen[3],
                                       bool anticipate_sharpening,

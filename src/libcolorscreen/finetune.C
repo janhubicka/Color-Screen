@@ -2,6 +2,7 @@
    Copyright (C) 2014-2026 Jan Hubicka
    This file is part of Color-Screen.  */
 
+#include <limits>
 #include <memory>
 #define HAVE_INLINE
 #define GSL_RANGE_CHECK_OFF
@@ -1884,8 +1885,10 @@ public:
 
   /* Apply blur to SRC_SCR and compute DST_SCR.
      Values are in vector V.  TILEID is the tile ID.
-     If WEIGHT_SCR is non-null, use it as a weight screen.  */
-  void
+     If WEIGHT_SCR is non-null, use it as a weight screen.  Return false when
+     MTF/PSF construction fails; DST_SCR is then unspecified and must be
+     ignored by the caller.  */
+  bool
   apply_blur (coord_t *v, int tileid, screen *dst_scr, screen *src_scr,
               screen *weight_scr = nullptr)
   {
@@ -1980,17 +1983,20 @@ public:
                 sp_blue.scanner_mtf.blur_diameter = blur_diameter.blue;
               }
           }
-        dst_scr->initialize_with_sharpen_parameters (*src_scr, vs,
-                                                     tile_sharpened, parallel);
+        if (!dst_scr->initialize_with_sharpen_parameters (
+                *src_scr, vs, tile_sharpened, parallel))
+          return false;
       }
     else
       dst_scr->initialize_with_blur (*src_scr, blur * pixel_size);
+    return true;
   }
 
-  /* Initialize screen for tile TILEID using values in vector V.
-     Return true if screen was updated.  */
+  /* Initialize screen for tile TILEID using values in vector V.  Return false
+     on MTF/PSF construction failure.  Store in UPDATED whether a successful
+     call changed the tile screen.  */
   bool
-  init_screen (coord_t *v, int tileid)
+  init_screen (coord_t *v, int tileid, bool *updated)
   {
     luminosity_t emulsion_blur = get_emulsion_blur_radius (v);
     rgbdata blur = get_channel_blur_radius (v);
@@ -2029,10 +2035,14 @@ public:
 								 red_strip_width,
 								 green_strip_width,
 								 NULL);
+	    if (!scr)
+	      return false;
 	    memcpy (tiles[tileid].scr.get (), scr.get (), sizeof (screen));
+	    *updated = true;
 	    return true;
 	  }
-	return false;
+	*updated = false;
+	return true;
       }
 
     if (optimize_emulsion_blur
@@ -2059,18 +2069,22 @@ public:
         || tiles[tileid].last_emulsion_intensities != intensities
         || tiles[tileid].last_emulsion_offset != emulsion_offset)
       {
-        apply_blur (v, tileid, tiles[tileid].scr.get (),
-                    optimize_emulsion_blur && !optimize_emulsion_intensities
-                        ? emulsion_scr.get ()
-                        : original_scr.get (),
-                    optimize_emulsion_intensities ? emulsion_scr.get ()
-                                                  : nullptr);
+        if (!apply_blur (
+                v, tileid, tiles[tileid].scr.get (),
+                optimize_emulsion_blur && !optimize_emulsion_intensities
+                    ? emulsion_scr.get ()
+                    : original_scr.get (),
+                optimize_emulsion_intensities ? emulsion_scr.get ()
+                                              : nullptr))
+          return false;
         tiles[tileid].last_screen_revision = screen_revision;
         tiles[tileid].last_emulsion_intensities = intensities;
         tiles[tileid].last_emulsion_offset = emulsion_offset;
+        *updated = true;
         return true;
       }
-    return false;
+    *updated = false;
+    return true;
   }
 
   /* Evaluate screen pixel for TILEID at X,Y with offset OFF.
@@ -2833,7 +2847,9 @@ public:
               tiles[tileid].sharpened_color, tiles[tileid].color.data (), theight,
               twidth, theight, get_sharpen_radius (v), get_sharpen_amount (v),
               nullptr, false);
-        bool updated = init_screen (v, tileid);
+        bool updated = false;
+        if (!init_screen (v, tileid, &updated))
+          return std::numeric_limits<coord_t>::max ();
         simulate_screen (v, tileid, updated);
       }
     double_rgbdata red, green, blue;
@@ -3095,7 +3111,9 @@ public:
   std::unique_ptr<simple_image>
   produce_image (coord_t *v, int tileid, int type)
   {
-    init_screen (v, tileid);
+    bool updated = false;
+    if (!init_screen (v, tileid, &updated))
+      return nullptr;
 
     std::unique_ptr<simple_image> img = std::make_unique<simple_image> ();
     if (!img || !img->allocate (twidth, theight))
@@ -3231,7 +3249,9 @@ public:
   bool
   write_file (coord_t *v, const char *name, int tileid, int type)
   {
-    init_screen (v, tileid);
+    bool updated = false;
+    if (!init_screen (v, tileid, &updated))
+      return false;
     // void *buffer;
     // size_t len = create_linear_srgb_profile (&buffer);
 
@@ -4176,8 +4196,9 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
               best_solver.type,
               best_solver.get_red_strip_width (best_solver.start.data ()),
               best_solver.get_green_strip_width (best_solver.start.data ()));
-          best_solver.apply_blur (best_solver.start.data (), 0, &scr, &scr1);
-          ret.dot_spread = scr.get_image (true, 1);
+          if (best_solver.apply_blur (best_solver.start.data (), 0, &scr,
+                                      &scr1))
+            ret.dot_spread = scr.get_image (true, 1);
         }
       ret.screen = best_solver.original_scr->get_image ();
       ret.blurred_screen = best_solver.tiles[0].scr->get_image ();
@@ -4192,8 +4213,8 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
 
       screen scr, scr1;
       scr1.initialize_dot ();
-      best_solver.apply_blur (best_solver.start.data (), 0, &scr, &scr1);
-      ret.dot_spread = scr.get_image (true, 1);
+      if (best_solver.apply_blur (best_solver.start.data (), 0, &scr, &scr1))
+        ret.dot_spread = scr.get_image (true, 1);
     }
   if (fparams.screen_file)
     best_solver.original_scr->save_tiff (fparams.screen_file);
@@ -4213,8 +4234,8 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
     {
       screen scr, scr1;
       scr1.initialize_dot ();
-      best_solver.apply_blur (best_solver.start.data (), 0, &scr, &scr1);
-      scr.save_tiff (fparams.dot_spread_file, true, 1);
+      if (best_solver.apply_blur (best_solver.start.data (), 0, &scr, &scr1))
+        scr.save_tiff (fparams.dot_spread_file, true, 1);
     }
   // printf ("%i %i %i %i %f %f %f %f\n", bx, by, fsx, fsy,
   // best_solver.tile_pos[twidth/2+(theight/2)*twidth].x,

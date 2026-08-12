@@ -58,12 +58,21 @@ public:
   {
     return m_sampling;
   }
+
+  /* Return true when every screen in this table was initialized successfully.
+     A false result means callers must discard the table.  */
+  pure_attr bool valid_p () const
+  {
+    return m_valid;
+  }
 private:
   /* Unique id of the image (used for caching).  */
   uint64_t m_id;
   int m_width, m_height;
   /* Pixel-sampling policy common to every screen in M_SCREEN_TABLE.  */
   screen_sampling m_sampling;
+  /* True only if all entries in M_SCREEN_TABLE were initialized.  */
+  bool m_valid;
   std::vector <screen> m_screen_table;
 };
 

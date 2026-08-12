@@ -242,6 +242,43 @@ OTF and the positive broad Gaussian halo component as an energy-weighted PSF
 mixture.  Only then does it take the magnitude for the residual.  This keeps
 halo fitting consistent with phase reversals predicted by defocus.
 
+### 6.1 Per-frequency uncertainty weighting
+
+New slanted-edge measurements also store an optional one-standard-deviation
+uncertainty for each MTF sample, in percentage points.  The reported MTF curve
+itself is unchanged.  Color-Screen estimates uncertainty by splitting the ROI
+into four interleaved groups of scan lines, recomputing the MTF on each group
+with the already-qualified edge geometry, and converting the between-group
+scatter to the standard error of the full ROI.  The uncertainty curve is
+smoothed over a narrow frequency interval because adjacent zero-padded FFT bins
+are strongly correlated.
+
+The physical-model residual remains expressed in percentage points.  When a
+curve contains usable uncertainty estimates, the fitter multiplies each
+residual by an inverse-uncertainty weight.  A 0.25 percentage-point floor, or
+one quarter of the curve's median uncertainty when that is larger, prevents an
+accidentally tiny variance estimate near DC from dominating the optimization.
+The weights are RMS-normalized within each measurement so uncertainty changes
+only the relative importance of frequencies inside that curve; it does not
+silently increase or decrease the total influence of the curve compared with
+the historical objective.
+
+Project files may therefore contain either
+
+```text
+scanner_mtf_point: frequency contrast
+```
+
+or
+
+```text
+scanner_mtf_point: frequency contrast uncertainty
+```
+
+Old two-value records load with zero uncertainty and use the original uniformly
+weighted fit.  Imported QuickMTF data likewise remains uniformly weighted unless
+an uncertainty estimate is explicitly available.
+
 ## 7. Capture grouping and current storage limitation
 
 `same_capture` groups adjacent measurements. Curves in one group share a fitted

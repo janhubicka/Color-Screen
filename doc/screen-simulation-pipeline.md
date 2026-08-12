@@ -430,19 +430,23 @@ The `|| 1` branch and unreachable analytical implementation were removed.  The
 helper explicitly transforms the same truncated FIR kernel as the direct blur
 path, preserving the existing blur-regression contract.
 
-### SCR-007 — PSF normalization and filtering are not transactional
+### SCR-007 — failed PSF/MTF construction must invalidate the screen
 
-**Severity:** medium/high on malformed model or allocation failure
+**Severity:** medium/high on cancellation, allocation failure or malformed model
 
-**Status:** open
+**Status:** fixed
 
-Several paths divide by PSF sum or FFT DC without validating a positive finite
-normalizer.  `screen::initialize_with_sharpen_parameters()` returns `void`, so
-a failed channel can leave a partially modified destination.
+PSF sums and FFT DC normalizers are checked before division, and
+`screen::initialize_with_sharpen_parameters()` now returns `bool`.  A failure
+may leave the destination only partly initialized; deliberately no second
+`screen` is allocated or copied merely to make this operation transactional.
+The API contract instead requires the caller to discard or ignore the
+destination whenever the function returns false.
 
-A later patch should build a temporary screen, validate every channel, and
-commit only on success.  This requires changing callers and is intentionally
-outside the aperture-ownership patch.
+All current callers propagate that failure.  Cached periodic screens are not
+inserted, spatially varying screen tables are marked invalid, and finetuning
+paths stop using the affected result.  This keeps the normal performance- and
+memory-critical path copy-free while making failure handling explicit.
 
 ### SIM-009 — one global pixel scale is used across a warped image
 

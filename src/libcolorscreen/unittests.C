@@ -6,6 +6,7 @@
 #include <vector>
 #include <atomic>
 #include <chrono>
+#include <string>
 
 
 #include "include/colorscreen.h"
@@ -540,7 +541,11 @@ test_screen_sharpening ()
 	{
 	  double defocus = 12.0*i/100.0; // 0 to 2mm in 5 steps
 	  sp.scanner_mtf.defocus = defocus;
-	  scr->initialize_with_sharpen_parameters (*mstr, par, m != 2, true);
+	  if (!scr->initialize_with_sharpen_parameters (*mstr, par, m != 2, true))
+	    {
+	      fprintf (stderr, "MTF screen filtering initialization failed\n");
+	      return false;
+	    }
 
 	  for (int c = 0; c < 3; c++)
 	    if (scr->add[7][11][c] != mstr->add[7][11][c])
@@ -602,8 +607,12 @@ test_screen_sharpening ()
   signed_sp.scanner_mtf.defocus = 0.5;
   signed_sp.scanner_mtf_scale = 1.0 / screen::size;
   sharpen_parameters *signed_par[3] = {&signed_sp, &signed_sp, &signed_sp};
-  signed_result.initialize_with_sharpen_parameters (signed_source, signed_par,
-                                                     false, false);
+  if (!signed_result.initialize_with_sharpen_parameters (
+          signed_source, signed_par, false, false))
+    {
+      fprintf (stderr, "Signed screen OTF initialization failed\n");
+      return false;
+    }
 
   double signed_sum = 0;
   double signed_norm = 0;
@@ -1452,6 +1461,67 @@ test_mtf_physical_model ()
       ok = false;
     }
 
+  /* Per-frequency uncertainty should reduce the leverage of visibly noisy
+     high-frequency samples without changing the total weight of a curve.
+     Generate a physical MTF, bias its upper-frequency tail and mark that tail
+     as uncertain.  The uncertainty-weighted fit must recover defocus more
+     accurately than the same samples interpreted with historical uniform
+     weights.  */
+  mtf_parameters weighted_source = hurley;
+  weighted_source.sigma = 0.45;
+  weighted_source.defocus = 0.16;
+  weighted_source.halo_fraction = 0.08;
+  weighted_source.halo_sigma = 5.0;
+  mtf_measurement weighted_measurement;
+  weighted_measurement.name = "synthetic uncertainty-weighted MTF";
+  weighted_measurement.wavelength = weighted_source.wavelength;
+  mtf_measurement uniform_measurement = weighted_measurement;
+  for (int i = 0; i <= 100; i++)
+    {
+      const double frequency = i / 200.0;
+      double contrast = weighted_source.system_mtf (frequency) * 100;
+      const bool noisy_tail = frequency >= 0.28;
+      if (noisy_tail)
+        contrast += 4.0;
+      weighted_measurement.add_value (frequency, contrast,
+                                      noisy_tail ? 8.0 : 0.25);
+      uniform_measurement.add_value (frequency, contrast);
+    }
+  mtf_estimation_options weighted_options;
+  weighted_options.model = mtf_model::physical_diffraction;
+  weighted_options.optimize_defocus = true;
+  auto fit_defocus
+      = [&] (const mtf_measurement &measurement, double *defocus)
+        {
+          mtf_parameters input = weighted_source;
+          input.defocus = 0.08;
+          input.measurements = {measurement};
+          mtf_parameters result;
+          const char *error = nullptr;
+          const double objective = result.estimate_parameters (
+              input, weighted_options, nullptr, nullptr, &error,
+              mtf_parameters::estimate_use_nmsimplex
+                  | mtf_parameters::estimate_use_multifit);
+          if (error || objective < 0)
+            return false;
+          *defocus = result.defocus;
+          return true;
+        };
+  double weighted_defocus = 0;
+  double uniform_defocus = 0;
+  if (!fit_defocus (weighted_measurement, &weighted_defocus)
+      || !fit_defocus (uniform_measurement, &uniform_defocus)
+      || std::abs (weighted_defocus - weighted_source.defocus)
+             >= std::abs (uniform_defocus - weighted_source.defocus)
+      || std::abs (weighted_defocus - weighted_source.defocus) > 0.01)
+    {
+      fprintf (stderr,
+               "MTF uncertainty weighting failed: weighted defocus %.12g, "
+               "uniform %.12g, expected %.12g\n",
+               weighted_defocus, uniform_defocus, weighted_source.defocus);
+      ok = false;
+    }
+
   /* The metadata-free fallback remains a separate model and must not silently
      enable diffraction.  */
   mtf_parameters fallback;
@@ -1918,10 +1988,14 @@ test_mtf_physical_model ()
      reintroduction of float storage in long measured curves.  */
   mtf_measurement precision_measurement;
   const double precise_contrast = 99.123456789012345;
-  precision_measurement.add_value (0.123456789012345, precise_contrast);
-  if (precision_measurement.get_contrast (0) != precise_contrast)
+  const double precise_uncertainty = 0.12345678901234567;
+  precision_measurement.add_value (0.123456789012345, precise_contrast,
+                                   precise_uncertainty);
+  if (precision_measurement.get_contrast (0) != precise_contrast
+      || precision_measurement.get_uncertainty (0) != precise_uncertainty)
     {
-      fprintf (stderr, "Measured MTF contrast lost double precision\n");
+      fprintf (stderr,
+               "Measured MTF contrast or uncertainty lost double precision\n");
       ok = false;
     }
 
@@ -1945,10 +2019,13 @@ test_mtf_physical_model ()
   saved_measurement.same_capture = false;
   saved_measurement.name = "quoted \"IR\" measurement \\ path";
   saved_measurement.add_value (0.012345678901234568,
-                               99.123456789012351);
+                               99.123456789012351,
+                               0.12345678901234567);
   saved_measurement.add_value (0.23456789012345678,
-                               54.234567890123456);
-  saved_measurement.add_value (0.5, 4.3456789012345679);
+                               54.234567890123456,
+                               0.98765432109876539);
+  saved_measurement.add_value (0.5, 4.3456789012345679,
+                               2.3456789012345679);
   saved_mtf.measurements = {saved_measurement};
 
   FILE *project = tmpfile ();
@@ -2001,6 +2078,44 @@ test_mtf_physical_model ()
       fprintf (stderr, "Legacy deconvolution kernel compatibility failed%s%s\n",
                legacy_kernel_error ? ": " : "",
                legacy_kernel_error ? legacy_kernel_error : "");
+      ok = false;
+    }
+
+  /* Project files written before uncertainty estimates were added contain
+     two-value scanner_mtf_point records.  They must continue to load with
+     zero uncertainty, which selects the historical uniformly weighted fit.  */
+  FILE *legacy_mtf_project = tmpfile ();
+  render_parameters legacy_mtf_render;
+  const char *legacy_mtf_error = nullptr;
+  const char legacy_mtf_text[]
+      = "screen_alignment_version: 1\n"
+        "scanner_mtf_measurement: 0\n"
+        "scanner_mtf_point: 0 100\n"
+        "scanner_mtf_point: 0.5 10\n"
+        "screen_alignment_end\n";
+  const bool legacy_mtf_loaded
+      = legacy_mtf_project
+        && fwrite (legacy_mtf_text, 1, sizeof (legacy_mtf_text) - 1,
+                   legacy_mtf_project)
+               == sizeof (legacy_mtf_text) - 1
+        && !fseek (legacy_mtf_project, 0, SEEK_SET)
+        && load_csp (legacy_mtf_project, nullptr, nullptr,
+                     &legacy_mtf_render, nullptr, &legacy_mtf_error);
+  if (legacy_mtf_project)
+    fclose (legacy_mtf_project);
+  if (!legacy_mtf_loaded
+      || legacy_mtf_render.sharpen.scanner_mtf.measurements.size () != 1
+      || legacy_mtf_render.sharpen.scanner_mtf.measurements[0].size () != 2
+      || legacy_mtf_render.sharpen.scanner_mtf.measurements[0]
+                 .get_uncertainty (0)
+             != 0
+      || legacy_mtf_render.sharpen.scanner_mtf.measurements[0]
+                 .get_uncertainty (1)
+             != 0)
+    {
+      fprintf (stderr, "Legacy two-column MTF compatibility failed%s%s\n",
+               legacy_mtf_error ? ": " : "",
+               legacy_mtf_error ? legacy_mtf_error : "");
       ok = false;
     }
 
@@ -3729,6 +3844,23 @@ test_slanted_edge_mtf ()
 	  return false;
 	}
 
+      bool has_uncertainty = false;
+      for (size_t i = 0; i < measurement.size (); i++)
+        {
+          const double uncertainty = measurement.get_uncertainty (i);
+          if (!my_isfinite (uncertainty) || uncertainty < 0)
+            {
+              printf ("Invalid slanted-edge uncertainty\n");
+              return false;
+            }
+          has_uncertainty |= uncertainty > 0;
+        }
+      if (!has_uncertainty)
+        {
+          printf ("Slanted edge did not estimate MTF uncertainty\n");
+          return false;
+        }
+
       mtf m (sp_hi.scanner_mtf);
       if (! m.precompute (NULL))
 	{
@@ -3881,6 +4013,318 @@ test_slanted_edge_mtf ()
               return x < edge_x ? 10000 : 50000;
             }))
     return false;
+
+  return true;
+}
+
+/* Verify that independent slanted edges from one real Phase One capture are
+   accepted consistently and lead the physical MTF solver to the same basin.
+   The ten ROIs sample horizontal and vertical edges at five field positions
+   in a 2089 PPI, f/8, 750 nm capture with 3.760 um sensor pixels.  This test
+   intentionally checks reproducibility statistics rather than exact fitted
+   values: real field curvature and target variation are allowed, while a
+   random ROI result or optimizer jump must fail.  */
+static bool
+test_real_mtf_reproducibility ()
+{
+  struct fit_result
+  {
+    double sigma;
+    double defocus;
+    double halo_fraction;
+    double halo_sigma;
+    double objective;
+  };
+
+  static constexpr const char *edge_files[] = {
+    "ON_558_001_004_ISA-bottomlefth.tif",
+    "ON_558_001_004_ISA-bottomleftv.tif",
+    "ON_558_001_004_ISA-bottomrighth.tif",
+    "ON_558_001_004_ISA-bottomrightv.tif",
+    "ON_558_001_004_ISA-centerh.tif",
+    "ON_558_001_004_ISA-centerv.tif",
+    "ON_558_001_004_ISA-toplefth.tif",
+    "ON_558_001_004_ISA-topleftv.tif",
+    "ON_558_001_004_ISA-toprighth.tif",
+    "ON_558_001_004_ISA-toprightv.tif"
+  };
+
+  /* Return the source-tree path of test file FILENAME.  Automake supplies
+     TOP_SRCDIR during make check; the fallback is convenient when running the
+     binary manually from build-qt/testsuite.  */
+  auto test_path = [] (const char *filename)
+    {
+      const char *top_srcdir = getenv ("top_srcdir");
+      if (!top_srcdir || !*top_srcdir)
+        top_srcdir = "../..";
+      return std::string (top_srcdir) + "/testsuite/" + filename;
+    };
+
+  /* Fit MEASUREMENT from START and store the physical-model result in OUT.
+     The capture metadata is fixed; only residual sigma, defocus and the broad
+     halo are allowed to move.  */
+  auto fit_measurement
+      = [] (const mtf_measurement &measurement, const fit_result &start,
+            fit_result *out)
+        {
+          mtf_parameters input;
+          input.model = mtf_model::physical_diffraction;
+          input.scan_dpi = 2089;
+          input.pixel_pitch = 3.760;
+          input.f_stop = 8;
+          input.wavelength = 750;
+          input.sensor_fill_factor = 1;
+          input.sigma = start.sigma;
+          input.defocus = start.defocus;
+          input.halo_fraction = start.halo_fraction;
+          input.halo_sigma = start.halo_sigma;
+          input.measurements = {measurement};
+
+          mtf_estimation_options options;
+          options.model = mtf_model::physical_diffraction;
+          options.optimize_sigma = true;
+          options.optimize_defocus = true;
+          options.optimize_halo_fraction = true;
+          options.optimize_halo_sigma = true;
+
+          mtf_parameters result;
+          const char *error = nullptr;
+          const double objective = result.estimate_parameters (
+              input, options, nullptr, nullptr, &error,
+              mtf_parameters::estimate_use_nmsimplex
+                  | mtf_parameters::estimate_use_multifit);
+          if (error || objective < 0 || !my_isfinite (objective)
+              || !my_isfinite (result.sigma)
+              || !my_isfinite (result.defocus)
+              || !my_isfinite (result.halo_fraction)
+              || !my_isfinite (result.halo_sigma))
+            {
+              fprintf (stderr, "Real MTF fit failed%s%s\n",
+                       error ? ": " : "", error ? error : "");
+              return false;
+            }
+          *out = {result.sigma, result.defocus, result.halo_fraction,
+                  result.halo_sigma, objective};
+          return true;
+        };
+
+  /* Return the sample standard deviation of VALUES.  */
+  auto standard_deviation = [] (const std::vector<double> &values)
+    {
+      double mean = 0;
+      for (double value : values)
+        mean += value;
+      mean /= values.size ();
+      double sum = 0;
+      for (double value : values)
+        {
+          const double delta = value - mean;
+          sum += delta * delta;
+        }
+      return std::sqrt (sum / (values.size () - 1));
+    };
+
+  const fit_result default_start = {0.65, 0.16, 0.12, 8.0, 0};
+  std::vector<fit_result> fits;
+  std::vector<mtf_measurement> measurements;
+  fits.reserve (sizeof (edge_files) / sizeof (edge_files[0]));
+  measurements.reserve (sizeof (edge_files) / sizeof (edge_files[0]));
+
+  for (const char *filename : edge_files)
+    {
+      const std::string path = test_path (filename);
+      image_data image;
+      const char *error = nullptr;
+      if (!image.load (path.c_str (), false, &error, nullptr))
+        {
+          fprintf (stderr, "Cannot load real slanted-edge fixture %s: %s\n",
+                   path.c_str (), error ? error : "unknown error");
+          return false;
+        }
+
+      render_parameters parameters;
+      parameters.gamma = 1.0;
+      slanted_edge_parameters edge_parameters;
+      edge_parameters.wavelength = 750;
+      edge_parameters.channel = 3;
+      edge_parameters.name = filename;
+      const slanted_edge_results edge
+          = slanted_edge_mtf (parameters, image, image.get_area (),
+                              edge_parameters, nullptr);
+      if (!edge.success
+          || parameters.sharpen.scanner_mtf.measurements.size () != 1)
+        {
+          fprintf (stderr, "Real slanted edge %s was rejected: %s\n",
+                   filename,
+                   edge.error.empty () ? "no measurement produced"
+                                       : edge.error.c_str ());
+          return false;
+        }
+      if (edge.edge_angle < 4.5 || edge.edge_angle > 5.2
+          || edge.edge_fit_rms > 0.25 || edge.edge_snr < 20
+          || edge.phase_coverage < 0.95)
+        {
+          fprintf (stderr,
+                   "Unexpected geometry/quality for %s: angle %.6g, RMS "
+                   "%.6g, SNR %.6g, coverage %.6g\n",
+                   filename, edge.edge_angle, edge.edge_fit_rms, edge.edge_snr,
+                   edge.phase_coverage);
+          return false;
+        }
+
+      const mtf_measurement &measurement
+          = parameters.sharpen.scanner_mtf.measurements[0];
+      bool has_uncertainty = false;
+      for (size_t i = 0; i < measurement.size (); i++)
+        if (measurement.get_uncertainty (i) > 0)
+          has_uncertainty = true;
+      if (!has_uncertainty)
+        {
+          fprintf (stderr, "Real slanted edge %s has no uncertainty data\n",
+                   filename);
+          return false;
+        }
+
+      fit_result fitted;
+      if (!fit_measurement (measurement, default_start, &fitted))
+        return false;
+      if (fitted.sigma < 0.3 || fitted.sigma > 1.2
+          || fitted.defocus < 0.1 || fitted.defocus > 0.35
+          || fitted.halo_fraction < 0 || fitted.halo_fraction > 0.35
+          || fitted.halo_sigma <= 0 || fitted.halo_sigma > 64)
+        {
+          fprintf (stderr,
+                   "Unreasonable physical fit for %s: sigma %.6g, defocus "
+                   "%.6g, halo %.6g at %.6g px\n",
+                   filename, fitted.sigma, fitted.defocus,
+                   fitted.halo_fraction, fitted.halo_sigma);
+          return false;
+        }
+      measurements.push_back (measurement);
+      fits.push_back (fitted);
+    }
+
+  std::vector<double> sigma_values;
+  std::vector<double> defocus_values;
+  std::vector<double> halo_fraction_values;
+  std::vector<double> halo_sigma_values;
+  for (const fit_result &fit : fits)
+    {
+      sigma_values.push_back (fit.sigma);
+      defocus_values.push_back (fit.defocus);
+      halo_fraction_values.push_back (fit.halo_fraction);
+      halo_sigma_values.push_back (fit.halo_sigma);
+    }
+
+  const double sigma_sd = standard_deviation (sigma_values);
+  const double defocus_sd = standard_deviation (defocus_values);
+  const double halo_fraction_sd = standard_deviation (halo_fraction_values);
+  const double halo_sigma_sd = standard_deviation (halo_sigma_values);
+  if (sigma_sd > 0.12 || defocus_sd > 0.04 || halo_fraction_sd > 0.03
+      || halo_sigma_sd > 8.0)
+    {
+      fprintf (stderr,
+               "Real-edge physical fits are not reproducible: sigma SD %.6g, "
+               "defocus SD %.6g, halo-fraction SD %.6g, halo-radius SD %.6g\n",
+               sigma_sd, defocus_sd, halo_fraction_sd, halo_sigma_sd);
+      return false;
+    }
+
+  /* Files are ordered as horizontal/vertical pairs at the same field
+     position.  Defocus and halo energy should normally agree more closely
+     within a pair than the compact residual sigma, which can absorb modest
+     directional blur.  One bottom-right pair is intentionally given a wider
+     defocus allowance because the real capture shows measurable field/orientation
+     variation there.  */
+  std::vector<double> paired_defocus_differences;
+  for (size_t i = 0; i < fits.size (); i += 2)
+    {
+      const double defocus_difference
+          = std::abs (fits[i].defocus - fits[i + 1].defocus);
+      const double halo_difference
+          = std::abs (fits[i].halo_fraction - fits[i + 1].halo_fraction);
+      paired_defocus_differences.push_back (defocus_difference);
+      if (defocus_difference > 0.10 || halo_difference > 0.02)
+        {
+          fprintf (stderr,
+                   "Horizontal/vertical fit disagreement for %s/%s: defocus "
+                   "%.6g, halo fraction %.6g\n",
+                   edge_files[i], edge_files[i + 1], defocus_difference,
+                   halo_difference);
+          return false;
+        }
+    }
+  std::sort (paired_defocus_differences.begin (),
+             paired_defocus_differences.end ());
+  if (paired_defocus_differences[paired_defocus_differences.size () / 2]
+      > 0.02)
+    {
+      fprintf (stderr,
+               "Median horizontal/vertical defocus disagreement is %.6g mm\n",
+               paired_defocus_differences[paired_defocus_differences.size ()
+                                          / 2]);
+      return false;
+    }
+
+  /* Refit one representative real curve from deliberately different starting
+     points.  Solver convergence should be much tighter than the genuine
+     edge-to-edge variation above.  */
+  static constexpr fit_result alternate_starts[] = {
+    {0.25, 0.05, 0.03, 4.0, 0},
+    {1.10, 0.45, 0.30, 30.0, 0}
+  };
+  const size_t representative = 4; /* Center horizontal edge.  */
+  for (const fit_result &start : alternate_starts)
+    {
+      fit_result refit;
+      if (!fit_measurement (measurements[representative], start, &refit))
+        return false;
+      const fit_result &reference = fits[representative];
+      if (std::abs (refit.sigma - reference.sigma) > 0.01
+          || std::abs (refit.defocus - reference.defocus) > 0.005
+          || std::abs (refit.halo_fraction - reference.halo_fraction) > 0.005
+          || std::abs (refit.halo_sigma - reference.halo_sigma) > 0.2)
+        {
+          fprintf (stderr,
+                   "Real MTF solver depends on its initial guess: sigma "
+                   "%.6g/%.6g, defocus %.6g/%.6g, halo %.6g/%.6g, radius "
+                   "%.6g/%.6g\n",
+                   refit.sigma, reference.sigma, refit.defocus,
+                   reference.defocus, refit.halo_fraction,
+                   reference.halo_fraction, refit.halo_sigma,
+                   reference.halo_sigma);
+          return false;
+        }
+    }
+
+  /* The circles fixture deliberately contains several curved transitions and
+     is not a valid slanted-edge ROI.  It must be rejected rather than yielding
+     a random MTF curve.  */
+  {
+    const std::string path = test_path ("ON_558_001_004_ISA-circles.tif");
+    image_data image;
+    const char *error = nullptr;
+    if (!image.load (path.c_str (), false, &error, nullptr))
+      {
+        fprintf (stderr, "Cannot load real circles fixture: %s\n",
+                 error ? error : "unknown error");
+        return false;
+      }
+    render_parameters parameters;
+    parameters.gamma = 1.0;
+    slanted_edge_parameters edge_parameters;
+    edge_parameters.wavelength = 750;
+    const slanted_edge_results edge
+        = slanted_edge_mtf (parameters, image, image.get_area (),
+                            edge_parameters, nullptr);
+    if (edge.success || edge.failure == slanted_edge_failure_none
+        || !parameters.sharpen.scanner_mtf.measurements.empty ())
+      {
+        fprintf (stderr,
+                 "Real circles fixture was incorrectly accepted as one edge\n");
+        return false;
+      }
+  }
 
   return true;
 }
@@ -4195,6 +4639,8 @@ main (int argc, char **argv)
     { "cow_points", "cow points tests", [] () { return test_cow_points (); } },
     { "image_area", "image area tests", [] () { return test_image_area (); } },
     { "slanted_edge", "slanted edge MTF tests", [] () { return test_slanted_edge_mtf (); } },
+    { "real_mtf_reproducibility", "real MTF reproducibility tests",
+      [] () { return test_real_mtf_reproducibility (); } },
     { "denoising", "denoising tests", [] () { return test_denoise (); } },
     { "demosaic", "dufay and paget demosaicing tests", [] () { return test_demosaic (); } },
     { NULL, NULL, NULL }

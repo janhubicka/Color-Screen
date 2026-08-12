@@ -14,6 +14,7 @@
 #include <limits>
 #include <new>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace colorscreen {
@@ -76,6 +77,145 @@ inverse_sinc (double x)
   if (x2 < 1.0e-12)
     return 1.0 + x2 / 6.0 + 7.0 * x2 * x2 / 360.0;
   return x / std::sin (x);
+}
+
+/* Interpolate empty bins in ESF_SUM/ESF_COUNT and store the complete ESF in
+   ESF.  Measured bins retain their arithmetic mean; leading/trailing empty
+   bins use the nearest measured plateau and interior gaps are linearly
+   interpolated.  Return false when no measured bin is present.  */
+static bool
+interpolate_esf (const std::vector<double> &esf_sum,
+                 const std::vector<int> &esf_count, std::vector<double> *esf)
+{
+  const int num_bins = (int)esf_count.size ();
+  if (esf_sum.size () != esf_count.size () || !num_bins)
+    return false;
+  esf->assign (num_bins, 0);
+  int first_valid = 0;
+  while (first_valid < num_bins && !esf_count[first_valid])
+    first_valid++;
+  if (first_valid == num_bins)
+    return false;
+
+  const double first_value
+      = esf_sum[first_valid] / esf_count[first_valid];
+  for (int bin = 0; bin <= first_valid; bin++)
+    (*esf)[bin] = first_value;
+
+  int previous = first_valid;
+  for (int bin = first_valid + 1; bin < num_bins; bin++)
+    if (esf_count[bin])
+      {
+        const double left_value = esf_sum[previous] / esf_count[previous];
+        const double right_value = esf_sum[bin] / esf_count[bin];
+        for (int fill = previous; fill <= bin; fill++)
+          {
+            const double fraction
+                = (double)(fill - previous) / (bin - previous);
+            (*esf)[fill]
+                = left_value + fraction * (right_value - left_value);
+          }
+        previous = bin;
+      }
+  const double last_value = esf_sum[previous] / esf_count[previous];
+  for (int bin = previous; bin < num_bins; bin++)
+    (*esf)[bin] = last_value;
+  return true;
+}
+
+/* Compute the corrected normalized MTF from ESF.  PEAK_IDX is the qualified
+   full-ROI LSF peak used to center finite-support windows, PARAMS specifies
+   the window, OVERSAMPLING is the ESF sampling rate and N is the zero-padded
+   FFT size.  Store samples from DC through sensor Nyquist in RESULT and
+   return false if normalization or a corrected value is non-finite.  */
+static bool
+compute_mtf_curve (const std::vector<double> &esf, int peak_idx,
+                   int support_half_bins,
+                   const slanted_edge_parameters &params, int oversampling,
+                   int N, std::vector<double> *result)
+{
+  const int num_bins = (int)esf.size ();
+  if (num_bins < 2 || peak_idx < 0 || peak_idx >= num_bins || N < num_bins)
+    return false;
+
+  std::vector<double> lsf (num_bins, 0);
+  lsf[0] = esf[1] - esf[0];
+  for (int bin = 1; bin < num_bins - 1; bin++)
+    lsf[bin] = (esf[bin + 1] - esf[bin - 1]) / 2.0;
+  lsf[num_bins - 1] = esf[num_bins - 1] - esf[num_bins - 2];
+
+  std::vector<double, fft_allocator<double>> in_vec (N, 0.0);
+  for (int bin = 0; bin < num_bins; bin++)
+    {
+      const int offset = bin - peak_idx;
+      double weight = 0;
+      if (support_half_bins)
+        {
+          if (std::abs (offset) > support_half_bins)
+            continue;
+          const double cosine
+              = std::cos (M_PI * offset / support_half_bins);
+          if (params.window == slanted_edge_parameters::window_hann)
+            weight = 0.5 * (1.0 + cosine);
+          else if (params.window == slanted_edge_parameters::window_hamming)
+            weight = 0.54 + 0.46 * cosine;
+          else
+            weight = 1;
+        }
+      else
+        {
+          /* Preserve the historical full-ROI window placement.  */
+          const int window_index = offset + num_bins / 2;
+          if (window_index < 0 || window_index >= num_bins)
+            continue;
+          if (params.window == slanted_edge_parameters::window_hann)
+            weight = 0.5
+                     * (1.0
+                        - std::cos (2.0 * M_PI * window_index
+                                    / (num_bins - 1)));
+          else if (params.window == slanted_edge_parameters::window_hamming)
+            weight = 0.54
+                     - 0.46
+                           * std::cos (2.0 * M_PI * window_index
+                                       / (num_bins - 1));
+          else
+            weight = 1;
+        }
+      in_vec[bin] = lsf[bin] * weight;
+    }
+
+  auto out = fft_alloc_complex<double> (N / 2 + 1);
+  fft_plan<double> plan
+      = fft_plan_r2c_1d<double> (N, in_vec.data (), out.get ());
+  plan.execute_r2c (in_vec.data (), out.get ());
+
+  const double mtf_zero
+      = std::hypot (out.get ()[0][0], out.get ()[0][1]);
+  if (!my_isfinite (mtf_zero) || mtf_zero < 1.0e-9)
+    return false;
+
+  const int last_index
+      = std::min (N / 2, (int)std::floor (0.5 * N / oversampling));
+  result->resize (last_index + 1);
+  for (int index = 0; index <= last_index; index++)
+    {
+      const double re = out.get ()[index][0];
+      const double im = out.get ()[index][1];
+      double value = std::hypot (re, im) / mtf_zero;
+      if (index)
+        {
+          const double frequency = (double)index * oversampling / N;
+          const double bin_argument = M_PI * frequency / oversampling;
+          const double derivative_argument
+              = 2.0 * M_PI * frequency / oversampling;
+          value *= inverse_sinc (bin_argument)
+                   * inverse_sinc (derivative_argument);
+        }
+      if (!my_isfinite (value) || value < 0)
+        return false;
+      (*result)[index] = value;
+    }
+  return true;
 }
 
 /* Format FORMAT and its following printf-style arguments into a string.  */
@@ -851,38 +991,13 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img,
       return res;
     }
 
-  std::vector<double> esf (num_bins, 0);
-  int first_valid = 0;
-  while (first_valid < num_bins && !esf_count[first_valid])
-    first_valid++;
-  if (first_valid == num_bins)
+  std::vector<double> esf;
+  if (!interpolate_esf (esf_sum, esf_count, &esf))
     {
       set_failure (&res, slanted_edge_failure_invalid_numerics, progress,
                    "ESF contains no measured samples");
       return res;
     }
-
-  double first_value = esf_sum[first_valid] / esf_count[first_valid];
-  for (int bin = 0; bin <= first_valid; bin++)
-    esf[bin] = first_value;
-
-  int previous = first_valid;
-  for (int bin = first_valid + 1; bin < num_bins; bin++)
-    if (esf_count[bin])
-      {
-        double left_value = esf_sum[previous] / esf_count[previous];
-        double right_value = esf_sum[bin] / esf_count[bin];
-        for (int fill = previous; fill <= bin; fill++)
-          {
-            double fraction = (double)(fill - previous) / (bin - previous);
-            esf[fill]
-                = left_value + fraction * (right_value - left_value);
-          }
-        previous = bin;
-      }
-  double last_value = esf_sum[previous] / esf_count[previous];
-  for (int bin = previous; bin < num_bins; bin++)
-    esf[bin] = last_value;
 
   /* Estimate plateau noise directly from pixels well away from the fitted
      transition.  Limit the vectors to a deterministic sample so a mistakenly
@@ -972,14 +1087,30 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img,
   qualified_lsf[num_bins - 1]
       = qualified_esf[num_bins - 1] - qualified_esf[num_bins - 2];
 
-  int peak_idx = 0;
+  /* The geometric line fit already locates the intended edge at signed
+     distance zero.  Search the validation LSF only in a small neighborhood
+     of that position.  A distant dust mark, illumination boundary, or noisy
+     ROI endpoint must not replace the fitted edge merely because its local
+     derivative happens to be larger.  PEAK_IDX is subsequently used only to
+     center the LSF window and to measure how much derivative energy belongs
+     to this transition.  */
+  const int expected_peak_idx
+      = (int)std::llround (-min_d * oversampling);
+  const int peak_search_radius
+      = std::max (1, (int)std::ceil (max_lsf_peak_offset * oversampling));
+  const int peak_search_begin
+      = std::max (0, expected_peak_idx - peak_search_radius);
+  const int peak_search_end
+      = std::min (num_bins - 1, expected_peak_idx + peak_search_radius);
+  int peak_idx = std::clamp (expected_peak_idx, 0, num_bins - 1);
   double peak_magnitude = 0;
   double total_lsf_energy = 0;
   for (int bin = 0; bin < num_bins; bin++)
     {
       double magnitude = std::abs (qualified_lsf[bin]);
       total_lsf_energy += magnitude;
-      if (magnitude > peak_magnitude)
+      if (bin >= peak_search_begin && bin <= peak_search_end
+          && magnitude > peak_magnitude)
         {
           peak_magnitude = magnitude;
           peak_idx = bin;
@@ -1042,23 +1173,6 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img,
     }
   N <<= 1;
 
-  std::vector<double> lsf (num_bins, 0);
-  lsf[0] = esf[1] - esf[0];
-  for (int bin = 1; bin < num_bins - 1; bin++)
-    lsf[bin] = (esf[bin + 1] - esf[bin - 1]) / 2.0;
-  lsf[num_bins - 1] = esf[num_bins - 1] - esf[num_bins - 2];
-
-  double max_lsf = 0;
-  for (double value : lsf)
-    max_lsf = std::max (max_lsf, std::abs (value));
-  if (!my_isfinite (max_lsf) || max_lsf <= 1.0e-12)
-    {
-      set_failure (&res, slanted_edge_failure_invalid_numerics, progress,
-                   "line-spread function is zero or non-finite");
-      return res;
-    }
-
-  std::vector<double, fft_allocator<double>> in_vec (N, 0.0);
   int support_half_bins = 0;
   if (params.lsf_half_width > 0)
     {
@@ -1078,47 +1192,6 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img,
         }
     }
 
-  for (int bin = 0; bin < num_bins; bin++)
-    {
-      int offset = bin - peak_idx;
-      double weight = 0;
-      if (support_half_bins)
-        {
-          if (std::abs (offset) > support_half_bins)
-            continue;
-          double cosine
-              = std::cos (M_PI * offset / support_half_bins);
-          if (params.window == slanted_edge_parameters::window_hann)
-            weight = 0.5 * (1.0 + cosine);
-          else if (params.window == slanted_edge_parameters::window_hamming)
-            weight = 0.54 + 0.46 * cosine;
-          else
-            weight = 1;
-        }
-      else
-        {
-          /* Preserve the historical full-ROI window placement.  The
-             finite-support path is symmetric around the qualified LSF peak,
-             while this compatibility path uses NUM_BINS as its window length.  */
-          int window_index = offset + num_bins / 2;
-          if (window_index < 0 || window_index >= num_bins)
-            continue;
-          if (params.window == slanted_edge_parameters::window_hann)
-            weight = 0.5
-                     * (1.0
-                        - std::cos (2.0 * M_PI * window_index
-                                    / (num_bins - 1)));
-          else if (params.window == slanted_edge_parameters::window_hamming)
-            weight = 0.54
-                     - 0.46
-                           * std::cos (2.0 * M_PI * window_index
-                                       / (num_bins - 1));
-          else
-            weight = 1;
-        }
-      in_vec[bin] = lsf[bin] * weight;
-    }
-
   if (progress)
     fprintf (stderr,
              "Slanted-edge: num_bins=%d, oversampling=%d, FFT=%d, LSF support "
@@ -1132,28 +1205,114 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img,
                        ? "Hamming"
                        : "rectangular");
 
-  auto out = fft_alloc_complex<double> (N / 2 + 1);
-  fft_plan<double> plan
-      = fft_plan_r2c_1d<double> (N, in_vec.data (), out.get ());
-  plan.execute_r2c (in_vec.data (), out.get ());
-
-  std::vector<double> mtf (N / 2 + 1);
-  for (int index = 0; index <= N / 2; index++)
-    {
-      double re = out.get ()[index][0];
-      double im = out.get ()[index][1];
-      mtf[index] = std::hypot (re, im);
-    }
-
-  double mtf_zero = mtf[0];
-  if (!my_isfinite (mtf_zero) || mtf_zero < 1.0e-9)
+  std::vector<double> mtf;
+  if (!compute_mtf_curve (esf, peak_idx, support_half_bins, params,
+                          oversampling, N, &mtf))
     {
       set_failure (&res, slanted_edge_failure_invalid_numerics, progress,
-                   "zero-frequency MTF normalization is invalid");
+                   "MTF normalization or correction is invalid");
       return res;
     }
-  for (double &value : mtf)
-    value /= mtf_zero;
+
+  /* Estimate frequency-dependent random uncertainty by recomputing the MTF
+     from four interleaved groups of scan lines.  The edge geometry, window
+     and FFT grid remain fixed, so the scatter measures image noise and
+     sensitivity to subpixel phase coverage rather than changing the reported
+     MTF estimator.  Each group contains about one quarter of the samples;
+     divide the between-group standard deviation by sqrt(4) to estimate the
+     standard error of the full-ROI curve.  Small ROIs keep uncertainty zero,
+     which deliberately requests the historical uniform fit.  */
+  constexpr int uncertainty_subsets = 4;
+  std::vector<std::vector<double>> subset_mtfs;
+  const int uncertainty_line_count = edge.vertical ? roi.height : roi.width;
+  if (uncertainty_line_count >= 32)
+    for (int subset = 0; subset < uncertainty_subsets; subset++)
+      {
+        std::vector<double> subset_sum (num_bins, 0);
+        std::vector<int> subset_count (num_bins, 0);
+        for (int y = 0; y < roi.height; y++)
+          for (int x = 0; x < roi.width; x++)
+            {
+              const int line = edge.vertical ? y : x;
+              if (line % uncertainty_subsets != subset)
+                continue;
+              const double d = distance (x, y);
+              const int bin
+                  = (int)std::llround ((d - min_d) * oversampling);
+              if (bin >= 0 && bin < num_bins)
+                {
+                  subset_sum[bin]
+                      += pixels[(size_t)y * roi.width + x];
+                  subset_count[bin]++;
+                }
+            }
+
+        int occupied_subset_bins = 0;
+        std::vector<bool> subset_phases (oversampling, false);
+        for (int bin = 0; bin < num_bins; bin++)
+          if (subset_count[bin])
+            {
+              occupied_subset_bins++;
+              subset_phases[bin % oversampling] = true;
+            }
+        const int subset_phase_count
+            = std::count (subset_phases.begin (), subset_phases.end (), true);
+        if (subset_phase_count < 2
+            || occupied_subset_bins < std::max (4, num_bins / 10))
+          continue;
+
+        std::vector<double> subset_esf;
+        std::vector<double> subset_mtf;
+        if (interpolate_esf (subset_sum, subset_count, &subset_esf)
+            && compute_mtf_curve (subset_esf, peak_idx, support_half_bins,
+                                  params, oversampling, N, &subset_mtf)
+            && subset_mtf.size () == mtf.size ())
+          subset_mtfs.push_back (std::move (subset_mtf));
+      }
+
+  std::vector<double> mtf_uncertainty (mtf.size (), 0);
+  if (subset_mtfs.size () >= 3)
+    {
+      for (size_t i = 0; i < mtf.size (); i++)
+        {
+          long double mean = 0;
+          for (const std::vector<double> &curve : subset_mtfs)
+            mean += curve[i];
+          mean /= subset_mtfs.size ();
+          long double sum_squared = 0;
+          for (const std::vector<double> &curve : subset_mtfs)
+            {
+              const long double delta = curve[i] - mean;
+              sum_squared += delta * delta;
+            }
+          const long double subset_variance
+              = sum_squared / (subset_mtfs.size () - 1);
+          mtf_uncertainty[i]
+              = my_sqrt ((double)(subset_variance / subset_mtfs.size ()));
+        }
+
+      /* Adjacent zero-padded FFT bins are strongly correlated.  Smooth the
+         noisy four-way variance estimate over +/-0.01 cycles/pixel using an
+         RMS average; this changes only fit weights, never the measured MTF.  */
+      const int smoothing_radius
+          = std::max (1, (int)std::ceil (0.01 * N / oversampling));
+      std::vector<double> smoothed (mtf_uncertainty.size (), 0);
+      for (size_t i = 0; i < mtf_uncertainty.size (); i++)
+        {
+          const int first
+              = std::max (0, (int)i - smoothing_radius);
+          const int last
+              = std::min ((int)mtf_uncertainty.size () - 1,
+                          (int)i + smoothing_radius);
+          long double sum_squared = 0;
+          for (int j = first; j <= last; j++)
+            sum_squared += (long double)mtf_uncertainty[j]
+                           * mtf_uncertainty[j];
+          smoothed[i]
+              = my_sqrt ((double)(sum_squared / (last - first + 1)));
+        }
+      mtf_uncertainty.swap (smoothed);
+    }
 
   mtf_measurement measurement;
   measurement.name
@@ -1162,33 +1321,29 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img,
   measurement.wavelength = params.wavelength;
   measurement.same_capture = params.same_capture;
 
-  double sample_rate = oversampling;
   double largest_mtf = 0;
-  for (int index = 0; index <= N / 2; index++)
+  for (size_t index = 0; index < mtf.size (); index++)
     {
-      double frequency = index * sample_rate / N;
-      if (frequency > 0.5)
-        break;
+      const double frequency = (double)index * oversampling / N;
+      const double mtf_value = mtf[index];
+      if (index)
+        largest_mtf = std::max (largest_mtf, mtf_value);
+      measurement.add_value (frequency, mtf_value * 100.0,
+                             mtf_uncertainty[index] * 100.0);
+    }
 
-      double mtf_value = mtf[index];
-      if (frequency > 0)
-        {
-          double bin_argument = M_PI * frequency / sample_rate;
-          double derivative_argument
-              = 2.0 * M_PI * frequency / sample_rate;
-          mtf_value
-              *= inverse_sinc (bin_argument)
-                 * inverse_sinc (derivative_argument);
-          largest_mtf = std::max (largest_mtf, mtf_value);
-        }
-
-      if (!my_isfinite (mtf_value) || mtf_value < 0)
-        {
-          set_failure (&res, slanted_edge_failure_invalid_numerics, progress,
-                       "corrected MTF contains an invalid value");
-          return res;
-        }
-      measurement.add_value (frequency, mtf_value * 100.0);
+  if (progress && subset_mtfs.size () >= 3)
+    {
+      std::vector<double> positive_uncertainties;
+      for (double uncertainty : mtf_uncertainty)
+        if (uncertainty > 0 && my_isfinite (uncertainty))
+          positive_uncertainties.push_back (uncertainty * 100.0);
+      if (!positive_uncertainties.empty ())
+        fprintf (stderr,
+                 "Slanted-edge: uncertainty estimated from %zu interleaved "
+                 "subsets, median 1-sigma %.3f percentage points\n",
+                 subset_mtfs.size (),
+                 median_value (std::move (positive_uncertainties)));
     }
 
   if (largest_mtf > max_normalized_mtf)

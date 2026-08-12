@@ -1785,10 +1785,11 @@ screen::get_image (bool normalize, int tiles) const
   return img;
 }
 
-/* Initialize current screen by applying sharpening parameters SHARPEN
-   to SCR.  If ANTICIPATE_SHARPENING is true, the sharpening is applied.
-   If PARALLEL is true, use OpenMP.  */
-void
+/* Initialize current screen by applying sharpening parameters SHARPEN to SCR.
+   If ANTICIPATE_SHARPENING is true, apply the digital sharpening as well.
+   PARALLEL permits OpenMP.  Return false when transfer/PSF construction
+   fails; in that case THIS is unspecified and the caller must discard it.  */
+bool
 screen::initialize_with_sharpen_parameters (screen &scr,
 					    sharpen_parameters *sharpen[3],
 					    bool anticipate_sharpening, bool parallel)
@@ -1816,14 +1817,14 @@ screen::initialize_with_sharpen_parameters (screen &scr,
           screen_fft_t k_const = snr > 0 ? 1.0f / snr : 0;
 	  std::shared_ptr<mtf> cur_mtf = mtf::get_mtf (sharpen[c]->scanner_mtf, NULL);
 	  if (!cur_mtf->precompute (NULL, parallel))
-	    return;
+	    return false;
 	  int this_psf_size = cur_mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
 	  //printf ("screen step %f %f psf size %i\n", step, screen::size * step, this_psf_size);
 	  /* PSF may revisit this_psf_size.  */
 	  if (this_psf_size > screen::size)
 	    {
 	      if (!cur_mtf->precompute_psf (NULL, parallel))
-		return;
+		return false;
 	      this_psf_size = cur_mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
 	    }
 
@@ -1851,6 +1852,8 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		      }
 		  }
 	      /* Normalize so DC is exactly 1.0 (before data_scale).  */
+	      if (!my_isfinite (fft[0][0]) || my_fabs (fft[0][0]) < 1.0e-30)
+		return false;
 	      screen_fft_t sc = data_scale / fft[0][0];
 	      if (sc != 1)
 		for (int x = 0; x < fft_size * screen::size; x++)
@@ -1923,6 +1926,8 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 	      double sum = 0;
 	      for (int x = 0; x < screen::size * screen::size; x++)
 		  sum += wrapped_psf [x];
+	      if (!my_isfinite (sum) || sum <= 0)
+		return false;
 	      double sum_inv = 1 / sum;
 	      for (int x = 0; x < screen::size * screen::size; x++)
 		wrapped_psf [x] *= sum_inv;
@@ -1937,7 +1942,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		  const char *error;
 		  tiff_writer out (p, &error);
 		  if (error)
-		    return;
+		    return false;
 		  screen_fft_t max = 0;
 		  for (int x = 0; x < screen::size * screen::size; x++)
 		    max = std::max (max, wrapped_psf[x]);
@@ -1951,7 +1956,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 			  out.put_pixel (x, i, i, i);
 			}
 		      if (!out.write_row ())
-			return;
+			return false;
 		    }
 		}
 	      auto plan_2d = fft_plan_r2c_2d<screen_fft_t> (screen::size, screen::size, NULL /* Do not overwrite */, fft.get ());
@@ -1969,6 +1974,8 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		}
 	    }
 	  /* Normalize so DC is exactly 1.0 (before data_scale).  */
+	  if (!my_isfinite (fft[0][0]) || my_fabs (fft[0][0]) < 1.0e-30)
+	    return false;
 	  screen_fft_t sc = data_scale / fft[0][0];
 	  if (sc != 1)
 	    for (int x = 0; x < fft_size * screen::size; x++)
@@ -1989,6 +1996,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
   scr.patch_proportions ().print (stdout);
   printf ("\n");
 #endif
+  return true;
 }
 void
 screen::initialize_with_point_spread (

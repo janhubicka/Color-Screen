@@ -251,7 +251,7 @@ public:
               bool legacy_channel_wavelengths)
       : m_measurements (measured), m_params (params), m_options (options),
         m_progress (progress), be_verbose (verbose), start_vec (),
-        start (nullptr), diffraction (false),
+        fit_weights (), start (nullptr), diffraction (false),
         m_legacy_channel_wavelengths (legacy_channel_wavelengths), nvalues (0),
         n_observations (0), sigma_index (-1), fill_factor_index (-1),
         wavelength_index (), channel_wavelength_index (), blur_index (),
@@ -403,12 +403,66 @@ public:
           }
       }
 
+    fit_weights.resize (m_measurements.size ());
     for (size_t measurement = 0; measurement < m_measurements.size ();
          measurement++)
-      if (m_options.include_measurement_p (measurement))
-        for (size_t i = 0; i < m_measurements[measurement].size (); i++)
-          if (m_measurements[measurement].get_freq (i) <= 0.5)
-            n_observations++;
+      {
+        const mtf_measurement &curve = m_measurements[measurement];
+        fit_weights[measurement].assign (curve.size (), 1.0);
+        if (!m_options.include_measurement_p (measurement))
+          continue;
+
+        std::vector<double> uncertainties;
+        for (size_t i = 0; i < curve.size (); i++)
+          if (curve.get_freq (i) <= 0.5)
+            {
+              n_observations++;
+              const double uncertainty = curve.get_uncertainty (i);
+              if (my_isfinite (uncertainty) && uncertainty > 0)
+                uncertainties.push_back (uncertainty);
+            }
+
+        /* New slanted-edge curves can carry a one-sigma uncertainty for each
+           MTF sample.  Use it only when enough samples define a stable scale.
+           A 0.25 percentage-point systematic floor prevents DC and accidental
+           low-variance bins from dominating the physical fit.  Normalize the
+           RMS weight to one so weighting only redistributes influence within a
+           curve and does not change that curve's overall importance.  */
+        if (uncertainties.size () >= 3)
+          {
+            const size_t middle = uncertainties.size () / 2;
+            std::nth_element (uncertainties.begin (),
+                              uncertainties.begin () + middle,
+                              uncertainties.end ());
+            const double median_uncertainty = uncertainties[middle];
+            const double uncertainty_floor
+                = std::max (0.25, 0.25 * median_uncertainty);
+            long double sum_weights_squared = 0;
+            int weighted_points = 0;
+            for (size_t i = 0; i < curve.size (); i++)
+              if (curve.get_freq (i) <= 0.5)
+                {
+                  double uncertainty = curve.get_uncertainty (i);
+                  if (!(my_isfinite (uncertainty) && uncertainty > 0))
+                    uncertainty = median_uncertainty;
+                  const double weight
+                      = 1.0 / std::max (uncertainty, uncertainty_floor);
+                  fit_weights[measurement][i] = weight;
+                  sum_weights_squared
+                      += (long double)weight * (long double)weight;
+                  weighted_points++;
+                }
+            if (sum_weights_squared > 0 && weighted_points)
+              {
+                const double normalization
+                    = my_sqrt ((double)((long double)weighted_points
+                                        / sum_weights_squared));
+                for (size_t i = 0; i < curve.size (); i++)
+                  if (curve.get_freq (i) <= 0.5)
+                    fit_weights[measurement][i] *= normalization;
+              }
+          }
+      }
 
     start = start_vec.data ();
     sums.assign (m_measurements.size (), 0.0);
@@ -683,12 +737,13 @@ public:
 	       model, not the measurement, supplies the sign after a phase reversal.  */
 	    const double predicted_otf = p.system_otf (freq);
 	    double contrast2 = my_fabs (predicted_otf) * 100;
-	    double residual = contrast - contrast2;
-	    msum += residual * residual;
+	    const double residual = contrast - contrast2;
+	    const double weighted_residual = residual * fit_weights[m][i];
+	    msum += weighted_residual * weighted_residual;
 	    if (f_vec)
-	      { 
+	      {
 		assert (out_idx < n_observations);
-		f_vec[out_idx++] = residual;
+		f_vec[out_idx++] = weighted_residual;
 	      }
 #if 0
 	    if (be_verbose)
@@ -744,6 +799,9 @@ public:
   progress_info *m_progress;
   bool be_verbose;
   std::vector<double> start_vec;
+  /* Per-sample normalized inverse-uncertainty weights.  Curves without
+     uncertainty estimates contain unit weights.  */
+  std::vector<std::vector<double>> fit_weights;
   std::vector<double> sums;
   double *start;
   bool diffraction;

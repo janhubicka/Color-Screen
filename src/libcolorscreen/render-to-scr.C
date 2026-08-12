@@ -4,6 +4,7 @@
 
 #include <cassert>
 #include "render-to-scr.h"
+#include <atomic>
 #include "screen.h"
 #include "lru-cache.h"
 #include "finetune-int.h"
@@ -75,7 +76,9 @@ get_new_screen (struct screen_params &p, progress_info *progress)
 	 we should scale exactly by it.  */
       sharpen_parameters *vv[3] = {&p.sharpen, &p.sharpen, &p.sharpen};
       blurred->empty ();
-      blurred->initialize_with_sharpen_parameters (*s, vv, p.anticipate_sharpening);
+      if (!blurred->initialize_with_sharpen_parameters (
+              *s, vv, p.anticipate_sharpening))
+        return nullptr;
     }
   else
     blurred->initialize_with_blur (*s, p.sharpen.usm_radius);
@@ -113,10 +116,8 @@ get_new_screen_table (struct screen_table_params &p, progress_info *progress)
 {
   auto s = std::make_unique<screen_table> (p.param, p.type, p.red_strip_width,
                                        p.green_strip_width, p.sharpen, progress);
-  if (progress && progress->cancelled ())
-    {
-      return nullptr;
-    }
+  if (!s->valid_p () || (progress && progress->cancelled ()))
+    return nullptr;
   return s;
 }
 
@@ -186,19 +187,23 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
               ? screen_sampling::integrate_pixel
               : screen_sampling_for_capture_transfer (
                     sharpen, sharpen.scanner_mtf_scale != 0)),
-      m_screen_table (m_width * m_height)
+      m_valid (true), m_screen_table (m_width * m_height)
 {
   screen s;
   s.initialize (type, red_strip_width, green_strip_width);
   if (progress)
     progress->set_task ("computing screen table", m_width * m_height);
-#pragma omp parallel for default(none) shared(progress,sharpen) collapse(2)           \
+  std::atomic<bool> failed (false);
+#pragma omp parallel for default(none) shared(progress,sharpen,failed) collapse(2)    \
     shared(param, s)
   for (int y = 0; y < m_height; y++)
     for (int x = 0; x < m_width; x++)
       {
         if (progress && progress->cancel_requested ())
-          continue;
+          {
+            failed.store (true, std::memory_order_relaxed);
+            continue;
+          }
 	switch (param->get_mode ())
 	  {
 	  case scanner_blur_correction_parameters::blur_radius:
@@ -210,7 +215,9 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
 	      sharpen_parameters sp = sharpen;
 	      sp.scanner_mtf.defocus = param->get_correction (x, y);
 	      sharpen_parameters *vv[3] = {&sp, &sp, &sp};
-	      m_screen_table[y * m_width + x].initialize_with_sharpen_parameters (s, vv, false);
+	      if (!m_screen_table[y * m_width + x]
+                       .initialize_with_sharpen_parameters (s, vv, false))
+                failed.store (true, std::memory_order_relaxed);
 	      break;
 	    }
 	  case scanner_blur_correction_parameters::mtf_blur_diameter:
@@ -218,7 +225,9 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
 	      sharpen_parameters sp = sharpen;
 	      sp.scanner_mtf.blur_diameter = param->get_correction (x, y);
 	      sharpen_parameters *vv[3] = {&sp, &sp, &sp};
-	      m_screen_table[y * m_width + x].initialize_with_sharpen_parameters (s, vv, false);
+	      if (!m_screen_table[y * m_width + x]
+                       .initialize_with_sharpen_parameters (s, vv, false))
+                failed.store (true, std::memory_order_relaxed);
 	      break;
 	    }
 	  case scanner_blur_correction_parameters::max_correction:
@@ -227,6 +236,7 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
         if (progress)
           progress->inc_progress ();
       }
+  m_valid = !failed.load (std::memory_order_relaxed);
 }
 
 /* Initialize saturation loss table for SCREEN_TABLE, COLLECTION_SCREEN, IMG_WIDTH, IMG_HEIGHT, MAP, COLLECTION_THRESHOLD and SHARPEN.

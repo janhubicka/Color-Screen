@@ -260,10 +260,20 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
               return false;
             for (size_t i = 0; i < measurement.size (); i++)
               {
-                if (fprintf (f, "scanner_mtf_point: %.17g %.17g\n",
-                             measurement.get_freq (i),
-                             measurement.get_contrast (i))
-                    < 0)
+                const double uncertainty = measurement.get_uncertainty (i);
+                if (uncertainty > 0)
+                  {
+                    if (fprintf (f,
+                                 "scanner_mtf_point: %.17g %.17g %.17g\n",
+                                 measurement.get_freq (i),
+                                 measurement.get_contrast (i), uncertainty)
+                        < 0)
+                      return false;
+                  }
+                else if (fprintf (f, "scanner_mtf_point: %.17g %.17g\n",
+                                  measurement.get_freq (i),
+                                  measurement.get_contrast (i))
+                         < 0)
                   return false;
               }
           }
@@ -1884,6 +1894,8 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
         {
           double freq;
           double contrast;
+          double uncertainty = 0;
+          char line[256];
           if (measurement == -1)
             {
               if (rparam)
@@ -1894,13 +1906,28 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
                 }
               measurement = 0;
             }
-          if (!read_double (f, &freq) || !read_double (f, &contrast))
+          /* Older project files contain two values.  New slanted-edge
+             measurements optionally append a one-sigma uncertainty in
+             percentage points.  Parse the complete line so both forms remain
+             accepted without letting a missing third value consume the next
+             keyword.  */
+          if (!fgets (line, sizeof (line), f))
             {
               *error = "error parsing scanner_mtf_point";
               return false;
             }
-          if (!my_isfinite (freq) || !my_isfinite (contrast) || freq < 0
-              || contrast < 0
+          int values = sscanf (line, "%lf %lf %lf", &freq, &contrast,
+                               &uncertainty);
+          if (values < 2)
+            {
+              *error = "error parsing scanner_mtf_point";
+              return false;
+            }
+          if (values == 2)
+            uncertainty = 0;
+          if (!my_isfinite (freq) || !my_isfinite (contrast)
+              || !my_isfinite (uncertainty) || freq < 0 || contrast < 0
+              || uncertainty < 0
               || (rparam
                   && rparam->sharpen.scanner_mtf.measurements[measurement]
                          .size ()
@@ -1917,7 +1944,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
             }
           if (rparam)
             rparam->sharpen.scanner_mtf.measurements[measurement].add_value (
-                freq, contrast);
+                freq, contrast, uncertainty);
         }
       else if (!strcmp (buf, "scanner_use_mtf_measurement"))
         {
