@@ -51,10 +51,19 @@ public:
   {
     return m_height;
   }
+
+  /* Return the operation needed to convert these periodic screens to capture
+     pixels without applying the sensor aperture twice.  */
+  pure_attr screen_sampling get_sampling () const
+  {
+    return m_sampling;
+  }
 private:
   /* Unique id of the image (used for caching).  */
   uint64_t m_id;
   int m_width, m_height;
+  /* Pixel-sampling policy common to every screen in M_SCREEN_TABLE.  */
+  screen_sampling m_sampling;
   std::vector <screen> m_screen_table;
 };
 
@@ -230,16 +239,19 @@ public:
                                            coord_t h) const;
 
 
-  /* Return screen of type T in PREVIEW mode.  Sharpen it according to SHARPEN parameters
-     if ANTICIPATE_SHARPENING is true.  RED_STRIP_WIDTH and DUFAY_GREEN_STRIP_HEIGHT specify
-     strip widths.  Update PROGRESS and return screen unique ID.  */
+  /* Return screen of type T in PREVIEW mode.  Sharpen it according to SHARPEN
+     if ANTICIPATE_SHARPENING is true.  RED_STRIP_WIDTH and
+     DUFAY_GREEN_STRIP_HEIGHT specify strip widths.  Update PROGRESS, return
+     the screen identifier in ID, and return the required finite-image
+     sampling operation in SAMPLING when those pointers are non-null.  */
   static std::shared_ptr<screen> get_screen (enum scr_type t, bool preview,
 			     bool anticipate_sharpening,
     			     const sharpen_parameters &sharpen,
                              coord_t red_strip_width,
                              coord_t dufay_green_strip_height,
                              progress_info *progress = NULL,
-                             uint64_t *id = NULL);
+                             uint64_t *id = NULL,
+                             screen_sampling *sampling = NULL);
 
   /* Release screen S.  */
   static void release_screen (screen *s);
@@ -488,30 +500,52 @@ render_to_scr::get_simulated_screen_pixel (point_t p) const noexcept
 }
 
 /* Determine capture pixel (X, Y) in periodic screen filter SCR using MAP.
-   Integrate a five-by-five approximation of the capture-pixel footprint and
-   optionally return the center screen coordinate in RETP.
+   Integrate the complete capture-pixel footprint with a separable five-point
+   Gauss--Legendre rule and optionally return the center screen coordinate in
+   RETP.  SCR must not already contain sensor-aperture attenuation.
 
-   FIXME(SIM-001): callers must eventually select this integration explicitly.
-   It is correct only when SCR does not already contain sensor-aperture loss.
-   Measured MTF data and the physical MTF with SENSOR_FILL_FACTOR enabled
-   already contain that loss.  See doc/screen-simulation-pipeline.md.  */
+   MAP is treated as locally affine over one capture pixel.  This requires only
+   three coordinate transforms while retaining the existing support for mesh
+   and lens mappings.  The 25 transmission lookups dominate this fallback
+   path; MTFs which already contain the aperture use NOANTIALIAS_SCREEN.  */
 inline rgbdata
 antialias_screen (const screen &scr, const scr_to_img &map,
 		  int x, int y, point_t *retp = NULL) noexcept
 {
+  /* Nodes and weights of the five-point Gauss--Legendre rule transformed from
+     [-1,1] to the full pixel interval [-0.5,0.5].  The weights sum to one.  */
+  static constexpr coord_t nodes[5]
+      = { (coord_t)-0.4530899229693319964,
+          (coord_t)-0.2692346550528415455,
+          (coord_t)0,
+          (coord_t)0.2692346550528415455,
+          (coord_t)0.4530899229693319964 };
+  static constexpr double weights[5]
+      = { 0.1184634425280945438, 0.2393143352496832340,
+          0.2844444444444444444, 0.2393143352496832340,
+          0.1184634425280945438 };
+
   point_t p = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
   point_t px = map.to_scr ({ x + (coord_t)1.5, y + (coord_t)0.5 });
   point_t py = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)1.5 });
-  rgbdata am = { (luminosity_t)0.0, (luminosity_t)0.0, (luminosity_t)0.0 };
-  point_t pdx = (px - p) * ((coord_t)1.0 / (coord_t)6.0);
-  point_t pdy = (py - p) * ((coord_t)1.0 / (coord_t)6.0);
+  point_t pdx = px - p;
+  point_t pdy = py - p;
   if (retp)
     *retp = p;
 
-  for (int yy = -2; yy <= 2; yy++)
-    for (int xx = -2; xx <= 2; xx++)
-      am += scr.interpolated_mult (p + pdx * (coord_t)xx + pdy * (coord_t)yy);
-  return am * ((coord_t)1.0 / (coord_t)25);
+  double_rgbdata sum;
+  for (int yy = 0; yy < 5; yy++)
+    for (int xx = 0; xx < 5; xx++)
+      {
+        const double weight = weights[xx] * weights[yy];
+        const rgbdata value = scr.interpolated_mult (
+            p + pdx * nodes[xx] + pdy * nodes[yy]);
+        sum.red += (double)value.red * weight;
+        sum.green += (double)value.green * weight;
+        sum.blue += (double)value.blue * weight;
+      }
+  return { (luminosity_t)sum.red, (luminosity_t)sum.green,
+           (luminosity_t)sum.blue };
 }
 
 /* Determine image pixel X,Y in screen filter SCR using MAP.

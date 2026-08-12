@@ -40,6 +40,19 @@ struct screen_params
   }
 };
 
+/* Return true when GET_NEW_SCREEN applies the selected capture MTF to a
+   periodic screen described by SHARPEN.  USM_RADIUS is also the historical
+   switch saying that the screen needs blur; when SCANNER_MTF_SCALE is nonzero,
+   the MTF rather than the legacy Gaussian performs that blur.  Preserve the
+   exact historical dispatch condition here.  */
+static pure_attr bool
+screen_uses_capture_mtf_p (const sharpen_parameters &sharpen)
+{
+  return sharpen.scanner_mtf_scale != 0
+         && (sharpen.get_mode () != sharpen_parameters::none
+             || sharpen.usm_radius != 0);
+}
+
 /* Return new screen for parameters P.  Update PROGRESS.  */
 std::unique_ptr<screen>
 get_new_screen (struct screen_params &p, progress_info *progress)
@@ -167,7 +180,13 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
 			    const sharpen_parameters &sharpen,
                             progress_info *progress)
     : m_id (lru_caches::get ()), m_width (param->get_width ()),
-      m_height (param->get_height ()), m_screen_table (m_width * m_height)
+      m_height (param->get_height ()),
+      m_sampling (
+          param->get_mode () == scanner_blur_correction_parameters::blur_radius
+              ? screen_sampling::integrate_pixel
+              : screen_sampling_for_capture_transfer (
+                    sharpen, sharpen.scanner_mtf_scale != 0)),
+      m_screen_table (m_width * m_height)
 {
   screen s;
   s.initialize (type, red_strip_width, green_strip_width);
@@ -243,7 +262,8 @@ saturation_loss_table::saturation_loss_table (
 		/* TODO: No support for adaptive sharpening/blurring of simulated
 		   screens yet.  */
                 *collection_screen, NULL,
-	       	collection_threshold, sharpen, *map,
+                screen_table->get_sampling (), collection_threshold, sharpen,
+                *map,
 		{xp - 100, yp - 100, 200, 200}))
           {
             color_matrix sat (cred.red, cgreen.red, cblue.red, (luminosity_t)0.0,
@@ -294,17 +314,23 @@ render_to_scr::precompute_img_range (bool grayscale_needed, bool normalized_patc
   return render_to_scr::precompute_all (grayscale_needed, normalized_patches, progress);
 }
 
-/* Return screen of type T in PREVIEW mode.  Sharpen it according to SHARPEN parameters
-   if ANTICIPATE_SHARPENING is true.  RED_STRIP_WIDTH and GREEN_STRIP_WIDTH specify
-   strip widths.  Update PROGRESS and return screen unique ID in ID.  */
+/* Return screen of type T in PREVIEW mode.  Sharpen it according to SHARPEN if
+   ANTICIPATE_SHARPENING is true.  RED_STRIP_WIDTH and GREEN_STRIP_WIDTH
+   specify strip widths.  Update PROGRESS, return the screen identifier in ID,
+   and return the finite-image sampling operation in SAMPLING when requested.
+   */
 std::shared_ptr<screen>
 render_to_scr::get_screen (enum scr_type t, bool preview, 
 			   bool anticipate_sharpening,
 			   const sharpen_parameters &sharpen,
                            coord_t red_strip_width, coord_t green_strip_width,
-                           progress_info *progress, uint64_t *id)
+                           progress_info *progress, uint64_t *id,
+                           screen_sampling *sampling)
 {
   screen_params p = { t, preview, red_strip_width, green_strip_width, anticipate_sharpening, sharpen};
+  if (sampling)
+    *sampling = screen_sampling_for_capture_transfer (
+        sharpen, screen_uses_capture_mtf_p (sharpen));
   return screen_cache.get (p, progress, id);
 }
 
@@ -374,13 +400,15 @@ render_to_scr::simulate_screen (progress_info *progress)
   sharpen_parameters sharpen = m_params.sharpen;
   sharpen.usm_radius = m_params.screen_blur_radius * psize;
   sharpen.scanner_mtf_scale *= psize;
+  screen_sampling sampling = screen_sampling::integrate_pixel;
   std::shared_ptr<screen> scr = get_screen (m_scr_to_img.get_type (), false,
 	       false,
 	       sharpen,
 	       m_params.red_strip_width,
-	       m_params.green_strip_width, progress, &screen_id);
+	       m_params.green_strip_width, progress, &screen_id, &sampling);
   m_simulated_screen =
-    get_simulated_screen (m_scr_to_img.get_param (), scr.get (), screen_id, m_params.sharpen,
+    get_simulated_screen (m_scr_to_img.get_param (), scr.get (), screen_id,
+                          sampling, m_params.sharpen,
 			  m_img.width, m_img.height, progress,
 			  &m_simulated_screen_id);
 }

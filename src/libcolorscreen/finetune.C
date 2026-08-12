@@ -4760,6 +4760,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
    RET_RED, RET_GREEN, RET_BLUE are returned colors.
    SCR is screen used to render the pattern, while COLLECTION_SCR is used to do
    the data collection.  SIMULATED_SCREEN is optional simulated screen.
+   SAMPLING specifies whether SCR still needs capture-pixel integration.
    THRESHOLD is the collection threshold.  SHARPEN_PARAM are sharpen
    parameters. MAP is the scr-to-img map.  AREA defines the area.  */
 
@@ -4767,7 +4768,7 @@ bool
 determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                       screen &scr, screen &collection_scr,
                       simulated_screen *simulated_screen,
-                      luminosity_t threshold,
+                      screen_sampling sampling, luminosity_t threshold,
                       const sharpen_parameters &sharpen_param, scr_to_img &map,
                       int_image_area area)
 {
@@ -4817,20 +4818,18 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
      rendered screen.  */
   else if (sharpen_mode == sharpen_parameters::none)
     {
-      bool antialias = !sharpen_param.scanner_mtf_scale;
 #pragma omp declare reduction(+ : double_rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
-    shared(area, threshold, map, scr, collection_scr,antialias)               \
+    shared(area, threshold, map, scr, collection_scr, sampling)               \
     reduction(+ : wr, wg, wb, red, green, blue)
       for (int y = area.y; y < area.y + area.height; y++)
         for (int x = area.x; x < area.x + area.width; x++)
           {
             point_t p;
             rgbdata am;
-            /* Render screen.
-               Scanner MTF already estimates sensor loss; so we should not need
-               to antialias.  */
-            if (!antialias)
+            /* Render the capture sample according to the explicit owner of
+               the sensor aperture.  */
+            if (sampling == screen_sampling::point_sample)
               am = noantialias_screen (scr, map, x, y, &p);
             else
               am = antialias_screen (scr, map, x, y, &p);
@@ -4874,10 +4873,8 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       int ysize = area.height + 2 * ext;
       std::vector<rgbdata> rendered (xsize * ysize);
 
-      /* Render screen.
-         Scanner MTF already estimates sensor loss; so we should not need to
-         antialias.  */
-      if (sharpen_param.scanner_mtf_scale)
+      /* Render capture samples before applying the digital filter.  */
+      if (sampling == screen_sampling::point_sample)
         for (int y = area.y - ext; y < area.y + area.height + ext; y++)
           for (int x = area.x - ext; x < area.x + area.width + ext; x++)
             rendered[(y - area.y + ext) * xsize + x - area.x + ext]
@@ -5062,20 +5059,17 @@ render_screen (image_data &img, const scr_to_img_parameters &param,
   sharpen_parameters sharpen = rparam.sharpen;
   sharpen.usm_radius = rparam.screen_blur_radius * pixel_size;
   sharpen.scanner_mtf_scale *= pixel_size;
+  screen_sampling sampling = screen_sampling::integrate_pixel;
   std::shared_ptr<screen> scr = render_to_scr::get_screen (
       param.type, false, false, sharpen, rparam.red_strip_width,
-      rparam.green_strip_width);
+      rparam.green_strip_width, nullptr, nullptr, &sampling);
   for (int y = 0; y < height; y++)
     for (int x = 0; x < width; x++)
       {
-        const int steps = 4;
-        rgbdata d = { 0, 0, 0 };
-        for (int xx = 0; xx < steps; xx++)
-          for (int yy = 0; yy < steps; yy++)
-            d += scr->interpolated_mult (
-                map.to_scr ({ x + (xx + 1) / (coord_t)(steps + 1),
-                              y + (yy + 1) / (coord_t)(steps + 1) }));
-        d *= (coord_t)1 / (coord_t)(steps * steps);
+        const rgbdata d
+            = sampling == screen_sampling::point_sample
+                  ? noantialias_screen (*scr, map, x, y)
+                  : antialias_screen (*scr, map, x, y);
         img.put_rgb_pixel (x, y, {
           (unsigned short)(invert_gamma (d.red, rparam.gamma) * 65535),
           (unsigned short)(invert_gamma (d.green, rparam.gamma) * 65535),

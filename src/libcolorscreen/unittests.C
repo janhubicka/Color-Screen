@@ -17,6 +17,7 @@
 #include "include/mesh.h"
 #include "screen.h"
 #include "render.h"
+#include "render-to-scr.h"
 #include "simulate.h"
 #include "include/spectrum-to-xyz.h"
 #include "lru-cache.h"
@@ -576,8 +577,9 @@ test_screen_sharpening ()
   return true;
 }
 
-/* Test finite screen-simulation storage, cache identity, display
-   normalization, coordinate ordering, and degenerate-screen handling.  */
+/* Test finite screen-simulation storage, aperture ownership, pixel
+   integration, cache identity, display normalization, coordinate ordering,
+   and degenerate-screen handling.  */
 bool
 test_screen_simulation ()
 {
@@ -614,6 +616,222 @@ test_screen_simulation ()
       fprintf (stderr,
                "Simulated-screen cache used approximate MTF-scale equality\n");
       ok = false;
+    }
+  second = first;
+  second.sampling = screen_sampling::point_sample;
+  if (first == second)
+    {
+      fprintf (stderr,
+               "Simulated-screen cache ignored pixel-sampling policy\n");
+      ok = false;
+    }
+
+  /* A measured MTF always contains the sensor aperture.  An analytical MTF
+     contains it only when the fill-factor term is enabled.  No transfer can
+     own the aperture unless it was actually applied to the periodic screen.  */
+  sharpen_parameters transfer;
+  transfer.scanner_mtf.sensor_fill_factor = 0;
+  if (transfer.scanner_mtf.includes_sensor_aperture_p ()
+      || screen_sampling_for_capture_transfer (transfer, true)
+             != screen_sampling::integrate_pixel)
+    {
+      fprintf (stderr,
+               "Aperture-exclusive analytical MTF selected point sampling\n");
+      ok = false;
+    }
+  transfer.scanner_mtf.sensor_fill_factor = 1;
+  if (!transfer.scanner_mtf.includes_sensor_aperture_p ()
+      || screen_sampling_for_capture_transfer (transfer, true)
+             != screen_sampling::point_sample
+      || screen_sampling_for_capture_transfer (transfer, false)
+             != screen_sampling::integrate_pixel)
+    {
+      fprintf (stderr,
+               "Analytical sensor aperture has incorrect sampling ownership\n");
+      ok = false;
+    }
+  /* Exercise the public screen-construction API as well as the policy helper.
+     A valid deconvolution mode requests construction of the forward periodic
+     capture screen even though ANTICIPATE_SHARPENING is false.  */
+  sharpen_parameters applied_transfer;
+  applied_transfer.mode = sharpen_parameters::wiener_deconvolution;
+  applied_transfer.scanner_mtf_scale = (luminosity_t)0.01;
+  applied_transfer.scanner_mtf.f_stop = 8;
+  applied_transfer.scanner_mtf.wavelength = 750;
+  applied_transfer.scanner_mtf.pixel_pitch = 3.760;
+  applied_transfer.scanner_mtf.scan_dpi = 1887;
+  applied_transfer.scanner_mtf.sensor_fill_factor = 1;
+  screen_sampling actual_sampling = screen_sampling::integrate_pixel;
+  std::shared_ptr<screen> actual_screen = render_to_scr::get_screen (
+      Paget, false, false, applied_transfer, (coord_t)0, (coord_t)0,
+      nullptr, nullptr, &actual_sampling);
+  if (!actual_screen || actual_sampling != screen_sampling::point_sample)
+    {
+      fprintf (stderr,
+               "Screen construction lost analytical aperture ownership\n");
+      ok = false;
+    }
+  applied_transfer.scanner_mtf.sensor_fill_factor = 0;
+  actual_screen = render_to_scr::get_screen (
+      Paget, false, false, applied_transfer, (coord_t)0, (coord_t)0,
+      nullptr, nullptr, &actual_sampling);
+  if (!actual_screen || actual_sampling != screen_sampling::integrate_pixel)
+    {
+      fprintf (stderr,
+               "Screen construction skipped aperture-exclusive integration\n");
+      ok = false;
+    }
+
+  mtf_measurement measured;
+  measured.add_value (0, 100);
+  measured.add_value ((double)0.25, 80);
+  measured.add_value ((double)0.5, 40);
+  transfer.scanner_mtf.measurements.push_back (measured);
+  transfer.scanner_mtf.measured_mtf_idx = 0;
+  transfer.scanner_mtf.sensor_fill_factor = 0;
+  if (!transfer.scanner_mtf.includes_sensor_aperture_p ()
+      || screen_sampling_for_capture_transfer (transfer, true)
+             != screen_sampling::point_sample)
+    {
+      fprintf (stderr,
+               "Measured MTF did not retain sensor-aperture ownership\n");
+      ok = false;
+    }
+  applied_transfer.scanner_mtf.measurements.clear ();
+  applied_transfer.scanner_mtf.measurements.push_back (measured);
+  applied_transfer.scanner_mtf.measured_mtf_idx = 0;
+  applied_transfer.scanner_mtf.sensor_fill_factor = 0;
+  actual_screen = render_to_scr::get_screen (
+      Paget, false, false, applied_transfer, (coord_t)0, (coord_t)0,
+      nullptr, nullptr, &actual_sampling);
+  if (!actual_screen || actual_sampling != screen_sampling::point_sample)
+    {
+      fprintf (stderr,
+               "Screen construction lost measured aperture ownership\n");
+      ok = false;
+    }
+
+  /* Verify integration over the complete pixel footprint.  The screen is a
+     one-dimensional sinusoid at 0.5 cycles per capture pixel.  Compare the
+     five-point Gauss--Legendre result with a dense midpoint integral of the
+     same periodic bilinear screen representation.  Also reproduce the old
+     [-1/3,+1/3] equal-weight rule to ensure this test detects SIM-002.  */
+  screen sinusoid;
+  constexpr double sinusoid_phase = 0.23;
+  for (int y = 0; y < screen::size; y++)
+    for (int x = 0; x < screen::size; x++)
+      {
+        const luminosity_t value
+            = (luminosity_t)(0.5
+                             + 0.4
+                                   * std::cos (2.0 * M_PI * x / screen::size
+                                               + sinusoid_phase));
+        for (int c = 0; c < 3; c++)
+          {
+            sinusoid.mult[y][x][c] = value;
+            sinusoid.add[y][x][c] = 0;
+          }
+      }
+  scr_to_img_parameters sinusoid_parameters;
+  sinusoid_parameters.type = Paget;
+  sinusoid_parameters.coordinate1 = { 2, 0 };
+  sinusoid_parameters.coordinate2 = { 0, 2 };
+  scr_to_img sinusoid_map;
+  if (!sinusoid_map.set_parameters (sinusoid_parameters, 16, 16))
+    {
+      fprintf (stderr, "Sinusoidal aperture-test mapping failed\n");
+      ok = false;
+    }
+  else
+    {
+      constexpr int reference_steps = 65536;
+      double reference = 0;
+      for (int i = 0; i < reference_steps; i++)
+        {
+          const coord_t offset
+              = ((coord_t)i + (coord_t)0.5) / reference_steps
+                - (coord_t)0.5;
+          reference += sinusoid
+                           .interpolated_mult (sinusoid_map.to_scr (
+                               { (coord_t)0.5 + offset, (coord_t)0.5 }))
+                           .red;
+        }
+      reference /= reference_steps;
+
+      const double integrated
+          = antialias_screen (sinusoid, sinusoid_map, 0, 0).red;
+      point_t center
+          = sinusoid_map.to_scr ({ (coord_t)0.5, (coord_t)0.5 });
+      point_t dx
+          = (sinusoid_map.to_scr ({ (coord_t)1.5, (coord_t)0.5 })
+             - center)
+            * ((coord_t)1 / (coord_t)6);
+      point_t dy
+          = (sinusoid_map.to_scr ({ (coord_t)0.5, (coord_t)1.5 })
+             - center)
+            * ((coord_t)1 / (coord_t)6);
+      double old_integral = 0;
+      for (int yy = -2; yy <= 2; yy++)
+        for (int xx = -2; xx <= 2; xx++)
+          old_integral
+              += sinusoid
+                     .interpolated_mult (center + dx * (coord_t)xx
+                                         + dy * (coord_t)yy)
+                     .red;
+      old_integral /= 25;
+
+      if (fabs (integrated - reference) > 1e-5)
+        {
+          fprintf (stderr,
+                   "Full-pixel quadrature mismatch: got %.9g, reference "
+                   "%.9g\n",
+                   integrated, reference);
+          ok = false;
+        }
+      if (fabs (old_integral - reference) < 0.01)
+        {
+          fprintf (stderr,
+                   "Aperture regression no longer distinguishes the old "
+                   "partial-pixel rule\n");
+          ok = false;
+        }
+
+      /* The finite renderer must dispatch the policy once outside its hot
+         pixel loop.  Its first sample should match the corresponding direct
+         sampling primitive exactly.  */
+      simulated_screen_params sample_parameters = {};
+      sample_parameters.screen_id = 29;
+      sample_parameters.width = 4;
+      sample_parameters.height = 4;
+      sample_parameters.params = sinusoid_parameters;
+      sample_parameters.scr = &sinusoid;
+      sample_parameters.sampling = screen_sampling::point_sample;
+      std::unique_ptr<simulated_screen> point_image
+          = get_new_simulated_screen (sample_parameters, nullptr);
+      sample_parameters.sampling = screen_sampling::integrate_pixel;
+      std::unique_ptr<simulated_screen> integrated_image
+          = get_new_simulated_screen (sample_parameters, nullptr);
+      if (!point_image || !integrated_image)
+        {
+          fprintf (stderr, "Sampling-policy simulation failed\n");
+          ok = false;
+        }
+      else
+        {
+          const rgbdata expected_point
+              = noantialias_screen (sinusoid, sinusoid_map, 0, 0);
+          const rgbdata expected_integrated
+              = antialias_screen (sinusoid, sinusoid_map, 0, 0);
+          if (!point_image->get_pixel (0, 0).almost_equal_p (
+                  expected_point, (luminosity_t)1e-6)
+              || !integrated_image->get_pixel (0, 0).almost_equal_p (
+                  expected_integrated, (luminosity_t)1e-6))
+            {
+              fprintf (stderr,
+                       "Finite screen ignored explicit sampling policy\n");
+              ok = false;
+            }
+        }
     }
 
   /* Invalid dimensions or a missing periodic source must fail before an
@@ -790,8 +1008,9 @@ test_screen_simulation ()
   scr_to_img dummy_map;
   sharpen_parameters no_sharpening;
   if (!determine_color_loss (&actual_red, &actual_green, &actual_blue,
-                             dummy_screen, dummy_screen, &collected, 0,
-                             no_sharpening, dummy_map,
+                             dummy_screen, dummy_screen, &collected,
+                             screen_sampling::point_sample, 0, no_sharpening,
+                             dummy_map,
                              {1, 0, 1, 2}))
     {
       fprintf (stderr, "Finite colour-loss simulation failed\n");

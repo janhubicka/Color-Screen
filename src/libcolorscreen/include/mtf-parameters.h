@@ -199,6 +199,16 @@ struct mtf_parameters
   {
     return measured_mtf_idx >= 0 && measurements.size () > (size_t)measured_mtf_idx && measurements[measured_mtf_idx].size () > 2;
   }
+  /* Return true when the evaluated capture transfer already contains sensor
+     pixel-aperture attenuation.  A measured curve is obtained from sampled
+     image data and therefore contains this response.  An analytical model
+     contains it only when SENSOR_FILL_FACTOR enables SENSOR_MTF.  */
+  pure_attr bool
+  includes_sensor_aperture_p () const
+  {
+    return use_measured_mtf ()
+           || (my_isfinite (sensor_fill_factor) && sensor_fill_factor > 0);
+  }
   /* Return true when all metadata required by the physical model is valid.  */
   bool
   can_simulate_diffraction_p () const

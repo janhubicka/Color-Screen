@@ -20,6 +20,31 @@
 
 namespace colorscreen
 {
+/* Sampling operation applied when a periodic screen is converted to discrete
+   capture pixels.  */
+enum class screen_sampling
+{
+  /* Sample at the pixel centre.  Use this when the pre-sampling transfer
+     already contains the sensor pixel aperture.  */
+  point_sample,
+  /* Integrate transmission over the complete capture-pixel footprint.  Use
+     this when the preceding transfer excludes the sensor aperture.  */
+  integrate_pixel
+};
+
+/* Return the sampling policy for a periodic screen filtered according to
+   SHARPEN.  FORWARD_MTF_APPLIED is true only when the selected capture MTF was
+   actually applied to that screen.  */
+inline pure_attr screen_sampling
+screen_sampling_for_capture_transfer (const sharpen_parameters &sharpen,
+                                      bool forward_mtf_applied)
+{
+  if (forward_mtf_applied
+      && sharpen.scanner_mtf.includes_sensor_aperture_p ())
+    return screen_sampling::point_sample;
+  return screen_sampling::integrate_pixel;
+}
+
 /* Finite RGB image containing the simulated capture of a periodic SCREEN.  */
 struct simulated_screen;
 
@@ -32,8 +57,9 @@ typedef rgbdata simulated_screen_pixel;
    SCREEN_ID identifies SCR.  MESH_TRANS_ID identifies the optional mesh; when
    it is zero PARAMS contains the complete analytical mapping.  WIDTH and
    HEIGHT are part of the result and therefore must participate in equality.
-   SHARPEN is compared exactly because this cache stores a complete image, not
-   an interactive approximation.  */
+   SAMPLING records whether the pixel aperture is already included.  SHARPEN
+   is compared exactly because this cache stores a complete image, not an
+   interactive approximation.  */
 struct simulated_screen_params
 {
   /* Unique identifier of SCR.  */
@@ -42,6 +68,8 @@ struct simulated_screen_params
   uint64_t mesh_trans_id;
   /* Dimensions of the simulated image in capture pixels.  */
   int width, height;
+  /* Operation converting the periodic screen to discrete capture samples.  */
+  screen_sampling sampling = screen_sampling::integrate_pixel;
   /* Mapping from periodic screen coordinates to capture pixels.  */
   scr_to_img_parameters params;
   /* Digital sharpening applied after rendering the capture samples.  */
@@ -55,6 +83,7 @@ struct simulated_screen_params
   {
     return screen_id == o.screen_id && mesh_trans_id == o.mesh_trans_id
            && width == o.width && height == o.height
+           && sampling == o.sampling
            && (mesh_trans_id || params == o.params)
            && sharpen.equal_p (o.sharpen);
   }
@@ -125,12 +154,13 @@ protected:
 };
 
 /* Return a cached finite simulation for PARAM and SCR.  SCREEN_ID identifies
-   SCR, WIDTH and HEIGHT specify output dimensions, SHARPEN specifies the
-   post-sampling digital filter, and ID receives the cache-entry identifier.
-   Update PROGRESS and return null on failure or cancellation.  */
+   SCR, SAMPLING specifies pixel-aperture ownership, WIDTH and HEIGHT specify
+   output dimensions, SHARPEN specifies the post-sampling digital filter, and
+   ID receives the cache-entry identifier.  Update PROGRESS and return null on
+   failure or cancellation.  */
 std::shared_ptr<simulated_screen>
 get_simulated_screen (const scr_to_img_parameters &param, const screen *scr,
-                      uint64_t screen_id,
+                      uint64_t screen_id, screen_sampling sampling,
                       const sharpen_parameters sharpen, int width, int height,
                       progress_info *progress, uint64_t *id);
 
