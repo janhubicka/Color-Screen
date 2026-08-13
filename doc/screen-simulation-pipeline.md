@@ -148,6 +148,17 @@ Spatially varying scanner-blur correction uses a `screen_table`.  Its entries
 share one aperture-ownership policy because varying defocus or blur diameter
 does not change whether the selected transfer includes the sensor aperture.
 
+Finetune has an additional prepared-source path for the dense scalar physical-
+defocus analysis.  Once the process-screen geometry is fixed, it stores the
+three Fourier spectra of the ideal periodic source and a separate
+defocus-independent analytical transfer state.  For each exact focus node it
+evaluates only the signed defocus term and multiplies the resulting OTF values
+directly into the periodic Fourier coefficients.  This is the exact
+Fourier-series convolution for a periodic source and avoids estimating PSF
+support, reconstructing and wrapping a spatial PSF, and Fourier-transforming
+that kernel.  The ordinary renderer and variable-strip finetune prepass retain
+the general direct/wrapped-PSF implementation.
+
 ### 3. Mapping and finite-image sampling
 
 `get_simulated_screen()` uses a one-entry LRU cache keyed by:
@@ -320,6 +331,12 @@ defocus verifies a negative lobe near 0.1875 cycles/pixel through both the
 large-image deconvolver and the 128 x 128 periodic-screen FFT.  A matching
 synthetic measured MTF remains nonnegative.  A 128 x 128 PSF reconstructed from
 the same signed analytical OTF is finite and nonnegative in the tested case.
+
+Revision 0023 additionally verifies the prepared finetune path independently
+of spatial PSF reconstruction.  A synthetic periodic cosine is multiplied by
+the analytical signed OTF coefficient at its exact harmonic, and the cached
+defocus-dependent transfer table agrees with `mtf::precompute()` throughout
+the sampled frequency range.
 
 ### SIM-004 — cache key omitted finite dimensions
 

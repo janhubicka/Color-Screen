@@ -21,6 +21,9 @@ struct screen_filter_profile
 {
   uint64_t mtf_precompute_calls = 0;
   uint64_t mtf_psf_precompute_calls = 0;
+  uint64_t physical_focus_cache_hits = 0;
+  uint64_t physical_focus_cache_misses = 0;
+  uint64_t physical_focus_transfer_builds = 0;
   uint64_t direct_transfer_builds = 0;
   uint64_t wrapped_psf_builds = 0;
   uint64_t kernel_forward_ffts = 0;
@@ -126,10 +129,12 @@ public:
   prepare_filter_source (screen_filter_source &source,
                          screen_filter_profile *profile = nullptr) const;
   /* Initialize THIS by applying SHARPEN to a source previously prepared by
-     PREPARE_FILTER_SOURCE.  This exact path reuses the source channel FFTs and
+     PREPARE_FILTER_SOURCE.  This path reuses the source channel FFTs and
      therefore performs only the focus-dependent transfer construction and
-     inverse transforms.  Richardson-Lucy sharpening is not supported because
-     it iterates in the spatial domain; return false if it is requested.  */
+     inverse transforms.  For the analytical physical model it applies the
+     signed OTF directly at the periodic Fourier harmonics instead of building
+     and rewrapping a spatial PSF.  Richardson-Lucy sharpening is not supported
+     because it iterates in the spatial domain; return false if requested.  */
   nodiscard_attr bool
   initialize_with_sharpen_parameters (
       const screen_filter_source &source,

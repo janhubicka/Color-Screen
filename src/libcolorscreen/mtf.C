@@ -930,6 +930,200 @@ get_psf_radius (const mtf::psf_t *psf, int size, bool *ok = nullptr)
 
 }
 
+namespace
+{
+
+/* Keep this grid identical to the analytical branch of MTF::PRECOMPUTE so
+   prepared focus tables and the general MTF implementation have the same
+   interpolation error and cutoff behavior.  The final two samples are zero.  */
+constexpr int focus_transfer_table_entries = 512;
+constexpr int focus_transfer_model_entries = focus_transfer_table_entries - 2;
+constexpr double focus_transfer_step
+    = 1.0 / (focus_transfer_table_entries - 2);
+
+}
+
+/* One defocus-independent sample of the physical system transfer.  COMPACT
+   already contains sensor aperture, diffraction, residual Gaussian blur, and
+   the compact-core energy fraction.  HALO is the complete fixed broad-halo
+   contribution.  Only the normalized pupil integral in DEFOCUS_FACTOR varies
+   between focus states.  */
+struct mtf_focus_transfer::impl
+{
+  struct sample
+  {
+    double compact = 0;
+    double halo = 0;
+    double q = 0;
+    double phase_per_mm = 0;
+    long double pupil_denominator = 1;
+  };
+
+  std::array<sample, focus_transfer_model_entries> samples;
+};
+
+mtf_focus_transfer::mtf_focus_transfer () = default;
+mtf_focus_transfer::~mtf_focus_transfer () = default;
+mtf_focus_transfer::mtf_focus_transfer (mtf_focus_transfer &&) noexcept
+    = default;
+mtf_focus_transfer &
+mtf_focus_transfer::operator= (mtf_focus_transfer &&) noexcept = default;
+
+/* Prepare all physical-transfer terms that do not depend on DEFOCUS.  */
+mtf_focus_transfer::mtf_focus_transfer (const mtf_parameters &params)
+{
+  if (!params.simulate_diffraction_p ())
+    return;
+
+  auto prepared = std::make_unique<impl> ();
+
+  const bool halo_enabled
+      = my_isfinite (params.halo_fraction) && params.halo_fraction > 0
+        && my_isfinite (params.halo_sigma) && params.halo_sigma > 0;
+  const double halo_fraction
+      = halo_enabled ? std::clamp (params.halo_fraction, 0.0, 1.0) : 0;
+  const double compact_fraction = halo_enabled ? 1.0 - halo_fraction : 1.0;
+  const double wavelength_mm = params.wavelength * 1.0e-6;
+  const double working_f_stop = params.effective_f_stop ();
+  const double phase_scale
+      = M_PI / (wavelength_mm * working_f_stop * working_f_stop);
+
+  if (!(my_isfinite (phase_scale) && phase_scale > 0))
+    return;
+
+  for (int i = 0; i < focus_transfer_model_entries; i++)
+    {
+      const double frequency = i * focus_transfer_step;
+      impl::sample &sample = prepared->samples[i];
+      sample.q = params.nu (frequency);
+      const double sensor = params.sensor_otf (frequency);
+      sample.compact
+          = sensor * compact_fraction
+            * params.lens_diffraction_otf (frequency)
+            * gaussian_blur_mtf (frequency, params.sigma);
+      sample.halo = halo_enabled
+                        ? sensor * halo_fraction * params.halo_mtf (frequency)
+                        : 0;
+
+      if (sample.q > 0 && sample.q < 1 && sample.compact != 0)
+        {
+          const long double overlap = 1.0L - (long double)sample.q;
+          sample.pupil_denominator
+              = defocused_pupil_integral (overlap, 0);
+          sample.phase_per_mm
+              = phase_scale * sample.q * (1.0 - sample.q);
+        }
+
+      if (!my_isfinite (sample.compact) || !my_isfinite (sample.halo)
+          || !my_isfinite (sample.q) || !my_isfinite (sample.phase_per_mm)
+          || !(sample.pupil_denominator > 0))
+        return;
+    }
+
+  m_impl = std::move (prepared);
+}
+
+/* Construct the same equidistant signed system-transfer table used by the
+   analytical MTF implementation, evaluating only the defocus-dependent pupil
+   numerator for every new focus state.  */
+bool
+mtf_focus_transfer::precompute (
+    double defocus, precomputed_function<double> &transfer) const
+{
+  if (!m_impl)
+    return false;
+
+  std::array<double, focus_transfer_table_entries> values = {};
+  for (int i = 0; i < focus_transfer_model_entries; i++)
+    {
+      const impl::sample &sample = m_impl->samples[i];
+      double defocus_factor = 1;
+      if (sample.compact != 0 && sample.q > 0 && sample.q < 1
+          && my_fabs (defocus) >= 1.0e-15)
+        {
+          if (!my_isfinite (defocus))
+            defocus_factor = 0;
+          else
+            {
+              const long double edge_phase
+                  = (long double)defocus * sample.phase_per_mm;
+              if (std::fabs (edge_phase) >= 1.0e-12L)
+                {
+                  const long double numerator = defocused_pupil_integral (
+                      1.0L - (long double)sample.q, edge_phase);
+                  defocus_factor = std::clamp (
+                      (double)(numerator / sample.pupil_denominator), -1.0,
+                      1.0);
+                }
+            }
+        }
+      values[i] = sample.compact * defocus_factor + sample.halo;
+      if (!my_isfinite (values[i]))
+        return false;
+    }
+
+  values[focus_transfer_model_entries]
+      = values[focus_transfer_model_entries + 1] = 0;
+  transfer.set_range (0, 1 + focus_transfer_step);
+  transfer.init_by_y_values (values.data (), values.size ());
+  return true;
+}
+
+namespace
+{
+
+/* LRU key for immutable physical-transfer state.  Defocus is normalized to
+   zero before lookup, while every other active physical-model parameter is
+   compared by MTF_PARAMETERS::OPERATOR==.  */
+struct mtf_focus_transfer_cache_params
+{
+  mtf_parameters params;
+
+  bool
+  operator== (const mtf_focus_transfer_cache_params &o) const
+  {
+    return params == o.params;
+  }
+};
+
+std::unique_ptr<mtf_focus_transfer>
+get_new_mtf_focus_transfer (mtf_focus_transfer_cache_params &p,
+                            progress_info *progress)
+{
+  (void)progress;
+  auto ret = std::make_unique<mtf_focus_transfer> (p.params);
+  if (!ret->valid_p ())
+    return nullptr;
+  return ret;
+}
+
+using mtf_focus_transfer_cache_t
+    = lru_cache<mtf_focus_transfer_cache_params, mtf_focus_transfer,
+                get_new_mtf_focus_transfer, 16>;
+static mtf_focus_transfer_cache_t mtf_focus_transfer_cache (
+    "physical focus transfer");
+
+}
+
+std::shared_ptr<const mtf_focus_transfer>
+mtf_focus_transfer::get (const mtf_parameters &params, bool *cache_hit)
+{
+  if (cache_hit)
+    *cache_hit = false;
+  if (!params.simulate_diffraction_p ())
+    return nullptr;
+  mtf_focus_transfer_cache_params key;
+  key.params = params;
+  key.params.defocus = 0;
+  return mtf_focus_transfer_cache.get (key, nullptr, nullptr, cache_hit);
+}
+
+void
+mtf_focus_transfer::prune_cache ()
+{
+  mtf_focus_transfer_cache.prune ();
+}
+
 /* Return signed radial sensor-aperture OTF at PIXEL_FREQ cycles per pixel.
    The first-cut model is radial, as requested; SENSOR_FILL_FACTOR is
    interpreted as active pixel area, so its square root is the active linear

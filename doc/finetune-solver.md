@@ -263,7 +263,7 @@ model or objective.
 
 ## Focus caches, discretization, and invalidation
 
-The solver uses four exact reuse levels and one deliberately narrow
+The solver uses five exact reuse levels and one deliberately narrow
 approximation for the dense physical-displacement pass.
 
 1. A fixed-screen fast path calls `render_to_scr::get_screen()` when no screen,
@@ -286,10 +286,14 @@ approximation for the dense physical-displacement pass.
    process-screen family and relevant strip widths.  The first exact focus
    state constructs the ideal periodic screen and forward-transforms its three
    channels; subsequent exact nodes and exact-final evaluations reuse those
-   spectra and perform only transfer construction, spectral multiplication,
-   and the three inverse transforms.  This factoring is exact and produces
-   periodic samples matching the ordinary exact path within a tight float
-   tolerance in the regression test.
+   spectra.
+5. The same path uses a second small thread-safe cache for the analytical
+   physical transfer with defocus removed from its key.  Fixed sensor,
+   diffraction, residual-sigma, halo, pupil-overlap, and Fourier-grid terms are
+   prepared once.  A new focus state evaluates only the signed
+   defocus-dependent pupil integral, samples the resulting transfer at the
+   periodic harmonics, multiplies it by the cached source spectra, and performs
+   the three inverse transforms.
 
 The finetune cache is deliberately separate from the ordinary rendering cache,
 so transient simplex vertices cannot evict display/render entries.  Entries
@@ -299,7 +303,7 @@ never published.  Emulsion blur, offset, and intensity fits continue to use
 private copy-on-write screens because their source screen varies by tile and
 objective state.
 
-The four reuse levels are numerically exact.  The cache comparison explicitly
+The five reuse levels are numerically exact.  The cache comparison explicitly
 includes per-channel capture MTFs even when digital sharpening mode is `none`;
 the capture transfer remains active in that mode.  This also prevents distinct
 channel MTFs from being mistaken for one common filter.
@@ -312,7 +316,15 @@ using the ordinary exact path because every width trial changes the ideal
 screen.  Richardson--Lucy sharpening also stays on its spatial-domain path.
 For the direct-transfer numerical regime, radial coordinates of the fixed
 128x128 Fourier grid are computed once rather than through repeated `hypot()`
-calls for every exact focus state.
+calls for every exact focus state.  For the supported analytical physical path,
+the direct transfer is not merely a small-support shortcut: convolution of a
+periodic source is exactly multiplication of its Fourier-series coefficients
+by the signed OTF at the corresponding harmonics.  The prepared-source path
+therefore avoids estimating PSF support, reconstructing and wrapping a spatial
+PSF, and Fourier-transforming that kernel.  The ordinary support-dependent
+direct/wrapped-PSF implementation remains in use for variable strip widths,
+measured MTFs, empirical blur models, and the other unsupported cases listed
+above.
 
 ### Dense scalar physical-defocus interpolation
 
@@ -349,8 +361,9 @@ displacement changes the transfer much more rapidly, and progressively coarser
 towards the low-MTF boundary.  The default is 33 nodes, which leaves room in
 the existing 64-entry linked-list LRU for concurrent and prepass states.
 
-Each node is built by the ordinary exact filtering path and stored in that
-existing LRU.  A requested intermediate displacement linearly blends the
+Each supported fixed-source node is built by the exact direct periodic-OTF path
+and stored in that existing LRU.  A requested intermediate displacement
+linearly blends the
 `mult` samples of the two neighboring exact periodic screens; presentation-only
 `add` data is unchanged by optical filtering and is copied exactly.  This does
 **not** interpolate a nonnegative MTF curve: the node screens have already been
@@ -374,13 +387,15 @@ model is fully available.  The CLI keeps it opt-in through
 range threshold and node count.
 
 An exact node miss now reuses the immutable source spectra in the supported
-fixed-source scalar-defocus case.  Simplex coordinates outside the dense
-displacement mode nevertheless remain arbitrary floating-point values, and
-variable-strip or emulsion-dependent fits still rebuild their source state.
-The present final-screen interpolation has fixed quadratic spacing; future
-error-controlled subdivision should explicitly validate intervals near signed
-OTF zero crossings and direct/wrapped-PSF implementation transitions.  See
-FT-034, FT-037, FT-052, and FT-053.
+fixed-source scalar-defocus case and its defocus-independent physical-transfer
+state.  Simplex coordinates outside the dense displacement mode nevertheless
+remain arbitrary floating-point values, and variable-strip or
+emulsion-dependent fits still rebuild their source state.  The present
+final-screen interpolation has fixed quadratic spacing; future error-controlled
+subdivision should explicitly validate intervals near signed OTF zero
+crossings.  The direct/wrapped-PSF transition remains relevant only to the
+ordinary filtering paths outside the prepared scalar physical-defocus case.
+See FT-034, FT-037, FT-052, FT-053, and FT-054.
 
 ## Profiling
 
@@ -392,8 +407,8 @@ atomic-counter overhead.  Set `finetune_parameters::collect_profile` and read
 - screen initialization, local-state reuse, final-screen and source-spectrum
   cache hits/misses, and exact builds;
 - interpolated screen constructions, exact node uses, and exact final builds;
-- MTF/PSF preparation, direct-transfer and wrapped-PSF construction, and FFT
-  counts;
+- general MTF/PSF preparation, physical-transfer-state hits/misses and table
+  builds, direct-transfer and wrapped-PSF construction, and FFT counts;
 - accumulated time in the objective, screen cache/filter and interpolation
   paths, periodic-screen sampling, colour estimation, and residual calculation.
 

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <fftw3.h>
+#include <memory>
 #include <mutex>
 #ifdef HAVE_MALLOC_H
 #include <malloc.h>
@@ -22,6 +23,51 @@
 
 namespace colorscreen
 {
+
+/* Immutable defocus-independent state of the analytical physical capture
+   transfer.  The expensive fixed diffraction, sensor, halo, and pupil-overlap
+   terms are prepared once and shared through an LRU cache.  PRECOMPUTE builds
+   the same signed 512-sample radial transfer table as MTF::PRECOMPUTE for the
+   requested image-plane DEFOCUS, but evaluates only the varying pupil phase.
+
+   This helper is intentionally limited to the metadata-driven physical model.
+   Measured curves and the empirical fallback retain the ordinary MTF/PSF
+   path.  Instances are immutable after construction and safe to share between
+   adaptive-focus worker threads.  */
+class mtf_focus_transfer
+{
+public:
+  mtf_focus_transfer ();
+  explicit mtf_focus_transfer (const mtf_parameters &params);
+  ~mtf_focus_transfer ();
+  mtf_focus_transfer (mtf_focus_transfer &&) noexcept;
+  mtf_focus_transfer &operator= (mtf_focus_transfer &&) noexcept;
+  mtf_focus_transfer (const mtf_focus_transfer &) = delete;
+  mtf_focus_transfer &operator= (const mtf_focus_transfer &) = delete;
+
+  /* Return a cached transfer source for PARAMS with DEFOCUS excluded from the
+     key.  Return null when PARAMS does not select the analytical physical
+     model.  CACHE_HIT, when nonnull, reports whether the immutable state was
+     already present.  */
+  static std::shared_ptr<const mtf_focus_transfer>
+  get (const mtf_parameters &params, bool *cache_hit = nullptr);
+
+  /* Build the signed radial transfer table for DEFOCUS.  Return false if the
+     prepared state or resulting coefficients are invalid.  */
+  nodiscard_attr bool
+  precompute (double defocus, precomputed_function<double> &transfer) const;
+
+  /* Remove unreferenced cached states.  This is primarily useful to make
+     profiling and unit-test cache accounting deterministic.  */
+  static void prune_cache ();
+
+  /* Return true when construction from physical capture metadata succeeded.  */
+  bool valid_p () const { return (bool)m_impl; }
+
+private:
+  struct impl;
+  std::unique_ptr<impl> m_impl;
+};
 
 /* Radially symmetric optical transfer model.  For the analytical physical
    model the table stores the signed, real zero-phase OTF so known defocus

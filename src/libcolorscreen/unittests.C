@@ -376,6 +376,121 @@ test_finetune_focus_screen_cache ()
       physical[c].scanner_mtf.sensor_fill_factor = 1;
       physical[c].scanner_mtf_scale = (luminosity_t)0.12;
     }
+  /* The physical-focus transfer cache excludes DEFOCUS from its key and
+     prepares only invariant terms.  Verify both the cache contract and the
+     resulting signed transfer against the independent general MTF path.  */
+  mtf_focus_transfer::prune_cache ();
+  bool physical_transfer_cache_hit = true;
+  std::shared_ptr<const mtf_focus_transfer> prepared_transfer
+      = mtf_focus_transfer::get (physical[0].scanner_mtf,
+                                 &physical_transfer_cache_hit);
+  if (!prepared_transfer || physical_transfer_cache_hit)
+    {
+      fprintf (stderr, "Physical focus-transfer cache miss was not recorded\n");
+      return false;
+    }
+  mtf_parameters comparison_parameters = physical[0].scanner_mtf;
+  comparison_parameters.defocus = (coord_t)0.5;
+  std::shared_ptr<const mtf_focus_transfer> reused_transfer
+      = mtf_focus_transfer::get (comparison_parameters,
+                                 &physical_transfer_cache_hit);
+  if (!reused_transfer || !physical_transfer_cache_hit
+      || reused_transfer.get () != prepared_transfer.get ())
+    {
+      fprintf (stderr, "Physical focus-transfer state was not reused\n");
+      return false;
+    }
+  precomputed_function<double> prepared_table;
+  if (!reused_transfer->precompute (comparison_parameters.defocus,
+                                    prepared_table))
+    return false;
+  std::shared_ptr<mtf> comparison_mtf
+      = mtf::get_mtf (comparison_parameters, nullptr);
+  if (!comparison_mtf || !comparison_mtf->precompute (nullptr, false))
+    return false;
+  for (int i = 0; i <= 1000; i++)
+    {
+      const double frequency = i * 0.001;
+      const double error
+          = fabs (prepared_table.apply (frequency)
+                  - comparison_mtf->get_transfer (frequency));
+      if (error > 2e-13)
+        {
+          fprintf (stderr,
+                   "Prepared physical transfer differs at %g by %.17g\n",
+                   frequency, error);
+          return false;
+        }
+    }
+
+  /* Exercise the complete prepared-spectrum path on one Fourier harmonic.
+     Its recovered amplitude must be the signed transfer coefficient itself,
+     independent of the general sampled-PSF implementation.  */
+  constexpr int focus_test_bin = 24;
+  constexpr double focus_test_frequency
+      = focus_test_bin / (double)screen::size;
+  screen focus_test_source, focus_test_result;
+  for (int y = 0; y < screen::size; y++)
+    for (int x = 0; x < screen::size; x++)
+      for (int c = 0; c < 3; c++)
+        {
+          focus_test_source.mult[y][x][c]
+              = (luminosity_t)(0.5
+                               + 0.2
+                                     * std::cos (2 * M_PI * focus_test_bin * x
+                                                 / screen::size));
+          focus_test_source.add[y][x][c] = 0;
+        }
+  screen_filter_source focus_test_spectrum;
+  if (!focus_test_source.prepare_filter_source (focus_test_spectrum))
+    return false;
+  std::array<sharpen_parameters, 3> focus_test_sharpen = physical;
+  for (int c = 0; c < 3; c++)
+    {
+      focus_test_sharpen[c].scanner_mtf = comparison_parameters;
+      focus_test_sharpen[c].scanner_mtf_scale
+          = (luminosity_t)(1.0 / screen::size);
+    }
+  sharpen_parameters *focus_test_channels[3]
+      = { &focus_test_sharpen[0], &focus_test_sharpen[1],
+          &focus_test_sharpen[2] };
+  screen_filter_profile focus_test_profile;
+  if (!focus_test_result.initialize_with_sharpen_parameters (
+          focus_test_spectrum, focus_test_channels, false, false,
+          &focus_test_profile))
+    return false;
+  double focus_test_sum = 0;
+  double focus_test_norm = 0;
+  for (int y = 0; y < screen::size; y++)
+    for (int x = 0; x < screen::size; x++)
+      {
+        const double cosine
+            = std::cos (2 * M_PI * focus_test_bin * x / screen::size);
+        focus_test_sum
+            += ((double)focus_test_result.mult[y][x][0] - 0.5) * cosine;
+        focus_test_norm += cosine * cosine;
+      }
+  const double focus_test_response
+      = focus_test_sum / focus_test_norm / 0.2;
+  const double focus_test_expected
+      = comparison_mtf->get_transfer (focus_test_frequency);
+  if (!(focus_test_expected < 0)
+      || fabs (focus_test_response - focus_test_expected) > 2e-6
+      || focus_test_profile.mtf_precompute_calls
+      || focus_test_profile.mtf_psf_precompute_calls
+      || focus_test_profile.physical_focus_cache_hits != 1
+      || focus_test_profile.physical_focus_transfer_builds != 1
+      || focus_test_profile.direct_transfer_builds != 1
+      || focus_test_profile.wrapped_psf_builds
+      || focus_test_profile.kernel_forward_ffts)
+    {
+      fprintf (stderr,
+               "Prepared physical harmonic response differs: expected %g "
+               "got %g\n",
+               focus_test_expected, focus_test_response);
+      return false;
+    }
+
   coord_t max_defocus = 0;
   if (!finetune_useful_defocus_limit (
           physical[0].scanner_mtf, physical[0].scanner_mtf_scale,
@@ -421,15 +536,31 @@ test_finetune_focus_screen_cache ()
           Dufay, (coord_t)0.45, (coord_t)0.35, false, upper_physical,
           false, &cache_hit, &physical_source_hit_profile);
   if (!upper_screen || physical_source_hit_profile.screen_forward_ffts
-      || physical_source_hit_profile.screen_inverse_ffts != 3)
-    return false;
+      || physical_source_hit_profile.screen_inverse_ffts != 3
+      || physical_source_hit_profile.mtf_precompute_calls
+      || physical_source_hit_profile.mtf_psf_precompute_calls
+      || physical_source_hit_profile.physical_focus_cache_hits != 1
+      || physical_source_hit_profile.physical_focus_cache_misses
+      || physical_source_hit_profile.physical_focus_transfer_builds != 1
+      || physical_source_hit_profile.direct_transfer_builds != 1
+      || physical_source_hit_profile.wrapped_psf_builds
+      || physical_source_hit_profile.kernel_forward_ffts)
+    {
+      fprintf (stderr,
+               "Prepared physical focus did not use the direct cached "
+               "transfer path\n");
+      return false;
+    }
 
   screen physical_source, exact_upper, exact_target;
   physical_source.initialize (Dufay, (coord_t)0.45, (coord_t)0.35);
+  screen_filter_source prepared_physical_source;
+  if (!physical_source.prepare_filter_source (prepared_physical_source))
+    return false;
   sharpen_parameters *upper_channels[3]
       = { &upper_physical[0], &upper_physical[1], &upper_physical[2] };
   if (!exact_upper.initialize_with_sharpen_parameters (
-          physical_source, upper_channels, false, false)
+          prepared_physical_source, upper_channels, false, false)
       || !exact_upper.almost_equal_p (
           *upper_screen, &delta, (luminosity_t)1e-8))
     {
@@ -442,7 +573,7 @@ test_finetune_focus_screen_cache ()
   sharpen_parameters *target_channels[3]
       = { &target_physical[0], &target_physical[1], &target_physical[2] };
   if (!exact_target.initialize_with_sharpen_parameters (
-          physical_source, target_channels, false, false))
+          prepared_physical_source, target_channels, false, false))
     return false;
   long double squared_error = 0;
   double max_error = 0;

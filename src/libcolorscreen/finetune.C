@@ -247,6 +247,9 @@ public:
   std::atomic_uint64_t exact_screen_builds{0};
   std::atomic_uint64_t mtf_precompute_calls{0};
   std::atomic_uint64_t mtf_psf_precompute_calls{0};
+  std::atomic_uint64_t physical_focus_cache_hits{0};
+  std::atomic_uint64_t physical_focus_cache_misses{0};
+  std::atomic_uint64_t physical_focus_transfer_builds{0};
   std::atomic_uint64_t direct_transfer_builds{0};
   std::atomic_uint64_t wrapped_psf_builds{0};
   std::atomic_uint64_t kernel_forward_ffts{0};
@@ -267,6 +270,12 @@ public:
                                     std::memory_order_relaxed);
     mtf_psf_precompute_calls.fetch_add (p.mtf_psf_precompute_calls,
                                         std::memory_order_relaxed);
+    physical_focus_cache_hits.fetch_add (p.physical_focus_cache_hits,
+                                         std::memory_order_relaxed);
+    physical_focus_cache_misses.fetch_add (p.physical_focus_cache_misses,
+                                           std::memory_order_relaxed);
+    physical_focus_transfer_builds.fetch_add (
+        p.physical_focus_transfer_builds, std::memory_order_relaxed);
     direct_transfer_builds.fetch_add (p.direct_transfer_builds,
                                       std::memory_order_relaxed);
     wrapped_psf_builds.fetch_add (p.wrapped_psf_builds,
@@ -303,6 +312,9 @@ public:
     COPY_PROFILE_FIELD (exact_screen_builds);
     COPY_PROFILE_FIELD (mtf_precompute_calls);
     COPY_PROFILE_FIELD (mtf_psf_precompute_calls);
+    COPY_PROFILE_FIELD (physical_focus_cache_hits);
+    COPY_PROFILE_FIELD (physical_focus_cache_misses);
+    COPY_PROFILE_FIELD (physical_focus_transfer_builds);
     COPY_PROFILE_FIELD (direct_transfer_builds);
     COPY_PROFILE_FIELD (wrapped_psf_builds);
     COPY_PROFILE_FIELD (kernel_forward_ffts);

@@ -97,6 +97,9 @@ struct finetune_profile
 
   uint64_t mtf_precompute_calls = 0;
   uint64_t mtf_psf_precompute_calls = 0;
+  uint64_t physical_focus_cache_hits = 0;
+  uint64_t physical_focus_cache_misses = 0;
+  uint64_t physical_focus_transfer_builds = 0;
   uint64_t direct_transfer_builds = 0;
   uint64_t wrapped_psf_builds = 0;
   uint64_t kernel_forward_ffts = 0;
@@ -132,6 +135,9 @@ struct finetune_profile
     exact_screen_builds += o.exact_screen_builds;
     mtf_precompute_calls += o.mtf_precompute_calls;
     mtf_psf_precompute_calls += o.mtf_psf_precompute_calls;
+    physical_focus_cache_hits += o.physical_focus_cache_hits;
+    physical_focus_cache_misses += o.physical_focus_cache_misses;
+    physical_focus_transfer_builds += o.physical_focus_transfer_builds;
     direct_transfer_builds += o.direct_transfer_builds;
     wrapped_psf_builds += o.wrapped_psf_builds;
     kernel_forward_ffts += o.kernel_forward_ffts;

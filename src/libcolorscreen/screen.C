@@ -1897,13 +1897,53 @@ same_periodic_filter_parameters_p (const sharpen_parameters &a,
   return !anticipate_sharpening || a == b;
 }
 
+/* Sample signed radial transfer GET_TRANSFER on the fixed periodic Fourier
+   grid and apply the selected digital inverse-filter mode.  The lower half of
+   the real FFT is the vertical mirror of the upper half.  */
+template <typename Transfer>
+static void
+build_direct_periodic_filter (
+    typename fft_complex_t<screen_fft_t>::type *fft, luminosity_t step,
+    sharpen_parameters::sharpen_mode mode, screen_fft_t k_const,
+    screen_fft_t data_scale, Transfer get_transfer)
+{
+  const auto &radii = periodic_fft_radii ();
+  for (int y = 0; y < fft_size; y++)
+    for (int x = 0; x < fft_size; x++)
+      {
+        std::complex<screen_fft_t> ker (
+            std::clamp ((screen_fft_t)get_transfer (
+                            radii[y * fft_size + x] * step),
+                        (screen_fft_t)-1, (screen_fft_t)1),
+            (screen_fft_t)0);
+        if (mode == sharpen_parameters::wiener_deconvolution)
+          ker = ker
+                * (std::conj (ker) / (std::norm (ker) + k_const));
+        else if (mode == sharpen_parameters::blur_deconvolution)
+          ker = ker * ker;
+        ker *= data_scale;
+        fft[y * fft_size + x][0] = std::real (ker);
+        fft[y * fft_size + x][1] = std::imag (ker);
+        if (y)
+          {
+            fft[(screen::size - y) * fft_size + x][0]
+                = std::real (ker);
+            fft[(screen::size - y) * fft_size + x][1]
+                = std::imag (ker);
+          }
+      }
+}
+
 /* Construct the periodic capture/sharpening transfer for SHARPEN in FFT.
    ANTICIPATE_SHARPENING controls the digital inverse filter, while the forward
-   capture MTF is always applied.  Store the effective mode in MODE_RET.  */
+   capture MTF is always applied.  DIRECT_PHYSICAL_TRANSFER permits the
+   prepared-source finetune path to sample a physical OTF directly instead of
+   constructing a spatial PSF.  Store the effective mode in MODE_RET.  */
 static bool
 build_periodic_filter (typename fft_complex_t<screen_fft_t>::type *fft,
                        sharpen_parameters &sharpen,
                        bool anticipate_sharpening, bool parallel,
+                       bool direct_physical_transfer,
                        screen_filter_profile *profile,
                        sharpen_parameters::sharpen_mode *mode_ret)
 {
@@ -1916,159 +1956,174 @@ build_periodic_filter (typename fft_complex_t<screen_fft_t>::type *fft,
   const screen_fft_t data_scale = 1.0 / (screen::size * screen::size);
   const luminosity_t snr = sharpen.scanner_snr;
   const screen_fft_t k_const = snr > 0 ? 1.0f / snr : 0;
-  if (profile)
-    profile->mtf_precompute_calls++;
-  std::shared_ptr<mtf> cur_mtf = mtf::get_mtf (sharpen.scanner_mtf, NULL);
-  if (!cur_mtf->precompute (NULL, parallel))
-    return false;
-  int this_psf_size
-      = cur_mtf->psf_size (sharpen.scanner_mtf_scale * screen::size);
-  /* PSF precomputation may revise THIS_PSF_SIZE.  */
-  if (this_psf_size > screen::size)
+  /* A periodic source is filtered exactly by multiplying its Fourier-series
+     coefficients by the signed physical OTF at the corresponding harmonics.
+     Reuse the defocus-independent optical state and avoid constructing a
+     spatial PSF merely to wrap it back into the same period.  Measured and
+     empirical transfers retain the general support-dependent path below.  */
+  bool physical_focus_cache_hit = false;
+  std::shared_ptr<const mtf_focus_transfer> physical_focus;
+  if (direct_physical_transfer)
+    physical_focus = mtf_focus_transfer::get (
+        sharpen.scanner_mtf, &physical_focus_cache_hit);
+  if (physical_focus)
     {
       if (profile)
-        profile->mtf_psf_precompute_calls++;
-      if (!cur_mtf->precompute_psf (NULL, parallel))
+        {
+          (physical_focus_cache_hit ? profile->physical_focus_cache_hits
+                                    : profile->physical_focus_cache_misses)++;
+          profile->physical_focus_transfer_builds++;
+          profile->direct_transfer_builds++;
+        }
+      precomputed_function<double> transfer;
+      if (!physical_focus->precompute (
+              sharpen.scanner_mtf.defocus, transfer))
         return false;
-      this_psf_size
-          = cur_mtf->psf_size (sharpen.scanner_mtf_scale * screen::size);
+      build_direct_periodic_filter (
+          fft, step, mode, k_const, data_scale,
+          [&transfer] (double frequency) {
+            return transfer.apply (frequency);
+          });
     }
-
-  /* Small PSF support: sample the signed transfer directly on the fixed
-     periodic Fourier grid.  */
-  if (this_psf_size < screen::size)
-    {
-      if (profile)
-        profile->direct_transfer_builds++;
-      const auto &radii = periodic_fft_radii ();
-      for (int y = 0; y < fft_size; y++)
-        for (int x = 0; x < fft_size; x++)
-          {
-            std::complex<screen_fft_t> ker (
-                std::clamp ((screen_fft_t)cur_mtf->get_transfer (
-                                radii[y * fft_size + x] * step),
-                            (screen_fft_t)-1, (screen_fft_t)1),
-                (screen_fft_t)0);
-            if (mode == sharpen_parameters::wiener_deconvolution)
-              ker = ker
-                    * (std::conj (ker) / (std::norm (ker) + k_const));
-            else if (mode == sharpen_parameters::blur_deconvolution)
-              ker = ker * ker;
-            ker *= data_scale;
-            fft[y * fft_size + x][0] = std::real (ker);
-            fft[y * fft_size + x][1] = std::imag (ker);
-            if (y)
-              {
-                fft[(screen::size - y) * fft_size + x][0]
-                    = std::real (ker);
-                fft[(screen::size - y) * fft_size + x][1]
-                    = std::imag (ker);
-              }
-          }
-    }
-  /* Large PSF support: wrap the spatial PSF into one screen period and
-     transform that periodic kernel.  */
   else
     {
       if (profile)
-        profile->wrapped_psf_builds++;
-      std::vector<screen_fft_t> wrapped_psf (
-          screen::size * screen::size, 0.0);
-
-      if (parallel)
+        profile->mtf_precompute_calls++;
+      std::shared_ptr<mtf> cur_mtf
+          = mtf::get_mtf (sharpen.scanner_mtf, NULL);
+      if (!cur_mtf->precompute (NULL, parallel))
+        return false;
+      int this_psf_size
+          = cur_mtf->psf_size (sharpen.scanner_mtf_scale * screen::size);
+      /* PSF precomputation may revise THIS_PSF_SIZE.  */
+      if (this_psf_size > screen::size)
         {
-#pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
-    shared(wrapped_psf,cur_mtf,step,this_psf_size) if (parallel)
-          for (int yy = 0; yy < screen::size; yy++)
-            for (int xx = 0; xx < screen::size; xx++)
-              {
-                /* Use double to limit accumulation roundoff.  */
-                double sum = 0.0;
-                for (int y = yy; y < this_psf_size; y += screen::size)
-                  for (int x = xx; x < this_psf_size; x += screen::size)
-                    sum += cur_mtf->get_psf (
-                        x, y, step * screen::size);
-
-                for (int y = yy; y < this_psf_size; y += screen::size)
-                  for (int x = screen::size - xx; x < this_psf_size;
-                       x += screen::size)
-                    sum += cur_mtf->get_psf (
-                        x, y, step * screen::size);
-
-                for (int y = screen::size - yy; y < this_psf_size;
-                     y += screen::size)
-                  for (int x = xx; x < this_psf_size; x += screen::size)
-                    sum += cur_mtf->get_psf (
-                        x, y, step * screen::size);
-
-                for (int y = screen::size - yy; y < this_psf_size;
-                     y += screen::size)
-                  for (int x = screen::size - xx; x < this_psf_size;
-                       x += screen::size)
-                    sum += cur_mtf->get_psf (
-                        x, y, step * screen::size);
-
-                wrapped_psf[yy * screen::size + xx] = sum;
-              }
+          if (profile)
+            profile->mtf_psf_precompute_calls++;
+          if (!cur_mtf->precompute_psf (NULL, parallel))
+            return false;
+          this_psf_size
+              = cur_mtf->psf_size (
+                  sharpen.scanner_mtf_scale * screen::size);
         }
+
+      /* Small PSF support: sample the signed transfer directly on the fixed
+         periodic Fourier grid.  */
+      if (this_psf_size < screen::size)
+        {
+          if (profile)
+            profile->direct_transfer_builds++;
+          build_direct_periodic_filter (
+              fft, step, mode, k_const, data_scale,
+              [&cur_mtf] (double frequency) {
+                return cur_mtf->get_transfer (frequency);
+              });
+        }
+      /* Large PSF support: wrap the spatial PSF into one screen period and
+         transform that periodic kernel.  */
       else
         {
-          for (int yy = 0; yy < screen::size; yy++)
-            for (int xx = 0; xx < screen::size; xx++)
-              {
-                /* Use double to limit accumulation roundoff.  */
-                double sum = 0.0;
-                for (int y = yy; y < this_psf_size; y += screen::size)
-                  for (int x = xx; x < this_psf_size; x += screen::size)
-                    sum += cur_mtf->get_psf (
-                        x, y, step * screen::size);
+          if (profile)
+            profile->wrapped_psf_builds++;
+          std::vector<screen_fft_t> wrapped_psf (
+              screen::size * screen::size, 0.0);
 
-                for (int y = yy; y < this_psf_size; y += screen::size)
-                  for (int x = screen::size - xx; x < this_psf_size;
-                       x += screen::size)
-                    sum += cur_mtf->get_psf (
-                        x, y, step * screen::size);
+          if (parallel)
+            {
+#pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
+    shared(wrapped_psf,cur_mtf,step,this_psf_size) if (parallel)
+              for (int yy = 0; yy < screen::size; yy++)
+                for (int xx = 0; xx < screen::size; xx++)
+                  {
+                    /* Use double to limit accumulation roundoff.  */
+                    double sum = 0.0;
+                    for (int y = yy; y < this_psf_size; y += screen::size)
+                      for (int x = xx; x < this_psf_size; x += screen::size)
+                        sum += cur_mtf->get_psf (
+                            x, y, step * screen::size);
 
-                for (int y = screen::size - yy; y < this_psf_size;
-                     y += screen::size)
-                  for (int x = xx; x < this_psf_size; x += screen::size)
-                    sum += cur_mtf->get_psf (
-                        x, y, step * screen::size);
+                    for (int y = yy; y < this_psf_size; y += screen::size)
+                      for (int x = screen::size - xx; x < this_psf_size;
+                           x += screen::size)
+                        sum += cur_mtf->get_psf (
+                            x, y, step * screen::size);
 
-                for (int y = screen::size - yy; y < this_psf_size;
-                     y += screen::size)
-                  for (int x = screen::size - xx; x < this_psf_size;
-                       x += screen::size)
-                    sum += cur_mtf->get_psf (
-                        x, y, step * screen::size);
+                    for (int y = screen::size - yy; y < this_psf_size;
+                         y += screen::size)
+                      for (int x = xx; x < this_psf_size; x += screen::size)
+                        sum += cur_mtf->get_psf (
+                            x, y, step * screen::size);
 
-                wrapped_psf[yy * screen::size + xx] = sum;
-              }
-        }
+                    for (int y = screen::size - yy; y < this_psf_size;
+                         y += screen::size)
+                      for (int x = screen::size - xx; x < this_psf_size;
+                           x += screen::size)
+                        sum += cur_mtf->get_psf (
+                            x, y, step * screen::size);
 
-      double sum = 0;
-      for (screen_fft_t value : wrapped_psf)
-        sum += value;
-      if (!my_isfinite (sum) || sum <= 0)
-        return false;
-      const double sum_inv = 1 / sum;
-      for (screen_fft_t &value : wrapped_psf)
-        value *= sum_inv;
+                    wrapped_psf[yy * screen::size + xx] = sum;
+                  }
+            }
+          else
+            {
+              for (int yy = 0; yy < screen::size; yy++)
+                for (int xx = 0; xx < screen::size; xx++)
+                  {
+                    /* Use double to limit accumulation roundoff.  */
+                    double sum = 0.0;
+                    for (int y = yy; y < this_psf_size; y += screen::size)
+                      for (int x = xx; x < this_psf_size; x += screen::size)
+                        sum += cur_mtf->get_psf (
+                            x, y, step * screen::size);
 
-      auto plan_2d = fft_plan_r2c_2d<screen_fft_t> (
-          screen::size, screen::size, NULL /* Do not overwrite */, fft);
-      plan_2d.execute_r2c (wrapped_psf.data (), fft);
-      if (profile)
-        profile->kernel_forward_ffts++;
-      for (int i = 0; i < fft_size * screen::size; i++)
-        {
-          std::complex<screen_fft_t> ker (fft[i][0], fft[i][1]);
-          if (mode == sharpen_parameters::wiener_deconvolution)
-            ker = ker * (std::conj (ker) / (std::norm (ker) + k_const));
-          else if (mode == sharpen_parameters::blur_deconvolution)
-            ker = ker * ker;
-          fft[i][0] = std::real (ker) * data_scale;
-          fft[i][1] = std::imag (ker) * data_scale;
+                    for (int y = yy; y < this_psf_size; y += screen::size)
+                      for (int x = screen::size - xx; x < this_psf_size;
+                           x += screen::size)
+                        sum += cur_mtf->get_psf (
+                            x, y, step * screen::size);
+
+                    for (int y = screen::size - yy; y < this_psf_size;
+                         y += screen::size)
+                      for (int x = xx; x < this_psf_size; x += screen::size)
+                        sum += cur_mtf->get_psf (
+                            x, y, step * screen::size);
+
+                    for (int y = screen::size - yy; y < this_psf_size;
+                         y += screen::size)
+                      for (int x = screen::size - xx; x < this_psf_size;
+                           x += screen::size)
+                        sum += cur_mtf->get_psf (
+                            x, y, step * screen::size);
+
+                    wrapped_psf[yy * screen::size + xx] = sum;
+                  }
+            }
+
+          double sum = 0;
+          for (screen_fft_t value : wrapped_psf)
+            sum += value;
+          if (!my_isfinite (sum) || sum <= 0)
+            return false;
+          const double sum_inv = 1 / sum;
+          for (screen_fft_t &value : wrapped_psf)
+            value *= sum_inv;
+
+          auto plan_2d = fft_plan_r2c_2d<screen_fft_t> (
+              screen::size, screen::size, NULL /* Do not overwrite */, fft);
+          plan_2d.execute_r2c (wrapped_psf.data (), fft);
+          if (profile)
+            profile->kernel_forward_ffts++;
+          for (int i = 0; i < fft_size * screen::size; i++)
+            {
+              std::complex<screen_fft_t> ker (fft[i][0], fft[i][1]);
+              if (mode == sharpen_parameters::wiener_deconvolution)
+                ker = ker
+                      * (std::conj (ker) / (std::norm (ker) + k_const));
+              else if (mode == sharpen_parameters::blur_deconvolution)
+                ker = ker * ker;
+              fft[i][0] = std::real (ker) * data_scale;
+              fft[i][1] = std::imag (ker) * data_scale;
+            }
         }
     }
 
@@ -2115,7 +2170,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
               *sharpen[c], *sharpen[c - 1], anticipate_sharpening))
         if (!build_periodic_filter (
                 fft.get (), *sharpen[c], anticipate_sharpening, parallel,
-                profile, &mode))
+                false, profile, &mode))
           return false;
 
       const uint64_t channels = all ? 3 : 1;
@@ -2151,9 +2206,10 @@ screen::initialize_with_sharpen_parameters (screen &scr,
   return true;
 }
 
-/* Initialize current screen from immutable SOURCE spectra.  This is the same
-   exact linear filter as the ordinary path, but it omits the source forward
-   FFTs.  */
+/* Initialize current screen from immutable SOURCE spectra.  Omit the source
+   forward FFTs.  For analytical physical defocus, sample the signed OTF
+   directly at the periodic harmonics; this is the exact Fourier-series
+   convolution and avoids the ordinary path's sampled-PSF round trip.  */
 bool
 screen::initialize_with_sharpen_parameters (
     const screen_filter_source &source, sharpen_parameters *sharpen[3],
@@ -2185,7 +2241,7 @@ screen::initialize_with_sharpen_parameters (
               *sharpen[c], *sharpen[c - 1], anticipate_sharpening))
         if (!build_periodic_filter (
                 fft.get (), *sharpen[c], anticipate_sharpening, parallel,
-                profile, &mode))
+                true, profile, &mode))
           return false;
       /* Richardson-Lucy was rejected above; keep the assertion near the
          application point so later mode additions cannot silently misuse the

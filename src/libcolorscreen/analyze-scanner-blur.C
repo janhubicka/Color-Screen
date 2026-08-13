@@ -667,11 +667,16 @@ analyze_scanner_blur_worker::print_profile () const
           (unsigned long long)p.focus_screen_interpolations,
           (unsigned long long)p.focus_screen_exact_node_uses,
           (unsigned long long)p.focus_screen_final_exact_builds);
-  printf ("  exact screen builds: %llu; MTF precomputes %llu, PSF "
-          "precomputes %llu; direct transfers %llu, wrapped PSFs %llu\n",
+  printf ("  exact screen builds: %llu; general MTF precomputes %llu, PSF "
+          "precomputes %llu; physical focus state %llu hits, %llu misses, "
+          "%llu transfer tables\n",
           (unsigned long long)p.exact_screen_builds,
           (unsigned long long)p.mtf_precompute_calls,
           (unsigned long long)p.mtf_psf_precompute_calls,
+          (unsigned long long)p.physical_focus_cache_hits,
+          (unsigned long long)p.physical_focus_cache_misses,
+          (unsigned long long)p.physical_focus_transfer_builds);
+  printf ("  periodic filters: %llu direct transfers, %llu wrapped PSFs\n",
           (unsigned long long)p.direct_transfer_builds,
           (unsigned long long)p.wrapped_psf_builds);
   printf ("  FFTs: %llu kernel forward, %llu screen forward, %llu screen "

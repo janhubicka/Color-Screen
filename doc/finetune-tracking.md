@@ -619,7 +619,11 @@ quadratic nodes and interpolates neighboring exact node screens; see FT-053.
 Revision 0022 splits the immutable source spectra from the focus-dependent
 transfer for fixed-geometry scalar physical defocus, so remaining node misses
 and exact-final evaluations no longer repeat the three source forward FFTs;
-see FT-052.  Other MTF fits still use arbitrary exact simplex coordinates.
+see FT-052.  Revision 0023 also separates the defocus-independent physical
+transfer state and applies the signed OTF directly at periodic harmonics, so
+the supported path no longer reconstructs a spatial PSF or performs a kernel
+FFT for every exact node; see FT-054.  Other MTF fits still use arbitrary exact
+simplex coordinates.
 
 ### FT-035 — no instrumentation separates optimizer and screen-filter cost
 
@@ -634,8 +638,8 @@ snapshot in `finetune_result::profile`, and exposes aggregate reporting through
 - simplex runs, iterations, evaluations, and total objective calls;
 - `init_screen()` calls, local reuse, exact builds, and fixed/focus cache
   hits/misses;
-- MTF and PSF preparation, direct/wrapped transfer construction, and
-  forward/inverse FFT counts;
+- general MTF and PSF preparation, physical-transfer cache/table work,
+  direct/wrapped transfer construction, and forward/inverse FFT counts;
 - steady-clock time in the objective, filtering/cache path, sampling, colour
   estimation, and residual evaluation.
 
@@ -682,6 +686,27 @@ small exact improvement on this fixture, not another interpolation-sized
 speedup: PSF construction and inverse FFTs now dominate.  These times are
 diagnostic rather than a claim about full-scan scaling.
 
+Revision 0023 removes that repeated PSF construction from the supported
+fixed-source scalar physical-defocus path.  A one-thread fixed-strip run used
+the same analytical transfer table as the general MTF model but sampled it
+directly at the periodic Fourier harmonics.  Three alternating measurements
+reduced the exact-path median from 2.36 s in 0022 to 0.10 s and the 33-node
+interpolated median from 1.14 s to 0.09 s.  The exact run reported 112 direct
+periodic transfers, one miss plus 111 hits in the defocus-independent physical
+state cache, zero general MTF/PSF preparations, zero wrapped PSFs, and zero
+kernel FFTs.  The fixed-strip saved correction files remained byte-identical
+to 0022 for both exact and interpolated runs.
+
+With the experimental Dufay strip-width prepass enabled, revision 0023 keeps
+the 104 variable-source coarse builds on the ordinary wrapped-PSF path and
+uses the direct physical path only after the robust widths become fixed.  The
+same local benchmark changed from approximately 4.94 s to 2.52 s.  This mixed
+case is intentionally not evidence for strip-width approximation: the dense
+periodic convolution now evaluates the analytical signed OTF directly rather
+than reproducing the older sampled-and-wrapped spatial-PSF approximation, so
+full-scan validation remains appropriate even though the fixed-strip
+displacement regression is unchanged.
+
 ### FT-036 — adaptive output is scalar but per-channel fits are accepted
 
 **Severity:** medium API/model correctness
@@ -700,7 +725,8 @@ extend the correction-table and renderer formats to preserve three channels.
 
 **Severity:** high approximation correctness
 
-**Status:** performance design
+**Status:** fixed for prepared scalar physical defocus; open for the ordinary
+filtering paths
 
 `screen::initialize_with_sharpen_parameters()` does not use one numerically
 uniform implementation over the whole focus range.  Depending on the estimated
@@ -717,6 +743,14 @@ optimum exactly.  This avoids interpolation of MTF magnitude and passed the
 current midpoint and end-to-end regressions, but it does not yet adaptively
 subdivide or detect every direct/wrapped transition.  Keep this issue open for
 broader models, screen frequencies, and error-controlled refinement.
+
+Revision 0023 removes the implementation transition from the supported
+fixed-source scalar physical-defocus path.  A periodic source is convolved
+exactly by multiplying its Fourier-series coefficients with the signed OTF at
+the corresponding harmonics, so this path no longer estimates PSF support or
+switches to a sampled-and-wrapped spatial kernel.  Variable-strip sources,
+measured MTFs, empirical blur, and the other ordinary filtering paths retain
+the direct/wrapped choice and therefore keep this issue relevant.
 
 ### FT-052 — exact focus-cache misses rebuild invariant source state
 
@@ -737,7 +771,9 @@ thread-safe LRU is keyed by screen type and the relevant fixed strip widths.
 The first supported focus state constructs the ideal screen and forward-
 transforms its three channels; later exact nodes and exact-final evaluations
 reuse that state.  Regression coverage requires the second exact focus state
-to perform no source forward FFTs and to match the ordinary exact build.
+to perform no source forward FFTs.  Revision 0023 validates the prepared path
+against the analytical signed transfer itself rather than requiring equality
+with the ordinary sampled-PSF numerical implementation.
 
 The optimization is intentionally limited to scalar physical defocus with a
 fixed, emulsion-independent source.  Dufay strip-width fitting continues on the
@@ -746,6 +782,39 @@ emulsion blur/intensity/offset fitting remains private until source ownership
 is explicit.  Per-channel focus, residual sigma, compact blur, and legacy blur
 also remain outside this first implementation.  Extending source-state reuse
 to those cases is lower priority than validating scalar defocus on full scans.
+
+### FT-054 — physical focus nodes rebuild invariant transfer and spatial PSF
+
+**Severity:** high performance
+
+**Status:** fixed for fixed-source scalar physical defocus
+
+After revision 0022, every exact focus-node miss still constructed a complete
+`mtf` table, estimated its PSF support, reconstructed a sampled spatial PSF,
+wrapped that kernel into the 128x128 period, and forward-transformed it.  Most
+of the analytical system transfer is independent of defocus, and the spatial
+PSF round trip is unnecessary for a periodic source.
+
+Revision 0023 introduces a bounded thread-safe cache whose key contains the
+physical capture model with defocus normalized to zero.  It prepares the fixed
+sensor aperture, diffraction, residual Gaussian, halo, pupil-overlap
+denominators, defocus phase scales, and periodic Fourier-bin radii once.  A new
+focus value evaluates only the signed defocus-dependent pupil numerators and
+constructs the same 512-sample radial transfer table used by
+`mtf::precompute()`.
+
+The prepared-source screen path samples that table directly at the periodic
+harmonics, multiplies it by the cached source spectra, and performs the three
+inverse FFTs.  This is the exact Fourier-series convolution for the analytical
+periodic model and preserves negative OTF lobes.  It avoids PSF support
+estimation, PSF reconstruction and wrapping, and the kernel forward FFT.
+
+The optimization is deliberately limited to the fixed-source scalar physical
+displacement path.  The Dufay strip-width prepass changes the source screen and
+continues through the ordinary filter, as do per-channel defocus, residual
+sigma, measured MTFs, empirical compact blur, legacy blur, emulsion variables,
+and Richardson--Lucy sharpening.  Those cases may be factored later only with
+their own correctness tests and cache keys.
 
 ### FT-053 — arbitrary simplex focus nodes have a low exact-cache hit rate
 
@@ -785,8 +854,8 @@ three-dimensional RGB table.
 
 Revision 0017 supplies a reproducible first speed and equality check, but its
 numbers are not a portable universal claim.  They depend on the screen family,
-MTF model, metadata, FFT implementation, thread count, and where the useful
-range crosses the direct/wrapped-PSF transition in FT-037.
+MTF model, metadata, FFT implementation, thread count, and whether the
+prepared physical path or an ordinary support-dependent filter is active.
 
 The initial reproducible smoke command, run from `testsuite`, is:
 
@@ -825,9 +894,9 @@ preparation, FFTs, cache behaviour, and major objective stages.  Broader
 benchmark collection remains useful, but instrumentation is no longer a blocker
 for exact optimization work.
 
-### Phase B — share immutable source state
+### Phase B — share immutable source and physical-transfer state
 
-**Status:** complete for fixed-geometry scalar physical defocus in 0022;
+**Status:** complete for fixed-geometry scalar physical defocus in 0023;
 variable-source cases remain open
 
 Revision 0022 splits screen preparation into:
@@ -841,8 +910,8 @@ Revision 0022 splits screen preparation into:
 A bounded shared cache now reuses stages 1 and 2 across local scalar-defocus
 solvers.  Its key includes the state that changes the supported source:
 
-- screen type and strip widths;
-- screen type and the fixed strip widths.
+- screen type;
+- the fixed strip widths relevant to that process.
 
 Capture scale, MTF metadata, wavelength, sigma, halo, sensor aperture, and
 sharpening mode remain in the subsequent transfer-state key rather than the
@@ -850,6 +919,13 @@ source-FFT key.  Emulsion-dependent and variable-strip sources deliberately
 stay on the ordinary exact path; if they are supported later, their full
 source state must be added to the key rather than keying either cache only on
 scalar focus.
+
+Revision 0023 adds an independent cache for stage 3.  Defocus is normalized
+out of its key, while sensor aperture, diffraction metadata, residual sigma,
+halo, and the other active physical-model fields remain part of the identity.
+Each exact focus node then evaluates only the varying signed pupil term and
+samples the result on the precomputed periodic frequency grid.  No spatial PSF
+or kernel FFT is needed in this supported path.
 
 ### Phase C — exact focus-node cache
 
@@ -861,7 +937,9 @@ constructions are not published, and emulsion-dependent fits are excluded.
 Revision 0017 makes dense scalar physical-focus requests converge on shared
 quadratic node keys, while other exact fits retain arbitrary simplex values.
 Revision 0022 makes supported final-screen misses cheaper by reusing an
-independently cached immutable source spectrum.
+independently cached immutable source spectrum.  Revision 0023 also reuses the
+defocus-independent analytical transfer state and constructs each exact node
+through direct periodic-OTF multiplication.
 
 Per-channel focus should ultimately use separable one-dimensional transfer
 state rather than a dense three-dimensional RGB focus table.
@@ -897,10 +975,11 @@ An error-controlled extension should, for selected intervals:
 
 The implemented table range is driven by the physical screen-frequency MTF,
 not the full legal 0--20 mm interval, and its spacing is quadratic rather than
-uniform.  An adaptive extension should still detect intervals crossing the
-direct/wrapped PSF transition from FT-037; the safest long-term design is to
-interpolate one common signed frequency-domain representation instead of two
-different final-screen paths.
+uniform.  The prepared scalar physical path now uses one common signed
+frequency-domain representation throughout the range.  If interpolation is
+broadened to ordinary measured, empirical, variable-source, or per-channel
+paths, it must still account for their direct/wrapped implementation choices
+or establish an equivalent common representation first.
 
 ### Acceptance criteria
 
@@ -953,6 +1032,26 @@ Revision 0017 adds:
   exercised, reduces exact screen builds, and preserves the exact correction
   table within 0.00001 mm.
 
+Revision 0022 adds:
+
+- exact prepared-source filtering and source-spectrum cache reuse;
+- no repeated source forward FFTs after the first fixed-geometry focus state;
+- concurrent focus requests sharing one immutable three-channel source
+  preparation;
+- end-to-end profile accounting showing fewer source forward than inverse
+  transforms.
+
+Revision 0023 adds:
+
+- defocus-independent physical-transfer cache miss/hit and pointer reuse;
+- transfer-table equality with the independent analytical `mtf` path over the
+  complete sampled frequency range;
+- signed periodic-harmonic response equal to the analytical OTF coefficient;
+- zero general MTF/PSF preparations, zero wrapped kernels, and zero kernel FFTs
+  in the supported prepared scalar physical-defocus path;
+- end-to-end fixed-strip exact/interpolated correction equality with the
+  previous revision.
+
 ## Test work still required
 
 1. Add synthetic rectangular-tile geometry tests that recover known phase,
@@ -965,8 +1064,9 @@ Revision 0017 adds:
    differ, so the FT-001 stride regression cannot return.
 5. Add synthetic spatial-focus fields and compare recovered correction tables
    with known truth.
-6. Collect full-scan RGB+IR profile distributions, including screen and
-   objective error around direct/wrapped-PSF transitions, before broadening the
-   approximation beyond the physical displacement-only GUI path.
+6. Collect full-scan RGB+IR profile distributions and screen/objective error
+   around signed-OTF zero crossings.  If approximation is broadened beyond the
+   prepared physical displacement-only GUI path, also cover the ordinary
+   direct/wrapped-PSF transitions used by those additional models.
 7. Run the existing Dufay RGB finetune tests, all `libcolorscreen` unit tests,
    and the real MTF/edge reproducibility tests on Linux, macOS, and Windows.
