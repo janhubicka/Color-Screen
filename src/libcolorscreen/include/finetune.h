@@ -69,6 +69,81 @@ enum finetune_flags : uint64_t
   finetune_produce_images = 1 << 21
 };
 
+/* Lightweight counters collected by FINETUNE.  Times use steady-clock
+   nanoseconds and are intended for relative performance diagnosis, not for
+   benchmarking across different machines or builds.  Cache hits include a
+   thread that waited for another thread to finish constructing the same exact
+   entry; the screen-filter time is charged only to the thread that performed
+   the construction.  */
+struct finetune_profile
+{
+  uint64_t simplex_runs = 0;
+  uint64_t simplex_iterations = 0;
+  uint64_t simplex_evaluations = 0;
+  uint64_t objective_evaluations = 0;
+
+  uint64_t screen_init_calls = 0;
+  uint64_t screen_state_reuses = 0;
+  uint64_t fixed_screen_cache_hits = 0;
+  uint64_t fixed_screen_cache_misses = 0;
+  uint64_t focus_screen_cache_hits = 0;
+  uint64_t focus_screen_cache_misses = 0;
+  uint64_t focus_screen_interpolations = 0;
+  uint64_t focus_screen_exact_node_uses = 0;
+  uint64_t focus_screen_final_exact_builds = 0;
+  uint64_t exact_screen_builds = 0;
+
+  uint64_t mtf_precompute_calls = 0;
+  uint64_t mtf_psf_precompute_calls = 0;
+  uint64_t direct_transfer_builds = 0;
+  uint64_t wrapped_psf_builds = 0;
+  uint64_t kernel_forward_ffts = 0;
+  uint64_t screen_forward_ffts = 0;
+  uint64_t screen_inverse_ffts = 0;
+
+  uint64_t objective_nanoseconds = 0;
+  uint64_t screen_filter_nanoseconds = 0;
+  uint64_t screen_cache_nanoseconds = 0;
+  uint64_t screen_interpolation_nanoseconds = 0;
+  uint64_t screen_simulation_nanoseconds = 0;
+  uint64_t color_estimation_nanoseconds = 0;
+  uint64_t residual_nanoseconds = 0;
+
+  finetune_profile &
+  operator+= (const finetune_profile &o)
+  {
+    simplex_runs += o.simplex_runs;
+    simplex_iterations += o.simplex_iterations;
+    simplex_evaluations += o.simplex_evaluations;
+    objective_evaluations += o.objective_evaluations;
+    screen_init_calls += o.screen_init_calls;
+    screen_state_reuses += o.screen_state_reuses;
+    fixed_screen_cache_hits += o.fixed_screen_cache_hits;
+    fixed_screen_cache_misses += o.fixed_screen_cache_misses;
+    focus_screen_cache_hits += o.focus_screen_cache_hits;
+    focus_screen_cache_misses += o.focus_screen_cache_misses;
+    focus_screen_interpolations += o.focus_screen_interpolations;
+    focus_screen_exact_node_uses += o.focus_screen_exact_node_uses;
+    focus_screen_final_exact_builds += o.focus_screen_final_exact_builds;
+    exact_screen_builds += o.exact_screen_builds;
+    mtf_precompute_calls += o.mtf_precompute_calls;
+    mtf_psf_precompute_calls += o.mtf_psf_precompute_calls;
+    direct_transfer_builds += o.direct_transfer_builds;
+    wrapped_psf_builds += o.wrapped_psf_builds;
+    kernel_forward_ffts += o.kernel_forward_ffts;
+    screen_forward_ffts += o.screen_forward_ffts;
+    screen_inverse_ffts += o.screen_inverse_ffts;
+    objective_nanoseconds += o.objective_nanoseconds;
+    screen_filter_nanoseconds += o.screen_filter_nanoseconds;
+    screen_cache_nanoseconds += o.screen_cache_nanoseconds;
+    screen_interpolation_nanoseconds += o.screen_interpolation_nanoseconds;
+    screen_simulation_nanoseconds += o.screen_simulation_nanoseconds;
+    color_estimation_nanoseconds += o.color_estimation_nanoseconds;
+    residual_nanoseconds += o.residual_nanoseconds;
+    return *this;
+  }
+};
+
 /* Configuration and optional diagnostic outputs for one FINETUNE call.  */
 struct finetune_parameters
 {
@@ -94,6 +169,25 @@ struct finetune_parameters
   const char *merged_file = nullptr;
   const char *collected_file = nullptr;
   const char *dot_spread_file = nullptr;
+  /* Collect detailed cache, FFT and timing counters in FINETUNE_RESULT.
+     Disabled by default so ordinary geometry/focus fitting pays no profiling
+     clock or atomic-counter overhead.  */
+  bool collect_profile = false;
+
+  /* Approximate scalar physical defocus during a fit by linearly
+     interpolating periodic screens cached at a fixed nonlinear grid of exact
+     defocus nodes.  This is intended for the dense displacement-analysis pass
+     after an exact coarse prepass.  It is accepted only when scalar physical
+     defocus is the sole varying capture-transfer parameter.
+
+     SCANNER_MTF_DEFOCUS_INTERPOLATION_MAX is the useful nonnegative defocus
+     range in millimetres.  SCANNER_MTF_DEFOCUS_INTERPOLATION_NODES includes
+     both endpoints; the nodes are quadratically spaced to provide finer
+     resolution near focus.  The final fitted point is always evaluated with
+     an exact screen and is not inserted into the node cache.  */
+  bool interpolate_scanner_mtf_defocus = false;
+  coord_t scanner_mtf_defocus_interpolation_max = 0;
+  int scanner_mtf_defocus_interpolation_nodes = 33;
   finetune_parameters () {}
 };
 
@@ -151,6 +245,11 @@ struct finetune_result
   rgbdata mix_weights = { -1, -1, -1 };
   rgbdata mix_dark = { -1, -1, -1 };
   std::string err;
+
+  /* Work performed by this FINETUNE call when COLLECT_PROFILE was enabled.
+     The snapshot remains useful on failure and is independent of the validity
+     of the numerical result fields.  */
+  finetune_profile profile;
 
   /* Solver point data.  */
   point_t solver_point_img_location = { -1, -1 };

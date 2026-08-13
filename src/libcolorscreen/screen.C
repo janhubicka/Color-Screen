@@ -1785,6 +1785,22 @@ screen::get_image (bool normalize, int tiles) const
   return img;
 }
 
+/* Return true when A and B produce the same periodic capture/sharpening
+   transfer.  SHARPEN_PARAMETERS::OPERATOR== deliberately ignores scanner MTF
+   fields when the effective digital sharpening mode is NONE.  The forward
+   capture transfer is nevertheless applied by this routine, so compare it
+   explicitly.  */
+static bool
+same_periodic_filter_parameters_p (const sharpen_parameters &a,
+                                   const sharpen_parameters &b,
+                                   bool anticipate_sharpening)
+{
+  if (a.scanner_mtf_scale != b.scanner_mtf_scale
+      || (a.scanner_mtf_scale && !(a.scanner_mtf == b.scanner_mtf)))
+    return false;
+  return !anticipate_sharpening || a == b;
+}
+
 /* Initialize current screen by applying sharpening parameters SHARPEN to SCR.
    If ANTICIPATE_SHARPENING is true, apply the digital sharpening as well.
    PARALLEL permits OpenMP.  Return false when transfer/PSF construction
@@ -1792,13 +1808,17 @@ screen::get_image (bool normalize, int tiles) const
 bool
 screen::initialize_with_sharpen_parameters (screen &scr,
 					    sharpen_parameters *sharpen[3],
-					    bool anticipate_sharpening, bool parallel)
+					    bool anticipate_sharpening, bool parallel,
+					    screen_filter_profile *profile)
 {
   /* ADD is presentation data rather than optical transmission.  Preserve it
      while filtering the multiplicative transmission in MULT.  */
   memcpy (add, scr.add, sizeof (add));
   auto fft = fft_alloc_complex<screen_fft_t> (screen::size * fft_size);
-  bool all = *sharpen[0] == *sharpen[1] && *sharpen[0] == *sharpen[2];
+  bool all = same_periodic_filter_parameters_p (
+                 *sharpen[0], *sharpen[1], anticipate_sharpening)
+             && same_periodic_filter_parameters_p (
+                 *sharpen[0], *sharpen[2], anticipate_sharpening);
 #if 0
   printf ("Initial patch proportions:");
   scr.patch_proportions ().print (stdout);
@@ -1809,12 +1829,16 @@ screen::initialize_with_sharpen_parameters (screen &scr,
       sharpen_parameters::sharpen_mode mode = sharpen[c]->get_mode ();
       if (!anticipate_sharpening)
 	mode = sharpen_parameters::none;
-      if (!c || !(*sharpen[c] == *sharpen[c - 1]))
+      if (!c
+          || !same_periodic_filter_parameters_p (
+              *sharpen[c], *sharpen[c - 1], anticipate_sharpening))
         {
           luminosity_t step = sharpen[c]->scanner_mtf_scale;
           screen_fft_t data_scale = 1.0 / (screen::size * screen::size);
 	  luminosity_t snr = sharpen[c]->scanner_snr;
           screen_fft_t k_const = snr > 0 ? 1.0f / snr : 0;
+	  if (profile)
+	    profile->mtf_precompute_calls++;
 	  std::shared_ptr<mtf> cur_mtf = mtf::get_mtf (sharpen[c]->scanner_mtf, NULL);
 	  if (!cur_mtf->precompute (NULL, parallel))
 	    return false;
@@ -1823,6 +1847,8 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 	  /* PSF may revisit this_psf_size.  */
 	  if (this_psf_size > screen::size)
 	    {
+	      if (profile)
+		profile->mtf_psf_precompute_calls++;
 	      if (!cur_mtf->precompute_psf (NULL, parallel))
 		return false;
 	      this_psf_size = cur_mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
@@ -1831,6 +1857,8 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 	  /* Small PSF size: use fast path of producing its FFT directly.  */
 	  if (this_psf_size < screen::size)
 	    {
+	      if (profile)
+		profile->direct_transfer_builds++;
 	      for (int y = 0; y < fft_size; y++)
 		for (int x = 0; x < fft_size; x++)
 		  {
@@ -1865,6 +1893,8 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 	  /* Large PSF: Compute its periodic form and do FFT.  */
 	  else
 	    {
+	      if (profile)
+		profile->wrapped_psf_builds++;
 	      std::vector <screen_fft_t> wrapped_psf (screen::size * screen::size, 0.0);
 	      //printf ("This psf size %i\n", this_psf_size);
 
@@ -1961,6 +1991,8 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		}
 	      auto plan_2d = fft_plan_r2c_2d<screen_fft_t> (screen::size, screen::size, NULL /* Do not overwrite */, fft.get ());
 	      plan_2d.execute_r2c (wrapped_psf.data (), fft.get ());
+	      if (profile)
+		profile->kernel_forward_ffts++;
 	      //printf ("screen snr %f mtf0 %f %f", snr, fft[0][0], fft[0][1]);
 	      for (int x = 0; x < fft_size * screen::size; x++)
 		{
@@ -1984,10 +2016,33 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		fft[x][1] *= sc;
 	      }
         }
+      const uint64_t channels = all ? 3 : 1;
       if (mode != sharpen_parameters::richardson_lucy_deconvolution)
-        initialize_with_2D_fft_fast<screen_fft_t> (*this, scr, fft.get (), c, all ? 2 : c);
+        {
+          initialize_with_2D_fft_fast<screen_fft_t> (
+              *this, scr, fft.get (), c, all ? 2 : c);
+          if (profile)
+            {
+              profile->screen_forward_ffts += channels;
+              profile->screen_inverse_ffts += channels;
+            }
+        }
       else
-        initialize_with_richardson_lucy<screen_fft_t> (*this, scr, fft.get (), c, all ? 2 : c, sharpen[c]->richardson_lucy_iterations, sharpen[c]->richardson_lucy_sigma);
+        {
+          initialize_with_richardson_lucy<screen_fft_t> (
+              *this, scr, fft.get (), c, all ? 2 : c,
+              sharpen[c]->richardson_lucy_iterations,
+              sharpen[c]->richardson_lucy_sigma);
+          if (profile)
+            {
+              const uint64_t transforms_per_channel
+                  = 1 + 2 * (uint64_t)sharpen[c]->richardson_lucy_iterations;
+              profile->screen_forward_ffts
+                  += channels * transforms_per_channel;
+              profile->screen_inverse_ffts
+                  += channels * transforms_per_channel;
+            }
+        }
       if (all)
 	break;
     }

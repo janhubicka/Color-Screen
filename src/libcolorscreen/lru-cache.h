@@ -165,8 +165,12 @@ protected:
      FETCH_FUNC produces the value T for P.  */
   template <typename Matcher, typename Init, typename Fetcher>
   std::shared_ptr<T>
-  get_internal (P &p, progress_info *progress, uint64_t *id_out, Matcher &&match_func, Init &&init_func, Fetcher &&fetch_func)
+  get_internal (P &p, progress_info *progress, uint64_t *id_out,
+                bool *cache_hit, Matcher &&match_func, Init &&init_func,
+                Fetcher &&fetch_func)
   {
+    if (cache_hit)
+      *cache_hit = false;
     uint64_t time = lru_caches::get ();
     Entry *longest_unused = NULL, *e;
     int size = 0;
@@ -216,10 +220,12 @@ protected:
             std::shared_ptr<T> ret = e->val;
             if (id_out)
               *id_out = e->id;
+            if (cache_hit)
+              *cache_hit = (bool)ret;
             return ret;
           }
         if (e->val.use_count () <= 1 && !e->computing
-            && (!longest_unused || longest_unused->last_used < e->last_used))
+            && (!longest_unused || e->last_used < longest_unused->last_used))
           longest_unused = e;
         size++;
       }
@@ -329,10 +335,11 @@ public:
      Use PROGRESS for task cancellation.
      ID will receive the unique identifier of the entry.  */
   std::shared_ptr<T>
-  get (P &p, progress_info *progress, uint64_t *id = NULL)
+  get (P &p, progress_info *progress, uint64_t *id = NULL,
+       bool *cache_hit = NULL)
   {
     return this->get_internal (
-        p, progress, id,
+        p, progress, id, cache_hit,
         [&](Entry *e) { return p == e->params; },
         [](Entry *) {},
         [&](Entry *e) { return get_new (e->params, progress); });
@@ -369,10 +376,11 @@ public:
      Use PROGRESS for task cancellation.
      ID will receive the unique identifier of the entry.  */
   std::shared_ptr<T>
-  get (P &p, int_image_area area, progress_info *progress, uint64_t *id = NULL)
+  get (P &p, int_image_area area, progress_info *progress,
+       uint64_t *id = NULL, bool *cache_hit = NULL)
   {
     return this->get_internal (
-        p, progress, id,
+        p, progress, id, cache_hit,
         [&](Entry *e) {
           return e->area.contains_p (area) && p == e->params;
         },

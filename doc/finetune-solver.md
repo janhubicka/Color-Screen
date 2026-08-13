@@ -66,7 +66,8 @@ expensive local fits themselves:
 2. `analyze_strips()` fits each coarse location;
 3. `step2()` rejects the least reliable prepass fits by fit score, computes
    robust global strip widths and focus, updates the worker's private rendering
-   parameters, and allocates the dense pass;
+   parameters, derives the useful physical-defocus range when dense focus
+   interpolation is enabled, and allocates the dense pass;
 4. `analyze_blur()` fits each dense sub-sample;
 5. `step3()` rejects the least reliable local fits by fit score and robustly
    reduces every group of sub-samples to one correction-table entry.
@@ -249,29 +250,132 @@ complete periodic screen.
 This warm start is exact: it changes only the initial simplex, not the forward
 model or objective.
 
-## Existing caches and invalidation
+## Focus caches, discretization, and invalidation
 
-The solver has two useful but limited exact caches.
+The solver uses three exact reuse levels and one deliberately narrow
+approximation for the dense physical-displacement pass.
 
 1. A fixed-screen fast path calls `render_to_scr::get_screen()` when no screen,
-   blur, MTF, strip, or emulsion variable changes.  Its tile revision is marked
-   current after a cache hit.
-2. A variable solver instance remembers the last strip widths, emulsion state,
+   blur, MTF, strip, or emulsion variable changes.  The returned immutable
+   periodic screen is shared directly, and its tile revision is marked current
+   after both cache hits and misses.
+2. Every `finetune_solver` remembers its last strip widths, emulsion state,
    legacy blur, MTF sigma, and per-channel focus.  It rebuilds the periodic
    screen only when one of those values changes; a pure phase update only
    resamples.
+3. MTF sigma/focus fits with an emulsion-independent source use a dedicated,
+   thread-safe finetune cache of exact final periodic screens.  Its nominal
+   capacity is 64 entries, about 24 MiB with the current 128x128 RGB screen
+   representation.  The key contains the screen family, relevant strip widths,
+   whether sharpening is anticipated, and the complete per-channel capture and
+   sharpening parameters.  Construction-only state such as the OpenMP choice
+   is not part of the key.
 
-These caches are local to one `finetune_solver`.  Adaptive focus constructs a
-new solver for every scan location, so exact screens and source FFTs are not
-shared between neighbouring cells.  This is the principal performance issue
-behind FT-034.
+The finetune cache is deliberately separate from the ordinary rendering cache,
+so transient simplex vertices cannot evict display/render entries.  Entries
+still referenced by active solvers cannot be evicted, so the nominal capacity
+is a soft bound under heavy concurrent use.  A failed MTF/PSF construction is
+never published.  Emulsion blur, offset, and intensity fits continue to use
+private copy-on-write screens because their source screen varies by tile and
+objective state.
 
-The current review deliberately does not interpolate between focus values.
-Physical defocus has signed OTF zero crossings, and the screen filter can switch
-between direct and wrapped-PSF implementations as support grows.  The proposed
-order is therefore: instrument, share immutable/exact state, add a bounded exact
-focus-node cache, and only then evaluate error-controlled interpolation with an
-exact final objective/refinement.  See FT-034 through FT-037.
+The three reuse levels are numerically exact.  The cache comparison explicitly
+includes per-channel capture MTFs even when digital sharpening mode is `none`;
+the capture transfer remains active in that mode.  This also prevents distinct
+channel MTFs from being mistaken for one common filter.
+
+### Dense scalar physical-defocus interpolation
+
+The exact cache alone has limited value for adaptive focus because a simplex
+normally generates different floating-point defocus values in every local fit.
+For the second, dense stage of displacement analysis, the worker can therefore
+restrict scalar physical defocus to a shared nonlinear node table and
+interpolate between neighboring exact cached screens.  The coarse prepass is
+always exact.
+
+After the prepass, the worker calculates the process-screen frequency using the
+same expression as the GUI MTF widget:
+
+```text
+screen_frequency = scr_names[screen_type].frequency * representative_pixel_size
+```
+
+Starting at best focus, it finds the first positive defocus where the complete
+physical system MTF magnitude at that frequency reaches a configurable
+threshold, 5% by default.  Later OTF lobes are deliberately ignored: once the
+screen pattern has crossed this low-contrast interval, the scan is not treated
+as a useful focus measurement merely because a phase-reversed lobe rises
+again.  Analysis fails normally when the in-focus response is already below
+the threshold or when the exact coarse estimate lies beyond the useful range.
+
+For maximum useful displacement `d_max` and `N` nodes, the table uses
+
+```text
+d_i = d_max * (i / (N - 1))^2,  i = 0,...,N-1.
+```
+
+Quadratic spacing is intentionally dense near best focus, where a small
+displacement changes the transfer much more rapidly, and progressively coarser
+towards the low-MTF boundary.  The default is 33 nodes, which leaves room in
+the existing 64-entry linked-list LRU for concurrent and prepass states.
+
+Each node is built by the ordinary exact filtering path and stored in that
+existing LRU.  A requested intermediate displacement linearly blends the
+`mult` samples of the two neighboring exact periodic screens; presentation-only
+`add` data is unchanged by optical filtering and is copied exactly.  This does
+**not** interpolate a nonnegative MTF curve: the node screens have already been
+formed with the signed physical OTF, so phase reversals and their effect on the
+simulated screen survive in the quantity being blended.
+
+Only the exploratory simplex objective is approximated.  At the selected
+optimum the solver constructs the periodic screen again with the exact
+physical filter, recomputes the objective and fitted colours, and keeps that
+exact state for outlier selection and result production.  Arbitrary final
+optima are not inserted into the node LRU, because they would evict the shared
+grid one value at a time.
+
+The approximation is accepted only when scalar physical defocus is the sole
+varying screen-filter parameter.  It is disabled for per-channel defocus,
+compact metadata-free blur diameter, residual MTF sigma, legacy screen blur,
+strip-width optimization, and emulsion-dependent source screens.  The Qt
+adaptive worker enables it automatically only when the physical diffraction
+model is fully available.  The CLI keeps it opt-in through
+`--interpolate-focus`; `--focus-min-mtf` and `--focus-cache-nodes` select the
+range threshold and node count.
+
+An exact node miss still reconstructs the ideal periodic source and recomputes
+its channel FFTs before applying the focus-dependent transfer.  Moreover,
+simplex coordinates outside the dense displacement mode remain arbitrary
+floating-point values.  Sharing immutable source FFTs is therefore still
+useful.  The present final-screen interpolation has fixed quadratic spacing;
+future error-controlled subdivision should explicitly validate intervals near
+signed OTF zero crossings and direct/wrapped-PSF implementation transitions.
+See FT-034, FT-037, FT-052, and FT-053.
+
+## Profiling
+
+Profiling is opt-in so normal geometry and focus fitting does not pay clock or
+atomic-counter overhead.  Set `finetune_parameters::collect_profile` and read
+`finetune_result::profile` to obtain:
+
+- simplex runs, iterations, evaluations, and total objective calls;
+- screen initialization, local-state reuse, cache hits/misses, and exact builds;
+- interpolated screen constructions, exact node uses, and exact final builds;
+- MTF/PSF preparation, direct-transfer and wrapped-PSF construction, and FFT
+  counts;
+- accumulated time in the objective, screen cache/filter and interpolation
+  paths, periodic-screen sampling, colour estimation, and residual calculation.
+
+`analyze-scanner-blur --profile` enables profiling for all coarse and dense
+fits and prints their aggregate.  Times are steady-clock nanoseconds summed
+across worker threads.  They are intentionally overlapping diagnostic totals,
+not components that add to wall time: in particular a cache miss includes the
+exact filter construction, and the objective includes all of its sub-stages.
+Cache hits include a caller that waited for another thread to publish the same
+exact entry.  Low-level MTF/FFT counters cover builds owned by finetune's
+variable-screen paths; a miss in the ordinary renderer cache contributes cache
+time and an exact-build count but does not currently expose its internal FFT
+breakdown.
 
 ## Result-field contract
 

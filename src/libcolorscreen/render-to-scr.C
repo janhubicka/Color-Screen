@@ -335,13 +335,13 @@ render_to_scr::get_screen (enum scr_type t, bool preview,
 			   const sharpen_parameters &sharpen,
                            coord_t red_strip_width, coord_t green_strip_width,
                            progress_info *progress, uint64_t *id,
-                           screen_sampling *sampling)
+                           screen_sampling *sampling, bool *cache_hit)
 {
   screen_params p = { t, preview, red_strip_width, green_strip_width, anticipate_sharpening, sharpen};
   if (sampling)
     *sampling = screen_sampling_for_capture_transfer (
         sharpen, screen_uses_capture_mtf_p (sharpen));
-  return screen_cache.get (p, progress, id);
+  return screen_cache.get (p, progress, id, cache_hit);
 }
 
 /* Release screen S.  */

@@ -30,7 +30,10 @@ public:
         flags (finetune_position | finetune_no_progress_report
                | finetune_scanner_mtf_defocus),
         reoptimize_strip_widths (false), skipmin (25), skipmax (25),
-        tolerance (-1), progress (NULL), verbose (false)
+        tolerance (-1), progress (NULL), verbose (false),
+        report_profile (false), interpolate_focus (false),
+        focus_mtf_threshold ((coord_t)0.05), focus_interpolation_nodes (33),
+        focus_interpolation_max (0), focus_screen_frequency (0)
   {
   }
 
@@ -63,6 +66,18 @@ public:
   /* Optional progress/cancellation object.  */
   progress_info *progress;
   bool verbose;
+  /* Print accumulated FINETUNE/cache counters after analysis.  */
+  bool report_profile;
+  /* During the dense scalar physical-defocus pass, approximate arbitrary
+     focus values by interpolating exact filtered screens from a fixed
+     nonlinear cache grid.  The coarse prepass remains exact.  */
+  bool interpolate_focus;
+  /* Stop the focus grid at the first defocus where the process-screen
+     frequency falls to this system-MTF magnitude.  */
+  coord_t focus_mtf_threshold;
+  /* Number of quadratically spaced exact cache nodes, including endpoints.
+     The current linked-list LRU cache has 64 entries.  */
+  int focus_interpolation_nodes;
 
   /* Prepare dimensions and the coarse prepass.  Return false for invalid
      settings or a cancellation request.  */
@@ -87,6 +102,11 @@ public:
   /* Robustly reduce dense samples and return the adaptive correction table.
      Return null on cancellation, invalid data, or tolerance failure.  */
   DLL_PUBLIC std::unique_ptr<scanner_blur_correction_parameters> step3 ();
+  /* Aggregate profiling data from all completed prepass and dense fits.  */
+  DLL_PUBLIC finetune_profile get_profile () const;
+  /* Print a compact accumulated profile through the worker's progress output
+     discipline.  This does not require a successful correction table.  */
+  DLL_PUBLIC void print_profile () const;
 
 private:
   /* Return coarse result X,Y.  Keeping indexing here prevents accidental use
@@ -115,6 +135,8 @@ private:
   histogram blur_hist;
   std::vector<finetune_result> prepass;
   std::vector<finetune_result> mainpass;
+  coord_t focus_interpolation_max;
+  coord_t focus_screen_frequency;
 };
 } // namespace colorscreen
 #endif

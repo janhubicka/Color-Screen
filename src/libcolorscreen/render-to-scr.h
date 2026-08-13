@@ -260,7 +260,8 @@ public:
                              coord_t dufay_green_strip_height,
                              progress_info *progress = NULL,
                              uint64_t *id = NULL,
-                             screen_sampling *sampling = NULL);
+                             screen_sampling *sampling = NULL,
+                             bool *cache_hit = NULL);
 
   /* Release screen S.  */
   static void release_screen (screen *s);

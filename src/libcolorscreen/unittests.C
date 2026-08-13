@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <array>
 #include <climits>
 #include <math.h>
 #include <stdlib.h>
@@ -144,6 +145,74 @@ test_finetune_helpers ()
       return false;
     }
 
+  finetune_focus_grid_interval interval;
+  if (!finetune_focus_grid_interval_for_value ((coord_t)0.5, 2, 5,
+                                                &interval)
+      || interval.lower_index != 2 || interval.upper_index != 2
+      || interval.lower != (coord_t)0.5
+      || interval.upper != (coord_t)0.5 || interval.upper_weight != 0)
+    {
+      fprintf (stderr, "Exact nonlinear focus-grid node was not recognized\n");
+      return false;
+    }
+  if (!finetune_focus_grid_interval_for_value ((coord_t)0.8125, 2, 5,
+                                                &interval)
+      || interval.lower_index != 2 || interval.upper_index != 3
+      || fabs (interval.lower - 0.5) > 1e-12
+      || fabs (interval.upper - 1.125) > 1e-12
+      || fabs (interval.upper_weight - 0.5) > 1e-12)
+    {
+      fprintf (stderr, "Nonlinear focus-grid interpolation interval failed\n");
+      return false;
+    }
+  if (!finetune_focus_grid_interval_for_value (-1, 2, 5, &interval)
+      || interval.lower_index != 0 || interval.upper_index != 0
+      || !finetune_focus_grid_interval_for_value (3, 2, 5, &interval)
+      || interval.lower_index != 4 || interval.upper_index != 4
+      || finetune_focus_grid_interval_for_value (0.5, 0, 5, &interval)
+      || finetune_focus_grid_interval_for_value (0.5, 2, 1, &interval)
+      || finetune_focus_grid_interval_for_value (0.5, 2, 65, &interval)
+      || finetune_focus_grid_interval_for_value (0.5, 2, 5, nullptr))
+    {
+      fprintf (stderr, "Nonlinear focus-grid bounds validation failed\n");
+      return false;
+    }
+
+  mtf_parameters focus_mtf;
+  focus_mtf.model = mtf_model::physical_diffraction;
+  focus_mtf.scan_dpi = 4000;
+  focus_mtf.f_stop = 8;
+  focus_mtf.wavelength = 550;
+  focus_mtf.pixel_pitch = 3.76;
+  focus_mtf.sensor_fill_factor = 1;
+  coord_t useful_limit = 0;
+  const coord_t screen_frequency = (coord_t)0.12;
+  if (!finetune_useful_defocus_limit (focus_mtf, screen_frequency,
+                                      (coord_t)0.05, 20, &useful_limit)
+      || useful_limit <= 0 || useful_limit >= 20)
+    {
+      fprintf (stderr, "Useful physical-focus range was not detected\n");
+      return false;
+    }
+  focus_mtf.defocus = useful_limit;
+  if (fabs (focus_mtf.system_mtf (screen_frequency) - 0.05) > 1e-8)
+    {
+      fprintf (stderr,
+               "Useful focus boundary does not match 5%% MTF: %.12g\n",
+               focus_mtf.system_mtf (screen_frequency));
+      return false;
+    }
+  focus_mtf.defocus = 0;
+  const coord_t in_focus = focus_mtf.system_mtf (screen_frequency);
+  if (in_focus >= 0.999
+      || finetune_useful_defocus_limit (
+          focus_mtf, screen_frequency, (in_focus + (coord_t)0.999) / 2,
+          20, &useful_limit))
+    {
+      fprintf (stderr, "Unusable in-focus MTF was not rejected\n");
+      return false;
+    }
+
   zero_dimensional_simplex_problem zero;
   const double zero_result
       = simplex<double> (zero, nullptr, nullptr, false);
@@ -155,6 +224,205 @@ test_finetune_helpers ()
       return false;
     }
 
+  return true;
+}
+
+bool
+test_finetune_focus_screen_cache ()
+{
+  std::array<sharpen_parameters, 3> sharpen;
+  for (int c = 0; c < 3; c++)
+    {
+      sharpen[c].mode = sharpen_parameters::none;
+      sharpen[c].scanner_mtf.model = mtf_model::empirical_fallback;
+      sharpen[c].scanner_mtf.sensor_fill_factor = 0;
+      sharpen[c].scanner_mtf.sigma = 0.8 + 0.4 * c;
+      sharpen[c].scanner_mtf.blur_diameter = 0;
+      sharpen[c].scanner_mtf_scale = (luminosity_t)0.012345;
+    }
+  sharpen_parameters *channels[3]
+      = { &sharpen[0], &sharpen[1], &sharpen[2] };
+
+  /* Capture transfer is active even when digital sharpening mode is NONE.
+     Different channel MTFs must therefore not collapse to the first one.  */
+  screen dot, filtered_dot;
+  dot.initialize_dot ();
+  if (!filtered_dot.initialize_with_sharpen_parameters (
+          dot, channels, false, false))
+    {
+      fprintf (stderr, "Per-channel capture-MTF construction failed\n");
+      return false;
+    }
+  double red_green_delta = 0;
+  double green_blue_delta = 0;
+  for (int y = 0; y < screen::size; y++)
+    for (int x = 0; x < screen::size; x++)
+      {
+        red_green_delta
+            += fabs (filtered_dot.mult[y][x][0]
+                     - filtered_dot.mult[y][x][1]);
+        green_blue_delta
+            += fabs (filtered_dot.mult[y][x][1]
+                     - filtered_dot.mult[y][x][2]);
+      }
+  if (red_green_delta < 1e-5 || green_blue_delta < 1e-5)
+    {
+      fprintf (stderr,
+               "Per-channel capture MTFs were collapsed: deltas %g %g\n",
+               red_green_delta, green_blue_delta);
+      return false;
+    }
+
+  finetune_prune_screen_cache_for_test ();
+  const coord_t red_width = (coord_t)0.314159;
+  const coord_t green_width = (coord_t)0.271828;
+  screen source, expected;
+  source.initialize (Joly, red_width, green_width);
+  screen_filter_profile expected_profile;
+  if (!expected.initialize_with_sharpen_parameters (
+          source, channels, false, false, &expected_profile))
+    return false;
+
+  bool cache_hit = true;
+  screen_filter_profile miss_profile;
+  std::shared_ptr<screen> first = finetune_get_cached_screen_for_test (
+      Joly, red_width, green_width, false, sharpen, false, &cache_hit,
+      &miss_profile);
+  if (!first || cache_hit || !miss_profile.mtf_precompute_calls
+      || !miss_profile.screen_forward_ffts
+      || !miss_profile.screen_inverse_ffts)
+    {
+      fprintf (stderr, "Exact finetune focus-cache miss was not recorded\n");
+      return false;
+    }
+  luminosity_t delta = 0;
+  if (!expected.almost_equal_p (*first, &delta, (luminosity_t)1e-8))
+    {
+      fprintf (stderr,
+               "Cached exact focus screen differs from direct build by %g\n",
+               (double)delta);
+      return false;
+    }
+
+  cache_hit = false;
+  screen_filter_profile hit_profile;
+  std::shared_ptr<screen> second = finetune_get_cached_screen_for_test (
+      Joly, red_width, green_width, false, sharpen, true, &cache_hit,
+      &hit_profile);
+  if (!second || !cache_hit || second.get () != first.get ()
+      || hit_profile.mtf_precompute_calls
+      || hit_profile.mtf_psf_precompute_calls
+      || hit_profile.direct_transfer_builds
+      || hit_profile.wrapped_psf_builds || hit_profile.kernel_forward_ffts
+      || hit_profile.screen_forward_ffts
+      || hit_profile.screen_inverse_ffts)
+    {
+      fprintf (stderr, "Exact finetune focus-cache hit was not reused\n");
+      return false;
+    }
+
+  first.reset ();
+  second.reset ();
+  finetune_prune_screen_cache_for_test ();
+
+  /* The dense displacement approximation linearly combines two exact
+     physical-defocus nodes.  Check a representative midpoint against an
+     independently filtered screen at the requested focus.  */
+  std::array<sharpen_parameters, 3> physical;
+  for (int c = 0; c < 3; c++)
+    {
+      physical[c].mode = sharpen_parameters::none;
+      physical[c].scanner_mtf.model = mtf_model::physical_diffraction;
+      physical[c].scanner_mtf.scan_dpi = 4000;
+      physical[c].scanner_mtf.f_stop = 8;
+      physical[c].scanner_mtf.wavelength = 550;
+      physical[c].scanner_mtf.pixel_pitch = 3.76;
+      physical[c].scanner_mtf.sensor_fill_factor = 1;
+      physical[c].scanner_mtf_scale = (luminosity_t)0.12;
+    }
+  coord_t max_defocus = 0;
+  if (!finetune_useful_defocus_limit (
+          physical[0].scanner_mtf, physical[0].scanner_mtf_scale,
+          (coord_t)0.05, 20, &max_defocus))
+    return false;
+  constexpr int nodes = 33;
+  constexpr int lower_index = 11;
+  const coord_t lower_defocus
+      = max_defocus * ((coord_t)lower_index / (nodes - 1))
+        * ((coord_t)lower_index / (nodes - 1));
+  const coord_t upper_defocus
+      = max_defocus * ((coord_t)(lower_index + 1) / (nodes - 1))
+        * ((coord_t)(lower_index + 1) / (nodes - 1));
+  const coord_t target_defocus
+      = (lower_defocus + upper_defocus) * (coord_t)0.5;
+  finetune_focus_grid_interval physical_interval;
+  if (!finetune_focus_grid_interval_for_value (
+          target_defocus, max_defocus, nodes, &physical_interval)
+      || physical_interval.lower_index != lower_index
+      || physical_interval.upper_index != lower_index + 1
+      || fabs (physical_interval.upper_weight - 0.5) > 1e-10)
+    return false;
+
+  std::array<sharpen_parameters, 3> lower_physical = physical;
+  std::array<sharpen_parameters, 3> upper_physical = physical;
+  std::array<sharpen_parameters, 3> target_physical = physical;
+  for (int c = 0; c < 3; c++)
+    {
+      lower_physical[c].scanner_mtf.defocus = lower_defocus;
+      upper_physical[c].scanner_mtf.defocus = upper_defocus;
+      target_physical[c].scanner_mtf.defocus = target_defocus;
+    }
+  cache_hit = false;
+  std::shared_ptr<screen> lower_screen
+      = finetune_get_cached_screen_for_test (
+          Dufay, (coord_t)0.45, (coord_t)0.35, false, lower_physical,
+          false, &cache_hit);
+  if (!lower_screen || cache_hit)
+    return false;
+  std::shared_ptr<screen> upper_screen
+      = finetune_get_cached_screen_for_test (
+          Dufay, (coord_t)0.45, (coord_t)0.35, false, upper_physical,
+          false, &cache_hit);
+  if (!upper_screen)
+    return false;
+
+  screen physical_source, exact_target;
+  physical_source.initialize (Dufay, (coord_t)0.45, (coord_t)0.35);
+  sharpen_parameters *target_channels[3]
+      = { &target_physical[0], &target_physical[1], &target_physical[2] };
+  if (!exact_target.initialize_with_sharpen_parameters (
+          physical_source, target_channels, false, false))
+    return false;
+  long double squared_error = 0;
+  double max_error = 0;
+  size_t samples = 0;
+  for (int y = 0; y < screen::size; y++)
+    for (int x = 0; x < screen::size; x++)
+      for (int c = 0; c < 3; c++)
+        {
+          const double approximated
+              = ((double)lower_screen->mult[y][x][c]
+                 + (double)upper_screen->mult[y][x][c])
+                * 0.5;
+          const double error
+              = approximated - exact_target.mult[y][x][c];
+          squared_error += error * error;
+          max_error = std::max (max_error, fabs (error));
+          samples++;
+        }
+  const double rms_error = std::sqrt ((double)(squared_error / samples));
+  if (max_error > 0.01 || rms_error > 0.002)
+    {
+      fprintf (stderr,
+               "Interpolated physical focus screen is inaccurate: max %g, "
+               "RMS %g\n",
+               max_error, rms_error);
+      return false;
+    }
+
+  lower_screen.reset ();
+  upper_screen.reset ();
+  finetune_prune_screen_cache_for_test ();
   return true;
 }
 
@@ -3517,12 +3785,20 @@ struct test_params
 };
 
 std::atomic<int> get_new_calls;
+std::atomic<int> get_new_fast_calls;
 
 std::unique_ptr<int>
 get_new_test (test_params &p, progress_info *)
 {
   get_new_calls++;
   std::this_thread::sleep_for (std::chrono::milliseconds (100));
+  return std::make_unique<int> (p.x * 2);
+}
+
+std::unique_ptr<int>
+get_new_test_fast (test_params &p, progress_info *)
+{
+  get_new_fast_calls++;
   return std::make_unique<int> (p.x * 2);
 }
 
@@ -3558,6 +3834,41 @@ test_lru_cache_concurrency ()
 	  printf ("LRU concurrency test FAIL: thread %d got wrong result\n", i);
 	  ok = false;
 	}
+    }
+
+  /* Verify true least-recently-used eviction.  The former comparison selected
+     the newest free entry and therefore behaved as an MRU cache.  */
+  lru_cache<test_params, int, get_new_test_fast, 2> eviction_cache (
+      "test_eviction_cache");
+  get_new_fast_calls = 0;
+  test_params p1 = { 1 }, p2 = { 2 }, p3 = { 3 };
+  bool hit = false;
+  std::shared_ptr<int> value = eviction_cache.get (p1, nullptr, nullptr, &hit);
+  if (!value || hit)
+    ok = false;
+  value.reset ();
+  value = eviction_cache.get (p2, nullptr, nullptr, &hit);
+  if (!value || hit)
+    ok = false;
+  value.reset ();
+  value = eviction_cache.get (p1, nullptr, nullptr, &hit);
+  if (!value || !hit)
+    ok = false;
+  value.reset ();
+  value = eviction_cache.get (p3, nullptr, nullptr, &hit);
+  if (!value || hit)
+    ok = false;
+  value.reset ();
+  value = eviction_cache.get (p1, nullptr, nullptr, &hit);
+  if (!value || !hit)
+    ok = false;
+  value.reset ();
+  value = eviction_cache.get (p2, nullptr, nullptr, &hit);
+  if (!value || hit || get_new_fast_calls != 4)
+    {
+      printf ("LRU eviction test FAIL: hit %i, builds %i\n", hit,
+              (int)get_new_fast_calls);
+      ok = false;
     }
   return ok;
 }
@@ -4940,6 +5251,8 @@ main (int argc, char **argv)
     { "color", "color tests", [] () { test_color (); return true; } },
     { "finetune_helpers", "finetune and Nelder-Mead contract tests",
       [] () { return test_finetune_helpers (); } },
+    { "finetune_focus_cache", "exact finetune focus-screen cache tests",
+      [] () { return test_finetune_focus_screen_cache (); } },
     { "scanner_blur_correction", "scanner blur correction table tests",
       [] () { return test_scanner_blur_correction_contract (); } },
     { "linearity", "render linearity tests", [] () { return (bool)test_render_linearity (); } },

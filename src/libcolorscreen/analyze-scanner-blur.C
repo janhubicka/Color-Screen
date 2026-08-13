@@ -124,6 +124,44 @@ analyze_scanner_blur_worker::step1 ()
       || scan.width <= 0 || scan.height <= 0)
     return false;
 
+  if (interpolate_focus)
+    {
+      const uint64_t incompatible
+          = finetune_scanner_mtf_sigma
+            | finetune_scanner_mtf_channel_defocus | finetune_screen_blur
+            | finetune_screen_channel_blurs | finetune_emulsion_blur;
+      if (!(flags & finetune_scanner_mtf_defocus) || (flags & incompatible)
+          || reoptimize_strip_widths
+          || !rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
+        {
+          pause_stdout (progress);
+          fprintf (stderr,
+                   "Focus interpolation requires scalar physical defocus "
+                   "as the sole varying screen-filter parameter\n");
+          resume_stdout (progress);
+          return false;
+        }
+      if (!my_isfinite (focus_mtf_threshold)
+          || focus_mtf_threshold <= 0 || focus_mtf_threshold >= 1)
+        {
+          pause_stdout (progress);
+          fprintf (stderr,
+                   "Focus interpolation MTF threshold must be between 0 "
+                   "and 100 percent\n");
+          resume_stdout (progress);
+          return false;
+        }
+      if (focus_interpolation_nodes < 2
+          || focus_interpolation_nodes > 64)
+        {
+          pause_stdout (progress);
+          fprintf (stderr,
+                   "Focus interpolation node count must be in [2,64]\n");
+          resume_stdout (progress);
+          return false;
+        }
+    }
+
   /* The correction table stores one kind of scalar correction.  Scanner MTF
      sigma may be fitted together with defocus, but it is not itself the
      spatially varying correction recorded by this worker.  Combining legacy
@@ -243,6 +281,7 @@ analyze_scanner_blur_worker::analyze_strips (int x, int y,
                ? (uint64_t)finetune_strips
                : (uint64_t)0);
   fparam.multitile = 1;
+  fparam.collect_profile = report_profile;
   finetune_result &res = prepass_result (x, y);
   res = finetune (rparam, param, scan,
                   { { (coord_t)(x + 0.5) * scan.width / strip_xsteps,
@@ -404,6 +443,62 @@ analyze_scanner_blur_worker::step2 ()
         }
     }
 
+  if (interpolate_focus)
+    {
+      scr_to_img map;
+      if (!map.set_parameters (param, scan))
+        return false;
+      const coord_t pixel_size
+          = map.pixel_size ({ 0, 0, scan.width, scan.height });
+      focus_screen_frequency = scr_names[param.type].frequency * pixel_size;
+      mtf_parameters focus_mtf = rparam.sharpen.scanner_mtf;
+      /* RGB finetuning currently applies one achromatic periodic-screen
+         filter and uses 550 nm; mirror CAPTURE_SHARPEN_PARAMETERS exactly
+         when deriving the useful focus range.  */
+      if (!(flags & finetune_bw) && scan.has_rgb ())
+        focus_mtf.wavelength = 550;
+      if (!my_isfinite (focus_screen_frequency)
+          || focus_screen_frequency <= 0
+          || !finetune_useful_defocus_limit (
+              focus_mtf, focus_screen_frequency, focus_mtf_threshold,
+              (coord_t)20, &focus_interpolation_max))
+        {
+          pause_stdout (progress);
+          fprintf (stderr,
+                   "Focus analysis failed: the physical in-focus MTF at "
+                   "the process-screen frequency is at or below %.1f%%\n",
+                   focus_mtf_threshold * 100);
+          resume_stdout (progress);
+          return false;
+        }
+      const coord_t robust_focus = rparam.sharpen.scanner_mtf.defocus;
+      const coord_t tolerance
+          = std::numeric_limits<coord_t>::epsilon ()
+            * std::max ((coord_t)1, focus_interpolation_max) * 64;
+      if (!my_isfinite (robust_focus)
+          || robust_focus > focus_interpolation_max + tolerance)
+        {
+          pause_stdout (progress);
+          fprintf (stderr,
+                   "Focus analysis failed: coarse defocus %.5f mm is "
+                   "outside the useful %.5f mm range (screen-frequency "
+                   "MTF %.1f%%)\n",
+                   robust_focus, focus_interpolation_max,
+                   focus_mtf_threshold * 100);
+          resume_stdout (progress);
+          return false;
+        }
+      if (verbose)
+        {
+          pause_stdout (progress);
+          printf ("Dense focus interpolation: %.6f cycles/pixel, "
+                  "0...%.5f mm at %.1f%% MTF, %i quadratic nodes\n",
+                  focus_screen_frequency, focus_interpolation_max,
+                  focus_mtf_threshold * 100, focus_interpolation_nodes);
+          resume_stdout (progress);
+        }
+    }
+
   if (verbose)
     {
       pause_stdout (progress);
@@ -448,6 +543,15 @@ analyze_scanner_blur_worker::analyze_blur (int x, int y,
   if (mode == scanner_blur_correction_parameters::blur_radius)
     fparam.flags |= finetune_use_screen_blur;
   fparam.multitile = 1;
+  fparam.collect_profile = report_profile;
+  if (interpolate_focus)
+    {
+      fparam.interpolate_scanner_mtf_defocus = true;
+      fparam.scanner_mtf_defocus_interpolation_max
+          = focus_interpolation_max;
+      fparam.scanner_mtf_defocus_interpolation_nodes
+          = focus_interpolation_nodes;
+    }
   finetune_result &res = mainpass_result (x, y);
   res = finetune (
       rparam, param, scan,
@@ -464,6 +568,84 @@ analyze_scanner_blur_worker::analyze_blur (int x, int y,
   if (progress)
     progress->inc_progress ();
   return res.success;
+}
+
+finetune_profile
+analyze_scanner_blur_worker::get_profile () const
+{
+  finetune_profile ret;
+  for (const finetune_result &res : prepass)
+    ret += res.profile;
+  for (const finetune_result &res : mainpass)
+    ret += res.profile;
+  return ret;
+}
+
+void
+analyze_scanner_blur_worker::print_profile () const
+{
+  const finetune_profile p = get_profile ();
+  uint64_t successful = 0;
+  for (const finetune_result &res : prepass)
+    successful += res.success;
+  for (const finetune_result &res : mainpass)
+    successful += res.success;
+  const uint64_t fits = prepass.size () + mainpass.size ();
+  const uint64_t focus_lookups
+      = p.focus_screen_cache_hits + p.focus_screen_cache_misses;
+  const double focus_hit_rate
+      = focus_lookups
+            ? 100.0 * p.focus_screen_cache_hits / focus_lookups
+            : 0.0;
+  const auto milliseconds = [] (uint64_t nanoseconds) {
+    return nanoseconds / 1000000.0;
+  };
+
+  pause_stdout (progress);
+  printf ("Finetune profile: %llu/%llu fits successful; %llu simplex runs, "
+          "%llu iterations, %llu evaluations; %llu objective calls\n",
+          (unsigned long long)successful, (unsigned long long)fits,
+          (unsigned long long)p.simplex_runs,
+          (unsigned long long)p.simplex_iterations,
+          (unsigned long long)p.simplex_evaluations,
+          (unsigned long long)p.objective_evaluations);
+  printf ("  screen states: %llu init calls, %llu local reuses; "
+          "focus cache %llu hits, %llu misses (%.1f%% hit); fixed cache "
+          "%llu hits, %llu misses\n",
+          (unsigned long long)p.screen_init_calls,
+          (unsigned long long)p.screen_state_reuses,
+          (unsigned long long)p.focus_screen_cache_hits,
+          (unsigned long long)p.focus_screen_cache_misses, focus_hit_rate,
+          (unsigned long long)p.fixed_screen_cache_hits,
+          (unsigned long long)p.fixed_screen_cache_misses);
+  printf ("  focus approximation: %llu interpolations, %llu exact node "
+          "uses, %llu exact final builds\n",
+          (unsigned long long)p.focus_screen_interpolations,
+          (unsigned long long)p.focus_screen_exact_node_uses,
+          (unsigned long long)p.focus_screen_final_exact_builds);
+  printf ("  exact screen builds: %llu; MTF precomputes %llu, PSF "
+          "precomputes %llu; direct transfers %llu, wrapped PSFs %llu\n",
+          (unsigned long long)p.exact_screen_builds,
+          (unsigned long long)p.mtf_precompute_calls,
+          (unsigned long long)p.mtf_psf_precompute_calls,
+          (unsigned long long)p.direct_transfer_builds,
+          (unsigned long long)p.wrapped_psf_builds);
+  printf ("  FFTs: %llu kernel forward, %llu screen forward, %llu screen "
+          "inverse\n",
+          (unsigned long long)p.kernel_forward_ffts,
+          (unsigned long long)p.screen_forward_ffts,
+          (unsigned long long)p.screen_inverse_ffts);
+  printf ("  accumulated time: objective %.1f ms; filtering %.1f ms; "
+          "cache lookup/wait %.1f ms; interpolation %.1f ms; simulation "
+          "%.1f ms; colors %.1f ms; residual %.1f ms\n",
+          milliseconds (p.objective_nanoseconds),
+          milliseconds (p.screen_filter_nanoseconds),
+          milliseconds (p.screen_cache_nanoseconds),
+          milliseconds (p.screen_interpolation_nanoseconds),
+          milliseconds (p.screen_simulation_nanoseconds),
+          milliseconds (p.color_estimation_nanoseconds),
+          milliseconds (p.residual_nanoseconds));
+  resume_stdout (progress);
 }
 
 /* Reduce dense fits into the final adaptive correction table.  */

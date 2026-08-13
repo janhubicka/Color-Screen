@@ -12,6 +12,20 @@ namespace colorscreen {
 struct sharpen_parameters;
 template<typename T> class precomputed_function;
 
+/* Operation counts for one exact periodic-screen capture-transfer build.
+   The caller owns the structure and may pass null when profiling is not
+   required.  Counts describe numerical work, not cache lookups.  */
+struct screen_filter_profile
+{
+  uint64_t mtf_precompute_calls = 0;
+  uint64_t mtf_psf_precompute_calls = 0;
+  uint64_t direct_transfer_builds = 0;
+  uint64_t wrapped_psf_builds = 0;
+  uint64_t kernel_forward_ffts = 0;
+  uint64_t screen_forward_ffts = 0;
+  uint64_t screen_inverse_ffts = 0;
+};
+
 /* Periodic linear-light representation of a historical color screen.
 
    MULT contains multiplicative transmission and is the quantity affected by
@@ -100,7 +114,8 @@ public:
   initialize_with_sharpen_parameters (screen &scr,
                                       sharpen_parameters *sharpen[3],
                                       bool anticipate_sharpening,
-                                      bool parallel = true);
+                                      bool parallel = true,
+                                      screen_filter_profile *profile = nullptr);
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
   void strip (coord_t first_strip_width, coord_t second_strip_width, int color1, int color2, int color3);

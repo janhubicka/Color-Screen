@@ -2,7 +2,9 @@
    Copyright (C) 2014-2026 Jan Hubicka
    This file is part of Color-Screen.  */
 
+#include <array>
 #include <atomic>
+#include <chrono>
 #include <climits>
 #include <functional>
 #include <limits>
@@ -18,6 +20,7 @@
 #include "include/histogram.h"
 #include "include/stitch.h"
 #include "include/tiff-writer.h"
+#include "lru-cache.h"
 #include "nmsimplex.h"
 #include "render-interpolate.h"
 #include "sharpen.h"
@@ -77,6 +80,123 @@ finetune_render_mix_dark (rgbdata weights, luminosity_t scalar_dark,
   return { neutral_dark, neutral_dark, neutral_dark };
 }
 
+/* Return a quadratically spaced scalar-defocus grid interval.  Computing the
+   node values from integer indexes makes cache keys bit-identical in every
+   solver that uses the same range.  */
+bool
+finetune_focus_grid_interval_for_value (
+    coord_t defocus, coord_t max_defocus, int nodes,
+    finetune_focus_grid_interval *interval)
+{
+  if (!interval || !my_isfinite (defocus) || !my_isfinite (max_defocus)
+      || max_defocus <= 0 || nodes < 2 || nodes > 64)
+    return false;
+
+  defocus = std::clamp (defocus, (coord_t)0, max_defocus);
+  const coord_t last = nodes - 1;
+  const coord_t scaled = std::sqrt (defocus / max_defocus) * last;
+  int lower_index = (int)std::floor (scaled);
+  if (lower_index < 0)
+    lower_index = 0;
+  if (lower_index >= nodes - 1)
+    lower_index = nodes - 1;
+  int upper_index = std::min (lower_index + 1, nodes - 1);
+
+  const auto node_value = [=] (int index) {
+    const coord_t t = index / last;
+    return max_defocus * t * t;
+  };
+  const coord_t lower = node_value (lower_index);
+  const coord_t upper = node_value (upper_index);
+  coord_t upper_weight = 0;
+  if (upper > lower)
+    upper_weight = (defocus - lower) / (upper - lower);
+  upper_weight = std::clamp (upper_weight, (coord_t)0, (coord_t)1);
+
+  /* Roundoff in SQRT may place a value computed from an exact node just above
+     or below the corresponding integer.  Collapse numerically exact endpoint
+     cases so they require only one cache lookup.  */
+  const coord_t tolerance
+      = std::numeric_limits<coord_t>::epsilon ()
+        * std::max ((coord_t)1, max_defocus) * 32;
+  if (my_fabs (defocus - lower) <= tolerance)
+    {
+      upper_index = lower_index;
+      upper_weight = 0;
+    }
+  else if (my_fabs (defocus - upper) <= tolerance)
+    {
+      lower_index = upper_index;
+      upper_weight = 0;
+    }
+
+  interval->lower_index = lower_index;
+  interval->upper_index = upper_index;
+  interval->lower = node_value (lower_index);
+  interval->upper = node_value (upper_index);
+  interval->upper_weight = upper_weight;
+  return true;
+}
+
+/* Find the first useful-defocus boundary at the process-screen frequency.
+   The quadratic scan is deliberately dense near best focus and is followed
+   by bisection.  This is cheap compared with constructing even one filtered
+   periodic screen and avoids stepping over the first low-contrast interval
+   before later signed-OTF lobes.  */
+bool
+finetune_useful_defocus_limit (mtf_parameters params,
+                               coord_t pixel_frequency,
+                               coord_t minimum_mtf, coord_t hard_max,
+                               coord_t *limit)
+{
+  if (!limit || !my_isfinite (pixel_frequency) || pixel_frequency <= 0
+      || !my_isfinite (minimum_mtf) || minimum_mtf <= 0
+      || minimum_mtf >= 1 || !my_isfinite (hard_max) || hard_max <= 0
+      || !params.simulate_diffraction_p ())
+    return false;
+
+  params.defocus = 0;
+  const coord_t in_focus = params.system_mtf (pixel_frequency);
+  if (!my_isfinite (in_focus) || in_focus <= minimum_mtf)
+    return false;
+
+  constexpr int samples = 4096;
+  coord_t previous_defocus = 0;
+  for (int i = 1; i <= samples; i++)
+    {
+      const coord_t t = (coord_t)i / samples;
+      const coord_t defocus = hard_max * t * t;
+      params.defocus = defocus;
+      const coord_t current_mtf = params.system_mtf (pixel_frequency);
+      if (!my_isfinite (current_mtf))
+        return false;
+      if (current_mtf <= minimum_mtf)
+        {
+          coord_t low = previous_defocus;
+          coord_t high = defocus;
+          /* SYSTEM_MTF is not assumed globally monotone: bisection remains
+             inside the first sampled crossing bracket.  */
+          for (int iteration = 0; iteration < 60; iteration++)
+            {
+              const coord_t middle = (low + high) * (coord_t)0.5;
+              params.defocus = middle;
+              const coord_t middle_mtf = params.system_mtf (pixel_frequency);
+              if (!my_isfinite (middle_mtf))
+                return false;
+              if (middle_mtf > minimum_mtf)
+                low = middle;
+              else
+                high = middle;
+            }
+          *limit = high;
+          return true;
+        }
+      previous_defocus = defocus;
+    }
+  *limit = hard_max;
+  return true;
+}
+
 namespace
 {
 struct gsl_work_deleter
@@ -103,6 +223,256 @@ struct gsl_vector_deleter
     gsl_vector_free (p);
   }
 };
+
+/* Thread-safe accumulator shared by every solver candidate created by one
+   FINETUNE call.  The public result contains an ordinary snapshot.  */
+class finetune_profile_accumulator
+{
+public:
+  std::atomic_uint64_t simplex_runs{0};
+  std::atomic_uint64_t simplex_iterations{0};
+  std::atomic_uint64_t simplex_evaluations{0};
+  std::atomic_uint64_t objective_evaluations{0};
+  std::atomic_uint64_t screen_init_calls{0};
+  std::atomic_uint64_t screen_state_reuses{0};
+  std::atomic_uint64_t fixed_screen_cache_hits{0};
+  std::atomic_uint64_t fixed_screen_cache_misses{0};
+  std::atomic_uint64_t focus_screen_cache_hits{0};
+  std::atomic_uint64_t focus_screen_cache_misses{0};
+  std::atomic_uint64_t focus_screen_interpolations{0};
+  std::atomic_uint64_t focus_screen_exact_node_uses{0};
+  std::atomic_uint64_t focus_screen_final_exact_builds{0};
+  std::atomic_uint64_t exact_screen_builds{0};
+  std::atomic_uint64_t mtf_precompute_calls{0};
+  std::atomic_uint64_t mtf_psf_precompute_calls{0};
+  std::atomic_uint64_t direct_transfer_builds{0};
+  std::atomic_uint64_t wrapped_psf_builds{0};
+  std::atomic_uint64_t kernel_forward_ffts{0};
+  std::atomic_uint64_t screen_forward_ffts{0};
+  std::atomic_uint64_t screen_inverse_ffts{0};
+  std::atomic_uint64_t objective_nanoseconds{0};
+  std::atomic_uint64_t screen_filter_nanoseconds{0};
+  std::atomic_uint64_t screen_cache_nanoseconds{0};
+  std::atomic_uint64_t screen_interpolation_nanoseconds{0};
+  std::atomic_uint64_t screen_simulation_nanoseconds{0};
+  std::atomic_uint64_t color_estimation_nanoseconds{0};
+  std::atomic_uint64_t residual_nanoseconds{0};
+
+  void
+  add_filter_profile (const screen_filter_profile &p)
+  {
+    mtf_precompute_calls.fetch_add (p.mtf_precompute_calls,
+                                    std::memory_order_relaxed);
+    mtf_psf_precompute_calls.fetch_add (p.mtf_psf_precompute_calls,
+                                        std::memory_order_relaxed);
+    direct_transfer_builds.fetch_add (p.direct_transfer_builds,
+                                      std::memory_order_relaxed);
+    wrapped_psf_builds.fetch_add (p.wrapped_psf_builds,
+                                  std::memory_order_relaxed);
+    kernel_forward_ffts.fetch_add (p.kernel_forward_ffts,
+                                   std::memory_order_relaxed);
+    screen_forward_ffts.fetch_add (p.screen_forward_ffts,
+                                   std::memory_order_relaxed);
+    screen_inverse_ffts.fetch_add (p.screen_inverse_ffts,
+                                   std::memory_order_relaxed);
+  }
+
+  finetune_profile
+  snapshot () const
+  {
+    finetune_profile ret;
+#define COPY_PROFILE_FIELD(FIELD)                                             \
+  ret.FIELD = FIELD.load (std::memory_order_relaxed)
+    COPY_PROFILE_FIELD (simplex_runs);
+    COPY_PROFILE_FIELD (simplex_iterations);
+    COPY_PROFILE_FIELD (simplex_evaluations);
+    COPY_PROFILE_FIELD (objective_evaluations);
+    COPY_PROFILE_FIELD (screen_init_calls);
+    COPY_PROFILE_FIELD (screen_state_reuses);
+    COPY_PROFILE_FIELD (fixed_screen_cache_hits);
+    COPY_PROFILE_FIELD (fixed_screen_cache_misses);
+    COPY_PROFILE_FIELD (focus_screen_cache_hits);
+    COPY_PROFILE_FIELD (focus_screen_cache_misses);
+    COPY_PROFILE_FIELD (focus_screen_interpolations);
+    COPY_PROFILE_FIELD (focus_screen_exact_node_uses);
+    COPY_PROFILE_FIELD (focus_screen_final_exact_builds);
+    COPY_PROFILE_FIELD (exact_screen_builds);
+    COPY_PROFILE_FIELD (mtf_precompute_calls);
+    COPY_PROFILE_FIELD (mtf_psf_precompute_calls);
+    COPY_PROFILE_FIELD (direct_transfer_builds);
+    COPY_PROFILE_FIELD (wrapped_psf_builds);
+    COPY_PROFILE_FIELD (kernel_forward_ffts);
+    COPY_PROFILE_FIELD (screen_forward_ffts);
+    COPY_PROFILE_FIELD (screen_inverse_ffts);
+    COPY_PROFILE_FIELD (objective_nanoseconds);
+    COPY_PROFILE_FIELD (screen_filter_nanoseconds);
+    COPY_PROFILE_FIELD (screen_cache_nanoseconds);
+    COPY_PROFILE_FIELD (screen_interpolation_nanoseconds);
+    COPY_PROFILE_FIELD (screen_simulation_nanoseconds);
+    COPY_PROFILE_FIELD (color_estimation_nanoseconds);
+    COPY_PROFILE_FIELD (residual_nanoseconds);
+#undef COPY_PROFILE_FIELD
+    return ret;
+  }
+};
+
+enum class finetune_profile_timer_kind
+{
+  objective,
+  screen_filter,
+  screen_cache,
+  screen_interpolation,
+  screen_simulation,
+  color_estimation,
+  residual
+};
+
+/* Charge elapsed steady-clock time to PROFILE on every exit path.  */
+class finetune_profile_timer
+{
+public:
+  finetune_profile_timer (finetune_profile_accumulator *profile,
+                          finetune_profile_timer_kind kind)
+      : m_profile (profile), m_kind (kind),
+        m_start (profile ? clock::now () : clock::time_point ())
+  {
+  }
+
+  ~finetune_profile_timer ()
+  {
+    if (!m_profile)
+      return;
+    const uint64_t elapsed
+        = std::chrono::duration_cast<std::chrono::nanoseconds> (clock::now ()
+                                                                - m_start)
+              .count ();
+    std::atomic_uint64_t *counter = nullptr;
+    switch (m_kind)
+      {
+      case finetune_profile_timer_kind::objective:
+        counter = &m_profile->objective_nanoseconds;
+        break;
+      case finetune_profile_timer_kind::screen_filter:
+        counter = &m_profile->screen_filter_nanoseconds;
+        break;
+      case finetune_profile_timer_kind::screen_cache:
+        counter = &m_profile->screen_cache_nanoseconds;
+        break;
+      case finetune_profile_timer_kind::screen_interpolation:
+        counter = &m_profile->screen_interpolation_nanoseconds;
+        break;
+      case finetune_profile_timer_kind::screen_simulation:
+        counter = &m_profile->screen_simulation_nanoseconds;
+        break;
+      case finetune_profile_timer_kind::color_estimation:
+        counter = &m_profile->color_estimation_nanoseconds;
+        break;
+      case finetune_profile_timer_kind::residual:
+        counter = &m_profile->residual_nanoseconds;
+        break;
+      }
+    counter->fetch_add (elapsed, std::memory_order_relaxed);
+  }
+
+private:
+  using clock = std::chrono::steady_clock;
+  finetune_profile_accumulator *m_profile;
+  finetune_profile_timer_kind m_kind;
+  clock::time_point m_start;
+};
+
+/* Compare the subset of SHARPEN that changes the periodic filtered screen.
+   SHARPEN_PARAMETERS::OPERATOR== intentionally ignores the capture MTF in
+   mode NONE, so compare the capture scale/model explicitly as the renderer's
+   ordinary screen cache does.  */
+static bool
+same_filtered_screen_parameters_p (const sharpen_parameters &a,
+                                   const sharpen_parameters &b,
+                                   bool anticipate_sharpening)
+{
+  return a.scanner_mtf_scale == b.scanner_mtf_scale
+         && (!a.scanner_mtf_scale || a.scanner_mtf == b.scanner_mtf)
+         && (!anticipate_sharpening || a == b);
+}
+
+/* Key for exact focus-dependent periodic screens used only by FINETUNE.  It
+   is separate from the renderer cache so the optimizer cannot evict normal
+   display/render entries with its transient focus nodes.  PARALLEL and
+   PROFILE affect construction only and deliberately do not participate in
+   equality.  */
+struct finetune_screen_cache_params
+{
+  scr_type type = Joly;
+  coord_t red_strip_width = 0;
+  coord_t green_strip_width = 0;
+  bool anticipate_sharpening = false;
+  bool parallel = false;
+  std::array<sharpen_parameters, 3> sharpen = {};
+  screen_filter_profile *filter_profile = nullptr;
+
+  bool
+  operator== (const finetune_screen_cache_params &o) const
+  {
+    if (type != o.type
+        || anticipate_sharpening != o.anticipate_sharpening
+        || (screen_with_varying_strips_p (type)
+            && (red_strip_width != o.red_strip_width
+                || green_strip_width != o.green_strip_width)))
+      return false;
+    for (int c = 0; c < 3; c++)
+      if (!same_filtered_screen_parameters_p (
+              sharpen[c], o.sharpen[c], anticipate_sharpening))
+        return false;
+    return true;
+  }
+};
+
+std::unique_ptr<screen>
+get_new_finetune_screen (finetune_screen_cache_params &p,
+                         progress_info *progress)
+{
+  (void)progress;
+  screen_filter_profile *filter_profile = p.filter_profile;
+  /* The cache entry retains PARAMS after this call.  Do not retain a pointer
+     to the requesting solver's stack-local profile structure.  */
+  p.filter_profile = nullptr;
+  auto source = std::make_unique<screen> ();
+  source->initialize (p.type, p.red_strip_width, p.green_strip_width);
+  auto filtered = std::make_unique<screen> ();
+  sharpen_parameters *channels[3]
+      = { &p.sharpen[0], &p.sharpen[1], &p.sharpen[2] };
+  if (!filtered->initialize_with_sharpen_parameters (
+          *source, channels, p.anticipate_sharpening, p.parallel,
+          filter_profile))
+    return nullptr;
+  return filtered;
+}
+
+/* A screen occupies roughly 384 KiB with the current 128x128 float storage;
+   64 entries therefore bound the nominal payload near 24 MiB.  Entries still
+   referenced by active solvers are not evicted by LRU_CACHE.  */
+using finetune_screen_cache_t
+    = lru_cache<finetune_screen_cache_params, screen,
+                get_new_finetune_screen, 64>;
+static finetune_screen_cache_t finetune_screen_cache ("finetune focus screen");
+
+static std::shared_ptr<screen>
+get_cached_finetune_screen (
+    scr_type type, coord_t red_strip_width, coord_t green_strip_width,
+    bool anticipate_sharpening,
+    const std::array<sharpen_parameters, 3> &sharpen, bool parallel,
+    bool *cache_hit, screen_filter_profile *filter_profile)
+{
+  finetune_screen_cache_params params;
+  params.type = type;
+  params.red_strip_width = red_strip_width;
+  params.green_strip_width = green_strip_width;
+  params.anticipate_sharpening = anticipate_sharpening;
+  params.parallel = parallel;
+  params.sharpen = sharpen;
+  params.filter_profile = filter_profile;
+  return finetune_screen_cache.get (params, nullptr, nullptr, cache_hit);
+}
 
 /* Translate center to given coordinates (x,y).  */
 class translation_3x3matrix : public matrix3x3<coord_t>
@@ -297,8 +667,10 @@ public:
     point_t fixed_offset = { -10, -10 }, fixed_emulsion_offset = { -10, -10 };
     /* Screen merging emulsion and unblurred screen.  */
     std::unique_ptr<screen> merged_scr;
-    /* Blurred screen used to render simulated scan.  */
-    std::unique_ptr<screen> scr;
+    /* Blurred screen used to render the simulated scan.  Exact cached focus
+       nodes may be shared by many local solvers; dynamically merged/emulsion
+       screens use a private instance.  */
+    std::shared_ptr<screen> scr;
 
     tile_data () {}
     tile_data (const tile_data &) = delete;
@@ -366,6 +738,14 @@ private:
   rgbdata last_scanner_mtf_defocus;
   luminosity_t last_emulsion_blur;
   coord_t last_width, last_height;
+  finetune_profile_accumulator *profile = nullptr;
+  /* Dense displacement analysis may approximate scalar physical defocus from
+     cached exact nodes.  The coarse prepass and the final objective remain
+     exact.  */
+  bool interpolate_scanner_mtf_defocus = false;
+  coord_t scanner_mtf_defocus_interpolation_max = 0;
+  int scanner_mtf_defocus_interpolation_nodes = 0;
+  bool force_exact_scanner_mtf_defocus = false;
 public:
   /* Unblurred screen.  */
   std::shared_ptr<screen> original_scr;
@@ -374,6 +754,25 @@ public:
   sharpen_parameters render_sharpen_params;
 
   finetune_solver () {}
+
+  void
+  set_profile (finetune_profile_accumulator *p)
+  {
+    profile = p;
+  }
+
+  /* Optional hook consumed by NMSIMPLEX.H.  */
+  void
+  record_simplex_profile (int evaluations, int iterations)
+  {
+    if (!profile)
+      return;
+    profile->simplex_runs.fetch_add (1, std::memory_order_relaxed);
+    profile->simplex_evaluations.fetch_add (evaluations,
+                                            std::memory_order_relaxed);
+    profile->simplex_iterations.fetch_add (iterations,
+                                           std::memory_order_relaxed);
+  }
   int n_tiles;
   /* All tiles have same width and height.  */
   int twidth, theight;
@@ -1081,7 +1480,10 @@ public:
     if (optimize_scanner_mtf_sigma)
       to_range (v[mtf_sigma_index], (coord_t)0, (coord_t)20);
     if (optimize_scanner_mtf_defocus)
-      to_range (v[mtf_defocus_index], (coord_t)0, (coord_t)20);
+      to_range (v[mtf_defocus_index], (coord_t)0,
+                interpolate_scanner_mtf_defocus
+                    ? scanner_mtf_defocus_interpolation_max
+                    : (coord_t)20);
     if (optimize_scanner_mtf_channel_defocus)
       {
         to_range (v[mtf_defocus_index], (coord_t)0, (coord_t)20);
@@ -1369,15 +1771,18 @@ public:
     return true;
   }
 
-  /* Init solver with FLAGS, BLUR_RADIUS, RED_STRIP_WIDTH, GREEN_STRIP_WIDTH.
+  /* Init solver with FPARAMS, BLUR_RADIUS, RED_STRIP_WIDTH,
+     GREEN_STRIP_WIDTH.
      If SIM_INFRARED is true, simulate infrared channel.
      IS_TILE_SHARPENED indicates if tile is already sharpened.
      RESULTS are previous results if any.  */
   void
-  init (uint64_t flags, coord_t blur_radius, coord_t red_strip_width,
+  init (const finetune_parameters &fparams, coord_t blur_radius,
+        coord_t red_strip_width,
         coord_t green_strip_width, bool sim_infrared, bool is_tile_sharpened,
         const std::vector<finetune_result> *results)
   {
+    const uint64_t flags = fparams.flags;
     /* Keep disabled-parameter indexes harmless.  Most accessors are guarded
        by optimization flags, but explicit sentinels make accidental future
        use deterministic instead of indexing through an uninitialized value.  */
@@ -1402,6 +1807,13 @@ public:
     optimize_scanner_mtf_defocus = flags & finetune_scanner_mtf_defocus;
     optimize_scanner_mtf_channel_defocus
         = flags & finetune_scanner_mtf_channel_defocus;
+    interpolate_scanner_mtf_defocus
+        = fparams.interpolate_scanner_mtf_defocus;
+    scanner_mtf_defocus_interpolation_max
+        = fparams.scanner_mtf_defocus_interpolation_max;
+    scanner_mtf_defocus_interpolation_nodes
+        = fparams.scanner_mtf_defocus_interpolation_nodes;
+    force_exact_scanner_mtf_defocus = false;
     optimize_screen_channel_blurs = flags & finetune_screen_channel_blurs;
     optimize_emulsion_blur = flags & finetune_emulsion_blur;
     optimize_strips
@@ -1654,7 +2066,7 @@ public:
       for (int tileid = 0; tileid < n_tiles; tileid++)
         tiles[tileid].merged_scr = std::make_unique<screen> ();
     for (int tileid = 0; tileid < n_tiles; tileid++)
-      tiles[tileid].scr = std::make_unique<screen> ();
+      tiles[tileid].scr = std::make_shared<screen> ();
 
     /* Set up cached values.   */
     screen_revision = 0;
@@ -1825,7 +2237,10 @@ public:
     if (optimize_scanner_mtf_defocus)
       {
         start[mtf_defocus_index] = defocus;
-        to_range (start[mtf_defocus_index], (coord_t)0, (coord_t)20);
+        to_range (start[mtf_defocus_index], (coord_t)0,
+                  interpolate_scanner_mtf_defocus
+                      ? scanner_mtf_defocus_interpolation_max
+                      : (coord_t)20);
       }
     if (optimize_scanner_mtf_channel_defocus)
       {
@@ -2010,9 +2425,49 @@ public:
     // solver.print_values (solver.start);
     coord_t objective = simplex<coord_t, finetune_solver> (
         *this, "finetuning", progress, report);
+    if (interpolate_scanner_mtf_defocus)
+      objective = evaluate_final_focus_exactly ();
     coord_t score = scale_fit_score_by_contrast (objective);
     free_least_squares ();
     return score;
+  }
+
+  /* Re-evaluate the fitted scalar-defocus point using the exact physical
+     filter.  Approximation is useful while simplex explores the objective,
+     but the reported score, fitted colours and final result must describe the
+     real forward model.  Leave exact mode active so outlier detection and
+     SET_RESULTS can reuse the exact screen.  */
+  coord_t
+  evaluate_final_focus_exactly ()
+  {
+    if (!interpolate_scanner_mtf_defocus)
+      return objfunc (start.data ());
+    if (!force_exact_scanner_mtf_defocus)
+      {
+        force_exact_scanner_mtf_defocus = true;
+        screen_revision++;
+      }
+    return objfunc (start.data ());
+  }
+
+  /* Resume the interpolated objective before another simplex pass.  The
+     screen revision invalidates the exact final screen even when the first
+     trial happens to reuse the same defocus value.  */
+  void
+  resume_interpolated_focus ()
+  {
+    if (interpolate_scanner_mtf_defocus
+        && force_exact_scanner_mtf_defocus)
+      {
+        force_exact_scanner_mtf_defocus = false;
+        screen_revision++;
+      }
+  }
+
+  bool
+  interpolated_focus_p () const
+  {
+    return interpolate_scanner_mtf_defocus;
   }
 
   /* Get screen pixel for simulated screen TILE at point P.  */
@@ -2022,6 +2477,211 @@ public:
     return tiles[tile].simulated_screen[p.y * simulated_screen_width + p.x];
   }
 
+  /* Return true when the periodic screen is filtered through the scanner MTF
+     rather than through the legacy Gaussian screen-blur path.  */
+  bool
+  scanner_mtf_filter_p () const
+  {
+    return optimize_scanner_mtf_sigma || optimize_scanner_mtf_defocus
+           || optimize_scanner_mtf_channel_defocus
+           || (!optimize_screen_blur && !optimize_screen_channel_blurs);
+  }
+
+  /* Build the exact per-channel capture parameters represented by V.  */
+  std::array<sharpen_parameters, 3>
+  capture_sharpen_parameters (coord_t *v)
+  {
+    std::array<sharpen_parameters, 3> sp
+        = { render_sharpen_params, render_sharpen_params,
+            render_sharpen_params };
+    for (int c = 0; c < 3; c++)
+      {
+        sp[c].scanner_mtf.sigma = get_scanner_mtf_sigma (v);
+        sp[c].scanner_mtf_scale *= pixel_size;
+      }
+
+    if (sp[0].scanner_mtf.simulate_diffraction_p ())
+      {
+        const rgbdata defocus = get_scanner_mtf_channel_defocus (v);
+        sp[0].scanner_mtf.defocus = defocus.red;
+        sp[1].scanner_mtf.defocus = defocus.green;
+        sp[2].scanner_mtf.defocus = defocus.blue;
+        if (!tiles[0].color.empty ())
+          for (int c = 0; c < 3; c++)
+            sp[c].scanner_mtf.wavelength = 550;
+#if 0
+        /* TODO: Apply scanner spectral response before wavelength-specific
+           defocus, then use measured channel wavelengths here.  */
+        sp[0].scanner_mtf.wavelength = 466;
+        sp[1].scanner_mtf.wavelength = 526;
+        sp[2].scanner_mtf.wavelength = 653;
+#endif
+      }
+    else
+      {
+        const rgbdata blur_diameter = get_scanner_mtf_channel_defocus (v);
+        sp[0].scanner_mtf.blur_diameter = blur_diameter.red;
+        sp[1].scanner_mtf.blur_diameter = blur_diameter.green;
+        sp[2].scanner_mtf.blur_diameter = blur_diameter.blue;
+      }
+    return sp;
+  }
+
+  /* Obtain writable storage without modifying an exact screen still owned by
+     the shared focus cache.  */
+  screen *
+  writable_tile_screen (int tileid)
+  {
+    if (!tiles[tileid].scr || tiles[tileid].scr.use_count () != 1)
+      tiles[tileid].scr = std::make_shared<screen> ();
+    return tiles[tileid].scr.get ();
+  }
+
+  /* Exact cached focus nodes are valid only when the capture transfer is
+     applied directly to the process screen.  Emulsion-dependent source
+     screens vary by tile and remain on the private construction path.  */
+  bool
+  focus_screen_cache_eligible_p () const
+  {
+    return (optimize_scanner_mtf_sigma || optimize_scanner_mtf_defocus
+            || optimize_scanner_mtf_channel_defocus)
+           && !optimize_emulsion_blur && !optimize_emulsion_intensities
+           && !optimize_emulsion_offset;
+  }
+
+  /* The discretized approximation is intentionally narrower than the exact
+     focus cache.  It applies only to one scalar physical-defocus coordinate;
+     all other capture-transfer parameters and the source periodic screen
+     must stay fixed during the fit.  */
+  bool
+  focus_screen_interpolation_eligible_p () const
+  {
+    return interpolate_scanner_mtf_defocus
+           && optimize_scanner_mtf_defocus
+           && !optimize_scanner_mtf_sigma
+           && !optimize_scanner_mtf_channel_defocus && !optimize_strips
+           && render_sharpen_params.scanner_mtf.simulate_diffraction_p ()
+           && focus_screen_cache_eligible_p ();
+  }
+
+  /* Obtain one exact filtered screen through the existing linked-list LRU
+     cache and account for the lookup in the shared profile.  */
+  std::shared_ptr<screen>
+  get_profiled_cached_focus_screen (
+      const std::array<sharpen_parameters, 3> &sp,
+      coord_t red_strip_width, coord_t green_strip_width)
+  {
+    bool cache_hit = false;
+    screen_filter_profile filter_profile;
+    const auto cache_start
+        = profile ? std::chrono::steady_clock::now ()
+                  : std::chrono::steady_clock::time_point ();
+    std::shared_ptr<screen> scr = get_cached_finetune_screen (
+        type, red_strip_width, green_strip_width, tile_sharpened, sp,
+        parallel, profile ? &cache_hit : nullptr,
+        profile ? &filter_profile : nullptr);
+    if (profile)
+      {
+        const uint64_t elapsed
+            = std::chrono::duration_cast<std::chrono::nanoseconds> (
+                  std::chrono::steady_clock::now () - cache_start)
+                  .count ();
+        profile->screen_cache_nanoseconds.fetch_add (
+            elapsed, std::memory_order_relaxed);
+        if (cache_hit)
+          profile->focus_screen_cache_hits.fetch_add (
+              1, std::memory_order_relaxed);
+        else
+          {
+            profile->focus_screen_cache_misses.fetch_add (
+                1, std::memory_order_relaxed);
+            profile->exact_screen_builds.fetch_add (
+                1, std::memory_order_relaxed);
+            profile->screen_filter_nanoseconds.fetch_add (
+                elapsed, std::memory_order_relaxed);
+            profile->add_filter_profile (filter_profile);
+          }
+      }
+    return scr;
+  }
+
+  /* Obtain one exact scalar-defocus node.  NODE_DEFOCUS is generated from an
+     integer grid index, so all dense cells using the same range produce
+     bit-identical cache keys.  This common-value override is used only by the
+     scalar interpolation path; ordinary exact per-channel fits retain all
+     three values from CAPTURE_SHARPEN_PARAMETERS.  */
+  std::shared_ptr<screen>
+  get_focus_screen_node (coord_t *v, coord_t node_defocus,
+                         coord_t red_strip_width,
+                         coord_t green_strip_width)
+  {
+    assert (optimize_scanner_mtf_defocus
+            && !optimize_scanner_mtf_channel_defocus);
+    std::array<sharpen_parameters, 3> sp
+        = capture_sharpen_parameters (v);
+    for (int c = 0; c < 3; c++)
+      sp[c].scanner_mtf.defocus = node_defocus;
+    return get_profiled_cached_focus_screen (
+        sp, red_strip_width, green_strip_width);
+  }
+
+  /* Initialize TILEID by interpolating the two neighboring exact focus-grid
+     screens.  Filtering is linear in the source periodic screen, so this is
+     equivalent to linearly interpolating the signed transfer response rather
+     than its nonnegative MTF magnitude.  */
+  bool
+  initialize_interpolated_focus_screen (coord_t *v, int tileid,
+                                        coord_t red_strip_width,
+                                        coord_t green_strip_width)
+  {
+    finetune_focus_grid_interval interval;
+    if (!finetune_focus_grid_interval_for_value (
+            get_scanner_mtf_defocus (v),
+            scanner_mtf_defocus_interpolation_max,
+            scanner_mtf_defocus_interpolation_nodes, &interval))
+      return false;
+
+    std::shared_ptr<screen> lower
+        = get_focus_screen_node (v, interval.lower, red_strip_width,
+                                 green_strip_width);
+    if (!lower)
+      return false;
+    if (interval.lower_index == interval.upper_index)
+      {
+        tiles[tileid].scr = std::move (lower);
+        if (profile)
+          profile->focus_screen_exact_node_uses.fetch_add (
+              1, std::memory_order_relaxed);
+        return true;
+      }
+
+    std::shared_ptr<screen> upper
+        = get_focus_screen_node (v, interval.upper, red_strip_width,
+                                 green_strip_width);
+    if (!upper)
+      return false;
+
+    finetune_profile_timer timer (
+        profile, finetune_profile_timer_kind::screen_interpolation);
+    screen *dst = writable_tile_screen (tileid);
+    const luminosity_t upper_weight = interval.upper_weight;
+    const luminosity_t lower_weight = 1 - upper_weight;
+    /* Optical filtering changes MULT only.  ADD is identical in both exact
+       nodes, so copy it rather than introducing an unnecessary rounding step
+       into presentation-only data.  */
+    memcpy (dst->add, lower->add, sizeof (dst->add));
+    for (int y = 0; y < screen::size; y++)
+      for (int x = 0; x < screen::size; x++)
+        for (int c = 0; c < 3; c++)
+          dst->mult[y][x][c]
+              = lower->mult[y][x][c] * lower_weight
+                + upper->mult[y][x][c] * upper_weight;
+    if (profile)
+      profile->focus_screen_interpolations.fetch_add (
+          1, std::memory_order_relaxed);
+    return true;
+  }
+
   /* Apply blur to SRC_SCR and compute DST_SCR.
      Values are in vector V.  TILEID is the tile ID.
      If WEIGHT_SCR is non-null, use it as a weight screen.  Return false when
@@ -2029,7 +2689,8 @@ public:
      ignored by the caller.  */
   bool
   apply_blur (coord_t *v, int tileid, screen *dst_scr, screen *src_scr,
-              screen *weight_scr = nullptr)
+              screen *weight_scr = nullptr,
+              screen_filter_profile *filter_profile = nullptr)
   {
     rgbdata blur = get_channel_blur_radius (v);
 
@@ -2071,60 +2732,13 @@ public:
         src_scr = tiles[tileid].merged_scr.get ();
       }
 
-    if ((optimize_scanner_mtf_sigma || optimize_scanner_mtf_defocus
-         || optimize_scanner_mtf_channel_defocus)
-        || (!optimize_screen_blur && !optimize_screen_channel_blurs))
+    if (scanner_mtf_filter_p ())
       {
-        sharpen_parameters sp, sp_green, sp_blue;
-        sharpen_parameters *vs[3] = { &sp, &sp, &sp };
-        sp = render_sharpen_params;
-        // sp.scanner_mtf = mtf_params;
-        sp.scanner_mtf.sigma = get_scanner_mtf_sigma (v);
-        sp.scanner_mtf_scale *= pixel_size;
-        // sp.mode = sharpen_parameters::none;
-        if (sp.scanner_mtf.simulate_diffraction_p ())
-          {
-            sp.scanner_mtf.defocus = get_scanner_mtf_defocus (v);
-            if (!tiles[0].color.empty ())
-              sp.scanner_mtf.wavelength = 550;
-            if (/*tiles[0].color ||*/ optimize_scanner_mtf_channel_defocus)
-              {
-                vs[0] = &sp;
-                sp_green = sp;
-                vs[1] = &sp_green;
-                sp_blue = sp;
-                vs[2] = &sp_blue;
-
-                rgbdata defocus = get_scanner_mtf_channel_defocus (v);
-                sp.scanner_mtf.defocus = defocus.red;
-                sp_green.scanner_mtf.defocus = defocus.green;
-                sp_blue.scanner_mtf.defocus = defocus.blue;
-#if 0
-	        /* TODO: We should defocus only after applying scanner reaction to screen colors.  */
-		sp.scanner_mtf.wavelength = 466;
-		sp_green.scanner_mtf.wavelength = 526;
-		sp_blue.scanner_mtf.wavelength = 653;
-#endif
-              }
-          }
-        else
-          {
-            sp.scanner_mtf.blur_diameter = get_scanner_mtf_defocus (v);
-            if (optimize_scanner_mtf_channel_defocus)
-              {
-                vs[0] = &sp;
-                sp_green = sp;
-                vs[1] = &sp_green;
-                sp_blue = sp;
-                vs[2] = &sp_blue;
-                rgbdata blur_diameter = get_scanner_mtf_channel_defocus (v);
-                sp.scanner_mtf.blur_diameter = blur_diameter.red;
-                sp_green.scanner_mtf.blur_diameter = blur_diameter.green;
-                sp_blue.scanner_mtf.blur_diameter = blur_diameter.blue;
-              }
-          }
+        std::array<sharpen_parameters, 3> sp
+            = capture_sharpen_parameters (v);
+        sharpen_parameters *vs[3] = { &sp[0], &sp[1], &sp[2] };
         if (!dst_scr->initialize_with_sharpen_parameters (
-                *src_scr, vs, tile_sharpened, parallel))
+                *src_scr, vs, tile_sharpened, parallel, filter_profile))
           return false;
       }
     else
@@ -2136,14 +2750,18 @@ public:
      on MTF/PSF construction failure.  Store in UPDATED whether a successful
      call changed the tile screen.
 
-     This is the hot path for focus fitting.  A solver retains exactly its last
-     filtered periodic screen: phase-only objective evaluations resample it,
-     while a change to blur, MTF, strip widths, or emulsion state rebuilds it.
-     Separate adaptive-focus cells construct separate solvers and therefore do
-     not currently share this exact filtered state.  */
+     This is the hot path for focus fitting.  A solver retains its last exact
+     filtered screen for phase-only objective evaluations.  In addition,
+     MTF-focus fits whose source screen is independent of emulsion parameters
+     share exact filtered nodes through a dedicated finetune cache.  The cache
+     is deliberately separate from the renderer cache so transient simplex
+     vertices do not evict normal rendering state.  */
   bool
   init_screen (coord_t *v, int tileid, bool *updated)
   {
+    if (profile)
+      profile->screen_init_calls.fetch_add (1, std::memory_order_relaxed);
+
     luminosity_t emulsion_blur = get_emulsion_blur_radius (v);
     rgbdata blur = get_channel_blur_radius (v);
     luminosity_t scanner_mtf_sigma = get_scanner_mtf_sigma (v);
@@ -2161,35 +2779,55 @@ public:
         global_updated = true;
       }
 
-    /* Fast path: If everything is fixed, use screen cache. We will not
-       fill it with temporary screens then.  */
+    /* Fast path: if everything is fixed, use the ordinary renderer cache.
+       The dedicated focus cache below is reserved for changing MTF nodes.  */
     if (!optimize_scanner_mtf_sigma && !optimize_scanner_mtf_defocus
-	&& !optimize_scanner_mtf_channel_defocus
-       	&& !optimize_screen_blur && !optimize_screen_channel_blurs
-       	&& !optimize_strips && !optimize_emulsion_blur
-	&& !optimize_emulsion_intensities && !optimize_emulsion_offset)
+        && !optimize_scanner_mtf_channel_defocus
+        && !optimize_screen_blur && !optimize_screen_channel_blurs
+        && !optimize_strips && !optimize_emulsion_blur
+        && !optimize_emulsion_intensities && !optimize_emulsion_offset)
       {
-	if (global_updated)
-	  screen_revision++;
-	if (tiles[tileid].last_screen_revision != screen_revision)
-	  {
-	    sharpen_parameters sp = render_sharpen_params;
-	    sp.scanner_mtf_scale *= pixel_size;
-	    std::shared_ptr <screen> scr = render_to_scr::get_screen (type, false,
-								 tile_sharpened,
-								 sp,
-								 red_strip_width,
-								 green_strip_width,
-								 NULL);
-	    if (!scr)
-	      return false;
-	    memcpy (tiles[tileid].scr.get (), scr.get (), sizeof (screen));
-	    tiles[tileid].last_screen_revision = screen_revision;
-	    *updated = true;
-	    return true;
-	  }
-	*updated = false;
-	return true;
+        if (global_updated)
+          screen_revision++;
+        if (tiles[tileid].last_screen_revision != screen_revision)
+          {
+            sharpen_parameters sp = render_sharpen_params;
+            sp.scanner_mtf_scale *= pixel_size;
+            bool cache_hit = false;
+            const auto cache_start
+                = profile ? std::chrono::steady_clock::now ()
+                          : std::chrono::steady_clock::time_point ();
+            std::shared_ptr<screen> scr = render_to_scr::get_screen (
+                type, false, tile_sharpened, sp, red_strip_width,
+                green_strip_width, nullptr, nullptr, nullptr,
+                profile ? &cache_hit : nullptr);
+            if (profile)
+              {
+                const uint64_t elapsed
+                    = std::chrono::duration_cast<std::chrono::nanoseconds> (
+                          std::chrono::steady_clock::now () - cache_start)
+                          .count ();
+                profile->screen_cache_nanoseconds.fetch_add (
+                    elapsed, std::memory_order_relaxed);
+                (cache_hit ? profile->fixed_screen_cache_hits
+                           : profile->fixed_screen_cache_misses)
+                    .fetch_add (1, std::memory_order_relaxed);
+                if (!cache_hit)
+                  profile->exact_screen_builds.fetch_add (
+                      1, std::memory_order_relaxed);
+              }
+            if (!scr)
+              return false;
+            tiles[tileid].scr = std::move (scr);
+            tiles[tileid].last_screen_revision = screen_revision;
+            *updated = true;
+            return true;
+          }
+        if (profile)
+          profile->screen_state_reuses.fetch_add (1,
+                                                  std::memory_order_relaxed);
+        *updated = false;
+        return true;
       }
 
     if (optimize_emulsion_blur
@@ -2216,20 +2854,91 @@ public:
         || tiles[tileid].last_emulsion_intensities != intensities
         || tiles[tileid].last_emulsion_offset != emulsion_offset)
       {
-        if (!apply_blur (
-                v, tileid, tiles[tileid].scr.get (),
+        if (focus_screen_interpolation_eligible_p ()
+            && !force_exact_scanner_mtf_defocus)
+          {
+            if (!initialize_interpolated_focus_screen (
+                    v, tileid, red_strip_width, green_strip_width))
+              return false;
+          }
+        else if (focus_screen_interpolation_eligible_p ()
+                 && force_exact_scanner_mtf_defocus)
+          {
+            /* The exact final point is deliberately not inserted into the
+               node cache: arbitrary simplex optima would evict the fixed
+               reusable grid one value at a time.  */
+            screen_filter_profile filter_profile;
+            const auto filter_start
+                = profile ? std::chrono::steady_clock::now ()
+                          : std::chrono::steady_clock::time_point ();
+            const bool ok = apply_blur (
+                v, tileid, writable_tile_screen (tileid), original_scr.get (),
+                nullptr, profile ? &filter_profile : nullptr);
+            if (profile)
+              {
+                const uint64_t elapsed
+                    = std::chrono::duration_cast<std::chrono::nanoseconds> (
+                          std::chrono::steady_clock::now () - filter_start)
+                          .count ();
+                profile->focus_screen_final_exact_builds.fetch_add (
+                    1, std::memory_order_relaxed);
+                profile->exact_screen_builds.fetch_add (
+                    1, std::memory_order_relaxed);
+                profile->screen_filter_nanoseconds.fetch_add (
+                    elapsed, std::memory_order_relaxed);
+                profile->add_filter_profile (filter_profile);
+              }
+            if (!ok)
+              return false;
+          }
+        else if (focus_screen_cache_eligible_p ())
+          {
+            const std::array<sharpen_parameters, 3> sp
+                = capture_sharpen_parameters (v);
+            std::shared_ptr<screen> scr
+                = get_profiled_cached_focus_screen (
+                    sp, red_strip_width, green_strip_width);
+            if (!scr)
+              return false;
+            tiles[tileid].scr = std::move (scr);
+          }
+        else
+          {
+            screen_filter_profile filter_profile;
+            const auto filter_start
+                = profile ? std::chrono::steady_clock::now ()
+                          : std::chrono::steady_clock::time_point ();
+            const bool ok = apply_blur (
+                v, tileid, writable_tile_screen (tileid),
                 optimize_emulsion_blur && !optimize_emulsion_intensities
                     ? emulsion_scr.get ()
                     : original_scr.get (),
                 optimize_emulsion_intensities ? emulsion_scr.get ()
-                                              : nullptr))
-          return false;
+                                              : nullptr,
+                profile ? &filter_profile : nullptr);
+            if (profile)
+              {
+                const uint64_t elapsed
+                    = std::chrono::duration_cast<std::chrono::nanoseconds> (
+                          std::chrono::steady_clock::now () - filter_start)
+                          .count ();
+                profile->exact_screen_builds.fetch_add (
+                    1, std::memory_order_relaxed);
+                profile->screen_filter_nanoseconds.fetch_add (
+                    elapsed, std::memory_order_relaxed);
+                profile->add_filter_profile (filter_profile);
+              }
+            if (!ok)
+              return false;
+          }
         tiles[tileid].last_screen_revision = screen_revision;
         tiles[tileid].last_emulsion_intensities = intensities;
         tiles[tileid].last_emulsion_offset = emulsion_offset;
         *updated = true;
         return true;
       }
+    if (profile)
+      profile->screen_state_reuses.fetch_add (1, std::memory_order_relaxed);
     *updated = false;
     return true;
   }
@@ -2985,6 +3694,12 @@ public:
   coord_t
   objfunc (coord_t *v)
   {
+    if (profile)
+      profile->objective_evaluations.fetch_add (1,
+                                                std::memory_order_relaxed);
+    finetune_profile_timer objective_timer (
+        profile, finetune_profile_timer_kind::objective);
+
     /* Use double to avoid accumulation of round-off error.  */
     double sum = 0;
     const int nsamples = sample_points ();
@@ -3004,21 +3719,31 @@ public:
         bool updated = false;
         if (!init_screen (v, tileid, &updated))
           return std::numeric_limits<coord_t>::max ();
-        simulate_screen (v, tileid, updated);
+        {
+          finetune_profile_timer simulation_timer (
+              profile, finetune_profile_timer_kind::screen_simulation);
+          simulate_screen (v, tileid, updated);
+        }
       }
     double_rgbdata red, green, blue;
     rgbdata color;
-    if (!tiles[0].color.empty ())
-      get_colors (v, &red, &green, &blue);
-    else
-      color = bw_get_color (v);
     rgbdata mix_weights;
     luminosity_t mix_dark = 0;
-    if (simulate_infrared)
-      {
-        mix_weights = get_mix_weights (v);
-        mix_dark = get_mix_dark (v);
-      }
+    {
+      finetune_profile_timer color_timer (
+          profile, finetune_profile_timer_kind::color_estimation);
+      if (!tiles[0].color.empty ())
+        get_colors (v, &red, &green, &blue);
+      else
+        color = bw_get_color (v);
+      if (simulate_infrared)
+        {
+          mix_weights = get_mix_weights (v);
+          mix_dark = get_mix_dark (v);
+        }
+    }
+    finetune_profile_timer residual_timer (
+        profile, finetune_profile_timer_kind::residual);
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
         if (!tiles[0].color.empty ())
@@ -3820,6 +4545,24 @@ public:
   }
 };
 } // namespace
+
+std::shared_ptr<screen>
+finetune_get_cached_screen_for_test (
+    scr_type type, coord_t red_strip_width, coord_t green_strip_width,
+    bool anticipate_sharpening,
+    const std::array<sharpen_parameters, 3> &sharpen, bool parallel,
+    bool *cache_hit, screen_filter_profile *filter_profile)
+{
+  return get_cached_finetune_screen (
+      type, red_strip_width, green_strip_width, anticipate_sharpening,
+      sharpen, parallel, cache_hit, filter_profile);
+}
+
+void
+finetune_prune_screen_cache_for_test ()
+{
+  finetune_screen_cache.prune ();
+}
  
 /* Produce element I of a geometric sequence from MIN to MAX divided into
    STEPS intervals.  */
@@ -3900,23 +4643,65 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
           const finetune_parameters &fparams, progress_info *progress)
 {
   finetune_result ret;
+  finetune_profile_accumulator profile_storage;
+  finetune_profile_accumulator *profile
+      = fparams.collect_profile ? &profile_storage : nullptr;
+  auto finish = [&]() -> finetune_result {
+    if (profile)
+      ret.profile = profile->snapshot ();
+    return std::move (ret);
+  };
   bool tile_sharpened = false;
 
   if (const char *flag_error = finetune_flag_error (fparams.flags))
     {
       ret.err = flag_error;
-      return ret;
+      return finish ();
     }
   if (!my_isfinite (fparams.ignore_outliers)
       || fparams.ignore_outliers < 0 || fparams.ignore_outliers >= 1)
     {
       ret.err = "ignore_outliers must be finite and in [0,1)";
-      return ret;
+      return finish ();
     }
   if (fparams.range < 0)
     {
       ret.err = "negative finetune range";
-      return ret;
+      return finish ();
+    }
+  if (fparams.interpolate_scanner_mtf_defocus)
+    {
+      const uint64_t incompatible
+          = finetune_scanner_mtf_sigma
+            | finetune_scanner_mtf_channel_defocus | finetune_screen_blur
+            | finetune_screen_channel_blurs | finetune_strips
+            | finetune_emulsion_blur;
+      if (!(fparams.flags & finetune_scanner_mtf_defocus)
+          || (fparams.flags & incompatible))
+        {
+          ret.err = "focus interpolation requires scalar scanner MTF "
+                    "defocus as the sole varying screen-filter parameter";
+          return finish ();
+        }
+      if (!rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
+        {
+          ret.err = "focus interpolation requires the physical diffraction "
+                    "model";
+          return finish ();
+        }
+      if (!my_isfinite (fparams.scanner_mtf_defocus_interpolation_max)
+          || fparams.scanner_mtf_defocus_interpolation_max <= 0
+          || fparams.scanner_mtf_defocus_interpolation_max > 20)
+        {
+          ret.err = "invalid focus interpolation range";
+          return finish ();
+        }
+      if (fparams.scanner_mtf_defocus_interpolation_nodes < 2
+          || fparams.scanner_mtf_defocus_interpolation_nodes > 64)
+        {
+          ret.err = "focus interpolation node count must be in [2,64]";
+          return finish ();
+        }
     }
 
   int n_tiles;
@@ -3925,7 +4710,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
       if (!locs.empty ())
         {
           ret.err = "did not expect tiles";
-          return ret;
+          return finish ();
         }
       n_tiles = 1;
     }
@@ -3934,19 +4719,19 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
       if (locs.size () > (size_t)finetune_solver::max_tiles)
         {
           ret.err = "too many tile locations";
-          return ret;
+          return finish ();
         }
       n_tiles = (int)locs.size ();
       if (!n_tiles)
         {
           ret.err = "no tile locations";
-          return ret;
+          return finish ();
         }
     }
   if (results && results->size () < (size_t)n_tiles)
     {
       ret.err = "too few previous finetune results";
-      return ret;
+      return finish ();
     }
   const image_data *imgp[finetune_solver::max_tiles];
   scr_to_img *mapp[finetune_solver::max_tiles];
@@ -3983,7 +4768,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                                          true))
             {
               ret.err = "no tile for given coordinates";
-              return ret;
+              return finish ();
             }
           point_t p = img.stitch->images[ty][tx].common_scr_to_img (scr);
           x[tileid] = nearest_int (p.x);
@@ -3998,7 +4783,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
               if (!map.set_parameters (param, *imgp[tileid]))
                 {
                   ret.err = "failed to convert screen to image coordinates";
-                  return ret;
+                  return finish ();
                 }
 	      /* TODO: determine correct pixel size area.  */
               pixel_size
@@ -4010,7 +4795,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
   if (!my_isfinite (pixel_size) || pixel_size <= 0)
     {
       ret.err = "invalid local pixel size";
-      return ret;
+      return finish ();
     }
   bool bw = fparams.flags & finetune_bw;
   bool verbose = fparams.flags & finetune_verbose;
@@ -4114,14 +4899,14 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
             progress->resume_stdout ();
         }
       ret.err = "too small tile";
-      return ret;
+      return finish ();
     }
   int twidth = txmax - txmin + 1, theight = tymax - tymin + 1;
   if ((fparams.flags & finetune_sharpening)
       && (twidth <= 20 || theight <= 20))
     {
       ret.err = "tile too small for sharpening border";
-      return ret;
+      return finish ();
     }
   if (verbose)
     {
@@ -4133,6 +4918,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
         progress->resume_stdout ();
     }
   finetune_solver best_solver;
+  best_solver.set_profile (profile);
   coord_t best_fit_score = -1;
   std::atomic<bool> failed (false);
 
@@ -4163,14 +4949,14 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
       if (maxtiles == INT_MAX)
         {
           ret.err = "multitile search is too large";
-          return ret;
+          return finish ();
         }
       maxtiles++;
     }
   if ((int64_t)maxtiles * maxtiles > INT_MAX)
     {
       ret.err = "multitile search is too large";
-      return ret;
+      return finish ();
     }
 
   bool bw_is_simulated_infrared = false;
@@ -4213,12 +4999,12 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                 progress->resume_stdout ();
             }
           ret.err = "precomputing failed";
-          return ret;
+          return finish ();
         }
       if (progress && progress->cancel_requested ())
         {
           ret.err = "cancelled";
-          return ret;
+          return finish ();
         }
 
       if (maxtiles * maxtiles > 1
@@ -4230,7 +5016,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
     shared(fparams, maxtiles, rparam, pixel_size, best_fit_score, verbose,  \
                std::nothrow, imgp, twidth, theight, txmin, tymin, bw,         \
                progress, mapp, render, failed, best_solver, results,          \
-               bw_is_simulated_infrared, tile_sharpened)
+               bw_is_simulated_infrared, tile_sharpened, profile)
       for (int ty = 0; ty < maxtiles; ty++)
         for (int tx = 0; tx < maxtiles; tx++)
           {
@@ -4248,6 +5034,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
             // int cur_txmax = cur_txmin + twidth;
             // int cur_tymax = cur_tymin + theight;
             finetune_solver solver;
+            solver.set_profile (profile);
             solver.n_tiles = 1;
             solver.twidth = twidth;
             solver.theight = theight;
@@ -4261,7 +5048,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                 failed.store (true, std::memory_order_relaxed);
                 continue;
               }
-            solver.init (fparams.flags, rparam.screen_blur_radius,
+            solver.init (fparams, rparam.screen_blur_radius,
                          rparam.red_strip_width, rparam.green_strip_width,
                          bw_is_simulated_infrared, tile_sharpened, results);
             if (progress && progress->cancel_requested ())
@@ -4318,7 +5105,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                  shared.  Reject the ambiguous configuration rather than
                  silently relaxing every tile to simulated-IR semantics.  */
               ret.err = "mixed measured and simulated infrared tiles";
-              return ret;
+              return finish ();
             }
           /* FIXME: We only use render_to_scr since we eventually want to know
              pixel size. For stitched projects this is wrong.  */
@@ -4330,26 +5117,26 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                                                                  : nullptr))
             {
               ret.err = "precomputing failed";
-              return ret;
+              return finish ();
             }
           if (progress && progress->cancel_requested ())
             {
               ret.err = "cancelled";
-              return ret;
+              return finish ();
             }
           if (cur_txmin < 0 || cur_tymin < 0)
             {
               ret.err = "tile too large for image";
-              return ret;
+              return finish ();
             }
           if (!best_solver.init_tile (tileid, cur_txmin, cur_tymin, bw,
                                       *mapp[tileid], render))
             {
               ret.err = "out of memory";
-              return ret;
+              return finish ();
             }
         }
-      best_solver.init (fparams.flags, rparam.screen_blur_radius,
+      best_solver.init (fparams, rparam.screen_blur_radius,
                         rparam.red_strip_width, rparam.green_strip_width,
                         bw_is_simulated_infrared, tile_sharpened, results);
       gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
@@ -4382,12 +5169,14 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2) shared(  \
         fparams, rparam, pixel_size, best_fit_score, verbose, imgp, twidth, \
             theight, txmin, tymin, bw, progress, mapp, failed, best_solver,   \
-            results, bw_is_simulated_infrared, tile_sharpened, n_angles, angles)
+            results, bw_is_simulated_infrared, tile_sharpened, n_angles, angles, \
+            profile)
           for (int i = 0; i < 50; i++)
             {
               for (int rot = 0; rot < n_angles; rot ++)
                 {
                   finetune_solver solver;
+                  solver.set_profile (profile);
                   solver.n_tiles = 1;
                   solver.twidth = twidth;
                   solver.theight = theight;
@@ -4410,7 +5199,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                   solver.min_rotate = angles[rot][0];
                   solver.max_rotate = angles[rot][1];
                   solver.init (
-                      fparams.flags, rparam.screen_blur_radius,
+                      fparams, rparam.screen_blur_radius,
                       rparam.red_strip_width, rparam.green_strip_width,
                       bw_is_simulated_infrared, tile_sharpened, results);
                   coord_t u = solver.solve (
@@ -4438,17 +5227,17 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
   if (progress && progress->cancel_requested ())
     {
       ret.err = "cancelled";
-      return ret;
+      return finish ();
     }
   if (failed.load (std::memory_order_relaxed))
     {
       ret.err = "failed memory allocation";
-      return ret;
+      return finish ();
     }
   if (!valid_fit_score_p (best_fit_score))
     {
       ret.err = "invalid fit-quality score";
-      return ret;
+      return finish ();
     }
 
   if (best_solver.least_squares)
@@ -4465,9 +5254,12 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                                        fparams.ignore_outliers);
   if (best_solver.has_outliers ())
     {
+      best_solver.resume_interpolated_focus ();
       coord_t refined_objective = simplex<coord_t, finetune_solver> (
           best_solver, "finetuning with outliers", progress,
           !(fparams.flags & finetune_no_progress_report));
+      if (best_solver.interpolated_focus_p ())
+        refined_objective = best_solver.evaluate_final_focus_exactly ();
       /* The second simplex changes both the optimum and its fit-quality score.
          Keeping the score from the pre-outlier fit made the adaptive focus
          rejection threshold describe a different solution.  */
@@ -4477,13 +5269,13 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
   if (progress && progress->cancel_requested ())
     {
       ret.err = "cancelled";
-      return ret;
+      return finish ();
     }
 
   if (!valid_fit_score_p (best_fit_score))
     {
       ret.err = "invalid refined fit-quality score";
-      return ret;
+      return finish ();
     }
   ret.uncertainty = best_fit_score;
   if (verbose)
@@ -4496,7 +5288,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
     }
   best_solver.set_results (ret, param, rparam, verbose, progress);
   if (!ret.success)
-    return ret;
+    return finish ();
 
   if (fparams.simulated_file)
     best_solver.write_file (best_solver.start.data (), fparams.simulated_file,
@@ -4559,7 +5351,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
   // printf ("%i %i %i %i %f %f %f %f\n", bx, by, fsx, fsy,
   // best_solver.tile_pos[twidth/2+(theight/2)*twidth].x,
   // best_solver.tile_pos[twidth/2+(theight/2)*twidth].y, fp.x, fp.y);
-  return ret;
+  return finish ();
 }
 
 /* Finetune SOLVER parameters in given AREA using RPARAM and PARAM in IMG.

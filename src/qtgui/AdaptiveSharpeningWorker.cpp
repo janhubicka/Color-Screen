@@ -49,6 +49,13 @@ void AdaptiveSharpeningWorker::run() {
     worker.tolerance = tolerance;
     worker.progress = m_progress.get();
     worker.verbose = false; // Disable verbose for GUI
+    // Keep the coarse strip/focus pass exact.  For the physical displacement
+    // model the worker enables the discretized focus-screen cache only after
+    // step2 has derived the useful defocus range at the process-screen
+    // frequency.  The compact legacy fallback has no signed physical focus
+    // coordinate and therefore continues to use the exact path.
+    worker.interpolate_focus
+        = m_rparams.sharpen.scanner_mtf.simulate_diffraction_p();
     
     // Use local ThreadPool to avoid starving the global pool used by Renderer
     QThreadPool pool;

@@ -174,6 +174,10 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --xsamples=n              number of horizontal samples to analyze for every entry in table\n");
       fprintf (stderr, "      --ysamples=n              number of vertical samples to analyze for every entry in table\n");
       fprintf (stderr, "      --tolerance=max           maximal difference between minimal and maximal blur radius in robust average\n");
+      fprintf (stderr, "      --profile                 print accumulated finetune/cache profiling counters\n");
+      fprintf (stderr, "      --interpolate-focus       approximate dense physical-defocus fits from cached nonlinear focus nodes\n");
+      fprintf (stderr, "      --focus-min-mtf=percent   stop focus nodes when screen-frequency MTF reaches this value (default 5)\n");
+      fprintf (stderr, "      --focus-cache-nodes=n     exact nonlinear focus nodes, including endpoints (default 33, maximum 64)\n");
       fprintf (stderr, "      --optimize-fog            enable finetuning of fog (dark point)\n");
       fprintf (stderr, "      --simulate-infrared       simuate infrared layer\n");
       fprintf (stderr, "      --normalize               normalize colors\n");
@@ -1363,6 +1367,9 @@ get_correction (scanner_blur_correction_parameters::correction_mode mode, finetu
    REOPTIMIZE_STRIP_WIDTHS enables strip width optimization.
    SKIPMIN and SKIPMAX specify ranges to skip.
    TOLERANCE is robust average tolerance.
+   INTERPOLATE_FOCUS enables the discretized dense scalar-defocus cache.
+   FOCUS_MTF_THRESHOLD sets its useful-range MTF boundary and
+   FOCUS_INTERPOLATION_NODES sets its nonlinear exact-node count.
    PROGRESS is progress info.  */
 std::unique_ptr <scanner_blur_correction_parameters>
 analyze_scanner_blur_img (scr_to_img_parameters &param, 
@@ -1375,6 +1382,10 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 			  bool reoptimize_strip_widths,
 			  coord_t skipmin, coord_t skipmax,
 			  coord_t tolerance,
+			  bool interpolate_focus,
+			  coord_t focus_mtf_threshold,
+			  int focus_interpolation_nodes,
+			  bool report_profile,
 			  progress_info *progress)
 {
   analyze_scanner_blur_worker worker (param, rparam, scan);
@@ -1391,6 +1402,10 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
   worker.tolerance = tolerance;
   worker.progress = progress;
   worker.verbose = verbose;
+  worker.report_profile = report_profile;
+  worker.interpolate_focus = interpolate_focus;
+  worker.focus_mtf_threshold = focus_mtf_threshold;
+  worker.focus_interpolation_nodes = focus_interpolation_nodes;
   if (!worker.step1 ())
     return NULL;
   if (worker.do_strips ())
@@ -1401,12 +1416,19 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 	  worker.analyze_strips (x, y);
     }
   if (!worker.step2 ())
-    return NULL;
+    {
+      if (worker.report_profile)
+        worker.print_profile ();
+      return NULL;
+    }
 #pragma omp parallel for default(none) collapse(2) schedule(dynamic) shared (worker)
   for (int y = 0; y < worker.ysteps * worker.ysubsteps; y++)
     for (int x = 0; x < worker.xsteps * worker.xsubsteps; x++)
       worker.analyze_blur (x, y);
-  return worker.step3 ();
+  std::unique_ptr<scanner_blur_correction_parameters> ret = worker.step3 ();
+  if (worker.report_profile)
+    worker.print_profile ();
+  return ret;
 }
 
 /* Implement "analyze-scanner-blur" command with ARGC and ARGV.  */
@@ -1425,6 +1447,10 @@ analyze_scanner_blur (int argc, char **argv)
   int strip_xsteps = 0;
   int strip_ysteps = 0;
   bool reoptimize_strip_widths = false;
+  bool report_profile = false;
+  bool interpolate_focus = false;
+  float focus_mtf_percent = 5;
+  int focus_interpolation_nodes = 33;
   uint64_t flags = finetune_position | finetune_no_progress_report
 		   | finetune_scanner_mtf_defocus;
 
@@ -1441,6 +1467,14 @@ analyze_scanner_blur (int argc, char **argv)
         reoptimize_strip_widths = true;
       else if (arg == "--no-reoptimize-strip-widths")
         reoptimize_strip_widths = false;
+      else if (arg == "--profile")
+        report_profile = true;
+      else if (arg == "--no-profile")
+        report_profile = false;
+      else if (arg == "--interpolate-focus")
+        interpolate_focus = true;
+      else if (arg == "--no-interpolate-focus")
+        interpolate_focus = false;
       else if (arg == "--optimize-screen-blur")
         {
           flags &= ~(finetune_screen_channel_blurs | finetune_screen_blur | finetune_scanner_mtf_defocus | finetune_scanner_mtf_channel_defocus);
@@ -1499,6 +1533,12 @@ analyze_scanner_blur (int argc, char **argv)
         ;
       else if (parse_int_param (argc, argv, &i, "strip-height", strip_ysteps, 1,
                                 1024 * 1024))
+        ;
+      else if (parse_float_param (argc, argv, &i, "focus-min-mtf",
+                                  focus_mtf_percent, 0.001, 99.999))
+        ;
+      else if (parse_int_param (argc, argv, &i, "focus-cache-nodes",
+                                focus_interpolation_nodes, 2, 64))
         ;
       else if (!infname)
         infname = argv[i];
@@ -1559,7 +1599,8 @@ analyze_scanner_blur (int argc, char **argv)
       rparam.scanner_blur_correction = analyze_scanner_blur_img (
 	  param, rparam, scan, strip_xsteps, strip_ysteps, xsteps, ysteps,
 	  xsubsteps, ysubsteps, flags, reoptimize_strip_widths, skipmin, skipmax,
-	  tolerance, &progress);
+	  tolerance, interpolate_focus, focus_mtf_percent / 100,
+	  focus_interpolation_nodes, report_profile, &progress);
       if (!rparam.scanner_blur_correction)
 	return 1;
     }
@@ -1590,7 +1631,8 @@ analyze_scanner_blur (int argc, char **argv)
 	    rparam.get_tile_adjustment (x, y).scanner_blur_correction = analyze_scanner_blur_img (
 		scan.stitch->images[y][x].param, rparam, *scan.stitch->images[y][x].img.get(), strip_xsteps, strip_ysteps, xsteps, ysteps,
 		xsubsteps, ysubsteps, flags, reoptimize_strip_widths, skipmin, skipmax,
-		tolerance, &progress);
+		tolerance, interpolate_focus, focus_mtf_percent / 100,
+		focus_interpolation_nodes, report_profile, &progress);
 	    if (!rparam.get_tile_adjustment (x, y).scanner_blur_correction)
 	      {
 		progress.pop (stack);

@@ -8,7 +8,7 @@ if test -z "$srcdir"; then
     test -z "$srcdir" && srcdir=.
     test "${VERBOSE+set}" != set && VERBOSE=1
 fi
-echo 1..7
+echo 1..8
 . $srcdir/defs.sh
 NAME=dufaycolor_nikon_coolsan9000ED_4000DPI_raw
 pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-blur >out-${NAME}-finetune-blur.txt || exit 1
@@ -45,3 +45,65 @@ NAME=dufaycolor_nikon_coolsan9000ED_4000DPI_raw_sky
 pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par" --no-normalize --optimize-position --verbose --width=1 --optimize-fog --optimize-emulsion-blur >out-${NAME}-finetune-emulsionblur.txt || exit 1
 grep "^Emulsion blur robust min 0\\.03" out-${NAME}-finetune-emulsionblur.txt || exit 1
 oktest "finetune of sky: position and emulsion blur, nonormalize"
+
+# Exercise the displacement-only adaptive-focus pass with a physical capture
+# model.  The dense pass should use fewer exact periodic-screen constructions
+# when interpolation is enabled, while the resulting correction table remains
+# indistinguishable at the precision stored in parameter files.
+NAME=dufaycolor_nikon_coolsan9000ED_4000DPI_raw
+PHYSICAL_PAR=out-${NAME}-physical-focus-input.par
+${AWK-awk} '
+  { print }
+  /^sharpen_amount:/ {
+    print "scanner_mtf_scale: 1.000000"
+    print "scanner_mtf_model: physical-diffraction"
+    print "scanner_mtf_sigma_px: 0"
+    print "scanner_mtf_halo_fraction: 0"
+    print "scanner_mtf_halo_sigma_px: 0"
+    print "scanner_mtf_blur_diameter_px: 0"
+    print "scanner_mtf_pixel_pitch_um: 3.76"
+    print "scanner_mtf_sensor_fill_factor: 1"
+    print "scanner_mtf_wavelength_nm: 550"
+    print "scanner_mtf_channel_wavelengths_nm: 0 0 0 0"
+    print "scanner_mtf_f_stop: 8"
+    print "scanner_mtf_defocus_mm: 0.2"
+    print "scan_dpi: 4000"
+  }
+' "$srcdir/${NAME}-nomesh.par" >$PHYSICAL_PAR || exit 1
+
+COMMON_FOCUS_ARGS="--strip-width=1 --strip-height=1 --width=1 --height=1 --xsamples=1 --ysamples=1 --profile"
+pexec env OMP_NUM_THREADS=1 $RUNCOLORSCREEN analyze-scanner-blur \
+  "$srcdir/${NAME}.tif" $PHYSICAL_PAR $COMMON_FOCUS_ARGS \
+  --out=out-${NAME}-focus-exact.par \
+  >out-${NAME}-focus-exact.txt || exit 1
+pexec env OMP_NUM_THREADS=1 $RUNCOLORSCREEN analyze-scanner-blur \
+  "$srcdir/${NAME}.tif" $PHYSICAL_PAR $COMMON_FOCUS_ARGS \
+  --interpolate-focus --out=out-${NAME}-focus-interpolated.par \
+  >out-${NAME}-focus-interpolated.txt || exit 1
+
+exact_builds=`sed -n 's/.*exact screen builds: \([0-9][0-9]*\).*/\1/p' out-${NAME}-focus-exact.txt`
+interpolated_builds=`sed -n 's/.*exact screen builds: \([0-9][0-9]*\).*/\1/p' out-${NAME}-focus-interpolated.txt`
+test -n "$exact_builds" -a -n "$interpolated_builds" || exit 1
+test "$interpolated_builds" -lt "$exact_builds" || exit 1
+grep 'focus approximation: [1-9][0-9]* interpolations' \
+  out-${NAME}-focus-interpolated.txt >/dev/null || exit 1
+
+${AWK-awk} '/scanner_blur_correction_defocus_mms:/ {
+  for (i = 2; i <= NF; i++) print $i
+}' out-${NAME}-focus-exact.par >out-${NAME}-focus-exact-values.txt
+${AWK-awk} '/scanner_blur_correction_defocus_mms:/ {
+  for (i = 2; i <= NF; i++) print $i
+}' out-${NAME}-focus-interpolated.par >out-${NAME}-focus-interpolated-values.txt
+paste out-${NAME}-focus-exact-values.txt \
+      out-${NAME}-focus-interpolated-values.txt \
+  | ${AWK-awk} '
+      BEGIN { n = 0 }
+      NF == 2 {
+        d = $1 - $2
+        if (d < 0) d = -d
+        if (d > 0.00001) exit 1
+        n++
+      }
+      END { if (!n) exit 1 }
+    ' || exit 1
+oktest "adaptive physical focus uses cached nonlinear nodes"

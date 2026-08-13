@@ -3,6 +3,26 @@
 namespace colorscreen
 {
 
+/* Report optional solver statistics without adding a requirement to every
+   simplex client.  A client that defines
+
+       void record_simplex_profile (int evaluations, int iterations)
+
+   receives one callback when a simplex run finishes.  */
+template <typename C>
+static auto
+report_simplex_profile (C &c, int evaluations, int iterations, int)
+    -> decltype (c.record_simplex_profile (evaluations, iterations), void ())
+{
+  c.record_simplex_profile (evaluations, iterations);
+}
+
+template <typename C>
+static void
+report_simplex_profile (C &, int, int, long)
+{
+}
+
 /* Minimize C.OBJFUNC using the Nelder--Mead simplex method.  C supplies the
    initial vector C.START, NUM_VALUES, SCALE, EPSILON, CONSTRAIN and VERBOSE.
    TASK and PROGRESS describe optional progress reporting.  When
@@ -38,6 +58,7 @@ simplex (C &c, const char *task = NULL, progress_info *progress = NULL, bool pro
       /* There are no coordinates to dereference; passing null also keeps the
          template compatible with callers whose START is a raw array.  */
       T value = c.objfunc (nullptr);
+      report_simplex_profile (c, 1, 0, 0);
       if (progress && progress_report)
         progress->inc_progress ();
       return value;
@@ -339,6 +360,7 @@ simplex (C &c, const char *task = NULL, progress_info *progress = NULL, bool pro
 
   min = c.objfunc (v[vs]);
   k++;
+  report_simplex_profile (c, k, std::min (itr, MAX_IT), 0);
   if (c.verbose ())
     {
        printf("%d Function Evaluations\n",k);

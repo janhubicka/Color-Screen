@@ -8,7 +8,9 @@ Issue identifiers are intended to remain stable.
 
 Status values are:
 
-- **fixed**: corrected in the current review;
+- **fixed**: corrected in the reviewed source;
+- **partially fixed**: a safe subset is implemented, with explicit remaining
+  work;
 - **open**: a demonstrated defect or missing guard;
 - **model limitation**: current behaviour is deliberate or historical, but its
   assumptions restrict accuracy;
@@ -232,6 +234,37 @@ still requiring one objective evaluation to profile the linear colours and
 produce results.  The generic simplex used to divide by the dimension while
 constructing its initial vertices.  It now evaluates a zero-dimensional
 objective exactly once and returns that value.  A regression covers this path.
+
+### FT-050 — per-channel capture MTFs collapsed when sharpening was disabled
+
+**Severity:** high focus/model correctness
+
+**Status:** fixed
+
+`screen::initialize_with_sharpen_parameters()` used
+`sharpen_parameters::operator==` to decide whether adjacent channels could
+reuse one transfer.  That comparison intentionally returns true for digital
+sharpening mode `none`, but the capture MTF is still applied when sharpening is
+not anticipated.  Distinct red, green, and blue capture MTFs could therefore
+all be filtered with the first channel's transfer.
+
+The periodic-screen filter now compares scanner-MTF scale and model explicitly,
+independently of digital sharpening mode, before reusing a channel transfer.
+The exact finetune cache uses the same rule in its key.  A regression constructs
+three distinct empirical channel MTFs in mode `none` and checks both channel
+separation and exact cached-versus-direct output.
+
+### FT-051 — generic LRU eviction selected the most recently used entry
+
+**Severity:** medium performance and cache behaviour
+
+**Status:** fixed
+
+The free-entry selection comparison in `lru-cache.h` was reversed: once a cache
+was full it selected the entry with the greatest timestamp, effectively
+implementing MRU eviction.  The comparison now selects the smallest timestamp.
+A capacity-two regression touches the first entry before inserting a third and
+verifies that the untouched second entry is evicted.
 
 ### FT-038 — simplex shrink retains stale objective values
 
@@ -565,35 +598,62 @@ construct the heuristic from only the points inside the area.
 
 **Severity:** high performance
 
-**Status:** performance design
+**Status:** partially fixed
 
 Changing sigma or focus calls
 `screen::initialize_with_sharpen_parameters()`, which prepares the capture
-transfer and filters all periodic channels.  One solver caches only its last
-exact state.  Adaptive analysis constructs a fresh solver for every location,
-so neighbouring cells repeat almost identical work.
+transfer and filters all periodic channels.  One solver still caches its last
+exact state, and revision 0016 additionally introduces a dedicated thread-safe
+LRU of exact final periodic screens for MTF sigma/focus fits whose source is not
+modified by emulsion parameters.  It has a nominal 64-entry capacity and uses
+the complete per-channel capture/sharpening state as its key.
 
-Warm-starting from the global prepass reduces the number and distance of focus
-steps, but it does not share transfer preparation or filtered screens.
+This safely shares bit-identical simplex nodes across neighbouring fits and
+keeps transient optimizer entries out of the normal renderer cache.  It does
+not yet share the immutable ideal screen or its channel FFTs, and active
+references can temporarily make the nominal capacity a soft bound.  See
+FT-052.  Revision 0017 additionally maps the dense scalar physical-defocus pass
+onto shared quadratic nodes and interpolates neighboring exact node screens;
+see FT-053.  Other MTF fits still use arbitrary exact simplex coordinates.
 
 ### FT-035 — no instrumentation separates optimizer and screen-filter cost
 
 **Severity:** high performance engineering
 
-**Status:** performance design
+**Status:** fixed; broader benchmarking remains useful
 
-Before introducing an approximate cache, record at least:
+Revision 0016 adds opt-in `finetune_parameters::collect_profile`, returns a
+snapshot in `finetune_result::profile`, and exposes aggregate reporting through
+`analyze-scanner-blur --profile`.  It records:
 
-- simplex iterations and objective evaluations per local fit;
-- `init_screen()` calls and exact periodic-screen rebuilds;
-- fixed-screen and MTF-cache hits/misses;
-- MTF `precompute()` calls, PSF/transfer construction, and forward/inverse FFTs;
-- elapsed time in screen filtering, sampling, colour estimation, and residual
-  evaluation;
-- peak/shared cache memory.
+- simplex runs, iterations, evaluations, and total objective calls;
+- `init_screen()` calls, local reuse, exact builds, and fixed/focus cache
+  hits/misses;
+- MTF and PSF preparation, direct/wrapped transfer construction, and
+  forward/inverse FFT counts;
+- steady-clock time in the objective, filtering/cache path, sampling, colour
+  estimation, and residual evaluation.
 
-Report medians and upper percentiles for RGB+IR adaptive runs, not only one
-small synthetic tile.
+Profiling is disabled by default, so ordinary fits do not perform clock reads or
+atomic increments.  Reported times are thread-summed and intentionally overlap:
+the objective contains every sub-stage, and a cache miss includes its exact
+filter construction.
+
+Revision 0016's original five-thread smoke runs of the Dufay Coolscan fixture
+used 605 objective calls and produced 515--520 exact builds, 41--46 exact-focus
+hits, and a 7.3--8.2% hit rate.  The filter path dominated accumulated
+objective time, confirming both the bottleneck and the limited value of exact
+floating-point reuse alone.
+
+With a physical 4000-ppi capture model, revision 0017 compared the exact and
+discretized dense paths on the same fixture.  The exact run took 5.14 s and
+constructed 273 exact screens.  The default 33-node quadratic table took
+1.92 s, constructed 139 exact screens, performed 209 interpolations, and
+produced a byte-identical saved correction table.  Thread-summed interpolation
+time was 10.1 ms; filtering remained the dominant cost.  Counts can vary
+slightly with parallel scheduling.  Larger RGB+IR datasets should still be
+profiled and reported with medians and upper percentiles before treating this
+small fixture as a universal speedup estimate.
 
 ### FT-036 — adaptive output is scalar but per-channel fits are accepted
 
@@ -624,16 +684,97 @@ smoothly.  Interpolation must either use a common frequency-domain
 representation, split intervals at this transition, or detect the local error
 and fall back to exact filtering.
 
-### Measurement required before approximation
+Revision 0017's first-stage implementation interpolates the final exact
+periodic-screen samples on a quadratic grid and always rebuilds the selected
+optimum exactly.  This avoids interpolation of MTF magnitude and passed the
+current midpoint and end-to-end regressions, but it does not yet adaptively
+subdivide or detect every direct/wrapped transition.  Keep this issue open for
+broader models, screen frequencies, and error-controlled refinement.
 
-This review identifies the repeated exact screen build as the dominant
-algorithmic candidate, but it does not attach a portable speedup or error claim
-to interpolation.  Those numbers depend on the screen family, MTF model,
-metadata, FFT implementation, thread count, and where the requested focus range
-crosses the direct/wrapped-PSF transition in FT-037.  Phase A instrumentation
-must therefore be committed together with a reproducible benchmark command and
-representative RGB+IR fixtures before approximate values are used by the
-solver.
+### FT-052 — exact focus-cache misses rebuild invariant source state
+
+**Severity:** high performance
+
+**Status:** open
+
+The exact final-screen cache avoids a complete rebuild only on a bit-identical
+key hit.  On every miss, its generator still reconstructs the ideal periodic
+screen and forward-transforms all source channels before multiplying them by
+the new capture transfer.  For the common adaptive case, screen family and
+strip widths are usually shared across many cells, so this work is invariant.
+
+Split periodic filtering so an immutable source screen and its channel FFTs can
+be cached separately from focus-dependent signed transfer coefficients and the
+inverse transform.  The source key must include screen type, relevant strip
+widths, and any emulsion state that has already been folded into the source.
+Keep emulsion-dependent optimization on a private path until that ownership
+contract is explicit.  This remains an exact complementary optimization: the
+0017 node table reduces the number of misses, while source-state sharing would
+make every remaining node and exact-final miss cheaper.
+
+### FT-053 — arbitrary simplex focus nodes have a low exact-cache hit rate
+
+**Severity:** high performance
+
+**Status:** partially fixed for dense scalar physical displacement
+
+The simplex generates unconstrained floating-point focus values.  Warm-started
+neighbouring fits explore similar intervals, but usually not the same bit
+patterns; initial 0016 profiles observed only a 7--8% exact-focus hit rate.
+An exact final-screen LRU therefore removed some duplicate work but left most
+filter builds intact.
+
+Revision 0017 implements the first bounded one-dimensional table for the
+second, dense adaptive pass when scalar physical defocus is the sole varying
+screen-filter parameter.  The coarse prepass remains exact.  The useful range
+ends at the first displacement where physical system MTF at the process-screen
+frequency reaches 5% by default.  `N` exact nodes use
+`d_i=d_max(i/(N-1))^2`, concentrating samples near best focus.  Intermediate
+requests blend neighboring exact filtered screens from the existing linked-list
+LRU; they never interpolate nonnegative MTF magnitude.  The selected optimum,
+outlier handling, and result production are reevaluated with an exact screen,
+and arbitrary final values are not inserted into the node cache.
+
+The default 33-node fixture test reduced exact builds from 273 to 139 and wall
+time from 5.14 s to 1.92 s without changing the saved correction table.  The
+same test showed visible table changes with only 9 or 17 nodes, while 25 or
+more matched the exact saved result on this fixture; 33 therefore leaves a
+useful safety margin without filling all 64 cache entries.
+
+Remaining work is error-controlled subdivision around poorly interpolated
+intervals, wider real-data validation, and any future per-channel focus design.
+Per-channel focus should use separate one-dimensional state rather than a dense
+three-dimensional RGB table.
+
+### Initial measurement and continuing validation
+
+Revision 0017 supplies a reproducible first speed and equality check, but its
+numbers are not a portable universal claim.  They depend on the screen family,
+MTF model, metadata, FFT implementation, thread count, and where the useful
+range crosses the direct/wrapped-PSF transition in FT-037.
+
+The initial reproducible smoke command, run from `testsuite`, is:
+
+```sh
+OMP_NUM_THREADS=5 $BUILD/src/colorscreen/colorscreen analyze-scanner-blur \
+  dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif \
+  physical-focus-input.par \
+  --strip-width=1 --strip-height=1 --width=1 --height=1 \
+  --xsamples=2 --ysamples=1 --profile --interpolate-focus \
+  --focus-min-mtf=5 --focus-cache-nodes=33 \
+  --out=/tmp/focus-profile.par
+```
+
+`physical-focus-input.par` must contain a complete physical diffraction model;
+the testsuite regression constructs one from the Dufay fixture.  The benchmark
+is intentionally small and establishes accounting, output agreement, and
+bottleneck location.  Parallel scheduling can change exact hit/miss counts
+slightly between runs.  It is not a substitute for distributions from full
+RGB+IR adaptive scans.
+
+Representative datasets should record wall time, profile totals, fit counts,
+cache hit rate, and median/upper-percentile work per local fit before
+broadening the approximation or treating one node count as a global default.
 
 ## Proposed exact cache and focus table
 
@@ -641,11 +782,17 @@ The safe implementation order is deliberately conservative.
 
 ### Phase A — retain and measure warm starts
 
-The current patch implements global prepass warm starts for MTF and legacy
-blur.  Add regression counters or benchmark logging so the reduction in exact
-screen rebuilds can be measured on representative scans.
+**Status:** complete in 0016
+
+Global prepass warm starts are retained for MTF and legacy blur.  Opt-in
+profiling now measures simplex work, exact screen construction, transfer/PSF
+preparation, FFTs, cache behaviour, and major objective stages.  Broader
+benchmark collection remains useful, but instrumentation is no longer a blocker
+for exact optimization work.
 
 ### Phase B — share immutable source state
+
+**Status:** open; complementary exact optimization
 
 Split screen preparation into:
 
@@ -660,29 +807,39 @@ Its key must include every state that changes the source or units:
 
 - screen type and strip widths;
 - emulsion blur, offset, and per-tile intensities when active;
-- pixel size / scanner-MTF scale;
-- complete scanner-MTF model and metadata;
-- wavelength, sigma, halo, sensor aperture, and sharpening mode;
-- whether the measured tile is already sharpened;
-- legacy versus MTF path.
+- any emulsion-derived source state already folded into the periodic
+  samples.
 
-Do not key only on the scalar focus value.
+Capture scale, MTF metadata, wavelength, sigma, halo, sensor aperture, and
+sharpening mode belong to the subsequent transfer-state key rather than the
+source-FFT key.  Neither cache may be keyed only on scalar focus.
 
 ### Phase C — exact focus-node cache
 
-Cache exact filtered periodic screens at focus values actually evaluated by the
-simplex.  The cache should be bounded and thread-safe, avoid holding duplicate
-source FFTs, and never publish a screen after failed MTF/PSF construction.
-Per-channel focus is separable: three one-dimensional channel caches are
-preferable to a dense three-dimensional RGB table.
+**Status:** complete for final screens in 0016; discretized reuse added in 0017
 
-This phase is exact and may already remove most repeated work when many local
-fits start at the same global focus.
+Exact filtered periodic screens at focus values actually evaluated by the
+simplex are now stored in a bounded, thread-safe cache.  Failed MTF/PSF
+constructions are not published, and emulsion-dependent fits are excluded.
+The cache currently stores complete RGB screens and therefore still duplicates
+source FFT work on misses.  Revision 0017 makes dense scalar physical-focus
+requests converge on shared quadratic node keys, while other exact fits retain
+arbitrary simplex values.
+
+Per-channel focus should ultimately use separable one-dimensional transfer
+state rather than a dense three-dimensional RGB focus table.
 
 ### Phase D — error-controlled interpolation
 
-Only after Phases B/C are measured should intermediate focus values be
-approximated.  Two plausible linear objects are:
+**Status:** fixed-grid scalar implementation complete; adaptive error control open
+
+Revision 0017 implements the deliberately narrow first option requested for
+the displacement-only GUI pass: linearly blend already filtered exact periodic
+screens at quadratic scalar-defocus nodes.  The exact coarse pass determines
+the useful range from the first 5% process-screen-frequency MTF crossing, and
+the final selected point is rebuilt exactly.
+
+For broader or more aggressive approximation, two plausible linear objects are:
 
 - signed frequency-domain transfer coefficients multiplied by the cached
   source FFT; or
@@ -693,18 +850,20 @@ OTF phase reversals and zero crossings.  Interpolation must preserve the DC
 coefficient exactly and use adaptive subdivision where focus response is not
 sufficiently linear.
 
-For a requested focus between nodes:
+The current fixed-grid implementation performs the interpolation directly.
+An error-controlled extension should, for selected intervals:
 
 1. form the interpolated candidate;
 2. occasionally compute the exact node according to a validation schedule;
 3. compare periodic samples and the local objective;
 4. subdivide or fall back to exact filtering when the error budget is exceeded.
 
-The table range should be driven by the global prepass and expanded on demand,
-not fixed to the full legal 0--20 interval at uniformly fine spacing.  Node
-intervals must not silently cross the direct/wrapped PSF transition from
-FT-037; the safest long-term design is to interpolate one common signed
-frequency-domain representation instead of two different final-screen paths.
+The implemented table range is driven by the physical screen-frequency MTF,
+not the full legal 0--20 mm interval, and its spacing is quadratic rather than
+uniform.  An adaptive extension should still detect intervals crossing the
+direct/wrapped PSF transition from FT-037; the safest long-term design is to
+interpolate one common signed frequency-domain representation instead of two
+different final-screen paths.
 
 ### Acceptance criteria
 
@@ -728,6 +887,8 @@ current real-data reproducibility tests.
 
 ## Regression coverage added in this review
 
+Revision 0015 added:
+
 - incompatible finetune flag families and the zero-dimensional simplex path;
 - scalar dark conversion for simulated IR, including singular/non-finite
   mixing weights;
@@ -735,6 +896,25 @@ current real-data reproducibility tests.
 - correction-table allocation failure preserving existing state, malformed
   transactional load, save/load round-trip, cache-id refresh, and zero-filled
   reallocation.
+
+Revision 0016 adds:
+
+- exact cached-versus-direct periodic-screen equality;
+- distinct per-channel capture MTFs while digital sharpening mode is `none`;
+- exact focus-cache miss/hit accounting and reuse across construction-only
+  parallel settings;
+- true LRU rather than MRU eviction at a capacity boundary.
+
+Revision 0017 adds:
+
+- quadratic focus-grid interval construction, endpoint stability, clamping,
+  and invalid-input rejection;
+- first-crossing useful-range detection at a configurable physical MTF
+  threshold, including the unusable in-focus case;
+- midpoint exact-versus-interpolated periodic-screen error checks;
+- an end-to-end displacement regression which verifies that interpolation is
+  exercised, reduces exact screen builds, and preserves the exact correction
+  table within 0.00001 mm.
 
 ## Test work still required
 
@@ -748,7 +928,8 @@ current real-data reproducibility tests.
    differ, so the FT-001 stride regression cannot return.
 5. Add synthetic spatial-focus fields and compare recovered correction tables
    with known truth.
-6. Add focus-cache benchmarks/counters and exact-versus-interpolated validation
-   before enabling approximation by default.
+6. Collect full-scan RGB+IR profile distributions, including screen and
+   objective error around direct/wrapped-PSF transitions, before broadening the
+   approximation beyond the physical displacement-only GUI path.
 7. Run the existing Dufay RGB finetune tests, all `libcolorscreen` unit tests,
    and the real MTF/edge reproducibility tests on Linux, macOS, and Windows.
