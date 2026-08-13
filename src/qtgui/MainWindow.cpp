@@ -4384,13 +4384,13 @@ void MainWindow::onDetectScreenFinished(
                                                 "Autodetect screen"));
 }
 
-/** Launch adaptive sharpening analysis.
-   Creates an AdaptiveSharpeningWorker that analyses scanner blur across
-   the image in a grid of XSTEPS columns.  Connects incremental results
-   (stripAnalyzed, blurAnalyzed) to the AdaptiveSharpeningChart for
-   real-time visualisation.  The final result is a
-   scanner_blur_correction_parameters object applied in onAdaptiveSharpeningFinished.  */
-void MainWindow::onAdaptiveSharpeningRequested(int xsteps) {
+/** Launch adaptive sharpening analysis with PARAMETERS selected by the user.
+   The worker resolves automatic coarse/dense grid dimensions and connects
+   incremental results to the AdaptiveSharpeningChart for real-time
+   visualisation.  The final correction table is applied in
+   onAdaptiveSharpeningFinished.  */
+void MainWindow::onAdaptiveSharpeningRequested(
+    const AdaptiveSharpeningParameters &parameters) {
   if (!m_scan)
     return;
 
@@ -4399,27 +4399,24 @@ void MainWindow::onAdaptiveSharpeningRequested(int xsteps) {
   progress->set_task("Adaptive sharpening analysis", 1);
   addProgress(progress);
 
-  // Create worker
+  // Create worker from the complete one-run configuration selected in the
+  // dialog. The worker resolves automatic dimensions in STEP1.
   AdaptiveSharpeningWorker *worker = new AdaptiveSharpeningWorker(
-      m_scrToImgParams, m_rparams, m_scan, xsteps, progress);
+      m_scrToImgParams, m_rparams, m_scan, parameters, progress);
 
   QThread *thread = new QThread;
   worker->moveToThread(thread);
 
   connect(thread, &QThread::started, worker, &AdaptiveSharpeningWorker::run);
 
-  // Connect visualization signals
+  // Connect visualization signals.  Let the worker report the actual resolved
+  // coarse and dense grids instead of duplicating its aspect-ratio logic here.
   if (m_sharpnessPanel && m_sharpnessPanel->getAdaptiveChart()) {
     m_sharpnessPanel->showAdaptiveChart();
     AdaptiveSharpeningChart *chart = m_sharpnessPanel->getAdaptiveChart();
 
-    // Calculate ysteps similar to logic in analyze_scanner_blur_worker::step1
-    int ysteps = (xsteps * m_scan->height + m_scan->width / 2) / m_scan->width;
-    if (ysteps < 1)
-      ysteps = 1;
-
-    chart->initialize(xsteps, ysteps);
-
+    connect(worker, &AdaptiveSharpeningWorker::stripAnalysisStarted, chart,
+            [chart](int w, int h) { chart->initialize(w, h); });
     connect(worker, &AdaptiveSharpeningWorker::stripAnalyzed, chart,
             &AdaptiveSharpeningChart::updateStrip);
     connect(worker, &AdaptiveSharpeningWorker::blurAnalysisStarted, chart,

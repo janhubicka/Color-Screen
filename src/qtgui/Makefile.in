@@ -662,7 +662,7 @@ EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h \
 	icons/crosshair.svg icons/rotate-left.svg \
 	icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg \
 	icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg \
-	AdaptiveSharpeningWorker.h AdaptiveSharpeningChart.h \
+	AdaptiveSharpeningWorker.h AdaptiveSharpeningParameters.h AdaptiveSharpeningChart.h \
 	RenderDialog.h ProfilePanel.h CoordinateOptimizationWorker.h \
 	TilesPanel.h ImageLayerPanel.h MeasureDialog.h MTFFitDialog.h \
 	SlantedEdgeDialog.h

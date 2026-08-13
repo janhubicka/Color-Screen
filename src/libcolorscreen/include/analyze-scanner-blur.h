@@ -29,7 +29,8 @@ public:
         strip_ysteps (0), xsteps (0), ysteps (0), xsubsteps (0), ysubsteps (0),
         flags (finetune_position | finetune_no_progress_report
                | finetune_scanner_mtf_defocus),
-        reoptimize_strip_widths (false), skipmin (25), skipmax (25),
+        optimize_strip_widths (true), reoptimize_strip_widths (false),
+        skipmin (25), skipmax (25),
         tolerance (-1), progress (NULL), verbose (false),
         report_profile (false), interpolate_focus (false),
         focus_mtf_threshold ((coord_t)0.05), focus_interpolation_nodes (33),
@@ -54,8 +55,12 @@ public:
      Per-channel fits are currently reduced to their scalar mean because the
      correction-table format stores one value per cell.  */
   uint64_t flags;
+  /* For variable-strip screens, fit strip widths in the coarse prepass.
+     When false, keep the strip widths already present in RPARAM (or the
+     process defaults when they are zero).  */
+  bool optimize_strip_widths;
   /* Re-estimate strip widths in every dense-grid sample instead of fixing the
-     values determined by the prepass.  */
+     values determined by the prepass/current rendering parameters.  */
   bool reoptimize_strip_widths;
   /* Percentages removed from the low and high ends of robust histograms.  */
   coord_t skipmin;

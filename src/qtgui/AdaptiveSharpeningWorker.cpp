@@ -8,55 +8,38 @@ AdaptiveSharpeningWorker::AdaptiveSharpeningWorker(
     colorscreen::scr_to_img_parameters scrToImg,
     colorscreen::render_parameters rparams,
     std::shared_ptr<colorscreen::image_data> scan,
-    int xsteps,
+    AdaptiveSharpeningParameters parameters,
     std::shared_ptr<colorscreen::progress_info> progress)
-    : m_scrToImg(scrToImg), m_rparams(rparams), m_scan(scan), m_xsteps(xsteps),
-      m_progress(progress) {}
+    : m_scrToImg(scrToImg), m_rparams(rparams), m_scan(scan),
+      m_parameters(parameters), m_progress(progress) {}
 
+/** Run adaptive blur/focus analysis using the settings selected in the GUI.
+    The staged worker remains responsible for resolving zero-valued automatic
+    dimensions, validating flag combinations and deriving the physical focus
+    interpolation range.  */
 void AdaptiveSharpeningWorker::run() {
-    // Mimic analyze_scanner_blur_img logic
-    // Using default/hardcoded values for now as per analyze_scanner_blur_img signature
-    // but allowing xsteps/ysteps customization.
-    
-    // Calculate dependent steps
-    int ysteps = m_xsteps * m_scan->height / m_scan->width;
-    if (ysteps < 1) ysteps = 1;
-
-    // Hardcoded defaults matching CLI, but syncing strip steps to requested steps for GUI visualization compatibility
-    int strip_xsteps = m_xsteps;
-    int strip_ysteps = 0;
-    int xsubsteps = 0; // Means 0 -> defaults
-    int ysubsteps = 0;
-    uint64_t flags = colorscreen::finetune_position | 
-                     colorscreen::finetune_no_progress_report | 
-                     colorscreen::finetune_scanner_mtf_defocus;
-    bool reoptimize_strip_widths = false;
-    double skipmin = 25;
-    double skipmax = 25;
-    double tolerance = -1;
-
     colorscreen::analyze_scanner_blur_worker worker(m_scrToImg, m_rparams, *m_scan);
-    worker.strip_xsteps = strip_xsteps;
-    worker.strip_ysteps = strip_ysteps;
-    worker.xsteps = m_xsteps;
-    worker.ysteps = ysteps;
-    worker.xsubsteps = xsubsteps;
-    worker.ysubsteps = ysubsteps;
-    worker.flags = flags;
-    worker.reoptimize_strip_widths = reoptimize_strip_widths;
-    worker.skipmin = skipmin;
-    worker.skipmax = skipmax;
-    worker.tolerance = tolerance;
+    worker.strip_xsteps = m_parameters.stripXSteps;
+    worker.strip_ysteps = m_parameters.stripYSteps;
+    worker.xsteps = m_parameters.xSteps;
+    worker.ysteps = m_parameters.ySteps;
+    worker.xsubsteps = m_parameters.xSubsteps;
+    worker.ysubsteps = m_parameters.ySubsteps;
+    /* The GUI owns the outer progress task, so suppress the nested simplex
+       progress display regardless of the user-selectable fitting flags.  */
+    worker.flags = m_parameters.flags | colorscreen::finetune_no_progress_report;
+    worker.optimize_strip_widths = m_parameters.optimizeStripWidthsInPrepass;
+    worker.reoptimize_strip_widths = m_parameters.reoptimizeStripWidths;
+    worker.skipmin = m_parameters.skipMin;
+    worker.skipmax = m_parameters.skipMax;
+    worker.tolerance = m_parameters.tolerance;
     worker.progress = m_progress.get();
-    worker.verbose = false; // Disable verbose for GUI
-    // Keep the coarse strip/focus pass exact.  For the physical displacement
-    // model the worker enables the discretized focus-screen cache only after
-    // step2 has derived the useful defocus range at the process-screen
-    // frequency.  The compact legacy fallback has no signed physical focus
-    // coordinate and therefore continues to use the exact path.
-    worker.interpolate_focus
-        = m_rparams.sharpen.scanner_mtf.simulate_diffraction_p();
-    
+    worker.verbose = false;
+    worker.report_profile = m_parameters.reportProfile;
+    worker.interpolate_focus = m_parameters.interpolateFocus;
+    worker.focus_mtf_threshold = m_parameters.focusMtfThreshold;
+    worker.focus_interpolation_nodes = m_parameters.focusInterpolationNodes;
+
     // Use local ThreadPool to avoid starving the global pool used by Renderer
     QThreadPool pool;
     // Leave one thread free for GUI/Renderer
@@ -68,6 +51,7 @@ void AdaptiveSharpeningWorker::run() {
     }
 
     if (worker.do_strips()) {
+        emit stripAnalysisStarted(worker.strip_xsteps, worker.strip_ysteps);
         // Run sequentially to support cancellation (or chunked parallel if needed, but sequential is safer for responsive cancel)
         // Actually, analyze_scanner_blur_img uses OpenMP. QtConcurrent::blockingMap is good but hard to cancel instantly.
         // However, we can check cancelled() in the functor.
@@ -103,6 +87,8 @@ void AdaptiveSharpeningWorker::run() {
     }
 
     if (!worker.step2()) {
+        if (worker.report_profile)
+            worker.print_profile();
         emit finished(false, nullptr);
         return;
     }
@@ -139,6 +125,8 @@ void AdaptiveSharpeningWorker::run() {
     }
 
     auto result = worker.step3();
+    if (worker.report_profile)
+        worker.print_profile();
     if (result) {
         emit finished(true, std::shared_ptr<colorscreen::scanner_blur_correction_parameters>(result.release()));
     } else {

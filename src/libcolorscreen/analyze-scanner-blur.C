@@ -110,6 +110,18 @@ valid_grid_size_p (int width, int height, size_t *size)
   *size = (size_t)n;
   return true;
 }
+
+/* Return true when RPARAM contains an explicit pair of usable strip widths.
+   Zero denotes the process default in render parameters, so in that case
+   FINETUNE should keep its normal per-process initialization.  */
+static bool
+explicit_strip_widths_p (const render_parameters &rparam)
+{
+  return my_isfinite (rparam.red_strip_width)
+         && my_isfinite (rparam.green_strip_width)
+         && rparam.red_strip_width > 0 && rparam.red_strip_width < 1
+         && rparam.green_strip_width > 0 && rparam.green_strip_width < 1;
+}
 } // namespace
 
 /* Prepare dimensions and storage for the scanner-blur analysis.  */
@@ -241,7 +253,7 @@ analyze_scanner_blur_worker::step1 ()
   if (verbose)
     {
       pause_stdout (progress);
-      if (screen_with_varying_strips_p (param.type))
+      if (screen_with_varying_strips_p (param.type) && optimize_strip_widths)
         printf ("Analyzing %ix%i areas to determine strip widths and "
                 "blur (overall %i solutions to be computed)\n",
                 strip_xsteps, strip_ysteps, strip_xsteps * strip_ysteps);
@@ -256,6 +268,7 @@ analyze_scanner_blur_worker::step1 ()
       if (progress->cancel_requested ())
         return false;
       progress->set_task (screen_with_varying_strips_p (param.type)
+                                  && optimize_strip_widths
                               ? "analyzing screen strip sizes and blur"
                               : "analyzing screen blur",
                           strip_xsteps * strip_ysteps);
@@ -275,11 +288,18 @@ analyze_scanner_blur_worker::analyze_strips (int x, int y,
     return false;
 
   finetune_parameters fparam;
-  fparam.flags
-      = flags
-        | (screen_with_varying_strips_p (param.type)
-               ? (uint64_t)finetune_strips
-               : (uint64_t)0);
+  fparam.flags = flags;
+  if (screen_with_varying_strips_p (param.type))
+    {
+      if (optimize_strip_widths)
+        fparam.flags |= finetune_strips;
+      /* Start strip optimization from explicitly supplied rendering values,
+         or keep those values fixed when optimization is disabled.  With zero
+         widths leave FINETUNE_USE_STRIP_WIDTHS clear so process defaults are
+         used instead of literal zero-width strips.  */
+      if (explicit_strip_widths_p (rparam))
+        fparam.flags |= finetune_use_strip_widths;
+    }
   fparam.multitile = 1;
   fparam.collect_profile = report_profile;
   finetune_result &res = prepass_result (x, y);
@@ -332,10 +352,12 @@ analyze_scanner_blur_worker::step2 ()
           if (!valid_correction_p (correction))
             continue;
           if (screen_with_varying_strips_p (param.type)
+              && optimize_strip_widths
               && (!my_isfinite (res->red_strip_width)
                   || !my_isfinite (res->green_strip_width)))
             continue;
-          if (screen_with_varying_strips_p (param.type))
+          if (screen_with_varying_strips_p (param.type)
+              && optimize_strip_widths)
             {
               red_hist.pre_account (res->red_strip_width);
               green_hist.pre_account (res->green_strip_width);
@@ -353,7 +375,8 @@ analyze_scanner_blur_worker::step2 ()
           return false;
         }
 
-      if (screen_with_varying_strips_p (param.type))
+      if (screen_with_varying_strips_p (param.type)
+          && optimize_strip_widths)
         {
           red_hist.finalize_range (65536);
           green_hist.finalize_range (65536);
@@ -367,10 +390,12 @@ analyze_scanner_blur_worker::step2 ()
           if (!valid_correction_p (correction))
             continue;
           if (screen_with_varying_strips_p (param.type)
+              && optimize_strip_widths
               && (!my_isfinite (res->red_strip_width)
                   || !my_isfinite (res->green_strip_width)))
             continue;
-          if (screen_with_varying_strips_p (param.type))
+          if (screen_with_varying_strips_p (param.type)
+              && optimize_strip_widths)
             {
               red_hist.account (res->red_strip_width);
               green_hist.account (res->green_strip_width);
@@ -378,13 +403,15 @@ analyze_scanner_blur_worker::step2 ()
           blur_hist.account (correction);
         }
 
-      if (screen_with_varying_strips_p (param.type))
+      if (screen_with_varying_strips_p (param.type)
+          && optimize_strip_widths)
         {
           red_hist.finalize ();
           green_hist.finalize ();
         }
       blur_hist.finalize ();
-      if (screen_with_varying_strips_p (param.type))
+      if (screen_with_varying_strips_p (param.type)
+          && optimize_strip_widths)
         {
           rparam.red_strip_width
               = red_hist.find_avg (skipmin / 100, skipmax / 100);
@@ -415,7 +442,8 @@ analyze_scanner_blur_worker::step2 ()
       if (verbose)
         {
           pause_stdout (progress);
-          if (screen_with_varying_strips_p (param.type))
+          if (screen_with_varying_strips_p (param.type)
+              && optimize_strip_widths)
             {
               printf ("Red strip width %.2f%%\n",
                       rparam.red_strip_width * 100);
@@ -533,10 +561,17 @@ analyze_scanner_blur_worker::analyze_blur (int x, int y,
     return false;
 
   finetune_parameters fparam;
-  fparam.flags
-      = flags
-        | (reoptimize_strip_widths ? (uint64_t)finetune_strips
-                                   : (uint64_t)0);
+  fparam.flags = flags;
+  if (screen_with_varying_strips_p (param.type))
+    {
+      if (reoptimize_strip_widths)
+        fparam.flags |= finetune_strips;
+      /* STEP2 either installed robust prepass widths or retained the caller's
+         explicit widths.  Preserve them in the dense pass, including as the
+         starting point when widths are reoptimized.  */
+      if (explicit_strip_widths_p (rparam))
+        fparam.flags |= finetune_use_strip_widths;
+    }
   /* STEP2 stores the robust prepass blur in RPARAM.  Preserve it as the dense
      pass starting point just as the MTF path starts from the updated scanner
      model.  */

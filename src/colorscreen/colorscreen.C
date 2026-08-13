@@ -168,6 +168,7 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --out-tiff=name.tif       save resulting table also as tiff file\n");
       fprintf (stderr, "      --strip-width=n           number of horizontal samples used to detec strip widths\n");
       fprintf (stderr, "      --strip-height=n          number of vertical samples used to detect strip widths\n");
+      fprintf (stderr, "      --[no-]optimize-strip-widths optimize strip widths in the coarse prepass (default yes)\n");
       fprintf (stderr, "      --reoptimize-strip-widths optimize strip widths also during blur detection\n");
       fprintf (stderr, "      --width=n                 width of the correction table\n");
       fprintf (stderr, "      --height=n                height of the correction table\n");
@@ -1365,6 +1366,8 @@ get_correction (scanner_blur_correction_parameters::correction_mode mode, finetu
    sampling density.
    FLAGS specify optimization flags.
    REOPTIMIZE_STRIP_WIDTHS enables strip width optimization.
+   OPTIMIZE_STRIP_WIDTHS controls strip-width fitting in the coarse prepass;
+   REOPTIMIZE_STRIP_WIDTHS controls strip fitting in every dense sample.
    SKIPMIN and SKIPMAX specify ranges to skip.
    TOLERANCE is robust average tolerance.
    INTERPOLATE_FOCUS enables the discretized dense scalar-defocus cache.
@@ -1379,6 +1382,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 			  int xsteps, int ysteps,
 			  int xsubsteps, int ysubsteps,
 			  uint64_t flags,
+                          bool optimize_strip_widths,
 			  bool reoptimize_strip_widths,
 			  coord_t skipmin, coord_t skipmax,
 			  coord_t tolerance,
@@ -1396,6 +1400,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
   worker.xsubsteps = xsubsteps;
   worker.ysubsteps = ysubsteps;
   worker.flags = flags;
+  worker.optimize_strip_widths = optimize_strip_widths;
   worker.reoptimize_strip_widths = reoptimize_strip_widths;
   worker.skipmin = skipmin;
   worker.skipmax = skipmax;
@@ -1446,6 +1451,7 @@ analyze_scanner_blur (int argc, char **argv)
   float tolerance = -1;
   int strip_xsteps = 0;
   int strip_ysteps = 0;
+  bool optimize_strip_widths = true;
   bool reoptimize_strip_widths = false;
   bool report_profile = false;
   bool interpolate_focus = false;
@@ -1463,6 +1469,10 @@ analyze_scanner_blur (int argc, char **argv)
         outcspname = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "out-tiff"))
         outtifname = str;
+      else if (arg == "--optimize-strip-widths")
+        optimize_strip_widths = true;
+      else if (arg == "--no-optimize-strip-widths")
+        optimize_strip_widths = false;
       else if (arg == "--reoptimize-strip-widths")
         reoptimize_strip_widths = true;
       else if (arg == "--no-reoptimize-strip-widths")
@@ -1598,7 +1608,8 @@ analyze_scanner_blur (int argc, char **argv)
     {
       rparam.scanner_blur_correction = analyze_scanner_blur_img (
 	  param, rparam, scan, strip_xsteps, strip_ysteps, xsteps, ysteps,
-	  xsubsteps, ysubsteps, flags, reoptimize_strip_widths, skipmin, skipmax,
+	  xsubsteps, ysubsteps, flags, optimize_strip_widths,
+          reoptimize_strip_widths, skipmin, skipmax,
 	  tolerance, interpolate_focus, focus_mtf_percent / 100,
 	  focus_interpolation_nodes, report_profile, &progress);
       if (!rparam.scanner_blur_correction)
@@ -1630,7 +1641,8 @@ analyze_scanner_blur (int argc, char **argv)
 	      }
 	    rparam.get_tile_adjustment (x, y).scanner_blur_correction = analyze_scanner_blur_img (
 		scan.stitch->images[y][x].param, rparam, *scan.stitch->images[y][x].img.get(), strip_xsteps, strip_ysteps, xsteps, ysteps,
-		xsubsteps, ysubsteps, flags, reoptimize_strip_widths, skipmin, skipmax,
+		xsubsteps, ysubsteps, flags, optimize_strip_widths,
+                reoptimize_strip_widths, skipmin, skipmax,
 		tolerance, interpolate_focus, focus_mtf_percent / 100,
 		focus_interpolation_nodes, report_profile, &progress);
 	    if (!rparam.get_tile_adjustment (x, y).scanner_blur_correction)

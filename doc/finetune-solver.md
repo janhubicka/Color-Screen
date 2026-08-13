@@ -77,6 +77,16 @@ radius, physical MTF defocus, or compact MTF blur diameter.  Scanner MTF sigma
 may be fitted jointly with defocus, but sigma is not the spatial correction
 stored in the table.
 
+The Qt **Adaptive sharpening analysis** dialog exposes this worker configuration
+as one-run operational settings rather than persistent rendering parameters.
+The fitting tab selects the correction family and auxiliary local fit flags,
+including measured monochrome/IR.  The sampling tab controls the coarse
+prepass, final correction table, per-cell sub-sampling and robust reduction.
+The focus-cache tab controls physical-focus interpolation and profiling.
+Automatic dimensions are passed as zero and resolved by `step1()`, so the GUI
+does not duplicate the worker's aspect-ratio rules.  The worker reports its
+resolved coarse and dense grid sizes back to the chart before emitting samples.
+
 ## Which scan data is fitted
 
 ### Normal RGB mode
@@ -109,9 +119,10 @@ must use the same source kind for every tile: mixing measured IR and
 RGB-derived grayscale in one solver is rejected because colour constraints and
 result conversion are shared across tiles.
 
-The current adaptive-focus CLI and Qt worker do not select `finetune_bw` and
-therefore use RGB even when measured IR is present.  Exposing an explicit
-measured-IR choice, or safely preferring it by default, is tracked as FT-046.
+The adaptive Qt dialog exposes `finetune_bw` explicitly as **Use monochrome /
+IR channel**.  The `analyze-scanner-blur` CLI still lacks the corresponding
+choice and neither front end prefers measured IR automatically; that remaining
+work is tracked as FT-046.
 
 ### Experimental `finetune_simulate_infrared` mode
 

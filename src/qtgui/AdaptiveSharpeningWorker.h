@@ -3,6 +3,7 @@
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
 #include "../libcolorscreen/include/progress-info.h"
+#include "AdaptiveSharpeningParameters.h"
 #include "../libcolorscreen/include/scanner-blur-correction-parameters.h"
 #include <QObject>
 #include <memory>
@@ -18,16 +19,15 @@ public:
   AdaptiveSharpeningWorker(colorscreen::scr_to_img_parameters scrToImg,
                            colorscreen::render_parameters rparams,
                            std::shared_ptr<colorscreen::image_data> scan,
-                           int xsteps,
+                           AdaptiveSharpeningParameters parameters,
                            std::shared_ptr<colorscreen::progress_info> progress);
 
 public slots:
   void run();
 
-  int get_xsteps() const { return m_xsteps; }
-
 signals:
   void finished(bool success, std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result);
+  void stripAnalysisStarted(int width, int height);
   void stripAnalyzed(int x, int y, double red, double green);
   void blurAnalysisStarted(int width, int height);
   void blurAnalyzed(int x, int y, double correction);
@@ -36,6 +36,6 @@ private:
   colorscreen::scr_to_img_parameters m_scrToImg;
   colorscreen::render_parameters m_rparams;
   std::shared_ptr<colorscreen::image_data> m_scan;
-  int m_xsteps;
+  AdaptiveSharpeningParameters m_parameters;
   std::shared_ptr<colorscreen::progress_info> m_progress;
 };

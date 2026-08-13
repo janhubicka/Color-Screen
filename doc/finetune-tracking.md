@@ -551,19 +551,22 @@ otherwise the simplex is shrunk.  The current condition can discard a better
 reflection and take a worse contraction.  Add a deterministic outside-
 contraction regression before changing this historical optimizer behaviour.
 
-### FT-046 — adaptive front ends do not expose the measured-IR path
+### FT-046 — complete measured-IR selection in adaptive front ends
 
 **Severity:** high focus-model selection
 
-**Status:** open
+**Status:** partial
 
 `finetune()` supports measured grayscale/IR through `finetune_bw`, and RGB+IR
-is usually the best-constrained focus input.  However, both
-`analyze-scanner-blur` and `AdaptiveSharpeningWorker` hard-code adaptive flags
-without `finetune_bw`; the CLI has no equivalent of the finetune command's
-`--use-monochrome-channel`.  Consequently an RGB+IR scan silently uses
-normalized RGB.  Add an explicit CLI/GUI choice and evaluate whether measured
-IR should become the default when available, with an override for weak or
+is usually the best-constrained focus input.  The adaptive Qt dialog now
+exposes this explicitly as **Use monochrome / IR channel**, so GUI runs no
+longer have to use normalized RGB.  The setting is forwarded unchanged to
+both the exact prepass and dense pass.
+
+The `analyze-scanner-blur` CLI still lacks an equivalent of the finetune
+command's `--use-monochrome-channel`, and neither front end automatically
+chooses measured IR when it is available.  Add the CLI switch, then evaluate
+whether measured IR should become the default with an override for weak or
 misregistered IR channels.
 
 ### FT-047 — weak-contrast adaptive fits can remain formally valid

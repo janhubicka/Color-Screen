@@ -3,6 +3,7 @@
 
 #include "ParameterPanel.h"
 #include "TaskQueue.h"
+#include "AdaptiveSharpeningParameters.h"
 
 class MTFChartWidget;
 class QLabel;
@@ -20,7 +21,6 @@ struct finetune_result;
 
 #include "TilePreviewPanel.h"
 
-class AdaptiveSharpeningWorker;
 class AdaptiveSharpeningChart;
 
 class SharpnessPanel : public TilePreviewPanel {
@@ -50,7 +50,7 @@ public slots:
   void onAnalyzeDisplacements();
 
 signals:
-  void adaptiveSharpeningRequested(int xsteps);
+  void adaptiveSharpeningRequested(const AdaptiveSharpeningParameters &parameters);
   void detachMTFChartRequested(QWidget *widget);
   void detachAdaptiveChartRequested(QWidget *widget);
   void detachDotSpreadRequested(QWidget *widget);
@@ -104,6 +104,8 @@ private:
   /** True while M_MTF_FIT_QUEUE is processing a submitted fit.  */
   bool m_mtfFitRunning = false;
   uint64_t m_finetuneFlags = 0;
+  AdaptiveSharpeningParameters m_adaptiveSharpeningParameters;
+  bool m_adaptiveSharpeningParametersInitialized = false;
   class TilePreviewPanel *m_dotSpreadPanel = nullptr;
   AdaptiveSharpeningChart *m_adaptiveChart = nullptr;
   QWidget *m_adaptiveChartWrapper = nullptr;
