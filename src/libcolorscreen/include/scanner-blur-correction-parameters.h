@@ -17,6 +17,8 @@ public:
   DLL_PUBLIC static const char *correction_names [max_correction];
   DLL_PUBLIC static const char *pretty_correction_names [max_correction];
   DLL_PUBLIC scanner_blur_correction_parameters ();
+  /* Allocate a zero-filled WIDTH by HEIGHT correction table.  On failure the
+     existing table is left unchanged.  */
   DLL_PUBLIC bool alloc (int width, int height, enum correction_mode mode);
   DLL_PUBLIC ~scanner_blur_correction_parameters ();
   DLL_PUBLIC bool save (FILE *f);
@@ -26,19 +28,19 @@ public:
   {
     m_corrections[y * m_width + x] = radius;
   }
-  inline luminosity_t get_correction (int x, int y)
+  inline luminosity_t get_correction (int x, int y) const
   {
     return m_corrections[y * m_width + x];
   }
-  inline int get_width ()
+  inline int get_width () const
   {
     return m_width;
   }
-  inline int get_height ()
+  inline int get_height () const
   {
     return m_height;
   }
-  correction_mode get_mode ()
+  correction_mode get_mode () const
   {
     return m_mode;
   }

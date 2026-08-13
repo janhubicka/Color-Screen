@@ -3,8 +3,12 @@
 namespace colorscreen
 {
 
-/* If progress_report is false, do not report progress about solving, but still honor cancel.
-   This is useful when running multiple solvers in parallel.  */
+/* Minimize C.OBJFUNC using the Nelder--Mead simplex method.  C supplies the
+   initial vector C.START, NUM_VALUES, SCALE, EPSILON, CONSTRAIN and VERBOSE.
+   TASK and PROGRESS describe optional progress reporting.  When
+   PROGRESS_REPORT is false, cancellation is still honoured but the nested
+   progress task is suppressed.  MAX_ITERATIONS bounds the main loop.  Return
+   the objective value at the best final vertex.  */
 template<typename T,typename C>
 double
 simplex (C &c, const char *task = NULL, progress_info *progress = NULL, bool progress_report = true, int max_iterations = 10000)
@@ -23,6 +27,21 @@ simplex (C &c, const char *task = NULL, progress_info *progress = NULL, bool pro
   int n = c.num_values ();
   T EPSILON = c.epsilon ();
   T scale = c.scale ();
+
+  /* A zero-dimensional problem is useful when all model parameters are
+     fixed but the caller still needs the fitted linear colors and final
+     objective.  The generic simplex construction below divides by N.  */
+  if (n == 0)
+    {
+      if (progress && progress_report)
+        progress->set_task (task, 1);
+      /* There are no coordinates to dereference; passing null also keeps the
+         template compatible with callers whose START is a raw array.  */
+      T value = c.objfunc (nullptr);
+      if (progress && progress_report)
+        progress->inc_progress ();
+      return value;
+    }
 
   T **v;			/* holds vertices of simplex */
   T pn, qn;		/* values used to create initial simplex */

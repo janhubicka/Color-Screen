@@ -1,0 +1,23 @@
+var searchData=
+[
+  ['observer_0',['observer',['../classcolorscreen_1_1spectrum__dyes__to__xyz.html#a493666c78776db769b604ae597b0cb50',1,'colorscreen::spectrum_dyes_to_xyz']]],
+  ['observer_5fwhitepoint_1',['observer_whitepoint',['../structcolorscreen_1_1render__parameters.html#aac7582e00f984ccd94cabf45f04548b9',1,'colorscreen::render_parameters']]],
+  ['openmp_5fmin_5fsize_2',['openmp_min_size',['../classcolorscreen_1_1analyze__base.html#ac1cca6c2d20339ed4b75ef31b979b98c',1,'colorscreen::analyze_base']]],
+  ['optimize_5fcolors_3',['optimize_colors',['../structcolorscreen_1_1detect__regular__screen__params.html#a59a77d2daaaee56888047568e713d133',1,'colorscreen::detect_regular_screen_params']]],
+  ['optimize_5flens_4',['optimize_lens',['../structcolorscreen_1_1solver__parameters.html#a85cdeea99668e0dabbbd07520d36600a',1,'colorscreen::solver_parameters']]],
+  ['optimize_5ftilt_5',['optimize_tilt',['../structcolorscreen_1_1solver__parameters.html#a05eeb8e07e80148676c715338f19b6ca',1,'colorscreen::solver_parameters']]],
+  ['orange_5ffloat_5ftime_6',['ORANGE_FLOAT_TIME',['../JolyAnimation_8cpp.html#a52730f8bcf39624ced42abf01d54f481',1,'JolyAnimation.cpp']]],
+  ['orig_7',['orig',['../structcolorscreen_1_1finetune__result.html#aa1bf746847dfcc3f5dfc98af44a4db2a',1,'colorscreen::finetune_result']]],
+  ['orig_5ffile_8',['orig_file',['../structcolorscreen_1_1finetune__parameters.html#a5c564a16864cebca7ae73f5755add081',1,'colorscreen::finetune_parameters']]],
+  ['out_5fcolor_9',['out_color',['../classcolorscreen_1_1render.html#ac07a7100b4e7bf1c4f2f8330bd97edb6',1,'colorscreen::render']]],
+  ['out_5flookup_5ftable_5fsize_10',['out_lookup_table_size',['../classcolorscreen_1_1out__color__adjustments.html#a9673860387c0c83cc693c2b8ab220130',1,'colorscreen::out_color_adjustments']]],
+  ['outer_5ftile_5fborder_11',['outer_tile_border',['../structcolorscreen_1_1stitching__params.html#a3b8312c19c66a0b122166a2f19ed373f',1,'colorscreen::stitching_params']]],
+  ['outliers_5finfo_12',['outliers_info',['../structcolorscreen_1_1stitching__params.html#a7959888bee8f2968524fbd8d2e3b8540',1,'colorscreen::stitching_params']]],
+  ['output_13',['output',['../classcolorscreen_1_1stitch__image.html#a76c79eed41fce07d9eb1810f0d518b1b',1,'colorscreen::stitch_image']]],
+  ['output_5fgamma_14',['output_gamma',['../structcolorscreen_1_1render__parameters.html#a4e90ac3d28cdb49e356073e77aecb1d5',1,'colorscreen::render_parameters']]],
+  ['output_5fprofile_15',['output_profile',['../structcolorscreen_1_1render__parameters.html#ad69702dcb40662d90f66492581efc52d',1,'colorscreen::render_parameters']]],
+  ['output_5fprofile_5fnames_16',['output_profile_names',['../structcolorscreen_1_1render__parameters.html#a4126804ec5ece7ea564937e048c039e5',1,'colorscreen::render_parameters']]],
+  ['output_5ftone_5fcurve_17',['output_tone_curve',['../structcolorscreen_1_1render__parameters.html#abe398db03afff955968cb7ecddc99a22',1,'colorscreen::render_parameters']]],
+  ['output_5ftone_5fcurve_5fcontrol_5fpoints_18',['output_tone_curve_control_points',['../structcolorscreen_1_1render__parameters.html#ad1faaab31324dbb9f847ef53f47ecc5f',1,'colorscreen::render_parameters']]],
+  ['overall_5fpixels_19',['overall_pixels',['../structcolorscreen_1_1patches_1_1patch.html#a616cf3af804f3989f87bcc97f0da6a97',1,'colorscreen::patches::patch']]]
+];

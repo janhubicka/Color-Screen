@@ -1,0 +1,27 @@
+var searchData=
+[
+  ['fft_5fallocator_0',['fft_allocator',['../structcolorscreen_1_1fft__allocator.html',1,'colorscreen']]],
+  ['fft_5fcomplex_5ft_1',['fft_complex_t',['../structcolorscreen_1_1fft__complex__t.html',1,'colorscreen']]],
+  ['fft_5fcomplex_5ft_3c_20double_20_3e_2',['fft_complex_t&lt; double &gt;',['../structcolorscreen_1_1fft__complex__t_3_01double_01_4.html',1,'colorscreen']]],
+  ['fft_5fcomplex_5ft_3c_20float_20_3e_3',['fft_complex_t&lt; float &gt;',['../structcolorscreen_1_1fft__complex__t_3_01float_01_4.html',1,'colorscreen']]],
+  ['fft_5fdeleter_4',['fft_deleter',['../structcolorscreen_1_1fft__deleter.html',1,'colorscreen']]],
+  ['fft_5fplan_5',['fft_plan',['../classcolorscreen_1_1fft__plan.html',1,'colorscreen']]],
+  ['fft_5fplan_5ft_6',['fft_plan_t',['../structcolorscreen_1_1fft__plan__t.html',1,'colorscreen']]],
+  ['fft_5fplan_5ft_3c_20double_20_3e_7',['fft_plan_t&lt; double &gt;',['../structcolorscreen_1_1fft__plan__t_3_01double_01_4.html',1,'colorscreen']]],
+  ['fft_5fplan_5ft_3c_20float_20_3e_8',['fft_plan_t&lt; float &gt;',['../structcolorscreen_1_1fft__plan__t_3_01float_01_4.html',1,'colorscreen']]],
+  ['file_5fprogress_5finfo_9',['file_progress_info',['../classcolorscreen_1_1file__progress__info.html',1,'colorscreen']]],
+  ['film_5fsensitivity_10',['film_sensitivity',['../classcolorscreen_1_1film__sensitivity.html',1,'colorscreen']]],
+  ['finetune_5farea_5fparameters_11',['finetune_area_parameters',['../structcolorscreen_1_1finetune__area__parameters.html',1,'colorscreen']]],
+  ['finetune_5fparameters_12',['finetune_parameters',['../structcolorscreen_1_1finetune__parameters.html',1,'colorscreen']]],
+  ['finetune_5fresult_13',['finetune_result',['../structcolorscreen_1_1finetune__result.html',1,'colorscreen']]],
+  ['finetuneimagespanel_14',['FinetuneImagesPanel',['../classFinetuneImagesPanel.html',1,'']]],
+  ['finetunemisregisteredworker_15',['FinetuneMisregisteredWorker',['../classFinetuneMisregisteredWorker.html',1,'']]],
+  ['finetuneworker_16',['FinetuneWorker',['../classFinetuneWorker.html',1,'']]],
+  ['fir_5fblur_17',['fir_blur',['../classcolorscreen_1_1fir__blur.html',1,'colorscreen']]],
+  ['firework_18',['Firework',['../structFirework.html',1,'']]],
+  ['flatfieldworker_19',['FlatFieldWorker',['../classFlatFieldWorker.html',1,'']]],
+  ['flowlayout_20',['FlowLayout',['../classFlowLayout.html',1,'']]],
+  ['focusanalysisworker_21',['FocusAnalysisWorker',['../classFocusAnalysisWorker.html',1,'']]],
+  ['fvv_5fbridge_22',['fvv_bridge',['../structcolorscreen_1_1fvv__bridge.html',1,'colorscreen']]],
+  ['fvv_5fbridge_3c_20t_2c_20c_2c_20false_20_3e_23',['fvv_bridge&lt; T, C, false &gt;',['../structcolorscreen_1_1fvv__bridge_3_01T_00_01C_00_01false_01_4.html',1,'colorscreen']]]
+];

@@ -2,6 +2,9 @@
    Copyright (C) 2014-2026 Jan Hubicka
    This file is part of Color-Screen.  */
 
+#include <atomic>
+#include <climits>
+#include <functional>
 #include <limits>
 #include <memory>
 #define HAVE_INLINE
@@ -11,7 +14,7 @@
 #include "icc.h"
 #include "include/colorscreen.h"
 #include "include/dufaycolor.h"
-#include "include/finetune.h"
+#include "finetune-int.h"
 #include "include/histogram.h"
 #include "include/stitch.h"
 #include "include/tiff-writer.h"
@@ -21,6 +24,59 @@
 #include <gsl/gsl_multifit.h>
 namespace colorscreen
 {
+
+/* Validate combinations of FINETUNE_FLAGS before model setup can silently
+   disable or ignore one of the requested parameters.  */
+const char *
+finetune_flag_error (uint64_t flags)
+{
+  const uint64_t legacy_blur
+      = flags & (finetune_screen_blur | finetune_screen_channel_blurs);
+  const uint64_t scanner_mtf
+      = flags & (finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus
+                 | finetune_scanner_mtf_channel_defocus);
+
+  if ((flags & finetune_coordinates) && (flags & finetune_guess_coordinates))
+    return "coordinate refinement and coordinate discovery are mutually "
+           "exclusive";
+  if ((flags & finetune_screen_blur)
+      && (flags & finetune_screen_channel_blurs))
+    return "scalar and per-channel legacy screen blur are mutually exclusive";
+  if ((flags & finetune_scanner_mtf_defocus)
+      && (flags & finetune_scanner_mtf_channel_defocus))
+    return "scalar and per-channel scanner MTF defocus are mutually "
+           "exclusive";
+  if (legacy_blur && scanner_mtf)
+    return "legacy screen blur and scanner MTF optimization cannot be "
+           "combined";
+  return nullptr;
+}
+
+/* Convert a post-mix scalar dark term to an equivalent neutral pre-mix RGB
+   dark value.  */
+rgbdata
+finetune_render_mix_dark (rgbdata weights, luminosity_t scalar_dark,
+                          rgbdata fallback)
+{
+  if (!my_isfinite (weights.red) || !my_isfinite (weights.green)
+      || !my_isfinite (weights.blue) || !my_isfinite (scalar_dark))
+    return fallback;
+
+  const luminosity_t sum = weights.red + weights.green + weights.blue;
+  const luminosity_t scale = my_fabs (weights.red) + my_fabs (weights.green)
+                             + my_fabs (weights.blue);
+  const luminosity_t threshold
+      = std::numeric_limits<luminosity_t>::epsilon ()
+        * std::max ((luminosity_t)1, scale) * 16;
+  if (!my_isfinite (sum) || my_fabs (sum) <= threshold)
+    return fallback;
+
+  const luminosity_t neutral_dark = scalar_dark / sum;
+  if (!my_isfinite (neutral_dark))
+    return fallback;
+  return { neutral_dark, neutral_dark, neutral_dark };
+}
+
 namespace
 {
 struct gsl_work_deleter
@@ -76,11 +132,11 @@ public:
   }
 };
 
-/* Rotate by given angle.  */
+/* Scale both image axes by the same factor.  */
 class scale_3x3matrix : public matrix3x3<coord_t>
 {
 public:
-  /* Initialize rotation by ROTATION degrees.  */
+  /* Initialize uniform scaling by SCALE.  */
   scale_3x3matrix (coord_t scale)
   {
     (*this)(0, 0) = scale;
@@ -92,8 +148,8 @@ public:
 luminosity_t
 get_positional_color_contrast (scr_type type, rgbdata c, bool robust)
 {
-  /* Robust mode is used to detect coordinates and screen type completely.
-     Here we insist on getting difference between all three chanels.  */
+  /* Robust mode is used to discover coordinates and screen type completely.
+     Here we insist on a difference between all three channels.  */
   if (robust)
     {
       return std::min ({my_fabs (c.red - c.green), my_fabs (c.red - c.blue),
@@ -164,14 +220,31 @@ intersect_vectors (coord_t x1, coord_t y1, coord_t dx1, coord_t dy1,
 inline void
 to_range (coord_t &v, coord_t min, coord_t max)
 {
-#if 0
+  /* std::clamp leaves NaNs unchanged because both comparisons are false.
+     Comparison-based clamping also preserves the useful distinction between
+     positive and negative infinity.  Do not let one invalid simplex
+     coordinate poison screen-cache keys and subsequent evaluations.  */
   if (!(v >= min))
     v = min;
-  if (!(v <= max))
+  else if (!(v <= max))
     v = max;
-#endif
+}
 
-  v = std::clamp (v, min, max);
+/* Return true for a usable contrast-scaled FINETUNE score.  The largest
+   representable value is reserved as a propagation sentinel for failed
+   screen construction and non-finite objectives.  */
+inline bool
+valid_fit_score_p (coord_t score)
+{
+  return my_isfinite (score) && score >= 0
+         && score < std::numeric_limits<coord_t>::max ();
+}
+
+/* Return a safe positive divisor for diagnostic-image normalization.  */
+inline luminosity_t
+diagnostic_normalization (luminosity_t maximum)
+{
+  return my_isfinite (maximum) && maximum > 0 ? maximum : 1;
 }
 
 /* V is in range 0...1 expand it to MINV...MAXV.
@@ -312,8 +385,10 @@ public:
   /* True if openMP parallelism is desired.  */
   bool parallel;
 
-  /* Scanner mtf if known.  */
-  mtf *fixed_scanner_mtf;
+  /* Legacy, currently unused scanner-MTF pointer.  Keep it until the solver
+     construction cleanup tracked as FT-027 removes the remaining implicit
+     initialization state.  */
+  mtf *fixed_scanner_mtf = nullptr;
 
   /* Screen blur and strip widths. */
   coord_t fixed_blur, fixed_red_width, fixed_green_width, fixed_emulsion_blur;
@@ -333,7 +408,7 @@ public:
   coord_t pixel_size;
   scr_type type;
 
-  /* 1 if we optimize coordinate system; 2 if we want to guess it copletely.  */
+  /* 1 if we refine the coordinate system; 2 if we discover it completely.  */
   int optimize_coordinates;
   /* True if tile is already sharpened.  */
   bool tile_sharpened;
@@ -358,10 +433,10 @@ public:
   bool optimize_strips;
   /* Try to optimize dark point.  */
   bool optimize_fog;
-  /* Try to optimize for blur caused by film emulsion.  For this screen blur
-     needs to be fixed.  */
+  /* Try to optimize digital sharpening radius and amount.  */
   bool optimize_sharpening;
-  /* Try to optimize sharpening radius and amount.  */
+  /* Try to optimize blur caused by the historical film emulsion.  Unless the
+     full emulsion-intensity model is active, capture/screen blur is fixed.  */
   bool optimize_emulsion_blur;
   /* Optimize colors using least squares method.
      Probably useful only for debugging and better to be true.  */
@@ -1303,6 +1378,13 @@ public:
         coord_t green_strip_width, bool sim_infrared, bool is_tile_sharpened,
         const std::vector<finetune_result> *results)
   {
+    /* Keep disabled-parameter indexes harmless.  Most accessors are guarded
+       by optimization flags, but explicit sentinels make accidental future
+       use deterministic instead of indexing through an uninitialized value.  */
+    coordinate_index = fog_index = color_index = emulsion_intensity_index
+        = emulsion_offset_index = emulsion_blur_index = sharpen_index
+        = mtf_sigma_index = mtf_defocus_index = screen_index = strips_index
+        = mix_weights_index = mix_dark_index = -1;
     bw_is_simulated_infrared = sim_infrared;
 
     /* First decide on what to optimize.  */
@@ -1484,7 +1566,7 @@ public:
     else
       mix_dark_index = -1;
 
-    /* Try to gues intensity of emulsion below each of primary colors.
+    /* Try to guess the intensity of the emulsion below each primary color.
        Used when trying to determine emulsion blur.
        This must be per-tile since every tile is assumed to have different
        color (but uniform in each tile).  */
@@ -1685,8 +1767,15 @@ public:
     else
       set_emulsion_blur_radius (start.data (), -1);
     if (optimize_screen_channel_blurs)
-      start[screen_index] = start[screen_index + 1] = start[screen_index + 2]
-          = rev_pixel_blur ((coord_t)0.3);
+      {
+        coord_t initial_blur = (coord_t)0.3;
+        if ((flags & finetune_use_screen_blur) && my_isfinite (blur_radius))
+          initial_blur = blur_radius;
+        coord_t initial_value = rev_pixel_blur (initial_blur);
+        to_range (initial_value, (coord_t)0, (coord_t)1);
+        start[screen_index] = start[screen_index + 1]
+            = start[screen_index + 2] = initial_value;
+      }
     else
       {
         /* Optimizations seem to work better when it starts from small blur. */
@@ -1714,22 +1803,39 @@ public:
             abort ();
           }
       }
+    /* Start MTF optimization from the current rendering parameters.  The
+       adaptive-focus prepass stores its robust global estimate there before
+       constructing the dense-grid solvers.  Starting every solver at zero
+       discarded that information and forced many expensive periodic-screen
+       rebuilds while the simplex travelled back to the known neighbourhood.  */
     if (optimize_scanner_mtf_sigma)
       {
-        start[mtf_sigma_index] = 0;
+        coord_t sigma = render_sharpen_params.scanner_mtf.sigma;
+        if (!my_isfinite (sigma) || sigma < 0)
+          sigma = 0;
+        start[mtf_sigma_index] = sigma;
+        to_range (start[mtf_sigma_index], (coord_t)0, (coord_t)20);
       }
+    coord_t defocus
+        = render_sharpen_params.scanner_mtf.simulate_diffraction_p ()
+              ? render_sharpen_params.scanner_mtf.defocus
+              : render_sharpen_params.scanner_mtf.blur_diameter;
+    if (!my_isfinite (defocus) || defocus < 0)
+      defocus = 0;
     if (optimize_scanner_mtf_defocus)
       {
-        start[mtf_defocus_index] = 0;
+        start[mtf_defocus_index] = defocus;
+        to_range (start[mtf_defocus_index], (coord_t)0, (coord_t)20);
       }
     if (optimize_scanner_mtf_channel_defocus)
       {
-        start[mtf_defocus_index] = 0;
-        start[mtf_defocus_index + 1] = 0;
-        start[mtf_defocus_index + 2] = 0;
+        start[mtf_defocus_index] = defocus;
+        start[mtf_defocus_index + 1] = defocus;
+        start[mtf_defocus_index + 2] = defocus;
+        to_range (start[mtf_defocus_index], (coord_t)0, (coord_t)20);
+        to_range (start[mtf_defocus_index + 1], (coord_t)0, (coord_t)20);
+        to_range (start[mtf_defocus_index + 2], (coord_t)0, (coord_t)20);
       }
-    /* TODO: Maybe we want to use previous results and start from params by
-     * default.  */
     if (flags & finetune_use_strip_widths)
       {
         set_red_strip_width (start.data (), red_strip_width);
@@ -1850,11 +1956,48 @@ public:
   compute_contrast ()
   {
     if (!tiles[0].bw.empty ())
-      contrast = get_positional_color_contrast (type, last_color, finetune_coordinates == 2);
+      contrast = get_positional_color_contrast (type, last_color,
+                                                optimize_coordinates == 2);
     else
-      contrast = std::max ({get_positional_color_contrast (type, {(luminosity_t)last_red.red, (luminosity_t)last_green.red, (luminosity_t)last_blue.red}, finetune_coordinates == 2),
-			    get_positional_color_contrast (type, {(luminosity_t)last_red.green, (luminosity_t)last_green.green, (luminosity_t)last_blue.green}, finetune_coordinates == 2),
-			    get_positional_color_contrast (type, {(luminosity_t)last_red.blue, (luminosity_t)last_green.blue, (luminosity_t)last_blue.blue}, finetune_coordinates == 2)});
+      contrast = std::max (
+          { get_positional_color_contrast (
+                type,
+                { (luminosity_t)last_red.red,
+                  (luminosity_t)last_green.red,
+                  (luminosity_t)last_blue.red },
+                optimize_coordinates == 2),
+            get_positional_color_contrast (
+                type,
+                { (luminosity_t)last_red.green,
+                  (luminosity_t)last_green.green,
+                  (luminosity_t)last_blue.green },
+                optimize_coordinates == 2),
+            get_positional_color_contrast (
+                type,
+                { (luminosity_t)last_red.blue,
+                  (luminosity_t)last_green.blue,
+                  (luminosity_t)last_blue.blue },
+                optimize_coordinates == 2) });
+  }
+
+  /* Scale the minimum objective returned by SIMPLEX by the contrast available
+     for registration.  This is a heuristic fit-quality score, not a
+     statistical uncertainty or a simplex-spread estimate.  OBJFUNC has
+     already updated the fitted colors.  */
+  coord_t
+  scale_fit_score_by_contrast (coord_t objective)
+  {
+    /* OBJFUNC uses the largest finite value as a hard failure sentinel when
+       screen construction or sample evaluation fails.  Do not turn that
+       sentinel into an apparently valid capped score, and do not inspect the
+       fitted-colour caches because a failed objective need not refresh them.  */
+    if (!my_isfinite (objective) || objective < 0
+        || objective == std::numeric_limits<coord_t>::max ())
+      return std::numeric_limits<coord_t>::max ();
+    compute_contrast ();
+    if (my_isfinite (contrast) && contrast > 1 / (luminosity_t)65535)
+      return std::min (objective / contrast, (coord_t)(10000000));
+    return 100000000;
   }
 
   /* Invoke solver.  If REPORT is true, set progress report.
@@ -1865,15 +2008,11 @@ public:
   {
     // if (verbose)
     // solver.print_values (solver.start);
-    coord_t uncertainty = simplex<coord_t, finetune_solver> (
+    coord_t objective = simplex<coord_t, finetune_solver> (
         *this, "finetuning", progress, report);
-    compute_contrast ();
-    if (contrast > 1 / (luminosity_t)65535)
-      uncertainty = std::min (uncertainty / contrast, (coord_t)(10000000));
-    else
-      uncertainty = 100000000;
+    coord_t score = scale_fit_score_by_contrast (objective);
     free_least_squares ();
-    return uncertainty;
+    return score;
   }
 
   /* Get screen pixel for simulated screen TILE at point P.  */
@@ -1932,7 +2071,8 @@ public:
         src_scr = tiles[tileid].merged_scr.get ();
       }
 
-    if ((optimize_scanner_mtf_sigma || optimize_scanner_mtf_defocus)
+    if ((optimize_scanner_mtf_sigma || optimize_scanner_mtf_defocus
+         || optimize_scanner_mtf_channel_defocus)
         || (!optimize_screen_blur && !optimize_screen_channel_blurs))
       {
         sharpen_parameters sp, sp_green, sp_blue;
@@ -1994,7 +2134,13 @@ public:
 
   /* Initialize screen for tile TILEID using values in vector V.  Return false
      on MTF/PSF construction failure.  Store in UPDATED whether a successful
-     call changed the tile screen.  */
+     call changed the tile screen.
+
+     This is the hot path for focus fitting.  A solver retains exactly its last
+     filtered periodic screen: phase-only objective evaluations resample it,
+     while a change to blur, MTF, strip widths, or emulsion state rebuilds it.
+     Separate adaptive-focus cells construct separate solvers and therefore do
+     not currently share this exact filtered state.  */
   bool
   init_screen (coord_t *v, int tileid, bool *updated)
   {
@@ -2038,6 +2184,7 @@ public:
 	    if (!scr)
 	      return false;
 	    memcpy (tiles[tileid].scr.get (), scr.get (), sizeof (screen));
+	    tiles[tileid].last_screen_revision = screen_revision;
 	    *updated = true;
 	    return true;
 	  }
@@ -2765,7 +2912,7 @@ public:
   {
     if (!least_squares && !data_collection)
       last_color = { v[color_index], v[color_index + 1], v[color_index + 2] };
-    if (data_collection)
+    else if (data_collection)
       last_color = bw_determine_color_using_data_collection (v);
     else
       last_color = bw_determine_color_using_least_squares (v);
@@ -2800,7 +2947,10 @@ public:
   {
     if (optimize_coordinates == 1)
       {
-	point_t center = tiles[0].pos[(twidth / 2) * twidth + theight / 2];
+	/* POS is row-major.  Keep the transformation centred on the actual
+	   middle pixel also for rectangular tiles.  */
+	point_t center
+	    = tiles[0].pos[(theight / 2) * twidth + twidth / 2];
 	/* First move center to 0.  */
 	matrix3x3 trans = translation_3x3matrix (center * -1);
 	/* Next apply scale  */
@@ -2815,7 +2965,8 @@ public:
       }
     else if (optimize_coordinates == 2)
       {
-	point_t center = {(coord_t)(-theight/2), (coord_t)(-twidth/2)};
+	/* Pixel coordinates are X=width and Y=height.  */
+	point_t center = {(coord_t)(-twidth / 2), (coord_t)(-theight / 2)};
 	/* First move center to 0.  */
 	matrix3x3 trans = translation_3x3matrix (center);
 	/* Next apply scale  */
@@ -2836,6 +2987,9 @@ public:
   {
     /* Use double to avoid accumulation of round-off error.  */
     double sum = 0;
+    const int nsamples = sample_points ();
+    if (nsamples <= 0)
+      return std::numeric_limits<coord_t>::max ();
     update_transformation (v);
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
@@ -2906,15 +3060,22 @@ public:
                     luminosity_t d = bw_get_pixel (tileid, { x, y });
                     sum += my_fabs (c - d);
                   }
-            sum /= maxgray;
           }
+      }
+    /* MAXGRAY is shared by all BW tiles.  Normalizing inside the tile loop
+       divided the accumulated errors from earlier tiles repeatedly.  */
+    if (!tiles[0].bw.empty ())
+      {
+        if (!my_isfinite (maxgray) || !(maxgray > 0))
+          return std::numeric_limits<coord_t>::max ();
+        sum /= maxgray;
       }
     // printf ("%f\n", sum);
     /* Avoid solver from increasing blur past point it is no longer useful.
        Otherwise it will pick solutions with too large blur and very contrasty
        colors.  */
     //compute_contrast ();
-    return (sum / sample_points ())
+    return (sum / nsamples)
            * ((coord_t)1
               + get_blur_radius (v)
                     * (coord_t)0.01) /*/ std::max (contrast, (luminosity_t)0.0000001)*/; /** (1 + get_emulsion_blur_radius (v) * 0.0001)*/;
@@ -3117,7 +3278,7 @@ public:
 
     std::unique_ptr<simple_image> img = std::make_unique<simple_image> ();
     if (!img || !img->allocate (twidth, theight))
-      return img;
+      return nullptr;
 
     if (!tiles[0].color.empty ())
       {
@@ -3144,6 +3305,9 @@ public:
               gmax = std::max (d.green, gmax);
               bmax = std::max (d.blue, bmax);
             }
+        rmax = diagnostic_normalization (rmax);
+        gmax = diagnostic_normalization (gmax);
+        bmax = diagnostic_normalization (bmax);
 
         for (int y = 0; y < theight; y++)
           {
@@ -3207,6 +3371,7 @@ public:
                                lmax);
               lmax = std::max (bw_get_pixel (tileid, { x, y }), lmax);
             }
+        lmax = diagnostic_normalization (lmax);
 
         for (int y = 0; y < theight; y++)
           {
@@ -3293,6 +3458,9 @@ public:
               gmax = std::max (d.green, gmax);
               bmax = std::max (d.blue, bmax);
             }
+        rmax = diagnostic_normalization (rmax);
+        gmax = diagnostic_normalization (gmax);
+        bmax = diagnostic_normalization (bmax);
 
         for (int y = 0; y < theight; y++)
           {
@@ -3359,6 +3527,7 @@ public:
                                lmax);
               lmax = std::max (bw_get_pixel (tileid, { x, y }), lmax);
             }
+        lmax = diagnostic_normalization (lmax);
 
         for (int y = 0; y < theight; y++)
           {
@@ -3408,6 +3577,12 @@ public:
                progress_info *progress)
   {
     ret.badness = objfunc (start.data ());
+    if (!my_isfinite (ret.badness) || ret.badness < 0
+        || ret.badness == std::numeric_limits<coord_t>::max ())
+      {
+        ret.err = "invalid final objective";
+        return;
+      }
     // if (optimize_screen_blur)
     // ret.screen_blur_radius = start[screen_index];
     /* TODO: Translate back to stitched project coordinates.  */
@@ -3416,7 +3591,14 @@ public:
     ret.red_strip_width = get_red_strip_width (start.data ());
     ret.green_strip_width = get_green_strip_width (start.data ());
     ret.scanner_mtf_sigma = get_scanner_mtf_sigma (start.data ());
-    ret.contrast = get_positional_color_contrast (type, last_color, optimize_coordinates == 2);
+    ret.scanner_mtf_defocus = rparam.sharpen.scanner_mtf.defocus;
+    ret.scanner_mtf_blur_diameter
+        = rparam.sharpen.scanner_mtf.blur_diameter;
+    /* OBJFUNC above refreshed LAST_COLOR in BW mode and LAST_RED/GREEN/BLUE
+       in RGB mode.  Use the common helper so RGB results do not accidentally
+       report contrast from the unrelated BW cache.  */
+    compute_contrast ();
+    ret.contrast = contrast;
 
     if (optimize_coordinates)
       {
@@ -3446,7 +3628,8 @@ public:
               test_p.coordinate1 = ret.coordinate1;
               test_p.coordinate2 = ret.coordinate2;
               scr_to_img test_map;
-              test_map.set_parameters (test_p, 1, 1);
+              if (!test_map.set_parameters (test_p, 1, 1))
+                abort ();
               point_t p1_scr_test = test_map.to_scr (p1_img);
               point_t p2_scr_test = test_map.to_scr ({(coord_t)tiles[0].txmin + twidth - 1, (coord_t)tiles[0].tymin});
               point_t p3_scr_test = test_map.to_scr ({(coord_t)tiles[0].txmin, (coord_t)tiles[0].tymin + theight - 1});
@@ -3480,8 +3663,14 @@ public:
 
     if (optimize_scanner_mtf_defocus || optimize_scanner_mtf_channel_defocus)
       {
-        ret.scanner_mtf_defocus = get_scanner_mtf_defocus (start.data ());
-        ret.scanner_mtf_blur_diameter = get_scanner_mtf_defocus (start.data ());
+        const luminosity_t focus = get_scanner_mtf_defocus (start.data ());
+        /* Only update the field interpreted by the active model.  Callers
+           commonly copy both fields back to render_parameters, so mirroring
+           the fit into the inactive field corrupts a later model switch.  */
+        if (render_sharpen_params.scanner_mtf.simulate_diffraction_p ())
+          ret.scanner_mtf_defocus = focus;
+        else
+          ret.scanner_mtf_blur_diameter = focus;
       }
     if (optimize_scanner_mtf_channel_defocus)
       ret.scanner_mtf_channel_defocus_or_blur
@@ -3501,17 +3690,23 @@ public:
     ret.emulsion_coord_adjust = get_emulsion_offset (start.data (), 0);
     ret.fog = get_fog (start.data ());
     if (optimize_emulsion_intensities || simulate_infrared)
-      {
-        ret.mix_weights = get_mix_weights (start.data ());
-        ret.mix_dark = get_fog (start.data ());
-      }
+      ret.mix_weights = get_mix_weights (start.data ());
     else
       {
         ret.mix_weights.red = rparam.mix_red;
         ret.mix_weights.green = rparam.mix_green;
         ret.mix_weights.blue = rparam.mix_blue;
-        ret.mix_dark = rparam.mix_dark;
       }
+
+    /* MIX_DARK is fitted only by the experimental simulated-infrared mode.
+       Emulsion-intensity fitting may derive new neutral mixing weights, but
+       it has no dark variable; preserve the caller's current RGB dark rather
+       than manufacturing zero from GET_MIX_DARK's inactive default.  */
+    if (simulate_infrared)
+      ret.mix_dark = finetune_render_mix_dark (
+          ret.mix_weights, get_mix_dark (start.data ()), rparam.mix_dark);
+    else
+      ret.mix_dark = rparam.mix_dark;
 
     if (optimize_position && !optimize_coordinate1)
       {
@@ -3626,8 +3821,8 @@ public:
 };
 } // namespace
  
-/* Produce elemnt of geometric sequence from MIN to MAX having STEPS
-   elements of index I.  */
+/* Produce element I of a geometric sequence from MIN to MAX divided into
+   STEPS intervals.  */
 static coord_t
 geom_sequence (coord_t min, coord_t max, int steps, int i)
 {
@@ -3635,10 +3830,68 @@ geom_sequence (coord_t min, coord_t max, int steps, int i)
   return min * std::pow (r, i);
 }
 
-/* Finetune parameters and update RPARAM.
-   PARAM is scr-to-img parameters.  IMG is the image data.
-   LOCS are tile locations.  RESULTS are previous results.
-   FPARAMS are finetune parameters.  PROGRESS is used to report progress.  */
+/* Return true when AREA parameters are safe for grid construction and robust
+   fit-score filtering.  UNCERTAINTY_RATIO is the fraction of the most reliable
+   successful fits retained, not the fraction discarded.  */
+static bool
+valid_finetune_area_parameters_p (const finetune_area_parameters &parameters)
+{
+  return parameters.grid_width >= 0 && parameters.grid_height >= 0
+         && my_isfinite (parameters.min_contrast)
+         && parameters.min_contrast >= 0
+         && my_isfinite (parameters.uncertainty_ratio)
+         && parameters.uncertainty_ratio >= 0
+         && parameters.uncertainty_ratio <= 1
+         && my_isfinite (parameters.max_displacement)
+         && parameters.max_displacement >= 0;
+}
+
+/* Return true when WIDTH*HEIGHT is a usable int-indexed grid and store its
+   allocation size in COUNT.  The area helpers use int coordinates and
+   progress totals even though std::vector itself accepts a larger size_t.  */
+static bool
+valid_finetune_grid_size_p (int width, int height, size_t *count)
+{
+  if (!count || width <= 0 || height <= 0)
+    return false;
+  const int64_t n = (int64_t)width * height;
+  if (n <= 0 || n > INT_MAX)
+    return false;
+  *count = (size_t)n;
+  return true;
+}
+
+/* Find the largest fit-quality score accepted when RETAIN_RATIO of the most
+   reliable successful RESULTS is kept.  Failed and non-finite results do not
+   participate in the quantile.  */
+bool
+finetune_retained_fit_score_cutoff (
+    const std::vector<finetune_result> &results, coord_t retain_ratio,
+    coord_t *cutoff)
+{
+  if (!cutoff || !my_isfinite (retain_ratio) || retain_ratio < 0
+      || retain_ratio > 1)
+    return false;
+
+  std::vector<coord_t> scores;
+  scores.reserve (results.size ());
+  for (const finetune_result &result : results)
+    if (result.success && valid_fit_score_p (result.uncertainty))
+      scores.push_back (result.uncertainty);
+  if (scores.empty ())
+    return false;
+
+  std::sort (scores.begin (), scores.end (), std::greater<coord_t> ());
+  const size_t index
+      = (size_t)((scores.size () - 1) * ((coord_t)1 - retain_ratio));
+  *cutoff = scores[index];
+  return true;
+}
+
+/* Fit the model selected by FPARAMS to tiles from IMG.  RPARAM supplies the
+   fixed rendering state and starting values; it is not modified.  PARAM is
+   the screen-to-image geometry, LOCS are tile locations, RESULTS optionally
+   supply previous local offsets, and PROGRESS reports work/cancellation.  */
 
 finetune_result
 finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
@@ -3649,10 +3902,27 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
   finetune_result ret;
   bool tile_sharpened = false;
 
-  int n_tiles = locs.size ();
+  if (const char *flag_error = finetune_flag_error (fparams.flags))
+    {
+      ret.err = flag_error;
+      return ret;
+    }
+  if (!my_isfinite (fparams.ignore_outliers)
+      || fparams.ignore_outliers < 0 || fparams.ignore_outliers >= 1)
+    {
+      ret.err = "ignore_outliers must be finite and in [0,1)";
+      return ret;
+    }
+  if (fparams.range < 0)
+    {
+      ret.err = "negative finetune range";
+      return ret;
+    }
+
+  int n_tiles;
   if (fparams.flags & (finetune_coordinates | finetune_guess_coordinates))
     {
-      if (n_tiles)
+      if (!locs.empty ())
         {
           ret.err = "did not expect tiles";
           return ret;
@@ -3661,13 +3931,22 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
     }
   else
     {
-      if (n_tiles > finetune_solver::max_tiles)
-        n_tiles = finetune_solver::max_tiles;
+      if (locs.size () > (size_t)finetune_solver::max_tiles)
+        {
+          ret.err = "too many tile locations";
+          return ret;
+        }
+      n_tiles = (int)locs.size ();
       if (!n_tiles)
         {
           ret.err = "no tile locations";
           return ret;
         }
+    }
+  if (results && results->size () < (size_t)n_tiles)
+    {
+      ret.err = "too few previous finetune results";
+      return ret;
     }
   const image_data *imgp[finetune_solver::max_tiles];
   scr_to_img *mapp[finetune_solver::max_tiles];
@@ -3727,6 +4006,11 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
             }
           mapp[tileid] = &map;
         }
+    }
+  if (!my_isfinite (pixel_size) || pixel_size <= 0)
+    {
+      ret.err = "invalid local pixel size";
+      return ret;
     }
   bool bw = fparams.flags & finetune_bw;
   bool verbose = fparams.flags & finetune_verbose;
@@ -3833,6 +4117,12 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
       return ret;
     }
   int twidth = txmax - txmin + 1, theight = tymax - tymin + 1;
+  if ((fparams.flags & finetune_sharpening)
+      && (twidth <= 20 || theight <= 20))
+    {
+      ret.err = "tile too small for sharpening border";
+      return ret;
+    }
   if (verbose)
     {
       if (progress)
@@ -3843,8 +4133,8 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
         progress->resume_stdout ();
     }
   finetune_solver best_solver;
-  coord_t best_uncertainty = -1;
-  bool failed = false;
+  coord_t best_fit_score = -1;
+  std::atomic<bool> failed (false);
 
   render_parameters rparam2 = rparam;
   /* Working with sharpened tile is easier, since it is likely already
@@ -3856,7 +4146,8 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
     {
       if (fparams.flags
           & (finetune_screen_blur | finetune_screen_channel_blurs
-             | finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus))
+             | finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus
+             | finetune_scanner_mtf_channel_defocus))
         rparam2.sharpen.mode = sharpen_parameters::none;
       else
         tile_sharpened = true;
@@ -3868,7 +4159,19 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
   if (maxtiles < 1)
     maxtiles = 1;
   if (!(maxtiles & 1))
-    maxtiles++;
+    {
+      if (maxtiles == INT_MAX)
+        {
+          ret.err = "multitile search is too large";
+          return ret;
+        }
+      maxtiles++;
+    }
+  if ((int64_t)maxtiles * maxtiles > INT_MAX)
+    {
+      ret.err = "multitile search is too large";
+      return ret;
+    }
 
   bool bw_is_simulated_infrared = false;
 
@@ -3924,7 +4227,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
 
       gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
 #pragma omp parallel for default(none) collapse(2) schedule(dynamic)          \
-    shared(fparams, maxtiles, rparam, pixel_size, best_uncertainty, verbose,  \
+    shared(fparams, maxtiles, rparam, pixel_size, best_fit_score, verbose,  \
                std::nothrow, imgp, twidth, theight, txmin, tymin, bw,         \
                progress, mapp, render, failed, best_solver, results,          \
                bw_is_simulated_infrared, tile_sharpened)
@@ -3955,7 +4258,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
             if (!solver.init_tile (0, cur_txmin, cur_tymin, bw, *mapp[0],
                                    render))
               {
-                failed = true;
+                failed.store (true, std::memory_order_relaxed);
                 continue;
               }
             solver.init (fparams.flags, rparam.screen_blur_radius,
@@ -3963,7 +4266,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                          bw_is_simulated_infrared, tile_sharpened, results);
             if (progress && progress->cancel_requested ())
               continue;
-            coord_t uncertainty = solver.solve (
+            coord_t fit_score = solver.solve (
                 progress, !(fparams.flags & finetune_no_progress_report)
                               && maxtiles == 1);
 
@@ -3972,10 +4275,12 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
               progress->inc_progress ();
 #pragma omp critical
             {
-              if (best_uncertainty < 0 || best_uncertainty > uncertainty)
+              if (valid_fit_score_p (fit_score)
+                  && (!valid_fit_score_p (best_fit_score)
+                      || best_fit_score > fit_score))
                 {
                   best_solver = std::move (solver);
-                  best_uncertainty = uncertainty;
+                  best_fit_score = fit_score;
                 }
             }
           }
@@ -3998,10 +4303,23 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
           int cur_tymin = std::min (std::max (y[tileid] - theight / 2, 0),
                                     imgp[tileid]->height - theight - 1)
                           & ~1;
-          if (bw
-              && (rparam2.ignore_infrared
-                  || !imgp[tileid]->has_grayscale_or_ir ()))
-            bw_is_simulated_infrared = true;
+          const bool tile_uses_simulated_infrared
+              = bw && (rparam2.ignore_infrared
+                       || !imgp[tileid]->has_grayscale_or_ir ());
+          if (bw && tileid == 0)
+            bw_is_simulated_infrared = tile_uses_simulated_infrared;
+          else if (bw
+                   && bw_is_simulated_infrared
+                          != tile_uses_simulated_infrared)
+            {
+              /* One solver has one colour/constraint model for all BW tiles.
+                 Mixing measured IR with RGB-derived grayscale would make that
+                 model depend on the tile while the fitted parameters remain
+                 shared.  Reject the ambiguous configuration rather than
+                 silently relaxing every tile to simulated-IR semantics.  */
+              ret.err = "mixed measured and simulated infrared tiles";
+              return ret;
+            }
           /* FIXME: We only use render_to_scr since we eventually want to know
              pixel size. For stitched projects this is wrong.  */
           render render (*imgp[tileid], rparam2, 256);
@@ -4038,7 +4356,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
       /* Wild guessing needs brute forcing scale and rotation.  */
       if (best_solver.optimize_coordinates == 2)
         {
-          best_uncertainty = -1;
+          best_fit_score = -1;
 	  /* Limit angles and assume that original is scanned in sane position.  */
 	  static constexpr coord_t paget_angles[][2]={{-5,5},{-15,-5},{5,15},{-25,-15},{15,25}};
 	  const int n_paget_angles = sizeof (paget_angles) / sizeof (coord_t[2]);
@@ -4062,7 +4380,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
 	      
 
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2) shared(  \
-        fparams, rparam, pixel_size, best_uncertainty, verbose, imgp, twidth, \
+        fparams, rparam, pixel_size, best_fit_score, verbose, imgp, twidth, \
             theight, txmin, tymin, bw, progress, mapp, failed, best_solver,   \
             results, bw_is_simulated_infrared, tile_sharpened, n_angles, angles)
           for (int i = 0; i < 50; i++)
@@ -4083,7 +4401,10 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
 #pragma omp critical
                   r = solver.copy_tile (0, best_solver);
                   if (!r)
-                    failed = true;
+                    {
+                      failed.store (true, std::memory_order_relaxed);
+                      continue;
+                    }
                   solver.min_scale = geom_sequence (1/50.0, 1/1.5, 50, i);
                   solver.max_scale = geom_sequence (1/50.0, 1/1.5, 50, i+1);
                   solver.min_rotate = angles[rot][0];
@@ -4098,22 +4419,19 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                   //printf ("step %i rotate %i %f %f %f\n", i, rot, u, solver.get_scale (solver.start.data ()), solver.get_rotation (solver.start.data ()));
 #pragma omp critical
                   {
-                    if (best_uncertainty < 0 || best_uncertainty > u)
+                    if (valid_fit_score_p (u)
+                        && (!valid_fit_score_p (best_fit_score)
+                            || best_fit_score > u))
                       {
                         best_solver = std::move (solver);
-                        best_uncertainty = u;
+                        best_fit_score = u;
                       }
                   }
                 }
             }
-          if (failed)
-            {
-              ret.err = "out of memory";
-              return ret;
-            }
         }
       else
-        best_uncertainty = best_solver.solve (
+        best_fit_score = best_solver.solve (
             progress, !(fparams.flags & finetune_no_progress_report));
       gsl_set_error_handler (old_handler);
     }
@@ -4122,14 +4440,14 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
       ret.err = "cancelled";
       return ret;
     }
-  if (failed)
+  if (failed.load (std::memory_order_relaxed))
     {
       ret.err = "failed memory allocation";
       return ret;
     }
-  if (best_uncertainty < 0)
+  if (!valid_fit_score_p (best_fit_score))
     {
-      ret.err = "negative uncertainty";
+      ret.err = "invalid fit-quality score";
       return ret;
     }
 
@@ -4146,16 +4464,28 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
     best_solver.bw_determine_outliers (best_solver.start.data (),
                                        fparams.ignore_outliers);
   if (best_solver.has_outliers ())
-    simplex<coord_t, finetune_solver> (
-        best_solver, "finetuning with outliers", progress,
-        !(fparams.flags & finetune_no_progress_report));
+    {
+      coord_t refined_objective = simplex<coord_t, finetune_solver> (
+          best_solver, "finetuning with outliers", progress,
+          !(fparams.flags & finetune_no_progress_report));
+      /* The second simplex changes both the optimum and its fit-quality score.
+         Keeping the score from the pre-outlier fit made the adaptive focus
+         rejection threshold describe a different solution.  */
+      best_fit_score
+          = best_solver.scale_fit_score_by_contrast (refined_objective);
+    }
   if (progress && progress->cancel_requested ())
     {
       ret.err = "cancelled";
       return ret;
     }
 
-  ret.uncertainty = best_uncertainty;
+  if (!valid_fit_score_p (best_fit_score))
+    {
+      ret.err = "invalid refined fit-quality score";
+      return ret;
+    }
+  ret.uncertainty = best_fit_score;
   if (verbose)
     {
       if (progress)
@@ -4165,6 +4495,8 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
         progress->resume_stdout ();
     }
   best_solver.set_results (ret, param, rparam, verbose, progress);
+  if (!ret.success)
+    return ret;
 
   if (fparams.simulated_file)
     best_solver.write_file (best_solver.start.data (), fparams.simulated_file,
@@ -4187,19 +4519,6 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
         ret.sharpened
             = best_solver.produce_image (best_solver.start.data (), 0, 3);
       ret.diff = best_solver.produce_image (best_solver.start.data (), 0, 2);
-      if (fparams.screen_blur_file)
-        {
-          screen tmp;
-          best_solver.collect_screen (&tmp, best_solver.start.data (), 0);
-          screen scr, scr1;
-          scr.initialize (
-              best_solver.type,
-              best_solver.get_red_strip_width (best_solver.start.data ()),
-              best_solver.get_green_strip_width (best_solver.start.data ()));
-          if (best_solver.apply_blur (best_solver.start.data (), 0, &scr,
-                                      &scr1))
-            ret.dot_spread = scr.get_image (true, 1);
-        }
       ret.screen = best_solver.original_scr->get_image ();
       ret.blurred_screen = best_solver.tiles[0].scr->get_image ();
       if (best_solver.optimize_emulsion_blur)
@@ -4257,6 +4576,8 @@ finetune_misregistered_area (solver_parameters *solver,
 			     const finetune_area_parameters & fparam,
 			     progress_info *progress)
 {
+  if (!solver || !valid_finetune_area_parameters_p (fparam))
+    return false;
   int_image_area area = in_area.intersect ({ 0, 0, img.width, img.height });
   const bool verbose = false;
   if (area.empty_p () || param.type == Random)
@@ -4268,13 +4589,18 @@ finetune_misregistered_area (solver_parameters *solver,
     }
   int xsteps, ysteps;
   fparam.get_grid_dimensions (area, param, &xsteps, &ysteps);
-  if (!xsteps || !ysteps)
+  size_t requested_grid_size;
+  if (!valid_finetune_grid_size_p (xsteps, ysteps,
+                                   &requested_grid_size))
     {
       if (verbose)
-	printf ("Finetuning area failed since xsteps or ysteps is 0\n");
+	printf ("Finetuning area failed because the requested grid is invalid\n");
       return false;
     }
+  (void)requested_grid_size;
   int_image_area crop = rparam.get_scan_crop (img.width, img.height);
+  if (crop.empty_p ())
+    return false;
   int xstep = std::max (1, crop.width / xsteps);
   int ystep = std::max (1, crop.height / ysteps);
   if (verbose)
@@ -4337,7 +4663,7 @@ finetune_misregistered_area (solver_parameters *solver,
 	printf ("Finetuning area started by adding basis, steps %i %i\n",
 		xstep, ystep);
     }
-  /* See if points are corelated around a line.  In this case the current
+  /* See if points are correlated around a line.  In this case the current
      solution is probably quite iffy and we need to expand slowly.  */
   else if (solver->points.size () < 10000)
     {
@@ -4367,41 +4693,69 @@ finetune_misregistered_area (solver_parameters *solver,
 			     max (fabs (param.coordinate1.y),
 				  fabs (param.coordinate2.y)) * 2));
 
-  /* We may end up with very large grid; limit it to maximal search distance
-     so we do not end up allocating very large grid.  */
+  /* Locate trusted anchors in AREA.  The routine's contract says that points
+     outside AREA are not known to be registered correctly, so an existing
+     global point set with no local anchor cannot seed this flood fill.  */
+  int xmin = INT_MAX;
+  int ymin = INT_MAX;
+  int xmax = INT_MIN;
+  int ymax = INT_MIN;
+  int points_in_area = 0;
+  for (const auto &p : solver->points)
+    if (area.contains_p ({ (int)p.img.x, (int)p.img.y }))
+      {
+        xmin = std::min (xmin, (int)p.img.x);
+        ymin = std::min (ymin, (int)p.img.y);
+        xmax = std::max (xmax, (int)p.img.x);
+        ymax = std::max (ymax, (int)p.img.y);
+        points_in_area++;
+      }
+  if (!points_in_area)
+    return false;
+
+  /* We may end up with a very large grid; limit it to the maximal search
+     distance without overflowing int_image_area arithmetic.  */
   if (max_points < 1000)
     {
-      int xmin = INT_MAX;
-      int ymin = INT_MAX;
-      int xmax = INT_MIN;
-      int ymax = INT_MIN;
-    for (auto p:solver->points)
-	if (area.contains_p (
-			      {
-			      (int) p.img.x, (int) p.img.y}))
-	{
-	  xmin = std::min (xmin, (int) p.img.x);
-	  ymin = std::min (ymin, (int) p.img.y);
-	  xmax = std::max (xmax, (int) p.img.x);
-	  ymax = std::max (ymax, (int) p.img.y);
-	}
+      const int64_t xmargin = (int64_t)xstep * max_points;
+      const int64_t ymargin = (int64_t)ystep * max_points;
+      const int64_t area_right = (int64_t)area.x + area.width;
+      const int64_t area_bottom = (int64_t)area.y + area.height;
+      const int64_t left = std::max ((int64_t)area.x,
+                                     (int64_t)xmin - xmargin);
+      const int64_t top = std::max ((int64_t)area.y,
+                                    (int64_t)ymin - ymargin);
+      const int64_t right = std::min (area_right,
+                                      (int64_t)xmax + xmargin + 1);
+      const int64_t bottom = std::min (area_bottom,
+                                       (int64_t)ymax + ymargin + 1);
+      if (right <= left || bottom <= top || left < INT_MIN || top < INT_MIN
+          || right > INT_MAX || bottom > INT_MAX)
+        return false;
       int_image_area max_search_range
-      {
-      xmin - xstep * max_points, ymin - ystep * max_points,
-	  xmax - xmin + xstep * max_points * 2,
-	  ymax - ymin + ystep * max_points * 2};
+          = { (int)left, (int)top, (int)(right - left),
+              (int)(bottom - top) };
       if (verbose)
 	printf ("Intersecting with range %i %i %i %i\n", max_search_range.x,
 		max_search_range.y, max_search_range.width,
 		max_search_range.height);
       area = area.intersect (max_search_range);
+      if (area.empty_p ())
+        return false;
     }
 
   const int range = 3;
   int xsubstep = std::max (1, xstep / range);
   int ysubstep = std::max (1, ystep / range);
-  int xsubsteps = std::max (1, (area.width + xsubstep - 1) / xsubstep);
-  int ysubsteps = std::max (1, (area.height + ysubstep - 1) / ysubstep);
+  int xsubsteps
+      = (int)std::max<int64_t> (1, ((int64_t)area.width + xsubstep - 1)
+                                      / xsubstep);
+  int ysubsteps
+      = (int)std::max<int64_t> (1, ((int64_t)area.height + ysubstep - 1)
+                                      / ysubstep);
+  size_t tile_count;
+  if (!valid_finetune_grid_size_p (xsubsteps, ysubsteps, &tile_count))
+    return false;
   int npoints;
   int nfound = 0;
   coord_t max_uncertainty = 10000;
@@ -4414,7 +4768,7 @@ finetune_misregistered_area (solver_parameters *solver,
     bad
   };
 
-  std::vector < elt > tiles (xsubsteps * ysubsteps, unknown);
+  std::vector<elt> tiles (tile_count, unknown);
 
   const auto get_cell_pos =[area, xsubstep, ysubstep] (point_t p)->int_point_t {
     return {(int64_t) my_floor ((p.x - area.x) / (coord_t) xsubstep),
@@ -4562,19 +4916,24 @@ for (auto p:solver->points)
       npoints = 0;
       if (verbose)
 	printf ("Will consider %i results\n", (int) res.size ());
-      /* Now prune points that seems badr.  */
+      /* Prune failed, poorly registered, or poorly conditioned points.  */
       for (size_t i = 0; i < res.size ();)
 	{
 	  finetune_result & r = res[i];
-	  bool ok = r.success;
-	  if (!r.success)
-	    ok = false;
-	  else
-	    if (fabs
-		(get_cell_pos (r.solver_point_img_location).x -
-		 get_cell_pos (points[i]).x) > 3
-		|| fabs (get_cell_pos (r.solver_point_img_location).y -
-			 get_cell_pos (points[i]).y) > 3)
+	  bool ok = r.success && valid_fit_score_p (r.uncertainty)
+	            && my_isfinite (r.contrast);
+	  if (!ok)
+	    {
+	      /* The common removal path below records no additional geometry for
+	         a failed or non-finite fit.  */
+	    }
+	  else if (fabs
+		   (get_cell_pos (r.solver_point_img_location).x
+		        - get_cell_pos (points[i]).x)
+		       > 3
+		   || fabs (get_cell_pos (r.solver_point_img_location).y
+		            - get_cell_pos (points[i]).y)
+		          > 3)
 	    {
 	      if (verbose)
 		printf
@@ -4639,17 +4998,13 @@ for (auto p:solver->points)
          drop in each wave.  */
       if (res.size () > 5)
 	{
-	  std::sort (res.begin (), res.end (),
-		     [](finetune_result & a, finetune_result & b)
-		     {
-		     return a.uncertainty > b.uncertainty;
-		     }
-	  );
-	  max_uncertainty = std::min (max_uncertainty,
-				      res[(res.size () - 1) * (1 -
-							       fparam.
-							       uncertainty_ratio)].
-				      uncertainty);
+	  coord_t wave_cutoff;
+	  if (!finetune_retained_fit_score_cutoff (res, fparam.uncertainty_ratio,
+	                                  &wave_cutoff))
+	    return false;
+	  /* Let the accepted fit-quality threshold only tighten in later
+	     flood-fill waves.  */
+	  max_uncertainty = std::min (max_uncertainty, wave_cutoff);
 	}
 
       /* Now add computed points to solver and update tiles.  */
@@ -4697,23 +5052,31 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
 	       const finetune_area_parameters &fparam,
 	       progress_info *progress)
 {
+  if (!solver || !valid_finetune_area_parameters_p (fparam))
+    return false;
   int_image_area area = in_area.intersect ({ 0, 0, img.width, img.height });
   if (area.empty_p ())
     return false;
   int xsteps, ysteps;
   fparam.get_grid_dimensions (area, param, &xsteps, &ysteps);
-  if (!xsteps || !ysteps)
+  size_t requested_grid_size;
+  if (!valid_finetune_grid_size_p (xsteps, ysteps,
+                                   &requested_grid_size))
     return false;
+  (void)requested_grid_size;
   int_image_area crop = rparam.get_scan_crop (img.width, img.height);
+  if (crop.empty_p ())
+    return false;
   int xstep = std::max (1, crop.width / xsteps);
   int ystep = std::max (1, crop.height / ysteps);
-  xsteps = (area.width + xstep - 1) / xstep;
-  ysteps = (area.height + ystep - 1) / ystep;
-  if (!xsteps || !ysteps)
+  xsteps = (int)(((int64_t)area.width + xstep - 1) / xstep);
+  ysteps = (int)(((int64_t)area.height + ystep - 1) / ystep);
+  size_t result_count;
+  if (!valid_finetune_grid_size_p (xsteps, ysteps, &result_count))
     return false;
-  std::vector<finetune_result> res (xsteps * ysteps);
+  std::vector<finetune_result> res (result_count);
   if (progress)
-    progress->set_task ("finetuning grid", ysteps * xsteps);
+    progress->set_task ("finetuning grid", (int)result_count);
   /* We are going to initialize render inside of nested region.
      TODO: We probably want to set omp_nested on proper place.  */
 #ifdef _OPENMP
@@ -4754,10 +5117,10 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
     }
   if (progress && progress->cancel_requested ())
     return false;
-  std::sort (res.begin (), res.end (),
-             [] (finetune_result &a, finetune_result &b)
-               { return a.uncertainty > b.uncertainty; });
-  coord_t max_uncertainty = res[(xsteps * ysteps - 1) * (1 - fparam.uncertainty_ratio)].uncertainty;
+  coord_t max_uncertainty;
+  if (!finetune_retained_fit_score_cutoff (res, fparam.uncertainty_ratio,
+                                  &max_uncertainty))
+    return false;
   for (int x = 0; x < xsteps; x++)
     for (int y = 0; y < ysteps; y++)
       {
@@ -4884,7 +5247,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
         {
           std::shared_ptr<mtf> cur_mtf
               = mtf::get_mtf (sharpen_param.scanner_mtf, nullptr);
-          if (!cur_mtf->precompute ())
+          if (!cur_mtf || !cur_mtf->precompute ())
             return false;
           ext = cur_mtf->psf_size (sharpen_param.scanner_mtf_scale);
         }

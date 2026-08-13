@@ -1,0 +1,24 @@
+var searchData=
+[
+  ['capturepanel_2ecpp_0',['CapturePanel.cpp',['../CapturePanel_8cpp.html',1,'']]],
+  ['capturepanel_2eh_1',['CapturePanel.h',['../CapturePanel_8h.html',1,'']]],
+  ['ciechartwidget_2ecpp_2',['CIEChartWidget.cpp',['../CIEChartWidget_8cpp.html',1,'']]],
+  ['ciechartwidget_2eh_3',['CIEChartWidget.h',['../CIEChartWidget_8h.html',1,'']]],
+  ['color_2ec_4',['color.C',['../color_8C.html',1,'']]],
+  ['color_2eh_5',['color.h',['../color_8h.html',1,'']]],
+  ['coloroptimizerworker_2ecpp_6',['ColorOptimizerWorker.cpp',['../ColorOptimizerWorker_8cpp.html',1,'']]],
+  ['coloroptimizerworker_2eh_7',['ColorOptimizerWorker.h',['../ColorOptimizerWorker_8h.html',1,'']]],
+  ['colorpanel_2ecpp_8',['ColorPanel.cpp',['../ColorPanel_8cpp.html',1,'']]],
+  ['colorpanel_2eh_9',['ColorPanel.h',['../ColorPanel_8h.html',1,'']]],
+  ['colorscreen_2ec_10',['colorscreen.C',['../colorscreen_8C.html',1,'']]],
+  ['colorscreen_2eh_11',['colorscreen.h',['../colorscreen_8h.html',1,'']]],
+  ['colorutils_2eh_12',['ColorUtils.h',['../ColorUtils_8h.html',1,'']]],
+  ['contactcopypanel_2ecpp_13',['ContactCopyPanel.cpp',['../ContactCopyPanel_8cpp.html',1,'']]],
+  ['contactcopypanel_2eh_14',['ContactCopyPanel.h',['../ContactCopyPanel_8h.html',1,'']]],
+  ['coordinateoptimizationworker_2ecpp_15',['CoordinateOptimizationWorker.cpp',['../CoordinateOptimizationWorker_8cpp.html',1,'']]],
+  ['coordinateoptimizationworker_2eh_16',['CoordinateOptimizationWorker.h',['../CoordinateOptimizationWorker_8h.html',1,'']]],
+  ['coordinatetransformer_2ecpp_17',['CoordinateTransformer.cpp',['../CoordinateTransformer_8cpp.html',1,'']]],
+  ['coordinatetransformer_2eh_18',['CoordinateTransformer.h',['../CoordinateTransformer_8h.html',1,'']]],
+  ['cow_2dvector_2eh_19',['cow-vector.h',['../cow-vector_8h.html',1,'']]],
+  ['cubic_2dinterpolate_2eh_20',['cubic-interpolate.h',['../cubic-interpolate_8h.html',1,'']]]
+];

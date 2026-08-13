@@ -258,10 +258,15 @@ curve contains usable uncertainty estimates, the fitter multiplies each
 residual by an inverse-uncertainty weight.  A 0.25 percentage-point floor, or
 one quarter of the curve's median uncertainty when that is larger, prevents an
 accidentally tiny variance estimate near DC from dominating the optimization.
-The weights are RMS-normalized within each measurement so uncertainty changes
-only the relative importance of frequencies inside that curve; it does not
-silently increase or decrease the total influence of the curve compared with
-the historical objective.
+For an isolated curve, or a group containing a legacy curve without usable
+uncertainty, the weights are RMS-normalized within each measurement.  For two
+or more included uncertainty-aware curves in one contiguous `same_capture`
+group, raw inverse-uncertainty weights are normalized jointly across the
+capture.  The joint normalization keeps `sum(w^2) = N` for the group while
+preserving the relative confidence of repeated edges.  Thus a noisy edge no
+longer receives the same aggregate influence as a precise edge merely because
+each curve was normalized separately.  Excluded curves do not affect the
+eligibility of the included group.
 
 Project files may therefore contain either
 

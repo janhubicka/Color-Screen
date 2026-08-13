@@ -1,0 +1,25 @@
+var classSharpnessPanel =
+[
+    [ "SharpnessPanel", "classSharpnessPanel.html#a3484e317b845d80190e3fd92696cc831", null ],
+    [ "~SharpnessPanel", "classSharpnessPanel.html#a215b3ffd8426e67d31da9037c13c3b28", null ],
+    [ "adaptiveSharpeningRequested", "classSharpnessPanel.html#a5dac9a7572f88b49f1f3db62c438274f", null ],
+    [ "autodetectRequested", "classSharpnessPanel.html#ac30c7d41686a73cdfe99c9f512eb595d", null ],
+    [ "detachAdaptiveChartRequested", "classSharpnessPanel.html#a180026bc12fd60f058db50229a8e04d5", null ],
+    [ "detachDotSpreadRequested", "classSharpnessPanel.html#ab43cb86c83218caccca91f9f9d3ae1f1", null ],
+    [ "detachFinetuneImagesRequested", "classSharpnessPanel.html#a60b941a5ed89c423172165a1d293868b", null ],
+    [ "detachMTFChartRequested", "classSharpnessPanel.html#a505311bd8c2cc35c83b126739ef41524", null ],
+    [ "focusAnalysisRequested", "classSharpnessPanel.html#aa242c60db237ab1df323ee8eaf4a7ed4", null ],
+    [ "getAdaptiveChart", "classSharpnessPanel.html#a3b0dae5a78f7e01abe77a02c9f16adb4", null ],
+    [ "getMTFChartWidget", "classSharpnessPanel.html#a00fb24d774fff8d6a42ca1a5d9088f88", null ],
+    [ "getTileTypes", "classSharpnessPanel.html#a09838f9dd4c63fff5c971a7643a67ee8", null ],
+    [ "onAnalyzeDisplacements", "classSharpnessPanel.html#a96cf20e4b028c5c6b9d9bc4444afac02", null ],
+    [ "onTileUpdateScheduled", "classSharpnessPanel.html#a397507f4641f3e557246c46895a6bd6d", null ],
+    [ "reattachAdaptiveChart", "classSharpnessPanel.html#a04e6cd5bf9eb3ff8c1924b511369a66c", null ],
+    [ "reattachDotSpread", "classSharpnessPanel.html#a77c5ec2bf20de2c0b0cbaa20ffc91924", null ],
+    [ "reattachFinetuneImages", "classSharpnessPanel.html#a28466799254a88138c38aa67d52a985e", null ],
+    [ "reattachMTFChart", "classSharpnessPanel.html#aa8d63038bda08116e87f5b74c5a47544", null ],
+    [ "setFocusAnalysisChecked", "classSharpnessPanel.html#a8ba806985af65c0b5c8db77cb62f5c27", null ],
+    [ "shouldUpdateTiles", "classSharpnessPanel.html#a4b4d8b330a77ba1c2e1506d7bd08efa0", null ],
+    [ "showAdaptiveChart", "classSharpnessPanel.html#a50fb33fb9de687ec87c20a681b307e54", null ],
+    [ "updateFinetuneImages", "classSharpnessPanel.html#a6e8a895b348f31a6ccb48941c71b8fff", null ]
+];

@@ -1,11 +1,14 @@
 #include <assert.h>
+#include <climits>
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <memory>
 #include <thread>
 #include <vector>
 #include <atomic>
 #include <chrono>
+#include <limits>
 #include <string>
 
 
@@ -13,6 +16,7 @@
 #include "include/imagedata.h"
 #include "include/scr-to-img.h"
 #include "include/finetune.h"
+#include "include/scanner-blur-correction-parameters.h"
 #include "include/color.h"
 #include "include/matrix.h"
 #include "include/mesh.h"
@@ -30,11 +34,216 @@
 #include "demosaic.h"
 #include "finetune-int.h"
 #include "gaussian-blur.h"
+#include "nmsimplex.h"
 
 
 using namespace colorscreen;
 namespace
 {
+
+/* Zero-dimensional objective used to verify that SIMPLEX can evaluate a
+   fully fixed model without constructing a degenerate simplex.  */
+class zero_dimensional_simplex_problem
+{
+public:
+  std::vector<double> start;
+  int calls = 0;
+
+  int num_values () const { return 0; }
+  double epsilon () const { return 1e-6; }
+  double scale () const { return 1; }
+  bool verbose () const { return false; }
+  void constrain (double *) {}
+  double
+  objfunc (double *)
+  {
+    calls++;
+    return 3.25;
+  }
+};
+
+bool
+test_finetune_helpers ()
+{
+  const rgbdata fallback = { 0.01, 0.02, 0.03 };
+  rgbdata dark
+      = finetune_render_mix_dark ({ 0.2, 0.3, 0.5 }, 0.2, fallback);
+  if (fabs (dark.red - 0.2) > 1e-6 || dark.red != dark.green
+      || dark.red != dark.blue)
+    {
+      fprintf (stderr, "Unit-sum finetune mix-dark conversion failed\n");
+      return false;
+    }
+  dark = finetune_render_mix_dark ({ 0.4, 0.6, 1.0 }, 0.2, fallback);
+  if (fabs (dark.red - 0.1) > 1e-6 || dark.red != dark.green
+      || dark.red != dark.blue)
+    {
+      fprintf (stderr, "Scaled finetune mix-dark conversion failed\n");
+      return false;
+    }
+  dark = finetune_render_mix_dark ({ 1, -1, 0 }, 0.2, fallback);
+  if (dark != fallback)
+    {
+      fprintf (stderr, "Zero-sum finetune mix-dark fallback failed\n");
+      return false;
+    }
+  dark = finetune_render_mix_dark (
+      { std::numeric_limits<luminosity_t>::quiet_NaN (), 0, 0 }, 0.2,
+      fallback);
+  if (dark != fallback)
+    {
+      fprintf (stderr, "Non-finite finetune mix-dark fallback failed\n");
+      return false;
+    }
+
+  std::vector<finetune_result> fit_results (5);
+  fit_results[0].success = true;
+  fit_results[0].uncertainty = 10;
+  fit_results[1].success = true;
+  fit_results[1].uncertainty = 4;
+  fit_results[2].success = true;
+  fit_results[2].uncertainty = 2;
+  fit_results[3].success = false;
+  fit_results[3].uncertainty = 0;
+  fit_results[4].success = true;
+  fit_results[4].uncertainty
+      = std::numeric_limits<coord_t>::quiet_NaN ();
+  coord_t cutoff = -1;
+  if (!finetune_retained_fit_score_cutoff (fit_results, 1, &cutoff)
+      || cutoff != 10
+      || !finetune_retained_fit_score_cutoff (fit_results, 0.5, &cutoff)
+      || cutoff != 4
+      || !finetune_retained_fit_score_cutoff (fit_results, 0, &cutoff)
+      || cutoff != 2
+      || finetune_retained_fit_score_cutoff (fit_results, -0.1, &cutoff)
+      || finetune_retained_fit_score_cutoff (fit_results, 1.1, &cutoff))
+    {
+      fprintf (stderr, "Finetune fit-score retention cutoff failed\n");
+      return false;
+    }
+
+  if (finetune_flag_error (finetune_position)
+      || finetune_flag_error (finetune_scanner_mtf_sigma
+                              | finetune_scanner_mtf_defocus)
+      || finetune_flag_error (finetune_scanner_mtf_sigma
+                              | finetune_scanner_mtf_channel_defocus))
+    {
+      fprintf (stderr, "Valid finetune flag combination was rejected\n");
+      return false;
+    }
+  if (!finetune_flag_error (finetune_coordinates
+                            | finetune_guess_coordinates)
+      || !finetune_flag_error (finetune_screen_blur
+                               | finetune_screen_channel_blurs)
+      || !finetune_flag_error (finetune_scanner_mtf_defocus
+                               | finetune_scanner_mtf_channel_defocus)
+      || !finetune_flag_error (finetune_screen_blur
+                               | finetune_scanner_mtf_sigma))
+    {
+      fprintf (stderr, "Invalid finetune flag combination was accepted\n");
+      return false;
+    }
+
+  zero_dimensional_simplex_problem zero;
+  const double zero_result
+      = simplex<double> (zero, nullptr, nullptr, false);
+  if (zero_result != 3.25 || zero.calls != 1)
+    {
+      fprintf (stderr,
+               "Zero-dimensional simplex failed: result %g, calls %i\n",
+               zero_result, zero.calls);
+      return false;
+    }
+
+  return true;
+}
+
+bool
+test_scanner_blur_correction_contract ()
+{
+  scanner_blur_correction_parameters empty;
+  if (empty.save (nullptr))
+    return false;
+  const char *null_error = nullptr;
+  if (empty.load (nullptr, &null_error) || !null_error
+      || empty.load (nullptr, nullptr))
+    return false;
+
+  scanner_blur_correction_parameters correction;
+  if (!correction.alloc (
+          2, 2, scanner_blur_correction_parameters::blur_radius))
+    return false;
+  correction.set_correction (0, 0, 0.1);
+  correction.set_correction (1, 0, 0.2);
+  correction.set_correction (0, 1, 0.3);
+  correction.set_correction (1, 1, 0.4);
+  const uint64_t original_id = correction.id;
+
+  if (correction.alloc (0, 2,
+                        scanner_blur_correction_parameters::blur_radius)
+      || correction.alloc (
+          2, 2, scanner_blur_correction_parameters::max_correction)
+      || correction.alloc (
+          INT_MAX, INT_MAX,
+          scanner_blur_correction_parameters::blur_radius))
+    return false;
+  if (correction.id != original_id || correction.get_width () != 2
+      || correction.get_height () != 2
+      || correction.get_mode ()
+             != scanner_blur_correction_parameters::blur_radius
+      || my_fabs (correction.get_correction (1, 1) - 0.4) > 1e-6)
+    return false;
+
+  FILE *malformed = tmpfile ();
+  if (!malformed)
+    return false;
+  fprintf (malformed, "scanner_blur_correction_dimensions: 1 1\n"
+                      "scanner_blur_correction_type: blur-radius\n"
+                      "scanner_blur_correction_gaussian_blurs: 1 1 1\n"
+                      "scanner_blur_correction_end\n");
+  rewind (malformed);
+  const char *error = nullptr;
+  const bool malformed_loaded = correction.load (malformed, &error);
+  fclose (malformed);
+  if (malformed_loaded || !error || correction.id != original_id
+      || correction.get_width () != 2 || correction.get_height () != 2
+      || my_fabs (correction.get_correction (1, 1) - 0.4) > 1e-6)
+    return false;
+
+  FILE *saved = tmpfile ();
+  if (!saved || !correction.save (saved))
+    {
+      if (saved)
+        fclose (saved);
+      return false;
+    }
+  rewind (saved);
+  scanner_blur_correction_parameters loaded;
+  error = nullptr;
+  const bool load_ok = loaded.load (saved, &error);
+  fclose (saved);
+  if (!load_ok || error || loaded.get_width () != 2
+      || loaded.get_height () != 2
+      || loaded.get_mode ()
+             != scanner_blur_correction_parameters::blur_radius
+      || my_fabs (loaded.get_correction (0, 0) - 0.1) > 1e-6
+      || my_fabs (loaded.get_correction (1, 1) - 0.4) > 1e-6)
+    return false;
+
+  const uint64_t before_realloc = loaded.id;
+  if (!loaded.alloc (1, 3,
+                     scanner_blur_correction_parameters::mtf_defocus)
+      || loaded.id == before_realloc || loaded.get_width () != 1
+      || loaded.get_height () != 3
+      || loaded.get_mode ()
+             != scanner_blur_correction_parameters::mtf_defocus)
+    return false;
+  for (int y = 0; y < 3; y++)
+    if (loaded.get_correction (0, y) != 0)
+      return false;
+  return true;
+}
+
 inline int
 fast_rand16 (unsigned int *g_seed)
 {
@@ -4729,6 +4938,10 @@ main (int argc, char **argv)
   test_entry tests[] = {
     { "matrix", "matrix tests", [] () { test_matrix (); return true; } },
     { "color", "color tests", [] () { test_color (); return true; } },
+    { "finetune_helpers", "finetune and Nelder-Mead contract tests",
+      [] () { return test_finetune_helpers (); } },
+    { "scanner_blur_correction", "scanner blur correction table tests",
+      [] () { return test_scanner_blur_correction_contract (); } },
     { "linearity", "render linearity tests", [] () { return (bool)test_render_linearity (); } },
     { "blur", "screen blur tests", [] () { return test_screen_blur (); } },
     { "sharpening", "screen sharpening tests", [] () { return test_screen_sharpening (); } },

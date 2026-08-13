@@ -1,0 +1,25 @@
+var searchData=
+[
+  ['paget_5fgeometry_0',['paget_geometry',['../structcolorscreen_1_1paget__geometry.html',1,'colorscreen']]],
+  ['pagetanimation_1',['PagetAnimation',['../classPagetAnimation.html',1,'']]],
+  ['parameterpanel_2',['ParameterPanel',['../classParameterPanel.html',1,'']]],
+  ['parameterstate_3',['ParameterState',['../structParameterState.html',1,'']]],
+  ['particle_4',['Particle',['../structParticle.html',1,'']]],
+  ['patch_5',['patch',['../structcolorscreen_1_1patches_1_1patch.html',1,'colorscreen::patches']]],
+  ['patches_6',['patches',['../classcolorscreen_1_1patches.html',1,'colorscreen']]],
+  ['patches_5fcache_5fparams_7',['patches_cache_params',['../structcolorscreen_1_1patches__cache__params.html',1,'colorscreen']]],
+  ['pixel_8',['pixel',['../structcolorscreen_1_1image__data_1_1pixel.html',1,'colorscreen::image_data']]],
+  ['point_5flocation_9',['point_location',['../structcolorscreen_1_1solver__parameters_1_1point__location.html',1,'colorscreen::solver_parameters']]],
+  ['point_5ft_10',['point_t',['../structcolorscreen_1_1point__t.html',1,'colorscreen']]],
+  ['precomputed_5ffunction_11',['precomputed_function',['../classcolorscreen_1_1precomputed__function.html',1,'colorscreen']]],
+  ['precomputed_5ffunction_3c_20luminosity_5ft_20_3e_12',['precomputed_function&lt; luminosity_t &gt;',['../classcolorscreen_1_1precomputed__function.html',1,'colorscreen']]],
+  ['precomputed_5ffunction_3c_20psf_5ft_20_3e_13',['precomputed_function&lt; psf_t &gt;',['../classcolorscreen_1_1precomputed__function.html',1,'colorscreen']]],
+  ['precomputed_5frgbdata_14',['precomputed_rgbdata',['../classcolorscreen_1_1precomputed__rgbdata.html',1,'colorscreen']]],
+  ['precomputed_5frgbdata_5fparams_15',['precomputed_rgbdata_params',['../structcolorscreen_1_1precomputed__rgbdata__params.html',1,'colorscreen']]],
+  ['presaturation_5fmatrix_16',['presaturation_matrix',['../classcolorscreen_1_1presaturation__matrix.html',1,'colorscreen']]],
+  ['pro_5fphoto_5frgb_5fxyz_5fmatrix_17',['pro_photo_rgb_xyz_matrix',['../classcolorscreen_1_1pro__photo__rgb__xyz__matrix.html',1,'colorscreen']]],
+  ['profilepanel_18',['ProfilePanel',['../classProfilePanel.html',1,'']]],
+  ['progress_5finfo_19',['progress_info',['../classcolorscreen_1_1progress__info.html',1,'colorscreen']]],
+  ['progressentry_20',['ProgressEntry',['../structProgressEntry.html',1,'']]],
+  ['property_5ft_21',['property_t',['../structcolorscreen_1_1property__t.html',1,'colorscreen']]]
+];

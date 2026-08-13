@@ -566,9 +566,10 @@ stage contract is changed further.
 3. **OTF semantics, complete:** separate known signed physical OTF from
    measured nonnegative MTF and preserve physical phase reversals in every FFT
    path.
-4. **Filtering robustness:** make periodic-screen filtering transactional so a
-   failed per-channel MTF/PSF calculation cannot leave a partially filtered
-   screen.
+4. **Filtering robustness, complete:** propagate periodic-screen filtering
+   failure and require the caller to discard the destination.  Deliberately do
+   not allocate and copy a second `screen` merely to make filtering
+   transactional.
 5. **Precision validation:** quantify the periodic-table interpolation MTF,
    local mapping scale, and representative Phase One / Schneider screen
    harmonics.

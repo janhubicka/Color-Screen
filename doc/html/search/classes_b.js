@@ -1,0 +1,28 @@
+var searchData=
+[
+  ['mainwindow_0',['MainWindow',['../classMainWindow.html',1,'']]],
+  ['mapalloc_1',['MapAlloc',['../classcolorscreen_1_1MapAlloc.html',1,'colorscreen']]],
+  ['mapallocator_2',['MapAllocator',['../structcolorscreen_1_1MapAllocator.html',1,'colorscreen']]],
+  ['mapdeleter_3',['MapDeleter',['../structcolorscreen_1_1MapDeleter.html',1,'colorscreen']]],
+  ['matrix_4',['matrix',['../classcolorscreen_1_1matrix.html',1,'colorscreen']]],
+  ['matrix2x2_5',['matrix2x2',['../classcolorscreen_1_1matrix2x2.html',1,'colorscreen']]],
+  ['matrix2x2_3c_20coord_5ft_20_3e_6',['matrix2x2&lt; coord_t &gt;',['../classcolorscreen_1_1matrix2x2.html',1,'colorscreen']]],
+  ['matrix3x3_7',['matrix3x3',['../classcolorscreen_1_1matrix3x3.html',1,'colorscreen']]],
+  ['matrix3x3_3c_20coord_5ft_20_3e_8',['matrix3x3&lt; coord_t &gt;',['../classcolorscreen_1_1matrix3x3.html',1,'colorscreen']]],
+  ['matrix4x4_9',['matrix4x4',['../classcolorscreen_1_1matrix4x4.html',1,'colorscreen']]],
+  ['matrix4x4_3c_20coord_5ft_20_3e_10',['matrix4x4&lt; coord_t &gt;',['../classcolorscreen_1_1matrix4x4.html',1,'colorscreen']]],
+  ['matrix4x4_3c_20luminosity_5ft_20_3e_11',['matrix4x4&lt; luminosity_t &gt;',['../classcolorscreen_1_1matrix4x4.html',1,'colorscreen']]],
+  ['matrix_3c_20t_2c_202_20_3e_12',['matrix&lt; T, 2 &gt;',['../classcolorscreen_1_1matrix.html',1,'colorscreen']]],
+  ['matrix_3c_20t_2c_203_20_3e_13',['matrix&lt; T, 3 &gt;',['../classcolorscreen_1_1matrix.html',1,'colorscreen']]],
+  ['matrix_3c_20t_2c_204_20_3e_14',['matrix&lt; T, 4 &gt;',['../classcolorscreen_1_1matrix.html',1,'colorscreen']]],
+  ['measuredialog_15',['MeasureDialog',['../classMeasureDialog.html',1,'']]],
+  ['mem_5frgbdata_16',['mem_rgbdata',['../structcolorscreen_1_1mem__rgbdata.html',1,'colorscreen']]],
+  ['memory_5fbuffer_17',['memory_buffer',['../structcolorscreen_1_1memory__buffer.html',1,'colorscreen']]],
+  ['mesh_18',['mesh',['../classcolorscreen_1_1mesh.html',1,'colorscreen']]],
+  ['mesh_5fpoint_19',['mesh_point',['../structcolorscreen_1_1mesh_1_1mesh__point.html',1,'colorscreen::mesh']]],
+  ['mtf_20',['mtf',['../classcolorscreen_1_1mtf.html',1,'colorscreen']]],
+  ['mtf_5fmeasurement_21',['mtf_measurement',['../structcolorscreen_1_1mtf__measurement.html',1,'colorscreen']]],
+  ['mtf_5fparameters_22',['mtf_parameters',['../structcolorscreen_1_1mtf__parameters.html',1,'colorscreen']]],
+  ['mtfchartwidget_23',['MTFChartWidget',['../classMTFChartWidget.html',1,'']]],
+  ['multilinetabwidget_24',['MultiLineTabWidget',['../classMultiLineTabWidget.html',1,'']]]
+];

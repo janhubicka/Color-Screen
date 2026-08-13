@@ -1,4 +1,8 @@
 #include <cctype>
+#include <climits>
+#include <cstdlib>
+#include <limits>
+#include <utility>
 #include "include/tiff-writer.h"
 #include "include/scanner-blur-correction-parameters.h"
 #include "loadsave.h"
@@ -24,11 +28,29 @@ scanner_blur_correction_parameters::scanner_blur_correction_parameters ()
 bool
 scanner_blur_correction_parameters::alloc (int width, int height, enum correction_mode mode)
 {
-  m_corrections = (luminosity_t *)calloc (width * height, sizeof (luminosity_t));
+  if (width <= 0 || height <= 0 || mode < blur_radius
+      || mode >= max_correction)
+    return false;
+  if ((size_t)width > std::numeric_limits<size_t>::max () / (size_t)height)
+    return false;
+  const size_t count = (size_t)width * (size_t)height;
+  if (count > INT_MAX
+      || count > std::numeric_limits<size_t>::max () / sizeof (luminosity_t))
+    return false;
+  luminosity_t *corrections
+      = (luminosity_t *)calloc (count, sizeof (luminosity_t));
+  if (!corrections)
+    return false;
+
+  free (m_corrections);
+  m_corrections = corrections;
   m_width = width;
   m_height = height;
   m_mode = mode;
-  return (m_corrections != NULL);
+  /* A successful replacement changes every cache key that refers to this
+     table, even when its dimensions and address happen to stay the same.  */
+  id = lru_caches::get ();
+  return true;
 }
 
 scanner_blur_correction_parameters::~scanner_blur_correction_parameters ()
@@ -39,6 +61,9 @@ scanner_blur_correction_parameters::~scanner_blur_correction_parameters ()
 bool
 scanner_blur_correction_parameters::save (FILE *f)
 {
+  if (!f || !m_corrections || m_width <= 0 || m_height <= 0
+      || m_mode < blur_radius || m_mode >= max_correction)
+    return false;
   if (fprintf (f, "  scanner_blur_correction_dimensions: %i %i\n", m_width,
                m_height)
       < 0)
@@ -78,6 +103,9 @@ scanner_blur_correction_parameters::save (FILE *f)
 const char *
 scanner_blur_correction_parameters::save_tiff (const char *filename)
 {
+  if (!filename || !m_corrections || m_width <= 0 || m_height <= 0
+      || m_mode < blur_radius || m_mode >= max_correction)
+    return "No scanner blur correction data";
   tiff_writer_params tp;
   tp.filename = filename;
   tp.width = m_width;
@@ -104,6 +132,14 @@ scanner_blur_correction_parameters::save_tiff (const char *filename)
 bool
 scanner_blur_correction_parameters::load (FILE *f, const char **error)
 {
+  if (!error)
+    return false;
+  *error = NULL;
+  if (!f)
+    {
+      *error = "missing scanner blur correction input";
+      return false;
+    }
   if (!expect_keyword (f, "scanner_blur_correction_dimensions:"))
     {
       *error = "expected scanner_blur_correction_dimensions";
@@ -145,7 +181,7 @@ scanner_blur_correction_parameters::load (FILE *f, const char **error)
     case mtf_blur_diameter:
       if (!expect_keyword (f, "scanner_blur_correction_blur_diameter_pxs:"))
 	{
-	  *error = "expected scanner_blur_correction_blur_dimater_pxs";
+	  *error = "expected scanner_blur_correction_blur_diameter_pxs";
 	  return false;
 	}
       break;
@@ -159,10 +195,15 @@ scanner_blur_correction_parameters::load (FILE *f, const char **error)
     default:
       abort ();
     }
-  alloc (width, height, mode);
-  for (int y = 0; y < m_height; y++)
+  scanner_blur_correction_parameters loaded;
+  if (!loaded.alloc (width, height, mode))
     {
-      for (int x = 0; x < m_width; x++)
+      *error = "invalid or too large scanner blur correction dimensions";
+      return false;
+    }
+  for (int y = 0; y < loaded.m_height; y++)
+    {
+      for (int x = 0; x < loaded.m_width; x++)
         for (int i = 0; i < 4; i++)
             {
               float sx;
@@ -171,7 +212,7 @@ scanner_blur_correction_parameters::load (FILE *f, const char **error)
                   *error = "failed to parse scanner blur correction gaussian blurs";
                   return false;
                 }
-              m_corrections[y * m_width + x] = sx;
+              loaded.m_corrections[y * loaded.m_width + x] = sx;
             }
     }
   if (!expect_keyword (f, "scanner_blur_correction_end"))
@@ -179,6 +220,11 @@ scanner_blur_correction_parameters::load (FILE *f, const char **error)
       *error = "expected scanner_blur_correction_end";
       return false;
     }
+  std::swap (id, loaded.id);
+  std::swap (m_width, loaded.m_width);
+  std::swap (m_height, loaded.m_height);
+  std::swap (m_corrections, loaded.m_corrections);
+  std::swap (m_mode, loaded.m_mode);
   return true;
 }
 }

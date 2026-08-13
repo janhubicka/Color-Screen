@@ -1,0 +1,25 @@
+var classcolorscreen_1_1precomputed__function =
+[
+    [ "precomputed_function", "classcolorscreen_1_1precomputed__function.html#a10008f8aed6882b67fcc3523d4e216d7", null ],
+    [ "precomputed_function", "classcolorscreen_1_1precomputed__function.html#acbc34922da50dffe5f88c973858f2ef4", null ],
+    [ "precomputed_function", "classcolorscreen_1_1precomputed__function.html#af9d1702bafad79a6e29bafcde7820ee3", null ],
+    [ "precomputed_function", "classcolorscreen_1_1precomputed__function.html#a3c4d6dcf09ae9f0d8c7be61c68bb9bce", null ],
+    [ "precomputed_function", "classcolorscreen_1_1precomputed__function.html#a4e6f1ea917454b80a7a67a927833d9bd", null ],
+    [ "precomputed_function", "classcolorscreen_1_1precomputed__function.html#add8d9afa0a67e2f4b19b691793ee4fd1", null ],
+    [ "precomputed_function", "classcolorscreen_1_1precomputed__function.html#ad420ee764bc6711f298dcb9c73bc3faf", null ],
+    [ "precomputed_function", "classcolorscreen_1_1precomputed__function.html#ae13bef96d2edc38a51485e50c99320ba", null ],
+    [ "~precomputed_function", "classcolorscreen_1_1precomputed__function.html#a9dc6193bde95b57959a6c4d561409026", null ],
+    [ "apply", "classcolorscreen_1_1precomputed__function.html#a992d9ec3bf3215da1ddfe05415ac7020", null ],
+    [ "get_max", "classcolorscreen_1_1precomputed__function.html#a49f63eb93aa513e5035364f352487a3a", null ],
+    [ "init_by_function", "classcolorscreen_1_1precomputed__function.html#a2d57727e50c2080833948ff1f0e9398f", null ],
+    [ "init_by_table", "classcolorscreen_1_1precomputed__function.html#a08c39d2d80b9d5a0295884d89678df5e", null ],
+    [ "init_by_x_y_values", "classcolorscreen_1_1precomputed__function.html#a15ea216fe26656e420572c34e4cfb815", null ],
+    [ "init_by_y_values", "classcolorscreen_1_1precomputed__function.html#a83d84356c251bf97fa44c003a5a94ba3", null ],
+    [ "invert", "classcolorscreen_1_1precomputed__function.html#a2f827b963ac822d1a1109d11d8bf794d", null ],
+    [ "operator!=", "classcolorscreen_1_1precomputed__function.html#ad5768d075ca4ecdf46fb85e768c60414", null ],
+    [ "operator=", "classcolorscreen_1_1precomputed__function.html#ad310f26ae23bded82ebad6e26ece49db", null ],
+    [ "operator=", "classcolorscreen_1_1precomputed__function.html#a270aab324c0e6e9b820f066185e892f0", null ],
+    [ "operator==", "classcolorscreen_1_1precomputed__function.html#a10a8b2ae6b5d428c0f9d9c4b650e12d6", null ],
+    [ "plot", "classcolorscreen_1_1precomputed__function.html#a67ecc50ddb6602684e3f0a61de93df9b", null ],
+    [ "set_range", "classcolorscreen_1_1precomputed__function.html#ace28760872d2e3bda8af58df5f7b16b6", null ]
+];

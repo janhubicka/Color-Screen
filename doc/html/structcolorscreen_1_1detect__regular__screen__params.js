@@ -1,0 +1,25 @@
+var structcolorscreen_1_1detect__regular__screen__params =
+[
+    [ "detect_regular_screen_params", "structcolorscreen_1_1detect__regular__screen__params.html#a69945ccedfeb24d3efe2f99c7181a528", null ],
+    [ "border_bottom", "structcolorscreen_1_1detect__regular__screen__params.html#a308e695588d930304890850feef0657a", null ],
+    [ "border_left", "structcolorscreen_1_1detect__regular__screen__params.html#a0db115f194a93cf754ead8500718138a", null ],
+    [ "border_right", "structcolorscreen_1_1detect__regular__screen__params.html#a8ebf9c418587803fb8e3f5a258a5742e", null ],
+    [ "border_top", "structcolorscreen_1_1detect__regular__screen__params.html#acebe6794d0bb0026f670e3815e3c010b", null ],
+    [ "bottom", "structcolorscreen_1_1detect__regular__screen__params.html#a348f0139ecc262a9637733a28f7dacda", null ],
+    [ "do_mesh", "structcolorscreen_1_1detect__regular__screen__params.html#afc8a7f7557774acb37b45c41294dd59e", null ],
+    [ "fast_floodfill", "structcolorscreen_1_1detect__regular__screen__params.html#aea12ca729d160f6abbd532d59fbc0e9a", null ],
+    [ "gamma", "structcolorscreen_1_1detect__regular__screen__params.html#a285631a8e65b6ace2ddb906b23c2c0ae", null ],
+    [ "left", "structcolorscreen_1_1detect__regular__screen__params.html#a92f97f405e1d9ca6f8b9b0904f0ab695", null ],
+    [ "lens_correction", "structcolorscreen_1_1detect__regular__screen__params.html#ae87c7f45e08dc9b219b1201a40d973a9", null ],
+    [ "max_unknown_screen_range", "structcolorscreen_1_1detect__regular__screen__params.html#a8f143ea5ebbd6ce9d76de35137a5bd3f", null ],
+    [ "min_patch_contrast", "structcolorscreen_1_1detect__regular__screen__params.html#a0a60c801531232c144e3f6264f60a606", null ],
+    [ "min_screen_percentage", "structcolorscreen_1_1detect__regular__screen__params.html#a5be88cb06da58a92ef168735764e86c8", null ],
+    [ "optimize_colors", "structcolorscreen_1_1detect__regular__screen__params.html#a59a77d2daaaee56888047568e713d133", null ],
+    [ "return_known_patches", "structcolorscreen_1_1detect__regular__screen__params.html#a9ba2b8c00388d8c98b812286d9d95154", null ],
+    [ "return_screen_map", "structcolorscreen_1_1detect__regular__screen__params.html#a47cb113f2d1f9c167ad1b6ec7a0b2372", null ],
+    [ "right", "structcolorscreen_1_1detect__regular__screen__params.html#a35edf49ef1f971be94737af0a32b4c0b", null ],
+    [ "scanner_type", "structcolorscreen_1_1detect__regular__screen__params.html#af29a6fd443842a70813922467252420b", null ],
+    [ "scr_type", "structcolorscreen_1_1detect__regular__screen__params.html#af75c723bb155ab5ab3fc8815a5a180c0", null ],
+    [ "slow_floodfill", "structcolorscreen_1_1detect__regular__screen__params.html#a3c9e0c13c4fef06712645a58705e0d61", null ],
+    [ "top", "structcolorscreen_1_1detect__regular__screen__params.html#ace6b67373907479582a4281936a53696", null ]
+];

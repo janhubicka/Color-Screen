@@ -1492,12 +1492,12 @@ analyze_scanner_blur (int argc, char **argv)
         ;
       else if (parse_float_param (argc, argv, &i, "skip-min", skipmin, 0, 50))
         ;
-      else if (parse_float_param (argc, argv, &i, "skip-max", skipmin, 0, 50))
+      else if (parse_float_param (argc, argv, &i, "skip-max", skipmax, 0, 50))
         ;
-      else if (parse_int_param (argc, argv, &i, "strip-width", xsteps, 1,
+      else if (parse_int_param (argc, argv, &i, "strip-width", strip_xsteps, 1,
                                 1024 * 1024))
         ;
-      else if (parse_int_param (argc, argv, &i, "strip-height", ysteps, 1,
+      else if (parse_int_param (argc, argv, &i, "strip-height", strip_ysteps, 1,
                                 1024 * 1024))
         ;
       else if (!infname)

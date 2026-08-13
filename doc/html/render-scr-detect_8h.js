@@ -1,0 +1,25 @@
+var render_scr_detect_8h =
+[
+    [ "colorscreen::color_class_params", "structcolorscreen_1_1color__class__params.html", "structcolorscreen_1_1color__class__params" ],
+    [ "colorscreen::precomputed_rgbdata_params", "structcolorscreen_1_1precomputed__rgbdata__params.html", "structcolorscreen_1_1precomputed__rgbdata__params" ],
+    [ "colorscreen::patches_cache_params", "structcolorscreen_1_1patches__cache__params.html", "structcolorscreen_1_1patches__cache__params" ],
+    [ "colorscreen::color_data_params", "structcolorscreen_1_1color__data__params.html", "structcolorscreen_1_1color__data__params" ],
+    [ "colorscreen::render_scr_detect", "classcolorscreen_1_1render__scr__detect.html", "classcolorscreen_1_1render__scr__detect" ],
+    [ "colorscreen::render_scr_detect_adjusted", "classcolorscreen_1_1render__scr__detect__adjusted.html", "classcolorscreen_1_1render__scr__detect__adjusted" ],
+    [ "colorscreen::render_scr_detect_normalized", "classcolorscreen_1_1render__scr__detect__normalized.html", "classcolorscreen_1_1render__scr__detect__normalized" ],
+    [ "colorscreen::render_scr_detect_pixel_color", "classcolorscreen_1_1render__scr__detect__pixel__color.html", "classcolorscreen_1_1render__scr__detect__pixel__color" ],
+    [ "colorscreen::render_scr_detect_superpose_img", "classcolorscreen_1_1render__scr__detect__superpose__img.html", "classcolorscreen_1_1render__scr__detect__superpose__img" ],
+    [ "colorscreen::distance_list", "classcolorscreen_1_1distance__list.html", "classcolorscreen_1_1distance__list" ],
+    [ "colorscreen::distance_list::entry", "structcolorscreen_1_1distance__list_1_1entry.html", "structcolorscreen_1_1distance__list_1_1entry" ],
+    [ "colorscreen::render_scr_relax", "classcolorscreen_1_1render__scr__relax.html", "classcolorscreen_1_1render__scr__relax" ],
+    [ "colorscreen::render_scr_nearest", "classcolorscreen_1_1render__scr__nearest.html", "classcolorscreen_1_1render__scr__nearest" ],
+    [ "colorscreen::render_scr_nearest_scaled", "classcolorscreen_1_1render__scr__nearest__scaled.html", "classcolorscreen_1_1render__scr__nearest__scaled" ],
+    [ "colorscreen::color_class_cache_t", "namespacecolorscreen.html#aed5805783ed17b0c34d1f830011289e0", null ],
+    [ "colorscreen::color_data_cache_t", "namespacecolorscreen.html#aa7a6fb293d5c20da285f453dbbdfa1d5", null ],
+    [ "colorscreen::patches_cache_t", "namespacecolorscreen.html#aec115a8424bf0c833c2a60b5e7fc6c7d", null ],
+    [ "colorscreen::precomputed_rgbdata_cache_t", "namespacecolorscreen.html#a9d64dd6b70342701a08ae3b0638b4467", null ],
+    [ "colorscreen::get_color_class_map", "namespacecolorscreen.html#a87ebd0ba29e8ae602903781570b36c5c", null ],
+    [ "colorscreen::get_new_color_data", "namespacecolorscreen.html#ad4ddf0343c0e496e1bf2e2b829aefad3", null ],
+    [ "colorscreen::get_patches", "namespacecolorscreen.html#a7ff88a944f4df79d2062ee561155eeb7", null ],
+    [ "colorscreen::get_precomputed_rgbdata", "namespacecolorscreen.html#a49b63e38860169f92afe3b05e5ad3eec", null ]
+];

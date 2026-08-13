@@ -1,0 +1,19 @@
+var searchData=
+[
+  ['max_5fcollection_5fquality_0',['max_collection_quality',['../structcolorscreen_1_1render__parameters.html#af638107c67c27fff4abbb5772932bd89a17959cbc19d5fd6891e167bc4a493d80',1,'colorscreen::render_parameters']]],
+  ['max_5fcorrection_1',['max_correction',['../classcolorscreen_1_1scanner__blur__correction__parameters.html#a6b90d1807c0ef563acd3b5a5a608ef53a5775a276708477bae85c76655838b5de',1,'colorscreen::scanner_blur_correction_parameters']]],
+  ['max_5fdemosaiced_5fscaling_2',['max_demosaiced_scaling',['../structcolorscreen_1_1render__parameters.html#ab1eed157acb21e2507e540ec9f79b20ea59c26a7a301e9243bc8cf299af4d9fa0',1,'colorscreen::render_parameters']]],
+  ['max_5fgeometry_3',['max_geometry',['../structcolorscreen_1_1render__to__file__params.html#a8cf199d8b8850e530283a4f8bce20358ade4686ce4e85aafade75c91552167616',1,'colorscreen::render_to_file_params']]],
+  ['max_5fpoint_5fcolor_4',['max_point_color',['../structcolorscreen_1_1solver__parameters.html#a1a649fa5e4a09cf2090d076ee2f2863ba6281980e609ff8e2b7363450e36c0d7c',1,'colorscreen::solver_parameters']]],
+  ['max_5fscanner_5ftype_5',['max_scanner_type',['../namespacecolorscreen.html#ae848bfe008a664ece58d4c93ba577992a94bd5b732156fae464b6b309357754a0',1,'colorscreen']]],
+  ['max_5fscr_5ftype_6',['max_scr_type',['../namespacecolorscreen.html#acb2e9d8fdee843f5f9eed1e24ce19668a3d4412fcef7bb41cc5c3dd83cd9f39dc',1,'colorscreen']]],
+  ['max_5fscreen_5fdemosaic_7',['max_screen_demosaic',['../structcolorscreen_1_1render__parameters.html#a30cfe13aaf92a0c8178e9b0f41b1fe60a7c4e2ce038bdb2fa0d5554b8627ad91c',1,'colorscreen::render_parameters']]],
+  ['maybe_5fmonochromatic_5fdemosaic_8',['MAYBE_MONOCHROMATIC_DEMOSAIC',['../classcolorscreen_1_1render__parameters_1_1capture__type__property.html#ae2d144f80fae5be3af9c75995c28a6d9af226a9fabed7182c7336d26f0e1fc8cc',1,'colorscreen::render_parameters::capture_type_property']]],
+  ['measuremode_9',['MeasureMode',['../classImageWidget.html#a08e2b919f622cf7be5f01ede0c599478a6808ce6ab1be0d1696987a3d7ada5129',1,'ImageWidget']]],
+  ['mode_5fbluranalysis_10',['Mode_BlurAnalysis',['../classAdaptiveSharpeningChart.html#a9c6319cc457bab7bedabe0c2f47ad0d1a27311e508941dfce1f8f7ecaac06439e',1,'AdaptiveSharpeningChart']]],
+  ['mode_5ffinalcorrection_11',['Mode_FinalCorrection',['../classAdaptiveSharpeningChart.html#a9c6319cc457bab7bedabe0c2f47ad0d1a77d5bad8d9902ab0f569ef15182a4379',1,'AdaptiveSharpeningChart']]],
+  ['mode_5fstripanalysis_12',['Mode_StripAnalysis',['../classAdaptiveSharpeningChart.html#a9c6319cc457bab7bedabe0c2f47ad0d1a19b16ba10bc0d9d091c25fe228289feb',1,'AdaptiveSharpeningChart']]],
+  ['monochromatic_5fccd_13',['monochromatic_ccd',['../classcolorscreen_1_1spectrum__dyes__to__xyz.html#a896932e50ab5520175834a1a9adda61eaa4059bfb25e82ee606540ed269f73a76',1,'colorscreen::spectrum_dyes_to_xyz']]],
+  ['mtf_5fblur_5fdiameter_14',['mtf_blur_diameter',['../classcolorscreen_1_1scanner__blur__correction__parameters.html#a6b90d1807c0ef563acd3b5a5a608ef53a46b06793b2d824c8fd48b72659721e9a',1,'colorscreen::scanner_blur_correction_parameters']]],
+  ['mtf_5fdefocus_15',['mtf_defocus',['../classcolorscreen_1_1scanner__blur__correction__parameters.html#a6b90d1807c0ef563acd3b5a5a608ef53a999fbbc4d7f9ae058dd3f1b5b7e80bc9',1,'colorscreen::scanner_blur_correction_parameters']]]
+];

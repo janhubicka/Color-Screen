@@ -1,0 +1,28 @@
+var structcolorscreen_1_1paget__geometry =
+[
+    [ "blue_entry_to_scr", "structcolorscreen_1_1paget__geometry.html#af85d43e4c657c5ae2a1a764be348adfb", null ],
+    [ "blue_scr_to_entry", "structcolorscreen_1_1paget__geometry.html#a2d368778a96fcd3c15ae0501640da428", null ],
+    [ "blue_scr_to_entry", "structcolorscreen_1_1paget__geometry.html#ab4cc9eef370b7ad6884f51d1dc637cf5", null ],
+    [ "from_demosaiced_coordinates", "structcolorscreen_1_1paget__geometry.html#a8ba7086f9019e0ec6f0d61159cd9f29b", null ],
+    [ "from_diagonal_coordinates", "structcolorscreen_1_1paget__geometry.html#a60a1b10cecfea97387d6c825bf6951ea", null ],
+    [ "from_diagonal_coordinates", "structcolorscreen_1_1paget__geometry.html#a23b099a8e7dd873246e24a5490b45dbc", null ],
+    [ "green_entry_to_scr", "structcolorscreen_1_1paget__geometry.html#a8aa2cf6c501c8b9c289d21a8730a6a3f", null ],
+    [ "green_scr_to_entry", "structcolorscreen_1_1paget__geometry.html#a4b3e0f363851c1f2d082b52ea0c14044", null ],
+    [ "green_scr_to_entry", "structcolorscreen_1_1paget__geometry.html#a8958918dc376af670904bd7189b5686b", null ],
+    [ "offset_for_interpolation_blue", "structcolorscreen_1_1paget__geometry.html#a1a34555bb43e75a9be6955f15494c72b", null ],
+    [ "offset_for_interpolation_green", "structcolorscreen_1_1paget__geometry.html#a08e56a788fe7c81d55911e224f4175d0", null ],
+    [ "offset_for_interpolation_red", "structcolorscreen_1_1paget__geometry.html#a32dcf4416f826890cce2d87ac4572727", null ],
+    [ "red_entry_to_scr", "structcolorscreen_1_1paget__geometry.html#a3c7454717c16992e044ff1a8f2d1947c", null ],
+    [ "red_scr_to_entry", "structcolorscreen_1_1paget__geometry.html#a8ac21c907b9f694197fc4813eb8151e9", null ],
+    [ "red_scr_to_entry", "structcolorscreen_1_1paget__geometry.html#adac65e4189571ec95f2b0e76e161381d", null ],
+    [ "to_demosaiced_coordinates", "structcolorscreen_1_1paget__geometry.html#a4d7e17e7f6ce2f4bd21da377797a9b83", null ],
+    [ "to_diagonal_coordinates", "structcolorscreen_1_1paget__geometry.html#ab2e6538740082a62acfcd4cdadd73982", null ],
+    [ "to_diagonal_coordinates", "structcolorscreen_1_1paget__geometry.html#a08310c72c9c4a5d14c677840cf30ded4", null ],
+    [ "blue_height_scale", "structcolorscreen_1_1paget__geometry.html#a4986d5a9c9f34c91d2415c669b8d114b", null ],
+    [ "blue_width_scale", "structcolorscreen_1_1paget__geometry.html#afef1b82cfa36bbee3bc560aad3b08605", null ],
+    [ "check_range", "structcolorscreen_1_1paget__geometry.html#ae99a13b531438fa237e9de93d438df95", null ],
+    [ "green_height_scale", "structcolorscreen_1_1paget__geometry.html#a9be5fa5e882f1eaf46b5a6bc3c31113b", null ],
+    [ "green_width_scale", "structcolorscreen_1_1paget__geometry.html#a7ac7fadbdc2eaaa68b7e660f47cd8746", null ],
+    [ "red_height_scale", "structcolorscreen_1_1paget__geometry.html#ac9ad27133c8ebbbdf42f9697fb6fa2aa", null ],
+    [ "red_width_scale", "structcolorscreen_1_1paget__geometry.html#aa73f3b9a03216c64a29c41b339638cdd", null ]
+];

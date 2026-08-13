@@ -1,43 +1,153 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+#include <climits>
+#include <limits>
+#include <vector>
+#include "finetune-int.h"
 #include "include/analyze-scanner-blur.h"
 #include "include/scr-to-img.h"
 namespace colorscreen
 {
 namespace
 {
+/* Return the fitted correction represented by RES in MODE.  */
 coord_t
 get_correction (scanner_blur_correction_parameters::correction_mode mode,
-                finetune_result &res)
+                const finetune_result &res)
 {
   switch (mode)
     {
     case scanner_blur_correction_parameters::blur_radius:
       return res.screen_blur_radius;
-      break;
     case scanner_blur_correction_parameters::mtf_defocus:
       return res.scanner_mtf_defocus;
-      break;
     case scanner_blur_correction_parameters::mtf_blur_diameter:
       return res.scanner_mtf_blur_diameter;
-      break;
     case scanner_blur_correction_parameters::max_correction:
       abort ();
     }
   abort ();
 }
+
+/* Return true when RES has a usable historical fit-quality score.  The public
+   field is named "uncertainty" for compatibility, but stores objective divided
+   by registration contrast rather than a statistical error estimate.  */
+bool
+valid_fit_score_p (const finetune_result &res)
+{
+  return res.success && my_isfinite (res.uncertainty)
+         && res.uncertainty >= 0
+         && res.uncertainty < std::numeric_limits<coord_t>::max ();
+}
+
+/* Return true for a scalar correction representable by the current table
+   format.  All supported fit coordinates are non-negative.  */
+bool
+valid_correction_p (coord_t correction)
+{
+  return my_isfinite (correction) && correction >= 0 && correction <= 1024;
+}
+
+/* Compute the fit-score cutoff for RESULTS after discarding SKIPMAX percent
+   of the least reliable successful fits.  Store the cutoff in THRESHOLD.  */
+bool
+find_fit_score_threshold (const std::vector<finetune_result *> &results,
+                            coord_t skipmax, coord_t *threshold)
+{
+  histogram hist;
+  int nvalid = 0;
+  for (finetune_result *res : results)
+    if (valid_fit_score_p (*res))
+      {
+        hist.pre_account (res->uncertainty);
+        nvalid++;
+      }
+  if (!nvalid)
+    return false;
+  hist.finalize_range (65536);
+  for (finetune_result *res : results)
+    if (valid_fit_score_p (*res))
+      hist.account (res->uncertainty);
+  hist.finalize ();
+  *threshold = hist.find_max (skipmax / (coord_t)100);
+  return my_isfinite (*threshold);
+}
+
+/* Return true when RES passes the fit-score filter THRESHOLD.  */
+bool
+accepted_result_p (const finetune_result &res, coord_t threshold)
+{
+  return valid_fit_score_p (res) && res.uncertainty <= threshold;
+}
+
+/* Pause progress output through PROGRESS when it is available.  */
+void
+pause_stdout (progress_info *progress)
+{
+  if (progress)
+    progress->pause_stdout ();
+}
+
+/* Resume progress output through PROGRESS when it is available.  */
+void
+resume_stdout (progress_info *progress)
+{
+  if (progress)
+    progress->resume_stdout ();
+}
+
+/* Return true when WIDTH*HEIGHT fits the worker's int-coordinate indexing and
+   store the corresponding allocation size in SIZE.  */
+bool
+valid_grid_size_p (int width, int height, size_t *size)
+{
+  if (width <= 0 || height <= 0)
+    return false;
+  const int64_t n = (int64_t)width * height;
+  if (n <= 0 || n > INT_MAX)
+    return false;
+  *size = (size_t)n;
+  return true;
+}
 } // namespace
 
+/* Prepare dimensions and storage for the scanner-blur analysis.  */
 bool
 analyze_scanner_blur_worker::step1 ()
 {
+  if (finetune_flag_error (flags))
+    return false;
+  if (!my_isfinite (skipmin) || !my_isfinite (skipmax) || skipmin < 0
+      || skipmax < 0 || skipmin > 50 || skipmax > 50
+      || skipmin + skipmax >= 100 || !my_isfinite (tolerance)
+      || scan.width <= 0 || scan.height <= 0)
+    return false;
+
+  /* The correction table stores one kind of scalar correction.  Scanner MTF
+     sigma may be fitted together with defocus, but it is not itself the
+     spatially varying correction recorded by this worker.  Combining legacy
+     screen blur with the MTF model is rejected by FINETUNE_FLAG_ERROR.  */
+  const bool legacy_blur
+      = flags & (finetune_screen_blur | finetune_screen_channel_blurs);
+  const bool mtf_focus
+      = flags
+        & (finetune_scanner_mtf_defocus
+           | finetune_scanner_mtf_channel_defocus);
+  /* Exactly one correction kind must be representable in the output table.
+     Sigma may be optimized jointly with focus, but sigma alone has no table
+     mode.  */
+  if (legacy_blur == mtf_focus)
+    return false;
+
   if (!xsteps && !ysteps)
     xsteps = 10;
   if (!xsteps)
-    xsteps = (ysteps * scan.width + scan.height / 2) / scan.height;
+    xsteps = (int)(((int64_t)ysteps * scan.width + scan.height / 2)
+                   / scan.height);
   if (!ysteps)
-    ysteps = (xsteps * scan.height + scan.width / 2) / scan.width;
+    ysteps = (int)(((int64_t)xsteps * scan.height + scan.width / 2)
+                   / scan.width);
   if (xsteps <= 1)
     xsteps = 2;
   if (ysteps <= 1)
@@ -48,18 +158,37 @@ analyze_scanner_blur_worker::step1 ()
     xsubsteps = ysubsteps;
   if (!xsubsteps)
     xsubsteps = ysubsteps = 5;
+  if (xsubsteps <= 0 || ysubsteps <= 0)
+    return false;
+
   if (!strip_xsteps && !strip_ysteps)
     strip_xsteps = 10;
   if (!strip_xsteps)
-    strip_xsteps = (strip_ysteps * scan.width + scan.height / 2) / scan.height;
+    strip_xsteps = (int)(((int64_t)strip_ysteps * scan.width
+                          + scan.height / 2)
+                         / scan.height);
   if (!strip_ysteps)
-    strip_ysteps = (strip_xsteps * scan.height + scan.width / 2) / scan.width;
-  if (!strip_xsteps)
+    strip_ysteps = (int)(((int64_t)strip_xsteps * scan.height
+                          + scan.width / 2)
+                         / scan.width);
+  if (strip_xsteps <= 0)
     strip_xsteps = 1;
-  if (!strip_ysteps)
+  if (strip_ysteps <= 0)
     strip_ysteps = 1;
+
+  const int64_t sample_width = (int64_t)xsteps * xsubsteps;
+  const int64_t sample_height = (int64_t)ysteps * ysubsteps;
+  size_t prepass_size;
+  size_t mainpass_size;
+  if (sample_width > INT_MAX || sample_height > INT_MAX
+      || !valid_grid_size_p (strip_xsteps, strip_ysteps, &prepass_size)
+      || !valid_grid_size_p ((int)sample_width, (int)sample_height,
+                             &mainpass_size))
+    return false;
+  (void)mainpass_size;
+
   if (rparam.scanner_blur_correction)
-    rparam.scanner_blur_correction = NULL;
+    rparam.scanner_blur_correction.reset ();
 #ifdef _OPENMP
   omp_set_nested (1);
 #endif
@@ -69,125 +198,146 @@ analyze_scanner_blur_worker::step1 ()
     mode = rparam.sharpen.scanner_mtf.simulate_diffraction_p ()
                ? scanner_blur_correction_parameters::mtf_defocus
                : scanner_blur_correction_parameters::mtf_blur_diameter;
-  {
-    prepass.resize (strip_xsteps * strip_ysteps);
-    if (verbose)
-      {
-        progress->pause_stdout ();
-        if (screen_with_varying_strips_p (param.type))
-          printf ("Analyzing %ix%i areas to determine strip widths and "
-                  "blur (overall %i solutions to be computed)\n",
-                  strip_xsteps, strip_ysteps, strip_xsteps * strip_ysteps);
-        else
-          printf ("Analyzing %ix%i areas to determine blur (overall %i "
-                  "solutions to be computed)\n",
-                  strip_xsteps, strip_ysteps, strip_xsteps * strip_ysteps);
-        progress->resume_stdout ();
-      }
-    progress->set_task (screen_with_varying_strips_p (param.type)
-                            ? "analyzing screen strip sizes and blur"
-                            : "analyzing screen blur",
-                        strip_xsteps * strip_ysteps);
-    return true;
-#if 0
-#pragma omp parallel for default(none) collapse(2) schedule(dynamic)          \
-    shared(strip_xsteps, strip_ysteps, rparam, scan, progress, param,         \
-               prepass, flags)
-    for (int y = 0; y < strip_ysteps; y++)
-      for (int x = 0; x < strip_xsteps; x++)
-	{
-	}
-#endif
-  }
+
+  prepass.assign (prepass_size, finetune_result ());
+  if (verbose)
+    {
+      pause_stdout (progress);
+      if (screen_with_varying_strips_p (param.type))
+        printf ("Analyzing %ix%i areas to determine strip widths and "
+                "blur (overall %i solutions to be computed)\n",
+                strip_xsteps, strip_ysteps, strip_xsteps * strip_ysteps);
+      else
+        printf ("Analyzing %ix%i areas to determine blur (overall %i "
+                "solutions to be computed)\n",
+                strip_xsteps, strip_ysteps, strip_xsteps * strip_ysteps);
+      resume_stdout (progress);
+    }
+  if (progress)
+    {
+      if (progress->cancel_requested ())
+        return false;
+      progress->set_task (screen_with_varying_strips_p (param.type)
+                              ? "analyzing screen strip sizes and blur"
+                              : "analyzing screen blur",
+                          strip_xsteps * strip_ysteps);
+    }
+  return true;
 }
 
+/* Evaluate coarse prepass sample X,Y.  */
 bool
 analyze_scanner_blur_worker::analyze_strips (int x, int y,
                                              coord_t *red_strip_width,
                                              coord_t *green_strip_width)
 {
+  if (x < 0 || x >= strip_xsteps || y < 0 || y >= strip_ysteps)
+    return false;
+  if (progress && progress->cancel_requested ())
+    return false;
+
   finetune_parameters fparam;
   fparam.flags
       = flags
-        | (screen_with_varying_strips_p (param.type) ? finetune_strips : 0);
+        | (screen_with_varying_strips_p (param.type)
+               ? (uint64_t)finetune_strips
+               : (uint64_t)0);
   fparam.multitile = 1;
-  prepass[y * strip_xsteps + x]
-      = finetune (rparam, param, scan,
+  finetune_result &res = prepass_result (x, y);
+  res = finetune (rparam, param, scan,
                   { { (coord_t)(x + 0.5) * scan.width / strip_xsteps,
                       (coord_t)(y + 0.5) * scan.height / strip_ysteps } },
                   NULL, fparam, progress);
-  progress->inc_progress ();
-  if (prepass[y * strip_xsteps + x].success && red_strip_width)
+  if (progress)
+    progress->inc_progress ();
+  if (res.success)
     {
-      *red_strip_width = prepass[y * strip_xsteps + x].red_strip_width;
-      *green_strip_width = prepass[y * strip_xsteps + x].green_strip_width;
+      if (red_strip_width)
+        *red_strip_width = res.red_strip_width;
+      if (green_strip_width)
+        *green_strip_width = res.green_strip_width;
     }
-  return prepass[y * strip_xsteps + x].success;
+  return res.success;
 }
+
+/* Reduce the prepass and prepare the dense focus-analysis pass.  */
 bool
 analyze_scanner_blur_worker::step2 ()
 {
-  if (prepass.size ())
+  if (progress && progress->cancel_requested ())
+    return false;
+
+  if (!prepass.empty ())
     {
-      int nok = 0;
-      for (int y = 0; y < strip_ysteps; y++)
-        for (int x = 0; x < strip_xsteps; x++)
-          {
-            finetune_result &res = prepass[y * strip_xsteps + x];
-            if (res.success)
-              uncertainty_hist.pre_account (res.uncertainty);
-          }
-      uncertainty_hist.finalize_range (65536);
-      for (int y = 0; y < strip_ysteps; y++)
-        for (int x = 0; x < strip_xsteps; x++)
-          {
-            finetune_result &res = prepass[y * strip_xsteps + x];
-            if (res.success)
-              uncertainty_hist.account (res.uncertainty);
-          }
-      uncertainty_hist.finalize ();
-      coord_t uncertainty_threshold
-          = uncertainty_hist.find_max (skipmax / 100.0);
-      for (int y = 0; y < strip_ysteps; y++)
-        for (int x = 0; x < strip_xsteps; x++)
-          {
-            finetune_result &res = prepass[y * strip_xsteps + x];
-            if (!res.success || res.uncertainty > uncertainty_threshold)
-              continue;
-            if (screen_with_varying_strips_p (param.type))
-              {
-                red_hist.pre_account (res.red_strip_width);
-                green_hist.pre_account (res.green_strip_width);
-              }
-            blur_hist.pre_account (get_correction (mode, res));
-            nok++;
-          }
-      if (!nok)
+      std::vector<finetune_result *> results;
+      results.reserve (prepass.size ());
+      for (finetune_result &res : prepass)
+        results.push_back (&res);
+
+      coord_t fit_score_threshold;
+      if (!find_fit_score_threshold (results, skipmax,
+                                       &fit_score_threshold))
         {
-          progress->pause_stdout ();
-          fprintf (stderr, "Analysis failed\n");
+          pause_stdout (progress);
+          fprintf (stderr, "Analysis failed: no successful prepass fits\n");
+          resume_stdout (progress);
           return false;
         }
+
+      int nok = 0;
+      for (finetune_result *res : results)
+        {
+          if (!accepted_result_p (*res, fit_score_threshold))
+            continue;
+          const coord_t correction = get_correction (mode, *res);
+          if (!valid_correction_p (correction))
+            continue;
+          if (screen_with_varying_strips_p (param.type)
+              && (!my_isfinite (res->red_strip_width)
+                  || !my_isfinite (res->green_strip_width)))
+            continue;
+          if (screen_with_varying_strips_p (param.type))
+            {
+              red_hist.pre_account (res->red_strip_width);
+              green_hist.pre_account (res->green_strip_width);
+            }
+          blur_hist.pre_account (correction);
+          nok++;
+        }
+      if (!nok)
+        {
+          pause_stdout (progress);
+          fprintf (stderr,
+                   "Analysis failed: all successful prepass fits were "
+                   "rejected\n");
+          resume_stdout (progress);
+          return false;
+        }
+
       if (screen_with_varying_strips_p (param.type))
         {
           red_hist.finalize_range (65536);
           green_hist.finalize_range (65536);
         }
       blur_hist.finalize_range (65536);
-      for (int y = 0; y < strip_ysteps; y++)
-        for (int x = 0; x < strip_xsteps; x++)
-          {
-            finetune_result &res = prepass[y * strip_xsteps + x];
-            if (!res.success || res.uncertainty > uncertainty_threshold)
-              continue;
-            if (screen_with_varying_strips_p (param.type))
-              {
-                red_hist.account (res.red_strip_width);
-                green_hist.account (res.green_strip_width);
-              }
-            blur_hist.account (get_correction (mode, res));
-            nok++;
-          }
+      for (finetune_result *res : results)
+        {
+          if (!accepted_result_p (*res, fit_score_threshold))
+            continue;
+          const coord_t correction = get_correction (mode, *res);
+          if (!valid_correction_p (correction))
+            continue;
+          if (screen_with_varying_strips_p (param.type)
+              && (!my_isfinite (res->red_strip_width)
+                  || !my_isfinite (res->green_strip_width)))
+            continue;
+          if (screen_with_varying_strips_p (param.type))
+            {
+              red_hist.account (res->red_strip_width);
+              green_hist.account (res->green_strip_width);
+            }
+          blur_hist.account (correction);
+        }
 
       if (screen_with_varying_strips_p (param.type))
         {
@@ -201,27 +351,31 @@ analyze_scanner_blur_worker::step2 ()
               = red_hist.find_avg (skipmin / 100, skipmax / 100);
           rparam.green_strip_width
               = green_hist.find_avg (skipmin / 100, skipmax / 100);
+          if (!my_isfinite (rparam.red_strip_width)
+              || !my_isfinite (rparam.green_strip_width))
+            return false;
         }
+      const coord_t robust_correction
+          = blur_hist.find_avg (skipmin / 100, skipmax / 100);
+      if (!valid_correction_p (robust_correction))
+        return false;
       switch (mode)
         {
         case scanner_blur_correction_parameters::blur_radius:
-          rparam.screen_blur_radius
-              = blur_hist.find_avg (skipmin / 100, skipmax / 100);
+          rparam.screen_blur_radius = robust_correction;
           break;
         case scanner_blur_correction_parameters::mtf_defocus:
-          rparam.sharpen.scanner_mtf.defocus
-              = blur_hist.find_avg (skipmin / 100, skipmax / 100);
+          rparam.sharpen.scanner_mtf.defocus = robust_correction;
           break;
         case scanner_blur_correction_parameters::mtf_blur_diameter:
-          rparam.sharpen.scanner_mtf.blur_diameter
-              = blur_hist.find_avg (skipmin / 100, skipmax / 100);
+          rparam.sharpen.scanner_mtf.blur_diameter = robust_correction;
           break;
         case scanner_blur_correction_parameters::max_correction:
           abort ();
         }
       if (verbose)
         {
-          progress->pause_stdout ();
+          pause_stdout (progress);
           if (screen_with_varying_strips_p (param.type))
             {
               printf ("Red strip width %.2f%%\n",
@@ -246,154 +400,185 @@ analyze_scanner_blur_worker::step2 ()
             case scanner_blur_correction_parameters::max_correction:
               abort ();
             }
-          progress->resume_stdout ();
+          resume_stdout (progress);
         }
     }
+
   if (verbose)
     {
-      progress->pause_stdout ();
+      pause_stdout (progress);
       printf ("Analyzing %ix%i areas each subsampled %ix%i (overall %i "
               "solutions to be computed)\n",
               xsteps, ysteps, xsubsteps, ysubsteps,
               xsteps * ysteps * xsubsteps * ysubsteps);
-      progress->resume_stdout ();
+      resume_stdout (progress);
     }
-  mainpass.resize (xsteps * xsubsteps * ysteps * ysubsteps);
-  progress->set_task ("analyzing samples",
-                      ysteps * xsteps * xsubsteps * ysubsteps);
+
+  const int sample_width = xsteps * xsubsteps;
+  const int sample_height = ysteps * ysubsteps;
+  size_t mainpass_size;
+  if (!valid_grid_size_p (sample_width, sample_height, &mainpass_size))
+    return false;
+  mainpass.assign (mainpass_size, finetune_result ());
+  if (progress)
+    progress->set_task ("analyzing samples", (int)mainpass_size);
   return true;
-#if 0
-#pragma omp parallel for default(none) collapse(2) schedule(dynamic)          \
-    shared(xsteps, ysteps, xsubsteps, ysubsteps, rparam, scan, progress,      \
-               param, mainpass, reoptimize_strip_widths, flags)
-  for (int y = 0; y < ysteps * ysubsteps; y++)
-    for (int x = 0; x < xsteps * xsubsteps; x++)
-      {
-        finetune_parameters fparam;
-        fparam.flags = flags | (reoptimize_strip_widths ? finetune_strips : 0);
-        fparam.multitile = 1;
-        mainpass[y * xsteps * xsubsteps + x] = finetune (
-            rparam, param, scan,
-            { { (coord_t)(x + 0.5) * scan.width / (xsteps * xsubsteps),
-                (coord_t)(y + 0.5) * scan.height / (ysteps * ysubsteps) } },
-            NULL, fparam, progress);
-        progress->inc_progress ();
-      }
-#endif
 }
+
+/* Evaluate dense-grid sample X,Y.  */
 bool
 analyze_scanner_blur_worker::analyze_blur (int x, int y,
                                            rgbdata *displacements)
 {
+  const int width = xsteps * xsubsteps;
+  const int height = ysteps * ysubsteps;
+  if (x < 0 || x >= width || y < 0 || y >= height)
+    return false;
+  if (progress && progress->cancel_requested ())
+    return false;
+
   finetune_parameters fparam;
-  fparam.flags = flags | (reoptimize_strip_widths ? finetune_strips : 0);
+  fparam.flags
+      = flags
+        | (reoptimize_strip_widths ? (uint64_t)finetune_strips
+                                   : (uint64_t)0);
+  /* STEP2 stores the robust prepass blur in RPARAM.  Preserve it as the dense
+     pass starting point just as the MTF path starts from the updated scanner
+     model.  */
+  if (mode == scanner_blur_correction_parameters::blur_radius)
+    fparam.flags |= finetune_use_screen_blur;
   fparam.multitile = 1;
-  mainpass[y * xsteps * xsubsteps + x] = finetune (
+  finetune_result &res = mainpass_result (x, y);
+  res = finetune (
       rparam, param, scan,
-      { { (coord_t)(x + 0.5) * scan.width / (xsteps * xsubsteps),
-          (coord_t)(y + 0.5) * scan.height / (ysteps * ysubsteps) } },
+      { { (coord_t)(x + 0.5) * scan.width / width,
+          (coord_t)(y + 0.5) * scan.height / height } },
       NULL, fparam, progress);
-  if (mainpass[y * strip_xsteps + x].success && displacements)
+  if (res.success && displacements)
     {
-      coord_t cor
-          = get_correction (mode, mainpass[y * xsteps * xsubsteps + x]);
-      *displacements
-          = { (luminosity_t)cor, (luminosity_t)cor, (luminosity_t)cor };
+      coord_t correction = get_correction (mode, res);
+      *displacements = { (luminosity_t)correction,
+                         (luminosity_t)correction,
+                         (luminosity_t)correction };
     }
-  progress->inc_progress ();
-  return mainpass[y * strip_xsteps + x].success;
+  if (progress)
+    progress->inc_progress ();
+  return res.success;
 }
+
+/* Reduce dense fits into the final adaptive correction table.  */
 std::unique_ptr<scanner_blur_correction_parameters>
 analyze_scanner_blur_worker::step3 ()
 {
+  if (progress && progress->cancel_requested ())
+    return NULL;
+  if (mainpass.empty ())
+    return NULL;
+
   std::unique_ptr<scanner_blur_correction_parameters> scanner_blur_correction
       = std::make_unique<scanner_blur_correction_parameters> ();
-  scanner_blur_correction->alloc (xsteps, ysteps, mode);
+  if (!scanner_blur_correction->alloc (xsteps, ysteps, mode))
+    return NULL;
   scr_to_img map;
   if (!map.set_parameters (param, scan))
     return NULL;
-  /* TODO: get correct tile.  */
+  /* The correction table currently uses one representative pixel scale for
+     the whole scan.  Spatially varying scale is tracked separately.  */
   coord_t pixel_size = map.pixel_size ({0, 0, scan.width, scan.height});
-  progress->set_task ("summarizing results", 1);
+  if (!my_isfinite (pixel_size) || pixel_size <= 0)
+    return NULL;
+  if (progress)
+    progress->set_task ("summarizing results", 1);
+
   bool fail = false;
+  std::vector<finetune_result *> samples;
+  samples.reserve ((size_t)xsubsteps * ysubsteps);
   for (int y = 0; y < ysteps; y++)
     for (int x = 0; x < xsteps; x++)
       {
-        int nok = 0;
-        histogram uncertainty_hist;
+        samples.clear ();
         for (int yy = 0; yy < ysubsteps; yy++)
           for (int xx = 0; xx < xsubsteps; xx++)
-            {
-              finetune_result &res
-                  = mainpass[(y * ysubsteps + yy) * xsteps * xsubsteps
-                             + x * xsubsteps + xx];
-              if (res.success)
-                uncertainty_hist.pre_account (res.uncertainty);
-            }
-        uncertainty_hist.finalize_range (65536);
-        for (int yy = 0; yy < ysubsteps; yy++)
-          for (int xx = 0; xx < xsubsteps; xx++)
-            {
-              finetune_result &res
-                  = mainpass[(y * ysubsteps + yy) * xsteps * xsubsteps
-                             + x * xsubsteps + xx];
-              if (res.success)
-                uncertainty_hist.account (res.uncertainty);
-            }
-        uncertainty_hist.finalize ();
-        coord_t uncertainty_threshold
-            = uncertainty_hist.find_max (skipmax / 100.0);
-        histogram hist;
-        for (int yy = 0; yy < ysubsteps; yy++)
-          for (int xx = 0; xx < xsubsteps; xx++)
-            {
-              finetune_result &res
-                  = mainpass[(y * ysubsteps + yy) * xsteps * xsubsteps
-                             + x * xsubsteps + xx];
-              if (!res.success || res.uncertainty > uncertainty_threshold)
-                continue;
-              nok++;
-              hist.pre_account (get_correction (mode, res));
-            }
-        if (!nok)
+            samples.push_back (&mainpass_result (x * xsubsteps + xx,
+                                                 y * ysubsteps + yy));
+
+        coord_t fit_score_threshold;
+        if (!find_fit_score_threshold (samples, skipmax,
+                                         &fit_score_threshold))
           {
-            progress->pause_stdout ();
-            fprintf (stderr, "Analysis failed for sample %i,%i\n", x, y);
+            pause_stdout (progress);
+            fprintf (stderr,
+                     "Analysis failed for sample %i,%i: no successful fits\n",
+                     x, y);
+            resume_stdout (progress);
             return NULL;
           }
+
+        int nok = 0;
+        histogram hist;
+        for (finetune_result *res : samples)
+          {
+            if (!accepted_result_p (*res, fit_score_threshold))
+              continue;
+            const coord_t correction = get_correction (mode, *res);
+            if (!valid_correction_p (correction))
+              continue;
+            hist.pre_account (correction);
+            nok++;
+          }
+        if (!nok)
+          {
+            pause_stdout (progress);
+            fprintf (stderr,
+                     "Analysis failed for sample %i,%i: all fits were "
+                     "rejected\n",
+                     x, y);
+            resume_stdout (progress);
+            return NULL;
+          }
+
         hist.finalize_range (65536);
-        for (int yy = 0; yy < ysubsteps; yy++)
-          for (int xx = 0; xx < xsubsteps; xx++)
+        for (finetune_result *res : samples)
+          if (accepted_result_p (*res, fit_score_threshold))
             {
-              finetune_result &res
-                  = mainpass[(y * ysubsteps + yy) * xsteps * xsubsteps
-                             + x * xsubsteps + xx];
-              hist.account (get_correction (mode, res));
+              const coord_t correction = get_correction (mode, *res);
+              if (valid_correction_p (correction))
+                hist.account (correction);
             }
         hist.finalize ();
-        if (tolerance >= 0
-            && hist.find_max (skipmax / 100.0) - hist.find_min (skipmin / 100)
-                   > tolerance)
+
+        const coord_t low = hist.find_min (skipmin / 100);
+        const coord_t high = hist.find_max (skipmax / 100.0);
+        if (tolerance >= 0 && high - low > tolerance)
           {
-            progress->pause_stdout ();
-            printf (
-                "Tolerance threshold %f exceeded for entry %i,%i: %s "
-                " range is %f...%f (diff %f)\n",
-                tolerance, x, y,
-                scanner_blur_correction_parameters::pretty_correction_names[(
-                    int)mode],
-                hist.find_min (skipmin / 100), hist.find_max (skipmax / 100.0),
-                hist.find_max (skipmax / 100.0)
-                    - hist.find_min (skipmin / 100));
+            pause_stdout (progress);
+            printf ("Tolerance threshold %f exceeded for entry %i,%i: %s "
+                    "range is %f...%f (diff %f)\n",
+                    tolerance, x, y,
+                    scanner_blur_correction_parameters::pretty_correction_names
+                        [(int)mode],
+                    low, high, high - low);
             fail = true;
-            progress->resume_stdout ();
+            resume_stdout (progress);
           }
-        luminosity_t b = hist.find_avg (skipmin / 100, skipmax / 100);
-        assert (b >= 0 && b <= 1024);
+        luminosity_t correction
+            = hist.find_avg (skipmin / 100, skipmax / 100);
+        if (!valid_correction_p (correction))
+          {
+            pause_stdout (progress);
+            fprintf (stderr,
+                     "Analysis failed for sample %i,%i: invalid correction "
+                     "%f\n",
+                     x, y, correction);
+            resume_stdout (progress);
+            return NULL;
+          }
         if (mode == scanner_blur_correction_parameters::blur_radius)
-          b *= pixel_size;
-        scanner_blur_correction->set_correction (x, y, b);
+          correction *= pixel_size;
+        scanner_blur_correction->set_correction (x, y, correction);
       }
+  if (progress)
+    progress->inc_progress ();
   if (fail)
     return NULL;
   return scanner_blur_correction;

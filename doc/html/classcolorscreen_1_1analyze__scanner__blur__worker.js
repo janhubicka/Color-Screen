@@ -1,0 +1,26 @@
+var classcolorscreen_1_1analyze__scanner__blur__worker =
+[
+    [ "analyze_scanner_blur_worker", "classcolorscreen_1_1analyze__scanner__blur__worker.html#aace020ce70a99edcaa08ac01464e1d7b", null ],
+    [ "analyze_blur", "classcolorscreen_1_1analyze__scanner__blur__worker.html#a6b399add54fa39e08bee1dd168a1aba1", null ],
+    [ "analyze_strips", "classcolorscreen_1_1analyze__scanner__blur__worker.html#af71d4673f0044a2ff205814f7de9266d", null ],
+    [ "do_strips", "classcolorscreen_1_1analyze__scanner__blur__worker.html#a7d313afaa078e81a6e1b970fcdc2697b", null ],
+    [ "step1", "classcolorscreen_1_1analyze__scanner__blur__worker.html#ae90073e78cecc9fb43fb6209c93c3762", null ],
+    [ "step2", "classcolorscreen_1_1analyze__scanner__blur__worker.html#a90a9bdf84042ef504b8d6c5c072529e6", null ],
+    [ "step3", "classcolorscreen_1_1analyze__scanner__blur__worker.html#a15c6ee2e1b80f2f9ee10a1b46e37928a", null ],
+    [ "flags", "classcolorscreen_1_1analyze__scanner__blur__worker.html#aa5bd7a92aeb4c95846925002c328783f", null ],
+    [ "param", "classcolorscreen_1_1analyze__scanner__blur__worker.html#a91ff47b14148f3da100ea9db2d992ef8", null ],
+    [ "progress", "classcolorscreen_1_1analyze__scanner__blur__worker.html#a5304995b4cad4c306df8630dc8f7309b", null ],
+    [ "reoptimize_strip_widths", "classcolorscreen_1_1analyze__scanner__blur__worker.html#a0406ba29b05caefed855d4bbb2a8be66", null ],
+    [ "rparam", "classcolorscreen_1_1analyze__scanner__blur__worker.html#a046ab9aed65bb5a5ab01928055c7d3d3", null ],
+    [ "scan", "classcolorscreen_1_1analyze__scanner__blur__worker.html#a02c10c6383751fcaff0d2e3f79d70d6b", null ],
+    [ "skipmax", "classcolorscreen_1_1analyze__scanner__blur__worker.html#ac3fbd013c0578942ff2893450a996a6e", null ],
+    [ "skipmin", "classcolorscreen_1_1analyze__scanner__blur__worker.html#af21bde06ca2dc072b1e2760ccb2cf641", null ],
+    [ "strip_xsteps", "classcolorscreen_1_1analyze__scanner__blur__worker.html#a9e55d0b2b7bf760cbe423212b3a8c3f1", null ],
+    [ "strip_ysteps", "classcolorscreen_1_1analyze__scanner__blur__worker.html#a45df912e3dc4cf485f424be9ba73d220", null ],
+    [ "tolerance", "classcolorscreen_1_1analyze__scanner__blur__worker.html#aa1d8f0977826d71e8d850e0779a98e34", null ],
+    [ "verbose", "classcolorscreen_1_1analyze__scanner__blur__worker.html#a416660fa033a60ebd11174bc1eac49b9", null ],
+    [ "xsteps", "classcolorscreen_1_1analyze__scanner__blur__worker.html#a2d67af57772b20825159ffc24040819f", null ],
+    [ "xsubsteps", "classcolorscreen_1_1analyze__scanner__blur__worker.html#aa3171cc1b0846045f8046673248fa4ac", null ],
+    [ "ysteps", "classcolorscreen_1_1analyze__scanner__blur__worker.html#aa7f732bd15f37c8e112240c855311ebc", null ],
+    [ "ysubsteps", "classcolorscreen_1_1analyze__scanner__blur__worker.html#a726265675a9a3f18991c948d49d9c91f", null ]
+];

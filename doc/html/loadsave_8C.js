@@ -1,0 +1,27 @@
+var loadsave_8C =
+[
+    [ "dparam_check", "loadsave_8C.html#ac26092325f384b95eb722b90c3a859fe", null ],
+    [ "HEADER", "loadsave_8C.html#ab7770a7f0d95e67620ff6ed347a07a56", null ],
+    [ "Paget_res", "loadsave_8C.html#ad290069d54def7466062e6131b7e88fe", null ],
+    [ "param_check", "loadsave_8C.html#aac5d82148fdcb9871729fbef76de77e8", null ],
+    [ "rparam_check", "loadsave_8C.html#a645938bcf16f126b7ab17e12484f8a2a", null ],
+    [ "sparam_check", "loadsave_8C.html#a8f8b9c694dd540b50d4544f18daee0af", null ],
+    [ "colorscreen::expect_keyword", "namespacecolorscreen.html#a850679d953f8c515ac669e6b34e039e7", null ],
+    [ "colorscreen::get_keyword", "namespacecolorscreen.html#a19b9f8b75bb1eb0d229309d54d4dd8ac", null ],
+    [ "colorscreen::load_csp", "namespacecolorscreen.html#afd0b7cb05cd67054f1be19a08ec7d735", null ],
+    [ "colorscreen::parse_bool", "namespacecolorscreen.html#a146b71ba32af0604b6e25215bb627f13", null ],
+    [ "colorscreen::read_color", "namespacecolorscreen.html#a1d7b54866c1584509e946fbcd969118a", null ],
+    [ "colorscreen::read_double", "namespacecolorscreen.html#a3c4e1f609a339bd1023c76cfbe7c189d", null ],
+    [ "colorscreen::read_escaped_string", "namespacecolorscreen.html#ab70fa2e042531268a6612d0d86be82bd", null ],
+    [ "colorscreen::read_int", "namespacecolorscreen.html#add517a27026685966b90f90834d6530b", null ],
+    [ "colorscreen::read_luminosity", "namespacecolorscreen.html#a26ba98d49d61c2d013a089e117137918", null ],
+    [ "colorscreen::read_rgb", "namespacecolorscreen.html#accfcb4975e438645e077bcace2341256", null ],
+    [ "colorscreen::read_scalar", "namespacecolorscreen.html#ae0da46382328999359ff732ade599c51", null ],
+    [ "colorscreen::read_vector", "namespacecolorscreen.html#a775aed9f315cacb0d58d72c2a6707cad", null ],
+    [ "colorscreen::read_xyz", "namespacecolorscreen.html#aa085e2f7fa50f6ffea3145df7388a87e", null ],
+    [ "colorscreen::save_csp", "namespacecolorscreen.html#a91528c29744e928fbe3b75e5ee33579d", null ],
+    [ "colorscreen::skipwhitespace", "namespacecolorscreen.html#a0dbe4f5410f81d2f0b11ea4415829f5b", null ],
+    [ "colorscreen::write_escaped_string", "namespacecolorscreen.html#a4f6d9401e75ff4a63b497822ff1c61af", null ],
+    [ "colorscreen::bool_names", "namespacecolorscreen.html#a741ec981cf0e0eca035a634f36e21c01", null ],
+    [ "colorscreen::channel_names", "namespacecolorscreen.html#a8901848326daa0ecfe5123a78be22a24", null ]
+];

@@ -1,0 +1,26 @@
+var searchData=
+[
+  ['k_0',['K',['../structcolorscreen_1_1richards__curve__parameters.html#a80b96349819cb9ff051ae299dfa2dfa5',1,'colorscreen::richards_curve_parameters']]],
+  ['k_1',['k',['../namespacecolorscreen.html#a75d58d89d69d3c853130f9d63718e6a5',1,'colorscreen']]],
+  ['keep_5fall_5fimages_2',['keep_all_images',['../classcolorscreen_1_1stitch__project.html#a6a83d2dd05c6d3f2b1775bad36960c87',1,'colorscreen::stitch_project']]],
+  ['kernels_3',['kernels',['../structcolorscreen_1_1bspline__initializer.html#a623b30926dcb7d4bc4623f367f3720ac',1,'colorscreen::bspline_initializer::kernels'],['../structcolorscreen_1_1cubic__initializer.html#a2627b65ca31c8ff3bd91a8c1f492a270',1,'colorscreen::cubic_initializer::kernels'],['../structcolorscreen_1_1lanczos3__initializer.html#a372fb87dcdb40f52c7642549c73ea3cd',1,'colorscreen::lanczos3_initializer::kernels']]],
+  ['keypressevent_4',['keyPressEvent',['../classHurleyAnimation.html#a59eb83a34f1a8353b0ff7a82cedee569',1,'HurleyAnimation::keyPressEvent()'],['../classImageWidget.html#a27d3b67197037791af2aea0b1a696b4b',1,'ImageWidget::keyPressEvent(QKeyEvent *event) override']]],
+  ['keyreleaseevent_5',['keyReleaseEvent',['../classImageWidget.html#a82467dc477f605a303a389fdb13855ac',1,'ImageWidget']]],
+  ['kill_5fhdr_5fpixel_6',['kill_hdr_pixel',['../classcolorscreen_1_1tiff__writer.html#a44e6c88c559a39ed8a51bc864ffd69f3',1,'colorscreen::tiff_writer::kill_hdr_pixel(int x, int row)'],['../classcolorscreen_1_1tiff__writer.html#a39dbe2502d5d2b87b2966fefd88d8b3e',1,'colorscreen::tiff_writer::kill_hdr_pixel(int x)']]],
+  ['kill_5fpixel_7',['kill_pixel',['../classcolorscreen_1_1tiff__writer.html#a32a5b2f52ffe41f5944441a54497d8d1',1,'colorscreen::tiff_writer::kill_pixel(int x, int row)'],['../classcolorscreen_1_1tiff__writer.html#aba85e56d571ff0d53dfe918e926fefba',1,'colorscreen::tiff_writer::kill_pixel(int x)']]],
+  ['known_8',['known',['../classcolorscreen_1_1demosaic__base.html#a9fb4416bbfae0e371afae4c7cffe4e3e',1,'colorscreen::demosaic_base']]],
+  ['known_5fand_5fnot_5ffake_5fp_9',['known_and_not_fake_p',['../classcolorscreen_1_1screen__map.html#aa4fc9732c3a5d7949f035632832e1157',1,'colorscreen::screen_map']]],
+  ['known_5fp_10',['known_p',['../classcolorscreen_1_1screen__map.html#a9717ad4e3417c21128cc78dc14ea7609',1,'colorscreen::screen_map']]],
+  ['known_5fpatches_11',['known_patches',['../structcolorscreen_1_1detected__screen.html#a3b3869c578e5e19ac7de8f63fa377429',1,'colorscreen::detected_screen']]],
+  ['known_5fpixels_12',['known_pixels',['../classcolorscreen_1_1stitch__image.html#afd103f7508653e64aac0878284821d7a',1,'colorscreen::stitch_image']]],
+  ['known_5fscreen_5ffilename_13',['known_screen_filename',['../classcolorscreen_1_1stitch__image.html#ade83991272b1c0b1f2d52e47d7757444',1,'colorscreen::stitch_image']]],
+  ['known_5fscreen_5ftiles_14',['known_screen_tiles',['../structcolorscreen_1_1stitching__params.html#a97ba9be4d0fdcafede6d085b95b62331',1,'colorscreen::stitching_params']]],
+  ['kodachrome25_5fcurve_15',['kodachrome25_curve',['../classcolorscreen_1_1spectrum__dyes__to__xyz.html#a053b154ecb541e6ae7ec134109404aa4a1e1c2817c33043b26990cbb16dde2ab6',1,'colorscreen::spectrum_dyes_to_xyz']]],
+  ['kodachrome_5f25_5fblue_16',['kodachrome_25_blue',['../classcolorscreen_1_1film__sensitivity.html#a97face530eb23780977b8d83c194472a',1,'colorscreen::film_sensitivity']]],
+  ['kodachrome_5f25_5fgreen_17',['kodachrome_25_green',['../classcolorscreen_1_1film__sensitivity.html#a7c1cf7124aac1e0721427bd89ac36af3',1,'colorscreen::film_sensitivity']]],
+  ['kodachrome_5f25_5fred_18',['kodachrome_25_red',['../classcolorscreen_1_1film__sensitivity.html#a54cd0b93044c7afe38f05781ee8bd3df',1,'colorscreen::film_sensitivity']]],
+  ['kodachrome_5f25_5fsensitivity_19',['kodachrome_25_sensitivity',['../classcolorscreen_1_1spectrum__dyes__to__xyz.html#acf63e7d1204a5c41c1d1e9a2c6b26e90ae04abc76762c8baba934a5a30ead957e',1,'colorscreen::spectrum_dyes_to_xyz']]],
+  ['kodak_5fprofessional_5ftrix_5f400_20',['kodak_professional_trix_400',['../classcolorscreen_1_1spectrum__dyes__to__xyz.html#a896932e50ab5520175834a1a9adda61ea1626d860dc7285d0fb0e131d70b5e4a9',1,'colorscreen::spectrum_dyes_to_xyz']]],
+  ['kr_21',['kr',['../structcolorscreen_1_1lens__warp__correction__parameters.html#a1787aa031521c878c726fa29f2178d6a',1,'colorscreen::lens_warp_correction_parameters']]],
+  ['kuopio_5fnatural_5fscale_22',['KUOPIO_NATURAL_SCALE',['../spectrum-to-xyz_8C.html#ae8e9a99e45b6f4110dd2bafd3b6ba30e',1,'spectrum-to-xyz.C']]]
+];
