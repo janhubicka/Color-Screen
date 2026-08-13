@@ -4,12 +4,14 @@
 
 #ifndef SCREEN_H
 #define SCREEN_H
+#include <memory>
 #include "include/color.h"
 #include "include/scr-to-img.h"
 #include "include/colorscreen.h"
 #include "mtf.h"
 namespace colorscreen {
 struct sharpen_parameters;
+class screen_filter_source;
 template<typename T> class precomputed_function;
 
 /* Operation counts for one exact periodic-screen capture-transfer build.
@@ -116,6 +118,23 @@ public:
                                       bool anticipate_sharpening,
                                       bool parallel = true,
                                       screen_filter_profile *profile = nullptr);
+  /* Prepare the source-side Fourier state of THIS for repeated periodic
+     capture filtering.  The resulting SOURCE is immutable and may be shared
+     by multiple threads.  PROFILE, when nonnull, records the three forward
+     channel transforms performed here.  */
+  nodiscard_attr bool
+  prepare_filter_source (screen_filter_source &source,
+                         screen_filter_profile *profile = nullptr) const;
+  /* Initialize THIS by applying SHARPEN to a source previously prepared by
+     PREPARE_FILTER_SOURCE.  This exact path reuses the source channel FFTs and
+     therefore performs only the focus-dependent transfer construction and
+     inverse transforms.  Richardson-Lucy sharpening is not supported because
+     it iterates in the spatial domain; return false if it is requested.  */
+  nodiscard_attr bool
+  initialize_with_sharpen_parameters (
+      const screen_filter_source &source,
+      sharpen_parameters *sharpen[3], bool anticipate_sharpening,
+      bool parallel = true, screen_filter_profile *profile = nullptr);
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
   void strip (coord_t first_strip_width, coord_t second_strip_width, int color1, int color2, int color3);
@@ -147,6 +166,26 @@ private:
   void initialize_with_gaussian_blur (screen &scr, coord_t blur_radius, int cmin, int cmax);
   void initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, blur_alg alg);
   void initialize_with_1D_fft (screen &scr, luminosity_t weights[size], int cmin = 0, int cmax = 3);
+};
+
+/* Immutable source-side state for repeated exact periodic-screen filtering.
+   Its implementation is private so FFTW storage and plans do not leak into
+   the internal screen interface.  Instances are move-only and are normally
+   owned through the finetune LRU cache.  */
+class screen_filter_source
+{
+public:
+  screen_filter_source ();
+  ~screen_filter_source ();
+  screen_filter_source (screen_filter_source &&) noexcept;
+  screen_filter_source &operator= (screen_filter_source &&) noexcept;
+  screen_filter_source (const screen_filter_source &) = delete;
+  screen_filter_source &operator= (const screen_filter_source &) = delete;
+
+private:
+  struct impl;
+  std::unique_ptr<impl> m_impl;
+  friend class screen;
 };
 }
 #endif

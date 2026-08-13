@@ -612,12 +612,14 @@ modified by emulsion parameters.  It has a nominal 64-entry capacity and uses
 the complete per-channel capture/sharpening state as its key.
 
 This safely shares bit-identical simplex nodes across neighbouring fits and
-keeps transient optimizer entries out of the normal renderer cache.  It does
-not yet share the immutable ideal screen or its channel FFTs, and active
-references can temporarily make the nominal capacity a soft bound.  See
-FT-052.  Revision 0017 additionally maps the dense scalar physical-defocus pass
-onto shared quadratic nodes and interpolates neighboring exact node screens;
-see FT-053.  Other MTF fits still use arbitrary exact simplex coordinates.
+keeps transient optimizer entries out of the normal renderer cache.  Active
+references can temporarily make the nominal capacity a soft bound.  Revision
+0017 additionally maps the dense scalar physical-defocus pass onto shared
+quadratic nodes and interpolates neighboring exact node screens; see FT-053.
+Revision 0022 splits the immutable source spectra from the focus-dependent
+transfer for fixed-geometry scalar physical defocus, so remaining node misses
+and exact-final evaluations no longer repeat the three source forward FFTs;
+see FT-052.  Other MTF fits still use arbitrary exact simplex coordinates.
 
 ### FT-035 — no instrumentation separates optimizer and screen-filter cost
 
@@ -657,6 +659,28 @@ time was 10.1 ms; filtering remained the dominant cost.  Counts can vary
 slightly with parallel scheduling.  Larger RGB+IR datasets should still be
 profiled and reported with medians and upper percentiles before treating this
 small fixture as a universal speedup estimate.
+
+Revision 0022 additionally reports source-spectrum cache hits and misses.  On
+the same one-thread Dufay fixture with experimental coarse strip-width fitting
+enabled, the exact run reused one source spectrum for 80 of 81 eligible focus
+builds.  Total screen forward transforms fell from the 555 that would have
+matched all inverse transforms to 315; the remaining 312 transforms belong to
+104 variable-strip prepass builds plus three transforms for the one fixed
+source.  The interpolated run reused 23 of 24 eligible source lookups and used
+315 forward versus 384 inverse transforms.
+
+With strip widths held fixed to isolate physical defocus, the exact run reused
+the source on 112 of 113 builds and performed only three source forward FFTs
+versus 339 inverse FFTs.  The 33-node interpolated run reused it on 55 of 56
+builds and performed three source forward versus 168 inverse FFTs.  The two
+saved correction parameter files were byte-identical to revision 0021 and to
+each other.  Five alternating warm runs gave median wall times of 2.15 s in
+0021 and 2.14 s in 0022 for exact focus, and 1.11 s versus 1.08 s for the
+interpolated path.  Median accumulated filtering time changed from 2103.9 to
+2084.8 ms and from 1053.8 to 1023.9 ms respectively.  Thus source reuse is a
+small exact improvement on this fixture, not another interpolation-sized
+speedup: PSF construction and inverse FFTs now dominate.  These times are
+diagnostic rather than a claim about full-scan scaling.
 
 ### FT-036 — adaptive output is scalar but per-channel fits are accepted
 
@@ -698,7 +722,8 @@ broader models, screen frequencies, and error-controlled refinement.
 
 **Severity:** high performance
 
-**Status:** open
+**Status:** fixed for fixed-geometry scalar physical defocus; broader
+variable-source sharing remains open
 
 The exact final-screen cache avoids a complete rebuild only on a bit-identical
 key hit.  On every miss, its generator still reconstructs the ideal periodic
@@ -706,14 +731,21 @@ screen and forward-transforms all source channels before multiplying them by
 the new capture transfer.  For the common adaptive case, screen family and
 strip widths are usually shared across many cells, so this work is invariant.
 
-Split periodic filtering so an immutable source screen and its channel FFTs can
-be cached separately from focus-dependent signed transfer coefficients and the
-inverse transform.  The source key must include screen type, relevant strip
-widths, and any emulsion state that has already been folded into the source.
-Keep emulsion-dependent optimization on a private path until that ownership
-contract is explicit.  This remains an exact complementary optimization: the
-0017 node table reduces the number of misses, while source-state sharing would
-make every remaining node and exact-final miss cheaper.
+Revision 0022 splits periodic filtering into immutable source spectra and a
+focus-dependent signed transfer/inverse-transform stage.  A separate bounded,
+thread-safe LRU is keyed by screen type and the relevant fixed strip widths.
+The first supported focus state constructs the ideal screen and forward-
+transforms its three channels; later exact nodes and exact-final evaluations
+reuse that state.  Regression coverage requires the second exact focus state
+to perform no source forward FFTs and to match the ordinary exact build.
+
+The optimization is intentionally limited to scalar physical defocus with a
+fixed, emulsion-independent source.  Dufay strip-width fitting continues on the
+ordinary exact path because its simplex changes the source boundaries, and
+emulsion blur/intensity/offset fitting remains private until source ownership
+is explicit.  Per-channel focus, residual sigma, compact blur, and legacy blur
+also remain outside this first implementation.  Extending source-state reuse
+to those cases is lower priority than validating scalar defocus on full scans.
 
 ### FT-053 — arbitrary simplex focus nodes have a low exact-cache hit rate
 
@@ -795,9 +827,10 @@ for exact optimization work.
 
 ### Phase B — share immutable source state
 
-**Status:** open; complementary exact optimization
+**Status:** complete for fixed-geometry scalar physical defocus in 0022;
+variable-source cases remain open
 
-Split screen preparation into:
+Revision 0022 splits screen preparation into:
 
 1. an immutable source periodic screen after strip-width and historical
    emulsion operations;
@@ -805,29 +838,30 @@ Split screen preparation into:
 3. focus-dependent signed transfer coefficients;
 4. inverse-transformed filtered periodic channels.
 
-A bounded shared cache can safely reuse stages 1 and 2 across local solvers.
-Its key must include every state that changes the source or units:
+A bounded shared cache now reuses stages 1 and 2 across local scalar-defocus
+solvers.  Its key includes the state that changes the supported source:
 
 - screen type and strip widths;
-- emulsion blur, offset, and per-tile intensities when active;
-- any emulsion-derived source state already folded into the periodic
-  samples.
+- screen type and the fixed strip widths.
 
 Capture scale, MTF metadata, wavelength, sigma, halo, sensor aperture, and
-sharpening mode belong to the subsequent transfer-state key rather than the
-source-FFT key.  Neither cache may be keyed only on scalar focus.
+sharpening mode remain in the subsequent transfer-state key rather than the
+source-FFT key.  Emulsion-dependent and variable-strip sources deliberately
+stay on the ordinary exact path; if they are supported later, their full
+source state must be added to the key rather than keying either cache only on
+scalar focus.
 
 ### Phase C — exact focus-node cache
 
 **Status:** complete for final screens in 0016; discretized reuse added in 0017
 
 Exact filtered periodic screens at focus values actually evaluated by the
-simplex are now stored in a bounded, thread-safe cache.  Failed MTF/PSF
+simplex are stored in a bounded, thread-safe cache.  Failed MTF/PSF
 constructions are not published, and emulsion-dependent fits are excluded.
-The cache currently stores complete RGB screens and therefore still duplicates
-source FFT work on misses.  Revision 0017 makes dense scalar physical-focus
-requests converge on shared quadratic node keys, while other exact fits retain
-arbitrary simplex values.
+Revision 0017 makes dense scalar physical-focus requests converge on shared
+quadratic node keys, while other exact fits retain arbitrary simplex values.
+Revision 0022 makes supported final-screen misses cheaper by reusing an
+independently cached immutable source spectrum.
 
 Per-channel focus should ultimately use separable one-dimensional transfer
 state rather than a dense three-dimensional RGB focus table.

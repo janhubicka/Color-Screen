@@ -239,6 +239,8 @@ public:
   std::atomic_uint64_t fixed_screen_cache_misses{0};
   std::atomic_uint64_t focus_screen_cache_hits{0};
   std::atomic_uint64_t focus_screen_cache_misses{0};
+  std::atomic_uint64_t focus_source_cache_hits{0};
+  std::atomic_uint64_t focus_source_cache_misses{0};
   std::atomic_uint64_t focus_screen_interpolations{0};
   std::atomic_uint64_t focus_screen_exact_node_uses{0};
   std::atomic_uint64_t focus_screen_final_exact_builds{0};
@@ -293,6 +295,8 @@ public:
     COPY_PROFILE_FIELD (fixed_screen_cache_misses);
     COPY_PROFILE_FIELD (focus_screen_cache_hits);
     COPY_PROFILE_FIELD (focus_screen_cache_misses);
+    COPY_PROFILE_FIELD (focus_source_cache_hits);
+    COPY_PROFILE_FIELD (focus_source_cache_misses);
     COPY_PROFILE_FIELD (focus_screen_interpolations);
     COPY_PROFILE_FIELD (focus_screen_exact_node_uses);
     COPY_PROFILE_FIELD (focus_screen_final_exact_builds);
@@ -395,11 +399,79 @@ same_filtered_screen_parameters_p (const sharpen_parameters &a,
          && (!anticipate_sharpening || a == b);
 }
 
+/* Key for immutable source spectra used by fixed-geometry scalar-defocus
+   fits.  The spectra depend only on the process screen, not on focus or the
+   capture transfer.  PROFILE affects construction only and is excluded from
+   equality.  */
+struct finetune_screen_source_cache_params
+{
+  scr_type type = Joly;
+  coord_t red_strip_width = 0;
+  coord_t green_strip_width = 0;
+  screen_filter_profile *filter_profile = nullptr;
+
+  bool
+  operator== (const finetune_screen_source_cache_params &o) const
+  {
+    return type == o.type
+           && (!screen_with_varying_strips_p (type)
+               || (red_strip_width == o.red_strip_width
+                   && green_strip_width == o.green_strip_width));
+  }
+};
+
+std::unique_ptr<screen_filter_source>
+get_new_finetune_screen_source (finetune_screen_source_cache_params &p,
+                                progress_info *progress)
+{
+  (void)progress;
+  screen_filter_profile *filter_profile = p.filter_profile;
+  p.filter_profile = nullptr;
+  screen source;
+  source.initialize (p.type, p.red_strip_width, p.green_strip_width);
+  auto prepared = std::make_unique<screen_filter_source> ();
+  if (!source.prepare_filter_source (*prepared, filter_profile))
+    return nullptr;
+  return prepared;
+}
+
+/* A prepared RGB source spectrum occupies about 0.6 MiB.  Fixed scalar-focus
+   fitting normally uses one entry; eight entries keep accidental geometry
+   variation bounded without turning this exact cache into a strip-width
+   approximation.  */
+using finetune_screen_source_cache_t
+    = lru_cache<finetune_screen_source_cache_params, screen_filter_source,
+                get_new_finetune_screen_source, 8>;
+static finetune_screen_source_cache_t finetune_screen_source_cache (
+    "finetune focus source spectrum");
+
+static std::shared_ptr<screen_filter_source>
+get_cached_finetune_screen_source (
+    scr_type type, coord_t red_strip_width, coord_t green_strip_width,
+    bool *cache_hit, screen_filter_profile *filter_profile)
+{
+  finetune_screen_source_cache_params params;
+  params.type = type;
+  params.red_strip_width = red_strip_width;
+  params.green_strip_width = green_strip_width;
+  params.filter_profile = filter_profile;
+  return finetune_screen_source_cache.get (
+      params, nullptr, nullptr, cache_hit);
+}
+
+/* Construction-only details returned by a final-screen cache miss.  They do
+   not participate in final-screen cache equality.  */
+struct finetune_screen_build_info
+{
+  bool source_cache_lookup = false;
+  bool source_cache_hit = false;
+};
+
 /* Key for exact focus-dependent periodic screens used only by FINETUNE.  It
    is separate from the renderer cache so the optimizer cannot evict normal
-   display/render entries with its transient focus nodes.  PARALLEL and
-   PROFILE affect construction only and deliberately do not participate in
-   equality.  */
+   display/render entries with its transient focus nodes.  PARALLEL,
+   REUSE_SOURCE_SPECTRUM, PROFILE and BUILD_INFO affect construction only and
+   deliberately do not participate in equality.  */
 struct finetune_screen_cache_params
 {
   scr_type type = Joly;
@@ -407,8 +479,10 @@ struct finetune_screen_cache_params
   coord_t green_strip_width = 0;
   bool anticipate_sharpening = false;
   bool parallel = false;
+  bool reuse_source_spectrum = false;
   std::array<sharpen_parameters, 3> sharpen = {};
   screen_filter_profile *filter_profile = nullptr;
+  finetune_screen_build_info *build_info = nullptr;
 
   bool
   operator== (const finetune_screen_cache_params &o) const
@@ -433,18 +507,47 @@ get_new_finetune_screen (finetune_screen_cache_params &p,
 {
   (void)progress;
   screen_filter_profile *filter_profile = p.filter_profile;
+  finetune_screen_build_info *build_info = p.build_info;
   /* The cache entry retains PARAMS after this call.  Do not retain a pointer
      to the requesting solver's stack-local profile structure.  */
   p.filter_profile = nullptr;
-  auto source = std::make_unique<screen> ();
-  source->initialize (p.type, p.red_strip_width, p.green_strip_width);
+  p.build_info = nullptr;
   auto filtered = std::make_unique<screen> ();
   sharpen_parameters *channels[3]
       = { &p.sharpen[0], &p.sharpen[1], &p.sharpen[2] };
-  if (!filtered->initialize_with_sharpen_parameters (
-          *source, channels, p.anticipate_sharpening, p.parallel,
-          filter_profile))
-    return nullptr;
+  bool prepared_source_supported = p.reuse_source_spectrum;
+  if (p.anticipate_sharpening)
+    for (int c = 0; c < 3; c++)
+      if (p.sharpen[c].get_mode ()
+          == sharpen_parameters::richardson_lucy_deconvolution)
+        prepared_source_supported = false;
+  if (prepared_source_supported)
+    {
+      bool source_cache_hit = false;
+      std::shared_ptr<screen_filter_source> source
+          = get_cached_finetune_screen_source (
+              p.type, p.red_strip_width, p.green_strip_width,
+              &source_cache_hit, filter_profile);
+      if (build_info)
+        {
+          build_info->source_cache_lookup = true;
+          build_info->source_cache_hit = source_cache_hit;
+        }
+      if (!source
+          || !filtered->initialize_with_sharpen_parameters (
+              *source, channels, p.anticipate_sharpening, p.parallel,
+              filter_profile))
+        return nullptr;
+    }
+  else
+    {
+      screen source;
+      source.initialize (p.type, p.red_strip_width, p.green_strip_width);
+      if (!filtered->initialize_with_sharpen_parameters (
+              source, channels, p.anticipate_sharpening, p.parallel,
+              filter_profile))
+        return nullptr;
+    }
   return filtered;
 }
 
@@ -461,7 +564,9 @@ get_cached_finetune_screen (
     scr_type type, coord_t red_strip_width, coord_t green_strip_width,
     bool anticipate_sharpening,
     const std::array<sharpen_parameters, 3> &sharpen, bool parallel,
-    bool *cache_hit, screen_filter_profile *filter_profile)
+    bool reuse_source_spectrum, bool *cache_hit,
+    screen_filter_profile *filter_profile,
+    finetune_screen_build_info *build_info = nullptr)
 {
   finetune_screen_cache_params params;
   params.type = type;
@@ -469,8 +574,10 @@ get_cached_finetune_screen (
   params.green_strip_width = green_strip_width;
   params.anticipate_sharpening = anticipate_sharpening;
   params.parallel = parallel;
+  params.reuse_source_spectrum = reuse_source_spectrum;
   params.sharpen = sharpen;
   params.filter_profile = filter_profile;
+  params.build_info = build_info;
   return finetune_screen_cache.get (params, nullptr, nullptr, cache_hit);
 }
 
@@ -2549,6 +2656,23 @@ public:
            && !optimize_emulsion_offset;
   }
 
+  /* Source spectra can be shared only while the ideal periodic screen and
+     every capture parameter except one scalar physical defocus stay fixed.
+     Strip-width fitting is intentionally left on the ordinary exact path;
+     it changes the source screen itself and is tracked as separate
+     experimental work.  */
+  bool
+  focus_source_cache_eligible_p () const
+  {
+    return optimize_scanner_mtf_defocus && !optimize_scanner_mtf_sigma
+           && !optimize_scanner_mtf_channel_defocus && !optimize_strips
+           && render_sharpen_params.scanner_mtf.simulate_diffraction_p ()
+           && focus_screen_cache_eligible_p ()
+           && (!tile_sharpened
+               || render_sharpen_params.get_mode ()
+                      != sharpen_parameters::richardson_lucy_deconvolution);
+  }
+
   /* The discretized approximation is intentionally narrower than the exact
      focus cache.  It applies only to one scalar physical-defocus coordinate;
      all other capture-transfer parameters and the source periodic screen
@@ -2561,7 +2685,7 @@ public:
            && !optimize_scanner_mtf_sigma
            && !optimize_scanner_mtf_channel_defocus && !optimize_strips
            && render_sharpen_params.scanner_mtf.simulate_diffraction_p ()
-           && focus_screen_cache_eligible_p ();
+           && focus_source_cache_eligible_p ();
   }
 
   /* Obtain one exact filtered screen through the existing linked-list LRU
@@ -2572,14 +2696,17 @@ public:
       coord_t red_strip_width, coord_t green_strip_width)
   {
     bool cache_hit = false;
+    finetune_screen_build_info build_info;
     screen_filter_profile filter_profile;
     const auto cache_start
         = profile ? std::chrono::steady_clock::now ()
                   : std::chrono::steady_clock::time_point ();
     std::shared_ptr<screen> scr = get_cached_finetune_screen (
         type, red_strip_width, green_strip_width, tile_sharpened, sp,
-        parallel, profile ? &cache_hit : nullptr,
-        profile ? &filter_profile : nullptr);
+        parallel, focus_source_cache_eligible_p (),
+        profile ? &cache_hit : nullptr,
+        profile ? &filter_profile : nullptr,
+        profile ? &build_info : nullptr);
     if (profile)
       {
         const uint64_t elapsed
@@ -2601,8 +2728,42 @@ public:
                 elapsed, std::memory_order_relaxed);
             profile->add_filter_profile (filter_profile);
           }
+        if (build_info.source_cache_lookup)
+          (build_info.source_cache_hit ? profile->focus_source_cache_hits
+                                       : profile->focus_source_cache_misses)
+              .fetch_add (1, std::memory_order_relaxed);
       }
     return scr;
+  }
+
+  /* Obtain the immutable source spectrum used by an exact scalar-defocus
+     final evaluation and account for this direct source-cache lookup.  */
+  std::shared_ptr<screen_filter_source>
+  get_profiled_cached_focus_source (coord_t red_strip_width,
+                                    coord_t green_strip_width,
+                                    screen_filter_profile *filter_profile)
+  {
+    bool cache_hit = false;
+    const auto cache_start
+        = profile ? std::chrono::steady_clock::now ()
+                  : std::chrono::steady_clock::time_point ();
+    std::shared_ptr<screen_filter_source> source
+        = get_cached_finetune_screen_source (
+            type, red_strip_width, green_strip_width,
+            profile ? &cache_hit : nullptr, filter_profile);
+    if (profile)
+      {
+        const uint64_t elapsed
+            = std::chrono::duration_cast<std::chrono::nanoseconds> (
+                  std::chrono::steady_clock::now () - cache_start)
+                  .count ();
+        profile->screen_cache_nanoseconds.fetch_add (
+            elapsed, std::memory_order_relaxed);
+        (cache_hit ? profile->focus_source_cache_hits
+                   : profile->focus_source_cache_misses)
+            .fetch_add (1, std::memory_order_relaxed);
+      }
+    return source;
   }
 
   /* Obtain one exact scalar-defocus node.  NODE_DEFOCUS is generated from an
@@ -2871,9 +3032,20 @@ public:
             const auto filter_start
                 = profile ? std::chrono::steady_clock::now ()
                           : std::chrono::steady_clock::time_point ();
-            const bool ok = apply_blur (
-                v, tileid, writable_tile_screen (tileid), original_scr.get (),
-                nullptr, profile ? &filter_profile : nullptr);
+            std::shared_ptr<screen_filter_source> source
+                = get_profiled_cached_focus_source (
+                    red_strip_width, green_strip_width,
+                    profile ? &filter_profile : nullptr);
+            std::array<sharpen_parameters, 3> sp
+                = capture_sharpen_parameters (v);
+            sharpen_parameters *channels[3]
+                = { &sp[0], &sp[1], &sp[2] };
+            const bool ok
+                = source
+                  && writable_tile_screen (tileid)
+                         ->initialize_with_sharpen_parameters (
+                             *source, channels, tile_sharpened, parallel,
+                             profile ? &filter_profile : nullptr);
             if (profile)
               {
                 const uint64_t elapsed
@@ -4555,13 +4727,14 @@ finetune_get_cached_screen_for_test (
 {
   return get_cached_finetune_screen (
       type, red_strip_width, green_strip_width, anticipate_sharpening,
-      sharpen, parallel, cache_hit, filter_profile);
+      sharpen, parallel, true, cache_hit, filter_profile);
 }
 
 void
 finetune_prune_screen_cache_for_test ()
 {
   finetune_screen_cache.prune ();
+  finetune_screen_source_cache.prune ();
 }
  
 /* Produce element I of a geometric sequence from MIN to MAX divided into

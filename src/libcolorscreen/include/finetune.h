@@ -88,6 +88,8 @@ struct finetune_profile
   uint64_t fixed_screen_cache_misses = 0;
   uint64_t focus_screen_cache_hits = 0;
   uint64_t focus_screen_cache_misses = 0;
+  uint64_t focus_source_cache_hits = 0;
+  uint64_t focus_source_cache_misses = 0;
   uint64_t focus_screen_interpolations = 0;
   uint64_t focus_screen_exact_node_uses = 0;
   uint64_t focus_screen_final_exact_builds = 0;
@@ -122,6 +124,8 @@ struct finetune_profile
     fixed_screen_cache_misses += o.fixed_screen_cache_misses;
     focus_screen_cache_hits += o.focus_screen_cache_hits;
     focus_screen_cache_misses += o.focus_screen_cache_misses;
+    focus_source_cache_hits += o.focus_source_cache_hits;
+    focus_source_cache_misses += o.focus_source_cache_misses;
     focus_screen_interpolations += o.focus_screen_interpolations;
     focus_screen_exact_node_uses += o.focus_screen_exact_node_uses;
     focus_screen_final_exact_builds += o.focus_screen_final_exact_builds;

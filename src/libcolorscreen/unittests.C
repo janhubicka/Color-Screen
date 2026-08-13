@@ -304,6 +304,41 @@ test_finetune_focus_screen_cache ()
       return false;
     }
 
+  /* A different exact transfer must miss the final-screen cache but reuse the
+     immutable source spectrum.  It should therefore perform inverse channel
+     transforms without repeating any source forward FFT.  */
+  std::array<sharpen_parameters, 3> changed_sharpen = sharpen;
+  for (int c = 0; c < 3; c++)
+    changed_sharpen[c].scanner_mtf.sigma += (luminosity_t)0.173;
+  sharpen_parameters *changed_channels[3]
+      = { &changed_sharpen[0], &changed_sharpen[1], &changed_sharpen[2] };
+  screen changed_expected;
+  if (!changed_expected.initialize_with_sharpen_parameters (
+          source, changed_channels, false, false))
+    return false;
+  cache_hit = true;
+  screen_filter_profile source_hit_profile;
+  std::shared_ptr<screen> changed
+      = finetune_get_cached_screen_for_test (
+          Joly, red_width, green_width, false, changed_sharpen, false,
+          &cache_hit, &source_hit_profile);
+  if (!changed || cache_hit || source_hit_profile.screen_forward_ffts
+      || !source_hit_profile.screen_inverse_ffts)
+    {
+      fprintf (stderr,
+               "Prepared finetune source spectrum was not reused\n");
+      return false;
+    }
+  if (!changed_expected.almost_equal_p (
+          *changed, &delta, (luminosity_t)1e-8))
+    {
+      fprintf (stderr,
+               "Prepared-source focus screen differs from direct build by "
+               "%g\n",
+               (double)delta);
+      return false;
+    }
+
   cache_hit = false;
   screen_filter_profile hit_profile;
   std::shared_ptr<screen> second = finetune_get_cached_screen_for_test (
@@ -323,6 +358,7 @@ test_finetune_focus_screen_cache ()
 
   first.reset ();
   second.reset ();
+  changed.reset ();
   finetune_prune_screen_cache_for_test ();
 
   /* The dense displacement approximation linearly combines two exact
@@ -379,15 +415,30 @@ test_finetune_focus_screen_cache ()
           false, &cache_hit);
   if (!lower_screen || cache_hit)
     return false;
+  screen_filter_profile physical_source_hit_profile;
   std::shared_ptr<screen> upper_screen
       = finetune_get_cached_screen_for_test (
           Dufay, (coord_t)0.45, (coord_t)0.35, false, upper_physical,
-          false, &cache_hit);
-  if (!upper_screen)
+          false, &cache_hit, &physical_source_hit_profile);
+  if (!upper_screen || physical_source_hit_profile.screen_forward_ffts
+      || physical_source_hit_profile.screen_inverse_ffts != 3)
     return false;
 
-  screen physical_source, exact_target;
+  screen physical_source, exact_upper, exact_target;
   physical_source.initialize (Dufay, (coord_t)0.45, (coord_t)0.35);
+  sharpen_parameters *upper_channels[3]
+      = { &upper_physical[0], &upper_physical[1], &upper_physical[2] };
+  if (!exact_upper.initialize_with_sharpen_parameters (
+          physical_source, upper_channels, false, false)
+      || !exact_upper.almost_equal_p (
+          *upper_screen, &delta, (luminosity_t)1e-8))
+    {
+      fprintf (stderr,
+               "Prepared physical-defocus screen differs from direct build "
+               "by %g\n",
+               (double)delta);
+      return false;
+    }
   sharpen_parameters *target_channels[3]
       = { &target_physical[0], &target_physical[1], &target_physical[2] };
   if (!exact_target.initialize_with_sharpen_parameters (
@@ -422,6 +473,45 @@ test_finetune_focus_screen_cache ()
 
   lower_screen.reset ();
   upper_screen.reset ();
+  finetune_prune_screen_cache_for_test ();
+
+  /* Different focus states can be built concurrently by adaptive worker
+     threads.  They must share one source-spectrum construction even though
+     every final-screen key is distinct.  */
+  constexpr int parallel_focus_states = 4;
+  std::array<std::shared_ptr<screen>, parallel_focus_states> parallel_screens;
+  std::array<screen_filter_profile, parallel_focus_states> parallel_profiles;
+  std::array<bool, parallel_focus_states> parallel_cache_hits = {};
+#pragma omp parallel for
+  for (int i = 0; i < parallel_focus_states; i++)
+    {
+      std::array<sharpen_parameters, 3> state = physical;
+      for (int c = 0; c < 3; c++)
+        state[c].scanner_mtf.defocus = (coord_t)0.11 + (coord_t)0.07 * i;
+      parallel_screens[i] = finetune_get_cached_screen_for_test (
+          Dufay, (coord_t)0.45, (coord_t)0.35, false, state, false,
+          &parallel_cache_hits[i], &parallel_profiles[i]);
+    }
+  uint64_t parallel_forward_ffts = 0;
+  uint64_t parallel_inverse_ffts = 0;
+  for (int i = 0; i < parallel_focus_states; i++)
+    {
+      if (!parallel_screens[i] || parallel_cache_hits[i])
+        return false;
+      parallel_forward_ffts += parallel_profiles[i].screen_forward_ffts;
+      parallel_inverse_ffts += parallel_profiles[i].screen_inverse_ffts;
+      parallel_screens[i].reset ();
+    }
+  if (parallel_forward_ffts != 3
+      || parallel_inverse_ffts != 3 * parallel_focus_states)
+    {
+      fprintf (stderr,
+               "Concurrent focus states used %llu source forward and %llu "
+               "inverse FFTs\n",
+               (unsigned long long)parallel_forward_ffts,
+               (unsigned long long)parallel_inverse_ffts);
+      return false;
+    }
   finetune_prune_screen_cache_for_test ();
   return true;
 }

@@ -263,7 +263,7 @@ model or objective.
 
 ## Focus caches, discretization, and invalidation
 
-The solver uses three exact reuse levels and one deliberately narrow
+The solver uses four exact reuse levels and one deliberately narrow
 approximation for the dense physical-displacement pass.
 
 1. A fixed-screen fast path calls `render_to_scr::get_screen()` when no screen,
@@ -281,6 +281,15 @@ approximation for the dense physical-displacement pass.
    whether sharpening is anticipated, and the complete per-channel capture and
    sharpening parameters.  Construction-only state such as the OpenMP choice
    is not part of the key.
+4. Fixed-geometry scalar physical-defocus fits additionally use a small
+   thread-safe cache of immutable source spectra.  Its key contains only the
+   process-screen family and relevant strip widths.  The first exact focus
+   state constructs the ideal periodic screen and forward-transforms its three
+   channels; subsequent exact nodes and exact-final evaluations reuse those
+   spectra and perform only transfer construction, spectral multiplication,
+   and the three inverse transforms.  This factoring is exact and produces
+   periodic samples matching the ordinary exact path within a tight float
+   tolerance in the regression test.
 
 The finetune cache is deliberately separate from the ordinary rendering cache,
 so transient simplex vertices cannot evict display/render entries.  Entries
@@ -290,10 +299,20 @@ never published.  Emulsion blur, offset, and intensity fits continue to use
 private copy-on-write screens because their source screen varies by tile and
 objective state.
 
-The three reuse levels are numerically exact.  The cache comparison explicitly
+The four reuse levels are numerically exact.  The cache comparison explicitly
 includes per-channel capture MTFs even when digital sharpening mode is `none`;
 the capture transfer remains active in that mode.  This also prevents distinct
 channel MTFs from being mistaken for one common filter.
+
+Source-spectrum sharing is intentionally narrower than the final-screen
+cache.  It is enabled only when scalar physical defocus is the sole varying
+screen-filter parameter and the source screen is independent of emulsion
+variables.  In particular, the experimental Dufay strip-width prepass keeps
+using the ordinary exact path because every width trial changes the ideal
+screen.  Richardson--Lucy sharpening also stays on its spatial-domain path.
+For the direct-transfer numerical regime, radial coordinates of the fixed
+128x128 Fourier grid are computed once rather than through repeated `hypot()`
+calls for every exact focus state.
 
 ### Dense scalar physical-defocus interpolation
 
@@ -354,14 +373,14 @@ model is fully available.  The CLI keeps it opt-in through
 `--interpolate-focus`; `--focus-min-mtf` and `--focus-cache-nodes` select the
 range threshold and node count.
 
-An exact node miss still reconstructs the ideal periodic source and recomputes
-its channel FFTs before applying the focus-dependent transfer.  Moreover,
-simplex coordinates outside the dense displacement mode remain arbitrary
-floating-point values.  Sharing immutable source FFTs is therefore still
-useful.  The present final-screen interpolation has fixed quadratic spacing;
-future error-controlled subdivision should explicitly validate intervals near
-signed OTF zero crossings and direct/wrapped-PSF implementation transitions.
-See FT-034, FT-037, FT-052, and FT-053.
+An exact node miss now reuses the immutable source spectra in the supported
+fixed-source scalar-defocus case.  Simplex coordinates outside the dense
+displacement mode nevertheless remain arbitrary floating-point values, and
+variable-strip or emulsion-dependent fits still rebuild their source state.
+The present final-screen interpolation has fixed quadratic spacing; future
+error-controlled subdivision should explicitly validate intervals near signed
+OTF zero crossings and direct/wrapped-PSF implementation transitions.  See
+FT-034, FT-037, FT-052, and FT-053.
 
 ## Profiling
 
@@ -370,7 +389,8 @@ atomic-counter overhead.  Set `finetune_parameters::collect_profile` and read
 `finetune_result::profile` to obtain:
 
 - simplex runs, iterations, evaluations, and total objective calls;
-- screen initialization, local-state reuse, cache hits/misses, and exact builds;
+- screen initialization, local-state reuse, final-screen and source-spectrum
+  cache hits/misses, and exact builds;
 - interpolated screen constructions, exact node uses, and exact final builds;
 - MTF/PSF preparation, direct-transfer and wrapped-PSF construction, and FFT
   counts;
