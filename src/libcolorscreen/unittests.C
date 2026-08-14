@@ -38,6 +38,7 @@
 #include "finetune-int.h"
 #include "gaussian-blur.h"
 #include "nmsimplex.h"
+#include "gsl-solver.h"
 
 
 using namespace colorscreen;
@@ -87,6 +88,59 @@ test_runtime_infinity_luminosity ()
   luminosity_t value;
   std::memcpy (&value, (const void *)&bits, sizeof (value));
   return value;
+}
+
+/* Invalid problem used to exercise the GSL multifit allocation-failure path.
+   GSL requires at least as many observations as fitted values.  */
+class invalid_gsl_multifit_problem
+{
+public:
+  double start[1] = { 0 };
+
+  int num_values () const { return 1; }
+  int num_observations () const { return 0; }
+  double derivative_perturbation () const { return 1e-6; }
+  bool verbose () const { return false; }
+  void constrain (double *) {}
+  int residuals (const double *, double *) { return GSL_SUCCESS; }
+};
+
+/* Verify the fast-math-safe quiet-NaN constructor, finite predicates, and the
+   GSL failure sentinel that motivated the constructor.  */
+bool
+test_nonfinite_helpers ()
+{
+  volatile float volatile_float_nan = my_quiet_nan<float> ();
+  volatile double volatile_double_nan = my_quiet_nan<double> ();
+  float float_nan = volatile_float_nan;
+  double double_nan = volatile_double_nan;
+  uint32_t float_bits;
+  uint64_t double_bits;
+  std::memcpy (&float_bits, &float_nan, sizeof (float_bits));
+  std::memcpy (&double_bits, &double_nan, sizeof (double_bits));
+
+  if (my_isfinite (float_nan) || my_isfinite (double_nan)
+      || float_bits != UINT32_C (0x7fc00000)
+      || double_bits != UINT64_C (0x7ff8000000000000))
+    {
+      fprintf (stderr, "Fast-math-safe quiet-NaN construction failed\n");
+      return false;
+    }
+
+  if (!my_isfinite ((float)1.25) || !my_isfinite ((double)-2.5))
+    {
+      fprintf (stderr, "Finite values were classified as non-finite\n");
+      return false;
+    }
+
+  invalid_gsl_multifit_problem invalid_multifit;
+  if (my_isfinite (gsl_multifit<double> (invalid_multifit)))
+    {
+      fprintf (stderr,
+               "GSL multifit allocation failure did not return NaN\n");
+      return false;
+    }
+  return true;
 }
 
 /* Zero-dimensional objective used to verify that SIMPLEX can evaluate a
@@ -5574,6 +5628,8 @@ main (int argc, char **argv)
   test_entry tests[] = {
     { "matrix", "matrix tests", [] () { test_matrix (); return true; } },
     { "color", "color tests", [] () { test_color (); return true; } },
+    { "nonfinite_helpers", "fast-math non-finite and GSL failure tests",
+      [] () { return test_nonfinite_helpers (); } },
     { "finetune_helpers", "finetune and Nelder-Mead contract tests",
       [] () { return test_finetune_helpers (); } },
     { "finetune_focus_cache", "exact finetune focus-screen cache tests",

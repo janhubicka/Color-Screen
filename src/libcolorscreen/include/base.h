@@ -70,6 +70,32 @@ my_isfinite (double x)
          != UINT64_C (0x7ff0000000000000);
 }
 
+/* Return a quiet NaN of floating-point type T.  Construct the value from its
+   IEC-559 object representation at run time because spelling a NaN constant is
+   undefined under -ffinite-math-only and diagnosed by clang.  The volatile
+   integer read prevents the compiler from replacing this failure sentinel with
+   an ordinary finite value when -Ofast is enabled.  */
+template <typename T>
+static inline T
+my_quiet_nan ()
+{
+  static_assert (std::is_same_v<T, float> || std::is_same_v<T, double>);
+  T value;
+  if constexpr (std::is_same_v<T, float>)
+    {
+      volatile uint32_t volatile_bits = UINT32_C (0x7fc00000);
+      uint32_t bits = volatile_bits;
+      std::memcpy (&value, &bits, sizeof (value));
+    }
+  else
+    {
+      volatile uint64_t volatile_bits = UINT64_C (0x7ff8000000000000);
+      uint64_t bits = volatile_bits;
+      std::memcpy (&value, &bits, sizeof (value));
+    }
+  return value;
+}
+
 /* Prevent conversion to wrong data type when doing math.  */
 static inline float
 my_pow (float x, float y)

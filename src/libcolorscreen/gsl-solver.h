@@ -203,14 +203,14 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
 	    progress->resume_stdout ();
         }
       gsl_set_error_handler (old_handler);
-      return NAN;
+      return my_quiet_nan<double> ();
     }
 
   gsl_vector *x = gsl_vector_alloc (p);
   for (int i = 0; i < p; i++)
     gsl_vector_set (x, i, c.start[i]);
 
-  double final_chisq = NAN;
+  double final_chisq = my_quiet_nan<double> ();
   int status = gsl_multifit_nlinear_init (x, &fdf, w);
 
   if (status != GSL_SUCCESS)
@@ -227,7 +227,7 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
       gsl_vector_free (x);
       gsl_multifit_nlinear_free (w);
       gsl_set_error_handler (old_handler);
-      return NAN;
+      return my_quiet_nan<double> ();
     }
 
   double initial_resid = 0;
@@ -420,10 +420,10 @@ gsl_simplex (C &c, const char *task = NULL, progress_info *progress = NULL,
       gsl_vector_free (x);
       gsl_vector_free (ss);
       gsl_set_error_handler (old_handler);
-      return NAN;
+      return my_quiet_nan<double> ();
     }
 
-  double min_val = NAN;
+  double min_val = my_quiet_nan<double> ();
   int status = gsl_multimin_fminimizer_set (s, &minex_func, x, ss);
 
   if (status == GSL_SUCCESS)
