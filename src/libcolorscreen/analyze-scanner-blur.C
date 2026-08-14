@@ -264,6 +264,7 @@ bool
 analyze_scanner_blur_worker::step1 ()
 {
   last_error.clear ();
+  reduction_profile = {};
   if (const char *flag_error = finetune_flag_error (flags))
     {
       set_error (std::string ("Invalid adaptive finetune settings: ")
@@ -288,10 +289,11 @@ analyze_scanner_blur_worker::step1 ()
             | finetune_screen_channel_blurs | finetune_emulsion_blur;
       if (!(flags & finetune_scanner_mtf_defocus) || (flags & incompatible)
           || reoptimize_strip_widths
-          || !rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
+          || rparam.sharpen.scanner_mtf.use_measured_mtf ())
         {
           set_error ("Focus interpolation requires scalar physical defocus "
-                     "as the sole varying screen-filter parameter");
+                     "or compact fallback blur diameter as the sole varying "
+                     "screen-filter parameter");
           return false;
         }
       if (!my_isfinite (focus_mtf_threshold)
@@ -632,21 +634,32 @@ analyze_scanner_blur_worker::step2 ()
          when deriving the useful focus range.  */
       if (!(flags & finetune_bw) && scan.has_rgb ())
         focus_mtf.wavelength = 550;
-      if (!my_isfinite (focus_screen_frequency)
-          || focus_screen_frequency <= 0
-          || !finetune_useful_defocus_limit (
-              focus_mtf, focus_screen_frequency, focus_mtf_threshold,
-              (coord_t)20, &focus_interpolation_max))
+      const bool physical_focus = focus_mtf.simulate_diffraction_p ();
+      const bool useful_range
+          = my_isfinite (focus_screen_frequency)
+            && focus_screen_frequency > 0
+            && (physical_focus
+                    ? finetune_useful_defocus_limit (
+                          focus_mtf, focus_screen_frequency,
+                          focus_mtf_threshold, (coord_t)20,
+                          &focus_interpolation_max)
+                    : finetune_useful_blur_diameter_limit (
+                          focus_mtf, focus_screen_frequency,
+                          focus_mtf_threshold, (coord_t)20,
+                          &focus_interpolation_max));
+      if (!useful_range)
         {
           pause_stdout (progress);
           fprintf (stderr,
-                   "Focus analysis failed: the physical in-focus MTF at "
-                   "the process-screen frequency is at or below %.1f%%\n",
+                   "Focus analysis failed: the in-focus MTF at the "
+                   "process-screen frequency is at or below %.1f%%\n",
                    focus_mtf_threshold * 100);
           resume_stdout (progress);
           return false;
         }
-      const coord_t robust_focus = rparam.sharpen.scanner_mtf.defocus;
+      const coord_t robust_focus
+          = physical_focus ? rparam.sharpen.scanner_mtf.defocus
+                           : rparam.sharpen.scanner_mtf.blur_diameter;
       const coord_t tolerance
           = std::numeric_limits<coord_t>::epsilon ()
             * std::max ((coord_t)1, focus_interpolation_max) * 64;
@@ -655,9 +668,13 @@ analyze_scanner_blur_worker::step2 ()
         {
           pause_stdout (progress);
           fprintf (stderr,
-                   "Focus analysis failed: coarse defocus %.5f mm is "
-                   "outside the useful %.5f mm range (screen-frequency "
-                   "MTF %.1f%%)\n",
+                   physical_focus
+                       ? "Focus analysis failed: coarse defocus %.5f mm is "
+                         "outside the useful %.5f mm range (screen-frequency "
+                         "MTF %.1f%%)\n"
+                       : "Focus analysis failed: coarse blur diameter %.5f "
+                         "pixels is outside the useful %.5f pixel range "
+                         "(screen-frequency MTF %.1f%%)\n",
                    robust_focus, focus_interpolation_max,
                    focus_mtf_threshold * 100);
           resume_stdout (progress);
@@ -666,10 +683,16 @@ analyze_scanner_blur_worker::step2 ()
       if (verbose)
         {
           pause_stdout (progress);
-          printf ("Dense focus interpolation: %.6f cycles/pixel, "
-                  "0...%.5f mm at %.1f%% MTF, %i quadratic nodes\n",
-                  focus_screen_frequency, focus_interpolation_max,
-                  focus_mtf_threshold * 100, focus_interpolation_nodes);
+          if (physical_focus)
+            printf ("Dense focus interpolation: %.6f cycles/pixel, "
+                    "0...%.5f mm at %.1f%% MTF, %i quadratic nodes\n",
+                    focus_screen_frequency, focus_interpolation_max,
+                    focus_mtf_threshold * 100, focus_interpolation_nodes);
+          else
+            printf ("Dense fallback-blur interpolation: %.6f cycles/pixel, "
+                    "0...%.5f pixels at %.1f%% MTF, %i quadratic nodes\n",
+                    focus_screen_frequency, focus_interpolation_max,
+                    focus_mtf_threshold * 100, focus_interpolation_nodes);
           resume_stdout (progress);
         }
     }
@@ -820,6 +843,36 @@ analyze_scanner_blur_worker::print_profile () const
     print_fit_diagnostics ("prepass", prepass_diagnostics);
   if (!mainpass.empty ())
     print_fit_diagnostics ("dense pass", mainpass_diagnostics);
+  if (reduction_profile.cells)
+    {
+      const double mean_accepted
+          = (double)reduction_profile.accepted_samples
+            / reduction_profile.cells;
+      const double mean_total
+          = (double)reduction_profile.total_samples / reduction_profile.cells;
+      const double accepted_fraction
+          = reduction_profile.total_samples
+                ? (double)reduction_profile.accepted_samples * 100
+                      / reduction_profile.total_samples
+                : 0;
+      printf ("  correction cells: %zu; accepted samples %d...%d "
+              "(mean %.2f of %.2f, %.1f%%); robust %s spread "
+              "%.9g...%.9g (mean %.9g); accepted fitted contrast "
+              "%.9g%%...%.9g%% (mean %.9g%%)\n",
+              reduction_profile.cells, reduction_profile.accepted_min,
+              reduction_profile.accepted_max, mean_accepted, mean_total,
+              accepted_fraction,
+              scanner_blur_correction_parameters::pretty_correction_names
+                  [(int)mode],
+              (double)reduction_profile.spread_min,
+              (double)reduction_profile.spread_max,
+              (double)(reduction_profile.spread_sum
+                       / reduction_profile.cells),
+              (double)(reduction_profile.contrast_min * 100),
+              (double)(reduction_profile.contrast_max * 100),
+              (double)(reduction_profile.contrast_sum * 100
+                       / reduction_profile.accepted_samples));
+    }
   printf ("  screen states: %llu init calls, %llu local reuses; "
           "focus cache %llu hits, %llu misses (%.1f%% hit); fixed cache "
           "%llu hits, %llu misses\n",
@@ -843,13 +896,14 @@ analyze_scanner_blur_worker::print_profile () const
           (unsigned long long)p.focus_screen_final_exact_builds);
   printf ("  exact screen builds: %llu; general MTF precomputes %llu, PSF "
           "precomputes %llu; physical focus state %llu hits, %llu misses, "
-          "%llu transfer tables\n",
+          "%llu transfer tables; empirical fallback %llu transfer tables\n",
           (unsigned long long)p.exact_screen_builds,
           (unsigned long long)p.mtf_precompute_calls,
           (unsigned long long)p.mtf_psf_precompute_calls,
           (unsigned long long)p.physical_focus_cache_hits,
           (unsigned long long)p.physical_focus_cache_misses,
-          (unsigned long long)p.physical_focus_transfer_builds);
+          (unsigned long long)p.physical_focus_transfer_builds,
+          (unsigned long long)p.empirical_focus_transfer_builds);
   printf ("  periodic filters: %llu direct transfers, %llu wrapped PSFs\n",
           (unsigned long long)p.direct_transfer_builds,
           (unsigned long long)p.wrapped_psf_builds);
@@ -876,6 +930,7 @@ std::unique_ptr<scanner_blur_correction_parameters>
 analyze_scanner_blur_worker::step3 ()
 {
   last_error.clear ();
+  reduction_profile = {};
   if (progress && progress->cancel_requested ())
     {
       last_error = "Analysis cancelled.";
@@ -886,7 +941,8 @@ analyze_scanner_blur_worker::step3 ()
 
   std::unique_ptr<scanner_blur_correction_parameters> scanner_blur_correction
       = std::make_unique<scanner_blur_correction_parameters> ();
-  if (!scanner_blur_correction->alloc (xsteps, ysteps, mode))
+  if (!scanner_blur_correction->alloc (xsteps, ysteps, mode)
+      || !scanner_blur_correction->alloc_diagnostics ())
     return NULL;
   scr_to_img map;
   if (!map.set_parameters (param, scan))
@@ -924,6 +980,7 @@ analyze_scanner_blur_worker::step3 ()
           }
 
         int nok = 0;
+        long double accepted_contrast_sum = 0;
         histogram hist;
         for (finetune_result *res : samples)
           {
@@ -933,6 +990,7 @@ analyze_scanner_blur_worker::step3 ()
             if (!valid_correction_p (correction))
               continue;
             hist.pre_account (correction);
+            accepted_contrast_sum += res->contrast;
             nok++;
           }
         if (!nok)
@@ -982,9 +1040,58 @@ analyze_scanner_blur_worker::step3 ()
             resume_stdout (progress);
             return NULL;
           }
+        luminosity_t spread = high - low;
         if (mode == scanner_blur_correction_parameters::blur_radius)
-          correction *= pixel_size;
+          {
+            correction *= pixel_size;
+            spread *= pixel_size;
+          }
+        if (!my_isfinite (spread) || spread < 0)
+          {
+            set_error ("Analysis produced an invalid robust correction "
+                       "spread");
+            return NULL;
+          }
         scanner_blur_correction->set_correction (x, y, correction);
+        scanner_blur_correction_parameters::cell_diagnostics diagnostics = {
+          spread,
+          (luminosity_t)(accepted_contrast_sum / nok),
+          nok,
+          (int)samples.size ()
+        };
+        scanner_blur_correction->set_diagnostics (x, y, diagnostics);
+
+        if (!reduction_profile.cells)
+          {
+            reduction_profile.accepted_min
+                = reduction_profile.accepted_max = nok;
+            reduction_profile.spread_min
+                = reduction_profile.spread_max = spread;
+            reduction_profile.contrast_min
+                = reduction_profile.contrast_max = diagnostics.mean_contrast;
+          }
+        else
+          {
+            reduction_profile.accepted_min
+                = std::min (reduction_profile.accepted_min, nok);
+            reduction_profile.accepted_max
+                = std::max (reduction_profile.accepted_max, nok);
+            reduction_profile.spread_min
+                = std::min (reduction_profile.spread_min, (coord_t)spread);
+            reduction_profile.spread_max
+                = std::max (reduction_profile.spread_max, (coord_t)spread);
+            reduction_profile.contrast_min
+                = std::min (reduction_profile.contrast_min,
+                            diagnostics.mean_contrast);
+            reduction_profile.contrast_max
+                = std::max (reduction_profile.contrast_max,
+                            diagnostics.mean_contrast);
+          }
+        reduction_profile.cells++;
+        reduction_profile.accepted_samples += nok;
+        reduction_profile.total_samples += samples.size ();
+        reduction_profile.spread_sum += spread;
+        reduction_profile.contrast_sum += accepted_contrast_sum;
       }
   if (progress)
     progress->inc_progress ();

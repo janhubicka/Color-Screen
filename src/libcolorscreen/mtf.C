@@ -1315,10 +1315,11 @@ mtf_parameters::measured_mtf_correction (double pixel_freq) const
          * circular_blur_mtf (pixel_freq, blur_diameter);
 }
 
-/* Return signed complete radial system OTF at PIXEL_FREQ cycles per pixel.
-   This is meaningful for the analytical physical model, where the pupil phase
-   is known.  Measured slanted-edge data is magnitude-only and is handled
-   separately by MTF::PRECOMPUTE.  */
+/* Return the analytical complete radial system transfer at PIXEL_FREQ cycles
+   per pixel.  For the physical model this is the signed OTF because pupil
+   phase is known.  The metadata-free empirical fallback has no independent
+   phase model and therefore remains nonnegative.  Measured slanted-edge data
+   is magnitude-only and is handled separately by MTF::PRECOMPUTE.  */
 double
 mtf_parameters::system_otf (double pixel_freq) const
 {

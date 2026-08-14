@@ -166,6 +166,7 @@ print_help (char *err = NULL)
       fprintf (stderr, "    Supported args:\n");
       fprintf (stderr, "      --out=name.par            save parameters to a given file instead of overwriting original\n");
       fprintf (stderr, "      --out-tiff=name.tif       save resulting table also as tiff file\n");
+      fprintf (stderr, "      --out-diagnostics=name.csv save per-cell correction spread, sample support and contrast\n");
       fprintf (stderr, "      --strip-width=n           number of horizontal samples used to detec strip widths\n");
       fprintf (stderr, "      --strip-height=n          number of vertical samples used to detect strip widths\n");
       fprintf (stderr, "      --[no-]optimize-strip-widths optimize strip widths in the coarse prepass (default yes)\n");
@@ -178,9 +179,9 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --min-contrast=percent    reject fits with weaker fitted screen modulation (default %.8g, 0 disables)\n",
                (double)(finetune_default_min_contrast * 100));
       fprintf (stderr, "      --profile                 print accumulated finetune/cache profiling counters\n");
-      fprintf (stderr, "      --interpolate-focus       approximate dense physical-defocus fits from cached nonlinear focus nodes\n");
+      fprintf (stderr, "      --interpolate-focus       approximate dense physical-defocus or fallback-blur fits from cached nonlinear nodes\n");
       fprintf (stderr, "      --focus-min-mtf=percent   stop focus nodes when screen-frequency MTF reaches this value (default 5)\n");
-      fprintf (stderr, "      --focus-cache-nodes=n     exact nonlinear focus nodes, including endpoints (default 33, maximum 64)\n");
+      fprintf (stderr, "      --focus-cache-nodes=n     exact nonlinear focus nodes, including endpoints (default 49, maximum 64)\n");
       fprintf (stderr, "      --optimize-fog            enable finetuning of fog (dark point)\n");
       fprintf (stderr, "      --simulate-infrared       simuate infrared layer\n");
       fprintf (stderr, "      --normalize               normalize colors\n");
@@ -1374,7 +1375,8 @@ get_correction (scanner_blur_correction_parameters::correction_mode mode, finetu
    TOLERANCE is robust average tolerance.
    MIN_CONTRAST rejects locally unidentifiable fits whose fitted additive-
    screen modulation is too weak.
-   INTERPOLATE_FOCUS enables the discretized dense scalar-defocus cache.
+   INTERPOLATE_FOCUS enables the discretized dense scalar physical-defocus or
+   fallback-blur cache.
    FOCUS_MTF_THRESHOLD sets its useful-range MTF boundary and
    FOCUS_INTERPOLATION_NODES sets its nonlinear exact-node count.
    PROGRESS is progress info.  */
@@ -1449,6 +1451,7 @@ analyze_scanner_blur (int argc, char **argv)
   const char *infname = NULL, *cspname = NULL, *error = NULL;
   const char *outcspname = NULL;
   const char *outtifname = NULL;
+  const char *outdiagnosticsname = NULL;
   subhelp = help_analyze_scanner_blur;
   int xsteps = 0, ysteps = 0;
   int xsubsteps = 0, ysubsteps = 0;
@@ -1463,7 +1466,7 @@ analyze_scanner_blur (int argc, char **argv)
   bool report_profile = false;
   bool interpolate_focus = false;
   float focus_mtf_percent = 5;
-  int focus_interpolation_nodes = 33;
+  int focus_interpolation_nodes = 49;
   uint64_t flags = finetune_position | finetune_no_progress_report
 		   | finetune_scanner_mtf_defocus;
 
@@ -1476,6 +1479,9 @@ analyze_scanner_blur (int argc, char **argv)
         outcspname = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "out-tiff"))
         outtifname = str;
+      else if (const char *str
+               = arg_with_param (argc, argv, &i, "out-diagnostics"))
+        outdiagnosticsname = str;
       else if (arg == "--optimize-strip-widths")
         optimize_strip_widths = true;
       else if (arg == "--no-optimize-strip-widths")
@@ -1720,6 +1726,59 @@ analyze_scanner_blur (int argc, char **argv)
 	  }
       }
   }
+  if (outdiagnosticsname)
+    {
+      if (!scan.stitch)
+        {
+          FILE *diagnostics = fopen (outdiagnosticsname, "wt");
+          if (!diagnostics)
+            {
+              progress.pause_stdout ();
+              perror (outdiagnosticsname);
+              return 1;
+            }
+          const bool ok
+              = rparam.scanner_blur_correction->save_diagnostics (diagnostics);
+          const bool close_ok = fclose (diagnostics) == 0;
+          if (!ok || !close_ok)
+            {
+              progress.pause_stdout ();
+              fprintf (stderr, "Failed saving diagnostics file %s\n",
+                       outdiagnosticsname);
+              return 1;
+            }
+        }
+      else
+        {
+          for (int y = 0; y < scan.stitch->params.height; y++)
+            for (int x = 0; x < scan.stitch->params.width; x++)
+              {
+                char pos[100];
+                sprintf (pos, "-%02i-%02i", y, x);
+                std::string name = (std::string)outdiagnosticsname
+                                   + (std::string)pos + ".csv";
+                FILE *diagnostics = fopen (name.c_str (), "wt");
+                if (!diagnostics)
+                  {
+                    progress.pause_stdout ();
+                    perror (name.c_str ());
+                    return 1;
+                  }
+                const bool ok
+                    = rparam.get_tile_adjustment (x, y)
+                          .scanner_blur_correction->save_diagnostics (
+                              diagnostics);
+                const bool close_ok = fclose (diagnostics) == 0;
+                if (!ok || !close_ok)
+                  {
+                    progress.pause_stdout ();
+                    fprintf (stderr, "Failed saving diagnostics file %s\n",
+                             name.c_str ());
+                    return 1;
+                  }
+              }
+        }
+    }
   return 0;
 }
 

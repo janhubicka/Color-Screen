@@ -68,9 +68,11 @@ class AdaptiveSharpeningDialog : public QDialog {
 public:
   AdaptiveSharpeningDialog(const AdaptiveSharpeningParameters &initial,
                            bool physicalFocusAvailable,
+                           bool focusInterpolationAvailable,
                            bool varyingStripWidths, bool hasRgb,
                            QWidget *parent = nullptr)
       : QDialog(parent), m_physicalFocusAvailable(physicalFocusAvailable),
+        m_focusInterpolationAvailable(focusInterpolationAvailable),
         m_varyingStripWidths(varyingStripWidths), m_hasRgb(hasRgb) {
     setWindowTitle(tr("Adaptive sharpening analysis"));
     setModal(true);
@@ -247,23 +249,25 @@ public:
     samplingTabLayout->addStretch();
     tabs->addTab(samplingTab, tr("Sampling"));
 
-    auto *focusGroup = new QGroupBox(tr("Physical-focus acceleration"), this);
+    auto *focusGroup = new QGroupBox(tr("Blur/focus acceleration"), this);
     auto *focusForm = new QFormLayout(focusGroup);
     m_interpolateFocusCheck = addCheckBox(
         focusForm, tr("Interpolate cached focus nodes"), initial.interpolateFocus,
-        tr("Use nonlinear exact focus nodes and interpolate intermediate dense-pass "
-           "screens. The coarse prepass and final selected solution remain exact."));
+        tr("Use nonlinear exact blur/focus nodes and interpolate intermediate "
+           "dense-pass screens. This accelerates both physical defocus and the "
+           "metadata-free compact fallback. The coarse prepass and final "
+           "selected solution remain exact."));
     m_focusMtfSpin = new QDoubleSpinBox(focusGroup);
     m_focusMtfSpin->setRange(0.001, 99.999);
     m_focusMtfSpin->setDecimals(3);
     m_focusMtfSpin->setSuffix(tr(" %"));
     m_focusMtfSpin->setValue(initial.focusMtfThreshold * 100.0);
-    m_focusMtfSpin->setToolTip(tr("Stop the useful focus range at the first defocus where the screen-frequency system MTF reaches this magnitude."));
+    m_focusMtfSpin->setToolTip(tr("Stop the useful blur/focus range at the first point where the screen-frequency system MTF reaches this magnitude."));
     focusForm->addRow(tr("Minimum screen-frequency MTF:"), m_focusMtfSpin);
     m_focusNodesSpin = new QSpinBox(focusGroup);
     m_focusNodesSpin->setRange(2, 64);
     m_focusNodesSpin->setValue(initial.focusInterpolationNodes);
-    m_focusNodesSpin->setToolTip(tr("Number of quadratically spaced exact focus nodes, including both endpoints."));
+    m_focusNodesSpin->setToolTip(tr("Number of quadratically spaced exact blur/focus nodes, including both endpoints."));
     focusForm->addRow(tr("Exact focus nodes:"), m_focusNodesSpin);
     m_profileCheck = addCheckBox(
         focusForm, tr("Collect finetune profile"), initial.reportProfile,
@@ -404,11 +408,11 @@ private:
                                  && !m_simulatedInfraredCheck->isChecked());
     m_dataCollectionCheck->setEnabled(!m_simulatedInfraredCheck->isChecked());
 
-    const bool scalarPhysicalFocus
+    const bool scalarInterpolatableFocus
         = correction == colorscreen::finetune_scanner_mtf_defocus
-          && m_physicalFocusAvailable;
+          && m_focusInterpolationAvailable;
     const bool interpolationCompatible
-        = scalarPhysicalFocus && !m_sigmaCheck->isChecked()
+        = scalarInterpolatableFocus && !m_sigmaCheck->isChecked()
           && !m_reoptimizeStripWidthsCheck->isChecked();
     if (!interpolationCompatible && m_interpolateFocusCheck->isChecked())
       m_interpolateFocusCheck->setChecked(false);
@@ -422,10 +426,16 @@ private:
     if (m_skipMinSpin->value() + m_skipMaxSpin->value() >= 100.0)
       status = tr("Skip-low and skip-high must add to less than 100%.");
     else if (!m_physicalFocusAvailable
-             && correction == colorscreen::finetune_scanner_mtf_defocus)
+             && correction == colorscreen::finetune_scanner_mtf_defocus
+             && m_focusInterpolationAvailable)
       status = tr("Physical capture metadata are incomplete: this correction "
-                  "mode will use the compact fallback blur diameter and focus "
-                  "interpolation is unavailable.");
+                  "mode uses the compact fallback blur diameter. Cached "
+                  "blur interpolation is available.");
+    else if (!m_focusInterpolationAvailable
+             && correction == colorscreen::finetune_scanner_mtf_defocus)
+      status = tr("A measured MTF curve is active. Scalar residual blur can "
+                  "still be fitted, but cached blur/focus interpolation is "
+                  "disabled for measured transfer data.");
     else if (!m_varyingStripWidths)
       status = tr("The coarse prepass still estimates the global blur/focus; "
                   "the selected process has no variable strip widths.");
@@ -444,6 +454,7 @@ private:
   }
 
   bool m_physicalFocusAvailable = false;
+  bool m_focusInterpolationAvailable = false;
   bool m_varyingStripWidths = false;
   bool m_hasRgb = false;
   QComboBox *m_correctionCombo = nullptr;
@@ -1194,16 +1205,20 @@ void SharpnessPanel::onAnalyzeDisplacements() {
   const ParameterState state = m_stateGetter();
   const bool physicalFocusAvailable
       = state.rparams.sharpen.scanner_mtf.simulate_diffraction_p();
+  const bool focusInterpolationAvailable
+      = !state.rparams.sharpen.scanner_mtf.use_measured_mtf();
   const bool varyingStripWidths
       = colorscreen::screen_with_varying_strips_p(state.scrToImg.type);
   const auto image = m_imageGetter();
   const bool hasRgb = image && image->has_rgb();
 
   if (!m_adaptiveSharpeningParametersInitialized)
-    m_adaptiveSharpeningParameters.interpolateFocus = physicalFocusAvailable;
+    m_adaptiveSharpeningParameters.interpolateFocus
+        = focusInterpolationAvailable;
 
   AdaptiveSharpeningDialog dialog(m_adaptiveSharpeningParameters,
                                    physicalFocusAvailable,
+                                   focusInterpolationAvailable,
                                    varyingStripWidths, hasRgb, this);
   if (dialog.exec() != QDialog::Accepted)
     return;

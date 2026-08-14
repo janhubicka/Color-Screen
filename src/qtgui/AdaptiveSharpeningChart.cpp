@@ -1,41 +1,83 @@
 #include "AdaptiveSharpeningChart.h"
+#include <QAction>
+#include <QActionGroup>
+#include <QHelpEvent>
 #include <QPainter>
 #include <QPaintEvent>
+#include <QToolTip>
 #include <cmath>
-#include <algorithm> // Added for std::clamp
-#include <limits> // Added for std::numeric_limits
+#include <algorithm>
+#include <limits>
 
+/** Construct an adaptive-analysis chart and its final-map context menu. */
 AdaptiveSharpeningChart::AdaptiveSharpeningChart(QWidget *parent)
     : QWidget(parent)
 {
     setBackgroundRole(QPalette::Base);
     setAutoFillBackground(true);
+    setContextMenuPolicy(Qt::ActionsContextMenu);
+
+    auto *displayGroup = new QActionGroup(this);
+    displayGroup->setExclusive(true);
+    m_showCorrectionAction = new QAction(tr("Show correction"), this);
+    m_showSpreadAction = new QAction(tr("Show robust measurement spread"), this);
+    m_showSupportAction = new QAction(tr("Show accepted sample fraction"), this);
+    m_showContrastAction = new QAction(tr("Show mean fitted contrast"), this);
+    for (QAction *action : {m_showCorrectionAction, m_showSpreadAction,
+                            m_showSupportAction, m_showContrastAction}) {
+        action->setCheckable(true);
+        displayGroup->addAction(action);
+        addAction(action);
+    }
+    m_showCorrectionAction->setChecked(true);
+    m_showSpreadAction->setEnabled(false);
+    m_showSupportAction->setEnabled(false);
+    m_showContrastAction->setEnabled(false);
+    connect(m_showCorrectionAction, &QAction::triggered, this,
+            [this]() { setFinalDisplayMode(FinalDisplay_Correction); });
+    connect(m_showSpreadAction, &QAction::triggered, this,
+            [this]() { setFinalDisplayMode(FinalDisplay_Spread); });
+    connect(m_showSupportAction, &QAction::triggered, this,
+            [this]() { setFinalDisplayMode(FinalDisplay_Support); });
+    connect(m_showContrastAction, &QAction::triggered, this,
+            [this]() { setFinalDisplayMode(FinalDisplay_Contrast); });
+    setToolTip(tr("Right-click the final map to select correction or confidence diagnostics."));
     resetRanges();
 }
 
-// Helper to reset ranges
-void AdaptiveSharpeningChart::resetRanges() {
+/** Reset dynamic ranges before starting or clearing an analysis. */
+void AdaptiveSharpeningChart::resetRanges()
+{
     m_minRed = std::numeric_limits<double>::max();
     m_maxRed = std::numeric_limits<double>::lowest();
     m_minGreen = std::numeric_limits<double>::max();
     m_maxGreen = std::numeric_limits<double>::lowest();
     m_minBlur = std::numeric_limits<double>::max();
     m_maxBlur = std::numeric_limits<double>::lowest();
+    m_minFinal = std::numeric_limits<double>::max();
+    m_maxFinal = std::numeric_limits<double>::lowest();
 }
 
+/** Prepare a WIDTH by HEIGHT live-analysis grid. */
 void AdaptiveSharpeningChart::initialize(int width, int height)
 {
     m_gridWidth = width;
     m_gridHeight = height;
     m_liveData.assign(width * height, Tile{});
     m_correction.reset();
+    m_showSpreadAction->setEnabled(false);
+    m_showSupportAction->setEnabled(false);
+    m_showContrastAction->setEnabled(false);
+    setFinalDisplayMode(FinalDisplay_Correction);
     m_mode = Mode_StripAnalysis; // Start with strip analysis
     m_dirty = true;
     resetRanges();
     update();
 }
 
-void AdaptiveSharpeningChart::updateStrip(int x, int y, double red_width, double green_width)
+/** Record strip widths RED_WIDTH and GREEN_WIDTH for coarse cell X,Y. */
+void AdaptiveSharpeningChart::updateStrip(int x, int y, double red_width,
+                                          double green_width)
 {
     if (x < 0 || x >= m_gridWidth || y < 0 || y >= m_gridHeight) return;
     
@@ -55,6 +97,7 @@ void AdaptiveSharpeningChart::updateStrip(int x, int y, double red_width, double
     update();
 }
 
+/** Record dense CORRECTION for cell X,Y. */
 void AdaptiveSharpeningChart::updateBlur(int x, int y, double correction)
 {
     if (x < 0 || x >= m_gridWidth || y < 0 || y >= m_gridHeight) return;
@@ -72,7 +115,9 @@ void AdaptiveSharpeningChart::updateBlur(int x, int y, double correction)
     update();
 }
 
-void AdaptiveSharpeningChart::setCorrection(std::shared_ptr<colorscreen::scanner_blur_correction_parameters> correction)
+/** Display CORRECTION and enable diagnostic maps when they are available. */
+void AdaptiveSharpeningChart::setCorrection(
+    std::shared_ptr<colorscreen::scanner_blur_correction_parameters> correction)
 {
     m_correction = correction;
     if (m_correction) {
@@ -82,11 +127,19 @@ void AdaptiveSharpeningChart::setCorrection(std::shared_ptr<colorscreen::scanner
         m_gridWidth = 0;
         m_gridHeight = 0;
     }
+    const bool hasDiagnostics = m_correction && m_correction->has_diagnostics();
+    m_showSpreadAction->setEnabled(hasDiagnostics);
+    m_showSupportAction->setEnabled(hasDiagnostics);
+    m_showContrastAction->setEnabled(hasDiagnostics);
+    if (!hasDiagnostics && m_finalDisplayMode != FinalDisplay_Correction)
+        setFinalDisplayMode(FinalDisplay_Correction);
     m_mode = Mode_FinalCorrection;
+    updateFinalRange();
     m_dirty = true;
     update();
 }
 
+/** Clear all live and final chart state. */
 void AdaptiveSharpeningChart::clear()
 {
     m_correction.reset();
@@ -95,20 +148,166 @@ void AdaptiveSharpeningChart::clear()
     m_gridHeight = 0;
     m_preview = QImage();
     m_dirty = false;
+    m_showSpreadAction->setEnabled(false);
+    m_showSupportAction->setEnabled(false);
+    m_showContrastAction->setEnabled(false);
+    setFinalDisplayMode(FinalDisplay_Correction);
     resetRanges();
     update();
 }
 
+/** Select MODE for the completed correction map. */
+void AdaptiveSharpeningChart::setFinalDisplayMode(FinalDisplayMode mode)
+{
+    if (mode != FinalDisplay_Correction
+        && (!m_correction || !m_correction->has_diagnostics()))
+        mode = FinalDisplay_Correction;
+    m_finalDisplayMode = mode;
+    m_showCorrectionAction->setChecked(mode == FinalDisplay_Correction);
+    m_showSpreadAction->setChecked(mode == FinalDisplay_Spread);
+    m_showSupportAction->setChecked(mode == FinalDisplay_Support);
+    m_showContrastAction->setChecked(mode == FinalDisplay_Contrast);
+    updateFinalRange();
+    m_dirty = true;
+    update();
+}
+
+/** Return the scalar represented by the selected final map at X,Y. */
+double AdaptiveSharpeningChart::finalDisplayValue(int x, int y) const
+{
+    if (!m_correction)
+        return 0.0;
+    if (m_finalDisplayMode == FinalDisplay_Correction)
+        return m_correction->get_correction(x, y);
+    const auto *diagnostics = m_correction->get_diagnostics(x, y);
+    if (!diagnostics)
+        return 0.0;
+    switch (m_finalDisplayMode) {
+    case FinalDisplay_Correction:
+        return m_correction->get_correction(x, y);
+    case FinalDisplay_Spread:
+        return diagnostics->robust_spread;
+    case FinalDisplay_Support:
+        return diagnostics->total_samples > 0
+                   ? static_cast<double>(diagnostics->accepted_samples)
+                         / diagnostics->total_samples
+                   : 0.0;
+    case FinalDisplay_Contrast:
+        return diagnostics->mean_contrast;
+    }
+    return 0.0;
+}
+
+/** Recompute the display range for the selected final-map quantity. */
+void AdaptiveSharpeningChart::updateFinalRange()
+{
+    if (m_finalDisplayMode == FinalDisplay_Support) {
+        m_minFinal = 0.0;
+        m_maxFinal = 1.0;
+        return;
+    }
+
+    m_minFinal = m_finalDisplayMode == FinalDisplay_Correction
+                     ? std::numeric_limits<double>::max()
+                     : 0.0;
+    m_maxFinal = std::numeric_limits<double>::lowest();
+    if (!m_correction)
+        return;
+    for (int y = 0; y < m_correction->get_height(); y++)
+        for (int x = 0; x < m_correction->get_width(); x++) {
+            const double value = finalDisplayValue(x, y);
+            if (!colorscreen::my_isfinite(value))
+                continue;
+            m_minFinal = std::min(m_minFinal, value);
+            m_maxFinal = std::max(m_maxFinal, value);
+        }
+    if (m_maxFinal == std::numeric_limits<double>::lowest()
+        || m_minFinal == std::numeric_limits<double>::max()) {
+        m_minFinal = 0.0;
+        m_maxFinal = 1.0;
+    }
+}
+
+/** Return the widget rectangle occupied by the un-smoothed map preview. */
+QRect AdaptiveSharpeningChart::previewTargetRect() const
+{
+    if (m_preview.isNull() || m_preview.width() <= 0 || m_preview.height() <= 0
+        || width() <= 0 || height() <= 0)
+        return QRect();
+    const double widgetAspect = static_cast<double>(width()) / height();
+    const double imageAspect
+        = static_cast<double>(m_preview.width()) / m_preview.height();
+    if (widgetAspect > imageAspect) {
+        const int h = height();
+        const int w = static_cast<int>(h * imageAspect);
+        return QRect((width() - w) / 2, 0, w, h);
+    }
+    const int w = width();
+    const int h = static_cast<int>(w / imageAspect);
+    return QRect(0, (height() - h) / 2, w, h);
+}
+
+/** Show exact per-cell final values for tooltip EVENTs. */
+bool AdaptiveSharpeningChart::event(QEvent *event)
+{
+    if (event->type() == QEvent::ToolTip && m_mode == Mode_FinalCorrection
+        && m_correction) {
+        auto *helpEvent = static_cast<QHelpEvent *>(event);
+        const QRect target = previewTargetRect();
+        if (target.contains(helpEvent->pos()) && target.width() > 0
+            && target.height() > 0) {
+            const int x = std::clamp(
+                (helpEvent->pos().x() - target.x()) * m_gridWidth
+                    / target.width(),
+                0, m_gridWidth - 1);
+            const int y = std::clamp(
+                (helpEvent->pos().y() - target.y()) * m_gridHeight
+                    / target.height(),
+                0, m_gridHeight - 1);
+            QString text = tr("Cell %1,%2\nCorrection: %3")
+                               .arg(x)
+                               .arg(y)
+                               .arg(m_correction->get_correction(x, y), 0,
+                                    'g', 8);
+            if (const auto *diagnostics
+                = m_correction->get_diagnostics(x, y)) {
+                const double support
+                    = diagnostics->total_samples > 0
+                          ? 100.0 * diagnostics->accepted_samples
+                                / diagnostics->total_samples
+                          : 0.0;
+                text += tr("\nRobust spread: %1\nAccepted samples: %2/%3 "
+                           "(%4%)\nMean fitted contrast: %5%")
+                            .arg(diagnostics->robust_spread, 0, 'g', 8)
+                            .arg(diagnostics->accepted_samples)
+                            .arg(diagnostics->total_samples)
+                            .arg(support, 0, 'f', 1)
+                            .arg(diagnostics->mean_contrast * 100.0, 0, 'g',
+                                 6);
+            }
+            QToolTip::showText(helpEvent->globalPos(), text, this, target);
+            return true;
+        }
+        QToolTip::hideText();
+        event->ignore();
+        return true;
+    }
+    return QWidget::event(event);
+}
+
+/** Return the preferred chart size. */
 QSize AdaptiveSharpeningChart::sizeHint() const
 {
     return QSize(400, 300);
 }
 
+/** Return the smallest useful chart size. */
 QSize AdaptiveSharpeningChart::minimumSizeHint() const
 {
     return QSize(200, 150);
 }
 
+/** Paint the map and legend. */
 void AdaptiveSharpeningChart::paintEvent(QPaintEvent *)
 {
     if (m_dirty) {
@@ -124,22 +323,8 @@ void AdaptiveSharpeningChart::paintEvent(QPaintEvent *)
     }
 
     // Centered aspect-ratio-respecting preview
-    QSize s = m_preview.size();
-    if (s.width() > 0 && s.height() > 0) {
-        double widgetAspect = (double)width() / height();
-        double imgAspect = (double)s.width() / s.height();
-        
-        QRect target;
-        if (widgetAspect > imgAspect) {
-             int h = height();
-             int w = (int)(h * imgAspect);
-             target = QRect((width() - w) / 2, 0, w, h);
-        } else {
-             int w = width();
-             int h = (int)(w / imgAspect);
-             target = QRect(0, (height() - h) / 2, w, h);
-        }
-        
+    const QRect target = previewTargetRect();
+    if (!target.isEmpty()) {
         painter.setRenderHint(QPainter::SmoothPixmapTransform, false); // Keep pixels sharp for grid
         painter.drawImage(target, m_preview);
     }
@@ -147,12 +332,14 @@ void AdaptiveSharpeningChart::paintEvent(QPaintEvent *)
     renderLegend(painter);
 }
 
+/** Mark the preview dirty after resize EVENT. */
 void AdaptiveSharpeningChart::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
     m_dirty = true; // In case we want to re-render based on size (though we usually scale)
 }
 
+/** Rebuild the small nearest-neighbour map image from current data. */
 void AdaptiveSharpeningChart::updatePreview()
 {
     if (m_gridWidth <= 0 || m_gridHeight <= 0) {
@@ -167,15 +354,38 @@ void AdaptiveSharpeningChart::updatePreview()
     double rangeRed = (m_maxRed > m_minRed) ? (m_maxRed - m_minRed) : 1.0;
     double rangeGreen = (m_maxGreen > m_minGreen) ? (m_maxGreen - m_minGreen) : 1.0;
     double rangeBlur = (m_maxBlur > m_minBlur) ? (m_maxBlur - m_minBlur) : 1.0;
+    if (m_mode == Mode_FinalCorrection)
+        updateFinalRange();
+    const double rangeFinal
+        = (m_maxFinal > m_minFinal) ? (m_maxFinal - m_minFinal) : 1.0;
     
     for (int y = 0; y < m_gridHeight; y++) {
         for (int x = 0; x < m_gridWidth; x++) {
             QColor c = Qt::black; // Uncomputed color
             
             if (m_mode == Mode_FinalCorrection && m_correction) {
-                 double val = m_correction->get_correction(x, y);
-                 // Heatmap
-                 c = QColor::fromHsvF((1.0 - std::min(val, 2.0)/2.0) * 0.66, 1.0, 1.0); 
+                 const double value = finalDisplayValue(x, y);
+                 const double normalized
+                     = std::clamp((value - m_minFinal) / rangeFinal, 0.0, 1.0);
+                 switch (m_finalDisplayMode) {
+                 case FinalDisplay_Correction:
+                     c = QColor::fromHsvF((1.0 - normalized) * 0.66, 1.0, 1.0);
+                     break;
+                 case FinalDisplay_Spread:
+                     // Low spread is high confidence (green), high spread red.
+                     c = QColor::fromHsvF((1.0 - normalized) * 0.33, 1.0, 1.0);
+                     break;
+                 case FinalDisplay_Support:
+                     // More accepted samples are better.
+                     c = QColor::fromHsvF(normalized * 0.33, 1.0, 1.0);
+                     break;
+                 case FinalDisplay_Contrast: {
+                     const int gray = std::clamp(
+                         static_cast<int>(normalized * 255.0), 0, 255);
+                     c = QColor(gray, gray, gray);
+                     break;
+                 }
+                 }
             } else if (m_mode == Mode_StripAnalysis || m_mode == Mode_BlurAnalysis) {
                 const Tile &t = m_liveData[y * m_gridWidth + x];
                 if (t.valid) {
@@ -217,6 +427,7 @@ void AdaptiveSharpeningChart::updatePreview()
     m_dirty = false;
 }
 
+/** Draw the legend using PAINTER. */
 void AdaptiveSharpeningChart::renderLegend(QPainter &painter)
 {
     // Simple legend logic
@@ -282,37 +493,62 @@ void AdaptiveSharpeningChart::renderLegend(QPainter &painter)
 
     } else {
         QRect legendRect(10, h - 30, w - 20, 20);
-        
-        // Draw gradient
         QLinearGradient grad(legendRect.topLeft(), legendRect.topRight());
-        grad.setColorAt(0, Qt::black);
-        
         QString label;
+        QString minText;
+        QString maxText;
+
         if (m_mode == Mode_BlurAnalysis) {
-             grad.setColorAt(1, Qt::white);
-             label = "Correction Amount";
+            grad.setColorAt(0, Qt::black);
+            grad.setColorAt(1, Qt::white);
+            label = tr("Correction amount");
+            const double minValue
+                = m_minBlur < std::numeric_limits<double>::max() ? m_minBlur
+                                                                 : 0.0;
+            const double maxValue
+                = m_maxBlur > std::numeric_limits<double>::lowest() ? m_maxBlur
+                                                                    : 0.0;
+            minText = QString::number(minValue, 'g', 6);
+            maxText = QString::number(maxValue, 'g', 6);
         } else {
-             grad.setColorAt(1, Qt::white);
-             label = "Correction Amount";
+            switch (m_finalDisplayMode) {
+            case FinalDisplay_Correction:
+                grad.setColorAt(0, QColor::fromHsvF(0.66, 1.0, 1.0));
+                grad.setColorAt(1, QColor::fromHsvF(0.0, 1.0, 1.0));
+                label = tr("Correction (right-click for diagnostics)");
+                minText = QString::number(m_minFinal, 'g', 6);
+                maxText = QString::number(m_maxFinal, 'g', 6);
+                break;
+            case FinalDisplay_Spread:
+                grad.setColorAt(0, QColor::fromHsvF(0.33, 1.0, 1.0));
+                grad.setColorAt(1, QColor::fromHsvF(0.0, 1.0, 1.0));
+                label = tr("Robust measurement spread (lower is better)");
+                minText = QString::number(m_minFinal, 'g', 6);
+                maxText = QString::number(m_maxFinal, 'g', 6);
+                break;
+            case FinalDisplay_Support:
+                grad.setColorAt(0, QColor::fromHsvF(0.0, 1.0, 1.0));
+                grad.setColorAt(1, QColor::fromHsvF(0.33, 1.0, 1.0));
+                label = tr("Accepted sample fraction");
+                minText = QString::number(m_minFinal * 100.0, 'g', 5) + "%";
+                maxText = QString::number(m_maxFinal * 100.0, 'g', 5) + "%";
+                break;
+            case FinalDisplay_Contrast:
+                grad.setColorAt(0, Qt::black);
+                grad.setColorAt(1, Qt::white);
+                label = tr("Mean fitted contrast");
+                minText = QString::number(m_minFinal * 100.0, 'g', 5) + "%";
+                maxText = QString::number(m_maxFinal * 100.0, 'g', 5) + "%";
+                break;
+            }
         }
-        
+
         painter.drawText(10, h - 35, label);
-        
         painter.fillRect(legendRect, grad);
         painter.drawRect(legendRect);
-        
-        if (m_mode == Mode_BlurAnalysis) {
-            double minB = (m_minBlur < std::numeric_limits<double>::max()) ? m_minBlur : 0.0;
-            double maxB = (m_maxBlur > std::numeric_limits<double>::lowest()) ? m_maxBlur : 0.0;
-            QString minS = QString::number(minB, 'f', 2);
-            QString maxS = QString::number(maxB, 'f', 2);
-            
-            painter.setPen(Qt::white); 
-            painter.drawText(legendRect.left(), h - 5, minS);
-            painter.drawText(legendRect.right() - fm.horizontalAdvance(maxS), h - 5, maxS);
-        } else {
-            painter.drawText(legendRect.left(), h - 5, "0");
-            painter.drawText(legendRect.right() - 20, h - 5, "255");
-        }
+        painter.setPen(Qt::white);
+        painter.drawText(legendRect.left(), h - 5, minText);
+        painter.drawText(legendRect.right() - fm.horizontalAdvance(maxText),
+                         h - 5, maxText);
     }
 }

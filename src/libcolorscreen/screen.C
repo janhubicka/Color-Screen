@@ -1934,16 +1934,43 @@ build_direct_periodic_filter (
       }
 }
 
+/* Build the same 512-sample radial transfer table used by MTF::PRECOMPUTE
+   for the metadata-free analytical fallback, but do not estimate or construct
+   a spatial PSF.  A periodic screen needs only these Fourier coefficients.
+   This avoids the expensive PSF-support round trip for scalar blur-diameter
+   finetuning while preserving the established transfer-table sampling.  */
+static bool
+precompute_empirical_periodic_transfer (const mtf_parameters &params,
+                                        precomputed_function<double> &transfer)
+{
+  if (params.simulate_diffraction_p () || params.use_measured_mtf ())
+    return false;
+  constexpr int entries = 512;
+  std::array<double, entries> values;
+  const double step = 1.0 / (entries - 2);
+  for (int i = 0; i < entries - 2; i++)
+    {
+      values[i] = params.system_otf (i * step);
+      if (!my_isfinite (values[i]))
+        return false;
+    }
+  values[entries - 2] = values[entries - 1] = 0;
+  transfer.set_range (0, 1 + step);
+  transfer.init_by_y_values (values.data (), values.size ());
+  return true;
+}
+
 /* Construct the periodic capture/sharpening transfer for SHARPEN in FFT.
    ANTICIPATE_SHARPENING controls the digital inverse filter, while the forward
-   capture MTF is always applied.  DIRECT_PHYSICAL_TRANSFER permits the
-   prepared-source finetune path to sample a physical OTF directly instead of
-   constructing a spatial PSF.  Store the effective mode in MODE_RET.  */
+   capture MTF is always applied.  DIRECT_ANALYTICAL_TRANSFER permits the
+   prepared-source finetune path to sample either physical defocus or the
+   metadata-free empirical fallback directly instead of constructing a spatial
+   PSF.  Store the effective mode in MODE_RET.  */
 static bool
 build_periodic_filter (typename fft_complex_t<screen_fft_t>::type *fft,
                        sharpen_parameters &sharpen,
                        bool anticipate_sharpening, bool parallel,
-                       bool direct_physical_transfer,
+                       bool direct_analytical_transfer,
                        screen_filter_profile *profile,
                        sharpen_parameters::sharpen_mode *mode_ret)
 {
@@ -1957,13 +1984,14 @@ build_periodic_filter (typename fft_complex_t<screen_fft_t>::type *fft,
   const luminosity_t snr = sharpen.scanner_snr;
   const screen_fft_t k_const = snr > 0 ? 1.0f / snr : 0;
   /* A periodic source is filtered exactly by multiplying its Fourier-series
-     coefficients by the signed physical OTF at the corresponding harmonics.
-     Reuse the defocus-independent optical state and avoid constructing a
-     spatial PSF merely to wrap it back into the same period.  Measured and
-     empirical transfers retain the general support-dependent path below.  */
+     coefficients by the capture OTF at the corresponding harmonics.  Reuse
+     the defocus-independent physical state when available.  The empirical
+     fallback is also analytical, so on a prepared source build its established
+     radial transfer table directly and skip PSF support estimation.  Measured
+     curves retain the general support-dependent path below.  */
   bool physical_focus_cache_hit = false;
   std::shared_ptr<const mtf_focus_transfer> physical_focus;
-  if (direct_physical_transfer)
+  if (direct_analytical_transfer)
     physical_focus = mtf_focus_transfer::get (
         sharpen.scanner_mtf, &physical_focus_cache_hit);
   if (physical_focus)
@@ -1979,6 +2007,25 @@ build_periodic_filter (typename fft_complex_t<screen_fft_t>::type *fft,
       if (!physical_focus->precompute (
               sharpen.scanner_mtf.defocus, transfer))
         return false;
+      build_direct_periodic_filter (
+          fft, step, mode, k_const, data_scale,
+          [&transfer] (double frequency) {
+            return transfer.apply (frequency);
+          });
+    }
+  else if (direct_analytical_transfer
+           && !sharpen.scanner_mtf.use_measured_mtf ()
+           && !sharpen.scanner_mtf.simulate_diffraction_p ())
+    {
+      precomputed_function<double> transfer;
+      if (!precompute_empirical_periodic_transfer (sharpen.scanner_mtf,
+                                                   transfer))
+        return false;
+      if (profile)
+        {
+          profile->empirical_focus_transfer_builds++;
+          profile->direct_transfer_builds++;
+        }
       build_direct_periodic_filter (
           fft, step, mode, k_const, data_scale,
           [&transfer] (double frequency) {
@@ -2207,9 +2254,10 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 }
 
 /* Initialize current screen from immutable SOURCE spectra.  Omit the source
-   forward FFTs.  For analytical physical defocus, sample the signed OTF
-   directly at the periodic harmonics; this is the exact Fourier-series
-   convolution and avoids the ordinary path's sampled-PSF round trip.  */
+   forward FFTs.  For analytical physical defocus and the metadata-free
+   empirical fallback, sample the radial transfer directly at the periodic
+   harmonics; this is the exact Fourier-series convolution and avoids the
+   ordinary path's sampled-PSF round trip.  */
 bool
 screen::initialize_with_sharpen_parameters (
     const screen_filter_source &source, sharpen_parameters *sharpen[3],

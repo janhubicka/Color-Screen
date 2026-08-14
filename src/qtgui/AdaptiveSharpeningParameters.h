@@ -26,5 +26,5 @@ struct AdaptiveSharpeningParameters {
   bool reportProfile = false;
   bool interpolateFocus = false;
   double focusMtfThreshold = 0.05;
-  int focusInterpolationNodes = 33;
+  int focusInterpolationNodes = 49;
 };

@@ -36,7 +36,7 @@ public:
         progress (NULL),
         verbose (false),
         report_profile (false), interpolate_focus (false),
-        focus_mtf_threshold ((coord_t)0.05), focus_interpolation_nodes (33),
+        focus_mtf_threshold ((coord_t)0.05), focus_interpolation_nodes (49),
         focus_interpolation_max (0), focus_screen_frequency (0)
   {
   }
@@ -80,11 +80,12 @@ public:
   bool verbose;
   /* Print accumulated FINETUNE/cache counters after analysis.  */
   bool report_profile;
-  /* During the dense scalar physical-defocus pass, approximate arbitrary
-     focus values by interpolating exact filtered screens from a fixed
-     nonlinear cache grid.  The coarse prepass remains exact.  */
+  /* During the dense scalar analytical blur/focus pass, approximate arbitrary
+     values by interpolating exact filtered screens from a fixed nonlinear
+     cache grid.  This covers physical defocus and the metadata-free fallback
+     blur diameter.  The coarse prepass remains exact.  */
   bool interpolate_focus;
-  /* Stop the focus grid at the first defocus where the process-screen
+  /* Stop the blur/focus grid at the first point where the process-screen
      frequency falls to this system-MTF magnitude.  */
   coord_t focus_mtf_threshold;
   /* Number of quadratically spaced exact cache nodes, including endpoints.
@@ -129,6 +130,24 @@ public:
   }
 
 private:
+  /* Aggregate diagnostics produced while STEP3 reduces dense samples.  They
+     are kept separately from FINETUNE_PROFILE because they describe output
+     quality rather than solver work.  */
+  struct reduction_diagnostics
+  {
+    size_t cells = 0;
+    uint64_t accepted_samples = 0;
+    uint64_t total_samples = 0;
+    int accepted_min = 0;
+    int accepted_max = 0;
+    coord_t spread_min = 0;
+    coord_t spread_max = 0;
+    long double spread_sum = 0;
+    luminosity_t contrast_min = 0;
+    luminosity_t contrast_max = 0;
+    long double contrast_sum = 0;
+  };
+
   /* Return coarse result X,Y.  Keeping indexing here prevents accidental use
      of the dense-grid stride.  */
   finetune_result &
@@ -158,6 +177,7 @@ private:
   coord_t focus_interpolation_max;
   coord_t focus_screen_frequency;
   std::string last_error;
+  reduction_diagnostics reduction_profile;
 
   /* Record and print one failure detected by a sequential worker stage.  */
   void set_error (const std::string &message);

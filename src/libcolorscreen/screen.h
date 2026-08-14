@@ -24,6 +24,7 @@ struct screen_filter_profile
   uint64_t physical_focus_cache_hits = 0;
   uint64_t physical_focus_cache_misses = 0;
   uint64_t physical_focus_transfer_builds = 0;
+  uint64_t empirical_focus_transfer_builds = 0;
   uint64_t direct_transfer_builds = 0;
   uint64_t wrapped_psf_builds = 0;
   uint64_t kernel_forward_ffts = 0;

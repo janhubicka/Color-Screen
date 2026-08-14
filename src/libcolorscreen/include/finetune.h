@@ -108,6 +108,7 @@ struct finetune_profile
   uint64_t physical_focus_cache_hits = 0;
   uint64_t physical_focus_cache_misses = 0;
   uint64_t physical_focus_transfer_builds = 0;
+  uint64_t empirical_focus_transfer_builds = 0;
   uint64_t direct_transfer_builds = 0;
   uint64_t wrapped_psf_builds = 0;
   uint64_t kernel_forward_ffts = 0;
@@ -148,6 +149,7 @@ struct finetune_profile
     physical_focus_cache_hits += o.physical_focus_cache_hits;
     physical_focus_cache_misses += o.physical_focus_cache_misses;
     physical_focus_transfer_builds += o.physical_focus_transfer_builds;
+    empirical_focus_transfer_builds += o.empirical_focus_transfer_builds;
     direct_transfer_builds += o.direct_transfer_builds;
     wrapped_psf_builds += o.wrapped_psf_builds;
     kernel_forward_ffts += o.kernel_forward_ffts;
@@ -194,20 +196,23 @@ struct finetune_parameters
      clock or atomic-counter overhead.  */
   bool collect_profile = false;
 
-  /* Approximate scalar physical defocus during a fit by linearly
-     interpolating periodic screens cached at a fixed nonlinear grid of exact
-     defocus nodes.  This is intended for the dense displacement-analysis pass
-     after an exact coarse prepass.  It is accepted only when scalar physical
-     defocus is the sole varying capture-transfer parameter.
+  /* Approximate one scalar analytical blur/focus coordinate during a fit by
+     linearly interpolating periodic screens cached at a fixed nonlinear grid
+     of exact nodes.  The coordinate is physical image-plane defocus for the
+     diffraction model and compact blur diameter for the metadata-free
+     empirical fallback.  This is intended for the dense displacement-analysis
+     pass after an exact coarse prepass and is accepted only when this scalar
+     coordinate is the sole varying capture-transfer parameter.
 
-     SCANNER_MTF_DEFOCUS_INTERPOLATION_MAX is the useful nonnegative defocus
-     range in millimetres.  SCANNER_MTF_DEFOCUS_INTERPOLATION_NODES includes
-     both endpoints; the nodes are quadratically spaced to provide finer
-     resolution near focus.  The final fitted point is always evaluated with
-     an exact screen and is not inserted into the node cache.  */
+     SCANNER_MTF_DEFOCUS_INTERPOLATION_MAX is the useful nonnegative range in
+     the active coordinate's units (millimetres for physical defocus, pixels
+     for fallback blur diameter).  SCANNER_MTF_DEFOCUS_INTERPOLATION_NODES
+     includes both endpoints; nodes are quadratically spaced to provide finer
+     resolution near the sharp end.  The final fitted point is always evaluated
+     with an exact screen and is not inserted into the node cache.  */
   bool interpolate_scanner_mtf_defocus = false;
   coord_t scanner_mtf_defocus_interpolation_max = 0;
-  int scanner_mtf_defocus_interpolation_nodes = 33;
+  int scanner_mtf_defocus_interpolation_nodes = 49;
   finetune_parameters () {}
 };
 

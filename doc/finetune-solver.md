@@ -67,8 +67,8 @@ expensive local fits themselves:
 3. `step2()` first rejects numerically invalid or insufficient-contrast
    prepass fits, then rejects the least reliable remaining fits by fit score,
    computes robust global strip widths and focus, updates the worker's private
-   rendering parameters, derives the useful physical-defocus range when dense
-   focus interpolation is enabled, and allocates the dense pass;
+   rendering parameters, derives the useful scalar analytical blur/focus range when dense
+   interpolation is enabled, and allocates the dense pass;
 4. `analyze_blur()` fits each dense sub-sample and exposes it to the GUI only
    when its fitted screen modulation is identifiable;
 5. `step3()` applies the same identifiability guard before fit-score filtering
@@ -85,7 +85,7 @@ as one-run operational settings rather than persistent rendering parameters.
 The fitting tab selects the correction family and auxiliary local fit flags,
 including measured monochrome/IR.  The sampling tab controls the coarse
 prepass, final correction table, per-cell sub-sampling and robust reduction.
-The focus-cache tab controls physical-focus interpolation and profiling.
+The focus-cache tab controls scalar analytical blur/focus interpolation and profiling.
 Automatic dimensions are passed as zero and resolved by `step1()`, so the GUI
 does not duplicate the worker's aspect-ratio rules.  The worker reports its
 resolved coarse and dense grid sizes back to the chart before emitting samples.
@@ -276,8 +276,34 @@ contrast floor, while numerical validity checks remain active.  Profiling
 reports usable, low-contrast, invalid-contrast, invalid-fit-score, and solver-
 failure counts separately for the coarse and dense passes, together with the
 finite fitted-contrast range and mean.  Individual `finetune_result` objects
-retain their raw contrast, so future confidence-map presentation does not need
-to change the solver result contract.
+retain their raw contrast.
+
+### Per-cell repeatability diagnostics
+
+A final correction-table value is reduced from the dense sub-samples belonging
+to one cell.  The table now retains, for every cell:
+
+- the robust retained correction range (`high - low`) after the configured
+  correction-tail rejection, in the same units as the stored correction;
+- the number of identifiable, fit-score-accepted samples with valid correction
+  values, and the total number attempted for that cell;
+- the mean fitted contrast of those accepted samples.
+
+These are deliberately separate diagnostics rather than a single synthetic
+confidence score.  A spread has physical units and is directly interpretable as
+repeatability; sample support depends on the configured sub-sampling; fitted
+contrast depends on local image content.  Combining them requires
+mode- and data-specific calibration that is not yet available.
+
+The adaptive Qt chart exposes correction, robust spread, accepted-sample
+fraction, and mean contrast as selectable maps and reports the exact values in
+a cell tooltip.  The command-line worker summarizes the ranges when profiling
+and can write one CSV row per cell with
+`--out-diagnostics=NAME.csv`; each row names the correction mode so its units
+remain interpretable without the corresponding CSP file.  Diagnostics are intentionally not embedded in
+the CSP correction section, so older Color-Screen versions can still read saved
+correction tables.  Consequently they describe the current analysis result and
+are not restored when a CSP file is reopened.
 
 ## Starting values
 
@@ -301,7 +327,7 @@ model or objective.
 ## Focus caches, discretization, and invalidation
 
 The solver uses six exact reuse levels and one deliberately narrow
-approximation for the dense physical-displacement pass.
+approximation for the dense scalar analytical blur/focus pass.
 
 1. A fixed-screen fast path calls `render_to_scr::get_screen()` when no screen,
    blur, MTF, strip, or emulsion variable changes.  The returned immutable
@@ -322,19 +348,19 @@ approximation for the dense physical-displacement pass.
    as weak references indexed by node number.  Repeated simplex evaluations
    therefore avoid traversing and locking the global linked-list LRU.  Weak
    ownership preserves the global cache's eviction and memory bound.
-5. Fixed-geometry scalar physical-defocus fits additionally use a small
-   thread-safe cache of immutable source spectra.  Its key contains only the
-   process-screen family and relevant strip widths.  The first exact focus
-   state constructs the ideal periodic screen and forward-transforms its three
-   channels; subsequent exact nodes and exact-final evaluations reuse those
-   spectra.
-6. The same path uses a second small thread-safe cache for the analytical
-   physical transfer with defocus removed from its key.  Fixed sensor,
+5. Fixed-geometry scalar physical-defocus and empirical-fallback fits
+   additionally use a small thread-safe cache of immutable source spectra.  Its
+   key contains only the process-screen family and relevant strip widths.  The
+   first exact scalar state constructs the ideal periodic screen and forward-
+   transforms its three channels; subsequent exact nodes and exact-final
+   evaluations reuse those spectra.
+6. Physical defocus additionally uses a second small thread-safe cache for the
+   analytical transfer with defocus removed from its key.  Fixed sensor,
    diffraction, residual-sigma, halo, pupil-overlap, and Fourier-grid terms are
    prepared once.  A new focus state evaluates only the signed
-   defocus-dependent pupil integral, samples the resulting transfer at the
-   periodic harmonics, multiplies it by the cached source spectra, and performs
-   the three inverse transforms.
+   defocus-dependent pupil integral.  The empirical fallback has no comparable
+   expensive fixed state: it directly evaluates its compact analytical radial
+   transfer table on each exact node.
 
 The finetune cache is deliberately separate from the ordinary rendering cache,
 so transient simplex vertices cannot evict display/render entries.  Entries
@@ -344,101 +370,114 @@ never published.  Emulsion blur, offset, and intensity fits continue to use
 private copy-on-write screens because their source screen varies by tile and
 objective state.
 
-The five reuse levels are numerically exact.  The cache comparison explicitly
+The exact reuse levels are numerically exact.  The cache comparison explicitly
 includes per-channel capture MTFs even when digital sharpening mode is `none`;
 the capture transfer remains active in that mode.  This also prevents distinct
 channel MTFs from being mistaken for one common filter.
 
 Source-spectrum sharing is intentionally narrower than the final-screen
-cache.  It is enabled only when scalar physical defocus is the sole varying
-screen-filter parameter and the source screen is independent of emulsion
-variables.  In particular, the experimental Dufay strip-width prepass keeps
-using the ordinary exact path because every width trial changes the ideal
-screen.  Richardson--Lucy sharpening also stays on its spatial-domain path.
-For the direct-transfer numerical regime, radial coordinates of the fixed
-128x128 Fourier grid are computed once rather than through repeated `hypot()`
-calls for every exact focus state.  For the supported analytical physical path,
-the direct transfer is not merely a small-support shortcut: convolution of a
-periodic source is exactly multiplication of its Fourier-series coefficients
-by the signed OTF at the corresponding harmonics.  The prepared-source path
-therefore avoids estimating PSF support, reconstructing and wrapping a spatial
-PSF, and Fourier-transforming that kernel.  The ordinary support-dependent
-direct/wrapped-PSF implementation remains in use for variable strip widths,
-measured MTFs, empirical blur models, and the other unsupported cases listed
-above.
+cache.  It is enabled when one scalar capture coordinate is being fitted,
+strip widths and emulsion state are fixed, and Richardson--Lucy sharpening is
+not active.  This now covers both analytical scalar models used by adaptive
+blur detection: physical defocus and the metadata-free empirical fallback blur
+diameter.  The experimental Dufay strip-width prepass stays on the ordinary
+exact path because every width trial changes the ideal screen.
 
-### Dense scalar physical-defocus interpolation
+For the prepared analytical paths, radial coordinates of the fixed 128x128
+Fourier grid are computed once rather than through repeated `hypot()` calls.
+Physical defocus reuses a defocus-independent signed-OTF state.  The empirical
+fallback builds the same 512-sample radial `system_otf()` table used by the
+general MTF implementation, but applies it directly to the periodic Fourier
+coefficients instead of estimating PSF support and reconstructing a spatial
+PSF.  In both cases convolution of the periodic source is performed as direct
+Fourier-series multiplication, followed only by the required inverse channel
+FFTs.  The ordinary support-dependent direct/wrapped-PSF implementation remains
+in use for variable strip widths, measured MTF curves, residual-sigma and
+per-channel fits, emulsion-dependent screens, and the other unsupported cases.
 
-The exact cache alone has limited value for adaptive focus because a simplex
-normally generates different floating-point defocus values in every local fit.
-For the second, dense stage of displacement analysis, the worker can therefore
-restrict scalar physical defocus to a shared nonlinear node table and
-interpolate between neighboring exact cached screens.  The coarse prepass is
-always exact.
+### Dense scalar analytical focus/blur interpolation
 
-After the prepass, the worker calculates the process-screen frequency using the
-same expression as the GUI MTF widget:
+An exact cache alone has limited value for adaptive fitting because a simplex
+normally generates different floating-point parameter values in every local
+fit.  For the second, dense stage of scanner-blur analysis, the worker can
+therefore restrict either supported scalar analytical coordinate to a shared
+nonlinear node table and interpolate between neighboring exact cached screens.
+The coarse prepass remains exact.
+
+The supported coordinates are:
+
+- physical defocus, stored in millimetres; and
+- metadata-free empirical fallback blur diameter, stored in pixels.
+
+Measured MTF curves are deliberately excluded because their transfer and useful
+range are supplied by external data rather than one analytical scalar family.
+Per-channel focus, residual sigma, strip-width fitting and emulsion-dependent
+sources are also excluded.
+
+The worker calculates the process-screen frequency using the same expression as
+the GUI MTF widget:
 
 ```text
 screen_frequency = scr_names[screen_type].frequency * representative_pixel_size
 ```
 
-Starting at best focus, it finds the first positive defocus where the complete
-physical system MTF magnitude at that frequency reaches a configurable
-threshold, 5% by default.  Later OTF lobes are deliberately ignored: once the
-screen pattern has crossed this low-contrast interval, the scan is not treated
-as a useful focus measurement merely because a phase-reversed lobe rises
-again.  Analysis fails normally when the in-focus response is already below
-the threshold or when the exact coarse estimate lies beyond the useful range.
+Starting from the sharpest end of the active scalar model, it finds the first
+parameter value where the complete system MTF magnitude at that frequency
+reaches a configurable threshold, 5% by default.  For physical defocus this
+uses the first positive signed-OTF crossing and deliberately ignores later
+phase-reversed lobes.  For the empirical fallback it uses the first crossing of
+the analytical Gaussian/circular-blur transfer.  Analysis fails normally when
+the zero-blur response is already below the threshold or when the exact coarse
+estimate lies beyond the useful interval.
 
-For maximum useful displacement `d_max` and `N` nodes, the table uses
+For useful upper bound `v_max` and `N` nodes, the table uses
 
 ```text
-d_i = d_max * (i / (N - 1))^2,  i = 0,...,N-1.
+v_i = v_max * (i / (N - 1))^2,  i = 0,...,N-1.
 ```
 
-Quadratic spacing is intentionally dense near best focus, where a small
-displacement changes the transfer much more rapidly, and progressively coarser
-towards the low-MTF boundary.  The default is 33 nodes, which leaves room in
-the existing 64-entry linked-list LRU for concurrent and prepass states.
+Quadratic spacing is intentionally dense near the sharp end, where a small
+change affects the screen most strongly, and progressively coarser towards the
+low-MTF boundary.  The default is 49 nodes.  Physical-defocus fixtures had
+already stabilized with fewer nodes, but the compact fallback model showed a
+visible correction change at 33 nodes on the Dufay regression while 49 and 64
+matched the exact saved values; 49 therefore becomes the common conservative
+default while remaining below the 64-entry exact-screen LRU capacity.
 
-Each supported fixed-source node is built by the exact direct periodic-OTF path
-and stored in that existing LRU.  A requested intermediate displacement
+Each supported fixed-source node is built by its exact direct periodic-transfer
+path and stored in the existing LRU.  A requested intermediate scalar value
 linearly blends the `mult` samples of the two neighboring exact periodic
-screens; presentation-only `add` data is unchanged by optical filtering and
-is copied exactly.  The 128x128x3 blend is performed as one flat contiguous
-loop so C++ compilers can vectorize it; the former three-level loop had an
-innermost extent of three and was particularly slow in GCC builds.  This does
-**not** interpolate a nonnegative MTF curve: the node screens have already been
-formed with the signed physical OTF, so phase reversals and their effect on the
-simulated screen survive in the quantity being blended.
+screens; presentation-only `add` data is unchanged by optical filtering and is
+copied exactly.  The 128x128x3 blend is performed as one flat contiguous SIMD
+loop.  Solver-local weak references avoid repeated global LRU traversal while
+leaving eviction ownership with the bounded shared cache.
+
+The interpolation object is the already filtered periodic screen, not an MTF
+magnitude.  Physical nodes therefore retain signed-OTF phase reversals before
+the blend is performed.  The empirical fallback is nonnegative by model
+construction but uses the same screen-space interpolation machinery.
 
 Only the exploratory simplex objective is approximated.  At the selected
-optimum the solver constructs the periodic screen again with the exact
-physical filter, recomputes the objective and fitted colours, and keeps that
-exact state for outlier selection and result production.  Arbitrary final
+optimum the solver constructs the periodic screen again with the exact active
+analytical transfer, recomputes the objective and fitted colours, and keeps
+that exact state for outlier selection and result production.  Arbitrary final
 optima are not inserted into the node LRU, because they would evict the shared
 grid one value at a time.
 
-The approximation is accepted only when scalar physical defocus is the sole
-varying screen-filter parameter.  It is disabled for per-channel defocus,
-compact metadata-free blur diameter, residual MTF sigma, legacy screen blur,
-strip-width optimization, and emulsion-dependent source screens.  The Qt
-adaptive worker enables it automatically only when the physical diffraction
-model is fully available.  The CLI keeps it opt-in through
-`--interpolate-focus`; `--focus-min-mtf` and `--focus-cache-nodes` select the
-range threshold and node count.
+The Qt adaptive worker enables interpolation automatically for supported scalar
+analytical models and disables it for measured MTF data or incompatible fit
+flags.  The CLI keeps it opt-in through `--interpolate-focus`;
+`--focus-min-mtf` and `--focus-cache-nodes` select the range threshold and node
+count.
 
-An exact node miss now reuses the immutable source spectra in the supported
-fixed-source scalar-defocus case and its defocus-independent physical-transfer
-state.  Simplex coordinates outside the dense displacement mode nevertheless
-remain arbitrary floating-point values, and variable-strip or
-emulsion-dependent fits still rebuild their source state.  The present
-final-screen interpolation has fixed quadratic spacing; future error-controlled
-subdivision should explicitly validate intervals near signed OTF zero
-crossings.  The direct/wrapped-PSF transition remains relevant only to the
-ordinary filtering paths outside the prepared scalar physical-defocus case.
-See FT-034, FT-037, FT-052, FT-053, and FT-054.
+For both scalar models, an exact node miss now reuses immutable source spectra.
+Physical defocus also reuses its defocus-independent physical-transfer state;
+the fallback instead evaluates its inexpensive analytical 512-sample transfer
+table directly and never enters the generic MTF/PSF-support path.  Variable
+strip or emulsion-dependent fits still rebuild their source state.  Future
+error-controlled subdivision should validate interpolation error in output
+units rather than simply lowering the common node count.  See FT-034, FT-037,
+FT-052, FT-053, FT-054, and FT-057.
 
 ## Profiling
 
@@ -450,8 +489,9 @@ atomic-counter overhead.  Set `finetune_parameters::collect_profile` and read
 - screen initialization, local-state reuse, final-screen and source-spectrum
   cache hits/misses, solver-local node-reference hits/misses, and exact builds;
 - interpolated screen constructions, exact node uses, and exact final builds;
-- general MTF/PSF preparation, physical-transfer-state hits/misses and table
-  builds, direct-transfer and wrapped-PSF construction, and FFT counts;
+- general MTF/PSF preparation, physical-transfer-state hits/misses, empirical
+  fallback transfer-table builds, direct-transfer and wrapped-PSF construction,
+  and FFT counts;
 - accumulated time in the objective, screen cache/filter and interpolation
   paths, periodic-screen sampling, colour estimation, and residual calculation.
 

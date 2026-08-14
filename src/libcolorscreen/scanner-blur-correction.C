@@ -22,7 +22,7 @@ const char *scanner_blur_correction_parameters::pretty_correction_names[] = {
 };
 scanner_blur_correction_parameters::scanner_blur_correction_parameters ()
     : id (lru_caches::get ()), m_width (0), m_height (0),
-      m_corrections (NULL), m_mode (max_correction)
+      m_corrections (NULL), m_diagnostics (NULL), m_mode (max_correction)
 {
 }
 bool
@@ -43,7 +43,9 @@ scanner_blur_correction_parameters::alloc (int width, int height, enum correctio
     return false;
 
   free (m_corrections);
+  free (m_diagnostics);
   m_corrections = corrections;
+  m_diagnostics = NULL;
   m_width = width;
   m_height = height;
   m_mode = mode;
@@ -57,7 +59,29 @@ scanner_blur_correction_parameters::~scanner_blur_correction_parameters ()
 {
   if (m_corrections)
     free (m_corrections);
+  if (m_diagnostics)
+    free (m_diagnostics);
 }
+
+/* Allocate zero-filled reduction diagnostics for the current table.  */
+bool
+scanner_blur_correction_parameters::alloc_diagnostics ()
+{
+  if (!m_corrections || m_width <= 0 || m_height <= 0)
+    return false;
+  const size_t count = (size_t)m_width * (size_t)m_height;
+  if (count > std::numeric_limits<size_t>::max ()
+                  / sizeof (cell_diagnostics))
+    return false;
+  cell_diagnostics *diagnostics
+      = (cell_diagnostics *)calloc (count, sizeof (cell_diagnostics));
+  if (!diagnostics)
+    return false;
+  free (m_diagnostics);
+  m_diagnostics = diagnostics;
+  return true;
+}
+
 bool
 scanner_blur_correction_parameters::save (FILE *f)
 {
@@ -129,6 +153,40 @@ scanner_blur_correction_parameters::save_tiff (const char *filename)
     }
   return NULL;
 }
+
+/* Save per-cell reduction diagnostics to F as CSV.  The correction itself is
+   included so the file remains useful without the corresponding CSP file.  */
+bool
+scanner_blur_correction_parameters::save_diagnostics (FILE *f) const
+{
+  if (!f || !m_corrections || !m_diagnostics || m_width <= 0
+      || m_height <= 0 || m_mode < blur_radius || m_mode >= max_correction)
+    return false;
+  if (fprintf (f,
+               "x,y,correction_mode,correction,robust_spread,accepted_samples,"
+               "total_samples,accepted_fraction,mean_contrast\n")
+      < 0)
+    return false;
+  for (int y = 0; y < m_height; y++)
+    for (int x = 0; x < m_width; x++)
+      {
+        const size_t i = (size_t)y * m_width + x;
+        const cell_diagnostics &d = m_diagnostics[i];
+        const double accepted_fraction
+            = d.total_samples > 0
+                  ? (double)d.accepted_samples / d.total_samples
+                  : 0;
+        if (fprintf (f, "%d,%d,%s,%.17g,%.17g,%d,%d,%.17g,%.17g\n", x,
+                     y, correction_names[(int)m_mode],
+                     (double)m_corrections[i], (double)d.robust_spread,
+                     d.accepted_samples, d.total_samples, accepted_fraction,
+                     (double)d.mean_contrast)
+            < 0)
+          return false;
+      }
+  return !ferror (f);
+}
+
 bool
 scanner_blur_correction_parameters::load (FILE *f, const char **error)
 {
@@ -224,6 +282,7 @@ scanner_blur_correction_parameters::load (FILE *f, const char **error)
   std::swap (m_width, loaded.m_width);
   std::swap (m_height, loaded.m_height);
   std::swap (m_corrections, loaded.m_corrections);
+  std::swap (m_diagnostics, loaded.m_diagnostics);
   std::swap (m_mode, loaded.m_mode);
   return true;
 }

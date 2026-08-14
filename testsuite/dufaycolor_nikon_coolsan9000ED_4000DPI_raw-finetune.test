@@ -8,7 +8,7 @@ if test -z "$srcdir"; then
     test -z "$srcdir" && srcdir=.
     test "${VERBOSE+set}" != set && VERBOSE=1
 fi
-echo 1..11
+echo 1..13
 . $srcdir/defs.sh
 NAME=dufaycolor_nikon_coolsan9000ED_4000DPI_raw
 pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-blur >out-${NAME}-finetune-blur.txt || exit 1
@@ -77,7 +77,8 @@ ${AWK-awk} '
 pexec env OMP_NUM_THREADS=1 $RUNCOLORSCREEN analyze-scanner-blur \
   "$srcdir/${NAME}.tif" $PHYSICAL_PAR \
   --strip-width=1 --strip-height=1 --width=1 --height=1 \
-  --xsamples=1 --ysamples=1 --no-optimize-strip-widths --verbose --profile \
+  --xsamples=2 --ysamples=2 --no-optimize-strip-widths --verbose --profile \
+  --out-diagnostics=out-${NAME}-focus-fixed-strips-diagnostics.csv \
   --out=out-${NAME}-focus-fixed-strips.par \
   >out-${NAME}-focus-fixed-strips.txt || exit 1
 grep 'Analyzing 1x1 areas to determine blur ' \
@@ -89,7 +90,7 @@ grep 'focus source spectra: [1-9][0-9]* hits, 1 misses' \
   out-${NAME}-focus-fixed-strips.txt >/dev/null || exit 1
 grep 'prepass identifiability: 1 usable, 0 low contrast' \
   out-${NAME}-focus-fixed-strips.txt >/dev/null || exit 1
-grep 'dense pass identifiability: 4 usable, 0 low contrast' \
+grep 'dense pass identifiability: 16 usable, 0 low contrast' \
   out-${NAME}-focus-fixed-strips.txt >/dev/null || exit 1
 grep 'general MTF precomputes 0, PSF precomputes 0; physical focus state [1-9][0-9]* hits, 1 misses' \
   out-${NAME}-focus-fixed-strips.txt >/dev/null || exit 1
@@ -100,6 +101,24 @@ fixed_inverse_ffts=`sed -n 's/.*FFTs: [0-9][0-9]* kernel forward, \([0-9][0-9]*\
 test -n "$fixed_forward_ffts" -a -n "$fixed_inverse_ffts" || exit 1
 test "$fixed_forward_ffts" -lt "$fixed_inverse_ffts" || exit 1
 oktest "adaptive focus can keep coarse-pass strip widths fixed"
+
+${AWK-awk} -F, '
+  NR == 1 {
+    if ($0 != "x,y,correction_mode,correction,robust_spread,accepted_samples,total_samples,accepted_fraction,mean_contrast")
+      exit 1
+    next
+  }
+  {
+    if (NF != 9 || $3 != "mtf-defocus" || $5 <= 0 || $6 != 3 ||
+        $7 != 4 || $8 != 0.75 || $9 <= 0)
+      exit 1
+    n++
+  }
+  END { if (n != 4) exit 1 }
+' out-${NAME}-focus-fixed-strips-diagnostics.csv || exit 1
+grep 'correction cells: 4; accepted samples 3...3' \
+  out-${NAME}-focus-fixed-strips.txt >/dev/null || exit 1
+oktest "adaptive focus exports per-cell confidence diagnostics"
 
 # A finite optimizer result with insufficient fitted screen modulation must be
 # reported as unidentifiable rather than allowed to define the robust focus.
@@ -175,3 +194,58 @@ ${AWK-awk} '/scanner_blur_correction_defocus_mms:/ {
 cmp out-${NAME}-focus-exact-values.txt \
   out-${NAME}-focus-contrast-disabled-values.txt >/dev/null || exit 1
 oktest "adaptive focus contrast rejection can be disabled"
+
+# The metadata-free compact fallback uses the same scalar-node acceleration as
+# physical defocus.  Exact nodes and final evaluations must avoid the generic
+# MTF/PSF path, and the 49-node interpolation should preserve the stored
+# correction values on this fixture.
+NAME=dufaycolor_nikon_coolsan9000ED_4000DPI_raw
+FALLBACK_PAR=out-${NAME}-fallback-focus-input.par
+${AWK-awk} '
+  { print }
+  /^sharpen_amount:/ {
+    print "scanner_mtf_scale: 1.000000"
+    print "scanner_mtf_model: empirical-fallback"
+    print "scanner_mtf_sigma_px: 0"
+    print "scanner_mtf_halo_fraction: 0"
+    print "scanner_mtf_halo_sigma_px: 0"
+    print "scanner_mtf_blur_diameter_px: 1"
+    print "scanner_mtf_pixel_pitch_um: 0"
+    print "scanner_mtf_sensor_fill_factor: 0"
+    print "scanner_mtf_wavelength_nm: 0"
+    print "scanner_mtf_channel_wavelengths_nm: 0 0 0 0"
+    print "scanner_mtf_f_stop: 0"
+    print "scanner_mtf_defocus_mm: 0"
+    print "scan_dpi: 4000"
+  }
+' "$srcdir/${NAME}-nomesh.par" >$FALLBACK_PAR || exit 1
+
+FALLBACK_ARGS="--strip-width=1 --strip-height=1 --width=1 --height=1 --xsamples=1 --ysamples=1 --no-optimize-strip-widths --profile"
+pexec env OMP_NUM_THREADS=1 $RUNCOLORSCREEN analyze-scanner-blur \
+  "$srcdir/${NAME}.tif" $FALLBACK_PAR $FALLBACK_ARGS \
+  --out=out-${NAME}-fallback-focus-exact.par \
+  >out-${NAME}-fallback-focus-exact.txt || exit 1
+pexec env OMP_NUM_THREADS=1 $RUNCOLORSCREEN analyze-scanner-blur \
+  "$srcdir/${NAME}.tif" $FALLBACK_PAR $FALLBACK_ARGS \
+  --interpolate-focus --focus-cache-nodes=49 \
+  --out=out-${NAME}-fallback-focus-interpolated.par \
+  >out-${NAME}-fallback-focus-interpolated.txt || exit 1
+
+grep 'general MTF precomputes 0, PSF precomputes 0;.*empirical fallback [1-9][0-9]* transfer tables' \
+  out-${NAME}-fallback-focus-exact.txt >/dev/null || exit 1
+grep 'focus source spectra: [1-9][0-9]* hits, 1 misses' \
+  out-${NAME}-fallback-focus-exact.txt >/dev/null || exit 1
+grep 'focus approximation: [1-9][0-9]* interpolations' \
+  out-${NAME}-fallback-focus-interpolated.txt >/dev/null || exit 1
+
+grep 'scanner_blur_correction_type: mtf-blur-diameter' \
+  out-${NAME}-fallback-focus-exact.par >/dev/null || exit 1
+${AWK-awk} '/scanner_blur_correction_blur_diameter_pxs:/ {
+  for (i = 2; i <= NF; i++) print $i
+}' out-${NAME}-fallback-focus-exact.par >out-${NAME}-fallback-focus-exact-values.txt
+${AWK-awk} '/scanner_blur_correction_blur_diameter_pxs:/ {
+  for (i = 2; i <= NF; i++) print $i
+}' out-${NAME}-fallback-focus-interpolated.par >out-${NAME}-fallback-focus-interpolated-values.txt
+cmp out-${NAME}-fallback-focus-exact-values.txt \
+  out-${NAME}-fallback-focus-interpolated-values.txt >/dev/null || exit 1
+oktest "adaptive fallback blur uses cached nonlinear nodes"

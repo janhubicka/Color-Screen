@@ -80,21 +80,21 @@ finetune_render_mix_dark (rgbdata weights, luminosity_t scalar_dark,
   return { neutral_dark, neutral_dark, neutral_dark };
 }
 
-/* Return a quadratically spaced scalar-defocus grid interval.  Computing the
+/* Return a quadratically spaced scalar blur/focus-grid interval.  Computing
    node values from integer indexes makes cache keys bit-identical in every
    solver that uses the same range.  */
 bool
 finetune_focus_grid_interval_for_value (
-    coord_t defocus, coord_t max_defocus, int nodes,
+    coord_t value, coord_t max_value, int nodes,
     finetune_focus_grid_interval *interval)
 {
-  if (!interval || !my_isfinite (defocus) || !my_isfinite (max_defocus)
-      || max_defocus <= 0 || nodes < 2 || nodes > 64)
+  if (!interval || !my_isfinite (value) || !my_isfinite (max_value)
+      || max_value <= 0 || nodes < 2 || nodes > 64)
     return false;
 
-  defocus = std::clamp (defocus, (coord_t)0, max_defocus);
+  value = std::clamp (value, (coord_t)0, max_value);
   const coord_t last = nodes - 1;
-  const coord_t scaled = std::sqrt (defocus / max_defocus) * last;
+  const coord_t scaled = std::sqrt (value / max_value) * last;
   int lower_index = (int)std::floor (scaled);
   if (lower_index < 0)
     lower_index = 0;
@@ -104,13 +104,13 @@ finetune_focus_grid_interval_for_value (
 
   const auto node_value = [=] (int index) {
     const coord_t t = index / last;
-    return max_defocus * t * t;
+    return max_value * t * t;
   };
   const coord_t lower = node_value (lower_index);
   const coord_t upper = node_value (upper_index);
   coord_t upper_weight = 0;
   if (upper > lower)
-    upper_weight = (defocus - lower) / (upper - lower);
+    upper_weight = (value - lower) / (upper - lower);
   upper_weight = std::clamp (upper_weight, (coord_t)0, (coord_t)1);
 
   /* Roundoff in SQRT may place a value computed from an exact node just above
@@ -118,13 +118,13 @@ finetune_focus_grid_interval_for_value (
      cases so they require only one cache lookup.  */
   const coord_t tolerance
       = std::numeric_limits<coord_t>::epsilon ()
-        * std::max ((coord_t)1, max_defocus) * 32;
-  if (my_fabs (defocus - lower) <= tolerance)
+        * std::max ((coord_t)1, max_value) * 32;
+  if (my_fabs (value - lower) <= tolerance)
     {
       upper_index = lower_index;
       upper_weight = 0;
     }
-  else if (my_fabs (defocus - upper) <= tolerance)
+  else if (my_fabs (value - upper) <= tolerance)
     {
       lower_index = upper_index;
       upper_weight = 0;
@@ -138,48 +138,49 @@ finetune_focus_grid_interval_for_value (
   return true;
 }
 
-/* Find the first useful-defocus boundary at the process-screen frequency.
-   The quadratic scan is deliberately dense near best focus and is followed
-   by bisection.  This is cheap compared with constructing even one filtered
+/* Find the first useful scalar blur/focus boundary at the process-screen
+   frequency.  SET_VALUE changes the one varying model coordinate.  The
+   quadratic scan is deliberately dense near the sharp end and is followed by
+   bisection.  This is cheap compared with constructing even one filtered
    periodic screen and avoids stepping over the first low-contrast interval
-   before later signed-OTF lobes.  */
-bool
-finetune_useful_defocus_limit (mtf_parameters params,
-                               coord_t pixel_frequency,
-                               coord_t minimum_mtf, coord_t hard_max,
-                               coord_t *limit)
+   before later OTF lobes.  */
+template<typename SetValue>
+static bool
+finetune_useful_scalar_limit (mtf_parameters params,
+                              coord_t pixel_frequency,
+                              coord_t minimum_mtf, coord_t hard_max,
+                              SetValue set_value, coord_t *limit)
 {
   if (!limit || !my_isfinite (pixel_frequency) || pixel_frequency <= 0
       || !my_isfinite (minimum_mtf) || minimum_mtf <= 0
-      || minimum_mtf >= 1 || !my_isfinite (hard_max) || hard_max <= 0
-      || !params.simulate_diffraction_p ())
+      || minimum_mtf >= 1 || !my_isfinite (hard_max) || hard_max <= 0)
     return false;
 
-  params.defocus = 0;
+  set_value (params, 0);
   const coord_t in_focus = params.system_mtf (pixel_frequency);
   if (!my_isfinite (in_focus) || in_focus <= minimum_mtf)
     return false;
 
   constexpr int samples = 4096;
-  coord_t previous_defocus = 0;
+  coord_t previous_value = 0;
   for (int i = 1; i <= samples; i++)
     {
       const coord_t t = (coord_t)i / samples;
-      const coord_t defocus = hard_max * t * t;
-      params.defocus = defocus;
+      const coord_t value = hard_max * t * t;
+      set_value (params, value);
       const coord_t current_mtf = params.system_mtf (pixel_frequency);
       if (!my_isfinite (current_mtf))
         return false;
       if (current_mtf <= minimum_mtf)
         {
-          coord_t low = previous_defocus;
-          coord_t high = defocus;
+          coord_t low = previous_value;
+          coord_t high = value;
           /* SYSTEM_MTF is not assumed globally monotone: bisection remains
              inside the first sampled crossing bracket.  */
           for (int iteration = 0; iteration < 60; iteration++)
             {
               const coord_t middle = (low + high) * (coord_t)0.5;
-              params.defocus = middle;
+              set_value (params, middle);
               const coord_t middle_mtf = params.system_mtf (pixel_frequency);
               if (!my_isfinite (middle_mtf))
                 return false;
@@ -191,10 +192,39 @@ finetune_useful_defocus_limit (mtf_parameters params,
           *limit = high;
           return true;
         }
-      previous_defocus = defocus;
+      previous_value = value;
     }
   *limit = hard_max;
   return true;
+}
+
+/* Find the first useful physical-defocus boundary.  */
+bool
+finetune_useful_defocus_limit (mtf_parameters params,
+                               coord_t pixel_frequency,
+                               coord_t minimum_mtf, coord_t hard_max,
+                               coord_t *limit)
+{
+  if (!params.simulate_diffraction_p ())
+    return false;
+  return finetune_useful_scalar_limit (
+      params, pixel_frequency, minimum_mtf, hard_max,
+      [] (mtf_parameters &p, coord_t value) { p.defocus = value; }, limit);
+}
+
+/* Find the first useful metadata-free compact-blur boundary.  */
+bool
+finetune_useful_blur_diameter_limit (mtf_parameters params,
+                                     coord_t pixel_frequency,
+                                     coord_t minimum_mtf, coord_t hard_max,
+                                     coord_t *limit)
+{
+  if (params.simulate_diffraction_p () || params.use_measured_mtf ())
+    return false;
+  return finetune_useful_scalar_limit (
+      params, pixel_frequency, minimum_mtf, hard_max,
+      [] (mtf_parameters &p, coord_t value) { p.blur_diameter = value; },
+      limit);
 }
 
 /* Classify one completed fit for use by adaptive blur/focus reduction.  Do
@@ -272,6 +302,7 @@ public:
   std::atomic_uint64_t physical_focus_cache_hits{0};
   std::atomic_uint64_t physical_focus_cache_misses{0};
   std::atomic_uint64_t physical_focus_transfer_builds{0};
+  std::atomic_uint64_t empirical_focus_transfer_builds{0};
   std::atomic_uint64_t direct_transfer_builds{0};
   std::atomic_uint64_t wrapped_psf_builds{0};
   std::atomic_uint64_t kernel_forward_ffts{0};
@@ -298,6 +329,8 @@ public:
                                            std::memory_order_relaxed);
     physical_focus_transfer_builds.fetch_add (
         p.physical_focus_transfer_builds, std::memory_order_relaxed);
+    empirical_focus_transfer_builds.fetch_add (
+        p.empirical_focus_transfer_builds, std::memory_order_relaxed);
     direct_transfer_builds.fetch_add (p.direct_transfer_builds,
                                       std::memory_order_relaxed);
     wrapped_psf_builds.fetch_add (p.wrapped_psf_builds,
@@ -339,6 +372,7 @@ public:
     COPY_PROFILE_FIELD (physical_focus_cache_hits);
     COPY_PROFILE_FIELD (physical_focus_cache_misses);
     COPY_PROFILE_FIELD (physical_focus_transfer_builds);
+    COPY_PROFILE_FIELD (empirical_focus_transfer_builds);
     COPY_PROFILE_FIELD (direct_transfer_builds);
     COPY_PROFILE_FIELD (wrapped_psf_builds);
     COPY_PROFILE_FIELD (kernel_forward_ffts);
@@ -2698,17 +2732,16 @@ public:
            && !optimize_emulsion_offset;
   }
 
-  /* Source spectra can be shared only while the ideal periodic screen and
-     every capture parameter except one scalar physical defocus stay fixed.
-     Strip-width fitting is intentionally left on the ordinary exact path;
-     it changes the source screen itself and is tracked as separate
-     experimental work.  */
+  /* Source spectra can be shared while the ideal periodic screen stays
+     fixed.  Scalar physical defocus and compact fallback blur diameter both
+     change only the capture transfer.  Strip-width fitting is intentionally
+     left on the ordinary exact path because it changes the source screen
+     itself.  */
   bool
   focus_source_cache_eligible_p () const
   {
     return optimize_scanner_mtf_defocus && !optimize_scanner_mtf_sigma
            && !optimize_scanner_mtf_channel_defocus && !optimize_strips
-           && render_sharpen_params.scanner_mtf.simulate_diffraction_p ()
            && focus_screen_cache_eligible_p ()
            && (!tile_sharpened
                || render_sharpen_params.get_mode ()
@@ -2716,9 +2749,10 @@ public:
   }
 
   /* The discretized approximation is intentionally narrower than the exact
-     focus cache.  It applies only to one scalar physical-defocus coordinate;
-     all other capture-transfer parameters and the source periodic screen
-     must stay fixed during the fit.  */
+     focus cache.  It applies only to one scalar analytical capture coordinate:
+     physical defocus or metadata-free compact fallback blur diameter.  All
+     other capture-transfer parameters and the source periodic screen must stay
+     fixed during the fit.  Measured MTF data remains on the exact path.  */
   bool
   focus_screen_interpolation_eligible_p () const
   {
@@ -2726,7 +2760,7 @@ public:
            && optimize_scanner_mtf_defocus
            && !optimize_scanner_mtf_sigma
            && !optimize_scanner_mtf_channel_defocus && !optimize_strips
-           && render_sharpen_params.scanner_mtf.simulate_diffraction_p ()
+           && !render_sharpen_params.scanner_mtf.use_measured_mtf ()
            && focus_source_cache_eligible_p ();
   }
 
@@ -2778,7 +2812,7 @@ public:
     return scr;
   }
 
-  /* Obtain the immutable source spectrum used by an exact scalar-defocus
+  /* Obtain the immutable source spectrum used by an exact scalar blur/focus
      final evaluation and account for this direct source-cache lookup.  */
   std::shared_ptr<screen_filter_source>
   get_profiled_cached_focus_source (coord_t red_strip_width,
@@ -2808,11 +2842,12 @@ public:
     return source;
   }
 
-  /* Obtain one exact scalar-defocus node.  NODE_DEFOCUS is generated from an
-     integer grid index, so all dense cells using the same range produce
-     bit-identical cache keys.  This common-value override is used only by the
-     scalar interpolation path; ordinary exact per-channel fits retain all
-     three values from CAPTURE_SHARPEN_PARAMETERS.  */
+  /* Obtain one exact scalar blur/focus node.  NODE_DEFOCUS is generated from
+     an integer grid index, so all dense cells using the same range produce
+     bit-identical cache keys.  For the empirical fallback it represents blur
+     diameter rather than physical defocus.  This common-value override is
+     used only by the scalar interpolation path; ordinary exact per-channel
+     fits retain all three values from CAPTURE_SHARPEN_PARAMETERS.  */
   std::shared_ptr<screen>
   get_focus_screen_node (coord_t *v, int node_index, coord_t node_defocus,
                          coord_t red_strip_width,
@@ -2839,7 +2874,10 @@ public:
     std::array<sharpen_parameters, 3> sp
         = capture_sharpen_parameters (v);
     for (int c = 0; c < 3; c++)
-      sp[c].scanner_mtf.defocus = node_defocus;
+      if (sp[c].scanner_mtf.simulate_diffraction_p ())
+        sp[c].scanner_mtf.defocus = node_defocus;
+      else
+        sp[c].scanner_mtf.blur_diameter = node_defocus;
     cached = get_profiled_cached_focus_screen (
         sp, red_strip_width, green_strip_width);
     if (cached)
@@ -4913,10 +4951,10 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                     "defocus as the sole varying screen-filter parameter";
           return finish ();
         }
-      if (!rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
+      if (rparam.sharpen.scanner_mtf.use_measured_mtf ())
         {
-          ret.err = "focus interpolation requires the physical diffraction "
-                    "model";
+          ret.err = "focus interpolation requires an analytical physical or "
+                    "empirical fallback MTF model";
           return finish ();
         }
       if (!my_isfinite (fparams.scanner_mtf_defocus_interpolation_max)

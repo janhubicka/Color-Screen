@@ -17,8 +17,10 @@ const char *finetune_flag_error (uint64_t flags);
 rgbdata finetune_render_mix_dark (rgbdata weights, luminosity_t scalar_dark,
                                   rgbdata fallback);
 
-/* One interval of the nonlinear scalar-defocus grid used by the dense
-   displacement-analysis approximation.  UPPER_WEIGHT is zero at LOWER and
+/* One interval of the nonlinear scalar blur/focus grid used by the dense
+   displacement-analysis approximation.  The scalar coordinate is physical
+   image-plane defocus for the diffraction model and compact blur diameter for
+   the metadata-free empirical fallback.  UPPER_WEIGHT is zero at LOWER and
    one at UPPER.  */
 struct finetune_focus_grid_interval
 {
@@ -29,10 +31,10 @@ struct finetune_focus_grid_interval
   coord_t upper_weight = 0;
 };
 
-/* Return the quadratically spaced grid interval containing DEFOCUS in
-   [0,MAX_DEFOCUS].  NODES includes both endpoints.  */
+/* Return the quadratically spaced grid interval containing VALUE in
+   [0,MAX_VALUE].  NODES includes both endpoints.  */
 bool finetune_focus_grid_interval_for_value (
-    coord_t defocus, coord_t max_defocus, int nodes,
+    coord_t value, coord_t max_value, int nodes,
     finetune_focus_grid_interval *interval);
 
 /* Materialize in DST the multiplicative transmission between exact
@@ -65,6 +67,16 @@ bool finetune_useful_defocus_limit (mtf_parameters params,
                                     coord_t pixel_frequency,
                                     coord_t minimum_mtf, coord_t hard_max,
                                     coord_t *limit);
+
+/* Find the first nonnegative compact fallback blur diameter at which PARAMS'
+   system MTF at PIXEL_FREQUENCY drops to MINIMUM_MTF.  Search no farther than
+   HARD_MAX and store HARD_MAX when no crossing occurs.  PARAMS must select
+   the metadata-free analytical fallback rather than measured MTF data.  */
+bool finetune_useful_blur_diameter_limit (mtf_parameters params,
+                                          coord_t pixel_frequency,
+                                          coord_t minimum_mtf,
+                                          coord_t hard_max,
+                                          coord_t *limit);
 
 /* Find the fit-quality cutoff that retains RETAIN_RATIO of the most reliable
    successful RESULTS.  Failed and non-finite results are ignored.  */

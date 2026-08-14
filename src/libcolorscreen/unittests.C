@@ -371,6 +371,37 @@ test_finetune_helpers ()
       return false;
     }
 
+  mtf_parameters fallback_mtf;
+  fallback_mtf.model = mtf_model::empirical_fallback;
+  fallback_mtf.sigma = 0;
+  fallback_mtf.sensor_fill_factor = 0;
+  fallback_mtf.blur_diameter = 0;
+  coord_t useful_blur_limit = 0;
+  if (!finetune_useful_blur_diameter_limit (
+          fallback_mtf, screen_frequency, (coord_t)0.05, 20,
+          &useful_blur_limit)
+      || useful_blur_limit <= 0 || useful_blur_limit >= 20)
+    {
+      fprintf (stderr, "Useful fallback-blur range was not detected\n");
+      return false;
+    }
+  fallback_mtf.blur_diameter = useful_blur_limit;
+  if (fabs (fallback_mtf.system_mtf (screen_frequency) - 0.05) > 1e-8)
+    {
+      fprintf (stderr,
+               "Useful fallback boundary does not match 5%% MTF: %.12g\n",
+               fallback_mtf.system_mtf (screen_frequency));
+      return false;
+    }
+  fallback_mtf.blur_diameter = 0;
+  if (finetune_useful_blur_diameter_limit (
+          focus_mtf, screen_frequency, (coord_t)0.05, 20,
+          &useful_blur_limit))
+    {
+      fprintf (stderr, "Physical model was accepted as fallback blur\n");
+      return false;
+    }
+
   zero_dimensional_simplex_problem zero;
   const double zero_result
       = simplex<double> (zero, nullptr, nullptr, false);
@@ -446,7 +477,8 @@ test_finetune_focus_screen_cache ()
   std::shared_ptr<screen> first = finetune_get_cached_screen_for_test (
       Joly, red_width, green_width, false, sharpen, false, &cache_hit,
       &miss_profile);
-  if (!first || cache_hit || !miss_profile.mtf_precompute_calls
+  if (!first || cache_hit || miss_profile.mtf_precompute_calls
+      || !miss_profile.empirical_focus_transfer_builds
       || !miss_profile.screen_forward_ffts
       || !miss_profile.screen_inverse_ffts)
     {
@@ -467,7 +499,13 @@ test_finetune_focus_screen_cache ()
      transforms without repeating any source forward FFT.  */
   std::array<sharpen_parameters, 3> changed_sharpen = sharpen;
   for (int c = 0; c < 3; c++)
-    changed_sharpen[c].scanner_mtf.sigma += (luminosity_t)0.173;
+    {
+      changed_sharpen[c].scanner_mtf.sigma += (luminosity_t)0.173;
+      /* Exercise a nonzero compact fallback diameter too.  This is the
+         adaptive fallback path accelerated below, and historically it could
+         take the wrapped-PSF implementation.  */
+      changed_sharpen[c].scanner_mtf.blur_diameter = (luminosity_t)2.75;
+    }
   sharpen_parameters *changed_channels[3]
       = { &changed_sharpen[0], &changed_sharpen[1], &changed_sharpen[2] };
   screen changed_expected;
@@ -505,6 +543,7 @@ test_finetune_focus_screen_cache ()
   if (!second || !cache_hit || second.get () != first.get ()
       || hit_profile.mtf_precompute_calls
       || hit_profile.mtf_psf_precompute_calls
+      || hit_profile.empirical_focus_transfer_builds
       || hit_profile.direct_transfer_builds
       || hit_profile.wrapped_psf_builds || hit_profile.kernel_forward_ffts
       || hit_profile.screen_forward_ffts
@@ -856,6 +895,68 @@ test_scanner_blur_correction_contract ()
   correction.set_correction (1, 0, 0.2);
   correction.set_correction (0, 1, 0.3);
   correction.set_correction (1, 1, 0.4);
+  if (!correction.alloc_diagnostics ())
+    return false;
+  scanner_blur_correction_parameters::cell_diagnostics diagnostics
+      = { 0.025, 0.4, 3, 4 };
+  correction.set_diagnostics (1, 1, diagnostics);
+  const scanner_blur_correction_parameters::cell_diagnostics *saved_diagnostics
+      = correction.get_diagnostics (1, 1);
+  if (!correction.has_diagnostics () || !saved_diagnostics
+      || my_fabs (saved_diagnostics->robust_spread - 0.025) > 1e-6
+      || my_fabs (saved_diagnostics->mean_contrast - 0.4) > 1e-6
+      || saved_diagnostics->accepted_samples != 3
+      || saved_diagnostics->total_samples != 4)
+    return false;
+
+  FILE *diagnostic_csv = tmpfile ();
+  if (!diagnostic_csv || !correction.save_diagnostics (diagnostic_csv))
+    {
+      if (diagnostic_csv)
+        fclose (diagnostic_csv);
+      return false;
+    }
+  rewind (diagnostic_csv);
+  char diagnostic_line[512];
+  if (!fgets (diagnostic_line, sizeof (diagnostic_line), diagnostic_csv)
+      || strcmp (diagnostic_line,
+                 "x,y,correction_mode,correction,robust_spread,accepted_samples,"
+                 "total_samples,accepted_fraction,mean_contrast\n"))
+    {
+      fclose (diagnostic_csv);
+      return false;
+    }
+  bool found_diagnostic = false;
+  while (fgets (diagnostic_line, sizeof (diagnostic_line), diagnostic_csv))
+    {
+      int x, y, accepted, total;
+      char mode[32];
+      double value, spread, fraction, contrast;
+      if (sscanf (diagnostic_line, "%d,%d,%31[^,],%lf,%lf,%d,%d,%lf,%lf",
+                  &x, &y, mode, &value, &spread, &accepted, &total, &fraction,
+                  &contrast)
+          != 9)
+        {
+          fclose (diagnostic_csv);
+          return false;
+        }
+      if (x == 1 && y == 1)
+        {
+          found_diagnostic = true;
+          if (strcmp (mode, "blur-radius")
+              || my_fabs (value - 0.4) > 1e-6
+              || my_fabs (spread - 0.025) > 1e-6 || accepted != 3
+              || total != 4 || my_fabs (fraction - 0.75) > 1e-6
+              || my_fabs (contrast - 0.4) > 1e-6)
+            {
+              fclose (diagnostic_csv);
+              return false;
+            }
+        }
+    }
+  fclose (diagnostic_csv);
+  if (!found_diagnostic)
+    return false;
   const uint64_t original_id = correction.id;
 
   if (correction.alloc (0, 2,
@@ -870,7 +971,8 @@ test_scanner_blur_correction_contract ()
       || correction.get_height () != 2
       || correction.get_mode ()
              != scanner_blur_correction_parameters::blur_radius
-      || my_fabs (correction.get_correction (1, 1) - 0.4) > 1e-6)
+      || my_fabs (correction.get_correction (1, 1) - 0.4) > 1e-6
+      || !correction.has_diagnostics ())
     return false;
 
   FILE *malformed = tmpfile ();
@@ -886,7 +988,8 @@ test_scanner_blur_correction_contract ()
   fclose (malformed);
   if (malformed_loaded || !error || correction.id != original_id
       || correction.get_width () != 2 || correction.get_height () != 2
-      || my_fabs (correction.get_correction (1, 1) - 0.4) > 1e-6)
+      || my_fabs (correction.get_correction (1, 1) - 0.4) > 1e-6
+      || !correction.has_diagnostics ())
     return false;
 
   FILE *saved = tmpfile ();
@@ -906,7 +1009,8 @@ test_scanner_blur_correction_contract ()
       || loaded.get_mode ()
              != scanner_blur_correction_parameters::blur_radius
       || my_fabs (loaded.get_correction (0, 0) - 0.1) > 1e-6
-      || my_fabs (loaded.get_correction (1, 1) - 0.4) > 1e-6)
+      || my_fabs (loaded.get_correction (1, 1) - 0.4) > 1e-6
+      || loaded.has_diagnostics ())
     return false;
 
   const uint64_t before_realloc = loaded.id;
@@ -915,7 +1019,8 @@ test_scanner_blur_correction_contract ()
       || loaded.id == before_realloc || loaded.get_width () != 1
       || loaded.get_height () != 3
       || loaded.get_mode ()
-             != scanner_blur_correction_parameters::mtf_defocus)
+             != scanner_blur_correction_parameters::mtf_defocus
+      || loaded.has_diagnostics ())
     return false;
   for (int y = 0; y < 3; y++)
     if (loaded.get_correction (0, y) != 0)
