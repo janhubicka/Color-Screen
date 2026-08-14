@@ -64,13 +64,16 @@ expensive local fits themselves:
 
 1. `step1()` validates the grid and allocates a coarse prepass;
 2. `analyze_strips()` fits each coarse location;
-3. `step2()` rejects the least reliable prepass fits by fit score, computes
-   robust global strip widths and focus, updates the worker's private rendering
-   parameters, derives the useful physical-defocus range when dense focus
-   interpolation is enabled, and allocates the dense pass;
-4. `analyze_blur()` fits each dense sub-sample;
-5. `step3()` rejects the least reliable local fits by fit score and robustly
-   reduces every group of sub-samples to one correction-table entry.
+3. `step2()` first rejects numerically invalid or insufficient-contrast
+   prepass fits, then rejects the least reliable remaining fits by fit score,
+   computes robust global strip widths and focus, updates the worker's private
+   rendering parameters, derives the useful physical-defocus range when dense
+   focus interpolation is enabled, and allocates the dense pass;
+4. `analyze_blur()` fits each dense sub-sample and exposes it to the GUI only
+   when its fitted screen modulation is identifiable;
+5. `step3()` applies the same identifiability guard before fit-score filtering
+   and robustly reduces every group of sub-samples to one correction-table
+   entry.
 
 The worker is single-use.  It stores one scalar correction model: legacy blur
 radius, physical MTF defocus, or compact MTF blur diameter.  Scanner MTF sigma
@@ -241,6 +244,40 @@ Adaptive focus uses this fit-quality score in two stages:
 
 The same accepted set is used for histogram range construction and histogram
 population.
+
+### Identifiability and fitted contrast
+
+A converged simplex is not sufficient evidence that local focus was measured.
+A flat, saturated, damaged, or otherwise weakly modulated patch can have a
+finite optimum even though the additive-screen phase and blur are effectively
+unconstrained.  `finetune_result::contrast` records the positional colour
+contrast derived from the fitted screen primaries and is used as the local
+identifiability signal.
+
+The adaptive worker accepts a fit only when:
+
+- the solver completed successfully;
+- fitted contrast is finite and nonnegative;
+- fitted contrast is at least `min_contrast` (1/1024 by default);
+- the historical contrast-scaled fit score is finite, nonnegative, and below
+  its failure sentinel.
+
+This classification happens before either coarse or dense fit-score histograms
+are built.  Consequently, an area containing only weak fits fails explicitly
+instead of promoting its least bad arbitrary focus value.  Invalid correction
+values and invalid Dufay strip widths remain separate post-classification
+failures.
+
+The internal default threshold is 1/1024, or approximately 0.09765625% of
+normalized image range.  The Qt dialog exposes it as **Minimum fitted
+contrast** in percent.  The command-line equivalent is
+`analyze-scanner-blur --min-contrast=PERCENT`; zero disables only the positive
+contrast floor, while numerical validity checks remain active.  Profiling
+reports usable, low-contrast, invalid-contrast, invalid-fit-score, and solver-
+failure counts separately for the coarse and dense passes, together with the
+finite fitted-contrast range and mean.  Individual `finetune_result` objects
+retain their raw contrast, so future confidence-map presentation does not need
+to change the solver result contract.
 
 ## Starting values
 
@@ -413,7 +450,9 @@ atomic-counter overhead.  Set `finetune_parameters::collect_profile` and read
   paths, periodic-screen sampling, colour estimation, and residual calculation.
 
 `analyze-scanner-blur --profile` enables profiling for all coarse and dense
-fits and prints their aggregate.  Times are steady-clock nanoseconds summed
+fits and prints their aggregate.  It also prints the adaptive minimum contrast
+and separate coarse/dense identifiability counts and fitted-contrast ranges.
+Times are steady-clock nanoseconds summed
 across worker threads.  They are intentionally overlapping diagnostic totals,
 not components that add to wall time: in particular a cache miss includes the
 exact filter construction, and the objective includes all of its sub-stages.

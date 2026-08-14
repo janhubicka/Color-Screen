@@ -135,7 +135,10 @@ private slots:
   void onFocusAnalysisRequested(bool checked, uint64_t flags);
   void onFocusAnalysisFinished(bool success, colorscreen::finetune_result result);
   void onAdaptiveSharpeningRequested(const AdaptiveSharpeningParameters &parameters);
-  void onAdaptiveSharpeningFinished(bool success, std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result);
+  void onAdaptiveSharpeningFinished(
+      bool success,
+      std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result,
+      const QString &error);
   void onAutomaticallyAddPointsRequested(const colorscreen::finetune_area_parameters &params);
   void onAutomaticallyAddPointsInAreaRequested(const colorscreen::finetune_area_parameters &params);
   void onAutodetectCoordinatesRequested();

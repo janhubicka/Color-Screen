@@ -8,7 +8,7 @@ if test -z "$srcdir"; then
     test -z "$srcdir" && srcdir=.
     test "${VERBOSE+set}" != set && VERBOSE=1
 fi
-echo 1..9
+echo 1..11
 . $srcdir/defs.sh
 NAME=dufaycolor_nikon_coolsan9000ED_4000DPI_raw
 pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-blur >out-${NAME}-finetune-blur.txt || exit 1
@@ -87,6 +87,10 @@ if grep '^Red strip width ' out-${NAME}-focus-fixed-strips.txt >/dev/null; then
 fi
 grep 'focus source spectra: [1-9][0-9]* hits, 1 misses' \
   out-${NAME}-focus-fixed-strips.txt >/dev/null || exit 1
+grep 'prepass identifiability: 1 usable, 0 low contrast' \
+  out-${NAME}-focus-fixed-strips.txt >/dev/null || exit 1
+grep 'dense pass identifiability: 4 usable, 0 low contrast' \
+  out-${NAME}-focus-fixed-strips.txt >/dev/null || exit 1
 grep 'general MTF precomputes 0, PSF precomputes 0; physical focus state [1-9][0-9]* hits, 1 misses' \
   out-${NAME}-focus-fixed-strips.txt >/dev/null || exit 1
 grep 'periodic filters: [1-9][0-9]* direct transfers, 0 wrapped PSFs' \
@@ -96,6 +100,24 @@ fixed_inverse_ffts=`sed -n 's/.*FFTs: [0-9][0-9]* kernel forward, \([0-9][0-9]*\
 test -n "$fixed_forward_ffts" -a -n "$fixed_inverse_ffts" || exit 1
 test "$fixed_forward_ffts" -lt "$fixed_inverse_ffts" || exit 1
 oktest "adaptive focus can keep coarse-pass strip widths fixed"
+
+# A finite optimizer result with insufficient fitted screen modulation must be
+# reported as unidentifiable rather than allowed to define the robust focus.
+rm -f out-${NAME}-focus-unidentifiable.par
+if env OMP_NUM_THREADS=1 $RUNCOLORSCREEN analyze-scanner-blur \
+  "$srcdir/${NAME}.tif" $PHYSICAL_PAR \
+  --strip-width=1 --strip-height=1 --width=1 --height=1 \
+  --xsamples=1 --ysamples=1 --no-optimize-strip-widths \
+  --min-contrast=100 --out=out-${NAME}-focus-unidentifiable.par \
+  >out-${NAME}-focus-unidentifiable.txt 2>&1; then
+  exit 1
+fi
+grep 'no identifiable fits at minimum fitted contrast 100%' \
+  out-${NAME}-focus-unidentifiable.txt >/dev/null || exit 1
+grep '1 low contrast' out-${NAME}-focus-unidentifiable.txt >/dev/null \
+  || exit 1
+test ! -f out-${NAME}-focus-unidentifiable.par || exit 1
+oktest "adaptive focus rejects unidentifiable low-contrast fits"
 
 COMMON_FOCUS_ARGS="--strip-width=1 --strip-height=1 --width=1 --height=1 --xsamples=1 --ysamples=1 --no-optimize-strip-widths --profile"
 pexec env OMP_NUM_THREADS=1 $RUNCOLORSCREEN analyze-scanner-blur \
@@ -137,3 +159,17 @@ paste out-${NAME}-focus-exact-values.txt \
       END { if (!n) exit 1 }
     ' || exit 1
 oktest "adaptive physical focus uses cached nonlinear nodes"
+
+# Zero explicitly disables the positive contrast floor and must preserve the
+# historical correction produced by the otherwise identical exact run.
+pexec env OMP_NUM_THREADS=1 $RUNCOLORSCREEN analyze-scanner-blur \
+  "$srcdir/${NAME}.tif" $PHYSICAL_PAR $COMMON_FOCUS_ARGS \
+  --min-contrast=0 --out=out-${NAME}-focus-contrast-disabled.par \
+  >out-${NAME}-focus-contrast-disabled.txt || exit 1
+${AWK-awk} '/scanner_blur_correction_defocus_mms:/ {
+  for (i = 2; i <= NF; i++) print $i
+}' out-${NAME}-focus-contrast-disabled.par \
+  >out-${NAME}-focus-contrast-disabled-values.txt
+cmp out-${NAME}-focus-exact-values.txt \
+  out-${NAME}-focus-contrast-disabled-values.txt >/dev/null || exit 1
+oktest "adaptive focus contrast rejection can be disabled"

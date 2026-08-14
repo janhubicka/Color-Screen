@@ -220,6 +220,19 @@ public:
     m_skipMaxSpin->setValue(initial.skipMax);
     m_skipMaxSpin->setToolTip(tr("Discard this fraction from the high end / worst-fit tail."));
     reductionForm->addRow(tr("Skip high:"), m_skipMaxSpin);
+    m_minContrastSpin = new QDoubleSpinBox(reductionGroup);
+    m_minContrastSpin->setRange(0.0, 100.0);
+    m_minContrastSpin->setDecimals(8);
+    m_minContrastSpin->setSingleStep(0.01);
+    m_minContrastSpin->setSuffix(tr(" %"));
+    m_minContrastSpin->setSpecialValueText(tr("disabled"));
+    m_minContrastSpin->setValue(initial.minimumContrast * 100.0);
+    m_minContrastSpin->setToolTip(
+        tr("Reject a local fit when the fitted additive-screen patch modulation "
+           "is below this threshold. Such a finite solution does not contain "
+           "enough information to determine focus reliably. Zero disables "
+           "only the contrast floor; numerical validity checks remain active."));
+    reductionForm->addRow(tr("Minimum fitted contrast:"), m_minContrastSpin);
     m_toleranceSpin = new QDoubleSpinBox(reductionGroup);
     m_toleranceSpin->setRange(-1.0, 10.0);
     m_toleranceSpin->setDecimals(4);
@@ -327,6 +340,7 @@ public:
     result.skipMin = m_skipMinSpin->value();
     result.skipMax = m_skipMaxSpin->value();
     result.tolerance = m_toleranceSpin->value();
+    result.minimumContrast = m_minContrastSpin->value() / 100.0;
     result.reportProfile = m_profileCheck->isChecked();
     result.interpolateFocus = m_interpolateFocusCheck->isEnabled()
                               && m_interpolateFocusCheck->isChecked();
@@ -451,6 +465,7 @@ private:
   QCheckBox *m_reoptimizeStripWidthsCheck = nullptr;
   QDoubleSpinBox *m_skipMinSpin = nullptr;
   QDoubleSpinBox *m_skipMaxSpin = nullptr;
+  QDoubleSpinBox *m_minContrastSpin = nullptr;
   QDoubleSpinBox *m_toleranceSpin = nullptr;
   QCheckBox *m_interpolateFocusCheck = nullptr;
   QDoubleSpinBox *m_focusMtfSpin = nullptr;

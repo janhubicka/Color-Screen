@@ -492,6 +492,9 @@ unittests_LDFLAGS = -static
 unittests_CXXFLAGS = -DLIBCOLORSCREEN
 unittests_LDADD = libcolorscreen.la 
 unittests_SOURCES = unittests.C
+CLEANFILES = paget_ha_test.tiff paget_ahd_test.tiff \
+	paget_amaze_test.tiff paget_rcd_test.tiff paget_lmmse_test.tiff \
+	dufay_rcd_test.tiff
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
@@ -1255,6 +1258,7 @@ install-strip:
 mostlyclean-generic:
 
 clean-generic:
+	-$(am__rm_f) $(CLEANFILES)
 
 distclean-generic:
 	-$(am__rm_f) $(CONFIG_CLEAN_FILES)

@@ -41,19 +41,19 @@ TESTS_ENVIRONMENT       = top_builddir=$(top_builddir) top_srcdir=$(top_srcdir)
 
 # Files produced directly by tests rather than by the Automake test driver.
 # Declare them so clean/distclean and distcleancheck leave the build tree clean.
-CLEANFILES              = paget_ha_test.tiff \
-                          paget_ahd_test.tiff \
-                          paget_amaze_test.tiff \
-                          paget_rcd_test.tiff \
-                          paget_lmmse_test.tiff \
-                          dufay_rcd_test.tiff \
-                          slanted-edge-1.log \
+CLEANFILES              = slanted-edge-1.log \
                           slanted-edge-2.log \
                           slanted-edge-3.log \
                           slanted-edge-4.log \
                           slanted-edge-5.log \
                           slanted-edge-6.log \
-                          slanted-edge-invalid-mtf.txt
+                          slanted-edge-invalid-mtf.txt \
+                          paget_ha_test.tiff \
+                          paget_ahd_test.tiff \
+                          paget_amaze_test.tiff \
+                          paget_rcd_test.tiff \
+                          paget_lmmse_test.tiff \
+                          dufay_rcd_test.tiff
 
 TESTS                   = unittests.test \
 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw.test  \

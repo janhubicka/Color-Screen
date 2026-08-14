@@ -22,6 +22,7 @@ struct AdaptiveSharpeningParameters {
   double skipMin = 25.0;
   double skipMax = 25.0;
   double tolerance = -1.0;
+  double minimumContrast = colorscreen::finetune_default_min_contrast;
   bool reportProfile = false;
   bool interpolateFocus = false;
   double focusMtfThreshold = 0.05;

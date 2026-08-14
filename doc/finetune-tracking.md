@@ -48,9 +48,9 @@ corrections.
 
 **Status:** fixed
 
-Coarse and dense reductions now fail normally when no successful fits, or no
-fits surviving fit-score filtering, remain.  They no longer finalize or
-query an empty histogram.
+Coarse and dense reductions now fail normally when no identifiable fits, or
+no fits surviving fit-score and correction-value filtering, remain.  They no
+longer finalize or query an empty histogram.
 
 ### FT-004 — fixed-screen cache hits were never marked current
 
@@ -573,14 +573,29 @@ misregistered IR channels.
 
 **Severity:** high focus identifiability
 
-**Status:** open
+**Status:** fixed
 
-When positional colour contrast is too small, fit-score scaling returns a very
-large finite score.  It is ranked behind ordinary fits, but if every cell is
-weak the adaptive histograms can still accept those fits and reduce arbitrary
-focus values.  Add an explicit minimum-contrast/identifiability threshold to
-the adaptive worker, and distinguish low contrast from numerical or allocation
-failure in its diagnostics.
+When positional colour contrast was too small, fit-score scaling returned a
+very large finite score.  It ranked behind ordinary fits, but an all-weak
+prepass or dense cell could still accept its least bad finite results and
+reduce essentially arbitrary focus values.
+
+The adaptive worker now classifies every completed fit before constructing
+fit-score histograms.  A usable result must have solver success, finite
+nonnegative fitted contrast at or above a configurable threshold, and a finite
+nonnegative historical fit score.  Low contrast, invalid contrast, invalid fit
+score, and solver failure are counted separately.  If no identifiable fit
+remains, the worker reports those categories and fails normally instead of
+querying a histogram or returning a focus correction.
+
+The internal default threshold is 1/1024, approximately 0.09765625% of
+normalized image range, matching the established geometry-detection floor.
+The Qt dialog and `--min-contrast=PERCENT` CLI option present the threshold in
+percent; zero disables the positive floor but retains numerical validity
+checks.  Profile output reports coarse
+and dense category counts plus the finite contrast range and mean.  The raw
+per-fit contrast remains in `finetune_result` for diagnostics and possible
+confidence-map presentation.
 
 ### FT-048 — misregistered-area line fitting uses points outside the area
 
@@ -1051,6 +1066,16 @@ Revision 0023 adds:
   in the supported prepared scalar physical-defocus path;
 - end-to-end fixed-strip exact/interpolated correction equality with the
   previous revision.
+
+Revision 0024 adds:
+
+- synthetic classification of solver failure, invalid contrast, low contrast,
+  invalid fit score, and an exactly-at-threshold usable result;
+- end-to-end adaptive rejection when every coarse fit is below the configured
+  minimum contrast;
+- end-to-end verification that a zero threshold disables the positive floor
+  without changing the exact saved correction;
+- profile assertions for separate coarse and dense identifiability counts.
 
 ## Test work still required
 

@@ -4433,8 +4433,9 @@ void MainWindow::onAdaptiveSharpeningRequested(
           [this, worker, thread, progress](
               bool success,
               std::shared_ptr<colorscreen::scanner_blur_correction_parameters>
-                  result) {
-            onAdaptiveSharpeningFinished(success, result);
+                  result,
+              const QString &error) {
+            onAdaptiveSharpeningFinished(success, result, error);
             removeProgress(progress); // Ensure progress is removed
             worker->deleteLater();
             thread->quit();
@@ -4450,11 +4451,14 @@ void MainWindow::onAdaptiveSharpeningRequested(
    and updates the chart widget.  Shows a success info or failure warning.  */
 void MainWindow::onAdaptiveSharpeningFinished(
     bool success,
-    std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result) {
+    std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result,
+    const QString &error) {
   if (!success || !result) {
     if (!success) {
       QMessageBox::warning(this, tr("Adaptive Sharpening"),
-                           tr("Analysis failed or cancelled."));
+                           error.isEmpty()
+                               ? tr("Analysis failed or cancelled.")
+                               : error);
     }
     return;
   }

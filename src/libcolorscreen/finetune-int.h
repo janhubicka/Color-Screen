@@ -50,6 +50,24 @@ bool finetune_retained_fit_score_cutoff (
     const std::vector<finetune_result> &results, coord_t retain_ratio,
     coord_t *cutoff);
 
+/* Classification of one completed FINETUNE result for adaptive analysis.
+   LOW_CONTRAST is distinct from numerical failure: the optimizer found a
+   finite solution, but the fitted additive-screen modulation is too weak to
+   constrain position, blur, or focus reliably.  */
+enum class finetune_result_quality
+{
+  usable,
+  solver_failure,
+  invalid_contrast,
+  low_contrast,
+  invalid_fit_score
+};
+
+/* Classify RESULT using MIN_CONTRAST as the smallest usable fitted
+   positional colour contrast.  MIN_CONTRAST must be finite and nonnegative.  */
+finetune_result_quality finetune_classify_result (
+    const finetune_result &result, luminosity_t min_contrast);
+
 /* Internal exact focus-screen cache access used by regression tests.  Normal
    finetune callers reach this cache through FINETUNE itself.  */
 std::shared_ptr<screen> finetune_get_cached_screen_for_test (

@@ -12,6 +12,12 @@ struct render_parameters;
 struct scr_to_img_parameters;
 struct scr_detect_parameters;
 class image_data;
+
+/* Default minimum fitted screen contrast accepted by automatic and adaptive
+   finetune reductions.  A caller-supplied zero explicitly disables the
+   positive contrast floor while retaining numerical validity checks.  */
+constexpr luminosity_t finetune_default_min_contrast
+    = (luminosity_t)1 / (luminosity_t)1024;
 /* Nonlinear and auxiliary operations enabled for FINETUNE.  Legacy scalar
    and per-channel screen blur are mutually exclusive.  Scanner-MTF sigma may
    be combined with either scalar or per-channel defocus, but scanner-MTF and
@@ -230,7 +236,9 @@ struct finetune_result
   luminosity_t scanner_mtf_blur_diameter = -1;
   /* Physical image-plane defocus in millimetres; see the contract above.  */
   luminosity_t scanner_mtf_defocus = -1;
-  /* Registration contrast derived from fitted screen colors.  */
+  /* Registration contrast derived from fitted screen colors.  This is also
+     the adaptive blur/focus identifiability signal: a finite optimizer result
+     with too little fitted screen modulation is not a reliable measurement.  */
   luminosity_t contrast = 0;
   /* Per-channel physical defocus or compact blur diameter; interpretation is
      selected by the active scanner MTF model.  */
@@ -315,7 +323,7 @@ struct finetune_area_parameters
   int grid_height = 0;
   /* Minimum positional colour contrast accepted during automatic detection.
      A meaningful range is approximately 0 to 1/16.  */
-  luminosity_t min_contrast = 1/1024.0;
+  luminosity_t min_contrast = finetune_default_min_contrast;
   /* Fraction of the most reliable successful fits to retain.  */
   luminosity_t uncertainty_ratio = 0.8;
   /* Maximum accepted registration displacement in screen-period units.  A

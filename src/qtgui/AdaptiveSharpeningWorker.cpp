@@ -33,6 +33,7 @@ void AdaptiveSharpeningWorker::run() {
     worker.skipmin = m_parameters.skipMin;
     worker.skipmax = m_parameters.skipMax;
     worker.tolerance = m_parameters.tolerance;
+    worker.min_contrast = m_parameters.minimumContrast;
     worker.progress = m_progress.get();
     worker.verbose = false;
     worker.report_profile = m_parameters.reportProfile;
@@ -46,7 +47,7 @@ void AdaptiveSharpeningWorker::run() {
     pool.setMaxThreadCount(std::max(1, QThread::idealThreadCount() - 1));
 
     if (!worker.step1()) {
-        emit finished(false, nullptr);
+        emit finished(false, nullptr, QString::fromStdString(worker.error()));
         return;
     }
 
@@ -64,7 +65,7 @@ void AdaptiveSharpeningWorker::run() {
         }
         
         if (m_progress && m_progress->cancelled()) {
-            emit finished(false, nullptr);
+            emit finished(false, nullptr, tr("Analysis cancelled."));
             return;
         }
 
@@ -81,7 +82,7 @@ void AdaptiveSharpeningWorker::run() {
         pool.waitForDone();
         
         if (m_progress && m_progress->cancelled()) {
-            emit finished(false, nullptr);
+            emit finished(false, nullptr, tr("Analysis cancelled."));
             return;
         }
     }
@@ -89,7 +90,8 @@ void AdaptiveSharpeningWorker::run() {
     if (!worker.step2()) {
         if (worker.report_profile)
             worker.print_profile();
-        emit finished(false, nullptr);
+        emit finished(false, nullptr,
+                      QString::fromStdString(worker.error()));
         return;
     }
 
@@ -120,7 +122,7 @@ void AdaptiveSharpeningWorker::run() {
     pool.waitForDone();
     
     if (m_progress && m_progress->cancelled()) {
-        emit finished(false, nullptr);
+        emit finished(false, nullptr, tr("Analysis cancelled."));
         return;
     }
 
@@ -128,8 +130,12 @@ void AdaptiveSharpeningWorker::run() {
     if (worker.report_profile)
         worker.print_profile();
     if (result) {
-        emit finished(true, std::shared_ptr<colorscreen::scanner_blur_correction_parameters>(result.release()));
+        emit finished(
+            true,
+            std::shared_ptr<colorscreen::scanner_blur_correction_parameters>(
+                result.release()),
+            QString());
     } else {
-        emit finished(false, nullptr);
+        emit finished(false, nullptr, QString::fromStdString(worker.error()));
     }
 }

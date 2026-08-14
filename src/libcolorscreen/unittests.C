@@ -123,6 +123,63 @@ test_finetune_helpers ()
       return false;
     }
 
+  finetune_result quality_result;
+  const luminosity_t minimum_contrast = 1 / (luminosity_t)1024;
+  if (finetune_classify_result (quality_result, minimum_contrast)
+      != finetune_result_quality::solver_failure)
+    {
+      fprintf (stderr, "Failed finetune result was not classified\n");
+      return false;
+    }
+  quality_result.success = true;
+  quality_result.contrast
+      = std::numeric_limits<luminosity_t>::quiet_NaN ();
+  if (finetune_classify_result (quality_result, minimum_contrast)
+      != finetune_result_quality::invalid_contrast)
+    {
+      fprintf (stderr, "Invalid finetune contrast was not classified\n");
+      return false;
+    }
+  quality_result.contrast = minimum_contrast / 2;
+  quality_result.uncertainty
+      = std::numeric_limits<coord_t>::quiet_NaN ();
+  if (finetune_classify_result (quality_result, minimum_contrast)
+      != finetune_result_quality::invalid_fit_score)
+    {
+      fprintf (stderr,
+               "Invalid finetune score was hidden by weak contrast\n");
+      return false;
+    }
+  quality_result.uncertainty = 1;
+  if (finetune_classify_result (quality_result, minimum_contrast)
+      != finetune_result_quality::low_contrast)
+    {
+      fprintf (stderr, "Weak finetune contrast was not rejected\n");
+      return false;
+    }
+  quality_result.contrast = minimum_contrast;
+  quality_result.uncertainty
+      = std::numeric_limits<coord_t>::quiet_NaN ();
+  if (finetune_classify_result (quality_result, minimum_contrast)
+      != finetune_result_quality::invalid_fit_score)
+    {
+      fprintf (stderr, "Invalid finetune score was not classified\n");
+      return false;
+    }
+  quality_result.uncertainty = 1;
+  if (finetune_classify_result (quality_result, minimum_contrast)
+      != finetune_result_quality::usable)
+    {
+      fprintf (stderr, "Identifiable finetune result was rejected\n");
+      return false;
+    }
+  if (finetune_classify_result (quality_result, -1)
+      != finetune_result_quality::invalid_contrast)
+    {
+      fprintf (stderr, "Invalid minimum contrast was accepted\n");
+      return false;
+    }
+
   if (finetune_flag_error (finetune_position)
       || finetune_flag_error (finetune_scanner_mtf_sigma
                               | finetune_scanner_mtf_defocus)

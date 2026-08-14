@@ -6,6 +6,7 @@
 #include "AdaptiveSharpeningParameters.h"
 #include "../libcolorscreen/include/scanner-blur-correction-parameters.h"
 #include <QObject>
+#include <QString>
 #include <memory>
 #include <vector>
 
@@ -26,7 +27,10 @@ public slots:
   void run();
 
 signals:
-  void finished(bool success, std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result);
+  void finished(
+      bool success,
+      std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result,
+      QString error);
   void stripAnalysisStarted(int width, int height);
   void stripAnalyzed(int x, int y, double red, double green);
   void blurAnalysisStarted(int width, int height);

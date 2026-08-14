@@ -16,3 +16,12 @@ unittests_LDFLAGS = -static
 unittests_CXXFLAGS = -DLIBCOLORSCREEN
 unittests_LDADD = libcolorscreen.la 
 unittests_SOURCES=unittests.C
+
+# The unit-test executable writes these images in its own build directory.
+# They are not managed by Automake's test driver, so declare them explicitly.
+CLEANFILES = paget_ha_test.tiff \
+             paget_ahd_test.tiff \
+             paget_amaze_test.tiff \
+             paget_rcd_test.tiff \
+             paget_lmmse_test.tiff \
+             dufay_rcd_test.tiff

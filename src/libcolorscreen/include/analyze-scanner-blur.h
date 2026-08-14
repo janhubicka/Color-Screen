@@ -1,6 +1,7 @@
 #ifndef ANALYZE_SCANNER_BLUR_H
 #define ANALYZE_SCANNER_BLUR_H
 #include <cassert>
+#include <string>
 #include "colorscreen.h"
 #include "finetune.h"
 #include "histogram.h"
@@ -31,7 +32,9 @@ public:
                | finetune_scanner_mtf_defocus),
         optimize_strip_widths (true), reoptimize_strip_widths (false),
         skipmin (25), skipmax (25),
-        tolerance (-1), progress (NULL), verbose (false),
+        tolerance (-1), min_contrast (finetune_default_min_contrast),
+        progress (NULL),
+        verbose (false),
         report_profile (false), interpolate_focus (false),
         focus_mtf_threshold ((coord_t)0.05), focus_interpolation_nodes (33),
         focus_interpolation_max (0), focus_screen_frequency (0)
@@ -68,6 +71,10 @@ public:
   /* Maximum accepted robust correction range within one table entry.
      Negative values disable the check.  */
   coord_t tolerance;
+  /* Smallest fitted positional colour contrast accepted as an identifiable
+     blur/focus measurement.  Successful fits below this threshold are
+     rejected separately from numerical solver failures.  */
+  luminosity_t min_contrast;
   /* Optional progress/cancellation object.  */
   progress_info *progress;
   bool verbose;
@@ -112,6 +119,14 @@ public:
   /* Print a compact accumulated profile through the worker's progress output
      discipline.  This does not require a successful correction table.  */
   DLL_PUBLIC void print_profile () const;
+  /* Explain the most recent sequential-stage failure when available.
+     Parallel local fits retain their own FINETUNE_RESULT errors; STEP2 and
+     STEP3 summarize them without racing on this string.  */
+  const std::string &
+  error () const
+  {
+    return last_error;
+  }
 
 private:
   /* Return coarse result X,Y.  Keeping indexing here prevents accidental use
@@ -142,6 +157,10 @@ private:
   std::vector<finetune_result> mainpass;
   coord_t focus_interpolation_max;
   coord_t focus_screen_frequency;
+  std::string last_error;
+
+  /* Record and print one failure detected by a sequential worker stage.  */
+  void set_error (const std::string &message);
 };
 } // namespace colorscreen
 #endif

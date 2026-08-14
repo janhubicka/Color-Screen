@@ -1,8 +1,10 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+#include <algorithm>
 #include <climits>
 #include <limits>
+#include <sstream>
 #include <vector>
 #include "finetune-int.h"
 #include "include/analyze-scanner-blur.h"
@@ -30,15 +32,91 @@ get_correction (scanner_blur_correction_parameters::correction_mode mode,
   abort ();
 }
 
-/* Return true when RES has a usable historical fit-quality score.  The public
-   field is named "uncertainty" for compatibility, but stores objective divided
-   by registration contrast rather than a statistical error estimate.  */
-bool
-valid_fit_score_p (const finetune_result &res)
+/* Diagnostic counts for one adaptive-analysis pass or correction-table cell.
+   These categories deliberately separate weak image information from solver
+   failure and invalid numerical output.  */
+struct fit_diagnostics
 {
-  return res.success && my_isfinite (res.uncertainty)
-         && res.uncertainty >= 0
-         && res.uncertainty < std::numeric_limits<coord_t>::max ();
+  size_t usable = 0;
+  size_t solver_failures = 0;
+  size_t invalid_contrasts = 0;
+  size_t low_contrasts = 0;
+  size_t invalid_fit_scores = 0;
+  size_t finite_contrasts = 0;
+  luminosity_t contrast_min = std::numeric_limits<luminosity_t>::max ();
+  luminosity_t contrast_max = std::numeric_limits<luminosity_t>::lowest ();
+  long double contrast_sum = 0;
+};
+
+/* Account RESULT in DIAGNOSTICS using MIN_CONTRAST.  */
+void
+account_fit_diagnostic (fit_diagnostics *diagnostics,
+                        const finetune_result &result,
+                        luminosity_t min_contrast)
+{
+  if (result.success && my_isfinite (result.contrast)
+      && result.contrast >= 0)
+    {
+      diagnostics->finite_contrasts++;
+      diagnostics->contrast_min
+          = std::min (diagnostics->contrast_min, result.contrast);
+      diagnostics->contrast_max
+          = std::max (diagnostics->contrast_max, result.contrast);
+      diagnostics->contrast_sum += result.contrast;
+    }
+
+  switch (finetune_classify_result (result, min_contrast))
+    {
+    case finetune_result_quality::usable:
+      diagnostics->usable++;
+      break;
+    case finetune_result_quality::solver_failure:
+      diagnostics->solver_failures++;
+      break;
+    case finetune_result_quality::invalid_contrast:
+      diagnostics->invalid_contrasts++;
+      break;
+    case finetune_result_quality::low_contrast:
+      diagnostics->low_contrasts++;
+      break;
+    case finetune_result_quality::invalid_fit_score:
+      diagnostics->invalid_fit_scores++;
+      break;
+    }
+}
+
+/* Collect diagnostic counts for RESULTS.  */
+fit_diagnostics
+collect_fit_diagnostics (const std::vector<finetune_result *> &results,
+                         luminosity_t min_contrast)
+{
+  fit_diagnostics diagnostics;
+  for (const finetune_result *result : results)
+    account_fit_diagnostic (&diagnostics, *result, min_contrast);
+  return diagnostics;
+}
+
+/* Collect diagnostic counts for a complete worker pass.  */
+fit_diagnostics
+collect_fit_diagnostics (const std::vector<finetune_result> &results,
+                         luminosity_t min_contrast)
+{
+  fit_diagnostics diagnostics;
+  for (const finetune_result &result : results)
+    account_fit_diagnostic (&diagnostics, result, min_contrast);
+  return diagnostics;
+}
+
+/* Return true when RES is an identifiable fit with a usable historical
+   fit-quality score.  The public field is named "uncertainty" for
+   compatibility, but stores objective divided by registration contrast
+   rather than a statistical error estimate.  */
+bool
+identifiable_result_p (const finetune_result &res,
+                       luminosity_t min_contrast)
+{
+  return finetune_classify_result (res, min_contrast)
+         == finetune_result_quality::usable;
 }
 
 /* Return true for a scalar correction representable by the current table
@@ -53,12 +131,13 @@ valid_correction_p (coord_t correction)
    of the least reliable successful fits.  Store the cutoff in THRESHOLD.  */
 bool
 find_fit_score_threshold (const std::vector<finetune_result *> &results,
-                            coord_t skipmax, coord_t *threshold)
+                          coord_t skipmax, luminosity_t min_contrast,
+                          coord_t *threshold)
 {
   histogram hist;
   int nvalid = 0;
   for (finetune_result *res : results)
-    if (valid_fit_score_p (*res))
+    if (identifiable_result_p (*res, min_contrast))
       {
         hist.pre_account (res->uncertainty);
         nvalid++;
@@ -67,7 +146,7 @@ find_fit_score_threshold (const std::vector<finetune_result *> &results,
     return false;
   hist.finalize_range (65536);
   for (finetune_result *res : results)
-    if (valid_fit_score_p (*res))
+    if (identifiable_result_p (*res, min_contrast))
       hist.account (res->uncertainty);
   hist.finalize ();
   *threshold = hist.find_max (skipmax / (coord_t)100);
@@ -76,9 +155,11 @@ find_fit_score_threshold (const std::vector<finetune_result *> &results,
 
 /* Return true when RES passes the fit-score filter THRESHOLD.  */
 bool
-accepted_result_p (const finetune_result &res, coord_t threshold)
+accepted_result_p (const finetune_result &res, coord_t threshold,
+                   luminosity_t min_contrast)
 {
-  return valid_fit_score_p (res) && res.uncertainty <= threshold;
+  return identifiable_result_p (res, min_contrast)
+         && res.uncertainty <= threshold;
 }
 
 /* Pause progress output through PROGRESS when it is available.  */
@@ -95,6 +176,49 @@ resume_stdout (progress_info *progress)
 {
   if (progress)
     progress->resume_stdout ();
+}
+
+/* Describe why no identifiable fits remain in PHASE.  */
+std::string
+no_identifiable_fits_message (const char *phase,
+                              const fit_diagnostics &diagnostics,
+                              luminosity_t min_contrast)
+{
+  std::ostringstream out;
+  out << "Analysis failed";
+  if (phase && *phase)
+    out << " for " << phase;
+  out << ": no identifiable fits at minimum fitted contrast "
+      << min_contrast * 100 << "% (" << diagnostics.low_contrasts
+      << " low contrast, " << diagnostics.invalid_contrasts
+      << " invalid contrast, " << diagnostics.invalid_fit_scores
+      << " invalid fit score, " << diagnostics.solver_failures
+      << " solver failure";
+  if (diagnostics.solver_failures != 1)
+    out << 's';
+  out << ')';
+  return out.str ();
+}
+
+/* Print one compact identifiability summary.  The caller controls progress
+   output around a group of profile lines.  */
+void
+print_fit_diagnostics (const char *phase,
+                       const fit_diagnostics &diagnostics)
+{
+  printf ("  %s identifiability: %zu usable, %zu low contrast, %zu invalid "
+          "contrast, %zu invalid fit score, %zu solver failure%s",
+          phase, diagnostics.usable, diagnostics.low_contrasts,
+          diagnostics.invalid_contrasts, diagnostics.invalid_fit_scores,
+          diagnostics.solver_failures,
+          diagnostics.solver_failures == 1 ? "" : "s");
+  if (diagnostics.finite_contrasts)
+    printf ("; fitted contrast %.9g%%...%.9g%% (mean %.9g%%)",
+            (double)(diagnostics.contrast_min * 100),
+            (double)(diagnostics.contrast_max * 100),
+            (double)(diagnostics.contrast_sum * 100
+                     / diagnostics.finite_contrasts));
+  printf ("\n");
 }
 
 /* Return true when WIDTH*HEIGHT fits the worker's int-coordinate indexing and
@@ -124,17 +248,37 @@ explicit_strip_widths_p (const render_parameters &rparam)
 }
 } // namespace
 
+/* Record and print one failure detected by a sequential worker stage.  Local
+   FINETUNE calls run in parallel and therefore never update LAST_ERROR.  */
+void
+analyze_scanner_blur_worker::set_error (const std::string &message)
+{
+  last_error = message;
+  pause_stdout (progress);
+  fprintf (stderr, "%s\n", last_error.c_str ());
+  resume_stdout (progress);
+}
+
 /* Prepare dimensions and storage for the scanner-blur analysis.  */
 bool
 analyze_scanner_blur_worker::step1 ()
 {
-  if (finetune_flag_error (flags))
-    return false;
+  last_error.clear ();
+  if (const char *flag_error = finetune_flag_error (flags))
+    {
+      set_error (std::string ("Invalid adaptive finetune settings: ")
+                 + flag_error);
+      return false;
+    }
   if (!my_isfinite (skipmin) || !my_isfinite (skipmax) || skipmin < 0
       || skipmax < 0 || skipmin > 50 || skipmax > 50
       || skipmin + skipmax >= 100 || !my_isfinite (tolerance)
+      || !my_isfinite (min_contrast) || min_contrast < 0
       || scan.width <= 0 || scan.height <= 0)
-    return false;
+    {
+      set_error ("Invalid adaptive finetune grid or reduction settings");
+      return false;
+    }
 
   if (interpolate_focus)
     {
@@ -146,30 +290,21 @@ analyze_scanner_blur_worker::step1 ()
           || reoptimize_strip_widths
           || !rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
         {
-          pause_stdout (progress);
-          fprintf (stderr,
-                   "Focus interpolation requires scalar physical defocus "
-                   "as the sole varying screen-filter parameter\n");
-          resume_stdout (progress);
+          set_error ("Focus interpolation requires scalar physical defocus "
+                     "as the sole varying screen-filter parameter");
           return false;
         }
       if (!my_isfinite (focus_mtf_threshold)
           || focus_mtf_threshold <= 0 || focus_mtf_threshold >= 1)
         {
-          pause_stdout (progress);
-          fprintf (stderr,
-                   "Focus interpolation MTF threshold must be between 0 "
-                   "and 100 percent\n");
-          resume_stdout (progress);
+          set_error ("Focus interpolation MTF threshold must be between 0 "
+                     "and 100 percent");
           return false;
         }
       if (focus_interpolation_nodes < 2
           || focus_interpolation_nodes > 64)
         {
-          pause_stdout (progress);
-          fprintf (stderr,
-                   "Focus interpolation node count must be in [2,64]\n");
-          resume_stdout (progress);
+          set_error ("Focus interpolation node count must be in [2,64]");
           return false;
         }
     }
@@ -188,7 +323,11 @@ analyze_scanner_blur_worker::step1 ()
      Sigma may be optimized jointly with focus, but sigma alone has no table
      mode.  */
   if (legacy_blur == mtf_focus)
-    return false;
+    {
+      set_error ("Adaptive analysis requires exactly one stored blur or "
+                 "focus correction family");
+      return false;
+    }
 
   if (!xsteps && !ysteps)
     xsteps = 10;
@@ -209,7 +348,10 @@ analyze_scanner_blur_worker::step1 ()
   if (!xsubsteps)
     xsubsteps = ysubsteps = 5;
   if (xsubsteps <= 0 || ysubsteps <= 0)
-    return false;
+    {
+      set_error ("Adaptive analysis sub-sample dimensions must be positive");
+      return false;
+    }
 
   if (!strip_xsteps && !strip_ysteps)
     strip_xsteps = 10;
@@ -234,7 +376,10 @@ analyze_scanner_blur_worker::step1 ()
       || !valid_grid_size_p (strip_xsteps, strip_ysteps, &prepass_size)
       || !valid_grid_size_p ((int)sample_width, (int)sample_height,
                              &mainpass_size))
-    return false;
+    {
+      set_error ("Adaptive analysis grid is too large");
+      return false;
+    }
   (void)mainpass_size;
 
   if (rparam.scanner_blur_correction)
@@ -309,22 +454,27 @@ analyze_scanner_blur_worker::analyze_strips (int x, int y,
                   NULL, fparam, progress);
   if (progress)
     progress->inc_progress ();
-  if (res.success)
+  const bool identifiable = identifiable_result_p (res, min_contrast);
+  if (identifiable)
     {
       if (red_strip_width)
         *red_strip_width = res.red_strip_width;
       if (green_strip_width)
         *green_strip_width = res.green_strip_width;
     }
-  return res.success;
+  return identifiable;
 }
 
 /* Reduce the prepass and prepare the dense focus-analysis pass.  */
 bool
 analyze_scanner_blur_worker::step2 ()
 {
+  last_error.clear ();
   if (progress && progress->cancel_requested ())
-    return false;
+    {
+      last_error = "Analysis cancelled.";
+      return false;
+    }
 
   if (!prepass.empty ())
     {
@@ -334,19 +484,19 @@ analyze_scanner_blur_worker::step2 ()
         results.push_back (&res);
 
       coord_t fit_score_threshold;
-      if (!find_fit_score_threshold (results, skipmax,
-                                       &fit_score_threshold))
+      if (!find_fit_score_threshold (results, skipmax, min_contrast,
+                                     &fit_score_threshold))
         {
-          pause_stdout (progress);
-          fprintf (stderr, "Analysis failed: no successful prepass fits\n");
-          resume_stdout (progress);
+          set_error (no_identifiable_fits_message (
+              "prepass", collect_fit_diagnostics (results, min_contrast),
+              min_contrast));
           return false;
         }
 
       int nok = 0;
       for (finetune_result *res : results)
         {
-          if (!accepted_result_p (*res, fit_score_threshold))
+          if (!accepted_result_p (*res, fit_score_threshold, min_contrast))
             continue;
           const coord_t correction = get_correction (mode, *res);
           if (!valid_correction_p (correction))
@@ -367,11 +517,8 @@ analyze_scanner_blur_worker::step2 ()
         }
       if (!nok)
         {
-          pause_stdout (progress);
-          fprintf (stderr,
-                   "Analysis failed: all successful prepass fits were "
-                   "rejected\n");
-          resume_stdout (progress);
+          set_error ("Analysis failed: all identifiable prepass fits had "
+                     "invalid correction or strip-width values");
           return false;
         }
 
@@ -384,7 +531,7 @@ analyze_scanner_blur_worker::step2 ()
       blur_hist.finalize_range (65536);
       for (finetune_result *res : results)
         {
-          if (!accepted_result_p (*res, fit_score_threshold))
+          if (!accepted_result_p (*res, fit_score_threshold, min_contrast))
             continue;
           const coord_t correction = get_correction (mode, *res);
           if (!valid_correction_p (correction))
@@ -593,16 +740,22 @@ analyze_scanner_blur_worker::analyze_blur (int x, int y,
       { { (coord_t)(x + 0.5) * scan.width / width,
           (coord_t)(y + 0.5) * scan.height / height } },
       NULL, fparam, progress);
-  if (res.success && displacements)
+  bool identifiable = identifiable_result_p (res, min_contrast);
+  coord_t correction = -1;
+  if (identifiable)
     {
-      coord_t correction = get_correction (mode, res);
+      correction = get_correction (mode, res);
+      identifiable = valid_correction_p (correction);
+    }
+  if (identifiable && displacements)
+    {
       *displacements = { (luminosity_t)correction,
                          (luminosity_t)correction,
                          (luminosity_t)correction };
     }
   if (progress)
     progress->inc_progress ();
-  return res.success;
+  return identifiable;
 }
 
 finetune_profile
@@ -620,6 +773,10 @@ void
 analyze_scanner_blur_worker::print_profile () const
 {
   const finetune_profile p = get_profile ();
+  const fit_diagnostics prepass_diagnostics
+      = collect_fit_diagnostics (prepass, min_contrast);
+  const fit_diagnostics mainpass_diagnostics
+      = collect_fit_diagnostics (mainpass, min_contrast);
   uint64_t successful = 0;
   for (const finetune_result &res : prepass)
     successful += res.success;
@@ -643,13 +800,20 @@ analyze_scanner_blur_worker::print_profile () const
   };
 
   pause_stdout (progress);
-  printf ("Finetune profile: %llu/%llu fits successful; %llu simplex runs, "
+  printf ("Finetune profile: %llu/%llu fits solver-successful; %llu simplex "
+          "runs, "
           "%llu iterations, %llu evaluations; %llu objective calls\n",
           (unsigned long long)successful, (unsigned long long)fits,
           (unsigned long long)p.simplex_runs,
           (unsigned long long)p.simplex_iterations,
           (unsigned long long)p.simplex_evaluations,
           (unsigned long long)p.objective_evaluations);
+  printf ("  adaptive minimum fitted contrast: %.9g%%\n",
+          (double)(min_contrast * 100));
+  if (!prepass.empty ())
+    print_fit_diagnostics ("prepass", prepass_diagnostics);
+  if (!mainpass.empty ())
+    print_fit_diagnostics ("dense pass", mainpass_diagnostics);
   printf ("  screen states: %llu init calls, %llu local reuses; "
           "focus cache %llu hits, %llu misses (%.1f%% hit); fixed cache "
           "%llu hits, %llu misses\n",
@@ -701,8 +865,12 @@ analyze_scanner_blur_worker::print_profile () const
 std::unique_ptr<scanner_blur_correction_parameters>
 analyze_scanner_blur_worker::step3 ()
 {
+  last_error.clear ();
   if (progress && progress->cancel_requested ())
-    return NULL;
+    {
+      last_error = "Analysis cancelled.";
+      return NULL;
+    }
   if (mainpass.empty ())
     return NULL;
 
@@ -734,14 +902,14 @@ analyze_scanner_blur_worker::step3 ()
                                                  y * ysubsteps + yy));
 
         coord_t fit_score_threshold;
-        if (!find_fit_score_threshold (samples, skipmax,
-                                         &fit_score_threshold))
+        if (!find_fit_score_threshold (samples, skipmax, min_contrast,
+                                       &fit_score_threshold))
           {
-            pause_stdout (progress);
-            fprintf (stderr,
-                     "Analysis failed for sample %i,%i: no successful fits\n",
-                     x, y);
-            resume_stdout (progress);
+            char phase[64];
+            snprintf (phase, sizeof (phase), "sample %i,%i", x, y);
+            set_error (no_identifiable_fits_message (
+                phase, collect_fit_diagnostics (samples, min_contrast),
+                min_contrast));
             return NULL;
           }
 
@@ -749,7 +917,7 @@ analyze_scanner_blur_worker::step3 ()
         histogram hist;
         for (finetune_result *res : samples)
           {
-            if (!accepted_result_p (*res, fit_score_threshold))
+            if (!accepted_result_p (*res, fit_score_threshold, min_contrast))
               continue;
             const coord_t correction = get_correction (mode, *res);
             if (!valid_correction_p (correction))
@@ -759,18 +927,18 @@ analyze_scanner_blur_worker::step3 ()
           }
         if (!nok)
           {
-            pause_stdout (progress);
-            fprintf (stderr,
-                     "Analysis failed for sample %i,%i: all fits were "
-                     "rejected\n",
-                     x, y);
-            resume_stdout (progress);
+            char message[160];
+            snprintf (message, sizeof (message),
+                      "Analysis failed for sample %i,%i: all identifiable "
+                      "fits had invalid correction values",
+                      x, y);
+            set_error (message);
             return NULL;
           }
 
         hist.finalize_range (65536);
         for (finetune_result *res : samples)
-          if (accepted_result_p (*res, fit_score_threshold))
+          if (accepted_result_p (*res, fit_score_threshold, min_contrast))
             {
               const coord_t correction = get_correction (mode, *res);
               if (valid_correction_p (correction))

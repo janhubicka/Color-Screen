@@ -197,6 +197,26 @@ finetune_useful_defocus_limit (mtf_parameters params,
   return true;
 }
 
+/* Classify one completed fit for use by adaptive blur/focus reduction.  Do
+   this after FINETUNE has evaluated the final exact screen, so CONTRAST and
+   UNCERTAINTY describe the result that would be stored.  */
+finetune_result_quality
+finetune_classify_result (const finetune_result &result,
+                          luminosity_t min_contrast)
+{
+  if (!result.success)
+    return finetune_result_quality::solver_failure;
+  if (!my_isfinite (result.contrast) || result.contrast < 0
+      || !my_isfinite (min_contrast) || min_contrast < 0)
+    return finetune_result_quality::invalid_contrast;
+  if (!my_isfinite (result.uncertainty) || result.uncertainty < 0
+      || result.uncertainty >= std::numeric_limits<coord_t>::max ())
+    return finetune_result_quality::invalid_fit_score;
+  if (result.contrast < min_contrast)
+    return finetune_result_quality::low_contrast;
+  return finetune_result_quality::usable;
+}
+
 namespace
 {
 struct gsl_work_deleter

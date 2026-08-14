@@ -175,6 +175,8 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --xsamples=n              number of horizontal samples to analyze for every entry in table\n");
       fprintf (stderr, "      --ysamples=n              number of vertical samples to analyze for every entry in table\n");
       fprintf (stderr, "      --tolerance=max           maximal difference between minimal and maximal blur radius in robust average\n");
+      fprintf (stderr, "      --min-contrast=percent    reject fits with weaker fitted screen modulation (default %.8g, 0 disables)\n",
+               (double)(finetune_default_min_contrast * 100));
       fprintf (stderr, "      --profile                 print accumulated finetune/cache profiling counters\n");
       fprintf (stderr, "      --interpolate-focus       approximate dense physical-defocus fits from cached nonlinear focus nodes\n");
       fprintf (stderr, "      --focus-min-mtf=percent   stop focus nodes when screen-frequency MTF reaches this value (default 5)\n");
@@ -1370,6 +1372,8 @@ get_correction (scanner_blur_correction_parameters::correction_mode mode, finetu
    REOPTIMIZE_STRIP_WIDTHS controls strip fitting in every dense sample.
    SKIPMIN and SKIPMAX specify ranges to skip.
    TOLERANCE is robust average tolerance.
+   MIN_CONTRAST rejects locally unidentifiable fits whose fitted additive-
+   screen modulation is too weak.
    INTERPOLATE_FOCUS enables the discretized dense scalar-defocus cache.
    FOCUS_MTF_THRESHOLD sets its useful-range MTF boundary and
    FOCUS_INTERPOLATION_NODES sets its nonlinear exact-node count.
@@ -1386,6 +1390,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 			  bool reoptimize_strip_widths,
 			  coord_t skipmin, coord_t skipmax,
 			  coord_t tolerance,
+                          luminosity_t min_contrast,
 			  bool interpolate_focus,
 			  coord_t focus_mtf_threshold,
 			  int focus_interpolation_nodes,
@@ -1405,6 +1410,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
   worker.skipmin = skipmin;
   worker.skipmax = skipmax;
   worker.tolerance = tolerance;
+  worker.min_contrast = min_contrast;
   worker.progress = progress;
   worker.verbose = verbose;
   worker.report_profile = report_profile;
@@ -1449,6 +1455,7 @@ analyze_scanner_blur (int argc, char **argv)
   float skipmin = 25;
   float skipmax = 25;
   float tolerance = -1;
+  float min_contrast_percent = finetune_default_min_contrast * 100;
   int strip_xsteps = 0;
   int strip_ysteps = 0;
   bool optimize_strip_widths = true;
@@ -1538,6 +1545,9 @@ analyze_scanner_blur (int argc, char **argv)
         ;
       else if (parse_float_param (argc, argv, &i, "skip-max", skipmax, 0, 50))
         ;
+      else if (parse_float_param (argc, argv, &i, "min-contrast",
+                                  min_contrast_percent, 0, 100))
+        ;
       else if (parse_int_param (argc, argv, &i, "strip-width", strip_xsteps, 1,
                                 1024 * 1024))
         ;
@@ -1610,7 +1620,8 @@ analyze_scanner_blur (int argc, char **argv)
 	  param, rparam, scan, strip_xsteps, strip_ysteps, xsteps, ysteps,
 	  xsubsteps, ysubsteps, flags, optimize_strip_widths,
           reoptimize_strip_widths, skipmin, skipmax,
-	  tolerance, interpolate_focus, focus_mtf_percent / 100,
+	  tolerance, min_contrast_percent / 100, interpolate_focus,
+          focus_mtf_percent / 100,
 	  focus_interpolation_nodes, report_profile, &progress);
       if (!rparam.scanner_blur_correction)
 	return 1;
@@ -1643,7 +1654,8 @@ analyze_scanner_blur (int argc, char **argv)
 		scan.stitch->images[y][x].param, rparam, *scan.stitch->images[y][x].img.get(), strip_xsteps, strip_ysteps, xsteps, ysteps,
 		xsubsteps, ysubsteps, flags, optimize_strip_widths,
                 reoptimize_strip_widths, skipmin, skipmax,
-		tolerance, interpolate_focus, focus_mtf_percent / 100,
+		tolerance, min_contrast_percent / 100, interpolate_focus,
+                focus_mtf_percent / 100,
 		focus_interpolation_nodes, report_profile, &progress);
 	    if (!rparam.get_tile_adjustment (x, y).scanner_blur_correction)
 	      {
