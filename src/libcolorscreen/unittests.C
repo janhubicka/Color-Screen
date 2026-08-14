@@ -9,6 +9,8 @@
 #include <vector>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
+#include <cstring>
 #include <limits>
 #include <string>
 
@@ -41,6 +43,51 @@
 using namespace colorscreen;
 namespace
 {
+
+/* Construct IEC-559 special values through their object representation.
+   The clang buildbots use -ffast-math/-ffinite-math-only, under which spelling
+   NaN or infinity as a floating constant is undefined and clang may discard
+   or replace the value before a test can inspect it.  Volatile integer bits
+   force the special value to be materialized at run time, which is also how
+   non-finite values can enter the library from files and external data.  */
+static luminosity_t
+test_runtime_nan_luminosity ()
+{
+  static_assert (sizeof (luminosity_t) == sizeof (uint32_t));
+  volatile uint32_t bits = UINT32_C (0x7fc00000);
+  luminosity_t value;
+  std::memcpy (&value, (const void *)&bits, sizeof (value));
+  return value;
+}
+
+static coord_t
+test_runtime_nan_coord ()
+{
+  static_assert (sizeof (coord_t) == sizeof (uint64_t));
+  volatile uint64_t bits = UINT64_C (0x7ff8000000000000);
+  coord_t value;
+  std::memcpy (&value, (const void *)&bits, sizeof (value));
+  return value;
+}
+
+static double
+test_runtime_infinity ()
+{
+  volatile uint64_t bits = UINT64_C (0x7ff0000000000000);
+  double value;
+  std::memcpy (&value, (const void *)&bits, sizeof (value));
+  return value;
+}
+
+static luminosity_t
+test_runtime_infinity_luminosity ()
+{
+  static_assert (sizeof (luminosity_t) == sizeof (uint32_t));
+  volatile uint32_t bits = UINT32_C (0x7f800000);
+  luminosity_t value;
+  std::memcpy (&value, (const void *)&bits, sizeof (value));
+  return value;
+}
 
 /* Zero-dimensional objective used to verify that SIMPLEX can evaluate a
    fully fixed model without constructing a degenerate simplex.  */
@@ -89,7 +136,7 @@ test_finetune_helpers ()
       return false;
     }
   dark = finetune_render_mix_dark (
-      { std::numeric_limits<luminosity_t>::quiet_NaN (), 0, 0 }, 0.2,
+      { test_runtime_nan_luminosity (), 0, 0 }, 0.2,
       fallback);
   if (dark != fallback)
     {
@@ -108,7 +155,7 @@ test_finetune_helpers ()
   fit_results[3].uncertainty = 0;
   fit_results[4].success = true;
   fit_results[4].uncertainty
-      = std::numeric_limits<coord_t>::quiet_NaN ();
+      = test_runtime_nan_coord ();
   coord_t cutoff = -1;
   if (!finetune_retained_fit_score_cutoff (fit_results, 1, &cutoff)
       || cutoff != 10
@@ -133,7 +180,7 @@ test_finetune_helpers ()
     }
   quality_result.success = true;
   quality_result.contrast
-      = std::numeric_limits<luminosity_t>::quiet_NaN ();
+      = test_runtime_nan_luminosity ();
   if (finetune_classify_result (quality_result, minimum_contrast)
       != finetune_result_quality::invalid_contrast)
     {
@@ -142,7 +189,7 @@ test_finetune_helpers ()
     }
   quality_result.contrast = minimum_contrast / 2;
   quality_result.uncertainty
-      = std::numeric_limits<coord_t>::quiet_NaN ();
+      = test_runtime_nan_coord ();
   if (finetune_classify_result (quality_result, minimum_contrast)
       != finetune_result_quality::invalid_fit_score)
     {
@@ -159,7 +206,7 @@ test_finetune_helpers ()
     }
   quality_result.contrast = minimum_contrast;
   quality_result.uncertainty
-      = std::numeric_limits<coord_t>::quiet_NaN ();
+      = test_runtime_nan_coord ();
   if (finetune_classify_result (quality_result, minimum_contrast)
       != finetune_result_quality::invalid_fit_score)
     {
@@ -1888,12 +1935,12 @@ deconvolution_tile_rmse (deconvolution<T> &filter, Function expected)
       {
         const double got = filter.get_pixel (0, x + border, y + border);
         if (!my_isfinite (got))
-          return INFINITY;
+          return test_runtime_infinity ();
         const double error = got - expected (x, y);
         squared_error += error * error;
         n++;
       }
-  return n ? std::sqrt ((double)(squared_error / n)) : INFINITY;
+  return n ? std::sqrt ((double)(squared_error / n)) : test_runtime_infinity ();
 }
 
 /* Return the fitted horizontal cosine amplitude in FILTER at FREQUENCY after
@@ -3247,7 +3294,7 @@ test_mtf_deconvolution ()
       fprintf (stderr, "Public zero-SNR Wiener mode was not disabled\n");
       ok = false;
     }
-  disabled_wiener.scanner_snr = INFINITY;
+  disabled_wiener.scanner_snr = test_runtime_infinity_luminosity ();
   if (disabled_wiener.get_mode () != sharpen_parameters::none)
     {
       fprintf (stderr, "Public nonfinite-SNR Wiener mode was not disabled\n");

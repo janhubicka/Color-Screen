@@ -48,8 +48,13 @@ static_assert (std::numeric_limits<double>::is_iec559
 static inline bool
 my_isfinite (float x)
 {
-  uint32_t bits;
-  std::memcpy (&bits, &x, sizeof (bits));
+  uint32_t raw_bits;
+  std::memcpy (&raw_bits, &x, sizeof (raw_bits));
+  /* Clang with -ffinite-math-only can otherwise reason backwards from X's
+     floating type and fold the exponent test to true.  The volatile integer
+     copy makes the decision depend only on the run-time object representation,
+     while keeping all floating-point operations out of this predicate.  */
+  volatile uint32_t bits = raw_bits;
   return (bits & UINT32_C (0x7f800000)) != UINT32_C (0x7f800000);
 }
 
@@ -58,8 +63,9 @@ my_isfinite (float x)
 static inline bool
 my_isfinite (double x)
 {
-  uint64_t bits;
-  std::memcpy (&bits, &x, sizeof (bits));
+  uint64_t raw_bits;
+  std::memcpy (&raw_bits, &x, sizeof (raw_bits));
+  volatile uint64_t bits = raw_bits;
   return (bits & UINT64_C (0x7ff0000000000000))
          != UINT64_C (0x7ff0000000000000);
 }
