@@ -651,8 +651,8 @@ snapshot in `finetune_result::profile`, and exposes aggregate reporting through
 `analyze-scanner-blur --profile`.  It records:
 
 - simplex runs, iterations, evaluations, and total objective calls;
-- `init_screen()` calls, local reuse, exact builds, and fixed/focus cache
-  hits/misses;
+- `init_screen()` calls, local reuse, exact builds, global fixed/focus cache
+  hits/misses, and solver-local focus-node hits/misses;
 - general MTF and PSF preparation, physical-transfer cache/table work,
   direct/wrapped transfer construction, and forward/inverse FFT counts;
 - steady-clock time in the objective, filtering/cache path, sampling, colour
@@ -865,6 +865,45 @@ intervals, wider real-data validation, and any future per-channel focus design.
 Per-channel focus should use separate one-dimensional state rather than a dense
 three-dimensional RGB table.
 
+### FT-055 — focus-node lookup and screen interpolation dominate dense fits
+
+**Severity:** high performance
+
+**Status:** fixed in revision 0027 for the scalar physical-focus table
+
+After the direct physical-transfer work removed PSF construction, a full
+fixed-strip profile exposed two new costs.  The linked-list LRU was searched
+for both endpoints of nearly every interpolated simplex state, and each state
+materialized a 128x128x3 screen through a three-level loop whose innermost
+extent was only three.  On the profiled scan this accounted for 53.4 seconds
+of cache lookup/wait and 151.3 seconds of interpolation in thread-summed time.
+
+Revision 0027 keeps weak, solver-local references to exact grid nodes indexed
+by their integer node number.  The global LRU remains authoritative and
+bounded, but repeated evaluations in one simplex no longer traverse or lock it
+when the node is still alive.  The materialized interpolation remains
+mathematically unchanged, but its multiplicative array is treated as one
+contiguous vector and blended with an OpenMP SIMD loop.  This is preferable to
+lazy per-pixel blending: a prototype removed the full-screen write but doubled
+the endpoint sampling work and was slower on small and single-threaded fits.
+
+A five-thread fixed-strip regression was also run with the same grid shape as
+the supplied full profile: 425 coarse and 10,625 dense fits, 11,050 in total.
+Two alternating measurements produced byte-identical correction tables.  The
+median wall time changed from 20.02 to 16.28 seconds; median thread-summed
+objective time from 71.13 to 53.34 seconds; interpolation from 17.26 to 6.27
+seconds; and global cache lookup/wait from 13.59 to 6.58 seconds.  The optimized
+runs served 502,163 repeated node requests from solver-local references and
+reduced global focus-cache accesses from roughly 672,000 to 170,000.  These
+numbers are diagnostic single-host measurements, not portable universal
+ratios; the full RGB+IR scan remains the relevant field benchmark.
+
+The two exact-final builds normally reported for each dense cell are not
+duplicates in the current algorithm: the first exact screen defines outlier
+selection, and a second is required after the refined optimum changes.  They
+should be combined only with a deliberate redesign of outlier refinement, not
+removed as a cache optimization.
+
 ### Initial measurement and continuing validation
 
 Revision 0017 supplies a reproducible first speed and equality check, but its
@@ -1076,6 +1115,15 @@ Revision 0024 adds:
 - end-to-end verification that a zero threshold disables the positive floor
   without changing the exact saved correction;
 - profile assertions for separate coarse and dense identifiability counts.
+
+Revision 0027 adds:
+
+- numerical equality between the historical nested focus-screen blend and the
+  flat SIMD-friendly implementation at a non-midpoint weight;
+- end-to-end profile assertions that both solver-local node hits and first-use
+  misses occur;
+- a full-grid fixed-strip benchmark producing a byte-identical correction
+  table while reducing interpolation and global-cache time.
 
 ## Test work still required
 

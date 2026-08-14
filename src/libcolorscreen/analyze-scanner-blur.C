@@ -789,6 +789,12 @@ analyze_scanner_blur_worker::print_profile () const
       = focus_lookups
             ? 100.0 * p.focus_screen_cache_hits / focus_lookups
             : 0.0;
+  const uint64_t local_focus_lookups
+      = p.focus_screen_local_node_hits + p.focus_screen_local_node_misses;
+  const double local_focus_hit_rate
+      = local_focus_lookups
+            ? 100.0 * p.focus_screen_local_node_hits / local_focus_lookups
+            : 0.0;
   const uint64_t source_lookups
       = p.focus_source_cache_hits + p.focus_source_cache_misses;
   const double source_hit_rate
@@ -826,6 +832,10 @@ analyze_scanner_blur_worker::print_profile () const
   printf ("  focus source spectra: %llu hits, %llu misses (%.1f%% hit)\n",
           (unsigned long long)p.focus_source_cache_hits,
           (unsigned long long)p.focus_source_cache_misses, source_hit_rate);
+  printf ("  solver-local focus nodes: %llu hits, %llu misses (%.1f%% hit)\n",
+          (unsigned long long)p.focus_screen_local_node_hits,
+          (unsigned long long)p.focus_screen_local_node_misses,
+          local_focus_hit_rate);
   printf ("  focus approximation: %llu interpolations, %llu exact node "
           "uses, %llu exact final builds\n",
           (unsigned long long)p.focus_screen_interpolations,

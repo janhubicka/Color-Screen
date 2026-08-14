@@ -300,7 +300,7 @@ model or objective.
 
 ## Focus caches, discretization, and invalidation
 
-The solver uses five exact reuse levels and one deliberately narrow
+The solver uses six exact reuse levels and one deliberately narrow
 approximation for the dense physical-displacement pass.
 
 1. A fixed-screen fast path calls `render_to_scr::get_screen()` when no screen,
@@ -318,13 +318,17 @@ approximation for the dense physical-displacement pass.
    whether sharpening is anticipated, and the complete per-channel capture and
    sharpening parameters.  Construction-only state such as the OpenMP choice
    is not part of the key.
-4. Fixed-geometry scalar physical-defocus fits additionally use a small
+4. Within one dense scalar-focus solver, already acquired grid nodes are kept
+   as weak references indexed by node number.  Repeated simplex evaluations
+   therefore avoid traversing and locking the global linked-list LRU.  Weak
+   ownership preserves the global cache's eviction and memory bound.
+5. Fixed-geometry scalar physical-defocus fits additionally use a small
    thread-safe cache of immutable source spectra.  Its key contains only the
    process-screen family and relevant strip widths.  The first exact focus
    state constructs the ideal periodic screen and forward-transforms its three
    channels; subsequent exact nodes and exact-final evaluations reuse those
    spectra.
-5. The same path uses a second small thread-safe cache for the analytical
+6. The same path uses a second small thread-safe cache for the analytical
    physical transfer with defocus removed from its key.  Fixed sensor,
    diffraction, residual-sigma, halo, pupil-overlap, and Fourier-grid terms are
    prepared once.  A new focus state evaluates only the signed
@@ -400,9 +404,11 @@ the existing 64-entry linked-list LRU for concurrent and prepass states.
 
 Each supported fixed-source node is built by the exact direct periodic-OTF path
 and stored in that existing LRU.  A requested intermediate displacement
-linearly blends the
-`mult` samples of the two neighboring exact periodic screens; presentation-only
-`add` data is unchanged by optical filtering and is copied exactly.  This does
+linearly blends the `mult` samples of the two neighboring exact periodic
+screens; presentation-only `add` data is unchanged by optical filtering and
+is copied exactly.  The 128x128x3 blend is performed as one flat contiguous
+loop so C++ compilers can vectorize it; the former three-level loop had an
+innermost extent of three and was particularly slow in GCC builds.  This does
 **not** interpolate a nonnegative MTF curve: the node screens have already been
 formed with the signed physical OTF, so phase reversals and their effect on the
 simulated screen survive in the quantity being blended.
@@ -442,7 +448,7 @@ atomic-counter overhead.  Set `finetune_parameters::collect_profile` and read
 
 - simplex runs, iterations, evaluations, and total objective calls;
 - screen initialization, local-state reuse, final-screen and source-spectrum
-  cache hits/misses, and exact builds;
+  cache hits/misses, solver-local node-reference hits/misses, and exact builds;
 - interpolated screen constructions, exact node uses, and exact final builds;
 - general MTF/PSF preparation, physical-transfer-state hits/misses and table
   builds, direct-transfer and wrapped-PSF construction, and FFT counts;

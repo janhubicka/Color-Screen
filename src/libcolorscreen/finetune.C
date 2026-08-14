@@ -259,6 +259,8 @@ public:
   std::atomic_uint64_t fixed_screen_cache_misses{0};
   std::atomic_uint64_t focus_screen_cache_hits{0};
   std::atomic_uint64_t focus_screen_cache_misses{0};
+  std::atomic_uint64_t focus_screen_local_node_hits{0};
+  std::atomic_uint64_t focus_screen_local_node_misses{0};
   std::atomic_uint64_t focus_source_cache_hits{0};
   std::atomic_uint64_t focus_source_cache_misses{0};
   std::atomic_uint64_t focus_screen_interpolations{0};
@@ -324,6 +326,8 @@ public:
     COPY_PROFILE_FIELD (fixed_screen_cache_misses);
     COPY_PROFILE_FIELD (focus_screen_cache_hits);
     COPY_PROFILE_FIELD (focus_screen_cache_misses);
+    COPY_PROFILE_FIELD (focus_screen_local_node_hits);
+    COPY_PROFILE_FIELD (focus_screen_local_node_misses);
     COPY_PROFILE_FIELD (focus_source_cache_hits);
     COPY_PROFILE_FIELD (focus_source_cache_misses);
     COPY_PROFILE_FIELD (focus_screen_interpolations);
@@ -885,6 +889,10 @@ private:
   coord_t scanner_mtf_defocus_interpolation_max = 0;
   int scanner_mtf_defocus_interpolation_nodes = 0;
   bool force_exact_scanner_mtf_defocus = false;
+  /* Avoid traversing and locking the global linked-list LRU for focus nodes
+     already acquired by this simplex.  Weak ownership preserves the global
+     cache's bounded eviction behaviour.  */
+  std::array<std::weak_ptr<screen>, 64> focus_screen_nodes;
 public:
   /* Unblurred screen.  */
   std::shared_ptr<screen> original_scr;
@@ -1953,6 +1961,8 @@ public:
     scanner_mtf_defocus_interpolation_nodes
         = fparams.scanner_mtf_defocus_interpolation_nodes;
     force_exact_scanner_mtf_defocus = false;
+    for (std::weak_ptr<screen> &node : focus_screen_nodes)
+      node.reset ();
     optimize_screen_channel_blurs = flags & finetune_screen_channel_blurs;
     optimize_emulsion_blur = flags & finetune_emulsion_blur;
     optimize_strips
@@ -2804,18 +2814,37 @@ public:
      scalar interpolation path; ordinary exact per-channel fits retain all
      three values from CAPTURE_SHARPEN_PARAMETERS.  */
   std::shared_ptr<screen>
-  get_focus_screen_node (coord_t *v, coord_t node_defocus,
+  get_focus_screen_node (coord_t *v, int node_index, coord_t node_defocus,
                          coord_t red_strip_width,
                          coord_t green_strip_width)
   {
     assert (optimize_scanner_mtf_defocus
             && !optimize_scanner_mtf_channel_defocus);
+    assert (node_index >= 0
+            && node_index < scanner_mtf_defocus_interpolation_nodes
+            && node_index < (int)focus_screen_nodes.size ());
+
+    std::shared_ptr<screen> cached = focus_screen_nodes[node_index].lock ();
+    if (cached)
+      {
+        if (profile)
+          profile->focus_screen_local_node_hits.fetch_add (
+              1, std::memory_order_relaxed);
+        return cached;
+      }
+    if (profile)
+      profile->focus_screen_local_node_misses.fetch_add (
+          1, std::memory_order_relaxed);
+
     std::array<sharpen_parameters, 3> sp
         = capture_sharpen_parameters (v);
     for (int c = 0; c < 3; c++)
       sp[c].scanner_mtf.defocus = node_defocus;
-    return get_profiled_cached_focus_screen (
+    cached = get_profiled_cached_focus_screen (
         sp, red_strip_width, green_strip_width);
+    if (cached)
+      focus_screen_nodes[node_index] = cached;
+    return cached;
   }
 
   /* Initialize TILEID by interpolating the two neighboring exact focus-grid
@@ -2835,7 +2864,8 @@ public:
       return false;
 
     std::shared_ptr<screen> lower
-        = get_focus_screen_node (v, interval.lower, red_strip_width,
+        = get_focus_screen_node (v, interval.lower_index, interval.lower,
+                                 red_strip_width,
                                  green_strip_width);
     if (!lower)
       return false;
@@ -2849,7 +2879,8 @@ public:
       }
 
     std::shared_ptr<screen> upper
-        = get_focus_screen_node (v, interval.upper, red_strip_width,
+        = get_focus_screen_node (v, interval.upper_index, interval.upper,
+                                 red_strip_width,
                                  green_strip_width);
     if (!upper)
       return false;
@@ -2858,17 +2889,11 @@ public:
         profile, finetune_profile_timer_kind::screen_interpolation);
     screen *dst = writable_tile_screen (tileid);
     const luminosity_t upper_weight = interval.upper_weight;
-    const luminosity_t lower_weight = 1 - upper_weight;
     /* Optical filtering changes MULT only.  ADD is identical in both exact
        nodes, so copy it rather than introducing an unnecessary rounding step
        into presentation-only data.  */
     memcpy (dst->add, lower->add, sizeof (dst->add));
-    for (int y = 0; y < screen::size; y++)
-      for (int x = 0; x < screen::size; x++)
-        for (int c = 0; c < 3; c++)
-          dst->mult[y][x][c]
-              = lower->mult[y][x][c] * lower_weight
-                + upper->mult[y][x][c] * upper_weight;
+    finetune_interpolate_screen_mult (*dst, *lower, *upper, upper_weight);
     if (profile)
       profile->focus_screen_interpolations.fetch_add (
           1, std::memory_order_relaxed);

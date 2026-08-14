@@ -39,6 +39,8 @@ jobs:
       run: brew install -v openjpeg
     - name: Install libpng
       run: brew install -v libpng
+    - name: Install webp
+      run: brew install -v webp
     - name: Install adwaita-icon-theme
       run: brew install -v adwaita-icon-theme
     - name: Link qt6
@@ -204,6 +206,12 @@ jobs:
         cp /opt/homebrew/lib/libopenjp2.*.dylib Color-Screen.app/Contents/Frameworks/ || true
         cp /opt/homebrew/lib/libpng16.*.dylib Color-Screen.app/Contents/Frameworks/ || true
         cp /opt/homebrew/lib/libexpat.*.dylib Color-Screen.app/Contents/Frameworks/ || true
+
+        # Homebrew's libwebp depends on a separate SharpYUV dylib.  macdeployqt
+        # copies libwebp for Qt's image plugin but currently misses this
+        # transitive @rpath dependency.
+        WEBP_PREFIX=$(brew --prefix webp)
+        cp -L "$WEBP_PREFIX"/lib/libsharpyuv*.dylib Color-Screen.app/Contents/Frameworks/
         
         # Fix RPATHs for manually copied libs
         for LIB in Color-Screen.app/Contents/Frameworks/*.dylib; do
@@ -211,28 +219,41 @@ jobs:
             install_name_tool -id "@executable_path/../Frameworks/$NAME" "$LIB"
         done
         
-        # Fix dependencies WITHIN the bundled frameworks (dylib -> dylib references)
-        # e.g. libgsl linking against libgslcblas or libcolorscreen linking against libgsl
-        # This is CRITICAL because the system libs will be uninstalled
+        # Fix dependencies WITHIN the bundled frameworks (dylib -> dylib references).
+        # Homebrew libraries use both absolute paths and @rpath references; the
+        # latter is used by libwebp for libsharpyuv.
         for DYLIB in Color-Screen.app/Contents/Frameworks/*.dylib; do
              [ -f "$DYLIB" ] || continue
              echo "Fixing inner dependencies for $(basename "$DYLIB")..."
-             
-             # Use otool to find dependencies in homebrew prefix
-             # We use process substitution to grep cleanly
-             # We grep for /opt/homebrew/ to catch both /lib/ and /opt/ (keg-only) paths
-             otool -L "$DYLIB" | grep '/opt/homebrew/' | awk '{print $1}' | while read -r DEP_PATH; do
+
+             while IFS= read -r DEP_PATH; do
+                 case "$DEP_PATH" in
+                     /opt/homebrew/*|@rpath/*.dylib)
+                         ;;
+                     *)
+                         continue
+                         ;;
+                 esac
+
                  DEP_NAME=$(basename "$DEP_PATH")
-                 
-                 # Check if we have bundled this dependency
                  if [ -f "Color-Screen.app/Contents/Frameworks/$DEP_NAME" ]; then
-                      echo "  Rewriting $DEP_NAME in $(basename "$DYLIB")..."
-                      # Use @loader_path because these are sibling libraries in the same directory
+                      echo "  Rewriting $DEP_PATH in $(basename "$DYLIB")..."
+                      # Bundled non-framework dylibs are siblings.
                       install_name_tool -change "$DEP_PATH" "@loader_path/$DEP_NAME" "$DYLIB"
                  else
                       echo "  Warning: Inner dependency $DEP_NAME needed by $(basename "$DYLIB") not found in bundle!"
                  fi
-             done
+             done < <(otool -L "$DYLIB" | awk 'NR > 1 {print $1}')
+        done
+
+        # Catch the particular macdeployqt failure before signing and uploading
+        # an application which dyld cannot start.
+        for LIBWEBP in Color-Screen.app/Contents/Frameworks/libwebp*.dylib; do
+             [ -f "$LIBWEBP" ] || continue
+             if otool -L "$LIBWEBP" | grep -q '@rpath/libsharpyuv'; then
+                 echo "ERROR: $(basename "$LIBWEBP") still has an unresolved libsharpyuv dependency" >&2
+                 exit 1
+             fi
         done
 
         # Bundle Adwaita icons (if available)

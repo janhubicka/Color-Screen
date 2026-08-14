@@ -35,6 +35,28 @@ bool finetune_focus_grid_interval_for_value (
     coord_t defocus, coord_t max_defocus, int nodes,
     finetune_focus_grid_interval *interval);
 
+/* Materialize in DST the multiplicative transmission between exact
+   focus-grid screens LOWER and UPPER, giving UPPER the weight UPPER_WEIGHT.
+   Keep the loop flat: the former three-level 128x128x3 loop left a
+   three-element innermost dimension that GCC did not reliably vectorize.
+   ADD is independent of optical filtering and remains the caller's
+   responsibility.  DST must not alias either source.  */
+inline void
+finetune_interpolate_screen_mult (screen &dst, const screen &lower,
+                                  const screen &upper,
+                                  luminosity_t upper_weight)
+{
+  assert (&dst != &lower && &dst != &upper);
+  constexpr int values = screen::size * screen::size * 3;
+  luminosity_t *d = &dst.mult[0][0][0];
+  const luminosity_t *l = &lower.mult[0][0][0];
+  const luminosity_t *u = &upper.mult[0][0][0];
+  const luminosity_t lower_weight = 1 - upper_weight;
+#pragma omp simd
+  for (int i = 0; i < values; i++)
+    d[i] = l[i] * lower_weight + u[i] * upper_weight;
+}
+
 /* Find the first nonnegative physical defocus at which PARAMS' system MTF at
    PIXEL_FREQUENCY drops to MINIMUM_MTF.  Search no farther than HARD_MAX and
    store HARD_MAX when no crossing occurs.  The in-focus response must exceed

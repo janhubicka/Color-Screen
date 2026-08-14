@@ -710,6 +710,38 @@ test_finetune_focus_screen_cache ()
       return false;
     }
 
+  /* The dense focus approximation materializes the interpolated screen on
+     every new simplex state.  Verify that the flat SIMD-friendly helper is
+     numerically equivalent to the historical three-level loop, including
+     non-midpoint weights.  */
+  constexpr luminosity_t interpolation_weight = (luminosity_t)0.371;
+  const luminosity_t lower_weight = 1 - interpolation_weight;
+  screen reference_interpolation, flat_interpolation;
+  for (int y = 0; y < screen::size; y++)
+    for (int x = 0; x < screen::size; x++)
+      for (int c = 0; c < 3; c++)
+        reference_interpolation.mult[y][x][c]
+            = lower_screen->mult[y][x][c] * lower_weight
+              + upper_screen->mult[y][x][c] * interpolation_weight;
+  finetune_interpolate_screen_mult (
+      flat_interpolation, *lower_screen, *upper_screen,
+      interpolation_weight);
+  double interpolation_delta = 0;
+  for (int y = 0; y < screen::size; y++)
+    for (int x = 0; x < screen::size; x++)
+      for (int c = 0; c < 3; c++)
+        interpolation_delta
+            = std::max (interpolation_delta,
+                        fabs ((double)reference_interpolation.mult[y][x][c]
+                              - flat_interpolation.mult[y][x][c]));
+  if (interpolation_delta > 2e-7)
+    {
+      fprintf (stderr,
+               "Flat focus-screen interpolation differs by %.12g\n",
+               interpolation_delta);
+      return false;
+    }
+
   screen physical_source, exact_upper, exact_target;
   physical_source.initialize (Dufay, (coord_t)0.45, (coord_t)0.35);
   screen_filter_source prepared_physical_source;

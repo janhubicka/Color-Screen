@@ -135,6 +135,8 @@ test -n "$exact_builds" -a -n "$interpolated_builds" || exit 1
 test "$interpolated_builds" -lt "$exact_builds" || exit 1
 grep 'focus approximation: [1-9][0-9]* interpolations' \
   out-${NAME}-focus-interpolated.txt >/dev/null || exit 1
+grep 'solver-local focus nodes: [1-9][0-9]* hits, [1-9][0-9]* misses' \
+  out-${NAME}-focus-interpolated.txt >/dev/null || exit 1
 grep 'general MTF precomputes 0, PSF precomputes 0; physical focus state [1-9][0-9]* hits, 1 misses' \
   out-${NAME}-focus-exact.txt >/dev/null || exit 1
 grep 'periodic filters: [1-9][0-9]* direct transfers, 0 wrapped PSFs' \
