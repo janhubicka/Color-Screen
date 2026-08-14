@@ -9,12 +9,24 @@
 namespace colorscreen
 {
 
+/* Return the support radius of the bilateral spatial Gaussian with standard
+   deviation SIGMA_S.  Keep this in one place so tile-border allocation and
+   filtering use exactly the same support.  */
+static int
+bilateral_radius (luminosity_t sigma_s)
+{
+  return std::max (0, (int)std::ceil (sigma_s * 3.0));
+}
+
 /* Set up denoising for given parameters.  */
 template <typename T>
 denoising<T>::denoising (const denoise_parameters &params, int max_threads)
     : m_params (params)
 {
-  m_border_size = m_params.search_radius + m_params.patch_radius;
+  if (m_params.mode == denoise_parameters::bilateral)
+    m_border_size = bilateral_radius (m_params.bilateral_sigma_s);
+  else
+    m_border_size = m_params.search_radius + m_params.patch_radius;
   /* Use a reasonable tile size.  */
   m_tile_size = 128;
   while (m_tile_size < m_border_size * 4)
@@ -54,7 +66,7 @@ process_bilateral (int tile_size, int border, int basic_size, const T *in, T *ou
 {
   const T inv_s2 = (T)1.0 / ((T)2.0 * sigma_s * sigma_s);
   const T inv_r2 = (T)1.0 / ((T)2.0 * sigma_r * sigma_r);
-  const int r = (int)std::ceil (sigma_s * 3.0);
+  const int r = bilateral_radius (sigma_s);
 
   for (int y = border; y < border + basic_size; ++y)
     for (int x = border; x < border + basic_size; ++x)

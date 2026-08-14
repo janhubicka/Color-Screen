@@ -5415,6 +5415,26 @@ test_denoise ()
     denoise_parameters::nl_fast
   };
 
+  /* A bilateral filter needs a border matching its spatial kernel, not the
+     unrelated NL-means patch and search radii.  Sigma 2 has support radius 6
+     with the three-sigma truncation used by process_bilateral().  */
+  {
+    denoise_parameters params;
+    params.mode = denoise_parameters::bilateral;
+    params.bilateral_sigma_s = 2.0f;
+    params.bilateral_sigma_r = 0.1f;
+    params.patch_radius = 1;
+    params.search_radius = 3;
+    denoising<float> bilateral (params, 1);
+    if (bilateral.get_border_size () != 6)
+      {
+        fprintf (stderr,
+                 "Bilateral denoising border is %i instead of kernel radius 6\n",
+                 bilateral.get_border_size ());
+        return false;
+      }
+  }
+
   for (auto mode : modes)
     {
       std::vector<float> denoised (width * height);

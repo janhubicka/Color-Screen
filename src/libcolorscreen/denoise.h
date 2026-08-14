@@ -69,7 +69,7 @@ public:
 private:
   /* Denoising parameters.  */
   denoise_parameters m_params;
-  /* Size of border (search_radius + patch_radius).  */
+  /* Size of border required by the active filter kernel.  */
   int m_border_size = 0;
   /* Size of tile.  */
   int m_tile_size = 0;
