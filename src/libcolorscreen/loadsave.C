@@ -403,6 +403,26 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
                           [(int)rparam->screen_demosaic]
                               .name)
                  < 0
+          || fprintf (f, "screen_denoise: %s\n",
+                      denoise_parameters::denoise_mode_names
+                          [(int)rparam->screen_denoise.mode]
+                              .name)
+                 < 0
+          || fprintf (f, "screen_denoise_strength: %.17g\n",
+                      rparam->screen_denoise.strength)
+                 < 0
+          || fprintf (f, "screen_denoise_patch_radius: %d\n",
+                      rparam->screen_denoise.patch_radius)
+                 < 0
+          || fprintf (f, "screen_denoise_search_radius: %d\n",
+                      rparam->screen_denoise.search_radius)
+                 < 0
+          || fprintf (f, "screen_denoise_bilateral_sigma_s: %.17g\n",
+                      rparam->screen_denoise.bilateral_sigma_s)
+                 < 0
+          || fprintf (f, "screen_denoise_bilateral_sigma_r: %.17g\n",
+                      rparam->screen_denoise.bilateral_sigma_r)
+                 < 0
           || fprintf (f, "mix_weights: %f %f %f\n", rparam->mix_red,
                       rparam->mix_green, rparam->mix_blue)
                  < 0
@@ -1620,6 +1640,64 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
           if (rparam)
             rparam->screen_demosaic
                 = (enum render_parameters::screen_demosaic_t)j;
+        }
+      else if (!strcmp (buf, "screen_denoise"))
+        {
+          get_keyword (f, buf2);
+          int j;
+          for (j = 0; j < (int)denoise_parameters::denoise_mode_max; j++)
+            if (!strcmp (buf2, denoise_parameters::denoise_mode_names[j].name))
+              break;
+          if (j == (int)denoise_parameters::denoise_mode_max)
+            {
+              *error = "unknown screen denoising mode";
+              return false;
+            }
+          if (rparam)
+            rparam->screen_denoise.mode
+                = (enum denoise_parameters::denoise_mode)j;
+        }
+      else if (!strcmp (buf, "screen_denoise_strength"))
+        {
+          if (!read_luminosity (f, rparam_check (screen_denoise.strength)))
+            {
+              *error = "error parsing screen_denoise_strength";
+              return false;
+            }
+        }
+      else if (!strcmp (buf, "screen_denoise_patch_radius"))
+        {
+          if (!read_int (f, rparam_check (screen_denoise.patch_radius)))
+            {
+              *error = "error parsing screen_denoise_patch_radius";
+              return false;
+            }
+        }
+      else if (!strcmp (buf, "screen_denoise_search_radius"))
+        {
+          if (!read_int (f, rparam_check (screen_denoise.search_radius)))
+            {
+              *error = "error parsing screen_denoise_search_radius";
+              return false;
+            }
+        }
+      else if (!strcmp (buf, "screen_denoise_bilateral_sigma_s"))
+        {
+          if (!read_luminosity (
+                  f, rparam_check (screen_denoise.bilateral_sigma_s)))
+            {
+              *error = "error parsing screen_denoise_bilateral_sigma_s";
+              return false;
+            }
+        }
+      else if (!strcmp (buf, "screen_denoise_bilateral_sigma_r"))
+        {
+          if (!read_luminosity (
+                  f, rparam_check (screen_denoise.bilateral_sigma_r)))
+            {
+              *error = "error parsing screen_denoise_bilateral_sigma_r";
+              return false;
+            }
         }
       else if (!strcmp (buf, "scr_detect_red"))
         {

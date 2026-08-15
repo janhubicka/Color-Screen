@@ -444,20 +444,27 @@ public:
   screen_tile_rgb_color (rgbdata &red_ret, rgbdata &green_ret, rgbdata &blue_ret, int x, int y) const
   {
     red_ret = {0, 0, 0};
-    for (int yy = 0; yy < GEOMETRY::red_width_scale; yy++)
-      for (int xx = 0; xx < GEOMETRY::red_height_scale; xx++)
-	red_ret += fast_rgb_red (x * GEOMETRY::red_width_scale + xx, y * GEOMETRY::red_height_scale + yy);
-    red_ret *= ((luminosity_t) 1.0 / (GEOMETRY::red_height_scale * GEOMETRY::red_width_scale));
+    for (int yy = 0; yy < GEOMETRY::red_height_scale; yy++)
+      for (int xx = 0; xx < GEOMETRY::red_width_scale; xx++)
+        red_ret += fast_rgb_red (x * GEOMETRY::red_width_scale + xx,
+                                 y * GEOMETRY::red_height_scale + yy);
+    red_ret *= ((luminosity_t)1.0
+                / (GEOMETRY::red_height_scale * GEOMETRY::red_width_scale));
     green_ret = {0, 0, 0};
-    for (int yy = 0; yy < GEOMETRY::green_width_scale; yy++)
-      for (int xx = 0; xx < GEOMETRY::green_height_scale; xx++)
-	green_ret += fast_rgb_green (x * GEOMETRY::green_width_scale + xx, y * GEOMETRY::green_height_scale + yy);
-    green_ret *= ((luminosity_t) 1.0 / (GEOMETRY::green_height_scale * GEOMETRY::green_width_scale));
+    for (int yy = 0; yy < GEOMETRY::green_height_scale; yy++)
+      for (int xx = 0; xx < GEOMETRY::green_width_scale; xx++)
+        green_ret += fast_rgb_green (x * GEOMETRY::green_width_scale + xx,
+                                     y * GEOMETRY::green_height_scale + yy);
+    green_ret *= ((luminosity_t)1.0
+                  / (GEOMETRY::green_height_scale
+                     * GEOMETRY::green_width_scale));
     blue_ret = {0, 0, 0};
-    for (int yy = 0; yy < GEOMETRY::blue_width_scale; yy++)
-      for (int xx = 0; xx < GEOMETRY::blue_height_scale; xx++)
-	blue_ret += fast_rgb_blue (x * GEOMETRY::blue_width_scale + xx, y * GEOMETRY::blue_height_scale + yy);
-    blue_ret *= ((luminosity_t) 1.0 / (GEOMETRY::blue_height_scale * GEOMETRY::blue_width_scale));
+    for (int yy = 0; yy < GEOMETRY::blue_height_scale; yy++)
+      for (int xx = 0; xx < GEOMETRY::blue_width_scale; xx++)
+        blue_ret += fast_rgb_blue (x * GEOMETRY::blue_width_scale + xx,
+                                   y * GEOMETRY::blue_height_scale + yy);
+    blue_ret *= ((luminosity_t)1.0
+                 / (GEOMETRY::blue_height_scale * GEOMETRY::blue_width_scale));
   }
 
   /* Populate demosaiced data vector.  */

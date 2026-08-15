@@ -35,6 +35,7 @@
 #include "include/paget.h"
 #include "include/dufaycolor.h"
 #include "demosaic.h"
+#include "analyze-base.h"
 #include "finetune-int.h"
 #include "gaussian-blur.h"
 #include "nmsimplex.h"
@@ -5520,27 +5521,43 @@ test_denoise ()
   std::vector<float> noisy (width * height);
 
   unsigned int seed = 123;
-  /* Create a simple gradient image.  */
+  /* Create a gradient with zero-mean additive noise.  */
   for (int y = 0; y < height; y++)
     for (int x = 0; x < width; x++)
       {
         float val = (float)x / width;
         original[y * width + x] = val;
-        /* Add some noise.  */
-        float noise = (float)(fast_rand16 (&seed) % 100) / 1000.0f;
+        float noise
+            = ((int)(fast_rand16 (&seed) % 201) - 100) / 2000.0f;
         noisy[y * width + x] = val + noise;
       }
 
-  auto get_float_pixel = [] (const std::vector<float> &data, int_point_t p, int width, void *) -> float
-  {
-    return data[p.y * width + p.x];
-  };
+  auto get_float_pixel = [] (const std::vector<float> &data, int_point_t p,
+                             int width, void *) -> float
+  { return data[p.y * width + p.x]; };
 
   denoise_parameters::denoise_mode modes[] = {
     denoise_parameters::bilateral,
     denoise_parameters::nl_means,
     denoise_parameters::nl_fast
   };
+
+  /* Selecting NL-means should enable it with useful defaults.  */
+  {
+    denoise_parameters params;
+    params.mode = denoise_parameters::nl_fast;
+    if (params.get_mode () != denoise_parameters::nl_fast)
+      {
+        fprintf (stderr, "Default NL-means parameters disable denoising\n");
+        return false;
+      }
+    params.search_radius = 0;
+    if (params.get_mode () != denoise_parameters::none)
+      {
+        fprintf (stderr, "Invalid NL-means search radius was accepted\n");
+        return false;
+      }
+  }
 
   /* A bilateral filter needs a border matching its spatial kernel, not the
      unrelated NL-means patch and search radii.  Sigma 2 has support radius 6
@@ -5573,8 +5590,10 @@ test_denoise ()
       params.bilateral_sigma_s = 2.0f;
       params.bilateral_sigma_r = 0.1f;
 
-      if (!denoise<float, float, const std::vector<float> &, void *, get_float_pixel, float> (
-              denoised.data (), noisy, NULL, width, height, params, NULL, false))
+      if (!denoise<float, float, const std::vector<float> &, void *,
+                   get_float_pixel, float> (denoised.data (), noisy, NULL,
+                                             width, height, params, NULL,
+                                             false))
         return false;
 
       /* Calculate MSE for noisy and denoised images.  */
@@ -5583,18 +5602,191 @@ test_denoise ()
       for (int y = 0; y < height; y++)
         for (int x = 0; x < width; x++)
           {
-            double diff_noisy = noisy[y * width + x] - original[y * width + x];
-            double diff_denoised = denoised[y * width + x] - original[y * width + x];
+            double diff_noisy
+                = noisy[y * width + x] - original[y * width + x];
+            double diff_denoised
+                = denoised[y * width + x] - original[y * width + x];
             mse_noisy += diff_noisy * diff_noisy;
             mse_denoised += diff_denoised * diff_denoised;
           }
 
       if (mse_denoised >= mse_noisy)
         {
-          printf ("Denoising mode %i failed to reduce MSE: noisy %f, denoised %f\n", (int)mode, mse_noisy, mse_denoised);
+          fprintf (stderr,
+                   "Denoising mode %i failed to reduce MSE: noisy %f, denoised %f\n",
+                   (int)mode, mse_noisy, mse_denoised);
           return false;
         }
     }
+
+  /* The reference and integral-image NL-means implementations must implement
+     the same patch-distance normalization.  */
+  {
+    std::vector<float> reference (width * height), fast (width * height);
+    denoise_parameters params;
+    params.strength = 0.1f;
+    params.patch_radius = 2;
+    params.search_radius = 3;
+    params.mode = denoise_parameters::nl_means;
+    if (!denoise<float> (
+            width, height, [&] (int x, int y) { return noisy[y * width + x]; },
+            [&] (int x, int y, float val) { reference[y * width + x] = val; },
+            params, NULL, false))
+      return false;
+    params.mode = denoise_parameters::nl_fast;
+    if (!denoise<float> (
+            width, height, [&] (int x, int y) { return noisy[y * width + x]; },
+            [&] (int x, int y, float val) { fast[y * width + x] = val; },
+            params, NULL, false))
+      return false;
+    for (size_t i = 0; i < fast.size (); i++)
+      if (fabs (fast[i] - reference[i]) > 2e-6)
+        {
+          fprintf (stderr,
+                   "Fast/reference NL-means differ at %zu: %.9g versus %.9g\n",
+                   i, fast[i], reference[i]);
+          return false;
+        }
+  }
+
+  /* The public functor interface is used in-place by analyze_base.  Tiled
+     denoising must still read every border from the original image, not from
+     an already processed neighbouring tile.  */
+  {
+    const int w = 300, h = 180;
+    std::vector<float> source ((size_t)w * h), out ((size_t)w * h);
+    std::vector<float> inplace;
+    unsigned int s = 17;
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        {
+          float noise
+              = ((int)(fast_rand16 (&s) % 201) - 100) / 2500.0f;
+          source[(size_t)y * w + x]
+              = (x < w / 2 ? 0.2f : 0.8f) + noise
+                + 0.03f * sinf (0.17f * x + 0.11f * y);
+        }
+    inplace = source;
+    denoise_parameters params;
+    params.mode = denoise_parameters::nl_fast;
+    params.strength = 0.1f;
+    params.patch_radius = 1;
+    params.search_radius = 3;
+    if (!denoise<float> (
+            w, h, [&] (int x, int y) { return source[(size_t)y * w + x]; },
+            [&] (int x, int y, float val) { out[(size_t)y * w + x] = val; },
+            params, NULL, true)
+        || !denoise<float> (
+            w, h, [&] (int x, int y) { return inplace[(size_t)y * w + x]; },
+            [&] (int x, int y, float val)
+            { inplace[(size_t)y * w + x] = val; },
+            params, NULL, true))
+      return false;
+    for (size_t i = 0; i < out.size (); i++)
+      if (out[i] != inplace[i])
+        {
+          fprintf (stderr,
+                   "In-place denoising differs from immutable-input result at %zu\n",
+                   i);
+          return false;
+        }
+  }
+
+  /* Image-boundary extension must not prefer the left/top side over the
+     right/bottom side.  */
+  {
+    const int w = 40, h = 17;
+    std::vector<float> a ((size_t)w * h), flipped ((size_t)w * h);
+    std::vector<float> da ((size_t)w * h), df ((size_t)w * h);
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        a[(size_t)y * w + x]
+            = 0.1f + 0.015f * x + 0.07f * sinf (0.3f * x + 0.2f * y);
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        flipped[(size_t)y * w + x] = a[(size_t)y * w + (w - 1 - x)];
+    denoise_parameters params;
+    params.mode = denoise_parameters::bilateral;
+    params.bilateral_sigma_s = 2;
+    params.bilateral_sigma_r = 0.1f;
+    if (!denoise<float> (
+            w, h, [&] (int x, int y) { return a[(size_t)y * w + x]; },
+            [&] (int x, int y, float val) { da[(size_t)y * w + x] = val; },
+            params, NULL, false)
+        || !denoise<float> (
+            w, h,
+            [&] (int x, int y) { return flipped[(size_t)y * w + x]; },
+            [&] (int x, int y, float val) { df[(size_t)y * w + x] = val; },
+            params, NULL, false))
+      return false;
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        if (fabs (da[(size_t)y * w + x]
+                  - df[(size_t)y * w + (w - 1 - x)])
+            > 2e-6)
+          {
+            fprintf (stderr, "Denoising boundary reflection is asymmetric\n");
+            return false;
+          }
+  }
+
+  /* Precise-RGB screen data use channel-specific rectangular sample grids.
+     Averaging a tile must iterate HEIGHT_SCALE vertically and WIDTH_SCALE
+     horizontally; swapping them reads the wrong Dufay red samples.  */
+  {
+    class test_dufay_rgb_analyzer : public analyze_base_worker<dufay_geometry>
+    {
+    public:
+      test_dufay_rgb_analyzer () : analyze_base_worker (1, 0, 0, 0, 0, 0)
+      {
+        m_area = { 0, 0, 1, 1 };
+        m_rgb_red = std::make_unique<rgbdata[]> (2);
+        m_rgb_green = std::make_unique<rgbdata[]> (1);
+        m_rgb_blue = std::make_unique<rgbdata[]> (1);
+        m_rgb_red[0] = { 1, 2, 3 };
+        m_rgb_red[1] = { 3, 4, 5 };
+        m_rgb_green[0] = { 6, 7, 8 };
+        m_rgb_blue[0] = { 9, 10, 11 };
+      }
+    } analyzer;
+    rgbdata red, green, blue;
+    analyzer.screen_tile_rgb_color (red, green, blue, 0, 0);
+    if (red != rgbdata{ 2, 3, 4 } || green != rgbdata{ 6, 7, 8 }
+        || blue != rgbdata{ 9, 10, 11 })
+      {
+        fprintf (stderr, "Precise-RGB screen tile averaging uses wrong grid axes\n");
+        return false;
+      }
+  }
+
+  /* Screen-patch denoising settings are part of the rendering state and must
+     survive a CSP save/load round trip.  */
+  {
+    render_parameters saved, loaded;
+    saved.screen_denoise.mode = denoise_parameters::nl_fast;
+    saved.screen_denoise.strength = 0.073f;
+    saved.screen_denoise.patch_radius = 3;
+    saved.screen_denoise.search_radius = 9;
+    saved.screen_denoise.bilateral_sigma_s = 1.75f;
+    saved.screen_denoise.bilateral_sigma_r = 0.034f;
+    FILE *f = tmpfile ();
+    const char *error = NULL;
+    if (!f || !save_csp (f, NULL, NULL, &saved, NULL) || fseek (f, 0, SEEK_SET)
+        || !load_csp (f, NULL, NULL, &loaded, NULL, &error))
+      {
+        fprintf (stderr, "Denoising CSP round trip failed: %s\n",
+                 error ? error : "I/O error");
+        if (f)
+          fclose (f);
+        return false;
+      }
+    fclose (f);
+    if (!saved.screen_denoise.equal_p (loaded.screen_denoise))
+      {
+        fprintf (stderr, "Screen denoising parameters were not preserved\n");
+        return false;
+      }
+  }
 
   return true;
 }

@@ -1,4 +1,4 @@
-/* High-quality image denoising.
+/* Tiled scalar denoising utilities.
    Copyright (C) 2014-2026 Jan Hubicka
    This file is part of Color-Screen.  */
 
@@ -13,6 +13,23 @@
 
 namespace colorscreen
 {
+
+/* Reflect coordinate P into an image axis of length SIZE.  Repeat the edge
+   sample on both sides.  Unlike a single clamp/reflection this also works when
+   the filter border is wider than the image.  */
+inline int
+denoise_reflect_coordinate (int p, int size) noexcept
+{
+  if (size <= 1)
+    return 0;
+  const int64_t period = 2 * (int64_t)size;
+  int64_t q = (int64_t)p % period;
+  if (q < 0)
+    q += period;
+  if (q >= size)
+    q = period - 1 - q;
+  return (int)q;
+}
 
 /* Class managing denoising process.
    T is the data type (float or double).  */
@@ -56,11 +73,12 @@ public:
     m_data[threadid].tile[y * m_tile_size + x] = val;
   }
 
-  /* Get pixel at coordinates X, Y for given THREADID.  */
+  /* Get filtered output pixel at coordinates X, Y for given THREADID.
+     Call after process_tile().  */
   T
   get_pixel (int threadid, int x, int y) const
   {
-    return m_data[threadid].tile[y * m_tile_size + x];
+    return m_data[threadid].out_tile[y * m_tile_size + x];
   }
 
   /* Apply denoising to the tile for given THREAD_ID.  */
@@ -84,6 +102,7 @@ private:
     /* Auxiliary buffers.  */
     std::vector<T> aux1;
     std::vector<T> aux2;
+    std::vector<T> aux3;
     /* True if initialized.  */
     bool initialized = false;
   };
@@ -107,6 +126,19 @@ denoise (mem_O *out, T data, P param, int width, int height,
 {
   if (params.get_mode () == denoise_parameters::none)
     return true;
+  if (width < 0 || height < 0)
+    return false;
+  if (!width || !height)
+    return true;
+
+  /* Tile borders must always be read from the original image.  Callers are
+     allowed to use the same storage for input and output, so take one
+     immutable snapshot before any tile starts writing its result.  */
+  std::vector<O> source ((size_t)width * height);
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      source[(size_t)y * width + x]
+          = getdata (data, { x, y }, width, param);
 
   int nthreads = parallel ? omp_get_max_threads () : 1;
   denoising<DT> d (params, nthreads);
@@ -120,7 +152,7 @@ denoise (mem_O *out, T data, P param, int width, int height,
     progress->set_task ("denoising (non-local means)", xtiles * ytiles);
 
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2) shared(  \
-        width, height, d, progress, out, param, parallel, data) if (parallel)
+        width, height, d, progress, out, parallel, source) if (parallel)
   for (int y = 0; y < height; y += d.get_basic_tile_size ())
     for (int x = 0; x < width; x += d.get_basic_tile_size ())
       {
@@ -134,18 +166,9 @@ denoise (mem_O *out, T data, P param, int width, int height,
               int px = x + xx - d.get_border_size ();
               int py = y + yy - d.get_border_size ();
 
-              /* Do mirroring to avoid sharp edge at the border of image.  */
-              if (px < 0)
-                px = -px;
-              if (py < 0)
-                py = -py;
-              if (px >= width)
-                px = width - (px - width) - 1;
-              if (py >= height)
-                py = height - (py - height) - 1;
-              px = std::clamp (px, 0, width - 1);
-              py = std::clamp (py, 0, height - 1);
-              d.put_pixel (id, xx, yy, getdata (data, {px, py}, width, param));
+              px = denoise_reflect_coordinate (px, width);
+              py = denoise_reflect_coordinate (py, height);
+              d.put_pixel (id, xx, yy, source[(size_t)py * width + px]);
             }
         d.process_tile (id, progress);
         for (int yy = 0; yy < d.get_basic_tile_size (); yy++)
@@ -170,6 +193,17 @@ denoise (int width, int height, GETDATA getdata, SETDATA setdata,
 {
   if (params.get_mode () == denoise_parameters::none)
     return true;
+  if (width < 0 || height < 0)
+    return false;
+  if (!width || !height)
+    return true;
+
+  /* SETDATA may update the same storage read by GETDATA.  Snapshot it so
+     neighbouring tiles cannot observe one another's already denoised border.  */
+  std::vector<DT> source ((size_t)width * height);
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      source[(size_t)y * width + x] = getdata (x, y);
 
   int nthreads = parallel ? omp_get_max_threads () : 1;
   denoising<DT> d (params, nthreads);
@@ -183,7 +217,7 @@ denoise (int width, int height, GETDATA getdata, SETDATA setdata,
     progress->set_task ("denoising", xtiles * ytiles);
 
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2) shared(  \
-        width, height, d, progress, getdata, setdata, parallel) if (parallel)
+        width, height, d, progress, setdata, parallel, source) if (parallel)
   for (int y = 0; y < height; y += d.get_basic_tile_size ())
     for (int x = 0; x < width; x += d.get_basic_tile_size ())
       {
@@ -197,13 +231,9 @@ denoise (int width, int height, GETDATA getdata, SETDATA setdata,
               int px = x + xx - d.get_border_size ();
               int py = y + yy - d.get_border_size ();
 
-              if (px < 0) px = -px;
-              if (py < 0) py = -py;
-              if (px >= width) px = width - (px - width) - 1;
-              if (py >= height) py = height - (py - height) - 1;
-              px = std::clamp (px, 0, width - 1);
-              py = std::clamp (py, 0, height - 1);
-              d.put_pixel (id, xx, yy, getdata (px, py));
+              px = denoise_reflect_coordinate (px, width);
+              py = denoise_reflect_coordinate (py, height);
+              d.put_pixel (id, xx, yy, source[(size_t)py * width + px]);
             }
         d.process_tile (id, progress);
         for (int yy = 0; yy < d.get_basic_tile_size (); yy++)
@@ -229,6 +259,16 @@ denoise_rgb (mem_O *out, T data, P param, int width, int height,
 {
   if (params.get_mode () == denoise_parameters::none)
     return true;
+  if (width < 0 || height < 0)
+    return false;
+  if (!width || !height)
+    return true;
+
+  std::vector<O> source ((size_t)width * height);
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      source[(size_t)y * width + x]
+          = getdata (data, { x, y }, width, param);
 
   int nthreads = parallel ? omp_get_max_threads () : 1;
   denoising<DT> d (params, nthreads * 3);
@@ -242,7 +282,7 @@ denoise_rgb (mem_O *out, T data, P param, int width, int height,
     progress->set_task ("denoising rgb (non-local means)", xtiles * ytiles);
 
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2) shared(  \
-        width, height, d, progress, out, param, parallel, data) if (parallel)
+        width, height, d, progress, out, parallel, source) if (parallel)
   for (int y = 0; y < height; y += d.get_basic_tile_size ())
     for (int x = 0; x < width; x += d.get_basic_tile_size ())
       {
@@ -259,14 +299,10 @@ denoise_rgb (mem_O *out, T data, P param, int width, int height,
               int px = x + xx - d.get_border_size ();
               int py = y + yy - d.get_border_size ();
 
-              if (px < 0) px = -px;
-              if (py < 0) py = -py;
-              if (px >= width) px = width - (px - width) - 1;
-              if (py >= height) py = height - (py - height) - 1;
-              px = std::clamp (px, 0, width - 1);
-              py = std::clamp (py, 0, height - 1);
+              px = denoise_reflect_coordinate (px, width);
+              py = denoise_reflect_coordinate (py, height);
 
-              O pixel = getdata (data, {px, py}, width, param);
+              O pixel = source[(size_t)py * width + px];
               d.put_pixel (3 * id, xx, yy, pixel.red);
               d.put_pixel (3 * id + 1, xx, yy, pixel.green);
               d.put_pixel (3 * id + 2, xx, yy, pixel.blue);
@@ -303,6 +339,15 @@ denoise_rgb (int width, int height, GETDATA getdata, SETDATA setdata,
 {
   if (params.get_mode () == denoise_parameters::none)
     return true;
+  if (width < 0 || height < 0)
+    return false;
+  if (!width || !height)
+    return true;
+
+  std::vector<rgbdata> source ((size_t)width * height);
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      source[(size_t)y * width + x] = getdata (x, y);
 
   int nthreads = parallel ? omp_get_max_threads () : 1;
   denoising<DT> d (params, nthreads * 3);
@@ -316,7 +361,7 @@ denoise_rgb (int width, int height, GETDATA getdata, SETDATA setdata,
     progress->set_task ("denoising rgb", xtiles * ytiles);
 
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2) shared(  \
-        width, height, d, progress, getdata, setdata, parallel) if (parallel)
+        width, height, d, progress, setdata, parallel, source) if (parallel)
   for (int y = 0; y < height; y += d.get_basic_tile_size ())
     for (int x = 0; x < width; x += d.get_basic_tile_size ())
       {
@@ -333,14 +378,10 @@ denoise_rgb (int width, int height, GETDATA getdata, SETDATA setdata,
               int px = x + xx - d.get_border_size ();
               int py = y + yy - d.get_border_size ();
 
-              if (px < 0) px = -px;
-              if (py < 0) py = -py;
-              if (px >= width) px = width - (px - width) - 1;
-              if (py >= height) py = height - (py - height) - 1;
-              px = std::clamp (px, 0, width - 1);
-              py = std::clamp (py, 0, height - 1);
+              px = denoise_reflect_coordinate (px, width);
+              py = denoise_reflect_coordinate (py, height);
 
-              rgbdata pixel = getdata (px, py);
+              rgbdata pixel = source[(size_t)py * width + px];
               d.put_pixel (3 * id, xx, yy, pixel.red);
               d.put_pixel (3 * id + 1, xx, yy, pixel.green);
               d.put_pixel (3 * id + 2, xx, yy, pixel.blue);

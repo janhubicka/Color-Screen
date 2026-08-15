@@ -249,7 +249,7 @@ void ScreenPanel::setupUi() {
   );
 
 
-  addSeparator("Denoising");
+  addSeparator("Screen patch denoising");
 
   // Screen Denoise Mode
   addEnumParameter("Denoise Mode",
@@ -257,7 +257,7 @@ void ScreenPanel::setupUi() {
       (int)denoise_parameters::denoise_mode_max,
       [](const ParameterState &s) { return (int)s.rparams.screen_denoise.mode; },
       [](ParameterState &s, int v) { s.rparams.screen_denoise.mode = (denoise_parameters::denoise_mode)v; },
-      nullptr, "Select denoising algorithm to reduce noise in the reconstructed image."
+      nullptr, "Denoise collected screen-patch samples before screen interpolation/demosaicing. This is an experimental patch-domain filter, not final-image denoising."
   );
 
   // Strength (h)
@@ -269,7 +269,7 @@ void ScreenPanel::setupUi() {
       [](const ParameterState &s) {
         return s.rparams.screen_denoise.mode == denoise_parameters::nl_means ||
                s.rparams.screen_denoise.mode == denoise_parameters::nl_fast;
-      }, false, "Filtering strength for Non-local means denoising. Larger values remove more noise but may blur details.");
+      }, false, "Patch-distance scale for Non-local means denoising. Larger values accept less-similar patches and therefore smooth more strongly.");
 
   // Patch Radius
   addSliderParameter(
@@ -280,7 +280,7 @@ void ScreenPanel::setupUi() {
       [](const ParameterState &s) {
         return s.rparams.screen_denoise.mode == denoise_parameters::nl_means ||
                s.rparams.screen_denoise.mode == denoise_parameters::nl_fast;
-      }, false, "Radius of the patch used for similarity comparison in Non-local means.");
+      }, false, "Radius of the square patch used for similarity comparison. The current implementation operates in each screen color's sample lattice, so the physical radius can differ between screen geometries/channels.");
 
   // Search Radius
   addSliderParameter(
@@ -291,7 +291,7 @@ void ScreenPanel::setupUi() {
       [](const ParameterState &s) {
         return s.rparams.screen_denoise.mode == denoise_parameters::nl_means ||
                s.rparams.screen_denoise.mode == denoise_parameters::nl_fast;
-      }, false, "Radius of the search window for Non-local means. Larger values are slower but may produce better results.");
+      }, false, "Radius of the search window in the current screen-patch sample lattice. Larger values are slower and are not yet geometry-normalized.");
 
   // Bilateral Sigma S
   addSliderParameter(

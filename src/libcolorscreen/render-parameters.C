@@ -94,8 +94,8 @@ const property_t sharpen_parameters::resampling_kernel_names [] = {
 const property_t denoise_parameters::denoise_mode_names []  = {
   { "none", "None", "No denoising." },
   { "bilateral", "Bilateral filter", "Fast edge-preserving smoothing filter." },
-  { "nl-means", "Non-local means", "High quality denoising algorithm preserving details and suppressing periodic patterns." },
-  { "nl-fast", "Non-local means (fast)", "Optimized version of non-local means denoising." },
+  { "nl-means", "Non-local means", "Reference non-local means implementation for collected screen-patch samples." },
+  { "nl-fast", "Non-local means (fast)", "Integral-image implementation of the same non-local means weighting." },
 };
 const property_t render_parameters::collection_quality_names []  = {
   { "fast", "Fast", "Sample each patch in its center" },

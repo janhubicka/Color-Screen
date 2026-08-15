@@ -1,4 +1,4 @@
-/* High-quality image denoising.
+/* Tiled scalar denoising utilities.
    Copyright (C) 2014-2026 Jan Hubicka
    This file is part of Color-Screen.  */
 
@@ -54,6 +54,7 @@ denoising<T>::init (int thread_id)
     {
       m_data[thread_id].aux1.resize (m_tile_size * m_tile_size);
       m_data[thread_id].aux2.resize (m_tile_size * m_tile_size);
+      m_data[thread_id].aux3.resize (m_tile_size * m_tile_size);
     }
   m_data[thread_id].initialized = true;
 }
@@ -92,7 +93,8 @@ process_bilateral (int tile_size, int border, int basic_size, const T *in, T *ou
 template <typename T>
 static void
 process_nl_fast (int tile_size, int border, int basic_size, const T *in, T *out,
-                 int patch_r, int search_r, T strength, T *integral, T *diff)
+                 int patch_r, int search_r, T strength, T *integral, T *diff,
+                 T *total_weight)
 {
   const T strength_sq = strength * strength;
   const T inv_strength_sq = (strength_sq > (T)0) ? (T)1.0 / strength_sq : (T)0.0;
@@ -100,8 +102,8 @@ process_nl_fast (int tile_size, int border, int basic_size, const T *in, T *out,
   const int patch_diam = 2 * patch_r + 1;
   const T inv_patch_size = (T)1.0 / (T)(patch_diam * patch_diam);
 
-  std::vector<T> total_weight (size * size, 0);
-  std::vector<T> weighted_sum (size * size, 0);
+  std::fill (total_weight, total_weight + (size_t)size * size, (T)0);
+  std::fill (out, out + (size_t)size * size, (T)0);
 
   for (int sy = -search_r; sy <= search_r; ++sy)
     for (int sx = -search_r; sx <= search_r; ++sx)
@@ -112,7 +114,7 @@ process_nl_fast (int tile_size, int border, int basic_size, const T *in, T *out,
               for (int x = border; x < border + basic_size; ++x)
                 {
                   total_weight[y * size + x] += 1;
-                  weighted_sum[y * size + x] += in[y * size + x];
+                  out[y * size + x] += in[y * size + x];
                 }
             continue;
           }
@@ -149,13 +151,13 @@ process_nl_fast (int tile_size, int border, int basic_size, const T *in, T *out,
               
               T weight = std::exp (-dist_sq * inv_patch_size * inv_strength_sq);
               total_weight[y * size + x] += weight;
-              weighted_sum[y * size + x] += weight * in[(y + sy) * size + (x + sx)];
+              out[y * size + x] += weight * in[(y + sy) * size + (x + sx)];
             }
       }
 
   for (int y = border; y < border + basic_size; ++y)
     for (int x = border; x < border + basic_size; ++x)
-      out[y * size + x] = weighted_sum[y * size + x] / total_weight[y * size + x];
+      out[y * size + x] /= total_weight[y * size + x];
 }
 
 /* Apply denoising (Non-Local Means) to the tile for given THREAD_ID.  */
@@ -182,7 +184,8 @@ denoising<T>::process_tile (int thread_id, progress_info *progress)
       process_nl_fast (m_tile_size, border, basic_size, in, out,
                        m_params.patch_radius, m_params.search_radius,
                        (T)m_params.strength, m_data[thread_id].aux1.data (),
-                       m_data[thread_id].aux2.data ());
+                       m_data[thread_id].aux2.data (),
+                       m_data[thread_id].aux3.data ());
     }
   else
     {
@@ -190,7 +193,10 @@ denoising<T>::process_tile (int thread_id, progress_info *progress)
       const int patch_r = m_params.patch_radius;
       const int search_r = m_params.search_radius;
       const T strength_sq = m_params.strength * m_params.strength;
-      const T inv_strength_sq = (strength_sq > (T)0) ? (T)1.0 / strength_sq : (T)0.0;
+      const T inv_strength_sq
+          = (strength_sq > (T)0) ? (T)1.0 / strength_sq : (T)0.0;
+      const int patch_diam = 2 * patch_r + 1;
+      const T inv_patch_size = (T)1.0 / (T)(patch_diam * patch_diam);
 
       /* Process each pixel in the basic tile (excluding borders).  */
       for (int y = border; y < border + basic_size; ++y)
@@ -224,7 +230,9 @@ denoising<T>::process_tile (int thread_id, progress_info *progress)
                         }
                       
                       /* Weighting function.  */
-                      T weight = std::exp (-dist_sq * inv_strength_sq);
+                      T weight
+                          = std::exp (-dist_sq * inv_patch_size
+                                      * inv_strength_sq);
                       weighted_sum += weight * in[cy * m_tile_size + cx];
                       total_weight += weight;
                     }
@@ -238,9 +246,6 @@ denoising<T>::process_tile (int thread_id, progress_info *progress)
         }
     }
   
-  /* Copy result back to tile buffer so get_pixel works correctly.  */
-  std::copy (m_data[thread_id].out_tile.begin (), m_data[thread_id].out_tile.end (),
-             m_data[thread_id].tile.begin ());
 }
 
 template class denoising<float>;

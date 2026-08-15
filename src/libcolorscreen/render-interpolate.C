@@ -48,7 +48,7 @@ struct analyzer_params
 	|| simulated_screen_id != o.simulated_screen_id
         || (!mesh_trans_id && params != o.params)
         || params.type != o.params.type
-	|| !denoise.equal_p (o.denoise))
+	|| !(denoise == o.denoise))
       return false;
     if (mode == analyze_base::color || mode == analyze_base::precise_rgb)
       {
@@ -88,7 +88,7 @@ struct demosaiced_params
 	   && scan_exposure == o.scan_exposure
 	   && contact_copy == o.contact_copy
 	   && alg == o.alg
-	   && screen_denoise.equal_p (o.screen_denoise);
+	   && screen_denoise == o.screen_denoise;
   }
 };
 bool

@@ -6,6 +6,7 @@
 #define RENDER_PARAMETERS_H
 #include <array>
 #include <cmath>
+#include <limits>
 #include "base.h"
 #include "color.h"
 #include "progress-info.h"
@@ -228,13 +229,13 @@ struct denoise_parameters
   /* Denoising mode.  */
   enum denoise_mode mode = none;
 
-  /* Strength of filtering (h) for NL-means.  */
-  luminosity_t strength = 0;
+  /* RMS patch-distance scale (h) for NL-means.  */
+  luminosity_t strength = 0.1;
 
-  /* Patch radius for NL-means.  */
+  /* Patch radius for NL-means, in input sample-array coordinates.  */
   int patch_radius = 1;
 
-  /* Search radius for NL-means.  */
+  /* Search radius for NL-means, in input sample-array coordinates.  */
   int search_radius = 6;
 
   /* Bilateral filter spatial sigma.  */
@@ -246,9 +247,22 @@ struct denoise_parameters
   /* Return effective denoising mode.  */
   pure_attr enum denoise_mode get_mode () const
   {
+    if (mode == none)
+      return none;
     if (mode == bilateral)
-      return (bilateral_sigma_s > 0 && bilateral_sigma_r > 0) ? bilateral : none;
-    if (strength <= 0)
+      {
+        if (!my_isfinite (bilateral_sigma_s)
+            || !my_isfinite (bilateral_sigma_r)
+            || bilateral_sigma_s <= 0 || bilateral_sigma_r <= 0
+            || bilateral_sigma_s
+                   > (luminosity_t)std::numeric_limits<int>::max () / 12)
+          return none;
+        return bilateral;
+      }
+    if ((mode != nl_means && mode != nl_fast) || !my_isfinite (strength)
+        || strength <= 0 || patch_radius < 0 || search_radius < 1
+        || (int64_t)patch_radius + search_radius
+               > std::numeric_limits<int>::max () / 4)
       return none;
     return mode;
   };
@@ -367,7 +381,8 @@ struct render_parameters
   /* Sharpening parameters.  */
   sharpen_parameters sharpen;
 
-  /* Denoising parameters.  */
+  /* Output-image denoising parameters.  Reserved for a post-demosaic
+     denoising stage; currently not applied by the renderer.  */
   denoise_parameters denoise;
 
   /***** Tile Adjustment (used to adjust parameters of individual tiles) *****/
@@ -479,7 +494,8 @@ struct render_parameters
   /* Radius (in image pixels) the screen should be blurred.  */
   coord_t screen_blur_radius = 0.5;
 
-  /* Screen denoising parameters.  */
+  /* Denoising applied to collected screen-patch samples before screen
+     interpolation/demosaicing.  */
   denoise_parameters screen_denoise;
 
   /* Threshold for collecting color information.  */
@@ -708,8 +724,8 @@ struct render_parameters
 	   && scan_crop == other.scan_crop
 	   && image_area == other.image_area
 	   && sharpen.equal_p (other.sharpen)
-	   && denoise.equal_p (other.denoise)
-	   && screen_denoise.equal_p (other.screen_denoise)
+	   && denoise == other.denoise
+	   && screen_denoise == other.screen_denoise
            && presaturation == other.presaturation
 	   && gamut_warning == other.gamut_warning
            && saturation == other.saturation && brightness == other.brightness
