@@ -1,0 +1,38 @@
+name: Publish verified DN-013 patch
+
+on:
+  push:
+    branches:
+      - review/dn-013-stage
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: review/dn-013-stage
+          fetch-depth: 0
+      - name: Apply exact locally-tested DN-013 patch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat .dn013.patch.part.* > /tmp/DN013.patch
+          echo 'bf753423f08c041f40d23983050cf14b2c82211187f86a53dcb2da08499284d6  /tmp/DN013.patch' | sha256sum -c -
+          git apply --check /tmp/DN013.patch
+          git apply /tmp/DN013.patch
+          git diff --check
+          test "$(git hash-object src/libcolorscreen/denoise.C)" = debe441a4dc47ad34623a25e0f41bdb448595170
+          test "$(git hash-object src/libcolorscreen/denoise.h)" = d5b2fb6539a017a5540c15d6d6487f6482e70ec1
+          test "$(git hash-object src/libcolorscreen/include/render-parameters.h)" = fdfbb4debf2821ea1817e1aa8817e826ba7756d2
+          test "$(git hash-object src/libcolorscreen/loadsave.C)" = 2c47247f117ac116947816ad88aa149ceb9668ae
+          test "$(git hash-object src/libcolorscreen/unittests.C)" = 71b96e14afea58b01e4cb84d09a4b77f00e352c3
+          rm .dn013.patch.part.* .github/workflows/dn013-stage-publish.yml
+          git add -A
+          git config user.name 'OpenAI review'
+          git config user.email 'review@openai.invalid'
+          git commit -m 'denoise: add optional variance-normalized NLM distance' -m 'Add an opt-in floor-plus-slope signal variance model for NL-means patch differences. A zero variance floor preserves the historical raw distance exactly. Apply the normalized metric consistently to scalar, geometry-aware, precise-RGB and post-demosaic fast/reference NLM paths while leaving bilateral filtering unchanged. Persist the coefficients, preserve cache-vs-structural equality semantics, and add normalization, fast/reference, geometry, RGB-vector and round-trip regressions. Automatic coefficient estimation is intentionally deferred.'
+          git push origin HEAD:review/dn-013-stage
