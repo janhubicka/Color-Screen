@@ -30,7 +30,14 @@ jobs:
           apt-rdepends "${pkgs[@]}" \
             | sed -n '/^[^ ]/p' \
             | grep -v '^<' \
-            | sort -u > /tmp/packages.txt
+            | sort -u > /tmp/packages-all.txt
+          : > /tmp/packages.txt
+          while read -r p; do
+            candidate=$(apt-cache policy "$p" | awk '/Candidate:/ {print $2}')
+            if [ -n "$candidate" ] && [ "$candidate" != '(none)' ]; then
+              echo "$p" >> /tmp/packages.txt
+            fi
+          done < /tmp/packages-all.txt
           apt-get download $(cat /tmp/packages.txt)
           tar -czf "$GITHUB_WORKSPACE/colorscreen-deps-debian13-amd64-ci.tar.gz" .
       - name: Upload dependency bundle
