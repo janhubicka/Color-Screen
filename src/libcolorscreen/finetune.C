@@ -80,6 +80,28 @@ finetune_render_mix_dark (rgbdata weights, luminosity_t scalar_dark,
   return { neutral_dark, neutral_dark, neutral_dark };
 }
 
+/* Return the stable historical start for the active scalar scanner-MTF
+   coordinate.  Physical defocus benefits from the adaptive coarse estimate.
+   Measured MTF curves use BLUR_DIAMETER as an explicit residual correction
+   and likewise retain the caller's estimate.  The metadata-free empirical
+   circular-blur model is intentionally different: because its screen colors
+   are variable-projected, blur and primary saturation can compensate one
+   another and produce widely separated minima.  Starting at zero preserves
+   the pre-warm-start basin selection used by this fallback model.  */
+coord_t
+finetune_initial_scanner_mtf_focus (const mtf_parameters &params)
+{
+  coord_t value = 0;
+  if (params.simulate_diffraction_p ())
+    value = params.defocus;
+  else if (params.use_measured_mtf ())
+    value = params.blur_diameter;
+  if (!my_isfinite (value) || value < 0)
+    return 0;
+  return value;
+}
+
+
 /* Return a quadratically spaced scalar blur/focus-grid interval.  Computing
    node values from integer indexes makes cache keys bit-identical in every
    solver that uses the same range.  */
@@ -2411,12 +2433,11 @@ public:
         start[mtf_sigma_index] = sigma;
         to_range (start[mtf_sigma_index], (coord_t)0, (coord_t)20);
       }
+    /* Physical and measured-MTF fits can reuse the caller's current estimate.
+       Keep the empirical fallback on its historical zero-blur boundary; see
+       FINETUNE_INITIAL_SCANNER_MTF_FOCUS for the basin-selection rationale.  */
     coord_t defocus
-        = render_sharpen_params.scanner_mtf.simulate_diffraction_p ()
-              ? render_sharpen_params.scanner_mtf.defocus
-              : render_sharpen_params.scanner_mtf.blur_diameter;
-    if (!my_isfinite (defocus) || defocus < 0)
-      defocus = 0;
+        = finetune_initial_scanner_mtf_focus (render_sharpen_params.scanner_mtf);
     if (optimize_scanner_mtf_defocus)
       {
         start[mtf_defocus_index] = defocus;
@@ -2748,11 +2769,12 @@ public:
                       != sharpen_parameters::richardson_lucy_deconvolution);
   }
 
-  /* The discretized approximation is intentionally narrower than the exact
-     focus cache.  It applies only to one scalar analytical capture coordinate:
-     physical defocus or metadata-free compact fallback blur diameter.  All
-     other capture-transfer parameters and the source periodic screen must stay
-     fixed during the fit.  Measured MTF data remains on the exact path.  */
+  /* The discretized approximation is intentionally restricted to scalar
+     physical defocus.  The empirical fallback objective is sufficiently
+     multimodal that small interpolation changes can switch between blur/color
+     compensation basins; its direct analytical exact path is already cheap.
+     All other capture-transfer parameters and the source periodic screen must
+     stay fixed during the fit.  */
   bool
   focus_screen_interpolation_eligible_p () const
   {
@@ -2760,7 +2782,7 @@ public:
            && optimize_scanner_mtf_defocus
            && !optimize_scanner_mtf_sigma
            && !optimize_scanner_mtf_channel_defocus && !optimize_strips
-           && !render_sharpen_params.scanner_mtf.use_measured_mtf ()
+           && render_sharpen_params.scanner_mtf.simulate_diffraction_p ()
            && focus_source_cache_eligible_p ();
   }
 
@@ -4951,10 +4973,10 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                     "defocus as the sole varying screen-filter parameter";
           return finish ();
         }
-      if (rparam.sharpen.scanner_mtf.use_measured_mtf ())
+      if (!rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
         {
-          ret.err = "focus interpolation requires an analytical physical or "
-                    "empirical fallback MTF model";
+          ret.err = "focus interpolation requires an analytical physical "
+                    "defocus model";
           return finish ();
         }
       if (!my_isfinite (fparams.scanner_mtf_defocus_interpolation_max)

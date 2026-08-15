@@ -68,12 +68,18 @@ evaluation.  The revision is now updated after a successful hit.
 
 **Status:** fixed
 
-The prepass correctly computed a robust global focus, but new MTF solvers
+The prepass correctly computed a robust global focus, but physical MTF solvers
 initialized focus at zero and legacy channel-blur solvers initialized at 0.3.
-MTF sigma and focus now start from the active render MTF.  Dense legacy fits set
-`finetune_use_screen_blur`, and both scalar and per-channel legacy blur honour
-the prepass value.  This reduces expensive screen rebuilds without changing the
-objective.
+Physical defocus and measured-MTF residual blur now start from the active render
+MTF.  Dense legacy fits set `finetune_use_screen_blur`, and both scalar and
+per-channel legacy blur honour the prepass value.
+
+The metadata-free empirical fallback is an intentional exception.  Real-data
+validation later showed that its blur/color objective is multimodal: a nonzero
+warm start can select a several-pixel blur/color-compensation basin instead of
+the historical low-blur basin.  Revision 0032 therefore restores zero-blur
+initialization specifically for empirical fallback while retaining warm starts
+for physical defocus.
 
 ### FT-006 — rectangular tiles used transposed centre indexing
 
@@ -873,45 +879,40 @@ trip; see FT-057.
 
 **Severity:** high performance
 
-**Status:** partially fixed for dense scalar physical displacement and
-metadata-free fallback blur
+**Status:** fixed for dense scalar physical displacement; empirical fallback
+kept exact after real-data validation
 
 The simplex generates unconstrained floating-point focus values.  Warm-started
-neighbouring fits explore similar intervals, but usually not the same bit
-patterns; initial 0016 profiles observed only a 7--8% exact-focus hit rate.
-An exact final-screen LRU therefore removed some duplicate work but left most
-filter builds intact.
+neighboring physical fits explore similar intervals but usually not the same bit
+patterns; initial 0016 profiles observed only a 7--8% exact-focus hit rate.  An
+exact final-screen LRU therefore removed some duplicate work but left most
+physical filter builds intact.
 
-Revision 0017 implements the first bounded one-dimensional table for the
-second, dense adaptive pass when scalar physical defocus is the sole varying
-screen-filter parameter.  The coarse prepass remains exact.  The useful range
-ends at the first displacement where physical system MTF at the process-screen
-frequency reaches 5% by default.  `N` exact nodes use
-`d_i=d_max(i/(N-1))^2`, concentrating samples near best focus.  Intermediate
+Revision 0017 implements a bounded one-dimensional table for the second, dense
+adaptive pass when scalar physical defocus is the sole varying screen-filter
+parameter.  The useful range ends at the first displacement where physical
+system MTF at the process-screen frequency reaches 5% by default.  Exact nodes
+use `d_i=d_max(i/(N-1))^2`, concentrating samples near best focus.  Intermediate
 requests blend neighboring exact filtered screens from the existing linked-list
-LRU; they never interpolate nonnegative MTF magnitude.  The selected optimum,
-outlier handling, and result production are reevaluated with an exact screen,
-and arbitrary final values are not inserted into the node cache.
+LRU; the selected optimum, outlier handling, and result production are
+reevaluated exactly.
 
-The default 33-node fixture test reduced exact builds from 273 to 139 and wall
-time from 5.14 s to 1.92 s without changing the saved correction table.  The
-same test showed visible table changes with only 9 or 17 nodes, while 25 or
-more matched the exact saved result on this fixture; 33 therefore leaves a
-useful safety margin without filling all 64 cache entries.
+Revision 0031 temporarily extended the same approximation to metadata-free
+empirical fallback blur.  A large corner-scan stress fixture showed that this is
+not robust: the fallback objective has competing blur/color basins, and small
+screen-interpolation changes can decide which basin Nelder--Mead reaches.  On a
+25x17 correction grid with 5x5 samples, exact versus 49-node interpolation
+moved 23 cells by more than 0.2 pixel and the largest change exceeded one pixel.
+Changing the node count was also non-monotonic on the smaller regression
+fixture.  Revision 0032 therefore restricts interpolation to physical defocus.
 
-Revision 0031 generalizes the same one-dimensional node scheme to the
-metadata-free empirical fallback blur diameter.  Its useful range ends at the
-first blur diameter where the analytical system MTF at the process-screen
-frequency reaches the same threshold.  A Dufay fallback regression showed that
-33 nodes could move the fitted correction by about 0.1 scan pixel, while 49
-and 64 nodes reproduced the exact saved correction values.  The common default
-is therefore raised to 49 nodes.  Measured MTF curves remain exact and outside
-this approximation.
+The empirical fallback retains the source-spectrum and direct analytical
+transfer acceleration from revision 0031, so exact evaluation is practical:
+the same 25x17, 5x5 external stress run completed in about 19.6 seconds on the
+validation host with no generic MTF/PSF preparations.  See FT-057 and FT-058.
 
-Remaining work is error-controlled subdivision around poorly interpolated
-intervals, wider real-data validation, and any future per-channel focus design.
-Per-channel focus should use separate one-dimensional state rather than a dense
-three-dimensional RGB table.
+Remaining physical-interpolation work is error-controlled subdivision around
+poorly interpolated intervals and any future per-channel focus design.
 
 ### FT-055 — focus-node lookup and screen interpolation dominate dense fits
 
@@ -956,295 +957,64 @@ removed as a cache optimization.
 
 **Severity:** high performance
 
-**Status:** fixed in revision 0031
+**Status:** fixed in revision 0031 for exact evaluation; interpolation withdrawn
+in revision 0032
 
-The metadata-free fallback model uses one scalar compact blur diameter, just as
-the physical model uses one scalar displacement.  Nevertheless, the initial
-focus acceleration required complete diffraction metadata.  Arbitrary fallback
-simplex values therefore had poor exact-screen-cache reuse, could repeat the
-source forward FFTs, and entered the generic MTF/PSF-support machinery on each
-miss.  This made the fallback second pass much slower than physical defocus on
-otherwise identical adaptive grids.
+The metadata-free fallback model uses one scalar compact blur diameter, but it
+originally missed the scalar-focus acceleration available to physical defocus.
+Arbitrary fallback simplex values therefore had poor exact-screen-cache reuse,
+repeated source forward FFTs, and entered the generic MTF/PSF-support machinery
+on each miss.
 
-Revision 0031 treats fallback blur diameter as the second supported analytical
-scalar family.  With fixed strip geometry it now reuses the immutable source
-spectra, computes the same 512-sample Gaussian/circular `system_otf()` table as
-the general MTF model, and applies that transfer directly at the periodic
-harmonics.  It does not estimate PSF support, reconstruct a spatial PSF, or
-perform a kernel FFT.  The dense pass uses the same quadratic node/interpolation
-machinery and exact-final reevaluation as physical defocus; measured MTF curves
-remain excluded.
+Revision 0031 reuses immutable source spectra and applies the fallback's
+analytical 512-sample Gaussian/circular `system_otf()` table directly at the
+periodic harmonics.  Exact fallback states no longer estimate PSF support,
+reconstruct a spatial PSF, or perform a kernel FFT.  This exact direct path is
+retained.
 
-The useful fallback interval is detected from the first 5% process-screen-
-frequency MTF crossing.  On the Dufay fallback regression, 33 nodes were not
-sufficient to preserve the exact stored correction, while 49 and 64 matched it;
-the default node count is therefore 49.  A larger 25-column, 5x5-subsample
-fallback run with strip-width optimization disabled completed 22,750 local
-fits in 24.5 seconds on the validation host.  Its profile reported three source
-forward FFTs total, zero generic MTF/PSF preparations, 95,215 direct empirical
-transfer tables, and no wrapped PSFs.  These timings are host-specific but
-confirm that the pathological fallback PSF rebuild path is gone.
+Revision 0031 also enabled nonlinear-node interpolation for fallback blur, but
+revision 0032 removes that approximation after the corner-scan stress fixture
+showed basin-sensitive results.  The exact analytical path is fast enough
+without it: a 25x17 grid with 5x5 dense samples and fixed strip widths completed
+10,735 local fits in about 19.6 seconds on the validation host, with three
+source forward FFTs total and zero generic MTF/PSF preparations.
 
-Further approximation work should use explicit error control rather than
-reducing the fallback node count blindly.  Variable Dufay strip widths remain
-on the exact ordinary path by design.
+Variable Dufay strip widths remain on the ordinary exact path by design.
 
-### Initial measurement and continuing validation
+### FT-058 — empirical fallback blur/color objective is multimodal
 
-Revision 0017 supplies a reproducible first speed and equality check, but its
-numbers are not a portable universal claim.  They depend on the screen family,
-MTF model, metadata, FFT implementation, thread count, and whether the
-prepared physical path or an ordinary support-dependent filter is active.
+**Severity:** high fallback-model correctness
 
-The initial reproducible smoke command, run from `testsuite`, is:
+**Status:** compatibility regression fixed in revision 0032; intrinsic
+ambiguity remains open
 
-```sh
-OMP_NUM_THREADS=5 $BUILD/src/colorscreen/colorscreen analyze-scanner-blur \
-  dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif \
-  physical-focus-input.par \
-  --strip-width=1 --strip-height=1 --width=1 --height=1 \
-  --xsamples=2 --ysamples=1 --profile --interpolate-focus \
-  --focus-min-mtf=5 --focus-cache-nodes=33 \
-  --out=/tmp/focus-profile.par
-```
+The empirical fallback simultaneously fits a compact blur diameter and local
+screen-primary colours.  Excessive blur can be partly compensated by making the
+fitted primaries more saturated.  The source already contained a warning about
+this failure mode, but its small blur regularizer applies to legacy screen blur,
+not to scanner-MTF fallback blur diameter.
 
-`physical-focus-input.par` must contain a complete physical diffraction model;
-the testsuite regression constructs one from the Dufay fixture.  The benchmark
-is intentionally small and establishes accounting, output agreement, and
-bottleneck location.  Parallel scheduling can change exact hit/miss counts
-slightly between runs.  It is not a substitute for distributions from full
-RGB+IR adaptive scans.
+Before revision 0015, fallback MTF blur happened to start at the zero-blur
+boundary.  Revision 0015 generalized the adaptive coarse-focus warm start to
+scanner MTF fits.  This is beneficial for physical defocus, but on fallback it
+moves the initial simplex away from the boundary and makes the several-pixel
+color-compensation basin much easier to reach.  On the supplied corner crop,
+the same local sample could converge near 0.19 pixel from zero or near 4.7--5
+pixels from a nonzero start; the high-blur solution can even have a lower raw
+residual because its fitted screen colours become unrealistically contrasty.
 
-Representative datasets should record wall time, profile totals, fit counts,
-cache hit rate, and median/upper-percentile work per local fit before
-broadening the approximation or treating one node count as a global default.
+Revision 0032 restores the historical zero-blur initialization only for the
+metadata-free empirical fallback.  Physical defocus and measured-MTF residual
+blur keep their warm starts.  On one 5x5 stress cell, 21 of 25 individual
+fallback fits then reproduce the pre-0015 values exactly; the robust retained
+low-blur result remains close despite a few historical high-blur outliers.
+The regression test also verifies that changing only the stored fallback
+starting diameter from 1 to 4.75 pixels no longer changes the adaptive result.
 
-## Proposed exact cache and focus table
-
-The safe implementation order is deliberately conservative.
-
-### Phase A — retain and measure warm starts
-
-**Status:** complete in 0016
-
-Global prepass warm starts are retained for MTF and legacy blur.  Opt-in
-profiling now measures simplex work, exact screen construction, transfer/PSF
-preparation, FFTs, cache behaviour, and major objective stages.  Broader
-benchmark collection remains useful, but instrumentation is no longer a blocker
-for exact optimization work.
-
-### Phase B — share immutable source and physical-transfer state
-
-**Status:** complete for fixed-geometry scalar physical defocus and empirical
-fallback blur; variable-source cases remain open
-
-Revision 0022 splits screen preparation into:
-
-1. an immutable source periodic screen after strip-width and historical
-   emulsion operations;
-2. its channel FFTs;
-3. focus-dependent signed transfer coefficients;
-4. inverse-transformed filtered periodic channels.
-
-A bounded shared cache now reuses stages 1 and 2 across local scalar analytical
-physical-defocus or fallback-blur solvers.  Its key includes the state that changes the supported source:
-
-- screen type;
-- the fixed strip widths relevant to that process.
-
-Capture scale, MTF metadata, wavelength, sigma, halo, sensor aperture, and
-sharpening mode remain in the subsequent transfer-state key rather than the
-source-FFT key.  Emulsion-dependent and variable-strip sources deliberately
-stay on the ordinary exact path; if they are supported later, their full
-source state must be added to the key rather than keying either cache only on
-scalar focus.
-
-Revision 0023 adds an independent cache for the physical stage 3.  Defocus is
-normalized out of its key, while sensor aperture, diffraction metadata,
-residual sigma, halo, and the other active physical-model fields remain part of
-the identity.  Each exact physical focus node then evaluates only the varying
-signed pupil term and samples the result on the precomputed periodic frequency
-grid.  Revision 0031 gives the empirical fallback an analogous direct periodic
-path without an extra fixed-state cache: its inexpensive analytical radial
-transfer is rebuilt per exact blur node while the source spectra are shared.
-Neither prepared scalar path requires a spatial PSF or kernel FFT.
-
-### Phase C — exact focus-node cache
-
-**Status:** complete for final screens in 0016; discretized reuse added in 0017
-
-Exact filtered periodic screens at focus values actually evaluated by the
-simplex are stored in a bounded, thread-safe cache.  Failed MTF/PSF
-constructions are not published, and emulsion-dependent fits are excluded.
-Revision 0017 makes dense scalar physical-focus requests converge on shared
-quadratic node keys.  Revision 0031 does the same for metadata-free scalar
-fallback blur diameter, using a denser 49-node default validated against the
-exact fallback fixture, while measured and multi-parameter fits retain
-arbitrary simplex values.
-Revision 0022 makes supported final-screen misses cheaper by reusing an
-independently cached immutable source spectrum.  Revision 0023 also reuses the
-defocus-independent analytical transfer state and constructs each exact node
-through direct periodic-OTF multiplication.
-
-Per-channel focus should ultimately use separable one-dimensional transfer
-state rather than a dense three-dimensional RGB focus table.
-
-### Phase D — error-controlled interpolation
-
-**Status:** fixed-grid scalar implementation complete; adaptive error control open
-
-Revision 0017 implements the deliberately narrow first option requested for
-the displacement-only GUI pass: linearly blend already filtered exact periodic
-screens at quadratic scalar-defocus nodes.  Revision 0031 extends this to the
-metadata-free scalar fallback blur diameter.  The exact coarse pass determines
-the useful range from the first 5% process-screen-frequency MTF crossing of the
-active analytical model, and the final selected point is rebuilt exactly.
-
-For broader or more aggressive approximation, two plausible linear objects are:
-
-- signed frequency-domain transfer coefficients multiplied by the cached
-  source FFT; or
-- already filtered periodic channel samples.
-
-Do not interpolate only nonnegative MTF magnitude: physical defocus has signed
-OTF phase reversals and zero crossings.  Interpolation must preserve the DC
-coefficient exactly and use adaptive subdivision where focus response is not
-sufficiently linear.
-
-The current fixed-grid implementation performs the interpolation directly.
-An error-controlled extension should, for selected intervals:
-
-1. form the interpolated candidate;
-2. occasionally compute the exact node according to a validation schedule;
-3. compare periodic samples and the local objective;
-4. subdivide or fall back to exact filtering when the error budget is exceeded.
-
-The implemented table range is driven by the active analytical model's
-screen-frequency MTF rather than its full legal parameter interval, and its
-spacing is quadratic rather than uniform.  The prepared scalar physical path
-uses one common signed frequency-domain representation throughout the range;
-the empirical fallback uses its common analytical radial transfer throughout
-the blur range.  If interpolation is broadened to measured, variable-source,
-residual-sigma, or per-channel paths, it must still account for their numerical
-representation choices or establish an equivalent common representation
-first.
-
-### Acceptance criteria
-
-An approximate focus table should not be merged merely because images look
-similar.  On synthetic and real RGB+IR scans, validate:
-
-- maximum and RMS periodic-screen sample error;
-- objective error at identical geometry/colour variables;
-- fitted scalar/per-channel focus displacement;
-- fitted screen-phase and geometry displacement;
-- final adaptive-table displacement and rejected-cell count;
-- behaviour around signed-OTF zero crossings;
-- deterministic results under parallel scheduling;
-- bounded memory and predictable eviction.
-
-Set thresholds in physical output units.  A reasonable initial goal is that
-approximation changes fitted screen phase by far less than the geometry
-acceptance threshold and changes focus by far less than the robust spread of
-repeat measurements; the exact numerical limits need to be established from
-current real-data reproducibility tests.
-
-## Regression coverage added in this review
-
-Revision 0015 added:
-
-- incompatible finetune flag families and the zero-dimensional simplex path;
-- scalar dark conversion for simulated IR, including singular/non-finite
-  mixing weights;
-- robust area-fit score retention, excluding failed and non-finite results;
-- correction-table allocation failure preserving existing state, malformed
-  transactional load, save/load round-trip, cache-id refresh, and zero-filled
-  reallocation.
-
-Revision 0016 adds:
-
-- exact cached-versus-direct periodic-screen equality;
-- distinct per-channel capture MTFs while digital sharpening mode is `none`;
-- exact focus-cache miss/hit accounting and reuse across construction-only
-  parallel settings;
-- true LRU rather than MRU eviction at a capacity boundary.
-
-Revision 0017 adds:
-
-- quadratic focus-grid interval construction, endpoint stability, clamping,
-  and invalid-input rejection;
-- first-crossing useful-range detection at a configurable physical MTF
-  threshold, including the unusable in-focus case;
-- midpoint exact-versus-interpolated periodic-screen error checks;
-- an end-to-end displacement regression which verifies that interpolation is
-  exercised, reduces exact screen builds, and preserves the exact correction
-  table within 0.00001 mm.
-
-Revision 0022 adds:
-
-- exact prepared-source filtering and source-spectrum cache reuse;
-- no repeated source forward FFTs after the first fixed-geometry focus state;
-- concurrent focus requests sharing one immutable three-channel source
-  preparation;
-- end-to-end profile accounting showing fewer source forward than inverse
-  transforms.
-
-Revision 0023 adds:
-
-- defocus-independent physical-transfer cache miss/hit and pointer reuse;
-- transfer-table equality with the independent analytical `mtf` path over the
-  complete sampled frequency range;
-- signed periodic-harmonic response equal to the analytical OTF coefficient;
-- zero general MTF/PSF preparations, zero wrapped kernels, and zero kernel FFTs
-  in the supported prepared scalar physical-defocus path;
-- end-to-end fixed-strip exact/interpolated correction equality with the
-  previous revision.
-
-Revision 0024 adds:
-
-- synthetic classification of solver failure, invalid contrast, low contrast,
-  invalid fit score, and an exactly-at-threshold usable result;
-- end-to-end adaptive rejection when every coarse fit is below the configured
-  minimum contrast;
-- end-to-end verification that a zero threshold disables the positive floor
-  without changing the exact saved correction;
-- profile assertions for separate coarse and dense identifiability counts.
-
-Revision 0027 adds:
-
-- numerical equality between the historical nested focus-screen blend and the
-  flat SIMD-friendly implementation at a non-midpoint weight;
-- end-to-end profile assertions that both solver-local node hits and first-use
-  misses occur;
-- a full-grid fixed-strip benchmark producing a byte-identical correction
-  table while reducing interpolation and global-cache time.
-
-Revision 0031 adds:
-
-- first-5%-MTF useful-range detection for metadata-free fallback blur diameter;
-- exact generic-versus-prepared periodic-screen equality with a nonzero compact
-  fallback diameter;
-- end-to-end exact/interpolated fallback correction equality at 49 nodes;
-- profile assertions that the prepared fallback performs no general MTF/PSF
-  preparation, reuses one source spectrum, exercises interpolation, and reports
-  direct empirical transfer tables.
-
-## Test work still required
-
-1. Add synthetic rectangular-tile geometry tests that recover known phase,
-   scale, and rotation.
-2. Add BW tests for measured IR, RGB-derived grayscale, flat black input, and
-   zero surviving samples.
-3. Extend the current flag-validation regression to exercise every legal blur
-   family and the adaptive worker's scalar-output restrictions.
-4. Add adaptive-worker tests whose coarse and dense widths intentionally
-   differ, so the FT-001 stride regression cannot return.
-5. Add synthetic spatial-focus fields and compare recovered correction tables
-   with known truth.
-6. Collect full-scan RGB+IR profile distributions and screen/objective error
-   around signed-OTF zero crossings and across the empirical fallback blur
-   range.  If approximation is broadened beyond the two prepared scalar
-   analytical paths, also cover the ordinary direct/wrapped-PSF transitions
-   used by those additional models.
-7. Run the existing Dufay RGB finetune tests, all `libcolorscreen` unit tests,
-   and the real MTF/edge reproducibility tests on Linux, macOS, and Windows.
+This restores historical basin selection but does not make the fallback model
+mathematically identifiable.  Some stress cells still show a several-pixel
+within-cell robust spread because individual fits can reach both basins.
+Future work should address that explicitly, for example by constraining or
+regularizing fitted screen chromaticities from reliable sharp regions, or by a
+mode-aware/spatially coherent fallback reducer.  It should not rely on a lucky
+simplex starting point as the final solution.

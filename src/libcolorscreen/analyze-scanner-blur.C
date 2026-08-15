@@ -289,11 +289,10 @@ analyze_scanner_blur_worker::step1 ()
             | finetune_screen_channel_blurs | finetune_emulsion_blur;
       if (!(flags & finetune_scanner_mtf_defocus) || (flags & incompatible)
           || reoptimize_strip_widths
-          || rparam.sharpen.scanner_mtf.use_measured_mtf ())
+          || !rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
         {
           set_error ("Focus interpolation requires scalar physical defocus "
-                     "or compact fallback blur diameter as the sole varying "
-                     "screen-filter parameter");
+                     "as the sole varying screen-filter parameter");
           return false;
         }
       if (!my_isfinite (focus_mtf_threshold)
@@ -634,19 +633,12 @@ analyze_scanner_blur_worker::step2 ()
          when deriving the useful focus range.  */
       if (!(flags & finetune_bw) && scan.has_rgb ())
         focus_mtf.wavelength = 550;
-      const bool physical_focus = focus_mtf.simulate_diffraction_p ();
       const bool useful_range
           = my_isfinite (focus_screen_frequency)
             && focus_screen_frequency > 0
-            && (physical_focus
-                    ? finetune_useful_defocus_limit (
-                          focus_mtf, focus_screen_frequency,
-                          focus_mtf_threshold, (coord_t)20,
-                          &focus_interpolation_max)
-                    : finetune_useful_blur_diameter_limit (
-                          focus_mtf, focus_screen_frequency,
-                          focus_mtf_threshold, (coord_t)20,
-                          &focus_interpolation_max));
+            && finetune_useful_defocus_limit (
+                focus_mtf, focus_screen_frequency, focus_mtf_threshold,
+                (coord_t)20, &focus_interpolation_max);
       if (!useful_range)
         {
           pause_stdout (progress);
@@ -657,9 +649,7 @@ analyze_scanner_blur_worker::step2 ()
           resume_stdout (progress);
           return false;
         }
-      const coord_t robust_focus
-          = physical_focus ? rparam.sharpen.scanner_mtf.defocus
-                           : rparam.sharpen.scanner_mtf.blur_diameter;
+      const coord_t robust_focus = rparam.sharpen.scanner_mtf.defocus;
       const coord_t tolerance
           = std::numeric_limits<coord_t>::epsilon ()
             * std::max ((coord_t)1, focus_interpolation_max) * 64;
@@ -668,13 +658,8 @@ analyze_scanner_blur_worker::step2 ()
         {
           pause_stdout (progress);
           fprintf (stderr,
-                   physical_focus
-                       ? "Focus analysis failed: coarse defocus %.5f mm is "
-                         "outside the useful %.5f mm range (screen-frequency "
-                         "MTF %.1f%%)\n"
-                       : "Focus analysis failed: coarse blur diameter %.5f "
-                         "pixels is outside the useful %.5f pixel range "
-                         "(screen-frequency MTF %.1f%%)\n",
+                   "Focus analysis failed: coarse defocus %.5f mm is outside "
+                   "the useful %.5f mm range (screen-frequency MTF %.1f%%)\n",
                    robust_focus, focus_interpolation_max,
                    focus_mtf_threshold * 100);
           resume_stdout (progress);
@@ -683,16 +668,10 @@ analyze_scanner_blur_worker::step2 ()
       if (verbose)
         {
           pause_stdout (progress);
-          if (physical_focus)
-            printf ("Dense focus interpolation: %.6f cycles/pixel, "
-                    "0...%.5f mm at %.1f%% MTF, %i quadratic nodes\n",
-                    focus_screen_frequency, focus_interpolation_max,
-                    focus_mtf_threshold * 100, focus_interpolation_nodes);
-          else
-            printf ("Dense fallback-blur interpolation: %.6f cycles/pixel, "
-                    "0...%.5f pixels at %.1f%% MTF, %i quadratic nodes\n",
-                    focus_screen_frequency, focus_interpolation_max,
-                    focus_mtf_threshold * 100, focus_interpolation_nodes);
+          printf ("Dense focus interpolation: %.6f cycles/pixel, "
+                  "0...%.5f mm at %.1f%% MTF, %i quadratic nodes\n",
+                  focus_screen_frequency, focus_interpolation_max,
+                  focus_mtf_threshold * 100, focus_interpolation_nodes);
           resume_stdout (progress);
         }
     }

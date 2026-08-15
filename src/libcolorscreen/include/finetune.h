@@ -196,20 +196,19 @@ struct finetune_parameters
      clock or atomic-counter overhead.  */
   bool collect_profile = false;
 
-  /* Approximate one scalar analytical blur/focus coordinate during a fit by
-     linearly interpolating periodic screens cached at a fixed nonlinear grid
-     of exact nodes.  The coordinate is physical image-plane defocus for the
-     diffraction model and compact blur diameter for the metadata-free
-     empirical fallback.  This is intended for the dense displacement-analysis
-     pass after an exact coarse prepass and is accepted only when this scalar
-     coordinate is the sole varying capture-transfer parameter.
+  /* Approximate scalar physical image-plane defocus during a fit by linearly
+     interpolating periodic screens cached at a fixed nonlinear grid of exact
+     nodes.  This is intended for the dense displacement-analysis pass after
+     an exact coarse prepass and is accepted only when physical defocus is the
+     sole varying capture-transfer parameter.  Metadata-free empirical fallback
+     blur deliberately remains exact because its multimodal blur/color
+     objective is not interpolation-stable.
 
-     SCANNER_MTF_DEFOCUS_INTERPOLATION_MAX is the useful nonnegative range in
-     the active coordinate's units (millimetres for physical defocus, pixels
-     for fallback blur diameter).  SCANNER_MTF_DEFOCUS_INTERPOLATION_NODES
-     includes both endpoints; nodes are quadratically spaced to provide finer
-     resolution near the sharp end.  The final fitted point is always evaluated
-     with an exact screen and is not inserted into the node cache.  */
+     SCANNER_MTF_DEFOCUS_INTERPOLATION_MAX is the useful nonnegative defocus
+     range in millimetres.  SCANNER_MTF_DEFOCUS_INTERPOLATION_NODES includes
+     both endpoints; nodes are quadratically spaced to provide finer resolution
+     near best focus.  The final fitted point is always evaluated with an exact
+     screen and is not inserted into the node cache.  */
   bool interpolate_scanner_mtf_defocus = false;
   coord_t scanner_mtf_defocus_interpolation_max = 0;
   int scanner_mtf_defocus_interpolation_nodes = 49;

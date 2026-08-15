@@ -179,7 +179,7 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --min-contrast=percent    reject fits with weaker fitted screen modulation (default %.8g, 0 disables)\n",
                (double)(finetune_default_min_contrast * 100));
       fprintf (stderr, "      --profile                 print accumulated finetune/cache profiling counters\n");
-      fprintf (stderr, "      --interpolate-focus       approximate dense physical-defocus or fallback-blur fits from cached nonlinear nodes\n");
+      fprintf (stderr, "      --interpolate-focus       approximate dense physical-defocus fits from cached nonlinear nodes\n");
       fprintf (stderr, "      --focus-min-mtf=percent   stop focus nodes when screen-frequency MTF reaches this value (default 5)\n");
       fprintf (stderr, "      --focus-cache-nodes=n     exact nonlinear focus nodes, including endpoints (default 49, maximum 64)\n");
       fprintf (stderr, "      --optimize-fog            enable finetuning of fog (dark point)\n");
@@ -1376,7 +1376,7 @@ get_correction (scanner_blur_correction_parameters::correction_mode mode, finetu
    MIN_CONTRAST rejects locally unidentifiable fits whose fitted additive-
    screen modulation is too weak.
    INTERPOLATE_FOCUS enables the discretized dense scalar physical-defocus or
-   fallback-blur cache.
+   physical-defocus cache.
    FOCUS_MTF_THRESHOLD sets its useful-range MTF boundary and
    FOCUS_INTERPOLATION_NODES sets its nonlinear exact-node count.
    PROGRESS is progress info.  */

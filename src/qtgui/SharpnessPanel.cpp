@@ -253,10 +253,11 @@ public:
     auto *focusForm = new QFormLayout(focusGroup);
     m_interpolateFocusCheck = addCheckBox(
         focusForm, tr("Interpolate cached focus nodes"), initial.interpolateFocus,
-        tr("Use nonlinear exact blur/focus nodes and interpolate intermediate "
-           "dense-pass screens. This accelerates both physical defocus and the "
-           "metadata-free compact fallback. The coarse prepass and final "
-           "selected solution remain exact."));
+        tr("Use nonlinear exact focus nodes and interpolate intermediate "
+           "dense-pass screens for physical defocus. The empirical fallback "
+           "uses its fast exact analytical transfer because its objective is "
+           "too multimodal for reliable interpolation. The coarse prepass and "
+           "final selected solution remain exact."));
     m_focusMtfSpin = new QDoubleSpinBox(focusGroup);
     m_focusMtfSpin->setRange(0.001, 99.999);
     m_focusMtfSpin->setDecimals(3);
@@ -426,11 +427,11 @@ private:
     if (m_skipMinSpin->value() + m_skipMaxSpin->value() >= 100.0)
       status = tr("Skip-low and skip-high must add to less than 100%.");
     else if (!m_physicalFocusAvailable
-             && correction == colorscreen::finetune_scanner_mtf_defocus
-             && m_focusInterpolationAvailable)
+             && correction == colorscreen::finetune_scanner_mtf_defocus)
       status = tr("Physical capture metadata are incomplete: this correction "
-                  "mode uses the compact fallback blur diameter. Cached "
-                  "blur interpolation is available.");
+                  "mode uses the compact fallback blur diameter. The fallback "
+                  "is evaluated exactly using its fast analytical transfer; "
+                  "focus interpolation is disabled.");
     else if (!m_focusInterpolationAvailable
              && correction == colorscreen::finetune_scanner_mtf_defocus)
       status = tr("A measured MTF curve is active. Scalar residual blur can "
@@ -1205,8 +1206,7 @@ void SharpnessPanel::onAnalyzeDisplacements() {
   const ParameterState state = m_stateGetter();
   const bool physicalFocusAvailable
       = state.rparams.sharpen.scanner_mtf.simulate_diffraction_p();
-  const bool focusInterpolationAvailable
-      = !state.rparams.sharpen.scanner_mtf.use_measured_mtf();
+  const bool focusInterpolationAvailable = physicalFocusAvailable;
   const bool varyingStripWidths
       = colorscreen::screen_with_varying_strips_p(state.scrToImg.type);
   const auto image = m_imageGetter();

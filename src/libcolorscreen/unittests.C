@@ -336,6 +336,28 @@ test_finetune_helpers ()
       return false;
     }
 
+  mtf_parameters start_mtf;
+  start_mtf.model = mtf_model::empirical_fallback;
+  start_mtf.blur_diameter = 4.75;
+  if (finetune_initial_scanner_mtf_focus (start_mtf) != 0)
+    {
+      fprintf (stderr,
+               "Empirical fallback did not preserve zero-blur initialization\n");
+      return false;
+    }
+  start_mtf.model = mtf_model::physical_diffraction;
+  start_mtf.scan_dpi = 4000;
+  start_mtf.f_stop = 8;
+  start_mtf.wavelength = 550;
+  start_mtf.pixel_pitch = 3.76;
+  start_mtf.defocus = 0.237;
+  if (fabs (finetune_initial_scanner_mtf_focus (start_mtf) - 0.237)
+      > 1e-12)
+    {
+      fprintf (stderr, "Physical focus warm start was lost\n");
+      return false;
+    }
+
   mtf_parameters focus_mtf;
   focus_mtf.model = mtf_model::physical_diffraction;
   focus_mtf.scan_dpi = 4000;

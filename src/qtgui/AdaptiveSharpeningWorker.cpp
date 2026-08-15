@@ -15,7 +15,7 @@ AdaptiveSharpeningWorker::AdaptiveSharpeningWorker(
 
 /** Run adaptive blur/focus analysis using the settings selected in the GUI.
     The staged worker remains responsible for resolving zero-valued automatic
-    dimensions, validating flag combinations and deriving the physical focus
+    dimensions, validating flag combinations and deriving the physical-focus
     interpolation range.  */
 void AdaptiveSharpeningWorker::run() {
     colorscreen::analyze_scanner_blur_worker worker(m_scrToImg, m_rparams, *m_scan);

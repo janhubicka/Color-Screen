@@ -195,10 +195,9 @@ cmp out-${NAME}-focus-exact-values.txt \
   out-${NAME}-focus-contrast-disabled-values.txt >/dev/null || exit 1
 oktest "adaptive focus contrast rejection can be disabled"
 
-# The metadata-free compact fallback uses the same scalar-node acceleration as
-# physical defocus.  Exact nodes and final evaluations must avoid the generic
-# MTF/PSF path, and the 49-node interpolation should preserve the stored
-# correction values on this fixture.
+# The metadata-free compact fallback has a fast exact analytical path, but its
+# blur/color objective is multimodal.  Keep it exact: interpolating the screen
+# can move the simplex between the low-blur and color-compensation basins.
 NAME=dufaycolor_nikon_coolsan9000ED_4000DPI_raw
 FALLBACK_PAR=out-${NAME}-fallback-focus-input.par
 ${AWK-awk} '
@@ -225,27 +224,41 @@ pexec env OMP_NUM_THREADS=1 $RUNCOLORSCREEN analyze-scanner-blur \
   "$srcdir/${NAME}.tif" $FALLBACK_PAR $FALLBACK_ARGS \
   --out=out-${NAME}-fallback-focus-exact.par \
   >out-${NAME}-fallback-focus-exact.txt || exit 1
-pexec env OMP_NUM_THREADS=1 $RUNCOLORSCREEN analyze-scanner-blur \
-  "$srcdir/${NAME}.tif" $FALLBACK_PAR $FALLBACK_ARGS \
-  --interpolate-focus --focus-cache-nodes=49 \
-  --out=out-${NAME}-fallback-focus-interpolated.par \
-  >out-${NAME}-fallback-focus-interpolated.txt || exit 1
 
 grep 'general MTF precomputes 0, PSF precomputes 0;.*empirical fallback [1-9][0-9]* transfer tables' \
   out-${NAME}-fallback-focus-exact.txt >/dev/null || exit 1
 grep 'focus source spectra: [1-9][0-9]* hits, 1 misses' \
   out-${NAME}-fallback-focus-exact.txt >/dev/null || exit 1
-grep 'focus approximation: [1-9][0-9]* interpolations' \
-  out-${NAME}-fallback-focus-interpolated.txt >/dev/null || exit 1
-
 grep 'scanner_blur_correction_type: mtf-blur-diameter' \
   out-${NAME}-fallback-focus-exact.par >/dev/null || exit 1
+
+# The input blur estimate must not warm-start the empirical fallback.  A large
+# starting value used to push the simplex into a high-blur/color-compensation
+# basin.  Changing only the stored starting estimate must therefore leave the
+# adaptive result unchanged.
+sed 's/scanner_mtf_blur_diameter_px: 1$/scanner_mtf_blur_diameter_px: 4.75/' \
+  $FALLBACK_PAR >out-${NAME}-fallback-focus-high-start.par || exit 1
+pexec env OMP_NUM_THREADS=1 $RUNCOLORSCREEN analyze-scanner-blur \
+  "$srcdir/${NAME}.tif" out-${NAME}-fallback-focus-high-start.par \
+  $FALLBACK_ARGS --out=out-${NAME}-fallback-focus-high-start-out.par \
+  >out-${NAME}-fallback-focus-high-start.txt || exit 1
 ${AWK-awk} '/scanner_blur_correction_blur_diameter_pxs:/ {
   for (i = 2; i <= NF; i++) print $i
 }' out-${NAME}-fallback-focus-exact.par >out-${NAME}-fallback-focus-exact-values.txt
 ${AWK-awk} '/scanner_blur_correction_blur_diameter_pxs:/ {
   for (i = 2; i <= NF; i++) print $i
-}' out-${NAME}-fallback-focus-interpolated.par >out-${NAME}-fallback-focus-interpolated-values.txt
+}' out-${NAME}-fallback-focus-high-start-out.par >out-${NAME}-fallback-focus-high-start-values.txt
 cmp out-${NAME}-fallback-focus-exact-values.txt \
-  out-${NAME}-fallback-focus-interpolated-values.txt >/dev/null || exit 1
-oktest "adaptive fallback blur uses cached nonlinear nodes"
+  out-${NAME}-fallback-focus-high-start-values.txt >/dev/null || exit 1
+
+# Interpolation is intentionally rejected for empirical fallback.  Its exact
+# analytical transfer is already fast and interpolation is not basin-stable.
+if env OMP_NUM_THREADS=1 $RUNCOLORSCREEN analyze-scanner-blur \
+  "$srcdir/${NAME}.tif" $FALLBACK_PAR $FALLBACK_ARGS \
+  --interpolate-focus --out=out-${NAME}-fallback-focus-interpolated.par \
+  >out-${NAME}-fallback-focus-interpolated.txt 2>&1; then
+  exit 1
+fi
+grep 'Focus interpolation requires scalar physical defocus' \
+  out-${NAME}-fallback-focus-interpolated.txt >/dev/null || exit 1
+oktest "adaptive fallback blur uses exact analytical transfer"

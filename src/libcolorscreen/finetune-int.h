@@ -17,6 +17,14 @@ const char *finetune_flag_error (uint64_t flags);
 rgbdata finetune_render_mix_dark (rgbdata weights, luminosity_t scalar_dark,
                                   rgbdata fallback);
 
+/* Return the scalar scanner-MTF coordinate used to initialize a local
+   FINETUNE fit.  Physical defocus and measured-MTF residual blur keep the
+   caller's current estimate.  The metadata-free empirical circular-blur
+   fallback intentionally starts at zero: its blur/color objective is
+   multimodal and warm-starting from an adaptive coarse average can move
+   otherwise equivalent local fits into a high-blur color-compensation basin. */
+coord_t finetune_initial_scanner_mtf_focus (const mtf_parameters &params);
+
 /* One interval of the nonlinear scalar blur/focus grid used by the dense
    displacement-analysis approximation.  The scalar coordinate is physical
    image-plane defocus for the diffraction model and compact blur diameter for

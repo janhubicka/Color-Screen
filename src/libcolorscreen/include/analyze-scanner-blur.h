@@ -80,12 +80,13 @@ public:
   bool verbose;
   /* Print accumulated FINETUNE/cache counters after analysis.  */
   bool report_profile;
-  /* During the dense scalar analytical blur/focus pass, approximate arbitrary
+  /* During the dense scalar physical-defocus pass, approximate arbitrary
      values by interpolating exact filtered screens from a fixed nonlinear
-     cache grid.  This covers physical defocus and the metadata-free fallback
-     blur diameter.  The coarse prepass remains exact.  */
+     cache grid.  Empirical fallback blur remains exact because its multimodal
+     blur/color objective is not interpolation-stable.  The coarse prepass
+     remains exact.  */
   bool interpolate_focus;
-  /* Stop the blur/focus grid at the first point where the process-screen
+  /* Stop the physical-focus grid at the first point where the process-screen
      frequency falls to this system-MTF magnitude.  */
   coord_t focus_mtf_threshold;
   /* Number of quadratically spaced exact cache nodes, including endpoints.
