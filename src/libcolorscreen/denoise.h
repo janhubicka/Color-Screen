@@ -269,6 +269,201 @@ denoise_screen_with_support (int width, int height, GETDATA getdata,
       xscale, yscale, params, progress, parallel);
 }
 
+/* Geometry-aware RGB-vector denoiser for collected precise-RGB screen
+   samples.  Neighbour similarity is computed once from the complete scanner
+   RGB vector and the resulting weight is applied to all three components.
+   This is the pre-demosaic analogue of denoise_rgb_vector(), but uses the
+   physical screen geometry and retained collection support.  */
+template <bool USE_SUPPORT, typename GETDATA, typename GETSUPPORT,
+          typename SETDATA, typename ENTRY_TO_SCR, typename SCR_TO_ENTRY>
+nodiscard_attr bool
+denoise_screen_rgb_impl (int width, int height, GETDATA getdata,
+                         GETSUPPORT getsupport, SETDATA setdata,
+                         ENTRY_TO_SCR entry_to_scr,
+                         SCR_TO_ENTRY scr_to_entry, int xscale, int yscale,
+                         const denoise_parameters &params,
+                         progress_info *progress, bool parallel)
+{
+  if (params.get_mode () == denoise_parameters::none)
+    return true;
+  if (width < 0 || height < 0)
+    return false;
+  if (!width || !height)
+    return true;
+
+  std::vector<rgbdata> source ((size_t)width * height);
+  std::vector<luminosity_t> support;
+  if constexpr (USE_SUPPORT)
+    support.resize ((size_t)width * height);
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      {
+        source[(size_t)y * width + x] = getdata (x, y);
+        if constexpr (USE_SUPPORT)
+          support[(size_t)y * width + x] = getsupport (x, y);
+      }
+
+  auto usable = [] (luminosity_t v) -> luminosity_t
+  {
+    return v > (luminosity_t)0 && my_isfinite (v) ? v : (luminosity_t)0;
+  };
+  auto support_at = [&] (int_point_t logical) -> luminosity_t
+  {
+    if constexpr (!USE_SUPPORT)
+      return (luminosity_t)1;
+    int_point_t e = denoise_reflect_entry (logical, width, height);
+    return usable (support[(size_t)e.y * width + e.x]);
+  };
+  auto pair_reliability = [&] (int_point_t a, int_point_t b) -> luminosity_t
+  {
+    if constexpr (!USE_SUPPORT)
+      return (luminosity_t)1;
+    luminosity_t aa = support_at (a), bb = support_at (b);
+    if (aa == 0 || bb == 0)
+      return 0;
+    return 2 * aa * bb / (aa + bb);
+  };
+  auto value_at = [&] (int_point_t logical) -> rgbdata
+  {
+    int_point_t e = denoise_reflect_entry (logical, width, height);
+    return source[(size_t)e.y * width + e.x];
+  };
+  auto rgb_dist_sq = [] (rgbdata a, rgbdata b) -> luminosity_t
+  {
+    luminosity_t dr = a.red - b.red;
+    luminosity_t dg = a.green - b.green;
+    luminosity_t db = a.blue - b.blue;
+    /* Mean squared RGB distance keeps the parameter scale comparable to one
+       scalar component, matching the post-demosaic vector denoiser.  */
+    return (dr * dr + dg * dg + db * db) / (luminosity_t)3;
+  };
+
+  const bool bilateral = params.get_mode () == denoise_parameters::bilateral;
+  const coord_t spatial_radius
+      = bilateral ? (coord_t)std::ceil (params.bilateral_sigma_s * 3.0)
+                  : (coord_t)params.search_radius;
+  const int search_index_r
+      = denoise_screen_index_radius (spatial_radius, xscale, yscale);
+  const int patch_index_r
+      = denoise_screen_index_radius ((coord_t)params.patch_radius,
+                                     xscale, yscale);
+  const luminosity_t strength_sq
+      = (luminosity_t)params.strength * (luminosity_t)params.strength;
+  const luminosity_t inv_strength_sq
+      = strength_sq > 0 ? 1 / strength_sq : 0;
+  const luminosity_t sigma_s_sq
+      = (luminosity_t)params.bilateral_sigma_s * params.bilateral_sigma_s;
+  const luminosity_t sigma_r_sq
+      = (luminosity_t)params.bilateral_sigma_r * params.bilateral_sigma_r;
+  const luminosity_t inv_s2 = sigma_s_sq > 0 ? 1 / (2 * sigma_s_sq) : 0;
+  const luminosity_t inv_r2 = sigma_r_sq > 0 ? 1 / (2 * sigma_r_sq) : 0;
+
+  if (progress)
+    progress->set_task ("denoising collected RGB screen samples", height);
+
+#pragma omp parallel for schedule(dynamic) if(parallel)
+  for (int y = 0; y < height; y++)
+    {
+      if (progress && progress->cancel_requested ())
+        continue;
+      for (int x = 0; x < width; x++)
+        {
+          int_point_t center = {x, y};
+          const point_t center_scr = entry_to_scr (center);
+          const rgbdata center_val = source[(size_t)y * width + x];
+          rgbdata weighted_sum = {0, 0, 0};
+          luminosity_t total_weight = 0;
+
+          for (int iy = -search_index_r; iy <= search_index_r; iy++)
+            for (int ix = -search_index_r; ix <= search_index_r; ix++)
+              {
+                int_point_t candidate = {x + ix, y + iy};
+                point_t search_delta = entry_to_scr (candidate) - center_scr;
+                if (my_fabs (search_delta.x) > spatial_radius + 1e-9
+                    || my_fabs (search_delta.y) > spatial_radius + 1e-9)
+                  continue;
+
+                const rgbdata candidate_val = value_at (candidate);
+                luminosity_t weight;
+                if (bilateral)
+                  {
+                    const luminosity_t dist_s2
+                        = search_delta.x * search_delta.x
+                          + search_delta.y * search_delta.y;
+                    const luminosity_t reliability
+                        = pair_reliability (center, candidate);
+                    weight = std::exp (-dist_s2 * inv_s2
+                                       - rgb_dist_sq (candidate_val, center_val)
+                                             * reliability * inv_r2)
+                             * support_at (candidate);
+                  }
+                else
+                  {
+                    const point_t candidate_scr = entry_to_scr (candidate);
+                    luminosity_t dist_sq = 0;
+                    int patch_size = 0;
+                    for (int py = -patch_index_r; py <= patch_index_r; py++)
+                      for (int px = -patch_index_r; px <= patch_index_r; px++)
+                        {
+                          int_point_t p1 = {x + px, y + py};
+                          point_t patch_delta = entry_to_scr (p1) - center_scr;
+                          if (my_fabs (patch_delta.x)
+                                  > params.patch_radius + 1e-9
+                              || my_fabs (patch_delta.y)
+                                  > params.patch_radius + 1e-9)
+                            continue;
+                          int_point_t p2
+                              = scr_to_entry (candidate_scr + patch_delta);
+                          dist_sq += rgb_dist_sq (value_at (p1), value_at (p2))
+                                     * pair_reliability (p1, p2);
+                          patch_size++;
+                        }
+                    if (!patch_size)
+                      continue;
+                    weight = std::exp (-(dist_sq / patch_size)
+                                       * inv_strength_sq)
+                             * support_at (candidate);
+                  }
+                weighted_sum += candidate_val * weight;
+                total_weight += weight;
+              }
+          setdata (x, y, total_weight > 0 ? weighted_sum / total_weight
+                                          : center_val);
+        }
+      if (progress)
+        progress->inc_progress ();
+    }
+  return !progress || !progress->cancelled ();
+}
+
+template <typename GETDATA, typename SETDATA, typename ENTRY_TO_SCR,
+          typename SCR_TO_ENTRY>
+nodiscard_attr bool
+denoise_screen_rgb (int width, int height, GETDATA getdata, SETDATA setdata,
+                    ENTRY_TO_SCR entry_to_scr, SCR_TO_ENTRY scr_to_entry,
+                    int xscale, int yscale, const denoise_parameters &params,
+                    progress_info *progress, bool parallel = true)
+{
+  return denoise_screen_rgb_impl<false> (
+      width, height, getdata, [] (int, int) { return (luminosity_t)1; },
+      setdata, entry_to_scr, scr_to_entry, xscale, yscale, params, progress,
+      parallel);
+}
+
+template <typename GETDATA, typename GETSUPPORT, typename SETDATA,
+          typename ENTRY_TO_SCR, typename SCR_TO_ENTRY>
+nodiscard_attr bool
+denoise_screen_rgb_with_support (
+    int width, int height, GETDATA getdata, GETSUPPORT getsupport,
+    SETDATA setdata, ENTRY_TO_SCR entry_to_scr, SCR_TO_ENTRY scr_to_entry,
+    int xscale, int yscale, const denoise_parameters &params,
+    progress_info *progress, bool parallel = true)
+{
+  return denoise_screen_rgb_impl<true> (
+      width, height, getdata, getsupport, setdata, entry_to_scr, scr_to_entry,
+      xscale, yscale, params, progress, parallel);
+}
+
 /* Class managing denoising process.
    T is the data type (float or double).  */
 template <typename T>

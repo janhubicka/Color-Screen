@@ -274,7 +274,7 @@ void ScreenPanel::setupUi() {
 
   // Strength (h)
   addSliderParameter(
-      "Strength", 0.0, 1.0, 100.0, 2, "", "",
+      "Strength", 0.0, 1.0, 10000.0, 4, "", "",
       [](const ParameterState &s) { return s.rparams.screen_denoise.strength; },
       [](ParameterState &s, double v) { s.rparams.screen_denoise.strength = v; },
       1.0,
@@ -292,7 +292,7 @@ void ScreenPanel::setupUi() {
       [](const ParameterState &s) {
         return s.rparams.screen_denoise.mode == denoise_parameters::nl_means ||
                s.rparams.screen_denoise.mode == denoise_parameters::nl_fast;
-      }, false, "Radius of the square patch used for similarity comparison. The current implementation operates in each screen color's sample lattice, so the physical radius can differ between screen geometries/channels.");
+      }, false, "Radius of the patch used for similarity comparison, measured in common physical screen coordinates before demosaicing.");
 
   // Search Radius
   addSliderParameter(
@@ -303,7 +303,7 @@ void ScreenPanel::setupUi() {
       [](const ParameterState &s) {
         return s.rparams.screen_denoise.mode == denoise_parameters::nl_means ||
                s.rparams.screen_denoise.mode == denoise_parameters::nl_fast;
-      }, false, "Radius of the search window in the current screen-patch sample lattice. Larger values are slower and are not yet geometry-normalized.");
+      }, false, "Radius of the search window in common physical screen coordinates before demosaicing. Larger values are slower.");
 
   // Bilateral Sigma S
   addSliderParameter(
@@ -334,7 +334,7 @@ void ScreenPanel::setupUi() {
   );
 
   addSliderParameter(
-      "Strength", 0.0, 1.0, 100.0, 2, "", "",
+      "Strength", 0.0, 1.0, 10000.0, 4, "", "",
       [](const ParameterState &s) { return s.rparams.demosaiced_denoise.strength; },
       [](ParameterState &s, double v) { s.rparams.demosaiced_denoise.strength = v; },
       1.0,

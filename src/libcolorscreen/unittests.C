@@ -5899,6 +5899,92 @@ test_denoise ()
         }
   }
 
+  /* Precise-RGB pre-demosaic filtering must use one RGB-vector weight for
+     all components.  If every input sample lies on one chromaticity ray,
+     common weighting preserves that ray; three independent scalar filters do
+     not in general because each component has a different distance scale.  */
+  {
+    const int vw = 13, vh = 11;
+    const rgbdata ray = { (luminosity_t)0.2, (luminosity_t)0.5,
+                          (luminosity_t)0.9 };
+    std::vector<rgbdata> input ((size_t)vw * vh), out ((size_t)vw * vh),
+        fast ((size_t)vw * vh);
+    std::vector<luminosity_t> support ((size_t)vw * vh, 1);
+    for (int y = 0; y < vh; y++)
+      for (int x = 0; x < vw; x++)
+        {
+          luminosity_t a = (luminosity_t)(0.3 + 0.03 * ((3 * x + 5 * y) % 9));
+          input[(size_t)y * vw + x] = ray * a;
+        }
+    support[(size_t)5 * vw + 6] = 0;
+    input[(size_t)5 * vw + 6] = ray * (luminosity_t)1.7;
+
+    auto identity_to_scr = [] (int_point_t e) -> point_t
+      { return { (coord_t)e.x, (coord_t)e.y }; };
+    auto identity_to_entry = [] (point_t p) -> int_point_t
+      { return { nearest_int (p.x), nearest_int (p.y) }; };
+
+    for (denoise_parameters::denoise_mode mode :
+         { denoise_parameters::bilateral, denoise_parameters::nl_means })
+      {
+        denoise_parameters params;
+        params.mode = mode;
+        params.strength = 0.035f;
+        params.patch_radius = 1;
+        params.search_radius = 2;
+        params.bilateral_sigma_s = 1.5f;
+        params.bilateral_sigma_r = 0.08f;
+        if (!denoise_screen_rgb_with_support (
+                vw, vh,
+                [&] (int x, int y) { return input[(size_t)y * vw + x]; },
+                [&] (int x, int y) { return support[(size_t)y * vw + x]; },
+                [&] (int x, int y, rgbdata v) { out[(size_t)y * vw + x] = v; },
+                identity_to_scr, identity_to_entry, 1, 1, params, NULL, false))
+          return false;
+        for (const rgbdata &v : out)
+          if (v.red > 1e-8
+              && (fabs (v.green / v.red - ray.green / ray.red) > 3e-5
+                  || fabs (v.blue / v.red - ray.blue / ray.red) > 3e-5))
+            {
+              fprintf (stderr,
+                       "Screen RGB-vector denoising changed chromaticity: %g %g %g\n",
+                       v.red, v.green, v.blue);
+              return false;
+            }
+      }
+
+    /* Geometry NL_FAST has the same exact reference semantics as NL_MEANS.  */
+    denoise_parameters params;
+    params.mode = denoise_parameters::nl_means;
+    params.strength = 0.035f;
+    params.patch_radius = 1;
+    params.search_radius = 2;
+    if (!denoise_screen_rgb_with_support (
+            vw, vh, [&] (int x, int y) { return input[(size_t)y * vw + x]; },
+            [&] (int x, int y) { return support[(size_t)y * vw + x]; },
+            [&] (int x, int y, rgbdata v) { out[(size_t)y * vw + x] = v; },
+            paget_geometry::red_entry_to_scr,
+            [] (point_t p) { return paget_geometry::red_scr_to_entry (p); },
+            1, 2, params, NULL, false))
+      return false;
+    params.mode = denoise_parameters::nl_fast;
+    if (!denoise_screen_rgb_with_support (
+            vw, vh, [&] (int x, int y) { return input[(size_t)y * vw + x]; },
+            [&] (int x, int y) { return support[(size_t)y * vw + x]; },
+            [&] (int x, int y, rgbdata v) { fast[(size_t)y * vw + x] = v; },
+            paget_geometry::red_entry_to_scr,
+            [] (point_t p) { return paget_geometry::red_scr_to_entry (p); },
+            1, 2, params, NULL, false))
+      return false;
+    for (size_t i = 0; i < out.size (); i++)
+      if (out[i].red != fast[i].red || out[i].green != fast[i].green
+          || out[i].blue != fast[i].blue)
+        {
+          fprintf (stderr, "Screen RGB-vector NL_FAST differs from reference\n");
+          return false;
+        }
+  }
+
   /* analyze_base must actually pass retained collection support to the
      pre-demosaic denoiser.  This synthetic analyzer represents a sub-pixel
      central red patch surrounded by reliable samples.  */
