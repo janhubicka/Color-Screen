@@ -1,0 +1,155 @@
+           || fprintf (f, "screen_denoise_patch_radius: %d\n",
+                       rparam->screen_denoise.patch_radius)
+                  < 0
+@@ -431,6 +437,12 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
+           || fprintf (f, "demosaiced_denoise_strength: %.17g\n",
+                       rparam->demosaiced_denoise.strength)
+                  < 0
++          || fprintf (f, "demosaiced_denoise_noise_variance_floor: %.17g\n",
++                      rparam->demosaiced_denoise.noise_variance_floor)
++                 < 0
++          || fprintf (f, "demosaiced_denoise_noise_variance_slope: %.17g\n",
++                      rparam->demosaiced_denoise.noise_variance_slope)
++                 < 0
+           || fprintf (f, "demosaiced_denoise_patch_radius: %d\n",
+                       rparam->demosaiced_denoise.patch_radius)
+                  < 0
+@@ -1685,6 +1697,24 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
+               return false;
+             }
+         }
++      else if (!strcmp (buf, "screen_denoise_noise_variance_floor"))
++        {
++          if (!read_luminosity (
++                  f, rparam_check (screen_denoise.noise_variance_floor)))
++            {
++              *error = "error parsing screen_denoise_noise_variance_floor";
++              return false;
++            }
++        }
++      else if (!strcmp (buf, "screen_denoise_noise_variance_slope"))
++        {
++          if (!read_luminosity (
++                  f, rparam_check (screen_denoise.noise_variance_slope)))
++            {
++              *error = "error parsing screen_denoise_noise_variance_slope";
++              return false;
++            }
++        }
+       else if (!strcmp (buf, "screen_denoise_patch_radius"))
+         {
+           if (!read_int (f, rparam_check (screen_denoise.patch_radius)))
+@@ -1744,6 +1774,24 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
+               return false;
+             }
+         }
++      else if (!strcmp (buf, "demosaiced_denoise_noise_variance_floor"))
++        {
++          if (!read_luminosity (
++                  f, rparam_check (demosaiced_denoise.noise_variance_floor)))
++            {
++              *error = "error parsing demosaiced_denoise_noise_variance_floor";
++              return false;
++            }
++        }
++      else if (!strcmp (buf, "demosaiced_denoise_noise_variance_slope"))
++        {
++          if (!read_luminosity (
++                  f, rparam_check (demosaiced_denoise.noise_variance_slope)))
++            {
++              *error = "error parsing demosaiced_denoise_noise_variance_slope";
++              return false;
++            }
++        }
+       else if (!strcmp (buf, "demosaiced_denoise_patch_radius"))
+         {
+           if (!read_int (f, rparam_check (demosaiced_denoise.patch_radius)))
+diff --git a/src/libcolorscreen/unittests.C b/src/libcolorscreen/unittests.C
+index 7e07996..71b96e1 100644
+--- a/src/libcolorscreen/unittests.C
++++ b/src/libcolorscreen/unittests.C
+@@ -5559,6 +5559,43 @@ test_denoise ()
+       }
+   }
+ 
++  /* NL-means noise normalization is opt-in.  With a zero variance floor the
++     historical raw squared-distance metric must be exact.  Once enabled, the
++     same absolute difference is less surprising at higher signal when the
++     variance slope predicts more noise there.  */
++  {
++    denoise_parameters params;
++    params.mode = denoise_parameters::nl_means;
++    params.strength = 1.0f;
++    const float raw = (0.2f - 0.1f) * (0.2f - 0.1f);
++    params.noise_variance_floor = 0;
++    params.noise_variance_slope = 0.1f; /* Inactive without a floor.  */
++    if (denoise_nl_square_distance (0.1f, 0.2f, params) != raw)
++      {
++        fprintf (stderr, "Inactive noise model changed NL-means distance\n");
++        return false;
++      }
++
++    params.noise_variance_floor = 0.01f;
++    const float low = denoise_nl_square_distance (0.1f, 0.2f, params);
++    const float high = denoise_nl_square_distance (0.7f, 0.8f, params);
++    if (fabsf (low - raw / 0.05f) > 2e-6f
++        || fabsf (high - raw / 0.17f) > 2e-6f || !(high < low))
++      {
++        fprintf (stderr,
++                 "Signal-dependent noise normalization is wrong: low %g high %g\n",
++                 low, high);
++        return false;
++      }
++
++    params.noise_variance_floor = -0.01f;
++    if (params.get_mode () != denoise_parameters::none)
++      {
++        fprintf (stderr, "Negative noise variance floor was accepted\n");
++        return false;
++      }
++  }
++
+   /* A bilateral filter needs a border matching its spatial kernel, not the
+      unrelated NL-means patch and search radii.  Sigma 2 has support radius 6
+      with the three-sigma truncation used by process_bilateral().  */
+@@ -5649,6 +5686,40 @@ test_denoise ()
+         }
+   }
+ 
++  /* Integral-image and reference NL-means must also agree when patch
++     differences are normalized by the optional signal-dependent variance
++     model.  */
++  {
++    std::vector<float> reference (width * height), fast (width * height);
++    denoise_parameters params;
++    params.strength = 0.9f;
++    params.patch_radius = 2;
++    params.search_radius = 3;
++    params.noise_variance_floor = 0.0004f;
++    params.noise_variance_slope = 0.0015f;
++    params.mode = denoise_parameters::nl_means;
++    if (!denoise<float> (
++            width, height, [&] (int x, int y) { return noisy[y * width + x]; },
++            [&] (int x, int y, float val) { reference[y * width + x] = val; },
++            params, NULL, false))
++      return false;
++    params.mode = denoise_parameters::nl_fast;
++    if (!denoise<float> (
++            width, height, [&] (int x, int y) { return noisy[y * width + x]; },
++            [&] (int x, int y, float val) { fast[y * width + x] = val; },
++            params, NULL, false))
++      return false;
++    for (size_t i = 0; i < fast.size (); i++)
++      if (fabs (fast[i] - reference[i]) > 3e-6)
++        {
++          fprintf (stderr,
++                   "Noise-normalized fast/reference NL-means differ at %zu: "
++                   "%.9g versus %.9g\n",
++                   i, fast[i], reference[i]);
++          return false;
++        }
++  }
++
+   /* Collection support of one must be exactly the historical unweighted
+      confidence.  This is important because well-sampled screen patches should
+      not change merely because analyze-* now retains its collection weights.  */
