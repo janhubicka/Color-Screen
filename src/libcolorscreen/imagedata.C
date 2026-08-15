@@ -1422,6 +1422,7 @@ image_data::parse_icc_profile (progress_info *progress)
       fprintf (stderr, "Non-RGB profiles are not supported by ColorScreen!\n");
       if (progress)
         progress->resume_stdout ();
+      cmsCloseProfile (hInProfile);
       return false;
     }
 
@@ -1435,6 +1436,7 @@ image_data::parse_icc_profile (progress_info *progress)
                        "profiles are supported by ColorScreen!\n");
       if (progress)
         progress->resume_stdout ();
+      cmsCloseProfile (hInProfile);
       return false;
     }
 
@@ -1448,6 +1450,7 @@ image_data::parse_icc_profile (progress_info *progress)
       fprintf (stderr, "Failed to do icc profile transform\n");
       if (progress)
         progress->resume_stdout ();
+      cmsCloseProfile (hInProfile);
       return false;
     }
   float rgb_buffer[] = { 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1 };
@@ -1504,6 +1507,7 @@ image_data::parse_icc_profile (progress_info *progress)
           fprintf (stderr, "Failed to create profile transform\n");
           if (progress)
             progress->resume_stdout ();
+          cmsCloseProfile (hXYZ);
           cmsCloseProfile (hInProfile);
           return false;
         }

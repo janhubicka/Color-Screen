@@ -65,9 +65,12 @@ void AdaptiveSharpeningChart::initialize(int width, int height)
     m_gridHeight = height;
     m_liveData.assign(width * height, Tile{});
     m_correction.reset();
-    m_showSpreadAction->setEnabled(false);
-    m_showSupportAction->setEnabled(false);
-    m_showContrastAction->setEnabled(false);
+    if (m_showSpreadAction)
+        m_showSpreadAction->setEnabled(false);
+    if (m_showSupportAction)
+        m_showSupportAction->setEnabled(false);
+    if (m_showContrastAction)
+        m_showContrastAction->setEnabled(false);
     setFinalDisplayMode(FinalDisplay_Correction);
     m_mode = Mode_StripAnalysis; // Start with strip analysis
     m_dirty = true;
@@ -119,6 +122,12 @@ void AdaptiveSharpeningChart::updateBlur(int x, int y, double correction)
 void AdaptiveSharpeningChart::setCorrection(
     std::shared_ptr<colorscreen::scanner_blur_correction_parameters> correction)
 {
+    /* Parameter-state updates call this for every unrelated GUI change.  Do
+       not churn the chart (or its detachable context-menu actions) unless the
+       correction object itself changed.  Adaptive analysis installs a fresh
+       correction object when new data are available.  */
+    if (m_correction == correction)
+        return;
     m_correction = correction;
     if (m_correction) {
         m_gridWidth = m_correction->get_width();
@@ -128,9 +137,16 @@ void AdaptiveSharpeningChart::setCorrection(
         m_gridHeight = 0;
     }
     const bool hasDiagnostics = m_correction && m_correction->has_diagnostics();
-    m_showSpreadAction->setEnabled(hasDiagnostics);
-    m_showSupportAction->setEnabled(hasDiagnostics);
-    m_showContrastAction->setEnabled(hasDiagnostics);
+    /* These actions are presentation-only.  They may disappear when the chart
+       has been detached/reparented while a parameter-state update is in
+       flight, so never make correction-state updates depend on their
+       lifetime.  */
+    if (m_showSpreadAction)
+        m_showSpreadAction->setEnabled(hasDiagnostics);
+    if (m_showSupportAction)
+        m_showSupportAction->setEnabled(hasDiagnostics);
+    if (m_showContrastAction)
+        m_showContrastAction->setEnabled(hasDiagnostics);
     if (!hasDiagnostics && m_finalDisplayMode != FinalDisplay_Correction)
         setFinalDisplayMode(FinalDisplay_Correction);
     m_mode = Mode_FinalCorrection;
@@ -148,9 +164,12 @@ void AdaptiveSharpeningChart::clear()
     m_gridHeight = 0;
     m_preview = QImage();
     m_dirty = false;
-    m_showSpreadAction->setEnabled(false);
-    m_showSupportAction->setEnabled(false);
-    m_showContrastAction->setEnabled(false);
+    if (m_showSpreadAction)
+        m_showSpreadAction->setEnabled(false);
+    if (m_showSupportAction)
+        m_showSupportAction->setEnabled(false);
+    if (m_showContrastAction)
+        m_showContrastAction->setEnabled(false);
     setFinalDisplayMode(FinalDisplay_Correction);
     resetRanges();
     update();
@@ -163,10 +182,14 @@ void AdaptiveSharpeningChart::setFinalDisplayMode(FinalDisplayMode mode)
         && (!m_correction || !m_correction->has_diagnostics()))
         mode = FinalDisplay_Correction;
     m_finalDisplayMode = mode;
-    m_showCorrectionAction->setChecked(mode == FinalDisplay_Correction);
-    m_showSpreadAction->setChecked(mode == FinalDisplay_Spread);
-    m_showSupportAction->setChecked(mode == FinalDisplay_Support);
-    m_showContrastAction->setChecked(mode == FinalDisplay_Contrast);
+    if (m_showCorrectionAction)
+        m_showCorrectionAction->setChecked(mode == FinalDisplay_Correction);
+    if (m_showSpreadAction)
+        m_showSpreadAction->setChecked(mode == FinalDisplay_Spread);
+    if (m_showSupportAction)
+        m_showSupportAction->setChecked(mode == FinalDisplay_Support);
+    if (m_showContrastAction)
+        m_showContrastAction->setChecked(mode == FinalDisplay_Contrast);
     updateFinalRange();
     m_dirty = true;
     update();

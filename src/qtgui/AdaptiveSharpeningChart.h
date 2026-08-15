@@ -3,11 +3,12 @@
 
 #include <QWidget>
 #include <QImage>
+#include <QAction>
+#include <QPointer>
 #include <memory>
 #include <vector>
 #include "../libcolorscreen/include/scanner-blur-correction-parameters.h"
 
-class QAction;
 class QPainter;
 
 class AdaptiveSharpeningChart : public QWidget
@@ -77,10 +78,10 @@ private:
     
     Mode m_mode = Mode_FinalCorrection;
     FinalDisplayMode m_finalDisplayMode = FinalDisplay_Correction;
-    QAction *m_showCorrectionAction = nullptr;
-    QAction *m_showSpreadAction = nullptr;
-    QAction *m_showSupportAction = nullptr;
-    QAction *m_showContrastAction = nullptr;
+    QPointer<QAction> m_showCorrectionAction;
+    QPointer<QAction> m_showSpreadAction;
+    QPointer<QAction> m_showSupportAction;
+    QPointer<QAction> m_showContrastAction;
     
     QImage m_preview;
     bool m_dirty = false;

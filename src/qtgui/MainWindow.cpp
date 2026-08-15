@@ -2705,9 +2705,9 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
 
   updateRegistrationGroupVisibility();
 
-  if (m_sharpnessPanel && m_sharpnessPanel->getAdaptiveChart()) {
-    m_sharpnessPanel->getAdaptiveChart()->setCorrection(
-        state.rparams.scanner_blur_correction);
+  if (m_sharpnessPanel) {
+    if (AdaptiveSharpeningChart *chart = m_sharpnessPanel->getAdaptiveChart())
+      chart->setCorrection(state.rparams.scanner_blur_correction);
   }
 }
 

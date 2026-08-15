@@ -1159,6 +1159,11 @@ void SharpnessPanel::onTileUpdateScheduled() {
 
 QWidget *SharpnessPanel::getMTFChartWidget() const { return m_mtfChart; }
 
+AdaptiveSharpeningChart *SharpnessPanel::getAdaptiveChart() const
+{
+  return m_adaptiveChart.data();
+}
+
 // getTilesWidget removed here (in base)
 
 // createDetachableSection removed (moved to ParameterPanel)
@@ -1625,9 +1630,38 @@ void SharpnessPanel::setMeasureMtfEnabled(bool enabled) {
     }
 }
 
-void SharpnessPanel::reattachAdaptiveChart(QWidget *widget) {
-    if (widget && m_adaptiveChart == widget) {
-         QFormLayout *layout = qobject_cast<QFormLayout*>(this->layout());
-         if (layout) layout->addRow(widget);
+void SharpnessPanel::reattachAdaptiveChart(QWidget *widget)
+{
+  if (!widget || widget != m_adaptiveChart.data())
+    return;
+
+  /* Restore the chart to the detachable section that originally owned it.
+     Adding it directly to the panel form used to leave the section wrapper
+     owning only a placeholder and made the chart lifetime depend on the dock
+     reparenting sequence.  */
+  if (m_adaptiveChartContainer && m_adaptiveChartContainer->count() > 0)
+    {
+      QWidget *section = m_adaptiveChartContainer->itemAt(0)->widget();
+      if (section && section->layout())
+        {
+          if (section->layout()->count() > 1)
+            {
+              QLayoutItem *item = section->layout()->takeAt(1);
+              if (item)
+                {
+                  if (item->widget())
+                    delete item->widget();
+                  delete item;
+                }
+            }
+          section->layout()->addWidget(widget);
+          widget->show();
+          if (section->layout()->count() > 0)
+            {
+              QLayoutItem *headerItem = section->layout()->itemAt(0);
+              if (headerItem && headerItem->widget())
+                headerItem->widget()->show();
+            }
+        }
     }
 }

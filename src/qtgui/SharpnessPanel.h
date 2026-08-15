@@ -4,6 +4,8 @@
 #include "ParameterPanel.h"
 #include "TaskQueue.h"
 #include "AdaptiveSharpeningParameters.h"
+#include "AdaptiveSharpeningChart.h"
+#include <QPointer>
 
 class MTFChartWidget;
 class QLabel;
@@ -20,8 +22,6 @@ struct finetune_result;
 } // namespace colorscreen
 
 #include "TilePreviewPanel.h"
-
-class AdaptiveSharpeningChart;
 
 class SharpnessPanel : public TilePreviewPanel {
   Q_OBJECT
@@ -43,7 +43,7 @@ public:
 
   void reattachDotSpread(QWidget *widget);
   void reattachAdaptiveChart(QWidget *widget);
-  AdaptiveSharpeningChart *getAdaptiveChart() const { return m_adaptiveChart; }
+  AdaptiveSharpeningChart *getAdaptiveChart() const;
   void showAdaptiveChart();
 
 public slots:
@@ -107,7 +107,7 @@ private:
   AdaptiveSharpeningParameters m_adaptiveSharpeningParameters;
   bool m_adaptiveSharpeningParametersInitialized = false;
   class TilePreviewPanel *m_dotSpreadPanel = nullptr;
-  AdaptiveSharpeningChart *m_adaptiveChart = nullptr;
+  QPointer<AdaptiveSharpeningChart> m_adaptiveChart;
   QWidget *m_adaptiveChartWrapper = nullptr;
   QVBoxLayout *m_adaptiveChartContainer = nullptr;
 };
