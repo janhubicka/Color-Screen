@@ -5788,6 +5788,36 @@ test_denoise ()
       }
   }
 
+  /* denoise_parameters::operator== is deliberately cache/output equivalence:
+     changing a parameter ignored by the current mode must not invalidate a
+     cached image.  render_parameters::operator== has different semantics and
+     is an exact GUI/state comparison, so the same edit must make rendering
+     parameters structurally different.  */
+  {
+    render_parameters a, b;
+    a.screen_denoise.mode = denoise_parameters::none;
+    b = a;
+    b.screen_denoise.strength = a.screen_denoise.strength + 0.125f;
+    if (!(a.screen_denoise == b.screen_denoise))
+      {
+        fprintf (stderr,
+                 "Inactive denoise parameter invalidates cache equivalence\n");
+        return false;
+      }
+    if (a.screen_denoise.equal_p (b.screen_denoise))
+      {
+        fprintf (stderr,
+                 "Denoise structural comparison ignored stored parameter\n");
+        return false;
+      }
+    if (a == b)
+      {
+        fprintf (stderr,
+                 "Render structural comparison used denoise cache equivalence\n");
+        return false;
+      }
+  }
+
   return true;
 }
 /* Unit test for Dufaycolor RCD demosaicing.  */

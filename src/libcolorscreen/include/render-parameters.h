@@ -153,8 +153,11 @@ struct sharpen_parameters
 	   || mode == blur_deconvolution;
   }
 
-  /* Return true if THIS and O will produce same image.
-     Used for caching.
+  /* Cache/output equivalence, not a structural comparison.
+     Return true if THIS and O will produce the same sharpened image, so they
+     may share a cached result.  Parameters ignored by the effective mode and
+     sufficiently small scanner-MTF scale differences intentionally compare
+     equal here.
      
      Allow small differences in scale since screen may change during editing.  */
   pure_attr bool
@@ -194,7 +197,9 @@ struct sharpen_parameters
     abort ();
   }
 
-  /* Return true if THIS and O have same data.  */
+  /* Exact structural comparison.  Return true only if every stored
+     sharpening parameter in THIS and O is equal.  Use this for GUI/state
+     comparison rather than the cache-equivalence operator above.  */
   pure_attr bool equal_p (const sharpen_parameters &o) const
   {
     return mode == o.mode
@@ -267,7 +272,10 @@ struct denoise_parameters
     return mode;
   };
 
-  /* Return true if THIS and O will produce same image.  */
+  /* Cache/output equivalence, not a structural comparison.
+     Return true if THIS and O have the same effective denoising mode and all
+     parameters used by that mode are equal.  Parameters ignored by the
+     effective mode intentionally do not make cached output different.  */
   pure_attr bool
   operator== (const denoise_parameters &o) const
   {
@@ -284,7 +292,9 @@ struct denoise_parameters
 	   && search_radius == o.search_radius;
   }
 
-  /* Return true if THIS and O have same data.  */
+  /* Exact structural comparison.  Return true only if every stored denoising
+     parameter in THIS and O is equal, including parameters inactive in the
+     selected mode.  Use this for GUI/state comparison.  */
   pure_attr bool equal_p (const denoise_parameters &o) const
   {
     return mode == o.mode
@@ -704,7 +714,10 @@ struct render_parameters
   DLL_PUBLIC tile_adjustment &get_tile_adjustment (int x, int y);
   DLL_PUBLIC const tile_adjustment &get_tile_adjustment (int x, int y) const;
 
-  /* Return true if THIS and OTHER are equal.  */
+  /* Exact structural comparison of rendering state.  This operator is used
+     by the GUI to detect any parameter edit, so nested parameter structures
+     must use their exact structural comparisons here rather than their
+     cache/output-equivalence operators.  */
   pure_attr bool
   operator== (const render_parameters &other) const
   {
@@ -724,8 +737,8 @@ struct render_parameters
 	   && scan_crop == other.scan_crop
 	   && image_area == other.image_area
 	   && sharpen.equal_p (other.sharpen)
-	   && denoise == other.denoise
-	   && screen_denoise == other.screen_denoise
+	   && denoise.equal_p (other.denoise)
+	   && screen_denoise.equal_p (other.screen_denoise)
            && presaturation == other.presaturation
 	   && gamut_warning == other.gamut_warning
            && saturation == other.saturation && brightness == other.brightness
@@ -760,9 +773,9 @@ struct render_parameters
 	   && output_tone_curve_control_points == other.output_tone_curve_control_points
 	   && white_balance == other.white_balance;
   }
-  /* Return true if THIS and OTHER are not equal.  */
+  /* Exact structural inequality; see operator== above.  */
   pure_attr bool
-  operator!= (render_parameters &other) const
+  operator!= (const render_parameters &other) const
   {
     return !(*this == other);
   }
