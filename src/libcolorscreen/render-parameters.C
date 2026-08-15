@@ -94,7 +94,7 @@ const property_t sharpen_parameters::resampling_kernel_names [] = {
 const property_t denoise_parameters::denoise_mode_names []  = {
   { "none", "None", "No denoising." },
   { "bilateral", "Bilateral filter", "Fast edge-preserving smoothing filter." },
-  { "nl-means", "Non-local means", "Reference non-local means implementation for collected screen-patch samples." },
+  { "nl-means", "Non-local means", "Reference non-local means implementation." },
   { "nl-fast", "Non-local means (fast)", "Integral-image implementation of the same non-local means weighting." },
 };
 const property_t render_parameters::collection_quality_names []  = {
@@ -1459,8 +1459,8 @@ render_parameters::original_render_from (render_parameters &rparam, bool color, 
       mix_blue = rparam.mix_blue;
     }
   sharpen = rparam.sharpen;
-  denoise = rparam.denoise;
   screen_denoise = rparam.screen_denoise;
+  demosaiced_denoise = rparam.demosaiced_denoise;
   gamut_warning = rparam.gamut_warning;
 
   /* Copy setup of interpolated rendering algorithm.  */

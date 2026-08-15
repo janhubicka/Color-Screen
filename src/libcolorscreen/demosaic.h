@@ -4522,7 +4522,8 @@ public:
   bool
   demosaic (ANALYZER *analyze, render *r,
             render_parameters::screen_demosaic_t alg,
-            denoise_parameters denoise_params, progress_info *progress)
+            const denoise_parameters &demosaiced_denoise,
+            progress_info *progress)
   {
     if (!initialize (analyze))
       return false;
@@ -4575,17 +4576,13 @@ public:
       default:
         break;
       }
-#if 0
-    if (denoise_params.get_mode () != denoise_parameters::none)
-      {
-        return denoise_rgb<luminosity_t> (
-            m_area.width, m_area.height,
-            [&] (int x, int y) { return m_demosaiced[y * m_area.width + x]; },
-            [&] (int x, int y, rgbdata pixel)
-              { m_demosaiced[y * m_area.width + x] = pixel; }, denoise_params,
-            progress);
-      }
-#endif
+    if (demosaiced_denoise.get_mode () != denoise_parameters::none)
+      return denoise_rgb_vector (
+          m_area.width, m_area.height,
+          [&] (int x, int y) { return m_demosaiced[y * m_area.width + x]; },
+          [&] (int x, int y, rgbdata pixel)
+            { m_demosaiced[y * m_area.width + x] = pixel; },
+          demosaiced_denoise, progress);
     return true;
   }
 };
@@ -4606,7 +4603,8 @@ public:
   bool
   demosaic (ANALYZER *analyze, render *r,
             render_parameters::screen_demosaic_t alg,
-            denoise_parameters denoise_params, progress_info *progress)
+            const denoise_parameters &demosaiced_denoise,
+            progress_info *progress)
   {
     if (!initialize (analyze))
       return false;
@@ -4663,17 +4661,13 @@ public:
       default:
         break;
       }
-#if 0
-    if (denoise_params.get_mode () != denoise_parameters::none)
-      {
-        return denoise_rgb<luminosity_t> (
-            m_area.width, m_area.height,
-            [&] (int x, int y) { return m_demosaiced[y * m_area.width + x]; },
-            [&] (int x, int y, rgbdata pixel)
-              { m_demosaiced[y * m_area.width + x] = pixel; }, denoise_params,
-            progress);
-      }
-#endif
+    if (demosaiced_denoise.get_mode () != denoise_parameters::none)
+      return denoise_rgb_vector (
+          m_area.width, m_area.height,
+          [&] (int x, int y) { return m_demosaiced[y * m_area.width + x]; },
+          [&] (int x, int y, rgbdata pixel)
+            { m_demosaiced[y * m_area.width + x] = pixel; },
+          demosaiced_denoise, progress);
     return true;
   }
 };

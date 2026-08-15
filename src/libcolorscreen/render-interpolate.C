@@ -74,7 +74,7 @@ struct demosaiced_params
   luminosity_t scan_exposure;
   contact_copy_parameters contact_copy;
   render_parameters::screen_demosaic_t alg;
-  denoise_parameters screen_denoise;
+  denoise_parameters demosaiced_denoise;
 
   ANALYZER *analyzer;
   class render_interpolate *r;
@@ -88,7 +88,7 @@ struct demosaiced_params
 	   && scan_exposure == o.scan_exposure
 	   && contact_copy == o.contact_copy
 	   && alg == o.alg
-	   && screen_denoise == o.screen_denoise;
+	   && demosaiced_denoise == o.demosaiced_denoise;
   }
 };
 bool
@@ -180,7 +180,7 @@ std::unique_ptr<demosaic_paget>
 get_new_demosaic_paget (demosaiced_params<analyze_paget> &p, progress_info *progress)
 {
   auto ret = std::make_unique<demosaic_paget> ();
-  if (!ret->demosaic (p.analyzer, (render_to_scr *)p.r, p.alg, p.screen_denoise, progress))
+  if (!ret->demosaic (p.analyzer, (render_to_scr *)p.r, p.alg, p.demosaiced_denoise, progress))
     {
       return nullptr;
     }
@@ -192,7 +192,7 @@ std::unique_ptr<demosaic_dufay>
 get_new_demosaic_dufay (demosaiced_params<analyze_dufay> &p, progress_info *progress)
 {
   auto ret = std::make_unique<demosaic_dufay> ();
-  if (!ret->demosaic (p.analyzer, (render_to_scr *)p.r, p.alg, p.screen_denoise, progress))
+  if (!ret->demosaic (p.analyzer, (render_to_scr *)p.r, p.alg, p.demosaiced_denoise, progress))
     {
       return nullptr;
     }
@@ -436,7 +436,7 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
 	    m_params.screen_demosaic == render_parameters::default_demosaic
 	    ? (m_screen_compensation ? render_parameters::rcd_demosaic : render_parameters::amaze_demosaic)
 	    : m_params.screen_demosaic,
-	    m_params.screen_denoise,
+	    m_params.demosaiced_denoise,
 	    m_paget.get (), this
 	  };
 	  m_demosaic_paget = demosaic_paget_cache.get (pp, progress);
@@ -459,7 +459,7 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
 	    m_params.screen_demosaic == render_parameters::default_demosaic
 	    ? (m_screen_compensation ? render_parameters::rcd_demosaic : render_parameters::amaze_demosaic)
 	    : m_params.screen_demosaic,
-	    m_params.screen_denoise,
+	    m_params.demosaiced_denoise,
 	    m_dufay.get (), this
 	  };
 	  m_demosaic_dufay = demosaic_dufay_cache.get (pp, progress);

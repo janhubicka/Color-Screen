@@ -5649,6 +5649,153 @@ test_denoise ()
         }
   }
 
+  /* Collection support of one must be exactly the historical unweighted
+     confidence.  This is important because well-sampled screen patches should
+     not change merely because analyze-* now retains its collection weights.  */
+  {
+    std::vector<float> unweighted (width * height), weighted (width * height);
+    denoise_parameters params;
+    params.mode = denoise_parameters::nl_fast;
+    params.strength = 0.1f;
+    params.patch_radius = 2;
+    params.search_radius = 3;
+    if (!denoise<float> (
+            width, height, [&] (int x, int y) { return noisy[y * width + x]; },
+            [&] (int x, int y, float val) { unweighted[y * width + x] = val; },
+            params, NULL, false)
+        || !denoise_with_support<float> (
+            width, height, [&] (int x, int y) { return noisy[y * width + x]; },
+            [] (int, int) { return 1.0f; },
+            [&] (int x, int y, float val) { weighted[y * width + x] = val; },
+            params, NULL, false))
+      return false;
+    for (size_t i = 0; i < weighted.size (); i++)
+      if (weighted[i] != unweighted[i])
+        {
+          fprintf (stderr,
+                   "Unit-support denoising changed historical output at %zu: "
+                   "%.9g versus %.9g\n",
+                   i, weighted[i], unweighted[i]);
+          return false;
+        }
+  }
+
+  /* A screen sample inferred from essentially no actual scanner area must not
+     have the same authority as a reliable observation.  With a small range
+     sigma, ordinary bilateral filtering preserves the isolated bright sample;
+     zero collection support lets its reliable neighbours reconstruct it.  */
+  {
+    const int w = 15, h = 15, cx = w / 2, cy = h / 2;
+    std::vector<float> input ((size_t)w * h, 0.2f);
+    std::vector<float> ordinary ((size_t)w * h), weighted ((size_t)w * h);
+    std::vector<float> support ((size_t)w * h, 1.0f);
+    input[(size_t)cy * w + cx] = 0.8f;
+    support[(size_t)cy * w + cx] = 0.0f;
+    denoise_parameters params;
+    params.mode = denoise_parameters::bilateral;
+    params.bilateral_sigma_s = 2.0f;
+    params.bilateral_sigma_r = 0.05f;
+    if (!denoise<float> (
+            w, h, [&] (int x, int y) { return input[(size_t)y * w + x]; },
+            [&] (int x, int y, float val) { ordinary[(size_t)y * w + x] = val; },
+            params, NULL, false)
+        || !denoise_with_support<float> (
+            w, h, [&] (int x, int y) { return input[(size_t)y * w + x]; },
+            [&] (int x, int y) { return support[(size_t)y * w + x]; },
+            [&] (int x, int y, float val) { weighted[(size_t)y * w + x] = val; },
+            params, NULL, false))
+      return false;
+    const float ordinary_center = ordinary[(size_t)cy * w + cx];
+    const float weighted_center = weighted[(size_t)cy * w + cx];
+    if (ordinary_center < 0.7f || fabsf (weighted_center - 0.2f) > 1e-5f)
+      {
+        fprintf (stderr,
+                 "Collection support did not suppress unreliable sample: "
+                 "ordinary %.9g weighted %.9g\n",
+                 ordinary_center, weighted_center);
+        return false;
+      }
+  }
+
+  /* Fast and reference NLM must remain equivalent with spatially varying
+     collection support, including sub-pixel and zero-support samples.  */
+  {
+    std::vector<float> support (width * height), reference (width * height),
+        fast (width * height);
+    for (int y = 0; y < height; y++)
+      for (int x = 0; x < width; x++)
+        {
+          const int k = (x + 3 * y) % 7;
+          support[(size_t)y * width + x]
+              = k == 0 ? 0.0f : k == 1 ? 0.2f : k == 2 ? 0.5f
+                                                   : k == 3 ? 0.8f
+                                                            : 1.0f + 0.25f * (k - 4);
+        }
+    denoise_parameters params;
+    params.strength = 0.1f;
+    params.patch_radius = 2;
+    params.search_radius = 3;
+    params.mode = denoise_parameters::nl_means;
+    if (!denoise_with_support<float> (
+            width, height, [&] (int x, int y) { return noisy[y * width + x]; },
+            [&] (int x, int y) { return support[(size_t)y * width + x]; },
+            [&] (int x, int y, float val) { reference[y * width + x] = val; },
+            params, NULL, false))
+      return false;
+    params.mode = denoise_parameters::nl_fast;
+    if (!denoise_with_support<float> (
+            width, height, [&] (int x, int y) { return noisy[y * width + x]; },
+            [&] (int x, int y) { return support[(size_t)y * width + x]; },
+            [&] (int x, int y, float val) { fast[y * width + x] = val; },
+            params, NULL, false))
+      return false;
+    for (size_t i = 0; i < fast.size (); i++)
+      if (fabs (fast[i] - reference[i]) > 3e-6)
+        {
+          fprintf (stderr,
+                   "Confidence-aware fast/reference NL-means differ at %zu: "
+                   "%.9g versus %.9g\n",
+                   i, fast[i], reference[i]);
+          return false;
+        }
+  }
+
+  /* analyze_base must actually pass retained collection support to the
+     pre-demosaic denoiser.  This synthetic analyzer represents a sub-pixel
+     central red patch surrounded by reliable samples.  */
+  {
+    class support_test_analyzer : public analyze_base_worker<dufay_geometry>
+    {
+    public:
+      support_test_analyzer () : analyze_base_worker (0, 0, 0, 0, 0, 0)
+      {
+        m_area = { 0, 0, 15, 15 };
+        const size_t n = (size_t)m_area.width * m_area.height;
+        m_red = std::make_unique<luminosity_t[]> (n);
+        m_red_support = std::make_unique<luminosity_t[]> (n);
+        std::fill (m_red.get (), m_red.get () + n, (luminosity_t)0.2);
+        std::fill (m_red_support.get (), m_red_support.get () + n,
+                   (luminosity_t)1);
+        const size_t center = (size_t)7 * m_area.width + 7;
+        m_red[center] = (luminosity_t)0.8;
+        m_red_support[center] = 0;
+      }
+    } analyzer;
+    denoise_parameters params;
+    params.mode = denoise_parameters::bilateral;
+    params.bilateral_sigma_s = 2;
+    params.bilateral_sigma_r = 0.05f;
+    if (analyzer.red_collection_support (7, 7) != 0
+        || analyzer.red_collection_support (6, 7) != 1
+        || !analyzer.denoise_red (params, NULL)
+        || fabs (analyzer.red (7, 7) - 0.2f) > 1e-5)
+      {
+        fprintf (stderr,
+                 "Analyzer did not preserve/use collection support in denoising\n");
+        return false;
+      }
+  }
+
   /* The public functor interface is used in-place by analyze_base.  Tiled
      denoising must still read every border from the original image, not from
      an already processed neighbouring tile.  */
@@ -5759,8 +5906,81 @@ test_denoise ()
       }
   }
 
-  /* Screen-patch denoising settings are part of the rendering state and must
-     survive a CSP save/load round trip.  */
+  /* Post-demosaic denoising must use one RGB-vector weight rather than
+     filtering each channel independently.  A field whose colors lie on a
+     fixed chromaticity ray must therefore remain on that ray after filtering.  */
+  {
+    const int w = 9, h = 5;
+    std::vector<rgbdata> in ((size_t)w * h), out ((size_t)w * h);
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        {
+          luminosity_t v = (luminosity_t)(0.08 * x + 0.025 * y);
+          if (x == 4 && y == 2)
+            v += (luminosity_t)0.22;
+          in[(size_t)y * w + x] = { v, 2 * v, 3 * v };
+        }
+    denoise_parameters params;
+    params.mode = denoise_parameters::bilateral;
+    params.bilateral_sigma_s = 1.5f;
+    params.bilateral_sigma_r = 0.18f;
+    if (!denoise_rgb_vector (
+            w, h,
+            [&] (int x, int y) { return in[(size_t)y * w + x]; },
+            [&] (int x, int y, rgbdata c) { out[(size_t)y * w + x] = c; },
+            params, NULL, false))
+      return false;
+    for (const rgbdata &c : out)
+      if (fabs (c.green - 2 * c.red) > 2e-6
+          || fabs (c.blue - 3 * c.red) > 3e-6)
+        {
+          fprintf (stderr,
+                   "Post-demosaic vector denoising changed chromaticity\n");
+          return false;
+        }
+  }
+
+  /* The vector reference and integral-image NL-means implementations must
+     implement the same RGB patch metric.  */
+  {
+    const int w = 11, h = 8;
+    std::vector<rgbdata> in ((size_t)w * h), slow ((size_t)w * h), fast ((size_t)w * h);
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        in[(size_t)y * w + x]
+            = { (luminosity_t)(0.03 * x + 0.011 * y),
+                (luminosity_t)(0.02 * y + 0.017 * x),
+                (luminosity_t)(0.013 * (x + y) + (x == 5 ? 0.08 : 0)) };
+    denoise_parameters params;
+    params.patch_radius = 1;
+    params.search_radius = 2;
+    params.strength = 0.12f;
+    params.mode = denoise_parameters::nl_means;
+    if (!denoise_rgb_vector (
+            w, h, [&] (int x, int y) { return in[(size_t)y * w + x]; },
+            [&] (int x, int y, rgbdata c) { slow[(size_t)y * w + x] = c; },
+            params, NULL, false))
+      return false;
+    params.mode = denoise_parameters::nl_fast;
+    if (!denoise_rgb_vector (
+            w, h, [&] (int x, int y) { return in[(size_t)y * w + x]; },
+            [&] (int x, int y, rgbdata c) { fast[(size_t)y * w + x] = c; },
+            params, NULL, false))
+      return false;
+    for (size_t i = 0; i < slow.size (); i++)
+      for (int c = 0; c < 3; c++)
+        if (fabs (slow[i][c] - fast[i][c]) > 3e-5)
+          {
+            fprintf (stderr,
+                     "Vector NL-means implementations disagree: %g vs %g\n",
+                     (double)slow[i][c], (double)fast[i][c]);
+            return false;
+          }
+  }
+
+  /* Both denoising stages are part of the rendering state and must survive a
+     CSP save/load round trip exactly, including parameters inactive in the
+     currently selected mode.  */
   {
     render_parameters saved, loaded;
     saved.screen_denoise.mode = denoise_parameters::nl_fast;
@@ -5769,6 +5989,12 @@ test_denoise ()
     saved.screen_denoise.search_radius = 9;
     saved.screen_denoise.bilateral_sigma_s = 1.75f;
     saved.screen_denoise.bilateral_sigma_r = 0.034f;
+    saved.demosaiced_denoise.mode = denoise_parameters::bilateral;
+    saved.demosaiced_denoise.strength = 0.231f;
+    saved.demosaiced_denoise.patch_radius = 4;
+    saved.demosaiced_denoise.search_radius = 11;
+    saved.demosaiced_denoise.bilateral_sigma_s = 2.25f;
+    saved.demosaiced_denoise.bilateral_sigma_r = 0.047f;
     FILE *f = tmpfile ();
     const char *error = NULL;
     if (!f || !save_csp (f, NULL, NULL, &saved, NULL) || fseek (f, 0, SEEK_SET)
@@ -5781,9 +6007,10 @@ test_denoise ()
         return false;
       }
     fclose (f);
-    if (!saved.screen_denoise.equal_p (loaded.screen_denoise))
+    if (!saved.screen_denoise.equal_p (loaded.screen_denoise)
+        || !saved.demosaiced_denoise.equal_p (loaded.demosaiced_denoise))
       {
-        fprintf (stderr, "Screen denoising parameters were not preserved\n");
+        fprintf (stderr, "Denoising parameters were not preserved\n");
         return false;
       }
   }
@@ -5814,6 +6041,15 @@ test_denoise ()
       {
         fprintf (stderr,
                  "Render structural comparison used denoise cache equivalence\n");
+        return false;
+      }
+    b = a;
+    b.demosaiced_denoise.bilateral_sigma_r
+        = a.demosaiced_denoise.bilateral_sigma_r + 0.01f;
+    if (a == b)
+      {
+        fprintf (stderr,
+                 "Render comparison ignored post-demosaic denoise state\n");
         return false;
       }
   }
@@ -5997,6 +6233,38 @@ test_demosaic_dufay ()
   
   bool ok = test_demosaic_loop (fake, demosaicer, render_parameters::rcd_demosaic, "Dufay RCD");
   demosaicer.save_tiff ("dufay_rcd_test.tiff", NULL);
+
+  /* The independently configured post-demosaic stage must actually operate on
+     the completed color field.  */
+  demosaic_dufay_base<fake_analyze<dufay_geometry>> filtered;
+  denoise_parameters post;
+  post.mode = denoise_parameters::bilateral;
+  post.bilateral_sigma_s = 1.5f;
+  post.bilateral_sigma_r = 0.5f;
+  if (!filtered.demosaic (&fake, NULL, render_parameters::rcd_demosaic, post, NULL))
+    {
+      fprintf (stderr, "Post-demosaic Dufay denoising failed\n");
+      return false;
+    }
+  bool changed = false;
+  for (int y = 20; y < h - 20 && !changed; y++)
+    for (int x = 20; x < w - 20; x++)
+      {
+        rgbdata a = demosaicer.fast_demosaiced_data (x, y);
+        rgbdata b = filtered.fast_demosaiced_data (x, y);
+        if (fabs (a.red - b.red) + fabs (a.green - b.green)
+                + fabs (a.blue - b.blue)
+            > 1e-5)
+          {
+            changed = true;
+            break;
+          }
+      }
+  if (!changed)
+    {
+      fprintf (stderr, "Post-demosaic Dufay denoising had no effect\n");
+      ok = false;
+    }
   return ok;
 }
 

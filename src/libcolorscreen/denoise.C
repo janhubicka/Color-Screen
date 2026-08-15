@@ -20,8 +20,9 @@ bilateral_radius (luminosity_t sigma_s)
 
 /* Set up denoising for given parameters.  */
 template <typename T>
-denoising<T>::denoising (const denoise_parameters &params, int max_threads)
-    : m_params (params)
+denoising<T>::denoising (const denoise_parameters &params, int max_threads,
+                         bool use_support)
+    : m_params (params), m_use_support (use_support)
 {
   if (m_params.mode == denoise_parameters::bilateral)
     m_border_size = bilateral_radius (m_params.bilateral_sigma_s);
@@ -50,6 +51,8 @@ denoising<T>::init (int thread_id)
     return;
   m_data[thread_id].tile.resize (m_tile_size * m_tile_size);
   m_data[thread_id].out_tile.resize (m_tile_size * m_tile_size);
+  if (m_use_support)
+    m_data[thread_id].support.resize (m_tile_size * m_tile_size);
   if (m_params.mode == denoise_parameters::nl_fast)
     {
       m_data[thread_id].aux1.resize (m_tile_size * m_tile_size);
@@ -59,11 +62,69 @@ denoising<T>::init (int thread_id)
   m_data[thread_id].initialized = true;
 }
 
-/* Bilateral filter implementation.  */
+/* Return a usable collection support.  Analyze-* weights are accumulated from
+   actual scan contributions and should normally be finite and nonnegative,
+   but keep denoising robust against corrupt/partially initialized data.  */
 template <typename T>
+static inline T
+usable_support (T support)
+{
+  return support > (T)0 && my_isfinite (support) ? support : (T)0;
+}
+
+/* Reliability of a difference between two samples with supports A and B.
+   If support is proportional to the number/area of contributing scanner
+   samples, noise variance is approximately inversely proportional to it.
+   The harmonic mean therefore gives a useful inverse-variance-like weight
+   for a difference.  It is normalized so equal unit supports give one and
+   the confidence-aware filter is exactly the historical filter when every
+   support value is one.  */
+template <typename T>
+static inline T
+support_pair_reliability (T a, T b)
+{
+  a = usable_support (a);
+  b = usable_support (b);
+  if (a == (T)0 || b == (T)0)
+    return (T)0;
+  return (T)2 * a * b / (a + b);
+}
+
+template <bool USE_SUPPORT, typename T>
+static inline T
+sample_support (const T *support, int idx)
+{
+  if constexpr (USE_SUPPORT)
+    return usable_support (support[idx]);
+  else
+    {
+      (void)support;
+      (void)idx;
+      return (T)1;
+    }
+}
+
+template <bool USE_SUPPORT, typename T>
+static inline T
+sample_pair_reliability (const T *support, int idx1, int idx2)
+{
+  if constexpr (USE_SUPPORT)
+    return support_pair_reliability (support[idx1], support[idx2]);
+  else
+    {
+      (void)support;
+      (void)idx1;
+      (void)idx2;
+      return (T)1;
+    }
+}
+
+/* Bilateral filter implementation.  */
+template <bool USE_SUPPORT, typename T>
 static void
 process_bilateral (int tile_size, int border, int basic_size, const T *in, T *out,
-                   luminosity_t sigma_s, luminosity_t sigma_r)
+                   luminosity_t sigma_s, luminosity_t sigma_r,
+                   const T *support)
 {
   const T inv_s2 = (T)1.0 / ((T)2.0 * sigma_s * sigma_s);
   const T inv_r2 = (T)1.0 / ((T)2.0 * sigma_r * sigma_r);
@@ -81,20 +142,30 @@ process_bilateral (int tile_size, int border, int basic_size, const T *in, T *ou
               T val = in[(y + ky) * tile_size + (x + kx)];
               T dist_s2 = (T)(kx * kx + ky * ky);
               T dist_r2 = (val - center_val) * (val - center_val);
-              T weight = std::exp (-dist_s2 * inv_s2 - dist_r2 * inv_r2);
+              int center_idx = y * tile_size + x;
+              int candidate_idx = (y + ky) * tile_size + (x + kx);
+              T reliability = sample_pair_reliability<USE_SUPPORT> (
+                  support, center_idx, candidate_idx);
+              T candidate_support
+                  = sample_support<USE_SUPPORT> (support, candidate_idx);
+              T weight
+                  = std::exp (-dist_s2 * inv_s2
+                              - dist_r2 * reliability * inv_r2)
+                    * candidate_support;
               sum_w += weight;
               sum_v += weight * val;
             }
-        out[y * tile_size + x] = sum_v / sum_w;
+        out[y * tile_size + x]
+            = sum_w > (T)0 ? sum_v / sum_w : center_val;
       }
 }
 
 /* Fast NL-means using integral images.  */
-template <typename T>
+template <bool USE_SUPPORT, typename T>
 static void
 process_nl_fast (int tile_size, int border, int basic_size, const T *in, T *out,
                  int patch_r, int search_r, T strength, T *integral, T *diff,
-                 T *total_weight)
+                 T *total_weight, const T *support)
 {
   const T strength_sq = strength * strength;
   const T inv_strength_sq = (strength_sq > (T)0) ? (T)1.0 / strength_sq : (T)0.0;
@@ -113,8 +184,10 @@ process_nl_fast (int tile_size, int border, int basic_size, const T *in, T *out,
             for (int y = border; y < border + basic_size; ++y)
               for (int x = border; x < border + basic_size; ++x)
                 {
-                  total_weight[y * size + x] += 1;
-                  out[y * size + x] += in[y * size + x];
+                  const int idx = y * size + x;
+                  T weight = sample_support<USE_SUPPORT> (support, idx);
+                  total_weight[idx] += weight;
+                  out[idx] += weight * in[idx];
                 }
             continue;
           }
@@ -123,8 +196,12 @@ process_nl_fast (int tile_size, int border, int basic_size, const T *in, T *out,
         for (int y = border - patch_r; y < border + basic_size + patch_r; ++y)
           for (int x = border - patch_r; x < border + basic_size + patch_r; ++x)
             {
-              T d = in[y * size + x] - in[(y + sy) * size + (x + sx)];
-              diff[y * size + x] = d * d;
+              int idx1 = y * size + x;
+              int idx2 = (y + sy) * size + (x + sx);
+              T d = in[idx1] - in[idx2];
+              diff[idx1]
+                  = d * d * sample_pair_reliability<USE_SUPPORT> (
+                                support, idx1, idx2);
             }
 
         /* Calculate integral image of squared differences.  */
@@ -149,15 +226,24 @@ process_nl_fast (int tile_size, int border, int basic_size, const T *in, T *out,
                         - integral[(y + patch_r) * size + (x - patch_r - 1)]
                         + integral[(y - patch_r - 1) * size + (x - patch_r - 1)];
               
-              T weight = std::exp (-dist_sq * inv_patch_size * inv_strength_sq);
+              int candidate_idx = (y + sy) * size + (x + sx);
+              T weight
+                  = std::exp (-dist_sq * inv_patch_size * inv_strength_sq)
+                    * sample_support<USE_SUPPORT> (support, candidate_idx);
               total_weight[y * size + x] += weight;
-              out[y * size + x] += weight * in[(y + sy) * size + (x + sx)];
+              out[y * size + x] += weight * in[candidate_idx];
             }
       }
 
   for (int y = border; y < border + basic_size; ++y)
     for (int x = border; x < border + basic_size; ++x)
-      out[y * size + x] /= total_weight[y * size + x];
+      {
+        const int idx = y * size + x;
+        if (total_weight[idx] > (T)0)
+          out[idx] /= total_weight[idx];
+        else
+          out[idx] = in[idx];
+      }
 }
 
 /* Apply denoising (Non-Local Means) to the tile for given THREAD_ID.  */
@@ -173,19 +259,36 @@ denoising<T>::process_tile (int thread_id, progress_info *progress)
   
   const T *in = m_data[thread_id].tile.data ();
   T *out = m_data[thread_id].out_tile.data ();
+  const T *support
+      = m_use_support ? m_data[thread_id].support.data () : nullptr;
 
   if (m_params.mode == denoise_parameters::bilateral)
     {
-      process_bilateral (m_tile_size, border, basic_size, in, out,
-                         (T)m_params.bilateral_sigma_s, (T)m_params.bilateral_sigma_r);
+      if (m_use_support)
+        process_bilateral<true> (
+            m_tile_size, border, basic_size, in, out,
+            (T)m_params.bilateral_sigma_s, (T)m_params.bilateral_sigma_r,
+            support);
+      else
+        process_bilateral<false> (
+            m_tile_size, border, basic_size, in, out,
+            (T)m_params.bilateral_sigma_s, (T)m_params.bilateral_sigma_r,
+            support);
     }
   else if (m_params.mode == denoise_parameters::nl_fast)
     {
-      process_nl_fast (m_tile_size, border, basic_size, in, out,
-                       m_params.patch_radius, m_params.search_radius,
-                       (T)m_params.strength, m_data[thread_id].aux1.data (),
-                       m_data[thread_id].aux2.data (),
-                       m_data[thread_id].aux3.data ());
+      if (m_use_support)
+        process_nl_fast<true> (
+            m_tile_size, border, basic_size, in, out, m_params.patch_radius,
+            m_params.search_radius, (T)m_params.strength,
+            m_data[thread_id].aux1.data (), m_data[thread_id].aux2.data (),
+            m_data[thread_id].aux3.data (), support);
+      else
+        process_nl_fast<false> (
+            m_tile_size, border, basic_size, in, out, m_params.patch_radius,
+            m_params.search_radius, (T)m_params.strength,
+            m_data[thread_id].aux1.data (), m_data[thread_id].aux2.data (),
+            m_data[thread_id].aux3.data (), support);
     }
   else
     {
@@ -225,7 +328,16 @@ denoising<T>::process_tile (int thread_id, progress_info *progress)
                               T v1 = in[(y + py) * m_tile_size + (x + px)];
                               T v2 = in[(cy + py) * m_tile_size + (cx + px)];
                               T d = v1 - v2;
-                              dist_sq += d * d;
+                              if (m_use_support)
+                                {
+                                  int idx1 = (y + py) * m_tile_size + (x + px);
+                                  int idx2 = (cy + py) * m_tile_size + (cx + px);
+                                  dist_sq += d * d
+                                             * support_pair_reliability (
+                                                 support[idx1], support[idx2]);
+                                }
+                              else
+                                dist_sq += d * d;
                             }
                         }
                       
@@ -233,6 +345,9 @@ denoising<T>::process_tile (int thread_id, progress_info *progress)
                       T weight
                           = std::exp (-dist_sq * inv_patch_size
                                       * inv_strength_sq);
+                      if (m_use_support)
+                        weight *= usable_support (
+                            support[cy * m_tile_size + cx]);
                       weighted_sum += weight * in[cy * m_tile_size + cx];
                       total_weight += weight;
                     }
@@ -246,6 +361,229 @@ denoising<T>::process_tile (int thread_id, progress_info *progress)
         }
     }
   
+}
+
+
+/* Return mean squared distance of two RGB samples.  Using the channel mean
+   keeps the range parameter on the same approximate scale as scalar filtering.  */
+static inline luminosity_t
+rgb_mean_square_distance (rgbdata a, rgbdata b)
+{
+  luminosity_t dr = a.red - b.red;
+  luminosity_t dg = a.green - b.green;
+  luminosity_t db = a.blue - b.blue;
+  return (dr * dr + dg * dg + db * db) / (luminosity_t)3;
+}
+
+rgb_denoising::rgb_denoising (const denoise_parameters &params,
+                              int max_threads)
+    : m_params (params)
+{
+  if (m_params.mode == denoise_parameters::bilateral)
+    m_border_size = bilateral_radius (m_params.bilateral_sigma_s);
+  else
+    m_border_size = m_params.search_radius + m_params.patch_radius;
+  m_tile_size = 128;
+  while (m_tile_size < m_border_size * 4)
+    m_tile_size *= 2;
+  m_data.resize (max_threads);
+}
+
+void
+rgb_denoising::init (int thread_id)
+{
+  if (m_data[thread_id].initialized)
+    return;
+  const size_t n = (size_t)m_tile_size * m_tile_size;
+  m_data[thread_id].tile.resize (n);
+  m_data[thread_id].out_tile.resize (n);
+  if (m_params.mode == denoise_parameters::nl_fast)
+    {
+      m_data[thread_id].integral.resize (n);
+      m_data[thread_id].diff.resize (n);
+      m_data[thread_id].total_weight.resize (n);
+    }
+  m_data[thread_id].initialized = true;
+}
+
+void
+rgb_denoising::process_tile (int thread_id, progress_info *progress)
+{
+  if (progress && progress->cancelled ())
+    return;
+
+  const int border = m_border_size;
+  const int basic_size = get_basic_tile_size ();
+  const int size = m_tile_size;
+  const rgbdata *in = m_data[thread_id].tile.data ();
+  rgbdata *out = m_data[thread_id].out_tile.data ();
+
+  if (m_params.mode == denoise_parameters::bilateral)
+    {
+      const luminosity_t inv_s2
+          = (luminosity_t)1
+            / ((luminosity_t)2 * m_params.bilateral_sigma_s
+               * m_params.bilateral_sigma_s);
+      const luminosity_t inv_r2
+          = (luminosity_t)1
+            / ((luminosity_t)2 * m_params.bilateral_sigma_r
+               * m_params.bilateral_sigma_r);
+      const int r = bilateral_radius (m_params.bilateral_sigma_s);
+      for (int y = border; y < border + basic_size; y++)
+        for (int x = border; x < border + basic_size; x++)
+          {
+            const rgbdata center = in[y * size + x];
+            luminosity_t sum_w = 0;
+            rgbdata sum = { 0, 0, 0 };
+            for (int ky = -r; ky <= r; ky++)
+              for (int kx = -r; kx <= r; kx++)
+                {
+                  const rgbdata val = in[(y + ky) * size + x + kx];
+                  const luminosity_t dist_s2
+                      = (luminosity_t)(kx * kx + ky * ky);
+                  const luminosity_t dist_r2
+                      = rgb_mean_square_distance (center, val);
+                  const luminosity_t w
+                      = std::exp (-dist_s2 * inv_s2 - dist_r2 * inv_r2);
+                  sum_w += w;
+                  sum.red += w * val.red;
+                  sum.green += w * val.green;
+                  sum.blue += w * val.blue;
+                }
+            if (sum_w > 0)
+              out[y * size + x]
+                  = { sum.red / sum_w, sum.green / sum_w, sum.blue / sum_w };
+            else
+              out[y * size + x] = center;
+          }
+      return;
+    }
+
+  const int patch_r = m_params.patch_radius;
+  const int search_r = m_params.search_radius;
+  const luminosity_t strength_sq = m_params.strength * m_params.strength;
+  const luminosity_t inv_strength_sq
+      = strength_sq > 0 ? (luminosity_t)1 / strength_sq : 0;
+  const int patch_diam = patch_r * 2 + 1;
+  const luminosity_t inv_patch_size
+      = (luminosity_t)1 / (luminosity_t)(patch_diam * patch_diam);
+
+  if (m_params.mode == denoise_parameters::nl_fast)
+    {
+      luminosity_t *integral = m_data[thread_id].integral.data ();
+      luminosity_t *diff = m_data[thread_id].diff.data ();
+      luminosity_t *total_weight = m_data[thread_id].total_weight.data ();
+      const size_t n = (size_t)size * size;
+      std::fill (total_weight, total_weight + n, (luminosity_t)0);
+      std::fill (out, out + n, rgbdata { 0, 0, 0 });
+
+      for (int sy = -search_r; sy <= search_r; sy++)
+        for (int sx = -search_r; sx <= search_r; sx++)
+          {
+            if (!sx && !sy)
+              {
+                for (int y = border; y < border + basic_size; y++)
+                  for (int x = border; x < border + basic_size; x++)
+                    {
+                      const int idx = y * size + x;
+                      total_weight[idx] += 1;
+                      out[idx].red += in[idx].red;
+                      out[idx].green += in[idx].green;
+                      out[idx].blue += in[idx].blue;
+                    }
+                continue;
+              }
+
+            for (int y = border - patch_r;
+                 y < border + basic_size + patch_r; y++)
+              for (int x = border - patch_r;
+                   x < border + basic_size + patch_r; x++)
+                {
+                  const int idx1 = y * size + x;
+                  const int idx2 = (y + sy) * size + x + sx;
+                  diff[idx1] = rgb_mean_square_distance (in[idx1], in[idx2]);
+                }
+
+            for (int y = border - patch_r;
+                 y < border + basic_size + patch_r; y++)
+              {
+                luminosity_t row_sum = 0;
+                for (int x = border - patch_r;
+                     x < border + basic_size + patch_r; x++)
+                  {
+                    row_sum += diff[y * size + x];
+                    integral[y * size + x]
+                        = y > border - patch_r
+                              ? integral[(y - 1) * size + x] + row_sum
+                              : row_sum;
+                  }
+              }
+
+            for (int y = border; y < border + basic_size; y++)
+              for (int x = border; x < border + basic_size; x++)
+                {
+                  luminosity_t dist_sq
+                      = integral[(y + patch_r) * size + x + patch_r]
+                        - integral[(y - patch_r - 1) * size + x + patch_r]
+                        - integral[(y + patch_r) * size + x - patch_r - 1]
+                        + integral[(y - patch_r - 1) * size + x - patch_r - 1];
+                  luminosity_t w
+                      = std::exp (-dist_sq * inv_patch_size * inv_strength_sq);
+                  const int idx = y * size + x;
+                  const rgbdata candidate = in[(y + sy) * size + x + sx];
+                  total_weight[idx] += w;
+                  out[idx].red += w * candidate.red;
+                  out[idx].green += w * candidate.green;
+                  out[idx].blue += w * candidate.blue;
+                }
+          }
+
+      for (int y = border; y < border + basic_size; y++)
+        for (int x = border; x < border + basic_size; x++)
+          {
+            const int idx = y * size + x;
+            if (total_weight[idx] > 0)
+              {
+                out[idx].red /= total_weight[idx];
+                out[idx].green /= total_weight[idx];
+                out[idx].blue /= total_weight[idx];
+              }
+            else
+              out[idx] = in[idx];
+          }
+      return;
+    }
+
+  /* Reference vector NL-means.  */
+  for (int y = border; y < border + basic_size; y++)
+    for (int x = border; x < border + basic_size; x++)
+      {
+        luminosity_t total_weight = 0;
+        rgbdata sum = { 0, 0, 0 };
+        for (int sy = -search_r; sy <= search_r; sy++)
+          for (int sx = -search_r; sx <= search_r; sx++)
+            {
+              luminosity_t dist_sq = 0;
+              for (int py = -patch_r; py <= patch_r; py++)
+                for (int px = -patch_r; px <= patch_r; px++)
+                  dist_sq += rgb_mean_square_distance (
+                      in[(y + py) * size + x + px],
+                      in[(y + sy + py) * size + x + sx + px]);
+              luminosity_t w
+                  = std::exp (-dist_sq * inv_patch_size * inv_strength_sq);
+              rgbdata candidate = in[(y + sy) * size + x + sx];
+              total_weight += w;
+              sum.red += w * candidate.red;
+              sum.green += w * candidate.green;
+              sum.blue += w * candidate.blue;
+            }
+        if (total_weight > 0)
+          out[y * size + x] = { sum.red / total_weight,
+                                sum.green / total_weight,
+                                sum.blue / total_weight };
+        else
+          out[y * size + x] = in[y * size + x];
+      }
 }
 
 template class denoising<float>;

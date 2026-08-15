@@ -261,6 +261,16 @@ public:
   bool denoise_rgb_green (const denoise_parameters &params, progress_info *progress);
   bool denoise_rgb_blue (const denoise_parameters &params, progress_info *progress);
 
+  /* Return raw collection support for a red/green/blue sample.  The support
+     is the accumulated contribution of real scanner pixels used to estimate
+     the sample.  It is available for precise/color collection modes and is
+     deliberately kept separate from the normalized sample value: values
+     below one are common when a screen patch is represented by less than one
+     scanner pixel.  Fast collection has no such estimate and returns one.  */
+  pure_attr luminosity_t red_collection_support (int x, int y) const noexcept;
+  pure_attr luminosity_t green_collection_support (int x, int y) const noexcept;
+  pure_attr luminosity_t blue_collection_support (int x, int y) const noexcept;
+
   /* Write the analyzed screen to a file.
      FILENAME is the name of the file to write to.
      KNOWN_PIXELS is the bitmap of known pixels.
@@ -306,6 +316,12 @@ protected:
   int_image_area m_area;
   std::unique_ptr<luminosity_t[]> m_red, m_green, m_blue;
   std::unique_ptr<rgbdata[]> m_rgb_red, m_rgb_green, m_rgb_blue;
+  /* Amount of real scanner data contributing to each collected screen
+     sample.  These arrays retain the W_RED/W_GREEN/W_BLUE values produced by
+     the analyze-* collection routines so pre-demosaic denoising can give
+     sub-pixel/inferred samples less authority than well-sampled patches.  */
+  std::unique_ptr<luminosity_t[]> m_red_support, m_green_support,
+      m_blue_support;
   std::unique_ptr<bitmap_2d> m_known_pixels;
   int m_n_known_pixels = 0;
   std::unique_ptr<contrast_info[]> m_contrast;

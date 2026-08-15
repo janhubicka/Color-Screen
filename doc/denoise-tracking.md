@@ -17,10 +17,11 @@ implementation and a regression are present in the current review branch;
 | DN-009 | Resolved | Low | Analysis cache keys considered inactive denoise fields and caused needless invalidation. |
 | DN-010 | Open | High | Spatial radii are measured in channel-array indices rather than common screen coordinates; Dufay/Paget channels therefore use physically different neighbourhoods. |
 | DN-011 | Open | High | `precise_rgb` denoises R/G/B components independently.  Use one vector/guide-derived neighbour weight for all components. |
-| DN-012 | Open | High | Analyzer collection confidence/sample support is discarded before denoising.  Preserve and use it as measurement uncertainty. |
+| DN-012 | Resolved | High | Preserve analyzer collection support through `analyze_base` and use it in pre-demosaic bilateral/NLM similarity and candidate weighting.  Unit support reproduces historical filtering; weak/sub-pixel samples have proportionally less authority. |
 | DN-013 | Open | High | NLM strength has no calibrated noise model and patch distance does not account for expected noise variance or signal dependence. |
 | DN-014 | Open | High | Design and evaluate a guided screen-lattice NLM, preferably IR-guided for registered RGB+IR scans. |
-| DN-015 | Open | Medium | Distinguish patch-domain `screen_denoise` from the dormant post-demosaic/output `render_parameters::denoise` stage in API/UI and decide whether the latter should exist. |
+| DN-015 | Resolved | Medium | Split reconstruction-domain denoising into independent `screen_denoise` (before demosaicing) and `demosaiced_denoise` (after materialized Paget/Dufay demosaicing) parameters and GUI sections, with complete project-file persistence. |
+| DN-021 | Resolved | High | Post-demosaic bilateral/NLM uses a common RGB-vector distance and applies one neighbour weight to all channels; reference and fast vector NLM are regression-tested. |
 | DN-016 | Open | Medium | Build a quality corpus with edges, texture, Dufay/Paget geometry, RGB-vector chromaticity, confidence variation, and real scan crops. |
 | DN-017 | Open | Medium | Decide whether filtering is best in linear intensity, density/log, or variance-stabilized domain for scanner/film noise. |
 | DN-018 | Open | Low | Precompute bilateral spatial weights and profile before optimizing the brute-force bilateral implementation. |
@@ -29,10 +30,11 @@ implementation and a regression are present in the current review branch;
 
 ## Recommended next implementation order
 
-1. Land the resolved correctness fixes and run native Qt plus sanitizer builds.
-2. Preserve per-screen-sample collection confidence through `analyze_base`.
-3. Introduce geometry-aware screen-coordinate neighbourhoods.
-4. Prototype common-weight RGB/vector NLM without IR.
-5. Add IR-guided similarity for registered RGB+IR scans and compare it with the RGB guide.
-6. Calibrate strength from an explicit noise/variance estimate.
-7. Only after quality is established, optimize the geometry-aware implementation.
+1. Run native Qt plus sanitizer builds for the split-stage implementation.
+2. Introduce geometry-aware screen-coordinate neighbourhoods for the
+   pre-demosaic sample lattices.
+3. Extend common-weight RGB/vector similarity to precise-RGB screen samples.
+4. Add IR-guided similarity for registered RGB+IR scans and compare it with
+   the RGB guide.
+5. Calibrate strength from an explicit noise/variance estimate.
+6. Only after quality is established, optimize the geometry-aware implementation.

@@ -391,10 +391,6 @@ struct render_parameters
   /* Sharpening parameters.  */
   sharpen_parameters sharpen;
 
-  /* Output-image denoising parameters.  Reserved for a post-demosaic
-     denoising stage; currently not applied by the renderer.  */
-  denoise_parameters denoise;
-
   /***** Tile Adjustment (used to adjust parameters of individual tiles) *****/
 
   /* Adjustment parameters for a single tile.  */
@@ -504,9 +500,15 @@ struct render_parameters
   /* Radius (in image pixels) the screen should be blurred.  */
   coord_t screen_blur_radius = 0.5;
 
-  /* Denoising applied to collected screen-patch samples before screen
-     interpolation/demosaicing.  */
+  /* Denoising applied to collected screen-element colors before screen
+     demosaicing.  The analyze-* collection support participates in this
+     stage when it is available.  */
   denoise_parameters screen_denoise;
+
+  /* Denoising applied to the complete color field after screen demosaicing
+     and before it is resampled/combined with the high-resolution B&W image.
+     This stage uses common RGB-vector similarity weights.  */
+  denoise_parameters demosaiced_denoise;
 
   /* Threshold for collecting color information.  */
   luminosity_t collection_threshold = 0.2;
@@ -737,8 +739,8 @@ struct render_parameters
 	   && scan_crop == other.scan_crop
 	   && image_area == other.image_area
 	   && sharpen.equal_p (other.sharpen)
-	   && denoise.equal_p (other.denoise)
 	   && screen_denoise.equal_p (other.screen_denoise)
+	   && demosaiced_denoise.equal_p (other.demosaiced_denoise)
            && presaturation == other.presaturation
 	   && gamut_warning == other.gamut_warning
            && saturation == other.saturation && brightness == other.brightness

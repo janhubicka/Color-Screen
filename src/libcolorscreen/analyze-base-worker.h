@@ -958,24 +958,26 @@ analyze_base_worker<GEOMETRY>::analyze (
   bool ok = false;
   if (mode == precise || mode == precise_rgb || mode == color)
     {
-      std::unique_ptr<luminosity_t[]> w_red_ptr = std::make_unique<
-          luminosity_t[]> ((size_t) m_area.width * m_area.height
-                           * (GEOMETRY::red_width_scale
-                              * GEOMETRY::red_height_scale));
-      std::unique_ptr<luminosity_t[]> w_green_ptr = std::make_unique<
-          luminosity_t[]> ((size_t) m_area.width * m_area.height
-                           * (GEOMETRY::green_width_scale
-                              * GEOMETRY::green_height_scale));
-      std::unique_ptr<luminosity_t[]> w_blue_ptr = std::make_unique<
-          luminosity_t[]> ((size_t) m_area.width * m_area.height
-                           * (GEOMETRY::blue_width_scale
-                              * GEOMETRY::blue_height_scale));
-      if (!w_red_ptr || !w_green_ptr || !w_blue_ptr)
+      /* Keep the collection weights after analysis.  They describe how much
+         actual scanner data contributed to each screen-element estimate and
+         are needed by confidence-aware pre-demosaic denoising.  Previously
+         these arrays were temporary and were discarded immediately after
+         normalizing the collected colors.  */
+      m_red_support = std::make_unique<luminosity_t[]> (
+          (size_t)m_area.width * m_area.height
+          * (GEOMETRY::red_width_scale * GEOMETRY::red_height_scale));
+      m_green_support = std::make_unique<luminosity_t[]> (
+          (size_t)m_area.width * m_area.height
+          * (GEOMETRY::green_width_scale * GEOMETRY::green_height_scale));
+      m_blue_support = std::make_unique<luminosity_t[]> (
+          (size_t)m_area.width * m_area.height
+          * (GEOMETRY::blue_width_scale * GEOMETRY::blue_height_scale));
+      if (!m_red_support || !m_green_support || !m_blue_support)
         return false;
 
-      luminosity_t *w_red = w_red_ptr.get ();
-      luminosity_t *w_green = w_green_ptr.get ();
-      luminosity_t *w_blue = w_blue_ptr.get ();
+      luminosity_t *w_red = m_red_support.get ();
+      luminosity_t *w_green = m_green_support.get ();
+      luminosity_t *w_blue = m_blue_support.get ();
 
       std::fill (w_red,
                  w_red + (size_t) m_area.width * m_area.height

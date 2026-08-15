@@ -6,21 +6,22 @@ during the review, and the intended direction for a replacement algorithm.
 
 ## Where denoising happens
 
-The active denoising stage is not a final-image filter.  `render_interpolate`
-first collects one value for every colour-screen sample in `analyze_base` and
-then applies `screen_denoise` to those collected sample arrays.  Interpolation
-or screen demosaicing happens afterwards.
+The reconstruction denoiser is not a final rendered-image filter.
+`render_interpolate` first collects one value for every colour-screen sample
+in `analyze_base` and can apply `screen_denoise` to those collected sample
+arrays.  After materialized Paget/Dufay screen demosaicing, an independent
+`demosaiced_denoise` stage can filter the complete colour field before it is
+resampled and combined with the high-resolution B&W detail.  Either stage,
+both, or neither may therefore be selected independently.
 
 For `precise_rgb` collection each red, green and blue screen sample is itself
 an RGB scanner measurement.  The current implementation denoises the three
 components of each such array independently.
 
-There is also a `render_parameters::denoise` member intended for output-image
-denoising.  No active renderer path currently applies it.  The post-demosaic
-calls in `demosaic.h` are disabled with `#if 0`.  The two stages should remain
-separate: patch-domain denoising can exploit screen geometry and collection
-confidence, while ordinary output-image denoising has different goals and
-noise statistics.
+Ordinary final-image denoising after the reconstructed colour has been
+combined with B&W detail remains a separate image-processing problem and is
+not represented by either reconstruction-domain control.  It can be handled
+by the ordinary rendering/post-processing pipeline later if needed.
 
 ## Algorithms in the current implementation
 
@@ -38,6 +39,11 @@ parameters have the same meaning in both modes.
 
 The filters operate on tiles for parallelism and bounded scratch storage.
 Every tile has a border large enough for the selected filter support.
+
+The post-demosaic RGB implementation uses mean squared RGB distance for its
+range and patch metrics.  Thus the numerical strength/sigma scale remains
+comparable to one scalar channel, while one resulting neighbour weight is
+used for all three components.
 
 ## Correctness problems found and fixed
 
@@ -90,13 +96,13 @@ lattices such as Dufay red samples and Paget red/green samples, and can read
 the wrong samples.  The loops now use height scale vertically and width scale
 horizontally.  A Dufay regression checks the expected two-red-sample average.
 
-### Parameters were not persistent
+### Denoising parameters are persistent
 
-The Qt controls edit `render_parameters::screen_denoise`, but those values
-were not saved to or restored from the project parameter file.  The selected
-filter consequently disappeared on reload.  The screen-patch denoising mode
-and all its parameters are now serialized.  Older files remain valid because
-missing fields keep their defaults.
+Both reconstruction-domain parameter sets are serialized completely:
+`screen_denoise` for collected samples before demosaicing and
+`demosaiced_denoise` for the complete colour field afterwards.  Mode, NLM
+strength/radii and bilateral sigmas are all round-tripped even when some are
+inactive in the selected mode, so GUI state is preserved exactly.
 
 ### Invalid parameter handling
 
@@ -133,13 +139,49 @@ different neighbours and can change chromaticity.  Similarity should instead
 be computed from a common guide or RGB-vector patch, and one weight should be
 applied to all components of the sample.
 
-### Collection confidence is currently discarded
+### Collection confidence is now retained and used
 
-The analyzer accumulates each screen sample with a collection weight and only
-later divides by that weight.  A sample assembled from many strong source
-pixels is therefore treated identically by denoising to a weak or even
-fallback-filled sample.  The collection weights, and ideally local variance
-or sample count, should be retained as measurement confidence.
+The analyzer accumulates every precise/color screen sample together with a
+collection weight describing how much real scanner data contributed to it.
+Those weights are now retained in `analyze_base` instead of being discarded
+after normalization and are consumed by the pre-demosaic bilateral/NLM
+filters.
+
+For NLM, a patch difference is weighted by the harmonic mean of the supports
+of the two compared samples.  This is an inverse-variance-like rule if noise
+variance is approximately inversely proportional to contributing scanner
+area.  Candidate accumulation is additionally weighted by the candidate's
+own support.  Bilateral filtering applies the same principle to its range
+distance and output accumulation.
+
+The normalization is intentionally anchored at support one: if all samples
+have support one, confidence-aware filtering is exactly the historical
+filter.  A sub-pixel sample has weaker range/patch authority and contributes
+less to neighbours, while a zero-support fallback sample can be reconstructed
+from reliable neighbouring measurements rather than acting as an observation
+itself.  The raw support arrays are kept unchanged after denoising; we do not
+yet invent a propagated statistical confidence for filtered values.
+
+Fast collection has no area/support estimate and therefore continues to use
+the unweighted filter.
+
+### Pre- and post-demosaic denoising are distinct stages
+
+The stages now have independent parameter blocks and GUI sections.  The
+pre-demosaic stage operates on measured screen-element colours and uses
+collection support when available.  The post-demosaic stage operates on the
+regular complete colour field and computes one RGB-vector similarity weight
+which is applied to all three channels, avoiding channel-dependent neighbour
+choices and incidental chromaticity shifts.
+
+The post stage currently applies to the materialized advanced Paget/Dufay
+demosaicing path.  Simpler on-demand nearest/linear/bicubic interpolation and
+vertical-strip renderers do not yet materialize a complete colour field and
+therefore leave the post-demosaic controls disabled.
+
+Denoising the final rendered image after B&W detail has been recombined is a
+separate ordinary image-processing operation and need not share these
+controls.
 
 ### `strength` is not tied to a noise model
 
@@ -155,8 +197,8 @@ image denoiser.
 
 1. Represent every collected sample by its position in common screen
    coordinates.
-2. Retain collection confidence and, where possible, an estimate of sample
-   variance.
+2. Use the retained collection support and, where possible, extend it with an
+   estimate of sample variance.
 3. Build a guide used only for neighbour similarity.  For RGB+IR scans the
    registered IR/monochrome layer is an attractive guide because it describes
    scene structure without screen colour.  Without IR, use a common robust

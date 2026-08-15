@@ -33,6 +33,18 @@ protected:
   }
 };
 
+static bool
+postDemosaicDenoiseAvailable (const ParameterState &state)
+{
+  const bool materialized
+      = paget_like_screen_p (state.scrToImg.type)
+        || dufay_like_screen_p (state.scrToImg.type);
+  const auto alg = state.rparams.screen_demosaic;
+  return materialized
+         && (alg == render_parameters::default_demosaic
+             || (int)alg >= (int)render_parameters::hamilton_adams_demosaic);
+}
+
 class ScreenPreviewPanel : public TilePreviewPanel {
 public:
   ScreenPreviewPanel(StateGetter stateGetter, StateSetter stateSetter,
@@ -249,7 +261,7 @@ void ScreenPanel::setupUi() {
   );
 
 
-  addSeparator("Screen patch denoising");
+  addSeparator("Denoising before screen demosaicing");
 
   // Screen Denoise Mode
   addEnumParameter("Denoise Mode",
@@ -257,7 +269,7 @@ void ScreenPanel::setupUi() {
       (int)denoise_parameters::denoise_mode_max,
       [](const ParameterState &s) { return (int)s.rparams.screen_denoise.mode; },
       [](ParameterState &s, int v) { s.rparams.screen_denoise.mode = (denoise_parameters::denoise_mode)v; },
-      nullptr, "Denoise collected screen-patch samples before screen interpolation/demosaicing. This is an experimental patch-domain filter, not final-image denoising."
+      nullptr, "Denoise collected screen-element colors before demosaicing. Collection support is used so weak/sub-pixel measurements have less authority."
   );
 
   // Strength (h)
@@ -310,6 +322,67 @@ void ScreenPanel::setupUi() {
       1.0,
       [](const ParameterState &s) { return s.rparams.screen_denoise.mode == denoise_parameters::bilateral; },
       false, "Range standard deviation for Bilateral filter. Controls how much intensity difference is allowed while smoothing.");
+
+  addSeparator("Denoising after screen demosaicing");
+
+  addEnumParameter("Denoise Mode",
+      denoise_parameters::denoise_mode_names,
+      (int)denoise_parameters::denoise_mode_max,
+      [](const ParameterState &s) { return (int)s.rparams.demosaiced_denoise.mode; },
+      [](ParameterState &s, int v) { s.rparams.demosaiced_denoise.mode = (denoise_parameters::denoise_mode)v; },
+      postDemosaicDenoiseAvailable, "Denoise the complete demosaiced color field before it is resampled and combined with the high-resolution B&W detail. RGB similarity weights are shared by all three channels. This stage currently requires the materialized advanced Paget/Dufay demosaicing path."
+  );
+
+  addSliderParameter(
+      "Strength", 0.0, 1.0, 100.0, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.demosaiced_denoise.strength; },
+      [](ParameterState &s, double v) { s.rparams.demosaiced_denoise.strength = v; },
+      1.0,
+      [](const ParameterState &s) {
+        return postDemosaicDenoiseAvailable (s)
+               && (s.rparams.demosaiced_denoise.mode == denoise_parameters::nl_means ||
+                   s.rparams.demosaiced_denoise.mode == denoise_parameters::nl_fast);
+      }, false, "RMS RGB patch-distance scale for Non-local means. One similarity weight is applied to the whole RGB vector.");
+
+  addSliderParameter(
+      "Patch Radius", 1, 10, 1, 0, "", "",
+      [](const ParameterState &s) { return (double)s.rparams.demosaiced_denoise.patch_radius; },
+      [](ParameterState &s, double v) { s.rparams.demosaiced_denoise.patch_radius = (int)v; },
+      1.0,
+      [](const ParameterState &s) {
+        return postDemosaicDenoiseAvailable (s)
+               && (s.rparams.demosaiced_denoise.mode == denoise_parameters::nl_means ||
+                   s.rparams.demosaiced_denoise.mode == denoise_parameters::nl_fast);
+      }, false, "Radius of RGB patches used for post-demosaic similarity comparison.");
+
+  addSliderParameter(
+      "Search Radius", 1, 30, 1, 0, "", "",
+      [](const ParameterState &s) { return (double)s.rparams.demosaiced_denoise.search_radius; },
+      [](ParameterState &s, double v) { s.rparams.demosaiced_denoise.search_radius = (int)v; },
+      1.0,
+      [](const ParameterState &s) {
+        return postDemosaicDenoiseAvailable (s)
+               && (s.rparams.demosaiced_denoise.mode == denoise_parameters::nl_means ||
+                   s.rparams.demosaiced_denoise.mode == denoise_parameters::nl_fast);
+      }, false, "Radius of the search window in the demosaiced color field.");
+
+  addSliderParameter(
+      "Bilateral Spatial Sigma", 0.1, 10.0, 10.0, 1, "", "",
+      [](const ParameterState &s) { return s.rparams.demosaiced_denoise.bilateral_sigma_s; },
+      [](ParameterState &s, double v) { s.rparams.demosaiced_denoise.bilateral_sigma_s = v; },
+      1.0,
+      [](const ParameterState &s) { return postDemosaicDenoiseAvailable (s)
+                                      && s.rparams.demosaiced_denoise.mode == denoise_parameters::bilateral; },
+      false, "Spatial standard deviation for post-demosaic vector bilateral filtering.");
+
+  addSliderParameter(
+      "Bilateral Range Sigma", 0.01, 1.0, 100.0, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.demosaiced_denoise.bilateral_sigma_r; },
+      [](ParameterState &s, double v) { s.rparams.demosaiced_denoise.bilateral_sigma_r = v; },
+      1.0,
+      [](const ParameterState &s) { return postDemosaicDenoiseAvailable (s)
+                                      && s.rparams.demosaiced_denoise.mode == denoise_parameters::bilateral; },
+      false, "RMS RGB range standard deviation for post-demosaic vector bilateral filtering.");
 
   updateUI();
 }
