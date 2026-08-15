@@ -1,0 +1,41 @@
+name: Export Debian 13 build dependencies
+
+on:
+  push:
+    branches:
+      - review/deps-export
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    container: debian:13
+    steps:
+      - name: Download dependency packages
+        shell: bash
+        run: |
+          set -euxo pipefail
+          apt-get update
+          apt-get install -y apt-rdepends ca-certificates
+          mkdir -p /tmp/debs
+          cd /tmp/debs
+          pkgs=(
+            libgsl-dev
+            libfftw3-dev
+            libturbojpeg0-dev
+            libraw-dev
+            libzip-dev
+            liblcms2-dev
+            libexiv2-dev
+          )
+          apt-rdepends "${pkgs[@]}" \
+            | sed -n '/^[^ ]/p' \
+            | grep -v '^<' \
+            | sort -u > /tmp/packages.txt
+          apt-get download $(cat /tmp/packages.txt)
+          tar -czf "$GITHUB_WORKSPACE/colorscreen-deps-debian13-amd64-ci.tar.gz" .
+      - name: Upload dependency bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-deps-debian13-amd64-ci
+          path: colorscreen-deps-debian13-amd64-ci.tar.gz
+          if-no-files-found: error
