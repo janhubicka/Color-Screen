@@ -73,6 +73,14 @@ struct paget_geometry : public base_geometry
     return {p.x + p.y, -p.x + p.y};
   }
 
+  /* Packed red/green rows use half-integer screen coordinates.  C++ integer
+     division truncates toward zero, which is wrong for logical samples above
+     or to the left of the image used by reflected denoising borders.  */
+  inline static int64_t floor_div2 (int64_t v)
+  {
+    return v / 2 - (v < 0 && v % 2 != 0);
+  }
+
   /* Red and green are diagonal, so when doing interpolation we need to account that.  */
   inline static int_point_t offset_for_interpolation_red (int_point_t e, int_point_t off)
   {
@@ -83,12 +91,12 @@ struct paget_geometry : public base_geometry
     /* Undo division by 2.  We know parity from y.  */
     e.x = e.x * 2 + (e.y & 1);
     /* Undo from_diagonal_coordinates.  */
-    e.x = (e.x - e.y) / 2;
+    e.x = floor_div2 (e.x - e.y);
     e.y = e.y + e.x;
     /* Offset and convert back.  */
     e = e + off;
     e = from_diagonal_coordinates (e);
-    e.x /= 2;
+    e.x = floor_div2 (e.x);
     return e;
   }
   inline static int_point_t offset_for_interpolation_blue (int_point_t e, int_point_t off)
@@ -123,7 +131,7 @@ struct paget_geometry : public base_geometry
     /* convert to diagonal coordinates; round to nearest integer and round back.  */
     point_t p = to_diagonal_coordinates (scr);
     int_point_t e = from_diagonal_coordinates ((int_point_t){nearest_int (p.x), nearest_int (p.y)});
-    e.x /= 2;
+    e.x = floor_div2 (e.x);
     return e;
   }
   static inline
@@ -135,7 +143,7 @@ struct paget_geometry : public base_geometry
     off->x = my_modf (p.x, &xx);
     off->y = my_modf (p.y, &yy);
     int_point_t e = from_diagonal_coordinates ((int_point_t){xx,yy});
-    e.x /= 2;
+    e.x = floor_div2 (e.x);
     return e;
   }
   static inline
@@ -161,17 +169,17 @@ struct paget_geometry : public base_geometry
   point_t red_entry_to_scr (int_point_t e)
   {
     if (!(e.y&1))
-      return {e.x-(coord_t)0.5, (coord_t)(e.y / 2)};
+      return {e.x-(coord_t)0.5, (coord_t)floor_div2 (e.y)};
     else
-      return {(coord_t)e.x, (e.y / 2) + (coord_t)0.5};
+      return {(coord_t)e.x, floor_div2 (e.y) + (coord_t)0.5};
   }
   static inline
   point_t green_entry_to_scr (int_point_t e)
   {
     if (!(e.y&1))
-      return {(coord_t)e.x, (coord_t)(e.y / 2)};
+      return {(coord_t)e.x, (coord_t)floor_div2 (e.y)};
     else
-      return {e.x + (coord_t)0.5, (e.y / 2) + (coord_t)0.5};
+      return {e.x + (coord_t)0.5, floor_div2 (e.y) + (coord_t)0.5};
   }
   static inline
   point_t blue_entry_to_scr (int_point_t e)

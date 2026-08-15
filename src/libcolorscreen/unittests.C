@@ -5760,6 +5760,145 @@ test_denoise ()
         }
   }
 
+  /* Screen-domain radii are expressed in common screen coordinates.  Check
+     both geometry mappings themselves and the reference filter's compatibility
+     with the historical unit rectangular lattice.  */
+  {
+    /* Paget red/green are packed by row.  Their mappings must remain exact for
+       negative logical entries used by reflected denoising borders.  */
+    for (int y = -5; y <= 5; y++)
+      for (int x = -5; x <= 5; x++)
+        {
+          int_point_t e = { x, y };
+          if (paget_geometry::red_scr_to_entry (
+                  paget_geometry::red_entry_to_scr (e)) != e
+              || paget_geometry::green_scr_to_entry (
+                     paget_geometry::green_entry_to_scr (e)) != e
+              || paget_geometry::blue_scr_to_entry (
+                     paget_geometry::blue_entry_to_scr (e)) != e
+              || dufay_geometry::red_scr_to_entry (
+                     dufay_geometry::red_entry_to_scr (e)) != e)
+            {
+              fprintf (stderr,
+                       "Screen sample entry/screen mapping is not reversible at %i,%i\n",
+                       x, y);
+              return false;
+            }
+        }
+
+    /* Dufay red is sampled at half-screen-cell horizontal spacing: a physical
+       radius-one square therefore contains five by three red samples.  Paget
+       blue has half-cell spacing on both axes and therefore contains 5x5.  */
+    auto count_square = [] (auto entry_to_scr, int rx, int ry)
+    {
+      int count = 0;
+      point_t center = entry_to_scr (int_point_t{ 0, 0 });
+      for (int y = -ry; y <= ry; y++)
+        for (int x = -rx; x <= rx; x++)
+          {
+            point_t p = entry_to_scr (int_point_t{ x, y });
+            if (my_fabs (p.x - center.x) <= 1.000000001
+                && my_fabs (p.y - center.y) <= 1.000000001)
+              count++;
+          }
+      return count;
+    };
+    if (count_square (dufay_geometry::red_entry_to_scr, 6, 4) != 15
+        || count_square (paget_geometry::blue_entry_to_scr, 6, 6) != 25)
+      {
+        fprintf (stderr, "Screen-coordinate denoise neighbourhood has wrong density\n");
+        return false;
+      }
+
+    /* The same packed Paget red array offset points in opposite horizontal
+       directions on alternating phases.  This is why NLM must map physical
+       patch displacements rather than simply reuse raw array offsets.  */
+    point_t p00 = paget_geometry::red_entry_to_scr ({ 0, 0 });
+    point_t p01 = paget_geometry::red_entry_to_scr ({ 0, 1 });
+    point_t p02 = paget_geometry::red_entry_to_scr ({ 0, 2 });
+    point_t d0 = p01 - p00;
+    point_t d1 = p02 - p01;
+    if (!d0.almost_eq ({ 0.5, 0.5 }, 1e-12)
+        || !d1.almost_eq ({ -0.5, 0.5 }, 1e-12))
+      {
+        fprintf (stderr, "Paget packed-row physical phase is wrong\n");
+        return false;
+      }
+
+    /* On a unit rectangular sample lattice the geometry-aware reference
+       implementation must reproduce the historical reference NLM and
+       bilateral filters.  */
+    auto identity_to_scr = [] (int_point_t e) -> point_t
+      { return { (coord_t)e.x, (coord_t)e.y }; };
+    auto identity_to_entry = [] (point_t p) -> int_point_t
+      { return { nearest_int (p.x), nearest_int (p.y) }; };
+    for (denoise_parameters::denoise_mode mode :
+         { denoise_parameters::bilateral, denoise_parameters::nl_means })
+      {
+        std::vector<float> ordinary (width * height), screen_ref (width * height);
+        denoise_parameters params;
+        params.mode = mode;
+        params.strength = 0.1f;
+        params.patch_radius = 2;
+        params.search_radius = 3;
+        params.bilateral_sigma_s = 1.5f;
+        params.bilateral_sigma_r = 0.1f;
+        if (!denoise<float> (
+                width, height,
+                [&] (int x, int y) { return noisy[(size_t)y * width + x]; },
+                [&] (int x, int y, float v)
+                { ordinary[(size_t)y * width + x] = v; },
+                params, NULL, false)
+            || !denoise_screen<float> (
+                width, height,
+                [&] (int x, int y) { return noisy[(size_t)y * width + x]; },
+                [&] (int x, int y, float v)
+                { screen_ref[(size_t)y * width + x] = v; },
+                identity_to_scr, identity_to_entry, 1, 1, params, NULL, false))
+          return false;
+        for (size_t i = 0; i < ordinary.size (); i++)
+          if (fabs (ordinary[i] - screen_ref[i]) > 3e-6)
+            {
+              fprintf (stderr,
+                       "Unit-lattice geometry denoiser differs at %zu: %.9g vs %.9g\n",
+                       i, ordinary[i], screen_ref[i]);
+              return false;
+            }
+      }
+
+    /* Geometry NL_FAST intentionally falls back to the reference path until
+       a valid acceleration exists for packed/skewed lattices.  */
+    std::vector<float> ref (width * height), fast (width * height);
+    denoise_parameters params;
+    params.strength = 0.1f;
+    params.patch_radius = 2;
+    params.search_radius = 3;
+    params.mode = denoise_parameters::nl_means;
+    if (!denoise_screen<float> (
+            width, height,
+            [&] (int x, int y) { return noisy[(size_t)y * width + x]; },
+            [&] (int x, int y, float v) { ref[(size_t)y * width + x] = v; },
+            paget_geometry::red_entry_to_scr,
+            [] (point_t p) { return paget_geometry::red_scr_to_entry (p); },
+            1, 2, params, NULL, false))
+      return false;
+    params.mode = denoise_parameters::nl_fast;
+    if (!denoise_screen<float> (
+            width, height,
+            [&] (int x, int y) { return noisy[(size_t)y * width + x]; },
+            [&] (int x, int y, float v) { fast[(size_t)y * width + x] = v; },
+            paget_geometry::red_entry_to_scr,
+            [] (point_t p) { return paget_geometry::red_scr_to_entry (p); },
+            1, 2, params, NULL, false))
+      return false;
+    for (size_t i = 0; i < ref.size (); i++)
+      if (ref[i] != fast[i])
+        {
+          fprintf (stderr, "Geometry NL_FAST did not use reference semantics\n");
+          return false;
+        }
+  }
+
   /* analyze_base must actually pass retained collection support to the
      pre-demosaic denoiser.  This synthetic analyzer represents a sub-pixel
      central red patch surrounded by reliable samples.  */

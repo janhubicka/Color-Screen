@@ -1042,14 +1042,16 @@ analyze_base::denoise_red (const denoise_parameters &params, progress_info *prog
   int w = m_area.width << m_rwscl;
   int h = m_area.height << m_rhscl;
   if (m_red_support)
-    return colorscreen::denoise_with_support<luminosity_t> (
+    return colorscreen::denoise_screen_with_support<luminosity_t> (
         w, h, [&] (int x, int y) { return m_red[y * w + x]; },
         [&] (int x, int y) { return m_red_support[y * w + x]; },
         [&] (int x, int y, luminosity_t val) { m_red[y * w + x] = val; },
+        m_red_entry_to_scr, m_red_scr_to_entry, 1 << m_rwscl, 1 << m_rhscl,
         params, progress);
-  return colorscreen::denoise<luminosity_t> (w, h,
-      [&] (int x, int y) { return m_red[y * w + x]; },
+  return colorscreen::denoise_screen<luminosity_t> (
+      w, h, [&] (int x, int y) { return m_red[y * w + x]; },
       [&] (int x, int y, luminosity_t val) { m_red[y * w + x] = val; },
+      m_red_entry_to_scr, m_red_scr_to_entry, 1 << m_rwscl, 1 << m_rhscl,
       params, progress);
 }
 
@@ -1061,14 +1063,16 @@ analyze_base::denoise_green (const denoise_parameters &params, progress_info *pr
   int w = m_area.width << m_gwscl;
   int h = m_area.height << m_ghscl;
   if (m_green_support)
-    return colorscreen::denoise_with_support<luminosity_t> (
+    return colorscreen::denoise_screen_with_support<luminosity_t> (
         w, h, [&] (int x, int y) { return m_green[y * w + x]; },
         [&] (int x, int y) { return m_green_support[y * w + x]; },
         [&] (int x, int y, luminosity_t val) { m_green[y * w + x] = val; },
+        m_green_entry_to_scr, m_green_scr_to_entry, 1 << m_gwscl, 1 << m_ghscl,
         params, progress);
-  return colorscreen::denoise<luminosity_t> (w, h,
-      [&] (int x, int y) { return m_green[y * w + x]; },
+  return colorscreen::denoise_screen<luminosity_t> (
+      w, h, [&] (int x, int y) { return m_green[y * w + x]; },
       [&] (int x, int y, luminosity_t val) { m_green[y * w + x] = val; },
+      m_green_entry_to_scr, m_green_scr_to_entry, 1 << m_gwscl, 1 << m_ghscl,
       params, progress);
 }
 
@@ -1080,14 +1084,16 @@ analyze_base::denoise_blue (const denoise_parameters &params, progress_info *pro
   int w = m_area.width << m_bwscl;
   int h = m_area.height << m_bhscl;
   if (m_blue_support)
-    return colorscreen::denoise_with_support<luminosity_t> (
+    return colorscreen::denoise_screen_with_support<luminosity_t> (
         w, h, [&] (int x, int y) { return m_blue[y * w + x]; },
         [&] (int x, int y) { return m_blue_support[y * w + x]; },
         [&] (int x, int y, luminosity_t val) { m_blue[y * w + x] = val; },
+        m_blue_entry_to_scr, m_blue_scr_to_entry, 1 << m_bwscl, 1 << m_bhscl,
         params, progress);
-  return colorscreen::denoise<luminosity_t> (w, h,
-      [&] (int x, int y) { return m_blue[y * w + x]; },
+  return colorscreen::denoise_screen<luminosity_t> (
+      w, h, [&] (int x, int y) { return m_blue[y * w + x]; },
       [&] (int x, int y, luminosity_t val) { m_blue[y * w + x] = val; },
+      m_blue_entry_to_scr, m_blue_scr_to_entry, 1 << m_bwscl, 1 << m_bhscl,
       params, progress);
 }
 
@@ -1098,16 +1104,26 @@ analyze_base::denoise_rgb_red (const denoise_parameters &params, progress_info *
     return true;
   int w = m_area.width << m_rwscl;
   int h = m_area.height << m_rhscl;
-  if (m_red_support)
-    return colorscreen::denoise_rgb_with_support<float> (
-        w, h, [&] (int x, int y) { return m_rgb_red[y * w + x]; },
-        [&] (int x, int y) { return m_red_support[y * w + x]; },
-        [&] (int x, int y, rgbdata val) { m_rgb_red[y * w + x] = val; },
-        params, progress);
-  return colorscreen::denoise_rgb<float> (w, h,
-      [&] (int x, int y) { return m_rgb_red[y * w + x]; },
-      [&] (int x, int y, rgbdata val) { m_rgb_red[y * w + x] = val; },
-      params, progress);
+  for (int c = 0; c < 3; c++)
+    {
+      bool ok;
+      if (m_red_support)
+        ok = colorscreen::denoise_screen_with_support<float> (
+            w, h, [&] (int x, int y) { return m_rgb_red[y * w + x][c]; },
+            [&] (int x, int y) { return m_red_support[y * w + x]; },
+            [&] (int x, int y, float val) { m_rgb_red[y * w + x][c] = val; },
+            m_red_entry_to_scr, m_red_scr_to_entry, 1 << m_rwscl, 1 << m_rhscl,
+            params, progress);
+      else
+        ok = colorscreen::denoise_screen<float> (
+            w, h, [&] (int x, int y) { return m_rgb_red[y * w + x][c]; },
+            [&] (int x, int y, float val) { m_rgb_red[y * w + x][c] = val; },
+            m_red_entry_to_scr, m_red_scr_to_entry, 1 << m_rwscl, 1 << m_rhscl,
+            params, progress);
+      if (!ok)
+        return false;
+    }
+  return true;
 }
 
 bool
@@ -1117,16 +1133,26 @@ analyze_base::denoise_rgb_green (const denoise_parameters &params, progress_info
     return true;
   int w = m_area.width << m_gwscl;
   int h = m_area.height << m_ghscl;
-  if (m_green_support)
-    return colorscreen::denoise_rgb_with_support<float> (
-        w, h, [&] (int x, int y) { return m_rgb_green[y * w + x]; },
-        [&] (int x, int y) { return m_green_support[y * w + x]; },
-        [&] (int x, int y, rgbdata val) { m_rgb_green[y * w + x] = val; },
-        params, progress);
-  return colorscreen::denoise_rgb<float> (w, h,
-      [&] (int x, int y) { return m_rgb_green[y * w + x]; },
-      [&] (int x, int y, rgbdata val) { m_rgb_green[y * w + x] = val; },
-      params, progress);
+  for (int c = 0; c < 3; c++)
+    {
+      bool ok;
+      if (m_green_support)
+        ok = colorscreen::denoise_screen_with_support<float> (
+            w, h, [&] (int x, int y) { return m_rgb_green[y * w + x][c]; },
+            [&] (int x, int y) { return m_green_support[y * w + x]; },
+            [&] (int x, int y, float val) { m_rgb_green[y * w + x][c] = val; },
+            m_green_entry_to_scr, m_green_scr_to_entry, 1 << m_gwscl, 1 << m_ghscl,
+            params, progress);
+      else
+        ok = colorscreen::denoise_screen<float> (
+            w, h, [&] (int x, int y) { return m_rgb_green[y * w + x][c]; },
+            [&] (int x, int y, float val) { m_rgb_green[y * w + x][c] = val; },
+            m_green_entry_to_scr, m_green_scr_to_entry, 1 << m_gwscl, 1 << m_ghscl,
+            params, progress);
+      if (!ok)
+        return false;
+    }
+  return true;
 }
 
 bool
@@ -1136,16 +1162,26 @@ analyze_base::denoise_rgb_blue (const denoise_parameters &params, progress_info 
     return true;
   int w = m_area.width << m_bwscl;
   int h = m_area.height << m_bhscl;
-  if (m_blue_support)
-    return colorscreen::denoise_rgb_with_support<float> (
-        w, h, [&] (int x, int y) { return m_rgb_blue[y * w + x]; },
-        [&] (int x, int y) { return m_blue_support[y * w + x]; },
-        [&] (int x, int y, rgbdata val) { m_rgb_blue[y * w + x] = val; },
-        params, progress);
-  return colorscreen::denoise_rgb<float> (w, h,
-      [&] (int x, int y) { return m_rgb_blue[y * w + x]; },
-      [&] (int x, int y, rgbdata val) { m_rgb_blue[y * w + x] = val; },
-      params, progress);
+  for (int c = 0; c < 3; c++)
+    {
+      bool ok;
+      if (m_blue_support)
+        ok = colorscreen::denoise_screen_with_support<float> (
+            w, h, [&] (int x, int y) { return m_rgb_blue[y * w + x][c]; },
+            [&] (int x, int y) { return m_blue_support[y * w + x]; },
+            [&] (int x, int y, float val) { m_rgb_blue[y * w + x][c] = val; },
+            m_blue_entry_to_scr, m_blue_scr_to_entry, 1 << m_bwscl, 1 << m_bhscl,
+            params, progress);
+      else
+        ok = colorscreen::denoise_screen<float> (
+            w, h, [&] (int x, int y) { return m_rgb_blue[y * w + x][c]; },
+            [&] (int x, int y, float val) { m_rgb_blue[y * w + x][c] = val; },
+            m_blue_entry_to_scr, m_blue_scr_to_entry, 1 << m_bwscl, 1 << m_bhscl,
+            params, progress);
+      if (!ok)
+        return false;
+    }
+  return true;
 }
 
 luminosity_t

@@ -297,10 +297,25 @@ protected:
   /* Minimum size for OpenMP parallelization.  */
   static constexpr size_t openmp_min_size = 128 * 1024;
 
-  /* Initialize analyzer with scales.
-     RWSCL, RHSCL, GWSCL, GHSCL, BWSCL, BHSCL are the scales for the channels.  */
-  analyze_base (int rwscl, int rhscl, int gwscl, int ghscl, int bwscl, int bhscl)
-  : m_rwscl (rwscl), m_rhscl (rhscl), m_gwscl (gwscl), m_ghscl (ghscl), m_bwscl (bwscl), m_bhscl (bhscl)
+  using entry_to_scr_fn = point_t (*) (int_point_t);
+  using scr_to_entry_fn = int_point_t (*) (point_t);
+
+  /* Initialize analyzer with channel-array scales and the geometry mappings
+     used to express collected samples in common screen coordinates.  */
+  analyze_base (int rwscl, int rhscl, int gwscl, int ghscl, int bwscl, int bhscl,
+                entry_to_scr_fn red_entry_to_scr,
+                scr_to_entry_fn red_scr_to_entry,
+                entry_to_scr_fn green_entry_to_scr,
+                scr_to_entry_fn green_scr_to_entry,
+                entry_to_scr_fn blue_entry_to_scr,
+                scr_to_entry_fn blue_scr_to_entry)
+  : m_rwscl (rwscl), m_rhscl (rhscl), m_gwscl (gwscl), m_ghscl (ghscl),
+    m_bwscl (bwscl), m_bhscl (bhscl),
+    m_red_entry_to_scr (red_entry_to_scr), m_red_scr_to_entry (red_scr_to_entry),
+    m_green_entry_to_scr (green_entry_to_scr),
+    m_green_scr_to_entry (green_scr_to_entry),
+    m_blue_entry_to_scr (blue_entry_to_scr),
+    m_blue_scr_to_entry (blue_scr_to_entry)
   {
   }
 
@@ -313,6 +328,12 @@ protected:
   int m_ghscl = 0;
   int m_bwscl = 0;
   int m_bhscl = 0;
+  entry_to_scr_fn m_red_entry_to_scr = nullptr;
+  scr_to_entry_fn m_red_scr_to_entry = nullptr;
+  entry_to_scr_fn m_green_entry_to_scr = nullptr;
+  scr_to_entry_fn m_green_scr_to_entry = nullptr;
+  entry_to_scr_fn m_blue_entry_to_scr = nullptr;
+  scr_to_entry_fn m_blue_scr_to_entry = nullptr;
   int_image_area m_area;
   std::unique_ptr<luminosity_t[]> m_red, m_green, m_blue;
   std::unique_ptr<rgbdata[]> m_rgb_red, m_rgb_green, m_rgb_blue;
@@ -335,7 +356,14 @@ class analyze_base_worker : public analyze_base
 public:
   /* Constructor.  */
   analyze_base_worker (int rwscl, int rhscl, int gwscl, int ghscl, int bwscl, int bhscl)
-  : analyze_base (rwscl, rhscl, gwscl, ghscl, bwscl, bhscl)
+  : analyze_base (
+      rwscl, rhscl, gwscl, ghscl, bwscl, bhscl,
+      [] (int_point_t e) { return GEOMETRY::red_entry_to_scr (e); },
+      [] (point_t p) { return GEOMETRY::red_scr_to_entry (p); },
+      [] (int_point_t e) { return GEOMETRY::green_entry_to_scr (e); },
+      [] (point_t p) { return GEOMETRY::green_scr_to_entry (p); },
+      [] (int_point_t e) { return GEOMETRY::blue_entry_to_scr (e); },
+      [] (point_t p) { return GEOMETRY::blue_scr_to_entry (p); })
   {
   }
 
