@@ -2,7 +2,8 @@
 
 This register tracks the screen-patch denoising review.  "Resolved" means the
 implementation and a regression are present in the current review branch;
-"open" items are intentionally deferred rather than silently approximated.
+"Partial" means a correctness-preserving implementation slice is present but
+the remaining calibration/evaluation work is still intentionally open.
 
 | ID | Status | Priority | Issue |
 |---|---|---|---|
@@ -15,10 +16,10 @@ implementation and a regression are present in the current review branch;
 | DN-007 | Resolved | Medium | Invalid/non-finite denoise parameters could reach tile-size/index calculations. |
 | DN-008 | Resolved | Low | `nl_fast` allocated large weight/output vectors for every tile.  Reuse per-thread scratch buffers. |
 | DN-009 | Resolved | Low | Analysis cache keys considered inactive denoise fields and caused needless invalidation. |
-| DN-010 | Open | High | Spatial radii are measured in channel-array indices rather than common screen coordinates; Dufay/Paget channels therefore use physically different neighbourhoods. |
-| DN-011 | Open | High | `precise_rgb` denoises R/G/B components independently.  Use one vector/guide-derived neighbour weight for all components. |
+| DN-010 | Resolved | High | Pre-demosaic spatial neighbourhoods are measured in common physical screen coordinates using the existing per-channel geometry mappings.  Paget packed phases and reflected negative coordinates are regression-tested; geometry-aware `nl_fast` deliberately uses the exact reference path. |
+| DN-011 | Resolved | High | `precise_rgb` pre-demosaic filtering uses one scanner-RGB vector similarity weight for all three components, retaining common screen geometry and collection support.  Chromaticity preservation and fast/reference semantics are regression-tested. |
 | DN-012 | Resolved | High | Preserve analyzer collection support through `analyze_base` and use it in pre-demosaic bilateral/NLM similarity and candidate weighting.  Unit support reproduces historical filtering; weak/sub-pixel samples have proportionally less authority. |
-| DN-013 | Open | High | NLM strength has no calibrated noise model and patch distance does not account for expected noise variance or signal dependence. |
+| DN-013 | Partial | High | NLM patch distance now has an optional signal-dependent variance normalization `variance = floor + slope * signal`; a zero floor preserves historical output exactly.  Scalar, geometry-aware, precise-RGB and post-demosaic fast/reference paths, persistence, and equality semantics are covered.  Automatic estimation/calibration of the coefficients from real scans remains open. |
 | DN-014 | Open | High | Design and evaluate a guided screen-lattice NLM, preferably IR-guided for registered RGB+IR scans. |
 | DN-015 | Resolved | Medium | Split reconstruction-domain denoising into independent `screen_denoise` (before demosaicing) and `demosaiced_denoise` (after materialized Paget/Dufay demosaicing) parameters and GUI sections, with complete project-file persistence. |
 | DN-021 | Resolved | High | Post-demosaic bilateral/NLM uses a common RGB-vector distance and applies one neighbour weight to all channels; reference and fast vector NLM are regression-tested. |
@@ -30,11 +31,15 @@ implementation and a regression are present in the current review branch;
 
 ## Recommended next implementation order
 
-1. Run native Qt plus sanitizer builds for the split-stage implementation.
-2. Introduce geometry-aware screen-coordinate neighbourhoods for the
-   pre-demosaic sample lattices.
-3. Extend common-weight RGB/vector similarity to precise-RGB screen samples.
-4. Add IR-guided similarity for registered RGB+IR scans and compare it with
-   the RGB guide.
-5. Calibrate strength from an explicit noise/variance estimate.
-6. Only after quality is established, optimize the geometry-aware implementation.
+1. Estimate the DN-013 variance floor/slope from homogeneous regions in the
+   real Paget and Dufay regression scans and check whether one normalized
+   strength has comparable meaning across both processes.
+2. If substantial signal dependence remains after the simple variance model,
+   evaluate linear intensity against density/log or a variance-stabilized
+   domain (DN-017).
+3. Add IR-guided similarity for registered RGB+IR scans and compare it with
+   the calibrated RGB guide (DN-014).
+4. Grow the quality corpus with stable real-scan crops and quantitative
+   texture/edge/chromaticity/confidence checks (DN-016).
+5. Only after quality is established, optimize the geometry-aware
+   implementation (DN-018/DN-019).

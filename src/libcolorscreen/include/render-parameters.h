@@ -234,13 +234,36 @@ struct denoise_parameters
   /* Denoising mode.  */
   enum denoise_mode mode = none;
 
-  /* RMS patch-distance scale (h) for NL-means.  */
+  /* RMS patch-distance scale (h) for NL-means.  Without a noise model this
+     is in sample-value units.  With noise normalization enabled it is
+     dimensionless.  */
   luminosity_t strength = 0.1;
 
-  /* Patch radius for NL-means, in input sample-array coordinates.  */
+  /* Optional signal-dependent variance model used to normalize NL-means
+     patch differences:
+
+       variance(value) = noise_variance_floor + noise_variance_slope * value.
+
+     The model is enabled when NOISE_VARIANCE_FLOOR is positive.  A zero
+     floor preserves the historical unnormalized patch metric exactly and
+     makes NOISE_VARIANCE_SLOPE inactive.  Values are variances, not sigmas.  */
+  luminosity_t noise_variance_floor = 0;
+  luminosity_t noise_variance_slope = 0;
+
+  /* Return true when the optional NL-means variance model is active.
+     get_mode() validates the active coefficients before filtering.  */
+  pure_attr bool noise_model_p () const
+  {
+    return noise_variance_floor > 0;
+  }
+
+  /* Patch radius for NL-means.  Pre-demosaic screen filtering measures this
+     in common screen coordinates; ordinary image filtering uses input sample
+     coordinates.  */
   int patch_radius = 1;
 
-  /* Search radius for NL-means, in input sample-array coordinates.  */
+  /* Search radius for NL-means, with the same coordinate convention as
+     PATCH_RADIUS.  */
   int search_radius = 6;
 
   /* Bilateral filter spatial sigma.  */
@@ -267,7 +290,14 @@ struct denoise_parameters
     if ((mode != nl_means && mode != nl_fast) || !my_isfinite (strength)
         || strength <= 0 || patch_radius < 0 || search_radius < 1
         || (int64_t)patch_radius + search_radius
-               > std::numeric_limits<int>::max () / 4)
+               > std::numeric_limits<int>::max () / 4
+        || !my_isfinite (noise_variance_floor)
+        || noise_variance_floor < 0)
+      return none;
+    /* SLOPE is inactive when the floor is zero, just like the bilateral
+       parameters are inactive in NL-means mode.  */
+    if (noise_model_p ()
+        && (!my_isfinite (noise_variance_slope) || noise_variance_slope < 0))
       return none;
     return mode;
   };
@@ -287,9 +317,12 @@ struct denoise_parameters
     if (mode == bilateral)
       return bilateral_sigma_s == o.bilateral_sigma_s
 	     && bilateral_sigma_r == o.bilateral_sigma_r;
-    return strength == o.strength
-	   && patch_radius == o.patch_radius
-	   && search_radius == o.search_radius;
+    if (strength != o.strength || patch_radius != o.patch_radius
+        || search_radius != o.search_radius
+        || noise_variance_floor != o.noise_variance_floor)
+      return false;
+    return !noise_model_p ()
+           || noise_variance_slope == o.noise_variance_slope;
   }
 
   /* Exact structural comparison.  Return true only if every stored denoising
@@ -299,6 +332,8 @@ struct denoise_parameters
   {
     return mode == o.mode
 	   && strength == o.strength
+           && noise_variance_floor == o.noise_variance_floor
+           && noise_variance_slope == o.noise_variance_slope
 	   && patch_radius == o.patch_radius
 	   && search_radius == o.search_radius
 	   && bilateral_sigma_s == o.bilateral_sigma_s
