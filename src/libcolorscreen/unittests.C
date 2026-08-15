@@ -5559,6 +5559,43 @@ test_denoise ()
       }
   }
 
+  /* NL-means noise normalization is opt-in.  With a zero variance floor the
+     historical raw squared-distance metric must be exact.  Once enabled, the
+     same absolute difference is less surprising at higher signal when the
+     variance slope predicts more noise there.  */
+  {
+    denoise_parameters params;
+    params.mode = denoise_parameters::nl_means;
+    params.strength = 1.0f;
+    const float raw = (0.2f - 0.1f) * (0.2f - 0.1f);
+    params.noise_variance_floor = 0;
+    params.noise_variance_slope = 0.1f; /* Inactive without a floor.  */
+    if (denoise_nl_square_distance (0.1f, 0.2f, params) != raw)
+      {
+        fprintf (stderr, "Inactive noise model changed NL-means distance\n");
+        return false;
+      }
+
+    params.noise_variance_floor = 0.01f;
+    const float low = denoise_nl_square_distance (0.1f, 0.2f, params);
+    const float high = denoise_nl_square_distance (0.7f, 0.8f, params);
+    if (fabsf (low - raw / 0.05f) > 2e-6f
+        || fabsf (high - raw / 0.17f) > 2e-6f || !(high < low))
+      {
+        fprintf (stderr,
+                 "Signal-dependent noise normalization is wrong: low %g high %g\n",
+                 low, high);
+        return false;
+      }
+
+    params.noise_variance_floor = -0.01f;
+    if (params.get_mode () != denoise_parameters::none)
+      {
+        fprintf (stderr, "Negative noise variance floor was accepted\n");
+        return false;
+      }
+  }
+
   /* A bilateral filter needs a border matching its spatial kernel, not the
      unrelated NL-means patch and search radii.  Sigma 2 has support radius 6
      with the three-sigma truncation used by process_bilateral().  */
@@ -5644,6 +5681,40 @@ test_denoise ()
         {
           fprintf (stderr,
                    "Fast/reference NL-means differ at %zu: %.9g versus %.9g\n",
+                   i, fast[i], reference[i]);
+          return false;
+        }
+  }
+
+  /* Integral-image and reference NL-means must also agree when patch
+     differences are normalized by the optional signal-dependent variance
+     model.  */
+  {
+    std::vector<float> reference (width * height), fast (width * height);
+    denoise_parameters params;
+    params.strength = 0.9f;
+    params.patch_radius = 2;
+    params.search_radius = 3;
+    params.noise_variance_floor = 0.0004f;
+    params.noise_variance_slope = 0.0015f;
+    params.mode = denoise_parameters::nl_means;
+    if (!denoise<float> (
+            width, height, [&] (int x, int y) { return noisy[y * width + x]; },
+            [&] (int x, int y, float val) { reference[y * width + x] = val; },
+            params, NULL, false))
+      return false;
+    params.mode = denoise_parameters::nl_fast;
+    if (!denoise<float> (
+            width, height, [&] (int x, int y) { return noisy[y * width + x]; },
+            [&] (int x, int y, float val) { fast[y * width + x] = val; },
+            params, NULL, false))
+      return false;
+    for (size_t i = 0; i < fast.size (); i++)
+      if (fabs (fast[i] - reference[i]) > 3e-6)
+        {
+          fprintf (stderr,
+                   "Noise-normalized fast/reference NL-means differ at %zu: "
+                   "%.9g versus %.9g\n",
                    i, fast[i], reference[i]);
           return false;
         }
@@ -5870,9 +5941,11 @@ test_denoise ()
        a valid acceleration exists for packed/skewed lattices.  */
     std::vector<float> ref (width * height), fast (width * height);
     denoise_parameters params;
-    params.strength = 0.1f;
+    params.strength = 0.9f;
     params.patch_radius = 2;
     params.search_radius = 3;
+    params.noise_variance_floor = 0.0004f;
+    params.noise_variance_slope = 0.0015f;
     params.mode = denoise_parameters::nl_means;
     if (!denoise_screen<float> (
             width, height,
@@ -5956,9 +6029,11 @@ test_denoise ()
     /* Geometry NL_FAST has the same exact reference semantics as NL_MEANS.  */
     denoise_parameters params;
     params.mode = denoise_parameters::nl_means;
-    params.strength = 0.035f;
+    params.strength = 0.9f;
     params.patch_radius = 1;
     params.search_radius = 2;
+    params.noise_variance_floor = 0.0005f;
+    params.noise_variance_slope = 0.001f;
     if (!denoise_screen_rgb_with_support (
             vw, vh, [&] (int x, int y) { return input[(size_t)y * vw + x]; },
             [&] (int x, int y) { return support[(size_t)y * vw + x]; },
@@ -6201,6 +6276,32 @@ test_denoise ()
                      (double)slow[i][c], (double)fast[i][c]);
             return false;
           }
+
+    params.noise_variance_floor = 0.0004f;
+    params.noise_variance_slope = 0.0015f;
+    params.strength = 0.9f;
+    params.mode = denoise_parameters::nl_means;
+    if (!denoise_rgb_vector (
+            w, h, [&] (int x, int y) { return in[(size_t)y * w + x]; },
+            [&] (int x, int y, rgbdata c) { slow[(size_t)y * w + x] = c; },
+            params, NULL, false))
+      return false;
+    params.mode = denoise_parameters::nl_fast;
+    if (!denoise_rgb_vector (
+            w, h, [&] (int x, int y) { return in[(size_t)y * w + x]; },
+            [&] (int x, int y, rgbdata c) { fast[(size_t)y * w + x] = c; },
+            params, NULL, false))
+      return false;
+    for (size_t i = 0; i < slow.size (); i++)
+      for (int c = 0; c < 3; c++)
+        if (fabs (slow[i][c] - fast[i][c]) > 4e-5)
+          {
+            fprintf (stderr,
+                     "Noise-normalized vector NLM implementations disagree: "
+                     "%g vs %g\n",
+                     (double)slow[i][c], (double)fast[i][c]);
+            return false;
+          }
   }
 
   /* Both denoising stages are part of the rendering state and must survive a
@@ -6210,12 +6311,16 @@ test_denoise ()
     render_parameters saved, loaded;
     saved.screen_denoise.mode = denoise_parameters::nl_fast;
     saved.screen_denoise.strength = 0.073f;
+    saved.screen_denoise.noise_variance_floor = 0.00031f;
+    saved.screen_denoise.noise_variance_slope = 0.0017f;
     saved.screen_denoise.patch_radius = 3;
     saved.screen_denoise.search_radius = 9;
     saved.screen_denoise.bilateral_sigma_s = 1.75f;
     saved.screen_denoise.bilateral_sigma_r = 0.034f;
     saved.demosaiced_denoise.mode = denoise_parameters::bilateral;
     saved.demosaiced_denoise.strength = 0.231f;
+    saved.demosaiced_denoise.noise_variance_floor = 0.00052f;
+    saved.demosaiced_denoise.noise_variance_slope = 0.0021f;
     saved.demosaiced_denoise.patch_radius = 4;
     saved.demosaiced_denoise.search_radius = 11;
     saved.demosaiced_denoise.bilateral_sigma_s = 2.25f;
@@ -6268,6 +6373,26 @@ test_denoise ()
                  "Render structural comparison used denoise cache equivalence\n");
         return false;
       }
+    b = a;
+    a.screen_denoise.mode = denoise_parameters::nl_means;
+    b = a;
+    b.screen_denoise.noise_variance_slope = 0.01f;
+    if (!(a.screen_denoise == b.screen_denoise))
+      {
+        fprintf (stderr,
+                 "Inactive noise-variance slope invalidates cache equivalence\n");
+        return false;
+      }
+    a.screen_denoise.noise_variance_floor = 0.001f;
+    b = a;
+    b.screen_denoise.noise_variance_slope = 0.01f;
+    if (a.screen_denoise == b.screen_denoise)
+      {
+        fprintf (stderr,
+                 "Active noise-variance slope ignored by cache equivalence\n");
+        return false;
+      }
+
     b = a;
     b.demosaiced_denoise.bilateral_sigma_r
         = a.demosaiced_denoise.bilateral_sigma_r + 0.01f;

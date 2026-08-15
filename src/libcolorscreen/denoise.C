@@ -164,10 +164,10 @@ process_bilateral (int tile_size, int border, int basic_size, const T *in, T *ou
 template <bool USE_SUPPORT, typename T>
 static void
 process_nl_fast (int tile_size, int border, int basic_size, const T *in, T *out,
-                 int patch_r, int search_r, T strength, T *integral, T *diff,
-                 T *total_weight, const T *support)
+                 int patch_r, int search_r, const denoise_parameters &params,
+                 T *integral, T *diff, T *total_weight, const T *support)
 {
-  const T strength_sq = strength * strength;
+  const T strength_sq = (T)params.strength * (T)params.strength;
   const T inv_strength_sq = (strength_sq > (T)0) ? (T)1.0 / strength_sq : (T)0.0;
   const int size = tile_size;
   const int patch_diam = 2 * patch_r + 1;
@@ -198,10 +198,9 @@ process_nl_fast (int tile_size, int border, int basic_size, const T *in, T *out,
             {
               int idx1 = y * size + x;
               int idx2 = (y + sy) * size + (x + sx);
-              T d = in[idx1] - in[idx2];
               diff[idx1]
-                  = d * d * sample_pair_reliability<USE_SUPPORT> (
-                                support, idx1, idx2);
+                  = denoise_nl_square_distance (in[idx1], in[idx2], params)
+                    * sample_pair_reliability<USE_SUPPORT> (support, idx1, idx2);
             }
 
         /* Calculate integral image of squared differences.  */
@@ -280,14 +279,14 @@ denoising<T>::process_tile (int thread_id, progress_info *progress)
       if (m_use_support)
         process_nl_fast<true> (
             m_tile_size, border, basic_size, in, out, m_params.patch_radius,
-            m_params.search_radius, (T)m_params.strength,
-            m_data[thread_id].aux1.data (), m_data[thread_id].aux2.data (),
+            m_params.search_radius, m_params, m_data[thread_id].aux1.data (),
+            m_data[thread_id].aux2.data (),
             m_data[thread_id].aux3.data (), support);
       else
         process_nl_fast<false> (
             m_tile_size, border, basic_size, in, out, m_params.patch_radius,
-            m_params.search_radius, (T)m_params.strength,
-            m_data[thread_id].aux1.data (), m_data[thread_id].aux2.data (),
+            m_params.search_radius, m_params, m_data[thread_id].aux1.data (),
+            m_data[thread_id].aux2.data (),
             m_data[thread_id].aux3.data (), support);
     }
   else
@@ -327,17 +326,18 @@ denoising<T>::process_tile (int thread_id, progress_info *progress)
                             {
                               T v1 = in[(y + py) * m_tile_size + (x + px)];
                               T v2 = in[(cy + py) * m_tile_size + (cx + px)];
-                              T d = v1 - v2;
+                              T d2 = denoise_nl_square_distance (v1, v2,
+                                                                  m_params);
                               if (m_use_support)
                                 {
                                   int idx1 = (y + py) * m_tile_size + (x + px);
                                   int idx2 = (cy + py) * m_tile_size + (cx + px);
-                                  dist_sq += d * d
+                                  dist_sq += d2
                                              * support_pair_reliability (
                                                  support[idx1], support[idx2]);
                                 }
                               else
-                                dist_sq += d * d;
+                                dist_sq += d2;
                             }
                         }
                       
@@ -501,7 +501,9 @@ rgb_denoising::process_tile (int thread_id, progress_info *progress)
                 {
                   const int idx1 = y * size + x;
                   const int idx2 = (y + sy) * size + x + sx;
-                  diff[idx1] = rgb_mean_square_distance (in[idx1], in[idx2]);
+                  diff[idx1]
+                      = denoise_nl_rgb_square_distance (in[idx1], in[idx2],
+                                                        m_params);
                 }
 
             for (int y = border - patch_r;
@@ -566,9 +568,9 @@ rgb_denoising::process_tile (int thread_id, progress_info *progress)
               luminosity_t dist_sq = 0;
               for (int py = -patch_r; py <= patch_r; py++)
                 for (int px = -patch_r; px <= patch_r; px++)
-                  dist_sq += rgb_mean_square_distance (
+                  dist_sq += denoise_nl_rgb_square_distance (
                       in[(y + py) * size + x + px],
-                      in[(y + sy + py) * size + x + sx + px]);
+                      in[(y + sy + py) * size + x + sx + px], m_params);
               luminosity_t w
                   = std::exp (-dist_sq * inv_patch_size * inv_strength_sq);
               rgbdata candidate = in[(y + sy) * size + x + sx];

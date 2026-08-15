@@ -57,6 +57,47 @@ denoise_reflect_entry (int_point_t p, int width, int height) noexcept
           denoise_reflect_coordinate ((int)p.y, height)};
 }
 
+/* Return the variance predicted for one NL-means sample.  The simple
+   floor-plus-slope model is intentionally optional: a zero variance floor
+   means use the historical raw squared-distance metric.  Negative sample
+   values are clamped to zero only for the signal-dependent variance term.  */
+template <typename T>
+inline T
+denoise_nl_sample_variance (T value, const denoise_parameters &params)
+{
+  T signal = value > (T)0 && my_isfinite (value) ? value : (T)0;
+  return (T)params.noise_variance_floor
+         + (T)params.noise_variance_slope * signal;
+}
+
+/* Squared NL-means difference in either historical sample-value units or,
+   when the variance model is enabled, units of the expected variance of the
+   difference of two independent samples.  */
+template <typename T>
+inline T
+denoise_nl_square_distance (T a, T b, const denoise_parameters &params)
+{
+  T d = a - b;
+  T dist = d * d;
+  if (!params.noise_model_p ())
+    return dist;
+  T variance = denoise_nl_sample_variance (a, params)
+               + denoise_nl_sample_variance (b, params);
+  return variance > (T)0 ? dist / variance : dist;
+}
+
+/* RGB analogue using the mean of three independently normalized channel
+   differences, preserving the existing per-component scale convention.  */
+inline luminosity_t
+denoise_nl_rgb_square_distance (rgbdata a, rgbdata b,
+                                const denoise_parameters &params)
+{
+  return (denoise_nl_square_distance (a.red, b.red, params)
+          + denoise_nl_square_distance (a.green, b.green, params)
+          + denoise_nl_square_distance (a.blue, b.blue, params))
+         / (luminosity_t)3;
+}
+
 template <typename ENTRY_TO_SCR>
 inline bool
 denoise_screen_offset_in_square (int_point_t center, int_point_t sample,
@@ -218,8 +259,9 @@ denoise_screen_impl (int width, int height, GETDATA getdata,
                              array offset.  */
                           int_point_t p2
                               = scr_to_entry (candidate_scr + patch_delta);
-                          DT d = value_at (p1) - value_at (p2);
-                          dist_sq += d * d * pair_reliability (p1, p2);
+                          dist_sq += denoise_nl_square_distance (
+                                         value_at (p1), value_at (p2), params)
+                                     * pair_reliability (p1, p2);
                           patch_size++;
                         }
                     if (!patch_size)
@@ -414,7 +456,8 @@ denoise_screen_rgb_impl (int width, int height, GETDATA getdata,
                             continue;
                           int_point_t p2
                               = scr_to_entry (candidate_scr + patch_delta);
-                          dist_sq += rgb_dist_sq (value_at (p1), value_at (p2))
+                          dist_sq += denoise_nl_rgb_square_distance (
+                                         value_at (p1), value_at (p2), params)
                                      * pair_reliability (p1, p2);
                           patch_size++;
                         }

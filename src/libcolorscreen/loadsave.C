@@ -411,6 +411,12 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
           || fprintf (f, "screen_denoise_strength: %.17g\n",
                       rparam->screen_denoise.strength)
                  < 0
+          || fprintf (f, "screen_denoise_noise_variance_floor: %.17g\n",
+                      rparam->screen_denoise.noise_variance_floor)
+                 < 0
+          || fprintf (f, "screen_denoise_noise_variance_slope: %.17g\n",
+                      rparam->screen_denoise.noise_variance_slope)
+                 < 0
           || fprintf (f, "screen_denoise_patch_radius: %d\n",
                       rparam->screen_denoise.patch_radius)
                  < 0
@@ -430,6 +436,12 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
                  < 0
           || fprintf (f, "demosaiced_denoise_strength: %.17g\n",
                       rparam->demosaiced_denoise.strength)
+                 < 0
+          || fprintf (f, "demosaiced_denoise_noise_variance_floor: %.17g\n",
+                      rparam->demosaiced_denoise.noise_variance_floor)
+                 < 0
+          || fprintf (f, "demosaiced_denoise_noise_variance_slope: %.17g\n",
+                      rparam->demosaiced_denoise.noise_variance_slope)
                  < 0
           || fprintf (f, "demosaiced_denoise_patch_radius: %d\n",
                       rparam->demosaiced_denoise.patch_radius)
@@ -1685,6 +1697,24 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
               return false;
             }
         }
+      else if (!strcmp (buf, "screen_denoise_noise_variance_floor"))
+        {
+          if (!read_luminosity (
+                  f, rparam_check (screen_denoise.noise_variance_floor)))
+            {
+              *error = "error parsing screen_denoise_noise_variance_floor";
+              return false;
+            }
+        }
+      else if (!strcmp (buf, "screen_denoise_noise_variance_slope"))
+        {
+          if (!read_luminosity (
+                  f, rparam_check (screen_denoise.noise_variance_slope)))
+            {
+              *error = "error parsing screen_denoise_noise_variance_slope";
+              return false;
+            }
+        }
       else if (!strcmp (buf, "screen_denoise_patch_radius"))
         {
           if (!read_int (f, rparam_check (screen_denoise.patch_radius)))
@@ -1741,6 +1771,24 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
                   f, rparam_check (demosaiced_denoise.strength)))
             {
               *error = "error parsing demosaiced_denoise_strength";
+              return false;
+            }
+        }
+      else if (!strcmp (buf, "demosaiced_denoise_noise_variance_floor"))
+        {
+          if (!read_luminosity (
+                  f, rparam_check (demosaiced_denoise.noise_variance_floor)))
+            {
+              *error = "error parsing demosaiced_denoise_noise_variance_floor";
+              return false;
+            }
+        }
+      else if (!strcmp (buf, "demosaiced_denoise_noise_variance_slope"))
+        {
+          if (!read_luminosity (
+                  f, rparam_check (demosaiced_denoise.noise_variance_slope)))
+            {
+              *error = "error parsing demosaiced_denoise_noise_variance_slope";
               return false;
             }
         }
