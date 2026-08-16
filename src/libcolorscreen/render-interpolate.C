@@ -696,6 +696,21 @@ render_interpolate::estimate_screen_noise_scale_models (
 }
 
 bool
+render_interpolate::estimate_screen_noise_three_scale_models (
+    denoise_noise_three_scale_estimate *red,
+    denoise_noise_three_scale_estimate *green,
+    denoise_noise_three_scale_estimate *blue) const
+{
+  if (m_paget)
+    return m_paget->estimate_noise_three_scale_models (red, green, blue);
+  if (m_dufay)
+    return m_dufay->estimate_noise_three_scale_models (red, green, blue);
+  if (m_strips)
+    return m_strips->estimate_noise_three_scale_models (red, green, blue);
+  return false;
+}
+
+bool
 render_interpolate::analyze_patches (analyzer analyze, const char *task,
                                      bool screen, int_image_area area,
                                      progress_info *progress)
