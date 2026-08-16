@@ -1,9 +1,11 @@
 #include "MTFChartWidget.h"
 #include "spectrum-to-xyz.h"
 #include "color.h"
+#include <QBrush>
 #include <QFontMetrics>
 #include <QPaintEvent>
 #include <QMouseEvent>
+#include <QLinearGradient>
 #include <QPainter>
 #include <QPainterPath>
 #include <algorithm>
@@ -99,6 +101,32 @@ static QColor wavelengthToRGB(double wavelength) {
       return Qt::white;
       
   return col;
+}
+
+/* Convert the stored one-standard-deviation MTF uncertainty (in percentage
+   points) to a display opacity.  This is deliberately only a visualization:
+   model fitting continues to use the statistical weights in mtf.C.
+
+   The fitter already treats 0.25 percentage points as its absolute uncertainty
+   floor, so measurements at or below that level are fully opaque.  Square-root
+   compression keeps substantially noisier parts of a curve visible while
+   preserving a clear monotonic confidence cue.  Zero means "no estimate" and
+   is handled by the caller as a legacy fully opaque curve.  */
+static int
+measuredMtfAlpha(double uncertainty)
+{
+  constexpr double fullyOpaqueUncertainty = 0.25;
+  constexpr double minimumAlpha = 0.15;
+
+  if (!(uncertainty > 0)
+      || !colorscreen::my_isfinite(uncertainty))
+    return 255;
+
+  const double alpha
+      = std::sqrt(fullyOpaqueUncertainty
+                  / std::max(uncertainty, fullyOpaqueUncertainty));
+  return std::clamp((int)std::lround(alpha * 255.0),
+                    (int)std::lround(minimumAlpha * 255.0), 255);
 }
 
 std::vector<MTFChartWidget::LegendItem> MTFChartWidget::getLegendItems() const {
@@ -388,19 +416,64 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
       drawCurve(*item.data, item.color, item.width,
                 item.dashed ? Qt::DashLine : Qt::SolidLine);
     } else if (item.measurement) {
-        // Measured MTFs
-        painter.setPen(QPen(item.color, 2, Qt::DotLine));
+        // Measured MTFs.  Keep one continuous dotted path and vary only its
+        // alpha along the frequency axis according to stored uncertainty.
         QPainterPath path;
+        bool pathStarted = false;
+        QLinearGradient certaintyGradient(chartRect.left(), 0,
+                                          chartRect.right(), 0);
+        bool hasUncertainty = false;
+        double firstUncertaintyFreq = 2.0;
+        double lastUncertaintyFreq = -1.0;
+        QColor firstUncertaintyColor;
+        QColor lastUncertaintyColor;
+
         for (size_t i = 0; i < item.measurement->size(); ++i) {
             double freq = item.measurement->get_freq(i);
             double value = item.measurement->get_contrast(i) * 0.01;
             if (freq < 0.0 || freq > 1.0) continue;
             int x = chartRect.left() + (int)(freq * chartRect.width());
             int y = mapY(value);
-            if (i == 0)
+            if (!pathStarted) {
                 path.moveTo(x, y);
-            else
+                pathStarted = true;
+            } else {
                 path.lineTo(x, y);
+            }
+
+            const double uncertainty = item.measurement->get_uncertainty(i);
+            if (uncertainty > 0
+                && colorscreen::my_isfinite(uncertainty)) {
+                QColor certaintyColor = item.color;
+                certaintyColor.setAlpha(measuredMtfAlpha(uncertainty));
+                certaintyGradient.setColorAt(freq, certaintyColor);
+                if (freq < firstUncertaintyFreq) {
+                    firstUncertaintyFreq = freq;
+                    firstUncertaintyColor = certaintyColor;
+                }
+                if (freq > lastUncertaintyFreq) {
+                    lastUncertaintyFreq = freq;
+                    lastUncertaintyColor = certaintyColor;
+                }
+                hasUncertainty = true;
+            }
+        }
+
+        if (!pathStarted)
+            continue;
+
+        if (hasUncertainty) {
+            // Extend the nearest known certainty through any leading/trailing
+            // samples without an uncertainty estimate.  Interior gaps are
+            // naturally interpolated by the gradient.
+            certaintyGradient.setColorAt(0.0, firstUncertaintyColor);
+            certaintyGradient.setColorAt(1.0, lastUncertaintyColor);
+            painter.setPen(QPen(QBrush(certaintyGradient), item.width,
+                                Qt::DotLine));
+        } else {
+            // Legacy/project-imported curves have no stored uncertainty and
+            // retain the historical fully opaque appearance.
+            painter.setPen(QPen(item.color, item.width, Qt::DotLine));
         }
         painter.drawPath(path);
     }
