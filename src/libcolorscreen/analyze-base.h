@@ -17,6 +17,8 @@
 
 namespace colorscreen {
 
+struct denoise_noise_estimate;
+
 /* Base class for color screen analysis.
    Analyzes image data to determine properties of the color screen patches.  */
 class analyze_base
@@ -260,6 +262,13 @@ public:
   bool denoise_rgb_red (const denoise_parameters &params, progress_info *progress);
   bool denoise_rgb_green (const denoise_parameters &params, progress_info *progress);
   bool denoise_rgb_blue (const denoise_parameters &params, progress_info *progress);
+
+  /* Estimate signal-dependent noise models of the three collected screen
+     separations without changing any rendering parameters.  In precise-RGB
+     mode the scanner RGB components are pooled within each separation.  */
+  bool estimate_noise_models (denoise_noise_estimate *red,
+                              denoise_noise_estimate *green,
+                              denoise_noise_estimate *blue) const;
 
   /* Return raw collection support for a red/green/blue sample.  The support
      is the accumulated contribution of real scanner pixels used to estimate

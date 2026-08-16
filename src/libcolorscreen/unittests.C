@@ -5596,6 +5596,162 @@ test_denoise ()
       }
   }
 
+  /* Estimate a floor-plus-slope noise model from second differences.  The
+     underlying test image is a linear gradient, so its deterministic signal
+     cancels exactly.  Weak-support outliers must not bias the estimate.  */
+  {
+    const int w = 96, h = 72;
+    const luminosity_t expected_floor = (luminosity_t)0.0004;
+    const luminosity_t expected_slope = (luminosity_t)0.0012;
+    std::vector<luminosity_t> data ((size_t)w * h);
+    std::vector<luminosity_t> support ((size_t)w * h, 1);
+    unsigned int noise_seed = 0x51c0ffeeU;
+    auto gaussian = [&] () -> luminosity_t
+    {
+      luminosity_t u1
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      luminosity_t u2
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      return std::sqrt ((luminosity_t)-2 * std::log (u1))
+             * std::cos ((luminosity_t)6.2831853071795864769 * u2);
+    };
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        {
+          luminosity_t signal = (luminosity_t)0.08
+              + (luminosity_t)0.72 * x / (w - 1)
+              + (luminosity_t)0.04 * y / (h - 1);
+          luminosity_t variance = expected_floor + expected_slope * signal;
+          data[(size_t)y * w + x] = signal + std::sqrt (variance) * gaussian ();
+          if ((x + 17 * y) % 113 == 0)
+            {
+              support[(size_t)y * w + x] = 0;
+              data[(size_t)y * w + x] += 5;
+            }
+        }
+    auto identity_to_scr = [] (int_point_t p) -> point_t
+      { return {(coord_t)p.x, (coord_t)p.y}; };
+    denoise_noise_estimate estimate = estimate_screen_noise_model (
+        w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+        [&] (int x, int y) { return support[(size_t)y * w + x]; },
+        identity_to_scr);
+    if (!estimate.valid_p ()
+        || fabs (estimate.variance_floor - expected_floor) > expected_floor * 0.45
+        || fabs (estimate.variance_slope - expected_slope) > expected_slope * 0.45
+        || estimate.support_threshold < (luminosity_t)0.45
+        || estimate.support_threshold > (luminosity_t)0.55)
+      {
+        fprintf (stderr,
+                 "Noise estimator mismatch: floor %g slope %g support %g "
+                 "observations %zu bins %d error %g\n",
+                 (double)estimate.variance_floor,
+                 (double)estimate.variance_slope,
+                 (double)estimate.support_threshold, estimate.observations,
+                 estimate.bins, (double)estimate.relative_fit_error);
+        return false;
+      }
+  }
+
+  /* Precise-RGB estimation pools the three scanner components but must
+     recover the same shared model used by vector NL-means.  */
+  {
+    const int w = 80, h = 60;
+    const luminosity_t expected_floor = (luminosity_t)0.0003;
+    const luminosity_t expected_slope = (luminosity_t)0.0009;
+    std::vector<rgbdata> data ((size_t)w * h);
+    std::vector<luminosity_t> support ((size_t)w * h, 1);
+    unsigned int noise_seed = 0x2468ace0U;
+    auto gaussian = [&] () -> luminosity_t
+    {
+      luminosity_t u1
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      luminosity_t u2
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      return std::sqrt ((luminosity_t)-2 * std::log (u1))
+             * std::cos ((luminosity_t)6.2831853071795864769 * u2);
+    };
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        {
+          rgbdata signal = {
+            (luminosity_t)0.08 + (luminosity_t)0.65 * x / (w - 1),
+            (luminosity_t)0.15 + (luminosity_t)0.55 * y / (h - 1),
+            (luminosity_t)0.12
+                + (luminosity_t)0.35 * x / (w - 1)
+                + (luminosity_t)0.25 * y / (h - 1)};
+          rgbdata v;
+          for (int k = 0; k < 3; k++)
+            {
+              luminosity_t variance
+                  = expected_floor + expected_slope * signal[k];
+              v[k] = signal[k] + std::sqrt (variance) * gaussian ();
+            }
+          data[(size_t)y * w + x] = v;
+          if ((11 * x + 7 * y) % 149 == 0)
+            {
+              support[(size_t)y * w + x] = 0;
+              data[(size_t)y * w + x] += rgbdata{4, 3, 5};
+            }
+        }
+    denoise_noise_estimate estimate = estimate_screen_rgb_noise_model (
+        w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+        [&] (int x, int y) { return support[(size_t)y * w + x]; },
+        [] (int_point_t p) { return point_t{(coord_t)p.x, (coord_t)p.y}; });
+    if (!estimate.valid_p ()
+        || fabs (estimate.variance_floor - expected_floor) > expected_floor * 0.5
+        || fabs (estimate.variance_slope - expected_slope) > expected_slope * 0.5)
+      {
+        fprintf (stderr,
+                 "RGB noise estimator mismatch: floor %g slope %g obs %zu "
+                 "error %g\n",
+                 (double)estimate.variance_floor,
+                 (double)estimate.variance_slope, estimate.observations,
+                 (double)estimate.relative_fit_error);
+        return false;
+      }
+  }
+
+  /* Packed screen geometries must only use equally spaced physical triples.
+     In particular Paget red rows are horizontally regular but their vertical
+     array columns zig-zag by half a screen coordinate.  */
+  {
+    const int w = 80, h = 64;
+    std::vector<luminosity_t> data ((size_t)w * h), support ((size_t)w * h, 1);
+    unsigned int noise_seed = 0x13572468U;
+    auto gaussian = [&] () -> luminosity_t
+    {
+      luminosity_t u1
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      luminosity_t u2
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      return std::sqrt ((luminosity_t)-2 * std::log (u1))
+             * std::cos ((luminosity_t)6.2831853071795864769 * u2);
+    };
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        {
+          point_t p = paget_geometry::red_entry_to_scr ({x, y});
+          luminosity_t signal = (luminosity_t)0.2
+              + (luminosity_t)0.004 * p.x + (luminosity_t)0.002 * p.y;
+          luminosity_t variance = (luminosity_t)0.0007;
+          data[(size_t)y * w + x] = signal + std::sqrt (variance) * gaussian ();
+        }
+    denoise_noise_estimate estimate = estimate_screen_noise_model (
+        w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+        [&] (int x, int y) { return support[(size_t)y * w + x]; },
+        [] (int_point_t p) { return paget_geometry::red_entry_to_scr (p); });
+    if (!estimate.valid_p ()
+        || fabs (estimate.variance_floor - (luminosity_t)0.0007)
+               > (luminosity_t)0.00035)
+      {
+        fprintf (stderr,
+                 "Paget noise estimator mismatch: floor %g slope %g obs %zu\n",
+                 (double)estimate.variance_floor,
+                 (double)estimate.variance_slope, estimate.observations);
+        return false;
+      }
+  }
+
   /* A bilateral filter needs a border matching its spatial kernel, not the
      unrelated NL-means patch and search radii.  Sigma 2 has support radius 6
      with the three-sigma truncation used by process_bilateral().  */

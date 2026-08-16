@@ -20,6 +20,7 @@ namespace colorscreen
 
 class demosaic_paget;
 class demosaic_dufay;
+struct denoise_noise_estimate;
 typedef std::function <bool (coord_t, coord_t, rgbdata)> analyzer;
 typedef std::function <bool (coord_t, coord_t, rgbdata, rgbdata, rgbdata)> rgb_analyzer;
 
@@ -130,6 +131,12 @@ public:
 
   /* Dump patch density to OUT.  */
   bool dump_patch_density (FILE *out);
+
+  /* Measure noise models of the currently precomputed collected screen
+     separations.  This is read-only and does not change render parameters.  */
+  bool estimate_screen_noise_models (denoise_noise_estimate *red,
+                                     denoise_noise_estimate *green,
+                                     denoise_noise_estimate *blue) const;
 
 private:
   /* Compensate saturation loss at screen coordinate P for color C.  */

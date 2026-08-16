@@ -11,7 +11,7 @@ the remaining calibration/evaluation work is still intentionally open.
 | DN-002 | Resolved | High | `nl_means` and `nl_fast` used different patch-distance normalization and therefore different strength semantics. |
 | DN-003 | Resolved | High | Image-border reflection was asymmetric and failed for borders wider than small images. |
 | DN-004 | Resolved | High | Bilateral tile border must equal its three-sigma spatial support. |
-| DN-005 | Resolved | High | `screen_tile_rgb_color()` interchanged width/height scale loops on non-square channel lattices. |
+| DN-005 | Resolved | Medium | `screen_tile_rgb_color()` interchanged width/height scale loops on non-square channel lattices. |
 | DN-006 | Resolved | Medium | `screen_denoise` GUI settings were not persisted in project parameter files. |
 | DN-007 | Resolved | Medium | Invalid/non-finite denoise parameters could reach tile-size/index calculations. |
 | DN-008 | Resolved | Low | `nl_fast` allocated large weight/output vectors for every tile.  Reuse per-thread scratch buffers. |
@@ -19,7 +19,7 @@ the remaining calibration/evaluation work is still intentionally open.
 | DN-010 | Resolved | High | Pre-demosaic spatial neighbourhoods are measured in common physical screen coordinates using the existing per-channel geometry mappings.  Paget packed phases and reflected negative coordinates are regression-tested; geometry-aware `nl_fast` deliberately uses the exact reference path. |
 | DN-011 | Resolved | High | `precise_rgb` pre-demosaic filtering uses one scanner-RGB vector similarity weight for all three components, retaining common screen geometry and collection support.  Chromaticity preservation and fast/reference semantics are regression-tested. |
 | DN-012 | Resolved | High | Preserve analyzer collection support through `analyze_base` and use it in pre-demosaic bilateral/NLM similarity and candidate weighting.  Unit support reproduces historical filtering; weak/sub-pixel samples have proportionally less authority. |
-| DN-013 | Partial | High | NLM patch distance now has an optional signal-dependent variance normalization `variance = floor + slope * signal`; a zero floor preserves historical output exactly.  Scalar, geometry-aware, precise-RGB and post-demosaic fast/reference paths, persistence, and equality semantics are covered.  Automatic estimation/calibration of the coefficients from real scans remains open. |
+| DN-013 | Partial | High | NLM patch distance has an optional signal-dependent variance normalization `variance = floor + slope * signal`; a zero floor preserves historical output exactly.  A read-only robust estimator now measures per-separation floor/slope from support-filtered, geometry-valid second differences and exposes fit quality.  Synthetic scalar/RGB/Paget regressions recover known models, but real Hurley/Paget and Dufay scans show substantial fit residuals and channel disagreement, so automatic application remains intentionally deferred. |
 | DN-014 | Open | High | Design and evaluate a guided screen-lattice NLM, preferably IR-guided for registered RGB+IR scans. |
 | DN-015 | Resolved | Medium | Split reconstruction-domain denoising into independent `screen_denoise` (before demosaicing) and `demosaiced_denoise` (after materialized Paget/Dufay demosaicing) parameters and GUI sections, with complete project-file persistence. |
 | DN-021 | Resolved | High | Post-demosaic bilateral/NLM uses a common RGB-vector distance and applies one neighbour weight to all channels; reference and fast vector NLM are regression-tested. |
@@ -31,15 +31,19 @@ the remaining calibration/evaluation work is still intentionally open.
 
 ## Recommended next implementation order
 
-1. Estimate the DN-013 variance floor/slope from homogeneous regions in the
-   real Paget and Dufay regression scans and check whether one normalized
-   strength has comparable meaning across both processes.
-2. If substantial signal dependence remains after the simple variance model,
+1. Extend the DN-013 diagnostic estimator to a second physical spacing and use
+   the scale dependence to separate independent measurement noise from smooth
+   image/emulsion curvature or texture.  Compare the spacing-1/spacing-2
+   diagnostics on the Hurley Paget and near-Nyquist Dufay scans.
+2. Only if the estimator becomes stable across spatial scales and channels,
+   map its result into rendering coefficients and check whether one normalized
+   NLM strength has comparable meaning across both processes.
+3. If substantial signal dependence remains after the refined noise model,
    evaluate linear intensity against density/log or a variance-stabilized
    domain (DN-017).
-3. Add IR-guided similarity for registered RGB+IR scans and compare it with
+4. Add IR-guided similarity for registered RGB+IR scans and compare it with
    the calibrated RGB guide (DN-014).
-4. Grow the quality corpus with stable real-scan crops and quantitative
+5. Grow the quality corpus with stable real-scan crops and quantitative
    texture/edge/chromaticity/confidence checks (DN-016).
-5. Only after quality is established, optimize the geometry-aware
+6. Only after quality is established, optimize the geometry-aware
    implementation (DN-018/DN-019).

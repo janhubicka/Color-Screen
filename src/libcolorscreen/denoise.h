@@ -98,6 +98,275 @@ denoise_nl_rgb_square_distance (rgbdata a, rgbdata b,
          / (luminosity_t)3;
 }
 
+
+/* Result of a conservative estimate of the signal-dependent sample-noise
+   model used by NL-means.  The estimator works on collected screen samples;
+   it does not modify rendering parameters by itself.  */
+struct denoise_noise_estimate
+{
+  luminosity_t variance_floor = 0;
+  luminosity_t variance_slope = 0;
+  luminosity_t support_threshold = 0;
+  luminosity_t relative_fit_error = 0;
+  size_t observations = 0;
+  int bins = 0;
+
+  bool valid_p () const
+  {
+    return observations >= 256 && bins >= 4
+           && my_isfinite (variance_floor) && variance_floor > 0
+           && my_isfinite (variance_slope) && variance_slope >= 0;
+  }
+};
+
+namespace denoise_noise_estimator_detail
+{
+struct observation
+{
+  luminosity_t signal;
+  luminosity_t variance;
+};
+
+inline luminosity_t
+median (std::vector<luminosity_t> &v)
+{
+  if (v.empty ())
+    return 0;
+  const size_t n = v.size ();
+  std::nth_element (v.begin (), v.begin () + n / 2, v.end ());
+  luminosity_t hi = v[n / 2];
+  if (n & 1)
+    return hi;
+  std::nth_element (v.begin (), v.begin () + n / 2 - 1,
+                    v.begin () + n / 2);
+  return (v[n / 2 - 1] + hi) * (luminosity_t)0.5;
+}
+
+/* A second difference removes a locally linear image gradient.  For three
+   independent samples with approximately equal variance V,
+
+       Var (a - 2 b + c) = 6 V.
+
+   The accompanying signal estimate is (a+b+c)/3.  It equals the center of a
+   linear signal and, for equal independent sample variances, is uncorrelated
+   with the second difference because (1,1,1) is orthogonal to (1,-2,1).
+
+   The median of a squared zero-mean Gaussian divided by its variance is the
+   median of chi-square(1), approximately 0.4549364231.  Dividing bin medians
+   by this constant makes the estimate consistent for Gaussian scanner noise
+   while remaining much less sensitive to edges and texture than a mean.  */
+inline denoise_noise_estimate
+fit (std::vector<observation> &obs, luminosity_t support_threshold)
+{
+  denoise_noise_estimate result;
+  result.observations = obs.size ();
+  result.support_threshold = support_threshold;
+  if (obs.size () < 256)
+    return result;
+
+  std::sort (obs.begin (), obs.end (),
+             [] (const observation &a, const observation &b)
+             { return a.signal < b.signal; });
+  int nbins = (int)std::clamp<size_t> (obs.size () / 256, 4, 32);
+  struct bin_t { luminosity_t x, y; size_t n; };
+  std::vector<bin_t> bins;
+  bins.reserve (nbins);
+  constexpr luminosity_t chi_square_1_median
+      = (luminosity_t)0.45493642311957275;
+  for (int b = 0; b < nbins; b++)
+    {
+      size_t begin = obs.size () * (size_t)b / nbins;
+      size_t end = obs.size () * (size_t)(b + 1) / nbins;
+      if (end - begin < 16)
+        continue;
+      std::vector<luminosity_t> signals, vars;
+      signals.reserve (end - begin);
+      vars.reserve (end - begin);
+      for (size_t i = begin; i < end; i++)
+        {
+          signals.push_back (obs[i].signal);
+          vars.push_back (obs[i].variance);
+        }
+      luminosity_t x = median (signals);
+      luminosity_t y = median (vars) / chi_square_1_median;
+      if (my_isfinite (x) && my_isfinite (y) && y > 0)
+        bins.push_back ({std::max (x, (luminosity_t)0), y, end - begin});
+    }
+  result.bins = bins.size ();
+  if (bins.size () < 4)
+    return result;
+
+  long double sw = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const bin_t &b : bins)
+    {
+      long double w = b.n;
+      sw += w;
+      sx += w * b.x;
+      sy += w * b.y;
+      sxx += w * b.x * b.x;
+      sxy += w * b.x * b.y;
+    }
+  long double denom = sw * sxx - sx * sx;
+  long double slope = denom > 1e-30L ? (sw * sxy - sx * sy) / denom : 0;
+  long double floor = (sy - slope * sx) / sw;
+
+  /* Do not manufacture a slope-only model when the intercept is unstable.
+     A constant positive variance is a conservative fallback and keeps the
+     opt-in semantics of denoise_parameters (positive floor enables model).  */
+  if (slope < 0 || floor <= 0 || !std::isfinite ((double)slope)
+      || !std::isfinite ((double)floor))
+    {
+      slope = 0;
+      floor = sy / sw;
+    }
+  if (floor <= 0 || !std::isfinite ((double)floor))
+    return result;
+
+  result.variance_floor = (luminosity_t)floor;
+  result.variance_slope = (luminosity_t)std::max ((long double)0, slope);
+
+  long double err = 0, scale = 0;
+  for (const bin_t &b : bins)
+    {
+      long double predicted = floor + slope * b.x;
+      long double d = b.y - predicted;
+      err += b.n * d * d;
+      scale += b.n * b.y * b.y;
+    }
+  result.relative_fit_error
+      = scale > 0 ? (luminosity_t)std::sqrt (err / scale) : 0;
+  return result;
+}
+
+template <typename GETSUPPORT>
+inline luminosity_t
+support_threshold (int width, int height, GETSUPPORT getsupport)
+{
+  const size_t total = (size_t)width * height;
+  const size_t step = std::max<size_t> (1, total / 4096);
+  std::vector<luminosity_t> support;
+  support.reserve (std::min<size_t> (total, 4096));
+  for (size_t i = 0; i < total; i += step)
+    {
+      luminosity_t s = getsupport ((int)(i % width), (int)(i / width));
+      if (s > 0 && my_isfinite (s))
+        support.push_back (s);
+    }
+  /* Require at least half of the typical positive support.  This rejects
+     inferred/weak screen elements without assuming that collection support
+     is an exact sample count.  */
+  return support.empty () ? 0 : median (support) * (luminosity_t)0.5;
+}
+
+template <typename ENTRY_TO_SCR>
+inline bool
+second_difference_geometry_p (int_point_t a, int_point_t b, int_point_t c,
+                              ENTRY_TO_SCR entry_to_scr)
+{
+  point_t pa = entry_to_scr (a), pb = entry_to_scr (b), pc = entry_to_scr (c);
+  coord_t ex = pa.x + pc.x - 2 * pb.x;
+  coord_t ey = pa.y + pc.y - 2 * pb.y;
+  coord_t scale = std::max ((coord_t)1,
+                            std::max (my_fabs (pc.x - pa.x),
+                                      my_fabs (pc.y - pa.y)));
+  return my_fabs (ex) <= scale * (coord_t)1e-7
+         && my_fabs (ey) <= scale * (coord_t)1e-7;
+}
+
+template <typename GETSUPPORT, typename ENTRY_TO_SCR, typename ADD>
+inline denoise_noise_estimate
+collect (int width, int height, GETSUPPORT getsupport,
+         ENTRY_TO_SCR entry_to_scr, ADD add)
+{
+  std::vector<observation> obs;
+  if (width < 3 && height < 3)
+    return {};
+  luminosity_t min_support = support_threshold (width, height, getsupport);
+  const size_t possible = (size_t)height * std::max (0, width - 2)
+                          + (size_t)width * std::max (0, height - 2);
+  const size_t stride = std::max<size_t> (1, possible / 200000);
+  obs.reserve (std::min<size_t> (possible, 200000));
+  size_t serial = 0;
+  auto consider = [&] (int_point_t a, int_point_t b, int_point_t c)
+  {
+    if (serial++ % stride)
+      return;
+    if (!second_difference_geometry_p (a, b, c, entry_to_scr))
+      return;
+    luminosity_t sa = getsupport ((int)a.x, (int)a.y);
+    luminosity_t sb = getsupport ((int)b.x, (int)b.y);
+    luminosity_t sc = getsupport ((int)c.x, (int)c.y);
+    if (!my_isfinite (sa) || !my_isfinite (sb) || !my_isfinite (sc)
+        || sa < min_support || sb < min_support || sc < min_support)
+      return;
+    add (obs, a, b, c);
+  };
+  for (int y = 0; y < height; y++)
+    for (int x = 1; x + 1 < width; x++)
+      consider ({x - 1, y}, {x, y}, {x + 1, y});
+  for (int y = 1; y + 1 < height; y++)
+    for (int x = 0; x < width; x++)
+      consider ({x, y - 1}, {x, y}, {x, y + 1});
+  return fit (obs, min_support);
+}
+} // namespace denoise_noise_estimator_detail
+
+/* Estimate floor + slope * signal noise variance from a scalar screen-sample
+   lattice.  Only well-supported samples are used.  */
+template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
+inline denoise_noise_estimate
+estimate_screen_noise_model (int width, int height, GETDATA getdata,
+                             GETSUPPORT getsupport, ENTRY_TO_SCR entry_to_scr)
+{
+  using namespace denoise_noise_estimator_detail;
+  return collect (width, height, getsupport, entry_to_scr,
+                  [&] (std::vector<observation> &obs, int_point_t a,
+                       int_point_t b, int_point_t c)
+                  {
+                    luminosity_t va = getdata ((int)a.x, (int)a.y);
+                    luminosity_t vb = getdata ((int)b.x, (int)b.y);
+                    luminosity_t vc = getdata ((int)c.x, (int)c.y);
+                    if (!my_isfinite (va) || !my_isfinite (vb)
+                        || !my_isfinite (vc))
+                      return;
+                    luminosity_t d = va - 2 * vb + vc;
+                    luminosity_t signal = (va + vb + vc) / (luminosity_t)3;
+                    obs.push_back ({std::max (signal, (luminosity_t)0),
+                                    d * d / (luminosity_t)6});
+                  });
+}
+
+/* RGB variant.  The three scanner components contribute independent
+   observations to the same variance model, matching the shared coefficients
+   used by precise-RGB NL-means.  */
+template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
+inline denoise_noise_estimate
+estimate_screen_rgb_noise_model (int width, int height, GETDATA getdata,
+                                 GETSUPPORT getsupport,
+                                 ENTRY_TO_SCR entry_to_scr)
+{
+  using namespace denoise_noise_estimator_detail;
+  return collect (width, height, getsupport, entry_to_scr,
+                  [&] (std::vector<observation> &obs, int_point_t a,
+                       int_point_t b, int_point_t c)
+                  {
+                    rgbdata va = getdata ((int)a.x, (int)a.y);
+                    rgbdata vb = getdata ((int)b.x, (int)b.y);
+                    rgbdata vc = getdata ((int)c.x, (int)c.y);
+                    for (int k = 0; k < 3; k++)
+                      {
+                        if (!my_isfinite (va[k]) || !my_isfinite (vb[k])
+                            || !my_isfinite (vc[k]))
+                          continue;
+                        luminosity_t d = va[k] - 2 * vb[k] + vc[k];
+                        luminosity_t signal
+                            = (va[k] + vb[k] + vc[k]) / (luminosity_t)3;
+                        obs.push_back ({std::max (signal, (luminosity_t)0),
+                                        d * d / (luminosity_t)6});
+                      }
+                  });
+}
+
 template <typename ENTRY_TO_SCR>
 inline bool
 denoise_screen_offset_in_square (int_point_t center, int_point_t sample,

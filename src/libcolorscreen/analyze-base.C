@@ -1160,6 +1160,70 @@ analyze_base::denoise_rgb_blue (const denoise_parameters &params, progress_info 
       params, progress);
 }
 
+bool
+analyze_base::estimate_noise_models (denoise_noise_estimate *red_est,
+                                     denoise_noise_estimate *green_est,
+                                     denoise_noise_estimate *blue_est) const
+{
+  auto scalar = [&] (const luminosity_t *data, const luminosity_t *support,
+                     int wscl, int hscl, entry_to_scr_fn entry_to_scr)
+  {
+    if (!data)
+      return denoise_noise_estimate{};
+    const int w = m_area.width << wscl;
+    const int h = m_area.height << hscl;
+    return estimate_screen_noise_model (
+        w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+        [&] (int x, int y)
+        {
+          return support ? support[(size_t)y * w + x] : (luminosity_t)1;
+        },
+        entry_to_scr);
+  };
+  auto rgb = [&] (const rgbdata *data, const luminosity_t *support,
+                  int wscl, int hscl, entry_to_scr_fn entry_to_scr)
+  {
+    if (!data)
+      return denoise_noise_estimate{};
+    const int w = m_area.width << wscl;
+    const int h = m_area.height << hscl;
+    return estimate_screen_rgb_noise_model (
+        w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+        [&] (int x, int y)
+        {
+          return support ? support[(size_t)y * w + x] : (luminosity_t)1;
+        },
+        entry_to_scr);
+  };
+
+  denoise_noise_estimate r, g, b;
+  if (m_rgb_red || m_rgb_green || m_rgb_blue)
+    {
+      r = rgb (m_rgb_red.get (), m_red_support.get (), m_rwscl, m_rhscl,
+               m_red_entry_to_scr);
+      g = rgb (m_rgb_green.get (), m_green_support.get (), m_gwscl, m_ghscl,
+               m_green_entry_to_scr);
+      b = rgb (m_rgb_blue.get (), m_blue_support.get (), m_bwscl, m_bhscl,
+               m_blue_entry_to_scr);
+    }
+  else
+    {
+      r = scalar (m_red.get (), m_red_support.get (), m_rwscl, m_rhscl,
+                  m_red_entry_to_scr);
+      g = scalar (m_green.get (), m_green_support.get (), m_gwscl, m_ghscl,
+                  m_green_entry_to_scr);
+      b = scalar (m_blue.get (), m_blue_support.get (), m_bwscl, m_bhscl,
+                  m_blue_entry_to_scr);
+    }
+  if (red_est)
+    *red_est = r;
+  if (green_est)
+    *green_est = g;
+  if (blue_est)
+    *blue_est = b;
+  return r.valid_p () || g.valid_p () || b.valid_p ();
+}
+
 luminosity_t
 analyze_base::red_collection_support (int x, int y) const noexcept
 {
