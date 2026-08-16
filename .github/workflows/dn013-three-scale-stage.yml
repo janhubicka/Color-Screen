@@ -25,6 +25,7 @@ jobs:
         run: |
           set -euxo pipefail
           python3 .dn013-three-scale.py
+          python3 .dn013-three-scale-fix.py
           git diff --check
           git diff --stat
 
@@ -33,6 +34,7 @@ jobs:
         run: |
           set -euxo pipefail
           tar --exclude=.git --exclude=.dn013-three-scale.py \
+              --exclude=.dn013-three-scale-fix.py \
               --exclude=.github/workflows/dn013-three-scale-stage.yml \
               -czf /tmp/colorscreen-three-scale-source.tar.gz .
       - uses: actions/upload-artifact@v4
@@ -89,7 +91,8 @@ jobs:
         run: |
           set -euxo pipefail
           git diff --check
-          rm .dn013-three-scale.py .github/workflows/dn013-three-scale-stage.yml
+          rm .dn013-three-scale.py .dn013-three-scale-fix.py \
+             .github/workflows/dn013-three-scale-stage.yml
           git add -A
           git config user.name 'OpenAI review'
           git config user.email 'review@openai.invalid'
