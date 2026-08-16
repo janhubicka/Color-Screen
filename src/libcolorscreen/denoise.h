@@ -119,6 +119,29 @@ struct denoise_noise_estimate
   }
 };
 
+/* Paired diagnostic at one and two physical sample spacings.  Only
+   center/direction combinations valid at both spacings are admitted, so the
+   scale comparison is not biased by packed lattices contributing different
+   directions at different scales.  For independent sample noise the robust
+   spacing-2/spacing-1 variance ratio should be near one.  Smooth curvature
+   contributes to a second difference proportionally to spacing squared, and
+   therefore to its squared variance statistic proportionally to spacing^4.  */
+struct denoise_noise_scale_estimate
+{
+  denoise_noise_estimate spacing1;
+  denoise_noise_estimate spacing2;
+  luminosity_t spacing2_variance_ratio = 0;
+  size_t paired_observations = 0;
+
+  bool valid_p () const
+  {
+    return spacing1.valid_p () && spacing2.valid_p ()
+           && paired_observations >= 256
+           && my_isfinite (spacing2_variance_ratio)
+           && spacing2_variance_ratio > 0;
+  }
+};
+
 namespace denoise_noise_estimator_detail
 {
 struct observation
@@ -273,6 +296,25 @@ second_difference_geometry_p (int_point_t a, int_point_t b, int_point_t c,
          && my_fabs (ey) <= scale * (coord_t)1e-7;
 }
 
+template <typename ENTRY_TO_SCR>
+inline bool
+second_difference_scale_pair_geometry_p (
+    int_point_t a2, int_point_t a1, int_point_t b, int_point_t c1,
+    int_point_t c2, ENTRY_TO_SCR entry_to_scr)
+{
+  if (!second_difference_geometry_p (a1, b, c1, entry_to_scr)
+      || !second_difference_geometry_p (a2, b, c2, entry_to_scr))
+    return false;
+
+  point_t pb = entry_to_scr (b);
+  point_t d1 = entry_to_scr (c1) - pb;
+  point_t d2 = entry_to_scr (c2) - pb;
+  coord_t scale = std::max ((coord_t)1,
+                            std::max (my_fabs (d2.x), my_fabs (d2.y)));
+  return my_fabs (d2.x - 2 * d1.x) <= scale * (coord_t)1e-7
+         && my_fabs (d2.y - 2 * d1.y) <= scale * (coord_t)1e-7;
+}
+
 template <typename GETSUPPORT, typename ENTRY_TO_SCR, typename ADD>
 inline denoise_noise_estimate
 collect (int width, int height, GETSUPPORT getsupport,
@@ -308,6 +350,82 @@ collect (int width, int height, GETSUPPORT getsupport,
     for (int x = 0; x < width; x++)
       consider ({x, y - 1}, {x, y}, {x, y + 1});
   return fit (obs, min_support);
+}
+
+template <typename GETSUPPORT, typename ENTRY_TO_SCR, typename ADD>
+inline denoise_noise_scale_estimate
+collect_scales (int width, int height, GETSUPPORT getsupport,
+                ENTRY_TO_SCR entry_to_scr, ADD add)
+{
+  denoise_noise_scale_estimate result;
+  std::vector<observation> spacing1, spacing2;
+  if (width < 5 && height < 5)
+    return result;
+
+  luminosity_t min_support = support_threshold (width, height, getsupport);
+  const size_t possible = (size_t)height * std::max (0, width - 4)
+                          + (size_t)width * std::max (0, height - 4);
+  const size_t stride = std::max<size_t> (1, possible / 200000);
+  spacing1.reserve (std::min<size_t> (possible, 200000));
+  spacing2.reserve (std::min<size_t> (possible, 200000));
+  size_t serial = 0;
+
+  auto consider = [&] (int_point_t a2, int_point_t a1, int_point_t b,
+                       int_point_t c1, int_point_t c2)
+  {
+    if (serial++ % stride)
+      return;
+    if (!second_difference_scale_pair_geometry_p (a2, a1, b, c1, c2,
+                                                   entry_to_scr))
+      return;
+
+    luminosity_t support[5] = {
+      getsupport ((int)a2.x, (int)a2.y),
+      getsupport ((int)a1.x, (int)a1.y),
+      getsupport ((int)b.x, (int)b.y),
+      getsupport ((int)c1.x, (int)c1.y),
+      getsupport ((int)c2.x, (int)c2.y)};
+    for (luminosity_t v : support)
+      if (!my_isfinite (v) || v < min_support)
+        return;
+    add (spacing1, spacing2, a2, a1, b, c1, c2);
+  };
+
+  for (int y = 0; y < height; y++)
+    for (int x = 2; x + 2 < width; x++)
+      consider ({x - 2, y}, {x - 1, y}, {x, y}, {x + 1, y},
+                {x + 2, y});
+  for (int y = 2; y + 2 < height; y++)
+    for (int x = 0; x < width; x++)
+      consider ({x, y - 2}, {x, y - 1}, {x, y}, {x, y + 1},
+                {x, y + 2});
+
+  if (spacing1.size () != spacing2.size ())
+    return result;
+  result.paired_observations = spacing1.size ();
+
+  /* The chi-square correction cancels in this ratio, so use the raw robust
+     median second-difference variance at each scale.  The same accepted
+     centers/directions contribute to both medians.  */
+  if (!spacing1.empty ())
+    {
+      std::vector<luminosity_t> v1, v2;
+      v1.reserve (spacing1.size ());
+      v2.reserve (spacing2.size ());
+      for (size_t i = 0; i < spacing1.size (); i++)
+        {
+          v1.push_back (spacing1[i].variance);
+          v2.push_back (spacing2[i].variance);
+        }
+      luminosity_t m1 = median (v1);
+      luminosity_t m2 = median (v2);
+      if (m1 > 0 && my_isfinite (m1) && my_isfinite (m2))
+        result.spacing2_variance_ratio = m2 / m1;
+    }
+
+  result.spacing1 = fit (spacing1, min_support);
+  result.spacing2 = fit (spacing2, min_support);
+  return result;
 }
 } // namespace denoise_noise_estimator_detail
 
@@ -365,6 +483,82 @@ estimate_screen_rgb_noise_model (int width, int height, GETDATA getdata,
                                         d * d / (luminosity_t)6});
                       }
                   });
+}
+
+/* Compare the same scalar screen-sample centers/directions at one and two
+   physical lattice spacings.  A common five-sample mean is used as the signal
+   coordinate: its equal weights are orthogonal to both second-difference
+   coefficient vectors (0,1,-2,1,0) and (1,0,-2,0,1).  */
+template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
+inline denoise_noise_scale_estimate
+estimate_screen_noise_scale_model (int width, int height, GETDATA getdata,
+                                   GETSUPPORT getsupport,
+                                   ENTRY_TO_SCR entry_to_scr)
+{
+  using namespace denoise_noise_estimator_detail;
+  return collect_scales (
+      width, height, getsupport, entry_to_scr,
+      [&] (std::vector<observation> &spacing1,
+           std::vector<observation> &spacing2, int_point_t a2,
+           int_point_t a1, int_point_t b, int_point_t c1, int_point_t c2)
+      {
+        luminosity_t v[5] = {
+          getdata ((int)a2.x, (int)a2.y),
+          getdata ((int)a1.x, (int)a1.y),
+          getdata ((int)b.x, (int)b.y),
+          getdata ((int)c1.x, (int)c1.y),
+          getdata ((int)c2.x, (int)c2.y)};
+        for (luminosity_t x : v)
+          if (!my_isfinite (x))
+            return;
+        luminosity_t signal
+            = (v[0] + v[1] + v[2] + v[3] + v[4]) / (luminosity_t)5;
+        luminosity_t d1 = v[1] - 2 * v[2] + v[3];
+        luminosity_t d2 = v[0] - 2 * v[2] + v[4];
+        signal = std::max (signal, (luminosity_t)0);
+        spacing1.push_back ({signal, d1 * d1 / (luminosity_t)6});
+        spacing2.push_back ({signal, d2 * d2 / (luminosity_t)6});
+      });
+}
+
+/* Scanner-RGB variant of the paired-scale diagnostic.  Each component
+   contributes a paired observation to the same shared model.  */
+template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
+inline denoise_noise_scale_estimate
+estimate_screen_rgb_noise_scale_model (int width, int height, GETDATA getdata,
+                                       GETSUPPORT getsupport,
+                                       ENTRY_TO_SCR entry_to_scr)
+{
+  using namespace denoise_noise_estimator_detail;
+  return collect_scales (
+      width, height, getsupport, entry_to_scr,
+      [&] (std::vector<observation> &spacing1,
+           std::vector<observation> &spacing2, int_point_t a2,
+           int_point_t a1, int_point_t b, int_point_t c1, int_point_t c2)
+      {
+        rgbdata v[5] = {
+          getdata ((int)a2.x, (int)a2.y),
+          getdata ((int)a1.x, (int)a1.y),
+          getdata ((int)b.x, (int)b.y),
+          getdata ((int)c1.x, (int)c1.y),
+          getdata ((int)c2.x, (int)c2.y)};
+        for (int k = 0; k < 3; k++)
+          {
+            bool finite = true;
+            for (const rgbdata &sample : v)
+              finite &= my_isfinite (sample[k]);
+            if (!finite)
+              continue;
+            luminosity_t signal
+                = (v[0][k] + v[1][k] + v[2][k] + v[3][k] + v[4][k])
+                  / (luminosity_t)5;
+            luminosity_t d1 = v[1][k] - 2 * v[2][k] + v[3][k];
+            luminosity_t d2 = v[0][k] - 2 * v[2][k] + v[4][k];
+            signal = std::max (signal, (luminosity_t)0);
+            spacing1.push_back ({signal, d1 * d1 / (luminosity_t)6});
+            spacing2.push_back ({signal, d2 * d2 / (luminosity_t)6});
+          }
+      });
 }
 
 template <typename ENTRY_TO_SCR>
