@@ -22,6 +22,7 @@ class demosaic_paget;
 class demosaic_dufay;
 struct denoise_noise_estimate;
 struct denoise_noise_scale_estimate;
+struct denoise_noise_three_scale_estimate;
 typedef std::function <bool (coord_t, coord_t, rgbdata)> analyzer;
 typedef std::function <bool (coord_t, coord_t, rgbdata, rgbdata, rgbdata)> rgb_analyzer;
 
@@ -144,6 +145,10 @@ public:
   bool estimate_screen_noise_scale_models (denoise_noise_scale_estimate *red,
                                            denoise_noise_scale_estimate *green,
                                            denoise_noise_scale_estimate *blue) const;
+  bool estimate_screen_noise_three_scale_models (
+      denoise_noise_three_scale_estimate *red,
+      denoise_noise_three_scale_estimate *green,
+      denoise_noise_three_scale_estimate *blue) const;
 
 private:
   /* Compensate saturation loss at screen coordinate P for color C.  */

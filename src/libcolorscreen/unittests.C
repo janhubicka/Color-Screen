@@ -5668,6 +5668,25 @@ test_denoise ()
                  (double)scales.spacing2.relative_fit_error);
         return false;
       }
+
+    denoise_noise_three_scale_estimate three
+        = estimate_screen_noise_three_scale_model (
+            w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+            [&] (int x, int y) { return support[(size_t)y * w + x]; },
+            identity_to_scr);
+    if (!three.valid_p ()
+        || three.spacing2_variance_ratio < (luminosity_t)0.5
+        || three.spacing2_variance_ratio > (luminosity_t)2
+        || three.spacing3_variance_ratio < (luminosity_t)0.4
+        || three.spacing3_variance_ratio > (luminosity_t)2.5)
+      {
+        fprintf (stderr,
+                 "Three-scale noise estimator mismatch: ratios %g %g paired %zu\n",
+                 (double)three.spacing2_variance_ratio,
+                 (double)three.spacing3_variance_ratio,
+                 three.paired_observations);
+        return false;
+      }
   }
 
   /* Precise-RGB estimation pools the three scanner components but must
@@ -5745,6 +5764,27 @@ test_denoise ()
                  scales.paired_observations);
         return false;
       }
+
+    denoise_noise_three_scale_estimate three
+        = estimate_screen_rgb_noise_three_scale_model (
+            w, h,
+            [&] (int x, int y) { return data[(size_t)y * w + x]; },
+            [&] (int x, int y) { return support[(size_t)y * w + x]; },
+            [] (int_point_t p)
+            { return point_t{(coord_t)p.x, (coord_t)p.y}; });
+    if (!three.valid_p ()
+        || three.spacing2_variance_ratio < (luminosity_t)0.5
+        || three.spacing2_variance_ratio > (luminosity_t)2
+        || three.spacing3_variance_ratio < (luminosity_t)0.4
+        || three.spacing3_variance_ratio > (luminosity_t)2.5)
+      {
+        fprintf (stderr,
+                 "RGB three-scale estimator mismatch: ratios %g %g paired %zu\n",
+                 (double)three.spacing2_variance_ratio,
+                 (double)three.spacing3_variance_ratio,
+                 three.paired_observations);
+        return false;
+      }
   }
 
   /* Packed screen geometries must only use equally spaced physical triples.
@@ -5801,6 +5841,25 @@ test_denoise ()
                  scales.paired_observations);
         return false;
       }
+
+    denoise_noise_three_scale_estimate three
+        = estimate_screen_noise_three_scale_model (
+            w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+            [&] (int x, int y) { return support[(size_t)y * w + x]; },
+            [] (int_point_t p) { return paget_geometry::red_entry_to_scr (p); });
+    if (!three.valid_p ()
+        || three.spacing2_variance_ratio < (luminosity_t)0.35
+        || three.spacing2_variance_ratio > (luminosity_t)2.7
+        || three.spacing3_variance_ratio < (luminosity_t)0.25
+        || three.spacing3_variance_ratio > (luminosity_t)3.5)
+      {
+        fprintf (stderr,
+                 "Paget three-scale estimator mismatch: ratios %g %g paired %zu\n",
+                 (double)three.spacing2_variance_ratio,
+                 (double)three.spacing3_variance_ratio,
+                 three.paired_observations);
+        return false;
+      }
   }
 
   /* A smooth quadratic signal is deliberately not noise.  Its second
@@ -5843,6 +5902,31 @@ test_denoise ()
                  "paired %zu\n",
                  (double)scales.spacing2_variance_ratio,
                  scales.paired_observations);
+        return false;
+      }
+
+    denoise_noise_three_scale_estimate three
+        = estimate_screen_noise_three_scale_model (
+            w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+            [&] (int x, int y) { return support[(size_t)y * w + x]; },
+            [] (int_point_t p)
+            { return point_t{(coord_t)p.x, (coord_t)p.y}; });
+    if (!three.valid_p ()
+        || three.spacing2_variance_ratio < (luminosity_t)2.5
+        || three.spacing3_variance_ratio < (luminosity_t)8
+        || !three.scale_fit_valid_p ()
+        || three.scale_growth_exponent < (luminosity_t)2.5
+        || three.scale_growth_exponent > (luminosity_t)5.5
+        || three.extrapolated_scale_invariant_fraction > (luminosity_t)0.5)
+      {
+        fprintf (stderr,
+                 "Three-scale curvature fit mismatch: ratios %g %g exponent %g "
+                 "noise fraction %g paired %zu\n",
+                 (double)three.spacing2_variance_ratio,
+                 (double)three.spacing3_variance_ratio,
+                 (double)three.scale_growth_exponent,
+                 (double)three.extrapolated_scale_invariant_fraction,
+                 three.paired_observations);
         return false;
       }
   }
