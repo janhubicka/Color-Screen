@@ -1,0 +1,98 @@
+name: Validate DN-013 three-scale diagnostic
+
+on:
+  push:
+    branches:
+      - review/dn-013-three-scale-stage
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: review/dn-013-three-scale-stage
+          fetch-depth: 0
+
+      - name: Apply deterministic three-scale transformation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 .dn013-three-scale.py
+          git diff --check
+          git diff --stat
+
+      - name: Export transformed source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          tar --exclude=.git --exclude=.dn013-three-scale.py \
+              --exclude=.github/workflows/dn013-three-scale-stage.yml \
+              -czf /tmp/colorscreen-three-scale-source.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dn013-three-scale-source
+          path: /tmp/colorscreen-three-scale-source.tar.gz
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev \
+            liblcms2-dev libfftw3-dev libexiv2-dev libopenjp2-7-dev libpng-dev \
+            build-essential
+
+      - name: Optimized checking build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          CXXFLAGS='-O2 -g0' CFLAGS='-O2 -g0' \
+            ./configure --enable-checking --disable-static-link
+          make -j2
+
+      - name: Focused optimized denoising test
+        run: ./src/libcolorscreen/unittests denoising
+
+      - name: Full optimized suite
+        run: make -j2 check
+
+      - name: Prepare sanitizer build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          make distclean
+          CXXFLAGS='-O1 -g -fsanitize=address,undefined' \
+          CFLAGS='-O1 -g -fsanitize=address,undefined' \
+            ./configure --enable-checking --disable-static-link
+
+      - name: Sanitizer build
+        run: make -j1
+
+      - name: Focused ASan UBSan tests
+        shell: bash
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          set -euxo pipefail
+          ./src/libcolorscreen/unittests denoising
+          ./src/libcolorscreen/unittests demosaic
+
+      - name: Publish exact validated source tree to staging branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git diff --check
+          rm .dn013-three-scale.py .github/workflows/dn013-three-scale-stage.yml
+          git add -A
+          git config user.name 'OpenAI review'
+          git config user.email 'review@openai.invalid'
+          git commit -m 'denoise: add empirical three-scale noise diagnostic' \
+            -m 'Compare identical support-qualified screen samples at physical spacings 1, 2 and 3. Report robust scale ratios and, only when scale-dependent excess is strong and monotone, fit an empirical V(h)=N+A*h^p law with free exponent p. Keep the result diagnostic-only and add scalar, precise-RGB, Paget packed-geometry and curvature regressions.'
+          git push origin HEAD:review/dn-013-three-scale-stage
