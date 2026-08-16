@@ -87,6 +87,10 @@ support_pair_reliability (T a, T b)
   b = usable_support (b);
   if (a == (T)0 || b == (T)0)
     return (T)0;
+  /* Keep the equal-support identity exact even with -ffast-math.  This is
+     required for unit support to reproduce the historical filter bitwise.  */
+  if (a == b)
+    return a;
   return (T)2 * a * b / (a + b);
 }
 

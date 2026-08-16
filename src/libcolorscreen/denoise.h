@@ -441,6 +441,8 @@ denoise_screen_impl (int width, int height, GETDATA getdata,
     DT bb = support_at (b);
     if (aa == (DT)0 || bb == (DT)0)
       return (DT)0;
+    if (aa == bb)
+      return aa;
     return (DT)2 * aa * bb / (aa + bb);
   };
   auto value_at = [&] (int_point_t logical) -> DT
@@ -632,6 +634,8 @@ denoise_screen_rgb_impl (int width, int height, GETDATA getdata,
     luminosity_t aa = support_at (a), bb = support_at (b);
     if (aa == 0 || bb == 0)
       return 0;
+    if (aa == bb)
+      return aa;
     return 2 * aa * bb / (aa + bb);
   };
   auto value_at = [&] (int_point_t logical) -> rgbdata
