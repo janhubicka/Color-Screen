@@ -18,6 +18,7 @@
 namespace colorscreen {
 
 struct denoise_noise_estimate;
+struct denoise_noise_scale_estimate;
 
 /* Base class for color screen analysis.
    Analyzes image data to determine properties of the color screen patches.  */
@@ -269,6 +270,13 @@ public:
   bool estimate_noise_models (denoise_noise_estimate *red,
                               denoise_noise_estimate *green,
                               denoise_noise_estimate *blue) const;
+
+  /* Compare the same collected sample centers/directions at one and two
+     physical lattice spacings.  This is diagnostic only and never changes
+     rendering parameters.  */
+  bool estimate_noise_scale_models (denoise_noise_scale_estimate *red,
+                                    denoise_noise_scale_estimate *green,
+                                    denoise_noise_scale_estimate *blue) const;
 
   /* Return raw collection support for a red/green/blue sample.  The support
      is the accumulated contribution of real scanner pixels used to estimate

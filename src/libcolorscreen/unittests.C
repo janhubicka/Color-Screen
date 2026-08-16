@@ -5650,6 +5650,24 @@ test_denoise ()
                  estimate.bins, (double)estimate.relative_fit_error);
         return false;
       }
+
+    denoise_noise_scale_estimate scales = estimate_screen_noise_scale_model (
+        w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+        [&] (int x, int y) { return support[(size_t)y * w + x]; },
+        identity_to_scr);
+    if (!scales.valid_p ()
+        || scales.spacing2_variance_ratio < (luminosity_t)0.55
+        || scales.spacing2_variance_ratio > (luminosity_t)1.8)
+      {
+        fprintf (stderr,
+                 "Two-scale noise estimator mismatch: ratio %g paired %zu "
+                 "near error %g far error %g\n",
+                 (double)scales.spacing2_variance_ratio,
+                 scales.paired_observations,
+                 (double)scales.spacing1.relative_fit_error,
+                 (double)scales.spacing2.relative_fit_error);
+        return false;
+      }
   }
 
   /* Precise-RGB estimation pools the three scanner components but must
@@ -5709,6 +5727,24 @@ test_denoise ()
                  (double)estimate.relative_fit_error);
         return false;
       }
+
+    denoise_noise_scale_estimate scales
+        = estimate_screen_rgb_noise_scale_model (
+            w, h,
+            [&] (int x, int y) { return data[(size_t)y * w + x]; },
+            [&] (int x, int y) { return support[(size_t)y * w + x]; },
+            [] (int_point_t p)
+            { return point_t{(coord_t)p.x, (coord_t)p.y}; });
+    if (!scales.valid_p ()
+        || scales.spacing2_variance_ratio < (luminosity_t)0.55
+        || scales.spacing2_variance_ratio > (luminosity_t)1.8)
+      {
+        fprintf (stderr,
+                 "RGB two-scale estimator mismatch: ratio %g paired %zu\n",
+                 (double)scales.spacing2_variance_ratio,
+                 scales.paired_observations);
+        return false;
+      }
   }
 
   /* Packed screen geometries must only use equally spaced physical triples.
@@ -5750,7 +5786,67 @@ test_denoise ()
                  (double)estimate.variance_slope, estimate.observations);
         return false;
       }
+
+    denoise_noise_scale_estimate scales = estimate_screen_noise_scale_model (
+        w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+        [&] (int x, int y) { return support[(size_t)y * w + x]; },
+        [] (int_point_t p) { return paget_geometry::red_entry_to_scr (p); });
+    if (!scales.valid_p ()
+        || scales.spacing2_variance_ratio < (luminosity_t)0.4
+        || scales.spacing2_variance_ratio > (luminosity_t)2.5)
+      {
+        fprintf (stderr,
+                 "Paget two-scale estimator mismatch: ratio %g paired %zu\n",
+                 (double)scales.spacing2_variance_ratio,
+                 scales.paired_observations);
+        return false;
+      }
   }
+
+  /* A smooth quadratic signal is deliberately not noise.  Its second
+     difference grows with spacing squared, so the paired scale diagnostic
+     must expose a variance ratio well above the noise-only value of one.  */
+  {
+    const int w = 56, h = 48;
+    const luminosity_t curvature = (luminosity_t)0.0005;
+    const luminosity_t noise_variance = (luminosity_t)0.0000001;
+    std::vector<luminosity_t> data ((size_t)w * h), support ((size_t)w * h, 1);
+    unsigned int noise_seed = 0x10293847U;
+    auto gaussian = [&] () -> luminosity_t
+    {
+      luminosity_t u1
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      luminosity_t u2
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      return std::sqrt ((luminosity_t)-2 * std::log (u1))
+             * std::cos ((luminosity_t)6.2831853071795864769 * u2);
+    };
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        {
+          luminosity_t dx = x - (w - 1) * (luminosity_t)0.5;
+          luminosity_t dy = y - (h - 1) * (luminosity_t)0.5;
+          luminosity_t signal
+              = (luminosity_t)0.2 + curvature * (dx * dx + dy * dy);
+          data[(size_t)y * w + x]
+              = signal + std::sqrt (noise_variance) * gaussian ();
+        }
+    denoise_noise_scale_estimate scales = estimate_screen_noise_scale_model (
+        w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+        [&] (int x, int y) { return support[(size_t)y * w + x]; },
+        [] (int_point_t p) { return point_t{(coord_t)p.x, (coord_t)p.y}; });
+    if (!scales.valid_p ()
+        || scales.spacing2_variance_ratio < (luminosity_t)2.5)
+      {
+        fprintf (stderr,
+                 "Two-scale estimator failed to detect curvature: ratio %g "
+                 "paired %zu\n",
+                 (double)scales.spacing2_variance_ratio,
+                 scales.paired_observations);
+        return false;
+      }
+  }
+
 
   /* A bilateral filter needs a border matching its spatial kernel, not the
      unrelated NL-means patch and search radii.  Sigma 2 has support radius 6

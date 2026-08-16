@@ -19,7 +19,7 @@ the remaining calibration/evaluation work is still intentionally open.
 | DN-010 | Resolved | High | Pre-demosaic spatial neighbourhoods are measured in common physical screen coordinates using the existing per-channel geometry mappings.  Paget packed phases and reflected negative coordinates are regression-tested; geometry-aware `nl_fast` deliberately uses the exact reference path. |
 | DN-011 | Resolved | High | `precise_rgb` pre-demosaic filtering uses one scanner-RGB vector similarity weight for all three components, retaining common screen geometry and collection support.  Chromaticity preservation and fast/reference semantics are regression-tested. |
 | DN-012 | Resolved | High | Preserve analyzer collection support through `analyze_base` and use it in pre-demosaic bilateral/NLM similarity and candidate weighting.  Unit support reproduces historical filtering; weak/sub-pixel samples have proportionally less authority. |
-| DN-013 | Partial | High | NLM patch distance has an optional signal-dependent variance normalization `variance = floor + slope * signal`; a zero floor preserves historical output exactly.  A read-only robust estimator now measures per-separation floor/slope from support-filtered, geometry-valid second differences and exposes fit quality.  Synthetic scalar/RGB/Paget regressions recover known models, but real Hurley/Paget and Dufay scans show substantial fit residuals and channel disagreement, so automatic application remains intentionally deferred. |
+| DN-013 | Partial | High | NLM patch distance has an optional signal-dependent variance normalization `variance = floor + slope * signal`; a zero floor preserves historical output exactly.  The read-only estimator now compares identical support-qualified, geometry-valid observations at physical spacings 1 and 2.  Dufay is nearly scale-invariant (spacing-2/spacing-1 robust variance ratios about 1.14--1.19), while Hurley/Paget is strongly scale-dependent (about 2.59/2.62/1.60 for red/green/blue), confirming structural contamination of the single-scale estimate.  Automatic application remains intentionally deferred. |
 | DN-014 | Open | High | Design and evaluate a guided screen-lattice NLM, preferably IR-guided for registered RGB+IR scans. |
 | DN-015 | Resolved | Medium | Split reconstruction-domain denoising into independent `screen_denoise` (before demosaicing) and `demosaiced_denoise` (after materialized Paget/Dufay demosaicing) parameters and GUI sections, with complete project-file persistence. |
 | DN-021 | Resolved | High | Post-demosaic bilateral/NLM uses a common RGB-vector distance and applies one neighbour weight to all channels; reference and fast vector NLM are regression-tested. |
@@ -31,13 +31,13 @@ the remaining calibration/evaluation work is still intentionally open.
 
 ## Recommended next implementation order
 
-1. Extend the DN-013 diagnostic estimator to a second physical spacing and use
-   the scale dependence to separate independent measurement noise from smooth
-   image/emulsion curvature or texture.  Compare the spacing-1/spacing-2
-   diagnostics on the Hurley Paget and near-Nyquist Dufay scans.
-2. Only if the estimator becomes stable across spatial scales and channels,
-   map its result into rendering coefficients and check whether one normalized
-   NLM strength has comparable meaning across both processes.
+1. Use the spacing-1/spacing-2 diagnostics to refine sample selection or
+   separate the scale-invariant component from smooth image/emulsion
+   structure.  Hurley/Paget needs this correction substantially more than the
+   near-Nyquist Dufay scan.
+2. Re-evaluate floor/slope fit quality after removing scale-dependent
+   structure; only if estimates are stable across scales and channels should
+   they be mapped into rendering coefficients.
 3. If substantial signal dependence remains after the refined noise model,
    evaluate linear intensity against density/log or a variance-stabilized
    domain (DN-017).
