@@ -1,0 +1,165 @@
+diff --git a/src/libcolorscreen/analyze-base.C b/src/libcolorscreen/analyze-base.C
+index f3eb9c9..34a9957 100644
+--- a/src/libcolorscreen/analyze-base.C
++++ b/src/libcolorscreen/analyze-base.C
+@@ -1350,6 +1350,67 @@ analyze_base::estimate_noise_three_scale_models (
+   return r.valid_p () || g.valid_p () || b.valid_p ();
+ }
+ 
++bool
++analyze_base::estimate_noise_domain_comparisons (
++    denoise_noise_domain_comparison *red_est,
++    denoise_noise_domain_comparison *green_est,
++    denoise_noise_domain_comparison *blue_est) const
++{
++  auto scalar = [&] (const luminosity_t *data, const luminosity_t *support,
++                     int wscl, int hscl, entry_to_scr_fn entry_to_scr)
++  {
++    if (!data)
++      return denoise_noise_domain_comparison{};
++    const int w = m_area.width << wscl;
++    const int h = m_area.height << hscl;
++    return estimate_screen_noise_domain_comparison (
++        w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
++        [&] (int x, int y)
++        { return support ? support[(size_t)y * w + x] : (luminosity_t)1; },
++        entry_to_scr);
++  };
++  auto rgb = [&] (const rgbdata *data, const luminosity_t *support,
++                  int wscl, int hscl, entry_to_scr_fn entry_to_scr)
++  {
++    if (!data)
++      return denoise_noise_domain_comparison{};
++    const int w = m_area.width << wscl;
++    const int h = m_area.height << hscl;
++    return estimate_screen_rgb_noise_domain_comparison (
++        w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
++        [&] (int x, int y)
++        { return support ? support[(size_t)y * w + x] : (luminosity_t)1; },
++        entry_to_scr);
++  };
++
++  denoise_noise_domain_comparison r, g, b;
++  if (m_rgb_red || m_rgb_green || m_rgb_blue)
++    {
++      r = rgb (m_rgb_red.get (), m_red_support.get (), m_rwscl, m_rhscl,
++               m_red_entry_to_scr);
++      g = rgb (m_rgb_green.get (), m_green_support.get (), m_gwscl, m_ghscl,
++               m_green_entry_to_scr);
++      b = rgb (m_rgb_blue.get (), m_blue_support.get (), m_bwscl, m_bhscl,
++               m_blue_entry_to_scr);
++    }
++  else
++    {
++      r = scalar (m_red.get (), m_red_support.get (), m_rwscl, m_rhscl,
++                  m_red_entry_to_scr);
++      g = scalar (m_green.get (), m_green_support.get (), m_gwscl, m_ghscl,
++                  m_green_entry_to_scr);
++      b = scalar (m_blue.get (), m_blue_support.get (), m_bwscl, m_bhscl,
++                  m_blue_entry_to_scr);
++    }
++  if (red_est)
++    *red_est = r;
++  if (green_est)
++    *green_est = g;
++  if (blue_est)
++    *blue_est = b;
++  return r.valid_p () || g.valid_p () || b.valid_p ();
++}
++
+ luminosity_t
+ analyze_base::red_collection_support (int x, int y) const noexcept
+ {
+diff --git a/src/libcolorscreen/analyze-base.h b/src/libcolorscreen/analyze-base.h
+index cdced79..360a0db 100644
+--- a/src/libcolorscreen/analyze-base.h
++++ b/src/libcolorscreen/analyze-base.h
+@@ -20,6 +20,7 @@ namespace colorscreen {
+ struct denoise_noise_estimate;
+ struct denoise_noise_scale_estimate;
+ struct denoise_noise_three_scale_estimate;
++struct denoise_noise_domain_comparison;
+ 
+ /* Base class for color screen analysis.
+    Analyzes image data to determine properties of the color screen patches.  */
+@@ -286,6 +287,13 @@ public:
+       denoise_noise_three_scale_estimate *green,
+       denoise_noise_three_scale_estimate *blue) const;
+ 
++  /* Compare linear, density/log and variance-stabilized domains using the
++     same three-scale geometry/support diagnostic.  Read-only.  */
++  bool estimate_noise_domain_comparisons (
++      denoise_noise_domain_comparison *red,
++      denoise_noise_domain_comparison *green,
++      denoise_noise_domain_comparison *blue) const;
++
+   /* Return raw collection support for a red/green/blue sample.  The support
+      is the accumulated contribution of real scanner pixels used to estimate
+      the sample.  It is available for precise/color collection modes and is
+diff --git a/src/libcolorscreen/denoise.h b/src/libcolorscreen/denoise.h
+index bb45c5d..40a63e1 100644
+--- a/src/libcolorscreen/denoise.h
++++ b/src/libcolorscreen/denoise.h
+@@ -108,6 +108,12 @@ struct denoise_noise_estimate
+   luminosity_t variance_slope = 0;
+   luminosity_t support_threshold = 0;
+   luminosity_t relative_fit_error = 0;
++  /* Pure diagnostic regression before enforcing the physical linear-domain
++     constraints floor>0 and slope>=0.  Transformed-domain comparisons use
++     this value so a legitimate negative variance slope is not penalized.  */
++  luminosity_t unconstrained_variance_floor = 0;
++  luminosity_t unconstrained_variance_slope = 0;
++  luminosity_t unconstrained_relative_fit_error = 0;
+   size_t observations = 0;
+   int bins = 0;
+ 
+@@ -180,6 +186,21 @@ struct denoise_noise_three_scale_estimate
+   }
+ };
+ 
++/* Compare the existing three-scale diagnostic in several sample domains.
++   LINEAR is the historical collected-sample domain.  DENSITY_LOG applies
++   -log(x) and therefore accepts only strictly positive samples.
++   VARIANCE_STABILIZED uses the spacing-1 linear floor+slope estimate to
++   construct a generalized square-root transform.  All results are read-only. */
++struct denoise_noise_domain_comparison
++{
++  denoise_noise_three_scale_estimate linear;
++  denoise_noise_three_scale_estimate density_log;
++  denoise_noise_three_scale_estimate variance_stabilized;
++  denoise_noise_estimate variance_stabilizer_source;
++
++  bool valid_p () const { return linear.valid_p (); }
++};
++
+ namespace denoise_noise_estimator_detail
+ {
+ struct observation
+@@ -217,7 +238,8 @@ median (std::vector<luminosity_t> &v)
+    by this constant makes the estimate consistent for Gaussian scanner noise
+    while remaining much less sensitive to edges and texture than a mean.  */
+ inline denoise_noise_estimate
+-fit (std::vector<observation> &obs, luminosity_t support_threshold)
++fit (std::vector<observation> &obs, luminosity_t support_threshold,
++     bool nonnegative_signal = true)
+ {
+   denoise_noise_estimate result;
+   result.observations = obs.size ();
+@@ -251,7 +273,8 @@ fit (std::vector<observation> &obs, luminosity_t support_threshold)
+       luminosity_t x = median (signals);
+       luminosity_t y = median (vars) / chi_square_1_median;
+       if (my_isfinite (x) && my_isfinite (y) && y > 0)
+-        bins.push_back ({std::max (x, (luminosity_t)0), y, end - begin});
++        bins.push_back ({nonnegative_signal ? std::max (x, (luminosity_t)0) : x,
++                         y, end - begin});
+     }
+   result.bins = bins.size ();
+   if (bins.size () < 4)
+@@ -271,6 +294,22 @@ fit (std::vector<observation> &obs, luminosity_t support_threshold)
+   long double slope = denom > 1e-30L ? (sw * sxy - sx * sy) / denom : 0;
+   long double floor = (sy - slope * sx) / sw;
+ 
++  if (my_isfinite ((double)slope) && my_isfinite ((double)floor))
++    {
++      result.unconstrained_variance_floor = (luminosity_t)floor;
++      result.unconstrained_variance_slope = (luminosity_t)slope;
