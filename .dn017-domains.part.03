@@ -1,0 +1,55 @@
++    const luminosity_t expected_floor = (luminosity_t)0.0002;
++    const luminosity_t expected_slope = (luminosity_t)0.002;
++    std::vector<luminosity_t> data ((size_t)w * h), support ((size_t)w * h, 1);
++    unsigned int noise_seed = 0x51ab17U;
++    auto gaussian = [&] () -> luminosity_t
++    {
++      luminosity_t u1
++          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
++      luminosity_t u2
++          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
++      return std::sqrt ((luminosity_t)-2 * std::log (u1))
++             * std::cos ((luminosity_t)6.2831853071795864769 * u2);
++    };
++    for (int y = 0; y < h; y++)
++      for (int x = 0; x < w; x++)
++        {
++          luminosity_t signal = (luminosity_t)0.08
++              + (luminosity_t)0.65 * x / (w - 1)
++              + (luminosity_t)0.08 * y / (h - 1);
++          luminosity_t variance = expected_floor + expected_slope * signal;
++          data[(size_t)y * w + x]
++              = signal + std::sqrt (variance) * gaussian ();
++        }
++
++    denoise_noise_domain_comparison domains = estimate_screen_noise_domain_comparison (
++        w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
++        [&] (int x, int y) { return support[(size_t)y * w + x]; },
++        [] (int_point_t p) { return point_t{(coord_t)p.x, (coord_t)p.y}; });
++    if (!domains.linear.valid_p () || !domains.variance_stabilized.valid_p ()
++        || domains.linear.spacing1.variance_slope < expected_slope * (luminosity_t)0.35
++        || domains.variance_stabilized.spacing1.variance_slope
++               > domains.variance_stabilized.spacing1.variance_floor
++                    * (luminosity_t)0.02
++        || fabs (domains.variance_stabilized.spacing2_variance_ratio
++                 - (luminosity_t)1) > (luminosity_t)0.3
++        || fabs (domains.variance_stabilized.spacing3_variance_ratio
++                 - (luminosity_t)1) > (luminosity_t)0.35)
++      {
++        fprintf (stderr,
++                 "Variance-stabilized diagnostic mismatch: linear floor %g "
++                 "slope %g; VST floor %g slope %g ratios %g %g\n",
++                 (double)domains.linear.spacing1.variance_floor,
++                 (double)domains.linear.spacing1.variance_slope,
++                 (double)domains.variance_stabilized.spacing1.variance_floor,
++                 (double)domains.variance_stabilized.spacing1.variance_slope,
++                 (double)domains.variance_stabilized.spacing2_variance_ratio,
++                 (double)domains.variance_stabilized.spacing3_variance_ratio);
++        return false;
++      }
++  }
++
++
+   /* A bilateral filter needs a border matching its spatial kernel, not the
+      unrelated NL-means patch and search radii.  Sigma 2 has support radius 6
+      with the three-sigma truncation used by process_bilateral().  */
