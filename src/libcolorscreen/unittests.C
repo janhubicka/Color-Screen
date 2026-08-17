@@ -5687,6 +5687,24 @@ test_denoise ()
                  three.paired_observations);
         return false;
       }
+
+    denoise_noise_domain_comparison domains
+        = estimate_screen_noise_domain_comparison (
+            w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+            [&] (int x, int y) { return support[(size_t)y * w + x]; },
+            identity_to_scr);
+    if (domains.linear.paired_observations != three.paired_observations
+        || domains.linear.spacing2_variance_ratio
+               != three.spacing2_variance_ratio
+        || domains.linear.spacing3_variance_ratio
+               != three.spacing3_variance_ratio
+        || !domains.density_log.valid_p ()
+        || !domains.variance_stabilized.valid_p ())
+      {
+        fprintf (stderr,
+                 "Scalar noise-domain comparison changed linear semantics\n");
+        return false;
+      }
   }
 
   /* Precise-RGB estimation pools the three scanner components but must
@@ -5783,6 +5801,26 @@ test_denoise ()
                  (double)three.spacing2_variance_ratio,
                  (double)three.spacing3_variance_ratio,
                  three.paired_observations);
+        return false;
+      }
+
+    denoise_noise_domain_comparison domains
+        = estimate_screen_rgb_noise_domain_comparison (
+            w, h,
+            [&] (int x, int y) { return data[(size_t)y * w + x]; },
+            [&] (int x, int y) { return support[(size_t)y * w + x]; },
+            [] (int_point_t p)
+            { return point_t{(coord_t)p.x, (coord_t)p.y}; });
+    if (domains.linear.paired_observations != three.paired_observations
+        || domains.linear.spacing2_variance_ratio
+               != three.spacing2_variance_ratio
+        || domains.linear.spacing3_variance_ratio
+               != three.spacing3_variance_ratio
+        || !domains.density_log.valid_p ()
+        || !domains.variance_stabilized.valid_p ())
+      {
+        fprintf (stderr,
+                 "RGB noise-domain comparison changed linear semantics\n");
         return false;
       }
   }
@@ -5927,6 +5965,134 @@ test_denoise ()
                  (double)three.scale_growth_exponent,
                  (double)three.extrapolated_scale_invariant_fraction,
                  three.paired_observations);
+        return false;
+      }
+  }
+
+
+  /* DN-017 keeps domain selection diagnostic-only.  Verify the elementary
+     transforms first, including the slope->0 limit of the generalized
+     square-root transform.  */
+  {
+    luminosity_t y = 0;
+    if (!denoise_density_log_transform ((luminosity_t)std::exp (-2.0), &y)
+        || fabs (y - (luminosity_t)2) > (luminosity_t)1e-5
+        || denoise_density_log_transform (0, &y)
+        || !denoise_variance_stabilizing_transform (
+               (luminosity_t)0.3, (luminosity_t)0.04, 0, &y)
+        || fabs (y - (luminosity_t)1.5) > (luminosity_t)1e-5)
+      {
+        fprintf (stderr, "Noise-domain elementary transforms are wrong\n");
+        return false;
+      }
+  }
+
+  /* Multiplicative log-normal noise becomes additive in density/log space.
+     Use broad flat signal bands so the robust second-difference statistic is
+     dominated by noise rather than by the boundaries between signal levels. */
+  {
+    const int w = 128, h = 96;
+    const luminosity_t sigma = (luminosity_t)0.16;
+    std::vector<luminosity_t> data ((size_t)w * h), support ((size_t)w * h, 1);
+    unsigned int noise_seed = 0x31415926U;
+    auto gaussian = [&] () -> luminosity_t
+    {
+      luminosity_t u1
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      luminosity_t u2
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      return std::sqrt ((luminosity_t)-2 * std::log (u1))
+             * std::cos ((luminosity_t)6.2831853071795864769 * u2);
+    };
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        {
+          int band = std::min (7, y / (h / 8));
+          luminosity_t t = (luminosity_t)band / 7;
+          luminosity_t signal = std::exp (
+              std::log ((luminosity_t)0.12) * (1 - t)
+              + std::log ((luminosity_t)0.90) * t);
+          luminosity_t z = gaussian ();
+          data[(size_t)y * w + x]
+              = signal * std::exp (sigma * z - sigma * sigma * (luminosity_t)0.5);
+        }
+    denoise_noise_domain_comparison domains
+        = estimate_screen_noise_domain_comparison (
+            w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+            [&] (int x, int y) { return support[(size_t)y * w + x]; },
+            [] (int_point_t p)
+            { return point_t{(coord_t)p.x, (coord_t)p.y}; });
+    if (!domains.linear.valid_p () || !domains.density_log.valid_p ()
+        || domains.density_log.paired_observations
+               != domains.linear.paired_observations
+        || !(domains.density_log.spacing1.unconstrained_relative_fit_error
+             < domains.linear.spacing1.unconstrained_relative_fit_error
+                   * (luminosity_t)0.6))
+      {
+        fprintf (stderr,
+                 "Density-domain diagnostic failed: linear error %g density "
+                 "error %g observations %zu/%zu\n",
+                 (double)domains.linear.spacing1.unconstrained_relative_fit_error,
+                 (double)domains.density_log.spacing1.unconstrained_relative_fit_error,
+                 domains.linear.paired_observations,
+                 domains.density_log.paired_observations);
+        return false;
+      }
+  }
+
+  /* For a true floor+slope variance law the generalized square-root domain
+     should make the residual variance nearly signal-independent.  This does
+     not assert that the transformed fit error is lower: the linear domain is
+     already exactly the model used to construct the transform.  */
+  {
+    const int w = 128, h = 96;
+    const luminosity_t floor = (luminosity_t)0.0002;
+    const luminosity_t slope = (luminosity_t)0.01;
+    std::vector<luminosity_t> data ((size_t)w * h), support ((size_t)w * h, 1);
+    unsigned int noise_seed = 0x27182818U;
+    auto gaussian = [&] () -> luminosity_t
+    {
+      luminosity_t u1
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      luminosity_t u2
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      return std::sqrt ((luminosity_t)-2 * std::log (u1))
+             * std::cos ((luminosity_t)6.2831853071795864769 * u2);
+    };
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        {
+          luminosity_t signal = (luminosity_t)0.10
+              + (luminosity_t)0.75 * x / (w - 1)
+              + (luminosity_t)0.04 * y / (h - 1);
+          luminosity_t variance = floor + slope * signal;
+          data[(size_t)y * w + x]
+              = signal + std::sqrt (variance) * gaussian ();
+        }
+    denoise_noise_domain_comparison domains
+        = estimate_screen_noise_domain_comparison (
+            w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+            [&] (int x, int y) { return support[(size_t)y * w + x]; },
+            [] (int_point_t p)
+            { return point_t{(coord_t)p.x, (coord_t)p.y}; });
+    if (!domains.linear.valid_p () || !domains.variance_stabilized.valid_p ()
+        || domains.variance_stabilized.paired_observations
+               != domains.linear.paired_observations
+        || !(domains.variance_stabilizer_source.variance_slope
+             > domains.variance_stabilizer_source.variance_floor * 3)
+        || !(domains.variance_stabilized.spacing1.variance_slope
+             < domains.variance_stabilized.spacing1.variance_floor
+                   * (luminosity_t)0.05))
+      {
+        fprintf (stderr,
+                 "Variance-stabilized diagnostic failed: source floor %g "
+                 "slope %g transformed floor %g slope %g obs %zu/%zu\n",
+                 (double)domains.variance_stabilizer_source.variance_floor,
+                 (double)domains.variance_stabilizer_source.variance_slope,
+                 (double)domains.variance_stabilized.spacing1.variance_floor,
+                 (double)domains.variance_stabilized.spacing1.variance_slope,
+                 domains.linear.paired_observations,
+                 domains.variance_stabilized.paired_observations);
         return false;
       }
   }
