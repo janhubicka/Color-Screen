@@ -1,0 +1,69 @@
+name: Execute Adobe DNG SDK reference warp
+
+on:
+  push:
+    branches: [ "agent/dng-sdk-reference-run" ]
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and execute Build 2652 warp
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build libjpeg-dev zlib1g-dev libexpat1-dev
+          curl -fL --retry 3 \
+            https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1_2652_20260714.zip \
+            -o /tmp/dng-sdk.zip
+          echo '73499b47f4683e12120a234bd0946f02e52ab2ff9834bcbd0e9f8ab4f923360e  /tmp/dng-sdk.zip' | sha256sum -c -
+          mkdir /tmp/adobe
+          unzip -q /tmp/dng-sdk.zip -d /tmp/adobe
+          ADOBE=/tmp/adobe/dng_sdk_1_7_1
+          git clone --depth 1 https://github.com/hfiguiere/dng_sdk.git /tmp/build
+          cp -a "$ADOBE/dng_sdk/source/." /tmp/build/dng_sdk/source/
+          cd /tmp/build
+          test "$(sha256sum "$ADOBE/dng_sdk/source/dng_lens_correction.cpp" | cut -d' ' -f1)" = \
+               "$(sha256sum dng_sdk/source/dng_lens_correction.cpp | cut -d' ' -f1)"
+          test "$(sha256sum dng_sdk/source/dng_lens_correction.cpp | cut -d' ' -f1)" = \
+               '89112619dce4a205761dc9e3b0c641d6c1d99911829a18c181a7229af4e8521f'
+
+          # JPEG-XL is unrelated to lens warping.  The Linux build glue currently
+          # requires a newer libjxl than Ubuntu 24.04, so omit that translation
+          # unit and make its Meson dependency placeholders empty for this probe.
+          sed -i "s/jpegxl = dependency.*/jpegxl = declare_dependency()/" meson.build
+          sed -i "s/jpegxl_threads = dependency.*/jpegxl_threads = declare_dependency()/" meson.build
+          sed -i "/'dng_jxl.cpp',/d" dng_sdk/source/meson.build
+
+          cat "$GITHUB_WORKSPACE/.github/dng-reference/reference-wrapper.inc" \
+            >> dng_sdk/source/dng_lens_correction.cpp
+          cp "$GITHUB_WORKSPACE/.github/dng-reference/reference_probe.cpp" \
+            dng_sdk/source/reference_probe.cpp
+          cat >> dng_sdk/source/meson.build <<'EOF'
+
+          executable(
+            'reference_probe',
+            'reference_probe.cpp',
+            cpp_args: [ '-DqDNGUseLibJPEG=1', '-DAdobePrivate=0' ],
+            include_directories: [ '..' / 'projects' / 'meson' ],
+            dependencies: [ zlib, expat, libjpeg ],
+            link_with: [ dng_sdk, xmp_sdk ]
+          )
+          EOF
+          meson setup _build
+          ninja -C _build dng_sdk/source/reference_probe
+          mkdir -p "$GITHUB_WORKSPACE/reference-output"
+          _build/dng_sdk/source/reference_probe \
+            | tee "$GITHUB_WORKSPACE/reference-output/adobe-dng-sdk-2652-warp-fixture.txt"
+          {
+            echo 'Adobe DNG SDK 1.7.1 Build 2652, 2026-07-14'
+            echo 'Official ZIP sha256: 73499b47f4683e12120a234bd0946f02e52ab2ff9834bcbd0e9f8ab4f923360e'
+            echo 'dng_lens_correction.cpp sha256: 89112619dce4a205761dc9e3b0c641d6c1d99911829a18c181a7229af4e8521f'
+          } > "$GITHUB_WORKSPACE/reference-output/PROVENANCE.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: adobe-dng-sdk-2652-executed-warp-fixture
+          path: reference-output
