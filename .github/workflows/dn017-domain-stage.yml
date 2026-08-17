@@ -1,0 +1,41 @@
+name: Publish verified DN-017 domain comparison
+
+on:
+  push:
+    branches:
+      - review/dn-017-domain-stage
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: review/dn-017-domain-stage
+          fetch-depth: 0
+      - name: Apply exact locally-tested DN-017 patch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat .dn017-domain.part.* > /tmp/DN017-domain.patch
+          echo '400be067120e703419021cc887dab94af98a88715aa2aa72f30a657c54f3db55  /tmp/DN017-domain.patch' | sha256sum -c -
+          git apply --check /tmp/DN017-domain.patch
+          git apply /tmp/DN017-domain.patch
+          cp .dn017-domain-tracker.md doc/denoise-tracking.md
+          git diff --check
+          test "$(git hash-object src/libcolorscreen/analyze-base.C)" = 3ff7d76950962bc54ce88e624ec1d91edbb7c300
+          test "$(git hash-object src/libcolorscreen/analyze-base.h)" = 06455d2f2cb3bcc3934e8f39ac83ed2d78cfdbdc
+          test "$(git hash-object src/libcolorscreen/denoise.h)" = e9dfdadde7ab47531ae1dd5b22f2551a23129160
+          test "$(git hash-object src/libcolorscreen/render-interpolate.C)" = 0dc4b4004ba75d33dceca15f44241345e4bf8491
+          test "$(git hash-object src/libcolorscreen/render-interpolate.h)" = 71f6c9ddd27117ac79eee4bfa58546795f2516c0
+          test "$(git hash-object src/libcolorscreen/unittests.C)" = fb66c2e4c65791c4fb605d93badf36860ec105b6
+          test "$(git hash-object doc/denoise-tracking.md)" = d9a89b25662a21e939b538d43890a2fcb3e01461
+          rm .dn017-domain.part.* .dn017-domain-tracker.md .github/workflows/dn017-domain-stage.yml
+          git add -A
+          git config user.name 'OpenAI review'
+          git config user.email 'review@openai.invalid'
+          git commit -m 'denoise: compare screen-noise domains' -m 'Compare the existing three-scale collected-screen noise diagnostic in linear intensity, density/log, and a generalized square-root variance-stabilized domain. Keep linear results on the existing estimator, reject non-positive density samples, and derive the VST from the linear spacing-1 floor+slope model. Synthetic regressions validate multiplicative-noise and signal-dependent additive-noise cases; real Hurley/Paget and Dufay measurements show no transformed domain improves both processes consistently, so production denoising remains in linear sample space.'
+          git push origin HEAD:review/dn-017-domain-stage
