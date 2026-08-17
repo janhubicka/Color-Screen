@@ -1,0 +1,41 @@
+name: Publish verified DN-017 domain diagnostic
+
+on:
+  push:
+    branches:
+      - review/dn-017-domain-diagnostic-stage
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: review/dn-017-domain-diagnostic-stage
+          fetch-depth: 0
+      - name: Apply exact locally-tested DN-017 patch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat .dn017-domain.part.* > /tmp/DN017-domain.patch
+          echo '33eaeccd28b41380ffa95a0012415f29bd79913e78af3e921d392f60b27d5acd  /tmp/DN017-domain.patch' | sha256sum -c -
+          git apply --check /tmp/DN017-domain.patch
+          git apply /tmp/DN017-domain.patch
+          git diff --check
+          test "$(git hash-object src/libcolorscreen/analyze-base.C)" = 34a9957300399a15e6af34da6e8f3ae4452fb236
+          test "$(git hash-object src/libcolorscreen/analyze-base.h)" = 082ec2fb7ec375168d3f629f6df5e5cda681bdae
+          test "$(git hash-object src/libcolorscreen/denoise.h)" = a4a84fdd471ca7031030a6148afbc282acedd3bf
+          test "$(git hash-object src/libcolorscreen/render-interpolate.C)" = 0dc4b4004ba75d33dceca15f44241345e4bf8491
+          test "$(git hash-object src/libcolorscreen/render-interpolate.h)" = b81aacb80f2a0d97533c63a076bbf1221dc9a671
+          test "$(git hash-object src/libcolorscreen/unittests.C)" = b3b84e02856bcf913308b625f43ffe60f7707785
+          test "$(git hash-object doc/denoise-tracking.md)" = 77d4f5636c4f155f551a52d15a1b6922479faa2b
+          rm .dn017-domain.part.* .github/workflows/dn017-domain-diagnostic-stage.yml
+          git add -A
+          git config user.name 'OpenAI review'
+          git config user.email 'review@openai.invalid'
+          git commit -m 'denoise: compare noise domains across scales' \
+            -m 'Compare identical positive collected samples in linear intensity, shifted optical density, and a generalized square-root variance-stabilized domain. Keep the comparison read-only and expose it through analyzer/render wrappers. Add synthetic density, floor+slope VST, and precise-RGB sample-set regressions. Real Hurley/Paget improves in density while Dufay degrades, so keep rendering in the existing linear domain and record DN-017 as diagnostic/partial.'
+          git push origin HEAD:review/dn-017-domain-diagnostic-stage
