@@ -180,6 +180,30 @@ struct denoise_noise_three_scale_estimate
   }
 };
 
+
+/* Compare the same three-scale screen-noise diagnostic in several sample
+   domains without changing rendering parameters.  LINEAR is the historical
+   linear-intensity estimate.  DENSITY applies -log(x) and therefore rejects
+   non-positive samples instead of clipping them.  VARIANCE_STABILIZED uses
+   the spacing-1 floor+slope model measured in linear space to integrate
+   1/sqrt(variance(x)); its coefficients are recorded for diagnostics.  */
+struct denoise_noise_domain_comparison
+{
+  denoise_noise_three_scale_estimate linear;
+  denoise_noise_three_scale_estimate density;
+  denoise_noise_three_scale_estimate variance_stabilized;
+  luminosity_t vst_variance_floor = 0;
+  luminosity_t vst_variance_slope = 0;
+
+  bool density_valid_p () const { return density.valid_p (); }
+  bool variance_stabilized_valid_p () const
+  {
+    return vst_variance_floor > 0 && my_isfinite (vst_variance_floor)
+           && my_isfinite (vst_variance_slope)
+           && vst_variance_slope >= 0 && variance_stabilized.valid_p ();
+  }
+};
+
 namespace denoise_noise_estimator_detail
 {
 struct observation
@@ -842,6 +866,188 @@ estimate_screen_rgb_noise_three_scale_model (
             spacing3.push_back ({signal, d3 * d3 / (luminosity_t)6});
           }
       });
+}
+
+
+/* Apply a scalar sample transform before running the three-scale diagnostic.
+   TRANSFORM returns false when the raw sample has no representation in the
+   requested domain (for example non-positive transmission in density space).
+   The physical geometry/support selection remains exactly the same as in the
+   linear estimator.  */
+template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR,
+          typename TRANSFORM>
+inline denoise_noise_three_scale_estimate
+estimate_screen_noise_three_scale_model_transformed (
+    int width, int height, GETDATA getdata, GETSUPPORT getsupport,
+    ENTRY_TO_SCR entry_to_scr, TRANSFORM transform)
+{
+  using namespace denoise_noise_estimator_detail;
+  return collect_three_scales (
+      width, height, getsupport, entry_to_scr,
+      [&] (std::vector<observation> &spacing1,
+           std::vector<observation> &spacing2,
+           std::vector<observation> &spacing3, int_point_t a3,
+           int_point_t a2, int_point_t a1, int_point_t b, int_point_t c1,
+           int_point_t c2, int_point_t c3)
+      {
+        int_point_t points[7] = {a3, a2, a1, b, c1, c2, c3};
+        luminosity_t v[7];
+        for (int i = 0; i < 7; i++)
+          {
+            luminosity_t raw = getdata ((int)points[i].x, (int)points[i].y);
+            if (!my_isfinite (raw) || !transform (raw, &v[i])
+                || !my_isfinite (v[i]))
+              return;
+          }
+        luminosity_t signal = 0;
+        for (luminosity_t x : v)
+          signal += x;
+        signal = std::max (signal / (luminosity_t)7, (luminosity_t)0);
+        luminosity_t d1 = v[2] - 2 * v[3] + v[4];
+        luminosity_t d2 = v[1] - 2 * v[3] + v[5];
+        luminosity_t d3 = v[0] - 2 * v[3] + v[6];
+        spacing1.push_back ({signal, d1 * d1 / (luminosity_t)6});
+        spacing2.push_back ({signal, d2 * d2 / (luminosity_t)6});
+        spacing3.push_back ({signal, d3 * d3 / (luminosity_t)6});
+      });
+}
+
+template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR,
+          typename TRANSFORM>
+inline denoise_noise_three_scale_estimate
+estimate_screen_rgb_noise_three_scale_model_transformed (
+    int width, int height, GETDATA getdata, GETSUPPORT getsupport,
+    ENTRY_TO_SCR entry_to_scr, TRANSFORM transform)
+{
+  using namespace denoise_noise_estimator_detail;
+  return collect_three_scales (
+      width, height, getsupport, entry_to_scr,
+      [&] (std::vector<observation> &spacing1,
+           std::vector<observation> &spacing2,
+           std::vector<observation> &spacing3, int_point_t a3,
+           int_point_t a2, int_point_t a1, int_point_t b, int_point_t c1,
+           int_point_t c2, int_point_t c3)
+      {
+        int_point_t points[7] = {a3, a2, a1, b, c1, c2, c3};
+        rgbdata raw[7];
+        for (int i = 0; i < 7; i++)
+          raw[i] = getdata ((int)points[i].x, (int)points[i].y);
+        for (int k = 0; k < 3; k++)
+          {
+            luminosity_t v[7];
+            bool valid = true;
+            for (int i = 0; i < 7; i++)
+              valid &= my_isfinite (raw[i][k])
+                       && transform (raw[i][k], &v[i])
+                       && my_isfinite (v[i]);
+            if (!valid)
+              continue;
+            luminosity_t signal = 0;
+            for (luminosity_t x : v)
+              signal += x;
+            signal = std::max (signal / (luminosity_t)7, (luminosity_t)0);
+            luminosity_t d1 = v[2] - 2 * v[3] + v[4];
+            luminosity_t d2 = v[1] - 2 * v[3] + v[5];
+            luminosity_t d3 = v[0] - 2 * v[3] + v[6];
+            spacing1.push_back ({signal, d1 * d1 / (luminosity_t)6});
+            spacing2.push_back ({signal, d2 * d2 / (luminosity_t)6});
+            spacing3.push_back ({signal, d3 * d3 / (luminosity_t)6});
+          }
+      });
+}
+
+inline bool
+denoise_density_transform (luminosity_t value, luminosity_t *out)
+{
+  if (!(value > 0) || !my_isfinite (value))
+    return false;
+  *out = -std::log (value);
+  return my_isfinite (*out);
+}
+
+/* Integral of 1/sqrt(a+b*x), written without the small-b cancellation in
+   2/b*(sqrt(a+b*x)-sqrt(a)).  The irrelevant additive constant is chosen so
+   T(0)=0.  For b=0 this smoothly reduces to x/sqrt(a).  */
+inline bool
+denoise_variance_stabilizing_transform (luminosity_t value,
+                                          luminosity_t variance_floor,
+                                          luminosity_t variance_slope,
+                                          luminosity_t *out)
+{
+  if (!(variance_floor > 0) || variance_slope < 0
+      || !my_isfinite (value) || !my_isfinite (variance_floor)
+      || !my_isfinite (variance_slope))
+    return false;
+  luminosity_t variance = variance_floor + variance_slope * value;
+  if (!(variance > 0) || !my_isfinite (variance))
+    return false;
+  luminosity_t denom = std::sqrt (variance) + std::sqrt (variance_floor);
+  if (!(denom > 0) || !my_isfinite (denom))
+    return false;
+  *out = 2 * value / denom;
+  return my_isfinite (*out);
+}
+
+template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
+inline denoise_noise_domain_comparison
+estimate_screen_noise_domain_comparison (
+    int width, int height, GETDATA getdata, GETSUPPORT getsupport,
+    ENTRY_TO_SCR entry_to_scr)
+{
+  denoise_noise_domain_comparison result;
+  result.linear = estimate_screen_noise_three_scale_model (
+      width, height, getdata, getsupport, entry_to_scr);
+  result.density = estimate_screen_noise_three_scale_model_transformed (
+      width, height, getdata, getsupport, entry_to_scr,
+      [] (luminosity_t value, luminosity_t *out)
+      { return denoise_density_transform (value, out); });
+  if (result.linear.spacing1.valid_p ())
+    {
+      result.vst_variance_floor = result.linear.spacing1.variance_floor;
+      result.vst_variance_slope = result.linear.spacing1.variance_slope;
+      const luminosity_t floor = result.vst_variance_floor;
+      const luminosity_t slope = result.vst_variance_slope;
+      result.variance_stabilized
+          = estimate_screen_noise_three_scale_model_transformed (
+              width, height, getdata, getsupport, entry_to_scr,
+              [floor, slope] (luminosity_t value, luminosity_t *out)
+              {
+                return denoise_variance_stabilizing_transform (
+                    value, floor, slope, out);
+              });
+    }
+  return result;
+}
+
+template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
+inline denoise_noise_domain_comparison
+estimate_screen_rgb_noise_domain_comparison (
+    int width, int height, GETDATA getdata, GETSUPPORT getsupport,
+    ENTRY_TO_SCR entry_to_scr)
+{
+  denoise_noise_domain_comparison result;
+  result.linear = estimate_screen_rgb_noise_three_scale_model (
+      width, height, getdata, getsupport, entry_to_scr);
+  result.density = estimate_screen_rgb_noise_three_scale_model_transformed (
+      width, height, getdata, getsupport, entry_to_scr,
+      [] (luminosity_t value, luminosity_t *out)
+      { return denoise_density_transform (value, out); });
+  if (result.linear.spacing1.valid_p ())
+    {
+      result.vst_variance_floor = result.linear.spacing1.variance_floor;
+      result.vst_variance_slope = result.linear.spacing1.variance_slope;
+      const luminosity_t floor = result.vst_variance_floor;
+      const luminosity_t slope = result.vst_variance_slope;
+      result.variance_stabilized
+          = estimate_screen_rgb_noise_three_scale_model_transformed (
+              width, height, getdata, getsupport, entry_to_scr,
+              [floor, slope] (luminosity_t value, luminosity_t *out)
+              {
+                return denoise_variance_stabilizing_transform (
+                    value, floor, slope, out);
+              });
+    }
+  return result;
 }
 
 template <typename ENTRY_TO_SCR>
