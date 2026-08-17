@@ -8,7 +8,6 @@
 #include "dng_image.h"
 #include "dng_image_writer.h"
 #include "dng_info.h"
-#include "dng_metadata.h"
 #include "dng_stream.h"
 
 bool SupportsJXL (const dng_image &)
