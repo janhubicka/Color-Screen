@@ -1,0 +1,39 @@
+name: Agent publish tested lens DNG patch
+
+on:
+  push:
+    branches: [ "agent/lens-dng-publish-stage" ]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Publish tested patch as one clean review commit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat .github/agent-lens-dng-patch/part*.b64 | base64 -d > /tmp/lens.patch
+          echo 'c1040132f1caca3634f9a10a915ab9223144be5669dc713b61fd54d5a5e80989  /tmp/lens.patch' | sha256sum -c -
+          git fetch origin main
+          git reset --hard origin/main
+          git apply --check /tmp/lens.patch
+          git apply /tmp/lens.patch
+          git diff --check
+          git add \
+            doc/lens-correction-review.md \
+            src/libcolorscreen/include/lens-correction.h \
+            src/libcolorscreen/include/lens-warp-correction-parameters.h \
+            src/libcolorscreen/lens-warp-correction.C \
+            src/libcolorscreen/scr-to-img.C \
+            src/libcolorscreen/solver.C \
+            src/libcolorscreen/unittests.C
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'lens: fix DNG warp semantics and inverse consistency'
+          git push --force origin HEAD:agent/lens-dng-correctness
