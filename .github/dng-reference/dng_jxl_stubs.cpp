@@ -15,15 +15,13 @@ bool SupportsJXL (const dng_image &)
 	return false;
 }
 
-void ParseJXL (dng_host &, dng_stream &, dng_info &, bool, bool)
+bool ParseJXL (dng_host &, dng_stream &, dng_info &, bool, bool)
 {
 	ThrowProgramError ();
+	return false;
 }
 
-void dng_jxl_decoder::Decode (dng_host &,
-								dng_image &,
-								const dng_jxl_decode_settings &,
-								dng_stream &)
+void dng_jxl_decoder::Decode (dng_host &, dng_stream &)
 {
 	ThrowProgramError ();
 }
