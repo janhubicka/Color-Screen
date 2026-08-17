@@ -19,12 +19,12 @@ the remaining calibration/evaluation work is still intentionally open.
 | DN-010 | Resolved | High | Pre-demosaic spatial neighbourhoods are measured in common physical screen coordinates using the existing per-channel geometry mappings.  Paget packed phases and reflected negative coordinates are regression-tested; geometry-aware `nl_fast` deliberately uses the exact reference path. |
 | DN-011 | Resolved | High | `precise_rgb` pre-demosaic filtering uses one scanner-RGB vector similarity weight for all three components, retaining common screen geometry and collection support.  Chromaticity preservation and fast/reference semantics are regression-tested. |
 | DN-012 | Resolved | High | Preserve analyzer collection support through `analyze_base` and use it in pre-demosaic bilateral/NLM similarity and candidate weighting.  Unit support reproduces historical filtering; weak/sub-pixel samples have proportionally less authority. |
-| DN-013 | Partial | High | NLM patch distance has an optional signal-dependent variance normalization `variance = floor + slope * signal`; a zero floor preserves historical output exactly.  The read-only estimator now compares identical support-qualified, geometry-valid observations at physical spacings 1, 2 and 3, and can fit an empirical `V(h) = N + A h^p` law with free exponent when the scale-dependent excess is monotone and physically admissible.  Real Paget/Dufay fits are not stable across channels, so automatic application remains intentionally deferred. |
+| DN-013 | Partial | High | NLM patch distance has an optional signal-dependent variance normalization `variance = floor + slope * signal`; a zero floor preserves historical output exactly.  The read-only estimator compares identical support-qualified, geometry-valid observations at physical spacings 1, 2 and 3, and can fit an empirical `V(h) = N + A h^p` law with free exponent when the scale-dependent excess is monotone and physically admissible.  Real Paget/Dufay fits are not stable across channels, so automatic application remains intentionally deferred. |
 | DN-014 | Open | High | Design and evaluate a guided screen-lattice NLM, preferably IR-guided for registered RGB+IR scans. |
 | DN-015 | Resolved | Medium | Split reconstruction-domain denoising into independent `screen_denoise` (before demosaicing) and `demosaiced_denoise` (after materialized Paget/Dufay demosaicing) parameters and GUI sections, with complete project-file persistence. |
 | DN-021 | Resolved | High | Post-demosaic bilateral/NLM uses a common RGB-vector distance and applies one neighbour weight to all channels; reference and fast vector NLM are regression-tested. |
 | DN-016 | Open | Medium | Build a quality corpus with edges, texture, Dufay/Paget geometry, RGB-vector chromaticity, confidence variation, and real scan crops. |
-| DN-017 | Open | Medium | Decide whether filtering is best in linear intensity, density/log, or variance-stabilized domain for scanner/film noise. |
+| DN-017 | Resolved | Medium | Compare the same three-scale statistic in linear intensity, density/log and a generalized variance-stabilized domain.  Density improves scale invariance on Hurley/Paget but degrades the Dufay scan; the VST gives no consistent improvement.  Keep linear intensity as the default filtering domain and retain transformed domains as diagnostics only. |
 | DN-018 | Open | Low | Precompute bilateral spatial weights and profile before optimizing the brute-force bilateral implementation. |
 | DN-019 | Open | Low | Rework the fast NLM integral image to use an explicit `(w+1)*(h+1)` zero border; current indexing is correct under validated radii but unnecessarily subtle. |
 | DN-020 | Open | Low | Consider exposing command-line denoise controls once algorithm semantics are stable; currently settings are GUI/project-file oriented. |
@@ -49,17 +49,53 @@ The extra scale confirms that the simple spatial decomposition is not common
 across processes or even across colour separations.  The fitted exponent is
 therefore a diagnostic of structure/noise mixing, not a calibration parameter.
 
+## DN-017 real-scan domain diagnostics
+
+The domain comparison reuses the same support and physical geometry rules as
+the three-scale estimator.  `fit error` is the dimensionless spacing-1
+floor-plus-slope variance-model residual.  The generalized VST is derived from
+the linear spacing-1 `floor + slope * signal` fit; it does not use an
+independently tuned noise model.
+
+| Scan / separation | domain | spacing 2 | spacing 3 | fit error |
+|---|---|---:|---:|---:|
+| Hurley/Paget red | linear | 2.68 | 4.72 | 0.738 |
+|  | density | 2.08 | 3.30 | 0.732 |
+|  | VST | 2.69 | 4.82 | 0.740 |
+| Hurley/Paget green | linear | 2.64 | 4.81 | 0.734 |
+|  | density | 2.08 | 3.44 | 0.685 |
+|  | VST | 2.65 | 4.91 | 0.733 |
+| Hurley/Paget blue | linear | 1.58 | 2.82 | 0.729 |
+|  | density | 1.49 | 2.26 | 0.572 |
+|  | VST | 1.51 | 2.62 | 0.736 |
+| Dufay red | linear | 1.14 | 1.27 | 0.776 |
+|  | density | 1.14 | 1.28 | 0.878 |
+|  | VST | 1.14 | 1.27 | 0.769 |
+| Dufay green | linear | 1.20 | 1.33 | 0.340 |
+|  | density | 1.24 | 1.42 | 0.842 |
+|  | VST | 1.20 | 1.34 | 0.423 |
+| Dufay blue | linear | 1.15 | 1.24 | 0.799 |
+|  | density | 1.20 | 1.30 | 0.838 |
+|  | VST | 1.16 | 1.25 | 0.794 |
+
+Density/log space clearly removes part of the structural contamination in the
+Hurley/Paget scan, especially in blue, but the same transform moves the Dufay
+scan away from scale invariance and worsens its variance-model residuals.  The
+VST is mostly an intensity rescaling when the fitted slope is zero and gives no
+consistent gain when the slope is nonzero.  There is therefore no globally
+better transformed domain in the current corpus.  Linear intensity remains the
+conservative default for filtering; transformed domains stay diagnostic.
+
 ## Recommended next implementation order
 
-1. Use the same multi-scale diagnostics to compare linear intensity with
-   density/log or a variance-stabilized domain (DN-017).  Prefer a domain only
-   if it improves scale invariance and cross-channel consistency on both real
-   scans rather than merely improving one fitted coefficient.
-2. Revisit automatic DN-013 coefficient estimation only if one domain gives
-   stable scale behaviour; otherwise keep the explicit variance model opt-in.
-3. Add IR-guided similarity for registered RGB+IR scans and compare it with
-   the best calibrated RGB guide (DN-014).
-4. Grow the quality corpus with stable real-scan crops and quantitative
-   texture/edge/chromaticity/confidence checks (DN-016).
-5. Only after quality is established, optimize the geometry-aware
+1. Add IR-guided similarity for registered RGB+IR scans and compare it with the
+   existing RGB guide (DN-014).  Keep the guide orthogonal to the filtering
+   value domain so IR can improve neighbour selection without changing colour
+   values.
+2. Grow the quality corpus with stable real-scan crops and quantitative
+   texture/edge/chromaticity/confidence checks (DN-016), including examples
+   where density helped and where it hurt.
+3. Revisit automatic DN-013 variance calibration only if the larger corpus
+   supports a process-specific model; otherwise keep the explicit model opt-in.
+4. Only after quality is established, optimize the geometry-aware
    implementation (DN-018/DN-019).

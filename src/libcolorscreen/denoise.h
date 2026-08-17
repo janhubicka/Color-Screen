@@ -11,6 +11,7 @@
 #include <vector>
 #include <cmath>
 #include <algorithm>
+#include <limits>
 #include <omp.h>
 
 namespace colorscreen
@@ -178,6 +179,22 @@ struct denoise_noise_three_scale_estimate
            && extrapolated_scale_invariant_fraction >= 0
            && extrapolated_scale_invariant_fraction <= 1;
   }
+};
+
+/* Read-only DN-017 comparison of the same three-scale sample statistic in
+   three value domains.  LINEAR is the historical collected-sample domain.
+   DENSITY uses -log(x) and therefore rejects non-positive samples rather than
+   clipping them.  VARIANCE_STABILIZED uses the floor+slope model fitted by
+   LINEAR.spacing1 to integrate 1/sqrt(variance(x)); it is left invalid when
+   the linear model itself is unavailable.  None of these diagnostics changes
+   rendering parameters.  */
+struct denoise_noise_domain_comparison
+{
+  denoise_noise_three_scale_estimate linear;
+  denoise_noise_three_scale_estimate density;
+  denoise_noise_three_scale_estimate variance_stabilized;
+
+  bool valid_p () const { return linear.valid_p (); }
 };
 
 namespace denoise_noise_estimator_detail
@@ -842,6 +859,123 @@ estimate_screen_rgb_noise_three_scale_model (
             spacing3.push_back ({signal, d3 * d3 / (luminosity_t)6});
           }
       });
+}
+
+/* Return a quiet NaN so the existing three-scale collector rejects any
+   observation containing a sample outside a transformed domain.  */
+inline luminosity_t
+denoise_noise_invalid_domain_value ()
+{
+  return std::numeric_limits<luminosity_t>::quiet_NaN ();
+}
+
+inline luminosity_t
+denoise_noise_density_value (luminosity_t value)
+{
+  if (!(value > 0) || !my_isfinite (value))
+    return denoise_noise_invalid_domain_value ();
+  return -std::log (value);
+}
+
+/* Integrated inverse standard deviation for variance a+b*x.  Writing
+
+       2/b * (sqrt(a+b*x) - sqrt(a))
+
+   as 2*x/(sqrt(a+b*x)+sqrt(a)) avoids cancellation for a small slope and
+   also gives the correct x/sqrt(a) limit when b is exactly zero.  Negative
+   intensities are rejected instead of being clipped because this is a
+   diagnostic transform, not a rendering operation.  */
+inline luminosity_t
+denoise_noise_variance_stabilized_value (
+    luminosity_t value, const denoise_noise_estimate &model)
+{
+  if (!model.valid_p () || !(value >= 0) || !my_isfinite (value))
+    return denoise_noise_invalid_domain_value ();
+  const luminosity_t a = model.variance_floor;
+  const luminosity_t variance = a + model.variance_slope * value;
+  if (!(variance > 0) || !my_isfinite (variance))
+    return denoise_noise_invalid_domain_value ();
+  const luminosity_t denom = std::sqrt (variance) + std::sqrt (a);
+  if (!(denom > 0) || !my_isfinite (denom))
+    return denoise_noise_invalid_domain_value ();
+  return 2 * value / denom;
+}
+
+/* Compare scalar collected samples in linear intensity, density/log and a
+   variance-stabilized domain while retaining identical geometry/support
+   semantics in each individual three-scale measurement.  */
+template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
+inline denoise_noise_domain_comparison
+estimate_screen_noise_domain_comparison (
+    int width, int height, GETDATA getdata, GETSUPPORT getsupport,
+    ENTRY_TO_SCR entry_to_scr)
+{
+  denoise_noise_domain_comparison result;
+  result.linear = estimate_screen_noise_three_scale_model (
+      width, height, getdata, getsupport, entry_to_scr);
+
+  result.density = estimate_screen_noise_three_scale_model (
+      width, height,
+      [&] (int x, int y)
+      { return denoise_noise_density_value (getdata (x, y)); },
+      getsupport, entry_to_scr);
+
+  if (result.linear.spacing1.valid_p ())
+    {
+      const denoise_noise_estimate model = result.linear.spacing1;
+      result.variance_stabilized = estimate_screen_noise_three_scale_model (
+          width, height,
+          [&] (int x, int y)
+          {
+            return denoise_noise_variance_stabilized_value (getdata (x, y),
+                                                            model);
+          },
+          getsupport, entry_to_scr);
+    }
+  return result;
+}
+
+/* Precise-RGB variant.  The same pooled linear variance model is used for
+   each scanner component, matching the shared variance coefficients used by
+   vector NL-means before demosaicing.  Invalid transformed components are
+   represented by NaN and are skipped independently by the RGB collector.  */
+template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
+inline denoise_noise_domain_comparison
+estimate_screen_rgb_noise_domain_comparison (
+    int width, int height, GETDATA getdata, GETSUPPORT getsupport,
+    ENTRY_TO_SCR entry_to_scr)
+{
+  denoise_noise_domain_comparison result;
+  result.linear = estimate_screen_rgb_noise_three_scale_model (
+      width, height, getdata, getsupport, entry_to_scr);
+
+  result.density = estimate_screen_rgb_noise_three_scale_model (
+      width, height,
+      [&] (int x, int y)
+      {
+        rgbdata value = getdata (x, y);
+        for (int k = 0; k < 3; k++)
+          value[k] = denoise_noise_density_value (value[k]);
+        return value;
+      },
+      getsupport, entry_to_scr);
+
+  if (result.linear.spacing1.valid_p ())
+    {
+      const denoise_noise_estimate model = result.linear.spacing1;
+      result.variance_stabilized = estimate_screen_rgb_noise_three_scale_model (
+          width, height,
+          [&] (int x, int y)
+          {
+            rgbdata value = getdata (x, y);
+            for (int k = 0; k < 3; k++)
+              value[k] = denoise_noise_variance_stabilized_value (value[k],
+                                                                  model);
+            return value;
+          },
+          getsupport, entry_to_scr);
+    }
+  return result;
 }
 
 template <typename ENTRY_TO_SCR>
