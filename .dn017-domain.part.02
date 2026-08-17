@@ -1,0 +1,121 @@
+diff --git a/src/libcolorscreen/render-interpolate.C b/src/libcolorscreen/render-interpolate.C
+index 687edc6..0dc4b40 100644
+--- a/src/libcolorscreen/render-interpolate.C
++++ b/src/libcolorscreen/render-interpolate.C
+@@ -710,6 +710,21 @@ render_interpolate::estimate_screen_noise_three_scale_models (
+   return false;
+ }
+ 
++bool
++render_interpolate::estimate_screen_noise_domain_comparisons (
++    denoise_noise_domain_comparison *red,
++    denoise_noise_domain_comparison *green,
++    denoise_noise_domain_comparison *blue) const
++{
++  if (m_paget)
++    return m_paget->estimate_noise_domain_comparisons (red, green, blue);
++  if (m_dufay)
++    return m_dufay->estimate_noise_domain_comparisons (red, green, blue);
++  if (m_strips)
++    return m_strips->estimate_noise_domain_comparisons (red, green, blue);
++  return false;
++}
++
+ bool
+ render_interpolate::analyze_patches (analyzer analyze, const char *task,
+                                      bool screen, int_image_area area,
+diff --git a/src/libcolorscreen/render-interpolate.h b/src/libcolorscreen/render-interpolate.h
+index 01e1d05..b81aacb 100644
+--- a/src/libcolorscreen/render-interpolate.h
++++ b/src/libcolorscreen/render-interpolate.h
+@@ -23,6 +23,7 @@ class demosaic_dufay;
+ struct denoise_noise_estimate;
+ struct denoise_noise_scale_estimate;
+ struct denoise_noise_three_scale_estimate;
++struct denoise_noise_domain_comparison;
+ typedef std::function <bool (coord_t, coord_t, rgbdata)> analyzer;
+ typedef std::function <bool (coord_t, coord_t, rgbdata, rgbdata, rgbdata)> rgb_analyzer;
+ 
+@@ -149,6 +150,10 @@ public:
+       denoise_noise_three_scale_estimate *red,
+       denoise_noise_three_scale_estimate *green,
+       denoise_noise_three_scale_estimate *blue) const;
++  bool estimate_screen_noise_domain_comparisons (
++      denoise_noise_domain_comparison *red,
++      denoise_noise_domain_comparison *green,
++      denoise_noise_domain_comparison *blue) const;
+ 
+ private:
+   /* Compensate saturation loss at screen coordinate P for color C.  */
+diff --git a/src/libcolorscreen/unittests.C b/src/libcolorscreen/unittests.C
+index 6c5de4a..b3b84e0 100644
+--- a/src/libcolorscreen/unittests.C
++++ b/src/libcolorscreen/unittests.C
+@@ -5932,6 +5932,154 @@ test_denoise ()
+   }
+ 
+ 
++  /* DN-017 domain comparison: an exponential transmission field with
++     multiplicative log-normal noise is linear with constant noise variance
++     in optical-density space.  Density should therefore fit its spacing-1
++     noise model substantially better than raw linear intensity.  */
++  {
++    const int w = 120, h = 90;
++    std::vector<luminosity_t> data ((size_t)w * h), support ((size_t)w * h, 1);
++    unsigned int noise_seed = 0x7319ac42U;
++    auto gaussian = [&] () -> luminosity_t
++    {
++      luminosity_t u1
++          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
++      luminosity_t u2
++          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
++      return std::sqrt ((luminosity_t)-2 * std::log (u1))
++             * std::cos ((luminosity_t)6.2831853071795864769 * u2);
++    };
++    for (int y = 0; y < h; y++)
++      for (int x = 0; x < w; x++)
++        {
++          luminosity_t density = (luminosity_t)0.15
++              + (luminosity_t)0.008 * x + (luminosity_t)0.004 * y;
++          density += (luminosity_t)0.025 * gaussian ();
++          data[(size_t)y * w + x] = std::exp (-density);
++        }
++    denoise_noise_domain_comparison domains
++        = estimate_screen_noise_domain_comparison (
++            w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
++            [&] (int x, int y) { return support[(size_t)y * w + x]; },
++            [] (int_point_t p)
++            { return point_t{(coord_t)p.x, (coord_t)p.y}; });
++    if (!domains.valid_p () || !domains.variance_stabilized_valid_p ()
++        || domains.linear.paired_observations != domains.density.paired_observations
++        || domains.linear.paired_observations
++               != domains.variance_stabilized.paired_observations
++        || !(domains.density.spacing1.relative_fit_error
++             < domains.linear.spacing1.relative_fit_error * (luminosity_t)0.6)
++        || fabs (domains.density.spacing2_variance_ratio - (luminosity_t)1)
++               > (luminosity_t)0.2
++        || fabs (domains.density.spacing3_variance_ratio - (luminosity_t)1)
++               > (luminosity_t)0.2)
++      {
++        fprintf (stderr,
++                 "Density-domain noise diagnostic mismatch: linear err %g "
++                 "density err %g ratios %g %g obs %zu/%zu/%zu\n",
++                 (double)domains.linear.spacing1.relative_fit_error,
++                 (double)domains.density.spacing1.relative_fit_error,
++                 (double)domains.density.spacing2_variance_ratio,
++                 (double)domains.density.spacing3_variance_ratio,
++                 domains.linear.paired_observations,
++                 domains.density.paired_observations,
++                 domains.variance_stabilized.paired_observations);
++        return false;
++      }
++  }
++
++  /* A floor+slope Gaussian variance law should become approximately constant
++     after the generalized square-root transform.  The comparison deliberately
++     keeps the same positive samples in every domain.  */
++  {
++    const int w = 120, h = 90;
++    std::vector<luminosity_t> data ((size_t)w * h), support ((size_t)w * h, 1);
++    unsigned int noise_seed = 0x4b21d783U;
++    auto gaussian = [&] () -> luminosity_t
