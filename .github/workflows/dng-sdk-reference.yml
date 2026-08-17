@@ -1,0 +1,81 @@
+name: DNG SDK reference probe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and execute Build 2652 warp
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build libjpeg-dev zlib1g-dev libexpat1-dev
+          curl -fL --retry 3 \
+            https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1_2652_20260714.zip \
+            -o /tmp/dng-sdk.zip
+          echo '73499b47f4683e12120a234bd0946f02e52ab2ff9834bcbd0e9f8ab4f923360e  /tmp/dng-sdk.zip' | sha256sum -c -
+          mkdir /tmp/adobe
+          unzip -q /tmp/dng-sdk.zip -d /tmp/adobe
+          ADOBE=/tmp/adobe/dng_sdk_1_7_1
+          git clone --depth 1 https://github.com/hfiguiere/dng_sdk.git /tmp/build
+          cp -a "$ADOBE/dng_sdk/source/." /tmp/build/dng_sdk/source/
+          cd /tmp/build
+          test "$(sha256sum "$ADOBE/dng_sdk/source/dng_lens_correction.cpp" | cut -d' ' -f1)" = \
+               "$(sha256sum dng_sdk/source/dng_lens_correction.cpp | cut -d' ' -f1)"
+          test "$(sha256sum dng_sdk/source/dng_lens_correction.cpp | cut -d' ' -f1)" = \
+               '89112619dce4a205761dc9e3b0c641d6c1d99911829a18c181a7229af4e8521f'
+
+          # dng_jxl.h is pulled by generic SDK headers even though lens warping
+          # does not use JPEG XL.  Build 2652 expects the libjxl 0.11 API while
+          # Ubuntu 24.04 packages an older API, so use the 0.11.1 public headers.
+          git clone --depth 1 --branch v0.11.1 https://github.com/libjxl/libjxl.git /tmp/libjxl
+          export CPLUS_INCLUDE_PATH="/tmp/libjxl/lib/include${CPLUS_INCLUDE_PATH:+:$CPLUS_INCLUDE_PATH}"
+
+          # Keep this a lens-warp diagnostic build.  The SDK archive contains
+          # the full dng_opcodes.cpp implementation required by dng_opcode
+          # virtuals, but the mirror's source list does not include it in all
+          # revisions; add it explicitly.  Keep dng_jxl.cpp out and provide
+          # no-op JXL stubs, since no JXL path is executed by this probe.
+          sed -i "s/jpegxl = dependency.*/jpegxl = declare_dependency()/" meson.build
+          sed -i "s/jpegxl_threads = dependency.*/jpegxl_threads = declare_dependency()/" meson.build
+          sed -i "/'dng_jxl.cpp',/d" dng_sdk/source/meson.build
+          if ! grep -q "'dng_opcodes.cpp'" dng_sdk/source/meson.build; then
+            sed -i "/'dng_opcode_list.cpp',/a\\  'dng_opcodes.cpp'," dng_sdk/source/meson.build
+          fi
+
+          cat "$GITHUB_WORKSPACE/.github/dng-reference/reference-wrapper.inc" \
+            >> dng_sdk/source/dng_lens_correction.cpp
+          cp "$GITHUB_WORKSPACE/.github/dng-reference/reference_probe.cpp" \
+            dng_sdk/source/reference_probe.cpp
+          cp "$GITHUB_WORKSPACE/.github/dng-reference/dng_jxl_stubs.cpp" \
+            dng_sdk/source/dng_jxl_stubs.cpp
+          cat >> dng_sdk/source/meson.build <<'EOF'
+
+          executable(
+            'reference_probe',
+            'reference_probe.cpp',
+            'dng_jxl_stubs.cpp',
+            cpp_args: [ '-DqDNGUseLibJPEG=1', '-DAdobePrivate=0' ],
+            include_directories: [ '..' / 'projects' / 'meson' ],
+            dependencies: [ zlib, expat, libjpeg ],
+            link_with: [ dng_sdk, xmp_sdk ]
+          )
+          EOF
+          meson setup _build
+          ninja -C _build dng_sdk/source/reference_probe
+          mkdir -p "$GITHUB_WORKSPACE/reference-output"
+          _build/dng_sdk/source/reference_probe \
+            | tee "$GITHUB_WORKSPACE/reference-output/adobe-dng-sdk-2652-warp-fixture.txt"
+          {
+            echo 'Adobe DNG SDK 1.7.1 Build 2652, 2026-07-14'
+            echo 'Official ZIP sha256: 73499b47f4683e12120a234bd0946f02e52ab2ff9834bcbd0e9f8ab4f923360e'
+            echo 'dng_lens_correction.cpp sha256: 89112619dce4a205761dc9e3b0c641d6c1d99911829a18c181a7229af4e8521f'
+          } > "$GITHUB_WORKSPACE/reference-output/PROVENANCE.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: adobe-dng-sdk-2652-executed-warp-fixture
+          path: reference-output
