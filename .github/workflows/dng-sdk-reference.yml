@@ -17,9 +17,7 @@ jobs:
           set -euxo pipefail
           sudo apt-get update
           sudo apt-get install -y meson ninja-build libjpeg-dev zlib1g-dev libexpat1-dev
-          curl -fL --retry 3 \
-            https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1_2652_20260714.zip \
-            -o /tmp/dng-sdk.zip
+          curl -fL --retry 3 https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1_2652_20260714.zip -o /tmp/dng-sdk.zip
           echo '73499b47f4683e12120a234bd0946f02e52ab2ff9834bcbd0e9f8ab4f923360e  /tmp/dng-sdk.zip' | sha256sum -c -
           mkdir /tmp/adobe
           unzip -q /tmp/dng-sdk.zip -d /tmp/adobe
@@ -27,20 +25,14 @@ jobs:
           git clone --depth 1 https://github.com/hfiguiere/dng_sdk.git /tmp/build
           cp -a "$ADOBE/dng_sdk/source/." /tmp/build/dng_sdk/source/
           cd /tmp/build
-          test "$(sha256sum "$ADOBE/dng_sdk/source/dng_lens_correction.cpp" | cut -d' ' -f1)" = \
-               "$(sha256sum dng_sdk/source/dng_lens_correction.cpp | cut -d' ' -f1)"
-          test "$(sha256sum dng_sdk/source/dng_lens_correction.cpp | cut -d' ' -f1)" = \
-               '89112619dce4a205761dc9e3b0c641d6c1d99911829a18c181a7229af4e8521f'
-
+          test "$(sha256sum "$ADOBE/dng_sdk/source/dng_lens_correction.cpp" | cut -d' ' -f1)" = "$(sha256sum dng_sdk/source/dng_lens_correction.cpp | cut -d' ' -f1)"
+          test "$(sha256sum dng_sdk/source/dng_lens_correction.cpp | cut -d' ' -f1)" = '89112619dce4a205761dc9e3b0c641d6c1d99911829a18c181a7229af4e8521f'
           git clone --depth 1 --branch v0.11.1 https://github.com/libjxl/libjxl.git /tmp/libjxl
           export CPLUS_INCLUDE_PATH="/tmp/libjxl/lib/include${CPLUS_INCLUDE_PATH:+:$CPLUS_INCLUDE_PATH}"
           sed -i "s/jpegxl = dependency.*/jpegxl = declare_dependency()/" meson.build
           sed -i "s/jpegxl_threads = dependency.*/jpegxl_threads = declare_dependency()/" meson.build
           sed -i "/'dng_jxl.cpp',/d" dng_sdk/source/meson.build
-          if ! grep -q "'dng_opcodes.cpp'" dng_sdk/source/meson.build; then
-            sed -i "/'dng_opcode_list.cpp',/a\\  'dng_opcodes.cpp'," dng_sdk/source/meson.build
-          fi
-
+          if ! grep -q "'dng_opcodes.cpp'" dng_sdk/source/meson.build; then sed -i "/'dng_opcode_list.cpp',/a\\  'dng_opcodes.cpp'," dng_sdk/source/meson.build; fi
           cat "$GITHUB_WORKSPACE/.github/dng-reference/reference-wrapper.inc" >> dng_sdk/source/dng_lens_correction.cpp
           cp "$GITHUB_WORKSPACE/.github/dng-reference/reference_probe.cpp" dng_sdk/source/reference_probe.cpp
           cp "$GITHUB_WORKSPACE/.github/dng-reference/dng_jxl_stubs.cpp" dng_sdk/source/dng_jxl_stubs.cpp
