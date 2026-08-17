@@ -52,6 +52,26 @@ get_inverse (const lens_warp_correction_parameters &param, coord_t dist,
         max = r;
     }
 }
+
+/* Return the upper corrected/output radius needed while inverting source
+   radii up to MAX_DIST for PARAM.
+
+   DNG defines the polynomial through normalized radius one.  Color-Screen's
+   get_ratio() keeps the edge ratio constant outside that domain.  Therefore,
+   when the edge ratio is below one, source radius MAX_DIST corresponds to
+   corrected radius MAX_DIST / edge_ratio.  The direct inverse and cached
+   inverse must use the same domain.  */
+pure_attr inline coord_t
+inverse_search_limit (const lens_warp_correction_parameters &param,
+                      coord_t max_dist)
+{
+  const coord_t edge_ratio = param.get_ratio (1);
+  if (!(edge_ratio > 0) || !my_isfinite (edge_ratio)
+      || !(max_dist > 0) || !my_isfinite (max_dist))
+    return 0;
+  return edge_ratio < 1 ? max_dist / edge_ratio : max_dist;
+}
+
 /* Precompute the inverse radial distortion function for parameters P.
    Provides progress updates via PROG.  */
 std::unique_ptr<precomputed_function<coord_t>>
@@ -60,34 +80,9 @@ get_new_inverse (struct lens_inverse_parameters &p, progress_info *prog)
   (void)prog;
   coord_t inv_max_dist_sq2 = 1 / (p.max_dist * p.max_dist);
 
-  /* Determine the start of binary search for computing inverse.
-     For correction to make sense, get_ratio must be monotonously increasing
-     for whole image area.  For negative correction coefficient the function
-     is not monotonously increasing for large values.  So search carefully
-     for max element which inverts to m_max_dist.
-
-     In common case the lens parameters will be normalized so ratio of 1 is 1.
-     In this case max is max_dist. */
-  coord_t max = 1;
-  if (my_fabs (p.param.get_ratio (1) - 1)
-      < lens_warp_correction::epsilon / p.max_dist)
-    max = p.max_dist;
-  else
-    {
-      coord_t last = 0;
-      coord_t next;
-      while ((next = max * p.param.get_ratio (max * max * inv_max_dist_sq2))
-             < p.max_dist)
-        {
-          /* Did we reach point where function decreases now?
-             This means that parameters are broken, but we can cap search and
-             get somewhat sane results.  */
-          if (last > next)
-            break;
-          max = 1.2 * max;
-          last = next;
-        }
-    }
+  const coord_t max = inverse_search_limit (p.param, p.max_dist);
+  if (!(max > 0) || !my_isfinite (max))
+    return nullptr;
 
   /* Now precompute inverse.  */
   return std::make_unique<precomputed_function<coord_t>> (
@@ -116,12 +111,16 @@ lens_warp_correction::precompute (point_t center, point_t c1, point_t c2,
       m_noop = true;
       return true;
     }
+  if (!m_params.is_monotone ())
+    return false;
   m_noop = false;
   m_max_dist = std::max (
       c1.dist_from (center),
       std::max (c2.dist_from (center),
                 std::max (c3.dist_from (center), c4.dist_from (center))));
   m_center = center;
+  if (!(m_max_dist > 0) || !my_isfinite (m_max_dist))
+    return false;
   m_inv_max_dist_sq2 = 1 / (m_max_dist * m_max_dist);
   return true;
 }
@@ -151,7 +150,7 @@ lens_warp_correction::nonprecomputed_scan_to_corrected (point_t p) const
     return p;
   bool too_far = false;
   coord_t dist = p.dist_from (m_center);
-  coord_t max_search = m_max_dist;
+  const coord_t max_search = inverse_search_limit (m_params, m_max_dist);
   if (dist > m_max_dist)
     dist = m_max_dist, too_far = true;
 

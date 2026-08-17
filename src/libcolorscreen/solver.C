@@ -262,6 +262,7 @@ public:
   const solver_parameters &m_sparam;
   progress_info *m_progress;
   static constexpr coord_t scale_kr = 128;
+  static constexpr coord_t bad_value = 100000000;
 
   /* Return number of lens center coordinates.  */
   int
@@ -347,7 +348,8 @@ public:
   bool
   solve (const coord_t *vals, coord_t *chisq, std::vector <point_t> *transformed) const
   {
-    static constexpr coord_t bad_val = 100000000;
+    if (chisq)
+      *chisq = bad_value;
     m_param.center = { (coord_t)0, (coord_t)0 };
     m_param.coordinate1 = { (coord_t)1, (coord_t)0 };
     m_param.coordinate2 = { (coord_t)0, (coord_t)1 };
@@ -373,7 +375,7 @@ public:
                   m_param.lens_correction.kr[0], m_param.lens_correction.kr[1],
                   m_param.lens_correction.kr[2], m_param.lens_correction.kr[3]);
 	if (chisq)
-	  *chisq = bad_val;
+	  *chisq = bad_value;
         if (transformed)
           for (size_t i = 0; i < m_sparam.points.size (); i++)
             (*transformed)[i] = m_sparam.points[i].scr;
@@ -382,7 +384,7 @@ public:
     if (!m_param.lens_correction.normalize ())
       {
         if (chisq)
-          *chisq = bad_val;
+          *chisq = bad_value;
         if (transformed)
           for (size_t i = 0; i < m_sparam.points.size (); i++)
             (*transformed)[i] = m_sparam.points[i].scr;
@@ -404,15 +406,15 @@ public:
 		    | homography::solve_rotation, m_param.scanner_type, &map, m_sparam.center, &chi, transformed);
     if (chisq)
     {
-      if (!(chi >= 0 && chi < bad_val))
+      if (!(chi >= 0 && chi < bad_value))
 	{
 	  printf ("Bad chi %f\n", chi);
-	  *chisq = bad_val;
+	  *chisq = bad_value;
 	}
       else
 	*chisq = chi;
     }
-    return (chi >= 0 && chi < bad_val);
+    return (chi >= 0 && chi < bad_value);
   }
   /* Return number of observations.  */
   int
@@ -454,7 +456,7 @@ public:
   coord_t
   objfunc (coord_t *vals)
   {
-    coord_t chisq;
+    coord_t chisq = bad_value;
     solve (vals, &chisq, nullptr);
     return chisq;
   }

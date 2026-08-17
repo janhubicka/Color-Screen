@@ -39,8 +39,12 @@ struct lens_warp_correction
     m_params = p;
   }
 
-  /* Precompute normalization factor so that the distance from CENTER to
-     any of the four corners C1, C2, C3, C4 is at most 1.
+  /* Precompute the DNG radial normalization.  CENTER is the optical center in
+     pixel coordinates and C1 ... C4 are the four pixel centers at the corners
+     of the warped/output image.  Thus for a WIDTH x HEIGHT image the corner
+     coordinates are based on WIDTH-1 and HEIGHT-1, not WIDTH and HEIGHT.
+
+     The farthest corner defines normalized radius r=1.
      Returns true on success.  */
   nodiscard_attr DLL_PUBLIC bool precompute (point_t center, point_t c1,
 					     point_t c2, point_t c3,

@@ -1,19 +1,29 @@
 #ifndef LENS_WARP_CORRECTION_PARAMETERS_H
 #define LENS_WARP_CORRECTION_PARAMETERS_H
 /* Parameters for radial lens distortion correction.
-   Follows the DNG WarpRectilinear polynomial model.  */
+   Implements the radial, single-coefficient-set subset of the DNG
+   WarpRectilinear polynomial model.  Color-Screen currently has no
+   tangential (kt0/kt1) terms or per-plane coefficient sets.  */
 #include "base.h"
 namespace colorscreen
 {
-/* Radial lens warp correction parameters.  Follows DNG WarpRectilinear model.
-   Correction is defined as:
-   r_src = (kr0 + kr1 * r^2 + kr2 * r^4 + kr3 * r^6) * r_dst
-   where r is distance from lens center.  */
+/* Radial lens warp correction parameters.
+
+   In DNG terminology this maps a point in the warped/output image to the
+   source sample position.  With tangential terms fixed to zero,
+
+     r_src = r_dst * (kr0 + kr1*r^2 + kr2*r^4 + kr3*r^6),
+
+   where r is normalized by the distance from the optical center to the
+   farthest output-image pixel.  DNG specifies the polynomial for 0 <= r <= 1.
+   Color-Screen keeps the edge ratio constant when evaluating outside that
+   interval so its numerical inverse has a defined extrapolation rule.  */
 struct lens_warp_correction_parameters
 {
-  /* Radial correction coefficients, same as in the DNG specs.  */
+  /* DNG WarpRectilinear radial coefficients kr0 ... kr3.  */
   coord_t kr[4];
-  /* Center in relative coordinates 0...1  */
+  /* Optical center in DNG normalized coordinates.  (0,0) is the top-left
+     pixel center and (1,1) is the bottom-right pixel center.  */
   point_t center;
 
   /* Initialize with identity correction and center at (0.5, 0.5).  */
@@ -50,10 +60,14 @@ struct lens_warp_correction_parameters
   }
 
   /* Verify that the correction is monotone on a interval [0, 1].
-     Monotonicity is required for the inverse mapping to be well-defined.  */
+     This is the DNG invertibility condition for the radial-only subset.  */
   pure_attr bool
   is_monotone () const
   {
+    for (coord_t k : kr)
+      if (!my_isfinite (k))
+        return false;
+
     /* The source radius is r_src = r * (k0 + k1*r^2 + k2*r^4 + k3*r^6).
        For monotonicity we need d(r_src)/dr > 0 for r in [0, 1].
        d(r_src)/dr = k0 + 3*k1*r^2 + 5*k2*r^4 + 7*k3*r^6.
@@ -64,7 +78,7 @@ struct lens_warp_correction_parameters
     };
 
     /* Check boundaries.  */
-    if (f (0) <= 0 || f (1) <= 0)
+    if (!(f (0) > 0) || !(f (1) > 0))
       return false;
 
     /* Check critical points of f(x) where f'(x) = 0.
@@ -101,20 +115,26 @@ struct lens_warp_correction_parameters
     return true;
   }
 
-  /* Adjust parameters so get_ratio (1) == 1.  This is used to normalize
-     the correction so that it is defined relative to the maximum distance.
-     Returns false if the normalization fails (e.g., degenerate coefficients).  */
+  /* Remove the overall radial scale by making get_ratio(1) == 1.
+
+     This is a Color-Screen solver gauge, not a DNG requirement: an overall
+     scale is otherwise almost completely degenerate with the fitted linear
+     screen-to-image transform.  Imported DNG coefficients need not be
+     normalized this way.  */
   bool
   normalize ()
   {
-    coord_t c = 1 / get_ratio (1);
+    const coord_t edge_ratio = get_ratio (1);
+    if (!(edge_ratio > 0) || !my_isfinite (edge_ratio))
+      return false;
+    const coord_t c = 1 / edge_ratio;
     kr[0] *= c;
     kr[1] *= c;
     kr[2] *= c;
     kr[3] *= c;
-    if (my_fabs (1 - get_ratio (1)) > 0.00001)
-      return false;
-    return true;
+    return my_isfinite (kr[0]) && my_isfinite (kr[1])
+           && my_isfinite (kr[2]) && my_isfinite (kr[3])
+           && my_fabs (1 - get_ratio (1)) <= 0.00001;
   }
 };
 }

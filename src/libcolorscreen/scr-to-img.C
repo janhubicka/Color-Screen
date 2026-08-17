@@ -327,20 +327,27 @@ scr_to_img::set_parameters_for_early_correction (
   m_nwarnings = 0;
   assert (!debug || (width > 0 && height > 0));
 
-  /* Next initialize lens correction.
-     Lens center is specified in scan coordinates, so apply previous
-     corrections.  */
-  point_t center = { m_param.lens_correction.center.x * width,
-    		     m_param.lens_correction.center.y * height};
+  /* DNG normalizes the optical center between the top-left and bottom-right
+     pixel centers.  Pixel coordinates therefore run through WIDTH-1 and
+     HEIGHT-1.  Using WIDTH/HEIGHT here shifts both the center and the radial
+     normalization.  */
+  const coord_t max_x = width > 0 ? (coord_t)(width - 1) : 0;
+  const coord_t max_y = height > 0 ? (coord_t)(height - 1) : 0;
+  point_t center = { m_param.lens_correction.center.x * max_x,
+                     m_param.lens_correction.center.y * max_y};
   point_t c1 = { (coord_t)0, (coord_t)0 };
-  point_t c2 = { (coord_t)width, (coord_t)0 };
-  point_t c3 = { (coord_t)0, (coord_t)height };
-  point_t c4 = { (coord_t)width, (coord_t)height };
+  point_t c2 = { max_x, (coord_t)0 };
+  point_t c3 = { (coord_t)0, max_y };
+  point_t c4 = { max_x, max_y };
   m_lens_correction.set_parameters (m_param.lens_correction);
+
+  /* Moving-lens scanners are a Color-Screen extension.  The movement-axis
+     coordinate is subtracted before lens correction, so it is identically
+     zero in the reduced lens coordinate system.  */
   if (m_param.scanner_type == lens_move_horizontally)
-    c1.x = c2.x = c3.x = c4.x = center.x = m_param.lens_correction.center.x;
+    c1.x = c2.x = c3.x = c4.x = center.x = 0;
   if (m_param.scanner_type == lens_move_vertically)
-    c1.y = c2.y = c3.y = c4.y = center.y = m_param.lens_correction.center.y;
+    c1.y = c2.y = c3.y = c4.y = center.y = 0;
   if (!m_lens_correction.precompute (center, c1, c2, c3, c4))
     return false;
   /* For non-noop conversion we need to also precompute inverse.  */

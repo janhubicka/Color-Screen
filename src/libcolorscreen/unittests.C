@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <algorithm>
 #include <array>
 #include <climits>
 #include <math.h>
@@ -4552,7 +4553,38 @@ test_whitepoint_constants ()
   return ok;
 }
 
-/* Verify that lens warp correction works correctly and agrees with DNG.  */
+/* Independently evaluate the radial-only DNG WarpRectilinear equations for P
+   in a WIDTH by HEIGHT full image.  CENTER is the normalized DNG optical
+   center and KR contains kr0 ... kr3.
+
+   Keep this implementation separate from lens_warp_correction helpers: it is
+   a specification reference used to detect changes in center normalization,
+   radial normalization, polynomial order or transform direction.  */
+point_t
+dng_warp_rectilinear_reference (point_t p, int width, int height,
+                                point_t center, const coord_t kr[4])
+{
+  const coord_t x0 = 0;
+  const coord_t y0 = 0;
+  const coord_t x1 = width - 1;
+  const coord_t y1 = height - 1;
+  const coord_t cx = x0 + center.x * (x1 - x0);
+  const coord_t cy = y0 + center.y * (y1 - y0);
+  const coord_t mx = std::max (my_fabs (x0 - cx), my_fabs (x1 - cx));
+  const coord_t my = std::max (my_fabs (y0 - cy), my_fabs (y1 - cy));
+  const coord_t m = my_sqrt (mx * mx + my * my);
+  const coord_t dx = (p.x - cx) / m;
+  const coord_t dy = (p.y - cy) / m;
+  const coord_t rsq = dx * dx + dy * dy;
+  const coord_t f
+      = kr[0] + rsq * (kr[1] + rsq * (kr[2] + rsq * kr[3]));
+  return { cx + m * f * dx, cy + m * f * dy };
+}
+
+/* Verify the implemented radial, single-coefficient-set subset of DNG
+   WarpRectilinear.  The reference calculation above follows the equations in
+   Adobe DNG Specification 1.7.1.0, WarpRectilinear (Opcode ID 1), with
+   tangential coefficients kt0=kt1=0.  */
 bool
 test_lens_warp ()
 {
@@ -4564,7 +4596,7 @@ test_lens_warp ()
   } cases[] = {
     { "Synthetic Barrel", { 1.0, 0.05, 0.02, 0.01 }, { 0.5, 0.5 } },
     //{ "Nikon Coolscan 9000ED", { 0.99508, 0.0245411, -0.0521967, 0.0325757 }, { 0.560586, 0.482547 } },
-    { "Adobe DNG Sample", { 0.999787, 0.000025, -0.000025, 0.000006 }, { 0.500029, 0.499863 } }
+    { "Near-identity DNG profile", { 0.999787, 0.000025, -0.000025, 0.000006 }, { 0.500029, 0.499863 } }
   };
 
   for (const auto& tc : cases)
@@ -4581,19 +4613,11 @@ test_lens_warp ()
 
       lens_warp_correction lw;
       lw.set_parameters (p);
-      point_t img_center = { 500, 500 };
-      
-      /* Calculate scan corners for normalization.  */
-      lens_warp_correction lw_prep;
-      lw_prep.set_parameters (p);
-      if (!lw_prep.precompute (img_center, { 0, 0 }, { 1000, 0 }, { 1000, 1000 }, { 0, 1000 }))
-	return false;
-      point_t scan_c1 = lw_prep.corrected_to_scan ({ 0, 0 });
-      point_t scan_c2 = lw_prep.corrected_to_scan ({ 1000, 0 });
-      point_t scan_c3 = lw_prep.corrected_to_scan ({ 1000, 1000 });
-      point_t scan_c4 = lw_prep.corrected_to_scan ({ 0, 1000 });
 
-      if (!lw.precompute (img_center, scan_c1, scan_c2, scan_c3, scan_c4))
+      /* Coordinate endpoints 0..1000 describe 1001 output pixel centers.  */
+      point_t img_center = { tc.center.x * 1000, tc.center.y * 1000 };
+      if (!lw.precompute (img_center, {0, 0}, {1000, 0},
+                          {1000, 1000}, {0, 1000}))
 	return false;
       if (!lw.precompute_inverse ())
 	return false;
@@ -4612,6 +4636,17 @@ test_lens_warp ()
           {
             point_t orig = { (coord_t) x, (coord_t) y };
             point_t scan = lw.corrected_to_scan (orig);
+            /* The inverse lookup is defined for source pixels in the image.
+               Positive distortion may request a source position outside the
+               source rectangle at an output corner; do not use such a point
+               as an inverse-domain round-trip test.  */
+            const coord_t max_dist
+                = std::max ({img_center.dist_from ({0, 0}),
+                             img_center.dist_from ({1000, 0}),
+                             img_center.dist_from ({1000, 1000}),
+                             img_center.dist_from ({0, 1000})});
+            if (scan.dist_from (img_center) > max_dist)
+              continue;
             point_t corrected = lw.scan_to_corrected (scan);
             if (!orig.almost_eq (corrected, 0.01))
               {
@@ -4633,9 +4668,19 @@ test_lens_warp ()
       printf ("FAILED: is_monotone should be false for p2!\n");
       ok = false;
     }
+  lens_warp_correction broken;
+  broken.set_parameters (p2);
+  if (broken.precompute ({500, 500}, {0, 0}, {1000, 0},
+                         {1000, 1000}, {0, 1000}))
+    {
+      fprintf (stderr, "Non-monotone DNG radial warp was accepted\n");
+      ok = false;
+    }
 
-  /* Adobe DNG Specification 1.3 Worked Example.
-     Image 1000x1000, center (500,500), corner (0,0) defines r=1.0.
+  /* Synthetic direct evaluation of the DNG radial polynomial.  The DNG
+     specification gives the equations but not this numerical example.
+     Coordinate endpoints 0..1000 describe 1001 pixel centers, so center
+     (500,500) and a corner define r=1.
      Parameters: kr = [1.0, 0.05, -0.02, 0.005]
      Point (600, 700) -> Delta (100, 200), r^2 = (100^2+200^2)/(500^2+500^2) = 0.1.
      Distortion ratio f(0.1) = 1.0 + 0.05(0.1) - 0.02(0.01) + 0.005(0.001) = 1.004805.
@@ -4654,8 +4699,110 @@ test_lens_warp ()
     point_t p_expected = { 600.4805, 700.9610 };
     if (!p_out.almost_eq (p_expected, 1e-4))
       {
-        printf ("FAILED: DNG Specification Worked Example mismatch!\n");
+        printf ("FAILED: synthetic DNG radial example mismatch!\n");
         printf ("Expected (%f, %f), got (%f, %f)\n", p_expected.x, p_expected.y, p_out.x, p_out.y);
+        ok = false;
+      }
+  }
+
+  /* Compare the complete production forward path against an independent
+     transcription of the DNG equations.  Use a non-square image, an
+     off-center optical center and coefficients whose edge ratio is not one so
+     center normalization, m, polynomial order and transform direction are all
+     observable independently.  */
+  {
+    constexpr int width = 1001;
+    constexpr int height = 701;
+    scr_to_img_parameters p;
+    p.lens_correction.center = {0.23, 0.67};
+    p.lens_correction.kr[0] = 0.992;
+    p.lens_correction.kr[1] = 0.045;
+    p.lens_correction.kr[2] = -0.028;
+    p.lens_correction.kr[3] = 0.009;
+    scr_to_img map;
+    if (!map.set_parameters_for_early_correction (p, width, height))
+      return false;
+    const point_t samples[] = {
+      {0, 0}, {1000, 0}, {0, 700}, {1000, 700},
+      {123, 456}, {827, 51}, {230, 469}
+    };
+    for (point_t sample : samples)
+      {
+        point_t expected = dng_warp_rectilinear_reference (
+            sample, width, height, p.lens_correction.center,
+            p.lens_correction.kr);
+        point_t actual = map.inverse_early_correction (sample);
+        if (!actual.almost_eq (expected, 1e-9))
+          {
+            fprintf (stderr,
+                     "DNG WarpRectilinear mismatch at %.12g,%.12g: "
+                     "expected %.12g,%.12g got %.12g,%.12g\n",
+                     sample.x, sample.y, expected.x, expected.y,
+                     actual.x, actual.y);
+            ok = false;
+          }
+      }
+  }
+
+  /* DNG explicitly defines normalized optical center (1,0) to be the
+     top-right pixel.  This catches WIDTH rather than WIDTH-1 scaling directly.  */
+  {
+    scr_to_img_parameters p;
+    p.lens_correction.center = {1, 0};
+    p.lens_correction.kr[0] = 0.9;
+    scr_to_img map;
+    if (!map.set_parameters_for_early_correction (p, 11, 7))
+      return false;
+    point_t top_right = {10, 0};
+    if (!map.inverse_early_correction (top_right).almost_eq (top_right, 1e-12))
+      {
+        fprintf (stderr, "DNG optical center (1,0) is not the top-right pixel\n");
+        ok = false;
+      }
+  }
+
+  /* The direct inverse used by lens_solver and the lookup-table inverse must
+     have the same domain.  f(1)<1 requires a corrected radius greater than m
+     to invert source pixels near radius m.  */
+  {
+    lens_warp_correction_parameters p;
+    p.kr[0] = 0.9;
+    lens_warp_correction lw;
+    lw.set_parameters (p);
+    if (!lw.precompute ({500, 500}, {0, 0}, {1000, 0},
+                        {1000, 1000}, {0, 1000})
+        || !lw.precompute_inverse ())
+      return false;
+    const point_t source_points[] = {{0, 0}, {1000, 0}, {125, 625}};
+    for (point_t source : source_points)
+      {
+        point_t direct = lw.nonprecomputed_scan_to_corrected (source);
+        point_t cached = lw.scan_to_corrected (source);
+        if (!direct.almost_eq (cached, 0.002)
+            || !lw.corrected_to_scan (direct).almost_eq (source, 0.001))
+          {
+            fprintf (stderr, "Direct and cached lens inverses disagree\n");
+            ok = false;
+          }
+      }
+  }
+
+  /* The moving-lens extension removes the movement-axis coordinate before
+     applying the radial model.  The optical center on that discarded axis is
+     therefore zero in the reduced lens coordinate system.  */
+  {
+    scr_to_img_parameters p;
+    p.scanner_type = lens_move_horizontally;
+    p.lens_correction.center = {0.5, 0.61};
+    p.lens_correction.kr[0] = 0.9;
+    scr_to_img map;
+    if (!map.set_parameters_for_early_correction (p, 1000, 600))
+      return false;
+    point_t center_line = {123, 0.61 * 599};
+    if (!map.inverse_early_correction (center_line).almost_eq (center_line,
+                                                               1e-10))
+      {
+        fprintf (stderr, "Moving-lens discarded axis has a spurious center\n");
         ok = false;
       }
   }
