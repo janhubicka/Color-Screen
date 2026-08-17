@@ -167,27 +167,3 @@
 +template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
 +inline denoise_noise_domain_comparison
 +estimate_screen_noise_domain_comparison (int width, int height,
-+                                         GETDATA getdata,
-+                                         GETSUPPORT getsupport,
-+                                         ENTRY_TO_SCR entry_to_scr)
-+{
-+  denoise_noise_domain_comparison result;
-+  result.linear = estimate_screen_noise_three_scale_model (
-+      width, height, getdata, getsupport, entry_to_scr);
-+  result.density_log = estimate_screen_noise_three_scale_model_transformed (
-+      width, height, getdata, getsupport, entry_to_scr,
-+      denoise_density_log_transform);
-+  result.variance_stabilizer_source = result.linear.spacing1;
-+  if (result.variance_stabilizer_source.valid_p ())
-+    {
-+      const luminosity_t floor = result.variance_stabilizer_source.variance_floor;
-+      const luminosity_t slope = result.variance_stabilizer_source.variance_slope;
-+      result.variance_stabilized
-+          = estimate_screen_noise_three_scale_model_transformed (
-+              width, height, getdata, getsupport, entry_to_scr,
-+              [=] (luminosity_t x, luminosity_t *out)
-+              { return denoise_variance_stabilizing_transform (
-+                    x, floor, slope, out); });
-+    }
-+  return result;
-+}
