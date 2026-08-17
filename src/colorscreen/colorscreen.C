@@ -4217,7 +4217,8 @@ do_slanted_edge (int argc, char **argv)
   render_parameters rparam;
   rparam.gamma = gamma;
 
-  slanted_edge_results res = slanted_edge_mtf (rparam, img, img.get_area(), params, &progress);
+  slanted_edge_results res =
+      slanted_edge_mtf (rparam, img, img.get_area(), params, &progress);
   if (!res.success)
     {
       fprintf (stderr, "Slanted edge analysis failed: %s\n",
@@ -4242,13 +4243,7 @@ do_slanted_edge (int argc, char **argv)
       progress.resume_stdout ();
     }
 
-  if (rparam.sharpen.scanner_mtf.measurements.empty())
-    {
-      fprintf (stderr, "No MTF measurement produced\n");
-      return 1;
-    }
-
-  auto &m = rparam.sharpen.scanner_mtf.measurements.back();
+  auto &m = res.measurement;
 
   if (verbose)
     {

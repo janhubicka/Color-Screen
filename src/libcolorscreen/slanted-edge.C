@@ -694,10 +694,10 @@ robust_location_scale (const std::vector<double> &values, double *median,
 
 
 /* Measure the spatial-frequency response of one slanted edge in ROI using
-   PARAMS, append the qualified measurement to RPARAM, and use PROGRESS for
-   diagnostics and cancellation-aware rendering.  */
+   PARAMS and return the qualified curve in the result.  RPARAM is read-only:
+   callers may measure several channels first and commit them atomically.  */
 slanted_edge_results
-slanted_edge_mtf (render_parameters &rparam, const image_data &img,
+slanted_edge_mtf (const render_parameters &rparam, const image_data &img,
                   int_image_area roi, const slanted_edge_parameters &params,
                   progress_info *progress)
 {
@@ -713,6 +713,25 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img,
           format_message ("oversampling %d is outside the supported range "
                           "2..%d",
                           oversampling, max_slanted_edge_oversampling));
+      return res;
+    }
+  if (params.channel < -1 || params.channel > 3)
+    {
+      set_failure (&res, slanted_edge_failure_invalid_parameters, progress,
+                   "MTF measurement channel must be image layer, red, green, "
+                   "blue, or infrared");
+      return res;
+    }
+  if (params.channel >= 0 && params.channel <= 2 && !img.has_rgb ())
+    {
+      set_failure (&res, slanted_edge_failure_invalid_parameters, progress,
+                   "requested RGB MTF channel is not present in the image");
+      return res;
+    }
+  if (params.channel == 3 && !img.has_grayscale_or_ir ())
+    {
+      set_failure (&res, slanted_edge_failure_invalid_parameters, progress,
+                   "requested infrared MTF channel is not present in the image");
       return res;
     }
   if (!my_isfinite (params.lsf_half_width) || params.lsf_half_width < 0)
@@ -752,8 +771,13 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img,
      disabling sharpening only in the private render used for measurement.  */
   render_parameters measurement_rparam = rparam;
   measurement_rparam.sharpen.mode = sharpen_parameters::none;
+  /* CHANNEL 3 explicitly requests the native grayscale/IR plane even when
+     normal rendering is configured to synthesize the image layer from RGB.  */
+  if (params.channel == 3)
+    measurement_rparam.ignore_infrared = false;
   render r (img, measurement_rparam, 65535);
-  if (!r.precompute_all (true, false, {1, 1, 1}, progress))
+  const bool grayscale_needed = params.channel < 0 || params.channel == 3;
+  if (!r.precompute_all (grayscale_needed, false, {1, 1, 1}, progress))
     {
       set_failure (&res, slanted_edge_failure_precomputation, progress,
                    "image precomputation failed");
@@ -783,7 +807,17 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img,
   for (int y = 0; y < roi.height; y++)
     for (int x = 0; x < roi.width; x++)
       {
-        double value = r.get_unadjusted_data ({roi.x + x, roi.y + y});
+        const int_point_t pos = {roi.x + x, roi.y + y};
+        double value;
+        if (params.channel < 0 || params.channel == 3)
+          value = r.get_unadjusted_data (pos);
+        else
+          {
+            const rgbdata rgb = r.get_unadjusted_rgb_pixel (pos);
+            value = params.channel == 0
+                        ? rgb.red
+                        : params.channel == 1 ? rgb.green : rgb.blue;
+          }
         if (!my_isfinite (value))
           {
             set_failure (
@@ -1382,7 +1416,7 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img,
   for (double value : esf)
     res.edge_histogram.push_back ((luminosity_t)value);
 
-  rparam.sharpen.scanner_mtf.measurements.push_back (measurement);
+  res.measurement = std::move (measurement);
   res.success = true;
   res.failure = slanted_edge_failure_none;
   res.error.clear ();

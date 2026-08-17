@@ -5040,28 +5040,60 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
       else if (currentMtf.wavelength > 0)
         defaults.wavelength = currentMtf.wavelength;
     }
-    if (!currentMtf.measurements.empty() && defaults.channel < 0)
-      defaults.channel = currentMtf.measurements.back().channel;
 
-    SlantedEdgeDialog dialog(defaults, !currentMtf.measurements.empty(), this);
+    const bool hasRgb = m_scan && m_scan->has_rgb();
+    const bool hasInfrared = m_scan && m_scan->has_grayscale_or_ir();
+    SlantedEdgeDialog dialog(defaults, !currentMtf.measurements.empty(),
+                             hasRgb, hasInfrared, this);
     if (dialog.exec() != QDialog::Accepted) {
       m_sharpnessPanel->setMeasureMtfChecked(false);
       return;
     }
-    const colorscreen::slanted_edge_parameters measurementParameters =
+    const colorscreen::slanted_edge_parameters baseParameters =
         dialog.parameters();
-    m_slantedEdgeParameters = measurementParameters;
+    m_slantedEdgeParameters = baseParameters;
 
-    auto result = std::make_shared<colorscreen::slanted_edge_results>();
+    std::vector<colorscreen::slanted_edge_parameters> measurementParameters;
+    if (dialog.measureNativeChannels()) {
+      static const char *const channelNames[4] =
+          {"Red", "Green", "Blue", "Infrared"};
+      const int channelCount = hasInfrared ? 4 : 3;
+      measurementParameters.reserve(channelCount);
+      for (int channel = 0; channel < channelCount; ++channel) {
+        colorscreen::slanted_edge_parameters p = baseParameters;
+        p.channel = channel;
+        p.name = baseParameters.name + " " + channelNames[channel];
+        p.same_capture = channel == 0 ? baseParameters.same_capture : true;
+
+        double wavelength = currentMtf.wavelengths[channel];
+        if (!(colorscreen::my_isfinite(wavelength) && wavelength > 0)
+            && m_scan) {
+          wavelength = m_scan->wavelengths[channel];
+        }
+        p.wavelength =
+            colorscreen::my_isfinite(wavelength) && wavelength > 0
+                ? wavelength
+                : 0;
+        measurementParameters.push_back(std::move(p));
+      }
+    } else {
+      colorscreen::slanted_edge_parameters p = baseParameters;
+      p.channel = -1;
+      measurementParameters.push_back(std::move(p));
+    }
+
+    auto results =
+        std::make_shared<std::vector<colorscreen::slanted_edge_results>>();
+    auto batchError = std::make_shared<std::string>();
     runAreaComputation(
         tr("Select an area containing a slanted edge to compute its MTF"),
-        tr("Measure MTF of a slanted edge"),
+        measurementParameters.size() > 1
+            ? tr("Measure per-channel MTF of a slanted edge")
+            : tr("Measure MTF of a slanted edge"),
         [this]() { m_sharpnessPanel->setMeasureMtfEnabled(false); },
-        [this, result]() {
-          if (!result->success) {
-            QString reason = result->error.empty()
-                                 ? tr("No usable single slanted edge was found.")
-                                 : QString::fromStdString(result->error);
+        [this, batchError]() {
+          if (!batchError->empty()) {
+            QString reason = QString::fromStdString(*batchError);
             QMessageBox::warning(
                 this, tr("MTF Measurement Failed"),
                 tr("%1\n\nSelect one straight, isolated edge with clear "
@@ -5072,12 +5104,35 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
           m_sharpnessPanel->setMeasureMtfChecked(false);
           m_sharpnessPanel->setMeasureMtfEnabled(true);
         },
-        [result, measurementParameters](ParameterState &s,
-           colorscreen::image_data &scan,
-           const colorscreen::int_image_area &area,
-           colorscreen::progress_info *p) {
-          *result = colorscreen::slanted_edge_mtf(
-              s.rparams, scan, area, measurementParameters, p);
+        [results, batchError, measurementParameters](
+            ParameterState &s, colorscreen::image_data &scan,
+            const colorscreen::int_image_area &area,
+            colorscreen::progress_info *progress) {
+          results->clear();
+          batchError->clear();
+          results->reserve(measurementParameters.size());
+
+          for (const auto &parameters : measurementParameters) {
+            colorscreen::slanted_edge_results result =
+                colorscreen::slanted_edge_mtf(
+                    s.rparams, scan, area, parameters, progress);
+            if (!result.success) {
+              *batchError =
+                  parameters.name + ": "
+                  + (result.error.empty()
+                         ? std::string("no usable single slanted edge was found")
+                         : result.error);
+              results->push_back(std::move(result));
+              return;
+            }
+            results->push_back(std::move(result));
+          }
+
+          /* Commit the set only after every requested native channel passed
+             qualification.  This prevents partial RGB measurement groups.  */
+          for (auto &result : *results)
+            s.rparams.sharpen.scanner_mtf.measurements.push_back(
+                std::move(result.measurement));
         });
   } else {
     if (m_imageWidget->interactionMode() == ImageWidget::GenericAreaMode) {

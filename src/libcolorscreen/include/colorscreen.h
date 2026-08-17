@@ -367,7 +367,9 @@ struct slanted_edge_parameters
      not used by the slanted-edge numerical calculation itself.  */
   double wavelength = 0;
 
-  /* Measurement channel: -1 unknown, 0 red, 1 green, 2 blue, or 3 infrared.  */
+  /* Image source to measure: -1 is the current image layer, 0 red, 1 green,
+     2 blue, and 3 the native grayscale/infrared plane.  For native RGB
+     channels CHANNEL is also copied to the resulting MTF metadata.  */
   int channel = -1;
 
   /* Human-readable name stored with the appended MTF measurement.  */
@@ -441,10 +443,15 @@ struct slanted_edge_results
 
   /* Distance between adjacent EDGE_HISTOGRAM samples in input pixels.  */
   double edge_histogram_step = 0;
+
+  /* Qualified frequency-domain measurement.  This is populated only on
+     success.  SLANTED_EDGE_MTF itself is side-effect free; callers decide
+     when and where to store the returned curve.  */
+  mtf_measurement measurement;
 };
 
 DLL_PUBLIC slanted_edge_results
-slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_area roi,
+slanted_edge_mtf (const render_parameters &rparam, const image_data &img, int_image_area roi,
                   const slanted_edge_parameters &params, progress_info *progress = NULL);
 
 DLL_PUBLIC std::vector <rgbdata>

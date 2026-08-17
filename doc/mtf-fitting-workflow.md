@@ -159,20 +159,29 @@ self-contained and avoids later changes caused by a global fallback value.
 ## 5. Slanted-edge GUI workflow
 
 Choosing **Measure slanted-edge MTF** opens a setup dialog before area
-selection. The dialog contains:
+selection. For an RGB scan the default is to measure the red, green, and blue
+scanner channels independently from one selected ROI. If a native infrared
+plane is also present it becomes the fourth curve. All curves generated from
+one ROI are stored in the same capture group. The current image layer remains
+available as an explicit alternative; this is useful when the quantity to be
+calibrated is the RGB-derived grayscale mixture itself.
+
+The dialog contains:
 
 - measurement name;
-- channel label;
-- wavelength;
+- native-channels versus image-layer source;
+- optional image-layer wavelength;
 - same-capture grouping;
 - ESF oversampling from 2 to 64;
 - retained LSF half-width;
 - Hann, Hamming, or rectangular LSF window.
 
-A positive wavelength is required before area selection. The most recently used
-settings are retained for the current application session. Wavelength and
-channel are initialized from the most recent measurement when possible, then
-from the global MTF wavelength.
+For native-channel measurement, each curve receives the corresponding
+per-channel wavelength from the scanner-MTF settings, falling back to capture
+metadata when available. Unknown wavelengths remain zero and can be supplied or
+optimized later by the fitting workflow. An image-layer measurement may also
+have an unknown wavelength because a mixture of RGB channels need not have one
+physically meaningful wavelength.
 
 The defaults preserve the historical Color-Screen measurement:
 
@@ -186,8 +195,10 @@ That setting is a comparison convention, not necessarily a more accurate
 estimate of the complete capture response.
 
 The image area is selected only after the dialog is accepted. The actual edge
-analysis runs in the existing background area-computation workflow, and one
-measurement with all metadata is appended to the scanner-MTF state.
+analysis runs in the existing background area-computation workflow. All
+requested native channels must pass edge qualification before any of their
+measurements are appended, so a failed channel cannot leave a partial RGB
+capture group in the scanner-MTF state.
 
 ## 6. MTF fitting dialog
 

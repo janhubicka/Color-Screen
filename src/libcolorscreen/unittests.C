@@ -5151,13 +5151,18 @@ test_slanted_edge_mtf ()
         printf("Edge found: (%f,%f) - (%f,%f)\n", (double)res.edge_p1.x, (double)res.edge_p1.y, (double)res.edge_p2.x, (double)res.edge_p2.y);
       
       // Verify MTF
-      if (rparam.sharpen.scanner_mtf.measurements.empty())
+      if (!rparam.sharpen.scanner_mtf.measurements.empty())
+	{
+	  printf("Slanted-edge measurement unexpectedly modified render parameters\n");
+	  return false;
+	}
+	
+      auto &measurement = res.measurement;
+      if (!measurement.size())
 	{
 	  printf("No MTF measurement generated\n");
 	  return false;
 	}
-	
-      auto &measurement = rparam.sharpen.scanner_mtf.measurements[0];
       if (measurement.wavelength != params.wavelength
           || measurement.channel != params.channel
           || measurement.name != params.name)
@@ -5481,8 +5486,8 @@ test_real_mtf_reproducibility ()
       const slanted_edge_results edge
           = slanted_edge_mtf (parameters, image, image.get_area (),
                               edge_parameters, nullptr);
-      if (!edge.success
-          || parameters.sharpen.scanner_mtf.measurements.size () != 1)
+      if (!edge.success || !edge.measurement.size ()
+          || !parameters.sharpen.scanner_mtf.measurements.empty ())
         {
           fprintf (stderr, "Real slanted edge %s was rejected: %s\n",
                    filename,
@@ -5502,8 +5507,7 @@ test_real_mtf_reproducibility ()
           return false;
         }
 
-      const mtf_measurement &measurement
-          = parameters.sharpen.scanner_mtf.measurements[0];
+      const mtf_measurement &measurement = edge.measurement;
       bool has_uncertainty = false;
       for (size_t i = 0; i < measurement.size (); i++)
         if (measurement.get_uncertainty (i) > 0)

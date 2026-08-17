@@ -19,7 +19,8 @@
     HAS_PREVIOUS_MEASUREMENT determines whether SAME CAPTURE is meaningful.  */
 SlantedEdgeDialog::SlantedEdgeDialog(
     const colorscreen::slanted_edge_parameters &defaults,
-    bool hasPreviousMeasurement, QWidget *parent)
+    bool hasPreviousMeasurement, bool hasRgb, bool hasInfrared,
+    QWidget *parent)
     : QDialog(parent) {
   setWindowTitle(tr("Measure slanted-edge MTF"));
   setModal(true);
@@ -29,9 +30,9 @@ SlantedEdgeDialog::SlantedEdgeDialog(
 
   auto *mainLayout = new QVBoxLayout(this);
   auto *description = new QLabel(
-      tr("Wavelength and channel are stored with the measured curve. They do "
-         "not alter the edge calculation, but they are required by the "
-         "diffraction-based MTF fit."),
+      tr("For RGB scans the default is to measure each native scanner channel "
+         "from the selected edge. The image layer can still be measured "
+         "directly when its RGB mixture is itself the quantity of interest."),
       this);
   description->setWordWrap(true);
   mainLayout->addWidget(description);
@@ -50,17 +51,18 @@ SlantedEdgeDialog::SlantedEdgeDialog(
   m_nameEdit->setToolTip(tr("Name shown in the MTF chart and fit dialog."));
   form->addRow(tr("Measurement name:"), m_nameEdit);
 
-  m_channelCombo = new QComboBox(this);
-  m_channelCombo->addItem(tr("Unknown / grayscale"), -1);
-  m_channelCombo->addItem(tr("Red"), 0);
-  m_channelCombo->addItem(tr("Green"), 1);
-  m_channelCombo->addItem(tr("Blue"), 2);
-  m_channelCombo->addItem(tr("Infrared"), 3);
-  int channelIndex = m_channelCombo->findData(defaults.channel);
-  m_channelCombo->setCurrentIndex(channelIndex >= 0 ? channelIndex : 0);
-  m_channelCombo->setToolTip(
-      tr("Channel is a label; the wavelength field remains authoritative."));
-  form->addRow(tr("Channel:"), m_channelCombo);
+  m_sourceCombo = new QComboBox(this);
+  if (hasRgb)
+    m_sourceCombo->addItem(
+        hasInfrared ? tr("Native RGB + infrared channels")
+                    : tr("Native RGB channels"),
+        true);
+  m_sourceCombo->addItem(tr("Image layer"), false);
+  m_sourceCombo->setCurrentIndex(0);
+  m_sourceCombo->setToolTip(
+      tr("Native channels are analyzed independently from the same ROI. "
+         "Image layer measures the current grayscale/infrared or RGB mixture."));
+  form->addRow(tr("Measure:"), m_sourceCombo);
 
   m_wavelengthSpin = new QDoubleSpinBox(this);
   m_wavelengthSpin->setRange(0.0, 2000.0);
@@ -70,9 +72,10 @@ SlantedEdgeDialog::SlantedEdgeDialog(
   m_wavelengthSpin->setSpecialValueText(tr("unknown"));
   m_wavelengthSpin->setValue(defaults.wavelength);
   m_wavelengthSpin->setToolTip(
-      tr("Narrow-band wavelength associated with this edge. For the Hurley "
-         "infrared scan use 750 nm."));
-  form->addRow(tr("Wavelength:"), m_wavelengthSpin);
+      tr("Optional wavelength for an image-layer measurement. Native-channel "
+         "measurements use the per-channel wavelengths from capture/MTF "
+         "settings; an unknown wavelength can be optimized later."));
+  form->addRow(tr("Image-layer wavelength:"), m_wavelengthSpin);
 
   m_sameCaptureCheck = new QCheckBox(
       tr("Same capture as previous measurement"), this);
@@ -135,6 +138,9 @@ SlantedEdgeDialog::SlantedEdgeDialog(
   connect(m_wavelengthSpin,
           QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
           [this]() { updateValidation(); });
+  connect(m_sourceCombo,
+          QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+          [this]() { updateValidation(); });
   mainLayout->addWidget(buttons);
   updateValidation();
 
@@ -157,15 +163,18 @@ SlantedEdgeDialog::SlantedEdgeDialog(
   resize(requested);
 }
 
-/** Enable area selection only after a positive wavelength has been entered.
-    The numerical edge calculation does not use it, but a physical MTF fit
-    cannot interpret a measured curve without this acquisition metadata.  */
+/** Update source-dependent controls.  Wavelength is intentionally optional:
+    native channels can obtain it from capture metadata and a genuinely mixed
+    image layer may not have one physically meaningful wavelength.  */
 void SlantedEdgeDialog::updateValidation() {
-  const bool valid = m_wavelengthSpin->value() > 0;
-  m_acceptButton->setEnabled(valid);
+  const bool nativeChannels = measureNativeChannels();
+  m_wavelengthSpin->setEnabled(!nativeChannels);
+  m_acceptButton->setEnabled(true);
   m_statusLabel->setText(
-      valid ? tr("The wavelength will be stored with the measured curve.")
-            : tr("Enter the wavelength associated with this measurement."));
+      nativeChannels
+          ? tr("One curve will be produced for each native channel. All curves "
+               "will be marked as belonging to the same capture.")
+          : tr("The current image layer will be measured directly."));
 }
 
 /** Return the measurement metadata and numerical controls entered by the
@@ -175,7 +184,7 @@ colorscreen::slanted_edge_parameters SlantedEdgeDialog::parameters() const {
   result.name = m_nameEdit->text().trimmed().toStdString();
   if (result.name.empty())
     result.name = "Slanted edge MTF";
-  result.channel = m_channelCombo->currentData().toInt();
+  result.channel = -1;
   result.wavelength = m_wavelengthSpin->value();
   result.same_capture = m_sameCaptureCheck->isEnabled()
                         && m_sameCaptureCheck->isChecked();
@@ -184,4 +193,9 @@ colorscreen::slanted_edge_parameters SlantedEdgeDialog::parameters() const {
   result.window = static_cast<colorscreen::slanted_edge_parameters::window_type>(
       m_windowCombo->currentData().toInt());
   return result;
+}
+
+/** Return true if the dialog requests the default per-channel measurement.  */
+bool SlantedEdgeDialog::measureNativeChannels() const {
+  return m_sourceCombo->currentData().toBool();
 }
