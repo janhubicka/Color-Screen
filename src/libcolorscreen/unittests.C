@@ -5936,6 +5936,31 @@ test_denoise ()
                  three.paired_observations);
         return false;
       }
+
+
+    denoise_noise_domain_comparison domains
+        = estimate_screen_rgb_noise_domain_comparison (
+            w, h,
+            [&] (int x, int y) { return data[(size_t)y * w + x]; },
+            [&] (int x, int y) { return support[(size_t)y * w + x]; },
+            [] (int_point_t p)
+            { return point_t{(coord_t)p.x, (coord_t)p.y}; });
+    if (!domains.linear.valid_p () || !domains.variance_stabilized_valid_p ()
+        || domains.linear.spacing2_variance_ratio
+               != three.spacing2_variance_ratio
+        || domains.linear.spacing3_variance_ratio
+               != three.spacing3_variance_ratio)
+      {
+        fprintf (stderr,
+                 "RGB domain comparison changed linear semantics: ratios "
+                 "%g %g vs %g %g; VST valid %d\n",
+                 (double)domains.linear.spacing2_variance_ratio,
+                 (double)domains.linear.spacing3_variance_ratio,
+                 (double)three.spacing2_variance_ratio,
+                 (double)three.spacing3_variance_ratio,
+                 domains.variance_stabilized_valid_p () ? 1 : 0);
+        return false;
+      }
   }
 
   /* Packed screen geometries must only use equally spaced physical triples.
@@ -6078,6 +6103,135 @@ test_denoise ()
                  (double)three.scale_growth_exponent,
                  (double)three.extrapolated_scale_invariant_fraction,
                  three.paired_observations);
+        return false;
+      }
+  }
+
+
+  /* Density space should expose multiplicative/log-normal noise as nearly
+     additive.  The underlying transmission is exponential in a linear
+     density ramp: it is curved in intensity space but exactly linear after
+     -log(), so scale dependence and floor+slope fit error should both improve
+     substantially in density space.  */
+  {
+    const int w = 96, h = 72;
+    const luminosity_t sigma = (luminosity_t)0.03;
+    std::vector<luminosity_t> data ((size_t)w * h), support ((size_t)w * h, 1);
+    unsigned int noise_seed = 0x17d31e5U;
+    auto gaussian = [&] () -> luminosity_t
+    {
+      luminosity_t u1
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      luminosity_t u2
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      return std::sqrt ((luminosity_t)-2 * std::log (u1))
+             * std::cos ((luminosity_t)6.2831853071795864769 * u2);
+    };
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        {
+          luminosity_t density = (luminosity_t)0.35
+              + (luminosity_t)0.9 * x / (w - 1)
+              + (luminosity_t)0.18 * y / (h - 1);
+          data[(size_t)y * w + x]
+              = std::exp (-density + sigma * gaussian ());
+        }
+    auto identity_to_scr = [] (int_point_t p) -> point_t
+      { return {(coord_t)p.x, (coord_t)p.y}; };
+    denoise_noise_domain_comparison domains
+        = estimate_screen_noise_domain_comparison (
+            w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+            [&] (int x, int y) { return support[(size_t)y * w + x]; },
+            identity_to_scr);
+    if (!domains.linear.valid_p () || !domains.density_valid_p ()
+        || domains.density.spacing2_variance_ratio < (luminosity_t)0.75
+        || domains.density.spacing2_variance_ratio > (luminosity_t)1.3
+        || domains.density.spacing3_variance_ratio < (luminosity_t)0.7
+        || domains.density.spacing3_variance_ratio > (luminosity_t)1.4
+        || domains.density.spacing1.relative_fit_error > (luminosity_t)0.35
+        || domains.density.spacing1.relative_fit_error
+               > domains.linear.spacing1.relative_fit_error * (luminosity_t)0.55)
+      {
+        fprintf (stderr,
+                 "Density-domain diagnostic mismatch: linear ratios %g %g "
+                 "error %g; density ratios %g %g error %g\n",
+                 (double)domains.linear.spacing2_variance_ratio,
+                 (double)domains.linear.spacing3_variance_ratio,
+                 (double)domains.linear.spacing1.relative_fit_error,
+                 (double)domains.density.spacing2_variance_ratio,
+                 (double)domains.density.spacing3_variance_ratio,
+                 (double)domains.density.spacing1.relative_fit_error);
+        return false;
+      }
+    luminosity_t dummy;
+    if (denoise_density_transform (0, &dummy)
+        || denoise_density_transform ((luminosity_t)-0.1, &dummy))
+      {
+        fprintf (stderr, "Density transform accepted non-positive sample\n");
+        return false;
+      }
+  }
+
+  /* The generalized square-root transform is derived from the measured
+     linear-space floor+slope variance model.  On synthetic additive noise
+     with exactly that law it should strongly flatten the residual
+     signal-dependence, while remaining numerically well behaved at zero
+     slope.  */
+  {
+    const int w = 112, h = 80;
+    const luminosity_t expected_floor = (luminosity_t)0.00035;
+    const luminosity_t expected_slope = (luminosity_t)0.0020;
+    std::vector<luminosity_t> data ((size_t)w * h), support ((size_t)w * h, 1);
+    unsigned int noise_seed = 0x51ab17eU;
+    auto gaussian = [&] () -> luminosity_t
+    {
+      luminosity_t u1
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      luminosity_t u2
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      return std::sqrt ((luminosity_t)-2 * std::log (u1))
+             * std::cos ((luminosity_t)6.2831853071795864769 * u2);
+    };
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        {
+          luminosity_t signal = (luminosity_t)0.08
+              + (luminosity_t)0.72 * x / (w - 1)
+              + (luminosity_t)0.04 * y / (h - 1);
+          luminosity_t variance = expected_floor + expected_slope * signal;
+          data[(size_t)y * w + x] = signal + std::sqrt (variance) * gaussian ();
+        }
+    denoise_noise_domain_comparison domains
+        = estimate_screen_noise_domain_comparison (
+            w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+            [&] (int x, int y) { return support[(size_t)y * w + x]; },
+            [] (int_point_t p)
+            { return point_t{(coord_t)p.x, (coord_t)p.y}; });
+    if (!domains.linear.valid_p () || !domains.variance_stabilized_valid_p ()
+        || !(domains.linear.spacing1.variance_slope > 0)
+        || domains.variance_stabilized.spacing1.variance_slope
+               > domains.variance_stabilized.spacing1.variance_floor
+                     * (luminosity_t)0.20)
+      {
+        fprintf (stderr,
+                 "Variance-stabilized diagnostic mismatch: linear floor %g "
+                 "slope %g; VST floor %g slope %g error %g\n",
+                 (double)domains.linear.spacing1.variance_floor,
+                 (double)domains.linear.spacing1.variance_slope,
+                 (double)domains.variance_stabilized.spacing1.variance_floor,
+                 (double)domains.variance_stabilized.spacing1.variance_slope,
+                 (double)domains.variance_stabilized.spacing1.relative_fit_error);
+        return false;
+      }
+    luminosity_t transformed = 0;
+    if (!denoise_variance_stabilizing_transform (
+            (luminosity_t)0.4, expected_floor, 0, &transformed)
+        || fabs (transformed
+                 - (luminosity_t)0.4 / std::sqrt (expected_floor))
+               > (luminosity_t)1e-5)
+      {
+        fprintf (stderr, "Constant-variance VST limit is unstable: %g\n",
+                 (double)transformed);
         return false;
       }
   }
