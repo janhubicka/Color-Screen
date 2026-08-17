@@ -30,6 +30,12 @@ jobs:
           test "$(sha256sum dng_sdk/source/dng_lens_correction.cpp | cut -d' ' -f1)" = \
                '89112619dce4a205761dc9e3b0c641d6c1d99911829a18c181a7229af4e8521f'
 
+          # Print where Build 2652 implements host helpers that older Meson
+          # manifests may not know about.  This is diagnostic provenance, not
+          # a substitute implementation.
+          grep -R -n --include='*.cpp' 'dng_host::PerformAreaTask' "$ADOBE/dng_sdk/source" || true
+          grep -R -n --include='*.cpp' 'dng_host::Make_dng_complex_image' "$ADOBE/dng_sdk/source" || true
+
           # dng_jxl.h is pulled by generic SDK headers even though lens warping
           # does not use JPEG XL.  Build 2652 expects the libjxl 0.11 API while
           # Ubuntu 24.04 packages an older API, so use the 0.11.1 public headers
@@ -44,11 +50,14 @@ jobs:
             >> dng_sdk/source/dng_lens_correction.cpp
           cp "$GITHUB_WORKSPACE/.github/dng-reference/reference_probe.cpp" \
             dng_sdk/source/reference_probe.cpp
+          cp "$GITHUB_WORKSPACE/.github/dng-reference/dng_jxl_stubs.cpp" \
+            dng_sdk/source/dng_jxl_stubs.cpp
           cat >> dng_sdk/source/meson.build <<'EOF'
 
           executable(
             'reference_probe',
             'reference_probe.cpp',
+            'dng_jxl_stubs.cpp',
             cpp_args: [ '-DqDNGUseLibJPEG=1', '-DAdobePrivate=0' ],
             include_directories: [ '..' / 'projects' / 'meson' ],
             dependencies: [ zlib, expat, libjpeg ],
