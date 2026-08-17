@@ -8,28 +8,166 @@ jobs:
   probe:
     runs-on: ubuntu-24.04
     steps:
-      - name: Download official Adobe DNG SDK 1.7.1 build 2652
+      - name: Build and execute Adobe DNG SDK 1.7.1 build 2652 warp
+        shell: bash
         run: |
           set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build libjpeg-dev zlib1g-dev libexpat1-dev libjxl-dev
+
           curl -fL --retry 3 \
             https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1_2652_20260714.zip \
             -o /tmp/dng-sdk.zip
-          sha256sum /tmp/dng-sdk.zip | tee /tmp/dng-sdk.zip.sha256
-          mkdir /tmp/dng
-          unzip -q /tmp/dng-sdk.zip -d /tmp/dng
-          find /tmp/dng -name dng_lens_correction.cpp -o -name dng_lens_correction.h -o -name dng_rect.h -o -name dng_utils.cpp | sort | tee /tmp/files.txt
-          SRC=$(dirname "$(find /tmp/dng -name dng_lens_correction.cpp | head -1)")
-          mkdir -p reference
-          cp "$SRC/dng_lens_correction.cpp" reference/
-          cp "$SRC/dng_lens_correction.h" reference/
-          cp "$SRC/dng_rect.h" reference/
-          cp "$SRC/dng_utils.cpp" reference/
-          cp "$SRC/dng_flags.h" reference/
-          cp /tmp/dng-sdk.zip.sha256 reference/
-          grep -n -A45 -B8 'Compute center' "$SRC/dng_lens_correction.cpp" > reference/warp-center-snippet.txt
-          grep -n -A80 'GetSrcPixelPosition' "$SRC/dng_lens_correction.cpp" | tail -120 > reference/warp-evaluation-snippet.txt
-          find /tmp/dng -maxdepth 3 -type f -name '*.xcodeproj' -o -name 'CMakeLists.txt' -o -name 'Makefile*' | head -100 > reference/build-files.txt
+          echo '73499b47f4683e12120a234bd0946f02e52ab2ff9834bcbd0e9f8ab4f923360e  /tmp/dng-sdk.zip' | sha256sum -c -
+          mkdir /tmp/adobe
+          unzip -q /tmp/dng-sdk.zip -d /tmp/adobe
+          ADOBE=/tmp/adobe/dng_sdk_1_7_1
+
+          # hfiguiere/dng_sdk supplies only the Linux Meson glue. Replace its DNG
+          # source files with the bytes from Adobe's official Build 2652 archive.
+          git clone --depth 1 https://github.com/hfiguiere/dng_sdk.git /tmp/build
+          cp -a "$ADOBE/dng_sdk/source/." /tmp/build/dng_sdk/source/
+          cd /tmp/build
+          sha256sum "$ADOBE/dng_sdk/source/dng_lens_correction.cpp" dng_sdk/source/dng_lens_correction.cpp
+          test "$(sha256sum "$ADOBE/dng_sdk/source/dng_lens_correction.cpp" | cut -d' ' -f1)" = \
+               "$(sha256sum dng_sdk/source/dng_lens_correction.cpp | cut -d' ' -f1)"
+
+          # Expose a diagnostic entry point in the same translation unit as Adobe's
+          # private dng_filter_warp. The body constructs the real filter and calls
+          # its real GetSrcPixelPosition; no warp arithmetic is reimplemented here.
+          cat >> dng_sdk/source/dng_lens_correction.cpp <<'EOF'
+
+          #include "dng_simple_image.h"
+
+          extern "C" void
+          adobe_dng_reference_warp (int width, int height,
+                                    double center_h, double center_v,
+                                    const double kr[4],
+                                    double dst_h, double dst_v,
+                                    double *src_h, double *src_v)
+          {
+              dng_host host;
+              AutoPtr<dng_negative> negative (dng_negative::Make (host));
+              negative->SetMonochrome ();
+
+              dng_simple_image srcImage (dng_rect (height, width), 1, ttFloat,
+                                         host.Allocator ());
+              dng_simple_image dstImage (dng_rect (height, width), 1, ttFloat,
+                                         host.Allocator ());
+
+              dng_warp_params_radial radial;
+              dng_vector rv (4);
+              rv [0] = kr [0];
+              rv [1] = kr [1];
+              rv [2] = kr [2];
+              rv [3] = kr [3];
+              radial.SetWarpRectilinear_1_3 (0, rv);
+
+              dng_vector tan [1];
+              tan [0] = dng_vector (2);
+              tan [0] [0] = 0.0;
+              tan [0] [1] = 0.0;
+
+              AutoPtr<dng_warp_params> params (
+                  new dng_warp_params_rectilinear (
+                      1, radial, tan, dng_point_real64 (center_v, center_h)));
+
+              dng_filter_warp filter (srcImage, dstImage, *negative, params);
+              dng_point_real64 out = filter.GetSrcPixelPosition (
+                  dng_point_real64 (dst_v, dst_h), 0);
+              *src_h = out.h;
+              *src_v = out.v;
+          }
+          EOF
+
+          cat > dng_sdk/source/reference_probe.cpp <<'EOF'
+          #include <cstdio>
+
+          extern "C" void adobe_dng_reference_warp (
+              int width, int height, double center_h, double center_v,
+              const double kr[4], double dst_h, double dst_v,
+              double *src_h, double *src_v);
+
+          struct fixture
+          {
+              const char *name;
+              int width, height;
+              double cx, cy;
+              double kr[4];
+              double x, y;
+          };
+
+          int main ()
+          {
+              const fixture f[] = {
+                  {"classic", 1000, 1000, 0.5, 0.5,
+                   {1.0, 0.05, -0.02, 0.005}, 600, 700},
+                  {"offcenter_tl", 1001, 701, 0.23, 0.67,
+                   {0.992, 0.045, -0.028, 0.009}, 0, 0},
+                  {"offcenter_tr", 1001, 701, 0.23, 0.67,
+                   {0.992, 0.045, -0.028, 0.009}, 1000, 0},
+                  {"offcenter_bl", 1001, 701, 0.23, 0.67,
+                   {0.992, 0.045, -0.028, 0.009}, 0, 700},
+                  {"offcenter_br", 1001, 701, 0.23, 0.67,
+                   {0.992, 0.045, -0.028, 0.009}, 1000, 700},
+                  {"offcenter_mid1", 1001, 701, 0.23, 0.67,
+                   {0.992, 0.045, -0.028, 0.009}, 123, 456},
+                  {"offcenter_mid2", 1001, 701, 0.23, 0.67,
+                   {0.992, 0.045, -0.028, 0.009}, 827, 51},
+                  {"offcenter_mid3", 1001, 701, 0.23, 0.67,
+                   {0.992, 0.045, -0.028, 0.009}, 230, 469},
+                  {"coolscan_tl", 4000, 3000, 0.560586, 0.482547,
+                   {0.99508, 0.0245411, -0.0521967, 0.0325757}, 0, 0},
+                  {"coolscan_br", 4000, 3000, 0.560586, 0.482547,
+                   {0.99508, 0.0245411, -0.0521967, 0.0325757}, 3999, 2999},
+                  {"coolscan_mid", 4000, 3000, 0.560586, 0.482547,
+                   {0.99508, 0.0245411, -0.0521967, 0.0325757}, 317, 2411},
+                  {"edge_ratio_below_one", 1000, 800, 0.41, 0.62,
+                   {0.9, 0.0, 0.0, 0.0}, 901, 87}
+              };
+
+              for (const fixture &q : f)
+                {
+                  double sx, sy;
+                  adobe_dng_reference_warp (q.width, q.height, q.cx, q.cy,
+                                             q.kr, q.x, q.y, &sx, &sy);
+                  std::printf ("%-22s %d %d %.17g %.17g "
+                               "%.17g %.17g %.17g %.17g "
+                               "%.17g %.17g %.17g %.17g\n",
+                               q.name, q.width, q.height, q.cx, q.cy,
+                               q.kr[0], q.kr[1], q.kr[2], q.kr[3],
+                               q.x, q.y, sx, sy);
+                }
+          }
+          EOF
+
+          cat >> dng_sdk/source/meson.build <<'EOF'
+
+          executable(
+            'reference_probe',
+            'reference_probe.cpp',
+            cpp_args: [
+              '-DqDNGUseLibJPEG=1',
+              '-DAdobePrivate=0'
+            ],
+            include_directories: [
+              '..' / 'projects' / 'meson',
+            ],
+            dependencies: [ zlib, expat, libjpeg, jpegxl, jpegxl_threads ],
+            link_with: [ dng_sdk, xmp_sdk ]
+          )
+          EOF
+
+          meson setup _build
+          ninja -C _build dng_sdk/source/reference_probe
+          mkdir -p "$GITHUB_WORKSPACE/reference-output"
+          _build/dng_sdk/source/reference_probe | tee "$GITHUB_WORKSPACE/reference-output/adobe-dng-sdk-2652-warp-fixture.txt"
+          cp "$ADOBE/LICENSE.txt" "$GITHUB_WORKSPACE/reference-output/Adobe-DNG-SDK-LICENSE.txt"
+          printf '%s\n' 'Adobe DNG SDK 1.7.1 Build 2652, 2026-07-14' > "$GITHUB_WORKSPACE/reference-output/PROVENANCE.txt"
+          printf '%s\n' 'Official ZIP sha256: 73499b47f4683e12120a234bd0946f02e52ab2ff9834bcbd0e9f8ab4f923360e' >> "$GITHUB_WORKSPACE/reference-output/PROVENANCE.txt"
+          sha256sum "$ADOBE/dng_sdk/source/dng_lens_correction.cpp" >> "$GITHUB_WORKSPACE/reference-output/PROVENANCE.txt"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: adobe-dng-sdk-2652-warp-reference
-          path: reference
+          name: adobe-dng-sdk-2652-executed-warp-fixture
+          path: reference-output
