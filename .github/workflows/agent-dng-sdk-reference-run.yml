@@ -14,7 +14,7 @@ jobs:
         run: |
           set -euxo pipefail
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build libjpeg-dev zlib1g-dev libexpat1-dev
+          sudo apt-get install -y meson ninja-build libjpeg-dev zlib1g-dev libexpat1-dev libjxl-dev
           curl -fL --retry 3 \
             https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1_2652_20260714.zip \
             -o /tmp/dng-sdk.zip
@@ -30,9 +30,10 @@ jobs:
           test "$(sha256sum dng_sdk/source/dng_lens_correction.cpp | cut -d' ' -f1)" = \
                '89112619dce4a205761dc9e3b0c641d6c1d99911829a18c181a7229af4e8521f'
 
-          # JPEG-XL is unrelated to lens warping.  The Linux build glue currently
-          # requires a newer libjxl than Ubuntu 24.04, so omit that translation
-          # unit and make its Meson dependency placeholders empty for this probe.
+          # JPEG-XL is unrelated to lens warping.  Ubuntu 24.04 has sufficiently
+          # compatible headers for the common SDK includes, but its pkg-config
+          # version is older than this build glue requests.  Omit dng_jxl.cpp
+          # itself and suppress the Meson versioned dependency for this probe.
           sed -i "s/jpegxl = dependency.*/jpegxl = declare_dependency()/" meson.build
           sed -i "s/jpegxl_threads = dependency.*/jpegxl_threads = declare_dependency()/" meson.build
           sed -i "/'dng_jxl.cpp',/d" dng_sdk/source/meson.build
