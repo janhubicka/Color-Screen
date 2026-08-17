@@ -5932,6 +5932,154 @@ test_denoise ()
   }
 
 
+  /* DN-017 domain comparison: an exponential transmission field with
+     multiplicative log-normal noise is linear with constant noise variance
+     in optical-density space.  Density should therefore fit its spacing-1
+     noise model substantially better than raw linear intensity.  */
+  {
+    const int w = 120, h = 90;
+    std::vector<luminosity_t> data ((size_t)w * h), support ((size_t)w * h, 1);
+    unsigned int noise_seed = 0x7319ac42U;
+    auto gaussian = [&] () -> luminosity_t
+    {
+      luminosity_t u1
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      luminosity_t u2
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      return std::sqrt ((luminosity_t)-2 * std::log (u1))
+             * std::cos ((luminosity_t)6.2831853071795864769 * u2);
+    };
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        {
+          luminosity_t density = (luminosity_t)0.15
+              + (luminosity_t)0.008 * x + (luminosity_t)0.004 * y;
+          density += (luminosity_t)0.025 * gaussian ();
+          data[(size_t)y * w + x] = std::exp (-density);
+        }
+    denoise_noise_domain_comparison domains
+        = estimate_screen_noise_domain_comparison (
+            w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+            [&] (int x, int y) { return support[(size_t)y * w + x]; },
+            [] (int_point_t p)
+            { return point_t{(coord_t)p.x, (coord_t)p.y}; });
+    if (!domains.valid_p () || !domains.variance_stabilized_valid_p ()
+        || domains.linear.paired_observations != domains.density.paired_observations
+        || domains.linear.paired_observations
+               != domains.variance_stabilized.paired_observations
+        || !(domains.density.spacing1.relative_fit_error
+             < domains.linear.spacing1.relative_fit_error * (luminosity_t)0.6)
+        || fabs (domains.density.spacing2_variance_ratio - (luminosity_t)1)
+               > (luminosity_t)0.2
+        || fabs (domains.density.spacing3_variance_ratio - (luminosity_t)1)
+               > (luminosity_t)0.2)
+      {
+        fprintf (stderr,
+                 "Density-domain noise diagnostic mismatch: linear err %g "
+                 "density err %g ratios %g %g obs %zu/%zu/%zu\n",
+                 (double)domains.linear.spacing1.relative_fit_error,
+                 (double)domains.density.spacing1.relative_fit_error,
+                 (double)domains.density.spacing2_variance_ratio,
+                 (double)domains.density.spacing3_variance_ratio,
+                 domains.linear.paired_observations,
+                 domains.density.paired_observations,
+                 domains.variance_stabilized.paired_observations);
+        return false;
+      }
+  }
+
+  /* A floor+slope Gaussian variance law should become approximately constant
+     after the generalized square-root transform.  The comparison deliberately
+     keeps the same positive samples in every domain.  */
+  {
+    const int w = 120, h = 90;
+    std::vector<luminosity_t> data ((size_t)w * h), support ((size_t)w * h, 1);
+    unsigned int noise_seed = 0x4b21d783U;
+    auto gaussian = [&] () -> luminosity_t
+    {
+      luminosity_t u1
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      luminosity_t u2
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      return std::sqrt ((luminosity_t)-2 * std::log (u1))
+             * std::cos ((luminosity_t)6.2831853071795864769 * u2);
+    };
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        {
+          luminosity_t signal = (luminosity_t)0.15
+              + (luminosity_t)0.55 * x / (w - 1)
+              + (luminosity_t)0.10 * y / (h - 1);
+          luminosity_t variance
+              = (luminosity_t)0.0002 + (luminosity_t)0.003 * signal;
+          luminosity_t value = signal + std::sqrt (variance) * gaussian ();
+          data[(size_t)y * w + x] = std::max (value, (luminosity_t)0.001);
+        }
+    denoise_noise_domain_comparison domains
+        = estimate_screen_noise_domain_comparison (
+            w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+            [&] (int x, int y) { return support[(size_t)y * w + x]; },
+            [] (int_point_t p)
+            { return point_t{(coord_t)p.x, (coord_t)p.y}; });
+    luminosity_t linear_relative_slope
+        = domains.linear.spacing1.variance_slope
+          / domains.linear.spacing1.variance_floor;
+    luminosity_t vst_relative_slope
+        = domains.variance_stabilized.spacing1.variance_slope
+          / domains.variance_stabilized.spacing1.variance_floor;
+    if (!domains.variance_stabilized_valid_p ()
+        || !(linear_relative_slope > (luminosity_t)1)
+        || !(vst_relative_slope < linear_relative_slope * (luminosity_t)0.02)
+        || fabs (domains.variance_stabilized.spacing2_variance_ratio
+                 - (luminosity_t)1) > (luminosity_t)0.2
+        || fabs (domains.variance_stabilized.spacing3_variance_ratio
+                 - (luminosity_t)1) > (luminosity_t)0.2)
+      {
+        fprintf (stderr,
+                 "Variance-stabilized diagnostic mismatch: relative slopes "
+                 "%g -> %g ratios %g %g\n",
+                 (double)linear_relative_slope, (double)vst_relative_slope,
+                 (double)domains.variance_stabilized.spacing2_variance_ratio,
+                 (double)domains.variance_stabilized.spacing3_variance_ratio);
+        return false;
+      }
+  }
+
+  /* Precise-RGB comparison uses the same domain-valid component observations
+     for all three transforms.  Exercise the pooled vector-data wrapper and
+     the rejection of a non-positive component.  */
+  {
+    const int w = 64, h = 52;
+    std::vector<rgbdata> data ((size_t)w * h);
+    std::vector<luminosity_t> support ((size_t)w * h, 1);
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        data[(size_t)y * w + x]
+            = {(luminosity_t)0.2 + (luminosity_t)0.003 * x,
+               (luminosity_t)0.3 + (luminosity_t)0.002 * y,
+               (luminosity_t)0.25 + (luminosity_t)0.001 * (x + y)};
+    data[(size_t)(h / 2) * w + w / 2].green = (luminosity_t)-0.1;
+    denoise_noise_domain_comparison domains
+        = estimate_screen_rgb_noise_domain_comparison (
+            w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+            [&] (int x, int y) { return support[(size_t)y * w + x]; },
+            [] (int_point_t p)
+            { return point_t{(coord_t)p.x, (coord_t)p.y}; });
+    if (domains.linear.paired_observations != domains.density.paired_observations
+        || (domains.variance_stabilized.valid_p ()
+            && domains.linear.paired_observations
+                   != domains.variance_stabilized.paired_observations))
+      {
+        fprintf (stderr,
+                 "RGB domain comparison used different sample sets: %zu/%zu/%zu\n",
+                 domains.linear.paired_observations,
+                 domains.density.paired_observations,
+                 domains.variance_stabilized.paired_observations);
+        return false;
+      }
+  }
+
+
   /* A bilateral filter needs a border matching its spatial kernel, not the
      unrelated NL-means patch and search radii.  Sigma 2 has support radius 6
      with the three-sigma truncation used by process_bilateral().  */

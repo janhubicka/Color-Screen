@@ -180,6 +180,32 @@ struct denoise_noise_three_scale_estimate
   }
 };
 
+/* Read-only DN-017 comparison of the same three-scale diagnostic in three
+   sample domains.  All three estimates use the same strictly-positive raw
+   samples so differences are caused by the transform rather than by sample
+   selection.  DENSITY uses a shifted -log(x) transform; the shift makes its
+   signal coordinate non-negative but does not affect second differences.
+   VARIANCE_STABILIZED uses the floor+slope model fitted by LINEAR.spacing1. */
+struct denoise_noise_domain_comparison
+{
+  denoise_noise_three_scale_estimate linear;
+  denoise_noise_three_scale_estimate density;
+  denoise_noise_three_scale_estimate variance_stabilized;
+  luminosity_t density_reference = 0;
+
+  bool valid_p () const
+  {
+    return linear.valid_p () && density.valid_p ()
+           && density_reference > 0 && my_isfinite (density_reference);
+  }
+
+  bool variance_stabilized_valid_p () const
+  {
+    return valid_p () && variance_stabilized.valid_p ()
+           && linear.spacing1.valid_p ();
+  }
+};
+
 namespace denoise_noise_estimator_detail
 {
 struct observation
@@ -842,6 +868,145 @@ estimate_screen_rgb_noise_three_scale_model (
             spacing3.push_back ({signal, d3 * d3 / (luminosity_t)6});
           }
       });
+}
+
+/* Compare linear intensity, density/log, and the variance-stabilized domain
+   on one common set of strictly-positive scalar samples.  Keeping the sample
+   set common is important: otherwise a domain could look better merely by
+   rejecting difficult observations.  */
+template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
+inline denoise_noise_domain_comparison
+estimate_screen_noise_domain_comparison (int width, int height, GETDATA getdata,
+                                         GETSUPPORT getsupport,
+                                         ENTRY_TO_SCR entry_to_scr)
+{
+  denoise_noise_domain_comparison result;
+  luminosity_t reference = 0;
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      {
+        luminosity_t value = getdata (x, y);
+        if (value > 0 && my_isfinite (value))
+          reference = std::max (reference, value);
+      }
+  if (!(reference > 0) || !my_isfinite (reference))
+    return result;
+  result.density_reference = reference;
+
+  auto positive = [&] (int x, int y)
+  {
+    luminosity_t value = getdata (x, y);
+    if (!(value > 0) || !my_isfinite (value))
+      return (luminosity_t)NAN;
+    return value;
+  };
+  result.linear = estimate_screen_noise_three_scale_model (
+      width, height, positive, getsupport, entry_to_scr);
+  result.density = estimate_screen_noise_three_scale_model (
+      width, height,
+      [&] (int x, int y)
+      {
+        luminosity_t value = positive (x, y);
+        return my_isfinite (value)
+                   ? std::log (reference) - std::log (value)
+                   : value;
+      },
+      getsupport, entry_to_scr);
+
+  if (result.linear.spacing1.valid_p ())
+    {
+      const luminosity_t floor = result.linear.spacing1.variance_floor;
+      const luminosity_t slope = result.linear.spacing1.variance_slope;
+      const luminosity_t root_floor = std::sqrt (floor);
+      result.variance_stabilized = estimate_screen_noise_three_scale_model (
+          width, height,
+          [&] (int x, int y)
+          {
+            luminosity_t value = positive (x, y);
+            if (!my_isfinite (value))
+              return value;
+            luminosity_t variance = floor + slope * value;
+            if (!(variance > 0) || !my_isfinite (variance))
+              return (luminosity_t)NAN;
+            /* 2/b*(sqrt(a+b*x)-sqrt(a)), written in rationalized form.
+               This is stable for b -> 0 and then becomes x/sqrt(a).  */
+            return 2 * value / (std::sqrt (variance) + root_floor);
+          },
+          getsupport, entry_to_scr);
+    }
+  return result;
+}
+
+/* Precise-RGB counterpart.  The positive/reference tests are per scanner
+   component, matching the component pooling used by the existing RGB noise
+   estimator.  A single reference is only an additive density offset, so using
+   the maximum across all three components does not change second differences. */
+template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
+inline denoise_noise_domain_comparison
+estimate_screen_rgb_noise_domain_comparison (
+    int width, int height, GETDATA getdata, GETSUPPORT getsupport,
+    ENTRY_TO_SCR entry_to_scr)
+{
+  denoise_noise_domain_comparison result;
+  luminosity_t reference = 0;
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      {
+        rgbdata value = getdata (x, y);
+        for (int k = 0; k < 3; k++)
+          if (value[k] > 0 && my_isfinite (value[k]))
+            reference = std::max (reference, value[k]);
+      }
+  if (!(reference > 0) || !my_isfinite (reference))
+    return result;
+  result.density_reference = reference;
+
+  auto positive = [&] (int x, int y)
+  {
+    rgbdata value = getdata (x, y);
+    for (int k = 0; k < 3; k++)
+      if (!(value[k] > 0) || !my_isfinite (value[k]))
+        value[k] = (luminosity_t)NAN;
+    return value;
+  };
+  result.linear = estimate_screen_rgb_noise_three_scale_model (
+      width, height, positive, getsupport, entry_to_scr);
+  result.density = estimate_screen_rgb_noise_three_scale_model (
+      width, height,
+      [&] (int x, int y)
+      {
+        rgbdata value = positive (x, y);
+        for (int k = 0; k < 3; k++)
+          if (my_isfinite (value[k]))
+            value[k] = std::log (reference) - std::log (value[k]);
+        return value;
+      },
+      getsupport, entry_to_scr);
+
+  if (result.linear.spacing1.valid_p ())
+    {
+      const luminosity_t floor = result.linear.spacing1.variance_floor;
+      const luminosity_t slope = result.linear.spacing1.variance_slope;
+      const luminosity_t root_floor = std::sqrt (floor);
+      result.variance_stabilized = estimate_screen_rgb_noise_three_scale_model (
+          width, height,
+          [&] (int x, int y)
+          {
+            rgbdata value = positive (x, y);
+            for (int k = 0; k < 3; k++)
+              if (my_isfinite (value[k]))
+                {
+                  luminosity_t variance = floor + slope * value[k];
+                  value[k] = variance > 0 && my_isfinite (variance)
+                                 ? 2 * value[k]
+                                       / (std::sqrt (variance) + root_floor)
+                                 : (luminosity_t)NAN;
+                }
+            return value;
+          },
+          getsupport, entry_to_scr);
+    }
+  return result;
 }
 
 template <typename ENTRY_TO_SCR>
