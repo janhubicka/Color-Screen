@@ -33,26 +33,16 @@ jobs:
           # The public SDK implements several dng_host methods as validation
           # stubs under qDNGValidate.  The mirror Meson manifest compiles the
           # SDK library without qDNGValidateTarget even though its dng_validate
-          # executable is built with it, which leaves unresolved references in
-          # current Build 2652.  Compile the library and this probe in the same
-          # public validation configuration used by Adobe's command-line SDK.
+          # executable is built with it.  Add the validation define only to the
+          # static-library argument block; the following text is unique there.
           python3 - <<'PY'
           from pathlib import Path
           path = Path('dng_sdk/source/meson.build')
           text = path.read_text()
-          old = """  cpp_args: [
-            '-DqDNGUseLibJPEG=1',
-            '-DAdobePrivate=0'
-          ]
-          """
-          new = """  cpp_args: [
-            '-DqDNGUseLibJPEG=1',
-            '-DAdobePrivate=0',
-            '-DqDNGValidateTarget=1',
-          ]
-          """
-          if old not in text:
-              raise SystemExit('SDK static-library cpp_args block not found')
+          old = "    '-DAdobePrivate=0'\n  ],\n  dependencies:"
+          new = "    '-DAdobePrivate=0',\n    '-DqDNGValidateTarget=1',\n  ],\n  dependencies:"
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one SDK cpp_args tail, found {text.count(old)}')
           path.write_text(text.replace(old, new, 1))
           PY
 
