@@ -20,7 +20,10 @@ void ParseJXL (dng_host &, dng_stream &, dng_info &, bool, bool)
 	ThrowProgramError ();
 }
 
-void dng_jxl_decoder::Decode (dng_host &, dng_stream &)
+void dng_jxl_decoder::Decode (dng_host &,
+								dng_image &,
+								const dng_jxl_decode_settings &,
+								dng_stream &)
 {
 	ThrowProgramError ();
 }
@@ -33,24 +36,28 @@ void PreviewColorSpaceToJXLEncoding (PreviewColorSpaceEnum,
 }
 
 void EncodeJXL_Tile (dng_host &,
+					 const dng_image &,
+					 const dng_rect &,
 					 dng_stream &,
-					 const dng_pixel_buffer &,
+					 const dng_jxl_encode_settings &,
 					 const dng_jxl_color_space_info &,
-					 const dng_jxl_encode_settings &)
+					 uint32,
+					 uint32)
 {
 	ThrowProgramError ();
 }
 
-void EncodeJXL_Container (dng_host &,
-						  dng_stream &,
-						  const dng_pixel_buffer &,
-						  const dng_jxl_encode_settings &,
-						  const dng_jxl_color_space_info &,
-						  const dng_metadata *,
-						  bool,
-						  bool,
-						  bool,
-						  const std::vector<std::shared_ptr<dng_bmff_box>> *)
+void EncodeJXL_Container (
+	dng_host &,
+	const dng_image &,
+	dng_stream &,
+	const dng_jxl_encode_settings &,
+	const dng_jxl_color_space_info &,
+	const dng_metadata *,
+	const dng_image *,
+	const dng_jxl_encode_settings *,
+	const dng_jxl_color_space_info *,
+	const std::vector<std::shared_ptr<dng_bmff_box>> &)
 {
 	ThrowProgramError ();
 }
