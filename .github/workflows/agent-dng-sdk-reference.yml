@@ -1,0 +1,35 @@
+name: DNG SDK reference probe
+
+on:
+  push:
+    branches: [ "agent/dng-sdk-reference-stage" ]
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download official Adobe DNG SDK 1.7.1 build 2652
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 3 \
+            https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1_2652_20260714.zip \
+            -o /tmp/dng-sdk.zip
+          sha256sum /tmp/dng-sdk.zip | tee /tmp/dng-sdk.zip.sha256
+          mkdir /tmp/dng
+          unzip -q /tmp/dng-sdk.zip -d /tmp/dng
+          find /tmp/dng -name dng_lens_correction.cpp -o -name dng_lens_correction.h -o -name dng_rect.h -o -name dng_utils.cpp | sort | tee /tmp/files.txt
+          SRC=$(dirname "$(find /tmp/dng -name dng_lens_correction.cpp | head -1)")
+          mkdir -p reference
+          cp "$SRC/dng_lens_correction.cpp" reference/
+          cp "$SRC/dng_lens_correction.h" reference/
+          cp "$SRC/dng_rect.h" reference/
+          cp "$SRC/dng_utils.cpp" reference/
+          cp "$SRC/dng_flags.h" reference/
+          cp /tmp/dng-sdk.zip.sha256 reference/
+          grep -n -A45 -B8 'Compute center' "$SRC/dng_lens_correction.cpp" > reference/warp-center-snippet.txt
+          grep -n -A80 'GetSrcPixelPosition' "$SRC/dng_lens_correction.cpp" | tail -120 > reference/warp-evaluation-snippet.txt
+          find /tmp/dng -maxdepth 3 -type f -name '*.xcodeproj' -o -name 'CMakeLists.txt' -o -name 'Makefile*' | head -100 > reference/build-files.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: adobe-dng-sdk-2652-warp-reference
+          path: reference
