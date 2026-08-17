@@ -36,7 +36,25 @@ jobs:
           # executable is built with it, which leaves unresolved references in
           # current Build 2652.  Compile the library and this probe in the same
           # public validation configuration used by Adobe's command-line SDK.
-          sed -i "/'-DAdobePrivate=0'/a\\    '-DqDNGValidateTarget=1'," dng_sdk/source/meson.build
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('dng_sdk/source/meson.build')
+          text = path.read_text()
+          old = """  cpp_args: [
+            '-DqDNGUseLibJPEG=1',
+            '-DAdobePrivate=0'
+          ]
+          """
+          new = """  cpp_args: [
+            '-DqDNGUseLibJPEG=1',
+            '-DAdobePrivate=0',
+            '-DqDNGValidateTarget=1',
+          ]
+          """
+          if old not in text:
+              raise SystemExit('SDK static-library cpp_args block not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
 
           # dng_jxl.h is pulled by generic SDK headers even though lens warping
           # does not use JPEG XL.  Build 2652 expects the libjxl 0.11 API while
