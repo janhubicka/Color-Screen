@@ -1,0 +1,228 @@
+Sl1Pf!^1WN+N}=o=20gZr13J+h$c)ZGcESH8nj
+z*QBv)*zrZvdb4EQb?QSeB_5E(DWWRWmF+z&Kfi;%&|A~mgC*j<7;PoMd6MFD0nSYw
+zp~nDz%1k<H6$O{t(PA<Fb@P30B)d1gegHUf=h4=T8&)pXgnSL$|8jQI>>@wyVVv{F
+z!AHfs60Dj2?Xs{f!7aK`s28_@o>#uSQ6%eCvphNY;`xaee=|mQKXC*a?io;zS0M)8
+z`2pS04h35bCoov;yV2!|x)Cg0an*%a(Bd~W?Us#F6@14Jq(0lXZ?ImX^psLhJ(L`=
+znsFt+)~LfRP<f?#wxW479g^Hu_wze%62D{akZcXOZOv3yQ0JIR>@^_^y^dW*mOE7E
+zwWZMncWG-Djn~^H8WEsS@}TVA7li}AwuHY|6KY+Znhe%^oPXG;hizE$JD`wG>CB!#
+zEgyVEytOMjT89!02hCCs6!d>AskHAkzGHbk?W>P^ORDPdZo{qZrgISeXuW~SDzG4H
+zPiyg8Xmx2%SCFD9Z4>q&L-fcBx|=Z7opFb-Px$=Bvq+0Cbp)J7>20^6Uy?Z-5{}`G
+z7*V%bu1xbcWs;;$;vEM{1vcF+4bwOa#GM$ie4l8h1Tpj^A69ug^uFS03JupjC2AnU
+znz3aRemzka4siu#V2GN|3+80w8aVuON|5o&F1s5&yD~w%s_{)WPnq}-6uhT70;BSK
+zCHa41v^l2T<E@>z3aFsj?>Sm=Th^1Y_`~m@-Z+nNaB%T)aB*;Ogzk6T|JdrD@$Q-6
+z-hTGL!NLD8{@~sx`j7GMndCqIx1I`@;D7u1H;4NF#OeOyfBSm$A6wls{eSs}_y6`|
+z#3lUST9^A{G5yCr_ssl%`eFSq9&#TC{>LBg`PqLt|DF%eJ^yR(uLMW#|HMJ}`Txed
+z?(^mEndqLA?pg1@oPR6+Z8?<xR{nqcZ|q<H-}bM4_}><}r+e>(;&k4xO@H6;h6Z2%
+hYjOXd4aND-$BXMY|2O_nf-&b`i^m5exi?R6{s*TO@c#e+
+
+literal 0
+HcmV?d00001
+
+diff --git a/testsuite/nikon-rgbi-mtf-test.C b/testsuite/nikon-rgbi-mtf-test.C
+new file mode 100644
+index 0000000..07d1e32
+--- /dev/null
++++ b/testsuite/nikon-rgbi-mtf-test.C
+@@ -0,0 +1,168 @@
++#include <algorithm>
++#include <array>
++#include <cmath>
++#include <cstdio>
++#include <cstdlib>
++#include <string>
++
++#include "../src/libcolorscreen/include/colorscreen.h"
++#include "../src/libcolorscreen/include/imagedata.h"
++#include "../src/libcolorscreen/include/render-parameters.h"
++
++using namespace colorscreen;
++
++/* Return the first downward 50-percent crossing of MEASUREMENT in MTF50.
++   Linear interpolation keeps the regression insensitive to FFT padding.  */
++static bool
++measurement_mtf50 (const mtf_measurement &measurement, double *mtf50)
++{
++  if (!mtf50 || measurement.size () < 2)
++    return false;
++  for (size_t i = 1; i < measurement.size (); i++)
++    {
++      const double f0 = measurement.get_freq (i - 1);
++      const double f1 = measurement.get_freq (i);
++      const double c0 = measurement.get_contrast (i - 1);
++      const double c1 = measurement.get_contrast (i);
++      if (!std::isfinite (f0) || !std::isfinite (f1)
++          || !std::isfinite (c0) || !std::isfinite (c1))
++        return false;
++      if (c0 >= 50 && c1 <= 50 && c0 != c1)
++        {
++          *mtf50 = f0 + (50 - c0) * (f1 - f0) / (c1 - c0);
++          return std::isfinite (*mtf50) && *mtf50 > 0;
++        }
++    }
++  return false;
++}
++
++struct scan_result
++{
++  std::array<double, 4> mtf50 = { 0, 0, 0, 0 };
++};
++
++/* Measure all four native scanner channels in FILENAME and store MTF50 in OUT.
++   Return false and print a diagnostic when the real-data contract is broken.  */
++static bool
++measure_scan (const char *filename, scan_result *out)
++{
++  const char *top_srcdir = getenv ("top_srcdir");
++  if (!top_srcdir || !*top_srcdir)
++    top_srcdir = "..";
++  const std::string path = std::string (top_srcdir) + "/testsuite/" + filename;
++
++  image_data image;
++  const char *error = nullptr;
++  if (!image.load (path.c_str (), false, &error, nullptr))
++    {
++      fprintf (stderr, "Cannot load Nikon RGBI MTF fixture %s: %s\n",
++               path.c_str (), error ? error : "unknown error");
++      return false;
++    }
++  if (!image.has_rgb () || !image.has_grayscale_or_ir ())
++    {
++      fprintf (stderr, "Nikon RGBI fixture did not load all four channels: %s\n",
++               filename);
++      return false;
++    }
++
++  render_parameters parameters;
++  parameters.gamma = 1.0;
++  for (int channel = 0; channel < 4; channel++)
++    {
++      slanted_edge_parameters edge_parameters;
++      edge_parameters.channel = channel;
++      edge_parameters.same_capture = channel != 0;
++      edge_parameters.name = std::string (filename) + " channel "
++                             + std::to_string (channel);
++      const slanted_edge_results edge
++          = slanted_edge_mtf (parameters, image, image.get_area (),
++                              edge_parameters, nullptr);
++      if (!edge.success || !edge.measurement.size ())
++        {
++          fprintf (stderr,
++                   "Nikon RGBI slanted edge failed for %s channel %d: %s\n",
++                   filename, channel,
++                   edge.error.empty () ? "no measurement produced"
++                                       : edge.error.c_str ());
++          return false;
++        }
++
++      /* The library API is intentionally side-effect free; callers decide
++         whether to append a qualified measurement to render parameters.  */
++      if (!parameters.sharpen.scanner_mtf.measurements.empty ())
++        {
++          fprintf (stderr, "Nikon RGBI measurement modified render parameters\n");
++          return false;
++        }
++      if (edge.measurement.channel != channel
++          || edge.measurement.same_capture != (channel != 0))
++        {
++          fprintf (stderr,
++                   "Nikon RGBI measurement metadata mismatch for channel %d\n",
++                   channel);
++          return false;
++        }
++      if (edge.edge_angle < 3.5 || edge.edge_angle > 6.5)
++        {
++          fprintf (stderr,
++                   "Unexpected Nikon razor angle %.6g for %s channel %d\n",
++                   edge.edge_angle, filename, channel);
++          return false;
++        }
++      if (!measurement_mtf50 (edge.measurement, &out->mtf50[channel]))
++        {
++          fprintf (stderr,
++                   "Nikon RGBI measurement has no usable MTF50 for %s channel %d\n",
++                   filename, channel);
++          return false;
++        }
++    }
++  return true;
++}
++
++/* Verify that native-channel MTF measurement distinguishes a sharp and a
++   deliberately defocused real Nikon RGB+IR capture.  */
++static bool
++test_nikon_rgbi_mtf_focus ()
++{
++  scan_result sharp, defocused;
++  if (!measure_scan ("nikon-razor-sharp-rgbi.tif", &sharp)
++      || !measure_scan ("nikon-razor-defocus-rgbi.tif", &defocused))
++    return false;
++
++  for (int channel = 0; channel < 4; channel++)
++    if (sharp.mtf50[channel] <= 2 * defocused.mtf50[channel])
++      {
++        fprintf (stderr,
++                 "Nikon focus ordering failed for channel %d: sharp MTF50 %.6g, "
++                 "defocused %.6g cycles/pixel\n",
++                 channel, sharp.mtf50[channel], defocused.mtf50[channel]);
++        return false;
++      }
++
++  /* If all four values are numerically identical, CHANNEL has almost certainly
++     been treated as metadata while the same mixed image layer was measured.  */
++  const auto [minimum, maximum]
++      = std::minmax_element (sharp.mtf50.begin (), sharp.mtf50.end ());
++  if (*maximum - *minimum < 1e-6)
++    {
++      fprintf (stderr,
++               "Nikon native-channel MTF curves are unexpectedly identical\n");
++      return false;
++    }
++  return true;
++}
++
++int
++main ()
++{
++  puts ("1..1");
++  if (test_nikon_rgbi_mtf_focus ())
++    {
++      puts ("ok 1 - Nikon RGB+IR native-channel focus MTF regression");
++      return 0;
++    }
++  puts ("not ok 1 - Nikon RGB+IR native-channel focus MTF regression");
++  return 1;
++}
++diff --git a/testsuite/nikon-rgbi-mtf.test b/testsuite/nikon-rgbi-mtf.test
++new file mode 100755
++index 0000000..57e247b
++--- /dev/null
+++++ b/testsuite/nikon-rgbi-mtf.test
++@@ -0,0 +1,28 @@
+++#!/bin/sh
+++# Compile and run the compact real Nikon RGB+IR native-channel MTF regression.
+++
+++set -e
+++
+++test_object=./nikon-rgbi-mtf-test.lo
+++test_program=./nikon-rgbi-mtf-test${EXEEXT}
+++
+++cleanup ()
+++{
+++    "$top_builddir/libtool" --mode=clean rm -f "$test_object" "$test_program" \
+++        >/dev/null 2>&1 || rm -f "$test_object" "$test_program"
+++}
+++trap cleanup EXIT HUP INT TERM
+++
+++"$top_builddir/libtool" --tag=CXX --mode=compile \
+++    $CXX $CPPFLAGS $CXXFLAGS -std=c++17 -DLIBCOLORSCREEN \
+++    -I"$top_srcdir/src/libcolorscreen" \
+++    -I"$top_srcdir/src/libcolorscreen/include" \
+++    -I"$top_builddir/src/libcolorscreen" \
+++    -I"$top_builddir/src/libcolorscreen/include" \
+++    -c "$srcdir/nikon-rgbi-mtf-test.C" -o "$test_object"
+++
+++"$top_builddir/libtool" --tag=CXX --mode=link \
+++    $CXX $CXXFLAGS $LDFLAGS -o "$test_program" "$test_object" \
+++    "$top_builddir/src/libcolorscreen/libcolorscreen.la" $LIBS
+++
+++"$test_program"
