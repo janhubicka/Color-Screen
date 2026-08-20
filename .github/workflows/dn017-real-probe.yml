@@ -1,0 +1,64 @@
+name: DN017 real-scan probe
+
+on:
+  push:
+    branches:
+      - agent/dn017-real-probe
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/dn017-real-probe
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev liblcms2-dev libfftw3-dev libexiv2-dev libopenjp2-7-dev libpng-dev build-essential
+      - name: Build core
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir build-qt
+          cd build-qt
+          CFLAGS='-O2 -g -Wall -Wextra' CXXFLAGS='-O2 -g -Wall -Wextra' ../configure --enable-checking --disable-shared --enable-static --disable-static-link
+          make -j$(nproc) src/libcolorscreen/libcolorscreen.la
+      - name: Build diagnostic probe
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat > /tmp/noise-domain-probe.C <<'CPP'
+          #include "include/colorscreen.h"
+          #include "render-interpolate.h"
+          #include "denoise.h"
+          #include "include/progress-info.h"
+          #include <cstdio>
+          using namespace colorscreen;
+          static void print_three(const char *name, const denoise_noise_three_scale_estimate &e) {
+            printf("  %-7s valid=%d obs=%zu r2=%g r3=%g floor=%g slope=%g fiterr=%g", name, e.valid_p(), e.paired_observations, (double)e.spacing2_variance_ratio, (double)e.spacing3_variance_ratio, (double)e.spacing1.variance_floor, (double)e.spacing1.variance_slope, (double)e.spacing1.relative_fit_error);
+            if (e.scale_fit_valid_p()) printf(" p=%g invariant=%g", (double)e.scale_growth_exponent, (double)e.extrapolated_scale_invariant_fraction);
+            printf("\n");
+          }
+          static void print_channel(const char *name, const denoise_noise_domain_comparison &c) {
+            printf("%s\n", name); print_three("linear", c.linear); print_three("density", c.density); print_three("vst", c.variance_stabilized);
+          }
+          int main(int argc, char **argv) {
+            if (argc != 3) return 2;
+            const char *error=nullptr; scr_to_img_parameters param; scr_detect_parameters dparam; render_parameters rparam; solver_parameters solver;
+            FILE *in=fopen(argv[2],"r"); if(!in) return 2; if(!load_csp(in,&param,&dparam,&rparam,&solver,&error)) { fprintf(stderr,"par: %s\n", error?error:"load failed"); return 2; } fclose(in);
+            file_progress_info progress(stdout,false,false); image_data scan; if(!scan.load(argv[1],false,&error,&progress,rparam.demosaic)) { fprintf(stderr,"scan: %s\n", error?error:"load failed"); return 2; }
+            rparam.screen_denoise=denoise_parameters(); rparam.demosaiced_denoise=denoise_parameters(); rparam.screen_demosaic=render_parameters::nearest_demosaic;
+            render_interpolate renderer(param,scan,rparam,65535); if(!renderer.precompute_all(&progress)) return 2;
+            denoise_noise_domain_comparison r,g,b; if(!renderer.estimate_screen_noise_domain_comparisons(&r,&g,&b)) return 2;
+            print_channel("red separation",r); print_channel("green separation",g); print_channel("blue separation",b); return 0;
+          }
+          CPP
+          g++ -std=gnu++17 -O2 -g -fopenmp -I$GITHUB_WORKSPACE/src/libcolorscreen -I$GITHUB_WORKSPACE/build-qt/src/libcolorscreen -I$GITHUB_WORKSPACE/src/libcolorscreen/include /tmp/noise-domain-probe.C $GITHUB_WORKSPACE/build-qt/src/libcolorscreen/.libs/libcolorscreen.a -lexiv2 -lopenjp2 -lpng16 -llcms2 -lzip -lraw -lturbojpeg -ltiff -lfftw3f -lfftw3 -lgsl -lgslcblas -lm -o /tmp/noise-domain-probe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dn017-real-noise-domain-probe
+          path: /tmp/noise-domain-probe
