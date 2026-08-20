@@ -1,0 +1,25 @@
+name: DN-017 source transport
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Archive exact DN-017 base
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch origin main --depth=1
+          test "$(git rev-parse origin/main)" = "f52c7133c8a41656b6c5e274719269a4edad313d"
+          git archive --format=tar.gz --output=/tmp/colorscreen-dn017-base.tar.gz origin/main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-dn017-base-source
+          path: /tmp/colorscreen-dn017-base.tar.gz
