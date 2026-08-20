@@ -2,60 +2,94 @@
 // translation units. The reference probe exercises only WarpRectilinear and
 // never calls any of these functions.
 
-#include "dng_tag_values.h"
-#include "dng_jxl.h"
 #include "dng_exceptions.h"
 #include "dng_image.h"
-#include "dng_image_writer.h"
 #include "dng_info.h"
+#include "dng_jxl.h"
+#include "dng_pixel_buffer.h"
 #include "dng_stream.h"
+#include "dng_string.h"
+#include "dng_tag_values.h"
 
-bool SupportsJXL (const dng_image &)
+bool
+SupportsJXL (const dng_image &)
 {
-	return false;
+  return false;
 }
 
-bool ParseJXL (dng_host &, dng_stream &, dng_info &, bool, bool)
+bool
+ParseJXL (dng_host &, dng_stream &, dng_info &, bool, bool)
 {
-	ThrowProgramError ();
-	return false;
+  ThrowProgramError ();
+  return false;
 }
 
-void dng_jxl_decoder::Decode (dng_host &, dng_stream &)
+dng_jxl_decoder::~dng_jxl_decoder ()
 {
-	ThrowProgramError ();
 }
 
-void PreviewColorSpaceToJXLEncoding (PreviewColorSpaceEnum,
-									 uint32,
-									 dng_jxl_color_space_info &)
+void
+dng_jxl_decoder::Decode (dng_host &, dng_stream &)
 {
-	ThrowProgramError ();
+  ThrowProgramError ();
 }
 
-void EncodeJXL_Tile (dng_host &,
-					 const dng_image &,
-					 const dng_rect &,
-					 dng_stream &,
-					 const dng_jxl_encode_settings &,
-					 const dng_jxl_color_space_info &,
-					 uint32,
-					 uint32)
+void
+dng_jxl_decoder::ProcessExifBox (dng_host &, const std::vector<uint8> &)
 {
-	ThrowProgramError ();
+  ThrowProgramError ();
 }
 
-void EncodeJXL_Container (
-	dng_host &,
-	const dng_image &,
-	dng_stream &,
-	const dng_jxl_encode_settings &,
-	const dng_jxl_color_space_info &,
-	const dng_metadata *,
-	const dng_image *,
-	const dng_jxl_encode_settings *,
-	const dng_jxl_color_space_info *,
-	const std::vector<std::shared_ptr<dng_bmff_box>> &)
+void
+dng_jxl_decoder::ProcessXMPBox (dng_host &, const std::vector<uint8> &)
 {
-	ThrowProgramError ();
+  ThrowProgramError ();
+}
+
+void
+dng_jxl_decoder::ProcessBox (dng_host &, const dng_string &,
+                             const std::vector<uint8> &)
+{
+  ThrowProgramError ();
+}
+
+void
+PreviewColorSpaceToJXLEncoding (PreviewColorSpaceEnum, uint32,
+                                dng_jxl_color_space_info &)
+{
+  ThrowProgramError ();
+}
+
+void
+EncodeJXL_Tile (dng_host &, dng_stream &, const dng_pixel_buffer &,
+                const dng_jxl_color_space_info &,
+                const dng_jxl_encode_settings &)
+{
+  ThrowProgramError ();
+}
+
+void
+EncodeJXL_Tile (dng_host &, dng_stream &, const dng_image &,
+                const dng_jxl_color_space_info &,
+                const dng_jxl_encode_settings &)
+{
+  ThrowProgramError ();
+}
+
+void
+EncodeJXL_Container (dng_host &, dng_stream &, const dng_image &,
+                     const dng_jxl_encode_settings &,
+                     const dng_jxl_color_space_info &, const dng_metadata *,
+                     bool, bool, bool, const dng_bmff_box_list *)
+{
+  ThrowProgramError ();
+}
+
+void
+EncodeJXL_Container (dng_host &, dng_stream &, const dng_pixel_buffer &,
+                     const dng_jxl_encode_settings &,
+                     const dng_jxl_color_space_info &, const dng_metadata *,
+                     bool, bool, bool, const dng_bmff_box_list *)
+{
+  ThrowProgramError ();
 }
