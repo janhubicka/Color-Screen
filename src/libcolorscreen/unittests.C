@@ -1413,6 +1413,51 @@ test_homography (bool lens_correction, bool joly, coord_t epsilon)
       ok &= do_test_homography (param, 1024, 1024, true, epsilon, 4);
       param.lens_correction.center = saved_center;
     }
+
+  /* Lens optimization is a variable-projection problem: only lens coordinates
+     belong to the outer nonlinear fit, and every trial recomputes H*(L) from
+     the correspondences.  An initial homography guess must therefore have no
+     influence on the fitted lens.  Start one solve from deliberately absurd
+     linear geometry and require the same lens solution as a default start.  */
+  if (lens_correction && !joly)
+    {
+      image_data img;
+      if (!img.set_dimensions (1024, 1024))
+        return false;
+      scr_to_img_parameters truth = param;
+      truth.scanner_type = fixed_lens;
+      scr_to_img truth_map;
+      if (!truth_map.set_parameters (truth, img))
+        return false;
+
+      solver_parameters sparam;
+      for (int y = 0; y < 10; y++)
+        for (int x = 0; x < 10; x++)
+          {
+            point_t image = {(coord_t)(111 * x), (coord_t)(111 * y)};
+            sparam.add_point (image, truth_map.to_scr (image),
+                              solver_parameters::red);
+          }
+
+      scr_to_img_parameters ordinary, nonsense;
+      ordinary.scanner_type = fixed_lens;
+      nonsense.scanner_type = fixed_lens;
+      nonsense.center = {123456, -654321};
+      nonsense.coordinate1 = {-37, 91};
+      nonsense.coordinate2 = {52, -113};
+      nonsense.tilt_x = 0.0027;
+      nonsense.tilt_y = -0.0024;
+      const coord_t ordinary_objective = solver (&ordinary, img, sparam);
+      const coord_t nonsense_objective = solver (&nonsense, img, sparam);
+      if (!(ordinary_objective >= 0 && ordinary_objective < 1e30)
+          || !(nonsense_objective >= 0 && nonsense_objective < 1e30)
+          || !(ordinary.lens_correction == nonsense.lens_correction))
+        {
+          fprintf (stderr,
+                   "Initial homography guess changed profiled lens fit\n");
+          ok = false;
+        }
+    }
   return ok;
 }
 
@@ -4967,6 +5012,10 @@ test_lens_warp ()
       return false;
     lens_warp_correction_parameters off_image = synthetic;
     off_image.center = {2.0, 0.5};
+    lens_warp_correction_parameters centered_camera = synthetic;
+    centered_camera.center = {0.25, 0.75};
+    lens_warp_correction_parameters outside_centered_camera = synthetic;
+    outside_centered_camera.center = {0.24, 0.75};
     lens_warp_correction_parameters discarded_axis = synthetic;
     discarded_axis.center = {100.0, 0.5};
     if (!solver_parameters::lens_candidate_reasonable_p (synthetic,
@@ -4981,6 +5030,12 @@ test_lens_warp ()
         /* Distance 4 permits -1.5..2.5 on each fitted axis.  */
         || !solver_parameters::lens_candidate_reasonable_p (off_image,
                                                              fixed_lens, 4)
+        /* Distance 0.5 is the centered-camera preset: both fitted center
+           coordinates must remain in the central half of the capture.  */
+        || !solver_parameters::lens_candidate_reasonable_p (
+               centered_camera, fixed_lens, 0.5)
+        || solver_parameters::lens_candidate_reasonable_p (
+               outside_centered_camera, fixed_lens, 0.5)
         /* Distance 1 means that every fitted center coordinate stays in the
            image.  */
         || solver_parameters::lens_candidate_reasonable_p (

@@ -416,7 +416,7 @@ public:
     if (num_coordinates () == 1)
       m_start[1] = 0;
   }
-  scr_to_img_parameters &m_param;
+  const scr_to_img_parameters &m_param;
   const image_data &m_img_data;
   const solver_parameters &m_sparam;
   progress_info *m_progress;
@@ -539,7 +539,8 @@ public:
   /* Measure whether the fitted lens model is distinguishable from the
      homography on the actual registration points.
 
-     RESIDUALS() refits the best homography for every lens parameter vector.
+     FIT_PROFILED_HOMOGRAPHY() refits the best homography for every lens
+     parameter vector, and RESIDUALS() exposes that profiled fit to GSL.
      Consequently a finite-difference column here is the derivative of the
      profiled residual r*(L)=r(H*(L),L): homography directions have already
      been eliminated.  This is equivalent, to first order, to projecting the
@@ -616,12 +617,6 @@ public:
         max_column_norm = std::max (max_column_norm, column_norm);
       }
 
-    /* Residual evaluations modify M_PARAM while trying perturbed models.
-       Restore the converged candidate before returning to the caller.  */
-    coord_t restore_chisq = bad_value;
-    if (!solve (start, &restore_chisq, nullptr))
-      ok = false;
-
     if (!ok || !(max_column_norm > 0))
       {
         gsl_matrix_free (jacobian);
@@ -678,89 +673,108 @@ public:
     return ret;
   }
 
-  /* Solve for lens parameters.
-     VALS are current lens parameters.
-     CHISQ is updated with resulting chi square.
-     TRANSFORMED is updated with transformed points.  */
+  /* Decode lens-only solver coordinates VALS into LENS.  No homography or
+     perspective parameters are carried by the outer nonlinear optimizer.
+     Return false if the resulting normalized radial model is outside the
+     conservative automatic-fit envelope.  */
   bool
-  solve (const coord_t *vals, coord_t *chisq, std::vector <point_t> *transformed) const
+  lens_from_values (const coord_t *vals,
+                    lens_warp_correction_parameters *lens) const
+  {
+    int n = num_coordinates ();
+    *lens = lens_warp_correction_parameters ();
+    if (is_fixed_lens (m_param.scanner_type))
+      lens->center = { vals[0], vals[1] };
+    else if (m_param.scanner_type == lens_move_horizontally)
+      lens->center = { 0, vals[0] };
+    else if (m_param.scanner_type == lens_move_vertically)
+      lens->center = { vals[0], 0 };
+    else
+      abort ();
+    lens->kr[0] = 1;
+    lens->kr[1] = vals[n] * (1 / scale_kr);
+    lens->kr[2] = vals[n + 1] * (1 / scale_kr);
+    lens->kr[3] = vals[n + 2] * (1 / scale_kr);
+    if (!lens->is_monotone ())
+      {
+        if (colorscreen_checking)
+          printf ("Non monotone lens correction %f %f: %f %f %f %f\n",
+                  lens->center.x, lens->center.y, lens->kr[0], lens->kr[1],
+                  lens->kr[2], lens->kr[3]);
+        return false;
+      }
+    return lens->normalize ()
+           && solver_parameters::lens_candidate_reasonable_p (
+               *lens, m_param.scanner_type, m_sparam.lens_center_distance);
+  }
+
+  /* Evaluate the profiled lens objective at lens-only coordinates VALS.
+
+     For every lens candidate this routine solves the best homography from the
+     registration correspondences by linear least squares and then returns its
+     residual/error.  The outer nonlinear optimizer therefore never needs an
+     initial homography guess and never carries homography coordinates: H is a
+     nuisance parameter eliminated as H*(L)=argmin_H E(L,H).  This is variable
+     projection (separable nonlinear least squares).
+
+     PARAM is intentionally read-only.  Trial evaluations use a local copy so
+     simplex/Jacobian probes cannot leak a temporary lens or linear geometry
+     state into later evaluations.  CHISQ receives the profiled objective and
+     TRANSFORMED, when non-null, receives screen points transformed by H*(L).
+     Do not use RANSAC here: changing an inlier set would make the outer
+     objective discontinuous.  */
+  bool
+  fit_profiled_homography (const coord_t *vals, coord_t *chisq,
+                           std::vector<point_t> *transformed) const
   {
     if (chisq)
       *chisq = bad_value;
-    m_param.center = { (coord_t)0, (coord_t)0 };
-    m_param.coordinate1 = { (coord_t)1, (coord_t)0 };
-    m_param.coordinate2 = { (coord_t)0, (coord_t)1 };
-    int n = num_coordinates ();
-    if (is_fixed_lens (m_param.scanner_type))
-      m_param.lens_correction.center = { vals[0], vals[1] };
-    else if (m_param.scanner_type == lens_move_horizontally)
-      m_param.lens_correction.center = { 0, vals[0] };
-    else if (m_param.scanner_type == lens_move_vertically)
-      m_param.lens_correction.center = { vals[0], 0 };
-    else
-      abort ();
-    m_param.lens_correction.kr[0] = 1;
-    m_param.lens_correction.kr[1] = vals[n] * (1 / scale_kr);
-    m_param.lens_correction.kr[2] = vals[n + 1] * (1 / scale_kr);
-    m_param.lens_correction.kr[3] = vals[n + 2] * (1 / scale_kr);
-    if (!m_param.lens_correction.is_monotone ())
-      {
-	if (colorscreen_checking)
-          printf ("Non monotone lens correction %f %f: %f %f %f %f\n",
-                  m_param.lens_correction.center.x,
-                  m_param.lens_correction.center.y,
-                  m_param.lens_correction.kr[0], m_param.lens_correction.kr[1],
-                  m_param.lens_correction.kr[2], m_param.lens_correction.kr[3]);
-	if (chisq)
-	  *chisq = bad_value;
-        if (transformed)
-          for (size_t i = 0; i < m_sparam.points.size (); i++)
-            (*transformed)[i] = m_sparam.points[i].scr;
-        return false;
-      }
-    if (!m_param.lens_correction.normalize ())
-      {
-        if (chisq)
-          *chisq = bad_value;
-        if (transformed)
-          for (size_t i = 0; i < m_sparam.points.size (); i++)
-            (*transformed)[i] = m_sparam.points[i].scr;
-        return false;
-      }
-    if (!solver_parameters::lens_candidate_reasonable_p (
-            m_param.lens_correction, m_param.scanner_type,
-            m_sparam.lens_center_distance))
+
+    lens_warp_correction_parameters lens;
+    if (!lens_from_values (vals, &lens))
       {
         if (transformed)
           for (size_t i = 0; i < m_sparam.points.size (); i++)
             (*transformed)[i] = m_sparam.points[i].scr;
         return false;
       }
+
+    scr_to_img_parameters trial = m_param;
+    trial.center = { (coord_t)0, (coord_t)0 };
+    trial.coordinate1 = { (coord_t)1, (coord_t)0 };
+    trial.coordinate2 = { (coord_t)0, (coord_t)1 };
+    trial.lens_correction = lens;
+
     scr_to_img map;
-    /* We may save some inversions if points are relatively few.  */
-    bool ok;
+    /* We may save inverse precomputation if points are relatively few.  */
+    bool map_ok;
     if (m_sparam.n_points () * 2 < lens_warp_correction::size)
-      ok = map.set_parameters_for_early_correction (m_param, m_img_data.width, m_img_data.height);
+      map_ok = map.set_parameters_for_early_correction (
+          trial, m_img_data.width, m_img_data.height);
     else
-      ok = map.set_parameters (m_param, m_img_data);
-    if (!ok)
+      map_ok = map.set_parameters (trial, m_img_data);
+    if (!map_ok)
       return false;
+
     coord_t chi = -5;
-    /* Do not use ransac here, since it is not smooth and will confuse solver.  */
-    homography::get_matrix (m_sparam.points, 
-		    (screen_with_vertical_strips_p (m_param.type) ? homography::solve_vertical_strips : 0)
-		    | homography::solve_rotation, m_param.scanner_type, &map, m_sparam.center, &chi, transformed);
+    homography::get_matrix (
+        m_sparam.points,
+        (screen_with_vertical_strips_p (m_param.type)
+             ? homography::solve_vertical_strips
+             : 0)
+            | homography::solve_rotation,
+        m_param.scanner_type, &map, m_sparam.center, &chi, transformed);
     if (chisq)
-    {
-      if (!(chi >= 0 && chi < bad_value))
-	{
-	  printf ("Bad chi %f\n", chi);
-	  *chisq = bad_value;
-	}
-      else
-	*chisq = chi;
-    }
-    return (chi >= 0 && chi < bad_value);
+      {
+        if (!(chi >= 0 && chi < bad_value))
+          {
+            printf ("Bad chi %f\n", chi);
+            *chisq = bad_value;
+          }
+        else
+          *chisq = chi;
+      }
+    return chi >= 0 && chi < bad_value;
   }
   /* Return number of observations.  */
   int
@@ -776,7 +790,7 @@ public:
   {
     std::vector<point_t> transformed (m_sparam.points.size ());
     coord_t chisq;
-    if (!solve (vals, &chisq, &transformed))
+    if (!fit_profiled_homography (vals, &chisq, &transformed))
       {
 	for (int i = 0; i < (int)num_observations (); i++)
 	  f_vec[i] = 1000;
@@ -803,7 +817,7 @@ public:
   objfunc (coord_t *vals)
   {
     coord_t chisq = bad_value;
-    solve (vals, &chisq, nullptr);
+    fit_profiled_homography (vals, &chisq, nullptr);
     return chisq;
   }
 };

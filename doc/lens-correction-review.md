@@ -11,7 +11,10 @@ lens fitting: robust spatial coverage and a bounded deformation envelope.
 Stage 3 makes the automatic optical-center search range configurable so whole-
 scanner-bed captures may legitimately fit a center outside the scanned image.
 Stage 4 rejects lens solutions that are not identifiable after the best
-homography has been refitted.
+homography has been refitted. Stage 5 makes that variable-projection structure
+explicit in the implementation: the outer nonlinear state contains only lens
+parameters and every trial solves a fresh best homography without an initial
+homography guess.
 
 ## Scope
 
@@ -78,6 +81,7 @@ axis before applying the remaining one-dimensional lens geometry.
 | LS-003 | Fixed | Normalized auto-fit candidates are restricted to a conservative displacement and radial-derivative envelope. This is solver safety policy, not a DNG-format restriction. |
 | LS-004 | Fixed | The automatic optical-center search range is configurable. `solver_lens_center_distance=0` selects the automatic policy; positive `D` permits each fitted normalized center coordinate in `0.5-D/2 .. 0.5+D/2`, so `D=1` stays inside the image and larger values permit off-image centers. |
 | LS-005 | Fixed | Lens candidates now need an identifiable profiled residual Jacobian. Finite-difference lens perturbations refit the best homography before residuals are compared, then a scaled SVD rejects lens directions that can be absorbed by projective geometry. |
+| LS-006 | Fixed | The variable-projection structure is explicit and state-safe: `lens_solver` holds the input geometry read-only, constructs every trial lens in a local parameter object, and solves `H*(L)` from the correspondences with no homography starting guess. |
 | TEST-001 | Fixed | The lens test used a fixed `(500,500)` center for all nominal test cases and normalized a second warp from already-warped source corners. |
 | TEST-002 | Fixed | A hand-calculated polynomial check was incorrectly described as an Adobe DNG worked example. It is retained as a synthetic formula check. |
 | TEST-003 | Fixed | Twelve source coordinates emitted by the executed Adobe DNG SDK Build 2652 are frozen in `test_lens_warp()` and compared directly with Color-Screen output. |
@@ -214,11 +218,21 @@ J_L_perp = (I - P_H) J_L,
 where `P_H` projects residual changes onto the subspace explainable by the
 homography. Equivalently, this is the lens block of the Schur complement after
 eliminating the homography parameters. The implementation does not explicitly
-construct `P_H`: `lens_solver::residuals()` already refits the best homography
-for every lens candidate. `lens_solver::identifiability()` therefore finite-
-differences this **profiled residual function** around the converged lens
-solution. To first order those finite differences are exactly the component of
-a lens perturbation which cannot be absorbed by refitting the homography.
+construct `P_H`: `lens_solver::fit_profiled_homography()` solves the best
+homography from scratch for every lens candidate and `residuals()` exposes that
+profiled fit to the numerical routines. `lens_solver::identifiability()`
+therefore finite-differences this **profiled residual function** around the
+converged lens solution. To first order those finite differences are exactly
+the component of a lens perturbation which cannot be absorbed by refitting the
+homography.
+
+This is variable projection (separable nonlinear least squares), not two frozen
+independent fits. The outer optimizer has only lens coordinates. For each trial
+`L`, the linear/projective nuisance parameters are eliminated as
+`H*(L)=argmin_H E(L,H)`. No initial estimate of `H` is needed. The incoming
+`scr_to_img_parameters` are read-only during the lens fit and each trial uses a
+local parameter object, so simplex and Jacobian probes cannot leak temporary
+lens or homography state into later evaluations.
 
 The Jacobian columns are multiplied by broad parameter scales before SVD. This
 is necessary because normalized center coordinates and the internally scaled
@@ -244,7 +258,7 @@ and the final homography/perspective solve continues. This prevents a weakly
 identified radial model from being installed merely because it can shave noise
 or perspective residual from the training points.
 
-## Stage 2--4 regression coverage
+## Stage 2--5 regression coverage
 
 The unit suite now checks that exactly the ordinary 100-point threshold is
 accepted when points are broadly distributed; a dense local cloud remains
@@ -260,7 +274,9 @@ discarded-axis semantics, and exercises actual recovery of a synthetic fixed
 lens with center `(1.8,0.6)`. Stage 4 adds a distortion-free but perspective-
 containing full-frame case: its profiled lens Jacobian is rank deficient and
 the solver must retain the pre-existing lens profile rather than invent radial
-correction for perspective.
+correction for perspective. Stage 5 additionally starts the same identifiable
+lens fit from both the default geometry and a deliberately absurd homography
+guess and requires the fitted lens to be identical.
 
 ## Deferred improvements
 
@@ -308,8 +324,11 @@ lens objective.
   the current registration points. The former should not be subject to the
   automatic-solver safety envelope.
 * The geometry panel now warns when point count is sufficient but coverage is
-  too local and exposes the optical-center search distance. A future UI can
-  also show numeric point coverage and projected-Jacobian singular values
+  too local and exposes the optical-center search distance. The `0.5` quick
+  preset is intended for ordinary centered camera/copy-stand captures and
+  keeps both fitted center coordinates in the central half of the image. A
+  future UI can also show numeric point coverage and projected-Jacobian singular
+  values
   rather than only pass/fail diagnostics.
 * Preserve rejected candidate diagnostics (objective, coverage, center,
   displacement, derivative range, scaled Jacobian singular values/directions)
@@ -344,3 +363,4 @@ Keep the following regressions as the lens code evolves:
 10. Recovery of a synthetic lens whose center lies outside the scanned image.
 11. Rejection of a lens fit whose profiled Jacobian is rank deficient because
     its effect can be absorbed by the fitted homography.
+12. Independence of the fitted lens from an arbitrary initial homography guess.
