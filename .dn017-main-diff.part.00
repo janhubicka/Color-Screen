@@ -1,0 +1,4263 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 1a318e5d1eed8d77c0e32abb460f935b6dead569..7b6b89f37b2c67243278b3b343903d48d04b5696 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -65,6 +65,159 @@ The project uses GitHub Actions for automated testing. Workflows are defined in
+ - **macOS**: Apple Silicon and Intel builds.
+ - **Windows**: MSYS2/MinGW-w64 builds.
+ 
++## Agent container build and test setup
++
++The ChatGPT/agent execution container is normally Debian 13 (trixie), amd64.
++It may not have root access, the development packages needed by Color-Screen,
++or reliable direct access to GitHub/Debian mirrors. A reproducible core-library
++build can still be made by keeping both source and dependencies in private
++prefixes.
++
++### Obtaining source and dependencies
++
++Prefer an exact source revision and record its commit SHA before testing. If
++normal network access works, a normal checkout/archive is fine. If direct
++container networking cannot reach GitHub, use a temporary GitHub Actions job as
++a transport: archive the exact revision (or run `make dist` when appropriate),
++upload it as an Actions artifact, and download that artifact into the container.
++Do not review or merge temporary transport branches/workflows; the review branch
++must contain only the intended project changes.
++
++For Debian 13/trixie amd64 core builds, the dependency bundle used successfully
++by agents contains the development packages and matching runtimes for:
++
++- FFTW: `libfftw3-dev`, `libfftw3-bin`, `libfftw3-long3`, `libfftw3-quad3`
++- GSL: `libgsl-dev`, `libgsl28`, `libgslcblas0`
++- TurboJPEG: `libturbojpeg0-dev`, `libturbojpeg0`
++- LittleCMS: `liblcms2-dev`, `liblcms2-2`
++- LibRaw: `libraw-dev`, `libraw23t64`
++- libzip: `libzip-dev`, `libzip5`, `zipcmp`, `zipmerge`, `ziptool`
++- Exiv2: `libexiv2-dev`, `libexiv2-28`, `libexiv2-data`
++- INI reader runtime needed by the packaged Exiv2 dependency:
++  `libinireader0`
++
++A convenient way to create the bundle is a temporary Debian 13 GitHub Actions
++runner using `apt-get download` for the packages above and uploading the
++resulting `.deb` files as an artifact. On a non-Debian host, the same bundle
++can be produced without `apt` by downloading the Debian trixie `Packages.xz`
++indexes, resolving the package filenames, and downloading the referenced
++`.deb` files. Keep the bundle together with the exact source revision when
++reproducibility matters.
++
++The agent container does not need root privileges to install this bundle.
++Extract every package into a private prefix, for example:
++
++```bash
++DEPS=/tmp/colorscreen-build/deps/local
++mkdir -p "$DEPS"
++for deb in /path/to/debs/*.deb; do
++  dpkg-deb -x "$deb" "$DEPS"
++done
++```
++
++Then point compilation, `pkg-config`, and runtime linking at that prefix:
++
++```bash
++export DEPS=/tmp/colorscreen-build/deps/local
++export PKG_CONFIG_PATH="$DEPS/usr/lib/x86_64-linux-gnu/pkgconfig:$DEPS/usr/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
++export CPPFLAGS="-I$DEPS/usr/include${CPPFLAGS:+ $CPPFLAGS}"
++export LDFLAGS="-L$DEPS/usr/lib/x86_64-linux-gnu -Wl,-rpath,$DEPS/usr/lib/x86_64-linux-gnu${LDFLAGS:+ $LDFLAGS}"
++export LD_LIBRARY_PATH="$DEPS/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
++```
++
++If a Debian package was built against an INI-reader SONAME not otherwise
++available in the container, an ABI-compatible private `libinih.so.1` shim has
++been used successfully for test-only builds. Prefer the real Debian runtime
++package (`libinireader0`) whenever available.
++
++### Core build used by agents
++
++For correctness work that does not require the GUI, use an out-of-tree build
++with checking enabled. Keep OpenMP enabled: some core code still calls OpenMP
++entry points directly, so `--disable-openmp` is not a supported test
++configuration.
++
++A conservative validation build is:
++
++```bash
++mkdir -p /tmp/colorscreen-build/build-o2
++cd /tmp/colorscreen-build/build-o2
++CFLAGS="-O2 -g -Wall -Wextra" \
++CXXFLAGS="-O2 -g -Wall -Wextra" \
++/path/to/Color-Screen/configure \
++  --enable-checking --disable-shared --enable-static --disable-static-link
++make -j"$(nproc)"
++```
++
++The optimized build that most closely exercises production assumptions is:
++
++```bash
++mkdir -p /tmp/colorscreen-build/build-ofast
++cd /tmp/colorscreen-build/build-ofast
++CFLAGS="-Ofast -march=native -g -Wall" \
++CXXFLAGS="-Ofast -march=native -g -Wall" \
++/path/to/Color-Screen/configure \
++  --enable-checking --disable-shared --enable-static --disable-static-link
++make -j"$(nproc)"
++```
++
++GCC is the most reliable compiler in this private-prefix setup because it has a
++working OpenMP runtime. Clang validation is useful when `omp.h`/libomp are
++available, but lack of the OpenMP development files is an environment problem,
++not a reason to disable OpenMP in Color-Screen.
++
++### Agent-side test procedure
++
++Run focused tests first while developing, then the complete unit binary:
++
++```bash
++./src/libcolorscreen/unittests warp lens_correction 1d_homography
++top_srcdir=/path/to/Color-Screen ./src/libcolorscreen/unittests
++```
++
++The second command should run all registered unit groups. Also use
++`make -j"$(nproc)" check` when the reconstructed source/build tree contains the
++generated testsuite Makefiles. For changes affecting CLI/rendering paths, run
++the relevant scripts in `testsuite/` in addition to the unit binary.
++
++Repeat important numerical tests with both `-O2` and `-Ofast`. Fast-math has
++historically exposed real portability/correctness issues, so an `-O2` pass
++alone is not enough for sensitive numerical code.
++
++Some integration tests, especially full finetune runs, can exceed the command
++execution window of the agent container. Run as much as possible locally, say
++exactly where execution stopped, and leave the uninterrupted long run to the
++repository CI rather than claiming a complete local pass.
++
++## Git and pull-request workflow for agents
++
++Substantial agent changes should be prepared on a clean feature branch created
++from the current `main`, never directly on `main`. Before committing, inspect
++the exact diff and make sure the branch contains only the intended files; keep
++temporary dependency/source-transport workflows and staging artifacts off the
++review branch.
++
++When the user authorizes publication, the preferred sequence is:
++
++1. create the feature branch from the current `main` commit;
++2. apply and test the intended changes;
++3. commit only the reviewed files;
++4. push the feature branch;
++5. open a **draft** pull request against `main`;
++6. inspect GitHub Actions results and report failures precisely.
++
++Do not merge a pull request unless the user explicitly asks for the merge.
++If a matching PR already exists, update that PR/branch instead of opening a
++duplicate.
++
++Commit messages should be relatively detailed. Use a concise subsystem-style
++subject (for example `lens: validate Adobe DNG reference geometry`) followed by
++a body that gives an overview of the changes and, importantly, their rationale.
++Call out compatibility decisions, non-obvious invariants, deliberately deferred
++work, and the tests that were run. Avoid vague one-line commit messages for
++nontrivial patches: the commit should remain useful months later without
++requiring the reader to reconstruct the motivation from the diff.
++
+ ## Repository Structure
+ 
+ - `src/libcolorscreen/`: Core rendering and processing library.
+diff --git a/doc/lens-correction-review.md b/doc/lens-correction-review.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..aeb855cd87853610e79daf61ad51ba9fb948a9d9
+--- /dev/null
++++ b/doc/lens-correction-review.md
+@@ -0,0 +1,366 @@
++# Lens correction review and solver tracker
++
++Review date: 2026-08-17  
++Code base: `7040f2f45b8fc64ba42d5155f50a4798376fb905`  
++References: Adobe DNG Specification 1.7.1.0, `WarpRectilinear` (opcode 1),
++and Adobe DNG SDK 1.7.1 Build 2652 (2026-07-14).
++
++Implementation status: stage 1 contains the DNG/correctness fixes and
++conformance regressions. Stage 2 adds conservative safeguards for automatic
++lens fitting: robust spatial coverage and a bounded deformation envelope.
++Stage 3 makes the automatic optical-center search range configurable so whole-
++scanner-bed captures may legitimately fit a center outside the scanned image.
++Stage 4 rejects lens solutions that are not identifiable after the best
++homography has been refitted. Stage 5 makes that variable-projection structure
++explicit in the implementation: the outer nonlinear state contains only lens
++parameters and every trial solves a fresh best homography without an initial
++homography guess.
++
++## Scope
++
++Color-Screen implements the radial subset of DNG `WarpRectilinear`:
++
++```
++r_source = r_output * (kr0 + kr1*r^2 + kr2*r^4 + kr3*r^6)
++```
++
++There is one coefficient set and the tangential coefficients are fixed to
++zero. Project files serialize the complete DNG-1-style record shape but the
++loader requires `N=1` and `kt0=kt1=0`. Consequently the implementation is
++compatible with that subset; it is not a complete implementation of every
++`WarpRectilinear` feature.
++
++The direction is important. DNG specifies inverse resampling: for a pixel in
++the warped/output image, the opcode computes the source coordinate to sample.
++`lens_warp_correction::corrected_to_scan()` has that direction.
++`scan_to_corrected()` is Color-Screen's numerical inverse used by the
++screen-to-image mapping.
++
++There is an important specification/reference-implementation discrepancy in
++the optical-center geometry. The DNG 1.7.1 prose describes normalized center
++coordinates in terms of image pixels (and in particular says `(1,0)` denotes
++the top-right pixel), which suggests `width-1`/`height-1` pixel-center
++endpoints. Adobe DNG SDK 1.7.1 Build 2652 instead implements the operation
++using `dng_rect` bounds: `dng_filter_warp` interpolates the center between
++`bounds.l..bounds.r` and `bounds.t..bounds.b`, and computes the normalization
++radius from the same rectangle. For `dng_rect(height,width)`, `r=width` and
++`b=height` are exclusive image bounds. Color-Screen deliberately follows this
++`width`/`height` SDK convention because interoperability with Adobe DNG and
++future lens-profile imports is more important than the earlier literal reading
++of the prose. The executed SDK dataset below makes this convention testable.
++
++For the radial-only model, DNG invertibility reduces to
++
++```
++w'(r) = kr0 + 3*kr1*r^2 + 5*kr2*r^4 + 7*kr3*r^6 > 0
++```
++
++on `0 <= r <= 1`. `lens_warp_correction_parameters::is_monotone()` checks
++the endpoints and all stationary points of this cubic in `r^2`, so the
++analytic test is appropriate for the implemented subset.
++
++`normalize()` is **not** a DNG requirement. The lens solver normalizes the
++edge ratio to one because an overall radial scale is almost degenerate with
++the simultaneously refitted homography. Imported DNG coefficients are used
++without this normalization.
++
++Moving-lens scanner modes are Color-Screen-specific extensions. DNG describes
++a fixed 2-D image warp; the moving-lens modes intentionally remove the motor
++axis before applying the remaining one-dimensional lens geometry.
++
++## Review findings and implementation status
++
++| ID | Status | Issue / action |
++|---|---|---|
++| LC-001 | Fixed after SDK cross-check | The initial spec-only review changed center/radius geometry to `width-1`/`height-1`. Executing Adobe DNG SDK 1.7.1 Build 2652 showed that the reference implementation actually uses the exclusive `dng_rect` bounds `width`/`height`; Color-Screen now follows the SDK. |
++| LC-002 | Fixed | The direct inverse used by `lens_solver` searched only to `m`, while the lookup-table inverse extended beyond `m` when `f(1)<1`. Both paths now use the same search bound. |
++| LC-003 | Fixed | `precompute()` accepted a non-monotone radial map although DNG requires an invertible warp. |
++| LC-004 | Fixed | Moving-lens precomputation left the default normalized center on the axis that is explicitly removed before lens correction. |
++| LS-001 | Fixed | A map-setup failure in `lens_solver::solve()` could return without initializing `chisq`; simplex could then consume an indeterminate objective value. |
++| LS-002 | Fixed | Automatic lens fitting now requires the central 90% of registration points to cover at least half of every relevant scan axis, in addition to the point-count threshold. |
++| LS-003 | Fixed | Normalized auto-fit candidates are restricted to a conservative displacement and radial-derivative envelope. This is solver safety policy, not a DNG-format restriction. |
++| LS-004 | Fixed | The automatic optical-center search range is configurable. `solver_lens_center_distance=0` selects the automatic policy; positive `D` permits each fitted normalized center coordinate in `0.5-D/2 .. 0.5+D/2`, so `D=1` stays inside the image and larger values permit off-image centers. |
++| LS-005 | Fixed | Lens candidates now need an identifiable profiled residual Jacobian. Finite-difference lens perturbations refit the best homography before residuals are compared, then a scaled SVD rejects lens directions that can be absorbed by projective geometry. |
++| LS-006 | Fixed | The variable-projection structure is explicit and state-safe: `lens_solver` holds the input geometry read-only, constructs every trial lens in a local parameter object, and solves `H*(L)` from the correspondences with no homography starting guess. |
++| TEST-001 | Fixed | The lens test used a fixed `(500,500)` center for all nominal test cases and normalized a second warp from already-warped source corners. |
++| TEST-002 | Fixed | A hand-calculated polynomial check was incorrectly described as an Adobe DNG worked example. It is retained as a synthetic formula check. |
++| TEST-003 | Fixed | Twelve source coordinates emitted by the executed Adobe DNG SDK Build 2652 are frozen in `test_lens_warp()` and compared directly with Color-Screen output. |
++
++## Adobe DNG SDK reference dataset
++
++The cross-implementation regression is based on data produced by **executing
++Adobe's implementation**, not by reimplementing its equations in a helper
++program. The reproducible probe lives on the experimental branch
++`agent/dng-sdk-reference-run`; the source state used to generate the frozen
++fixture is commit `cfb5f31fa852322eb6d3a6b8e566e1bfa2bdf3ce`.
++
++The workflow performs the following steps:
++
++1. Download Adobe's official
++   `dng_sdk_1_7_1_2652_20260714.zip` from
++   `https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1_2652_20260714.zip`.
++   The workflow refuses to continue unless its SHA-256 is
++   `73499b47f4683e12120a234bd0946f02e52ab2ff9834bcbd0e9f8ab4f923360e`.
++2. Unpack the archive and verify that the actual Adobe
++   `dng_sdk/source/dng_lens_correction.cpp` has SHA-256
++   `89112619dce4a205761dc9e3b0c641d6c1d99911829a18c181a7229af4e8521f`.
++3. Clone `hfiguiere/dng_sdk` only to obtain its Meson build scaffolding, then
++   overwrite its `dng_sdk/source` directory with the files from the verified
++   Adobe archive. Thus the lens implementation being executed is the official
++   Build 2652 source, not the mirror's copy.
++4. Build with the SDK validation helpers enabled (`qDNGValidateTarget=1`).
++   Build 2652 generic headers require the libjxl 0.11 API while the runner's
++   packaged libjxl is older, so the workflow supplies the public libjxl 0.11.1
++   headers, omits unrelated `dng_jxl.cpp`, and links throwing/no-op stubs for
++   JPEG-XL entry points. None of these entry points is called by the lens-warp
++   probe.
++5. Append `.github/dng-reference/reference-wrapper.inc` to Adobe's
++   `dng_lens_correction.cpp`. This is intentional: `dng_filter_warp` is an
++   implementation-private class in that translation unit. The wrapper can
++   therefore instantiate the **real** class rather than duplicate its math.
++   It creates a `dng_negative`, `dng_simple_image` source and destination with
++   bounds `dng_rect(height,width)`, loads the four radial coefficients through
++   `dng_warp_params_radial::SetWarpRectilinear_1_3`, sets tangential terms to
++   zero, constructs `dng_warp_params_rectilinear`, constructs
++   `dng_filter_warp`, and calls its real `GetSrcPixelPosition()` method.
++6. `.github/dng-reference/reference_probe.cpp` invokes that wrapper for twelve
++   cases: a simple centered polynomial, seven points of one non-square
++   off-center profile, three points using the Nikon Coolscan coefficients, and
++   one constant-ratio case with `f(1)<1`.
++7. The program prints all inputs and returned source coordinates at 17-digit
++   precision. The successful run saved them as
++   `.github/dng-reference/generated/adobe-dng-sdk-2652-warp-fixture.txt` with a
++   companion `PROVENANCE.txt`. Those exact numeric outputs are copied into
++   `test_lens_warp()`; the unit test never runs the Adobe SDK itself.
++
++This probe exposed the `width-1` mistake immediately. For example, Build 2652
++returns `(1011.2046333360396, 703.35264195316779)` for output pixel
++`(1000,700)` of the `1001 x 701`, center `(0.23,0.67)` fixture with
++`kr=(0.992,0.045,-0.028,0.009)`. That result is produced using center
++`(0.23*1001,0.67*701)` and the `1001 x 701` rectangle bounds. The previous
++pixel-center interpretation gives a measurably different result.
++
++Color-Screen keeps an independent equation transcription as a secondary
++arithmetic check, but the frozen Build 2652 coordinates are the authoritative
++interoperability regression. A future DNG/lens-database importer should add
++representative imported profiles to this table before extending the supported
++opcode subset.
++
++## Automatic solver safety envelope
++
++The lens solver refits a homography for every nonlinear lens candidate. On a
++small point cloud, low-order radial distortion is easily absorbed by that
++homography and the high-order terms/optical center are poorly identified.
++A very small local residual can therefore extrapolate to a very large global
++deformation. Point count does not cure this conditioning problem.
++
++The implemented conservative gate is:
++
++* retain the existing minimum point count (100 for ordinary screens, 200 for
++  vertical-strip screens);
++* require the central 90% of point coordinates to span at least 50% of the
++  scan in both axes for fixed-lens models;
++* for a moving horizontal lens require the vertical span, and vice versa;
++* bound the automatically fitted optical center by the configurable
++  `solver_lens_center_distance`: positive `D` gives each fitted normalized
++  coordinate the interval `0.5-D/2 .. 0.5+D/2`; `D=1` means the center stays
++  inside the image, `D>1` permits an off-image center, and `0=Auto` currently
++  resolves to `D=2`, preserving the former `[-0.5,1.5]` range;
++* after removing the solver's overall-scale gauge, require maximum radial
++  displacement `|r * (f(r)-1)| <= 0.05` of DNG radius `m`;
++* require radial derivative `0.5 <= w'(r) <= 1.5` throughout the image.
++
++These values are intentionally generous and remain provisional. They are not
++claimed physical limits and are not applied when merely loading or retaining a
++valid DNG/manual profile. They only decide whether an **automatically inferred**
++lens solution is safe enough to install. If spatial coverage is insufficient,
++lens optimization is skipped and any existing lens profile remains active.
++
++The center-distance control is intentionally a Color-Screen solver extension,
++not a statement about portable DNG profiles. It is useful for flatbed/film
++scanners which capture a much larger bed than the original: the physical lens
++axis may then lie well outside the image occupied by the original. Adobe DNG
++SDK Build 2652 validation, in contrast, expects a portable DNG opcode center in
++`[0,1]`. Imported/manual profiles are therefore not run through the automatic
++center-distance gate.
++
++For scale, the existing Nikon Coolscan 9000ED fixture
++
++```
++kr = 0.99508 0.0245411 -0.0521967 0.0325757
++```
++
++has about 0.185% maximum normalized radial displacement; evaluating the
++polynomial gives a radial-derivative range of about 0.9945..1.0357.  The
++normalized synthetic lens-solver regression is also comfortably inside the
++envelope (about 2.46% displacement and 0.952..1.190 derivative).  Thus the
++gate is aimed at underconstrained extrapolation, not at rejecting the
++distortions already represented by the test corpus.
++
++
++## Projected lens identifiability
++
++Color-Screen does not have the usual camera-calibration constraint that a set
++of observed target points is known a priori to lie on straight lines. Instead
++it has many noisy correspondences between screen coordinates and image
++coordinates and solves lens distortion together with a homography. The relevant
++question is therefore not whether the raw lens Jacobian is well conditioned,
++but whether a lens perturbation has an observable effect **after the homography
++is allowed to compensate optimally**.
++
++For conceptual Jacobian blocks `J_H` (homography) and `J_L` (lens), the useful
++lens information is
++
++```
++J_L_perp = (I - P_H) J_L,
++```
++
++where `P_H` projects residual changes onto the subspace explainable by the
++homography. Equivalently, this is the lens block of the Schur complement after
++eliminating the homography parameters. The implementation does not explicitly
++construct `P_H`: `lens_solver::fit_profiled_homography()` solves the best
++homography from scratch for every lens candidate and `residuals()` exposes that
++profiled fit to the numerical routines. `lens_solver::identifiability()`
++therefore finite-differences this **profiled residual function** around the
++converged lens solution. To first order those finite differences are exactly
++the component of a lens perturbation which cannot be absorbed by refitting the
++homography.
++
++This is variable projection (separable nonlinear least squares), not two frozen
++independent fits. The outer optimizer has only lens coordinates. For each trial
++`L`, the linear/projective nuisance parameters are eliminated as
++`H*(L)=argmin_H E(L,H)`. No initial estimate of `H` is needed. The incoming
++`scr_to_img_parameters` are read-only during the lens fit and each trial uses a
++local parameter object, so simplex and Jacobian probes cannot leak temporary
++lens or homography state into later evaluations.
++
++The Jacobian columns are multiplied by broad parameter scales before SVD. This
++is necessary because normalized center coordinates and the internally scaled
++`kr` coordinates use different numerical units; an unscaled condition number
++would mostly measure that arbitrary choice of units. The diagnostic records
++the smallest/largest singular values, their ratio, and the ratio of smallest to
++largest column norm. The current conservative acceptance rule is
++
++```
++smallest_singular_value / largest_singular_value >= 1e-4.
++```
++
++The threshold is deliberately loose. Existing synthetic fixed-lens recovery
++produces a ratio around `4.7e-3`, and the explicit off-image-center regression
++(center approximately `(1.8,0.6)`) is around `9.1e-3`, leaving roughly 47--90x
++margin. A distortion-free image with genuine perspective has an exactly zero
++lens singular direction because the optical center is then meaningless; this
++is the important failure mode the check is meant to catch.
++
++If the fitted lens fails this test, geometry solving itself does not fail. The
++pre-existing/manual lens profile is restored (identity if none was present)
++and the final homography/perspective solve continues. This prevents a weakly
++identified radial model from being installed merely because it can shave noise
++or perspective residual from the training points.
++
++## Stage 2--5 regression coverage
++
++The unit suite now checks that exactly the ordinary 100-point threshold is
++accepted when points are broadly distributed; a dense local cloud remains
++rejected even with remote outliers; and moving-lens scanners require coverage
++only perpendicular to the movement axis. It also verifies that the existing
++synthetic and Nikon Coolscan profiles pass the automatic-fit envelope, an
++extreme but still monotone search-box profile is rejected, and insufficient
++coverage does not replace an existing manual lens profile.
++
++Stage 3 adds project-file round-trip tests for `solver_lens_center_distance`,
++checks `0=Auto`, verifies the `D=1`/`D=4` center envelopes and moving-lens
++discarded-axis semantics, and exercises actual recovery of a synthetic fixed
++lens with center `(1.8,0.6)`. Stage 4 adds a distortion-free but perspective-
++containing full-frame case: its profiled lens Jacobian is rank deficient and
++the solver must retain the pre-existing lens profile rather than invent radial
++correction for perspective. Stage 5 additionally starts the same identifiable
++lens fit from both the default geometry and a deliberately absurd homography
++guess and requires the fitted lens to be identical.
++
++## Deferred improvements
++
++The following are deliberately *not* part of this conservative patch.
++
++### DNG model coverage
++
++* Implement nonzero tangential `kt0`/`kt1` terms if real input profiles require
++  them.
++* Support multiple coefficient sets (`N == plane count`) for lateral chromatic
++  aberration.
++* Evaluate `WarpRectilinear2` support separately; do not silently reinterpret
++  it as opcode 1.
++* If DNG opcodes are imported directly, audit active-area/crop coordinate
++  semantics rather than assuming the complete scan rectangle.
++
++### Solver conditioning and statistics
++
++* Report uncertainty for center and radial terms, using the profiled Jacobian
++  or its covariance, and suppress individual parameters that are not
++  identifiable even when the overall model passes the current singular-ratio
++  test.
++* Add model-order selection: fit `k1`, then `k1+k2`, and only enable `k3` when
++  supported by a significant residual improvement.
++* Consider weak regularization/prior information for the optical center and
++  high-order terms instead of only hard bounds.
++* Compare the lens model with a no-lens baseline on held-out registration
++  points so an extra global model is installed only when it predicts better.
++
++### Robust fitting
++
++The inner homography fit intentionally avoids RANSAC because a discontinuous
++RANSAC objective is hostile to the outer nonlinear optimizer. A future
++replacement should use a smooth robust loss (for example Huber or Tukey with a
++fixed/iteratively estimated scale) rather than reintroducing RANSAC inside the
++lens objective.
++
++### Calibration and UI
++
++* Build a corpus of calibrated macro lenses, high-resolution phones, camera
++  scanning rigs and film scanners; measure actual displacement, derivative and
++  projected-Jacobian envelopes before tightening the provisional 5%,
++  derivative and `1e-4` identifiability limits.
++* Distinguish a trusted/calibrated lens profile from a lens model inferred from
++  the current registration points. The former should not be subject to the
++  automatic-solver safety envelope.
++* The geometry panel now warns when point count is sufficient but coverage is
++  too local and exposes the optical-center search distance. The `0.5` quick
++  preset is intended for ordinary centered camera/copy-stand captures and
++  keeps both fitted center coordinates in the central half of the image. A
++  future UI can also show numeric point coverage and projected-Jacobian singular
++  values
++  rather than only pass/fail diagnostics.
++* Preserve rejected candidate diagnostics (objective, coverage, center,
++  displacement, derivative range, scaled Jacobian singular values/directions)
++  for troubleshooting.
++
++## Validation of stage 1
++
++The stage-1 patch was built locally from the exact `7040f2f` source tarball
++with a private Debian 13 dependency prefix. The complete 40-group unit binary
++passes with both `-O2 -Wall -Wextra --enable-checking` and
++`-Ofast -march=native -Wall --enable-checking`. The focused `warp`,
++`lens_correction` and `1d_homography` groups also pass independently in both
++builds. Render-original, slanted-edge, raw/autodetect and Capture One/stitch
++integration scripts pass in the O2 build. The long finetune integration script
++is left to repository CI because it exceeds the local command execution
++window; its first six cases completed successfully locally.
++
++## Testing targets
++
++Keep the following regressions as the lens code evolves:
++
++1. Frozen source coordinates emitted by Adobe DNG SDK 1.7.1 Build 2652.
++2. Independent radial-formula evaluation using Adobe SDK `dng_rect`
++   `width`/`height` bound semantics.
++3. Forward/inverse agreement for in-domain source pixels.
++4. Equality of lookup-table and direct inverse search domains.
++5. Known Coolscan coefficients (also represented in the Adobe SDK fixture).
++6. Full-frame synthetic solver recovery.
++7. Rejection of a dense registration cloud confined to a small scan area.
++8. Acceptance of a broad registration cloud with the same point count.
++9. Project-file and UI semantics for configurable off-image lens-center search.
++10. Recovery of a synthetic lens whose center lies outside the scanned image.
++11. Rejection of a lens fit whose profiled Jacobian is rank deficient because
++    its effect can be absorbed by the fitted homography.
++12. Independence of the fitted lens from an arbitrary initial homography guess.
+diff --git a/doc/mtf-fitting-workflow.md b/doc/mtf-fitting-workflow.md
+index 639c0d8152973b19723152515517216324190e11..20082926f260c925557542af946f7355b556df80 100644
+--- a/doc/mtf-fitting-workflow.md
++++ b/doc/mtf-fitting-workflow.md
+@@ -159,20 +159,29 @@ self-contained and avoids later changes caused by a global fallback value.
+ ## 5. Slanted-edge GUI workflow
+ 
+ Choosing **Measure slanted-edge MTF** opens a setup dialog before area
+-selection. The dialog contains:
++selection. For an RGB scan the default is to measure the red, green, and blue
++scanner channels independently from one selected ROI. If a native infrared
++plane is also present it becomes the fourth curve. All curves generated from
++one ROI are stored in the same capture group. The current image layer remains
++available as an explicit alternative; this is useful when the quantity to be
++calibrated is the RGB-derived grayscale mixture itself.
++
++The dialog contains:
+ 
+ - measurement name;
+-- channel label;
+-- wavelength;
++- native-channels versus image-layer source;
++- optional image-layer wavelength;
+ - same-capture grouping;
+ - ESF oversampling from 2 to 64;
+ - retained LSF half-width;
+ - Hann, Hamming, or rectangular LSF window.
+ 
+-A positive wavelength is required before area selection. The most recently used
+-settings are retained for the current application session. Wavelength and
+-channel are initialized from the most recent measurement when possible, then
+-from the global MTF wavelength.
++For native-channel measurement, each curve receives the corresponding
++per-channel wavelength from the scanner-MTF settings, falling back to capture
++metadata when available. Unknown wavelengths remain zero and can be supplied or
++optimized later by the fitting workflow. An image-layer measurement may also
++have an unknown wavelength because a mixture of RGB channels need not have one
++physically meaningful wavelength.
+ 
+ The defaults preserve the historical Color-Screen measurement:
+ 
+@@ -186,8 +195,10 @@ That setting is a comparison convention, not necessarily a more accurate
+ estimate of the complete capture response.
+ 
+ The image area is selected only after the dialog is accepted. The actual edge
+-analysis runs in the existing background area-computation workflow, and one
+-measurement with all metadata is appended to the scanner-MTF state.
++analysis runs in the existing background area-computation workflow. All
++requested native channels must pass edge qualification before any of their
++measurements are appended, so a failed channel cannot leave a partial RGB
++capture group in the scanner-MTF state.
+ 
+ ## 6. MTF fitting dialog
+ 
+diff --git a/src/colorscreen/colorscreen.C b/src/colorscreen/colorscreen.C
+index a149dbd38466b8d2ad467ceb867b9f799cca24f1..912c3ab63db765fad799f3d10139c74b24b7296b 100644
+--- a/src/colorscreen/colorscreen.C
++++ b/src/colorscreen/colorscreen.C
+@@ -4217,7 +4217,8 @@ do_slanted_edge (int argc, char **argv)
+   render_parameters rparam;
+   rparam.gamma = gamma;
+ 
+-  slanted_edge_results res = slanted_edge_mtf (rparam, img, img.get_area(), params, &progress);
++  slanted_edge_results res =
++      slanted_edge_mtf (rparam, img, img.get_area(), params, &progress);
+   if (!res.success)
+     {
+       fprintf (stderr, "Slanted edge analysis failed: %s\n",
+@@ -4242,13 +4243,7 @@ do_slanted_edge (int argc, char **argv)
+       progress.resume_stdout ();
+     }
+ 
+-  if (rparam.sharpen.scanner_mtf.measurements.empty())
+-    {
+-      fprintf (stderr, "No MTF measurement produced\n");
+-      return 1;
+-    }
+-
+-  auto &m = rparam.sharpen.scanner_mtf.measurements.back();
++  auto &m = res.measurement;
+ 
+   if (verbose)
+     {
+diff --git a/src/libcolorscreen/finetune.C b/src/libcolorscreen/finetune.C
+index cb3e07b2d6b26430f1f7b2a096105b31572e58bc..a69b0612c75b20bffed1c42189a4508db14813cd 100644
+--- a/src/libcolorscreen/finetune.C
++++ b/src/libcolorscreen/finetune.C
+@@ -5274,7 +5274,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
+       if (bw && (rparam2.ignore_infrared || !imgp[0]->has_grayscale_or_ir ()))
+         bw_is_simulated_infrared = true;
+       if (!render.precompute_all (
+-              bw /*grayscale*/, false /*normalized*/,
++              bw ? PRECOMPUTE_IMAGE_LAYER : PRECOMPUTE_RGB_IMAGE,
+               patch_proportions (param.type, &rparam2),
+               !(fparams.flags & finetune_no_progress_report) ? progress
+                                                              : nullptr))
+@@ -5401,7 +5401,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
+              pixel size. For stitched projects this is wrong.  */
+           render render (*imgp[tileid], rparam2, 256);
+           if (!render.precompute_all (
+-                  bw /*grayscale*/, false /*normalized*/,
++                  bw ? PRECOMPUTE_IMAGE_LAYER : PRECOMPUTE_RGB_IMAGE,
+                   patch_proportions (param.type, &rparam2),
+                   !(fparams.flags & finetune_no_progress_report) ? progress
+                                                                  : nullptr))
+diff --git a/src/libcolorscreen/has-regular-screen.C b/src/libcolorscreen/has-regular-screen.C
+index 78bb7ad1eff562d14a5e868949eb8129688a5e05..0a4db4e43c657040a4c09144f07df1b05e2205a1 100644
+--- a/src/libcolorscreen/has-regular-screen.C
++++ b/src/libcolorscreen/has-regular-screen.C
+@@ -211,7 +211,7 @@ has_regular_screen (image_data &scan, const has_regular_screen_params &params, p
+   else if (scan.gamma > 0)
+     rparams.gamma = scan.gamma;
+   render render (scan, rparams, 256);
+-  if (!render.precompute_all (true, false, (rgbdata){1.0/3, 1.0/3, 1.0/3}, progress))
++  if (!render.precompute_all (PRECOMPUTE_IMAGE_LAYER, (rgbdata){1.0/3, 1.0/3, 1.0/3}, progress))
+     {
+       ret.error = "precompute_all failed";
+       return ret;
+diff --git a/src/libcolorscreen/include/colorscreen.h b/src/libcolorscreen/include/colorscreen.h
+index 6f494848e07b8f1d93b80da5840924d90e2ae7a5..5ab9d95c7283a21c546c6fa2d5dd7a6adeff0a6b 100644
+--- a/src/libcolorscreen/include/colorscreen.h
++++ b/src/libcolorscreen/include/colorscreen.h
+@@ -367,7 +367,9 @@ struct slanted_edge_parameters
+      not used by the slanted-edge numerical calculation itself.  */
+   double wavelength = 0;
+ 
+-  /* Measurement channel: -1 unknown, 0 red, 1 green, 2 blue, or 3 infrared.  */
++  /* Image source to measure: -1 is the current image layer, 0 red, 1 green,
++     2 blue, and 3 the native grayscale/infrared plane.  For native RGB
++     channels CHANNEL is also copied to the resulting MTF metadata.  */
+   int channel = -1;
+ 
+   /* Human-readable name stored with the appended MTF measurement.  */
+@@ -441,10 +443,15 @@ struct slanted_edge_results
+ 
+   /* Distance between adjacent EDGE_HISTOGRAM samples in input pixels.  */
+   double edge_histogram_step = 0;
++
++  /* Qualified frequency-domain measurement.  This is populated only on
++     success.  SLANTED_EDGE_MTF itself is side-effect free; callers decide
++     when and where to store the returned curve.  */
++  mtf_measurement measurement;
+ };
+ 
+ DLL_PUBLIC slanted_edge_results
+-slanted_edge_mtf (render_parameters &rparam, const image_data &img, int_image_area roi,
++slanted_edge_mtf (const render_parameters &rparam, const image_data &img, int_image_area roi,
+                   const slanted_edge_parameters &params, progress_info *progress = NULL);
+ 
+ DLL_PUBLIC std::vector <rgbdata>
+diff --git a/src/libcolorscreen/include/lens-correction.h b/src/libcolorscreen/include/lens-correction.h
+index 02ba2ea450b25f654d2f5e6bce9095cfaed5ac00..05eed0185382d790348fe3834b2804c2411b7bdf 100644
+--- a/src/libcolorscreen/include/lens-correction.h
++++ b/src/libcolorscreen/include/lens-correction.h
+@@ -39,8 +39,11 @@ struct lens_warp_correction
+     m_params = p;
+   }
+ 
+-  /* Precompute normalization factor so that the distance from CENTER to
+-     any of the four corners C1, C2, C3, C4 is at most 1.
++  /* Precompute the DNG radial normalization.  CENTER is the optical center in
++     image coordinates and C1 ... C4 are the corners of the image rectangle.
++     Adobe DNG SDK dng_filter_warp uses dng_rect bounds here, so a WIDTH x
++     HEIGHT full image has right/bottom rectangle coordinates WIDTH/HEIGHT.
++     The farthest rectangle corner defines normalized radius r=1.
+      Returns true on success.  */
+   nodiscard_attr DLL_PUBLIC bool precompute (point_t center, point_t c1,
+ 					     point_t c2, point_t c3,
+diff --git a/src/libcolorscreen/include/lens-warp-correction-parameters.h b/src/libcolorscreen/include/lens-warp-correction-parameters.h
+index 30b3ff769e3ad42a6b91e9c4b14d092f3c094667..226b9c01274232e3a766ae16266aa5191d9be8bd 100644
+--- a/src/libcolorscreen/include/lens-warp-correction-parameters.h
++++ b/src/libcolorscreen/include/lens-warp-correction-parameters.h
+@@ -1,19 +1,31 @@
+ #ifndef LENS_WARP_CORRECTION_PARAMETERS_H
+ #define LENS_WARP_CORRECTION_PARAMETERS_H
+ /* Parameters for radial lens distortion correction.
+-   Follows the DNG WarpRectilinear polynomial model.  */
++   Implements the radial, single-coefficient-set subset of the DNG
++   WarpRectilinear polynomial model.  Color-Screen currently has no
++   tangential (kt0/kt1) terms or per-plane coefficient sets.  */
+ #include "base.h"
+ namespace colorscreen
+ {
+-/* Radial lens warp correction parameters.  Follows DNG WarpRectilinear model.
+-   Correction is defined as:
+-   r_src = (kr0 + kr1 * r^2 + kr2 * r^4 + kr3 * r^6) * r_dst
+-   where r is distance from lens center.  */
++/* Radial lens warp correction parameters.
++
++   In DNG terminology this maps a point in the warped/output image to the
++   source sample position.  With tangential terms fixed to zero,
++
++     r_src = r_dst * (kr0 + kr1*r^2 + kr2*r^4 + kr3*r^6),
++
++   where r is normalized by the distance from the optical center to the
++   farthest output-image pixel.  DNG specifies the polynomial for 0 <= r <= 1.
++   Color-Screen keeps the edge ratio constant when evaluating outside that
++   interval so its numerical inverse has a defined extrapolation rule.  */
+ struct lens_warp_correction_parameters
+ {
+-  /* Radial correction coefficients, same as in the DNG specs.  */
++  /* DNG WarpRectilinear radial coefficients kr0 ... kr3.  */
+   coord_t kr[4];
+-  /* Center in relative coordinates 0...1  */
++  /* Optical center in normalized DNG coordinates.  For interoperability we
++     follow Adobe DNG SDK dng_filter_warp: (0,0) is the top-left image bound
++     and (1,1) is the exclusive bottom-right image bound.  Color-Screen may
++     also use centers outside [0,1] when solving scanner-bed captures.  */
+   point_t center;
+ 
+   /* Initialize with identity correction and center at (0.5, 0.5).  */
+@@ -49,22 +61,33 @@ struct lens_warp_correction_parameters
+     return kr[0] + rsq * (kr[1] + rsq * (kr[2] + rsq * kr[3]));
+   }
+ 
++  /* Return derivative of source radius with respect to output radius for
++     RSQ=r^2 in the DNG domain [0,1].  */
++  pure_attr coord_t
++  get_radial_derivative (coord_t rsq) const
++  {
++    return kr[0]
++           + rsq * (3 * kr[1] + rsq * (5 * kr[2] + rsq * 7 * kr[3]));
++  }
++
+   /* Verify that the correction is monotone on a interval [0, 1].
+-     Monotonicity is required for the inverse mapping to be well-defined.  */
++     This is the DNG invertibility condition for the radial-only subset.  */
+   pure_attr bool
+   is_monotone () const
+   {
++    for (coord_t k : kr)
++      if (!my_isfinite (k))
++        return false;
++
+     /* The source radius is r_src = r * (k0 + k1*r^2 + k2*r^4 + k3*r^6).
+        For monotonicity we need d(r_src)/dr > 0 for r in [0, 1].
+        d(r_src)/dr = k0 + 3*k1*r^2 + 5*k2*r^4 + 7*k3*r^6.
+        Let x = r^2. We need f(x) = k0 + 3*k1*x + 5*k2*x^2 + 7*k3*x^3 > 0
+        for x in [0, 1].  */
+-    auto f = [this] (coord_t x) {
+-      return kr[0] + x * (3 * kr[1] + x * (5 * kr[2] + x * 7 * kr[3]));
+-    };
++    auto f = [this] (coord_t x) { return get_radial_derivative (x); };
+ 
+     /* Check boundaries.  */
+-    if (f (0) <= 0 || f (1) <= 0)
++    if (!(f (0) > 0) || !(f (1) > 0))
+       return false;
+ 
+     /* Check critical points of f(x) where f'(x) = 0.
+@@ -101,20 +124,26 @@ struct lens_warp_correction_parameters
+     return true;
+   }
+ 
+-  /* Adjust parameters so get_ratio (1) == 1.  This is used to normalize
+-     the correction so that it is defined relative to the maximum distance.
+-     Returns false if the normalization fails (e.g., degenerate coefficients).  */
++  /* Remove the overall radial scale by making get_ratio(1) == 1.
++
++     This is a Color-Screen solver gauge, not a DNG requirement: an overall
++     scale is otherwise almost completely degenerate with the fitted linear
++     screen-to-image transform.  Imported DNG coefficients need not be
++     normalized this way.  */
+   bool
+   normalize ()
+   {
+-    coord_t c = 1 / get_ratio (1);
++    const coord_t edge_ratio = get_ratio (1);
++    if (!(edge_ratio > 0) || !my_isfinite (edge_ratio))
++      return false;
++    const coord_t c = 1 / edge_ratio;
+     kr[0] *= c;
+     kr[1] *= c;
+     kr[2] *= c;
+     kr[3] *= c;
+-    if (my_fabs (1 - get_ratio (1)) > 0.00001)
+-      return false;
+-    return true;
++    return my_isfinite (kr[0]) && my_isfinite (kr[1])
++           && my_isfinite (kr[2]) && my_isfinite (kr[3])
++           && my_fabs (1 - get_ratio (1)) <= 0.00001;
+   }
+ };
+ }
+diff --git a/src/libcolorscreen/include/render-parameters.h b/src/libcolorscreen/include/render-parameters.h
+index fdfbb4debf2821ea1817e1aa8817e826ba7756d2..a62b40c3afd8e2e1346c04f16ba60d5dfe79b263 100644
+--- a/src/libcolorscreen/include/render-parameters.h
++++ b/src/libcolorscreen/include/render-parameters.h
+@@ -426,6 +426,13 @@ struct render_parameters
+   /* Sharpening parameters.  */
+   sharpen_parameters sharpen;
+ 
++  /* Return scanner sharpening parameters specialized for native CHANNEL
++     (0 red, 1 green, 2 blue, 3 infrared).  Direct measured MTF curves are
++     matched inside the selected same-capture group and analytical models use
++     the wavelength associated with the requested scanner channel.  */
++  DLL_PUBLIC sharpen_parameters
++  get_sharpen_parameters_for_channel (int channel) const;
++
+   /***** Tile Adjustment (used to adjust parameters of individual tiles) *****/
+ 
+   /* Adjustment parameters for a single tile.  */
+diff --git a/src/libcolorscreen/include/solver-parameters.h b/src/libcolorscreen/include/solver-parameters.h
+index 550511424ce39cf807a6e09c856fedd2142e7cba..bce08d3079a82340b19270ec724e3857b88c2c8c 100644
+--- a/src/libcolorscreen/include/solver-parameters.h
++++ b/src/libcolorscreen/include/solver-parameters.h
+@@ -14,13 +14,15 @@ struct solver_parameters
+ {
+   DLL_PUBLIC_EXP
+   solver_parameters ()
+-      : points (), optimize_lens (true), optimize_tilt (true), weighted (false), center ({0, 0})
++      : points (), optimize_lens (true), lens_center_distance (0),
++        optimize_tilt (true), weighted (false), center ({0, 0})
+   {
+   }
+   DLL_PUBLIC_EXP void
+   copy_without_points (const solver_parameters &other)
+   {
+     optimize_lens = other.optimize_lens;
++    lens_center_distance = other.lens_center_distance;
+     optimize_tilt = other.optimize_tilt;
+     weighted = other.weighted;
+   }
+@@ -70,6 +72,35 @@ struct solver_parameters
+   {
+     return screen_with_vertical_strips_p (type) ? 200 : 100;
+   }
++  /* Lens distortion is global.  Return true if registration points cover
++     enough of the relevant scan axes to constrain automatic lens fitting.
++     Point count is checked separately.  */
++  static constexpr coord_t minimum_lens_coverage = (coord_t)0.5;
++  DLL_PUBLIC_EXP bool
++  lens_coverage_sufficient (int width, int height,
++                            enum scanner_type scanner) const;
++
++  /* Return true if both point count and coverage permit automatic lens
++     fitting for TYPE and SCANNER.  */
++  DLL_PUBLIC_EXP bool
++  lens_optimization_sufficient (enum scr_type type, int width, int height,
++                                enum scanner_type scanner) const;
++
++  /* Return true if normalized lens parameters P are conservative enough for
++     an automatically inferred model.  This is solver policy, not a DNG
++     validity requirement, and is never applied to imported/manual profiles.  */
++  /* Maximum optical-center search distance uses a rectangle-normalized
++     Chebyshev metric around image center: D=1 permits coordinates 0..1,
++     D=2 permits -0.5..1.5.  Zero selects the automatic policy.  */
++  static constexpr coord_t automatic_lens_center_distance = (coord_t)2;
++  DLL_PUBLIC_EXP static coord_t
++  effective_lens_center_distance (coord_t distance);
++
++  DLL_PUBLIC_EXP static bool
++  lens_candidate_reasonable_p (const lens_warp_correction_parameters &p,
++                               enum scanner_type scanner,
++                               coord_t lens_center_distance = 0);
++
+   static int min_perspective_points (enum scr_type type)
+   {
+     return screen_with_vertical_strips_p (type) ? 20 : 10;
+@@ -82,8 +113,18 @@ struct solver_parameters
+ 
+   /* Vector holding points.  */
+   cow_vector<solver_point_t> points;
+-  /* If true, lens parameters are auto-optimized.  */
++  /* If true, lens parameters may be auto-optimized.  Point count, spatial
++     coverage, a conservative deformation envelope and a projected-Jacobian
++     identifiability check are additional safety conditions enforced by
++     solver().  The Jacobian check rejects a fitted lens model whose effect can
++     be absorbed by refitting the homography.  */
+   bool optimize_lens;
++  /* Maximum normalized distance of an automatically fitted lens center from
++     image center.  Zero means automatic.  Positive D constrains each fitted
++     coordinate to 0.5 +/- D/2, so D=1 stays inside the image and D>1 may
++     place the optical center outside it.  This is a Color-Screen scanner
++     calibration policy, not part of the portable DNG profile contract.  */
++  coord_t lens_center_distance;
+   /* If true, image tilt is auto-optimized.  */
+   bool optimize_tilt;
+   /* If true then weights of points are set according to the
+@@ -159,6 +200,7 @@ struct solver_parameters
+   bool operator== (const solver_parameters &other) const
+   {
+     return optimize_lens == other.optimize_lens &&
++           lens_center_distance == other.lens_center_distance &&
+            optimize_tilt == other.optimize_tilt &&
+            weighted == other.weighted &&
+            center == other.center &&
+diff --git a/src/libcolorscreen/lens-warp-correction.C b/src/libcolorscreen/lens-warp-correction.C
+index 4e4dde0c0e24ed629ca29979d77e1d4172f0885e..a294bfdf92c8faa00b089484835037d40b05310a 100644
+--- a/src/libcolorscreen/lens-warp-correction.C
++++ b/src/libcolorscreen/lens-warp-correction.C
+@@ -52,6 +52,26 @@ get_inverse (const lens_warp_correction_parameters &param, coord_t dist,
+         max = r;
+     }
+ }
++
++/* Return the upper corrected/output radius needed while inverting source
++   radii up to MAX_DIST for PARAM.
++
++   DNG defines the polynomial through normalized radius one.  Color-Screen's
++   get_ratio() keeps the edge ratio constant outside that domain.  Therefore,
++   when the edge ratio is below one, source radius MAX_DIST corresponds to
++   corrected radius MAX_DIST / edge_ratio.  The direct inverse and cached
++   inverse must use the same domain.  */
++pure_attr inline coord_t
++inverse_search_limit (const lens_warp_correction_parameters &param,
++                      coord_t max_dist)
++{
++  const coord_t edge_ratio = param.get_ratio (1);
++  if (!(edge_ratio > 0) || !my_isfinite (edge_ratio)
++      || !(max_dist > 0) || !my_isfinite (max_dist))
++    return 0;
++  return edge_ratio < 1 ? max_dist / edge_ratio : max_dist;
++}
++
+ /* Precompute the inverse radial distortion function for parameters P.
+    Provides progress updates via PROG.  */
+ std::unique_ptr<precomputed_function<coord_t>>
+@@ -60,34 +80,9 @@ get_new_inverse (struct lens_inverse_parameters &p, progress_info *prog)
+   (void)prog;
+   coord_t inv_max_dist_sq2 = 1 / (p.max_dist * p.max_dist);
+ 
+-  /* Determine the start of binary search for computing inverse.
+-     For correction to make sense, get_ratio must be monotonously increasing
+-     for whole image area.  For negative correction coefficient the function
+-     is not monotonously increasing for large values.  So search carefully
+-     for max element which inverts to m_max_dist.
+-
+-     In common case the lens parameters will be normalized so ratio of 1 is 1.
+-     In this case max is max_dist. */
+-  coord_t max = 1;
+-  if (my_fabs (p.param.get_ratio (1) - 1)
+-      < lens_warp_correction::epsilon / p.max_dist)
+-    max = p.max_dist;
+-  else
+-    {
+-      coord_t last = 0;
+-      coord_t next;
+-      while ((next = max * p.param.get_ratio (max * max * inv_max_dist_sq2))
+-             < p.max_dist)
+-        {
+-          /* Did we reach point where function decreases now?
+-             This means that parameters are broken, but we can cap search and
+-             get somewhat sane results.  */
+-          if (last > next)
+-            break;
+-          max = 1.2 * max;
+-          last = next;
+-        }
+-    }
++  const coord_t max = inverse_search_limit (p.param, p.max_dist);
++  if (!(max > 0) || !my_isfinite (max))
++    return nullptr;
+ 
+   /* Now precompute inverse.  */
+   return std::make_unique<precomputed_function<coord_t>> (
+@@ -116,12 +111,16 @@ lens_warp_correction::precompute (point_t center, point_t c1, point_t c2,
+       m_noop = true;
+       return true;
+     }
++  if (!m_params.is_monotone ())
++    return false;
+   m_noop = false;
+   m_max_dist = std::max (
+       c1.dist_from (center),
+       std::max (c2.dist_from (center),
+                 std::max (c3.dist_from (center), c4.dist_from (center))));
+   m_center = center;
++  if (!(m_max_dist > 0) || !my_isfinite (m_max_dist))
++    return false;
+   m_inv_max_dist_sq2 = 1 / (m_max_dist * m_max_dist);
+   return true;
+ }
+@@ -151,7 +150,7 @@ lens_warp_correction::nonprecomputed_scan_to_corrected (point_t p) const
+     return p;
+   bool too_far = false;
+   coord_t dist = p.dist_from (m_center);
+-  coord_t max_search = m_max_dist;
++  const coord_t max_search = inverse_search_limit (m_params, m_max_dist);
+   if (dist > m_max_dist)
+     dist = m_max_dist, too_far = true;
+ 
+diff --git a/src/libcolorscreen/loadsave.C b/src/libcolorscreen/loadsave.C
+index 2c47247f117ac116947816ad88aa149ceb9668ae..e405ab638aa2c88cd92d854c1ed49287cbe47ba4 100644
+--- a/src/libcolorscreen/loadsave.C
++++ b/src/libcolorscreen/loadsave.C
+@@ -544,6 +544,9 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
+       if (fprintf (f, "solver_optimize_lens: %s\n",
+                    bool_names[(int)sparam->optimize_lens])
+               < 0
++          || fprintf (f, "solver_lens_center_distance: %.17g\n",
++                      (double)sparam->lens_center_distance)
++                 < 0
+           || fprintf (f, "solver_optimize_tilt: %s\n",
+                       bool_names[(int)sparam->optimize_tilt])
+                  < 0)
+@@ -1898,6 +1901,18 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
+               return false;
+             }
+         }
++      else if (!strcmp (buf, "solver_lens_center_distance"))
++        {
++          coord_t distance;
++          if (!read_scalar (f, &distance) || !my_isfinite (distance)
++              || distance < 0)
++            {
++              *error = "error parsing solver_lens_center_distance";
++              return false;
++            }
++          if (sparam)
++            sparam->lens_center_distance = distance;
++        }
+       else if (!strcmp (buf, "solver_optimize_tilt"))
+         {
+           if (!parse_bool (f, sparam_check (optimize_tilt)))
+diff --git a/src/libcolorscreen/matrix-profile.C b/src/libcolorscreen/matrix-profile.C
+index 40957d60459cae28367f446a4729df8be0b082c4..140738e3c43fe08a6404504e1a49b4878ea50db4 100644
+--- a/src/libcolorscreen/matrix-profile.C
++++ b/src/libcolorscreen/matrix-profile.C
+@@ -518,7 +518,7 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img,
+   if (n >= 4)
+     {
+       render r (img, my_rparam, 255);
+-      if (!r.precompute_all (false, true, proportions, progress))
++      if (!r.precompute_all (NORMALIZED_PATCHES, proportions, progress))
+ 	return false;
+       color_matrix c = determine_color_matrix (
+           colors.data (), NULL, targets.data (), n, d50_white, 3, report, &r,
+diff --git a/src/libcolorscreen/render-diff.h b/src/libcolorscreen/render-diff.h
+index 04ab2640fe686f3381bad2ffe7aee628ec68b250..aefab0d94ef29b1ca66761de2b42f7d700ce555c 100644
+--- a/src/libcolorscreen/render-diff.h
++++ b/src/libcolorscreen/render-diff.h
+@@ -28,7 +28,7 @@ public:
+   nodiscard_attr bool
+   precompute_img_range (int_image_area area, progress_info *progress)
+   {
+-    if (!render_to_scr::precompute_img_range (false, true, {{0, 0}, {1, 1}}, progress))
++    if (!render_to_scr::precompute_img_range (NORMALIZED_PATCHES, {{0, 0}, {1, 1}}, progress))
+       return false;
+     if (!r1.precompute_img_range (area, progress))
+       return false;
+@@ -37,7 +37,7 @@ public:
+   nodiscard_attr bool
+   precompute_all (progress_info *progress)
+   {
+-    if (!render_to_scr::precompute_img_range (false, true, {{0, 0}, {1, 1}}, progress))
++    if (!render_to_scr::precompute_img_range (NORMALIZED_PATCHES, {{0, 0}, {1, 1}}, progress))
+       return false;
+     if (!r1.precompute_all (progress))
+       return false;
+diff --git a/src/libcolorscreen/render-fast.h b/src/libcolorscreen/render-fast.h
+index cb471e62dd2d116c00b5497329b08bd5ce0d030b..90967593cab5843a7ab29f15cad5ea8fe29a0633 100644
+--- a/src/libcolorscreen/render-fast.h
++++ b/src/libcolorscreen/render-fast.h
+@@ -27,14 +27,14 @@ public:
+   nodiscard_attr bool
+   precompute_all (progress_info *progress)
+   {
+-    return render_to_scr::precompute_all (true, true, progress);
++    return render_to_scr::precompute_all (PRECOMPUTE_IMAGE_LAYER | NORMALIZED_PATCHES, progress);
+   }
+ 
+   /* Precompute all data needed for rendering in AREA.  Update PROGRESS.  */
+   nodiscard_attr bool
+   precompute_img_range (int_image_area area, progress_info *progress)
+   {
+-    return render_to_scr::precompute_img_range (true, true, area, progress);
++    return render_to_scr::precompute_img_range (PRECOMPUTE_IMAGE_LAYER | NORMALIZED_PATCHES, area, progress);
+   }
+ 
+   /* Sample pixel at position P in screen coordinates.  */
+diff --git a/src/libcolorscreen/render-interpolate.C b/src/libcolorscreen/render-interpolate.C
+index 687edc6b242db62785f9f88f58a02f287bd199bd..cf16d3b1d2342dda6172044118c0a00c7b5353ae 100644
+--- a/src/libcolorscreen/render-interpolate.C
++++ b/src/libcolorscreen/render-interpolate.C
+@@ -308,8 +308,12 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
+      point correction goes right. Without doing so, for example black from red
+      pixels would be subtracted too aggressively, since we account for every
+      pixel in image, not only red patch portion.  */
+-  if (!render_to_scr::precompute_img_range (!m_original_color && !m_precise_rgb,
+-					    !m_original_color || m_profiled, area, progress))
++  int precompute_flags
++      = (m_original_color || m_precise_rgb) ? PRECOMPUTE_RGB_IMAGE
++                                            : PRECOMPUTE_IMAGE_LAYER;
++  if (!m_original_color || m_profiled)
++    precompute_flags |= NORMALIZED_PATCHES;
++  if (!render_to_scr::precompute_img_range (precompute_flags, area, progress))
+     return false;
+   if (m_screen_compensation
+       || m_params.collection_quality != render_parameters::fast_collection
+@@ -398,7 +402,7 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
+ 
+   struct analyzer_params p{
+     m_img.id,
+-    m_gray_data_id,
++    m_image_layer_id,
+     m_simulated_screen_id,
+     screen_id,
+     m_params.gamma,
+diff --git a/src/libcolorscreen/render-interpolate.h b/src/libcolorscreen/render-interpolate.h
+index 01e1d052b6a232752a8746c5d0554b20d9189812..369ba0a16166228746ee1b9bf0c6b4b5ae67ac75 100644
+--- a/src/libcolorscreen/render-interpolate.h
++++ b/src/libcolorscreen/render-interpolate.h
+@@ -77,8 +77,13 @@ public:
+   }
+ 
+   /* Precompute whole image range with additional options.  */
+-  nodiscard_attr bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress)
++  nodiscard_attr bool
++  precompute_all (int flags, rgbdata patch_proportions,
++                  progress_info *progress)
+   {
++    (void)flags;
++    (void)patch_proportions;
++    (void)progress;
+     abort ();
+   }
+ 
+diff --git a/src/libcolorscreen/render-parameters.C b/src/libcolorscreen/render-parameters.C
+index a0d06417d12e570fbd1fcda3e9f79739ea6019ae..9c3de3f3254f94f9f852c3c3db026664bd529b51 100644
+--- a/src/libcolorscreen/render-parameters.C
++++ b/src/libcolorscreen/render-parameters.C
+@@ -124,6 +124,73 @@ const property_t render_parameters::demosaiced_scaling_names []  = {
+ };
+ 
+ 
++/* Return scanner sharpening parameters specialized for native CHANNEL.
++   CHANNEL is 0 for red, 1 for green, 2 for blue and 3 for infrared.  */
++sharpen_parameters
++render_parameters::get_sharpen_parameters_for_channel (int channel) const
++{
++  sharpen_parameters result = sharpen;
++  if (channel < 0 || channel >= 4)
++    return result;
++
++  mtf_parameters &mtf = result.scanner_mtf;
++  int measurement_index = -1;
++  if (mtf.use_measured_mtf ())
++    {
++      const int selected = mtf.measured_mtf_idx;
++      const mtf_measurement &selected_measurement = mtf.measurements[selected];
++      if (selected_measurement.channel < 0
++          || selected_measurement.channel == channel)
++        measurement_index = selected;
++      else
++        {
++          int first = selected;
++          while (first > 0 && mtf.measurements[first].same_capture)
++            --first;
++          int last = first + 1;
++          while (last < (int)mtf.measurements.size ()
++                 && mtf.measurements[last].same_capture)
++            ++last;
++          for (int i = first; i < last; ++i)
++            if (mtf.measurements[i].channel == channel
++                && mtf.measurements[i].size () > 2)
++              {
++                measurement_index = i;
++                break;
++              }
++        }
++
++      /* An image-layer measurement intentionally applies to every channel.
++         For native measurements, never deconvolve one channel using another
++         channel's measured transfer function.  If this capture group does not
++         contain CHANNEL, disabling the direct curve lets the configured
++         analytical/fallback model take over.  */
++      mtf.measured_mtf_idx = measurement_index;
++    }
++
++  double wavelength = mtf.wavelengths[channel];
++  if (!(my_isfinite (wavelength) && wavelength > 0)
++      && measurement_index >= 0)
++    {
++      const double measured = mtf.measurements[measurement_index].wavelength;
++      if (my_isfinite (measured) && measured > 0)
++        wavelength = measured;
++    }
++  if (!(my_isfinite (wavelength) && wavelength > 0))
++    for (const mtf_measurement &measurement : mtf.measurements)
++      if (measurement.channel == channel
++          && my_isfinite (measurement.wavelength)
++          && measurement.wavelength > 0)
++        {
++          wavelength = measurement.wavelength;
++          break;
++        }
++  if (my_isfinite (wavelength) && wavelength > 0)
++    mtf.wavelength = wavelength;
++
++  return result;
++}
++
+ /* Return portion of screen occupied by red, green and blue patches for
+    screen of type T and rendering parameters RPARAM.  The sum of individual
+    portions should be at most 1.  */
+@@ -885,7 +952,7 @@ static rgbdata
+ get_color (image_data &img, render_parameters &rparam, scr_to_img_parameters &param, rgbdata c, progress_info *progress)
+ {
+   render r(img, rparam, 256);
+-  if (!r.precompute_all (false, true, patch_proportions (param.type, &rparam), progress))
++  if (!r.precompute_all (NORMALIZED_PATCHES, patch_proportions (param.type, &rparam), progress))
+     return c;
+   c.red = r.adjust_luminosity_ir (c.red);
+   c.green = r.adjust_luminosity_ir (c.green);
+@@ -1146,7 +1213,7 @@ render_parameters::auto_mix_dark (image_data &img, scr_to_img_parameters &param,
+     rparam.sharpen = dummy;
+     rparam.dark_point = 0;
+     render render (img, rparam, 256);
+-    if (!render.precompute_all (false, false, {1/3.0, 1/3.0, 1/3.0}, progress))
++    if (!render.precompute_all (PRECOMPUTE_RGB_IMAGE, {1/3.0, 1/3.0, 1/3.0}, progress))
+       return false;
+ #pragma omp parallel for reduction(rgb_histogram_range : hist)
+     for (int yy = 0; yy < area.height; yy++)
+@@ -1229,7 +1296,7 @@ render_parameters::auto_mix_weights_using_ir (image_data &img,
+     sharpen_parameters dummy;
+     rparam.sharpen = dummy;
+     render render (img, rparam, 256);
+-    if (!render.precompute_all (true, false, {1/3.0, 1/3.0, 1/3.0}, progress))
++    if (!render.precompute_all (PRECOMPUTE_IMAGE_LAYER | PRECOMPUTE_RGB_IMAGE, {1/3.0, 1/3.0, 1/3.0}, progress))
+       return false;
+ 
+ #pragma omp parallel for default(none) shared(progress, area, xsteps, ysteps, step, X, y, w, render)
+diff --git a/src/libcolorscreen/render-scr-detect.C b/src/libcolorscreen/render-scr-detect.C
+index 664d151af6ffb73da7246c13813f1383d66bf564..159966bcc644ab8672d03ef8ab48055570c11e1e 100644
+--- a/src/libcolorscreen/render-scr-detect.C
++++ b/src/libcolorscreen/render-scr-detect.C
+@@ -415,7 +415,7 @@ render_scr_detect::render_to_file (render_to_file_params &rfparams, render_type_
+     }
+ }
+ bool
+-render_scr_detect::precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress)
++render_scr_detect::precompute_all (int flags, progress_info *progress)
+ {
+   if (!m_scr_detect.set_parameters (m_scr_detect.m_param, m_params.gamma, &m_img, progress))
+     return false;
+@@ -432,7 +432,7 @@ render_scr_detect::precompute_all (bool grayscale_needed, bool normalized_patche
+     return false;
+   if (progress && progress->cancel_requested ())
+     return false;
+-  return render::precompute_all (grayscale_needed, normalized_patches, {1/3.0, 1/3.0, 1/3.0}, progress);
++  return render::precompute_all (flags, {1/3.0, 1/3.0, 1/3.0}, progress);
+ }
+ 
+ 
+@@ -534,7 +534,7 @@ analyze_color_proportions (scr_detect_parameters param, render_parameters &rpara
+   //param.min_ratio = 1.3;
+   //param.min_luminosity = 0.01;
+   render_scr_detect r (param, img, rparam, 256);
+-  if (!r.precompute_all (false, false, progress))
++  if (!r.precompute_all (PRECOMPUTE_NONE, progress))
+     return {1/3.0, 1/3.0, 1/3.0};
+   return r.analyze_color_proportions (map_param, area, progress);
+ }
+@@ -585,9 +585,9 @@ render_scr_nearest_scaled::~render_scr_nearest_scaled ()
+ bool
+ render_scr_nearest_scaled::precompute_all (progress_info *progress)
+ {
+-  if (!render_scr_detect::precompute_all (true, false, progress))
++  if (!render_scr_detect::precompute_all (PRECOMPUTE_IMAGE_LAYER, progress))
+     return false;
+-  patches_cache_params p = {m_color_class_map_id, m_gray_data_id, m_color_class_map.get (), &m_img, this};
++  patches_cache_params p = {m_color_class_map_id, m_image_layer_id, m_color_class_map.get (), &m_img, this};
+   m_patches = patches_cache.get (p, progress);
+   return (bool)m_patches;
+ }
+@@ -598,9 +598,9 @@ bool
+ render_scr_relax::precompute_all (progress_info *progress)
+ {
+ /* TODO; Rendering is not normalized correctly.  we probably should still compute vornoi diagrams and determine diameter. */
+-  if (!render_scr_detect::precompute_all (true, true, progress))
++  if (!render_scr_detect::precompute_all (PRECOMPUTE_IMAGE_LAYER | NORMALIZED_PATCHES, progress))
+     return false;
+-  color_data_params p = {m_color_class_map_id, m_gray_data_id, &m_img, m_color_class_map.get (), this};
++  color_data_params p = {m_color_class_map_id, m_image_layer_id, &m_img, m_color_class_map.get (), this};
+   m_color_data_handle = color_data_cache.get (p, progress);
+   if (!m_color_data_handle)
+     return false;
+diff --git a/src/libcolorscreen/render-scr-detect.h b/src/libcolorscreen/render-scr-detect.h
+index 8909b6926923b68fc9fd90c3001785abd85b5698..1a9365dcc0546779291ffd5288f89bc6f0522b7c 100644
+--- a/src/libcolorscreen/render-scr-detect.h
++++ b/src/libcolorscreen/render-scr-detect.h
+@@ -200,19 +200,17 @@ public:
+     else
+      return {0, 0, 0};
+   }
+-  bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress)
++  bool precompute_all (int flags, rgbdata patch_proportions,
++                       progress_info *progress)
+   {
++    (void)flags;
++    (void)patch_proportions;
++    (void)progress;
+     abort ();
+   }
+-  /* Precompute all data needed for rendering.
+-     GRAYSCALE_NEEDED specifies if grayscale data is needed.
+-     NORMALIZED_PATCHES specifies if patches should be normalized.
+-     PROGRESS is used to report progress and check for cancellation.  */
+-  /* Precompute all data needed for rendering.
+-     GRAYSCALE_NEEDED is true if grayscale data is needed.
+-     NORMALIZED_PATCHES is true if patch proportions should be normalized.
+-     PROGRESS is used to report progress and check for cancellation.  */
+-  nodiscard_attr bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress);
++  /* Precompute data selected by FLAGS.  PROGRESS reports work and
++     cancellation.  */
++  nodiscard_attr bool precompute_all (int flags, progress_info *progress);
+   /* Precompute adjusted RGB data.
+      PROGRESS is used to report progress and check for cancellation.  */
+   bool precompute_rgbdata (progress_info *progress);
+@@ -491,7 +489,7 @@ public:
+   }
+   bool precompute_all (progress_info *progress)
+   {
+-    return render_scr_detect::precompute_all (true, false, progress);
++    return render_scr_detect::precompute_all (PRECOMPUTE_IMAGE_LAYER, progress);
+   }
+   bool precompute_img_range (int_image_area area, progress_info *progress)
+   {
+@@ -535,7 +533,7 @@ public:
+   }
+   bool precompute_all (progress_info *progress)
+   {
+-    return render_scr_detect::precompute_all (true, false, progress);
++    return render_scr_detect::precompute_all (PRECOMPUTE_IMAGE_LAYER, progress);
+   }
+   bool precompute_img_range (int_image_area area, progress_info *progress)
+   {
+@@ -571,7 +569,7 @@ public:
+   }
+   bool precompute_all (progress_info *progress)
+   {
+-    return render_scr_detect::precompute_all (true, false, progress);
++    return render_scr_detect::precompute_all (PRECOMPUTE_IMAGE_LAYER, progress);
+   }
+   bool precompute_img_range (int_image_area area, progress_info *progress)
+   {
+@@ -603,7 +601,7 @@ public:
+   pure_attr inline rgbdata sample_pixel_img (point_t p) const;
+   bool precompute_all (progress_info *progress)
+   {
+-    return render_scr_detect::precompute_all (true, false, progress);
++    return render_scr_detect::precompute_all (PRECOMPUTE_IMAGE_LAYER, progress);
+   }
+   bool precompute_img_range (int_image_area area, progress_info *progress)
+   {
+@@ -767,7 +765,7 @@ public:
+   }
+   bool precompute_all (progress_info *progress)
+   {
+-    return render_scr_detect::precompute_all (true, true, progress);
++    return render_scr_detect::precompute_all (PRECOMPUTE_IMAGE_LAYER | NORMALIZED_PATCHES, progress);
+   }
+   void set_render_type (render_type_parameters rtparam)
+   {
+diff --git a/src/libcolorscreen/render-screen.h b/src/libcolorscreen/render-screen.h
+index ae7ffb0c5cc3134343e281fe6607fca0e060bc50..c19755449453e18becb0780da00aae9d1cc23da1 100644
+--- a/src/libcolorscreen/render-screen.h
++++ b/src/libcolorscreen/render-screen.h
+@@ -26,7 +26,7 @@ public:
+ 			   sharpen,
+                            m_params.red_strip_width,
+                            m_params.green_strip_width, progress);
+-    return render_to_scr::precompute_all (false, false, progress);
++    return render_to_scr::precompute_all (PRECOMPUTE_NONE, progress);
+   }
+   bool
+   precompute_img_range (int_image_area area, progress_info *progress = NULL)
+diff --git a/src/libcolorscreen/render-simulate.C b/src/libcolorscreen/render-simulate.C
+index 03d1b7d48cf1fc602477a672678d2199a7de9c1c..d5a6fc877fe35e9b305f69eb2461dbecd1a621c4 100644
+--- a/src/libcolorscreen/render-simulate.C
++++ b/src/libcolorscreen/render-simulate.C
+@@ -67,7 +67,7 @@ render_simulate_process::precompute_all (progress_info *progress)
+   m_screen = get_screen (m_scr_to_img.get_type (), false, false, sharpen,
+ 			 m_params.red_strip_width,
+ 			 m_params.green_strip_width, progress);
+-  if (!render_to_scr::precompute_all (false, false, progress))
++  if (!render_to_scr::precompute_all (PRECOMPUTE_RGB_IMAGE, progress))
+     return false;
+   struct simulation_params p = {m_img.id, &m_img, this, m_params.gamma, m_scr_to_img.get_param (), m_params.sharpen};
+   p.sharpen.mode = sharpen_parameters::blur_deconvolution;
+diff --git a/src/libcolorscreen/render-superposeimg.h b/src/libcolorscreen/render-superposeimg.h
+index 518904370f09914aa708dbd0089d388dc742e5cf..5fa1b4fe938ccf1663ade1ca43a0ecfc16d19cf6 100644
+--- a/src/libcolorscreen/render-superposeimg.h
++++ b/src/libcolorscreen/render-superposeimg.h
+@@ -45,7 +45,10 @@ public:
+ 			   sharpen,
+                            m_params.red_strip_width,
+                            m_params.green_strip_width, progress);
+-    return render_to_scr::precompute_all (!m_color, m_preview, progress);
++    int flags = m_color ? PRECOMPUTE_RGB_IMAGE : PRECOMPUTE_IMAGE_LAYER;
++    if (m_preview)
++      flags |= NORMALIZED_PATCHES;
++    return render_to_scr::precompute_all (flags, progress);
+   }
+   bool
+   precompute_img_range (int_image_area area, progress_info *progress = NULL)
+diff --git a/src/libcolorscreen/render-to-scr.C b/src/libcolorscreen/render-to-scr.C
+index 0a24b3b1f6ed570605a83360ab29210e4029f27f..40d1dc2befc5c97a30d3d2e1c337b4dfbe606257 100644
+--- a/src/libcolorscreen/render-to-scr.C
++++ b/src/libcolorscreen/render-to-scr.C
+@@ -300,28 +300,29 @@ render_to_scr::pixel_size () const noexcept
+   return m_pixel_size;
+ }
+ 
+-/* Precompute all data needed for rendering.  Update PROGRESS.
+-   GRAYSCALE_NEEDED specifies if grayscale only rendering is sufficient.
+-   NORMALIZED_PATCHES specifies if patches should be normalized.  */
++/* Precompute data selected by FLAGS.  Update PROGRESS.  */
+ bool
+-render_to_scr::precompute_all (bool grayscale_needed, bool normalized_patches,
+-			       progress_info *progress)
++render_to_scr::precompute_all (int flags, progress_info *progress)
+ {
+   if (!m_ok)
+     return false;
+-  return render::precompute_all (grayscale_needed, normalized_patches,
+-				 normalized_patches ? m_scr_to_img.patch_proportions (&m_params) : (rgbdata){(luminosity_t)1.0/(luminosity_t)3.0, (luminosity_t)1.0/(luminosity_t)3.0, (luminosity_t)1.0/(luminosity_t)3.0},
+-				 progress);
++  const bool normalized_patches = flags & NORMALIZED_PATCHES;
++  const rgbdata proportions
++      = normalized_patches
++            ? m_scr_to_img.patch_proportions (&m_params)
++            : rgbdata{ (luminosity_t)1.0 / (luminosity_t)3.0,
++                       (luminosity_t)1.0 / (luminosity_t)3.0,
++                       (luminosity_t)1.0 / (luminosity_t)3.0 };
++  return render::precompute_all (flags, proportions, progress);
+ }
+ 
+-/* Precompute all data needed for rendering in AREA.  Update PROGRESS.
+-   GRAYSCALE_NEEDED specifies if grayscale only rendering is sufficient.
+-   NORMALIZED_PATCHES specifies if patches should be normalized.  */
++/* Precompute data selected by FLAGS in AREA.  Update PROGRESS.  */
+ bool
+-render_to_scr::precompute_img_range (bool grayscale_needed, bool normalized_patches, int_image_area area, progress_info *progress)
++render_to_scr::precompute_img_range (int flags, int_image_area area,
++                                     progress_info *progress)
+ {
+   (void)area;
+-  return render_to_scr::precompute_all (grayscale_needed, normalized_patches, progress);
++  return render_to_scr::precompute_all (flags, progress);
+ }
+ 
+ /* Return screen of type T in PREVIEW mode.  Sharpen it according to SHARPEN if
+diff --git a/src/libcolorscreen/render-to-scr.h b/src/libcolorscreen/render-to-scr.h
+index 999d9d9f9064fb52959faa4af9990b0a7f4b2310..40aab0ed2241044a1a6eb71d3a585d50b5cd6c7a 100644
+--- a/src/libcolorscreen/render-to-scr.h
++++ b/src/libcolorscreen/render-to-scr.h
+@@ -156,24 +156,27 @@ public:
+   /* Return approximate size of an scan pixel in screen coordinates.  */
+   pure_attr coord_t pixel_size () const noexcept;
+ 
+-  /* Precompute all data needed for rendering.  Update PROGRESS.
+-     GRAYSCALE_NEEDED specifies if grayscale only rendering is sufficient.
+-     NORMALIZED_PATCHES specifies if patches should be normalized.
+-     PATCH_PROPORTIONS specifies proportions of R, G and B patches.  */
+-  nodiscard_attr DLL_PUBLIC bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress)
++  /* Precompute data selected by FLAGS.  Update PROGRESS.
++     PATCH_PROPORTIONS is intentionally unavailable through this wrapper;
++     screen geometry supplies it when NORMALIZED_PATCHES is requested.  */
++  nodiscard_attr DLL_PUBLIC bool
++  precompute_all (int flags, rgbdata patch_proportions,
++                  progress_info *progress)
+   {
++    (void)flags;
++    (void)patch_proportions;
++    (void)progress;
+     abort ();
+   }
+ 
+-  /* Precompute all data needed for rendering.  Update PROGRESS.
+-     GRAYSCALE_NEEDED specifies if grayscale only rendering is sufficient.
+-     NORMALIZED_PATCHES specifies if patches should be normalized.  */
+-  nodiscard_attr DLL_PUBLIC bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress);
++  /* Precompute data selected by FLAGS.  Update PROGRESS.  */
++  nodiscard_attr DLL_PUBLIC bool precompute_all (int flags,
++                                                 progress_info *progress);
+ 
+-  /* Precompute all data needed for rendering in AREA.  Update PROGRESS.
+-     GRAYSCALE_NEEDED specifies if grayscale only rendering is sufficient.
+-     NORMALIZED_PATCHES specifies if patches should be normalized.  */
+-  nodiscard_attr DLL_PUBLIC bool precompute_img_range (bool grayscale_needed, bool normalized_patches, int_image_area area, progress_info *progress);
++  /* Precompute data selected by FLAGS in AREA.  Update PROGRESS.  */
++  nodiscard_attr DLL_PUBLIC bool precompute_img_range (int flags,
++                                                       int_image_area area,
++                                                       progress_info *progress);
+ 
+   /* Build the finite capture-space simulation used by precise collection and
+      screen compensation.  PROGRESS reports the operation.  The periodic
+@@ -341,7 +344,10 @@ public:
+   nodiscard_attr bool
+   precompute_all (progress_info *progress = NULL)
+   {
+-    if (!render_to_scr::precompute_all (!m_color, m_profiled, progress))
++    int flags = m_color ? PRECOMPUTE_RGB_IMAGE : PRECOMPUTE_IMAGE_LAYER;
++    if (m_profiled)
++      flags |= NORMALIZED_PATCHES;
++    if (!render_to_scr::precompute_all (flags, progress))
+       return false;
+     /* When doing profiled matrix, we need to pre-scale the profile so
+        black point corretion goes right. Without doing so, for exmaple
+diff --git a/src/libcolorscreen/render.C b/src/libcolorscreen/render.C
+index 26855494169da00a7234a949ffc38a8a88278104..abe65895ac58cc70fb98d460265a747cb8d7b8bb 100644
+--- a/src/libcolorscreen/render.C
++++ b/src/libcolorscreen/render.C
+@@ -16,7 +16,7 @@ namespace colorscreen
+ class lru_caches lru_caches;
+ std::atomic_uint64_t lru_caches::time;
+ 
+-/* A wrapper class around m_sharpened_data which handles allocation and
++/* A wrapper class around precomputed image data which handles allocation and
+    deallocation. This is needed for the cache.  */
+ class sharpened_data
+ {
+@@ -461,11 +461,18 @@ prune_render_caches ()
+ /*                             render implementation                         */
+ /*****************************************************************************/
+ 
+-/* Precompute all data needed for rendering.  */
++/* Precompute data selected by FLAGS.  PATCH_PROPORTIONS controls output-color
++   setup and PROGRESS reports work and cancellation.  */
+ bool
+-render::precompute_all (bool grayscale_needed, bool normalized_patches,
+-			rgbdata patch_proportions, progress_info *progress)
++render::precompute_all (int flags, rgbdata patch_proportions,
++                        progress_info *progress)
+ {
++  const bool image_layer_needed = flags & PRECOMPUTE_IMAGE_LAYER;
++  const bool rgb_image_needed = flags & PRECOMPUTE_RGB_IMAGE;
++  const bool normalized_patches = flags & NORMALIZED_PATCHES;
++  if (rgb_image_needed && !m_img.has_rgb ())
++    return false;
++
+   if (m_params.backlight_correction)
+     {
+       backlight_correction_cache_params p
+@@ -494,42 +501,135 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
+         {
+           par.gamma_table = m_img.to_linear[1];
+           m_rgb_lookup_table[1] = lookup_table_cache.get (par, progress);
++          if (!m_rgb_lookup_table[1])
++            return false;
+           par.gamma_table = m_img.to_linear[2];
+           m_rgb_lookup_table[2] = lookup_table_cache.get (par, progress);
++          if (!m_rgb_lookup_table[2])
++            return false;
+         }
+       else
+         {
+-	  m_rgb_lookup_table[1] = lookup_table_cache.get (par, progress);
+-	  m_rgb_lookup_table[2] = lookup_table_cache.get (par, progress);
++          m_rgb_lookup_table[1] = lookup_table_cache.get (par, progress);
++          m_rgb_lookup_table[2] = lookup_table_cache.get (par, progress);
++          if (!m_rgb_lookup_table[1] || !m_rgb_lookup_table[2])
++            return false;
+         }
+     }
+ 
+-  if (grayscale_needed)
++  const bool ir_simulation
++      = !m_img.has_grayscale_or_ir ()
++        || (m_img.has_rgb () && m_params.ignore_infrared);
++
++  /* Scanner sharpening belongs to the native capture channels, before any
++     RGB mixture is formed.  Materialize the planes only when a caller needs
++     RGB output or when an RGB-derived image layer must be mixed afterwards.  */
++  const bool sharpen_rgb
++      = m_img.has_rgb ()
++        && m_params.sharpen.get_mode () != sharpen_parameters::none
++        && (rgb_image_needed || (image_layer_needed && ir_simulation));
++  if (sharpen_rgb)
+     {
+-      bool ir_simulation = !m_img.has_grayscale_or_ir ()
+-			   || (m_img.has_rgb () && m_params.ignore_infrared);
+-      gray_and_sharpen_params p
+-          = { { m_img.id,
+-                &m_img,
+-                m_params.gamma,
+-                { m_img.to_linear[0], m_img.to_linear[1], m_img.to_linear[2] },
+-                ir_simulation ? m_params.mix_dark : rgbdata{1.0f, 1.0f, 1.0f},
+-                ir_simulation ? m_params.mix_red : 1.0f,
+-                ir_simulation ? m_params.mix_green : 1.0f,
+-                ir_simulation ? m_params.mix_blue : 1.0f,
+-                m_backlight_correction.get (),
+-                m_backlight_correction_id,
+-                ir_simulation ? m_params.ignore_infrared : false }, m_params.sharpen };
+-      m_sharpened_data_holder
+-          = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
+-      if (!m_sharpened_data_holder)
+-        return false;
+-      m_sharpened_data = m_sharpened_data_holder->m_data;
++      /* Publish the RGB image only after all three channel planes are ready.
++         This keeps m_rgb_image[0] as the single all-or-none state bit used by
++         the hot pixel accessors.  */
++      std::shared_ptr<sharpened_data> rgb_image_holder[3];
++      for (int channel = 0; channel < 3; ++channel)
++        {
++          gray_and_sharpen_params p
++              = { { m_img.id,
++                    &m_img,
++                    m_params.gamma,
++                    { m_img.to_linear[0], m_img.to_linear[1],
++                      m_img.to_linear[2] },
++                    rgbdata{0, 0, 0},
++                    channel == 0 ? 1.0f : 0.0f,
++                    channel == 1 ? 1.0f : 0.0f,
++                    channel == 2 ? 1.0f : 0.0f,
++                    m_backlight_correction.get (),
++                    m_backlight_correction_id,
++                    true },
++                  m_params.get_sharpen_parameters_for_channel (channel) };
++          rgb_image_holder[channel]
++              = gray_and_sharpened_data_cache.get (p, progress);
++          if (!rgb_image_holder[channel])
++            return false;
++        }
++      for (int channel = 0; channel < 3; ++channel)
++        {
++          m_rgb_image_holder[channel] = std::move (rgb_image_holder[channel]);
++          m_rgb_image[channel] = m_rgb_image_holder[channel]->m_data;
++        }
++      if (colorscreen_checking)
++        assert (m_rgb_image[0] && m_rgb_image[1] && m_rgb_image[2]);
+     }
++
++  if (image_layer_needed)
++    {
++      if (ir_simulation && sharpen_rgb)
++        {
++          /* RGB-derived image layers are mixed from already-sharpened native
++             channels.  Mixing first and deconvolving afterwards would impose
++             one transfer function on three spectrally different channels.  */
++          m_image_layer_holder
++              = std::make_shared<sharpened_data> (m_img.width, m_img.height);
++          if (!m_image_layer_holder->m_data)
++            return false;
++          m_image_layer = m_image_layer_holder->m_data;
++          const size_t size = (size_t)m_img.width * m_img.height;
++#pragma omp parallel for
++          for (size_t i = 0; i < size; ++i)
++            m_image_layer[i]
++                = ((luminosity_t)m_rgb_image[0][i] - m_params.mix_dark.red)
++                      * m_params.mix_red
++                  + ((luminosity_t)m_rgb_image[1][i]
++                     - m_params.mix_dark.green)
++                        * m_params.mix_green
++                  + ((luminosity_t)m_rgb_image[2][i]
++                     - m_params.mix_dark.blue)
++                        * m_params.mix_blue;
++          m_image_layer_id = lru_caches::get ();
++        }
++      else
++        {
++          sharpen_parameters image_layer_sharpen = m_params.sharpen;
++          /* On RGB+IR input the native scalar plane is scanner channel 3.  A
++             grayscale-only scan keeps the historical scalar/global model.  */
++          if (!ir_simulation && m_img.has_rgb ())
++            image_layer_sharpen
++                = m_params.get_sharpen_parameters_for_channel (3);
++
++          gray_and_sharpen_params p
++              = { { m_img.id,
++                    &m_img,
++                    m_params.gamma,
++                    { m_img.to_linear[0], m_img.to_linear[1],
++                      m_img.to_linear[2] },
++                    ir_simulation ? m_params.mix_dark
++                                  : rgbdata{1.0f, 1.0f, 1.0f},
++                    ir_simulation ? m_params.mix_red : 1.0f,
++                    ir_simulation ? m_params.mix_green : 1.0f,
++                    ir_simulation ? m_params.mix_blue : 1.0f,
++                    m_backlight_correction.get (),
++                    m_backlight_correction_id,
++                    ir_simulation ? m_params.ignore_infrared : false },
++                  image_layer_sharpen };
++          m_image_layer_holder
++              = gray_and_sharpened_data_cache.get (p, progress,
++                                                    &m_image_layer_id);
++          if (!m_image_layer_holder)
++            return false;
++          m_image_layer = m_image_layer_holder->m_data;
++        }
++    }
++
+   if (m_params.contact_copy.simulate)
+     {
+-      m_sensitivity_hd_curve = std::make_unique <richards_hd_curve> (100, m_params.contact_copy.emulsion_characteristic_curve);
+-      m_sensitivity = std::make_unique <film_sensitivity> (m_sensitivity_hd_curve.get (), m_params.contact_copy.preflash, m_params.contact_copy.exposure, m_params.contact_copy.boost);
++      m_sensitivity_hd_curve = std::make_unique <richards_hd_curve> (
++          100, m_params.contact_copy.emulsion_characteristic_curve);
++      m_sensitivity = std::make_unique <film_sensitivity> (
++          m_sensitivity_hd_curve.get (), m_params.contact_copy.preflash,
++          m_params.contact_copy.exposure, m_params.contact_copy.boost);
+       m_sensitivity->precompute ();
+     }
+   if (m_sensitivity)
+@@ -539,10 +639,14 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
+       const int steps = 65536;
+       luminosity_t yvals[steps];
+       for (int i = 0; i < steps; i++)
+-	yvals[i] = adjust_luminosity_ir (i * (lmax - lmin) / (steps - 1) + lmin);
+-      m_adjust_luminosity = std::make_unique <precomputed_function <luminosity_t>> (lmin, lmax, yvals, steps);
++        yvals[i] = adjust_luminosity_ir (
++            i * (lmax - lmin) / (steps - 1) + lmin);
++      m_adjust_luminosity
++          = std::make_unique<precomputed_function<luminosity_t>> (
++              lmin, lmax, yvals, steps);
+     }
+-  return out_color.precompute (m_params, &m_img, normalized_patches, patch_proportions, progress);
++  return out_color.precompute (m_params, &m_img, normalized_patches,
++                               patch_proportions, progress);
+ }
+ 
+ #if 0
+@@ -551,7 +655,7 @@ bool
+ render::precompute_img_range (int_image_area area, progress_info *progress)
+ {
+   (void)area;
+-  return precompute_all (true, false, {1.0/3, 1.0/3, 1.0/3}, progress);
++  return precompute_all (PRECOMPUTE_IMAGE_LAYER, {1.0/3, 1.0/3, 1.0/3}, progress);
+ }
+ #endif
+ 
+@@ -712,7 +816,11 @@ get_linearized_pixel (const image_data &img, render_parameters &rparam, int xx,
+       imgp = img.stitch->images[ty][tx].img.get ();
+     }
+   render r (*imgp, rparam, 255);
+-  if (!r.precompute_all (!img.has_rgb (), false, { 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f }, progress))
++  const int flags
++      = imgp->has_rgb () ? PRECOMPUTE_RGB_IMAGE : PRECOMPUTE_IMAGE_LAYER;
++  if (!r.precompute_all (flags,
++                         { 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f },
++                         progress))
+     return rgbdata(0, 0, 0);
+   for (int y = yy - range; y < yy + range; y++)
+     for (int x = xx - range; x < xx + range; x++)
+@@ -754,7 +862,7 @@ hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity
+ std::shared_ptr<histogram>
+ render::get_image_layer_histogram (progress_info *progress)
+ {
+-  image_layer_histogram_params p = {m_gray_data_id, m_params.get_scan_crop (m_img.width, m_img.height), this};
++  image_layer_histogram_params p = {m_image_layer_id, m_params.get_scan_crop (m_img.width, m_img.height), this};
+   return image_layer_histogram_cache.get (p, progress);
+ }
+ 
+@@ -766,7 +874,7 @@ hd_x_histogram (render_parameters &rparam, image_data &img, int steps, luminosit
+   if (img.stitch)
+     return {};
+   render r (img, rparam, 256);
+-  if (!r.precompute_all (true, false, {1, 1, 1}, progress))
++  if (!r.precompute_all (PRECOMPUTE_IMAGE_LAYER, {1, 1, 1}, progress))
+     return {};
+   auto hist = r.get_image_layer_histogram (progress);
+   if (!hist)
+diff --git a/src/libcolorscreen/render.h b/src/libcolorscreen/render.h
+index 36f5090f84c56d9a7d62f8847a06cfb75d288d59..729ae5094bf72e9b464c0504f2723e21405f0fe4 100644
+--- a/src/libcolorscreen/render.h
++++ b/src/libcolorscreen/render.h
+@@ -28,6 +28,15 @@ namespace colorscreen
+ {
+ class histogram;
+ 
++/* Data that render::precompute_all should materialize.  Flags can be ORed.  */
++enum render_precompute_flags
++{
++  PRECOMPUTE_NONE = 0,
++  PRECOMPUTE_IMAGE_LAYER = 1 << 0,
++  PRECOMPUTE_RGB_IMAGE = 1 << 1,
++  NORMALIZED_PATCHES = 1 << 2
++};
++
+ /* Helper for downscaling template for grayscale rendering.
+    Account VAL * SCALE to DATA.  */
+ template <bool UseAtomic = false>
+@@ -146,26 +155,34 @@ public:
+   pure_attr inline luminosity_t
+   get_linearized_data_blue (int_point_t p) const noexcept;
+ 
+-  /* Precompute all data needed for rendering.  GRAYSCALE_NEEDED
+-     indicates if gray data is required.  If NORMALIZED_PATCHES is true,
+-     spectral computation is normalized.  PATCH_PROPORTIONS specifies
+-     color proportions.  Report progress to PROGRESS.  Return false on failure.
+-   */
+-  nodiscard_attr DLL_PUBLIC bool precompute_all (bool grayscale_needed,
+-                                                 bool normalized_patches,
++  /* Precompute data selected by FLAGS.  PRECOMPUTE_IMAGE_LAYER materializes
++     the scalar image layer used by get_data(), PRECOMPUTE_RGB_IMAGE prepares
++     native RGB access (including scanner sharpening when enabled), and
++     NORMALIZED_PATCHES requests normalized spectral/profile computation.
++     PATCH_PROPORTIONS specifies color proportions.  Report progress to
++     PROGRESS and return false on failure.  */
++  nodiscard_attr DLL_PUBLIC bool precompute_all (int flags,
+                                                  rgbdata patch_proportions,
+                                                  progress_info *progress);
+ 
+-  /* Get linearized RGB pixel value at index X, Y.  */
++  /* Get linearized RGB pixel value at index X, Y.  If a sharpened RGB image
++     was precomputed, return its independently processed scanner channels.
++     The three M_RGB_IMAGE planes are always present or absent together.  */
+   pure_attr inline rgbdata
+   get_linearized_rgb_pixel (int_point_t p) const noexcept
+   {
+     if (colorscreen_checking)
+       assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
++    if (m_rgb_image[0])
++      {
++        const size_t i = p.y * (size_t)m_img.width + p.x;
++        return { (luminosity_t)m_rgb_image[0][i],
++                 (luminosity_t)m_rgb_image[1][i],
++                 (luminosity_t)m_rgb_image[2][i] };
++      }
+     image_data::pixel pxl = m_img.get_rgb_pixel (p.x, p.y);
+-    rgbdata d = { m_rgb_lookup_table[0][pxl.r], m_rgb_lookup_table[1][pxl.g],
+-                  m_rgb_lookup_table[2][pxl.b] };
+-    return d;
++    return { m_rgb_lookup_table[0][pxl.r], m_rgb_lookup_table[1][pxl.g],
++             m_rgb_lookup_table[2][pxl.b] };
+   }
+ 
+   /* Get unadjusted RGB pixel value at index X, Y.  */
+@@ -173,7 +190,9 @@ public:
+   get_unadjusted_rgb_pixel (int_point_t p) const noexcept
+   {
+     rgbdata d = get_linearized_rgb_pixel (p);
+-    if (m_backlight_correction)
++    /* Precomputed RGB planes already contain backlight correction because
++       scanner sharpening must see the corrected channel data.  */
++    if (m_backlight_correction && !m_rgb_image[0])
+       {
+         d.red = m_backlight_correction->apply (
+             d.red, p.x, p.y, backlight_correction_parameters::red, true);
+@@ -288,14 +307,20 @@ protected:
+   /* Rendering parameters.  */
+   render_parameters m_params;
+ 
+-  /* ID of graydata computed.  */
+-  uint64_t m_gray_data_id = m_img.id;
++  /* ID of the precomputed scalar image layer.  */
++  uint64_t m_image_layer_id = m_img.id;
+ 
+-  /* Sharpened data we render from.  */
+-  mem_luminosity_t *m_sharpened_data = nullptr;
++  /* Precomputed scalar image layer used by grayscale/screen rendering.  */
++  mem_luminosity_t *m_image_layer = nullptr;
+ 
+   /* Wrapping class to cause proper destruction.  */
+-  std::shared_ptr<class sharpened_data> m_sharpened_data_holder = nullptr;
++  std::shared_ptr<class sharpened_data> m_image_layer_holder = nullptr;
++
++  /* Independently scanner-sharpened native RGB channels.  Values are
++     linearized and backlight-corrected, but global dark point and exposure are
++     still applied by the higher-level RGB accessors.  */
++  mem_luminosity_t *m_rgb_image[3] = { nullptr, nullptr, nullptr };
++  std::shared_ptr<class sharpened_data> m_rgb_image_holder[3];
+ 
+   /* Maximal value in M_IMG.  */
+   int m_maxval = m_img.has_grayscale_or_ir () ? m_img.maxval : 65535;
+@@ -314,13 +339,13 @@ protected:
+       = nullptr;
+ };
+ 
+-/* Get sharpened grayscale value at index X, Y without adjustments.  */
++/* Get precomputed image-layer value at index X, Y without adjustments.  */
+ pure_attr inline luminosity_t always_inline_attr
+ render::get_unadjusted_data (int_point_t p) const noexcept
+ {
+   if (colorscreen_checking)
+     assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
+-  return m_sharpened_data[p.y * m_img.width + p.x];
++  return m_image_layer[p.y * m_img.width + p.x];
+ }
+ 
+ /* Adjust luminosity LUM considering infrared sensitivity and dark point.  */
+@@ -342,30 +367,39 @@ render::get_data (int_point_t p) const noexcept
+   return adjust_luminosity_ir (get_unadjusted_data (p));
+ }
+ 
+-/* Get linearized red channel value at index X, Y.  */
++/* Get linearized red channel value at index X, Y.  If the RGB image was
++   precomputed with scanner sharpening, return that processed channel.  */
+ pure_attr inline luminosity_t always_inline_attr
+ render::get_linearized_data_red (int_point_t p) const noexcept
+ {
+   if (colorscreen_checking)
+     assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
++  if (m_rgb_image[0])
++    return (luminosity_t)m_rgb_image[0][p.y * m_img.width + p.x];
+   return m_rgb_lookup_table[0][m_img.get_rgb_pixel (p.x, p.y).r];
+ }
+ 
+-/* Get linearized green channel value at index X, Y.  */
++/* Get linearized green channel value at index X, Y.  If the RGB image was
++   precomputed with scanner sharpening, return that processed channel.  */
+ pure_attr inline luminosity_t always_inline_attr
+ render::get_linearized_data_green (int_point_t p) const noexcept
+ {
+   if (colorscreen_checking)
+     assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
++  if (m_rgb_image[0])
++    return (luminosity_t)m_rgb_image[1][p.y * m_img.width + p.x];
+   return m_rgb_lookup_table[1][m_img.get_rgb_pixel (p.x, p.y).g];
+ }
+ 
+-/* Get linearized blue channel value at index X, Y.  */
++/* Get linearized blue channel value at index X, Y.  If the RGB image was
++   precomputed with scanner sharpening, return that processed channel.  */
+ pure_attr inline luminosity_t always_inline_attr
+ render::get_linearized_data_blue (int_point_t p) const noexcept
+ {
+   if (colorscreen_checking)
+     assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
++  if (m_rgb_image[0])
++    return (luminosity_t)m_rgb_image[2][p.y * m_img.width + p.x];
+   return m_rgb_lookup_table[2][m_img.get_rgb_pixel (p.x, p.y).b];
+ }
+ 
+@@ -373,10 +407,8 @@ render::get_linearized_data_blue (int_point_t p) const noexcept
+ pure_attr inline luminosity_t
+ render::get_data_red (int_point_t p) const noexcept
+ {
+-  if (colorscreen_checking)
+-    assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
+-  luminosity_t v = m_rgb_lookup_table[0][m_img.get_rgb_pixel (p.x, p.y).r];
+-  if (m_backlight_correction)
++  luminosity_t v = get_linearized_data_red (p);
++  if (m_backlight_correction && !m_rgb_image[0])
+     v = m_backlight_correction->apply (
+         v, p.x, p.y, backlight_correction_parameters::red, true);
+   v = (v - m_params.dark_point) * m_params.scan_exposure;
+@@ -387,10 +419,8 @@ render::get_data_red (int_point_t p) const noexcept
+ pure_attr inline luminosity_t
+ render::get_data_green (int_point_t p) const noexcept
+ {
+-  if (colorscreen_checking)
+-    assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
+-  luminosity_t v = m_rgb_lookup_table[1][m_img.get_rgb_pixel (p.x, p.y).g];
+-  if (m_backlight_correction)
++  luminosity_t v = get_linearized_data_green (p);
++  if (m_backlight_correction && !m_rgb_image[0])
+     v = m_backlight_correction->apply (
+         v, p.x, p.y, backlight_correction_parameters::green, true);
+   v = (v - m_params.dark_point) * m_params.scan_exposure;
+@@ -401,10 +431,8 @@ render::get_data_green (int_point_t p) const noexcept
+ pure_attr inline luminosity_t
+ render::get_data_blue (int_point_t p) const noexcept
+ {
+-  if (colorscreen_checking)
+-    assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
+-  luminosity_t v = m_rgb_lookup_table[2][m_img.get_rgb_pixel (p.x, p.y).b];
+-  if (m_backlight_correction)
++  luminosity_t v = get_linearized_data_blue (p);
++  if (m_backlight_correction && !m_rgb_image[0])
+     v = m_backlight_correction->apply (
+         v, p.x, p.y, backlight_correction_parameters::blue, true);
+   v = (v - m_params.dark_point) * m_params.scan_exposure;
+@@ -531,7 +559,7 @@ render::get_unadjusted_img_rgb_pixel (point_t p) const noexcept
+                               get_linearized_data_blue ({ sx + 1, sy + 2 }),
+                               get_linearized_data_blue ({ sx + 2, sy + 2 }) };
+       ret.blue = do_bicubic_interpolate (b1, b2, b3, b4, { rx, ry });
+-      if (m_backlight_correction)
++      if (m_backlight_correction && !m_rgb_image[0])
+         {
+           ret.red = m_backlight_correction->apply (
+               ret.red, p.x, p.y, backlight_correction_parameters::red, true);
+diff --git a/src/libcolorscreen/scr-detect-geometry.C b/src/libcolorscreen/scr-detect-geometry.C
+index 3ebaec81525baaaaaf83c407d6e4748f45cae38e..b7b06b045993bc6e3c683e50ff24ac05fbdea153 100644
+--- a/src/libcolorscreen/scr-detect-geometry.C
++++ b/src/libcolorscreen/scr-detect-geometry.C
+@@ -1736,7 +1736,7 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
+             return ret;
+           }
+           render = std::move(new_render);
+-          if (!render->precompute_all(false, false, progress) ||
++          if (!render->precompute_all(PRECOMPUTE_NONE, progress) ||
+               !render->precompute_rgbdata(progress)) {
+             render = NULL;
+             if (progress) {
+diff --git a/src/libcolorscreen/scr-to-img.C b/src/libcolorscreen/scr-to-img.C
+index c64adb778c2f861b9ffd15b854ec3d0cf7472047..2e1b21fb13b27650dcf4de6ab7bbd8e54e2afa19 100644
+--- a/src/libcolorscreen/scr-to-img.C
++++ b/src/libcolorscreen/scr-to-img.C
+@@ -327,20 +327,25 @@ scr_to_img::set_parameters_for_early_correction (
+   m_nwarnings = 0;
+   assert (!debug || (width > 0 && height > 0));
+ 
+-  /* Next initialize lens correction.
+-     Lens center is specified in scan coordinates, so apply previous
+-     corrections.  */
++  /* Match Adobe DNG SDK dng_filter_warp geometry.  The SDK interpolates the
++     normalized optical center against dng_rect bounds, whose right/bottom
++     coordinates are WIDTH/HEIGHT (the exclusive image bounds), and uses the
++     same rectangle to compute the normalization radius.  */
+   point_t center = { m_param.lens_correction.center.x * width,
+-    		     m_param.lens_correction.center.y * height};
++                     m_param.lens_correction.center.y * height};
+   point_t c1 = { (coord_t)0, (coord_t)0 };
+   point_t c2 = { (coord_t)width, (coord_t)0 };
+   point_t c3 = { (coord_t)0, (coord_t)height };
+   point_t c4 = { (coord_t)width, (coord_t)height };
+   m_lens_correction.set_parameters (m_param.lens_correction);
++
++  /* Moving-lens scanners are a Color-Screen extension.  The movement-axis
++     coordinate is subtracted before lens correction, so it is identically
++     zero in the reduced lens coordinate system.  */
+   if (m_param.scanner_type == lens_move_horizontally)
+-    c1.x = c2.x = c3.x = c4.x = center.x = m_param.lens_correction.center.x;
++    c1.x = c2.x = c3.x = c4.x = center.x = 0;
+   if (m_param.scanner_type == lens_move_vertically)
+-    c1.y = c2.y = c3.y = c4.y = center.y = m_param.lens_correction.center.y;
++    c1.y = c2.y = c3.y = c4.y = center.y = 0;
+   if (!m_lens_correction.precompute (center, c1, c2, c3, c4))
+     return false;
+   /* For non-noop conversion we need to also precompute inverse.  */
+diff --git a/src/libcolorscreen/slanted-edge.C b/src/libcolorscreen/slanted-edge.C
+index 36b5cb7016ca1196b7a3fad48c7f17ce9447883e..a772bcb9f9b35ca5eb614d96ba7059fe2970d5f4 100644
+--- a/src/libcolorscreen/slanted-edge.C
++++ b/src/libcolorscreen/slanted-edge.C
+@@ -694,10 +694,10 @@ robust_location_scale (const std::vector<double> &values, double *median,
+ 
+ 
+ /* Measure the spatial-frequency response of one slanted edge in ROI using
+-   PARAMS, append the qualified measurement to RPARAM, and use PROGRESS for
+-   diagnostics and cancellation-aware rendering.  */
++   PARAMS and return the qualified curve in the result.  RPARAM is read-only:
++   callers may measure several channels first and commit them atomically.  */
+ slanted_edge_results
+-slanted_edge_mtf (render_parameters &rparam, const image_data &img,
++slanted_edge_mtf (const render_parameters &rparam, const image_data &img,
+                   int_image_area roi, const slanted_edge_parameters &params,
+                   progress_info *progress)
+ {
+@@ -715,6 +715,25 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img,
+                           oversampling, max_slanted_edge_oversampling));
+       return res;
+     }
++  if (params.channel < -1 || params.channel > 3)
++    {
++      set_failure (&res, slanted_edge_failure_invalid_parameters, progress,
++                   "MTF measurement channel must be image layer, red, green, "
++                   "blue, or infrared");
++      return res;
++    }
++  if (params.channel >= 0 && params.channel <= 2 && !img.has_rgb ())
++    {
++      set_failure (&res, slanted_edge_failure_invalid_parameters, progress,
++                   "requested RGB MTF channel is not present in the image");
++      return res;
++    }
++  if (params.channel == 3 && !img.has_grayscale_or_ir ())
++    {
++      set_failure (&res, slanted_edge_failure_invalid_parameters, progress,
++                   "requested infrared MTF channel is not present in the image");
++      return res;
++    }
+   if (!my_isfinite (params.lsf_half_width) || params.lsf_half_width < 0)
+     {
+       set_failure (
+@@ -752,8 +771,15 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img,
+      disabling sharpening only in the private render used for measurement.  */
+   render_parameters measurement_rparam = rparam;
+   measurement_rparam.sharpen.mode = sharpen_parameters::none;
++  /* CHANNEL 3 explicitly requests the native grayscale/IR plane even when
++     normal rendering is configured to synthesize the image layer from RGB.  */
++  if (params.channel == 3)
++    measurement_rparam.ignore_infrared = false;
+   render r (img, measurement_rparam, 65535);
+-  if (!r.precompute_all (true, false, {1, 1, 1}, progress))
++  const int precompute_flags
++      = params.channel < 0 || params.channel == 3 ? PRECOMPUTE_IMAGE_LAYER
++                                                  : PRECOMPUTE_NONE;
++  if (!r.precompute_all (precompute_flags, {1, 1, 1}, progress))
+     {
+       set_failure (&res, slanted_edge_failure_precomputation, progress,
+                    "image precomputation failed");
+@@ -783,7 +809,17 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img,
+   for (int y = 0; y < roi.height; y++)
+     for (int x = 0; x < roi.width; x++)
+       {
+-        double value = r.get_unadjusted_data ({roi.x + x, roi.y + y});
++        const int_point_t pos = {roi.x + x, roi.y + y};
++        double value;
++        if (params.channel < 0 || params.channel == 3)
++          value = r.get_unadjusted_data (pos);
++        else
++          {
++            const rgbdata rgb = r.get_unadjusted_rgb_pixel (pos);
++            value = params.channel == 0
++                        ? rgb.red
++                        : params.channel == 1 ? rgb.green : rgb.blue;
++          }
+         if (!my_isfinite (value))
+           {
+             set_failure (
+@@ -1382,7 +1418,7 @@ slanted_edge_mtf (render_parameters &rparam, const image_data &img,
+   for (double value : esf)
+     res.edge_histogram.push_back ((luminosity_t)value);
+ 
+-  rparam.sharpen.scanner_mtf.measurements.push_back (measurement);
++  res.measurement = std::move (measurement);
+   res.success = true;
+   res.failure = slanted_edge_failure_none;
+   res.error.clear ();
+diff --git a/src/libcolorscreen/solver.C b/src/libcolorscreen/solver.C
+index 90ce34cea5a0a320a62817e95be218d1b17ef2c6..e4004a5e60fca342737c86b777c0ebb01b717cd9 100644
+--- a/src/libcolorscreen/solver.C
++++ b/src/libcolorscreen/solver.C
+@@ -6,6 +6,7 @@
+ #define GSL_RANGE_CHECK_OFF
+ #include <memory>
+ #include <array>
++#include <limits>
+ #include <gsl/gsl_multifit.h>
+ #include <gsl/gsl_linalg.h>
+ #include <gsl/gsl_eigen.h>
+@@ -23,6 +24,137 @@ namespace colorscreen
+ const char *const solver_parameters::point_color_names[(int)max_point_color]
+     = { "red", "green", "blue" };
+ 
++/* Return true when registration points cover enough of the scan to constrain
++   a global radial lens model.  Point count is checked separately.
++
++   Use the central 90% span on each relevant image axis.  This prevents one or
++   two stray/outlier points from making a compact point cloud appear global.
++   For moving-lens scanners the movement axis is removed before lens
++   correction, so only the perpendicular axis constrains the 1-D lens model.  */
++bool
++solver_parameters::lens_coverage_sufficient (int width, int height,
++                                             enum scanner_type scanner) const
++{
++  if (width <= 1 || height <= 1 || points.size () == 0)
++    return false;
++
++  std::vector<coord_t> xs, ys;
++  xs.reserve (points.size ());
++  ys.reserve (points.size ());
++  for (const solver_point_t &p : points.read ())
++    {
++      if (!my_isfinite (p.img.x) || !my_isfinite (p.img.y))
++        return false;
++      xs.push_back (p.img.x);
++      ys.push_back (p.img.y);
++    }
++  std::sort (xs.begin (), xs.end ());
++  std::sort (ys.begin (), ys.end ());
++
++  auto central_span = [] (const std::vector<coord_t> &v) -> coord_t
++  {
++    if (v.empty ())
++      return 0;
++    size_t trim = v.size () / 20; /* Five percent at each end.  */
++    if (2 * trim >= v.size ())
++      trim = 0;
++    return v[v.size () - 1 - trim] - v[trim];
++  };
++
++  const coord_t x_coverage = central_span (xs) / (coord_t)(width - 1);
++  const coord_t y_coverage = central_span (ys) / (coord_t)(height - 1);
++  if (scanner == lens_move_horizontally)
++    return y_coverage >= minimum_lens_coverage;
++  if (scanner == lens_move_vertically)
++    return x_coverage >= minimum_lens_coverage;
++  return is_fixed_lens (scanner)
++         && x_coverage >= minimum_lens_coverage
++         && y_coverage >= minimum_lens_coverage;
++}
++
++/* Return true if point count and scan coverage are both sufficient for
++   automatic lens fitting.  */
++bool
++solver_parameters::lens_optimization_sufficient (enum scr_type type, int width,
++                                                 int height,
++                                                 enum scanner_type scanner) const
++{
++  return (int)n_points () >= min_lens_points (type)
++         && lens_coverage_sufficient (width, height, scanner);
++}
++
++/* Resolve configured lens-center DISTANCE.  Zero selects the automatic
++   policy, which currently preserves the historical [-0.5,1.5] search box.
++   Return a negative value for invalid configuration.  */
++coord_t
++solver_parameters::effective_lens_center_distance (coord_t distance)
++{
++  if (!my_isfinite (distance) || distance < 0)
++    return -1;
++  return distance == 0 ? automatic_lens_center_distance : distance;
++}
++
++/* Return true if P is a plausible normalized result of automatic lens
++   fitting.  The center bound is a Color-Screen scanner-calibration policy,
++   not a DNG validity rule; Adobe DNG SDK Build 2652 requires portable DNG
++   profile centers themselves to remain in [0,1].  */
++bool
++solver_parameters::lens_candidate_reasonable_p (
++    const lens_warp_correction_parameters &p, enum scanner_type scanner,
++    coord_t lens_center_distance)
++{
++  constexpr coord_t max_normalized_displacement = (coord_t)0.05;
++  constexpr coord_t min_derivative = (coord_t)0.5;
++  constexpr coord_t max_derivative = (coord_t)1.5;
++
++  const coord_t distance
++      = effective_lens_center_distance (lens_center_distance);
++  if (!(distance > 0))
++    return false;
++  const coord_t center_radius = distance * (coord_t)0.5;
++  const coord_t min_center = (coord_t)0.5 - center_radius;
++  const coord_t max_center = (coord_t)0.5 + center_radius;
++
++  if (!p.is_monotone () || my_fabs (p.get_ratio (1) - 1) > (coord_t)0.00001)
++    return false;
++
++  auto center_reasonable = [min_center, max_center] (coord_t c) -> bool
++  {
++    return my_isfinite (c) && c >= min_center && c <= max_center;
++  };
++  if (is_fixed_lens (scanner))
++    {
++      if (!center_reasonable (p.center.x)
++          || !center_reasonable (p.center.y))
++        return false;
++    }
++  else if (scanner == lens_move_horizontally)
++    {
++      if (!center_reasonable (p.center.y))
++        return false;
++    }
++  else if (scanner == lens_move_vertically)
++    {
++      if (!center_reasonable (p.center.x))
++        return false;
++    }
++  else
++    return false;
++
++  for (int i = 0; i <= 64; i++)
++    {
++      const coord_t r = (coord_t)i / 64;
++      const coord_t rsq = r * r;
++      const coord_t ratio = p.get_ratio (rsq);
++      const coord_t derivative = p.get_radial_derivative (rsq);
++      if (!my_isfinite (ratio) || !my_isfinite (derivative)
++          || my_fabs (r * (ratio - 1)) > max_normalized_displacement
++          || derivative < min_derivative || derivative > max_derivative)
++        return false;
++    }
++  return true;
++}
++
+ namespace
+ {
+ bool debug_output = false;
+@@ -245,6 +377,33 @@ pick_nearest_points (std::vector<solver_parameters::solver_point_t> &out,
+     out.push_back (points[e.index]);
+ }
+ 
++/* Diagnostics for separating lens deformation from homography.  The lens
++   solver profiles out the homography for every lens candidate, so finite
++   differences of its residual vector already measure the component of a lens
++   perturbation which cannot be absorbed by refitting the homography.  */
++struct lens_identifiability_diagnostics
++{
++  bool valid = false;
++  coord_t singular_ratio = 0;
++  coord_t column_ratio = 0;
++  coord_t minimum_singular_value = 0;
++  coord_t maximum_singular_value = 0;
++
++  /* The projected Jacobian is scaled to broad solver parameter ranges.  A
++     ratio below 1e-4 means that at least one plausible lens direction changes
++     the observations ten thousand times less than the best determined
++     direction, after the homography has already absorbed everything it can.
++     Treat such a model as numerically unidentified rather than letting radial
++     terms explain projective error or registration noise.  */
++  static constexpr coord_t minimum_singular_ratio = (coord_t)1e-4;
++
++  bool
++  identifiable_p () const
++  {
++    return valid && singular_ratio >= minimum_singular_ratio;
++  }
++};
++
+ /* Nonlinear optimizer for determining radial lens warp parameters.  */
+ class lens_solver
+ {
+@@ -257,11 +416,12 @@ public:
+     if (num_coordinates () == 1)
+       m_start[1] = 0;
+   }
+-  scr_to_img_parameters &m_param;
++  const scr_to_img_parameters &m_param;
+   const image_data &m_img_data;
+   const solver_parameters &m_sparam;
+   progress_info *m_progress;
+   static constexpr coord_t scale_kr = 128;
++  static constexpr coord_t bad_value = 100000000;
+ 
+   /* Return number of lens center coordinates.  */
+   int
+@@ -313,23 +473,30 @@ public:
+   constrain (coord_t *vals) const
+   {
+     int n = num_coordinates ();
+-    /* Also consider the case that lens center is outside of the scan.  */
+-    if (vals[0] < (coord_t)-10)
+-      vals[0] = (coord_t)-10;
+-    if (vals[0] > (coord_t)10)
+-      vals[0] = (coord_t)10;
++    /* Off-image centers are useful for scanner calibration when the scanned
++       original is a crop far from the optical axis.  Bound the fitted center
++       by the user-configurable rectangle-normalized distance rather than by a
++       hard-coded DNG-like box.  */
++    coord_t distance = solver_parameters::effective_lens_center_distance (
++        m_sparam.lens_center_distance);
++    if (!(distance > 0))
++      distance = solver_parameters::automatic_lens_center_distance;
++    const coord_t radius = distance * (coord_t)0.5;
++    const coord_t min_center = (coord_t)0.5 - radius;
++    const coord_t max_center = (coord_t)0.5 + radius;
++    if (vals[0] < min_center)
++      vals[0] = min_center;
++    if (vals[0] > max_center)
++      vals[0] = max_center;
+     if (n == 2)
+       {
+-        if (vals[1] < (coord_t)-10)
+-          vals[1] = (coord_t)-10;
+-        if (vals[1] > (coord_t)10)
+-          vals[1] = (coord_t)10;
++        if (vals[1] < min_center)
++          vals[1] = min_center;
++        if (vals[1] > max_center)
++          vals[1] = max_center;
+       }
+-    /*
+-       Coefficient	Typical Range	  Extreme Range 
+-       k1 (3rd Order)   ±0.001-±0.05      ±0.15
+-       k2 (5th Order)   ±0.0001-±0.01     ±0.05
+-       k3 (7th Order)   ≈0 (often unused) ±0.01  */
++    /* Coefficient boxes are only a coarse numerical guard.  The physically
++       meaningful bound is imposed on the resulting normalized radial map.  */
+     constexpr coord_t range [3] = {0.15, 0.05, 0.01};
+     for (int i = n, j = 0; i < n + 3; i++, j++)
+       {
+@@ -340,79 +507,274 @@ public:
+       }
+   }
+ 
+-  /* Solve for lens parameters.
+-     VALS are current lens parameters.
+-     CHISQ is updated with resulting chi square.
+-     TRANSFORMED is updated with transformed points.  */
++  /* Return the scale used to make lens-coordinate I dimensionless for
++     identifiability testing.  The Jacobian condition depends on parameter
++     units, so use the same broad physical/search scales as the nonlinear
++     optimizer rather than comparing a normalized center coordinate directly
++     with the internally amplified radial coefficients.  */
++  coord_t
++  identifiability_parameter_scale (int i) const
++  {
++    const int n = num_coordinates ();
++    if (i < n)
++      {
++        const coord_t distance
++            = solver_parameters::effective_lens_center_distance (
++                m_sparam.lens_center_distance);
++        return distance > 0 ? distance * (coord_t)0.5 : (coord_t)1;
++      }
++    switch (i - n)
++      {
++      case 0:
++        return (coord_t)0.15 * scale_kr;
++      case 1:
++        return (coord_t)0.05 * scale_kr;
++      case 2:
++        return (coord_t)0.01 * scale_kr;
++      default:
++        abort ();
++      }
++  }
++
++  /* Measure whether the fitted lens model is distinguishable from the
++     homography on the actual registration points.
++
++     FIT_PROFILED_HOMOGRAPHY() refits the best homography for every lens
++     parameter vector, and RESIDUALS() exposes that profiled fit to GSL.
++     Consequently a finite-difference column here is the derivative of the
++     profiled residual r*(L)=r(H*(L),L): homography directions have already
++     been eliminated.  This is equivalent, to first order, to projecting the
++     raw lens Jacobian onto the orthogonal complement of the homography
++     Jacobian (or taking the homography Schur complement).  It is exactly the
++     distinction needed for Color-Screen, where registration points are noisy
++     correspondences rather than points known a priori to lie on straight
++     calibration lines.
++
++     Return both the singular-value ratio of the dimensionless projected
++     Jacobian and the weakest/strongest column-norm ratio.  The latter catches
++     parameters whose effect is essentially zero even before correlations
++     between columns are considered.  */
++  lens_identifiability_diagnostics
++  identifiability ()
++  {
++    lens_identifiability_diagnostics ret;
++    const int nvals = num_values ();
++    const int nobs = num_observations ();
++    if (nobs < nvals || nvals <= 0)
++      return ret;
++
++    std::vector<coord_t> plus (start, start + nvals);
++    std::vector<coord_t> minus (start, start + nvals);
++    std::vector<coord_t> plus_residuals (nobs);
++    std::vector<coord_t> minus_residuals (nobs);
++    gsl_matrix *jacobian = gsl_matrix_alloc (nobs, nvals);
++    if (!jacobian)
++      return ret;
++
++    coord_t min_column_norm = std::numeric_limits<coord_t>::max ();
++    coord_t max_column_norm = 0;
++    bool ok = true;
++    for (int col = 0; col < nvals && ok; col++)
++      {
++        std::copy (start, start + nvals, plus.begin ());
++        std::copy (start, start + nvals, minus.begin ());
++        const coord_t step
++            = derivative_perturbation ()
++              * std::max ((coord_t)1, my_fabs (start[col]));
++        plus[col] += step;
++        minus[col] -= step;
++        constrain (plus.data ());
++        constrain (minus.data ());
++        const coord_t delta = plus[col] - minus[col];
++        if (!(delta > 0)
++            || residuals (plus.data (), plus_residuals.data ()) != GSL_SUCCESS
++            || residuals (minus.data (), minus_residuals.data ())
++                   != GSL_SUCCESS)
++          {
++            ok = false;
++            break;
++          }
++
++        const coord_t scale = identifiability_parameter_scale (col);
++        long double norm_sq = 0;
++        for (int row = 0; row < nobs; row++)
++          {
++            const coord_t derivative
++                = (plus_residuals[row] - minus_residuals[row]) / delta
++                  * scale;
++            if (!my_isfinite (derivative))
++              {
++                ok = false;
++                break;
++              }
++            gsl_matrix_set (jacobian, row, col, derivative);
++            norm_sq += (long double)derivative * derivative;
++          }
++        if (!ok)
++          break;
++        const coord_t column_norm = my_sqrt ((coord_t)norm_sq);
++        min_column_norm = std::min (min_column_norm, column_norm);
++        max_column_norm = std::max (max_column_norm, column_norm);
++      }
++
++    if (!ok || !(max_column_norm > 0))
++      {
++        gsl_matrix_free (jacobian);
++        return ret;
++      }
++
++    gsl_matrix *v = gsl_matrix_alloc (nvals, nvals);
++    gsl_vector *singular = gsl_vector_alloc (nvals);
++    gsl_vector *work = gsl_vector_alloc (nvals);
++    if (!v || !singular || !work)
++      {
++        if (v)
++          gsl_matrix_free (v);
++        if (singular)
++          gsl_vector_free (singular);
++        if (work)
++          gsl_vector_free (work);
++        gsl_matrix_free (jacobian);
++        return ret;
++      }
++
++    gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
++    const int status = gsl_linalg_SV_decomp (jacobian, v, singular, work);
++    gsl_set_error_handler (old_handler);
++    if (status == GSL_SUCCESS)
++      {
++        coord_t smax = 0;
++        coord_t smin = std::numeric_limits<coord_t>::max ();
++        for (int i = 0; i < nvals; i++)
++          {
++            const coord_t value = gsl_vector_get (singular, i);
++            if (!my_isfinite (value) || value < 0)
++              {
++                smax = 0;
++                break;
++              }
++            smax = std::max (smax, value);
++            smin = std::min (smin, value);
++          }
++        if (smax > 0)
++          {
++            ret.valid = true;
++            ret.minimum_singular_value = smin;
++            ret.maximum_singular_value = smax;
++            ret.singular_ratio = smin / smax;
++            ret.column_ratio = min_column_norm / max_column_norm;
++          }
++      }
++
++    gsl_vector_free (work);
++    gsl_vector_free (singular);
++    gsl_matrix_free (v);
++    gsl_matrix_free (jacobian);
++    return ret;
++  }
++
++  /* Decode lens-only solver coordinates VALS into LENS.  No homography or
++     perspective parameters are carried by the outer nonlinear optimizer.
++     Return false if the resulting normalized radial model is outside the
++     conservative automatic-fit envelope.  */
+   bool
+-  solve (const coord_t *vals, coord_t *chisq, std::vector <point_t> *transformed) const
++  lens_from_values (const coord_t *vals,
++                    lens_warp_correction_parameters *lens) const
+   {
+-    static constexpr coord_t bad_val = 100000000;
+-    m_param.center = { (coord_t)0, (coord_t)0 };
+-    m_param.coordinate1 = { (coord_t)1, (coord_t)0 };
+-    m_param.coordinate2 = { (coord_t)0, (coord_t)1 };
+     int n = num_coordinates ();
++    *lens = lens_warp_correction_parameters ();
+     if (is_fixed_lens (m_param.scanner_type))
+-      m_param.lens_correction.center = { vals[0], vals[1] };
++      lens->center = { vals[0], vals[1] };
+     else if (m_param.scanner_type == lens_move_horizontally)
+-      m_param.lens_correction.center = { 0, vals[0] };
++      lens->center = { 0, vals[0] };
+     else if (m_param.scanner_type == lens_move_vertically)
+-      m_param.lens_correction.center = { vals[0], 0 };
++      lens->center = { vals[0], 0 };
+     else
+       abort ();
+-    m_param.lens_correction.kr[0] = 1;
+-    m_param.lens_correction.kr[1] = vals[n] * (1 / scale_kr);
+-    m_param.lens_correction.kr[2] = vals[n + 1] * (1 / scale_kr);
+-    m_param.lens_correction.kr[3] = vals[n + 2] * (1 / scale_kr);
+-    if (!m_param.lens_correction.is_monotone ())
++    lens->kr[0] = 1;
++    lens->kr[1] = vals[n] * (1 / scale_kr);
++    lens->kr[2] = vals[n + 1] * (1 / scale_kr);
++    lens->kr[3] = vals[n + 2] * (1 / scale_kr);
++    if (!lens->is_monotone ())
+       {
+-	if (colorscreen_checking)
++        if (colorscreen_checking)
+           printf ("Non monotone lens correction %f %f: %f %f %f %f\n",
+-                  m_param.lens_correction.center.x,
+-                  m_param.lens_correction.center.y,
+-                  m_param.lens_correction.kr[0], m_param.lens_correction.kr[1],
+-                  m_param.lens_correction.kr[2], m_param.lens_correction.kr[3]);
+-	if (chisq)
+-	  *chisq = bad_val;
+-        if (transformed)
+-          for (size_t i = 0; i < m_sparam.points.size (); i++)
+-            (*transformed)[i] = m_sparam.points[i].scr;
++                  lens->center.x, lens->center.y, lens->kr[0], lens->kr[1],
++                  lens->kr[2], lens->kr[3]);
+         return false;
+       }
+-    if (!m_param.lens_correction.normalize ())
++    return lens->normalize ()
++           && solver_parameters::lens_candidate_reasonable_p (
++               *lens, m_param.scanner_type, m_sparam.lens_center_distance);
++  }
++
++  /* Evaluate the profiled lens objective at lens-only coordinates VALS.
++
++     For every lens candidate this routine solves the best homography from the
++     registration correspondences by linear least squares and then returns its
++     residual/error.  The outer nonlinear optimizer therefore never needs an
++     initial homography guess and never carries homography coordinates: H is a
++     nuisance parameter eliminated as H*(L)=argmin_H E(L,H).  This is variable
++     projection (separable nonlinear least squares).
++
++     PARAM is intentionally read-only.  Trial evaluations use a local copy so
++     simplex/Jacobian probes cannot leak a temporary lens or linear geometry
++     state into later evaluations.  CHISQ receives the profiled objective and
++     TRANSFORMED, when non-null, receives screen points transformed by H*(L).
++     Do not use RANSAC here: changing an inlier set would make the outer
++     objective discontinuous.  */
++  bool
++  fit_profiled_homography (const coord_t *vals, coord_t *chisq,
++                           std::vector<point_t> *transformed) const
++  {
++    if (chisq)
++      *chisq = bad_value;
++
++    lens_warp_correction_parameters lens;
++    if (!lens_from_values (vals, &lens))
+       {
+-        if (chisq)
+-          *chisq = bad_val;
+         if (transformed)
+           for (size_t i = 0; i < m_sparam.points.size (); i++)
+             (*transformed)[i] = m_sparam.points[i].scr;
+         return false;
+       }
++
++    scr_to_img_parameters trial = m_param;
++    trial.center = { (coord_t)0, (coord_t)0 };
++    trial.coordinate1 = { (coord_t)1, (coord_t)0 };
++    trial.coordinate2 = { (coord_t)0, (coord_t)1 };
++    trial.lens_correction = lens;
++
+     scr_to_img map;
+-    /* We may save some inversions if points are relatively few.  */
+-    bool ok;
++    /* We may save inverse precomputation if points are relatively few.  */
++    bool map_ok;
+     if (m_sparam.n_points () * 2 < lens_warp_correction::size)
+-      ok = map.set_parameters_for_early_correction (m_param, m_img_data.width, m_img_data.height);
++      map_ok = map.set_parameters_for_early_correction (
++          trial, m_img_data.width, m_img_data.height);
+     else
+-      ok = map.set_parameters (m_param, m_img_data);
+-    if (!ok)
++      map_ok = map.set_parameters (trial, m_img_data);
++    if (!map_ok)
+       return false;
++
+     coord_t chi = -5;
+-    /* Do not use ransac here, since it is not smooth and will confuse solver.  */
+-    homography::get_matrix (m_sparam.points, 
+-		    (screen_with_vertical_strips_p (m_param.type) ? homography::solve_vertical_strips : 0)
+-		    | homography::solve_rotation, m_param.scanner_type, &map, m_sparam.center, &chi, transformed);
++    homography::get_matrix (
++        m_sparam.points,
++        (screen_with_vertical_strips_p (m_param.type)
++             ? homography::solve_vertical_strips
++             : 0)
++            | homography::solve_rotation,
++        m_param.scanner_type, &map, m_sparam.center, &chi, transformed);
+     if (chisq)
+-    {
+-      if (!(chi >= 0 && chi < bad_val))
+-	{
+-	  printf ("Bad chi %f\n", chi);
+-	  *chisq = bad_val;
+-	}
+-      else
+-	*chisq = chi;
+-    }
+-    return (chi >= 0 && chi < bad_val);
++      {
++        if (!(chi >= 0 && chi < bad_value))
++          {
++            printf ("Bad chi %f\n", chi);
++            *chisq = bad_value;
++          }
++        else
++          *chisq = chi;
++      }
++    return chi >= 0 && chi < bad_value;
+   }
+   /* Return number of observations.  */
+   int
+@@ -428,7 +790,7 @@ public:
+   {
+     std::vector<point_t> transformed (m_sparam.points.size ());
+     coord_t chisq;
+-    if (!solve (vals, &chisq, &transformed))
++    if (!fit_profiled_homography (vals, &chisq, &transformed))
+       {
+ 	for (int i = 0; i < (int)num_observations (); i++)
+ 	  f_vec[i] = 1000;
+@@ -454,8 +816,8 @@ public:
+   coord_t
+   objfunc (coord_t *vals)
+   {
+-    coord_t chisq;
+-    solve (vals, &chisq, nullptr);
++    coord_t chisq = bad_value;
++    fit_profiled_homography (vals, &chisq, nullptr);
+     return chisq;
+   }
+ };
+@@ -492,12 +854,25 @@ solver (scr_to_img_parameters *param,const  image_data &img_data,
+ 
+   param->mesh_trans = nullptr;
+ 
+-  /* Require more points for strips; we only can verify 1d info.  */
+-  bool optimize_lens = sparam.optimize_lens && ((int)sparam.n_points () > solver_parameters::min_lens_points (param->type));
++  /* Lens correction is global.  Point count alone is unsafe: a dense local
++     cloud can leave center and high-order radial terms unconstrained while
++     still extrapolating across the complete scan.  */
++  const bool optimize_lens
++      = sparam.optimize_lens
++        && sparam.lens_optimization_sufficient (
++               param->type, img_data.width, img_data.height,
++               param->scanner_type);
+   bool optimize_rotation = sparam.optimize_tilt && ((int)sparam.n_points () > solver_parameters::min_perspective_points (param->type));
+ 
+   if (optimize_lens)
+     {
++      /* Keep a trusted/manual lens profile intact until the newly fitted model
++         has passed both the physical envelope and the identifiability test.
++         If the registration data cannot separate lens distortion from the
++         simultaneously fitted homography, retaining the previous profile (or
++         identity) is safer than installing an arbitrary compensating warp.  */
++      const lens_warp_correction_parameters previous_lens
++          = param->lens_correction;
+       lens_solver s (*param, img_data, sparam, progress);
+       bool use_early_multifit = false;
+       bool use_simplex = true;
+@@ -528,8 +903,25 @@ solver (scr_to_img_parameters *param,const  image_data &img_data,
+           = s.start[n + 1] * (1 / lens_solver::scale_kr);
+       param->lens_correction.kr[3]
+           = s.start[n + 2] * (1 / lens_solver::scale_kr);
+-      if (!param->lens_correction.normalize ())
++      if (!param->lens_correction.normalize ()
++          || !solver_parameters::lens_candidate_reasonable_p (
++                 param->lens_correction, param->scanner_type,
++                 sparam.lens_center_distance))
+         return 1e30;
++      const lens_identifiability_diagnostics identifiability
++          = s.identifiability ();
++      if (!identifiability.identifiable_p ())
++        {
++          if (debug_output)
++            fprintf (stderr,
++                     "Ignoring unidentifiable lens fit: singular ratio %.12g, "
++                     "column ratio %.12g, singular values %.12g..%.12g\n",
++                     identifiability.singular_ratio,
++                     identifiability.column_ratio,
++                     identifiability.minimum_singular_value,
++                     identifiability.maximum_singular_value);
++          param->lens_correction = previous_lens;
++        }
+     }
+   if (progress)
+     progress->set_task ("optimizing perspective correction", 1);
+diff --git a/src/libcolorscreen/stitch-image.C b/src/libcolorscreen/stitch-image.C
+index 3a800f5d52c578c2dcd8fcb84415b19eb72c363d..ae833e10ea5d697b7d2233ac0239130b09fb1a91 100644
+--- a/src/libcolorscreen/stitch-image.C
++++ b/src/libcolorscreen/stitch-image.C
+@@ -701,7 +701,7 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
+   my_rparam.mix_blue = 1;
+   param.mesh_trans = mesh_trans;
+   render_to_scr render (param, *img, my_rparam, 256);
+-  if (!render.precompute_all (true, false, progress))
++  if (!render.precompute_all (PRECOMPUTE_IMAGE_LAYER, progress))
+     return false;
+   if (!m_prj->my_screen)
+     {
+@@ -1381,14 +1381,14 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
+ 		    && other.load_img (error, progress))
+ 		  {
+ 		    render1 = new render (*img, rparams, 255);
+-		    if (!render1->precompute_all (img->has_grayscale_or_ir (), false, {1.0/3.0, 1.0/3.0, 1.0/3.0}, progress))
++		    if (!render1->precompute_all (img->has_rgb () ? PRECOMPUTE_RGB_IMAGE : PRECOMPUTE_IMAGE_LAYER, {1.0/3.0, 1.0/3.0, 1.0/3.0}, progress))
+ 		      {
+ 			*error = "precomputation failed";
+ 			delete render1;
+ 			render1 = 0;
+ 		      }
+ 		    render2 = new render (*other.img, rparams, 255);
+-		    if (!render2->precompute_all (img->has_grayscale_or_ir (), false, {1.0/3.0, 1.0/3.0, 1.0/3.0}, progress))
++		    if (!render2->precompute_all (img->has_rgb () ? PRECOMPUTE_RGB_IMAGE : PRECOMPUTE_IMAGE_LAYER, {1.0/3.0, 1.0/3.0, 1.0/3.0}, progress))
+ 		      {
+ 			*error = "precomputation failed";
+ 			delete render1;
+diff --git a/src/libcolorscreen/unittests.C b/src/libcolorscreen/unittests.C
+index 6c5de4add6b33d03dcded1d40a7bd1742a2279dc..ffc4ea6c99b166acc5aee304d924490da6544465 100644
+--- a/src/libcolorscreen/unittests.C
++++ b/src/libcolorscreen/unittests.C
+@@ -1,4 +1,5 @@
+ #include <assert.h>
++#include <algorithm>
+ #include <array>
+ #include <climits>
+ #include <math.h>
+@@ -1295,7 +1296,8 @@ compare_scr_to_img (const char *test_name, scr_to_img_parameters & param,
+ 
+ bool
+ do_test_homography (scr_to_img_parameters &param, int width, int height,
+-                    bool lens_correction, coord_t epsilon)
++                    bool lens_correction, coord_t epsilon,
++                    coord_t lens_center_distance = 0)
+ {
+   scr_to_img map;
+   image_data img;
+@@ -1309,6 +1311,7 @@ do_test_homography (scr_to_img_parameters &param, int width, int height,
+     }
+   solver_parameters sparam;
+   sparam.optimize_lens = lens_correction;
++  sparam.lens_center_distance = lens_center_distance;
+   int xstep = (width + 99) / 11;
+   int ystep = (height + 99) / 10;
+   for (int y = 0; y < height; y += ystep)
+@@ -1356,6 +1359,105 @@ test_homography (bool lens_correction, bool joly, coord_t epsilon)
+       param.scanner_type = (enum scanner_type)scanner;
+       ok &= do_test_homography (param, 1024, 1024, lens_correction, epsilon);
+     }
++
++  /* An exactly distortion-free image still contains the perspective/tilt
++     above, but it contains no information about the optical center.  The
++     profiled lens Jacobian must therefore be rank deficient after the best
++     homography is refitted.  Verify that lens optimization keeps the identity
++     profile instead of using radial terms to imitate the perspective.  */
++  if (lens_correction && !joly)
++    {
++      image_data img;
++      if (!img.set_dimensions (1024, 1024))
++        return false;
++      scr_to_img_parameters truth = param;
++      truth.scanner_type = fixed_lens;
++      truth.lens_correction = lens_warp_correction_parameters ();
++      scr_to_img truth_map;
++      if (!truth_map.set_parameters (truth, img))
++        return false;
++      solver_parameters sparam;
++      for (int y = 0; y < 10; y++)
++        for (int x = 0; x < 10; x++)
++          {
++            point_t image = {(coord_t)(111 * x), (coord_t)(111 * y)};
++            sparam.add_point (image, truth_map.to_scr (image),
++                              solver_parameters::red);
++          }
++      lens_warp_correction_parameters retained_profile;
++      retained_profile.center = {0.43, 0.57};
++      retained_profile.kr[1] = 0.005;
++      if (!retained_profile.normalize ())
++        return false;
++      scr_to_img_parameters fitted;
++      fitted.scanner_type = fixed_lens;
++      fitted.lens_correction = retained_profile;
++      const coord_t objective = solver (&fitted, img, sparam);
++      if (!(objective >= 0 && objective < 1e30)
++          || !(fitted.lens_correction == retained_profile))
++        {
++          fprintf (stderr,
++                   "Unidentifiable lens fit replaced the retained profile\n");
++          ok = false;
++        }
++    }
++
++  /* A scanner capture can be cropped far from the fixed lens optical axis.
++     Verify that the explicit center-distance setting affects the actual
++     nonlinear solver, rather than only the post-fit plausibility check.  */
++  if (lens_correction && !joly)
++    {
++      point_t saved_center = param.lens_correction.center;
++      param.scanner_type = fixed_lens;
++      param.lens_correction.center = {1.8, 0.6};
++      ok &= do_test_homography (param, 1024, 1024, true, epsilon, 4);
++      param.lens_correction.center = saved_center;
++    }
++
++  /* Lens optimization is a variable-projection problem: only lens coordinates
++     belong to the outer nonlinear fit, and every trial recomputes H*(L) from
++     the correspondences.  An initial homography guess must therefore have no
++     influence on the fitted lens.  Start one solve from deliberately absurd
++     linear geometry and require the same lens solution as a default start.  */
++  if (lens_correction && !joly)
++    {
++      image_data img;
++      if (!img.set_dimensions (1024, 1024))
++        return false;
++      scr_to_img_parameters truth = param;
++      truth.scanner_type = fixed_lens;
++      scr_to_img truth_map;
++      if (!truth_map.set_parameters (truth, img))
++        return false;
++
++      solver_parameters sparam;
++      for (int y = 0; y < 10; y++)
++        for (int x = 0; x < 10; x++)
++          {
++            point_t image = {(coord_t)(111 * x), (coord_t)(111 * y)};
++            sparam.add_point (image, truth_map.to_scr (image),
++                              solver_parameters::red);
++          }
++
++      scr_to_img_parameters ordinary, nonsense;
++      ordinary.scanner_type = fixed_lens;
++      nonsense.scanner_type = fixed_lens;
++      nonsense.center = {123456, -654321};
++      nonsense.coordinate1 = {-37, 91};
++      nonsense.coordinate2 = {52, -113};
++      nonsense.tilt_x = 0.0027;
++      nonsense.tilt_y = -0.0024;
++      const coord_t ordinary_objective = solver (&ordinary, img, sparam);
++      const coord_t nonsense_objective = solver (&nonsense, img, sparam);
++      if (!(ordinary_objective >= 0 && ordinary_objective < 1e30)
++          || !(nonsense_objective >= 0 && nonsense_objective < 1e30)
++          || !(ordinary.lens_correction == nonsense.lens_correction))
++        {
++          fprintf (stderr,
++                   "Initial homography guess changed profiled lens fit\n");
++          ok = false;
++        }
++    }
+   return ok;
+ }
+ 
+@@ -4267,7 +4369,7 @@ test_render_linearity ()
+       rparam.output_gamma = gamma;
+       rparam.output_profile = render_parameters::output_profile_original;
+       render ren (img, rparam, 65535);
+-      if (!ren.precompute_all (true, false, {1, 1, 1}, NULL))
++      if (!ren.precompute_all (PRECOMPUTE_IMAGE_LAYER, {1, 1, 1}, NULL))
+ 	return false;
+       for (int i = 0; i < 65535; i++)
+ 	{
+@@ -4552,7 +4654,38 @@ test_whitepoint_constants ()
+   return ok;
+ }
+ 
+-/* Verify that lens warp correction works correctly and agrees with DNG.  */
++/* Independently evaluate the radial-only DNG WarpRectilinear equations for P
++   in a WIDTH by HEIGHT full image.  CENTER is the normalized DNG optical
++   center and KR contains kr0 ... kr3.
++
++   Keep this implementation separate from lens_warp_correction helpers.  It
++   follows the radial equations plus the rectangle-bound convention used by
++   Adobe DNG SDK dng_filter_warp, and provides a secondary check alongside the
++   frozen output of the executed Adobe reference implementation.  */
++point_t
++dng_warp_rectilinear_reference (point_t p, int width, int height,
++                                point_t center, const coord_t kr[4])
++{
++  const coord_t x0 = 0;
++  const coord_t y0 = 0;
++  const coord_t x1 = width;
++  const coord_t y1 = height;
++  const coord_t cx = x0 + center.x * (x1 - x0);
++  const coord_t cy = y0 + center.y * (y1 - y0);
++  const coord_t mx = std::max (my_fabs (x0 - cx), my_fabs (x1 - cx));
++  const coord_t my = std::max (my_fabs (y0 - cy), my_fabs (y1 - cy));
++  const coord_t m = my_sqrt (mx * mx + my * my);
++  const coord_t dx = (p.x - cx) / m;
++  const coord_t dy = (p.y - cy) / m;
++  const coord_t rsq = std::min ((coord_t)1, dx * dx + dy * dy);
++  const coord_t f
++      = kr[0] + rsq * (kr[1] + rsq * (kr[2] + rsq * kr[3]));
++  return { cx + m * f * dx, cy + m * f * dy };
++}
++
++/* Verify the implemented radial, single-coefficient-set subset of DNG
++   WarpRectilinear.  In addition to the independent calculation above, this
++   test contains coordinates emitted by Adobe DNG SDK 1.7.1 Build 2652.  */
+ bool
+ test_lens_warp ()
+ {
+@@ -4564,7 +4697,7 @@ test_lens_warp ()
+   } cases[] = {
+     { "Synthetic Barrel", { 1.0, 0.05, 0.02, 0.01 }, { 0.5, 0.5 } },
+     //{ "Nikon Coolscan 9000ED", { 0.99508, 0.0245411, -0.0521967, 0.0325757 }, { 0.560586, 0.482547 } },
+-    { "Adobe DNG Sample", { 0.999787, 0.000025, -0.000025, 0.000006 }, { 0.500029, 0.499863 } }
++    { "Near-identity DNG profile", { 0.999787, 0.000025, -0.000025, 0.000006 }, { 0.500029, 0.499863 } }
+   };
+ 
+   for (const auto& tc : cases)
+@@ -4581,19 +4714,11 @@ test_lens_warp ()
+ 
+       lens_warp_correction lw;
+       lw.set_parameters (p);
+-      point_t img_center = { 500, 500 };
+-      
+-      /* Calculate scan corners for normalization.  */
+-      lens_warp_correction lw_prep;
+-      lw_prep.set_parameters (p);
+-      if (!lw_prep.precompute (img_center, { 0, 0 }, { 1000, 0 }, { 1000, 1000 }, { 0, 1000 }))
+-	return false;
+-      point_t scan_c1 = lw_prep.corrected_to_scan ({ 0, 0 });
+-      point_t scan_c2 = lw_prep.corrected_to_scan ({ 1000, 0 });
+-      point_t scan_c3 = lw_prep.corrected_to_scan ({ 1000, 1000 });
+-      point_t scan_c4 = lw_prep.corrected_to_scan ({ 0, 1000 });
+ 
+-      if (!lw.precompute (img_center, scan_c1, scan_c2, scan_c3, scan_c4))
++      /* Use a 0..1000 square for the low-level radial helper.  */
++      point_t img_center = { tc.center.x * 1000, tc.center.y * 1000 };
++      if (!lw.precompute (img_center, {0, 0}, {1000, 0},
++                          {1000, 1000}, {0, 1000}))
+ 	return false;
+       if (!lw.precompute_inverse ())
+ 	return false;
+@@ -4612,6 +4737,17 @@ test_lens_warp ()
+           {
+             point_t orig = { (coord_t) x, (coord_t) y };
+             point_t scan = lw.corrected_to_scan (orig);
++            /* The inverse lookup is defined for source pixels in the image.
++               Positive distortion may request a source position outside the
++               source rectangle at an output corner; do not use such a point
++               as an inverse-domain round-trip test.  */
++            const coord_t max_dist
++                = std::max ({img_center.dist_from ({0, 0}),
++                             img_center.dist_from ({1000, 0}),
++                             img_center.dist_from ({1000, 1000}),
++                             img_center.dist_from ({0, 1000})});
++            if (scan.dist_from (img_center) > max_dist)
++              continue;
+             point_t corrected = lw.scan_to_corrected (scan);
+             if (!orig.almost_eq (corrected, 0.01))
+               {
+@@ -4633,9 +4769,19 @@ test_lens_warp ()
+       printf ("FAILED: is_monotone should be false for p2!\n");
+       ok = false;
+     }
++  lens_warp_correction broken;
++  broken.set_parameters (p2);
++  if (broken.precompute ({500, 500}, {0, 0}, {1000, 0},
++                         {1000, 1000}, {0, 1000}))
++    {
++      fprintf (stderr, "Non-monotone DNG radial warp was accepted\n");
++      ok = false;
++    }
+ 
+-  /* Adobe DNG Specification 1.3 Worked Example.
+-     Image 1000x1000, center (500,500), corner (0,0) defines r=1.0.
++  /* Synthetic direct evaluation of the DNG radial polynomial.  The DNG
++     specification gives the equations but not this numerical example.
++     Using rectangle endpoints 0..1000 gives center (500,500) and makes a
++     corner define r=1.
+      Parameters: kr = [1.0, 0.05, -0.02, 0.005]
+      Point (600, 700) -> Delta (100, 200), r^2 = (100^2+200^2)/(500^2+500^2) = 0.1.
+      Distortion ratio f(0.1) = 1.0 + 0.05(0.1) - 0.02(0.01) + 0.005(0.001) = 1.004805.
+@@ -4654,12 +4800,328 @@ test_lens_warp ()
+     point_t p_expected = { 600.4805, 700.9610 };
+     if (!p_out.almost_eq (p_expected, 1e-4))
+       {
+-        printf ("FAILED: DNG Specification Worked Example mismatch!\n");
++        printf ("FAILED: synthetic DNG radial example mismatch!\n");
+         printf ("Expected (%f, %f), got (%f, %f)\n", p_expected.x, p_expected.y, p_out.x, p_out.y);
+         ok = false;
+       }
+   }
+ 
++  /* Cross-implementation conformance fixture.  The EXPECTED values below were
++     emitted by the actual Adobe DNG SDK 1.7.1 Build 2652 (2026-07-14), not
++     calculated by Color-Screen.  The reference workflow downloaded Adobe's
++     official dng_sdk_1_7_1_2652_20260714.zip, verified SHA-256
++       73499b47f4683e12120a234bd0946f02e52ab2ff9834bcbd0e9f8ab4f923360e
++     and verified dng_lens_correction.cpp SHA-256
++       89112619dce4a205761dc9e3b0c641d6c1d99911829a18c181a7229af4e8521f.
++     A wrapper compiled in Adobe's dng_lens_correction.cpp instantiated the
++     real dng_filter_warp and called GetSrcPixelPosition().  See
++     doc/lens-correction-review.md for the complete reproduction procedure.  */
++  {
++    struct adobe_dng_fixture
++    {
++      const char *name;
++      int width, height;
++      point_t center;
++      coord_t kr[4];
++      point_t output;
++      point_t expected_source;
++    };
++    const adobe_dng_fixture fixtures[] = {
++      { "classic", 1000, 1000, {0.5, 0.5},
++        {1, 0.05, -0.02, 0.005}, {600, 700},
++        {600.48050000000001, 700.96100000000001} },
++      { "offcenter_tl", 1001, 701, {0.23, 0.67},
++        {0.992, 0.045, -0.028, 0.009}, {0, 0},
++        {-0.98894095820949701, -2.0174429911056109} },
++      { "offcenter_tr", 1001, 701, {0.23, 0.67},
++        {0.992, 0.045, -0.028, 0.009}, {1000, 0},
++        {1013.8325672342966, -8.4398480753109197} },
++      { "offcenter_bl", 1001, 701, {0.23, 0.67},
++        {0.992, 0.045, -0.028, 0.009}, {0, 700},
++        {0.59777057668648581, 699.40196978270342} },
++      { "offcenter_br", 1001, 701, {0.23, 0.67},
++        {0.992, 0.045, -0.028, 0.009}, {1000, 700},
++        {1011.2046333360396, 703.35264195316779} },
++      { "offcenter_mid1", 1001, 701, {0.23, 0.67},
++        {0.992, 0.045, -0.028, 0.009}, {123, 456},
++        {123.78924343023824, 456.10061510483405} },
++      { "offcenter_mid2", 1001, 701, {0.23, 0.67},
++        {0.992, 0.045, -0.028, 0.009}, {827, 51},
++        {834.12407645072631, 46.002032462044667} },
++      { "offcenter_mid3", 1001, 701, {0.23, 0.67},
++        {0.992, 0.045, -0.028, 0.009}, {230, 469},
++        {230.00183999362491, 469.00535998142914} },
++      { "coolscan_tl", 4000, 3000, {0.560586, 0.482547},
++        {0.99508, 0.0245411, -0.0521967, 0.0325757}, {0, 0},
++        {1.5160594222929831, 0.97875695171978805} },
++      { "coolscan_br", 4000, 3000, {0.560586, 0.482547},
++        {0.99508, 0.0245411, -0.0521967, 0.0325757}, {3999, 2999},
++        {3995.2350617838392, 2995.6750628546024} },
++      { "coolscan_mid", 4000, 3000, {0.560586, 0.482547},
++        {0.99508, 0.0245411, -0.0521967, 0.0325757}, {317, 2411},
++        {320.87650466339437, 2409.0603644564176} },
++      { "edge_ratio_below_one", 1000, 800, {0.41, 0.62},
++        {0.9, 0, 0, 0}, {901, 87},
++        {851.90000000000009, 127.89999999999998} }
++    };
++
++    for (const adobe_dng_fixture &fixture : fixtures)
++      {
++        scr_to_img_parameters p;
++        p.lens_correction.center = fixture.center;
++        for (int i = 0; i < 4; i++)
++          p.lens_correction.kr[i] = fixture.kr[i];
++        scr_to_img map;
++        if (!map.set_parameters_for_early_correction (
++                p, fixture.width, fixture.height))
++          return false;
++        const point_t actual
++            = map.inverse_early_correction (fixture.output);
++        const point_t equation = dng_warp_rectilinear_reference (
++            fixture.output, fixture.width, fixture.height, fixture.center,
++            fixture.kr);
++        if (!actual.almost_eq (fixture.expected_source, 1e-9)
++            || !equation.almost_eq (fixture.expected_source, 1e-9))
++          {
++            fprintf (stderr,
++                     "Adobe DNG SDK fixture %s mismatch: expected "
++                     "%.17g,%.17g got %.17g,%.17g; equation %.17g,%.17g\n",
++                     fixture.name, fixture.expected_source.x,
++                     fixture.expected_source.y, actual.x, actual.y, equation.x,
++                     equation.y);
++            ok = false;
++          }
++      }
++  }
++
++  /* The direct inverse used by lens_solver and the lookup-table inverse must
++     have the same domain.  f(1)<1 requires a corrected radius greater than m
++     to invert source pixels near radius m.  */
++  {
++    lens_warp_correction_parameters p;
++    p.kr[0] = 0.9;
++    lens_warp_correction lw;
++    lw.set_parameters (p);
++    if (!lw.precompute ({500, 500}, {0, 0}, {1000, 0},
++                        {1000, 1000}, {0, 1000})
++        || !lw.precompute_inverse ())
++      return false;
++    const point_t source_points[] = {{0, 0}, {1000, 0}, {125, 625}};
++    for (point_t source : source_points)
++      {
++        point_t direct = lw.nonprecomputed_scan_to_corrected (source);
++        point_t cached = lw.scan_to_corrected (source);
++        if (!direct.almost_eq (cached, 0.002)
++            || !lw.corrected_to_scan (direct).almost_eq (source, 0.001))
++          {
++            fprintf (stderr, "Direct and cached lens inverses disagree\n");
++            ok = false;
++          }
++      }
++  }
++
++  /* The moving-lens extension removes the movement-axis coordinate before
++     applying the radial model.  The optical center on that discarded axis is
++     therefore zero in the reduced lens coordinate system.  */
++  {
++    scr_to_img_parameters p;
++    p.scanner_type = lens_move_horizontally;
++    p.lens_correction.center = {0.5, 0.61};
++    p.lens_correction.kr[0] = 0.9;
++    scr_to_img map;
++    if (!map.set_parameters_for_early_correction (p, 1000, 600))
++      return false;
++    point_t center_line = {123, 0.61 * 600};
++    if (!map.inverse_early_correction (center_line).almost_eq (center_line,
++                                                               1e-10))
++      {
++        fprintf (stderr, "Moving-lens discarded axis has a spurious center\n");
++        ok = false;
++      }
++  }
++
++  /* Automatic lens fitting needs global coverage, not merely enough points.
++     The local cloud has two remote outliers, which the central-90% span must
++     ignore.  Exactly MIN_LENS_POINTS broadly distributed points must qualify.  */
++  {
++    solver_parameters local, global, horizontal, vertical;
++    for (int i = 0; i < 98; i++)
++      {
++        coord_t x = 450 + (i % 10) * 5;
++        coord_t y = 450 + (i / 10) * 5;
++        local.add_point ({x, y}, {x, y}, solver_parameters::red);
++      }
++    local.add_point ({0, 0}, {0, 0}, solver_parameters::red);
++    local.add_point ({999, 999}, {999, 999}, solver_parameters::red);
++
++    for (int y = 0; y < 10; y++)
++      for (int x = 0; x < 10; x++)
++        {
++          coord_t broad_x = (coord_t)(111 * x);
++          coord_t broad_y = (coord_t)(111 * y);
++          coord_t local_x = 450 + 5 * x;
++          coord_t local_y = 450 + 5 * y;
++          global.add_point ({broad_x, broad_y}, {broad_x, broad_y},
++                            solver_parameters::red);
++          horizontal.add_point ({local_x, broad_y}, {local_x, broad_y},
++                                solver_parameters::red);
++          vertical.add_point ({broad_x, local_y}, {broad_x, local_y},
++                              solver_parameters::red);
++        }
++
++    if (local.lens_optimization_sufficient (Paget, 1000, 1000, fixed_lens)
++        || !global.lens_optimization_sufficient (Paget, 1000, 1000,
++                                                 fixed_lens)
++        || !horizontal.lens_optimization_sufficient (
++               Paget, 1000, 1000, lens_move_horizontally)
++        || horizontal.lens_optimization_sufficient (
++               Paget, 1000, 1000, lens_move_vertically)
++        || !vertical.lens_optimization_sufficient (
++               Paget, 1000, 1000, lens_move_vertically)
++        || vertical.lens_optimization_sufficient (
++               Paget, 1000, 1000, lens_move_horizontally))
++      {
++        fprintf (stderr, "Lens-solver spatial coverage gate is wrong\n");
++        ok = false;
++      }
++  }
++
++  /* The automatic-fit envelope is much narrower than DNG validity.  Current
++     synthetic and Coolscan profiles are accepted after solver normalization,
++     while a still-monotone extreme profile from the coefficient search box is
++     rejected.  */
++  {
++    lens_warp_correction_parameters synthetic;
++    synthetic.center = {0.4, 0.6};
++    synthetic.kr[1] = 0.01;
++    synthetic.kr[2] = 0.03;
++    synthetic.kr[3] = 0.01;
++    lens_warp_correction_parameters coolscan;
++    coolscan.center = {0.560586, 0.482547};
++    coolscan.kr[0] = 0.99508;
++    coolscan.kr[1] = 0.0245411;
++    coolscan.kr[2] = -0.0521967;
++    coolscan.kr[3] = 0.0325757;
++    lens_warp_correction_parameters extreme;
++    extreme.center = {0.5, 0.5};
++    extreme.kr[1] = -0.15;
++    extreme.kr[2] = -0.05;
++    extreme.kr[3] = -0.01;
++    if (!synthetic.normalize () || !coolscan.normalize ()
++        || !extreme.normalize ())
++      return false;
++    lens_warp_correction_parameters off_image = synthetic;
++    off_image.center = {2.0, 0.5};
++    lens_warp_correction_parameters centered_camera = synthetic;
++    centered_camera.center = {0.25, 0.75};
++    lens_warp_correction_parameters outside_centered_camera = synthetic;
++    outside_centered_camera.center = {0.24, 0.75};
++    lens_warp_correction_parameters discarded_axis = synthetic;
++    discarded_axis.center = {100.0, 0.5};
++    if (!solver_parameters::lens_candidate_reasonable_p (synthetic,
++                                                          fixed_lens)
++        || !solver_parameters::lens_candidate_reasonable_p (coolscan,
++                                                             fixed_lens)
++        || solver_parameters::lens_candidate_reasonable_p (extreme,
++                                                            fixed_lens)
++        /* Auto resolves to distance 2, i.e. center coordinates -0.5..1.5.  */
++        || solver_parameters::lens_candidate_reasonable_p (off_image,
++                                                            fixed_lens)
++        /* Distance 4 permits -1.5..2.5 on each fitted axis.  */
++        || !solver_parameters::lens_candidate_reasonable_p (off_image,
++                                                             fixed_lens, 4)
++        /* Distance 0.5 is the centered-camera preset: both fitted center
++           coordinates must remain in the central half of the capture.  */
++        || !solver_parameters::lens_candidate_reasonable_p (
++               centered_camera, fixed_lens, 0.5)
++        || solver_parameters::lens_candidate_reasonable_p (
++               outside_centered_camera, fixed_lens, 0.5)
++        /* Distance 1 means that every fitted center coordinate stays in the
++           image.  */
++        || solver_parameters::lens_candidate_reasonable_p (
++               lens_warp_correction_parameters{off_image}, fixed_lens, 1)
++        /* The movement-axis coordinate is deliberately discarded.  */
++        || !solver_parameters::lens_candidate_reasonable_p (
++               discarded_axis, lens_move_horizontally, 1)
++        || solver_parameters::lens_candidate_reasonable_p (synthetic,
++                                                            fixed_lens, -1))
++      {
++        fprintf (stderr, "Lens-solver deformation/center envelope is wrong\n");
++        ok = false;
++      }
++
++    /* Solver configuration must round-trip, while old project files which do
++       not contain the new keyword keep the automatic value zero.  */
++    solver_parameters saved_solver;
++    saved_solver.lens_center_distance = 3.25;
++    FILE *project = tmpfile ();
++    solver_parameters loaded_solver;
++    const char *project_error = nullptr;
++    const bool project_saved
++        = project && save_csp (project, nullptr, nullptr, nullptr,
++                               &saved_solver);
++    const bool project_loaded
++        = project_saved && !fseek (project, 0, SEEK_SET)
++          && load_csp (project, nullptr, nullptr, nullptr, &loaded_solver,
++                       &project_error);
++    if (project)
++      fclose (project);
++    if (!project_loaded || project_error
++        || loaded_solver.lens_center_distance != 3.25)
++      {
++        fprintf (stderr, "Lens-center distance project round trip failed%s%s\n",
++                 project_error ? ": " : "",
++                 project_error ? project_error : "");
++        ok = false;
++      }
++    if (solver_parameters ().lens_center_distance != 0
++        || solver_parameters::effective_lens_center_distance (0) != 2)
++      {
++        fprintf (stderr, "Automatic lens-center distance default changed\n");
++        ok = false;
++      }
++  }
++
++  /* Solver-only limits must not invalidate an existing profile.  With local
++     points automatic fitting is disabled, so even a DNG-valid profile outside
++     the automatic envelope remains installed while the homography is fitted.  */
++  {
++    image_data img;
++    if (!img.set_dimensions (1000, 1000))
++      return false;
++    scr_to_img_parameters truth;
++    truth.type = Paget;
++    truth.scanner_type = fixed_lens;
++    truth.lens_correction.center = {0.5, 0.5};
++    truth.lens_correction.kr[1] = -0.15;
++    truth.lens_correction.kr[2] = -0.05;
++    truth.lens_correction.kr[3] = -0.01;
++    if (!truth.lens_correction.normalize ())
++      return false;
++    scr_to_img map;
++    if (!map.set_parameters (truth, img))
++      return false;
++    solver_parameters sparam;
++    for (int y = 0; y < 10; y++)
++      for (int x = 0; x < 10; x++)
++        {
++          point_t image = {(coord_t)(450 + 5 * x),
++                           (coord_t)(450 + 5 * y)};
++          sparam.add_point (image, map.to_scr (image), solver_parameters::red);
++        }
++    scr_to_img_parameters fitted;
++    fitted.type = Paget;
++    fitted.scanner_type = fixed_lens;
++    fitted.lens_correction = truth.lens_correction;
++    solver (&fitted, img, sparam);
++    if (!(fitted.lens_correction == truth.lens_correction))
++      {
++        fprintf (stderr,
++                 "Insufficient coverage modified an existing lens profile\n");
++        ok = false;
++      }
++  }
++
+   return ok;
+ }
+ 
+@@ -4917,6 +5379,170 @@ get_test_gray (image_data *img, int_point_t p, int, void *)
+   return (luminosity_t)img->get_pixel (p.x, p.y) / 65535.0f;
+ }
+ 
++/* Verify channel-specific scanner sharpening, precompute flags and original
++   RGB rendering.  */
++static bool
++test_channel_sharpening ()
++{
++  constexpr int width = 96;
++  constexpr int height = 64;
++  image_data img;
++  if (!img.set_dimensions (width, height, true, false))
++    return false;
++  img.maxval = 65535;
++  for (int y = 0; y < height; ++y)
++    for (int x = 0; x < width; ++x)
++      {
++        const image_data::gray value = x < width / 2 ? 10000 : 50000;
++        img.put_rgb_pixel (x, y, { value, value, value });
++      }
++
++  render_parameters params;
++  params.gamma = 1;
++  params.ignore_infrared = true;
++  params.mix_dark = { 0, 0, 0 };
++  params.mix_red = 0.2;
++  params.mix_green = 0.3;
++  params.mix_blue = 0.5;
++  params.sharpen.mode = sharpen_parameters::wiener_deconvolution;
++  params.sharpen.scanner_snr = 200;
++  params.sharpen.supersample = 1;
++  params.sharpen.scanner_mtf.wavelengths = { 650, 540, 470, 850 };
++
++  const double contrast[3][7]
++      = { { 100, 100, 100, 100, 100, 100, 100 },
++          { 100, 96, 88, 72, 55, 42, 35 },
++          { 100, 90, 72, 52, 36, 24, 18 } };
++  for (int channel = 0; channel < 3; ++channel)
++    {
++      mtf_measurement measurement;
++      measurement.channel = channel;
++      measurement.wavelength = 600 - 70 * channel;
++      measurement.same_capture = channel != 0;
++      measurement.name
++          = channel == 0 ? "red" : channel == 1 ? "green" : "blue";
++      for (int i = 0; i < 7; ++i)
++        measurement.add_value (i / 12.0, contrast[channel][i]);
++      params.sharpen.scanner_mtf.measurements.push_back (
++          std::move (measurement));
++    }
++  params.sharpen.scanner_mtf.measured_mtf_idx = 0;
++
++  for (int channel = 0; channel < 3; ++channel)
++    {
++      const sharpen_parameters channel_sharpen
++          = params.get_sharpen_parameters_for_channel (channel);
++      if (channel_sharpen.scanner_mtf.measured_mtf_idx != channel
++          || channel_sharpen.scanner_mtf.wavelength
++                 != params.sharpen.scanner_mtf.wavelengths[channel])
++        {
++          fprintf (stderr,
++                   "Scanner sharpening did not select channel %d metadata\n",
++                   channel);
++          return false;
++        }
++    }
++  const sharpen_parameters ir_sharpen
++      = params.get_sharpen_parameters_for_channel (3);
++  if (ir_sharpen.scanner_mtf.measured_mtf_idx != -1
++      || ir_sharpen.scanner_mtf.wavelength != 850)
++    {
++      fprintf (stderr,
++               "Missing IR measurement did not fall back to the IR model\n");
++      return false;
++    }
++
++  /* An explicitly selected image-layer measurement retains the historical
++     behavior of supplying one transfer curve to all native channels.  */
++  render_parameters image_layer_params = params;
++  mtf_measurement image_layer_measurement;
++  image_layer_measurement.channel = -1;
++  image_layer_measurement.name = "image layer";
++  for (int i = 0; i < 7; ++i)
++    image_layer_measurement.add_value (i / 12.0, 100 - 8 * i);
++  image_layer_params.sharpen.scanner_mtf.measurements.push_back (
++      std::move (image_layer_measurement));
++  const int image_layer_index
++      = image_layer_params.sharpen.scanner_mtf.measurements.size () - 1;
++  image_layer_params.sharpen.scanner_mtf.measured_mtf_idx
++      = image_layer_index;
++  if (image_layer_params.get_sharpen_parameters_for_channel (0)
++              .scanner_mtf.measured_mtf_idx
++          != image_layer_index
++      || image_layer_params.get_sharpen_parameters_for_channel (2)
++                 .scanner_mtf.measured_mtf_idx
++             != image_layer_index)
++    {
++      fprintf (stderr,
++               "Image-layer MTF no longer applies to every RGB channel\n");
++      return false;
++    }
++
++  render r (img, params, 65535);
++  if (!r.precompute_all (PRECOMPUTE_IMAGE_LAYER | PRECOMPUTE_RGB_IMAGE,
++                         { 1, 1, 1 }, nullptr))
++    {
++      fprintf (stderr, "Per-channel sharpening precomputation failed\n");
++      return false;
++    }
++
++  const int_point_t p = { width / 2 - 1, height / 2 };
++  const double red = r.get_linearized_data_red (p);
++  const double green = r.get_linearized_data_green (p);
++  const double blue = r.get_linearized_data_blue (p);
++  if (fabs (red - green) < 1e-5 && fabs (green - blue) < 1e-5)
++    {
++      fprintf (stderr,
++               "Different same-capture channel MTFs produced identical RGB "
++               "sharpening\n");
++      return false;
++    }
++
++  const double expected_mix
++      = red * params.mix_red + green * params.mix_green
++        + blue * params.mix_blue;
++  const double actual_mix = r.get_unadjusted_data (p);
++  const double tolerance = 0.002 * std::max (1.0, fabs (expected_mix));
++  if (fabs (actual_mix - expected_mix) > tolerance)
++    {
++      fprintf (stderr,
++               "Image layer was not mixed from sharpened RGB channels: "
++               "expected %.12g got %.12g\n",
++               expected_mix, actual_mix);
++      return false;
++    }
++
++  /* Original-capture rendering must request the RGB image rather than merely
++     lookup tables, so it displays the same scanner-sharpened channels.  */
++  scr_to_img_parameters map_parameters;
++  map_parameters.type = Paget;
++  map_parameters.center = { width / 2.0, height / 2.0 };
++  map_parameters.coordinate1 = { 4, 0 };
++  map_parameters.coordinate2 = { 0, 4 };
++  render_img original (map_parameters, img, params, 65535);
++  render_type_parameters render_type;
++  render_type.type = render_type_original;
++  original.set_render_type (render_type);
++  if (!original.precompute_all (nullptr))
++    {
++      fprintf (stderr, "Original RGB renderer precomputation failed\n");
++      return false;
++    }
++  const rgbdata original_pixel
++      = original.sample_pixel_img ({ (coord_t)p.x, (coord_t)p.y });
++  const rgbdata direct_pixel = r.get_rgb_pixel (p);
++  if (fabs (original_pixel.red - direct_pixel.red) > tolerance
++      || fabs (original_pixel.green - direct_pixel.green) > tolerance
++      || fabs (original_pixel.blue - direct_pixel.blue) > tolerance)
++    {
++      fprintf (stderr,
++               "Original renderer did not use scanner-sharpened RGB image\n");
++      return false;
++    }
++
++  return true;
++}
++
+ /* Verify the slanted-edge MTF estimator against realistic optical blurs
+    generated at high resolution and subsequently integrated to sensor pixels.  */
+ static bool
+@@ -5004,13 +5630,18 @@ test_slanted_edge_mtf ()
+         printf("Edge found: (%f,%f) - (%f,%f)\n", (double)res.edge_p1.x, (double)res.edge_p1.y, (double)res.edge_p2.x, (double)res.edge_p2.y);
+       
+       // Verify MTF
+-      if (rparam.sharpen.scanner_mtf.measurements.empty())
++      if (!rparam.sharpen.scanner_mtf.measurements.empty())
+ 	{
+-	  printf("No MTF measurement generated\n");
++	  printf("Slanted-edge measurement unexpectedly modified render parameters\n");
+ 	  return false;
+ 	}
+ 	
+-      auto &measurement = rparam.sharpen.scanner_mtf.measurements[0];
++      auto &measurement = res.measurement;
++      if (!measurement.size())
++	{
++	  printf("No MTF measurement generated\n");
++	  return false;
++	}
+       if (measurement.wavelength != params.wavelength
+           || measurement.channel != params.channel
+           || measurement.name != params.name)
+@@ -5334,8 +5965,8 @@ test_real_mtf_reproducibility ()
+       const slanted_edge_results edge
+           = slanted_edge_mtf (parameters, image, image.get_area (),
+                               edge_parameters, nullptr);
+-      if (!edge.success
+-          || parameters.sharpen.scanner_mtf.measurements.size () != 1)
++      if (!edge.success || !edge.measurement.size ()
++          || !parameters.sharpen.scanner_mtf.measurements.empty ())
+         {
+           fprintf (stderr, "Real slanted edge %s was rejected: %s\n",
+                    filename,
+@@ -5355,8 +5986,7 @@ test_real_mtf_reproducibility ()
+           return false;
+         }
+ 
+-      const mtf_measurement &measurement
+-          = parameters.sharpen.scanner_mtf.measurements[0];
++      const mtf_measurement &measurement = edge.measurement;
+       bool has_uncertainty = false;
+       for (size_t i = 0; i < measurement.size (); i++)
+         if (measurement.get_uncertainty (i) > 0)
+@@ -7024,6 +7654,8 @@ main (int argc, char **argv)
+     { "mesh_inversion", "mesh inversion tests", [] () { return test_mesh_inversion (); } },
+     { "cow_points", "cow points tests", [] () { return test_cow_points (); } },
+     { "image_area", "image area tests", [] () { return test_image_area (); } },
++    { "channel_sharpening", "per-channel scanner sharpening tests",
++      [] () { return test_channel_sharpening (); } },
+     { "slanted_edge", "slanted edge MTF tests", [] () { return test_slanted_edge_mtf (); } },
+     { "real_mtf_reproducibility", "real MTF reproducibility tests",
+       [] () { return test_real_mtf_reproducibility (); } },
+diff --git a/src/qtgui/GeometryPanel.cpp b/src/qtgui/GeometryPanel.cpp
+index 027561404788f7bc86bbb1b759e9f5736c6fddce..1b92a999745cb4cc50b83d28ff242dacd857a166 100644
+--- a/src/qtgui/GeometryPanel.cpp
++++ b/src/qtgui/GeometryPanel.cpp
+@@ -144,6 +144,20 @@ void GeometryPanel::setupUi() {
+       nullptr, "Include lens distortion parameters in the optimization solver.");
+   connect(m_lensCb, &QCheckBox::toggled, this, triggerIfAuto);
+ 
++  addDoubleParameter("Lens center distance", 0.0, 100.0,
++      [](const ParameterState &s){ return (double)s.solver.lens_center_distance; },
++      [](ParameterState &s, double v){ s.solver.lens_center_distance = v; },
++      {{0.0, "Auto"}},
++      {{0.5, "Centered camera"}, {1.0, "Within image"},
++       {2.0, "2x image"}, {4.0, "4x image"}},
++      nullptr,
++      "Maximum distance allowed between the fitted optical center and image "
++      "center. 0 uses the automatic limit (currently 2). The Centered camera "
++      "preset (0.5) keeps the center in the central half of the capture; 1 "
++      "allows it anywhere inside the image, and values above 1 allow it "
++      "proportionally outside the image. Useful when a scanner image is a "
++      "crop far from the scanner lens optical axis.");
++
+   m_lensMessageLabel = new QLabel();
+   m_lensMessageLabel->setStyleSheet("font-size: 10px; color: #888; margin-left: 20px;");
+   m_lensMessageLabel->setVisible(false);
+@@ -293,6 +307,20 @@ void GeometryPanel::updateRegistrationPointInfo(const ParameterState &state) {
+   updateMsg(m_tiltMessageLabel, colorscreen::solver_parameters::min_perspective_points(type), "perspective correction");
+   updateMsg(m_nonlinearMessageLabel, colorscreen::solver_parameters::min_mesh_points(type), "nonlinear correction");
+ 
++  /* Point count alone does not constrain a global radial fit.  Mirror the
++     solver's coverage gate so a dense local point cloud gets an actionable
++     explanation instead of silently enabling lens optimization.  */
++  if (m_lensMessageLabel
++      && numPoints >= colorscreen::solver_parameters::min_lens_points(type)) {
++      auto scan = m_imageGetter();
++      if (scan && !state.solver.lens_coverage_sufficient(
++                      scan->width, scan->height, state.scrToImg.scanner_type)) {
++          m_lensMessageLabel->setText(
++              "Lens correction needs registration points spanning at least half of each relevant scan axis");
++          m_lensMessageLabel->show();
++      }
++  }
++
+   bool canOptimize = numPoints >= colorscreen::solver_parameters::min_points(type);
+   if (m_optimizeButton) m_optimizeButton->setEnabled(canOptimize);
+ 
+diff --git a/src/qtgui/MainWindow.cpp b/src/qtgui/MainWindow.cpp
+index 366476c49ce0f72fb0c28685d1ba6537748b00ba..e43d14f9fa593379f9b77e73a4f1b0e298ebf460 100644
+--- a/src/qtgui/MainWindow.cpp
++++ b/src/qtgui/MainWindow.cpp
+@@ -5040,28 +5040,60 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
+       else if (currentMtf.wavelength > 0)
+         defaults.wavelength = currentMtf.wavelength;
+     }
+-    if (!currentMtf.measurements.empty() && defaults.channel < 0)
+-      defaults.channel = currentMtf.measurements.back().channel;
+ 
+-    SlantedEdgeDialog dialog(defaults, !currentMtf.measurements.empty(), this);
++    const bool hasRgb = m_scan && m_scan->has_rgb();
++    const bool hasInfrared = m_scan && m_scan->has_grayscale_or_ir();
++    SlantedEdgeDialog dialog(defaults, !currentMtf.measurements.empty(),
++                             hasRgb, hasInfrared, this);
+     if (dialog.exec() != QDialog::Accepted) {
+       m_sharpnessPanel->setMeasureMtfChecked(false);
+       return;
+     }
+-    const colorscreen::slanted_edge_parameters measurementParameters =
++    const colorscreen::slanted_edge_parameters baseParameters =
+         dialog.parameters();
+-    m_slantedEdgeParameters = measurementParameters;
++    m_slantedEdgeParameters = baseParameters;
++
++    std::vector<colorscreen::slanted_edge_parameters> measurementParameters;
++    if (dialog.measureNativeChannels()) {
++      static const char *const channelNames[4] =
++          {"Red", "Green", "Blue", "Infrared"};
++      const int channelCount = hasInfrared ? 4 : 3;
++      measurementParameters.reserve(channelCount);
++      for (int channel = 0; channel < channelCount; ++channel) {
++        colorscreen::slanted_edge_parameters p = baseParameters;
++        p.channel = channel;
++        p.name = baseParameters.name + " " + channelNames[channel];
++        p.same_capture = channel == 0 ? baseParameters.same_capture : true;
++
++        double wavelength = currentMtf.wavelengths[channel];
++        if (!(colorscreen::my_isfinite(wavelength) && wavelength > 0)
++            && m_scan) {
++          wavelength = m_scan->wavelengths[channel];
++        }
++        p.wavelength =
++            colorscreen::my_isfinite(wavelength) && wavelength > 0
++                ? wavelength
++                : 0;
++        measurementParameters.push_back(std::move(p));
++      }
++    } else {
++      colorscreen::slanted_edge_parameters p = baseParameters;
++      p.channel = -1;
++      measurementParameters.push_back(std::move(p));
++    }
+ 
+-    auto result = std::make_shared<colorscreen::slanted_edge_results>();
++    auto results =
++        std::make_shared<std::vector<colorscreen::slanted_edge_results>>();
++    auto batchError = std::make_shared<std::string>();
+     runAreaComputation(
+         tr("Select an area containing a slanted edge to compute its MTF"),
+-        tr("Measure MTF of a slanted edge"),
++        measurementParameters.size() > 1
++            ? tr("Measure per-channel MTF of a slanted edge")
++            : tr("Measure MTF of a slanted edge"),
+         [this]() { m_sharpnessPanel->setMeasureMtfEnabled(false); },
+-        [this, result]() {
+-          if (!result->success) {
+-            QString reason = result->error.empty()
+-                                 ? tr("No usable single slanted edge was found.")
+-                                 : QString::fromStdString(result->error);
++        [this, batchError]() {
++          if (!batchError->empty()) {
++            QString reason = QString::fromStdString(*batchError);
+             QMessageBox::warning(
+                 this, tr("MTF Measurement Failed"),
+                 tr("%1\n\nSelect one straight, isolated edge with clear "
+@@ -5072,12 +5104,35 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
+           m_sharpnessPanel->setMeasureMtfChecked(false);
+           m_sharpnessPanel->setMeasureMtfEnabled(true);
+         },
+-        [result, measurementParameters](ParameterState &s,
+-           colorscreen::image_data &scan,
+-           const colorscreen::int_image_area &area,
+-           colorscreen::progress_info *p) {
+-          *result = colorscreen::slanted_edge_mtf(
+-              s.rparams, scan, area, measurementParameters, p);
++        [results, batchError, measurementParameters](
++            ParameterState &s, colorscreen::image_data &scan,
++            const colorscreen::int_image_area &area,
++            colorscreen::progress_info *progress) {
++          results->clear();
++          batchError->clear();
++          results->reserve(measurementParameters.size());
++
++          for (const auto &parameters : measurementParameters) {
++            colorscreen::slanted_edge_results result =
++                colorscreen::slanted_edge_mtf(
++                    s.rparams, scan, area, parameters, progress);
++            if (!result.success) {
++              *batchError =
++                  parameters.name + ": "
++                  + (result.error.empty()
++                         ? std::string("no usable single slanted edge was found")
++                         : result.error);
++              results->push_back(std::move(result));
++              return;
++            }
++            results->push_back(std::move(result));
++          }
++
++          /* Commit the set only after every requested native channel passed
++             qualification.  This prevents partial RGB measurement groups.  */
++          for (auto &result : *results)
++            s.rparams.sharpen.scanner_mtf.measurements.push_back(
++                std::move(result.measurement));
+         });
+   } else {
+     if (m_imageWidget->interactionMode() == ImageWidget::GenericAreaMode) {
+diff --git a/src/qtgui/SlantedEdgeDialog.cpp b/src/qtgui/SlantedEdgeDialog.cpp
+index 7d1c5f8bf3e60012e5d6d3d7773562316130ee7f..0600732e58b0780e4303787b748b1d1b60d35d2e 100644
+--- a/src/qtgui/SlantedEdgeDialog.cpp
++++ b/src/qtgui/SlantedEdgeDialog.cpp
+@@ -19,7 +19,8 @@
+     HAS_PREVIOUS_MEASUREMENT determines whether SAME CAPTURE is meaningful.  */
+ SlantedEdgeDialog::SlantedEdgeDialog(
+     const colorscreen::slanted_edge_parameters &defaults,
+-    bool hasPreviousMeasurement, QWidget *parent)
++    bool hasPreviousMeasurement, bool hasRgb, bool hasInfrared,
++    QWidget *parent)
+     : QDialog(parent) {
+   setWindowTitle(tr("Measure slanted-edge MTF"));
+   setModal(true);
+@@ -29,9 +30,9 @@ SlantedEdgeDialog::SlantedEdgeDialog(
+ 
+   auto *mainLayout = new QVBoxLayout(this);
+   auto *description = new QLabel(
+-      tr("Wavelength and channel are stored with the measured curve. They do "
+-         "not alter the edge calculation, but they are required by the "
+-         "diffraction-based MTF fit."),
++      tr("For RGB scans the default is to measure each native scanner channel "
++         "from the selected edge. The image layer can still be measured "
++         "directly when its RGB mixture is itself the quantity of interest."),
+       this);
+   description->setWordWrap(true);
+   mainLayout->addWidget(description);
+@@ -50,17 +51,18 @@ SlantedEdgeDialog::SlantedEdgeDialog(
+   m_nameEdit->setToolTip(tr("Name shown in the MTF chart and fit dialog."));
+   form->addRow(tr("Measurement name:"), m_nameEdit);
+ 
+-  m_channelCombo = new QComboBox(this);
+-  m_channelCombo->addItem(tr("Unknown / grayscale"), -1);
+-  m_channelCombo->addItem(tr("Red"), 0);
+-  m_channelCombo->addItem(tr("Green"), 1);
+-  m_channelCombo->addItem(tr("Blue"), 2);
+-  m_channelCombo->addItem(tr("Infrared"), 3);
+-  int channelIndex = m_channelCombo->findData(defaults.channel);
+-  m_channelCombo->setCurrentIndex(channelIndex >= 0 ? channelIndex : 0);
+-  m_channelCombo->setToolTip(
+-      tr("Channel is a label; the wavelength field remains authoritative."));
+-  form->addRow(tr("Channel:"), m_channelCombo);
++  m_sourceCombo = new QComboBox(this);
++  if (hasRgb)
++    m_sourceCombo->addItem(
++        hasInfrared ? tr("Native RGB + infrared channels")
++                    : tr("Native RGB channels"),
++        true);
++  m_sourceCombo->addItem(tr("Image layer"), false);
++  m_sourceCombo->setCurrentIndex(0);
++  m_sourceCombo->setToolTip(
++      tr("Native channels are analyzed independently from the same ROI. "
++         "Image layer measures the current grayscale/infrared or RGB mixture."));
++  form->addRow(tr("Measure:"), m_sourceCombo);
+ 
+   m_wavelengthSpin = new QDoubleSpinBox(this);
+   m_wavelengthSpin->setRange(0.0, 2000.0);
+@@ -70,9 +72,10 @@ SlantedEdgeDialog::SlantedEdgeDialog(
+   m_wavelengthSpin->setSpecialValueText(tr("unknown"));
+   m_wavelengthSpin->setValue(defaults.wavelength);
+   m_wavelengthSpin->setToolTip(
+-      tr("Narrow-band wavelength associated with this edge. For the Hurley "
+-         "infrared scan use 750 nm."));
+-  form->addRow(tr("Wavelength:"), m_wavelengthSpin);
++      tr("Optional wavelength for an image-layer measurement. Native-channel "
++         "measurements use the per-channel wavelengths from capture/MTF "
++         "settings; an unknown wavelength can be optimized later."));
++  form->addRow(tr("Image-layer wavelength:"), m_wavelengthSpin);
+ 
+   m_sameCaptureCheck = new QCheckBox(
+       tr("Same capture as previous measurement"), this);
+@@ -135,6 +138,9 @@ SlantedEdgeDialog::SlantedEdgeDialog(
+   connect(m_wavelengthSpin,
+           QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+           [this]() { updateValidation(); });
++  connect(m_sourceCombo,
++          QOverload<int>::of(&QComboBox::currentIndexChanged), this,
++          [this]() { updateValidation(); });
+   mainLayout->addWidget(buttons);
+   updateValidation();
+ 
+@@ -157,15 +163,18 @@ SlantedEdgeDialog::SlantedEdgeDialog(
+   resize(requested);
+ }
+ 
+-/** Enable area selection only after a positive wavelength has been entered.
+-    The numerical edge calculation does not use it, but a physical MTF fit
+-    cannot interpret a measured curve without this acquisition metadata.  */
++/** Update source-dependent controls.  Wavelength is intentionally optional:
++    native channels can obtain it from capture metadata and a genuinely mixed
++    image layer may not have one physically meaningful wavelength.  */
+ void SlantedEdgeDialog::updateValidation() {
+-  const bool valid = m_wavelengthSpin->value() > 0;
+-  m_acceptButton->setEnabled(valid);
++  const bool nativeChannels = measureNativeChannels();
++  m_wavelengthSpin->setEnabled(!nativeChannels);
++  m_acceptButton->setEnabled(true);
+   m_statusLabel->setText(
+-      valid ? tr("The wavelength will be stored with the measured curve.")
+-            : tr("Enter the wavelength associated with this measurement."));
++      nativeChannels
++          ? tr("One curve will be produced for each native channel. All curves "
++               "will be marked as belonging to the same capture.")
++          : tr("The current image layer will be measured directly."));
+ }
+ 
+ /** Return the measurement metadata and numerical controls entered by the
+@@ -175,7 +184,7 @@ colorscreen::slanted_edge_parameters SlantedEdgeDialog::parameters() const {
+   result.name = m_nameEdit->text().trimmed().toStdString();
+   if (result.name.empty())
+     result.name = "Slanted edge MTF";
+-  result.channel = m_channelCombo->currentData().toInt();
++  result.channel = -1;
+   result.wavelength = m_wavelengthSpin->value();
+   result.same_capture = m_sameCaptureCheck->isEnabled()
+                         && m_sameCaptureCheck->isChecked();
+@@ -185,3 +194,8 @@ colorscreen::slanted_edge_parameters SlantedEdgeDialog::parameters() const {
+       m_windowCombo->currentData().toInt());
+   return result;
+ }
++
++/** Return true if the dialog requests the default per-channel measurement.  */
++bool SlantedEdgeDialog::measureNativeChannels() const {
++  return m_sourceCombo->currentData().toBool();
++}
+diff --git a/src/qtgui/SlantedEdgeDialog.h b/src/qtgui/SlantedEdgeDialog.h
+index f7cf33ccc21dbfee75413a19d79ed5c35a19526f..81bf9d87f7abbfb51d1b0c432d9810be920ea3f5 100644
+--- a/src/qtgui/SlantedEdgeDialog.h
++++ b/src/qtgui/SlantedEdgeDialog.h
+@@ -11,26 +11,30 @@ class QLabel;
+ class QPushButton;
+ class QSpinBox;
+ 
+-/** Configure one slanted-edge measurement before selecting its image area.
+-    Numerical analysis controls and measurement metadata are collected in one
+-    place so every generated MTF curve records its wavelength explicitly.  */
++/** Configure slanted-edge measurement before selecting its image area.
++    RGB scans default to measuring all native channels from the same ROI; the
++    historical mixed/native image layer remains available explicitly.  */
+ class SlantedEdgeDialog : public QDialog {
+ public:
+   /** Construct the dialog from DEFAULTS.  HAS_PREVIOUS_MEASUREMENT controls
+       whether the new curve may share a capture with the preceding curve.  */
+   explicit SlantedEdgeDialog(
+       const colorscreen::slanted_edge_parameters &defaults,
+-      bool hasPreviousMeasurement, QWidget *parent = nullptr);
++      bool hasPreviousMeasurement, bool hasRgb, bool hasInfrared,
++      QWidget *parent = nullptr);
+ 
+   /** Return the complete settings currently entered by the user.  */
+   colorscreen::slanted_edge_parameters parameters() const;
+ 
++  /** Return true when one selected ROI should produce all native channels.  */
++  bool measureNativeChannels() const;
++
+ private:
+   /** Enable acceptance only when required measurement metadata is valid.  */
+   void updateValidation();
+ 
+   QLineEdit *m_nameEdit = nullptr;
+-  QComboBox *m_channelCombo = nullptr;
++  QComboBox *m_sourceCombo = nullptr;
+   QDoubleSpinBox *m_wavelengthSpin = nullptr;
+   QCheckBox *m_sameCaptureCheck = nullptr;
+   QSpinBox *m_oversamplingSpin = nullptr;
+diff --git a/testsuite/Makefile.am b/testsuite/Makefile.am
+index 05f09c10b2dcf23f1c57b95d9d2fe02265844aad..014ec1acb880162b94495c5f1d424b9d3aff8a31 100644
+--- a/testsuite/Makefile.am
++++ b/testsuite/Makefile.am
+@@ -23,6 +23,10 @@ EXTRA_DIST              = defs.sh $(TESTS) \
+ 			  ON_558_001_004_ISA-toprighth.tif \
+ 			  ON_558_001_004_ISA-toprightv.tif \
+ 			  ON_558_001_004_ISA-README.md \
++			  nikon-razor-rgbi-README.md \
++			  nikon-razor-sharp-rgbi.tif \
++			  nikon-razor-defocus-rgbi.tif \
++			  nikon-rgbi-mtf-test.C \
+ 			  slanted-gaussian-vsharp.tif \
+ 			  slanted-gaussian-vsharp-mtf.txt \
+ 			  slanted-gaussian-sharp.tif \
+@@ -37,7 +41,10 @@ EXTRA_DIST              = defs.sh $(TESTS) \
+ TEST_LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) \
+ 			  $(top_srcdir)/build-aux/tap-driver.sh
+ 
+-TESTS_ENVIRONMENT       = top_builddir=$(top_builddir) top_srcdir=$(top_srcdir)
++TESTS_ENVIRONMENT       = top_builddir=$(top_builddir) top_srcdir=$(top_srcdir) \
++                          EXEEXT='$(EXEEXT)' CXX='$(CXX)' \
++                          CPPFLAGS='$(CPPFLAGS)' CXXFLAGS='$(CXXFLAGS)' \
++                          LDFLAGS='$(LDFLAGS)' LIBS='$(LIBS)'
+ 
+ # Files produced directly by tests rather than by the Automake test driver.
+ # Declare them so clean/distclean and distcleancheck leave the build tree clean.
+@@ -60,7 +67,8 @@ TESTS                   = unittests.test \
+ 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw-finetune.test \
+ 			  dufaycolor_dt_captureone_export.test \
+ 			  render-original.test \
+-			  slanted-edge.test
++			  slanted-edge.test \
++			  nikon-rgbi-mtf.test
+ 
+ distclean-local:
+ 	-rm -rf ./out-* ./out2-*
+diff --git a/testsuite/Makefile.in b/testsuite/Makefile.in
+index 9635a8c690df0803a0e2b3971502d6a7fbd78b15..acebc8d2790cd6c569a58b1f2a64b254602e9810 100644
+--- a/testsuite/Makefile.in
++++ b/testsuite/Makefile.in
+@@ -508,6 +508,10 @@ EXTRA_DIST = defs.sh $(TESTS) \
+ 			  ON_558_001_004_ISA-toprighth.tif \
+ 			  ON_558_001_004_ISA-toprightv.tif \
+ 			  ON_558_001_004_ISA-README.md \
++			  nikon-razor-rgbi-README.md \
++			  nikon-razor-sharp-rgbi.tif \
++			  nikon-razor-defocus-rgbi.tif \
++			  nikon-rgbi-mtf-test.C \
+ 			  slanted-gaussian-vsharp.tif \
+ 			  slanted-gaussian-vsharp-mtf.txt \
+ 			  slanted-gaussian-sharp.tif \
+@@ -522,7 +526,10 @@ EXTRA_DIST = defs.sh $(TESTS) \
+ TEST_LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) \
+ 			  $(top_srcdir)/build-aux/tap-driver.sh
+ 
+-TESTS_ENVIRONMENT = top_builddir=$(top_builddir) top_srcdir=$(top_srcdir)
++TESTS_ENVIRONMENT = top_builddir=$(top_builddir) top_srcdir=$(top_srcdir) \
++                          EXEEXT='$(EXEEXT)' CXX='$(CXX)' \
++                          CPPFLAGS='$(CPPFLAGS)' CXXFLAGS='$(CXXFLAGS)' \
++                          LDFLAGS='$(LDFLAGS)' LIBS='$(LIBS)'
+ CLEANFILES = slanted-edge-1.log slanted-edge-2.log \
+ 	slanted-edge-3.log slanted-edge-4.log slanted-edge-5.log \
+ 	slanted-edge-6.log slanted-edge-invalid-mtf.txt \
+@@ -533,7 +540,8 @@ TESTS = unittests.test \
+ 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw-finetune.test \
+ 			  dufaycolor_dt_captureone_export.test \
+ 			  render-original.test \
+-			  slanted-edge.test
++			  slanted-edge.test \
++			  nikon-rgbi-mtf.test
+ 
+ all: all-am
+ 
+diff --git a/testsuite/nikon-razor-rgbi-README.md b/testsuite/nikon-razor-rgbi-README.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..55fd4eaca0fa19fe9322c60cf518bb9ba31b0650
+--- /dev/null
++++ b/testsuite/nikon-razor-rgbi-README.md
+@@ -0,0 +1,26 @@
++# Nikon RGB+IR razor MTF fixtures
++
++These are compact crops from a Nikon Super COOLSCAN LS-9000 ED focus sweep
++provided for Color-Screen MTF testing.  The original scans were made with
++VueScan 9.7.27 at 4000 DPI and exposure 0.8.  The full focus sweep is
++intentionally not part of the repository.
++
++Both fixtures are the same `48x96+634+100` crop around one clean part of the
++slanted razor edge.  The crop excludes the visible blade nicks farther down the
++original frame while retaining about 8 pixels of edge displacement from top
++to bottom.  Keeping only the support needed by the slanted-edge solver makes
++the real-data regression compact enough for the normal testsuite.
++
++* `nikon-razor-sharp-rgbi.tif` comes from
++  `nikon-4000DPI-expozice0.8-focus-0.05.tif`, near the sharp part of the focus
++  sweep.
++* `nikon-razor-defocus-rgbi.tif` comes from
++  `nikon-4000DPI-expozice0.8-focus0.4.tif`, a deliberately defocused setting.
++
++The crops retain all four 16-bit samples: red, green, blue, and the fourth
++Nikon infrared sample.  They are stored with lossless Deflate compression and
++4000-DPI resolution tags.  Color-Screen's TIFF loader maps the fourth sample of
++a four-sample RGB TIFF to its grayscale/IR plane.
++
++A separately exported `focus0-ir.tif` from the supplied data is not included:
++it is pixel-identical to the fourth sample of the corresponding `focus0.tif`.
+diff --git a/testsuite/nikon-rgbi-mtf-test.C b/testsuite/nikon-rgbi-mtf-test.C
+new file mode 100644
+index 0000000000000000000000000000000000000000..07d1e3295080766f7aa366c45af31184811492c4
+--- /dev/null
++++ b/testsuite/nikon-rgbi-mtf-test.C
+@@ -0,0 +1,168 @@
++#include <algorithm>
++#include <array>
++#include <cmath>
++#include <cstdio>
++#include <cstdlib>
++#include <string>
++
++#include "../src/libcolorscreen/include/colorscreen.h"
++#include "../src/libcolorscreen/include/imagedata.h"
++#include "../src/libcolorscreen/include/render-parameters.h"
++
++using namespace colorscreen;
++
++/* Return the first downward 50-percent crossing of MEASUREMENT in MTF50.
++   Linear interpolation keeps the regression insensitive to FFT padding.  */
++static bool
++measurement_mtf50 (const mtf_measurement &measurement, double *mtf50)
++{
++  if (!mtf50 || measurement.size () < 2)
++    return false;
++  for (size_t i = 1; i < measurement.size (); i++)
++    {
++      const double f0 = measurement.get_freq (i - 1);
++      const double f1 = measurement.get_freq (i);
++      const double c0 = measurement.get_contrast (i - 1);
++      const double c1 = measurement.get_contrast (i);
++      if (!std::isfinite (f0) || !std::isfinite (f1)
++          || !std::isfinite (c0) || !std::isfinite (c1))
++        return false;
++      if (c0 >= 50 && c1 <= 50 && c0 != c1)
++        {
++          *mtf50 = f0 + (50 - c0) * (f1 - f0) / (c1 - c0);
++          return std::isfinite (*mtf50) && *mtf50 > 0;
++        }
++    }
++  return false;
++}
++
++struct scan_result
++{
++  std::array<double, 4> mtf50 = { 0, 0, 0, 0 };
++};
++
++/* Measure all four native scanner channels in FILENAME and store MTF50 in OUT.
++   Return false and print a diagnostic when the real-data contract is broken.  */
++static bool
++measure_scan (const char *filename, scan_result *out)
++{
++  const char *top_srcdir = getenv ("top_srcdir");
++  if (!top_srcdir || !*top_srcdir)
++    top_srcdir = "..";
++  const std::string path = std::string (top_srcdir) + "/testsuite/" + filename;
++
++  image_data image;
++  const char *error = nullptr;
++  if (!image.load (path.c_str (), false, &error, nullptr))
++    {
++      fprintf (stderr, "Cannot load Nikon RGBI MTF fixture %s: %s\n",
++               path.c_str (), error ? error : "unknown error");
++      return false;
++    }
++  if (!image.has_rgb () || !image.has_grayscale_or_ir ())
++    {
++      fprintf (stderr, "Nikon RGBI fixture did not load all four channels: %s\n",
++               filename);
++      return false;
++    }
++
++  render_parameters parameters;
++  parameters.gamma = 1.0;
++  for (int channel = 0; channel < 4; channel++)
++    {
++      slanted_edge_parameters edge_parameters;
++      edge_parameters.channel = channel;
++      edge_parameters.same_capture = channel != 0;
++      edge_parameters.name = std::string (filename) + " channel "
++                             + std::to_string (channel);
++      const slanted_edge_results edge
++          = slanted_edge_mtf (parameters, image, image.get_area (),
++                              edge_parameters, nullptr);
++      if (!edge.success || !edge.measurement.size ())
++        {
++          fprintf (stderr,
++                   "Nikon RGBI slanted edge failed for %s channel %d: %s\n",
++                   filename, channel,
++                   edge.error.empty () ? "no measurement produced"
++                                       : edge.error.c_str ());
++          return false;
++        }
++
++      /* The library API is intentionally side-effect free; callers decide
++         whether to append a qualified measurement to render parameters.  */
++      if (!parameters.sharpen.scanner_mtf.measurements.empty ())
++        {
++          fprintf (stderr, "Nikon RGBI measurement modified render parameters\n");
++          return false;
++        }
++      if (edge.measurement.channel != channel
++          || edge.measurement.same_capture != (channel != 0))
++        {
++          fprintf (stderr,
++                   "Nikon RGBI measurement metadata mismatch for channel %d\n",
++                   channel);
++          return false;
++        }
++      if (edge.edge_angle < 3.5 || edge.edge_angle > 6.5)
++        {
++          fprintf (stderr,
++                   "Unexpected Nikon razor angle %.6g for %s channel %d\n",
++                   edge.edge_angle, filename, channel);
++          return false;
++        }
++      if (!measurement_mtf50 (edge.measurement, &out->mtf50[channel]))
++        {
++          fprintf (stderr,
++                   "Nikon RGBI measurement has no usable MTF50 for %s channel %d\n",
++                   filename, channel);
++          return false;
++        }
++    }
++  return true;
++}
++
++/* Verify that native-channel MTF measurement distinguishes a sharp and a
++   deliberately defocused real Nikon RGB+IR capture.  */
++static bool
++test_nikon_rgbi_mtf_focus ()
++{
++  scan_result sharp, defocused;
++  if (!measure_scan ("nikon-razor-sharp-rgbi.tif", &sharp)
++      || !measure_scan ("nikon-razor-defocus-rgbi.tif", &defocused))
++    return false;
++
++  for (int channel = 0; channel < 4; channel++)
++    if (sharp.mtf50[channel] <= 2 * defocused.mtf50[channel])
++      {
++        fprintf (stderr,
++                 "Nikon focus ordering failed for channel %d: sharp MTF50 %.6g, "
++                 "defocused %.6g cycles/pixel\n",
++                 channel, sharp.mtf50[channel], defocused.mtf50[channel]);
++        return false;
++      }
++
++  /* If all four values are numerically identical, CHANNEL has almost certainly
++     been treated as metadata while the same mixed image layer was measured.  */
++  const auto [minimum, maximum]
++      = std::minmax_element (sharp.mtf50.begin (), sharp.mtf50.end ());
++  if (*maximum - *minimum < 1e-6)
++    {
++      fprintf (stderr,
++               "Nikon native-channel MTF curves are unexpectedly identical\n");
++      return false;
++    }
++  return true;
++}
++
++int
++main ()
++{
++  puts ("1..1");
++  if (test_nikon_rgbi_mtf_focus ())
++    {
++      puts ("ok 1 - Nikon RGB+IR native-channel focus MTF regression");
++      return 0;
++    }
++  puts ("not ok 1 - Nikon RGB+IR native-channel focus MTF regression");
++  return 1;
++}
+diff --git a/testsuite/nikon-rgbi-mtf.test b/testsuite/nikon-rgbi-mtf.test
+new file mode 100755
+index 0000000000000000000000000000000000000000..57e247b5900624a23afea81c43c9b1fc4cdebb4a
+--- /dev/null
++++ b/testsuite/nikon-rgbi-mtf.test
+@@ -0,0 +1,28 @@
++#!/bin/sh
++# Compile and run the compact real Nikon RGB+IR native-channel MTF regression.
++
++set -e
++
++test_object=./nikon-rgbi-mtf-test.lo
++test_program=./nikon-rgbi-mtf-test${EXEEXT}
++
++cleanup ()
++{
++    "$top_builddir/libtool" --mode=clean rm -f "$test_object" "$test_program" \
++        >/dev/null 2>&1 || rm -f "$test_object" "$test_program"
++}
++trap cleanup EXIT HUP INT TERM
++
++"$top_builddir/libtool" --tag=CXX --mode=compile \
++    $CXX $CPPFLAGS $CXXFLAGS -std=c++17 -DLIBCOLORSCREEN \
++    -I"$top_srcdir/src/libcolorscreen" \
++    -I"$top_srcdir/src/libcolorscreen/include" \
++    -I"$top_builddir/src/libcolorscreen" \
++    -I"$top_builddir/src/libcolorscreen/include" \
++    -c "$srcdir/nikon-rgbi-mtf-test.C" -o "$test_object"
++
++"$top_builddir/libtool" --tag=CXX --mode=link \
++    $CXX $CXXFLAGS $LDFLAGS -o "$test_program" "$test_object" \
++    "$top_builddir/src/libcolorscreen/libcolorscreen.la" $LIBS
++
++"$test_program"
