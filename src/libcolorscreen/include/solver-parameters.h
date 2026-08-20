@@ -14,13 +14,15 @@ struct solver_parameters
 {
   DLL_PUBLIC_EXP
   solver_parameters ()
-      : points (), optimize_lens (true), optimize_tilt (true), weighted (false), center ({0, 0})
+      : points (), optimize_lens (true), lens_center_distance (0),
+        optimize_tilt (true), weighted (false), center ({0, 0})
   {
   }
   DLL_PUBLIC_EXP void
   copy_without_points (const solver_parameters &other)
   {
     optimize_lens = other.optimize_lens;
+    lens_center_distance = other.lens_center_distance;
     optimize_tilt = other.optimize_tilt;
     weighted = other.weighted;
   }
@@ -87,9 +89,17 @@ struct solver_parameters
   /* Return true if normalized lens parameters P are conservative enough for
      an automatically inferred model.  This is solver policy, not a DNG
      validity requirement, and is never applied to imported/manual profiles.  */
+  /* Maximum optical-center search distance uses a rectangle-normalized
+     Chebyshev metric around image center: D=1 permits coordinates 0..1,
+     D=2 permits -0.5..1.5.  Zero selects the automatic policy.  */
+  static constexpr coord_t automatic_lens_center_distance = (coord_t)2;
+  DLL_PUBLIC_EXP static coord_t
+  effective_lens_center_distance (coord_t distance);
+
   DLL_PUBLIC_EXP static bool
   lens_candidate_reasonable_p (const lens_warp_correction_parameters &p,
-                               enum scanner_type scanner);
+                               enum scanner_type scanner,
+                               coord_t lens_center_distance = 0);
 
   static int min_perspective_points (enum scr_type type)
   {
@@ -104,9 +114,17 @@ struct solver_parameters
   /* Vector holding points.  */
   cow_vector<solver_point_t> points;
   /* If true, lens parameters may be auto-optimized.  Point count, spatial
-     coverage and a conservative deformation envelope are additional safety
-     conditions enforced by solver().  */
+     coverage, a conservative deformation envelope and a projected-Jacobian
+     identifiability check are additional safety conditions enforced by
+     solver().  The Jacobian check rejects a fitted lens model whose effect can
+     be absorbed by refitting the homography.  */
   bool optimize_lens;
+  /* Maximum normalized distance of an automatically fitted lens center from
+     image center.  Zero means automatic.  Positive D constrains each fitted
+     coordinate to 0.5 +/- D/2, so D=1 stays inside the image and D>1 may
+     place the optical center outside it.  This is a Color-Screen scanner
+     calibration policy, not part of the portable DNG profile contract.  */
+  coord_t lens_center_distance;
   /* If true, image tilt is auto-optimized.  */
   bool optimize_tilt;
   /* If true then weights of points are set according to the
@@ -182,6 +200,7 @@ struct solver_parameters
   bool operator== (const solver_parameters &other) const
   {
     return optimize_lens == other.optimize_lens &&
+           lens_center_distance == other.lens_center_distance &&
            optimize_tilt == other.optimize_tilt &&
            weighted == other.weighted &&
            center == other.center &&

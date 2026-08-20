@@ -1296,7 +1296,8 @@ compare_scr_to_img (const char *test_name, scr_to_img_parameters & param,
 
 bool
 do_test_homography (scr_to_img_parameters &param, int width, int height,
-                    bool lens_correction, coord_t epsilon)
+                    bool lens_correction, coord_t epsilon,
+                    coord_t lens_center_distance = 0)
 {
   scr_to_img map;
   image_data img;
@@ -1310,6 +1311,7 @@ do_test_homography (scr_to_img_parameters &param, int width, int height,
     }
   solver_parameters sparam;
   sparam.optimize_lens = lens_correction;
+  sparam.lens_center_distance = lens_center_distance;
   int xstep = (width + 99) / 11;
   int ystep = (height + 99) / 10;
   for (int y = 0; y < height; y += ystep)
@@ -1356,6 +1358,60 @@ test_homography (bool lens_correction, bool joly, coord_t epsilon)
     {
       param.scanner_type = (enum scanner_type)scanner;
       ok &= do_test_homography (param, 1024, 1024, lens_correction, epsilon);
+    }
+
+  /* An exactly distortion-free image still contains the perspective/tilt
+     above, but it contains no information about the optical center.  The
+     profiled lens Jacobian must therefore be rank deficient after the best
+     homography is refitted.  Verify that lens optimization keeps the identity
+     profile instead of using radial terms to imitate the perspective.  */
+  if (lens_correction && !joly)
+    {
+      image_data img;
+      if (!img.set_dimensions (1024, 1024))
+        return false;
+      scr_to_img_parameters truth = param;
+      truth.scanner_type = fixed_lens;
+      truth.lens_correction = lens_warp_correction_parameters ();
+      scr_to_img truth_map;
+      if (!truth_map.set_parameters (truth, img))
+        return false;
+      solver_parameters sparam;
+      for (int y = 0; y < 10; y++)
+        for (int x = 0; x < 10; x++)
+          {
+            point_t image = {(coord_t)(111 * x), (coord_t)(111 * y)};
+            sparam.add_point (image, truth_map.to_scr (image),
+                              solver_parameters::red);
+          }
+      lens_warp_correction_parameters retained_profile;
+      retained_profile.center = {0.43, 0.57};
+      retained_profile.kr[1] = 0.005;
+      if (!retained_profile.normalize ())
+        return false;
+      scr_to_img_parameters fitted;
+      fitted.scanner_type = fixed_lens;
+      fitted.lens_correction = retained_profile;
+      const coord_t objective = solver (&fitted, img, sparam);
+      if (!(objective >= 0 && objective < 1e30)
+          || !(fitted.lens_correction == retained_profile))
+        {
+          fprintf (stderr,
+                   "Unidentifiable lens fit replaced the retained profile\n");
+          ok = false;
+        }
+    }
+
+  /* A scanner capture can be cropped far from the fixed lens optical axis.
+     Verify that the explicit center-distance setting affects the actual
+     nonlinear solver, rather than only the post-fit plausibility check.  */
+  if (lens_correction && !joly)
+    {
+      point_t saved_center = param.lens_correction.center;
+      param.scanner_type = fixed_lens;
+      param.lens_correction.center = {1.8, 0.6};
+      ok &= do_test_homography (param, 1024, 1024, true, epsilon, 4);
+      param.lens_correction.center = saved_center;
     }
   return ok;
 }
@@ -4909,14 +4965,64 @@ test_lens_warp ()
     if (!synthetic.normalize () || !coolscan.normalize ()
         || !extreme.normalize ())
       return false;
+    lens_warp_correction_parameters off_image = synthetic;
+    off_image.center = {2.0, 0.5};
+    lens_warp_correction_parameters discarded_axis = synthetic;
+    discarded_axis.center = {100.0, 0.5};
     if (!solver_parameters::lens_candidate_reasonable_p (synthetic,
                                                           fixed_lens)
         || !solver_parameters::lens_candidate_reasonable_p (coolscan,
                                                              fixed_lens)
         || solver_parameters::lens_candidate_reasonable_p (extreme,
-                                                            fixed_lens))
+                                                            fixed_lens)
+        /* Auto resolves to distance 2, i.e. center coordinates -0.5..1.5.  */
+        || solver_parameters::lens_candidate_reasonable_p (off_image,
+                                                            fixed_lens)
+        /* Distance 4 permits -1.5..2.5 on each fitted axis.  */
+        || !solver_parameters::lens_candidate_reasonable_p (off_image,
+                                                             fixed_lens, 4)
+        /* Distance 1 means that every fitted center coordinate stays in the
+           image.  */
+        || solver_parameters::lens_candidate_reasonable_p (
+               lens_warp_correction_parameters{off_image}, fixed_lens, 1)
+        /* The movement-axis coordinate is deliberately discarded.  */
+        || !solver_parameters::lens_candidate_reasonable_p (
+               discarded_axis, lens_move_horizontally, 1)
+        || solver_parameters::lens_candidate_reasonable_p (synthetic,
+                                                            fixed_lens, -1))
       {
-        fprintf (stderr, "Lens-solver deformation envelope is wrong\n");
+        fprintf (stderr, "Lens-solver deformation/center envelope is wrong\n");
+        ok = false;
+      }
+
+    /* Solver configuration must round-trip, while old project files which do
+       not contain the new keyword keep the automatic value zero.  */
+    solver_parameters saved_solver;
+    saved_solver.lens_center_distance = 3.25;
+    FILE *project = tmpfile ();
+    solver_parameters loaded_solver;
+    const char *project_error = nullptr;
+    const bool project_saved
+        = project && save_csp (project, nullptr, nullptr, nullptr,
+                               &saved_solver);
+    const bool project_loaded
+        = project_saved && !fseek (project, 0, SEEK_SET)
+          && load_csp (project, nullptr, nullptr, nullptr, &loaded_solver,
+                       &project_error);
+    if (project)
+      fclose (project);
+    if (!project_loaded || project_error
+        || loaded_solver.lens_center_distance != 3.25)
+      {
+        fprintf (stderr, "Lens-center distance project round trip failed%s%s\n",
+                 project_error ? ": " : "",
+                 project_error ? project_error : "");
+        ok = false;
+      }
+    if (solver_parameters ().lens_center_distance != 0
+        || solver_parameters::effective_lens_center_distance (0) != 2)
+      {
+        fprintf (stderr, "Automatic lens-center distance default changed\n");
         ok = false;
       }
   }
