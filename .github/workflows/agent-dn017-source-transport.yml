@@ -15,31 +15,32 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Commit exact changed-file transport chunks
+      - name: Archive exact current main
         shell: bash
         run: |
           set -euxo pipefail
-          BASE=7040f2f45b8fc64ba42d5155f50a4798376fb905
           MAIN=f52c7133c8a41656b6c5e274719269a4edad313d
           git fetch origin main
           test "$(git rev-parse origin/main)" = "$MAIN"
+          git archive --format=tar.gz --output=/tmp/colorscreen-main-f52c713.tar.gz origin/main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-main-f52c713-source
+          path: /tmp/colorscreen-main-f52c713.tar.gz
+      - name: Record transport run
+        shell: bash
+        run: |
+          set -euxo pipefail
           rm -rf .transport
           mkdir .transport
-          git diff --name-only --diff-filter=AM "$BASE" "$MAIN" > /tmp/changed-files.txt
-          tar -czf /tmp/current-main-changes.tar.gz -T /tmp/changed-files.txt
-          base64 -w0 /tmp/current-main-changes.tar.gz > /tmp/current-main-changes.b64
-          split -b 400000 -d -a 3 /tmp/current-main-changes.b64 .transport/part-
           {
-            echo "base=$BASE"
-            echo "main=$MAIN"
-            echo "tar_sha256=$(sha256sum /tmp/current-main-changes.tar.gz | cut -d' ' -f1)"
-            echo "base64_sha256=$(sha256sum /tmp/current-main-changes.b64 | cut -d' ' -f1)"
-            echo "parts=$(find .transport -name 'part-*' | wc -l)"
-            echo "files=$(wc -l < /tmp/changed-files.txt)"
-          } > .transport/manifest.txt
-          cp /tmp/changed-files.txt .transport/changed-files.txt
+            echo "main=f52c7133c8a41656b6c5e274719269a4edad313d"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "artifact=colorscreen-main-f52c713-source"
+            echo "archive_sha256=$(sha256sum /tmp/colorscreen-main-f52c713.tar.gz | cut -d' ' -f1)"
+          } > .transport/run.txt
           git config user.name 'OpenAI source transport'
           git config user.email 'review@openai.invalid'
           git add -- .transport
-          git commit -m 'agent: export current main delta [skip ci]'
+          git commit -m 'agent: record source transport run [skip ci]'
           git push origin HEAD:agent/dn-017-source-transport
