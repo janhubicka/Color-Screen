@@ -1,0 +1,153 @@
++   admitted sample.  TRANSFORM returns false for samples outside its domain.
++   Geometry and collection-support selection are otherwise identical to the
++   linear diagnostic.  */
++template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR,
++          typename TRANSFORM>
++inline denoise_noise_three_scale_estimate
++estimate_screen_noise_three_scale_transformed_model (
++    int width, int height, GETDATA getdata, GETSUPPORT getsupport,
++    ENTRY_TO_SCR entry_to_scr, TRANSFORM transform)
++{
++  using namespace denoise_noise_estimator_detail;
++  return collect_three_scales (
++      width, height, getsupport, entry_to_scr,
++      [&] (std::vector<observation> &spacing1,
++           std::vector<observation> &spacing2,
++           std::vector<observation> &spacing3, int_point_t a3,
++           int_point_t a2, int_point_t a1, int_point_t b, int_point_t c1,
++           int_point_t c2, int_point_t c3)
++      {
++        luminosity_t raw[7] = {
++          getdata ((int)a3.x, (int)a3.y), getdata ((int)a2.x, (int)a2.y),
++          getdata ((int)a1.x, (int)a1.y), getdata ((int)b.x, (int)b.y),
++          getdata ((int)c1.x, (int)c1.y), getdata ((int)c2.x, (int)c2.y),
++          getdata ((int)c3.x, (int)c3.y)};
++        luminosity_t v[7];
++        for (int i = 0; i < 7; i++)
++          if (!transform (raw[i], &v[i]))
++            return;
++        luminosity_t signal = 0;
++        for (luminosity_t x : v)
++          signal += x;
++        signal /= (luminosity_t)7;
++        luminosity_t d1 = v[2] - 2 * v[3] + v[4];
++        luminosity_t d2 = v[1] - 2 * v[3] + v[5];
++        luminosity_t d3 = v[0] - 2 * v[3] + v[6];
++        spacing1.push_back ({signal, d1 * d1 / (luminosity_t)6});
++        spacing2.push_back ({signal, d2 * d2 / (luminosity_t)6});
++        spacing3.push_back ({signal, d3 * d3 / (luminosity_t)6});
++      });
++}
++
++/* RGB counterpart of estimate_screen_noise_three_scale_transformed_model().
++   The same scalar transform is applied to each scanner component and valid
++   components are pooled, matching the shared precise-RGB noise model.  */
++template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR,
++          typename TRANSFORM>
++inline denoise_noise_three_scale_estimate
++estimate_screen_rgb_noise_three_scale_transformed_model (
++    int width, int height, GETDATA getdata, GETSUPPORT getsupport,
++    ENTRY_TO_SCR entry_to_scr, TRANSFORM transform)
++{
++  using namespace denoise_noise_estimator_detail;
++  return collect_three_scales (
++      width, height, getsupport, entry_to_scr,
++      [&] (std::vector<observation> &spacing1,
++           std::vector<observation> &spacing2,
++           std::vector<observation> &spacing3, int_point_t a3,
++           int_point_t a2, int_point_t a1, int_point_t b, int_point_t c1,
++           int_point_t c2, int_point_t c3)
++      {
++        rgbdata raw[7] = {
++          getdata ((int)a3.x, (int)a3.y), getdata ((int)a2.x, (int)a2.y),
++          getdata ((int)a1.x, (int)a1.y), getdata ((int)b.x, (int)b.y),
++          getdata ((int)c1.x, (int)c1.y), getdata ((int)c2.x, (int)c2.y),
++          getdata ((int)c3.x, (int)c3.y)};
++        for (int k = 0; k < 3; k++)
++          {
++            luminosity_t v[7];
++            bool valid = true;
++            for (int i = 0; i < 7; i++)
++              if (!transform (raw[i][k], &v[i]))
++                {
++                  valid = false;
++                  break;
++                }
++            if (!valid)
++              continue;
++            luminosity_t signal = 0;
++            for (luminosity_t x : v)
++              signal += x;
++            signal /= (luminosity_t)7;
++            luminosity_t d1 = v[2] - 2 * v[3] + v[4];
++            luminosity_t d2 = v[1] - 2 * v[3] + v[5];
++            luminosity_t d3 = v[0] - 2 * v[3] + v[6];
++            spacing1.push_back ({signal, d1 * d1 / (luminosity_t)6});
++            spacing2.push_back ({signal, d2 * d2 / (luminosity_t)6});
++            spacing3.push_back ({signal, d3 * d3 / (luminosity_t)6});
++          }
++      });
++}
++
++/* Compare scalar screen-sample noise diagnostics in linear, density and
++   variance-stabilized domains.  The VST coefficients come from the linear
++   spacing-1 fit on the same three-scale sample population.  */
++template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
++inline denoise_noise_domain_comparison
++estimate_screen_noise_domain_comparison (int width, int height, GETDATA getdata,
++                                         GETSUPPORT getsupport,
++                                         ENTRY_TO_SCR entry_to_scr)
++{
++  denoise_noise_domain_comparison result;
++  result.linear = estimate_screen_noise_three_scale_model (
++      width, height, getdata, getsupport, entry_to_scr);
++  result.density = estimate_screen_noise_three_scale_transformed_model (
++      width, height, getdata, getsupport, entry_to_scr,
++      [] (luminosity_t x, luminosity_t *out)
++      { return denoise_noise_estimator_detail::density_transform (x, out); });
++  if (result.linear.spacing1.valid_p ())
++    {
++      result.vst_source_variance_floor = result.linear.spacing1.variance_floor;
++      result.vst_source_variance_slope = result.linear.spacing1.variance_slope;
++      luminosity_t a = result.vst_source_variance_floor;
++      luminosity_t b = result.vst_source_variance_slope;
++      result.variance_stabilized
++          = estimate_screen_noise_three_scale_transformed_model (
++              width, height, getdata, getsupport, entry_to_scr,
++              [a, b] (luminosity_t x, luminosity_t *out)
++              {
++                return denoise_noise_estimator_detail::
++                    variance_stabilizing_transform (x, a, b, out);
++              });
++    }
++  return result;
++}
++
++/* Precise-RGB counterpart of estimate_screen_noise_domain_comparison().  */
++template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
++inline denoise_noise_domain_comparison
++estimate_screen_rgb_noise_domain_comparison (
++    int width, int height, GETDATA getdata, GETSUPPORT getsupport,
++    ENTRY_TO_SCR entry_to_scr)
++{
++  denoise_noise_domain_comparison result;
++  result.linear = estimate_screen_rgb_noise_three_scale_model (
++      width, height, getdata, getsupport, entry_to_scr);
++  result.density = estimate_screen_rgb_noise_three_scale_transformed_model (
++      width, height, getdata, getsupport, entry_to_scr,
++      [] (luminosity_t x, luminosity_t *out)
++      { return denoise_noise_estimator_detail::density_transform (x, out); });
++  if (result.linear.spacing1.valid_p ())
++    {
++      result.vst_source_variance_floor = result.linear.spacing1.variance_floor;
++      result.vst_source_variance_slope = result.linear.spacing1.variance_slope;
++      luminosity_t a = result.vst_source_variance_floor;
++      luminosity_t b = result.vst_source_variance_slope;
++      result.variance_stabilized
++          = estimate_screen_rgb_noise_three_scale_transformed_model (
++              width, height, getdata, getsupport, entry_to_scr,
++              [a, b] (luminosity_t x, luminosity_t *out)
++              { return denoise_noise_estimator_detail::variance_stabilizing_transform (x, a, b, out); });
++    }
++  return result;
++}
