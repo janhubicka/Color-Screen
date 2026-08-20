@@ -544,6 +544,9 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
       if (fprintf (f, "solver_optimize_lens: %s\n",
                    bool_names[(int)sparam->optimize_lens])
               < 0
+          || fprintf (f, "solver_lens_center_distance: %.17g\n",
+                      (double)sparam->lens_center_distance)
+                 < 0
           || fprintf (f, "solver_optimize_tilt: %s\n",
                       bool_names[(int)sparam->optimize_tilt])
                  < 0)
@@ -1897,6 +1900,18 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
               *error = "error parsing solver_optimize_lens";
               return false;
             }
+        }
+      else if (!strcmp (buf, "solver_lens_center_distance"))
+        {
+          coord_t distance;
+          if (!read_scalar (f, &distance) || !my_isfinite (distance)
+              || distance < 0)
+            {
+              *error = "error parsing solver_lens_center_distance";
+              return false;
+            }
+          if (sparam)
+            sparam->lens_center_distance = distance;
         }
       else if (!strcmp (buf, "solver_optimize_tilt"))
         {

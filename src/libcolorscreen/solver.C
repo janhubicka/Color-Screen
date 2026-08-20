@@ -6,6 +6,7 @@
 #define GSL_RANGE_CHECK_OFF
 #include <memory>
 #include <array>
+#include <limits>
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_linalg.h>
 #include <gsl/gsl_eigen.h>
@@ -82,23 +83,42 @@ solver_parameters::lens_optimization_sufficient (enum scr_type type, int width,
          && lens_coverage_sufficient (width, height, scanner);
 }
 
+/* Resolve configured lens-center DISTANCE.  Zero selects the automatic
+   policy, which currently preserves the historical [-0.5,1.5] search box.
+   Return a negative value for invalid configuration.  */
+coord_t
+solver_parameters::effective_lens_center_distance (coord_t distance)
+{
+  if (!my_isfinite (distance) || distance < 0)
+    return -1;
+  return distance == 0 ? automatic_lens_center_distance : distance;
+}
+
 /* Return true if P is a plausible normalized result of automatic lens
-   fitting.  These bounds are intentionally solver policy rather than DNG
-   format constraints.  */
+   fitting.  The center bound is a Color-Screen scanner-calibration policy,
+   not a DNG validity rule; Adobe DNG SDK Build 2652 requires portable DNG
+   profile centers themselves to remain in [0,1].  */
 bool
 solver_parameters::lens_candidate_reasonable_p (
-    const lens_warp_correction_parameters &p, enum scanner_type scanner)
+    const lens_warp_correction_parameters &p, enum scanner_type scanner,
+    coord_t lens_center_distance)
 {
-  constexpr coord_t min_center = (coord_t)-0.5;
-  constexpr coord_t max_center = (coord_t)1.5;
   constexpr coord_t max_normalized_displacement = (coord_t)0.05;
   constexpr coord_t min_derivative = (coord_t)0.5;
   constexpr coord_t max_derivative = (coord_t)1.5;
 
+  const coord_t distance
+      = effective_lens_center_distance (lens_center_distance);
+  if (!(distance > 0))
+    return false;
+  const coord_t center_radius = distance * (coord_t)0.5;
+  const coord_t min_center = (coord_t)0.5 - center_radius;
+  const coord_t max_center = (coord_t)0.5 + center_radius;
+
   if (!p.is_monotone () || my_fabs (p.get_ratio (1) - 1) > (coord_t)0.00001)
     return false;
 
-  auto center_reasonable = [] (coord_t c) -> bool
+  auto center_reasonable = [min_center, max_center] (coord_t c) -> bool
   {
     return my_isfinite (c) && c >= min_center && c <= max_center;
   };
@@ -357,6 +377,33 @@ pick_nearest_points (std::vector<solver_parameters::solver_point_t> &out,
     out.push_back (points[e.index]);
 }
 
+/* Diagnostics for separating lens deformation from homography.  The lens
+   solver profiles out the homography for every lens candidate, so finite
+   differences of its residual vector already measure the component of a lens
+   perturbation which cannot be absorbed by refitting the homography.  */
+struct lens_identifiability_diagnostics
+{
+  bool valid = false;
+  coord_t singular_ratio = 0;
+  coord_t column_ratio = 0;
+  coord_t minimum_singular_value = 0;
+  coord_t maximum_singular_value = 0;
+
+  /* The projected Jacobian is scaled to broad solver parameter ranges.  A
+     ratio below 1e-4 means that at least one plausible lens direction changes
+     the observations ten thousand times less than the best determined
+     direction, after the homography has already absorbed everything it can.
+     Treat such a model as numerically unidentified rather than letting radial
+     terms explain projective error or registration noise.  */
+  static constexpr coord_t minimum_singular_ratio = (coord_t)1e-4;
+
+  bool
+  identifiable_p () const
+  {
+    return valid && singular_ratio >= minimum_singular_ratio;
+  }
+};
+
 /* Nonlinear optimizer for determining radial lens warp parameters.  */
 class lens_solver
 {
@@ -426,19 +473,27 @@ public:
   constrain (coord_t *vals) const
   {
     int n = num_coordinates ();
-    /* DNG permits an optical center outside the image, but centers many image
-       widths away are effectively unconstrained polynomial extrapolation.
-       This tighter box is only for automatically fitted centers.  */
-    if (vals[0] < (coord_t)-0.5)
-      vals[0] = (coord_t)-0.5;
-    if (vals[0] > (coord_t)1.5)
-      vals[0] = (coord_t)1.5;
+    /* Off-image centers are useful for scanner calibration when the scanned
+       original is a crop far from the optical axis.  Bound the fitted center
+       by the user-configurable rectangle-normalized distance rather than by a
+       hard-coded DNG-like box.  */
+    coord_t distance = solver_parameters::effective_lens_center_distance (
+        m_sparam.lens_center_distance);
+    if (!(distance > 0))
+      distance = solver_parameters::automatic_lens_center_distance;
+    const coord_t radius = distance * (coord_t)0.5;
+    const coord_t min_center = (coord_t)0.5 - radius;
+    const coord_t max_center = (coord_t)0.5 + radius;
+    if (vals[0] < min_center)
+      vals[0] = min_center;
+    if (vals[0] > max_center)
+      vals[0] = max_center;
     if (n == 2)
       {
-        if (vals[1] < (coord_t)-0.5)
-          vals[1] = (coord_t)-0.5;
-        if (vals[1] > (coord_t)1.5)
-          vals[1] = (coord_t)1.5;
+        if (vals[1] < min_center)
+          vals[1] = min_center;
+        if (vals[1] > max_center)
+          vals[1] = max_center;
       }
     /* Coefficient boxes are only a coarse numerical guard.  The physically
        meaningful bound is imposed on the resulting normalized radial map.  */
@@ -450,6 +505,177 @@ public:
         if (vals[i] > (coord_t)range[j] * scale_kr)
           vals[i] = (coord_t)range[j] * scale_kr;
       }
+  }
+
+  /* Return the scale used to make lens-coordinate I dimensionless for
+     identifiability testing.  The Jacobian condition depends on parameter
+     units, so use the same broad physical/search scales as the nonlinear
+     optimizer rather than comparing a normalized center coordinate directly
+     with the internally amplified radial coefficients.  */
+  coord_t
+  identifiability_parameter_scale (int i) const
+  {
+    const int n = num_coordinates ();
+    if (i < n)
+      {
+        const coord_t distance
+            = solver_parameters::effective_lens_center_distance (
+                m_sparam.lens_center_distance);
+        return distance > 0 ? distance * (coord_t)0.5 : (coord_t)1;
+      }
+    switch (i - n)
+      {
+      case 0:
+        return (coord_t)0.15 * scale_kr;
+      case 1:
+        return (coord_t)0.05 * scale_kr;
+      case 2:
+        return (coord_t)0.01 * scale_kr;
+      default:
+        abort ();
+      }
+  }
+
+  /* Measure whether the fitted lens model is distinguishable from the
+     homography on the actual registration points.
+
+     RESIDUALS() refits the best homography for every lens parameter vector.
+     Consequently a finite-difference column here is the derivative of the
+     profiled residual r*(L)=r(H*(L),L): homography directions have already
+     been eliminated.  This is equivalent, to first order, to projecting the
+     raw lens Jacobian onto the orthogonal complement of the homography
+     Jacobian (or taking the homography Schur complement).  It is exactly the
+     distinction needed for Color-Screen, where registration points are noisy
+     correspondences rather than points known a priori to lie on straight
+     calibration lines.
+
+     Return both the singular-value ratio of the dimensionless projected
+     Jacobian and the weakest/strongest column-norm ratio.  The latter catches
+     parameters whose effect is essentially zero even before correlations
+     between columns are considered.  */
+  lens_identifiability_diagnostics
+  identifiability ()
+  {
+    lens_identifiability_diagnostics ret;
+    const int nvals = num_values ();
+    const int nobs = num_observations ();
+    if (nobs < nvals || nvals <= 0)
+      return ret;
+
+    std::vector<coord_t> plus (start, start + nvals);
+    std::vector<coord_t> minus (start, start + nvals);
+    std::vector<coord_t> plus_residuals (nobs);
+    std::vector<coord_t> minus_residuals (nobs);
+    gsl_matrix *jacobian = gsl_matrix_alloc (nobs, nvals);
+    if (!jacobian)
+      return ret;
+
+    coord_t min_column_norm = std::numeric_limits<coord_t>::max ();
+    coord_t max_column_norm = 0;
+    bool ok = true;
+    for (int col = 0; col < nvals && ok; col++)
+      {
+        std::copy (start, start + nvals, plus.begin ());
+        std::copy (start, start + nvals, minus.begin ());
+        const coord_t step
+            = derivative_perturbation ()
+              * std::max ((coord_t)1, my_fabs (start[col]));
+        plus[col] += step;
+        minus[col] -= step;
+        constrain (plus.data ());
+        constrain (minus.data ());
+        const coord_t delta = plus[col] - minus[col];
+        if (!(delta > 0)
+            || residuals (plus.data (), plus_residuals.data ()) != GSL_SUCCESS
+            || residuals (minus.data (), minus_residuals.data ())
+                   != GSL_SUCCESS)
+          {
+            ok = false;
+            break;
+          }
+
+        const coord_t scale = identifiability_parameter_scale (col);
+        long double norm_sq = 0;
+        for (int row = 0; row < nobs; row++)
+          {
+            const coord_t derivative
+                = (plus_residuals[row] - minus_residuals[row]) / delta
+                  * scale;
+            if (!my_isfinite (derivative))
+              {
+                ok = false;
+                break;
+              }
+            gsl_matrix_set (jacobian, row, col, derivative);
+            norm_sq += (long double)derivative * derivative;
+          }
+        if (!ok)
+          break;
+        const coord_t column_norm = my_sqrt ((coord_t)norm_sq);
+        min_column_norm = std::min (min_column_norm, column_norm);
+        max_column_norm = std::max (max_column_norm, column_norm);
+      }
+
+    /* Residual evaluations modify M_PARAM while trying perturbed models.
+       Restore the converged candidate before returning to the caller.  */
+    coord_t restore_chisq = bad_value;
+    if (!solve (start, &restore_chisq, nullptr))
+      ok = false;
+
+    if (!ok || !(max_column_norm > 0))
+      {
+        gsl_matrix_free (jacobian);
+        return ret;
+      }
+
+    gsl_matrix *v = gsl_matrix_alloc (nvals, nvals);
+    gsl_vector *singular = gsl_vector_alloc (nvals);
+    gsl_vector *work = gsl_vector_alloc (nvals);
+    if (!v || !singular || !work)
+      {
+        if (v)
+          gsl_matrix_free (v);
+        if (singular)
+          gsl_vector_free (singular);
+        if (work)
+          gsl_vector_free (work);
+        gsl_matrix_free (jacobian);
+        return ret;
+      }
+
+    gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
+    const int status = gsl_linalg_SV_decomp (jacobian, v, singular, work);
+    gsl_set_error_handler (old_handler);
+    if (status == GSL_SUCCESS)
+      {
+        coord_t smax = 0;
+        coord_t smin = std::numeric_limits<coord_t>::max ();
+        for (int i = 0; i < nvals; i++)
+          {
+            const coord_t value = gsl_vector_get (singular, i);
+            if (!my_isfinite (value) || value < 0)
+              {
+                smax = 0;
+                break;
+              }
+            smax = std::max (smax, value);
+            smin = std::min (smin, value);
+          }
+        if (smax > 0)
+          {
+            ret.valid = true;
+            ret.minimum_singular_value = smin;
+            ret.maximum_singular_value = smax;
+            ret.singular_ratio = smin / smax;
+            ret.column_ratio = min_column_norm / max_column_norm;
+          }
+      }
+
+    gsl_vector_free (work);
+    gsl_vector_free (singular);
+    gsl_matrix_free (v);
+    gsl_matrix_free (jacobian);
+    return ret;
   }
 
   /* Solve for lens parameters.
@@ -502,7 +728,8 @@ public:
         return false;
       }
     if (!solver_parameters::lens_candidate_reasonable_p (
-            m_param.lens_correction, m_param.scanner_type))
+            m_param.lens_correction, m_param.scanner_type,
+            m_sparam.lens_center_distance))
       {
         if (transformed)
           for (size_t i = 0; i < m_sparam.points.size (); i++)
@@ -625,6 +852,13 @@ solver (scr_to_img_parameters *param,const  image_data &img_data,
 
   if (optimize_lens)
     {
+      /* Keep a trusted/manual lens profile intact until the newly fitted model
+         has passed both the physical envelope and the identifiability test.
+         If the registration data cannot separate lens distortion from the
+         simultaneously fitted homography, retaining the previous profile (or
+         identity) is safer than installing an arbitrary compensating warp.  */
+      const lens_warp_correction_parameters previous_lens
+          = param->lens_correction;
       lens_solver s (*param, img_data, sparam, progress);
       bool use_early_multifit = false;
       bool use_simplex = true;
@@ -657,8 +891,23 @@ solver (scr_to_img_parameters *param,const  image_data &img_data,
           = s.start[n + 2] * (1 / lens_solver::scale_kr);
       if (!param->lens_correction.normalize ()
           || !solver_parameters::lens_candidate_reasonable_p (
-                 param->lens_correction, param->scanner_type))
+                 param->lens_correction, param->scanner_type,
+                 sparam.lens_center_distance))
         return 1e30;
+      const lens_identifiability_diagnostics identifiability
+          = s.identifiability ();
+      if (!identifiability.identifiable_p ())
+        {
+          if (debug_output)
+            fprintf (stderr,
+                     "Ignoring unidentifiable lens fit: singular ratio %.12g, "
+                     "column ratio %.12g, singular values %.12g..%.12g\n",
+                     identifiability.singular_ratio,
+                     identifiability.column_ratio,
+                     identifiability.minimum_singular_value,
+                     identifiability.maximum_singular_value);
+          param->lens_correction = previous_lens;
+        }
     }
   if (progress)
     progress->set_task ("optimizing perspective correction", 1);

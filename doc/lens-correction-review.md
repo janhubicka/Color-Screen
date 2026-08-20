@@ -8,6 +8,10 @@ and Adobe DNG SDK 1.7.1 Build 2652 (2026-07-14).
 Implementation status: stage 1 contains the DNG/correctness fixes and
 conformance regressions. Stage 2 adds conservative safeguards for automatic
 lens fitting: robust spatial coverage and a bounded deformation envelope.
+Stage 3 makes the automatic optical-center search range configurable so whole-
+scanner-bed captures may legitimately fit a center outside the scanned image.
+Stage 4 rejects lens solutions that are not identifiable after the best
+homography has been refitted.
 
 ## Scope
 
@@ -71,7 +75,9 @@ axis before applying the remaining one-dimensional lens geometry.
 | LC-004 | Fixed | Moving-lens precomputation left the default normalized center on the axis that is explicitly removed before lens correction. |
 | LS-001 | Fixed | A map-setup failure in `lens_solver::solve()` could return without initializing `chisq`; simplex could then consume an indeterminate objective value. |
 | LS-002 | Fixed | Automatic lens fitting now requires the central 90% of registration points to cover at least half of every relevant scan axis, in addition to the point-count threshold. |
-| LS-003 | Fixed | Normalized auto-fit candidates are restricted to a conservative center, displacement and radial-derivative envelope. This is solver safety policy, not a DNG-format restriction. |
+| LS-003 | Fixed | Normalized auto-fit candidates are restricted to a conservative displacement and radial-derivative envelope. This is solver safety policy, not a DNG-format restriction. |
+| LS-004 | Fixed | The automatic optical-center search range is configurable. `solver_lens_center_distance=0` selects the automatic policy; positive `D` permits each fitted normalized center coordinate in `0.5-D/2 .. 0.5+D/2`, so `D=1` stays inside the image and larger values permit off-image centers. |
+| LS-005 | Fixed | Lens candidates now need an identifiable profiled residual Jacobian. Finite-difference lens perturbations refit the best homography before residuals are compared, then a scaled SVD rejects lens directions that can be absorbed by projective geometry. |
 | TEST-001 | Fixed | The lens test used a fixed `(500,500)` center for all nominal test cases and normalized a second warp from already-warped source corners. |
 | TEST-002 | Fixed | A hand-calculated polynomial check was incorrectly described as an Adobe DNG worked example. It is retained as a synthetic formula check. |
 | TEST-003 | Fixed | Twelve source coordinates emitted by the executed Adobe DNG SDK Build 2652 are frozen in `test_lens_warp()` and compared directly with Color-Screen output. |
@@ -151,8 +157,11 @@ The implemented conservative gate is:
 * require the central 90% of point coordinates to span at least 50% of the
   scan in both axes for fixed-lens models;
 * for a moving horizontal lens require the vertical span, and vice versa;
-* constrain an automatically fitted normalized optical center to
-  `[-0.5, 1.5]` on each fitted axis;
+* bound the automatically fitted optical center by the configurable
+  `solver_lens_center_distance`: positive `D` gives each fitted normalized
+  coordinate the interval `0.5-D/2 .. 0.5+D/2`; `D=1` means the center stays
+  inside the image, `D>1` permits an off-image center, and `0=Auto` currently
+  resolves to `D=2`, preserving the former `[-0.5,1.5]` range;
 * after removing the solver's overall-scale gauge, require maximum radial
   displacement `|r * (f(r)-1)| <= 0.05` of DNG radius `m`;
 * require radial derivative `0.5 <= w'(r) <= 1.5` throughout the image.
@@ -162,6 +171,14 @@ claimed physical limits and are not applied when merely loading or retaining a
 valid DNG/manual profile. They only decide whether an **automatically inferred**
 lens solution is safe enough to install. If spatial coverage is insufficient,
 lens optimization is skipped and any existing lens profile remains active.
+
+The center-distance control is intentionally a Color-Screen solver extension,
+not a statement about portable DNG profiles. It is useful for flatbed/film
+scanners which capture a much larger bed than the original: the physical lens
+axis may then lie well outside the image occupied by the original. Adobe DNG
+SDK Build 2652 validation, in contrast, expects a portable DNG opcode center in
+`[0,1]`. Imported/manual profiles are therefore not run through the automatic
+center-distance gate.
 
 For scale, the existing Nikon Coolscan 9000ED fixture
 
@@ -176,7 +193,58 @@ envelope (about 2.46% displacement and 0.952..1.190 derivative).  Thus the
 gate is aimed at underconstrained extrapolation, not at rejecting the
 distortions already represented by the test corpus.
 
-## Stage 2 regression coverage
+
+## Projected lens identifiability
+
+Color-Screen does not have the usual camera-calibration constraint that a set
+of observed target points is known a priori to lie on straight lines. Instead
+it has many noisy correspondences between screen coordinates and image
+coordinates and solves lens distortion together with a homography. The relevant
+question is therefore not whether the raw lens Jacobian is well conditioned,
+but whether a lens perturbation has an observable effect **after the homography
+is allowed to compensate optimally**.
+
+For conceptual Jacobian blocks `J_H` (homography) and `J_L` (lens), the useful
+lens information is
+
+```
+J_L_perp = (I - P_H) J_L,
+```
+
+where `P_H` projects residual changes onto the subspace explainable by the
+homography. Equivalently, this is the lens block of the Schur complement after
+eliminating the homography parameters. The implementation does not explicitly
+construct `P_H`: `lens_solver::residuals()` already refits the best homography
+for every lens candidate. `lens_solver::identifiability()` therefore finite-
+differences this **profiled residual function** around the converged lens
+solution. To first order those finite differences are exactly the component of
+a lens perturbation which cannot be absorbed by refitting the homography.
+
+The Jacobian columns are multiplied by broad parameter scales before SVD. This
+is necessary because normalized center coordinates and the internally scaled
+`kr` coordinates use different numerical units; an unscaled condition number
+would mostly measure that arbitrary choice of units. The diagnostic records
+the smallest/largest singular values, their ratio, and the ratio of smallest to
+largest column norm. The current conservative acceptance rule is
+
+```
+smallest_singular_value / largest_singular_value >= 1e-4.
+```
+
+The threshold is deliberately loose. Existing synthetic fixed-lens recovery
+produces a ratio around `4.7e-3`, and the explicit off-image-center regression
+(center approximately `(1.8,0.6)`) is around `9.1e-3`, leaving roughly 47--90x
+margin. A distortion-free image with genuine perspective has an exactly zero
+lens singular direction because the optical center is then meaningless; this
+is the important failure mode the check is meant to catch.
+
+If the fitted lens fails this test, geometry solving itself does not fail. The
+pre-existing/manual lens profile is restored (identity if none was present)
+and the final homography/perspective solve continues. This prevents a weakly
+identified radial model from being installed merely because it can shave noise
+or perspective residual from the training points.
+
+## Stage 2--4 regression coverage
 
 The unit suite now checks that exactly the ordinary 100-point threshold is
 accepted when points are broadly distributed; a dense local cloud remains
@@ -185,6 +253,14 @@ only perpendicular to the movement axis. It also verifies that the existing
 synthetic and Nikon Coolscan profiles pass the automatic-fit envelope, an
 extreme but still monotone search-box profile is rejected, and insufficient
 coverage does not replace an existing manual lens profile.
+
+Stage 3 adds project-file round-trip tests for `solver_lens_center_distance`,
+checks `0=Auto`, verifies the `D=1`/`D=4` center envelopes and moving-lens
+discarded-axis semantics, and exercises actual recovery of a synthetic fixed
+lens with center `(1.8,0.6)`. Stage 4 adds a distortion-free but perspective-
+containing full-frame case: its profiled lens Jacobian is rank deficient and
+the solver must retain the pre-existing lens profile rather than invent radial
+correction for perspective.
 
 ## Deferred improvements
 
@@ -203,11 +279,10 @@ The following are deliberately *not* part of this conservative patch.
 
 ### Solver conditioning and statistics
 
-* Compute a conditioning/identifiability diagnostic from the nonlinear
-  Jacobian (singular values or covariance). Spatial coverage is only a cheap
-  proxy.
-* Report uncertainty for center and radial terms and suppress parameters that
-  are not individually identifiable.
+* Report uncertainty for center and radial terms, using the profiled Jacobian
+  or its covariance, and suppress individual parameters that are not
+  identifiable even when the overall model passes the current singular-ratio
+  test.
 * Add model-order selection: fit `k1`, then `k1+k2`, and only enable `k3` when
   supported by a significant residual improvement.
 * Consider weak regularization/prior information for the optical center and
@@ -226,17 +301,19 @@ lens objective.
 ### Calibration and UI
 
 * Build a corpus of calibrated macro lenses, high-resolution phones, camera
-  scanning rigs and film scanners; measure actual displacement and derivative
-  envelopes before tightening or relaxing the provisional 5% / 0.5..1.5
-  limits.
+  scanning rigs and film scanners; measure actual displacement, derivative and
+  projected-Jacobian envelopes before tightening the provisional 5%,
+  derivative and `1e-4` identifiability limits.
 * Distinguish a trusted/calibrated lens profile from a lens model inferred from
   the current registration points. The former should not be subject to the
   automatic-solver safety envelope.
 * The geometry panel now warns when point count is sufficient but coverage is
-  too local. A future UI can also show the numeric point coverage and solver
-  conditioning rather than only the pass/fail warning.
+  too local and exposes the optical-center search distance. A future UI can
+  also show numeric point coverage and projected-Jacobian singular values
+  rather than only pass/fail diagnostics.
 * Preserve rejected candidate diagnostics (objective, coverage, center,
-  displacement, derivative range) for troubleshooting.
+  displacement, derivative range, scaled Jacobian singular values/directions)
+  for troubleshooting.
 
 ## Validation of stage 1
 
@@ -263,3 +340,7 @@ Keep the following regressions as the lens code evolves:
 6. Full-frame synthetic solver recovery.
 7. Rejection of a dense registration cloud confined to a small scan area.
 8. Acceptance of a broad registration cloud with the same point count.
+9. Project-file and UI semantics for configurable off-image lens-center search.
+10. Recovery of a synthetic lens whose center lies outside the scanned image.
+11. Rejection of a lens fit whose profiled Jacobian is rank deficient because
+    its effect can be absorbed by the fitted homography.
