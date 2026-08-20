@@ -6,22 +6,26 @@ on:
       - agent/dn017-source-transport
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  archive:
+  export-diff:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
           ref: agent/dn017-source-transport
-      - name: Archive exact source
+          fetch-depth: 0
+      - name: Export current-main text delta
         shell: bash
         run: |
           set -euxo pipefail
+          git diff --no-ext-diff --full-index 7040f2f45b8fc64ba42d5155f50a4798376fb905 9c5ba76f1739e2e6818cb6f392d34358e5a4fda7 -- . ':(exclude)testsuite/*.tif' > /tmp/current-main.patch
+          split -C 200k -d -a 2 /tmp/current-main.patch .dn017-main-diff.part.
           rm .github/workflows/dn017-source-transport.yml
-          tar --exclude=.git -czf /tmp/colorscreen-current-main.tar.gz .
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dn017-current-main-source
-          path: /tmp/colorscreen-current-main.tar.gz
+          git add -- .dn017-main-diff.part.*
+          git rm --cached --ignore-unmatch .github/workflows/dn017-source-transport.yml || true
+          git config user.name 'OpenAI transport'
+          git config user.email 'transport@openai.invalid'
+          git commit -m 'transport current-main text diff for DN-017'
+          git push origin HEAD:agent/dn017-source-transport
