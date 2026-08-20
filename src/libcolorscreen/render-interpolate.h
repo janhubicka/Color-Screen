@@ -23,6 +23,7 @@ class demosaic_dufay;
 struct denoise_noise_estimate;
 struct denoise_noise_scale_estimate;
 struct denoise_noise_three_scale_estimate;
+struct denoise_noise_domain_comparison;
 typedef std::function <bool (coord_t, coord_t, rgbdata)> analyzer;
 typedef std::function <bool (coord_t, coord_t, rgbdata, rgbdata, rgbdata)> rgb_analyzer;
 
@@ -154,6 +155,12 @@ public:
       denoise_noise_three_scale_estimate *red,
       denoise_noise_three_scale_estimate *green,
       denoise_noise_three_scale_estimate *blue) const;
+
+  /* Compare linear, density/log and variance-stabilized noise domains.  */
+  bool estimate_screen_noise_domain_comparisons (
+      denoise_noise_domain_comparison *red,
+      denoise_noise_domain_comparison *green,
+      denoise_noise_domain_comparison *blue) const;
 
 private:
   /* Compensate saturation loss at screen coordinate P for color C.  */

@@ -6562,6 +6562,107 @@ test_denoise ()
   }
 
 
+  /* Log-density should stabilize multiplicative scanner/transmission noise.
+     Build an exponential transmission field with log-normal noise: its log is
+     a linear ramp plus additive stationary noise, so density space should be
+     substantially more scale-invariant and easier to fit than raw intensity.  */
+  {
+    const int w = 96, h = 72;
+    std::vector<luminosity_t> data ((size_t)w * h), support ((size_t)w * h, 1);
+    unsigned int noise_seed = 0x17d017U;
+    auto gaussian = [&] () -> luminosity_t
+    {
+      luminosity_t u1
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      luminosity_t u2
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      return std::sqrt ((luminosity_t)-2 * std::log (u1))
+             * std::cos ((luminosity_t)6.2831853071795864769 * u2);
+    };
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        {
+          luminosity_t density = (luminosity_t)0.2
+              + (luminosity_t)1.0 * x / (w - 1)
+              + (luminosity_t)0.15 * y / (h - 1);
+          data[(size_t)y * w + x]
+              = std::exp (-density + (luminosity_t)0.055 * gaussian ());
+        }
+    auto identity = [] (int_point_t q)
+      { return point_t{(coord_t)q.x, (coord_t)q.y}; };
+    denoise_noise_domain_comparison comparison = estimate_screen_noise_domains (
+        w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+        [&] (int x, int y) { return support[(size_t)y * w + x]; }, identity);
+    if (!comparison.valid_p () || !comparison.density_valid_p ()
+        || comparison.density_log.spacing1.relative_fit_error
+               >= comparison.linear.spacing1.relative_fit_error * (luminosity_t)0.5
+        || fabs (comparison.density_log.spacing2_variance_ratio - 1)
+               >= fabs (comparison.linear.spacing2_variance_ratio - 1))
+      {
+        fprintf (stderr,
+                 "Density-domain diagnostic failed: linear ratios %g/%g error %g; "
+                 "density %g/%g error %g\n",
+                 (double)comparison.linear.spacing2_variance_ratio,
+                 (double)comparison.linear.spacing3_variance_ratio,
+                 (double)comparison.linear.spacing1.relative_fit_error,
+                 (double)comparison.density_log.spacing2_variance_ratio,
+                 (double)comparison.density_log.spacing3_variance_ratio,
+                 (double)comparison.density_log.spacing1.relative_fit_error);
+        return false;
+      }
+  }
+
+  /* The generalized square-root transform should flatten a true
+     floor+slope signal-dependent additive-noise law without numerical trouble
+     when the fitted slope is small.  */
+  {
+    const int w = 96, h = 72;
+    const luminosity_t floor = (luminosity_t)0.00035;
+    const luminosity_t slope = (luminosity_t)0.0020;
+    std::vector<luminosity_t> data ((size_t)w * h), support ((size_t)w * h, 1);
+    unsigned int noise_seed = 0x51ab17U;
+    auto gaussian = [&] () -> luminosity_t
+    {
+      luminosity_t u1
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      luminosity_t u2
+          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
+      return std::sqrt ((luminosity_t)-2 * std::log (u1))
+             * std::cos ((luminosity_t)6.2831853071795864769 * u2);
+    };
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++)
+        {
+          luminosity_t signal = (luminosity_t)0.08
+              + (luminosity_t)0.72 * x / (w - 1)
+              + (luminosity_t)0.04 * y / (h - 1);
+          data[(size_t)y * w + x]
+              = signal + std::sqrt (floor + slope * signal) * gaussian ();
+        }
+    auto identity = [] (int_point_t q)
+      { return point_t{(coord_t)q.x, (coord_t)q.y}; };
+    denoise_noise_domain_comparison comparison = estimate_screen_noise_domains (
+        w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
+        [&] (int x, int y) { return support[(size_t)y * w + x]; }, identity);
+    if (!comparison.variance_stabilized_valid_p ()
+        || comparison.variance_stabilized.spacing1.variance_floor <= 0
+        || comparison.variance_stabilized.spacing1.variance_slope
+               > comparison.variance_stabilized.spacing1.variance_floor
+                     * (luminosity_t)0.35
+        || !my_isfinite (denoise_variance_stabilizing_transform (
+               (luminosity_t)0.5, floor, (luminosity_t)1e-12)))
+      {
+        fprintf (stderr,
+                 "Variance-stabilized diagnostic failed: floor %g slope %g "
+                 "linear floor/slope %g/%g\n",
+                 (double)comparison.variance_stabilized.spacing1.variance_floor,
+                 (double)comparison.variance_stabilized.spacing1.variance_slope,
+                 (double)comparison.vst_variance_floor,
+                 (double)comparison.vst_variance_slope);
+        return false;
+      }
+  }
+
   /* A bilateral filter needs a border matching its spatial kernel, not the
      unrelated NL-means patch and search radii.  Sigma 2 has support radius 6
      with the three-sigma truncation used by process_bilateral().  */
