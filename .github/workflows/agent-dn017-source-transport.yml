@@ -1,0 +1,28 @@
+name: DN-017 source transport
+
+on:
+  push:
+    branches:
+      - agent/dn-017-source-transport
+
+permissions:
+  contents: read
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Archive exact current main
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "f52c7133c8a41656b6c5e274719269a4edad313d"
+          git archive --format=tar.gz --output=/tmp/colorscreen-main-f52c713.tar.gz origin/main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-main-f52c713-source
+          path: /tmp/colorscreen-main-f52c713.tar.gz
