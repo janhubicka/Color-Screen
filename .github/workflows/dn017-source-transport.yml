@@ -1,0 +1,27 @@
+name: DN017 source transport
+
+on:
+  push:
+    branches:
+      - agent/dn017-source-transport
+
+permissions:
+  contents: read
+
+jobs:
+  archive:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/dn017-source-transport
+      - name: Archive exact source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm .github/workflows/dn017-source-transport.yml
+          tar --exclude=.git -czf /tmp/colorscreen-current-main.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dn017-current-main-source
+          path: /tmp/colorscreen-current-main.tar.gz
