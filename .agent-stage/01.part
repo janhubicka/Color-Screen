@@ -1,0 +1,324 @@
+diff --git a/src/libcolorscreen/unittests.C b/src/libcolorscreen/unittests.C
+index 7cdeb25..92ac278 100644
+--- a/src/libcolorscreen/unittests.C
++++ b/src/libcolorscreen/unittests.C
+@@ -5981,6 +5981,161 @@ test_real_mtf_reproducibility ()
+   return true;
+ }
+ 
++/* Verify native-channel slanted-edge measurement on a compact real Nikon
++   RGB+IR focus pair.  The fixtures are crops of the same razor edge: one near
++   best focus and one deliberately defocused.  This exercises the TIFF fourth
++   sample as IR and catches accidentally measuring the mixed image layer for
++   every requested channel.  */
++static bool
++test_nikon_rgbi_mtf_focus ()
++{
++  struct scan_result
++  {
++    std::array<double, 4> mtf50 = {0, 0, 0, 0};
++  };
++
++  auto test_path = [] (const char *filename)
++    {
++      const char *top_srcdir = getenv ("top_srcdir");
++      if (!top_srcdir || !*top_srcdir)
++        top_srcdir = "../..";
++      return std::string (top_srcdir) + "/testsuite/" + filename;
++    };
++
++  /* Return the first downward 50-percent crossing of MEASUREMENT.  Linear
++     interpolation makes the check insensitive to FFT zero-padding density.  */
++  auto measurement_mtf50 = [] (const mtf_measurement &measurement,
++                               double *mtf50)
++    {
++      if (!mtf50 || measurement.size () < 2)
++        return false;
++      for (size_t i = 1; i < measurement.size (); i++)
++        {
++          const double f0 = measurement.get_freq (i - 1);
++          const double f1 = measurement.get_freq (i);
++          const double c0 = measurement.get_contrast (i - 1);
++          const double c1 = measurement.get_contrast (i);
++          if (!my_isfinite (f0) || !my_isfinite (f1)
++              || !my_isfinite (c0) || !my_isfinite (c1))
++            return false;
++          if (c0 >= 50 && c1 <= 50 && c0 != c1)
++            {
++              *mtf50 = f0 + (50 - c0) * (f1 - f0) / (c1 - c0);
++              return my_isfinite (*mtf50) && *mtf50 > 0;
++            }
++        }
++      return false;
++    };
++
++  auto measure_scan = [&] (const char *filename, scan_result *out)
++    {
++      image_data image;
++      const std::string path = test_path (filename);
++      const char *error = nullptr;
++      if (!image.load (path.c_str (), false, &error, nullptr))
++        {
++          fprintf (stderr, "Cannot load Nikon RGBI MTF fixture %s: %s\n",
++                   path.c_str (), error ? error : "unknown error");
++          return false;
++        }
++      if (!image.has_rgb () || !image.has_grayscale_or_ir ())
++        {
++          fprintf (stderr,
++                   "Nikon RGBI MTF fixture did not load all four channels: %s\n",
++                   filename);
++          return false;
++        }
++
++      render_parameters parameters;
++      parameters.gamma = 1.0;
++      for (int channel = 0; channel < 4; channel++)
++        {
++          slanted_edge_parameters edge_parameters;
++          edge_parameters.channel = channel;
++          edge_parameters.same_capture = channel != 0;
++          edge_parameters.name = std::string (filename) + " channel "
++                                 + std::to_string (channel);
++          const slanted_edge_results edge
++              = slanted_edge_mtf (parameters, image, image.get_area (),
++                                  edge_parameters, nullptr);
++          if (!edge.success || !edge.measurement.size ())
++            {
++              fprintf (stderr,
++                       "Nikon RGBI slanted edge failed for %s channel %d: %s\n",
++                       filename, channel,
++                       edge.error.empty () ? "no measurement produced"
++                                           : edge.error.c_str ());
++              return false;
++            }
++          if (!parameters.sharpen.scanner_mtf.measurements.empty ())
++            {
++              fprintf (stderr,
++                       "Nikon RGBI measurement modified render parameters\n");
++              return false;
++            }
++          if (edge.measurement.channel != channel
++              || edge.measurement.same_capture != (channel != 0))
++            {
++              fprintf (stderr,
++                       "Nikon RGBI measurement metadata mismatch for channel %d\n",
++                       channel);
++              return false;
++            }
++          if (edge.edge_angle < 3.5 || edge.edge_angle > 6.5)
++            {
++              fprintf (stderr,
++                       "Unexpected Nikon razor angle %.6g for %s channel %d\n",
++                       edge.edge_angle, filename, channel);
++              return false;
++            }
++          if (!measurement_mtf50 (edge.measurement, &out->mtf50[channel]))
++            {
++              fprintf (stderr,
++                       "Nikon RGBI measurement has no usable MTF50 for %s "
++                       "channel %d\n",
++                       filename, channel);
++              return false;
++            }
++        }
++      return true;
++    };
++
++  scan_result sharp, defocused;
++  if (!measure_scan ("nikon-razor-sharp-rgbi.tif", &sharp)
++      || !measure_scan ("nikon-razor-defocus-rgbi.tif", &defocused))
++    return false;
++
++  for (int channel = 0; channel < 4; channel++)
++    if (sharp.mtf50[channel] <= 2 * defocused.mtf50[channel])
++      {
++        fprintf (stderr,
++                 "Nikon focus ordering failed for channel %d: sharp MTF50 "
++                 "%.6g, defocused %.6g cycles/pixel\n",
++                 channel, sharp.mtf50[channel], defocused.mtf50[channel]);
++        return false;
++      }
++
++  /* The real scanner channels are measurably different.  If all four MTF50s
++     are numerically identical, CHANNEL has almost certainly been treated only
++     as metadata and the same image layer was measured four times.  Keep the
++     threshold tiny so this remains a bug detector, not a calibration test.  */
++  double minimum = sharp.mtf50[0];
++  double maximum = sharp.mtf50[0];
++  for (int channel = 1; channel < 4; channel++)
++    {
++      minimum = std::min (minimum, sharp.mtf50[channel]);
++      maximum = std::max (maximum, sharp.mtf50[channel]);
++    }
++  if (maximum - minimum < 1e-6)
++    {
++      fprintf (stderr,
++               "Nikon native-channel MTF curves are unexpectedly identical\n");
++      return false;
++    }
++
++  return true;
++}
++
+ static bool
+ test_denoise ()
+ {
+@@ -7498,6 +7653,8 @@ main (int argc, char **argv)
+     { "slanted_edge", "slanted edge MTF tests", [] () { return test_slanted_edge_mtf (); } },
+     { "real_mtf_reproducibility", "real MTF reproducibility tests",
+       [] () { return test_real_mtf_reproducibility (); } },
++    { "nikon_rgbi_mtf", "Nikon RGB+IR focus MTF tests",
++      [] () { return test_nikon_rgbi_mtf_focus (); } },
+     { "denoising", "denoising tests", [] () { return test_denoise (); } },
+     { "demosaic", "dufay and paget demosaicing tests", [] () { return test_demosaic (); } },
+     { NULL, NULL, NULL }
+diff --git a/testsuite/Makefile.am b/testsuite/Makefile.am
+index 05f09c1..da6e817 100644
+--- a/testsuite/Makefile.am
++++ b/testsuite/Makefile.am
+@@ -23,6 +23,9 @@ EXTRA_DIST              = defs.sh $(TESTS) \
+ 			  ON_558_001_004_ISA-toprighth.tif \
+ 			  ON_558_001_004_ISA-toprightv.tif \
+ 			  ON_558_001_004_ISA-README.md \
++			  nikon-razor-rgbi-README.md \
++			  nikon-razor-sharp-rgbi.tif \
++			  nikon-razor-defocus-rgbi.tif \
+ 			  slanted-gaussian-vsharp.tif \
+ 			  slanted-gaussian-vsharp-mtf.txt \
+ 			  slanted-gaussian-sharp.tif \
+diff --git a/testsuite/Makefile.in b/testsuite/Makefile.in
+index 9635a8c..94f4feb 100644
+--- a/testsuite/Makefile.in
++++ b/testsuite/Makefile.in
+@@ -508,6 +508,9 @@ EXTRA_DIST = defs.sh $(TESTS) \
+ 			  ON_558_001_004_ISA-toprighth.tif \
+ 			  ON_558_001_004_ISA-toprightv.tif \
+ 			  ON_558_001_004_ISA-README.md \
++			  nikon-razor-rgbi-README.md \
++			  nikon-razor-sharp-rgbi.tif \
++			  nikon-razor-defocus-rgbi.tif \
+ 			  slanted-gaussian-vsharp.tif \
+ 			  slanted-gaussian-vsharp-mtf.txt \
+ 			  slanted-gaussian-sharp.tif \
+diff --git a/testsuite/nikon-razor-defocus-rgbi.tif b/testsuite/nikon-razor-defocus-rgbi.tif
+new file mode 100644
+index 0000000000000000000000000000000000000000..327bba6ec8502328044fe5c573703abf5dedb2fb
+GIT binary patch
+literal 65068
+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
