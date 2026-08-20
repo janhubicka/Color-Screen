@@ -6,10 +6,11 @@ on:
       - agent/dn017-transport
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   source:
+    if: github.event.head_commit.message != 'record DN017 transport run'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -20,8 +21,18 @@ jobs:
         run: |
           set -euxo pipefail
           git rev-parse HEAD
-          tar --exclude=.git --exclude=.github/workflows/dn017-source-transport.yml -czf /tmp/colorscreen-dn017-current-main.tar.gz .
+          tar --exclude=.git --exclude=.github/workflows/dn017-source-transport.yml --exclude=.dn017-run-id -czf /tmp/colorscreen-dn017-current-main.tar.gz .
       - uses: actions/upload-artifact@v4
         with:
           name: dn017-current-main-source
           path: /tmp/colorscreen-dn017-current-main.tar.gz
+      - name: Record transport run ID
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "$GITHUB_RUN_ID" > .dn017-run-id
+          git config user.name 'OpenAI transport'
+          git config user.email 'review@openai.invalid'
+          git add -- .dn017-run-id
+          git commit -m 'record DN017 transport run'
+          git push origin HEAD:agent/dn017-transport
