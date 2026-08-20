@@ -1,0 +1,106 @@
++   -log(X) and therefore only accepts strictly positive collected samples.
++   VARIANCE_STABILIZED uses the LINEAR spacing-1 floor+slope model to apply
++   the generalized square-root transform whose local derivative is
++   1/sqrt(floor+slope*X).  The transform choice is diagnostic only and does
++   not alter denoising or rendering parameters.  */
++struct denoise_noise_domain_comparison
++{
++  denoise_noise_three_scale_estimate linear;
++  denoise_noise_three_scale_estimate density;
++  denoise_noise_three_scale_estimate variance_stabilized;
++  denoise_noise_estimate variance_stabilizer_model;
++
++  bool valid_p () const
++  {
++    return linear.valid_p () || density.valid_p ()
++           || variance_stabilized.valid_p ();
++  }
++};
++
+ namespace denoise_noise_estimator_detail
+ {
+ struct observation
+@@ -844,6 +865,106 @@ estimate_screen_rgb_noise_three_scale_model (
+       });
+ }
+ 
++/* Transform a positive transmission sample X to optical-density coordinates.
++   Non-positive or non-finite inputs return NaN so the existing estimator
++   rejects that complete component observation rather than clipping it.  */
++inline luminosity_t
++denoise_density_transform (luminosity_t x)
++{
++  if (!(x > 0) || !my_isfinite (x))
++    return std::numeric_limits<luminosity_t>::quiet_NaN ();
++  return -std::log (x);
++}
++
++/* Apply the generalized square-root variance stabilizer derived from MODEL.
++   For variance a+b*x its derivative is 1/sqrt(a+b*x).  The algebraically
++   stable form below avoids cancellation as b approaches zero and reduces to
++   x/sqrt(a) when b is exactly zero.  Invalid model/sample combinations return
++   NaN and are rejected by the estimator.  */
++inline luminosity_t
++denoise_variance_stabilizing_transform (luminosity_t x,
++                                        const denoise_noise_estimate &model)
++{
++  if (!my_isfinite (x) || !model.valid_p ())
++    return std::numeric_limits<luminosity_t>::quiet_NaN ();
++  const luminosity_t a = model.variance_floor;
++  const luminosity_t b = model.variance_slope;
++  const luminosity_t variance = a + b * x;
++  if (!(a > 0) || !(variance > 0) || !my_isfinite (variance))
++    return std::numeric_limits<luminosity_t>::quiet_NaN ();
++  if (b == 0)
++    return x / std::sqrt (a);
++  return 2 * x / (std::sqrt (variance) + std::sqrt (a));
++}
++
++/* Compare scalar screen-sample noise diagnostics in linear intensity,
++   density and variance-stabilized domains.  WIDTH and HEIGHT describe the
++   sample lattice, GETDATA returns a collected sample, GETSUPPORT its support,
++   and ENTRY_TO_SCR maps lattice entries to physical screen coordinates.  */
++template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
++inline denoise_noise_domain_comparison
++estimate_screen_noise_domains (int width, int height, GETDATA getdata,
++                               GETSUPPORT getsupport,
++                               ENTRY_TO_SCR entry_to_scr)
++{
++  denoise_noise_domain_comparison result;
++  result.linear = estimate_screen_noise_three_scale_model (
++      width, height, getdata, getsupport, entry_to_scr);
++  result.density = estimate_screen_noise_three_scale_model (
++      width, height,
++      [&] (int x, int y) { return denoise_density_transform (getdata (x, y)); },
++      getsupport, entry_to_scr);
++  result.variance_stabilizer_model = result.linear.spacing1;
++  if (result.variance_stabilizer_model.valid_p ())
++    result.variance_stabilized = estimate_screen_noise_three_scale_model (
++        width, height,
++        [&] (int x, int y)
++        {
++          return denoise_variance_stabilizing_transform (
++              getdata (x, y), result.variance_stabilizer_model);
++        },
++        getsupport, entry_to_scr);
++  return result;
++}
++
++/* RGB counterpart of estimate_screen_noise_domains().  Each scanner
++   component is transformed independently while the existing precise-RGB
++   estimator continues to pool the resulting component observations.  */
++template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
++inline denoise_noise_domain_comparison
++estimate_screen_rgb_noise_domains (int width, int height, GETDATA getdata,
++                                   GETSUPPORT getsupport,
++                                   ENTRY_TO_SCR entry_to_scr)
++{
++  denoise_noise_domain_comparison result;
++  result.linear = estimate_screen_rgb_noise_three_scale_model (
++      width, height, getdata, getsupport, entry_to_scr);
++  result.density = estimate_screen_rgb_noise_three_scale_model (
++      width, height,
++      [&] (int x, int y)
++      {
++        rgbdata v = getdata (x, y);
++        for (int k = 0; k < 3; k++)
