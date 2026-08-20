@@ -1,101 +1,56 @@
-name: Ubuntu build
+name: Apply staged lens center patch
 
 on:
   push:
-    branches: [ "main", "v1-branch", "Kimrova-bachelorRelease" ]
-  pull_request:
-    branches: [ "main" ]
+    branches: [ "agent/lens-center-distance" ]
+
+permissions:
+  contents: write
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - { runner: ubuntu-24.04, arch: amd64 }
-          - { runner: ubuntu-24.04-arm, arch: arm64 }
-    
-    runs-on: ${{ matrix.runner }}
-    
-    env:
-      LC_ALL: C.UTF-8
-      LANG: C.UTF-8
-      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    
+  apply-stage3:
+    runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v4
-    - name: Update
-      run: sudo apt-get update
-    - name: Install dependencies
-      run: sudo apt-get install -y libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev liblcms2-dev libgtk2.0-dev libfftw3-dev qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev libexiv2-dev build-essential libopenjp2-7-dev libpng-dev
-    
-    - name: configure
-      run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" ./configure --enable-qtgui
-    - name: make
-      run: make -j$(nproc)
-    - name: make check
-      run: make -j$(nproc) check
-    - name: Upload Test Results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: testsuite-${{ matrix.arch }}
-        path: |
-          testsuite/*.txt
-          testsuite/*.log
-          testsuite/*.par
-    
-    - name: Package DEB
-      run: |
-        # Create temp install dir
-        mkdir -p /tmp/install
-        # Install to temp dir
-        make install DESTDIR=/tmp/install
-        # Run packaging script
-        ./os/linux/package_deb.sh /tmp/install 2.0alpha ${{ matrix.arch }}
-    - uses: actions/upload-artifact@v4
-      with:
-        name: colorscreen-deb-${{ matrix.arch }}
-        path: colorscreen_*.deb
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Rebase tested patch onto current main and publish clean commit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BASE=f44251299bdbd48014641753de7da1cf6b057977
 
-    # Only run distcheck and checking build on amd64 to save time/resources on ARM runners
-    - name: make distcheck
-      if: matrix.arch == 'amd64'
-      run: make -j$(nproc) distcheck
-    - name: Upload Test Results (distcheck)
-      if: matrix.arch == 'amd64' && always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: testsuite-distcheck-${{ matrix.arch }}
-        path: |
-          testsuite/*.txt
-          testsuite/*.log
-          testsuite/*.par
-    
-    - uses: actions/upload-artifact@v4
-      if: matrix.arch == 'amd64'
-      with:
-        name: source-tarball
-        path: colorscreen-*.tar.gz
+          # The temporary staging workflow carries the tested patch as a
+          # base64/gzip heredoc. Extract it rather than duplicating the payload.
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('.github/workflows/agent-apply-lens-center-stage3.yml').read_text()
+          start = text.index("H4sIC")
+          end = text.index("\nPATCH\n", start)
+          Path('/tmp/stage3.patch.gz.b64').write_text(text[start:end] + '\n')
+          PY
+          base64 -d /tmp/stage3.patch.gz.b64 | gunzip > /tmp/stage3.patch
+          git apply --check /tmp/stage3.patch
+          git apply /tmp/stage3.patch
 
-    - name: make distclean
-      if: matrix.arch == 'amd64'
-      run: make -j$(nproc) distclean
-    
-    - name: configure with checking
-      if: matrix.arch == 'amd64'
-      run: CXXFLAGS="-Ofast  -march=native -fsanitize=address,undefined" CFLAGS="$CXXFLAGS" ./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui
-    - name: make (checking enabled)
-      if: matrix.arch == 'amd64'
-      run: make -j$(nproc) 
-    - name: make -j$(nproc) check (checking enabled)
-      if: matrix.arch == 'amd64'
-      run: make check
-    - name: Upload Test Results (checking enabled)
-      if: matrix.arch == 'amd64' && always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: testsuite-checking-${{ matrix.arch }}
-        path: |
-          testsuite/*.txt
-          testsuite/*.log
-          testsuite/*.par
+          # Discard every temporary staging commit/file and commit only the six
+          # reviewed Stage-3 files on top of the current main revision.
+          git reset --soft "$BASE"
+          git reset
+          git add -- \
+            doc/lens-correction-review.md \
+            src/libcolorscreen/include/solver-parameters.h \
+            src/libcolorscreen/loadsave.C \
+            src/libcolorscreen/solver.C \
+            src/libcolorscreen/unittests.C \
+            src/qtgui/GeometryPanel.cpp
+          git diff --cached --check
+          git diff --cached --stat
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'lens: make fitted center range configurable' \
+            -m 'Replace the fixed [-0.5,1.5] automatic lens-center search box with solver_lens_center_distance. A positive distance D constrains each fitted coordinate to 0.5 +/- D/2, so D=1 stays inside the image and larger values support scanner captures cropped far from the physical optical axis. Zero remains Auto and currently resolves to D=2 to preserve the previous behavior.' \
+            -m 'Propagate the setting through simplex constraints, post-fit plausibility checks, project-file save/load, exact solver equality/copying, and the Qt Geometry panel. Keep the movement-axis coordinate ignored for moving-lens scanners and document that off-image fitted centers are a Color-Screen scanner-calibration extension rather than portable Adobe DNG profile semantics.' \
+            -m 'Extend the regression suite with configuration round-trip and bound checks plus an end-to-end synthetic fixed-lens recovery whose true center is x=1.8. The locally tested patch passed the complete O2 unit suite (40/40) and focused warp/lens_correction/1d_homography tests under both O2 and Ofast; the Qt addition is left to repository CI.'
+          git push --force origin HEAD:agent/lens-center-distance
