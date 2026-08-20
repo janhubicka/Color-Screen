@@ -148,11 +148,13 @@ void GeometryPanel::setupUi() {
       [](const ParameterState &s){ return (double)s.solver.lens_center_distance; },
       [](ParameterState &s, double v){ s.solver.lens_center_distance = v; },
       {{0.0, "Auto"}},
-      {{1.0, "Within image"}, {2.0, "2x image"}, {4.0, "4x image"}},
+      {{0.5, "Centered camera"}, {1.0, "Within image"},
+       {2.0, "2x image"}, {4.0, "4x image"}},
       nullptr,
       "Maximum distance allowed between the fitted optical center and image "
-      "center. 0 uses the automatic limit (currently 2). A value of 1 allows "
-      "the center anywhere inside the image; values above 1 allow it "
+      "center. 0 uses the automatic limit (currently 2). The Centered camera "
+      "preset (0.5) keeps the center in the central half of the capture; 1 "
+      "allows it anywhere inside the image, and values above 1 allow it "
       "proportionally outside the image. Useful when a scanner image is a "
       "crop far from the scanner lens optical axis.");
 
