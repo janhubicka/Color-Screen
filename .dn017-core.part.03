@@ -1,0 +1,92 @@
++        w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
++        [&] (int x, int y) { return support[(size_t)y * w + x]; },
++        [] (int_point_t p) { return point_t{(coord_t)p.x, (coord_t)p.y}; });
++    if (!domains.linear.valid_p () || !domains.density.valid_p ()
++        || fabs (domains.density.spacing2_variance_ratio - (luminosity_t)1)
++               > (luminosity_t)0.25
++        || fabs (domains.density.spacing3_variance_ratio - (luminosity_t)1)
++               > (luminosity_t)0.25
++        || domains.density.spacing1.relative_fit_error
++               >= domains.linear.spacing1.relative_fit_error * (luminosity_t)0.5)
++      {
++        fprintf (stderr,
++                 "Density-domain diagnostic mismatch: linear ratios %g %g "
++                 "error %g; density ratios %g %g error %g\n",
++                 (double)domains.linear.spacing2_variance_ratio,
++                 (double)domains.linear.spacing3_variance_ratio,
++                 (double)domains.linear.spacing1.relative_fit_error,
++                 (double)domains.density.spacing2_variance_ratio,
++                 (double)domains.density.spacing3_variance_ratio,
++                 (double)domains.density.spacing1.relative_fit_error);
++        return false;
++      }
++  }
++
++  /* The generalized square-root transform should flatten a known additive
++     floor+slope variance law without becoming numerically singular when the
++     slope is small.  */
++  {
++    const int w = 96, h = 72;
++    const luminosity_t expected_floor = (luminosity_t)0.0004;
++    const luminosity_t expected_slope = (luminosity_t)0.002;
++    std::vector<luminosity_t> data ((size_t)w * h), support ((size_t)w * h, 1);
++    unsigned int noise_seed = 0x4bd12c77U;
++    auto gaussian = [&] () -> luminosity_t
++    {
++      luminosity_t u1
++          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
++      luminosity_t u2
++          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
++      return std::sqrt ((luminosity_t)-2 * std::log (u1))
++             * std::cos ((luminosity_t)6.2831853071795864769 * u2);
++    };
++    for (int y = 0; y < h; y++)
++      for (int x = 0; x < w; x++)
++        {
++          luminosity_t signal = (luminosity_t)0.08
++              + (luminosity_t)0.70 * x / (w - 1)
++              + (luminosity_t)0.05 * y / (h - 1);
++          luminosity_t variance = expected_floor + expected_slope * signal;
++          data[(size_t)y * w + x] = signal + std::sqrt (variance) * gaussian ();
++        }
++    denoise_noise_domain_comparison domains = estimate_screen_noise_domains (
++        w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
++        [&] (int x, int y) { return support[(size_t)y * w + x]; },
++        [] (int_point_t p) { return point_t{(coord_t)p.x, (coord_t)p.y}; });
++    if (!domains.linear.valid_p () || !domains.variance_stabilized.valid_p ()
++        || !domains.variance_stabilizer_model.valid_p ()
++        || domains.variance_stabilized.spacing1.variance_slope
++               > (luminosity_t)0.05)
++      {
++        fprintf (stderr,
++                 "Variance-stabilized diagnostic mismatch: model %g + %g*x; "
++                 "transformed %g + %g*x error %g\n",
++                 (double)domains.variance_stabilizer_model.variance_floor,
++                 (double)domains.variance_stabilizer_model.variance_slope,
++                 (double)domains.variance_stabilized.spacing1.variance_floor,
++                 (double)domains.variance_stabilized.spacing1.variance_slope,
++                 (double)domains.variance_stabilized.spacing1.relative_fit_error);
++        return false;
++      }
++
++    denoise_noise_estimate nearly_constant;
++    nearly_constant.variance_floor = (luminosity_t)0.01;
++    nearly_constant.variance_slope = (luminosity_t)1e-12;
++    nearly_constant.observations = 256;
++    nearly_constant.bins = 4;
++    luminosity_t transformed
++        = denoise_variance_stabilizing_transform ((luminosity_t)0.4,
++                                                   nearly_constant);
++    if (!my_isfinite (transformed)
++        || fabs (transformed - (luminosity_t)4) > (luminosity_t)1e-4)
++      {
++        fprintf (stderr, "Variance-stabilizer small-slope limit mismatch: %g\n",
++                 (double)transformed);
++        return false;
++      }
++  }
++
++
+   /* A bilateral filter needs a border matching its spatial kernel, not the
+      unrelated NL-means patch and search radii.  Sigma 2 has support radius 6
+      with the three-sigma truncation used by process_bilateral().  */
