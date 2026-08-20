@@ -327,18 +327,16 @@ scr_to_img::set_parameters_for_early_correction (
   m_nwarnings = 0;
   assert (!debug || (width > 0 && height > 0));
 
-  /* DNG normalizes the optical center between the top-left and bottom-right
-     pixel centers.  Pixel coordinates therefore run through WIDTH-1 and
-     HEIGHT-1.  Using WIDTH/HEIGHT here shifts both the center and the radial
-     normalization.  */
-  const coord_t max_x = width > 0 ? (coord_t)(width - 1) : 0;
-  const coord_t max_y = height > 0 ? (coord_t)(height - 1) : 0;
-  point_t center = { m_param.lens_correction.center.x * max_x,
-                     m_param.lens_correction.center.y * max_y};
+  /* Match Adobe DNG SDK dng_filter_warp geometry.  The SDK interpolates the
+     normalized optical center against dng_rect bounds, whose right/bottom
+     coordinates are WIDTH/HEIGHT (the exclusive image bounds), and uses the
+     same rectangle to compute the normalization radius.  */
+  point_t center = { m_param.lens_correction.center.x * width,
+                     m_param.lens_correction.center.y * height};
   point_t c1 = { (coord_t)0, (coord_t)0 };
-  point_t c2 = { max_x, (coord_t)0 };
-  point_t c3 = { (coord_t)0, max_y };
-  point_t c4 = { max_x, max_y };
+  point_t c2 = { (coord_t)width, (coord_t)0 };
+  point_t c3 = { (coord_t)0, (coord_t)height };
+  point_t c4 = { (coord_t)width, (coord_t)height };
   m_lens_correction.set_parameters (m_param.lens_correction);
 
   /* Moving-lens scanners are a Color-Screen extension.  The movement-axis

@@ -4557,17 +4557,18 @@ test_whitepoint_constants ()
    in a WIDTH by HEIGHT full image.  CENTER is the normalized DNG optical
    center and KR contains kr0 ... kr3.
 
-   Keep this implementation separate from lens_warp_correction helpers: it is
-   a specification reference used to detect changes in center normalization,
-   radial normalization, polynomial order or transform direction.  */
+   Keep this implementation separate from lens_warp_correction helpers.  It
+   follows the radial equations plus the rectangle-bound convention used by
+   Adobe DNG SDK dng_filter_warp, and provides a secondary check alongside the
+   frozen output of the executed Adobe reference implementation.  */
 point_t
 dng_warp_rectilinear_reference (point_t p, int width, int height,
                                 point_t center, const coord_t kr[4])
 {
   const coord_t x0 = 0;
   const coord_t y0 = 0;
-  const coord_t x1 = width - 1;
-  const coord_t y1 = height - 1;
+  const coord_t x1 = width;
+  const coord_t y1 = height;
   const coord_t cx = x0 + center.x * (x1 - x0);
   const coord_t cy = y0 + center.y * (y1 - y0);
   const coord_t mx = std::max (my_fabs (x0 - cx), my_fabs (x1 - cx));
@@ -4575,16 +4576,15 @@ dng_warp_rectilinear_reference (point_t p, int width, int height,
   const coord_t m = my_sqrt (mx * mx + my * my);
   const coord_t dx = (p.x - cx) / m;
   const coord_t dy = (p.y - cy) / m;
-  const coord_t rsq = dx * dx + dy * dy;
+  const coord_t rsq = std::min ((coord_t)1, dx * dx + dy * dy);
   const coord_t f
       = kr[0] + rsq * (kr[1] + rsq * (kr[2] + rsq * kr[3]));
   return { cx + m * f * dx, cy + m * f * dy };
 }
 
 /* Verify the implemented radial, single-coefficient-set subset of DNG
-   WarpRectilinear.  The reference calculation above follows the equations in
-   Adobe DNG Specification 1.7.1.0, WarpRectilinear (Opcode ID 1), with
-   tangential coefficients kt0=kt1=0.  */
+   WarpRectilinear.  In addition to the independent calculation above, this
+   test contains coordinates emitted by Adobe DNG SDK 1.7.1 Build 2652.  */
 bool
 test_lens_warp ()
 {
@@ -4614,7 +4614,7 @@ test_lens_warp ()
       lens_warp_correction lw;
       lw.set_parameters (p);
 
-      /* Coordinate endpoints 0..1000 describe 1001 output pixel centers.  */
+      /* Use a 0..1000 square for the low-level radial helper.  */
       point_t img_center = { tc.center.x * 1000, tc.center.y * 1000 };
       if (!lw.precompute (img_center, {0, 0}, {1000, 0},
                           {1000, 1000}, {0, 1000}))
@@ -4679,8 +4679,8 @@ test_lens_warp ()
 
   /* Synthetic direct evaluation of the DNG radial polynomial.  The DNG
      specification gives the equations but not this numerical example.
-     Coordinate endpoints 0..1000 describe 1001 pixel centers, so center
-     (500,500) and a corner define r=1.
+     Using rectangle endpoints 0..1000 gives center (500,500) and makes a
+     corner define r=1.
      Parameters: kr = [1.0, 0.05, -0.02, 0.005]
      Point (600, 700) -> Delta (100, 200), r^2 = (100^2+200^2)/(500^2+500^2) = 0.1.
      Distortion ratio f(0.1) = 1.0 + 0.05(0.1) - 0.02(0.01) + 0.005(0.001) = 1.004805.
@@ -4705,59 +4705,91 @@ test_lens_warp ()
       }
   }
 
-  /* Compare the complete production forward path against an independent
-     transcription of the DNG equations.  Use a non-square image, an
-     off-center optical center and coefficients whose edge ratio is not one so
-     center normalization, m, polynomial order and transform direction are all
-     observable independently.  */
+  /* Cross-implementation conformance fixture.  The EXPECTED values below were
+     emitted by the actual Adobe DNG SDK 1.7.1 Build 2652 (2026-07-14), not
+     calculated by Color-Screen.  The reference workflow downloaded Adobe's
+     official dng_sdk_1_7_1_2652_20260714.zip, verified SHA-256
+       73499b47f4683e12120a234bd0946f02e52ab2ff9834bcbd0e9f8ab4f923360e
+     and verified dng_lens_correction.cpp SHA-256
+       89112619dce4a205761dc9e3b0c641d6c1d99911829a18c181a7229af4e8521f.
+     A wrapper compiled in Adobe's dng_lens_correction.cpp instantiated the
+     real dng_filter_warp and called GetSrcPixelPosition().  See
+     doc/lens-correction-review.md for the complete reproduction procedure.  */
   {
-    constexpr int width = 1001;
-    constexpr int height = 701;
-    scr_to_img_parameters p;
-    p.lens_correction.center = {0.23, 0.67};
-    p.lens_correction.kr[0] = 0.992;
-    p.lens_correction.kr[1] = 0.045;
-    p.lens_correction.kr[2] = -0.028;
-    p.lens_correction.kr[3] = 0.009;
-    scr_to_img map;
-    if (!map.set_parameters_for_early_correction (p, width, height))
-      return false;
-    const point_t samples[] = {
-      {0, 0}, {1000, 0}, {0, 700}, {1000, 700},
-      {123, 456}, {827, 51}, {230, 469}
+    struct adobe_dng_fixture
+    {
+      const char *name;
+      int width, height;
+      point_t center;
+      coord_t kr[4];
+      point_t output;
+      point_t expected_source;
     };
-    for (point_t sample : samples)
+    const adobe_dng_fixture fixtures[] = {
+      { "classic", 1000, 1000, {0.5, 0.5},
+        {1, 0.05, -0.02, 0.005}, {600, 700},
+        {600.48050000000001, 700.96100000000001} },
+      { "offcenter_tl", 1001, 701, {0.23, 0.67},
+        {0.992, 0.045, -0.028, 0.009}, {0, 0},
+        {-0.98894095820949701, -2.0174429911056109} },
+      { "offcenter_tr", 1001, 701, {0.23, 0.67},
+        {0.992, 0.045, -0.028, 0.009}, {1000, 0},
+        {1013.8325672342966, -8.4398480753109197} },
+      { "offcenter_bl", 1001, 701, {0.23, 0.67},
+        {0.992, 0.045, -0.028, 0.009}, {0, 700},
+        {0.59777057668648581, 699.40196978270342} },
+      { "offcenter_br", 1001, 701, {0.23, 0.67},
+        {0.992, 0.045, -0.028, 0.009}, {1000, 700},
+        {1011.2046333360396, 703.35264195316779} },
+      { "offcenter_mid1", 1001, 701, {0.23, 0.67},
+        {0.992, 0.045, -0.028, 0.009}, {123, 456},
+        {123.78924343023824, 456.10061510483405} },
+      { "offcenter_mid2", 1001, 701, {0.23, 0.67},
+        {0.992, 0.045, -0.028, 0.009}, {827, 51},
+        {834.12407645072631, 46.002032462044667} },
+      { "offcenter_mid3", 1001, 701, {0.23, 0.67},
+        {0.992, 0.045, -0.028, 0.009}, {230, 469},
+        {230.00183999362491, 469.00535998142914} },
+      { "coolscan_tl", 4000, 3000, {0.560586, 0.482547},
+        {0.99508, 0.0245411, -0.0521967, 0.0325757}, {0, 0},
+        {1.5160594222929831, 0.97875695171978805} },
+      { "coolscan_br", 4000, 3000, {0.560586, 0.482547},
+        {0.99508, 0.0245411, -0.0521967, 0.0325757}, {3999, 2999},
+        {3995.2350617838392, 2995.6750628546024} },
+      { "coolscan_mid", 4000, 3000, {0.560586, 0.482547},
+        {0.99508, 0.0245411, -0.0521967, 0.0325757}, {317, 2411},
+        {320.87650466339437, 2409.0603644564176} },
+      { "edge_ratio_below_one", 1000, 800, {0.41, 0.62},
+        {0.9, 0, 0, 0}, {901, 87},
+        {851.90000000000009, 127.89999999999998} }
+    };
+
+    for (const adobe_dng_fixture &fixture : fixtures)
       {
-        point_t expected = dng_warp_rectilinear_reference (
-            sample, width, height, p.lens_correction.center,
-            p.lens_correction.kr);
-        point_t actual = map.inverse_early_correction (sample);
-        if (!actual.almost_eq (expected, 1e-9))
+        scr_to_img_parameters p;
+        p.lens_correction.center = fixture.center;
+        for (int i = 0; i < 4; i++)
+          p.lens_correction.kr[i] = fixture.kr[i];
+        scr_to_img map;
+        if (!map.set_parameters_for_early_correction (
+                p, fixture.width, fixture.height))
+          return false;
+        const point_t actual
+            = map.inverse_early_correction (fixture.output);
+        const point_t equation = dng_warp_rectilinear_reference (
+            fixture.output, fixture.width, fixture.height, fixture.center,
+            fixture.kr);
+        if (!actual.almost_eq (fixture.expected_source, 1e-9)
+            || !equation.almost_eq (fixture.expected_source, 1e-9))
           {
             fprintf (stderr,
-                     "DNG WarpRectilinear mismatch at %.12g,%.12g: "
-                     "expected %.12g,%.12g got %.12g,%.12g\n",
-                     sample.x, sample.y, expected.x, expected.y,
-                     actual.x, actual.y);
+                     "Adobe DNG SDK fixture %s mismatch: expected "
+                     "%.17g,%.17g got %.17g,%.17g; equation %.17g,%.17g\n",
+                     fixture.name, fixture.expected_source.x,
+                     fixture.expected_source.y, actual.x, actual.y, equation.x,
+                     equation.y);
             ok = false;
           }
-      }
-  }
-
-  /* DNG explicitly defines normalized optical center (1,0) to be the
-     top-right pixel.  This catches WIDTH rather than WIDTH-1 scaling directly.  */
-  {
-    scr_to_img_parameters p;
-    p.lens_correction.center = {1, 0};
-    p.lens_correction.kr[0] = 0.9;
-    scr_to_img map;
-    if (!map.set_parameters_for_early_correction (p, 11, 7))
-      return false;
-    point_t top_right = {10, 0};
-    if (!map.inverse_early_correction (top_right).almost_eq (top_right, 1e-12))
-      {
-        fprintf (stderr, "DNG optical center (1,0) is not the top-right pixel\n");
-        ok = false;
       }
   }
 
@@ -4798,7 +4830,7 @@ test_lens_warp ()
     scr_to_img map;
     if (!map.set_parameters_for_early_correction (p, 1000, 600))
       return false;
-    point_t center_line = {123, 0.61 * 599};
+    point_t center_line = {123, 0.61 * 600};
     if (!map.inverse_early_correction (center_line).almost_eq (center_line,
                                                                1e-10))
       {

@@ -2,7 +2,8 @@
 
 Review date: 2026-08-17  
 Code base: `7040f2f45b8fc64ba42d5155f50a4798376fb905`  
-Reference: Adobe DNG Specification 1.7.1.0, `WarpRectilinear` (opcode 1).
+References: Adobe DNG Specification 1.7.1.0, `WarpRectilinear` (opcode 1),
+and Adobe DNG SDK 1.7.1 Build 2652 (2026-07-14).
 
 Implementation status: stage 1 contains the DNG/correctness fixes and
 conformance regressions. Stage 2 adds conservative safeguards for automatic
@@ -28,10 +29,18 @@ the warped/output image, the opcode computes the source coordinate to sample.
 `scan_to_corrected()` is Color-Screen's numerical inverse used by the
 screen-to-image mapping.
 
-The DNG normalized optical center uses the top-left and bottom-right **pixel
-centers** as 0 and 1. Therefore a `width x height` image uses coordinate
-endpoints `width-1` and `height-1`. The farthest output pixel from the optical
-center defines the normalization radius `m` and therefore `r=1`.
+There is an important specification/reference-implementation discrepancy in
+the optical-center geometry. The DNG 1.7.1 prose describes normalized center
+coordinates in terms of image pixels (and in particular says `(1,0)` denotes
+the top-right pixel), which suggests `width-1`/`height-1` pixel-center
+endpoints. Adobe DNG SDK 1.7.1 Build 2652 instead implements the operation
+using `dng_rect` bounds: `dng_filter_warp` interpolates the center between
+`bounds.l..bounds.r` and `bounds.t..bounds.b`, and computes the normalization
+radius from the same rectangle. For `dng_rect(height,width)`, `r=width` and
+`b=height` are exclusive image bounds. Color-Screen deliberately follows this
+`width`/`height` SDK convention because interoperability with Adobe DNG and
+future lens-profile imports is more important than the earlier literal reading
+of the prose. The executed SDK dataset below makes this convention testable.
 
 For the radial-only model, DNG invertibility reduces to
 
@@ -56,7 +65,7 @@ axis before applying the remaining one-dimensional lens geometry.
 
 | ID | Status | Issue / action |
 |---|---|---|
-| LC-001 | Fixed | Production DNG center and corner normalization used `width`/`height` instead of the bottom-right pixel centers `width-1`/`height-1`. |
+| LC-001 | Fixed after SDK cross-check | The initial spec-only review changed center/radius geometry to `width-1`/`height-1`. Executing Adobe DNG SDK 1.7.1 Build 2652 showed that the reference implementation actually uses the exclusive `dng_rect` bounds `width`/`height`; Color-Screen now follows the SDK. |
 | LC-002 | Fixed | The direct inverse used by `lens_solver` searched only to `m`, while the lookup-table inverse extended beyond `m` when `f(1)<1`. Both paths now use the same search bound. |
 | LC-003 | Fixed | `precompute()` accepted a non-monotone radial map although DNG requires an invertible warp. |
 | LC-004 | Fixed | Moving-lens precomputation left the default normalized center on the axis that is explicitly removed before lens correction. |
@@ -65,6 +74,67 @@ axis before applying the remaining one-dimensional lens geometry.
 | LS-003 | Fixed | Normalized auto-fit candidates are restricted to a conservative center, displacement and radial-derivative envelope. This is solver safety policy, not a DNG-format restriction. |
 | TEST-001 | Fixed | The lens test used a fixed `(500,500)` center for all nominal test cases and normalized a second warp from already-warped source corners. |
 | TEST-002 | Fixed | A hand-calculated polynomial check was incorrectly described as an Adobe DNG worked example. It is retained as a synthetic formula check. |
+| TEST-003 | Fixed | Twelve source coordinates emitted by the executed Adobe DNG SDK Build 2652 are frozen in `test_lens_warp()` and compared directly with Color-Screen output. |
+
+## Adobe DNG SDK reference dataset
+
+The cross-implementation regression is based on data produced by **executing
+Adobe's implementation**, not by reimplementing its equations in a helper
+program. The reproducible probe lives on the experimental branch
+`agent/dng-sdk-reference-run`; the source state used to generate the frozen
+fixture is commit `cfb5f31fa852322eb6d3a6b8e566e1bfa2bdf3ce`.
+
+The workflow performs the following steps:
+
+1. Download Adobe's official
+   `dng_sdk_1_7_1_2652_20260714.zip` from
+   `https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1_2652_20260714.zip`.
+   The workflow refuses to continue unless its SHA-256 is
+   `73499b47f4683e12120a234bd0946f02e52ab2ff9834bcbd0e9f8ab4f923360e`.
+2. Unpack the archive and verify that the actual Adobe
+   `dng_sdk/source/dng_lens_correction.cpp` has SHA-256
+   `89112619dce4a205761dc9e3b0c641d6c1d99911829a18c181a7229af4e8521f`.
+3. Clone `hfiguiere/dng_sdk` only to obtain its Meson build scaffolding, then
+   overwrite its `dng_sdk/source` directory with the files from the verified
+   Adobe archive. Thus the lens implementation being executed is the official
+   Build 2652 source, not the mirror's copy.
+4. Build with the SDK validation helpers enabled (`qDNGValidateTarget=1`).
+   Build 2652 generic headers require the libjxl 0.11 API while the runner's
+   packaged libjxl is older, so the workflow supplies the public libjxl 0.11.1
+   headers, omits unrelated `dng_jxl.cpp`, and links throwing/no-op stubs for
+   JPEG-XL entry points. None of these entry points is called by the lens-warp
+   probe.
+5. Append `.github/dng-reference/reference-wrapper.inc` to Adobe's
+   `dng_lens_correction.cpp`. This is intentional: `dng_filter_warp` is an
+   implementation-private class in that translation unit. The wrapper can
+   therefore instantiate the **real** class rather than duplicate its math.
+   It creates a `dng_negative`, `dng_simple_image` source and destination with
+   bounds `dng_rect(height,width)`, loads the four radial coefficients through
+   `dng_warp_params_radial::SetWarpRectilinear_1_3`, sets tangential terms to
+   zero, constructs `dng_warp_params_rectilinear`, constructs
+   `dng_filter_warp`, and calls its real `GetSrcPixelPosition()` method.
+6. `.github/dng-reference/reference_probe.cpp` invokes that wrapper for twelve
+   cases: a simple centered polynomial, seven points of one non-square
+   off-center profile, three points using the Nikon Coolscan coefficients, and
+   one constant-ratio case with `f(1)<1`.
+7. The program prints all inputs and returned source coordinates at 17-digit
+   precision. The successful run saved them as
+   `.github/dng-reference/generated/adobe-dng-sdk-2652-warp-fixture.txt` with a
+   companion `PROVENANCE.txt`. Those exact numeric outputs are copied into
+   `test_lens_warp()`; the unit test never runs the Adobe SDK itself.
+
+This probe exposed the `width-1` mistake immediately. For example, Build 2652
+returns `(1011.2046333360396, 703.35264195316779)` for output pixel
+`(1000,700)` of the `1001 x 701`, center `(0.23,0.67)` fixture with
+`kr=(0.992,0.045,-0.028,0.009)`. That result is produced using center
+`(0.23*1001,0.67*701)` and the `1001 x 701` rectangle bounds. The previous
+pixel-center interpretation gives a measurably different result.
+
+Color-Screen keeps an independent equation transcription as a secondary
+arithmetic check, but the frozen Build 2652 coordinates are the authoritative
+interoperability regression. A future DNG/lens-database importer should add
+representative imported profiles to this table before extending the supported
+opcode subset.
 
 ## Automatic solver safety envelope
 
@@ -184,11 +254,12 @@ window; its first six cases completed successfully locally.
 
 Keep the following regressions as the lens code evolves:
 
-1. DNG direct radial formula evaluation.
-2. DNG optical-center conversion using `width-1`/`height-1`.
+1. Frozen source coordinates emitted by Adobe DNG SDK 1.7.1 Build 2652.
+2. Independent radial-formula evaluation using Adobe SDK `dng_rect`
+   `width`/`height` bound semantics.
 3. Forward/inverse agreement for in-domain source pixels.
 4. Equality of lookup-table and direct inverse search domains.
-5. Known Coolscan coefficients.
+5. Known Coolscan coefficients (also represented in the Adobe SDK fixture).
 6. Full-frame synthetic solver recovery.
 7. Rejection of a dense registration cloud confined to a small scan area.
 8. Acceptance of a broad registration cloud with the same point count.

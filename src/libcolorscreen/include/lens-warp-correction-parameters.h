@@ -22,8 +22,10 @@ struct lens_warp_correction_parameters
 {
   /* DNG WarpRectilinear radial coefficients kr0 ... kr3.  */
   coord_t kr[4];
-  /* Optical center in DNG normalized coordinates.  (0,0) is the top-left
-     pixel center and (1,1) is the bottom-right pixel center.  */
+  /* Optical center in normalized DNG coordinates.  For interoperability we
+     follow Adobe DNG SDK dng_filter_warp: (0,0) is the top-left image bound
+     and (1,1) is the exclusive bottom-right image bound.  Color-Screen may
+     also use centers outside [0,1] when solving scanner-bed captures.  */
   point_t center;
 
   /* Initialize with identity correction and center at (0.5, 0.5).  */

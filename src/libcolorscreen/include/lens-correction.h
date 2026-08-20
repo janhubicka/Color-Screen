@@ -40,11 +40,10 @@ struct lens_warp_correction
   }
 
   /* Precompute the DNG radial normalization.  CENTER is the optical center in
-     pixel coordinates and C1 ... C4 are the four pixel centers at the corners
-     of the warped/output image.  Thus for a WIDTH x HEIGHT image the corner
-     coordinates are based on WIDTH-1 and HEIGHT-1, not WIDTH and HEIGHT.
-
-     The farthest corner defines normalized radius r=1.
+     image coordinates and C1 ... C4 are the corners of the image rectangle.
+     Adobe DNG SDK dng_filter_warp uses dng_rect bounds here, so a WIDTH x
+     HEIGHT full image has right/bottom rectangle coordinates WIDTH/HEIGHT.
+     The farthest rectangle corner defines normalized radius r=1.
      Returns true on success.  */
   nodiscard_attr DLL_PUBLIC bool precompute (point_t center, point_t c1,
 					     point_t c2, point_t c3,
