@@ -1,0 +1,28 @@
+#!/bin/sh
+# Compile and run the compact real Nikon RGB+IR native-channel MTF regression.
+
+set -e
+
+test_object=./nikon-rgbi-mtf-test.lo
+test_program=./nikon-rgbi-mtf-test${EXEEXT}
+
+cleanup ()
+{
+    "$top_builddir/libtool" --mode=clean rm -f "$test_object" "$test_program" \
+        >/dev/null 2>&1 || rm -f "$test_object" "$test_program"
+}
+trap cleanup EXIT HUP INT TERM
+
+"$top_builddir/libtool" --tag=CXX --mode=compile \
+    $CXX $CPPFLAGS $CXXFLAGS -std=c++17 -DLIBCOLORSCREEN \
+    -I"$top_srcdir/src/libcolorscreen" \
+    -I"$top_srcdir/src/libcolorscreen/include" \
+    -I"$top_builddir/src/libcolorscreen" \
+    -I"$top_builddir/src/libcolorscreen/include" \
+    -c "$srcdir/nikon-rgbi-mtf-test.C" -o "$test_object"
+
+"$top_builddir/libtool" --tag=CXX --mode=link \
+    $CXX $CXXFLAGS $LDFLAGS -o "$test_program" "$test_object" \
+    "$top_builddir/src/libcolorscreen/libcolorscreen.la" $LIBS
+
+"$test_program"

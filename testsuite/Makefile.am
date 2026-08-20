@@ -23,6 +23,10 @@ EXTRA_DIST              = defs.sh $(TESTS) \
 			  ON_558_001_004_ISA-toprighth.tif \
 			  ON_558_001_004_ISA-toprightv.tif \
 			  ON_558_001_004_ISA-README.md \
+			  nikon-razor-rgbi-README.md \
+			  nikon-razor-sharp-rgbi.tif \
+			  nikon-razor-defocus-rgbi.tif \
+			  nikon-rgbi-mtf-test.C \
 			  slanted-gaussian-vsharp.tif \
 			  slanted-gaussian-vsharp-mtf.txt \
 			  slanted-gaussian-sharp.tif \
@@ -37,7 +41,10 @@ EXTRA_DIST              = defs.sh $(TESTS) \
 TEST_LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) \
 			  $(top_srcdir)/build-aux/tap-driver.sh
 
-TESTS_ENVIRONMENT       = top_builddir=$(top_builddir) top_srcdir=$(top_srcdir)
+TESTS_ENVIRONMENT       = top_builddir=$(top_builddir) top_srcdir=$(top_srcdir) \
+                          EXEEXT='$(EXEEXT)' CXX='$(CXX)' \
+                          CPPFLAGS='$(CPPFLAGS)' CXXFLAGS='$(CXXFLAGS)' \
+                          LDFLAGS='$(LDFLAGS)' LIBS='$(LIBS)'
 
 # Files produced directly by tests rather than by the Automake test driver.
 # Declare them so clean/distclean and distcleancheck leave the build tree clean.
@@ -60,7 +67,8 @@ TESTS                   = unittests.test \
 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw-finetune.test \
 			  dufaycolor_dt_captureone_export.test \
 			  render-original.test \
-			  slanted-edge.test
+			  slanted-edge.test \
+			  nikon-rgbi-mtf.test
 
 distclean-local:
 	-rm -rf ./out-* ./out2-*
