@@ -65,6 +65,159 @@ The project uses GitHub Actions for automated testing. Workflows are defined in 
 - **macOS**: Apple Silicon and Intel builds.
 - **Windows**: MSYS2/MinGW-w64 builds.
 
+## Agent container build and test setup
+
+The ChatGPT/agent execution container is normally Debian 13 (trixie), amd64.
+It may not have root access, the development packages needed by Color-Screen,
+or reliable direct access to GitHub/Debian mirrors. A reproducible core-library
+build can still be made by keeping both source and dependencies in private
+prefixes.
+
+### Obtaining source and dependencies
+
+Prefer an exact source revision and record its commit SHA before testing. If
+normal network access works, a normal checkout/archive is fine. If direct
+container networking cannot reach GitHub, use a temporary GitHub Actions job as
+a transport: archive the exact revision (or run `make dist` when appropriate),
+upload it as an Actions artifact, and download that artifact into the container.
+Do not review or merge temporary transport branches/workflows; the review branch
+must contain only the intended project changes.
+
+For Debian 13/trixie amd64 core builds, the dependency bundle used successfully
+by agents contains the development packages and matching runtimes for:
+
+- FFTW: `libfftw3-dev`, `libfftw3-bin`, `libfftw3-long3`, `libfftw3-quad3`
+- GSL: `libgsl-dev`, `libgsl28`, `libgslcblas0`
+- TurboJPEG: `libturbojpeg0-dev`, `libturbojpeg0`
+- LittleCMS: `liblcms2-dev`, `liblcms2-2`
+- LibRaw: `libraw-dev`, `libraw23t64`
+- libzip: `libzip-dev`, `libzip5`, `zipcmp`, `zipmerge`, `ziptool`
+- Exiv2: `libexiv2-dev`, `libexiv2-28`, `libexiv2-data`
+- INI reader runtime needed by the packaged Exiv2 dependency:
+  `libinireader0`
+
+A convenient way to create the bundle is a temporary Debian 13 GitHub Actions
+runner using `apt-get download` for the packages above and uploading the
+resulting `.deb` files as an artifact. On a non-Debian host, the same bundle
+can be produced without `apt` by downloading the Debian trixie `Packages.xz`
+indexes, resolving the package filenames, and downloading the referenced
+`.deb` files. Keep the bundle together with the exact source revision when
+reproducibility matters.
+
+The agent container does not need root privileges to install this bundle.
+Extract every package into a private prefix, for example:
+
+```bash
+DEPS=/tmp/colorscreen-build/deps/local
+mkdir -p "$DEPS"
+for deb in /path/to/debs/*.deb; do
+  dpkg-deb -x "$deb" "$DEPS"
+done
+```
+
+Then point compilation, `pkg-config`, and runtime linking at that prefix:
+
+```bash
+export DEPS=/tmp/colorscreen-build/deps/local
+export PKG_CONFIG_PATH="$DEPS/usr/lib/x86_64-linux-gnu/pkgconfig:$DEPS/usr/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+export CPPFLAGS="-I$DEPS/usr/include${CPPFLAGS:+ $CPPFLAGS}"
+export LDFLAGS="-L$DEPS/usr/lib/x86_64-linux-gnu -Wl,-rpath,$DEPS/usr/lib/x86_64-linux-gnu${LDFLAGS:+ $LDFLAGS}"
+export LD_LIBRARY_PATH="$DEPS/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+```
+
+If a Debian package was built against an INI-reader SONAME not otherwise
+available in the container, an ABI-compatible private `libinih.so.1` shim has
+been used successfully for test-only builds. Prefer the real Debian runtime
+package (`libinireader0`) whenever available.
+
+### Core build used by agents
+
+For correctness work that does not require the GUI, use an out-of-tree build
+with checking enabled. Keep OpenMP enabled: some core code still calls OpenMP
+entry points directly, so `--disable-openmp` is not a supported test
+configuration.
+
+A conservative validation build is:
+
+```bash
+mkdir -p /tmp/colorscreen-build/build-o2
+cd /tmp/colorscreen-build/build-o2
+CFLAGS="-O2 -g -Wall -Wextra" \
+CXXFLAGS="-O2 -g -Wall -Wextra" \
+/path/to/Color-Screen/configure \
+  --enable-checking --disable-shared --enable-static --disable-static-link
+make -j"$(nproc)"
+```
+
+The optimized build that most closely exercises production assumptions is:
+
+```bash
+mkdir -p /tmp/colorscreen-build/build-ofast
+cd /tmp/colorscreen-build/build-ofast
+CFLAGS="-Ofast -march=native -g -Wall" \
+CXXFLAGS="-Ofast -march=native -g -Wall" \
+/path/to/Color-Screen/configure \
+  --enable-checking --disable-shared --enable-static --disable-static-link
+make -j"$(nproc)"
+```
+
+GCC is the most reliable compiler in this private-prefix setup because it has a
+working OpenMP runtime. Clang validation is useful when `omp.h`/libomp are
+available, but lack of the OpenMP development files is an environment problem,
+not a reason to disable OpenMP in Color-Screen.
+
+### Agent-side test procedure
+
+Run focused tests first while developing, then the complete unit binary:
+
+```bash
+./src/libcolorscreen/unittests warp lens_correction 1d_homography
+top_srcdir=/path/to/Color-Screen ./src/libcolorscreen/unittests
+```
+
+The second command should run all registered unit groups. Also use
+`make -j"$(nproc)" check` when the reconstructed source/build tree contains the
+generated testsuite Makefiles. For changes affecting CLI/rendering paths, run
+the relevant scripts in `testsuite/` in addition to the unit binary.
+
+Repeat important numerical tests with both `-O2` and `-Ofast`. Fast-math has
+historically exposed real portability/correctness issues, so an `-O2` pass
+alone is not enough for sensitive numerical code.
+
+Some integration tests, especially full finetune runs, can exceed the command
+execution window of the agent container. Run as much as possible locally, say
+exactly where execution stopped, and leave the uninterrupted long run to the
+repository CI rather than claiming a complete local pass.
+
+## Git and pull-request workflow for agents
+
+Substantial agent changes should be prepared on a clean feature branch created
+from the current `main`, never directly on `main`. Before committing, inspect
+the exact diff and make sure the branch contains only the intended files; keep
+temporary dependency/source-transport workflows and staging artifacts off the
+review branch.
+
+When the user authorizes publication, the preferred sequence is:
+
+1. create the feature branch from the current `main` commit;
+2. apply and test the intended changes;
+3. commit only the reviewed files;
+4. push the feature branch;
+5. open a **draft** pull request against `main`;
+6. inspect GitHub Actions results and report failures precisely.
+
+Do not merge a pull request unless the user explicitly asks for the merge.
+If a matching PR already exists, update that PR/branch instead of opening a
+duplicate.
+
+Commit messages should be relatively detailed. Use a concise subsystem-style
+subject (for example `lens: validate Adobe DNG reference geometry`) followed by
+a body that gives an overview of the changes and, importantly, their rationale.
+Call out compatibility decisions, non-obvious invariants, deliberately deferred
+work, and the tests that were run. Avoid vague one-line commit messages for
+nontrivial patches: the commit should remain useful months later without
+requiring the reader to reconstruct the motivation from the diff.
+
 ## Repository Structure
 
 - `src/libcolorscreen/`: Core rendering and processing library.
