@@ -4,9 +4,9 @@ Review date: 2026-08-17
 Code base: `7040f2f45b8fc64ba42d5155f50a4798376fb905`  
 Reference: Adobe DNG Specification 1.7.1.0, `WarpRectilinear` (opcode 1).
 
-Implementation status: stage 1 contains only DNG/correctness fixes and
-conformance regressions. Solver coverage and plausibility policy remain
-explicitly deferred to stage 2.
+Implementation status: stage 1 contains the DNG/correctness fixes and
+conformance regressions. Stage 2 adds conservative safeguards for automatic
+lens fitting: robust spatial coverage and a bounded deformation envelope.
 
 ## Scope
 
@@ -61,8 +61,8 @@ axis before applying the remaining one-dimensional lens geometry.
 | LC-003 | Fixed | `precompute()` accepted a non-monotone radial map although DNG requires an invertible warp. |
 | LC-004 | Fixed | Moving-lens precomputation left the default normalized center on the axis that is explicitly removed before lens correction. |
 | LS-001 | Fixed | A map-setup failure in `lens_solver::solve()` could return without initializing `chisq`; simplex could then consume an indeterminate objective value. |
-| LS-002 | Next patch | Lens optimization is still enabled by point count alone. Add robust spatial-coverage qualification after the DNG/correctness patch is validated. |
-| LS-003 | Next patch | Add a conservative automatic-solver deformation envelope after the DNG/correctness patch is validated. This is a safety policy, not a DNG-format restriction. |
+| LS-002 | Fixed | Automatic lens fitting now requires the central 90% of registration points to cover at least half of every relevant scan axis, in addition to the point-count threshold. |
+| LS-003 | Fixed | Normalized auto-fit candidates are restricted to a conservative center, displacement and radial-derivative envelope. This is solver safety policy, not a DNG-format restriction. |
 | TEST-001 | Fixed | The lens test used a fixed `(500,500)` center for all nominal test cases and normalized a second warp from already-warped source corners. |
 | TEST-002 | Fixed | A hand-calculated polynomial check was incorrectly described as an Adobe DNG worked example. It is retained as a synthetic formula check. |
 
@@ -74,7 +74,7 @@ homography and the high-order terms/optical center are poorly identified.
 A very small local residual can therefore extrapolate to a very large global
 deformation. Point count does not cure this conditioning problem.
 
-The proposed conservative gate for the next patch is:
+The implemented conservative gate is:
 
 * retain the existing minimum point count (100 for ordinary screens, 200 for
   vertical-strip screens);
@@ -87,10 +87,11 @@ The proposed conservative gate for the next patch is:
   displacement `|r * (f(r)-1)| <= 0.05` of DNG radius `m`;
 * require radial derivative `0.5 <= w'(r) <= 1.5` throughout the image.
 
-These proposed values are intentionally generous and provisional. They are not
-claimed physical limits and must not be applied when merely loading a valid
-DNG profile. They only decide whether an **automatically inferred** lens
-solution is safe enough to install.
+These values are intentionally generous and remain provisional. They are not
+claimed physical limits and are not applied when merely loading or retaining a
+valid DNG/manual profile. They only decide whether an **automatically inferred**
+lens solution is safe enough to install. If spatial coverage is insufficient,
+lens optimization is skipped and any existing lens profile remains active.
 
 For scale, the existing Nikon Coolscan 9000ED fixture
 
@@ -101,9 +102,19 @@ kr = 0.99508 0.0245411 -0.0521967 0.0325757
 has about 0.185% maximum normalized radial displacement; evaluating the
 polynomial gives a radial-derivative range of about 0.9945..1.0357.  The
 normalized synthetic lens-solver regression is also comfortably inside the
-envelope (about 2.46% displacement and 0.952..1.190 derivative).  Thus the proposed
+envelope (about 2.46% displacement and 0.952..1.190 derivative).  Thus the
 gate is aimed at underconstrained extrapolation, not at rejecting the
 distortions already represented by the test corpus.
+
+## Stage 2 regression coverage
+
+The unit suite now checks that exactly the ordinary 100-point threshold is
+accepted when points are broadly distributed; a dense local cloud remains
+rejected even with remote outliers; and moving-lens scanners require coverage
+only perpendicular to the movement axis. It also verifies that the existing
+synthetic and Nikon Coolscan profiles pass the automatic-fit envelope, an
+extreme but still monotone search-box profile is rejected, and insufficient
+coverage does not replace an existing manual lens profile.
 
 ## Deferred improvements
 
@@ -151,8 +162,9 @@ lens objective.
 * Distinguish a trusted/calibrated lens profile from a lens model inferred from
   the current registration points. The former should not be subject to the
   automatic-solver safety envelope.
-* Show point coverage and solver conditioning in the geometry panel, not only
-  the raw number of registration points.
+* The geometry panel now warns when point count is sufficient but coverage is
+  too local. A future UI can also show the numeric point coverage and solver
+  conditioning rather than only the pass/fail warning.
 * Preserve rejected candidate diagnostics (objective, coverage, center,
   displacement, derivative range) for troubleshooting.
 

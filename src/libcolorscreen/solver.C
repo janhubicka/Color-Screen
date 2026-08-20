@@ -23,6 +23,118 @@ namespace colorscreen
 const char *const solver_parameters::point_color_names[(int)max_point_color]
     = { "red", "green", "blue" };
 
+/* Return true when registration points cover enough of the scan to constrain
+   a global radial lens model.  Point count is checked separately.
+
+   Use the central 90% span on each relevant image axis.  This prevents one or
+   two stray/outlier points from making a compact point cloud appear global.
+   For moving-lens scanners the movement axis is removed before lens
+   correction, so only the perpendicular axis constrains the 1-D lens model.  */
+bool
+solver_parameters::lens_coverage_sufficient (int width, int height,
+                                             enum scanner_type scanner) const
+{
+  if (width <= 1 || height <= 1 || points.size () == 0)
+    return false;
+
+  std::vector<coord_t> xs, ys;
+  xs.reserve (points.size ());
+  ys.reserve (points.size ());
+  for (const solver_point_t &p : points.read ())
+    {
+      if (!my_isfinite (p.img.x) || !my_isfinite (p.img.y))
+        return false;
+      xs.push_back (p.img.x);
+      ys.push_back (p.img.y);
+    }
+  std::sort (xs.begin (), xs.end ());
+  std::sort (ys.begin (), ys.end ());
+
+  auto central_span = [] (const std::vector<coord_t> &v) -> coord_t
+  {
+    if (v.empty ())
+      return 0;
+    size_t trim = v.size () / 20; /* Five percent at each end.  */
+    if (2 * trim >= v.size ())
+      trim = 0;
+    return v[v.size () - 1 - trim] - v[trim];
+  };
+
+  const coord_t x_coverage = central_span (xs) / (coord_t)(width - 1);
+  const coord_t y_coverage = central_span (ys) / (coord_t)(height - 1);
+  if (scanner == lens_move_horizontally)
+    return y_coverage >= minimum_lens_coverage;
+  if (scanner == lens_move_vertically)
+    return x_coverage >= minimum_lens_coverage;
+  return is_fixed_lens (scanner)
+         && x_coverage >= minimum_lens_coverage
+         && y_coverage >= minimum_lens_coverage;
+}
+
+/* Return true if point count and scan coverage are both sufficient for
+   automatic lens fitting.  */
+bool
+solver_parameters::lens_optimization_sufficient (enum scr_type type, int width,
+                                                 int height,
+                                                 enum scanner_type scanner) const
+{
+  return (int)n_points () >= min_lens_points (type)
+         && lens_coverage_sufficient (width, height, scanner);
+}
+
+/* Return true if P is a plausible normalized result of automatic lens
+   fitting.  These bounds are intentionally solver policy rather than DNG
+   format constraints.  */
+bool
+solver_parameters::lens_candidate_reasonable_p (
+    const lens_warp_correction_parameters &p, enum scanner_type scanner)
+{
+  constexpr coord_t min_center = (coord_t)-0.5;
+  constexpr coord_t max_center = (coord_t)1.5;
+  constexpr coord_t max_normalized_displacement = (coord_t)0.05;
+  constexpr coord_t min_derivative = (coord_t)0.5;
+  constexpr coord_t max_derivative = (coord_t)1.5;
+
+  if (!p.is_monotone () || my_fabs (p.get_ratio (1) - 1) > (coord_t)0.00001)
+    return false;
+
+  auto center_reasonable = [] (coord_t c) -> bool
+  {
+    return my_isfinite (c) && c >= min_center && c <= max_center;
+  };
+  if (is_fixed_lens (scanner))
+    {
+      if (!center_reasonable (p.center.x)
+          || !center_reasonable (p.center.y))
+        return false;
+    }
+  else if (scanner == lens_move_horizontally)
+    {
+      if (!center_reasonable (p.center.y))
+        return false;
+    }
+  else if (scanner == lens_move_vertically)
+    {
+      if (!center_reasonable (p.center.x))
+        return false;
+    }
+  else
+    return false;
+
+  for (int i = 0; i <= 64; i++)
+    {
+      const coord_t r = (coord_t)i / 64;
+      const coord_t rsq = r * r;
+      const coord_t ratio = p.get_ratio (rsq);
+      const coord_t derivative = p.get_radial_derivative (rsq);
+      if (!my_isfinite (ratio) || !my_isfinite (derivative)
+          || my_fabs (r * (ratio - 1)) > max_normalized_displacement
+          || derivative < min_derivative || derivative > max_derivative)
+        return false;
+    }
+  return true;
+}
+
 namespace
 {
 bool debug_output = false;
@@ -314,23 +426,22 @@ public:
   constrain (coord_t *vals) const
   {
     int n = num_coordinates ();
-    /* Also consider the case that lens center is outside of the scan.  */
-    if (vals[0] < (coord_t)-10)
-      vals[0] = (coord_t)-10;
-    if (vals[0] > (coord_t)10)
-      vals[0] = (coord_t)10;
+    /* DNG permits an optical center outside the image, but centers many image
+       widths away are effectively unconstrained polynomial extrapolation.
+       This tighter box is only for automatically fitted centers.  */
+    if (vals[0] < (coord_t)-0.5)
+      vals[0] = (coord_t)-0.5;
+    if (vals[0] > (coord_t)1.5)
+      vals[0] = (coord_t)1.5;
     if (n == 2)
       {
-        if (vals[1] < (coord_t)-10)
-          vals[1] = (coord_t)-10;
-        if (vals[1] > (coord_t)10)
-          vals[1] = (coord_t)10;
+        if (vals[1] < (coord_t)-0.5)
+          vals[1] = (coord_t)-0.5;
+        if (vals[1] > (coord_t)1.5)
+          vals[1] = (coord_t)1.5;
       }
-    /*
-       Coefficient	Typical Range	  Extreme Range 
-       k1 (3rd Order)   ±0.001-±0.05      ±0.15
-       k2 (5th Order)   ±0.0001-±0.01     ±0.05
-       k3 (7th Order)   ≈0 (often unused) ±0.01  */
+    /* Coefficient boxes are only a coarse numerical guard.  The physically
+       meaningful bound is imposed on the resulting normalized radial map.  */
     constexpr coord_t range [3] = {0.15, 0.05, 0.01};
     for (int i = n, j = 0; i < n + 3; i++, j++)
       {
@@ -385,6 +496,14 @@ public:
       {
         if (chisq)
           *chisq = bad_value;
+        if (transformed)
+          for (size_t i = 0; i < m_sparam.points.size (); i++)
+            (*transformed)[i] = m_sparam.points[i].scr;
+        return false;
+      }
+    if (!solver_parameters::lens_candidate_reasonable_p (
+            m_param.lens_correction, m_param.scanner_type))
+      {
         if (transformed)
           for (size_t i = 0; i < m_sparam.points.size (); i++)
             (*transformed)[i] = m_sparam.points[i].scr;
@@ -494,8 +613,14 @@ solver (scr_to_img_parameters *param,const  image_data &img_data,
 
   param->mesh_trans = nullptr;
 
-  /* Require more points for strips; we only can verify 1d info.  */
-  bool optimize_lens = sparam.optimize_lens && ((int)sparam.n_points () > solver_parameters::min_lens_points (param->type));
+  /* Lens correction is global.  Point count alone is unsafe: a dense local
+     cloud can leave center and high-order radial terms unconstrained while
+     still extrapolating across the complete scan.  */
+  const bool optimize_lens
+      = sparam.optimize_lens
+        && sparam.lens_optimization_sufficient (
+               param->type, img_data.width, img_data.height,
+               param->scanner_type);
   bool optimize_rotation = sparam.optimize_tilt && ((int)sparam.n_points () > solver_parameters::min_perspective_points (param->type));
 
   if (optimize_lens)
@@ -530,7 +655,9 @@ solver (scr_to_img_parameters *param,const  image_data &img_data,
           = s.start[n + 1] * (1 / lens_solver::scale_kr);
       param->lens_correction.kr[3]
           = s.start[n + 2] * (1 / lens_solver::scale_kr);
-      if (!param->lens_correction.normalize ())
+      if (!param->lens_correction.normalize ()
+          || !solver_parameters::lens_candidate_reasonable_p (
+                 param->lens_correction, param->scanner_type))
         return 1e30;
     }
   if (progress)

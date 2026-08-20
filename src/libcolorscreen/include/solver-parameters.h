@@ -70,6 +70,27 @@ struct solver_parameters
   {
     return screen_with_vertical_strips_p (type) ? 200 : 100;
   }
+  /* Lens distortion is global.  Return true if registration points cover
+     enough of the relevant scan axes to constrain automatic lens fitting.
+     Point count is checked separately.  */
+  static constexpr coord_t minimum_lens_coverage = (coord_t)0.5;
+  DLL_PUBLIC_EXP bool
+  lens_coverage_sufficient (int width, int height,
+                            enum scanner_type scanner) const;
+
+  /* Return true if both point count and coverage permit automatic lens
+     fitting for TYPE and SCANNER.  */
+  DLL_PUBLIC_EXP bool
+  lens_optimization_sufficient (enum scr_type type, int width, int height,
+                                enum scanner_type scanner) const;
+
+  /* Return true if normalized lens parameters P are conservative enough for
+     an automatically inferred model.  This is solver policy, not a DNG
+     validity requirement, and is never applied to imported/manual profiles.  */
+  DLL_PUBLIC_EXP static bool
+  lens_candidate_reasonable_p (const lens_warp_correction_parameters &p,
+                               enum scanner_type scanner);
+
   static int min_perspective_points (enum scr_type type)
   {
     return screen_with_vertical_strips_p (type) ? 20 : 10;
@@ -82,7 +103,9 @@ struct solver_parameters
 
   /* Vector holding points.  */
   cow_vector<solver_point_t> points;
-  /* If true, lens parameters are auto-optimized.  */
+  /* If true, lens parameters may be auto-optimized.  Point count, spatial
+     coverage and a conservative deformation envelope are additional safety
+     conditions enforced by solver().  */
   bool optimize_lens;
   /* If true, image tilt is auto-optimized.  */
   bool optimize_tilt;

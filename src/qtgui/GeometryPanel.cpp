@@ -293,6 +293,20 @@ void GeometryPanel::updateRegistrationPointInfo(const ParameterState &state) {
   updateMsg(m_tiltMessageLabel, colorscreen::solver_parameters::min_perspective_points(type), "perspective correction");
   updateMsg(m_nonlinearMessageLabel, colorscreen::solver_parameters::min_mesh_points(type), "nonlinear correction");
 
+  /* Point count alone does not constrain a global radial fit.  Mirror the
+     solver's coverage gate so a dense local point cloud gets an actionable
+     explanation instead of silently enabling lens optimization.  */
+  if (m_lensMessageLabel
+      && numPoints >= colorscreen::solver_parameters::min_lens_points(type)) {
+      auto scan = m_imageGetter();
+      if (scan && !state.solver.lens_coverage_sufficient(
+                      scan->width, scan->height, state.scrToImg.scanner_type)) {
+          m_lensMessageLabel->setText(
+              "Lens correction needs registration points spanning at least half of each relevant scan axis");
+          m_lensMessageLabel->show();
+      }
+  }
+
   bool canOptimize = numPoints >= colorscreen::solver_parameters::min_points(type);
   if (m_optimizeButton) m_optimizeButton->setEnabled(canOptimize);
 

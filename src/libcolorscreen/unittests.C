@@ -4807,6 +4807,128 @@ test_lens_warp ()
       }
   }
 
+  /* Automatic lens fitting needs global coverage, not merely enough points.
+     The local cloud has two remote outliers, which the central-90% span must
+     ignore.  Exactly MIN_LENS_POINTS broadly distributed points must qualify.  */
+  {
+    solver_parameters local, global, horizontal, vertical;
+    for (int i = 0; i < 98; i++)
+      {
+        coord_t x = 450 + (i % 10) * 5;
+        coord_t y = 450 + (i / 10) * 5;
+        local.add_point ({x, y}, {x, y}, solver_parameters::red);
+      }
+    local.add_point ({0, 0}, {0, 0}, solver_parameters::red);
+    local.add_point ({999, 999}, {999, 999}, solver_parameters::red);
+
+    for (int y = 0; y < 10; y++)
+      for (int x = 0; x < 10; x++)
+        {
+          coord_t broad_x = (coord_t)(111 * x);
+          coord_t broad_y = (coord_t)(111 * y);
+          coord_t local_x = 450 + 5 * x;
+          coord_t local_y = 450 + 5 * y;
+          global.add_point ({broad_x, broad_y}, {broad_x, broad_y},
+                            solver_parameters::red);
+          horizontal.add_point ({local_x, broad_y}, {local_x, broad_y},
+                                solver_parameters::red);
+          vertical.add_point ({broad_x, local_y}, {broad_x, local_y},
+                              solver_parameters::red);
+        }
+
+    if (local.lens_optimization_sufficient (Paget, 1000, 1000, fixed_lens)
+        || !global.lens_optimization_sufficient (Paget, 1000, 1000,
+                                                 fixed_lens)
+        || !horizontal.lens_optimization_sufficient (
+               Paget, 1000, 1000, lens_move_horizontally)
+        || horizontal.lens_optimization_sufficient (
+               Paget, 1000, 1000, lens_move_vertically)
+        || !vertical.lens_optimization_sufficient (
+               Paget, 1000, 1000, lens_move_vertically)
+        || vertical.lens_optimization_sufficient (
+               Paget, 1000, 1000, lens_move_horizontally))
+      {
+        fprintf (stderr, "Lens-solver spatial coverage gate is wrong\n");
+        ok = false;
+      }
+  }
+
+  /* The automatic-fit envelope is much narrower than DNG validity.  Current
+     synthetic and Coolscan profiles are accepted after solver normalization,
+     while a still-monotone extreme profile from the coefficient search box is
+     rejected.  */
+  {
+    lens_warp_correction_parameters synthetic;
+    synthetic.center = {0.4, 0.6};
+    synthetic.kr[1] = 0.01;
+    synthetic.kr[2] = 0.03;
+    synthetic.kr[3] = 0.01;
+    lens_warp_correction_parameters coolscan;
+    coolscan.center = {0.560586, 0.482547};
+    coolscan.kr[0] = 0.99508;
+    coolscan.kr[1] = 0.0245411;
+    coolscan.kr[2] = -0.0521967;
+    coolscan.kr[3] = 0.0325757;
+    lens_warp_correction_parameters extreme;
+    extreme.center = {0.5, 0.5};
+    extreme.kr[1] = -0.15;
+    extreme.kr[2] = -0.05;
+    extreme.kr[3] = -0.01;
+    if (!synthetic.normalize () || !coolscan.normalize ()
+        || !extreme.normalize ())
+      return false;
+    if (!solver_parameters::lens_candidate_reasonable_p (synthetic,
+                                                          fixed_lens)
+        || !solver_parameters::lens_candidate_reasonable_p (coolscan,
+                                                             fixed_lens)
+        || solver_parameters::lens_candidate_reasonable_p (extreme,
+                                                            fixed_lens))
+      {
+        fprintf (stderr, "Lens-solver deformation envelope is wrong\n");
+        ok = false;
+      }
+  }
+
+  /* Solver-only limits must not invalidate an existing profile.  With local
+     points automatic fitting is disabled, so even a DNG-valid profile outside
+     the automatic envelope remains installed while the homography is fitted.  */
+  {
+    image_data img;
+    if (!img.set_dimensions (1000, 1000))
+      return false;
+    scr_to_img_parameters truth;
+    truth.type = Paget;
+    truth.scanner_type = fixed_lens;
+    truth.lens_correction.center = {0.5, 0.5};
+    truth.lens_correction.kr[1] = -0.15;
+    truth.lens_correction.kr[2] = -0.05;
+    truth.lens_correction.kr[3] = -0.01;
+    if (!truth.lens_correction.normalize ())
+      return false;
+    scr_to_img map;
+    if (!map.set_parameters (truth, img))
+      return false;
+    solver_parameters sparam;
+    for (int y = 0; y < 10; y++)
+      for (int x = 0; x < 10; x++)
+        {
+          point_t image = {(coord_t)(450 + 5 * x),
+                           (coord_t)(450 + 5 * y)};
+          sparam.add_point (image, map.to_scr (image), solver_parameters::red);
+        }
+    scr_to_img_parameters fitted;
+    fitted.type = Paget;
+    fitted.scanner_type = fixed_lens;
+    fitted.lens_correction = truth.lens_correction;
+    solver (&fitted, img, sparam);
+    if (!(fitted.lens_correction == truth.lens_correction))
+      {
+        fprintf (stderr,
+                 "Insufficient coverage modified an existing lens profile\n");
+        ok = false;
+      }
+  }
+
   return ok;
 }
 

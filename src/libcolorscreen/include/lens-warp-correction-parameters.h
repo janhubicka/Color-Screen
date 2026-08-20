@@ -59,6 +59,15 @@ struct lens_warp_correction_parameters
     return kr[0] + rsq * (kr[1] + rsq * (kr[2] + rsq * kr[3]));
   }
 
+  /* Return derivative of source radius with respect to output radius for
+     RSQ=r^2 in the DNG domain [0,1].  */
+  pure_attr coord_t
+  get_radial_derivative (coord_t rsq) const
+  {
+    return kr[0]
+           + rsq * (3 * kr[1] + rsq * (5 * kr[2] + rsq * 7 * kr[3]));
+  }
+
   /* Verify that the correction is monotone on a interval [0, 1].
      This is the DNG invertibility condition for the radial-only subset.  */
   pure_attr bool
@@ -73,9 +82,7 @@ struct lens_warp_correction_parameters
        d(r_src)/dr = k0 + 3*k1*r^2 + 5*k2*r^4 + 7*k3*r^6.
        Let x = r^2. We need f(x) = k0 + 3*k1*x + 5*k2*x^2 + 7*k3*x^3 > 0
        for x in [0, 1].  */
-    auto f = [this] (coord_t x) {
-      return kr[0] + x * (3 * kr[1] + x * (5 * kr[2] + x * 7 * kr[3]));
-    };
+    auto f = [this] (coord_t x) { return get_radial_derivative (x); };
 
     /* Check boundaries.  */
     if (!(f (0) > 0) || !(f (1) > 0))
