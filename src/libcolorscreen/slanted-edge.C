@@ -776,8 +776,10 @@ slanted_edge_mtf (const render_parameters &rparam, const image_data &img,
   if (params.channel == 3)
     measurement_rparam.ignore_infrared = false;
   render r (img, measurement_rparam, 65535);
-  const bool grayscale_needed = params.channel < 0 || params.channel == 3;
-  if (!r.precompute_all (grayscale_needed, false, {1, 1, 1}, progress))
+  const int precompute_flags
+      = params.channel < 0 || params.channel == 3 ? PRECOMPUTE_IMAGE_LAYER
+                                                  : PRECOMPUTE_NONE;
+  if (!r.precompute_all (precompute_flags, {1, 1, 1}, progress))
     {
       set_failure (&res, slanted_edge_failure_precomputation, progress,
                    "image precomputation failed");

@@ -701,7 +701,7 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
   my_rparam.mix_blue = 1;
   param.mesh_trans = mesh_trans;
   render_to_scr render (param, *img, my_rparam, 256);
-  if (!render.precompute_all (true, false, progress))
+  if (!render.precompute_all (PRECOMPUTE_IMAGE_LAYER, progress))
     return false;
   if (!m_prj->my_screen)
     {
@@ -1381,14 +1381,14 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
 		    && other.load_img (error, progress))
 		  {
 		    render1 = new render (*img, rparams, 255);
-		    if (!render1->precompute_all (img->has_grayscale_or_ir (), false, {1.0/3.0, 1.0/3.0, 1.0/3.0}, progress))
+		    if (!render1->precompute_all (img->has_rgb () ? PRECOMPUTE_RGB_IMAGE : PRECOMPUTE_IMAGE_LAYER, {1.0/3.0, 1.0/3.0, 1.0/3.0}, progress))
 		      {
 			*error = "precomputation failed";
 			delete render1;
 			render1 = 0;
 		      }
 		    render2 = new render (*other.img, rparams, 255);
-		    if (!render2->precompute_all (img->has_grayscale_or_ir (), false, {1.0/3.0, 1.0/3.0, 1.0/3.0}, progress))
+		    if (!render2->precompute_all (img->has_rgb () ? PRECOMPUTE_RGB_IMAGE : PRECOMPUTE_IMAGE_LAYER, {1.0/3.0, 1.0/3.0, 1.0/3.0}, progress))
 		      {
 			*error = "precomputation failed";
 			delete render1;

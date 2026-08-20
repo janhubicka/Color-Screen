@@ -415,7 +415,7 @@ render_scr_detect::render_to_file (render_to_file_params &rfparams, render_type_
     }
 }
 bool
-render_scr_detect::precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress)
+render_scr_detect::precompute_all (int flags, progress_info *progress)
 {
   if (!m_scr_detect.set_parameters (m_scr_detect.m_param, m_params.gamma, &m_img, progress))
     return false;
@@ -432,7 +432,7 @@ render_scr_detect::precompute_all (bool grayscale_needed, bool normalized_patche
     return false;
   if (progress && progress->cancel_requested ())
     return false;
-  return render::precompute_all (grayscale_needed, normalized_patches, {1/3.0, 1/3.0, 1/3.0}, progress);
+  return render::precompute_all (flags, {1/3.0, 1/3.0, 1/3.0}, progress);
 }
 
 
@@ -534,7 +534,7 @@ analyze_color_proportions (scr_detect_parameters param, render_parameters &rpara
   //param.min_ratio = 1.3;
   //param.min_luminosity = 0.01;
   render_scr_detect r (param, img, rparam, 256);
-  if (!r.precompute_all (false, false, progress))
+  if (!r.precompute_all (PRECOMPUTE_NONE, progress))
     return {1/3.0, 1/3.0, 1/3.0};
   return r.analyze_color_proportions (map_param, area, progress);
 }
@@ -585,9 +585,9 @@ render_scr_nearest_scaled::~render_scr_nearest_scaled ()
 bool
 render_scr_nearest_scaled::precompute_all (progress_info *progress)
 {
-  if (!render_scr_detect::precompute_all (true, false, progress))
+  if (!render_scr_detect::precompute_all (PRECOMPUTE_IMAGE_LAYER, progress))
     return false;
-  patches_cache_params p = {m_color_class_map_id, m_gray_data_id, m_color_class_map.get (), &m_img, this};
+  patches_cache_params p = {m_color_class_map_id, m_image_layer_id, m_color_class_map.get (), &m_img, this};
   m_patches = patches_cache.get (p, progress);
   return (bool)m_patches;
 }
@@ -598,9 +598,9 @@ bool
 render_scr_relax::precompute_all (progress_info *progress)
 {
 /* TODO; Rendering is not normalized correctly.  we probably should still compute vornoi diagrams and determine diameter. */
-  if (!render_scr_detect::precompute_all (true, true, progress))
+  if (!render_scr_detect::precompute_all (PRECOMPUTE_IMAGE_LAYER | NORMALIZED_PATCHES, progress))
     return false;
-  color_data_params p = {m_color_class_map_id, m_gray_data_id, &m_img, m_color_class_map.get (), this};
+  color_data_params p = {m_color_class_map_id, m_image_layer_id, &m_img, m_color_class_map.get (), this};
   m_color_data_handle = color_data_cache.get (p, progress);
   if (!m_color_data_handle)
     return false;

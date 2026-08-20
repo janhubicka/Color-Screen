@@ -5274,7 +5274,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
       if (bw && (rparam2.ignore_infrared || !imgp[0]->has_grayscale_or_ir ()))
         bw_is_simulated_infrared = true;
       if (!render.precompute_all (
-              bw /*grayscale*/, false /*normalized*/,
+              bw ? PRECOMPUTE_IMAGE_LAYER : PRECOMPUTE_RGB_IMAGE,
               patch_proportions (param.type, &rparam2),
               !(fparams.flags & finetune_no_progress_report) ? progress
                                                              : nullptr))
@@ -5401,7 +5401,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
              pixel size. For stitched projects this is wrong.  */
           render render (*imgp[tileid], rparam2, 256);
           if (!render.precompute_all (
-                  bw /*grayscale*/, false /*normalized*/,
+                  bw ? PRECOMPUTE_IMAGE_LAYER : PRECOMPUTE_RGB_IMAGE,
                   patch_proportions (param.type, &rparam2),
                   !(fparams.flags & finetune_no_progress_report) ? progress
                                                                  : nullptr))

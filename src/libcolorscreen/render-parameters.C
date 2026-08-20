@@ -124,6 +124,73 @@ const property_t render_parameters::demosaiced_scaling_names []  = {
 };
 
 
+/* Return scanner sharpening parameters specialized for native CHANNEL.
+   CHANNEL is 0 for red, 1 for green, 2 for blue and 3 for infrared.  */
+sharpen_parameters
+render_parameters::get_sharpen_parameters_for_channel (int channel) const
+{
+  sharpen_parameters result = sharpen;
+  if (channel < 0 || channel >= 4)
+    return result;
+
+  mtf_parameters &mtf = result.scanner_mtf;
+  int measurement_index = -1;
+  if (mtf.use_measured_mtf ())
+    {
+      const int selected = mtf.measured_mtf_idx;
+      const mtf_measurement &selected_measurement = mtf.measurements[selected];
+      if (selected_measurement.channel < 0
+          || selected_measurement.channel == channel)
+        measurement_index = selected;
+      else
+        {
+          int first = selected;
+          while (first > 0 && mtf.measurements[first].same_capture)
+            --first;
+          int last = first + 1;
+          while (last < (int)mtf.measurements.size ()
+                 && mtf.measurements[last].same_capture)
+            ++last;
+          for (int i = first; i < last; ++i)
+            if (mtf.measurements[i].channel == channel
+                && mtf.measurements[i].size () > 2)
+              {
+                measurement_index = i;
+                break;
+              }
+        }
+
+      /* An image-layer measurement intentionally applies to every channel.
+         For native measurements, never deconvolve one channel using another
+         channel's measured transfer function.  If this capture group does not
+         contain CHANNEL, disabling the direct curve lets the configured
+         analytical/fallback model take over.  */
+      mtf.measured_mtf_idx = measurement_index;
+    }
+
+  double wavelength = mtf.wavelengths[channel];
+  if (!(my_isfinite (wavelength) && wavelength > 0)
+      && measurement_index >= 0)
+    {
+      const double measured = mtf.measurements[measurement_index].wavelength;
+      if (my_isfinite (measured) && measured > 0)
+        wavelength = measured;
+    }
+  if (!(my_isfinite (wavelength) && wavelength > 0))
+    for (const mtf_measurement &measurement : mtf.measurements)
+      if (measurement.channel == channel
+          && my_isfinite (measurement.wavelength)
+          && measurement.wavelength > 0)
+        {
+          wavelength = measurement.wavelength;
+          break;
+        }
+  if (my_isfinite (wavelength) && wavelength > 0)
+    mtf.wavelength = wavelength;
+
+  return result;
+}
+
 /* Return portion of screen occupied by red, green and blue patches for
    screen of type T and rendering parameters RPARAM.  The sum of individual
    portions should be at most 1.  */
@@ -885,7 +952,7 @@ static rgbdata
 get_color (image_data &img, render_parameters &rparam, scr_to_img_parameters &param, rgbdata c, progress_info *progress)
 {
   render r(img, rparam, 256);
-  if (!r.precompute_all (false, true, patch_proportions (param.type, &rparam), progress))
+  if (!r.precompute_all (NORMALIZED_PATCHES, patch_proportions (param.type, &rparam), progress))
     return c;
   c.red = r.adjust_luminosity_ir (c.red);
   c.green = r.adjust_luminosity_ir (c.green);
@@ -1146,7 +1213,7 @@ render_parameters::auto_mix_dark (image_data &img, scr_to_img_parameters &param,
     rparam.sharpen = dummy;
     rparam.dark_point = 0;
     render render (img, rparam, 256);
-    if (!render.precompute_all (false, false, {1/3.0, 1/3.0, 1/3.0}, progress))
+    if (!render.precompute_all (PRECOMPUTE_RGB_IMAGE, {1/3.0, 1/3.0, 1/3.0}, progress))
       return false;
 #pragma omp parallel for reduction(rgb_histogram_range : hist)
     for (int yy = 0; yy < area.height; yy++)
@@ -1229,7 +1296,7 @@ render_parameters::auto_mix_weights_using_ir (image_data &img,
     sharpen_parameters dummy;
     rparam.sharpen = dummy;
     render render (img, rparam, 256);
-    if (!render.precompute_all (true, false, {1/3.0, 1/3.0, 1/3.0}, progress))
+    if (!render.precompute_all (PRECOMPUTE_IMAGE_LAYER | PRECOMPUTE_RGB_IMAGE, {1/3.0, 1/3.0, 1/3.0}, progress))
       return false;
 
 #pragma omp parallel for default(none) shared(progress, area, xsteps, ysteps, step, X, y, w, render)

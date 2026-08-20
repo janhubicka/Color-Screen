@@ -45,7 +45,10 @@ public:
 			   sharpen,
                            m_params.red_strip_width,
                            m_params.green_strip_width, progress);
-    return render_to_scr::precompute_all (!m_color, m_preview, progress);
+    int flags = m_color ? PRECOMPUTE_RGB_IMAGE : PRECOMPUTE_IMAGE_LAYER;
+    if (m_preview)
+      flags |= NORMALIZED_PATCHES;
+    return render_to_scr::precompute_all (flags, progress);
   }
   bool
   precompute_img_range (int_image_area area, progress_info *progress = NULL)

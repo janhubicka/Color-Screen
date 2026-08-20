@@ -300,28 +300,29 @@ render_to_scr::pixel_size () const noexcept
   return m_pixel_size;
 }
 
-/* Precompute all data needed for rendering.  Update PROGRESS.
-   GRAYSCALE_NEEDED specifies if grayscale only rendering is sufficient.
-   NORMALIZED_PATCHES specifies if patches should be normalized.  */
+/* Precompute data selected by FLAGS.  Update PROGRESS.  */
 bool
-render_to_scr::precompute_all (bool grayscale_needed, bool normalized_patches,
-			       progress_info *progress)
+render_to_scr::precompute_all (int flags, progress_info *progress)
 {
   if (!m_ok)
     return false;
-  return render::precompute_all (grayscale_needed, normalized_patches,
-				 normalized_patches ? m_scr_to_img.patch_proportions (&m_params) : (rgbdata){(luminosity_t)1.0/(luminosity_t)3.0, (luminosity_t)1.0/(luminosity_t)3.0, (luminosity_t)1.0/(luminosity_t)3.0},
-				 progress);
+  const bool normalized_patches = flags & NORMALIZED_PATCHES;
+  const rgbdata proportions
+      = normalized_patches
+            ? m_scr_to_img.patch_proportions (&m_params)
+            : rgbdata{ (luminosity_t)1.0 / (luminosity_t)3.0,
+                       (luminosity_t)1.0 / (luminosity_t)3.0,
+                       (luminosity_t)1.0 / (luminosity_t)3.0 };
+  return render::precompute_all (flags, proportions, progress);
 }
 
-/* Precompute all data needed for rendering in AREA.  Update PROGRESS.
-   GRAYSCALE_NEEDED specifies if grayscale only rendering is sufficient.
-   NORMALIZED_PATCHES specifies if patches should be normalized.  */
+/* Precompute data selected by FLAGS in AREA.  Update PROGRESS.  */
 bool
-render_to_scr::precompute_img_range (bool grayscale_needed, bool normalized_patches, int_image_area area, progress_info *progress)
+render_to_scr::precompute_img_range (int flags, int_image_area area,
+                                     progress_info *progress)
 {
   (void)area;
-  return render_to_scr::precompute_all (grayscale_needed, normalized_patches, progress);
+  return render_to_scr::precompute_all (flags, progress);
 }
 
 /* Return screen of type T in PREVIEW mode.  Sharpen it according to SHARPEN if

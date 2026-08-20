@@ -426,6 +426,13 @@ struct render_parameters
   /* Sharpening parameters.  */
   sharpen_parameters sharpen;
 
+  /* Return scanner sharpening parameters specialized for native CHANNEL
+     (0 red, 1 green, 2 blue, 3 infrared).  Direct measured MTF curves are
+     matched inside the selected same-capture group and analytical models use
+     the wavelength associated with the requested scanner channel.  */
+  DLL_PUBLIC sharpen_parameters
+  get_sharpen_parameters_for_channel (int channel) const;
+
   /***** Tile Adjustment (used to adjust parameters of individual tiles) *****/
 
   /* Adjustment parameters for a single tile.  */
