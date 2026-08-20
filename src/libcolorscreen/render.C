@@ -16,7 +16,7 @@ namespace colorscreen
 class lru_caches lru_caches;
 std::atomic_uint64_t lru_caches::time;
 
-/* A wrapper class around m_sharpened_data which handles allocation and
+/* A wrapper class around precomputed image data which handles allocation and
    deallocation. This is needed for the cache.  */
 class sharpened_data
 {
@@ -461,11 +461,18 @@ prune_render_caches ()
 /*                             render implementation                         */
 /*****************************************************************************/
 
-/* Precompute all data needed for rendering.  */
+/* Precompute data selected by FLAGS.  PATCH_PROPORTIONS controls output-color
+   setup and PROGRESS reports work and cancellation.  */
 bool
-render::precompute_all (bool grayscale_needed, bool normalized_patches,
-			rgbdata patch_proportions, progress_info *progress)
+render::precompute_all (int flags, rgbdata patch_proportions,
+                        progress_info *progress)
 {
+  const bool image_layer_needed = flags & PRECOMPUTE_IMAGE_LAYER;
+  const bool rgb_image_needed = flags & PRECOMPUTE_RGB_IMAGE;
+  const bool normalized_patches = flags & NORMALIZED_PATCHES;
+  if (rgb_image_needed && !m_img.has_rgb ())
+    return false;
+
   if (m_params.backlight_correction)
     {
       backlight_correction_cache_params p
@@ -494,42 +501,135 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
         {
           par.gamma_table = m_img.to_linear[1];
           m_rgb_lookup_table[1] = lookup_table_cache.get (par, progress);
+          if (!m_rgb_lookup_table[1])
+            return false;
           par.gamma_table = m_img.to_linear[2];
           m_rgb_lookup_table[2] = lookup_table_cache.get (par, progress);
+          if (!m_rgb_lookup_table[2])
+            return false;
         }
       else
         {
-	  m_rgb_lookup_table[1] = lookup_table_cache.get (par, progress);
-	  m_rgb_lookup_table[2] = lookup_table_cache.get (par, progress);
+          m_rgb_lookup_table[1] = lookup_table_cache.get (par, progress);
+          m_rgb_lookup_table[2] = lookup_table_cache.get (par, progress);
+          if (!m_rgb_lookup_table[1] || !m_rgb_lookup_table[2])
+            return false;
         }
     }
 
-  if (grayscale_needed)
+  const bool ir_simulation
+      = !m_img.has_grayscale_or_ir ()
+        || (m_img.has_rgb () && m_params.ignore_infrared);
+
+  /* Scanner sharpening belongs to the native capture channels, before any
+     RGB mixture is formed.  Materialize the planes only when a caller needs
+     RGB output or when an RGB-derived image layer must be mixed afterwards.  */
+  const bool sharpen_rgb
+      = m_img.has_rgb ()
+        && m_params.sharpen.get_mode () != sharpen_parameters::none
+        && (rgb_image_needed || (image_layer_needed && ir_simulation));
+  if (sharpen_rgb)
     {
-      bool ir_simulation = !m_img.has_grayscale_or_ir ()
-			   || (m_img.has_rgb () && m_params.ignore_infrared);
-      gray_and_sharpen_params p
-          = { { m_img.id,
-                &m_img,
-                m_params.gamma,
-                { m_img.to_linear[0], m_img.to_linear[1], m_img.to_linear[2] },
-                ir_simulation ? m_params.mix_dark : rgbdata{1.0f, 1.0f, 1.0f},
-                ir_simulation ? m_params.mix_red : 1.0f,
-                ir_simulation ? m_params.mix_green : 1.0f,
-                ir_simulation ? m_params.mix_blue : 1.0f,
-                m_backlight_correction.get (),
-                m_backlight_correction_id,
-                ir_simulation ? m_params.ignore_infrared : false }, m_params.sharpen };
-      m_sharpened_data_holder
-          = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
-      if (!m_sharpened_data_holder)
-        return false;
-      m_sharpened_data = m_sharpened_data_holder->m_data;
+      /* Publish the RGB image only after all three channel planes are ready.
+         This keeps m_rgb_image[0] as the single all-or-none state bit used by
+         the hot pixel accessors.  */
+      std::shared_ptr<sharpened_data> rgb_image_holder[3];
+      for (int channel = 0; channel < 3; ++channel)
+        {
+          gray_and_sharpen_params p
+              = { { m_img.id,
+                    &m_img,
+                    m_params.gamma,
+                    { m_img.to_linear[0], m_img.to_linear[1],
+                      m_img.to_linear[2] },
+                    rgbdata{0, 0, 0},
+                    channel == 0 ? 1.0f : 0.0f,
+                    channel == 1 ? 1.0f : 0.0f,
+                    channel == 2 ? 1.0f : 0.0f,
+                    m_backlight_correction.get (),
+                    m_backlight_correction_id,
+                    true },
+                  m_params.get_sharpen_parameters_for_channel (channel) };
+          rgb_image_holder[channel]
+              = gray_and_sharpened_data_cache.get (p, progress);
+          if (!rgb_image_holder[channel])
+            return false;
+        }
+      for (int channel = 0; channel < 3; ++channel)
+        {
+          m_rgb_image_holder[channel] = std::move (rgb_image_holder[channel]);
+          m_rgb_image[channel] = m_rgb_image_holder[channel]->m_data;
+        }
+      if (colorscreen_checking)
+        assert (m_rgb_image[0] && m_rgb_image[1] && m_rgb_image[2]);
     }
+
+  if (image_layer_needed)
+    {
+      if (ir_simulation && sharpen_rgb)
+        {
+          /* RGB-derived image layers are mixed from already-sharpened native
+             channels.  Mixing first and deconvolving afterwards would impose
+             one transfer function on three spectrally different channels.  */
+          m_image_layer_holder
+              = std::make_shared<sharpened_data> (m_img.width, m_img.height);
+          if (!m_image_layer_holder->m_data)
+            return false;
+          m_image_layer = m_image_layer_holder->m_data;
+          const size_t size = (size_t)m_img.width * m_img.height;
+#pragma omp parallel for
+          for (size_t i = 0; i < size; ++i)
+            m_image_layer[i]
+                = ((luminosity_t)m_rgb_image[0][i] - m_params.mix_dark.red)
+                      * m_params.mix_red
+                  + ((luminosity_t)m_rgb_image[1][i]
+                     - m_params.mix_dark.green)
+                        * m_params.mix_green
+                  + ((luminosity_t)m_rgb_image[2][i]
+                     - m_params.mix_dark.blue)
+                        * m_params.mix_blue;
+          m_image_layer_id = lru_caches::get ();
+        }
+      else
+        {
+          sharpen_parameters image_layer_sharpen = m_params.sharpen;
+          /* On RGB+IR input the native scalar plane is scanner channel 3.  A
+             grayscale-only scan keeps the historical scalar/global model.  */
+          if (!ir_simulation && m_img.has_rgb ())
+            image_layer_sharpen
+                = m_params.get_sharpen_parameters_for_channel (3);
+
+          gray_and_sharpen_params p
+              = { { m_img.id,
+                    &m_img,
+                    m_params.gamma,
+                    { m_img.to_linear[0], m_img.to_linear[1],
+                      m_img.to_linear[2] },
+                    ir_simulation ? m_params.mix_dark
+                                  : rgbdata{1.0f, 1.0f, 1.0f},
+                    ir_simulation ? m_params.mix_red : 1.0f,
+                    ir_simulation ? m_params.mix_green : 1.0f,
+                    ir_simulation ? m_params.mix_blue : 1.0f,
+                    m_backlight_correction.get (),
+                    m_backlight_correction_id,
+                    ir_simulation ? m_params.ignore_infrared : false },
+                  image_layer_sharpen };
+          m_image_layer_holder
+              = gray_and_sharpened_data_cache.get (p, progress,
+                                                    &m_image_layer_id);
+          if (!m_image_layer_holder)
+            return false;
+          m_image_layer = m_image_layer_holder->m_data;
+        }
+    }
+
   if (m_params.contact_copy.simulate)
     {
-      m_sensitivity_hd_curve = std::make_unique <richards_hd_curve> (100, m_params.contact_copy.emulsion_characteristic_curve);
-      m_sensitivity = std::make_unique <film_sensitivity> (m_sensitivity_hd_curve.get (), m_params.contact_copy.preflash, m_params.contact_copy.exposure, m_params.contact_copy.boost);
+      m_sensitivity_hd_curve = std::make_unique <richards_hd_curve> (
+          100, m_params.contact_copy.emulsion_characteristic_curve);
+      m_sensitivity = std::make_unique <film_sensitivity> (
+          m_sensitivity_hd_curve.get (), m_params.contact_copy.preflash,
+          m_params.contact_copy.exposure, m_params.contact_copy.boost);
       m_sensitivity->precompute ();
     }
   if (m_sensitivity)
@@ -539,10 +639,14 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
       const int steps = 65536;
       luminosity_t yvals[steps];
       for (int i = 0; i < steps; i++)
-	yvals[i] = adjust_luminosity_ir (i * (lmax - lmin) / (steps - 1) + lmin);
-      m_adjust_luminosity = std::make_unique <precomputed_function <luminosity_t>> (lmin, lmax, yvals, steps);
+        yvals[i] = adjust_luminosity_ir (
+            i * (lmax - lmin) / (steps - 1) + lmin);
+      m_adjust_luminosity
+          = std::make_unique<precomputed_function<luminosity_t>> (
+              lmin, lmax, yvals, steps);
     }
-  return out_color.precompute (m_params, &m_img, normalized_patches, patch_proportions, progress);
+  return out_color.precompute (m_params, &m_img, normalized_patches,
+                               patch_proportions, progress);
 }
 
 #if 0
@@ -551,7 +655,7 @@ bool
 render::precompute_img_range (int_image_area area, progress_info *progress)
 {
   (void)area;
-  return precompute_all (true, false, {1.0/3, 1.0/3, 1.0/3}, progress);
+  return precompute_all (PRECOMPUTE_IMAGE_LAYER, {1.0/3, 1.0/3, 1.0/3}, progress);
 }
 #endif
 
@@ -712,7 +816,11 @@ get_linearized_pixel (const image_data &img, render_parameters &rparam, int xx,
       imgp = img.stitch->images[ty][tx].img.get ();
     }
   render r (*imgp, rparam, 255);
-  if (!r.precompute_all (!img.has_rgb (), false, { 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f }, progress))
+  const int flags
+      = imgp->has_rgb () ? PRECOMPUTE_RGB_IMAGE : PRECOMPUTE_IMAGE_LAYER;
+  if (!r.precompute_all (flags,
+                         { 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f },
+                         progress))
     return rgbdata(0, 0, 0);
   for (int y = yy - range; y < yy + range; y++)
     for (int x = xx - range; x < xx + range; x++)
@@ -754,7 +862,7 @@ hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity
 std::shared_ptr<histogram>
 render::get_image_layer_histogram (progress_info *progress)
 {
-  image_layer_histogram_params p = {m_gray_data_id, m_params.get_scan_crop (m_img.width, m_img.height), this};
+  image_layer_histogram_params p = {m_image_layer_id, m_params.get_scan_crop (m_img.width, m_img.height), this};
   return image_layer_histogram_cache.get (p, progress);
 }
 
@@ -766,7 +874,7 @@ hd_x_histogram (render_parameters &rparam, image_data &img, int steps, luminosit
   if (img.stitch)
     return {};
   render r (img, rparam, 256);
-  if (!r.precompute_all (true, false, {1, 1, 1}, progress))
+  if (!r.precompute_all (PRECOMPUTE_IMAGE_LAYER, {1, 1, 1}, progress))
     return {};
   auto hist = r.get_image_layer_histogram (progress);
   if (!hist)

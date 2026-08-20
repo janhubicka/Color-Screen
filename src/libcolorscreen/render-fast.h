@@ -27,14 +27,14 @@ public:
   nodiscard_attr bool
   precompute_all (progress_info *progress)
   {
-    return render_to_scr::precompute_all (true, true, progress);
+    return render_to_scr::precompute_all (PRECOMPUTE_IMAGE_LAYER | NORMALIZED_PATCHES, progress);
   }
 
   /* Precompute all data needed for rendering in AREA.  Update PROGRESS.  */
   nodiscard_attr bool
   precompute_img_range (int_image_area area, progress_info *progress)
   {
-    return render_to_scr::precompute_img_range (true, true, area, progress);
+    return render_to_scr::precompute_img_range (PRECOMPUTE_IMAGE_LAYER | NORMALIZED_PATCHES, area, progress);
   }
 
   /* Sample pixel at position P in screen coordinates.  */

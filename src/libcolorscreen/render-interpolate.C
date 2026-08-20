@@ -308,8 +308,12 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
      point correction goes right. Without doing so, for example black from red
      pixels would be subtracted too aggressively, since we account for every
      pixel in image, not only red patch portion.  */
-  if (!render_to_scr::precompute_img_range (!m_original_color && !m_precise_rgb,
-					    !m_original_color || m_profiled, area, progress))
+  int precompute_flags
+      = (m_original_color || m_precise_rgb) ? PRECOMPUTE_RGB_IMAGE
+                                            : PRECOMPUTE_IMAGE_LAYER;
+  if (!m_original_color || m_profiled)
+    precompute_flags |= NORMALIZED_PATCHES;
+  if (!render_to_scr::precompute_img_range (precompute_flags, area, progress))
     return false;
   if (m_screen_compensation
       || m_params.collection_quality != render_parameters::fast_collection
@@ -398,7 +402,7 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
 
   struct analyzer_params p{
     m_img.id,
-    m_gray_data_id,
+    m_image_layer_id,
     m_simulated_screen_id,
     screen_id,
     m_params.gamma,

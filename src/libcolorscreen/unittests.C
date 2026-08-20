@@ -4268,7 +4268,7 @@ test_render_linearity ()
       rparam.output_gamma = gamma;
       rparam.output_profile = render_parameters::output_profile_original;
       render ren (img, rparam, 65535);
-      if (!ren.precompute_all (true, false, {1, 1, 1}, NULL))
+      if (!ren.precompute_all (PRECOMPUTE_IMAGE_LAYER, {1, 1, 1}, NULL))
 	return false;
       for (int i = 0; i < 65535; i++)
 	{
@@ -5216,6 +5216,170 @@ static luminosity_t
 get_test_gray (image_data *img, int_point_t p, int, void *)
 {
   return (luminosity_t)img->get_pixel (p.x, p.y) / 65535.0f;
+}
+
+/* Verify channel-specific scanner sharpening, precompute flags and original
+   RGB rendering.  */
+static bool
+test_channel_sharpening ()
+{
+  constexpr int width = 96;
+  constexpr int height = 64;
+  image_data img;
+  if (!img.set_dimensions (width, height, true, false))
+    return false;
+  img.maxval = 65535;
+  for (int y = 0; y < height; ++y)
+    for (int x = 0; x < width; ++x)
+      {
+        const image_data::gray value = x < width / 2 ? 10000 : 50000;
+        img.put_rgb_pixel (x, y, { value, value, value });
+      }
+
+  render_parameters params;
+  params.gamma = 1;
+  params.ignore_infrared = true;
+  params.mix_dark = { 0, 0, 0 };
+  params.mix_red = 0.2;
+  params.mix_green = 0.3;
+  params.mix_blue = 0.5;
+  params.sharpen.mode = sharpen_parameters::wiener_deconvolution;
+  params.sharpen.scanner_snr = 200;
+  params.sharpen.supersample = 1;
+  params.sharpen.scanner_mtf.wavelengths = { 650, 540, 470, 850 };
+
+  const double contrast[3][7]
+      = { { 100, 100, 100, 100, 100, 100, 100 },
+          { 100, 96, 88, 72, 55, 42, 35 },
+          { 100, 90, 72, 52, 36, 24, 18 } };
+  for (int channel = 0; channel < 3; ++channel)
+    {
+      mtf_measurement measurement;
+      measurement.channel = channel;
+      measurement.wavelength = 600 - 70 * channel;
+      measurement.same_capture = channel != 0;
+      measurement.name
+          = channel == 0 ? "red" : channel == 1 ? "green" : "blue";
+      for (int i = 0; i < 7; ++i)
+        measurement.add_value (i / 12.0, contrast[channel][i]);
+      params.sharpen.scanner_mtf.measurements.push_back (
+          std::move (measurement));
+    }
+  params.sharpen.scanner_mtf.measured_mtf_idx = 0;
+
+  for (int channel = 0; channel < 3; ++channel)
+    {
+      const sharpen_parameters channel_sharpen
+          = params.get_sharpen_parameters_for_channel (channel);
+      if (channel_sharpen.scanner_mtf.measured_mtf_idx != channel
+          || channel_sharpen.scanner_mtf.wavelength
+                 != params.sharpen.scanner_mtf.wavelengths[channel])
+        {
+          fprintf (stderr,
+                   "Scanner sharpening did not select channel %d metadata\n",
+                   channel);
+          return false;
+        }
+    }
+  const sharpen_parameters ir_sharpen
+      = params.get_sharpen_parameters_for_channel (3);
+  if (ir_sharpen.scanner_mtf.measured_mtf_idx != -1
+      || ir_sharpen.scanner_mtf.wavelength != 850)
+    {
+      fprintf (stderr,
+               "Missing IR measurement did not fall back to the IR model\n");
+      return false;
+    }
+
+  /* An explicitly selected image-layer measurement retains the historical
+     behavior of supplying one transfer curve to all native channels.  */
+  render_parameters image_layer_params = params;
+  mtf_measurement image_layer_measurement;
+  image_layer_measurement.channel = -1;
+  image_layer_measurement.name = "image layer";
+  for (int i = 0; i < 7; ++i)
+    image_layer_measurement.add_value (i / 12.0, 100 - 8 * i);
+  image_layer_params.sharpen.scanner_mtf.measurements.push_back (
+      std::move (image_layer_measurement));
+  const int image_layer_index
+      = image_layer_params.sharpen.scanner_mtf.measurements.size () - 1;
+  image_layer_params.sharpen.scanner_mtf.measured_mtf_idx
+      = image_layer_index;
+  if (image_layer_params.get_sharpen_parameters_for_channel (0)
+              .scanner_mtf.measured_mtf_idx
+          != image_layer_index
+      || image_layer_params.get_sharpen_parameters_for_channel (2)
+                 .scanner_mtf.measured_mtf_idx
+             != image_layer_index)
+    {
+      fprintf (stderr,
+               "Image-layer MTF no longer applies to every RGB channel\n");
+      return false;
+    }
+
+  render r (img, params, 65535);
+  if (!r.precompute_all (PRECOMPUTE_IMAGE_LAYER | PRECOMPUTE_RGB_IMAGE,
+                         { 1, 1, 1 }, nullptr))
+    {
+      fprintf (stderr, "Per-channel sharpening precomputation failed\n");
+      return false;
+    }
+
+  const int_point_t p = { width / 2 - 1, height / 2 };
+  const double red = r.get_linearized_data_red (p);
+  const double green = r.get_linearized_data_green (p);
+  const double blue = r.get_linearized_data_blue (p);
+  if (fabs (red - green) < 1e-5 && fabs (green - blue) < 1e-5)
+    {
+      fprintf (stderr,
+               "Different same-capture channel MTFs produced identical RGB "
+               "sharpening\n");
+      return false;
+    }
+
+  const double expected_mix
+      = red * params.mix_red + green * params.mix_green
+        + blue * params.mix_blue;
+  const double actual_mix = r.get_unadjusted_data (p);
+  const double tolerance = 0.002 * std::max (1.0, fabs (expected_mix));
+  if (fabs (actual_mix - expected_mix) > tolerance)
+    {
+      fprintf (stderr,
+               "Image layer was not mixed from sharpened RGB channels: "
+               "expected %.12g got %.12g\n",
+               expected_mix, actual_mix);
+      return false;
+    }
+
+  /* Original-capture rendering must request the RGB image rather than merely
+     lookup tables, so it displays the same scanner-sharpened channels.  */
+  scr_to_img_parameters map_parameters;
+  map_parameters.type = Paget;
+  map_parameters.center = { width / 2.0, height / 2.0 };
+  map_parameters.coordinate1 = { 4, 0 };
+  map_parameters.coordinate2 = { 0, 4 };
+  render_img original (map_parameters, img, params, 65535);
+  render_type_parameters render_type;
+  render_type.type = render_type_original;
+  original.set_render_type (render_type);
+  if (!original.precompute_all (nullptr))
+    {
+      fprintf (stderr, "Original RGB renderer precomputation failed\n");
+      return false;
+    }
+  const rgbdata original_pixel
+      = original.sample_pixel_img ({ (coord_t)p.x, (coord_t)p.y });
+  const rgbdata direct_pixel = r.get_rgb_pixel (p);
+  if (fabs (original_pixel.red - direct_pixel.red) > tolerance
+      || fabs (original_pixel.green - direct_pixel.green) > tolerance
+      || fabs (original_pixel.blue - direct_pixel.blue) > tolerance)
+    {
+      fprintf (stderr,
+               "Original renderer did not use scanner-sharpened RGB image\n");
+      return false;
+    }
+
+  return true;
 }
 
 /* Verify the slanted-edge MTF estimator against realistic optical blurs
@@ -7329,6 +7493,8 @@ main (int argc, char **argv)
     { "mesh_inversion", "mesh inversion tests", [] () { return test_mesh_inversion (); } },
     { "cow_points", "cow points tests", [] () { return test_cow_points (); } },
     { "image_area", "image area tests", [] () { return test_image_area (); } },
+    { "channel_sharpening", "per-channel scanner sharpening tests",
+      [] () { return test_channel_sharpening (); } },
     { "slanted_edge", "slanted edge MTF tests", [] () { return test_slanted_edge_mtf (); } },
     { "real_mtf_reproducibility", "real MTF reproducibility tests",
       [] () { return test_real_mtf_reproducibility (); } },

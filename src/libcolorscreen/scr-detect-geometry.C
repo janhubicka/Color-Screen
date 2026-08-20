@@ -1736,7 +1736,7 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
             return ret;
           }
           render = std::move(new_render);
-          if (!render->precompute_all(false, false, progress) ||
+          if (!render->precompute_all(PRECOMPUTE_NONE, progress) ||
               !render->precompute_rgbdata(progress)) {
             render = NULL;
             if (progress) {

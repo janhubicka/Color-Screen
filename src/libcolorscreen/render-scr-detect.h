@@ -200,19 +200,17 @@ public:
     else
      return {0, 0, 0};
   }
-  bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress)
+  bool precompute_all (int flags, rgbdata patch_proportions,
+                       progress_info *progress)
   {
+    (void)flags;
+    (void)patch_proportions;
+    (void)progress;
     abort ();
   }
-  /* Precompute all data needed for rendering.
-     GRAYSCALE_NEEDED specifies if grayscale data is needed.
-     NORMALIZED_PATCHES specifies if patches should be normalized.
-     PROGRESS is used to report progress and check for cancellation.  */
-  /* Precompute all data needed for rendering.
-     GRAYSCALE_NEEDED is true if grayscale data is needed.
-     NORMALIZED_PATCHES is true if patch proportions should be normalized.
-     PROGRESS is used to report progress and check for cancellation.  */
-  nodiscard_attr bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress);
+  /* Precompute data selected by FLAGS.  PROGRESS reports work and
+     cancellation.  */
+  nodiscard_attr bool precompute_all (int flags, progress_info *progress);
   /* Precompute adjusted RGB data.
      PROGRESS is used to report progress and check for cancellation.  */
   bool precompute_rgbdata (progress_info *progress);
@@ -491,7 +489,7 @@ public:
   }
   bool precompute_all (progress_info *progress)
   {
-    return render_scr_detect::precompute_all (true, false, progress);
+    return render_scr_detect::precompute_all (PRECOMPUTE_IMAGE_LAYER, progress);
   }
   bool precompute_img_range (int_image_area area, progress_info *progress)
   {
@@ -535,7 +533,7 @@ public:
   }
   bool precompute_all (progress_info *progress)
   {
-    return render_scr_detect::precompute_all (true, false, progress);
+    return render_scr_detect::precompute_all (PRECOMPUTE_IMAGE_LAYER, progress);
   }
   bool precompute_img_range (int_image_area area, progress_info *progress)
   {
@@ -571,7 +569,7 @@ public:
   }
   bool precompute_all (progress_info *progress)
   {
-    return render_scr_detect::precompute_all (true, false, progress);
+    return render_scr_detect::precompute_all (PRECOMPUTE_IMAGE_LAYER, progress);
   }
   bool precompute_img_range (int_image_area area, progress_info *progress)
   {
@@ -603,7 +601,7 @@ public:
   pure_attr inline rgbdata sample_pixel_img (point_t p) const;
   bool precompute_all (progress_info *progress)
   {
-    return render_scr_detect::precompute_all (true, false, progress);
+    return render_scr_detect::precompute_all (PRECOMPUTE_IMAGE_LAYER, progress);
   }
   bool precompute_img_range (int_image_area area, progress_info *progress)
   {
@@ -767,7 +765,7 @@ public:
   }
   bool precompute_all (progress_info *progress)
   {
-    return render_scr_detect::precompute_all (true, true, progress);
+    return render_scr_detect::precompute_all (PRECOMPUTE_IMAGE_LAYER | NORMALIZED_PATCHES, progress);
   }
   void set_render_type (render_type_parameters rtparam)
   {

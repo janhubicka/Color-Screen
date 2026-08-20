@@ -28,6 +28,15 @@ namespace colorscreen
 {
 class histogram;
 
+/* Data that render::precompute_all should materialize.  Flags can be ORed.  */
+enum render_precompute_flags
+{
+  PRECOMPUTE_NONE = 0,
+  PRECOMPUTE_IMAGE_LAYER = 1 << 0,
+  PRECOMPUTE_RGB_IMAGE = 1 << 1,
+  NORMALIZED_PATCHES = 1 << 2
+};
+
 /* Helper for downscaling template for grayscale rendering.
    Account VAL * SCALE to DATA.  */
 template <bool UseAtomic = false>
@@ -146,26 +155,34 @@ public:
   pure_attr inline luminosity_t
   get_linearized_data_blue (int_point_t p) const noexcept;
 
-  /* Precompute all data needed for rendering.  GRAYSCALE_NEEDED
-     indicates if gray data is required.  If NORMALIZED_PATCHES is true,
-     spectral computation is normalized.  PATCH_PROPORTIONS specifies
-     color proportions.  Report progress to PROGRESS.  Return false on failure.
-   */
-  nodiscard_attr DLL_PUBLIC bool precompute_all (bool grayscale_needed,
-                                                 bool normalized_patches,
+  /* Precompute data selected by FLAGS.  PRECOMPUTE_IMAGE_LAYER materializes
+     the scalar image layer used by get_data(), PRECOMPUTE_RGB_IMAGE prepares
+     native RGB access (including scanner sharpening when enabled), and
+     NORMALIZED_PATCHES requests normalized spectral/profile computation.
+     PATCH_PROPORTIONS specifies color proportions.  Report progress to
+     PROGRESS and return false on failure.  */
+  nodiscard_attr DLL_PUBLIC bool precompute_all (int flags,
                                                  rgbdata patch_proportions,
                                                  progress_info *progress);
 
-  /* Get linearized RGB pixel value at index X, Y.  */
+  /* Get linearized RGB pixel value at index X, Y.  If a sharpened RGB image
+     was precomputed, return its independently processed scanner channels.
+     The three M_RGB_IMAGE planes are always present or absent together.  */
   pure_attr inline rgbdata
   get_linearized_rgb_pixel (int_point_t p) const noexcept
   {
     if (colorscreen_checking)
       assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
+    if (m_rgb_image[0])
+      {
+        const size_t i = p.y * (size_t)m_img.width + p.x;
+        return { (luminosity_t)m_rgb_image[0][i],
+                 (luminosity_t)m_rgb_image[1][i],
+                 (luminosity_t)m_rgb_image[2][i] };
+      }
     image_data::pixel pxl = m_img.get_rgb_pixel (p.x, p.y);
-    rgbdata d = { m_rgb_lookup_table[0][pxl.r], m_rgb_lookup_table[1][pxl.g],
-                  m_rgb_lookup_table[2][pxl.b] };
-    return d;
+    return { m_rgb_lookup_table[0][pxl.r], m_rgb_lookup_table[1][pxl.g],
+             m_rgb_lookup_table[2][pxl.b] };
   }
 
   /* Get unadjusted RGB pixel value at index X, Y.  */
@@ -173,7 +190,9 @@ public:
   get_unadjusted_rgb_pixel (int_point_t p) const noexcept
   {
     rgbdata d = get_linearized_rgb_pixel (p);
-    if (m_backlight_correction)
+    /* Precomputed RGB planes already contain backlight correction because
+       scanner sharpening must see the corrected channel data.  */
+    if (m_backlight_correction && !m_rgb_image[0])
       {
         d.red = m_backlight_correction->apply (
             d.red, p.x, p.y, backlight_correction_parameters::red, true);
@@ -288,14 +307,20 @@ protected:
   /* Rendering parameters.  */
   render_parameters m_params;
 
-  /* ID of graydata computed.  */
-  uint64_t m_gray_data_id = m_img.id;
+  /* ID of the precomputed scalar image layer.  */
+  uint64_t m_image_layer_id = m_img.id;
 
-  /* Sharpened data we render from.  */
-  mem_luminosity_t *m_sharpened_data = nullptr;
+  /* Precomputed scalar image layer used by grayscale/screen rendering.  */
+  mem_luminosity_t *m_image_layer = nullptr;
 
   /* Wrapping class to cause proper destruction.  */
-  std::shared_ptr<class sharpened_data> m_sharpened_data_holder = nullptr;
+  std::shared_ptr<class sharpened_data> m_image_layer_holder = nullptr;
+
+  /* Independently scanner-sharpened native RGB channels.  Values are
+     linearized and backlight-corrected, but global dark point and exposure are
+     still applied by the higher-level RGB accessors.  */
+  mem_luminosity_t *m_rgb_image[3] = { nullptr, nullptr, nullptr };
+  std::shared_ptr<class sharpened_data> m_rgb_image_holder[3];
 
   /* Maximal value in M_IMG.  */
   int m_maxval = m_img.has_grayscale_or_ir () ? m_img.maxval : 65535;
@@ -314,13 +339,13 @@ protected:
       = nullptr;
 };
 
-/* Get sharpened grayscale value at index X, Y without adjustments.  */
+/* Get precomputed image-layer value at index X, Y without adjustments.  */
 pure_attr inline luminosity_t always_inline_attr
 render::get_unadjusted_data (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
     assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
-  return m_sharpened_data[p.y * m_img.width + p.x];
+  return m_image_layer[p.y * m_img.width + p.x];
 }
 
 /* Adjust luminosity LUM considering infrared sensitivity and dark point.  */
@@ -342,30 +367,39 @@ render::get_data (int_point_t p) const noexcept
   return adjust_luminosity_ir (get_unadjusted_data (p));
 }
 
-/* Get linearized red channel value at index X, Y.  */
+/* Get linearized red channel value at index X, Y.  If the RGB image was
+   precomputed with scanner sharpening, return that processed channel.  */
 pure_attr inline luminosity_t always_inline_attr
 render::get_linearized_data_red (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
     assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
+  if (m_rgb_image[0])
+    return (luminosity_t)m_rgb_image[0][p.y * m_img.width + p.x];
   return m_rgb_lookup_table[0][m_img.get_rgb_pixel (p.x, p.y).r];
 }
 
-/* Get linearized green channel value at index X, Y.  */
+/* Get linearized green channel value at index X, Y.  If the RGB image was
+   precomputed with scanner sharpening, return that processed channel.  */
 pure_attr inline luminosity_t always_inline_attr
 render::get_linearized_data_green (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
     assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
+  if (m_rgb_image[0])
+    return (luminosity_t)m_rgb_image[1][p.y * m_img.width + p.x];
   return m_rgb_lookup_table[1][m_img.get_rgb_pixel (p.x, p.y).g];
 }
 
-/* Get linearized blue channel value at index X, Y.  */
+/* Get linearized blue channel value at index X, Y.  If the RGB image was
+   precomputed with scanner sharpening, return that processed channel.  */
 pure_attr inline luminosity_t always_inline_attr
 render::get_linearized_data_blue (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
     assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
+  if (m_rgb_image[0])
+    return (luminosity_t)m_rgb_image[2][p.y * m_img.width + p.x];
   return m_rgb_lookup_table[2][m_img.get_rgb_pixel (p.x, p.y).b];
 }
 
@@ -373,10 +407,8 @@ render::get_linearized_data_blue (int_point_t p) const noexcept
 pure_attr inline luminosity_t
 render::get_data_red (int_point_t p) const noexcept
 {
-  if (colorscreen_checking)
-    assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
-  luminosity_t v = m_rgb_lookup_table[0][m_img.get_rgb_pixel (p.x, p.y).r];
-  if (m_backlight_correction)
+  luminosity_t v = get_linearized_data_red (p);
+  if (m_backlight_correction && !m_rgb_image[0])
     v = m_backlight_correction->apply (
         v, p.x, p.y, backlight_correction_parameters::red, true);
   v = (v - m_params.dark_point) * m_params.scan_exposure;
@@ -387,10 +419,8 @@ render::get_data_red (int_point_t p) const noexcept
 pure_attr inline luminosity_t
 render::get_data_green (int_point_t p) const noexcept
 {
-  if (colorscreen_checking)
-    assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
-  luminosity_t v = m_rgb_lookup_table[1][m_img.get_rgb_pixel (p.x, p.y).g];
-  if (m_backlight_correction)
+  luminosity_t v = get_linearized_data_green (p);
+  if (m_backlight_correction && !m_rgb_image[0])
     v = m_backlight_correction->apply (
         v, p.x, p.y, backlight_correction_parameters::green, true);
   v = (v - m_params.dark_point) * m_params.scan_exposure;
@@ -401,10 +431,8 @@ render::get_data_green (int_point_t p) const noexcept
 pure_attr inline luminosity_t
 render::get_data_blue (int_point_t p) const noexcept
 {
-  if (colorscreen_checking)
-    assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
-  luminosity_t v = m_rgb_lookup_table[2][m_img.get_rgb_pixel (p.x, p.y).b];
-  if (m_backlight_correction)
+  luminosity_t v = get_linearized_data_blue (p);
+  if (m_backlight_correction && !m_rgb_image[0])
     v = m_backlight_correction->apply (
         v, p.x, p.y, backlight_correction_parameters::blue, true);
   v = (v - m_params.dark_point) * m_params.scan_exposure;
@@ -531,7 +559,7 @@ render::get_unadjusted_img_rgb_pixel (point_t p) const noexcept
                               get_linearized_data_blue ({ sx + 1, sy + 2 }),
                               get_linearized_data_blue ({ sx + 2, sy + 2 }) };
       ret.blue = do_bicubic_interpolate (b1, b2, b3, b4, { rx, ry });
-      if (m_backlight_correction)
+      if (m_backlight_correction && !m_rgb_image[0])
         {
           ret.red = m_backlight_correction->apply (
               ret.red, p.x, p.y, backlight_correction_parameters::red, true);

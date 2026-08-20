@@ -67,7 +67,7 @@ render_simulate_process::precompute_all (progress_info *progress)
   m_screen = get_screen (m_scr_to_img.get_type (), false, false, sharpen,
 			 m_params.red_strip_width,
 			 m_params.green_strip_width, progress);
-  if (!render_to_scr::precompute_all (false, false, progress))
+  if (!render_to_scr::precompute_all (PRECOMPUTE_RGB_IMAGE, progress))
     return false;
   struct simulation_params p = {m_img.id, &m_img, this, m_params.gamma, m_scr_to_img.get_param (), m_params.sharpen};
   p.sharpen.mode = sharpen_parameters::blur_deconvolution;

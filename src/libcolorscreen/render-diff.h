@@ -28,7 +28,7 @@ public:
   nodiscard_attr bool
   precompute_img_range (int_image_area area, progress_info *progress)
   {
-    if (!render_to_scr::precompute_img_range (false, true, {{0, 0}, {1, 1}}, progress))
+    if (!render_to_scr::precompute_img_range (NORMALIZED_PATCHES, {{0, 0}, {1, 1}}, progress))
       return false;
     if (!r1.precompute_img_range (area, progress))
       return false;
@@ -37,7 +37,7 @@ public:
   nodiscard_attr bool
   precompute_all (progress_info *progress)
   {
-    if (!render_to_scr::precompute_img_range (false, true, {{0, 0}, {1, 1}}, progress))
+    if (!render_to_scr::precompute_img_range (NORMALIZED_PATCHES, {{0, 0}, {1, 1}}, progress))
       return false;
     if (!r1.precompute_all (progress))
       return false;

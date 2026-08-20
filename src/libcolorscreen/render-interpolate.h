@@ -77,8 +77,13 @@ public:
   }
 
   /* Precompute whole image range with additional options.  */
-  nodiscard_attr bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress)
+  nodiscard_attr bool
+  precompute_all (int flags, rgbdata patch_proportions,
+                  progress_info *progress)
   {
+    (void)flags;
+    (void)patch_proportions;
+    (void)progress;
     abort ();
   }
 

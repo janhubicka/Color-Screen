@@ -211,7 +211,7 @@ has_regular_screen (image_data &scan, const has_regular_screen_params &params, p
   else if (scan.gamma > 0)
     rparams.gamma = scan.gamma;
   render render (scan, rparams, 256);
-  if (!render.precompute_all (true, false, (rgbdata){1.0/3, 1.0/3, 1.0/3}, progress))
+  if (!render.precompute_all (PRECOMPUTE_IMAGE_LAYER, (rgbdata){1.0/3, 1.0/3, 1.0/3}, progress))
     {
       ret.error = "precompute_all failed";
       return ret;
