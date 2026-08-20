@@ -529,28 +529,40 @@ render::precompute_all (int flags, rgbdata patch_proportions,
         && m_params.sharpen.get_mode () != sharpen_parameters::none
         && (rgb_image_needed || (image_layer_needed && ir_simulation));
   if (sharpen_rgb)
-    for (int channel = 0; channel < 3; ++channel)
-      {
-        gray_and_sharpen_params p
-            = { { m_img.id,
-                  &m_img,
-                  m_params.gamma,
-                  { m_img.to_linear[0], m_img.to_linear[1],
-                    m_img.to_linear[2] },
-                  rgbdata{0, 0, 0},
-                  channel == 0 ? 1.0f : 0.0f,
-                  channel == 1 ? 1.0f : 0.0f,
-                  channel == 2 ? 1.0f : 0.0f,
-                  m_backlight_correction.get (),
-                  m_backlight_correction_id,
-                  true },
-                m_params.get_sharpen_parameters_for_channel (channel) };
-        m_rgb_image_holder[channel]
-            = gray_and_sharpened_data_cache.get (p, progress);
-        if (!m_rgb_image_holder[channel])
-          return false;
-        m_rgb_image[channel] = m_rgb_image_holder[channel]->m_data;
-      }
+    {
+      /* Publish the RGB image only after all three channel planes are ready.
+         This keeps m_rgb_image[0] as the single all-or-none state bit used by
+         the hot pixel accessors.  */
+      std::shared_ptr<sharpened_data> rgb_image_holder[3];
+      for (int channel = 0; channel < 3; ++channel)
+        {
+          gray_and_sharpen_params p
+              = { { m_img.id,
+                    &m_img,
+                    m_params.gamma,
+                    { m_img.to_linear[0], m_img.to_linear[1],
+                      m_img.to_linear[2] },
+                    rgbdata{0, 0, 0},
+                    channel == 0 ? 1.0f : 0.0f,
+                    channel == 1 ? 1.0f : 0.0f,
+                    channel == 2 ? 1.0f : 0.0f,
+                    m_backlight_correction.get (),
+                    m_backlight_correction_id,
+                    true },
+                  m_params.get_sharpen_parameters_for_channel (channel) };
+          rgb_image_holder[channel]
+              = gray_and_sharpened_data_cache.get (p, progress);
+          if (!rgb_image_holder[channel])
+            return false;
+        }
+      for (int channel = 0; channel < 3; ++channel)
+        {
+          m_rgb_image_holder[channel] = std::move (rgb_image_holder[channel]);
+          m_rgb_image[channel] = m_rgb_image_holder[channel]->m_data;
+        }
+      if (colorscreen_checking)
+        assert (m_rgb_image[0] && m_rgb_image[1] && m_rgb_image[2]);
+    }
 
   if (image_layer_needed)
     {

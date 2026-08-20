@@ -166,12 +166,23 @@ public:
                                                  progress_info *progress);
 
   /* Get linearized RGB pixel value at index X, Y.  If a sharpened RGB image
-     was precomputed, return its independently processed scanner channels.  */
+     was precomputed, return its independently processed scanner channels.
+     The three M_RGB_IMAGE planes are always present or absent together.  */
   pure_attr inline rgbdata
   get_linearized_rgb_pixel (int_point_t p) const noexcept
   {
-    return { get_linearized_data_red (p), get_linearized_data_green (p),
-             get_linearized_data_blue (p) };
+    if (colorscreen_checking)
+      assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
+    if (m_rgb_image[0])
+      {
+        const size_t i = p.y * (size_t)m_img.width + p.x;
+        return { (luminosity_t)m_rgb_image[0][i],
+                 (luminosity_t)m_rgb_image[1][i],
+                 (luminosity_t)m_rgb_image[2][i] };
+      }
+    image_data::pixel pxl = m_img.get_rgb_pixel (p.x, p.y);
+    return { m_rgb_lookup_table[0][pxl.r], m_rgb_lookup_table[1][pxl.g],
+             m_rgb_lookup_table[2][pxl.b] };
   }
 
   /* Get unadjusted RGB pixel value at index X, Y.  */
@@ -179,20 +190,16 @@ public:
   get_unadjusted_rgb_pixel (int_point_t p) const noexcept
   {
     rgbdata d = get_linearized_rgb_pixel (p);
-    if (m_backlight_correction)
+    /* Precomputed RGB planes already contain backlight correction because
+       scanner sharpening must see the corrected channel data.  */
+    if (m_backlight_correction && !m_rgb_image[0])
       {
-        /* Precomputed RGB planes already contain backlight correction because
-           scanner sharpening must see the corrected channel data.  */
-        if (!m_rgb_image[0])
-          d.red = m_backlight_correction->apply (
-              d.red, p.x, p.y, backlight_correction_parameters::red, true);
-        if (!m_rgb_image[1])
-          d.green = m_backlight_correction->apply (
-              d.green, p.x, p.y, backlight_correction_parameters::green,
-              true);
-        if (!m_rgb_image[2])
-          d.blue = m_backlight_correction->apply (
-              d.blue, p.x, p.y, backlight_correction_parameters::blue, true);
+        d.red = m_backlight_correction->apply (
+            d.red, p.x, p.y, backlight_correction_parameters::red, true);
+        d.green = m_backlight_correction->apply (
+            d.green, p.x, p.y, backlight_correction_parameters::green, true);
+        d.blue = m_backlight_correction->apply (
+            d.blue, p.x, p.y, backlight_correction_parameters::blue, true);
       }
     return d;
   }
@@ -379,7 +386,7 @@ render::get_linearized_data_green (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
     assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
-  if (m_rgb_image[1])
+  if (m_rgb_image[0])
     return (luminosity_t)m_rgb_image[1][p.y * m_img.width + p.x];
   return m_rgb_lookup_table[1][m_img.get_rgb_pixel (p.x, p.y).g];
 }
@@ -391,7 +398,7 @@ render::get_linearized_data_blue (int_point_t p) const noexcept
 {
   if (colorscreen_checking)
     assert (p.x >= 0 && p.x < m_img.width && p.y >= 0 && p.y < m_img.height);
-  if (m_rgb_image[2])
+  if (m_rgb_image[0])
     return (luminosity_t)m_rgb_image[2][p.y * m_img.width + p.x];
   return m_rgb_lookup_table[2][m_img.get_rgb_pixel (p.x, p.y).b];
 }
@@ -413,7 +420,7 @@ pure_attr inline luminosity_t
 render::get_data_green (int_point_t p) const noexcept
 {
   luminosity_t v = get_linearized_data_green (p);
-  if (m_backlight_correction && !m_rgb_image[1])
+  if (m_backlight_correction && !m_rgb_image[0])
     v = m_backlight_correction->apply (
         v, p.x, p.y, backlight_correction_parameters::green, true);
   v = (v - m_params.dark_point) * m_params.scan_exposure;
@@ -425,7 +432,7 @@ pure_attr inline luminosity_t
 render::get_data_blue (int_point_t p) const noexcept
 {
   luminosity_t v = get_linearized_data_blue (p);
-  if (m_backlight_correction && !m_rgb_image[2])
+  if (m_backlight_correction && !m_rgb_image[0])
     v = m_backlight_correction->apply (
         v, p.x, p.y, backlight_correction_parameters::blue, true);
   v = (v - m_params.dark_point) * m_params.scan_exposure;
@@ -552,20 +559,15 @@ render::get_unadjusted_img_rgb_pixel (point_t p) const noexcept
                               get_linearized_data_blue ({ sx + 1, sy + 2 }),
                               get_linearized_data_blue ({ sx + 2, sy + 2 }) };
       ret.blue = do_bicubic_interpolate (b1, b2, b3, b4, { rx, ry });
-      if (m_backlight_correction)
+      if (m_backlight_correction && !m_rgb_image[0])
         {
-          if (!m_rgb_image[0])
-            ret.red = m_backlight_correction->apply (
-                ret.red, p.x, p.y, backlight_correction_parameters::red,
-                true);
-          if (!m_rgb_image[1])
-            ret.green = m_backlight_correction->apply (
-                ret.green, p.x, p.y, backlight_correction_parameters::green,
-                true);
-          if (!m_rgb_image[2])
-            ret.blue = m_backlight_correction->apply (
-                ret.blue, p.x, p.y, backlight_correction_parameters::blue,
-                true);
+          ret.red = m_backlight_correction->apply (
+              ret.red, p.x, p.y, backlight_correction_parameters::red, true);
+          ret.green = m_backlight_correction->apply (
+              ret.green, p.x, p.y, backlight_correction_parameters::green,
+              true);
+          ret.blue = m_backlight_correction->apply (
+              ret.blue, p.x, p.y, backlight_correction_parameters::blue, true);
         }
       return ret;
     }
