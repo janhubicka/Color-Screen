@@ -11,6 +11,7 @@
 #include <vector>
 #include <cmath>
 #include <algorithm>
+#include <limits>
 #include <omp.h>
 
 namespace colorscreen
@@ -177,6 +178,34 @@ struct denoise_noise_three_scale_estimate
            && my_isfinite (extrapolated_scale_invariant_fraction)
            && extrapolated_scale_invariant_fraction >= 0
            && extrapolated_scale_invariant_fraction <= 1;
+  }
+};
+
+/* Read-only comparison of the three-scale screen-noise diagnostic in the
+   original linear sample domain, photographic density (-log sample), and a
+   variance-stabilized domain derived from LINEAR.spacing1's fitted
+   floor-plus-slope variance model.  Each member reports its own accepted
+   observation count because density necessarily rejects non-positive samples.
+   This structure is diagnostic only and does not select a rendering domain.  */
+struct denoise_noise_domain_comparison
+{
+  denoise_noise_three_scale_estimate linear;
+  denoise_noise_three_scale_estimate density;
+  denoise_noise_three_scale_estimate variance_stabilized;
+
+  bool valid_p () const
+  {
+    return linear.valid_p ();
+  }
+
+  bool density_valid_p () const
+  {
+    return density.valid_p ();
+  }
+
+  bool variance_stabilized_valid_p () const
+  {
+    return variance_stabilized.valid_p ();
   }
 };
 
@@ -842,6 +871,113 @@ estimate_screen_rgb_noise_three_scale_model (
             spacing3.push_back ({signal, d3 * d3 / (luminosity_t)6});
           }
       });
+}
+
+/* Transform VALUE according to the fitted floor-plus-slope variance model.
+   FLOOR and SLOPE are the linear-domain variance coefficients.  The algebraic
+   form used for positive VALUE avoids cancellation when SLOPE is small and
+   tends continuously to VALUE/sqrt(FLOOR) as SLOPE tends to zero.  Negative
+   VALUE follows the same constant-floor convention as denoise_nl_sample_variance().
+   Return NaN when the model cannot define a real transform.  */
+inline luminosity_t
+denoise_noise_variance_stabilize (luminosity_t value, luminosity_t floor,
+                                  luminosity_t slope)
+{
+  const luminosity_t nan = std::numeric_limits<luminosity_t>::quiet_NaN ();
+  if (!my_isfinite (value) || !my_isfinite (floor) || floor <= 0
+      || !my_isfinite (slope) || slope < 0)
+    return nan;
+  const luminosity_t root_floor = std::sqrt (floor);
+  if (value <= 0 || slope == 0)
+    return value / root_floor;
+  const luminosity_t variance = floor + slope * value;
+  if (!(variance > 0) || !my_isfinite (variance))
+    return nan;
+  return 2 * value / (std::sqrt (variance) + root_floor);
+}
+
+/* Compare scalar collected screen samples in linear, density and
+   variance-stabilized domains.  WIDTH and HEIGHT describe the collected
+   lattice, GETDATA returns its linear sample value, GETSUPPORT returns raw
+   collection support, and ENTRY_TO_SCR maps an entry to physical screen
+   coordinates.  The variance-stabilizing transform is parameterized only by
+   the already-computed linear spacing-1 fit.  */
+template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
+inline denoise_noise_domain_comparison
+estimate_screen_noise_domain_comparison (int width, int height, GETDATA getdata,
+                                         GETSUPPORT getsupport,
+                                         ENTRY_TO_SCR entry_to_scr)
+{
+  denoise_noise_domain_comparison result;
+  result.linear = estimate_screen_noise_three_scale_model (
+      width, height, getdata, getsupport, entry_to_scr);
+
+  const luminosity_t nan = std::numeric_limits<luminosity_t>::quiet_NaN ();
+  result.density = estimate_screen_noise_three_scale_model (
+      width, height,
+      [&] (int x, int y)
+      {
+        luminosity_t value = getdata (x, y);
+        return my_isfinite (value) && value > 0 ? -std::log (value) : nan;
+      },
+      getsupport, entry_to_scr);
+
+  if (result.linear.spacing1.valid_p ())
+    {
+      const luminosity_t floor = result.linear.spacing1.variance_floor;
+      const luminosity_t slope = result.linear.spacing1.variance_slope;
+      result.variance_stabilized = estimate_screen_noise_three_scale_model (
+          width, height,
+          [&] (int x, int y)
+          { return denoise_noise_variance_stabilize (getdata (x, y), floor, slope); },
+          getsupport, entry_to_scr);
+    }
+  return result;
+}
+
+/* RGB variant of estimate_screen_noise_domain_comparison().  GETDATA returns
+   scanner RGB samples; the density and variance-stabilizing transforms are
+   applied component-wise.  The VST uses the shared linear precise-RGB
+   floor/slope fit, matching the common variance model used by vector NLM.  */
+template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
+inline denoise_noise_domain_comparison
+estimate_screen_rgb_noise_domain_comparison (
+    int width, int height, GETDATA getdata, GETSUPPORT getsupport,
+    ENTRY_TO_SCR entry_to_scr)
+{
+  denoise_noise_domain_comparison result;
+  result.linear = estimate_screen_rgb_noise_three_scale_model (
+      width, height, getdata, getsupport, entry_to_scr);
+
+  const luminosity_t nan = std::numeric_limits<luminosity_t>::quiet_NaN ();
+  result.density = estimate_screen_rgb_noise_three_scale_model (
+      width, height,
+      [&] (int x, int y)
+      {
+        rgbdata value = getdata (x, y);
+        for (int k = 0; k < 3; k++)
+          value[k] = my_isfinite (value[k]) && value[k] > 0
+                         ? -std::log (value[k]) : nan;
+        return value;
+      },
+      getsupport, entry_to_scr);
+
+  if (result.linear.spacing1.valid_p ())
+    {
+      const luminosity_t floor = result.linear.spacing1.variance_floor;
+      const luminosity_t slope = result.linear.spacing1.variance_slope;
+      result.variance_stabilized = estimate_screen_rgb_noise_three_scale_model (
+          width, height,
+          [&] (int x, int y)
+          {
+            rgbdata value = getdata (x, y);
+            for (int k = 0; k < 3; k++)
+              value[k] = denoise_noise_variance_stabilize (value[k], floor, slope);
+            return value;
+          },
+          getsupport, entry_to_scr);
+    }
+  return result;
 }
 
 template <typename ENTRY_TO_SCR>
