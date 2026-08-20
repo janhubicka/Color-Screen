@@ -21,23 +21,17 @@ jobs:
         run: |
           set -euo pipefail
           PATCH=/tmp/nikon-rgbi.patch
-          cat .agent-stage/01.part .agent-stage/02.part .agent-stage/03.part \
-              .agent-stage/04.part .agent-stage/05.part > "$PATCH"
-          cat .agent-stage/rem00.b64 \
-              .agent-stage/rem01-02.b64 \
-              .agent-stage/rem03-04.b64 \
-              .agent-stage/rem05-06.b64 \
-              .agent-stage/rem07-08.b64 \
-              .agent-stage/rem09-10.b64 \
-            | base64 --decode | gzip --decompress >> "$PATCH"
-          echo '7aa59d6b75d270a49605ee29c0ad66b29da460e575dbc3bcb788d8a2671c2432  /tmp/nikon-rgbi.patch' \
+          cat .agent-final/00.part .agent-final/01.part .agent-final/02.part \
+              .agent-final/03.part .agent-final/04.part .agent-final/05.part \
+              > "$PATCH"
+          echo 'd6643a65e4262c2698b8fc40ea13766f751f0c230542a2f39efcb8201a8d2d07  /tmp/nikon-rgbi.patch' \
             | sha256sum --check
 
       - name: Apply patch to clean review branch
         shell: bash
         run: |
           set -euo pipefail
-          BASE=a25dff38fdf946bd5b9c232ae8009464428627b2
+          BASE=f52c7133c8a41656b6c5e274719269a4edad313d
           TARGET=agent/nikon-rgbi-mtf-regression
           git fetch origin "$TARGET"
           git checkout -B "$TARGET" "origin/$TARGET"
@@ -46,19 +40,21 @@ jobs:
           git diff --check
 
           expected=$(cat <<'EOF'
-          src/libcolorscreen/unittests.C
           testsuite/Makefile.am
           testsuite/Makefile.in
           testsuite/nikon-razor-defocus-rgbi.tif
           testsuite/nikon-razor-rgbi-README.md
           testsuite/nikon-razor-sharp-rgbi.tif
+          testsuite/nikon-rgbi-mtf-test.C
+          testsuite/nikon-rgbi-mtf.test
           EOF
           )
           actual=$(git status --short | sed -E 's/^.. //' | sort)
           test "$actual" = "$(printf '%s\n' "$expected" | sed 's/^          //' | sort)"
 
-          echo 'e03257ee6b6050a88e94fbfce40b85111b655b85965f6661acf0dffd4428c13b  testsuite/nikon-razor-sharp-rgbi.tif' | sha256sum --check
-          echo '05089b92b09532269785628d616c631f09daf985d6bf9f9ba67f125b88582452  testsuite/nikon-razor-defocus-rgbi.tif' | sha256sum --check
+          echo '172a40ee77c5b958e1d6ec4b3e45d542bcbced1a8cd954de626aa73772079b50  testsuite/nikon-razor-sharp-rgbi.tif' | sha256sum --check
+          echo 'd05f95351638530c546c33866015d722b79aa3b8a040e34e3115777595b75c72  testsuite/nikon-razor-defocus-rgbi.tif' | sha256sum --check
+          test -x testsuite/nikon-rgbi-mtf.test
 
       - name: Commit and push review branch
         shell: bash
@@ -67,57 +63,45 @@ jobs:
           git config user.name 'OpenAI agent'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -- \
-            src/libcolorscreen/unittests.C \
             testsuite/Makefile.am \
             testsuite/Makefile.in \
             testsuite/nikon-razor-rgbi-README.md \
             testsuite/nikon-razor-sharp-rgbi.tif \
-            testsuite/nikon-razor-defocus-rgbi.tif
+            testsuite/nikon-razor-defocus-rgbi.tif \
+            testsuite/nikon-rgbi-mtf-test.C \
+            testsuite/nikon-rgbi-mtf.test
           git diff --cached --check
           git commit -F - <<'EOF'
           mtf: add Nikon RGB+IR focus regression
 
           Add a compact real-scanner regression for native-channel slanted-edge
           MTF measurement using two crops of the same Nikon RGB+IR razor-edge
-          capture: one near best focus and one deliberately defocused.
+          focus sweep: one near best focus and one deliberately defocused.
 
           Exercise all four native scanner channels independently and verify
-          that the TIFF fourth sample is available as IR, slanted-edge
-          measurement remains side-effect free, channel/same-capture metadata
-          is preserved, and every channel has a substantially higher MTF50 in
-          the sharp capture than in the defocused capture.  Also require a
-          nonzero spread between the four sharp-channel MTF50 values so a
-          regression that silently measures the same mixed image layer for
-          every requested channel is caught.
+          that the TIFF fourth sample is available as IR, the library MTF API
+          remains side-effect free, channel/same-capture metadata is preserved,
+          and every channel has substantially higher MTF50 in the sharp capture
+          than in the defocused capture.  Also require a nonzero spread between
+          the sharp-channel MTF50 values so a regression that silently measures
+          one mixed image layer for all native channels is caught.
 
-          Keep the fixtures small by cropping the real scans to 64x128 pixels.
-          Register both TIFFs and their provenance README in EXTRA_DIST so the
-          test works from release tarballs as well as a source checkout.
+          Keep the real fixtures small with matching 48x96 crops around the
+          clean razor edge, stored as lossless 16-bit four-sample TIFFs.  Run
+          the regression through a standalone TAP helper built by the test
+          wrapper so the production library and monolithic unit-test source do
+          not need unrelated changes.  Register the helper and fixtures in the
+          generated testsuite build files so make check and distcheck exercise
+          the same data.
 
           This is regression coverage only; it does not change MTF algorithms,
-          rendering behavior, or parameter formats.
+          rendering behavior, or serialized parameter formats.
 
-          Validation before publication: the patch was rebased onto main
-          a25dff38fdf946bd5b9c232ae8009464428627b2, applies cleanly, passes
-          git diff --check, and the fixture SHA-256 hashes and 4-channel TIFF
-          structure were independently verified.  Full compilation and the
-          nikon_rgbi_mtf test are delegated to pull-request CI.
+          Validation before publication: the final binary patch is based on
+          main f52c7133c8a41656b6c5e274719269a4edad313d, passes git diff --check,
+          the helper passes C++17 syntax checking, the wrapper passes sh -n,
+          and fixture hashes plus four-channel TIFF structure were independently
+          verified.  Full linked builds and the real-data measurement run in
+          pull-request CI.
           EOF
           git push origin HEAD:refs/heads/agent/nikon-rgbi-mtf-regression
-
-      - name: Remove temporary transport branches
-        if: success()
-        shell: bash
-        run: |
-          set -euo pipefail
-          for branch in \
-            agent/nikon-rgbi-mtf-stage \
-            agent/nikon-rgbi-mtf-stage-copy \
-            agent/nikon-rgbi-mtf-stage-keepalive \
-            agent/nikon-rgbi-mtf-stage-v2 \
-            agent/nikon-rgbi-mtf-stage-v3 \
-            agent/nikon-rgbi-mtf-stage-v4 \
-            agent/nikon-rgbi-mtf-stage-v5 \
-            agent/nikon-rgbi-mtf-stage-v6; do
-            git push origin --delete "$branch" || true
-          done
