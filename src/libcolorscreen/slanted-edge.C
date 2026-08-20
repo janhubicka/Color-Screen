@@ -23,7 +23,11 @@ namespace {
 constexpr int default_slanted_edge_oversampling = 10;
 constexpr int max_slanted_edge_oversampling = 64;
 constexpr int max_slanted_edge_bins = 8 * 1024 * 1024;
-constexpr int edge_centroid_radius = 10;
+/* Include the gradient tails of broad defocused edges in their weighted
+   centroids.  Keep the secondary-peak guard narrower so a strong neighboring
+   transition still disqualifies the scan line instead of biasing its
+   centroid.  */
+constexpr int edge_centroid_radius = 14;
 constexpr int secondary_peak_guard = 12;
 
 /* These qualification limits deliberately favor rejecting a questionable ROI
