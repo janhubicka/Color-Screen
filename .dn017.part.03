@@ -1,0 +1,83 @@
++                x + eps, a, b, &hi))
++          return false;
++        luminosity_t derivative = (hi - lo) / (2 * eps);
++        luminosity_t normalized_variance
++            = derivative * derivative * (a + b * x);
++        if (fabs (normalized_variance - (luminosity_t)1)
++            > (luminosity_t)0.01)
++          {
++            fprintf (stderr,
++                     "Variance-stabilizing derivative mismatch at %g: %g\n",
++                     (double)x, (double)normalized_variance);
++            return false;
++          }
++      }
++    luminosity_t transformed;
++    if (!denoise_noise_estimator_detail::variance_stabilizing_transform (
++            (luminosity_t)0.5, a, 0, &transformed)
++        || fabs (transformed - (luminosity_t)0.5 / std::sqrt (a))
++               > (luminosity_t)1e-5)
++      {
++        fprintf (stderr, "Constant-variance VST limit mismatch: %g\n",
++                 (double)transformed);
++        return false;
++      }
++  }
++
++  /* Exercise the transformed precise-RGB collector.  Each component has a
++     different linear density ramp but the same multiplicative noise level;
++     pooling them should still produce a valid, nearly scale-invariant density
++     diagnostic.  */
++  {
++    const int w = 64, h = 52;
++    std::vector<rgbdata> data ((size_t)w * h);
++    std::vector<luminosity_t> support ((size_t)w * h, 1);
++    unsigned int noise_seed = 0x31415926U;
++    auto gaussian = [&] () -> luminosity_t
++    {
++      luminosity_t u1
++          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
++      luminosity_t u2
++          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
++      return std::sqrt ((luminosity_t)-2 * std::log (u1))
++             * std::cos ((luminosity_t)6.2831853071795864769 * u2);
++    };
++    for (int y = 0; y < h; y++)
++      for (int x = 0; x < w; x++)
++        {
++          rgbdata density = {
++            (luminosity_t)0.2 + (luminosity_t)1.0 * x / (w - 1),
++            (luminosity_t)0.3 + (luminosity_t)0.8 * y / (h - 1),
++            (luminosity_t)0.15 + (luminosity_t)0.6 * x / (w - 1)
++                + (luminosity_t)0.3 * y / (h - 1)};
++          rgbdata value;
++          for (int k = 0; k < 3; k++)
++            value[k] = std::exp (-density[k] + (luminosity_t)0.03 * gaussian ());
++          data[(size_t)y * w + x] = value;
++        }
++    denoise_noise_domain_comparison domains
++        = estimate_screen_rgb_noise_domain_comparison (
++            w, h, [&] (int x, int y) { return data[(size_t)y * w + x]; },
++            [&] (int x, int y) { return support[(size_t)y * w + x]; },
++            [] (int_point_t p)
++            { return point_t{(coord_t)p.x, (coord_t)p.y}; });
++    if (!domains.density.valid_p ()
++        || fabs (domains.density.spacing2_variance_ratio - (luminosity_t)1)
++               > (luminosity_t)0.25
++        || fabs (domains.density.spacing3_variance_ratio - (luminosity_t)1)
++               > (luminosity_t)0.35)
++      {
++        fprintf (stderr,
++                 "RGB density-domain diagnostic mismatch: ratios %g %g, "
++                 "paired %zu\n",
++                 (double)domains.density.spacing2_variance_ratio,
++                 (double)domains.density.spacing3_variance_ratio,
++                 domains.density.paired_observations);
++        return false;
++      }
++  }
++
++
+   /* A bilateral filter needs a border matching its spatial kernel, not the
+      unrelated NL-means patch and search radii.  Sigma 2 has support radius 6
+      with the three-sigma truncation used by process_bilateral().  */
