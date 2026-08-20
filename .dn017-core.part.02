@@ -1,0 +1,112 @@
++          v[k] = denoise_density_transform (v[k]);
++        return v;
++      },
++      getsupport, entry_to_scr);
++  result.variance_stabilizer_model = result.linear.spacing1;
++  if (result.variance_stabilizer_model.valid_p ())
++    result.variance_stabilized = estimate_screen_rgb_noise_three_scale_model (
++        width, height,
++        [&] (int x, int y)
++        {
++          rgbdata v = getdata (x, y);
++          for (int k = 0; k < 3; k++)
++            v[k] = denoise_variance_stabilizing_transform (
++                v[k], result.variance_stabilizer_model);
++          return v;
++        },
++        getsupport, entry_to_scr);
++  return result;
++}
++
+ template <typename ENTRY_TO_SCR>
+ inline bool
+ denoise_screen_offset_in_square (int_point_t center, int_point_t sample,
+diff --git a/src/libcolorscreen/render-interpolate.C b/src/libcolorscreen/render-interpolate.C
+index 687edc6..9d28d58 100644
+--- a/src/libcolorscreen/render-interpolate.C
++++ b/src/libcolorscreen/render-interpolate.C
+@@ -710,6 +710,23 @@ render_interpolate::estimate_screen_noise_three_scale_models (
+   return false;
+ }
+ 
++/* Compare precomputed screen samples in linear, density and
++   variance-stabilized domains.  RED, GREEN and BLUE receive diagnostics.  */
++bool
++render_interpolate::estimate_screen_noise_domain_models (
++    denoise_noise_domain_comparison *red,
++    denoise_noise_domain_comparison *green,
++    denoise_noise_domain_comparison *blue) const
++{
++  if (m_paget)
++    return m_paget->estimate_noise_domain_models (red, green, blue);
++  if (m_dufay)
++    return m_dufay->estimate_noise_domain_models (red, green, blue);
++  if (m_strips)
++    return m_strips->estimate_noise_domain_models (red, green, blue);
++  return false;
++}
++
+ bool
+ render_interpolate::analyze_patches (analyzer analyze, const char *task,
+                                      bool screen, int_image_area area,
+diff --git a/src/libcolorscreen/render-interpolate.h b/src/libcolorscreen/render-interpolate.h
+index 01e1d05..004154c 100644
+--- a/src/libcolorscreen/render-interpolate.h
++++ b/src/libcolorscreen/render-interpolate.h
+@@ -23,6 +23,7 @@ class demosaic_dufay;
+ struct denoise_noise_estimate;
+ struct denoise_noise_scale_estimate;
+ struct denoise_noise_three_scale_estimate;
++struct denoise_noise_domain_comparison;
+ typedef std::function <bool (coord_t, coord_t, rgbdata)> analyzer;
+ typedef std::function <bool (coord_t, coord_t, rgbdata, rgbdata, rgbdata)> rgb_analyzer;
+ 
+@@ -149,6 +150,12 @@ public:
+       denoise_noise_three_scale_estimate *red,
+       denoise_noise_three_scale_estimate *green,
+       denoise_noise_three_scale_estimate *blue) const;
++  /* Compare precomputed collected screen samples in linear, density and
++     variance-stabilized domains.  RED, GREEN and BLUE receive diagnostics.  */
++  bool estimate_screen_noise_domain_models (
++      denoise_noise_domain_comparison *red,
++      denoise_noise_domain_comparison *green,
++      denoise_noise_domain_comparison *blue) const;
+ 
+ private:
+   /* Compensate saturation loss at screen coordinate P for color C.  */
+diff --git a/src/libcolorscreen/unittests.C b/src/libcolorscreen/unittests.C
+index 6c5de4a..fa0adac 100644
+--- a/src/libcolorscreen/unittests.C
++++ b/src/libcolorscreen/unittests.C
+@@ -5932,6 +5932,123 @@ test_denoise ()
+   }
+ 
+ 
++  /* Optical density should turn multiplicative transmission noise into an
++     approximately additive constant-variance process.  Use an exponential
++     transmission ramp with log-normal noise: the density-domain three-scale
++     ratios should be much closer to one and its signal-dependent fit should
++     improve substantially over linear intensity.  */
++  {
++    const int w = 96, h = 72;
++    const luminosity_t sigma = (luminosity_t)0.03;
++    std::vector<luminosity_t> data ((size_t)w * h), support ((size_t)w * h, 1);
++    unsigned int noise_seed = 0x7a31d9e5U;
++    auto gaussian = [&] () -> luminosity_t
++    {
++      luminosity_t u1
++          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
++      luminosity_t u2
++          = ((luminosity_t)fast_rand16 (&noise_seed) + 1) / (luminosity_t)32768;
++      return std::sqrt ((luminosity_t)-2 * std::log (u1))
++             * std::cos ((luminosity_t)6.2831853071795864769 * u2);
++    };
++    for (int y = 0; y < h; y++)
++      for (int x = 0; x < w; x++)
++        {
++          luminosity_t density = (luminosity_t)0.15
++              + (luminosity_t)0.012 * x + (luminosity_t)0.006 * y;
++          data[(size_t)y * w + x]
++              = std::exp (-density + sigma * gaussian ());
++        }
++    denoise_noise_domain_comparison domains = estimate_screen_noise_domains (
