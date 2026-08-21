@@ -32,9 +32,7 @@ jobs:
 
           path = Path("src/libcolorscreen/denoise.C")
           text = path.read_text()
-          anchor = """  const T *support
-              = m_use_support ? m_data[thread_id].support.data () : nullptr;
-          """
+          anchor = "m_use_support ? m_data[thread_id].support.data () : nullptr;\n"
           addition = """
             /* Unit support is defined to reproduce the historical unweighted filter
                exactly.  Do not rely on algebraically redundant multiplications by one
