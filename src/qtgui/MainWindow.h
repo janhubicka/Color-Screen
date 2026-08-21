@@ -65,14 +65,40 @@ class QUndoStack; // Forward decl
 class MainWindow : public QMainWindow {
   Q_OBJECT
 public:
-  explicit MainWindow(QWidget *parent = nullptr);
+  /** Construct one independent image-document window.
+
+      RECOVERYDIRECTORY is unique to this document and is managed by
+      ColorScreenApplication.  */
+  explicit MainWindow(const QString &recoveryDirectory,
+                      QWidget *parent = nullptr);
   ~MainWindow() override;
 
   // Internal use by Undo Command
   void applyState(const ParameterState &state);
 
-  // Public method for loading files (CLI support)
+  /** Load FILENAME into this document window.
+
+      New user-initiated opens normally go through ColorScreenApplication so
+      an occupied window is never overwritten.  SUPPRESSPARAMPROMPT is reserved
+      for crash recovery.  */
   void loadFile(const QString &fileName, bool suppressParamPrompt = false);
+
+  /** Return true when this untouched empty window may host a newly opened
+      image instead of allocating another document window.  */
+  bool canReuseForOpen() const;
+
+  /** Return the filename shown in the Window menu, including a modification
+      marker when this document has unsaved parameters.  */
+  QString documentDisplayName() const;
+
+  /** Return the absolute path of the image assigned to this document. */
+  QString currentImageFile() const { return m_currentImageFile; }
+
+  /** Restore this document from its per-window recovery directory. */
+  bool restoreRecoveryState();
+
+  /** Rebuild this window's Window menu from the application document list. */
+  void refreshWindowMenu();
 
   struct SolverRequestData {
     colorscreen::scr_to_img_parameters scrToImg;
@@ -162,6 +188,15 @@ protected:
 private:
   // Helper to check for unsaved changes and prompt to save
   bool maybeSave();
+
+  /** Save parameters to FILEName and update the document's save metadata. */
+  bool saveParametersToFile(const QString &fileName);
+
+  /** Prompt for a parameter filename and save synchronously. */
+  bool saveParametersAs();
+
+  /** Return whether undo state or recovered state differs from the last save. */
+  bool isDocumentModified() const;
 
   void setupUi();
   void createMenus();
@@ -422,15 +457,16 @@ private:
   QString m_currentImageFile;
   QString m_currentParamsFile;
   bool m_currentParamsFileIsWeak = false; // true if filename is suggested, not loaded
+  bool m_imageLoadPending = false;
+  bool m_recoveryDirty = false;
+  bool m_closing = false;
   bool m_focusAnalysisPending = false;
   uint64_t m_focusAnalysisFlags = 0;
 
   // Crash recovery
   QString m_recoveryDir;
   void saveRecoveryState();
-  void loadRecoveryState();
   void clearRecoveryFiles();
-  bool hasRecoveryFiles();
   
   // Solver Worker
   GeometrySolverWorker *m_solverWorker;
