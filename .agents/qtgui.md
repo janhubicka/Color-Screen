@@ -5,22 +5,24 @@ This document provides technical details for developing the Qt6-based graphical 
 ## Architecture Overview
 
 The GUI is built using **Qt6** and follows a modular panel-based architecture.
-The main window (`MainWindow`) serves as a shell that integrates multiple
-functional panels.  It is a frontend for `libcolorscreen`.
+Each document window (`MainWindow`) integrates the image view and functional
+panels and is a frontend for `libcolorscreen`; `WorkspaceWindow` is the shared
+application shell when documents are attached.
 
 The application is essentially a special-purpose non-destructive image editor.
-It uses a multi-document model with a tabbed workspace by default.
-`ColorScreenApplication` owns the document objects, `WorkspaceWindow` presents
-them as movable tabs, and each `MainWindow` owns one image (`m_scan`) and all
-mutable state associated with that image. A `MainWindow` may be embedded as a
-tab or detached as a top-level window; changing presentation must never copy or
-recreate document state. Rendering and analysis may be slow, so every document
-keeps its own background work and cancellation state.
+It uses Qt's standard multiple-document model. `ColorScreenApplication` owns
+the document objects, `WorkspaceWindow` provides the application shell and a
+`QMdiArea`, and each `MainWindow` owns one image (`m_scan`) and all mutable state
+associated with that image. The MDI area uses tabbed view by default and can
+switch to tiled or cascaded subwindows. A `MainWindow` may also be detached as
+a top-level window; changing presentation must never copy or recreate document
+state. Rendering and analysis may be slow, so every document keeps its own
+background work and cancellation state.
 
 ### Key Components
 
 - **`ColorScreenApplication`**: The application-level document manager. It creates and tracks `MainWindow` instances, routes open requests, manages tab/detached presentation, cycles between documents, and restores per-document crash-recovery sessions.
-- **`WorkspaceWindow`**: The primary top-level window. It owns only presentation state and a movable/closable `QTabWidget`; it never owns the image-processing state of a document.
+- **`WorkspaceWindow`**: The primary top-level application shell. Its central `QMdiArea` provides tabbed and subwindow views, while the shell temporarily presents the active document's menu bar, toolbar, and inspector. It owns presentation state only, never image-processing state.
 - **`MainWindow`**: One complete image document. It owns the scan, parameters, undo stack, image/navigation widgets, panels, task queues, workers, progress entries, detached docks, and a unique recovery directory. Mutable document state must never be shared between different `MainWindow` instances.
 - **`NavigationView`**: This shows the whole image and indicates zoom and position of ImageWidget.
 It lets user to effectively move around the image
@@ -29,7 +31,7 @@ It lets user to effectively move around the image
 - **`ParameterState`**: A structured object containing all render and project-level parameters. It is used as the single source of truth for the UI.
 - **`TaskQueue`**: Manages background worker threads. It utilizes multiple specialized queues (e.g., `m_renderQueue` for image tiles and `m_pointsQueue` for registration overlays) to ensure that heavy computations like point rendering do not block the main GUI thread or interfere with image tile generation.
 
-### Multi-Document Tabbed Workspace
+### Standard Multiple-Document Workspace
 
 Opening an image must not replace an occupied document. All entry points—File
 Open (including multi-selection), recent files, positional command-line paths,
@@ -53,13 +55,30 @@ Workspace geometry and recent-file lists remain application preferences in
 presentation state. Recent lists are persisted when they change so a
 later-closing document cannot overwrite newer entries.
 
-The default presentation is tabbed, like Photoshop/Krita. Detaching removes the
-existing `MainWindow` from `WorkspaceWindow` and reparents that same object as a
-top-level window; reattaching performs the inverse operation. Never serialize,
-clone, or reconstruct a document merely to change its presentation. Tabs are
-movable and closable, and double-click/context-menu detachment is supported.
-`Ctrl+Tab` and `Ctrl+Shift+Tab` cycle all documents, whether tabbed or detached.
-`Ctrl+N` creates a new tab and `Ctrl+Shift+N` creates a detached empty window.
+`WorkspaceWindow` must use `QMdiArea`, rather than maintaining a parallel custom
+tab implementation. The default view is `QMdiArea::TabbedView`; its internal
+`QTabBar` has `autoHide` enabled so no tab strip is shown for a single document.
+The workspace is a `QMainWindow`: the active document toolbar is installed in
+its top toolbar area, therefore document tabs naturally appear below it. The
+active document's navigation/parameter column is shown in the shared inspector
+dock. Inactive documents retain their complete processing and undo state.
+
+**Window → Arrange Images** switches the same live documents between tabbed,
+tiled, and cascaded MDI views using `setViewMode()`, `tileSubWindows()`, and
+`cascadeSubWindows()`. Detaching removes the existing `MainWindow` from the MDI
+area and reparents that same object as a top-level window; reattaching performs
+the inverse operation. Never serialize, clone, or reconstruct a document merely
+to change its presentation. Tabs are movable and closable, can be dragged out,
+and also support double-click/context-menu detachment. `Ctrl+Tab` and
+`Ctrl+Shift+Tab` cycle all documents, whether attached or detached. `Ctrl+N`
+creates a new workspace document and `Ctrl+Shift+N` creates a detached empty
+window.
+
+`MainWindow` remains the ownership boundary. When embedded, only presentation
+widgets are temporarily reparented: its menu actions and toolbar are surfaced by
+the workspace and its inspector is placed in the shared inspector stack. Before
+detachment or destruction these widgets must be returned to the same
+`MainWindow`, so ordinary state saving and teardown continue to work.
 
 Crash recovery is session-aware. `ColorScreenApplication` prompts once and
 restores one `MainWindow` per recovery directory. Each `MainWindow` writes and

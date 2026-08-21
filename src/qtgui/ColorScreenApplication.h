@@ -62,6 +62,9 @@ public:
   /** Refresh tab/window presentation after DOCUMENT's title changes. */
   void refreshDocumentPresentation(MainWindow *document);
 
+  /** Return workspace-owned UI to DOCUMENT before its close event finishes. */
+  void prepareDocumentForClose(MainWindow *document);
+
   /** Return the number of documents currently attached as tabs. */
   int tabCount() const;
 

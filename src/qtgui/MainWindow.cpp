@@ -329,6 +329,7 @@ void MainWindow::setupUi() {
 
   // Right: Column
   m_rightColumn = new QWidget(this);
+  m_rightColumn->setObjectName(QStringLiteral("DocumentInspector"));
   QVBoxLayout *rightLayout = new QVBoxLayout(m_rightColumn);
   rightLayout->setContentsMargins(0, 0, 0, 0);
 
@@ -2411,6 +2412,47 @@ void MainWindow::refreshWindowMenu() {
     application->populateWindowMenu(m_windowMenu, this);
 }
 
+/** Prepare this document for presentation inside the shared MDI workspace.
+    The image view remains inside this MainWindow, while the navigation and
+    parameter column is moved to the workspace inspector.  The workspace also
+    presents the active document's menu and toolbar; document-owned diagnostic
+    docks and progress state remain with the embedded document. */
+void MainWindow::prepareForWorkspaceEmbedding() {
+  if (m_workspaceEmbedded)
+    return;
+
+  if (m_mainSplitter)
+    m_workspaceSplitterState = m_mainSplitter->saveState();
+  if (m_rightColumn && m_rightColumn->parentWidget() == m_mainSplitter) {
+    m_rightColumn->hide();
+    m_rightColumn->setParent(nullptr);
+  }
+  if (m_toolbar)
+    m_toolbar->hide();
+  if (menuBar())
+    menuBar()->hide();
+  m_workspaceEmbedded = true;
+}
+
+/** Restore this document's ordinary standalone QMainWindow presentation. */
+void MainWindow::restoreFromWorkspaceEmbedding() {
+  if (!m_workspaceEmbedded)
+    return;
+
+  if (m_rightColumn && m_mainSplitter &&
+      m_rightColumn->parentWidget() != m_mainSplitter) {
+    m_mainSplitter->addWidget(m_rightColumn);
+    m_rightColumn->show();
+    if (!m_workspaceSplitterState.isEmpty())
+      m_mainSplitter->restoreState(m_workspaceSplitterState);
+  }
+  if (m_toolbar)
+    m_toolbar->show();
+  if (menuBar())
+    menuBar()->show();
+  m_workspaceEmbedded = false;
+}
+
 /** Open a recent image without replacing an occupied document window. */
 void MainWindow::openRecentFile() {
   QAction *action = qobject_cast<QAction *>(sender());
@@ -2846,6 +2888,12 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 
   // Clean up recovery files on normal exit
   clearRecoveryFiles();
+
+  // Return workspace-owned presentation widgets before saving state or
+  // destroying this document.  This keeps all document UI owned by the
+  // MainWindow during teardown and lets the workspace select the next image.
+  if (ColorScreenApplication *application = documentApplication())
+    application->prepareDocumentForClose(this);
 
   // Recent lists are persisted at the point of each change.  Saving a stale
   // per-window copy here would let the last closed document overwrite entries

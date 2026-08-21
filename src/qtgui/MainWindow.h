@@ -10,6 +10,7 @@
 #include "../libcolorscreen/include/scr-detect-parameters.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
 #include "../libcolorscreen/include/solver-parameters.h"
+#include <QByteArray>
 #include <QElapsedTimer>
 #include <QMainWindow>
 #include <QVBoxLayout>
@@ -99,6 +100,24 @@ public:
 
   /** Rebuild this window's Window menu from the application document list. */
   void refreshWindowMenu();
+
+  /** Return the document-specific toolbar while this document is attached to
+      the shared workspace. */
+  QToolBar *workspaceToolBar() const { return m_toolbar; }
+
+  /** Return the navigation/parameter panel column hosted by the workspace. */
+  QWidget *workspaceInspectorWidget() const { return m_rightColumn; }
+
+  /** Remove shared chrome from this QMainWindow before it is embedded in the
+      application-level MDI area.  The document state itself is unchanged. */
+  void prepareForWorkspaceEmbedding();
+
+  /** Restore the ordinary standalone-window layout after leaving the MDI
+      workspace. */
+  void restoreFromWorkspaceEmbedding();
+
+  /** Return whether this document is currently presented by the workspace. */
+  bool isWorkspaceEmbedded() const { return m_workspaceEmbedded; }
 
   struct SolverRequestData {
     colorscreen::scr_to_img_parameters scrToImg;
@@ -310,6 +329,8 @@ private:
   QStringList m_recentParams;
 
   QSplitter *m_mainSplitter;
+  QByteArray m_workspaceSplitterState;
+  bool m_workspaceEmbedded = false;
   QList<int> m_splitterSizesBeforeFullscreen; // Save splitter state before fullscreen
 
   // Left side

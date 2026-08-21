@@ -1,10 +1,12 @@
 Changes in version 1.1
  - New features:
    - New QT based graphical user interface
-   - The Qt GUI can keep multiple images open simultaneously. Images are tabs
-     in one workspace by default and can be detached/re-attached as independent
-     windows. Every image retains its own parameter state, undo history,
-     background tasks, progress reporting, and crash recovery.
+   - The Qt GUI can keep multiple images open in a standard MDI workspace. The
+     tab bar is hidden for one image and appears below the toolbar for multiple
+     images; documents can be rearranged as tabs, tiles, or cascaded windows,
+     and tabs can be detached/re-attached without losing document state. Every
+     image retains its own parameters, undo history, background tasks, progress
+     reporting, and crash recovery.
    - Support for new processes:
      - Dioptrichrome-B 
      - Improved Dioptrichrome-B

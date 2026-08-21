@@ -3,14 +3,21 @@
 #include "ColorScreenApplication.h"
 #include "MainWindow.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QDockWidget>
 #include <QMenu>
+#include <QMenuBar>
+#include <QMdiArea>
+#include <QMdiSubWindow>
+#include <QMouseEvent>
 #include <QScreen>
 #include <QSettings>
+#include <QStackedWidget>
 #include <QTabBar>
-#include <QTabWidget>
-#include <QVBoxLayout>
+#include <QTimer>
+#include <QToolBar>
 
 namespace {
 
@@ -19,52 +26,75 @@ ColorScreenApplication *documentApplication() {
   return dynamic_cast<ColorScreenApplication *>(QApplication::instance());
 }
 
+/** MDI wrapper that delegates close requests to the document's save policy. */
+class DocumentSubWindow final : public QMdiSubWindow {
+public:
+  explicit DocumentSubWindow(MainWindow *document, QWidget *parent = nullptr)
+      : QMdiSubWindow(parent), m_document(document) {
+    setAttribute(Qt::WA_DeleteOnClose, false);
+  }
+
+protected:
+  /** Request normal document closure after the current MDI event completes. */
+  void closeEvent(QCloseEvent *event) override {
+    event->ignore();
+    if (m_closePending || !m_document)
+      return;
+
+    m_closePending = true;
+    QPointer<MainWindow> document = m_document;
+    QTimer::singleShot(0, this, [this, document]() {
+      m_closePending = false;
+      if (document)
+        document->close();
+    });
+  }
+
+private:
+  QPointer<MainWindow> m_document;
+  bool m_closePending = false;
+};
+
 } // namespace
 
-/** Construct the primary Photoshop/Krita-style tabbed workspace. */
+/** Construct the primary Photoshop/Krita-style multiple-document workspace. */
 WorkspaceWindow::WorkspaceWindow(QWidget *parent) : QMainWindow(parent) {
   setObjectName(QStringLiteral("workspaceWindow"));
   setWindowTitle(tr("Color-Screen"));
+  setDockNestingEnabled(true);
+  setDockOptions(QMainWindow::AnimatedDocks | QMainWindow::AllowNestedDocks |
+                 QMainWindow::AllowTabbedDocks);
 
-  m_tabs = new QTabWidget(this);
-  m_tabs->setDocumentMode(true);
-  m_tabs->setMovable(true);
-  m_tabs->setTabsClosable(true);
-  m_tabs->setElideMode(Qt::ElideMiddle);
-  setCentralWidget(m_tabs);
+  m_mdiArea = new QMdiArea(this);
+  m_mdiArea->setObjectName(QStringLiteral("documentMdiArea"));
+  m_mdiArea->setActivationOrder(QMdiArea::ActivationHistoryOrder);
+  m_mdiArea->setDocumentMode(true);
+  m_mdiArea->setTabsClosable(true);
+  m_mdiArea->setTabsMovable(true);
+  m_mdiArea->setTabPosition(QTabWidget::North);
+  m_mdiArea->setOption(QMdiArea::DontMaximizeSubWindowOnActivation, true);
+  m_mdiArea->setViewMode(QMdiArea::TabbedView);
+  setCentralWidget(m_mdiArea);
 
-  connect(m_tabs, &QTabWidget::tabCloseRequested, this,
-          [this](int index) { closeTab(index); });
-  connect(m_tabs, &QTabWidget::currentChanged, this, [this](int) {
-    if (MainWindow *document = currentDocument()) {
-      document->refreshWindowMenu();
-      setWindowTitle(document->documentDisplayName() + tr(" — Color-Screen"));
-    } else {
-      setWindowTitle(tr("Color-Screen"));
-    }
-  });
+  m_inspectorStack = new QStackedWidget(this);
+  m_inspectorStack->setObjectName(QStringLiteral("documentInspectorStack"));
+  m_inspectorDock = new QDockWidget(tr("Document Controls"), this);
+  m_inspectorDock->setObjectName(QStringLiteral("DocumentControlsDock"));
+  m_inspectorDock->setWidget(m_inspectorStack);
+  m_inspectorDock->setAllowedAreas(Qt::LeftDockWidgetArea |
+                                   Qt::RightDockWidgetArea);
+  m_inspectorDock->setMinimumWidth(280);
+  addDockWidget(Qt::RightDockWidgetArea, m_inspectorDock);
+  m_inspectorDock->hide();
 
-  m_tabs->tabBar()->setContextMenuPolicy(Qt::CustomContextMenu);
-  connect(m_tabs->tabBar(), &QWidget::customContextMenuRequested, this,
-          [this](const QPoint &position) {
-            const int index = m_tabs->tabBar()->tabAt(position);
-            if (index < 0)
-              return;
-            QMenu menu(this);
-            QAction *detach = menu.addAction(tr("Detach Image"));
-            if (menu.exec(m_tabs->tabBar()->mapToGlobal(position)) == detach)
-              detachTab(index);
-          });
-  connect(m_tabs->tabBar(), &QTabBar::tabBarDoubleClicked, this,
-          [this](int index) {
-            if (index >= 0)
-              detachTab(index);
-          });
+  connect(m_mdiArea, &QMdiArea::subWindowActivated, this,
+          [this](QMdiSubWindow *window) { onSubWindowActivated(window); });
 
+  configureTabBar();
   restoreWorkspaceGeometry();
 }
 
-/** Embed DOCUMENT as a live tab without recreating any document state. */
+/** Embed DOCUMENT in the shared MDI area without recreating its state. */
 void WorkspaceWindow::addDocument(MainWindow *document) {
   if (!document)
     return;
@@ -74,45 +104,85 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
   }
 
   document->hide();
+  document->prepareForWorkspaceEmbedding();
+
+  if (QWidget *inspector = document->workspaceInspectorWidget()) {
+    m_inspectorStack->addWidget(inspector);
+    inspector->hide();
+  }
+
   document->setWindowFlags(Qt::Widget);
-  document->setParent(m_tabs);
-  const int index = m_tabs->addTab(document, document->documentDisplayName());
-  m_tabs->setTabToolTip(index, document->currentImageFile());
-  m_tabs->setCurrentIndex(index);
+  auto *subWindow = new DocumentSubWindow(document);
+  subWindow->setObjectName(QStringLiteral("documentSubWindow"));
+  subWindow->setWindowTitle(document->documentDisplayName());
+  subWindow->setWidget(document);
+  m_mdiArea->addSubWindow(subWindow);
+
+  QPointer<QMdiSubWindow> guardedSubWindow(subWindow);
+  connect(document, &QObject::destroyed, this,
+          [this, guardedSubWindow]() {
+            if (guardedSubWindow) {
+              m_mdiArea->removeSubWindow(guardedSubWindow);
+              guardedSubWindow->deleteLater();
+            }
+            QTimer::singleShot(0, this, [this]() {
+              onSubWindowActivated(m_mdiArea->currentSubWindow());
+              configureTabBar();
+            });
+          });
+
   document->show();
+  subWindow->show();
+  m_mdiArea->setActiveSubWindow(subWindow);
+  onSubWindowActivated(subWindow);
+  configureTabBar();
+
   show();
+  if (isMinimized())
+    showNormal();
   raise();
   activateWindow();
 }
 
-/** Remove DOCUMENT from the tab widget without closing or deleting it. */
+/** Remove DOCUMENT from the MDI area and restore standalone presentation. */
 void WorkspaceWindow::removeDocument(MainWindow *document) {
-  if (!document)
+  if (!document || !containsDocument(document))
     return;
-  const int index = m_tabs->indexOf(document);
-  if (index >= 0)
-    m_tabs->removeTab(index);
+
+  takeDocumentFromWorkspace(document);
+  document->restoreFromWorkspaceEmbedding();
+  document->show();
+
+  onSubWindowActivated(m_mdiArea->currentSubWindow());
+  configureTabBar();
 }
 
-/** Return the MainWindow embedded in the active tab. */
+/** Return the active MDI document while toolbar interactions retain selection. */
 MainWindow *WorkspaceWindow::currentDocument() const {
-  return qobject_cast<MainWindow *>(m_tabs->currentWidget());
+  QMdiSubWindow *window = m_mdiArea->currentSubWindow();
+  if (!window)
+    window = m_mdiArea->activeSubWindow();
+  return documentForSubWindow(window);
 }
 
-/** Return the number of attached documents. */
-int WorkspaceWindow::tabCount() const { return m_tabs->count(); }
+/** Return the number of documents attached to the MDI workspace. */
+int WorkspaceWindow::tabCount() const {
+  return m_mdiArea->subWindowList().size();
+}
 
-/** Return whether DOCUMENT is one of this workspace's tabs. */
+/** Return whether DOCUMENT is attached to this workspace. */
 bool WorkspaceWindow::containsDocument(MainWindow *document) const {
-  return document && m_tabs->indexOf(document) >= 0;
+  return subWindowForDocument(document) != nullptr;
 }
 
-/** Select DOCUMENT when it is tabbed. */
+/** Select DOCUMENT in either tabbed or subwindow presentation. */
 void WorkspaceWindow::activateDocument(MainWindow *document) {
-  const int index = document ? m_tabs->indexOf(document) : -1;
-  if (index < 0)
+  QMdiSubWindow *subWindow = subWindowForDocument(document);
+  if (!subWindow)
     return;
-  m_tabs->setCurrentIndex(index);
+
+  m_mdiArea->setActiveSubWindow(subWindow);
+  onSubWindowActivated(subWindow);
   show();
   if (isMinimized())
     showNormal();
@@ -121,15 +191,62 @@ void WorkspaceWindow::activateDocument(MainWindow *document) {
   document->setFocus();
 }
 
-/** Update the visible title for DOCUMENT after filename/dirty-state changes. */
+/** Update tab/subwindow text after filename or modified-state changes. */
 void WorkspaceWindow::refreshDocument(MainWindow *document) {
-  const int index = document ? m_tabs->indexOf(document) : -1;
-  if (index < 0)
+  QMdiSubWindow *subWindow = subWindowForDocument(document);
+  if (!subWindow)
     return;
-  m_tabs->setTabText(index, document->documentDisplayName());
-  m_tabs->setTabToolTip(index, document->currentImageFile());
-  if (index == m_tabs->currentIndex())
+
+  subWindow->setWindowTitle(document->documentDisplayName());
+  if (m_chromeDocument == document)
     setWindowTitle(document->documentDisplayName() + tr(" — Color-Screen"));
+  configureTabBar();
+}
+
+/** Restore workspace-owned widgets before DOCUMENT's destructor runs. */
+void WorkspaceWindow::prepareDocumentForClose(MainWindow *document) {
+  if (!document || !containsDocument(document))
+    return;
+
+  takeDocumentFromWorkspace(document);
+  document->restoreFromWorkspaceEmbedding();
+  onSubWindowActivated(m_mdiArea->currentSubWindow());
+  configureTabBar();
+}
+
+/** Present attached documents as tabs and hide the bar for a single image. */
+void WorkspaceWindow::showTabbedDocuments() {
+  m_mdiArea->setViewMode(QMdiArea::TabbedView);
+  m_mdiArea->setTabsClosable(true);
+  m_mdiArea->setTabsMovable(true);
+  configureTabBar();
+}
+
+/** Present attached documents as equally sized MDI tiles. */
+void WorkspaceWindow::tileDocuments() {
+  m_mdiArea->setViewMode(QMdiArea::SubWindowView);
+  for (QMdiSubWindow *subWindow : m_mdiArea->subWindowList())
+    subWindow->showNormal();
+  m_mdiArea->tileSubWindows();
+}
+
+/** Present attached documents as cascading MDI subwindows. */
+void WorkspaceWindow::cascadeDocuments() {
+  m_mdiArea->setViewMode(QMdiArea::SubWindowView);
+  for (QMdiSubWindow *subWindow : m_mdiArea->subWindowList())
+    subWindow->showNormal();
+  m_mdiArea->cascadeSubWindows();
+}
+
+/** Return whether Qt's tabbed MDI presentation is active. */
+bool WorkspaceWindow::isTabbedView() const {
+  return m_mdiArea->viewMode() == QMdiArea::TabbedView;
+}
+
+/** Return whether the auto-hiding document tab bar is currently visible. */
+bool WorkspaceWindow::isTabBarVisible() const {
+  QTabBar *tabBar = documentTabBar();
+  return tabBar && tabBar->isVisible();
 }
 
 /** Restore the workspace geometry only when it still fits the current desktop. */
@@ -157,7 +274,7 @@ void WorkspaceWindow::restoreWorkspaceGeometry() {
   }
 }
 
-/** Persist the outer workspace geometry independently of document dock state. */
+/** Persist the outer workspace geometry independently of document state. */
 void WorkspaceWindow::saveWorkspaceGeometry() const {
   QSettings settings;
   settings.setValue("workspaceGeometry", saveGeometry());
@@ -165,19 +282,248 @@ void WorkspaceWindow::saveWorkspaceGeometry() const {
     settings.setValue("workspaceDesktopSize", screen->availableGeometry().size());
 }
 
-/** Close one tab through MainWindow::closeEvent and its save policy. */
-void WorkspaceWindow::closeTab(int index) {
-  if (auto *document = qobject_cast<MainWindow *>(m_tabs->widget(index)))
-    document->close();
+/** Return the MDI wrapper associated with DOCUMENT. */
+QMdiSubWindow *
+WorkspaceWindow::subWindowForDocument(MainWindow *document) const {
+  if (!document)
+    return nullptr;
+  for (QMdiSubWindow *window : m_mdiArea->subWindowList()) {
+    if (window && window->widget() == document)
+      return window;
+  }
+  return nullptr;
 }
 
-/** Move a tab into a normal top-level MainWindow without copying its state. */
-void WorkspaceWindow::detachTab(int index) {
-  auto *document = qobject_cast<MainWindow *>(m_tabs->widget(index));
+/** Return the MainWindow hosted by WINDOW. */
+MainWindow *
+WorkspaceWindow::documentForSubWindow(QMdiSubWindow *window) const {
+  return window ? qobject_cast<MainWindow *>(window->widget()) : nullptr;
+}
+
+/** Return Qt's internal MDI tab bar, when tabbed view has created one. */
+QTabBar *WorkspaceWindow::documentTabBar() const {
+  return m_mdiArea->findChild<QTabBar *>(
+      QString(), Qt::FindDirectChildrenOnly);
+}
+
+/** Activate and return the document represented by tab INDEX. */
+MainWindow *WorkspaceWindow::documentAtTab(int index) const {
+  QTabBar *tabBar = documentTabBar();
+  if (!tabBar || index < 0 || index >= tabBar->count())
+    return nullptr;
+
+  tabBar->setCurrentIndex(index);
+  return currentDocument();
+}
+
+/** Configure auto-hiding tabs, context actions, and drag-out detachment. */
+void WorkspaceWindow::configureTabBar() {
+  QTimer::singleShot(0, this, [this]() {
+    QTabBar *tabBar = documentTabBar();
+    if (!tabBar)
+      return;
+
+    tabBar->setAutoHide(true);
+    tabBar->setDocumentMode(true);
+    tabBar->setMovable(true);
+    tabBar->setTabsClosable(true);
+    tabBar->setElideMode(Qt::ElideMiddle);
+    tabBar->setContextMenuPolicy(Qt::CustomContextMenu);
+
+    if (m_tabBar != tabBar) {
+      if (m_tabBar)
+        m_tabBar->removeEventFilter(this);
+      m_tabBar = tabBar;
+      m_tabBar->installEventFilter(this);
+    }
+
+    if (tabBar->property("colorscreenConfigured").toBool())
+      return;
+    tabBar->setProperty("colorscreenConfigured", true);
+
+    connect(tabBar, &QWidget::customContextMenuRequested, this,
+            [this, tabBar](const QPoint &position) {
+              MainWindow *document = documentAtTab(tabBar->tabAt(position));
+              if (!document)
+                return;
+
+              QMenu menu(this);
+              QAction *detach = menu.addAction(tr("Detach Image"));
+              menu.addSeparator();
+              QAction *tabbed = menu.addAction(tr("Tabbed Documents"));
+              QAction *tile = menu.addAction(tr("Tile Documents"));
+              QAction *cascade = menu.addAction(tr("Cascade Documents"));
+              QAction *selected = menu.exec(tabBar->mapToGlobal(position));
+              if (selected == detach)
+                detachDocument(document);
+              else if (selected == tabbed)
+                showTabbedDocuments();
+              else if (selected == tile)
+                tileDocuments();
+              else if (selected == cascade)
+                cascadeDocuments();
+            });
+
+    connect(tabBar, &QTabBar::tabBarDoubleClicked, this,
+            [this](int index) {
+              if (MainWindow *document = documentAtTab(index))
+                detachDocument(document);
+            });
+  });
+}
+
+/** Present DOCUMENT's menus, toolbar, and inspector in the shared shell. */
+void WorkspaceWindow::installDocumentChrome(MainWindow *document) {
+  if (!document)
+    return;
+
+  menuBar()->clear();
+  for (QAction *action : document->menuBar()->actions())
+    menuBar()->addAction(action);
+
+  if (QToolBar *toolbar = document->workspaceToolBar()) {
+    document->removeToolBar(toolbar);
+    if (toolbar->parentWidget() != this)
+      toolbar->setParent(this);
+    addToolBar(Qt::TopToolBarArea, toolbar);
+    toolbar->show();
+  }
+
+  if (QWidget *inspector = document->workspaceInspectorWidget()) {
+    if (m_inspectorStack->indexOf(inspector) < 0)
+      m_inspectorStack->addWidget(inspector);
+    m_inspectorStack->setCurrentWidget(inspector);
+    inspector->show();
+    m_inspectorDock->show();
+  } else {
+    m_inspectorDock->hide();
+  }
+
+  document->refreshWindowMenu();
+  setWindowTitle(document->documentDisplayName() + tr(" — Color-Screen"));
+}
+
+/** Remove DOCUMENT's shared chrome and optionally show it in its own window. */
+void WorkspaceWindow::releaseDocumentChrome(MainWindow *document,
+                                             bool showInWindow) {
+  if (!document)
+    return;
+
+  if (QToolBar *toolbar = document->workspaceToolBar()) {
+    if (toolbar->parentWidget() == this)
+      removeToolBar(toolbar);
+    if (toolbar->parentWidget() != document)
+      toolbar->setParent(document);
+    document->addToolBar(Qt::TopToolBarArea, toolbar);
+    toolbar->setVisible(showInWindow);
+  }
+
+  document->menuBar()->setVisible(showInWindow);
+  if (m_chromeDocument == document) {
+    menuBar()->clear();
+    m_chromeDocument.clear();
+  }
+}
+
+/** Detach DOCUMENT through ColorScreenApplication without copying its state. */
+void WorkspaceWindow::detachDocument(MainWindow *document) {
   if (!document)
     return;
   if (ColorScreenApplication *application = documentApplication())
     application->detachDocument(document);
+}
+
+/** Switch the shared shell to WINDOW's document. */
+void WorkspaceWindow::onSubWindowActivated(QMdiSubWindow *window) {
+  MainWindow *document = documentForSubWindow(window);
+  if (m_chromeDocument == document) {
+    if (document)
+      setWindowTitle(document->documentDisplayName() + tr(" — Color-Screen"));
+    return;
+  }
+
+  if (m_chromeDocument)
+    releaseDocumentChrome(m_chromeDocument, false);
+
+  m_chromeDocument = document;
+  if (document) {
+    installDocumentChrome(document);
+  } else {
+    menuBar()->clear();
+    m_inspectorDock->hide();
+    setWindowTitle(tr("Color-Screen"));
+  }
+}
+
+/** Remove DOCUMENT's wrapper and inspector while keeping DOCUMENT alive. */
+void WorkspaceWindow::takeDocumentFromWorkspace(MainWindow *document) {
+  QMdiSubWindow *subWindow = subWindowForDocument(document);
+  if (!subWindow)
+    return;
+
+  releaseDocumentChrome(document, true);
+
+  if (QWidget *inspector = document->workspaceInspectorWidget()) {
+    m_inspectorStack->removeWidget(inspector);
+    inspector->hide();
+    inspector->setParent(nullptr);
+  }
+
+  document->hide();
+  m_mdiArea->removeSubWindow(document);
+  m_mdiArea->removeSubWindow(subWindow);
+  subWindow->deleteLater();
+
+  document->setParent(nullptr);
+  document->setWindowFlags(Qt::Window);
+}
+
+/** Detach a tab when it is dragged beyond the tab-bar docking margin. */
+bool WorkspaceWindow::eventFilter(QObject *watched, QEvent *event) {
+  if (watched != m_tabBar || !m_tabBar)
+    return QMainWindow::eventFilter(watched, event);
+
+  switch (event->type()) {
+  case QEvent::MouseButtonPress: {
+    auto *mouseEvent = static_cast<QMouseEvent *>(event);
+    if (mouseEvent->button() == Qt::LeftButton) {
+      m_dragDocument =
+          documentAtTab(m_tabBar->tabAt(mouseEvent->position().toPoint()));
+      m_dragStartGlobal = mouseEvent->globalPosition().toPoint();
+    }
+    break;
+  }
+  case QEvent::MouseMove: {
+    auto *mouseEvent = static_cast<QMouseEvent *>(event);
+    if (!m_dragDocument || !(mouseEvent->buttons() & Qt::LeftButton))
+      break;
+
+    const QPoint globalPosition = mouseEvent->globalPosition().toPoint();
+    if ((globalPosition - m_dragStartGlobal).manhattanLength() <
+        QApplication::startDragDistance())
+      break;
+
+    const QPoint localPosition = m_tabBar->mapFromGlobal(globalPosition);
+    const QRect dockingMargin = m_tabBar->rect().adjusted(-24, -32, 24, 32);
+    if (dockingMargin.contains(localPosition))
+      break;
+
+    QPointer<MainWindow> document = m_dragDocument;
+    m_dragDocument.clear();
+    QTimer::singleShot(0, this, [this, document]() {
+      if (document)
+        detachDocument(document);
+    });
+    return true;
+  }
+  case QEvent::MouseButtonRelease:
+    m_dragDocument.clear();
+    break;
+  default:
+    break;
+  }
+
+  return QMainWindow::eventFilter(watched, event);
 }
 
 /** Close the whole session, respecting every document's close veto. */

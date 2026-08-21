@@ -10,8 +10,13 @@
 #include <QDebug>
 #include <QIcon>
 #include <QPalette>
+#include <QMdiArea>
+#include <QMdiSubWindow>
+#include <QMouseEvent>
 #include <QSettings>
 #include <QStyleFactory>
+#include <QTabBar>
+#include <QToolBar>
 #include <QTimer>
 
 #include <cstring>
@@ -72,6 +77,27 @@ int main(int argc, char *argv[]) {
       "smoke-test-close-to-empty-tab",
       "Close all documents and require a fresh reusable empty tab");
   parser.addOption(closeToEmptyTabOption);
+
+  QCommandLineOption expectedTabBarOption(
+      "smoke-test-expect-tabbar",
+      "Fail smoke testing unless the document tab bar is visible or hidden",
+      "state");
+  parser.addOption(expectedTabBarOption);
+
+  QCommandLineOption mdiArrangementOption(
+      "smoke-test-mdi-arrangements",
+      "Exercise tile, cascade, and tabbed QMdiArea presentations");
+  parser.addOption(mdiArrangementOption);
+
+  QCommandLineOption toolbarOrderOption(
+      "smoke-test-toolbar-before-tabs",
+      "Require the active document toolbar to be above the document tab bar");
+  parser.addOption(toolbarOrderOption);
+
+  QCommandLineOption dragDetachOption(
+      "smoke-test-tab-drag-detach",
+      "Exercise dragging a document tab out into a detached window");
+  parser.addOption(dragDetachOption);
 
   QCommandLineOption timeReportOption(
       "time-report", "Enable internal time reporting of tasks");
@@ -200,6 +226,144 @@ int main(int argc, char *argv[]) {
             app.exit(5);
           }
         });
+      });
+    });
+  }
+
+  if (parser.isSet(expectedTabBarOption)) {
+    const QString expected = parser.value(expectedTabBarOption).trimmed().toLower();
+    QTimer::singleShot(100, &app, [&app, expected]() {
+      WorkspaceWindow *workspace = app.workspaceWindow();
+      const bool valid = expected == QStringLiteral("visible") ||
+                         expected == QStringLiteral("hidden");
+      const bool wantedVisible = expected == QStringLiteral("visible");
+      const bool actualVisible = workspace && workspace->isTabBarVisible();
+      if (!valid || actualVisible != wantedVisible) {
+        qCritical() << "Smoke test expected document tab bar" << expected
+                    << "but visibility was" << actualVisible;
+        app.exit(6);
+      }
+    });
+  }
+
+  if (parser.isSet(mdiArrangementOption)) {
+    QTimer::singleShot(100, &app, [&app]() {
+      WorkspaceWindow *workspace = app.workspaceWindow();
+      if (!workspace || workspace->tabCount() < 2) {
+        qCritical() << "MDI arrangement smoke test requires two documents";
+        app.exit(7);
+        return;
+      }
+      workspace->tileDocuments();
+      auto *mdiArea = workspace->findChild<QMdiArea *>(
+          QStringLiteral("documentMdiArea"));
+      const QList<QMdiSubWindow *> tiledWindows =
+          mdiArea ? mdiArea->subWindowList() : QList<QMdiSubWindow *>();
+      if (workspace->isTabbedView() || tiledWindows.size() < 2 ||
+          !tiledWindows[0]->geometry().isValid() ||
+          !tiledWindows[1]->geometry().isValid() ||
+          !tiledWindows[0]->geometry().intersected(
+              tiledWindows[1]->geometry()).isEmpty()) {
+        qCritical() << "Tile Documents did not create distinct non-overlapping"
+                       " subwindows";
+        app.exit(7);
+        return;
+      }
+      workspace->cascadeDocuments();
+      const QList<QMdiSubWindow *> cascadedWindows =
+          mdiArea ? mdiArea->subWindowList() : QList<QMdiSubWindow *>();
+      if (workspace->isTabbedView() || cascadedWindows.size() < 2 ||
+          cascadedWindows[0]->pos() == cascadedWindows[1]->pos()) {
+        qCritical() << "Cascade Documents did not create offset subwindows";
+        app.exit(7);
+        return;
+      }
+      workspace->showTabbedDocuments();
+      if (!workspace->isTabbedView()) {
+        qCritical() << "Tabbed Documents did not restore tabbed mode";
+        app.exit(7);
+      }
+    });
+  }
+
+  if (parser.isSet(toolbarOrderOption)) {
+    QTimer::singleShot(100, &app, [&app]() {
+      WorkspaceWindow *workspace = app.workspaceWindow();
+      auto *mdiArea = workspace
+                          ? workspace->findChild<QMdiArea *>(
+                                QStringLiteral("documentMdiArea"))
+                          : nullptr;
+      auto *tabBar = mdiArea
+                         ? mdiArea->findChild<QTabBar *>(
+                               QString(), Qt::FindDirectChildrenOnly)
+                         : nullptr;
+      auto *toolbar = workspace
+                          ? workspace->findChild<QToolBar *>(
+                                QStringLiteral("MainToolbar"),
+                                Qt::FindDirectChildrenOnly)
+                          : nullptr;
+      if (!tabBar || !toolbar ||
+          toolbar->mapToGlobal(toolbar->rect().bottomLeft()).y() >=
+              tabBar->mapToGlobal(tabBar->rect().topLeft()).y()) {
+        qCritical() << "Document tabs are not below the shared toolbar";
+        app.exit(8);
+      }
+    });
+  }
+
+  if (parser.isSet(dragDetachOption)) {
+    QTimer::singleShot(250, &app, [&app]() {
+      WorkspaceWindow *workspace = app.workspaceWindow();
+      auto *mdiArea = workspace
+                          ? workspace->findChild<QMdiArea *>(
+                                QStringLiteral("documentMdiArea"))
+                          : nullptr;
+      auto *tabBar = mdiArea
+                         ? mdiArea->findChild<QTabBar *>(
+                               QString(), Qt::FindDirectChildrenOnly)
+                         : nullptr;
+      MainWindow *document = workspace ? workspace->currentDocument() : nullptr;
+      const int tabsBefore = app.tabCount();
+      if (!tabBar || !document || tabsBefore < 2 || !tabBar->isVisible()) {
+        qCritical() << "Tab drag smoke test requires two visible document tabs";
+        app.exit(9);
+        return;
+      }
+
+      const int index = tabBar->currentIndex();
+      const QPoint localStart = tabBar->tabRect(index).center();
+      const QPoint globalStart = tabBar->mapToGlobal(localStart);
+      const QPoint localOutside(-80, tabBar->height() + 80);
+      const QPoint globalOutside = tabBar->mapToGlobal(localOutside);
+
+      QMouseEvent press(QEvent::MouseButtonPress, QPointF(localStart),
+                        QPointF(globalStart), Qt::LeftButton, Qt::LeftButton,
+                        Qt::NoModifier);
+      QCoreApplication::sendEvent(tabBar, &press);
+      QMouseEvent move(QEvent::MouseMove, QPointF(localOutside),
+                       QPointF(globalOutside), Qt::NoButton, Qt::LeftButton,
+                       Qt::NoModifier);
+      QCoreApplication::sendEvent(tabBar, &move);
+      QMouseEvent release(QEvent::MouseButtonRelease, QPointF(localOutside),
+                          QPointF(globalOutside), Qt::LeftButton,
+                          Qt::NoButton, Qt::NoModifier);
+      QCoreApplication::sendEvent(tabBar, &release);
+
+      QPointer<MainWindow> guardedDocument(document);
+      QTimer::singleShot(100, &app, [&app, workspace, guardedDocument,
+                                     tabsBefore]() {
+        if (!guardedDocument || app.tabCount() != tabsBefore - 1 ||
+            guardedDocument->parentWidget()) {
+          qCritical() << "Dragging a document tab did not detach it";
+          app.exit(9);
+          return;
+        }
+        app.attachDocument(guardedDocument);
+        if (app.tabCount() != tabsBefore ||
+            !workspace->containsDocument(guardedDocument)) {
+          qCritical() << "Dragged document did not reattach intact";
+          app.exit(9);
+        }
       });
     });
   }
