@@ -1,0 +1,192 @@
+diff --git a/src/libcolorscreen/slanted-edge.C b/src/libcolorscreen/slanted-edge.C
+index 1ffdc6ae..eab4fe44 100644
+--- a/src/libcolorscreen/slanted-edge.C
++++ b/src/libcolorscreen/slanted-edge.C
+@@ -23,12 +23,19 @@ namespace {
+ constexpr int default_slanted_edge_oversampling = 10;
+ constexpr int max_slanted_edge_oversampling = 64;
+ constexpr int max_slanted_edge_bins = 8 * 1024 * 1024;
+-/* Include the gradient tails of broad defocused edges in their weighted
+-   centroids.  Keep the secondary-peak guard narrower so a strong neighboring
+-   transition still disqualifies the scan line instead of biasing its
+-   centroid.  */
+-constexpr int edge_centroid_radius = 14;
++/* Sharp edges give the most stable line fit with the historical compact
++   centroid aperture.  Broad defocused edges need four more pixels on either
++   side so their coherent gradient tails do not bias the centroid as the edge
++   moves through the pixel phases.  Detect that case from the whole ROI below
++   rather than imposing the broad aperture on every edge.  Keep the secondary-
++   peak guard narrower so a strong neighboring transition still disqualifies
++   the scan line instead of being folded into either centroid.  */
++constexpr int compact_edge_centroid_radius = 10;
++constexpr int broad_edge_centroid_radius = 14;
+ constexpr int secondary_peak_guard = 12;
++constexpr double min_broad_edge_tail_ratio = 0.05;
++constexpr double min_broad_edge_tail_coherence = 0.80;
++constexpr double min_broad_edge_tail_polarity_fraction = 0.95;
+ 
+ /* These qualification limits deliberately favor rejecting a questionable ROI
+    over manufacturing a plausible-looking curve from texture, multiple edges,
+@@ -58,6 +65,24 @@ struct edge_sample
+   double signed_strength;
+ };
+ 
++/* A scan-line edge measured with both centroid apertures.  The outer-tail
++   diagnostics are later combined over the ROI to select one aperture for all
++   rows or columns.  Mixing apertures line by line would itself introduce a
++   phase-dependent centroid shift.  */
++struct edge_centroid_candidate
++{
++  double line_coordinate;
++  double compact_position;
++  double broad_position;
++  double compact_signed_strength;
++  double broad_signed_strength;
++  double compact_coherence;
++  double broad_coherence;
++  double tail_ratio;
++  double tail_coherence;
++  bool tail_has_same_polarity;
++};
++
+ /* Geometric result of looking for one orientation of a straight edge.  */
+ struct edge_line_candidate
+ {
+@@ -397,8 +422,8 @@ detect_edge_line (const std::vector<double> &pixels, int width, int height,
+                       : pixels[(size_t)normal * width + line];
+     };
+ 
+-  std::vector<edge_sample> candidates;
+-  candidates.reserve (line_count);
++  std::vector<edge_centroid_candidate> centroid_candidates;
++  centroid_candidates.reserve (line_count);
+   std::vector<double> gradient (normal_size - 2);
+ 
+   for (int line = 0; line < line_count; line++)
+@@ -427,35 +452,108 @@ detect_edge_line (const std::vector<double> &pixels, int width, int height,
+               = std::max (secondary_gradient,
+                           std::abs (gradient[normal - 1]));
+ 
+-      int first = std::max (1, maximum_position - edge_centroid_radius);
+-      int last
+-          = std::min (normal_size - 2,
+-                      maximum_position + edge_centroid_radius);
+-      double local_absolute_sum = 0;
+-      double local_signed_sum = 0;
+-      double weighted_position = 0;
++      int first
++          = std::max (1, maximum_position - broad_edge_centroid_radius);
++      int last = std::min (normal_size - 2,
++                           maximum_position + broad_edge_centroid_radius);
++      double compact_absolute_sum = 0;
++      double compact_signed_sum = 0;
++      double compact_weighted_position = 0;
++      double broad_absolute_sum = 0;
++      double broad_signed_sum = 0;
++      double broad_weighted_position = 0;
+       for (int normal = first; normal <= last; normal++)
+         {
+           double value = gradient[normal - 1];
+           double weight = std::abs (value);
+-          local_absolute_sum += weight;
+-          local_signed_sum += value;
+-          weighted_position += weight * normal;
++          broad_absolute_sum += weight;
++          broad_signed_sum += value;
++          broad_weighted_position += weight * normal;
++          if (std::abs (normal - maximum_position)
++              <= compact_edge_centroid_radius)
++            {
++              compact_absolute_sum += weight;
++              compact_signed_sum += value;
++              compact_weighted_position += weight * normal;
++            }
+         }
+-      if (!my_isfinite (local_absolute_sum)
+-          || local_absolute_sum <= 1.0e-12)
++      if (!my_isfinite (compact_absolute_sum)
++          || !my_isfinite (broad_absolute_sum)
++          || compact_absolute_sum <= 1.0e-12
++          || broad_absolute_sum <= 1.0e-12)
+         continue;
+ 
+       double secondary_ratio = secondary_gradient / maximum_gradient;
+-      double coherence = std::abs (local_signed_sum) / local_absolute_sum;
+-      if (secondary_ratio > max_secondary_peak_ratio
+-          || coherence < min_local_gradient_coherence
+-          || local_signed_sum == 0)
++      if (secondary_ratio > max_secondary_peak_ratio)
+         continue;
+ 
++      double compact_coherence
++          = std::abs (compact_signed_sum) / compact_absolute_sum;
++      double broad_coherence
++          = std::abs (broad_signed_sum) / broad_absolute_sum;
++      double tail_absolute_sum
++          = std::max (0.0, broad_absolute_sum - compact_absolute_sum);
++      double tail_signed_sum = broad_signed_sum - compact_signed_sum;
++      double tail_ratio
++          = std::abs (tail_signed_sum) / compact_absolute_sum;
++      double tail_coherence
++          = tail_absolute_sum > 1.0e-12
++                ? std::abs (tail_signed_sum) / tail_absolute_sum
++                : 0;
++      bool tail_has_same_polarity
++          = compact_signed_sum != 0 && tail_signed_sum != 0
++            && ((compact_signed_sum > 0) == (tail_signed_sum > 0));
++
++      centroid_candidates.push_back (
++          {(double)line,
++           compact_weighted_position / compact_absolute_sum,
++           broad_weighted_position / broad_absolute_sum,
++           compact_signed_sum, broad_signed_sum, compact_coherence,
++           broad_coherence, tail_ratio, tail_coherence,
++           tail_has_same_polarity});
++    }
++
++  /* A genuinely broad transition has substantial outer gradient energy, that
++     energy has one polarity, and it is coherent rather than texture/noise.
++     Medians make the decision insensitive to isolated scratches.  Use one
++     aperture for the complete edge so the choice cannot vary with pixel
++     phase from one scan line to the next.  */
++  std::vector<double> tail_ratios;
++  std::vector<double> tail_coherences;
++  tail_ratios.reserve (centroid_candidates.size ());
++  tail_coherences.reserve (centroid_candidates.size ());
++  int same_polarity_tails = 0;
++  for (const edge_centroid_candidate &candidate : centroid_candidates)
++    {
++      tail_ratios.push_back (candidate.tail_ratio);
++      tail_coherences.push_back (candidate.tail_coherence);
++      same_polarity_tails += candidate.tail_has_same_polarity;
++    }
++  bool use_broad_centroids
++      = !centroid_candidates.empty ()
++        && median_value (tail_ratios) >= min_broad_edge_tail_ratio
++        && median_value (tail_coherences)
++               >= min_broad_edge_tail_coherence
++        && (double)same_polarity_tails / centroid_candidates.size ()
++               >= min_broad_edge_tail_polarity_fraction;
++
++  std::vector<edge_sample> candidates;
++  candidates.reserve (centroid_candidates.size ());
++  for (const edge_centroid_candidate &candidate : centroid_candidates)
++    {
++      double coherence = use_broad_centroids
++                             ? candidate.broad_coherence
++                             : candidate.compact_coherence;
++      double signed_strength = use_broad_centroids
++                                   ? candidate.broad_signed_strength
++                                   : candidate.compact_signed_strength;
++      if (coherence < min_local_gradient_coherence || signed_strength == 0)
++        continue;
+       candidates.push_back (
+-          {(double)line, weighted_position / local_absolute_sum,
+-           local_signed_sum});
++          {candidate.line_coordinate,
++           use_broad_centroids ? candidate.broad_position
++                               : candidate.compact_position,
++           signed_strength});
+     }
+ 
+   result.qualified_samples = candidates.size ();
