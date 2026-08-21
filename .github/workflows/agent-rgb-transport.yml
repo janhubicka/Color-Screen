@@ -15,7 +15,7 @@ concurrency:
 jobs:
   publish-weighted-matching:
     if: github.head_ref == 'agent/transport-rgb-sharpening-20260821'
-    runs-on: macos-latest
+    runs-on: ubuntu-slim
     steps:
       - name: Check out exact transport payload
         uses: actions/checkout@v4
