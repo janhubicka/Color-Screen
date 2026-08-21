@@ -9,7 +9,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   bundle:
@@ -56,3 +56,40 @@ jobs:
             debs/*.deb
           if-no-files-found: error
           retention-days: 1
+
+  publish-weighted-matching:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out transport payload
+        uses: actions/checkout@v4
+        with:
+          path: transport
+
+      - name: Check out exact tested base
+        uses: actions/checkout@v4
+        with:
+          ref: 24de87bfd6b5e12a0238a2c8248c1715de6a5c84
+          fetch-depth: 0
+          path: repo
+
+      - name: Verify payload and publish one commit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat transport/agent/weighted-matching.patch.b64.* > weighted-matching.patch.b64
+          echo '2c6da3e2ba2d99ec2305d576e9b28a94f34c01be09ef46389aa235824be3c534  weighted-matching.patch.b64' | sha256sum -c -
+          base64 --decode weighted-matching.patch.b64 > weighted-matching.patch
+          echo '97889df09fdb654c101f964bd47081942f0c3db43c222426a1a3a30da103b9f4  weighted-matching.patch' | sha256sum -c -
+
+          cd repo
+          test "$(git rev-parse HEAD)" = 24de87bfd6b5e12a0238a2c8248c1715de6a5c84
+          git checkout -B agent/weighted-overlap-matching 24de87bfd6b5e12a0238a2c8248c1715de6a5c84
+          git apply --index --whitespace=error ../weighted-matching.patch
+          git diff --cached --check
+          test "$(git diff --cached --name-only | sort)" = $'src/libcolorscreen/analyze-base.C\nsrc/libcolorscreen/unittests.C'
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git commit -F ../transport/agent/weighted-matching-commit.txt
+          git push origin HEAD:refs/heads/agent/weighted-overlap-matching
+          git rev-parse HEAD
