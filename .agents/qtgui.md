@@ -71,7 +71,13 @@ undo state.
 
 **Window → Arrange Images** switches the same live documents between tabbed,
 tiled, and cascaded MDI views using `setViewMode()`, `tileSubWindows()`, and
-`cascadeSubWindows()`. Detaching removes the existing `MainWindow` from the MDI
+`cascadeSubWindows()`. Keep `QMdiArea::activationOrder` at Qt's default
+`CreationOrder`: Qt also uses this order when it tiles and cascades windows, so
+`ActivationHistoryOrder` makes spatial placement depend on focus history. A
+click in tiled/cascaded view changes only the active document; it must never
+move, swap, or re-tile document windows. Color-Screen implements document
+cycling separately and does not need MDI activation history for Ctrl+Tab.
+Detaching removes the existing `MainWindow` from the MDI
 area and reparents that same object as a top-level window; reattaching performs
 the inverse operation. Never serialize, clone, or reconstruct a document merely
 to change its presentation. Tabs are movable and closable, can be dragged out,
@@ -85,6 +91,11 @@ widgets are temporarily reparented: its menu actions and toolbar are surfaced by
 the workspace and its inspector is placed in the shared inspector stack. Before
 detachment or destruction these widgets must be returned to the same
 `MainWindow`, so ordinary state saving and teardown continue to work.
+
+Top-level menus follow the conventional order **File, Edit, View,
+Registration, Window, Help**. `Window` is the final working menu and owns MDI
+arrangement/navigation plus the document list; `Help` is always last and holds
+application-wide help/about actions. Keep this order when adding new menus.
 
 Crash recovery is session-aware. `ColorScreenApplication` prompts once and
 restores one `MainWindow` per recovery directory. Each `MainWindow` writes and

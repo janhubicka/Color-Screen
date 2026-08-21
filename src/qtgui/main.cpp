@@ -11,6 +11,7 @@
 #include <QIcon>
 #include <QPalette>
 #include <QMdiArea>
+#include <QMenuBar>
 #include <QMdiSubWindow>
 #include <QMouseEvent>
 #include <QSettings>
@@ -89,6 +90,16 @@ int main(int argc, char *argv[]) {
       "smoke-test-mdi-arrangements",
       "Exercise tile, cascade, and tabbed QMdiArea presentations");
   parser.addOption(mdiArrangementOption);
+
+  QCommandLineOption tileActivationStableOption(
+      "smoke-test-tile-activation-stable",
+      "Require activating a tiled document to keep every tile in place");
+  parser.addOption(tileActivationStableOption);
+
+  QCommandLineOption menuOrderOption(
+      "smoke-test-menu-order",
+      "Require Registration, Window, Help as the final three top-level menus");
+  parser.addOption(menuOrderOption);
 
   QCommandLineOption toolbarOrderOption(
       "smoke-test-toolbar-before-tabs",
@@ -293,6 +304,64 @@ int main(int argc, char *argv[]) {
       if (!workspace->isTabbedView()) {
         qCritical() << "Tabbed Documents did not restore tabbed mode";
         app.exit(7);
+      }
+    });
+  }
+
+  if (parser.isSet(tileActivationStableOption)) {
+    QTimer::singleShot(150, &app, [&app]() {
+      WorkspaceWindow *workspace = app.workspaceWindow();
+      auto *mdiArea = workspace
+                          ? workspace->findChild<QMdiArea *>(
+                                QStringLiteral("documentMdiArea"))
+                          : nullptr;
+      if (!workspace || !mdiArea || workspace->tabCount() < 2) {
+        qCritical() << "Tile activation stability test requires two documents";
+        app.exit(11);
+        return;
+      }
+      workspace->tileDocuments();
+      const QList<QMdiSubWindow *> windows =
+          mdiArea->subWindowList(QMdiArea::CreationOrder);
+      if (windows.size() < 2) {
+        app.exit(11);
+        return;
+      }
+      QMdiSubWindow *first = windows[0];
+      QMdiSubWindow *second = windows[1];
+      const QPoint firstPosition = first->pos();
+      const QPoint secondPosition = second->pos();
+      QMdiSubWindow *target =
+          mdiArea->activeSubWindow() == first ? second : first;
+      mdiArea->setActiveSubWindow(target);
+      QTimer::singleShot(100, &app, [mdiArea, first, second, firstPosition,
+                                     secondPosition, target, &app]() {
+        if (mdiArea->activeSubWindow() != target ||
+            first->pos() != firstPosition || second->pos() != secondPosition) {
+          qCritical() << "Activating a tiled document moved or swapped tiles";
+          app.exit(11);
+        }
+      });
+    });
+  }
+
+  if (parser.isSet(menuOrderOption)) {
+    QTimer::singleShot(250, &app, [&app]() {
+      WorkspaceWindow *workspace = app.workspaceWindow();
+      const QList<QAction *> actions =
+          workspace && workspace->menuBar() ? workspace->menuBar()->actions()
+                                            : QList<QAction *>();
+      QStringList menus;
+      for (QAction *action : actions)
+        menus.append(action ? action->text().remove(QLatin1Char('&'))
+                            : QString());
+      const int registration = menus.indexOf(QStringLiteral("Registration"));
+      const int window = menus.indexOf(QStringLiteral("Window"));
+      const int help = menus.indexOf(QStringLiteral("Help"));
+      if (registration < 0 || window != registration + 1 ||
+          help != window + 1 || help != menus.size() - 1) {
+        qCritical() << "Unexpected top-level menu order:" << menus;
+        app.exit(12);
       }
     });
   }

@@ -68,7 +68,7 @@ WorkspaceWindow::WorkspaceWindow(QWidget *parent) : QMainWindow(parent) {
 
   m_mdiArea = new QMdiArea(this);
   m_mdiArea->setObjectName(QStringLiteral("documentMdiArea"));
-  m_mdiArea->setActivationOrder(QMdiArea::ActivationHistoryOrder);
+  m_mdiArea->setActivationOrder(QMdiArea::CreationOrder);
   m_mdiArea->setDocumentMode(true);
   m_mdiArea->setTabsClosable(true);
   m_mdiArea->setTabsMovable(true);
