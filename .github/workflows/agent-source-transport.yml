@@ -15,15 +15,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Archive exact source revision
+      - name: Archive current main revision
         shell: bash
         run: |
           set -euxo pipefail
-          git rev-parse HEAD | tee SOURCE_COMMIT
-          git archive --format=tar.gz --prefix=Color-Screen/ -o Color-Screen-source.tar.gz HEAD
+          git fetch origin main
+          git rev-parse origin/main | tee SOURCE_COMMIT
+          git archive --format=tar.gz --prefix=Color-Screen/ -o Color-Screen-source.tar.gz origin/main
       - uses: actions/upload-artifact@v4
         with:
-          name: colorscreen-source-24de87b
+          name: colorscreen-source-main-d32b9c0
           path: |
             Color-Screen-source.tar.gz
             SOURCE_COMMIT
