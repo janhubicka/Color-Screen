@@ -19,10 +19,10 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           path: transport
 
-      - name: Check out exact current base
+      - name: Check out exact current main
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: 099f01abfbd7c07cc222938815249ad9409955d3
           fetch-depth: 0
           path: repo
 
@@ -36,10 +36,10 @@ jobs:
           echo '9d4184c1244e6d60f6fc0c1689a9cdb73daeecd367f17732405fe16c36f8df61  /tmp/focus-model.patch' | sha256sum -c -
 
           cd repo
-          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.base.sha }}"
+          test "$(git rev-parse HEAD)" = 099f01abfbd7c07cc222938815249ad9409955d3
           git config user.name 'OpenAI Codex'
           git config user.email 'noreply@openai.com'
-          git checkout -B agent/uniform-image-layer-focus "${{ github.event.pull_request.base.sha }}"
+          git checkout -B agent/uniform-image-layer-focus 099f01abfbd7c07cc222938815249ad9409955d3
           git am /tmp/focus-model.patch
           git diff HEAD^ --check
           test "$(git diff HEAD^ --name-only | sort)" = $'doc/finetune-solver.md\ndoc/finetune-tracking.md\nsrc/libcolorscreen/finetune-int.h\nsrc/libcolorscreen/finetune.C\nsrc/libcolorscreen/include/finetune.h\nsrc/libcolorscreen/unittests.C'
