@@ -3,7 +3,7 @@ name: Agent publish Qt tabbed workspace
 on:
   pull_request:
     branches:
-      - agent/transport-base-qt-tabbed
+      - agent/transport-base-qt-tabbed-current
     paths:
       - .github/workflows/agent-publish-qt-tabbed.yml
       - agent/qt-tabbed-source-docs.patch.xz.b64.*
