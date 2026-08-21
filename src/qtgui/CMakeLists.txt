@@ -39,6 +39,7 @@ include_directories(
 set(SOURCES
     main.cpp
     ColorScreenApplication.cpp
+    WorkspaceWindow.cpp
     MainWindow.cpp
     ImageWidget.cpp
     NavigationView.cpp
@@ -70,6 +71,7 @@ set(SOURCES
 
 set(HEADERS
     ColorScreenApplication.h
+    WorkspaceWindow.h
     MainWindow.h
     ImageWidget.h
     Renderer.h

@@ -116,6 +116,7 @@ am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-ColorScreenApplication.$(OBJEXT) \
+	colorscreen_qt-WorkspaceWindow.$(OBJEXT) \
 	colorscreen_qt-MainWindow.$(OBJEXT) \
 	colorscreen_qt-ImageWidget.$(OBJEXT) \
 	colorscreen_qt-BacklightChartWidget.$(OBJEXT) \
@@ -277,6 +278,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-MTFFitDialog.Po \
 	./$(DEPDIR)/colorscreen_qt-ColorScreenApplication.Po \
+	./$(DEPDIR)/colorscreen_qt-WorkspaceWindow.Po \
 	./$(DEPDIR)/colorscreen_qt-MainWindow.Po \
 	./$(DEPDIR)/colorscreen_qt-MeasureDialog.Po \
 	./$(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Po \
@@ -545,6 +547,7 @@ top_srcdir = @top_srcdir@
 colorscreen_qt_SOURCES = \
     main.cpp \
     ColorScreenApplication.cpp \
+    WorkspaceWindow.cpp \
     MainWindow.cpp \
     ImageWidget.cpp \
     BacklightChartWidget.cpp \
@@ -649,7 +652,7 @@ MOC_SOURCES = \
     moc_ImageLayerPanel.cpp \
     moc_MeasureDialog.cpp
 
-EXTRA_DIST = ColorScreenApplication.h ImageWidget.h CapturePanel.h MainWindow.h \
+EXTRA_DIST = ColorScreenApplication.h WorkspaceWindow.h ImageWidget.h CapturePanel.h MainWindow.h \
 	MTFChartWidget.h DeformationChartWidget.h \
 	FinetuneImagesPanel.h BacklightChartWidget.h ColorUtils.h \
 	NavigationView.h ParameterPanel.h ParameterState.h Renderer.h \
@@ -804,6 +807,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-MTFFitDialog.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ColorScreenApplication.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-WorkspaceWindow.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-MainWindow.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-MeasureDialog.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Po@am__quote@ # am--include-marker
@@ -932,6 +936,20 @@ colorscreen_qt-ColorScreenApplication.obj: ColorScreenApplication.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='ColorScreenApplication.cpp' object='colorscreen_qt-ColorScreenApplication.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-ColorScreenApplication.obj `if test -f 'ColorScreenApplication.cpp'; then $(CYGPATH_W) 'ColorScreenApplication.cpp'; else $(CYGPATH_W) '$(srcdir)/ColorScreenApplication.cpp'; fi`
+
+colorscreen_qt-WorkspaceWindow.o: WorkspaceWindow.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-WorkspaceWindow.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-WorkspaceWindow.Tpo -c -o colorscreen_qt-WorkspaceWindow.o `test -f 'WorkspaceWindow.cpp' || echo '$(srcdir)/'`WorkspaceWindow.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-WorkspaceWindow.Tpo $(DEPDIR)/colorscreen_qt-WorkspaceWindow.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='WorkspaceWindow.cpp' object='colorscreen_qt-WorkspaceWindow.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-WorkspaceWindow.o `test -f 'WorkspaceWindow.cpp' || echo '$(srcdir)/'`WorkspaceWindow.cpp
+
+colorscreen_qt-WorkspaceWindow.obj: WorkspaceWindow.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-WorkspaceWindow.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-WorkspaceWindow.Tpo -c -o colorscreen_qt-WorkspaceWindow.obj `if test -f 'WorkspaceWindow.cpp'; then $(CYGPATH_W) 'WorkspaceWindow.cpp'; else $(CYGPATH_W) '$(srcdir)/WorkspaceWindow.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-WorkspaceWindow.Tpo $(DEPDIR)/colorscreen_qt-WorkspaceWindow.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='WorkspaceWindow.cpp' object='colorscreen_qt-WorkspaceWindow.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-WorkspaceWindow.obj `if test -f 'WorkspaceWindow.cpp'; then $(CYGPATH_W) 'WorkspaceWindow.cpp'; else $(CYGPATH_W) '$(srcdir)/WorkspaceWindow.cpp'; fi`
 
 colorscreen_qt-MainWindow.o: MainWindow.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-MainWindow.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-MainWindow.Tpo -c -o colorscreen_qt-MainWindow.o `test -f 'MainWindow.cpp' || echo '$(srcdir)/'`MainWindow.cpp
@@ -2484,6 +2502,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFFitDialog.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ColorScreenApplication.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-WorkspaceWindow.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MainWindow.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MeasureDialog.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Po
@@ -2630,6 +2649,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFFitDialog.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ColorScreenApplication.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-WorkspaceWindow.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MainWindow.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MeasureDialog.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Po

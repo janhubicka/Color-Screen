@@ -9,6 +9,7 @@
 class MainWindow;
 class QEvent;
 class QMenu;
+class WorkspaceWindow;
 
 /** Application-level owner of Color-Screen document windows.
 
@@ -26,7 +27,7 @@ public:
       RECOVERYDIRECTORY identifies the per-document crash-recovery directory.
       When it is empty, a new unique directory is assigned.  */
   MainWindow *createDocumentWindow(
-      const QString &recoveryDirectory = QString());
+      const QString &recoveryDirectory = QString(), bool detached = false);
 
   /** Open every path in FILENAMES as an independent image document.
 
@@ -43,8 +44,30 @@ public:
       when at least one recovery window was created.  */
   bool restoreRecoverySession();
 
-  /** Return the currently live document windows in creation order. */
+  /** Return the currently live documents in creation order. */
   QList<MainWindow *> documentWindows();
+
+  /** Return the primary tabbed workspace, creating it when necessary. */
+  WorkspaceWindow *workspaceWindow();
+
+  /** Move DOCUMENT from the tabbed workspace into a top-level window. */
+  void detachDocument(MainWindow *document);
+
+  /** Move DOCUMENT into the primary tabbed workspace without recreating it. */
+  void attachDocument(MainWindow *document);
+
+  /** Attach every detached document to the primary workspace. */
+  void attachAllDocuments();
+
+  /** Refresh tab/window presentation after DOCUMENT's title changes. */
+  void refreshDocumentPresentation(MainWindow *document);
+
+  /** Return the number of documents currently attached as tabs. */
+  int tabCount() const;
+
+  /** Close all documents for a workspace shutdown.  Return false if any
+      document vetoes closing because the user cancels a prompt. */
+  bool closeAllDocumentsForWorkspace();
 
   /** Rebuild MENU with document-window creation, cycling, and activation
       actions.  CURRENTWINDOW is marked as the active document.  */
@@ -54,8 +77,7 @@ public:
       either end of the current document list.  */
   void activateRelativeWindow(MainWindow *currentWindow, int offset);
 
-  /** Ask every document window to close, stopping if a window rejects its
-      close event because of unsaved work or an active export.  */
+  /** Ask every document to close.  Used by smoke tests and application exit. */
   void closeAllDocumentWindows();
 
 protected:
@@ -86,5 +108,10 @@ private:
   /** Return a reusable empty document, preferring PREFERREDWINDOW. */
   MainWindow *reusableWindow(MainWindow *preferredWindow);
 
+  /** Return the active image document from either a tab or detached window. */
+  MainWindow *activeDocument() const;
+
   QList<QPointer<MainWindow>> m_documentWindows;
+  QPointer<WorkspaceWindow> m_workspaceWindow;
+  bool m_workspaceShutdown = false;
 };

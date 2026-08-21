@@ -1,4 +1,6 @@
 #include "ColorScreenApplication.h"
+#include "MainWindow.h"
+#include "WorkspaceWindow.h"
 #include "progress-info.h"
 
 #include <QColor>
@@ -55,6 +57,21 @@ int main(int argc, char *argv[]) {
       "Fail smoke testing unless exactly N document windows were created",
       "count");
   parser.addOption(expectedWindowsOption);
+
+  QCommandLineOption expectedTabsOption(
+      "smoke-test-expect-tabs",
+      "Fail smoke testing unless exactly N image tabs were created", "count");
+  parser.addOption(expectedTabsOption);
+
+  QCommandLineOption detachReattachOption(
+      "smoke-test-detach-reattach",
+      "Exercise detaching and reattaching the active image document");
+  parser.addOption(detachReattachOption);
+
+  QCommandLineOption closeToEmptyTabOption(
+      "smoke-test-close-to-empty-tab",
+      "Close all documents and require a fresh reusable empty tab");
+  parser.addOption(closeToEmptyTabOption);
 
   QCommandLineOption timeReportOption(
       "time-report", "Enable internal time reporting of tasks");
@@ -125,6 +142,65 @@ int main(int argc, char *argv[]) {
                     << "document windows but created" << actual;
         app.exit(2);
       }
+    });
+  }
+
+  if (parser.isSet(expectedTabsOption)) {
+    bool converted = false;
+    const int expected = parser.value(expectedTabsOption).toInt(&converted);
+    QTimer::singleShot(0, &app, [&app, expected, converted]() {
+      const int actual = app.tabCount();
+      if (!converted || expected < 0 || actual != expected) {
+        qCritical() << "Smoke test expected" << expected
+                    << "document tabs but created" << actual;
+        app.exit(3);
+      }
+    });
+  }
+
+  if (parser.isSet(detachReattachOption)) {
+    QTimer::singleShot(0, &app, [&app]() {
+      WorkspaceWindow *workspace = app.workspaceWindow();
+      MainWindow *document = workspace ? workspace->currentDocument() : nullptr;
+      const int documentsBefore = app.documentWindows().size();
+      const int tabsBefore = app.tabCount();
+      if (!document || tabsBefore < 1) {
+        qCritical() << "Smoke test has no active tab to detach";
+        app.exit(4);
+        return;
+      }
+      app.detachDocument(document);
+      if (app.documentWindows().size() != documentsBefore ||
+          app.tabCount() != tabsBefore - 1 || document->parentWidget()) {
+        qCritical() << "Smoke test detach did not preserve the live document";
+        app.exit(4);
+        return;
+      }
+      app.attachDocument(document);
+      if (app.documentWindows().size() != documentsBefore ||
+          app.tabCount() != tabsBefore ||
+          !workspace->containsDocument(document)) {
+        qCritical() << "Smoke test reattach did not restore the same document";
+        app.exit(4);
+      }
+    });
+  }
+
+  if (parser.isSet(closeToEmptyTabOption)) {
+    QTimer::singleShot(50, &app, [&app]() {
+      const QList<MainWindow *> documents = app.documentWindows();
+      for (MainWindow *document : documents)
+        document->close();
+      QTimer::singleShot(0, &app, [&app]() {
+        QTimer::singleShot(0, &app, [&app]() {
+          const QList<MainWindow *> remaining = app.documentWindows();
+          if (remaining.size() != 1 || app.tabCount() != 1 ||
+              !remaining.front()->canReuseForOpen()) {
+            qCritical() << "Smoke test did not leave one reusable empty tab";
+            app.exit(5);
+          }
+        });
+      });
     });
   }
 

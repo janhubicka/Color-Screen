@@ -9,18 +9,18 @@ The main window (`MainWindow`) serves as a shell that integrates multiple
 functional panels.  It is a frontend for `libcolorscreen`.
 
 The application is essentially a special-purpose non-destructive image editor.
-It uses a multi-document, multi-window model: `ColorScreenApplication` owns the
-set of document windows, and each `MainWindow` owns one image (`m_scan`) and all
-mutable state associated with that image. A document window contains the
-standard menu, toolbar, and status bar together with three main components:
-`ImageWidget`, `NavigationView`, and the parameter panels. The status bar is
-integrated with libcolorscreen's `progress_info`, which makes it possible to
-visualise and cancel tasks and subtasks. Rendering and analysis may be slow, so
-it is important to keep every document window responsive.
+It uses a multi-document model with a tabbed workspace by default.
+`ColorScreenApplication` owns the document objects, `WorkspaceWindow` presents
+them as movable tabs, and each `MainWindow` owns one image (`m_scan`) and all
+mutable state associated with that image. A `MainWindow` may be embedded as a
+tab or detached as a top-level window; changing presentation must never copy or
+recreate document state. Rendering and analysis may be slow, so every document
+keeps its own background work and cancellation state.
 
 ### Key Components
 
-- **`ColorScreenApplication`**: The application-level document manager. It creates and tracks `MainWindow` instances, routes multi-file/desktop open requests, builds Window menus, cycles between documents, and restores per-document crash-recovery sessions.
+- **`ColorScreenApplication`**: The application-level document manager. It creates and tracks `MainWindow` instances, routes open requests, manages tab/detached presentation, cycles between documents, and restores per-document crash-recovery sessions.
+- **`WorkspaceWindow`**: The primary top-level window. It owns only presentation state and a movable/closable `QTabWidget`; it never owns the image-processing state of a document.
 - **`MainWindow`**: One complete image document. It owns the scan, parameters, undo stack, image/navigation widgets, panels, task queues, workers, progress entries, detached docks, and a unique recovery directory. Mutable document state must never be shared between different `MainWindow` instances.
 - **`NavigationView`**: This shows the whole image and indicates zoom and position of ImageWidget.
 It lets user to effectively move around the image
@@ -29,13 +29,14 @@ It lets user to effectively move around the image
 - **`ParameterState`**: A structured object containing all render and project-level parameters. It is used as the single source of truth for the UI.
 - **`TaskQueue`**: Manages background worker threads. It utilizes multiple specialized queues (e.g., `m_renderQueue` for image tiles and `m_pointsQueue` for registration overlays) to ensure that heavy computations like point rendering do not block the main GUI thread or interfere with image tile generation.
 
-### Multi-Document Window Model
+### Multi-Document Tabbed Workspace
 
 Opening an image must not replace an occupied document. All entry points—File
 Open (including multi-selection), recent files, positional command-line paths,
 and `QFileOpenEvent` from the desktop—route through
 `ColorScreenApplication::openFiles()`. The first path may reuse an untouched
-empty window; every other path receives a new `MainWindow`.
+empty document; every other path receives a new `MainWindow` and is attached
+to the primary workspace by default.
 
 The document boundary is intentionally the entire `MainWindow`. In particular,
 each document has independent:
@@ -47,17 +48,18 @@ each document has independent:
   cancellation state;
 - current image/parameter filenames and a UUID-named recovery directory.
 
-Window layout and recent-file lists remain application preferences in
-`QSettings`; they are not document state. Recent lists are persisted when they
-change so a later-closing window cannot overwrite newer entries from another
-window.
+Workspace geometry and recent-file lists remain application preferences in
+`QSettings`; they are not document state. Detached-document geometry is also
+presentation state. Recent lists are persisted when they change so a
+later-closing document cannot overwrite newer entries.
 
-The Window menu is rebuilt for all live documents whenever a window is added or
-removed, and immediately before the menu opens. Document actions and ordinary
-editor shortcuts must use `Qt::WindowShortcut`, not
-`Qt::ApplicationShortcut`, otherwise identical actions in several open windows
-become ambiguous. `Ctrl+Tab` and `Ctrl+Shift+Tab` cycle documents; `Ctrl+N`
-creates an empty document window.
+The default presentation is tabbed, like Photoshop/Krita. Detaching removes the
+existing `MainWindow` from `WorkspaceWindow` and reparents that same object as a
+top-level window; reattaching performs the inverse operation. Never serialize,
+clone, or reconstruct a document merely to change its presentation. Tabs are
+movable and closable, and double-click/context-menu detachment is supported.
+`Ctrl+Tab` and `Ctrl+Shift+Tab` cycle all documents, whether tabbed or detached.
+`Ctrl+N` creates a new tab and `Ctrl+Shift+N` creates a detached empty window.
 
 Crash recovery is session-aware. `ColorScreenApplication` prompts once and
 restores one `MainWindow` per recovery directory. Each `MainWindow` writes and

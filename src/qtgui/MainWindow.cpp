@@ -2862,6 +2862,8 @@ void MainWindow::updateWindowTitle() {
                        : QFileInfo(m_currentImageFile).fileName());
   setWindowModified(isDocumentModified());
   setWindowTitle(title + QStringLiteral("[*]"));
+  if (ColorScreenApplication *application = documentApplication())
+    application->refreshDocumentPresentation(this);
 }
 
 // Save the current interaction mode so it can be restored later.
@@ -2906,16 +2908,15 @@ void MainWindow::restoreInteractionMode() {
 void MainWindow::saveWindowState() {
   QSettings settings;
 
-  // Save window geometry and state
-  // Save window geometry and state
-  settings.setValue("windowGeometry", saveGeometry());
-  settings.setValue("windowState", saveState());
-
-  // Save desktop size for validation on restore
-  QScreen *screen = QApplication::primaryScreen();
-  if (screen) {
-    settings.setValue("desktopSize", screen->availableGeometry().size());
+  // The primary workspace owns tabbed-window geometry.  Save document-window
+  // geometry only while this document is detached; dock state is useful in
+  // either presentation.
+  if (isWindow()) {
+    settings.setValue("windowGeometry", saveGeometry());
+    if (QScreen *screen = QApplication::primaryScreen())
+      settings.setValue("desktopSize", screen->availableGeometry().size());
   }
+  settings.setValue("windowState", saveState());
 
   // Save splitter positions
   if (m_mainSplitter) {
