@@ -130,7 +130,17 @@ There are two programs installed.
 [wiki](https://github.com/janhubicka/Color-Screen/wiki/colorscreen) for usage
 information.
 
-`colorscreen-qt` is a QT6 based GUI application. 
+`colorscreen-qt` is a Qt 6 based GUI application. It can open several
+images at once, either by selecting multiple files in **File → Open Image(s)**
+or by passing several paths on the command line:
+
+    colorscreen-qt scan-1.tif scan-2.tif scan-3.csprj
+
+Each image receives an independent document window with its own parameters,
+undo history, rendering/analysis workers, progress tasks, and crash-recovery
+state. Use the **Window** menu, `Ctrl+Tab`, and `Ctrl+Shift+Tab` to move between
+open images; `Ctrl+N` creates another empty document window. Closing one window
+does not affect the others.
 
 Finally you may try to build also `colorscreen-gtk` which is a deprecated GTK
 based gui application. Invoke it with `colorscreen-gtk <scan file>`. Scan must

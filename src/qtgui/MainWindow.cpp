@@ -8,6 +8,7 @@
 #include "AdaptiveSharpeningChart.h" // Added
 #include "AdaptiveSharpeningWorker.h"
 #include "ColorOptimizerWorker.h"
+#include "ColorScreenApplication.h"
 #include "CoordinateOptimizationWorker.h"
 #include "DetectScreenWorker.h"
 #include "FinetuneWorker.h"
@@ -48,12 +49,12 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QProgressBar>
+#include <QPointer>
 #include <QPushButton>
 #include <QScreen>
 #include <QSettings>
 #include <QSizeGrip>
 #include <QSplitter>
-#include <QStandardPaths>
 #include <QStatusBar>
 #include <QSvgRenderer>
 #include <QTabWidget>
@@ -129,13 +130,24 @@ Q_DECLARE_METATYPE(std::vector<colorscreen::solver_parameters::solver_point_t>*)
 Q_DECLARE_METATYPE(std::shared_ptr<colorscreen::progress_info>)
 Q_DECLARE_METATYPE(colorscreen::finetune_result)
 
-/** Construct the main window.
+namespace {
+
+/** Return the application-level document manager when MainWindow is running
+    inside the normal Color-Screen Qt application.  */
+ColorScreenApplication *documentApplication() {
+  return dynamic_cast<ColorScreenApplication *>(QCoreApplication::instance());
+}
+
+} // namespace
+
+/** Construct one independent image-document window.
    Registers Qt meta-types needed for cross-thread signal/slot connections,
-   sets up the UI (panels, docks, toolbar, menus), initialises crash recovery,
-   creates persistent background worker threads for the geometry solver,
-   color optimizer, and coordinate optimization, and restores the previous
-   window layout from QSettings.  */
-MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
+   sets up the UI (panels, docks, toolbar, menus), assigns the document's
+   recovery directory, creates persistent background worker threads for the
+   geometry solver, color optimizer, and coordinate optimization, and restores
+   the preferred window layout from QSettings.  */
+MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
+    : QMainWindow(parent), m_recoveryDir(recoveryDirectory) {
   qRegisterMetaType<MainWindow::SolverRequestData>();
   qRegisterMetaType<MainWindow::ColorOptimizerRequestData>();
   qRegisterMetaType<colorscreen::render_parameters>();
@@ -147,6 +159,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   qRegisterMetaType<colorscreen::finetune_result>();
   qRegisterMetaType<std::shared_ptr<colorscreen::progress_info>>();
   m_undoStack = new QUndoStack(this);
+  connect(m_undoStack, &QUndoStack::cleanChanged, this,
+          [this]() { updateWindowTitle(); });
 
   setupUi();
 
@@ -156,29 +170,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   connect(m_progressTimer, &QTimer::timeout, this,
           &MainWindow::onProgressTimer);
 
-  // Initialize crash recovery directory
-  m_recoveryDir =
-      QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
-  // Use "colorscreen" instead of app name "colorscreen-qt"
-  m_recoveryDir.replace("/colorscreen-qt", "/colorscreen");
-  QDir().mkpath(m_recoveryDir);
-
-  // Check for recovery files and offer restoration
-  if (hasRecoveryFiles()) {
-    QMessageBox::StandardButton reply = QMessageBox::question(
-        this, "Crash Recovery",
-        "The application did not exit cleanly last time.\n"
-        "Would you like to restore your previous session?",
-        QMessageBox::Yes | QMessageBox::No);
-
-    if (reply == QMessageBox::Yes) {
-      loadRecoveryState();
-    } else {
-      clearRecoveryFiles();
-    }
-  }
-
-  // Set up recovery auto-save timer (30 seconds)
+  // Set up per-document recovery auto-save timer (30 seconds)
   m_recoveryTimer = new QTimer(this);
   m_recoveryTimer->setInterval(30000); // 30 seconds
   connect(m_recoveryTimer, &QTimer::timeout, this,
@@ -1170,7 +1162,7 @@ void MainWindow::createToolbar() {
   m_panAction->setChecked(true);
   m_panAction->setToolTip("Pan Tool (P)");
   m_panAction->setShortcut(QKeySequence("P"));
-  m_panAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_panAction->setShortcutContext(Qt::WindowShortcut);
   m_toolbar->addAction(m_panAction);
 
   // Zoom controls
@@ -1202,7 +1194,7 @@ void MainWindow::createToolbar() {
   m_selectAction->setCheckable(true);
   m_selectAction->setToolTip("Select Tool (S)");
   m_selectAction->setShortcut(QKeySequence("S"));
-  m_selectAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_selectAction->setShortcutContext(Qt::WindowShortcut);
   m_toolbar->addAction(m_selectAction);
   m_registrationActions.append(m_selectAction);
 
@@ -1212,7 +1204,7 @@ void MainWindow::createToolbar() {
   m_addPointAction->setCheckable(true);
   m_addPointAction->setToolTip("Add Registration Point (A)");
   m_addPointAction->setShortcut(QKeySequence("A"));
-  m_addPointAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_addPointAction->setShortcutContext(Qt::WindowShortcut);
   m_toolbar->addAction(m_addPointAction);
   m_registrationActions.append(m_addPointAction);
 
@@ -1222,7 +1214,7 @@ void MainWindow::createToolbar() {
   m_setCenterAction->setCheckable(true);
   m_setCenterAction->setToolTip("Set Screen Coordinates (C)");
   m_setCenterAction->setShortcut(QKeySequence("C"));
-  m_setCenterAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_setCenterAction->setShortcutContext(Qt::WindowShortcut);
   m_toolbar->addAction(m_setCenterAction);
   m_registrationActions.append(m_setCenterAction);
 
@@ -1301,7 +1293,7 @@ void MainWindow::createToolbar() {
 
   QAction *exploreModeAction = new QAction("Explore Mode", this);
   exploreModeAction->setShortcut(QKeySequence("Ctrl+M"));
-  exploreModeAction->setShortcutContext(Qt::ApplicationShortcut);
+  exploreModeAction->setShortcutContext(Qt::WindowShortcut);
   connect(exploreModeAction, &QAction::triggered, this, [this]() {
     if (m_imageWidget) {
       m_imageWidget->setExploreMode(m_imageWidget->interactionMode() !=
@@ -1320,7 +1312,7 @@ void MainWindow::createModeShortcuts() {
     int key = (i + 1) % 10;
     QAction *action = new QAction(this);
     action->setShortcut(QKeySequence(QString::number(key)));
-    action->setShortcutContext(Qt::ApplicationShortcut);
+    action->setShortcutContext(Qt::WindowShortcut);
     action->setEnabled(false); // Initially disabled
     connect(action, &QAction::triggered, this, [this, i]() {
       if (i < m_modeComboBox->count()) {
@@ -1612,63 +1604,83 @@ void MainWindow::onModeChanged(int index) {
   }
 }
 
-/** Create all application menus: File, Edit, View, and Registration.
-   File menu: Open/Save/Render with recent file/param submenus.
-   Edit menu: Undo/Redo from QUndoStack.
+/** Create all document-window menus: File, Edit, View, Window, and
+   Registration.
+   File menu: multi-image Open, Save, Render, Close, and application Exit.
+   Edit menu: this document's Undo/Redo stack.
    View menu: Zoom controls, rotation, mirror, fullscreen, gamut warning.
+   Window menu: create, cycle, and activate independent image documents.
    Registration menu: Point selection, deletion, pruning, geometry
    optimization, coordinate lock/optimize, auto-optimize toggle.
    Also sets up the ExploreMode zoom shortcut management that disables
    global zoom shortcuts while ExploreMode is active to allow continuous
    hold-to-zoom.  */
 void MainWindow::createMenus() {
-  QMenu *fileMenu = menuBar()->addMenu("&File");
-  m_openAction = fileMenu->addAction("&Open Image...");
+  m_fileMenu = menuBar()->addMenu("&File");
+  m_openAction = m_fileMenu->addAction("&Open Image(s)...");
   m_openAction->setShortcut(QKeySequence::Open); // Ctrl+O
-  m_openAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_openAction->setShortcutContext(Qt::WindowShortcut);
   connect(m_openAction, &QAction::triggered, this, &MainWindow::onOpenImage);
 
-  m_recentFilesMenu = fileMenu->addMenu("Open &Recent");
+  m_recentFilesMenu = m_fileMenu->addMenu("Open &Recent");
+  connect(m_recentFilesMenu, &QMenu::aboutToShow, this,
+          &MainWindow::loadRecentFiles);
   updateRecentFileActions();
 
-  QAction *openParamsAction = fileMenu->addAction("Open &Parameters...");
+  QAction *openParamsAction = m_fileMenu->addAction("Open &Parameters...");
   openParamsAction->setToolTip(
       "Load rendering and geometry settings from a parameter (.par) file.");
   connect(openParamsAction, &QAction::triggered, this,
           &MainWindow::onOpenParameters);
 
-  m_recentParamsMenu = fileMenu->addMenu("Open Recent &Parameters");
+  m_recentParamsMenu = m_fileMenu->addMenu("Open Recent &Parameters");
+  connect(m_recentParamsMenu, &QMenu::aboutToShow, this,
+          &MainWindow::loadRecentParams);
   updateRecentParamsActions();
 
-  fileMenu->addSeparator();
+  m_fileMenu->addSeparator();
 
-  m_saveAction = fileMenu->addAction("&Save Parameters");
+  m_saveAction = m_fileMenu->addAction("&Save Parameters");
   m_saveAction->setToolTip(
       "Save all current parameters to the current .par file.");
   m_saveAction->setShortcut(QKeySequence::Save); // Ctrl+S
-  m_saveAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_saveAction->setShortcutContext(Qt::WindowShortcut);
   connect(m_saveAction, &QAction::triggered, this,
           &MainWindow::onSaveParameters);
 
-  m_saveAsAction = fileMenu->addAction("Save Parameters &As...");
+  m_saveAsAction = m_fileMenu->addAction("Save Parameters &As...");
   m_saveAsAction->setToolTip("Save current parameters to a new .par file.");
   m_saveAsAction->setShortcut(QKeySequence::SaveAs); // Ctrl+Shift+S
-  m_saveAsAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_saveAsAction->setShortcutContext(Qt::WindowShortcut);
   connect(m_saveAsAction, &QAction::triggered, this,
           &MainWindow::onSaveParametersAs);
 
-  fileMenu->addSeparator();
+  m_fileMenu->addSeparator();
 
-  m_renderAction = fileMenu->addAction("&Render...");
+  m_renderAction = m_fileMenu->addAction("&Render...");
   m_renderAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_E));
+  m_renderAction->setShortcutContext(Qt::WindowShortcut);
   m_renderAction->setEnabled(false);
   connect(m_renderAction, &QAction::triggered, this, &MainWindow::onRender);
 
-  fileMenu->addSeparator();
+  m_fileMenu->addSeparator();
 
-  QAction *exitAction = fileMenu->addAction("E&xit");
-  exitAction->setToolTip("Close the application.");
-  connect(exitAction, &QAction::triggered, this, &QWidget::close);
+  QAction *closeAction = m_fileMenu->addAction("&Close Window");
+  closeAction->setShortcut(QKeySequence::Close);
+  closeAction->setShortcutContext(Qt::WindowShortcut);
+  closeAction->setToolTip("Close this image document window.");
+  connect(closeAction, &QAction::triggered, this, &QWidget::close);
+
+  QAction *exitAction = m_fileMenu->addAction("E&xit");
+  exitAction->setShortcut(QKeySequence::Quit);
+  exitAction->setShortcutContext(Qt::WindowShortcut);
+  exitAction->setToolTip("Close all image documents and exit Color-Screen.");
+  connect(exitAction, &QAction::triggered, this, []() {
+    if (ColorScreenApplication *application = documentApplication())
+      application->closeAllDocumentWindows();
+    else
+      QApplication::closeAllWindows();
+  });
 
   QMenu *editMenu = menuBar()->addMenu("&Edit");
   QAction *undoAction = m_undoStack->createUndoAction(this, tr("&Undo"));
@@ -1689,7 +1701,7 @@ void MainWindow::createMenus() {
   m_zoomInAction->setShortcuts({QKeySequence::ZoomIn,
                                 QKeySequence(Qt::Key_Plus),
                                 QKeySequence(Qt::Key_Equal)}); // Ctrl++, +, =
-  m_zoomInAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_zoomInAction->setShortcutContext(Qt::WindowShortcut);
   m_zoomInAction->setToolTip("Increase view magnification.");
   connect(m_zoomInAction, &QAction::triggered, this, &MainWindow::onZoomIn);
 
@@ -1697,7 +1709,7 @@ void MainWindow::createMenus() {
   m_zoomOutAction->setIcon(getSymbolicIcon(":/icons/zoom-out.svg"));
   m_zoomOutAction->setShortcuts(
       {QKeySequence::ZoomOut, QKeySequence(Qt::Key_Minus)}); // Ctrl+-, -
-  m_zoomOutAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_zoomOutAction->setShortcutContext(Qt::WindowShortcut);
   m_zoomOutAction->setStatusTip(tr("Zoom out"));
   m_zoomOutAction->setToolTip("Decrease view magnification.");
   connect(m_zoomOutAction, &QAction::triggered, this, &MainWindow::onZoomOut);
@@ -1706,7 +1718,7 @@ void MainWindow::createMenus() {
   m_zoom100Action = new QAction(tr("Zoom &1:1"), this);
   m_zoom100Action->setIcon(getSymbolicIcon(":/icons/zoom-100.svg"));
   m_zoom100Action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
-  m_zoom100Action->setShortcutContext(Qt::ApplicationShortcut);
+  m_zoom100Action->setShortcutContext(Qt::WindowShortcut);
   m_zoom100Action->setStatusTip(tr("Zoom to 100%"));
   m_zoom100Action->setToolTip("Restore view to 1:1 pixel scale (100%).");
   connect(m_zoom100Action, &QAction::triggered, this, &MainWindow::onZoom100);
@@ -1715,7 +1727,7 @@ void MainWindow::createMenus() {
   m_zoomFitAction = new QAction(tr("Fit to &Screen"), this);
   m_zoomFitAction->setIcon(getSymbolicIcon(":/icons/zoom-fit.svg"));
   m_zoomFitAction->setShortcut(Qt::CTRL | Qt::Key_0);
-  m_zoomFitAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_zoomFitAction->setShortcutContext(Qt::WindowShortcut);
   m_zoomFitAction->setToolTip(
       "Adjust zoom to fit the entire image in the viewer.");
   connect(m_zoomFitAction, &QAction::triggered, this, &MainWindow::onZoomFit);
@@ -1742,7 +1754,7 @@ void MainWindow::createMenus() {
   // (which might pan). But navigation pan is usually just arrows. Let's use
   // Ctrl+L and Ctrl+R.
   m_rotateLeftAction->setShortcut(Qt::CTRL | Qt::Key_L);
-  m_rotateLeftAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_rotateLeftAction->setShortcutContext(Qt::WindowShortcut);
   m_rotateLeftAction->setToolTip(
       "Rotate the digital scan 90 degrees counter-clockwise.");
   connect(m_rotateLeftAction, &QAction::triggered, this,
@@ -1750,7 +1762,7 @@ void MainWindow::createMenus() {
 
   m_rotateRightAction = m_viewMenu->addAction("Rotate &Right");
   m_rotateRightAction->setShortcut(Qt::CTRL | Qt::Key_R);
-  m_rotateRightAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_rotateRightAction->setShortcutContext(Qt::WindowShortcut);
   m_rotateRightAction->setToolTip(
       "Rotate the digital scan 90 degrees clockwise.");
   connect(m_rotateRightAction, &QAction::triggered, this,
@@ -1769,10 +1781,17 @@ void MainWindow::createMenus() {
   m_fullscreenAction = m_viewMenu->addAction("&Fullscreen");
   m_fullscreenAction->setCheckable(true);
   m_fullscreenAction->setShortcut(Qt::Key_F11);
-  m_fullscreenAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_fullscreenAction->setShortcutContext(Qt::WindowShortcut);
   m_fullscreenAction->setToolTip("Toggle fullscreen image display.");
   connect(m_fullscreenAction, &QAction::triggered, this,
           &MainWindow::toggleFullscreen);
+
+  // Window Menu.  Its document list is rebuilt immediately before display so
+  // every MainWindow sees windows opened or closed from another document.
+  m_windowMenu = menuBar()->addMenu("&Window");
+  connect(m_windowMenu, &QMenu::aboutToShow, this,
+          &MainWindow::refreshWindowMenu);
+  refreshWindowMenu();
 
   // Registration Menu
   m_registrationMenu = menuBar()->addMenu("&Registration");
@@ -1802,14 +1821,14 @@ void MainWindow::createMenus() {
 
   m_selectAllAction = m_registrationMenu->addAction("Select &All");
   m_selectAllAction->setShortcut(QKeySequence::SelectAll); // Ctrl+A
-  m_selectAllAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_selectAllAction->setShortcutContext(Qt::WindowShortcut);
   m_selectAllAction->setToolTip("Select all registration points.");
   connect(m_selectAllAction, &QAction::triggered, this,
           &MainWindow::onSelectAll);
 
   m_deselectAllAction = m_registrationMenu->addAction("&Deselect All");
   m_deselectAllAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
-  m_deselectAllAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_deselectAllAction->setShortcutContext(Qt::WindowShortcut);
   m_deselectAllAction->setToolTip("Clear current point selection.");
   connect(m_deselectAllAction, &QAction::triggered, this,
           &MainWindow::onDeselectAll);
@@ -1818,7 +1837,7 @@ void MainWindow::createMenus() {
       m_registrationMenu->addAction("&Remove Selected Points");
   m_deleteSelectedAction->setShortcuts(
       {QKeySequence::Delete, QKeySequence(Qt::Key_Backspace)});
-  m_deleteSelectedAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_deleteSelectedAction->setShortcutContext(Qt::WindowShortcut);
   m_deleteSelectedAction->setToolTip(
       "Delete the currently selected registration points.");
   connect(m_deleteSelectedAction, &QAction::triggered, this,
@@ -1828,7 +1847,7 @@ void MainWindow::createMenus() {
       m_registrationMenu->addAction("&Prune Misplaced Points");
   m_pruneMisplacedAction->setShortcuts(
       {QKeySequence("Ctrl+Delete"), QKeySequence("Ctrl+Backspace")});
-  m_pruneMisplacedAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_pruneMisplacedAction->setShortcutContext(Qt::WindowShortcut);
   m_pruneMisplacedAction->setToolTip(
       "Automatically delete points with high registration error scores.");
   connect(m_pruneMisplacedAction, &QAction::triggered, this,
@@ -1901,6 +1920,8 @@ void MainWindow::onOpenParameters() {
     if (loadParameterFile(fileName)) {
       m_currentParamsFile = QFileInfo(fileName).absoluteFilePath();
       m_currentParamsFileIsWeak = false;
+      updateWindowTitle();
+      saveRecoveryState();
       statusBar()->showMessage(QString("Parameters loaded from %1").arg(fileName),
                                3000);
     }
@@ -1908,120 +1929,95 @@ void MainWindow::onOpenParameters() {
 }
 
 /** Save parameters to the current .par file.
-   If no file has been explicitly chosen (m_currentParamsFile is empty or
-   "weak" — i.e. auto-suggested), falls back to Save As.  Uses save_csp
-   from libcolorscreen; detection parameters are only written when RGB
-   scan data is available (matching GTK GUI behaviour).  */
+   A weak auto-suggested filename is confirmed through Save As before writing.
+   Saving is synchronous so closeEvent can reliably decide whether it is safe
+   to close this particular document window.  */
 void MainWindow::onSaveParameters() {
-  // If we don't have a current file OR it's a weak suggestion, fall back to
-  // Save As
   if (m_currentParamsFile.isEmpty() || m_currentParamsFileIsWeak) {
-    onSaveParametersAs();
+    saveParametersAs();
     return;
   }
-
-  FILE *f = fopen(m_currentParamsFile.toUtf8().constData(), "wt");
-  if (!f) {
-    QMessageBox::critical(this, "Error",
-                          QString("Could not open file for writing: %1")
-                              .arg(m_currentParamsFile));
-    return;
-  }
-
-  // Save parameters using save_csp
-  // Pass scan detection params only if we have RGB data (matching GTK behavior)
-  bool has_rgb = m_scan && m_scan->has_rgb();
-  if (!colorscreen::save_csp(f, &m_scrToImgParams,
-                             has_rgb ? &m_detectParams : nullptr, &m_rparams,
-                             &m_solverParams)) {
-    fclose(f);
-    QMessageBox::critical(this, "Error", "Failed to save parameters.");
-    return;
-  }
-
-  fclose(f);
-  statusBar()->showMessage(
-      QString("Parameters saved to %1").arg(m_currentParamsFile), 3000);
-
-  // Mark as saved (clean state)
-  if (m_undoStack) {
-    m_undoStack->setClean();
-  }
+  saveParametersToFile(m_currentParamsFile);
 }
 
-/** Save parameters to a new .par file chosen by the user.
-   Appends ".par" extension if missing, updates the current file path,
-   marks it as non-weak, and adds it to the recent params list.  */
-void MainWindow::onSaveParametersAs() {
+/** Save parameters to a new .par file chosen by the user. */
+void MainWindow::onSaveParametersAs() { saveParametersAs(); }
+
+/** Write the current document parameters to FILENAME and mark them saved. */
+bool MainWindow::saveParametersToFile(const QString &fileName) {
+  const QString absoluteFileName = QFileInfo(fileName).absoluteFilePath();
+  FILE *f = fopen(absoluteFileName.toUtf8().constData(), "wt");
+  if (!f) {
+    QMessageBox::critical(
+        this, "Error",
+        QString("Could not open file for writing: %1").arg(absoluteFileName));
+    return false;
+  }
+
+  const bool hasRgb = m_scan && m_scan->has_rgb();
+  bool saved = colorscreen::save_csp(
+      f, &m_scrToImgParams, hasRgb ? &m_detectParams : nullptr, &m_rparams,
+      &m_solverParams);
+  if (fclose(f) != 0)
+    saved = false;
+
+  if (!saved) {
+    QMessageBox::critical(this, "Error", "Failed to save parameters.");
+    return false;
+  }
+
+  m_currentParamsFile = absoluteFileName;
+  m_currentParamsFileIsWeak = false;
+  m_recoveryDirty = false;
+  addToRecentParams(absoluteFileName);
+  if (m_undoStack)
+    m_undoStack->setClean();
+  updateWindowTitle();
+  saveRecoveryState();
+
+  statusBar()->showMessage(
+      QString("Parameters saved to %1").arg(absoluteFileName), 3000);
+  return true;
+}
+
+/** Ask for a parameter filename and save it before returning to the caller. */
+bool MainWindow::saveParametersAs() {
   QString fileName = QFileDialog::getSaveFileName(
       this, "Save Parameters",
       m_currentParamsFile.isEmpty() ? QString() : m_currentParamsFile,
       "Parameters (*.par);;All Files (*)");
-
   if (fileName.isEmpty())
-    return;
+    return false;
 
-  QTimer::singleShot(0, this, [this, fileName]() {
-    QString saveFileName = fileName;
-    // Add .par extension if not present
-    if (!saveFileName.endsWith(".par", Qt::CaseInsensitive)) {
-      saveFileName += ".par";
-    }
-
-    FILE *f = fopen(saveFileName.toUtf8().constData(), "wt");
-    if (!f) {
-      QMessageBox::critical(
-          this, "Error",
-          QString("Could not open file for writing: %1").arg(saveFileName));
-      return;
-    }
-
-    // Save parameters using save_csp
-    // Pass scan detection params only if we have RGB data (matching GTK
-    // behavior)
-    bool has_rgb = m_scan && m_scan->has_rgb();
-    if (!colorscreen::save_csp(f, &m_scrToImgParams,
-                               has_rgb ? &m_detectParams : nullptr, &m_rparams,
-                               &m_solverParams)) {
-      fclose(f);
-      QMessageBox::critical(this, "Error", "Failed to save parameters.");
-      return;
-    }
-
-    fclose(f);
-
-    // Update current file path and add to recent
-    m_currentParamsFile = QFileInfo(fileName).absoluteFilePath();
-    m_currentParamsFileIsWeak = false; // Now it's a real file, not a suggestion
-    addToRecentParams(fileName);
-
-    statusBar()->showMessage(QString("Parameters saved to %1").arg(fileName),
-                             3000);
-
-    // Mark as saved (clean state)
-    if (m_undoStack) {
-      m_undoStack->setClean();
-    }
-  });
+  if (!fileName.endsWith(QLatin1String(".par"), Qt::CaseInsensitive))
+    fileName += QStringLiteral(".par");
+  return saveParametersToFile(fileName);
 }
 
-/** Show a file dialog and open an image.
-   Uses QTimer::singleShot(0) to defer the actual loadFile call so that
-   the event loop can clean up KIO jobs from the file dialog before any
-   QMessageBox is shown — prevents crashes in KF6KIOGui on KDE.  */
+/** Show a multi-selection file dialog and open each image independently.
+   The application may reuse this window only when it is untouched and empty;
+   otherwise every selected image receives a new MainWindow.  Dispatch is
+   deferred by one event-loop turn so KDE can dispose of KIO file-dialog jobs
+   before an associated parameter prompt is shown.  */
 void MainWindow::onOpenImage() {
-  QString fileName = QFileDialog::getOpenFileName(
-      this, "Open Image", QString(),
+  const QStringList fileNames = QFileDialog::getOpenFileNames(
+      this, "Open Images", m_lastOpenDir,
       "Images (*.tif *.tiff *.jpg *.jpeg *.jp2 *.j2k *.jpc *.jpf *.jpx *.png "
       "*.raw *.dng *.iiq *.nef *.cr2 *.eip *.arw *.raf *.arq *.csprj);;All "
       "Files (*)");
-  if (fileName.isEmpty())
+  if (fileNames.isEmpty())
     return;
 
-  // Defer loadFile to allow the event loop to spin and clean up
-  // KIO jobs from the file dialog before we pop up another dialog (QMessageBox)
-  // in loadFile(). Otherwise, KJob::kill can crash in KF6KIOGui.
-  QTimer::singleShot(0, this, [this, fileName]() { loadFile(fileName); });
+  m_lastOpenDir = QFileInfo(fileNames.constFirst()).absolutePath();
+  const QPointer<MainWindow> guardedWindow(this);
+  QTimer::singleShot(0, qApp, [guardedWindow, fileNames]() {
+    if (!guardedWindow)
+      return;
+    if (ColorScreenApplication *application = documentApplication())
+      application->openFiles(fileNames, guardedWindow);
+    else
+      guardedWindow->loadFile(fileNames.constFirst());
+  });
 }
 
 /** Register a new background task for progress tracking.
@@ -2363,6 +2359,11 @@ void MainWindow::onImageLoaded() {
    Moves it to the front, caps the list at MaxRecentFiles, rebuilds
    the menu, and persists to QSettings.  */
 void MainWindow::addToRecentFiles(const QString &filePath) {
+  // Another document may have updated the application-wide list since this
+  // window was created.  Merge against the latest persisted value before
+  // writing so independently finishing image loads cannot lose entries.
+  QSettings settings;
+  m_recentFiles = settings.value("recentFiles").toStringList();
   QString absolutePath = QFileInfo(filePath).absoluteFilePath();
   m_recentFiles.removeAll(absolutePath);
   m_recentFiles.prepend(absolutePath);
@@ -2370,8 +2371,8 @@ void MainWindow::addToRecentFiles(const QString &filePath) {
   while (m_recentFiles.size() > MaxRecentFiles)
     m_recentFiles.removeLast();
 
+  settings.setValue("recentFiles", m_recentFiles);
   updateRecentFileActions();
-  saveRecentFiles();
 }
 
 /** Rebuild the "Open Recent" submenu from the m_recentFiles list.
@@ -2381,8 +2382,9 @@ void MainWindow::updateRecentFileActions() {
   m_recentFileActions.clear();
 
   for (int i = 0; i < m_recentFiles.size(); ++i) {
-    QString text =
-        tr("&%1 %2").arg(i + 1).arg(QFileInfo(m_recentFiles[i]).fileName());
+    QString fileName = QFileInfo(m_recentFiles[i]).fileName();
+    fileName.replace(QLatin1Char('&'), QStringLiteral("&&"));
+    QString text = tr("&%1 %2").arg(i + 1).arg(fileName);
     QAction *action =
         m_recentFilesMenu->addAction(text, this, &MainWindow::openRecentFile);
     action->setData(m_recentFiles[i]);
@@ -2403,14 +2405,23 @@ void MainWindow::updateRecentFileActions() {
   }
 }
 
-/** Slot invoked when a recent file menu item is clicked.
-   Extracts the file path from the action's data and loads it.  */
+/** Rebuild this document's Window menu from the application's live list. */
+void MainWindow::refreshWindowMenu() {
+  if (ColorScreenApplication *application = documentApplication())
+    application->populateWindowMenu(m_windowMenu, this);
+}
+
+/** Open a recent image without replacing an occupied document window. */
 void MainWindow::openRecentFile() {
   QAction *action = qobject_cast<QAction *>(sender());
-  if (action) {
-    QString fileName = action->data().toString();
+  if (!action)
+    return;
+
+  const QString fileName = action->data().toString();
+  if (ColorScreenApplication *application = documentApplication())
+    application->openFiles({fileName}, this);
+  else
     loadFile(fileName);
-  }
 }
 
 /** Load an image file and optionally its associated .par parameter file.
@@ -2424,6 +2435,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   if (fileName.isEmpty())
     return;
 
+  m_imageLoadPending = true;
+  if (!suppressParamPrompt)
+    m_recoveryDirty = false;
   m_currentImageFile = QFileInfo(fileName).absoluteFilePath();
   updateWindowTitle();
 
@@ -2510,6 +2524,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
       watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
       [this, watcher, tempScan, progress, fileName, isCsprj]() {
         std::pair<bool, QString> result = watcher->result();
+        m_imageLoadPending = false;
         removeProgress(progress);
         watcher->deleteLater();
 
@@ -2541,8 +2556,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                                   &m_solverParams);
           onImageLoaded();
 
-          // Add to recent files
+          // Add to recent files and immediately establish this document's
+          // independent crash-recovery payload.
           addToRecentFiles(m_currentImageFile);
+          saveRecoveryState();
+          updateWindowTitle();
 
           // Launch background tile loading for stitch projects.
           if (isCsprj && m_scan->stitch) {
@@ -2597,6 +2615,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           }
 
         } else {
+          updateWindowTitle();
           if (progress->cancelled()) {
           } else {
             QMessageBox::critical(this, "Error Loading Image",
@@ -2741,26 +2760,50 @@ void MainWindow::changeParameters(const ParameterState &newState,
       new ChangeParametersCommand(this, currentState, newState, description));
 }
 
-// Helper to check for unsaved changes and prompt to save
-/** Check for unsaved parameter changes and prompt the user.
-   Returns true if it's safe to proceed (user saved, discarded, or there
-   were no changes).  Returns false if the user cancelled.  */
-bool MainWindow::maybeSave() {
-  // Only prompt if there are unsaved changes (undo stack is not clean)
-  if (!m_undoStack || m_undoStack->isClean()) {
-    return true; // No changes or no undo stack, proceed
-  }
+/** Return whether this document has parameters not represented by its saved
+    .par file.  Recovered state remains dirty even though the reconstructed undo
+    stack starts empty.  */
+bool MainWindow::isDocumentModified() const {
+  return m_recoveryDirty || (m_undoStack && !m_undoStack->isClean());
+}
 
-  QMessageBox::StandardButton ret = QMessageBox::warning(
+/** Return whether a new image may safely reuse this document window. */
+bool MainWindow::canReuseForOpen() const {
+  return !m_closing && !m_scan && !m_imageLoadPending &&
+         m_currentImageFile.isEmpty() && !isDocumentModified();
+}
+
+/** Return this document's concise name for the application Window menu. */
+QString MainWindow::documentDisplayName() const {
+  QString name = m_currentImageFile.isEmpty()
+                     ? tr("Untitled")
+                     : QFileInfo(m_currentImageFile).fileName();
+  if (isDocumentModified())
+    name += QLatin1Char('*');
+  return name;
+}
+
+/** Check for unsaved parameter changes and prompt the user.
+   Returns true only after a successful synchronous save, an explicit discard,
+   or when this document has no unsaved state.  */
+bool MainWindow::maybeSave() {
+  if (!isDocumentModified())
+    return true;
+
+  QString displayName = documentDisplayName();
+  displayName.remove(QLatin1Char('*'));
+  const QMessageBox::StandardButton result = QMessageBox::warning(
       this, "Unsaved Changes",
-      "Parameters have been modified.\nDo you want to save your changes?",
+      QString("Parameters for %1 have been modified.\n"
+              "Do you want to save your changes?")
+          .arg(displayName),
       QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
 
-  switch (ret) {
+  switch (result) {
   case QMessageBox::Save:
-    onSaveParameters();
-    // If save was successful or user cancelled save dialog, we're clean
-    return true;
+    if (m_currentParamsFile.isEmpty() || m_currentParamsFileIsWeak)
+      return saveParametersAs();
+    return saveParametersToFile(m_currentParamsFile);
   case QMessageBox::Discard:
     return true;
   case QMessageBox::Cancel:
@@ -2769,10 +2812,10 @@ bool MainWindow::maybeSave() {
   }
 }
 
-/** Handle window close event.
-   Prompts for unsaved changes, asks to cancel any active render, cancels
-   all remaining background tasks, cleans up crash recovery files, and
-   saves window state and recent file lists.  */
+/** Handle closing one image-document window.
+   Prompts for this document's unsaved changes, asks to cancel its active
+   render, cancels only its background tasks, removes only its recovery data,
+   and saves the shared preferred window layout.  */
 void MainWindow::closeEvent(QCloseEvent *event) {
   // Check for unsaved changes
   if (!maybeSave()) {
@@ -2784,13 +2827,15 @@ void MainWindow::closeEvent(QCloseEvent *event) {
   if (!m_renderProgress.expired()) {
     auto ret = QMessageBox::question(
         this, tr("Rendering in Progress"),
-        tr("A render is currently in progress. Cancel it and quit?"),
+        tr("A render is currently in progress. Cancel it and close this window?"),
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     if (ret != QMessageBox::Yes) {
       event->ignore();
       return;
     }
   }
+
+  m_closing = true;
 
   // Cancel all active processes
   for (const auto &progress : m_activeProgresses) {
@@ -2802,20 +2847,21 @@ void MainWindow::closeEvent(QCloseEvent *event) {
   // Clean up recovery files on normal exit
   clearRecoveryFiles();
 
+  // Recent lists are persisted at the point of each change.  Saving a stale
+  // per-window copy here would let the last closed document overwrite entries
+  // added by another open window.
   saveWindowState();
-  saveRecentFiles();
-  saveRecentParams();
   event->accept();
 }
 
-/** Update the window title to show the application version and the
-   currently loaded image filename.  */
+/** Update the title and standard Qt modification marker for this document. */
 void MainWindow::updateWindowTitle() {
-  QString title = "Color-Screen " PACKAGE_VERSION;
-  if (!m_currentImageFile.isEmpty()) {
-    title += ": " + QFileInfo(m_currentImageFile).fileName();
-  }
-  setWindowTitle(title);
+  QString title = QStringLiteral("Color-Screen " PACKAGE_VERSION ": ") +
+                  (m_currentImageFile.isEmpty()
+                       ? tr("Untitled")
+                       : QFileInfo(m_currentImageFile).fileName());
+  setWindowModified(isDocumentModified());
+  setWindowTitle(title + QStringLiteral("[*]"));
 }
 
 // Save the current interaction mode so it can be restored later.
@@ -2955,6 +3001,10 @@ void MainWindow::restoreWindowState() {
 /** Add a file path to the most-recently-used parameter files list.
    Same pattern as addToRecentFiles.  */
 void MainWindow::addToRecentParams(const QString &filePath) {
+  // Parameter saves and loads can finish in different document windows; start
+  // from QSettings so the most recent writer merges rather than overwrites.
+  QSettings settings;
+  m_recentParams = settings.value("recentParams").toStringList();
   QString absolutePath = QFileInfo(filePath).absoluteFilePath();
   m_recentParams.removeAll(absolutePath);
   m_recentParams.prepend(absolutePath);
@@ -2962,8 +3012,8 @@ void MainWindow::addToRecentParams(const QString &filePath) {
   while (m_recentParams.size() > MaxRecentFiles)
     m_recentParams.removeLast();
 
+  settings.setValue("recentParams", m_recentParams);
   updateRecentParamsActions();
-  saveRecentParams();
 }
 
 /** Rebuild the "Open Recent Parameters" submenu.  */
@@ -2972,8 +3022,9 @@ void MainWindow::updateRecentParamsActions() {
   m_recentParamsActions.clear();
 
   for (int i = 0; i < m_recentParams.size(); ++i) {
-    QString text =
-        tr("&%1 %2").arg(i + 1).arg(QFileInfo(m_recentParams[i]).fileName());
+    QString fileName = QFileInfo(m_recentParams[i]).fileName();
+    fileName.replace(QLatin1Char('&'), QStringLiteral("&&"));
+    QString text = tr("&%1 %2").arg(i + 1).arg(fileName);
     QAction *action = m_recentParamsMenu->addAction(
         text, this, &MainWindow::openRecentParams);
     action->setData(m_recentParams[i]);
@@ -3000,11 +3051,18 @@ void MainWindow::updateRecentParamsActions() {
    syncs gamut warning state, and clears undo history.  */
 void MainWindow::openRecentParams() {
   QAction *action = qobject_cast<QAction *>(sender());
-  if (action) {
-    QString fileName = action->data().toString();
+  if (!action)
+    return;
+
+  // maybeSave() can rebuild this submenu and delete ACTION, so capture its
+  // payload before opening a nested save dialog.
+  const QString fileName = action->data().toString();
+  if (maybeSave()) {
     if (loadParameterFile(fileName)) {
       m_currentParamsFile = QFileInfo(fileName).absoluteFilePath();
       m_currentParamsFileIsWeak = false;
+      updateWindowTitle();
+      saveRecoveryState();
       statusBar()->showMessage(QString("Parameters loaded from %1").arg(fileName),
                                3000);
     }
@@ -3243,120 +3301,120 @@ void MainWindow::onGamutWarningToggled(bool checked) {
 
 // Crash Recovery Methods
 
-/** Check whether crash recovery files exist in the cache directory.  */
-bool MainWindow::hasRecoveryFiles() {
-  QString imagePath = m_recoveryDir + "/recovery_image.txt";
-  QString paramsPath = m_recoveryDir + "/recovery_params.par";
-  return QFile::exists(imagePath) || QFile::exists(paramsPath);
-}
-
-/** Auto-save current state to the crash recovery directory.
-   Called by a 30-second periodic timer.  Saves the image file path,
-   all parameters as a .par file, and the current .par filename/weak
-   flag metadata.  Only saves if an image is loaded.  */
+/** Auto-save this document into its private crash-recovery directory.
+   Called by a 30-second timer and immediately after image load/save.  The
+   payload contains the image path, complete parameters, and current parameter
+   filename metadata.  */
 void MainWindow::saveRecoveryState() {
-  // Only save if we have an image loaded
-  if (!m_scan) {
+  if (!m_scan || m_recoveryDir.isEmpty())
     return;
-  }
+  if (!QDir().mkpath(m_recoveryDir))
+    return;
 
-  // Save current image path
-  QString imagePath = m_recoveryDir + "/recovery_image.txt";
-  QFile imageFile(imagePath);
+  const QDir directory(m_recoveryDir);
+  QFile imageFile(directory.filePath(QStringLiteral("recovery_image.txt")));
   if (imageFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
     QTextStream out(&imageFile);
     out << m_currentImageFile;
-    imageFile.close();
   }
 
-  // Save current parameters
-  QString paramsPath = m_recoveryDir + "/recovery_params.par";
+  const QString paramsPath =
+      directory.filePath(QStringLiteral("recovery_params.par"));
+  bool paramsSaved = false;
   FILE *f = fopen(paramsPath.toUtf8().constData(), "wt");
   if (f) {
-    bool has_rgb = m_scan && m_scan->has_rgb();
-    colorscreen::save_csp(f, &m_scrToImgParams,
-                          has_rgb ? &m_detectParams : nullptr, &m_rparams,
-                          &m_solverParams);
-    fclose(f);
+    const bool hasRgb = m_scan->has_rgb();
+    paramsSaved = colorscreen::save_csp(
+        f, &m_scrToImgParams, hasRgb ? &m_detectParams : nullptr, &m_rparams,
+        &m_solverParams);
+    if (fclose(f) != 0)
+      paramsSaved = false;
   }
+  if (!paramsSaved)
+    QFile::remove(paramsPath);
 
-  // Save parameter file path and weak flag
-  QString paramsMetaPath = m_recoveryDir + "/recovery_params_meta.txt";
-  QFile metaFile(paramsMetaPath);
+  QFile metaFile(
+      directory.filePath(QStringLiteral("recovery_params_meta.txt")));
   if (metaFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
     QTextStream out(&metaFile);
-    out << m_currentParamsFile << "\n";
-    out << (m_currentParamsFileIsWeak ? "1" : "0") << "\n";
-    metaFile.close();
+    out << m_currentParamsFile << '\n';
+    out << (m_currentParamsFileIsWeak ? "1" : "0") << '\n';
+    out << (isDocumentModified() ? "1" : "0") << '\n';
   }
 }
 
-/** Restore the application state from crash recovery files.
-   Loads the parameter file, the image path metadata (param file name
-   and weak flag), and re-opens the image if it still exists on disk.
-   Shows a warning if the image file is missing.  */
-void MainWindow::loadRecoveryState() {
-  // Load image path
-  QString imagePath = m_recoveryDir + "/recovery_image.txt";
-  QString imageToLoad;
+/** Restore this document from its private recovery payload.
+   Restores the saved dirty flag when present; legacy payloads are treated as
+   modified because they may contain edits never written to the user's .par
+   file. Returns false only when the directory contains no usable data.  */
+bool MainWindow::restoreRecoveryState() {
+  if (m_recoveryDir.isEmpty())
+    return false;
 
+  const QDir directory(m_recoveryDir);
+  const QString imagePath =
+      directory.filePath(QStringLiteral("recovery_image.txt"));
+  const QString paramsPath =
+      directory.filePath(QStringLiteral("recovery_params.par"));
+  if (!QFile::exists(imagePath) && !QFile::exists(paramsPath))
+    return false;
+
+  QString imageToLoad;
   QFile imageFile(imagePath);
   if (imageFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
     QTextStream in(&imageFile);
     imageToLoad = in.readLine().trimmed();
-    imageFile.close();
   }
 
-  // Load parameters
-  QString paramsPath = m_recoveryDir + "/recovery_params.par";
   if (QFile::exists(paramsPath)) {
     FILE *f = fopen(paramsPath.toUtf8().constData(), "r");
     if (f) {
       const char *error = nullptr;
-      colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams, &m_rparams,
-                            &m_solverParams, &error);
+      const bool loaded = colorscreen::load_csp(
+          f, &m_scrToImgParams, &m_detectParams, &m_rparams, &m_solverParams,
+          &error);
       fclose(f);
-
-      if (error) {
+      if (!loaded || error) {
         QMessageBox::warning(
             this, "Recovery Warning",
-            QString("Error loading parameters: %1").arg(error));
+            error ? QString("Error loading parameters: %1").arg(error)
+                  : QStringLiteral("Could not load recovered parameters."));
+      } else {
+        m_prevScrToImgParams = m_scrToImgParams;
+        m_prevDetectParams = m_detectParams;
       }
     }
   }
 
-  // Load parameter file path and weak flag
-  QString paramsMetaPath = m_recoveryDir + "/recovery_params_meta.txt";
-  QFile metaFile(paramsMetaPath);
+  m_recoveryDirty = true; // Legacy recovery metadata has no dirty flag.
+  QFile metaFile(
+      directory.filePath(QStringLiteral("recovery_params_meta.txt")));
   if (metaFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
     QTextStream in(&metaFile);
     m_currentParamsFile = in.readLine().trimmed();
-    QString weakFlag = in.readLine().trimmed();
-    m_currentParamsFileIsWeak = (weakFlag == "1");
-    metaFile.close();
+    m_currentParamsFileIsWeak = (in.readLine().trimmed() == QLatin1String("1"));
+    const QString dirtyFlag = in.readLine().trimmed();
+    if (!dirtyFlag.isEmpty())
+      m_recoveryDirty = (dirtyFlag == QLatin1String("1"));
   }
 
-  // Load image if path was saved
   if (!imageToLoad.isEmpty() && QFile::exists(imageToLoad)) {
-    loadFile(imageToLoad, true); // Suppress param prompt during recovery
+    loadFile(imageToLoad, true);
   } else if (!imageToLoad.isEmpty()) {
     QMessageBox::warning(
         this, "Recovery Warning",
         QString("Could not find image file: %1").arg(imageToLoad));
   }
 
-  // Update UI with recovered parameters
   updateUIFromState(getCurrentState());
+  updateWindowTitle();
+  return true;
 }
 
-/** Delete the crash recovery files from the cache directory.
-   Called on clean exit to prevent spurious recovery prompts.  */
+/** Delete only this document's recovery directory after a clean close. */
 void MainWindow::clearRecoveryFiles() {
-  QString imagePath = m_recoveryDir + "/recovery_image.txt";
-  QString paramsPath = m_recoveryDir + "/recovery_params.par";
-
-  QFile::remove(imagePath);
-  QFile::remove(paramsPath);
+  if (!m_recoveryDir.isEmpty())
+    QDir(m_recoveryDir).removeRecursively();
 }
 /** Select all registration points in the ImageWidget.  */
 void MainWindow::onSelectAll() { m_imageWidget->selectAll(); }
@@ -3856,9 +3914,9 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
     m_gamutWarningAction->setChecked(m_rparams.gamut_warning);
   }
 
-  if (m_undoStack) {
+  if (m_undoStack)
     m_undoStack->clear();
-  }
+  m_recoveryDirty = false;
 
   updateModeMenu();
   updateUIFromState(getCurrentState());

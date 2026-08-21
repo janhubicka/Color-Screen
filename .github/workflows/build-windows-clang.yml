@@ -141,7 +141,9 @@ jobs:
         ) &
         
         # Run the GUI with smoke-test auto-quit
-        $APP_BIN --debug-qt --smoke-test 30000 "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" || echo "GUI exited with $?"
+        $APP_BIN --debug-qt --smoke-test 30000 --smoke-test-expect-windows 2 \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" || { status=$?; echo "GUI exited with $status"; exit $status; }
         
     - name: Upload GUI Screenshots
       uses: actions/upload-artifact@v4
