@@ -1,0 +1,36 @@
+name: Agent focus model source transport
+
+on:
+  push:
+    branches:
+      - agent/focus-areas-model-transport-20260821
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact revision
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bundle repository
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git rev-parse HEAD > HEAD.sha
+          git bundle create Color-Screen.bundle --all
+          git bundle verify Color-Screen.bundle
+
+      - name: Upload source bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-focus-model-source
+          path: |
+            Color-Screen.bundle
+            HEAD.sha
+          if-no-files-found: error
+          retention-days: 1
