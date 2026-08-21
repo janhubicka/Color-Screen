@@ -180,6 +180,48 @@ struct denoise_noise_three_scale_estimate
   }
 };
 
+/* Three-scale diagnostics evaluated in alternative sample domains.  LINEAR
+   is the existing raw-sample result.  DENSITY_LOG applies -log(X) and rejects
+   non-positive samples.  VARIANCE_STABILIZED uses the spacing-1 linear
+   floor+slope model to integrate 1/sqrt(variance(X)); it remains diagnostic
+   and never changes rendering parameters.  */
+struct denoise_noise_domain_comparison
+{
+  denoise_noise_three_scale_estimate linear;
+  denoise_noise_three_scale_estimate density_log;
+  denoise_noise_three_scale_estimate variance_stabilized;
+  luminosity_t vst_variance_floor = 0;
+  luminosity_t vst_variance_slope = 0;
+
+  bool valid_p () const { return linear.valid_p (); }
+  bool density_valid_p () const { return density_log.valid_p (); }
+  bool variance_stabilized_valid_p () const
+  {
+    return variance_stabilized.valid_p () && vst_variance_floor > 0;
+  }
+};
+
+/* Transform sample X using the generalized square-root variance-stabilizing
+   transform for VARIANCE(X)=FLOOR+SLOPE*X.  The rationalized form avoids
+   cancellation when SLOPE is small and continuously approaches
+   X/sqrt(FLOOR) for zero slope.  */
+inline luminosity_t
+denoise_variance_stabilizing_transform (luminosity_t x,
+                                        luminosity_t floor,
+                                        luminosity_t slope)
+{
+  if (!my_isfinite (x) || !my_isfinite (floor) || floor <= 0
+      || !my_isfinite (slope) || slope < 0)
+    return std::numeric_limits<luminosity_t>::quiet_NaN ();
+  if (slope == 0)
+    return x / std::sqrt (floor);
+  luminosity_t variance
+      = floor + slope * std::max (x, (luminosity_t)0);
+  if (!(variance > 0) || !my_isfinite (variance))
+    return std::numeric_limits<luminosity_t>::quiet_NaN ();
+  return 2 * x / (std::sqrt (variance) + std::sqrt (floor));
+}
+
 namespace denoise_noise_estimator_detail
 {
 struct observation
@@ -842,6 +884,93 @@ estimate_screen_rgb_noise_three_scale_model (
             spacing3.push_back ({signal, d3 * d3 / (luminosity_t)6});
           }
       });
+}
+
+/* Compare LINEAR, density/log and variance-stabilized domains for scalar
+   screen samples.  WIDTH and HEIGHT describe the separation lattice, GETDATA
+   and GETSUPPORT provide samples/support, and ENTRY_TO_SCR supplies physical
+   screen geometry.  */
+template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
+inline denoise_noise_domain_comparison
+estimate_screen_noise_domains (int width, int height, GETDATA getdata,
+                               GETSUPPORT getsupport,
+                               ENTRY_TO_SCR entry_to_scr)
+{
+  denoise_noise_domain_comparison result;
+  result.linear = estimate_screen_noise_three_scale_model (
+      width, height, getdata, getsupport, entry_to_scr);
+
+  result.density_log = estimate_screen_noise_three_scale_model (
+      width, height,
+      [&] (int x, int y)
+      {
+        luminosity_t v = getdata (x, y);
+        return v > 0 && my_isfinite (v)
+                   ? -std::log (v)
+                   : std::numeric_limits<luminosity_t>::quiet_NaN ();
+      },
+      getsupport, entry_to_scr);
+
+  if (result.linear.spacing1.valid_p ())
+    {
+      result.vst_variance_floor = result.linear.spacing1.variance_floor;
+      result.vst_variance_slope = result.linear.spacing1.variance_slope;
+      result.variance_stabilized = estimate_screen_noise_three_scale_model (
+          width, height,
+          [&] (int x, int y)
+          {
+            return denoise_variance_stabilizing_transform (
+                getdata (x, y), result.vst_variance_floor,
+                result.vst_variance_slope);
+          },
+          getsupport, entry_to_scr);
+    }
+  return result;
+}
+
+/* RGB equivalent of ESTIMATE_SCREEN_NOISE_DOMAINS.  Scanner components are
+   transformed independently, then pooled exactly as in the existing
+   precise-RGB three-scale diagnostic.  */
+template <typename GETDATA, typename GETSUPPORT, typename ENTRY_TO_SCR>
+inline denoise_noise_domain_comparison
+estimate_screen_rgb_noise_domains (int width, int height, GETDATA getdata,
+                                   GETSUPPORT getsupport,
+                                   ENTRY_TO_SCR entry_to_scr)
+{
+  denoise_noise_domain_comparison result;
+  result.linear = estimate_screen_rgb_noise_three_scale_model (
+      width, height, getdata, getsupport, entry_to_scr);
+
+  result.density_log = estimate_screen_rgb_noise_three_scale_model (
+      width, height,
+      [&] (int x, int y)
+      {
+        rgbdata v = getdata (x, y);
+        for (int k = 0; k < 3; k++)
+          v[k] = v[k] > 0 && my_isfinite (v[k])
+                     ? -std::log (v[k])
+                     : std::numeric_limits<luminosity_t>::quiet_NaN ();
+        return v;
+      },
+      getsupport, entry_to_scr);
+
+  if (result.linear.spacing1.valid_p ())
+    {
+      result.vst_variance_floor = result.linear.spacing1.variance_floor;
+      result.vst_variance_slope = result.linear.spacing1.variance_slope;
+      result.variance_stabilized = estimate_screen_rgb_noise_three_scale_model (
+          width, height,
+          [&] (int x, int y)
+          {
+            rgbdata v = getdata (x, y);
+            for (int k = 0; k < 3; k++)
+              v[k] = denoise_variance_stabilizing_transform (
+                  v[k], result.vst_variance_floor, result.vst_variance_slope);
+            return v;
+          },
+          getsupport, entry_to_scr);
+    }
+  return result;
 }
 
 template <typename ENTRY_TO_SCR>
