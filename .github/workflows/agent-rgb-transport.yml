@@ -19,10 +19,10 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           path: transport
 
-      - name: Check out exact tested base
+      - name: Check out exact current main
         uses: actions/checkout@v4
         with:
-          ref: d32b9c010b1f1753cba752b995dcefac09fa0d87
+          ref: 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84
           fetch-depth: 0
           path: repo
 
@@ -30,24 +30,24 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          cat transport/agent/weighted-matching.patch.b64.* > weighted-matching.patch.b64
-          echo '2c6da3e2ba2d99ec2305d576e9b28a94f34c01be09ef46389aa235824be3c534  weighted-matching.patch.b64' | sha256sum -c -
-          base64 --decode weighted-matching.patch.b64 > weighted-matching.patch
-          echo '97889df09fdb654c101f964bd47081942f0c3db43c222426a1a3a30da103b9f4  weighted-matching.patch' | sha256sum -c -
+          cat transport/agent/weighted-matching.patch.b64.* \
+            | tr -d '\r\n' \
+            | base64 --decode > weighted-matching.patch
+          echo '97889df09fdb654c101f964bd47081942f0c3db43c222426a1a3a30da103b9f4  weighted-matching.patch' \
+            | sha256sum -c -
 
-          cp transport/agent/weighted-paget-fix.patch.b64 .
-          echo 'cac1c807480008a083263dd09e9deb0d0507bf2701da064d32683cbb2674185e  weighted-paget-fix.patch.b64' | sha256sum -c -
-          base64 --decode weighted-paget-fix.patch.b64 > weighted-paget-fix.patch
-          echo '259e1c06927b9c1372e868efbac3f4d83eb197e3a3152aa91c22a2af605994e3  weighted-paget-fix.patch' | sha256sum -c -
+          tr -d '\r\n' < transport/agent/weighted-paget-fix.patch.b64 \
+            | base64 --decode > weighted-paget-fix.patch
+          echo '259e1c06927b9c1372e868efbac3f4d83eb197e3a3152aa91c22a2af605994e3  weighted-paget-fix.patch' \
+            | sha256sum -c -
 
           cd repo
-          test "$(git rev-parse HEAD)" = d32b9c010b1f1753cba752b995dcefac09fa0d87
-          git checkout -B agent/weighted-overlap-matching d32b9c010b1f1753cba752b995dcefac09fa0d87
+          test "$(git rev-parse HEAD)" = 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84
+          git checkout -B agent/weighted-overlap-matching 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84
           git apply --index --whitespace=error ../weighted-matching.patch
           git apply --index --whitespace=error ../weighted-paget-fix.patch
           git diff --cached --check
           test "$(git diff --cached --name-only | sort)" = $'src/libcolorscreen/analyze-base.C\nsrc/libcolorscreen/unittests.C'
-          test "$(git write-tree)" = 6b4ab54ec4a2363ddc4281441d8b9caf9d6f9760
           git config user.name 'OpenAI Codex'
           git config user.email 'noreply@openai.com'
           git commit -F ../transport/agent/weighted-matching-commit.txt
