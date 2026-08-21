@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: weighted-overlap-matching-publisher
+  cancel-in-progress: true
+
 jobs:
   publish-weighted-matching:
     if: github.head_ref == 'agent/transport-rgb-sharpening-20260821'
