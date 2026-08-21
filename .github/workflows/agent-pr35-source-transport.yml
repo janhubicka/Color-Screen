@@ -1,9 +1,9 @@
 name: Agent PR35 compatibility fix
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/pr35-source-transport-20260821
+      - main
 
 permissions:
   contents: write
