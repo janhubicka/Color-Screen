@@ -40,7 +40,6 @@ jobs:
           echo 'c25cb5d2b89d349688109bc2d44b07835bf37ef039430d37ce1e243545766f90  qt-tabbed.patch.xz' | sha256sum -c -
           xz --decompress --stdout qt-tabbed.patch.xz > qt-tabbed.patch
           echo '2bbda0e3f68a0b3f8c29b88a6a36944baa3e33f8825a970f3198dad1cecce268  qt-tabbed.patch' | sha256sum -c -
-
           cd repo
           test "$(git rev-parse HEAD)" = cda22812f2749690aab0ddf365c0ad7d6640ae85
           git checkout -B agent/qtgui-tabbed-workspace cda22812f2749690aab0ddf365c0ad7d6640ae85
