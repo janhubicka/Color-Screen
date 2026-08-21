@@ -1,4 +1,4 @@
-name: Agent publish Qt multi-document
+name: Agent assemble Qt multi-document CI commit
 
 on:
   pull_request:
@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  publish:
+  assemble:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'agent/transport-qt-multidocument-20260821'
@@ -23,14 +23,17 @@ jobs:
         with:
           path: transport
 
-      - name: Check out current non-overlapping base
+      - name: Check out exact review base
         uses: actions/checkout@v4
         with:
           ref: 878d96176f03ac8ddffdb072e120868b0c909c67
           fetch-depth: 0
           path: repo
 
-      - name: Verify payload and publish source/documentation commits
+      - name: Verify patch and create detached CI commit object
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
         shell: bash
         run: |
           set -euxo pipefail
@@ -42,31 +45,76 @@ jobs:
           echo '062523e6a4c500941fde4fe922efe1beec1835f5654974d144b60f4b31d6ec8d  qt-multidocument.patch' | sha256sum -c -
 
           cd repo
-          base=878d96176f03ac8ddffdb072e120868b0c909c67
-          test "$(git rev-parse HEAD)" = "$base"
+          test "$(git rev-parse HEAD)" = 878d96176f03ac8ddffdb072e120868b0c909c67
           git config user.name 'OpenAI Codex'
           git config user.email 'noreply@openai.com'
-
-          # Reconstruct the exact tested commits first, then rewrite only the
-          # implementation commit to omit workflow files. GitHub Actions tokens
-          # cannot update workflow definitions; those four files are added as a
-          # separate connector-authored CI commit after this branch is pushed.
-          git checkout -B agent/qtgui-multi-document-assembled "$base"
           git am --whitespace=error ../qt-multidocument.patch
-          original_implementation=$(git rev-parse HEAD~1)
-          original_documentation=$(git rev-parse HEAD)
+          test "$(git rev-list --count 878d96176f03ac8ddffdb072e120868b0c909c67..HEAD)" = 2
+          git diff --check 878d96176f03ac8ddffdb072e120868b0c909c67..HEAD
 
-          git checkout -B agent/qtgui-multi-document "$base"
-          git cherry-pick --no-commit "$original_implementation"
-          git restore --source="$base" --staged --worktree -- \
-            .github/workflows/build-macos.yml \
-            .github/workflows/build-ubuntu.yml \
-            .github/workflows/build-windows-clang.yml \
-            .github/workflows/build-windows.yml
-          git commit -C "$original_implementation"
-          git cherry-pick "$original_documentation"
+          api="https://api.github.com/repos/$REPOSITORY/git"
+          auth=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
 
-          test "$(git rev-list --count "$base"..HEAD)" = 2
-          git diff --check "$base"..HEAD
-          test "$(git diff --name-only "$base"..HEAD | sort)" = $'.agents/qtgui.md\nNEWS\nREADME.md\nsrc/qtgui/CMakeLists.txt\nsrc/qtgui/ColorScreenApplication.cpp\nsrc/qtgui/ColorScreenApplication.h\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/MainWindow.h\nsrc/qtgui/Makefile.am\nsrc/qtgui/Makefile.in\nsrc/qtgui/main.cpp'
-          git push --force origin HEAD:refs/heads/agent/qtgui-multi-document
+          create_blob() {
+            local path=$1
+            local payload response
+            payload=$(mktemp)
+            response=$(mktemp)
+            python3 - "$path" "$payload" <<'PY'
+          import base64, json, pathlib, sys
+          source = pathlib.Path(sys.argv[1]).read_bytes()
+          pathlib.Path(sys.argv[2]).write_text(json.dumps({
+              "content": base64.b64encode(source).decode("ascii"),
+              "encoding": "base64",
+          }))
+          PY
+            curl --fail-with-body --silent --show-error \
+              "${auth[@]}" -X POST "$api/blobs" --data-binary "@$payload" > "$response"
+            jq -er .sha "$response"
+            rm -f "$payload" "$response"
+          }
+
+          mac_blob=$(create_blob .github/workflows/build-macos.yml)
+          ubuntu_blob=$(create_blob .github/workflows/build-ubuntu.yml)
+          windows_clang_blob=$(create_blob .github/workflows/build-windows-clang.yml)
+          windows_blob=$(create_blob .github/workflows/build-windows.yml)
+
+          test "$mac_blob" = e79fe0610a167ad1d570e4f1b382e39b8496b840
+          test "$ubuntu_blob" = ec79e57b506c15b32902f3bce0ed2e82a1b8db5b
+          test "$windows_clang_blob" = 945d30505e250bf59e9e5cdcdaaa134a3733a2ab
+          test "$windows_blob" = 343af381eaae20a99fb0a2fff710786a8d895210
+
+          jq -n \
+            --arg base_tree 01b38aab72b484e104d0eec42237e68e9e80a121 \
+            --arg mac "$mac_blob" \
+            --arg ubuntu "$ubuntu_blob" \
+            --arg windows_clang "$windows_clang_blob" \
+            --arg windows "$windows_blob" \
+            '{base_tree:$base_tree,tree:[
+              {path:".github/workflows/build-macos.yml",mode:"100644",type:"blob",sha:$mac},
+              {path:".github/workflows/build-ubuntu.yml",mode:"100644",type:"blob",sha:$ubuntu},
+              {path:".github/workflows/build-windows-clang.yml",mode:"100644",type:"blob",sha:$windows_clang},
+              {path:".github/workflows/build-windows.yml",mode:"100644",type:"blob",sha:$windows}
+            ]}' > tree.json
+          curl --fail-with-body --silent --show-error \
+            "${auth[@]}" -X POST "$api/trees" --data-binary @tree.json > tree-response.json
+          tree_sha=$(jq -er .sha tree-response.json)
+
+          jq -n \
+            --arg message $'ci: cover multi-document GUI launches\n\nLaunch two copies of the bundled test image in the Linux, macOS, GCC/MinGW, and Clang/MinGW GUI smoke tests and require exactly two document windows. This exercises the multi-file command-line path and protects the invariant that every input is handled by an independent MainWindow.' \
+            --arg tree "$tree_sha" \
+            --arg parent d59bd95f5b75286fa1c1def0dec3534cc6226c67 \
+            '{message:$message,tree:$tree,parents:[$parent]}' > commit.json
+          curl --fail-with-body --silent --show-error \
+            "${auth[@]}" -X POST "$api/commits" --data-binary @commit.json > commit-response.json
+          commit_sha=$(jq -er .sha commit-response.json)
+
+          echo "CI_COMMIT_SHA=$commit_sha"
+          echo "CI_TREE_SHA=$tree_sha"
+          {
+            echo '## Detached CI commit object'
+            echo
+            echo "- Commit: \`$commit_sha\`"
+            echo "- Tree: \`$tree_sha\`"
+            echo '- Parent: `d59bd95f5b75286fa1c1def0dec3534cc6226c67`'
+          } >> "$GITHUB_STEP_SUMMARY"
