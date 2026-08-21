@@ -23,10 +23,10 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           path: transport
 
-      - name: Check out exact current main
+      - name: Check out latest main
         uses: actions/checkout@v4
         with:
-          ref: 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84
+          ref: main
           fetch-depth: 0
           path: repo
 
@@ -64,8 +64,9 @@ jobs:
           PY
 
           cd repo
-          test "$(git rev-parse HEAD)" = 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84
-          git checkout -B agent/weighted-overlap-matching 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84
+          base=$(git rev-parse HEAD)
+          test "$(git rev-parse --abbrev-ref HEAD)" = main
+          git checkout -B agent/weighted-overlap-matching "$base"
           git apply --index --whitespace=error ../weighted-matching.patch
           git apply --index --whitespace=error ../weighted-paget-fix.patch
           git diff --cached --check
@@ -74,4 +75,4 @@ jobs:
           git config user.email 'noreply@openai.com'
           git commit -F ../transport/agent/weighted-matching-commit.txt
           git push --force origin HEAD:refs/heads/agent/weighted-overlap-matching
-          git rev-parse HEAD
+          printf 'Published on base %s as %s\n' "$base" "$(git rev-parse HEAD)"
