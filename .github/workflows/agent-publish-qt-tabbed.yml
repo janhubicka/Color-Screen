@@ -1,0 +1,53 @@
+name: Agent publish Qt tabbed workspace
+
+on:
+  pull_request:
+    branches:
+      - agent/transport-base-qt-tabbed
+    paths:
+      - .github/workflows/agent-publish-qt-tabbed.yml
+      - agent/qt-tabbed-source-docs.patch.xz.b64.*
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'agent/transport-qt-tabbed-20260821'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out transport payload
+        uses: actions/checkout@v4
+        with:
+          path: transport
+
+      - name: Check out exact merged multi-document base
+        uses: actions/checkout@v4
+        with:
+          ref: d62b01339d20ffdb5f9658f6c372aac8fe410068
+          fetch-depth: 0
+          path: repo
+
+      - name: Verify payload and publish source and documentation commit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat transport/agent/qt-tabbed-source-docs.patch.xz.b64.* > qt-tabbed-source-docs.patch.xz.b64
+          echo 'b11c229cf3c4c92ba10708f0610287926c4ef888cc48fc3ce6f3f7420f41c9b4  qt-tabbed-source-docs.patch.xz.b64' | sha256sum -c -
+          base64 --decode qt-tabbed-source-docs.patch.xz.b64 > qt-tabbed-source-docs.patch.xz
+          echo 'a370aaf80261c6b1280a579625f6e59597711cd697c74c4c10dd191711ff9631  qt-tabbed-source-docs.patch.xz' | sha256sum -c -
+          xz --decompress --stdout qt-tabbed-source-docs.patch.xz > qt-tabbed-source-docs.patch
+          echo 'ecc4d9259b042e735a149aa9fb6ae5e6b89daa4bba034c71ae36ae6848536775  qt-tabbed-source-docs.patch' | sha256sum -c -
+
+          cd repo
+          test "$(git rev-parse HEAD)" = d62b01339d20ffdb5f9658f6c372aac8fe410068
+          git checkout -B agent/qtgui-tabbed-documents d62b01339d20ffdb5f9658f6c372aac8fe410068
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git am --whitespace=error ../qt-tabbed-source-docs.patch
+          test "$(git rev-list --count d62b01339d20ffdb5f9658f6c372aac8fe410068..HEAD)" = 1
+          git diff --check d62b01339d20ffdb5f9658f6c372aac8fe410068..HEAD
+          test "$(git diff --name-only d62b01339d20ffdb5f9658f6c372aac8fe410068..HEAD | sort)" = $'.agents/qtgui.md\nNEWS\nREADME.md\nsrc/qtgui/CMakeLists.txt\nsrc/qtgui/ColorScreenApplication.cpp\nsrc/qtgui/ColorScreenApplication.h\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/MainWindow.h\nsrc/qtgui/Makefile.am\nsrc/qtgui/Makefile.in\nsrc/qtgui/WorkspaceWindow.cpp\nsrc/qtgui/WorkspaceWindow.h\nsrc/qtgui/main.cpp'
+          git push --force origin HEAD:refs/heads/agent/qtgui-tabbed-documents
