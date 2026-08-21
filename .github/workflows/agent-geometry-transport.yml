@@ -1,0 +1,46 @@
+name: Agent geometry source transport
+
+on:
+  push:
+    branches:
+      - agent/geometry-transport-20260821
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  archive-source:
+    if: ${{ github.event_name == 'pull_request' || !contains(github.event.head_commit.message, '[transport result]') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Record push run identifier
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          printf '%s\n' "$GITHUB_RUN_ID" > .agent-geometry-transport-run-id
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -- .agent-geometry-transport-run-id
+          git commit -m 'ci: record geometry transport run [transport result] [skip ci]'
+          git push origin HEAD:agent/geometry-transport-20260821
+      - name: Archive current main revision
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch origin main
+          git rev-parse origin/main | tee SOURCE_COMMIT
+          git archive --format=tar.gz --prefix=Color-Screen/ -o Color-Screen-source.tar.gz origin/main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-geometry-source-main
+          path: |
+            Color-Screen-source.tar.gz
+            SOURCE_COMMIT
+          if-no-files-found: error
