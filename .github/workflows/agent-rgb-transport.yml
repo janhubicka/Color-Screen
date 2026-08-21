@@ -10,17 +10,19 @@ permissions:
 
 jobs:
   publish-weighted-matching:
+    if: github.head_ref == 'agent/transport-rgb-sharpening-20260821'
     runs-on: ubuntu-latest
     steps:
-      - name: Check out transport payload
+      - name: Check out exact transport payload
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           path: transport
 
       - name: Check out exact tested base
         uses: actions/checkout@v4
         with:
-          ref: 24de87bfd6b5e12a0238a2c8248c1715de6a5c84
+          ref: d32b9c010b1f1753cba752b995dcefac09fa0d87
           fetch-depth: 0
           path: repo
 
@@ -39,12 +41,13 @@ jobs:
           echo '259e1c06927b9c1372e868efbac3f4d83eb197e3a3152aa91c22a2af605994e3  weighted-paget-fix.patch' | sha256sum -c -
 
           cd repo
-          test "$(git rev-parse HEAD)" = 24de87bfd6b5e12a0238a2c8248c1715de6a5c84
-          git checkout -B agent/weighted-overlap-matching 24de87bfd6b5e12a0238a2c8248c1715de6a5c84
+          test "$(git rev-parse HEAD)" = d32b9c010b1f1753cba752b995dcefac09fa0d87
+          git checkout -B agent/weighted-overlap-matching d32b9c010b1f1753cba752b995dcefac09fa0d87
           git apply --index --whitespace=error ../weighted-matching.patch
           git apply --index --whitespace=error ../weighted-paget-fix.patch
           git diff --cached --check
           test "$(git diff --cached --name-only | sort)" = $'src/libcolorscreen/analyze-base.C\nsrc/libcolorscreen/unittests.C'
+          test "$(git write-tree)" = 6b4ab54ec4a2363ddc4281441d8b9caf9d6f9760
           git config user.name 'OpenAI Codex'
           git config user.email 'noreply@openai.com'
           git commit -F ../transport/agent/weighted-matching-commit.txt
