@@ -108,6 +108,10 @@ public:
   /** Return the navigation/parameter panel column hosted by the workspace. */
   QWidget *workspaceInspectorWidget() const { return m_rightColumn; }
 
+  /** Return the per-document progress controls shown in the workspace status
+      bar while this document is active. */
+  QWidget *workspaceStatusWidget() const { return m_progressContainer; }
+
   /** Remove shared chrome from this QMainWindow before it is embedded in the
       application-level MDI area.  The document state itself is unchanged. */
   void prepareForWorkspaceEmbedding();

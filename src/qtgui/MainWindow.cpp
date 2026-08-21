@@ -1005,6 +1005,7 @@ void MainWindow::setupUi() {
 
   // Progress Container (initially hidden)
   m_progressContainer = new QWidget(statusBar);
+  m_progressContainer->setObjectName(QStringLiteral("DocumentProgressContainer"));
   QHBoxLayout *progressLayout = new QHBoxLayout(m_progressContainer);
   progressLayout->setContentsMargins(0, 0, 0, 0);
   progressLayout->setSpacing(8);
@@ -2431,6 +2432,8 @@ void MainWindow::prepareForWorkspaceEmbedding() {
     m_toolbar->hide();
   if (menuBar())
     menuBar()->hide();
+  if (statusBar())
+    statusBar()->hide();
   m_workspaceEmbedded = true;
 }
 
@@ -2450,6 +2453,8 @@ void MainWindow::restoreFromWorkspaceEmbedding() {
     m_toolbar->show();
   if (menuBar())
     menuBar()->show();
+  if (statusBar())
+    statusBar()->show();
   m_workspaceEmbedded = false;
 }
 
