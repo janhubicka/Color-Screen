@@ -1,0 +1,39 @@
+name: Agent export MDI fix source
+
+on:
+  pull_request:
+    branches:
+      - agent/mdi-fix-source-base-20260821
+    paths:
+      - agent/mdi-fix-source-trigger.txt
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact current main
+        uses: actions/checkout@v4
+        with:
+          ref: 099f01abfbd7c07cc222938815249ad9409955d3
+          fetch-depth: 0
+
+      - name: Create reproducible source bundle
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test "$(git rev-parse HEAD)" = 099f01abfbd7c07cc222938815249ad9409955d3
+          git bundle create Color-Screen.bundle --all
+          printf '%s\n' "$(git rev-parse HEAD)" > HEAD.sha
+
+      - name: Upload source bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-mdi-fix-source
+          path: |
+            Color-Screen.bundle
+            HEAD.sha
+          if-no-files-found: error
