@@ -30,7 +30,9 @@ struct scr_detect_parameters
      Existing real Dufay integration scans still depend on the historical
      radius 2 / amount 3 default, so retain it until the blur-tolerant
      classifier can replace this compatibility aid.  Explicit zero values
-     remain valid for benchmarking the unsharpened detector path.  */
+     remain valid for benchmarking the unsharpened detector path.  Changing
+     the default requires validation against the real Dufay integration
+     fixtures.  */
   coord_t sharpen_radius;
   luminosity_t sharpen_amount;
   /* Return true when OTHER produces the same color classification.  This is
