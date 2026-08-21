@@ -18,13 +18,13 @@ same physical subelements as red_avg(), green_avg() and blue_avg().
 
 Add a weighted_matching regression covering the unweighted baseline, explicit
 unit-support compatibility, an adversarial majority of low-support samples,
-and independent per-channel weighting where only blue is reliable.  The
-focused matcher, channel-sharpening, scanner-blur, denoising and lens-warp
-groups pass in both O2 and Ofast checking builds.  The full six-stage Dufay
-stitch fixture passes in both builds and retains its established -16,-10
-offset.
+and independent per-channel weighting where only blue is reliable.
 
-The complete unit suite passes 41 of 42 groups in both builds.  The only
-failure is the existing real-MTF fixture at SNR 29.8569 versus the threshold
-30; the same failure was reproduced on the exact pre-patch 24de87bfd6b5 base,
-and current main's intervening changes are confined to DNG lens normalization.
+Validation on the matching-equivalent main tree used during development:
+focused matching, channel-sharpening, scanner-blur, denoising and lens-warp
+groups pass in both O2 and Ofast checking builds.  The complete six-stage
+Dufay stitch fixture passes in both builds and retains its established
+-16,-10 offset.  The complete unit suite passes 41 of 42 groups; the only
+failure on that validation base is the pre-existing real-MTF SNR boundary at
+29.8569 versus 30.  Subsequent main changes are outside the overlap-matching
+implementation and are exercised again by pull-request CI.
