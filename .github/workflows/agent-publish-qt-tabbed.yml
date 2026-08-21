@@ -30,25 +30,24 @@ jobs:
           fetch-depth: 0
           path: repo
 
-      - name: Verify payload and publish source and documentation commit
+      - name: Verify payload and publish tabbed workspace commit
         shell: bash
         run: |
           set -euxo pipefail
-          cat transport/agent/qt-tabbed-source-docs.patch.xz.b64.* \
-            | tr -d '\r\n' > qt-tabbed-source-docs.patch.xz.b64
-          echo 'b11c229cf3c4c92ba10708f0610287926c4ef888cc48fc3ce6f3f7420f41c9b4  qt-tabbed-source-docs.patch.xz.b64' | sha256sum -c -
-          base64 --decode qt-tabbed-source-docs.patch.xz.b64 > qt-tabbed-source-docs.patch.xz
-          echo 'a370aaf80261c6b1280a579625f6e59597711cd697c74c4c10dd191711ff9631  qt-tabbed-source-docs.patch.xz' | sha256sum -c -
-          xz --decompress --stdout qt-tabbed-source-docs.patch.xz > qt-tabbed-source-docs.patch
-          echo 'ecc4d9259b042e735a149aa9fb6ae5e6b89daa4bba034c71ae36ae6848536775  qt-tabbed-source-docs.patch' | sha256sum -c -
+          cat transport/agent/qt-tabbed-source-docs.patch.xz.b64.* > qt-tabbed.patch.xz.b64
+          echo '4bbf85aab183c08d01c0487d7f1f98e961ceff46337fedcbb8eeec66019e85e1  qt-tabbed.patch.xz.b64' | sha256sum -c -
+          base64 --decode qt-tabbed.patch.xz.b64 > qt-tabbed.patch.xz
+          echo 'c25cb5d2b89d349688109bc2d44b07835bf37ef039430d37ce1e243545766f90  qt-tabbed.patch.xz' | sha256sum -c -
+          xz --decompress --stdout qt-tabbed.patch.xz > qt-tabbed.patch
+          echo '2bbda0e3f68a0b3f8c29b88a6a36944baa3e33f8825a970f3198dad1cecce268  qt-tabbed.patch' | sha256sum -c -
 
           cd repo
           test "$(git rev-parse HEAD)" = cda22812f2749690aab0ddf365c0ad7d6640ae85
           git checkout -B agent/qtgui-tabbed-workspace cda22812f2749690aab0ddf365c0ad7d6640ae85
           git config user.name 'OpenAI Codex'
           git config user.email 'noreply@openai.com'
-          git am --whitespace=error ../qt-tabbed-source-docs.patch
+          git am --whitespace=error ../qt-tabbed.patch
           test "$(git rev-list --count cda22812f2749690aab0ddf365c0ad7d6640ae85..HEAD)" = 1
           git diff --check cda22812f2749690aab0ddf365c0ad7d6640ae85..HEAD
-          test "$(git diff --name-only cda22812f2749690aab0ddf365c0ad7d6640ae85..HEAD | sort)" = $'.agents/qtgui.md\nNEWS\nREADME.md\nsrc/qtgui/CMakeLists.txt\nsrc/qtgui/ColorScreenApplication.cpp\nsrc/qtgui/ColorScreenApplication.h\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/MainWindow.h\nsrc/qtgui/Makefile.am\nsrc/qtgui/Makefile.in\nsrc/qtgui/WorkspaceWindow.cpp\nsrc/qtgui/WorkspaceWindow.h\nsrc/qtgui/main.cpp'
+          test "$(git diff --name-only cda22812f2749690aab0ddf365c0ad7d6640ae85..HEAD | sort)" = $'.agents/qtgui.md\nNEWS\nREADME.md\nsrc/qtgui/CMakeLists.txt\nsrc/qtgui/ColorScreenApplication.cpp\nsrc/qtgui/ColorScreenApplication.h\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/Makefile.am\nsrc/qtgui/Makefile.in\nsrc/qtgui/WorkspaceWindow.cpp\nsrc/qtgui/WorkspaceWindow.h\nsrc/qtgui/main.cpp'
           git push --force origin HEAD:refs/heads/agent/qtgui-tabbed-workspace
