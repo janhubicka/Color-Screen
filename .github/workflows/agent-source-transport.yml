@@ -16,6 +16,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Record workflow run identifier
+        shell: bash
+        run: |
+          set -euxo pipefail
+          printf '%s\n' "$GITHUB_RUN_ID" > .agent-source-transport-run-id
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -- .agent-source-transport-run-id
+          git commit -m 'ci: record source transport run [transport result] [skip ci]'
+          git push origin HEAD:agent/source-transport-20260821
       - name: Archive current main revision
         shell: bash
         run: |
@@ -41,13 +51,3 @@ jobs:
             SOURCE_COMMIT
             debs/*.deb
           if-no-files-found: error
-      - name: Record workflow run identifier
-        shell: bash
-        run: |
-          set -euxo pipefail
-          printf '%s\n' "$GITHUB_RUN_ID" > .agent-source-transport-run-id
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -- .agent-source-transport-run-id
-          git commit -m 'ci: record source transport run [transport result] [skip ci]'
-          git push origin HEAD:agent/source-transport-20260821
