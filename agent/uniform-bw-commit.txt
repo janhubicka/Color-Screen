@@ -1,0 +1,38 @@
+finetune: fit uniform BW colours independently per tile
+
+Repair the joint BW/infrared model used by multi-location finetuning.  Every
+input tile is assumed locally uniform, but the previous least-squares setup
+allocated one coefficient while reading three and then forced every tile to
+share one primary-intensity triple.  Differently coloured image regions could
+therefore not provide the intended common-focus constraint, and the coefficient
+access itself was outside the allocated GSL vector.
+
+Use a block-diagonal linear model with three consecutive coefficients for each
+input tile.  Scanner blur/defocus and the simulated historical screen remain
+shared, while every tile receives independent uniform image-layer intensities.
+Zero the reusable design matrix before filling its tile blocks, extract all
+coefficients through one checked helper, and make BW pixel evaluation consume
+the matching tile's fitted colour.
+
+Keep the established single-tile data-collection path unchanged.  Because that
+estimator pools samples rather than representing independent tiles, genuine
+joint BW fits now use least-squares variable projection unless the caller has
+explicitly disabled it, in which case direct nonlinear colour coordinates are
+also allocated per tile.  Preserve finetune_result::color as the first-tile
+compatibility field and add tile_colors for the complete ordered result.  Use
+the strongest tile contrast for the historical order-independent fit-quality
+normalization.
+
+Add a focused synthetic regression for the blur-colour ambiguity.  One colour
+is exactly compatible with both a reference and a competing transfer, and
+repeating that colour remains ambiguous.  Independent red, green and blue
+tiles reject the competing transfer, recover their own coefficients, and give
+the same result under tile permutation.  Update the solver documentation and
+tracking register to describe the repaired model and the remaining multi-tile
+result limitations.
+
+Validation before publication:
+- O2 checking build: complete unit suite and make check
+- Ofast -march=native checking build: complete unit suite
+- AddressSanitizer/UndefinedBehaviorSanitizer: focused multi-tile regression
+- git diff --check
