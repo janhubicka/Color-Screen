@@ -1,9 +1,6 @@
-name: Agent RGB sharpening transport
+name: Publish weighted overlap matching
 
 on:
-  push:
-    branches:
-      - agent/transport-rgb-sharpening-20260821
   pull_request:
     branches:
       - main
@@ -12,51 +9,6 @@ permissions:
   contents: write
 
 jobs:
-  bundle:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out exact transport revision
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Record revision and make repository bundle
-        shell: bash
-        run: |
-          set -euxo pipefail
-          git rev-parse HEAD > HEAD.sha
-          git bundle create Color-Screen.bundle --all
-          git bundle verify Color-Screen.bundle
-
-      - name: Download Debian 13 dependency closure
-        shell: bash
-        run: |
-          set -euxo pipefail
-          mkdir -p debs
-          docker run --rm \
-            -v "$PWD/debs:/out" \
-            debian:trixie-slim \
-            bash -euxo pipefail -c '
-              apt-get update
-              apt-get install -y --no-install-recommends ca-certificates
-              apt-get install -y --download-only --no-install-recommends \
-                libfftw3-dev libgsl-dev libturbojpeg0-dev liblcms2-dev \
-                libraw-dev libzip-dev libexiv2-dev
-              cp /var/cache/apt/archives/*.deb /out/
-            '
-          ls -lh debs
-
-      - name: Upload transport bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: colorscreen-rgb-agent-transport
-          path: |
-            Color-Screen.bundle
-            HEAD.sha
-            debs/*.deb
-          if-no-files-found: error
-          retention-days: 1
-
   publish-weighted-matching:
     runs-on: ubuntu-latest
     steps:
@@ -81,14 +33,20 @@ jobs:
           base64 --decode weighted-matching.patch.b64 > weighted-matching.patch
           echo '97889df09fdb654c101f964bd47081942f0c3db43c222426a1a3a30da103b9f4  weighted-matching.patch' | sha256sum -c -
 
+          cp transport/agent/weighted-paget-fix.patch.b64 .
+          echo 'cac1c807480008a083263dd09e9deb0d0507bf2701da064d32683cbb2674185e  weighted-paget-fix.patch.b64' | sha256sum -c -
+          base64 --decode weighted-paget-fix.patch.b64 > weighted-paget-fix.patch
+          echo '259e1c06927b9c1372e868efbac3f4d83eb197e3a3152aa91c22a2af605994e3  weighted-paget-fix.patch' | sha256sum -c -
+
           cd repo
           test "$(git rev-parse HEAD)" = 24de87bfd6b5e12a0238a2c8248c1715de6a5c84
           git checkout -B agent/weighted-overlap-matching 24de87bfd6b5e12a0238a2c8248c1715de6a5c84
           git apply --index --whitespace=error ../weighted-matching.patch
+          git apply --index --whitespace=error ../weighted-paget-fix.patch
           git diff --cached --check
           test "$(git diff --cached --name-only | sort)" = $'src/libcolorscreen/analyze-base.C\nsrc/libcolorscreen/unittests.C'
           git config user.name 'OpenAI Codex'
           git config user.email 'noreply@openai.com'
           git commit -F ../transport/agent/weighted-matching-commit.txt
-          git push origin HEAD:refs/heads/agent/weighted-overlap-matching
+          git push --force origin HEAD:refs/heads/agent/weighted-overlap-matching
           git rev-parse HEAD
