@@ -1,22 +1,235 @@
-name: Agent PR35 source transport
+name: Agent PR35 compatibility fix
 
 on:
   push:
     branches:
       - agent/pr35-source-transport-20260821
-  pull_request:
-    branches:
-      - main
+
+permissions:
+  contents: write
 
 jobs:
-  package-source:
+  apply-fix:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Package source tree
-        run: tar --exclude=.git -czf /tmp/colorscreen-pr35-source.tar.gz .
-      - uses: actions/upload-artifact@v4
         with:
-          name: colorscreen-pr35-source
-          path: /tmp/colorscreen-pr35-source.tar.gz
-          retention-days: 1
+          ref: agent/scr-detect-measurement
+          fetch-depth: 0
+      - name: Restore detector compatibility and correct instrumentation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one replacement, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "src/libcolorscreen/include/scr-detect-parameters.h",
+              "        sharpen_radius (0), sharpen_amount (0)",
+              "        sharpen_radius (2), sharpen_amount (3)")
+          replace_once(
+              "src/libcolorscreen/include/scr-detect-parameters.h",
+              "  /* Legacy unsharp-mask parameters used before screen-color classification.\n"
+              "     They are retained for old parameter files, but new detection defaults to\n"
+              "     no pre-classification sharpening.  Scanner sharpening now belongs to the\n"
+              "     render pipeline, where measured per-channel MTF data can be used.  */",
+              "  /* Legacy unsharp-mask parameters used before screen-color classification.\n"
+              "     Existing real Dufay integration scans still depend on the historical\n"
+              "     radius 2 / amount 3 default, so retain it until the blur-tolerant\n"
+              "     classifier can replace this compatibility aid.  Explicit zero values\n"
+              "     remain valid for benchmarking the unsharpened detector path.  */")
+
+          replace_once(
+              "src/libcolorscreen/scr-detect-geometry.C",
+              "          bool precompute_ok = render->precompute_all(PRECOMPUTE_NONE, progress);\n"
+              "          if (precompute_ok && dsparams->slow_floodfill) {\n"
+              "            stats.rgb_precomputes++;\n"
+              "            precompute_ok = render->precompute_rgbdata(progress);\n"
+              "          }",
+              "          bool precompute_ok = render->precompute_all(PRECOMPUTE_NONE, progress);\n"
+              "          if (precompute_ok && stats.legacy_preclassification_sharpening)\n"
+              "            stats.rgb_precomputes++;\n"
+              "          if (precompute_ok && dsparams->slow_floodfill) {\n"
+              "            precompute_ok = render->precompute_rgbdata(progress);\n"
+              "            if (precompute_ok\n"
+              "                && !stats.legacy_preclassification_sharpening)\n"
+              "              stats.rgb_precomputes++;\n"
+              "          }")
+
+          replace_once(
+              "src/libcolorscreen/unittests.C",
+              "/* Verify that REPORT contains a successful detector statistics record and that\n"
+              "   it reports EXPECTED_RGB_PRECOMPUTES adjusted-RGB precomputations.  */\n"
+              "bool\n"
+              "check_detection_stats (FILE *report, int expected_rgb_precomputes)\n"
+              "{\n"
+              "  rewind (report);\n"
+              "  char line[2048];\n"
+              "  char rgb_precomputes[64];\n"
+              "  snprintf (rgb_precomputes, sizeof (rgb_precomputes), \"rgb_precomputes=%i\",\n"
+              "            expected_rgb_precomputes);\n"
+              "  while (fgets (line, sizeof (line), report))\n"
+              "    if (!strncmp (line, \"detect_stats:\", strlen (\"detect_stats:\")))\n"
+              "      return strstr (line, \"result=success\")\n"
+              "             && strstr (line, rgb_precomputes)\n"
+              "             && strstr (line, \"legacy_preclassification_sharpening=0\");\n"
+              "  return false;\n"
+              "}",
+              "/* Verify that REPORT contains a successful detector statistics record and that\n"
+              "   it reports EXPECTED_RGB_PRECOMPUTES adjusted-RGB precomputations and the\n"
+              "   EXPECTED_LEGACY_SHARPENING state.  */\n"
+              "bool\n"
+              "check_detection_stats (FILE *report, int expected_rgb_precomputes,\n"
+              "                       bool expected_legacy_sharpening)\n"
+              "{\n"
+              "  rewind (report);\n"
+              "  char line[2048];\n"
+              "  char rgb_precomputes[64];\n"
+              "  char legacy_sharpening[80];\n"
+              "  snprintf (rgb_precomputes, sizeof (rgb_precomputes), \"rgb_precomputes=%i\",\n"
+              "            expected_rgb_precomputes);\n"
+              "  snprintf (legacy_sharpening, sizeof (legacy_sharpening),\n"
+              "            \"legacy_preclassification_sharpening=%i\",\n"
+              "            expected_legacy_sharpening);\n"
+              "  while (fgets (line, sizeof (line), report))\n"
+              "    if (!strncmp (line, \"detect_stats:\", strlen (\"detect_stats:\")))\n"
+              "      return strstr (line, \"result=success\")\n"
+              "             && strstr (line, rgb_precomputes)\n"
+              "             && strstr (line, legacy_sharpening);\n"
+              "  return false;\n"
+              "}")
+          replace_once(
+              "src/libcolorscreen/unittests.C",
+              "  if (dparam.sharpen_radius != 0 || dparam.sharpen_amount != 0)\n"
+              "    {\n"
+              "      fprintf (stderr, \"Screen detection unexpectedly enables legacy sharpening\\n\");\n"
+              "      return false;\n"
+              "    }",
+              "  if (dparam.sharpen_radius != 2 || dparam.sharpen_amount != 3)\n"
+              "    {\n"
+              "      fprintf (stderr,\n"
+              "               \"Screen detection compatibility sharpening default changed\\n\");\n"
+              "      return false;\n"
+              "    }")
+          replace_once(
+              "src/libcolorscreen/unittests.C",
+              "\t  dsparams.fast_floodfill = alg != 2;\n"
+              "\t  dsparams.slow_floodfill = alg != 1;\n\n"
+              "\t  /* Save some time with slow floodfill.  */",
+              "\t  dsparams.fast_floodfill = alg != 2;\n"
+              "\t  dsparams.slow_floodfill = alg != 1;\n"
+              "\t  scr_detect_parameters run_dparam = dparam;\n"
+              "\t  if (!dsparams.slow_floodfill)\n"
+              "\t    {\n"
+              "\t      run_dparam.sharpen_radius = 0;\n"
+              "\t      run_dparam.sharpen_amount = 0;\n"
+              "\t    }\n\n"
+              "\t  /* Save some time with slow floodfill.  */")
+          replace_once(
+              "src/libcolorscreen/unittests.C",
+              "\t  auto detected = detect_regular_screen (img, dparam, sparam, &dsparams,\n"
+              "\t                                         NULL, detection_report);\n"
+              "\t  bool stats_ok\n"
+              "\t      = check_detection_stats (detection_report, dsparams.slow_floodfill ? 1 : 0);",
+              "\t  auto detected = detect_regular_screen (img, run_dparam, sparam, &dsparams,\n"
+              "\t                                         NULL, detection_report);\n"
+              "\t  bool legacy_sharpening = run_dparam.sharpen_radius > 0\n"
+              "\t                           && run_dparam.sharpen_amount > 0;\n"
+              "\t  bool stats_ok = check_detection_stats (\n"
+              "\t      detection_report, legacy_sharpening ? 1 : 0, legacy_sharpening);")
+
+          doc = Path("doc/scr-detect-geometry-tracking.md")
+          text = doc.read_text()
+          start = text.index("### DG-020 — pre-classification unsharp masking is a legacy detector aid")
+          end = text.index("### DG-021 —", start)
+          dg020 = '''### DG-020 — pre-classification unsharp masking is a legacy detector aid
+
+**Severity:** high compatibility/robustness
+
+**Status:** compatibility default retained; removal blocked by DG-019
+
+The `scr_detect_parameters` radius/amount unsharp mask predates the current MTF
+model.  An attempt in PR #35 to change its historical radius 2 / amount 3
+default to zero exposed a real compatibility dependency: both existing Dufay
+CLI integration tests aborted during autodetection.  The Coolscan raw fixture
+exhausted all 36 search regions, while the Capture One stitched fixture failed
+on a later tile after earlier tiles had been detected.
+
+Keep radius 2 / amount 3 as the default for now.  Explicit zero values remain a
+supported experimental mode and are exercised by synthetic fast-only discovery.
+This is not an endorsement of unsharp masking as the long-term detector design;
+it is a regression guard until DG-009 through DG-013 make the classifier robust
+to imperfect boundaries without artificially sharpening them.
+
+Before retiring the compatibility mask again, compare the historical default
+and explicit zero values on the current CLI fixtures and the Batch 08 corpus in
+DG-019.  Any replacement must match or improve successful detection without
+increasing false positives or failure time.
+
+'''
+          text = text[:start] + dg020 + text[end:]
+          start = text.index("### DG-023 — fast-only flood fill should not precompute the slow RGB image")
+          end = text.index("## Validation corpus", start)
+          dg023 = '''### DG-023 — fast-only flood fill should not precompute the slow RGB image
+
+**Severity:** medium performance
+
+**Status:** fixed for the explicitly unsharpened path
+
+Fast flood fill itself uses only the color-class map, but the historical
+pre-classification unsharp mask needs adjusted RGB in order to build that map.
+Consequently a default radius 2 / amount 3 run legitimately performs one RGB
+precomputation even in fast-only mode.  The detector statistics now count this
+implicit precomputation rather than reporting a misleading zero.
+
+When the compatibility mask is explicitly disabled and slow image-domain
+confirmation is also disabled, adjusted RGB is not materialized.  Synthetic
+fast-only discovery exercises this zero-mask mode and requires
+`rgb_precomputes=0`.  Thus the slow-path allocation is still avoidable, while
+DG-020 accurately records the cost of the compatibility mask.
+
+'''
+          text = text[:start] + dg023 + text[end:]
+          marker = "The corpus should contain, for every available screen family:\n"
+          batch = '''The historical National Geographic failure corpus is available in Dropbox at
+`/Batch 08 error samples`.  It contains 25 problematic NGS scans, generally as
+nine original Capture One EIP tiles plus flattened outputs.  Treat the EIP tiles
+as the authoritative regression inputs.  Start manual smoke testing with
+`NGS00428/Tiles - EIP/dpa_ecp_NGS00428_Tile01.eip` and
+`NGS00899/Tiles - EIP/dpa_ecp_NGS00899_Tile01.eip`, then expand to all tiles and
+all scans.  These files are too large for routine CI, so keep the existing small
+real Dufay fixtures as CI gates and use Batch 08 for manual robustness and
+failure-time measurements.
+
+For each Batch 08 input, compare the historical 2 / 3 mask, explicit 0 / 0, and
+future blur-tolerant alternatives.  Record success/type, search regions, seed
+pixels, initial grids, final failure stage, patch count, coverage, and stage
+wall times from DG-014.
+
+'''
+          if marker not in text:
+              raise SystemExit("tracking doc: validation marker missing")
+          text = text.replace(marker, batch + marker, 1)
+          doc.write_text(text)
+          PY
+          git diff --check
+          git diff --stat
+      - name: Commit fix to PR branch
+        shell: bash
+        run: |
+          git config user.name "OpenAI"
+          git config user.email "noreply@openai.com"
+          git add src/libcolorscreen/include/scr-detect-parameters.h \
+                  src/libcolorscreen/scr-detect-geometry.C \
+                  src/libcolorscreen/unittests.C \
+                  doc/scr-detect-geometry-tracking.md
+          git commit -m "detect: restore compatibility sharpening default" \
+            -m "Restore the historical radius 2 / amount 3 pre-classification mask after the real Dufay integration fixtures demonstrated that zeroing the default still breaks autodetection. Keep explicit zero values available for the fast-only experiment. Count RGB precomputation accurately when the compatibility mask causes precompute_all to materialize adjusted pixels, and make the synthetic statistics check cover both the default and explicitly unsharpened paths. Record the Batch 08 EIP corpus and the compatibility dependency in the geometry tracking register."
+          git push origin HEAD:agent/scr-detect-measurement
