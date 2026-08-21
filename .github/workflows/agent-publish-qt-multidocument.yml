@@ -1,0 +1,51 @@
+name: Agent publish Qt multi-document
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/agent-publish-qt-multidocument.yml
+      - agent/qt.patch.xz.b64.*
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'agent/transport-qt-multidocument-20260821'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out transport payload
+        uses: actions/checkout@v4
+        with:
+          path: transport
+
+      - name: Check out exact tested base
+        uses: actions/checkout@v4
+        with:
+          ref: 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84
+          fetch-depth: 0
+          path: repo
+
+      - name: Verify payload and publish review branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat transport/agent/qt.patch.xz.b64.* > qt.patch.xz.b64
+          echo 'dce9c704d55a21e4cf8753854b77e6d45ad6c7fac0d1652e2296183f62163ad4  qt.patch.xz.b64' | sha256sum -c -
+          base64 --decode qt.patch.xz.b64 > qt.patch.xz
+          echo '64b34cf0c82eeb46ed0a80a7d994108288163cd2c96b9a3612b3d3517ce4f26d  qt.patch.xz' | sha256sum -c -
+          xz --decompress --stdout qt.patch.xz > qt-multidocument.patch
+          echo '062523e6a4c500941fde4fe922efe1beec1835f5654974d144b60f4b31d6ec8d  qt-multidocument.patch' | sha256sum -c -
+
+          cd repo
+          test "$(git rev-parse HEAD)" = 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84
+          git checkout -B agent/qtgui-multi-document 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84
+          git am --whitespace=error ../qt-multidocument.patch
+          test "$(git rev-list --count 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84..HEAD)" = 2
+          git diff --check 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84..HEAD
+          test "$(git diff --name-only 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84..HEAD | sort)" = $'.agents/qtgui.md\n.github/workflows/build-macos.yml\n.github/workflows/build-ubuntu.yml\n.github/workflows/build-windows-clang.yml\n.github/workflows/build-windows.yml\nNEWS\nREADME.md\nsrc/qtgui/CMakeLists.txt\nsrc/qtgui/ColorScreenApplication.cpp\nsrc/qtgui/ColorScreenApplication.h\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/MainWindow.h\nsrc/qtgui/Makefile.am\nsrc/qtgui/Makefile.in\nsrc/qtgui/main.cpp'
+          git push --force-with-lease origin HEAD:refs/heads/agent/qtgui-multi-document
