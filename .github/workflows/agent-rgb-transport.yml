@@ -15,7 +15,7 @@ concurrency:
 jobs:
   publish-weighted-matching:
     if: github.head_ref == 'agent/transport-rgb-sharpening-20260821'
-    runs-on: ubuntu-24.04-arm
+    runs-on: macos-latest
     steps:
       - name: Check out exact transport payload
         uses: actions/checkout@v4
@@ -34,16 +34,34 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          cat transport/agent/weighted-matching.patch.b64.* \
-            | tr -d '\r\n' \
-            | base64 --decode > weighted-matching.patch
-          echo '97889df09fdb654c101f964bd47081942f0c3db43c222426a1a3a30da103b9f4  weighted-matching.patch' \
-            | sha256sum -c -
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          from pathlib import Path
 
-          tr -d '\r\n' < transport/agent/weighted-paget-fix.patch.b64 \
-            | base64 --decode > weighted-paget-fix.patch
-          echo '259e1c06927b9c1372e868efbac3f4d83eb197e3a3152aa91c22a2af605994e3  weighted-paget-fix.patch' \
-            | sha256sum -c -
+          def decode(parts, output, expected):
+              encoded = ''.join(
+                  ''.join(path.read_text().split()) for path in parts
+              )
+              data = base64.b64decode(encoded, validate=True)
+              actual = hashlib.sha256(data).hexdigest()
+              if actual != expected:
+                  raise SystemExit(
+                      f'{output}: SHA-256 {actual}, expected {expected}'
+                  )
+              Path(output).write_bytes(data)
+
+          decode(
+              sorted(Path('transport/agent').glob('weighted-matching.patch.b64.*')),
+              'weighted-matching.patch',
+              '97889df09fdb654c101f964bd47081942f0c3db43c222426a1a3a30da103b9f4',
+          )
+          decode(
+              [Path('transport/agent/weighted-paget-fix.patch.b64')],
+              'weighted-paget-fix.patch',
+              '259e1c06927b9c1372e868efbac3f4d83eb197e3a3152aa91c22a2af605994e3',
+          )
+          PY
 
           cd repo
           test "$(git rev-parse HEAD)" = 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84
