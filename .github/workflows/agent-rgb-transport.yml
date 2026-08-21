@@ -40,10 +40,12 @@ jobs:
           from pathlib import Path
 
           def decode(parts, output, expected):
-              encoded = ''.join(
-                  ''.join(path.read_text().split()) for path in parts
+              data = b''.join(
+                  base64.b64decode(
+                      ''.join(path.read_text().split()), validate=True
+                  )
+                  for path in parts
               )
-              data = base64.b64decode(encoded, validate=True)
               actual = hashlib.sha256(data).hexdigest()
               if actual != expected:
                   raise SystemExit(
