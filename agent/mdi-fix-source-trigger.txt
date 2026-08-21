@@ -1,0 +1,1 @@
+Export current main source bundle for local Qt MDI regression testing.
