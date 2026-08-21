@@ -44,6 +44,8 @@ jobs:
           cd repo
           test "$(git rev-parse HEAD)" = 878d96176f03ac8ddffdb072e120868b0c909c67
           git checkout -B agent/qtgui-multi-document 878d96176f03ac8ddffdb072e120868b0c909c67
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
           git am --whitespace=error ../qt-multidocument.patch
           test "$(git rev-list --count 878d96176f03ac8ddffdb072e120868b0c909c67..HEAD)" = 2
           git diff --check 878d96176f03ac8ddffdb072e120868b0c909c67..HEAD
