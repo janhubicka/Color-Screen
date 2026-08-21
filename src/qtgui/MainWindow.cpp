@@ -1606,14 +1606,15 @@ void MainWindow::onModeChanged(int index) {
   }
 }
 
-/** Create all document-window menus: File, Edit, View, Window, and
-   Registration.
+/** Create all document-window menus in conventional application order:
+   File, Edit, View, Registration, Window, Help.
    File menu: multi-image Open, Save, Render, Close, and application Exit.
    Edit menu: this document's Undo/Redo stack.
    View menu: Zoom controls, rotation, mirror, fullscreen, gamut warning.
-   Window menu: create, cycle, and activate independent image documents.
    Registration menu: Point selection, deletion, pruning, geometry
    optimization, coordinate lock/optimize, auto-optimize toggle.
+   Window menu: create, arrange, cycle, and activate image documents.
+   Help menu: application and Qt version information.
    Also sets up the ExploreMode zoom shortcut management that disables
    global zoom shortcuts while ExploreMode is active to allow continuous
    hold-to-zoom.  */
@@ -1788,13 +1789,6 @@ void MainWindow::createMenus() {
   connect(m_fullscreenAction, &QAction::triggered, this,
           &MainWindow::toggleFullscreen);
 
-  // Window Menu.  Its document list is rebuilt immediately before display so
-  // every MainWindow sees windows opened or closed from another document.
-  m_windowMenu = menuBar()->addMenu("&Window");
-  connect(m_windowMenu, &QMenu::aboutToShow, this,
-          &MainWindow::refreshWindowMenu);
-  refreshWindowMenu();
-
   // Registration Menu
   m_registrationMenu = menuBar()->addMenu("&Registration");
 
@@ -1883,6 +1877,31 @@ void MainWindow::createMenus() {
   m_optimizeCoordinatesAction->setToolTip("Optimize Coordinates");
   connect(m_optimizeCoordinatesAction, &QAction::triggered, this,
           &MainWindow::onOptimizeCoordinates);
+
+  // Window comes after document-specific editing menus and immediately before
+  // Help, matching the conventional desktop-application menu order.  Its
+  // document list is rebuilt immediately before display so every MainWindow
+  // sees images opened or closed from another document.
+  m_windowMenu = menuBar()->addMenu("&Window");
+  connect(m_windowMenu, &QMenu::aboutToShow, this,
+          &MainWindow::refreshWindowMenu);
+  refreshWindowMenu();
+
+  // Help is application-wide presentation even though the actions live on the
+  // document while it is detached.  WorkspaceWindow surfaces the active
+  // document's menu actions without changing their ownership.
+  m_helpMenu = menuBar()->addMenu("&Help");
+  QAction *aboutAction = m_helpMenu->addAction(tr("&About Color-Screen"));
+  connect(aboutAction, &QAction::triggered, this, [this]() {
+    QMessageBox::about(
+        QApplication::activeWindow(), tr("About Color-Screen"),
+        tr("<b>Color-Screen %1</b><br><br>"
+           "Open-source software for digital reconstruction and analysis of "
+           "early color photographic processes.")
+            .arg(QApplication::applicationVersion()));
+  });
+  QAction *aboutQtAction = m_helpMenu->addAction(tr("About &Qt"));
+  connect(aboutQtAction, &QAction::triggered, qApp, &QApplication::aboutQt);
 
   // Dynamically manage zoom shortcuts for ExploreMode to allow continuous
   // hold-to-zoom
