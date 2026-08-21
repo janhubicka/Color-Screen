@@ -24,7 +24,7 @@ the remaining calibration/evaluation work is still intentionally open.
 | DN-015 | Resolved | Medium | Split reconstruction-domain denoising into independent `screen_denoise` (before demosaicing) and `demosaiced_denoise` (after materialized Paget/Dufay demosaicing) parameters and GUI sections, with complete project-file persistence. |
 | DN-021 | Resolved | High | Post-demosaic bilateral/NLM uses a common RGB-vector distance and applies one neighbour weight to all channels; reference and fast vector NLM are regression-tested. |
 | DN-016 | Open | Medium | Build a quality corpus with edges, texture, Dufay/Paget geometry, RGB-vector chromaticity, confidence variation, and real scan crops. |
-| DN-017 | Open | Medium | Decide whether filtering is best in linear intensity, density/log, or variance-stabilized domain for scanner/film noise. |
+| DN-017 | Partial | Medium | A read-only domain comparison now runs the same three-scale diagnostic in linear intensity, density/log, and a generalized square-root variance-stabilized domain derived from the spacing-1 floor+slope model. Synthetic regressions verify the expected multiplicative-noise and signal-dependent-noise cases; real-scan comparison remains diagnostic and no filtering domain is selected automatically. |
 | DN-018 | Open | Low | Precompute bilateral spatial weights and profile before optimizing the brute-force bilateral implementation. |
 | DN-019 | Open | Low | Rework the fast NLM integral image to use an explicit `(w+1)*(h+1)` zero border; current indexing is correct under validated radii but unnecessarily subtle. |
 | DN-020 | Open | Low | Consider exposing command-line denoise controls once algorithm semantics are stable; currently settings are GUI/project-file oriented. |
@@ -51,10 +51,10 @@ therefore a diagnostic of structure/noise mixing, not a calibration parameter.
 
 ## Recommended next implementation order
 
-1. Use the same multi-scale diagnostics to compare linear intensity with
-   density/log or a variance-stabilized domain (DN-017).  Prefer a domain only
-   if it improves scale invariance and cross-channel consistency on both real
-   scans rather than merely improving one fitted coefficient.
+1. Run the DN-017 domain comparison on the real Hurley/Paget and Dufay
+   scans.  Prefer a domain only if it improves scale invariance and
+   cross-channel consistency on both scans rather than merely improving one
+   fitted coefficient.
 2. Revisit automatic DN-013 coefficient estimation only if one domain gives
    stable scale behaviour; otherwise keep the explicit variance model opt-in.
 3. Add IR-guided similarity for registered RGB+IR scans and compare it with
