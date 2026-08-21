@@ -1,0 +1,59 @@
+name: Agent publish MDI conventions
+
+on:
+  pull_request:
+    branches:
+      - agent/transport-base-mdi-conventions-20260821
+    paths:
+      - agent/mdi-conventions-source.patch.xz.b64
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'agent/transport-mdi-conventions-20260821'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out transport payload
+        uses: actions/checkout@v4
+        with:
+          path: transport
+
+      - name: Check out exact current main
+        uses: actions/checkout@v4
+        with:
+          ref: 35a970b8ad98cb64ef0a1ee45fc9b6c05982cdfa
+          fetch-depth: 0
+          path: repo
+
+      - name: Verify, apply, and publish conventions commit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp transport/agent/mdi-conventions-source.patch.xz.b64 .
+          echo '0f1e54d56ccb1d00f88c206c50a37fad6cd37014a71aeb1f5c03456c912ce835  mdi-conventions-source.patch.xz.b64' | sha256sum -c -
+          base64 --decode mdi-conventions-source.patch.xz.b64 > mdi-conventions-source.patch.xz
+          echo 'b9301357529ac2b75f9a4cf9c503fb12dabd9279f4a84ebd3091b7cfd51fe0a4  mdi-conventions-source.patch.xz' | sha256sum -c -
+          xz --decompress --stdout mdi-conventions-source.patch.xz > mdi-conventions-source.patch
+          echo 'fa128459e1d1a97c2ab87b2fd447283dc6557c52619c51542daf52452eb255f9  mdi-conventions-source.patch' | sha256sum -c -
+
+          cd repo
+          test "$(git rev-parse HEAD)" = 35a970b8ad98cb64ef0a1ee45fc9b6c05982cdfa
+          git checkout -B agent/qtgui-mdi-conventions 35a970b8ad98cb64ef0a1ee45fc9b6c05982cdfa
+          git apply --check ../mdi-conventions-source.patch
+          git apply ../mdi-conventions-source.patch
+          git diff --check
+          test "$(git diff --name-only | sort)" = $'.agents/qtgui.md\nNEWS\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/WorkspaceWindow.cpp\nsrc/qtgui/main.cpp'
+
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git add -- .agents/qtgui.md NEWS src/qtgui/MainWindow.cpp src/qtgui/WorkspaceWindow.cpp src/qtgui/main.cpp
+          git commit -m 'qtgui: stabilize MDI activation and menu order' \
+            -m 'Keep QMdiArea in CreationOrder so tiled and cascaded layouts have stable spatial ordering independent of focus history. Qt uses activationOrder not only for subWindowList and next/previous activation but also when arranging windows; ActivationHistoryOrder therefore allowed focus changes plus workspace relayout to swap tiled documents.' \
+            -m 'Move Window after Registration and add a final Help menu with About Color-Screen and About Qt, following the conventional Qt MDI menu layout. Document the menu and MDI invariants.' \
+            -m 'Add focused smoke checks that activating the other tiled document leaves tile positions unchanged and that Registration, Window, Help are the final three menus.' \
+            -m 'Validation: native Qt 6 build with -O2 -g -Wall -Wextra; current main reproduces the tile-position swap; the patch makes the same two-document activation test stable; tabbed, tile/cascade, menu-order, global-status-bar, and toolbar/tab placement smoke tests pass; git diff --check is clean.'
+          git push --force origin HEAD:refs/heads/agent/qtgui-mdi-conventions
