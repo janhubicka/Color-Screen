@@ -58,7 +58,6 @@ jobs:
           retention-days: 1
 
   publish-weighted-matching:
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Check out transport payload
