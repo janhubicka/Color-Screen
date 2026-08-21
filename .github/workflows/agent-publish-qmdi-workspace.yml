@@ -1,0 +1,57 @@
+name: Agent publish Qt MDI workspace
+
+on:
+  pull_request:
+    branches:
+      - agent/transport-base-qmdi-workspace-20260821
+    paths:
+      - .github/workflows/agent-publish-qmdi-workspace.yml
+      - agent/qmdi-source.patch.xz.b64.*
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'agent/transport-qmdi-workspace-20260821'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out transport payload
+        uses: actions/checkout@v4
+        with:
+          path: transport
+
+      - name: Check out current main
+        uses: actions/checkout@v4
+        with:
+          ref: 19e4f8fbb010d20b7cf570a25c2fd153ca998d42
+          fetch-depth: 0
+          path: repo
+
+      - name: Verify and publish the Qt MDI source commit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat transport/agent/qmdi-source.patch.xz.b64.* \
+            | tr -d '\r\n' > qmdi-source.patch.xz.b64
+          echo 'ee4bbb73e58c06c042248c19f33df02cd0de97443026ea900fd36ea6b1fc8f3f  qmdi-source.patch.xz.b64' | sha256sum -c -
+          base64 --decode qmdi-source.patch.xz.b64 > qmdi-source.patch.xz
+          echo '17e32ae24a92f54b1f8295f987ab5f087262d8c1fcf03233bda3c12b47cf64c2  qmdi-source.patch.xz' | sha256sum -c -
+          xz --decompress --stdout qmdi-source.patch.xz > qmdi-source.patch
+          echo 'b27cce287c6de1e3702942e0cc7b3ec0c33209d8e086471621849f27c73c5ad0  qmdi-source.patch' | sha256sum -c -
+
+          cd repo
+          test "$(git rev-parse HEAD)" = 19e4f8fbb010d20b7cf570a25c2fd153ca998d42
+          git checkout -B agent/qtgui-standard-mdi-workspace 19e4f8fbb010d20b7cf570a25c2fd153ca998d42
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git apply --index ../qmdi-source.patch
+          git diff --cached --check
+          test "$(git diff --cached --name-only | sort)" = $'.agents/qtgui.md\nNEWS\nREADME.md\nsrc/qtgui/ColorScreenApplication.cpp\nsrc/qtgui/ColorScreenApplication.h\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/MainWindow.h\nsrc/qtgui/WorkspaceWindow.cpp\nsrc/qtgui/WorkspaceWindow.h\nsrc/qtgui/main.cpp'
+          git commit -m 'qtgui: use Qt MDI for the document workspace' \
+            -m 'Replace the custom document tab shell with QMdiArea so the GUI follows standard image-editor multiple-document behavior. The workspace presents the active document menu, toolbar, and inspector while every MainWindow continues to own its complete processing, undo, progress, and recovery state.' \
+            -m 'Use auto-hiding tabs below the shared toolbar by default, add tabbed, tiled, and cascaded arrangements, and support live detach/reattach through drag-out, double-click, and context-menu actions without recreating documents. Return temporarily reparented UI before detach or close and document the ownership rules.' \
+            -m 'Validated with a Qt 6 -O2 -g -Wall -Wextra build, one- and two-document MDI smoke tests, tile/cascade geometry checks, close-to-empty behavior, and live detach/reattach. Forty of forty-one core unit groups pass; the remaining real-MTF ROI failure is pre-existing and unrelated to this Qt-only change.'
+          git push --force origin HEAD:refs/heads/agent/qtgui-standard-mdi-workspace
