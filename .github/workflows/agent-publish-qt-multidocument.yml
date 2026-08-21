@@ -3,7 +3,7 @@ name: Agent publish Qt multi-document
 on:
   pull_request:
     branches:
-      - main
+      - agent/transport-base-qt-multidocument
     paths:
       - .github/workflows/agent-publish-qt-multidocument.yml
       - agent/qt.patch.xz.b64.*
