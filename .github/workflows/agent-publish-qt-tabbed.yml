@@ -23,10 +23,10 @@ jobs:
         with:
           path: transport
 
-      - name: Check out exact merged multi-document base
+      - name: Check out current main
         uses: actions/checkout@v4
         with:
-          ref: d62b01339d20ffdb5f9658f6c372aac8fe410068
+          ref: cda22812f2749690aab0ddf365c0ad7d6640ae85
           fetch-depth: 0
           path: repo
 
@@ -42,12 +42,12 @@ jobs:
           echo 'ecc4d9259b042e735a149aa9fb6ae5e6b89daa4bba034c71ae36ae6848536775  qt-tabbed-source-docs.patch' | sha256sum -c -
 
           cd repo
-          test "$(git rev-parse HEAD)" = d62b01339d20ffdb5f9658f6c372aac8fe410068
-          git checkout -B agent/qtgui-tabbed-documents d62b01339d20ffdb5f9658f6c372aac8fe410068
+          test "$(git rev-parse HEAD)" = cda22812f2749690aab0ddf365c0ad7d6640ae85
+          git checkout -B agent/qtgui-tabbed-workspace cda22812f2749690aab0ddf365c0ad7d6640ae85
           git config user.name 'OpenAI Codex'
           git config user.email 'noreply@openai.com'
           git am --whitespace=error ../qt-tabbed-source-docs.patch
-          test "$(git rev-list --count d62b01339d20ffdb5f9658f6c372aac8fe410068..HEAD)" = 1
-          git diff --check d62b01339d20ffdb5f9658f6c372aac8fe410068..HEAD
-          test "$(git diff --name-only d62b01339d20ffdb5f9658f6c372aac8fe410068..HEAD | sort)" = $'.agents/qtgui.md\nNEWS\nREADME.md\nsrc/qtgui/CMakeLists.txt\nsrc/qtgui/ColorScreenApplication.cpp\nsrc/qtgui/ColorScreenApplication.h\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/MainWindow.h\nsrc/qtgui/Makefile.am\nsrc/qtgui/Makefile.in\nsrc/qtgui/WorkspaceWindow.cpp\nsrc/qtgui/WorkspaceWindow.h\nsrc/qtgui/main.cpp'
-          git push --force origin HEAD:refs/heads/agent/qtgui-tabbed-documents
+          test "$(git rev-list --count cda22812f2749690aab0ddf365c0ad7d6640ae85..HEAD)" = 1
+          git diff --check cda22812f2749690aab0ddf365c0ad7d6640ae85..HEAD
+          test "$(git diff --name-only cda22812f2749690aab0ddf365c0ad7d6640ae85..HEAD | sort)" = $'.agents/qtgui.md\nNEWS\nREADME.md\nsrc/qtgui/CMakeLists.txt\nsrc/qtgui/ColorScreenApplication.cpp\nsrc/qtgui/ColorScreenApplication.h\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/MainWindow.h\nsrc/qtgui/Makefile.am\nsrc/qtgui/Makefile.in\nsrc/qtgui/WorkspaceWindow.cpp\nsrc/qtgui/WorkspaceWindow.h\nsrc/qtgui/main.cpp'
+          git push --force origin HEAD:refs/heads/agent/qtgui-tabbed-workspace
