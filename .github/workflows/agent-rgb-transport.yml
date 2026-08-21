@@ -1,0 +1,55 @@
+name: Agent RGB sharpening transport
+
+on:
+  push:
+    branches:
+      - agent/transport-rgb-sharpening-20260821
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact transport revision
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Record revision and make repository bundle
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git rev-parse HEAD > HEAD.sha
+          git bundle create Color-Screen.bundle --all
+          git bundle verify Color-Screen.bundle
+
+      - name: Download Debian 13 dependency closure
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p debs
+          docker run --rm \
+            -v "$PWD/debs:/out" \
+            debian:trixie-slim \
+            bash -euxo pipefail -c '
+              apt-get update
+              apt-get install -y --no-install-recommends ca-certificates
+              apt-get install -y --download-only --no-install-recommends \
+                libfftw3-dev libgsl-dev libturbojpeg0-dev liblcms2-dev \
+                libraw-dev libzip-dev libexiv2-dev
+              cp /var/cache/apt/archives/*.deb /out/
+            '
+          ls -lh debs
+
+      - name: Upload transport bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-rgb-agent-transport
+          path: |
+            Color-Screen.bundle
+            HEAD.sha
+            debs/*.deb
+          if-no-files-found: error
+          retention-days: 1
