@@ -4,13 +4,16 @@ on:
   push:
     branches:
       - agent/geometry-transport-20260821
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
   publish:
-    if: ${{ !contains(github.event.head_commit.message, '[publish result]') }}
+    if: ${{ github.event_name == 'pull_request' || !contains(github.event.head_commit.message, '[publish result]') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -18,6 +21,7 @@ jobs:
           fetch-depth: 0
 
       - name: Record workflow run
+        if: ${{ github.event_name == 'push' }}
         shell: bash
         run: |
           set -euxo pipefail
