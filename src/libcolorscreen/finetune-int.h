@@ -40,8 +40,8 @@ finetune_apply_uniform_image_layer (screen &dst, const screen &source,
                          weight.mult[y][x][2] };
         else
           membership = weight.interpolated_mult (
-              { x * ((coord_t)1 / (coord_t)screen::size),
-                y * ((coord_t)1 / (coord_t)screen::size) }
+              point_t { x * ((coord_t)1 / (coord_t)screen::size),
+                        y * ((coord_t)1 / (coord_t)screen::size) }
               + offset);
         const luminosity_t transmission
             = membership.red * intensities.red
