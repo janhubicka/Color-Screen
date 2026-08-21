@@ -7,41 +7,19 @@
 #include "render-to-scr.h"
 #include "bitmap.h"
 #include "gsl-utils.h"
-#include "sharpen.h"
 #include "nmsimplex.h"
 namespace colorscreen
 {
 namespace {
 
-/* Helper for sharpening part of the scan.  */
-struct imgtile
-{
-  const luminosity_t *lookup_table[3];
-  int xstart, ystart;
-  const image_data *img;
-};
-
-static rgbdata
-get_pixel (struct imgtile *sec, int_point_t pt, int, int)
-{
-  rgbdata ret = {0,0,0};
-  pt.x += sec->xstart;
-  pt.y += sec->ystart;
-  if (pt.x < 0 || pt.y < 0 || pt.x >= sec->img->width || pt.y >= sec->img->height)
-    return ret;
-  image_data::pixel p_pixel = sec->img->get_rgb_pixel (pt.x, pt.y);
-  ret.red = sec->lookup_table[0] [p_pixel.r];
-  ret.green = sec->lookup_table[1] [p_pixel.g];
-  ret.blue = sec->lookup_table[2] [p_pixel.b];
-  return ret;
-}
-
+/* One candidate pixel used while selecting representative screen colors.  */
 struct entry {
 	rgbdata sharpened_color;
 	rgbdata orig_color;
 	luminosity_t priority;
 };
 
+/* Sort candidate entries E1 and E2 by descending priority.  */
 bool
 compare_priorities(struct entry &e1, struct entry &e2)
 {
@@ -154,39 +132,26 @@ optimize_screen_colors (scr_detect_parameters *param, const image_data *img,
                         luminosity_t gamma, int_image_area area,
                         progress_info *progress, FILE *report)
 {
-  const double sharpen_amount = 0;
-  const double sharpen_radius = 3;
-  int clen = fir_blur::convolve_matrix_length (sharpen_radius);
-  mem_rgbdata *sharpened = (mem_rgbdata *)malloc (
-      (area.width + clen) * (area.height + clen) * sizeof (mem_rgbdata));
-  if (!sharpened)
-    return false;
   std::shared_ptr<float[]> lookup_table[3];
   if (!render::get_lookup_tables (lookup_table, gamma, img, progress))
     return false;
-  struct imgtile section = { { lookup_table[0].get (), lookup_table[1].get (),
-                               lookup_table[2].get () },
-                             area.x - clen / 2,
-                             area.y - clen / 2,
-                             img };
-  sharpen<rgbdata, mem_rgbdata, imgtile *, int, &get_pixel> (
-      sharpened, &section, 0, area.width + clen, area.height + clen,
-      sharpen_radius, sharpen_amount, progress);
   std::vector<entry> pixels;
+  pixels.reserve ((size_t)area.width * area.height);
   for (int yy = area.y; yy < area.y + area.height; yy++)
     for (int xx = area.x; xx < area.x + area.width; xx++)
       {
+        image_data::pixel pixel = img->get_rgb_pixel (xx, yy);
         struct entry e;
-        e.orig_color
-            = get_pixel (&section, { xx - area.x + clen / 2, yy - area.y + clen / 2 },
-                         0, 0);
-        e.sharpened_color = sharpened[(yy - area.y + clen / 2) * (area.width + clen)
-                                      + xx - area.x + clen / 2];
+        e.orig_color = { lookup_table[0][pixel.r], lookup_table[1][pixel.g],
+                         lookup_table[2][pixel.b] };
+        /* This code historically ran an unsharp mask with amount zero here.
+           Its output is exactly the linearized input, so avoid allocating and
+           copying a second image-sized RGB buffer.  */
+        e.sharpened_color = e.orig_color;
         e.priority = 3
                      - (e.orig_color.red + e.orig_color.green + e.orig_color.blue);
         pixels.push_back (e);
       }
-  free (sharpened);
 
   sort (pixels.begin (), pixels.end (), compare_priorities);
   int pos = pixels.size () / 2;

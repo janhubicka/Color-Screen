@@ -1462,11 +1462,50 @@ test_homography (bool lens_correction, bool joly, coord_t epsilon)
   return ok;
 }
 
+/* Verify that REPORT contains a successful detector statistics record and that
+   it reports EXPECTED_RGB_PRECOMPUTES adjusted-RGB precomputations.  */
+bool
+check_detection_stats (FILE *report, int expected_rgb_precomputes)
+{
+  rewind (report);
+  char line[2048];
+  char rgb_precomputes[64];
+  snprintf (rgb_precomputes, sizeof (rgb_precomputes), "rgb_precomputes=%i",
+            expected_rgb_precomputes);
+  while (fgets (line, sizeof (line), report))
+    if (!strncmp (line, "detect_stats:", strlen ("detect_stats:")))
+      return strstr (line, "result=success")
+             && strstr (line, rgb_precomputes)
+             && strstr (line, "legacy_preclassification_sharpening=0");
+  return false;
+}
+
+/* Render and rediscover screen geometry PARAM in a WIDTH by HEIGHT synthetic
+   image and compare the detected transform with EPSILON tolerance.  */
 bool
 do_test_discovery (scr_to_img_parameters &param, int width, int height, coord_t epsilon)
 {
   image_data img;
   scr_detect_parameters dparam;
+  if (dparam.sharpen_radius != 0 || dparam.sharpen_amount != 0)
+    {
+      fprintf (stderr, "Screen detection unexpectedly enables legacy sharpening\n");
+      return false;
+    }
+  scr_detect_parameters changed_dparam = dparam;
+  changed_dparam.min_ratio += (luminosity_t)0.25;
+  if (changed_dparam == dparam)
+    {
+      fprintf (stderr, "Screen detection cache key ignores min_ratio\n");
+      return false;
+    }
+  changed_dparam = dparam;
+  changed_dparam.min_luminosity += (luminosity_t)0.01;
+  if (changed_dparam == dparam)
+    {
+      fprintf (stderr, "Screen detection cache key ignores min_luminosity\n");
+      return false;
+    }
   render_parameters rparam;
   rparam.gamma = 1.0;
   rparam.screen_blur_radius = 1;
@@ -1497,8 +1536,19 @@ do_test_discovery (scr_to_img_parameters &param, int width, int height, coord_t 
 	  if (m)
 	    sparam.optimize_lens = sparam.optimize_tilt = false;
 	  printf ("Mesh: %i, fast floodfill %i slow floodfill %i\n", dsparams.do_mesh, dsparams.fast_floodfill, dsparams.slow_floodfill);
-	  auto detected
-	      = detect_regular_screen (img, dparam, sparam, &dsparams, NULL, NULL);
+	  FILE *detection_report = tmpfile ();
+	  if (!detection_report)
+	    return false;
+	  auto detected = detect_regular_screen (img, dparam, sparam, &dsparams,
+	                                         NULL, detection_report);
+	  bool stats_ok
+	      = check_detection_stats (detection_report, dsparams.slow_floodfill ? 1 : 0);
+	  fclose (detection_report);
+	  if (!stats_ok)
+	    {
+	      fprintf (stderr, "Screen detection statistics are incomplete\n");
+	      return false;
+	    }
 	  if (!detected.success)
 	    {
 	      printf ("Screen discovery failed; saving screen to out.tif\n");
@@ -1530,6 +1580,7 @@ report (const char *name, bool ok)
     error_found = true;
   fflush (stdout);
 }
+/* Exercise synthetic Finlay and Dufay discovery with EPSILON tolerance.  */
 bool
 test_discovery (coord_t epsilon)
 {

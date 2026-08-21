@@ -123,7 +123,7 @@ std::unique_ptr<color_class_map> get_color_class_map(color_class_params &p, prog
 /* Cache for color class maps.  */
 static color_class_cache_t color_class_cache ("color tables");
 
-/* Helper for sharpening.
+/* Helper for the legacy pre-classification unsharp mask.
    R specifies the renderer.
    P specifies the point.  */
 rgbdata
@@ -146,6 +146,8 @@ get_precomputed_rgbdata(precomputed_rgbdata_params &p, progress_info *progress)
     {
       return nullptr;
     }
+  /* This unsharp mask predates measured scanner MTF sharpening and is kept
+     only for compatibility with old screen-detection parameter files.  */
   if (p.p.sharpen_radius > 0 && p.p.sharpen_amount > 0)
     ok = sharpen<rgbdata, render_scr_detect::my_mem_rgbdata, render_scr_detect &,int, getdata_helper> (my_precomputed_rgbdata->m_data, *p.r, 0, p.img->width, p.img->height, p.p.sharpen_radius, p.p.sharpen_amount, progress);
   else
@@ -419,7 +421,7 @@ render_scr_detect::precompute_all (int flags, progress_info *progress)
 {
   if (!m_scr_detect.set_parameters (m_scr_detect.m_param, m_params.gamma, &m_img, progress))
     return false;
-  if (m_scr_detect.m_param.sharpen_radius > 0 || m_scr_detect.m_param.sharpen_amount > 0)
+  if (m_scr_detect.m_param.sharpen_radius > 0 && m_scr_detect.m_param.sharpen_amount > 0)
     {
       if (!precompute_rgbdata (progress))
 	return false;

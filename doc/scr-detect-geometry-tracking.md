@@ -16,9 +16,10 @@ The long-term goals are:
 4. make every robustness or performance change measurable without increasing
    false-positive detections.
 
-The first review deliberately changes no detection thresholds and introduces no
-new heuristic.  It fixes only local defects whose intended behavior follows
-from the existing geometry and records larger algorithmic work here.
+The first reviews deliberately introduce no blur-tolerance heuristic.  They fix
+local defects whose intended behavior follows from the existing geometry, add
+measurement hooks, and remove obsolete work that does not change detector
+output.
 
 Status values are:
 
@@ -206,26 +207,28 @@ mandatory safeguards.
 
 ## Failure-time and performance work
 
-### DG-014 — failure stages have no structured counters or timings
+### DG-014 — failure stages need structured counters and timings
 
 **Severity:** high
 
-**Status:** measurement prerequisite
+**Status:** fixed baseline instrumentation
 
-Reports currently contain prose but no stable failure reason or stage timing.
-Add optional counters for:
+When a report file is supplied, regular-screen detection now emits two stable
+summary records.  `detect_stats:` records the final result, detected type, search
+regions and seed pixels examined, completed initial grids, initial-solver
+failures, flood-fill attempts and failures, patch count, last flood rejection
+reason, color-optimization/precompute failures, class-map builds, RGB
+precomputations, and whether the legacy pre-classification unsharp mask was
+active.  `detect_stats_ms:` records wall time spent in color optimization,
+precomputation, class-map construction, initial solvers, flood fill, final
+solver, mesh solver, and the complete detection.
 
-- color optimization and render precomputation;
-- full-image classification;
-- starting components inspected per screen type;
-- initial grids completed;
-- linear-solver rejections;
-- flood-fill patches visited and rejection reason;
-- coverage, unknown-area, border, and final-solver rejection; and
-- elapsed wall and CPU time for each stage.
-
-Instrumentation must be inactive or negligible in normal builds and should use
-stable identifiers suitable for tests and benchmark summaries.
+Flood fill supplies stable rejection identifiers for invalid screen scale,
+flipped Dufay-like geometry, mapping failures, too few patches, refined-solver
+failure, unknown areas, insufficient coverage, border failures, and
+cancellation.  Clock sampling is disabled when there is no report file.  CPU
+time and finer per-screen-family seed counters remain optional follow-up if wall
+time does not identify the bottleneck clearly.
 
 ### DG-015 — color optimization can rebuild image-wide state for every search cell
 
@@ -280,13 +283,83 @@ repeated large stack frames, but heap allocation per candidate would make the
 failure path slower.  Change this only with profiles; prefer per-thread reusable
 storage with an explicit capacity.
 
+### DG-020 — pre-classification unsharp masking is a legacy detector aid
+
+**Severity:** medium historical/performance
+
+**Status:** fixed compatibility default
+
+The `scr_detect_parameters` radius/amount unsharp mask predates the current MTF
+model.  It was introduced when high-volume National Geographic work required
+automatic detection and stitching of many scans under substantial time pressure.
+That was a reasonable way to make the old threshold classifier more aggressive,
+but it should not define the modern detector architecture.
+
+New `scr_detect_parameters` now default this legacy mask off.  Serialized
+nonzero `scr_detect_sharpen_radius` and `scr_detect_sharpen_amount` values are
+still read and honored, so existing parameter files that intentionally request
+the old behavior remain compatible.  Scanner restoration now belongs to the
+render pipeline, which can sharpen native RGB channels independently from
+measured or modeled MTF data.
+
+Geometry detection does not yet accept a `render_parameters` sharpening model.
+Do not duplicate the new MTF machinery inside screen detection.  If future
+measurements show that restoration before classification is useful, pass the
+chosen scanner MTF configuration explicitly and test it as a separate detector
+mode.  The preferred robustness work remains DG-009 through DG-013, where the
+detector tolerates imperfect boundaries rather than depending on sharpening to
+make them artificially crisp.
+
+### DG-021 — color optimization copied a padded image through a zero-amount mask
+
+**Severity:** medium performance
+
+**Status:** fixed
+
+The area-based `optimize_screen_colors()` path allocated a padded RGB buffer and
+called the generic unsharp-mask helper with a hard-coded amount of zero.  The
+helper therefore copied the linearized input exactly; no sharpening occurred.
+Color ranking now uses the same linearized RGB values directly, eliminating the
+second image buffer and copy without changing the samples presented to the
+optimizer.
+
+### DG-022 — screen-class cache equality omitted classification thresholds
+
+**Severity:** high correctness
+
+**Status:** fixed
+
+`scr_detect_parameters::operator==()` participates in the color-class-map cache
+key but did not compare `min_luminosity` or `min_ratio`, even though both values
+change `classify_adjusted_color()`.  Changing either threshold could therefore
+reuse a class map computed with stale classification rules.  Both values are now
+part of the comparison; legacy sharpening parameters remain part of the key as
+before.
+
+### DG-023 — fast-only flood fill should not precompute the slow RGB image
+
+**Severity:** medium performance
+
+**Status:** fixed
+
+The top-level detector always materialized the full adjusted RGB image before
+searching, although fast flood fill only uses the color-class map.  Adjusted RGB
+precomputation is now requested only when slow image-domain confirmation is
+enabled.  This removes one full-image buffer and pass from fast-only detection,
+which is particularly useful for quickly rejecting unsuitable images.
+
 ## Validation corpus
 
 ### DG-019 — build a geometry-detection benchmark and regression corpus
 
 **Severity:** high
 
-**Status:** measurement prerequisite
+**Status:** in progress
+
+The report-only DG-014 records now provide a stable baseline format, and the
+existing synthetic discovery tests cover sharp Finlay and Dufay detection with
+both slow+fast and fast-only flood fill.  The remaining corpus work is to add
+real soft scans, controlled degraded variants, and negative images.
 
 The corpus should contain, for every available screen family:
 
@@ -324,14 +397,15 @@ heuristic becomes the default:
 
 ## Recommended implementation order
 
-1. Implement DG-014 and assemble DG-019 without changing detection behavior.
+1. Use DG-014 statistics to record baselines for the existing sharp fixtures,
+   then extend DG-019 with real soft scans and representative negative images.
 2. Add the bounded prediction-neighborhood search from DG-010 behind an
    experimental switch and calibrate it against false positives.
 3. Introduce robust partial-grid scoring (DG-011), using the local search as its
    observation layer.
 4. Compare a coarse periodicity proposal (DG-013) only for regions where the
    exact component seed fails.
-5. Use the resulting failure counters to implement early rejection and state
-   reuse (DG-015 through DG-017).
+5. Use the measured failure costs to implement early rejection and state reuse
+   (DG-015 through DG-017).
 6. Revisit scratch storage and lower-level micro-optimization (DG-018) only
    after the algorithmic failure cost is under control.

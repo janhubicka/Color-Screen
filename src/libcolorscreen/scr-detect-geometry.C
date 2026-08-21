@@ -9,6 +9,7 @@
 #include "render-scr-detect.h"
 #include "render-to-scr.h"
 #include "solver.h"
+#include <chrono>
 #include <limits.h>
 #include <memory>
 namespace colorscreen {
@@ -17,6 +18,86 @@ namespace {
 // const bool verbose = true;
 const bool verbose = false;
 const int verbose_confirm = 0;
+
+/* Report-only counters and timings for one regular-screen detection run.
+   REPORT_FILE controls whether clocks are sampled and whether the summary is
+   written.  Normal detection without a report only updates a few counters.  */
+struct detection_stats {
+  using clock = std::chrono::steady_clock;
+  using time_point = clock::time_point;
+
+  FILE *report_file;
+  const char *result = "no-initial-grid";
+  const char *last_flood_failure = "none";
+  scr_type type = Random;
+  int regions = 0;
+  long long seed_pixels = 0;
+  int initial_grids = 0;
+  int initial_solver_failures = 0;
+  int flood_attempts = 0;
+  int flood_failures = 0;
+  int color_opt_failures = 0;
+  int precompute_failures = 0;
+  int classmap_builds = 0;
+  int rgb_precomputes = 0;
+  int patches = 0;
+  bool legacy_preclassification_sharpening = false;
+  double optimize_colors_ms = 0;
+  double precompute_ms = 0;
+  double classmap_ms = 0;
+  double initial_solver_ms = 0;
+  double flood_ms = 0;
+  double final_solver_ms = 0;
+  double mesh_solver_ms = 0;
+  time_point total_start;
+
+  /* Start statistics collection for REPORT_FILE.  */
+  explicit detection_stats(FILE *report_file)
+      : report_file(report_file),
+        total_start(report_file ? clock::now() : time_point()) {}
+
+  /* Return a stage start time when reporting is enabled.  */
+  time_point start_timer() const {
+    return report_file ? clock::now() : time_point();
+  }
+
+  /* Add time since START to ACCUMULATOR when reporting is enabled.  */
+  void add_time(double *accumulator, time_point start) const {
+    if (report_file)
+      *accumulator +=
+          std::chrono::duration<double, std::milli>(clock::now() - start)
+              .count();
+  }
+
+  /* Write stable counters and stage timings to REPORT_FILE.  */
+  ~detection_stats() {
+    if (!report_file)
+      return;
+    double total_ms =
+        std::chrono::duration<double, std::milli>(clock::now() - total_start)
+            .count();
+    const char *type_name =
+        type >= Random && type < max_scr_type ? scr_names[(int)type].name
+                                              : "none";
+    fprintf(report_file,
+            "detect_stats: result=%s type=%s regions=%i seed_pixels=%lld "
+            "initial_grids=%i initial_solver_failures=%i flood_attempts=%i "
+            "flood_failures=%i patches=%i last_flood_failure=%s "
+            "color_opt_failures=%i precompute_failures=%i classmap_builds=%i "
+            "rgb_precomputes=%i legacy_preclassification_sharpening=%i\n",
+            result, type_name, regions, seed_pixels, initial_grids,
+            initial_solver_failures, flood_attempts, flood_failures, patches,
+            last_flood_failure, color_opt_failures, precompute_failures,
+            classmap_builds, rgb_precomputes,
+            legacy_preclassification_sharpening);
+    fprintf(report_file,
+            "detect_stats_ms: optimize_colors=%.3f precompute=%.3f "
+            "classmap=%.3f initial_solver=%.3f flood=%.3f "
+            "final_solver=%.3f mesh_solver=%.3f total=%.3f\n",
+            optimize_colors_ms, precompute_ms, classmap_ms, initial_solver_ms,
+            flood_ms, final_solver_ms, mesh_solver_ms, total_ms);
+  }
+};
 /* Find the eight-connected patch of class C containing X, Y in COLOR_MAP.
    Store at most MAX_PATCH_SIZE pixels in ENTRIES and return the number stored.
    VISITED marks pixels belonging to patches already considered.  If PERMANENT
@@ -1145,14 +1226,17 @@ static solver_parameters::point_color diagonal_coordinates_to_color(int x,
    points in SPARAM, use VISITED to avoid reusing classified components, return
    the number of accepted patches through NPATCHES, and apply limits from
    DSPARAMS.  REPORT_FILE receives diagnostics and PROGRESS reports work and
-   cancellation.  Return null when the candidate cannot cover the required
-   screen area consistently.  */
+   cancellation.  Store a stable rejection identifier in FAILURE_REASON.
+   Return null when the candidate cannot cover the required screen area
+   consistently.  */
 std::unique_ptr<screen_map> flood_fill(
     FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t greeny,
     const scr_to_img_parameters &param, const image_data &img,
     const render_scr_detect *render, const color_class_map *color_map,
     solver_parameters *sparam, bitmap_2d *visited, int *npatches,
-    const detect_regular_screen_params *dsparams, progress_info *progress) {
+    const detect_regular_screen_params *dsparams, progress_info *progress,
+    const char **failure_reason) {
+  *failure_reason = "none";
   coord_t screen_xsize = my_sqrt(param.coordinate1.x * param.coordinate1.x +
                                  param.coordinate1.y * param.coordinate1.y);
   coord_t screen_ysize = my_sqrt(param.coordinate2.x * param.coordinate2.x +
@@ -1169,16 +1253,22 @@ std::unique_ptr<screen_map> flood_fill(
 
   /* If screen is estimated too small or too large give up.  */
   if (screen_xsize < 2 || screen_ysize < 2 || screen_xsize > 100 ||
-      screen_ysize > 100)
+      screen_ysize > 100) {
+    *failure_reason = "screen-size";
     return NULL;
+  }
 
   /* Do not flip the image.  */
-  if (dufay_like_screen_p(param.type) && param.coordinate1.y < 0)
+  if (dufay_like_screen_p(param.type) && param.coordinate1.y < 0) {
+    *failure_reason = "flipped-screen";
     return NULL;
+  }
 
   scr_to_img scr_map;
-  if (!scr_map.set_parameters(param, img))
+  if (!scr_map.set_parameters(param, img)) {
+    *failure_reason = "initial-map";
     return NULL;
+  }
 
   int max_patch_size = my_floor(screen_xsize * screen_ysize / (coord_t)1.5);
   int min_patch_size = (int)(screen_xsize * screen_ysize / 8);
@@ -1215,8 +1305,10 @@ std::unique_ptr<screen_map> flood_fill(
      Normally, this should always be the case since screen discovery always
      places point 0,0 on screen. But in case of large deformations we may hit
      this.   */
-  if (width <= xshift || height <= yshift)
+  if (width <= xshift || height <= yshift) {
+    *failure_reason = "seed-outside-map";
     return NULL;
+  }
   if (report_file)
     fprintf(report_file,
             "Flood fill started with coordinates %f,%f and %f,%f\n",
@@ -1409,12 +1501,16 @@ std::unique_ptr<screen_map> flood_fill(
 #undef cpatch
     }
   }
-  if (progress && progress->cancel_requested())
+  if (progress && progress->cancel_requested()) {
+    *failure_reason = "cancelled";
     return NULL;
+  }
   /* A Dufay-like screen has two square-patch centers per repetition.  */
   *npatches = nfound;
-  if (nfound < 100)
+  if (nfound < 100) {
+    *failure_reason = "too-few-patches";
     return NULL;
+  }
 
   /* Refine the screen dimensions before computing coverage statistics.  */
   solver_parameters sparam2;
@@ -1423,10 +1519,14 @@ std::unique_ptr<screen_map> flood_fill(
     sparam2.optimize_lens = sparam2.optimize_tilt = false;
   map->determine_solver_points(*npatches, &sparam2);
   param2 = param;
-  if (simple_solver(&param2, img, sparam2, progress) > 1e20)
+  if (simple_solver(&param2, img, sparam2, progress) > 1e20) {
+    *failure_reason = "refine-solver";
     return NULL;
-  if (progress && progress->cancel_requested())
+  }
+  if (progress && progress->cancel_requested()) {
+    *failure_reason = "cancelled";
     return NULL;
+  }
   screen_xsize = my_sqrt(param2.coordinate1.x * param2.coordinate1.x +
                           param2.coordinate1.y * param2.coordinate1.y);
   screen_ysize = my_sqrt(param2.coordinate2.x * param2.coordinate2.x +
@@ -1436,8 +1536,10 @@ std::unique_ptr<screen_map> flood_fill(
 
   /* Check for large unanalyzed areas.  */
   scr_to_img map2;
-  if (!map2.set_parameters(param2, img))
+  if (!map2.set_parameters(param2, img)) {
+    *failure_reason = "refined-map";
     return NULL;
+  }
   int xmin, ymin, xmax, ymax;
   map->get_known_range(&xmin, &ymin, &xmax, &ymax);
   int snexpected = (paget_like_screen_p(param.type) ? 8 : 2) * (xmax - xmin) *
@@ -1479,8 +1581,10 @@ std::unique_ptr<screen_map> flood_fill(
     progress->set_task("checking known range", map->height);
   for (int y = -map->yshift; y < map->height - map->yshift; y++) {
     int last_seen = INT_MAX / 2;
-    if (progress && progress->cancel_requested())
+    if (progress && progress->cancel_requested()) {
+      *failure_reason = "cancelled";
       return NULL;
+    }
     for (int x = -map->xshift; x < map->width - map->xshift; x++, last_seen++)
       if (!map->known_p({x, y})) {
         point_t scr = map->get_screen_coord({x, y});
@@ -1520,6 +1624,7 @@ std::unique_ptr<screen_map> flood_fill(
                     "image coordinates %f %f\n",
                     img.x, img.y);
           }
+          *failure_reason = "unknown-area";
           return NULL;
         }
         // else
@@ -1537,6 +1642,7 @@ std::unique_ptr<screen_map> flood_fill(
       // fprintf (report_file, "Reducing --min-screen-percentage would
       // bypass this error\n");
     }
+    *failure_reason = "insufficient-coverage";
     return NULL;
   }
   if (xmin > std::max(dsparams->border_left, (coord_t)2) * img.width / 100) {
@@ -1545,6 +1651,7 @@ std::unique_ptr<screen_map> flood_fill(
               "Detected screen failed to reach left border of the image "
               "(limit %f)\n",
               dsparams->border_left);
+    *failure_reason = "left-border";
     return NULL;
   }
   if (ymin > std::max(dsparams->border_top, (coord_t)2) * img.height / 100) {
@@ -1553,6 +1660,7 @@ std::unique_ptr<screen_map> flood_fill(
               "Detected screen failed to reach top border of the image "
               "(limit %f)\n",
               dsparams->border_top);
+    *failure_reason = "top-border";
     return NULL;
   }
   if (xmax <
@@ -1562,6 +1670,7 @@ std::unique_ptr<screen_map> flood_fill(
               "Detected screen failed to reach right border of the image "
               "(limit %f)\n",
               dsparams->border_right);
+    *failure_reason = "right-border";
     return NULL;
   }
   if (ymax <
@@ -1571,6 +1680,7 @@ std::unique_ptr<screen_map> flood_fill(
               "Detected screen failed to reach bottom border of the image "
               "(limit %f)\n",
               dsparams->border_bottom);
+    *failure_reason = "bottom-border";
     return NULL;
   }
   return map;
@@ -1696,6 +1806,10 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
   scr_to_img_parameters param;
   param.type = type;
   param.scanner_type = dsparams->scanner_type;
+  detection_stats stats(report_file);
+  stats.type = type;
+  stats.legacy_preclassification_sharpening =
+      dparam.sharpen_radius > 0 && dparam.sharpen_amount > 0;
 
   {
     bitmap_2d visited(img.width, img.height);
@@ -1718,6 +1832,7 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
                          search_xsteps * search_ysteps);
     for (int s = 0; s < (int)points.size() && !smap; s++)
       if (!progress || !progress->cancel_requested()) {
+        stats.regions++;
         int xmin = points[s].x * img.width / search_xsteps;
         int ymin = points[s].y * img.height / search_ysteps;
         int xmax = (points[s].x + 1) * img.width / search_xsteps;
@@ -1729,10 +1844,15 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
         if (progress)
           progress->push();
         if (dsparams->optimize_colors) {
-          if (!optimize_screen_colors(&dparam, &img, dsparams->gamma,
-                                      {xmin, ymin, std::min(1000, xmax - xmin),
-                                       std::min(1000, ymax - ymin)},
-                                      progress, report_file)) {
+          detection_stats::time_point stage_start = stats.start_timer();
+          bool colors_ok = optimize_screen_colors(
+              &dparam, &img, dsparams->gamma,
+              {xmin, ymin, std::min(1000, xmax - xmin),
+               std::min(1000, ymax - ymin)},
+              progress, report_file);
+          stats.add_time(&stats.optimize_colors_ms, stage_start);
+          if (!colors_ok) {
+            stats.color_opt_failures++;
             if (progress)
               progress->pause_stdout();
             printf("Failed to analyze colors on start coordinates %i,%i "
@@ -1759,16 +1879,26 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
         }
         if (!render) {
           prune_render_scr_detect_caches();
+          detection_stats::time_point stage_start = stats.start_timer();
           std::unique_ptr<render_scr_detect> new_render(
               new render_scr_detect(dparam, img, empty, 256));
           if (!new_render) {
+            stats.add_time(&stats.precompute_ms, stage_start);
+            stats.precompute_failures++;
+            stats.result = "renderer-allocation";
             if (progress)
               progress->pop();
             return ret;
           }
           render = std::move(new_render);
-          if (!render->precompute_all(PRECOMPUTE_NONE, progress) ||
-              !render->precompute_rgbdata(progress)) {
+          bool precompute_ok = render->precompute_all(PRECOMPUTE_NONE, progress);
+          if (precompute_ok && dsparams->slow_floodfill) {
+            stats.rgb_precomputes++;
+            precompute_ok = render->precompute_rgbdata(progress);
+          }
+          stats.add_time(&stats.precompute_ms, stage_start);
+          if (!precompute_ok) {
+            stats.precompute_failures++;
             render = NULL;
             if (progress) {
               progress->pop();
@@ -1782,6 +1912,8 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
            boundaries between them, but small blue patches may disappear.
            Keep both this map and the renderer's original map as candidates.  */
         if (try_paget_finlay) {
+          detection_stats::time_point stage_start = stats.start_timer();
+          stats.classmap_builds++;
           std::unique_ptr<color_class_map> new_cmap(new color_class_map);
           cmap = std::move(new_cmap);
           cmap->allocate(img.width, img.height);
@@ -1795,7 +1927,9 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
             if (progress)
               progress->inc_progress();
           }
+          stats.add_time(&stats.classmap_ms, stage_start);
           if (progress && progress->cancel_requested()) {
+            stats.result = "cancelled";
             if (progress)
               progress->pop();
             return ret;
@@ -1807,6 +1941,8 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
           for (int y = ymin; y < ymax && !smap && nattempts < maxattempts; y++)
             for (int x = xmin; x < xmax && !smap && nattempts < maxattempts;
                  x++) {
+              if (report_file)
+                stats.seed_pixels++;
               if (report_file)
                 fflush(report_file);
 
@@ -1857,12 +1993,14 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
                 this_cmap = render->get_color_class_map();
               }
               if (progress && progress->cancel_requested()) {
+                stats.result = "cancelled";
                 if (progress)
                   progress->pop();
                 return ret;
               }
 
               if (current_type != Random) {
+                stats.initial_grids++;
                 nattempts++;
                 if (report_file && verbose) {
                   fprintf(report_file, "Initial grid found at:\n");
@@ -1870,15 +2008,28 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
                 }
                 visited.clear();
                 param.type = current_type;
-                if (simple_solver(&param, img, sparam, progress) > 1e20)
+                detection_stats::time_point stage_start = stats.start_timer();
+                coord_t initial_solver_error =
+                    simple_solver(&param, img, sparam, progress);
+                stats.add_time(&stats.initial_solver_ms, stage_start);
+                if (initial_solver_error > (coord_t)1e20) {
+                  stats.initial_solver_failures++;
                   continue;
+                }
+                stats.flood_attempts++;
+                const char *flood_failure = "none";
+                stage_start = stats.start_timer();
                 smap =
                     flood_fill(report_file, dsparams->slow_floodfill,
                                dsparams->fast_floodfill, sparam.points[0].img.x,
                                sparam.points[0].img.y, param, img, render.get(),
                                this_cmap, NULL /*sparam*/, &visited,
-                               &ret.patches_found, dsparams, progress);
+                               &ret.patches_found, dsparams, progress,
+                               &flood_failure);
+                stats.add_time(&stats.flood_ms, stage_start);
+                stats.last_flood_failure = flood_failure;
                 if (!smap) {
+                  stats.flood_failures++;
                   if (progress) {
                     progress->set_task("looking for initial grid",
                                        search_xsteps * search_ysteps);
@@ -1888,6 +2039,8 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
                   x += 10;
                 } else {
                   type = current_type;
+                  stats.type = type;
+                  stats.last_flood_failure = "none";
                   break;
                 }
               }
@@ -1953,6 +2106,13 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
 #endif
   }
   if (!smap || (progress && progress->cancel_requested())) {
+    if (progress && progress->cancel_requested())
+      stats.result = "cancelled";
+    else if (stats.flood_attempts)
+      stats.result = "flood-fill";
+    else
+      stats.result = "no-initial-grid";
+    stats.patches = ret.patches_found;
     return ret;
   }
   /* Obtain more realistic solution so the range chosen for final mesh is
@@ -1969,11 +2129,15 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
     ret.param.lens_center_y = img.width / 2;*/
   // ret.param.projection_distance = img.width;
   ret.param.lens_correction = dsparams->lens_correction;
+  detection_stats::time_point stage_start = stats.start_timer();
   coord_t solver_error = solver(&ret.param, img, sparam, progress);
+  stats.add_time(&stats.final_solver_ms, stage_start);
   if (progress && progress->cancel_requested()) {
+    stats.result = "cancelled";
     return ret;
   }
   if (!my_isfinite(solver_error) || solver_error > (coord_t)1e20) {
+    stats.result = "final-solver";
     if (report_file)
       fprintf(report_file, "Final geometry solver failed\n");
     return ret;
@@ -1981,6 +2145,7 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
   summarise_quality(img, smap.get(), ret.param, "homographic", report_file,
                     progress);
   if (progress && progress->cancel_requested()) {
+    stats.result = "cancelled";
     return ret;
   }
   if (report_file) {
@@ -2022,8 +2187,10 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
   if (dsparams->do_mesh && (dsparams->left || dsparams->top ||
                             dsparams->right || dsparams->bottom)) {
     scr_to_img map;
-    if (!map.set_parameters(ret.param, img))
+    if (!map.set_parameters(ret.param, img)) {
+      stats.result = "straightening-map";
       return ret;
+    }
     const int range = 10;
     if (progress)
       progress->set_task("straightening corners", smap->height);
@@ -2071,10 +2238,15 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
       progress->resume_stdout();
   }
   if (dsparams->do_mesh) {
+    stage_start = stats.start_timer();
     std::shared_ptr<mesh> m =
         solver_mesh(&ret.param, img, sparam, *smap, progress);
-    if (!m || (progress && progress->cancel_requested()))
+    stats.add_time(&stats.mesh_solver_ms, stage_start);
+    if (!m || (progress && progress->cancel_requested())) {
+      stats.result = progress && progress->cancel_requested() ? "cancelled"
+                                                             : "mesh-solver";
       return ret;
+    }
     const int xsteps = 50, ysteps = 50;
     m->precompute_inverse();
     /* Now produce output (regular) grid of solver points.
@@ -2160,6 +2332,9 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
 
   if (dsparams->return_screen_map)
     ret.smap = smap.release();
+  stats.result = "success";
+  stats.type = type;
+  stats.patches = ret.patches_found;
   ret.success = true;
   return ret;
 }
