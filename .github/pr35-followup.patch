@@ -1,0 +1,225 @@
+diff --git a/doc/scr-detect-geometry-tracking.md b/doc/scr-detect-geometry-tracking.md
+index d528463..b57deaf 100644
+--- a/doc/scr-detect-geometry-tracking.md
++++ b/doc/scr-detect-geometry-tracking.md
+@@ -285,30 +285,27 @@ storage with an explicit capacity.
+ 
+ ### DG-020 — pre-classification unsharp masking is a legacy detector aid
+ 
+-**Severity:** medium historical/performance
++**Severity:** high compatibility/robustness
+ 
+-**Status:** fixed compatibility default
++**Status:** compatibility default retained; removal blocked by DG-019
+ 
+ The `scr_detect_parameters` radius/amount unsharp mask predates the current MTF
+-model.  It was introduced when high-volume National Geographic work required
+-automatic detection and stitching of many scans under substantial time pressure.
+-That was a reasonable way to make the old threshold classifier more aggressive,
+-but it should not define the modern detector architecture.
+-
+-New `scr_detect_parameters` now default this legacy mask off.  Serialized
+-nonzero `scr_detect_sharpen_radius` and `scr_detect_sharpen_amount` values are
+-still read and honored, so existing parameter files that intentionally request
+-the old behavior remain compatible.  Scanner restoration now belongs to the
+-render pipeline, which can sharpen native RGB channels independently from
+-measured or modeled MTF data.
+-
+-Geometry detection does not yet accept a `render_parameters` sharpening model.
+-Do not duplicate the new MTF machinery inside screen detection.  If future
+-measurements show that restoration before classification is useful, pass the
+-chosen scanner MTF configuration explicitly and test it as a separate detector
+-mode.  The preferred robustness work remains DG-009 through DG-013, where the
+-detector tolerates imperfect boundaries rather than depending on sharpening to
+-make them artificially crisp.
++model.  An attempt in PR #35 to change its historical radius 2 / amount 3
++default to zero exposed a real compatibility dependency: both existing Dufay
++CLI integration tests aborted during autodetection.  The Coolscan raw fixture
++exhausted all 36 search regions, while the Capture One stitched fixture failed
++on a later tile after earlier tiles had been detected.
++
++Keep radius 2 / amount 3 as the default for now.  Explicit zero values remain a
++supported experimental mode and are exercised by synthetic fast-only discovery.
++This is not an endorsement of unsharp masking as the long-term detector design;
++it is a regression guard until DG-009 through DG-013 make the classifier robust
++to imperfect boundaries without artificially sharpening them.
++
++Before retiring the compatibility mask again, compare the historical default
++and explicit zero values on the current CLI fixtures and the Batch 08 corpus in
++DG-019.  Any replacement must match or improve successful detection without
++increasing false positives or failure time.
+ 
+ ### DG-021 — color optimization copied a padded image through a zero-amount mask
+ 
+@@ -340,13 +337,19 @@ before.
+ 
+ **Severity:** medium performance
+ 
+-**Status:** fixed
++**Status:** fixed for the explicitly unsharpened path
++
++Fast flood fill itself uses only the color-class map, but the historical
++pre-classification unsharp mask needs adjusted RGB in order to build that map.
++Consequently a default radius 2 / amount 3 run legitimately performs one RGB
++precomputation even in fast-only mode.  The detector statistics now count this
++implicit precomputation rather than reporting a misleading zero.
+ 
+-The top-level detector always materialized the full adjusted RGB image before
+-searching, although fast flood fill only uses the color-class map.  Adjusted RGB
+-precomputation is now requested only when slow image-domain confirmation is
+-enabled.  This removes one full-image buffer and pass from fast-only detection,
+-which is particularly useful for quickly rejecting unsuitable images.
++When the compatibility mask is explicitly disabled and slow image-domain
++confirmation is also disabled, adjusted RGB is not materialized.  Synthetic
++fast-only discovery exercises this zero-mask mode and requires
++`rgb_precomputes=0`.  Thus the slow-path allocation is still avoidable, while
++DG-020 accurately records the cost of the compatibility mask.
+ 
+ ## Validation corpus
+ 
+@@ -361,6 +364,21 @@ existing synthetic discovery tests cover sharp Finlay and Dufay detection with
+ both slow+fast and fast-only flood fill.  The remaining corpus work is to add
+ real soft scans, controlled degraded variants, and negative images.
+ 
++The historical National Geographic failure corpus is available in Dropbox at
++`/Batch 08 error samples`.  It contains 25 problematic NGS scans, generally as
++nine original Capture One EIP tiles plus flattened outputs.  Treat the EIP tiles
++as the authoritative regression inputs.  Start manual smoke testing with
++`NGS00428/Tiles - EIP/dpa_ecp_NGS00428_Tile01.eip` and
++`NGS00899/Tiles - EIP/dpa_ecp_NGS00899_Tile01.eip`, then expand to all tiles and
++all scans.  These files are too large for routine CI, so keep the existing small
++real Dufay fixtures as CI gates and use Batch 08 for manual robustness and
++failure-time measurements.
++
++For each Batch 08 input, compare the historical 2 / 3 mask, explicit 0 / 0, and
++future blur-tolerant alternatives.  Record success/type, search regions, seed
++pixels, initial grids, final failure stage, patch count, coverage, and stage
++wall times from DG-014.
++
+ The corpus should contain, for every available screen family:
+ 
+ - sharp scans that currently succeed, including rotations and perspective;
+diff --git a/src/libcolorscreen/include/scr-detect-parameters.h b/src/libcolorscreen/include/scr-detect-parameters.h
+index 169d937..47bbd54 100644
+--- a/src/libcolorscreen/include/scr-detect-parameters.h
++++ b/src/libcolorscreen/include/scr-detect-parameters.h
+@@ -13,7 +13,7 @@ struct scr_detect_parameters
+   scr_detect_parameters ()
+       : black ({ 0, 0, 0 }), red ({ 1, 0, 0 }), green ({ 0, 1, 0 }),
+         blue ({ 0, 0, 1 }), min_luminosity (0.000), min_ratio (1),
+-        sharpen_radius (0), sharpen_amount (0)
++        sharpen_radius (2), sharpen_amount (3)
+   {
+   }
+ 
+@@ -27,9 +27,10 @@ struct scr_detect_parameters
+   luminosity_t min_ratio;
+ 
+   /* Legacy unsharp-mask parameters used before screen-color classification.
+-     They are retained for old parameter files, but new detection defaults to
+-     no pre-classification sharpening.  Scanner sharpening now belongs to the
+-     render pipeline, where measured per-channel MTF data can be used.  */
++     Existing real Dufay integration scans still depend on the historical
++     radius 2 / amount 3 default, so retain it until the blur-tolerant
++     classifier can replace this compatibility aid.  Explicit zero values
++     remain valid for benchmarking the unsharpened detector path.  */
+   coord_t sharpen_radius;
+   luminosity_t sharpen_amount;
+   /* Return true when OTHER produces the same color classification.  This is
+diff --git a/src/libcolorscreen/scr-detect-geometry.C b/src/libcolorscreen/scr-detect-geometry.C
+index 9cada15..197e8e9 100644
+--- a/src/libcolorscreen/scr-detect-geometry.C
++++ b/src/libcolorscreen/scr-detect-geometry.C
+@@ -1892,9 +1892,13 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
+           }
+           render = std::move(new_render);
+           bool precompute_ok = render->precompute_all(PRECOMPUTE_NONE, progress);
+-          if (precompute_ok && dsparams->slow_floodfill) {
++          if (precompute_ok && stats.legacy_preclassification_sharpening)
+             stats.rgb_precomputes++;
++          if (precompute_ok && dsparams->slow_floodfill) {
+             precompute_ok = render->precompute_rgbdata(progress);
++            if (precompute_ok
++                && !stats.legacy_preclassification_sharpening)
++              stats.rgb_precomputes++;
+           }
+           stats.add_time(&stats.precompute_ms, stage_start);
+           if (!precompute_ok) {
+diff --git a/src/libcolorscreen/unittests.C b/src/libcolorscreen/unittests.C
+index 44a8567..a16aa41 100644
+--- a/src/libcolorscreen/unittests.C
++++ b/src/libcolorscreen/unittests.C
+@@ -1463,20 +1463,26 @@ test_homography (bool lens_correction, bool joly, coord_t epsilon)
+ }
+ 
+ /* Verify that REPORT contains a successful detector statistics record and that
+-   it reports EXPECTED_RGB_PRECOMPUTES adjusted-RGB precomputations.  */
++   it reports EXPECTED_RGB_PRECOMPUTES adjusted-RGB precomputations and the
++   EXPECTED_LEGACY_SHARPENING state.  */
+ bool
+-check_detection_stats (FILE *report, int expected_rgb_precomputes)
++check_detection_stats (FILE *report, int expected_rgb_precomputes,
++                       bool expected_legacy_sharpening)
+ {
+   rewind (report);
+   char line[2048];
+   char rgb_precomputes[64];
++  char legacy_sharpening[80];
+   snprintf (rgb_precomputes, sizeof (rgb_precomputes), "rgb_precomputes=%i",
+             expected_rgb_precomputes);
++  snprintf (legacy_sharpening, sizeof (legacy_sharpening),
++            "legacy_preclassification_sharpening=%i",
++            expected_legacy_sharpening);
+   while (fgets (line, sizeof (line), report))
+     if (!strncmp (line, "detect_stats:", strlen ("detect_stats:")))
+       return strstr (line, "result=success")
+              && strstr (line, rgb_precomputes)
+-             && strstr (line, "legacy_preclassification_sharpening=0");
++             && strstr (line, legacy_sharpening);
+   return false;
+ }
+ 
+@@ -1487,9 +1493,10 @@ do_test_discovery (scr_to_img_parameters &param, int width, int height, coord_t
+ {
+   image_data img;
+   scr_detect_parameters dparam;
+-  if (dparam.sharpen_radius != 0 || dparam.sharpen_amount != 0)
++  if (dparam.sharpen_radius != 2 || dparam.sharpen_amount != 3)
+     {
+-      fprintf (stderr, "Screen detection unexpectedly enables legacy sharpening\n");
++      fprintf (stderr,
++               "Screen detection compatibility sharpening default changed\n");
+       return false;
+     }
+   scr_detect_parameters changed_dparam = dparam;
+@@ -1528,6 +1535,14 @@ do_test_discovery (scr_to_img_parameters &param, int width, int height, coord_t
+ 	{
+ 	  dsparams.fast_floodfill = alg != 2;
+ 	  dsparams.slow_floodfill = alg != 1;
++	  scr_detect_parameters run_dparam = dparam;
++	  /* Exercise the fast-only path without the compatibility mask so this
++	     also verifies that adjusted RGB is not materialized unnecessarily.  */
++	  if (!dsparams.slow_floodfill)
++	    {
++	      run_dparam.sharpen_radius = 0;
++	      run_dparam.sharpen_amount = 0;
++	    }
+ 
+ 	  /* Save some time with slow floodfill.  */
+ 	  if (!dsparams.fast_floodfill && m)
+@@ -1539,10 +1554,12 @@ do_test_discovery (scr_to_img_parameters &param, int width, int height, coord_t
+ 	  FILE *detection_report = tmpfile ();
+ 	  if (!detection_report)
+ 	    return false;
+-	  auto detected = detect_regular_screen (img, dparam, sparam, &dsparams,
++	  auto detected = detect_regular_screen (img, run_dparam, sparam, &dsparams,
+ 	                                         NULL, detection_report);
+-	  bool stats_ok
+-	      = check_detection_stats (detection_report, dsparams.slow_floodfill ? 1 : 0);
++	  bool legacy_sharpening = run_dparam.sharpen_radius > 0
++	                           && run_dparam.sharpen_amount > 0;
++	  bool stats_ok = check_detection_stats (
++	      detection_report, legacy_sharpening ? 1 : 0, legacy_sharpening);
+ 	  fclose (detection_report);
+ 	  if (!stats_ok)
+ 	    {
