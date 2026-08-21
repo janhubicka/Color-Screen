@@ -56,7 +56,7 @@ jobs:
           decode(
               sorted(Path('transport/agent').glob('weighted-matching.patch.b64.*')),
               'weighted-matching.patch',
-              '97889df09fdb654c101f964bd47081942f0c3db43c222426a1a3a30da103b9f4',
+              '6bd27e176b01eeeb8eaee0311d6157cfa1691db2ea2914892637df158760ae6e',
           )
           decode(
               [Path('transport/agent/weighted-paget-fix.patch.b64')],
