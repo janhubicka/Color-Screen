@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/transport-rgb-sharpening-20260821
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
