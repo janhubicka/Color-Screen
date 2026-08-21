@@ -79,7 +79,7 @@ jobs:
           windows_clang_blob=$(create_blob .github/workflows/build-windows-clang.yml)
           windows_blob=$(create_blob .github/workflows/build-windows.yml)
 
-          test "$mac_blob" = e79fe0610a167ad1d570e4f1b382e39b8496b840
+          test "$mac_blob" = e79fee9b66a53de2ac8679251839054419ef2d34
           test "$ubuntu_blob" = ec79e57b506c15b32902f3bce0ed2e82a1b8db5b
           test "$windows_clang_blob" = 945d30505e250bf59e9e5cdcdaaa134a3733a2ab
           test "$windows_blob" = 343af381eaae20a99fb0a2fff710786a8d895210
