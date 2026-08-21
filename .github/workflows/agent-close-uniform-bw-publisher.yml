@@ -1,0 +1,21 @@
+name: Close temporary uniform BW publisher
+
+on:
+  pull_request:
+    branches:
+      - agent/focus-uniform-bw-publish-base-20260821
+
+permissions:
+  pull-requests: write
+
+jobs:
+  close:
+    if: github.head_ref == 'agent/focus-uniform-bw-publisher-20260821'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close transport-only pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_REPO: ${{ github.repository }}
+        run: gh pr close "$PR_NUMBER" --repo "$GH_REPO" --comment "The clean feature branch has been published; closing this temporary transform publisher without merge."
