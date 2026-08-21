@@ -1,0 +1,55 @@
+name: Agent publish adaptive MTF centroid fix
+
+on:
+  push:
+    branches:
+      - agent/source-transport-20260821
+
+permissions:
+  contents: write
+
+jobs:
+  publish-fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply tested patch to a clean branch from main
+        shell: bash
+        env:
+          TARGET_BRANCH: agent/mtf-adaptive-centroid
+        run: |
+          set -euxo pipefail
+          cp .github/agent-mtf-adaptive-centroid.patch /tmp/mtf-adaptive-centroid.patch
+          git fetch origin main
+          git fetch origin "$TARGET_BRANCH" || true
+          git switch --force-create "$TARGET_BRANCH" origin/main
+          git apply --check /tmp/mtf-adaptive-centroid.patch
+          git apply /tmp/mtf-adaptive-centroid.patch
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- src/libcolorscreen/slanted-edge.C
+          git commit -F - <<'EOF'
+          mtf: select centroid aperture from edge tails
+
+          The broad-defocus fix widened every slanted-edge centroid from 10 to
+          14 pixels.  That is necessary for the bundled Nikon defocus fixture,
+          but on the sharper Phase One edges the extra four pixels mostly
+          collect texture and noise.  Their line-fit RMS rises from roughly
+          0.16 to 0.27 pixels and trips the real-data reproducibility regression.
+
+          Measure each scan line with both apertures, then choose one aperture
+          for the complete ROI.  Use the broad aperture only when the outer
+          11--14 pixel band has substantial gradient energy, coherent sign, and
+          matching polarity across almost every scan line.  Otherwise retain
+          the historical compact aperture.  Selecting once per ROI avoids
+          introducing a phase-dependent shift by mixing apertures line by line.
+
+          This preserves the 14-pixel behavior for all four defocused Nikon
+          RGB+IR channels while restoring the stable compact centroids for the
+          ten sharper Phase One edges.  The secondary-edge guard and all
+          qualification thresholds remain unchanged.
+          EOF
+          git push --force-with-lease origin "HEAD:refs/heads/$TARGET_BRANCH"
