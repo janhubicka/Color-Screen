@@ -1,0 +1,49 @@
+name: Publish uniform BW multi-tile model
+
+on:
+  pull_request:
+    branches:
+      - agent/focus-uniform-bw-publish-base-20260821
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/focus-uniform-bw-publisher-20260821'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact publisher payload
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: transport
+
+      - name: Check out exact current base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          path: repo
+
+      - name: Apply verified source transforms and publish feature branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd repo
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.base.sha }}"
+          python ../transport/agent/patch_uniform_bw.py
+          python ../transport/agent/add_uniform_bw_regression.py
+          python ../transport/agent/update_uniform_bw_docs.py
+          git diff --check
+          test "$(git diff --name-only | sort)" = $'doc/finetune-solver.md\ndoc/finetune-tracking.md\nsrc/libcolorscreen/finetune-int.h\nsrc/libcolorscreen/finetune.C\nsrc/libcolorscreen/include/finetune.h\nsrc/libcolorscreen/unittests.C'
+          git checkout -B agent/uniform-bw-multitile-focus "${{ github.event.pull_request.base.sha }}"
+          git add -- doc/finetune-solver.md doc/finetune-tracking.md \
+            src/libcolorscreen/finetune-int.h src/libcolorscreen/finetune.C \
+            src/libcolorscreen/include/finetune.h src/libcolorscreen/unittests.C
+          git diff --cached --check
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git commit -F ../transport/agent/uniform-bw-commit.txt
+          git push --force origin HEAD:refs/heads/agent/uniform-bw-multitile-focus
+          printf 'Published %s on base %s\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD^)"
