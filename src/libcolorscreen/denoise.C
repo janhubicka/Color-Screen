@@ -265,9 +265,28 @@ denoising<T>::process_tile (int thread_id, progress_info *progress)
   const T *support
       = m_use_support ? m_data[thread_id].support.data () : nullptr;
 
+  /* Unit support is defined to reproduce the historical unweighted filter
+     exactly.  Do not rely on algebraically redundant multiplications by one
+     compiling to bit-identical code under -ffast-math: Apple Clang can select
+     a different arithmetic/vectorization path for the support-enabled
+     template.
+     Dispatch an all-unit tile through the same unweighted implementation.  */
+  bool use_support = m_use_support;
+  if (use_support)
+    {
+      use_support = false;
+      const size_t n = (size_t)m_tile_size * m_tile_size;
+      for (size_t i = 0; i < n; i++)
+        if (usable_support (support[i]) != (T)1)
+          {
+            use_support = true;
+            break;
+          }
+    }
+
   if (m_params.mode == denoise_parameters::bilateral)
     {
-      if (m_use_support)
+      if (use_support)
         process_bilateral<true> (
             m_tile_size, border, basic_size, in, out,
             (T)m_params.bilateral_sigma_s, (T)m_params.bilateral_sigma_r,
@@ -280,7 +299,7 @@ denoising<T>::process_tile (int thread_id, progress_info *progress)
     }
   else if (m_params.mode == denoise_parameters::nl_fast)
     {
-      if (m_use_support)
+      if (use_support)
         process_nl_fast<true> (
             m_tile_size, border, basic_size, in, out, m_params.patch_radius,
             m_params.search_radius, m_params, m_data[thread_id].aux1.data (),
@@ -332,7 +351,7 @@ denoising<T>::process_tile (int thread_id, progress_info *progress)
                               T v2 = in[(cy + py) * m_tile_size + (cx + px)];
                               T d2 = denoise_nl_square_distance (v1, v2,
                                                                   m_params);
-                              if (m_use_support)
+                              if (use_support)
                                 {
                                   int idx1 = (y + py) * m_tile_size + (x + px);
                                   int idx2 = (cy + py) * m_tile_size + (cx + px);
@@ -349,7 +368,7 @@ denoising<T>::process_tile (int thread_id, progress_info *progress)
                       T weight
                           = std::exp (-dist_sq * inv_patch_size
                                       * inv_strength_sq);
-                      if (m_use_support)
+                      if (use_support)
                         weight *= usable_support (
                             support[cy * m_tile_size + cx]);
                       weighted_sum += weight * in[cy * m_tile_size + cx];
