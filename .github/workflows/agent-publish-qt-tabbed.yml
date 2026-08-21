@@ -34,6 +34,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+          # Reassemble the exact locally validated follow-up.
           cat transport/agent/qt-tabbed-source-docs.patch.xz.b64.* > qt-tabbed-source-docs.patch.xz.b64
           echo 'b11c229cf3c4c92ba10708f0610287926c4ef888cc48fc3ce6f3f7420f41c9b4  qt-tabbed-source-docs.patch.xz.b64' | sha256sum -c -
           base64 --decode qt-tabbed-source-docs.patch.xz.b64 > qt-tabbed-source-docs.patch.xz
