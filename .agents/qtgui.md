@@ -58,10 +58,16 @@ later-closing document cannot overwrite newer entries.
 `WorkspaceWindow` must use `QMdiArea`, rather than maintaining a parallel custom
 tab implementation. The default view is `QMdiArea::TabbedView`; its internal
 `QTabBar` has `autoHide` enabled so no tab strip is shown for a single document.
+Tabbed MDI subwindows must remain maximized: an active tab represents the whole
+document viewport and must never expose a nested `QMdiSubWindow` frame.
 The workspace is a `QMainWindow`: the active document toolbar is installed in
 its top toolbar area, therefore document tabs naturally appear below it. The
 active document's navigation/parameter column is shown in the shared inspector
-dock. Inactive documents retain their complete processing and undo state.
+dock. The workspace also owns the one visible status bar. The active document's
+progress controls are temporarily moved into it and that document's status
+messages are mirrored there; inactive documents keep their private status state
+hidden until activated. Inactive documents retain their complete processing and
+undo state.
 
 **Window → Arrange Images** switches the same live documents between tabbed,
 tiled, and cascaded MDI views using `setViewMode()`, `tileSubWindows()`, and

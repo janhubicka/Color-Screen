@@ -15,6 +15,7 @@
 #include <QMouseEvent>
 #include <QSettings>
 #include <QStyleFactory>
+#include <QStatusBar>
 #include <QTabBar>
 #include <QToolBar>
 #include <QTimer>
@@ -98,6 +99,16 @@ int main(int argc, char *argv[]) {
       "smoke-test-tab-drag-detach",
       "Exercise dragging a document tab out into a detached window");
   parser.addOption(dragDetachOption);
+
+  QCommandLineOption tabbedFillOption(
+      "smoke-test-tabbed-fills-workspace",
+      "Require the active tabbed MDI document to fill the document viewport");
+  parser.addOption(tabbedFillOption);
+
+  QCommandLineOption globalStatusBarOption(
+      "smoke-test-global-statusbar",
+      "Require the active document to use the workspace status bar");
+  parser.addOption(globalStatusBarOption);
 
   QCommandLineOption timeReportOption(
       "time-report", "Enable internal time reporting of tasks");
@@ -365,6 +376,64 @@ int main(int argc, char *argv[]) {
           app.exit(9);
         }
       });
+    });
+  }
+
+  if (parser.isSet(tabbedFillOption)) {
+    QTimer::singleShot(200, &app, [&app]() {
+      WorkspaceWindow *workspace = app.workspaceWindow();
+      if (!workspace || workspace->tabCount() < 2) {
+        qCritical() << "Tabbed fill smoke test requires two documents";
+        app.exit(10);
+        return;
+      }
+      workspace->showTabbedDocuments();
+      QTimer::singleShot(0, &app, [&app, workspace]() {
+        auto *mdiArea = workspace->findChild<QMdiArea *>(
+            QStringLiteral("documentMdiArea"));
+        QMdiSubWindow *active = mdiArea ? mdiArea->activeSubWindow() : nullptr;
+        if (!mdiArea || !active || !workspace->isTabbedView()) {
+          qCritical() << "Tabbed fill smoke test has no active tabbed subwindow";
+          app.exit(10);
+          return;
+        }
+
+        const QSize viewportSize = mdiArea->viewport()->size();
+        const QSize documentSize = active->size();
+        if (!(active->windowState() & Qt::WindowMaximized) ||
+            documentSize.width() * 10 < viewportSize.width() * 9 ||
+            documentSize.height() * 10 < viewportSize.height() * 9) {
+          qCritical() << "Active tabbed document does not fill MDI viewport"
+                      << "document" << documentSize << "viewport"
+                      << viewportSize << "state" << active->windowState();
+          app.exit(10);
+        }
+      });
+    });
+  }
+
+  if (parser.isSet(globalStatusBarOption)) {
+    QTimer::singleShot(200, &app, [&app]() {
+      WorkspaceWindow *workspace = app.workspaceWindow();
+      MainWindow *document = workspace ? workspace->currentDocument() : nullptr;
+      QStatusBar *workspaceStatus = workspace ? workspace->statusBar() : nullptr;
+      QWidget *progress = document ? document->workspaceStatusWidget() : nullptr;
+      if (!workspaceStatus || !document || !progress ||
+          progress->parentWidget() != workspaceStatus ||
+          document->statusBar()->isVisible()) {
+        qCritical() << "Active document is not using the global status bar";
+        app.exit(11);
+        return;
+      }
+
+      const QString marker = QStringLiteral("workspace-status-smoke");
+      document->statusBar()->showMessage(marker);
+      QCoreApplication::processEvents();
+      if (workspaceStatus->currentMessage() != marker) {
+        qCritical() << "Document status message was not mirrored globally";
+        app.exit(11);
+      }
+      document->statusBar()->clearMessage();
     });
   }
 

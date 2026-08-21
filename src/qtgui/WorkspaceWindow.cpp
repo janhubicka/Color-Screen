@@ -15,6 +15,7 @@
 #include <QScreen>
 #include <QSettings>
 #include <QStackedWidget>
+#include <QStatusBar>
 #include <QTabBar>
 #include <QTimer>
 #include <QToolBar>
@@ -72,9 +73,11 @@ WorkspaceWindow::WorkspaceWindow(QWidget *parent) : QMainWindow(parent) {
   m_mdiArea->setTabsClosable(true);
   m_mdiArea->setTabsMovable(true);
   m_mdiArea->setTabPosition(QTabWidget::North);
-  m_mdiArea->setOption(QMdiArea::DontMaximizeSubWindowOnActivation, true);
+  m_mdiArea->setOption(QMdiArea::DontMaximizeSubWindowOnActivation, false);
   m_mdiArea->setViewMode(QMdiArea::TabbedView);
   setCentralWidget(m_mdiArea);
+
+  statusBar()->setObjectName(QStringLiteral("WorkspaceStatusBar"));
 
   m_inspectorStack = new QStackedWidget(this);
   m_inspectorStack->setObjectName(QStringLiteral("documentInspectorStack"));
@@ -118,6 +121,17 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
   subWindow->setWidget(document);
   m_mdiArea->addSubWindow(subWindow);
 
+  QPointer<MainWindow> guardedDocument(document);
+  connect(document->statusBar(), &QStatusBar::messageChanged, this,
+          [this, guardedDocument](const QString &message) {
+            if (!guardedDocument || m_chromeDocument != guardedDocument)
+              return;
+            if (message.isEmpty())
+              statusBar()->clearMessage();
+            else
+              statusBar()->showMessage(message);
+          });
+
   QPointer<QMdiSubWindow> guardedSubWindow(subWindow);
   connect(document, &QObject::destroyed, this,
           [this, guardedSubWindow]() {
@@ -133,6 +147,8 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
 
   document->show();
   subWindow->show();
+  if (m_mdiArea->viewMode() == QMdiArea::TabbedView)
+    subWindow->showMaximized();
   m_mdiArea->setActiveSubWindow(subWindow);
   onSubWindowActivated(subWindow);
   configureTabBar();
@@ -216,9 +232,14 @@ void WorkspaceWindow::prepareDocumentForClose(MainWindow *document) {
 
 /** Present attached documents as tabs and hide the bar for a single image. */
 void WorkspaceWindow::showTabbedDocuments() {
+  m_mdiArea->setOption(QMdiArea::DontMaximizeSubWindowOnActivation, false);
   m_mdiArea->setViewMode(QMdiArea::TabbedView);
   m_mdiArea->setTabsClosable(true);
   m_mdiArea->setTabsMovable(true);
+  if (QMdiSubWindow *active = m_mdiArea->currentSubWindow()) {
+    active->showMaximized();
+    m_mdiArea->setActiveSubWindow(active);
+  }
   configureTabBar();
 }
 
@@ -399,6 +420,21 @@ void WorkspaceWindow::installDocumentChrome(MainWindow *document) {
     m_inspectorDock->hide();
   }
 
+  if (QWidget *statusWidget = document->workspaceStatusWidget()) {
+    if (statusWidget->parentWidget() != statusBar()) {
+      const bool explicitlyHidden = statusWidget->isHidden();
+      document->statusBar()->removeWidget(statusWidget);
+      statusBar()->addPermanentWidget(statusWidget);
+      statusWidget->setVisible(!explicitlyHidden);
+    }
+  }
+
+  const QString message = document->statusBar()->currentMessage();
+  if (message.isEmpty())
+    statusBar()->clearMessage();
+  else
+    statusBar()->showMessage(message);
+
   document->refreshWindowMenu();
   setWindowTitle(document->documentDisplayName() + tr(" — Color-Screen"));
 }
@@ -418,8 +454,19 @@ void WorkspaceWindow::releaseDocumentChrome(MainWindow *document,
     toolbar->setVisible(showInWindow);
   }
 
+  if (QWidget *statusWidget = document->workspaceStatusWidget()) {
+    if (statusWidget->parentWidget() == statusBar()) {
+      const bool explicitlyHidden = statusWidget->isHidden();
+      statusBar()->removeWidget(statusWidget);
+      document->statusBar()->addPermanentWidget(statusWidget);
+      statusWidget->setVisible(!explicitlyHidden);
+    }
+    document->statusBar()->setVisible(showInWindow);
+  }
+
   document->menuBar()->setVisible(showInWindow);
   if (m_chromeDocument == document) {
+    statusBar()->clearMessage();
     menuBar()->clear();
     m_chromeDocument.clear();
   }
@@ -451,6 +498,7 @@ void WorkspaceWindow::onSubWindowActivated(QMdiSubWindow *window) {
   } else {
     menuBar()->clear();
     m_inspectorDock->hide();
+    statusBar()->clearMessage();
     setWindowTitle(tr("Color-Screen"));
   }
 }
