@@ -37,10 +37,25 @@ jobs:
           git fetch origin main
           git rev-parse origin/main | tee SOURCE_COMMIT
           git archive --format=tar.gz --prefix=Color-Screen/ -o Color-Screen-source.tar.gz origin/main
+      - name: Download Debian trixie core build dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p debs/partial
+          docker run --rm \
+            -v "$PWD/debs:/var/cache/apt/archives" \
+            debian:trixie \
+            bash -lc 'apt-get update && apt-get install -y --download-only --no-install-recommends libfftw3-dev libgsl-dev libturbojpeg0-dev libtiff-dev libraw-dev libzip-dev liblcms2-dev libopenjp2-7-dev libpng-dev libexiv2-dev'
+          rm -rf debs/partial debs/lock
       - uses: actions/upload-artifact@v4
         with:
           name: colorscreen-geometry-source-main
           path: |
             Color-Screen-source.tar.gz
             SOURCE_COMMIT
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-trixie-build-deps
+          path: debs/*.deb
           if-no-files-found: error
