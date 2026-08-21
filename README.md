@@ -136,12 +136,16 @@ or by passing several paths on the command line:
 
     colorscreen-qt scan-1.tif scan-2.tif scan-3.csprj
 
-Images open as movable tabs in one workspace by default, similar to Photoshop
-and Krita. Each tab is still an independent document with its own parameters,
+Images open in a standard Qt multiple-document workspace, similar to Photoshop
+and Krita. With one image the document tab bar is hidden; opening a second
+image reveals movable, closable tabs directly below the active document
+toolbar. Each image remains an independent document with its own parameters,
 undo history, rendering/analysis workers, progress tasks, and crash-recovery
-state. Use the **Window** menu, `Ctrl+Tab`, and `Ctrl+Shift+Tab` to move between
-images. A tab can be detached into a separate window and later moved back to
-the workspace without recreating or copying the document.
+state. Use **Window → Arrange Images** to consolidate documents as tabs or to
+tile/cascade several canvases. Tabs can be dragged out, double-clicked, or
+detached from their context menu and later returned to the workspace without
+recreating or copying the document. `Ctrl+Tab` and `Ctrl+Shift+Tab` cycle the
+open images.
 
 Finally you may try to build also `colorscreen-gtk` which is a deprecated GTK
 based gui application. Invoke it with `colorscreen-gtk <scan file>`. Scan must

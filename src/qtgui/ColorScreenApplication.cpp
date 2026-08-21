@@ -222,9 +222,6 @@ void ColorScreenApplication::detachDocument(MainWindow *document) {
     return;
 
   m_workspaceWindow->removeDocument(document);
-  document->hide();
-  document->setParent(nullptr);
-  document->setWindowFlags(Qt::Window);
   document->show();
   document->raise();
   document->activateWindow();
@@ -257,6 +254,14 @@ void ColorScreenApplication::refreshDocumentPresentation(MainWindow *document) {
   if (m_workspaceWindow)
     m_workspaceWindow->refreshDocument(document);
   refreshWindowMenus();
+}
+
+/** Return workspace-owned presentation widgets before DOCUMENT closes. */
+void ColorScreenApplication::prepareDocumentForClose(MainWindow *document) {
+  if (!document || !m_workspaceWindow ||
+      !m_workspaceWindow->containsDocument(document))
+    return;
+  m_workspaceWindow->prepareDocumentForClose(document);
 }
 
 /** Return the number of attached document tabs. */
@@ -341,6 +346,31 @@ void ColorScreenApplication::populateWindowMenu(QMenu *menu,
   attachAllAction->setEnabled(hasDetached);
   connect(attachAllAction, &QAction::triggered, menu, [this]() {
     attachAllDocuments();
+  });
+
+  QMenu *arrangeMenu = menu->addMenu(tr("&Arrange Images"));
+
+  QAction *tabbedAction = arrangeMenu->addAction(tr("Consolidate All to &Tabs"));
+  tabbedAction->setCheckable(true);
+  tabbedAction->setChecked(m_workspaceWindow &&
+                           m_workspaceWindow->isTabbedView());
+  connect(tabbedAction, &QAction::triggered, menu, [this]() {
+    attachAllDocuments();
+    workspaceWindow()->showTabbedDocuments();
+  });
+
+  QAction *tileAction = arrangeMenu->addAction(tr("&Tile All"));
+  tileAction->setEnabled(documentWindows().size() > 1);
+  connect(tileAction, &QAction::triggered, menu, [this]() {
+    attachAllDocuments();
+    workspaceWindow()->tileDocuments();
+  });
+
+  QAction *cascadeAction = arrangeMenu->addAction(tr("&Cascade"));
+  cascadeAction->setEnabled(documentWindows().size() > 1);
+  connect(cascadeAction, &QAction::triggered, menu, [this]() {
+    attachAllDocuments();
+    workspaceWindow()->cascadeDocuments();
   });
 
   const QList<MainWindow *> documents = documentWindows();
