@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/focus-areas-model-transport-20260821
+  pull_request:
+    branches:
+      - agent/focus-areas-model-base-20260821
 
 permissions:
   contents: read
