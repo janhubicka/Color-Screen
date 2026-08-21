@@ -17,11 +17,12 @@ namespace {
 // const bool verbose = true;
 const bool verbose = false;
 const int verbose_confirm = 0;
-/* Lookup patch of a given color C, coordinates X, Y in COLOR_MAP and maximal size
-   MAX_PATCH_SIZE. Return number of pixels in patch. ENTRIES will be
-   initialized to list all pixels in the patch.  VISITED bitmap is used to mark
-   pixels that belong to already known patches.  If PERMANENT then bitmap is
-   updated to mark all pixels of the patch as visited.  */
+/* Find the eight-connected patch of class C containing X, Y in COLOR_MAP.
+   Store at most MAX_PATCH_SIZE pixels in ENTRIES and return the number stored.
+   VISITED marks pixels belonging to patches already considered.  If PERMANENT
+   is false, clear the bits set by this search before returning.  A return value
+   equal to MAX_PATCH_SIZE means that the component reached the size limit and
+   may be larger.  */
 int find_patch(const color_class_map &color_map, scr_detect::color_class c,
                int x, int y, int max_patch_size, int_point_t *entries,
                bitmap_2d *visited, bool permanent) {
@@ -61,11 +62,14 @@ done:
   return end;
 }
 
-/* Find center of patch specified by ENTRIES of SIZE.
-   This is a weighted average of all entries. Store computed center coordinates
-   in X and Y. Return true if this center is inside of the patch.  */
+/* Compute the arithmetic mean of the SIZE pixels in ENTRIES and store it in X
+   and Y.  Return false for an empty patch or when the image pixel nearest the
+   mean is not part of the patch.  */
 
 bool patch_center(int_point_t *entries, int size, coord_t *x, coord_t *y) {
+  if (size <= 0)
+    return false;
+
   int xsum = 0;
   int ysum = 0;
   for (int i = 0; i < size; i++) {
@@ -82,9 +86,10 @@ bool patch_center(int_point_t *entries, int size, coord_t *x, coord_t *y) {
   return false;
 }
 
-/* Return true if there is a strip on coordinates X, Y of color C in COLOR_MAP.
-   This is done by checking that there is a patch of MIN_PATCH_SIZE. Store
-   result priority in PRIORITY. VISITED is the bitmap marking visited pixels.  */
+/* Return true if COLOR_MAP contains a class-C component of at least
+   MIN_PATCH_SIZE pixels at X, Y.  Store the successful match priority in
+   PRIORITY.  VISITED supplies temporary component-search state; strip pixels
+   are not retained there because a strip is one connected component.  */
 
 bool confirm_strip(const color_class_map *color_map, coord_t x, coord_t y,
                    scr_detect::color_class c, int min_patch_size, int *priority,
@@ -102,51 +107,51 @@ bool confirm_strip(const color_class_map *color_map, coord_t x, coord_t y,
 }
 
 const int npatches = 5;
+
+/* Image-space center of one classified screen patch.  */
 struct patch_info {
   coord_t x, y;
 };
 
-/* Try to guess Dufaycolor or Omnicolore screen on coordinates X and Y using COLOR_MAP.
-   Return true if successful. Store parameters in SPARAM. REPORT_FILE is the file for
-   reporting details. VISITED is the bitmap marking visited pixels. PROGRESS is the progress reporter.
-   This function only detects grid of NPATCHESxNPATCHES*2
-   color patches which is strong enough evidence that the scan seems to contain
-   Dufay color screen but this is not enough patches to accurately determine
-   geometry.  Once approximate geometry is detected in next step flood_fill
-   will find remaining patches of TYPE.
+/* Try to identify an initial Dufay-like grid starting at X, Y in COLOR_MAP.
+   TYPE selects the Dufay, Dioptichrome, Improved Dioptichrome, or Omnicolore
+   color permutation and lattice angle.  On success, store the observed patch
+   centers in SPARAM.  VISITED prevents repeatedly starting from the same
+   connected component and REPORT_FILE receives optional diagnostics.
 
-   Screen organization is
+   This function validates a NPATCHES by 2 * NPATCHES grid.  That is strong
+   evidence for the screen type, but it is intentionally only an initial
+   estimate; flood_fill() later collects enough patches for the final geometry.
+
+   The Dufay arrangement is
 
    GBGBGB
    RRRRRR
    GBGBGB
    RRRRRR
 
-   We also support DioptichromeB where red and green is exchanged
+   Dioptichrome B exchanges red and green:
 
    RBRBRB
    GGGGGG
    RBRBRB
    GGGGGG
 
-   and ImprovedDioptichrome or Omnicolore where red and blue is exchanged
+   Improved Dioptichrome B and Omnicolore exchange red and blue:
 
    GRGRGR
    BBBBBB
    GRGRGR
    BBBBBB
 
-   Moreover the ImprovedDioptichrome has angle between lines approx 107 degrees
-   while in other screens the lines are approximately orthogonal.
-
-   Code is written with Dufaycolor in mind and the color permutations are
-   handled by my_red, my_green and my_blue.
-   */
-
+   Improved Dioptichrome B has an angle of approximately 107.77 degrees
+   between lattice vectors; the other supported Dufay-like screens are
+   approximately orthogonal.  MY_RED, MY_GREEN, and MY_BLUE implement these
+   color permutations below.  */
 bool try_guess_screen(FILE *report_file, scr_type type,
                       const color_class_map &color_map,
                       solver_parameters &sparam, int x, int y,
-                      bitmap_2d *visited, progress_info *progress) {
+                      bitmap_2d *visited) {
   const int max_size = 1000;
   struct patch_info rbpatches[npatches][npatches * 2];
   int_point_t entries[max_size];
@@ -176,6 +181,7 @@ bool try_guess_screen(FILE *report_file, scr_type type,
             scrname, x, y, size, rbpatches[0][0].x, rbpatches[0][0].y);
 
   bool patch_found = false;
+  int adjacent_size = 0;
 
   /* Now find adjacent blue patch.  */
   for (int i = 0; i < size && !patch_found; i++) {
@@ -184,10 +190,11 @@ bool try_guess_screen(FILE *report_file, scr_type type,
       scr_detect::color_class t = color_map.get_class(x, y);
       if (t == my_blue) {
         /* Do not mark as visited so we can revisit.  */
-        int size = find_patch(color_map, my_blue, x, y, max_size, entries,
-                              visited, false);
-        patch_found =
-            patch_center(entries, size, &rbpatches[0][1].x, &rbpatches[0][1].y);
+        adjacent_size = find_patch(color_map, my_blue, x, y, max_size, entries,
+                                   visited, false);
+        patch_found = patch_center(entries, adjacent_size,
+                                   &rbpatches[0][1].x,
+                                   &rbpatches[0][1].y);
       } else if (t != scr_detect::unknown)
         break;
     }
@@ -195,8 +202,8 @@ bool try_guess_screen(FILE *report_file, scr_type type,
 
   if (!patch_found) {
     if (report_file && verbose)
-      fprintf(report_file, "%s: %s patch not found\n", cnames[(int)my_blue],
-              scrname);
+      fprintf(report_file, "%s: %s patch not found\n", scrname,
+              cnames[(int)my_blue]);
     return false;
   }
 
@@ -208,8 +215,8 @@ bool try_guess_screen(FILE *report_file, scr_type type,
     fprintf(report_file,
             "%s: found %s patch of size %i and center %f %f guessing patch "
             "distance %f %f\n",
-            scrname, cnames[(int)my_blue], size, rbpatches[0][0].x,
-            rbpatches[0][0].y, patch_stepx, patch_stepy);
+            scrname, cnames[(int)my_blue], adjacent_size,
+            rbpatches[0][1].x, rbpatches[0][1].y, patch_stepx, patch_stepy);
   for (int p = 2; p < npatches * 2; p++) {
     int nx = rbpatches[0][p - 1].x + patch_stepx;
     int ny = rbpatches[0][p - 1].y + patch_stepy;
@@ -235,12 +242,10 @@ bool try_guess_screen(FILE *report_file, scr_type type,
     fprintf(report_file,
             "%s: Confirmed %i patches in alternating direction with "
             "distances %f %f\n",
-            scrname, npatches, patch_stepx, patch_stepy);
+            scrname, npatches * 2, patch_stepx, patch_stepy);
 
-  /* Now once row is found, extend each entry to an orthogonal row.  */
+  /* Once the first row is known, extend it along the second lattice vector.  */
   for (int r = 1; r < npatches; r++) {
-    int rx = rbpatches[r - 1][0].x - patch_stepy;
-    int ry = rbpatches[r - 1][0].y + patch_stepx;
     coord_t vpatch_stepx;
     coord_t vpatch_stepy;
 
@@ -258,6 +263,8 @@ bool try_guess_screen(FILE *report_file, scr_type type,
       vpatch_stepy = patch_stepx;
     }
 
+    int rx = rbpatches[r - 1][0].x + vpatch_stepx;
+    int ry = rbpatches[r - 1][0].y + vpatch_stepy;
     int nx = rbpatches[r - 1][0].x + 2 * vpatch_stepx;
     int ny = rbpatches[r - 1][0].y + 2 * vpatch_stepy;
     int priority;
@@ -330,26 +337,27 @@ bool try_guess_screen(FILE *report_file, scr_type type,
   return true;
 }
 
-/* Same as try_guess_screen but for Paget/Finlay screens on coordinates X and Y
-   using COLOR_MAP. Store parameters in SPARAM. REPORT_FILE is the file for reporting
-   details. VISITED is the bitmap marking visited pixels. PROGRESS is the progress reporter.
-   Screen is organized
- as follows
+/* Try to identify an initial Paget/Finlay grid starting at X, Y in
+   COLOR_MAP.  On success, store observed patch centers in SPARAM.  VISITED
+   prevents repeatedly starting from the same component and REPORT_FILE
+   receives optional diagnostics.
 
-   G   R   G
- B   B   B
-   R   G   R
- B   B   B
+   In image-oriented coordinates the screen is
 
- Detection works in diagonal coordinates, so the grid is rorated 45 degrees.
+     G   R   G
+   B   B   B
+     R   G   R
+   B   B   B
+
+   Detection uses diagonal coordinates, rotating the logical grid by 45
+   degrees:
 
    G B G B
    B R B R
-   G B G B
-   */
+   G B G B  */
 bool try_guess_paget_screen(FILE *report_file, const color_class_map &color_map,
                             solver_parameters &sparam, int x, int y,
-                            bitmap_2d *visited, progress_info *progress) {
+                            bitmap_2d *visited) {
   const int max_size = 1000;
   struct patch_info rpatches[npatches][npatches];
   struct patch_info gpatches[npatches][npatches];
@@ -415,6 +423,7 @@ bool try_guess_paget_screen(FILE *report_file, const color_class_map &color_map,
       fprintf(report_file,
               "Paget: Second blue patch not found with step %f %f\n",
               b2patch_stepx, b2patch_stepy);
+    return false;
   }
   patch_found = patch_center(entries, size, &bx, &by);
   if (!patch_found || (bx == bpatches[0][0].x && by == bpatches[0][0].y)) {
@@ -423,7 +432,7 @@ bool try_guess_paget_screen(FILE *report_file, const color_class_map &color_map,
     return false;
   }
 
-  /* Order the blue patches to the step is positive.  */
+  /* Order the blue patches so the first lattice step points right.  */
   if (b1patch_stepx < 0) {
     std::swap(b1patch_stepx, b2patch_stepx);
     std::swap(b1patch_stepy, b2patch_stepy);
@@ -431,7 +440,7 @@ bool try_guess_paget_screen(FILE *report_file, const color_class_map &color_map,
     std::swap(bpatches[0][0].y, by);
   }
 
-  /* Now determine the dsitance between two green patches
+  /* Now determine the distance between two green patches
 
        G
      B   B
@@ -624,19 +633,19 @@ bool try_guess_paget_screen(FILE *report_file, const color_class_map &color_map,
   return true;
 }
 
-/* Verify that there is a patch on coordinates X and Y of color C in COLOR_MAP.
-   Check that its size is in range of MIN_PATCH_SIZE and MAX_PATCH_SIZE.
-   MAX_DISTANCE is the maximum distance, store adjusted coordinates in CX, CY
-   and priority in PRIORITY. REPORT_FILE is the file for reporting details,
-   VISITED is the bitmap of visited pixels.  */
-
+/* Verify a classified patch of color C near X, Y in COLOR_MAP.  Accept only
+   components whose size lies in MIN_PATCH_SIZE through MAX_PATCH_SIZE and whose
+   center is within MAX_DISTANCE of the prediction.  Store the accepted center
+   in CX, CY and a distance-derived priority in PRIORITY.  REPORT_FILE receives
+   optional diagnostics and VISITED prevents a component from being accepted
+   more than once.  */
 bool confirm_patch(FILE *report_file, const color_class_map *color_map,
                    coord_t x, coord_t y, scr_detect::color_class c,
                    int min_patch_size, int max_patch_size, coord_t max_distance,
                    coord_t *cx, coord_t *cy, int *priority,
                    bitmap_2d *visited) {
-  // if (x < 0 || y < 0 || x >= color_map->width || y >= color_map->height)
-  // return false;
+  *cx = x;
+  *cy = y;
   int_point_t entries[max_patch_size + 1];
   const char *fail = NULL;
   int size = find_patch(*color_map, c, (int)(x + (coord_t)0.5),
@@ -657,7 +666,7 @@ bool confirm_patch(FILE *report_file, const color_class_map *color_map,
   if (report_file && fail && verbose)
     fprintf(
         report_file,
-        "size: %i (expecting %i...%i) coord: %f %f center %f %f color %i%s\n",
+        "size: %i (expecting %i...%i) coord: %f %f center %f %f color %i %s\n",
         size, min_patch_size, max_patch_size, x, y, *cx, *cy, (int)c,
         fail ? fail : "");
   // printf ("center %f %f\n", *cx, *cy);
@@ -683,32 +692,33 @@ bool confirm_patch(FILE *report_file, const color_class_map *color_map,
 
 #define N_PRIORITIES 8
 
-/* Confirm geometry by matching screen pattern with given RENDER.
-   COORDINATE1 and COORDINATE2 are grid vectors. Test at coordinates X, Y
-   and color T. WIDTH and HEIGHT are bounds. MAX_DISTANCE is maximum distance.
-   Store adjusted coordinates in RCX, RCY and priority in PRIORITY. SUM_RANGE
-   is search range, PATCH_XSCALE and PATCH_YSCALE scale patches. STRIP indicates
-   if it is a strip patch, CORNERS checks corner patches, MIN_CONTRAST is min contrast.  */
-
+/* Confirm a predicted screen element from image data supplied by RENDER.
+   COORDINATE1 and COORDINATE2 are the local lattice vectors and X, Y is the
+   predicted image position.  T is the expected color class; WIDTH and HEIGHT
+   bound interpolation.  Search within a fraction of MAX_DISTANCE, store the
+   best position in RCX, RCY, and assign PRIORITY from contrast and displacement.
+   SUM_RANGE controls the centroid-search footprint, PATCH_XSCALE and
+   PATCH_YSCALE control the inner/outer sampling pattern, STRIP selects strip
+   geometry, CORNERS excludes corner samples for diamond-shaped patches, and
+   MIN_CONTRAST is the required inner-to-outer color ratio.  */
 bool confirm(const render_scr_detect *render, point_t coordinate1,
              point_t coordinate2, coord_t x, coord_t y,
              scr_detect::color_class t, int width, int height,
              coord_t max_distance, coord_t *rcx, coord_t *rcy, int *priority,
              coord_t sum_range, coord_t patch_xscale, coord_t patch_yscale,
              bool strip, bool corners, luminosity_t min_contrast) {
-  /*  bestcx, bestcy are adjusted locations of the patch.  */
-  coord_t bestcy = x, bestcx = y;
-  /*  bestouter_lr is intensity of pixels on left and right boundary the patch
-      bestouter_ud is intensity of pixels on upwards and downwards boundary the
-     patch bestouter_corners is intensity of pixels in corners of the patch
-      bestinner is intensity of pixels inside of patch.  */
+  /* BESTCX and BESTCY are adjusted locations of the patch.  */
+  coord_t bestcx = x, bestcy = y;
+  /* BESTOUTER_LR, BESTOUTER_UD, and BESTOUTER_CORNERS are the sampled
+     color fractions around the patch boundary.  BESTINNER is the fraction
+     inside the patch.  */
   luminosity_t minsum = 0, bestinner = 0, bestouter_lr = 0,
                bestouter_corners = 0, bestouter_ud = 0;
 
-  /* Analyze (sample_steps * 2 + 1) x (sample_steps * 2 + 1) pixels.
-     The inner square of (sample_steps * 2 - 1) x (sample_steps * 2 - 1) should
-     be inside of the patch while the boundary outside. Separate boundary by
-     outer_space to allow unsharp patches.  */
+  /* Analyze a sparse (2 * SAMPLE_STEPS + 1) square.  The inner
+     (2 * SAMPLE_STEPS - 1) square should lie in the patch and the boundary
+     should lie outside it.  OUTER_SPACE leaves a gap for moderately blurred
+     patch boundaries.  */
   const int sample_steps = 2;
   const int outer_space = 1;
   // TODO: Works for Dufay.  */
@@ -743,8 +753,8 @@ bool confirm(const render_scr_detect *render, point_t coordinate1,
     printf("pixel step: %f ranges %i %i distance %f\n", pixel_step, xmax - xmin,
            ymax - ymin, scaled_max_distance);
 
-  /* Do not try to search towards end of screen since it gives wrong resutls.
-     broder 4x4 is necessary for interpolation.  */
+  /* Do not search near an image edge, where interpolation would use pixels
+     outside the image.  A four-pixel border is required.  */
   if (y - scaled_max_distance + ymin - 4 < 0 ||
       y + scaled_max_distance + ymax + 4 >= height ||
       x - scaled_max_distance + xmin - 4 < 0 ||
@@ -912,8 +922,7 @@ bool confirm(const render_scr_detect *render, point_t coordinate1,
   }
   for (int yy = -sample_steps - outer_space; yy <= sample_steps + outer_space;
        yy++) {
-    /* Make bigger gap between the outer set of points and inner ones so
-     * image can be unsharp.  */
+    /* Leave a gap between inner and outer samples for blurred boundaries.  */
     if (yy == -sample_steps - outer_space + 1 || yy == sample_steps)
       yy += outer_space;
     for (int xx = -sample_steps - outer_space; xx <= sample_steps + outer_space;
@@ -1083,9 +1092,9 @@ bool confirm(const render_scr_detect *render, point_t coordinate1,
   return true;
 }
 
-/* Flood fill is controlled withpriority queue with fixed
-   number of priorities.  This reduces chances that misdetected
-   patches will be used as seeds to identify large parts of screen.  */
+/* Fixed-level priority queue used by flood_fill().  Higher numeric priorities
+   are processed first so weak or misdetected patches are less likely to seed a
+   large part of the screen.  */
 
 template <int N, typename T> class priority_queue {
 public:
@@ -1094,11 +1103,13 @@ public:
   std::vector<T> queue[N];
   int sum[N];
 
+  /* Insert E with numeric PRIORITY in the range zero through N - 1.  */
   void insert(T e, int priority) {
     sum[priority]++;
     queue[N - priority - 1].push_back(e);
   }
 
+  /* Extract the next entry from the highest nonempty priority into E.  */
   bool extract_min(T &e) {
     for (int i = 0; i < npriorities; i++)
       if (queue[i].size()) {
@@ -1109,6 +1120,7 @@ public:
     return false;
   }
 
+  /* Print insertion counts for every priority to F.  */
   void print_sums(FILE *f) const {
     fprintf(f, "Overall priority entries:");
     for (int n : sum) {
@@ -1118,6 +1130,7 @@ public:
   }
 };
 
+/* Return the Paget/Finlay patch color at diagonal screen coordinate X, Y.  */
 static solver_parameters::point_color diagonal_coordinates_to_color(int x,
                                                                     int y) {
   if (!(y & 1))
@@ -1125,6 +1138,15 @@ static solver_parameters::point_color diagonal_coordinates_to_color(int x,
   return (x & 1) ? solver_parameters::red : solver_parameters::blue;
 }
 
+/* Grow an initial regular-screen solution across IMG.  GREENX, GREENY is the
+   image position assigned to screen coordinate zero and PARAM is the initial
+   lattice transform.  FAST validates connected components in COLOR_MAP; SLOW
+   validates sampled color contrast through RENDER.  Store optional solver
+   points in SPARAM, use VISITED to avoid reusing classified components, return
+   the number of accepted patches through NPATCHES, and apply limits from
+   DSPARAMS.  REPORT_FILE receives diagnostics and PROGRESS reports work and
+   cancellation.  Return null when the candidate cannot cover the required
+   screen area consistently.  */
 std::unique_ptr<screen_map> flood_fill(
     FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t greeny,
     const scr_to_img_parameters &param, const image_data &img,
@@ -1248,9 +1270,8 @@ std::unique_ptr<screen_map> flood_fill(
       new screen_map(param.type, xshift, yshift, width, height));
 
   struct queue_entry {
-    /* X and Y inscreen specific coordinates so all points appear at integer
-       for Dufay X is multiplied by 2; for paget these are diagonal
-       coordinates.  */
+    /* SCR_X and SCR_Y use screen-specific integer coordinates.  Dufay-like
+       screens double X; Paget/Finlay screens use diagonal coordinates.  */
     int scr_x, scr_y;
     coord_t img_x, img_y;
   };
@@ -1276,8 +1297,9 @@ std::unique_ptr<screen_map> flood_fill(
       if (sparam)
         sparam->add_point(
             {e.img_x, e.img_y}, {e.scr_x / 2.0, (coord_t)e.scr_y},
-            e.scr_y ? (colorscreen::solver_parameters::point_color)my_blue
-                    : (colorscreen::solver_parameters::point_color)my_green);
+            (e.scr_x & 1)
+                ? (colorscreen::solver_parameters::point_color)my_blue
+                : (colorscreen::solver_parameters::point_color)my_green);
 
       // search range should be 1/2 but 1/3 seems to work better in
       // practice. Maybe it is because we look into orthogonal bounding
@@ -1317,8 +1339,7 @@ std::unique_ptr<screen_map> flood_fill(
       }
       if (!map->known_p({e.scr_x, e.scr_y - 1}) &&
           cstrip(e.img_x - param.coordinate2.x / 2,
-                 e.img_y - param.coordinate2.y / 2, scr_detect::red,
-                 priority) &&
+                 e.img_y - param.coordinate2.y / 2, my_red, priority) &&
           cpatch(e.img_x - param.coordinate2.x, e.img_y - param.coordinate2.y,
                  (e.scr_x & 1) ? my_blue : my_green, priority2)) {
         map->safe_set_coord({e.scr_x, e.scr_y - 1}, {ix, iy});
@@ -1328,8 +1349,7 @@ std::unique_ptr<screen_map> flood_fill(
       }
       if (!map->known_p({e.scr_x, e.scr_y + 1}) &&
           cstrip(e.img_x + param.coordinate2.x / 2,
-                 e.img_y + param.coordinate2.y / 2, scr_detect::red,
-                 priority) &&
+                 e.img_y + param.coordinate2.y / 2, my_red, priority) &&
           cpatch(e.img_x + param.coordinate2.x, e.img_y + param.coordinate2.y,
                  (e.scr_x & 1) ? my_blue : my_green, priority2)) {
         map->safe_set_coord({e.scr_x, e.scr_y + 1}, {ix, iy});
@@ -1391,13 +1411,12 @@ std::unique_ptr<screen_map> flood_fill(
   }
   if (progress && progress->cancel_requested())
     return NULL;
-  /* Dufay screen has two points per screen repetetion.  */
+  /* A Dufay-like screen has two square-patch centers per repetition.  */
   *npatches = nfound;
   if (nfound < 100)
     return NULL;
 
-  /* Determine better screen dimension so the overall statistics are
-   * meaningfull.  */
+  /* Refine the screen dimensions before computing coverage statistics.  */
   solver_parameters sparam2;
   scr_to_img_parameters param2;
   if (dsparams->do_mesh)
@@ -1484,15 +1503,17 @@ std::unique_ptr<screen_map> flood_fill(
                !found;
                xx++)
             if (map->known_p({xx, yy})) {
-              last_seen = -xx;
+              last_seen = x - xx;
               found = true;
             }
         if (!found) {
-          progress->pause_stdout();
+          if (progress)
+            progress->pause_stdout();
           printf("Too large unanalyzed unknown screen area around "
                  "image coordinates %f %f\n",
                  img.x, img.y);
-          progress->resume_stdout();
+          if (progress)
+            progress->resume_stdout();
           if (report_file) {
             fprintf(report_file,
                     "Too large unanalyzed unknown screen area around "
@@ -1511,7 +1532,7 @@ std::unique_ptr<screen_map> flood_fill(
   if (snexpected * dsparams->min_screen_percentage > nfound * 100) {
     if (report_file) {
       fprintf(report_file,
-              "Detected screen patches covers only %2.2f%% of the screen\n",
+              "Detected screen patches cover only %2.2f%% of the screen\n",
               nfound * 100.0 / snexpected);
       // fprintf (report_file, "Reducing --min-screen-percentage would
       // bypass this error\n");
@@ -1555,8 +1576,8 @@ std::unique_ptr<screen_map> flood_fill(
   return map;
 }
 
-/* List points in range 0...(xstep-1) and 0....(ystep - 1) starting from
- * middle.  */
+/* Return every cell in an XSTEPS by YSTEPS search grid, ordered in
+   concentric square rings from the central cell toward the image border.  */
 std::vector<int_point_t> check_points(int xsteps, int ysteps) {
   std::vector<int_point_t> ret;
   ret.push_back({xsteps / 2, ysteps / 2});
@@ -1587,6 +1608,9 @@ std::vector<int_point_t> check_points(int xsteps, int ysteps) {
   return ret;
 }
 
+/* Summarize distances between detected coordinates in SMAP and the transform
+   PARAM for IMG.  TYPE names the transform in REPORT_FILE and PROGRESS is
+   paused while the report is written.  */
 void summarise_quality(const image_data &img, const screen_map *smap,
                        const scr_to_img_parameters &param, const char *type,
                        FILE *report_file, progress_info *progress) {
@@ -1626,24 +1650,30 @@ void summarise_quality(const image_data &img, const screen_map *smap,
       if (report_file)
         fprintf(report_file,
                 "%s patches %i. Avg distance to %s solution %f; max "
-                "distance %f; %2.2f%% with distance over 1 and %2.2f%% "
-                "with distance over 4\n",
+                "distance %f; %2.2f%% with distance at least 1 and %2.2f%% "
+                "with distance at least 4\n",
                 channel[c], distance_num[c], type,
                 distance_sum[c] / distance_num[c], max_distance[c],
-                one_num[c] * 100.0 / distance_num[c],
+                (one_num[c] + four_num[c]) * 100.0 / distance_num[c],
                 four_num[c] * 100.0 / distance_num[c]);
     }
   if (progress)
     progress->resume_stdout();
 }
 
+/* Detect a regular screen in IMG using color classification DPARAM and limits
+   DSPARAMS.  Search candidate regions from the center outward, estimate an
+   initial lattice for each supported regular screen, flood-fill accepted
+   patches, and fit the final homography or mesh.  Update SPARAM with final
+   solver points, report optional diagnostics to REPORT_FILE, and use PROGRESS
+   for status and cancellation.  Return an unsuccessful result on any rejected
+   or cancelled stage.  */
 detected_screen
 detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
                         solver_parameters &sparam,
                         const detect_regular_screen_params *dsparams,
                         progress_info *progress, FILE *report_file) {
-  /* Try both screen types; it is cheap to do so and seems to work quite
-     reliable now.  */
+  /* Try all supported regular-screen families.  */
   const bool try_dufay = true;
   const bool try_omnicolore = true;
   const bool try_paget_finlay = true;
@@ -1673,6 +1703,7 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
     bitmap_2d visited_paget2(img.width, img.height);
     bitmap_2d visited_dioptichromeB(img.width, img.height);
     bitmap_2d visited_improved_dioptichromeB(img.width, img.height);
+    bitmap_2d visited_omnicolore(img.width, img.height);
     std::unique_ptr<render_scr_detect> render = NULL;
     std::unique_ptr<color_class_map> cmap = NULL;
     const int search_xsteps = 6;
@@ -1746,13 +1777,10 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
             continue;
           }
         }
-        /* In Finlay/Paget screen the blue patches touches by borders.
-           Enforce boundaries between patches so flood fill does not
-           overflow.
-
-FIXME: This does not seem to work well since blue patches are too
-small and may get eliminated completely.  So in the following code
-we simply try both cmaps.  */
+        /* In Paget/Finlay screens, blue patches touch at their corners.
+           The separately materialized class map was intended to enforce
+           boundaries between them, but small blue patches may disappear.
+           Keep both this map and the renderer's original map as candidates.  */
         if (try_paget_finlay) {
           std::unique_ptr<color_class_map> new_cmap(new color_class_map);
           cmap = std::move(new_cmap);
@@ -1786,45 +1814,45 @@ we simply try both cmaps.  */
               color_class_map *this_cmap;
               /* Try to guess both screen types.  If we find Paget/Finlay
                  screen, preserve original type if it makes sense,
-                 otheriwse default to Paget.  */
+                 otherwise default to Paget.  */
               if (try_dufay &&
                   try_guess_screen(report_file, Dufay,
                                    *render->get_color_class_map(), sparam, x, y,
-                                   &visited, progress)) {
+                                   &visited)) {
                 current_type = Dufay;
                 this_cmap = render->get_color_class_map();
               } else if (try_dufay &&
                          try_guess_screen(report_file, DioptichromeB,
                                           *render->get_color_class_map(),
-                                          sparam, x, y, &visited_dioptichromeB,
-                                          progress)) {
+                                          sparam, x, y,
+                                          &visited_dioptichromeB)) {
                 current_type = DioptichromeB;
                 this_cmap = render->get_color_class_map();
               } else if (try_dufay &&
                          try_guess_screen(
                              report_file, ImprovedDioptichromeB,
                              *render->get_color_class_map(), sparam, x, y,
-                             &visited_improved_dioptichromeB, progress)) {
+                             &visited_improved_dioptichromeB)) {
                 current_type = ImprovedDioptichromeB;
                 this_cmap = render->get_color_class_map();
               } else if (try_omnicolore &&
                          try_guess_screen(
                              report_file, Omnicolore,
                              *render->get_color_class_map(), sparam, x, y,
-                             &visited_improved_dioptichromeB, progress)) {
+                             &visited_omnicolore)) {
                 current_type = Omnicolore;
                 this_cmap = render->get_color_class_map();
               } else if (try_paget_finlay &&
                          try_guess_paget_screen(
                              report_file,
                              cmap ? *cmap : *render->get_color_class_map(),
-                             sparam, x, y, &visited_paget, progress)) {
+                             sparam, x, y, &visited_paget)) {
                 current_type = type == Finlay ? Finlay : Paget;
                 this_cmap = cmap ? cmap.get() : render->get_color_class_map();
               } else if (try_paget_finlay && cmap &&
                          try_guess_paget_screen(
                              report_file, *render->get_color_class_map(),
-                             sparam, x, y, &visited_paget2, progress)) {
+                             sparam, x, y, &visited_paget2)) {
                 current_type = type == Finlay ? Finlay : Paget;
                 this_cmap = render->get_color_class_map();
               }
@@ -1842,10 +1870,8 @@ we simply try both cmaps.  */
                 }
                 visited.clear();
                 param.type = current_type;
-                if (simple_solver(&param, img, sparam, progress) > 1e20) {
-                  nattempts++;
+                if (simple_solver(&param, img, sparam, progress) > 1e20)
                   continue;
-                }
                 smap =
                     flood_fill(report_file, dsparams->slow_floodfill,
                                dsparams->fast_floodfill, sparam.points[0].img.x,
@@ -1894,10 +1920,10 @@ we simply try both cmaps.  */
 		  if (!progress || !progress->cancel_requested ())
 			  for (int i = -d; i < d && !smap; i++)
 			  {
-				  if (try_guess_screen (report_file, *render.get_color_class_map (), sparam, img.width / 2 + i, img.height / 2 + d, &visited, progress)
-						  || try_guess_screen (report_file, *render.get_color_class_map (), sparam, img.width / 2 + i, img.height / 2 - d, &visited, progress)
-						  || try_guess_screen (report_file, *render.get_color_class_map (), sparam, img.width / 2 + d, img.height / 2 + i, &visited, progress)
-						  || try_guess_screen (report_file, *render.get_color_class_map (), sparam, img.width / 2 - d, img.height / 2 + i, &visited, progress))
+				  if (try_guess_screen (report_file, *render.get_color_class_map (), sparam, img.width / 2 + i, img.height / 2 + d, &visited)
+						  || try_guess_screen (report_file, *render.get_color_class_map (), sparam, img.width / 2 + i, img.height / 2 - d, &visited)
+						  || try_guess_screen (report_file, *render.get_color_class_map (), sparam, img.width / 2 + d, img.height / 2 + i, &visited)
+						  || try_guess_screen (report_file, *render.get_color_class_map (), sparam, img.width / 2 - d, img.height / 2 + i, &visited))
 				  {
 					  if (verbose)
 					  {
@@ -1943,8 +1969,13 @@ we simply try both cmaps.  */
     ret.param.lens_center_y = img.width / 2;*/
   // ret.param.projection_distance = img.width;
   ret.param.lens_correction = dsparams->lens_correction;
-  solver(&ret.param, img, sparam, progress);
+  coord_t solver_error = solver(&ret.param, img, sparam, progress);
   if (progress && progress->cancel_requested()) {
+    return ret;
+  }
+  if (!my_isfinite(solver_error) || solver_error > (coord_t)1e20) {
+    if (report_file)
+      fprintf(report_file, "Final geometry solver failed\n");
     return ret;
   }
   summarise_quality(img, smap.get(), ret.param, "homographic", report_file,
@@ -2119,7 +2150,7 @@ we simply try both cmaps.  */
     progress->pause_stdout();
   if (report_file)
     fprintf(report_file,
-            "Unalanyzed border left: %f%%, right %f%%, top %f%%, bottom %f%%\n",
+            "Unanalyzed border left: %f%%, right %f%%, top %f%%, bottom %f%%\n",
             ret.range.x * 100.0 / img.width,
             100 - (ret.range.x + ret.range.width) * 100.0 / img.width,
             ret.range.y * 100.0 / img.height,
@@ -2134,6 +2165,9 @@ we simply try both cmaps.  */
 }
 } // namespace
 
+/* Detect a regular screen and prune temporary render-detection caches before
+   returning.  IMG, DPARAM, SPARAM, DSPARAMS, PROGRESS, and REPORT_FILE have the
+   same roles as in detect_regular_screen_1().  */
 detected_screen
 detect_regular_screen(const image_data &img, scr_detect_parameters &dparam,
                       solver_parameters &sparam,
