@@ -1,0 +1,29 @@
+e-variance weight of two independent samples with raw
+@@ -478,20 +498,20 @@ analyze_base::find_best_match (int percentage, int max_percentage,
+       = m_red_support || m_green_support || m_blue_support
+         || other.m_red_support || other.m_green_support
+         || other.m_blue_support;
+-  /* Return the logical RGB support of one screen tile.  */
++  /* Return the logical RGB support of ANALYZER's screen tile at (X, Y).  */
+   const auto screen_tile_collection_support
+       = [] (const analyze_base &analyzer, int x, int y) -> rgbdata
+   {
+     return {
+       average_collection_support (
+           analyzer.m_red_support.get (), analyzer.m_area.width,
+-          analyzer.m_rwscl, analyzer.m_rhscl, x, y),
++          analyzer.m_area.height, analyzer.m_rwscl, analyzer.m_rhscl, x, y),
+       average_collection_support (
+           analyzer.m_green_support.get (), analyzer.m_area.width,
+-          analyzer.m_gwscl, analyzer.m_ghscl, x, y),
++          analyzer.m_area.height, analyzer.m_gwscl, analyzer.m_ghscl, x, y),
+       average_collection_support (
+           analyzer.m_blue_support.get (), analyzer.m_area.width,
+-          analyzer.m_bwscl, analyzer.m_bhscl, x, y)
++          analyzer.m_area.height, analyzer.m_bwscl, analyzer.m_bhscl, x, y)
+     };
+   };
+   std::unique_ptr<rgbdata[]> sums = std::make_unique<rgbdata[]> ((size_t) m_area.width * m_area.height);
+diff --git a/src/libcolorscreen/unittests.C b/src/libcolorscreen/unittests.C
+index cb49e0d6..89813ab4 100644
+--- a/

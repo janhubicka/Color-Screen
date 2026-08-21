@@ -1,0 +1,32 @@
+  x, y, reliable ? (luminosity_t)1 : (luminosity_t)0.001);
++        const luminosity_t support
++            = reliable ? (luminosity_t)1 : (luminosity_t)0.001;
++        corrupted_supported.set_support (x, y,
++                                         { support, support, support });
++
++        /* Red and green imitate the false shift while blue retains the true
++           shift.  Only independent per-channel support can let blue decide.  */
++        const rgbdata fallback = texture (x + 101, y + 103);
++        rgbdata channel_value = fallback;
++        if (x + misleading_shift >= 0)
++          {
++            channel_value.red = sample (x + misleading_shift, y, 0);
++            channel_value.green = sample (x + misleading_shift, y, 1);
++          }
++        if (x + correct_shift < width)
++          channel_value.blue = sample (x + correct_shift, y, 2);
++        channel_corrupted.set_pixel (x, y, channel_value);
++        channel_corrupted_supported.set_pixel (x, y, channel_value);
++        channel_corrupted_supported.set_support (
++            x, y, { (luminosity_t)0.001, (luminosity_t)0.001,
++                    (luminosity_t)1 });
+       }
+ 
+   scr_to_img_parameters map_parameters;
+@@ -6276,6 +6301,7 @@ test_weighted_matching ()
+       return false;
+     }
+ 
++  /* Require FIRST and SECOND to match at (EXPECTED_X, EXPECTED_Y).  */
+   auto expect_shift = [&] (const char *name, matching_test_analyzer &first,
+                            matching_test_analyzer &second, int expected

@@ -1,0 +1,40 @@
+          = support[(size_t)(y * yscale + yy) * support_width
+-                      + x * xscale + xx];
+-        if (my_isfinite (value) && value > (luminosity_t)0)
+-          sum += value;
+-      }
+-  return sum / (xscale * yscale);
++  const int support_width = width << width_scale;
++  const int support_height = height << height_scale;
++  const auto get_support = [&] (int xx, int yy)
++  {
++    xx = std::min (std::max (xx, 0), support_width - 1);
++    yy = std::min (std::max (yy, 0), support_height - 1);
++    const luminosity_t value = support[(size_t)yy * support_width + xx];
++    return my_isfinite (value) && value > (luminosity_t)0
++               ? value
++               : (luminosity_t)0;
++  };
++
++  if (!height_scale)
++    {
++      if (!width_scale)
++        return get_support (x, y);
++      return (get_support (2 * x, y) + get_support (2 * x + 1, y))
++             * (luminosity_t)0.5;
++    }
++  if (!width_scale)
++    {
++      /* Paget red and green logical rows are bracketed by even packed rows;
++         the intervening odd row is shifted by half a screen tile.  */
++      const int next_even_row = std::min (2 * (y + 1), 2 * (height - 1));
++      return (get_support (x, 2 * y) + get_support (x, next_even_row))
++             * (luminosity_t)0.5;
++    }
++  return (get_support (2 * x, 2 * y) + get_support (2 * x + 1, 2 * y)
++          + get_support (2 * x, 2 * y + 1)
++          + get_support (2 * x + 1, 2 * y + 1))
++         * (luminosity_t)0.25;
+ }
+ 
+ /* Return the invers

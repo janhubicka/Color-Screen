@@ -1,0 +1,33 @@
+diff --git a/src/libcolorscreen/analyze-base.C b/src/libcolorscreen/analyze-base.C
+index ff570c50..81014bc3 100644
+--- a/src/libcolorscreen/analyze-base.C
++++ b/src/libcolorscreen/analyze-base.C
+@@ -8,30 +8,50 @@ namespace colorscreen
+ {
+ 
+ /* Return the average raw collection support of the channel samples making up
+-   screen tile (X, Y).  SUPPORT is laid out at WIDTH << WIDTH_SCALE by the
+-   corresponding scaled height.  Missing support means the historical unit
++   screen tile (X, Y).  SUPPORT is laid out at WIDTH << WIDTH_SCALE by HEIGHT
++   << HEIGHT_SCALE.  Match the same packed subelements as red_avg(),
++   green_avg() and blue_avg(): Paget red/green use the two even packed rows
++   bracketing a logical row, while a channel scaled in both directions uses
++   the ordinary 2 by 2 block.  Missing support means the historical unit
+    weight; nonpositive and non-finite entries contribute zero.  */
+ static inline luminosity_t
+-average_collection_support (const luminosity_t *support, int width,
++average_collection_support (const luminosity_t *support, int width, int height,
+                             int width_scale, int height_scale, int x, int y)
+ {
+   if (!support)
+     return (luminosity_t)1;
+ 
+-  const int xscale = 1 << width_scale;
+-  const int yscale = 1 << height_scale;
+-  const int support_width = width * xscale;
+-  luminosity_t sum = 0;
+-  for (int yy = 0; yy < yscale; yy++)
+-    for (int xx = 0; xx < xscale; xx++)
+-      {
+-        const luminosity_t value
+-  

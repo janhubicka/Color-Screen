@@ -1,0 +1,18 @@
+_x,
+                            int expected_y) -> bool
+@@ -6310,6 +6336,15 @@ test_weighted_matching ()
+                         correct_shift, 0))
+     return false;
+ 
++  /* A shared scalar confidence would still follow the two corrupted channels;
++     the per-channel weights must allow the reliable blue plane to win.  */
++  if (!expect_shift ("Unweighted channel-corrupted matching", reference,
++                     channel_corrupted, misleading_shift, 0)
++      || !expect_shift ("Per-channel support-weighted matching",
++                        reference_supported, channel_corrupted_supported,
++                        correct_shift, 0))
++    return false;
++
+   return true;
+ }
+ 

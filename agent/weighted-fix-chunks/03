@@ -1,0 +1,43 @@
+src/libcolorscreen/unittests.C
++++ b/src/libcolorscreen/unittests.C
+@@ -6149,6 +6149,8 @@ test_real_mtf_reproducibility ()
+   return true;
+ }
+ 
++/* Verify that overlap matching uses retained collection support without
++   changing the historical geometry qualification or unit-support result.  */
+ static bool
+ test_weighted_matching ()
+ {
+@@ -6162,6 +6164,7 @@ test_weighted_matching ()
+   class matching_test_analyzer : public analyze_base_worker<strips_geometry>
+   {
+   public:
++    /* Construct a WIDTH by HEIGHT analyzer and optionally allocate support.  */
+     matching_test_analyzer (int width, int height, bool with_support)
+         : analyze_base_worker (0, 0, 0, 0, 0, 0)
+     {
+@@ -6189,7 +6192,7 @@ test_weighted_matching ()
+         }
+     }
+ 
+-    /* Set all three channel values of one screen tile.  */
++    /* Set RGB VALUE for the screen tile at (X, Y).  */
+     void
+     set_pixel (int x, int y, rgbdata value)
+     {
+@@ -6199,18 +6202,18 @@ test_weighted_matching ()
+       m_blue[index] = value.blue;
+     }
+ 
+-    /* Set equal retained collection support for all three channels.  */
++    /* Set per-channel retained SUPPORT for the screen tile at (X, Y).  */
+     void
+-    set_support (int x, int y, luminosity_t support)
++    set_support (int x, int y, rgbdata support)
+     {
+       const size_t index = (size_t)y * m_area.width + x;
+-      m_red_support[index] = support;
+-      m_green_support[index] = support;
+-      m_blue_support[index] = support;
++      m_red_suppo

@@ -1,0 +1,34 @@
+rt[index] = support.red;
++      m_green_support[index] = support.green;
++      m_blue_support[index] = support.blue;
+     }
+   };
+ 
+-  /* Deterministic high-frequency texture with independent RGB components.  */
++  /* Return a deterministic high-frequency sample for (X, Y), CHANNEL.  */
+   auto sample = [] (int x, int y, int channel) -> luminosity_t
+   {
+     uint32_t value = (uint32_t)x * UINT32_C (73856093)
+@@ -6225,6 +6228,7 @@ test_weighted_matching ()
+                  * (luminosity_t)(value & UINT32_C (0xffff))
+                  / (luminosity_t)65535;
+   };
++  /* Return all three independent texture channels at (X, Y).  */
+   auto texture = [&] (int x, int y) -> rgbdata
+   { return { sample (x, y, 0), sample (x, y, 1), sample (x, y, 2) }; };
+ 
+@@ -6234,6 +6238,8 @@ test_weighted_matching ()
+   matching_test_analyzer clean_supported (width, height, true);
+   matching_test_analyzer corrupted (width, height, false);
+   matching_test_analyzer corrupted_supported (width, height, true);
++  matching_test_analyzer channel_corrupted (width, height, false);
++  matching_test_analyzer channel_corrupted_supported (width, height, true);
+ 
+   for (int y = 0; y < height; y++)
+     for (int x = 0; x < width; x++)
+@@ -6260,8 +6266,27 @@ test_weighted_matching ()
+           corrupted_value = texture (x + 101, y + 103);
+         corrupted.set_pixel (x, y, corrupted_value);
+         corrupted_supported.set_pixel (x, y, corrupted_value);
+-        corrupted_supported.set_support (
+-          
