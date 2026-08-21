@@ -1,0 +1,52 @@
+name: Publish uniform-image-layer focus model
+
+on:
+  pull_request:
+    branches:
+      - agent/focus-model-publish-base-20260821
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/focus-model-publisher-20260821'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact publisher payload
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: transport
+
+      - name: Check out exact current base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          path: repo
+
+      - name: Verify and publish focus model
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat transport/agent/focus-model-chunks/* > /tmp/focus-model.patch.b64
+          base64 -d /tmp/focus-model.patch.b64 > /tmp/focus-model.patch
+          echo '9d4184c1244e6d60f6fc0c1689a9cdb73daeecd367f17732405fe16c36f8df61  /tmp/focus-model.patch' | sha256sum -c -
+
+          cd repo
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.base.sha }}"
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git checkout -B agent/uniform-image-layer-focus "${{ github.event.pull_request.base.sha }}"
+          git am /tmp/focus-model.patch
+          git diff HEAD^ --check
+          test "$(git diff HEAD^ --name-only | sort)" = $'doc/finetune-solver.md\ndoc/finetune-tracking.md\nsrc/libcolorscreen/finetune-int.h\nsrc/libcolorscreen/finetune.C\nsrc/libcolorscreen/include/finetune.h\nsrc/libcolorscreen/unittests.C'
+          echo '6c7ff7e511f825ed28d6c033084ac60f67c8c18fec9ddc25596de91ce826a5f6  doc/finetune-solver.md' | sha256sum -c -
+          echo '9bc71543993321e536546a7bde31e4ea21f3d7ea0356c30bcc8c4755579b2279  doc/finetune-tracking.md' | sha256sum -c -
+          echo 'c0085be5a59c01135798d39099e78c4ed1955c0a026c5b6c50a93a97af0fe377  src/libcolorscreen/finetune-int.h' | sha256sum -c -
+          echo 'd725bbd2ea4070575d05efb9143d328bd6cd138a6f61e5390431f3577e144749  src/libcolorscreen/finetune.C' | sha256sum -c -
+          echo 'cf00cf0a2fb30bd5019b4e07047d8dc752c780b8348fe2ad1e78c8d4e801943f  src/libcolorscreen/include/finetune.h' | sha256sum -c -
+          echo 'f48d512469b069a3ff99df15daca64b797013514e34637db5a843a3c8a8081fc  src/libcolorscreen/unittests.C' | sha256sum -c -
+          git push --force origin HEAD:refs/heads/agent/uniform-image-layer-focus
+          printf 'Published %s on base %s\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD^)"
