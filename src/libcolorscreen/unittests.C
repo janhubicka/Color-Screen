@@ -4674,13 +4674,19 @@ dng_warp_rectilinear_reference (point_t p, int width, int height,
   const coord_t cy = y0 + center.y * (y1 - y0);
   const coord_t mx = std::max (my_fabs (x0 - cx), my_fabs (x1 - cx));
   const coord_t my = std::max (my_fabs (y0 - cy), my_fabs (y1 - cy));
-  const coord_t m = my_sqrt (mx * mx + my * my);
-  const coord_t dx = (p.x - cx) / m;
-  const coord_t dy = (p.y - cy) / m;
-  const coord_t rsq = std::min ((coord_t)1, dx * dx + dy * dy);
+  const coord_t max_dist_sq2 = mx * mx + my * my;
+  const coord_t dx = p.x - cx;
+  const coord_t dy = p.y - cy;
+  const coord_t rsq
+      = std::min ((coord_t)1, (dx * dx + dy * dy) / max_dist_sq2);
   const coord_t f
       = kr[0] + rsq * (kr[1] + rsq * (kr[2] + rsq * kr[3]));
-  return { cx + m * f * dx, cy + m * f * dy };
+
+  /* This is algebraically identical to normalizing DX and DY by
+     sqrt(MAX_DIST_SQ2) and multiplying by the same radius again.  Keeping the
+     squared radius and original offsets avoids target-specific reciprocal and
+     reassociation differences under fast-math.  */
+  return { cx + f * dx, cy + f * dy };
 }
 
 /* Verify the implemented radial, single-coefficient-set subset of DNG

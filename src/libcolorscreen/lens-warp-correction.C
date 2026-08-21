@@ -12,13 +12,15 @@ struct lens_inverse_parameters
 {
   lens_warp_correction_parameters param;
   coord_t max_dist;
+  coord_t inv_max_dist_sq2;
 
-  /* Return true if this parameter set is equal to O.  */
+  /* Return true if this cache parameter set is equal to O.  */
   bool
   operator== (const lens_inverse_parameters &o) const
   {
-    return param == o.param 
-           && max_dist == o.max_dist;
+    return param == o.param
+           && max_dist == o.max_dist
+           && inv_max_dist_sq2 == o.inv_max_dist_sq2;
   }
 };
 
@@ -78,7 +80,6 @@ std::unique_ptr<precomputed_function<coord_t>>
 get_new_inverse (struct lens_inverse_parameters &p, progress_info *prog)
 {
   (void)prog;
-  coord_t inv_max_dist_sq2 = 1 / (p.max_dist * p.max_dist);
 
   const coord_t max = inverse_search_limit (p.param, p.max_dist);
   if (!(max > 0) || !my_isfinite (max))
@@ -88,7 +89,7 @@ get_new_inverse (struct lens_inverse_parameters &p, progress_info *prog)
   return std::make_unique<precomputed_function<coord_t>> (
       0, p.max_dist, lens_warp_correction::size,
       [&] (coord_t x) {
-        return get_inverse (p.param, x, max, inv_max_dist_sq2);
+        return get_inverse (p.param, x, max, p.inv_max_dist_sq2);
       },
       true);
 }
@@ -114,15 +115,21 @@ lens_warp_correction::precompute (point_t center, point_t c1, point_t c2,
   if (!m_params.is_monotone ())
     return false;
   m_noop = false;
-  m_max_dist = std::max (
-      c1.dist_from (center),
-      std::max (c2.dist_from (center),
-                std::max (c3.dist_from (center), c4.dist_from (center))));
+  const coord_t max_dist_sq2
+      = std::max (c1.dist_sq2_from (center),
+                  std::max (c2.dist_sq2_from (center),
+                            std::max (c3.dist_sq2_from (center),
+                                      c4.dist_sq2_from (center))));
   m_center = center;
-  if (!(m_max_dist > 0) || !my_isfinite (m_max_dist))
+  if (!(max_dist_sq2 > 0) || !my_isfinite (max_dist_sq2))
     return false;
-  m_inv_max_dist_sq2 = 1 / (m_max_dist * m_max_dist);
-  return true;
+
+  /* Keep the squared normalization before taking the square root.  Squaring
+     M_MAX_DIST again needlessly perturbs the rectangle-corner squared radius
+     and, under fast-math, can make the DNG forward mapping target-dependent.  */
+  m_max_dist = my_sqrt (max_dist_sq2);
+  m_inv_max_dist_sq2 = 1 / max_dist_sq2;
+  return my_isfinite (m_max_dist) && my_isfinite (m_inv_max_dist_sq2);
 }
 
 /* Precompute the inverse radial distortion function lookup table.
@@ -132,7 +139,8 @@ lens_warp_correction::precompute_inverse ()
 {
   if (m_noop)
     return true;
-  lens_inverse_parameters p = { m_params, m_max_dist };
+  lens_inverse_parameters p
+      = { m_params, m_max_dist, m_inv_max_dist_sq2 };
   m_inverted_ratio = lens_inverse_cache.get (p, nullptr);
   return m_inverted_ratio != nullptr;
 }
