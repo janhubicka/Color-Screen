@@ -1,0 +1,262 @@
+diff --git a/src/libcolorscreen/analyze-base.C b/src/libcolorscreen/analyze-base.C
+index ff570c50..81014bc3 100644
+--- a/src/libcolorscreen/analyze-base.C
++++ b/src/libcolorscreen/analyze-base.C
+@@ -8,30 +8,50 @@ namespace colorscreen
+ {
+ 
+ /* Return the average raw collection support of the channel samples making up
+-   screen tile (X, Y).  SUPPORT is laid out at WIDTH << WIDTH_SCALE by the
+-   corresponding scaled height.  Missing support means the historical unit
++   screen tile (X, Y).  SUPPORT is laid out at WIDTH << WIDTH_SCALE by HEIGHT
++   << HEIGHT_SCALE.  Match the same packed subelements as red_avg(),
++   green_avg() and blue_avg(): Paget red/green use the two even packed rows
++   bracketing a logical row, while a channel scaled in both directions uses
++   the ordinary 2 by 2 block.  Missing support means the historical unit
+    weight; nonpositive and non-finite entries contribute zero.  */
+ static inline luminosity_t
+-average_collection_support (const luminosity_t *support, int width,
++average_collection_support (const luminosity_t *support, int width, int height,
+                             int width_scale, int height_scale, int x, int y)
+ {
+   if (!support)
+     return (luminosity_t)1;
+ 
+-  const int xscale = 1 << width_scale;
+-  const int yscale = 1 << height_scale;
+-  const int support_width = width * xscale;
+-  luminosity_t sum = 0;
+-  for (int yy = 0; yy < yscale; yy++)
+-    for (int xx = 0; xx < xscale; xx++)
+-      {
+-        const luminosity_t value
+-            = support[(size_t)(y * yscale + yy) * support_width
+-                      + x * xscale + xx];
+-        if (my_isfinite (value) && value > (luminosity_t)0)
+-          sum += value;
+-      }
+-  return sum / (xscale * yscale);
++  const int support_width = width << width_scale;
++  const int support_height = height << height_scale;
++  const auto get_support = [&] (int xx, int yy)
++  {
++    xx = std::min (std::max (xx, 0), support_width - 1);
++    yy = std::min (std::max (yy, 0), support_height - 1);
++    const luminosity_t value = support[(size_t)yy * support_width + xx];
++    return my_isfinite (value) && value > (luminosity_t)0
++               ? value
++               : (luminosity_t)0;
++  };
++
++  if (!height_scale)
++    {
++      if (!width_scale)
++        return get_support (x, y);
++      return (get_support (2 * x, y) + get_support (2 * x + 1, y))
++             * (luminosity_t)0.5;
++    }
++  if (!width_scale)
++    {
++      /* Paget red and green logical rows are bracketed by even packed rows;
++         the intervening odd row is shifted by half a screen tile.  */
++      const int next_even_row = std::min (2 * (y + 1), 2 * (height - 1));
++      return (get_support (x, 2 * y) + get_support (x, next_even_row))
++             * (luminosity_t)0.5;
++    }
++  return (get_support (2 * x, 2 * y) + get_support (2 * x + 1, 2 * y)
++          + get_support (2 * x, 2 * y + 1)
++          + get_support (2 * x + 1, 2 * y + 1))
++         * (luminosity_t)0.25;
+ }
+ 
+ /* Return the inverse-variance weight of two independent samples with raw
+@@ -478,20 +498,20 @@ analyze_base::find_best_match (int percentage, int max_percentage,
+       = m_red_support || m_green_support || m_blue_support
+         || other.m_red_support || other.m_green_support
+         || other.m_blue_support;
+-  /* Return the logical RGB support of one screen tile.  */
++  /* Return the logical RGB support of ANALYZER's screen tile at (X, Y).  */
+   const auto screen_tile_collection_support
+       = [] (const analyze_base &analyzer, int x, int y) -> rgbdata
+   {
+     return {
+       average_collection_support (
+           analyzer.m_red_support.get (), analyzer.m_area.width,
+-          analyzer.m_rwscl, analyzer.m_rhscl, x, y),
++          analyzer.m_area.height, analyzer.m_rwscl, analyzer.m_rhscl, x, y),
+       average_collection_support (
+           analyzer.m_green_support.get (), analyzer.m_area.width,
+-          analyzer.m_gwscl, analyzer.m_ghscl, x, y),
++          analyzer.m_area.height, analyzer.m_gwscl, analyzer.m_ghscl, x, y),
+       average_collection_support (
+           analyzer.m_blue_support.get (), analyzer.m_area.width,
+-          analyzer.m_bwscl, analyzer.m_bhscl, x, y)
++          analyzer.m_area.height, analyzer.m_bwscl, analyzer.m_bhscl, x, y)
+     };
+   };
+   std::unique_ptr<rgbdata[]> sums = std::make_unique<rgbdata[]> ((size_t) m_area.width * m_area.height);
+diff --git a/src/libcolorscreen/unittests.C b/src/libcolorscreen/unittests.C
+index cb49e0d6..89813ab4 100644
+--- a/src/libcolorscreen/unittests.C
++++ b/src/libcolorscreen/unittests.C
+@@ -6149,6 +6149,8 @@ test_real_mtf_reproducibility ()
+   return true;
+ }
+ 
++/* Verify that overlap matching uses retained collection support without
++   changing the historical geometry qualification or unit-support result.  */
+ static bool
+ test_weighted_matching ()
+ {
+@@ -6162,6 +6164,7 @@ test_weighted_matching ()
+   class matching_test_analyzer : public analyze_base_worker<strips_geometry>
+   {
+   public:
++    /* Construct a WIDTH by HEIGHT analyzer and optionally allocate support.  */
+     matching_test_analyzer (int width, int height, bool with_support)
+         : analyze_base_worker (0, 0, 0, 0, 0, 0)
+     {
+@@ -6189,7 +6192,7 @@ test_weighted_matching ()
+         }
+     }
+ 
+-    /* Set all three channel values of one screen tile.  */
++    /* Set RGB VALUE for the screen tile at (X, Y).  */
+     void
+     set_pixel (int x, int y, rgbdata value)
+     {
+@@ -6199,18 +6202,18 @@ test_weighted_matching ()
+       m_blue[index] = value.blue;
+     }
+ 
+-    /* Set equal retained collection support for all three channels.  */
++    /* Set per-channel retained SUPPORT for the screen tile at (X, Y).  */
+     void
+-    set_support (int x, int y, luminosity_t support)
++    set_support (int x, int y, rgbdata support)
+     {
+       const size_t index = (size_t)y * m_area.width + x;
+-      m_red_support[index] = support;
+-      m_green_support[index] = support;
+-      m_blue_support[index] = support;
++      m_red_support[index] = support.red;
++      m_green_support[index] = support.green;
++      m_blue_support[index] = support.blue;
+     }
+   };
+ 
+-  /* Deterministic high-frequency texture with independent RGB components.  */
++  /* Return a deterministic high-frequency sample for (X, Y), CHANNEL.  */
+   auto sample = [] (int x, int y, int channel) -> luminosity_t
+   {
+     uint32_t value = (uint32_t)x * UINT32_C (73856093)
+@@ -6225,6 +6228,7 @@ test_weighted_matching ()
+                  * (luminosity_t)(value & UINT32_C (0xffff))
+                  / (luminosity_t)65535;
+   };
++  /* Return all three independent texture channels at (X, Y).  */
+   auto texture = [&] (int x, int y) -> rgbdata
+   { return { sample (x, y, 0), sample (x, y, 1), sample (x, y, 2) }; };
+ 
+@@ -6234,6 +6238,8 @@ test_weighted_matching ()
+   matching_test_analyzer clean_supported (width, height, true);
+   matching_test_analyzer corrupted (width, height, false);
+   matching_test_analyzer corrupted_supported (width, height, true);
++  matching_test_analyzer channel_corrupted (width, height, false);
++  matching_test_analyzer channel_corrupted_supported (width, height, true);
+ 
+   for (int y = 0; y < height; y++)
+     for (int x = 0; x < width; x++)
+@@ -6260,8 +6266,27 @@ test_weighted_matching ()
+           corrupted_value = texture (x + 101, y + 103);
+         corrupted.set_pixel (x, y, corrupted_value);
+         corrupted_supported.set_pixel (x, y, corrupted_value);
+-        corrupted_supported.set_support (
+-            x, y, reliable ? (luminosity_t)1 : (luminosity_t)0.001);
++        const luminosity_t support
++            = reliable ? (luminosity_t)1 : (luminosity_t)0.001;
++        corrupted_supported.set_support (x, y,
++                                         { support, support, support });
++
++        /* Red and green imitate the false shift while blue is still
++           correct.  Only independent per-channel support can let blue win.  */
++        const rgbdata fallback = texture (x + 101, y + 103);
++        rgbdata channel_value = fallback;
++        if (x + misleading_shift >= 0)
++          {
++            channel_value.red = sample (x + misleading_shift, y, 0);
++            channel_value.green = sample (x + misleading_shift, y, 1);
++          }
++        if (x + correct_shift < width)
++          channel_value.blue = sample (x + correct_shift, y, 2);
++        channel_corrupted.set_pixel (x, y, channel_value);
++        channel_corrupted_supported.set_pixel (x, y, channel_value);
++        channel_corrupted_supported.set_support (
++            x, y, { (luminosity_t)0.001, (luminosity_t)0.001,
++                    (luminosity_t)1 });
+       }
+ 
+   scr_to_img_parameters map_parameters;
+@@ -6276,6 +6301,7 @@ test_weighted_matching ()
+       return false;
+     }
+ 
++  /* Require FIRST  and SECOND to match at (EXPECTED_X, EXPECTED_Y).  */
++  auto expect_shift = [&] (const char *name, matching_test_analyzer &first,
++                           matching_test_analyzer &second, int expected_x,
++                           int expected_y) -> bool
++  {
++    coord_t xshift = 0, yshift = 0;
++    const int result = first.find_best_match (
++        60, 100, second, 0, &xshift, &yshift, -1, map, other_map, nullptr);
++    if (result != 2 || xshift != expected_x || yshift != expected_y)
++      {
++        fprintf (stderr,
++                 "%s found shift %.9g,%.9g with result %d; expected %d,%d\n",
++                 name, xshift, yshift, result, expected_x, expected_y);
++        return false;
++      }
++    return true;
++  };
++
++  /* Explicit unit support must preserve the established unweighted offset.  */
++  if (!expect_shift ("Unweighted clean matching", reference, clean,
++                     correct_shift, 0)
++      || !expect_shift ("Unit-support clean matching", reference_supported,
++                        clean_supported, correct_shift, 0))
++    return false;
++
++  /* Most pixels below imitate a different shift, but have almost no scanner
++     support.  Historical unweighted matching follows that corruption; paired
++     support must let the reliable minority recover the true offset.  */
++  if (!expect_shift ("Unweighted corrupted matching", reference, corrupted,
++                     misleading_shift, 0)
++      || !expect_shift ("Support-weighted corrupted matching",
++                        reference_supported, corrupted_supported,
++                        correct_shift, 0))
++    return false;
++
++  /* A shared scalar confidence would still follow the two corrupted channels;
++     the per-channel weights must allow the reliable blue plane to win.  */
++  if (!expect_shift ("Unweighted channel-corrupted matching", reference,
++                     channel_corrupted, misleading_shift, 0)
++      || !expect_shift ("Per-channel support-weighted matching",
++                        reference_supported, channel_corrupted_supported,
++                        correct_shift, 0))
++    return false;
++
++  return true;
++}
++
+ static bool
+ test_denoise ()
+ {
+@@ -7766,6 +7966,8 @@ main (int argc, char **argv)
+     { "slanted_edge", "slanted edge MTF tests", [] () { return test_slanted_edge_mtf (); } },
+     { "real_mtf_reproducibility", "real MTF reproducibility tests",
+       [] () { return test_real_mtf_reproducibility (); } },
++    { "weighted_matching", "collection-support weighted matching tests",
++      [] () { return test_weighted_matching (); } },
+     { "denoising", "denoising tests", [] () { return test_denoise (); } },
+     { "demosaic", "dufay and paget demosaicing tests", [] () { return test_demosaic (); } },
+     { NULL, NULL, NULL }

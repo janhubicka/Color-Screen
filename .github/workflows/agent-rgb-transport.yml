@@ -23,10 +23,10 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           path: transport
 
-      - name: Check out latest main
+      - name: Check out exact current main
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84
           fetch-depth: 0
           path: repo
 
@@ -34,47 +34,19 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          python3 - <<'PY'
-          import base64
-          import hashlib
-          from pathlib import Path
-
-          def decode(parts, output, expected):
-              data = b''.join(
-                  base64.b64decode(
-                      ''.join(path.read_text().split()), validate=True
-                  )
-                  for path in parts
-              )
-              actual = hashlib.sha256(data).hexdigest()
-              if actual != expected:
-                  raise SystemExit(
-                      f'{output}: SHA-256 {actual}, expected {expected}'
-                  )
-              Path(output).write_bytes(data)
-
-          decode(
-              sorted(Path('transport/agent').glob('weighted-matching.patch.b64.*')),
-              'weighted-matching.patch',
-              '6bd27e176b01eeeb8eaee0311d6157cfa1691db2ea2914892637df158760ae6e',
-          )
-          decode(
-              [Path('transport/agent/weighted-paget-fix.patch.b64')],
-              'weighted-paget-fix.patch',
-              '259e1c06927b9c1372e868efbac3f4d83eb197e3a3152aa91c22a2af605994e3',
-          )
-          PY
+          echo 'ed7052f4d8edb22701ed9ee01ebd08ad0b5a3dbb33756bd03f2bab665c11a7a2  transport/agent/weighted-matching-main.patch' | sha256sum -c -
+          echo 'a41ead607b9ba836f5ee97ebb1d99347aed2668fd363b2995ca65da41362aa40  transport/agent/weighted-paget-fix-raw.patch' | sha256sum -c -
 
           cd repo
-          base=$(git rev-parse HEAD)
-          test "$(git rev-parse --abbrev-ref HEAD)" = main
-          git checkout -B agent/weighted-overlap-matching "$base"
-          git apply --index --whitespace=error ../weighted-matching.patch
-          git apply --index --whitespace=error ../weighted-paget-fix.patch
+          test "$(git rev-parse HEAD)" = 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84
+          git checkout -B agent/weighted-overlap-matching 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84
+          git apply --index --whitespace=error ../transport/agent/weighted-matching-main.patch
+          git apply --index --whitespace=error ../transport/agent/weighted-paget-fix-raw.patch
           git diff --cached --check
           test "$(git diff --cached --name-only | sort)" = $'src/libcolorscreen/analyze-base.C\nsrc/libcolorscreen/unittests.C'
+          test "$(git write-tree)" = e3d8cf50d282c4078940ecda2c572e9df2fecd2c
           git config user.name 'OpenAI Codex'
           git config user.email 'noreply@openai.com'
           git commit -F ../transport/agent/weighted-matching-commit.txt
           git push --force origin HEAD:refs/heads/agent/weighted-overlap-matching
-          printf 'Published on base %s as %s\n' "$base" "$(git rev-parse HEAD)"
+          printf 'Published %s on base %s\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD^)"
