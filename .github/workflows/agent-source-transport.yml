@@ -31,7 +31,7 @@ jobs:
           docker run --rm \
             -v "$PWD/debs:/out" \
             debian:trixie \
-            bash -lc 'apt-get update && apt-get install -y --download-only --no-install-recommends -o Dir::Cache::archives=/out libfftw3-dev libfftw3-bin libfftw3-long3 libfftw3-quad3 libgsl-dev libgsl28 libgslcblas0 libturbojpeg0-dev libturbojpeg0 lcms2-utils liblcms2-dev liblcms2-2 libraw-dev libraw23t64 libzip-dev libzip5 zipcmp zipmerge ziptool libexiv2-dev libexiv2-28 libexiv2-data libinireader0'
+            bash -lc 'apt-get update && apt-get install -y --download-only --no-install-recommends -o Dir::Cache::archives=/out libfftw3-dev libfftw3-bin libfftw3-long3 libfftw3-quad3 libgsl-dev libgsl28 libgslcblas0 libturbojpeg0-dev libturbojpeg0 liblcms2-dev liblcms2-2 libraw-dev libraw23t64 libzip-dev libzip5 zipcmp zipmerge ziptool libexiv2-dev libexiv2-28 libexiv2-data libinireader0'
           rm -rf debs/partial debs/lock
       - uses: actions/upload-artifact@v4
         with:
