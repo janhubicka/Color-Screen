@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/pr35-source-transport-20260821
+  pull_request:
+    branches:
+      - main
 
 jobs:
   package-source:
