@@ -1,0 +1,19 @@
+name: Agent PR35 source transport
+
+on:
+  push:
+    branches:
+      - agent/pr35-source-transport-20260821
+
+jobs:
+  package-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package source tree
+        run: tar --exclude=.git -czf /tmp/colorscreen-pr35-source.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-pr35-source
+          path: /tmp/colorscreen-pr35-source.tar.gz
+          retention-days: 1
