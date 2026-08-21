@@ -285,30 +285,27 @@ storage with an explicit capacity.
 
 ### DG-020 — pre-classification unsharp masking is a legacy detector aid
 
-**Severity:** medium historical/performance
+**Severity:** high compatibility/robustness
 
-**Status:** fixed compatibility default
+**Status:** compatibility default retained; removal blocked by DG-019
 
 The `scr_detect_parameters` radius/amount unsharp mask predates the current MTF
-model.  It was introduced when high-volume National Geographic work required
-automatic detection and stitching of many scans under substantial time pressure.
-That was a reasonable way to make the old threshold classifier more aggressive,
-but it should not define the modern detector architecture.
+model.  An attempt in PR #35 to change its historical radius 2 / amount 3
+default to zero exposed a real compatibility dependency: both existing Dufay
+CLI integration tests aborted during autodetection.  The Coolscan raw fixture
+exhausted all 36 search regions, while the Capture One stitched fixture failed
+on a later tile after earlier tiles had been detected.
 
-New `scr_detect_parameters` now default this legacy mask off.  Serialized
-nonzero `scr_detect_sharpen_radius` and `scr_detect_sharpen_amount` values are
-still read and honored, so existing parameter files that intentionally request
-the old behavior remain compatible.  Scanner restoration now belongs to the
-render pipeline, which can sharpen native RGB channels independently from
-measured or modeled MTF data.
+Keep radius 2 / amount 3 as the default for now.  Explicit zero values remain a
+supported experimental mode and are exercised by synthetic fast-only discovery.
+This is not an endorsement of unsharp masking as the long-term detector design;
+it is a regression guard until DG-009 through DG-013 make the classifier robust
+to imperfect boundaries without artificially sharpening them.
 
-Geometry detection does not yet accept a `render_parameters` sharpening model.
-Do not duplicate the new MTF machinery inside screen detection.  If future
-measurements show that restoration before classification is useful, pass the
-chosen scanner MTF configuration explicitly and test it as a separate detector
-mode.  The preferred robustness work remains DG-009 through DG-013, where the
-detector tolerates imperfect boundaries rather than depending on sharpening to
-make them artificially crisp.
+Before retiring the compatibility mask again, compare the historical default
+and explicit zero values on the current CLI fixtures and the Batch 08 corpus in
+DG-019.  Any replacement must match or improve successful detection without
+increasing false positives or failure time.
 
 ### DG-021 — color optimization copied a padded image through a zero-amount mask
 
@@ -340,13 +337,19 @@ before.
 
 **Severity:** medium performance
 
-**Status:** fixed
+**Status:** fixed for the explicitly unsharpened path
 
-The top-level detector always materialized the full adjusted RGB image before
-searching, although fast flood fill only uses the color-class map.  Adjusted RGB
-precomputation is now requested only when slow image-domain confirmation is
-enabled.  This removes one full-image buffer and pass from fast-only detection,
-which is particularly useful for quickly rejecting unsuitable images.
+Fast flood fill itself uses only the color-class map, but the historical
+pre-classification unsharp mask needs adjusted RGB in order to build that map.
+Consequently a default radius 2 / amount 3 run legitimately performs one RGB
+precomputation even in fast-only mode.  The detector statistics now count this
+implicit precomputation rather than reporting a misleading zero.
+
+When the compatibility mask is explicitly disabled and slow image-domain
+confirmation is also disabled, adjusted RGB is not materialized.  Synthetic
+fast-only discovery exercises this zero-mask mode and requires
+`rgb_precomputes=0`.  Thus the slow-path allocation is still avoidable, while
+DG-020 accurately records the cost of the compatibility mask.
 
 ## Validation corpus
 
@@ -360,6 +363,21 @@ The report-only DG-014 records now provide a stable baseline format, and the
 existing synthetic discovery tests cover sharp Finlay and Dufay detection with
 both slow+fast and fast-only flood fill.  The remaining corpus work is to add
 real soft scans, controlled degraded variants, and negative images.
+
+The historical National Geographic failure corpus is available in Dropbox at
+`/Batch 08 error samples`.  It contains 25 problematic NGS scans, generally as
+nine original Capture One EIP tiles plus flattened outputs.  Treat the EIP tiles
+as the authoritative regression inputs.  Start manual smoke testing with
+`NGS00428/Tiles - EIP/dpa_ecp_NGS00428_Tile01.eip` and
+`NGS00899/Tiles - EIP/dpa_ecp_NGS00899_Tile01.eip`, then expand to all tiles and
+all scans.  These files are too large for routine CI, so keep the existing small
+real Dufay fixtures as CI gates and use Batch 08 for manual robustness and
+failure-time measurements.
+
+For each Batch 08 input, compare the historical 2 / 3 mask, explicit 0 / 0, and
+future blur-tolerant alternatives.  Record success/type, search regions, seed
+pixels, initial grids, final failure stage, patch count, coverage, and stage
+wall times from DG-014.
 
 The corpus should contain, for every available screen family:
 

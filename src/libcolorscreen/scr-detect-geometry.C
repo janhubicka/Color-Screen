@@ -1892,9 +1892,13 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
           }
           render = std::move(new_render);
           bool precompute_ok = render->precompute_all(PRECOMPUTE_NONE, progress);
-          if (precompute_ok && dsparams->slow_floodfill) {
+          if (precompute_ok && stats.legacy_preclassification_sharpening)
             stats.rgb_precomputes++;
+          if (precompute_ok && dsparams->slow_floodfill) {
             precompute_ok = render->precompute_rgbdata(progress);
+            if (precompute_ok
+                && !stats.legacy_preclassification_sharpening)
+              stats.rgb_precomputes++;
           }
           stats.add_time(&stats.precompute_ms, stage_start);
           if (!precompute_ok) {

@@ -13,7 +13,7 @@ struct scr_detect_parameters
   scr_detect_parameters ()
       : black ({ 0, 0, 0 }), red ({ 1, 0, 0 }), green ({ 0, 1, 0 }),
         blue ({ 0, 0, 1 }), min_luminosity (0.000), min_ratio (1),
-        sharpen_radius (0), sharpen_amount (0)
+        sharpen_radius (2), sharpen_amount (3)
   {
   }
 
@@ -27,9 +27,10 @@ struct scr_detect_parameters
   luminosity_t min_ratio;
 
   /* Legacy unsharp-mask parameters used before screen-color classification.
-     They are retained for old parameter files, but new detection defaults to
-     no pre-classification sharpening.  Scanner sharpening now belongs to the
-     render pipeline, where measured per-channel MTF data can be used.  */
+     Existing real Dufay integration scans still depend on the historical
+     radius 2 / amount 3 default, so retain it until the blur-tolerant
+     classifier can replace this compatibility aid.  Explicit zero values
+     remain valid for benchmarking the unsharpened detector path.  */
   coord_t sharpen_radius;
   luminosity_t sharpen_amount;
   /* Return true when OTHER produces the same color classification.  This is
