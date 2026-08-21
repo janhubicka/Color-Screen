@@ -8,23 +8,62 @@ The GUI is built using **Qt6** and follows a modular panel-based architecture.
 The main window (`MainWindow`) serves as a shell that integrates multiple
 functional panels.  It is a frontend for `libcolorscreen`.
 
-The application is essentially a special purpose non-destructive image editor.
-Main functionality is loading an image `m_scan` along with parameters saved in
-`ParameterState`. Main window consists of standard menu, toolbar, statusbar and
-three main components: `ImageWIdget`, `Navigationview` and Panels. The status
-bar is integrated with libcolorscreen's `progress_info` which makes it possible
-to visualise progress on tasks and subtasks as well as cancel individual tasks.
-Rendering and analysis may be slow and it is important to keep GUI responsive.
+The application is essentially a special-purpose non-destructive image editor.
+It uses a multi-document, multi-window model: `ColorScreenApplication` owns the
+set of document windows, and each `MainWindow` owns one image (`m_scan`) and all
+mutable state associated with that image. A document window contains the
+standard menu, toolbar, and status bar together with three main components:
+`ImageWidget`, `NavigationView`, and the parameter panels. The status bar is
+integrated with libcolorscreen's `progress_info`, which makes it possible to
+visualise and cancel tasks and subtasks. Rendering and analysis may be slow, so
+it is important to keep every document window responsive.
 
 ### Key Components
 
-- **`MainWindow`**: The top-level window. It manages the lifecycle of the image data, the TaskQueue, and connects signals between panels and the main application logic.
+- **`ColorScreenApplication`**: The application-level document manager. It creates and tracks `MainWindow` instances, routes multi-file/desktop open requests, builds Window menus, cycles between documents, and restores per-document crash-recovery sessions.
+- **`MainWindow`**: One complete image document. It owns the scan, parameters, undo stack, image/navigation widgets, panels, task queues, workers, progress entries, detached docks, and a unique recovery directory. Mutable document state must never be shared between different `MainWindow` instances.
 - **`NavigationView`**: This shows the whole image and indicates zoom and position of ImageWidget.
 It lets user to effectively move around the image
 - **`ImageWidget`**: This displays the image and provides high-performance interaction. It uses a modular architecture for rendering and event handling to manage complex interaction modes (Pan, Select, SetCenter, etc.).
 - **`ParameterPanel`**: The abstract base class for all UI panels (e.g., `CapturePanel`, `ColorPanel`, `SharpnessPanel`). It provides a rich set of helper methods to create consistent UI controls that are linked to the application state.
 - **`ParameterState`**: A structured object containing all render and project-level parameters. It is used as the single source of truth for the UI.
 - **`TaskQueue`**: Manages background worker threads. It utilizes multiple specialized queues (e.g., `m_renderQueue` for image tiles and `m_pointsQueue` for registration overlays) to ensure that heavy computations like point rendering do not block the main GUI thread or interfere with image tile generation.
+
+### Multi-Document Window Model
+
+Opening an image must not replace an occupied document. All entry points—File
+Open (including multi-selection), recent files, positional command-line paths,
+and `QFileOpenEvent` from the desktop—route through
+`ColorScreenApplication::openFiles()`. The first path may reuse an untouched
+empty window; every other path receives a new `MainWindow`.
+
+The document boundary is intentionally the entire `MainWindow`. In particular,
+each document has independent:
+
+- `image_data`, render/detection/geometry/solver parameters, profile spots, and
+  render mode;
+- `QUndoStack`, selection/tool state, panels, navigation, and detached docks;
+- worker objects, `TaskQueue` instances, progress entries, and render
+  cancellation state;
+- current image/parameter filenames and a UUID-named recovery directory.
+
+Window layout and recent-file lists remain application preferences in
+`QSettings`; they are not document state. Recent lists are persisted when they
+change so a later-closing window cannot overwrite newer entries from another
+window.
+
+The Window menu is rebuilt for all live documents whenever a window is added or
+removed, and immediately before the menu opens. Document actions and ordinary
+editor shortcuts must use `Qt::WindowShortcut`, not
+`Qt::ApplicationShortcut`, otherwise identical actions in several open windows
+become ambiguous. `Ctrl+Tab` and `Ctrl+Shift+Tab` cycle documents; `Ctrl+N`
+creates an empty document window.
+
+Crash recovery is session-aware. `ColorScreenApplication` prompts once and
+restores one `MainWindow` per recovery directory. Each `MainWindow` writes and
+removes only its own payload, so closing one image cannot erase another image's
+recovery state. The legacy single-document recovery slot is migrated without
+removing its source files until the complete copy succeeds.
 
 ---
 
