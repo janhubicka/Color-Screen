@@ -19,10 +19,12 @@ same physical subelements as red_avg(), green_avg() and blue_avg().
 Add a weighted_matching regression covering the unweighted baseline, explicit
 unit-support compatibility, an adversarial majority of low-support samples,
 and independent per-channel weighting where only blue is reliable.  The
-focused matcher, channel-sharpening, scanner-blur and denoising groups pass in
-both O2 and Ofast checking builds.  The real Dufay stitching test passes 6/6 in
-both builds and retains its established -16,-10 offset.
+focused matcher, channel-sharpening, scanner-blur, denoising and lens-warp
+groups pass in both O2 and Ofast checking builds.  The full six-stage Dufay
+stitch fixture passes in both builds and retains its established -16,-10
+offset.
 
-Complete make check runs report 79/81 in both builds.  The only failure is the
-pre-existing real-MTF fixture at SNR 29.8569 versus the threshold 30; the same
-failure was reproduced on the exact 24de87bfd6b5 base revision.
+The complete unit suite passes 41 of 42 groups in both builds.  The only
+failure is the existing real-MTF fixture at SNR 29.8569 versus the threshold
+30; the same failure was reproduced on the exact pre-patch 24de87bfd6b5 base,
+and current main's intervening changes are confined to DNG lens normalization.
