@@ -6,10 +6,11 @@ on:
       - agent/source-transport-20260821
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   archive-source:
+    if: ${{ !contains(github.event.head_commit.message, '[transport result]') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -40,3 +41,13 @@ jobs:
             SOURCE_COMMIT
             debs/*.deb
           if-no-files-found: error
+      - name: Record workflow run identifier
+        shell: bash
+        run: |
+          set -euxo pipefail
+          printf '%s\n' "$GITHUB_RUN_ID" > .agent-source-transport-run-id
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -- .agent-source-transport-run-id
+          git commit -m 'ci: record source transport run [transport result] [skip ci]'
+          git push origin HEAD:agent/source-transport-20260821
