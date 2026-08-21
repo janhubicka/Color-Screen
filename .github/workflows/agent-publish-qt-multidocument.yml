@@ -30,7 +30,7 @@ jobs:
           fetch-depth: 0
           path: repo
 
-      - name: Verify payload and publish review branch
+      - name: Verify payload and publish source/documentation commits
         shell: bash
         run: |
           set -euxo pipefail
@@ -42,12 +42,31 @@ jobs:
           echo '062523e6a4c500941fde4fe922efe1beec1835f5654974d144b60f4b31d6ec8d  qt-multidocument.patch' | sha256sum -c -
 
           cd repo
-          test "$(git rev-parse HEAD)" = 878d96176f03ac8ddffdb072e120868b0c909c67
-          git checkout -B agent/qtgui-multi-document 878d96176f03ac8ddffdb072e120868b0c909c67
+          base=878d96176f03ac8ddffdb072e120868b0c909c67
+          test "$(git rev-parse HEAD)" = "$base"
           git config user.name 'OpenAI Codex'
           git config user.email 'noreply@openai.com'
+
+          # Reconstruct the exact tested commits first, then rewrite only the
+          # implementation commit to omit workflow files. GitHub Actions tokens
+          # cannot update workflow definitions; those four files are added as a
+          # separate connector-authored CI commit after this branch is pushed.
+          git checkout -B agent/qtgui-multi-document-assembled "$base"
           git am --whitespace=error ../qt-multidocument.patch
-          test "$(git rev-list --count 878d96176f03ac8ddffdb072e120868b0c909c67..HEAD)" = 2
-          git diff --check 878d96176f03ac8ddffdb072e120868b0c909c67..HEAD
-          test "$(git diff --name-only 878d96176f03ac8ddffdb072e120868b0c909c67..HEAD | sort)" = $'.agents/qtgui.md\n.github/workflows/build-macos.yml\n.github/workflows/build-ubuntu.yml\n.github/workflows/build-windows-clang.yml\n.github/workflows/build-windows.yml\nNEWS\nREADME.md\nsrc/qtgui/CMakeLists.txt\nsrc/qtgui/ColorScreenApplication.cpp\nsrc/qtgui/ColorScreenApplication.h\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/MainWindow.h\nsrc/qtgui/Makefile.am\nsrc/qtgui/Makefile.in\nsrc/qtgui/main.cpp'
+          original_implementation=$(git rev-parse HEAD~1)
+          original_documentation=$(git rev-parse HEAD)
+
+          git checkout -B agent/qtgui-multi-document "$base"
+          git cherry-pick --no-commit "$original_implementation"
+          git restore --source="$base" --staged --worktree -- \
+            .github/workflows/build-macos.yml \
+            .github/workflows/build-ubuntu.yml \
+            .github/workflows/build-windows-clang.yml \
+            .github/workflows/build-windows.yml
+          git commit -C "$original_implementation"
+          git cherry-pick "$original_documentation"
+
+          test "$(git rev-list --count "$base"..HEAD)" = 2
+          git diff --check "$base"..HEAD
+          test "$(git diff --name-only "$base"..HEAD | sort)" = $'.agents/qtgui.md\nNEWS\nREADME.md\nsrc/qtgui/CMakeLists.txt\nsrc/qtgui/ColorScreenApplication.cpp\nsrc/qtgui/ColorScreenApplication.h\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/MainWindow.h\nsrc/qtgui/Makefile.am\nsrc/qtgui/Makefile.in\nsrc/qtgui/main.cpp'
           git push --force origin HEAD:refs/heads/agent/qtgui-multi-document
