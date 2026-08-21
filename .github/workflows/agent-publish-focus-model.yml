@@ -30,8 +30,9 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          cat transport/agent/focus-model-chunks/* > /tmp/focus-model.patch.b64
-          base64 -d /tmp/focus-model.patch.b64 > /tmp/focus-model.patch
+          base64 -d transport/agent/focus-model.patch.gz.b64 > /tmp/focus-model.patch.gz
+          echo '5e09b49f33229ddfce9cecc80c1f54eec834b8b3ae4d172562b19eef4fa6a914  /tmp/focus-model.patch.gz' | sha256sum -c -
+          gzip -dc /tmp/focus-model.patch.gz > /tmp/focus-model.patch
           echo '9d4184c1244e6d60f6fc0c1689a9cdb73daeecd367f17732405fe16c36f8df61  /tmp/focus-model.patch' | sha256sum -c -
 
           cd repo
