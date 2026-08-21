@@ -1,0 +1,75 @@
+diff --git a/src/libcolorscreen/analyze-base.C b/src/libcolorscreen/analyze-base.C
+index f3eb9c92..6de44741 100644
+--- a/src/libcolorscreen/analyze-base.C
++++ b/src/libcolorscreen/analyze-base.C
+@@ -6,6 +6,48 @@
+ #include "denoise.h"
+ namespace colorscreen
+ {
++
++/* Return the average raw collection support of the channel samples making up
++   screen tile (X, Y).  SUPPORT is laid out at WIDTH << WIDTH_SCALE by the
++   corresponding scaled height.  Missing support means the historical unit
++   weight; nonpositive and non-finite entries contribute zero.  */
++static inline luminosity_t
++average_collection_support (const luminosity_t *support, int width,
++                            int width_scale, int height_scale, int x, int y)
++{
++  if (!support)
++    return (luminosity_t)1;
++
++  const int xscale = 1 << width_scale;
++  const int yscale = 1 << height_scale;
++  const int support_width = width * xscale;
++  luminosity_t sum = 0;
++  for (int yy = 0; yy < yscale; yy++)
++    for (int xx = 0; xx < xscale; xx++)
++      {
++        const luminosity_t value
++            = support[(size_t)(y * yscale + yy) * support_width
++                      + x * xscale + xx];
++        if (my_isfinite (value) && value > (luminosity_t)0)
++          sum += value;
++      }
++  return sum / (xscale * yscale);
++}
++
++/* Return the inverse-variance weight of two independent samples with raw
++   collection supports FIRST and SECOND.  The algebraically equivalent
++   branch form avoids overflowing FIRST * SECOND for malformed large input.  */
++static inline luminosity_t
++paired_collection_support (luminosity_t first, luminosity_t second)
++{
++  if (!(my_isfinite (first) && my_isfinite (second)
++        && first > (luminosity_t)0 && second > (luminosity_t)0))
++    return 0;
++  if (first < second)
++    return first / ((luminosity_t)1 + first / second);
++  return second / ((luminosity_t)1 + second / first);
++}
++
+ static void
+ add (unsigned char ov[256][256][3], int c, coord_t x, coord_t y)
+ {
+@@ -432,6 +474,26 @@ analyze_base::find_best_match (int percentage, int max_percentage,
+     fprintf (report_file, "cpfind output: %f,%f out of range\n", *xshift_ret,
+              *yshift_ret);
+ 
++  const bool use_collection_support
++      = m_red_support || m_green_support || m_blue_support
++        || other.m_red_support || other.m_green_support
++        || other.m_blue_support;
++  /* Return the logical RGB support of one screen tile.  */
++  const auto screen_tile_collection_support
++      = [] (const analyze_base &analyzer, int x, int y) -> rgbdata
++  {
++    return {
++      average_collection_support (
++          analyzer.m_red_support.get (), analyzer.m_area.width,
++          analyzer.m_rwscl, analyzer.m_rhscl, x, y),
++      average_collection_support (
++          analyzer.m_green_support.get (), analyzer.m_area.width,
++          analyzer.m_gwscl, analyzer.m_ghscl, x, y),
++      average_collection_support (
++          analyzer.m_blue_support.get (), analyzer.m_area.width,
++          analyzer.m

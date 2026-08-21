@@ -30,17 +30,18 @@ jobs:
           fetch-depth: 0
           path: repo
 
-      - name: Verify payload and publish one commit
+      - name: Verify, commit, and publish the tested patch
         shell: bash
         run: |
           set -euxo pipefail
-          echo 'ed7052f4d8edb22701ed9ee01ebd08ad0b5a3dbb33756bd03f2bab665c11a7a2  transport/agent/weighted-matching-main.patch' | sha256sum -c -
+          cat transport/agent/weighted-main-chunks/* > weighted-matching-main.patch
+          echo 'ed7052f4d8edb22701ed9ee01ebd08ad0b5a3dbb33756bd03f2bab665c11a7a2  weighted-matching-main.patch' | sha256sum -c -
           echo 'a41ead607b9ba836f5ee97ebb1d99347aed2668fd363b2995ca65da41362aa40  transport/agent/weighted-paget-fix-raw.patch' | sha256sum -c -
 
           cd repo
           test "$(git rev-parse HEAD)" = 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84
           git checkout -B agent/weighted-overlap-matching 16fe77d3c08dc3e27b927bba7e9ec16a6d97bc84
-          git apply --index --whitespace=error ../transport/agent/weighted-matching-main.patch
+          git apply --index --whitespace=error ../weighted-matching-main.patch
           git apply --index --whitespace=error ../transport/agent/weighted-paget-fix-raw.patch
           git diff --cached --check
           test "$(git diff --cached --name-only | sort)" = $'src/libcolorscreen/analyze-base.C\nsrc/libcolorscreen/unittests.C'

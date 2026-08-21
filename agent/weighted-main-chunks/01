@@ -1,0 +1,54 @@
+_bwscl, analyzer.m_bhscl, x, y)
++    };
++  };
+   std::unique_ptr<rgbdata[]> sums = std::make_unique<rgbdata[]> ((size_t) m_area.width * m_area.height);
+   std::unique_ptr<rgbdata[]> other_sums
+       = std::make_unique<rgbdata[]> ((size_t) other.m_area.width * other.m_area.height);
+@@ -494,7 +556,8 @@ analyze_base::find_best_match (int percentage, int max_percentage,
+                best_rscale, best_gscale, best_bscale, best_noverlap, first,   \
+                last, other_first, other_last, left, right, other_left,        \
+                other_right, range, other_range, val_known, xshift_ret,        \
+-               yshift_ret, sums, other_sums, report_file, direction, map, l)
++               yshift_ret, sums, other_sums, report_file, direction, map, l,  \
++               use_collection_support, screen_tile_collection_support)
+   for (int y = ystart; y < yend; y++)
+     {
+       bool lfound = false;
+@@ -650,6 +713,52 @@ analyze_base::find_best_match (int percentage, int max_percentage,
+               continue;
+             }
+ 
++          /* Keep overlap qualification as the historical count of known
++             screen tiles.  Collection support affects only the photometric
++             fit and is shift-dependent, so it cannot use the row suffix sums
++             above.  Estimate exposure from the same bounded grid of samples
++             used for residual evaluation.  */
++          if (use_collection_support)
++            {
++              rsum1 = rsum2 = gsum1 = gsum2 = bsum1 = bsum2 = 0;
++              for (int yy = yystart; yy < yyend; yy += ystep)
++                {
++                  int y1 = yy + m_area.yshift ();
++                  int row_xstart = -m_area.xshift () + range[y1].min;
++                  int row_xend = -m_area.xshift () + range[y1].max + 1;
++                  int y2 = yy - y + other.m_area.yshift ();
++                  row_xstart = std::max (
++                      -other.m_area.xshift () + x + other_range[y2].min,
++                      row_xstart);
++                  row_xend = std::min (
++                      -other.m_area.xshift () + other_range[y2].max + 1 + x,
++                      row_xend);
++                  for (int xx = row_xstart; xx < row_xend; xx += xstep)
++                    {
++                      const int x1 = xx + m_area.xshift ();
++                      const int x2 = xx - x + other.m_area.xshift ();
++                      const rgbdata first_support
++                          = screen_tile_collection_support (*this, x1, y1);
++                      const rgbdata second_support
++                          = screen_tile_collection_support (other, x2, y2);
++                      const rgbdata weight = {
++                        paired_collection_support (first_support.red,
++                                                   second_support.red),
++                        paired_collection_support (first_support.green,
++                                                   second_support.green),
++      

@@ -1,0 +1,29 @@
+   = screen_tile_collection_support (*this, x1, y1);
++                      const rgbdata second_support
++                          = screen_tile_collection_support (other, x2, y2);
++                      const rgbdata weight = {
++                        paired_collection_support (first_support.red,
++                                                   second_support.red),
++                        paired_collection_support (first_support.green,
++                                                   second_support.green),
++                        paired_collection_support (first_support.blue,
++                                                   second_support.blue)
++                      };
++                      sqsum += weight.red * rdiff1 * rdiff1
++                               + weight.green * gdiff * gdiff
++                               + weight.blue * bdiff * bdiff;
++                      residual_weight
++                          += weight.red + weight.green + weight.blue;
++                    }
++                  else
++                    sqsum += rdiff1 * rdiff1 + gdiff * gdiff
++                             + bdiff * bdiff;
+                   // sqsum += rdiff1*rdiff1*rdiff1*rdiff1 +
+                   // rdiff2*rdiff2*rdiff2*rdiff2 + gdiff*gdiff*gdiff*gdiff +
+                   // bdiff*bdiff*bdiff*bdiff;
+                 }
+             }
+-          sqsum /= est_noverlap;
++          if (use_collection_support)
++            {
++              if (!(my_isfinite (residual_wei

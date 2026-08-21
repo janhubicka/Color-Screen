@@ -1,0 +1,33 @@
+                  paired_collection_support (first_support.blue,
++                                                   second_support.blue)
++                      };
++                      rsum1 += red_avg (x1, y1) * weight.red;
++                      rsum2 += other.red_avg (x2, y2) * weight.red;
++                      gsum1 += green_avg (x1, y1) * weight.green;
++                      gsum2 += other.green_avg (x2, y2) * weight.green;
++                      bsum1 += blue_avg (x1, y1) * weight.blue;
++                      bsum2 += other.blue_avg (x2, y2) * weight.blue;
++                    }
++                }
++            }
++
+ #if 0
+ 	  int noverlap = 0;
+ 	  for (int yy = yystart; yy < yyend; yy+= ystep)
+@@ -715,6 +824,7 @@ analyze_base::find_best_match (int percentage, int max_percentage,
+                      "cpfind answer exposure correction %f %f %f\n", rscale,
+                      gscale, bscale);
+ 
++          luminosity_t residual_weight = 0;
+           for (int yy = yystart; yy < yyend; yy += ystep)
+             {
+               int y1 = yy + m_area.yshift ();
+@@ -750,13 +860,48 @@ analyze_base::find_best_match (int percentage, int max_percentage,
+                   rdiff1 *= 65546;
+                   gdiff *= 65536;
+                   bdiff *= 65536;
+-                  sqsum += rdiff1 * rdiff1 + gdiff * gdiff + bdiff * bdiff;
++                  if (use_collection_support)
++                    {
++                      const rgbdata first_support
++                       

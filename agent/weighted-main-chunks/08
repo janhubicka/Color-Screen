@@ -1,0 +1,34 @@
+return false;
++    }
++
++  auto expect_shift = [&] (const char *name, matching_test_analyzer &first,
++                           matching_test_analyzer &second, int expected_x,
++                           int expected_y) -> bool
++  {
++    coord_t xshift = 0, yshift = 0;
++    const int result = first.find_best_match (
++        60, 100, second, 0, &xshift, &yshift, -1, map, other_map, nullptr);
++    if (result != 2 || xshift != expected_x || yshift != expected_y)
++      {
++        fprintf (stderr,
++                 "%s found shift %.9g,%.9g with result %d; expected %d,%d\n",
++                 name, xshift, yshift, result, expected_x, expected_y);
++        return false;
++      }
++    return true;
++  };
++
++  /* Explicit unit support must preserve the established unweighted offset.  */
++  if (!expect_shift ("Unweighted clean matching", reference, clean,
++                     correct_shift, 0)
++      || !expect_shift ("Unit-support clean matching", reference_supported,
++                        clean_supported, correct_shift, 0))
++    return false;
++
++  /* Most pixels below imitate a different shift, but have almost no scanner
++     support.  Historical unweighted matching follows that corruption; paired
++     support must let the reliable minority recover the true offset.  */
++  if (!expect_shift ("Unweighted corrupted matching", reference, corrupted,
++                     misleading_shift, 0)
++      || !expect_shift ("Support-weighted corrupted matching",
++                        r

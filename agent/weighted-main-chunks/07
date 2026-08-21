@@ -1,0 +1,37 @@
+{
++        const rgbdata value = texture (x, y);
++        reference.set_pixel (x, y, value);
++        reference_supported.set_pixel (x, y, value);
++
++        const rgbdata clean_value
++            = x + correct_shift < width
++                  ? texture (x + correct_shift, y)
++                  : texture (x + 101, y + 103);
++        clean.set_pixel (x, y, clean_value);
++        clean_supported.set_pixel (x, y, clean_value);
++
++        const bool reliable = (3 * x + 5 * y) % 10 < 3
++                              && x + correct_shift < width;
++        rgbdata corrupted_value;
++        if (reliable)
++          corrupted_value = texture (x + correct_shift, y);
++        else if (x + misleading_shift >= 0)
++          corrupted_value = texture (x + misleading_shift, y);
++        else
++          corrupted_value = texture (x + 101, y + 103);
++        corrupted.set_pixel (x, y, corrupted_value);
++        corrupted_supported.set_pixel (x, y, corrupted_value);
++        corrupted_supported.set_support (
++            x, y, reliable ? (luminosity_t)1 : (luminosity_t)0.001);
++      }
++
++  scr_to_img_parameters map_parameters;
++  map_parameters.center = { 0, 0 };
++  map_parameters.coordinate1 = { 1, 0 };
++  map_parameters.coordinate2 = { 0, 1 };
++  scr_to_img map, other_map;
++  if (!map.set_parameters (map_parameters, width, height)
++      || !other_map.set_parameters (map_parameters, width, height))
++    {
++      fprintf (stderr, "Weighted matching test could not initialize maps\n");
++      

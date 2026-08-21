@@ -1,0 +1,37 @@
+ze_base_worker (0, 0, 0, 0, 0, 0)
++    {
++      m_area = { 0, 0, width, height };
++      const size_t size = (size_t)width * height;
++      m_red = std::make_unique<luminosity_t[]> (size);
++      m_green = std::make_unique<luminosity_t[]> (size);
++      m_blue = std::make_unique<luminosity_t[]> (size);
++      m_known_pixels = std::make_unique<bitmap_2d> (width, height);
++      for (int y = 0; y < height; y++)
++        for (int x = 0; x < width; x++)
++          m_known_pixels->set_bit (x, y);
++      m_n_known_pixels = width * height;
++      if (with_support)
++        {
++          m_red_support = std::make_unique<luminosity_t[]> (size);
++          m_green_support = std::make_unique<luminosity_t[]> (size);
++          m_blue_support = std::make_unique<luminosity_t[]> (size);
++          std::fill (m_red_support.get (), m_red_support.get () + size,
++                     (luminosity_t)1);
++          std::fill (m_green_support.get (), m_green_support.get () + size,
++                     (luminosity_t)1);
++          std::fill (m_blue_support.get (), m_blue_support.get () + size,
++                     (luminosity_t)1);
++        }
++    }
++
++    /* Set all three channel values of one screen tile.  */
++    void
++    set_pixel (int x, int y, rgbdata value)
++    {
++      const size_t index = (size_t)y * m_area.width + x;
++      m_red[index] = value.red;
++      m_green[index] = value.green;
++      m_blue[index] = value.blue;
++    }
++
++    /* Set equal retained collection support for all thre

@@ -1,0 +1,46 @@
+ght)
++                    && residual_weight > (luminosity_t)0))
++                {
++                  if (is_cpfind)
++                    fprintf (report_file,
++                             "cpfind answer has no supported RGB samples\n");
++                  continue;
++                }
++              sqsum /= residual_weight;
++            }
++          else
++            sqsum /= est_noverlap;
+           if (is_cpfind)
+             fprintf (report_file, "cpfind answer sqsum %f overlap %i\n", sqsum,
+                      est_noverlap);
+diff --git a/src/libcolorscreen/unittests.C b/src/libcolorscreen/unittests.C
+index ffc4ea6c..be0a3833 100644
+--- a/src/libcolorscreen/unittests.C
++++ b/src/libcolorscreen/unittests.C
+@@ -35,6 +35,7 @@
+ #include "denoise.h"
+ #include "include/paget.h"
+ #include "include/dufaycolor.h"
++#include "include/strips.h"
+ #include "demosaic.h"
+ #include "analyze-base.h"
+ #include "finetune-int.h"
+@@ -6142,6 +6143,170 @@ test_real_mtf_reproducibility ()
+   return true;
+ }
+ 
++static bool
++test_weighted_matching ()
++{
++  constexpr int width = 40;
++  constexpr int height = 32;
++  constexpr int correct_shift = 3;
++  constexpr int misleading_shift = -2;
++
++  /* Minimal regular-grid analyzer whose scalar channels and optional
++     collection-support arrays can be filled directly.  */
++  class matching_test_analyzer : public analyze_base_worker<strips_geometry>
++  {
++  public:
++    matching_test_analyzer (int width, int height, bool with_support)
++        : analy

@@ -1,0 +1,19 @@
+eference_supported, corrupted_supported,
++                        correct_shift, 0))
++    return false;
++
++  return true;
++}
++
+ static bool
+ test_denoise ()
+ {
+@@ -7659,6 +7824,8 @@ main (int argc, char **argv)
+     { "slanted_edge", "slanted edge MTF tests", [] () { return test_slanted_edge_mtf (); } },
+     { "real_mtf_reproducibility", "real MTF reproducibility tests",
+       [] () { return test_real_mtf_reproducibility (); } },
++    { "weighted_matching", "collection-support weighted matching tests",
++      [] () { return test_weighted_matching (); } },
+     { "denoising", "denoising tests", [] () { return test_denoise (); } },
+     { "demosaic", "dufay and paget demosaicing tests", [] () { return test_demosaic (); } },
+     { NULL, NULL, NULL }

@@ -1,0 +1,39 @@
+e channels.  */
++    void
++    set_support (int x, int y, luminosity_t support)
++    {
++      const size_t index = (size_t)y * m_area.width + x;
++      m_red_support[index] = support;
++      m_green_support[index] = support;
++      m_blue_support[index] = support;
++    }
++  };
++
++  /* Deterministic high-frequency texture with independent RGB components.  */
++  auto sample = [] (int x, int y, int channel) -> luminosity_t
++  {
++    uint32_t value = (uint32_t)x * UINT32_C (73856093)
++                     ^ (uint32_t)y * UINT32_C (19349663)
++                     ^ (uint32_t)channel * UINT32_C (83492791)
++                     ^ UINT32_C (0x9e3779b9);
++    value ^= value >> 13;
++    value *= UINT32_C (1274126177);
++    value ^= value >> 16;
++    return (luminosity_t)0.1
++           + (luminosity_t)0.8
++                 * (luminosity_t)(value & UINT32_C (0xffff))
++                 / (luminosity_t)65535;
++  };
++  auto texture = [&] (int x, int y) -> rgbdata
++  { return { sample (x, y, 0), sample (x, y, 1), sample (x, y, 2) }; };
++
++  matching_test_analyzer reference (width, height, false);
++  matching_test_analyzer reference_supported (width, height, true);
++  matching_test_analyzer clean (width, height, false);
++  matching_test_analyzer clean_supported (width, height, true);
++  matching_test_analyzer corrupted (width, height, false);
++  matching_test_analyzer corrupted_supported (width, height, true);
++
++  for (int y = 0; y < height; y++)
++    for (int x = 0; x < width; x++)
++      
