@@ -433,17 +433,33 @@ detect_edge_line (const std::vector<double> &pixels, int width, int height,
                       maximum_position + edge_centroid_radius);
       double local_absolute_sum = 0;
       double local_signed_sum = 0;
+      double centroid_weight_sum = 0;
       double weighted_position = 0;
+      const bool positive_peak = gradient[maximum_index] > 0;
       for (int normal = first; normal <= last; normal++)
         {
           double value = gradient[normal - 1];
           double weight = std::abs (value);
           local_absolute_sum += weight;
           local_signed_sum += value;
-          weighted_position += weight * normal;
+
+          /* Broad defocus needs a wide centroid aperture, but real edges can
+             have weak ringing of the opposite polarity inside that aperture.
+             Such a lobe belongs to the same transition for the coherence
+             check, but using it as positive centroid mass shifts the fitted
+             line as the lobe strength changes from one scan line to another.
+             Accumulate the centroid only from gradients matching the dominant
+             peak polarity while retaining all gradients for qualification.  */
+          if ((value > 0) == positive_peak)
+            {
+              centroid_weight_sum += weight;
+              weighted_position += weight * normal;
+            }
         }
       if (!my_isfinite (local_absolute_sum)
-          || local_absolute_sum <= 1.0e-12)
+          || !my_isfinite (centroid_weight_sum)
+          || local_absolute_sum <= 1.0e-12
+          || centroid_weight_sum <= 1.0e-12)
         continue;
 
       double secondary_ratio = secondary_gradient / maximum_gradient;
@@ -454,7 +470,7 @@ detect_edge_line (const std::vector<double> &pixels, int width, int height,
         continue;
 
       candidates.push_back (
-          {(double)line, weighted_position / local_absolute_sum,
+          {(double)line, weighted_position / centroid_weight_sum,
            local_signed_sum});
     }
 
