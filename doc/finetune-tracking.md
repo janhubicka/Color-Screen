@@ -1018,3 +1018,40 @@ Future work should address that explicitly, for example by constraining or
 regularizing fitted screen chromaticities from reliable sharp regions, or by a
 mode-aware/spatially coherent fallback reducer.  It should not rely on a lucky
 simplex starting point as the final solution.
+
+
+### FT-059 — uniform-colour multi-tile focus model was tied to emulsion blur
+
+**Severity:** high focus identifiability
+
+**Status:** partially fixed; automatic area selection remains open
+
+The original multi-tile experiment used the physically useful factorization
+needed for robust focus analysis: one set of historical screen-primary scanner
+responses is shared across the image, while every locally uniform scene tile
+has three scalar image-layer intensities that dim those primaries before the
+common capture transfer.  Several differently coloured tiles can therefore
+constrain one blur/focus value without allowing each tile to invent its own
+screen chromaticities.
+
+That machinery had become reachable only indirectly when emulsion blur was
+optimized together with capture blur, which also enabled per-tile emulsion
+offsets and unnecessarily enlarged the nonlinear problem.  A dedicated
+`finetune_uniform_image_layer` mode now reuses the per-tile intensity model
+without enabling emulsion blur or offsets.  RGB normalization and patch-colour
+data collection are disabled because the uniform image layer is explicitly
+modelled.  The unblurred process screen supplies the primary-membership weight
+when emulsion blur is not requested; the historical emulsion-blur experiment
+continues to use its blurred weight screen.
+
+`finetune_result::tile_primary_intensities` returns the fitted per-tile
+transmissions in input-location order.  The existing shared `screen_red`,
+`screen_green`, and `screen_blue` fields remain the one global primary response
+set.  Regression coverage checks the shared-primary scaling operation itself
+and runs the production `finetune()` path on synthetic differently coloured
+uniform tiles with a known common blur.
+
+Remaining work is to discover suitable solid areas automatically, reject weak
+individual fits, choose a well-conditioned colour-diverse subset, and add
+leave-one-area-out/held-out validation before the Qt workflow uses the joint
+fit as an authoritative focus measurement.

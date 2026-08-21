@@ -288,7 +288,9 @@ test_finetune_helpers ()
       || finetune_flag_error (finetune_scanner_mtf_sigma
                               | finetune_scanner_mtf_defocus)
       || finetune_flag_error (finetune_scanner_mtf_sigma
-                              | finetune_scanner_mtf_channel_defocus))
+                              | finetune_scanner_mtf_channel_defocus)
+      || finetune_flag_error (finetune_uniform_image_layer
+                              | finetune_scanner_mtf_defocus))
     {
       fprintf (stderr, "Valid finetune flag combination was rejected\n");
       return false;
@@ -300,11 +302,53 @@ test_finetune_helpers ()
       || !finetune_flag_error (finetune_scanner_mtf_defocus
                                | finetune_scanner_mtf_channel_defocus)
       || !finetune_flag_error (finetune_screen_blur
-                               | finetune_scanner_mtf_sigma))
+                               | finetune_scanner_mtf_sigma)
+      || !finetune_flag_error (finetune_uniform_image_layer | finetune_bw)
+      || !finetune_flag_error (finetune_uniform_image_layer
+                               | finetune_simulate_infrared))
     {
       fprintf (stderr, "Invalid finetune flag combination was accepted\n");
       return false;
     }
+
+  /* The uniform-image-layer model must only scale the shared scanner
+     response of a screen primary; it must not invent tile-specific primary
+     chromaticities.  Exercise the same helper used by the production blur
+     path on a real Paget screen.  */
+  {
+    screen source, weighted_a, weighted_b;
+    source.initialize (Paget);
+    const rgbdata a = { 0.7, 0.25, 0.1 };
+    const rgbdata b = { 0.15, 0.6, 0.85 };
+    finetune_apply_uniform_image_layer (weighted_a, source, source, a,
+                                        { 0, 0 });
+    finetune_apply_uniform_image_layer (weighted_b, source, source, b,
+                                        { 0, 0 });
+    for (int y = 0; y < screen::size; y++)
+      for (int x = 0; x < screen::size; x++)
+        {
+          const luminosity_t wa
+              = source.mult[y][x][0] * a.red
+                + source.mult[y][x][1] * a.green
+                + source.mult[y][x][2] * a.blue;
+          const luminosity_t wb
+              = source.mult[y][x][0] * b.red
+                + source.mult[y][x][1] * b.green
+                + source.mult[y][x][2] * b.blue;
+          for (int c = 0; c < 3; c++)
+            if (fabs (weighted_a.mult[y][x][c]
+                      - source.mult[y][x][c] * wa)
+                    > 1e-7
+                || fabs (weighted_b.mult[y][x][c]
+                          - source.mult[y][x][c] * wb)
+                       > 1e-7)
+              {
+                fprintf (stderr,
+                         "Uniform image-layer primary scaling mismatch\n");
+                return false;
+              }
+        }
+  }
 
   finetune_focus_grid_interval interval;
   if (!finetune_focus_grid_interval_for_value ((coord_t)0.5, 2, 5,
@@ -438,6 +482,149 @@ test_finetune_helpers ()
       return false;
     }
 
+  return true;
+}
+
+/* Verify the production FINETUNE path for several differently coloured
+   uniform tiles.  The capture blur and screen-primary responses are shared;
+   only the three image-layer primary intensities vary between tiles.  */
+bool
+test_finetune_uniform_image_layer ()
+{
+  constexpr int width = 384;
+  constexpr int height = 96;
+  constexpr int regions = 3;
+  constexpr coord_t true_blur = (coord_t)0.82;
+  const rgbdata truth[regions]
+      = { { 0.50, 0.30, 0.20 }, { 0.18, 0.78, 0.35 },
+          { 0.82, 0.12, 0.55 } };
+
+  image_data image;
+  if (!image.set_dimensions (width, height, true, false))
+    return false;
+
+  scr_to_img_parameters geometry;
+  geometry.type = Paget;
+  geometry.center = { 0, 0 };
+  geometry.coordinate1 = { 8, 0 };
+  geometry.coordinate2 = { 0, 8 };
+  scr_to_img map;
+  if (!map.set_parameters (geometry, image))
+    return false;
+  const coord_t pixel_size
+      = map.pixel_size ({ 0, 0, width, height });
+  if (!(pixel_size > 0))
+    return false;
+
+  screen source;
+  source.initialize (geometry.type);
+  std::array<std::unique_ptr<screen>, regions> blurred;
+  for (int tileid = 0; tileid < regions; tileid++)
+    {
+      auto weighted = std::make_unique<screen> ();
+      blurred[tileid] = std::make_unique<screen> ();
+      finetune_apply_uniform_image_layer (*weighted, source, source,
+                                          truth[tileid], { 0, 0 });
+      blurred[tileid]->initialize_with_blur (*weighted,
+                                             true_blur * pixel_size);
+    }
+
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      {
+        const int tileid = std::min (x / (width / regions), regions - 1);
+        rgbdata value = blurred[tileid]->interpolated_mult (
+            map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 }));
+        value.red = std::clamp (value.red, (luminosity_t)0,
+                                (luminosity_t)1);
+        value.green = std::clamp (value.green, (luminosity_t)0,
+                                  (luminosity_t)1);
+        value.blue = std::clamp (value.blue, (luminosity_t)0,
+                                 (luminosity_t)1);
+        image.put_rgb_pixel (
+            x, y,
+            { (image_data::gray)(value.red * 65535 + (luminosity_t)0.5),
+              (image_data::gray)(value.green * 65535 + (luminosity_t)0.5),
+              (image_data::gray)(value.blue * 65535 + (luminosity_t)0.5) });
+      }
+
+  render_parameters rparam;
+  rparam.gamma = 1;
+  rparam.screen_blur_radius = (coord_t)0.3;
+  rparam.sharpen.mode = sharpen_parameters::none;
+  rparam.sharpen.scanner_mtf_scale = 0;
+  rparam.mix_red = (luminosity_t)0.21;
+  rparam.mix_green = (luminosity_t)0.34;
+  rparam.mix_blue = (luminosity_t)0.45;
+  rparam.mix_dark = { (luminosity_t)0.01, (luminosity_t)0.02,
+                      (luminosity_t)0.03 };
+
+  finetune_parameters fparam;
+  fparam.range = 2;
+  fparam.ignore_outliers = 0;
+  fparam.flags = finetune_screen_blur | finetune_uniform_image_layer
+                 | finetune_no_normalize | finetune_no_data_collection;
+  const std::vector<point_t> locations
+      = { { 64, 48 }, { 192, 48 }, { 320, 48 } };
+  finetune_result result
+      = finetune (rparam, geometry, image, locations, nullptr, fparam, nullptr);
+  if (!result.success)
+    {
+      fprintf (stderr, "Uniform multi-tile finetune failed: %s\n",
+               result.err.c_str ());
+      return false;
+    }
+  if (fabs (result.screen_blur_radius - true_blur) > 0.12)
+    {
+      fprintf (stderr,
+               "Uniform multi-tile blur mismatch: got %.9g expected %.9g\n",
+               (double)result.screen_blur_radius, (double)true_blur);
+      return false;
+    }
+  if (result.tile_primary_intensities.size () != regions)
+    {
+      fprintf (stderr, "Uniform multi-tile intensities were not returned\n");
+      return false;
+    }
+  if (result.mix_weights.red != rparam.mix_red
+      || result.mix_weights.green != rparam.mix_green
+      || result.mix_weights.blue != rparam.mix_blue
+      || result.mix_dark.red != rparam.mix_dark.red
+      || result.mix_dark.green != rparam.mix_dark.green
+      || result.mix_dark.blue != rparam.mix_dark.blue)
+    {
+      fprintf (stderr,
+               "Uniform multi-tile fit unexpectedly changed RGB/neutral "
+               "mixing parameters\n");
+      return false;
+    }
+
+  const rgbdata primaries[3]
+      = { result.screen_red, result.screen_green, result.screen_blue };
+  for (int tileid = 0; tileid < regions; tileid++)
+    for (int primary = 0; primary < 3; primary++)
+      {
+        const rgbdata effective
+            = primaries[primary]
+              * result.tile_primary_intensities[tileid][primary];
+        const rgbdata expected
+            = primary == 0 ? rgbdata{ truth[tileid].red, 0, 0 }
+                           : primary == 1
+                                 ? rgbdata{ 0, truth[tileid].green, 0 }
+                                 : rgbdata{ 0, 0, truth[tileid].blue };
+        const luminosity_t effective_error
+            = std::max ({ my_fabs (effective.red - expected.red),
+                          my_fabs (effective.green - expected.green),
+                          my_fabs (effective.blue - expected.blue) });
+        if (effective_error > 0.10)
+          {
+            fprintf (stderr,
+                     "Uniform multi-tile factorization mismatch in tile %d "
+                     "primary %d\n",
+                     tileid, primary);
+            return false;
+          }
+      }
   return true;
 }
 
@@ -7924,6 +8111,9 @@ main (int argc, char **argv)
       [] () { return test_nonfinite_helpers (); } },
     { "finetune_helpers", "finetune and Nelder-Mead contract tests",
       [] () { return test_finetune_helpers (); } },
+    { "finetune_uniform_tiles",
+      "uniform-image-layer multi-tile finetune tests",
+      [] () { return test_finetune_uniform_image_layer (); } },
     { "finetune_focus_cache", "exact finetune focus-screen cache tests",
       [] () { return test_finetune_focus_screen_cache (); } },
     { "scanner_blur_correction", "scanner blur correction table tests",
