@@ -1,6 +1,7 @@
 #include "ColorScreenApplication.h"
 
 #include "MainWindow.h"
+#include "WorkspaceWindow.h"
 
 #include <QAction>
 #include <QDir>
@@ -74,47 +75,38 @@ ColorScreenApplication::ColorScreenApplication(int &argc, char **argv)
   setQuitOnLastWindowClosed(true);
 }
 
-/** Create and show one independently owned document window. */
+/** Create one independently owned document and present it as a tab by default. */
 MainWindow *ColorScreenApplication::createDocumentWindow(
-    const QString &recoveryDirectory) {
+    const QString &recoveryDirectory, bool detached) {
   pruneDocumentWindows();
-
-  MainWindow *referenceWindow = nullptr;
-  if (QWidget *active = activeWindow())
-    referenceWindow = dynamic_cast<MainWindow *>(active);
-  if (!referenceWindow && !m_documentWindows.isEmpty())
-    referenceWindow = m_documentWindows.constLast();
 
   const QString assignedRecoveryDirectory =
       recoveryDirectory.isEmpty() ? newRecoveryDirectory()
                                   : recoveryDirectory;
-  auto *window = new MainWindow(assignedRecoveryDirectory);
-  window->setAttribute(Qt::WA_DeleteOnClose);
-  m_documentWindows.append(window);
+  auto *document = new MainWindow(assignedRecoveryDirectory);
+  document->setAttribute(Qt::WA_DeleteOnClose);
+  m_documentWindows.append(document);
 
-  connect(window, &QObject::destroyed, this, [this]() {
-    // Defer pruning until QObject destruction has completed.  Calling methods
-    // through a QPointer from inside destroyed() could otherwise reach a
-    // partially destructed MainWindow.
+  connect(document, &QObject::destroyed, this, [this]() {
     QTimer::singleShot(0, this, [this]() {
       pruneDocumentWindows();
       refreshWindowMenus();
+      if (!m_workspaceShutdown && m_documentWindows.isEmpty())
+        createDocumentWindow();
     });
   });
 
-  window->show();
-
-  // Every MainWindow restores the preferred layout.  Offset additional
-  // documents so that opening several files does not leave them perfectly
-  // superimposed while still preserving the user's saved size and dock state.
-  if (referenceWindow && referenceWindow != window) {
-    constexpr int cascadeStep = 28;
-    const QPoint offset(cascadeStep, cascadeStep);
-    window->move(referenceWindow->pos() + offset);
+  if (detached) {
+    document->setWindowFlags(Qt::Window);
+    document->show();
+    document->raise();
+    document->activateWindow();
+  } else {
+    workspaceWindow()->addDocument(document);
   }
 
   refreshWindowMenus();
-  return window;
+  return document;
 }
 
 /** Open a list of images, assigning one complete MainWindow to each image. */
@@ -214,92 +206,201 @@ QList<MainWindow *> ColorScreenApplication::documentWindows() {
   return windows;
 }
 
-/** Populate the Window menu from the current live document set. */
+/** Return the primary tabbed workspace, creating it on first use. */
+WorkspaceWindow *ColorScreenApplication::workspaceWindow() {
+  if (!m_workspaceWindow) {
+    m_workspaceWindow = new WorkspaceWindow();
+    m_workspaceWindow->setAttribute(Qt::WA_DeleteOnClose, false);
+  }
+  return m_workspaceWindow;
+}
+
+/** Detach DOCUMENT into a top-level window without recreating it. */
+void ColorScreenApplication::detachDocument(MainWindow *document) {
+  if (!document || !m_workspaceWindow ||
+      !m_workspaceWindow->containsDocument(document))
+    return;
+
+  m_workspaceWindow->removeDocument(document);
+  document->hide();
+  document->setParent(nullptr);
+  document->setWindowFlags(Qt::Window);
+  document->show();
+  document->raise();
+  document->activateWindow();
+  refreshWindowMenus();
+}
+
+/** Attach DOCUMENT to the primary workspace without changing its state. */
+void ColorScreenApplication::attachDocument(MainWindow *document) {
+  if (!document)
+    return;
+  if (m_workspaceWindow && m_workspaceWindow->containsDocument(document)) {
+    m_workspaceWindow->activateDocument(document);
+    return;
+  }
+  workspaceWindow()->addDocument(document);
+  refreshWindowMenus();
+}
+
+/** Attach every detached document to the primary workspace. */
+void ColorScreenApplication::attachAllDocuments() {
+  const QList<MainWindow *> documents = documentWindows();
+  for (MainWindow *document : documents)
+    attachDocument(document);
+}
+
+/** Refresh a document's tab or detached-window presentation. */
+void ColorScreenApplication::refreshDocumentPresentation(MainWindow *document) {
+  if (!document)
+    return;
+  if (m_workspaceWindow)
+    m_workspaceWindow->refreshDocument(document);
+  refreshWindowMenus();
+}
+
+/** Return the number of attached document tabs. */
+int ColorScreenApplication::tabCount() const {
+  return m_workspaceWindow ? m_workspaceWindow->tabCount() : 0;
+}
+
+/** Close all documents while the workspace itself is shutting down. */
+bool ColorScreenApplication::closeAllDocumentsForWorkspace() {
+  m_workspaceShutdown = true;
+  const QList<MainWindow *> documents = documentWindows();
+  for (MainWindow *document : documents) {
+    if (document && !document->close()) {
+      m_workspaceShutdown = false;
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Populate the Window menu with tab and detached-window controls. */
 void ColorScreenApplication::populateWindowMenu(QMenu *menu,
                                                  MainWindow *currentWindow) {
   if (!menu)
     return;
-
   menu->clear();
 
-  QAction *newWindowAction = menu->addAction(tr("&New Window"));
-  newWindowAction->setShortcut(QKeySequence::New);
-  newWindowAction->setShortcutContext(Qt::WindowShortcut);
-  newWindowAction->setToolTip(
-      tr("Create an empty window for another image document."));
-  connect(newWindowAction, &QAction::triggered, menu, [this]() {
-    // Creating a window rebuilds every Window menu.  Defer the operation so
-    // the QAction that emitted triggered() is not deleted mid-emission.
+  QAction *newTabAction = menu->addAction(tr("&New Image Tab"));
+  newTabAction->setShortcut(QKeySequence::New);
+  newTabAction->setShortcutContext(Qt::WindowShortcut);
+  connect(newTabAction, &QAction::triggered, menu, [this]() {
     QTimer::singleShot(0, this, [this]() { createDocumentWindow(); });
   });
 
-  QAction *nextWindowAction = menu->addAction(tr("Next Image"));
-  nextWindowAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Tab));
-  nextWindowAction->setShortcutContext(Qt::WindowShortcut);
-  connect(nextWindowAction, &QAction::triggered, menu,
-          [this, currentWindow]() {
-            activateRelativeWindow(currentWindow, 1);
-          });
+  QAction *newWindowAction = menu->addAction(tr("New &Detached Window"));
+  newWindowAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N));
+  newWindowAction->setShortcutContext(Qt::WindowShortcut);
+  connect(newWindowAction, &QAction::triggered, menu, [this]() {
+    QTimer::singleShot(0, this, [this]() { createDocumentWindow(QString(), true); });
+  });
 
-  QAction *previousWindowAction = menu->addAction(tr("Previous Image"));
-  previousWindowAction->setShortcut(
-      QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab));
-  previousWindowAction->setShortcutContext(Qt::WindowShortcut);
-  connect(previousWindowAction, &QAction::triggered, menu,
-          [this, currentWindow]() {
-            activateRelativeWindow(currentWindow, -1);
-          });
+  QAction *nextAction = menu->addAction(tr("Next Image"));
+  nextAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Tab));
+  nextAction->setShortcutContext(Qt::WindowShortcut);
+  connect(nextAction, &QAction::triggered, menu, [this, currentWindow]() {
+    activateRelativeWindow(currentWindow, 1);
+  });
 
-  const QList<MainWindow *> windows = documentWindows();
-  const bool multipleWindows = windows.size() > 1;
-  nextWindowAction->setEnabled(multipleWindows);
-  previousWindowAction->setEnabled(multipleWindows);
+  QAction *previousAction = menu->addAction(tr("Previous Image"));
+  previousAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab));
+  previousAction->setShortcutContext(Qt::WindowShortcut);
+  connect(previousAction, &QAction::triggered, menu, [this, currentWindow]() {
+    activateRelativeWindow(currentWindow, -1);
+  });
 
   menu->addSeparator();
-  for (int i = 0; i < windows.size(); ++i) {
-    QPointer<MainWindow> guardedWindow(windows[i]);
-    QString documentName = windows[i]->documentDisplayName();
-    documentName.replace(QLatin1Char('&'), QStringLiteral("&&"));
-    QAction *action =
-        menu->addAction(tr("&%1 %2").arg(i + 1).arg(documentName));
+  QAction *detachAction = menu->addAction(tr("Detach Current Image"));
+  detachAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D));
+  detachAction->setShortcutContext(Qt::WindowShortcut);
+  detachAction->setEnabled(currentWindow && m_workspaceWindow &&
+                           m_workspaceWindow->containsDocument(currentWindow));
+  connect(detachAction, &QAction::triggered, menu, [this, currentWindow]() {
+    detachDocument(currentWindow);
+  });
+
+  QAction *attachAction = menu->addAction(tr("Move Current Image to Tabs"));
+  attachAction->setEnabled(currentWindow &&
+                           (!m_workspaceWindow ||
+                            !m_workspaceWindow->containsDocument(currentWindow)));
+  connect(attachAction, &QAction::triggered, menu, [this, currentWindow]() {
+    attachDocument(currentWindow);
+  });
+
+  QAction *attachAllAction = menu->addAction(tr("Attach All Images as Tabs"));
+  bool hasDetached = false;
+  for (MainWindow *document : documentWindows()) {
+    if (!m_workspaceWindow || !m_workspaceWindow->containsDocument(document)) {
+      hasDetached = true;
+      break;
+    }
+  }
+  attachAllAction->setEnabled(hasDetached);
+  connect(attachAllAction, &QAction::triggered, menu, [this]() {
+    attachAllDocuments();
+  });
+
+  const QList<MainWindow *> documents = documentWindows();
+  const bool multiple = documents.size() > 1;
+  nextAction->setEnabled(multiple);
+  previousAction->setEnabled(multiple);
+
+  menu->addSeparator();
+  for (int i = 0; i < documents.size(); ++i) {
+    QPointer<MainWindow> guarded(documents[i]);
+    QString name = documents[i]->documentDisplayName();
+    name.replace(QLatin1Char('&'), QStringLiteral("&&"));
+    QAction *action = menu->addAction(tr("&%1 %2").arg(i + 1).arg(name));
     action->setCheckable(true);
-    action->setChecked(windows[i] == currentWindow);
-    action->setToolTip(windows[i]->currentImageFile().isEmpty()
-                           ? tr("Empty image document")
-                           : windows[i]->currentImageFile());
-    connect(action, &QAction::triggered, menu, [guardedWindow]() {
-      if (!guardedWindow)
+    action->setChecked(documents[i] == currentWindow);
+    connect(action, &QAction::triggered, menu, [this, guarded]() {
+      if (!guarded)
         return;
-      if (guardedWindow->isMinimized())
-        guardedWindow->showNormal();
-      guardedWindow->raise();
-      guardedWindow->activateWindow();
+      if (m_workspaceWindow && m_workspaceWindow->containsDocument(guarded))
+        m_workspaceWindow->activateDocument(guarded);
+      else {
+        if (guarded->isMinimized())
+          guarded->showNormal();
+        guarded->raise();
+        guarded->activateWindow();
+      }
     });
   }
 }
 
-/** Activate the next or previous document window. */
+/** Activate the next or previous document, whether tabbed or detached. */
 void ColorScreenApplication::activateRelativeWindow(MainWindow *currentWindow,
                                                      int offset) {
-  const QList<MainWindow *> windows = documentWindows();
-  if (windows.isEmpty())
+  const QList<MainWindow *> documents = documentWindows();
+  if (documents.isEmpty())
     return;
-
-  int currentIndex = windows.indexOf(currentWindow);
+  int currentIndex = documents.indexOf(currentWindow);
+  if (currentIndex < 0)
+    currentIndex = documents.indexOf(activeDocument());
   if (currentIndex < 0)
     currentIndex = 0;
-  const int count = windows.size();
-  const int targetIndex = ((currentIndex + offset) % count + count) % count;
-  MainWindow *target = windows[targetIndex];
-  if (target->isMinimized())
-    target->showNormal();
-  target->raise();
-  target->activateWindow();
+  const int count = documents.size();
+  MainWindow *target = documents[((currentIndex + offset) % count + count) % count];
+  if (m_workspaceWindow && m_workspaceWindow->containsDocument(target))
+    m_workspaceWindow->activateDocument(target);
+  else {
+    if (target->isMinimized())
+      target->showNormal();
+    target->raise();
+    target->activateWindow();
+  }
 }
 
 /** Close every document window using each window's normal close policy. */
 void ColorScreenApplication::closeAllDocumentWindows() {
-  closeAllWindows();
+  if (m_workspaceWindow) {
+    m_workspaceWindow->close();
+    return;
+  }
+  closeAllDocumentsForWorkspace();
 }
 
 /** Open files delivered by Finder, Explorer, or the desktop shell. */
@@ -400,17 +501,26 @@ void ColorScreenApplication::refreshWindowMenus() {
     window->refreshWindowMenu();
 }
 
+/** Return the active document from the workspace or a detached window. */
+MainWindow *ColorScreenApplication::activeDocument() const {
+  if (QWidget *active = activeWindow()) {
+    if (auto *document = dynamic_cast<MainWindow *>(active))
+      return document;
+    if (m_workspaceWindow && active == m_workspaceWindow)
+      return m_workspaceWindow->currentDocument();
+  }
+  return m_workspaceWindow ? m_workspaceWindow->currentDocument() : nullptr;
+}
+
 /** Find an untouched empty window that can host the first requested image. */
 MainWindow *ColorScreenApplication::reusableWindow(
     MainWindow *preferredWindow) {
   if (preferredWindow && preferredWindow->canReuseForOpen())
     return preferredWindow;
 
-  if (QWidget *active = activeWindow()) {
-    if (auto *window = dynamic_cast<MainWindow *>(active)) {
-      if (window->canReuseForOpen())
-        return window;
-    }
+  if (MainWindow *window = activeDocument()) {
+    if (window->canReuseForOpen())
+      return window;
   }
 
   for (MainWindow *window : documentWindows()) {
