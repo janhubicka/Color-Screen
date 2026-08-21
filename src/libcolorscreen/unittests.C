@@ -35,6 +35,7 @@
 #include "denoise.h"
 #include "include/paget.h"
 #include "include/dufaycolor.h"
+#include "include/strips.h"
 #include "demosaic.h"
 #include "analyze-base.h"
 #include "finetune-int.h"
@@ -6148,6 +6149,205 @@ test_real_mtf_reproducibility ()
   return true;
 }
 
+/* Verify that overlap matching uses retained collection support without
+   changing the historical geometry qualification or unit-support result.  */
+static bool
+test_weighted_matching ()
+{
+  constexpr int width = 40;
+  constexpr int height = 32;
+  constexpr int correct_shift = 3;
+  constexpr int misleading_shift = -2;
+
+  /* Minimal regular-grid analyzer whose scalar channels and optional
+     collection-support arrays can be filled directly.  */
+  class matching_test_analyzer : public analyze_base_worker<strips_geometry>
+  {
+  public:
+    /* Construct a WIDTH by HEIGHT analyzer and optionally allocate support.  */
+    matching_test_analyzer (int width, int height, bool with_support)
+        : analyze_base_worker (0, 0, 0, 0, 0, 0)
+    {
+      m_area = { 0, 0, width, height };
+      const size_t size = (size_t)width * height;
+      m_red = std::make_unique<luminosity_t[]> (size);
+      m_green = std::make_unique<luminosity_t[]> (size);
+      m_blue = std::make_unique<luminosity_t[]> (size);
+      m_known_pixels = std::make_unique<bitmap_2d> (width, height);
+      for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+          m_known_pixels->set_bit (x, y);
+      m_n_known_pixels = width * height;
+      if (with_support)
+        {
+          m_red_support = std::make_unique<luminosity_t[]> (size);
+          m_green_support = std::make_unique<luminosity_t[]> (size);
+          m_blue_support = std::make_unique<luminosity_t[]> (size);
+          std::fill (m_red_support.get (), m_red_support.get () + size,
+                     (luminosity_t)1);
+          std::fill (m_green_support.get (), m_green_support.get () + size,
+                     (luminosity_t)1);
+          std::fill (m_blue_support.get (), m_blue_support.get () + size,
+                     (luminosity_t)1);
+        }
+    }
+
+    /* Set RGB VALUE for the screen tile at (X, Y).  */
+    void
+    set_pixel (int x, int y, rgbdata value)
+    {
+      const size_t index = (size_t)y * m_area.width + x;
+      m_red[index] = value.red;
+      m_green[index] = value.green;
+      m_blue[index] = value.blue;
+    }
+
+    /* Set per-channel retained SUPPORT for the screen tile at (X, Y).  */
+    void
+    set_support (int x, int y, rgbdata support)
+    {
+      const size_t index = (size_t)y * m_area.width + x;
+      m_red_support[index] = support.red;
+      m_green_support[index] = support.green;
+      m_blue_support[index] = support.blue;
+    }
+  };
+
+  /* Return a deterministic high-frequency sample for (X, Y), CHANNEL.  */
+  auto sample = [] (int x, int y, int channel) -> luminosity_t
+  {
+    uint32_t value = (uint32_t)x * UINT32_C (73856093)
+                     ^ (uint32_t)y * UINT32_C (19349663)
+                     ^ (uint32_t)channel * UINT32_C (83492791)
+                     ^ UINT32_C (0x9e3779b9);
+    value ^= value >> 13;
+    value *= UINT32_C (1274126177);
+    value ^= value >> 16;
+    return (luminosity_t)0.1
+           + (luminosity_t)0.8
+                 * (luminosity_t)(value & UINT32_C (0xffff))
+                 / (luminosity_t)65535;
+  };
+  /* Return all three independent texture channels at (X, Y).  */
+  auto texture = [&] (int x, int y) -> rgbdata
+  { return { sample (x, y, 0), sample (x, y, 1), sample (x, y, 2) }; };
+
+  matching_test_analyzer reference (width, height, false);
+  matching_test_analyzer reference_supported (width, height, true);
+  matching_test_analyzer clean (width, height, false);
+  matching_test_analyzer clean_supported (width, height, true);
+  matching_test_analyzer corrupted (width, height, false);
+  matching_test_analyzer corrupted_supported (width, height, true);
+  matching_test_analyzer channel_corrupted (width, height, false);
+  matching_test_analyzer channel_corrupted_supported (width, height, true);
+
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      {
+        const rgbdata value = texture (x, y);
+        reference.set_pixel (x, y, value);
+        reference_supported.set_pixel (x, y, value);
+
+        const rgbdata clean_value
+            = x + correct_shift < width
+                  ? texture (x + correct_shift, y)
+                  : texture (x + 101, y + 103);
+        clean.set_pixel (x, y, clean_value);
+        clean_supported.set_pixel (x, y, clean_value);
+
+        const bool reliable = (3 * x + 5 * y) % 10 < 3
+                              && x + correct_shift < width;
+        rgbdata corrupted_value;
+        if (reliable)
+          corrupted_value = texture (x + correct_shift, y);
+        else if (x + misleading_shift >= 0)
+          corrupted_value = texture (x + misleading_shift, y);
+        else
+          corrupted_value = texture (x + 101, y + 103);
+        corrupted.set_pixel (x, y, corrupted_value);
+        corrupted_supported.set_pixel (x, y, corrupted_value);
+        const luminosity_t support
+            = reliable ? (luminosity_t)1 : (luminosity_t)0.001;
+        corrupted_supported.set_support (x, y,
+                                         { support, support, support });
+
+        /* Red and green imitate the false shift while blue retains the true
+           shift.  Only independent per-channel support can let blue decide.  */
+        const rgbdata fallback = texture (x + 101, y + 103);
+        rgbdata channel_value = fallback;
+        if (x + misleading_shift >= 0)
+          {
+            channel_value.red = sample (x + misleading_shift, y, 0);
+            channel_value.green = sample (x + misleading_shift, y, 1);
+          }
+        if (x + correct_shift < width)
+          channel_value.blue = sample (x + correct_shift, y, 2);
+        channel_corrupted.set_pixel (x, y, channel_value);
+        channel_corrupted_supported.set_pixel (x, y, channel_value);
+        channel_corrupted_supported.set_support (
+            x, y, { (luminosity_t)0.001, (luminosity_t)0.001,
+                    (luminosity_t)1 });
+      }
+
+  scr_to_img_parameters map_parameters;
+  map_parameters.center = { 0, 0 };
+  map_parameters.coordinate1 = { 1, 0 };
+  map_parameters.coordinate2 = { 0, 1 };
+  scr_to_img map, other_map;
+  if (!map.set_parameters (map_parameters, width, height)
+      || !other_map.set_parameters (map_parameters, width, height))
+    {
+      fprintf (stderr, "Weighted matching test could not initialize maps\n");
+      return false;
+    }
+
+  /* Require FIRST and SECOND to match at (EXPECTED_X, EXPECTED_Y).  */
+  auto expect_shift = [&] (const char *name, matching_test_analyzer &first,
+                           matching_test_analyzer &second, int expected_x,
+                           int expected_y) -> bool
+  {
+    coord_t xshift = 0, yshift = 0;
+    const int result = first.find_best_match (
+        60, 100, second, 0, &xshift, &yshift, -1, map, other_map, nullptr);
+    if (result != 2 || xshift != expected_x || yshift != expected_y)
+      {
+        fprintf (stderr,
+                 "%s found shift %.9g,%.9g with result %d; expected %d,%d\n",
+                 name, xshift, yshift, result, expected_x, expected_y);
+        return false;
+      }
+    return true;
+  };
+
+  /* Explicit unit support must preserve the established unweighted offset.  */
+  if (!expect_shift ("Unweighted clean matching", reference, clean,
+                     correct_shift, 0)
+      || !expect_shift ("Unit-support clean matching", reference_supported,
+                        clean_supported, correct_shift, 0))
+    return false;
+
+  /* Most pixels below imitate a different shift, but have almost no scanner
+     support.  Historical unweighted matching follows that corruption; paired
+     support must let the reliable minority recover the true offset.  */
+  if (!expect_shift ("Unweighted corrupted matching", reference, corrupted,
+                     misleading_shift, 0)
+      || !expect_shift ("Support-weighted corrupted matching",
+                        reference_supported, corrupted_supported,
+                        correct_shift, 0))
+    return false;
+
+  /* A shared scalar confidence would still follow the two corrupted channels;
+     the per-channel weights must allow the reliable blue plane to win.  */
+  if (!expect_shift ("Unweighted channel-corrupted matching", reference,
+                     channel_corrupted, misleading_shift, 0)
+      || !expect_shift ("Per-channel support-weighted matching",
+                        reference_supported, channel_corrupted_supported,
+                        correct_shift, 0))
+    return false;
+
+  return true;
+}
+
 static bool
 test_denoise ()
 {
@@ -7766,6 +7966,8 @@ main (int argc, char **argv)
     { "slanted_edge", "slanted edge MTF tests", [] () { return test_slanted_edge_mtf (); } },
     { "real_mtf_reproducibility", "real MTF reproducibility tests",
       [] () { return test_real_mtf_reproducibility (); } },
+    { "weighted_matching", "collection-support weighted matching tests",
+      [] () { return test_weighted_matching (); } },
     { "denoising", "denoising tests", [] () { return test_denoise (); } },
     { "demosaic", "dufay and paget demosaicing tests", [] () { return test_demosaic (); } },
     { NULL, NULL, NULL }

@@ -6,6 +6,68 @@
 #include "denoise.h"
 namespace colorscreen
 {
+
+/* Return the average raw collection support of the channel samples making up
+   screen tile (X, Y).  SUPPORT is laid out at WIDTH << WIDTH_SCALE by HEIGHT
+   << HEIGHT_SCALE.  Match the same packed subelements as red_avg(),
+   green_avg() and blue_avg(): Paget red/green use the two even packed rows
+   bracketing a logical row, while a channel scaled in both directions uses
+   the ordinary 2 by 2 block.  Missing support means the historical unit
+   weight; nonpositive and non-finite entries contribute zero.  */
+static inline luminosity_t
+average_collection_support (const luminosity_t *support, int width, int height,
+                            int width_scale, int height_scale, int x, int y)
+{
+  if (!support)
+    return (luminosity_t)1;
+
+  const int support_width = width << width_scale;
+  const int support_height = height << height_scale;
+  const auto get_support = [&] (int xx, int yy)
+  {
+    xx = std::min (std::max (xx, 0), support_width - 1);
+    yy = std::min (std::max (yy, 0), support_height - 1);
+    const luminosity_t value = support[(size_t)yy * support_width + xx];
+    return my_isfinite (value) && value > (luminosity_t)0
+               ? value
+               : (luminosity_t)0;
+  };
+
+  if (!height_scale)
+    {
+      if (!width_scale)
+        return get_support (x, y);
+      return (get_support (2 * x, y) + get_support (2 * x + 1, y))
+             * (luminosity_t)0.5;
+    }
+  if (!width_scale)
+    {
+      /* Paget red and green logical rows are bracketed by even packed rows;
+         the intervening odd row is shifted by half a screen tile.  */
+      const int next_even_row = std::min (2 * (y + 1), 2 * (height - 1));
+      return (get_support (x, 2 * y) + get_support (x, next_even_row))
+             * (luminosity_t)0.5;
+    }
+  return (get_support (2 * x, 2 * y) + get_support (2 * x + 1, 2 * y)
+          + get_support (2 * x, 2 * y + 1)
+          + get_support (2 * x + 1, 2 * y + 1))
+         * (luminosity_t)0.25;
+}
+
+/* Return the inverse-variance weight of two independent samples with raw
+   collection supports FIRST and SECOND.  The algebraically equivalent
+   branch form avoids overflowing FIRST * SECOND for malformed large input.  */
+static inline luminosity_t
+paired_collection_support (luminosity_t first, luminosity_t second)
+{
+  if (!(my_isfinite (first) && my_isfinite (second)
+        && first > (luminosity_t)0 && second > (luminosity_t)0))
+    return 0;
+  if (first < second)
+    return first / ((luminosity_t)1 + first / second);
+  return second / ((luminosity_t)1 + second / first);
+}
+
 static void
 add (unsigned char ov[256][256][3], int c, coord_t x, coord_t y)
 {
@@ -432,6 +494,26 @@ analyze_base::find_best_match (int percentage, int max_percentage,
     fprintf (report_file, "cpfind output: %f,%f out of range\n", *xshift_ret,
              *yshift_ret);
 
+  const bool use_collection_support
+      = m_red_support || m_green_support || m_blue_support
+        || other.m_red_support || other.m_green_support
+        || other.m_blue_support;
+  /* Return the logical RGB support of ANALYZER's screen tile at (X, Y).  */
+  const auto screen_tile_collection_support
+      = [] (const analyze_base &analyzer, int x, int y) -> rgbdata
+  {
+    return {
+      average_collection_support (
+          analyzer.m_red_support.get (), analyzer.m_area.width,
+          analyzer.m_area.height, analyzer.m_rwscl, analyzer.m_rhscl, x, y),
+      average_collection_support (
+          analyzer.m_green_support.get (), analyzer.m_area.width,
+          analyzer.m_area.height, analyzer.m_gwscl, analyzer.m_ghscl, x, y),
+      average_collection_support (
+          analyzer.m_blue_support.get (), analyzer.m_area.width,
+          analyzer.m_area.height, analyzer.m_bwscl, analyzer.m_bhscl, x, y)
+    };
+  };
   std::unique_ptr<rgbdata[]> sums = std::make_unique<rgbdata[]> ((size_t) m_area.width * m_area.height);
   std::unique_ptr<rgbdata[]> other_sums
       = std::make_unique<rgbdata[]> ((size_t) other.m_area.width * other.m_area.height);
@@ -494,7 +576,8 @@ analyze_base::find_best_match (int percentage, int max_percentage,
                best_rscale, best_gscale, best_bscale, best_noverlap, first,   \
                last, other_first, other_last, left, right, other_left,        \
                other_right, range, other_range, val_known, xshift_ret,        \
-               yshift_ret, sums, other_sums, report_file, direction, map, l)
+               yshift_ret, sums, other_sums, report_file, direction, map, l,  \
+               use_collection_support, screen_tile_collection_support)
   for (int y = ystart; y < yend; y++)
     {
       bool lfound = false;
@@ -650,6 +733,52 @@ analyze_base::find_best_match (int percentage, int max_percentage,
               continue;
             }
 
+          /* Keep overlap qualification as the historical count of known
+             screen tiles.  Collection support affects only the photometric
+             fit and is shift-dependent, so it cannot use the row suffix sums
+             above.  Estimate exposure from the same bounded grid of samples
+             used for residual evaluation.  */
+          if (use_collection_support)
+            {
+              rsum1 = rsum2 = gsum1 = gsum2 = bsum1 = bsum2 = 0;
+              for (int yy = yystart; yy < yyend; yy += ystep)
+                {
+                  int y1 = yy + m_area.yshift ();
+                  int row_xstart = -m_area.xshift () + range[y1].min;
+                  int row_xend = -m_area.xshift () + range[y1].max + 1;
+                  int y2 = yy - y + other.m_area.yshift ();
+                  row_xstart = std::max (
+                      -other.m_area.xshift () + x + other_range[y2].min,
+                      row_xstart);
+                  row_xend = std::min (
+                      -other.m_area.xshift () + other_range[y2].max + 1 + x,
+                      row_xend);
+                  for (int xx = row_xstart; xx < row_xend; xx += xstep)
+                    {
+                      const int x1 = xx + m_area.xshift ();
+                      const int x2 = xx - x + other.m_area.xshift ();
+                      const rgbdata first_support
+                          = screen_tile_collection_support (*this, x1, y1);
+                      const rgbdata second_support
+                          = screen_tile_collection_support (other, x2, y2);
+                      const rgbdata weight = {
+                        paired_collection_support (first_support.red,
+                                                   second_support.red),
+                        paired_collection_support (first_support.green,
+                                                   second_support.green),
+                        paired_collection_support (first_support.blue,
+                                                   second_support.blue)
+                      };
+                      rsum1 += red_avg (x1, y1) * weight.red;
+                      rsum2 += other.red_avg (x2, y2) * weight.red;
+                      gsum1 += green_avg (x1, y1) * weight.green;
+                      gsum2 += other.green_avg (x2, y2) * weight.green;
+                      bsum1 += blue_avg (x1, y1) * weight.blue;
+                      bsum2 += other.blue_avg (x2, y2) * weight.blue;
+                    }
+                }
+            }
+
 #if 0
 	  int noverlap = 0;
 	  for (int yy = yystart; yy < yyend; yy+= ystep)
@@ -715,6 +844,7 @@ analyze_base::find_best_match (int percentage, int max_percentage,
                      "cpfind answer exposure correction %f %f %f\n", rscale,
                      gscale, bscale);
 
+          luminosity_t residual_weight = 0;
           for (int yy = yystart; yy < yyend; yy += ystep)
             {
               int y1 = yy + m_area.yshift ();
@@ -750,13 +880,48 @@ analyze_base::find_best_match (int percentage, int max_percentage,
                   rdiff1 *= 65546;
                   gdiff *= 65536;
                   bdiff *= 65536;
-                  sqsum += rdiff1 * rdiff1 + gdiff * gdiff + bdiff * bdiff;
+                  if (use_collection_support)
+                    {
+                      const rgbdata first_support
+                          = screen_tile_collection_support (*this, x1, y1);
+                      const rgbdata second_support
+                          = screen_tile_collection_support (other, x2, y2);
+                      const rgbdata weight = {
+                        paired_collection_support (first_support.red,
+                                                   second_support.red),
+                        paired_collection_support (first_support.green,
+                                                   second_support.green),
+                        paired_collection_support (first_support.blue,
+                                                   second_support.blue)
+                      };
+                      sqsum += weight.red * rdiff1 * rdiff1
+                               + weight.green * gdiff * gdiff
+                               + weight.blue * bdiff * bdiff;
+                      residual_weight
+                          += weight.red + weight.green + weight.blue;
+                    }
+                  else
+                    sqsum += rdiff1 * rdiff1 + gdiff * gdiff
+                             + bdiff * bdiff;
                   // sqsum += rdiff1*rdiff1*rdiff1*rdiff1 +
                   // rdiff2*rdiff2*rdiff2*rdiff2 + gdiff*gdiff*gdiff*gdiff +
                   // bdiff*bdiff*bdiff*bdiff;
                 }
             }
-          sqsum /= est_noverlap;
+          if (use_collection_support)
+            {
+              if (!(my_isfinite (residual_weight)
+                    && residual_weight > (luminosity_t)0))
+                {
+                  if (is_cpfind)
+                    fprintf (report_file,
+                             "cpfind answer has no supported RGB samples\n");
+                  continue;
+                }
+              sqsum /= residual_weight;
+            }
+          else
+            sqsum /= est_noverlap;
           if (is_cpfind)
             fprintf (report_file, "cpfind answer sqsum %f overlap %i\n", sqsum,
                      est_noverlap);
