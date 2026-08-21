@@ -52,6 +52,12 @@ finetune_flag_error (uint64_t flags)
   if (legacy_blur && scanner_mtf)
     return "legacy screen blur and scanner MTF optimization cannot be "
            "combined";
+  if ((flags & finetune_uniform_image_layer) && (flags & finetune_bw))
+    return "uniform image-layer multi-tile fitting requires RGB input";
+  if ((flags & finetune_uniform_image_layer)
+      && (flags & finetune_simulate_infrared))
+    return "uniform image-layer fitting and simulated infrared are mutually "
+           "exclusive";
   return nullptr;
 }
 
@@ -1061,8 +1067,10 @@ public:
   /* True if we are using simulated infrared as source of tiles's bw.  */
   bool bw_is_simulated_infrared;
 
-  /* True if emulsion patch intensities should be finetuned.
-     Initialized in init call.  */
+  /* True if per-tile uniform image-layer intensities should be finetuned.
+     The historical name below is retained internally because the same
+     machinery is also used by the emulsion-blur experiment.  */
+  bool optimize_uniform_image_layer;
   bool optimize_emulsion_intensities;
   bool optimize_emulsion_offset;
   bool fog_by_least_squares;
@@ -2021,6 +2029,8 @@ public:
       node.reset ();
     optimize_screen_channel_blurs = flags & finetune_screen_channel_blurs;
     optimize_emulsion_blur = flags & finetune_emulsion_blur;
+    optimize_uniform_image_layer
+        = (flags & finetune_uniform_image_layer) && !tiles[0].color.empty ();
     optimize_strips
         = (flags & finetune_strips) && screen_with_varying_strips_p (type);
     /* Strips needs to be optimized only for some screens, like Dufay, Joly or
@@ -2050,6 +2060,15 @@ public:
     /* TODO; We probably can sharpen and normalize.  */
     normalize = !(flags & finetune_no_normalize) && !optimize_sharpening
                 && !tiles[0].color.empty ();
+    /* Uniform-colour multi-tile fitting models the image layer explicitly.
+       Per-pixel RGB normalization would divide out the very tile-dependent
+       primary intensities being fitted, and data collection cannot separate
+       one shared screen response from several tile intensity vectors.  Do
+       this before the normalization/emulsion-blur compatibility check below
+       so an explicitly requested emulsion blur is not disabled merely because
+       normalization would otherwise have been the default.  */
+    if (optimize_uniform_image_layer)
+      data_collection = normalize = false;
     /* Normalization turns every color of every pixel to have sum of 1.
        This simplifies the optimization since it effectively removes
        the image layer and we can more easily estimate screen position and
@@ -2068,18 +2087,20 @@ public:
         if (least_squares)
           optimize_mix_weights = optimize_mix_dark = true;
       }
-    /* When finetuning emulsion blur, tune also offset carefully.  */
-    if (!tiles[0].color.empty () && optimize_emulsion_blur
-        && (optimize_screen_blur || optimize_screen_channel_blurs
-            || optimize_scanner_mtf_sigma || optimize_scanner_mtf_defocus
-            || optimize_scanner_mtf_channel_defocus))
-      {
-        optimize_emulsion_intensities = true;
-        optimize_emulsion_offset = true;
-        data_collection = false;
-      }
-    else
-      optimize_emulsion_intensities = optimize_emulsion_offset = false;
+    /* The historical emulsion-blur experiment also needs per-tile primary
+       intensities and a local emulsion offset.  Uniform-image-layer focus
+       fitting reuses only the intensity part: screen primaries and capture
+       transfer stay shared while local offsets remain fixed.  */
+    const bool coupled_emulsion_fit
+        = !tiles[0].color.empty () && optimize_emulsion_blur
+          && (optimize_screen_blur || optimize_screen_channel_blurs
+              || optimize_scanner_mtf_sigma || optimize_scanner_mtf_defocus
+              || optimize_scanner_mtf_channel_defocus);
+    optimize_emulsion_intensities
+        = optimize_uniform_image_layer || coupled_emulsion_fit;
+    optimize_emulsion_offset = coupled_emulsion_fit;
+    if (optimize_emulsion_intensities)
+      data_collection = false;
 
     /* To optimize emulsion blur we can either assume that screen blur
        is already known and use it or try to simulate everything including
@@ -2974,39 +2995,10 @@ public:
 
     if (weight_scr)
       {
-        rgbdata i = get_emulsion_intensities (v, tileid);
-        point_t offset = get_emulsion_offset (v, tileid);
-        if (offset.x == 0 && offset.y == 0)
-          for (int y = 0; y < screen::size; y++)
-            for (int x = 0; x < screen::size; x++)
-              {
-                luminosity_t w = weight_scr->mult[y][x][0] * i.red
-                                 + weight_scr->mult[y][x][1] * i.green
-                                 + weight_scr->mult[y][x][2] * i.blue;
-                tiles[tileid].merged_scr->mult[y][x][0]
-                    = src_scr->mult[y][x][0] * w;
-                tiles[tileid].merged_scr->mult[y][x][1]
-                    = src_scr->mult[y][x][1] * w;
-                tiles[tileid].merged_scr->mult[y][x][2]
-                    = src_scr->mult[y][x][2] * w;
-              }
-        else
-          for (int y = 0; y < screen::size; y++)
-            for (int x = 0; x < screen::size; x++)
-              {
-                rgbdata wd = weight_scr->interpolated_mult (
-                    (point_t){ x * ((coord_t)1 / (coord_t)screen::size),
-                               y * ((coord_t)1 / (coord_t)screen::size) }
-                    + offset);
-                luminosity_t w
-                    = wd.red * i.red + wd.green * i.green + wd.blue * i.blue;
-                tiles[tileid].merged_scr->mult[y][x][0]
-                    = src_scr->mult[y][x][0] * w;
-                tiles[tileid].merged_scr->mult[y][x][1]
-                    = src_scr->mult[y][x][1] * w;
-                tiles[tileid].merged_scr->mult[y][x][2]
-                    = src_scr->mult[y][x][2] * w;
-              }
+        finetune_apply_uniform_image_layer (
+            *tiles[tileid].merged_scr, *src_scr, *weight_scr,
+            get_emulsion_intensities (v, tileid),
+            get_emulsion_offset (v, tileid));
         src_scr = tiles[tileid].merged_scr.get ();
       }
 
@@ -3202,8 +3194,10 @@ public:
                 optimize_emulsion_blur && !optimize_emulsion_intensities
                     ? emulsion_scr.get ()
                     : original_scr.get (),
-                optimize_emulsion_intensities ? emulsion_scr.get ()
-                                              : nullptr,
+                optimize_emulsion_intensities
+                    ? (optimize_emulsion_blur ? emulsion_scr.get ()
+                                               : original_scr.get ())
+                    : nullptr,
                 profile ? &filter_profile : nullptr);
             if (profile)
               {
@@ -4699,11 +4693,23 @@ public:
         ret.screen_green = screen_green;
         ret.screen_blue = screen_blue;
       }
+    if (optimize_uniform_image_layer)
+      {
+        ret.tile_primary_intensities.resize (n_tiles);
+        for (int tileid = 0; tileid < n_tiles; tileid++)
+          ret.tile_primary_intensities[tileid]
+              = get_emulsion_intensities (start.data (), tileid);
+      }
     ret.emulsion_blur_radius = get_emulsion_blur_radius (start.data ());
     ret.screen_coord_adjust = get_offset (start.data (), 0);
     ret.emulsion_coord_adjust = get_emulsion_offset (start.data (), 0);
     ret.fog = get_fog (start.data ());
-    if (optimize_emulsion_intensities || simulate_infrared)
+    /* The uniform-image-layer mode fits only per-tile scalar transmission.
+       It does not recalibrate RGB-to-neutral mixing weights.  The historical
+       coupled emulsion experiment may still derive those weights from its
+       fitted primary response.  */
+    if ((optimize_emulsion_intensities && !optimize_uniform_image_layer)
+        || simulate_infrared)
       ret.mix_weights = get_mix_weights (start.data ());
     else
       {
@@ -4713,9 +4719,11 @@ public:
       }
 
     /* MIX_DARK is fitted only by the experimental simulated-infrared mode.
-       Emulsion-intensity fitting may derive new neutral mixing weights, but
-       it has no dark variable; preserve the caller's current RGB dark rather
-       than manufacturing zero from GET_MIX_DARK's inactive default.  */
+       The historical coupled emulsion-intensity fit may derive new neutral
+       mixing weights, but it has no dark variable; preserve the caller's
+       current RGB dark rather than manufacturing zero from GET_MIX_DARK's
+       inactive default.  Uniform-image-layer focus fitting preserves both
+       the input mix weights and mix dark.  */
     if (simulate_infrared)
       ret.mix_dark = finetune_render_mix_dark (
           ret.mix_weights, get_mix_dark (start.data ()), rparam.mix_dark);
@@ -5092,6 +5100,19 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
 
   if (!bw && !imgp[0]->has_rgb ())
     bw = true;
+  if (fparams.flags & finetune_uniform_image_layer)
+    {
+      if (n_tiles < 2)
+        {
+          ret.err = "uniform image-layer fitting requires at least two tiles";
+          return finish ();
+        }
+      if (bw || !imgp[0]->has_rgb ())
+        {
+          ret.err = "uniform image-layer fitting requires RGB input";
+          return finish ();
+        }
+    }
 
   int iterations = 0;
   int txmin, txmax, tymin, tymax;

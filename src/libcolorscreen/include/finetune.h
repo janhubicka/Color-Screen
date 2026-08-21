@@ -5,6 +5,7 @@
 #include "colorscreen.h"
 #include <memory>
 #include <string>
+#include <vector>
 namespace colorscreen
 {
 class screen;
@@ -72,7 +73,14 @@ enum finetune_flags : uint64_t
   /* Search broadly for scale and rotation rather than refining a known map.  */
   finetune_guess_coordinates = 1 << 20,
   /* Retain diagnostic images in FINETUNE_RESULT.  */
-  finetune_produce_images = 1 << 21
+  finetune_produce_images = 1 << 21,
+  /* Model every explicitly supplied RGB tile as a locally uniform image
+     layer.  The historical screen-primary responses and capture transfer are
+     shared by all tiles, while each tile gets three scalar intensities that
+     dim the red, green and blue screen primaries before capture blur.  This
+     is intended for joint focus analysis of several differently coloured
+     solid areas.  */
+  finetune_uniform_image_layer = 1 << 22
 };
 
 /* Lightweight counters collected by FINETUNE.  Times use steady-clock
@@ -261,6 +269,10 @@ struct finetune_result
   point_t emulsion_coord_adjust = { -1, -1 };
   /* Fitted BW patch intensities or legacy color summary.  */
   rgbdata color = { -1, -1, -1 };
+  /* For FINETUNE_UNIFORM_IMAGE_LAYER, per-tile scalar image-layer
+     intensities multiplying the shared red, green and blue screen primaries.
+     Entries follow LOCS order.  Empty for ordinary RGB/BW fits and failure.  */
+  std::vector<rgbdata> tile_primary_intensities;
   /* Scanner RGB response to ideal red, green and blue screen primaries.  */
   rgbdata screen_red = { -1, -1, -1 }, screen_green = { -1, -1, -1 },
           screen_blue = { -1, -1, -1 };

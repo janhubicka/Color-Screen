@@ -1,6 +1,7 @@
 #ifndef FINETUNE_INT_H
 #define FINETUNE_INT_H
 #include <array>
+#include <cstring>
 #include <memory>
 #include <vector>
 #include "include/finetune.h"
@@ -16,6 +17,41 @@ const char *finetune_flag_error (uint64_t flags);
    conversion is undefined or any fitted value is non-finite.  */
 rgbdata finetune_render_mix_dark (rgbdata weights, luminosity_t scalar_dark,
                                   rgbdata fallback);
+
+/* Multiply SOURCE by one locally uniform image layer and store the result in
+   DST.  WEIGHT describes the spatial red/green/blue primary membership before
+   capture blur; INTENSITIES gives this tile's scalar transmission beneath each
+   primary.  OFFSET is used only by the historical emulsion-offset experiment.
+   The operation scales all scanner-response channels by the same local image
+   layer, so screen-primary chromaticities remain shared between tiles.  */
+inline void
+finetune_apply_uniform_image_layer (screen &dst, const screen &source,
+                                    const screen &weight,
+                                    rgbdata intensities, point_t offset)
+{
+  memcpy (dst.add, source.add, sizeof (dst.add));
+  const bool no_offset = offset.x == 0 && offset.y == 0;
+  for (int y = 0; y < screen::size; y++)
+    for (int x = 0; x < screen::size; x++)
+      {
+        rgbdata membership;
+        if (no_offset)
+          membership = { weight.mult[y][x][0], weight.mult[y][x][1],
+                         weight.mult[y][x][2] };
+        else
+          membership = weight.interpolated_mult (
+              { x * ((coord_t)1 / (coord_t)screen::size),
+                y * ((coord_t)1 / (coord_t)screen::size) }
+              + offset);
+        const luminosity_t transmission
+            = membership.red * intensities.red
+              + membership.green * intensities.green
+              + membership.blue * intensities.blue;
+        dst.mult[y][x][0] = source.mult[y][x][0] * transmission;
+        dst.mult[y][x][1] = source.mult[y][x][1] * transmission;
+        dst.mult[y][x][2] = source.mult[y][x][2] * transmission;
+      }
+}
 
 /* Return the scalar scanner-MTF coordinate used to initialize a local
    FINETUNE fit.  Physical defocus and measured-MTF residual blur keep the

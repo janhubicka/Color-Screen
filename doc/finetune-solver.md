@@ -159,10 +159,20 @@ screen families where they are meaningful.
 
 ### 3. Optional historical emulsion model
 
-The solver can blur the ideal screen in screen-period units.  In the more
-experimental multi-tile mode it can also fit a screen-space emulsion offset and
-per-tile primary intensities, merge the resulting neutral layer with the
-screen, and then apply the capture transfer.
+The solver can blur the ideal screen in screen-period units.  Its multi-tile
+RGB model can also represent locally uniform image colours explicitly.  The
+historical screen-primary RGB responses and capture transfer are shared by all
+tiles, while every tile has three scalar image-layer intensities that dim the
+red, green, and blue screen primaries before capture blur.  This factorization
+is selected by `finetune_uniform_image_layer` and is intended for joint focus
+analysis of several differently coloured solid areas.  RGB normalization and
+patch-colour data collection are disabled in this mode because the image layer
+is part of the model rather than something to divide out.
+
+The older emulsion-blur experiment uses the same per-tile intensity machinery
+and additionally permits a screen-space emulsion offset and fitted emulsion
+blur.  Those extra degrees of freedom are not enabled merely by selecting the
+uniform-image-layer mode.
 
 ### 4. Capture transfer
 
@@ -507,6 +517,22 @@ exact entry.  Low-level MTF/FFT counters cover builds owned by finetune's
 variable-screen paths; a miss in the ordinary renderer cache contributes cache
 time and an exact-build count but does not currently expose its internal FFT
 breakdown.
+
+## Uniform-colour multi-tile contract
+
+`finetune_uniform_image_layer` requires at least two explicit RGB tile
+locations.  One set of screen-primary RGB responses is fitted for the complete
+call.  For tile `t`, `tile_primary_intensities[t]` contains three scalar
+transmissions multiplying those shared red, green, and blue primaries before
+the common capture blur is applied.  Tile positions may still have independent
+phase corrections when `finetune_position` is selected.
+
+The factorization is deliberately restrictive: it does not give every tile an
+independent primary chromaticity.  Spatial fading that only changes primary
+amplitude can therefore be absorbed by the tile intensities, while genuine
+spatial changes of dye chromaticity remain visible as residual/model mismatch.
+This is preferable for focus identification because unconstrained per-tile
+primary colours would recreate the blur-versus-saturation ambiguity.
 
 ## Result-field contract
 
