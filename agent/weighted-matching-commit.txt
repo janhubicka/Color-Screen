@@ -1,0 +1,28 @@
+analyze: weight overlap matching by collection support
+
+Use retained per-channel collection support when matching analyzed screen
+overlaps.  For every corresponding sample pair, combine the supports as
+
+  w = s1 * s2 / (s1 + s2)
+
+and use the same pair weight in the exposure estimate and in that channel's
+squared RGB residual.  Normalize candidate scores by the accumulated red,
+green and blue support.  This prevents inferred or poorly sampled screen
+elements from overpowering reliable scanner data.
+
+Keep geometric overlap qualification based on the historical count of known
+screen tiles.  Preserve the existing suffix-sum and scoring path when support
+arrays are absent, so fast collection retains its established behavior.
+For packed Paget and Dufay channel lattices, average retained support over the
+same physical subelements as red_avg(), green_avg() and blue_avg().
+
+Add a weighted_matching regression covering the unweighted baseline, explicit
+unit-support compatibility, an adversarial majority of low-support samples,
+and independent per-channel weighting where only blue is reliable.  The
+focused matcher, channel-sharpening, scanner-blur and denoising groups pass in
+both O2 and Ofast checking builds.  The real Dufay stitching test passes 6/6 in
+both builds and retains its established -16,-10 offset.
+
+Complete make check runs report 79/81 in both builds.  The only failure is the
+pre-existing real-MTF fixture at SNR 29.8569 versus the threshold 30; the same
+failure was reproduced on the exact 24de87bfd6b5 base revision.
