@@ -1,0 +1,70 @@
+name: Agent compare multiview headless backends
+
+on:
+  pull_request:
+    branches:
+      - agent/multiview-panels-publish-base-20260822
+    paths:
+      - agent/multiview-panels-headless.trigger
+
+jobs:
+  baseline:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 15399e7ca10e3ff9abc9797364bbd3f8ca33482d
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev liblcms2-dev libgtk2.0-dev libfftw3-dev qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev libexiv2-dev build-essential libopenjp2-7-dev libpng-dev
+      - name: Build
+        run: |
+          export PATH="$(qmake6 -query QT_HOST_LIBEXECS):$PATH"
+          CXXFLAGS="-O2 -g -Wall -Wextra" CFLAGS="$CXXFLAGS" ./configure --enable-qtgui
+          make -j"$(nproc)"
+      - name: Probe baseline backends
+        shell: bash
+        run: |
+          set +e
+          for backend in offscreen minimal; do
+            QT_QPA_PLATFORM=$backend ./src/qtgui/colorscreen-qt --smoke-test 3000 \
+              "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+              > "baseline-$backend.log" 2>&1
+            echo "status=$?" >> "baseline-$backend.log"
+          done
+          cat baseline-*.log
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: baseline-headless-logs
+          path: baseline-*.log
+
+  patched:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/qtgui-multiview-panels-diagnostic
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev liblcms2-dev libgtk2.0-dev libfftw3-dev qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev libexiv2-dev build-essential libopenjp2-7-dev libpng-dev
+      - name: Build
+        run: |
+          export PATH="$(qmake6 -query QT_HOST_LIBEXECS):$PATH"
+          CXXFLAGS="-O2 -g -Wall -Wextra" CFLAGS="$CXXFLAGS" ./configure --enable-qtgui
+          make -j"$(nproc)"
+      - name: Run patched multiview with minimal backend
+        shell: bash
+        run: |
+          set +e
+          QT_QPA_PLATFORM=minimal ./src/qtgui/colorscreen-qt \
+            --smoke-test 12000 --smoke-test-expect-windows 2 \
+            --smoke-test-new-view --smoke-test-slanted-reference \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+            > patched-minimal.log 2>&1
+          echo "status=$?" >> patched-minimal.log
+          cat patched-minimal.log
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: patched-minimal-log
+          path: patched-minimal.log
