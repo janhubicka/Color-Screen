@@ -1024,7 +1024,8 @@ simplex starting point as the final solution.
 
 **Severity:** high focus identifiability
 
-**Status:** partially fixed; automatic area selection remains open
+**Status:** partially fixed; candidate search/subset selection implemented,
+solver orchestration and validation remain open
 
 The original multi-tile experiment used the physically useful factorization
 needed for robust focus analysis: one set of historical screen-primary scanner
@@ -1051,7 +1052,21 @@ set.  Regression coverage checks the shared-primary scaling operation itself
 and runs the production `finetune()` path on synthetic differently coloured
 uniform tiles with a known common blur.
 
-Remaining work is to discover suitable solid areas automatically, reject weak
-individual fits, choose a well-conditioned colour-diverse subset, and add
-leave-one-area-out/held-out validation before the Qt workflow uses the joint
-fit as an authoritative focus measurement.
+The library now also contains the cheap pre-solver and post-solver pieces of
+automatic area selection.  `finetune_find_focus_area_candidates()` searches a
+linear RGB analysis image for windows well described by shallow per-channel
+planes, separately limiting residual texture and the fitted gradient so gentle
+fading remains usable.  It performs non-maximum suppression before expensive
+solver work.  After callers run an ordinary one-tile `finetune()` on each
+candidate, `finetune_select_focus_areas()` rejects failures/weak contrast,
+normalizes the raw final objective by observed mean-colour magnitude rather
+than fitted contrast, and greedily selects a D-optimal colour-diverse subset.
+The contrast-scaled historical uncertainty is deliberately not used.  A
+normalized colour Gram determinant rejects repeated copies of effectively one
+colour.
+
+Remaining work is to orchestrate the individual candidate fits efficiently,
+feed their retained per-tile starting states into the joint uniform-image-layer
+fit, add leave-one-area-out/held-out focus validation, and expose the resulting
+areas and controls in Qt.  Search-window sizing should be derived from the local
+finetune tile footprint when the GUI integration is added.
