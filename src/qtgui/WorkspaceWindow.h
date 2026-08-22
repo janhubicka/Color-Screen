@@ -9,6 +9,7 @@ class ImageViewWindow;
 class QCloseEvent;
 class QDockWidget;
 class QEvent;
+class ImageWidget;
 class QMdiArea;
 class QMdiSubWindow;
 class QStackedWidget;
@@ -93,6 +94,9 @@ protected:
   /** Close all documents through their normal save/cancel policy. */
   void closeEvent(QCloseEvent *event) override;
 
+  /** Reclaim the active document inspector when the workspace gets focus. */
+  void changeEvent(QEvent *event) override;
+
   /** Implement drag-out tab detachment while preserving ordinary tab moves. */
   bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -126,6 +130,9 @@ private:
 
   /** Show the task-progress dock iff any attached document has visible rows. */
   void updateUserVisibleProgressDockVisibility();
+
+  /** Put DOCUMENT's shared inspector in the workspace and target IMAGEWIDGET. */
+  void installDocumentInspector(MainWindow *document, ImageWidget *imageWidget);
 
   /** Show DOCUMENT's menus, toolbar, inspector, and transient status as the
       active workspace chrome. */

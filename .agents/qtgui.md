@@ -102,9 +102,19 @@ applied through the source document's undoable parameter path. **Reload and
 demosaic** reloads both the source scan and every associated slanted-edge
 reference from its own filename using the current demosaic mode.
 
-**Window → New View** creates another MDI view of the same document. Views share
-the image and document transforms such as rotation and mirroring, while render
-mode, Color/IR choice, zoom, and pan remain view-local.
+**Window → New View** creates another MDI view of the same document. Ordinary
+views present the same complete Navigation + parameter-panel inspector as the
+primary view; the document owns one inspector instance and the active ordinary
+view merely presents it, so panel state, undo routing, and detached diagnostic
+widgets are never duplicated. Navigation and panel tools that act on an image
+(crop/area selection, measurement, geometry visualization, and registration
+interaction) target the ordinary view currently presenting the inspector.
+Detached ordinary views host that same inspector locally while active and return
+it to the workspace/primary window on activation changes. Views share the image
+and document transforms such as rotation and mirroring, while render mode,
+Color/IR choice, zoom, and pan remain view-local. Slanted-edge reference views
+remain intentionally specialized and keep their separate Navigation +
+Sharpness-only inspector.
 
 Top-level menus follow the conventional order **File, Edit, View,
 Registration, Window, Help**. `Window` is the final working menu and owns MDI

@@ -13,6 +13,8 @@
 #include <QByteArray>
 #include <QElapsedTimer>
 #include <QMainWindow>
+#include <QMetaObject>
+#include <QPointer>
 #include <QString>
 #include <QVBoxLayout>
 #include <functional>
@@ -145,8 +147,25 @@ public:
       the shared workspace. */
   QToolBar *workspaceToolBar() const { return m_toolbar; }
 
-  /** Return the navigation/parameter panel column hosted by the workspace. */
+  /** Return the document-owned navigation/parameter panel column. */
   QWidget *workspaceInspectorWidget() const { return m_rightColumn; }
+
+  /** Detach and return the document-owned inspector from its current host. */
+  QWidget *takeWorkspaceInspector();
+
+  /** Restore the document-owned inspector beside the primary image view. */
+  void restoreWorkspaceInspector();
+
+  /** Route inspector navigation and interactive panel tools to IMAGEWIDGET. */
+  void setInspectorImageWidget(ImageWidget *imageWidget);
+
+  /** Return the image view currently controlled by the document inspector. */
+  ImageWidget *inspectorImageWidget() const {
+    return m_inspectorImageWidget ? m_inspectorImageWidget.data() : m_imageWidget;
+  }
+
+  /** Return the document's primary image view. */
+  ImageWidget *primaryImageWidget() const { return m_imageWidget; }
 
   /** Return the transient per-document progress controls shown while this
       document is the active workspace document. */
@@ -274,6 +293,7 @@ private slots:
 
 protected:
   void closeEvent(QCloseEvent *event) override;
+  void changeEvent(QEvent *event) override;
 
 private:
   // Helper to check for unsaved changes and prompt to save
@@ -406,6 +426,8 @@ private:
 
   // Left side
   ImageWidget *m_imageWidget;
+  QPointer<ImageWidget> m_inspectorImageWidget;
+  std::vector<QMetaObject::Connection> m_inspectorImageConnections;
 
   // Right side
   QWidget *m_rightColumn;
