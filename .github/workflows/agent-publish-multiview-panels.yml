@@ -41,6 +41,9 @@ jobs:
 
       - name: Build Qt GUI
         run: |
+          QT_LIBEXECS="$(qmake6 -query QT_HOST_LIBEXECS)"
+          test -x "$QT_LIBEXECS/moc"
+          export PATH="$QT_LIBEXECS:$PATH"
           CXXFLAGS="-O2 -g -Wall -Wextra" CFLAGS="$CXXFLAGS" \
             ./configure --enable-qtgui
           make -j"$(nproc)"
