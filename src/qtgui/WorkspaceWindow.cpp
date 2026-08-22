@@ -766,7 +766,9 @@ void WorkspaceWindow::installViewChrome(ImageViewWindow *view) {
       m_inspectorStack->addWidget(inspector);
     m_inspectorStack->setCurrentWidget(inspector);
     inspector->show();
-    m_inspectorDock->setWindowTitle(tr("Sharpness"));
+    m_inspectorDock->setWindowTitle(
+        view->isSlantedEdgeReference() ? tr("Reference Controls")
+                                       : tr("Document Controls"));
     m_inspectorDock->show();
   } else {
     m_inspectorDock->setWindowTitle(tr("Document Controls"));

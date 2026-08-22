@@ -63,6 +63,10 @@ public:
   /** Return all live secondary views. */
   QList<ImageViewWindow *> viewWindows();
 
+  /** Reload every slanted-edge reference associated with SOURCE using the
+      document's current demosaic setting. */
+  void reloadSlantedEdgeReferences(MainWindow *source);
+
   /** Open every path in FILENAMES as an independent image document.
 
       PREFERREDWINDOW is reused for the first file only when it is still an

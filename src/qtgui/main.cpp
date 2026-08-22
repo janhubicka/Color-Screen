@@ -689,6 +689,7 @@ int main(int argc, char *argv[]) {
       colorscreen::render_type_t alternate = sourceType;
       const colorscreen::render_type_t candidates[] = {
           colorscreen::render_type_original,
+          colorscreen::render_type_image_layer,
           colorscreen::render_type_interpolated,
           colorscreen::render_type_realistic,
           colorscreen::render_type_screen};
@@ -750,7 +751,11 @@ int main(int argc, char *argv[]) {
             app.documentWindows().size() != documentCount || !workspace ||
             !workspace->containsView(reference) ||
             app.tabCount() != tabCount + 1 ||
-            !reference->workspaceInspectorWidget()) {
+            !reference->workspaceInspectorWidget() ||
+            !reference->workspaceInspectorWidget()->findChild<QWidget *>(
+                QStringLiteral("SlantedEdgeNavigation")) ||
+            !reference->workspaceInspectorWidget()->findChild<QWidget *>(
+                QStringLiteral("SlantedEdgeReferenceTabs"))) {
           qCritical() << "Slanted-edge reference did not remain a specialized "
                          "shared-parameter workspace view";
           app.exit(15);
@@ -764,7 +769,27 @@ int main(int argc, char *argv[]) {
           app.exit(15);
           return;
         }
-        reference->close();
+
+        const auto beforeReload = reference->sharedImageData();
+        app.reloadSlantedEdgeReferences(source);
+        auto checkReload = std::make_shared<std::function<void(int)>>();
+        *checkReload = [&app, reference, beforeReload, checkReload](
+                           int attemptsLeft) {
+          if (reference && reference->sharedImageData() == beforeReload &&
+              attemptsLeft > 0) {
+            QTimer::singleShot(250, &app, [checkReload, attemptsLeft]() {
+              (*checkReload)(attemptsLeft - 1);
+            });
+            return;
+          }
+          if (!reference || reference->sharedImageData() == beforeReload) {
+            qCritical() << "Slanted-edge reference did not reload";
+            app.exit(15);
+            return;
+          }
+          reference->close();
+        };
+        (*checkReload)(28);
       };
       (*checkReference)(28);
     });

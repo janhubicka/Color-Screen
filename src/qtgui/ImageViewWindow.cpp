@@ -3,6 +3,8 @@
 #include "ColorScreenApplication.h"
 #include "ImageWidget.h"
 #include "MainWindow.h"
+#include "MultiLineTabWidget.h"
+#include "NavigationView.h"
 #include "SharpnessPanel.h"
 #include "SlantedEdgeDialog.h"
 
@@ -21,8 +23,10 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QSignalBlocker>
+#include <QSplitter>
 #include <QStatusBar>
 #include <QToolBar>
+#include <QVBoxLayout>
 #include <QVariant>
 #include <QtConcurrent>
 
@@ -90,7 +94,7 @@ MainWindow *ImageViewWindow::sourceDocument() const { return m_document.data(); 
 
 /** Return the reduced Sharpness inspector used only by reference views. */
 QWidget *ImageViewWindow::workspaceInspectorWidget() const {
-  return m_sharpnessPanel;
+  return m_referenceInspector;
 }
 
 /** Build the standard compact toolbar and menus for a secondary image view. */
@@ -220,10 +224,34 @@ void ImageViewWindow::setupUi() {
   resize(1100, 800);
 }
 
-/** Create the only parameter panel exposed by a slanted-edge reference. */
+/** Build the reduced navigation + Sharpness inspector for a reference image. */
 void ImageViewWindow::setupReferenceInspector() {
   if (!m_slantedEdgeReference || !m_document)
     return;
+
+  m_referenceInspector = new QWidget(this);
+  m_referenceInspector->setObjectName(
+      QStringLiteral("SlantedEdgeReferenceInspector"));
+  auto *layout = new QVBoxLayout(m_referenceInspector);
+  layout->setContentsMargins(0, 0, 0, 0);
+
+  auto *splitter = new QSplitter(Qt::Vertical, m_referenceInspector);
+  layout->addWidget(splitter);
+
+  m_navigationView = new NavigationView(splitter);
+  m_navigationView->setObjectName(QStringLiteral("SlantedEdgeNavigation"));
+  m_navigationView->setMinimumHeight(200);
+  splitter->addWidget(m_navigationView);
+  connect(m_imageWidget, &ImageWidget::viewStateChanged, m_navigationView,
+          &NavigationView::onViewStateChanged);
+  connect(m_navigationView, &NavigationView::zoomChanged, m_imageWidget,
+          &ImageWidget::setZoom);
+  connect(m_navigationView, &NavigationView::panChanged, m_imageWidget,
+          &ImageWidget::setPan);
+
+  m_referenceTabs = new MultiLineTabWidget(splitter);
+  m_referenceTabs->setObjectName(QStringLiteral("SlantedEdgeReferenceTabs"));
+  splitter->addWidget(m_referenceTabs);
 
   m_sharpnessPanel = new SharpnessPanel(
       [this]() {
@@ -234,7 +262,8 @@ void ImageViewWindow::setupReferenceInspector() {
         if (m_document)
           m_document->applySharedDocumentState(state, description);
       },
-      [this]() { return m_scan; }, this);
+      [this]() { return m_scan; }, m_referenceTabs);
+  m_referenceTabs->addTab(m_sharpnessPanel, tr("Sharpness"));
 
   connect(m_sharpnessPanel,
           &SharpnessPanel::openSlantedEdgeReferenceRequested, this, [this]() {
@@ -245,13 +274,17 @@ void ImageViewWindow::setupReferenceInspector() {
   connect(m_sharpnessPanel, &SharpnessPanel::measureMtfRequested, this,
           &ImageViewWindow::onMeasureMtfRequested);
 
-  m_referenceInspectorDock = new QDockWidget(tr("Sharpness"), this);
+  splitter->setStretchFactor(0, 0);
+  splitter->setStretchFactor(1, 1);
+  splitter->setSizes({220, 520});
+
+  m_referenceInspectorDock = new QDockWidget(tr("Reference Controls"), this);
   m_referenceInspectorDock->setObjectName(
       QStringLiteral("SlantedEdgeSharpnessDock"));
   m_referenceInspectorDock->setAllowedAreas(Qt::LeftDockWidgetArea |
                                             Qt::RightDockWidgetArea);
   m_referenceInspectorDock->setMinimumWidth(300);
-  m_referenceInspectorDock->setWidget(m_sharpnessPanel);
+  m_referenceInspectorDock->setWidget(m_referenceInspector);
   addDockWidget(Qt::RightDockWidgetArea, m_referenceInspectorDock);
   m_referenceInspectorDock->show();
 }
@@ -310,6 +343,13 @@ void ImageViewWindow::loadReferenceImage(const QString &fileName) {
                                            : QString());
       });
   watcher->setFuture(future);
+}
+
+/** Reload the external reference with the document's current demosaic mode. */
+void ImageViewWindow::reloadReferenceImage() {
+  if (!m_slantedEdgeReference || m_referenceFile.isEmpty())
+    return;
+  loadReferenceImage(m_referenceFile);
 }
 
 /** Refresh shared state without disturbing view-local render mode/zoom/pan. */
@@ -423,11 +463,17 @@ void ImageViewWindow::updateImageParameters(bool imageChanged) {
     m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                             &m_detectParams, &m_renderTypeParams,
                             &m_solverParams);
+    if (m_navigationView)
+      m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
+                                 &m_detectParams);
     m_imageWidget->fitToView();
   } else {
     m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
                                     &m_detectParams, &m_renderTypeParams,
                                     &m_solverParams);
+    if (m_navigationView)
+      m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams,
+                                         &m_detectParams);
   }
 }
 
@@ -631,8 +677,8 @@ void ImageViewWindow::onReferenceAreaSelected(QRect widgetArea) {
 void ImageViewWindow::prepareForWorkspaceEmbedding() {
   if (m_workspaceEmbedded)
     return;
-  if (m_referenceInspectorDock && m_sharpnessPanel) {
-    m_sharpnessPanel->setParent(nullptr);
+  if (m_referenceInspectorDock && m_referenceInspector) {
+    m_referenceInspector->setParent(nullptr);
     m_referenceInspectorDock->setWidget(nullptr);
     m_referenceInspectorDock->hide();
   }
@@ -649,9 +695,9 @@ void ImageViewWindow::prepareForWorkspaceEmbedding() {
 void ImageViewWindow::restoreFromWorkspaceEmbedding() {
   if (!m_workspaceEmbedded)
     return;
-  if (m_referenceInspectorDock && m_sharpnessPanel) {
-    m_sharpnessPanel->setParent(nullptr);
-    m_referenceInspectorDock->setWidget(m_sharpnessPanel);
+  if (m_referenceInspectorDock && m_referenceInspector) {
+    m_referenceInspector->setParent(nullptr);
+    m_referenceInspectorDock->setWidget(m_referenceInspector);
     m_referenceInspectorDock->show();
   }
   if (m_toolbar)

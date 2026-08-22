@@ -240,6 +240,17 @@ QList<ImageViewWindow *> ColorScreenApplication::viewWindows() {
   return views;
 }
 
+/** Reload every slanted-edge reference associated with SOURCE. */
+void ColorScreenApplication::reloadSlantedEdgeReferences(MainWindow *source) {
+  if (!source)
+    return;
+  for (ImageViewWindow *view : viewWindows()) {
+    if (view && view->sourceDocument() == source &&
+        view->isSlantedEdgeReference())
+      view->reloadReferenceImage();
+  }
+}
+
 /** Open a list of images, assigning one complete MainWindow to each image. */
 void ColorScreenApplication::openFiles(const QStringList &fileNames,
                                        MainWindow *preferredWindow,

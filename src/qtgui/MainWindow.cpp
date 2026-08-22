@@ -124,6 +124,7 @@ private:
 Q_DECLARE_METATYPE(MainWindow::SolverRequestData)
 Q_DECLARE_METATYPE(MainWindow::ColorOptimizerRequestData)
 Q_DECLARE_METATYPE(colorscreen::render_parameters)
+Q_DECLARE_METATYPE(colorscreen::scr_detect_parameters)
 Q_DECLARE_METATYPE(colorscreen::scr_to_img_parameters)
 Q_DECLARE_METATYPE(std::vector<colorscreen::point_t>)
 Q_DECLARE_METATYPE(std::vector<colorscreen::color_match>)
@@ -153,6 +154,9 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
   qRegisterMetaType<MainWindow::SolverRequestData>();
   qRegisterMetaType<MainWindow::ColorOptimizerRequestData>();
   qRegisterMetaType<colorscreen::render_parameters>();
+  qRegisterMetaType<colorscreen::scr_detect_parameters>(
+      "colorscreen::scr_detect_parameters");
+  qRegisterMetaType<const char *>("const char*");
   qRegisterMetaType<colorscreen::scr_to_img_parameters>();
   qRegisterMetaType<std::vector<colorscreen::point_t>>();
   qRegisterMetaType<std::vector<colorscreen::color_match>>();
@@ -702,6 +706,9 @@ void MainWindow::setupUi() {
                        [this]() {
                          if (!m_currentImageFile.isEmpty()) {
                            loadFile(m_currentImageFile, true);
+                           if (ColorScreenApplication *application =
+                                   documentApplication())
+                             application->reloadSlantedEdgeReferences(this);
                          }
                        },
                        this);

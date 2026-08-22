@@ -13,6 +13,8 @@
 
 class ImageWidget;
 class MainWindow;
+class MultiLineTabWidget;
+class NavigationView;
 class SharpnessPanel;
 class QAction;
 class QCheckBox;
@@ -80,6 +82,10 @@ public:
   /** Return the reference filename, or an empty string for a normal New View. */
   QString referenceFile() const { return m_referenceFile; }
 
+  /** Reload this reference scan using the source document's current demosaic
+      setting.  Normal secondary views ignore this request. */
+  void reloadReferenceImage();
+
 private slots:
   /** Refresh shared image/parameter snapshots after the document changes. */
   void refreshFromDocument();
@@ -125,6 +131,9 @@ private:
   QComboBox *m_modeComboBox = nullptr;
   QCheckBox *m_colorCheckBox = nullptr;
   QAction *m_mirrorAction = nullptr;
+  QWidget *m_referenceInspector = nullptr;
+  NavigationView *m_navigationView = nullptr;
+  MultiLineTabWidget *m_referenceTabs = nullptr;
   SharpnessPanel *m_sharpnessPanel = nullptr;
   QDockWidget *m_referenceInspectorDock = nullptr;
   bool m_workspaceEmbedded = false;
