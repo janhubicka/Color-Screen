@@ -1,0 +1,1 @@
+diagnose multiview panel smoke
