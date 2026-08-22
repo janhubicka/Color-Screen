@@ -1,0 +1,52 @@
+name: Agent publish PR58 view teardown fix
+
+on:
+  pull_request:
+    branches:
+      - agent/pr58-view-teardown-publish-base-20260822
+    paths:
+      - agent/pr58-view-teardown-source.patch
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out transport patch
+        uses: actions/checkout@v4
+        with:
+          path: transport
+
+      - name: Check out exact PR 58 head
+        uses: actions/checkout@v4
+        with:
+          ref: 908b6674df9e313837c769c7941913017ec853e3
+          fetch-depth: 0
+          path: repo
+
+      - name: Verify, apply, and update PR 58
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp transport/agent/pr58-view-teardown-source.patch .
+          echo '34e7f692d9c822a07642be2a78544cf4af2cc8a4316e3831744f5788563f9dc6  pr58-view-teardown-source.patch' | sha256sum -c -
+
+          cd repo
+          test "$(git rev-parse HEAD)" = 908b6674df9e313837c769c7941913017ec853e3
+          git checkout -B agent/qtgui-new-view-tabs 908b6674df9e313837c769c7941913017ec853e3
+          git apply --check ../pr58-view-teardown-source.patch
+          git apply ../pr58-view-teardown-source.patch
+          git diff --check
+          test "$(git diff --name-only | sort)" = $'src/qtgui/ColorScreenApplication.cpp\nsrc/qtgui/ColorScreenApplication.h\nsrc/qtgui/ImageViewWindow.cpp\nsrc/qtgui/ImageViewWindow.h\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/WorkspaceWindow.cpp\nsrc/qtgui/WorkspaceWindow.h\nsrc/qtgui/main.cpp'
+
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git add -- src/qtgui/ColorScreenApplication.cpp src/qtgui/ColorScreenApplication.h \
+            src/qtgui/ImageViewWindow.cpp src/qtgui/ImageViewWindow.h \
+            src/qtgui/MainWindow.cpp src/qtgui/WorkspaceWindow.cpp \
+            src/qtgui/WorkspaceWindow.h src/qtgui/main.cpp
+          git commit -m 'qtgui: fix embedded view teardown and renderer metatypes' -m 'Register render_type_parameters for queued Renderer updates used by ImageWidget and NavigationView. Return secondary-view chrome to the view before WA_DeleteOnClose destroys it, transfer toolbars only through QMainWindow add/remove APIs, and explicitly destroy the toolbar while its owning QMainWindow is still alive. This prevents stale iconSizeChanged/toolButtonStyleChanged connections and the New View close crash seen in the combined smoke test.\n\nSerialize the combined New View/slanted-reference smoke phases so deferred deletion completes before the reference view is created.'
+          git push origin HEAD:refs/heads/agent/qtgui-new-view-tabs
