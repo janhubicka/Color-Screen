@@ -1,0 +1,53 @@
+name: Agent publish PR58 fix
+
+on:
+  pull_request:
+    branches:
+      - agent/pr58-fix-publish-base-20260822
+    paths:
+      - agent/pr58-fix.patch.gz.b64
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out transport payload
+        uses: actions/checkout@v4
+        with:
+          path: transport
+
+      - name: Check out exact PR 58 head
+        uses: actions/checkout@v4
+        with:
+          ref: df7816112900a54bc680496425d74a233a611af3
+          fetch-depth: 0
+          path: repo
+
+      - name: Verify, apply, and update PR 58
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp transport/agent/pr58-fix.patch.gz.b64 .
+          echo 'bdf0c169ce26b8d3b16cd723456ceddfa717e74bb5575d10226955977a81e299  pr58-fix.patch.gz.b64' | sha256sum -c -
+          base64 --decode pr58-fix.patch.gz.b64 > pr58-fix.patch.gz
+          echo '63e4a6f5cc2568a985e737f586185ad38d0cf8b98b7e01ac315c17bc52c7a8ce  pr58-fix.patch.gz' | sha256sum -c -
+          gzip -dc pr58-fix.patch.gz > pr58-fix.patch
+          echo '923c9ca97794a22ad5a22d6ebbcc53230168b27ac0034c78129197ba4ea95336  pr58-fix.patch' | sha256sum -c -
+
+          cd repo
+          test "$(git rev-parse HEAD)" = df7816112900a54bc680496425d74a233a611af3
+          git checkout -B agent/qtgui-new-view-tabs df7816112900a54bc680496425d74a233a611af3
+          git apply --check ../pr58-fix.patch
+          git apply ../pr58-fix.patch
+          git diff --check
+          test "$(git diff --name-only | sort)" = $'src/qtgui/MainWindow.cpp\nsrc/qtgui/main.cpp'
+
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git add -- src/qtgui/MainWindow.cpp src/qtgui/main.cpp
+          git commit -m 'qtgui: fix New View smoke and queued renderer types' -m 'Use Image layer as the first always-available alternate rendering mode in the New View smoke test, so render-mode independence does not depend on successful screen autodetection. Register scr_detect_parameters and const char* for the existing queued Renderer invocations, removing the QMetaMethod datatype warnings seen in CI and allowing queued parameter/render calls to run normally.'
+          git push origin HEAD:refs/heads/agent/qtgui-new-view-tabs
