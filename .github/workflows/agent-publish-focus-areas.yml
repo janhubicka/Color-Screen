@@ -1,0 +1,50 @@
+name: Publish focus-area library patch
+
+on:
+  pull_request:
+    branches:
+      - agent/focus-area-publish-base-20260822
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/focus-area-publisher-20260822'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out publisher payload
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: transport
+
+      - name: Check out exact current main
+        uses: actions/checkout@v4
+        with:
+          ref: 15399e7ca10e3ff9abc9797364bbd3f8ca33482d
+          fetch-depth: 0
+          path: repo
+
+      - name: Verify, rebase and publish
+        shell: bash
+        run: |
+          set -euxo pipefail
+          base64 -d transport/agent/focus-areas.patch.gz.b64 > /tmp/focus-areas.patch.gz
+          echo '13bb986c30389e184a533024971909ea76245fde09de997c633b08a5d0d2fef8  /tmp/focus-areas.patch.gz' | sha256sum -c -
+          gzip -dc /tmp/focus-areas.patch.gz > /tmp/focus-areas.patch
+          echo '18b684d59f4c799767d3976c0191a7aafd464bcf64aea2df7f419a6ad826a9eb  /tmp/focus-areas.patch' | sha256sum -c -
+
+          cd repo
+          test "$(git rev-parse HEAD)" = '15399e7ca10e3ff9abc9797364bbd3f8ca33482d'
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git checkout -B agent/focus-analysis-areas HEAD
+          git am /tmp/focus-areas.patch
+          git diff HEAD^ --check
+          test "$(git diff HEAD^ --name-only | sort)" = $'doc/finetune-solver.md\ndoc/finetune-tracking.md\nsrc/libcolorscreen/finetune.C\nsrc/libcolorscreen/include/finetune.h\nsrc/libcolorscreen/unittests.C'
+          grep -q 'finetune_find_focus_area_candidates' src/libcolorscreen/include/finetune.h
+          grep -q 'finetune_select_focus_areas' src/libcolorscreen/include/finetune.h
+          grep -q 'finetune_focus_areas' src/libcolorscreen/unittests.C
+          git push --force origin HEAD:refs/heads/agent/focus-analysis-areas
+          printf 'Published %s on base %s\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD^)"
