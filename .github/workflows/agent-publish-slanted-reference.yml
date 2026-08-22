@@ -1,0 +1,53 @@
+name: Agent publish slanted reference
+
+on:
+  pull_request:
+    branches:
+      - agent/slanted-reference-publish-base-20260822
+    paths:
+      - agent/slanted-reference.patch.gz.b64
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out transport payload
+        uses: actions/checkout@v4
+        with:
+          path: transport
+
+      - name: Check out New View tabs base
+        uses: actions/checkout@v4
+        with:
+          ref: df7816112900a54bc680496425d74a233a611af3
+          fetch-depth: 0
+          path: repo
+
+      - name: Verify, apply, and publish slanted reference
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp transport/agent/slanted-reference.patch.gz.b64 .
+          echo '0f4b3024f4b66434da91fb75d26d69e2046d1e9ad715d787f42e54fabc450696  slanted-reference.patch.gz.b64' | sha256sum -c -
+          base64 --decode slanted-reference.patch.gz.b64 > slanted-reference.patch.gz
+          echo '29695e3a34e6afe3bd9fc5aa42800c4e63a5aa6107b93e6d115d3c1d0953e8db  slanted-reference.patch.gz' | sha256sum -c -
+          gzip -dc slanted-reference.patch.gz > slanted-reference.patch
+          echo '30a986735f232b3cce26bf49f690ec8580c4d233ebf2a47112260b90f39875de  slanted-reference.patch' | sha256sum -c -
+
+          cd repo
+          test "$(git rev-parse HEAD)" = df7816112900a54bc680496425d74a233a611af3
+          git checkout -B agent/qtgui-slanted-edge-reference df7816112900a54bc680496425d74a233a611af3
+          git apply --check ../slanted-reference.patch
+          git apply ../slanted-reference.patch
+          git diff --check
+          test "$(git diff --name-only | sort)" = $'src/qtgui/ColorScreenApplication.cpp\nsrc/qtgui/ColorScreenApplication.h\nsrc/qtgui/ImageViewWindow.cpp\nsrc/qtgui/ImageViewWindow.h\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/MainWindow.h\nsrc/qtgui/SharpnessPanel.cpp\nsrc/qtgui/SharpnessPanel.h\nsrc/qtgui/WorkspaceWindow.cpp\nsrc/qtgui/main.cpp'
+
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git add -- src/qtgui/ColorScreenApplication.cpp src/qtgui/ColorScreenApplication.h src/qtgui/ImageViewWindow.cpp src/qtgui/ImageViewWindow.h src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h src/qtgui/SharpnessPanel.cpp src/qtgui/SharpnessPanel.h src/qtgui/WorkspaceWindow.cpp src/qtgui/main.cpp
+          git commit -m 'qtgui: add slanted-edge reference views' -m 'Add an Open slanted edge reference action immediately before the existing MTF edge measurement control in Sharpness. The selected reference scan opens as a specialized secondary MDI view with its own image_data but the source document remains the sole owner of parameter-file state, sharpening measurements, undo history, and recovery.\n\nReference views expose only the Sharpness panel and limit rendering choices to Original digital capture and Image layer. Measuring an edge runs against the reference scan and appends successful MTF measurements through the source document parameter/undo path, so scanner-reference measurements stay with the same .par file.\n\nKeep pan/zoom controls for examining the reference, but omit source-image rotation and mirror actions because this tab displays a different scan. Reference views still detach/reattach through the standard MDI machinery and never count as independent session documents.\n\nAdd focused smoke coverage for separate reference image identity, unchanged document count, MDI tab presentation, Sharpness-only inspector, and the restricted render-mode list.'
+          git push --force origin HEAD:refs/heads/agent/qtgui-slanted-edge-reference
