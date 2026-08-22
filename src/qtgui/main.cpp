@@ -682,6 +682,7 @@ int main(int argc, char *argv[]) {
       colorscreen::render_type_t alternate = sourceType;
       const colorscreen::render_type_t candidates[] = {
           colorscreen::render_type_original,
+          colorscreen::render_type_image_layer,
           colorscreen::render_type_interpolated,
           colorscreen::render_type_realistic,
           colorscreen::render_type_screen};
