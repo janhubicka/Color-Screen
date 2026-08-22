@@ -1,0 +1,372 @@
+diff --git a/.agents/qtgui.md b/.agents/qtgui.md
+index 16e8ec89..fe7fba97 100644
+--- a/.agents/qtgui.md
++++ b/.agents/qtgui.md
+@@ -84,12 +84,15 @@ Sharpness calibration may use a **slanted-edge reference view**.  This is a
+ specialized `ImageViewWindow` which owns a separately loaded reference scan but
+ uses the source `MainWindow` as the authoritative parameter/undo/recovery
+ model.  It must never load, save, or suggest a second `.par` file.  Its inspector
+-contains only `SharpnessPanel`, and its render-mode selector is deliberately
+-limited to **Original digital capture** and **Image layer**.  Slanted-edge MTF
+-measurements selected in the reference image are appended through the source
+-document's undoable parameter setter.  Reference views are ordinary MDI views:
+-they open as tabs, may be tiled or detached, and do not increase the document
+-or recovery-session count.
++keeps the standard `NavigationView` above a single **Sharpness** tab, and its
++render-mode selector is deliberately limited to **Original digital capture**
++and **Image layer**.  Slanted-edge MTF measurements selected in the reference
++image are appended through the source document's undoable parameter setter.
++Reference views are ordinary MDI views: they open as tabs, may be tiled or
++detached, and do not increase the document or recovery-session count.  A
++**Reload and demosaic** request reloads both the source scan and every
++slanted-edge reference associated with that document using the newly selected
++demosaicing mode; the references still keep their own image objects.
+ 
+ **Window → New View** creates another `ImageViewWindow` for the same document.
+ A new view is an MDI tab by default and participates in tabbed/tiled/cascaded
+diff --git a/NEWS b/NEWS
+index dc2d3ff8..65b59b84 100644
+--- a/NEWS
++++ b/NEWS
+@@ -26,9 +26,10 @@ Changes in version 1.1
+      image. Views can still be detached when needed.
+    - The Sharpness panel can open a separate slanted-edge reference scan while
+      keeping the current scan's parameter file and undo history. Reference
+-     scans open as MDI views with a Sharpness-only inspector, support direct
+-     edge MTF measurement, and expose only Original digital capture and Image
+-     layer rendering modes.
++     scans open as MDI views with the normal navigation preview plus a single
++     Sharpness tab, support direct edge MTF measurement, and expose only
++     Original digital capture and Image layer rendering modes. Reload and
++     demosaic refreshes the main scan and every associated reference image.
+    - Support for new processes:
+      - Dioptrichrome-B 
+      - Improved Dioptrichrome-B
+diff --git a/src/qtgui/ColorScreenApplication.cpp b/src/qtgui/ColorScreenApplication.cpp
+index 82bb52f1..89c711e6 100644
+--- a/src/qtgui/ColorScreenApplication.cpp
++++ b/src/qtgui/ColorScreenApplication.cpp
+@@ -240,6 +240,17 @@ QList<ImageViewWindow *> ColorScreenApplication::viewWindows() {
+   return views;
+ }
+ 
++/** Reload every slanted-edge reference associated with SOURCE. */
++void ColorScreenApplication::reloadSlantedEdgeReferences(MainWindow *source) {
++  if (!source)
++    return;
++  for (ImageViewWindow *view : viewWindows()) {
++    if (view && view->sourceDocument() == source &&
++        view->isSlantedEdgeReference())
++      view->reloadReferenceImage();
++  }
++}
++
+ /** Open a list of images, assigning one complete MainWindow to each image. */
+ void ColorScreenApplication::openFiles(const QStringList &fileNames,
+                                        MainWindow *preferredWindow,
+diff --git a/src/qtgui/ColorScreenApplication.h b/src/qtgui/ColorScreenApplication.h
+index ad597fcb..28dcfc55 100644
+--- a/src/qtgui/ColorScreenApplication.h
++++ b/src/qtgui/ColorScreenApplication.h
+@@ -63,6 +63,10 @@ public:
+   /** Return all live secondary views. */
+   QList<ImageViewWindow *> viewWindows();
+ 
++  /** Reload every slanted-edge reference associated with SOURCE using the
++      document's current demosaic setting. */
++  void reloadSlantedEdgeReferences(MainWindow *source);
++
+   /** Open every path in FILENAMES as an independent image document.
+ 
+       PREFERREDWINDOW is reused for the first file only when it is still an
+diff --git a/src/qtgui/ImageViewWindow.cpp b/src/qtgui/ImageViewWindow.cpp
+index 056a40c3..79d73f36 100644
+--- a/src/qtgui/ImageViewWindow.cpp
++++ b/src/qtgui/ImageViewWindow.cpp
+@@ -3,6 +3,8 @@
+ #include "ColorScreenApplication.h"
+ #include "ImageWidget.h"
+ #include "MainWindow.h"
++#include "MultiLineTabWidget.h"
++#include "NavigationView.h"
+ #include "SharpnessPanel.h"
+ #include "SlantedEdgeDialog.h"
+ 
+@@ -21,8 +23,10 @@
+ #include <QMenuBar>
+ #include <QMessageBox>
+ #include <QSignalBlocker>
++#include <QSplitter>
+ #include <QStatusBar>
+ #include <QToolBar>
++#include <QVBoxLayout>
+ #include <QVariant>
+ #include <QtConcurrent>
+ 
+@@ -90,7 +94,7 @@ MainWindow *ImageViewWindow::sourceDocument() const { return m_document.data();
+ 
+ /** Return the reduced Sharpness inspector used only by reference views. */
+ QWidget *ImageViewWindow::workspaceInspectorWidget() const {
+-  return m_sharpnessPanel;
++  return m_referenceInspector;
+ }
+ 
+ /** Build the standard compact toolbar and menus for a secondary image view. */
+@@ -220,11 +224,35 @@ void ImageViewWindow::setupUi() {
+   resize(1100, 800);
+ }
+ 
+-/** Create the only parameter panel exposed by a slanted-edge reference. */
++/** Build the reduced navigation + Sharpness inspector for a reference image. */
+ void ImageViewWindow::setupReferenceInspector() {
+   if (!m_slantedEdgeReference || !m_document)
+     return;
+ 
++  m_referenceInspector = new QWidget(this);
++  m_referenceInspector->setObjectName(
++      QStringLiteral("SlantedEdgeReferenceInspector"));
++  auto *layout = new QVBoxLayout(m_referenceInspector);
++  layout->setContentsMargins(0, 0, 0, 0);
++
++  auto *splitter = new QSplitter(Qt::Vertical, m_referenceInspector);
++  layout->addWidget(splitter);
++
++  m_navigationView = new NavigationView(splitter);
++  m_navigationView->setObjectName(QStringLiteral("SlantedEdgeNavigation"));
++  m_navigationView->setMinimumHeight(200);
++  splitter->addWidget(m_navigationView);
++  connect(m_imageWidget, &ImageWidget::viewStateChanged, m_navigationView,
++          &NavigationView::onViewStateChanged);
++  connect(m_navigationView, &NavigationView::zoomChanged, m_imageWidget,
++          &ImageWidget::setZoom);
++  connect(m_navigationView, &NavigationView::panChanged, m_imageWidget,
++          &ImageWidget::setPan);
++
++  m_referenceTabs = new MultiLineTabWidget(splitter);
++  m_referenceTabs->setObjectName(QStringLiteral("SlantedEdgeReferenceTabs"));
++  splitter->addWidget(m_referenceTabs);
++
+   m_sharpnessPanel = new SharpnessPanel(
+       [this]() {
+         return m_document ? m_document->documentStateSnapshot()
+@@ -234,7 +262,8 @@ void ImageViewWindow::setupReferenceInspector() {
+         if (m_document)
+           m_document->applySharedDocumentState(state, description);
+       },
+-      [this]() { return m_scan; }, this);
++      [this]() { return m_scan; }, m_referenceTabs);
++  m_referenceTabs->addTab(m_sharpnessPanel, tr("Sharpness"));
+ 
+   connect(m_sharpnessPanel,
+           &SharpnessPanel::openSlantedEdgeReferenceRequested, this, [this]() {
+@@ -245,13 +274,17 @@ void ImageViewWindow::setupReferenceInspector() {
+   connect(m_sharpnessPanel, &SharpnessPanel::measureMtfRequested, this,
+           &ImageViewWindow::onMeasureMtfRequested);
+ 
+-  m_referenceInspectorDock = new QDockWidget(tr("Sharpness"), this);
++  splitter->setStretchFactor(0, 0);
++  splitter->setStretchFactor(1, 1);
++  splitter->setSizes({220, 520});
++
++  m_referenceInspectorDock = new QDockWidget(tr("Reference Controls"), this);
+   m_referenceInspectorDock->setObjectName(
+       QStringLiteral("SlantedEdgeSharpnessDock"));
+   m_referenceInspectorDock->setAllowedAreas(Qt::LeftDockWidgetArea |
+                                             Qt::RightDockWidgetArea);
+   m_referenceInspectorDock->setMinimumWidth(300);
+-  m_referenceInspectorDock->setWidget(m_sharpnessPanel);
++  m_referenceInspectorDock->setWidget(m_referenceInspector);
+   addDockWidget(Qt::RightDockWidgetArea, m_referenceInspectorDock);
+   m_referenceInspectorDock->show();
+ }
+@@ -312,6 +345,13 @@ void ImageViewWindow::loadReferenceImage(const QString &fileName) {
+   watcher->setFuture(future);
+ }
+ 
++/** Reload the external reference with the document's current demosaic mode. */
++void ImageViewWindow::reloadReferenceImage() {
++  if (!m_slantedEdgeReference || m_referenceFile.isEmpty())
++    return;
++  loadReferenceImage(m_referenceFile);
++}
++
+ /** Refresh shared state without disturbing view-local render mode/zoom/pan. */
+ void ImageViewWindow::refreshFromDocument() {
+   if (!m_document)
+@@ -423,11 +463,17 @@ void ImageViewWindow::updateImageParameters(bool imageChanged) {
+     m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
+                             &m_detectParams, &m_renderTypeParams,
+                             &m_solverParams);
++    if (m_navigationView)
++      m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
++                                 &m_detectParams);
+     m_imageWidget->fitToView();
+   } else {
+     m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
+                                     &m_detectParams, &m_renderTypeParams,
+                                     &m_solverParams);
++    if (m_navigationView)
++      m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams,
++                                         &m_detectParams);
+   }
+ }
+ 
+@@ -631,8 +677,8 @@ void ImageViewWindow::onReferenceAreaSelected(QRect widgetArea) {
+ void ImageViewWindow::prepareForWorkspaceEmbedding() {
+   if (m_workspaceEmbedded)
+     return;
+-  if (m_referenceInspectorDock && m_sharpnessPanel) {
+-    m_sharpnessPanel->setParent(nullptr);
++  if (m_referenceInspectorDock && m_referenceInspector) {
++    m_referenceInspector->setParent(nullptr);
+     m_referenceInspectorDock->setWidget(nullptr);
+     m_referenceInspectorDock->hide();
+   }
+@@ -649,9 +695,9 @@ void ImageViewWindow::prepareForWorkspaceEmbedding() {
+ void ImageViewWindow::restoreFromWorkspaceEmbedding() {
+   if (!m_workspaceEmbedded)
+     return;
+-  if (m_referenceInspectorDock && m_sharpnessPanel) {
+-    m_sharpnessPanel->setParent(nullptr);
+-    m_referenceInspectorDock->setWidget(m_sharpnessPanel);
++  if (m_referenceInspectorDock && m_referenceInspector) {
++    m_referenceInspector->setParent(nullptr);
++    m_referenceInspectorDock->setWidget(m_referenceInspector);
+     m_referenceInspectorDock->show();
+   }
+   if (m_toolbar)
+diff --git a/src/qtgui/ImageViewWindow.h b/src/qtgui/ImageViewWindow.h
+index a2901b84..8b281e99 100644
+--- a/src/qtgui/ImageViewWindow.h
++++ b/src/qtgui/ImageViewWindow.h
+@@ -13,6 +13,8 @@
+ 
+ class ImageWidget;
+ class MainWindow;
++class MultiLineTabWidget;
++class NavigationView;
+ class SharpnessPanel;
+ class QAction;
+ class QCheckBox;
+@@ -80,6 +82,10 @@ public:
+   /** Return the reference filename, or an empty string for a normal New View. */
+   QString referenceFile() const { return m_referenceFile; }
+ 
++  /** Reload this reference scan using the source document's current demosaic
++      setting.  Normal secondary views ignore this request. */
++  void reloadReferenceImage();
++
+ private slots:
+   /** Refresh shared image/parameter snapshots after the document changes. */
+   void refreshFromDocument();
+@@ -125,6 +131,9 @@ private:
+   QComboBox *m_modeComboBox = nullptr;
+   QCheckBox *m_colorCheckBox = nullptr;
+   QAction *m_mirrorAction = nullptr;
++  QWidget *m_referenceInspector = nullptr;
++  NavigationView *m_navigationView = nullptr;
++  MultiLineTabWidget *m_referenceTabs = nullptr;
+   SharpnessPanel *m_sharpnessPanel = nullptr;
+   QDockWidget *m_referenceInspectorDock = nullptr;
+   bool m_workspaceEmbedded = false;
+diff --git a/src/qtgui/MainWindow.cpp b/src/qtgui/MainWindow.cpp
+index e0164843..447922cd 100644
+--- a/src/qtgui/MainWindow.cpp
++++ b/src/qtgui/MainWindow.cpp
+@@ -124,6 +124,7 @@ private:
+ Q_DECLARE_METATYPE(MainWindow::SolverRequestData)
+ Q_DECLARE_METATYPE(MainWindow::ColorOptimizerRequestData)
+ Q_DECLARE_METATYPE(colorscreen::render_parameters)
++Q_DECLARE_METATYPE(colorscreen::scr_detect_parameters)
+ Q_DECLARE_METATYPE(colorscreen::scr_to_img_parameters)
+ Q_DECLARE_METATYPE(std::vector<colorscreen::point_t>)
+ Q_DECLARE_METATYPE(std::vector<colorscreen::color_match>)
+@@ -153,6 +154,9 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
+   qRegisterMetaType<MainWindow::SolverRequestData>();
+   qRegisterMetaType<MainWindow::ColorOptimizerRequestData>();
+   qRegisterMetaType<colorscreen::render_parameters>();
++  qRegisterMetaType<colorscreen::scr_detect_parameters>(
++      "colorscreen::scr_detect_parameters");
++  qRegisterMetaType<const char *>("const char*");
+   qRegisterMetaType<colorscreen::scr_to_img_parameters>();
+   qRegisterMetaType<std::vector<colorscreen::point_t>>();
+   qRegisterMetaType<std::vector<colorscreen::color_match>>();
+@@ -702,6 +706,9 @@ void MainWindow::setupUi() {
+                        [this]() {
+                          if (!m_currentImageFile.isEmpty()) {
+                            loadFile(m_currentImageFile, true);
++                           if (ColorScreenApplication *application =
++                                   documentApplication())
++                             application->reloadSlantedEdgeReferences(this);
+                          }
+                        },
+                        this);
+diff --git a/src/qtgui/WorkspaceWindow.cpp b/src/qtgui/WorkspaceWindow.cpp
+index 30f29fdb..b9d80b62 100644
+--- a/src/qtgui/WorkspaceWindow.cpp
++++ b/src/qtgui/WorkspaceWindow.cpp
+@@ -766,7 +766,9 @@ void WorkspaceWindow::installViewChrome(ImageViewWindow *view) {
+       m_inspectorStack->addWidget(inspector);
+     m_inspectorStack->setCurrentWidget(inspector);
+     inspector->show();
+-    m_inspectorDock->setWindowTitle(tr("Sharpness"));
++    m_inspectorDock->setWindowTitle(
++        view->isSlantedEdgeReference() ? tr("Reference Controls")
++                                       : tr("Document Controls"));
+     m_inspectorDock->show();
+   } else {
+     m_inspectorDock->setWindowTitle(tr("Document Controls"));
+diff --git a/src/qtgui/main.cpp b/src/qtgui/main.cpp
+index 60aa8f1e..8d71e00c 100644
+--- a/src/qtgui/main.cpp
++++ b/src/qtgui/main.cpp
+@@ -689,6 +689,7 @@ int main(int argc, char *argv[]) {
+       colorscreen::render_type_t alternate = sourceType;
+       const colorscreen::render_type_t candidates[] = {
+           colorscreen::render_type_original,
++          colorscreen::render_type_image_layer,
+           colorscreen::render_type_interpolated,
+           colorscreen::render_type_realistic,
+           colorscreen::render_type_screen};
+@@ -750,7 +751,11 @@ int main(int argc, char *argv[]) {
+             app.documentWindows().size() != documentCount || !workspace ||
+             !workspace->containsView(reference) ||
+             app.tabCount() != tabCount + 1 ||
+-            !reference->workspaceInspectorWidget()) {
++            !reference->workspaceInspectorWidget() ||
++            !reference->workspaceInspectorWidget()->findChild<QWidget *>(
++                QStringLiteral("SlantedEdgeNavigation")) ||
++            !reference->workspaceInspectorWidget()->findChild<QWidget *>(
++                QStringLiteral("SlantedEdgeReferenceTabs"))) {
+           qCritical() << "Slanted-edge reference did not remain a specialized "
+                          "shared-parameter workspace view";
+           app.exit(15);
+@@ -764,7 +769,27 @@ int main(int argc, char *argv[]) {
+           app.exit(15);
+           return;
+         }
+-        reference->close();
++
++        const auto beforeReload = reference->sharedImageData();
++        app.reloadSlantedEdgeReferences(source);
++        auto checkReload = std::make_shared<std::function<void(int)>>();
++        *checkReload = [&app, reference, beforeReload, checkReload](
++                           int attemptsLeft) {
++          if (reference && reference->sharedImageData() == beforeReload &&
++              attemptsLeft > 0) {
++            QTimer::singleShot(250, &app, [checkReload, attemptsLeft]() {
++              (*checkReload)(attemptsLeft - 1);
++            });
++            return;
++          }
++          if (!reference || reference->sharedImageData() == beforeReload) {
++            qCritical() << "Slanted-edge reference did not reload";
++            app.exit(15);
++            return;
++          }
++          reference->close();
++        };
++        (*checkReload)(28);
+       };
+       (*checkReference)(28);
+     });
