@@ -103,6 +103,9 @@ public:
   /** Return workspace-owned UI to DOCUMENT before its close event finishes. */
   void prepareDocumentForClose(MainWindow *document);
 
+  /** Return workspace-owned chrome to VIEW before WA_DeleteOnClose destroys it. */
+  void prepareViewForClose(ImageViewWindow *view);
+
   /** Return the number of documents currently attached as tabs. */
   int tabCount() const;
 

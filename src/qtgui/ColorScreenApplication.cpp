@@ -406,6 +406,13 @@ void ColorScreenApplication::prepareDocumentForClose(MainWindow *document) {
   m_workspaceWindow->prepareDocumentForClose(document);
 }
 
+/** Return shared workspace chrome before an embedded secondary view closes. */
+void ColorScreenApplication::prepareViewForClose(ImageViewWindow *view) {
+  if (!view || !m_workspaceWindow || !m_workspaceWindow->containsView(view))
+    return;
+  m_workspaceWindow->prepareViewForClose(view);
+}
+
 /** Return the number of attached document tabs. */
 int ColorScreenApplication::tabCount() const {
   return m_workspaceWindow ? m_workspaceWindow->tabCount() : 0;

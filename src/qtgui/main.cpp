@@ -713,7 +713,11 @@ int main(int argc, char *argv[]) {
   }
 
   if (parser.isSet(slantedReferenceOption)) {
-    QTimer::singleShot(350, &app, [&app]() {
+    // When both view smoke tests are requested, allow WA_DeleteOnClose from
+    // New View to complete before constructing the reference view.  This keeps
+    // the tests deterministic and also exercises the normal view-close path.
+    const int referenceSmokeDelay = parser.isSet(newViewOption) ? 700 : 350;
+    QTimer::singleShot(referenceSmokeDelay, &app, [&app]() {
       const QList<MainWindow *> documents = app.documentWindows();
       if (documents.isEmpty() || documents.front()->currentImageFile().isEmpty()) {
         qCritical() << "Slanted reference smoke test requires a loaded image";

@@ -64,6 +64,9 @@ public:
   /** Return all workspace-hosted UI to DOCUMENT before it closes. */
   void prepareDocumentForClose(MainWindow *document);
 
+  /** Return shared chrome and the MDI wrapper to VIEW before it closes. */
+  void prepareViewForClose(ImageViewWindow *view);
+
   /** Consolidate attached documents into the default tabbed presentation. */
   void showTabbedDocuments();
 

@@ -124,6 +124,7 @@ private:
 Q_DECLARE_METATYPE(MainWindow::SolverRequestData)
 Q_DECLARE_METATYPE(MainWindow::ColorOptimizerRequestData)
 Q_DECLARE_METATYPE(colorscreen::render_parameters)
+Q_DECLARE_METATYPE(colorscreen::render_type_parameters)
 Q_DECLARE_METATYPE(colorscreen::scr_detect_parameters)
 Q_DECLARE_METATYPE(colorscreen::scr_to_img_parameters)
 Q_DECLARE_METATYPE(std::vector<colorscreen::point_t>)
@@ -154,6 +155,8 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
   qRegisterMetaType<MainWindow::SolverRequestData>();
   qRegisterMetaType<MainWindow::ColorOptimizerRequestData>();
   qRegisterMetaType<colorscreen::render_parameters>();
+  qRegisterMetaType<colorscreen::render_type_parameters>(
+      "colorscreen::render_type_parameters");
   qRegisterMetaType<colorscreen::scr_detect_parameters>(
       "colorscreen::scr_detect_parameters");
   qRegisterMetaType<const char *>("const char*");

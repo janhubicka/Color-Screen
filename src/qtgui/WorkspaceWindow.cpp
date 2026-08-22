@@ -407,6 +407,17 @@ void WorkspaceWindow::prepareDocumentForClose(MainWindow *document) {
   configureTabBar();
 }
 
+/** Restore view-owned chrome before WA_DeleteOnClose destroys an MDI view. */
+void WorkspaceWindow::prepareViewForClose(ImageViewWindow *view) {
+  if (!view || !containsView(view))
+    return;
+
+  takeViewFromWorkspace(view);
+  view->restoreFromWorkspaceEmbedding();
+  onSubWindowActivated(m_mdiArea->currentSubWindow());
+  configureTabBar();
+}
+
 /** Present attached documents as tabs and hide the bar for a single image. */
 void WorkspaceWindow::showTabbedDocuments() {
   m_mdiArea->setOption(QMdiArea::DontMaximizeSubWindowOnActivation, false);
@@ -754,9 +765,8 @@ void WorkspaceWindow::installViewChrome(ImageViewWindow *view) {
     menuBar()->addAction(action);
 
   if (QToolBar *toolbar = view->workspaceToolBar()) {
-    view->removeToolBar(toolbar);
-    if (toolbar->parentWidget() != this)
-      toolbar->setParent(this);
+    if (auto *owner = qobject_cast<QMainWindow *>(toolbar->parentWidget()))
+      owner->removeToolBar(toolbar);
     addToolBar(Qt::TopToolBarArea, toolbar);
     toolbar->show();
   }
@@ -789,10 +799,8 @@ void WorkspaceWindow::releaseViewChrome(ImageViewWindow *view,
     return;
 
   if (QToolBar *toolbar = view->workspaceToolBar()) {
-    if (toolbar->parentWidget() == this)
-      removeToolBar(toolbar);
-    if (toolbar->parentWidget() != view)
-      toolbar->setParent(view);
+    if (auto *owner = qobject_cast<QMainWindow *>(toolbar->parentWidget()))
+      owner->removeToolBar(toolbar);
     view->addToolBar(Qt::TopToolBarArea, toolbar);
     toolbar->setVisible(showInWindow);
   }
