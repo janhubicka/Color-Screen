@@ -92,6 +92,20 @@ the workspace and its inspector is placed in the shared inspector stack. Before
 detachment or destruction these widgets must be returned to the same
 `MainWindow`, so ordinary state saving and teardown continue to work.
 
+Sharpness calibration may use a **slanted-edge reference view**. This is a
+specialized `ImageViewWindow` which owns a separately loaded reference scan but
+uses the source `MainWindow` as the authoritative parameter/undo/recovery
+model. It never owns or suggests another `.par` file. Its inspector keeps the
+standard `NavigationView` above a single **Sharpness** tab, and rendering is
+limited to **Original digital capture** and **Image layer**. Measurements are
+applied through the source document's undoable parameter path. **Reload and
+demosaic** reloads both the source scan and every associated slanted-edge
+reference from its own filename using the current demosaic mode.
+
+**Window → New View** creates another MDI view of the same document. Views share
+the image and document transforms such as rotation and mirroring, while render
+mode, Color/IR choice, zoom, and pan remain view-local.
+
 Top-level menus follow the conventional order **File, Edit, View,
 Registration, Window, Help**. `Window` is the final working menu and owns MDI
 arrangement/navigation plus the document list; `Help` is always last and holds

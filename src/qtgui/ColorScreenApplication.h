@@ -10,6 +10,7 @@ class MainWindow;
 class ImageViewWindow;
 class QEvent;
 class QMenu;
+class QWidget;
 class WorkspaceWindow;
 
 /** Application-level owner of Color-Screen document windows.
@@ -38,6 +39,18 @@ public:
       primary workspace by default. */
   ImageViewWindow *createViewWindow(MainWindow *source, bool detached = false);
 
+  /** Create a specialized view of REFERENCEFILE for measuring scanner MTF.
+
+      SOURCE remains the owner of the parameter/undo/recovery state; only the
+      displayed scan belongs to the reference view. */
+  ImageViewWindow *createSlantedEdgeReference(MainWindow *source,
+                                              const QString &referenceFile,
+                                              bool detached = false);
+
+  /** Prompt for a slanted-edge reference image and open it for SOURCE. */
+  ImageViewWindow *openSlantedEdgeReference(MainWindow *source,
+                                            QWidget *dialogParent = nullptr);
+
   /** Move VIEW from the workspace into a standalone top-level window. */
   void detachView(ImageViewWindow *view);
 
@@ -49,6 +62,10 @@ public:
 
   /** Return all live secondary views. */
   QList<ImageViewWindow *> viewWindows();
+
+  /** Reload every slanted-edge reference associated with SOURCE using the
+      document's current demosaic setting. */
+  void reloadSlantedEdgeReferences(MainWindow *source);
 
   /** Open every path in FILENAMES as an independent image document.
 

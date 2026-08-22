@@ -683,6 +683,12 @@ void MainWindow::setupUi() {
 
   connect(m_sharpnessPanel, &SharpnessPanel::focusAnalysisRequested, this,
           &MainWindow::onFocusAnalysisRequested);
+  connect(m_sharpnessPanel,
+          &SharpnessPanel::openSlantedEdgeReferenceRequested, this,
+          [this]() {
+            if (ColorScreenApplication *application = documentApplication())
+              application->openSlantedEdgeReference(this, this);
+          });
   connect(m_sharpnessPanel, &SharpnessPanel::measureMtfRequested, this,
           &MainWindow::onMeasureMtfRequested);
 
@@ -700,6 +706,9 @@ void MainWindow::setupUi() {
                        [this]() {
                          if (!m_currentImageFile.isEmpty()) {
                            loadFile(m_currentImageFile, true);
+                           if (ColorScreenApplication *application =
+                                   documentApplication())
+                             application->reloadSlantedEdgeReferences(this);
                          }
                        },
                        this);
@@ -2960,6 +2969,12 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
 /** Return a copy of the shared document parameters for secondary views. */
 ParameterState MainWindow::documentStateSnapshot() const {
   return getCurrentState();
+}
+
+/** Apply shared document parameters changed by a secondary/specialized view. */
+void MainWindow::applySharedDocumentState(const ParameterState &state,
+                                          const QString &description) {
+  changeParameters(state, description);
 }
 
 /** Rotate the shared document left on behalf of a secondary view. */

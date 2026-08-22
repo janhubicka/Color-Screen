@@ -25,6 +25,8 @@
 #include <QTimer>
 
 #include <cstring>
+#include <functional>
+#include <memory>
 
 /** Start the Qt GUI, restore any crashed document session, and open every
     positional image argument in an independent MainWindow.  */
@@ -133,6 +135,11 @@ int main(int argc, char *argv[]) {
       "smoke-test-new-view",
       "Create a secondary view and verify shared image and independent render mode");
   parser.addOption(newViewOption);
+
+  QCommandLineOption slantedReferenceOption(
+      "smoke-test-slanted-reference",
+      "Open the current image as a separate slanted-edge reference view");
+  parser.addOption(slantedReferenceOption);
 
   QCommandLineOption timeReportOption(
       "time-report", "Enable internal time reporting of tasks");
@@ -702,6 +709,89 @@ int main(int argc, char *argv[]) {
       }
 
       view->close();
+    });
+  }
+
+  if (parser.isSet(slantedReferenceOption)) {
+    QTimer::singleShot(350, &app, [&app]() {
+      const QList<MainWindow *> documents = app.documentWindows();
+      if (documents.isEmpty() || documents.front()->currentImageFile().isEmpty()) {
+        qCritical() << "Slanted reference smoke test requires a loaded image";
+        app.exit(15);
+        return;
+      }
+
+      MainWindow *source = documents.front();
+      const int documentCount = documents.size();
+      const int tabCount = app.tabCount();
+      ImageViewWindow *reference = app.createSlantedEdgeReference(
+          source, source->currentImageFile());
+      if (!reference) {
+        qCritical() << "Could not create slanted-edge reference view";
+        app.exit(15);
+        return;
+      }
+
+      auto checkReference =
+          std::make_shared<std::function<void(int)>>();
+      *checkReference = [&app, source, reference, documentCount, tabCount,
+                         checkReference](int attemptsLeft) {
+        if (reference && !reference->sharedImageData() && attemptsLeft > 0) {
+          QTimer::singleShot(250, &app, [checkReference, attemptsLeft]() {
+            (*checkReference)(attemptsLeft - 1);
+          });
+          return;
+        }
+
+        WorkspaceWindow *workspace = app.workspaceWindow();
+        if (!reference || !reference->isSlantedEdgeReference() ||
+            reference->sourceDocument() != source ||
+            !reference->sharedImageData() ||
+            reference->sharedImageData() == source->sharedImageData() ||
+            app.documentWindows().size() != documentCount || !workspace ||
+            !workspace->containsView(reference) ||
+            app.tabCount() != tabCount + 1 ||
+            !reference->workspaceInspectorWidget() ||
+            !reference->workspaceInspectorWidget()->findChild<QWidget *>(
+                QStringLiteral("SlantedEdgeNavigation")) ||
+            !reference->workspaceInspectorWidget()->findChild<QWidget *>(
+                QStringLiteral("SlantedEdgeReferenceTabs"))) {
+          qCritical() << "Slanted-edge reference did not remain a specialized "
+                         "shared-parameter workspace view";
+          app.exit(15);
+          return;
+        }
+
+        if (!reference->setRenderType(colorscreen::render_type_original) ||
+            !reference->setRenderType(colorscreen::render_type_image_layer) ||
+            reference->setRenderType(colorscreen::render_type_interpolated)) {
+          qCritical() << "Slanted-edge reference exposes unexpected render modes";
+          app.exit(15);
+          return;
+        }
+
+        const auto beforeReload = reference->sharedImageData();
+        app.reloadSlantedEdgeReferences(source);
+        auto checkReload = std::make_shared<std::function<void(int)>>();
+        *checkReload = [&app, reference, beforeReload, checkReload](
+                           int attemptsLeft) {
+          if (reference && reference->sharedImageData() == beforeReload &&
+              attemptsLeft > 0) {
+            QTimer::singleShot(250, &app, [checkReload, attemptsLeft]() {
+              (*checkReload)(attemptsLeft - 1);
+            });
+            return;
+          }
+          if (!reference || reference->sharedImageData() == beforeReload) {
+            qCritical() << "Slanted-edge reference did not reload";
+            app.exit(15);
+            return;
+          }
+          reference->close();
+        };
+        (*checkReload)(28);
+      };
+      (*checkReference)(28);
     });
   }
 

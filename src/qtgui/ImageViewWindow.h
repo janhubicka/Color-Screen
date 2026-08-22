@@ -6,13 +6,20 @@
 
 #include <QMainWindow>
 #include <QPointer>
+#include <QRect>
+#include <QString>
 #include <memory>
+#include <vector>
 
 class ImageWidget;
 class MainWindow;
+class MultiLineTabWidget;
+class NavigationView;
+class SharpnessPanel;
 class QAction;
 class QCheckBox;
 class QComboBox;
+class QDockWidget;
 class QToolBar;
 
 /** Lightweight secondary view of one MainWindow document.
@@ -30,6 +37,10 @@ public:
   /** Construct secondary view number VIEWNUMBER for DOCUMENT. */
   explicit ImageViewWindow(MainWindow *document, int viewNumber,
                            QWidget *parent = nullptr);
+
+  /** Construct a slanted-edge reference view of REFERENCEFILE for DOCUMENT. */
+  ImageViewWindow(MainWindow *document, int viewNumber,
+                  const QString &referenceFile, QWidget *parent = nullptr);
 
   /** Return the document whose image and parameters this view follows. */
   MainWindow *sourceDocument() const;
@@ -62,6 +73,19 @@ public:
   /** Return whether this view is currently presented inside the workspace. */
   bool isWorkspaceEmbedded() const { return m_workspaceEmbedded; }
 
+  /** Return true when this view displays an external slanted-edge reference. */
+  bool isSlantedEdgeReference() const { return m_slantedEdgeReference; }
+
+  /** Return the optional specialized inspector presented by the workspace. */
+  QWidget *workspaceInspectorWidget() const;
+
+  /** Return the reference filename, or an empty string for a normal New View. */
+  QString referenceFile() const { return m_referenceFile; }
+
+  /** Reload this reference scan using the source document's current demosaic
+      setting.  Normal secondary views ignore this request. */
+  void reloadReferenceImage();
+
 private slots:
   /** Refresh shared image/parameter snapshots after the document changes. */
   void refreshFromDocument();
@@ -72,9 +96,24 @@ private slots:
   /** Change only this view's IR/RGB presentation. */
   void onColorChanged(bool checked);
 
+  /** Start/cancel slanted-edge area selection in a reference view. */
+  void onMeasureMtfRequested(bool checked);
+
+  /** Consume a selected rectangle when reference MTF measurement is active. */
+  void onReferenceAreaSelected(QRect area);
+
 private:
   /** Build the compact image-view UI and view-local toolbar/menu actions. */
   void setupUi();
+
+  /** Build the reduced Sharpness-only inspector for a reference image. */
+  void setupReferenceInspector();
+
+  /** Load the external reference image without changing the source document. */
+  void loadReferenceImage(const QString &fileName);
+
+  /** Convert a selection rectangle to bounded reference-image coordinates. */
+  QRect referenceImageArea(QRect widgetArea) const;
 
   /** Rebuild render-mode choices valid for the current shared document. */
   void rebuildModeList();
@@ -92,7 +131,15 @@ private:
   QComboBox *m_modeComboBox = nullptr;
   QCheckBox *m_colorCheckBox = nullptr;
   QAction *m_mirrorAction = nullptr;
+  QWidget *m_referenceInspector = nullptr;
+  NavigationView *m_navigationView = nullptr;
+  MultiLineTabWidget *m_referenceTabs = nullptr;
+  SharpnessPanel *m_sharpnessPanel = nullptr;
+  QDockWidget *m_referenceInspectorDock = nullptr;
   bool m_workspaceEmbedded = false;
+  bool m_slantedEdgeReference = false;
+  bool m_referenceLoadPending = false;
+  QString m_referenceFile;
 
   std::shared_ptr<colorscreen::image_data> m_scan;
   colorscreen::render_parameters m_rparams;
@@ -100,4 +147,6 @@ private:
   colorscreen::scr_to_img_parameters m_scrToImgParams;
   colorscreen::solver_parameters m_solverParams;
   colorscreen::render_type_parameters m_renderTypeParams;
+  colorscreen::slanted_edge_parameters m_slantedEdgeParameters;
+  std::vector<colorscreen::slanted_edge_parameters> m_pendingMtfParameters;
 };

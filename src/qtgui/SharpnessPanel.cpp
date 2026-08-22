@@ -815,6 +815,11 @@ void SharpnessPanel::setupUi() {
         return !s.rparams.sharpen.scanner_mtf.simulate_diffraction_p();
       }, false, "Simulates a uniform \"box\" blur of a specific diameter in pixels. Used when diffraction simulation is disabled.");
 
+  addButtonParameter(
+      "", "Open slanted edge reference",
+      [this]() { emit openSlantedEdgeReferenceRequested(); }, nullptr,
+      "Open another scan as a slanted-edge reference. The reference uses the "
+      "current document's shared sharpening parameters and measurements.");
 
   // Measure MTF button
   m_measureMtfBtn = addToggleButtonParameter("", "Measure mtf of an edge", [this](bool checked) {
