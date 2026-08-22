@@ -1,0 +1,53 @@
+name: Agent publish status task strip
+
+on:
+  pull_request:
+    branches:
+      - agent/status-strip-publish-base-20260822
+    paths:
+      - agent/status-task-strip.patch.gz.b64
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out transport payload
+        uses: actions/checkout@v4
+        with:
+          path: transport
+
+      - name: Check out exact current main
+        uses: actions/checkout@v4
+        with:
+          ref: ab4997bfee76954c5144193a32aac8d212a96a69
+          fetch-depth: 0
+          path: repo
+
+      - name: Verify, apply, and publish status layout fix
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp transport/agent/status-task-strip.patch.gz.b64 .
+          echo 'd4df24bf4b218263436ef6d579f30cb8752a92e47151ed4d880b308305a2e338  status-task-strip.patch.gz.b64' | sha256sum -c -
+          base64 --decode status-task-strip.patch.gz.b64 > status-task-strip.patch.gz
+          echo '0334a46a582bbee376dc8ef984fe827518f64961d6094caf52247e5a281d350d  status-task-strip.patch.gz' | sha256sum -c -
+          gzip -dc status-task-strip.patch.gz > status-task-strip.patch
+          echo '86365e4fe755841629234650d8b95fcffc509b50018c56357762cece852423f9  status-task-strip.patch' | sha256sum -c -
+
+          cd repo
+          test "$(git rev-parse HEAD)" = ab4997bfee76954c5144193a32aac8d212a96a69
+          git checkout -B agent/qtgui-status-task-strip ab4997bfee76954c5144193a32aac8d212a96a69
+          git apply --check ../status-task-strip.patch
+          git apply ../status-task-strip.patch
+          git diff --check
+          test "$(git diff --name-only | sort)" = $'NEWS\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/MainWindow.h\nsrc/qtgui/WorkspaceWindow.cpp\nsrc/qtgui/WorkspaceWindow.h\nsrc/qtgui/main.cpp'
+
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git add -- NEWS src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h src/qtgui/WorkspaceWindow.cpp src/qtgui/WorkspaceWindow.h src/qtgui/main.cpp
+          git commit -m 'qtgui: keep long task rows above the status line' -m 'Keep the ordinary QStatusBar permanently one line high. User-visible long-running progress rows live in a frameless bottom dock immediately above it, while only the active document short-lived transient progress may occupy the bottom line. This prevents frequent rendering and overlay tasks from changing the status-bar height while a long operation is running.\n\nDetached documents use the same two-tier layout locally. Attached documents move only their dedicated task container into the workspace task dock, so long operations remain visible across tab changes without becoming children of QStatusBar. The workspace shows the task dock only while at least one dedicated row is present.\n\nExtend the user-visible progress smoke test to require dedicated rows outside QStatusBar, preserve status-bar height across tab changes, and verify that adding/removing a transient progress task cannot disturb the task strip.'
+          git push --force origin HEAD:refs/heads/agent/qtgui-status-task-strip
