@@ -1,0 +1,51 @@
+name: Agent publish user-visible progress
+
+on:
+  pull_request:
+    branches:
+      - agent/transport-base-user-visible-progress-20260822
+    paths:
+      - agent/uvp.part-*
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out transport payload
+        uses: actions/checkout@v4
+        with:
+          path: transport
+
+      - name: Check out exact current main
+        uses: actions/checkout@v4
+        with:
+          ref: 589f09990f0db89e0412a0e28252904d12173c24
+          fetch-depth: 0
+          path: repo
+
+      - name: Verify, apply, and publish progress UI
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat transport/agent/uvp.part-* > user-visible-progress.patch.b64
+          echo 'c1310f5bc8a44100b0bef90c9dc16071a7de262258e3a3a7beeaddc0dda7a975  user-visible-progress.patch.b64' | sha256sum -c -
+          base64 --decode user-visible-progress.patch.b64 > user-visible-progress.patch
+          echo '6a5815c50495ace79940ba495057c3a3160bae2560d12868f5a70610b25e861a  user-visible-progress.patch' | sha256sum -c -
+
+          cd repo
+          test "$(git rev-parse HEAD)" = 589f09990f0db89e0412a0e28252904d12173c24
+          git checkout -B agent/qtgui-user-visible-progress 589f09990f0db89e0412a0e28252904d12173c24
+          git apply --check ../user-visible-progress.patch
+          git apply ../user-visible-progress.patch
+          git diff --check
+          test "$(git diff --name-only | sort)" = $'NEWS\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/MainWindow.h\nsrc/qtgui/WorkspaceWindow.cpp\nsrc/qtgui/WorkspaceWindow.h\nsrc/qtgui/main.cpp'
+
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git add -- NEWS src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h src/qtgui/WorkspaceWindow.cpp src/qtgui/WorkspaceWindow.h src/qtgui/main.cpp
+          git commit -m 'qtgui: add user-visible progress tasks' -m 'Give long-running user-initiated operations dedicated status-bar rows instead of forcing them through the compact transient progress selector. Each visible row owns its task label, progress bar, and termination action and remains accessible in the shared workspace status area when another document becomes active.\n\nMark render-to-file, coordinate autodetection, automatic point addition, automatic point addition in an area, and displacement analysis as user-visible. One-shot operations use Cancel; incremental point addition uses Stop so already accepted point batches remain part of the document while cooperative termination is requested.\n\nKeep user-visible registration alive for the complete worker lifetime, including across incremental pointsReady callbacks, and add smoke coverage for global row visibility plus Cancel/Stop behavior.\n\nValidated locally with Qt 6 compilation using -O2 -g -Wall -Wextra, focused GUI smoke checks, regenerated moc_MainWindow.cpp, and git diff --check.'
+          git push --force origin HEAD:refs/heads/agent/qtgui-user-visible-progress
