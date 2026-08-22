@@ -1,0 +1,52 @@
+name: Agent focus-area library transport
+
+on:
+  pull_request:
+    branches:
+      - agent/focus-area-library-transport-base-20260822
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    if: github.head_ref == 'agent/focus-area-library-transport-20260822'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact source parent
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+
+      - name: Record source and repository bundle
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git rev-parse HEAD > HEAD.sha
+          git bundle create Color-Screen.bundle --all
+          git bundle verify Color-Screen.bundle
+
+      - name: Download Debian 13 core dependency closure
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p debs
+          docker run --rm -v "$PWD/debs:/out" debian:trixie-slim bash -euxo pipefail -c '
+            apt-get update
+            apt-get install -y --download-only --no-install-recommends \
+              libfftw3-dev libgsl-dev libturbojpeg0-dev liblcms2-dev \
+              libraw-dev libzip-dev libexiv2-dev libopenjp2-7-dev libpng-dev
+            cp /var/cache/apt/archives/*.deb /out/
+          '
+
+      - name: Upload transport bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-focus-area-library
+          path: |
+            Color-Screen.bundle
+            HEAD.sha
+            debs/*.deb
+          if-no-files-found: error
+          retention-days: 1
