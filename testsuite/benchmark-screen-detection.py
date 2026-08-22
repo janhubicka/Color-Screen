@@ -1,0 +1,344 @@
+#!/usr/bin/env python3
+"""Run repeatable regular-screen detection benchmarks on external scans."""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+import time
+
+
+STATS_PREFIX = "detect_stats:"
+TIMINGS_PREFIX = "detect_stats_ms:"
+COVERAGE_RE = re.compile(
+    r"Analyzed\s+([0-9.]+)% of scan and\s+([0-9.]+)%\s+of the screen area"
+)
+
+CSV_FIELDS = [
+    "scan",
+    "mode",
+    "sharpen_radius",
+    "sharpen_amount",
+    "floodfill",
+    "exit_code",
+    "success",
+    "type",
+    "scan_coverage_percent",
+    "screen_coverage_percent",
+    "regions",
+    "seed_pixels",
+    "initial_grids",
+    "initial_solver_failures",
+    "flood_attempts",
+    "flood_failures",
+    "patches",
+    "last_flood_failure",
+    "color_opt_failures",
+    "precompute_failures",
+    "classmap_builds",
+    "rgb_precomputes",
+    "legacy_preclassification_sharpening",
+    "optimize_colors_ms",
+    "precompute_ms",
+    "classmap_ms",
+    "initial_solver_ms",
+    "flood_ms",
+    "final_solver_ms",
+    "mesh_solver_ms",
+    "detector_total_ms",
+    "wall_ms",
+    "peak_rss_kb",
+    "report",
+    "log",
+    "output_par",
+]
+
+
+class Mode:
+    """One detector-sharpening and flood-fill benchmark configuration."""
+
+    def __init__(self, name: str, radius: float, amount: float, floodfill: str):
+        self.name = name
+        self.radius = radius
+        self.amount = amount
+        self.floodfill = floodfill
+
+
+def parse_mode(value: str) -> Mode:
+    """Parse NAME,RADIUS,AMOUNT[,FLOODFILL] from VALUE."""
+    fields = value.split(",")
+    if len(fields) not in (3, 4):
+        raise argparse.ArgumentTypeError(
+            "mode must be NAME,RADIUS,AMOUNT[,FLOODFILL]"
+        )
+    name = fields[0].strip()
+    if not name:
+        raise argparse.ArgumentTypeError("mode name must not be empty")
+    try:
+        radius = float(fields[1])
+        amount = float(fields[2])
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("radius and amount must be numbers") from exc
+    floodfill = fields[3].strip() if len(fields) == 4 else "both"
+    if floodfill not in ("both", "fast", "slow"):
+        raise argparse.ArgumentTypeError("floodfill must be both, fast, or slow")
+    return Mode(name, radius, amount, floodfill)
+
+
+def parse_key_values(line: str, prefix: str) -> dict[str, str]:
+    """Parse whitespace-separated KEY=VALUE fields after PREFIX in LINE."""
+    if not line.startswith(prefix):
+        return {}
+    ret: dict[str, str] = {}
+    for field in line[len(prefix) :].strip().split():
+        if "=" not in field:
+            continue
+        key, value = field.split("=", 1)
+        ret[key] = value
+    return ret
+
+
+def read_report(path: Path) -> tuple[dict[str, str], dict[str, str], str, str]:
+    """Return detector counters, timings, and coverage values from PATH."""
+    stats: dict[str, str] = {}
+    timings: dict[str, str] = {}
+    scan_coverage = ""
+    screen_coverage = ""
+    if not path.exists():
+        return stats, timings, scan_coverage, screen_coverage
+    with path.open("r", encoding="utf-8", errors="replace") as report:
+        for line in report:
+            if line.startswith(STATS_PREFIX):
+                stats = parse_key_values(line, STATS_PREFIX)
+            elif line.startswith(TIMINGS_PREFIX):
+                timings = parse_key_values(line, TIMINGS_PREFIX)
+            else:
+                match = COVERAGE_RE.search(line)
+                if match:
+                    scan_coverage, screen_coverage = match.groups()
+    return stats, timings, scan_coverage, screen_coverage
+
+
+def read_rss_kb(pid: int) -> int | None:
+    """Return resident memory for PID on Linux, or None if unavailable."""
+    status = Path(f"/proc/{pid}/status")
+    try:
+        with status.open("r", encoding="ascii") as stream:
+            for line in stream:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1])
+    except (FileNotFoundError, PermissionError, ValueError):
+        pass
+    return None
+
+
+def run_process(command: list[str], log_path: Path) -> tuple[int, float, int | None]:
+    """Run COMMAND, writing combined output to LOG_PATH and measuring resources."""
+    start = time.monotonic()
+    peak_rss_kb: int | None = None
+    with log_path.open("wb") as log:
+        process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+        while process.poll() is None:
+            rss_kb = read_rss_kb(process.pid)
+            if rss_kb is not None:
+                peak_rss_kb = max(peak_rss_kb or 0, rss_kb)
+            time.sleep(0.1)
+        rss_kb = read_rss_kb(process.pid)
+        if rss_kb is not None:
+            peak_rss_kb = max(peak_rss_kb or 0, rss_kb)
+        exit_code = process.returncode
+    return exit_code, (time.monotonic() - start) * 1000, peak_rss_kb
+
+
+def sparse_parameter_file(path: Path, mode: Mode) -> None:
+    """Write only detector-sharpening overrides for MODE to PATH."""
+    path.write_text(
+        "screen_alignment_version: 1\n"
+        f"scr_detect_sharpen_radius: {mode.radius:.9g}\n"
+        f"scr_detect_sharpen_amount: {mode.amount:.9g}\n",
+        encoding="ascii",
+    )
+
+
+def floodfill_arguments(mode: Mode) -> list[str]:
+    """Return autodetect command-line flags selecting MODE's flood fill."""
+    if mode.floodfill == "fast":
+        return ["--fast-floodfill", "--no-slow-floodfill"]
+    if mode.floodfill == "slow":
+        return ["--no-fast-floodfill", "--slow-floodfill"]
+    return ["--fast-floodfill", "--slow-floodfill"]
+
+
+def safe_name(value: str) -> str:
+    """Return VALUE with characters unsuitable for filenames replaced."""
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", value)
+
+
+def benchmark_one(
+    args: argparse.Namespace, scan: Path, mode: Mode, output_dir: Path
+) -> dict[str, str | int | float]:
+    """Run one detector benchmark for SCAN and MODE and return one CSV row."""
+    stem = safe_name(scan.stem)
+    mode_name = safe_name(mode.name)
+    report_path = output_dir / f"{stem}-{mode_name}.report.txt"
+    log_path = output_dir / f"{stem}-{mode_name}.log.txt"
+    output_par = output_dir / f"{stem}-{mode_name}.par"
+
+    with tempfile.TemporaryDirectory(prefix="colorscreen-detect-bench-") as temp_dir:
+        input_par = Path(temp_dir) / "detector.par"
+        sparse_parameter_file(input_par, mode)
+        command = [
+            str(args.colorscreen),
+            f"--threads={args.threads}",
+            "autodetect",
+            str(scan),
+            str(output_par),
+            f"--par={input_par}",
+            f"--screen-type={args.screen_type}",
+            f"--scanner-type={args.scanner_type}",
+            f"--gamma={args.gamma}",
+            "--no-mesh",
+            "--no-auto-color-model",
+            "--no-auto-levels",
+            f"--report={report_path}",
+        ]
+        command.extend(floodfill_arguments(mode))
+        if not args.optimize_colors:
+            command.append("--no-optimize-colors")
+        exit_code, wall_ms, peak_rss_kb = run_process(command, log_path)
+
+    stats, timings, scan_coverage, screen_coverage = read_report(report_path)
+    row: dict[str, str | int | float] = {
+        "scan": str(scan),
+        "mode": mode.name,
+        "sharpen_radius": mode.radius,
+        "sharpen_amount": mode.amount,
+        "floodfill": mode.floodfill,
+        "exit_code": exit_code,
+        "success": 1 if stats.get("result") == "success" else 0,
+        "type": stats.get("type", ""),
+        "scan_coverage_percent": scan_coverage,
+        "screen_coverage_percent": screen_coverage,
+        "wall_ms": f"{wall_ms:.3f}",
+        "peak_rss_kb": peak_rss_kb if peak_rss_kb is not None else "",
+        "report": str(report_path),
+        "log": str(log_path),
+        "output_par": str(output_par) if output_par.exists() else "",
+    }
+    for key in (
+        "regions",
+        "seed_pixels",
+        "initial_grids",
+        "initial_solver_failures",
+        "flood_attempts",
+        "flood_failures",
+        "patches",
+        "last_flood_failure",
+        "color_opt_failures",
+        "precompute_failures",
+        "classmap_builds",
+        "rgb_precomputes",
+        "legacy_preclassification_sharpening",
+    ):
+        row[key] = stats.get(key, "")
+    timing_names = {
+        "optimize_colors_ms": "optimize_colors",
+        "precompute_ms": "precompute",
+        "classmap_ms": "classmap",
+        "initial_solver_ms": "initial_solver",
+        "flood_ms": "flood",
+        "final_solver_ms": "final_solver",
+        "mesh_solver_ms": "mesh_solver",
+        "detector_total_ms": "total",
+    }
+    for output_name, report_name in timing_names.items():
+        row[output_name] = timings.get(report_name, "")
+    return row
+
+
+def main() -> int:
+    """Parse arguments, run all requested benchmarks, and write the CSV summary."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "scans", nargs="+", type=Path, help="external scans to benchmark"
+    )
+    parser.add_argument(
+        "--colorscreen",
+        type=Path,
+        required=True,
+        help="path to the built colorscreen command-line program",
+    )
+    parser.add_argument(
+        "--csv", type=Path, default=Path("screen-detection-benchmark.csv")
+    )
+    parser.add_argument(
+        "--output-dir", type=Path, default=Path("screen-detection-benchmark")
+    )
+    parser.add_argument("--screen-type", default="Dufay")
+    parser.add_argument("--scanner-type", default="fixed-lens")
+    parser.add_argument("--gamma", type=float, default=1.0)
+    parser.add_argument("--threads", type=int, default=max(1, os.cpu_count() or 1))
+    parser.add_argument(
+        "--mode",
+        type=parse_mode,
+        action="append",
+        help=(
+            "benchmark mode NAME,RADIUS,AMOUNT[,FLOODFILL]; may be repeated; "
+            "FLOODFILL is both, fast, or slow"
+        ),
+    )
+    parser.add_argument(
+        "--no-optimize-colors",
+        dest="optimize_colors",
+        action="store_false",
+        help="disable per-region screen-color optimization",
+    )
+    parser.set_defaults(optimize_colors=True)
+    args = parser.parse_args()
+
+    if args.threads < 1:
+        parser.error("--threads must be positive")
+    if not args.colorscreen.is_file():
+        parser.error(f"colorscreen executable not found: {args.colorscreen}")
+    missing = [scan for scan in args.scans if not scan.is_file()]
+    if missing:
+        parser.error("scan not found: " + ", ".join(str(scan) for scan in missing))
+
+    modes = args.mode or [
+        Mode("legacy-2-3", 2.0, 3.0, "both"),
+        Mode("unsharpened-0-0", 0.0, 0.0, "both"),
+    ]
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    args.csv.parent.mkdir(parents=True, exist_ok=True)
+
+    rows: list[dict[str, str | int | float]] = []
+    with args.csv.open("w", encoding="utf-8", newline="") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=CSV_FIELDS)
+        writer.writeheader()
+        for scan in args.scans:
+            for mode in modes:
+                print(f"benchmarking {scan} [{mode.name}]", flush=True)
+                row = benchmark_one(args, scan, mode, args.output_dir)
+                rows.append(row)
+                writer.writerow(row)
+                csv_file.flush()
+                print(
+                    "  result={success} seeds={seed_pixels} patches={patches} "
+                    "flood_ms={flood_ms} total_ms={detector_total_ms} "
+                    "wall_ms={wall_ms}".format(**row),
+                    flush=True,
+                )
+
+    successful = sum(int(row["success"]) for row in rows)
+    print(f"wrote {len(rows)} rows to {args.csv}; {successful} detections succeeded")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
