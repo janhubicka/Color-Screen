@@ -18,9 +18,13 @@ Changes in version 1.1
      addition, and displacement analysis use these rows; incremental automatic
      point addition offers "Stop" so points already added remain in the image.
    - The Window menu provides New View for opening a second view of the same
-     image as another workspace tab. Secondary views share document state and
-     transforms such as rotation and mirroring, while render mode, Color/IR,
-     zoom and pan remain independent. Views can still be detached when needed.
+     image as another workspace tab. Ordinary views expose the same complete
+     Navigation and parameter-panel controls as the primary view; panel image
+     tools follow the view currently presenting the inspector. Secondary views
+     share document state and transforms such as rotation and mirroring, while
+     render mode, Color/IR, zoom and pan remain independent. Views can still be
+     detached when needed, with the document inspector moving to the active
+     detached view rather than duplicating document/undo state.
    - The Sharpness panel can open a separate slanted-edge reference scan while
      keeping the current scan's parameter file and undo history. Reference
      scans keep the normal navigation preview above a single Sharpness tab and

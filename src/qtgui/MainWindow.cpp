@@ -37,6 +37,7 @@
 #include "SlantedEdgeDialog.h"
 #include <QDoubleSpinBox>
 #include <QElapsedTimer>
+#include <QEvent>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -277,7 +278,13 @@ MainWindow::~MainWindow() {
 
   // Explicitly delete UI components that might access member variables
   // (callbacks) This ensures they are destroyed BEFORE members like m_rparams
-  // or m_scan. We delete the main splitter which contains the panels.
+  // or m_scan. Reclaim the document inspector first if another view presented
+  // it, then delete the main splitter which owns the panels.
+  if (m_rightColumn && m_mainSplitter &&
+      m_rightColumn->parentWidget() != m_mainSplitter) {
+    m_rightColumn->setParent(m_mainSplitter);
+    m_mainSplitter->addWidget(m_rightColumn);
+  }
   if (m_mainSplitter) {
     m_mainSplitter->setParent(nullptr); // Detach first
     delete m_mainSplitter;
@@ -350,13 +357,19 @@ void MainWindow::setupUi() {
   m_navigationView->setMinimumHeight(200);
   rightSplitter->addWidget(m_navigationView);
 
-  // Connect Navigation Signals
-  connect(m_imageWidget, &ImageWidget::viewStateChanged, m_navigationView,
-          &NavigationView::onViewStateChanged);
-  connect(m_navigationView, &NavigationView::zoomChanged, m_imageWidget,
-          &ImageWidget::setZoom);
-  connect(m_navigationView, &NavigationView::panChanged, m_imageWidget,
-          &ImageWidget::setPan);
+  // Navigation controls whichever ordinary view is currently presenting this
+  // document's inspector. The source side of viewStateChanged is switched by
+  // setInspectorImageWidget().
+  connect(m_navigationView, &NavigationView::zoomChanged, this,
+          [this](double zoom) {
+            if (ImageWidget *image = inspectorImageWidget())
+              image->setZoom(zoom);
+          });
+  connect(m_navigationView, &NavigationView::panChanged, this,
+          [this](double x, double y) {
+            if (ImageWidget *image = inspectorImageWidget())
+              image->setPan(x, y);
+          });
 
   // Connect NavigationView progress signals
   connect(m_navigationView, &NavigationView::progressStarted, this,
@@ -840,8 +853,11 @@ void MainWindow::setupUi() {
           &MainWindow::onColorOptimizeRequested);
   connect(m_profilePanel, &ProfilePanel::addSpotModeRequested, this,
           &MainWindow::onAddSpotModeRequested);
-  connect(m_profilePanel, &ProfilePanel::showProfileSpotsChanged, m_imageWidget,
-          &ImageWidget::setShowProfileSpots);
+  connect(m_profilePanel, &ProfilePanel::showProfileSpotsChanged, this,
+          [this](bool show) {
+            if (ImageWidget *image = inspectorImageWidget())
+              image->setShowProfileSpots(show);
+          });
 
   // ImageWidget::pointAdded is routed to onPointAdded; profile spot
   // handling is done there when m_addingProfileSpot is true.
@@ -943,16 +959,29 @@ void MainWindow::setupUi() {
           &MainWindow::onAutomaticallyAddPointsInAreaRequested);
   connect(m_geometryPanel, &GeometryPanel::nonlinearToggled, this,
           &MainWindow::onNonlinearToggled);
-  connect(m_geometryPanel, &GeometryPanel::centerOnRequested, m_imageWidget,
-          &ImageWidget::centerOn);
+  connect(m_geometryPanel, &GeometryPanel::centerOnRequested, this,
+          [this](const colorscreen::point_t &point) {
+            if (ImageWidget *image = inspectorImageWidget())
+              image->centerOn(point);
+          });
 
-  // Connect visualization sliders
-  connect(m_geometryPanel, &GeometryPanel::heatmapToleranceChanged,
-          m_imageWidget, &ImageWidget::setHeatmapTolerance);
-  connect(m_geometryPanel, &GeometryPanel::exaggerateChanged, m_imageWidget,
-          &ImageWidget::setExaggerate);
-  connect(m_geometryPanel, &GeometryPanel::maxArrowLengthChanged, m_imageWidget,
-          &ImageWidget::setMaxArrowLength);
+  // Connect visualization sliders to the view currently controlled by the
+  // shared document inspector.
+  connect(m_geometryPanel, &GeometryPanel::heatmapToleranceChanged, this,
+          [this](double value) {
+            if (ImageWidget *image = inspectorImageWidget())
+              image->setHeatmapTolerance(value);
+          });
+  connect(m_geometryPanel, &GeometryPanel::exaggerateChanged, this,
+          [this](double value) {
+            if (ImageWidget *image = inspectorImageWidget())
+              image->setExaggerate(value);
+          });
+  connect(m_geometryPanel, &GeometryPanel::maxArrowLengthChanged, this,
+          [this](double value) {
+            if (ImageWidget *image = inspectorImageWidget())
+              image->setMaxArrowLength(value);
+          });
   connect(m_geometryPanel, &GeometryPanel::autodetectCoordinatesRequested, this,
           &MainWindow::onAutodetectCoordinatesRequested);
   connect(m_geometryPanel, &GeometryPanel::alternateColorsRequested, this,
@@ -964,9 +993,12 @@ void MainWindow::setupUi() {
   m_registrationPointsAction->setChecked(
       m_imageWidget->registrationPointsVisible());
 
-  // Link View menu -> ImageWidget
-  connect(m_registrationPointsAction, &QAction::toggled, m_imageWidget,
-          &ImageWidget::setShowRegistrationPoints);
+  // Link View menu -> the ordinary view currently controlled by the inspector.
+  connect(m_registrationPointsAction, &QAction::toggled, this,
+          [this](bool show) {
+            if (ImageWidget *image = inspectorImageWidget())
+              image->setShowRegistrationPoints(show);
+          });
 
   // Link ImageWidget -> View menu (to keep it in sync if changed elsewhere)
   connect(m_imageWidget, &ImageWidget::registrationPointsVisibilityChanged,
@@ -983,8 +1015,10 @@ void MainWindow::setupUi() {
   // Link GeometryPanel checkbox -> ImageWidget
   QCheckBox *regBox = m_geometryPanel->registrationPointsCheckBox();
   if (regBox) {
-    connect(regBox, &QCheckBox::toggled, m_imageWidget,
-            &ImageWidget::setShowRegistrationPoints);
+    connect(regBox, &QCheckBox::toggled, this, [this](bool show) {
+      if (ImageWidget *image = inspectorImageWidget())
+        image->setShowRegistrationPoints(show);
+    });
     QSignalBlocker blocker(regBox);
     regBox->setChecked(m_imageWidget->registrationPointsVisible());
   }
@@ -1102,6 +1136,7 @@ void MainWindow::setupUi() {
   m_manuallySelectedProgressIndex = -1;
 
   createToolbar(); // Initialize toolbar
+  setInspectorImageWidget(m_imageWidget);
 }
 
 // Helper to manually load and recolor symbolic icons on Windows where
@@ -2603,6 +2638,139 @@ void MainWindow::restoreUserVisibleStatusWidget() {
   updateProgressContainerVisibility();
 }
 
+
+/** Detach the document-owned inspector from whichever presentation hosts it. */
+QWidget *MainWindow::takeWorkspaceInspector() {
+  if (!m_rightColumn)
+    return nullptr;
+  m_rightColumn->hide();
+  if (m_rightColumn->parentWidget())
+    m_rightColumn->setParent(nullptr);
+  return m_rightColumn;
+}
+
+/** Restore the document-owned inspector beside the primary image view. */
+void MainWindow::restoreWorkspaceInspector() {
+  if (!m_rightColumn || !m_mainSplitter)
+    return;
+
+  if (m_rightColumn->parentWidget() != m_mainSplitter) {
+    takeWorkspaceInspector();
+    m_mainSplitter->addWidget(m_rightColumn);
+    if (!m_workspaceSplitterState.isEmpty())
+      m_mainSplitter->restoreState(m_workspaceSplitterState);
+  }
+  setInspectorImageWidget(m_imageWidget);
+  m_rightColumn->show();
+}
+
+/** Route the shared inspector's navigation and editing gestures to IMAGEWIDGET. */
+void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
+  ImageWidget *target = imageWidget ? imageWidget : m_imageWidget;
+  if (!target)
+    return;
+
+  for (const QMetaObject::Connection &connection : m_inspectorImageConnections)
+    disconnect(connection);
+  m_inspectorImageConnections.clear();
+  m_inspectorImageWidget = target;
+
+  if (m_navigationView) {
+    m_inspectorImageConnections.push_back(
+        connect(target, &ImageWidget::viewStateChanged, m_navigationView,
+                &NavigationView::onViewStateChanged));
+  }
+
+  // The primary ImageWidget already has the full document-editing signal
+  // wiring installed by setupUi(). Secondary ordinary views acquire the same
+  // document-side behavior only while they present this inspector.
+  if (target != m_imageWidget) {
+    m_inspectorImageConnections.push_back(
+        connect(target, &ImageWidget::progressStarted, this,
+                &MainWindow::addProgress));
+    m_inspectorImageConnections.push_back(
+        connect(target, &ImageWidget::progressFinished, this,
+                &MainWindow::removeProgress));
+    m_inspectorImageConnections.push_back(
+        connect(target, &ImageWidget::distanceMeasured, this,
+                &MainWindow::onDistanceMeasured));
+    m_inspectorImageConnections.push_back(
+        connect(target, &ImageWidget::selectionChanged, this,
+                &MainWindow::updateRegistrationActions));
+    m_inspectorImageConnections.push_back(
+        connect(target, &ImageWidget::registrationPointsVisibilityChanged, this,
+                &MainWindow::updateRegistrationActions));
+    if (m_registrationPointsAction) {
+      m_inspectorImageConnections.push_back(connect(
+          target, &ImageWidget::registrationPointsVisibilityChanged,
+          m_registrationPointsAction, &QAction::setChecked));
+    }
+    if (m_geometryPanel) {
+      m_inspectorImageConnections.push_back(connect(
+          target, &ImageWidget::registrationPointsVisibilityChanged,
+          m_geometryPanel, &GeometryPanel::setRegistrationPointsVisible));
+    }
+    m_inspectorImageConnections.push_back(
+        connect(target, &ImageWidget::pointManipulationStarted, this,
+                &MainWindow::onPointManipulationStarted));
+    m_inspectorImageConnections.push_back(
+        connect(target, &ImageWidget::pointsChanged, this,
+                &MainWindow::maybeTriggerAutoSolver));
+    m_inspectorImageConnections.push_back(
+        connect(target, &ImageWidget::pointsChanged, this,
+                [this]() { emit documentStateChanged(); }));
+    m_inspectorImageConnections.push_back(
+        connect(target, &ImageWidget::pointAdded, this, &MainWindow::onPointAdded));
+    m_inspectorImageConnections.push_back(
+        connect(target, &ImageWidget::areaSelected, this, &MainWindow::onAreaSelected));
+    m_inspectorImageConnections.push_back(
+        connect(target, &ImageWidget::setCenterRequested, this,
+                &MainWindow::onSetCenter));
+    m_inspectorImageConnections.push_back(
+        connect(target, &ImageWidget::coordinateSystemChanged, this,
+                &MainWindow::onCoordinateSystemChanged));
+    m_inspectorImageConnections.push_back(connect(
+        target, &ImageWidget::coordinateSystemManipulationStarted, this,
+        &MainWindow::onCoordinateSystemManipulationStarted));
+    m_inspectorImageConnections.push_back(connect(
+        target, &ImageWidget::coordinateSystemManipulationFinished, this,
+        &MainWindow::onCoordinateSystemManipulationFinished));
+    m_inspectorImageConnections.push_back(connect(
+        target, &ImageWidget::profileSpotRemoveRequested, this,
+        [this](int index) {
+          if (!m_addingProfileSpot)
+            return;
+          ParameterState state = getCurrentState();
+          if (index >= 0 && index < static_cast<int>(state.profileSpots.size())) {
+            state.profileSpots.erase(state.profileSpots.begin() + index);
+            changeParameters(state, "Remove profile spot");
+          }
+        }));
+    m_inspectorImageConnections.push_back(connect(
+        target, &ImageWidget::interactionModeChanged, this,
+        [this](ImageWidget::InteractionMode mode) {
+          if (m_capturePanel)
+            m_capturePanel->setCropChecked(mode == ImageWidget::CropMode);
+        }));
+  }
+
+  if (m_registrationPointsAction) {
+    const QSignalBlocker blocker(m_registrationPointsAction);
+    m_registrationPointsAction->setChecked(target->registrationPointsVisible());
+  }
+  if (m_geometryPanel) {
+    m_geometryPanel->setRegistrationPointsVisible(
+        target->registrationPointsVisible());
+  }
+}
+
+/** Reclaim the inspector when a detached primary document becomes active. */
+void MainWindow::changeEvent(QEvent *event) {
+  QMainWindow::changeEvent(event);
+  if (event && event->type() == QEvent::WindowActivate && !m_workspaceEmbedded)
+    restoreWorkspaceInspector();
+}
+
 /** Prepare this document for presentation inside the shared MDI workspace.
     The image view remains inside this MainWindow, while the navigation and
     parameter column is moved to the workspace inspector.  The workspace also
@@ -2614,10 +2782,7 @@ void MainWindow::prepareForWorkspaceEmbedding() {
 
   if (m_mainSplitter)
     m_workspaceSplitterState = m_mainSplitter->saveState();
-  if (m_rightColumn && m_rightColumn->parentWidget() == m_mainSplitter) {
-    m_rightColumn->hide();
-    m_rightColumn->setParent(nullptr);
-  }
+  takeWorkspaceInspector();
   if (m_toolbar)
     m_toolbar->hide();
   if (menuBar())
@@ -2632,13 +2797,7 @@ void MainWindow::restoreFromWorkspaceEmbedding() {
   if (!m_workspaceEmbedded)
     return;
 
-  if (m_rightColumn && m_mainSplitter &&
-      m_rightColumn->parentWidget() != m_mainSplitter) {
-    m_mainSplitter->addWidget(m_rightColumn);
-    m_rightColumn->show();
-    if (!m_workspaceSplitterState.isEmpty())
-      m_mainSplitter->restoreState(m_workspaceSplitterState);
-  }
+  restoreWorkspaceInspector();
   if (m_toolbar)
     m_toolbar->show();
   if (menuBar())
@@ -3136,8 +3295,8 @@ void MainWindow::updateWindowTitle() {
 // Save the current interaction mode so it can be restored later.
 // We ignore GenericAreaMode to avoid "saving" a temporary selection state.
 void MainWindow::saveInteractionMode() {
-  if (m_imageWidget->interactionMode() != ImageWidget::GenericAreaMode)
-    m_previousInteractionMode = m_imageWidget->interactionMode();
+  if (inspectorImageWidget()->interactionMode() != ImageWidget::GenericAreaMode)
+    m_previousInteractionMode = inspectorImageWidget()->interactionMode();
 }
 
 // Return to the interaction mode that was active before a temporary operation
@@ -3148,24 +3307,24 @@ void MainWindow::restoreInteractionMode() {
     if (m_panAction)
       m_panAction->setChecked(true);
     else
-      m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+      inspectorImageWidget()->setInteractionMode(ImageWidget::PanMode);
   } else if (m_previousInteractionMode == ImageWidget::SelectMode) {
     if (m_selectAction)
       m_selectAction->setChecked(true);
     else
-      m_imageWidget->setInteractionMode(ImageWidget::SelectMode);
+      inspectorImageWidget()->setInteractionMode(ImageWidget::SelectMode);
   } else if (m_previousInteractionMode == ImageWidget::AddPointMode) {
     if (m_addPointAction)
       m_addPointAction->setChecked(true);
     else
-      m_imageWidget->setInteractionMode(ImageWidget::AddPointMode);
+      inspectorImageWidget()->setInteractionMode(ImageWidget::AddPointMode);
   } else if (m_previousInteractionMode == ImageWidget::SetCenterMode) {
     if (m_setCenterAction)
       m_setCenterAction->setChecked(true);
     else
-      m_imageWidget->setInteractionMode(ImageWidget::SetCenterMode);
+      inspectorImageWidget()->setInteractionMode(ImageWidget::SetCenterMode);
   } else {
-    m_imageWidget->setInteractionMode(m_previousInteractionMode);
+    inspectorImageWidget()->setInteractionMode(m_previousInteractionMode);
   }
 }
 
@@ -4025,7 +4184,7 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
    saves the current interaction mode, and enters CropMode.  Preserves
    the viewport center across the crop state change.  */
 void MainWindow::onCropRequested() {
-  if (m_imageWidget->interactionMode() == ImageWidget::CropMode) {
+  if (inspectorImageWidget()->interactionMode() == ImageWidget::CropMode) {
     restoreInteractionMode();
     statusBar()->clearMessage();
     return;
@@ -4036,17 +4195,17 @@ void MainWindow::onCropRequested() {
 
   // Preserve center across crop state change
   colorscreen::point_t center =
-      m_imageWidget->widgetToImage(m_imageWidget->rect().center());
+      inspectorImageWidget()->widgetToImage(inspectorImageWidget()->rect().center());
 
   ParameterState state = getCurrentState();
   if (state.rparams.scan_crop.set) {
     state.rparams.scan_crop.set = false;
     changeParameters(state, "Clear crop for re-cropping");
-    m_imageWidget->centerOn(center);
+    inspectorImageWidget()->centerOn(center);
   }
 
   saveInteractionMode();
-  m_imageWidget->setInteractionMode(ImageWidget::CropMode);
+  inspectorImageWidget()->setInteractionMode(ImageWidget::CropMode);
   statusBar()->showMessage("Select crop");
 }
 
@@ -4061,7 +4220,7 @@ void MainWindow::startAreaSelection(const QString &message,
   if (!m_scan)
     return;
 
-  if (m_imageWidget->interactionMode() == ImageWidget::GenericAreaMode) {
+  if (inspectorImageWidget()->interactionMode() == ImageWidget::GenericAreaMode) {
     restoreInteractionMode();
     statusBar()->clearMessage();
     m_areaSelectionCallback = nullptr;
@@ -4072,7 +4231,7 @@ void MainWindow::startAreaSelection(const QString &message,
 
   m_areaSelectionCallback = callback;
   saveInteractionMode();
-  m_imageWidget->setInteractionMode(ImageWidget::GenericAreaMode);
+  inspectorImageWidget()->setInteractionMode(ImageWidget::GenericAreaMode);
   statusBar()->showMessage(message);
 }
 
@@ -4203,10 +4362,10 @@ QRect MainWindow::getImageArea(QRect area) {
 
   // Convert widget coordinates to image coordinates
   // Get the four corners and find min/max
-  colorscreen::point_t p1 = m_imageWidget->widgetToImage(area.topLeft());
-  colorscreen::point_t p2 = m_imageWidget->widgetToImage(area.topRight());
-  colorscreen::point_t p3 = m_imageWidget->widgetToImage(area.bottomLeft());
-  colorscreen::point_t p4 = m_imageWidget->widgetToImage(area.bottomRight());
+  colorscreen::point_t p1 = inspectorImageWidget()->widgetToImage(area.topLeft());
+  colorscreen::point_t p2 = inspectorImageWidget()->widgetToImage(area.topRight());
+  colorscreen::point_t p3 = inspectorImageWidget()->widgetToImage(area.bottomLeft());
+  colorscreen::point_t p4 = inspectorImageWidget()->widgetToImage(area.bottomRight());
 
   // Find bounding box in image coordinates
   int xmin = std::min({p1.x, p2.x, p3.x, p4.x});
@@ -5259,9 +5418,9 @@ void MainWindow::onAddSpotModeRequested(bool active) {
   m_addingProfileSpot = active;
   if (active) {
     saveInteractionMode();
-    m_imageWidget->setInteractionMode(ImageWidget::AddPointMode);
+    inspectorImageWidget()->setInteractionMode(ImageWidget::AddPointMode);
   } else {
-    m_imageWidget->setInteractionMode(m_previousInteractionMode);
+    inspectorImageWidget()->setInteractionMode(m_previousInteractionMode);
   }
 }
 
@@ -5343,7 +5502,7 @@ void MainWindow::onColorOptimizerFinished(
    which is handled by onDistanceMeasured.  */
 void MainWindow::onMeasureRequested() {
   saveInteractionMode();
-  m_imageWidget->setInteractionMode(ImageWidget::MeasureMode);
+  inspectorImageWidget()->setInteractionMode(ImageWidget::MeasureMode);
   statusBar()->showMessage(tr("Click and drag to measure distance for DPI calculation"), 5000);
 }
 
@@ -5484,7 +5643,7 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
                 std::move(result.measurement));
         });
   } else {
-    if (m_imageWidget->interactionMode() == ImageWidget::GenericAreaMode) {
+    if (inspectorImageWidget()->interactionMode() == ImageWidget::GenericAreaMode) {
       restoreInteractionMode();
       statusBar()->clearMessage();
       m_areaSelectionCallback = nullptr;

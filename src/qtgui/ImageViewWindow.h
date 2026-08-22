@@ -37,6 +37,7 @@ public:
   /** Construct secondary view number VIEWNUMBER for DOCUMENT. */
   explicit ImageViewWindow(MainWindow *document, int viewNumber,
                            QWidget *parent = nullptr);
+  ~ImageViewWindow() override;
 
   /** Construct a slanted-edge reference view of REFERENCEFILE for DOCUMENT. */
   ImageViewWindow(MainWindow *document, int viewNumber,
@@ -76,8 +77,16 @@ public:
   /** Return true when this view displays an external slanted-edge reference. */
   bool isSlantedEdgeReference() const { return m_slantedEdgeReference; }
 
-  /** Return the optional specialized inspector presented by the workspace. */
+  /** Return the inspector presented for this view.
+      Ordinary views use the owning document's full inspector; reference views
+      use their specialized Sharpness-only inspector. */
   QWidget *workspaceInspectorWidget() const;
+
+  /** Return true when this view owns its inspector rather than borrowing it. */
+  bool ownsWorkspaceInspector() const { return m_slantedEdgeReference; }
+
+  /** Return this view's image widget for document-inspector routing. */
+  ImageWidget *imageWidget() const { return m_imageWidget; }
 
   /** Return the reference filename, or an empty string for a normal New View. */
   QString referenceFile() const { return m_referenceFile; }
@@ -85,6 +94,9 @@ public:
   /** Reload this reference scan using the source document's current demosaic
       setting.  Normal secondary views ignore this request. */
   void reloadReferenceImage();
+
+protected:
+  void changeEvent(QEvent *event) override;
 
 private slots:
   /** Refresh shared image/parameter snapshots after the document changes. */
@@ -108,6 +120,12 @@ private:
 
   /** Build the reduced Sharpness-only inspector for a reference image. */
   void setupReferenceInspector();
+
+  /** Move the owning document's full inspector into a detached ordinary view. */
+  void claimDocumentInspector();
+
+  /** Release the borrowed document inspector before another host takes it. */
+  void releaseDocumentInspector();
 
   /** Load the external reference image without changing the source document. */
   void loadReferenceImage(const QString &fileName);
@@ -136,6 +154,8 @@ private:
   MultiLineTabWidget *m_referenceTabs = nullptr;
   SharpnessPanel *m_sharpnessPanel = nullptr;
   QDockWidget *m_referenceInspectorDock = nullptr;
+  QDockWidget *m_documentInspectorDock = nullptr;
+  QWidget *m_documentInspectorHost = nullptr;
   bool m_workspaceEmbedded = false;
   bool m_slantedEdgeReference = false;
   bool m_referenceLoadPending = false;
