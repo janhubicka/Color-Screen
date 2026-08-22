@@ -7,6 +7,7 @@
 #include <QAction>
 #include <QDir>
 #include <QFile>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QFileOpenEvent>
 #include <QKeySequence>
@@ -144,6 +145,60 @@ ImageViewWindow *ColorScreenApplication::createViewWindow(MainWindow *source,
 
   refreshWindowMenus();
   return view;
+}
+
+/** Create a slanted-edge reference view whose parameters belong to SOURCE. */
+ImageViewWindow *ColorScreenApplication::createSlantedEdgeReference(
+    MainWindow *source, const QString &referenceFile, bool detached) {
+  if (!source || referenceFile.trimmed().isEmpty())
+    return nullptr;
+
+  pruneViewWindows();
+  int viewNumber = 2;
+  for (ImageViewWindow *view : viewWindows()) {
+    if (view->sourceDocument() == source)
+      viewNumber = qMax(viewNumber, view->viewNumber() + 1);
+  }
+
+  auto *view = new ImageViewWindow(
+      source, viewNumber, QFileInfo(referenceFile).absoluteFilePath());
+  view->setAttribute(Qt::WA_DeleteOnClose);
+  m_viewWindows.append(view);
+  connect(view, &QObject::destroyed, this, [this]() {
+    QTimer::singleShot(0, this, [this]() {
+      pruneViewWindows();
+      refreshWindowMenus();
+    });
+  });
+
+  if (detached) {
+    view->setWindowFlags(Qt::Window);
+    view->show();
+    view->raise();
+    view->activateWindow();
+  } else {
+    workspaceWindow()->addView(view);
+  }
+
+  refreshWindowMenus();
+  return view;
+}
+
+/** Ask the user for another scan to use as a slanted-edge MTF reference. */
+ImageViewWindow *ColorScreenApplication::openSlantedEdgeReference(
+    MainWindow *source, QWidget *dialogParent) {
+  if (!source)
+    return nullptr;
+
+  const QString fileName = QFileDialog::getOpenFileName(
+      dialogParent ? dialogParent : source,
+      tr("Open slanted edge reference"), QString(),
+      tr("Images (*.tif *.tiff *.jpg *.jpeg *.jp2 *.j2k *.jpc *.jpf *.jpx "
+         "*.png *.raw *.dng *.iiq *.nef *.cr2 *.eip *.arw *.raf *.arq);;"
+         "All Files (*)"));
+  if (fileName.isEmpty())
+    return nullptr;
+  return createSlantedEdgeReference(source, fileName);
 }
 
 /** Detach VIEW from the primary workspace without recreating it. */

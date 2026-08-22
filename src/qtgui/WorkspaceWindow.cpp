@@ -250,6 +250,11 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
 
   view->hide();
   view->prepareForWorkspaceEmbedding();
+  if (QWidget *inspector = view->workspaceInspectorWidget()) {
+    if (m_inspectorStack->indexOf(inspector) < 0)
+      m_inspectorStack->addWidget(inspector);
+    inspector->hide();
+  }
   view->setWindowFlags(Qt::Widget);
 
   auto *subWindow = new ViewSubWindow(view);
@@ -664,6 +669,7 @@ void WorkspaceWindow::installDocumentChrome(MainWindow *document) {
       m_inspectorStack->addWidget(inspector);
     m_inspectorStack->setCurrentWidget(inspector);
     inspector->show();
+    m_inspectorDock->setWindowTitle(tr("Document Controls"));
     m_inspectorDock->show();
   } else {
     m_inspectorDock->hide();
@@ -755,7 +761,17 @@ void WorkspaceWindow::installViewChrome(ImageViewWindow *view) {
     toolbar->show();
   }
 
-  m_inspectorDock->hide();
+  if (QWidget *inspector = view->workspaceInspectorWidget()) {
+    if (m_inspectorStack->indexOf(inspector) < 0)
+      m_inspectorStack->addWidget(inspector);
+    m_inspectorStack->setCurrentWidget(inspector);
+    inspector->show();
+    m_inspectorDock->setWindowTitle(tr("Sharpness"));
+    m_inspectorDock->show();
+  } else {
+    m_inspectorDock->setWindowTitle(tr("Document Controls"));
+    m_inspectorDock->hide();
+  }
   const QString message = view->statusBar()->currentMessage();
   if (message.isEmpty())
     statusBar()->clearMessage();
@@ -784,6 +800,7 @@ void WorkspaceWindow::releaseViewChrome(ImageViewWindow *view,
   if (m_chromeView == view) {
     statusBar()->clearMessage();
     menuBar()->clear();
+    m_inspectorDock->setWindowTitle(tr("Document Controls"));
     m_chromeView.clear();
   }
 }
@@ -852,6 +869,11 @@ void WorkspaceWindow::takeViewFromWorkspace(ImageViewWindow *view) {
     return;
 
   releaseViewChrome(view, true);
+  if (QWidget *inspector = view->workspaceInspectorWidget()) {
+    m_inspectorStack->removeWidget(inspector);
+    inspector->hide();
+    inspector->setParent(nullptr);
+  }
   view->hide();
   m_mdiArea->removeSubWindow(view);
   m_mdiArea->removeSubWindow(subWindow);
