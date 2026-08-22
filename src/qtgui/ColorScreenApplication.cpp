@@ -1,6 +1,7 @@
 #include "ColorScreenApplication.h"
 
 #include "MainWindow.h"
+#include "ImageViewWindow.h"
 #include "WorkspaceWindow.h"
 
 #include <QAction>
@@ -107,6 +108,46 @@ MainWindow *ColorScreenApplication::createDocumentWindow(
 
   refreshWindowMenus();
   return document;
+}
+
+/** Create an additional display-only view of SOURCE. */
+ImageViewWindow *ColorScreenApplication::createViewWindow(MainWindow *source) {
+  if (!source || !source->sharedImageData())
+    return nullptr;
+
+  pruneViewWindows();
+  int viewNumber = 2;
+  for (ImageViewWindow *view : viewWindows()) {
+    if (view->sourceDocument() == source)
+      viewNumber = qMax(viewNumber, view->viewNumber() + 1);
+  }
+
+  auto *view = new ImageViewWindow(source, viewNumber);
+  view->setAttribute(Qt::WA_DeleteOnClose);
+  m_viewWindows.append(view);
+  connect(view, &QObject::destroyed, this, [this]() {
+    QTimer::singleShot(0, this, [this]() {
+      pruneViewWindows();
+      refreshWindowMenus();
+    });
+  });
+  view->show();
+  view->raise();
+  view->activateWindow();
+  refreshWindowMenus();
+  return view;
+}
+
+/** Return all live secondary views. */
+QList<ImageViewWindow *> ColorScreenApplication::viewWindows() {
+  pruneViewWindows();
+  QList<ImageViewWindow *> views;
+  views.reserve(m_viewWindows.size());
+  for (const QPointer<ImageViewWindow> &view : m_viewWindows) {
+    if (view)
+      views.append(view.data());
+  }
+  return views;
 }
 
 /** Open a list of images, assigning one complete MainWindow to each image. */
@@ -303,6 +344,15 @@ void ColorScreenApplication::populateWindowMenu(QMenu *menu,
     QTimer::singleShot(0, this, [this]() { createDocumentWindow(QString(), true); });
   });
 
+  QAction *newViewAction = menu->addAction(tr("New &View"));
+  newViewAction->setToolTip(
+      tr("Open another view of this image with independent render mode and zoom."));
+  newViewAction->setEnabled(currentWindow && currentWindow->sharedImageData());
+  connect(newViewAction, &QAction::triggered, menu, [this, currentWindow]() {
+    if (currentWindow)
+      createViewWindow(currentWindow);
+  });
+
   QAction *nextAction = menu->addAction(tr("Next Image"));
   nextAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Tab));
   nextAction->setShortcutContext(Qt::WindowShortcut);
@@ -399,6 +449,23 @@ void ColorScreenApplication::populateWindowMenu(QMenu *menu,
       }
     });
   }
+
+  const QList<ImageViewWindow *> views = viewWindows();
+  if (!views.isEmpty()) {
+    menu->addSeparator();
+    for (ImageViewWindow *view : views) {
+      QPointer<ImageViewWindow> guarded(view);
+      QAction *action = menu->addAction(view->windowTitle());
+      connect(action, &QAction::triggered, menu, [guarded]() {
+        if (!guarded)
+          return;
+        if (guarded->isMinimized())
+          guarded->showNormal();
+        guarded->raise();
+        guarded->activateWindow();
+      });
+    }
+  }
 }
 
 /** Activate the next or previous document, whether tabbed or detached. */
@@ -453,6 +520,16 @@ void ColorScreenApplication::pruneDocumentWindows() {
   for (auto it = m_documentWindows.begin(); it != m_documentWindows.end();) {
     if (it->isNull())
       it = m_documentWindows.erase(it);
+    else
+      ++it;
+  }
+}
+
+/** Remove stale secondary-view pointers. */
+void ColorScreenApplication::pruneViewWindows() {
+  for (auto it = m_viewWindows.begin(); it != m_viewWindows.end();) {
+    if (it->isNull())
+      it = m_viewWindows.erase(it);
     else
       ++it;
   }
@@ -536,6 +613,8 @@ MainWindow *ColorScreenApplication::activeDocument() const {
   if (QWidget *active = activeWindow()) {
     if (auto *document = dynamic_cast<MainWindow *>(active))
       return document;
+    if (auto *view = dynamic_cast<ImageViewWindow *>(active))
+      return view->sourceDocument();
     if (m_workspaceWindow && active == m_workspaceWindow)
       return m_workspaceWindow->currentDocument();
   }

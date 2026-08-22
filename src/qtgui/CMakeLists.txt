@@ -40,6 +40,7 @@ set(SOURCES
     main.cpp
     ColorScreenApplication.cpp
     WorkspaceWindow.cpp
+    ImageViewWindow.cpp
     MainWindow.cpp
     ImageWidget.cpp
     NavigationView.cpp
@@ -72,6 +73,7 @@ set(SOURCES
 set(HEADERS
     ColorScreenApplication.h
     WorkspaceWindow.h
+    ImageViewWindow.h
     MainWindow.h
     ImageWidget.h
     Renderer.h

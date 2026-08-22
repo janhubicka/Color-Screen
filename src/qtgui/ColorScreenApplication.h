@@ -7,6 +7,7 @@
 #include <QStringList>
 
 class MainWindow;
+class ImageViewWindow;
 class QEvent;
 class QMenu;
 class WorkspaceWindow;
@@ -28,6 +29,16 @@ public:
       When it is empty, a new unique directory is assigned.  */
   MainWindow *createDocumentWindow(
       const QString &recoveryDirectory = QString(), bool detached = false);
+
+  /** Create a lightweight secondary view of SOURCE.
+
+      The source MainWindow remains the sole editable document owner; the new
+      top-level view shares its image and follows document parameter changes
+      while keeping render mode, zoom, and pan independent. */
+  ImageViewWindow *createViewWindow(MainWindow *source);
+
+  /** Return all live secondary views. */
+  QList<ImageViewWindow *> viewWindows();
 
   /** Open every path in FILENAMES as an independent image document.
 
@@ -92,6 +103,9 @@ private:
   /** Remove deleted QPointer entries from m_documentWindows. */
   void pruneDocumentWindows();
 
+  /** Remove deleted secondary-view pointers. */
+  void pruneViewWindows();
+
   /** Return recovery directories containing usable per-document state. */
   QStringList recoveryDirectories() const;
 
@@ -115,6 +129,7 @@ private:
   MainWindow *activeDocument() const;
 
   QList<QPointer<MainWindow>> m_documentWindows;
+  QList<QPointer<ImageViewWindow>> m_viewWindows;
   QPointer<WorkspaceWindow> m_workspaceWindow;
   bool m_workspaceShutdown = false;
 };
