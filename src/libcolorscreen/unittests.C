@@ -795,8 +795,57 @@ test_finetune_uniform_image_layer ()
         return false;
       }
 
-  finetune_result result
-      = finetune (rparam, geometry, image, locations, nullptr, fparam, nullptr);
+  /* Verify the same locations individually, then exercise the public
+     quality/diversity selection and joint-fit orchestration used by the future
+     GUI workflow.  Individual fits intentionally retain their own possibly
+     ambiguous blur estimates; only the joint result is authoritative.  */
+  std::vector<focus_analysis_area> verified_areas (regions);
+  for (int tileid = 0; tileid < regions; tileid++)
+    {
+      verified_areas[tileid].image_center = locations[tileid];
+      verified_areas[tileid].mean_color = truth[tileid];
+    }
+  std::vector<finetune_result> individual_fits;
+  if (!verify_focus_analysis_areas (rparam, geometry, image, verified_areas,
+                                    fparam, &individual_fits, nullptr)
+      || individual_fits.size () != regions)
+    {
+      fprintf (stderr, "Uniform focus-area verification failed to run\n");
+      return false;
+    }
+  for (int tileid = 0; tileid < regions; tileid++)
+    if (!individual_fits[tileid].success)
+      {
+        fprintf (stderr, "Uniform focus area %d failed verification: %s\n",
+                 tileid, individual_fits[tileid].err.c_str ());
+        return false;
+      }
+  focus_analysis_selection_parameters selection_params;
+  selection_params.max_areas = regions;
+  selection_params.fit_retain_ratio = 1;
+  std::vector<size_t> selected;
+  coord_t selected_condition = 0;
+  if (!select_focus_analysis_areas (verified_areas, individual_fits,
+                                    selection_params, &selected,
+                                    &selected_condition)
+      || selected.size () != regions || !(selected_condition > 0))
+    {
+      fprintf (stderr, "Uniform focus-area subset selection failed\n");
+      return false;
+    }
+
+  const std::vector<size_t> duplicate_selection = { selected[0], selected[0] };
+  if (finetune_focus_analysis_areas (rparam, geometry, image, verified_areas,
+                                     individual_fits, duplicate_selection,
+                                     fparam, nullptr).success)
+    {
+      fprintf (stderr, "Duplicate focus-area selection was accepted\n");
+      return false;
+    }
+
+  finetune_result result = finetune_focus_analysis_areas (
+      rparam, geometry, image, verified_areas, individual_fits, selected,
+      fparam, nullptr);
   if (!result.success)
     {
       fprintf (stderr, "Uniform multi-tile finetune failed: %s\n",

@@ -566,6 +566,23 @@ intensity factorization.  The returned colour-condition value is
 zero for rank-deficient colour sets and one for isotropic three-dimensional
 coverage.
 
+`verify_focus_analysis_areas()` then runs the ordinary one-tile solver at every
+discovered centre and keeps its full `finetune_result`.  When the eventual
+joint model is `finetune_uniform_image_layer`, the single-tile verification
+uses unnormalized least-squares RGB with data collection disabled: for one
+uniform tile its three image-layer intensity factors are algebraically
+indistinguishable from the fitted screen-primary magnitudes, while position,
+fit residual and contrast remain useful qualification signals.  A failed
+individual solve is retained as a failed result rather than aborting the whole
+discovery pass.
+
+`finetune_focus_analysis_areas()` consumes the selected indices and those
+individual results.  It enables the uniform-image-layer factorization for the
+joint solve, reuses each tile's individual phase/legacy-blur result as a start,
+and warm-starts scalar scanner-MTF sigma/focus from the median successful
+individual fit.  The median is only a basin-local starting point; the shared
+joint focus remains a free nonlinear parameter.
+
 ## Result-field contract
 
 For scalar MTF focus, the field belonging to the active model is fitted while

@@ -412,6 +412,36 @@ select_focus_analysis_areas (
     const focus_analysis_selection_parameters &parameters,
     std::vector<size_t> *indices, coord_t *color_condition = nullptr);
 
+/* Run one ordinary single-tile FINETUNE verification at every AREA centre.
+   When FPARAMS selects FINETUNE_UNIFORM_IMAGE_LAYER, verification removes that
+   multi-tile-only flag and uses unnormalized least-squares RGB instead: for one
+   tile the local image-layer intensities are indistinguishable from fitted
+   screen-primary magnitudes, which is sufficient for fit-quality and phase
+   qualification.  FITS is returned in the same order as AREAS.  A solver
+   failure remains a normal FINETUNE_RESULT in FITS; false means invalid input
+   or cancellation.  */
+nodiscard_attr DLL_PUBLIC bool
+verify_focus_analysis_areas (
+    const render_parameters &rparam, const scr_to_img_parameters &param,
+    const image_data &img, const std::vector<focus_analysis_area> &areas,
+    const finetune_parameters &fparams, std::vector<finetune_result> *fits,
+    progress_info *progress = nullptr);
+
+/* Jointly finetune the selected, individually verified AREAS.  INDICES refer
+   to AREAS/FITS and must contain between two and eight unique entries.
+   FINETUNE_UNIFORM_IMAGE_LAYER is enabled for the joint solve and the selected
+   individual results provide per-tile phase/legacy-blur starting values.
+   Scalar scanner-MTF sigma/focus is additionally warm-started from the median
+   successful individual fit.  Return a normal failed FINETUNE_RESULT for
+   invalid inputs or an unsuccessful joint solve.  */
+DLL_PUBLIC finetune_result
+finetune_focus_analysis_areas (
+    const render_parameters &rparam, const scr_to_img_parameters &param,
+    const image_data &img, const std::vector<focus_analysis_area> &areas,
+    const std::vector<finetune_result> &fits,
+    const std::vector<size_t> &indices, const finetune_parameters &fparams,
+    progress_info *progress = nullptr);
+
 /* Match scan tiles to a simulated additive-screen capture.
 
    For normal refinement LOCS contains between one and eight image-pixel

@@ -1024,7 +1024,7 @@ simplex starting point as the final solution.
 
 **Severity:** high focus identifiability
 
-**Status:** partially fixed; library discovery/selection implemented, solver orchestration and Qt remain open
+**Status:** partially fixed; library discovery/verification/joint orchestration implemented, validation and Qt remain open
 
 The original multi-tile experiment used the physically useful factorization
 needed for robust focus analysis: one set of historical screen-primary scanner
@@ -1077,7 +1077,16 @@ second-stage rejection.  On the existing Coolscan Dufay fixture they retain 18
 spatially separated candidates, while the sky crop reaches the 64-candidate cap;
 the full-fixture discovery pass takes about 0.1 s in the local O2 build.
 
-Remaining work is to run/retain the individual `finetune()` results for the
-discovered candidates, add leave-one-area-out and held-out validation around the
-joint fit, and connect the resulting state to the Qt **Find focus analysis
-areas** / **Analyze sharpness in areas** workflow.
+The library workflow now also runs and retains one ordinary single-tile
+`finetune()` result per discovered candidate.  For a future uniform-image-layer
+joint fit, verification uses the equivalent one-tile unnormalized
+least-squares RGB model, where the local image-layer factors can be absorbed
+into the fitted primary magnitudes.  Selected candidates are then passed to a
+joint wrapper that enables `finetune_uniform_image_layer`, reuses their phase
+and legacy-blur starts, and seeds scalar scanner-MTF sigma/focus from the robust
+median of successful individual fits.  Synthetic Paget coverage exercises the
+complete verify/select/joint path and still recovers the known common blur.
+
+Remaining work is leave-one-area-out and held-out validation around the joint
+fit, followed by the Qt **Find focus analysis areas** / **Analyze sharpness in
+areas** workflow and scan overlay.

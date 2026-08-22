@@ -797,6 +797,179 @@ select_focus_analysis_areas (
   return true;
 }
 
+/* Return a copy of FPARAMS suitable for checking one candidate independently.
+   The uniform-image-layer factorization itself requires several tiles.  With
+   one tile its three image-layer intensities can instead be absorbed exactly
+   into the fitted screen-primary magnitudes, so use the corresponding
+   unnormalized least-squares RGB objective for candidate qualification.  */
+static finetune_parameters
+focus_area_individual_parameters (const finetune_parameters &fparams)
+{
+  finetune_parameters ret = fparams;
+  if (ret.flags & finetune_uniform_image_layer)
+    {
+      ret.flags &= ~finetune_uniform_image_layer;
+      ret.flags |= finetune_no_normalize | finetune_no_data_collection;
+    }
+  ret.flags |= finetune_no_progress_report;
+  ret.multitile = 1;
+  ret.simulated_file = nullptr;
+  ret.orig_file = nullptr;
+  ret.sharpened_file = nullptr;
+  ret.diff_file = nullptr;
+  ret.screen_file = nullptr;
+  ret.screen_blur_file = nullptr;
+  ret.emulsion_file = nullptr;
+  ret.merged_file = nullptr;
+  ret.collected_file = nullptr;
+  ret.dot_spread_file = nullptr;
+  return ret;
+}
+
+/* Run an independent solver check at every discovered focus-analysis area.  */
+bool
+verify_focus_analysis_areas (
+    const render_parameters &rparam, const scr_to_img_parameters &param,
+    const image_data &img, const std::vector<focus_analysis_area> &areas,
+    const finetune_parameters &fparams, std::vector<finetune_result> *fits,
+    progress_info *progress)
+{
+  if (!fits || areas.size () > INT_MAX
+      || (fparams.flags & (finetune_coordinates | finetune_guess_coordinates)))
+    return false;
+  finetune_parameters individual = focus_area_individual_parameters (fparams);
+  if (finetune_flag_error (individual.flags))
+    return false;
+  fits->assign (areas.size (), finetune_result ());
+  if (progress)
+    {
+      if (progress->cancel_requested ())
+        return false;
+      progress->set_task ("verifying focus analysis areas", (int)areas.size ());
+    }
+  for (size_t i = 0; i < areas.size (); i++)
+    {
+      const point_t p = areas[i].image_center;
+      if (!my_isfinite (p.x) || !my_isfinite (p.y))
+        {
+          (*fits)[i].err = "invalid focus analysis area centre";
+          if (progress)
+            progress->inc_progress ();
+          continue;
+        }
+      (*fits)[i]
+          = finetune (rparam, param, img, { p }, nullptr, individual, progress);
+      if (progress)
+        {
+          if (progress->cancel_requested ())
+            return false;
+          progress->inc_progress ();
+        }
+    }
+  return true;
+}
+
+/* Return the median of finite nonnegative VALUES, or -1 when none exist.  */
+static coord_t
+focus_area_median (std::vector<coord_t> values)
+{
+  values.erase (std::remove_if (values.begin (), values.end (),
+                                [] (coord_t v)
+                                { return !my_isfinite (v) || v < 0; }),
+                values.end ());
+  if (values.empty ())
+    return -1;
+  const size_t mid = values.size () / 2;
+  std::nth_element (values.begin (), values.begin () + mid, values.end ());
+  coord_t ret = values[mid];
+  if (!(values.size () & 1))
+    {
+      const coord_t lower
+          = *std::max_element (values.begin (), values.begin () + mid);
+      ret = (lower + ret) * (coord_t)0.5;
+    }
+  return ret;
+}
+
+/* Jointly fit a selected set of individually verified focus-analysis areas.  */
+finetune_result
+finetune_focus_analysis_areas (
+    const render_parameters &rparam, const scr_to_img_parameters &param,
+    const image_data &img, const std::vector<focus_analysis_area> &areas,
+    const std::vector<finetune_result> &fits,
+    const std::vector<size_t> &indices, const finetune_parameters &fparams,
+    progress_info *progress)
+{
+  finetune_result failed;
+  if (areas.size () != fits.size () || indices.size () < 2
+      || indices.size () > 8
+      || (fparams.flags & (finetune_coordinates | finetune_guess_coordinates)))
+    {
+      failed.err = "invalid focus analysis area selection";
+      return failed;
+    }
+
+  std::vector<unsigned char> used (areas.size (), 0);
+  std::vector<point_t> locations;
+  std::vector<finetune_result> starts;
+  locations.reserve (indices.size ());
+  starts.reserve (indices.size ());
+  std::vector<coord_t> sigmas, focuses;
+  for (size_t index : indices)
+    {
+      if (index >= areas.size () || used[index] || !fits[index].success
+          || !my_isfinite (areas[index].image_center.x)
+          || !my_isfinite (areas[index].image_center.y))
+        {
+          failed.err = "invalid focus analysis area index";
+          return failed;
+        }
+      used[index] = 1;
+      locations.push_back (areas[index].image_center);
+      starts.push_back (fits[index]);
+      if (fits[index].success)
+        {
+          sigmas.push_back (fits[index].scanner_mtf_sigma);
+          focuses.push_back (rparam.sharpen.scanner_mtf.simulate_diffraction_p ()
+                                 ? fits[index].scanner_mtf_defocus
+                                 : fits[index].scanner_mtf_blur_diameter);
+        }
+    }
+
+  finetune_parameters joint = fparams;
+  joint.flags |= finetune_uniform_image_layer | finetune_no_progress_report;
+  joint.multitile = 1;
+  if (const char *error = finetune_flag_error (joint.flags))
+    {
+      failed.err = error;
+      return failed;
+    }
+
+  /* Individual fits are not authoritative focus measurements, but their robust
+     median is a useful basin-local starting point for the shared nonlinear
+     transfer.  The joint fit remains free to move away from it.  */
+  render_parameters warm = rparam;
+  if (joint.flags & finetune_scanner_mtf_sigma)
+    {
+      const coord_t sigma = focus_area_median (sigmas);
+      if (sigma >= 0)
+        warm.sharpen.scanner_mtf.sigma = sigma;
+    }
+  if (joint.flags & finetune_scanner_mtf_defocus)
+    {
+      const coord_t focus = focus_area_median (focuses);
+      if (focus >= 0)
+        {
+          if (warm.sharpen.scanner_mtf.simulate_diffraction_p ())
+            warm.sharpen.scanner_mtf.defocus = focus;
+          else
+            warm.sharpen.scanner_mtf.blur_diameter = focus;
+        }
+    }
+
+  return finetune (warm, param, img, locations, &starts, joint, progress);
+}
+
 namespace
 {
 struct gsl_work_deleter
