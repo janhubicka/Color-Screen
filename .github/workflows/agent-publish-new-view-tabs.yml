@@ -32,11 +32,11 @@ jobs:
         run: |
           set -euxo pipefail
           cp transport/agent/new-view-tabs.patch.gz.b64 .
-          echo '84c9a87595cedafbbc321b4d7b21d0c15a5c760cf1cfdd449a18940bd71d0597  new-view-tabs.patch.gz.b64' | sha256sum -c -
+          echo 'd9a01f55165c0dff10a949db9da446c46d1ce5d8f2bf427ebbc4cd49fc5d005d  new-view-tabs.patch.gz.b64' | sha256sum -c -
           base64 --decode new-view-tabs.patch.gz.b64 > new-view-tabs.patch.gz
-          echo '32b8508a92a4677263c85cfdaa12083f32fe65136e081100dfd81dadda954249  new-view-tabs.patch.gz' | sha256sum -c -
+          echo '5c7eb63e082b7c4c86a4f506dce69b8c5d24b9c62d35e9b5ef7ca9cc14f17dc1  new-view-tabs.patch.gz' | sha256sum -c -
           gzip -dc new-view-tabs.patch.gz > new-view-tabs.patch
-          echo 'f3a7eacb95da7a5af5ed2275b5de730100bfead355ce269352df81087ad55448  new-view-tabs.patch' | sha256sum -c -
+          echo '056c02c6c06d3da56bcb41bf51442b8e7d12cc921c3bbc7c6b0390fb82856437  new-view-tabs.patch' | sha256sum -c -
 
           cd repo
           test "$(git rev-parse HEAD)" = 9b73fd867b1faf4362cddfb01e7d1b50e183b8b9
@@ -44,10 +44,10 @@ jobs:
           git apply --check ../new-view-tabs.patch
           git apply ../new-view-tabs.patch
           git diff --check
-          test "$(git diff --name-only | sort)" = $'.agents/qtgui.md\nNEWS\nsrc/qtgui/ColorScreenApplication.cpp\nsrc/qtgui/ColorScreenApplication.h\nsrc/qtgui/ImageViewWindow.cpp\nsrc/qtgui/ImageViewWindow.h\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/MainWindow.h\nsrc/qtgui/WorkspaceWindow.cpp\nsrc/qtgui/WorkspaceWindow.h\nsrc/qtgui/main.cpp'
+          test "$(git diff --name-only | sort)" = $'src/qtgui/ColorScreenApplication.cpp\nsrc/qtgui/ColorScreenApplication.h\nsrc/qtgui/ImageViewWindow.cpp\nsrc/qtgui/ImageViewWindow.h\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/MainWindow.h\nsrc/qtgui/WorkspaceWindow.cpp\nsrc/qtgui/WorkspaceWindow.h\nsrc/qtgui/main.cpp'
 
           git config user.name 'OpenAI Codex'
           git config user.email 'noreply@openai.com'
-          git add -- .agents/qtgui.md NEWS src/qtgui/ColorScreenApplication.cpp src/qtgui/ColorScreenApplication.h src/qtgui/ImageViewWindow.cpp src/qtgui/ImageViewWindow.h src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h src/qtgui/WorkspaceWindow.cpp src/qtgui/WorkspaceWindow.h src/qtgui/main.cpp
+          git add -- src/qtgui/ColorScreenApplication.cpp src/qtgui/ColorScreenApplication.h src/qtgui/ImageViewWindow.cpp src/qtgui/ImageViewWindow.h src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h src/qtgui/WorkspaceWindow.cpp src/qtgui/WorkspaceWindow.h src/qtgui/main.cpp
           git commit -m 'qtgui: integrate secondary views into the MDI workspace' -m 'Make Window > New View behave like a standard image-editor view rather than always creating a separate top-level window. Secondary ImageViewWindow objects are hosted by WorkspaceWindow/QMdiArea by default, participate in tabbed, tiled, and cascaded layouts, and can still be detached or reattached without recreation.\n\nUse the same bundled symbolic pan, zoom, rotation, and mirror icons as the main image toolbar. Keep render mode, Color/IR choice, zoom, and pan view-local, while routing rotation and mirroring through the owning MainWindow so those scan transforms remain shared document state and refresh every view of the image.\n\nGeneralize the Window menu and MDI tab handling so secondary views can be activated, detached, attached, tiled, cascaded, and listed alongside documents without becoming recovery/session documents. Extend the New View smoke check to require a workspace tab and non-null standard toolbar icons.\n\nValidation: changed Qt translation units and regenerated MOC units compile with Qt 6 using -O2 -g -Wall -Wextra; only pre-existing warnings are emitted; git diff --check is clean.'
           git push --force origin HEAD:refs/heads/agent/qtgui-new-view-tabs
