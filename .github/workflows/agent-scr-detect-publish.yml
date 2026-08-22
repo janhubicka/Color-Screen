@@ -1,0 +1,48 @@
+name: Agent screen-detection publication
+
+on:
+  push:
+    branches:
+      - agent/scr-detect-publish-20260822
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/scr-detect-publish-20260822
+          path: staging
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/scr-detect-prediction-rounding
+          fetch-depth: 0
+          path: target
+      - name: Apply inspected detector patch
+        shell: bash
+        run: |
+          cd target
+          git apply --check ../staging/.agent-publish/scr-detect-rounding.patch
+          git apply ../staging/.agent-publish/scr-detect-rounding.patch
+          cp ../staging/.agent-publish/benchmark-scr-detect.py scripts/benchmark-scr-detect.py
+          chmod +x scripts/benchmark-scr-detect.py
+          python3 -m py_compile scripts/benchmark-scr-detect.py
+          git diff --check
+          git diff --stat
+      - name: Publish temporary commit
+        shell: bash
+        run: |
+          cd target
+          git config user.name "OpenAI"
+          git config user.email "noreply@openai.com"
+          git add src/libcolorscreen/scr-detect-geometry.C \
+                  doc/scr-detect-geometry-tracking.md \
+                  scripts/benchmark-scr-detect.py
+          git commit -m "agent: stage screen prediction rounding"
+          git push origin HEAD:agent/scr-detect-prediction-rounding
