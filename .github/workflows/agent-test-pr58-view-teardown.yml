@@ -1,0 +1,42 @@
+name: Agent test PR58 view teardown fix
+
+on:
+  pull_request:
+    branches:
+      - agent/pr58-view-teardown-publish-base-20260822
+    paths:
+      - agent/pr58-view-teardown-test.trigger
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out exact PR 58 head
+        uses: actions/checkout@v4
+        with:
+          ref: 75883a2f98c513a8088f1a92736db65d0ee260e0
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev liblcms2-dev libgtk2.0-dev libfftw3-dev qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev libexiv2-dev build-essential libopenjp2-7-dev libpng-dev
+
+      - name: Configure and build Qt GUI
+        run: |
+          export PATH=/usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:$PATH
+          CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure --enable-qtgui
+          make -j$(nproc)
+
+      - name: Run combined multiview smoke test
+        run: |
+          QT_QPA_PLATFORM=offscreen ./src/qtgui/colorscreen-qt \
+            --smoke-test 10000 --smoke-test-expect-windows 2 \
+            --smoke-test-tile-activation-stable --smoke-test-menu-order \
+            --smoke-test-new-view --smoke-test-slanted-reference \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
