@@ -108,6 +108,20 @@ public:
   /** Return the absolute path of the image assigned to this document. */
   QString currentImageFile() const { return m_currentImageFile; }
 
+  /** Share the loaded scan with additional views of this document. */
+  std::shared_ptr<colorscreen::image_data> sharedImageData() const {
+    return m_scan;
+  }
+
+  /** Return a copy of the shared document parameters for a secondary view. */
+  ParameterState documentStateSnapshot() const;
+
+  /** Return this view's render-mode settings as the initial state for a new
+      secondary view. */
+  colorscreen::render_type_parameters viewRenderTypeParameters() const {
+    return m_renderTypeParams;
+  }
+
   /** Restore this document from its per-window recovery directory. */
   bool restoreRecoveryState();
 
@@ -168,6 +182,10 @@ public:
   };
 
 signals:
+  /** Emitted after the loaded image or shared document parameters change.
+      Secondary views refresh from this signal while keeping render mode, zoom,
+      and pan view-local. */
+  void documentStateChanged();
   /** Emitted when this document gains or loses dedicated progress rows. */
   void userVisibleProgressVisibilityChanged(bool visible);
 

@@ -1,5 +1,6 @@
 #include "ColorScreenApplication.h"
 #include "MainWindow.h"
+#include "ImageViewWindow.h"
 #include "WorkspaceWindow.h"
 #include "progress-info.h"
 
@@ -126,6 +127,11 @@ int main(int argc, char *argv[]) {
       "smoke-test-user-visible-progress",
       "Exercise dedicated Cancel/Stop rows for long-running tasks");
   parser.addOption(userVisibleProgressOption);
+
+  QCommandLineOption newViewOption(
+      "smoke-test-new-view",
+      "Create a secondary view and verify shared image and independent render mode");
+  parser.addOption(newViewOption);
 
   QCommandLineOption timeReportOption(
       "time-report", "Enable internal time reporting of tasks");
@@ -628,6 +634,52 @@ int main(int argc, char *argv[]) {
 
       stopDocument->removeProgress(stopProgress);
       cancelDocument->removeProgress(cancelProgress);
+    });
+  }
+
+  if (parser.isSet(newViewOption)) {
+    QTimer::singleShot(300, &app, [&app]() {
+      const QList<MainWindow *> documents = app.documentWindows();
+      if (documents.isEmpty() || !documents.front()->sharedImageData()) {
+        qCritical() << "New View smoke test requires a loaded document";
+        app.exit(14);
+        return;
+      }
+
+      MainWindow *source = documents.front();
+      const auto sourceScan = source->sharedImageData();
+      const auto sourceType = source->viewRenderTypeParameters().type;
+      ImageViewWindow *view = app.createViewWindow(source);
+      if (!view || view->sourceDocument() != source ||
+          view->sharedImageData() != sourceScan ||
+          app.documentWindows().size() != documents.size()) {
+        qCritical() << "New View did not share the source document image";
+        app.exit(14);
+        return;
+      }
+
+      colorscreen::render_type_t alternate = sourceType;
+      const colorscreen::render_type_t candidates[] = {
+          colorscreen::render_type_original,
+          colorscreen::render_type_interpolated,
+          colorscreen::render_type_realistic,
+          colorscreen::render_type_screen};
+      bool changed = false;
+      for (colorscreen::render_type_t candidate : candidates) {
+        if (candidate != sourceType && view->setRenderType(candidate)) {
+          alternate = candidate;
+          changed = true;
+          break;
+        }
+      }
+      if (!changed || view->renderType() != alternate ||
+          source->viewRenderTypeParameters().type != sourceType) {
+        qCritical() << "New View render mode is not independent";
+        app.exit(14);
+        return;
+      }
+
+      view->close();
     });
   }
 

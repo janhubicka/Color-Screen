@@ -978,6 +978,8 @@ void MainWindow::setupUi() {
           &MainWindow::onPointManipulationStarted);
   connect(m_imageWidget, &ImageWidget::pointsChanged, this,
           &MainWindow::maybeTriggerAutoSolver);
+  connect(m_imageWidget, &ImageWidget::pointsChanged, this,
+          [this]() { emit documentStateChanged(); });
 
   // Nonlinear corrections checkbox
   m_geometryPanel->setNonlinearChecked(m_scrToImgParams.mesh_trans != nullptr);
@@ -2947,6 +2949,13 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
     if (AdaptiveSharpeningChart *chart = m_sharpnessPanel->getAdaptiveChart())
       chart->setCorrection(state.rparams.scanner_blur_correction);
   }
+
+  emit documentStateChanged();
+}
+
+/** Return a copy of the shared document parameters for secondary views. */
+ParameterState MainWindow::documentStateSnapshot() const {
+  return getCurrentState();
 }
 
 /** Create a snapshot of the current application parameters.
