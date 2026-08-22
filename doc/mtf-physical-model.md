@@ -35,6 +35,11 @@ Keeping these modes separate is important. A fitted blur-disk diameter must not
 silently replace known diffraction physics, and diffraction must not be applied
 a second time to a measured curve that already includes it.
 
+Edge localization and ROI qualification are documented separately in
+[`mtf-slanted-edge-robustness.md`](mtf-slanted-edge-robustness.md). That note
+explains why Color-Screen must support both essentially pixel-sharp and strongly
+defocused archival scans without accepting unrelated texture or multiple edges.
+
 ## 1. Frequency, planes, and units
 
 All public scalar frequencies are in **cycles per output image pixel**. In the

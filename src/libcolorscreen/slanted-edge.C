@@ -29,6 +29,16 @@ constexpr int max_slanted_edge_bins = 8 * 1024 * 1024;
    centroid.  */
 constexpr int edge_centroid_radius = 14;
 constexpr int secondary_peak_guard = 12;
+/* Scale-adaptive geometry is a fallback for edges rejected by the established
+   compact path.  Derive every widened support from the measured gradient FWHM
+   and cap pathological estimates before they can hide unrelated structure.  */
+constexpr int max_adaptive_edge_centroid_radius = 96;
+constexpr double max_adaptive_edge_width_fraction = 0.35;
+constexpr double adaptive_centroid_fwhm_factor = 1.5;
+constexpr double adaptive_secondary_guard_fwhm_factor = 0.5;
+constexpr int adaptive_secondary_guard_padding = 2;
+constexpr double adaptive_peak_offset_fwhm_factor = 0.10;
+constexpr double adaptive_primary_lsf_fwhm_factor = 1.5;
 
 /* These qualification limits deliberately favor rejecting a questionable ROI
    over manufacturing a plausible-looking curve from texture, multiple edges,
@@ -71,6 +81,8 @@ struct edge_line_candidate
   double fit_p95 = 0;
   double angle_degrees = 0;
   int qualified_samples = 0;
+  bool adaptive_scale = false;
+  double gradient_fwhm = 0;
 };
 
 /* Return the reciprocal of sin (X) / X without losing accuracy near zero.  */
@@ -374,13 +386,88 @@ edge_sample_coverage_p (const std::vector<edge_sample> &samples,
   return true;
 }
 
-/* Detect a mostly vertical or mostly horizontal straight edge in PIXELS.
-   WIDTH and HEIGHT describe the local ROI buffer.  VERTICAL requests an edge
-   represented by x = slope*y + intercept; otherwise the representation is
-   y = slope*x + intercept.  */
+/* Estimate the full width at half maximum of the dominant gradient lobe in
+   PIXELS for one edge orientation.  A short binomial low-pass suppresses
+   pixel-phase and noise spikes before the width is measured.  Return zero when
+   no usable scan-line gradients are available.  */
+static double
+estimate_edge_gradient_fwhm (const std::vector<double> &pixels, int width,
+                             int height, bool vertical)
+{
+  const int normal_size = vertical ? width : height;
+  const int line_count = vertical ? height : width;
+  if (normal_size < 7 || line_count < 1)
+    return 0;
+
+  auto pixel = [&] (int normal, int line)
+    {
+      return vertical ? pixels[(size_t)line * width + normal]
+                      : pixels[(size_t)normal * width + line];
+    };
+
+  static constexpr int lowpass_weights[5] = { 1, 4, 6, 4, 1 };
+  std::vector<double> gradient (normal_size - 2);
+  std::vector<double> filtered (normal_size - 2);
+  std::vector<double> widths;
+  widths.reserve (line_count);
+
+  for (int line = 0; line < line_count; line++)
+    {
+      for (int normal = 1; normal < normal_size - 1; normal++)
+        gradient[normal - 1]
+            = pixel (normal + 1, line) - pixel (normal - 1, line);
+
+      for (int i = 0; i < (int)gradient.size (); i++)
+        {
+          /* Binomial 1,4,6,4,1 smoothing, with endpoint replication.  This is
+             used only to estimate transition scale; the eventual centroid and
+             every qualification statistic still use the original samples.  */
+          double sum = 0;
+          for (int k = -2; k <= 2; k++)
+            {
+              int j = std::clamp (i + k, 0, (int)gradient.size () - 1);
+              sum += lowpass_weights[k + 2] * gradient[j];
+            }
+          filtered[i] = sum / 16.0;
+        }
+
+      int peak = 0;
+      double peak_strength = 0;
+      for (int i = 0; i < (int)filtered.size (); i++)
+        if (std::abs (filtered[i]) > peak_strength)
+          {
+            peak_strength = std::abs (filtered[i]);
+            peak = i;
+          }
+      if (!my_isfinite (peak_strength) || peak_strength <= 1.0e-12)
+        continue;
+
+      const bool positive = filtered[peak] > 0;
+      const double half_strength = peak_strength * 0.5;
+      int first = peak;
+      int last = peak;
+      while (first > 0
+             && ((filtered[first - 1] > 0) == positive)
+             && std::abs (filtered[first - 1]) >= half_strength)
+        first--;
+      while (last + 1 < (int)filtered.size ()
+             && ((filtered[last + 1] > 0) == positive)
+             && std::abs (filtered[last + 1]) >= half_strength)
+        last++;
+      widths.push_back (last - first + 1);
+    }
+
+  return median_value (widths);
+}
+
+/* Detect a mostly vertical or mostly horizontal straight edge in PIXELS using
+   CENTROID_RADIUS for dominant-polarity centroid support and SECONDARY_GUARD
+   for excluding the principal gradient lobe from the competing-edge search.
+   WIDTH and HEIGHT describe the local ROI buffer.  */
 static edge_line_candidate
-detect_edge_line (const std::vector<double> &pixels, int width, int height,
-                  bool vertical)
+detect_edge_line_with_support (const std::vector<double> &pixels, int width,
+                               int height, bool vertical, int centroid_radius,
+                               int secondary_guard)
 {
   edge_line_candidate result;
   result.vertical = vertical;
@@ -422,15 +509,15 @@ detect_edge_line (const std::vector<double> &pixels, int width, int height,
       int maximum_position = maximum_index + 1;
       double secondary_gradient = 0;
       for (int normal = 1; normal < normal_size - 1; normal++)
-        if (std::abs (normal - maximum_position) > secondary_peak_guard)
+        if (std::abs (normal - maximum_position) > secondary_guard)
           secondary_gradient
               = std::max (secondary_gradient,
                           std::abs (gradient[normal - 1]));
 
-      int first = std::max (1, maximum_position - edge_centroid_radius);
+      int first = std::max (1, maximum_position - centroid_radius);
       int last
           = std::min (normal_size - 2,
-                      maximum_position + edge_centroid_radius);
+                      maximum_position + centroid_radius);
       double local_absolute_sum = 0;
       double local_signed_sum = 0;
       double centroid_weight_sum = 0;
@@ -662,6 +749,59 @@ detect_edge_line (const std::vector<double> &pixels, int width, int height,
   result.fit_p95 = fit_p95;
   result.angle_degrees = angle;
   return result;
+}
+
+/* Detect one edge orientation.  Preserve the established compact detector for
+   every ROI it already accepts.  If it rejects the geometry, estimate the
+   transition width and retry only when that width calls for a larger principal
+   lobe.  This keeps sharp-edge behavior unchanged while preventing a single
+   very defocused edge from being mistaken for several competing edges merely
+   because its gradient remains strong outside the fixed guard.  */
+static edge_line_candidate
+detect_edge_line (const std::vector<double> &pixels, int width, int height,
+                  bool vertical)
+{
+  edge_line_candidate compact
+      = detect_edge_line_with_support (pixels, width, height, vertical,
+                                       edge_centroid_radius,
+                                       secondary_peak_guard);
+  if (compact.valid)
+    return compact;
+
+  const double fwhm
+      = estimate_edge_gradient_fwhm (pixels, width, height, vertical);
+  const int normal_size = vertical ? width : height;
+  if (!my_isfinite (fwhm) || fwhm <= 0
+      || fwhm > max_adaptive_edge_width_fraction * normal_size)
+    return compact;
+
+  const int maximum_radius
+      = std::max (edge_centroid_radius,
+                  std::min (max_adaptive_edge_centroid_radius,
+                            std::max (1, (normal_size - 4) / 2)));
+  const int centroid_radius
+      = std::clamp (
+          (int)std::ceil (adaptive_centroid_fwhm_factor * fwhm),
+          edge_centroid_radius, maximum_radius);
+  const int secondary_guard
+      = std::clamp (
+          (int)std::ceil (adaptive_secondary_guard_fwhm_factor * fwhm)
+              + adaptive_secondary_guard_padding,
+          secondary_peak_guard, maximum_radius);
+
+  if (centroid_radius == edge_centroid_radius
+      && secondary_guard == secondary_peak_guard)
+    return compact;
+
+  edge_line_candidate adaptive
+      = detect_edge_line_with_support (pixels, width, height, vertical,
+                                       centroid_radius, secondary_guard);
+  adaptive.adaptive_scale = true;
+  adaptive.gradient_fwhm = fwhm;
+  if (adaptive.valid
+      || adaptive.qualified_samples > compact.qualified_samples)
+    return adaptive;
+  return compact;
 }
 
 /* Return a box-filtered copy of INPUT using an edge-replicated WINDOW-sample
@@ -1144,16 +1284,28 @@ slanted_edge_mtf (const render_parameters &rparam, const image_data &img,
       = qualified_esf[num_bins - 1] - qualified_esf[num_bins - 2];
 
   /* The geometric line fit already locates the intended edge at signed
-     distance zero.  Search the validation LSF only in a small neighborhood
-     of that position.  A distant dust mark, illumination boundary, or noisy
-     ROI endpoint must not replace the fitted edge merely because its local
-     derivative happens to be larger.  PEAK_IDX is subsequently used only to
-     center the LSF window and to measure how much derivative energy belongs
-     to this transition.  */
+     distance zero.  Search the validation LSF only near that position.  A
+     distant dust mark, illumination boundary, or noisy ROI endpoint must not
+     replace the fitted edge merely because its local derivative is larger.
+
+     For a broad transition the LSF maximum is intrinsically flat: binning and
+     phase noise can move the highest sampled bin by more than the sharp-edge
+     1.5-pixel tolerance even when the derivative centroid is stable.  Scale
+     that tolerance only for a localized broad lobe, and keep the historical
+     value for sharp edges and illumination ramps.  */
+  const double edge_gradient_fwhm
+      = edge.adaptive_scale ? edge.gradient_fwhm : 0;
+  double peak_offset_limit = max_lsf_peak_offset;
+  if (edge.adaptive_scale && my_isfinite (edge_gradient_fwhm)
+      && edge_gradient_fwhm > 0)
+    peak_offset_limit
+        = std::max (peak_offset_limit,
+                    adaptive_peak_offset_fwhm_factor * edge_gradient_fwhm);
+
   const int expected_peak_idx
       = (int)std::llround (-min_d * oversampling);
   const int peak_search_radius
-      = std::max (1, (int)std::ceil (max_lsf_peak_offset * oversampling));
+      = std::max (1, (int)std::ceil (peak_offset_limit * oversampling));
   const int peak_search_begin
       = std::max (0, expected_peak_idx - peak_search_radius);
   const int peak_search_end
@@ -1172,20 +1324,57 @@ slanted_edge_mtf (const render_parameters &rparam, const image_data &img,
           peak_idx = bin;
         }
     }
-  int primary_radius = 6 * oversampling;
-  double primary_lsf_energy = 0;
-  for (int bin = std::max (0, peak_idx - primary_radius);
-       bin <= std::min (num_bins - 1, peak_idx + primary_radius); bin++)
-    primary_lsf_energy += std::abs (qualified_lsf[bin]);
-  double primary_fraction
-      = primary_lsf_energy / std::max (total_lsf_energy, 1.0e-300);
+  /* A six-pixel primary LSF window is a useful rejection guard for sharp
+     edges, but it must not define the maximum measurable blur.  The adaptive
+     geometry path already carries its measured lobe width.  A moderately broad
+     edge can still pass compact geometry and fail only this energy check, so
+     retry the energy window (and only the energy window) with a localized FWHM
+     estimate if the historical six-pixel test fails.  This leaves geometry,
+     peak selection, and the measured curve unchanged for compact-valid edges.  */
+  int primary_radius_pixels = 6;
+  if (edge.adaptive_scale && my_isfinite (edge_gradient_fwhm)
+      && edge_gradient_fwhm > 0)
+    primary_radius_pixels
+        = std::max (primary_radius_pixels,
+                    (int)std::ceil (adaptive_primary_lsf_fwhm_factor
+                                    * edge_gradient_fwhm));
+
+  auto primary_lsf_fraction = [&] (int radius_pixels)
+    {
+      const int radius = radius_pixels * oversampling;
+      double energy = 0;
+      for (int bin = std::max (0, peak_idx - radius);
+           bin <= std::min (num_bins - 1, peak_idx + radius); bin++)
+        energy += std::abs (qualified_lsf[bin]);
+      return energy / std::max (total_lsf_energy, 1.0e-300);
+    };
+
+  double primary_fraction = primary_lsf_fraction (primary_radius_pixels);
+  if (!edge.adaptive_scale
+      && primary_fraction < min_primary_lsf_fraction)
+    {
+      const double validation_fwhm
+          = estimate_edge_gradient_fwhm (pixels, roi.width, roi.height,
+                                         edge.vertical);
+      if (my_isfinite (validation_fwhm) && validation_fwhm > 0
+          && validation_fwhm
+                 <= max_adaptive_edge_width_fraction * normal_size)
+        {
+          const int broad_radius_pixels
+              = std::max (primary_radius_pixels,
+                          (int)std::ceil (adaptive_primary_lsf_fwhm_factor
+                                          * validation_fwhm));
+          if (broad_radius_pixels > primary_radius_pixels)
+            primary_fraction = primary_lsf_fraction (broad_radius_pixels);
+        }
+    }
   double peak_offset = min_d + (double)peak_idx / oversampling;
 
   if (!my_isfinite (monotonicity) || !my_isfinite (primary_fraction)
       || !my_isfinite (peak_offset)
       || monotonicity < min_esf_monotonicity
       || primary_fraction < min_primary_lsf_fraction
-      || std::abs (peak_offset) > max_lsf_peak_offset)
+      || std::abs (peak_offset) > peak_offset_limit)
     {
       set_failure (
           &res, slanted_edge_failure_unstable_esf, progress,

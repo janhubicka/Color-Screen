@@ -200,6 +200,11 @@ requested native channels must pass edge qualification before any of their
 measurements are appended, so a failed channel cannot leave a partial RGB
 capture group in the scanner-MTF state.
 
+The sharp-to-defocused edge-localization policy, external comparisons with MTF
+Mapper, Imatest, SFRMAT-style implementations and FidMTF, and the fail-closed
+regression strategy are documented in
+[`mtf-slanted-edge-robustness.md`](mtf-slanted-edge-robustness.md).
+
 ## 6. MTF fitting dialog
 
 **Fit measured MTF model** opens the explicit optimizer dialog. It provides:

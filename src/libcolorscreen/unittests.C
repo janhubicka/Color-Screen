@@ -5979,6 +5979,100 @@ test_slanted_edge_mtf ()
 	  return false;
 	}
     }
+
+  /* The edge locator must cover the practical blur range without perturbing
+     the established sharp path.  These Gaussian ESFs span a nearly sharp
+     transition through severe defocus whose derivative remains broad for many
+     pixels.  The widest case is deliberately broader than the fixed
+     secondary-peak guard: it exercises the scale-adaptive fallback rather
+     than merely increasing a magic aperture constant.  */
+  {
+    constexpr int width = 256;
+    constexpr int height = 192;
+    static constexpr double blur_sigmas[]
+        = { 0.35, 1.0, 4.0, 8.0, 12.0, 16.0, 24.0 };
+    double previous_mtf50 = 1.0;
+
+    auto measurement_mtf50 = [] (const mtf_measurement &measurement)
+    {
+      for (size_t i = 1; i < measurement.size (); i++)
+        if (measurement.get_contrast (i) <= 50
+            && measurement.get_contrast (i - 1) > 50)
+          {
+            const double c0 = measurement.get_contrast (i - 1);
+            const double c1 = measurement.get_contrast (i);
+            const double f0 = measurement.get_freq (i - 1);
+            const double f1 = measurement.get_freq (i);
+            const double fraction = (50 - c0) / (c1 - c0);
+            return f0 + fraction * (f1 - f0);
+          }
+      return -1.0;
+    };
+
+    for (double sigma : blur_sigmas)
+      {
+        image_data image;
+        if (!image.set_dimensions (width, height, true, true))
+          return false;
+        image.maxval = 65535;
+        const double angle = 5.0 * M_PI / 180.0;
+        const double cos_angle = std::cos (angle);
+        const double sin_angle = std::sin (angle);
+        for (int y = 0; y < height; y++)
+          for (int x = 0; x < width; x++)
+            {
+              const double distance
+                  = (x - width / 2.0) * cos_angle
+                    + (y - height / 2.0) * sin_angle;
+              const double esf
+                  = 0.5 * (1.0 + std::erf (distance / (M_SQRT2 * sigma)));
+              const uint16_t value
+                  = (uint16_t)std::lround (10000 + 40000 * esf);
+              image.put_pixel (x, y, value);
+              image.put_rgb_pixel (x, y, { value, value, value });
+            }
+
+        render_parameters parameters;
+        parameters.gamma = 1.0;
+        slanted_edge_parameters edge_parameters;
+        edge_parameters.wavelength = 750;
+        edge_parameters.channel = 3;
+        edge_parameters.name = "Gaussian blur-range edge";
+        const slanted_edge_results result
+            = slanted_edge_mtf (parameters, image, image.get_area (),
+                                edge_parameters, nullptr);
+        if (!result.success)
+          {
+            fprintf (stderr,
+                     "Gaussian slanted edge sigma %.3g was rejected: %s\n",
+                     sigma, result.error.c_str ());
+            return false;
+          }
+        if (result.edge_angle < 4.5 || result.edge_angle > 5.5
+            || result.edge_fit_rms > 0.50)
+          {
+            fprintf (stderr,
+                     "Gaussian slanted edge sigma %.3g has unstable geometry: "
+                     "angle %.6g RMS %.6g\n",
+                     sigma, result.edge_angle, result.edge_fit_rms);
+            return false;
+          }
+
+        if (sigma >= 1.0)
+          {
+            const double mtf50 = measurement_mtf50 (result.measurement);
+            if (!(mtf50 > 0 && mtf50 < previous_mtf50))
+              {
+                fprintf (stderr,
+                         "Gaussian slanted edge sigma %.3g has invalid MTF50 "
+                         "%.9g after %.9g\n",
+                         sigma, mtf50, previous_mtf50);
+                return false;
+              }
+            previous_mtf50 = mtf50;
+          }
+      }
+  }
     
   /* Invalid ROIs must be rejected rather than converted into plausible but
      unrelated MTF curves.  DESCRIPTION identifies the adversarial geometry
@@ -6044,6 +6138,21 @@ test_slanted_edge_mtf ()
               double first_edge = 55.0 + slope * y;
               double second_edge = 120.0 + slope * y;
               return x >= first_edge && x < second_edge ? 50000 : 10000;
+            })
+      || !expect_rejected (
+          "two broad defocused parallel transitions",
+          [] (int x, int y) -> uint16_t
+            {
+              constexpr double sigma = 16.0;
+              double slope = std::tan (5.0 * M_PI / 180.0);
+              double first_edge = 55.0 + slope * y;
+              double second_edge = 125.0 + slope * y;
+              double first
+                  = std::erf ((x - first_edge) / (M_SQRT2 * sigma));
+              double second
+                  = std::erf ((x - second_edge) / (M_SQRT2 * sigma));
+              double bright_band = 0.5 * (first - second);
+              return (uint16_t)std::lround (10000 + 40000 * bright_band);
             })
       || !expect_rejected (
           "curved transition that cannot be represented by one line",
