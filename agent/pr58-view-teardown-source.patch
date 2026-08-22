@@ -1,0 +1,207 @@
+diff --git a/src/qtgui/ColorScreenApplication.cpp b/src/qtgui/ColorScreenApplication.cpp
+index 89c711e6..53fadaff 100644
+--- a/src/qtgui/ColorScreenApplication.cpp
++++ b/src/qtgui/ColorScreenApplication.cpp
+@@ -406,6 +406,13 @@ void ColorScreenApplication::prepareDocumentForClose(MainWindow *document) {
+   m_workspaceWindow->prepareDocumentForClose(document);
+ }
+ 
++/** Return shared workspace chrome before an embedded secondary view closes. */
++void ColorScreenApplication::prepareViewForClose(ImageViewWindow *view) {
++  if (!view || !m_workspaceWindow || !m_workspaceWindow->containsView(view))
++    return;
++  m_workspaceWindow->prepareViewForClose(view);
++}
++
+ /** Return the number of attached document tabs. */
+ int ColorScreenApplication::tabCount() const {
+   return m_workspaceWindow ? m_workspaceWindow->tabCount() : 0;
+diff --git a/src/qtgui/ColorScreenApplication.h b/src/qtgui/ColorScreenApplication.h
+index 28dcfc55..e39b0f57 100644
+--- a/src/qtgui/ColorScreenApplication.h
++++ b/src/qtgui/ColorScreenApplication.h
+@@ -103,6 +103,9 @@ public:
+   /** Return workspace-owned UI to DOCUMENT before its close event finishes. */
+   void prepareDocumentForClose(MainWindow *document);
+ 
++  /** Return workspace-owned chrome to VIEW before WA_DeleteOnClose destroys it. */
++  void prepareViewForClose(ImageViewWindow *view);
++
+   /** Return the number of documents currently attached as tabs. */
+   int tabCount() const;
+ 
+diff --git a/src/qtgui/ImageViewWindow.cpp b/src/qtgui/ImageViewWindow.cpp
+index 79d73f36..b4717453 100644
+--- a/src/qtgui/ImageViewWindow.cpp
++++ b/src/qtgui/ImageViewWindow.cpp
+@@ -12,6 +12,7 @@
+ #include <QActionGroup>
+ #include <QApplication>
+ #include <QCheckBox>
++#include <QCloseEvent>
+ #include <QComboBox>
+ #include <QDockWidget>
+ #include <QFileInfo>
+@@ -89,6 +90,30 @@ ImageViewWindow::ImageViewWindow(MainWindow *document, int viewNumber,
+   loadReferenceImage(m_referenceFile);
+ }
+ 
++
++/** Destroy toolbar chrome before QMainWindow begins base-class teardown.
++
++    Secondary-view toolbars move between two live QMainWindow layouts while a
++    tab is active.  Deleting the toolbar here ensures Qt disconnects its
++    QMainWindow icon/tool-button-style hooks while the current owner is still a
++    valid QMainWindow, rather than later from QWidget base destruction. */
++ImageViewWindow::~ImageViewWindow() {
++  if (!m_toolbar)
++    return;
++  if (auto *owner = qobject_cast<QMainWindow *>(m_toolbar->parentWidget()))
++    owner->removeToolBar(m_toolbar);
++  delete m_toolbar;
++  m_toolbar = nullptr;
++}
++
++/** Return an embedded view to ordinary QMainWindow ownership before closing. */
++void ImageViewWindow::closeEvent(QCloseEvent *event) {
++  if (auto *application =
++          dynamic_cast<ColorScreenApplication *>(QApplication::instance()))
++    application->prepareViewForClose(this);
++  QMainWindow::closeEvent(event);
++}
++
+ /** Return the document whose state this secondary view follows. */
+ MainWindow *ImageViewWindow::sourceDocument() const { return m_document.data(); }
+ 
+diff --git a/src/qtgui/ImageViewWindow.h b/src/qtgui/ImageViewWindow.h
+index 8b281e99..74335f7f 100644
+--- a/src/qtgui/ImageViewWindow.h
++++ b/src/qtgui/ImageViewWindow.h
+@@ -19,6 +19,7 @@ class SharpnessPanel;
+ class QAction;
+ class QCheckBox;
+ class QComboBox;
++class QCloseEvent;
+ class QDockWidget;
+ class QToolBar;
+ 
+@@ -42,6 +43,9 @@ public:
+   ImageViewWindow(MainWindow *document, int viewNumber,
+                   const QString &referenceFile, QWidget *parent = nullptr);
+ 
++  /** Destroy view-owned chrome while its QMainWindow is still fully alive. */
++  ~ImageViewWindow() override;
++
+   /** Return the document whose image and parameters this view follows. */
+   MainWindow *sourceDocument() const;
+ 
+@@ -86,6 +90,10 @@ public:
+       setting.  Normal secondary views ignore this request. */
+   void reloadReferenceImage();
+ 
++protected:
++  /** Return workspace-owned chrome before WA_DeleteOnClose destroys this view. */
++  void closeEvent(QCloseEvent *event) override;
++
+ private slots:
+   /** Refresh shared image/parameter snapshots after the document changes. */
+   void refreshFromDocument();
+diff --git a/src/qtgui/MainWindow.cpp b/src/qtgui/MainWindow.cpp
+index 447922cd..99801f83 100644
+--- a/src/qtgui/MainWindow.cpp
++++ b/src/qtgui/MainWindow.cpp
+@@ -124,6 +124,7 @@ private:
+ Q_DECLARE_METATYPE(MainWindow::SolverRequestData)
+ Q_DECLARE_METATYPE(MainWindow::ColorOptimizerRequestData)
+ Q_DECLARE_METATYPE(colorscreen::render_parameters)
++Q_DECLARE_METATYPE(colorscreen::render_type_parameters)
+ Q_DECLARE_METATYPE(colorscreen::scr_detect_parameters)
+ Q_DECLARE_METATYPE(colorscreen::scr_to_img_parameters)
+ Q_DECLARE_METATYPE(std::vector<colorscreen::point_t>)
+@@ -154,6 +155,8 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
+   qRegisterMetaType<MainWindow::SolverRequestData>();
+   qRegisterMetaType<MainWindow::ColorOptimizerRequestData>();
+   qRegisterMetaType<colorscreen::render_parameters>();
++  qRegisterMetaType<colorscreen::render_type_parameters>(
++      "colorscreen::render_type_parameters");
+   qRegisterMetaType<colorscreen::scr_detect_parameters>(
+       "colorscreen::scr_detect_parameters");
+   qRegisterMetaType<const char *>("const char*");
+diff --git a/src/qtgui/WorkspaceWindow.cpp b/src/qtgui/WorkspaceWindow.cpp
+index b9d80b62..d1981fac 100644
+--- a/src/qtgui/WorkspaceWindow.cpp
++++ b/src/qtgui/WorkspaceWindow.cpp
+@@ -407,6 +407,17 @@ void WorkspaceWindow::prepareDocumentForClose(MainWindow *document) {
+   configureTabBar();
+ }
+ 
++/** Restore view-owned chrome before WA_DeleteOnClose destroys an MDI view. */
++void WorkspaceWindow::prepareViewForClose(ImageViewWindow *view) {
++  if (!view || !containsView(view))
++    return;
++
++  takeViewFromWorkspace(view);
++  view->restoreFromWorkspaceEmbedding();
++  onSubWindowActivated(m_mdiArea->currentSubWindow());
++  configureTabBar();
++}
++
+ /** Present attached documents as tabs and hide the bar for a single image. */
+ void WorkspaceWindow::showTabbedDocuments() {
+   m_mdiArea->setOption(QMdiArea::DontMaximizeSubWindowOnActivation, false);
+@@ -754,9 +765,8 @@ void WorkspaceWindow::installViewChrome(ImageViewWindow *view) {
+     menuBar()->addAction(action);
+ 
+   if (QToolBar *toolbar = view->workspaceToolBar()) {
+-    view->removeToolBar(toolbar);
+-    if (toolbar->parentWidget() != this)
+-      toolbar->setParent(this);
++    if (auto *owner = qobject_cast<QMainWindow *>(toolbar->parentWidget()))
++      owner->removeToolBar(toolbar);
+     addToolBar(Qt::TopToolBarArea, toolbar);
+     toolbar->show();
+   }
+@@ -789,10 +799,8 @@ void WorkspaceWindow::releaseViewChrome(ImageViewWindow *view,
+     return;
+ 
+   if (QToolBar *toolbar = view->workspaceToolBar()) {
+-    if (toolbar->parentWidget() == this)
+-      removeToolBar(toolbar);
+-    if (toolbar->parentWidget() != view)
+-      toolbar->setParent(view);
++    if (auto *owner = qobject_cast<QMainWindow *>(toolbar->parentWidget()))
++      owner->removeToolBar(toolbar);
+     view->addToolBar(Qt::TopToolBarArea, toolbar);
+     toolbar->setVisible(showInWindow);
+   }
+diff --git a/src/qtgui/WorkspaceWindow.h b/src/qtgui/WorkspaceWindow.h
+index 1ddf2301..4367a543 100644
+--- a/src/qtgui/WorkspaceWindow.h
++++ b/src/qtgui/WorkspaceWindow.h
+@@ -64,6 +64,9 @@ public:
+   /** Return all workspace-hosted UI to DOCUMENT before it closes. */
+   void prepareDocumentForClose(MainWindow *document);
+ 
++  /** Return shared chrome and the MDI wrapper to VIEW before it closes. */
++  void prepareViewForClose(ImageViewWindow *view);
++
+   /** Consolidate attached documents into the default tabbed presentation. */
+   void showTabbedDocuments();
+ 
+diff --git a/src/qtgui/main.cpp b/src/qtgui/main.cpp
+index 8d71e00c..bd8f3131 100644
+--- a/src/qtgui/main.cpp
++++ b/src/qtgui/main.cpp
+@@ -713,7 +713,11 @@ int main(int argc, char *argv[]) {
+   }
+ 
+   if (parser.isSet(slantedReferenceOption)) {
+-    QTimer::singleShot(350, &app, [&app]() {
++    // When both view smoke tests are requested, allow WA_DeleteOnClose from
++    // New View to complete before constructing the reference view.  This keeps
++    // the tests deterministic and also exercises the normal view-close path.
++    const int referenceSmokeDelay = parser.isSet(newViewOption) ? 700 : 350;
++    QTimer::singleShot(referenceSmokeDelay, &app, [&app]() {
+       const QList<MainWindow *> documents = app.documentWindows();
+       if (documents.isEmpty() || documents.front()->currentImageFile().isEmpty()) {
+         qCritical() << "Slanted reference smoke test requires a loaded image";
