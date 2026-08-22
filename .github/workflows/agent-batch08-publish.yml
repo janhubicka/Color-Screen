@@ -42,7 +42,7 @@ jobs:
             | base64 -d > /tmp/batch08.patch
           echo "0a72b0d64b6102ea3230b41de4e1f0b4a8d1d6f584addd667ad7e16342eab707  /tmp/batch08.patch" | sha256sum -c -
           cd target
-          test "$(git rev-parse HEAD)" = "589f09990f0db89e0412a0e28252904d12173c24"
+          test "$(git rev-parse HEAD)" = "ab4997bfee76954c5144193a32aac8d212a96a69"
           git apply --check /tmp/batch08.patch
           git apply /tmp/batch08.patch
           git diff --check
