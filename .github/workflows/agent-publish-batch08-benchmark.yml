@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/batch08-benchmark-publish-20260822
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
