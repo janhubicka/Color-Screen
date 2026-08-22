@@ -6,7 +6,7 @@ on:
       - agent/batch08-benchmark-publish-20260822
   pull_request:
     branches:
-      - main
+      - agent/scr-detect-batch08-benchmark
 
 permissions:
   contents: write
