@@ -549,24 +549,54 @@ int main(int argc, char *argv[]) {
           cancelDocument->workspaceUserVisibleStatusWidget();
       QWidget *stopContainer = stopDocument->workspaceUserVisibleStatusWidget();
       QStatusBar *workspaceStatus = workspace->statusBar();
-      if (!cancelContainer || !stopContainer || !workspaceStatus ||
-          !workspaceStatus->isAncestorOf(cancelContainer) ||
-          !workspaceStatus->isAncestorOf(stopContainer) ||
+      QWidget *taskStack = workspace->findChild<QWidget *>(
+          QStringLiteral("WorkspaceUserVisibleProgressStack"));
+      if (!cancelContainer || !stopContainer || !workspaceStatus || !taskStack ||
+          !taskStack->isAncestorOf(cancelContainer) ||
+          !taskStack->isAncestorOf(stopContainer) ||
+          workspaceStatus->isAncestorOf(cancelContainer) ||
+          workspaceStatus->isAncestorOf(stopContainer) ||
           cancelContainer->isHidden() || stopContainer->isHidden()) {
-        qCritical() << "User-visible progress did not remain in global status "
-                       "area across documents";
+        qCritical() << "User-visible progress did not remain in the dedicated "
+                       "task strip above the status bar";
         app.exit(13);
         return;
       }
+
+      const int statusHeight = workspaceStatus->height();
 
       // Switching the active image must not hide long tasks belonging to the
       // other document.
       workspace->activateDocument(cancelDocument);
       QCoreApplication::processEvents();
-      if (!workspaceStatus->isAncestorOf(cancelContainer) ||
-          !workspaceStatus->isAncestorOf(stopContainer) ||
+      if (!taskStack->isAncestorOf(cancelContainer) ||
+          !taskStack->isAncestorOf(stopContainer) ||
+          workspaceStatus->height() != statusHeight ||
           cancelContainer->isHidden() || stopContainer->isHidden()) {
-        qCritical() << "User-visible progress disappeared after tab switch";
+        qCritical() << "User-visible progress disappeared after tab switch or "
+                       "changed the one-line status bar height";
+        app.exit(13);
+        return;
+      }
+
+      // A short-lived transient task may occupy the bottom status line but must
+      // not reparent dedicated rows or alter the height of that line.
+      auto transientProgress = std::make_shared<colorscreen::progress_info>();
+      transientProgress->set_task("transient smoke task", 100);
+      transientProgress->set_progress(10);
+      cancelDocument->addProgress(transientProgress);
+      QCoreApplication::processEvents();
+      if (workspaceStatus->height() != statusHeight ||
+          !taskStack->isAncestorOf(cancelContainer) ||
+          !taskStack->isAncestorOf(stopContainer)) {
+        qCritical() << "Transient progress disturbed the dedicated task strip";
+        app.exit(13);
+        return;
+      }
+      cancelDocument->removeProgress(transientProgress);
+      QCoreApplication::processEvents();
+      if (workspaceStatus->height() != statusHeight) {
+        qCritical() << "Transient progress changed status-bar height on exit";
         app.exit(13);
         return;
       }

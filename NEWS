@@ -7,9 +7,11 @@ Changes in version 1.1
      and tabs can be detached/re-attached without losing document state. Every
      image retains its own parameters, undo history, background tasks, progress
      reporting, and crash recovery. In tabbed mode the active image fills the
-     document area, while its messages and progress controls use the workspace's
-     single global status bar. Tiled and cascaded documents keep stable screen
-     positions when another image is activated.
+     document area, while its messages and transient progress controls use the
+     workspace's single one-line status bar. Long-running user-visible tasks use
+     dedicated rows in a task strip above it, so short background work cannot
+     repeatedly resize the status line. Tiled and cascaded documents keep stable
+     screen positions when another image is activated.
    - Long-running GUI operations can register dedicated rows in the global
      status bar so they remain visible and directly cancellable across document
      switches. Rendering to file, coordinate autodetection, automatic point

@@ -147,6 +147,9 @@ public:
     return m_userVisibleProgressContainer;
   }
 
+  /** Return the local frameless task-progress dock used by detached views. */
+  QDockWidget *userVisibleProgressDock() const { return m_userVisibleProgressDock; }
+
   /** Remove the persistent progress widget from this document's local layout
       so the workspace can host it globally. */
   QWidget *takeUserVisibleStatusWidget();
@@ -183,6 +186,8 @@ signals:
       Secondary views refresh from this signal while keeping render mode, zoom,
       and pan view-local. */
   void documentStateChanged();
+  /** Emitted when this document gains or loses dedicated progress rows. */
+  void userVisibleProgressVisibilityChanged(bool visible);
 
 private slots:
   void onZoomIn();
@@ -474,6 +479,7 @@ private:
   QVBoxLayout *m_progressLayout = nullptr;
   QWidget *m_userVisibleProgressContainer = nullptr;
   QVBoxLayout *m_userVisibleProgressLayout = nullptr;
+  QDockWidget *m_userVisibleProgressDock = nullptr;
   QWidget *m_transientProgressRow = nullptr;
 
   // Progress switcher UI (for multiple transient progresses)
