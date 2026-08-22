@@ -124,6 +124,8 @@ private:
 Q_DECLARE_METATYPE(MainWindow::SolverRequestData)
 Q_DECLARE_METATYPE(MainWindow::ColorOptimizerRequestData)
 Q_DECLARE_METATYPE(colorscreen::render_parameters)
+Q_DECLARE_METATYPE(colorscreen::render_type_parameters)
+Q_DECLARE_METATYPE(colorscreen::scr_detect_parameters)
 Q_DECLARE_METATYPE(colorscreen::scr_to_img_parameters)
 Q_DECLARE_METATYPE(std::vector<colorscreen::point_t>)
 Q_DECLARE_METATYPE(std::vector<colorscreen::color_match>)
@@ -153,6 +155,11 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
   qRegisterMetaType<MainWindow::SolverRequestData>();
   qRegisterMetaType<MainWindow::ColorOptimizerRequestData>();
   qRegisterMetaType<colorscreen::render_parameters>();
+  qRegisterMetaType<colorscreen::render_type_parameters>(
+      "colorscreen::render_type_parameters");
+  qRegisterMetaType<colorscreen::scr_detect_parameters>(
+      "colorscreen::scr_detect_parameters");
+  qRegisterMetaType<const char *>("const char*");
   qRegisterMetaType<colorscreen::scr_to_img_parameters>();
   qRegisterMetaType<std::vector<colorscreen::point_t>>();
   qRegisterMetaType<std::vector<colorscreen::color_match>>();
@@ -679,6 +686,12 @@ void MainWindow::setupUi() {
 
   connect(m_sharpnessPanel, &SharpnessPanel::focusAnalysisRequested, this,
           &MainWindow::onFocusAnalysisRequested);
+  connect(m_sharpnessPanel,
+          &SharpnessPanel::openSlantedEdgeReferenceRequested, this,
+          [this]() {
+            if (ColorScreenApplication *application = documentApplication())
+              application->openSlantedEdgeReference(this, this);
+          });
   connect(m_sharpnessPanel, &SharpnessPanel::measureMtfRequested, this,
           &MainWindow::onMeasureMtfRequested);
 
@@ -696,6 +709,9 @@ void MainWindow::setupUi() {
                        [this]() {
                          if (!m_currentImageFile.isEmpty()) {
                            loadFile(m_currentImageFile, true);
+                           if (ColorScreenApplication *application =
+                                   documentApplication())
+                             application->reloadSlantedEdgeReferences(this);
                          }
                        },
                        this);
@@ -2956,6 +2972,23 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
 /** Return a copy of the shared document parameters for secondary views. */
 ParameterState MainWindow::documentStateSnapshot() const {
   return getCurrentState();
+}
+
+/** Apply shared document parameters changed by a secondary/specialized view. */
+void MainWindow::applySharedDocumentState(const ParameterState &state,
+                                          const QString &description) {
+  changeParameters(state, description);
+}
+
+/** Rotate the shared document left on behalf of a secondary view. */
+void MainWindow::rotateDocumentLeft() { rotateLeft(); }
+
+/** Rotate the shared document right on behalf of a secondary view. */
+void MainWindow::rotateDocumentRight() { rotateRight(); }
+
+/** Change shared document mirroring on behalf of a secondary view. */
+void MainWindow::setDocumentMirror(bool checked) {
+  onMirrorHorizontally(checked);
 }
 
 /** Create a snapshot of the current application parameters.

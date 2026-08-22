@@ -57,6 +57,9 @@ signals:
   void detachFinetuneImagesRequested(QWidget *widget);
   void autodetectRequested();
   void focusAnalysisRequested(bool checked, uint64_t flags);
+  /** Ask the application to open another scan used only as a slanted-edge
+      sharpness reference while keeping the current document parameters. */
+  void openSlantedEdgeReferenceRequested();
   void measureMtfRequested(bool checked);
 
 protected:

@@ -116,11 +116,24 @@ public:
   /** Return a copy of the shared document parameters for a secondary view. */
   ParameterState documentStateSnapshot() const;
 
+  /** Apply an undoable shared parameter update originating in another view. */
+  void applySharedDocumentState(const ParameterState &state,
+                                const QString &description);
+
   /** Return this view's render-mode settings as the initial state for a new
       secondary view. */
   colorscreen::render_type_parameters viewRenderTypeParameters() const {
     return m_renderTypeParams;
   }
+
+  /** Rotate the shared document left from any attached view. */
+  void rotateDocumentLeft();
+
+  /** Rotate the shared document right from any attached view. */
+  void rotateDocumentRight();
+
+  /** Set horizontal mirroring for the shared document from any view. */
+  void setDocumentMirror(bool checked);
 
   /** Restore this document from its per-window recovery directory. */
   bool restoreRecoveryState();

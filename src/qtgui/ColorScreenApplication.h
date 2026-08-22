@@ -10,6 +10,7 @@ class MainWindow;
 class ImageViewWindow;
 class QEvent;
 class QMenu;
+class QWidget;
 class WorkspaceWindow;
 
 /** Application-level owner of Color-Screen document windows.
@@ -33,12 +34,41 @@ public:
   /** Create a lightweight secondary view of SOURCE.
 
       The source MainWindow remains the sole editable document owner; the new
-      top-level view shares its image and follows document parameter changes
-      while keeping render mode, zoom, and pan independent. */
-  ImageViewWindow *createViewWindow(MainWindow *source);
+      view shares its image and follows document parameter changes while
+      keeping render mode, zoom, and pan independent.  New views attach to the
+      primary workspace by default. */
+  ImageViewWindow *createViewWindow(MainWindow *source, bool detached = false);
+
+  /** Create a specialized view of REFERENCEFILE for measuring scanner MTF.
+
+      SOURCE remains the owner of the parameter/undo/recovery state; only the
+      displayed scan belongs to the reference view. */
+  ImageViewWindow *createSlantedEdgeReference(MainWindow *source,
+                                              const QString &referenceFile,
+                                              bool detached = false);
+
+  /** Prompt for a slanted-edge reference image and open it for SOURCE. */
+  ImageViewWindow *openSlantedEdgeReference(MainWindow *source,
+                                            QWidget *dialogParent = nullptr);
+
+  /** Move VIEW from the workspace into a standalone top-level window. */
+  void detachView(ImageViewWindow *view);
+
+  /** Move VIEW back into the primary workspace without recreating it. */
+  void attachView(ImageViewWindow *view);
+
+  /** Attach every detached secondary view to the primary workspace. */
+  void attachAllViews();
+
+  /** Close VIEW through its MDI wrapper when attached, or directly otherwise. */
+  bool closeView(ImageViewWindow *view);
 
   /** Return all live secondary views. */
   QList<ImageViewWindow *> viewWindows();
+
+  /** Reload every slanted-edge reference associated with SOURCE using the
+      document's current demosaic setting. */
+  void reloadSlantedEdgeReferences(MainWindow *source);
 
   /** Open every path in FILENAMES as an independent image document.
 
@@ -83,9 +113,11 @@ public:
       document vetoes closing because the user cancels a prompt. */
   bool closeAllDocumentsForWorkspace();
 
-  /** Rebuild MENU with document-window creation, cycling, and activation
-      actions.  CURRENTWINDOW is marked as the active document.  */
-  void populateWindowMenu(QMenu *menu, MainWindow *currentWindow);
+  /** Rebuild MENU with document/view creation, arrangement, and activation
+      actions.  CURRENTWINDOW is the owning document and CURRENTVIEW, when
+      non-null, identifies the active secondary view. */
+  void populateWindowMenu(QMenu *menu, MainWindow *currentWindow,
+                          ImageViewWindow *currentView = nullptr);
 
   /** Activate the document OFFSET positions from CURRENTWINDOW, wrapping at
       either end of the current document list.  */
