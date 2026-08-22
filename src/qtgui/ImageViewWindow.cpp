@@ -14,6 +14,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDockWidget>
+#include <QEvent>
 #include <QFileInfo>
 #include <QFutureWatcher>
 #include <QIcon>
@@ -108,12 +109,17 @@ ImageViewWindow::ImageViewWindow(MainWindow *document, int viewNumber,
 }
 
 
+/** Destroy a secondary view without taking the document-owned inspector with it. */
+ImageViewWindow::~ImageViewWindow() { releaseDocumentInspector(); }
+
 /** Return the document whose state this secondary view follows. */
 MainWindow *ImageViewWindow::sourceDocument() const { return m_document.data(); }
 
-/** Return the reduced Sharpness inspector used only by reference views. */
+/** Return the inspector appropriate for this secondary view. */
 QWidget *ImageViewWindow::workspaceInspectorWidget() const {
-  return m_referenceInspector;
+  if (m_slantedEdgeReference)
+    return m_referenceInspector;
+  return m_document ? m_document->workspaceInspectorWidget() : nullptr;
 }
 
 /** Build the standard compact toolbar and menus for a secondary image view. */
@@ -245,7 +251,25 @@ void ImageViewWindow::setupUi() {
   statusBar()->showMessage(
       m_slantedEdgeReference
           ? tr("Slanted-edge reference — sharpness parameters are shared")
-          : tr("Secondary view — document edits are shared"));
+          : tr("Secondary view — document panels and edits are shared"));
+
+  if (!m_slantedEdgeReference) {
+    m_documentInspectorHost = new QWidget(this);
+    m_documentInspectorHost->setObjectName(
+        QStringLiteral("SecondaryDocumentInspectorHost"));
+    auto *inspectorLayout = new QVBoxLayout(m_documentInspectorHost);
+    inspectorLayout->setContentsMargins(0, 0, 0, 0);
+
+    m_documentInspectorDock = new QDockWidget(tr("Document Controls"), this);
+    m_documentInspectorDock->setObjectName(
+        QStringLiteral("SecondaryDocumentControlsDock"));
+    m_documentInspectorDock->setAllowedAreas(Qt::LeftDockWidgetArea |
+                                             Qt::RightDockWidgetArea);
+    m_documentInspectorDock->setMinimumWidth(280);
+    m_documentInspectorDock->setWidget(m_documentInspectorHost);
+    addDockWidget(Qt::RightDockWidgetArea, m_documentInspectorDock);
+    m_documentInspectorDock->hide();
+  }
   resize(1100, 800);
 }
 
@@ -698,10 +722,53 @@ void ImageViewWindow::onReferenceAreaSelected(QRect widgetArea) {
   watcher->setFuture(future);
 }
 
+
+/** Present the source document's full inspector in this detached ordinary view. */
+void ImageViewWindow::claimDocumentInspector() {
+  if (m_slantedEdgeReference || m_workspaceEmbedded || !m_document ||
+      !m_documentInspectorHost || !m_documentInspectorDock)
+    return;
+
+  QWidget *inspector = m_document->takeWorkspaceInspector();
+  if (!inspector)
+    return;
+
+  QLayout *layout = m_documentInspectorHost->layout();
+  if (layout && inspector->parentWidget() != m_documentInspectorHost) {
+    inspector->setParent(m_documentInspectorHost);
+    layout->addWidget(inspector);
+  }
+  m_document->setInspectorImageWidget(m_imageWidget);
+  inspector->show();
+  m_documentInspectorDock->show();
+}
+
+/** Release the borrowed document inspector without changing document state. */
+void ImageViewWindow::releaseDocumentInspector() {
+  if (m_slantedEdgeReference || !m_document || !m_documentInspectorHost)
+    return;
+
+  QWidget *inspector = m_document->workspaceInspectorWidget();
+  if (inspector && m_documentInspectorHost->isAncestorOf(inspector))
+    m_document->takeWorkspaceInspector();
+  if (m_documentInspectorDock)
+    m_documentInspectorDock->hide();
+}
+
+/** Reclaim panels when this detached ordinary view becomes active. */
+void ImageViewWindow::changeEvent(QEvent *event) {
+  QMainWindow::changeEvent(event);
+  if (event && event->type() == QEvent::WindowActivate && !m_workspaceEmbedded)
+    claimDocumentInspector();
+}
+
 /** Remove standalone chrome while the view is hosted by WorkspaceWindow. */
 void ImageViewWindow::prepareForWorkspaceEmbedding() {
   if (m_workspaceEmbedded)
     return;
+  releaseDocumentInspector();
+  if (m_documentInspectorDock)
+    m_documentInspectorDock->hide();
   if (m_referenceInspectorDock && m_referenceInspector) {
     m_referenceInspector->setParent(nullptr);
     m_referenceInspectorDock->setWidget(nullptr);
