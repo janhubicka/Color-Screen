@@ -33,8 +33,8 @@ jobs:
             --args ./src/qtgui/colorscreen-qt \
             --smoke-test 12000 --smoke-test-expect-windows 2 \
             --smoke-test-new-view --smoke-test-slanted-reference \
-            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000DPI_raw.tif" \
-            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000DPI_raw.tif" \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
             > multiview-gdb.log 2>&1
           status=$?
           echo "gdb_status=$status" >> multiview-gdb.log
