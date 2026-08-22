@@ -1,0 +1,318 @@
+--- a/src/libcolorscreen/scr-detect-geometry.C
++++ b/src/libcolorscreen/scr-detect-geometry.C
+@@ -143,6 +143,21 @@
+   return end;
+ }
+ 
++/* Find the class-C patch at floating-point prediction X, Y.  Predicted screen
++   coordinates are not integer pixel indices, so round to the nearest image
++   pixel rather than relying on an implicit conversion that truncates them.
++   ENTRIES and VISITED have the same meaning as in find_patch().  */
++int
++find_predicted_patch (const color_class_map &color_map,
++                      scr_detect::color_class c, coord_t x, coord_t y,
++                      int max_patch_size, int_point_t *entries,
++                      bitmap_2d *visited)
++{
++  return find_patch (color_map, c, my_floor (x + (coord_t)0.5),
++                     my_floor (y + (coord_t)0.5), max_patch_size, entries,
++                     visited, false);
++}
++
+ /* Compute the arithmetic mean of the SIZE pixels in ENTRIES and store it in X
+    and Y.  Return false for an empty patch or when the image pixel nearest the
+    mean is not part of the patch.  */
+@@ -299,10 +314,10 @@
+             scrname, cnames[(int)my_blue], adjacent_size,
+             rbpatches[0][1].x, rbpatches[0][1].y, patch_stepx, patch_stepy);
+   for (int p = 2; p < npatches * 2; p++) {
+-    int nx = rbpatches[0][p - 1].x + patch_stepx;
+-    int ny = rbpatches[0][p - 1].y + patch_stepy;
+-    size = find_patch(color_map, (p & 1) ? my_blue : my_green, nx, ny, max_size,
+-                      entries, visited, false);
++    coord_t nx = rbpatches[0][p - 1].x + patch_stepx;
++    coord_t ny = rbpatches[0][p - 1].y + patch_stepy;
++    size = find_predicted_patch (color_map, (p & 1) ? my_blue : my_green,
++                                 nx, ny, max_size, entries, visited);
+     if (size == 0 || size == max_size) {
+       if (report_file && verbose)
+         fprintf(report_file,
+@@ -344,10 +359,10 @@
+       vpatch_stepy = patch_stepx;
+     }
+ 
+-    int rx = rbpatches[r - 1][0].x + vpatch_stepx;
+-    int ry = rbpatches[r - 1][0].y + vpatch_stepy;
+-    int nx = rbpatches[r - 1][0].x + 2 * vpatch_stepx;
+-    int ny = rbpatches[r - 1][0].y + 2 * vpatch_stepy;
++    coord_t rx = rbpatches[r - 1][0].x + vpatch_stepx;
++    coord_t ry = rbpatches[r - 1][0].y + vpatch_stepy;
++    coord_t nx = rbpatches[r - 1][0].x + 2 * vpatch_stepx;
++    coord_t ny = rbpatches[r - 1][0].y + 2 * vpatch_stepy;
+     int priority;
+     if (!confirm_strip(&color_map, rx, ry, my_red, 1, &priority, visited)) {
+       if (report_file && verbose)
+@@ -358,8 +373,8 @@
+                 vpatch_stepx, vpatch_stepy);
+       return false;
+     }
+-    size = find_patch(color_map, my_green, nx, ny, max_size, entries, visited,
+-                      false);
++    size = find_predicted_patch (color_map, my_green, nx, ny, max_size,
++                                 entries, visited);
+     if (size == 0 || size == max_size) {
+       if (report_file && verbose)
+         fprintf(report_file,
+@@ -376,10 +391,11 @@
+       return false;
+     }
+     for (int p = 1; p < npatches * 2; p++) {
+-      int nx = rbpatches[r][p - 1].x + patch_stepx;
+-      int ny = rbpatches[r][p - 1].y + patch_stepy;
+-      size = find_patch(color_map, (p & 1) ? my_blue : my_green, nx, ny,
+-                        max_size, entries, visited, false);
++      coord_t nx = rbpatches[r][p - 1].x + patch_stepx;
++      coord_t ny = rbpatches[r][p - 1].y + patch_stepy;
++      size = find_predicted_patch (color_map,
++                                   (p & 1) ? my_blue : my_green, nx, ny,
++                                   max_size, entries, visited);
+       if (size == 0 || size == max_size) {
+         if (report_file && verbose)
+           fprintf(report_file,
+@@ -496,9 +512,9 @@
+   coord_t b2patch_stepx = b1patch_stepy;
+   coord_t b2patch_stepy = -b1patch_stepx;
+   coord_t bx, by;
+-  size = find_patch(
++  size = find_predicted_patch (
+       color_map, scr_detect::blue, gpatches[0][0].x + b2patch_stepx,
+-      gpatches[0][0].y + b2patch_stepy, max_size, entries, visited, false);
++      gpatches[0][0].y + b2patch_stepy, max_size, entries, visited);
+   if (!size || size == max_size) {
+     if (report_file && verbose)
+       fprintf(report_file,
+@@ -531,9 +547,9 @@
+   coord_t gpatch_stepx = (bpatches[0][0].x - gpatches[0][0].x) * 2;
+   coord_t gpatch_stepy = (bpatches[0][0].y - gpatches[0][0].y) * 2;
+ 
+-  size = find_patch(
++  size = find_predicted_patch (
+       color_map, scr_detect::green, gpatches[0][0].x + gpatch_stepx,
+-      gpatches[0][0].y + gpatch_stepy, max_size, entries, visited, false);
++      gpatches[0][0].y + gpatch_stepy, max_size, entries, visited);
+   if (!size || size == max_size) {
+     if (report_file && verbose)
+       fprintf(report_file, "Paget: Second green patch not found\n");
+@@ -556,9 +572,9 @@
+   coord_t patch_stepy = (gpatches[0][1].y - gpatches[0][0].y) / 2;
+   coord_t opatch_stepx = patch_stepy;
+   coord_t opatch_stepy = -patch_stepx;
+-  size = find_patch(color_map, scr_detect::blue, gpatches[0][1].x + patch_stepx,
+-                    gpatches[0][1].y + patch_stepy, max_size, entries, visited,
+-                    false);
++  size = find_predicted_patch (
++      color_map, scr_detect::blue, gpatches[0][1].x + patch_stepx,
++      gpatches[0][1].y + patch_stepy, max_size, entries, visited);
+   if (!size || size == max_size) {
+     if (report_file && verbose)
+       fprintf(report_file, "Paget: Third blue patch not found\n");
+@@ -578,10 +594,10 @@
+             "patch distance %f %f\n",
+             size, gpatches[0][1].x, gpatches[0][1].y, patch_stepx, patch_stepy);
+   for (int p = 2; p < npatches; p++) {
+-    int nx = bpatches[0][p - 1].x + patch_stepx;
+-    int ny = bpatches[0][p - 1].y + patch_stepy;
+-    size = find_patch(color_map, scr_detect::green, nx, ny, max_size, entries,
+-                      visited, false);
++    coord_t nx = bpatches[0][p - 1].x + patch_stepx;
++    coord_t ny = bpatches[0][p - 1].y + patch_stepy;
++    size = find_predicted_patch (color_map, scr_detect::green, nx, ny,
++                                 max_size, entries, visited);
+     if (size == 0 || size == max_size) {
+       if (report_file && verbose)
+         fprintf(report_file,
+@@ -597,8 +613,8 @@
+ 
+     nx = gpatches[0][p].x + patch_stepx;
+     ny = gpatches[0][p].y + patch_stepy;
+-    size = find_patch(color_map, scr_detect::blue, nx, ny, max_size, entries,
+-                      visited, false);
++    size = find_predicted_patch (color_map, scr_detect::blue, nx, ny,
++                                 max_size, entries, visited);
+     if (size == 0 || size == max_size) {
+       if (report_file && verbose)
+         fprintf(report_file,
+@@ -618,10 +634,10 @@
+   for (int p = 0; p < npatches; p++) {
+     for (int q = 1; q < npatches * 2; q++)
+       if (q & 1) {
+-        int nx = gpatches[(q - 1) / 2][p].x + opatch_stepx;
+-        int ny = gpatches[(q - 1) / 2][p].y + opatch_stepy;
+-        size = find_patch(color_map, scr_detect::blue, nx, ny, max_size,
+-                          entries, visited, false);
++        coord_t nx = gpatches[(q - 1) / 2][p].x + opatch_stepx;
++        coord_t ny = gpatches[(q - 1) / 2][p].y + opatch_stepy;
++        size = find_predicted_patch (color_map, scr_detect::blue, nx, ny,
++                                     max_size, entries, visited);
+         if (size == 0 || size == max_size) {
+           if (report_file && verbose)
+             fprintf(report_file,
+@@ -639,8 +655,8 @@
+         }
+         nx = bpatches[q - 1][p].x + opatch_stepx;
+         ny = bpatches[q - 1][p].y + opatch_stepy;
+-        size = find_patch(color_map, scr_detect::red, nx, ny, max_size, entries,
+-                          visited, false);
++        size = find_predicted_patch (color_map, scr_detect::red, nx, ny,
++                                     max_size, entries, visited);
+         if (size == 0 || size == max_size) {
+           if (report_file && verbose)
+             fprintf(report_file,
+@@ -657,10 +673,10 @@
+           return false;
+         }
+       } else {
+-        int nx = bpatches[q - 1][p].x + opatch_stepx;
+-        int ny = bpatches[q - 1][p].y + opatch_stepy;
+-        size = find_patch(color_map, scr_detect::green, nx, ny, max_size,
+-                          entries, visited, false);
++        coord_t nx = bpatches[q - 1][p].x + opatch_stepx;
++        coord_t ny = bpatches[q - 1][p].y + opatch_stepy;
++        size = find_predicted_patch (color_map, scr_detect::green, nx, ny,
++                                     max_size, entries, visited);
+         if (size == 0 || size == max_size) {
+           if (report_file && verbose)
+             fprintf(report_file,
+@@ -678,8 +694,8 @@
+         }
+         nx = rpatches[(q - 1) / 2][p].x + opatch_stepx;
+         ny = rpatches[(q - 1) / 2][p].y + opatch_stepy;
+-        size = find_patch(color_map, scr_detect::blue, nx, ny, max_size,
+-                          entries, visited, false);
++        size = find_predicted_patch (color_map, scr_detect::blue, nx, ny,
++                                     max_size, entries, visited);
+         if (size == 0 || size == max_size) {
+           if (report_file && verbose)
+             fprintf(report_file,
+--- a/doc/scr-detect-geometry-tracking.md
++++ b/doc/scr-detect-geometry-tracking.md
+@@ -147,17 +147,47 @@
+ 
+ **Severity:** high
+ 
+-**Status:** open
++**Status:** open, but blocked on a demonstrated failure after DG-024
++
++After DG-024, Dufay-like and Paget-like initial-grid code preserve fractional
++predictions and round them to the nearest image pixel before calling
++`find_patch()`.  A genuinely blurred or unknown center can still reject an
++otherwise coherent grid, so a bounded local search remains a possible follow-up.
++
++Do not add that heuristic preemptively.  On the real NGS00428 corner tile, a
++one- and two-pixel neighborhood prototype reduced zero-mask seed scanning to
++exactly the same 95 pixels as correct nearest-pixel rounding alone.  The wider
++search therefore added no observed robustness on the case that first motivated
++it.  Revisit local search only when DG-019 contains a scan that fails with
++correct rounding; then rank candidates by center displacement, color confidence,
++size consistency, and lattice agreement, with the radius kept below half the
++nearest competing-element distance.
++
++### DG-024 — predicted patch centers were truncated before lookup
++
++**Severity:** high robustness/performance
++
++**Status:** fixed
+ 
+-After the first two patches, both Dufay-like and Paget-like initial-grid code
+-round each predicted center to one image pixel and call `find_patch()` there.
+-Small accumulated vector error or a blurred/unknown center therefore rejects an
+-otherwise coherent grid.
+-
+-Evaluate a bounded local search around each prediction.  Rank components by
+-center displacement, color confidence, size consistency, and agreement with the
+-current lattice estimate.  The search radius must be derived from screen scale
+-and kept below half the nearest competing-element distance.
++Initial-grid geometry is floating point, but many predicted Dufay-like and
++Paget/Finlay patch positions were stored in integer temporaries or passed
++implicitly to `find_patch()`.  C++ conversion truncated those coordinates rather
++than selecting the nearest image pixel.  A subpixel prediction error could
++therefore become an avoidable one-pixel classification miss and force the outer
++seed scan to continue.
++
++Predicted coordinates now remain `coord_t` until a shared helper rounds them to
++the nearest image pixel.  Strip predictions likewise retain their fractional
++coordinates before `confirm_strip()` performs its existing nearest-pixel
++rounding.  Seed pixels supplied by the outer image scan remain integer pixels;
++only geometry-derived predictions change.
++
++On NGS00428 Tile01 with the legacy detector mask explicitly disabled, this
++reduces `seed_pixels` from 23,702 to 95 while preserving 93.35% detected screen
++coverage.  A one-pixel neighborhood search produced the same 95-pixel result,
++which is why DG-010 remains deferred rather than being bundled with this fix.
++With the normal 2 / 3 compatibility mask, Tile01 and Tile05 retain the same
++coverage, patch counts, and seed counts as before this change.
+ 
+ ### DG-011 — initial grids are accepted or rejected as all-or-nothing patterns
+ 
+@@ -377,7 +407,31 @@
+ For each Batch 08 input, compare the historical 2 / 3 mask, explicit 0 / 0, and
+ future blur-tolerant alternatives.  Record success/type, search regions, seed
+ pixels, initial grids, final failure stage, patch count, coverage, and stage
+-wall times from DG-014.
++wall times from DG-014.  `scripts/benchmark-scr-detect.py` automates these runs
++without putting the large/private images in the repository.  It can repeat
++2 / 3 and 0 / 0 runs with combined, fast-only, or slow-only flood fill and
++writes the stable detector records, coverage/borders, wall time, and Linux peak
++RSS to CSV while retaining the individual reports.
++
++The first two uploaded NGS00428 EIPs give the following one-run baseline with
++both flood-fill paths enabled.  Detector time is the DG-014 `total` and excludes
++raw-file loading; timings are indicative rather than acceptance thresholds, so
++use benchmark repeats for performance comparisons.
++
++| input | detector mask | screen coverage | seed pixels | patches | detector time |
++| --- | ---: | ---: | ---: | ---: | ---: |
++| Tile01, corner | 2 / 3 | 97.33% | 1 | 2,140,420 | 14.81 s |
++| Tile01, corner | 0 / 0 | 93.35% | 23,702 | 2,040,103 | 23.46 s |
++| Tile05, interior | 2 / 3 | 98.68% | 2 | 3,777,538 | 18.08 s |
++| Tile05, interior | 0 / 0 | 86.67% | 1 | 3,317,587 | 38.14 s |
++
++Tile01 contains no additive raster over roughly the top 23% and right 25% of the
++scan.  The existing border/known-range logic correctly treats that as a partial
++screen: with the 2 / 3 mask it analyzes 56.04% of the whole image but 97.33% of
++the actual screen area.  Tile05 is an interior control and shows the remaining
++problem clearly: even after DG-024, removing the old mask still reduces flood
++fill coverage to 86.67%.  That points to DG-009/class-map continuity as the next
++robustness problem rather than to a wider seed-neighborhood search.
+ 
+ The corpus should contain, for every available screen family:
+ 
+@@ -415,15 +469,16 @@
+ 
+ ## Recommended implementation order
+ 
+-1. Use DG-014 statistics to record baselines for the existing sharp fixtures,
+-   then extend DG-019 with real soft scans and representative negative images.
+-2. Add the bounded prediction-neighborhood search from DG-010 behind an
+-   experimental switch and calibrate it against false positives.
+-3. Introduce robust partial-grid scoring (DG-011), using the local search as its
+-   observation layer.
+-4. Compare a coarse periodicity proposal (DG-013) only for regions where the
+-   exact component seed fails.
+-5. Use the measured failure costs to implement early rejection and state reuse
+-   (DG-015 through DG-017).
+-6. Revisit scratch storage and lower-level micro-optimization (DG-018) only
+-   after the algorithmic failure cost is under control.
++1. Expand DG-019 across Batch 08 with `benchmark-scr-detect.py`, including
++   representative negative/no-screen images and repeated timing runs.
++2. Investigate DG-009/class-map continuity on scans such as NGS00428 Tile05,
++   where 0 / 0 finds a seed immediately but flood fill covers only 86.67%.
++3. Revisit the bounded neighborhood search in DG-010 only when a real scan
++   still fails at a correctly rounded predicted center.
++4. Introduce robust partial-grid scoring (DG-011) if isolated missing elements
++   remain a significant seed failure after DG-009/DG-010 are understood.
++5. Compare a coarse periodicity proposal (DG-013) only for regions where the
++   component-based seed path still fails.
++6. Use measured failure costs to implement early rejection and state reuse
++   (DG-015 through DG-017), then revisit scratch storage (DG-018) only if it is
++   visible in profiles.
