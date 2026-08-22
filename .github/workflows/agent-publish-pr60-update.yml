@@ -1,0 +1,59 @@
+name: Agent publish PR60 update
+
+on:
+  pull_request:
+    branches:
+      - agent/pr60-update-publish-base-20260822
+    paths:
+      - agent/pr60-update.patch.gz.b64
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out transport payload
+        uses: actions/checkout@v4
+        with:
+          path: transport
+
+      - name: Check out exact fixed PR 58 head
+        uses: actions/checkout@v4
+        with:
+          ref: ee835ce20a3dc02ac54848f70cd1d6d02dec70a7
+          fetch-depth: 0
+          path: repo
+
+      - name: Verify, apply, and update PR 60
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp transport/agent/pr60-update.patch.gz.b64 .
+          echo '8d7e1cfc71e9977da787d0dcf98fcebe639ef391582a2b03836cf7e9c2adc730  pr60-update.patch.gz.b64' | sha256sum -c -
+          base64 --decode pr60-update.patch.gz.b64 > pr60-update.patch.gz
+          echo '8e1d6125813a0606f6022d31ac362d84c81e672448c1034ccd9c372c32852e5d  pr60-update.patch.gz' | sha256sum -c -
+          gzip -dc pr60-update.patch.gz > pr60-update.patch
+          echo '8846a6c6cdc8825acd62b514065c38e414f6dc4d65e0960d27ab2c90dbb7df7a  pr60-update.patch' | sha256sum -c -
+
+          cd repo
+          test "$(git rev-parse HEAD)" = ee835ce20a3dc02ac54848f70cd1d6d02dec70a7
+          git checkout -B agent/qtgui-slanted-edge-reference ee835ce20a3dc02ac54848f70cd1d6d02dec70a7
+          git apply --check ../pr60-update.patch
+          git apply ../pr60-update.patch
+          git diff --check
+
+          git add -- .agents/qtgui.md .github/workflows/build-ubuntu.yml NEWS \
+            src/qtgui/ColorScreenApplication.cpp src/qtgui/ColorScreenApplication.h \
+            src/qtgui/ImageViewWindow.cpp src/qtgui/ImageViewWindow.h \
+            src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h \
+            src/qtgui/SharpnessPanel.cpp src/qtgui/SharpnessPanel.h \
+            src/qtgui/WorkspaceWindow.cpp src/qtgui/main.cpp
+          test "$(git diff --cached --name-only | sort)" = $'.agents/qtgui.md\n.github/workflows/build-ubuntu.yml\nNEWS\nsrc/qtgui/ColorScreenApplication.cpp\nsrc/qtgui/ColorScreenApplication.h\nsrc/qtgui/ImageViewWindow.cpp\nsrc/qtgui/ImageViewWindow.h\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/MainWindow.h\nsrc/qtgui/SharpnessPanel.cpp\nsrc/qtgui/SharpnessPanel.h\nsrc/qtgui/WorkspaceWindow.cpp\nsrc/qtgui/main.cpp'
+
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git commit -m 'qtgui: improve slanted-edge reference workflow' -m 'Keep the standard navigation overview above the single Sharpness tab in slanted-edge reference views so the reference image remains practical to browse while retaining its deliberately reduced parameter UI.\n\nMake Reload and demosaic a document-wide source refresh: reload the main scan and every slanted-edge reference image associated with that document, each from its own filename and with the current demosaic mode, while keeping the shared parameter file and sharpening measurements owned by the source document.\n\nExtend the slanted-reference smoke test to require both Navigation and the Sharpness tab and to verify that reference image_data is actually replaced by the reload path. Update Qt GUI documentation and NEWS accordingly.'
+          git push --force origin HEAD:refs/heads/agent/qtgui-slanted-edge-reference
