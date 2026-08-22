@@ -534,6 +534,37 @@ spatial changes of dye chromaticity remain visible as residual/model mismatch.
 This is preferable for focus identification because unconstrained per-tile
 primary colours would recreate the blur-versus-saturation ambiguity.
 
+### Preparing automatic solid-area candidates
+
+`finetune_find_focus_area_candidates()` is the cheap first stage for the future
+GUI workflow.  Its input is a linear, unadjusted RGB analysis image, normally a
+downscaled interpolated reconstruction.  The caller chooses a window at least as
+large as the finetune tile and supplies the mapping from analysis pixels back to
+scan coordinates.  Each candidate window is fitted independently in R, G, and B
+by a shallow plane.  The search reports both the residual after removing that
+plane and the total fitted RGB change across the window.  This deliberately
+accepts gentle fading or illumination drift while rejecting texture, edges, and
+strong gradients.  Non-maximum suppression keeps spatially distinct candidates
+before any expensive solver call.
+
+The search stage does not decide that an area is physically valid.  The caller
+must still run the ordinary one-tile `finetune()` model at every returned centre
+and store that result in the candidate.  `finetune_select_focus_areas()` then
+rejects numerical failures and weak fitted screen contrast, divides the raw
+final objective (`badness`) by the observed mean-colour norm so dark tiles are
+not favoured merely for having smaller absolute residuals, and greedily
+maximizes a D-optimal information matrix built from normalized candidate
+colours.  The historical contrast-scaled `uncertainty` value is intentionally
+not used for this quality ranking: excessive fitted colour contrast is itself
+part of the high-blur compensation failure mode.
+
+The selector also reports the determinant of the average normalized-colour Gram
+matrix and can reject a rank-deficient set.  Consequently many excellent areas
+of essentially one colour are not treated as equivalent to three independently
+coloured areas.  The selected centres and their individual `finetune_result`s
+are suitable inputs/starting states for a later joint
+`finetune_uniform_image_layer` call.
+
 ## Result-field contract
 
 For scalar MTF focus, the field belonging to the active model is fitted while
