@@ -19,7 +19,6 @@ class SharpnessPanel;
 class QAction;
 class QCheckBox;
 class QComboBox;
-class QCloseEvent;
 class QDockWidget;
 class QToolBar;
 
@@ -42,9 +41,6 @@ public:
   /** Construct a slanted-edge reference view of REFERENCEFILE for DOCUMENT. */
   ImageViewWindow(MainWindow *document, int viewNumber,
                   const QString &referenceFile, QWidget *parent = nullptr);
-
-  /** Destroy view-owned chrome while its QMainWindow is still fully alive. */
-  ~ImageViewWindow() override;
 
   /** Return the document whose image and parameters this view follows. */
   MainWindow *sourceDocument() const;
@@ -89,10 +85,6 @@ public:
   /** Reload this reference scan using the source document's current demosaic
       setting.  Normal secondary views ignore this request. */
   void reloadReferenceImage();
-
-protected:
-  /** Return workspace-owned chrome before WA_DeleteOnClose destroys this view. */
-  void closeEvent(QCloseEvent *event) override;
 
 private slots:
   /** Refresh shared image/parameter snapshots after the document changes. */

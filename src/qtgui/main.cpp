@@ -708,7 +708,7 @@ int main(int argc, char *argv[]) {
         return;
       }
 
-      view->close();
+      app.closeView(view);
     });
   }
 
@@ -791,7 +791,7 @@ int main(int argc, char *argv[]) {
             app.exit(15);
             return;
           }
-          reference->close();
+          app.closeView(reference);
         };
         (*checkReload)(28);
       };

@@ -228,6 +228,15 @@ void ColorScreenApplication::attachAllViews() {
     attachView(view);
 }
 
+/** Close VIEW using the ownership model of its current presentation. */
+bool ColorScreenApplication::closeView(ImageViewWindow *view) {
+  if (!view)
+    return false;
+  if (m_workspaceWindow && m_workspaceWindow->containsView(view))
+    return m_workspaceWindow->closeView(view);
+  return view->close();
+}
+
 /** Return all live secondary views. */
 QList<ImageViewWindow *> ColorScreenApplication::viewWindows() {
   pruneViewWindows();
@@ -404,13 +413,6 @@ void ColorScreenApplication::prepareDocumentForClose(MainWindow *document) {
       !m_workspaceWindow->containsDocument(document))
     return;
   m_workspaceWindow->prepareDocumentForClose(document);
-}
-
-/** Return shared workspace chrome before an embedded secondary view closes. */
-void ColorScreenApplication::prepareViewForClose(ImageViewWindow *view) {
-  if (!view || !m_workspaceWindow || !m_workspaceWindow->containsView(view))
-    return;
-  m_workspaceWindow->prepareViewForClose(view);
 }
 
 /** Return the number of attached document tabs. */

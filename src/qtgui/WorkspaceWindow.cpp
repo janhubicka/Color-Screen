@@ -61,30 +61,26 @@ private:
 /** MDI wrapper that closes only the lightweight secondary view. */
 class ViewSubWindow final : public QMdiSubWindow {
 public:
-  explicit ViewSubWindow(ImageViewWindow *view, QWidget *parent = nullptr)
-      : QMdiSubWindow(parent), m_view(view) {
-    setAttribute(Qt::WA_DeleteOnClose, false);
+  explicit ViewSubWindow(WorkspaceWindow *workspace, ImageViewWindow *view,
+                         QWidget *parent = nullptr)
+      : QMdiSubWindow(parent), m_workspace(workspace), m_view(view) {
+    // Attached secondary views are ordinary MDI children.  The wrapper owns
+    // and deletes the view when the tab/subwindow is closed; detached views
+    // switch back to WA_DeleteOnClose on the ImageViewWindow itself.
+    setAttribute(Qt::WA_DeleteOnClose, true);
   }
 
 protected:
-  /** Defer view closure until the current MDI event has completed. */
+  /** Return shared chrome, then let QMdiSubWindow perform normal MDI close. */
   void closeEvent(QCloseEvent *event) override {
-    event->ignore();
-    if (m_closePending || !m_view)
-      return;
-
-    m_closePending = true;
-    QPointer<ImageViewWindow> view = m_view;
-    QTimer::singleShot(0, this, [this, view]() {
-      m_closePending = false;
-      if (view)
-        view->close();
-    });
+    if (m_workspace && m_view)
+      m_workspace->prepareViewForClose(m_view);
+    QMdiSubWindow::closeEvent(event);
   }
 
 private:
+  QPointer<WorkspaceWindow> m_workspace;
   QPointer<ImageViewWindow> m_view;
-  bool m_closePending = false;
 };
 
 } // namespace
@@ -255,9 +251,10 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
       m_inspectorStack->addWidget(inspector);
     inspector->hide();
   }
+  view->setAttribute(Qt::WA_DeleteOnClose, false);
   view->setWindowFlags(Qt::Widget);
 
-  auto *subWindow = new ViewSubWindow(view);
+  auto *subWindow = new ViewSubWindow(this, view);
   subWindow->setObjectName(QStringLiteral("imageViewSubWindow"));
   subWindow->setWindowTitle(view->windowTitle());
   subWindow->setWidget(view);
@@ -283,12 +280,7 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
               statusBar()->showMessage(message);
           });
 
-  QPointer<QMdiSubWindow> guardedSubWindow(subWindow);
-  connect(view, &QObject::destroyed, this, [this, guardedSubWindow]() {
-    if (guardedSubWindow) {
-      m_mdiArea->removeSubWindow(guardedSubWindow);
-      guardedSubWindow->deleteLater();
-    }
+  connect(subWindow, &QObject::destroyed, this, [this]() {
     QTimer::singleShot(0, this, [this]() {
       onSubWindowActivated(m_mdiArea->currentSubWindow());
       configureTabBar();
@@ -412,10 +404,22 @@ void WorkspaceWindow::prepareViewForClose(ImageViewWindow *view) {
   if (!view || !containsView(view))
     return;
 
-  takeViewFromWorkspace(view);
-  view->restoreFromWorkspaceEmbedding();
-  onSubWindowActivated(m_mdiArea->currentSubWindow());
-  configureTabBar();
+  // Do not remove or delete the QMdiSubWindow from inside its close event.
+  // Only return widgets that the shared shell borrowed from the view.  The
+  // wrapper then performs the normal Qt MDI close and owns destruction of its
+  // child view.
+  releaseViewChrome(view, false);
+  if (QWidget *inspector = view->workspaceInspectorWidget()) {
+    m_inspectorStack->removeWidget(inspector);
+    inspector->hide();
+    inspector->setParent(view);
+  }
+}
+
+/** Close attached VIEW through its owning MDI subwindow. */
+bool WorkspaceWindow::closeView(ImageViewWindow *view) {
+  QMdiSubWindow *subWindow = subWindowForView(view);
+  return subWindow ? subWindow->close() : false;
 }
 
 /** Present attached documents as tabs and hide the bar for a single image. */
@@ -886,11 +890,11 @@ void WorkspaceWindow::takeViewFromWorkspace(ImageViewWindow *view) {
   }
   view->hide();
   m_mdiArea->removeSubWindow(view);
-  m_mdiArea->removeSubWindow(subWindow);
   subWindow->deleteLater();
 
   view->setParent(nullptr);
   view->setWindowFlags(Qt::Window);
+  view->setAttribute(Qt::WA_DeleteOnClose, true);
 }
 
 /** Detach a tab when it is dragged beyond the tab-bar docking margin. */

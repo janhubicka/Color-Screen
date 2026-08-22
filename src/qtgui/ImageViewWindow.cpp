@@ -12,7 +12,6 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QCheckBox>
-#include <QCloseEvent>
 #include <QComboBox>
 #include <QDockWidget>
 #include <QFileInfo>
@@ -58,7 +57,16 @@ ImageViewWindow::ImageViewWindow(MainWindow *document, int viewNumber,
             [this](const QString &) { refreshFromDocument(); });
     connect(m_document, &QObject::destroyed, this, [this]() {
       m_document.clear();
-      close();
+      QPointer<ImageViewWindow> view(this);
+      QTimer::singleShot(0, qApp, [view]() {
+        if (!view)
+          return;
+        if (auto *application = dynamic_cast<ColorScreenApplication *>(
+                QApplication::instance()))
+          application->closeView(view);
+        else
+          view->close();
+      });
     });
   }
   refreshFromDocument();
@@ -83,36 +91,22 @@ ImageViewWindow::ImageViewWindow(MainWindow *document, int viewNumber,
             [this](const QString &) { refreshFromDocument(); });
     connect(m_document, &QObject::destroyed, this, [this]() {
       m_document.clear();
-      close();
+      QPointer<ImageViewWindow> view(this);
+      QTimer::singleShot(0, qApp, [view]() {
+        if (!view)
+          return;
+        if (auto *application = dynamic_cast<ColorScreenApplication *>(
+                QApplication::instance()))
+          application->closeView(view);
+        else
+          view->close();
+      });
     });
   }
   refreshFromDocument();
   loadReferenceImage(m_referenceFile);
 }
 
-
-/** Destroy toolbar chrome before QMainWindow begins base-class teardown.
-
-    Secondary-view toolbars move between two live QMainWindow layouts while a
-    tab is active.  Deleting the toolbar here ensures Qt disconnects its
-    QMainWindow icon/tool-button-style hooks while the current owner is still a
-    valid QMainWindow, rather than later from QWidget base destruction. */
-ImageViewWindow::~ImageViewWindow() {
-  if (!m_toolbar)
-    return;
-  if (auto *owner = qobject_cast<QMainWindow *>(m_toolbar->parentWidget()))
-    owner->removeToolBar(m_toolbar);
-  delete m_toolbar;
-  m_toolbar = nullptr;
-}
-
-/** Return an embedded view to ordinary QMainWindow ownership before closing. */
-void ImageViewWindow::closeEvent(QCloseEvent *event) {
-  if (auto *application =
-          dynamic_cast<ColorScreenApplication *>(QApplication::instance()))
-    application->prepareViewForClose(this);
-  QMainWindow::closeEvent(event);
-}
 
 /** Return the document whose state this secondary view follows. */
 MainWindow *ImageViewWindow::sourceDocument() const { return m_document.data(); }
@@ -206,7 +200,13 @@ void ImageViewWindow::setupUi() {
   QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
   QAction *closeView = fileMenu->addAction(tr("&Close View"));
   closeView->setShortcut(QKeySequence::Close);
-  connect(closeView, &QAction::triggered, this, &QWidget::close);
+  connect(closeView, &QAction::triggered, this, [this]() {
+    if (auto *application =
+            dynamic_cast<ColorScreenApplication *>(QApplication::instance()))
+      application->closeView(this);
+    else
+      close();
+  });
 
   QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
   viewMenu->addAction(pan);

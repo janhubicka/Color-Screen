@@ -60,6 +60,9 @@ public:
   /** Attach every detached secondary view to the primary workspace. */
   void attachAllViews();
 
+  /** Close VIEW through its MDI wrapper when attached, or directly otherwise. */
+  bool closeView(ImageViewWindow *view);
+
   /** Return all live secondary views. */
   QList<ImageViewWindow *> viewWindows();
 
@@ -102,9 +105,6 @@ public:
 
   /** Return workspace-owned UI to DOCUMENT before its close event finishes. */
   void prepareDocumentForClose(MainWindow *document);
-
-  /** Return workspace-owned chrome to VIEW before WA_DeleteOnClose destroys it. */
-  void prepareViewForClose(ImageViewWindow *view);
 
   /** Return the number of documents currently attached as tabs. */
   int tabCount() const;
