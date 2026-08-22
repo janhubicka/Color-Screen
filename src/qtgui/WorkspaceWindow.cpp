@@ -19,6 +19,7 @@
 #include <QTabBar>
 #include <QTimer>
 #include <QToolBar>
+#include <QVBoxLayout>
 
 namespace {
 
@@ -79,6 +80,25 @@ WorkspaceWindow::WorkspaceWindow(QWidget *parent) : QMainWindow(parent) {
 
   statusBar()->setObjectName(QStringLiteral("WorkspaceStatusBar"));
 
+  // Long-running user-visible tasks remain global even when their document is
+  // not active. The active document's compact transient progress row is placed
+  // below this stack.
+  m_workspaceProgressArea = new QWidget(statusBar());
+  m_workspaceProgressArea->setObjectName(
+      QStringLiteral("WorkspaceProgressArea"));
+  m_workspaceProgressLayout = new QVBoxLayout(m_workspaceProgressArea);
+  m_workspaceProgressLayout->setContentsMargins(0, 0, 0, 0);
+  m_workspaceProgressLayout->setSpacing(2);
+
+  m_userVisibleProgressStack = new QWidget(m_workspaceProgressArea);
+  m_userVisibleProgressStack->setObjectName(
+      QStringLiteral("WorkspaceUserVisibleProgressStack"));
+  m_userVisibleProgressLayout = new QVBoxLayout(m_userVisibleProgressStack);
+  m_userVisibleProgressLayout->setContentsMargins(0, 0, 0, 0);
+  m_userVisibleProgressLayout->setSpacing(2);
+  m_workspaceProgressLayout->addWidget(m_userVisibleProgressStack);
+  statusBar()->addPermanentWidget(m_workspaceProgressArea, 1);
+
   m_inspectorStack = new QStackedWidget(this);
   m_inspectorStack->setObjectName(QStringLiteral("documentInspectorStack"));
   m_inspectorDock = new QDockWidget(tr("Document Controls"), this);
@@ -113,6 +133,8 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
     m_inspectorStack->addWidget(inspector);
     inspector->hide();
   }
+
+  attachUserVisibleProgress(document);
 
   document->setWindowFlags(Qt::Widget);
   auto *subWindow = new DocumentSubWindow(document);
@@ -393,7 +415,34 @@ void WorkspaceWindow::configureTabBar() {
   });
 }
 
-/** Present DOCUMENT's menus, toolbar, and inspector in the shared shell. */
+/** Keep DOCUMENT's persistent long-running task rows globally visible. */
+void WorkspaceWindow::attachUserVisibleProgress(MainWindow *document) {
+  if (!document || !m_userVisibleProgressLayout)
+    return;
+
+  QWidget *progress = document->workspaceUserVisibleStatusWidget();
+  if (!progress || progress->parentWidget() == m_userVisibleProgressStack)
+    return;
+
+  progress = document->takeUserVisibleStatusWidget();
+  if (!progress)
+    return;
+  progress->setParent(m_userVisibleProgressStack);
+  m_userVisibleProgressLayout->addWidget(progress);
+}
+
+/** Return DOCUMENT's persistent task rows to a detached document window. */
+void WorkspaceWindow::detachUserVisibleProgress(MainWindow *document) {
+  if (!document)
+    return;
+
+  QWidget *progress = document->workspaceUserVisibleStatusWidget();
+  if (progress && progress->parentWidget() == m_userVisibleProgressStack)
+    m_userVisibleProgressLayout->removeWidget(progress);
+  document->restoreUserVisibleStatusWidget();
+}
+
+/** Present DOCUMENT's menus, toolbar, inspector, and transient status row. */
 void WorkspaceWindow::installDocumentChrome(MainWindow *document) {
   if (!document)
     return;
@@ -421,10 +470,11 @@ void WorkspaceWindow::installDocumentChrome(MainWindow *document) {
   }
 
   if (QWidget *statusWidget = document->workspaceStatusWidget()) {
-    if (statusWidget->parentWidget() != statusBar()) {
+    if (statusWidget->parentWidget() != m_workspaceProgressArea) {
       const bool explicitlyHidden = statusWidget->isHidden();
       document->statusBar()->removeWidget(statusWidget);
-      statusBar()->addPermanentWidget(statusWidget);
+      statusWidget->setParent(m_workspaceProgressArea);
+      m_workspaceProgressLayout->addWidget(statusWidget);
       statusWidget->setVisible(!explicitlyHidden);
     }
   }
@@ -455,10 +505,10 @@ void WorkspaceWindow::releaseDocumentChrome(MainWindow *document,
   }
 
   if (QWidget *statusWidget = document->workspaceStatusWidget()) {
-    if (statusWidget->parentWidget() == statusBar()) {
+    if (statusWidget->parentWidget() == m_workspaceProgressArea) {
       const bool explicitlyHidden = statusWidget->isHidden();
-      statusBar()->removeWidget(statusWidget);
-      document->statusBar()->addPermanentWidget(statusWidget);
+      m_workspaceProgressLayout->removeWidget(statusWidget);
+      document->statusBar()->addPermanentWidget(statusWidget, 1);
       statusWidget->setVisible(!explicitlyHidden);
     }
     document->statusBar()->setVisible(showInWindow);
@@ -510,6 +560,7 @@ void WorkspaceWindow::takeDocumentFromWorkspace(MainWindow *document) {
     return;
 
   releaseDocumentChrome(document, true);
+  detachUserVisibleProgress(document);
 
   if (QWidget *inspector = document->workspaceInspectorWidget()) {
     m_inspectorStack->removeWidget(inspector);

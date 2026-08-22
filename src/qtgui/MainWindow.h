@@ -13,6 +13,7 @@
 #include <QByteArray>
 #include <QElapsedTimer>
 #include <QMainWindow>
+#include <QString>
 #include <QVBoxLayout>
 #include <functional>
 #include <map>
@@ -27,12 +28,13 @@ class QToolBar;    // Added
 class QComboBox;   // Added
 class QCheckBox;   // Added
 class QVBoxLayout; // Added for Linearization tab
+class QLabel;
+class QProgressBar;
+class QPushButton;
+class QWidget;
 #include "ImageWidget.h"
 
 class NavigationView;
-class QProgressBar;
-class QLabel;
-class QPushButton;
 class QTimer;
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/solver-parameters.h"
@@ -49,9 +51,20 @@ class QTimer;
 #include "BacklightChartWidget.h"
 #include <QElapsedTimer>
 
+/** Action offered for a user-visible long-running progress task. */
+enum class ProgressAction { Cancel, Stop };
+
+/** One registered background operation and its optional dedicated status row. */
 struct ProgressEntry {
   std::shared_ptr<colorscreen::progress_info> info;
   QElapsedTimer startTime;
+  bool userVisible = false;
+  ProgressAction action = ProgressAction::Cancel;
+  QString title;
+  QWidget *row = nullptr;
+  QLabel *rowLabel = nullptr;
+  QProgressBar *rowProgressBar = nullptr;
+  QPushButton *rowActionButton = nullptr;
 };
 
 class ScreenPanel;
@@ -108,9 +121,25 @@ public:
   /** Return the navigation/parameter panel column hosted by the workspace. */
   QWidget *workspaceInspectorWidget() const { return m_rightColumn; }
 
-  /** Return the per-document progress controls shown in the workspace status
-      bar while this document is active. */
+  /** Return the transient per-document progress controls shown while this
+      document is the active workspace document. */
   QWidget *workspaceStatusWidget() const { return m_progressContainer; }
+
+  /** Return this document's persistent user-visible progress rows.
+
+      Attached documents keep this widget in the workspace global status area
+      even while another image is active. */
+  QWidget *workspaceUserVisibleStatusWidget() const {
+    return m_userVisibleProgressContainer;
+  }
+
+  /** Remove the persistent progress widget from this document's local layout
+      so the workspace can host it globally. */
+  QWidget *takeUserVisibleStatusWidget();
+
+  /** Return user-visible progress rows to this document's own status widget
+      before detaching it from the shared workspace. */
+  void restoreUserVisibleStatusWidget();
 
   /** Remove shared chrome from this QMainWindow before it is embedded in the
       application-level MDI area.  The document state itself is unchanged. */
@@ -382,7 +411,19 @@ private:
 
   // Progress Reporting
 public:
+  /** Register ordinary transient background progress. */
   void addProgress(std::shared_ptr<colorscreen::progress_info> info);
+
+  /** Register a long-running task that gets its own status-bar row.
+
+      TITLE is the stable user-facing task name. ACTION controls whether the
+      row offers Cancel or Stop; both request cooperative termination through
+      the progress_info object, but Stop is used for incremental work whose
+      already-produced results remain useful. */
+  void addUserVisibleProgress(
+      std::shared_ptr<colorscreen::progress_info> info, const QString &title,
+      ProgressAction action = ProgressAction::Cancel);
+
   void removeProgress(std::shared_ptr<colorscreen::progress_info> info);
 
 private slots:
@@ -409,9 +450,13 @@ private:
   QProgressBar *m_progressBar;
   QLabel *m_statusLabel;
   QPushButton *m_cancelButton;
-  QWidget *m_progressContainer; // Container for the above
+  QWidget *m_progressContainer; // Outer progress area for a detached document
+  QVBoxLayout *m_progressLayout = nullptr;
+  QWidget *m_userVisibleProgressContainer = nullptr;
+  QVBoxLayout *m_userVisibleProgressLayout = nullptr;
+  QWidget *m_transientProgressRow = nullptr;
 
-  // Progress switcher UI (for multiple progresses)
+  // Progress switcher UI (for multiple transient progresses)
   QLabel *m_progressCountLabel;
   QPushButton *m_prevProgressButton;
   QPushButton *m_nextProgressButton;
@@ -431,8 +476,28 @@ private:
   // Tracks the active render progress so we can confirm before cancelling
   std::weak_ptr<colorscreen::progress_info> m_renderProgress;
 
-  // Helper to find the longest running task
+  /** Register INFO with either transient or dedicated-row presentation. */
+  void registerProgress(std::shared_ptr<colorscreen::progress_info> info,
+                        bool userVisible, const QString &title,
+                        ProgressAction action);
+
+  /** Return currently registered transient progress entries. */
+  std::vector<ProgressEntry *> transientProgresses();
+
+  /** Find the longest running transient task. */
   ProgressEntry *getLongestRunningTask();
+
+  /** Update LABEL and BAR from ENTRY's nested progress state. */
+  void updateProgressWidgets(const ProgressEntry &entry, QLabel *label,
+                             QProgressBar *bar, const QString &title);
+
+  /** Request cooperative cancellation/stopping of INFO. */
+  void requestProgressTermination(
+      const std::shared_ptr<colorscreen::progress_info> &info,
+      ProgressAction action);
+
+  /** Synchronize visibility of the outer progress container. */
+  void updateProgressContainerVisibility();
 
   // Undo/Redo
   QUndoStack *m_undoStack;

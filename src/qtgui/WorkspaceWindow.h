@@ -12,6 +12,8 @@ class QMdiArea;
 class QMdiSubWindow;
 class QStackedWidget;
 class QTabBar;
+class QVBoxLayout;
+class QWidget;
 
 /** Top-level multiple-document workspace for Color-Screen.
 
@@ -91,7 +93,14 @@ private:
   /** Apply tab behavior that QMdiArea does not expose directly. */
   void configureTabBar();
 
-  /** Show DOCUMENT's menus, toolbar, and inspector as active workspace chrome. */
+  /** Keep DOCUMENT's user-visible long tasks in the global status area. */
+  void attachUserVisibleProgress(MainWindow *document);
+
+  /** Return DOCUMENT's user-visible rows before detaching it. */
+  void detachUserVisibleProgress(MainWindow *document);
+
+  /** Show DOCUMENT's menus, toolbar, inspector, and transient status as the
+      active workspace chrome. */
   void installDocumentChrome(MainWindow *document);
 
   /** Return DOCUMENT's toolbar/menu visibility to its own window.
@@ -112,6 +121,10 @@ private:
   QMdiArea *m_mdiArea = nullptr;
   QDockWidget *m_inspectorDock = nullptr;
   QStackedWidget *m_inspectorStack = nullptr;
+  QWidget *m_workspaceProgressArea = nullptr;
+  QVBoxLayout *m_workspaceProgressLayout = nullptr;
+  QWidget *m_userVisibleProgressStack = nullptr;
+  QVBoxLayout *m_userVisibleProgressLayout = nullptr;
   QPointer<MainWindow> m_chromeDocument;
   QPointer<QTabBar> m_tabBar;
   QPointer<MainWindow> m_dragDocument;
