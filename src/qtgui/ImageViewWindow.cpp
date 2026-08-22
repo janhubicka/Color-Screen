@@ -799,4 +799,9 @@ void ImageViewWindow::restoreFromWorkspaceEmbedding() {
   if (statusBar())
     statusBar()->show();
   m_workspaceEmbedded = false;
+
+  // Detaching is an explicit ownership transition. Do not rely on the window
+  // system to synthesize WindowActivate before the view receives its panels;
+  // headless/offscreen platforms in particular may never send that event.
+  claimDocumentInspector();
 }
