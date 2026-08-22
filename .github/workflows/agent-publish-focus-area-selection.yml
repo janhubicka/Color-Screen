@@ -1,0 +1,49 @@
+name: Publish focus-area selection
+
+on:
+  pull_request:
+    branches:
+      - agent/focus-area-selection-publish-base-20260822
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/focus-area-selection-publisher-20260822'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out publisher payload
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: transport
+
+      - name: Check out exact current base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          path: repo
+
+      - name: Verify and publish focus-area selection
+        shell: bash
+        run: |
+          set -euxo pipefail
+          base64 -d transport/agent/focus-area-selection.patch.gz.b64 > /tmp/focus-area-selection.patch.gz
+          echo '957cc54c9d170439a6824779c510bdfa98605947a80e6b1bbed146afab69a9dd  /tmp/focus-area-selection.patch.gz' | sha256sum -c -
+          gzip -dc /tmp/focus-area-selection.patch.gz > /tmp/focus-area-selection.patch
+          echo '32cc32cb8f8ffd7f1ba09c697f250c08bcd4272d41e07714420ac3715d2a2655  /tmp/focus-area-selection.patch' | sha256sum -c -
+
+          cd repo
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.base.sha }}"
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git checkout -B agent/focus-analysis-area-selection "${{ github.event.pull_request.base.sha }}"
+          git am /tmp/focus-area-selection.patch
+          git diff HEAD^ --check
+          test "$(git diff HEAD^ --name-only | sort)" = $'doc/finetune-solver.md\ndoc/finetune-tracking.md\nsrc/libcolorscreen/finetune-int.h\nsrc/libcolorscreen/finetune.C\nsrc/libcolorscreen/include/finetune.h\nsrc/libcolorscreen/unittests.C'
+          grep -q 'check_detection_stats' src/libcolorscreen/unittests.C
+          grep -q 'Focus-area grid detector failed' src/libcolorscreen/unittests.C
+          git push --force origin HEAD:refs/heads/agent/focus-analysis-area-selection
+          printf 'Published %s on base %s\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD^)"
