@@ -350,6 +350,202 @@ test_finetune_helpers ()
         }
   }
 
+  /* The inexpensive focus-area finder should accept constant and gently
+     varying solid colours while rejecting image texture, a strong smooth
+     gradient and a solid patch too small to contain the complete analysis
+     window.  */
+  {
+    const int width = 52, height = 30;
+    std::vector<rgbdata> image ((size_t)width * height);
+    for (int y = 0; y < height; y++)
+      for (int x = 0; x < width; x++)
+        {
+          const luminosity_t texture = ((x + y) & 1) ? 0.10f : -0.10f;
+          image[(size_t)y * width + x]
+              = { 0.35f + texture, 0.38f - texture * 0.7f,
+                  0.32f + texture * 0.5f };
+        }
+    auto fill = [&] (int x0, int y0, int x1, int y1,
+                     const std::function<rgbdata (int, int)> &pixel)
+    {
+      for (int y = y0; y < y1; y++)
+        for (int x = x0; x < x1; x++)
+          image[(size_t)y * width + x] = pixel (x, y);
+    };
+    fill (3, 3, 15, 15, [] (int, int) { return rgbdata { 0.75, 0.12, 0.10 }; });
+    fill (19, 3, 33, 15, [] (int x, int y)
+          {
+            return rgbdata { (luminosity_t)(0.15 + 0.001 * (x - 26)),
+                             (luminosity_t)(0.65 + 0.0015 * (y - 9)),
+                             (luminosity_t)(0.20 - 0.0005 * (x - 26)) };
+          });
+    fill (36, 3, 50, 15, [] (int, int) { return rgbdata { 0.10, 0.14, 0.78 }; });
+    /* An exactly planar region is not necessarily solid: the explicit plane
+       change gate must reject this strong image gradient.  */
+    fill (3, 19, 19, 29, [] (int x, int)
+          {
+            return rgbdata { (luminosity_t)(0.15 + 0.035 * (x - 3)),
+                             0.30, 0.25 };
+          });
+    /* This patch is flatter than the background but cannot contain a 5x5
+       analysis window without including texture.  */
+    fill (24, 21, 28, 25, [] (int, int) { return rgbdata { 0.55, 0.55, 0.20 }; });
+
+    focus_analysis_area_parameters params;
+    params.max_relative_rms = 0.025;
+    params.max_relative_gradient = 0.15;
+    params.minimum_separation = 0.8;
+    params.max_candidates = 0;
+    std::vector<focus_analysis_area> found;
+    if (!finetune_find_focus_areas_in_grid (
+            image.data (), nullptr, width, height, { 0, 0 }, 1, 5, 5,
+            params, &found))
+      {
+        fprintf (stderr, "Focus-area grid detector failed\n");
+        return false;
+      }
+    bool red = false, green = false, blue = false, strong_gradient = false;
+    bool tiny = false;
+    for (const focus_analysis_area &area : found)
+      {
+        const coord_t x = area.screen_center.x;
+        const coord_t y = area.screen_center.y;
+        red |= x >= 5 && x <= 12 && y >= 5 && y <= 12;
+        green |= x >= 21 && x <= 30 && y >= 5 && y <= 12;
+        blue |= x >= 38 && x <= 47 && y >= 5 && y <= 12;
+        strong_gradient |= x >= 5 && x <= 16 && y >= 21 && y <= 26;
+        tiny |= x >= 24 && x <= 27 && y >= 21 && y <= 24;
+      }
+    if (!red || !green || !blue || strong_gradient || tiny)
+      {
+        fprintf (stderr,
+                 "Focus-area detector did not separate flat image regions\n");
+        return false;
+      }
+    for (size_t i = 0; i < found.size (); i++)
+      for (size_t j = i + 1; j < found.size (); j++)
+        {
+          const coord_t xs
+              = params.minimum_separation * found[i].screen_area.width;
+          const coord_t ys
+              = params.minimum_separation * found[i].screen_area.height;
+          const coord_t dx
+              = (found[i].screen_center.x - found[j].screen_center.x) / xs;
+          const coord_t dy
+              = (found[i].screen_center.y - found[j].screen_center.y) / ys;
+          if (dx * dx + dy * dy < 1 - 1e-12)
+            {
+              fprintf (stderr, "Focus-area non-maximum suppression failed\n");
+              return false;
+            }
+        }
+
+    std::vector<unsigned char> valid ((size_t)width * height, 1);
+    /* Punch one invalid sample into the middle of a red window and require
+       every accepted window covering it to disappear rather than silently
+       treating missing reconstruction data as black.  */
+    valid[(size_t)8 * width + 8] = 0;
+    std::vector<focus_analysis_area> with_hole;
+    if (!finetune_find_focus_areas_in_grid (
+            image.data (), valid.data (), width, height, { 0, 0 }, 1, 5, 5,
+            params, &with_hole))
+      return false;
+    for (const focus_analysis_area &area : with_hole)
+      if (fabs (area.screen_center.x - 8) <= 2
+          && fabs (area.screen_center.y - 8) <= 2)
+        {
+          fprintf (stderr, "Invalid focus-area sample was ignored\n");
+          return false;
+        }
+  }
+
+  /* After individual fits, quality is a gate and colour diversity is a
+     separate optimization.  A group of excellent red candidates must not
+     crowd out comparable green/blue/neutral areas, while failed or weak fits
+     never become useful merely because their colour is novel.  */
+  {
+    std::vector<focus_analysis_area> areas (10);
+    std::vector<finetune_result> fits (10);
+    for (int i = 0; i < 6; i++)
+      {
+        areas[i].mean_color = { 0.8, 0.1, 0.1 };
+        fits[i].success = true;
+        fits[i].contrast = 0.1;
+        fits[i].badness = 0.005 + i * 0.00005;
+        fits[i].uncertainty = 0.05;
+      }
+    areas[6].mean_color = { 0.1, 0.8, 0.1 };
+    areas[7].mean_color = { 0.1, 0.1, 0.8 };
+    areas[8].mean_color = { 0.4, 0.4, 0.4 };
+    for (int i = 6; i <= 8; i++)
+      {
+        fits[i].success = true;
+        fits[i].contrast = 0.1;
+        fits[i].badness = 0.0055 + (i - 6) * 0.0001;
+        fits[i].uncertainty = 0.06;
+      }
+    areas[9].mean_color = { 0.05, 0.9, 0.8 };
+    fits[9].success = true;
+    fits[9].contrast = finetune_default_min_contrast / 2;
+    fits[9].badness = 0.0001;
+    fits[9].uncertainty = 0.001;
+
+    focus_analysis_selection_parameters params;
+    params.max_areas = 4;
+    params.fit_retain_ratio = 1;
+    std::vector<size_t> selected;
+    coord_t condition = -1;
+    if (!select_focus_analysis_areas (areas, fits, params, &selected,
+                                      &condition)
+        || selected.size () != 4 || selected[0] != 8
+        || std::find (selected.begin (), selected.end (), 6) == selected.end ()
+        || std::find (selected.begin (), selected.end (), 7) == selected.end ()
+        || std::find (selected.begin (), selected.end (), 9) != selected.end ()
+        || !(condition > 0.5))
+      {
+        fprintf (stderr,
+                 "Focus-area quality/diversity subset selection failed\n");
+        return false;
+      }
+    bool selected_red = false;
+    for (size_t i : selected)
+      selected_red |= i < 6;
+    if (!selected_red)
+      {
+        fprintf (stderr, "Focus-area selector omitted red colour family\n");
+        return false;
+      }
+
+    /* Identical colours provide samples but no additional colour-space
+       conditioning.  */
+    areas.resize (4);
+    fits.resize (4);
+    for (int i = 0; i < 4; i++)
+      {
+        areas[i].mean_color = { 0.8, 0.1, 0.1 };
+        fits[i].success = true;
+        fits[i].contrast = 0.1;
+        fits[i].badness = 0.005;
+        fits[i].uncertainty = 0.05;
+      }
+    condition = -1;
+    if (!select_focus_analysis_areas (areas, fits, params, &selected,
+                                      &condition)
+        || selected.size () != 4 || condition > 1e-10)
+      {
+        fprintf (stderr,
+                 "Repeated focus-area colours falsely looked well conditioned\n");
+        return false;
+      }
+
+    params.max_areas = 9;
+    if (select_focus_analysis_areas (areas, fits, params, &selected, nullptr))
+      {
+        fprintf (stderr, "Oversized focus-area subset was accepted\n");
+        return false;
+      }
+  }
+
   finetune_focus_grid_interval interval;
   if (!finetune_focus_grid_interval_for_value ((coord_t)0.5, 2, 5,
                                                 &interval)
@@ -566,6 +762,39 @@ test_finetune_uniform_image_layer ()
                  | finetune_no_normalize | finetune_no_data_collection;
   const std::vector<point_t> locations
       = { { 64, 48 }, { 192, 48 }, { 320, 48 } };
+
+  /* Exercise the production discovery wrapper on the same synthetic scan.
+     Each region is physically a different uniform image colour under one
+     periodic screen, so the interpolated first pass should retain candidates
+     well inside all three regions and avoid depending on display rendering.  */
+  focus_analysis_area_parameters area_params;
+  area_params.window_scale = 1.5;
+  area_params.max_relative_rms = 0.12;
+  area_params.max_relative_gradient = 0.25;
+  area_params.minimum_separation = 0.8;
+  std::vector<focus_analysis_area> discovered;
+  if (!find_focus_analysis_areas (rparam, geometry, image, {}, fparam,
+                                  area_params, &discovered, nullptr))
+    {
+      fprintf (stderr, "Synthetic focus-area discovery failed to run\n");
+      return false;
+    }
+  bool found_region[regions] = {};
+  for (const focus_analysis_area &area : discovered)
+    for (int tileid = 0; tileid < regions; tileid++)
+      if (area.image_center.x > tileid * (width / regions) + 24
+          && area.image_center.x
+                 < (tileid + 1) * (width / regions) - 24)
+        found_region[tileid] = true;
+  for (int tileid = 0; tileid < regions; tileid++)
+    if (!found_region[tileid])
+      {
+        fprintf (stderr,
+                 "Synthetic focus-area discovery missed region %d (%zu candidates)\n",
+                 tileid, discovered.size ());
+        return false;
+      }
+
   finetune_result result
       = finetune (rparam, geometry, image, locations, nullptr, fparam, nullptr);
   if (!result.success)

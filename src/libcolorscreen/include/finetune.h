@@ -315,6 +315,103 @@ struct finetune_result
   // finetune_result& operator=(finetune_result&&) = default;
 };
 
+/* Controls the inexpensive first pass that locates sufficiently large, locally
+   uniform image areas for later focus analysis.  Distances are measured in
+   periodic screen-cell coordinates so the same defaults work across scan
+   resolutions.  */
+struct focus_analysis_area_parameters
+{
+  /* Distance between samples of the interpolated reconstruction in screen
+     periods.  Values near one suppress the physical screen while retaining
+     ordinary image edges.  */
+  coord_t sample_step = 1;
+  /* Scale of the uniformity window relative to the FINETUNE tile half-range.
+     A value of two verifies context extending twice as far as the solver tile.
+   */
+  coord_t window_scale = 2;
+  /* Distance between tested candidate centres in sampled-screen pixels.  */
+  int candidate_stride = 1;
+  /* Maximum RMS residual from the best shallow RGB plane, relative to the RMS
+     magnitude of the mean RGB value.  */
+  coord_t max_relative_rms = 0.15;
+  /* Maximum combined full-window change of that fitted plane, relative to the
+     mean RGB magnitude.  X/Y plane slopes are combined in quadrature so
+     opposite channel gradients cannot cancel.  This rejects smooth but
+     substantial image gradients.  */
+  coord_t max_relative_gradient = 0.25;
+  /* Reject nearly black areas where relative uniformity is ill-conditioned.  */
+  luminosity_t min_signal = 0.02;
+  /* Suppress accepted centres closer than this fraction of the analysis-window
+     width/height before applying MAX_CANDIDATES.  Zero disables suppression.  */
+  coord_t minimum_separation = 0.75;
+  /* Maximum number of image candidates returned after non-maximum suppression.
+     Zero means no explicit limit.  */
+  int max_candidates = 64;
+};
+
+/* One image region that passed the inexpensive interpolated-image uniformity
+   test.  The solver has not necessarily verified this candidate yet.  */
+struct focus_analysis_area
+{
+  point_t image_center = { -1, -1 };
+  point_t screen_center = { -1, -1 };
+  /* Screen-space rectangle over which local uniformity was measured.  */
+  image_area screen_area;
+  /* Conservative image-space bounding box of SCREEN_AREA for overlays and
+     subsequent tile qualification.  */
+  int_image_area image_bounds;
+  /* Mean unadjusted interpolated RGB value over SCREEN_AREA.  */
+  rgbdata mean_color = { 0, 0, 0 };
+  coord_t relative_rms = 0;
+  coord_t relative_gradient = 0;
+  /* Lower is better.  Used only to order/NMS image candidates; solver fit
+     quality remains a separate quantity.  */
+  coord_t uniformity_score = 0;
+};
+
+/* Controls selection of a colour-diverse subset after every candidate has been
+   checked independently by FINETUNE.  */
+struct focus_analysis_selection_parameters
+{
+  /* Joint FINETUNE currently supports at most eight explicit locations.  */
+  int max_areas = 8;
+  /* Form the diversity pool from this fraction of the best usable individual
+     fits, while retaining at least MAX_AREAS when enough fits exist.  */
+  coord_t fit_retain_ratio = 0.5;
+  luminosity_t min_contrast = finetune_default_min_contrast;
+  /* Signal floor used when converting absolute solver residual to a relative
+     image-space residual for quality ordering.  */
+  luminosity_t min_signal = 0.02;
+};
+
+/* Locate image regions large enough for FPARAMS' FINETUNE tile and sufficiently
+   uniform in the unadjusted interpolated reconstruction.  SEARCH_AREA is in
+   scan-image coordinates; an empty area selects RPARAM's image area.  Return
+   false only for invalid input, mapping/render failure or cancellation.  An
+   empty successful result means no suitable area was found.  */
+nodiscard_attr DLL_PUBLIC bool
+find_focus_analysis_areas (
+    const render_parameters &rparam, const scr_to_img_parameters &param,
+    const image_data &img, int_image_area search_area,
+    const finetune_parameters &fparams,
+    const focus_analysis_area_parameters &parameters,
+    std::vector<focus_analysis_area> *areas,
+    progress_info *progress = nullptr);
+
+/* Select up to PARAMETERS.MAX_AREAS from AREAS after independent FINETUNE
+   verification in FITS.  Weak/failed fits are discarded first; the retained
+   high-quality pool is then ordered to make its normalized RGB chromaticities
+   well conditioned.  INDICES refer to AREAS/FITS.  COLOR_CONDITION, when
+   nonnull, receives 27*det(G)/trace(G)^3 for the selected chromaticity Gram
+   matrix (zero for fewer than three independent colours, one for isotropic
+   coverage).  Return false only for invalid arguments.  */
+nodiscard_attr DLL_PUBLIC bool
+select_focus_analysis_areas (
+    const std::vector<focus_analysis_area> &areas,
+    const std::vector<finetune_result> &fits,
+    const focus_analysis_selection_parameters &parameters,
+    std::vector<size_t> *indices, coord_t *color_condition = nullptr);
+
 /* Match scan tiles to a simulated additive-screen capture.
 
    For normal refinement LOCS contains between one and eight image-pixel

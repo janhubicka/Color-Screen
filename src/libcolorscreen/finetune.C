@@ -275,6 +275,528 @@ finetune_classify_result (const finetune_result &result,
   return finetune_result_quality::usable;
 }
 
+/* Return true when C can be used by the focus-area detector.  */
+static inline bool
+finite_focus_area_color_p (rgbdata c)
+{
+  return my_isfinite (c.red) && my_isfinite (c.green)
+         && my_isfinite (c.blue);
+}
+
+/* Return RMS magnitude of RGB vector C.  */
+static inline coord_t
+focus_area_color_magnitude (rgbdata c)
+{
+  return my_sqrt (((coord_t)c.red * c.red + (coord_t)c.green * c.green
+                   + (coord_t)c.blue * c.blue)
+                  / (coord_t)3);
+}
+
+/* Return true when PARAMETERS form a safe focus-area detector setup.  */
+static bool
+valid_focus_analysis_area_parameters_p (
+    const focus_analysis_area_parameters &parameters)
+{
+  return my_isfinite (parameters.sample_step) && parameters.sample_step > 0
+         && my_isfinite (parameters.window_scale)
+         && parameters.window_scale >= 1
+         && parameters.candidate_stride >= 1
+         && my_isfinite (parameters.max_relative_rms)
+         && parameters.max_relative_rms >= 0
+         && my_isfinite (parameters.max_relative_gradient)
+         && parameters.max_relative_gradient >= 0
+         && my_isfinite (parameters.min_signal) && parameters.min_signal > 0
+         && my_isfinite (parameters.minimum_separation)
+         && parameters.minimum_separation >= 0
+         && parameters.max_candidates >= 0;
+}
+
+/* Score a regularly sampled interpolated RGB grid.  A shallow plane is fit
+   independently to all three channels using centred X/Y coordinates.  Because
+   the window is rectangular, the constant, X and Y basis vectors are mutually
+   orthogonal and the residual can be computed directly without a matrix solve.
+   This tolerates gentle fading/illumination gradients while still rejecting
+   texture, edges and stronger gradients.  */
+bool
+finetune_find_focus_areas_in_grid (
+    const rgbdata *data, const unsigned char *valid, int width, int height,
+    point_t origin, coord_t step, int window_width, int window_height,
+    const focus_analysis_area_parameters &parameters,
+    std::vector<focus_analysis_area> *areas)
+{
+  if (!areas || !data || width <= 0 || height <= 0
+      || (int64_t)width * height > INT_MAX
+      || !valid_focus_analysis_area_parameters_p (parameters)
+      || !my_isfinite (origin.x) || !my_isfinite (origin.y)
+      || !my_isfinite (step) || step <= 0 || window_width < 3
+      || window_height < 3 || !(window_width & 1) || !(window_height & 1))
+    return false;
+
+  areas->clear ();
+  if (window_width > width || window_height > height)
+    return true;
+
+  const int hx = window_width / 2;
+  const int hy = window_height / 2;
+  const int n = window_width * window_height;
+  double sxx = 0, syy = 0;
+  for (int x = -hx; x <= hx; x++)
+    sxx += (double)x * x * step * step * window_height;
+  for (int y = -hy; y <= hy; y++)
+    syy += (double)y * y * step * step * window_width;
+  if (!(sxx > 0) || !(syy > 0))
+    return false;
+
+  std::vector<focus_analysis_area> candidates;
+  const int stride = parameters.candidate_stride;
+  for (int cy = hy; cy + hy < height; cy += stride)
+    for (int cx = hx; cx + hx < width; cx += stride)
+      {
+        double sr = 0, sg = 0, sb = 0, sq = 0;
+        double sxr = 0, sxg = 0, sxb = 0;
+        double syr = 0, syg = 0, syb = 0;
+        bool usable = true;
+        for (int y = -hy; y <= hy && usable; y++)
+          for (int x = -hx; x <= hx; x++)
+            {
+              const size_t i = (size_t)(cy + y) * width + cx + x;
+              if ((valid && !valid[i]) || !finite_focus_area_color_p (data[i]))
+                {
+                  usable = false;
+                  break;
+                }
+              const rgbdata c = data[i];
+              const double ux = x * step;
+              const double uy = y * step;
+              sr += c.red;
+              sg += c.green;
+              sb += c.blue;
+              sq += (double)c.red * c.red + (double)c.green * c.green
+                    + (double)c.blue * c.blue;
+              sxr += ux * c.red;
+              sxg += ux * c.green;
+              sxb += ux * c.blue;
+              syr += uy * c.red;
+              syg += uy * c.green;
+              syb += uy * c.blue;
+            }
+        if (!usable)
+          continue;
+
+        const rgbdata mean
+            = { (luminosity_t)(sr / n), (luminosity_t)(sg / n),
+                (luminosity_t)(sb / n) };
+        const coord_t magnitude = focus_area_color_magnitude (mean);
+        if (!my_isfinite (magnitude) || magnitude < parameters.min_signal)
+          continue;
+
+        double sse = sq - (sr * sr + sg * sg + sb * sb) / n
+                     - (sxr * sxr + sxg * sxg + sxb * sxb) / sxx
+                     - (syr * syr + syg * syg + syb * syb) / syy;
+        /* Roundoff can make exact planes slightly negative.  A substantially
+           negative value indicates invalid arithmetic instead.  */
+        const double roundoff
+            = std::numeric_limits<double>::epsilon ()
+              * std::max (1.0, sq) * 128;
+        if (sse < -roundoff || !my_isfinite (sse))
+          continue;
+        if (sse < 0)
+          sse = 0;
+        const coord_t relative_rms
+            = my_sqrt (sse / ((double)n * 3)) / magnitude;
+
+        const double bx2 = (sxr * sxr + sxg * sxg + sxb * sxb)
+                           / (sxx * sxx);
+        const double by2 = (syr * syr + syg * syg + syb * syb)
+                           / (syy * syy);
+        const double dx = (window_width - 1) * step;
+        const double dy = (window_height - 1) * step;
+        const coord_t relative_gradient
+            = my_sqrt ((bx2 * dx * dx + by2 * dy * dy) / 3) / magnitude;
+        if (!my_isfinite (relative_rms) || !my_isfinite (relative_gradient)
+            || relative_rms > parameters.max_relative_rms
+            || relative_gradient > parameters.max_relative_gradient)
+          continue;
+
+        focus_analysis_area area;
+        area.screen_center
+            = { origin.x + cx * step, origin.y + cy * step };
+        area.screen_area
+            = { area.screen_center.x - window_width * step * (coord_t)0.5,
+                area.screen_center.y - window_height * step * (coord_t)0.5,
+                window_width * step, window_height * step };
+        area.mean_color = mean;
+        area.relative_rms = relative_rms;
+        area.relative_gradient = relative_gradient;
+        area.uniformity_score
+            = relative_rms + relative_gradient * (coord_t)0.25;
+        candidates.push_back (area);
+      }
+
+  std::stable_sort (
+      candidates.begin (), candidates.end (),
+      [] (const focus_analysis_area &a, const focus_analysis_area &b)
+      { return a.uniformity_score < b.uniformity_score; });
+
+  areas->reserve (parameters.max_candidates
+                      ? std::min ((size_t)parameters.max_candidates,
+                                  candidates.size ())
+                      : candidates.size ());
+  for (const focus_analysis_area &candidate : candidates)
+    {
+      bool overlap = false;
+      if (parameters.minimum_separation > 0)
+        for (const focus_analysis_area &accepted : *areas)
+          {
+            const coord_t xscale
+                = parameters.minimum_separation * candidate.screen_area.width;
+            const coord_t yscale
+                = parameters.minimum_separation * candidate.screen_area.height;
+            const coord_t dx
+                = (candidate.screen_center.x - accepted.screen_center.x)
+                  / xscale;
+            const coord_t dy
+                = (candidate.screen_center.y - accepted.screen_center.y)
+                  / yscale;
+            if (dx * dx + dy * dy < 1)
+              {
+                overlap = true;
+                break;
+              }
+          }
+      if (!overlap)
+        areas->push_back (candidate);
+      if (parameters.max_candidates
+          && (int)areas->size () >= parameters.max_candidates)
+        break;
+    }
+  return true;
+}
+
+/* Return a conservative image-space bounding box for screen-space AREA.
+   Sampling the corners, edge midpoints and centre also covers ordinary smooth
+   mesh/lens curvature without making the overlay depend on a dense polygon.  */
+static int_image_area
+focus_area_image_bounds (const scr_to_img &map, const image_area &area,
+                         const int_image_area &limit)
+{
+  coord_t xmin = 0, xmax = 0, ymin = 0, ymax = 0;
+  bool first = true;
+  for (int yi = 0; yi < 3; yi++)
+    for (int xi = 0; xi < 3; xi++)
+      {
+        point_t p = { area.x + area.width * xi * (coord_t)0.5,
+                      area.y + area.height * yi * (coord_t)0.5 };
+        if (!map.to_img_in_mesh_range (p))
+          continue;
+        p = map.to_img (p);
+        if (!my_isfinite (p.x) || !my_isfinite (p.y))
+          continue;
+        if (first)
+          xmin = xmax = p.x, ymin = ymax = p.y, first = false;
+        else
+          {
+            xmin = std::min (xmin, p.x);
+            xmax = std::max (xmax, p.x);
+            ymin = std::min (ymin, p.y);
+            ymax = std::max (ymax, p.y);
+          }
+      }
+  if (first)
+    return {};
+  int_image_area ret (my_floor (xmin), my_floor (ymin),
+                      my_ceil (xmax) - my_floor (xmin) + 1,
+                      my_ceil (ymax) - my_floor (ymin) + 1);
+  return ret.intersect (limit);
+}
+
+/* Locate solid-colour focus-analysis candidates in the interpolated
+   reconstruction.  Scanner sharpening and an already-installed adaptive blur
+   correction are disabled for this inexpensive discovery pass so candidate
+   classification does not depend circularly on the focus model being fitted.
+   Screen-domain denoising/demosaicing and the current colour reconstruction
+   remain active.  */
+bool
+find_focus_analysis_areas (
+    const render_parameters &rparam, const scr_to_img_parameters &param,
+    const image_data &img, int_image_area search_area,
+    const finetune_parameters &fparams,
+    const focus_analysis_area_parameters &parameters,
+    std::vector<focus_analysis_area> *areas, progress_info *progress)
+{
+  if (!areas || !img.has_rgb () || param.type == Random
+      || !valid_focus_analysis_area_parameters_p (parameters)
+      || fparams.range < 0 || finetune_flag_error (fparams.flags)
+      || (fparams.flags & (finetune_coordinates | finetune_guess_coordinates)))
+    return false;
+  areas->clear ();
+
+  const int_image_area image_limit
+      = rparam.get_image_area (img.width, img.height);
+  if (search_area.empty_p ())
+    search_area = image_limit;
+  else
+    search_area = search_area.intersect (image_limit);
+  if (search_area.empty_p ())
+    return true;
+
+  scr_to_img map;
+  if (!map.set_parameters (param, img))
+    return false;
+  const image_area screen_range = map.get_range (image_area (search_area));
+  if (screen_range.empty_p ())
+    return true;
+
+  coord_t solver_xrange = fparams.range
+                              ? fparams.range
+                              : ((fparams.flags
+                                  & (finetune_no_normalize | finetune_bw
+                                     | finetune_uniform_image_layer))
+                                     ? (coord_t)1
+                                     : (coord_t)2);
+  coord_t solver_yrange = solver_xrange;
+  if (screen_with_vertical_strips_p (param.type))
+    solver_yrange *= 3;
+  const int half_x = std::max (2, (int)my_ceil (
+                                      solver_xrange * parameters.window_scale
+                                      / parameters.sample_step));
+  const int half_y = std::max (2, (int)my_ceil (
+                                      solver_yrange * parameters.window_scale
+                                      / parameters.sample_step));
+  const int window_width = 2 * half_x + 1;
+  const int window_height = 2 * half_y + 1;
+
+  const coord_t step = parameters.sample_step;
+  const coord_t x0 = my_ceil (screen_range.x / step) * step;
+  const coord_t y0 = my_ceil (screen_range.y / step) * step;
+  const coord_t x1
+      = my_floor ((screen_range.x + screen_range.width) / step) * step;
+  const coord_t y1
+      = my_floor ((screen_range.y + screen_range.height) / step) * step;
+  if (x1 < x0 || y1 < y0)
+    return true;
+  const int64_t width64
+      = (int64_t)my_floor ((x1 - x0) / step + (coord_t)0.5) + 1;
+  const int64_t height64
+      = (int64_t)my_floor ((y1 - y0) / step + (coord_t)0.5) + 1;
+  if (width64 <= 0 || height64 <= 0 || width64 > INT_MAX
+      || height64 > INT_MAX || width64 * height64 > INT_MAX)
+    return false;
+  const int width = width64;
+  const int height = height64;
+  if (window_width > width || window_height > height)
+    return true;
+
+  render_parameters analysis_rparam = rparam;
+  analysis_rparam.sharpen.mode = sharpen_parameters::none;
+  analysis_rparam.scanner_blur_correction = nullptr;
+  render_interpolate renderer (param, img, analysis_rparam, 256);
+  renderer.set_unadjusted ();
+  if (!renderer.precompute_img_range (search_area, progress))
+    return false;
+  if (progress && progress->cancel_requested ())
+    return false;
+
+  std::vector<rgbdata> data ((size_t)width * height);
+  std::vector<unsigned char> valid ((size_t)width * height, 0);
+  for (int y = 0; y < height; y++)
+    {
+      if (progress && progress->cancel_requested ())
+        return false;
+      for (int x = 0; x < width; x++)
+        {
+          const point_t scr = { x0 + x * step, y0 + y * step };
+          if (!map.to_img_in_mesh_range (scr))
+            continue;
+          const point_t ip = map.to_img (scr);
+          if (!my_isfinite (ip.x) || !my_isfinite (ip.y)
+              || ip.x < search_area.x || ip.y < search_area.y
+              || ip.x >= search_area.x + search_area.width
+              || ip.y >= search_area.y + search_area.height)
+            continue;
+          const rgbdata c = renderer.sample_pixel_scr (scr);
+          if (!finite_focus_area_color_p (c))
+            continue;
+          const size_t i = (size_t)y * width + x;
+          data[i] = c;
+          valid[i] = 1;
+        }
+    }
+
+  std::vector<focus_analysis_area> found;
+  if (!finetune_find_focus_areas_in_grid (
+          data.data (), valid.data (), width, height, { x0, y0 }, step,
+          window_width, window_height, parameters, &found))
+    return false;
+
+  areas->reserve (found.size ());
+  for (focus_analysis_area &area : found)
+    {
+      if (!map.to_img_in_mesh_range (area.screen_center))
+        continue;
+      area.image_center = map.to_img (area.screen_center);
+      area.image_bounds
+          = focus_area_image_bounds (map, area.screen_area, search_area);
+      if (!finite_focus_area_color_p (area.mean_color)
+          || !my_isfinite (area.image_center.x)
+          || !my_isfinite (area.image_center.y) || area.image_bounds.empty_p ())
+        continue;
+      areas->push_back (area);
+    }
+  return true;
+}
+
+/* Determinant of a symmetric 3x3 matrix stored in G.  */
+static double
+focus_area_gram_determinant (const double g[3][3])
+{
+  return g[0][0] * (g[1][1] * g[2][2] - g[1][2] * g[2][1])
+         - g[0][1] * (g[1][0] * g[2][2] - g[1][2] * g[2][0])
+         + g[0][2] * (g[1][0] * g[2][1] - g[1][1] * g[2][0]);
+}
+
+/* Add outer product C*C^T to G.  */
+static void
+focus_area_add_outer_product (double g[3][3], const double c[3])
+{
+  for (int y = 0; y < 3; y++)
+    for (int x = 0; x < 3; x++)
+      g[y][x] += c[y] * c[x];
+}
+
+/* Select a high-quality, colour-diverse subset for the joint multi-tile fit.
+   Individual solver residual is normalized by the independently reconstructed
+   area signal; fitted contrast is only an information gate and never appears
+   in the quality denominator, avoiding the known high-saturation reward.  */
+bool
+select_focus_analysis_areas (
+    const std::vector<focus_analysis_area> &areas,
+    const std::vector<finetune_result> &fits,
+    const focus_analysis_selection_parameters &parameters,
+    std::vector<size_t> *indices, coord_t *color_condition)
+{
+  if (!indices || areas.size () != fits.size () || parameters.max_areas < 1
+      || parameters.max_areas > 8
+      || !my_isfinite (parameters.fit_retain_ratio)
+      || parameters.fit_retain_ratio < 0 || parameters.fit_retain_ratio > 1
+      || !my_isfinite (parameters.min_contrast) || parameters.min_contrast < 0
+      || !my_isfinite (parameters.min_signal) || parameters.min_signal <= 0)
+    return false;
+  indices->clear ();
+  if (color_condition)
+    *color_condition = 0;
+
+  struct candidate
+  {
+    size_t index;
+    double quality;
+    double chroma[3];
+    double neutrality;
+  };
+  std::vector<candidate> usable;
+  usable.reserve (areas.size ());
+  for (size_t i = 0; i < areas.size (); i++)
+    {
+      if (finetune_classify_result (fits[i], parameters.min_contrast)
+              != finetune_result_quality::usable
+          || !my_isfinite (fits[i].badness) || fits[i].badness < 0
+          || fits[i].badness >= std::numeric_limits<coord_t>::max ()
+          || !finite_focus_area_color_p (areas[i].mean_color))
+        continue;
+      const double r = std::max ((double)areas[i].mean_color.red, 0.0);
+      const double g = std::max ((double)areas[i].mean_color.green, 0.0);
+      const double b = std::max ((double)areas[i].mean_color.blue, 0.0);
+      const double signal = std::sqrt ((r * r + g * g + b * b) / 3);
+      const double sum = r + g + b;
+      if (!my_isfinite (signal) || signal < parameters.min_signal
+          || !my_isfinite (sum) || !(sum > 0))
+        continue;
+      candidate c;
+      c.index = i;
+      c.quality = fits[i].badness / signal;
+      c.chroma[0] = r / sum;
+      c.chroma[1] = g / sum;
+      c.chroma[2] = b / sum;
+      c.neutrality = std::min ({ c.chroma[0], c.chroma[1], c.chroma[2] });
+      if (my_isfinite (c.quality))
+        usable.push_back (c);
+    }
+  if (usable.empty ())
+    return true;
+
+  std::stable_sort (usable.begin (), usable.end (),
+                    [] (const candidate &a, const candidate &b)
+                    { return a.quality < b.quality; });
+  size_t pool_size
+      = (size_t)my_ceil (usable.size () * parameters.fit_retain_ratio);
+  pool_size = std::max (pool_size,
+                        std::min (usable.size (),
+                                  (size_t)parameters.max_areas));
+  pool_size = std::min (pool_size, usable.size ());
+  usable.resize (pool_size);
+
+  /* The first tile fixes the scale gauge of tile-primary intensities.  Prefer
+     a neutral-ish member of the already high-quality pool so later tiles do
+     not need extreme relative coefficients merely because the anchor was a
+     nearly pure primary.  */
+  size_t anchor = 0;
+  for (size_t i = 1; i < usable.size (); i++)
+    if (usable[i].neutrality > usable[anchor].neutrality + 1e-12
+        || (fabs (usable[i].neutrality - usable[anchor].neutrality) <= 1e-12
+            && usable[i].quality < usable[anchor].quality))
+      anchor = i;
+
+  double gram[3][3] = {};
+  std::vector<unsigned char> selected (usable.size (), 0);
+  auto accept = [&] (size_t i)
+  {
+    indices->push_back (usable[i].index);
+    focus_area_add_outer_product (gram, usable[i].chroma);
+    selected[i] = 1;
+  };
+  accept (anchor);
+
+  while ((int)indices->size () < parameters.max_areas
+         && indices->size () < usable.size ())
+    {
+      size_t best = usable.size ();
+      double best_det = -1;
+      for (size_t i = 0; i < usable.size (); i++)
+        if (!selected[i])
+          {
+            double trial[3][3];
+            memcpy (trial, gram, sizeof (trial));
+            focus_area_add_outer_product (trial, usable[i].chroma);
+            /* A tiny isotropic prior makes the D-optimal score meaningful for
+               the first two selected rows without materially changing later
+               conditioning.  */
+            for (int c = 0; c < 3; c++)
+              trial[c][c] += 1e-8;
+            const double det = focus_area_gram_determinant (trial);
+            if (best == usable.size () || det > best_det + 1e-18
+                || (fabs (det - best_det) <= 1e-18
+                    && usable[i].quality < usable[best].quality))
+              best = i, best_det = det;
+          }
+      if (best == usable.size ())
+        break;
+      accept (best);
+    }
+
+  if (color_condition && indices->size () >= 3)
+    {
+      const double trace = gram[0][0] + gram[1][1] + gram[2][2];
+      double det = focus_area_gram_determinant (gram);
+      if (det < 0 && det > -1e-14)
+        det = 0;
+      if (trace > 0 && det > 0 && my_isfinite (det))
+        *color_condition
+            = std::clamp ((coord_t)(27 * det / (trace * trace * trace)),
+                          (coord_t)0, (coord_t)1);
+    }
+  return true;
+}
+
 namespace
 {
 struct gsl_work_deleter

@@ -534,6 +534,38 @@ spatial changes of dye chromaticity remain visible as residual/model mismatch.
 This is preferable for focus identification because unconstrained per-tile
 primary colours would recreate the blur-versus-saturation ambiguity.
 
+### Focus-area discovery and subset conditioning
+
+`find_focus_analysis_areas()` performs only the inexpensive image-side first
+pass.  It samples the unadjusted interpolated reconstruction on a regular grid
+in periodic screen coordinates, normally once per screen period.  The tested
+window is larger than the eventual finetune tile.  Each RGB window is fitted by
+a shallow plane using an orthogonal constant/X/Y basis; candidates are rejected
+when either the relative RMS residual or the combined full-window fitted-plane
+change is too large.  This lets mild fading or illumination drift pass while texture, edges
+and substantial smooth gradients fail.  Missing reconstruction samples and
+near-black windows are also rejected, and spatial non-maximum suppression keeps
+the returned candidate list bounded and useful.
+
+The discovery renderer disables scanner sharpening and any already-installed
+adaptive blur correction so finding a focus-analysis area does not depend on
+the focus correction that the later fit is supposed to estimate.  Current
+screen-domain demosaicing/denoising and reconstruction geometry remain active.
+
+`select_focus_analysis_areas()` is called only after corresponding candidates
+have been checked individually by `finetune()`.  Failed or low-contrast fits are
+removed first.  Remaining fits are ordered by final raw residual divided by the
+independently reconstructed area signal, rather than by the historical
+contrast-scaled `uncertainty`; fitted contrast is therefore a minimum
+information gate and cannot reward the high-saturation compensation basin.
+The best retained pool is reduced to at most eight areas by a regularized
+D-optimal criterion on normalized RGB chromaticities.  A neutral-ish first tile
+is preferred because the first tile fixes the scale gauge of the primary
+intensity factorization.  The returned colour-condition value is
+`27*det(G)/trace(G)^3`, where `G` is the selected chromaticity Gram matrix; it is
+zero for rank-deficient colour sets and one for isotropic three-dimensional
+coverage.
+
 ## Result-field contract
 
 For scalar MTF focus, the field belonging to the active model is fitted while

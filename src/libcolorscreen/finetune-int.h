@@ -146,6 +146,18 @@ enum class finetune_result_quality
 finetune_result_quality finetune_classify_result (
     const finetune_result &result, luminosity_t min_contrast);
 
+/* Score a regularly sampled interpolated-RGB grid and return locally uniform
+   focus-analysis candidates.  VALID may be null when every sample is usable.
+   ORIGIN and STEP locate grid sample [0,0] in periodic screen coordinates.
+   WINDOW_WIDTH and WINDOW_HEIGHT are odd sample counts.  This helper contains
+   the detector math shared by production and deterministic unit tests; image
+   coordinates are filled by the production wrapper afterwards.  */
+bool finetune_find_focus_areas_in_grid (
+    const rgbdata *data, const unsigned char *valid, int width, int height,
+    point_t origin, coord_t step, int window_width, int window_height,
+    const focus_analysis_area_parameters &parameters,
+    std::vector<focus_analysis_area> *areas);
+
 /* Internal exact focus-screen cache access used by regression tests.  Normal
    finetune callers reach this cache through FINETUNE itself.  */
 std::shared_ptr<screen> finetune_get_cached_screen_for_test (

@@ -1024,7 +1024,7 @@ simplex starting point as the final solution.
 
 **Severity:** high focus identifiability
 
-**Status:** partially fixed; automatic area selection remains open
+**Status:** partially fixed; library discovery/selection implemented, solver orchestration and Qt remain open
 
 The original multi-tile experiment used the physically useful factorization
 needed for robust focus analysis: one set of historical screen-primary scanner
@@ -1051,7 +1051,33 @@ set.  Regression coverage checks the shared-primary scaling operation itself
 and runs the production `finetune()` path on synthetic differently coloured
 uniform tiles with a known common blur.
 
-Remaining work is to discover suitable solid areas automatically, reject weak
-individual fits, choose a well-conditioned colour-diverse subset, and add
-leave-one-area-out/held-out validation before the Qt workflow uses the joint
-fit as an authoritative focus measurement.
+The next library slice now provides the inexpensive discovery and subset-selection
+parts of that workflow.  `find_focus_analysis_areas()` samples the unadjusted
+interpolated reconstruction in screen coordinates, with scanner sharpening and
+an already-installed adaptive blur correction disabled to avoid a circular
+focus decision.  It fits a shallow RGB plane over a context larger than the
+actual finetune tile and rejects candidates by relative plane residual, plane
+change, signal, missing reconstruction samples and spatial non-maximum
+suppression.  A shallow plane rather than a constant allows gentle
+illumination/fading variation without accepting ordinary image gradients.
+
+After independent solver verification, `select_focus_analysis_areas()` first
+requires an ordinary usable finetune result and ranks fit quality by raw final
+residual relative to the independently reconstructed image signal.  Fitted
+contrast is an information gate, not a denominator, so exaggerated fitted
+screen saturation cannot improve the ranking merely by increasing contrast.
+The retained high-quality pool is then selected by a regularized D-optimal
+criterion in normalized RGB chromaticity space.  The first tile preferentially
+uses a neutral candidate because it fixes the scale gauge of the per-tile
+primary intensities.  The selector reports a normalized chromaticity Gram
+condition in [0,1]; repeated copies of one colour correctly remain singular.
+The initial finder defaults are deliberately liberal (`relative_rms <= 0.15`,
+`relative_gradient <= 0.25`) because individual finetune is the authoritative
+second-stage rejection.  On the existing Coolscan Dufay fixture they retain 18
+spatially separated candidates, while the sky crop reaches the 64-candidate cap;
+the full-fixture discovery pass takes about 0.1 s in the local O2 build.
+
+Remaining work is to run/retain the individual `finetune()` results for the
+discovered candidates, add leave-one-area-out and held-out validation around the
+joint fit, and connect the resulting state to the Qt **Find focus analysis
+areas** / **Analyze sharpness in areas** workflow.
