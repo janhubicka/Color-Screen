@@ -1,0 +1,46 @@
+name: Agent publish Batch 08 benchmark
+
+on:
+  push:
+    branches:
+      - agent/batch08-benchmark-publish-20260822
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: transport
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/scr-detect-batch08-benchmark
+          fetch-depth: 0
+          path: target
+      - name: Apply reviewed benchmark patch
+        shell: bash
+        run: |
+          cd target
+          git apply --check ../transport/.agent-publish/batch08-benchmark.patch
+          git apply ../transport/.agent-publish/batch08-benchmark.patch
+          python3 -m py_compile testsuite/benchmark-screen-detection.py
+          git diff --check
+          git diff --stat
+      - name: Commit benchmark patch
+        shell: bash
+        run: |
+          cd target
+          git config user.name "OpenAI"
+          git config user.email "noreply@openai.com"
+          git add doc/scr-detect-geometry-tracking.md \
+                  testsuite/Makefile.am \
+                  testsuite/Makefile.in \
+                  testsuite/benchmark-screen-detection.py
+          git commit -m "detect: add repeatable screen-detection benchmark" \
+            -m "Add a manually invoked benchmark driver for external regular-screen scans. The driver runs the existing autodetect command, records DG-014 counters and stage timings, scan/screen coverage, subprocess wall time, and Linux peak RSS, and keeps per-run reports, logs, and output parameter files. Default benchmark modes compare the historical detector mask (radius 2 / amount 3) with explicit unsharpened 0 / 0 without changing normal detector defaults; custom sharpening and fast/slow flood-fill combinations are also supported." \
+            -m "Record the first full-resolution National Geographic Batch 08 baseline from NGS00428 Tile01 and Tile05. Tile01 is a corner tile with a raster-free border: disabling the compatibility mask increases the seed search from 1 to 23,702 pixels and makes flood fill 2.96x slower. Tile05 is an interior control: its seed remains immediate at 0 / 0, but detected patches fall by 12.2% and flood fill becomes 1.68x slower. This shows that DG-010 seed search is useful but cannot by itself justify removing the mask; class-map and flood-fill completeness remain separate robustness work." \
+            -m "Include the benchmark driver in EXTRA_DIST and update the generated Makefile.in with the corresponding one-line delta. Validation includes Python bytecode compilation, legacy and 0 / 0 runs on the existing Dufay fixture, an explicit unsharpened fast-only run verifying rgb_precomputes=0, and four successful full-resolution EIP runs across the two NGS00428 tiles. The uploaded EIP data remain external and are not added to the repository."
+          git push origin HEAD:agent/scr-detect-batch08-benchmark
