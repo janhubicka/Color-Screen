@@ -5,7 +5,7 @@ on:
     branches:
       - agent/transport-base-user-visible-progress-20260822
     paths:
-      - agent/uvp.part-*
+      - agent/user-visible-progress.patch.gz.b64
 
 permissions:
   contents: write
@@ -31,9 +31,11 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          cat transport/agent/uvp.part-* > user-visible-progress.patch.b64
-          echo 'c1310f5bc8a44100b0bef90c9dc16071a7de262258e3a3a7beeaddc0dda7a975  user-visible-progress.patch.b64' | sha256sum -c -
-          base64 --decode user-visible-progress.patch.b64 > user-visible-progress.patch
+          cp transport/agent/user-visible-progress.patch.gz.b64 .
+          echo 'afa07e3437db9a966a7af79e78d7ed76d1d53461f1436ab3a91e7a40ff08fea4  user-visible-progress.patch.gz.b64' | sha256sum -c -
+          base64 --decode user-visible-progress.patch.gz.b64 > user-visible-progress.patch.gz
+          echo '714b0cec3f165418a4a2fd1257b7a3e48fb56f167eeb6cc02451f3bd317d755f  user-visible-progress.patch.gz' | sha256sum -c -
+          gzip -dc user-visible-progress.patch.gz > user-visible-progress.patch
           echo '6a5815c50495ace79940ba495057c3a3160bae2560d12868f5a70610b25e861a  user-visible-progress.patch' | sha256sum -c -
 
           cd repo
