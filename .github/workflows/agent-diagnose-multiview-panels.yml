@@ -1,0 +1,72 @@
+name: Agent diagnose multiview panels
+
+on:
+  pull_request:
+    branches:
+      - agent/multiview-panels-publish-base-20260822
+    paths:
+      - agent/multiview-panels-diagnose.trigger
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 15399e7ca10e3ff9abc9797364bbd3f8ca33482d
+          fetch-depth: 0
+      - name: Recover and apply reviewed patch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch origin agent/multiview-panels-publish-base-20260822
+          git show origin/agent/multiview-panels-publish-base-20260822:.github/workflows/agent-publish-multiview-panels.yml > /tmp/publisher.yml
+          payload=$(sed -n "s/^[[:space:]]*echo '\([^']*\)' | base64.*/\1/p" /tmp/publisher.yml)
+          test -n "$payload"
+          printf '%s' "$payload" | base64 --decode | gzip -d > /tmp/modify-multiview.py
+          python3 /tmp/modify-multiview.py
+          git diff --check
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev liblcms2-dev libgtk2.0-dev libfftw3-dev qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev libexiv2-dev build-essential libopenjp2-7-dev libpng-dev
+      - name: Build
+        run: |
+          QT_LIBEXECS="$(qmake6 -query QT_HOST_LIBEXECS)"
+          export PATH="$QT_LIBEXECS:$PATH"
+          CXXFLAGS="-O2 -g -Wall -Wextra" CFLAGS="$CXXFLAGS" ./configure --enable-qtgui
+          make -j"$(nproc)"
+      - name: Run diagnostic smoke
+        id: smoke
+        shell: bash
+        run: |
+          set +e
+          QT_QPA_PLATFORM=offscreen ./src/qtgui/colorscreen-qt --debug-qt \
+            --smoke-test 12000 --smoke-test-expect-windows 2 \
+            --smoke-test-new-view --smoke-test-slanted-reference \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+            > multiview-smoke.log 2>&1
+          status=$?
+          echo "exit_status=$status" | tee -a multiview-smoke.log
+          cat multiview-smoke.log
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Upload diagnostic log
+        uses: actions/upload-artifact@v4
+        with:
+          name: multiview-smoke-log
+          path: multiview-smoke.log
+      - name: Publish disposable diagnostic source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git checkout -B agent/qtgui-multiview-panels-diagnostic
+          git add -- .agents/qtgui.md NEWS src/qtgui/ImageViewWindow.cpp src/qtgui/ImageViewWindow.h src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h src/qtgui/WorkspaceWindow.cpp src/qtgui/WorkspaceWindow.h src/qtgui/main.cpp
+          git commit -m 'diagnostic: multiview panel source under test'
+          git push --force origin HEAD:refs/heads/agent/qtgui-multiview-panels-diagnostic
