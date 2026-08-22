@@ -27,9 +27,38 @@ jobs:
         shell: bash
         run: |
           cd target
-          git apply --check ../transport/.agent-publish/batch08-benchmark.patch
-          git apply ../transport/.agent-publish/batch08-benchmark.patch
+          git apply --check \
+            --exclude=testsuite/Makefile.am \
+            --exclude=testsuite/Makefile.in \
+            ../transport/.agent-publish/batch08-benchmark.patch
+          git apply \
+            --exclude=testsuite/Makefile.am \
+            --exclude=testsuite/Makefile.in \
+            ../transport/.agent-publish/batch08-benchmark.patch
+          python3 - <<'PY'
+          from pathlib import Path
+
+          for name in ("testsuite/Makefile.am", "testsuite/Makefile.in"):
+              path = Path(name)
+              text = path.read_text()
+              marker = "\t\t\t  validate-mtf-physical-model.py\n"
+              replacement = (
+                  "\t\t\t  validate-mtf-physical-model.py \\\n"
+                  "\t\t\t  benchmark-screen-detection.py\n"
+              )
+              if text.count(marker) != 1:
+                  raise SystemExit(f"{name}: expected one EXTRA_DIST marker")
+              path.write_text(text.replace(marker, replacement, 1))
+          PY
           python3 -m py_compile testsuite/benchmark-screen-detection.py
+          test "$(git hash-object testsuite/benchmark-screen-detection.py)" = \
+               0dd71b5b7608d0a46520ece823daa15aff0500af
+          test "$(git hash-object testsuite/Makefile.am)" = \
+               c0281ce2cd5e4fb1cdf67811af2667889c18f31f
+          test "$(git hash-object testsuite/Makefile.in)" = \
+               0ca6ce50885a56ad7f6336009033e47804b2b787
+          test "$(git hash-object doc/scr-detect-geometry-tracking.md)" = \
+               3bcaa47ae628798eb3394b975612d2fcb735c6e9
           git diff --check
           git diff --stat
       - name: Commit benchmark patch
