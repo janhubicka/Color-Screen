@@ -1,0 +1,53 @@
+name: Agent publish New View
+
+on:
+  pull_request:
+    branches:
+      - agent/new-view-publish-base-20260822
+    paths:
+      - agent/new-view.patch.gz.b64
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out transport payload
+        uses: actions/checkout@v4
+        with:
+          path: transport
+
+      - name: Check out exact current main
+        uses: actions/checkout@v4
+        with:
+          ref: ab4997bfee76954c5144193a32aac8d212a96a69
+          fetch-depth: 0
+          path: repo
+
+      - name: Verify, apply, and publish New View
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp transport/agent/new-view.patch.gz.b64 .
+          echo 'c8144972d556d7a7c01ba9e70dcc584d699e1ffcbf8d8f6413565ca344d5390a  new-view.patch.gz.b64' | sha256sum -c -
+          base64 --decode new-view.patch.gz.b64 > new-view.patch.gz
+          echo 'e5b272f742de37f6a1b0872bc5ebd1ca1e3746c98bd474cdb776d8f86c57add9  new-view.patch.gz' | sha256sum -c -
+          gzip -dc new-view.patch.gz > new-view.patch
+          echo 'efd922df6c45d39492b5d909f69b8f33201e07492757feb05f6468d80f171cbb  new-view.patch' | sha256sum -c -
+
+          cd repo
+          test "$(git rev-parse HEAD)" = ab4997bfee76954c5144193a32aac8d212a96a69
+          git checkout -B agent/qtgui-new-view ab4997bfee76954c5144193a32aac8d212a96a69
+          git apply --check ../new-view.patch
+          git apply ../new-view.patch
+          git diff --check
+          test "$(git diff --name-only | sort)" = $'NEWS\nsrc/qtgui/CMakeLists.txt\nsrc/qtgui/ColorScreenApplication.cpp\nsrc/qtgui/ColorScreenApplication.h\nsrc/qtgui/ImageViewWindow.cpp\nsrc/qtgui/ImageViewWindow.h\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/MainWindow.h\nsrc/qtgui/Makefile.am\nsrc/qtgui/Makefile.in\nsrc/qtgui/main.cpp'
+
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git add -- NEWS src/qtgui/CMakeLists.txt src/qtgui/ColorScreenApplication.cpp src/qtgui/ColorScreenApplication.h src/qtgui/ImageViewWindow.cpp src/qtgui/ImageViewWindow.h src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h src/qtgui/Makefile.am src/qtgui/Makefile.in src/qtgui/main.cpp
+          git commit -m 'qtgui: add secondary image views' -m 'Add Window > New View for displaying the same loaded image more than once without creating another document. MainWindow remains the sole owner of editable parameters, undo history, workers, recovery state, and filenames; ImageViewWindow shares image_data and follows document parameter snapshots while keeping display state such as render mode, IR/RGB choice, zoom, and pan independent.\n\nSecondary views have standard File/View/Window/Help menus, close independently, and disappear when their source document is destroyed. They are excluded from document/recovery accounting. Add smoke coverage which verifies shared image identity, unchanged document count, and independent render mode.'
+          git push --force origin HEAD:refs/heads/agent/qtgui-new-view
