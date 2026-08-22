@@ -32,7 +32,7 @@ jobs:
         run: |
           set -euxo pipefail
           cp transport/agent/slanted-reference.patch.gz.b64 .
-          echo '0f4b3024f4b66434da91fb75d26d69e2046d1e9ad715d787f42e54fabc450696  slanted-reference.patch.gz.b64' | sha256sum -c -
+          echo 'b8f9b4d40eac50615d74ddf30a6abea62a1f7304ac1b0c7b0129e726c8686f65  slanted-reference.patch.gz.b64' | sha256sum -c -
           base64 --decode slanted-reference.patch.gz.b64 > slanted-reference.patch.gz
           echo '29695e3a34e6afe3bd9fc5aa42800c4e63a5aa6107b93e6d115d3c1d0953e8db  slanted-reference.patch.gz' | sha256sum -c -
           gzip -dc slanted-reference.patch.gz > slanted-reference.patch
