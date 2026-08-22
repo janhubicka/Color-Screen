@@ -1,0 +1,74 @@
+name: Agent publish multiview panels
+
+on:
+  pull_request:
+    branches:
+      - agent/multiview-panels-publish-base-20260822
+    paths:
+      - agent/multiview-panels.trigger
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out exact current main
+        uses: actions/checkout@v4
+        with:
+          ref: 15399e7ca10e3ff9abc9797364bbd3f8ca33482d
+          fetch-depth: 0
+
+      - name: Apply multiview inspector change
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo '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' | base64 --decode | gzip -d > /tmp/modify-multiview.py
+          python3 /tmp/modify-multiview.py
+          git diff --check
+          test "$(git diff --name-only | sort)" = $'.agents/qtgui.md\nNEWS\nsrc/qtgui/ImageViewWindow.cpp\nsrc/qtgui/ImageViewWindow.h\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/MainWindow.h\nsrc/qtgui/WorkspaceWindow.cpp\nsrc/qtgui/WorkspaceWindow.h\nsrc/qtgui/main.cpp'
+
+      - name: Install Qt build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev \
+            liblcms2-dev libgtk2.0-dev libfftw3-dev qt6-base-dev qt6-tools-dev \
+            qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev \
+            libexiv2-dev build-essential libopenjp2-7-dev libpng-dev
+
+      - name: Build Qt GUI
+        run: |
+          CXXFLAGS="-O2 -g -Wall -Wextra" CFLAGS="$CXXFLAGS" \
+            ./configure --enable-qtgui
+          make -j"$(nproc)"
+
+      - name: Run multiview smoke
+        run: |
+          QT_QPA_PLATFORM=offscreen ./src/qtgui/colorscreen-qt \
+            --smoke-test 12000 --smoke-test-expect-windows 2 \
+            --smoke-test-new-view --smoke-test-slanted-reference \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+
+      - name: Commit and push review branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git checkout -B agent/qtgui-multiview-panels
+          git add -- .agents/qtgui.md NEWS \
+            src/qtgui/ImageViewWindow.cpp src/qtgui/ImageViewWindow.h \
+            src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h \
+            src/qtgui/WorkspaceWindow.cpp src/qtgui/WorkspaceWindow.h \
+            src/qtgui/main.cpp
+          git commit \
+            -m 'qtgui: give ordinary views the full document inspector' \
+            -m 'Make every ordinary New View present the same complete Navigation and parameter-panel inspector as the primary document view. Keep a single document-owned inspector so panel state, undo routing, detached diagnostic widgets, and recovery ownership are not duplicated; the active ordinary view only presents that inspector.' \
+            -m 'Route navigation and panel-driven image interactions to the ordinary view currently presenting the inspector, including area selection, crop/measurement tools, registration interaction, geometry visualization controls, and profile display. Detached secondary views temporarily host the same inspector and return it when workspace or primary-window focus changes.' \
+            -m 'Keep slanted-edge reference views intentionally specialized with their separate Navigation plus Sharpness-only inspector. Extend the New View smoke test to verify full panels in tabbed, detached, and reattached presentations while preserving view-local rendering state.' \
+            -m 'Validation: Qt 6 build with -O2 -g -Wall -Wextra, git diff --check, and the combined New View/slanted-reference offscreen smoke test.'
+          git push --force origin HEAD:refs/heads/agent/qtgui-multiview-panels
