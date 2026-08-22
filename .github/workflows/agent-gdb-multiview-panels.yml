@@ -1,0 +1,47 @@
+name: Agent gdb multiview panels
+
+on:
+  pull_request:
+    branches:
+      - agent/multiview-panels-publish-base-20260822
+    paths:
+      - agent/multiview-panels-gdb.trigger
+
+jobs:
+  gdb:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/qtgui-multiview-panels-diagnostic
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gdb libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev liblcms2-dev libgtk2.0-dev libfftw3-dev qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev libexiv2-dev build-essential libopenjp2-7-dev libpng-dev
+      - name: Build debug GUI
+        run: |
+          QT_LIBEXECS="$(qmake6 -query QT_HOST_LIBEXECS)"
+          export PATH="$QT_LIBEXECS:$PATH"
+          CXXFLAGS="-O0 -g3 -Wall -Wextra" CFLAGS="$CXXFLAGS" ./configure --enable-qtgui
+          make -j"$(nproc)"
+      - name: Capture backtrace
+        shell: bash
+        run: |
+          set +e
+          QT_QPA_PLATFORM=offscreen gdb --batch \
+            -ex 'set pagination off' -ex run -ex 'thread apply all bt full' \
+            --args ./src/qtgui/colorscreen-qt \
+            --smoke-test 12000 --smoke-test-expect-windows 2 \
+            --smoke-test-new-view --smoke-test-slanted-reference \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000DPI_raw.tif" \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000DPI_raw.tif" \
+            > multiview-gdb.log 2>&1
+          status=$?
+          echo "gdb_status=$status" >> multiview-gdb.log
+          cat multiview-gdb.log
+          exit 0
+      - name: Upload backtrace
+        uses: actions/upload-artifact@v4
+        with:
+          name: multiview-gdb-log
+          path: multiview-gdb.log
