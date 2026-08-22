@@ -67,6 +67,8 @@
 #include <QWindow>
 #include <QtConcurrent>
 
+#include <algorithm>
+
 // Undo/Redo Implementation
 
 /** Undo command that captures a full ParameterState snapshot before and after
@@ -1003,48 +1005,70 @@ void MainWindow::setupUi() {
   QStatusBar *statusBar = new QStatusBar(this);
   setStatusBar(statusBar);
 
-  // Progress Container (initially hidden)
+  // Progress Container. Ordinary short-lived work shares one transient row;
+  // explicitly user-visible operations receive dedicated rows beneath it.
   m_progressContainer = new QWidget(statusBar);
   m_progressContainer->setObjectName(QStringLiteral("DocumentProgressContainer"));
-  QHBoxLayout *progressLayout = new QHBoxLayout(m_progressContainer);
+  m_progressLayout = new QVBoxLayout(m_progressContainer);
+  m_progressLayout->setContentsMargins(0, 0, 0, 0);
+  m_progressLayout->setSpacing(2);
+
+  // User-visible rows have their own container.  The workspace moves this
+  // complete widget into its global status area while a document is attached,
+  // so long operations remain accessible after switching to another image.
+  m_userVisibleProgressContainer = new QWidget(m_progressContainer);
+  m_userVisibleProgressContainer->setObjectName(
+      QStringLiteral("UserVisibleProgressContainer"));
+  m_userVisibleProgressLayout =
+      new QVBoxLayout(m_userVisibleProgressContainer);
+  m_userVisibleProgressLayout->setContentsMargins(0, 0, 0, 0);
+  m_userVisibleProgressLayout->setSpacing(2);
+  m_userVisibleProgressContainer->hide();
+  m_progressLayout->addWidget(m_userVisibleProgressContainer);
+
+  m_transientProgressRow = new QWidget(m_progressContainer);
+  m_transientProgressRow->setObjectName(QStringLiteral("TransientProgressRow"));
+  QHBoxLayout *progressLayout = new QHBoxLayout(m_transientProgressRow);
   progressLayout->setContentsMargins(0, 0, 0, 0);
   progressLayout->setSpacing(8);
 
-  m_statusLabel = new QLabel("", m_progressContainer);
+  m_statusLabel = new QLabel("", m_transientProgressRow);
   m_statusLabel->setMinimumWidth(150);
   progressLayout->addWidget(m_statusLabel);
 
-  m_progressBar = new QProgressBar(m_progressContainer);
+  m_progressBar = new QProgressBar(m_transientProgressRow);
   m_progressBar->setRange(0, 100);
   m_progressBar->setTextVisible(false);
   m_progressBar->setMinimumWidth(200);
   progressLayout->addWidget(m_progressBar);
 
   // Progress switcher (count + prev/next buttons)
-  m_progressCountLabel = new QLabel("1/1", m_progressContainer);
+  m_progressCountLabel = new QLabel("1/1", m_transientProgressRow);
   m_progressCountLabel->setMinimumWidth(40);
   progressLayout->addWidget(m_progressCountLabel);
 
-  m_prevProgressButton = new QPushButton("<", m_progressContainer);
+  m_prevProgressButton = new QPushButton("<", m_transientProgressRow);
   m_prevProgressButton->setMaximumWidth(30);
   m_prevProgressButton->setToolTip("Previous progress");
   connect(m_prevProgressButton, &QPushButton::clicked, this,
           &MainWindow::onPrevProgress);
   progressLayout->addWidget(m_prevProgressButton);
 
-  m_nextProgressButton = new QPushButton(">", m_progressContainer);
+  m_nextProgressButton = new QPushButton(">", m_transientProgressRow);
   m_nextProgressButton->setMaximumWidth(30);
   m_nextProgressButton->setToolTip("Next progress");
   connect(m_nextProgressButton, &QPushButton::clicked, this,
           &MainWindow::onNextProgress);
   progressLayout->addWidget(m_nextProgressButton);
 
-  m_cancelButton = new QPushButton("Cancel", m_progressContainer);
+  m_cancelButton = new QPushButton("Cancel", m_transientProgressRow);
   connect(m_cancelButton, &QPushButton::clicked, this,
           &MainWindow::onCancelClicked);
   progressLayout->addWidget(m_cancelButton);
 
-  statusBar->addPermanentWidget(m_progressContainer);
+  m_progressLayout->addWidget(m_transientProgressRow);
+  m_transientProgressRow->hide();
+  statusBar->addPermanentWidget(m_progressContainer, 1);
   m_progressContainer->setVisible(false);
 
   // Initialize manual selection tracking
@@ -2041,286 +2065,380 @@ void MainWindow::onOpenImage() {
   });
 }
 
-/** Register a new background task for progress tracking.
-   Adds it to the active list and starts the periodic progress timer
-   if not already running.  */
+/** Register ordinary transient background progress. */
 void MainWindow::addProgress(std::shared_ptr<colorscreen::progress_info> info) {
-  ProgressEntry entry;
-  entry.info = info;
-  entry.startTime.start();
-  m_activeProgresses.push_back(entry);
-
-  if (!m_progressTimer->isActive()) {
-    m_progressTimer->start();
-  }
+  registerProgress(std::move(info), false, QString(), ProgressAction::Cancel);
 }
 
-/** Remove a completed or cancelled background task from progress tracking.
-   Adjusts the manually selected progress index to keep it valid after
-   the removal.  When the last progress is removed, stops the timer and
-   hides the progress container in the status bar.  */
+/** Register a long-running task with its own status-bar row. */
+void MainWindow::addUserVisibleProgress(
+    std::shared_ptr<colorscreen::progress_info> info, const QString &title,
+    ProgressAction action) {
+  registerProgress(std::move(info), true, title, action);
+}
+
+/** Register INFO and create a dedicated row when USERVISIBLE is true. */
+void MainWindow::registerProgress(
+    std::shared_ptr<colorscreen::progress_info> info, bool userVisible,
+    const QString &title, ProgressAction action) {
+  if (!info)
+    return;
+
+  ProgressEntry entry;
+  entry.info = std::move(info);
+  entry.userVisible = userVisible;
+  entry.action = action;
+  entry.title = title;
+  entry.startTime.start();
+
+  if (userVisible) {
+    entry.row = new QWidget(m_userVisibleProgressContainer);
+    entry.row->setObjectName(QStringLiteral("UserVisibleProgressRow"));
+    entry.row->setProperty("progressTitle", title);
+    QHBoxLayout *rowLayout = new QHBoxLayout(entry.row);
+    rowLayout->setContentsMargins(0, 0, 0, 0);
+    rowLayout->setSpacing(8);
+
+    entry.rowLabel = new QLabel(title, entry.row);
+    entry.rowLabel->setMinimumWidth(220);
+    rowLayout->addWidget(entry.rowLabel, 1);
+
+    entry.rowProgressBar = new QProgressBar(entry.row);
+    entry.rowProgressBar->setRange(0, 0);
+    entry.rowProgressBar->setTextVisible(false);
+    entry.rowProgressBar->setMinimumWidth(200);
+    rowLayout->addWidget(entry.rowProgressBar);
+
+    entry.rowActionButton = new QPushButton(
+        action == ProgressAction::Stop ? tr("Stop") : tr("Cancel"), entry.row);
+    entry.rowActionButton->setProperty(
+        "progressAction",
+        action == ProgressAction::Stop ? QStringLiteral("stop")
+                                       : QStringLiteral("cancel"));
+    const std::shared_ptr<colorscreen::progress_info> progress = entry.info;
+    connect(entry.rowActionButton, &QPushButton::clicked, this,
+            [this, progress, action]() {
+              requestProgressTermination(progress, action);
+            });
+    rowLayout->addWidget(entry.rowActionButton);
+
+    // Dedicated rows stay together in the persistent user-visible container.
+    m_userVisibleProgressLayout->addWidget(entry.row);
+    entry.row->show();
+  }
+
+  m_activeProgresses.push_back(std::move(entry));
+  if (!m_progressTimer->isActive())
+    m_progressTimer->start();
+
+  updateProgressContainerVisibility();
+}
+
+/** Return the active progresses that share the transient status row. */
+std::vector<ProgressEntry *> MainWindow::transientProgresses() {
+  std::vector<ProgressEntry *> result;
+  result.reserve(m_activeProgresses.size());
+  for (ProgressEntry &entry : m_activeProgresses)
+    if (!entry.userVisible)
+      result.push_back(&entry);
+  return result;
+}
+
+/** Remove a completed or terminated background task from progress tracking. */
 void MainWindow::removeProgress(
     std::shared_ptr<colorscreen::progress_info> info) {
-  int removedIndex = -1;
+  int removedTransientIndex = -1;
+  int transientIndex = 0;
+
   for (auto it = m_activeProgresses.begin(); it != m_activeProgresses.end();
        ++it) {
     if (it->info == info) {
-      removedIndex = std::distance(m_activeProgresses.begin(), it);
+      if (!it->userVisible)
+        removedTransientIndex = transientIndex;
+      if (it->row) {
+        m_userVisibleProgressLayout->removeWidget(it->row);
+        it->row->deleteLater();
+      }
       m_activeProgresses.erase(it);
       break;
     }
+    if (!it->userVisible)
+      ++transientIndex;
   }
 
-  // Clear the currently displayed progress if it was the one we just removed
-  if (m_currentlyDisplayedProgress == info) {
+  if (m_currentlyDisplayedProgress == info)
     m_currentlyDisplayedProgress.reset();
-  }
 
-  // Handle manual selection when progress is removed
-  if (removedIndex >= 0) {
-    if (m_manuallySelectedProgressIndex == removedIndex) {
-      // The manually selected progress was removed, reset to auto-select
+  if (removedTransientIndex >= 0 && m_manuallySelectedProgressIndex >= 0) {
+    if (m_manuallySelectedProgressIndex == removedTransientIndex)
       m_manuallySelectedProgressIndex = -1;
-    } else if (m_manuallySelectedProgressIndex > removedIndex) {
-      // Adjust index if progress before the selected one was removed
-      m_manuallySelectedProgressIndex--;
-    }
+    else if (m_manuallySelectedProgressIndex > removedTransientIndex)
+      --m_manuallySelectedProgressIndex;
   }
 
-  if (m_activeProgresses.empty()) {
-    m_progressTimer->stop();
-    m_progressContainer->setVisible(false);
+  const std::vector<ProgressEntry *> transient = transientProgresses();
+  if (transient.empty()) {
+    m_transientProgressRow->hide();
     m_currentlyDisplayedProgress.reset();
     m_manuallySelectedProgressIndex = -1;
+  } else if (m_manuallySelectedProgressIndex >= (int)transient.size()) {
+    m_manuallySelectedProgressIndex = -1;
   }
+
+  if (m_activeProgresses.empty())
+    m_progressTimer->stop();
+
+  updateProgressContainerVisibility();
 }
 
-/** Find the most relevant task to display in the progress bar.
-   Prefers the task with the longest elapsed time that has non-zero
-   progress (indicating active work).  Falls back to the oldest task
-   overall if none have reported progress yet.  */
+/** Find the most relevant transient task to display in the shared row. */
 ProgressEntry *MainWindow::getLongestRunningTask() {
   ProgressEntry *oldestActive = nullptr;
   ProgressEntry *oldestAny = nullptr;
   qint64 maxActiveTime = -1;
   qint64 maxAnyTime = -1;
 
-  for (auto &entry : m_activeProgresses) {
-    qint64 elapsed = entry.startTime.elapsed();
-
-    // Check if this task has non-zero progress
+  for (ProgressEntry *entry : transientProgresses()) {
+    const qint64 elapsed = entry->startTime.elapsed();
     float percent = 0;
-    entry.info->get_status(&percent);
+    entry->info->get_status(&percent);
 
-    // Track oldest task with non-zero progress
     if (percent > 0 && elapsed > maxActiveTime) {
       maxActiveTime = elapsed;
-      oldestActive = &entry;
+      oldestActive = entry;
     }
-
-    // Also track oldest task overall as fallback
     if (elapsed > maxAnyTime) {
       maxAnyTime = elapsed;
-      oldestAny = &entry;
+      oldestAny = entry;
     }
   }
 
-  // Prefer task with non-zero progress, otherwise use oldest
   return oldestActive ? oldestActive : oldestAny;
 }
 
-/** Periodic timer callback (100 ms) that updates the status bar progress.
-   Shows the task name chain (nested subtasks joined by " > "), progress
-   percentage, estimated time remaining (after 20 s with >0.1% progress),
-   and prev/next buttons when multiple tasks are active.  Uses a 300 ms
-   grace period before showing the progress container to avoid flicker
-   for very short tasks.  Supports manual selection via onPrevProgress/
-   onNextProgress or auto-selects via getLongestRunningTask().  */
+/** Format ENTRY's nested progress state into LABEL and BAR. */
+void MainWindow::updateProgressWidgets(const ProgressEntry &entry, QLabel *label,
+                                       QProgressBar *bar,
+                                       const QString &title) {
+  if (!entry.info || !label || !bar)
+    return;
+
+  const std::vector<colorscreen::progress_info::status> statusStack =
+      entry.info->get_status();
+  QStringList tasks;
+  float percent = -1;
+
+  for (const auto &status : statusStack) {
+    if (!status.task.empty()) {
+      QString taskName = QString::fromUtf8(status.task.c_str());
+      if (status.progress >= 0 && &status != &statusStack.back())
+        taskName += QString(" (%1%)").arg((int)status.progress);
+      tasks.append(taskName);
+    }
+    if (status.progress >= 0)
+      percent = status.progress;
+  }
+
+  QString statusText = tasks.join(QStringLiteral(" > "));
+  if (!title.isEmpty()) {
+    if (statusText.isEmpty())
+      statusText = title;
+    else if (statusText.compare(title, Qt::CaseInsensitive) != 0)
+      statusText = title + QStringLiteral(": ") + statusText;
+  } else if (statusText.isEmpty()) {
+    statusText = tr("Working...");
+  }
+
+  const qint64 elapsedMs = entry.startTime.elapsed();
+  if (elapsedMs > 20000 && percent > 0.1f) {
+    const double doneFraction = (double)percent / 100.0;
+    const qint64 remainingMs =
+        (qint64)((double)elapsedMs / doneFraction) - elapsedMs;
+    if (remainingMs > 0) {
+      const int remainingSec = (remainingMs / 1000) % 60;
+      const int remainingMin = remainingMs / 60000;
+      statusText += QString(" (ETR: %1:%2)")
+                        .arg(remainingMin)
+                        .arg(remainingSec, 2, 10, QChar('0'));
+    }
+  }
+
+  label->setText(statusText);
+  if (percent >= 0) {
+    bar->setRange(0, 100);
+    bar->setValue((int)percent);
+  } else {
+    bar->setRange(0, 0);
+  }
+}
+
+/** Synchronize transient and persistent progress-container visibility. */
+void MainWindow::updateProgressContainerVisibility() {
+  bool hasUserVisibleRows = false;
+  for (const ProgressEntry &entry : m_activeProgresses) {
+    if (entry.userVisible && entry.row && !entry.row->isHidden()) {
+      hasUserVisibleRows = true;
+      break;
+    }
+  }
+  m_userVisibleProgressContainer->setVisible(hasUserVisibleRows);
+
+  const bool transientVisible =
+      m_transientProgressRow && !m_transientProgressRow->isHidden();
+  const bool userVisibleIsLocal =
+      m_userVisibleProgressContainer->parentWidget() == m_progressContainer;
+  m_progressContainer->setVisible(
+      transientVisible || (userVisibleIsLocal && hasUserVisibleRows));
+}
+
+/** Periodically update transient progress and every dedicated long-task row. */
 void MainWindow::onProgressTimer() {
   if (m_activeProgresses.empty()) {
-    // No active tasks, hide progress
-    m_progressContainer->setVisible(false);
+    m_transientProgressRow->hide();
+    m_progressContainer->hide();
     m_currentlyDisplayedProgress.reset();
     m_manuallySelectedProgressIndex = -1;
+    m_progressTimer->stop();
+    return;
+  }
+
+  for (ProgressEntry &entry : m_activeProgresses) {
+    if (!entry.userVisible)
+      continue;
+    updateProgressWidgets(entry, entry.rowLabel, entry.rowProgressBar,
+                          entry.title);
+    if (entry.rowActionButton && entry.info->pool_cancel()) {
+      entry.rowActionButton->setText(entry.action == ProgressAction::Stop
+                                         ? tr("Stopping...")
+                                         : tr("Cancelling..."));
+      entry.rowActionButton->setEnabled(false);
+    }
+  }
+
+  const std::vector<ProgressEntry *> transient = transientProgresses();
+  if (transient.empty()) {
+    m_transientProgressRow->hide();
+    m_currentlyDisplayedProgress.reset();
+    m_manuallySelectedProgressIndex = -1;
+    updateProgressContainerVisibility();
     return;
   }
 
   ProgressEntry *task = nullptr;
   int currentIndex = 0;
-
-  // Determine which progress to display
   if (m_manuallySelectedProgressIndex >= 0 &&
-      m_manuallySelectedProgressIndex < (int)m_activeProgresses.size()) {
-    // Use manually selected progress
-    task = &m_activeProgresses[m_manuallySelectedProgressIndex];
+      m_manuallySelectedProgressIndex < (int)transient.size()) {
     currentIndex = m_manuallySelectedProgressIndex;
+    task = transient[currentIndex];
   } else {
-    // Auto-select: use default logic
     task = getLongestRunningTask();
-    if (task) {
-      // Find index of this task for display
-      for (size_t i = 0; i < m_activeProgresses.size(); ++i) {
-        if (&m_activeProgresses[i] == task) {
-          currentIndex = i;
-          break;
-        }
+    for (size_t i = 0; task && i < transient.size(); ++i) {
+      if (transient[i] == task) {
+        currentIndex = (int)i;
+        break;
       }
     }
-    m_manuallySelectedProgressIndex = -1; // Reset manual selection
+    m_manuallySelectedProgressIndex = -1;
   }
 
-  if (!task)
+  if (!task) {
+    m_transientProgressRow->hide();
+    updateProgressContainerVisibility();
     return;
+  }
 
-  // Track which progress is currently being displayed (for cancel button)
   m_currentlyDisplayedProgress = task->info;
-
-  // Update progress count label
   m_progressCountLabel->setText(
-      QString("%1/%2").arg(currentIndex + 1).arg(m_activeProgresses.size()));
+      QString("%1/%2").arg(currentIndex + 1).arg(transient.size()));
 
-  // Show/hide prev/next buttons based on count
-  bool multipleProgresses = m_activeProgresses.size() > 1;
-  m_prevProgressButton->setVisible(multipleProgresses);
-  m_nextProgressButton->setVisible(multipleProgresses);
-  m_progressCountLabel->setVisible(multipleProgresses);
+  const bool multiple = transient.size() > 1;
+  m_prevProgressButton->setVisible(multiple);
+  m_nextProgressButton->setVisible(multiple);
+  m_progressCountLabel->setVisible(multiple);
 
   if (task->startTime.elapsed() > 300) {
-    if (!m_progressContainer->isVisible()) {
-      m_progressContainer->setVisible(true);
-    }
+    updateProgressWidgets(*task, m_statusLabel, m_progressBar, QString());
+    m_transientProgressRow->show();
+  } else {
+    m_transientProgressRow->hide();
+  }
 
-    std::vector<colorscreen::progress_info::status> statusStack =
-        task->info->get_status();
+  updateProgressContainerVisibility();
+}
 
-    if (statusStack.empty()) {
-      m_statusLabel->setText("no progress info (yet)");
-      m_progressBar->setValue(0);
-      m_progressBar->setRange(0, 0);
-    } else {
-      QStringList tasks;
-      float percent = -1;
+/** Request cooperative termination of INFO using ACTION's user-facing policy. */
+void MainWindow::requestProgressTermination(
+    const std::shared_ptr<colorscreen::progress_info> &info,
+    ProgressAction action) {
+  if (!info)
+    return;
 
-      for (const auto &s : statusStack) {
-        if (!s.task.empty()) {
-          QString taskName = QString::fromUtf8(s.task.c_str());
-          if (s.progress >= 0 && &s != &statusStack.back()) {
-            taskName += QString(" (%1%)").arg((int)s.progress);
-          }
-          tasks.append(taskName);
-        }
-        // Use the progress of the most specific task that has progress
-        if (s.progress >= 0) {
-          percent = s.progress;
-        }
-      }
+  auto renderProgress = m_renderProgress.lock();
+  if (action == ProgressAction::Cancel && renderProgress &&
+      renderProgress == info) {
+    const auto ret = QMessageBox::question(
+        this, tr("Cancel Rendering"), tr("Cancel the current rendering?"),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (ret != QMessageBox::Yes)
+      return;
+  }
 
-      QString statusText = tasks.join(" > ");
-
-      // Time estimation for long running tasks
-      qint64 elapsedMs = task->startTime.elapsed();
-      if (elapsedMs > 20000 &&
-          percent > 0.1f) { // > 20s and at least 0.1% progress to avoid huge
-                            // estimates
-        double doneFraction = (double)percent / 100.0;
-        if (doneFraction > 0.0) {
-          qint64 totalEstimatedMs = (double)elapsedMs / doneFraction;
-          qint64 remainingMs = totalEstimatedMs - elapsedMs;
-
-          if (remainingMs > 0) {
-            int remainingSec = (remainingMs / 1000) % 60;
-            int remainingMin = (remainingMs / 60000);
-            statusText += QString(" (ETR: %1:%2)")
-                              .arg(remainingMin)
-                              .arg(remainingSec, 2, 10, QChar('0'));
-          }
-        }
-      }
-
-      m_statusLabel->setText(statusText);
-
-      if (percent >= 0) {
-        m_progressBar->setRange(0, 100);
-        m_progressBar->setValue((int)percent);
-      } else {
-        // Indeterminate progress (animated busy indicator)
-        m_progressBar->setRange(0, 0);
-      }
-    }
+  info->cancel();
+  for (ProgressEntry &entry : m_activeProgresses) {
+    if (entry.info != info || !entry.rowActionButton)
+      continue;
+    entry.rowActionButton->setText(action == ProgressAction::Stop
+                                       ? tr("Stopping...")
+                                       : tr("Cancelling..."));
+    entry.rowActionButton->setEnabled(false);
   }
 }
 
-/** Cancel the currently displayed progress task.
-   For render tasks, shows a confirmation dialog first since renders
-   can be expensive.  Uses a local shared_ptr copy to keep the progress_info
-   alive across the dialog's event loop in case removeProgress() is called
-   concurrently.  */
+/** Cancel the currently displayed transient progress task. */
 void MainWindow::onCancelClicked() {
-  // Cancel the currently displayed progress (not necessarily the longest
-  // running)
-  if (m_currentlyDisplayedProgress) {
-    // Keep a local reference alive across the dialog's event loop.
-    // removeProgress() may null m_currentlyDisplayedProgress while the
-    // confirmation dialog is open, but our local copy keeps the object alive.
-    auto currentProgress = m_currentlyDisplayedProgress;
-
-    // If this is the render task, ask before cancelling
-    auto renderProgress = m_renderProgress.lock();
-    if (renderProgress && renderProgress == currentProgress) {
-      auto ret = QMessageBox::question(
-          this, tr("Cancel Rendering"), tr("Cancel the current rendering?"),
-          QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-      if (ret != QMessageBox::Yes)
-        return;
-    }
-    currentProgress->cancel();
-  }
+  requestProgressTermination(m_currentlyDisplayedProgress,
+                             ProgressAction::Cancel);
 }
 
-/** Switch the progress display to the previous task in the active list.
-   If no manual selection has been made yet, starts from the current
-   auto-selected task.  Wraps around circularly.  */
+/** Switch the shared transient progress row to the previous background task. */
 void MainWindow::onPrevProgress() {
-  if (m_activeProgresses.size() <= 1)
+  const std::vector<ProgressEntry *> transient = transientProgresses();
+  if (transient.size() <= 1)
     return;
 
-  // If not manually selected yet, start from current auto-selected index
   if (m_manuallySelectedProgressIndex < 0) {
     ProgressEntry *currentTask = getLongestRunningTask();
-    for (size_t i = 0; i < m_activeProgresses.size(); ++i) {
-      if (&m_activeProgresses[i] == currentTask) {
-        m_manuallySelectedProgressIndex = i;
+    for (size_t i = 0; i < transient.size(); ++i) {
+      if (transient[i] == currentTask) {
+        m_manuallySelectedProgressIndex = (int)i;
         break;
       }
     }
   }
 
-  // Go to previous
   m_manuallySelectedProgressIndex =
-      (m_manuallySelectedProgressIndex - 1 + m_activeProgresses.size()) %
-      m_activeProgresses.size();
+      (m_manuallySelectedProgressIndex - 1 + (int)transient.size()) %
+      (int)transient.size();
 }
 
-/** Switch the progress display to the next task in the active list.
-   Mirrors onPrevProgress() but increments the index.  */
+/** Switch the shared transient progress row to the next background task. */
 void MainWindow::onNextProgress() {
-  if (m_activeProgresses.size() <= 1)
+  const std::vector<ProgressEntry *> transient = transientProgresses();
+  if (transient.size() <= 1)
     return;
 
-  // If not manually selected yet, start from current auto-selected index
   if (m_manuallySelectedProgressIndex < 0) {
     ProgressEntry *currentTask = getLongestRunningTask();
-    for (size_t i = 0; i < m_activeProgresses.size(); ++i) {
-      if (&m_activeProgresses[i] == currentTask) {
-        m_manuallySelectedProgressIndex = i;
+    for (size_t i = 0; i < transient.size(); ++i) {
+      if (transient[i] == currentTask) {
+        m_manuallySelectedProgressIndex = (int)i;
         break;
       }
     }
   }
 
-  // Go to next
   m_manuallySelectedProgressIndex =
-      (m_manuallySelectedProgressIndex + 1) % m_activeProgresses.size();
+      (m_manuallySelectedProgressIndex + 1) % (int)transient.size();
 }
 
 /** Post-load initialisation after a new image has been opened.
@@ -2430,6 +2548,32 @@ void MainWindow::updateRecentFileActions() {
 void MainWindow::refreshWindowMenu() {
   if (ColorScreenApplication *application = documentApplication())
     application->populateWindowMenu(m_windowMenu, this);
+}
+
+/** Remove persistent progress rows from the local status layout. */
+QWidget *MainWindow::takeUserVisibleStatusWidget() {
+  if (!m_userVisibleProgressContainer || !m_progressLayout)
+    return m_userVisibleProgressContainer;
+  if (m_userVisibleProgressContainer->parentWidget() == m_progressContainer) {
+    m_progressLayout->removeWidget(m_userVisibleProgressContainer);
+    m_userVisibleProgressContainer->setParent(nullptr);
+    updateProgressContainerVisibility();
+  }
+  return m_userVisibleProgressContainer;
+}
+
+/** Return persistent user-visible progress rows to this document. */
+void MainWindow::restoreUserVisibleStatusWidget() {
+  if (!m_userVisibleProgressContainer || !m_progressLayout)
+    return;
+  if (m_userVisibleProgressContainer->parentWidget() == m_progressContainer) {
+    updateProgressContainerVisibility();
+    return;
+  }
+
+  m_userVisibleProgressContainer->setParent(m_progressContainer);
+  m_progressLayout->insertWidget(0, m_userVisibleProgressContainer);
+  updateProgressContainerVisibility();
 }
 
 /** Prepare this document for presentation inside the shared MDI workspace.
@@ -4136,83 +4280,99 @@ void MainWindow::onAlternateColorsRequested() {
    Results arrive incrementally via pointsReady and geometryReady signals.  */
 void MainWindow::onAutomaticallyAddPointsInAreaRequested(
     const colorscreen::finetune_area_parameters &params) {
-  if (!m_scan) {
+  if (!m_scan)
     return;
-  }
 
   startAreaSelection(
       tr("Select area to add points"), [this, params](QRect area) {
         if (area.width() <= 0 || area.height() <= 0)
           return;
 
-        colorscreen::int_image_area crop = { area.x (), area.y (), area.width (),
-                                             area.height () };
+        const colorscreen::int_image_area crop = {
+            area.x(), area.y(), area.width(), area.height()};
 
-        // Create progress info
-        auto progress = std::make_shared<colorscreen::progress_info> ();
-        progress->set_task ("Finding missing registration points", 1);
-        colorscreen::sub_task task (progress.get ());
-        addProgress (progress);
+        auto progress = std::make_shared<colorscreen::progress_info>();
+        progress->set_task("Finding missing registration points", 1);
+        colorscreen::sub_task task(progress.get());
+        addUserVisibleProgress(
+            progress, tr("Automatically add points to area"),
+            ProgressAction::Stop);
 
-        // Create worker and thread
-        FinetuneMisregisteredWorker *worker = new FinetuneMisregisteredWorker (
+        auto *worker = new FinetuneMisregisteredWorker(
             m_solverParams, m_rparams, m_scrToImgParams, m_scan, crop, progress,
-            params, m_geometryPanel->isNonlinearEnabled ());
-        QThread *thread = new QThread ();
-        worker->moveToThread (thread);
+            params, m_geometryPanel->isNonlinearEnabled());
+        auto *thread = new QThread();
+        worker->moveToThread(thread);
 
-        // Connect signals
-        connect (thread, &QThread::started, worker,
-                 &FinetuneMisregisteredWorker::run);
-        connect (worker, &FinetuneMisregisteredWorker::finished, thread,
-                 &QThread::quit);
-        connect (worker, &FinetuneMisregisteredWorker::finished, worker,
-                 &QObject::deleteLater);
-        connect (thread, &QThread::finished, thread, &QObject::deleteLater);
+        connect(thread, &QThread::started, worker,
+                &FinetuneMisregisteredWorker::run);
+        connect(worker, &FinetuneMisregisteredWorker::finished, thread,
+                &QThread::quit);
+        connect(worker, &FinetuneMisregisteredWorker::finished, worker,
+                &QObject::deleteLater);
+        connect(thread, &QThread::finished, thread, &QObject::deleteLater);
 
-        // Connect to our slot to handle results
-        connect (
+        // Points and geometry are intentionally applied in batches while the
+        // operation is running.  Stopping therefore keeps everything already
+        // visible instead of rolling the document back.
+        connect(
             worker, &FinetuneMisregisteredWorker::pointsReady, this,
-            [this, progress] (
+            [this, progress](
                 std::vector<colorscreen::solver_parameters::solver_point_t>
                     points) {
-              if (progress && progress->cancelled ())
+              if (progress && progress->pool_cancel())
+                return;
+              if (points.empty())
                 return;
 
-              if (!points.empty ())
-                {
-                  ParameterState oldState = getCurrentState ();
-                  for (const auto &point : points)
-                    {
-                      m_solverParams.add_or_modify_point (point.img, point.scr,
-                                                          point.color);
-                    }
-                  m_imageWidget->updateParameters (
-                      &m_rparams, &m_scrToImgParams, &m_detectParams,
-                      &m_renderTypeParams, &m_solverParams);
-                  m_imageWidget->update ();
-                  ParameterState newState = getCurrentState ();
-                  m_undoStack->push (new ChangeParametersCommand (
-                      this, oldState, newState, "Add registration points"));
-                  updateRegistrationActions ();
-                }
-              removeProgress (progress);
+              ParameterState oldState = getCurrentState();
+              for (const auto &point : points)
+                m_solverParams.add_or_modify_point(point.img, point.scr,
+                                                   point.color);
+              m_imageWidget->updateParameters(
+                  &m_rparams, &m_scrToImgParams, &m_detectParams,
+                  &m_renderTypeParams, &m_solverParams);
+              m_imageWidget->update();
+              ParameterState newState = getCurrentState();
+              m_undoStack->push(new ChangeParametersCommand(
+                  this, oldState, newState, "Add registration points"));
+              updateRegistrationActions();
             });
-        connect (worker, &FinetuneMisregisteredWorker::geometryReady, this,
-                 [this, progress] (colorscreen::scr_to_img_parameters result) {
-                   if (progress && progress->cancelled ())
-                     return;
-                   ParameterState oldState = getCurrentState ();
-                   m_scrToImgParams.merge_solver_solution (result);
-                   m_imageWidget->updateParameters (
-                       &m_rparams, &m_scrToImgParams, &m_detectParams,
-                       &m_renderTypeParams, &m_solverParams);
-                   m_imageWidget->update ();
-                   ParameterState newState = getCurrentState ();
-                   m_undoStack->push (new ChangeParametersCommand (
-                       this, oldState, newState, "Optimize geometry"));
-                 });
-        thread->start ();
+        connect(worker, &FinetuneMisregisteredWorker::geometryReady, this,
+                [this, progress](colorscreen::scr_to_img_parameters result) {
+                  if (progress && progress->pool_cancel())
+                    return;
+                  ParameterState newState = getCurrentState();
+                  newState.scrToImg.merge_solver_solution(result);
+                  changeParameters(
+                      newState,
+                      "Automatically add points to area (Geometry update)");
+                });
+        connect(worker, &FinetuneMisregisteredWorker::requestCurrentPoints,
+                this,
+                [this](std::vector<colorscreen::solver_parameters::solver_point_t>
+                           *points) {
+                  if (points)
+                    *points = m_solverParams.points;
+                },
+                Qt::BlockingQueuedConnection);
+        connect(worker, &FinetuneMisregisteredWorker::finished, this,
+                [this, thread, progress](bool success) {
+                  removeProgress(progress);
+                  auto it = std::find(m_finetuneThreads.begin(),
+                                      m_finetuneThreads.end(), thread);
+                  if (it != m_finetuneThreads.end())
+                    m_finetuneThreads.erase(it);
+
+                  if (!success && (!progress || !progress->pool_cancel())) {
+                    QMessageBox::warning(
+                        this, tr("Optimization Failed"),
+                        tr("Automatically add points to area failed."));
+                  }
+                });
+
+        m_finetuneThreads.push_back(thread);
+        thread->start();
       });
 }
 
@@ -4237,7 +4397,8 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Finding missing registration points", 1);
   colorscreen::sub_task task(progress.get());
-  addProgress(progress);
+  addUserVisibleProgress(progress, tr("Automatically add points"),
+                         ProgressAction::Stop);
 
   // Create worker and thread
   FinetuneMisregisteredWorker *worker = new FinetuneMisregisteredWorker(
@@ -4259,7 +4420,7 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
       worker, &FinetuneMisregisteredWorker::pointsReady, this,
       [this, progress](
           std::vector<colorscreen::solver_parameters::solver_point_t> points) {
-        if (progress && progress->cancelled())
+        if (progress && progress->pool_cancel())
           return;
 
         if (!points.empty()) {
@@ -4280,7 +4441,7 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
       });
   connect(worker, &FinetuneMisregisteredWorker::geometryReady, this,
           [this, progress](colorscreen::scr_to_img_parameters result) {
-            if (progress && progress->cancelled())
+            if (progress && progress->pool_cancel())
               return;
             ParameterState newState = getCurrentState();
             newState.scrToImg.merge_solver_solution(result);
@@ -4300,7 +4461,7 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
               m_finetuneThreads.erase(it);
             }
 
-            if (!success && (!progress || !progress->cancelled())) {
+            if (!success && (!progress || !progress->pool_cancel())) {
               QMessageBox::warning(this, "Optimization Failed",
                                    "Automatically add points failed.");
             }
@@ -4528,7 +4689,7 @@ void MainWindow::onAdaptiveSharpeningRequested(
   // Create progress info
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Adaptive sharpening analysis", 1);
-  addProgress(progress);
+  addUserVisibleProgress(progress, tr("Analyze displacements"));
 
   // Create worker from the complete one-run configuration selected in the
   // dialog. The worker resolves automatic dimensions in STEP1.
@@ -4566,8 +4727,13 @@ void MainWindow::onAdaptiveSharpeningRequested(
               std::shared_ptr<colorscreen::scanner_blur_correction_parameters>
                   result,
               const QString &error) {
-            onAdaptiveSharpeningFinished(success, result, error);
-            removeProgress(progress); // Ensure progress is removed
+            const bool cancelled = progress && progress->pool_cancel();
+            if (!cancelled)
+              onAdaptiveSharpeningFinished(success, result, error);
+            else
+              statusBar()->showMessage(tr("Displacement analysis cancelled"),
+                                       3000);
+            removeProgress(progress);
             worker->deleteLater();
             thread->quit();
             thread->wait();
@@ -4642,7 +4808,7 @@ void MainWindow::onAutodetectCoordinatesRequested() {
   // Create progress info
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Autodetecting coordinates", 1);
-  addProgress(progress);
+  addUserVisibleProgress(progress, tr("Coordinate autodetection"));
 
   QMetaObject::invokeMethod(
       m_coordOptimizationWorker, "autodetect", Qt::QueuedConnection,
@@ -4966,14 +5132,15 @@ void MainWindow::onRender() {
     auto progress = std::make_shared<colorscreen::progress_info>();
     m_renderProgress =
         progress; // track so close/cancel can ask for confirmation
-    addProgress(progress);
+    addUserVisibleProgress(
+        progress, tr("Rendering %1").arg(QFileInfo(outputPath).fileName()));
 
     // Run render in background thread
     auto *watcher = new QFutureWatcher<bool>(this);
     connect(watcher, &QFutureWatcher<bool>::finished, this,
             [this, watcher, progress, outputPath]() {
               bool success = watcher->result();
-              bool cancelled = progress->cancelled();
+              bool cancelled = progress->pool_cancel();
               m_renderProgress.reset(); // no longer active
               removeProgress(progress);
               watcher->deleteLater();

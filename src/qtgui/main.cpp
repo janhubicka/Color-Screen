@@ -10,6 +10,7 @@
 #include <QDebug>
 #include <QIcon>
 #include <QPalette>
+#include <QPushButton>
 #include <QMdiArea>
 #include <QMenuBar>
 #include <QMdiSubWindow>
@@ -120,6 +121,11 @@ int main(int argc, char *argv[]) {
       "smoke-test-global-statusbar",
       "Require the active document to use the workspace status bar");
   parser.addOption(globalStatusBarOption);
+
+  QCommandLineOption userVisibleProgressOption(
+      "smoke-test-user-visible-progress",
+      "Exercise dedicated Cancel/Stop rows for long-running tasks");
+  parser.addOption(userVisibleProgressOption);
 
   QCommandLineOption timeReportOption(
       "time-report", "Enable internal time reporting of tasks");
@@ -488,7 +494,7 @@ int main(int argc, char *argv[]) {
       QStatusBar *workspaceStatus = workspace ? workspace->statusBar() : nullptr;
       QWidget *progress = document ? document->workspaceStatusWidget() : nullptr;
       if (!workspaceStatus || !document || !progress ||
-          progress->parentWidget() != workspaceStatus ||
+          !workspaceStatus->isAncestorOf(progress) ||
           document->statusBar()->isVisible()) {
         qCritical() << "Active document is not using the global status bar";
         app.exit(11);
@@ -503,6 +509,95 @@ int main(int argc, char *argv[]) {
         app.exit(11);
       }
       document->statusBar()->clearMessage();
+    });
+  }
+
+  if (parser.isSet(userVisibleProgressOption)) {
+    QTimer::singleShot(250, &app, [&app]() {
+      WorkspaceWindow *workspace = app.workspaceWindow();
+      const QList<MainWindow *> documents = app.documentWindows();
+      if (!workspace || documents.size() < 2) {
+        qCritical()
+            << "User-visible progress smoke test requires two documents";
+        app.exit(13);
+        return;
+      }
+
+      MainWindow *cancelDocument = documents[0];
+      MainWindow *stopDocument = documents[1];
+      auto cancelProgress = std::make_shared<colorscreen::progress_info>();
+      cancelProgress->set_task("cancel smoke task", 100);
+      cancelProgress->set_progress(25);
+      auto stopProgress = std::make_shared<colorscreen::progress_info>();
+      stopProgress->set_task("stop smoke task", 100);
+      stopProgress->set_progress(50);
+
+      cancelDocument->addUserVisibleProgress(
+          cancelProgress, QStringLiteral("Visible Cancel Task"));
+      stopDocument->addUserVisibleProgress(
+          stopProgress, QStringLiteral("Visible Stop Task"),
+          ProgressAction::Stop);
+      QCoreApplication::processEvents();
+
+      QWidget *cancelContainer =
+          cancelDocument->workspaceUserVisibleStatusWidget();
+      QWidget *stopContainer = stopDocument->workspaceUserVisibleStatusWidget();
+      QStatusBar *workspaceStatus = workspace->statusBar();
+      if (!cancelContainer || !stopContainer || !workspaceStatus ||
+          !workspaceStatus->isAncestorOf(cancelContainer) ||
+          !workspaceStatus->isAncestorOf(stopContainer) ||
+          cancelContainer->isHidden() || stopContainer->isHidden()) {
+        qCritical() << "User-visible progress did not remain in global status "
+                       "area across documents";
+        app.exit(13);
+        return;
+      }
+
+      // Switching the active image must not hide long tasks belonging to the
+      // other document.
+      workspace->activateDocument(cancelDocument);
+      QCoreApplication::processEvents();
+      if (!workspaceStatus->isAncestorOf(cancelContainer) ||
+          !workspaceStatus->isAncestorOf(stopContainer) ||
+          cancelContainer->isHidden() || stopContainer->isHidden()) {
+        qCritical() << "User-visible progress disappeared after tab switch";
+        app.exit(13);
+        return;
+      }
+
+      const QList<QWidget *> cancelRows = cancelContainer->findChildren<QWidget *>(
+          QStringLiteral("UserVisibleProgressRow"), Qt::FindDirectChildrenOnly);
+      const QList<QWidget *> stopRows = stopContainer->findChildren<QWidget *>(
+          QStringLiteral("UserVisibleProgressRow"), Qt::FindDirectChildrenOnly);
+      if (cancelRows.size() != 1 || stopRows.size() != 1) {
+        qCritical() << "Expected one dedicated row per user-visible task";
+        app.exit(13);
+        return;
+      }
+
+      QPushButton *cancelButton = cancelRows.front()->findChild<QPushButton *>();
+      QPushButton *stopButton = stopRows.front()->findChild<QPushButton *>();
+      if (!cancelButton || !stopButton || cancelButton->text() != "Cancel" ||
+          stopButton->text() != "Stop" ||
+          cancelButton->property("progressAction").toString() !=
+              QStringLiteral("cancel") ||
+          stopButton->property("progressAction").toString() !=
+              QStringLiteral("stop")) {
+        qCritical() << "Dedicated progress rows have incorrect actions";
+        app.exit(13);
+        return;
+      }
+
+      stopButton->click();
+      cancelButton->click();
+      if (!stopProgress->pool_cancel() || !cancelProgress->pool_cancel()) {
+        qCritical() << "Dedicated progress actions did not request termination";
+        app.exit(13);
+        return;
+      }
+
+      stopDocument->removeProgress(stopProgress);
+      cancelDocument->removeProgress(cancelProgress);
     });
   }
 
