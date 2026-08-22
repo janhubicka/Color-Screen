@@ -1,0 +1,58 @@
+name: Agent Batch 08 benchmark publish
+
+on:
+  push:
+    branches:
+      - agent/pr35-source-transport-20260821
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: transport
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/scr-detect-batch08-benchmark
+          fetch-depth: 0
+          path: target
+      - name: Reconstruct and validate patch
+        shell: bash
+        run: |
+          cat transport/.agent-batch08-publish/patch.b64.* | base64 -d > /tmp/batch08.patch
+          echo "0a72b0d64b6102ea3230b41de4e1f0b4a8d1d6f584addd667ad7e16342eab707  /tmp/batch08.patch" | sha256sum -c -
+          cd target
+          test "$(git rev-parse HEAD)" = "589f09990f0db89e0412a0e28252904d12173c24"
+          git apply --check /tmp/batch08.patch
+          git apply /tmp/batch08.patch
+          git diff --check
+          python3 -m py_compile scripts/benchmark-screen-detect.py
+          actual=$(git status --porcelain | awk '{print $2}' | sort)
+          expected=$(printf '%s\n' \
+            Makefile.am \
+            Makefile.in \
+            doc/scr-detect-geometry-tracking.md \
+            scripts/benchmark-screen-detect.py \
+            src/libcolorscreen/scr-detect-geometry.C | sort)
+          test "$actual" = "$expected"
+          git diff --stat
+      - name: Commit benchmark patch
+        shell: bash
+        run: |
+          cd target
+          git config user.name "OpenAI"
+          git config user.email "noreply@openai.com"
+          git add Makefile.am Makefile.in \
+            doc/scr-detect-geometry-tracking.md \
+            scripts/benchmark-screen-detect.py \
+            src/libcolorscreen/scr-detect-geometry.C
+          git commit -m "detect: add Batch 08 geometry benchmark" \
+            -m "Add a repeatable manual benchmark for regular-screen geometry detection before changing blur-tolerance heuristics. Extend report-only detector telemetry with a stable per-reason histogram for every failed flood-fill attempt, so failure-heavy images no longer expose only the last rejection reason. Counting and string classification stay inactive when no report file is requested." \
+            -m "Add scripts/benchmark-screen-detect.py to run fresh autodetect processes over files or recursive corpora, compare named legacy/unsharpened sharpening variants, preserve detailed reports and logs, and append machine-readable CSV rows immediately. Support Batch 08 Tile01 sweeps, real base parameter files, flood-fill modes, thread counts, timeouts, repetitions, and additional detector arguments. Include the script in source distributions." \
+            -m "Use the existing real Nikon Coolscan Dufay fixture as a smoke baseline. With four threads and combined flood fill, historical 2/3 sharpening succeeds in the first region after one initial grid and one flood attempt. Explicit 0/0 still forms 217 initial grids with no initial-solver failures, but all 217 flood fills fail: 121 at unknown-area and 96 at insufficient-coverage. The failed run spends about 9.8 seconds of a 10.5-second detector call in flood fill. Fast-only mode again forms 217 grids, with 184 unknown-area and 33 insufficient-coverage failures." \
+            -m "Record this as DG-024 and revise the tracking order: classify Batch 08 failures by seed formation versus later propagation before choosing DG-010; address weak-classification propagation separately; and prioritize a bounded flood probe or equivalent DG-016 early rejection for repeated expensive candidates. No detector threshold, search radius, screen-family selection, solver acceptance, or flood-fill propagation rule changes in this commit."
+          git push origin HEAD:agent/scr-detect-batch08-benchmark
