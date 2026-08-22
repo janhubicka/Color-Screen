@@ -80,24 +80,36 @@ WorkspaceWindow::WorkspaceWindow(QWidget *parent) : QMainWindow(parent) {
 
   statusBar()->setObjectName(QStringLiteral("WorkspaceStatusBar"));
 
-  // Long-running user-visible tasks remain global even when their document is
-  // not active. The active document's compact transient progress row is placed
-  // below this stack.
+  // The ordinary status bar is always a single bottom line.  Only the active
+  // document's transient progress may occupy it.  Dedicated long-running tasks
+  // live in a frameless bottom dock above the status bar, so rapid transient
+  // progress cannot repeatedly change the window's bottom-line height.
   m_workspaceProgressArea = new QWidget(statusBar());
   m_workspaceProgressArea->setObjectName(
       QStringLiteral("WorkspaceProgressArea"));
   m_workspaceProgressLayout = new QVBoxLayout(m_workspaceProgressArea);
   m_workspaceProgressLayout->setContentsMargins(0, 0, 0, 0);
-  m_workspaceProgressLayout->setSpacing(2);
+  m_workspaceProgressLayout->setSpacing(0);
+  statusBar()->addPermanentWidget(m_workspaceProgressArea, 1);
 
-  m_userVisibleProgressStack = new QWidget(m_workspaceProgressArea);
+  m_userVisibleProgressStack = new QWidget();
   m_userVisibleProgressStack->setObjectName(
       QStringLiteral("WorkspaceUserVisibleProgressStack"));
   m_userVisibleProgressLayout = new QVBoxLayout(m_userVisibleProgressStack);
-  m_userVisibleProgressLayout->setContentsMargins(0, 0, 0, 0);
+  m_userVisibleProgressLayout->setContentsMargins(4, 2, 4, 2);
   m_userVisibleProgressLayout->setSpacing(2);
-  m_workspaceProgressLayout->addWidget(m_userVisibleProgressStack);
-  statusBar()->addPermanentWidget(m_workspaceProgressArea, 1);
+
+  m_userVisibleProgressDock = new QDockWidget(this);
+  m_userVisibleProgressDock->setObjectName(
+      QStringLiteral("WorkspaceUserVisibleProgressDock"));
+  m_userVisibleProgressDock->setAllowedAreas(Qt::BottomDockWidgetArea);
+  m_userVisibleProgressDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
+  auto *taskDockTitle = new QWidget(m_userVisibleProgressDock);
+  taskDockTitle->setFixedHeight(0);
+  m_userVisibleProgressDock->setTitleBarWidget(taskDockTitle);
+  m_userVisibleProgressDock->setWidget(m_userVisibleProgressStack);
+  addDockWidget(Qt::BottomDockWidgetArea, m_userVisibleProgressDock);
+  m_userVisibleProgressDock->hide();
 
   m_inspectorStack = new QStackedWidget(this);
   m_inspectorStack->setObjectName(QStringLiteral("documentInspectorStack"));
@@ -135,6 +147,8 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
   }
 
   attachUserVisibleProgress(document);
+  connect(document, &MainWindow::userVisibleProgressVisibilityChanged, this,
+          [this](bool) { updateUserVisibleProgressDockVisibility(); });
 
   document->setWindowFlags(Qt::Widget);
   auto *subWindow = new DocumentSubWindow(document);
@@ -421,14 +435,17 @@ void WorkspaceWindow::attachUserVisibleProgress(MainWindow *document) {
     return;
 
   QWidget *progress = document->workspaceUserVisibleStatusWidget();
-  if (!progress || progress->parentWidget() == m_userVisibleProgressStack)
+  if (!progress || progress->parentWidget() == m_userVisibleProgressStack) {
+    updateUserVisibleProgressDockVisibility();
     return;
+  }
 
   progress = document->takeUserVisibleStatusWidget();
   if (!progress)
     return;
   progress->setParent(m_userVisibleProgressStack);
   m_userVisibleProgressLayout->addWidget(progress);
+  updateUserVisibleProgressDockVisibility();
 }
 
 /** Return DOCUMENT's persistent task rows to a detached document window. */
@@ -440,6 +457,24 @@ void WorkspaceWindow::detachUserVisibleProgress(MainWindow *document) {
   if (progress && progress->parentWidget() == m_userVisibleProgressStack)
     m_userVisibleProgressLayout->removeWidget(progress);
   document->restoreUserVisibleStatusWidget();
+  updateUserVisibleProgressDockVisibility();
+}
+
+/** Show the dedicated task strip only while at least one row is visible. */
+void WorkspaceWindow::updateUserVisibleProgressDockVisibility() {
+  if (!m_userVisibleProgressDock || !m_userVisibleProgressLayout)
+    return;
+
+  bool hasVisibleRows = false;
+  for (int i = 0; i < m_userVisibleProgressLayout->count(); ++i) {
+    QLayoutItem *item = m_userVisibleProgressLayout->itemAt(i);
+    QWidget *container = item ? item->widget() : nullptr;
+    if (container && !container->isHidden()) {
+      hasVisibleRows = true;
+      break;
+    }
+  }
+  m_userVisibleProgressDock->setVisible(hasVisibleRows);
 }
 
 /** Present DOCUMENT's menus, toolbar, inspector, and transient status row. */

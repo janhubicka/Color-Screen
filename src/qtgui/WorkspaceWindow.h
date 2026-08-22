@@ -99,6 +99,9 @@ private:
   /** Return DOCUMENT's user-visible rows before detaching it. */
   void detachUserVisibleProgress(MainWindow *document);
 
+  /** Show the task-progress dock iff any attached document has visible rows. */
+  void updateUserVisibleProgressDockVisibility();
+
   /** Show DOCUMENT's menus, toolbar, inspector, and transient status as the
       active workspace chrome. */
   void installDocumentChrome(MainWindow *document);
@@ -125,6 +128,7 @@ private:
   QVBoxLayout *m_workspaceProgressLayout = nullptr;
   QWidget *m_userVisibleProgressStack = nullptr;
   QVBoxLayout *m_userVisibleProgressLayout = nullptr;
+  QDockWidget *m_userVisibleProgressDock = nullptr;
   QPointer<MainWindow> m_chromeDocument;
   QPointer<QTabBar> m_tabBar;
   QPointer<MainWindow> m_dragDocument;
