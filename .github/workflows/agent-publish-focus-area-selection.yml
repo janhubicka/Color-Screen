@@ -11,7 +11,7 @@ permissions:
 jobs:
   publish:
     if: github.head_ref == 'agent/focus-area-selection-publisher-20260822'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Check out publisher payload
         uses: actions/checkout@v4
