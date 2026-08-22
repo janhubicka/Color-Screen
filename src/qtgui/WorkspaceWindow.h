@@ -5,6 +5,7 @@
 #include <QPointer>
 
 class MainWindow;
+class ImageViewWindow;
 class QCloseEvent;
 class QDockWidget;
 class QEvent;
@@ -33,6 +34,12 @@ public:
   /** Remove DOCUMENT from the workspace without closing it. */
   void removeDocument(MainWindow *document);
 
+  /** Add a secondary VIEW as another MDI tab/subwindow. */
+  void addView(ImageViewWindow *view);
+
+  /** Remove VIEW from the workspace without closing it. */
+  void removeView(ImageViewWindow *view);
+
   /** Return the active attached document, or nullptr when none is active. */
   MainWindow *currentDocument() const;
 
@@ -42,8 +49,14 @@ public:
   /** Return true when DOCUMENT is managed by this workspace. */
   bool containsDocument(MainWindow *document) const;
 
+  /** Return true when VIEW is managed by this workspace. */
+  bool containsView(ImageViewWindow *view) const;
+
   /** Activate DOCUMENT when it is attached. */
   void activateDocument(MainWindow *document);
+
+  /** Activate VIEW when it is attached. */
+  void activateView(ImageViewWindow *view);
 
   /** Refresh DOCUMENT's MDI title, tab text, and shared window title. */
   void refreshDocument(MainWindow *document);
@@ -81,14 +94,20 @@ private:
   /** Return the MDI wrapper for DOCUMENT, or nullptr when detached. */
   QMdiSubWindow *subWindowForDocument(MainWindow *document) const;
 
+  /** Return the MDI wrapper for VIEW, or nullptr when detached. */
+  QMdiSubWindow *subWindowForView(ImageViewWindow *view) const;
+
   /** Return the document contained in WINDOW. */
   MainWindow *documentForSubWindow(QMdiSubWindow *window) const;
+
+  /** Return the secondary view contained in WINDOW. */
+  ImageViewWindow *viewForSubWindow(QMdiSubWindow *window) const;
 
   /** Return the internal QMdiArea tab bar in tabbed view. */
   QTabBar *documentTabBar() const;
 
-  /** Activate and return the document represented by tab INDEX. */
-  MainWindow *documentAtTab(int index) const;
+  /** Return the hosted widget represented by tab INDEX and activate it. */
+  QWidget *windowAtTab(int index) const;
 
   /** Apply tab behavior that QMdiArea does not expose directly. */
   void configureTabBar();
@@ -115,11 +134,23 @@ private:
   /** Detach DOCUMENT into a top-level window through the application manager. */
   void detachDocument(MainWindow *document);
 
+  /** Detach VIEW into a top-level window through the application manager. */
+  void detachView(ImageViewWindow *view);
+
+  /** Show VIEW's menu, toolbar and status message in the shared shell. */
+  void installViewChrome(ImageViewWindow *view);
+
+  /** Return VIEW's shared chrome to its own window. */
+  void releaseViewChrome(ImageViewWindow *view, bool showInWindow);
+
   /** Refresh shared chrome after the active MDI subwindow changes. */
   void onSubWindowActivated(QMdiSubWindow *window);
 
   /** Remove DOCUMENT's MDI wrapper and inspector without showing it. */
   void takeDocumentFromWorkspace(MainWindow *document);
+
+  /** Remove VIEW's MDI wrapper without closing the view. */
+  void takeViewFromWorkspace(ImageViewWindow *view);
 
   QMdiArea *m_mdiArea = nullptr;
   QDockWidget *m_inspectorDock = nullptr;
@@ -130,8 +161,9 @@ private:
   QVBoxLayout *m_userVisibleProgressLayout = nullptr;
   QDockWidget *m_userVisibleProgressDock = nullptr;
   QPointer<MainWindow> m_chromeDocument;
+  QPointer<ImageViewWindow> m_chromeView;
   QPointer<QTabBar> m_tabBar;
-  QPointer<MainWindow> m_dragDocument;
+  QPointer<QWidget> m_dragWindow;
   QPoint m_dragStartGlobal;
   bool m_closing = false;
 };

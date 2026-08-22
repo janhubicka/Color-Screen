@@ -122,6 +122,15 @@ public:
     return m_renderTypeParams;
   }
 
+  /** Rotate the shared document left from any attached view. */
+  void rotateDocumentLeft();
+
+  /** Rotate the shared document right from any attached view. */
+  void rotateDocumentRight();
+
+  /** Set horizontal mirroring for the shared document from any view. */
+  void setDocumentMirror(bool checked);
+
   /** Restore this document from its per-window recovery directory. */
   bool restoreRecoveryState();
 

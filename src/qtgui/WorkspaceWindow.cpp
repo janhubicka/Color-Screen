@@ -1,6 +1,7 @@
 #include "WorkspaceWindow.h"
 
 #include "ColorScreenApplication.h"
+#include "ImageViewWindow.h"
 #include "MainWindow.h"
 
 #include <QAction>
@@ -54,6 +55,35 @@ protected:
 
 private:
   QPointer<MainWindow> m_document;
+  bool m_closePending = false;
+};
+
+/** MDI wrapper that closes only the lightweight secondary view. */
+class ViewSubWindow final : public QMdiSubWindow {
+public:
+  explicit ViewSubWindow(ImageViewWindow *view, QWidget *parent = nullptr)
+      : QMdiSubWindow(parent), m_view(view) {
+    setAttribute(Qt::WA_DeleteOnClose, false);
+  }
+
+protected:
+  /** Defer view closure until the current MDI event has completed. */
+  void closeEvent(QCloseEvent *event) override {
+    event->ignore();
+    if (m_closePending || !m_view)
+      return;
+
+    m_closePending = true;
+    QPointer<ImageViewWindow> view = m_view;
+    QTimer::singleShot(0, this, [this, view]() {
+      m_closePending = false;
+      if (view)
+        view->close();
+    });
+  }
+
+private:
+  QPointer<ImageViewWindow> m_view;
   bool m_closePending = false;
 };
 
@@ -209,12 +239,97 @@ void WorkspaceWindow::removeDocument(MainWindow *document) {
   configureTabBar();
 }
 
-/** Return the active MDI document while toolbar interactions retain selection. */
+/** Embed secondary VIEW in the same MDI area as ordinary documents. */
+void WorkspaceWindow::addView(ImageViewWindow *view) {
+  if (!view)
+    return;
+  if (containsView(view)) {
+    activateView(view);
+    return;
+  }
+
+  view->hide();
+  view->prepareForWorkspaceEmbedding();
+  view->setWindowFlags(Qt::Widget);
+
+  auto *subWindow = new ViewSubWindow(view);
+  subWindow->setObjectName(QStringLiteral("imageViewSubWindow"));
+  subWindow->setWindowTitle(view->windowTitle());
+  subWindow->setWidget(view);
+  m_mdiArea->addSubWindow(subWindow);
+
+  QPointer<ImageViewWindow> guardedView(view);
+  connect(view, &QWidget::windowTitleChanged, this,
+          [this, guardedView, subWindow](const QString &title) {
+            if (!guardedView)
+              return;
+            subWindow->setWindowTitle(title);
+            if (m_chromeView == guardedView)
+              setWindowTitle(title + tr(" — Color-Screen"));
+            configureTabBar();
+          });
+  connect(view->statusBar(), &QStatusBar::messageChanged, this,
+          [this, guardedView](const QString &message) {
+            if (!guardedView || m_chromeView != guardedView)
+              return;
+            if (message.isEmpty())
+              statusBar()->clearMessage();
+            else
+              statusBar()->showMessage(message);
+          });
+
+  QPointer<QMdiSubWindow> guardedSubWindow(subWindow);
+  connect(view, &QObject::destroyed, this, [this, guardedSubWindow]() {
+    if (guardedSubWindow) {
+      m_mdiArea->removeSubWindow(guardedSubWindow);
+      guardedSubWindow->deleteLater();
+    }
+    QTimer::singleShot(0, this, [this]() {
+      onSubWindowActivated(m_mdiArea->currentSubWindow());
+      configureTabBar();
+    });
+  });
+
+  view->show();
+  subWindow->show();
+  if (m_mdiArea->viewMode() == QMdiArea::TabbedView)
+    subWindow->showMaximized();
+  m_mdiArea->setActiveSubWindow(subWindow);
+  onSubWindowActivated(subWindow);
+  configureTabBar();
+
+  show();
+  if (isMinimized())
+    showNormal();
+  raise();
+  activateWindow();
+}
+
+/** Remove secondary VIEW from the MDI area and show it standalone. */
+void WorkspaceWindow::removeView(ImageViewWindow *view) {
+  if (!view || !containsView(view))
+    return;
+
+  takeViewFromWorkspace(view);
+  view->restoreFromWorkspaceEmbedding();
+  view->show();
+  view->raise();
+  view->activateWindow();
+
+  onSubWindowActivated(m_mdiArea->currentSubWindow());
+  configureTabBar();
+}
+
+/** Return the active document, resolving secondary views to their owner. */
 MainWindow *WorkspaceWindow::currentDocument() const {
   QMdiSubWindow *window = m_mdiArea->currentSubWindow();
   if (!window)
     window = m_mdiArea->activeSubWindow();
-  return documentForSubWindow(window);
+  if (MainWindow *document = documentForSubWindow(window))
+    return document;
+  if (ImageViewWindow *view = viewForSubWindow(window))
+    return view->sourceDocument();
+  return nullptr;
 }
 
 /** Return the number of documents attached to the MDI workspace. */
@@ -225,6 +340,11 @@ int WorkspaceWindow::tabCount() const {
 /** Return whether DOCUMENT is attached to this workspace. */
 bool WorkspaceWindow::containsDocument(MainWindow *document) const {
   return subWindowForDocument(document) != nullptr;
+}
+
+/** Return whether secondary VIEW is attached to this workspace. */
+bool WorkspaceWindow::containsView(ImageViewWindow *view) const {
+  return subWindowForView(view) != nullptr;
 }
 
 /** Select DOCUMENT in either tabbed or subwindow presentation. */
@@ -241,6 +361,22 @@ void WorkspaceWindow::activateDocument(MainWindow *document) {
   raise();
   activateWindow();
   document->setFocus();
+}
+
+/** Select secondary VIEW in either tabbed or subwindow presentation. */
+void WorkspaceWindow::activateView(ImageViewWindow *view) {
+  QMdiSubWindow *subWindow = subWindowForView(view);
+  if (!subWindow)
+    return;
+
+  m_mdiArea->setActiveSubWindow(subWindow);
+  onSubWindowActivated(subWindow);
+  show();
+  if (isMinimized())
+    showNormal();
+  raise();
+  activateWindow();
+  view->setFocus();
 }
 
 /** Update tab/subwindow text after filename or modified-state changes. */
@@ -351,10 +487,27 @@ WorkspaceWindow::subWindowForDocument(MainWindow *document) const {
   return nullptr;
 }
 
+/** Return the MDI wrapper associated with secondary VIEW. */
+QMdiSubWindow *WorkspaceWindow::subWindowForView(ImageViewWindow *view) const {
+  if (!view)
+    return nullptr;
+  for (QMdiSubWindow *window : m_mdiArea->subWindowList()) {
+    if (window && window->widget() == view)
+      return window;
+  }
+  return nullptr;
+}
+
 /** Return the MainWindow hosted by WINDOW. */
 MainWindow *
 WorkspaceWindow::documentForSubWindow(QMdiSubWindow *window) const {
   return window ? qobject_cast<MainWindow *>(window->widget()) : nullptr;
+}
+
+/** Return the secondary view hosted by WINDOW. */
+ImageViewWindow *
+WorkspaceWindow::viewForSubWindow(QMdiSubWindow *window) const {
+  return window ? qobject_cast<ImageViewWindow *>(window->widget()) : nullptr;
 }
 
 /** Return Qt's internal MDI tab bar, when tabbed view has created one. */
@@ -363,14 +516,15 @@ QTabBar *WorkspaceWindow::documentTabBar() const {
       QString(), Qt::FindDirectChildrenOnly);
 }
 
-/** Activate and return the document represented by tab INDEX. */
-MainWindow *WorkspaceWindow::documentAtTab(int index) const {
+/** Activate and return the hosted widget represented by tab INDEX. */
+QWidget *WorkspaceWindow::windowAtTab(int index) const {
   QTabBar *tabBar = documentTabBar();
   if (!tabBar || index < 0 || index >= tabBar->count())
     return nullptr;
 
   tabBar->setCurrentIndex(index);
-  return currentDocument();
+  QMdiSubWindow *window = m_mdiArea->currentSubWindow();
+  return window ? window->widget() : nullptr;
 }
 
 /** Configure auto-hiding tabs, context actions, and drag-out detachment. */
@@ -400,20 +554,29 @@ void WorkspaceWindow::configureTabBar() {
 
     connect(tabBar, &QWidget::customContextMenuRequested, this,
             [this, tabBar](const QPoint &position) {
-              MainWindow *document = documentAtTab(tabBar->tabAt(position));
-              if (!document)
+              QWidget *hosted = windowAtTab(tabBar->tabAt(position));
+              if (!hosted)
+                return;
+
+              auto *document = qobject_cast<MainWindow *>(hosted);
+              auto *view = qobject_cast<ImageViewWindow *>(hosted);
+              if (!document && !view)
                 return;
 
               QMenu menu(this);
-              QAction *detach = menu.addAction(tr("Detach Image"));
+              QAction *detach = menu.addAction(
+                  view ? tr("Detach View") : tr("Detach Image"));
               menu.addSeparator();
               QAction *tabbed = menu.addAction(tr("Tabbed Documents"));
               QAction *tile = menu.addAction(tr("Tile Documents"));
               QAction *cascade = menu.addAction(tr("Cascade Documents"));
               QAction *selected = menu.exec(tabBar->mapToGlobal(position));
-              if (selected == detach)
-                detachDocument(document);
-              else if (selected == tabbed)
+              if (selected == detach) {
+                if (view)
+                  detachView(view);
+                else
+                  detachDocument(document);
+              } else if (selected == tabbed)
                 showTabbedDocuments();
               else if (selected == tile)
                 tileDocuments();
@@ -421,11 +584,13 @@ void WorkspaceWindow::configureTabBar() {
                 cascadeDocuments();
             });
 
-    connect(tabBar, &QTabBar::tabBarDoubleClicked, this,
-            [this](int index) {
-              if (MainWindow *document = documentAtTab(index))
-                detachDocument(document);
-            });
+    connect(tabBar, &QTabBar::tabBarDoubleClicked, this, [this](int index) {
+      QWidget *hosted = windowAtTab(index);
+      if (auto *view = qobject_cast<ImageViewWindow *>(hosted))
+        detachView(view);
+      else if (auto *document = qobject_cast<MainWindow *>(hosted))
+        detachDocument(document);
+    });
   });
 }
 
@@ -565,21 +730,89 @@ void WorkspaceWindow::detachDocument(MainWindow *document) {
     application->detachDocument(document);
 }
 
-/** Switch the shared shell to WINDOW's document. */
+/** Detach secondary VIEW through the application manager. */
+void WorkspaceWindow::detachView(ImageViewWindow *view) {
+  if (!view)
+    return;
+  if (ColorScreenApplication *application = documentApplication())
+    application->detachView(view);
+}
+
+/** Present VIEW's standard menu/toolbar chrome in the shared workspace. */
+void WorkspaceWindow::installViewChrome(ImageViewWindow *view) {
+  if (!view)
+    return;
+
+  menuBar()->clear();
+  for (QAction *action : view->menuBar()->actions())
+    menuBar()->addAction(action);
+
+  if (QToolBar *toolbar = view->workspaceToolBar()) {
+    view->removeToolBar(toolbar);
+    if (toolbar->parentWidget() != this)
+      toolbar->setParent(this);
+    addToolBar(Qt::TopToolBarArea, toolbar);
+    toolbar->show();
+  }
+
+  m_inspectorDock->hide();
+  const QString message = view->statusBar()->currentMessage();
+  if (message.isEmpty())
+    statusBar()->clearMessage();
+  else
+    statusBar()->showMessage(message);
+  setWindowTitle(view->windowTitle() + tr(" — Color-Screen"));
+}
+
+/** Return VIEW's toolbar/menu/status presentation to its own window. */
+void WorkspaceWindow::releaseViewChrome(ImageViewWindow *view,
+                                        bool showInWindow) {
+  if (!view)
+    return;
+
+  if (QToolBar *toolbar = view->workspaceToolBar()) {
+    if (toolbar->parentWidget() == this)
+      removeToolBar(toolbar);
+    if (toolbar->parentWidget() != view)
+      toolbar->setParent(view);
+    view->addToolBar(Qt::TopToolBarArea, toolbar);
+    toolbar->setVisible(showInWindow);
+  }
+
+  view->menuBar()->setVisible(showInWindow);
+  view->statusBar()->setVisible(showInWindow);
+  if (m_chromeView == view) {
+    statusBar()->clearMessage();
+    menuBar()->clear();
+    m_chromeView.clear();
+  }
+}
+
+/** Switch the shared shell to WINDOW's document or secondary view. */
 void WorkspaceWindow::onSubWindowActivated(QMdiSubWindow *window) {
   MainWindow *document = documentForSubWindow(window);
-  if (m_chromeDocument == document) {
+  ImageViewWindow *view = viewForSubWindow(window);
+
+  if ((document && m_chromeDocument == document && !m_chromeView) ||
+      (view && m_chromeView == view && !m_chromeDocument)) {
     if (document)
       setWindowTitle(document->documentDisplayName() + tr(" — Color-Screen"));
+    else if (view)
+      setWindowTitle(view->windowTitle() + tr(" — Color-Screen"));
     return;
   }
 
   if (m_chromeDocument)
     releaseDocumentChrome(m_chromeDocument, false);
+  if (m_chromeView)
+    releaseViewChrome(m_chromeView, false);
 
   m_chromeDocument = document;
+  m_chromeView = view;
   if (document) {
     installDocumentChrome(document);
+  } else if (view) {
+    installViewChrome(view);
   } else {
     menuBar()->clear();
     m_inspectorDock->hide();
@@ -612,6 +845,22 @@ void WorkspaceWindow::takeDocumentFromWorkspace(MainWindow *document) {
   document->setWindowFlags(Qt::Window);
 }
 
+/** Remove secondary VIEW's MDI wrapper while keeping VIEW alive. */
+void WorkspaceWindow::takeViewFromWorkspace(ImageViewWindow *view) {
+  QMdiSubWindow *subWindow = subWindowForView(view);
+  if (!subWindow)
+    return;
+
+  releaseViewChrome(view, true);
+  view->hide();
+  m_mdiArea->removeSubWindow(view);
+  m_mdiArea->removeSubWindow(subWindow);
+  subWindow->deleteLater();
+
+  view->setParent(nullptr);
+  view->setWindowFlags(Qt::Window);
+}
+
 /** Detach a tab when it is dragged beyond the tab-bar docking margin. */
 bool WorkspaceWindow::eventFilter(QObject *watched, QEvent *event) {
   if (watched != m_tabBar || !m_tabBar)
@@ -621,15 +870,15 @@ bool WorkspaceWindow::eventFilter(QObject *watched, QEvent *event) {
   case QEvent::MouseButtonPress: {
     auto *mouseEvent = static_cast<QMouseEvent *>(event);
     if (mouseEvent->button() == Qt::LeftButton) {
-      m_dragDocument =
-          documentAtTab(m_tabBar->tabAt(mouseEvent->position().toPoint()));
+      m_dragWindow =
+          windowAtTab(m_tabBar->tabAt(mouseEvent->position().toPoint()));
       m_dragStartGlobal = mouseEvent->globalPosition().toPoint();
     }
     break;
   }
   case QEvent::MouseMove: {
     auto *mouseEvent = static_cast<QMouseEvent *>(event);
-    if (!m_dragDocument || !(mouseEvent->buttons() & Qt::LeftButton))
+    if (!m_dragWindow || !(mouseEvent->buttons() & Qt::LeftButton))
       break;
 
     const QPoint globalPosition = mouseEvent->globalPosition().toPoint();
@@ -642,16 +891,18 @@ bool WorkspaceWindow::eventFilter(QObject *watched, QEvent *event) {
     if (dockingMargin.contains(localPosition))
       break;
 
-    QPointer<MainWindow> document = m_dragDocument;
-    m_dragDocument.clear();
-    QTimer::singleShot(0, this, [this, document]() {
-      if (document)
+    QPointer<QWidget> hosted = m_dragWindow;
+    m_dragWindow.clear();
+    QTimer::singleShot(0, this, [this, hosted]() {
+      if (auto *view = qobject_cast<ImageViewWindow *>(hosted.data()))
+        detachView(view);
+      else if (auto *document = qobject_cast<MainWindow *>(hosted.data()))
         detachDocument(document);
     });
     return true;
   }
   case QEvent::MouseButtonRelease:
-    m_dragDocument.clear();
+    m_dragWindow.clear();
     break;
   default:
     break;

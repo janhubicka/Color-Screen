@@ -2958,6 +2958,17 @@ ParameterState MainWindow::documentStateSnapshot() const {
   return getCurrentState();
 }
 
+/** Rotate the shared document left on behalf of a secondary view. */
+void MainWindow::rotateDocumentLeft() { rotateLeft(); }
+
+/** Rotate the shared document right on behalf of a secondary view. */
+void MainWindow::rotateDocumentRight() { rotateRight(); }
+
+/** Change shared document mirroring on behalf of a secondary view. */
+void MainWindow::setDocumentMirror(bool checked) {
+  onMirrorHorizontally(checked);
+}
+
 /** Create a snapshot of the current application parameters.
    Bundles render_parameters, scr_to_img_parameters, scr_detect_parameters,
    solver_parameters, and profile spots into a ParameterState struct for

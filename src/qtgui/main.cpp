@@ -4,6 +4,7 @@
 #include "WorkspaceWindow.h"
 #include "progress-info.h"
 
+#include <QAction>
 #include <QColor>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
@@ -649,11 +650,31 @@ int main(int argc, char *argv[]) {
       MainWindow *source = documents.front();
       const auto sourceScan = source->sharedImageData();
       const auto sourceType = source->viewRenderTypeParameters().type;
+      const int previousTabs = app.tabCount();
       ImageViewWindow *view = app.createViewWindow(source);
+      WorkspaceWindow *workspace = app.workspaceWindow();
       if (!view || view->sourceDocument() != source ||
           view->sharedImageData() != sourceScan ||
-          app.documentWindows().size() != documents.size()) {
-        qCritical() << "New View did not share the source document image";
+          app.documentWindows().size() != documents.size() ||
+          !workspace || !workspace->containsView(view) ||
+          app.tabCount() != previousTabs + 1 || view->isWindow()) {
+        qCritical() << "New View was not added as a shared-image workspace tab";
+        app.exit(14);
+        return;
+      }
+
+      bool hasIconOnlyZoom = false;
+      bool hasIconOnlyRotation = false;
+      if (QToolBar *toolbar = view->workspaceToolBar()) {
+        for (QAction *action : toolbar->actions()) {
+          if (action->text() == QObject::tr("Zoom In") && !action->icon().isNull())
+            hasIconOnlyZoom = true;
+          if (action->text() == QObject::tr("Rotate Right") && !action->icon().isNull())
+            hasIconOnlyRotation = true;
+        }
+      }
+      if (!hasIconOnlyZoom || !hasIconOnlyRotation) {
+        qCritical() << "New View toolbar does not use the standard image-view icons";
         app.exit(14);
         return;
       }

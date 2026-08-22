@@ -10,6 +10,7 @@
 
 class ImageWidget;
 class MainWindow;
+class QAction;
 class QCheckBox;
 class QComboBox;
 class QToolBar;
@@ -17,9 +18,11 @@ class QToolBar;
 /** Lightweight secondary view of one MainWindow document.
 
     The source MainWindow remains the sole owner of editable document state,
-    undo/recovery, workers, and filenames.  This window shares the loaded scan
+    undo/recovery, workers, and filenames.  This view shares the loaded scan
     and follows snapshots of the source parameters, while keeping display-only
-    state (render mode, IR/RGB choice, zoom, and pan) independent. */
+    state (render mode, IR/RGB choice, zoom, and pan) independent.  By default
+    ColorScreenApplication embeds it as another QMdiArea tab; it may also be
+    detached as an ordinary top-level QMainWindow. */
 class ImageViewWindow final : public QMainWindow {
   Q_OBJECT
 
@@ -47,6 +50,18 @@ public:
   /** Select TYPE in this view without changing the source document view. */
   bool setRenderType(colorscreen::render_type_t type);
 
+  /** Return this view's toolbar while it is hosted by WorkspaceWindow. */
+  QToolBar *workspaceToolBar() const { return m_toolbar; }
+
+  /** Hide top-level chrome before this QMainWindow becomes an MDI child. */
+  void prepareForWorkspaceEmbedding();
+
+  /** Restore normal top-level chrome after the view leaves the workspace. */
+  void restoreFromWorkspaceEmbedding();
+
+  /** Return whether this view is currently presented inside the workspace. */
+  bool isWorkspaceEmbedded() const { return m_workspaceEmbedded; }
+
 private slots:
   /** Refresh shared image/parameter snapshots after the document changes. */
   void refreshFromDocument();
@@ -64,8 +79,8 @@ private:
   /** Rebuild render-mode choices valid for the current shared document. */
   void rebuildModeList();
 
-  /** Synchronize the color checkbox with render-mode capabilities. */
-  void updateColorControl();
+  /** Synchronize the color and mirror controls with their owners. */
+  void updateViewControls();
 
   /** Push copied shared parameters plus view-local render mode to ImageWidget. */
   void updateImageParameters(bool imageChanged);
@@ -76,6 +91,8 @@ private:
   QToolBar *m_toolbar = nullptr;
   QComboBox *m_modeComboBox = nullptr;
   QCheckBox *m_colorCheckBox = nullptr;
+  QAction *m_mirrorAction = nullptr;
+  bool m_workspaceEmbedded = false;
 
   std::shared_ptr<colorscreen::image_data> m_scan;
   colorscreen::render_parameters m_rparams;

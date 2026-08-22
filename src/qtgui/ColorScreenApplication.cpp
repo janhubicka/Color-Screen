@@ -111,7 +111,8 @@ MainWindow *ColorScreenApplication::createDocumentWindow(
 }
 
 /** Create an additional display-only view of SOURCE. */
-ImageViewWindow *ColorScreenApplication::createViewWindow(MainWindow *source) {
+ImageViewWindow *ColorScreenApplication::createViewWindow(MainWindow *source,
+                                                           bool detached) {
   if (!source || !source->sharedImageData())
     return nullptr;
 
@@ -131,11 +132,45 @@ ImageViewWindow *ColorScreenApplication::createViewWindow(MainWindow *source) {
       refreshWindowMenus();
     });
   });
-  view->show();
-  view->raise();
-  view->activateWindow();
+
+  if (detached) {
+    view->setWindowFlags(Qt::Window);
+    view->show();
+    view->raise();
+    view->activateWindow();
+  } else {
+    workspaceWindow()->addView(view);
+  }
+
   refreshWindowMenus();
   return view;
+}
+
+/** Detach VIEW from the primary workspace without recreating it. */
+void ColorScreenApplication::detachView(ImageViewWindow *view) {
+  if (!view || !m_workspaceWindow || !m_workspaceWindow->containsView(view))
+    return;
+  m_workspaceWindow->removeView(view);
+  refreshWindowMenus();
+}
+
+/** Attach VIEW to the primary workspace without changing view-local state. */
+void ColorScreenApplication::attachView(ImageViewWindow *view) {
+  if (!view)
+    return;
+  if (m_workspaceWindow && m_workspaceWindow->containsView(view)) {
+    m_workspaceWindow->activateView(view);
+    return;
+  }
+  workspaceWindow()->addView(view);
+  refreshWindowMenus();
+}
+
+/** Consolidate every detached secondary view into the workspace. */
+void ColorScreenApplication::attachAllViews() {
+  const QList<ImageViewWindow *> views = viewWindows();
+  for (ImageViewWindow *view : views)
+    attachView(view);
 }
 
 /** Return all live secondary views. */
@@ -325,7 +360,8 @@ bool ColorScreenApplication::closeAllDocumentsForWorkspace() {
 
 /** Populate the Window menu with tab and detached-window controls. */
 void ColorScreenApplication::populateWindowMenu(QMenu *menu,
-                                                 MainWindow *currentWindow) {
+                                                 MainWindow *currentWindow,
+                                                 ImageViewWindow *currentView) {
   if (!menu)
     return;
   menu->clear();
@@ -368,24 +404,39 @@ void ColorScreenApplication::populateWindowMenu(QMenu *menu,
   });
 
   menu->addSeparator();
-  QAction *detachAction = menu->addAction(tr("Detach Current Image"));
+  QAction *detachAction = menu->addAction(
+      currentView ? tr("Detach Current View") : tr("Detach Current Image"));
   detachAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D));
   detachAction->setShortcutContext(Qt::WindowShortcut);
-  detachAction->setEnabled(currentWindow && m_workspaceWindow &&
-                           m_workspaceWindow->containsDocument(currentWindow));
-  connect(detachAction, &QAction::triggered, menu, [this, currentWindow]() {
-    detachDocument(currentWindow);
-  });
+  detachAction->setEnabled(
+      currentView ? (m_workspaceWindow && m_workspaceWindow->containsView(currentView))
+                  : (currentWindow && m_workspaceWindow &&
+                     m_workspaceWindow->containsDocument(currentWindow)));
+  connect(detachAction, &QAction::triggered, menu,
+          [this, currentWindow, currentView]() {
+            if (currentView)
+              detachView(currentView);
+            else
+              detachDocument(currentWindow);
+          });
 
-  QAction *attachAction = menu->addAction(tr("Move Current Image to Tabs"));
-  attachAction->setEnabled(currentWindow &&
-                           (!m_workspaceWindow ||
-                            !m_workspaceWindow->containsDocument(currentWindow)));
-  connect(attachAction, &QAction::triggered, menu, [this, currentWindow]() {
-    attachDocument(currentWindow);
-  });
+  QAction *attachAction = menu->addAction(
+      currentView ? tr("Move Current View to Tabs")
+                  : tr("Move Current Image to Tabs"));
+  attachAction->setEnabled(
+      currentView ? (!m_workspaceWindow || !m_workspaceWindow->containsView(currentView))
+                  : (currentWindow &&
+                     (!m_workspaceWindow ||
+                      !m_workspaceWindow->containsDocument(currentWindow))));
+  connect(attachAction, &QAction::triggered, menu,
+          [this, currentWindow, currentView]() {
+            if (currentView)
+              attachView(currentView);
+            else
+              attachDocument(currentWindow);
+          });
 
-  QAction *attachAllAction = menu->addAction(tr("Attach All Images as Tabs"));
+  QAction *attachAllAction = menu->addAction(tr("Attach All Images and Views as Tabs"));
   bool hasDetached = false;
   for (MainWindow *document : documentWindows()) {
     if (!m_workspaceWindow || !m_workspaceWindow->containsDocument(document)) {
@@ -393,9 +444,18 @@ void ColorScreenApplication::populateWindowMenu(QMenu *menu,
       break;
     }
   }
+  if (!hasDetached) {
+    for (ImageViewWindow *view : viewWindows()) {
+      if (!m_workspaceWindow || !m_workspaceWindow->containsView(view)) {
+        hasDetached = true;
+        break;
+      }
+    }
+  }
   attachAllAction->setEnabled(hasDetached);
   connect(attachAllAction, &QAction::triggered, menu, [this]() {
     attachAllDocuments();
+    attachAllViews();
   });
 
   QMenu *arrangeMenu = menu->addMenu(tr("&Arrange Images"));
@@ -406,20 +466,23 @@ void ColorScreenApplication::populateWindowMenu(QMenu *menu,
                            m_workspaceWindow->isTabbedView());
   connect(tabbedAction, &QAction::triggered, menu, [this]() {
     attachAllDocuments();
+    attachAllViews();
     workspaceWindow()->showTabbedDocuments();
   });
 
   QAction *tileAction = arrangeMenu->addAction(tr("&Tile All"));
-  tileAction->setEnabled(documentWindows().size() > 1);
+  tileAction->setEnabled(documentWindows().size() + viewWindows().size() > 1);
   connect(tileAction, &QAction::triggered, menu, [this]() {
     attachAllDocuments();
+    attachAllViews();
     workspaceWindow()->tileDocuments();
   });
 
   QAction *cascadeAction = arrangeMenu->addAction(tr("&Cascade"));
-  cascadeAction->setEnabled(documentWindows().size() > 1);
+  cascadeAction->setEnabled(documentWindows().size() + viewWindows().size() > 1);
   connect(cascadeAction, &QAction::triggered, menu, [this]() {
     attachAllDocuments();
+    attachAllViews();
     workspaceWindow()->cascadeDocuments();
   });
 
@@ -435,7 +498,7 @@ void ColorScreenApplication::populateWindowMenu(QMenu *menu,
     name.replace(QLatin1Char('&'), QStringLiteral("&&"));
     QAction *action = menu->addAction(tr("&%1 %2").arg(i + 1).arg(name));
     action->setCheckable(true);
-    action->setChecked(documents[i] == currentWindow);
+    action->setChecked(!currentView && documents[i] == currentWindow);
     connect(action, &QAction::triggered, menu, [this, guarded]() {
       if (!guarded)
         return;
@@ -456,13 +519,19 @@ void ColorScreenApplication::populateWindowMenu(QMenu *menu,
     for (ImageViewWindow *view : views) {
       QPointer<ImageViewWindow> guarded(view);
       QAction *action = menu->addAction(view->windowTitle());
-      connect(action, &QAction::triggered, menu, [guarded]() {
+      action->setCheckable(true);
+      action->setChecked(view == currentView);
+      connect(action, &QAction::triggered, menu, [this, guarded]() {
         if (!guarded)
           return;
-        if (guarded->isMinimized())
-          guarded->showNormal();
-        guarded->raise();
-        guarded->activateWindow();
+        if (m_workspaceWindow && m_workspaceWindow->containsView(guarded))
+          m_workspaceWindow->activateView(guarded);
+        else {
+          if (guarded->isMinimized())
+            guarded->showNormal();
+          guarded->raise();
+          guarded->activateWindow();
+        }
       });
     }
   }
