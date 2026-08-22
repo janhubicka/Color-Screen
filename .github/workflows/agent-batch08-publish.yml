@@ -4,16 +4,13 @@ on:
   push:
     branches:
       - agent/pr35-source-transport-20260821
-  pull_request:
-    branches:
-      - main
 
 permissions:
   contents: write
 
 jobs:
   publish:
-    runs-on: ubuntu-24.04-arm
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,21 +23,23 @@ jobs:
       - name: Reconstruct and validate patch
         shell: bash
         run: |
-          cat \
-            transport/.agent-batch08-publish/patch.b64.00 \
-            transport/.agent-batch08-publish/patch.b64.01 \
-            transport/.agent-batch08-publish/patch.b64.02 \
-            transport/.agent-batch08-publish/patch.b64.03 \
-            transport/.agent-batch08-publish/patch.b64.04 \
-            transport/.agent-batch08-publish/fix.05.0 \
-            transport/.agent-batch08-publish/fix.05.1 \
-            transport/.agent-batch08-publish/fix.05.2 \
-            transport/.agent-batch08-publish/fix.06.0 \
-            transport/.agent-batch08-publish/fix.06.1 \
-            transport/.agent-batch08-publish/fix.06.2 \
-            transport/.agent-batch08-publish/patch.b64.07 \
-            | base64 -d > /tmp/batch08.patch
-          echo "0a72b0d64b6102ea3230b41de4e1f0b4a8d1d6f584addd667ad7e16342eab707  /tmp/batch08.patch" | sha256sum -c -
+          python3 - <<'PY'
+          import base64, hashlib
+          from pathlib import Path
+          names = [
+              'patch.b64.00', 'patch.b64.01', 'patch.b64.02', 'patch.b64.03',
+              'patch.b64.04', 'fix.05.0', 'fix.05.1', 'fix.05.2',
+              'fix.06.0', 'fix.06.1', 'fix.06.2', 'patch.b64.07'
+          ]
+          root = Path('transport/.agent-batch08-publish')
+          encoded = ''.join((root / name).read_text() for name in names)
+          data = base64.b64decode(encoded, validate=True)
+          digest = hashlib.sha256(data).hexdigest()
+          expected = '0a72b0d64b6102ea3230b41de4e1f0b4a8d1d6f584addd667ad7e16342eab707'
+          if digest != expected:
+              raise SystemExit(f'patch checksum {digest}, expected {expected}')
+          Path('/tmp/batch08.patch').write_bytes(data)
+          PY
           cd target
           test "$(git rev-parse HEAD)" = "ab4997bfee76954c5144193a32aac8d212a96a69"
           git apply --check /tmp/batch08.patch
