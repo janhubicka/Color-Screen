@@ -26,7 +26,7 @@ jobs:
           fetch-depth: 0
           path: repo
 
-      - name: Verify and publish focus-area selection
+      - name: Verify and publish focus-area library workflow
         shell: bash
         run: |
           set -euxo pipefail
@@ -35,15 +35,24 @@ jobs:
           gzip -dc /tmp/focus-area-selection.patch.gz > /tmp/focus-area-selection.patch
           echo '32cc32cb8f8ffd7f1ba09c697f250c08bcd4272d41e07714420ac3715d2a2655  /tmp/focus-area-selection.patch' | sha256sum -c -
 
+          base64 -d transport/agent/focus-area-orchestration.patch.gz.b64 > /tmp/focus-area-orchestration.patch.gz
+          echo 'e54c254dbac1c453068512caee4888117ddcc451bd25032faae558e1f234f9d7  /tmp/focus-area-orchestration.patch.gz' | sha256sum -c -
+          gzip -dc /tmp/focus-area-orchestration.patch.gz > /tmp/focus-area-orchestration.patch
+          echo '64181429c300e1fbac6e3e08649411cd09a7a42b5b33f0da84801d82b3de601b  /tmp/focus-area-orchestration.patch' | sha256sum -c -
+
           cd repo
-          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.base.sha }}"
+          BASE_SHA='${{ github.event.pull_request.base.sha }}'
+          test "$(git rev-parse HEAD)" = "$BASE_SHA"
           git config user.name 'OpenAI Codex'
           git config user.email 'noreply@openai.com'
-          git checkout -B agent/focus-analysis-area-selection "${{ github.event.pull_request.base.sha }}"
+          git checkout -B agent/focus-analysis-area-selection "$BASE_SHA"
           git am /tmp/focus-area-selection.patch
-          git diff HEAD^ --check
-          test "$(git diff HEAD^ --name-only | sort)" = $'doc/finetune-solver.md\ndoc/finetune-tracking.md\nsrc/libcolorscreen/finetune-int.h\nsrc/libcolorscreen/finetune.C\nsrc/libcolorscreen/include/finetune.h\nsrc/libcolorscreen/unittests.C'
+          git am /tmp/focus-area-orchestration.patch
+          git diff "$BASE_SHA"..HEAD --check
+          test "$(git diff "$BASE_SHA"..HEAD --name-only | sort)" = $'doc/finetune-solver.md\ndoc/finetune-tracking.md\nsrc/libcolorscreen/finetune-int.h\nsrc/libcolorscreen/finetune.C\nsrc/libcolorscreen/include/finetune.h\nsrc/libcolorscreen/unittests.C'
           grep -q 'check_detection_stats' src/libcolorscreen/unittests.C
           grep -q 'Focus-area grid detector failed' src/libcolorscreen/unittests.C
+          grep -q 'verify_focus_analysis_areas' src/libcolorscreen/unittests.C
+          test "$(git rev-list --count "$BASE_SHA"..HEAD)" = 2
           git push --force origin HEAD:refs/heads/agent/focus-analysis-area-selection
-          printf 'Published %s on base %s\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD^)"
+          printf 'Published %s on base %s\n' "$(git rev-parse HEAD)" "$BASE_SHA"
