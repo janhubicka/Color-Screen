@@ -33,13 +33,17 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import textwrap
 
           source = Path("publisher/.github/workflows/agent-publish-final-coordinate-v2.yml").read_text()
           marker = "          python3 - <<'PY'\n"
           start = source.index(marker) + len(marker)
           end = source.index("\n          PY\n", start)
-          Path("/tmp/final-coordinate-v2.py").write_text(textwrap.dedent(source[start:end]) + "\n")
+          lines = source[start:end].splitlines()
+          # Strip only the YAML block's fixed indentation. Embedded C++ text in
+          # Python triple-quoted strings intentionally has smaller indentation.
+          lines = [line[10:] if line.startswith("          ") else line
+                   for line in lines]
+          Path("/tmp/final-coordinate-v2.py").write_text("\n".join(lines) + "\n")
           PY
 
           set +e
