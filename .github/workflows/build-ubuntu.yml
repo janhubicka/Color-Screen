@@ -111,7 +111,7 @@ jobs:
 
   publish-monochrome-bayer-guide:
     if: github.event_name == 'pull_request' && github.head_ref == 'agent/tmp-publish-monochrome-bayer-guide'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: write
     steps:
