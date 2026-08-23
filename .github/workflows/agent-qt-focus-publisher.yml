@@ -1,8 +1,6 @@
 name: Temporary Qt focus-area publisher
 
 on:
-  push:
-    branches: [ "agent/qt-focus-publisher-20260823" ]
   pull_request:
     branches: [ "main" ]
 
@@ -14,20 +12,21 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       REVIEW_BRANCH: agent/qt-focus-area-heldout
-      BASE_SHA: b9296f936b75350e46bc8348e4a6cea4f7afad1e
       PATCH_SHA256: be98edd66803235494167b68a22ef7fbd97c8576fb32f801e871b01dafaab066
     steps:
-      - name: Check out exact current main base
+      - name: Check out current main base
         uses: actions/checkout@v4
         with:
-          ref: b9296f936b75350e46bc8348e4a6cea4f7afad1e
+          ref: main
           fetch-depth: 0
 
       - name: Reconstruct and apply reviewed patch
         shell: bash
         run: |
           set -euxo pipefail
-          git fetch origin agent/qt-focus-publisher-20260823
+          git fetch origin main agent/qt-focus-publisher-20260823
+          git reset --hard origin/main
+          git rev-parse HEAD > /tmp/base-sha
           for i in 00 01 02 03 04 05 06; do
             git show "origin/agent/qt-focus-publisher-20260823:agent/qt-focus-patch.${i}" >> /tmp/qt-focus-area.patch.gz.b64
           done
@@ -85,6 +84,8 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$(cat /tmp/base-sha)"
           git config user.name "OpenAI Codex"
           git config user.email "noreply@openai.com"
           git switch -c "${REVIEW_BRANCH}"
