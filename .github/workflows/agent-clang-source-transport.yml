@@ -95,9 +95,9 @@ jobs:
           +
           +# Verify the physical match rather than the arbitrary detected screen-grid
           +# phase or an exact known-pixel count.  The same match is represented as raw
-          +# offset -28,5 after nearest-pixel detector rounding.  Windows and Apple Clang
-          +# both map it to about final (6.71,-27.64), while boundary classification makes
-          +# the reported overlap differ slightly (58.62% versus 58.91%).
+          +# offset -28,5 after nearest-pixel detector rounding.  Mesh and no-mesh runs
+          +# both map it to about final (6.71,-27.64), while their known-pixel boundaries
+          +# make the reported overlap differ slightly (58.62% versus 58.91%).
           +check_stitch_match ()
           +{
           +    awk '
@@ -185,31 +185,32 @@ jobs:
           cat > /tmp/commit-message <<'EOF'
           tests: make macOS Clang regressions numerically robust
 
-          Fix two test-only assumptions exposed by Apple Clang -Ofast on arm64.
+          Fix two brittle test assumptions exposed by the macOS build.
 
           Validate solid focus-area candidates in the scan/output coordinate
           system instead of mapping them back through division and comparing an
           exact analysis-space boundary. Apple Clang reassociates the inverse
-          transform and contracts it to FMA under fast-math; the valid boundary
-          point 294.5 can therefore become 31.500000000000004 and fail an exact
-          <= 31.5 comparison. Keep a tiny scan-coordinate epsilon and retain the
-          inverse coordinates only for high-precision failure diagnostics.
+          transform and contracts it to FMA under -Ofast on arm64; the valid
+          boundary point 294.5 can therefore become 31.500000000000004 and fail
+          an exact <= 31.5 comparison. Keep a tiny scan-coordinate epsilon and
+          retain the inverse coordinates only for high-precision diagnostics.
 
           Make the Dufay stitch regression validate the physical final offset and
-          a narrow overlap range. Windows and Apple Clang both resolve the same
-          final displacement, about (6.71,-27.64), but differ by a few known
-          screen pixels at the overlap boundary, reporting 58.62% versus 58.91%.
+          a narrow overlap range. The ordinary mesh and --no-mesh paths both
+          resolve the same final displacement, about (6.71,-27.64), but their
+          known-pixel boundaries report 58.62% and 58.91% overlap respectively.
           Continue rejecting a genuinely different displacement or overlap while
-          avoiding exact compiler-dependent pixel-count and lattice-phase checks.
+          avoiding exact pixel-count and arbitrary lattice-phase checks.
 
           Validation: local Clang 17 O2/Ofast focus-finder reproduction; local
           Apple arm64 -Ofast codegen confirms the old inverse bound becomes FMA;
           the fused boundary evaluates to 31.500000000000004; the new direct
           scan-space comparison does not use the inverse FMA; the stitch parser
-          accepts both uploaded Windows and macOS reports and rejects altered
-          final-offset/overlap negative controls; dash syntax and git diff --check
-          pass. The publisher additionally runs an Ubuntu Clang -Ofast checking
-          build, focused focus-area unit group, and Dufay CLI integration test.
+          accepts the uploaded mesh/no-mesh reports and the earlier Windows
+          report while rejecting altered final-offset/overlap negative controls;
+          dash syntax and git diff --check pass. The publisher additionally runs
+          an Ubuntu Clang -Ofast checking build, focused focus-area unit group,
+          and Dufay CLI integration test.
           EOF
           git commit -F /tmp/commit-message
           git push --force origin "HEAD:$REVIEW_BRANCH"
