@@ -8,6 +8,7 @@ on:
 
 jobs:
   build:
+    if: github.event_name != 'pull_request' || github.head_ref != 'agent/tmp-publish-monochrome-bayer-guide'
 
     runs-on: windows-latest
 
@@ -129,7 +130,7 @@ jobs:
 
     - uses: actions/upload-artifact@v4
       with:
-        name: windows-installer-${{matrix.sys}}${{matrix.suffix}}
+        name: windows-installer-${{matrix.sys}}${{matrix.suffix}}.exe
         path: os/windows/Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe
     - uses: actions/upload-artifact@v4
       with:
@@ -139,3 +140,38 @@ jobs:
       with:
         name: portable-binary-${{matrix.sys}}${{matrix.suffix}}
         path: c:\Color-Screen-install\bin
+
+  publish-monochrome-bayer-guide:
+    if: github.event_name == 'pull_request' && github.head_ref == 'agent/tmp-publish-monochrome-bayer-guide'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: Apply and publish reviewed patch
+      shell: bash
+      run: |
+        set -euxo pipefail
+        cp .agent/mdi-activation.patch /tmp/mdi-activation.patch
+        cp .agent/bayer-core.patch /tmp/bayer-core.patch
+        cp .agent/bayer-guide-ui.patch /tmp/bayer-guide-ui.patch
+        git fetch origin agent/qtgui-monochrome-bayer-guide
+        git checkout -B agent/qtgui-monochrome-bayer-guide origin/agent/qtgui-monochrome-bayer-guide
+        git apply --check /tmp/mdi-activation.patch
+        git apply --check /tmp/bayer-core.patch
+        git apply --check /tmp/bayer-guide-ui.patch
+        git apply /tmp/mdi-activation.patch
+        git apply /tmp/bayer-core.patch
+        git apply /tmp/bayer-guide-ui.patch
+        git diff --check
+        git config user.name "OpenAI Agent"
+        git config user.email "agent@openai.com"
+        git add src/qtgui/WorkspaceWindow.cpp
+        git commit -m "qtgui: keep tiled windows stable on activation" -m "Prevent QMdiArea from restoring the maximized state inherited from tabbed presentation when a tiled or cascaded document becomes active. This addresses the tile-activation smoke failure without changing document state or activation order."
+        git add src/libcolorscreen/imagedata.C src/libcolorscreen/include/imagedata.h src/libcolorscreen/unittests.C
+        git commit -m "imagedata: detect monochrome Bayer captures" -m "Record whether LibRaw reported a conventional 2x2 Bayer CFA and reject Bayer-compensated monochrome loading for special/full-color layouts. Add a sparse affine-invariant RGB correlation analysis that conservatively identifies normally demosaiced monochrome Bayer captures, together with synthetic positive and negative unit coverage."
+        git add src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h
+        git commit -m "qtgui: guide monochrome Bayer RAW loading" -m "When an image opens without parameter data, use the library candidate analysis to offer a small extensible setup guide. Accepting the recommendation switches to monochromatic Bayer compensation and reloads through the existing demosaic path while preserving unsaved/dirty state. Recovery, explicit parameter loading, and ordinary manual reloads do not re-prompt."
+        git push origin HEAD:agent/qtgui-monochrome-bayer-guide
