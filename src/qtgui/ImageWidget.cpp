@@ -1968,7 +1968,7 @@ void ImageWidget::schedulePointsOverlayRender ()
   auto result = std::make_shared<QImage> ();
 
   m_pointsQueue.runAsync (
-      [=] (colorscreen::progress_info *) mutable
+      [=] (colorscreen::progress_info *progress) mutable
       {
         QImage overlay (w, h, QImage::Format_ARGB32_Premultiplied);
         overlay.fill (Qt::transparent);
@@ -1982,7 +1982,10 @@ void ImageWidget::schedulePointsOverlayRender ()
         p.setRenderHint (QPainter::Antialiasing);
 
         colorscreen::scr_to_img map;
-        (void)map.set_parameters (scrToImg, *scan);
+        if (!map.set_parameters (scrToImg, *scan)) {
+          *result = std::move (overlay);
+          return;
+        }
 
         /* Background-safe equivalent of imageToWidget.
            Must account for rotation/mirror via CoordinateTransformer.  */
@@ -1999,6 +2002,19 @@ void ImageWidget::schedulePointsOverlayRender ()
         double threshold  = dot_period * heatmapTol;
         double amp_scale  = (scale > 1.0) ? 1.0 : (exaggerate / (dot_period / 2.0));
         double marginPixels = maxArrowLen + 20.0 * scale;
+
+        /* Never pass non-finite or wildly off-screen coordinates to QPainter.
+           Raster backends may spend effectively unbounded time clipping such
+           primitives, which used to make final-coordinate registration overlays
+           appear to freeze the whole application. */
+        auto finitePoint = [] (const QPointF &pt) {
+          return std::isfinite (pt.x ()) && std::isfinite (pt.y ());
+        };
+        auto painterPointVisible = [=] (const QPointF &pt) {
+          return finitePoint (pt)
+              && pt.x () >= -marginPixels && pt.x () <= w + marginPixels
+              && pt.y () >= -marginPixels && pt.y () <= h + marginPixels;
+        };
 
         bool isVerticalStrips
             = colorscreen::screen_with_vertical_strips_p (scrToImg.type);
@@ -2020,68 +2036,98 @@ void ImageWidget::schedulePointsOverlayRender ()
 
         const auto &pointsVec = points.read ();
         for (size_t i = 0; i < pointsVec.size (); ++i) {
+          if ((i & 255) == 0 && progress && progress->cancel_requested ())
+            break;
+
           const auto &xi    = pointsVec[i].img;
           QPointF     start = toWidget (xi);
 
-          /* Culling. */
-          if (start.x () < -marginPixels || start.x () > w + marginPixels
-              || start.y () < -marginPixels || start.y () > h + marginPixels)
+          /* Cull measured points before doing residual geometry. */
+          if (!painterPointVisible (start))
             continue;
 
-          /* Compute simulated location. */
+          /* Compute simulated location.  A failed/extrapolated mapping may
+             legitimately produce a target far outside the viewport; keep the
+             measured point visible but do not hand that target to QPainter. */
           colorscreen::point_t scr_p = pointsVec[i].scr;
           if (isVerticalStrips) {
             colorscreen::point_t scr2 = map.to_scr (xi);
             scr_p.y = scr2.y;
           }
           colorscreen::point_t p_sim_img = map.to_img (scr_p);
-          QPointF              simulated = toWidget (p_sim_img);
-
-          double dx_img   = p_sim_img.x - xi.x;
-          double dy_img   = p_sim_img.y - xi.y;
-          double dist_img = sqrt (dx_img * dx_img + dy_img * dy_img);
-
-          /* Heatmap color calculation. */
-          QColor color;
-          double t = (threshold > 0) ? dist_img / threshold : 1.0;
-          if (t <= 0) color = Qt::green;
-          else if (t >= 1.0) color = Qt::red;
-          else {
-            int r_val, g_val;
-            if (t < 0.5) {
-              r_val = static_cast<int> (255 * (t / 0.5));
-              g_val = 255;
-            } else {
-              r_val = 255;
-              g_val = static_cast<int> (255 * (1.0 - (t - 0.5) / 0.5));
-            }
-            color = QColor (r_val, g_val, 0);
+          QPointF simulated = start;
+          bool residualValid = std::isfinite (p_sim_img.x)
+                               && std::isfinite (p_sim_img.y);
+          double dx_img = 0.0, dy_img = 0.0, dist_img = 0.0;
+          if (residualValid) {
+            simulated = toWidget (p_sim_img);
+            dx_img = p_sim_img.x - xi.x;
+            dy_img = p_sim_img.y - xi.y;
+            dist_img = std::hypot (dx_img, dy_img);
+            residualValid = finitePoint (simulated)
+                            && std::isfinite (dx_img)
+                            && std::isfinite (dy_img)
+                            && std::isfinite (dist_img);
           }
 
-          /* Arrow geometry. */
-          colorscreen::point_t xi_d = { xi.x + dx_img * amp_scale,
-                                        xi.y + dy_img * amp_scale };
-          QPointF arrowEnd = toWidget (xi_d);
-          double  dx_w     = arrowEnd.x () - start.x ();
-          double  dy_w     = arrowEnd.y () - start.y ();
-          double  dist_w2  = dx_w * dx_w + dy_w * dy_w;
-          bool    hasArrow = dist_w2 > 25.0;
-          double  arrowAngle = 0.0;
-
-          if (hasArrow) {
-            if (dist_w2 > maxArrowLen * maxArrowLen) {
-              double dist_w = sqrt (dist_w2);
-              dx_w *= maxArrowLen / dist_w;
-              dy_w *= maxArrowLen / dist_w;
-              arrowEnd = QPointF (start.x () + dx_w, start.y () + dy_w);
+          /* Heatmap color calculation.  Invalid residuals are visibly red but
+             have no target/arrow primitive. */
+          QColor color = Qt::red;
+          if (residualValid) {
+            double t = (threshold > 0) ? dist_img / threshold : 1.0;
+            if (t <= 0) color = Qt::green;
+            else if (t >= 1.0) color = Qt::red;
+            else {
+              int r_val, g_val;
+              if (t < 0.5) {
+                r_val = static_cast<int> (255 * (t / 0.5));
+                g_val = 255;
+              } else {
+                r_val = 255;
+                g_val = static_cast<int> (255 * (1.0 - (t - 0.5) / 0.5));
+              }
+              color = QColor (r_val, g_val, 0);
             }
-            arrowAngle = std::atan2 (dy_w, dx_w);
           }
 
-          /* Only draw the simulated target if it's shifted from the source. */
-          double dx_w_sim = simulated.x () - start.x ();
-          double dy_w_sim = simulated.y () - start.y ();
-          bool   isTargetVisible = (dx_w_sim * dx_w_sim + dy_w_sim * dy_w_sim) > 0.25;
+          /* Arrow geometry.  Use hypot to avoid overflow, then limit the
+             primitive to the existing maximum pixel length. */
+          QPointF arrowEnd = start;
+          bool hasArrow = false;
+          double arrowAngle = 0.0;
+          if (residualValid && std::isfinite (amp_scale)) {
+            colorscreen::point_t xi_d = { xi.x + dx_img * amp_scale,
+                                          xi.y + dy_img * amp_scale };
+            if (std::isfinite (xi_d.x) && std::isfinite (xi_d.y)) {
+              QPointF candidate = toWidget (xi_d);
+              if (finitePoint (candidate)) {
+                double dx_w = candidate.x () - start.x ();
+                double dy_w = candidate.y () - start.y ();
+                double dist_w = std::hypot (dx_w, dy_w);
+                if (std::isfinite (dist_w) && dist_w > 5.0) {
+                  if (dist_w > maxArrowLen) {
+                    dx_w *= maxArrowLen / dist_w;
+                    dy_w *= maxArrowLen / dist_w;
+                  }
+                  arrowEnd = QPointF (start.x () + dx_w,
+                                      start.y () + dy_w);
+                  hasArrow = finitePoint (arrowEnd);
+                  if (hasArrow)
+                    arrowAngle = std::atan2 (dy_w, dx_w);
+                }
+              }
+            }
+          }
+
+          /* Simulated targets are useful only when they fall near the actual
+             overlay.  This is the critical bound missing in the old code. */
+          double targetDistance = residualValid
+              ? std::hypot (simulated.x () - start.x (),
+                            simulated.y () - start.y ())
+              : 0.0;
+          bool isTargetVisible = residualValid
+              && painterPointVisible (simulated)
+              && std::isfinite (targetDistance) && targetDistance > 0.5;
 
           bool isSelected = selected.count (
               SelectedPoint{ i, SelectedPoint::RegistrationPoint });

@@ -326,6 +326,10 @@ public:
    */
   bool registrationPointsVisible() const { return m_showRegistrationPoints; }
 
+  /** Return whether the asynchronous registration overlay is still rendering.
+      Used by smoke tests and useful for diagnostics. */
+  bool registrationOverlayRenderPending() const { return m_pointsRenderPending; }
+
   /**
    * @brief Gets the number of registration points in the current solver.
    * @return The point count.

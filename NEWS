@@ -28,7 +28,9 @@ Changes in version 1.1
      by libcolorscreen). Final-coordinate views use that plane directly and do
      not reapply scan crop, 90-degree rotation, or scan mirroring. Final
      orientation instead has a smooth degree-valued rotation and a persistent
-     final mirror stored with the screen geometry. Views can still be detached
+     final mirror stored with the screen geometry. Registration-point overlays
+     safely cull invalid or far-off simulated targets in this coordinate mode,
+     avoiding rasterizer stalls on pathological residuals. Views can still be detached
      when needed, with the
      document inspector moving to the active detached view rather than
      duplicating document/undo state.

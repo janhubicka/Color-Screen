@@ -13,6 +13,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDockWidget>
+#include <QElapsedTimer>
 #include <QIcon>
 #include <QPalette>
 #include <QPushButton>
@@ -813,6 +814,34 @@ int main(int argc, char *argv[]) {
         app.exit(14);
         return;
       }
+
+      /* Registration overlays must tolerate an extrapolated simulated target
+         far outside a rotated/mirrored final viewport.  The measured point is
+         on-screen; only the target is pathological. */
+      ParameterState overlayState = source->documentStateSnapshot();
+      overlayState.solver.add_point(
+          overlayState.scrToImg.center,
+          {(colorscreen::coord_t)1e12, (colorscreen::coord_t)-1e12},
+          colorscreen::solver_parameters::red);
+      source->applySharedDocumentState(
+          overlayState, QStringLiteral("Smoke final registration overlay"));
+      QCoreApplication::processEvents();
+      view->imageWidget()->setShowRegistrationPoints(true);
+      view->imageWidget()->repaint();
+      QElapsedTimer overlayTimer;
+      overlayTimer.start();
+      while (view->imageWidget()->registrationOverlayRenderPending() &&
+             overlayTimer.elapsed() < 2000)
+        QCoreApplication::processEvents();
+      if (view->imageWidget()->registrationOverlayRenderPending()) {
+        qCritical() << "Final-coordinate registration overlay did not finish";
+        app.exit(14);
+        return;
+      }
+      view->imageWidget()->setShowRegistrationPoints(false);
+      source->applySharedDocumentState(
+          coordinateState, QStringLiteral("Restore smoke screen coordinates"));
+      QCoreApplication::processEvents();
 
       colorscreen::render_type_t alternate = sourceType;
       const colorscreen::render_type_t candidates[] = {
