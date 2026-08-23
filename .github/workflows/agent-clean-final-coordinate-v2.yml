@@ -1,0 +1,49 @@
+name: Clean final-coordinate v2
+
+on:
+  push:
+    branches:
+      - agent/final-coordinate-v2-cleanup-20260823
+
+permissions:
+  contents: write
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/final-coordinate-image-view
+          fetch-depth: 0
+      - name: Apply cleanup
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected text not found in {path}: {old!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace(
+              ".agents/qtgui.md",
+              "activation changes. views share the image and document geometry",
+              "activation changes. Views share the image and document geometry")
+          replace("src/qtgui/main.cpp", "std::abs(baseProbe.x - changedProbe.x)",
+                  "qAbs(baseProbe.x - changedProbe.x)")
+          replace("src/qtgui/main.cpp", "std::abs(baseProbe.y - changedProbe.y)",
+                  "qAbs(baseProbe.y - changedProbe.y)")
+          PY
+          git diff --check
+      - name: Commit cleanup
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .agents/qtgui.md src/qtgui/main.cpp
+          git commit -m "qtgui: polish final-coordinate regression coverage"
+          git push origin HEAD:agent/final-coordinate-image-view
