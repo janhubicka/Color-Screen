@@ -1,0 +1,44 @@
+name: Agent DG009 stats publisher
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/dg009-stats-publish-20260823
+          path: transport
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/scr-detect-fast-rejection-stats
+          fetch-depth: 0
+          path: target
+      - name: Apply validated DG-009 telemetry patch
+        shell: bash
+        run: |
+          base64 -d transport/.github/dg009-fast-rejection-stats.patch.gz.b64 | gzip -d > /tmp/dg009.patch
+          cd target
+          git apply --check /tmp/dg009.patch
+          git apply /tmp/dg009.patch
+          git diff --check
+          python3 -m py_compile testsuite/benchmark-screen-detection.py
+      - name: Commit and publish
+        shell: bash
+        run: |
+          cd target
+          git config user.name "OpenAI"
+          git config user.email "noreply@openai.com"
+          git add src/libcolorscreen/scr-detect-geometry.C \
+                  testsuite/benchmark-screen-detection.py \
+                  doc/scr-detect-dg009-diagnostics.md
+          git commit -m "detect: measure fast flood-fill rejection modes" \
+            -m "Extend report-only regular-screen detector telemetry with aggregate outcomes from fast classified-component flood fill. Count accepted patches, zero lookups, sub-threshold and oversized components, centroid and displacement rejections, and Dufay-like strip successes/failures. Thread the counters only when a report is requested so ordinary detection avoids the millions of counter updates seen on full-resolution scans. Export the fields through benchmark-screen-detection.py and document the NGS00428 Tile05 comparison. The unsharpened path shows 155,532 too-small square components versus 22,616 with the historical 2/3 mask, and 145,499 strip failures versus 41,208, while coverage and patch counts remain unchanged. Record rejected morphology/threshold/skip prototypes and make geometry-guided relaxed flood classification the next experiment rather than shipping a weak heuristic. Validation: exact current-main detector and benchmark blob hashes verified before patching; O2 checking build; synthetic Finlay/Dufay discovery with combined and fast-only flood fill; Ofast march=native warning build; real NGS00428 Tile05 fast-only 2/3 and 0/0 runs; existing small Nikon Dufay fast-only detection; Python bytecode and diff checks."
+          git push origin HEAD:agent/scr-detect-fast-rejection-stats
