@@ -1,3 +1,3 @@
-  File "/tmp/final-coordinate-v2.py", line 1
-    from pathlib import Path
-IndentationError: unexpected indent
+expected text not found in src/libcolorscreen/include/scr-to-img-parameters.h: '           && projection_distance == other.projection_distance\n && final_rotation == other.final_rotation\n && final_angl'
+ src/libcolorscreen/include/scr-to-img-parameters.h | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
