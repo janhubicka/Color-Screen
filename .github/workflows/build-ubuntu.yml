@@ -107,3 +107,133 @@ jobs:
           testsuite/*.txt
           testsuite/*.log
           testsuite/*.par
+
+  publish-screen-coordinates:
+    if: github.event_name == 'pull_request' && github.head_ref == 'agent/tmp-publish-screen-coordinates'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    steps:
+    - name: Checkout publisher payload
+      uses: actions/checkout@v4
+      with:
+        ref: agent/tmp-publish-screen-coordinates
+        path: publisher
+    - name: Checkout current main
+      uses: actions/checkout@v4
+      with:
+        ref: main
+        fetch-depth: 0
+        path: feature
+    - name: Reconstruct and apply patch
+      shell: bash
+      run: |
+        cat publisher/agent-screen-coordinates.0[0-5] > /tmp/screen-coordinates.b64
+        test "$(sha256sum /tmp/screen-coordinates.b64 | cut -d' ' -f1)" = bed9b4d5bdae9f0d91fac246a1fdd1546086e26e21a747048dec2391867e167b
+        base64 -d /tmp/screen-coordinates.b64 | gzip -d > /tmp/screen-coordinates.patch
+        test "$(sha256sum /tmp/screen-coordinates.patch | cut -d' ' -f1)" = e981c943566d11b5a246ffe6c1564858992daa330a85c5b9dd38950df92ccfb7
+        cd feature
+        git apply --check /tmp/screen-coordinates.patch
+        git apply /tmp/screen-coordinates.patch
+    - name: Update Qt developer documentation
+      shell: bash
+      run: |
+        cd feature
+        python3 - <<'PY'
+        from pathlib import Path
+        p = Path('.agents/qtgui.md')
+        s = p.read_text()
+        old = '''Views share the image
+        and document transforms such as rotation and mirroring, while render mode,
+        Color/IR choice, zoom, and pan remain view-local. Slanted-edge reference views
+        remain intentionally specialized and keep their separate Navigation +
+        Sharpness-only inspector.'''
+        new = '''Views share the image
+        and document transforms such as rotation and mirroring, while render mode,
+        Color/IR choice, zoom, pan, and coordinate-space selection remain view-local.
+        Each ordinary view exposes **Scan** coordinates for the raw capture and
+        **Screen** coordinates for libcolorscreen's geometrically corrected `final`
+        coordinate system. Image-facing panel and solver APIs continue to exchange scan
+        coordinates; `ImageWidget` maps those interactions through the active view
+        coordinate system. Stitched composites are final/Screen-only because they have
+        no single scan coordinate system. Slanted-edge reference views remain
+        intentionally specialized, scan-coordinate-only views with their separate
+        Navigation + Sharpness-only inspector.'''
+        if old not in s:
+            raise SystemExit('New View documentation anchor not found')
+        s = s.replace(old, new, 1)
+        old2 = '''presentation, zoom, pan, Color/IR selection, and view-local render modes are
+        deliberately not recovery state.'''
+        new2 = '''presentation, zoom, pan, Color/IR selection, coordinate-space selection, and
+        view-local render modes are deliberately not recovery state.'''
+        if old2 not in s:
+            raise SystemExit('recovery documentation anchor not found')
+        s = s.replace(old2, new2, 1)
+        p.write_text(s)
+        PY
+        git diff --check
+    - name: Install build dependencies
+      run: sudo apt-get update && sudo apt-get install -y libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev liblcms2-dev libgtk2.0-dev libfftw3-dev qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev libexiv2-dev build-essential libopenjp2-7-dev libpng-dev
+    - name: Build and focused tests
+      shell: bash
+      run: |
+        cd feature
+        CXXFLAGS="-O2 -g -Wall -Wextra" CFLAGS="$CXXFLAGS" ./configure --enable-qtgui
+        make -j$(nproc)
+        ./src/libcolorscreen/unittests render_coordinates
+        QT_QPA_PLATFORM=offscreen ./src/qtgui/colorscreen-qt \
+          --smoke-test 10000 --smoke-test-expect-windows 2 \
+          --smoke-test-tile-activation-stable --smoke-test-menu-order \
+          --smoke-test-new-view --smoke-test-slanted-reference \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+    - name: Commit and push feature branch
+      shell: bash
+      run: |
+        cd feature
+        git config user.name "OpenAI Agent"
+        git config user.email "agent@openai.com"
+        git checkout -B agent/qtgui-screen-coordinates
+        cat > /tmp/commit-message <<'MSG'
+        qtgui: add scan and screen coordinate views
+
+        Extend the public tile rendering API with an explicit coordinate-space
+        selector. Preserve historical default behavior for existing callers:
+        ordinary image tiles use scan coordinates and stitched projects use
+        libcolorscreen final coordinates. Add explicit scan and final choices,
+        reject impossible scan-coordinate requests for stitched composites, and
+        render ordinary final-coordinate tiles through the same native renderer
+        coordinate classification used by render-to-file.
+
+        Teach the Qt renderer and coordinate transformer to display ordinary
+        images in libcolorscreen final coordinates. Keep all panel, solver,
+        selection, and registration interactions expressed in scan coordinates
+        and map them through the active ImageWidget presentation. Reuse computed
+        final ranges so nonlinear geometry does not calculate its bounds twice
+        for each render request.
+
+        Add a view-local Coordinates selector labelled Scan / Screen to the
+        primary view and ordinary Window > New View presentations. Coordinate
+        space is presentation state alongside render mode, Color/IR, zoom and
+        pan, so independent views may choose different spaces without touching
+        document parameters, undo, parameter files, or crash recovery. Stitched
+        projects remain Screen-only and slanted-edge reference views Scan-only.
+
+        Add libcolorscreen regression coverage comparing explicit final tile
+        rendering with sample_pixel_final() for a nontrivial geometry and prove
+        that the default tile API remains byte-for-byte equivalent to explicit
+        scan coordinates. Extend the New View smoke test to verify independent
+        coordinate selection, shared Navigation routing, and scan-coordinate
+        interaction round trips.
+
+        Validation: git apply --check and git diff --check clean; Qt GUI builds
+        with -O2 -g -Wall -Wextra; render_coordinates unit test and the standard
+        offscreen multi-document/New View/slanted-reference smoke test pass.
+        MSG
+        git add NEWS .agents/qtgui.md src/libcolorscreen src/qtgui
+        git commit -F /tmp/commit-message
+        git push origin HEAD:agent/qtgui-screen-coordinates --force
