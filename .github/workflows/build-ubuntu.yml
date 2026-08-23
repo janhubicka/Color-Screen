@@ -8,6 +8,7 @@ on:
 
 jobs:
   build:
+    if: github.event_name != 'pull_request' || github.head_ref != 'agent/tmp-publish-monochrome-bayer-guide'
     strategy:
       matrix:
         include:
