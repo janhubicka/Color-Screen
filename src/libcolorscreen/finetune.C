@@ -58,6 +58,9 @@ finetune_flag_error (uint64_t flags)
       && (flags & finetune_simulate_infrared))
     return "uniform image-layer fitting and simulated infrared are mutually "
            "exclusive";
+  if ((flags & finetune_fixed_screen_colors)
+      && !(flags & finetune_uniform_image_layer))
+    return "fixed screen colors require uniform image-layer fitting";
   return nullptr;
 }
 
@@ -1071,6 +1074,12 @@ public:
      The historical name below is retained internally because the same
      machinery is also used by the emulsion-blur experiment.  */
   bool optimize_uniform_image_layer;
+  /* Use externally supplied shared scanner responses to the screen primaries
+     instead of re-estimating them from the tiles.  This removes the primary
+     response / image-layer scale gauge and is used for true held-out
+     validation.  */
+  bool fixed_screen_colors;
+  double_rgbdata fixed_red, fixed_green, fixed_blue;
   bool optimize_emulsion_intensities;
   bool optimize_emulsion_offset;
   bool fog_by_least_squares;
@@ -1681,11 +1690,18 @@ public:
     if (optimize_emulsion_blur)
       to_range (v[emulsion_blur_index], (coord_t)0, (coord_t)1);
     if (optimize_emulsion_intensities)
-      for (int i = 0; i < n_tiles * 3 - 1; i++)
-        /* First 2 values are normalized and make only sense in range 0..1
-           Rest of values are relative to the first two and may be large if
-           first patch is dark.  */
-        to_range (v[emulsion_intensity_index + i], (coord_t)0, i < 3 ? (coord_t)1 : (coord_t)100);
+      {
+        const int values = 3 * n_tiles - (fixed_screen_colors ? 0 : 1);
+        for (int i = 0; i < values; i++)
+          /* When screen colors are fitted, the first two values fix the
+             scale gauge and are normalized.  Fixed screen colors remove the
+             optimization gauge, but their amplitudes still inherit the
+             normalization chosen by the training tiles.  A held-out tile may
+             therefore need a relative coefficient above one.  */
+          to_range (v[emulsion_intensity_index + i], (coord_t)0,
+                    !fixed_screen_colors && i < 3 ? (coord_t)1
+                                                  : (coord_t)100);
+      }
     if (optimize_screen_blur)
       to_range (v[screen_index], (coord_t)0, (coord_t)1);
     if (optimize_scanner_mtf_sigma)
@@ -2031,6 +2047,14 @@ public:
     optimize_emulsion_blur = flags & finetune_emulsion_blur;
     optimize_uniform_image_layer
         = (flags & finetune_uniform_image_layer) && !tiles[0].color.empty ();
+    fixed_screen_colors = flags & finetune_fixed_screen_colors;
+    if (fixed_screen_colors)
+      {
+        assert (results && !results->empty ());
+        fixed_red = (*results)[0].screen_red;
+        fixed_green = (*results)[0].screen_green;
+        fixed_blue = (*results)[0].screen_blue;
+      }
     optimize_strips
         = (flags & finetune_strips) && screen_with_varying_strips_p (type);
     /* Strips needs to be optimized only for some screens, like Dufay, Joly or
@@ -2069,6 +2093,11 @@ public:
        normalization would otherwise have been the default.  */
     if (optimize_uniform_image_layer)
       data_collection = normalize = false;
+    /* Held-out validation must not give the omitted tile freedom to change
+       the shared screen-primary response.  With the response fixed there is
+       no color-estimation subproblem at all.  */
+    if (fixed_screen_colors)
+      least_squares = data_collection = false;
     /* Normalization turns every color of every pixel to have sum of 1.
        This simplifies the optimization since it effectively removes
        the image layer and we can more easily estimate screen position and
@@ -2158,7 +2187,7 @@ public:
 
     /* When not doing data collection or least squares, we need to optimize
      * colors.  */
-    if (!least_squares && !data_collection)
+    if (!fixed_screen_colors && !least_squares && !data_collection)
       {
         color_index = n_values;
         /* 3*3 values for color.
@@ -2211,7 +2240,12 @@ public:
     if (optimize_emulsion_intensities)
       {
         emulsion_intensity_index = n_values;
-        n_values += 3 * n_tiles - 1;
+        /* Normally the first tile fixes the scale gauge shared with the
+           fitted screen-primary response, so it needs only two variables.
+           When screen colors are fixed that gauge is gone and every tile,
+           including a one-tile held-out validation, needs three independent
+           transmission coefficients.  */
+        n_values += 3 * n_tiles - (fixed_screen_colors ? 0 : 1);
       }
     else
       emulsion_intensity_index = -1;
@@ -2373,8 +2407,11 @@ public:
       }
 
     if (optimize_emulsion_intensities)
-      for (int tileid = 0; tileid < 3 * n_tiles - 1; tileid++)
-        start[emulsion_intensity_index + tileid] = (coord_t)1 / (coord_t)3;
+      {
+        const int values = 3 * n_tiles - (fixed_screen_colors ? 0 : 1);
+        for (int i = 0; i < values; i++)
+          start[emulsion_intensity_index + i] = (coord_t)1 / (coord_t)3;
+      }
     /* Starting from small blur seems to work better, since other parameters
        are then more relevant.  Sane scanner lens blurs are close to Nyquist
        frequency.  */
@@ -3825,6 +3862,12 @@ public:
   {
     if (optimize_emulsion_intensities)
       {
+        if (fixed_screen_colors)
+          return {
+            (luminosity_t)v[emulsion_intensity_index + 3 * tileid + 0],
+            (luminosity_t)v[emulsion_intensity_index + 3 * tileid + 1],
+            (luminosity_t)v[emulsion_intensity_index + 3 * tileid + 2]
+          };
         /* Together with screen colors these are defined only up to scaling
          * factor.  */
         if (!tileid)
@@ -3914,7 +3957,13 @@ public:
   get_colors (coord_t *v, double_rgbdata *red, double_rgbdata *green,
               double_rgbdata *blue)
   {
-    if (!least_squares && !data_collection)
+    if (fixed_screen_colors)
+      {
+        *red = fixed_red;
+        *green = fixed_green;
+        *blue = fixed_blue;
+      }
+    else if (!least_squares && !data_collection)
       {
         *red = { v[color_index], v[color_index + 1], v[color_index + 2] };
         *green
@@ -5446,6 +5495,25 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
       ret.err = "too few previous finetune results";
       return finish ();
     }
+  if (fparams.flags & finetune_fixed_screen_colors)
+    {
+      if (!results || results->empty ())
+        {
+          ret.err = "fixed screen colors require a previous finetune result";
+          return finish ();
+        }
+      const auto finite_rgb = [] (rgbdata color) {
+        return my_isfinite (color.red) && my_isfinite (color.green)
+               && my_isfinite (color.blue);
+      };
+      if (!finite_rgb ((*results)[0].screen_red)
+          || !finite_rgb ((*results)[0].screen_green)
+          || !finite_rgb ((*results)[0].screen_blue))
+        {
+          ret.err = "invalid fixed screen colors in previous finetune result";
+          return finish ();
+        }
+    }
   const image_data *imgp[finetune_solver::max_tiles];
   scr_to_img *mapp[finetune_solver::max_tiles];
   int x[finetune_solver::max_tiles];
@@ -5517,7 +5585,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
     bw = true;
   if (fparams.flags & finetune_uniform_image_layer)
     {
-      if (n_tiles < 2)
+      if (n_tiles < 2 && !(fparams.flags & finetune_fixed_screen_colors))
         {
           ret.err = "uniform image-layer fitting requires at least two tiles";
           return finish ();

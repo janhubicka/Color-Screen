@@ -124,10 +124,19 @@ test_joint_focus_analysis ()
       return false;
     }
   if (!result.success || result.selected.size () != 3
-      || result.leave_one_out_fits.size () != 3)
+      || result.leave_one_out_fits.size () != 3
+      || result.held_out_fits.size () != 3
+      || result.held_out_relative_badness.size () != 3)
     {
       fprintf (stderr,
                "Joint focus analysis returned incomplete diagnostics\n");
+      return false;
+    }
+  if (!(result.held_out_max_relative_badness >= 0)
+      || !std::isfinite ((double)result.held_out_max_relative_badness))
+    {
+      fprintf (stderr, "Held-out focus residual is invalid: %.9g\n",
+               (double)result.held_out_max_relative_badness);
       return false;
     }
   if (std::fabs (result.joint_fit.screen_blur_radius - (coord_t)0.82) > 0.12)
@@ -168,6 +177,7 @@ test_joint_focus_analysis ()
   if (!finetune_analyze_focus_areas (rparam, geometry, image, candidates,
                                      fparam, analysis, &no_loo, nullptr)
       || !no_loo.leave_one_out_fits.empty ()
+      || !no_loo.held_out_fits.empty ()
       || no_loo.leave_one_out_focus_span >= 0
       || no_loo.leave_one_out_focus_max_delta >= 0)
     {

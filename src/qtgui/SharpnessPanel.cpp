@@ -991,6 +991,38 @@ void SharpnessPanel::setupUi() {
     emit focusAnalysisRequested(checked, m_finetuneFlags);
   }, nullptr, nullptr, "Experimental tool that attempts to find the best Focus/Sigma by analyzing the local contrast and sharpness of the selected area.");
 
+  m_findFocusAreasBtn = new QPushButton(tr("Find focus analysis areas"), this);
+  m_findFocusAreasBtn->setToolTip(
+      tr("Search a linear interpolated reconstruction for locally uniform "
+         "colour regions suitable for robust multi-area focus analysis."));
+  connect(m_findFocusAreasBtn, &QPushButton::clicked, this,
+          &SharpnessPanel::findFocusAreasRequested);
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(m_findFocusAreasBtn);
+  else
+    m_form->addRow(m_findFocusAreasBtn);
+
+  m_analyzeFocusAreasBtn
+      = new QPushButton(tr("Analyze sharpness in areas"), this);
+  m_analyzeFocusAreasBtn->setEnabled(false);
+  m_analyzeFocusAreasBtn->setToolTip(
+      tr("Verify the discovered regions independently, choose a "
+         "colour-diverse subset, fit one shared focus model, then run "
+         "leave-one-out and held-out validation."));
+  connect(m_analyzeFocusAreasBtn, &QPushButton::clicked, this,
+          [this]() { emit analyzeFocusAreasRequested(m_finetuneFlags); });
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(m_analyzeFocusAreasBtn);
+  else
+    m_form->addRow(m_analyzeFocusAreasBtn);
+
+  m_focusAreaStatusLabel = new QLabel(tr("No focus analysis areas found."), this);
+  m_focusAreaStatusLabel->setWordWrap(true);
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(m_focusAreaStatusLabel);
+  else
+    m_form->addRow(m_focusAreaStatusLabel);
+
   // Finetune diagnostic images section (initially hidden)
   m_finetuneImagesPanel = new FinetuneImagesPanel();
 
@@ -1618,6 +1650,24 @@ void SharpnessPanel::setFocusAnalysisChecked(bool checked) {
         m_analyzeAreaBtn->blockSignals(true);
         m_analyzeAreaBtn->setChecked(checked);
         m_analyzeAreaBtn->blockSignals(false);
+    }
+}
+
+/** Update controls for the document-local automatic focus-area workflow. */
+void SharpnessPanel::setFocusAreaAnalysisState(int candidateCount, bool running,
+                                               const QString &summary) {
+    if (m_findFocusAreasBtn)
+        m_findFocusAreasBtn->setEnabled(!running);
+    if (m_analyzeFocusAreasBtn)
+        m_analyzeFocusAreasBtn->setEnabled(!running && candidateCount >= 3);
+    if (m_focusAreaStatusLabel) {
+        if (!summary.isEmpty())
+            m_focusAreaStatusLabel->setText(summary);
+        else if (running)
+            m_focusAreaStatusLabel->setText(tr("Focus-area analysis running…"));
+        else
+            m_focusAreaStatusLabel->setText(
+                tr("%1 candidate focus area(s) available.").arg(candidateCount));
     }
 }
 

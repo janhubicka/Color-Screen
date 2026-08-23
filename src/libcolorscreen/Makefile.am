@@ -12,8 +12,7 @@ libcolorscreen_la_CXXFLAGS = -fvisibility=hidden -DLIBCOLORSCREEN $(EXIV2_CFLAGS
 libcolorscreen_la_LIBADD = $(EXIV2_LIBS) $(LIBRAW_LIBS) $(OPENJPEG_LIBS) $(LIBPNG_LIBS)
 
 noinst_PROGRAMS=unittests
-check_PROGRAMS=focus-analysis-unittests
-TESTS=focus-analysis-unittests
+EXTRA_PROGRAMS=focus-analysis-unittests
 unittests_LDFLAGS = -static
 unittests_CXXFLAGS = -DLIBCOLORSCREEN
 unittests_LDADD = libcolorscreen.la 
@@ -22,6 +21,9 @@ unittests_SOURCES=unittests.C
 focus_analysis_unittests_CXXFLAGS = -DLIBCOLORSCREEN
 focus_analysis_unittests_LDADD = libcolorscreen.la
 focus_analysis_unittests_SOURCES = focus-analysis-unittests.C
+
+check-local: focus-analysis-unittests
+	./focus-analysis-unittests
 
 # The unit-test executable writes these images in its own build directory.
 # They are not managed by Automake's test driver, so declare them explicitly.

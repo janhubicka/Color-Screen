@@ -1024,8 +1024,8 @@ simplex starting point as the final solution.
 
 **Severity:** high focus identifiability
 
-**Status:** partially fixed; candidate search/subset selection implemented,
-solver orchestration and validation remain open
+**Status:** substantially fixed; automatic search, joint fitting,
+leave-one-out/held-out validation, and Qt workflow implemented
 
 The original multi-tile experiment used the physically useful factorization
 needed for robust focus analysis: one set of historical screen-primary scanner
@@ -1065,8 +1065,24 @@ The contrast-scaled historical uncertainty is deliberately not used.  A
 normalized colour Gram determinant rejects repeated copies of effectively one
 colour.
 
-Remaining work is to orchestrate the individual candidate fits efficiently,
-feed their retained per-tile starting states into the joint uniform-image-layer
-fit, add leave-one-area-out/held-out focus validation, and expose the resulting
-areas and controls in Qt.  Search-window sizing should be derived from the local
-finetune tile footprint when the GUI integration is added.
+The complete library workflow is now available.  The image-level search wrapper
+builds a bounded-resolution unadjusted interpolated RGB image and derives a
+candidate window from the local screen period.  `finetune_analyze_focus_areas()`
+uses retained individual fits as starts for the joint uniform-image-layer fit,
+then performs leave-one-area-out stability checks.  For supported scalar RGB
+models it also performs a true held-out check: the N-1 focus transfer and shared
+screen-primary scanner responses are frozen while only the omitted tile's local
+phase and three transmission factors may move.  Held-out objective values are
+reported relative to observed tile colour magnitude.
+
+Qt now exposes document-local **Find focus analysis areas** and **Analyze
+sharpness in areas** actions in the Sharpness panel.  Candidate/selected
+rectangles are overlays owned by `MainWindow`, fitting runs off the GUI thread,
+and the measured focus is applied only after explicit user confirmation through
+the normal undo path.
+
+Remaining work is empirical rather than structural: calibrate candidate-window
+and residual/stability thresholds on a wider set of sharp, mildly defocused, and
+severely defocused real scans; decide whether spatially varying focus should be
+reported before adaptive correction; and, if needed, extend frozen held-out
+validation to per-channel or other multidimensional focus models.

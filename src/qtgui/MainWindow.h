@@ -6,6 +6,7 @@
 #include "../libcolorscreen/include/progress-info.h"
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/finetune.h"
+#include "../libcolorscreen/include/focus-analysis.h"
 #include "../libcolorscreen/include/render-type-parameters.h" // Added
 #include "../libcolorscreen/include/scr-detect-parameters.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
@@ -275,6 +276,8 @@ private slots:
   void maybeTriggerAutoSolver();
   void onFocusAnalysisRequested(bool checked, uint64_t flags);
   void onFocusAnalysisFinished(bool success, colorscreen::finetune_result result);
+  void onFindFocusAreasRequested();
+  void onAnalyzeFocusAreasRequested(uint64_t flags);
   void onAdaptiveSharpeningRequested(const AdaptiveSharpeningParameters &parameters);
   void onAdaptiveSharpeningFinished(
       bool success,
@@ -358,6 +361,11 @@ private:
   void restoreInteractionMode();
 
   void updateWindowTitle(); // Helper to update window title
+  /** Refresh focus-analysis rectangles in the ordinary view currently
+      presenting this document's inspector. */
+  void updateFocusAreaOverlays();
+  /** Clear transient automatic focus-area state for this document. */
+  void clearFocusAreaAnalysis();
 
 
   // Window state management
@@ -619,6 +627,9 @@ private:
   bool m_closing = false;
   bool m_focusAnalysisPending = false;
   uint64_t m_focusAnalysisFlags = 0;
+  std::vector<colorscreen::finetune_focus_area_candidate> m_focusAreaCandidates;
+  colorscreen::finetune_focus_analysis_result m_focusAreaAnalysisResult;
+  bool m_focusAreaAnalysisRunning = false;
 
   // Crash recovery
   QString m_recoveryDir;

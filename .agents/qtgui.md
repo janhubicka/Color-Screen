@@ -92,6 +92,16 @@ the workspace and its inspector is placed in the shared inspector stack. Before
 detachment or destruction these widgets must be returned to the same
 `MainWindow`, so ordinary state saving and teardown continue to work.
 
+Automatic solid-area focus analysis is also document-local.  The discovered
+candidate rectangles, individual fit results, selected subset, and validation
+diagnostics belong to the source `MainWindow`; they must never be static or
+application-global.  Ordinary views only present that state as overlays, and an
+active secondary view receives the same document overlay when it takes over the
+inspector.  Discovery and multi-area fitting are one-shot cancellable background
+operations.  A validated focus result is still applied through the source
+document's normal undoable parameter path, never by mutating renderer/view
+state directly.
+
 Sharpness calibration may use a **slanted-edge reference view**. This is a
 specialized `ImageViewWindow` which owns a separately loaded reference scan but
 uses the source `MainWindow` as the authoritative parameter/undo/recovery

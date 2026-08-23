@@ -5,6 +5,7 @@
 #include "../libcolorscreen/include/scr-detect-parameters.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
 #include "../libcolorscreen/include/colorscreen.h"
+#include "../libcolorscreen/include/finetune.h"
 #include "../libcolorscreen/include/solver-parameters.h"
 #include "Renderer.h"
 #include "TaskQueue.h"
@@ -35,6 +36,14 @@ class Renderer;
 class ImageWidget : public QWidget {
   Q_OBJECT
 public:
+  /** One document-owned focus-analysis rectangle rendered over this view. */
+  struct FocusAreaOverlay {
+    colorscreen::image_area area;
+    bool fitSuccessful = false;
+    bool selected = false;
+    colorscreen::coord_t heldOutRelativeBadness = -1;
+  };
+
   struct RenderRequestData {
     double xOffset;
     double yOffset;
@@ -89,6 +98,9 @@ public:
    */
   void setProfileSpots(const std::vector<colorscreen::point_t> *spots,
                        const std::vector<colorscreen::color_match> *results);
+
+  /** Replace the focus-analysis overlay shown by this view. */
+  void setFocusAreaOverlays(const std::vector<FocusAreaOverlay> &areas);
 
   /**
    * @brief Toggles the visibility of registration points.
@@ -274,6 +286,7 @@ private:
   // Drawing helpers to keep paintEvent clean
   void drawPointsOverlay(QPainter &p);
   void drawProfileSpots(QPainter &p);
+  void drawFocusAreas(QPainter &p);
   void drawScreenCoordinateSystem(QPainter &p);
   void drawMeasurement(QPainter &p);
 
@@ -365,6 +378,7 @@ private:
   colorscreen::solver_parameters *m_solver = nullptr;
   const std::vector<colorscreen::point_t> *m_profileSpots = nullptr;
   const std::vector<colorscreen::color_match> *m_profileSpotResults = nullptr;
+  std::vector<FocusAreaOverlay> m_focusAreaOverlays;
   
   // Coordinate system editing state
   enum class DragTarget { None, Center, Axis1, Axis2 };
