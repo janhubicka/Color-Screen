@@ -1031,6 +1031,12 @@ void ImageWidget::handleSetCenterPress(QMouseEvent *event) {
   if (m_scrToImg) {
     m_pressParams = *m_scrToImg;
     emit coordinateSystemManipulationStarted();
+    if (m_dragTarget == DragTarget::Center) {
+      m_scrToImg->center = m_dragStartImg;
+      m_pressParams.center = m_dragStartImg;
+      emit coordinateSystemChanged();
+      update();
+    }
   }
   event->accept();
 }
@@ -1304,8 +1310,10 @@ void ImageWidget::handleMeasureMove(QMouseEvent *event) {
  * @param event The mouse event.
  */
 void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
-  if (event->button() == Qt::LeftButton) {
-    if (m_interactionMode == PanMode) {
+  if (m_interactionMode == SetCenterMode) {
+    handleSetCenterRelease(event);
+  } else if (event->button() == Qt::LeftButton) {
+    if (m_interactionMode == PanMode && m_isDragging) {
       m_isDragging = false;
     } else if (m_interactionMode == SelectMode) {
       handleSelectRelease(event);
@@ -1314,11 +1322,8 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
     } else if (m_interactionMode == MeasureMode) {
       handleMeasureRelease(event);
     }
-  } else if (m_interactionMode == SetCenterMode) {
-    handleSetCenterRelease(event);
   }
 }
-
 
 /**
  * @brief Handles mouse release in SetCenterMode (finishing drag or setting coordinates).
