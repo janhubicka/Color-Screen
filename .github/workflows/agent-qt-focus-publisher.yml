@@ -34,6 +34,20 @@ jobs:
           done
           base64 --decode /tmp/qt-focus-area.patch.gz.b64 | gzip -d > /tmp/qt-focus-area.patch
           echo "${PATCH_SHA256}  /tmp/qt-focus-area.patch" | sha256sum -c -
+
+          # The transport patch was generated before the library-side focus
+          # regression landed on main, where focus-analysis-unittests.C was a
+          # new file.  Current main now tracks the earlier version of that
+          # file, while the transported version contains the additional true
+          # held-out/fixed-primary checks.  Remove only that already-landed
+          # index entry so the new-file hunk can install the complete reviewed
+          # version; the final name-set check below still requires it to be a
+          # modification relative to current main.
+          if git ls-files --error-unmatch src/libcolorscreen/focus-analysis-unittests.C >/dev/null 2>&1; then
+            git rm --cached --quiet src/libcolorscreen/focus-analysis-unittests.C
+            rm -f src/libcolorscreen/focus-analysis-unittests.C
+          fi
+
           git apply --3way /tmp/qt-focus-area.patch
           git show "origin/agent/qt-focus-publisher-20260823:agent/qt-focus-followup.patch" > /tmp/qt-focus-followup.patch
           echo "${FOLLOWUP_SHA256}  /tmp/qt-focus-followup.patch" | sha256sum -c -
