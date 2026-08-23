@@ -10,6 +10,7 @@
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QDockWidget>
 #include <QIcon>
 #include <QPalette>
 #include <QPushButton>
@@ -666,6 +667,45 @@ int main(int argc, char *argv[]) {
           !workspace || !workspace->containsView(view) ||
           app.tabCount() != previousTabs + 1 || view->isWindow()) {
         qCritical() << "New View was not added as a shared-image workspace tab";
+        app.exit(14);
+        return;
+      }
+
+      QWidget *inspector = view->workspaceInspectorWidget();
+      QDockWidget *workspaceInspector = workspace->findChild<QDockWidget *>(
+          QStringLiteral("DocumentControlsDock"));
+      if (!inspector || inspector != source->workspaceInspectorWidget() ||
+          !inspector->findChild<QWidget *>(QStringLiteral("ConfigTabs")) ||
+          !workspaceInspector || workspaceInspector->isHidden() ||
+          !workspaceInspector->isAncestorOf(inspector) ||
+          source->inspectorImageWidget() != view->imageWidget()) {
+        qCritical() << "New View does not present the owning document's full "
+                       "inspector and Navigation/panel controls";
+        app.exit(14);
+        return;
+      }
+
+      app.detachView(view);
+      QCoreApplication::processEvents();
+      view->activateWindow();
+      QCoreApplication::processEvents();
+      QDockWidget *detachedInspector = view->findChild<QDockWidget *>(
+          QStringLiteral("SecondaryDocumentControlsDock"));
+      if (!view->isWindow() || !detachedInspector ||
+          detachedInspector->isHidden() ||
+          !detachedInspector->isAncestorOf(inspector) ||
+          source->inspectorImageWidget() != view->imageWidget()) {
+        qCritical() << "Detached New View did not keep the full document panels";
+        app.exit(14);
+        return;
+      }
+
+      app.attachView(view);
+      QCoreApplication::processEvents();
+      if (!workspace->containsView(view) ||
+          !workspaceInspector->isAncestorOf(inspector) ||
+          source->inspectorImageWidget() != view->imageWidget()) {
+        qCritical() << "Reattached New View did not restore shared panels";
         app.exit(14);
         return;
       }

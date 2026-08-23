@@ -2,12 +2,14 @@
 
 #include "ColorScreenApplication.h"
 #include "ImageViewWindow.h"
+#include "ImageWidget.h"
 #include "MainWindow.h"
 
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
 #include <QDockWidget>
+#include <QEvent>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMdiArea>
@@ -308,13 +310,13 @@ void WorkspaceWindow::removeView(ImageViewWindow *view) {
     return;
 
   takeViewFromWorkspace(view);
+  onSubWindowActivated(m_mdiArea->currentSubWindow());
+  configureTabBar();
+
   view->restoreFromWorkspaceEmbedding();
   view->show();
   view->raise();
   view->activateWindow();
-
-  onSubWindowActivated(m_mdiArea->currentSubWindow());
-  configureTabBar();
 }
 
 /** Return the active document, resolving secondary views to their owner. */
@@ -409,10 +411,14 @@ void WorkspaceWindow::prepareViewForClose(ImageViewWindow *view) {
   // wrapper then performs the normal Qt MDI close and owns destruction of its
   // child view.
   releaseViewChrome(view, false);
-  if (QWidget *inspector = view->workspaceInspectorWidget()) {
-    m_inspectorStack->removeWidget(inspector);
-    inspector->hide();
-    inspector->setParent(view);
+  if (view->ownsWorkspaceInspector()) {
+    if (QWidget *inspector = view->workspaceInspectorWidget()) {
+      m_inspectorStack->removeWidget(inspector);
+      inspector->hide();
+      inspector->setParent(view);
+    }
+  } else if (MainWindow *document = view->sourceDocument()) {
+    document->setInspectorImageWidget(document->primaryImageWidget());
   }
 }
 
@@ -662,6 +668,32 @@ void WorkspaceWindow::updateUserVisibleProgressDockVisibility() {
   m_userVisibleProgressDock->setVisible(hasVisibleRows);
 }
 
+
+/** Present DOCUMENT's one inspector in the workspace for IMAGEWIDGET. */
+void WorkspaceWindow::installDocumentInspector(MainWindow *document,
+                                               ImageWidget *imageWidget) {
+  if (!document) {
+    m_inspectorDock->hide();
+    return;
+  }
+
+  QWidget *inspector = document->workspaceInspectorWidget();
+  if (!inspector) {
+    m_inspectorDock->hide();
+    return;
+  }
+
+  if (m_inspectorStack->indexOf(inspector) < 0) {
+    document->takeWorkspaceInspector();
+    m_inspectorStack->addWidget(inspector);
+  }
+  document->setInspectorImageWidget(imageWidget);
+  m_inspectorStack->setCurrentWidget(inspector);
+  inspector->show();
+  m_inspectorDock->setWindowTitle(tr("Document Controls"));
+  m_inspectorDock->show();
+}
+
 /** Present DOCUMENT's menus, toolbar, inspector, and transient status row. */
 void WorkspaceWindow::installDocumentChrome(MainWindow *document) {
   if (!document)
@@ -679,16 +711,7 @@ void WorkspaceWindow::installDocumentChrome(MainWindow *document) {
     toolbar->show();
   }
 
-  if (QWidget *inspector = document->workspaceInspectorWidget()) {
-    if (m_inspectorStack->indexOf(inspector) < 0)
-      m_inspectorStack->addWidget(inspector);
-    m_inspectorStack->setCurrentWidget(inspector);
-    inspector->show();
-    m_inspectorDock->setWindowTitle(tr("Document Controls"));
-    m_inspectorDock->show();
-  } else {
-    m_inspectorDock->hide();
-  }
+  installDocumentInspector(document, document->primaryImageWidget());
 
   if (QWidget *statusWidget = document->workspaceStatusWidget()) {
     if (statusWidget->parentWidget() != m_workspaceProgressArea) {
@@ -775,18 +798,19 @@ void WorkspaceWindow::installViewChrome(ImageViewWindow *view) {
     toolbar->show();
   }
 
-  if (QWidget *inspector = view->workspaceInspectorWidget()) {
-    if (m_inspectorStack->indexOf(inspector) < 0)
-      m_inspectorStack->addWidget(inspector);
-    m_inspectorStack->setCurrentWidget(inspector);
-    inspector->show();
-    m_inspectorDock->setWindowTitle(
-        view->isSlantedEdgeReference() ? tr("Reference Controls")
-                                       : tr("Document Controls"));
-    m_inspectorDock->show();
+  if (view->isSlantedEdgeReference()) {
+    if (QWidget *inspector = view->workspaceInspectorWidget()) {
+      if (m_inspectorStack->indexOf(inspector) < 0)
+        m_inspectorStack->addWidget(inspector);
+      m_inspectorStack->setCurrentWidget(inspector);
+      inspector->show();
+      m_inspectorDock->setWindowTitle(tr("Reference Controls"));
+      m_inspectorDock->show();
+    } else {
+      m_inspectorDock->hide();
+    }
   } else {
-    m_inspectorDock->setWindowTitle(tr("Document Controls"));
-    m_inspectorDock->hide();
+    installDocumentInspector(view->sourceDocument(), view->imageWidget());
   }
   const QString message = view->statusBar()->currentMessage();
   if (message.isEmpty())
@@ -826,10 +850,14 @@ void WorkspaceWindow::onSubWindowActivated(QMdiSubWindow *window) {
 
   if ((document && m_chromeDocument == document && !m_chromeView) ||
       (view && m_chromeView == view && !m_chromeDocument)) {
-    if (document)
+    if (document) {
+      installDocumentInspector(document, document->primaryImageWidget());
       setWindowTitle(document->documentDisplayName() + tr(" — Color-Screen"));
-    else if (view)
+    } else if (view) {
+      if (!view->isSlantedEdgeReference())
+        installDocumentInspector(view->sourceDocument(), view->imageWidget());
       setWindowTitle(view->windowTitle() + tr(" — Color-Screen"));
+    }
     return;
   }
 
@@ -863,8 +891,7 @@ void WorkspaceWindow::takeDocumentFromWorkspace(MainWindow *document) {
 
   if (QWidget *inspector = document->workspaceInspectorWidget()) {
     m_inspectorStack->removeWidget(inspector);
-    inspector->hide();
-    inspector->setParent(nullptr);
+    document->takeWorkspaceInspector();
   }
 
   document->hide();
@@ -883,10 +910,17 @@ void WorkspaceWindow::takeViewFromWorkspace(ImageViewWindow *view) {
     return;
 
   releaseViewChrome(view, true);
-  if (QWidget *inspector = view->workspaceInspectorWidget()) {
-    m_inspectorStack->removeWidget(inspector);
-    inspector->hide();
-    inspector->setParent(nullptr);
+  if (view->ownsWorkspaceInspector()) {
+    if (QWidget *inspector = view->workspaceInspectorWidget()) {
+      m_inspectorStack->removeWidget(inspector);
+      inspector->hide();
+      inspector->setParent(nullptr);
+    }
+  } else if (MainWindow *document = view->sourceDocument()) {
+    if (QWidget *inspector = document->workspaceInspectorWidget()) {
+      m_inspectorStack->removeWidget(inspector);
+      document->takeWorkspaceInspector();
+    }
   }
   view->hide();
   m_mdiArea->removeSubWindow(view);
@@ -945,6 +979,21 @@ bool WorkspaceWindow::eventFilter(QObject *watched, QEvent *event) {
   }
 
   return QMainWindow::eventFilter(watched, event);
+}
+
+
+/** Reclaim the active inspector after focus returns from a detached view. */
+void WorkspaceWindow::changeEvent(QEvent *event) {
+  QMainWindow::changeEvent(event);
+  if (!event || event->type() != QEvent::WindowActivate)
+    return;
+
+  if (m_chromeDocument)
+    installDocumentInspector(m_chromeDocument,
+                             m_chromeDocument->primaryImageWidget());
+  else if (m_chromeView && !m_chromeView->isSlantedEdgeReference())
+    installDocumentInspector(m_chromeView->sourceDocument(),
+                             m_chromeView->imageWidget());
 }
 
 /** Close the whole session, respecting every document's close veto. */
