@@ -1,0 +1,279 @@
+diff --git a/src/libcolorscreen/imagedata.C b/src/libcolorscreen/imagedata.C
+index 4530e88..c82e0e2 100644
+--- a/src/libcolorscreen/imagedata.C
++++ b/src/libcolorscreen/imagedata.C
+@@ -37,8 +37,8 @@ const property_t image_data::demosaic_names[(int)demosaic_max]
+      = {
+   { "default", "Default", "Automatically choose demosaicing algorithm" },
+   { "half", "Reduce image size to half and avoid demosaicing", "" },
+-  { "monochromatic", "Monochromatic", "Assume that every pixel in the RAW file represents intensity of a monochromatic capture (disable deosaicing completely)." },
+-  { "monochromatic_bayer_corrected", "Monochromatic with Bayer filter compensated", "Many monochromatic captures are still done through Bayer filter or with camera that sitll do in-camera processing assuming the Bayer filter.  In this case Monochromataic demosaicing leads to regular checkerboard pattern that is eliminated by this mode" },
++  { "monochromatic", "Monochromatic", "Assume that every pixel in the RAW file represents intensity of a monochromatic capture (disable demosaicing completely)." },
++  { "monochromatic_bayer_corrected", "Monochromatic with Bayer filter compensated", "Use native samples from a monochromatic capture made through a conventional Bayer filter and compensate the red/blue sensitivity relative to green. This removes the regular Bayer checkerboard without interpolating image detail." },
+   { "linear", "Linear interpolation", "Easiest demosaicing algorithm" },
+   { "VNG", "Variable number of gradients interpolation (VNG)", "Variable number of gradients (VNG)[6] interpolation computes gradients near the pixel of interest and uses the lower gradients (representing smoother and more similar parts of the image) to make an estimate. It is used in first versions of dcraw, and suffers from color artifacts." },
+   { "PPG", "Pixel grouping (PPG)", "Pixel grouping (PPG)[7] uses assumptions about natural scenery in making estimates. It has fewer color artifacts on natural images than the Variable Number of Gradients method." },
+@@ -855,8 +855,17 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
+       *error = libraw_strerror (ret);
+       return false;
+     }
++  /* LibRaw reserves filter values below 1000 for special layouts: 0 is
++     full-color, 1 is Leaf Catchlight's 16x16 layout and 9 is Fuji X-Trans.
++     The compensation below relies specifically on a repeating 2x2 Bayer CFA.  */
++  m_img->standard_bayer_cfa = m_processor->imgdata.idata.filters >= 1000;
+   if (!m_processor->imgdata.idata.filters)
+     m_img->demosaiced_by = image_data::demosaic_max;
++  if (bayer_correction && !m_img->standard_bayer_cfa)
++    {
++      *error = "monochromatic Bayer compensation requires a standard 2x2 Bayer RAW image";
++      return false;
++    }
+   m_img->f_stop = m_processor->imgdata.other.aperture;
+   m_img->focal_length = m_processor->imgdata.other.focal_len;
+   m_img->camera_model = m_processor->imgdata.idata.model;
+@@ -1608,6 +1617,98 @@ image_data::has_grayscale_or_ir () const
+   return m_data != NULL;
+ }
+ 
++/* Analyze whether the RGB channels are consistent with one monochromatic
++   signal observed through a conventional Bayer CFA.  The test samples at most
++   64x64 interior pixels, ignores clipped/dark samples, and uses affine-invariant
++   channel correlation so different camera gains and black offsets do not cause
++   a false negative.  Flat images are rejected because high correlation is not
++   meaningful without real tonal variation.  */
++monochrome_bayer_analysis
++image_data::analyze_monochrome_bayer () const
++{
++  monochrome_bayer_analysis result;
++  if (!standard_bayer_cfa || stitch || !m_rgbdata || width < 8 || height < 8
++      || maxval <= 0)
++    return result;
++
++  constexpr int max_axis_samples = 64;
++  const int nx = std::min (max_axis_samples, width - 4);
++  const int ny = std::min (max_axis_samples, height - 4);
++  const double low = maxval / 256.0;
++  const double high = maxval - low;
++  double sum[3] = { 0, 0, 0 };
++  double sum2[3] = { 0, 0, 0 };
++  double cross[3] = { 0, 0, 0 }; /* RG, RB, GB.  */
++
++  for (int sy = 0; sy < ny; sy++)
++    {
++      const int y = 2 + (ny == 1 ? 0 : sy * (height - 5) / (ny - 1));
++      const pixel *row = get_rgb_row (y);
++      for (int sx = 0; sx < nx; sx++)
++        {
++          const int x = 2 + (nx == 1 ? 0 : sx * (width - 5) / (nx - 1));
++          const pixel &p = row[x];
++          const double v[3] = { (double)p.r, (double)p.g, (double)p.b };
++          if (v[0] <= low || v[1] <= low || v[2] <= low
++              || v[0] >= high || v[1] >= high || v[2] >= high)
++            continue;
++          for (int c = 0; c < 3; c++)
++            {
++              sum[c] += v[c];
++              sum2[c] += v[c] * v[c];
++            }
++          cross[0] += v[0] * v[1];
++          cross[1] += v[0] * v[2];
++          cross[2] += v[1] * v[2];
++          result.samples++;
++        }
++    }
++
++  if (result.samples < 256)
++    return result;
++
++  const double n = result.samples;
++  double variance[3];
++  for (int c = 0; c < 3; c++)
++    variance[c] = std::max (0.0, sum2[c] / n - (sum[c] / n) * (sum[c] / n));
++
++  const double mean_variance = (variance[0] + variance[1] + variance[2]) / 3;
++  result.relative_signal_stddev = std::sqrt (mean_variance) / maxval;
++  if (result.relative_signal_stddev < 0.01)
++    return result;
++
++  const int ca[3] = { 0, 0, 1 };
++  const int cb[3] = { 1, 2, 2 };
++  double minimum_correlation = 1;
++  double maximum_relative_residual = 0;
++  for (int pair = 0; pair < 3; pair++)
++    {
++      const int a = ca[pair], b = cb[pair];
++      if (variance[a] <= 0 || variance[b] <= 0)
++        return result;
++      const double covariance
++          = cross[pair] / n - (sum[a] / n) * (sum[b] / n);
++      const double correlation
++          = std::clamp (covariance / std::sqrt (variance[a] * variance[b]),
++                        -1.0, 1.0);
++      minimum_correlation = std::min (minimum_correlation, correlation);
++      const double residual_fraction
++          = std::sqrt (std::max (0.0, 1 - correlation * correlation));
++      maximum_relative_residual
++          = std::max (maximum_relative_residual, residual_fraction);
++    }
++
++  result.minimum_correlation = minimum_correlation;
++  result.maximum_relative_residual = maximum_relative_residual;
++  /* Keep the automatic suggestion deliberately conservative.  Ordinary color
++     photographs often have correlated RGB luminance, but correlations this
++     close to one across all three channels are characteristic of an effectively
++     monochromatic capture.  */
++  result.candidate = minimum_correlation >= 0.995
++                     && maximum_relative_residual <= 0.10;
++  return result;
++}
++
+ /* Set dimensions of the image to W x H.
+    If ALLOCATE_RGB is true, allocate RGB data.
+    If ALLOCATE_GRAYSCALE is true, allocate grayscale data.  */
+diff --git a/src/libcolorscreen/include/imagedata.h b/src/libcolorscreen/include/imagedata.h
+index 9dd793a..ef343a8 100644
+--- a/src/libcolorscreen/include/imagedata.h
++++ b/src/libcolorscreen/include/imagedata.h
+@@ -15,6 +15,17 @@ namespace colorscreen
+ class image_data_loader;
+ class stitch_project;
+ 
++/* Statistics describing whether an RGB RAW rendering is consistent with one
++   monochromatic signal observed through the three Bayer filter colors.  */
++struct monochrome_bayer_analysis
++{
++  bool candidate = false;
++  unsigned int samples = 0;
++  double minimum_correlation = 0;
++  double maximum_relative_residual = 1;
++  double relative_signal_stddev = 0;
++};
++
+ /* Scanned image descriptor.  */
+ class image_data
+ {
+@@ -179,6 +190,10 @@ public:
+ 
+   pure_attr DLL_PUBLIC bool has_rgb () const;
+   pure_attr DLL_PUBLIC bool has_grayscale_or_ir () const;
++  /* Analyze a normally demosaiced RGB RAW image and return how closely its
++     channels follow one affine monochromatic signal.  Only conventional 2x2
++     Bayer RAW input is considered a candidate.  */
++  DLL_PUBLIC monochrome_bayer_analysis analyze_monochrome_bayer () const;
+   pure_attr inline int_image_area
+   get_area () const
+   {
+@@ -203,6 +218,9 @@ public:
+   std::array<luminosity_t, 4> wavelengths = { -2, -2, -2, -2 };
+   int rotation = -1;
+   int mirror = -1;
++  /* True when the RAW loader reported a conventional 2x2 Bayer CFA.
++     Special mosaics such as X-Trans and full-color RAW files are false.  */
++  bool standard_bayer_cfa = false;
+   demosaicing_t demosaiced_by = demosaic_max;
+   std::string camera_model;
+   std::string lens;
+diff --git a/src/libcolorscreen/unittests.C b/src/libcolorscreen/unittests.C
+index fe10700..d7a0864 100644
+--- a/src/libcolorscreen/unittests.C
++++ b/src/libcolorscreen/unittests.C
+@@ -8506,6 +8506,90 @@ test_demosaic ()
+ }
+ }
+ 
++/* Verify conservative detection of monochromatic data that was initially
++   rendered as RGB from a standard Bayer RAW file.  Channel gains/offsets and
++   small noise are allowed; real chromatic structure, flat data and non-Bayer
++   sources must not trigger the loading guide.  */
++static bool
++test_monochrome_bayer_analysis ()
++{
++  constexpr int width = 160, height = 120;
++  image_data image;
++  if (!image.set_dimensions (width, height, true, false))
++    return false;
++  image.standard_bayer_cfa = true;
++  unsigned int random_state = 17;
++  for (int y = 0; y < height; y++)
++    for (int x = 0; x < width; x++)
++      {
++        const double signal
++            = 8000 + 180 * x + 95 * y
++              + 3500 * sin (0.071 * x + 0.043 * y);
++        const int noise = (int)(fast_rand16 (&random_state) % 41) - 20;
++        image.put_rgb_pixel (
++            x, y,
++            { (image_data::gray)std::clamp (1200 + 0.78 * signal + noise,
++                                            0.0, 65535.0),
++              (image_data::gray)std::clamp (700 + 1.02 * signal - noise,
++                                            0.0, 65535.0),
++              (image_data::gray)std::clamp (1900 + 0.61 * signal + noise / 2,
++                                            0.0, 65535.0) });
++      }
++  monochrome_bayer_analysis analysis = image.analyze_monochrome_bayer ();
++  if (!analysis.candidate || analysis.samples < 256
++      || analysis.minimum_correlation < 0.995
++      || analysis.relative_signal_stddev < 0.01)
++    {
++      fprintf (stderr,
++               "Correlated monochrome Bayer data was rejected: n=%u corr=%g residual=%g signal=%g\n",
++               analysis.samples, analysis.minimum_correlation,
++               analysis.maximum_relative_residual,
++               analysis.relative_signal_stddev);
++      return false;
++    }
++
++  /* Add independent chromatic structure while retaining a common luminance
++     component.  This resembles an ordinary low-saturation color image and must
++     remain below the intentionally strict automatic threshold.  */
++  for (int y = 0; y < height; y++)
++    for (int x = 0; x < width; x++)
++      {
++        const double signal = 12000 + 150 * x + 110 * y;
++        const double red = signal + 7000 * sin (0.11 * x);
++        const double green = signal + 6500 * sin (0.09 * y + 0.7);
++        const double blue = signal + 6000 * sin (0.07 * x + 0.13 * y + 1.1);
++        image.put_rgb_pixel (
++            x, y,
++            { (image_data::gray)std::clamp (red, 0.0, 65535.0),
++              (image_data::gray)std::clamp (green, 0.0, 65535.0),
++              (image_data::gray)std::clamp (blue, 0.0, 65535.0) });
++      }
++  analysis = image.analyze_monochrome_bayer ();
++  if (analysis.candidate)
++    {
++      fprintf (stderr, "Chromatic Bayer data was classified as monochrome\n");
++      return false;
++    }
++
++  for (int y = 0; y < height; y++)
++    for (int x = 0; x < width; x++)
++      image.put_rgb_pixel (x, y, { 20000, 22000, 18000 });
++  if (image.analyze_monochrome_bayer ().candidate)
++    {
++      fprintf (stderr, "Flat Bayer data was classified as monochrome\n");
++      return false;
++    }
++
++  image.standard_bayer_cfa = false;
++  if (image.analyze_monochrome_bayer ().candidate)
++    {
++      fprintf (stderr, "Non-Bayer RGB data was classified as Bayer monochrome\n");
++      return false;
++    }
++  return true;
++}
++
++
+ 
+ 
+ 
+@@ -8579,6 +8663,8 @@ main (int argc, char **argv)
+       [] () { return test_weighted_matching (); } },
+     { "denoising", "denoising tests", [] () { return test_denoise (); } },
+     { "demosaic", "dufay and paget demosaicing tests", [] () { return test_demosaic (); } },
++    { "monochrome_bayer", "monochrome Bayer candidate analysis tests",
++      [] () { return test_monochrome_bayer_analysis (); } },
+     { NULL, NULL, NULL }
+   };
+ 
