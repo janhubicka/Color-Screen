@@ -124,8 +124,15 @@ application-wide help/about actions. Keep this order when adding new menus.
 Crash recovery is session-aware. `ColorScreenApplication` prompts once and
 restores one `MainWindow` per recovery directory. Each `MainWindow` writes and
 removes only its own payload, so closing one image cannot erase another image's
-recovery state. The legacy single-document recovery slot is migrated without
-removing its source files until the complete copy succeeds.
+recovery state. Slanted-edge reference filenames are stored in the owning
+document's recovery directory and recreated as attached specialized reference
+views after that document restores. Ordinary New Views, detached/attached
+presentation, zoom, pan, Color/IR selection, and view-local render modes are
+deliberately not recovery state. Reference metadata is rewritten atomically and
+is not rewritten while a saved list is being replayed, so reopening the first
+reference cannot truncate later entries. The legacy single-document recovery
+slot is migrated without removing its source files until the complete copy
+succeeds.
 
 ---
 

@@ -6,14 +6,20 @@
 
 #include <QAction>
 #include <QDir>
+#include <QDebug>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFileOpenEvent>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
 #include <QKeySequence>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPoint>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
@@ -60,6 +66,11 @@ QString legacyRecoveryFile(const QString &name) {
 /** Return the path of recovery payload NAME inside DIRECTORY. */
 QString recoveryFile(const QString &directory, const QString &name) {
   return QDir(directory).filePath(name);
+}
+
+/** Return the per-document metadata file for auxiliary reference scans. */
+QString recoveryReferencesFile(const QString &directory) {
+  return recoveryFile(directory, QStringLiteral("recovery_references.json"));
 }
 
 /** Copy SOURCE to DESTINATION without removing the legacy payload. */
@@ -164,12 +175,17 @@ ImageViewWindow *ColorScreenApplication::createSlantedEdgeReference(
       source, viewNumber, QFileInfo(referenceFile).absoluteFilePath());
   view->setAttribute(Qt::WA_DeleteOnClose);
   m_viewWindows.append(view);
-  connect(view, &QObject::destroyed, this, [this]() {
-    QTimer::singleShot(0, this, [this]() {
+  QPointer<MainWindow> guardedSource(source);
+  connect(view, &QObject::destroyed, this, [this, guardedSource]() {
+    QTimer::singleShot(0, this, [this, guardedSource]() {
       pruneViewWindows();
+      if (guardedSource)
+        saveSlantedEdgeReferenceRecovery(guardedSource);
       refreshWindowMenus();
     });
   });
+
+  saveSlantedEdgeReferenceRecovery(source);
 
   if (detached) {
     view->setWindowFlags(Qt::Window);
@@ -260,6 +276,116 @@ void ColorScreenApplication::reloadSlantedEdgeReferences(MainWindow *source) {
   }
 }
 
+/** Persist SOURCE's live slanted-edge reference filenames atomically. */
+void ColorScreenApplication::saveSlantedEdgeReferenceRecovery(
+    MainWindow *source) {
+  if (!source || m_restoringReferenceRecovery.contains(source))
+    return;
+
+  const QString directory = source->recoveryDirectory();
+  if (directory.isEmpty())
+    return;
+
+  QStringList references;
+  for (const QPointer<ImageViewWindow> &guardedView : m_viewWindows) {
+    ImageViewWindow *view = guardedView.data();
+    if (!view || view->sourceDocument() != source ||
+        !view->isSlantedEdgeReference() || view->referenceFile().isEmpty())
+      continue;
+    references.append(QFileInfo(view->referenceFile()).absoluteFilePath());
+  }
+
+  const QString path = recoveryReferencesFile(directory);
+  if (references.isEmpty()) {
+    QFile::remove(path);
+    return;
+  }
+  if (!QDir().mkpath(directory))
+    return;
+
+  QJsonArray referenceArray;
+  for (const QString &reference : references)
+    referenceArray.append(reference);
+  QJsonObject object;
+  object.insert(QStringLiteral("version"), 1);
+  object.insert(QStringLiteral("slantedEdgeReferences"), referenceArray);
+
+  QSaveFile file(path);
+  if (!file.open(QIODevice::WriteOnly)) {
+    qWarning() << "Could not save slanted-edge recovery metadata to" << path;
+    return;
+  }
+  file.write(QJsonDocument(object).toJson(QJsonDocument::Compact));
+  if (!file.commit())
+    qWarning() << "Could not commit slanted-edge recovery metadata to" << path;
+}
+
+/** Read SOURCE's slanted-edge reference recovery metadata. */
+bool ColorScreenApplication::readSlantedEdgeReferenceRecovery(
+    MainWindow *source, QStringList *references) const {
+  if (!source || !references)
+    return false;
+  references->clear();
+
+  const QString path = recoveryReferencesFile(source->recoveryDirectory());
+  if (!QFile::exists(path))
+    return true;
+
+  QFile file(path);
+  if (!file.open(QIODevice::ReadOnly))
+    return false;
+  QJsonParseError parseError;
+  const QJsonDocument document =
+      QJsonDocument::fromJson(file.readAll(), &parseError);
+  if (parseError.error != QJsonParseError::NoError || !document.isObject())
+    return false;
+
+  const QJsonObject object = document.object();
+  if (object.value(QStringLiteral("version")).toInt(-1) != 1 ||
+      !object.value(QStringLiteral("slantedEdgeReferences")).isArray())
+    return false;
+
+  const QJsonArray referenceArray =
+      object.value(QStringLiteral("slantedEdgeReferences")).toArray();
+  for (const QJsonValue &value : referenceArray) {
+    if (!value.isString() || value.toString().trimmed().isEmpty())
+      return false;
+    references->append(QFileInfo(value.toString()).absoluteFilePath());
+  }
+  return true;
+}
+
+/** Recreate SOURCE's recorded reference scans after document recovery. */
+int ColorScreenApplication::restoreSlantedEdgeReferencesFromRecovery(
+    MainWindow *source) {
+  QStringList references;
+  if (!readSlantedEdgeReferenceRecovery(source, &references)) {
+    qWarning() << "Ignoring unreadable slanted-edge recovery metadata for"
+               << (source ? source->documentDisplayName() : QString());
+    return -1;
+  }
+  if (!source || references.isEmpty())
+    return 0;
+
+  m_restoringReferenceRecovery.insert(source);
+  int restored = 0;
+  for (const QString &reference : references) {
+    if (!QFileInfo::exists(reference)) {
+      qWarning() << "Skipping missing recovered slanted-edge reference"
+                 << reference;
+      continue;
+    }
+    if (createSlantedEdgeReference(source, reference))
+      ++restored;
+  }
+  m_restoringReferenceRecovery.remove(source);
+
+  // Rewrite after the batch, rather than after every reference, so a crash
+  // during restoration cannot truncate the not-yet-restored tail of the list.
+  saveSlantedEdgeReferenceRecovery(source);
+  return restored;
+}
+
 /** Open a list of images, assigning one complete MainWindow to each image. */
 void ColorScreenApplication::openFiles(const QStringList &fileNames,
                                        MainWindow *preferredWindow,
@@ -332,6 +458,7 @@ bool ColorScreenApplication::restoreRecoverySession() {
   for (const QString &directory : directories) {
     MainWindow *window = createDocumentWindow(directory);
     if (window->restoreRecoveryState()) {
+      restoreSlantedEdgeReferencesFromRecovery(window);
       restoredAny = true;
     } else {
       // Invalid or incomplete recovery data should not leave an extra blank

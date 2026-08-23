@@ -817,7 +817,7 @@ int main(int argc, char *argv[]) {
         const auto beforeReload = reference->sharedImageData();
         app.reloadSlantedEdgeReferences(source);
         auto checkReload = std::make_shared<std::function<void(int)>>();
-        *checkReload = [&app, reference, beforeReload, checkReload](
+        *checkReload = [&app, source, reference, beforeReload, checkReload](
                            int attemptsLeft) {
           if (reference && reference->sharedImageData() == beforeReload &&
               attemptsLeft > 0) {
@@ -831,7 +831,41 @@ int main(int argc, char *argv[]) {
             app.exit(15);
             return;
           }
-          app.closeView(reference);
+
+          // Creating the reference must already have persisted it. Replay that
+          // recovery metadata while the original remains open; this should
+          // create one additional specialized reference view. In a real crash
+          // recovery the document starts with no secondary views.
+          if (app.restoreSlantedEdgeReferencesFromRecovery(source) != 1) {
+            qCritical() << "Slanted-edge recovery metadata did not recreate "
+                           "the recorded reference";
+            app.exit(15);
+            return;
+          }
+
+          QList<ImageViewWindow *> references;
+          for (ImageViewWindow *view : app.viewWindows()) {
+            if (view && view->sourceDocument() == source &&
+                view->isSlantedEdgeReference())
+              references.append(view);
+          }
+          WorkspaceWindow *workspace = app.workspaceWindow();
+          if (references.size() != 2 || !workspace) {
+            qCritical() << "Recovery did not recreate exactly one reference";
+            app.exit(15);
+            return;
+          }
+          for (ImageViewWindow *view : references) {
+            if (view->referenceFile() != source->currentImageFile() ||
+                !workspace->containsView(view)) {
+              qCritical() << "Recovered slanted-edge reference has wrong "
+                             "file or presentation";
+              app.exit(15);
+              return;
+            }
+          }
+          for (ImageViewWindow *view : references)
+            app.closeView(view);
         };
         (*checkReload)(28);
       };
