@@ -1,0 +1,115 @@
+name: Agent DG010 self publish
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/scr-detect-prediction-search
+          fetch-depth: 0
+          path: target
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/dg010-publish-20260823
+          path: transport
+      - name: Apply reviewed DG-010 patch
+        shell: bash
+        run: |
+          PATCH_B64=$(sed -n 's/^          PATCH_B64: //p' transport/.github/workflows/agent-dg010-publish.yml)
+          printf '%s' "$PATCH_B64" | base64 -d | gzip -d > /tmp/dg010.patch
+          cd target
+          git apply --check --exclude=doc/scr-detect-geometry-tracking.md /tmp/dg010.patch
+          git apply --exclude=doc/scr-detect-geometry-tracking.md /tmp/dg010.patch
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("doc/scr-detect-geometry-tracking.md")
+          text = path.read_text()
+          start = text.index(
+              "### DG-010 — predicted patch lookup samples only one rounded pixel"
+          )
+          end = text.index("### DG-011 —", start)
+          dg010 = '''### DG-010 — predicted patch lookup samples only one rounded pixel
+
+**Severity:** high
+
+**Status:** experimental fallback implemented; default off
+
+The historical path samples one rounded pixel at every predicted component
+center. An opt-in `prediction_search` fallback now preserves that exact lookup
+as the fast path and, only after it fails, searches nearby pixels of the expected
+color class. The radius is `min(6 px, 0.35 * spacing)`, where `spacing` is the
+current nearest-element distance, so the search remains below half the distance
+to a competing element. Among usable connected components it chooses the one
+whose center is nearest to the lattice prediction. The CLI exposes the
+experiment as `--prediction-search`; normal detection remains unchanged.
+
+Report telemetry records whether the fallback is enabled together with search,
+hit, and nearby-pixel counts. On full-resolution NGS00428 Tile01 with detector
+sharpening explicitly disabled, the fallback reduces initial-grid seed scanning
+from 23,702 pixels to 95. It performs 13 bounded searches, finds one useful
+fallback component, and examines 336 nearby pixels. Raster coverage remains
+53.41% of the scan and 93.35% of the screen area. NGS00428 Tile05, the interior
+control, still seeds on its first pixel and never invokes the fallback; its patch
+count and coverage are unchanged. The historical 2 / 3 detector mask also
+stays entirely on the exact path for both tiles.
+
+This isolates the single-pixel prediction weakness but does not solve the larger
+classification problem. Tile01 flood fill remains about 18 seconds in the
+local eight-thread baseline, and Tile05 still loses roughly 12% of its patches
+at 0 / 0. A deterministic 1024 by 1024 non-screen texture remains correctly
+rejected with the fallback, but bounded-search work raises detector time from
+about 1.33 to 2.13 seconds (2,818 searches, 129 component hits, 157,140 nearby
+pixels). Keep the fallback experimental until a larger negative corpus is
+measured and DG-009/class-map robustness is improved; do not use this result to
+remove the 2 / 3 compatibility mask.
+
+'''
+          text = text[:start] + dg010 + text[end:]
+          start = text.index("## Recommended implementation order")
+          recommended = '''## Recommended implementation order
+
+1. Continue extending DG-019 with real soft scans and representative negative
+   images; the NGS00428 baseline and benchmark driver are now established.
+2. Keep the DG-010 bounded prediction search experimental while expanding its
+   false-positive and failure-time measurements.
+3. Address DG-009 class-map/component robustness next. The interior NGS00428
+   tile shows that complete seed discovery does not prevent substantial patch
+   loss and slower flood fill without the compatibility mask.
+4. Introduce robust partial-grid scoring (DG-011) only after the observation
+   layer is less sensitive to classification fragmentation.
+5. Compare a coarse periodicity proposal (DG-013) for regions where classified
+   components cannot establish a useful seed.
+6. Use the measured failure costs to implement early rejection and state reuse
+   (DG-015 through DG-017), then revisit DG-018 micro-optimization.
+'''
+          text = text[:start] + recommended
+          path.write_text(text)
+          PY
+          git diff --check
+          python3 -m py_compile testsuite/benchmark-screen-detection.py
+      - name: Publish clean feature tree
+        shell: bash
+        run: |
+          cd target
+          git rm .github/workflows/agent-dg010-self-publish.yml
+          git config user.name "OpenAI"
+          git config user.email "noreply@openai.com"
+          git add src/libcolorscreen/scr-detect-geometry.C \
+                  src/libcolorscreen/include/detect-regular-screen-parameters.h \
+                  src/libcolorscreen/unittests.C \
+                  src/colorscreen/colorscreen.C \
+                  testsuite/benchmark-screen-detection.py \
+                  doc/scr-detect-geometry-tracking.md
+          git commit -m "detect: add bounded predicted-center fallback" \
+            -m "Keep the historical exact predicted-pixel component lookup as the default and add an opt-in bounded neighborhood fallback for DG-010. Search only the expected color class within min(6 pixels, 0.35 of current element spacing), choose the nearest usable component center, and expose the experiment through --prediction-search. Record fallback enablement, attempts, hits, and examined nearby pixels in detector telemetry and the Batch 08 benchmark driver. Extend synthetic discovery coverage to exercise the opt-in unsharpened fast-only path while verifying that prediction search stays disabled by default. Document full-resolution NGS00428 results: Tile01 0/0 seed scanning falls from 23,702 pixels to 95 with one useful fallback hit, while Tile05 and the historical 2/3 path never invoke the fallback. Keep the feature experimental because flood-fill completeness is unchanged and a no-screen texture shows measurable negative-case overhead."
+          git push origin HEAD:agent/scr-detect-prediction-search
