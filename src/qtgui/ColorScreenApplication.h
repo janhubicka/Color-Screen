@@ -3,6 +3,7 @@
 #include <QApplication>
 #include <QList>
 #include <QPointer>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -69,6 +70,13 @@ public:
   /** Reload every slanted-edge reference associated with SOURCE using the
       document's current demosaic setting. */
   void reloadSlantedEdgeReferences(MainWindow *source);
+
+  /** Recreate SOURCE's slanted-edge references from crash-recovery metadata.
+
+      Restored references are attached to the workspace; ordinary New Views and
+      view-local presentation state are intentionally not recovered.  Returns
+      the number of reference views recreated, or -1 for unreadable metadata. */
+  int restoreSlantedEdgeReferencesFromRecovery(MainWindow *source);
 
   /** Open every path in FILENAMES as an independent image document.
 
@@ -144,6 +152,13 @@ private:
   /** Return true when DIRECTORY contains at least one recovery payload file. */
   bool recoveryDirectoryHasData(const QString &directory) const;
 
+  /** Persist SOURCE's currently open slanted-edge reference filenames. */
+  void saveSlantedEdgeReferenceRecovery(MainWindow *source);
+
+  /** Read SOURCE's slanted-edge reference filenames from recovery metadata. */
+  bool readSlantedEdgeReferenceRecovery(MainWindow *source,
+                                        QStringList *references) const;
+
   /** Migrate the legacy single-document recovery payload into a new session
       directory.  Returns the new directory or an empty string on failure.  */
   QString migrateLegacyRecovery() const;
@@ -163,5 +178,6 @@ private:
   QList<QPointer<MainWindow>> m_documentWindows;
   QList<QPointer<ImageViewWindow>> m_viewWindows;
   QPointer<WorkspaceWindow> m_workspaceWindow;
+  QSet<MainWindow *> m_restoringReferenceRecovery;
   bool m_workspaceShutdown = false;
 };

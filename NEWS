@@ -30,6 +30,9 @@ Changes in version 1.1
      scans keep the normal navigation preview above a single Sharpness tab and
      expose only Original digital capture and Image layer rendering modes.
      Reload and demosaic refreshes the main scan and every associated reference.
+     Crash recovery records those reference filenames per document and reopens
+     them with the recovered image; ordinary New Views and view-local layout,
+     zoom, pan, and render-mode state are intentionally not recovered yet.
    - Support for new processes:
      - Dioptrichrome-B 
      - Improved Dioptrichrome-B

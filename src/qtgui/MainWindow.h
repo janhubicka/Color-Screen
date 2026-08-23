@@ -140,6 +140,12 @@ public:
   /** Restore this document from its per-window recovery directory. */
   bool restoreRecoveryState();
 
+  /** Return this document's private crash-recovery directory.
+
+      ColorScreenApplication uses this only for auxiliary recovery metadata
+      owned by views associated with this document. */
+  QString recoveryDirectory() const { return m_recoveryDir; }
+
   /** Rebuild this window's Window menu from the application document list. */
   void refreshWindowMenu();
 
