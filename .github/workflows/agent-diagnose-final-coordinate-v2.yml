@@ -1,0 +1,118 @@
+name: Diagnose and publish final-coordinate v2
+
+on:
+  push:
+    branches:
+      - agent/final-coordinate-v2-diagnostic-20260823
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout publisher source
+        uses: actions/checkout@v4
+        with:
+          ref: agent/final-coordinate-v2-diagnostic-20260823
+          path: publisher
+          fetch-depth: 0
+
+      - name: Checkout review branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/final-coordinate-image-view
+          path: target
+          fetch-depth: 0
+
+      - name: Extract and run reviewed transformation
+        id: transform
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          source = Path("publisher/.github/workflows/agent-publish-final-coordinate-v2.yml").read_text()
+          marker = "          python3 - <<'PY'\n"
+          start = source.index(marker) + len(marker)
+          end = source.index("\n          PY\n", start)
+          Path("/tmp/final-coordinate-v2.py").write_text(textwrap.dedent(source[start:end]) + "\n")
+          PY
+
+          set +e
+          cd target
+          python3 /tmp/final-coordinate-v2.py >/tmp/final-coordinate-v2.log 2>&1
+          status=$?
+          if [ "$status" -eq 0 ]; then
+            git diff --check >>/tmp/final-coordinate-v2.log 2>&1
+            status=$?
+          fi
+          git diff --stat >>/tmp/final-coordinate-v2.log 2>&1 || true
+          cd ..
+          set -e
+          cat /tmp/final-coordinate-v2.log
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Record transformation failure
+        if: steps.transform.outputs.status != '0'
+        shell: bash
+        run: |
+          cp /tmp/final-coordinate-v2.log publisher/agent-publisher-status.txt
+          cd publisher
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add agent-publisher-status.txt
+          git commit -m "ci: record final-coordinate publisher failure"
+          git push origin HEAD:agent/final-coordinate-v2-diagnostic-20260823
+
+      - name: Commit and push review branch
+        if: steps.transform.outputs.status == '0'
+        shell: bash
+        run: |
+          cd target
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add NEWS .agents/qtgui.md \
+            src/libcolorscreen/include/scr-to-img-parameters.h \
+            src/libcolorscreen/scr-to-img.C src/libcolorscreen/loadsave.C \
+            src/qtgui/CoordinateTransformer.cpp src/qtgui/CoordinateTransformer.h \
+            src/qtgui/GeometryPanel.cpp src/qtgui/ImageWidget.cpp \
+            src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h \
+            src/qtgui/ImageViewWindow.cpp src/qtgui/ImageViewWindow.h \
+            src/qtgui/main.cpp
+          git commit -F - <<'MSG'
+          qtgui: make final orientation native geometry
+
+          Treat libcolorscreen final coordinates as the complete output geometry
+          rather than another base canvas for the Qt scan presentation transform.
+          Final-coordinate views now ignore scan crop, quarter-turn scan rotation,
+          and scan mirroring, so viewport mapping agrees with render-to-file and
+          with the screen-to-final mapping itself.
+
+          Add final_mirror to scr_to_img_parameters and persist it in parameter
+          files next to final_rotation. Fold the reflection into the
+          screen-to-final matrix before the existing continuous degree rotation;
+          old parameter files remain compatible because the new flag defaults to
+          false.
+
+          In Qt, expose Final rotation as a continuous degree control whenever an
+          ordinary view is in Screen/final coordinates, and make the mirror action
+          edit final_mirror in that mode. Scan mode keeps the existing 90-degree
+          rotate actions and scan_mirror behavior. The Geometry panel exposes the
+          same final orientation parameters as shared, undoable document geometry,
+          so all final-coordinate views and file output stay synchronized.
+
+          Extend the New View smoke path with non-trivial final rotation/mirroring
+          and an explicit invariant check proving that changing scan crop,
+          scan_mirror, and scan_rotation cannot move a final-coordinate canvas.
+          Keep slanted-edge reference views scan-only.
+
+          Validation: every scripted source replacement is asserted and git diff
+          --check passes before this commit is created. Normal pull-request CI
+          performs the full Qt build and offscreen smoke test on supported
+          platforms.
+          MSG
+          git push origin HEAD:agent/final-coordinate-image-view
