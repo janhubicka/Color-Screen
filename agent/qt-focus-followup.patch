@@ -1,0 +1,51 @@
+diff --git a/doc/focus-area-analysis.md b/doc/focus-area-analysis.md
+index 6c91d38353426a2cc9ca93d8721d64afb6157063..ed56a3e860f44096a7191ecc46ebc4abf4552799 100644
+--- a/doc/focus-area-analysis.md
++++ b/doc/focus-area-analysis.md
+@@ -50,10 +50,12 @@ validation objective change the shared response scale it is supposed to test.
+ 
+ The focused synthetic regression constructs three Paget regions with different
+ uniform image-layer colours and one known common blur.  It checks recovery of
+-the shared blur, successful leave-one-out fits, bounded focus sensitivity,
+-candidate-order invariance, the option to disable leave-one-out work, and
++the shared blur, successful leave-one-out and held-out fits, bounded focus
++sensitivity, candidate-order invariance, the option to disable validation, and
+ rejection of geometry-discovery flags that are incompatible with explicit area
+-locations.
++locations.  A direct one-tile fixed-primary regression also verifies that all
++three held-out intensities remain free and that a deliberately wrong frozen
++blur produces a materially worse objective.
+ 
+ ## Qt workflow
+ 
+@@ -65,6 +67,11 @@ eight colour-diverse regions, runs the joint fit, and reports leave-one-out and
+ held-out diagnostics.  The joint result is deliberately not applied
+ automatically; **Apply joint focus** creates the ordinary undoable parameter
+ change only after the user has inspected the marked regions and summary.
++Individual verification and held-out evaluation both use the unnormalized raw
++RGB objective, so the displayed held-out/independent residual ratio compares
++like with like.  Selected overlays include this ratio; values above 2 are drawn
++more strongly as a visual inspection hint only, not as a library acceptance
++threshold.
+ 
+ Candidates, fit results and overlays belong to `MainWindow`, so separate open
+ documents never share them.  Ordinary `Window -> New View` windows display the
+diff --git a/src/qtgui/FocusAreaWorkflow.cpp b/src/qtgui/FocusAreaWorkflow.cpp
+index 5b7c7c831d996ecc27c883eeedad84dc21320f90..df1d5084eb3e16348aba0d8093fd9c74e7c49c30 100644
+--- a/src/qtgui/FocusAreaWorkflow.cpp
++++ b/src/qtgui/FocusAreaWorkflow.cpp
+@@ -135,8 +135,13 @@ bool analyzeCandidates(
+ 
+   finetune_parameters local;
+   local.range = 4;
++  /* Keep the per-candidate objective in raw RGB too.  Besides matching the
++     quality normalization used by the area selector, this makes the later
++     held-out/independent residual ratio compare like with like.  The one-tile
++     fit is deliberately over-flexible in screen response; the joint/held-out
++     stages are responsible for rejecting blur/saturation compensation.  */
+   local.flags = focusFlags | finetune_position | finetune_use_strip_widths
+-                | finetune_no_data_collection;
++                | finetune_no_data_collection | finetune_no_normalize;
+ 
+   if (progress)
+     progress->set_task("verifying focus-analysis areas", candidates->size());
