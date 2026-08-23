@@ -110,7 +110,7 @@ widgets are never duplicated. Navigation and panel tools that act on an image
 (crop/area selection, measurement, geometry visualization, and registration
 interaction) target the ordinary view currently presenting the inspector.
 Detached ordinary views host that same inspector locally while active and return
-it to the workspace/primary window on activation changes. views share the image and document geometry while render mode, Color/IR
+it to the workspace/primary window on activation changes. Views share the image and document geometry while render mode, Color/IR
 choice, coordinate-space choice, zoom, and pan remain view-local. Scan views
 apply the shared scan crop, quarter-turn rotation, and scan mirror. Screen/final
 views must not layer those presentation transforms over libcolorscreen's final

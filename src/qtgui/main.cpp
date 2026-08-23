@@ -704,8 +704,8 @@ int main(int argc, char *argv[]) {
           baseRange.x != changedRange.x || baseRange.y != changedRange.y ||
           baseRange.width != changedRange.width ||
           baseRange.height != changedRange.height ||
-          std::abs(baseProbe.x - changedProbe.x) > 1e-9 ||
-          std::abs(baseProbe.y - changedProbe.y) > 1e-9) {
+          qAbs(baseProbe.x - changedProbe.x) > 1e-9 ||
+          qAbs(baseProbe.y - changedProbe.y) > 1e-9) {
         qCritical() << "Scan presentation leaked into final coordinates";
         app.exit(14);
         return;
