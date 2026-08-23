@@ -11,15 +11,46 @@ fi
 echo 1..6
 . $srcdir/defs.sh
 NAME=dufaycolor_dt_captureone_export
+
+# Verify the physical match rather than the arbitrary detected screen-grid
+# phase or an exact known-pixel count.  The same match is represented as raw
+# offset -28,5 after nearest-pixel detector rounding.  Mesh and no-mesh runs
+# both map it to about final (6.71,-27.64), while their known-pixel boundaries
+# make the reported overlap differ slightly (58.62% versus 58.91%).
+check_stitch_match ()
+{
+    awk '
+      /Best match on offset/ {
+        have_final = 0;
+        have_overlap = 0;
+        for (i = 1; i <= NF; i++) {
+          if ($i == "(final" && i + 2 <= NF) {
+            x = $(i + 1);
+            y = $(i + 2);
+            sub(/,$/, "", x);
+            have_final = 1;
+          }
+          if ($i == "overlap" && i + 1 <= NF) {
+            overlap = $(i + 1);
+            sub(/%$/, "", overlap);
+            have_overlap = 1;
+          }
+        }
+        if (have_final && have_overlap &&
+            x >= 6.5 && x <= 7.0 &&
+            y >= -28.0 && y <= -27.2 &&
+            overlap >= 58.0 && overlap <= 60.0)
+          good = 1;
+      }
+      END { exit good ? 0 : 1; }
+    ' "$1"
+}
+
 pexec $RUNCOLORSCREEN stitch --ncols 2 "$srcdir/${NAME}_tile1.jpg" "$srcdir/${NAME}_tile2.jpg"  --out "out-${NAME}.csprj"  --report "out-${NAME}.txt" --no-cpfind  --min-screen-percentage=80 --max-unknown-screen-range=10 || exit 1
-# The integer offset is expressed in the independently detected screen-grid
-# origins.  Detector improvements may choose a lattice-equivalent origin while
-# preserving the same physical tile overlap, so keep the overlap fraction as
-# the stable stitching invariant rather than pinning an arbitrary grid phase.
-grep "Best match on offset .* overlap 58.620690%" "out-${NAME}.txt" || exit 1
+check_stitch_match "out-${NAME}.txt" || exit 1
 echo 'ok 1 - stitch project construction'
 pexec $RUNCOLORSCREEN stitch --ncols 2 "$srcdir/${NAME}_tile1.jpg" "$srcdir/${NAME}_tile2.jpg"  --out "out-${NAME}-nomesh.csprj"  --report "out-${NAME}.txt" --no-cpfind  --no-mesh --min-screen-percentage=80 --max-unknown-screen-range=10 || exit 1
-grep "Best match on offset .* overlap 58.620690%" "out-${NAME}.txt" || exit 1
+check_stitch_match "out-${NAME}.txt" || exit 1
 echo 'ok 2 - stitch project construction no mesh'
 PARNAME=out-${NAME}
 pexec $RUNCOLORSCREEN autodetect out-${NAME}.csprj ${PARNAME}.par --gamma 2.2  $* || exit 1

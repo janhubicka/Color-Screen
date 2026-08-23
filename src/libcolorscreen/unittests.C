@@ -694,22 +694,46 @@ test_finetune_focus_areas ()
       return false;
     }
 
+  /* Validate candidate positions in the output coordinate system.  Do not
+     invert the mapping by dividing by XSTEP/YSTEP just to classify the test
+     regions.  Apple Clang with -Ofast contracts e.g.
+     (294.5 - 200) / 3 into an FMA that rounds to 31.500000000000004, so an
+     exact upper-bound comparison in analysis coordinates can reject the
+     correctly mapped boundary point.  A tiny scan-coordinate tolerance also
+     keeps this metadata check independent of harmless fast-math contraction.  */
+  const coord_t position_epsilon = (coord_t)1e-9;
+  const auto mapped = [&] (coord_t x, coord_t y) {
+    return point_t { search.origin.x + x * search.xstep,
+                     search.origin.y + y * search.ystep };
+  };
+  const point_t brown_min = mapped (15.5, 15.5);
+  const point_t brown_max = mapped (31.5, 31.5);
+  const point_t green_min = mapped (95.5, 15.5);
+  const point_t green_max = mapped (111.5, 31.5);
+
   bool found_brown = false;
   bool found_green = false;
   for (const finetune_focus_area_candidate &area : areas)
     {
-      const coord_t cx = (area.center.x - search.origin.x) / search.xstep;
-      const coord_t cy = (area.center.y - search.origin.y) / search.ystep;
-      const bool brown = cx >= 15.5 && cx <= 31.5
-                         && cy >= 15.5 && cy <= 31.5;
-      const bool green = cx >= 95.5 && cx <= 111.5
-                         && cy >= 15.5 && cy <= 31.5;
+      const auto in_range = [&] (point_t min, point_t max) {
+        return area.center.x >= min.x - position_epsilon
+               && area.center.x <= max.x + position_epsilon
+               && area.center.y >= min.y - position_epsilon
+               && area.center.y <= max.y + position_epsilon;
+      };
+      const bool brown = in_range (brown_min, brown_max);
+      const bool green = in_range (green_min, green_max);
       if (!brown && !green)
         {
+          const coord_t cx
+              = (area.center.x - search.origin.x) / search.xstep;
+          const coord_t cy
+              = (area.center.y - search.origin.y) / search.ystep;
           fprintf (stderr,
                    "Focus-area finder accepted texture/strong gradient at "
-                   "%.3f, %.3f\n",
-                   (double)cx, (double)cy);
+                   "%.17g, %.17g (scan %.17g, %.17g)\n",
+                   (double)cx, (double)cy, (double)area.center.x,
+                   (double)area.center.y);
           return false;
         }
       if (area.area.width != search.window_width * search.xstep
