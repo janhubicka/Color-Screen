@@ -1,3 +1,15 @@
-expected text not found in src/libcolorscreen/include/scr-to-img-parameters.h: '           && projection_distance == other.projection_distance\n && final_rotation == other.final_rotation\n && final_angl'
- src/libcolorscreen/include/scr-to-img-parameters.h | 4 +++-
- 1 file changed, 3 insertions(+), 1 deletion(-)
+expected text not found in .agents/qtgui.md: 'views share the image\nand document transforms such as rotation and mirroring, while render mode,\nColor/IR choice, zoom, '
+ NEWS                                               |   6 +-
+ src/libcolorscreen/include/scr-to-img-parameters.h |   5 +-
+ src/libcolorscreen/loadsave.C                      |  11 ++
+ src/libcolorscreen/scr-to-img.C                    |  10 +-
+ src/qtgui/CoordinateTransformer.cpp                |  27 ++---
+ src/qtgui/CoordinateTransformer.h                  |  10 +-
+ src/qtgui/GeometryPanel.cpp                        |  20 ++++
+ src/qtgui/ImageViewWindow.cpp                      |  75 ++++++++++---
+ src/qtgui/ImageViewWindow.h                        |   7 ++
+ src/qtgui/ImageWidget.cpp                          |  21 ++--
+ src/qtgui/MainWindow.cpp                           | 119 +++++++++++++++++----
+ src/qtgui/MainWindow.h                             |  12 ++-
+ src/qtgui/main.cpp                                 |  38 +++++++
+ 13 files changed, 295 insertions(+), 66 deletions(-)
