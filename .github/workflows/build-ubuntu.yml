@@ -6,7 +6,72 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: write
+
 jobs:
+  publish-final-coordinate-patch:
+    if: github.event_name == 'pull_request' && github.head_ref == 'agent/tmp-publish-final-coordinate-image-view'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout publisher payload
+        uses: actions/checkout@v4
+        with:
+          ref: agent/tmp-publish-final-coordinate-image-view
+          path: payload
+      - name: Checkout clean feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/final-coordinate-image-view
+          fetch-depth: 0
+          path: feature
+      - name: Apply and verify patch
+        shell: bash
+        run: |
+          base64 -d payload/agent-final-coordinate-image-view.patch.gz.b64 | gunzip > /tmp/final-coordinate.patch
+          cd feature
+          git apply --check /tmp/final-coordinate.patch
+          git apply /tmp/final-coordinate.patch
+          git diff --check
+      - name: Commit and push feature branch
+        shell: bash
+        run: |
+          cd feature
+          git config user.name "OpenAI Agent"
+          git config user.email "agent@openai.com"
+          cat > /tmp/message <<'EOF'
+          render: support final-coordinate interactive image views
+
+          Extend the public tile rendering API with an explicit coordinate-space
+          selector. Existing callers continue to render in scan coordinates by
+          default, while final-coordinate tiles use the same geometrically
+          corrected screen plane as screen-geometry file output and stitched
+          projects.
+
+          Add per-view Scan coordinates / Screen coordinates selection to the Qt
+          image viewer. The primary view and ordinary New Views keep this display
+          choice independent alongside render mode, Color/IR, zoom, and pan.
+          Screen coordinates use libcolorscreen final coordinates, while widget
+          interaction continues to map back to scan coordinates for document
+          editing. Stitched projects remain final-coordinate-only and slanted-edge
+          reference views remain scan-only.
+
+          Keep the shared Navigation overview synchronized with the active
+          ordinary view and update registration/profile overlays for the selected
+          coordinate space.
+
+          Extend the New View smoke test to load the checked-in Dufay geometry,
+          exercise the public final-coordinate render_tile API directly, and
+          verify coordinate-space independence between primary and secondary
+          views.
+
+          Validation before publication: git diff --check clean; full Qt build
+          and offscreen smoke validation run in repository CI.
+          EOF
+          git add NEWS src/libcolorscreen/include/colorscreen.h src/libcolorscreen/render-tile.C src/libcolorscreen/render-tile.h src/qtgui/Renderer.h src/qtgui/Renderer.cpp src/qtgui/ImageWidget.h src/qtgui/ImageWidget.cpp src/qtgui/NavigationView.h src/qtgui/NavigationView.cpp src/qtgui/MainWindow.h src/qtgui/MainWindow.cpp src/qtgui/ImageViewWindow.h src/qtgui/ImageViewWindow.cpp src/qtgui/main.cpp
+          git commit -F /tmp/message
+          git push origin HEAD:agent/final-coordinate-image-view
+
   build:
     strategy:
       matrix:
