@@ -3,6 +3,8 @@ name: Temporary Qt focus-area publisher
 on:
   push:
     branches: [ "agent/qt-focus-publisher-20260823" ]
+  pull_request:
+    branches: [ "main" ]
 
 permissions:
   contents: write
