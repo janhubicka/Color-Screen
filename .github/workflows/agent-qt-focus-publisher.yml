@@ -1,0 +1,128 @@
+name: Temporary Qt focus-area publisher
+
+on:
+  push:
+    branches: [ "agent/qt-focus-publisher-20260823" ]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    env:
+      REVIEW_BRANCH: agent/qt-focus-area-heldout
+      BASE_SHA: b9296f936b75350e46bc8348e4a6cea4f7afad1e
+      PATCH_SHA256: be98edd66803235494167b68a22ef7fbd97c8576fb32f801e871b01dafaab066
+    steps:
+      - name: Check out exact current main base
+        uses: actions/checkout@v4
+        with:
+          ref: b9296f936b75350e46bc8348e4a6cea4f7afad1e
+          fetch-depth: 0
+
+      - name: Reconstruct and apply reviewed patch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch origin agent/qt-focus-publisher-20260823
+          for i in 00 01 02 03 04 05 06; do
+            git show "origin/agent/qt-focus-publisher-20260823:agent/qt-focus-patch.${i}" >> /tmp/qt-focus-area.patch.gz.b64
+          done
+          base64 --decode /tmp/qt-focus-area.patch.gz.b64 | gzip -d > /tmp/qt-focus-area.patch
+          echo "${PATCH_SHA256}  /tmp/qt-focus-area.patch" | sha256sum -c -
+          git apply --3way /tmp/qt-focus-area.patch
+          git diff --check HEAD
+          git diff HEAD --name-only | LC_ALL=C sort > /tmp/changed
+          cat > /tmp/expected <<'EOF'
+          doc/focus-area-analysis.md
+          src/libcolorscreen/Makefile.am
+          src/libcolorscreen/Makefile.in
+          src/libcolorscreen/finetune.C
+          src/libcolorscreen/focus-analysis-unittests.C
+          src/libcolorscreen/focus-analysis.C
+          src/libcolorscreen/include/finetune.h
+          src/libcolorscreen/include/focus-analysis.h
+          src/libcolorscreen/unittests.C
+          src/qtgui/FocusAreaOverlay.h
+          src/qtgui/FocusAreaWorkflow.cpp
+          src/qtgui/FocusAreaWorkflow.h
+          src/qtgui/ImageViewWindow.cpp
+          src/qtgui/ImageWidget.cpp
+          src/qtgui/ImageWidget.h
+          src/qtgui/MainWindow.cpp
+          src/qtgui/MainWindow.h
+          src/qtgui/Makefile.am
+          src/qtgui/Makefile.in
+          src/qtgui/SharpnessPanel.cpp
+          src/qtgui/SharpnessPanel.h
+          EOF
+          LC_ALL=C sort -o /tmp/expected /tmp/expected
+          diff -u /tmp/expected /tmp/changed
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev \
+            liblcms2-dev libgtk2.0-dev libfftw3-dev qt6-base-dev qt6-tools-dev \
+            qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev libexiv2-dev \
+            build-essential libopenjp2-7-dev libpng-dev
+
+      - name: Configure checking build
+        run: |
+          CXXFLAGS="-O2 -g -Wall -Wextra" CFLAGS="-O2 -g -Wall -Wextra" \
+            ./configure --enable-checking --enable-qtgui --disable-static-link
+
+      - name: Build library, focus regression, and Qt GUI
+        run: |
+          make -j"$(nproc)" src/libcolorscreen/unittests src/qtgui/colorscreen-qt
+          ./src/libcolorscreen/unittests finetune_focus_validation
+
+      - name: Publish clean review branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name "OpenAI Codex"
+          git config user.email "noreply@openai.com"
+          git switch -c "${REVIEW_BRANCH}"
+          git add -A
+          cat > /tmp/commit-message <<'EOF'
+          qtgui: analyze focus from solid image areas
+
+          Wire the solid-area focus pipeline into each Qt document. Add explicit
+          Find, Analyze, and Apply actions to the Sharpness panel, keep candidate
+          and validation state inside MainWindow, and draw the same document-local
+          overlays in every ordinary view while excluding slanted-edge references.
+          Background search and fitting use TaskQueue with generation guards so a
+          cancelled or stale result cannot overwrite newer document state.
+
+          Add true held-out validation to the library. For each selected area,
+          learn the shared optical model and scanner responses from the remaining
+          areas, freeze those shared parameters, and fit only the omitted tile's
+          phase and three image-layer primary intensities. Report normalized
+          held-out residuals alongside leave-one-out focus stability without
+          imposing a universal acceptance threshold. Fixed-primary mode keeps all
+          three tile intensities free, avoiding the first-tile scale gauge used
+          while screen primaries themselves are optimized.
+
+          Keep applying a measured focus as a separate undoable user action. A
+          parameter change invalidates stored candidates/results rather than
+          silently applying stale measurements. Selected overlays display the
+          held-out/independent residual ratio, with a stronger style above 2 as a
+          visual inspection hint only.
+
+          Fold the standalone focus-analysis regression into the normal unit-test
+          binary and repair generated Automake files so non-maintainer builds link
+          focus-analysis.C and the new Qt workflow. Extend the synthetic Paget
+          regression to verify fixed-primary held-out recovery and rejection of a
+          deliberately wrong shared blur.
+
+          Validation: checksum-gated three-way application onto current main;
+          git diff --check; Ubuntu 24.04 --enable-checking O2 build of the unit
+          binary and Qt GUI; focused finetune_focus_validation regression.
+          Repository pull-request CI will additionally exercise Ofast, sanitizers,
+          macOS, Windows/GCC, and Windows/Clang.
+          EOF
+          git commit -F /tmp/commit-message
+          git push --force origin "HEAD:${REVIEW_BRANCH}"
