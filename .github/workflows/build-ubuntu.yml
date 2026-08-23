@@ -27,7 +27,7 @@ jobs:
       working-directory: target
       run: |
         set -eux
-        test "$(git rev-parse HEAD)" = "6dbac661e029efa62d48246e3764bc234157bf21"
+        test "$(git rev-parse HEAD)" = "b6c6ccc0ee97f42fd743f630d56fb52d3f61108a"
         git config user.name "OpenAI Agent"
         git config user.email "noreply@openai.com"
 
