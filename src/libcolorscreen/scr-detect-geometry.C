@@ -730,12 +730,14 @@ bool try_guess_paget_screen(FILE *report_file, const color_class_map &color_map,
   return true;
 }
 
-/* Verify a classified patch of color C near X, Y in COLOR_MAP.  Accept only
-   components whose size lies in MIN_PATCH_SIZE through MAX_PATCH_SIZE and whose
-   center is within MAX_DISTANCE of the prediction.  Store the accepted center
-   in CX, CY and a distance-derived priority in PRIORITY.  REPORT_FILE receives
-   optional diagnostics and VISITED prevents a component from being accepted
-   more than once.  */
+/* Verify a classified patch of color C near X, Y in COLOR_MAP.  Normal
+   components must lie in MIN_PATCH_SIZE through MAX_PATCH_SIZE and have their
+   center within MAX_DISTANCE of the prediction.  Blur can shrink the pure-color
+   interior, so a component at least half MIN_PATCH_SIZE may also be accepted,
+   but only when its center is within half MAX_DISTANCE.  Store the accepted
+   center in CX, CY and a distance-derived priority in PRIORITY.  REPORT_FILE
+   receives optional diagnostics and VISITED prevents a component from being
+   accepted more than once.  */
 bool confirm_patch(FILE *report_file, const color_class_map *color_map,
                    coord_t x, coord_t y, scr_detect::color_class c,
                    int min_patch_size, int max_patch_size, coord_t max_distance,
@@ -748,7 +750,9 @@ bool confirm_patch(FILE *report_file, const color_class_map *color_map,
   int size = find_patch(*color_map, c, (int)(x + (coord_t)0.5),
                         (int)(y + (coord_t)0.5), max_patch_size + 1, entries,
                         visited, true);
-  if (size < min_patch_size) {
+  int relaxed_min_patch_size = std::max(1, (min_patch_size + 1) / 2);
+  bool small_fragment = size < min_patch_size;
+  if (size < relaxed_min_patch_size) {
     if (!size)
       fail = "rejected: zero size";
     else
@@ -757,9 +761,14 @@ bool confirm_patch(FILE *report_file, const color_class_map *color_map,
     fail = "rejected: too large";
   else if (!patch_center(entries, size, cx, cy))
     fail = "rejected: center not in patch";
-  else if ((*cx - x) * (*cx - x) + (*cy - y) * (*cy - y) >
-           max_distance * max_distance)
-    fail = "rejected: distance out of tolerance";
+  else {
+    coord_t distance2 = (*cx - x) * (*cx - x) + (*cy - y) * (*cy - y);
+    coord_t limit2 = max_distance * max_distance;
+    if (small_fragment)
+      limit2 /= 4;
+    if (distance2 > limit2)
+      fail = "rejected: distance out of tolerance";
+  }
   if (report_file && fail && verbose)
     fprintf(
         report_file,

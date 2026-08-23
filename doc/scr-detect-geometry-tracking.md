@@ -130,7 +130,7 @@ classified-patch diagnostics now have defined predicted center values.
 
 **Severity:** high
 
-**Status:** open
+**Status:** partially fixed by DG-025; broader class-map continuity remains open
 
 `find_patch()` uses eight-connected equality in the thresholded color-class
 map.  Blur can join neighboring elements diagonally, split one element into
@@ -142,6 +142,34 @@ A replacement must preserve the current sharp-image path as the cheap first
 choice.  Candidate extensions to evaluate include accepting a small unknown
 boundary, component morphology bounded by predicted screen scale, and using a
 confidence-valued class map rather than changing hard labels globally.
+
+### DG-025 — fast flood fill rejects blur-shrunken patch interiors
+
+**Severity:** high robustness/performance
+
+**Status:** fixed first-stage continuity
+
+After a valid initial grid and preliminary geometry fit, fast flood fill still
+required every square-patch component to contain at least the historical
+`min_patch_size` number of hard-classified pixels.  With detector sharpening
+disabled, blur reduces the pure-color interior even when the component centroid
+remains very close to the predicted lattice point.  On NGS00428 Tile05 at 0/0,
+diagnostics showed roughly 155,000 fast patch confirmations rejected as too
+small, compared with about 23,000 under the historical 2/3 mask.
+
+Keep the historical size and distance gates for normal components.  A component
+between half the normal minimum size and the normal minimum is now accepted only
+when its centroid is within half the normal geometric distance tolerance.  This
+uses the already-fitted lattice as the extra evidence needed for a small
+fragment; it does not relax initial-grid discovery, color classification,
+maximum component size, strip confirmation, or slow image-domain confirmation.
+
+Several broader alternatives were measured and rejected.  Halving the minimum
+size globally improved fast-only coverage but made combined fast+slow flood fill
+much slower by expanding the slow-confirmation frontier.  A one-pixel same-class
+seed search and a conservative unknown-hole rule recovered little coverage and
+added work.  The geometry-conditioned fragment rule is the first tested variant
+that improves both coverage and normal fast+slow runtime.
 
 ### DG-010 — predicted patch lookup samples only one rounded pixel
 
@@ -441,6 +469,26 @@ Therefore DG-024 is not sufficient evidence that the compatibility mask can be
 removed; subsequent work should focus on DG-009 class-map/component continuity
 and flood-fill completeness.
 
+DG-025 addresses one measured part of that gap.  The table below is an
+apples-to-apples before/after run on the same machine, using the accepted DG-024
+rounding baseline, Dufay, fixed-lens geometry, gamma 1, color optimization,
+fast+slow flood fill, no mesh, five threads, and explicit detector mask 0/0.
+
+| input | rule | screen area | patches | flood ms | detector ms | wall ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Tile05, interior | DG-024 baseline | 86.67% | 3,317,587 | 20,404.5 | 24,433.5 | 31,952.6 |
+| Tile05, interior | DG-025 fragments | 88.76% | 3,398,805 | 18,006.8 | 21,654.9 | 28,874.2 |
+| Tile01, corner | DG-024 baseline | 93.36% | 2,040,129 | 18,468.2 | 22,074.3 | 31,376.3 |
+| Tile01, corner | DG-025 fragments | 93.52% | 2,043,553 | 16,208.7 | 19,524.2 | 27,099.5 |
+
+Thus Tile05 gains 2.09 percentage points of screen coverage while flood time
+falls 11.7%; Tile01 preserves the real raster-free border while flood time falls
+12.2%.  Historical 2/3 runs remain effectively unchanged: Tile05 measures
+98.70% screen coverage and 3,778,087 patches, while Tile01 measures 97.28% and
+2,140,569 patches.  The compatibility mask is still retained because DG-025 does
+not recover the remaining Tile05 coverage gap or the strip/unknown-pixel part of
+DG-009.
+
 The corpus should contain, for every available screen family:
 
 - sharp scans that currently succeed, including rotations and perspective;
@@ -479,8 +527,8 @@ heuristic becomes the default:
 
 1. Expand DG-019 across Batch 08 with `testsuite/benchmark-screen-detection.py`,
    including representative negative/no-screen images and repeated timing runs.
-2. Investigate DG-009/class-map continuity on scans such as NGS00428 Tile05,
-   where 0 / 0 finds a seed immediately but flood fill covers only 86.67%.
+2. Continue DG-009 on the remaining unknown-pixel and strip-fragmentation gap;
+   DG-025 handles only geometry-consistent small square-patch fragments.
 3. Revisit the bounded neighborhood search in DG-010 only when a real scan
    still fails at a correctly rounded predicted center.
 4. Introduce robust partial-grid scoring (DG-011) if isolated missing elements
