@@ -17,28 +17,39 @@ CoordinateTransformer::CoordinateTransformer(
     /* scan_rotation, scan_mirror and scan_crop are presentation properties of
        the digitized scan.  A final-coordinate canvas already has its own
        continuous orientation in scr_to_img_parameters.  */
-    if (coordinates == colorscreen::render_scan_coordinates) {
+    auto useScanPresentation = [&]() {
         m_mirror = params.scan_mirror;
         m_rotation = (int)params.scan_rotation % 4;
-        if (m_rotation < 0) m_rotation += 4;
-    }
-    if (coordinates == colorscreen::render_final_coordinates && scan &&
-        scrToImg && scrToImg->type != colorscreen::Random && !scan->stitch) {
-        m_map = std::make_shared<colorscreen::scr_to_img>();
-        if (m_map->set_parameters(*scrToImg, *scan)) {
-            m_finalRange = colorscreen::int_image_area(
-                m_map->get_final_range(m_scanWidth, m_scanHeight));
-            m_finalAvailable = !m_finalRange.empty_p();
+        if (m_rotation < 0)
+            m_rotation += 4;
+    };
+
+    if (coordinates == colorscreen::render_scan_coordinates) {
+        useScanPresentation();
+    } else if (coordinates == colorscreen::render_final_coordinates && scan) {
+        if (scan->stitch) {
+            /* Stitched image_data already exposes the common final viewport as
+               its only meaningful canvas. */
+            m_finalAvailable = true;
+        } else if (scrToImg && scrToImg->type != colorscreen::Random) {
+            m_map = std::make_shared<colorscreen::scr_to_img>();
+            if (m_map->set_parameters(*scrToImg, *scan)) {
+                m_finalRange = colorscreen::int_image_area(
+                    m_map->get_final_range(m_scanWidth, m_scanHeight));
+                m_finalAvailable = !m_finalRange.empty_p();
+            }
         }
+
+        /* A failed final-coordinate request degrades exactly to an ordinary
+           scan view, including its presentation orientation. */
         if (!m_finalAvailable) {
             m_map.reset();
             m_coordinates = colorscreen::render_scan_coordinates;
+            useScanPresentation();
         }
-    } else if (coordinates == colorscreen::render_final_coordinates && scan &&
-               scan->stitch) {
-        /* Stitched image_data already exposes the common final viewport as its
-           only meaningful canvas. */
-        m_finalAvailable = true;
+    } else if (coordinates == colorscreen::render_final_coordinates) {
+        m_coordinates = colorscreen::render_scan_coordinates;
+        useScanPresentation();
     }
 }
 
