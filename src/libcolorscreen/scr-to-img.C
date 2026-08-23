@@ -191,7 +191,15 @@ scr_to_img::update_scr_to_final_parameters (coord_t final_ratio,
 #endif
     }
   rotate += m_rotation_adjustment;
-  m_scr_to_final_matrix = rotation_2x2matrix (rotate) * fm;
+
+  /* FINAL_MIRROR belongs to the final output geometry, not to scan
+     presentation.  Reflect the final X axis before applying the continuous
+     final rotation; get_final_range() then supplies the translation needed to
+     keep the resulting canvas zero based.  */
+  matrix2x2<coord_t> final_mirror_matrix (
+      m_param.final_mirror ? (coord_t)-1 : (coord_t)1, 0, 0, 1);
+  m_scr_to_final_matrix
+      = rotation_2x2matrix (rotate) * final_mirror_matrix * fm;
   m_final_to_scr_matrix = m_scr_to_final_matrix.invert ();
 }
 /* Initialize matrices from mapping parameters.  */

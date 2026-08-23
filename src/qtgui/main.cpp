@@ -2,6 +2,7 @@
 #include "MainWindow.h"
 #include "ImageViewWindow.h"
 #include "ImageWidget.h"
+#include "CoordinateTransformer.h"
 #include "WorkspaceWindow.h"
 #include "progress-info.h"
 
@@ -670,8 +671,45 @@ int main(int argc, char *argv[]) {
            (colorscreen::coord_t)sourceScan->height / 2};
       coordinateState.scrToImg.coordinate1 = {8, 0};
       coordinateState.scrToImg.coordinate2 = {0, 8};
+      coordinateState.scrToImg.final_rotation = 12.5;
+      coordinateState.scrToImg.final_mirror = true;
       source->applySharedDocumentState(coordinateState,
                                        QStringLiteral("Smoke screen coordinates"));
+
+      auto basePresentation = coordinateState.rparams;
+      basePresentation.scan_rotation = 0;
+      basePresentation.scan_mirror = false;
+      basePresentation.scan_crop.set = false;
+      CoordinateTransformer finalBase(sourceScan.get(), basePresentation,
+                                      &coordinateState.scrToImg,
+                                      colorscreen::render_final_coordinates);
+      auto changedPresentation = basePresentation;
+      changedPresentation.scan_rotation = 1;
+      changedPresentation.scan_mirror = true;
+      changedPresentation.scan_crop.set = true;
+      changedPresentation.scan_crop.x = sourceScan->width / 4;
+      changedPresentation.scan_crop.y = sourceScan->height / 4;
+      changedPresentation.scan_crop.width = sourceScan->width / 2;
+      changedPresentation.scan_crop.height = sourceScan->height / 2;
+      CoordinateTransformer finalChanged(sourceScan.get(), changedPresentation,
+                                         &coordinateState.scrToImg,
+                                         colorscreen::render_final_coordinates);
+      const auto baseRange = finalBase.getRenderCrop();
+      const auto changedRange = finalChanged.getRenderCrop();
+      const colorscreen::point_t probe = coordinateState.scrToImg.center;
+      const auto baseProbe = finalBase.scanToTransformedCrop(probe);
+      const auto changedProbe = finalChanged.scanToTransformedCrop(probe);
+      if (finalBase.getTransformedCropSize() !=
+              finalChanged.getTransformedCropSize() ||
+          baseRange.x != changedRange.x || baseRange.y != changedRange.y ||
+          baseRange.width != changedRange.width ||
+          baseRange.height != changedRange.height ||
+          std::abs(baseProbe.x - changedProbe.x) > 1e-9 ||
+          std::abs(baseProbe.y - changedProbe.y) > 1e-9) {
+        qCritical() << "Scan presentation leaked into final coordinates";
+        app.exit(14);
+        return;
+      }
 
       colorscreen::render_type_parameters apiRender;
       apiRender.type = colorscreen::render_type_original;

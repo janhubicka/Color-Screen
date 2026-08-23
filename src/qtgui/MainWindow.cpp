@@ -1255,8 +1255,27 @@ void MainWindow::createToolbar() {
               updateCoordinateSpaceControls();
               return;
             }
+            updateCoordinateSpaceControls();
             if (m_navigationView)
               m_navigationView->setCoordinateSpace(m_imageWidget->coordinateSpace());
+          });
+
+  m_finalRotationLabelAction = m_toolbar->addWidget(
+      new QLabel(tr("Final rotation: "), m_toolbar));
+  m_finalRotationSpinBox = new QDoubleSpinBox(m_toolbar);
+  m_finalRotationSpinBox->setObjectName(QStringLiteral("FinalRotationSpin"));
+  m_finalRotationSpinBox->setRange(-180.0, 180.0);
+  m_finalRotationSpinBox->setDecimals(2);
+  m_finalRotationSpinBox->setSingleStep(0.1);
+  m_finalRotationSpinBox->setSuffix(QStringLiteral("°"));
+  m_finalRotationSpinBox->setToolTip(
+      tr("Continuous rotation of the final-coordinate image; saved in the parameter file"));
+  m_finalRotationSpinAction = m_toolbar->addWidget(m_finalRotationSpinBox);
+  connect(m_finalRotationSpinBox, &QDoubleSpinBox::valueChanged, this,
+          [this](double degrees) {
+            if (m_imageWidget && m_imageWidget->coordinateSpace() ==
+                                     colorscreen::render_final_coordinates)
+              setDocumentFinalRotation(degrees);
           });
   updateCoordinateSpaceControls();
 
@@ -1280,18 +1299,18 @@ void MainWindow::createToolbar() {
   m_toolbar->addAction(m_zoom100Action);
   m_toolbar->addAction(m_zoomFitAction);
 
-  // Rotation
-  QAction *rotLeftAction = m_toolbar->addAction(
-      getSymbolicIcon(":/icons/rotate-left.svg"), "Rotate Left");
-  connect(rotLeftAction, &QAction::triggered, this, &MainWindow::rotateLeft);
-
-  QAction *rotRightAction = m_toolbar->addAction(
-      getSymbolicIcon(":/icons/rotate-right.svg"), "Rotate Right");
-  connect(rotRightAction, &QAction::triggered, this, &MainWindow::rotateRight);
-
-  if (m_mirrorAction) {
-    m_toolbar->addAction(m_mirrorAction);
+  // Scan quarter-turn actions are shared with the View menu.  Final mode
+  // hides them and exposes the continuous degree control above instead.
+  if (m_rotateLeftAction) {
+    m_rotateLeftAction->setIcon(getSymbolicIcon(":/icons/rotate-left.svg"));
+    m_toolbar->addAction(m_rotateLeftAction);
   }
+  if (m_rotateRightAction) {
+    m_rotateRightAction->setIcon(getSymbolicIcon(":/icons/rotate-right.svg"));
+    m_toolbar->addAction(m_rotateRightAction);
+  }
+  if (m_mirrorAction)
+    m_toolbar->addAction(m_mirrorAction);
 
   // === REGISTRATION GROUP ===
   QAction *regSeparator = m_toolbar->addSeparator();
@@ -1444,6 +1463,33 @@ void MainWindow::updateCoordinateSpaceControls() {
     m_coordinateComboBox->setCurrentIndex(index);
   m_coordinateComboBox->setEnabled(m_coordinateComboBox->count() > 1);
   m_coordinateComboBox->blockSignals(false);
+
+  const bool finalCoordinates =
+      current == colorscreen::render_final_coordinates;
+  if (m_rotateLeftAction)
+    m_rotateLeftAction->setVisible(!finalCoordinates);
+  if (m_rotateRightAction)
+    m_rotateRightAction->setVisible(!finalCoordinates);
+  if (m_finalRotationLabelAction)
+    m_finalRotationLabelAction->setVisible(finalCoordinates);
+  if (m_finalRotationSpinAction)
+    m_finalRotationSpinAction->setVisible(finalCoordinates);
+  if (m_finalRotationSpinBox) {
+    m_finalRotationSpinBox->blockSignals(true);
+    m_finalRotationSpinBox->setValue(m_scrToImgParams.final_rotation);
+    m_finalRotationSpinBox->blockSignals(false);
+  }
+  if (m_mirrorAction) {
+    m_mirrorAction->blockSignals(true);
+    m_mirrorAction->setChecked(finalCoordinates ? m_scrToImgParams.final_mirror
+                                                : m_rparams.scan_mirror);
+    m_mirrorAction->blockSignals(false);
+    m_mirrorAction->setText(finalCoordinates ? tr("Mirror Final Image")
+                                             : tr("Mirror Horizontally"));
+    m_mirrorAction->setToolTip(finalCoordinates
+        ? tr("Mirror the final-coordinate image; saved in the parameter file")
+        : tr("Mirror the digital scan horizontally"));
+  }
 }
 
 /** Create keyboard shortcuts 1–0 mapped to the first 10 render modes.
@@ -1513,11 +1559,11 @@ void MainWindow::rotateRight() {
 void MainWindow::onMirrorHorizontally(bool checked) {
   if (!m_scan)
     return;
-
-  ParameterState newState = getCurrentState();
-  newState.rparams.scan_mirror = checked;
-
-  changeParameters(newState, "Mirror Horizontally");
+  if (m_imageWidget && m_imageWidget->coordinateSpace() ==
+                           colorscreen::render_final_coordinates)
+    setDocumentFinalMirror(checked);
+  else
+    setDocumentMirror(checked);
 }
 
 /** Toggle fullscreen mode for the ImageWidget.
@@ -3161,9 +3207,14 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
     if (panel)
       panel->updateUI();
   }
-  // Sync mirror action
+  // Sync the shared mirror action to the coordinate space of the primary view.
   if (m_mirrorAction) {
-    m_mirrorAction->setChecked(state.rparams.scan_mirror);
+    const bool finalCoordinates = m_imageWidget &&
+        m_imageWidget->coordinateSpace() == colorscreen::render_final_coordinates;
+    m_mirrorAction->blockSignals(true);
+    m_mirrorAction->setChecked(finalCoordinates ? state.scrToImg.final_mirror
+                                                : state.rparams.scan_mirror);
+    m_mirrorAction->blockSignals(false);
   }
 
   // Sync nonlinear checkbox in GeometryPanel
@@ -3209,9 +3260,37 @@ void MainWindow::rotateDocumentLeft() { rotateLeft(); }
 /** Rotate the shared document right on behalf of a secondary view. */
 void MainWindow::rotateDocumentRight() { rotateRight(); }
 
-/** Change shared document mirroring on behalf of a secondary view. */
+/** Change shared scan mirroring on behalf of a secondary view. */
 void MainWindow::setDocumentMirror(bool checked) {
-  onMirrorHorizontally(checked);
+  if (!m_scan)
+    return;
+  ParameterState newState = getCurrentState();
+  if (newState.rparams.scan_mirror == checked)
+    return;
+  newState.rparams.scan_mirror = checked;
+  changeParameters(newState, "Mirror Horizontally");
+}
+
+/** Change continuous final rotation on behalf of an ordinary view. */
+void MainWindow::setDocumentFinalRotation(double degrees) {
+  if (!m_scan)
+    return;
+  ParameterState newState = getCurrentState();
+  if (newState.scrToImg.final_rotation == degrees)
+    return;
+  newState.scrToImg.final_rotation = degrees;
+  changeParameters(newState, "Set final rotation");
+}
+
+/** Change final-coordinate mirroring on behalf of an ordinary view. */
+void MainWindow::setDocumentFinalMirror(bool checked) {
+  if (!m_scan)
+    return;
+  ParameterState newState = getCurrentState();
+  if (newState.scrToImg.final_mirror == checked)
+    return;
+  newState.scrToImg.final_mirror = checked;
+  changeParameters(newState, "Mirror final image");
 }
 
 /** Create a snapshot of the current application parameters.

@@ -11,22 +11,24 @@ CoordinateTransformer::CoordinateTransformer(
         m_scanWidth = scan->width;
         m_scanHeight = scan->height;
     }
-    m_mirror = params.scan_mirror;
-    m_rotation = (int)params.scan_rotation % 4;
-    if (m_rotation < 0) m_rotation += 4;
     m_scanCrop = params.get_scan_crop(m_scanWidth, m_scanHeight);
-
     m_coordinates = coordinates;
+
+    /* scan_rotation, scan_mirror and scan_crop are presentation properties of
+       the digitized scan.  A final-coordinate canvas already has its own
+       continuous orientation in scr_to_img_parameters.  */
+    if (coordinates == colorscreen::render_scan_coordinates) {
+        m_mirror = params.scan_mirror;
+        m_rotation = (int)params.scan_rotation % 4;
+        if (m_rotation < 0) m_rotation += 4;
+    }
     if (coordinates == colorscreen::render_final_coordinates && scan &&
         scrToImg && scrToImg->type != colorscreen::Random && !scan->stitch) {
         m_map = std::make_shared<colorscreen::scr_to_img>();
         if (m_map->set_parameters(*scrToImg, *scan)) {
             m_finalRange = colorscreen::int_image_area(
                 m_map->get_final_range(m_scanWidth, m_scanHeight));
-            m_finalCropRange = colorscreen::int_image_area(
-                m_map->get_final_range(colorscreen::image_area(m_scanCrop)));
-            m_finalAvailable = !m_finalRange.empty_p() &&
-                               !m_finalCropRange.empty_p();
+            m_finalAvailable = !m_finalRange.empty_p();
         }
         if (!m_finalAvailable) {
             m_map.reset();
@@ -68,11 +70,10 @@ QSize CoordinateTransformer::getTransformedSize() const {
 colorscreen::int_image_area CoordinateTransformer::getRenderCrop() const {
     if (m_coordinates == colorscreen::render_final_coordinates) {
         if (m_map)
-            return colorscreen::int_image_area(
-                m_finalCropRange.x - m_finalRange.x,
-                m_finalCropRange.y - m_finalRange.y,
-                m_finalCropRange.width, m_finalCropRange.height);
-        return m_scanCrop;
+            return colorscreen::int_image_area(0, 0, m_finalRange.width,
+                                               m_finalRange.height);
+        /* Stitched images already expose their final viewport as image_data. */
+        return colorscreen::int_image_area(0, 0, m_scanWidth, m_scanHeight);
     }
     return m_scanCrop;
 }

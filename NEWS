@@ -25,7 +25,11 @@ Changes in version 1.1
      render mode, Color/IR, zoom and pan remain independent. Ordinary image
      views can also switch independently between raw Scan coordinates and the
      geometrically corrected Screen coordinate canvas (called final coordinates
-     by libcolorscreen). Views can still be detached when needed, with the
+     by libcolorscreen). Final-coordinate views use that plane directly and do
+     not reapply scan crop, 90-degree rotation, or scan mirroring. Final
+     orientation instead has a smooth degree-valued rotation and a persistent
+     final mirror stored with the screen geometry. Views can still be detached
+     when needed, with the
      document inspector moving to the active detached view rather than
      duplicating document/undo state.
    - The Sharpness panel can open a separate slanted-edge reference scan while

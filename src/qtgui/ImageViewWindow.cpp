@@ -14,6 +14,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDockWidget>
+#include <QDoubleSpinBox>
 #include <QEvent>
 #include <QFileInfo>
 #include <QFutureWatcher>
@@ -154,6 +155,25 @@ void ImageViewWindow::setupUi() {
     m_toolbar->addWidget(m_coordinateComboBox);
     connect(m_coordinateComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &ImageViewWindow::onCoordinateChanged);
+
+    m_finalRotationLabelAction = m_toolbar->addWidget(
+        new QLabel(tr("Final rotation: "), m_toolbar));
+    m_finalRotationSpinBox = new QDoubleSpinBox(m_toolbar);
+    m_finalRotationSpinBox->setObjectName(QStringLiteral("FinalRotationSpin"));
+    m_finalRotationSpinBox->setRange(-180.0, 180.0);
+    m_finalRotationSpinBox->setDecimals(2);
+    m_finalRotationSpinBox->setSingleStep(0.1);
+    m_finalRotationSpinBox->setSuffix(QStringLiteral("°"));
+    m_finalRotationSpinBox->setToolTip(
+        tr("Continuous rotation of the final-coordinate image; saved in the parameter file"));
+    m_finalRotationSpinAction = m_toolbar->addWidget(m_finalRotationSpinBox);
+    connect(m_finalRotationSpinBox, &QDoubleSpinBox::valueChanged, this,
+            [this](double degrees) {
+              if (m_document && m_imageWidget &&
+                  m_imageWidget->coordinateSpace() ==
+                      colorscreen::render_final_coordinates)
+                m_document->setDocumentFinalRotation(degrees);
+            });
   }
 
   m_toolbar->addSeparator();
@@ -185,21 +205,19 @@ void ImageViewWindow::setupUi() {
   fit->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
   connect(fit, &QAction::triggered, m_imageWidget, &ImageWidget::smoothFitToView);
 
-  QAction *rotateLeft = nullptr;
-  QAction *rotateRight = nullptr;
   if (!m_slantedEdgeReference) {
     m_toolbar->addSeparator();
-    rotateLeft = m_toolbar->addAction(viewIcon(":/icons/rotate-left.svg"),
-                                      tr("Rotate Left"));
-    rotateLeft->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
-    connect(rotateLeft, &QAction::triggered, this, [this]() {
+    m_rotateLeftAction = m_toolbar->addAction(viewIcon(":/icons/rotate-left.svg"),
+                                              tr("Rotate Left"));
+    m_rotateLeftAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
+    connect(m_rotateLeftAction, &QAction::triggered, this, [this]() {
       if (m_document)
         m_document->rotateDocumentLeft();
     });
-    rotateRight = m_toolbar->addAction(viewIcon(":/icons/rotate-right.svg"),
-                                       tr("Rotate Right"));
-    rotateRight->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
-    connect(rotateRight, &QAction::triggered, this, [this]() {
+    m_rotateRightAction = m_toolbar->addAction(viewIcon(":/icons/rotate-right.svg"),
+                                               tr("Rotate Right"));
+    m_rotateRightAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
+    connect(m_rotateRightAction, &QAction::triggered, this, [this]() {
       if (m_document)
         m_document->rotateDocumentRight();
     });
@@ -207,7 +225,12 @@ void ImageViewWindow::setupUi() {
                                           tr("Mirror Horizontally"));
     m_mirrorAction->setCheckable(true);
     connect(m_mirrorAction, &QAction::toggled, this, [this](bool checked) {
-      if (m_document)
+      if (!m_document || !m_imageWidget)
+        return;
+      if (m_imageWidget->coordinateSpace() ==
+          colorscreen::render_final_coordinates)
+        m_document->setDocumentFinalMirror(checked);
+      else
         m_document->setDocumentMirror(checked);
     });
   }
@@ -232,8 +255,8 @@ void ImageViewWindow::setupUi() {
   viewMenu->addAction(fit);
   if (!m_slantedEdgeReference) {
     viewMenu->addSeparator();
-    viewMenu->addAction(rotateLeft);
-    viewMenu->addAction(rotateRight);
+    viewMenu->addAction(m_rotateLeftAction);
+    viewMenu->addAction(m_rotateRightAction);
     viewMenu->addAction(m_mirrorAction);
   }
 
@@ -533,9 +556,29 @@ void ImageViewWindow::updateViewControls() {
     m_coordinateComboBox->setEnabled(m_coordinateComboBox->count() > 1);
   }
 
+  const bool finalCoordinates = m_imageWidget &&
+      m_imageWidget->coordinateSpace() == colorscreen::render_final_coordinates;
+  if (m_rotateLeftAction)
+    m_rotateLeftAction->setVisible(!finalCoordinates);
+  if (m_rotateRightAction)
+    m_rotateRightAction->setVisible(!finalCoordinates);
+  if (m_finalRotationLabelAction)
+    m_finalRotationLabelAction->setVisible(finalCoordinates);
+  if (m_finalRotationSpinAction)
+    m_finalRotationSpinAction->setVisible(finalCoordinates);
+  if (m_finalRotationSpinBox) {
+    const QSignalBlocker blocker(m_finalRotationSpinBox);
+    m_finalRotationSpinBox->setValue(m_scrToImgParams.final_rotation);
+  }
   if (m_mirrorAction) {
     const QSignalBlocker blocker(m_mirrorAction);
-    m_mirrorAction->setChecked(m_rparams.scan_mirror);
+    m_mirrorAction->setChecked(finalCoordinates ? m_scrToImgParams.final_mirror
+                                                : m_rparams.scan_mirror);
+    m_mirrorAction->setText(finalCoordinates ? tr("Mirror Final Image")
+                                             : tr("Mirror Horizontally"));
+    m_mirrorAction->setToolTip(finalCoordinates
+        ? tr("Mirror the final-coordinate image; saved in the parameter file")
+        : tr("Mirror the digital scan horizontally"));
   }
 }
 
@@ -585,8 +628,8 @@ void ImageViewWindow::onCoordinateChanged(int index) {
     return;
   const auto coordinates = static_cast<colorscreen::render_coordinate_space>(
       m_coordinateComboBox->itemData(index).toInt());
-  if (!m_imageWidget->setCoordinateSpace(coordinates))
-    updateViewControls();
+  m_imageWidget->setCoordinateSpace(coordinates);
+  updateViewControls();
 }
 
 colorscreen::render_coordinate_space ImageViewWindow::coordinateSpace() const {

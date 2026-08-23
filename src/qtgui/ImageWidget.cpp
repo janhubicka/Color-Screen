@@ -381,17 +381,22 @@ void ImageWidget::updateParameters(
     m_lastScrToImg = *scrToImg;
   }
 
-  // Auto-fit if crop/orientation changed, or if final-coordinate geometry itself
-  // changed.  In scan mode registration changes do not alter the view canvas.
-  if (rparams && (!(rparams->scan_crop == m_lastScanCrop) ||
-                   rparams->scan_rotation != m_lastRotation ||
-                   rparams->scan_mirror != m_lastMirror ||
-                   (mappingChanged && m_coordinateSpace ==
-                       colorscreen::render_final_coordinates))) {
+  // Scan presentation changes alter only scan-coordinate views.  Final views
+  // are laid out solely by scr_to_img final geometry (including final rotation
+  // and mirroring), so scan crop/rotation/mirror must not move that canvas.
+  if (rparams) {
+    const bool scanPresentationChanged =
+        !(rparams->scan_crop == m_lastScanCrop) ||
+        rparams->scan_rotation != m_lastRotation ||
+        rparams->scan_mirror != m_lastMirror;
     m_lastScanCrop = rparams->scan_crop;
     m_lastRotation = rparams->scan_rotation;
     m_lastMirror = rparams->scan_mirror;
-    fitToView();
+    if ((m_coordinateSpace == colorscreen::render_scan_coordinates &&
+         scanPresentationChanged) ||
+        (m_coordinateSpace == colorscreen::render_final_coordinates &&
+         mappingChanged))
+      fitToView();
   }
 
   // Request Re-render

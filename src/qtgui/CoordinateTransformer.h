@@ -10,10 +10,11 @@
 
 /** Map between scan coordinates and the view's current presentation canvas.
 
-    The presentation canvas may be backed either by raw scan coordinates or by
-    libcolorscreen final coordinates.  Crop, 90-degree rotation and mirroring
-    remain presentation transforms layered on top of either base coordinate
-    system.  Public interaction methods always convert back to scan coordinates. */
+    Scan-coordinate views layer scan crop, quarter-turn rotation and scan
+    mirroring over raw pixels.  Final-coordinate views use libcolorscreen's
+    final plane directly: continuous final_rotation/final_mirror are already
+    part of that mapping, so scan presentation transforms must not be applied
+    again.  Public interaction methods always convert back to scan coordinates. */
 class CoordinateTransformer {
 public:
     CoordinateTransformer(
@@ -67,5 +68,4 @@ private:
     bool m_finalAvailable = false;
     std::shared_ptr<colorscreen::scr_to_img> m_map;
     colorscreen::int_image_area m_finalRange;
-    colorscreen::int_image_area m_finalCropRange;
 };

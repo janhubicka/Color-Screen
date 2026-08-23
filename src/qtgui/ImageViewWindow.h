@@ -30,6 +30,8 @@ class QToolBar;
     state (render mode, IR/RGB choice, zoom, and pan) independent.  By default
     ColorScreenApplication embeds it as another QMdiArea tab; it may also be
     detached as an ordinary top-level QMainWindow. */
+class QDoubleSpinBox;
+
 class ImageViewWindow final : public QMainWindow {
   Q_OBJECT
 
@@ -155,7 +157,12 @@ private:
   QToolBar *m_toolbar = nullptr;
   QComboBox *m_modeComboBox = nullptr;
   QComboBox *m_coordinateComboBox = nullptr;
+  QDoubleSpinBox *m_finalRotationSpinBox = nullptr;
+  QAction *m_finalRotationLabelAction = nullptr;
+  QAction *m_finalRotationSpinAction = nullptr;
   QCheckBox *m_colorCheckBox = nullptr;
+  QAction *m_rotateLeftAction = nullptr;
+  QAction *m_rotateRightAction = nullptr;
   QAction *m_mirrorAction = nullptr;
   QWidget *m_referenceInspector = nullptr;
   NavigationView *m_navigationView = nullptr;

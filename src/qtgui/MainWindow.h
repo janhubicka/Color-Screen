@@ -29,6 +29,7 @@ class QDockWidget; // Added
 class QToolBar;    // Added
 class QComboBox;   // Added
 class QCheckBox;   // Added
+class QDoubleSpinBox;
 class QVBoxLayout; // Added for Linearization tab
 class QLabel;
 class QProgressBar;
@@ -134,8 +135,14 @@ public:
   /** Rotate the shared document right from any attached view. */
   void rotateDocumentRight();
 
-  /** Set horizontal mirroring for the shared document from any view. */
+  /** Set horizontal scan mirroring for the shared document from any view. */
   void setDocumentMirror(bool checked);
+
+  /** Set continuous final-plane rotation from any ordinary view. */
+  void setDocumentFinalRotation(double degrees);
+
+  /** Set horizontal final-plane mirroring from any ordinary view. */
+  void setDocumentFinalMirror(bool checked);
 
   /** Restore this document from its per-window recovery directory. */
   bool restoreRecoveryState();
@@ -444,6 +451,9 @@ private:
   QToolBar *m_toolbar;        // New toolbar
   QComboBox *m_modeComboBox;  // Mode selector
   QComboBox *m_coordinateComboBox = nullptr; // Scan/final canvas selector
+  QDoubleSpinBox *m_finalRotationSpinBox = nullptr;
+  QAction *m_finalRotationLabelAction = nullptr;
+  QAction *m_finalRotationSpinAction = nullptr;
   QCheckBox *m_colorCheckBox; // Color checkbox (IR/RGB switch)
 
   // Core Data
