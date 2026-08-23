@@ -35,20 +35,48 @@ jobs:
           base64 --decode /tmp/qt-focus-area.patch.gz.b64 | gzip -d > /tmp/qt-focus-area.patch
           echo "${PATCH_SHA256}  /tmp/qt-focus-area.patch" | sha256sum -c -
 
-          # The transport patch was generated before the library-side focus
-          # regression landed on main, where focus-analysis-unittests.C was a
-          # new file.  Current main now tracks the earlier version of that
-          # file, while the transported version contains the additional true
-          # held-out/fixed-primary checks.  Remove only that already-landed
-          # index entry so the new-file hunk can install the complete reviewed
-          # version; the final name-set check below still requires it to be a
-          # modification relative to current main.
-          if git ls-files --error-unmatch src/libcolorscreen/focus-analysis-unittests.C >/dev/null 2>&1; then
-            git rm --cached --quiet src/libcolorscreen/focus-analysis-unittests.C
-            rm -f src/libcolorscreen/focus-analysis-unittests.C
-          fi
+          # Most of the reviewed patch rebases cleanly with git-apply's native
+          # three-way mode.  focus-analysis-unittests.C is the one deliberate
+          # overlap: the transport patch was prepared while the earlier
+          # library-side version of that regression was still on a separate
+          # branch, and that version has since landed on main.  Merge that file
+          # explicitly from the blob recorded in the patch so neither the
+          # landed tests nor the held-out/fixed-primary additions are lost.
+          TARGET=src/libcolorscreen/focus-analysis-unittests.C
+          cp "$TARGET" /tmp/focus-tests-current.C
+          git apply --3way --exclude="$TARGET" /tmp/qt-focus-area.patch
 
-          git apply --3way /tmp/qt-focus-area.patch
+          old_blob=$(python3 - "$TARGET" /tmp/qt-focus-area.patch <<'PY'
+          import pathlib
+          import sys
+
+          target = sys.argv[1]
+          lines = pathlib.Path(sys.argv[2]).read_text().splitlines()
+          header = f"diff --git a/{target} b/{target}"
+          for i, line in enumerate(lines):
+              if line != header:
+                  continue
+              for candidate in lines[i + 1:i + 10]:
+                  if candidate.startswith("index "):
+                      print(candidate.split()[1].split("..", 1)[0])
+                      raise SystemExit(0)
+          raise SystemExit(f"missing index line for {target}")
+          PY
+          )
+          old_blob=$(git rev-parse "${old_blob}^{blob}")
+          git cat-file blob "$old_blob" > /tmp/focus-tests-base.C
+
+          cp /tmp/focus-tests-base.C "$TARGET"
+          git update-index --cacheinfo 100644 "$old_blob" "$TARGET"
+          git apply --index --include="$TARGET" /tmp/qt-focus-area.patch
+          cp "$TARGET" /tmp/focus-tests-reviewed.C
+
+          git show "HEAD:$TARGET" > "$TARGET"
+          current_blob=$(git rev-parse "HEAD:$TARGET")
+          git update-index --cacheinfo 100644 "$current_blob" "$TARGET"
+          git merge-file "$TARGET" /tmp/focus-tests-base.C /tmp/focus-tests-reviewed.C
+          git add "$TARGET"
+
           git show "origin/agent/qt-focus-publisher-20260823:agent/qt-focus-followup.patch" > /tmp/qt-focus-followup.patch
           echo "${FOLLOWUP_SHA256}  /tmp/qt-focus-followup.patch" | sha256sum -c -
           git apply /tmp/qt-focus-followup.patch
