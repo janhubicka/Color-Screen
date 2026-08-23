@@ -1,6 +1,7 @@
 #include "ColorScreenApplication.h"
 #include "MainWindow.h"
 #include "ImageViewWindow.h"
+#include "ImageWidget.h"
 #include "WorkspaceWindow.h"
 #include "progress-info.h"
 
@@ -658,6 +659,43 @@ int main(int argc, char *argv[]) {
       MainWindow *source = documents.front();
       const auto sourceScan = source->sharedImageData();
       const auto sourceType = source->viewRenderTypeParameters().type;
+
+      // Install a simple regular screen mapping so this smoke path exercises
+      // both the public final-coordinate tile API and the GUI selector without
+      // depending on a sidecar parameter file.
+      ParameterState coordinateState = source->documentStateSnapshot();
+      coordinateState.scrToImg.type = colorscreen::Dufay;
+      coordinateState.scrToImg.center =
+          {(colorscreen::coord_t)sourceScan->width / 2,
+           (colorscreen::coord_t)sourceScan->height / 2};
+      coordinateState.scrToImg.coordinate1 = {8, 0};
+      coordinateState.scrToImg.coordinate2 = {0, 8};
+      source->applySharedDocumentState(coordinateState,
+                                       QStringLiteral("Smoke screen coordinates"));
+
+      colorscreen::render_type_parameters apiRender;
+      apiRender.type = colorscreen::render_type_original;
+      apiRender.color = sourceScan->has_rgb();
+      colorscreen::tile_parameters apiTile;
+      std::vector<unsigned char> apiPixels(8 * 8 * 3);
+      apiTile.pixels = apiPixels.data();
+      apiTile.rowstride = 8 * 3;
+      apiTile.pixelbytes = 3;
+      apiTile.width = 8;
+      apiTile.height = 8;
+      apiTile.pos = {0, 0};
+      apiTile.step = 1;
+      auto apiRparams = coordinateState.rparams;
+      auto apiScrToImg = coordinateState.scrToImg;
+      auto apiDetect = coordinateState.detect;
+      if (!colorscreen::render_tile(*sourceScan, apiScrToImg, apiDetect,
+                                    apiRparams, apiRender, apiTile,
+                                    colorscreen::render_final_coordinates,
+                                    nullptr)) {
+        qCritical() << "Public render_tile final-coordinate API failed";
+        app.exit(14);
+        return;
+      }
       const int previousTabs = app.tabCount();
       ImageViewWindow *view = app.createViewWindow(source);
       WorkspaceWindow *workspace = app.workspaceWindow();
@@ -722,6 +760,18 @@ int main(int argc, char *argv[]) {
       }
       if (!hasIconOnlyZoom || !hasIconOnlyRotation) {
         qCritical() << "New View toolbar does not use the standard image-view icons";
+        app.exit(14);
+        return;
+      }
+
+      if (!source->primaryImageWidget() ||
+          source->primaryImageWidget()->coordinateSpace() !=
+              colorscreen::render_scan_coordinates ||
+          !view->setCoordinateSpace(colorscreen::render_final_coordinates) ||
+          view->coordinateSpace() != colorscreen::render_final_coordinates ||
+          source->primaryImageWidget()->coordinateSpace() !=
+              colorscreen::render_scan_coordinates) {
+        qCritical() << "New View Scan/Screen coordinate selection is not independent";
         app.exit(14);
         return;
       }
@@ -808,7 +858,8 @@ int main(int argc, char *argv[]) {
 
         if (!reference->setRenderType(colorscreen::render_type_original) ||
             !reference->setRenderType(colorscreen::render_type_image_layer) ||
-            reference->setRenderType(colorscreen::render_type_interpolated)) {
+            reference->setRenderType(colorscreen::render_type_interpolated) ||
+            reference->setCoordinateSpace(colorscreen::render_final_coordinates)) {
           qCritical() << "Slanted-edge reference exposes unexpected render modes";
           app.exit(15);
           return;

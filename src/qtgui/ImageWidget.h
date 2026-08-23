@@ -102,6 +102,13 @@ public:
    */
   void setShowProfileSpots(bool show);
 
+  /** Select the canvas coordinate space used for rendering this view.
+      Interaction APIs continue to consume/return scan coordinates. */
+  bool setCoordinateSpace(colorscreen::render_coordinate_space coordinates);
+  colorscreen::render_coordinate_space coordinateSpace() const {
+    return m_coordinateSpace;
+  }
+
   /**
    * @brief Clears the current selection.
    */
@@ -269,6 +276,8 @@ signals:
   void pointsChanged();
   void exitFullscreenRequested();
   void profileSpotRemoveRequested(int index);
+  /** Emitted when the view-local Scan/Screen canvas choice changes. */
+  void viewCoordinateSpaceChanged(int coordinateSpace);
 
 private:
   // Drawing helpers to keep paintEvent clean
@@ -376,6 +385,8 @@ private:
 
   bool m_showRegistrationPoints = false;
   bool m_showProfileSpots = true;
+  colorscreen::render_coordinate_space m_coordinateSpace =
+      colorscreen::render_scan_coordinates;
 
   Renderer *m_renderer = nullptr;
   QThread *m_renderThread = nullptr;

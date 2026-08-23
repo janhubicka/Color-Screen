@@ -149,7 +149,7 @@ void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::pro
     }
 
     // Use CoordinateTransformer to get effective dimensions (relative to crop)
-    CoordinateTransformer transformer(m_scan.get(), data.params);
+    CoordinateTransformer transformer(m_scan.get(), data.params, m_scrToImg, m_coordinateSpace);
     QSize transformedSize = transformer.getTransformedCropSize();
     int imgW = transformedSize.width();
     int imgH = transformedSize.height();
@@ -178,6 +178,7 @@ void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::pro
       Q_ARG(double, 0.0), 
       Q_ARG(double, 0.0), 
       Q_ARG(double, scale), Q_ARG(int, targetW), Q_ARG(int, targetH),
+      Q_ARG(int, (int)m_coordinateSpace),
       Q_ARG(colorscreen::render_parameters, data.params),
       Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress),
       Q_ARG(const char*, "Rendering navigation"));
@@ -228,6 +229,22 @@ void NavigationView::updateParameters(
   data.height = height();
   data.params = m_rparams ? *m_rparams : colorscreen::render_parameters();
   m_renderQueue.requestRender(QVariant::fromValue(data));
+}
+
+void NavigationView::setCoordinateSpace(
+    colorscreen::render_coordinate_space coordinates) {
+  if (m_scan && m_scan->stitch)
+    coordinates = colorscreen::render_final_coordinates;
+  if (m_coordinateSpace == coordinates)
+    return;
+  m_coordinateSpace = coordinates;
+  m_previewImage = QImage();
+  RenderRequestData data;
+  data.width = width();
+  data.height = height();
+  data.params = m_rparams ? *m_rparams : colorscreen::render_parameters();
+  m_renderQueue.requestRender(QVariant::fromValue(data));
+  update();
 }
 
 void NavigationView::resizeEvent(QResizeEvent *event) { 
@@ -339,7 +356,7 @@ void NavigationView::paintEvent(QPaintEvent *event) {
      int w = viewRect.width();
      int h = viewRect.height();
      
-     CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+     CoordinateTransformer transformer(m_scan.get(), *m_rparams, m_scrToImg, m_coordinateSpace);
      QSize transformedSize = transformer.getTransformedCropSize();
      int scanW = transformedSize.width();
      int scanH = transformedSize.height();

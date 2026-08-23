@@ -319,6 +319,7 @@ private:
   QRect getImageArea(QRect area);
   void pivotViewport(int oldRot, int newRot);
   void createToolbar();  // New helper
+  void updateCoordinateSpaceControls();
   void createModeShortcuts(); // Create 1-0 hotkeys for modes
   void updateModeMenu(); // Updates combo box items
   QIcon renderScreenIcon(colorscreen::scr_type type);
@@ -442,6 +443,7 @@ private:
 
   QToolBar *m_toolbar;        // New toolbar
   QComboBox *m_modeComboBox;  // Mode selector
+  QComboBox *m_coordinateComboBox = nullptr; // Scan/final canvas selector
   QCheckBox *m_colorCheckBox; // Color checkbox (IR/RGB switch)
 
   // Core Data

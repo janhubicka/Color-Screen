@@ -62,6 +62,10 @@ public:
   /** Select TYPE in this view without changing the source document view. */
   bool setRenderType(colorscreen::render_type_t type);
 
+  /** Select this view's raw-scan or final screen-coordinate canvas. */
+  bool setCoordinateSpace(colorscreen::render_coordinate_space coordinates);
+  colorscreen::render_coordinate_space coordinateSpace() const;
+
   /** Return this view's toolbar while it is hosted by WorkspaceWindow. */
   QToolBar *workspaceToolBar() const { return m_toolbar; }
 
@@ -108,6 +112,9 @@ private slots:
   /** Change only this view's IR/RGB presentation. */
   void onColorChanged(bool checked);
 
+  /** Change only this view's scan/final coordinate presentation. */
+  void onCoordinateChanged(int index);
+
   /** Start/cancel slanted-edge area selection in a reference view. */
   void onMeasureMtfRequested(bool checked);
 
@@ -147,6 +154,7 @@ private:
   ImageWidget *m_imageWidget = nullptr;
   QToolBar *m_toolbar = nullptr;
   QComboBox *m_modeComboBox = nullptr;
+  QComboBox *m_coordinateComboBox = nullptr;
   QCheckBox *m_colorCheckBox = nullptr;
   QAction *m_mirrorAction = nullptr;
   QWidget *m_referenceInspector = nullptr;

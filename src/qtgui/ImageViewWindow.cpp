@@ -147,6 +147,15 @@ void ImageViewWindow::setupUi() {
   connect(m_colorCheckBox, &QCheckBox::toggled, this,
           &ImageViewWindow::onColorChanged);
 
+  if (!m_slantedEdgeReference) {
+    m_toolbar->addWidget(new QLabel(tr("Coordinates: "), m_toolbar));
+    m_coordinateComboBox = new QComboBox(m_toolbar);
+    m_coordinateComboBox->setObjectName(QStringLiteral("CoordinateSpaceCombo"));
+    m_toolbar->addWidget(m_coordinateComboBox);
+    connect(m_coordinateComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &ImageViewWindow::onCoordinateChanged);
+  }
+
   m_toolbar->addSeparator();
 
   QAction *pan = m_toolbar->addAction(viewIcon(":/icons/hand.svg"), tr("Pan"));
@@ -498,6 +507,32 @@ void ImageViewWindow::updateViewControls() {
   m_colorCheckBox->setChecked(hasRgb && m_renderTypeParams.color);
   m_colorCheckBox->blockSignals(false);
 
+  if (m_coordinateComboBox) {
+    const bool stitched = m_scan && m_scan->stitch;
+    const bool hasFinal = stitched ||
+        (m_scan && m_scrToImgParams.type != colorscreen::Random);
+    const QSignalBlocker blocker(m_coordinateComboBox);
+    m_coordinateComboBox->clear();
+    if (!stitched)
+      m_coordinateComboBox->addItem(tr("Scan coordinates"),
+          (int)colorscreen::render_scan_coordinates);
+    if (hasFinal)
+      m_coordinateComboBox->addItem(tr("Screen coordinates"),
+          (int)colorscreen::render_final_coordinates);
+    if (stitched)
+      m_imageWidget->setCoordinateSpace(colorscreen::render_final_coordinates);
+    else if (!hasFinal && m_imageWidget->coordinateSpace() ==
+                            colorscreen::render_final_coordinates)
+      m_imageWidget->setCoordinateSpace(colorscreen::render_scan_coordinates);
+    int coordinateIndex = m_coordinateComboBox->findData(
+        (int)m_imageWidget->coordinateSpace());
+    if (coordinateIndex < 0 && m_coordinateComboBox->count())
+      coordinateIndex = 0;
+    if (coordinateIndex >= 0)
+      m_coordinateComboBox->setCurrentIndex(coordinateIndex);
+    m_coordinateComboBox->setEnabled(m_coordinateComboBox->count() > 1);
+  }
+
   if (m_mirrorAction) {
     const QSignalBlocker blocker(m_mirrorAction);
     m_mirrorAction->setChecked(m_rparams.scan_mirror);
@@ -542,6 +577,31 @@ void ImageViewWindow::onModeChanged(int index) {
 void ImageViewWindow::onColorChanged(bool checked) {
   m_renderTypeParams.color = checked;
   updateImageParameters(false);
+}
+
+/** Change the coordinate canvas only for this view. */
+void ImageViewWindow::onCoordinateChanged(int index) {
+  if (!m_coordinateComboBox || index < 0)
+    return;
+  const auto coordinates = static_cast<colorscreen::render_coordinate_space>(
+      m_coordinateComboBox->itemData(index).toInt());
+  if (!m_imageWidget->setCoordinateSpace(coordinates))
+    updateViewControls();
+}
+
+colorscreen::render_coordinate_space ImageViewWindow::coordinateSpace() const {
+  return m_imageWidget ? m_imageWidget->coordinateSpace()
+                       : colorscreen::render_scan_coordinates;
+}
+
+/** Programmatically select this view's coordinate canvas. */
+bool ImageViewWindow::setCoordinateSpace(
+    colorscreen::render_coordinate_space coordinates) {
+  if (m_slantedEdgeReference || !m_imageWidget)
+    return false;
+  const bool ok = m_imageWidget->setCoordinateSpace(coordinates);
+  updateViewControls();
+  return ok && m_imageWidget->coordinateSpace() == coordinates;
 }
 
 /** Programmatically select TYPE in this view. */

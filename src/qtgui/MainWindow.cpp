@@ -1239,6 +1239,27 @@ void MainWindow::createToolbar() {
           &MainWindow::onColorCheckBoxChanged);
   m_colorCheckBoxAction = m_toolbar->addWidget(m_colorCheckBox);
 
+  m_toolbar->addWidget(new QLabel(tr("Coordinates: "), m_toolbar));
+  m_coordinateComboBox = new QComboBox(m_toolbar);
+  m_coordinateComboBox->setObjectName(QStringLiteral("CoordinateSpaceCombo"));
+  m_coordinateComboBox->setToolTip(
+      tr("Choose raw scan geometry or geometrically corrected screen geometry"));
+  m_toolbar->addWidget(m_coordinateComboBox);
+  connect(m_coordinateComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, [this](int index) {
+            if (index < 0 || !m_imageWidget)
+              return;
+            const auto coordinates = static_cast<colorscreen::render_coordinate_space>(
+                m_coordinateComboBox->itemData(index).toInt());
+            if (!m_imageWidget->setCoordinateSpace(coordinates)) {
+              updateCoordinateSpaceControls();
+              return;
+            }
+            if (m_navigationView)
+              m_navigationView->setCoordinateSpace(m_imageWidget->coordinateSpace());
+          });
+  updateCoordinateSpaceControls();
+
   m_toolbar->addSeparator();
 
   // Interaction Tools - Pan in View group
@@ -1389,6 +1410,40 @@ void MainWindow::createToolbar() {
     }
   });
   addAction(exploreModeAction);
+}
+
+/** Rebuild the view-local Scan/Screen coordinate selector. */
+void MainWindow::updateCoordinateSpaceControls() {
+  if (!m_coordinateComboBox || !m_imageWidget)
+    return;
+  const bool stitched = m_scan && m_scan->stitch;
+  const bool hasFinal = stitched ||
+      (m_scan && m_scrToImgParams.type != colorscreen::Random);
+
+  m_coordinateComboBox->blockSignals(true);
+  m_coordinateComboBox->clear();
+  if (!stitched)
+    m_coordinateComboBox->addItem(tr("Scan coordinates"),
+        (int)colorscreen::render_scan_coordinates);
+  if (hasFinal)
+    m_coordinateComboBox->addItem(tr("Screen coordinates"),
+        (int)colorscreen::render_final_coordinates);
+
+  auto current = m_imageWidget->coordinateSpace();
+  if (stitched && current != colorscreen::render_final_coordinates) {
+    m_imageWidget->setCoordinateSpace(colorscreen::render_final_coordinates);
+    current = m_imageWidget->coordinateSpace();
+  } else if (!hasFinal && current == colorscreen::render_final_coordinates) {
+    m_imageWidget->setCoordinateSpace(colorscreen::render_scan_coordinates);
+    current = m_imageWidget->coordinateSpace();
+  }
+  int index = m_coordinateComboBox->findData((int)current);
+  if (index < 0 && m_coordinateComboBox->count())
+    index = 0;
+  if (index >= 0)
+    m_coordinateComboBox->setCurrentIndex(index);
+  m_coordinateComboBox->setEnabled(m_coordinateComboBox->count() > 1);
+  m_coordinateComboBox->blockSignals(false);
 }
 
 /** Create keyboard shortcuts 1–0 mapped to the first 10 render modes.
@@ -2676,9 +2731,17 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
   m_inspectorImageWidget = target;
 
   if (m_navigationView) {
+    m_navigationView->setCoordinateSpace(target->coordinateSpace());
     m_inspectorImageConnections.push_back(
         connect(target, &ImageWidget::viewStateChanged, m_navigationView,
                 &NavigationView::onViewStateChanged));
+    m_inspectorImageConnections.push_back(connect(
+        target, &ImageWidget::viewCoordinateSpaceChanged, this,
+        [this](int space) {
+          if (m_navigationView)
+            m_navigationView->setCoordinateSpace(
+                static_cast<colorscreen::render_coordinate_space>(space));
+        }));
   }
 
   // The primary ImageWidget already has the full document-editing signal
@@ -3125,6 +3188,7 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
       chart->setCorrection(state.rparams.scanner_blur_correction);
   }
 
+  updateCoordinateSpaceControls();
   emit documentStateChanged();
 }
 

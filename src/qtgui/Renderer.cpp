@@ -45,7 +45,8 @@ void Renderer::updateParameters(const colorscreen::render_parameters &rparams,
     m_renderType = renderType;
 }
 
-void Renderer::render(int reqId, double xOffset, double yOffset, double scale, int width, int height, 
+void Renderer::render(int reqId, double xOffset, double yOffset, double scale, int width, int height,
+                      int coordinateSpace,
                       colorscreen::render_parameters frameParams,
                       std::shared_ptr<colorscreen::progress_info> progress,
                       const char* taskName) 
@@ -74,8 +75,8 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
     m_activeFutures.removeIf([](const QFuture<void>& f) { return f.isFinished(); });
 
     // Run actual rendering in thread pool and track the future
-    QFuture<void> future = QtConcurrent::run([this, reqId, xOffset, yOffset, scale, width, height, 
-                       frameParams, progress, taskName,
+    QFuture<void> future = QtConcurrent::run([this, reqId, xOffset, yOffset, scale, width, height,
+                       coordinateSpace, frameParams, progress, taskName,
                        scrToImg, scrDetect, renderType]() mutable {
         
         if (progress && progress->cancel_requested()) {
@@ -90,7 +91,12 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
             return;
         }
 
-        CoordinateTransformer transformer(m_scan.get(), frameParams);
+        colorscreen::render_coordinate_space requestedSpace =
+            coordinateSpace == (int)colorscreen::render_final_coordinates
+                ? colorscreen::render_final_coordinates
+                : colorscreen::render_scan_coordinates;
+        CoordinateTransformer transformer(m_scan.get(), frameParams, &scrToImg,
+                                          requestedSpace);
         QSize transformedSize = transformer.getTransformedCropSize();
 
         QRectF visibleRect(0, 0, transformedSize.width(), transformedSize.height());
@@ -102,8 +108,10 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
             return;
         }
 
-        colorscreen::point_t p0 = transformer.transformedToScanCrop({intersection.left(), intersection.top()});
-        colorscreen::point_t p1 = transformer.transformedToScanCrop({intersection.right(), intersection.bottom()});
+        colorscreen::point_t p0 = transformer.transformedToRenderCrop(
+            {intersection.left(), intersection.top()});
+        colorscreen::point_t p1 = transformer.transformedToRenderCrop(
+            {intersection.right(), intersection.bottom()});
 
         double sx_unit = std::min(p0.x, p1.x);
         double sy_unit = std::min(p0.y, p1.y);
@@ -153,7 +161,9 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
         colorscreen::sub_task task (progress.get ());
         try {
             qCDebug(lcRenderSync) << "  Task ID:" << reqId << " starts rendering tile";
-            if (colorscreen::render_tile(*m_scan, scrToImg, scrDetect, frameParams, renderType, tile, progress.get()))
+            if (colorscreen::render_tile(*m_scan, scrToImg, scrDetect, frameParams,
+                                         renderType, tile, transformer.coordinateSpace(),
+                                         progress.get()))
                 success = true;
             qCDebug(lcRenderSync) << "  Task ID:" << reqId << " finished rendering tile " << success;
         } catch (...) {
