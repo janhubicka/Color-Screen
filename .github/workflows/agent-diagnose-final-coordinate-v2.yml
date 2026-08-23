@@ -38,11 +38,18 @@ jobs:
           marker = "          python3 - <<'PY'\n"
           start = source.index(marker) + len(marker)
           end = source.index("\n          PY\n", start)
-          lines = source[start:end].splitlines()
-          # Strip only the YAML block's fixed indentation. Embedded C++ text in
-          # Python triple-quoted strings intentionally has smaller indentation.
-          lines = [line[10:] if line.startswith("          ") else line
-                   for line in lines]
+          raw_lines = source[start:end].splitlines()
+          lines = []
+          in_triple_string = False
+          for raw in raw_lines:
+              line = raw
+              if not in_triple_string and line.startswith("          "):
+                  line = line[10:]
+              # Triple-quoted replacement strings deliberately contain source
+              # indentation that must survive extraction unchanged.
+              if line.count('"""') % 2:
+                  in_triple_string = not in_triple_string
+              lines.append(line)
           Path("/tmp/final-coordinate-v2.py").write_text("\n".join(lines) + "\n")
           PY
 
