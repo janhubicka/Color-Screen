@@ -55,8 +55,8 @@ index 3bca627..5868a2c 100644
 +    layout->addWidget(details);
 +
 +    auto *buttons = new QDialogButtonBox(
-+        QDialogButtonBox::Apply | QDialogButtonBox::Cancel, this);
-+    buttons->button(QDialogButtonBox::Apply)->setText(tr("Apply and reload"));
++        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
++    buttons->button(QDialogButtonBox::Ok)->setText(tr("Apply and reload"));
 +    buttons->button(QDialogButtonBox::Cancel)->setText(tr("Not now"));
 +    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
 +    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
