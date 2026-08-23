@@ -147,17 +147,47 @@ confidence-valued class map rather than changing hard labels globally.
 
 **Severity:** high
 
-**Status:** open
+**Status:** open, but blocked on a demonstrated failure after DG-024
 
-After the first two patches, both Dufay-like and Paget-like initial-grid code
-round each predicted center to one image pixel and call `find_patch()` there.
-Small accumulated vector error or a blurred/unknown center therefore rejects an
-otherwise coherent grid.
+After DG-024, Dufay-like and Paget-like initial-grid code preserves fractional
+predictions and rounds them to the nearest image pixel before calling
+`find_patch()`.  A genuinely blurred or unknown center can still reject an
+otherwise coherent grid, so a bounded local search remains a possible follow-up.
 
-Evaluate a bounded local search around each prediction.  Rank components by
-center displacement, color confidence, size consistency, and agreement with the
-current lattice estimate.  The search radius must be derived from screen scale
-and kept below half the nearest competing-element distance.
+Do not add that heuristic preemptively.  On the real NGS00428 corner tile, a
+one- and two-pixel neighborhood prototype reduced zero-mask seed scanning to
+exactly the same 95 pixels as correct nearest-pixel rounding alone.  The wider
+search therefore added no observed robustness on the case that first motivated
+it.  Revisit local search only when DG-019 contains a scan that fails with
+correct rounding; then rank candidates by center displacement, color confidence,
+size consistency, and lattice agreement, with the radius kept below half the
+nearest competing-element distance.
+
+### DG-024 — predicted patch centers were truncated before lookup
+
+**Severity:** high robustness/performance
+
+**Status:** fixed
+
+Initial-grid geometry is floating point, but many predicted Dufay-like and
+Paget/Finlay patch positions were stored in integer temporaries or passed
+implicitly to `find_patch()`.  C++ conversion truncated those coordinates rather
+than selecting the nearest image pixel.  A subpixel prediction error could
+therefore become an avoidable one-pixel classification miss and force the outer
+seed scan to continue.
+
+Predicted coordinates now remain `coord_t` until a shared helper rounds them to
+the nearest image pixel.  Strip predictions likewise retain their fractional
+coordinates before `confirm_strip()` performs its existing nearest-pixel
+rounding.  Seed pixels supplied by the outer image scan remain integer pixels;
+only geometry-derived predictions change.
+
+On NGS00428 Tile01 with the legacy detector mask explicitly disabled, this
+reduces `seed_pixels` from 23,702 to 95 while preserving 93.35% detected screen
+coverage.  A one-pixel neighborhood search produced the same 95-pixel result,
+which is why DG-010 remains deferred rather than being bundled with this fix.
+With the normal 2 / 3 compatibility mask, Tile01 and Tile05 retain the same
+coverage, patch counts, and seed counts as before this change.
 
 ### DG-011 — initial grids are accepted or rejected as all-or-nothing patterns
 
@@ -398,14 +428,18 @@ optimization, fast+slow flood fill, and no mesh.
 | Tile01, 0/0 | 53.40% | 93.33% | 23,702 | 2,040,103 | 32,208.2 | 41,112.7 | 60.70 | 2,947,032 |
 
 The corner tile shows a seed-discovery weakness very clearly: removing the mask
-changes a first-pixel initial grid into a 23,702-pixel search.  This motivates
-DG-009/DG-010 work, but does not isolate the single-pixel prediction rule from
-connected-component quality by itself.  The interior tile is the complementary
-warning: seed discovery remains immediate without sharpening, yet detected
-patches drop by 12.2% and flood fill becomes 1.68 times slower.  On the corner
-tile flood fill becomes 2.96 times slower.  Therefore a DG-010 seed fix alone is
-not sufficient evidence that the compatibility mask can be removed; subsequent
-work must also improve the class map/flood-fill completeness measured here.
+changes a first-pixel initial grid into a 23,702-pixel search.  DG-024 shows that
+this particular failure was caused by truncating fractional lattice predictions:
+nearest-pixel rounding alone reduces the zero-mask seed search to 95 pixels while
+retaining 93.35% screen coverage.  Radius-one and radius-two neighborhood
+prototypes produced the same result, so this scan does not justify DG-010.
+
+The interior tile is the complementary warning: seed discovery remains immediate
+without sharpening, yet detected patches drop by 12.2% and flood fill becomes
+1.68 times slower.  On the corner tile flood fill becomes 2.96 times slower.
+Therefore DG-024 is not sufficient evidence that the compatibility mask can be
+removed; subsequent work should focus on DG-009 class-map/component continuity
+and flood-fill completeness.
 
 The corpus should contain, for every available screen family:
 
@@ -443,15 +477,16 @@ heuristic becomes the default:
 
 ## Recommended implementation order
 
-1. Use DG-014 statistics to record baselines for the existing sharp fixtures,
-   then extend DG-019 with real soft scans and representative negative images.
-2. Add the bounded prediction-neighborhood search from DG-010 behind an
-   experimental switch and calibrate it against false positives.
-3. Introduce robust partial-grid scoring (DG-011), using the local search as its
-   observation layer.
-4. Compare a coarse periodicity proposal (DG-013) only for regions where the
-   exact component seed fails.
-5. Use the measured failure costs to implement early rejection and state reuse
-   (DG-015 through DG-017).
-6. Revisit scratch storage and lower-level micro-optimization (DG-018) only
-   after the algorithmic failure cost is under control.
+1. Expand DG-019 across Batch 08 with `testsuite/benchmark-screen-detection.py`,
+   including representative negative/no-screen images and repeated timing runs.
+2. Investigate DG-009/class-map continuity on scans such as NGS00428 Tile05,
+   where 0 / 0 finds a seed immediately but flood fill covers only 86.67%.
+3. Revisit the bounded neighborhood search in DG-010 only when a real scan
+   still fails at a correctly rounded predicted center.
+4. Introduce robust partial-grid scoring (DG-011) if isolated missing elements
+   remain a significant seed failure after DG-009/DG-010 are understood.
+5. Compare a coarse periodicity proposal (DG-013) only for regions where the
+   component-based seed path still fails.
+6. Use measured failure costs to implement early rejection and state reuse
+   (DG-015 through DG-017), then revisit scratch storage (DG-018) only if it is
+   visible in profiles.
