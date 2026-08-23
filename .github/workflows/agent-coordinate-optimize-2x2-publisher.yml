@@ -1,0 +1,55 @@
+name: TEMP publish coordinate optimize 2x2
+on:
+  push:
+    branches:
+      - agent/tmp-coordinate-optimize-2x2-publisher
+jobs:
+  publish:
+    runs-on: ubuntu-slim
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: eb66eab20b432a75d9a00dce6b7acedf43a4f068
+          fetch-depth: 0
+      - name: Reconstruct and validate patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64, pathlib
+          data = base64.b64decode('ZGlmZiAtLWdpdCBhL3NyYy9saWJjb2xvcnNjcmVlbi9pbmNsdWRlL2ZpbmV0dW5lLmggYi9zcmMvbGliY29sb3JzY3JlZW4vaW5jbHVkZS9maW5ldHVuZS5oCi0tLSBhL3NyYy9saWJjb2xvcnNjcmVlbi9pbmNsdWRlL2ZpbmV0dW5lLmgKKysrIGIvc3JjL2xpYmNvbG9yc2NyZWVuL2luY2x1ZGUvZmluZXR1bmUuaApAQAogICAvKiBIYWxmLWV4dGVudCBvZiB0aGUgYW5hbHl6ZWQgdGlsZSBpbiBwZXJpb2RpYyBzY3JlZW4tY2VsbCBjb29yZGluYXRlcy4KICAgICAgVGhlIGNvcnJlc3BvbmRpbmcgaW1hZ2UtcGl4ZWwgcmVjdGFuZ2xlIGlzIGRlcml2ZWQgZnJvbSB0aGUgbG9jYWwgbWFwLgogICAgICBaZXJvIHNlbGVjdHMgYSBtb2RlLWRlcGVuZGVudCBkZWZhdWx0LiAgKi8KICAgaW50IHJhbmdlID0gMDsKKyAgLyogS2VlcCBSQU5HRSBhcyB0aGUgZXhhY3Qgc2NyZWVuLWNvb3JkaW5hdGUgaGFsZi1leHRlbnQuICBCeSBkZWZhdWx0CisgICAgIEZJTkVUVU5FIG1heSBlbmxhcmdlIHRoZSByZXF1ZXN0ZWQgdGlsZSBmb3Igc3BhcnNlIHN0cmlwIHNjcmVlbnMgb3Igd2hlbgorICAgICB0aGUgbWFwcGVkIHBpeGVsIHJlY3RhbmdsZSB3b3VsZCBvdGhlcndpc2UgYmUgdmVyeSBzbWFsbC4gICovCisgIGJvb2wgZml4ZWRfcmFuZ2UgPSBmYWxzZTsKICAgLyogU2VhcmNoIGFuIG9kZCBNVUxUSVRJTEUgYnkgTVVMVElUSUxFIG5laWdoYm91cmhvb2QgYW5kIGtlZXAgdGhlIHRpbGUgd2l0aAogICAgICB0aGUgbG93ZXN0IGNvbnRyYXN0LXNjYWxlZCBmaXQgc2NvcmUuICAqLwogICBpbnQgbXVsdGl0aWxlID0gMTsKZGlmZiAtLWdpdCBhL3NyYy9saWJjb2xvcnNjcmVlbi9maW5ldHVuZS5DIGIvc3JjL2xpYmNvbG9yc2NyZWVuL2ZpbmV0dW5lLkMKLS0tIGEvc3JjL2xpYmNvbG9yc2NyZWVuL2ZpbmV0dW5lLkMKKysrIGIvc3JjL2xpYmNvbG9yc2NyZWVuL2ZpbmV0dW5lLkMKQEAKICAgaWYgKGZwYXJhbXMucmFuZ2UgPCAwKQogICAgIHsKICAgICAgIHJldC5lcnIgPSAibmVnYXRpdmUgZmluZXR1bmUgcmFuZ2UiOwogICAgICAgcmV0dXJuIGZpbmlzaCAoKTsKICAgICB9CisgIGlmIChmcGFyYW1zLmZpeGVkX3JhbmdlICYmICFmcGFyYW1zLnJhbmdlKQorICAgIHsKKyAgICAgIHJldC5lcnIgPSAiZml4ZWQgZmluZXR1bmUgcmFuZ2UgcmVxdWlyZXMgYSBwb3NpdGl2ZSByYW5nZSI7CisgICAgICByZXR1cm4gZmluaXNoICgpOworICAgIH0KQEAKICAgICAgIGNvb3JkX3QgdGVzdF94cmFuZ2UgPSBmcGFyYW1zLnJhbmdlID8gZnBhcmFtcy5yYW5nZSA6IGRlZl94cmFuZ2U7CiAgICAgICBjb29yZF90IHRlc3RfeXJhbmdlID0gdGVzdF94cmFuZ2U7CiAgICAgICAvKiBJZiBzY3JlZW4gdGlsZSBpcyBmYXIgZnJvbSByZWN0YW5ndWxhciwgY29tcGVuc2F0ZS4KICAgICAgICAgIEFsc28gc2NyZWVuIHdpdGggc3RyaXBzIGhhcyB0b28gZmV3IGVsZW1lbnRzLCBzbwogICAgICAgICAgZmluZXR1bmluZyBpcyBub3QgdmVyeSBzdHJlc3NlZCB0byBwaWNrIHJlYXNvbmFibGUgc29sdXRpb24uICAqLwotICAgICAgaWYgKHNjcmVlbl93aXRoX3ZlcnRpY2FsX3N0cmlwc19wIChwYXJhbS50eXBlKSkKKyAgICAgIGlmICghZnBhcmFtcy5maXhlZF9yYW5nZSAmJiBzY3JlZW5fd2l0aF92ZXJ0aWNhbF9zdHJpcHNfcCAocGFyYW0udHlwZSkpCiAgICAgICAgIHRlc3RfeXJhbmdlICo9IDM7CiAgICAgICBkbwogICAgICAgICB7Ci0gICAgICAgICAgaWYgKGl0ZXJhdGlvbnMpCisgICAgICAgICAgaWYgKGl0ZXJhdGlvbnMgJiYgIWZwYXJhbXMuZml4ZWRfcmFuZ2UpCiAgICAgICAgICAgICB0ZXN0X3hyYW5nZSsrLCB0ZXN0X3lyYW5nZSsrOwpAQAogICAgICAgICAgIGl0ZXJhdGlvbnMrKzsKICAgICAgICAgfQotICAgICAgd2hpbGUgKGl0ZXJhdGlvbnMgPCAxMCAmJiAodHhtaW4gKyAxMCA+IHR4bWF4IHx8IHR5bWluICsgMTAgPiB0eW1heCkpOworICAgICAgd2hpbGUgKCFmcGFyYW1zLmZpeGVkX3JhbmdlICYmIGl0ZXJhdGlvbnMgPCAxMAorICAgICAgICAgICAgICYmICh0eG1pbiArIDEwID4gdHhtYXggfHwgdHltaW4gKyAxMCA+IHR5bWF4KSk7CiAgICAgfQpkaWZmIC0tZ2l0IGEvc3JjL3F0Z3VpL0Nvb3JkaW5hdGVPcHRpbWl6YXRpb25Xb3JrZXIuY3BwIGIvc3JjL3F0Z3VpL0Nvb3JkaW5hdGVPcHRpbWl6YXRpb25Xb3JrZXIuY3BwCi0tLSBhL3NyYy9xdGd1aS9Db29yZGluYXRlT3B0aW1pemF0aW9uV29ya2VyLmNwcAorKysgYi9zcmMvcXRndWkvQ29vcmRpbmF0ZU9wdGltaXphdGlvbldvcmtlci5jcHAKQEAKICAgICBmcGFyYW1zLmZsYWdzID0gY29sb3JzY3JlZW46OmZpbmV0dW5lX3Bvc2l0aW9uIHwgY29sb3JzY3JlZW46OmZpbmV0dW5lX3ZlcmJvc2UgfAogICAgICAgICAgICAgICAgICAgICBjb2xvcnNjcmVlbjo6ZmluZXR1bmVfY29vcmRpbmF0ZXMgfCBjb2xvcnNjcmVlbjo6ZmluZXR1bmVfYncgfAogICAgICAgICAgICAgICAgICAgICBjb2xvcnNjcmVlbjo6ZmluZXR1bmVfdXNlX3N0cmlwX3dpZHRocyB8CiAgICAgICAgICAgICAgICAgICAgIGNvbG9yc2NyZWVuOjpmaW5ldHVuZV9wcm9kdWNlX2ltYWdlczsKKyAgICAvLyBDb29yZGluYXRlIHJlZmluZW1lbnQgb25seSBuZWVkcyBhIHZlcnkgc21hbGwgbG9jYWwgc2FtcGxlLiAgUkFOR0UgaXMKKyAgICAvLyBhIHNjcmVlbi1jb29yZGluYXRlIGhhbGYtZXh0ZW50LCBzbyBvbmUgcGVyaW9kIGluIGVhY2ggZGlyZWN0aW9uIGdpdmVzCisgICAgLy8gYSAyeDItcGVyaW9kIHRpbGUuICBLZWVwIGl0IGZpeGVkIHNvIGZpbmV0dW5lJ3Mgc3RyaXAtc2NyZWVuIGFuZAorICAgIC8vIG1pbmltdW0tcGl4ZWwtc2l6ZSBoZXVyaXN0aWNzIGRvIG5vdCBzaWxlbnRseSBlbmxhcmdlIHRoZSBST0kuCisgICAgZnBhcmFtcy5yYW5nZSA9IDE7CisgICAgZnBhcmFtcy5maXhlZF9yYW5nZSA9IHRydWU7CiAKICAgICByZXN1bHQgPSBjb2xvcnNjcmVlbjo6ZmluZXR1bmUocnBhcmFtcywgcGFyYW1zLCAqbV9zY2FuLCB7fSwgbnVsbHB0ciwgZnBhcmFtcywKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgcHJvZ3Jlc3MuZ2V0KCkpOwo=')
+          pathlib.Path('/tmp/fix.patch').write_bytes(data)
+          PY
+          echo "62c46f134a7b6c3ca6b65e48d28785294b3cfbe335e8b810f21d815ca713dc29  /tmp/fix.patch" | sha256sum -c -
+          git apply --check /tmp/fix.patch
+          git apply /tmp/fix.patch
+          git diff --check
+          changed="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n' src/libcolorscreen/finetune.C src/libcolorscreen/include/finetune.h src/qtgui/CoordinateOptimizationWorker.cpp | sort)"
+          test "$changed" = "$expected"
+      - name: Install focused build dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf automake libtool pkg-config libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev liblcms2-dev libfftw3-dev libexiv2-dev libopenjp2-7-dev libpng-dev qt6-base-dev qt6-tools-dev qt6-tools-dev-tools libqt6svg6-dev
+      - name: Configure checked Qt build
+        shell: bash
+        run: |
+          mkdir build-agent
+          cd build-agent
+          CFLAGS='-O2 -g -Wall -Wextra' CXXFLAGS='-O2 -g -Wall -Wextra' ../configure --enable-checking --enable-qtgui --disable-shared --enable-static --disable-static-link
+      - name: Compile changed core and GUI paths
+        shell: bash
+        run: |
+          make -C build-agent/src/libcolorscreen -j2 libcolorscreen_la-finetune.lo
+          make -C build-agent/src/qtgui -j2 colorscreen_qt-CoordinateOptimizationWorker.o
+      - name: Publish clean feature branch
+        shell: bash
+        run: |
+          git config user.name 'OpenAI Agent'
+          git config user.email 'openai-agent@users.noreply.github.com'
+          git add src/libcolorscreen/include/finetune.h src/libcolorscreen/finetune.C src/qtgui/CoordinateOptimizationWorker.cpp
+          git commit -m 'qtgui: limit coordinate optimization to 2x2 screen periods' -m 'The Geometry panel Optimize coordinates action refines center, rotation and scale using finetune, but it inherited finetune coordinate-mode defaults that analyze a much larger region, especially for Dufay and other strip screens. This makes a local geometry adjustment unnecessarily expensive.\n\nAdd an opt-in fixed_range contract to finetune_parameters. When enabled with a positive range, finetune uses that exact screen-coordinate half-extent and skips both the strip-screen vertical enlargement and the retry loop that grows tiny mapped tiles. Existing callers retain the historical adaptive behavior because fixed_range defaults to false.\n\nUse range=1 and fixed_range=true in CoordinateOptimizationWorker. Since range is a half-extent in screen-period coordinates, this limits the GUI operation to a 2x2-period neighborhood while preserving the existing position plus coordinate scale/rotation fit.\n\nValidated by applying the patch to current main with git diff --check and compiling the modified finetune core object plus CoordinateOptimizationWorker in an O2 checked Qt build.'
+          git branch -f agent/coordinate-optimize-2x2 HEAD
+          git push --force origin agent/coordinate-optimize-2x2
