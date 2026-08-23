@@ -9,6 +9,7 @@
 #include "render.h"
 #include "sharpen.h"
 #include "include/histogram.h"
+#include <array>
 #include <cassert>
 
 namespace colorscreen
@@ -34,6 +35,32 @@ sharpened_data::sharpened_data (int width, int height)
 }
 
 sharpened_data::~sharpened_data ()
+{
+  if (m_data)
+    MapAlloc::Free (m_data);
+  m_data = nullptr;
+}
+
+/* A wrapper around interleaved precomputed RGB data.  Keeping the persistent
+   representation interleaved avoids three separate cache allocations while
+   the deconvolution implementation remains free to use planar FFT scratch.  */
+class sharpened_rgb_data
+{
+public:
+  mem_rgbdata *m_data = nullptr;
+
+  /* Allocate WIDTH by HEIGHT interleaved RGB pixels.  */
+  sharpened_rgb_data (int width, int height);
+  ~sharpened_rgb_data ();
+};
+
+sharpened_rgb_data::sharpened_rgb_data (int width, int height)
+{
+  m_data = (mem_rgbdata *)MapAlloc::Alloc (
+      width * height * sizeof (mem_rgbdata), "HDR RGB data");
+}
+
+sharpened_rgb_data::~sharpened_rgb_data ()
 {
   if (m_data)
     MapAlloc::Free (m_data);
@@ -119,6 +146,22 @@ struct gray_and_sharpen_params
   /* Return true if this parameter set is equal to O.  */
   bool
   operator== (const gray_and_sharpen_params &o) const
+  {
+    return gp == o.gp && sp == o.sp;
+  }
+};
+
+/* Parameters for one-pass RGB sharpening.  GP describes the common linearized
+   source and SP contains the effective sharpening state for R, G and B.  */
+struct rgb_and_sharpen_params
+{
+  graydata_params gp = {};
+  std::array<sharpen_parameters, 3> sp = {};
+
+  /* Return true if this parameter set produces the same cached RGB output as
+     O.  */
+  bool
+  operator== (const rgb_and_sharpen_params &o) const
   {
     return gp == o.gp && sp == o.sp;
   }
@@ -214,6 +257,9 @@ get_new_lookup_table (lookup_table_params &p, progress_info *)
 /* Prototypes for data generation.  */
 std::unique_ptr<sharpened_data>
 get_new_gray_sharpened_data (gray_and_sharpen_params &p, progress_info *progress);
+std::unique_ptr<sharpened_rgb_data>
+get_new_rgb_sharpened_data (rgb_and_sharpen_params &p,
+                            progress_info *progress);
 
 /* Static cache instances.  */
 static lru_cache<backlight_correction_cache_params, backlight_correction,
@@ -230,6 +276,10 @@ static lru_cache<lookup_table_params, luminosity_t[], get_new_lookup_table, 4>
 static lru_cache<gray_and_sharpen_params, sharpened_data,
                  get_new_gray_sharpened_data, 2>
     gray_and_sharpened_data_cache ("gray and sharpened data");
+
+static lru_cache<rgb_and_sharpen_params, sharpened_rgb_data,
+                 get_new_rgb_sharpened_data, 2>
+    rgb_and_sharpened_data_cache ("RGB and sharpened data");
 
 /* Tables used during gray data computation.  */
 struct gray_data_tables
@@ -317,6 +367,33 @@ compute_gray_data (gray_data_tables &t, int x, int y, int r, int g, int b)
   return l1 + l2 + l3;
 }
 
+/* Compute the three independently corrected source channels at X, Y.  T uses
+   the same lookup/backlight machinery as grayscale conversion; channel weights
+   and dark values remain available so this helper exactly mirrors the old
+   three scalar passes when they are set to unit/zero values.  */
+inline rgbdata
+compute_rgb_data (gray_data_tables &t, int x, int y, int r, int g, int b)
+{
+  rgbdata ret = { t.rtable[r], t.gtable[g], t.btable[b] };
+  if (t.correction)
+    {
+      ret.red = (t.correction->apply (ret.red, x, y,
+                                      backlight_correction_parameters::red)
+                 - t.dark.red)
+                * t.red;
+      ret.green
+          = (t.correction->apply (ret.green, x, y,
+                                  backlight_correction_parameters::green)
+             - t.dark.green)
+            * t.green;
+      ret.blue = (t.correction->apply (ret.blue, x, y,
+                                       backlight_correction_parameters::blue)
+                  - t.dark.blue)
+                 * t.blue;
+    }
+  return ret;
+}
+
 /* Helper parameters for grayscale data fetching.  */
 struct getdata_params
 {
@@ -358,6 +435,15 @@ getdata_helper2 (const image_data *img, int_point_t p, int, gray_data_tables &t)
   return compute_gray_data (
       t, p.x, p.y, pxl.r,
       pxl.g, pxl.b);
+}
+
+/* Fetch one linearized/backlight-corrected native RGB pixel from IMG.  */
+inline rgbdata
+getrgbdata_helper (const image_data *img, int_point_t p, int,
+                   gray_data_tables &t)
+{
+  image_data::pixel pxl = img->get_rgb_pixel (p.x, p.y);
+  return compute_rgb_data (t, p.x, p.y, pxl.r, pxl.g, pxl.b);
 }
 
 /* Create new grayscale and sharpened data using parameters P.
@@ -444,6 +530,43 @@ get_new_gray_sharpened_data (gray_and_sharpen_params &p,
       return nullptr;
   return ret;
 }
+
+/* Create one interleaved, scanner-sharpened native RGB image.  Source pixels
+   are fetched once per pass.  Deconvolution uses independent effective MTF
+   parameters for the three scanner channels while unsharp masking naturally
+   operates on the RGB vector with the common radius and amount.  */
+std::unique_ptr<sharpened_rgb_data>
+get_new_rgb_sharpened_data (rgb_and_sharpen_params &p,
+                            progress_info *progress)
+{
+  auto ret = std::make_unique<sharpened_rgb_data> (p.gp.img->width,
+                                                   p.gp.img->height);
+  if (!ret || !ret->m_data)
+    return nullptr;
+
+  gray_data_tables t
+      = compute_gray_data_tables (p.gp, p.gp.backlight != nullptr, progress);
+  if (!t.rtable)
+    return nullptr;
+  t.correction = p.gp.backlight;
+
+  bool ok;
+  if (p.sp[0].deconvolution_p ())
+    ok = deconvolve_rgb<rgbdata, mem_rgbdata, const image_data *,
+                        gray_data_tables &, getrgbdata_helper> (
+        ret->m_data, p.gp.img, t, p.gp.img->width, p.gp.img->height, p.sp,
+        progress, true);
+  else
+    ok = sharpen<rgbdata, mem_rgbdata, const image_data *, gray_data_tables &,
+                 getrgbdata_helper> (
+        ret->m_data, p.gp.img, t, p.gp.img->width, p.gp.img->height,
+        p.sp[0].get_mode () == sharpen_parameters::none ? 0
+                                                        : p.sp[0].usm_radius,
+        p.sp[0].usm_amount, progress, true);
+  if (!ok)
+    return nullptr;
+  return ret;
+}
 } // anonymous namespace
 
 /* Prune render cache.  We need to do this so destruction order of MapAlloc and
@@ -452,6 +575,7 @@ void
 prune_render_caches ()
 {
   gray_and_sharpened_data_cache.prune ();
+  rgb_and_sharpened_data_cache.prune ();
   lookup_table_cache.prune ();
   backlight_correction_cache.prune ();
   image_layer_histogram_cache.prune ();
@@ -530,38 +654,32 @@ render::precompute_all (int flags, rgbdata patch_proportions,
         && (rgb_image_needed || (image_layer_needed && ir_simulation));
   if (sharpen_rgb)
     {
-      /* Publish the RGB image only after all three channel planes are ready.
-         This keeps m_rgb_image[0] as the single all-or-none state bit used by
-         the hot pixel accessors.  */
-      std::shared_ptr<sharpened_data> rgb_image_holder[3];
-      for (int channel = 0; channel < 3; ++channel)
-        {
-          gray_and_sharpen_params p
-              = { { m_img.id,
-                    &m_img,
-                    m_params.gamma,
-                    { m_img.to_linear[0], m_img.to_linear[1],
-                      m_img.to_linear[2] },
-                    rgbdata{0, 0, 0},
-                    channel == 0 ? 1.0f : 0.0f,
-                    channel == 1 ? 1.0f : 0.0f,
-                    channel == 2 ? 1.0f : 0.0f,
-                    m_backlight_correction.get (),
-                    m_backlight_correction_id,
-                    true },
-                  m_params.get_sharpen_parameters_for_channel (channel) };
-          rgb_image_holder[channel]
-              = gray_and_sharpened_data_cache.get (p, progress);
-          if (!rgb_image_holder[channel])
-            return false;
-        }
-      for (int channel = 0; channel < 3; ++channel)
-        {
-          m_rgb_image_holder[channel] = std::move (rgb_image_holder[channel]);
-          m_rgb_image[channel] = m_rgb_image_holder[channel]->m_data;
-        }
+      /* Native scanner channels are filtered together as one RGB operation,
+         but each deconvolution channel retains its own measured/physical MTF.
+         The persistent result is interleaved because subsequent rendering
+         normally consumes all three components together.  */
+      rgb_and_sharpen_params p
+          = { { m_img.id,
+                &m_img,
+                m_params.gamma,
+                { m_img.to_linear[0], m_img.to_linear[1],
+                  m_img.to_linear[2] },
+                rgbdata{0, 0, 0},
+                1.0f,
+                1.0f,
+                1.0f,
+                m_backlight_correction.get (),
+                m_backlight_correction_id,
+                true },
+              { m_params.get_sharpen_parameters_for_channel (0),
+                m_params.get_sharpen_parameters_for_channel (1),
+                m_params.get_sharpen_parameters_for_channel (2) } };
+      m_rgb_image_holder = rgb_and_sharpened_data_cache.get (p, progress);
+      if (!m_rgb_image_holder)
+        return false;
+      m_rgb_image = m_rgb_image_holder->m_data;
       if (colorscreen_checking)
-        assert (m_rgb_image[0] && m_rgb_image[1] && m_rgb_image[2]);
+        assert (m_rgb_image);
     }
 
   if (image_layer_needed)
@@ -579,15 +697,15 @@ render::precompute_all (int flags, rgbdata patch_proportions,
           const size_t size = (size_t)m_img.width * m_img.height;
 #pragma omp parallel for
           for (size_t i = 0; i < size; ++i)
-            m_image_layer[i]
-                = ((luminosity_t)m_rgb_image[0][i] - m_params.mix_dark.red)
-                      * m_params.mix_red
-                  + ((luminosity_t)m_rgb_image[1][i]
-                     - m_params.mix_dark.green)
-                        * m_params.mix_green
-                  + ((luminosity_t)m_rgb_image[2][i]
-                     - m_params.mix_dark.blue)
-                        * m_params.mix_blue;
+            {
+              const rgbdata pixel = m_rgb_image[i];
+              m_image_layer[i]
+                  = (pixel.red - m_params.mix_dark.red) * m_params.mix_red
+                    + (pixel.green - m_params.mix_dark.green)
+                          * m_params.mix_green
+                    + (pixel.blue - m_params.mix_dark.blue)
+                          * m_params.mix_blue;
+            }
           m_image_layer_id = lru_caches::get ();
         }
       else
@@ -793,6 +911,7 @@ void
 render_increase_lru_cache_sizes_for_stitch_projects (int n)
 {
   gray_and_sharpened_data_cache.increase_capacity (n);
+  rgb_and_sharpened_data_cache.increase_capacity (n);
 }
 
 /* Get linearized pixel at XX, YY with given RANGE.  */
