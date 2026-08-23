@@ -10,12 +10,18 @@ def replace(path, old, new, count=1):
 
 
 replace("src/qtgui/ImageWidget.cpp",
-        "[=] (colorscreen::progress_info *) mutable",
-        "[=] (colorscreen::progress_info *progress) mutable")
+        "#include <QTimer>\n#include <QtMath>\n",
+        "#include <QTimer>\n#include <QtMath>\n\n#include <cmath>\n")
 
 replace("src/qtgui/ImageWidget.cpp",
-        """        colorscreen::scr_to_img map;
-        (void)map.set_parameters (scrToImg, *scan);
+        """        QPainter p (&overlay);
+        p.setRenderHint (QPainter::Antialiasing);
+
+        colorscreen::scr_to_img map;
+        if (!map.set_parameters (scrToImg, *scan)) {
+          *result = std::move (overlay);
+          return;
+        }
 
         /* Background-safe equivalent of imageToWidget.
 """,
@@ -25,294 +31,17 @@ replace("src/qtgui/ImageWidget.cpp",
           return;
         }
 
+        QPainter p (&overlay);
+        p.setRenderHint (QPainter::Antialiasing);
+
         /* Background-safe equivalent of imageToWidget.
 """)
 
-replace("src/qtgui/ImageWidget.cpp",
-        """        double threshold  = dot_period * heatmapTol;
-        double amp_scale  = (scale > 1.0) ? 1.0 : (exaggerate / (dot_period / 2.0));
-        double marginPixels = maxArrowLen + 20.0 * scale;
-
-        bool isVerticalStrips
-""",
-        """        double threshold  = dot_period * heatmapTol;
-        double amp_scale  = (scale > 1.0) ? 1.0 : (exaggerate / (dot_period / 2.0));
-        double marginPixels = maxArrowLen + 20.0 * scale;
-
-        /* Never pass non-finite or wildly off-screen coordinates to QPainter.
-           Raster backends may spend effectively unbounded time clipping such
-           primitives, which used to make final-coordinate registration overlays
-           appear to freeze the whole application. */
-        auto finitePoint = [] (const QPointF &pt) {
-          return std::isfinite (pt.x ()) && std::isfinite (pt.y ());
-        };
-        auto painterPointVisible = [=] (const QPointF &pt) {
-          return finitePoint (pt)
-              && pt.x () >= -marginPixels && pt.x () <= w + marginPixels
-              && pt.y () >= -marginPixels && pt.y () <= h + marginPixels;
-        };
-
-        bool isVerticalStrips
-""")
-
-old_loop = """        const auto &pointsVec = points.read ();
-        for (size_t i = 0; i < pointsVec.size (); ++i) {
-          const auto &xi    = pointsVec[i].img;
-          QPointF     start = toWidget (xi);
-
-          /* Culling. */
-          if (start.x () < -marginPixels || start.x () > w + marginPixels
-              || start.y () < -marginPixels || start.y () > h + marginPixels)
-            continue;
-
-          /* Compute simulated location. */
-          colorscreen::point_t scr_p = pointsVec[i].scr;
-          if (isVerticalStrips) {
-            colorscreen::point_t scr2 = map.to_scr (xi);
-            scr_p.y = scr2.y;
-          }
-          colorscreen::point_t p_sim_img = map.to_img (scr_p);
-          QPointF              simulated = toWidget (p_sim_img);
-
-          double dx_img   = p_sim_img.x - xi.x;
-          double dy_img   = p_sim_img.y - xi.y;
-          double dist_img = sqrt (dx_img * dx_img + dy_img * dy_img);
-
-          /* Heatmap color calculation. */
-          QColor color;
-          double t = (threshold > 0) ? dist_img / threshold : 1.0;
-          if (t <= 0) color = Qt::green;
-          else if (t >= 1.0) color = Qt::red;
-          else {
-            int r_val, g_val;
-            if (t < 0.5) {
-              r_val = static_cast<int> (255 * (t / 0.5));
-              g_val = 255;
-            } else {
-              r_val = 255;
-              g_val = static_cast<int> (255 * (1.0 - (t - 0.5) / 0.5));
-            }
-            color = QColor (r_val, g_val, 0);
-          }
-
-          /* Arrow geometry. */
-          colorscreen::point_t xi_d = { xi.x + dx_img * amp_scale,
-                                        xi.y + dy_img * amp_scale };
-          QPointF arrowEnd = toWidget (xi_d);
-          double  dx_w     = arrowEnd.x () - start.x ();
-          double  dy_w     = arrowEnd.y () - start.y ();
-          double  dist_w2  = dx_w * dx_w + dy_w * dy_w;
-          bool    hasArrow = dist_w2 > 25.0;
-          double  arrowAngle = 0.0;
-
-          if (hasArrow) {
-            if (dist_w2 > maxArrowLen * maxArrowLen) {
-              double dist_w = sqrt (dist_w2);
-              dx_w *= maxArrowLen / dist_w;
-              dy_w *= maxArrowLen / dist_w;
-              arrowEnd = QPointF (start.x () + dx_w, start.y () + dy_w);
-            }
-            arrowAngle = std::atan2 (dy_w, dx_w);
-          }
-
-          /* Only draw the simulated target if it's shifted from the source. */
-          double dx_w_sim = simulated.x () - start.x ();
-          double dy_w_sim = simulated.y () - start.y ();
-          bool   isTargetVisible = (dx_w_sim * dx_w_sim + dy_w_sim * dy_w_sim) > 0.25;
-
-          bool isSelected = selected.count (
-              SelectedPoint{ i, SelectedPoint::RegistrationPoint });
-          visible.push_back ({ start, simulated, arrowEnd, arrowAngle, color,
-                               hasArrow, isSelected, isTargetVisible });
-        }
-"""
-new_loop = """        const auto &pointsVec = points.read ();
-        for (size_t i = 0; i < pointsVec.size (); ++i) {
-          if ((i & 255) == 0 && progress && progress->cancel_requested ())
-            break;
-
-          const auto &xi    = pointsVec[i].img;
-          QPointF     start = toWidget (xi);
-
-          /* Cull measured points before doing residual geometry. */
-          if (!painterPointVisible (start))
-            continue;
-
-          /* Compute simulated location.  A failed/extrapolated mapping may
-             legitimately produce a target far outside the viewport; keep the
-             measured point visible but do not hand that target to QPainter. */
-          colorscreen::point_t scr_p = pointsVec[i].scr;
-          if (isVerticalStrips) {
-            colorscreen::point_t scr2 = map.to_scr (xi);
-            scr_p.y = scr2.y;
-          }
-          colorscreen::point_t p_sim_img = map.to_img (scr_p);
-          QPointF simulated = start;
-          bool residualValid = std::isfinite (p_sim_img.x)
-                               && std::isfinite (p_sim_img.y);
-          double dx_img = 0.0, dy_img = 0.0, dist_img = 0.0;
-          if (residualValid) {
-            simulated = toWidget (p_sim_img);
-            dx_img = p_sim_img.x - xi.x;
-            dy_img = p_sim_img.y - xi.y;
-            dist_img = std::hypot (dx_img, dy_img);
-            residualValid = finitePoint (simulated)
-                            && std::isfinite (dx_img)
-                            && std::isfinite (dy_img)
-                            && std::isfinite (dist_img);
-          }
-
-          /* Heatmap color calculation.  Invalid residuals are visibly red but
-             have no target/arrow primitive. */
-          QColor color = Qt::red;
-          if (residualValid) {
-            double t = (threshold > 0) ? dist_img / threshold : 1.0;
-            if (t <= 0) color = Qt::green;
-            else if (t >= 1.0) color = Qt::red;
-            else {
-              int r_val, g_val;
-              if (t < 0.5) {
-                r_val = static_cast<int> (255 * (t / 0.5));
-                g_val = 255;
-              } else {
-                r_val = 255;
-                g_val = static_cast<int> (255 * (1.0 - (t - 0.5) / 0.5));
-              }
-              color = QColor (r_val, g_val, 0);
-            }
-          }
-
-          /* Arrow geometry.  Use hypot to avoid overflow, then limit the
-             primitive to the existing maximum pixel length. */
-          QPointF arrowEnd = start;
-          bool hasArrow = false;
-          double arrowAngle = 0.0;
-          if (residualValid && std::isfinite (amp_scale)) {
-            colorscreen::point_t xi_d = { xi.x + dx_img * amp_scale,
-                                          xi.y + dy_img * amp_scale };
-            if (std::isfinite (xi_d.x) && std::isfinite (xi_d.y)) {
-              QPointF candidate = toWidget (xi_d);
-              if (finitePoint (candidate)) {
-                double dx_w = candidate.x () - start.x ();
-                double dy_w = candidate.y () - start.y ();
-                double dist_w = std::hypot (dx_w, dy_w);
-                if (std::isfinite (dist_w) && dist_w > 5.0) {
-                  if (dist_w > maxArrowLen) {
-                    dx_w *= maxArrowLen / dist_w;
-                    dy_w *= maxArrowLen / dist_w;
-                  }
-                  arrowEnd = QPointF (start.x () + dx_w,
-                                      start.y () + dy_w);
-                  hasArrow = finitePoint (arrowEnd);
-                  if (hasArrow)
-                    arrowAngle = std::atan2 (dy_w, dx_w);
-                }
-              }
-            }
-          }
-
-          /* Simulated targets are useful only when they fall near the actual
-             overlay.  This is the critical bound missing in the old code. */
-          double targetDistance = residualValid
-              ? std::hypot (simulated.x () - start.x (),
-                            simulated.y () - start.y ())
-              : 0.0;
-          bool isTargetVisible = residualValid
-              && painterPointVisible (simulated)
-              && std::isfinite (targetDistance) && targetDistance > 0.5;
-
-          bool isSelected = selected.count (
-              SelectedPoint{ i, SelectedPoint::RegistrationPoint });
-          visible.push_back ({ start, simulated, arrowEnd, arrowAngle, color,
-                               hasArrow, isSelected, isTargetVisible });
-        }
-"""
-replace("src/qtgui/ImageWidget.cpp", old_loop, new_loop)
-
-replace("src/qtgui/ImageWidget.h",
-        """  bool registrationPointsVisible() const { return m_showRegistrationPoints; }
-
-  /**
-   * @brief Gets the number of registration points in the current solver.
-""",
-        """  bool registrationPointsVisible() const { return m_showRegistrationPoints; }
-
-  /** Return whether the asynchronous registration overlay is still rendering.
-      Used by smoke tests and useful for diagnostics. */
-  bool registrationOverlayRenderPending() const { return m_pointsRenderPending; }
-
-  /**
-   * @brief Gets the number of registration points in the current solver.
-""")
-
-replace("src/qtgui/main.cpp",
-        "#include <QDockWidget>\n#include <QIcon>\n",
-        "#include <QDockWidget>\n#include <QElapsedTimer>\n#include <QIcon>\n")
-
-replace("src/qtgui/main.cpp",
-        """      if (!source->primaryImageWidget() ||
-          source->primaryImageWidget()->coordinateSpace() !=
-              colorscreen::render_scan_coordinates ||
-          !view->setCoordinateSpace(colorscreen::render_final_coordinates) ||
-          view->coordinateSpace() != colorscreen::render_final_coordinates ||
-          source->primaryImageWidget()->coordinateSpace() !=
-              colorscreen::render_scan_coordinates) {
-        qCritical() << "New View Scan/Screen coordinate selection is not independent";
-        app.exit(14);
-        return;
-      }
-
-      colorscreen::render_type_t alternate = sourceType;
-""",
-        """      if (!source->primaryImageWidget() ||
-          source->primaryImageWidget()->coordinateSpace() !=
-              colorscreen::render_scan_coordinates ||
-          !view->setCoordinateSpace(colorscreen::render_final_coordinates) ||
-          view->coordinateSpace() != colorscreen::render_final_coordinates ||
-          source->primaryImageWidget()->coordinateSpace() !=
-              colorscreen::render_scan_coordinates) {
-        qCritical() << "New View Scan/Screen coordinate selection is not independent";
-        app.exit(14);
-        return;
-      }
-
-      /* Registration overlays must tolerate an extrapolated simulated target
-         far outside a rotated/mirrored final viewport.  The measured point is
-         on-screen; only the target is pathological. */
-      ParameterState overlayState = source->documentStateSnapshot();
-      overlayState.solver.add_point(
-          overlayState.scrToImg.center,
-          {(colorscreen::coord_t)1e12, (colorscreen::coord_t)-1e12},
-          colorscreen::solver_parameters::red);
-      source->applySharedDocumentState(
-          overlayState, QStringLiteral("Smoke final registration overlay"));
-      QCoreApplication::processEvents();
-      view->imageWidget()->setShowRegistrationPoints(true);
-      view->imageWidget()->repaint();
-      QElapsedTimer overlayTimer;
-      overlayTimer.start();
-      while (view->imageWidget()->registrationOverlayRenderPending() &&
-             overlayTimer.elapsed() < 2000)
-        QCoreApplication::processEvents();
-      if (view->imageWidget()->registrationOverlayRenderPending()) {
-        qCritical() << "Final-coordinate registration overlay did not finish";
-        app.exit(14);
-        return;
-      }
-      view->imageWidget()->setShowRegistrationPoints(false);
-      source->applySharedDocumentState(
-          coordinateState, QStringLiteral("Restore smoke screen coordinates"));
-      QCoreApplication::processEvents();
-
-      colorscreen::render_type_t alternate = sourceType;
-""")
-
 replace("NEWS",
-        """     orientation instead has a smooth degree-valued rotation and a persistent
-     final mirror stored with the screen geometry. Views can still be detached
-""",
-        """     orientation instead has a smooth degree-valued rotation and a persistent
-     final mirror stored with the screen geometry. Registration-point overlays
-     safely cull invalid or far-off simulated targets in this coordinate mode,
+        """     safely cull invalid or far-off simulated targets in this coordinate mode,
      avoiding rasterizer stalls on pathological residuals. Views can still be detached
+""",
+        """     safely cull invalid or far-off simulated targets in this coordinate mode,
+     avoiding rasterizer stalls on pathological residuals. Views can still be
+     detached
 """)
