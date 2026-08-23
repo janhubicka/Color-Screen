@@ -20,12 +20,16 @@ jobs:
       - name: Publish checksum-pinned feature commit
         run: |
           set -euxo pipefail
-          cp agent/qt-focus-feature.patch.gz.b64 /tmp/feature.patch.gz.b64
+          cat agent/qt-focus-feature.chunk-00 \
+              agent/qt-focus-feature.chunk-01 \
+              agent/qt-focus-feature.chunk-02 \
+              agent/qt-focus-feature.chunk-03 \
+              agent/qt-focus-feature.chunk-04 > /tmp/feature.patch.gz.b64
           echo 'b194fdacfc826da090541660a1845f747f2a2c6c2527c2716ab43c34a688bbf1  /tmp/feature.patch.gz.b64' | sha256sum -c -
 
           git fetch --no-tags origin main
           BASE=$(git rev-parse FETCH_HEAD)
-          test "$BASE" = 'ee723f4616708ff13f3ed7c034c8fcb27c728f0b'
+          test "$BASE" = 'c5d8463e4263332dc84f633ef535e99eaeec61df'
           git switch --detach "$BASE"
 
           base64 -d /tmp/feature.patch.gz.b64 | gzip -d > /tmp/feature.patch
@@ -64,9 +68,9 @@ jobs:
           qtgui: analyze focus from automatic solid-color areas
 
           Connect the solid-area focus-analysis library to the Qt Sharpness
-          workflow.  Build an unadjusted downscaled interpolated RGB analysis
+          workflow. Build an unadjusted downscaled interpolated RGB analysis
           image, find flat candidate regions, verify candidates independently,
-          choose a color-diverse subset, and fit one shared focus model.  Keep
+          choose a color-diverse subset, and fit one shared focus model. Keep
           all candidate/result/overlay state inside MainWindow so multiple
           documents and ordinary views remain independent.
 
@@ -74,8 +78,8 @@ jobs:
           For each selected region, learn focus and shared screen-primary
           scanner responses from the other regions, then evaluate the omitted
           tile while allowing only its local phase and three primary intensity
-          factors to move.  Report normalized held-out residuals alongside the
-          existing leave-one-out focus stability.  Fixed primary amplitudes
+          factors to move. Report normalized held-out residuals alongside the
+          existing leave-one-out focus stability. Fixed primary amplitudes
           retain the training normalization gauge, so held-out intensity
           factors remain relative and may exceed one.
 
