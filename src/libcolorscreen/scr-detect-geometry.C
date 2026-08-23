@@ -40,6 +40,14 @@ struct detection_stats {
   int precompute_failures = 0;
   int classmap_builds = 0;
   int rgb_precomputes = 0;
+  long long fast_patch_success = 0;
+  long long fast_patch_zero = 0;
+  long long fast_patch_too_small = 0;
+  long long fast_patch_too_large = 0;
+  long long fast_patch_center_reject = 0;
+  long long fast_patch_distance_reject = 0;
+  long long fast_strip_success = 0;
+  long long fast_strip_fail = 0;
   int patches = 0;
   bool legacy_preclassification_sharpening = false;
   double optimize_colors_ms = 0;
@@ -84,11 +92,18 @@ struct detection_stats {
             "initial_grids=%i initial_solver_failures=%i flood_attempts=%i "
             "flood_failures=%i patches=%i last_flood_failure=%s "
             "color_opt_failures=%i precompute_failures=%i classmap_builds=%i "
-            "rgb_precomputes=%i legacy_preclassification_sharpening=%i\n",
+            "rgb_precomputes=%i fast_patch_success=%lld fast_patch_zero=%lld "
+            "fast_patch_too_small=%lld fast_patch_too_large=%lld "
+            "fast_patch_center_reject=%lld fast_patch_distance_reject=%lld "
+            "fast_strip_success=%lld fast_strip_fail=%lld "
+            "legacy_preclassification_sharpening=%i\n",
             result, type_name, regions, seed_pixels, initial_grids,
             initial_solver_failures, flood_attempts, flood_failures, patches,
             last_flood_failure, color_opt_failures, precompute_failures,
-            classmap_builds, rgb_precomputes,
+            classmap_builds, rgb_precomputes, fast_patch_success,
+            fast_patch_zero, fast_patch_too_small, fast_patch_too_large,
+            fast_patch_center_reject, fast_patch_distance_reject,
+            fast_strip_success, fast_strip_fail,
             legacy_preclassification_sharpening);
     fprintf(report_file,
             "detect_stats_ms: optimize_colors=%.3f precompute=%.3f "
@@ -189,15 +204,20 @@ bool patch_center(int_point_t *entries, int size, coord_t *x, coord_t *y) {
 
 bool confirm_strip(const color_class_map *color_map, coord_t x, coord_t y,
                    scr_detect::color_class c, int min_patch_size, int *priority,
-                   bitmap_2d *visited) {
+                   bitmap_2d *visited, detection_stats *stats = nullptr) {
   int_point_t entries[min_patch_size + 1];
   /* Since strips are not isolated do not mark them as visited so we do not
    * block walk from other spot.  */
   int size = find_patch(*color_map, c, (int)(x + (coord_t)0.5),
                         (int)(y + (coord_t)0.5), min_patch_size + 1, entries,
                         visited, false);
-  if (size < min_patch_size)
+  if (size < min_patch_size) {
+    if (stats)
+      stats->fast_strip_fail++;
     return false;
+  }
+  if (stats)
+    stats->fast_strip_success++;
   *priority = 7;
   return true;
 }
@@ -740,7 +760,7 @@ bool confirm_patch(FILE *report_file, const color_class_map *color_map,
                    coord_t x, coord_t y, scr_detect::color_class c,
                    int min_patch_size, int max_patch_size, coord_t max_distance,
                    coord_t *cx, coord_t *cy, int *priority,
-                   bitmap_2d *visited) {
+                   bitmap_2d *visited, detection_stats *stats) {
   *cx = x;
   *cy = y;
   int_point_t entries[max_patch_size + 1];
@@ -749,17 +769,30 @@ bool confirm_patch(FILE *report_file, const color_class_map *color_map,
                         (int)(y + (coord_t)0.5), max_patch_size + 1, entries,
                         visited, true);
   if (size < min_patch_size) {
-    if (!size)
+    if (!size) {
       fail = "rejected: zero size";
-    else
+      if (stats)
+        stats->fast_patch_zero++;
+    } else {
       fail = "rejected: too small";
-  } else if (size > max_patch_size)
+      if (stats)
+        stats->fast_patch_too_small++;
+    }
+  } else if (size > max_patch_size) {
     fail = "rejected: too large";
-  else if (!patch_center(entries, size, cx, cy))
+    if (stats)
+      stats->fast_patch_too_large++;
+  } else if (!patch_center(entries, size, cx, cy)) {
     fail = "rejected: center not in patch";
-  else if ((*cx - x) * (*cx - x) + (*cy - y) * (*cy - y) >
-           max_distance * max_distance)
+    if (stats)
+      stats->fast_patch_center_reject++;
+  } else if ((*cx - x) * (*cx - x) + (*cy - y) * (*cy - y) >
+             max_distance * max_distance) {
     fail = "rejected: distance out of tolerance";
+    if (stats)
+      stats->fast_patch_distance_reject++;
+  } else if (stats)
+    stats->fast_patch_success++;
   if (report_file && fail && verbose)
     fprintf(
         report_file,
@@ -1251,8 +1284,11 @@ std::unique_ptr<screen_map> flood_fill(
     const render_scr_detect *render, const color_class_map *color_map,
     solver_parameters *sparam, bitmap_2d *visited, int *npatches,
     const detect_regular_screen_params *dsparams, progress_info *progress,
-    const char **failure_reason) {
+    detection_stats *stats, const char **failure_reason) {
   *failure_reason = "none";
+  /* Fast-path diagnostics are report-only so ordinary detection does not pay
+     for millions of counter updates on large scans.  */
+  detection_stats *fast_stats = report_file ? stats : nullptr;
   coord_t screen_xsize = my_sqrt(param.coordinate1.x * param.coordinate1.x +
                                  param.coordinate1.y * param.coordinate1.y);
   coord_t screen_ysize = my_sqrt(param.coordinate2.x * param.coordinate2.x +
@@ -1415,14 +1451,15 @@ std::unique_ptr<screen_map> flood_fill(
 #define cpatch(x, y, t, priority)                                              \
   ((fast && confirm_patch(report_file, color_map, x, y, t, min_patch_size,     \
                           max_patch_size, max_distance, &ix, &iy, &priority,   \
-                          visited)) ||                                         \
+                          visited, fast_stats)) ||                             \
    (slow && confirm(render, param.coordinate1, param.coordinate2, x, y, t,     \
                     color_map->width, color_map->height, max_distance, &ix,    \
                     &iy, &priority, 1.0f / 3.0f, 0.5f, 0.5f, false, false,     \
                     dsparams->min_patch_contrast)))
 #define cstrip(x, y, t, priority)                                              \
   ((fast &&                                                                    \
-    confirm_strip(color_map, x, y, t, min_patch_size, &priority, visited)) ||  \
+    confirm_strip(color_map, x, y, t, min_patch_size, &priority, visited,       \
+                  fast_stats)) ||                                              \
    (slow && confirm(render, param.coordinate1, param.coordinate2, x, y, t,     \
                     color_map->width, color_map->height, max_distance, &ix,    \
                     &iy, &priority, 1.0f / 3.0f, 0.5f, 0.5f, true, false,      \
@@ -1477,7 +1514,7 @@ std::unique_ptr<screen_map> flood_fill(
                           t == scr_detect::blue ? blue_min_patch_size          \
                                                 : min_patch_size,              \
                           max_patch_size, max_distance, &ix, &iy, &priority,   \
-                          visited)) ||                                         \
+                          visited, fast_stats)) ||                             \
    (slow && confirm(render, c1, c2, x, y, t, color_map->width,                 \
                     color_map->height, max_distance, &ix, &iy, &priority,      \
                     1.0 / 3, 0.20, t == scr_detect::blue ? 0.18 : 0.25, false, \
@@ -2044,7 +2081,7 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
                                dsparams->fast_floodfill, sparam.points[0].img.x,
                                sparam.points[0].img.y, param, img, render.get(),
                                this_cmap, NULL /*sparam*/, &visited,
-                               &ret.patches_found, dsparams, progress,
+                               &ret.patches_found, dsparams, progress, &stats,
                                &flood_failure);
                 stats.add_time(&stats.flood_ms, stage_start);
                 stats.last_flood_failure = flood_failure;
