@@ -465,6 +465,7 @@ private:
 
   std::function<void(QRect)> m_areaSelectionCallback = nullptr;
   ImageWidget::InteractionMode m_previousInteractionMode = ImageWidget::PanMode;
+  bool m_autoAddPointsAfterCoordinates = false;
 
 
   std::shared_ptr<colorscreen::image_data> m_scan;

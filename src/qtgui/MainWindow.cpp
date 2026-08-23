@@ -4896,6 +4896,12 @@ void MainWindow::onAutodetectScreen() {
     return;
   }
 
+  if (m_scrToImgParams.type != colorscreen::Random) {
+    m_autoAddPointsAfterCoordinates = true;
+    onAutodetectCoordinatesRequested();
+    return;
+  }
+
   // Create progress info
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Detecting screen", 1);
@@ -5192,8 +5198,10 @@ void MainWindow::onAutodetectCoordinatesFinished(
   if (progress)
     removeProgress(progress);
 
-  if (cancelled)
+  if (cancelled) {
+    m_autoAddPointsAfterCoordinates = false;
     return;
+  }
 
   if (success) {
     ParameterState oldState = getCurrentState();
@@ -5213,7 +5221,13 @@ void MainWindow::onAutodetectCoordinatesFinished(
 
     m_imageWidget->update();
     statusBar()->showMessage("Autodetect coordinates finished", 3000);
+
+    if (m_autoAddPointsAfterCoordinates) {
+      m_autoAddPointsAfterCoordinates = false;
+      onAutomaticallyAddPointsRequested(m_geometryPanel->finetuneAreaParams());
+    }
   } else {
+    m_autoAddPointsAfterCoordinates = false;
     QMessageBox::warning(this, "Autodetect Coordinates",
                          "Autodetect coordinates failed.");
   }

@@ -560,9 +560,9 @@ void CapturePanel::setupUi()
     
     addButtonParameter("Try luck", "Autodetect regular screen", 
         [this]() { emit autodetectRequested(); },
-        [this](const ParameterState &) {
+        [this](const ParameterState &s) {
             auto img = m_imageGetter();
-            return img && img->has_rgb();
+            return img && (img->has_rgb() || s.scrToImg.type != colorscreen::Random);
         });
 
     // Initial update
