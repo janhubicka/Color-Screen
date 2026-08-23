@@ -32,17 +32,18 @@ diff --git a/.agents/qtgui.md b/.agents/qtgui.md
 -Sharpness-only inspector.
 +Color/IR choice, displayed coordinate system, zoom, and pan remain view-local.
 +Each ordinary view exposes **Scan coordinates** and **Screen coordinates** in
-+its toolbar.  The latter is libcolorscreen's `final` coordinate system: the
++its toolbar. The latter is libcolorscreen's `final` coordinate system: the
 +geometrically corrected screen plane also used by screen-geometry file output
-+and stitched projects.  Scan mode preserves the existing Qt crop/rotation/mirror
++and stitched projects. Scan mode preserves the existing Qt crop/rotation/mirror
 +presentation; Screen mode lays out the canvas in final coordinates while mouse
 +tools, registration edits, crop/measurement callbacks, and panel APIs continue
-+to exchange scan coordinates for ordinary single scans.  `tile_parameters`
-+selects the same distinction through `render_coordinates_scan` (the backward-
-+compatible default) or `render_coordinates_final`.  Stitched projects have no
-+single scan coordinate system and therefore use final coordinates. Slanted-edge
-+reference views remain intentionally specialized and keep their separate
-+Navigation + Sharpness-only inspector in scan coordinates.
++to exchange scan coordinates for ordinary single scans. The public tile API
++selects the same distinction with `render_scan_coordinates` or
++`render_final_coordinates`; the legacy `render_tile` overload remains scan-
++coordinate behavior. Stitched projects have no single scan coordinate system
++and therefore use final coordinates. Slanted-edge reference views remain
++intentionally specialized and keep their separate Navigation + Sharpness-only
++inspector in scan coordinates.
  
  Top-level menus follow the conventional order **File, Edit, View,
  Registration, Window, Help**. `Window` is the final working menu and owns MDI
