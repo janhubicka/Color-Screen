@@ -4861,7 +4861,422 @@ finetune_prune_screen_cache_for_test ()
   finetune_screen_cache.prune ();
   finetune_screen_source_cache.prune ();
 }
- 
+
+namespace
+{
+
+struct flat_window
+{
+  int x = 0;
+  int y = 0;
+  rgbdata mean = { 0, 0, 0 };
+  coord_t relative_rms = 0;
+  coord_t relative_gradient = 0;
+  coord_t score = 0;
+};
+
+/* Evaluate how well one RGB window is described by an independent shallow
+   plane in each channel.  Local X and Y coordinates are centred, so the
+   constant, X and Y basis vectors are mutually orthogonal on a rectangle and
+   the least-squares residual can be computed without a matrix solve.  */
+static bool
+measure_flat_window (const rgbdata *data, int stride, int x0, int y0,
+                     int width, int height, coord_t minimum_color_norm,
+                     flat_window *ret)
+{
+  const double cx = (width - 1) * 0.5;
+  const double cy = (height - 1) * 0.5;
+  const double n = (double)width * height;
+  const double xnorm
+      = height * (double)width * (width * (double)width - 1.0) / 12.0;
+  const double ynorm
+      = width * (double)height * (height * (double)height - 1.0) / 12.0;
+
+  std::array<double, 3> sum = { 0, 0, 0 };
+  std::array<double, 3> sumsq = { 0, 0, 0 };
+  std::array<double, 3> sumx = { 0, 0, 0 };
+  std::array<double, 3> sumy = { 0, 0, 0 };
+
+  for (int y = 0; y < height; y++)
+    {
+      const double dy = y - cy;
+      for (int x = 0; x < width; x++)
+        {
+          const double dx = x - cx;
+          const rgbdata c = data[(size_t)(y0 + y) * stride + x0 + x];
+          if (!my_isfinite (c.red) || !my_isfinite (c.green)
+              || !my_isfinite (c.blue))
+            return false;
+          const double v[3] = { c.red, c.green, c.blue };
+          for (int channel = 0; channel < 3; channel++)
+            {
+              sum[channel] += v[channel];
+              sumsq[channel] += v[channel] * v[channel];
+              sumx[channel] += dx * v[channel];
+              sumy[channel] += dy * v[channel];
+            }
+        }
+    }
+
+  std::array<double, 3> mean;
+  double residual = 0;
+  double gradient2 = 0;
+  double mean_norm2 = 0;
+  for (int channel = 0; channel < 3; channel++)
+    {
+      mean[channel] = sum[channel] / n;
+      mean_norm2 += mean[channel] * mean[channel];
+      double rss = sumsq[channel] - sum[channel] * sum[channel] / n;
+      if (xnorm > 0)
+        {
+          rss -= sumx[channel] * sumx[channel] / xnorm;
+          const double span = sumx[channel] / xnorm * (width - 1);
+          gradient2 += span * span;
+        }
+      if (ynorm > 0)
+        {
+          rss -= sumy[channel] * sumy[channel] / ynorm;
+          const double span = sumy[channel] / ynorm * (height - 1);
+          gradient2 += span * span;
+        }
+      /* Roundoff can make the analytically non-negative residual slightly
+         negative for an exactly planar window.  */
+      residual += std::max (rss, 0.0);
+    }
+
+  const double mean_norm = std::sqrt (mean_norm2);
+  if (!my_isfinite (mean_norm) || mean_norm < minimum_color_norm)
+    return false;
+
+  ret->mean = { (luminosity_t)mean[0], (luminosity_t)mean[1],
+                (luminosity_t)mean[2] };
+  ret->relative_rms = std::sqrt (residual / n) / mean_norm;
+  ret->relative_gradient = std::sqrt (gradient2) / mean_norm;
+  ret->score = ret->relative_rms + ret->relative_gradient * (coord_t)0.25;
+  return my_isfinite (ret->relative_rms)
+         && my_isfinite (ret->relative_gradient) && my_isfinite (ret->score);
+}
+
+static bool
+usable_focus_fit_p (const finetune_focus_area_candidate &candidate,
+                    const finetune_focus_area_selection_parameters &parameters)
+{
+  const finetune_result &fit = candidate.fit;
+  if (!fit.success || !my_isfinite (fit.badness) || fit.badness < 0
+      || !my_isfinite (fit.contrast)
+      || fit.contrast < parameters.min_contrast)
+    return false;
+  const rgbdata c = candidate.mean_color;
+  if (!my_isfinite (c.red) || !my_isfinite (c.green)
+      || !my_isfinite (c.blue))
+    return false;
+  const double red = std::max ((luminosity_t)0, c.red);
+  const double green = std::max ((luminosity_t)0, c.green);
+  const double blue = std::max ((luminosity_t)0, c.blue);
+  const double norm = std::sqrt (red * red + green * green + blue * blue);
+  return my_isfinite (norm) && norm >= parameters.minimum_color_norm;
+}
+
+static coord_t
+focus_fit_quality (const finetune_focus_area_candidate &candidate)
+{
+  const rgbdata c = candidate.mean_color;
+  const double red = std::max ((luminosity_t)0, c.red);
+  const double green = std::max ((luminosity_t)0, c.green);
+  const double blue = std::max ((luminosity_t)0, c.blue);
+  const double norm = std::sqrt (red * red + green * green + blue * blue);
+  return candidate.fit.badness / norm;
+}
+
+static std::array<double, 3>
+normalized_focus_color (rgbdata c)
+{
+  const double red = std::max ((luminosity_t)0, c.red);
+  const double green = std::max ((luminosity_t)0, c.green);
+  const double blue = std::max ((luminosity_t)0, c.blue);
+  const double sum = red + green + blue;
+  return { red / sum, green / sum, blue / sum };
+}
+
+static double
+determinant3 (const double m[3][3])
+{
+  return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+         - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+         + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+}
+
+static void
+add_outer_product (double matrix[3][3], const std::array<double, 3> &v,
+                   double weight)
+{
+  for (int y = 0; y < 3; y++)
+    for (int x = 0; x < 3; x++)
+      matrix[y][x] += weight * v[y] * v[x];
+}
+
+} // namespace
+
+bool
+finetune_find_focus_area_candidates (
+    const rgbdata *data, int width, int height, int stride,
+    const finetune_focus_area_search_parameters &parameters,
+    std::vector<finetune_focus_area_candidate> *areas)
+{
+  if (!areas)
+    return false;
+  areas->clear ();
+  if (!data || width <= 0 || height <= 0 || stride < width
+      || parameters.window_width < 2 || parameters.window_height < 2
+      || parameters.window_width > width || parameters.window_height > height
+      || parameters.scan_step < 0 || parameters.max_candidates <= 0
+      || !my_isfinite (parameters.max_relative_rms)
+      || parameters.max_relative_rms < 0
+      || !my_isfinite (parameters.max_relative_gradient)
+      || parameters.max_relative_gradient < 0
+      || !my_isfinite (parameters.minimum_color_norm)
+      || parameters.minimum_color_norm < 0
+      || !my_isfinite (parameters.minimum_separation)
+      || parameters.minimum_separation < 0
+      || !my_isfinite (parameters.origin.x)
+      || !my_isfinite (parameters.origin.y)
+      || !my_isfinite (parameters.xstep) || parameters.xstep <= 0
+      || !my_isfinite (parameters.ystep) || parameters.ystep <= 0)
+    return false;
+
+  const int scan_step
+      = parameters.scan_step > 0
+            ? parameters.scan_step
+            : std::max (1, std::min (parameters.window_width,
+                                     parameters.window_height)
+                              / 4);
+  if (scan_step <= 0)
+    return false;
+  const coord_t separation
+      = parameters.minimum_separation > 0
+            ? parameters.minimum_separation
+            : (coord_t)std::min (parameters.window_width,
+                                 parameters.window_height)
+                  * (coord_t)0.75;
+  const coord_t separation2 = separation * separation;
+
+  std::vector<int> xpos, ypos;
+  auto fill_positions = [scan_step] (int limit, std::vector<int> *positions) {
+    for (int p = 0; p <= limit; p += scan_step)
+      positions->push_back (p);
+    /* Always inspect the far image edge even when the regular search stride
+       does not land on it exactly.  */
+    if (positions->empty () || positions->back () != limit)
+      positions->push_back (limit);
+  };
+  fill_positions (width - parameters.window_width, &xpos);
+  fill_positions (height - parameters.window_height, &ypos);
+
+  std::vector<flat_window> flat;
+  for (int y : ypos)
+    for (int x : xpos)
+      {
+        flat_window candidate;
+        candidate.x = x;
+        candidate.y = y;
+        if (!measure_flat_window (data, stride, x, y, parameters.window_width,
+                                  parameters.window_height,
+                                  parameters.minimum_color_norm, &candidate))
+          continue;
+        if (candidate.relative_rms > parameters.max_relative_rms
+            || candidate.relative_gradient
+                   > parameters.max_relative_gradient)
+          continue;
+        flat.push_back (candidate);
+      }
+
+  std::sort (flat.begin (), flat.end (), [] (const flat_window &a,
+                                             const flat_window &b) {
+    if (a.score != b.score)
+      return a.score < b.score;
+    if (a.y != b.y)
+      return a.y < b.y;
+    return a.x < b.x;
+  });
+
+  struct accepted_position
+  {
+    coord_t x;
+    coord_t y;
+  };
+  std::vector<accepted_position> accepted;
+  accepted.reserve (std::min ((size_t)parameters.max_candidates, flat.size ()));
+  for (const flat_window &candidate : flat)
+    {
+      const coord_t cx
+          = candidate.x + (parameters.window_width - 1) * (coord_t)0.5;
+      const coord_t cy
+          = candidate.y + (parameters.window_height - 1) * (coord_t)0.5;
+      bool separated = true;
+      for (const accepted_position &old : accepted)
+        {
+          const coord_t dx = cx - old.x;
+          const coord_t dy = cy - old.y;
+          if (dx * dx + dy * dy < separation2)
+            {
+              separated = false;
+              break;
+            }
+        }
+      if (!separated)
+        continue;
+
+      finetune_focus_area_candidate out;
+      out.center = { parameters.origin.x + cx * parameters.xstep,
+                     parameters.origin.y + cy * parameters.ystep };
+      out.area = {
+        out.center.x - parameters.window_width * parameters.xstep * (coord_t)0.5,
+        out.center.y - parameters.window_height * parameters.ystep * (coord_t)0.5,
+        parameters.window_width * parameters.xstep,
+        parameters.window_height * parameters.ystep
+      };
+      out.mean_color = candidate.mean;
+      out.relative_rms = candidate.relative_rms;
+      out.relative_gradient = candidate.relative_gradient;
+      out.search_score = candidate.score;
+      areas->push_back (std::move (out));
+      accepted.push_back ({ cx, cy });
+      if ((int)areas->size () >= parameters.max_candidates)
+        break;
+    }
+  return true;
+}
+
+bool
+finetune_select_focus_areas (
+    const std::vector<finetune_focus_area_candidate> &candidates,
+    const finetune_focus_area_selection_parameters &parameters,
+    std::vector<size_t> *selected, coord_t *color_volume)
+{
+  if (!selected)
+    return false;
+  selected->clear ();
+  if (color_volume)
+    *color_volume = 0;
+  if (parameters.min_areas < 2 || parameters.max_areas < parameters.min_areas
+      || parameters.max_areas > 8
+      || !my_isfinite (parameters.min_contrast)
+      || parameters.min_contrast < 0
+      || !my_isfinite (parameters.max_quality_ratio)
+      || parameters.max_quality_ratio < 1
+      || !my_isfinite (parameters.quality_floor)
+      || parameters.quality_floor <= 0
+      || !my_isfinite (parameters.minimum_color_norm)
+      || parameters.minimum_color_norm <= 0
+      || !my_isfinite (parameters.regularization)
+      || parameters.regularization <= 0
+      || !my_isfinite (parameters.minimum_color_volume)
+      || parameters.minimum_color_volume < 0)
+    return false;
+
+  std::vector<size_t> usable;
+  coord_t best_quality = std::numeric_limits<coord_t>::max ();
+  for (size_t i = 0; i < candidates.size (); i++)
+    if (usable_focus_fit_p (candidates[i], parameters))
+      {
+        const coord_t quality = focus_fit_quality (candidates[i]);
+        if (!my_isfinite (quality) || quality < 0)
+          continue;
+        usable.push_back (i);
+        best_quality = std::min (best_quality, quality);
+      }
+  if ((int)usable.size () < parameters.min_areas)
+    return false;
+
+  const coord_t quality_scale = std::max (best_quality, parameters.quality_floor);
+  const coord_t quality_limit
+      = std::max (best_quality * parameters.max_quality_ratio,
+                  best_quality
+                      + parameters.quality_floor
+                            * (parameters.max_quality_ratio - (coord_t)1));
+  usable.erase (std::remove_if (usable.begin (), usable.end (), [&] (size_t i) {
+                  return focus_fit_quality (candidates[i]) > quality_limit;
+                }),
+                usable.end ());
+  if ((int)usable.size () < parameters.min_areas)
+    return false;
+
+  double gram[3][3] = {
+    { parameters.regularization, 0, 0 },
+    { 0, parameters.regularization, 0 },
+    { 0, 0, parameters.regularization }
+  };
+  std::vector<bool> used (candidates.size (), false);
+
+  while ((int)selected->size () < parameters.max_areas
+         && selected->size () < usable.size ())
+    {
+      size_t best_index = (size_t)-1;
+      double best_det = -1;
+      for (size_t index : usable)
+        if (!used[index])
+          {
+            const std::array<double, 3> color
+                = normalized_focus_color (candidates[index].mean_color);
+            const double quality
+                = quality_scale
+                  / std::max (focus_fit_quality (candidates[index]),
+                              quality_scale);
+            double trial[3][3];
+            for (int y = 0; y < 3; y++)
+              for (int x = 0; x < 3; x++)
+                trial[y][x] = gram[y][x];
+            add_outer_product (trial, color, quality);
+            const double det = determinant3 (trial);
+            if (best_index == (size_t)-1 || det > best_det + 1e-18
+                || (std::fabs (det - best_det) <= 1e-18
+                    && (candidates[index].fit.badness
+                            < candidates[best_index].fit.badness
+                        || (candidates[index].fit.badness
+                                == candidates[best_index].fit.badness
+                            && candidates[index].search_score
+                                   < candidates[best_index].search_score))))
+              {
+                best_index = index;
+                best_det = det;
+              }
+          }
+      if (best_index == (size_t)-1)
+        break;
+      used[best_index] = true;
+      selected->push_back (best_index);
+      const std::array<double, 3> color
+          = normalized_focus_color (candidates[best_index].mean_color);
+      const double quality
+          = quality_scale
+            / std::max (focus_fit_quality (candidates[best_index]),
+                        quality_scale);
+      add_outer_product (gram, color, quality);
+    }
+
+  if ((int)selected->size () < parameters.min_areas)
+    {
+      selected->clear ();
+      return false;
+    }
+
+  double normalized_gram[3][3] = {};
+  for (size_t index : *selected)
+    add_outer_product (normalized_gram,
+                       normalized_focus_color (candidates[index].mean_color),
+                       1.0 / selected->size ());
+  const double volume = std::max (0.0, determinant3 (normalized_gram));
+  if (color_volume)
+    *color_volume = volume;
+  if (!my_isfinite (volume) || volume < parameters.minimum_color_volume)
+    {
+      selected->clear ();
+      return false;
+    }
+  return true;
+}
+
+
 /* Produce element I of a geometric sequence from MIN to MAX divided into
    STEPS intervals.  */
 static coord_t

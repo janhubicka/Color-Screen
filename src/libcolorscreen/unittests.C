@@ -628,6 +628,221 @@ test_finetune_uniform_image_layer ()
   return true;
 }
 
+/* Verify the cheap solid-area finder and the post-finetune colour-diverse
+   subset selection used by automatic focus analysis.  */
+bool
+test_finetune_focus_areas ()
+{
+  constexpr int width = 128;
+  constexpr int height = 64;
+  std::vector<rgbdata> image ((size_t)width * height);
+
+  /* Texture everywhere by default so an unpainted window is not accidentally
+     classified as a solid area.  */
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      {
+        const luminosity_t d = ((x + y) & 1) ? (luminosity_t)0.15
+                                              : (luminosity_t)-0.15;
+        image[(size_t)y * width + x]
+            = { (luminosity_t)0.45 + d, (luminosity_t)0.40 - d,
+                (luminosity_t)0.35 + d };
+      }
+
+  /* A gently varying red-brown area should survive the fitted-plane test.  */
+  for (int y = 8; y < 40; y++)
+    for (int x = 8; x < 40; x++)
+      image[(size_t)y * width + x]
+          = { (luminosity_t)(0.42 + 0.0004 * (x - 24)),
+              (luminosity_t)(0.25 + 0.0002 * (y - 24)),
+              (luminosity_t)(0.18 - 0.0003 * (x - 24)) };
+
+  /* This area is perfectly planar too, but its change across one analysis
+     window is deliberately too large to count as locally uniform.  */
+  for (int y = 8; y < 40; y++)
+    for (int x = 48; x < 80; x++)
+      image[(size_t)y * width + x]
+          = { (luminosity_t)(0.12 + 0.018 * (x - 48)),
+              (luminosity_t)0.32, (luminosity_t)0.22 };
+
+  /* A second genuinely flat colour lets non-maximum suppression retain more
+     than one useful region.  */
+  for (int y = 8; y < 40; y++)
+    for (int x = 88; x < 120; x++)
+      image[(size_t)y * width + x]
+          = { (luminosity_t)0.15, (luminosity_t)0.55,
+              (luminosity_t)0.22 };
+
+  finetune_focus_area_search_parameters search;
+  search.window_width = 16;
+  search.window_height = 16;
+  search.scan_step = 4;
+  search.max_candidates = 8;
+  search.max_relative_rms = 0.01;
+  search.max_relative_gradient = 0.08;
+  search.minimum_separation = 12;
+  search.origin = { 100, 200 };
+  search.xstep = 2;
+  search.ystep = 3;
+
+  std::vector<finetune_focus_area_candidate> areas;
+  if (!finetune_find_focus_area_candidates (
+          image.data (), width, height, width, search, &areas)
+      || areas.empty ())
+    {
+      fprintf (stderr, "Focus-area finder did not find solid regions\n");
+      return false;
+    }
+
+  bool found_brown = false;
+  bool found_green = false;
+  for (const finetune_focus_area_candidate &area : areas)
+    {
+      const coord_t cx = (area.center.x - search.origin.x) / search.xstep;
+      const coord_t cy = (area.center.y - search.origin.y) / search.ystep;
+      const bool brown = cx >= 15.5 && cx <= 31.5
+                         && cy >= 15.5 && cy <= 31.5;
+      const bool green = cx >= 95.5 && cx <= 111.5
+                         && cy >= 15.5 && cy <= 31.5;
+      if (!brown && !green)
+        {
+          fprintf (stderr,
+                   "Focus-area finder accepted texture/strong gradient at "
+                   "%.3f, %.3f\n",
+                   (double)cx, (double)cy);
+          return false;
+        }
+      if (area.area.width != search.window_width * search.xstep
+          || area.area.height != search.window_height * search.ystep
+          || area.relative_rms > search.max_relative_rms
+          || area.relative_gradient > search.max_relative_gradient)
+        {
+          fprintf (stderr, "Focus-area geometry/quality metadata mismatch\n");
+          return false;
+        }
+      found_brown |= brown;
+      found_green |= green;
+    }
+  if (!found_brown || !found_green)
+    {
+      fprintf (stderr,
+               "Focus-area non-maximum suppression lost an independent "
+               "solid colour\n");
+      return false;
+    }
+
+  finetune_focus_area_search_parameters invalid = search;
+  invalid.window_width = width + 1;
+  if (finetune_find_focus_area_candidates (
+          image.data (), width, height, width, invalid, &areas))
+    {
+      fprintf (stderr, "Invalid focus-area search geometry was accepted\n");
+      return false;
+    }
+  invalid = search;
+  invalid.scan_step = -1;
+  if (finetune_find_focus_area_candidates (
+          image.data (), width, height, width, invalid, &areas))
+    {
+      fprintf (stderr, "Negative focus-area search stride was accepted\n");
+      return false;
+    }
+
+  /* Individually good red samples should not crowd out slightly worse green
+     and blue samples.  Selection gates on raw BADNESS and then maximizes the
+     colour information volume.  UNCERTAINTY is intentionally irrelevant.  */
+  std::vector<finetune_focus_area_candidate> fitted;
+  for (int i = 0; i < 8; i++)
+    {
+      finetune_focus_area_candidate candidate;
+      candidate.mean_color
+          = { (luminosity_t)0.80, (luminosity_t)(0.10 + 0.002 * i),
+              (luminosity_t)(0.10 - 0.002 * i) };
+      candidate.search_score = (coord_t)i * 0.001;
+      candidate.fit.success = true;
+      candidate.fit.badness = 1.0 + 0.01 * i;
+      candidate.fit.contrast = 0.1;
+      candidate.fit.uncertainty = 1000 - i;
+      fitted.push_back (candidate);
+    }
+  auto add_fitted = [&] (rgbdata color, coord_t badness, coord_t contrast,
+                         coord_t uncertainty) {
+    finetune_focus_area_candidate candidate;
+    candidate.mean_color = color;
+    candidate.fit.success = true;
+    candidate.fit.badness = badness;
+    candidate.fit.contrast = contrast;
+    candidate.fit.uncertainty = uncertainty;
+    fitted.push_back (candidate);
+  };
+  add_fitted ({ 0.10, 0.80, 0.10 }, 1.16, 0.1, 1e6);
+  add_fitted ({ 0.10, 0.10, 0.80 }, 1.18, 0.1, 1e9);
+  /* A dark tile can have a deceptively small absolute residual.  Its quality
+     must be compared relative to observed signal, otherwise it would set an
+     unrealistically strict raw-BADNESS cutoff for every brighter colour.  */
+  add_fitted ({ 0.02, 0.01, 0.01 }, 0.20, 0.1, 0.001);
+  /* Excellent raw residual but unusably weak screen modulation: this must not
+     establish BEST_BADNESS or enter the subset.  */
+  add_fitted ({ 0.75, 0.05, 0.20 }, 0.50,
+              finetune_default_min_contrast / 2, 0.01);
+  /* Diverse but not a very good individual fit.  */
+  add_fitted ({ 0.45, 0.45, 0.10 }, 4.0, 0.1, 0.01);
+
+  finetune_focus_area_selection_parameters selection;
+  selection.min_areas = 3;
+  selection.max_areas = 3;
+  selection.min_contrast = finetune_default_min_contrast;
+  selection.max_quality_ratio = 1.6;
+  selection.minimum_color_volume = 0.001;
+  std::vector<size_t> selected;
+  coord_t volume = 0;
+  if (!finetune_select_focus_areas (fitted, selection, &selected, &volume)
+      || selected.size () != 3 || volume < 0.005)
+    {
+      fprintf (stderr,
+               "Focus-area selector did not find a well-conditioned subset "
+               "(volume %.9g)\n",
+               (double)volume);
+      return false;
+    }
+  bool red = false, green = false, blue = false;
+  for (size_t index : selected)
+    {
+      rgbdata c = fitted[index].mean_color;
+      if (c.red > c.green && c.red > c.blue)
+        red = true;
+      else if (c.green > c.red && c.green > c.blue)
+        green = true;
+      else if (c.blue > c.red && c.blue > c.green)
+        blue = true;
+    }
+  if (!red || !green || !blue)
+    {
+      fprintf (stderr,
+               "Focus-area selector preferred repeated colours over "
+               "diversity\n");
+      return false;
+    }
+
+  std::vector<finetune_focus_area_candidate> same_color (5);
+  for (size_t i = 0; i < same_color.size (); i++)
+    {
+      same_color[i].mean_color = { 0.8, 0.1, 0.1 };
+      same_color[i].fit.success = true;
+      same_color[i].fit.badness = 1 + i * 0.01;
+      same_color[i].fit.contrast = 0.1;
+    }
+  if (finetune_select_focus_areas (same_color, selection, &selected, &volume))
+    {
+      fprintf (stderr,
+               "Repeated copies of one colour passed focus-area diversity "
+               "validation\n");
+      return false;
+    }
+
+  return true;
+}
+
 bool
 test_finetune_focus_screen_cache ()
 {
@@ -8291,6 +8506,9 @@ main (int argc, char **argv)
     { "finetune_uniform_tiles",
       "uniform-image-layer multi-tile finetune tests",
       [] () { return test_finetune_uniform_image_layer (); } },
+    { "finetune_focus_areas",
+      "solid focus-area search and diverse-subset tests",
+      [] () { return test_finetune_focus_areas (); } },
     { "finetune_focus_cache", "exact finetune focus-screen cache tests",
       [] () { return test_finetune_focus_screen_cache (); } },
     { "scanner_blur_correction", "scanner blur correction table tests",

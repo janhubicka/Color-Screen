@@ -3,6 +3,7 @@
 #include "base.h"
 #include "color.h"
 #include "colorscreen.h"
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -334,6 +335,96 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
           const image_data &img, const std::vector<point_t> &locs,
           const std::vector<finetune_result> *results,
           const finetune_parameters &fparams, progress_info *progress);
+
+/* Candidate solid-colour region for multi-tile focus analysis.  AREA and
+   CENTER are expressed in caller-supplied image coordinates.  The search
+   stage fills the geometric/color diagnostics; callers subsequently run an
+   ordinary one-tile FINETUNE fit and store it in FIT before subset selection. */
+struct finetune_focus_area_candidate
+{
+  image_area area;
+  point_t center = { -1, -1 };
+  rgbdata mean_color = { 0, 0, 0 };
+  /* RMS residual after independently fitting a shallow plane to each RGB
+     channel, divided by the norm of the mean RGB vector.  */
+  coord_t relative_rms = std::numeric_limits<coord_t>::max ();
+  /* Norm of the fitted RGB change across the window divided by the norm of
+     the mean RGB vector.  This rejects strong gradients while allowing gentle
+     fading or illumination variation.  */
+  coord_t relative_gradient = std::numeric_limits<coord_t>::max ();
+  /* Search ordering score.  Lower is flatter; this is not a solver score.  */
+  coord_t search_score = std::numeric_limits<coord_t>::max ();
+  finetune_result fit;
+};
+
+/* Parameters for finding locally uniform areas in a linear RGB analysis
+   image.  DATA passed to FINETUNE_FIND_FOCUS_AREA_CANDIDATES is expected to be
+   an unadjusted/interpolated reconstruction rather than a display-gamma
+   preview.  ORIGIN is the image coordinate of sample [0,0]'s centre and
+   XSTEP/YSTEP map analysis samples back to image coordinates.  */
+struct finetune_focus_area_search_parameters
+{
+  int window_width = 0;
+  int window_height = 0;
+  /* Candidate-grid step in analysis pixels.  Zero chooses one quarter of the
+     smaller window dimension.  */
+  int scan_step = 0;
+  int max_candidates = 64;
+  coord_t max_relative_rms = 0.03;
+  coord_t max_relative_gradient = 0.20;
+  coord_t minimum_color_norm = 1.0 / 64.0;
+  /* Minimum centre distance in analysis pixels.  Zero chooses 3/4 of the
+     smaller window dimension.  */
+  coord_t minimum_separation = 0;
+  point_t origin = { 0, 0 };
+  coord_t xstep = 1;
+  coord_t ystep = 1;
+};
+
+/* Parameters for choosing a jointly useful subset after the candidates have
+   been verified independently with FINETUNE.  BADNESS, the raw final
+   objective, is used for quality gating; the historical contrast-scaled
+   UNCERTAINTY score is deliberately not used because excessive fitted colour
+   contrast is part of the blur-compensation failure mode this workflow is
+   intended to avoid.  */
+struct finetune_focus_area_selection_parameters
+{
+  int min_areas = 3;
+  int max_areas = 8;
+  luminosity_t min_contrast = finetune_default_min_contrast;
+  /* Compare the raw objective after dividing by the norm of the observed
+     candidate mean colour.  Keep fits whose resulting relative residual is
+     at most this multiple of the best one.  This avoids favouring dark areas
+     without using fitted screen contrast.  */
+  coord_t max_quality_ratio = 2;
+  coord_t quality_floor = 1e-6;
+  coord_t minimum_color_norm = 1.0 / 64.0;
+  /* Small diagonal used only while greedily maximizing the D-optimal colour
+     information matrix.  */
+  coord_t regularization = 1e-6;
+  /* Determinant of the average normalized-colour Gram matrix required from
+     the final subset.  Zero disables the diversity rejection.  */
+  coord_t minimum_color_volume = 1e-5;
+};
+
+/* Find non-overlapping, sufficiently flat windows in linear RGB DATA.  STRIDE
+   is measured in RGBDATA elements.  The routine does not run FINETUNE; it is
+   intentionally a cheap first pass before expensive per-candidate fitting.  */
+nodiscard_attr DLL_PUBLIC bool
+finetune_find_focus_area_candidates (
+    const rgbdata *data, int width, int height, int stride,
+    const finetune_focus_area_search_parameters &parameters,
+    std::vector<finetune_focus_area_candidate> *areas);
+
+/* Select a high-quality, colour-diverse subset of independently fitted
+   candidates.  Return candidate indexes in SELECTED.  COLOR_VOLUME, when
+   nonnull, receives the determinant of the average normalized-colour Gram
+   matrix for the selected set.  */
+nodiscard_attr DLL_PUBLIC bool
+finetune_select_focus_areas (
+    const std::vector<finetune_focus_area_candidate> &candidates,
+    const finetune_focus_area_selection_parameters &parameters,
+    std::vector<size_t> *selected, coord_t *color_volume = nullptr);
 
 struct finetune_area_parameters
 {
