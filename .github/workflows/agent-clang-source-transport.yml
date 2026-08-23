@@ -2,7 +2,7 @@ name: Temporary macOS Clang regression publisher
 
 on:
   pull_request:
-    branches: [ "main" ]
+    branches: [ "agent/tmp-clang-publisher-base-20260823" ]
 
 permissions:
   contents: write
