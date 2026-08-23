@@ -10,7 +10,7 @@ permissions:
 jobs:
   publish-final-coordinate-patch:
     if: github.head_ref == 'agent/tmp-publish-final-coordinate-image-view'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout publisher payload
         uses: actions/checkout@v4
