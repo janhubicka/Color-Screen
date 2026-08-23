@@ -12,7 +12,9 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       REVIEW_BRANCH: agent/qt-focus-area-heldout
+      PATCH_SOURCE_COMMIT: 3b0fab337896ac3827e997801451739d06c2f0cb
       PATCH_SHA256: be98edd66803235494167b68a22ef7fbd97c8576fb32f801e871b01dafaab066
+      FOLLOWUP_SHA256: 61aa3be7d8113906a3ceb0108ceb6ee504119425841cbb3282e71f91834517c7
     steps:
       - name: Check out current main base
         uses: actions/checkout@v4
@@ -28,11 +30,14 @@ jobs:
           git reset --hard origin/main
           git rev-parse HEAD > /tmp/base-sha
           for i in 00 01 02 03 04 05 06; do
-            git show "origin/agent/qt-focus-publisher-20260823:agent/qt-focus-patch.${i}" >> /tmp/qt-focus-area.patch.gz.b64
+            git show "${PATCH_SOURCE_COMMIT}:agent/qt-focus-patch.${i}" >> /tmp/qt-focus-area.patch.gz.b64
           done
           base64 --decode /tmp/qt-focus-area.patch.gz.b64 | gzip -d > /tmp/qt-focus-area.patch
           echo "${PATCH_SHA256}  /tmp/qt-focus-area.patch" | sha256sum -c -
           git apply --3way /tmp/qt-focus-area.patch
+          git show "origin/agent/qt-focus-publisher-20260823:agent/qt-focus-followup.patch" > /tmp/qt-focus-followup.patch
+          echo "${FOLLOWUP_SHA256}  /tmp/qt-focus-followup.patch" | sha256sum -c -
+          git apply /tmp/qt-focus-followup.patch
           git diff --check HEAD
           git diff HEAD --name-only | LC_ALL=C sort > /tmp/changed
           cat > /tmp/expected <<'EOF'
@@ -109,11 +114,11 @@ jobs:
           three tile intensities free, avoiding the first-tile scale gauge used
           while screen primaries themselves are optimized.
 
-          Keep applying a measured focus as a separate undoable user action. A
-          parameter change invalidates stored candidates/results rather than
-          silently applying stale measurements. Selected overlays display the
-          held-out/independent residual ratio, with a stronger style above 2 as a
-          visual inspection hint only.
+          Use unnormalized raw RGB for the independent candidate fits as well as
+          held-out evaluation so the displayed held-out/independent residual ratio
+          compares the same objective. Keep applying a measured focus as a separate
+          undoable user action; parameter changes invalidate stored candidates and
+          results instead of silently reusing stale measurements.
 
           Fold the standalone focus-analysis regression into the normal unit-test
           binary and repair generated Automake files so non-maintainer builds link
