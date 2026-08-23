@@ -1,0 +1,53 @@
+#!/bin/sh
+# epson-v850-defocused-mtf.test -- real seriously defocused scanner edge
+
+if test -z "$srcdir"; then
+    srcdir=`echo "$0" | sed 's,[^/]*$,,'`
+    test "$srcdir" = "$0" && srcdir=.
+    test -z "$srcdir" && srcdir=.
+fi
+
+COLORSCREEN=../src/colorscreen/colorscreen
+image="$srcdir/epson-v850-3200dpi-defocused-edge.tif"
+mtf=epson-v850-defocused-mtf.txt
+output=epson-v850-defocused-mtf-output.log
+rm -f "$mtf" "$output"
+
+echo "1..1"
+
+$COLORSCREEN slanted-edge "$image" --gamma 1.0 --wavelength=550 \
+    --oversampling=10 --edge-half-width=0 --edge-window=hann \
+    --save-mtf="$mtf" --verbose > "$output" 2>&1
+status=$?
+
+if test $status -ne 0 || test ! -s "$mtf"; then
+    echo "not ok 1 - Epson V850 real defocused razor edge"
+    cat "$output"
+    exit 1
+fi
+
+angle=`awk '/^Edge quality: angle / { print $4; exit }' "$output"`
+rms=`awk '/^Edge quality: angle / { print $8; exit }' "$output"`
+coverage=`awk '/^Edge quality: angle / { gsub(/%/, "", $16); print $16; exit }' "$output"`
+mtf50=`awk '
+    NR == 1 { pf = $1; pm = $2; next }
+    $2 <= 50 && pm > 50 {
+        print pf + (50 - pm) * ($1 - pf) / ($2 - pm)
+        exit
+    }
+    { pf = $1; pm = $2 }
+' "$mtf"`
+
+if test -n "$angle" && test -n "$rms" && test -n "$coverage" \
+   && test -n "$mtf50" \
+   && grep -q "Measurement wavelength: 550 nm" "$output" \
+   && awk -v angle="$angle" -v rms="$rms" -v coverage="$coverage" \
+          -v mtf50="$mtf50" 'BEGIN { exit !(angle >= 6.5 && angle <= 7.3 && rms <= 0.20 && coverage >= 95 && mtf50 >= 0.05 && mtf50 <= 0.07) }'; then
+    echo "ok 1 - Epson V850 real defocused razor edge"
+    exit 0
+fi
+
+echo "not ok 1 - Epson V850 real defocused razor edge"
+echo "# angle=$angle rms=$rms phase-coverage=$coverage mtf50=$mtf50"
+cat "$output"
+exit 1

@@ -26,6 +26,8 @@ EXTRA_DIST              = defs.sh $(TESTS) \
 			  nikon-razor-rgbi-README.md \
 			  nikon-razor-sharp-rgbi.tif \
 			  nikon-razor-defocus-rgbi.tif \
+			  epson-v850-3200dpi-defocused-edge.tif \
+			  epson-v850-defocused-README.md \
 			  nikon-rgbi-mtf-test.C \
 			  slanted-gaussian-vsharp.tif \
 			  slanted-gaussian-vsharp-mtf.txt \
@@ -56,6 +58,8 @@ CLEANFILES              = slanted-edge-1.log \
                           slanted-edge-5.log \
                           slanted-edge-6.log \
                           slanted-edge-invalid-mtf.txt \
+                          epson-v850-defocused-mtf.txt \
+                          epson-v850-defocused-mtf-output.log \
                           paget_ha_test.tiff \
                           paget_ahd_test.tiff \
                           paget_amaze_test.tiff \
@@ -69,6 +73,7 @@ TESTS                   = unittests.test \
 			  dufaycolor_dt_captureone_export.test \
 			  render-original.test \
 			  slanted-edge.test \
+			  epson-v850-defocused-mtf.test \
 			  nikon-rgbi-mtf.test
 
 distclean-local:
