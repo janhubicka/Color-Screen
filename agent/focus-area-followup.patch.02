@@ -1,0 +1,207 @@
+andidates[i].mean_color = { 0.4, 0.4, 0.4 };
++      candidates[i].fit.success = true;
++      candidates[i].fit.badness = (coord_t)0.01;
++      candidates[i].fit.contrast = (coord_t)0.2;
++      candidates[i].fit.color = intensities[i];
++      candidates[i].search_score = i;
++    }
++
++  finetune_focus_area_selection_parameters selection;
++  selection.min_areas = selection.max_areas = 3;
++  selection.minimum_color_volume = (coord_t)1e-4;
++  std::vector<size_t> selected;
++  coord_t volume = 0;
++  if (!finetune_select_focus_areas (candidates, selection, &selected, &volume)
++      || selected.size () != 3 || !(volume > selection.minimum_color_volume))
++    {
++      fprintf (stderr,
++               "BW primary-intensity diversity was not used (volume %.9g)\n",
++               (double)volume);
++      return false;
++    }
++  return true;
++}
++
++static bool
++build_bw_focus_fixture (image_data *image, scr_to_img_parameters *geometry,
++                        std::vector<point_t> *locations)
++{
++  constexpr int width = 384;
++  constexpr int height = 96;
++  constexpr int regions = 3;
++  constexpr coord_t true_blur = (coord_t)0.82;
++  const rgbdata truth[regions]
++      = { { 0.80, 0.12, 0.08 }, { 0.10, 0.75, 0.20 },
++          { 0.10, 0.12, 0.80 } };
++  const point_t loc[regions]
++      = { { 64, 48 }, { 192, 48 }, { 320, 48 } };
++
++  if (!image->set_dimensions (width, height, false, true))
++    return false;
++  geometry->type = Paget;
++  geometry->center = { 0, 0 };
++  geometry->coordinate1 = { 8, 0 };
++  geometry->coordinate2 = { 0, 8 };
++  scr_to_img map;
++  if (!map.set_parameters (*geometry, *image))
++    return false;
++  const coord_t pixel_size = map.pixel_size ({ 0, 0, width, height });
++
++  screen source;
++  source.initialize (geometry->type);
++  std::array<std::unique_ptr<screen>, regions> blurred;
++  for (int tileid = 0; tileid < regions; tileid++)
++    {
++      blurred[tileid] = std::make_unique<screen> ();
++      blurred[tileid]->initialize_with_blur (source, true_blur * pixel_size);
++    }
++  for (int y = 0; y < height; y++)
++    for (int x = 0; x < width; x++)
++      {
++        const int tileid = std::min (x / (width / regions), regions - 1);
++        const rgbdata screen_value = blurred[tileid]->interpolated_mult (
++            map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 }));
++        luminosity_t value
++            = screen_value.red * truth[tileid].red
++              + screen_value.green * truth[tileid].green
++              + screen_value.blue * truth[tileid].blue;
++        value = std::clamp (value, (luminosity_t)0, (luminosity_t)1);
++        image->put_pixel (
++            x, y, (image_data::gray)(value * 65535 + (luminosity_t)0.5));
++      }
++  locations->assign (loc, loc + regions);
++  return true;
++}
++
++static bool
++test_bw_multitile_focus ()
++{
++  image_data image;
++  scr_to_img_parameters geometry;
++  std::vector<point_t> locations;
++  if (!build_bw_focus_fixture (&image, &geometry, &locations))
++    return false;
++
++  render_parameters rparam;
++  rparam.gamma = 1;
++  rparam.screen_blur_radius = (coord_t)0.3;
++  rparam.sharpen.mode = sharpen_parameters::none;
++  rparam.sharpen.scanner_mtf_scale = 0;
++  finetune_parameters fparam;
++  fparam.range = 2;
++  fparam.ignore_outliers = 0;
++  fparam.flags = finetune_screen_blur | finetune_bw | finetune_no_normalize
++                 | finetune_no_data_collection;
++
++  finetune_result result
++      = finetune (rparam, geometry, image, locations, nullptr, fparam, nullptr);
++  if (!result.success)
++    {
++      fprintf (stderr, "BW multi-tile focus fit failed: %s\n",
++               result.err.c_str ());
++      return false;
++    }
++  if (std::fabs (result.screen_blur_radius - (coord_t)0.82) > 0.20)
++    {
++      fprintf (stderr, "BW multi-tile focus mismatch: %.9g\n",
++               (double)result.screen_blur_radius);
++      return false;
++    }
++  if (!(result.color.red > result.color.green
++        && result.color.red > result.color.blue))
++    {
++      fprintf (stderr, "BW first-tile primary intensities were not exported\n");
++      return false;
++    }
++  return true;
++}
++
++static bool
++test_grayscale_image_search ()
++{
++  image_data image;
++  scr_to_img_parameters geometry;
++  std::vector<point_t> locations;
++  if (!build_bw_focus_fixture (&image, &geometry, &locations))
++    return false;
++  render_parameters rparam;
++  rparam.gamma = 1;
++  rparam.sharpen.mode = sharpen_parameters::none;
++  rparam.sharpen.scanner_mtf_scale = 0;
++  finetune_focus_area_image_search_parameters search;
++  search.max_analysis_dimension = 384;
++  search.search.max_candidates = 12;
++  search.search.max_relative_rms = (coord_t)0.08;
++  search.search.max_relative_gradient = (coord_t)0.25;
++  std::vector<finetune_focus_area_candidate> candidates;
++  std::string error;
++  if (!finetune_find_focus_area_candidates_in_image (
++          rparam, geometry, image, search, &candidates, nullptr, &error))
++    {
++      fprintf (stderr, "Grayscale image focus search failed: %s\n",
++               error.c_str ());
++      return false;
++    }
++  if (candidates.empty ())
++    {
++      fprintf (stderr, "Grayscale image focus search found no areas\n");
++      return false;
++    }
++  return true;
++}
++
++
+ int
+ main ()
+ {
+-  if (!test_joint_focus_analysis ())
++  if (!test_joint_focus_analysis ()
++      || !test_sky_candidate_budget ()
++      || !test_bw_selection_uses_primary_intensities ()
++      || !test_bw_multitile_focus ()
++      || !test_grayscale_image_search ())
+     return 1;
+   printf ("focus-analysis-unittests: PASS\n");
+   return 0;
+diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-analysis.C
+--- a/src/libcolorscreen/focus-analysis.C
++++ b/src/libcolorscreen/focus-analysis.C
+@@ -119,10 +119,13 @@ finetune_find_focus_area_candidates_in_image (
+   if (!candidates)
+     return false;
+   candidates->clear ();
+-  if (!img.has_rgb ())
++  /* RENDER_INTERPOLATE reconstructs the image layer from either native RGB
++     or a monochrome/IR additive-screen scan.  Flatness belongs after screen
++     interpolation; do not pretend that a raw scalar scan is RGB.  */
++  if (!img.has_rgb () && !img.has_grayscale_or_ir ())
+     {
+       if (error)
+-        *error = "automatic focus-area discovery requires RGB input";
++        *error = "automatic focus-area discovery requires image data";
+       return false;
+     }
+   if (param.type == Random || parameters.max_analysis_dimension < 32
+diff --git a/src/libcolorscreen/Makefile.am b/src/libcolorscreen/Makefile.am
+--- a/src/libcolorscreen/Makefile.am
++++ b/src/libcolorscreen/Makefile.am
+@@ -31,4 +31,5 @@ CLEANFILES = paget_ha_test.tiff \
+              paget_amaze_test.tiff \
+              paget_rcd_test.tiff \
+              paget_lmmse_test.tiff \
+-             dufay_rcd_test.tiff
++             dufay_rcd_test.tiff \
++             focus-analysis-unittests$(EXEEXT)
+diff --git a/src/libcolorscreen/Makefile.in b/src/libcolorscreen/Makefile.in
+--- a/src/libcolorscreen/Makefile.in
++++ b/src/libcolorscreen/Makefile.in
+@@ -505,7 +505,8 @@ CLEANFILES = paget_ha_test.tiff \
+              paget_ahd_test.tiff \
+              paget_amaze_test.tiff \
+              paget_rcd_test.tiff \
+              paget_lmmse_test.tiff \
+-             dufay_rcd_test.tiff
++             dufay_rcd_test.tiff \
++             focus-analysis-unittests$(EXEEXT)
+ all: config.h
+ 	$(MAKE) $(AM_MAKEFLAGS) all-am
