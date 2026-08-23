@@ -1,9 +1,9 @@
 name: Agent DG009 stats publisher
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
+      - agent/dg009-stats-publish-20260823
 
 permissions:
   contents: write
