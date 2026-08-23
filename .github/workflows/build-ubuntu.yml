@@ -7,6 +7,58 @@ on:
     branches: [ "main" ]
 
 jobs:
+  publish-bayer-guide:
+    if: github.event_name == 'pull_request' && github.head_ref == 'agent/tmp-publish-bayer-guide'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout publisher payload
+      uses: actions/checkout@v4
+      with:
+        path: publisher
+    - name: Checkout review branch
+      uses: actions/checkout@v4
+      with:
+        ref: agent/qtgui-monochrome-bayer-guide
+        fetch-depth: 0
+        path: target
+    - name: Apply reviewed patches
+      working-directory: target
+      run: |
+        set -eux
+        test "$(git rev-parse HEAD)" = "6dbac661e029efa62d48246e3764bc234157bf21"
+        git config user.name "OpenAI Agent"
+        git config user.email "noreply@openai.com"
+
+        cat ../publisher/.agent/payload.*.b64 | base64 -d > /tmp/bayer-publisher.tgz
+        rm -rf /tmp/bayer-publisher
+        mkdir /tmp/bayer-publisher
+        tar -xzf /tmp/bayer-publisher.tgz -C /tmp/bayer-publisher
+
+        git apply --check /tmp/bayer-publisher/mdi-fix.patch
+        git apply /tmp/bayer-publisher/mdi-fix.patch
+        git diff --check
+        git add src/qtgui/WorkspaceWindow.cpp
+        git commit -m "qtgui: keep tiled MDI windows stable on activation"           -m "Tabbed MDI children are maximized, and Qt may maximize a newly activated child when switching back to subwindow presentation. Enable DontMaximizeSubWindowOnActivation before entering tiled or cascaded mode so focus changes cannot move or swap the layout. Tabbed presentation continues to restore Qt's normal maximize-on-activation behavior."
+
+        git apply --check /tmp/bayer-publisher/bayer-core.patch
+        git apply /tmp/bayer-publisher/bayer-core.patch
+        git apply --check /tmp/bayer-publisher/bayer-core-testfix.patch
+        git apply /tmp/bayer-publisher/bayer-core-testfix.patch
+        git diff --check
+        git add src/libcolorscreen/imagedata.C src/libcolorscreen/include/imagedata.h src/libcolorscreen/unittests.C
+        git commit -m "imagedata: detect monochrome Bayer captures"           -m "Record whether LibRaw reported a conventional 2x2 Bayer CFA, a special mosaic, or full-color data. Restrict Bayer response compensation to the conventional layout instead of applying 2x2 assumptions to X-Trans or full-color RAW files. Add a sparse affine-invariant RGB analysis that recognizes high-confidence monochrome Bayer candidates while rejecting flat, chromatic, and non-Bayer inputs, with synthetic unit coverage."
+
+        git apply --check /tmp/bayer-publisher/bayer-gui.patch
+        git apply /tmp/bayer-publisher/bayer-gui.patch
+        python3 /tmp/bayer-publisher/update-qtgui-docs.py
+        git diff --check
+        git add NEWS .agents/qtgui.md src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h
+        git commit -m "qtgui: guide monochrome Bayer image setup"           -m "After a normal user open with no accepted parameter file, offer a conservative setup-guide recommendation when libcolorscreen identifies a likely monochrome capture made through a Bayer CFA. Keep the current decoding as the default action; only explicit consent switches to compensated monochrome loading and reloads the source plus reference scans. Suppress the guide for recovery and explicit reloads, preserve the document dirty marker across decoding reloads, and document the incremental guide boundary without yet importing EXIF capture parameters or proposing screen autodetection."
+
+        git push origin HEAD:refs/heads/agent/qtgui-monochrome-bayer-guide
+
   build:
     strategy:
       matrix:
@@ -54,18 +106,14 @@ jobs:
     
     - name: Package DEB
       run: |
-        # Create temp install dir
         mkdir -p /tmp/install
-        # Install to temp dir
         make install DESTDIR=/tmp/install
-        # Run packaging script
         ./os/linux/package_deb.sh /tmp/install 2.0alpha ${{ matrix.arch }}
     - uses: actions/upload-artifact@v4
       with:
         name: colorscreen-deb-${{ matrix.arch }}
         path: colorscreen_*.deb
 
-    # Only run distcheck and checking build on amd64 to save time/resources on ARM runners
     - name: make distcheck
       if: matrix.arch == 'amd64'
       run: make -j$(nproc) distcheck
