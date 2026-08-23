@@ -14,7 +14,13 @@
     mirroring over raw pixels.  Final-coordinate views use libcolorscreen's
     final plane directly: continuous final_rotation/final_mirror are already
     part of that mapping, so scan presentation transforms must not be applied
-    again.  Public interaction methods always convert back to scan coordinates. */
+    again.  Public interaction methods always convert back to scan coordinates.
+
+    Final-coordinate map construction is cached internally.  In particular,
+    scr_to_img::get_final_range() walks the image boundary and must not be
+    recomputed by per-point GUI coordinate conversions.  Cache identity depends
+    only on the scan dimensions and scr_to_img_parameters; scan presentation and
+    other render parameters do not invalidate final geometry. */
 class CoordinateTransformer {
 public:
     CoordinateTransformer(
@@ -66,6 +72,6 @@ private:
     colorscreen::render_coordinate_space m_coordinates =
         colorscreen::render_scan_coordinates;
     bool m_finalAvailable = false;
-    std::shared_ptr<colorscreen::scr_to_img> m_map;
+    std::shared_ptr<const colorscreen::scr_to_img> m_map;
     colorscreen::int_image_area m_finalRange;
 };
