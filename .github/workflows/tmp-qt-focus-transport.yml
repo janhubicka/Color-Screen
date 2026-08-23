@@ -3,10 +3,14 @@ name: Temporary Qt focus publisher
 on:
   pull_request:
     branches:
-      - main
+      - agent/tmp-qt-focus-base-20260823
 
 permissions:
   contents: write
+
+concurrency:
+  group: tmp-qt-focus-publisher
+  cancel-in-progress: true
 
 jobs:
   publish:
