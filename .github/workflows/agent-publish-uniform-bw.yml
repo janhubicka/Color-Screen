@@ -1,21 +1,22 @@
 name: Publish focus-area follow-up
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/focus-uniform-bw-publisher-20260821
+      - agent/focus-uniform-bw-publish-base-20260821
 
 permissions:
   contents: write
 
 jobs:
   publish:
+    if: github.head_ref == 'agent/focus-uniform-bw-publisher-20260821'
     runs-on: ubuntu-latest
     steps:
       - name: Check out exact publisher payload
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
           path: transport
 
       - name: Check out PR 99 branch
@@ -58,14 +59,14 @@ jobs:
           tiles through the single-tile collection estimator.
 
           Allow automatic focus-area discovery on grayscale/IR scans through the
-          existing interpolated image-layer reconstruction.  Use independently
+          existing interpolated image-layer reconstruction. Use independently
           fitted BW primary intensities when selecting a D-optimal set of areas.
           Diversify the pre-fit candidate budget so a large exceptionally flat
           field such as sky cannot crowd every other material out before the
           expensive individual fits are attempted.
 
           Add regressions for grayscale image search, sky-budget retention,
-          fitted-primary diversity, and full multi-tile BW focus recovery.  Also
+          fitted-primary diversity, and full multi-tile BW focus recovery. Also
           register the focused checker in CLEANFILES with EXEEXT so distcheck
           does not leave the executable behind on Linux or Windows.
 
