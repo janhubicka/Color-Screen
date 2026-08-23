@@ -1,0 +1,45 @@
+name: Temporary Clang source transport
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  source-and-clang:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Archive exact source revision
+        run: |
+          git archive --format=tar.gz --prefix=Color-Screen/ -o colorscreen-source.tar.gz HEAD
+          git rev-parse HEAD > source-sha.txt
+      - name: Install Clang build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libomp-dev libtiff-dev libturbojpeg0-dev \
+            libzip-dev libgsl-dev libraw-dev liblcms2-dev libfftw3-dev \
+            libexiv2-dev libopenjp2-7-dev libpng-dev
+      - name: Configure Clang checking build
+        run: |
+          mkdir build-clang
+          cd build-clang
+          CC=clang CXX=clang++ \
+          CFLAGS="-Ofast -march=native -g -Wall" \
+          CXXFLAGS="-Ofast -march=native -g -Wall" \
+          ../configure --enable-checking --disable-shared --enable-static --disable-static-link
+      - name: Build focused unit binary
+        run: make -C build-clang -j"$(nproc)" src/libcolorscreen/unittests
+      - name: Run focus-area group
+        run: |
+          cd build-clang
+          top_srcdir="$GITHUB_WORKSPACE" ./src/libcolorscreen/unittests finetune_focus_areas
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-clang-source-${{ github.sha }}
+          path: |
+            colorscreen-source.tar.gz
+            source-sha.txt
+          retention-days: 1
