@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   publish:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     env:
       REVIEW_BRANCH: agent/fix-macos-clang-regressions
       EXPECTED_BASE: bc6008cb6a3c69af7c0f88494dbd3f7772410f7d
@@ -208,8 +208,8 @@ jobs:
           accepts the uploaded mesh/no-mesh reports and the earlier Windows
           report while rejecting altered final-offset/overlap negative controls;
           dash syntax and git diff --check pass. The publisher additionally runs
-          an Ubuntu Clang -Ofast checking build, focused focus-area unit group,
-          and Dufay CLI integration test.
+          an ARM64 Ubuntu Clang -Ofast checking build, focused focus-area unit
+          group, and Dufay CLI integration test.
           EOF
           git commit -F /tmp/commit-message
           git push --force origin "HEAD:$REVIEW_BRANCH"
