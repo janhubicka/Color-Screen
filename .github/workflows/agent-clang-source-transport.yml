@@ -142,7 +142,6 @@ jobs:
            PARNAME=out-${NAME}
            pexec $RUNCOLORSCREEN autodetect out-${NAME}.csprj ${PARNAME}.par --gamma 2.2  $* || exit 1
           PATCH
-          sed -i 's/^          //' /tmp/macos-clang-fix.patch
           git apply --check /tmp/macos-clang-fix.patch
           git apply /tmp/macos-clang-fix.patch
           git diff --check HEAD
