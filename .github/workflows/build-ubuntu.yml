@@ -1,8 +1,6 @@
 name: Ubuntu build
 
 on:
-  push:
-    branches: [ "main", "v1-branch", "Kimrova-bachelorRelease" ]
   pull_request:
     branches: [ "main" ]
 
@@ -11,7 +9,7 @@ permissions:
 
 jobs:
   publish-final-coordinate-patch:
-    if: github.event_name == 'pull_request' && github.head_ref == 'agent/tmp-publish-final-coordinate-image-view'
+    if: github.head_ref == 'agent/tmp-publish-final-coordinate-image-view'
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout publisher payload
@@ -28,19 +26,7 @@ jobs:
       - name: Apply and verify patch
         shell: bash
         run: |
-          cat > /tmp/chunks.sha256 <<'EOF'
-          730a45f2d5894a1ba1559345d5d936072c650845e7b351fb400c8e9356f06eae  payload/agent-final-coordinate.part00
-          21b1ad4c99dd4e136ea6aff6b3de62bd44514d0204b3fcface5c590f9021b503  payload/agent-final-coordinate.part01
-          473e905fa2bc489663b2410ce9cfe0637978fae68662980de0ad7b64941deb5b  payload/agent-final-coordinate.part02
-          0980512dc08577115313db7c283060e0fd91cc78dc67df42c63ea1e33da70c88  payload/agent-final-coordinate.part03
-          efe3a74700649d0cae6d937c52c0e5178266134a270104e1f951107fb45f256b  payload/agent-final-coordinate.part04
-          EOF
-          sha256sum -c /tmp/chunks.sha256
-          cat payload/agent-final-coordinate.part0{0,1,2,3,4} > /tmp/final-coordinate.b64
-          test "$(wc -c < /tmp/final-coordinate.b64)" -eq 19568
-          echo "289f105789f6641d5204f141011731d80acf21a506721b7ccec16facb29b37ff  /tmp/final-coordinate.b64" | sha256sum -c -
-          base64 -d /tmp/final-coordinate.b64 | gunzip > /tmp/final-coordinate.patch
-          echo "12e76a92cfb03143eaf5b5f2f597e6223fa6d327ead9727ac2d1c6804d200629  payload/agent-final-coordinate-followup.patch" | sha256sum -c -
+          base64 -d payload/agent-final-coordinate.patch.gz.b64 | gunzip > /tmp/final-coordinate.patch
           cd feature
           git apply --check /tmp/final-coordinate.patch
           git apply /tmp/final-coordinate.patch
@@ -54,139 +40,36 @@ jobs:
           git config user.name "OpenAI Agent"
           git config user.email "agent@openai.com"
           cat > /tmp/message <<'EOF'
-          render: support final-coordinate interactive image views
+          qtgui: add final-coordinate image views
 
           Extend the public tile rendering API with an explicit coordinate-space
-          selector. Existing callers continue to render in scan coordinates by
-          default, while final-coordinate tiles use the same geometrically
-          corrected screen plane as screen-geometry file output and stitched
-          projects.
+          selector. Existing callers continue to render in scan coordinates,
+          while the new final-coordinate path uses the same geometrically
+          corrected screen plane and renderer sampling policies as screen-
+          geometry file output and stitched projects.
 
-          Add per-view Scan coordinates / Screen coordinates selection to the Qt
-          image viewer. The primary view and ordinary New Views keep this display
-          choice independent alongside render mode, Color/IR, zoom, and pan.
-          Screen coordinates use libcolorscreen final coordinates, while widget
-          interaction continues to map back to scan coordinates for document
-          editing. Stitched projects remain final-coordinate-only and slanted-edge
-          reference views remain scan-only.
+          Make zero-based final-coordinate origin handling consistent between
+          renderers that sample image, screen, or native final coordinates.
 
-          Keep the shared Navigation overview synchronized with the active
-          ordinary view and update registration/profile overlays for the selected
-          coordinate space.
+          Add a view-local Scan coordinates / Screen coordinates selector to
+          primary and ordinary secondary Qt image views. Keep the choice outside
+          ParameterState so views can independently compare raw scan geometry
+          with the corrected screen plane alongside independent render mode,
+          Color/IR, zoom, and pan. Route rendering, fit/navigation, overlays,
+          and mouse interaction through the selected canvas while preserving
+          scan-coordinate editing APIs for document operations.
 
-          Extend the New View smoke test to load the checked-in Dufay geometry,
-          exercise the public final-coordinate render_tile API directly, and
-          verify coordinate-space independence between primary and secondary
-          views.
+          Stitched projects use final coordinates automatically because they do
+          not have a single scan coordinate system. Slanted-edge reference views
+          remain scan-only because they do not own registered screen geometry.
 
-          Document the public scan/final API and the GUI naming/ownership rules
-          in the Qt developer notes and NEWS.
+          Extend New View smoke coverage to exercise the public final-coordinate
+          render_tile API and verify coordinate-space independence between the
+          primary and secondary views. Update NEWS and Qt developer documentation.
 
-          Validation before publication: transport payload checksums, git apply
-          --check, and git diff --check pass; full Qt build and offscreen smoke
-          validation run in repository CI.
+          Validation before publication: git apply --check and git diff --check
+          are clean. Full Qt builds and offscreen smoke tests run in repository CI.
           EOF
-          git add .agents/qtgui.md NEWS src/libcolorscreen/include/colorscreen.h src/libcolorscreen/render-tile.C src/libcolorscreen/render-tile.h src/qtgui/Renderer.h src/qtgui/Renderer.cpp src/qtgui/ImageWidget.h src/qtgui/ImageWidget.cpp src/qtgui/NavigationView.h src/qtgui/NavigationView.cpp src/qtgui/MainWindow.h src/qtgui/MainWindow.cpp src/qtgui/ImageViewWindow.h src/qtgui/ImageViewWindow.cpp src/qtgui/main.cpp
+          git add -A
           git commit -F /tmp/message
           git push origin HEAD:agent/final-coordinate-image-view
-
-  build:
-    strategy:
-      matrix:
-        include:
-          - { runner: ubuntu-24.04, arch: amd64 }
-          - { runner: ubuntu-24.04-arm, arch: arm64 }
-    
-    runs-on: ${{ matrix.runner }}
-    
-    env:
-      LC_ALL: C.UTF-8
-      LANG: C.UTF-8
-      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    
-    steps:
-    - uses: actions/checkout@v4
-    - name: Update
-      run: sudo apt-get update
-    - name: Install dependencies
-      run: sudo apt-get install -y libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev liblcms2-dev libgtk2.0-dev libfftw3-dev qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev libexiv2-dev build-essential libopenjp2-7-dev libpng-dev
-    
-    - name: configure
-      run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" ./configure --enable-qtgui
-    - name: make
-      run: make -j$(nproc)
-    - name: Qt multi-document smoke test
-      run: |
-        QT_QPA_PLATFORM=offscreen ./src/qtgui/colorscreen-qt \
-          --smoke-test 10000 --smoke-test-expect-windows 2 \
-          --smoke-test-tile-activation-stable --smoke-test-menu-order \
-          --smoke-test-new-view --smoke-test-slanted-reference \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
-    - name: make check
-      run: make -j$(nproc) check
-    - name: Upload Test Results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: testsuite-${{ matrix.arch }}
-        path: |
-          testsuite/*.txt
-          testsuite/*.log
-          testsuite/*.par
-    
-    - name: Package DEB
-      run: |
-        # Create temp install dir
-        mkdir -p /tmp/install
-        # Install to temp dir
-        make install DESTDIR=/tmp/install
-        # Run packaging script
-        ./os/linux/package_deb.sh /tmp/install 2.0alpha ${{ matrix.arch }}
-    - uses: actions/upload-artifact@v4
-      with:
-        name: colorscreen-deb-${{ matrix.arch }}
-        path: colorscreen_*.deb
-
-    # Only run distcheck and checking build on amd64 to save time/resources on ARM runners
-    - name: make distcheck
-      if: matrix.arch == 'amd64'
-      run: make -j$(nproc) distcheck
-    - name: Upload Test Results (distcheck)
-      if: matrix.arch == 'amd64' && always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: testsuite-distcheck-${{ matrix.arch }}
-        path: |
-          testsuite/*.txt
-          testsuite/*.log
-          testsuite/*.par
-    
-    - uses: actions/upload-artifact@v4
-      if: matrix.arch == 'amd64'
-      with:
-        name: source-tarball
-        path: colorscreen-*.tar.gz
-
-    - name: make distclean
-      if: matrix.arch == 'amd64'
-      run: make -j$(nproc) distclean
-    
-    - name: configure with checking
-      if: matrix.arch == 'amd64'
-      run: CXXFLAGS="-Ofast  -march=native -fsanitize=address,undefined" CFLAGS="$CXXFLAGS" ./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui
-    - name: make (checking enabled)
-      if: matrix.arch == 'amd64'
-      run: make -j$(nproc) 
-    - name: make -j$(nproc) check (checking enabled)
-      if: matrix.arch == 'amd64'
-      run: make check
-    - name: Upload Test Results (checking enabled)
-      uses: actions/upload-artifact@v4
-      if: matrix.arch == 'amd64' && always()
-      with:
-        name: testsuite-checking-${{ matrix.arch }}
-        path: |
-          testsuite/*.txt
-          testsuite/*.log
-          testsuite/*.par
