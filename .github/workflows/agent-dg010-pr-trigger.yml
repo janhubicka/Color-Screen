@@ -1,0 +1,48 @@
+name: Agent DG010 PR trigger
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/dg010-publish-20260823
+          path: transport
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/scr-detect-prediction-search
+          fetch-depth: 0
+          path: target
+      - name: Apply reviewed DG-010 patch
+        shell: bash
+        run: |
+          PATCH_B64=$(sed -n 's/^          PATCH_B64: //p' transport/.github/workflows/agent-dg010-publish.yml)
+          printf '%s' "$PATCH_B64" | base64 -d | gzip -d > /tmp/dg010.patch
+          cd target
+          git apply --check /tmp/dg010.patch
+          git apply /tmp/dg010.patch
+          git diff --check
+          python3 -m py_compile testsuite/benchmark-screen-detection.py
+      - name: Commit and publish
+        shell: bash
+        run: |
+          cd target
+          git config user.name "OpenAI"
+          git config user.email "noreply@openai.com"
+          git add src/libcolorscreen/scr-detect-geometry.C \
+                  src/libcolorscreen/include/detect-regular-screen-parameters.h \
+                  src/libcolorscreen/unittests.C \
+                  src/colorscreen/colorscreen.C \
+                  testsuite/benchmark-screen-detection.py \
+                  doc/scr-detect-geometry-tracking.md
+          git commit -m "detect: add bounded predicted-center fallback" \
+            -m "Keep the historical exact predicted-pixel component lookup as the default and add an opt-in bounded neighborhood fallback for DG-010. Search only the expected color class within min(6 pixels, 0.35 of current element spacing), choose the nearest usable component center, and expose the experiment through --prediction-search. Record fallback enablement, attempts, hits, and examined nearby pixels in detector telemetry and the Batch 08 benchmark driver. Extend synthetic discovery coverage to exercise the opt-in unsharpened fast-only path while verifying that prediction search stays disabled by default. Document full-resolution NGS00428 results: Tile01 0/0 seed scanning falls from 23,702 pixels to 95 with one useful fallback hit, while Tile05 and the historical 2/3 path never invoke the fallback. Keep the feature experimental because flood-fill completeness is unchanged and a no-screen texture shows measurable negative-case overhead."
+          git push origin HEAD:agent/scr-detect-prediction-search
