@@ -1128,9 +1128,13 @@ void MainWindow::setupUi() {
   progressLayout->addWidget(m_cancelButton);
 
   m_progressLayout->addWidget(m_transientProgressRow);
+
+  QSizePolicy sp = m_transientProgressRow->sizePolicy();
+  sp.setRetainSizeWhenHidden(true);
+  m_transientProgressRow->setSizePolicy(sp);
+
   m_transientProgressRow->hide();
   statusBar->addPermanentWidget(m_progressContainer, 1);
-  m_progressContainer->setVisible(false);
 
   // Initialize manual selection tracking
   m_manuallySelectedProgressIndex = -1;
@@ -2462,14 +2466,14 @@ void MainWindow::updateProgressContainerVisibility() {
 
   const bool transientVisible =
       m_transientProgressRow && !m_transientProgressRow->isHidden();
-  m_progressContainer->setVisible(transientVisible);
+  // m_progressContainer->setVisible(transientVisible);
 }
 
 /** Periodically update transient progress and every dedicated long-task row. */
 void MainWindow::onProgressTimer() {
   if (m_activeProgresses.empty()) {
     m_transientProgressRow->hide();
-    m_progressContainer->hide();
+    // m_progressContainer->hide();
     m_currentlyDisplayedProgress.reset();
     m_manuallySelectedProgressIndex = -1;
     m_progressTimer->stop();
