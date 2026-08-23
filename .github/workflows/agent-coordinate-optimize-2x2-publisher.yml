@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - agent/tmp-coordinate-optimize-2x2-publisher
+  pull_request:
+    branches:
+      - agent/tmp-coordinate-optimize-2x2-base
 jobs:
   publish:
     runs-on: ubuntu-slim
