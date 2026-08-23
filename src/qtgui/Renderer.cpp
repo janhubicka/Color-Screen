@@ -122,9 +122,19 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
         if (tw <= 0) tw = 1;
         if (th <= 0) th = 1;
 
-        int angleIdx = (int)(frameParams.scan_rotation) % 4;
-        if (angleIdx < 0) angleIdx += 4;
-        bool mirror = frameParams.scan_mirror;
+        /* Scan rotation/mirroring are presentation transforms.  Final views
+           already contain their complete orientation in scr_to_img final
+           geometry, so applying the scan transform here a second time changes
+           tile dimensions/placement and clips the zero-based final canvas. */
+        const bool applyScanPresentation =
+            transformer.coordinateSpace() == colorscreen::render_scan_coordinates;
+        int angleIdx = 0;
+        bool mirror = false;
+        if (applyScanPresentation) {
+            angleIdx = (int)(frameParams.scan_rotation) % 4;
+            if (angleIdx < 0) angleIdx += 4;
+            mirror = frameParams.scan_mirror;
+        }
 
         int renderW = tw;
         int renderH = th;
