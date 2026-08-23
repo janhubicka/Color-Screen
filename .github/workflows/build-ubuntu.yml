@@ -7,6 +7,29 @@ on:
     branches: [ "main" ]
 
 jobs:
+  deps-export:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Update
+      run: sudo apt-get update
+    - name: Download detector build dependencies
+      run: |
+        mkdir -p deps
+        cd deps
+        apt-get download \
+          libtiff-dev libtiff6 libturbojpeg0-dev libturbojpeg0 \
+          libzip-dev libzip4 libgsl-dev libgsl27 \
+          libraw-dev libraw23t64 liblcms2-dev liblcms2-2 \
+          libfftw3-dev libfftw3-3 libfftw3-single3 \
+          libexiv2-dev libexiv2-27 libopenjp2-7-dev libopenjp2-7 \
+          libpng-dev libpng16-16t64 zlib1g-dev zlib1g \
+          pkg-config
+    - name: Upload detector dependencies
+      uses: actions/upload-artifact@v4
+      with:
+        name: detector-build-deps-amd64
+        path: deps/*.deb
+
   build:
     strategy:
       matrix:
