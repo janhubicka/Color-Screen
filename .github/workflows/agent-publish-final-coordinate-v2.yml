@@ -1,0 +1,852 @@
+name: Publish final-coordinate v2
+
+on:
+  push:
+    branches:
+      - agent/final-coordinate-v2-publisher-20260823
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/final-coordinate-image-view
+          fetch-depth: 0
+
+      - name: Apply final-coordinate orientation patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected text not found in {path}: {old[:120]!r}")
+              p.write_text(text.replace(old, new, count))
+
+          # libcolorscreen: persistent final-plane mirroring.
+          replace(
+              "src/libcolorscreen/include/scr-to-img-parameters.h",
+              """  /* Rotation from screen coordinates to final coordinates.  */
+  coord_t final_rotation = 0;
+  /* Angle of the screen X and Y axis in the final coordinates.  */
+  coord_t final_angle = 90;
+""",
+              """  /* Rotation from screen coordinates to final coordinates, in degrees.  */
+  coord_t final_rotation = 0;
+  /* Mirror the final coordinate plane horizontally before final rotation.  */
+  bool final_mirror = false;
+  /* Angle of the screen X and Y axis in the final coordinates.  */
+  coord_t final_angle = 90;
+""")
+          replace(
+              "src/libcolorscreen/include/scr-to-img-parameters.h",
+              """           && projection_distance == other.projection_distance
+           && final_rotation == other.final_rotation
+           && final_angle == other.final_angle
+""",
+              """           && projection_distance == other.projection_distance
+           && final_rotation == other.final_rotation
+           && final_mirror == other.final_mirror
+           && final_angle == other.final_angle
+""")
+
+          replace(
+              "src/libcolorscreen/scr-to-img.C",
+              """  rotate += m_rotation_adjustment;
+  m_scr_to_final_matrix = rotation_2x2matrix (rotate) * fm;
+  m_final_to_scr_matrix = m_scr_to_final_matrix.invert ();
+""",
+              """  rotate += m_rotation_adjustment;
+
+  /* FINAL_MIRROR belongs to the final output geometry, not to scan
+     presentation.  Reflect the final X axis before applying the continuous
+     final rotation; get_final_range() then supplies the translation needed to
+     keep the resulting canvas zero based.  */
+  matrix2x2<coord_t> final_mirror_matrix (
+      m_param.final_mirror ? (coord_t)-1 : (coord_t)1, 0, 0, 1);
+  m_scr_to_final_matrix
+      = rotation_2x2matrix (rotate) * final_mirror_matrix * fm;
+  m_final_to_scr_matrix = m_scr_to_final_matrix.invert ();
+""")
+
+          replace(
+              "src/libcolorscreen/loadsave.C",
+              """          || fprintf (f, \"final_rotation: %f\\n\", param->final_rotation) < 0
+          /* Needs large precision close to zero - so use %g.  */
+""",
+              """          || fprintf (f, \"final_rotation: %f\\n\", param->final_rotation) < 0
+          || fprintf (f, \"final_mirror: %s\\n\",
+                      bool_names[(int)param->final_mirror])
+                 < 0
+          /* Needs large precision close to zero - so use %g.  */
+""")
+          replace(
+              "src/libcolorscreen/loadsave.C",
+              """      else if (!strcmp (buf, \"final_rotation\"))
+        {
+          if (!read_scalar (f, param_check (final_rotation)))
+            {
+              *error = \"error parsing final_rotation\";
+              return false;
+            }
+        }
+      /* Old lens correction parameter; now ignored.  */
+""",
+              """      else if (!strcmp (buf, \"final_rotation\"))
+        {
+          if (!read_scalar (f, param_check (final_rotation)))
+            {
+              *error = \"error parsing final_rotation\";
+              return false;
+            }
+        }
+      else if (!strcmp (buf, \"final_mirror\"))
+        {
+          if (!parse_bool (f, param_check (final_mirror)))
+            {
+              *error = \"error parsing final_mirror\";
+              return false;
+            }
+        }
+      /* Old lens correction parameter; now ignored.  */
+""")
+
+          # Qt coordinate mapping: final views are the native final plane.  Scan
+          # crop/quarter-turn/mirror are deliberately ignored there.
+          replace(
+              "src/qtgui/CoordinateTransformer.h",
+              """    The presentation canvas may be backed either by raw scan coordinates or by
+    libcolorscreen final coordinates.  Crop, 90-degree rotation and mirroring
+    remain presentation transforms layered on top of either base coordinate
+    system.  Public interaction methods always convert back to scan coordinates. */
+""",
+              """    Scan-coordinate views layer scan crop, quarter-turn rotation and scan
+    mirroring over raw pixels.  Final-coordinate views use libcolorscreen's
+    final plane directly: continuous final_rotation/final_mirror are already
+    part of that mapping, so scan presentation transforms must not be applied
+    again.  Public interaction methods always convert back to scan coordinates. */
+""")
+          replace(
+              "src/qtgui/CoordinateTransformer.h",
+              """    colorscreen::int_image_area m_finalRange;
+    colorscreen::int_image_area m_finalCropRange;
+""",
+              """    colorscreen::int_image_area m_finalRange;
+""")
+
+          replace(
+              "src/qtgui/CoordinateTransformer.cpp",
+              """    m_mirror = params.scan_mirror;
+    m_rotation = (int)params.scan_rotation % 4;
+    if (m_rotation < 0) m_rotation += 4;
+    m_scanCrop = params.get_scan_crop(m_scanWidth, m_scanHeight);
+
+    m_coordinates = coordinates;
+""",
+              """    m_scanCrop = params.get_scan_crop(m_scanWidth, m_scanHeight);
+    m_coordinates = coordinates;
+
+    /* scan_rotation, scan_mirror and scan_crop are presentation properties of
+       the digitized scan.  A final-coordinate canvas already has its own
+       continuous orientation in scr_to_img_parameters.  */
+    if (coordinates == colorscreen::render_scan_coordinates) {
+        m_mirror = params.scan_mirror;
+        m_rotation = (int)params.scan_rotation % 4;
+        if (m_rotation < 0) m_rotation += 4;
+    }
+""")
+          replace(
+              "src/qtgui/CoordinateTransformer.cpp",
+              """        if (m_map->set_parameters(*scrToImg, *scan)) {
+            m_finalRange = colorscreen::int_image_area(
+                m_map->get_final_range(m_scanWidth, m_scanHeight));
+            m_finalCropRange = colorscreen::int_image_area(
+                m_map->get_final_range(colorscreen::image_area(m_scanCrop)));
+            m_finalAvailable = !m_finalRange.empty_p() &&
+                               !m_finalCropRange.empty_p();
+        }
+""",
+              """        if (m_map->set_parameters(*scrToImg, *scan)) {
+            m_finalRange = colorscreen::int_image_area(
+                m_map->get_final_range(m_scanWidth, m_scanHeight));
+            m_finalAvailable = !m_finalRange.empty_p();
+        }
+""")
+          replace(
+              "src/qtgui/CoordinateTransformer.cpp",
+              """colorscreen::int_image_area CoordinateTransformer::getRenderCrop() const {
+    if (m_coordinates == colorscreen::render_final_coordinates) {
+        if (m_map)
+            return colorscreen::int_image_area(
+                m_finalCropRange.x - m_finalRange.x,
+                m_finalCropRange.y - m_finalRange.y,
+                m_finalCropRange.width, m_finalCropRange.height);
+        return m_scanCrop;
+    }
+    return m_scanCrop;
+}
+""",
+              """colorscreen::int_image_area CoordinateTransformer::getRenderCrop() const {
+    if (m_coordinates == colorscreen::render_final_coordinates) {
+        if (m_map)
+            return colorscreen::int_image_area(0, 0, m_finalRange.width,
+                                               m_finalRange.height);
+        /* Stitched images already expose their final viewport as image_data. */
+        return colorscreen::int_image_area(0, 0, m_scanWidth, m_scanHeight);
+    }
+    return m_scanCrop;
+}
+""")
+
+          replace(
+              "src/qtgui/ImageWidget.cpp",
+              """  // Auto-fit if crop/orientation changed, or if final-coordinate geometry itself
+  // changed.  In scan mode registration changes do not alter the view canvas.
+  if (rparams && (!(rparams->scan_crop == m_lastScanCrop) ||
+                   rparams->scan_rotation != m_lastRotation ||
+                   rparams->scan_mirror != m_lastMirror ||
+                   (mappingChanged && m_coordinateSpace ==
+                       colorscreen::render_final_coordinates))) {
+    m_lastScanCrop = rparams->scan_crop;
+    m_lastRotation = rparams->scan_rotation;
+    m_lastMirror = rparams->scan_mirror;
+    fitToView();
+  }
+""",
+              """  // Scan presentation changes alter only scan-coordinate views.  Final views
+  // are laid out solely by scr_to_img final geometry (including final rotation
+  // and mirroring), so scan crop/rotation/mirror must not move that canvas.
+  if (rparams) {
+    const bool scanPresentationChanged =
+        !(rparams->scan_crop == m_lastScanCrop) ||
+        rparams->scan_rotation != m_lastRotation ||
+        rparams->scan_mirror != m_lastMirror;
+    m_lastScanCrop = rparams->scan_crop;
+    m_lastRotation = rparams->scan_rotation;
+    m_lastMirror = rparams->scan_mirror;
+    if ((m_coordinateSpace == colorscreen::render_scan_coordinates &&
+         scanPresentationChanged) ||
+        (m_coordinateSpace == colorscreen::render_final_coordinates &&
+         mappingChanged))
+      fitToView();
+  }
+""")
+
+          # Geometry panel exposes authoritative final orientation parameters.
+          replace(
+              "src/qtgui/GeometryPanel.cpp",
+              """  addEnumParameter(\"Scanner/camera geometry\", pretty_scanner_type_names,
+      [](const ParameterState &s){ return (int)s.scrToImg.scanner_type; },
+      [](ParameterState &s, int v){ s.scrToImg.scanner_type = (colorscreen::scanner_type)v; },
+      nullptr, \"Select the physical movement model of your scanner or camera rig. This defines how the perspective and lens distortions affects the image.\");
+
+  // Ensure Finetune widget is separate from Optimization group
+""",
+              """  addEnumParameter(\"Scanner/camera geometry\", pretty_scanner_type_names,
+      [](const ParameterState &s){ return (int)s.scrToImg.scanner_type; },
+      [](ParameterState &s, int v){ s.scrToImg.scanner_type = (colorscreen::scanner_type)v; },
+      nullptr, \"Select the physical movement model of your scanner or camera rig. This defines how the perspective and lens distortions affects the image.\");
+
+  addSeparator(\"Final image orientation\");
+  auto hasFinalGeometry = [](const ParameterState &s) {
+      return s.scrToImg.type != colorscreen::Random;
+  };
+  addSliderParameter(
+      \"Final rotation\", -180.0, 180.0, 100.0, 2, \"°\", \"\",
+      [](const ParameterState &s) { return (double)s.scrToImg.final_rotation; },
+      [](ParameterState &s, double v) { s.scrToImg.final_rotation = v; },
+      1.0, hasFinalGeometry, false,
+      \"Continuous rotation in degrees in the libcolorscreen final plane. \"
+      \"Unlike scan rotation this is not restricted to 90-degree steps and is \"
+      \"saved in the parameter file.\");
+  addCheckboxParameter(
+      \"Mirror final image\",
+      [](const ParameterState &s) { return s.scrToImg.final_mirror; },
+      [](ParameterState &s, bool v) { s.scrToImg.final_mirror = v; },
+      hasFinalGeometry,
+      \"Mirror the final-coordinate image horizontally before Final rotation. \"
+      \"This is part of geometry and is saved in the parameter file.\");
+
+  // Ensure Finetune widget is separate from Optimization group
+""")
+
+          # Main window: final mode shows continuous final rotation and makes the
+          # common mirror action operate on final_mirror instead of scan_mirror.
+          replace(
+              "src/qtgui/MainWindow.h",
+              """class QComboBox;   // Added
+class QCheckBox;   // Added
+""",
+              """class QComboBox;   // Added
+class QCheckBox;   // Added
+class QDoubleSpinBox;
+""")
+          replace(
+              "src/qtgui/MainWindow.h",
+              """  /** Set horizontal mirroring for the shared document from any view. */
+  void setDocumentMirror(bool checked);
+
+  /** Restore this document from its per-window recovery directory. */
+""",
+              """  /** Set horizontal scan mirroring for the shared document from any view. */
+  void setDocumentMirror(bool checked);
+
+  /** Set continuous final-plane rotation from any ordinary view. */
+  void setDocumentFinalRotation(double degrees);
+
+  /** Set horizontal final-plane mirroring from any ordinary view. */
+  void setDocumentFinalMirror(bool checked);
+
+  /** Restore this document from its per-window recovery directory. */
+""")
+          replace(
+              "src/qtgui/MainWindow.h",
+              """  QComboBox *m_modeComboBox;  // Mode selector
+  QComboBox *m_coordinateComboBox = nullptr; // Scan/final canvas selector
+  QCheckBox *m_colorCheckBox; // Color checkbox (IR/RGB switch)
+""",
+              """  QComboBox *m_modeComboBox;  // Mode selector
+  QComboBox *m_coordinateComboBox = nullptr; // Scan/final canvas selector
+  QDoubleSpinBox *m_finalRotationSpinBox = nullptr;
+  QAction *m_finalRotationLabelAction = nullptr;
+  QAction *m_finalRotationSpinAction = nullptr;
+  QCheckBox *m_colorCheckBox; // Color checkbox (IR/RGB switch)
+""")
+
+          replace(
+              "src/qtgui/MainWindow.cpp",
+              """            if (!m_imageWidget->setCoordinateSpace(coordinates)) {
+              updateCoordinateSpaceControls();
+              return;
+            }
+            if (m_navigationView)
+""",
+              """            if (!m_imageWidget->setCoordinateSpace(coordinates)) {
+              updateCoordinateSpaceControls();
+              return;
+            }
+            updateCoordinateSpaceControls();
+            if (m_navigationView)
+""")
+          replace(
+              "src/qtgui/MainWindow.cpp",
+              """          });
+  updateCoordinateSpaceControls();
+
+  m_toolbar->addSeparator();
+
+  // Interaction Tools - Pan in View group
+""",
+              """          });
+
+  m_finalRotationLabelAction = m_toolbar->addWidget(
+      new QLabel(tr(\"Final rotation: \"), m_toolbar));
+  m_finalRotationSpinBox = new QDoubleSpinBox(m_toolbar);
+  m_finalRotationSpinBox->setObjectName(QStringLiteral(\"FinalRotationSpin\"));
+  m_finalRotationSpinBox->setRange(-180.0, 180.0);
+  m_finalRotationSpinBox->setDecimals(2);
+  m_finalRotationSpinBox->setSingleStep(0.1);
+  m_finalRotationSpinBox->setSuffix(QStringLiteral(\"°\"));
+  m_finalRotationSpinBox->setToolTip(
+      tr(\"Continuous rotation of the final-coordinate image; saved in the parameter file\"));
+  m_finalRotationSpinAction = m_toolbar->addWidget(m_finalRotationSpinBox);
+  connect(m_finalRotationSpinBox, &QDoubleSpinBox::valueChanged, this,
+          [this](double degrees) {
+            if (m_imageWidget && m_imageWidget->coordinateSpace() ==
+                                     colorscreen::render_final_coordinates)
+              setDocumentFinalRotation(degrees);
+          });
+  updateCoordinateSpaceControls();
+
+  m_toolbar->addSeparator();
+
+  // Interaction Tools - Pan in View group
+""")
+          replace(
+              "src/qtgui/MainWindow.cpp",
+              """  // Rotation
+  QAction *rotLeftAction = m_toolbar->addAction(
+      getSymbolicIcon(\":/icons/rotate-left.svg\"), \"Rotate Left\");
+  connect(rotLeftAction, &QAction::triggered, this, &MainWindow::rotateLeft);
+
+  QAction *rotRightAction = m_toolbar->addAction(
+      getSymbolicIcon(\":/icons/rotate-right.svg\"), \"Rotate Right\");
+  connect(rotRightAction, &QAction::triggered, this, &MainWindow::rotateRight);
+
+  if (m_mirrorAction) {
+    m_toolbar->addAction(m_mirrorAction);
+  }
+""",
+              """  // Scan quarter-turn actions are shared with the View menu.  Final mode
+  // hides them and exposes the continuous degree control above instead.
+  if (m_rotateLeftAction) {
+    m_rotateLeftAction->setIcon(getSymbolicIcon(\":/icons/rotate-left.svg\"));
+    m_toolbar->addAction(m_rotateLeftAction);
+  }
+  if (m_rotateRightAction) {
+    m_rotateRightAction->setIcon(getSymbolicIcon(\":/icons/rotate-right.svg\"));
+    m_toolbar->addAction(m_rotateRightAction);
+  }
+  if (m_mirrorAction)
+    m_toolbar->addAction(m_mirrorAction);
+""")
+          replace(
+              "src/qtgui/MainWindow.cpp",
+              """  m_coordinateComboBox->setEnabled(m_coordinateComboBox->count() > 1);
+  m_coordinateComboBox->blockSignals(false);
+}
+
+/** Create keyboard shortcuts 1–0 mapped to the first 10 render modes.
+""",
+              """  m_coordinateComboBox->setEnabled(m_coordinateComboBox->count() > 1);
+  m_coordinateComboBox->blockSignals(false);
+
+  const bool finalCoordinates =
+      current == colorscreen::render_final_coordinates;
+  if (m_rotateLeftAction)
+    m_rotateLeftAction->setVisible(!finalCoordinates);
+  if (m_rotateRightAction)
+    m_rotateRightAction->setVisible(!finalCoordinates);
+  if (m_finalRotationLabelAction)
+    m_finalRotationLabelAction->setVisible(finalCoordinates);
+  if (m_finalRotationSpinAction)
+    m_finalRotationSpinAction->setVisible(finalCoordinates);
+  if (m_finalRotationSpinBox) {
+    m_finalRotationSpinBox->blockSignals(true);
+    m_finalRotationSpinBox->setValue(m_scrToImgParams.final_rotation);
+    m_finalRotationSpinBox->blockSignals(false);
+  }
+  if (m_mirrorAction) {
+    m_mirrorAction->blockSignals(true);
+    m_mirrorAction->setChecked(finalCoordinates ? m_scrToImgParams.final_mirror
+                                                : m_rparams.scan_mirror);
+    m_mirrorAction->blockSignals(false);
+    m_mirrorAction->setText(finalCoordinates ? tr(\"Mirror Final Image\")
+                                             : tr(\"Mirror Horizontally\"));
+    m_mirrorAction->setToolTip(finalCoordinates
+        ? tr(\"Mirror the final-coordinate image; saved in the parameter file\")
+        : tr(\"Mirror the digital scan horizontally\"));
+  }
+}
+
+/** Create keyboard shortcuts 1–0 mapped to the first 10 render modes.
+""")
+          replace(
+              "src/qtgui/MainWindow.cpp",
+              """void MainWindow::onMirrorHorizontally(bool checked) {
+  if (!m_scan)
+    return;
+
+  ParameterState newState = getCurrentState();
+  newState.rparams.scan_mirror = checked;
+
+  changeParameters(newState, \"Mirror Horizontally\");
+}
+""",
+              """void MainWindow::onMirrorHorizontally(bool checked) {
+  if (!m_scan)
+    return;
+  if (m_imageWidget && m_imageWidget->coordinateSpace() ==
+                           colorscreen::render_final_coordinates)
+    setDocumentFinalMirror(checked);
+  else
+    setDocumentMirror(checked);
+}
+""")
+          replace(
+              "src/qtgui/MainWindow.cpp",
+              """/** Change shared document mirroring on behalf of a secondary view. */
+void MainWindow::setDocumentMirror(bool checked) {
+  onMirrorHorizontally(checked);
+}
+""",
+              """/** Change shared scan mirroring on behalf of a secondary view. */
+void MainWindow::setDocumentMirror(bool checked) {
+  if (!m_scan)
+    return;
+  ParameterState newState = getCurrentState();
+  if (newState.rparams.scan_mirror == checked)
+    return;
+  newState.rparams.scan_mirror = checked;
+  changeParameters(newState, \"Mirror Horizontally\");
+}
+
+/** Change continuous final rotation on behalf of an ordinary view. */
+void MainWindow::setDocumentFinalRotation(double degrees) {
+  if (!m_scan)
+    return;
+  ParameterState newState = getCurrentState();
+  if (newState.scrToImg.final_rotation == degrees)
+    return;
+  newState.scrToImg.final_rotation = degrees;
+  changeParameters(newState, \"Set final rotation\");
+}
+
+/** Change final-coordinate mirroring on behalf of an ordinary view. */
+void MainWindow::setDocumentFinalMirror(bool checked) {
+  if (!m_scan)
+    return;
+  ParameterState newState = getCurrentState();
+  if (newState.scrToImg.final_mirror == checked)
+    return;
+  newState.scrToImg.final_mirror = checked;
+  changeParameters(newState, \"Mirror final image\");
+}
+""")
+          replace(
+              "src/qtgui/MainWindow.cpp",
+              """  // Sync mirror action
+  if (m_mirrorAction) {
+    m_mirrorAction->setChecked(state.rparams.scan_mirror);
+  }
+""",
+              """  // Sync the shared mirror action to the coordinate space of the primary view.
+  if (m_mirrorAction) {
+    const bool finalCoordinates = m_imageWidget &&
+        m_imageWidget->coordinateSpace() == colorscreen::render_final_coordinates;
+    m_mirrorAction->blockSignals(true);
+    m_mirrorAction->setChecked(finalCoordinates ? state.scrToImg.final_mirror
+                                                : state.rparams.scan_mirror);
+    m_mirrorAction->blockSignals(false);
+  }
+""")
+
+          # Secondary ordinary views get the same smooth final-rotation control;
+          # slanted-edge references remain scan-only.
+          replace(
+              "src/qtgui/ImageViewWindow.h",
+              """class ImageViewWindow final : public QMainWindow {
+""",
+              """class QDoubleSpinBox;
+
+class ImageViewWindow final : public QMainWindow {
+""")
+          replace(
+              "src/qtgui/ImageViewWindow.h",
+              """  QComboBox *m_modeComboBox = nullptr;
+  QComboBox *m_coordinateComboBox = nullptr;
+  QCheckBox *m_colorCheckBox = nullptr;
+  QAction *m_mirrorAction = nullptr;
+""",
+              """  QComboBox *m_modeComboBox = nullptr;
+  QComboBox *m_coordinateComboBox = nullptr;
+  QDoubleSpinBox *m_finalRotationSpinBox = nullptr;
+  QAction *m_finalRotationLabelAction = nullptr;
+  QAction *m_finalRotationSpinAction = nullptr;
+  QCheckBox *m_colorCheckBox = nullptr;
+  QAction *m_rotateLeftAction = nullptr;
+  QAction *m_rotateRightAction = nullptr;
+  QAction *m_mirrorAction = nullptr;
+""")
+          replace(
+              "src/qtgui/ImageViewWindow.cpp",
+              """#include <QDockWidget>
+#include <QEvent>
+""",
+              """#include <QDockWidget>
+#include <QDoubleSpinBox>
+#include <QEvent>
+""")
+          replace(
+              "src/qtgui/ImageViewWindow.cpp",
+              """    connect(m_coordinateComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &ImageViewWindow::onCoordinateChanged);
+  }
+
+  m_toolbar->addSeparator();
+""",
+              """    connect(m_coordinateComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &ImageViewWindow::onCoordinateChanged);
+
+    m_finalRotationLabelAction = m_toolbar->addWidget(
+        new QLabel(tr(\"Final rotation: \"), m_toolbar));
+    m_finalRotationSpinBox = new QDoubleSpinBox(m_toolbar);
+    m_finalRotationSpinBox->setObjectName(QStringLiteral(\"FinalRotationSpin\"));
+    m_finalRotationSpinBox->setRange(-180.0, 180.0);
+    m_finalRotationSpinBox->setDecimals(2);
+    m_finalRotationSpinBox->setSingleStep(0.1);
+    m_finalRotationSpinBox->setSuffix(QStringLiteral(\"°\"));
+    m_finalRotationSpinBox->setToolTip(
+        tr(\"Continuous rotation of the final-coordinate image; saved in the parameter file\"));
+    m_finalRotationSpinAction = m_toolbar->addWidget(m_finalRotationSpinBox);
+    connect(m_finalRotationSpinBox, &QDoubleSpinBox::valueChanged, this,
+            [this](double degrees) {
+              if (m_document && m_imageWidget &&
+                  m_imageWidget->coordinateSpace() ==
+                      colorscreen::render_final_coordinates)
+                m_document->setDocumentFinalRotation(degrees);
+            });
+  }
+
+  m_toolbar->addSeparator();
+""")
+          replace(
+              "src/qtgui/ImageViewWindow.cpp",
+              """  QAction *rotateLeft = nullptr;
+  QAction *rotateRight = nullptr;
+  if (!m_slantedEdgeReference) {
+    m_toolbar->addSeparator();
+    rotateLeft = m_toolbar->addAction(viewIcon(\":/icons/rotate-left.svg\"),
+                                      tr(\"Rotate Left\"));
+    rotateLeft->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
+    connect(rotateLeft, &QAction::triggered, this, [this]() {
+      if (m_document)
+        m_document->rotateDocumentLeft();
+    });
+    rotateRight = m_toolbar->addAction(viewIcon(\":/icons/rotate-right.svg\"),
+                                       tr(\"Rotate Right\"));
+    rotateRight->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
+    connect(rotateRight, &QAction::triggered, this, [this]() {
+      if (m_document)
+        m_document->rotateDocumentRight();
+    });
+    m_mirrorAction = m_toolbar->addAction(viewIcon(\":/icons/mirror.svg\"),
+                                          tr(\"Mirror Horizontally\"));
+    m_mirrorAction->setCheckable(true);
+    connect(m_mirrorAction, &QAction::toggled, this, [this](bool checked) {
+      if (m_document)
+        m_document->setDocumentMirror(checked);
+    });
+  }
+""",
+              """  if (!m_slantedEdgeReference) {
+    m_toolbar->addSeparator();
+    m_rotateLeftAction = m_toolbar->addAction(viewIcon(\":/icons/rotate-left.svg\"),
+                                              tr(\"Rotate Left\"));
+    m_rotateLeftAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
+    connect(m_rotateLeftAction, &QAction::triggered, this, [this]() {
+      if (m_document)
+        m_document->rotateDocumentLeft();
+    });
+    m_rotateRightAction = m_toolbar->addAction(viewIcon(\":/icons/rotate-right.svg\"),
+                                               tr(\"Rotate Right\"));
+    m_rotateRightAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
+    connect(m_rotateRightAction, &QAction::triggered, this, [this]() {
+      if (m_document)
+        m_document->rotateDocumentRight();
+    });
+    m_mirrorAction = m_toolbar->addAction(viewIcon(\":/icons/mirror.svg\"),
+                                          tr(\"Mirror Horizontally\"));
+    m_mirrorAction->setCheckable(true);
+    connect(m_mirrorAction, &QAction::toggled, this, [this](bool checked) {
+      if (!m_document || !m_imageWidget)
+        return;
+      if (m_imageWidget->coordinateSpace() ==
+          colorscreen::render_final_coordinates)
+        m_document->setDocumentFinalMirror(checked);
+      else
+        m_document->setDocumentMirror(checked);
+    });
+  }
+""")
+          replace(
+              "src/qtgui/ImageViewWindow.cpp",
+              """    viewMenu->addSeparator();
+    viewMenu->addAction(rotateLeft);
+    viewMenu->addAction(rotateRight);
+    viewMenu->addAction(m_mirrorAction);
+""",
+              """    viewMenu->addSeparator();
+    viewMenu->addAction(m_rotateLeftAction);
+    viewMenu->addAction(m_rotateRightAction);
+    viewMenu->addAction(m_mirrorAction);
+""")
+          replace(
+              "src/qtgui/ImageViewWindow.cpp",
+              """  if (m_mirrorAction) {
+    const QSignalBlocker blocker(m_mirrorAction);
+    m_mirrorAction->setChecked(m_rparams.scan_mirror);
+  }
+}
+""",
+              """  const bool finalCoordinates = m_imageWidget &&
+      m_imageWidget->coordinateSpace() == colorscreen::render_final_coordinates;
+  if (m_rotateLeftAction)
+    m_rotateLeftAction->setVisible(!finalCoordinates);
+  if (m_rotateRightAction)
+    m_rotateRightAction->setVisible(!finalCoordinates);
+  if (m_finalRotationLabelAction)
+    m_finalRotationLabelAction->setVisible(finalCoordinates);
+  if (m_finalRotationSpinAction)
+    m_finalRotationSpinAction->setVisible(finalCoordinates);
+  if (m_finalRotationSpinBox) {
+    const QSignalBlocker blocker(m_finalRotationSpinBox);
+    m_finalRotationSpinBox->setValue(m_scrToImgParams.final_rotation);
+  }
+  if (m_mirrorAction) {
+    const QSignalBlocker blocker(m_mirrorAction);
+    m_mirrorAction->setChecked(finalCoordinates ? m_scrToImgParams.final_mirror
+                                                : m_rparams.scan_mirror);
+    m_mirrorAction->setText(finalCoordinates ? tr(\"Mirror Final Image\")
+                                             : tr(\"Mirror Horizontally\"));
+    m_mirrorAction->setToolTip(finalCoordinates
+        ? tr(\"Mirror the final-coordinate image; saved in the parameter file\")
+        : tr(\"Mirror the digital scan horizontally\"));
+  }
+}
+""")
+          replace(
+              "src/qtgui/ImageViewWindow.cpp",
+              """  if (!m_imageWidget->setCoordinateSpace(coordinates))
+    updateViewControls();
+}
+""",
+              """  m_imageWidget->setCoordinateSpace(coordinates);
+  updateViewControls();
+}
+""")
+
+          # Smoke test: use non-trivial final geometry and prove that scan crop,
+          # mirror and 90-degree rotation do not perturb a final-coordinate view.
+          replace(
+              "src/qtgui/main.cpp",
+              """#include \"ImageViewWindow.h\"
+#include \"ImageWidget.h\"
+#include \"WorkspaceWindow.h\"
+""",
+              """#include \"ImageViewWindow.h\"
+#include \"ImageWidget.h\"
+#include \"CoordinateTransformer.h\"
+#include \"WorkspaceWindow.h\"
+""")
+          replace(
+              "src/qtgui/main.cpp",
+              """      coordinateState.scrToImg.coordinate1 = {8, 0};
+      coordinateState.scrToImg.coordinate2 = {0, 8};
+      source->applySharedDocumentState(coordinateState,
+""",
+              """      coordinateState.scrToImg.coordinate1 = {8, 0};
+      coordinateState.scrToImg.coordinate2 = {0, 8};
+      coordinateState.scrToImg.final_rotation = 12.5;
+      coordinateState.scrToImg.final_mirror = true;
+      source->applySharedDocumentState(coordinateState,
+""")
+          replace(
+              "src/qtgui/main.cpp",
+              """      colorscreen::render_type_parameters apiRender;
+""",
+              """      auto basePresentation = coordinateState.rparams;
+      basePresentation.scan_rotation = 0;
+      basePresentation.scan_mirror = false;
+      basePresentation.scan_crop.set = false;
+      CoordinateTransformer finalBase(sourceScan.get(), basePresentation,
+                                      &coordinateState.scrToImg,
+                                      colorscreen::render_final_coordinates);
+      auto changedPresentation = basePresentation;
+      changedPresentation.scan_rotation = 1;
+      changedPresentation.scan_mirror = true;
+      changedPresentation.scan_crop.set = true;
+      changedPresentation.scan_crop.x = sourceScan->width / 4;
+      changedPresentation.scan_crop.y = sourceScan->height / 4;
+      changedPresentation.scan_crop.width = sourceScan->width / 2;
+      changedPresentation.scan_crop.height = sourceScan->height / 2;
+      CoordinateTransformer finalChanged(sourceScan.get(), changedPresentation,
+                                         &coordinateState.scrToImg,
+                                         colorscreen::render_final_coordinates);
+      const auto baseRange = finalBase.getRenderCrop();
+      const auto changedRange = finalChanged.getRenderCrop();
+      const colorscreen::point_t probe = coordinateState.scrToImg.center;
+      const auto baseProbe = finalBase.scanToTransformedCrop(probe);
+      const auto changedProbe = finalChanged.scanToTransformedCrop(probe);
+      if (finalBase.getTransformedCropSize() !=
+              finalChanged.getTransformedCropSize() ||
+          baseRange.x != changedRange.x || baseRange.y != changedRange.y ||
+          baseRange.width != changedRange.width ||
+          baseRange.height != changedRange.height ||
+          std::abs(baseProbe.x - changedProbe.x) > 1e-9 ||
+          std::abs(baseProbe.y - changedProbe.y) > 1e-9) {
+        qCritical() << \"Scan presentation leaked into final coordinates\";
+        app.exit(14);
+        return;
+      }
+
+      colorscreen::render_type_parameters apiRender;
+""")
+
+          # Documentation.
+          replace(
+              "NEWS",
+              """     views can also switch independently between raw Scan coordinates and the
+     geometrically corrected Screen coordinate canvas (called final coordinates
+     by libcolorscreen). Views can still be detached when needed, with the
+""",
+              """     views can also switch independently between raw Scan coordinates and the
+     geometrically corrected Screen coordinate canvas (called final coordinates
+     by libcolorscreen). Final-coordinate views use that plane directly and do
+     not reapply scan crop, 90-degree rotation, or scan mirroring. Final
+     orientation instead has a smooth degree-valued rotation and a persistent
+     final mirror stored with the screen geometry. Views can still be detached
+     when needed, with the
+""")
+          replace(
+              ".agents/qtgui.md",
+              """views share the image
+and document transforms such as rotation and mirroring, while render mode,
+Color/IR choice, zoom, and pan remain view-local. Slanted-edge reference views
+""",
+              """views share the image and document geometry while render mode, Color/IR
+choice, coordinate-space choice, zoom, and pan remain view-local. Scan views
+apply the shared scan crop, quarter-turn rotation, and scan mirror. Screen/final
+views must not layer those presentation transforms over libcolorscreen's final
+plane; they use the continuous `scr_to_img_parameters::final_rotation` and
+`final_mirror` geometry saved in the parameter file. Slanted-edge reference views
+""")
+
+          PY
+
+          git diff --check
+          git diff --stat
+
+      - name: Commit and push review branch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add NEWS .agents/qtgui.md \
+            src/libcolorscreen/include/scr-to-img-parameters.h \
+            src/libcolorscreen/scr-to-img.C src/libcolorscreen/loadsave.C \
+            src/qtgui/CoordinateTransformer.cpp src/qtgui/CoordinateTransformer.h \
+            src/qtgui/GeometryPanel.cpp src/qtgui/ImageWidget.cpp \
+            src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h \
+            src/qtgui/ImageViewWindow.cpp src/qtgui/ImageViewWindow.h \
+            src/qtgui/main.cpp
+          git commit -F - <<'MSG'
+          qtgui: make final orientation native geometry
+
+          Treat libcolorscreen final coordinates as the complete output geometry
+          rather than another base canvas for the Qt scan presentation transform.
+          Final-coordinate views now ignore scan crop, quarter-turn scan rotation,
+          and scan mirroring, so viewport mapping agrees with render-to-file and
+          with the screen-to-final mapping itself.
+
+          Add final_mirror to scr_to_img_parameters and persist it in parameter
+          files next to final_rotation.  Fold the reflection into the
+          screen-to-final matrix before the existing continuous degree rotation;
+          old parameter files remain compatible because the new flag defaults to
+          false.
+
+          In Qt, expose Final rotation as a continuous degree control whenever an
+          ordinary view is in Screen/final coordinates, and make the mirror action
+          edit final_mirror in that mode.  Scan mode keeps the existing 90-degree
+          rotate actions and scan_mirror behavior.  The Geometry panel exposes the
+          same final orientation parameters as shared, undoable document geometry,
+          so all final-coordinate views and file output stay synchronized.
+
+          Extend the New View smoke path with non-trivial final rotation/mirroring
+          and an explicit invariant check proving that changing scan crop,
+          scan_mirror, and scan_rotation cannot move a final-coordinate canvas.
+          Keep slanted-edge reference views scan-only.
+
+          Publisher validation: all scripted source replacements were asserted,
+          git diff --check passed, and the review branch contains only the intended
+          source/documentation changes.  Normal pull-request CI performs the full
+          Qt build and offscreen smoke test on supported platforms.
+          MSG
+          git push origin HEAD:agent/final-coordinate-image-view
