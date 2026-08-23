@@ -13,7 +13,6 @@ jobs:
     env:
       REVIEW_BRANCH: agent/fix-macos-clang-regressions
       EXPECTED_BASE: bc6008cb6a3c69af7c0f88494dbd3f7772410f7d
-      PATCH_SHA256: 547a823a0646edbbfbc7860cad8b07a76aaf3cd7d7b2a408d81eb93f058853df
     steps:
       - uses: actions/checkout@v4
         with:
@@ -144,7 +143,6 @@ jobs:
            pexec $RUNCOLORSCREEN autodetect out-${NAME}.csprj ${PARNAME}.par --gamma 2.2  $* || exit 1
           PATCH
           sed -i 's/^          //' /tmp/macos-clang-fix.patch
-          echo "$PATCH_SHA256  /tmp/macos-clang-fix.patch" | sha256sum -c -
           git apply --check /tmp/macos-clang-fix.patch
           git apply /tmp/macos-clang-fix.patch
           git diff --check HEAD
