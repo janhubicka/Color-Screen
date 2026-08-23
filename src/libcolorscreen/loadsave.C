@@ -143,6 +143,9 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
           /* Needs large precision close to zero - so use %g.  */
           || fprintf (f, "tilt: %g %g\n", param->tilt_x, param->tilt_y) < 0
           || fprintf (f, "final_rotation: %f\n", param->final_rotation) < 0
+          || fprintf (f, "final_mirror: %s\n",
+                      bool_names[(int)param->final_mirror])
+                 < 0
           /* Needs large precision close to zero - so use %g.  */
           || fprintf (
                  f, "lens_warp_rectilinear: 1 %g %g %g %g 0 0 %g %g\n",
@@ -974,6 +977,14 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
           if (!read_scalar (f, param_check (final_rotation)))
             {
               *error = "error parsing final_rotation";
+              return false;
+            }
+        }
+      else if (!strcmp (buf, "final_mirror"))
+        {
+          if (!parse_bool (f, param_check (final_mirror)))
+            {
+              *error = "error parsing final_mirror";
               return false;
             }
         }

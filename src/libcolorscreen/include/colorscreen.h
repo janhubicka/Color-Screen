@@ -123,6 +123,16 @@ private:
   std::vector<uint8_t> m_data;
 };
 
+/* Coordinate space used by render_tile.  Scan coordinates preserve the
+   digitized image geometry.  Final coordinates are the geometrically
+   normalized screen plane also used by screen-geometry file rendering and
+   stitched projects.  */
+enum render_coordinate_space
+{
+  render_scan_coordinates,
+  render_final_coordinates
+};
+
 struct tile_parameters
 {
   uint8_t *pixels;
@@ -197,6 +207,15 @@ nodiscard_attr DLL_PUBLIC bool
 render_tile(image_data &scan, scr_to_img_parameters &param,
             scr_detect_parameters &dparam, render_parameters &rparam,
             render_type_parameters &rtparam, tile_parameters &tile,
+            progress_info *progress = NULL);
+/* Render TILE in the explicitly selected coordinate space.  FINAL coordinates
+   are zero-based relative to scr_to_img::get_final_range(), matching the
+   screen-geometry output canvas used by render_to_file.  */
+nodiscard_attr DLL_PUBLIC bool
+render_tile(image_data &scan, scr_to_img_parameters &param,
+            scr_detect_parameters &dparam, render_parameters &rparam,
+            render_type_parameters &rtparam, tile_parameters &tile,
+            render_coordinate_space coordinates,
             progress_info *progress = NULL);
 enum render_screen_tile_type
 {

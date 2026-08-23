@@ -30,6 +30,8 @@ class QToolBar;
     state (render mode, IR/RGB choice, zoom, and pan) independent.  By default
     ColorScreenApplication embeds it as another QMdiArea tab; it may also be
     detached as an ordinary top-level QMainWindow. */
+class QDoubleSpinBox;
+
 class ImageViewWindow final : public QMainWindow {
   Q_OBJECT
 
@@ -61,6 +63,10 @@ public:
 
   /** Select TYPE in this view without changing the source document view. */
   bool setRenderType(colorscreen::render_type_t type);
+
+  /** Select this view's raw-scan or final screen-coordinate canvas. */
+  bool setCoordinateSpace(colorscreen::render_coordinate_space coordinates);
+  colorscreen::render_coordinate_space coordinateSpace() const;
 
   /** Return this view's toolbar while it is hosted by WorkspaceWindow. */
   QToolBar *workspaceToolBar() const { return m_toolbar; }
@@ -108,6 +114,9 @@ private slots:
   /** Change only this view's IR/RGB presentation. */
   void onColorChanged(bool checked);
 
+  /** Change only this view's scan/final coordinate presentation. */
+  void onCoordinateChanged(int index);
+
   /** Start/cancel slanted-edge area selection in a reference view. */
   void onMeasureMtfRequested(bool checked);
 
@@ -147,7 +156,13 @@ private:
   ImageWidget *m_imageWidget = nullptr;
   QToolBar *m_toolbar = nullptr;
   QComboBox *m_modeComboBox = nullptr;
+  QComboBox *m_coordinateComboBox = nullptr;
+  QDoubleSpinBox *m_finalRotationSpinBox = nullptr;
+  QAction *m_finalRotationLabelAction = nullptr;
+  QAction *m_finalRotationSpinAction = nullptr;
   QCheckBox *m_colorCheckBox = nullptr;
+  QAction *m_rotateLeftAction = nullptr;
+  QAction *m_rotateRightAction = nullptr;
   QAction *m_mirrorAction = nullptr;
   QWidget *m_referenceInspector = nullptr;
   NavigationView *m_navigationView = nullptr;

@@ -175,7 +175,7 @@ void ImageWidget::smoothFitToView() {
   if (!m_scan || m_scan->width <= 0) return;
   double w = width();
   double h = height();
-  CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+  CoordinateTransformer transformer(m_scan.get(), *m_rparams, m_scrToImg, m_coordinateSpace);
   QSize transformedSize = transformer.getTransformedCropSize();
   double imgW = transformedSize.width();
   double imgH = transformedSize.height();
@@ -291,6 +291,15 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
 
 
   m_scan = scan;
+  if (m_scan && m_scan->stitch)
+    m_coordinateSpace = colorscreen::render_final_coordinates;
+  else if (m_coordinateSpace == colorscreen::render_final_coordinates &&
+           m_scan && m_rparams) {
+    CoordinateTransformer coordinateCheck(m_scan.get(), *m_rparams, m_scrToImg,
+                                          m_coordinateSpace);
+    if (!coordinateCheck.finalCoordinatesAvailable())
+      m_coordinateSpace = colorscreen::render_scan_coordinates;
+  }
   m_pointsOverlayDirty = true;
   if (m_rparams) {
       m_lastScanCrop = m_rparams->scan_crop;
@@ -365,20 +374,29 @@ void ImageWidget::updateParameters(
                            : colorscreen::render_type_parameters()));
   }
 
-  // Selective invalidation: only dirty if scrToImg parameters changed
-  if (scrToImg && *scrToImg != m_lastScrToImg) {
+  // Selective invalidation: only dirty if scrToImg parameters changed.
+  const bool mappingChanged = scrToImg && *scrToImg != m_lastScrToImg;
+  if (mappingChanged) {
     m_pointsOverlayDirty = true;
     m_lastScrToImg = *scrToImg;
   }
 
-  // Auto-fit if crop or orientation changed
-  if (rparams && (!(rparams->scan_crop == m_lastScanCrop) ||
-                   rparams->scan_rotation != m_lastRotation ||
-                   rparams->scan_mirror != m_lastMirror)) {
+  // Scan presentation changes alter only scan-coordinate views.  Final views
+  // are laid out solely by scr_to_img final geometry (including final rotation
+  // and mirroring), so scan crop/rotation/mirror must not move that canvas.
+  if (rparams) {
+    const bool scanPresentationChanged =
+        !(rparams->scan_crop == m_lastScanCrop) ||
+        rparams->scan_rotation != m_lastRotation ||
+        rparams->scan_mirror != m_lastMirror;
     m_lastScanCrop = rparams->scan_crop;
     m_lastRotation = rparams->scan_rotation;
     m_lastMirror = rparams->scan_mirror;
-    fitToView();
+    if ((m_coordinateSpace == colorscreen::render_scan_coordinates &&
+         scanPresentationChanged) ||
+        (m_coordinateSpace == colorscreen::render_final_coordinates &&
+         mappingChanged))
+      fitToView();
   }
 
   // Request Re-render
@@ -893,7 +911,7 @@ void ImageWidget::resizeEvent(QResizeEvent *event) {
     double centerY = m_viewY + (oldSize.height() / m_scale) / 2.0;
     
     // 2. Calculate new fit scale (m_minScale)
-    CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+    CoordinateTransformer transformer(m_scan.get(), *m_rparams, m_scrToImg, m_coordinateSpace);
     QSize transformedSize = transformer.getTransformedSize();
     double imgW = transformedSize.width();
     double imgH = transformedSize.height();
@@ -1619,7 +1637,7 @@ colorscreen::point_t ImageWidget::widgetToImage(QPointF p) const {
   double yr = p.y() / m_scale + m_viewY;
 
   // 2. Use Transformer (Transformed-Crop -> Scan)
-  CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+  CoordinateTransformer transformer(m_scan.get(), *m_rparams, m_scrToImg, m_coordinateSpace);
   return transformer.transformedToScanCrop({xr, yr});
 }
 
@@ -1634,7 +1652,7 @@ QPointF ImageWidget::imageToWidget(colorscreen::point_t p) const {
     return QPointF(p.x, p.y);
 
   // 1. Transformer (Scan -> Transformed)
-  CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+  CoordinateTransformer transformer(m_scan.get(), *m_rparams, m_scrToImg, m_coordinateSpace);
   colorscreen::point_t tr = transformer.scanToTransformedCrop(p);
 
   // 2. Apply View Offset & Scale (Transformed -> View)
@@ -1672,7 +1690,7 @@ void ImageWidget::rotateRight() {
  */
 void ImageWidget::centerOn(colorscreen::point_t imgPos) {
   if (!m_scan || !m_rparams) return;
-  CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+  CoordinateTransformer transformer(m_scan.get(), *m_rparams, m_scrToImg, m_coordinateSpace);
   colorscreen::point_t tr = transformer.scanToTransformedCrop(imgPos);
   
   m_viewX = tr.x - (width() / m_scale) / 2.0;
@@ -1698,7 +1716,7 @@ void ImageWidget::pivotViewport(int oldRotIdx, int newRotIdx) {
     // We use CoordinateTransformer twice: once with OLD rotation, once with NEW
     colorscreen::render_parameters oldParams = *m_rparams;
     oldParams.scan_rotation = oldRotIdx;
-    CoordinateTransformer oldTrans(m_scan.get(), oldParams);
+    CoordinateTransformer oldTrans(m_scan.get(), oldParams, m_scrToImg, m_coordinateSpace);
     
     // Map to Scan
     colorscreen::point_t scanPt = oldTrans.transformedToScanCrop({centerX_tr, centerY_tr});
@@ -1706,7 +1724,7 @@ void ImageWidget::pivotViewport(int oldRotIdx, int newRotIdx) {
     // Create params for NEW
     colorscreen::render_parameters newParams = *m_rparams;
     newParams.scan_rotation = newRotIdx;
-    CoordinateTransformer newTrans(m_scan.get(), newParams);
+    CoordinateTransformer newTrans(m_scan.get(), newParams, m_scrToImg, m_coordinateSpace);
     
     // Map to Transformed (New)
     colorscreen::point_t newCenter_tr = newTrans.scanToTransformedCrop(scanPt);
@@ -1736,7 +1754,7 @@ void ImageWidget::fitToView() {
   double w = width();
   double h = height();
 
-  CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+  CoordinateTransformer transformer(m_scan.get(), *m_rparams, m_scrToImg, m_coordinateSpace);
   QSize transformedSize = transformer.getTransformedCropSize();
   double imgW = transformedSize.width();
   double imgH = transformedSize.height();
@@ -1791,6 +1809,43 @@ void ImageWidget::setShowRegistrationPoints(bool show) {
 void ImageWidget::setShowProfileSpots(bool show) {
   m_showProfileSpots = show;
   update();
+}
+
+/** Select the view-local rendering coordinate space. */
+bool ImageWidget::setCoordinateSpace(
+    colorscreen::render_coordinate_space coordinates) {
+  if (!m_scan || !m_rparams) {
+    m_coordinateSpace = coordinates;
+    return true;
+  }
+  if (m_scan->stitch)
+    coordinates = colorscreen::render_final_coordinates;
+
+  CoordinateTransformer check(m_scan.get(), *m_rparams, m_scrToImg,
+                              coordinates);
+  if (coordinates == colorscreen::render_final_coordinates &&
+      !check.finalCoordinatesAvailable())
+    return false;
+  if (m_coordinateSpace == coordinates)
+    return true;
+
+  const colorscreen::point_t centerScan =
+      widgetToImage(QPointF(width() / 2.0, height() / 2.0));
+  const double relativeZoom = m_minScale > 1e-9 ? m_scale / m_minScale : 1.0;
+
+  m_coordinateSpace = coordinates;
+  m_pixmap = QImage();
+  m_pointsOverlay = QImage();
+  m_pointsOverlayDirty = true;
+  m_renderQueue.cancelAll();
+  m_pointsQueue.cancelAll();
+
+  fitToView();
+  if (relativeZoom > 1.000001)
+    setZoom(m_minScale * relativeZoom);
+  centerOn(centerScan);
+  emit viewCoordinateSpaceChanged((int)m_coordinateSpace);
+  return true;
 }
 
 /**
@@ -1903,6 +1958,7 @@ void ImageWidget::schedulePointsOverlayRender ()
   auto   scrToImg       = *m_scrToImg;
   auto   scan           = m_scan;
   auto   rparams        = *m_rparams; /* Snapshot rotation/mirror/crop state. */
+  auto   coordinateSpace = m_coordinateSpace;
   const auto points     = m_solver->points; /* Shallow copy of registration points. */
   auto   selected       = m_selectedPoints; /* Copy selection set. */
   double heatmapTol     = m_heatmapTolerance;
@@ -1930,7 +1986,7 @@ void ImageWidget::schedulePointsOverlayRender ()
 
         /* Background-safe equivalent of imageToWidget.
            Must account for rotation/mirror via CoordinateTransformer.  */
-        CoordinateTransformer transformer(scan.get(), rparams);
+        CoordinateTransformer transformer(scan.get(), rparams, &scrToImg, coordinateSpace);
         auto toWidget = [viewX, viewY, scale, transformer] (const colorscreen::point_t &img)
         { 
           colorscreen::point_t tr = transformer.scanToTransformedCrop(img);
@@ -2329,6 +2385,7 @@ void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progre
                               Q_ARG(double, data.scale),
                               Q_ARG(int, data.w),
                               Q_ARG(int, data.h),
+                              Q_ARG(int, (int)m_coordinateSpace),
                               Q_ARG(colorscreen::render_parameters, data.params),
                               Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress),
                               Q_ARG(const char*, "Rendering image"));
