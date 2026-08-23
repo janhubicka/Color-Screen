@@ -1,0 +1,103 @@
+name: Publish final-coordinate smoke fix
+
+on:
+  push:
+    branches:
+      - agent/final-coordinate-smoke-fix-20260823
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/final-coordinate-image-view
+          fetch-depth: 0
+      - name: Keep expensive render-mode smoke in scan coordinates
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/qtgui/main.cpp')
+          text = p.read_text()
+          old = '''      if (!source->primaryImageWidget() ||
+          source->primaryImageWidget()->coordinateSpace() !=
+              colorscreen::render_scan_coordinates ||
+          !view->setCoordinateSpace(colorscreen::render_final_coordinates) ||
+          view->coordinateSpace() != colorscreen::render_final_coordinates ||
+          source->primaryImageWidget()->coordinateSpace() !=
+              colorscreen::render_scan_coordinates) {
+        qCritical() << "New View Scan/Screen coordinate selection is not independent";
+        app.exit(14);
+        return;
+      }
+
+      colorscreen::render_type_t alternate = sourceType;
+'''
+          new = '''      if (!source->primaryImageWidget() ||
+          source->primaryImageWidget()->coordinateSpace() !=
+              colorscreen::render_scan_coordinates ||
+          !view->setCoordinateSpace(colorscreen::render_final_coordinates) ||
+          view->coordinateSpace() != colorscreen::render_final_coordinates ||
+          source->primaryImageWidget()->coordinateSpace() !=
+              colorscreen::render_scan_coordinates) {
+        qCritical() << "New View Scan/Screen coordinate selection is not independent";
+        app.exit(14);
+        return;
+      }
+
+      QWidget *finalRotationControl = view->workspaceToolBar()
+          ? view->workspaceToolBar()->findChild<QWidget *>(
+                QStringLiteral("FinalRotationSpin"))
+          : nullptr;
+      bool finalMirrorAction = false;
+      bool quarterTurnVisible = false;
+      if (QToolBar *toolbar = view->workspaceToolBar()) {
+        for (QAction *action : toolbar->actions()) {
+          if (!action)
+            continue;
+          if (action->text() == QObject::tr("Mirror Final Image"))
+            finalMirrorAction = true;
+          if ((action->text() == QObject::tr("Rotate Left") ||
+               action->text() == QObject::tr("Rotate Right")) &&
+              action->isVisible())
+            quarterTurnVisible = true;
+        }
+      }
+      if (!finalRotationControl || finalRotationControl->isHidden() ||
+          !finalMirrorAction || quarterTurnVisible) {
+        qCritical() << "Final-coordinate view does not expose smooth final "
+                       "rotation/mirroring controls";
+        app.exit(14);
+        return;
+      }
+
+      // The render-mode independence check predates final-coordinate views and
+      // may start an expensive reconstruction.  Return to Scan coordinates
+      // before exercising it so CI tests the view-local mode state without
+      // waiting for a disposable final-coordinate render during teardown.
+      if (!view->setCoordinateSpace(colorscreen::render_scan_coordinates) ||
+          view->coordinateSpace() != colorscreen::render_scan_coordinates) {
+        qCritical() << "New View did not return to Scan coordinates";
+        app.exit(14);
+        return;
+      }
+
+      colorscreen::render_type_t alternate = sourceType;
+'''
+          if old not in text:
+              raise SystemExit('expected New View coordinate smoke block not found')
+          p.write_text(text.replace(old, new, 1))
+          PY
+          git diff --check
+      - name: Commit and push review branch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/qtgui/main.cpp
+          git commit -m "qtgui: keep final-coordinate smoke teardown cheap"
+          git push origin HEAD:agent/final-coordinate-image-view
