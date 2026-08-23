@@ -28,10 +28,24 @@ jobs:
       - name: Apply and verify patch
         shell: bash
         run: |
-          base64 -d payload/agent-final-coordinate-image-view.patch.gz.b64 | gunzip > /tmp/final-coordinate.patch
+          cat > /tmp/chunks.sha256 <<'EOF'
+          730a45f2d5894a1ba1559345d5d936072c650845e7b351fb400c8e9356f06eae  payload/agent-final-coordinate.part00
+          21b1ad4c99dd4e136ea6aff6b3de62bd44514d0204b3fcface5c590f9021b503  payload/agent-final-coordinate.part01
+          473e905fa2bc489663b2410ce9cfe0637978fae68662980de0ad7b64941deb5b  payload/agent-final-coordinate.part02
+          0980512dc08577115313db7c283060e0fd91cc78dc67df42c63ea1e33da70c88  payload/agent-final-coordinate.part03
+          efe3a74700649d0cae6d937c52c0e5178266134a270104e1f951107fb45f256b  payload/agent-final-coordinate.part04
+          EOF
+          sha256sum -c /tmp/chunks.sha256
+          cat payload/agent-final-coordinate.part0{0,1,2,3,4} > /tmp/final-coordinate.b64
+          test "$(wc -c < /tmp/final-coordinate.b64)" -eq 19568
+          echo "289f105789f6641d5204f141011731d80acf21a506721b7ccec16facb29b37ff  /tmp/final-coordinate.b64" | sha256sum -c -
+          base64 -d /tmp/final-coordinate.b64 | gunzip > /tmp/final-coordinate.patch
+          echo "12e76a92cfb03143eaf5b5f2f597e6223fa6d327ead9727ac2d1c6804d200629  payload/agent-final-coordinate-followup.patch" | sha256sum -c -
           cd feature
           git apply --check /tmp/final-coordinate.patch
           git apply /tmp/final-coordinate.patch
+          git apply --check ../payload/agent-final-coordinate-followup.patch
+          git apply ../payload/agent-final-coordinate-followup.patch
           git diff --check
       - name: Commit and push feature branch
         shell: bash
@@ -65,10 +79,14 @@ jobs:
           verify coordinate-space independence between primary and secondary
           views.
 
-          Validation before publication: git diff --check clean; full Qt build
-          and offscreen smoke validation run in repository CI.
+          Document the public scan/final API and the GUI naming/ownership rules
+          in the Qt developer notes and NEWS.
+
+          Validation before publication: transport payload checksums, git apply
+          --check, and git diff --check pass; full Qt build and offscreen smoke
+          validation run in repository CI.
           EOF
-          git add NEWS src/libcolorscreen/include/colorscreen.h src/libcolorscreen/render-tile.C src/libcolorscreen/render-tile.h src/qtgui/Renderer.h src/qtgui/Renderer.cpp src/qtgui/ImageWidget.h src/qtgui/ImageWidget.cpp src/qtgui/NavigationView.h src/qtgui/NavigationView.cpp src/qtgui/MainWindow.h src/qtgui/MainWindow.cpp src/qtgui/ImageViewWindow.h src/qtgui/ImageViewWindow.cpp src/qtgui/main.cpp
+          git add .agents/qtgui.md NEWS src/libcolorscreen/include/colorscreen.h src/libcolorscreen/render-tile.C src/libcolorscreen/render-tile.h src/qtgui/Renderer.h src/qtgui/Renderer.cpp src/qtgui/ImageWidget.h src/qtgui/ImageWidget.cpp src/qtgui/NavigationView.h src/qtgui/NavigationView.cpp src/qtgui/MainWindow.h src/qtgui/MainWindow.cpp src/qtgui/ImageViewWindow.h src/qtgui/ImageViewWindow.cpp src/qtgui/main.cpp
           git commit -F /tmp/message
           git push origin HEAD:agent/final-coordinate-image-view
 
