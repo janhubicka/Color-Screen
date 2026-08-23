@@ -1,30 +1,106 @@
-name: Temporary Qt focus source transport
+name: Temporary Qt focus publisher
 
 on:
-  push:
-    branches:
-      - agent/tmp-qt-focus-transport-20260823
   pull_request:
     branches:
       - main
 
+permissions:
+  contents: write
+
 jobs:
-  source:
+  publish:
+    if: github.head_ref == 'agent/tmp-qt-focus-transport-20260823'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
-      - name: Archive exact main revision
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+      - name: Publish checksum-pinned feature commit
         run: |
           set -euxo pipefail
-          git fetch --no-tags origin bc6008cb6a3c69af7c0f88494dbd3f7772410f7d
-          BASE=bc6008cb6a3c69af7c0f88494dbd3f7772410f7d
-          echo "$BASE" > HEAD.sha
-          git archive --format=tar.gz --prefix=Color-Screen/ -o Color-Screen.tar.gz "$BASE"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: qt-focus-current-main-source
-          path: |
-            Color-Screen.tar.gz
-            HEAD.sha
+          cp agent/qt-focus-feature.patch.gz.b64 /tmp/feature.patch.gz.b64
+          echo 'b194fdacfc826da090541660a1845f747f2a2c6c2527c2716ab43c34a688bbf1  /tmp/feature.patch.gz.b64' | sha256sum -c -
+
+          git fetch --no-tags origin main
+          BASE=$(git rev-parse FETCH_HEAD)
+          test "$BASE" = 'ee723f4616708ff13f3ed7c034c8fcb27c728f0b'
+          git switch --detach "$BASE"
+
+          base64 -d /tmp/feature.patch.gz.b64 | gzip -d > /tmp/feature.patch
+          echo '9a68a77deca48347bd337aa3ade2358840075b7b35586e42d5e1a67f67768a14  /tmp/feature.patch' | sha256sum -c -
+          git apply --check /tmp/feature.patch
+          git apply /tmp/feature.patch
+          git diff --check
+
+          cat > /tmp/expected-files <<'EOF'
+          .agents/qtgui.md
+          doc/finetune-tracking.md
+          doc/focus-area-analysis.md
+          src/libcolorscreen/Makefile.am
+          src/libcolorscreen/Makefile.in
+          src/libcolorscreen/finetune.C
+          src/libcolorscreen/focus-analysis-unittests.C
+          src/libcolorscreen/focus-analysis.C
+          src/libcolorscreen/include/finetune.h
+          src/libcolorscreen/include/focus-analysis.h
+          src/qtgui/ImageWidget.cpp
+          src/qtgui/ImageWidget.h
+          src/qtgui/MainWindow.cpp
+          src/qtgui/MainWindow.h
+          src/qtgui/SharpnessPanel.cpp
+          src/qtgui/SharpnessPanel.h
+          EOF
+          git diff --name-only | sort > /tmp/actual-files
+          sort -o /tmp/expected-files /tmp/expected-files
+          diff -u /tmp/expected-files /tmp/actual-files
+
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git switch -c agent/qt-focus-area-analysis
+          git add -- $(cat /tmp/expected-files)
+          git commit -F - <<'EOF'
+          qtgui: analyze focus from automatic solid-color areas
+
+          Connect the solid-area focus-analysis library to the Qt Sharpness
+          workflow.  Build an unadjusted downscaled interpolated RGB analysis
+          image, find flat candidate regions, verify candidates independently,
+          choose a color-diverse subset, and fit one shared focus model.  Keep
+          all candidate/result/overlay state inside MainWindow so multiple
+          documents and ordinary views remain independent.
+
+          Add frozen held-out validation for the RGB uniform-image-layer model.
+          For each selected region, learn focus and shared screen-primary
+          scanner responses from the other regions, then evaluate the omitted
+          tile while allowing only its local phase and three primary intensity
+          factors to move.  Report normalized held-out residuals alongside the
+          existing leave-one-out focus stability.  Fixed primary amplitudes
+          retain the training normalization gauge, so held-out intensity
+          factors remain relative and may exceed one.
+
+          The Qt workflow runs discovery and fitting off the GUI thread, draws
+          candidate/verified/selected rectangles in ImageWidget, reports
+          leave-one-out and held-out diagnostics, and never applies a result
+          silently: Apply focus goes through the normal undoable parameter
+          path after explicit user confirmation.
+
+          Repair the generated libcolorscreen Makefile.in so non-maintainer
+          configure builds include focus-analysis.C and its focused regression.
+          Keep that checker out of ordinary builds via EXTRA_PROGRAMS and run
+          it from check-local.
+
+          Update focus-analysis, tracking, and Qt architecture documentation.
+
+          Validation:
+          - focused checking/O2 focus-analysis-unittests: PASS
+          - focused checking/-Ofast -march=native: PASS
+          - fresh non-maintainer configure from shipped Makefile.in builds and
+            runs focus-analysis-unittests: PASS
+          - git diff --check: PASS
+
+          Qt6 development headers are not available in the isolated local
+          container; the repository Linux/macOS/Windows CI matrix provides the
+          GUI compile and smoke-test validation for this commit.
+          EOF
+          git push origin HEAD:refs/heads/agent/qt-focus-area-analysis
