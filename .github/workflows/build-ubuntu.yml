@@ -23,45 +23,19 @@ jobs:
           ref: agent/qtgui-final-registration-overlay
           path: target
           fetch-depth: 0
-      - name: Apply checked patch
+      - name: Apply checked follow-up
         shell: bash
         run: |
           cd target
           python3 ../publisher/.agent-publish-overlay.py
           git diff --check
           git diff --stat
-      - name: Commit and push feature branch
+      - name: Amend and push feature branch
         shell: bash
         run: |
           cd target
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add NEWS src/qtgui/ImageWidget.cpp src/qtgui/ImageWidget.h src/qtgui/main.cpp
-          git commit -F - <<'MSG'
-          qtgui: bound registration overlay geometry
-
-          Keep registration-point overlay rasterization robust when Screen/final
-          coordinates map a simulated target far outside the visible image.
-          Previously only the measured point was culled; the simulated target
-          was still passed directly to QPainter, and extreme extrapolated
-          coordinates could make the raster backend spend effectively unbounded
-          time clipping the primitive while the main Qt event loop remained idle.
-
-          Validate both measured and simulated widget coordinates before any
-          painter operation. Preserve visible measured points when their residual
-          target is invalid, suppress only the target/arrow, use hypot-based
-          finite distance calculations to avoid overflow, limit arrows before
-          painting, and honor TaskQueue cancellation while scanning large point
-          sets. Also handle a failed screen map by returning an empty overlay
-          instead of using an invalid mapping.
-
-          Extend the existing New View smoke test with a final-coordinate view
-          containing a visible registration point whose simulated screen target
-          is deliberately far outside the viewport. Require the asynchronous
-          overlay to finish promptly, which directly covers the reported freeze.
-
-          Validation: scripted source contexts are asserted and git diff --check
-          passes before this commit. Normal PR CI runs the Qt offscreen smoke on
-          Ubuntu amd64/arm64 plus the platform builds and full testsuite.
-          MSG
-          git push origin HEAD:agent/qtgui-final-registration-overlay
+          git add NEWS src/qtgui/ImageWidget.cpp
+          git commit --amend --no-edit
+          git push --force-with-lease origin HEAD:agent/qtgui-final-registration-overlay
