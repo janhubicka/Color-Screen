@@ -1,6 +1,101 @@
 #include "CoordinateTransformer.h"
 #include <algorithm>
 #include <cmath>
+#include <mutex>
+#include <vector>
+
+namespace {
+
+/* Building a final-coordinate map is much more expensive than constructing a
+   CoordinateTransformer: get_final_range() walks the image boundary.  GUI code
+   intentionally creates short-lived transformers in point conversion helpers,
+   so keep the expensive immutable part shared across those instances. */
+struct FinalMappingCacheEntry {
+    int scanWidth = 0;
+    int scanHeight = 0;
+    colorscreen::scr_to_img_parameters params;
+    bool available = false;
+    std::shared_ptr<const colorscreen::scr_to_img> map;
+    colorscreen::int_image_area finalRange;
+};
+
+constexpr size_t kFinalMappingCacheSize = 16;
+std::mutex g_finalMappingCacheMutex;
+std::vector<std::shared_ptr<const FinalMappingCacheEntry>> g_finalMappingCache;
+thread_local std::weak_ptr<const FinalMappingCacheEntry> g_lastFinalMapping;
+
+bool finalMappingMatches(const FinalMappingCacheEntry &entry,
+                         int width, int height,
+                         const colorscreen::scr_to_img_parameters &params) {
+    return entry.scanWidth == width && entry.scanHeight == height
+           && entry.params == params;
+}
+
+std::shared_ptr<const FinalMappingCacheEntry>
+getFinalMapping(const colorscreen::image_data &scan,
+                const colorscreen::scr_to_img_parameters &params) {
+    const int width = scan.width;
+    const int height = scan.height;
+
+    /* This is the hot path for registration-point and overlay conversions.
+       Avoid even taking the global cache lock after the first lookup on a
+       thread while the geometry remains unchanged. */
+    if (auto last = g_lastFinalMapping.lock()) {
+        if (finalMappingMatches(*last, width, height, params))
+            return last;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_finalMappingCacheMutex);
+        for (auto it = g_finalMappingCache.rbegin();
+             it != g_finalMappingCache.rend(); ++it) {
+            if (finalMappingMatches(**it, width, height, params)) {
+                g_lastFinalMapping = *it;
+                return *it;
+            }
+        }
+    }
+
+    /* Compute outside the cache lock.  A renderer thread may be doing the same
+       work for the same newly changed geometry; allowing that rare duplicate
+       is preferable to blocking the GUI thread behind a boundary walk. */
+    auto built = std::make_shared<FinalMappingCacheEntry>();
+    built->scanWidth = width;
+    built->scanHeight = height;
+    built->params = params;
+
+    auto map = std::make_shared<colorscreen::scr_to_img>();
+    if (map->set_parameters(params, scan)) {
+        const colorscreen::int_image_area range(
+            map->get_final_range(width, height));
+        if (!range.empty_p()) {
+            built->available = true;
+            built->map = std::move(map);
+            built->finalRange = range;
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_finalMappingCacheMutex);
+        /* Another thread may have inserted the same geometry while we were
+           computing.  Reuse that canonical entry when possible. */
+        for (auto it = g_finalMappingCache.rbegin();
+             it != g_finalMappingCache.rend(); ++it) {
+            if (finalMappingMatches(**it, width, height, params)) {
+                g_lastFinalMapping = *it;
+                return *it;
+            }
+        }
+        g_finalMappingCache.push_back(built);
+        if (g_finalMappingCache.size() > kFinalMappingCacheSize)
+            g_finalMappingCache.erase(g_finalMappingCache.begin());
+    }
+
+    g_lastFinalMapping = built;
+    return built;
+}
+
+} // namespace
 
 CoordinateTransformer::CoordinateTransformer(
     const colorscreen::image_data* scan,
@@ -16,7 +111,7 @@ CoordinateTransformer::CoordinateTransformer(
 
     /* scan_rotation, scan_mirror and scan_crop are presentation properties of
        the digitized scan.  A final-coordinate canvas already has its own
-       continuous orientation in scr_to_img_parameters.  */
+       continuous orientation in scr_to_img_parameters. */
     auto useScanPresentation = [&]() {
         m_mirror = params.scan_mirror;
         m_rotation = (int)params.scan_rotation % 4;
@@ -32,11 +127,11 @@ CoordinateTransformer::CoordinateTransformer(
                its only meaningful canvas. */
             m_finalAvailable = true;
         } else if (scrToImg && scrToImg->type != colorscreen::Random) {
-            m_map = std::make_shared<colorscreen::scr_to_img>();
-            if (m_map->set_parameters(*scrToImg, *scan)) {
-                m_finalRange = colorscreen::int_image_area(
-                    m_map->get_final_range(m_scanWidth, m_scanHeight));
-                m_finalAvailable = !m_finalRange.empty_p();
+            const auto cached = getFinalMapping(*scan, *scrToImg);
+            if (cached->available) {
+                m_map = cached->map;
+                m_finalRange = cached->finalRange;
+                m_finalAvailable = true;
             }
         }
 
