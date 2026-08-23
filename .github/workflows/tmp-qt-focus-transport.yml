@@ -1,0 +1,27 @@
+name: Temporary Qt focus source transport
+
+on:
+  push:
+    branches:
+      - agent/tmp-qt-focus-transport-20260823
+
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Archive exact main parent
+        run: |
+          set -euxo pipefail
+          BASE=$(git rev-parse HEAD^)
+          test "$BASE" = "bc6008cb6a3c69af7c0f88494dbd3f7772410f7d"
+          echo "$BASE" > HEAD.sha
+          git archive --format=tar.gz --prefix=Color-Screen/ -o Color-Screen.tar.gz "$BASE"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qt-focus-current-main-source
+          path: |
+            Color-Screen.tar.gz
+            HEAD.sha
