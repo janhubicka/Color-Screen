@@ -19,129 +19,13 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Apply macOS Clang regression fixes
+      - name: Reconstruct and apply macOS Clang regression fixes
         shell: bash
         run: |
           set -euxo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_BASE"
-          cat > /tmp/macos-clang-fix.patch <<'PATCH'
-          diff --git a/src/libcolorscreen/unittests.C b/src/libcolorscreen/unittests.C
-          index 7e82bcc..fe10700 100644
-          --- a/src/libcolorscreen/unittests.C
-          +++ b/src/libcolorscreen/unittests.C
-          @@ -694,22 +694,46 @@ test_finetune_focus_areas ()
-                return false;
-              }
-          
-          +  /* Validate candidate positions in the output coordinate system.  Do not
-          +     invert the mapping by dividing by XSTEP/YSTEP just to classify the test
-          +     regions.  Apple Clang with -Ofast contracts e.g.
-          +     (294.5 - 200) / 3 into an FMA that rounds to 31.500000000000004, so an
-          +     exact upper-bound comparison in analysis coordinates can reject the
-          +     correctly mapped boundary point.  A tiny scan-coordinate tolerance also
-          +     keeps this metadata check independent of harmless fast-math contraction.  */
-          +  const coord_t position_epsilon = (coord_t)1e-9;
-          +  const auto mapped = [&] (coord_t x, coord_t y) {
-          +    return point_t { search.origin.x + x * search.xstep,
-          +                     search.origin.y + y * search.ystep };
-          +  };
-          +  const point_t brown_min = mapped (15.5, 15.5);
-          +  const point_t brown_max = mapped (31.5, 31.5);
-          +  const point_t green_min = mapped (95.5, 15.5);
-          +  const point_t green_max = mapped (111.5, 31.5);
-          +
-             bool found_brown = false;
-             bool found_green = false;
-             for (const finetune_focus_area_candidate &area : areas)
-               {
-          -      const coord_t cx = (area.center.x - search.origin.x) / search.xstep;
-          -      const coord_t cy = (area.center.y - search.origin.y) / search.ystep;
-          -      const bool brown = cx >= 15.5 && cx <= 31.5
-          -                         && cy >= 15.5 && cy <= 31.5;
-          -      const bool green = cx >= 95.5 && cx <= 111.5
-          -                         && cy >= 15.5 && cy <= 31.5;
-          +      const auto in_range = [&] (point_t min, point_t max) {
-          +        return area.center.x >= min.x - position_epsilon
-          +               && area.center.x <= max.x + position_epsilon
-          +               && area.center.y >= min.y - position_epsilon
-          +               && area.center.y <= max.y + position_epsilon;
-          +      };
-          +      const bool brown = in_range (brown_min, brown_max);
-          +      const bool green = in_range (green_min, green_max);
-                 if (!brown && !green)
-                   {
-          +          const coord_t cx
-          +              = (area.center.x - search.origin.x) / search.xstep;
-          +          const coord_t cy
-          +              = (area.center.y - search.origin.y) / search.ystep;
-                     fprintf (stderr,
-                              "Focus-area finder accepted texture/strong gradient at "
-          -                   "%.3f, %.3f\n",
-          -                   (double)cx, (double)cy);
-          +                   "%.17g, %.17g (scan %.17g, %.17g)\n",
-          +                   (double)cx, (double)cy, (double)area.center.x,
-          +                   (double)area.center.y);
-                     return false;
-                   }
-                 if (area.area.width != search.window_width * search.xstep
-          diff --git a/testsuite/dufaycolor_dt_captureone_export.test b/testsuite/dufaycolor_dt_captureone_export.test
-          index 6a6318c..fb08913 100755
-          --- a/testsuite/dufaycolor_dt_captureone_export.test
-          +++ b/testsuite/dufaycolor_dt_captureone_export.test
-          @@ -11,15 +11,46 @@ fi
-           echo 1..6
-           . $srcdir/defs.sh
-           NAME=dufaycolor_dt_captureone_export
-          +
-          +# Verify the physical match rather than the arbitrary detected screen-grid
-          +# phase or an exact known-pixel count.  The same match is represented as raw
-          +# offset -28,5 after nearest-pixel detector rounding.  Mesh and no-mesh runs
-          +# both map it to about final (6.71,-27.64), while their known-pixel boundaries
-          +# make the reported overlap differ slightly (58.62% versus 58.91%).
-          +check_stitch_match ()
-          +{
-          +    awk '
-          +      /Best match on offset/ {
-          +        have_final = 0;
-          +        have_overlap = 0;
-          +        for (i = 1; i <= NF; i++) {
-          +          if ($i == "(final" && i + 2 <= NF) {
-          +            x = $(i + 1);
-          +            y = $(i + 2);
-          +            sub(/,$/, "", x);
-          +            have_final = 1;
-          +          }
-          +          if ($i == "overlap" && i + 1 <= NF) {
-          +            overlap = $(i + 1);
-          +            sub(/%$/, "", overlap);
-          +            have_overlap = 1;
-          +          }
-          +        }
-          +        if (have_final && have_overlap &&
-          +            x >= 6.5 && x <= 7.0 &&
-          +            y >= -28.0 && y <= -27.2 &&
-          +            overlap >= 58.0 && overlap <= 60.0)
-          +          good = 1;
-          +      }
-          +      END { exit good ? 0 : 1; }
-          +    ' "$1"
-          +}
-          +
-           pexec $RUNCOLORSCREEN stitch --ncols 2 "$srcdir/${NAME}_tile1.jpg" "$srcdir/${NAME}_tile2.jpg"  --out "out-${NAME}.csprj"  --report "out-${NAME}.txt" --no-cpfind  --min-screen-percentage=80 --max-unknown-screen-range=10 || exit 1
-          -# The integer offset is expressed in the independently detected screen-grid
-          -# origins.  Detector improvements may choose a lattice-equivalent origin while
-          -# preserving the same physical tile overlap, so keep the overlap fraction as
-          -# the stable stitching invariant rather than pinning an arbitrary grid phase.
-          -grep "Best match on offset .* overlap 58.620690%" "out-${NAME}.txt" || exit 1
-          +check_stitch_match "out-${NAME}.txt" || exit 1
-           echo 'ok 1 - stitch project construction'
-           pexec $RUNCOLORSCREEN stitch --ncols 2 "$srcdir/${NAME}_tile1.jpg" "$srcdir/${NAME}_tile2.jpg"  --out "out-${NAME}-nomesh.csprj"  --report "out-${NAME}.txt" --no-cpfind  --no-mesh --min-screen-percentage=80 --max-unknown-screen-range=10 || exit 1
-          -grep "Best match on offset .* overlap 58.620690%" "out-${NAME}.txt" || exit 1
-          +check_stitch_match "out-${NAME}.txt" || exit 1
-           echo 'ok 2 - stitch project construction no mesh'
-           PARNAME=out-${NAME}
-           pexec $RUNCOLORSCREEN autodetect out-${NAME}.csprj ${PARNAME}.par --gamma 2.2  $* || exit 1
-          PATCH
+          printf '%s' 'LS0tIGEvc3JjL2xpYmNvbG9yc2NyZWVuL3VuaXR0ZXN0cy5DCisrKyBiL3NyYy9saWJjb2xvcnNjcmVlbi91bml0dGVzdHMuQwpAQCAtNjk0LDIyICs2OTQsNDYgQEAKICAgICAgIHJldHVybiBmYWxzZTsKICAgICB9CiAKKyAgLyogVmFsaWRhdGUgY2FuZGlkYXRlIHBvc2l0aW9ucyBpbiB0aGUgb3V0cHV0IGNvb3JkaW5hdGUgc3lzdGVtLiAgRG8gbm90CisgICAgIGludmVydCB0aGUgbWFwcGluZyBieSBkaXZpZGluZyBieSBYU1RFUC9ZU1RFUCBqdXN0IHRvIGNsYXNzaWZ5IHRoZSB0ZXN0CisgICAgIHJlZ2lvbnMuICBBcHBsZSBDbGFuZyB3aXRoIC1PZmFzdCBjb250cmFjdHMgZS5nLgorICAgICAoMjk0LjUgLSAyMDApIC8gMyBpbnRvIGFuIEZNQSB0aGF0IHJvdW5kcyB0byAzMS41MDAwMDAwMDAwMDAwMDQsIHNvIGFuCisgICAgIGV4YWN0IHVwcGVyLWJvdW5kIGNvbXBhcmlzb24gaW4gYW5hbHlzaXMgY29vcmRpbmF0ZXMgY2FuIHJlamVjdCB0aGUKKyAgICAgY29ycmVjdGx5IG1hcHBlZCBib3VuZGFyeSBwb2ludC4gIEEgdGlueSBzY2FuLWNvb3JkaW5hdGUgdG9sZXJhbmNlIGFsc28KKyAgICAga2VlcHMgdGhpcyBtZXRhZGF0YSBjaGVjayBpbmRlcGVuZGVudCBvZiBoYXJtbGVzcyBmYXN0LW1hdGggY29udHJhY3Rpb24uICAqLworICBjb25zdCBjb29yZF90IHBvc2l0aW9uX2Vwc2lsb24gPSAoY29vcmRfdCkxZS05OworICBjb25zdCBhdXRvIG1hcHBlZCA9IFsmXSAoY29vcmRfdCB4LCBjb29yZF90IHkpIHsKKyAgICByZXR1cm4gcG9pbnRfdCB7IHNlYXJjaC5vcmlnaW4ueCArIHggKiBzZWFyY2gueHN0ZXAsCisgICAgICAgICAgICAgICAgICAgICBzZWFyY2gub3JpZ2luLnkgKyB5ICogc2VhcmNoLnlzdGVwIH07CisgIH07CisgIGNvbnN0IHBvaW50X3QgYnJvd25fbWluID0gbWFwcGVkICgxNS41LCAxNS41KTsKKyAgY29uc3QgcG9pbnRfdCBicm93bl9tYXggPSBtYXBwZWQgKDMxLjUsIDMxLjUpOworICBjb25zdCBwb2ludF90IGdyZWVuX21pbiA9IG1hcHBlZCAoOTUuNSwgMTUuNSk7CisgIGNvbnN0IHBvaW50X3QgZ3JlZW5fbWF4ID0gbWFwcGVkICgxMTEuNSwgMzEuNSk7CisKICAgYm9vbCBmb3VuZF9icm93biA9IGZhbHNlOwogICBib29sIGZvdW5kX2dyZWVuID0gZmFsc2U7CiAgIGZvciAoY29uc3QgZmluZXR1bmVfZm9jdXNfYXJlYV9jYW5kaWRhdGUgJmFyZWEgOiBhcmVhcykKICAgICB7Ci0gICAgICBjb25zdCBjb29yZF90IGN4ID0gKGFyZWEuY2VudGVyLnggLSBzZWFyY2gub3JpZ2luLngpIC8gc2VhcmNoLnhzdGVwOwotICAgICAgY29uc3QgY29vcmRfdCBjeSA9IChhcmVhLmNlbnRlci55IC0gc2VhcmNoLm9yaWdpbi55KSAvIHNlYXJjaC55c3RlcDsKLSAgICAgIGNvbnN0IGJvb2wgYnJvd24gPSBjeCA+PSAxNS41ICYmIGN4IDw9IDMxLjUKLSAgICAgICAgICAgICAgICAgICAgICAgICAmJiBjeSA+PSAxNS41ICYmIGN5IDw9IDMxLjU7Ci0gICAgICBjb25zdCBib29sIGdyZWVuID0gY3ggPj0gOTUuNSAmJiBjeCA8PSAxMTEuNQotICAgICAgICAgICAgICAgICAgICAgICAgICYmIGN5ID49IDE1LjUgJiYgY3kgPD0gMzEuNTsKKyAgICAgIGNvbnN0IGF1dG8gaW5fcmFuZ2UgPSBbJl0gKHBvaW50X3QgbWluLCBwb2ludF90IG1heCkgeworICAgICAgICByZXR1cm4gYXJlYS5jZW50ZXIueCA+PSBtaW4ueCAtIHBvc2l0aW9uX2Vwc2lsb24KKyAgICAgICAgICAgICAgICYmIGFyZWEuY2VudGVyLnggPD0gbWF4LnggKyBwb3NpdGlvbl9lcHNpbG9uCisgICAgICAgICAgICAgICAmJiBhcmVhLmNlbnRlci55ID49IG1pbi55IC0gcG9zaXRpb25fZXBzaWxvbgorICAgICAgICAgICAgICAgJiYgYXJlYS5jZW50ZXIueSA8PSBtYXgueSArIHBvc2l0aW9uX2Vwc2lsb247CisgICAgICB9OworICAgICAgY29uc3QgYm9vbCBicm93biA9IGluX3JhbmdlIChicm93bl9taW4sIGJyb3duX21heCk7CisgICAgICBjb25zdCBib29sIGdyZWVuID0gaW5fcmFuZ2UgKGdyZWVuX21pbiwgZ3JlZW5fbWF4KTsKICAgICAgIGlmICghYnJvd24gJiYgIWdyZWVuKQogICAgICAgICB7CisgICAgICAgICAgY29uc3QgY29vcmRfdCBjeAorICAgICAgICAgICAgICA9IChhcmVhLmNlbnRlci54IC0gc2VhcmNoLm9yaWdpbi54KSAvIHNlYXJjaC54c3RlcDsKKyAgICAgICAgICBjb25zdCBjb29yZF90IGN5CisgICAgICAgICAgICAgID0gKGFyZWEuY2VudGVyLnkgLSBzZWFyY2gub3JpZ2luLnkpIC8gc2VhcmNoLnlzdGVwOwogICAgICAgICAgIGZwcmludGYgKHN0ZGVyciwKICAgICAgICAgICAgICAgICAgICAiRm9jdXMtYXJlYSBmaW5kZXIgYWNjZXB0ZWQgdGV4dHVyZS9zdHJvbmcgZ3JhZGllbnQgYXQgIgotICAgICAgICAgICAgICAgICAgICIlLjNmLCAlLjNmXG4iLAotICAgICAgICAgICAgICAgICAgIChkb3VibGUpY3gsIChkb3VibGUpY3kpOworICAgICAgICAgICAgICAgICAgICIlLjE3ZywgJS4xN2cgKHNjYW4gJS4xN2csICUuMTdnKVxuIiwKKyAgICAgICAgICAgICAgICAgICAoZG91YmxlKWN4LCAoZG91YmxlKWN5LCAoZG91YmxlKWFyZWEuY2VudGVyLngsCisgICAgICAgICAgICAgICAgICAgKGRvdWJsZSlhcmVhLmNlbnRlci55KTsKICAgICAgICAgICByZXR1cm4gZmFsc2U7CiAgICAgICAgIH0KICAgICAgIGlmIChhcmVhLmFyZWEud2lkdGggIT0gc2VhcmNoLndpbmRvd193aWR0aCAqIHNlYXJjaC54c3RlcAotLS0gYS90ZXN0c3VpdGUvZHVmYXljb2xvcl9kdF9jYXB0dXJlb25lX2V4cG9ydC50ZXN0CisrKyBiL3Rlc3RzdWl0ZS9kdWZheWNvbG9yX2R0X2NhcHR1cmVvbmVfZXhwb3J0LnRlc3QKQEAgLTExLDE1ICsxMSw0NiBAQAogZWNobyAxLi42CiAuICRzcmNkaXIvZGVmcy5zaAogTkFNRT1kdWZheWNvbG9yX2R0X2NhcHR1cmVvbmVfZXhwb3J0CisKKyMgVmVyaWZ5IHRoZSBwaHlzaWNhbCBtYXRjaCByYXRoZXIgdGhhbiB0aGUgYXJiaXRyYXJ5IGRldGVjdGVkIHNjcmVlbi1ncmlkCisjIHBoYXNlIG9yIGFuIGV4YWN0IGtub3duLXBpeGVsIGNvdW50LiAgVGhlIHNhbWUgbWF0Y2ggaXMgcmVwcmVzZW50ZWQgYXMgcmF3CisjIG9mZnNldCAtMjgsNSBhZnRlciBuZWFyZXN0LXBpeGVsIGRldGVjdG9yIHJvdW5kaW5nLiAgTWVzaCBhbmQgbm8tbWVzaCBydW5zCisjIGJvdGggbWFwIGl0IHRvIGFib3V0IGZpbmFsICg2LjcxLC0yNy42NCksIHdoaWxlIHRoZWlyIGtub3duLXBpeGVsIGJvdW5kYXJpZXMKKyMgbWFrZSB0aGUgcmVwb3J0ZWQgb3ZlcmxhcCBkaWZmZXIgc2xpZ2h0bHkgKDU4LjYyJSB2ZXJzdXMgNTguOTElKS4KK2NoZWNrX3N0aXRjaF9tYXRjaCAoKQoreworICAgIGF3ayAnCisgICAgICAvQmVzdCBtYXRjaCBvbiBvZmZzZXQvIHsKKyAgICAgICAgaGF2ZV9maW5hbCA9IDA7CisgICAgICAgIGhhdmVfb3ZlcmxhcCA9IDA7CisgICAgICAgIGZvciAoaSA9IDE7IGkgPD0gTkY7IGkrKykgeworICAgICAgICAgIGlmICgkaSA9PSAiKGZpbmFsIiAmJiBpICsgMiA8PSBORikgeworICAgICAgICAgICAgeCA9ICQoaSArIDEpOworICAgICAgICAgICAgeSA9ICQoaSArIDIpOworICAgICAgICAgICAgc3ViKC8sJC8sICIiLCB4KTsKKyAgICAgICAgICAgIGhhdmVfZmluYWwgPSAxOworICAgICAgICAgIH0KKyAgICAgICAgICBpZiAoJGkgPT0gIm92ZXJsYXAiICYmIGkgKyAxIDw9IE5GKSB7CisgICAgICAgICAgICBvdmVybGFwID0gJChpICsgMSk7CisgICAgICAgICAgICBzdWIoLyUkLywgIiIsIG92ZXJsYXApOworICAgICAgICAgICAgaGF2ZV9vdmVybGFwID0gMTsKKyAgICAgICAgICB9CisgICAgICAgIH0KKyAgICAgICAgaWYgKGhhdmVfZmluYWwgJiYgaGF2ZV9vdmVybGFwICYmCisgICAgICAgICAgICB4ID49IDYuNSAmJiB4IDw9IDcuMCAmJgorICAgICAgICAgICAgeSA+PSAtMjguMCAmJiB5IDw9IC0yNy4yICYmCisgICAgICAgICAgICBvdmVybGFwID49IDU4LjAgJiYgb3ZlcmxhcCA8PSA2MC4wKQorICAgICAgICAgIGdvb2QgPSAxOworICAgICAgfQorICAgICAgRU5EIHsgZXhpdCBnb29kID8gMCA6IDE7IH0KKyAgICAnICIkMSIKK30KKwogcGV4ZWMgJFJVTkNPTE9SU0NSRUVOIHN0aXRjaCAtLW5jb2xzIDIgIiRzcmNkaXIvJHtOQU1FfV90aWxlMS5qcGciICIkc3JjZGlyLyR7TkFNRX1fdGlsZTIuanBnIiAgLS1vdXQgIm91dC0ke05BTUV9LmNzcHJqIiAgLS1yZXBvcnQgIm91dC0ke05BTUV9LnR4dCIgLS1uby1jcGZpbmQgIC0tbWluLXNjcmVlbi1wZXJjZW50YWdlPTgwIC0tbWF4LXVua25vd24tc2NyZWVuLXJhbmdlPTEwIHx8IGV4aXQgMQotIyBUaGUgaW50ZWdlciBvZmZzZXQgaXMgZXhwcmVzc2VkIGluIHRoZSBpbmRlcGVuZGVudGx5IGRldGVjdGVkIHNjcmVlbi1ncmlkCi0jIG9yaWdpbnMuICBEZXRlY3RvciBpbXByb3ZlbWVudHMgbWF5IGNob29zZSBhIGxhdHRpY2UtZXF1aXZhbGVudCBvcmlnaW4gd2hpbGUKLSMgcHJlc2VydmluZyB0aGUgc2FtZSBwaHlzaWNhbCB0aWxlIG92ZXJsYXAsIHNvIGtlZXAgdGhlIG92ZXJsYXAgZnJhY3Rpb24gYXMKLSMgdGhlIHN0YWJsZSBzdGl0Y2hpbmcgaW52YXJpYW50IHJhdGhlciB0aGFuIHBpbm5pbmcgYW4gYXJiaXRyYXJ5IGdyaWQgcGhhc2UuCi1ncmVwICJCZXN0IG1hdGNoIG9uIG9mZnNldCAuKiBvdmVybGFwIDU4LjYyMDY5MCUiICJvdXQtJHtOQU1FfS50eHQiIHx8IGV4aXQgMQorY2hlY2tfc3RpdGNoX21hdGNoICJvdXQtJHtOQU1FfS50eHQiIHx8IGV4aXQgMQogZWNobyAnb2sgMSAtIHN0aXRjaCBwcm9qZWN0IGNvbnN0cnVjdGlvbicKIHBleGVjICRSVU5DT0xPUlNDUkVFTiBzdGl0Y2ggLS1uY29scyAyICIkc3JjZGlyLyR7TkFNRX1fdGlsZTEuanBnIiAiJHNyY2Rpci8ke05BTUV9X3RpbGUyLmpwZyIgIC0tb3V0ICJvdXQtJHtOQU1FfS1ub21lc2guY3NwcmoiICAtLXJlcG9ydCAib3V0LSR7TkFNRX0udHh0IiAtLW5vLWNwZmluZCAgLS1uby1tZXNoIC0tbWluLXNjcmVlbi1wZXJjZW50YWdlPTgwIC0tbWF4LXVua25vd24tc2NyZWVuLXJhbmdlPTEwIHx8IGV4aXQgMQotZ3JlcCAiQmVzdCBtYXRjaCBvbiBvZmZzZXQgLiogb3ZlcmxhcCA1OC42MjA2OTAlIiAib3V0LSR7TkFNRX0udHh0IiB8fCBleGl0IDEKK2NoZWNrX3N0aXRjaF9tYXRjaCAib3V0LSR7TkFNRX0udHh0IiB8fCBleGl0IDEKIGVjaG8gJ29rIDIgLSBzdGl0Y2ggcHJvamVjdCBjb25zdHJ1Y3Rpb24gbm8gbWVzaCcKIFBBUk5BTUU9b3V0LSR7TkFNRX0KIHBleGVjICRSVU5DT0xPUlNDUkVFTiBhdXRvZGV0ZWN0IG91dC0ke05BTUV9LmNzcHJqICR7UEFSTkFNRX0ucGFyIC0tZ2FtbWEgMi4yICAkKiB8fCBleGl0IDEK' | base64 -d > /tmp/macos-clang-fix.patch
+          test "$(sha256sum /tmp/macos-clang-fix.patch | awk '{print $1}')" = "d43e1bb1a03b2e8a52d0a88ce2b06ceb100cc68a8bc2f35bbc38a6d3d0857662"
           git apply --check /tmp/macos-clang-fix.patch
           git apply /tmp/macos-clang-fix.patch
           git diff --check HEAD
