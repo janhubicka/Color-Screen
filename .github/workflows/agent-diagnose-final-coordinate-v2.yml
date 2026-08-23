@@ -45,12 +45,15 @@ jobs:
               line = raw
               if not in_triple_string and line.startswith("          "):
                   line = line[10:]
-              # Triple-quoted replacement strings deliberately contain source
-              # indentation that must survive extraction unchanged.
               if line.count('"""') % 2:
                   in_triple_string = not in_triple_string
               lines.append(line)
-          Path("/tmp/final-coordinate-v2.py").write_text("\n".join(lines) + "\n")
+          script = "\n".join(lines) + "\n"
+          # The checked-in qtgui guide begins this sentence with a capital V.
+          script = script.replace(
+              "views share the image\nand document transforms",
+              "Views share the image\nand document transforms")
+          Path("/tmp/final-coordinate-v2.py").write_text(script)
           PY
 
           set +e
