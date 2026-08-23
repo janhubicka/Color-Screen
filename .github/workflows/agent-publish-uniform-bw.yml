@@ -1,49 +1,81 @@
-name: Publish uniform BW multi-tile model
+name: Publish focus-area follow-up
 
 on:
-  pull_request:
+  push:
     branches:
-      - agent/focus-uniform-bw-publish-base-20260821
+      - agent/focus-uniform-bw-publisher-20260821
 
 permissions:
   contents: write
 
 jobs:
   publish:
-    if: github.head_ref == 'agent/focus-uniform-bw-publisher-20260821'
     runs-on: ubuntu-latest
     steps:
       - name: Check out exact publisher payload
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.sha }}
           path: transport
 
-      - name: Check out exact current base
+      - name: Check out PR 99 branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: agent/qt-focus-area-analysis
           fetch-depth: 0
           path: repo
 
-      - name: Apply verified source transforms and publish feature branch
+      - name: Apply and publish verified follow-up
         shell: bash
         run: |
           set -euxo pipefail
           cd repo
-          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.base.sha }}"
-          python ../transport/agent/patch_uniform_bw.py
-          python ../transport/agent/add_uniform_bw_regression.py
-          python ../transport/agent/update_uniform_bw_docs.py
+          expected=ca6a4eab9326623e49975c48b7c36957f56e5310
+          test "$(git rev-parse HEAD)" = "$expected"
+          cat ../transport/agent/focus-area-followup.patch.* > /tmp/focus-area-followup.patch
+          git apply --check /tmp/focus-area-followup.patch
+          git apply /tmp/focus-area-followup.patch
           git diff --check
-          test "$(git diff --name-only | sort)" = $'doc/finetune-solver.md\ndoc/finetune-tracking.md\nsrc/libcolorscreen/finetune-int.h\nsrc/libcolorscreen/finetune.C\nsrc/libcolorscreen/include/finetune.h\nsrc/libcolorscreen/unittests.C'
-          git checkout -B agent/uniform-bw-multitile-focus "${{ github.event.pull_request.base.sha }}"
-          git add -- doc/finetune-solver.md doc/finetune-tracking.md \
-            src/libcolorscreen/finetune-int.h src/libcolorscreen/finetune.C \
-            src/libcolorscreen/include/finetune.h src/libcolorscreen/unittests.C
+          test "$(git diff --name-only | sort)" = $'src/libcolorscreen/Makefile.am\nsrc/libcolorscreen/Makefile.in\nsrc/libcolorscreen/finetune.C\nsrc/libcolorscreen/focus-analysis-unittests.C\nsrc/libcolorscreen/focus-analysis.C'
+          grep -q 'matrixw = 3 \* n_tiles' src/libcolorscreen/finetune.C
+          grep -q 'last_tile_color\[tileid\]' src/libcolorscreen/finetune.C
+          grep -q 'has_grayscale_or_ir' src/libcolorscreen/focus-analysis.C
+          grep -q 'test_sky_candidate_budget' src/libcolorscreen/focus-analysis-unittests.C
+          grep -q 'focus-analysis-unittests$(EXEEXT)' src/libcolorscreen/Makefile.am
+          git add -- src/libcolorscreen/Makefile.am src/libcolorscreen/Makefile.in \
+            src/libcolorscreen/finetune.C src/libcolorscreen/focus-analysis.C \
+            src/libcolorscreen/focus-analysis-unittests.C
           git diff --cached --check
           git config user.name 'OpenAI Codex'
           git config user.email 'noreply@openai.com'
-          git commit -F ../transport/agent/uniform-bw-commit.txt
-          git push --force origin HEAD:refs/heads/agent/uniform-bw-multitile-focus
-          printf 'Published %s on base %s\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD^)"
+          git commit -F - <<'EOF'
+          focus: support grayscale multi-area analysis
+
+          Keep the shared screen-primary/capture-transfer model while giving
+          every BW/IR uniform tile its own three primary intensity coefficients.
+          Fix the BW least-squares width to 3*n_tiles and solve the resulting
+          block-diagonal projection, and stop pooling differently colored BW
+          tiles through the single-tile collection estimator.
+
+          Allow automatic focus-area discovery on grayscale/IR scans through the
+          existing interpolated image-layer reconstruction.  Use independently
+          fitted BW primary intensities when selecting a D-optimal set of areas.
+          Diversify the pre-fit candidate budget so a large exceptionally flat
+          field such as sky cannot crowd every other material out before the
+          expensive individual fits are attempted.
+
+          Add regressions for grayscale image search, sky-budget retention,
+          fitted-primary diversity, and full multi-tile BW focus recovery.  Also
+          register the focused checker in CLEANFILES with EXEEXT so distcheck
+          does not leave the executable behind on Linux or Windows.
+
+          Local validation:
+          - checking/O2 focus-analysis-unittests: PASS
+          - checking/-Ofast -march=native focus-analysis-unittests: PASS
+          - focused checker removed by make clean: PASS
+          - synthetic BW shared blur: 0.81 recovered vs 0.82 truth
+          - full make check progressed through the existing real regressions but
+            was interrupted by the isolated execution cap, not a test failure
+          EOF
+          git push origin HEAD:refs/heads/agent/qt-focus-area-analysis
+          printf 'Published %s on %s\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD^)"
