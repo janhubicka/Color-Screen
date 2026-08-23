@@ -1559,11 +1559,17 @@ void MainWindow::rotateRight() {
 void MainWindow::onMirrorHorizontally(bool checked) {
   if (!m_scan)
     return;
+  ParameterState newState = getCurrentState();
   if (m_imageWidget && m_imageWidget->coordinateSpace() ==
-                           colorscreen::render_final_coordinates)
-    setDocumentFinalMirror(checked);
-  else
-    setDocumentMirror(checked);
+                           colorscreen::render_final_coordinates) {
+    newState.scrToImg.final_mirror = !newState.scrToImg.final_mirror;
+    newState.scrToImg.final_rotation = -newState.scrToImg.final_rotation;
+    changeParameters(newState, "Mirror Final Image");
+  } else {
+    newState.rparams.scan_mirror = !newState.rparams.scan_mirror;
+    newState.rparams.scan_rotation = (4 - (int)newState.rparams.scan_rotation) % 4;
+    changeParameters(newState, "Mirror Horizontally");
+  }
 }
 
 /** Toggle fullscreen mode for the ImageWidget.
