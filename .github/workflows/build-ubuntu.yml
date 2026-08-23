@@ -35,19 +35,24 @@ jobs:
         cd source
         git config user.name "OpenAI Agent"
         git config user.email "agent@openai.com"
+        cat > /tmp/recovery-commit-message <<'EOF'
+        qtgui: recover slanted-edge reference scans
+
+        Store live slanted-edge reference filenames alongside each document's crash-recovery payload and recreate those specialized reference tabs after the owning MainWindow is restored.
+
+        Keep reference recovery document-scoped and atomic. Suppress metadata rewrites while replaying a saved list so opening the first recovered reference cannot truncate later entries. Missing or unreadable auxiliary scans do not block restoration of the main document.
+
+        Deliberately do not recover ordinary New Views or view-local presentation state such as attachment, zoom, pan, Color/IR selection, or render mode. Recovered references return as attached workspace views and continue to share the source document's parameter and undo state.
+
+        Extend the existing slanted-reference smoke test to verify persistence and replay through the normal application creation path, and document the recovery boundary in NEWS and the Qt developer notes.
+
+        Validation before publication: exact base b9296f93; git diff --check clean. Full Qt build and smoke validation run in repository CI.
+        EOF
         git add NEWS .agents/qtgui.md \
           src/qtgui/ColorScreenApplication.cpp \
           src/qtgui/ColorScreenApplication.h \
           src/qtgui/MainWindow.h src/qtgui/main.cpp
-        git commit -m "qtgui: recover slanted-edge reference scans" -m "Store live slanted-edge reference filenames alongside each document's crash-recovery payload and recreate those specialized reference tabs after the owning MainWindow is restored.
-
-Keep reference recovery document-scoped and atomic. Suppress metadata rewrites while replaying a saved list so opening the first recovered reference cannot truncate later entries. Missing or unreadable auxiliary scans do not block restoration of the main document.
-
-Deliberately do not recover ordinary New Views or view-local presentation state such as attachment, zoom, pan, Color/IR selection, or render mode. Recovered references return as attached workspace views and continue to share the source document's parameter and undo state.
-
-Extend the existing slanted-reference smoke test to verify persistence and replay through the normal application creation path, and document the recovery boundary in NEWS and the Qt developer notes.
-
-Validation before publication: exact base b9296f93; git diff --check clean. Full Qt build and smoke validation run in repository CI."
+        git commit -F /tmp/recovery-commit-message
         git push origin HEAD:agent/qtgui-recover-slanted-references
 
   build:
