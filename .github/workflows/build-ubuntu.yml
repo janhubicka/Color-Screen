@@ -10,7 +10,7 @@ permissions:
 jobs:
   publish-final-coordinate-patch:
     if: github.head_ref == 'agent/tmp-publish-final-coordinate-image-view'
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout publisher payload
         uses: actions/checkout@v4
@@ -65,7 +65,7 @@ jobs:
 
           Extend New View smoke coverage to exercise the public final-coordinate
           render_tile API and verify coordinate-space independence between the
-          primary and secondary views. Update NEWS and Qt developer documentation.
+          primary and secondary views. Update NEWS.
 
           Validation before publication: git apply --check and git diff --check
           are clean. Full Qt builds and offscreen smoke tests run in repository CI.
