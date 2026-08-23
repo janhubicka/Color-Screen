@@ -1,0 +1,220 @@
+diff --git a/src/libcolorscreen/finetune.C b/src/libcolorscreen/finetune.C
+index 278e7e8..ff6ef53 100644
+--- a/src/libcolorscreen/finetune.C
++++ b/src/libcolorscreen/finetune.C
+@@ -1090,6 +1095,9 @@ public:
+      Initialized by objfunc and can be reused after it is computed
+      since get_colors is expensive.  */
+   double_rgbdata last_red, last_green, last_blue, last_color;
++  /* BW/IR tiles share screen geometry and capture transfer, but each uniform
++     scene region has its own three primary intensity coefficients.  */
++  std::array<double_rgbdata, max_tiles> last_tile_color;
+   double_rgbdata last_fog;
+ 
+   finetune_solver (const finetune_solver &) = delete;
+@@ -1665,13 +1673,12 @@ public:
+         /* If infrared channel is simulated, negative values may be possible
+            and it is kind of hard to constrain to reasonable bounds.
+            Still allow values somewhat out of range to account for possible
+-           over-exposure or cropping  */
++           over-exposure or cropping.  */
+         if (!bw_is_simulated_infrared)
+-          {
+-            to_range (v[color_index + 0], (coord_t)-0.1, (coord_t)1.1);
+-            to_range (v[color_index + 1], (coord_t)-0.1, (coord_t)1.1);
+-            to_range (v[color_index + 2], (coord_t)-0.1, (coord_t)1.1);
+-          }
++          for (int tileid = 0; tileid < n_tiles; tileid++)
++            for (int channel = 0; channel < 3; channel++)
++              to_range (v[color_index + 3 * tileid + channel],
++                        (coord_t)-0.1, (coord_t)1.1);
+       }
+     if (sharpen_index >= 0)
+       {
+@@ -1851,7 +1860,7 @@ public:
+       }
+     /* In BW mode we guess intensity.  */
+     else
+-      matrixw = 1;
++      matrixw = 3 * n_tiles;
+     int matrixh = sample_points () + (fog_by_least_squares != 0);
+     if (simulate_infrared)
+       matrixh *= 3;
+@@ -2101,6 +2120,12 @@ public:
+     optimize_emulsion_offset = coupled_emulsion_fit;
+     if (optimize_emulsion_intensities)
+       data_collection = false;
++    /* A single collected BW colour cannot describe several differently
++       coloured uniform regions.  Multi-tile BW therefore uses the
++       block-diagonal least-squares model (or the explicit nonlinear fallback
++       when least squares was disabled by the caller).  */
++    if (n_tiles > 1 && !tiles[0].bw.empty ())
++      data_collection = false;
+ 
+     /* To optimize emulsion blur we can either assume that screen blur
+        is already known and use it or try to simulate everything including
+@@ -2166,7 +2191,7 @@ public:
+         if (!tiles[0].color.empty ())
+           n_values += 9;
+         else
+-          n_values += 3;
++          n_values += 3 * n_tiles;
+       }
+     else
+       color_index = -1;
+@@ -2596,8 +2625,14 @@ public:
+   compute_contrast ()
+   {
+     if (!tiles[0].bw.empty ())
+-      contrast = get_positional_color_contrast (type, last_color,
+-                                                optimize_coordinates == 2);
++      {
++        contrast = 0;
++        for (int tileid = 0; tileid < n_tiles; tileid++)
++          contrast = std::max (
++              contrast,
++              get_positional_color_contrast (type, last_tile_color[tileid],
++                                              optimize_coordinates == 2));
++      }
+     else
+       contrast = std::max (
+           { get_positional_color_contrast (
+@@ -3765,46 +3800,56 @@ public:
+   rgbdata
+   bw_determine_color_using_least_squares (coord_t *v)
+   {
++    (void)v;
+     int e = 0;
+     if (!least_squares_initialized)
+       abort ();
++    gsl_matrix_set_zero (gsl_X.get ());
+     for (int tileid = 0; tileid < n_tiles; tileid++)
+       for (int y = border; y < theight - border; y++)
+         for (int x = border; x < twidth - border; x++)
+           if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
+             {
+               rgbdata c = get_simulated_screen_pixel (tileid, { x, y });
+-              gsl_matrix_set (gsl_X.get (), e, 0, c.red);
+-              gsl_matrix_set (gsl_X.get (), e, 1, c.green);
+-              gsl_matrix_set (gsl_X.get (), e, 2, c.blue);
++              gsl_matrix_set (gsl_X.get (), e, 3 * tileid + 0, c.red);
++              gsl_matrix_set (gsl_X.get (), e, 3 * tileid + 1, c.green);
++              gsl_matrix_set (gsl_X.get (), e, 3 * tileid + 2, c.blue);
+               e++;
+-              // gsl_vector_set (gsl_y[0], e, bw_get_pixel (x, y) / (2 *
+-              // maxgray));
+             }
+     if (e != (int)gsl_X->size1)
+       abort ();
+     double chisq;
+     if (gsl_multifit_linear (gsl_X.get (), gsl_y[0].get (), gsl_c.get (),
+-                             gsl_cov.get (), &chisq, gsl_work.get ()) != GSL_SUCCESS)
+-      return { -1, -1, -1 };
+-    rgbdata color
+-        = { (luminosity_t)gsl_vector_get (gsl_c.get (), 0) * (2 * maxgray),
+-            (luminosity_t)gsl_vector_get (gsl_c.get (), 1) * (2 * maxgray),
+-            (luminosity_t)gsl_vector_get (gsl_c.get (), 2) * (2 * maxgray) };
+-    /* If infrared channel is simulated, negative values may be possible
+-       and it is kind of hard to constrain to reasonable bounds.
+-       Still allow values somewhat out of range to account for possible
+-       over-exposure or cropping  */
+-    if (!bw_is_simulated_infrared)
++                             gsl_cov.get (), &chisq, gsl_work.get ())
++        != GSL_SUCCESS)
+       {
+-        color.red
+-            = std::clamp (color.red, (luminosity_t)-0.1, (luminosity_t)1.1);
+-        color.green
+-            = std::clamp (color.green, (luminosity_t)-0.1, (luminosity_t)1.1);
+-        color.blue
+-            = std::clamp (color.blue, (luminosity_t)-0.1, (luminosity_t)1.1);
++        for (int tileid = 0; tileid < n_tiles; tileid++)
++          last_tile_color[tileid] = { -1, -1, -1 };
++        last_color = last_tile_color[0];
++        return last_color;
+       }
+-    return color;
++    for (int tileid = 0; tileid < n_tiles; tileid++)
++      {
++        rgbdata color
++            = { (luminosity_t)gsl_vector_get (gsl_c.get (), 3 * tileid + 0)
++                    * (2 * maxgray),
++                (luminosity_t)gsl_vector_get (gsl_c.get (), 3 * tileid + 1)
++                    * (2 * maxgray),
++                (luminosity_t)gsl_vector_get (gsl_c.get (), 3 * tileid + 2)
++                    * (2 * maxgray) };
++        if (!bw_is_simulated_infrared)
++          {
++            color.red = std::clamp (color.red, (luminosity_t)-0.1,
++                                    (luminosity_t)1.1);
++            color.green = std::clamp (color.green, (luminosity_t)-0.1,
++                                      (luminosity_t)1.1);
++            color.blue = std::clamp (color.blue, (luminosity_t)-0.1,
++                                     (luminosity_t)1.1);
++          }
++        last_tile_color[tileid] = color;
++      }
++    last_color = last_tile_color[0];
++    return last_color;
+   }
+ 
+   rgbdata
+@@ -4018,7 +4086,7 @@ public:
+       if (!tiles[0].color.empty ())
+         get_colors (v, &red, &green, &blue);
+       else
+-        color = bw_get_color (v);
++        color = bw_get_color (v, 0);
+       if (simulate_infrared)
+         {
+           mix_weights = get_mix_weights (v);
+@@ -4063,8 +4131,8 @@ public:
+               for (int x = border; x < twidth - border; x++)
+                 if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
+                   {
+-                    luminosity_t c
+-                        = bw_evaluate_pixel (tileid, color, x, y);
++                    luminosity_t c = bw_evaluate_pixel (
++                        tileid, last_tile_color[tileid], x, y);
+                     luminosity_t d = bw_get_pixel (tileid, { x, y });
+                     sum += my_fabs (c - d);
+                   }
+@@ -4229,9 +4297,10 @@ public:
+   int
+   bw_determine_outliers (coord_t *v, coord_t ratio)
+   {
+-    rgbdata color = bw_get_color (v);
++    bw_get_color (v, 0);
+     for (int tileid = 0; tileid < n_tiles; tileid++)
+       {
++        rgbdata color = last_tile_color[tileid];
+         histogram hist;
+         for (int y = border; y < theight - border; y++)
+           for (int x = border; x < twidth - border; x++)
+@@ -4371,7 +4440,7 @@ public:
+     if (!tiles[tileid].bw.empty ())
+       {
+         luminosity_t lmax = 0;
+-        rgbdata color = bw_get_color (v);
++        rgbdata color = bw_get_color (v, tileid);
+         for (int y = 0; y < theight; y++)
+           for (int x = 0; x < twidth; x++)
+             {
+@@ -4527,7 +4596,7 @@ public:
+     if (!tiles[tileid].bw.empty ())
+       {
+         luminosity_t lmax = 0;
+-        rgbdata color = bw_get_color (v);
++        rgbdata color = bw_get_color (v, tileid);
+         for (int y = 0; y < theight; y++)
+           for (int x = 0; x < twidth; x++)
+             {
+@@ -4693,6 +4762,8 @@ public:
+         ret.screen_green = screen_green;
+         ret.screen_blue = screen_blue;
+       }
++    if (!tiles[0].bw.empty ())
++      ret.color = last_tile_color[0];
+     if (optimize_uniform_image_layer)
+       {
+         ret.tile_primary_inte
