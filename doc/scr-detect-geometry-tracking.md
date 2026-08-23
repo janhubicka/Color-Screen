@@ -361,8 +361,13 @@ DG-020 accurately records the cost of the compatibility mask.
 
 The report-only DG-014 records now provide a stable baseline format, and the
 existing synthetic discovery tests cover sharp Finlay and Dufay detection with
-both slow+fast and fast-only flood fill.  The remaining corpus work is to add
-real soft scans, controlled degraded variants, and negative images.
+both slow+fast and fast-only flood fill.  `testsuite/benchmark-screen-detection.py`
+provides the manual corpus driver.  It runs external scans through `autodetect`,
+uses sparse parameter files to select detector sharpening without changing the
+normal compatibility default, and writes one CSV row per scan/mode together with
+full reports, logs, and successful output parameter files.  The CSV includes the
+DG-014 counters and timings, scan/screen coverage, process wall time, and Linux
+peak resident memory when `/proc` is available.
 
 The historical National Geographic failure corpus is available in Dropbox at
 `/Batch 08 error samples`.  It contains 25 problematic NGS scans, generally as
@@ -378,6 +383,29 @@ For each Batch 08 input, compare the historical 2 / 3 mask, explicit 0 / 0, and
 future blur-tolerant alternatives.  Record success/type, search regions, seed
 pixels, initial grids, final failure stage, patch count, coverage, and stage
 wall times from DG-014.
+
+The first full-resolution baseline uses two 14204 by 10652 NGS00428 EIPs.  Tile
+05 is an interior tile and should contain screen across essentially the whole
+image.  Tile 01 is a corner tile; its top and right margins deliberately contain
+no additive raster.  Both modes use Dufay, fixed-lens geometry, gamma 1, color
+optimization, fast+slow flood fill, and no mesh.
+
+| scan/mode | scan area | screen area | seed pixels | patches | flood ms | detector ms | wall s | peak RSS KiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Tile05, legacy 2/3 | 98.66% | 98.66% | 2 | 3,777,541 | 20,693.2 | 30,990.1 | 51.34 | 2,883,832 |
+| Tile05, 0/0 | 86.66% | 86.67% | 1 | 3,317,587 | 34,835.0 | 42,676.8 | 62.33 | 2,867,576 |
+| Tile01, legacy 2/3 | 56.01% | 97.27% | 1 | 2,140,419 | 10,888.9 | 21,359.9 | 40.90 | 2,842,300 |
+| Tile01, 0/0 | 53.40% | 93.33% | 23,702 | 2,040,103 | 32,208.2 | 41,112.7 | 60.70 | 2,947,032 |
+
+The corner tile shows a seed-discovery weakness very clearly: removing the mask
+changes a first-pixel initial grid into a 23,702-pixel search.  This motivates
+DG-009/DG-010 work, but does not isolate the single-pixel prediction rule from
+connected-component quality by itself.  The interior tile is the complementary
+warning: seed discovery remains immediate without sharpening, yet detected
+patches drop by 12.2% and flood fill becomes 1.68 times slower.  On the corner
+tile flood fill becomes 2.96 times slower.  Therefore a DG-010 seed fix alone is
+not sufficient evidence that the compatibility mask can be removed; subsequent
+work must also improve the class map/flood-fill completeness measured here.
 
 The corpus should contain, for every available screen family:
 
