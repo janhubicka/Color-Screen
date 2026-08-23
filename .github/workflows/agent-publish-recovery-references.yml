@@ -1,9 +1,9 @@
 name: Agent publish slanted reference recovery
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/tmp-publish-recovery-references
+      - main
 
 permissions:
   contents: write
