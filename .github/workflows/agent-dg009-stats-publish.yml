@@ -1,9 +1,9 @@
 name: Agent DG009 stats publisher
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/dg009-stats-publish-20260823
+      - agent/scr-detect-fast-rejection-stats
 
 permissions:
   contents: write
