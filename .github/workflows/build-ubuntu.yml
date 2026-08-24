@@ -134,7 +134,13 @@ jobs:
       run: ccache --show-stats
 
   checking:
-    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, arch: amd64 }
+          - { runner: ubuntu-24.04-arm, arch: arm64 }
+
+    runs-on: ${{ matrix.runner }}
     container:
       image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
       credentials:
@@ -147,15 +153,18 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .ccache
-        key: ccache-${{ runner.os }}-amd64-checking-${{ github.event.pull_request.head.sha || github.sha }}
+        key: ccache-${{ runner.os }}-${{ matrix.arch }}-checking-${{ github.event.pull_request.head.sha || github.sha }}
         restore-keys: |
-          ccache-${{ runner.os }}-amd64-checking-
-          ccache-${{ runner.os }}-amd64-
+          ccache-${{ runner.os }}-${{ matrix.arch }}-checking-
+          ccache-${{ runner.os }}-${{ matrix.arch }}-
     - name: Reset compiler cache stats
       run: ccache --zero-stats
 
     - name: configure with checking
-      run: CXXFLAGS="-Ofast  -march=native -fsanitize=address,undefined" CFLAGS="$CXXFLAGS" ./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui
+      run: |
+        SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined"
+        CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
+          ./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui
     - name: make (checking enabled)
       run: make -j$(nproc)
     - name: Ensure virtual X server is available
@@ -191,7 +200,7 @@ jobs:
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: testsuite-checking-amd64
+        name: testsuite-checking-${{ matrix.arch }}
         path: |
           testsuite/*.txt
           testsuite/*.log
