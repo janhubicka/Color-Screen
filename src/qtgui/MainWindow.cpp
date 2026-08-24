@@ -150,27 +150,58 @@ ColorScreenApplication *documentApplication() {
     changing the load/reload orchestration. */
 class InitialSetupGuideDialog final : public QDialog {
 public:
-  explicit InitialSetupGuideDialog(QWidget *parent = nullptr)
+  explicit InitialSetupGuideDialog(QWidget *parent, bool suggestBayer, bool suggestFStop, bool suggestPitch, const colorscreen::image_data *scan)
       : QDialog(parent) {
     setWindowTitle(tr("Suggested image setup"));
     setModal(true);
 
     auto *layout = new QVBoxLayout(this);
-    auto *intro = new QLabel(
-        tr("This appears to be a monochromatic capture made with a Bayer-filter "
-           "camera."),
-        this);
-    intro->setWordWrap(true);
-    layout->addWidget(intro);
+    
+    if (suggestBayer) {
+      auto *intro = new QLabel(
+          tr("This appears to be a monochromatic capture made with a Bayer-filter camera."),
+          this);
+      intro->setWordWrap(true);
+      layout->addWidget(intro);
 
-    m_monochromeBayer =
-        new QCheckBox(tr("Reload with Bayer-filter compensation"), this);
-    m_monochromeBayer->setChecked(true);
-    layout->addWidget(m_monochromeBayer);
+      m_monochromeBayer =
+          new QCheckBox(tr("Reload with Bayer-filter compensation"), this);
+      m_monochromeBayer->setChecked(true);
+      layout->addWidget(m_monochromeBayer);
+      
+      if (suggestFStop || suggestPitch) {
+        auto *line = new QFrame(this);
+        line->setFrameShape(QFrame::HLine);
+        line->setFrameShadow(QFrame::Sunken);
+        layout->addWidget(line);
+      }
+    }
+    
+    if (suggestFStop || suggestPitch) {
+      auto *intro2 = new QLabel(
+          tr("The following camera parameters were automatically detected:"), this);
+      intro2->setWordWrap(true);
+      layout->addWidget(intro2);
+    }
+    
+    if (suggestFStop) {
+      m_fstop = new QCheckBox(tr("Set nominal f-stop to f/%1").arg(scan->f_stop, 0, 'f', 1), this);
+      m_fstop->setChecked(true);
+      layout->addWidget(m_fstop);
+    }
+    
+    if (suggestPitch) {
+      int divisor = scan->width > 0 ? scan->width : 1;
+      double sensorWidth = divisor * scan->pixel_pitch / 1000.0;
+      QString sensorName = getSensorName(sensorWidth);
+      m_pitch = new QCheckBox(tr("Set sensor pixel pitch to %1 μm (Sensor size: %2)").arg(scan->pixel_pitch, 0, 'f', 2).arg(sensorName), this);
+      m_pitch->setChecked(true);
+      layout->addWidget(m_pitch);
+    }
 
     auto *buttons = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    buttons->button(QDialogButtonBox::Ok)->setText(tr("Apply and reload"));
+    buttons->button(QDialogButtonBox::Ok)->setText(suggestBayer ? tr("Apply and reload") : tr("Apply"));
     buttons->button(QDialogButtonBox::Cancel)->setText(tr("Not now"));
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -181,9 +212,41 @@ public:
   bool useMonochromeBayerCorrection() const {
     return m_monochromeBayer && m_monochromeBayer->isChecked();
   }
+  
+  bool useFStop() const {
+    return m_fstop && m_fstop->isChecked();
+  }
+  
+  bool usePixelPitch() const {
+    return m_pitch && m_pitch->isChecked();
+  }
 
 private:
+  QString getSensorName(double width_mm) const {
+    struct Preset { const char* name; double w; };
+    Preset presets[] = {
+        {"PhaseOne 54.0mm", 54.0},
+        {"PhaseOne 53.7mm", 53.7},
+        {"PhaseOne 53.4mm", 53.4},
+        {"Medium Format 43.8mm", 43.8},
+        {"Full Frame (36mm)", 36.0},
+        {"APS-H (28.3mm)", 28.3},
+        {"APS-C (23.0mm)", 23.0},
+        {"Micro Four Thirds (17.3mm)", 17.3},
+        {"1-inch (13.2mm)", 13.2},
+        {"1/1.7-inch (7.6mm)", 7.6},
+        {"1/2.5-inch (5.76mm)", 5.76}
+    };
+    for (const auto& p : presets) {
+        if (std::abs(width_mm - p.w) < 1.0)
+            return QString::fromUtf8(p.name);
+    }
+    return tr("Unknown, %1 mm width").arg(width_mm, 0, 'f', 1);
+  }
+
   QCheckBox *m_monochromeBayer = nullptr;
+  QCheckBox *m_fstop = nullptr;
+  QCheckBox *m_pitch = nullptr;
 };
 
 } // namespace
@@ -2993,21 +3056,49 @@ void MainWindow::reloadCurrentImageWithDemosaic() {
    metadata import and screen autodetection will be added independently. */
 void MainWindow::maybeOfferInitialSetupGuide(
     const colorscreen::monochrome_bayer_analysis &analysis) {
-  if (!m_scan || !analysis.candidate ||
-      m_rparams.demosaic ==
-          colorscreen::image_data::demosaic_monochromatic_bayer_corrected)
+  if (!m_scan)
     return;
 
-  InitialSetupGuideDialog dialog(this);
-  if (dialog.exec() != QDialog::Accepted ||
-      !dialog.useMonochromeBayerCorrection())
+  bool suggestBayer = analysis.candidate &&
+      m_rparams.demosaic !=
+          colorscreen::image_data::demosaic_monochromatic_bayer_corrected;
+  bool suggestFStop = m_scan->f_stop > 0 &&
+      std::abs(m_scan->f_stop - m_rparams.sharpen.scanner_mtf.f_stop) > 0.01;
+  bool suggestPitch = m_scan->pixel_pitch > 0 &&
+      std::abs(m_scan->pixel_pitch - m_rparams.sharpen.scanner_mtf.pixel_pitch) > 0.001;
+
+  if (!suggestBayer && !suggestFStop && !suggestPitch)
+    return;
+
+  InitialSetupGuideDialog dialog(this, suggestBayer, suggestFStop, suggestPitch, m_scan.get());
+  if (dialog.exec() != QDialog::Accepted)
     return;
 
   ParameterState state = getCurrentState();
-  state.rparams.demosaic =
-      colorscreen::image_data::demosaic_monochromatic_bayer_corrected;
-  changeParameters(state, tr("Use monochromatic Bayer compensation"));
-  reloadCurrentImageWithDemosaic();
+  QStringList changes;
+  
+  if (suggestBayer && dialog.useMonochromeBayerCorrection()) {
+    state.rparams.demosaic =
+        colorscreen::image_data::demosaic_monochromatic_bayer_corrected;
+    changes << tr("Bayer compensation");
+  }
+  
+  if (suggestFStop && dialog.useFStop()) {
+    state.rparams.sharpen.scanner_mtf.f_stop = m_scan->f_stop;
+    changes << tr("f-stop");
+  }
+  
+  if (suggestPitch && dialog.usePixelPitch()) {
+    state.rparams.sharpen.scanner_mtf.pixel_pitch = m_scan->pixel_pitch;
+    changes << tr("pixel pitch");
+  }
+
+  if (!changes.isEmpty()) {
+    changeParameters(state, tr("Use autodetected %1").arg(changes.join(", ")));
+    if (suggestBayer && dialog.useMonochromeBayerCorrection()) {
+      reloadCurrentImageWithDemosaic();
+    }
+  }
 }
 
 /** Load an image file and optionally its associated .par parameter file.
@@ -3157,10 +3248,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           if (offerInitialGuide) {
             const colorscreen::monochrome_bayer_analysis analysis =
                 m_scan->analyze_monochrome_bayer();
-            if (analysis.candidate)
-              QTimer::singleShot(0, this, [this, analysis]() {
-                maybeOfferInitialSetupGuide(analysis);
-              });
+            QTimer::singleShot(0, this, [this, analysis]() {
+              maybeOfferInitialSetupGuide(analysis);
+            });
           }
 
           // Launch background tile loading for stitch projects.
