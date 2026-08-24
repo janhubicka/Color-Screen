@@ -1,0 +1,180 @@
+   QList<QPointer<MainWindow>> m_documentWindows;
+   QList<QPointer<ImageViewWindow>> m_viewWindows;
+   QPointer<WorkspaceWindow> m_workspaceWindow;
+   QSet<MainWindow *> m_restoringReferenceRecovery;
+-  bool m_workspaceShutdown = false;
++  QSet<MainWindow *> m_hiddenDocumentPresentations;
++  QSet<MainWindow *> m_finalizingDocuments;
++  QSet<MainWindow *> m_closingDocuments;
++  QSet<ImageViewWindow *> m_closingViews;
+ };
+diff --git a/src/qtgui/ImageViewWindow.cpp b/src/qtgui/ImageViewWindow.cpp
+index 619218d..d2e6bef 100644
+--- a/src/qtgui/ImageViewWindow.cpp
++++ b/src/qtgui/ImageViewWindow.cpp
+@@ -12,6 +12,7 @@
+ #include <QActionGroup>
+ #include <QApplication>
+ #include <QCheckBox>
++#include <QCloseEvent>
+ #include <QComboBox>
+ #include <QDockWidget>
+ #include <QDoubleSpinBox>
+@@ -858,6 +859,18 @@ void ImageViewWindow::releaseDocumentInspector() {
+     m_documentInspectorDock->hide();
+ }
+ 
++/** Close one secondary presentation and finalize its document only when last. */
++void ImageViewWindow::closeEvent(QCloseEvent *event) {
++  if (auto *application = dynamic_cast<ColorScreenApplication *>(
++          QApplication::instance())) {
++    if (!application->requestViewClose(this)) {
++      event->ignore();
++      return;
++    }
++  }
++  QMainWindow::closeEvent(event);
++}
++
+ /** Reclaim panels when this detached ordinary view becomes active. */
+ void ImageViewWindow::changeEvent(QEvent *event) {
+   QMainWindow::changeEvent(event);
+diff --git a/src/qtgui/ImageViewWindow.h b/src/qtgui/ImageViewWindow.h
+index ead7438..e77a24a 100644
+--- a/src/qtgui/ImageViewWindow.h
++++ b/src/qtgui/ImageViewWindow.h
+@@ -18,6 +18,7 @@ class NavigationView;
+ class SharpnessPanel;
+ class QAction;
+ class QCheckBox;
++class QCloseEvent;
+ class QComboBox;
+ class QDockWidget;
+ class QToolBar;
+@@ -102,6 +103,9 @@ public:
+   void reloadReferenceImage();
+ 
+ protected:
++  /** Close this presentation without destroying a document used by peers. */
++  void closeEvent(QCloseEvent *event) override;
++
+   void changeEvent(QEvent *event) override;
+ 
+ private slots:
+diff --git a/src/qtgui/MainWindow.cpp b/src/qtgui/MainWindow.cpp
+index 34a7277..e1c2833 100644
+--- a/src/qtgui/MainWindow.cpp
++++ b/src/qtgui/MainWindow.cpp
+@@ -2069,7 +2069,8 @@ void MainWindow::createMenus() {
+   QAction *closeAction = m_fileMenu->addAction("&Close Window");
+   closeAction->setShortcut(QKeySequence::Close);
+   closeAction->setShortcutContext(Qt::WindowShortcut);
+-  closeAction->setToolTip("Close this image document window.");
++  closeAction->setToolTip(
++      "Close this view. The image remains open while another view exists.");
+   connect(closeAction, &QAction::triggered, this, &QWidget::close);
+ 
+   QAction *exitAction = m_fileMenu->addAction("E&xit");
+@@ -3689,6 +3690,21 @@ bool MainWindow::maybeSave() {
+    render, cancels only its background tasks, removes only its recovery data,
+    and saves the shared preferred window layout.  */
+ void MainWindow::closeEvent(QCloseEvent *event) {
++  if (m_closing) {
++    event->accept();
++    return;
++  }
++
++  // The primary MainWindow is also the document state owner.  Closing this
++  // presentation must not destroy that owner while peer ImageViewWindows still
++  // need its parameters, undo stack, workers, and recovery state.
++  if (ColorScreenApplication *application = documentApplication()) {
++    if (application->retainDocumentForOpenViews(this)) {
++      event->ignore();
++      return;
++    }
++  }
++
+   // Check for unsaved changes
+   if (!maybeSave()) {
+     event->ignore();
+diff --git a/src/qtgui/WorkspaceWindow.cpp b/src/qtgui/WorkspaceWindow.cpp
+index 0323c1f..54cf605 100644
+--- a/src/qtgui/WorkspaceWindow.cpp
++++ b/src/qtgui/WorkspaceWindow.cpp
+@@ -73,10 +73,18 @@ public:
+   }
+ 
+ protected:
+-  /** Return shared chrome, then let QMdiSubWindow perform normal MDI close. */
++  /** Ask the application to preserve the document lifetime, then close. */
+   void closeEvent(QCloseEvent *event) override {
+-    if (m_workspace && m_view)
+-      m_workspace->prepareViewForClose(m_view);
++    if (m_view) {
++      if (ColorScreenApplication *application = documentApplication()) {
++        if (!application->requestViewClose(m_view)) {
++          event->ignore();
++          return;
++        }
++      } else if (m_workspace) {
++        m_workspace->prepareViewForClose(m_view);
++      }
++    }
+     QMdiSubWindow::closeEvent(event);
+   }
+ 
+@@ -206,6 +214,7 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
+             QTimer::singleShot(0, this, [this]() {
+               onSubWindowActivated(m_mdiArea->currentSubWindow());
+               configureTabBar();
++              scheduleCloseIfEmpty();
+             });
+           });
+ 
+@@ -235,6 +244,7 @@ void WorkspaceWindow::removeDocument(MainWindow *document) {
+ 
+   onSubWindowActivated(m_mdiArea->currentSubWindow());
+   configureTabBar();
++  scheduleCloseIfEmpty();
+ }
+ 
+ /** Embed secondary VIEW in the same MDI area as ordinary documents. */
+@@ -286,6 +296,7 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
+     QTimer::singleShot(0, this, [this]() {
+       onSubWindowActivated(m_mdiArea->currentSubWindow());
+       configureTabBar();
++      scheduleCloseIfEmpty();
+     });
+   });
+ 
+@@ -312,6 +323,7 @@ void WorkspaceWindow::removeView(ImageViewWindow *view) {
+   takeViewFromWorkspace(view);
+   onSubWindowActivated(m_mdiArea->currentSubWindow());
+   configureTabBar();
++  scheduleCloseIfEmpty();
+ 
+   view->restoreFromWorkspaceEmbedding();
+   view->show();
+@@ -390,15 +402,33 @@ void WorkspaceWindow::refreshDocument(MainWindow *document) {
+   configureTabBar();
+ }
+ 
+-/** Restore workspace-owned widgets before DOCUMENT's destructor runs. */
++/** Restore document-owned widgets before the logical owner can be destroyed. */
+ void WorkspaceWindow::prepareDocumentForClose(MainWindow *document) {
+-  if (!document || !containsDocument(document))
++  if (!document)
+     return;
+ 
+-  takeDocumentFromWorkspace(document);
+-  document->restoreFromWorkspaceEmbedding();
+-  onSubWindowActivated(m_mdiArea->currentSubWindow());
++  const bool wasAttached = containsDocument(document);
++  if (wasAttached) {
++    takeDocumentFromWorkspace(document);
++    document->restoreFromWorkspaceEmbedding();
++  } else {
++    // A closed primary presentation can still own the state used by secondary
++    // views. Its inspector may therefore be borrowed by the workspace or a
++    // detached view when the last peer finally closes.
++    if (QWidget *inspector = document->workspaceInspectorWidget()) {
