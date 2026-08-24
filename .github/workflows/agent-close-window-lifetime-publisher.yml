@@ -1,0 +1,44 @@
+name: Agent close-window lifetime publisher
+
+on:
+  pull_request:
+    branches:
+      - agent/tmp-publish-close-window-lifetime
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout publisher payload
+        uses: actions/checkout@v4
+        with:
+          ref: agent/tmp-publish-close-window-lifetime
+          path: payload
+          fetch-depth: 1
+      - name: Checkout clean feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/qtgui-close-window-lifetime
+          path: work
+          fetch-depth: 0
+      - name: Apply and validate patch
+        working-directory: work
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git apply --check ../payload/agent-close-window-lifetime.patch
+          git apply ../payload/agent-close-window-lifetime.patch
+          git diff --check
+      - name: Commit and push feature branch
+        working-directory: work
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name 'OpenAI Agent'
+          git config user.email 'agent@openai.com'
+          git add src/qtgui/MainWindow.cpp
+          git commit -m 'qtgui: prevent window teardown signal reentry' -m 'Disconnect incoming QObject signals as MainWindow destruction begins. QWidget destroys QObject-owned children only after derived C++ members have been torn down, and QUndoStack may emit cleanChanged from its destructor. That signal could re-enter updateWindowTitle(), refresh Window menus, and read the already-destroyed shared image state, causing an invalid shared_ptr release when closing documents.'
+          git push origin HEAD:agent/qtgui-close-window-lifetime
