@@ -7,6 +7,7 @@
 #include "../libcolorscreen/include/solver-parameters.h"
 #include "../libcolorscreen/include/stitch.h" // Needed for stitch_project
 #include "Renderer.h"
+#include <QColor>
 #include <QDebug>
 #include "Logging.h"
 #include <QHash>
@@ -471,6 +472,7 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
 
     drawPointsOverlay(p);
     drawProfileSpots(p);
+    drawFocusAreas(p);
     drawScreenCoordinateSystem(p);
     drawMeasurement(p);
 
@@ -632,6 +634,41 @@ void ImageWidget::drawProfileSpots(QPainter &p) {
     }
   }
   p.restore();
+}
+
+/** Draw document-local solid-area focus-analysis candidates.
+    Candidate rectangles remain visible while the expensive one-tile and
+    joint fits run.  Verified, selected, and failed candidates use distinct
+    pens; selected areas also show their held-out relative residual when it is
+    available.  */
+void ImageWidget::drawFocusAreas(QPainter &p) {
+  for (size_t i = 0; i < m_focusAreaOverlays.size(); ++i) {
+    const FocusAreaOverlay &overlay = m_focusAreaOverlays[i];
+    const auto &area = overlay.area;
+    QPointF p0 = imageToWidget({area.x, area.y});
+    QPointF p1 = imageToWidget({area.x + area.width, area.y + area.height});
+    QRectF rect(p0, p1);
+    rect = rect.normalized();
+
+    QColor color;
+    if (overlay.selected)
+      color = QColor(50, 220, 100);
+    else if (overlay.fitSuccessful)
+      color = QColor(80, 160, 255);
+    else
+      color = QColor(255, 190, 40);
+    QPen pen(color);
+    pen.setWidthF(overlay.selected ? 2.5 : 1.5);
+    p.setPen(pen);
+    p.setBrush(Qt::NoBrush);
+    p.drawRect(rect);
+
+    QString label = QString::number(i + 1);
+    if (overlay.heldOutRelativeBadness >= 0)
+      label += QStringLiteral("  %1")
+                   .arg(overlay.heldOutRelativeBadness, 0, 'g', 3);
+    p.drawText(rect.topLeft() + QPointF(3.0, 13.0), label);
+  }
 }
 
 /**
@@ -2454,5 +2491,12 @@ void ImageWidget::setProfileSpots(const std::vector<colorscreen::point_t> *spots
                                   const std::vector<colorscreen::color_match> *results) {
   m_profileSpots = spots;
   m_profileSpotResults = results;
+  update();
+}
+
+/** Replace the focus-analysis overlay for this view. */
+void ImageWidget::setFocusAreaOverlays(
+    const std::vector<FocusAreaOverlay> &areas) {
+  m_focusAreaOverlays = areas;
   update();
 }

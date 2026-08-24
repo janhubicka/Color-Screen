@@ -58,6 +58,9 @@ finetune_flag_error (uint64_t flags)
       && (flags & finetune_simulate_infrared))
     return "uniform image-layer fitting and simulated infrared are mutually "
            "exclusive";
+  if ((flags & finetune_fixed_screen_colors)
+      && !(flags & finetune_uniform_image_layer))
+    return "fixed screen colors require uniform image-layer fitting";
   return nullptr;
 }
 
@@ -1071,6 +1074,12 @@ public:
      The historical name below is retained internally because the same
      machinery is also used by the emulsion-blur experiment.  */
   bool optimize_uniform_image_layer;
+  /* Use externally supplied shared scanner responses to the screen primaries
+     instead of re-estimating them from the tiles.  This removes the primary
+     response / image-layer scale gauge and is used for true held-out
+     validation.  */
+  bool fixed_screen_colors;
+  double_rgbdata fixed_red, fixed_green, fixed_blue;
   bool optimize_emulsion_intensities;
   bool optimize_emulsion_offset;
   bool fog_by_least_squares;
@@ -1090,6 +1099,9 @@ public:
      Initialized by objfunc and can be reused after it is computed
      since get_colors is expensive.  */
   double_rgbdata last_red, last_green, last_blue, last_color;
+  /* BW/IR tiles share screen geometry and capture transfer, but each uniform
+     scene region has its own three primary intensity coefficients.  */
+  std::array<double_rgbdata, max_tiles> last_tile_color;
   double_rgbdata last_fog;
 
   finetune_solver (const finetune_solver &) = delete;
@@ -1665,13 +1677,12 @@ public:
         /* If infrared channel is simulated, negative values may be possible
            and it is kind of hard to constrain to reasonable bounds.
            Still allow values somewhat out of range to account for possible
-           over-exposure or cropping  */
+           over-exposure or cropping.  */
         if (!bw_is_simulated_infrared)
-          {
-            to_range (v[color_index + 0], (coord_t)-0.1, (coord_t)1.1);
-            to_range (v[color_index + 1], (coord_t)-0.1, (coord_t)1.1);
-            to_range (v[color_index + 2], (coord_t)-0.1, (coord_t)1.1);
-          }
+          for (int tileid = 0; tileid < n_tiles; tileid++)
+            for (int channel = 0; channel < 3; channel++)
+              to_range (v[color_index + 3 * tileid + channel],
+                        (coord_t)-0.1, (coord_t)1.1);
       }
     if (sharpen_index >= 0)
       {
@@ -1681,11 +1692,18 @@ public:
     if (optimize_emulsion_blur)
       to_range (v[emulsion_blur_index], (coord_t)0, (coord_t)1);
     if (optimize_emulsion_intensities)
-      for (int i = 0; i < n_tiles * 3 - 1; i++)
-        /* First 2 values are normalized and make only sense in range 0..1
-           Rest of values are relative to the first two and may be large if
-           first patch is dark.  */
-        to_range (v[emulsion_intensity_index + i], (coord_t)0, i < 3 ? (coord_t)1 : (coord_t)100);
+      {
+        const int values = 3 * n_tiles - (fixed_screen_colors ? 0 : 1);
+        for (int i = 0; i < values; i++)
+          /* When screen colors are fitted, the first two values fix the
+             scale gauge and are normalized.  Fixed screen colors remove the
+             optimization gauge, but their amplitudes still inherit the
+             normalization chosen by the training tiles.  A held-out tile may
+             therefore need a relative coefficient above one.  */
+          to_range (v[emulsion_intensity_index + i], (coord_t)0,
+                    !fixed_screen_colors && i < 3 ? (coord_t)1
+                                                  : (coord_t)100);
+      }
     if (optimize_screen_blur)
       to_range (v[screen_index], (coord_t)0, (coord_t)1);
     if (optimize_scanner_mtf_sigma)
@@ -1851,7 +1869,7 @@ public:
       }
     /* In BW mode we guess intensity.  */
     else
-      matrixw = 1;
+      matrixw = 3 * n_tiles;
     int matrixh = sample_points () + (fog_by_least_squares != 0);
     if (simulate_infrared)
       matrixh *= 3;
@@ -2031,6 +2049,14 @@ public:
     optimize_emulsion_blur = flags & finetune_emulsion_blur;
     optimize_uniform_image_layer
         = (flags & finetune_uniform_image_layer) && !tiles[0].color.empty ();
+    fixed_screen_colors = flags & finetune_fixed_screen_colors;
+    if (fixed_screen_colors)
+      {
+        assert (results && !results->empty ());
+        fixed_red = (*results)[0].screen_red;
+        fixed_green = (*results)[0].screen_green;
+        fixed_blue = (*results)[0].screen_blue;
+      }
     optimize_strips
         = (flags & finetune_strips) && screen_with_varying_strips_p (type);
     /* Strips needs to be optimized only for some screens, like Dufay, Joly or
@@ -2069,6 +2095,11 @@ public:
        normalization would otherwise have been the default.  */
     if (optimize_uniform_image_layer)
       data_collection = normalize = false;
+    /* Held-out validation must not give the omitted tile freedom to change
+       the shared screen-primary response.  With the response fixed there is
+       no color-estimation subproblem at all.  */
+    if (fixed_screen_colors)
+      least_squares = data_collection = false;
     /* Normalization turns every color of every pixel to have sum of 1.
        This simplifies the optimization since it effectively removes
        the image layer and we can more easily estimate screen position and
@@ -2100,6 +2131,12 @@ public:
         = optimize_uniform_image_layer || coupled_emulsion_fit;
     optimize_emulsion_offset = coupled_emulsion_fit;
     if (optimize_emulsion_intensities)
+      data_collection = false;
+    /* A single collected BW colour cannot describe several differently
+       coloured uniform regions.  Multi-tile BW therefore uses the
+       block-diagonal least-squares model (or the explicit nonlinear fallback
+       when least squares was disabled by the caller).  */
+    if (n_tiles > 1 && !tiles[0].bw.empty ())
       data_collection = false;
 
     /* To optimize emulsion blur we can either assume that screen blur
@@ -2158,7 +2195,7 @@ public:
 
     /* When not doing data collection or least squares, we need to optimize
      * colors.  */
-    if (!least_squares && !data_collection)
+    if (!fixed_screen_colors && !least_squares && !data_collection)
       {
         color_index = n_values;
         /* 3*3 values for color.
@@ -2166,7 +2203,7 @@ public:
         if (!tiles[0].color.empty ())
           n_values += 9;
         else
-          n_values += 3;
+          n_values += 3 * n_tiles;
       }
     else
       color_index = -1;
@@ -2211,7 +2248,12 @@ public:
     if (optimize_emulsion_intensities)
       {
         emulsion_intensity_index = n_values;
-        n_values += 3 * n_tiles - 1;
+        /* Normally the first tile fixes the scale gauge shared with the
+           fitted screen-primary response, so it needs only two variables.
+           When screen colors are fixed that gauge is gone and every tile,
+           including a one-tile held-out validation, needs three independent
+           transmission coefficients.  */
+        n_values += 3 * n_tiles - (fixed_screen_colors ? 0 : 1);
       }
     else
       emulsion_intensity_index = -1;
@@ -2365,16 +2407,20 @@ public:
             start[color_index + 8] = finetune_solver::rgbscale;
           }
         else
-          {
-            start[color_index] = 0;
-            start[color_index + 1] = 0;
-            start[color_index + 2] = 0;
-          }
+          for (int tileid = 0; tileid < n_tiles; tileid++)
+            {
+              start[color_index + 3 * tileid + 0] = 0;
+              start[color_index + 3 * tileid + 1] = 0;
+              start[color_index + 3 * tileid + 2] = 0;
+            }
       }
 
     if (optimize_emulsion_intensities)
-      for (int tileid = 0; tileid < 3 * n_tiles - 1; tileid++)
-        start[emulsion_intensity_index + tileid] = (coord_t)1 / (coord_t)3;
+      {
+        const int values = 3 * n_tiles - (fixed_screen_colors ? 0 : 1);
+        for (int i = 0; i < values; i++)
+          start[emulsion_intensity_index + i] = (coord_t)1 / (coord_t)3;
+      }
     /* Starting from small blur seems to work better, since other parameters
        are then more relevant.  Sane scanner lens blurs are close to Nyquist
        frequency.  */
@@ -2596,8 +2642,14 @@ public:
   compute_contrast ()
   {
     if (!tiles[0].bw.empty ())
-      contrast = get_positional_color_contrast (type, last_color,
-                                                optimize_coordinates == 2);
+      {
+        contrast = 0;
+        for (int tileid = 0; tileid < n_tiles; tileid++)
+          contrast = std::max (
+              contrast,
+              get_positional_color_contrast (type, last_tile_color[tileid],
+                                              optimize_coordinates == 2));
+      }
     else
       contrast = std::max (
           { get_positional_color_contrast (
@@ -3765,46 +3817,56 @@ public:
   rgbdata
   bw_determine_color_using_least_squares (coord_t *v)
   {
+    (void)v;
     int e = 0;
     if (!least_squares_initialized)
       abort ();
+    gsl_matrix_set_zero (gsl_X.get ());
     for (int tileid = 0; tileid < n_tiles; tileid++)
       for (int y = border; y < theight - border; y++)
         for (int x = border; x < twidth - border; x++)
           if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
             {
               rgbdata c = get_simulated_screen_pixel (tileid, { x, y });
-              gsl_matrix_set (gsl_X.get (), e, 0, c.red);
-              gsl_matrix_set (gsl_X.get (), e, 1, c.green);
-              gsl_matrix_set (gsl_X.get (), e, 2, c.blue);
+              gsl_matrix_set (gsl_X.get (), e, 3 * tileid + 0, c.red);
+              gsl_matrix_set (gsl_X.get (), e, 3 * tileid + 1, c.green);
+              gsl_matrix_set (gsl_X.get (), e, 3 * tileid + 2, c.blue);
               e++;
-              // gsl_vector_set (gsl_y[0], e, bw_get_pixel (x, y) / (2 *
-              // maxgray));
             }
     if (e != (int)gsl_X->size1)
       abort ();
     double chisq;
     if (gsl_multifit_linear (gsl_X.get (), gsl_y[0].get (), gsl_c.get (),
-                             gsl_cov.get (), &chisq, gsl_work.get ()) != GSL_SUCCESS)
-      return { -1, -1, -1 };
-    rgbdata color
-        = { (luminosity_t)gsl_vector_get (gsl_c.get (), 0) * (2 * maxgray),
-            (luminosity_t)gsl_vector_get (gsl_c.get (), 1) * (2 * maxgray),
-            (luminosity_t)gsl_vector_get (gsl_c.get (), 2) * (2 * maxgray) };
-    /* If infrared channel is simulated, negative values may be possible
-       and it is kind of hard to constrain to reasonable bounds.
-       Still allow values somewhat out of range to account for possible
-       over-exposure or cropping  */
-    if (!bw_is_simulated_infrared)
+                             gsl_cov.get (), &chisq, gsl_work.get ())
+        != GSL_SUCCESS)
       {
-        color.red
-            = std::clamp (color.red, (luminosity_t)-0.1, (luminosity_t)1.1);
-        color.green
-            = std::clamp (color.green, (luminosity_t)-0.1, (luminosity_t)1.1);
-        color.blue
-            = std::clamp (color.blue, (luminosity_t)-0.1, (luminosity_t)1.1);
+        for (int tileid = 0; tileid < n_tiles; tileid++)
+          last_tile_color[tileid] = { -1, -1, -1 };
+        last_color = last_tile_color[0];
+        return last_color;
       }
-    return color;
+    for (int tileid = 0; tileid < n_tiles; tileid++)
+      {
+        rgbdata color
+            = { (luminosity_t)gsl_vector_get (gsl_c.get (), 3 * tileid + 0)
+                    * (2 * maxgray),
+                (luminosity_t)gsl_vector_get (gsl_c.get (), 3 * tileid + 1)
+                    * (2 * maxgray),
+                (luminosity_t)gsl_vector_get (gsl_c.get (), 3 * tileid + 2)
+                    * (2 * maxgray) };
+        if (!bw_is_simulated_infrared)
+          {
+            color.red = std::clamp (color.red, (luminosity_t)-0.1,
+                                    (luminosity_t)1.1);
+            color.green = std::clamp (color.green, (luminosity_t)-0.1,
+                                      (luminosity_t)1.1);
+            color.blue = std::clamp (color.blue, (luminosity_t)-0.1,
+                                     (luminosity_t)1.1);
+          }
+        last_tile_color[tileid] = color;
+      }
+    last_color = last_tile_color[0];
+    return last_color;
   }
 
   rgbdata
@@ -3825,6 +3887,12 @@ public:
   {
     if (optimize_emulsion_intensities)
       {
+        if (fixed_screen_colors)
+          return {
+            (luminosity_t)v[emulsion_intensity_index + 3 * tileid + 0],
+            (luminosity_t)v[emulsion_intensity_index + 3 * tileid + 1],
+            (luminosity_t)v[emulsion_intensity_index + 3 * tileid + 2]
+          };
         /* Together with screen colors these are defined only up to scaling
          * factor.  */
         if (!tileid)
@@ -3900,21 +3968,38 @@ public:
   }
 
   double_rgbdata
-  bw_get_color (coord_t *v)
+  bw_get_color (coord_t *v, int tileid = 0)
   {
     if (!least_squares && !data_collection)
-      last_color = { v[color_index], v[color_index + 1], v[color_index + 2] };
+      {
+        for (int i = 0; i < n_tiles; i++)
+          last_tile_color[i]
+              = { v[color_index + 3 * i + 0],
+                  v[color_index + 3 * i + 1],
+                  v[color_index + 3 * i + 2] };
+        last_color = last_tile_color[0];
+      }
     else if (data_collection)
-      last_color = bw_determine_color_using_data_collection (v);
+      {
+        last_color = bw_determine_color_using_data_collection (v);
+        last_tile_color[0] = last_color;
+      }
     else
-      last_color = bw_determine_color_using_least_squares (v);
-    return last_color;
+      bw_determine_color_using_least_squares (v);
+    return last_tile_color[tileid];
   }
+
   void
   get_colors (coord_t *v, double_rgbdata *red, double_rgbdata *green,
               double_rgbdata *blue)
   {
-    if (!least_squares && !data_collection)
+    if (fixed_screen_colors)
+      {
+        *red = fixed_red;
+        *green = fixed_green;
+        *blue = fixed_blue;
+      }
+    else if (!least_squares && !data_collection)
       {
         *red = { v[color_index], v[color_index + 1], v[color_index + 2] };
         *green
@@ -4018,7 +4103,7 @@ public:
       if (!tiles[0].color.empty ())
         get_colors (v, &red, &green, &blue);
       else
-        color = bw_get_color (v);
+        color = bw_get_color (v, 0);
       if (simulate_infrared)
         {
           mix_weights = get_mix_weights (v);
@@ -4063,8 +4148,8 @@ public:
               for (int x = border; x < twidth - border; x++)
                 if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
                   {
-                    luminosity_t c
-                        = bw_evaluate_pixel (tileid, color, x, y);
+                    luminosity_t c = bw_evaluate_pixel (
+                        tileid, last_tile_color[tileid], x, y);
                     luminosity_t d = bw_get_pixel (tileid, { x, y });
                     sum += my_fabs (c - d);
                   }
@@ -4229,9 +4314,10 @@ public:
   int
   bw_determine_outliers (coord_t *v, coord_t ratio)
   {
-    rgbdata color = bw_get_color (v);
+    bw_get_color (v, 0);
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
+        rgbdata color = last_tile_color[tileid];
         histogram hist;
         for (int y = border; y < theight - border; y++)
           for (int x = border; x < twidth - border; x++)
@@ -4371,7 +4457,7 @@ public:
     if (!tiles[tileid].bw.empty ())
       {
         luminosity_t lmax = 0;
-        rgbdata color = bw_get_color (v);
+        rgbdata color = bw_get_color (v, tileid);
         for (int y = 0; y < theight; y++)
           for (int x = 0; x < twidth; x++)
             {
@@ -4527,7 +4613,7 @@ public:
     if (!tiles[tileid].bw.empty ())
       {
         luminosity_t lmax = 0;
-        rgbdata color = bw_get_color (v);
+        rgbdata color = bw_get_color (v, tileid);
         for (int y = 0; y < theight; y++)
           for (int x = 0; x < twidth; x++)
             {
@@ -4693,6 +4779,8 @@ public:
         ret.screen_green = screen_green;
         ret.screen_blue = screen_blue;
       }
+    if (!tiles[0].bw.empty ())
+      ret.color = last_tile_color[0];
     if (optimize_uniform_image_layer)
       {
         ret.tile_primary_intensities.resize (n_tiles);
@@ -4988,6 +5076,17 @@ focus_fit_quality (const finetune_focus_area_candidate &candidate)
   return candidate.fit.badness / norm;
 }
 
+static rgbdata
+focus_diversity_color (const finetune_focus_area_candidate &candidate)
+{
+  const rgbdata fitted = candidate.fit.color;
+  if (candidate.fit.success && my_isfinite (fitted.red)
+      && my_isfinite (fitted.green) && my_isfinite (fitted.blue)
+      && fitted.red + fitted.green + fitted.blue > 0)
+    return fitted;
+  return candidate.mean_color;
+}
+
 static std::array<double, 3>
 normalized_focus_color (rgbdata c)
 {
@@ -5105,7 +5204,9 @@ finetune_find_focus_area_candidates (
     coord_t y;
   };
   std::vector<accepted_position> accepted;
-  accepted.reserve (std::min ((size_t)parameters.max_candidates, flat.size ()));
+  std::vector<finetune_focus_area_candidate> pool;
+  accepted.reserve (flat.size ());
+  pool.reserve (flat.size ());
   for (const flat_window &candidate : flat)
     {
       const coord_t cx
@@ -5139,11 +5240,86 @@ finetune_find_focus_area_candidates (
       out.relative_rms = candidate.relative_rms;
       out.relative_gradient = candidate.relative_gradient;
       out.search_score = candidate.score;
-      areas->push_back (std::move (out));
+      pool.push_back (std::move (out));
       accepted.push_back ({ cx, cy });
-      if ((int)areas->size () >= parameters.max_candidates)
-        break;
     }
+
+  if ((int)pool.size () <= parameters.max_candidates)
+    {
+      *areas = std::move (pool);
+      return true;
+    }
+
+  /* Do not let a huge exceptionally flat region (typically sky) consume the
+     entire expensive-fit budget.  Keep the best flat candidate, reserve half
+     of the budget for appearance-diverse farthest-point samples, then fill
+     the rest by the original flatness ranking.  This changes only which
+     already-valid, spatially separated windows survive the budget.  */
+  auto appearance_distance2 = [] (rgbdata a, rgbdata b) {
+    auto feature = [] (rgbdata c) {
+      const double r = std::max ((double)c.red, 0.0);
+      const double g = std::max ((double)c.green, 0.0);
+      const double bl = std::max ((double)c.blue, 0.0);
+      const double norm = std::max (std::sqrt (r * r + g * g + bl * bl),
+                                    1e-12);
+      return std::array<double, 4>{ r / norm, g / norm, bl / norm,
+                                    std::log (norm) };
+    };
+    const auto x = feature (a);
+    const auto y = feature (b);
+    double d = 0;
+    for (int i = 0; i < 3; i++)
+      {
+        const double delta = x[i] - y[i];
+        d += delta * delta;
+      }
+    const double brightness = std::clamp (x[3] - y[3], -2.0, 2.0);
+    return d + 0.05 * brightness * brightness;
+  };
+
+  const size_t capacity = (size_t)parameters.max_candidates;
+  const size_t diverse_target = std::max ((size_t)1, capacity / 2);
+  std::vector<bool> chosen (pool.size (), false);
+  std::vector<size_t> indexes;
+  indexes.reserve (capacity);
+  chosen[0] = true;
+  indexes.push_back (0);
+  while (indexes.size () < diverse_target)
+    {
+      size_t best = (size_t)-1;
+      double best_distance = -1;
+      for (size_t i = 0; i < pool.size (); i++)
+        if (!chosen[i])
+          {
+            double min_distance = std::numeric_limits<double>::max ();
+            for (size_t old_index : indexes)
+              min_distance
+                  = std::min (min_distance,
+                              appearance_distance2 (pool[i].mean_color,
+                                                    pool[old_index].mean_color));
+            if (best == (size_t)-1 || min_distance > best_distance + 1e-18
+                || (std::fabs (min_distance - best_distance) <= 1e-18
+                    && i < best))
+              {
+                best = i;
+                best_distance = min_distance;
+              }
+          }
+      if (best == (size_t)-1)
+        break;
+      chosen[best] = true;
+      indexes.push_back (best);
+    }
+  for (size_t i = 0; i < pool.size () && indexes.size () < capacity; i++)
+    if (!chosen[i])
+      {
+        chosen[i] = true;
+        indexes.push_back (i);
+      }
+  std::sort (indexes.begin (), indexes.end ());
+  areas->reserve (indexes.size ());
+  for (size_t i : indexes)
+    areas->push_back (std::move (pool[i]));
   return true;
 }
 
@@ -5217,7 +5393,7 @@ finetune_select_focus_areas (
         if (!used[index])
           {
             const std::array<double, 3> color
-                = normalized_focus_color (candidates[index].mean_color);
+                = normalized_focus_color (focus_diversity_color (candidates[index]));
             const double quality
                 = quality_scale
                   / std::max (focus_fit_quality (candidates[index]),
@@ -5246,7 +5422,7 @@ finetune_select_focus_areas (
       used[best_index] = true;
       selected->push_back (best_index);
       const std::array<double, 3> color
-          = normalized_focus_color (candidates[best_index].mean_color);
+          = normalized_focus_color (focus_diversity_color (candidates[best_index]));
       const double quality
           = quality_scale
             / std::max (focus_fit_quality (candidates[best_index]),
@@ -5263,7 +5439,7 @@ finetune_select_focus_areas (
   double normalized_gram[3][3] = {};
   for (size_t index : *selected)
     add_outer_product (normalized_gram,
-                       normalized_focus_color (candidates[index].mean_color),
+                       normalized_focus_color (focus_diversity_color (candidates[index])),
                        1.0 / selected->size ());
   const double volume = std::max (0.0, determinant3 (normalized_gram));
   if (color_volume)
@@ -5446,6 +5622,25 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
       ret.err = "too few previous finetune results";
       return finish ();
     }
+  if (fparams.flags & finetune_fixed_screen_colors)
+    {
+      if (!results || results->empty ())
+        {
+          ret.err = "fixed screen colors require a previous finetune result";
+          return finish ();
+        }
+      const auto finite_rgb = [] (rgbdata color) {
+        return my_isfinite (color.red) && my_isfinite (color.green)
+               && my_isfinite (color.blue);
+      };
+      if (!finite_rgb ((*results)[0].screen_red)
+          || !finite_rgb ((*results)[0].screen_green)
+          || !finite_rgb ((*results)[0].screen_blue))
+        {
+          ret.err = "invalid fixed screen colors in previous finetune result";
+          return finish ();
+        }
+    }
   const image_data *imgp[finetune_solver::max_tiles];
   scr_to_img *mapp[finetune_solver::max_tiles];
   int x[finetune_solver::max_tiles];
@@ -5517,7 +5712,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
     bw = true;
   if (fparams.flags & finetune_uniform_image_layer)
     {
-      if (n_tiles < 2)
+      if (n_tiles < 2 && !(fparams.flags & finetune_fixed_screen_colors))
         {
           ret.err = "uniform image-layer fitting requires at least two tiles";
           return finish ();
