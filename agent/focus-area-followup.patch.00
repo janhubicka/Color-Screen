@@ -101,7 +101,7 @@ diff --git a/src/qtgui/MainWindow.cpp b/src/qtgui/MainWindow.cpp
          for (auto &candidate : result.candidates) {
            if (progress->cancelled()) {
              result.cancelled = true;
-@@ -11561,13 +11607,15 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
+@@ -11561,13 +11607,20 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
          }
  
          colorscreen::finetune_parameters joint = local;
@@ -114,6 +114,14 @@ diff --git a/src/qtgui/MainWindow.cpp b/src/qtgui/MainWindow.cpp
          colorscreen::finetune_focus_analysis_parameters analysisParameters;
          analysisParameters.selection.min_areas = 3;
          analysisParameters.selection.max_areas = 8;
++        /* Full RGB rank is required to learn shared RGB screen-primary
++           responses, but it is not an identifiability condition for BW: each
++           BW area has its own three primary weights and only blur is shared.
++           Still use the D-optimal ordering, just do not reject the best BW
++           subset solely because its cross-area colour Gram matrix is rank
++           deficient. */
++        if (useMonochrome)
++          analysisParameters.selection.minimum_color_volume = 0;
          analysisParameters.leave_one_out = true;
 -        analysisParameters.held_out = true;
 +        /* Frozen RGB-primary held-out validation belongs to the RGB uniform
