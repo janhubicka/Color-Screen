@@ -36,5 +36,7 @@ RUN apt-get update \
         qt6-translations-l10n \
         libqt6svg6-dev \
         tar \
+        xauth \
+        xvfb \
         xz-utils \
     && rm -rf /var/lib/apt/lists/*
