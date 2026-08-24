@@ -1,0 +1,180 @@
+-  if (currentIndex < 0)
+-    currentIndex = documents.indexOf(activeDocument());
++
++  QWidget *current = currentView ? static_cast<QWidget *>(currentView)
++                                 : static_cast<QWidget *>(currentWindow);
++  int currentIndex = presentations.indexOf(current);
++  if (currentIndex < 0) {
++    QWidget *active = activeWindow();
++    currentIndex = presentations.indexOf(active);
++  }
+   if (currentIndex < 0)
+     currentIndex = 0;
+-  const int count = documents.size();
+-  MainWindow *target = documents[((currentIndex + offset) % count + count) % count];
+-  if (m_workspaceWindow && m_workspaceWindow->containsDocument(target))
+-    m_workspaceWindow->activateDocument(target);
+-  else {
+-    if (target->isMinimized())
+-      target->showNormal();
+-    target->raise();
+-    target->activateWindow();
++
++  const int count = presentations.size();
++  QWidget *target =
++      presentations[((currentIndex + offset) % count + count) % count];
++  if (auto *document = qobject_cast<MainWindow *>(target)) {
++    if (m_workspaceWindow && m_workspaceWindow->containsDocument(document))
++      m_workspaceWindow->activateDocument(document);
++    else {
++      if (document->isMinimized())
++        document->showNormal();
++      document->raise();
++      document->activateWindow();
++    }
++  } else if (auto *view = qobject_cast<ImageViewWindow *>(target)) {
++    if (m_workspaceWindow && m_workspaceWindow->containsView(view))
++      m_workspaceWindow->activateView(view);
++    else {
++      if (view->isMinimized())
++        view->showNormal();
++      view->raise();
++      view->activateWindow();
++    }
+   }
+ }
+ 
+-/** Close every document window using each window's normal close policy. */
++/** Close every presentation for File -> Exit, respecting close vetoes. */
+ void ColorScreenApplication::closeAllDocumentWindows() {
+-  if (m_workspaceWindow) {
+-    m_workspaceWindow->close();
+-    return;
++  const QList<ImageViewWindow *> views = viewWindows();
++  for (ImageViewWindow *view : views) {
++    if (view && !closeView(view))
++      return;
+   }
+-  closeAllDocumentsForWorkspace();
++
++  const QList<MainWindow *> documents = documentWindows();
++  for (MainWindow *document : documents) {
++    if (!document || m_closingDocuments.contains(document))
++      continue;
++    m_finalizingDocuments.insert(document);
++    const bool closed = document->close();
++    m_finalizingDocuments.remove(document);
++    if (!closed)
++      return;
++    m_closingDocuments.insert(document);
++  }
++
++  if (m_workspaceWindow && m_workspaceWindow->tabCount() == 0)
++    m_workspaceWindow->close();
+ }
+ 
+ /** Open files delivered by Finder, Explorer, or the desktop shell. */
+@@ -806,6 +908,46 @@ void ColorScreenApplication::pruneViewWindows() {
+   }
+ }
+ 
++/** Return whether DOCUMENT has a secondary view that is not closing. */
++bool ColorScreenApplication::hasOpenViews(MainWindow *document,
++                                          ImageViewWindow *excluding) {
++  if (!document)
++    return false;
++  for (ImageViewWindow *view : viewWindows()) {
++    if (view != excluding && view->sourceDocument() == document &&
++        !m_closingViews.contains(view))
++      return true;
++  }
++  return false;
++}
++
++/** Finalize a hidden owner when its last view disappears unexpectedly. */
++void ColorScreenApplication::closeHiddenDocumentWithoutViews(
++    MainWindow *document) {
++  if (!document || !m_hiddenDocumentPresentations.contains(document) ||
++      m_closingDocuments.contains(document) || hasOpenViews(document))
++    return;
++
++  m_finalizingDocuments.insert(document);
++  const bool closed = document->close();
++  m_finalizingDocuments.remove(document);
++  if (closed) {
++    m_closingDocuments.insert(document);
++    return;
++  }
++
++  // An externally destroyed final view cannot be restored after a close veto.
++  // Reopen the primary presentation instead of leaving an invisible document.
++  m_hiddenDocumentPresentations.remove(document);
++  if (m_workspaceWindow)
++    m_workspaceWindow->addDocument(document);
++  else {
++    document->show();
++    document->raise();
++    document->activateWindow();
++  }
++}
++
+ /** Find all per-document recovery directories that contain payload data. */
+ QStringList ColorScreenApplication::recoveryDirectories() const {
+   QDir root(recoveryRootDirectory());
+diff --git a/src/qtgui/ColorScreenApplication.h b/src/qtgui/ColorScreenApplication.h
+index 89ccb7d..f6ccaab 100644
+--- a/src/qtgui/ColorScreenApplication.h
++++ b/src/qtgui/ColorScreenApplication.h
+@@ -64,6 +64,18 @@ public:
+   /** Close VIEW through its MDI wrapper when attached, or directly otherwise. */
+   bool closeView(ImageViewWindow *view);
+ 
++  /** Return true when DOCUMENT's original MainWindow presentation is still open. */
++  bool isDocumentPresentationOpen(MainWindow *document) const;
++
++  /** Close only DOCUMENT's original presentation while peer views remain.
++
++      Returns true when the close event must be ignored because DOCUMENT has been
++      retained as the hidden state owner of one or more secondary views. */
++  bool retainDocumentForOpenViews(MainWindow *document);
++
++  /** Approve closing VIEW and close its hidden document owner when it is last. */
++  bool requestViewClose(ImageViewWindow *view);
++
+   /** Return all live secondary views. */
+   QList<ImageViewWindow *> viewWindows();
+ 
+@@ -117,19 +129,15 @@ public:
+   /** Return the number of documents currently attached as tabs. */
+   int tabCount() const;
+ 
+-  /** Close all documents for a workspace shutdown.  Return false if any
+-      document vetoes closing because the user cancels a prompt. */
+-  bool closeAllDocumentsForWorkspace();
+-
+   /** Rebuild MENU with document/view creation, arrangement, and activation
+       actions.  CURRENTWINDOW is the owning document and CURRENTVIEW, when
+       non-null, identifies the active secondary view. */
+   void populateWindowMenu(QMenu *menu, MainWindow *currentWindow,
+                           ImageViewWindow *currentView = nullptr);
+ 
+-  /** Activate the document OFFSET positions from CURRENTWINDOW, wrapping at
+-      either end of the current document list.  */
+-  void activateRelativeWindow(MainWindow *currentWindow, int offset);
++  /** Activate the presentation OFFSET positions from the current view/window. */
++  void activateRelativeWindow(MainWindow *currentWindow,
++                              ImageViewWindow *currentView, int offset);
+ 
+   /** Ask every document to close.  Used by smoke tests and application exit. */
+   void closeAllDocumentWindows();
+@@ -175,9 +183,19 @@ private:
+   /** Return the active image document from either a tab or detached window. */
+   MainWindow *activeDocument() const;
+ 
++  /** Return whether DOCUMENT has a secondary view not already closing. */
++  bool hasOpenViews(MainWindow *document,
++                    ImageViewWindow *excluding = nullptr);
++
++  /** Close a hidden document owner after an unexpectedly destroyed last view. */
++  void closeHiddenDocumentWithoutViews(MainWindow *document);
++
