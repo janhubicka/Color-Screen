@@ -1,0 +1,321 @@
+diff --git a/src/colorscreen/colorscreen.C b/src/colorscreen/colorscreen.C
+index 912c3ab..e482286 100644
+--- a/src/colorscreen/colorscreen.C
++++ b/src/colorscreen/colorscreen.C
+@@ -20,6 +20,7 @@
+ #include "../libcolorscreen/include/analyze-scanner-blur.h"
+ #include "../libcolorscreen/include/dufaycolor.h"
+ #include "../libcolorscreen/include/finetune.h"
++#include "../libcolorscreen/include/focus-analysis.h"
+ #include "../libcolorscreen/include/histogram.h"
+ #include "../libcolorscreen/include/spectrum-to-xyz.h"
+ #include "../libcolorscreen/include/stitch.h"
+@@ -44,6 +45,7 @@ static enum subhelp {
+   help_stitch,
+   help_dump_patch_density,
+   help_finetune,
++  help_focus_areas,
+   help_lab,
+   help_read_chemcad_spectra,
+   help_has_regular_screen,
+@@ -331,6 +333,26 @@ print_help (char *err = NULL)
+                        "original and simultated tiles to <name>-y-x.tif\n");
+       fprintf (stderr, "      --simulate-infrared       simulate infrared layer\n");
+     }
++  if (subhelp == help_focus_areas || subhelp == help_basic)
++    {
++      fprintf (stderr, "  analyze-focus-areas <scan> <parameters> [<args>]\n");
++      fprintf (stderr, "    automatically find uniform areas and fit one shared focus model\n");
++    }
++  if (subhelp == help_focus_areas)
++    {
++      fprintf (stderr, "    Supported args:\n");
++      fprintf (stderr, "      --max-candidates=N         verify at most N discovered areas (default 24)\n");
++      fprintf (stderr, "      --min-areas=N              require at least N selected areas (default 3)\n");
++      fprintf (stderr, "      --max-areas=N              jointly fit at most N areas (default 8)\n");
++      fprintf (stderr, "      --range=N                  finetune half-range in screen periods (default 4)\n");
++      fprintf (stderr, "      --defocus-only             optimize only scanner-MTF defocus\n");
++      fprintf (stderr, "      --sigma-only               optimize only residual scanner-MTF sigma\n");
++      fprintf (stderr, "      --zero-focus-start         zero sigma/defocus after loading parameters\n");
++      fprintf (stderr, "      --use-monochrome-channel   force BW/IR focus fitting\n");
++      fprintf (stderr, "      --use-rgb                  force RGB uniform-image-layer fitting\n");
++      fprintf (stderr, "      --fixed-focus-verification verify candidates without refitting global focus\n");
++      fprintf (stderr, "      --no-leave-one-out         skip N-1 stability fits\n");
++    }
+   if (subhelp == help_lab || subhelp == help_basic)
+     {
+       fprintf (stderr, "  lab <subcommand>\n");
+@@ -2553,6 +2575,265 @@ digital_laboratory (int argc, char **argv)
+     print_help ();
+ }
+ 
++/* Implement automatic solid-area focus analysis from the command line.
++   This mirrors the Qt Sharpness-panel workflow: discover locally uniform
++   image-layer regions, verify them independently, choose a compact diverse
++   subset, then fit one shared capture-transfer model to every selected tile at
++   once.  */
++static int
++analyze_focus_areas (int argc, char **argv)
++{
++  const char *infname = NULL;
++  const char *cspname = NULL;
++  const char *error = NULL;
++  int max_candidates = 24;
++  int min_areas = 3;
++  int max_areas = 8;
++  int range = 4;
++  bool leave_one_out = true;
++  bool zero_focus_start = false;
++  bool force_bw = false;
++  bool force_rgb = false;
++  bool fixed_focus_verification = false;
++  uint64_t focus_flags
++      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
++  subhelp = help_focus_areas;
++
++  for (int i = 0; i < argc; i++)
++    {
++      std::string_view arg (argv[i]);
++      if (parse_common_flags (argc, argv, &i))
++        ;
++      else if (parse_int_param (argc, argv, &i, "max-candidates",
++                                max_candidates, 3, 256))
++        ;
++      else if (parse_int_param (argc, argv, &i, "min-areas", min_areas, 2,
++                                64))
++        ;
++      else if (parse_int_param (argc, argv, &i, "max-areas", max_areas, 2,
++                                64))
++        ;
++      else if (parse_int_param (argc, argv, &i, "range", range, 1, 64))
++        ;
++      else if (arg == "--defocus-only")
++        focus_flags = finetune_scanner_mtf_defocus;
++      else if (arg == "--sigma-only")
++        focus_flags = finetune_scanner_mtf_sigma;
++      else if (arg == "--zero-focus-start")
++        zero_focus_start = true;
++      else if (arg == "--use-monochrome-channel")
++        force_bw = true;
++      else if (arg == "--use-rgb")
++        force_rgb = true;
++      else if (arg == "--fixed-focus-verification")
++        fixed_focus_verification = true;
++      else if (arg == "--no-leave-one-out")
++        leave_one_out = false;
++      else if (!infname)
++        infname = argv[i];
++      else if (!cspname)
++        cspname = argv[i];
++      else
++        print_help (argv[i]);
++    }
++
++  if (!infname || !cspname)
++    print_help ();
++  if (force_bw && force_rgb)
++    {
++      fprintf (stderr,
++               "--use-monochrome-channel and --use-rgb are mutually exclusive\n");
++      return 1;
++    }
++  if (max_areas < min_areas)
++    {
++      fprintf (stderr, "--max-areas must be at least --min-areas\n");
++      return 1;
++    }
++
++  file_progress_info progress (stdout, verbose, verbose_tasks);
++
++  /* Load parameters first so RAW decoding uses the same demosaic choice as
++     the GUI.  This is particularly important for monochromatic Bayer scans.  */
++  render_parameters rparam;
++  scr_to_img_parameters param;
++  FILE *in = fopen (cspname, "rt");
++  if (!in)
++    {
++      perror (cspname);
++      return 1;
++    }
++  if (!load_csp (in, &param, NULL, &rparam, NULL, &error))
++    {
++      fclose (in);
++      fprintf (stderr, "Cannot load %s: %s\n", cspname, error);
++      return 1;
++    }
++  fclose (in);
++
++  if (zero_focus_start)
++    {
++      rparam.sharpen.scanner_mtf.sigma = 0;
++      rparam.sharpen.scanner_mtf.defocus = 0;
++      rparam.sharpen.scanner_mtf.blur_diameter = 0;
++    }
++
++  image_data scan;
++  if (verbose)
++    printf ("Loading scan %s\n", infname);
++  if (!scan.load (infname, false, &error, &progress, rparam.demosaic))
++    {
++      fprintf (stderr, "Cannot load %s: %s\n", infname, error);
++      return 1;
++    }
++
++  bool use_bw = !scan.has_rgb () && scan.has_grayscale_or_ir ();
++  if (force_bw)
++    use_bw = true;
++  if (force_rgb)
++    use_bw = false;
++  if (use_bw && !scan.has_grayscale_or_ir ())
++    {
++      fprintf (stderr, "The scan has no monochrome/IR channel\n");
++      return 1;
++    }
++  if (!use_bw && !scan.has_rgb ())
++    {
++      fprintf (stderr, "The scan has no RGB channels\n");
++      return 1;
++    }
++
++  finetune_focus_area_image_search_parameters search;
++  search.search.max_candidates = max_candidates;
++  std::vector<finetune_focus_area_candidate> candidates;
++  std::string search_error;
++  if (!finetune_find_focus_area_candidates_in_image (
++          rparam, param, scan, search, &candidates, &progress, &search_error))
++    {
++      fprintf (stderr, "Focus-area search failed: %s\n",
++               search_error.c_str ());
++      return 1;
++    }
++  printf ("Focus-area candidates: %zu\n", candidates.size ());
++  if (candidates.size () < (size_t)min_areas)
++    {
++      fprintf (stderr, "Only %zu candidate areas found; need at least %d\n",
++               candidates.size (), min_areas);
++      return 1;
++    }
++
++  finetune_parameters local;
++  local.range = range;
++  local.ignore_outliers = 0;
++  local.flags = finetune_position | finetune_no_progress_report;
++  if (!fixed_focus_verification)
++    local.flags |= focus_flags;
++  if (use_bw)
++    local.flags |= finetune_bw | finetune_no_normalize
++                   | finetune_no_data_collection;
++
++  progress.set_task ("verifying focus areas", candidates.size ());
++  size_t verified = 0;
++  for (auto &candidate : candidates)
++    {
++      candidate.fit = finetune (rparam, param, scan, { candidate.center },
++                                NULL, local, &progress);
++      if (candidate.fit.success)
++        verified++;
++      progress.inc_progress ();
++    }
++  printf ("Verified focus-area candidates: %zu/%zu\n", verified,
++          candidates.size ());
++
++  finetune_parameters joint = local;
++  joint.flags |= focus_flags | finetune_no_normalize
++                 | finetune_no_data_collection;
++  if (!use_bw)
++    joint.flags |= finetune_uniform_image_layer;
++
++  finetune_focus_analysis_parameters analysis_parameters;
++  analysis_parameters.selection.min_areas = min_areas;
++  analysis_parameters.selection.max_areas = max_areas;
++  if (use_bw)
++    analysis_parameters.selection.minimum_color_volume = 0;
++  analysis_parameters.leave_one_out = leave_one_out;
++  analysis_parameters.held_out = leave_one_out && !use_bw;
++
++  finetune_focus_analysis_result analysis;
++  if (!finetune_analyze_focus_areas (
++          rparam, param, scan, candidates, joint, analysis_parameters,
++          &analysis, &progress))
++    {
++      fprintf (stderr, "Focus-area joint analysis failed: %s\n",
++               analysis.err.c_str ());
++      return 1;
++    }
++
++  printf ("Selected focus areas: %zu\n", analysis.selected.size ());
++  for (size_t i = 0; i < analysis.selected.size (); i++)
++    {
++      const size_t index = analysis.selected[i];
++      const auto &candidate = candidates[index];
++      printf ("  area %zu candidate %zu center %.3f %.3f", i, index,
++              (double)candidate.center.x, (double)candidate.center.y);
++      if (candidate.fit.success)
++        {
++          if (focus_flags & finetune_scanner_mtf_sigma)
++            printf (" local-sigma %.6f",
++                    (double)candidate.fit.scanner_mtf_sigma);
++          if (focus_flags & finetune_scanner_mtf_defocus)
++            {
++              if (rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
++                printf (" local-defocus %.6f",
++                        (double)candidate.fit.scanner_mtf_defocus);
++              else
++                printf (" local-blur-diameter %.6f",
++                        (double)candidate.fit.scanner_mtf_blur_diameter);
++            }
++          printf (" badness %.8g contrast %.8g",
++                  (double)candidate.fit.badness,
++                  (double)candidate.fit.contrast);
++        }
++      printf ("\n");
++    }
++
++  printf ("Joint badness: %.12g\n", (double)analysis.joint_fit.badness);
++  if (focus_flags & finetune_scanner_mtf_sigma)
++    printf ("Joint scanner MTF sigma: %.9f px\n",
++            (double)analysis.joint_fit.scanner_mtf_sigma);
++  if (focus_flags & finetune_scanner_mtf_defocus)
++    {
++      if (rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
++        printf ("Joint scanner MTF defocus: %.9f mm\n",
++                (double)analysis.joint_fit.scanner_mtf_defocus);
++      else
++        printf ("Joint scanner MTF blur diameter: %.9f px\n",
++                (double)analysis.joint_fit.scanner_mtf_blur_diameter);
++    }
++
++  for (size_t i = 0; i < analysis.leave_one_out_fits.size (); i++)
++    {
++      const finetune_result &fit = analysis.leave_one_out_fits[i];
++      printf ("Leave-one-out %zu:", i);
++      if (focus_flags & finetune_scanner_mtf_sigma)
++        printf (" sigma %.9f", (double)fit.scanner_mtf_sigma);
++      if (focus_flags & finetune_scanner_mtf_defocus)
++        {
++          if (rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
++            printf (" defocus %.9f", (double)fit.scanner_mtf_defocus);
++          else
++            printf (" blur-diameter %.9f",
++                    (double)fit.scanner_mtf_blur_diameter);
++        }
++      printf (" badness %.12g\n", (double)fit.badness);
++    }
++  if (analysis.held_out_max_relative_badness >= 0)
++    printf ("Maximum held-out relative residual: %.12g\n",
++            (double)analysis.held_out_max_relative_badness);
++
++  return 0;
++}
++
+ /* Return screen channel C from result R.  */
+ static rgbdata
+ get_screen_channel (finetune_result &r, int c)
+@@ -4388,6 +4669,7 @@ main (int argc, char **argv)
+     {"analyze-backlight", [](int ac, char **av) { analyze_backlight (ac, av); return 0; }, ""},
+     {"analyze-scanner-blur", [](int ac, char **av) { return (int)analyze_scanner_blur (ac, av); }, ""},
+     {"finetune", [](int ac, char **av) { finetune (ac, av); return 0; }, ""},
++    {"analyze-focus-areas", [](int ac, char **av) { return analyze_focus_areas (ac, av); }, "focus-areas"},
+     {"export-lcc", [](int ac, char **av) { export_lcc (ac, av); return 0; }, ""},
+     {"dump-lcc", [](int ac, char **av) { return (int)dump_lcc (ac, av); }, ""},
+     {"stitch", [](int ac, char **av) { return stitch (ac, av); }, ""},
