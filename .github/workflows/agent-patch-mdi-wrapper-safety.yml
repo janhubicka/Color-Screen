@@ -1,0 +1,50 @@
+name: Agent patch MDI wrapper safety
+
+on:
+  pull_request:
+    branches: [ agent/qtgui-fix-document-mdi-wrapper-detach ]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-patch-mdi-wrapper-safety'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/qtgui-fix-document-mdi-wrapper-detach
+          fetch-depth: 0
+      - name: Patch stale MDI wrapper references
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/qtgui/WorkspaceWindow.cpp')
+          text = path.read_text()
+
+          old_destroy = '''  QPointer<QMdiSubWindow> guardedSubWindow(subWindow);\n  connect(document, &QObject::destroyed, this,\n          [this, guardedSubWindow]() {\n            if (guardedSubWindow) {\n              m_mdiArea->removeSubWindow(guardedSubWindow);\n              guardedSubWindow->deleteLater();\n            }\n'''
+          new_destroy = '''  QPointer<QMdiSubWindow> guardedSubWindow(subWindow);\n  connect(document, &QObject::destroyed, this,\n          [this, guardedSubWindow]() {\n            // The wrapper is owned by the MDI area. Scheduling its deletion is\n            // sufficient; removeSubWindow(QMdiSubWindow *) may delete it\n            // immediately and must not be followed by deleteLater().\n            if (guardedSubWindow)\n              guardedSubWindow->deleteLater();\n'''
+          if text.count(old_destroy) != 1:
+              raise SystemExit(f'document wrapper anchor count: {text.count(old_destroy)}')
+          text = text.replace(old_destroy, new_destroy)
+
+          old_title = '''  QPointer<ImageViewWindow> guardedView(view);\n  connect(view, &QWidget::windowTitleChanged, this,\n          [this, guardedView, subWindow](const QString &title) {\n            if (!guardedView)\n              return;\n            subWindow->setWindowTitle(title);\n'''
+          new_title = '''  QPointer<ImageViewWindow> guardedView(view);\n  QPointer<QMdiSubWindow> guardedSubWindow(subWindow);\n  connect(view, &QWidget::windowTitleChanged, this,\n          [this, guardedView, guardedSubWindow](const QString &title) {\n            if (!guardedView || !guardedSubWindow)\n              return;\n            guardedSubWindow->setWindowTitle(title);\n'''
+          if text.count(old_title) != 1:
+              raise SystemExit(f'view title wrapper anchor count: {text.count(old_title)}')
+          text = text.replace(old_title, new_title)
+
+          path.write_text(text)
+          PY
+          git diff --check
+      - name: Commit and publish
+        shell: bash
+        run: |
+          git config user.name 'Jan Hubička'
+          git config user.email '46065755+janhubicka@users.noreply.github.com'
+          git add src/qtgui/WorkspaceWindow.cpp
+          git commit -m 'qtgui: guard MDI wrapper lifetimes'
+          git push origin HEAD:agent/qtgui-fix-document-mdi-wrapper-detach
