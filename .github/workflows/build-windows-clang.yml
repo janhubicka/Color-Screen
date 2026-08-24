@@ -11,6 +11,12 @@ jobs:
 
     runs-on: ${{ matrix.runner }}
 
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPRESS: "true"
+      CCACHE_MAXSIZE: 500M
+
     strategy:
       matrix:
         include:
@@ -23,9 +29,10 @@ jobs:
     - uses: msys2/setup-msys2@v2
       with:
         msystem: ${{matrix.sys}}
-        update: true
+        update: false
+        cache: true
         install: >
-          make mingw-w64-${{matrix.env}}-clang mingw-w64-${{matrix.env}}-libtiff 
+          make mingw-w64-${{matrix.env}}-clang mingw-w64-${{matrix.env}}-ccache mingw-w64-${{matrix.env}}-libtiff 
           mingw-w64-${{matrix.env}}-llvm-openmp
           mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-libraw 
           mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip 
@@ -36,6 +43,16 @@ jobs:
           mingw-w64-${{matrix.env}}-imagemagick
           mingw-w64-${{matrix.env}}-exiv2
           ${{ matrix.sys != 'clangarm64' && format('mingw-w64-{0}-nsis', matrix.env) || '' }}
+    - name: Restore compiler cache
+      uses: actions/cache@v4
+      with:
+        path: .ccache
+        key: ccache-${{ runner.os }}-${{ matrix.sys }}${{ matrix.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
+        restore-keys: |
+          ccache-${{ runner.os }}-${{ matrix.sys }}${{ matrix.suffix }}-
+    - name: Reset compiler cache stats
+      shell: msys2 {0}
+      run: ccache --zero-stats
     - name: update autotools
       shell: msys2 {0}
       run: autoreconf -fiv
@@ -44,7 +61,7 @@ jobs:
       run: |
         export PATH="/${{matrix.sys}}/share/qt6/bin:$PATH"
         # Note: -lomp is used, ensuring libomp is linked
-        AR=llvm-ar NM=llvm-nm STRIP=llvm-strip RANLIB=llvm-ranlib CXXFLAGS="-O3 -flto -ffast-math -Wall  ${{matrix.flags}}" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-qtgui --prefix=/c/Color-Screen-install ${{matrix.conf}} #--disable-static-link
+        CC="ccache clang" CXX="ccache clang++" AR=llvm-ar NM=llvm-nm STRIP=llvm-strip RANLIB=llvm-ranlib CXXFLAGS="-O3 -flto -ffast-math -Wall  ${{matrix.flags}}" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-qtgui --prefix=/c/Color-Screen-install ${{matrix.conf}} #--disable-static-link
     - name: Upload config.log
       uses: actions/upload-artifact@v4
       if: failure()
@@ -166,3 +183,7 @@ jobs:
       with:
         name: portable-binary-${{matrix.sys}}${{matrix.suffix}}
         path: c:\Color-Screen-install\bin
+    - name: Compiler cache stats
+      if: always()
+      shell: msys2 {0}
+      run: ccache --show-stats
