@@ -57,8 +57,10 @@ later-closing document cannot overwrite newer entries.
 
 `WorkspaceWindow` must use `QMdiArea`, rather than maintaining a parallel custom
 tab implementation. The default view is `QMdiArea::TabbedView`; its internal
-`QTabBar` has `autoHide` enabled so no tab strip is shown for a single document.
-Tabbed MDI subwindows must remain maximized: an active tab represents the whole
+`QTabBar` uses Qt's standard document-mode behavior, including a visible tab
+for a single attached image. Do not auto-hide the only tab: an empty strip is
+more confusing than Qt's normal one-document presentation. Tabbed MDI
+subwindows must remain maximized: an active tab represents the whole
 document viewport and must never expose a nested `QMdiSubWindow` frame.
 The workspace is a `QMainWindow`: the active document toolbar is installed in
 its top toolbar area, therefore document tabs naturally appear below it. The
@@ -81,16 +83,31 @@ Detaching removes the existing `MainWindow` from the MDI
 area and reparents that same object as a top-level window; reattaching performs
 the inverse operation. Never serialize, clone, or reconstruct a document merely
 to change its presentation. Tabs are movable and closable, can be dragged out,
-and also support double-click/context-menu detachment. `Ctrl+Tab` and
-`Ctrl+Shift+Tab` cycle all documents, whether attached or detached. `Ctrl+N`
-creates a new workspace document and `Ctrl+Shift+N` creates a detached empty
-window.
+and also support double-click/context-menu detachment. If the final attached
+presentation is detached or closed, the now-empty workspace shell closes; it
+must never remain as a menu-less unusable window. `Ctrl+Tab` and
+`Ctrl+Shift+Tab` cycle all visible image presentations, including ordinary and
+specialized views, whether attached or detached. `Ctrl+N` creates a new
+workspace document and `Ctrl+Shift+N` creates a detached empty window.
 
-`MainWindow` remains the ownership boundary. When embedded, only presentation
+`MainWindow` remains the logical ownership boundary, but its original image
+presentation is a peer of `ImageViewWindow` presentations. Closing the original
+presentation while another view exists must not close the image: the application
+retains the `MainWindow` only as a hidden state owner until the final view closes.
+The last presentation performs the normal document close/save policy, and a
+close veto keeps that presentation open. When embedded, only presentation
 widgets are temporarily reparented: its menu actions and toolbar are surfaced by
 the workspace and its inspector is placed in the shared inspector stack. Before
 detachment or destruction these widgets must be returned to the same
 `MainWindow`, so ordinary state saving and teardown continue to work.
+
+Closing `WorkspaceWindow` closes only the presentations currently hosted in its
+MDI area. Detached documents and views are independent top-level windows and
+keep the application alive. **File → Exit** is the explicit application-wide
+close path and must close every presentation while respecting save/close vetoes.
+Do not create a replacement empty document merely because the last real document
+closed; once no image presentation remains, the workspace shell should disappear
+and normal Qt last-window lifetime rules apply.
 
 Automatic solid-area focus analysis is also document-local.  The discovered
 candidate rectangles, individual fit results, selected subset, and validation

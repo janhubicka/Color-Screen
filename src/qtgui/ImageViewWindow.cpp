@@ -12,6 +12,7 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QCheckBox>
+#include <QCloseEvent>
 #include <QComboBox>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
@@ -856,6 +857,18 @@ void ImageViewWindow::releaseDocumentInspector() {
     m_document->takeWorkspaceInspector();
   if (m_documentInspectorDock)
     m_documentInspectorDock->hide();
+}
+
+/** Close one secondary presentation and finalize its document only when last. */
+void ImageViewWindow::closeEvent(QCloseEvent *event) {
+  if (auto *application = dynamic_cast<ColorScreenApplication *>(
+          QApplication::instance())) {
+    if (!application->requestViewClose(this)) {
+      event->ignore();
+      return;
+    }
+  }
+  QMainWindow::closeEvent(event);
 }
 
 /** Reclaim panels when this detached ordinary view becomes active. */
