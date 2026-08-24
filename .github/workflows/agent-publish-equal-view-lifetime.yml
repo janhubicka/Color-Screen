@@ -1,0 +1,517 @@
+name: Publish equal view/window lifetime patch
+
+on:
+  pull_request:
+    branches:
+      - agent/tmp-equal-view-lifetime-base
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-trigger-equal-view-lifetime'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply presentation lifetime patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          cpp = Path('src/qtgui/ColorScreenApplication.cpp')
+          hdr = Path('src/qtgui/ColorScreenApplication.h')
+          s = cpp.read_text()
+          h = hdr.read_text()
+
+          def repl(text, old, new, label):
+              n = text.count(old)
+              if n != 1:
+                  raise SystemExit(f'{label}: expected one match, found {n}')
+              return text.replace(old, new, 1)
+
+          s = repl(s,
+              '#include <QMessageBox>\n#include <QPoint>\n',
+              '#include <QMessageBox>\n#include <QMdiSubWindow>\n#include <QPoint>\n',
+              'mdi include')
+          s = repl(s,
+              '#include <QUrl>\n#include <QUuid>\n',
+              '#include <QUrl>\n#include <QUuid>\n#include <QWidget>\n',
+              'widget include')
+
+          s = repl(s,
+          """  m_documentWindows.append(document);
+
+          connect(document, &QObject::destroyed, this, [this]() {
+            QTimer::singleShot(0, this, [this]() {
+              pruneDocumentWindows();
+              refreshWindowMenus();
+              if (!m_workspaceShutdown && m_documentWindows.isEmpty())
+                createDocumentWindow();
+            });
+          });
+          """,
+          """  m_documentWindows.append(document);
+          document->installEventFilter(this);
+
+          connect(document, &QObject::destroyed, this, [this, document]() {
+            m_primaryViewClosed.remove(document);
+            m_forceDocumentClose.remove(document);
+            QTimer::singleShot(0, this, [this]() {
+              pruneDocumentWindows();
+              refreshWindowMenus();
+              maybeHideEmptyWorkspace();
+            });
+          });
+          """, 'document lifecycle')
+
+          s = repl(s,
+          """  m_viewWindows.append(view);
+          connect(view, &QObject::destroyed, this, [this]() {
+            QTimer::singleShot(0, this, [this]() {
+              pruneViewWindows();
+              refreshWindowMenus();
+            });
+          });
+          """,
+          """  m_viewWindows.append(view);
+          QPointer<MainWindow> guardedSource(source);
+          connect(view, &QObject::destroyed, this, [this, guardedSource]() {
+            QTimer::singleShot(0, this, [this, guardedSource]() {
+              pruneViewWindows();
+              if (guardedSource &&
+                  m_primaryViewClosed.contains(guardedSource.data()) &&
+                  imageViewCount(guardedSource.data()) == 0 &&
+                  !m_forceDocumentClose.contains(guardedSource.data()))
+                closeBackingDocument(guardedSource.data());
+              refreshWindowMenus();
+              maybeHideEmptyWorkspace();
+            });
+          });
+          """, 'secondary view lifecycle')
+
+          normal_anchor = """  } else {
+            workspaceWindow()->addView(view);
+          }
+
+          refreshWindowMenus();
+          return view;
+          }
+
+          /** Create a slanted-edge reference view whose parameters belong to SOURCE. */
+          """
+          normal_new = normal_anchor.replace('\n\n  refreshWindowMenus();',
+                                             '\n\n  installViewCloseFilters(view);\n  refreshWindowMenus();')
+          s = repl(s, normal_anchor, normal_new, 'normal view filter')
+
+          ref_anchor = """  } else {
+            workspaceWindow()->addView(view);
+          }
+
+          refreshWindowMenus();
+          return view;
+          }
+
+          /** Ask the user for another scan to use as a slanted-edge MTF reference. */
+          """
+          ref_new = ref_anchor.replace('\n\n  refreshWindowMenus();',
+                                       '\n\n  installViewCloseFilters(view);\n  refreshWindowMenus();')
+          s = repl(s, ref_anchor, ref_new, 'reference view filter')
+
+          s = repl(s,
+          """  m_workspaceWindow->removeView(view);
+          refreshWindowMenus();
+          """,
+          """  m_workspaceWindow->removeView(view);
+          maybeHideEmptyWorkspace();
+          refreshWindowMenus();
+          """, 'detach view cleanup')
+
+          s = repl(s,
+          """  workspaceWindow()->addView(view);
+          refreshWindowMenus();
+          }
+
+          /** Consolidate every detached secondary view into the workspace. */
+          """,
+          """  workspaceWindow()->addView(view);
+          installViewCloseFilters(view);
+          refreshWindowMenus();
+          }
+
+          /** Consolidate every detached secondary view into the workspace. */
+          """, 'attach view filter')
+
+          s = repl(s,
+          """    m_workspaceWindow = new WorkspaceWindow();
+            m_workspaceWindow->setAttribute(Qt::WA_DeleteOnClose, false);
+          """,
+          """    m_workspaceWindow = new WorkspaceWindow();
+            m_workspaceWindow->setAttribute(Qt::WA_DeleteOnClose, false);
+            m_workspaceWindow->installEventFilter(this);
+          """, 'workspace filter')
+
+          s = repl(s,
+          """  document->raise();
+          document->activateWindow();
+          refreshWindowMenus();
+          }
+
+          /** Attach DOCUMENT to the primary workspace without changing its state. */
+          """,
+          """  document->raise();
+          document->activateWindow();
+          maybeHideEmptyWorkspace();
+          refreshWindowMenus();
+          }
+
+          /** Attach DOCUMENT to the primary workspace without changing its state. */
+          """, 'detach document cleanup')
+
+          s = repl(s,
+          """void ColorScreenApplication::attachDocument(MainWindow *document) {
+            if (!document)
+              return;
+          """,
+          """void ColorScreenApplication::attachDocument(MainWindow *document) {
+            if (!document)
+              return;
+            m_primaryViewClosed.remove(document);
+          """, 'attach primary reopening')
+
+          s = repl(s,
+          """  for (int i = 0; i < documents.size(); ++i) {
+            QPointer<MainWindow> guarded(documents[i]);
+            QString name = documents[i]->documentDisplayName();
+            name.replace(QLatin1Char('&'), QStringLiteral("&&"));
+            QAction *action = menu->addAction(tr("&%1 %2").arg(i + 1).arg(name));
+            action->setCheckable(true);
+            action->setChecked(!currentView && documents[i] == currentWindow);
+            connect(action, &QAction::triggered, menu, [this, guarded]() {
+              if (!guarded)
+                return;
+              if (m_workspaceWindow && m_workspaceWindow->containsDocument(guarded))
+                m_workspaceWindow->activateDocument(guarded);
+              else {
+                if (guarded->isMinimized())
+                  guarded->showNormal();
+                guarded->raise();
+                guarded->activateWindow();
+              }
+            });
+          }
+          """,
+          """  int documentNumber = 0;
+          for (int i = 0; i < documents.size(); ++i) {
+            if (m_primaryViewClosed.contains(documents[i]))
+              continue;
+            ++documentNumber;
+            QPointer<MainWindow> guarded(documents[i]);
+            QString name = documents[i]->documentDisplayName();
+            name.replace(QLatin1Char('&'), QStringLiteral("&&"));
+            QAction *action =
+                menu->addAction(tr("&%1 %2").arg(documentNumber).arg(name));
+            action->setCheckable(true);
+            action->setChecked(!currentView && documents[i] == currentWindow);
+            connect(action, &QAction::triggered, menu, [this, guarded]() {
+              if (guarded)
+                activateDocumentPresentation(guarded.data());
+            });
+          }
+          """, 'window menu hidden primary')
+
+          s = repl(s,
+          """  MainWindow *target = documents[((currentIndex + offset) % count + count) % count];
+          if (m_workspaceWindow && m_workspaceWindow->containsDocument(target))
+            m_workspaceWindow->activateDocument(target);
+          else {
+            if (target->isMinimized())
+              target->showNormal();
+            target->raise();
+            target->activateWindow();
+          }
+          }
+
+          /** Close every document window using each window's normal close policy. */
+          """,
+          """  MainWindow *target =
+              documents[((currentIndex + offset) % count + count) % count];
+            activateDocumentPresentation(target);
+          }
+
+          /** Close every document window using each window's normal close policy. */
+          """, 'relative activation')
+
+          marker = '/** Open files delivered by Finder, Explorer, or the desktop shell. */\n'
+          if s.count(marker) != 1:
+              raise SystemExit('helper insertion marker missing')
+          helpers = """/** Return the number of ordinary secondary views that still present SOURCE. */
+          int ColorScreenApplication::imageViewCount(MainWindow *source,
+                                                     ImageViewWindow *exclude) {
+            if (!source)
+              return 0;
+            int count = 0;
+            for (ImageViewWindow *view : viewWindows()) {
+              if (view != exclude && view->sourceDocument() == source &&
+                  !view->isSlantedEdgeReference())
+                ++count;
+            }
+            return count;
+          }
+
+          /** Observe VIEW and its current MDI wrapper for close requests. */
+          void ColorScreenApplication::installViewCloseFilters(ImageViewWindow *view) {
+            if (!view)
+              return;
+            view->installEventFilter(this);
+            for (QWidget *parent = view->parentWidget(); parent;
+                 parent = parent->parentWidget()) {
+              if (auto *subWindow = qobject_cast<QMdiSubWindow *>(parent)) {
+                subWindow->installEventFilter(this);
+                break;
+              }
+            }
+          }
+
+          /** Run normal document closing after its final image view disappears. */
+          bool ColorScreenApplication::closeBackingDocument(MainWindow *document) {
+            if (!document)
+              return false;
+            m_forceDocumentClose.insert(document);
+            const bool accepted = document->close();
+            m_forceDocumentClose.remove(document);
+            return accepted;
+          }
+
+          /** Return true when VIEW may close directly. */
+          bool ColorScreenApplication::prepareSecondaryViewClose(ImageViewWindow *view) {
+            if (!view || view->isSlantedEdgeReference())
+              return true;
+            MainWindow *document = view->sourceDocument();
+            if (!document || !m_primaryViewClosed.contains(document) ||
+                imageViewCount(document, view) != 0)
+              return true;
+
+            /* The last view closes the backing document first, so a cancelled
+               save prompt leaves the view intact.  Successful document
+               destruction closes the view through its existing source hook. */
+            closeBackingDocument(document);
+            return false;
+          }
+
+          /** Return whether a detached presentation remains visible. */
+          bool ColorScreenApplication::hasVisibleDetachedPresentation() {
+            for (MainWindow *document : documentWindows()) {
+              if (!m_primaryViewClosed.contains(document) && document->isVisible() &&
+                  (!m_workspaceWindow ||
+                   !m_workspaceWindow->containsDocument(document)))
+                return true;
+            }
+            for (ImageViewWindow *view : viewWindows()) {
+              if (view->isVisible() &&
+                  (!m_workspaceWindow || !m_workspaceWindow->containsView(view)))
+                return true;
+            }
+            return false;
+          }
+
+          /** Remove the useless shared shell once its last item is gone. */
+          void ColorScreenApplication::maybeHideEmptyWorkspace() {
+            if (!m_workspaceWindow || m_workspaceWindow->tabCount() != 0)
+              return;
+            m_workspaceWindow->saveWorkspaceGeometry();
+            m_workspaceWindow->hide();
+            QTimer::singleShot(0, this, [this]() {
+              if (m_workspaceWindow && m_workspaceWindow->tabCount() == 0 &&
+                  !hasVisibleDetachedPresentation() && documentWindows().isEmpty())
+                quit();
+            });
+          }
+
+          /** Activate the surviving presentation for DOCUMENT. */
+          void ColorScreenApplication::activateDocumentPresentation(
+              MainWindow *document) {
+            if (!document)
+              return;
+            if (m_primaryViewClosed.contains(document)) {
+              for (ImageViewWindow *view : viewWindows()) {
+                if (view->sourceDocument() != document ||
+                    view->isSlantedEdgeReference())
+                  continue;
+                if (m_workspaceWindow && m_workspaceWindow->containsView(view))
+                  m_workspaceWindow->activateView(view);
+                else {
+                  if (view->isMinimized())
+                    view->showNormal();
+                  else
+                    view->show();
+                  view->raise();
+                  view->activateWindow();
+                }
+                return;
+              }
+              return;
+            }
+
+            if (m_workspaceWindow && m_workspaceWindow->containsDocument(document))
+              m_workspaceWindow->activateDocument(document);
+            else {
+              if (document->isMinimized())
+                document->showNormal();
+              else
+                document->show();
+              document->raise();
+              document->activateWindow();
+            }
+          }
+
+          /** Close only items contained in the shared workspace. */
+          void ColorScreenApplication::closeWorkspacePresentation() {
+            if (!m_workspaceWindow || m_workspaceCloseInProgress)
+              return;
+            if (m_workspaceWindow->tabCount() == 0) {
+              maybeHideEmptyWorkspace();
+              return;
+            }
+
+            m_workspaceCloseInProgress = true;
+            const QList<MainWindow *> documents = documentWindows();
+            for (MainWindow *document : documents)
+              if (m_workspaceWindow &&
+                  m_workspaceWindow->containsDocument(document))
+                document->close();
+
+            const QList<ImageViewWindow *> views = viewWindows();
+            for (ImageViewWindow *view : views)
+              if (m_workspaceWindow && m_workspaceWindow->containsView(view))
+                closeView(view);
+
+            QTimer::singleShot(0, this, [this]() {
+              m_workspaceCloseInProgress = false;
+              maybeHideEmptyWorkspace();
+            });
+          }
+
+          /** Intercept close events so no original view/window is privileged. */
+          bool ColorScreenApplication::eventFilter(QObject *watched, QEvent *event) {
+            if (!event || event->type() != QEvent::Close)
+              return QApplication::eventFilter(watched, event);
+
+            if (watched == m_workspaceWindow) {
+              QTimer::singleShot(0, this,
+                                 [this]() { closeWorkspacePresentation(); });
+              return true;
+            }
+
+            if (auto *document = qobject_cast<MainWindow *>(watched)) {
+              if (!m_forceDocumentClose.contains(document) &&
+                  imageViewCount(document) > 0) {
+                if (m_workspaceWindow &&
+                    m_workspaceWindow->containsDocument(document))
+                  m_workspaceWindow->prepareDocumentForClose(document);
+                document->hide();
+                m_primaryViewClosed.insert(document);
+                maybeHideEmptyWorkspace();
+                refreshWindowMenus();
+                return true;
+              }
+            }
+
+            if (auto *view = qobject_cast<ImageViewWindow *>(watched)) {
+              if (!prepareSecondaryViewClose(view))
+                return true;
+            }
+
+            if (auto *subWindow = qobject_cast<QMdiSubWindow *>(watched)) {
+              if (auto *view = qobject_cast<ImageViewWindow *>(subWindow->widget()))
+                if (!prepareSecondaryViewClose(view))
+                  return true;
+            }
+
+            return QApplication::eventFilter(watched, event);
+          }
+
+          """
+          s = s.replace(marker, helpers + marker, 1)
+
+          h = repl(h,
+          """  /** Handle operating-system file-open events by opening another independent
+              document; delegate all other events to QApplication.  */
+            bool event(QEvent *event) override;
+          """,
+          """  /** Handle operating-system file-open events by opening another independent
+              document; delegate all other events to QApplication.  */
+            bool event(QEvent *event) override;
+
+            /** Intercept presentation close events before owner widgets apply
+                their historical lifetime semantics. */
+            bool eventFilter(QObject *watched, QEvent *event) override;
+          """, 'event filter declaration')
+
+          h = repl(h,
+          """  /** Remove deleted secondary-view pointers. */
+            void pruneViewWindows();
+          """,
+          """  /** Remove deleted secondary-view pointers. */
+            void pruneViewWindows();
+
+            int imageViewCount(MainWindow *source,
+                               ImageViewWindow *exclude = nullptr);
+            void installViewCloseFilters(ImageViewWindow *view);
+            bool closeBackingDocument(MainWindow *document);
+            bool prepareSecondaryViewClose(ImageViewWindow *view);
+            bool hasVisibleDetachedPresentation();
+            void maybeHideEmptyWorkspace();
+            void activateDocumentPresentation(MainWindow *document);
+            void closeWorkspacePresentation();
+          """, 'private helper declarations')
+
+          h = repl(h,
+          """  QPointer<WorkspaceWindow> m_workspaceWindow;
+            QSet<MainWindow *> m_restoringReferenceRecovery;
+            bool m_workspaceShutdown = false;
+          """,
+          """  QPointer<WorkspaceWindow> m_workspaceWindow;
+            QSet<MainWindow *> m_restoringReferenceRecovery;
+            QSet<MainWindow *> m_primaryViewClosed;
+            QSet<MainWindow *> m_forceDocumentClose;
+            bool m_workspaceShutdown = false;
+            bool m_workspaceCloseInProgress = false;
+          """, 'lifetime state')
+
+          cpp.write_text(s)
+          hdr.write_text(h)
+          PY
+          git diff --check
+          test "$(git diff --name-only | sort)" = "$(printf '%s\n' src/qtgui/ColorScreenApplication.cpp src/qtgui/ColorScreenApplication.h | sort)"
+          grep -q 'm_primaryViewClosed' src/qtgui/ColorScreenApplication.cpp
+          grep -q 'closeWorkspacePresentation' src/qtgui/ColorScreenApplication.cpp
+          grep -q 'QMdiSubWindow' src/qtgui/ColorScreenApplication.cpp
+      - name: Commit and publish clean feature branch
+        shell: bash
+        run: |
+          git config user.name "OpenAI"
+          git config user.email "noreply@openai.com"
+          git checkout -B agent/qtgui-equal-view-window-lifetime
+          git add src/qtgui/ColorScreenApplication.cpp src/qtgui/ColorScreenApplication.h
+          git commit -m "qtgui: make image views share document lifetime" -m "Treat the original MainWindow as one presentation of a backing image document rather than a privileged lifetime owner. Closing view 1 while secondary image views remain hides that presentation and keeps the document state alive; closing the final image view runs the normal document save/veto path and then destroys the shared image. Slanted-edge reference views do not extend image lifetime.
+
+Intercept the shared workspace close event at the application manager so it closes only presentations contained in that workspace instead of shutting down detached document/view windows. Hide the workspace shell when detaching or closing its final item, eliminating the empty menu-less primary window."
+          git push --force-with-lease origin HEAD:refs/heads/agent/qtgui-equal-view-window-lifetime
+
+  close-transport:
+    needs: publish
+    if: always() && github.head_ref == 'agent/tmp-trigger-equal-view-lifetime'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close temporary publisher PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr close "$PR_NUMBER" --repo "$GH_REPO" --comment "Published the clean equal-view lifetime feature branch; closing this transport-only PR."
