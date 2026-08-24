@@ -63,6 +63,11 @@ void CoordinateOptimizationWorker::optimize(
                     colorscreen::finetune_use_strip_widths |
                     colorscreen::finetune_produce_images;
 
+    // Coordinate refinement only needs a small local sample. Finetune's RANGE
+    // is the half-extent in periodic screen coordinates, so range 1 requests a
+    // 2x2-screen-period tile instead of the much larger coordinate-mode default.
+    fparams.range = 1;
+
     result = colorscreen::finetune(rparams, params, *m_scan, {}, nullptr, fparams,
                                    progress.get());
     success = result.success;
