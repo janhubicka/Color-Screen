@@ -104,6 +104,75 @@ freeze_focus_from_fit (render_parameters *rparam, uint64_t flags,
   return true;
 }
 
+/* Sigma and physical defocus both enter their transfer functions evenly around
+   zero.  Starting both at the constrained zero boundary therefore gives the
+   coupled simplex almost no first-order information and can select a
+   sigma/defocus compensation basin that depends on the caller's initial MTF.
+   Limit the continuation to the genuinely cold physical-model case; an
+   already calibrated nonzero model keeps the historical single joint fit.  */
+static bool
+coupled_physical_focus_cold_start_p (const render_parameters &rparam,
+                                     uint64_t flags)
+{
+  constexpr uint64_t coupled
+      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+  if ((flags & coupled) != coupled
+      || !rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
+    return false;
+
+  const coord_t sigma = rparam.sharpen.scanner_mtf.sigma;
+  const coord_t defocus = rparam.sharpen.scanner_mtf.defocus;
+  constexpr coord_t cold_epsilon = (coord_t)1e-8;
+  return my_isfinite (sigma) && my_isfinite (defocus) && sigma >= 0
+         && defocus >= 0 && sigma <= cold_epsilon
+         && defocus <= cold_epsilon;
+}
+
+/* Build a physically meaningful start for a cold coupled sigma+defocus fit.
+   First let physical defocus explain the shared loss of modulation while sigma
+   is fixed, then fit sigma with that defocus fixed, and only afterwards release
+   both coordinates together.  Every stage is still one simultaneous fit of
+   all selected areas; only the two global capture coordinates are staged.  */
+static bool
+warm_coupled_physical_focus_start (
+    const render_parameters &rparam, const scr_to_img_parameters &param,
+    const image_data &img, const std::vector<point_t> &locations,
+    const std::vector<finetune_result> &starts,
+    const finetune_parameters &fparams, render_parameters *seeded_rparam,
+    progress_info *progress)
+{
+  if (!seeded_rparam
+      || !coupled_physical_focus_cold_start_p (rparam, fparams.flags))
+    return false;
+
+  *seeded_rparam = rparam;
+
+  finetune_parameters defocus_only = fparams;
+  defocus_only.flags &= ~finetune_scanner_mtf_sigma;
+  finetune_result defocus_fit
+      = finetune (*seeded_rparam, param, img, locations, &starts,
+                  defocus_only, progress);
+  if (!defocus_fit.success || !my_isfinite (defocus_fit.scanner_mtf_defocus)
+      || defocus_fit.scanner_mtf_defocus < 0)
+    return false;
+  if (!freeze_focus_from_fit (seeded_rparam, defocus_only.flags, defocus_fit))
+    return false;
+  if (progress && progress->cancelled ())
+    return false;
+
+  finetune_parameters sigma_only = fparams;
+  sigma_only.flags &= ~finetune_scanner_mtf_defocus;
+  sigma_only.interpolate_scanner_mtf_defocus = false;
+  finetune_result sigma_fit
+      = finetune (*seeded_rparam, param, img, locations, &starts, sigma_only,
+                  progress);
+  if (sigma_fit.success && my_isfinite (sigma_fit.scanner_mtf_sigma)
+      && sigma_fit.scanner_mtf_sigma >= 0)
+    freeze_focus_from_fit (seeded_rparam, sigma_only.flags, sigma_fit);
+
+  return true;
+}
+
 } // namespace
 
 bool
@@ -273,8 +342,18 @@ finetune_analyze_focus_areas (
       starts.push_back (candidates[index].fit);
     }
 
-  result->joint_fit
-      = finetune (rparam, param, img, locations, &starts, fparams, progress);
+  render_parameters joint_rparam = rparam;
+  const bool staged_cold_start = warm_coupled_physical_focus_start (
+      rparam, param, img, locations, starts, fparams, &joint_rparam, progress);
+  result->joint_fit = finetune (joint_rparam, param, img, locations, &starts,
+                                fparams, progress);
+  /* A failed staging pass must never make an otherwise valid analysis
+     impossible.  Cancellation is not a solver failure and must not trigger
+     another expensive fit.  */
+  if (!result->joint_fit.success && staged_cold_start
+      && !(progress && progress->cancelled ()))
+    result->joint_fit
+        = finetune (rparam, param, img, locations, &starts, fparams, progress);
   if (!result->joint_fit.success)
     {
       result->err = "joint focus-area fit failed";
@@ -288,6 +367,14 @@ finetune_analyze_focus_areas (
       result->success = true;
       return true;
     }
+
+  /* Leave-one-out fits are local stability checks around the all-area
+     solution, not independent global searches.  Reuse the joint capture
+     transfer as their starting point; this both avoids the cold corner and
+     saves the simplex from rediscovering the same lens state N times.  */
+  render_parameters leave_one_out_rparam = rparam;
+  freeze_focus_from_fit (&leave_one_out_rparam, fparams.flags,
+                         result->joint_fit);
 
   result->leave_one_out_fits.reserve (result->selected.size ());
   for (size_t omitted = 0; omitted < result->selected.size (); omitted++)
@@ -303,8 +390,9 @@ finetune_analyze_focus_areas (
             subset_starts.push_back (starts[i]);
           }
 
-      finetune_result fit = finetune (rparam, param, img, subset_locations,
-                                     &subset_starts, fparams, progress);
+      finetune_result fit
+          = finetune (leave_one_out_rparam, param, img, subset_locations,
+                      &subset_starts, fparams, progress);
       result->leave_one_out_fits.push_back (std::move (fit));
       if (!result->leave_one_out_fits.back ().success)
         {
