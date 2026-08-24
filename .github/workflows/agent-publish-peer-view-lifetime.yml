@@ -1,17 +1,15 @@
 name: Agent publish peer-view lifetime patch
 
 on:
-  push:
-    branches:
-      - agent/tmp-publish-peer-view-lifetime
-    paths:
-      - '.agent/READY-peer-view-lifetime'
+  pull_request:
+    branches: [ "main" ]
 
 permissions:
   contents: write
 
 jobs:
   publish:
+    if: github.head_ref == 'agent/tmp-publish-peer-view-lifetime'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +44,3 @@ jobs:
             src/qtgui/main.cpp
           git commit -m "qtgui: make image views peer windows"
           git push origin "HEAD:refs/heads/$TARGET_BRANCH"
-
-      - name: Remove temporary publisher branch
-        if: success()
-        run: git push origin --delete agent/tmp-publish-peer-view-lifetime || true
