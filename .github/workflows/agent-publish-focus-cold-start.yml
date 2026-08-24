@@ -1,0 +1,317 @@
+name: Publish focus-area cold-start follow-up
+
+on:
+  pull_request:
+    branches:
+      - agent/tmp-focus-cold-start-base
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-focus-cold-start-publisher'
+    runs-on: ubuntu-24.04
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/focus-area-cold-start
+          fetch-depth: 0
+
+      - name: Verify base and apply patch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          expected=ef036dcd9b93aeb48a97d5dba64f5aa39140c24e
+          test "$(git rev-parse HEAD)" = "$expected"
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one match, found {count}")
+              return text.replace(old, new, 1)
+
+          # Library: stage a cold physical sigma+defocus fit so the coupled
+          # simplex does not start at the flat constrained (0,0) corner.
+          path = Path('src/libcolorscreen/focus-analysis.C')
+          text = path.read_text()
+          old = '''  return true;\n}\n\n} // namespace\n\nbool\nfinetune_find_focus_area_candidates_in_image (\n'''
+          new = '''  return true;\n}\n\n/* Sigma and physical defocus both enter their transfer functions evenly around\n   zero.  Starting both at the constrained zero boundary therefore gives the\n   coupled simplex almost no first-order information and can select a\n   sigma/defocus compensation basin that depends on the caller's initial MTF.\n   Limit the continuation to the genuinely cold physical-model case; an\n   already calibrated nonzero model keeps the historical single joint fit.  */\nstatic bool\ncoupled_physical_focus_cold_start_p (const render_parameters &rparam,\n                                     uint64_t flags)\n{\n  constexpr uint64_t coupled\n      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;\n  if ((flags & coupled) != coupled\n      || !rparam.sharpen.scanner_mtf.simulate_diffraction_p ())\n    return false;\n\n  const coord_t sigma = rparam.sharpen.scanner_mtf.sigma;\n  const coord_t defocus = rparam.sharpen.scanner_mtf.defocus;\n  constexpr coord_t cold_epsilon = (coord_t)1e-8;\n  return my_isfinite (sigma) && my_isfinite (defocus) && sigma >= 0\n         && defocus >= 0 && sigma <= cold_epsilon\n         && defocus <= cold_epsilon;\n}\n\n/* Build a physically meaningful start for a cold coupled sigma+defocus fit.\n   First let physical defocus explain the shared loss of modulation while sigma\n   is fixed, then fit sigma with that defocus fixed, and only afterwards release\n   both coordinates together.  Every stage is still one simultaneous fit of\n   all selected areas; only the two global capture coordinates are staged.  */\nstatic bool\nwarm_coupled_physical_focus_start (\n    const render_parameters &rparam, const scr_to_img_parameters &param,\n    const image_data &img, const std::vector<point_t> &locations,\n    const std::vector<finetune_result> &starts,\n    const finetune_parameters &fparams, render_parameters *seeded_rparam,\n    progress_info *progress)\n{\n  if (!seeded_rparam\n      || !coupled_physical_focus_cold_start_p (rparam, fparams.flags))\n    return false;\n\n  *seeded_rparam = rparam;\n\n  finetune_parameters defocus_only = fparams;\n  defocus_only.flags &= ~finetune_scanner_mtf_sigma;\n  finetune_result defocus_fit\n      = finetune (*seeded_rparam, param, img, locations, &starts,\n                  defocus_only, progress);\n  if (!defocus_fit.success || !my_isfinite (defocus_fit.scanner_mtf_defocus)\n      || defocus_fit.scanner_mtf_defocus < 0)\n    return false;\n  if (!freeze_focus_from_fit (seeded_rparam, defocus_only.flags, defocus_fit))\n    return false;\n  if (progress && progress->cancelled ())\n    return false;\n\n  finetune_parameters sigma_only = fparams;\n  sigma_only.flags &= ~finetune_scanner_mtf_defocus;\n  sigma_only.interpolate_scanner_mtf_defocus = false;\n  finetune_result sigma_fit\n      = finetune (*seeded_rparam, param, img, locations, &starts, sigma_only,\n                  progress);\n  if (sigma_fit.success && my_isfinite (sigma_fit.scanner_mtf_sigma)\n      && sigma_fit.scanner_mtf_sigma >= 0)\n    freeze_focus_from_fit (seeded_rparam, sigma_only.flags, sigma_fit);\n\n  return true;\n}\n\n} // namespace\n\nbool\nfinetune_find_focus_area_candidates_in_image (\n'''
+          text = replace_once(text, old, new, 'insert cold-start helpers')
+
+          old = '''  result->joint_fit\n      = finetune (rparam, param, img, locations, &starts, fparams, progress);\n  if (!result->joint_fit.success)\n'''
+          new = '''  render_parameters joint_rparam = rparam;\n  const bool staged_cold_start = warm_coupled_physical_focus_start (\n      rparam, param, img, locations, starts, fparams, &joint_rparam, progress);\n  result->joint_fit = finetune (joint_rparam, param, img, locations, &starts,\n                                fparams, progress);\n  /* A failed staging pass must never make an otherwise valid analysis\n     impossible.  Cancellation is not a solver failure and must not trigger\n     another expensive fit.  */\n  if (!result->joint_fit.success && staged_cold_start\n      && !(progress && progress->cancelled ()))\n    result->joint_fit\n        = finetune (rparam, param, img, locations, &starts, fparams, progress);\n  if (!result->joint_fit.success)\n'''
+          text = replace_once(text, old, new, 'replace joint fit')
+
+          old = '''  result->leave_one_out_fits.reserve (result->selected.size ());\n  for (size_t omitted = 0; omitted < result->selected.size (); omitted++)\n'''
+          new = '''  /* Leave-one-out fits are local stability checks around the all-area\n     solution, not independent global searches.  Reuse the joint capture\n     transfer as their starting point; this both avoids the cold corner and\n     saves the simplex from rediscovering the same lens state N times.  */\n  render_parameters leave_one_out_rparam = rparam;\n  freeze_focus_from_fit (&leave_one_out_rparam, fparams.flags,\n                         result->joint_fit);\n\n  result->leave_one_out_fits.reserve (result->selected.size ());\n  for (size_t omitted = 0; omitted < result->selected.size (); omitted++)\n'''
+          text = replace_once(text, old, new, 'insert leave-one-out warm start')
+
+          old = '''      finetune_result fit = finetune (rparam, param, img, subset_locations,\n                                     &subset_starts, fparams, progress);\n'''
+          new = '''      finetune_result fit\n          = finetune (leave_one_out_rparam, param, img, subset_locations,\n                      &subset_starts, fparams, progress);\n'''
+          text = replace_once(text, old, new, 'warm leave-one-out fits')
+          path.write_text(text)
+
+          # Qt: candidate verification should establish local phase, quality,
+          # and primary intensities.  Do not recalibrate global lens blur once
+          # per candidate; restore those flags only for the selected joint fit.
+          path = Path('src/qtgui/MainWindow.cpp')
+          text = path.read_text()
+          old = '''        colorscreen::finetune_parameters local;\n        local.range = 4;\n        local.ignore_outliers = 0;\n        local.flags = flags | colorscreen::finetune_position;\n'''
+          new = '''        const uint64_t sharedFocusFlags\n            = colorscreen::finetune_screen_blur\n              | colorscreen::finetune_screen_channel_blurs\n              | colorscreen::finetune_scanner_mtf_sigma\n              | colorscreen::finetune_scanner_mtf_defocus\n              | colorscreen::finetune_scanner_mtf_channel_defocus;\n        colorscreen::finetune_parameters local;\n        local.range = 4;\n        local.ignore_outliers = 0;\n        /* Candidate verification determines local registration, fit quality\n           and primary intensities.  Capture blur is shared by the whole scan\n           and is deliberately left fixed until the selected multi-area fit. */\n        local.flags = (flags & ~sharedFocusFlags)\n                      | colorscreen::finetune_position;\n'''
+          text = replace_once(text, old, new, 'fix candidate verification flags')
+
+          old = '''        colorscreen::finetune_parameters joint = local;\n        joint.flags |= colorscreen::finetune_no_normalize\n'''
+          new = '''        colorscreen::finetune_parameters joint = local;\n        joint.flags |= flags & sharedFocusFlags;\n        joint.flags |= colorscreen::finetune_no_normalize\n'''
+          text = replace_once(text, old, new, 'restore joint focus flags')
+          path.write_text(text)
+
+          # Focused regression: a synthetic monochrome Paget scan generated
+          # with the Hurley physical metadata must converge to essentially the
+          # same coupled sigma/defocus solution from a zero model and from a
+          # warm model near the truth.
+          path = Path('src/libcolorscreen/focus-analysis-unittests.C')
+          text = path.read_text()
+          anchor = '''static bool\ntest_grayscale_image_search ()\n'''
+          test_code = r'''static bool
+build_physical_bw_focus_fixture (
+    image_data *image, scr_to_img_parameters *geometry,
+    std::vector<finetune_focus_area_candidate> *candidates,
+    coord_t true_sigma, coord_t true_defocus)
+{
+  constexpr int width = 192;
+  constexpr int height = 64;
+  constexpr int regions = 3;
+  const rgbdata truth[regions]
+      = { { 0.80, 0.12, 0.08 }, { 0.10, 0.75, 0.20 },
+          { 0.10, 0.12, 0.80 } };
+  const point_t locations[regions]
+      = { { 32, 32 }, { 96, 32 }, { 160, 32 } };
+
+  if (!image->set_dimensions (width, height, false, true))
+    return false;
+  geometry->type = Paget;
+  geometry->center = { 0, 0 };
+  geometry->coordinate1 = { 8, 0 };
+  geometry->coordinate2 = { 0, 8 };
+  scr_to_img map;
+  if (!map.set_parameters (*geometry, *image))
+    return false;
+  const coord_t pixel_size = map.pixel_size ({ 0, 0, width, height });
+  if (!(pixel_size > 0))
+    return false;
+
+  screen source, filtered;
+  source.initialize (geometry->type);
+  sharpen_parameters transfer;
+  transfer.mode = sharpen_parameters::blur_deconvolution;
+  transfer.scanner_mtf_scale = pixel_size;
+  transfer.scanner_mtf.model = mtf_model::physical_diffraction;
+  transfer.scanner_mtf.scan_dpi = 1887;
+  transfer.scanner_mtf.f_stop = 8;
+  transfer.scanner_mtf.wavelength = 750;
+  transfer.scanner_mtf.pixel_pitch = 3.760;
+  transfer.scanner_mtf.sensor_fill_factor = 0;
+  transfer.scanner_mtf.sigma = true_sigma;
+  transfer.scanner_mtf.defocus = true_defocus;
+  sharpen_parameters *channels[3] = { &transfer, &transfer, &transfer };
+  if (!filtered.initialize_with_sharpen_parameters (
+          source, channels, false, false))
+    return false;
+
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      {
+        const int tileid = std::min (x / (width / regions), regions - 1);
+        const rgbdata screen_value = filtered.interpolated_mult (
+            map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 }));
+        luminosity_t value
+            = screen_value.red * truth[tileid].red
+              + screen_value.green * truth[tileid].green
+              + screen_value.blue * truth[tileid].blue;
+        value = std::clamp (value, (luminosity_t)0, (luminosity_t)1);
+        image->put_pixel (
+            x, y, (image_data::gray)(value * 65535 + (luminosity_t)0.5));
+      }
+
+  candidates->clear ();
+  for (int tileid = 0; tileid < regions; tileid++)
+    {
+      finetune_focus_area_candidate candidate;
+      candidate.center = locations[tileid];
+      candidate.mean_color = { 0.4, 0.4, 0.4 };
+      candidate.search_score = tileid;
+      candidate.fit.success = true;
+      candidate.fit.badness = (coord_t)0.01;
+      candidate.fit.contrast = (coord_t)0.2;
+      candidate.fit.color = truth[tileid];
+      candidate.fit.screen_coord_adjust = { 0, 0 };
+      candidate.fit.emulsion_coord_adjust = { 0, 0 };
+      candidates->push_back (candidate);
+    }
+  return true;
+}
+
+static bool
+test_physical_cold_start_agrees_with_warm_start ()
+{
+  constexpr coord_t true_sigma = (coord_t)0.45;
+  constexpr coord_t true_defocus = (coord_t)0.18;
+  image_data image;
+  scr_to_img_parameters geometry;
+  std::vector<finetune_focus_area_candidate> candidates;
+  if (!build_physical_bw_focus_fixture (&image, &geometry, &candidates,
+                                        true_sigma, true_defocus))
+    return false;
+
+  render_parameters cold;
+  cold.gamma = 1;
+  cold.sharpen.mode = sharpen_parameters::blur_deconvolution;
+  cold.sharpen.scanner_mtf_scale = 1;
+  cold.sharpen.scanner_mtf.model = mtf_model::physical_diffraction;
+  cold.sharpen.scanner_mtf.scan_dpi = 1887;
+  cold.sharpen.scanner_mtf.f_stop = 8;
+  cold.sharpen.scanner_mtf.wavelength = 750;
+  cold.sharpen.scanner_mtf.pixel_pitch = 3.760;
+  cold.sharpen.scanner_mtf.sensor_fill_factor = 0;
+  cold.sharpen.scanner_mtf.sigma = 0;
+  cold.sharpen.scanner_mtf.defocus = 0;
+
+  finetune_parameters fparam;
+  fparam.range = 2;
+  fparam.ignore_outliers = 0;
+  fparam.flags = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus
+                 | finetune_bw | finetune_no_normalize
+                 | finetune_no_data_collection;
+  finetune_focus_analysis_parameters analysis;
+  analysis.selection.min_areas = 3;
+  analysis.selection.max_areas = 3;
+  analysis.selection.minimum_color_volume = 0;
+  analysis.leave_one_out = false;
+  analysis.held_out = false;
+
+  finetune_focus_analysis_result cold_result;
+  if (!finetune_analyze_focus_areas (cold, geometry, image, candidates,
+                                     fparam, analysis, &cold_result, nullptr))
+    {
+      fprintf (stderr, "Physical cold-start focus analysis failed: %s\n",
+               cold_result.err.c_str ());
+      return false;
+    }
+
+  render_parameters warm = cold;
+  warm.sharpen.scanner_mtf.sigma = true_sigma;
+  warm.sharpen.scanner_mtf.defocus = true_defocus;
+  finetune_focus_analysis_result warm_result;
+  if (!finetune_analyze_focus_areas (warm, geometry, image, candidates,
+                                     fparam, analysis, &warm_result, nullptr))
+    {
+      fprintf (stderr, "Physical warm-start focus analysis failed: %s\n",
+               warm_result.err.c_str ());
+      return false;
+    }
+
+  const coord_t sigma_delta
+      = std::fabs (cold_result.joint_fit.scanner_mtf_sigma
+                   - warm_result.joint_fit.scanner_mtf_sigma);
+  const coord_t defocus_delta
+      = std::fabs (cold_result.joint_fit.scanner_mtf_defocus
+                   - warm_result.joint_fit.scanner_mtf_defocus);
+  printf ("physical focus cold %.6f/%.6f warm %.6f/%.6f truth %.6f/%.6f\n",
+          (double)cold_result.joint_fit.scanner_mtf_sigma,
+          (double)cold_result.joint_fit.scanner_mtf_defocus,
+          (double)warm_result.joint_fit.scanner_mtf_sigma,
+          (double)warm_result.joint_fit.scanner_mtf_defocus,
+          (double)true_sigma, (double)true_defocus);
+  if (!std::isfinite ((double)sigma_delta)
+      || !std::isfinite ((double)defocus_delta)
+      || sigma_delta > (coord_t)0.20 || defocus_delta > (coord_t)0.06)
+    {
+      fprintf (stderr,
+               "Physical focus solution still depends on initialization: "
+               "sigma delta %.9g defocus delta %.9g\n",
+               (double)sigma_delta, (double)defocus_delta);
+      return false;
+    }
+  return true;
+}
+
+'''
+          text = replace_once(text, anchor, test_code + anchor,
+                              'insert physical cold-start regression')
+          old = '''      || !test_bw_multitile_focus ()\n      || !test_grayscale_image_search ())\n'''
+          new = '''      || !test_bw_multitile_focus ()\n      || !test_physical_cold_start_agrees_with_warm_start ()\n      || !test_grayscale_image_search ())\n'''
+          text = replace_once(text, old, new, 'register cold-start regression')
+          path.write_text(text)
+
+          # Document the staged physical initialization and the cheaper
+          # candidate-verification contract.
+          path = Path('doc/focus-area-analysis.md')
+          text = path.read_text()
+          anchor = '''## Qt workflow\n'''
+          section = '''## Cold-start physical MTF fitting\n\nA coupled physical-MTF fit normally optimizes one global residual Gaussian\n`sigma` and one global image-plane `defocus` together with the local area\nparameters.  Both transfer coordinates are even around zero, so starting both\nat exactly zero puts Nelder--Mead at a constrained corner with little\nfirst-order information.  On real scans this can make the result depend much\nmore strongly than it should on whether a slanted-edge calibration was loaded\nfirst.\n\nWhen both physical `sigma` and `defocus` are requested and both current values\nare essentially zero, focus-area analysis now uses a continuation start:\n\n1. fit all selected areas jointly with defocus free and sigma fixed;\n2. keep that defocus fixed and fit sigma across the same selected areas;\n3. use those two values only as the starting point for the normal full joint\n   sigma+defocus fit.\n\nThis does not fix either parameter in the reported solution and does not alter\nan already calibrated nonzero model.  Leave-one-out fits start from the final\nall-area capture transfer rather than restarting from the project defaults.\n\nCandidate verification is intentionally cheaper than the selected-area solve.\nIt fits local registration, quality and primary intensities while keeping the\nglobal capture-blur coordinates fixed.  Sigma/defocus (or another requested\nshared blur family) are restored only for the joint fit of the selected areas.\nBesides avoiding many redundant lens optimizations, this prevents noisy\none-area blur estimates from becoming part of area selection.\n\n'''
+          text = replace_once(text, anchor, section + anchor,
+                              'document cold-start continuation')
+          path.write_text(text)
+          PY
+          git diff --check
+          test "$(git diff --name-only | sort)" = $'doc/focus-area-analysis.md\nsrc/libcolorscreen/focus-analysis-unittests.C\nsrc/libcolorscreen/focus-analysis.C\nsrc/qtgui/MainWindow.cpp'
+          grep -q 'warm_coupled_physical_focus_start' src/libcolorscreen/focus-analysis.C
+          grep -q 'test_physical_cold_start_agrees_with_warm_start' src/libcolorscreen/focus-analysis-unittests.C
+          grep -q 'flags & ~sharedFocusFlags' src/qtgui/MainWindow.cpp
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev liblcms2-dev libgtk2.0-dev libfftw3-dev qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev libexiv2-dev build-essential libopenjp2-7-dev libpng-dev
+
+      - name: Configure and build
+        run: |
+          CXXFLAGS='-O2' CFLAGS='-O2' ./configure --enable-checking --enable-qtgui
+          make -j2
+
+      - name: Run focused regression
+        run: ./src/libcolorscreen/focus-analysis-unittests
+
+      - name: Commit and publish
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git diff --check
+          git add -- doc/focus-area-analysis.md \
+            src/libcolorscreen/focus-analysis.C \
+            src/libcolorscreen/focus-analysis-unittests.C \
+            src/qtgui/MainWindow.cpp
+          git diff --cached --check
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git commit -F - <<'EOF'
+          focus: stabilize cold sigma/defocus area fits
+
+          A physical focus-area analysis that starts with both residual sigma
+          and defocus at zero sits at a constrained flat corner: both transfer
+          coordinates are even around zero.  Stage that specific cold start by
+          fitting shared defocus first, then shared sigma, before releasing both
+          in the normal all-area joint fit.  Existing nonzero MTF calibrations
+          keep the historical direct joint path.
+
+          Warm leave-one-out fits from the all-area capture transfer instead of
+          rediscovering the same lens state from project defaults.
+
+          Candidate verification now keeps global capture blur fixed and fits
+          only the local registration/quality/primary information needed for
+          selection; the requested blur coordinates are restored for the
+          selected joint solve.  This removes many redundant one-area lens fits.
+
+          Add a physical Paget BW regression with Hurley capture metadata that
+          compares zero-model and warm-model initialization of the coupled
+          sigma/defocus solution.
+          EOF
+          git push origin HEAD:refs/heads/agent/focus-area-cold-start
