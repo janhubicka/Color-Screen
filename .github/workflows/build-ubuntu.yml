@@ -39,10 +39,11 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+          exe=src/colorscreen/colorscreen
           mkdir -p /tmp/focus-cli/lib
-          cp src/colorscreen/.libs/colorscreen /tmp/focus-cli/colorscreen.bin
-          ldd src/colorscreen/.libs/colorscreen | tee /tmp/focus-cli/ldd.txt
-          ldd src/colorscreen/.libs/colorscreen | awk '/=> \/|^\// {for(i=1;i<=NF;i++) if ($i ~ /^\//) print $i}' | sort -u >/tmp/libs.txt
+          cp "$exe" /tmp/focus-cli/colorscreen.bin
+          ldd "$exe" | tee /tmp/focus-cli/ldd.txt
+          ldd "$exe" | awk '/=> \/|^\// {for(i=1;i<=NF;i++) if ($i ~ /^\//) print $i}' | sort -u >/tmp/libs.txt
           while read -r lib; do
             base=$(basename "$lib")
             case "$base" in
@@ -50,7 +51,6 @@ jobs:
             esac
             cp -L "$lib" "/tmp/focus-cli/lib/$base"
           done </tmp/libs.txt
-          cp -L src/libcolorscreen/.libs/libcolorscreen.so.0 /tmp/focus-cli/lib/ || true
           cat >/tmp/focus-cli/colorscreen <<'EOF'
           #!/bin/sh
           here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
