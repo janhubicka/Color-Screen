@@ -2,7 +2,7 @@ diff --git a/src/qtgui/MainWindow.cpp b/src/qtgui/MainWindow.cpp
 index f5276be..0000000 100644
 --- a/src/qtgui/MainWindow.cpp
 +++ b/src/qtgui/MainWindow.cpp
-@@ -442,6 +442,14 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
+@@ -442,5 +442,13 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
     dock widgets that may hold detached chart views.  */
  MainWindow::~MainWindow() {
 +  // QObject-owned children are destroyed by QWidget/QObject only after this
