@@ -71,6 +71,31 @@ No universal numerical acceptance threshold is imposed: physical defocus,
 empirical blur diameter, residual sigma, and legacy screen blur have different
 units, and useful residual thresholds still need calibration on real scans.
 
+## Cold-start physical MTF fitting
+
+A coupled physical-MTF fit normally optimizes one global residual Gaussian
+`sigma` and one global image-plane `defocus` together with the local area
+parameters.  Both transfer coordinates are even around zero, so starting both
+at exactly zero puts Nelder--Mead at a constrained corner with little
+first-order information.  On real scans this can make the result depend much
+more strongly than it should on whether a slanted-edge calibration was loaded
+first.
+
+When both physical `sigma` and `defocus` are requested and both current values
+are essentially zero, focus-area analysis now uses a continuation start:
+
+1. fit all selected areas jointly with defocus free and sigma fixed;
+2. keep that defocus fixed and fit sigma across the same selected areas;
+3. use those two values only as the starting point for the normal full joint
+   sigma+defocus fit.
+
+This does not fix either parameter in the reported solution and does not alter
+an already calibrated nonzero model.  Leave-one-out fits start from the final
+all-area capture transfer rather than restarting from the project defaults.
+The regression suite also constructs a monochrome Paget scan using the Hurley
+physical capture metadata and checks that cold and already-warm initialization
+converge to the same sigma/defocus neighbourhood.
+
 ## Qt workflow
 
 The Sharpness panel exposes **Find focus analysis areas** and **Analyze
