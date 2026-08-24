@@ -1,1 +1,2 @@
 Trigger the temporary close-window lifetime publisher.
+Retry after fixing the patch hunk.
