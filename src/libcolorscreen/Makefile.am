@@ -23,8 +23,8 @@ focus_analysis_unittests_CXXFLAGS = -DLIBCOLORSCREEN
 focus_analysis_unittests_LDADD = libcolorscreen.la
 focus_analysis_unittests_SOURCES = focus-analysis-unittests.C
 
-check-local: focus-analysis-unittests
-	./focus-analysis-unittests
+check-local: focus-analysis-unittests$(EXEEXT)
+	./focus-analysis-unittests$(EXEEXT)
 
 # The unit-test executable writes these images in its own build directory.
 # They are not managed by Automake's test driver, so declare them explicitly.
