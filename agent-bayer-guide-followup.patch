@@ -1,8 +1,8 @@
 diff --git a/src/qtgui/MainWindow.cpp b/src/qtgui/MainWindow.cpp
-index 4e474bf..0000000 100644
 --- a/src/qtgui/MainWindow.cpp
 +++ b/src/qtgui/MainWindow.cpp
-@@ -150,48 +150,28 @@ ColorScreenApplication *documentApplication() {
+@@ -150,43 +150,27 @@
+     changing the load/reload orchestration. */
  class InitialSetupGuideDialog final : public QDialog {
  public:
 -  InitialSetupGuideDialog(const colorscreen::monochrome_bayer_analysis &analysis,
@@ -44,9 +44,6 @@ index 4e474bf..0000000 100644
 -    details->setWordWrap(true);
 -    layout->addWidget(details);
 -
-+    /* QDialogButtonBox::Apply has ApplyRole and therefore does not emit
-+       accepted().  Use an accept-role button so clicking Apply and reload both
-+       closes the dialog and continues with the image reload. */
      auto *buttons = new QDialogButtonBox(
 -        QDialogButtonBox::Apply | QDialogButtonBox::Cancel, this);
 -    buttons->button(QDialogButtonBox::Apply)->setText(tr("Apply and reload"));
@@ -55,7 +52,7 @@ index 4e474bf..0000000 100644
      buttons->button(QDialogButtonBox::Cancel)->setText(tr("Not now"));
      connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
      connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-@@ -3020,7 +3000,7 @@ void MainWindow::maybeOfferInitialSetupGuide(
+@@ -3015,7 +2999,7 @@ void MainWindow::maybeOfferInitialSetupGuide(
            colorscreen::image_data::demosaic_monochromatic_bayer_corrected)
      return;
  
