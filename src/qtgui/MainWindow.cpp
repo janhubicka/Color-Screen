@@ -3771,29 +3771,7 @@ void MainWindow::saveInteractionMode() {
 // started. This handles both setting the ImageWidget mode and updating the
 // checked state of the corresponding toolbar actions.
 void MainWindow::restoreInteractionMode() {
-  if (m_previousInteractionMode == ImageWidget::PanMode) {
-    if (m_panAction)
-      m_panAction->setChecked(true);
-    else
-      inspectorImageWidget()->setInteractionMode(ImageWidget::PanMode);
-  } else if (m_previousInteractionMode == ImageWidget::SelectMode) {
-    if (m_selectAction)
-      m_selectAction->setChecked(true);
-    else
-      inspectorImageWidget()->setInteractionMode(ImageWidget::SelectMode);
-  } else if (m_previousInteractionMode == ImageWidget::AddPointMode) {
-    if (m_addPointAction)
-      m_addPointAction->setChecked(true);
-    else
-      inspectorImageWidget()->setInteractionMode(ImageWidget::AddPointMode);
-  } else if (m_previousInteractionMode == ImageWidget::SetCenterMode) {
-    if (m_setCenterAction)
-      m_setCenterAction->setChecked(true);
-    else
-      inspectorImageWidget()->setInteractionMode(ImageWidget::SetCenterMode);
-  } else {
-    inspectorImageWidget()->setInteractionMode(m_previousInteractionMode);
-  }
+  inspectorImageWidget()->setInteractionMode(m_previousInteractionMode);
 }
 
 
