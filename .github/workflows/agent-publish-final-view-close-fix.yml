@@ -4,12 +4,17 @@ on:
   push:
     branches:
       - agent/tmp-publish-final-view-close-fix
+  pull_request:
+    types: [opened, reopened, synchronize]
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
   publish:
+    if: github.head_ref == 'agent/tmp-publish-final-view-close-fix' || github.ref_name == 'agent/tmp-publish-final-view-close-fix'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
