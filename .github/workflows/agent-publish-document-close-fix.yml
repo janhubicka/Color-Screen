@@ -1,0 +1,55 @@
+name: Publish document-close lifetime fix
+
+on:
+  pull_request:
+    branches:
+      - agent/tmp-fix-document-close-lifetime-base
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: b4bdd9a151db3095f3bd56ed47b42104c2c76210
+          fetch-depth: 0
+
+      - name: Apply reviewed fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('src/qtgui/MainWindow.cpp')
+          s = p.read_text()
+          old = '''MainWindow::~MainWindow() {\n  // Hide window first to avoid invalid accessibility/focus events during\n'''
+          new = '''MainWindow::~MainWindow() {\n  // QUndoStack clears its commands in its destructor and emits state-change\n  // signals, including cleanChanged.  If it is left as a QObject child, that\n  // destructor runs from QObject::~QObject(), after MainWindow members such as\n  // m_scan have already been destroyed.  The cleanChanged connection can then\n  // re-enter updateWindowTitle() and read those dead members.  Destroy the undo\n  // stack now, with signals blocked, while the complete MainWindow is alive.\n  if (m_undoStack) {\n    m_undoStack->blockSignals(true);\n    delete m_undoStack;\n    m_undoStack = nullptr;\n  }\n\n  // Hide window first to avoid invalid accessibility/focus events during\n'''
+          if s.count(old) != 1:
+              raise SystemExit('MainWindow destructor context mismatch')
+          p.write_text(s.replace(old, new, 1))
+
+          p = Path('src/qtgui/main.cpp')
+          s = p.read_text()
+          old = '''      app.closeView(view);\n    });\n  }\n'''
+          new = '''      app.closeView(view);\n\n      // Also exercise destruction of one loaded document while another remains\n      // live.  MainWindow owns QUndoStack as a QObject child; its destructor\n      // must not be allowed to signal back into an already-destroyed document.\n      if (documents.size() > 1)\n        documents.back()->close();\n    });\n  }\n'''
+          if s.count(old) != 1:
+              raise SystemExit('New View smoke-test context mismatch')
+          p.write_text(s.replace(old, new, 1))
+          PY
+
+          git diff --check
+          test "$(git diff --name-only | sort)" = $'src/qtgui/MainWindow.cpp\nsrc/qtgui/main.cpp'
+          git diff -- src/qtgui/MainWindow.cpp src/qtgui/main.cpp
+
+      - name: Publish clean feature branch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B agent/qtgui-fix-document-close-lifetime
+          git add src/qtgui/MainWindow.cpp src/qtgui/main.cpp
+          git commit -m "qtgui: prevent callbacks during document teardown"
+          git push --force origin HEAD:agent/qtgui-fix-document-close-lifetime
