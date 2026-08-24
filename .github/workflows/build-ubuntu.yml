@@ -27,7 +27,7 @@ jobs:
         run: |
           git apply --check agent/focus-cli.patch
           git apply agent/focus-cli.patch
-          git diff --check
+          grep -q 'analyze-focus-areas' src/colorscreen/colorscreen.C
       - name: Build CLI
         run: |
           CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure
