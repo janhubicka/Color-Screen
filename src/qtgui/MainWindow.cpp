@@ -1320,6 +1320,8 @@ void MainWindow::setupUi() {
   sp.setRetainSizeWhenHidden(true);
   m_transientProgressRow->setSizePolicy(sp);
 
+  m_progressContainer->setMinimumHeight(m_transientProgressRow->sizeHint().height());
+
   m_transientProgressRow->hide();
   statusBar->addPermanentWidget(m_progressContainer, 1);
 
