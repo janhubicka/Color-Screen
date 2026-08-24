@@ -50,10 +50,10 @@ public:
   image_area get_range (image_area area) const noexcept;
   /* Determine rectangular section of the final coordinates to which image
      with dimensions IMG_WIDTH x IMG_HEIGHT fits.  */
-  image_area get_final_range (int img_width, int img_height) const noexcept;
+  image_area DLL_PUBLIC get_final_range (int img_width, int img_height) const noexcept;
   /* Determine rectangular section of the final coordinates to which image section
      AREA fits.  */
-  image_area get_final_range (image_area area) const noexcept;
+  image_area DLL_PUBLIC get_final_range (image_area area) const noexcept;
 
   /* Get area of image to which screen area fits.  */
   int_image_area get_img_range (int_image_area area) const noexcept;
