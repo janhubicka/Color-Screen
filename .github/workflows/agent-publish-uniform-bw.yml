@@ -33,13 +33,180 @@ jobs:
           cd repo
           expected=ecdcf51cdfee1e42a18a937092c8c67680b7c8ab
           test "$(git rev-parse HEAD)" = "$expected"
-          cat ../transport/agent/focus-area-followup.patch.* > /tmp/focus-area-followup.patch
-          git apply --check /tmp/focus-area-followup.patch
-          git apply /tmp/focus-area-followup.patch
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/qtgui/MainWindow.cpp')
+          text = path.read_text()
+
+          def replace_once(old, new):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one replacement, found {count}: {old[:80]!r}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+          '''ColorScreenApplication *documentApplication() {
+            return dynamic_cast<ColorScreenApplication *>(QCoreApplication::instance());
+          }
+
+          } // namespace
+          ''',
+          '''ColorScreenApplication *documentApplication() {
+            return dynamic_cast<ColorScreenApplication *>(QCoreApplication::instance());
+          }
+
+          /** Choose the scalar/BW focus model for scans that have no native RGB data,
+              and for RGB files that merely store one monochrome scanner signal in
+              three gain-scaled channels.  Test raw scan chromaticity rather than the
+              reconstructed image layer: a monochrome additive-screen scan can still
+              reconstruct strongly coloured scene areas, which are exactly the areas
+              whose independent primary intensities we want for focus analysis. */
+          bool focusAnalysisUsesMonochromeInput(const colorscreen::image_data &scan) {
+            if (!scan.has_rgb())
+              return scan.has_grayscale_or_ir();
+            if (scan.width <= 0 || scan.height <= 0)
+              return false;
+
+            const int xStep = std::max(1, scan.width / 32);
+            const int yStep = std::max(1, scan.height / 32);
+            const double darkThreshold
+                = static_cast<double>(std::max(1, scan.maxval)) * 0.02;
+            long double sumR = 0;
+            long double sumG = 0;
+            long double sumR2 = 0;
+            long double sumG2 = 0;
+            size_t samples = 0;
+            for (int y = yStep / 2; y < scan.height; y += yStep)
+              for (int x = xStep / 2; x < scan.width; x += xStep) {
+                const colorscreen::image_data::pixel pixel = scan.get_rgb_pixel(x, y);
+                const double total = static_cast<double>(pixel.r) + pixel.g + pixel.b;
+                if (total <= 3 * darkThreshold)
+                  continue;
+                const long double r = pixel.r / total;
+                const long double g = pixel.g / total;
+                sumR += r;
+                sumG += g;
+                sumR2 += r * r;
+                sumG2 += g * g;
+                ++samples;
+              }
+            if (samples < 32)
+              return false;
+            const long double meanR = sumR / samples;
+            const long double meanG = sumG / samples;
+            const long double variance
+                = std::max((long double)0, sumR2 / samples - meanR * meanR)
+                  + std::max((long double)0, sumG2 / samples - meanG * meanG);
+            return variance < (long double)5e-5;
+          }
+
+          } // namespace
+          ''')
+
+          replace_once(
+          '''/** Find locally uniform RGB areas on an unadjusted interpolated reconstruction.
+              The complete render/search pass runs outside the GUI thread and stores its
+              result only in this MainWindow, preserving the document boundary. */
+          void MainWindow::onFindFocusAreasRequested() {
+            if (!m_scan || m_focusAreaAnalysisRunning)
+              return;
+            if (!m_scan->has_rgb()) {
+              QMessageBox::warning(this, tr("Focus analysis areas"),
+                                   tr("Automatic focus-area discovery requires RGB input."));
+              return;
+            }
+
+            m_focusAreaAnalysisRunning = true;
+          ''',
+          '''/** Find locally uniform areas on an unadjusted interpolated reconstruction.
+              The complete render/search pass runs outside the GUI thread and stores its
+              result only in this MainWindow, preserving the document boundary. */
+          void MainWindow::onFindFocusAreasRequested() {
+            if (!m_scan || m_focusAreaAnalysisRunning)
+              return;
+
+            m_focusAreaAnalysisRunning = true;
+          ''')
+
+          replace_once(
+          '''  const std::shared_ptr<colorscreen::image_data> scan = m_scan;
+            const std::vector<colorscreen::finetune_focus_area_candidate> candidates
+                = m_focusAreaCandidates;
+            auto *watcher = new QFutureWatcher<FocusAreaAnalyzeTaskResult>(this);
+          ''',
+          '''  const std::shared_ptr<colorscreen::image_data> scan = m_scan;
+            const std::vector<colorscreen::finetune_focus_area_candidate> candidates
+                = m_focusAreaCandidates;
+            const bool useMonochrome = focusAnalysisUsesMonochromeInput(*scan);
+            auto *watcher = new QFutureWatcher<FocusAreaAnalyzeTaskResult>(this);
+          ''')
+
+          replace_once(
+          '''  watcher->setFuture(QtConcurrent::run(
+                [rparams, geometry, scan, candidates, progress, flags]() mutable {
+          ''',
+          '''  watcher->setFuture(QtConcurrent::run(
+                [rparams, geometry, scan, candidates, progress, flags,
+                 useMonochrome]() mutable {
+          ''')
+
+          replace_once(
+          '''        local.range = 4;
+                  local.ignore_outliers = 0;
+                  local.flags = flags | colorscreen::finetune_position;
+                  for (auto &candidate : result.candidates) {
+          ''',
+          '''        local.range = 4;
+                  local.ignore_outliers = 0;
+                  local.flags = flags | colorscreen::finetune_position;
+                  if (useMonochrome)
+                    local.flags |= colorscreen::finetune_bw
+                        | colorscreen::finetune_no_normalize
+                        | colorscreen::finetune_no_data_collection;
+                  for (auto &candidate : result.candidates) {
+          ''')
+
+          replace_once(
+          '''        colorscreen::finetune_parameters joint = local;
+                  joint.flags |= colorscreen::finetune_uniform_image_layer
+                      | colorscreen::finetune_no_normalize
+                      | colorscreen::finetune_no_data_collection;
+                  colorscreen::finetune_focus_analysis_parameters analysisParameters;
+                  analysisParameters.selection.min_areas = 3;
+                  analysisParameters.selection.max_areas = 8;
+                  analysisParameters.leave_one_out = true;
+                  analysisParameters.held_out = true;
+          ''',
+          '''        colorscreen::finetune_parameters joint = local;
+                  joint.flags |= colorscreen::finetune_no_normalize
+                      | colorscreen::finetune_no_data_collection;
+                  if (!useMonochrome)
+                    joint.flags |= colorscreen::finetune_uniform_image_layer;
+                  colorscreen::finetune_focus_analysis_parameters analysisParameters;
+                  analysisParameters.selection.min_areas = 3;
+                  analysisParameters.selection.max_areas = 8;
+                  /* Full RGB rank is required to learn shared RGB screen-primary
+                     responses, but it is not an identifiability condition for BW: each
+                     BW area has its own three primary weights and only blur is shared.
+                     Keep D-optimal ordering, but do not reject the best BW subset solely
+                     because its cross-area colour Gram matrix is rank deficient. */
+                  if (useMonochrome)
+                    analysisParameters.selection.minimum_color_volume = 0;
+                  analysisParameters.leave_one_out = true;
+                  /* Frozen RGB-primary held-out validation belongs to the RGB uniform
+                     image-layer model.  BW still gets full leave-one-out stability. */
+                  analysisParameters.held_out = !useMonochrome;
+          ''')
+
+          path.write_text(text)
+          PY
           git diff --check
           test "$(git diff --name-only)" = 'src/qtgui/MainWindow.cpp'
           grep -q 'focusAnalysisUsesMonochromeInput' src/qtgui/MainWindow.cpp
           grep -q 'local.flags |= colorscreen::finetune_bw' src/qtgui/MainWindow.cpp
+          grep -q 'minimum_color_volume = 0' src/qtgui/MainWindow.cpp
           grep -q 'analysisParameters.held_out = !useMonochrome' src/qtgui/MainWindow.cpp
           ! grep -q 'Automatic focus-area discovery requires RGB input' src/qtgui/MainWindow.cpp
           git add -- src/qtgui/MainWindow.cpp
@@ -54,15 +221,16 @@ jobs:
           grayscale/IR scans.
 
           Route genuine monochrome input through finetune_bw for both the
-          individual verification fits and the joint multi-area fit.  Detect
-          RGB files that only contain one gain-scaled monochrome scanner signal
-          by their nearly constant raw-pixel chromaticity, so storing a BW scan
-          as RGB does not accidentally select the ill-conditioned RGB model.
+          individual verification fits and the joint multi-area fit. Detect RGB
+          files that only contain one gain-scaled monochrome scanner signal by
+          their nearly constant raw-pixel chromaticity, so storing a BW scan as
+          RGB does not accidentally select the ill-conditioned RGB model.
 
-          The BW path uses the per-area primary-intensity model added by the
-          previous follow-up and keeps leave-one-out stability validation.  Real
-          RGB scans retain the uniform-image-layer model and frozen held-out
-          validation unchanged.
+          Keep D-optimal area ordering in BW mode, but do not impose the final
+          full-RGB-rank colour-volume rejection: per-area primary intensities
+          are nuisance parameters there and only blur is shared. BW keeps
+          leave-one-out focus stability; real RGB retains the strict diversity
+          gate, uniform-image-layer model, and frozen held-out validation.
           EOF
           git push origin HEAD:refs/heads/agent/qt-focus-area-analysis
           printf 'Published %s on %s\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD^)"
