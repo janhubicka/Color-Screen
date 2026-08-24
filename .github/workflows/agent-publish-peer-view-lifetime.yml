@@ -3,6 +3,8 @@ name: Agent publish peer-view lifetime patch
 on:
   pull_request:
     branches: [ "main" ]
+    paths:
+      - '.agent/READY-peer-view-base64'
 
 permissions:
   contents: write
@@ -16,8 +18,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Assemble patch
-        run: cat .agent/peer-view.patch.* > /tmp/peer-view.patch
+      - name: Assemble exact patch bytes
+        run: cat .agent/peer-view.b64.* | base64 --decode > /tmp/peer-view.patch
 
       - name: Publish clean branch
         env:
@@ -44,3 +46,7 @@ jobs:
             src/qtgui/main.cpp
           git commit -m "qtgui: make image views peer windows"
           git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+
+      - name: Remove temporary publisher branch
+        if: success()
+        run: git push origin --delete agent/tmp-publish-peer-view-lifetime || true
