@@ -31,7 +31,8 @@ jobs:
       - name: Build CLI
         run: |
           CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure
-          make -j$(nproc) src/colorscreen/colorscreen
+          make -C src/libcolorscreen -j$(nproc)
+          make -C src/colorscreen -j$(nproc) colorscreen
           ./src/colorscreen/colorscreen --help >/tmp/colorscreen-help.txt 2>&1 || true
           grep -q 'analyze-focus-areas' /tmp/colorscreen-help.txt
       - name: Bundle executable and shared libraries
@@ -39,9 +40,9 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p /tmp/focus-cli/lib
-          cp src/colorscreen/colorscreen /tmp/focus-cli/colorscreen.bin
-          ldd src/colorscreen/colorscreen | tee /tmp/focus-cli/ldd.txt
-          ldd src/colorscreen/colorscreen | awk '/=> \/|^\// {for(i=1;i<=NF;i++) if ($i ~ /^\//) print $i}' | sort -u >/tmp/libs.txt
+          cp src/colorscreen/.libs/colorscreen /tmp/focus-cli/colorscreen.bin
+          ldd src/colorscreen/.libs/colorscreen | tee /tmp/focus-cli/ldd.txt
+          ldd src/colorscreen/.libs/colorscreen | awk '/=> \/|^\// {for(i=1;i<=NF;i++) if ($i ~ /^\//) print $i}' | sort -u >/tmp/libs.txt
           while read -r lib; do
             base=$(basename "$lib")
             case "$base" in
@@ -49,6 +50,7 @@ jobs:
             esac
             cp -L "$lib" "/tmp/focus-cli/lib/$base"
           done </tmp/libs.txt
+          cp -L src/libcolorscreen/.libs/libcolorscreen.so.0 /tmp/focus-cli/lib/ || true
           cat >/tmp/focus-cli/colorscreen <<'EOF'
           #!/bin/sh
           here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
