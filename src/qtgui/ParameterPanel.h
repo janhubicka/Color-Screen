@@ -53,7 +53,7 @@ protected:
     scale: factor to map double value to integer slider range (e.g. 100 for 0.01
     precision). decimals: precision for SpinBox.
   */
-  void addSliderParameter(
+  QWidget *addSliderParameter(
       const QString &label, double min, double max, double scale, int decimals,
       const QString &suffix, const QString &specialValueText,
       std::function<double(const ParameterState &)> getter,

@@ -170,7 +170,7 @@ void ParameterPanel::addDoubleParameter(
   }
 }
 
-void ParameterPanel::addSliderParameter(
+QWidget *ParameterPanel::addSliderParameter(
     const QString &label, double min, double max, double scale, int decimals,
     const QString &suffix, const QString &specialValueText,
     std::function<double(const ParameterState &)> getter,
@@ -328,6 +328,7 @@ void ParameterPanel::addSliderParameter(
             labelWidget->setEnabled(en);
         });
   }
+  return container;
 }
 
 QWidget* ParameterPanel::addSlider(

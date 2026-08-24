@@ -65,6 +65,10 @@ private:
     class QPushButton *m_useDetectedSensorFillBtn = nullptr;
     class QLabel *m_sensorWidthNotice = nullptr;
     class QCheckBox *m_assumeRotationBox = nullptr;
+    class QWidget *m_redWavelengthWidget = nullptr;
+    class QWidget *m_greenWavelengthWidget = nullptr;
+    class QWidget *m_blueWavelengthWidget = nullptr;
+    class QWidget *m_irWavelengthWidget = nullptr;
     class BacklightChartWidget *m_backlightWidget = nullptr;
     class QPushButton *m_cropBtn = nullptr;
 };

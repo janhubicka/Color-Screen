@@ -1106,6 +1106,7 @@ void SharpnessPanel::updateMTFChart() {
       screenFreq = colorscreen::scr_names[(int)state.scrToImg.type].frequency * pixel_size;
   }
 
+  m_mtfChart->setChannelsPresence(img ? img->has_rgb() : true, img ? img->has_grayscale_or_ir() : true);
   m_mtfChart->setMTFData(curves, canSimulateDifraction,
                          state.rparams.sharpen.scanner_mtf.scan_dpi,
                          screenFreq);

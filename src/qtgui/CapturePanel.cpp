@@ -319,7 +319,7 @@ void CapturePanel::setupUi()
     });
 
     // 17. Scanner MTF Wavelengths
-    addSliderParameter(
+    m_redWavelengthWidget = addSliderParameter(
         "Red wavelength", 380.0, 780.0, 1.0, 0, "nm", "default (600nm)",
         [](const ParameterState &s) {
           return s.rparams.sharpen.scanner_mtf.wavelengths[0];
@@ -328,7 +328,7 @@ void CapturePanel::setupUi()
           s.rparams.sharpen.scanner_mtf.wavelengths[0] = v;
         }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the red channel.");
 
-    addSliderParameter(
+    m_greenWavelengthWidget = addSliderParameter(
         "Green wavelength", 380.0, 780.0, 1.0, 0, "nm", "default (530nm)",
         [](const ParameterState &s) {
           return s.rparams.sharpen.scanner_mtf.wavelengths[1];
@@ -337,7 +337,7 @@ void CapturePanel::setupUi()
           s.rparams.sharpen.scanner_mtf.wavelengths[1] = v;
         }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the green channel.");
 
-    addSliderParameter(
+    m_blueWavelengthWidget = addSliderParameter(
         "Blue wavelength", 380.0, 780.0, 1.0, 0, "nm", "default (450nm)",
         [](const ParameterState &s) {
           return s.rparams.sharpen.scanner_mtf.wavelengths[2];
@@ -346,7 +346,7 @@ void CapturePanel::setupUi()
           s.rparams.sharpen.scanner_mtf.wavelengths[2] = v;
         }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the blue channel.");
 
-    addSliderParameter(
+    m_irWavelengthWidget = addSliderParameter(
         "IR wavelength", 700.0, 1100.0, 1.0, 0, "nm", "default (850nm)",
         [](const ParameterState &s) {
           return s.rparams.sharpen.scanner_mtf.wavelengths[3];
@@ -378,6 +378,30 @@ void CapturePanel::setupUi()
             m_useDetectedGammaBtn->setVisible(std::abs(img->gamma - state.rparams.gamma) > 0.001);
         }
         setVisibleRow(m_detectedGammaValue->parentWidget(), showGamma);
+
+        
+        // Wavelength visibility and labels
+        if (m_redWavelengthWidget) {
+            bool has_rgb = img && img->has_rgb();
+            bool has_ir = img && img->has_grayscale_or_ir();
+            
+            setVisibleRow(m_redWavelengthWidget, has_rgb);
+            setVisibleRow(m_greenWavelengthWidget, has_rgb);
+            setVisibleRow(m_blueWavelengthWidget, has_rgb);
+            
+            // If only IR/Grayscale, show the 4th slider but label it "Wavelength"
+            setVisibleRow(m_irWavelengthWidget, has_ir);
+            
+            if (has_ir && !has_rgb) {
+                if (auto lab = qobject_cast<QLabel*>(m_form->labelForField(m_irWavelengthWidget))) {
+                    lab->setText("Wavelength");
+                }
+            } else if (has_ir && has_rgb) {
+                if (auto lab = qobject_cast<QLabel*>(m_form->labelForField(m_irWavelengthWidget))) {
+                    lab->setText("IR wavelength");
+                }
+            }
+        }
 
         // 4. Image Resolution
         bool showImageRes = false;

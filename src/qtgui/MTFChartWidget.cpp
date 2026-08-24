@@ -141,13 +141,21 @@ std::vector<MTFChartWidget::LegendItem> MTFChartWidget::getLegendItems() const {
     QColor colors[4] = {Qt::red, Qt::green, Qt::blue, Qt::darkGray};
     bool added = false;
     for (int c = 0; c < 4; ++c) {
+        bool enabled = false;
+        if (c < 3) enabled = m_hasRgb;
+        if (c == 3) enabled = m_hasIr;
+        if (!enabled) continue;
+        
+        QString nameLabel = names[c];
+        if (c == 3 && !m_hasRgb) nameLabel = ""; // Just "System", "Diffraction", etc.
+        
         if (m_channelWavelengths[c] > 0) {
             added = true;
-            items.push_back({QString("Diffraction") + names[c], colors[c], 1, m_canSimulateDiffraction, &m_data[c].lens_diffraction_mtf});
-            items.push_back({QString("Lens") + names[c], colors[c], 2, true, &m_data[c].lens_mtf, nullptr, true});
-            items.push_back({QString("System") + names[c], colors[c], 4, true, &m_data[c].system_mtf});
+            items.push_back({QString("Diffraction") + nameLabel, colors[c], 1, m_canSimulateDiffraction, &m_data[c].lens_diffraction_mtf});
+            items.push_back({QString("Lens") + nameLabel, colors[c], 2, true, &m_data[c].lens_mtf, nullptr, true});
+            items.push_back({QString("System") + nameLabel, colors[c], 4, true, &m_data[c].system_mtf});
             if (m_showSignedOtf && m_canSimulateDiffraction)
-                items.push_back({QString("Signed OTF") + names[c], QColor(80, 200, 255), 2, true,
+                items.push_back({QString("Signed OTF") + nameLabel, QColor(80, 200, 255), 2, true,
                                  &m_data[c].system_otf, nullptr, true});
         }
     }
@@ -625,4 +633,9 @@ void MTFChartWidget::mousePressEvent(QMouseEvent *event) {
     }
     
     QWidget::mousePressEvent(event);
+}
+void MTFChartWidget::setChannelsPresence(bool hasRgb, bool hasIr) {
+    m_hasRgb = hasRgb;
+    m_hasIr = hasIr;
+    update();
 }

@@ -13,6 +13,7 @@ public:
     
     void setMTFData(const std::array<colorscreen::mtf_parameters::computed_mtf, 4> &data, bool canSimulateDiffraction, double scanDpi, double screenFreq = -1);
     void setMeasuredMTF(const std::vector<colorscreen::mtf_measurement> &measurements, const std::array<double, 4> &channelWavelengths);
+    void setChannelsPresence(bool hasRgb, bool hasIr);
     /** Show or hide the signed analytical system OTF.  Measured slanted-edge
         curves remain magnitude-only.  */
     void setShowSignedOTF(bool show);
@@ -71,6 +72,8 @@ private:
     std::array<double, 4> m_channelWavelengths;
     bool m_hasMeasuredData = false;
     bool m_showSignedOtf = false;
+    bool m_hasRgb = true;
+    bool m_hasIr = true;
 
     std::set<QString> m_hiddenItems;
 };
