@@ -150,43 +150,27 @@ ColorScreenApplication *documentApplication() {
     changing the load/reload orchestration. */
 class InitialSetupGuideDialog final : public QDialog {
 public:
-  InitialSetupGuideDialog(const colorscreen::monochrome_bayer_analysis &analysis,
-                          QWidget *parent = nullptr)
+  explicit InitialSetupGuideDialog(QWidget *parent = nullptr)
       : QDialog(parent) {
     setWindowTitle(tr("Suggested image setup"));
     setModal(true);
 
     auto *layout = new QVBoxLayout(this);
     auto *intro = new QLabel(
-        tr("No parameter data was loaded for this image. Color-Screen found a "
-           "capture setting that may improve the reconstruction."),
+        tr("This appears to be a monochromatic capture made with a Bayer-filter "
+           "camera."),
         this);
     intro->setWordWrap(true);
     layout->addWidget(intro);
 
-    m_monochromeBayer = new QCheckBox(
-        tr("Use monochromatic Bayer-filter compensation"), this);
+    m_monochromeBayer =
+        new QCheckBox(tr("Reload with Bayer-filter compensation"), this);
     m_monochromeBayer->setChecked(true);
-    m_monochromeBayer->setToolTip(
-        tr("Reload the RAW without color interpolation and compensate the "
-           "different Bayer-filter channel sensitivities."));
     layout->addWidget(m_monochromeBayer);
 
-    auto *details = new QLabel(
-        tr("The RGB channels closely follow the same image signal (minimum "
-           "correlation %1, residual %2%). This is typical of a monochromatic "
-           "capture made with a conventional Bayer-filter camera. The suggested "
-           "mode keeps native sensor samples instead of interpolating color "
-           "detail.")
-            .arg(analysis.minimum_correlation, 0, 'f', 5)
-            .arg(analysis.maximum_relative_residual * 100.0, 0, 'f', 2),
-        this);
-    details->setWordWrap(true);
-    layout->addWidget(details);
-
     auto *buttons = new QDialogButtonBox(
-        QDialogButtonBox::Apply | QDialogButtonBox::Cancel, this);
-    buttons->button(QDialogButtonBox::Apply)->setText(tr("Apply and reload"));
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    buttons->button(QDialogButtonBox::Ok)->setText(tr("Apply and reload"));
     buttons->button(QDialogButtonBox::Cancel)->setText(tr("Not now"));
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -3014,7 +2998,7 @@ void MainWindow::maybeOfferInitialSetupGuide(
           colorscreen::image_data::demosaic_monochromatic_bayer_corrected)
     return;
 
-  InitialSetupGuideDialog dialog(analysis, this);
+  InitialSetupGuideDialog dialog(this);
   if (dialog.exec() != QDialog::Accepted ||
       !dialog.useMonochromeBayerCorrection())
     return;
