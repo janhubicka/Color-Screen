@@ -1,4 +1,4 @@
-name: Publish focus-area follow-up
+name: Publish focus-area Qt follow-up
 
 on:
   pull_request:
@@ -26,67 +26,43 @@ jobs:
           fetch-depth: 0
           path: repo
 
-      - name: Apply and publish verified follow-up
+      - name: Apply and publish Qt monochrome fix
         shell: bash
         run: |
           set -euxo pipefail
           cd repo
-          expected=ca6a4eab9326623e49975c48b7c36957f56e5310
+          expected=ecdcf51cdfee1e42a18a937092c8c67680b7c8ab
           test "$(git rev-parse HEAD)" = "$expected"
           cat ../transport/agent/focus-area-followup.patch.* > /tmp/focus-area-followup.patch
-          python3 - <<'PY'
-          from pathlib import Path
-          patch = Path('/tmp/focus-area-followup.patch')
-          text = patch.read_text()
-          needle = "+             focus-analysis-unittests$(EXEEXT)\n all: config.h\n"
-          replacement = "+             focus-analysis-unittests$(EXEEXT)\n \n all: config.h\n"
-          if needle not in text:
-              raise SystemExit('expected Makefile.in patch context not found')
-          patch.write_text(text.replace(needle, replacement, 1))
-          PY
           git apply --check /tmp/focus-area-followup.patch
           git apply /tmp/focus-area-followup.patch
           git diff --check
-          test "$(git diff --name-only | sort)" = $'src/libcolorscreen/Makefile.am\nsrc/libcolorscreen/Makefile.in\nsrc/libcolorscreen/finetune.C\nsrc/libcolorscreen/focus-analysis-unittests.C\nsrc/libcolorscreen/focus-analysis.C'
-          grep -q 'matrixw = 3 \* n_tiles' src/libcolorscreen/finetune.C
-          grep -q 'last_tile_color\[tileid\]' src/libcolorscreen/finetune.C
-          grep -q 'has_grayscale_or_ir' src/libcolorscreen/focus-analysis.C
-          grep -q 'test_sky_candidate_budget' src/libcolorscreen/focus-analysis-unittests.C
-          grep -q 'focus-analysis-unittests$(EXEEXT)' src/libcolorscreen/Makefile.am
-          git add -- src/libcolorscreen/Makefile.am src/libcolorscreen/Makefile.in \
-            src/libcolorscreen/finetune.C src/libcolorscreen/focus-analysis.C \
-            src/libcolorscreen/focus-analysis-unittests.C
+          test "$(git diff --name-only)" = 'src/qtgui/MainWindow.cpp'
+          grep -q 'focusAnalysisUsesMonochromeInput' src/qtgui/MainWindow.cpp
+          grep -q 'local.flags |= colorscreen::finetune_bw' src/qtgui/MainWindow.cpp
+          grep -q 'analysisParameters.held_out = !useMonochrome' src/qtgui/MainWindow.cpp
+          ! grep -q 'Automatic focus-area discovery requires RGB input' src/qtgui/MainWindow.cpp
+          git add -- src/qtgui/MainWindow.cpp
           git diff --cached --check
           git config user.name 'OpenAI Codex'
           git config user.email 'noreply@openai.com'
           git commit -F - <<'EOF'
-          focus: support grayscale multi-area analysis
+          qtgui: route monochrome focus areas through BW model
 
-          Keep the shared screen-primary/capture-transfer model while giving
-          every BW/IR uniform tile its own three primary intensity coefficients.
-          Fix the BW least-squares width to 3*n_tiles and solve the resulting
-          block-diagonal projection, and stop pooling differently colored BW
-          tiles through the single-tile collection estimator.
+          Remove the stale GUI-only RGB requirement from automatic focus-area
+          discovery now that the library reconstructs the image layer from
+          grayscale/IR scans.
 
-          Allow automatic focus-area discovery on grayscale/IR scans through the
-          existing interpolated image-layer reconstruction. Use independently
-          fitted BW primary intensities when selecting a D-optimal set of areas.
-          Diversify the pre-fit candidate budget so a large exceptionally flat
-          field such as sky cannot crowd every other material out before the
-          expensive individual fits are attempted.
+          Route genuine monochrome input through finetune_bw for both the
+          individual verification fits and the joint multi-area fit.  Detect
+          RGB files that only contain one gain-scaled monochrome scanner signal
+          by their nearly constant raw-pixel chromaticity, so storing a BW scan
+          as RGB does not accidentally select the ill-conditioned RGB model.
 
-          Add regressions for grayscale image search, sky-budget retention,
-          fitted-primary diversity, and full multi-tile BW focus recovery. Also
-          register the focused checker in CLEANFILES with EXEEXT so distcheck
-          does not leave the executable behind on Linux or Windows.
-
-          Local validation:
-          - checking/O2 focus-analysis-unittests: PASS
-          - checking/-Ofast -march=native focus-analysis-unittests: PASS
-          - focused checker removed by make clean: PASS
-          - synthetic BW shared blur: 0.81 recovered vs 0.82 truth
-          - full make check progressed through the existing real regressions but
-            was interrupted by the isolated execution cap, not a test failure
+          The BW path uses the per-area primary-intensity model added by the
+          previous follow-up and keeps leave-one-out stability validation.  Real
+          RGB scans retain the uniform-image-layer model and frozen held-out
+          validation unchanged.
           EOF
           git push origin HEAD:refs/heads/agent/qt-focus-area-analysis
           printf 'Published %s on %s\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD^)"
