@@ -44,7 +44,7 @@ jobs:
       run: ccache --zero-stats
     
     - name: configure
-      run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" ./configure --enable-qtgui
+      run: CXXFLAGS="-Ofast -flto=auto" CFLAGS="$CXXFLAGS" ./configure --enable-qtgui
     - name: make
       run: make -j$(nproc)
     - name: Qt multi-document smoke test
