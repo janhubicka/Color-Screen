@@ -1,3 +1,6 @@
+ analyzer optimization loop. For multi-area physical-MTF analysis, keep Defocus fixed when optimizing Sigma.");
+ 
+   addCheckboxParameter(
        "Optimize Defocus",
 @@ -982,7 +982,7 @@ void SharpnessPanel::setupUi() {
        [this](ParameterState &, bool v) {
