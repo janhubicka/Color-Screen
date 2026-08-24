@@ -837,6 +837,12 @@ int main(int argc, char *argv[]) {
       }
 
       app.closeView(view);
+
+      // Also exercise destruction of one loaded document while another remains
+      // live.  MainWindow owns QUndoStack as a QObject child; its destructor
+      // must not be allowed to signal back into an already-destroyed document.
+      if (documents.size() > 1)
+        documents.back()->close();
     });
   }
 
