@@ -20,6 +20,19 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Locate Homebrew cache
+      id: homebrew-cache
+      run: |
+        echo "path=$(brew --cache)" >> "$GITHUB_OUTPUT"
+        echo "image-version=${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
+    - name: Restore Homebrew download cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.homebrew-cache.outputs.path }}
+        key: homebrew-${{ runner.os }}-${{ runner.arch }}-${{ steps.homebrew-cache.outputs.image-version }}-${{ hashFiles('.github/workflows/build-macos.yml') }}
+        restore-keys: |
+          homebrew-${{ runner.os }}-${{ runner.arch }}-${{ steps.homebrew-cache.outputs.image-version }}-
+          homebrew-${{ runner.os }}-${{ runner.arch }}-
     - name: Install dependencies
       run: |
         brew install \
@@ -66,7 +79,7 @@ jobs:
         echo "MOC=$MOC"
 
         # -fopenmp is rejected by Apple's clang. As a hack enable it by hand.
-        CC="ccache clang" CXX="ccache clang++" CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS=" -L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp " ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS  --enable-qtgui  MOC="$MOC"
+        CC="ccache clang" CXX="ccache clang++" CXXFLAGS="-Ofast -flto=thin -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS=" -L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp " ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS  --enable-qtgui  MOC="$MOC"
     - name: Upload config.log
       uses: actions/upload-artifact@v4
       if: always()
