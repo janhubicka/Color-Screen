@@ -119,10 +119,13 @@ finetune_find_focus_area_candidates_in_image (
   if (!candidates)
     return false;
   candidates->clear ();
-  if (!img.has_rgb ())
+  /* RENDER_INTERPOLATE reconstructs the image layer from either native RGB
+     or a monochrome/IR additive-screen scan.  Flatness belongs after screen
+     interpolation; do not pretend that a raw scalar scan is RGB.  */
+  if (!img.has_rgb () && !img.has_grayscale_or_ir ())
     {
       if (error)
-        *error = "automatic focus-area discovery requires RGB input";
+        *error = "automatic focus-area discovery requires image data";
       return false;
     }
   if (param.type == Random || parameters.max_analysis_dimension < 32

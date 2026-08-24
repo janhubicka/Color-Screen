@@ -32,4 +32,5 @@ CLEANFILES = paget_ha_test.tiff \
              paget_amaze_test.tiff \
              paget_rcd_test.tiff \
              paget_lmmse_test.tiff \
-             dufay_rcd_test.tiff
+             dufay_rcd_test.tiff \
+             focus-analysis-unittests$(EXEEXT)
