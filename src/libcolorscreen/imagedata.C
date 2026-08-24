@@ -868,6 +868,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
     }
   m_img->f_stop = m_processor->imgdata.other.aperture;
   m_img->focal_length = m_processor->imgdata.other.focal_len;
+  m_img->camera_make = m_processor->imgdata.idata.make;
   m_img->camera_model = m_processor->imgdata.idata.model;
   m_img->lens = m_processor->imgdata.lens.Lens;
   if (m_processor->imgdata.lens.FocalLengthIn35mmFormat > 0)
@@ -891,6 +892,10 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
       *error = libraw_strerror (ret);
       return false;
     }
+  /* Save the full-resolution usable width before dcraw_process which may
+     halve dimensions in half-size mode.  This is needed to correct
+     FocalPlaneResolution-based pixel pitch for downsampled output.  */
+  m_img->full_res_width = m_processor->imgdata.sizes.width;
   if (progress)
     progress->set_task ("demosaicing", 1);
   if ((ret = m_processor->dcraw_process ()) != LIBRAW_SUCCESS)
@@ -1392,6 +1397,103 @@ image_data::load_part (int *permille, const char **error,
 	  pixel_pitch = 2.7 * 6400 / xdpi;
 	  sensor_fill_factor = 8 * ((xdpi * xdpi) / (6400.0*6400));
 	}
+
+      /* For cameras (not scanners), try to determine pixel pitch from
+	 EXIF metadata.  These methods only fire when no scanner-specific
+	 value has been set above.  */
+
+      /* Method 1: FocalPlaneXResolution gives the sensor pixel density
+	 directly.  This tag is written by many Canon, Nikon and Pentax
+	 DSLRs.  The unit tag (FocalPlaneResolutionUnit) is required to
+	 convert to physical dimensions.  For RAW files processed at
+	 reduced resolution (e.g. half-size demosaicing) the EXIF value
+	 still refers to the full sensor, so we scale by the ratio of
+	 full-resolution to output width.  */
+      if (pixel_pitch < 0
+	  && focal_plane_x_resolution > 0
+	  && focal_plane_resolution_unit > 0)
+	{
+	  double unit_to_um = 0;
+	  switch (focal_plane_resolution_unit)
+	    {
+	    case 2:
+	      unit_to_um = 25400.0;	/* inch -> µm.  */
+	      break;
+	    case 3:
+	      unit_to_um = 10000.0;	/* centimeter -> µm.  */
+	      break;
+	    case 4:
+	      unit_to_um = 1000.0;	/* millimeter -> µm.  */
+	      break;
+	    case 5:
+	      unit_to_um = 1.0;		/* micrometer -> µm.  */
+	      break;
+	    }
+	  if (unit_to_um > 0)
+	    {
+	      double native_pitch = unit_to_um / focal_plane_x_resolution;
+	      /* Correct for output resolution smaller than the native
+		 sensor (e.g. half-size demosaicing).  For TIFF/JPEG
+		 full_res_width is 0 and the ratio defaults to 1.  */
+	      double scale = (full_res_width > 0 && width > 0)
+			     ? (double)full_res_width / width
+			     : 1.0;
+	      pixel_pitch = native_pitch * scale;
+	    }
+	}
+
+      /* Method 2: Derive pixel pitch from the ratio of actual focal
+	 length to its 35mm-equivalent.  The crop factor gives the
+	 sensor diagonal relative to the 36×24 mm full-frame standard
+	 (diagonal ≈ 43.2666 mm).  Combined with the image aspect ratio,
+	 this yields the physical sensor width, and dividing by the
+	 output pixel count gives pixel pitch.  This method automatically
+	 adapts to reduced-resolution output.  */
+      if (pixel_pitch < 0
+	  && focal_length > 0
+	  && focal_length_in_35mm > 0
+	  && width > 0 && height > 0)
+	{
+	  double crop_factor = focal_length_in_35mm / focal_length;
+	  double diagonal_mm = 43.2666 / crop_factor;
+	  double aspect = (double)width / height;
+	  double sensor_width_mm
+	    = diagonal_mm * aspect / std::sqrt (1.0 + aspect * aspect);
+	  pixel_pitch = sensor_width_mm / width * 1000.0;
+	}
+
+      /* Method 3: Phase One medium format backs often lack standard
+	 focal plane resolution or 35mm-equivalent focal lengths in
+	 their EXIF. Since they use a few well-known sensors with
+	 distinct dimensions, we can infer pixel pitch from the image width.  */
+      if (pixel_pitch < 0
+	  && (camera_model.find ("Phase One") != std::string::npos
+	      || camera_model.find ("PhaseOne") != std::string::npos
+	      || camera_make.find ("Phase One") != std::string::npos
+	      || camera_make.find ("PhaseOne") != std::string::npos))
+	{
+	  int w = (full_res_width > 0) ? full_res_width : width;
+	  if (w >= 19000)
+	    pixel_pitch = 2.81;      /* 250MP (19236) IMX811 */
+	  else if (w >= 14000)
+	    pixel_pitch = 3.76;      /* 150MP (14204) */
+	  else if (w >= 11500)
+	    pixel_pitch = 4.6;       /* 100MP (11608) */
+	  else if (w >= 10200)
+	    pixel_pitch = 5.2;       /* 80MP (10328) */
+	  else if (w >= 8900)
+	    pixel_pitch = 6.0;       /* 60MP (8984) */
+	  else if (w >= 8200)
+	    pixel_pitch = 5.3;       /* 50MP (8280) */
+	  else if (w >= 7300)
+	    pixel_pitch = 6.0;       /* 40MP P40+ (7320) */
+	  else if (w >= 7200)
+	    pixel_pitch = 6.8;       /* 39MP P45+ (7216) */
+	  else if (w >= 6400)
+	    pixel_pitch = 6.8;       /* 31MP P30+ (6496) */
+	  else if (w >= 4000)
+	    pixel_pitch = 9.0;       /* 22MP/18MP/16MP P25/P21/P20 */
+	}
     }
   return ret;
 }
@@ -1825,6 +1927,15 @@ image_data::load_exif (const char *name)
         focal_plane_y_resolution
             = it->toRational ().first / (double)it->toRational ().second;
 
+      it = exifData.findKey (
+          Exiv2::ExifKey ("Exif.Photo.FocalPlaneResolutionUnit"));
+      if (it != exifData.end () && it->count ())
+#if EXIV2_TEST_VERSION(0,27,99)
+        focal_plane_resolution_unit = it->toInt64 ();
+#else
+        focal_plane_resolution_unit = it->toLong ();
+#endif
+
       it = exifData.findKey (Exiv2::ExifKey ("Exif.Photo.FocalLength"));
       if (it != exifData.end () && it->count ())
         focal_length
@@ -1838,6 +1949,10 @@ image_data::load_exif (const char *name)
 #else
         focal_length_in_35mm = it->toLong ();
 #endif
+
+      it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.Make"));
+      if (it != exifData.end () && it->count ())
+        camera_make = it->value ().toString ();
 
       it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.Model"));
       if (it != exifData.end () && it->count ())

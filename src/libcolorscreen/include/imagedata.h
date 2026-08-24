@@ -211,10 +211,19 @@ public:
   luminosity_t f_stop = -2;
   luminosity_t focal_plane_x_resolution = -2;
   luminosity_t focal_plane_y_resolution = -2;
+  /* EXIF FocalPlaneResolutionUnit (tag 0xA210):
+     2 = inch, 3 = centimeter, 4 = millimeter, 5 = micrometer.
+     -1 = unknown / not present.  */
+  int focal_plane_resolution_unit = -1;
   luminosity_t focal_length = -2;
   luminosity_t focal_length_in_35mm = -2;
   luminosity_t pixel_pitch = -2;
   luminosity_t sensor_fill_factor = -2;
+  /* Full-resolution image width before any demosaicing downscaling
+     (e.g. half-size mode).  Zero if not applicable or unknown.
+     Used to correct FocalPlaneResolution-based pixel pitch when
+     the output image is smaller than the native sensor.  */
+  int full_res_width = 0;
   std::array<luminosity_t, 4> wavelengths = { -2, -2, -2, -2 };
   int rotation = -1;
   int mirror = -1;
@@ -222,6 +231,7 @@ public:
      Special mosaics such as X-Trans and full-color RAW files are false.  */
   bool standard_bayer_cfa = false;
   demosaicing_t demosaiced_by = demosaic_max;
+  std::string camera_make;
   std::string camera_model;
   std::string lens;
   std::string software;
