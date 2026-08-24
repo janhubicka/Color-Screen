@@ -1,7 +1,7 @@
-de3..2cb8cba 100644
+de3..3896ff6 100644
 --- a/src/libcolorscreen/focus-analysis-unittests.C
 +++ b/src/libcolorscreen/focus-analysis-unittests.C
-@@ -356,6 +356,39 @@ test_bw_multitile_focus ()
+@@ -356,6 +356,42 @@ test_bw_multitile_focus ()
    return true;
  }
  
@@ -14,6 +14,9 @@ de3..2cb8cba 100644
 +  render_parameters rparam;
 +  rparam.sharpen.mode = sharpen_parameters::blur_deconvolution;
 +  rparam.sharpen.scanner_mtf.model = mtf_model::physical_diffraction;
++  rparam.sharpen.scanner_mtf.pixel_pitch = 3.76;
++  rparam.sharpen.scanner_mtf.f_stop = 8;
++  rparam.sharpen.scanner_mtf.scan_dpi = 2000;
 +
 +  finetune_parameters fparam;
 +  fparam.flags = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
@@ -41,7 +44,7 @@ de3..2cb8cba 100644
  static bool
  test_grayscale_image_search ()
  {
-@@ -398,6 +431,7 @@ main ()
+@@ -398,6 +434,7 @@ main ()
        || !test_sky_candidate_budget ()
        || !test_bw_selection_uses_primary_intensities ()
        || !test_bw_multitile_focus ()
@@ -114,6 +117,4 @@ index cf53fcd..49e564a 100644
          if (v) m_finetuneFlags |= colorscreen::finetune_scanner_mtf_sigma;
          else m_finetuneFlags &= ~colorscreen::finetune_scanner_mtf_sigma;
 -      }, nullptr, "Included in the focus analyzer optimization loop.");
-+      }, nullptr, "Included in the focus analyzer optimization loop. For multi-area physical-MTF analysis, keep Defocus fixed when optimizing Sigma.");
- 
-   addCheckboxParameter(
++      }, nullptr, "Included in the focus
