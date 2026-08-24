@@ -290,7 +290,42 @@ void TilePreviewPanel::setupTiles(const QString &title) {
   });
 }
 
+void TilePreviewPanel::rebuildTiles() {
+  if (!m_tilesContainer) return;
+  auto types = getTileTypes();
+  if (types.size() == m_tileLabels.size()) {
+     bool all_match = true;
+     // wait, no easy way to check text, size is usually enough
+     return;
+  }
+  
+  QLayout *layout = m_tilesContainer->layout();
+  QLayoutItem *child;
+  while ((child = layout->takeAt(0)) != nullptr) {
+      if (child->widget()) delete child->widget();
+      delete child;
+  }
+  m_tileLabels.clear();
+
+  for (const auto &pair : types) {
+    ScalableImageLabel *label = new ScalableImageLabel();
+    m_tileLabels.push_back(label);
+    
+    QWidget *container = new QWidget();
+    QVBoxLayout *clayout = new QVBoxLayout(container);
+    clayout->setContentsMargins(0, 0, 0, 0);
+    clayout->setSpacing(2);
+    clayout->addWidget(label, 0, Qt::AlignHCenter);
+    QLabel *captionLabel = new QLabel(pair.second);
+    captionLabel->setAlignment(Qt::AlignCenter);
+    clayout->addWidget(captionLabel, 0, Qt::AlignHCenter);
+    clayout->addStretch(1);
+    layout->addWidget(container);
+  }
+}
+
 void TilePreviewPanel::onParametersRefreshed(const ParameterState &state) {
+  rebuildTiles();
   scheduleTileUpdate();
 }
 

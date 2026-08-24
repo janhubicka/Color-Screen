@@ -1175,7 +1175,7 @@ mtf_parameters::effective_f_stop () const
 double
 mtf_parameters::nu (double pixel_freq) const
 {
-  if (!can_simulate_diffraction_p () || !my_isfinite (pixel_freq))
+  if (!can_simulate_diffraction_p () || !my_isfinite (wavelength) || wavelength <= 0 || !my_isfinite (pixel_freq))
     return 0;
   double frequency_per_mm = my_fabs (pixel_freq) / (pixel_pitch * 0.001);
   double wavelength_mm = wavelength * 1.0e-6;

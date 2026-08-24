@@ -58,6 +58,7 @@ protected:
   void scheduleTileUpdate();
   
   void setupTiles(const QString &title);
+  void rebuildTiles();
 
   void setDebounceInterval(int msec);
   

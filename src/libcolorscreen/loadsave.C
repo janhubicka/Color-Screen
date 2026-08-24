@@ -301,9 +301,6 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
           || fprintf (f, "scanner_mtf_sensor_fill_factor: %.17g\n",
                       rparam->sharpen.scanner_mtf.sensor_fill_factor)
                  < 0
-          || fprintf (f, "scanner_mtf_wavelength_nm: %.17g\n",
-                      rparam->sharpen.scanner_mtf.wavelength)
-                 < 0
           || fprintf (
                  f,
                  "scanner_mtf_channel_wavelengths_nm: %.17g %.17g %.17g "
@@ -2331,7 +2328,8 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
         }
       else if (!strcmp (buf, "scanner_mtf_wavelength_nm"))
         {
-          if (!read_double (f, rparam_check (sharpen.scanner_mtf.wavelength)))
+          double dummy;
+          if (!read_double (f, &dummy))
             {
               *error = "error parsing scanner_mtf_wavelength";
               return false;

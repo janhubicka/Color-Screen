@@ -711,9 +711,9 @@ render::precompute_all (int flags, rgbdata patch_proportions,
       else
         {
           sharpen_parameters image_layer_sharpen = m_params.sharpen;
-          /* On RGB+IR input the native scalar plane is scanner channel 3.  A
-             grayscale-only scan keeps the historical scalar/global model.  */
-          if (!ir_simulation && m_img.has_rgb ())
+          /* The native scalar plane is scanner channel 3 (IR).  A grayscale-only
+             scan is also interpreted as infrared.  */
+          if (!ir_simulation)
             image_layer_sharpen
                 = m_params.get_sharpen_parameters_for_channel (3);
 

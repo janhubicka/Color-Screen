@@ -227,7 +227,6 @@ struct mtf_parameters
   {
     return my_isfinite (pixel_pitch) && pixel_pitch > 0
            && my_isfinite (f_stop) && f_stop > 0
-           && my_isfinite (wavelength) && wavelength > 0
            && my_isfinite (scan_dpi) && scan_dpi > 0;
   }
   /* Return true when the physical model, rather than measured data, is used.  */

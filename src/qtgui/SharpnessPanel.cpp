@@ -588,6 +588,12 @@ public:
 protected:
   std::vector<std::pair<render_screen_tile_type, QString>>
   getTileTypes() const override {
+    std::shared_ptr<colorscreen::image_data> scan = m_imageGetter();
+    if (scan && scan->has_rgb() && scan->has_grayscale_or_ir()) {
+      return {{dot_spread, "RGB Dot Spread"}, {dot_spread_ir, "IR Dot Spread"}};
+    } else if (scan && scan->has_rgb()) {
+      return {{dot_spread, "RGB Dot Spread"}};
+    }
     return {{dot_spread, "Dot Spread"}};
   }
 
@@ -735,16 +741,7 @@ void SharpnessPanel::setupUi() {
         s.rparams.sharpen.scanner_mtf.sigma = v;
       }, 1.0, nullptr, false, "Residual compact Gaussian blur. In the physical model it is applied after diffraction and defocus; in the empirical fallback it is the compact core blur.");
 
-  // Wavelength
-  // Range 0.0 - 1200.0 (0.0 = unknown)
-  addSliderParameter(
-      "Wavelength", 0.0, 1200.0, 10.0, 1, "nm", "unknown",
-      [](const ParameterState &s) {
-        return s.rparams.sharpen.scanner_mtf.wavelength;
-      },
-      [](ParameterState &s, double v) {
-        s.rparams.sharpen.scanner_mtf.wavelength = v;
-      }, 1.0, nullptr, false, "Peak wavelength in nanometers used for calculating diffraction-limited MTF. 0 means use the average wavelength from the Capture tab.");
+
 
   // Defocus
   // Range 0.0 - 10.0 mm
@@ -1087,8 +1084,13 @@ void SharpnessPanel::updateMTFChart() {
   mtf_parameters chartParameters = state.rparams.sharpen.scanner_mtf;
   chartParameters.measured_mtf_idx = -1;
 
-  // Compute model curves with 100 steps.
-  mtf_parameters::computed_mtf curves = chartParameters.compute_curves(100);
+  // Compute model curves with 100 steps for all channels.
+  std::array<mtf_parameters::computed_mtf, 4> curves;
+  for (int c = 0; c < 4; c++) {
+      mtf_parameters p = chartParameters;
+      p.wavelength = p.get_channel_wavelength(c);
+      curves[c] = p.compute_curves(100);
+  }
 
   // Pass simulation flag to chart
   bool canSimulateDifraction

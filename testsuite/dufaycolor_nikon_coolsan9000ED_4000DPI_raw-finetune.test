@@ -63,8 +63,8 @@ ${AWK-awk} '
     print "scanner_mtf_blur_diameter_px: 0"
     print "scanner_mtf_pixel_pitch_um: 3.76"
     print "scanner_mtf_sensor_fill_factor: 1"
-    print "scanner_mtf_wavelength_nm: 550"
-    print "scanner_mtf_channel_wavelengths_nm: 0 0 0 0"
+    print "scanner_mtf_channel_wavelengths_nm: 550 550 550 550"
+    
     print "scanner_mtf_f_stop: 8"
     print "scanner_mtf_defocus_mm: 0.2"
     print "scan_dpi: 4000"
@@ -211,8 +211,8 @@ ${AWK-awk} '
     print "scanner_mtf_blur_diameter_px: 1"
     print "scanner_mtf_pixel_pitch_um: 0"
     print "scanner_mtf_sensor_fill_factor: 0"
-    print "scanner_mtf_wavelength_nm: 0"
     print "scanner_mtf_channel_wavelengths_nm: 0 0 0 0"
+    
     print "scanner_mtf_f_stop: 0"
     print "scanner_mtf_defocus_mm: 0"
     print "scan_dpi: 4000"

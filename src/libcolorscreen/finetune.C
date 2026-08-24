@@ -964,6 +964,7 @@ public:
   /* Screen with emulsion.  */
   std::shared_ptr<screen> emulsion_scr;
   sharpen_parameters render_sharpen_params;
+  int img_layer_c = 1;
 
   finetune_solver () {}
 
@@ -2785,14 +2786,7 @@ public:
         sp[2].scanner_mtf.defocus = defocus.blue;
         if (!tiles[0].color.empty ())
           for (int c = 0; c < 3; c++)
-            sp[c].scanner_mtf.wavelength = 550;
-#if 0
-        /* TODO: Apply scanner spectral response before wavelength-specific
-           defocus, then use measured channel wavelengths here.  */
-        sp[0].scanner_mtf.wavelength = 466;
-        sp[1].scanner_mtf.wavelength = 526;
-        sp[2].scanner_mtf.wavelength = 653;
-#endif
+            sp[c].scanner_mtf.wavelength = sp[c].scanner_mtf.get_channel_wavelength(c);
       }
     else
       {
@@ -3115,6 +3109,7 @@ public:
           {
             sharpen_parameters sp = render_sharpen_params;
             sp.scanner_mtf_scale *= pixel_size;
+            sp.scanner_mtf.wavelength = sp.scanner_mtf.get_channel_wavelength(img_layer_c);
             bool cache_hit = false;
             const auto cache_start
                 = profile ? std::chrono::steady_clock::now ()
@@ -5961,6 +5956,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
             solver.theight = theight;
             solver.pixel_size = pixel_size;
             solver.render_sharpen_params = rparam.sharpen;
+            solver.img_layer_c = rparam.get_image_layer_channel(imgp[0]);
             solver.collection_threshold = rparam.collection_threshold;
             solver.parallel = !(fparams.flags & finetune_no_progress_report);
             if (!solver.init_tile (0, cur_txmin, cur_tymin, bw, *mapp[0],
@@ -6103,6 +6099,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                   solver.theight = theight;
                   solver.collection_threshold = rparam.collection_threshold;
                   solver.render_sharpen_params = rparam.sharpen;
+                  solver.img_layer_c = rparam.get_image_layer_channel(imgp[0]);
                   solver.pixel_size = pixel_size;
                   solver.parallel
                       = !(fparams.flags & finetune_no_progress_report);
@@ -7156,6 +7153,8 @@ render_screen (image_data &img, const scr_to_img_parameters &param,
   sharpen_parameters sharpen = rparam.sharpen;
   sharpen.usm_radius = rparam.screen_blur_radius * pixel_size;
   sharpen.scanner_mtf_scale *= pixel_size;
+  int img_layer_c = rparam.get_image_layer_channel(&img);
+  sharpen.scanner_mtf.wavelength = sharpen.scanner_mtf.get_channel_wavelength(img_layer_c);
   screen_sampling sampling = screen_sampling::integrate_pixel;
   std::shared_ptr<screen> scr = render_to_scr::get_screen (
       param.type, false, false, sharpen, rparam.red_strip_width,

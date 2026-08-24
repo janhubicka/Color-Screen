@@ -3742,7 +3742,7 @@ test_mtf_physical_model ()
   mtf_parameters &saved_mtf = saved_render.sharpen.scanner_mtf;
   saved_mtf = source;
   saved_mtf.model = mtf_model::physical_diffraction;
-  saved_mtf.wavelength = 750.12345678901238;
+  saved_mtf.wavelength = 0;
   saved_mtf.wavelengths
       = {620.12345678901238, 540.23456789012345, 460.34567890123457,
          750.45678901234567};

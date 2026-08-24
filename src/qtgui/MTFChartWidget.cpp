@@ -17,10 +17,10 @@ MTFChartWidget::MTFChartWidget(QWidget *parent) : QWidget(parent) {
 }
 
 void MTFChartWidget::setMTFData(
-    const colorscreen::mtf_parameters::computed_mtf &data,
+    const std::array<colorscreen::mtf_parameters::computed_mtf, 4> &data,
     bool canSimulateDiffraction, double scanDpi, double screenFreq) {
   m_data = data;
-  m_hasData = !data.system_mtf.empty();
+  m_hasData = !data[0].system_mtf.empty();
   m_canSimulateDiffraction = canSimulateDiffraction;
   m_scanDpi = scanDpi;
   m_screenFreq = screenFreq;
@@ -131,17 +131,34 @@ measuredMtfAlpha(double uncertainty)
 
 std::vector<MTFChartWidget::LegendItem> MTFChartWidget::getLegendItems() const {
     std::vector<LegendItem> items;
-    items.push_back({"Diffraction", QColor(255, 100, 100), 2, m_canSimulateDiffraction, &m_data.lens_diffraction_mtf});
-    items.push_back({"Defocus", QColor(255, 165, 0), 2, m_canSimulateDiffraction, &m_data.lens_defocus_mtf});
-    items.push_back({"Hopkins blur", QColor(139, 69, 19), 2, !m_canSimulateDiffraction, &m_data.hopkins_blur_mtf});
-    items.push_back({"Gaussian blur", QColor(100, 200, 100), 2, true, &m_data.gaussian_blur_mtf});
-    items.push_back({"Halo component", QColor(180, 120, 220), 2, true, &m_data.halo_mtf});
-    items.push_back({"Lens", Qt::blue, 2, true, &m_data.lens_mtf});
-    items.push_back({"Sensor", Qt::gray, 2, true, &m_data.sensor_mtf});
-    items.push_back({"System", Qt::white, 4, true, &m_data.system_mtf});
-    if (m_showSignedOtf && m_canSimulateDiffraction)
-        items.push_back({"Signed OTF", QColor(80, 200, 255), 2, true,
-                         &m_data.system_otf, nullptr, true});
+    items.push_back({"Defocus", QColor(255, 165, 0), 2, m_canSimulateDiffraction, &m_data[0].lens_defocus_mtf});
+    items.push_back({"Hopkins blur", QColor(139, 69, 19), 2, !m_canSimulateDiffraction, &m_data[0].hopkins_blur_mtf});
+    items.push_back({"Gaussian blur", QColor(100, 200, 100), 2, true, &m_data[0].gaussian_blur_mtf});
+    items.push_back({"Halo component", QColor(180, 120, 220), 2, true, &m_data[0].halo_mtf});
+    items.push_back({"Sensor", Qt::gray, 2, true, &m_data[0].sensor_mtf});
+
+    const char *names[4] = {" R", " G", " B", " IR"};
+    QColor colors[4] = {Qt::red, Qt::green, Qt::blue, Qt::darkGray};
+    bool added = false;
+    for (int c = 0; c < 4; ++c) {
+        if (m_channelWavelengths[c] > 0) {
+            added = true;
+            items.push_back({QString("Diffraction") + names[c], colors[c], 1, m_canSimulateDiffraction, &m_data[c].lens_diffraction_mtf});
+            items.push_back({QString("Lens") + names[c], colors[c], 2, true, &m_data[c].lens_mtf, nullptr, true});
+            items.push_back({QString("System") + names[c], colors[c], 4, true, &m_data[c].system_mtf});
+            if (m_showSignedOtf && m_canSimulateDiffraction)
+                items.push_back({QString("Signed OTF") + names[c], QColor(80, 200, 255), 2, true,
+                                 &m_data[c].system_otf, nullptr, true});
+        }
+    }
+    if (!added) {
+        items.push_back({"Diffraction", QColor(255, 100, 100), 1, m_canSimulateDiffraction, &m_data[0].lens_diffraction_mtf});
+        items.push_back({"Lens", Qt::blue, 2, true, &m_data[0].lens_mtf, nullptr, true});
+        items.push_back({"System", Qt::white, 4, true, &m_data[0].system_mtf});
+        if (m_showSignedOtf && m_canSimulateDiffraction)
+            items.push_back({"Signed OTF", QColor(80, 200, 255), 2, true,
+                             &m_data[0].system_otf, nullptr, true});
+    }
 
     if (m_hasMeasuredData) {
         for (const auto &m : m_measurements) {
@@ -204,9 +221,9 @@ MTFChartWidget::LayoutInfo MTFChartWidget::calculateLayout(int w, int h) const {
   if (m_hasData) {
       // MTF50 check (pre-calculation)
       bool has_mtf50 = false;
-      if (!m_data.system_mtf.empty() && isVisible("System")) {
-          for (size_t i = 0; i < m_data.system_mtf.size() - 1; ++i) {
-              if (m_data.system_mtf[i] >= 0.5 && m_data.system_mtf[i+1] < 0.5) {
+      if (!m_data[0].system_mtf.empty() && isVisible("System")) {
+          for (size_t i = 0; i < m_data[0].system_mtf.size() - 1; ++i) {
+              if (m_data[0].system_mtf[i] >= 0.5 && m_data[0].system_mtf[i+1] < 0.5) {
                   has_mtf50 = true;
                   break;
               }
@@ -243,7 +260,7 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
   // Background
   painter.fillRect(rect(), palette().base());
 
-  if (!m_hasData || m_data.system_mtf.empty()) {
+  if (!m_hasData || m_data[0].system_mtf.empty()) {
     painter.setPen(palette().text().color());
     painter.drawText(rect(), Qt::AlignCenter, "No MTF data");
     return;
@@ -481,14 +498,14 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
 
   // Draw MTF50 information
   double mtf50_freq = -1;
-  if (!m_data.system_mtf.empty() && isVisible("System")) {
-      for (size_t i = 0; i < m_data.system_mtf.size() - 1; ++i) {
-          if (m_data.system_mtf[i] >= 0.5 && m_data.system_mtf[i+1] < 0.5) {
+  if (!m_data[0].system_mtf.empty() && isVisible("System")) {
+      for (size_t i = 0; i < m_data[0].system_mtf.size() - 1; ++i) {
+          if (m_data[0].system_mtf[i] >= 0.5 && m_data[0].system_mtf[i+1] < 0.5) {
               // Linear interpolation
-              double f0 = i / (double)(m_data.system_mtf.size() - 1);
-              double f1 = (i + 1) / (double)(m_data.system_mtf.size() - 1);
-              double v0 = m_data.system_mtf[i];
-              double v1 = m_data.system_mtf[i+1];
+              double f0 = i / (double)(m_data[0].system_mtf.size() - 1);
+              double f1 = (i + 1) / (double)(m_data[0].system_mtf.size() - 1);
+              double v0 = m_data[0].system_mtf[i];
+              double v1 = m_data[0].system_mtf[i+1];
               mtf50_freq = f0 + (0.5 - v0) * (f1 - f0) / (v1 - v0);
               break;
           }
@@ -518,14 +535,14 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
       
       // Compute contrast at screen frequency
       double contrast = 0;
-      if (!m_data.system_mtf.empty()) {
-          double idx_f = m_screenFreq * (m_data.system_mtf.size() - 1);
+      if (!m_data[0].system_mtf.empty()) {
+          double idx_f = m_screenFreq * (m_data[0].system_mtf.size() - 1);
           int idx = (int)idx_f;
-          if (idx >= 0 && idx < (int)m_data.system_mtf.size() - 1) {
+          if (idx >= 0 && idx < (int)m_data[0].system_mtf.size() - 1) {
               double frac = idx_f - idx;
-              contrast = m_data.system_mtf[idx] * (1.0 - frac) + m_data.system_mtf[idx+1] * frac;
-          } else if (idx >= (int)m_data.system_mtf.size() - 1) {
-              contrast = m_data.system_mtf.back();
+              contrast = m_data[0].system_mtf[idx] * (1.0 - frac) + m_data[0].system_mtf[idx+1] * frac;
+          } else if (idx >= (int)m_data[0].system_mtf.size() - 1) {
+              contrast = m_data[0].system_mtf.back();
           }
       }
       screenText += QString(" contrast: %1%").arg(contrast * 100.0, 0, 'f', 1);

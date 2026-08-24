@@ -365,6 +365,8 @@ render_to_scr::compute_screen_table (progress_info *progress)
     {
       p.sharpen = m_params.sharpen;
       p.sharpen.scanner_mtf_scale *= pixel_size ();
+      int img_layer_c = m_params.get_image_layer_channel(&m_img);
+      p.sharpen.scanner_mtf.wavelength = p.sharpen.scanner_mtf.get_channel_wavelength(img_layer_c);
     }
   m_screen_table = screen_table_cache.get (p, progress, &m_screen_table_uid);
   return (bool)m_screen_table;
@@ -411,6 +413,8 @@ render_to_scr::simulate_screen (progress_info *progress)
   sharpen_parameters sharpen = m_params.sharpen;
   sharpen.usm_radius = m_params.screen_blur_radius * psize;
   sharpen.scanner_mtf_scale *= psize;
+  int img_layer_c = m_params.get_image_layer_channel(&m_img);
+  sharpen.scanner_mtf.wavelength = sharpen.scanner_mtf.get_channel_wavelength(img_layer_c);
   screen_sampling sampling = screen_sampling::integrate_pixel;
   std::shared_ptr<screen> scr = get_screen (m_scr_to_img.get_type (), false,
 	       false,
@@ -472,10 +476,59 @@ render_screen_tile (tile_parameters &tile, scr_type type,
   bool avg = false;
   if (progress)
     progress->set_task ("rendering tile", 1);
-  if (rst == dot_spread)
+  if (rst == dot_spread || rst == dot_spread_ir)
     {
-      std::shared_ptr<mtf> cur_mtf = mtf::get_mtf (rparam.sharpen.scanner_mtf, NULL);
-      return cur_mtf->render_dot_spread_tile (tile, progress);
+      std::shared_ptr<mtf> mtfs[3];
+      if (rst == dot_spread_ir)
+        {
+          mtfs[0] = mtfs[1] = mtfs[2] = mtf::get_mtf (
+              rparam.get_sharpen_parameters_for_channel (3).scanner_mtf, NULL);
+        }
+      else
+        {
+          mtfs[0] = mtf::get_mtf (
+              rparam.get_sharpen_parameters_for_channel (0).scanner_mtf, NULL);
+          mtfs[1] = mtf::get_mtf (
+              rparam.get_sharpen_parameters_for_channel (1).scanner_mtf, NULL);
+          mtfs[2] = mtf::get_mtf (
+              rparam.get_sharpen_parameters_for_channel (2).scanner_mtf, NULL);
+        }
+      for (int i = 0; i < 3; i++)
+        {
+          if (!mtfs[i]->precompute_psf (progress))
+            return false;
+        }
+
+      double m[3] = { 0, 0, 0 };
+      double maxp = 1;
+      for (int c = 0; c < 3; c++)
+        {
+          for (int p = 0; p < 1024; p++)
+            m[c] = std::max (m[c], (double)mtfs[c]->get_psf (p));
+          for (double p = 1; p < 1024; p *= 1 + 1.0 / tile.width)
+            if (mtfs[c]->get_psf (p) > m[c] / 100)
+              maxp = std::max (maxp, p);
+          if (m[c] > 0)
+            m[c] = 1 / m[c];
+        }
+      luminosity_t step = maxp / (tile.width / (luminosity_t)2);
+      for (int y = 0; y < tile.height; y++)
+        for (int x = 0; x < tile.width; x++)
+          {
+            coord_t posx = (x - tile.width / 2) * step;
+            coord_t posy = (y - tile.height / 2) * step;
+            int chk = (nearest_int (posx) + nearest_int (posy)) & 1;
+            for (int c = 0; c < 3; c++)
+              {
+                luminosity_t val = mtfs[c]->get_psf (posx, posy, 1);
+                luminosity_t lum = val * m[c];
+                if (chk && c == 2) lum += 0.6;
+                lum = std::clamp (lum, (luminosity_t)0.0, (luminosity_t)1.0);
+                tile.pixels[x * 3 + y * tile.rowstride + c]
+                    = invert_gamma (lum, -1) * 255 + 0.5;
+              }
+          }
+      return true;
     }
 
   if (rst >= (int)backlight_screen)
@@ -516,6 +569,8 @@ render_screen_tile (tile_parameters &tile, scr_type type,
       sp = rparam.sharpen;
       sp.usm_radius *= pixel_size;
       sp.scanner_mtf_scale *= pixel_size;
+      int img_layer_c = rparam.get_image_layer_channel(nullptr);
+      sp.scanner_mtf.wavelength = sp.scanner_mtf.get_channel_wavelength(img_layer_c);
       if (rst != sharpened_screen || sp.mode == sharpen_parameters::none)
         sp.mode = sharpen_parameters::blur_deconvolution;
     }

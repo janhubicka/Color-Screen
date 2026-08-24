@@ -229,6 +229,7 @@ enum render_screen_tile_type
   corrected_detail_screen,
   corrected_full_screen,
   dot_spread,
+  dot_spread_ir,
 };
 nodiscard_attr DLL_PUBLIC bool
 render_screen_tile(tile_parameters &tile, scr_type type,

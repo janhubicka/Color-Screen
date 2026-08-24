@@ -1045,6 +1045,13 @@ private:
                                          bool normalized_patches,
                                          rgbdata patch_proportions,
                                          xyz target_whitepoint = d50_white) const;
+public:
+  int get_image_layer_channel (const image_data *img) const
+  {
+    if (!img) return 1;
+    bool ir_sim = !img->has_grayscale_or_ir () || (img->has_rgb () && ignore_infrared);
+    return ir_sim ? 1 : 3;
+  }
 };
 }
 #endif
