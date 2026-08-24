@@ -1,0 +1,180 @@
++
+ /** Return all live secondary views. */
+ QList<ImageViewWindow *> ColorScreenApplication::viewWindows() {
+   pruneViewWindows();
+@@ -495,7 +554,7 @@ WorkspaceWindow *ColorScreenApplication::workspaceWindow() {
+ 
+ /** Detach DOCUMENT into a top-level window without recreating it. */
+ void ColorScreenApplication::detachDocument(MainWindow *document) {
+-  if (!document || !m_workspaceWindow ||
++  if (!isDocumentPresentationOpen(document) || !m_workspaceWindow ||
+       !m_workspaceWindow->containsDocument(document))
+     return;
+ 
+@@ -508,7 +567,7 @@ void ColorScreenApplication::detachDocument(MainWindow *document) {
+ 
+ /** Attach DOCUMENT to the primary workspace without changing its state. */
+ void ColorScreenApplication::attachDocument(MainWindow *document) {
+-  if (!document)
++  if (!isDocumentPresentationOpen(document))
+     return;
+   if (m_workspaceWindow && m_workspaceWindow->containsDocument(document)) {
+     m_workspaceWindow->activateDocument(document);
+@@ -521,8 +580,10 @@ void ColorScreenApplication::attachDocument(MainWindow *document) {
+ /** Attach every detached document to the primary workspace. */
+ void ColorScreenApplication::attachAllDocuments() {
+   const QList<MainWindow *> documents = documentWindows();
+-  for (MainWindow *document : documents)
+-    attachDocument(document);
++  for (MainWindow *document : documents) {
++    if (isDocumentPresentationOpen(document))
++      attachDocument(document);
++  }
+ }
+ 
+ /** Refresh a document's tab or detached-window presentation. */
+@@ -536,10 +597,12 @@ void ColorScreenApplication::refreshDocumentPresentation(MainWindow *document) {
+ 
+ /** Return workspace-owned presentation widgets before DOCUMENT closes. */
+ void ColorScreenApplication::prepareDocumentForClose(MainWindow *document) {
+-  if (!document || !m_workspaceWindow ||
+-      !m_workspaceWindow->containsDocument(document))
++  if (!document)
+     return;
+-  m_workspaceWindow->prepareDocumentForClose(document);
++  if (m_workspaceWindow)
++    m_workspaceWindow->prepareDocumentForClose(document);
++  else
++    document->restoreWorkspaceInspector();
+ }
+ 
+ /** Return the number of attached document tabs. */
+@@ -547,19 +610,6 @@ int ColorScreenApplication::tabCount() const {
+   return m_workspaceWindow ? m_workspaceWindow->tabCount() : 0;
+ }
+ 
+-/** Close all documents while the workspace itself is shutting down. */
+-bool ColorScreenApplication::closeAllDocumentsForWorkspace() {
+-  m_workspaceShutdown = true;
+-  const QList<MainWindow *> documents = documentWindows();
+-  for (MainWindow *document : documents) {
+-    if (document && !document->close()) {
+-      m_workspaceShutdown = false;
+-      return false;
+-    }
+-  }
+-  return true;
+-}
+-
+ /** Populate the Window menu with tab and detached-window controls. */
+ void ColorScreenApplication::populateWindowMenu(QMenu *menu,
+                                                  MainWindow *currentWindow,
+@@ -594,16 +644,18 @@ void ColorScreenApplication::populateWindowMenu(QMenu *menu,
+   QAction *nextAction = menu->addAction(tr("Next Image"));
+   nextAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Tab));
+   nextAction->setShortcutContext(Qt::WindowShortcut);
+-  connect(nextAction, &QAction::triggered, menu, [this, currentWindow]() {
+-    activateRelativeWindow(currentWindow, 1);
+-  });
++  connect(nextAction, &QAction::triggered, menu,
++          [this, currentWindow, currentView]() {
++            activateRelativeWindow(currentWindow, currentView, 1);
++          });
+ 
+   QAction *previousAction = menu->addAction(tr("Previous Image"));
+   previousAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab));
+   previousAction->setShortcutContext(Qt::WindowShortcut);
+-  connect(previousAction, &QAction::triggered, menu, [this, currentWindow]() {
+-    activateRelativeWindow(currentWindow, -1);
+-  });
++  connect(previousAction, &QAction::triggered, menu,
++          [this, currentWindow, currentView]() {
++            activateRelativeWindow(currentWindow, currentView, -1);
++          });
+ 
+   menu->addSeparator();
+   QAction *detachAction = menu->addAction(
+@@ -641,7 +693,8 @@ void ColorScreenApplication::populateWindowMenu(QMenu *menu,
+   QAction *attachAllAction = menu->addAction(tr("Attach All Images and Views as Tabs"));
+   bool hasDetached = false;
+   for (MainWindow *document : documentWindows()) {
+-    if (!m_workspaceWindow || !m_workspaceWindow->containsDocument(document)) {
++    if (isDocumentPresentationOpen(document) &&
++        (!m_workspaceWindow || !m_workspaceWindow->containsDocument(document))) {
+       hasDetached = true;
+       break;
+     }
+@@ -672,8 +725,16 @@ void ColorScreenApplication::populateWindowMenu(QMenu *menu,
+     workspaceWindow()->showTabbedDocuments();
+   });
+ 
++  int primaryPresentations = 0;
++  for (MainWindow *document : documentWindows()) {
++    if (isDocumentPresentationOpen(document))
++      ++primaryPresentations;
++  }
++  const QList<ImageViewWindow *> views = viewWindows();
++  const int presentationCount = primaryPresentations + views.size();
++
+   QAction *tileAction = arrangeMenu->addAction(tr("&Tile All"));
+-  tileAction->setEnabled(documentWindows().size() + viewWindows().size() > 1);
++  tileAction->setEnabled(presentationCount > 1);
+   connect(tileAction, &QAction::triggered, menu, [this]() {
+     attachAllDocuments();
+     attachAllViews();
+@@ -681,17 +742,20 @@ void ColorScreenApplication::populateWindowMenu(QMenu *menu,
+   });
+ 
+   QAction *cascadeAction = arrangeMenu->addAction(tr("&Cascade"));
+-  cascadeAction->setEnabled(documentWindows().size() + viewWindows().size() > 1);
++  cascadeAction->setEnabled(presentationCount > 1);
+   connect(cascadeAction, &QAction::triggered, menu, [this]() {
+     attachAllDocuments();
+     attachAllViews();
+     workspaceWindow()->cascadeDocuments();
+   });
+ 
+-  const QList<MainWindow *> documents = documentWindows();
+-  const bool multiple = documents.size() > 1;
+-  nextAction->setEnabled(multiple);
+-  previousAction->setEnabled(multiple);
++  QList<MainWindow *> documents;
++  for (MainWindow *document : documentWindows()) {
++    if (isDocumentPresentationOpen(document))
++      documents.append(document);
++  }
++  nextAction->setEnabled(presentationCount > 1);
++  previousAction->setEnabled(presentationCount > 1);
+ 
+   menu->addSeparator();
+   for (int i = 0; i < documents.size(); ++i) {
+@@ -715,7 +779,6 @@ void ColorScreenApplication::populateWindowMenu(QMenu *menu,
+     });
+   }
+ 
+-  const QList<ImageViewWindow *> views = viewWindows();
+   if (!views.isEmpty()) {
+     menu->addSeparator();
+     for (ImageViewWindow *view : views) {
+@@ -739,36 +802,75 @@ void ColorScreenApplication::populateWindowMenu(QMenu *menu,
+   }
+ }
+ 
+-/** Activate the next or previous document, whether tabbed or detached. */
+-void ColorScreenApplication::activateRelativeWindow(MainWindow *currentWindow,
+-                                                     int offset) {
+-  const QList<MainWindow *> documents = documentWindows();
+-  if (documents.isEmpty())
++/** Activate the next or previous primary/secondary presentation. */
++void ColorScreenApplication::activateRelativeWindow(
++    MainWindow *currentWindow, ImageViewWindow *currentView, int offset) {
++  QList<QWidget *> presentations;
++  for (MainWindow *document : documentWindows()) {
++    if (isDocumentPresentationOpen(document))
++      presentations.append(document);
++  }
++  for (ImageViewWindow *view : viewWindows())
++    presentations.append(view);
++  if (presentations.isEmpty())
+     return;
+-  int currentIndex = documents.indexOf(currentWindow);
