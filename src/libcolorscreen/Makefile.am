@@ -18,6 +18,7 @@ unittests_CXXFLAGS = -DLIBCOLORSCREEN
 unittests_LDADD = libcolorscreen.la 
 unittests_SOURCES=unittests.C
 
+focus_analysis_unittests_LDFLAGS = -static
 focus_analysis_unittests_CXXFLAGS = -DLIBCOLORSCREEN
 focus_analysis_unittests_LDADD = libcolorscreen.la
 focus_analysis_unittests_SOURCES = focus-analysis-unittests.C
