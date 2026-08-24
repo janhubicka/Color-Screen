@@ -18,6 +18,7 @@ class NavigationView;
 class SharpnessPanel;
 class QAction;
 class QCheckBox;
+class QCloseEvent;
 class QComboBox;
 class QDockWidget;
 class QToolBar;
@@ -102,6 +103,9 @@ public:
   void reloadReferenceImage();
 
 protected:
+  /** Close this presentation without destroying a document used by peers. */
+  void closeEvent(QCloseEvent *event) override;
+
   void changeEvent(QEvent *event) override;
 
 private slots:

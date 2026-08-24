@@ -73,10 +73,18 @@ public:
   }
 
 protected:
-  /** Return shared chrome, then let QMdiSubWindow perform normal MDI close. */
+  /** Ask the application to preserve the document lifetime, then close. */
   void closeEvent(QCloseEvent *event) override {
-    if (m_workspace && m_view)
-      m_workspace->prepareViewForClose(m_view);
+    if (m_view) {
+      if (ColorScreenApplication *application = documentApplication()) {
+        if (!application->requestViewClose(m_view)) {
+          event->ignore();
+          return;
+        }
+      } else if (m_workspace) {
+        m_workspace->prepareViewForClose(m_view);
+      }
+    }
     QMdiSubWindow::closeEvent(event);
   }
 
@@ -206,6 +214,7 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
             QTimer::singleShot(0, this, [this]() {
               onSubWindowActivated(m_mdiArea->currentSubWindow());
               configureTabBar();
+              scheduleCloseIfEmpty();
             });
           });
 
@@ -235,6 +244,7 @@ void WorkspaceWindow::removeDocument(MainWindow *document) {
 
   onSubWindowActivated(m_mdiArea->currentSubWindow());
   configureTabBar();
+  scheduleCloseIfEmpty();
 }
 
 /** Embed secondary VIEW in the same MDI area as ordinary documents. */
@@ -286,6 +296,7 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
     QTimer::singleShot(0, this, [this]() {
       onSubWindowActivated(m_mdiArea->currentSubWindow());
       configureTabBar();
+      scheduleCloseIfEmpty();
     });
   });
 
@@ -312,6 +323,7 @@ void WorkspaceWindow::removeView(ImageViewWindow *view) {
   takeViewFromWorkspace(view);
   onSubWindowActivated(m_mdiArea->currentSubWindow());
   configureTabBar();
+  scheduleCloseIfEmpty();
 
   view->restoreFromWorkspaceEmbedding();
   view->show();
@@ -390,15 +402,33 @@ void WorkspaceWindow::refreshDocument(MainWindow *document) {
   configureTabBar();
 }
 
-/** Restore workspace-owned widgets before DOCUMENT's destructor runs. */
+/** Restore document-owned widgets before the logical owner can be destroyed. */
 void WorkspaceWindow::prepareDocumentForClose(MainWindow *document) {
-  if (!document || !containsDocument(document))
+  if (!document)
     return;
 
-  takeDocumentFromWorkspace(document);
-  document->restoreFromWorkspaceEmbedding();
-  onSubWindowActivated(m_mdiArea->currentSubWindow());
+  const bool wasAttached = containsDocument(document);
+  if (wasAttached) {
+    takeDocumentFromWorkspace(document);
+    document->restoreFromWorkspaceEmbedding();
+  } else {
+    // A closed primary presentation can still own the state used by secondary
+    // views. Its inspector may therefore be borrowed by the workspace or a
+    // detached view when the last peer finally closes.
+    if (QWidget *inspector = document->workspaceInspectorWidget()) {
+      if (m_inspectorStack->indexOf(inspector) >= 0)
+        m_inspectorStack->removeWidget(inspector);
+    }
+    document->restoreWorkspaceInspector();
+  }
+
+  // When the primary presentation was already closed, the current MDI child is
+  // the last secondary view being torn down. Reinstalling its chrome here would
+  // immediately borrow the document inspector again after we reclaimed it.
+  if (wasAttached)
+    onSubWindowActivated(m_mdiArea->currentSubWindow());
   configureTabBar();
+  scheduleCloseIfEmpty();
 }
 
 /** Restore view-owned chrome before WA_DeleteOnClose destroys an MDI view. */
@@ -428,7 +458,7 @@ bool WorkspaceWindow::closeView(ImageViewWindow *view) {
   return subWindow ? subWindow->close() : false;
 }
 
-/** Present attached documents as tabs and hide the bar for a single image. */
+/** Present attached images as standard Qt MDI tabs. */
 void WorkspaceWindow::showTabbedDocuments() {
   m_mdiArea->setOption(QMdiArea::DontMaximizeSubWindowOnActivation, false);
   m_mdiArea->setViewMode(QMdiArea::TabbedView);
@@ -468,7 +498,7 @@ bool WorkspaceWindow::isTabbedView() const {
   return m_mdiArea->viewMode() == QMdiArea::TabbedView;
 }
 
-/** Return whether the auto-hiding document tab bar is currently visible. */
+/** Return whether Qt's standard document tab bar is currently visible. */
 bool WorkspaceWindow::isTabBarVisible() const {
   QTabBar *tabBar = documentTabBar();
   return tabBar && tabBar->isVisible();
@@ -559,14 +589,13 @@ QWidget *WorkspaceWindow::windowAtTab(int index) const {
   return window ? window->widget() : nullptr;
 }
 
-/** Configure auto-hiding tabs, context actions, and drag-out detachment. */
+/** Configure standard tabs, context actions, and drag-out detachment. */
 void WorkspaceWindow::configureTabBar() {
   QTimer::singleShot(0, this, [this]() {
     QTabBar *tabBar = documentTabBar();
     if (!tabBar)
       return;
 
-    tabBar->setAutoHide(true);
     tabBar->setDocumentMode(true);
     tabBar->setMovable(true);
     tabBar->setTabsClosable(true);
@@ -623,6 +652,18 @@ void WorkspaceWindow::configureTabBar() {
       else if (auto *document = qobject_cast<MainWindow *>(hosted))
         detachDocument(document);
     });
+  });
+}
+
+/** Close an empty workspace shell on the next event-loop turn. */
+void WorkspaceWindow::scheduleCloseIfEmpty() {
+  if (m_closing || !m_mdiArea || !m_mdiArea->subWindowList().isEmpty())
+    return;
+
+  QTimer::singleShot(0, this, [this]() {
+    if (!m_closing && m_mdiArea && m_mdiArea->subWindowList().isEmpty() &&
+        isVisible())
+      close();
   });
 }
 
@@ -1002,7 +1043,7 @@ void WorkspaceWindow::changeEvent(QEvent *event) {
                              m_chromeView->imageWidget());
 }
 
-/** Close the whole session, respecting every document's close veto. */
+/** Close only the presentations hosted by this workspace shell. */
 void WorkspaceWindow::closeEvent(QCloseEvent *event) {
   if (m_closing) {
     event->accept();
@@ -1010,15 +1051,40 @@ void WorkspaceWindow::closeEvent(QCloseEvent *event) {
   }
 
   m_closing = true;
-  bool accepted = true;
-  if (ColorScreenApplication *application = documentApplication())
-    accepted = application->closeAllDocumentsForWorkspace();
-  if (!accepted) {
-    m_closing = false;
-    event->ignore();
-    return;
+  ColorScreenApplication *application = documentApplication();
+  QList<QPointer<ImageViewWindow>> views;
+  QList<QPointer<MainWindow>> documents;
+  for (QMdiSubWindow *subWindow : m_mdiArea->subWindowList()) {
+    if (ImageViewWindow *view = viewForSubWindow(subWindow))
+      views.append(view);
+    else if (MainWindow *document = documentForSubWindow(subWindow))
+      documents.append(document);
+  }
+
+  // Close secondary presentations first. A primary in this same workspace can
+  // then close normally; detached peers still cause it to become a hidden
+  // document owner rather than being destroyed.
+  for (const QPointer<ImageViewWindow> &view : views) {
+    if (view && !closeView(view)) {
+      m_closing = false;
+      event->ignore();
+      return;
+    }
+  }
+
+  for (const QPointer<MainWindow> &document : documents) {
+    if (!document)
+      continue;
+    const bool closed = document->close();
+    if (!closed &&
+        (!application || application->isDocumentPresentationOpen(document))) {
+      m_closing = false;
+      event->ignore();
+      return;
+    }
   }
 
   saveWorkspaceGeometry();
+  m_closing = false;
   event->accept();
 }

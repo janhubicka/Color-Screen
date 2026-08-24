@@ -64,6 +64,18 @@ public:
   /** Close VIEW through its MDI wrapper when attached, or directly otherwise. */
   bool closeView(ImageViewWindow *view);
 
+  /** Return true when DOCUMENT's original MainWindow presentation is still open. */
+  bool isDocumentPresentationOpen(MainWindow *document) const;
+
+  /** Close only DOCUMENT's original presentation while peer views remain.
+
+      Returns true when the close event must be ignored because DOCUMENT has been
+      retained as the hidden state owner of one or more secondary views. */
+  bool retainDocumentForOpenViews(MainWindow *document);
+
+  /** Approve closing VIEW and close its hidden document owner when it is last. */
+  bool requestViewClose(ImageViewWindow *view);
+
   /** Return all live secondary views. */
   QList<ImageViewWindow *> viewWindows();
 
@@ -117,19 +129,15 @@ public:
   /** Return the number of documents currently attached as tabs. */
   int tabCount() const;
 
-  /** Close all documents for a workspace shutdown.  Return false if any
-      document vetoes closing because the user cancels a prompt. */
-  bool closeAllDocumentsForWorkspace();
-
   /** Rebuild MENU with document/view creation, arrangement, and activation
       actions.  CURRENTWINDOW is the owning document and CURRENTVIEW, when
       non-null, identifies the active secondary view. */
   void populateWindowMenu(QMenu *menu, MainWindow *currentWindow,
                           ImageViewWindow *currentView = nullptr);
 
-  /** Activate the document OFFSET positions from CURRENTWINDOW, wrapping at
-      either end of the current document list.  */
-  void activateRelativeWindow(MainWindow *currentWindow, int offset);
+  /** Activate the presentation OFFSET positions from the current view/window. */
+  void activateRelativeWindow(MainWindow *currentWindow,
+                              ImageViewWindow *currentView, int offset);
 
   /** Ask every document to close.  Used by smoke tests and application exit. */
   void closeAllDocumentWindows();
@@ -175,9 +183,19 @@ private:
   /** Return the active image document from either a tab or detached window. */
   MainWindow *activeDocument() const;
 
+  /** Return whether DOCUMENT has a secondary view not already closing. */
+  bool hasOpenViews(MainWindow *document,
+                    ImageViewWindow *excluding = nullptr);
+
+  /** Close a hidden document owner after an unexpectedly destroyed last view. */
+  void closeHiddenDocumentWithoutViews(MainWindow *document);
+
   QList<QPointer<MainWindow>> m_documentWindows;
   QList<QPointer<ImageViewWindow>> m_viewWindows;
   QPointer<WorkspaceWindow> m_workspaceWindow;
   QSet<MainWindow *> m_restoringReferenceRecovery;
-  bool m_workspaceShutdown = false;
+  QSet<MainWindow *> m_hiddenDocumentPresentations;
+  QSet<MainWindow *> m_finalizingDocuments;
+  QSet<MainWindow *> m_closingDocuments;
+  QSet<ImageViewWindow *> m_closingViews;
 };
