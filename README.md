@@ -14,6 +14,8 @@ Jacobs identified rare scans of early color negatives using the Finlay color
 process. To address these unique negatives, Jan Hubička quickly created a
 rendering tool that would later become Color-Screen.
 
+<!-- temporary source export trigger -->
+
 # Installing Color-Screen
 ## Binary packages
 We provide binary packages for Windows (x86) and MacOS (aarch64) at
@@ -37,7 +39,7 @@ additional libraries:
  - [liblcms2](https://www.littlecms.com/)
  - [libfftw3](https://www.fftw.org/)
  - [openjpeg](https://www.openjpeg.org/)
- - [libpng](http://www.libpng.org/)
+ - [libpng](https://www.libpng.org/)
 
 If you wish to develop colorscreen, additional packages are recommended
 
