@@ -16,27 +16,84 @@ jobs:
         with:
           ref: agent/qtgui-fix-document-mdi-wrapper-detach
           fetch-depth: 0
-      - name: Patch stale MDI wrapper references
+      - name: Patch GUI and smoke-test lifetimes
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label} anchor count: {count}')
+              return text.replace(old, new)
+
+          # MDI wrappers must never be referenced after detach/deletion.
           path = Path('src/qtgui/WorkspaceWindow.cpp')
           text = path.read_text()
+          text = replace_once(text,
+          '''  QPointer<QMdiSubWindow> guardedSubWindow(subWindow);\n  connect(document, &QObject::destroyed, this,\n          [this, guardedSubWindow]() {\n            if (guardedSubWindow) {\n              m_mdiArea->removeSubWindow(guardedSubWindow);\n              guardedSubWindow->deleteLater();\n            }\n''',
+          '''  QPointer<QMdiSubWindow> guardedSubWindow(subWindow);\n  connect(document, &QObject::destroyed, this,\n          [this, guardedSubWindow]() {\n            // The wrapper is owned by the MDI area. Scheduling its deletion is\n            // sufficient; removeSubWindow(QMdiSubWindow *) may delete it\n            // immediately and must not be followed by deleteLater().\n            if (guardedSubWindow)\n              guardedSubWindow->deleteLater();\n''', 'document wrapper')
+          text = replace_once(text,
+          '''  QPointer<ImageViewWindow> guardedView(view);\n  connect(view, &QWidget::windowTitleChanged, this,\n          [this, guardedView, subWindow](const QString &title) {\n            if (!guardedView)\n              return;\n            subWindow->setWindowTitle(title);\n''',
+          '''  QPointer<ImageViewWindow> guardedView(view);\n  QPointer<QMdiSubWindow> guardedSubWindow(subWindow);\n  connect(view, &QWidget::windowTitleChanged, this,\n          [this, guardedView, guardedSubWindow](const QString &title) {\n            if (!guardedView || !guardedSubWindow)\n              return;\n            guardedSubWindow->setWindowTitle(title);\n''', 'view title wrapper')
+          path.write_text(text)
 
-          old_destroy = '''  QPointer<QMdiSubWindow> guardedSubWindow(subWindow);\n  connect(document, &QObject::destroyed, this,\n          [this, guardedSubWindow]() {\n            if (guardedSubWindow) {\n              m_mdiArea->removeSubWindow(guardedSubWindow);\n              guardedSubWindow->deleteLater();\n            }\n'''
-          new_destroy = '''  QPointer<QMdiSubWindow> guardedSubWindow(subWindow);\n  connect(document, &QObject::destroyed, this,\n          [this, guardedSubWindow]() {\n            // The wrapper is owned by the MDI area. Scheduling its deletion is\n            // sufficient; removeSubWindow(QMdiSubWindow *) may delete it\n            // immediately and must not be followed by deleteLater().\n            if (guardedSubWindow)\n              guardedSubWindow->deleteLater();\n'''
-          if text.count(old_destroy) != 1:
-              raise SystemExit(f'document wrapper anchor count: {text.count(old_destroy)}')
-          text = text.replace(old_destroy, new_destroy)
+          # The reusable parentless workspace is application-owned and must be
+          # destroyed before QApplication teardown so leak checking is meaningful.
+          path = Path('src/qtgui/ColorScreenApplication.h')
+          text = path.read_text()
+          text = replace_once(text,
+          '''  ColorScreenApplication(int &argc, char **argv);\n\n  /** Create, show, and register an empty document window.\n''',
+          '''  ColorScreenApplication(int &argc, char **argv);\n\n  /** Destroy application-owned top-level presentation objects. */\n  ~ColorScreenApplication() override;\n\n  /** Create, show, and register an empty document window.\n''', 'application destructor declaration')
+          path.write_text(text)
 
-          old_title = '''  QPointer<ImageViewWindow> guardedView(view);\n  connect(view, &QWidget::windowTitleChanged, this,\n          [this, guardedView, subWindow](const QString &title) {\n            if (!guardedView)\n              return;\n            subWindow->setWindowTitle(title);\n'''
-          new_title = '''  QPointer<ImageViewWindow> guardedView(view);\n  QPointer<QMdiSubWindow> guardedSubWindow(subWindow);\n  connect(view, &QWidget::windowTitleChanged, this,\n          [this, guardedView, guardedSubWindow](const QString &title) {\n            if (!guardedView || !guardedSubWindow)\n              return;\n            guardedSubWindow->setWindowTitle(title);\n'''
-          if text.count(old_title) != 1:
-              raise SystemExit(f'view title wrapper anchor count: {text.count(old_title)}')
-          text = text.replace(old_title, new_title)
+          path = Path('src/qtgui/ColorScreenApplication.cpp')
+          text = path.read_text()
+          text = replace_once(text,
+          '''ColorScreenApplication::ColorScreenApplication(int &argc, char **argv)\n    : QApplication(argc, argv) {\n  setQuitOnLastWindowClosed(true);\n}\n\n/** Create one independently owned document and present it as a tab by default. */\n''',
+          '''ColorScreenApplication::ColorScreenApplication(int &argc, char **argv)\n    : QApplication(argc, argv) {\n  setQuitOnLastWindowClosed(true);\n}\n\n/** Release reusable top-level presentation objects before QApplication dies. */\nColorScreenApplication::~ColorScreenApplication() {\n  // WorkspaceWindow intentionally survives close() so it can be reused while\n  // the application is running. It therefore needs explicit ownership here.\n  delete m_workspaceWindow.data();\n  m_workspaceWindow.clear();\n\n  // Normally WA_DeleteOnClose has already released every presentation. Clean\n  // up any detached survivors as a final ownership backstop, views before their\n  // document owners so their QPointers remain valid during view teardown.\n  for (const QPointer<ImageViewWindow> &view : m_viewWindows) {\n    if (view)\n      delete view.data();\n  }\n  for (const QPointer<MainWindow> &document : m_documentWindows) {\n    if (document)\n      delete document.data();\n  }\n}\n\n/** Create one independently owned document and present it as a tab by default. */\n''', 'application destructor definition')
+          path.write_text(text)
 
+          # Smoke testing needs deferred QObject deletion to complete before the
+          # event loop exits, and recursive retry closures must not self-own.
+          path = Path('src/qtgui/main.cpp')
+          text = path.read_text()
+          text = replace_once(text,
+          '''  // Lifetime smoke tests need one extra event-loop turn after the last visible\n  // window closes so they can inspect the final object-manager state.\n  if (parser.isSet(closeToEmptyTabOption) ||\n      parser.isSet(windowLifetimeOption))\n    app.setQuitOnLastWindowClosed(false);\n''',
+          '''  // Smoke tests perform explicit teardown so DeferredDelete events run to\n  // completion before the process exits and leak sanitizers inspect the heap.\n  if (parser.isSet(smokeTestOption))\n    app.setQuitOnLastWindowClosed(false);\n''', 'smoke quit-on-last-window')
+
+          text = replace_once(text,
+          '''      auto checkFinalPeerClose =\n          std::make_shared<std::function<void(int)>>();\n      *checkFinalPeerClose =\n          [&app, guardedSource, guardedView, documentCount, newViewSmokeDone,\n           checkFinalPeerClose](int attemptsLeft) {\n''',
+          '''      auto checkFinalPeerClose =\n          std::make_shared<std::function<void(int)>>();\n      std::weak_ptr<std::function<void(int)>> weakFinalPeerClose =\n          checkFinalPeerClose;\n      *checkFinalPeerClose =\n          [&app, guardedSource, guardedView, documentCount, newViewSmokeDone,\n           weakFinalPeerClose](int attemptsLeft) {\n''', 'final peer weak declaration')
+          text = replace_once(text,
+          '''              if (attemptsLeft > 0) {\n                QTimer::singleShot(50, &app,\n                                   [checkFinalPeerClose, attemptsLeft]() {\n                  (*checkFinalPeerClose)(attemptsLeft - 1);\n                });\n                return;\n              }\n''',
+          '''              if (attemptsLeft > 0) {\n                if (auto checkFinalPeerClose = weakFinalPeerClose.lock()) {\n                  QTimer::singleShot(50, &app,\n                                     [checkFinalPeerClose, attemptsLeft]() {\n                    (*checkFinalPeerClose)(attemptsLeft - 1);\n                  });\n                  return;\n                }\n              }\n''', 'final peer weak retry')
+
+          text = replace_once(text,
+          '''    auto startReferenceSmoke =\n        std::make_shared<std::function<void(int)>>();\n    *startReferenceSmoke =\n        [&app, newViewSmokeDone, startReferenceSmoke](int attemptsLeft) {\n''',
+          '''    auto startReferenceSmoke =\n        std::make_shared<std::function<void(int)>>();\n    std::weak_ptr<std::function<void(int)>> weakStartReferenceSmoke =\n        startReferenceSmoke;\n    *startReferenceSmoke =\n        [&app, newViewSmokeDone, weakStartReferenceSmoke](int attemptsLeft) {\n''', 'reference start weak declaration')
+          text = replace_once(text,
+          '''        QTimer::singleShot(100, &app,\n                           [startReferenceSmoke, attemptsLeft]() {\n          (*startReferenceSmoke)(attemptsLeft - 1);\n        });\n        return;\n''',
+          '''        if (auto startReferenceSmoke = weakStartReferenceSmoke.lock()) {\n          QTimer::singleShot(100, &app,\n                             [startReferenceSmoke, attemptsLeft]() {\n            (*startReferenceSmoke)(attemptsLeft - 1);\n          });\n          return;\n        }\n''', 'reference start weak retry')
+
+          text = replace_once(text,
+          '''      auto checkReference =\n          std::make_shared<std::function<void(int)>>();\n      *checkReference = [&app, guardedSource, guardedReference, documentCount,\n                         tabCount, checkReference](int attemptsLeft) {\n''',
+          '''      auto checkReference =\n          std::make_shared<std::function<void(int)>>();\n      std::weak_ptr<std::function<void(int)>> weakCheckReference = checkReference;\n      *checkReference = [&app, guardedSource, guardedReference, documentCount,\n                         tabCount, weakCheckReference](int attemptsLeft) {\n''', 'reference image weak declaration')
+          text = replace_once(text,
+          '''        if (!reference->sharedImageData() && attemptsLeft > 0) {\n          QTimer::singleShot(250, &app, [checkReference, attemptsLeft]() {\n            (*checkReference)(attemptsLeft - 1);\n          });\n          return;\n        }\n''',
+          '''        if (!reference->sharedImageData() && attemptsLeft > 0) {\n          if (auto checkReference = weakCheckReference.lock()) {\n            QTimer::singleShot(250, &app, [checkReference, attemptsLeft]() {\n              (*checkReference)(attemptsLeft - 1);\n            });\n            return;\n          }\n        }\n''', 'reference image weak retry')
+
+          text = replace_once(text,
+          '''        auto checkReload = std::make_shared<std::function<void(int)>>();\n        *checkReload = [&app, guardedSource, guardedReference, beforeReload,\n                        checkReload](int attemptsLeft) {\n''',
+          '''        auto checkReload = std::make_shared<std::function<void(int)>>();\n        std::weak_ptr<std::function<void(int)>> weakCheckReload = checkReload;\n        *checkReload = [&app, guardedSource, guardedReference, beforeReload,\n                        weakCheckReload](int attemptsLeft) {\n''', 'reload weak declaration')
+          text = replace_once(text,
+          '''          if (reference->sharedImageData() == beforeReload &&\n              attemptsLeft > 0) {\n            QTimer::singleShot(250, &app, [checkReload, attemptsLeft]() {\n              (*checkReload)(attemptsLeft - 1);\n            });\n            return;\n          }\n''',
+          '''          if (reference->sharedImageData() == beforeReload &&\n              attemptsLeft > 0) {\n            if (auto checkReload = weakCheckReload.lock()) {\n              QTimer::singleShot(250, &app, [checkReload, attemptsLeft]() {\n                (*checkReload)(attemptsLeft - 1);\n              });\n              return;\n            }\n          }\n''', 'reload weak retry')
+
+          text = replace_once(text,
+          '''    QTimer::singleShot(duration, &app, [&app]() {\n      app.closeAllDocumentWindows();\n      if (!app.documentWindows().isEmpty())\n        app.quit();\n    });\n''',
+          '''    QTimer::singleShot(duration, &app, [&app]() {\n      app.closeAllDocumentWindows();\n\n      // WA_DeleteOnClose may defer QObject destruction. Keep the event loop\n      // alive until every tracked document/view has actually disappeared so\n      // LeakSanitizer observes the post-teardown heap rather than live windows.\n      auto finishSmokeClose = std::make_shared<std::function<void(int)>>();\n      std::weak_ptr<std::function<void(int)>> weakFinishSmokeClose =\n          finishSmokeClose;\n      *finishSmokeClose = [&app, weakFinishSmokeClose](int attemptsLeft) {\n        if (app.documentWindows().isEmpty() && app.viewWindows().isEmpty()) {\n          app.quit();\n          return;\n        }\n        if (attemptsLeft <= 0) {\n          qCritical() << "Smoke-test teardown left live documents or views";\n          app.exit(18);\n          return;\n        }\n        if (auto finishSmokeClose = weakFinishSmokeClose.lock()) {\n          QTimer::singleShot(50, &app, [finishSmokeClose, attemptsLeft]() {\n            (*finishSmokeClose)(attemptsLeft - 1);\n          });\n        }\n      };\n      QTimer::singleShot(0, &app, [finishSmokeClose]() {\n        (*finishSmokeClose)(100);\n      });\n    });\n''', 'smoke deferred teardown')
           path.write_text(text)
           PY
           git diff --check
@@ -45,6 +102,9 @@ jobs:
         run: |
           git config user.name 'Jan Hubička'
           git config user.email '46065755+janhubicka@users.noreply.github.com'
-          git add src/qtgui/WorkspaceWindow.cpp
-          git commit -m 'qtgui: guard MDI wrapper lifetimes'
+          git add src/qtgui/WorkspaceWindow.cpp \
+                  src/qtgui/ColorScreenApplication.cpp \
+                  src/qtgui/ColorScreenApplication.h \
+                  src/qtgui/main.cpp
+          git commit -m 'qtgui: make sanitizer teardown lifetime-safe'
           git push origin HEAD:agent/qtgui-fix-document-mdi-wrapper-detach
