@@ -1,0 +1,181 @@
+diff --git a/.agents/qtgui.md b/.agents/qtgui.md
+index 3277fe6..4108b23 100644
+--- a/.agents/qtgui.md
++++ b/.agents/qtgui.md
+@@ -57,8 +57,10 @@ later-closing document cannot overwrite newer entries.
+ 
+ `WorkspaceWindow` must use `QMdiArea`, rather than maintaining a parallel custom
+ tab implementation. The default view is `QMdiArea::TabbedView`; its internal
+-`QTabBar` has `autoHide` enabled so no tab strip is shown for a single document.
+-Tabbed MDI subwindows must remain maximized: an active tab represents the whole
++`QTabBar` uses Qt's standard document-mode behavior, including a visible tab
++for a single attached image. Do not auto-hide the only tab: an empty strip is
++more confusing than Qt's normal one-document presentation. Tabbed MDI
++subwindows must remain maximized: an active tab represents the whole
+ document viewport and must never expose a nested `QMdiSubWindow` frame.
+ The workspace is a `QMainWindow`: the active document toolbar is installed in
+ its top toolbar area, therefore document tabs naturally appear below it. The
+@@ -81,17 +83,32 @@ Detaching removes the existing `MainWindow` from the MDI
+ area and reparents that same object as a top-level window; reattaching performs
+ the inverse operation. Never serialize, clone, or reconstruct a document merely
+ to change its presentation. Tabs are movable and closable, can be dragged out,
+-and also support double-click/context-menu detachment. `Ctrl+Tab` and
+-`Ctrl+Shift+Tab` cycle all documents, whether attached or detached. `Ctrl+N`
+-creates a new workspace document and `Ctrl+Shift+N` creates a detached empty
+-window.
+-
+-`MainWindow` remains the ownership boundary. When embedded, only presentation
++and also support double-click/context-menu detachment. If the final attached
++presentation is detached or closed, the now-empty workspace shell closes; it
++must never remain as a menu-less unusable window. `Ctrl+Tab` and
++`Ctrl+Shift+Tab` cycle all visible image presentations, including ordinary and
++specialized views, whether attached or detached. `Ctrl+N` creates a new
++workspace document and `Ctrl+Shift+N` creates a detached empty window.
++
++`MainWindow` remains the logical ownership boundary, but its original image
++presentation is a peer of `ImageViewWindow` presentations. Closing the original
++presentation while another view exists must not close the image: the application
++retains the `MainWindow` only as a hidden state owner until the final view closes.
++The last presentation performs the normal document close/save policy, and a
++close veto keeps that presentation open. When embedded, only presentation
+ widgets are temporarily reparented: its menu actions and toolbar are surfaced by
+ the workspace and its inspector is placed in the shared inspector stack. Before
+ detachment or destruction these widgets must be returned to the same
+ `MainWindow`, so ordinary state saving and teardown continue to work.
+ 
++Closing `WorkspaceWindow` closes only the presentations currently hosted in its
++MDI area. Detached documents and views are independent top-level windows and
++keep the application alive. **File → Exit** is the explicit application-wide
++close path and must close every presentation while respecting save/close vetoes.
++Do not create a replacement empty document merely because the last real document
++closed; once no image presentation remains, the workspace shell should disappear
++and normal Qt last-window lifetime rules apply.
++
+ Automatic solid-area focus analysis is also document-local.  The discovered
+ candidate rectangles, individual fit results, selected subset, and validation
+ diagnostics belong to the source `MainWindow`; they must never be static or
+diff --git a/.github/workflows/build-ubuntu.yml b/.github/workflows/build-ubuntu.yml
+index e055b1a..9b58ece 100644
+--- a/.github/workflows/build-ubuntu.yml
++++ b/.github/workflows/build-ubuntu.yml
+@@ -40,6 +40,11 @@ jobs:
+           --smoke-test-new-view --smoke-test-slanted-reference \
+           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
++    - name: Qt window-lifetime smoke test
++      run: |
++        QT_QPA_PLATFORM=offscreen ./src/qtgui/colorscreen-qt \
++          --smoke-test 10000 --smoke-test-window-lifetime \
++          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+     - name: make check
+       run: make -j$(nproc) check
+     - name: Upload Test Results
+diff --git a/src/qtgui/ColorScreenApplication.cpp b/src/qtgui/ColorScreenApplication.cpp
+index 5e33bc4..bc52b78 100644
+--- a/src/qtgui/ColorScreenApplication.cpp
++++ b/src/qtgui/ColorScreenApplication.cpp
+@@ -100,12 +100,13 @@ MainWindow *ColorScreenApplication::createDocumentWindow(
+   document->setAttribute(Qt::WA_DeleteOnClose);
+   m_documentWindows.append(document);
+ 
+-  connect(document, &QObject::destroyed, this, [this]() {
++  connect(document, &QObject::destroyed, this, [this, document]() {
++    m_hiddenDocumentPresentations.remove(document);
++    m_finalizingDocuments.remove(document);
++    m_closingDocuments.remove(document);
+     QTimer::singleShot(0, this, [this]() {
+       pruneDocumentWindows();
+       refreshWindowMenus();
+-      if (!m_workspaceShutdown && m_documentWindows.isEmpty())
+-        createDocumentWindow();
+     });
+   });
+ 
+@@ -138,9 +139,13 @@ ImageViewWindow *ColorScreenApplication::createViewWindow(MainWindow *source,
+   auto *view = new ImageViewWindow(source, viewNumber);
+   view->setAttribute(Qt::WA_DeleteOnClose);
+   m_viewWindows.append(view);
+-  connect(view, &QObject::destroyed, this, [this]() {
+-    QTimer::singleShot(0, this, [this]() {
++  QPointer<MainWindow> guardedSource(source);
++  connect(view, &QObject::destroyed, this, [this, guardedSource, view]() {
++    m_closingViews.remove(view);
++    QTimer::singleShot(0, this, [this, guardedSource]() {
+       pruneViewWindows();
++      if (guardedSource)
++        closeHiddenDocumentWithoutViews(guardedSource);
+       refreshWindowMenus();
+     });
+   });
+@@ -176,11 +181,14 @@ ImageViewWindow *ColorScreenApplication::createSlantedEdgeReference(
+   view->setAttribute(Qt::WA_DeleteOnClose);
+   m_viewWindows.append(view);
+   QPointer<MainWindow> guardedSource(source);
+-  connect(view, &QObject::destroyed, this, [this, guardedSource]() {
++  connect(view, &QObject::destroyed, this, [this, guardedSource, view]() {
++    m_closingViews.remove(view);
+     QTimer::singleShot(0, this, [this, guardedSource]() {
+       pruneViewWindows();
+-      if (guardedSource)
++      if (guardedSource) {
+         saveSlantedEdgeReferenceRecovery(guardedSource);
++        closeHiddenDocumentWithoutViews(guardedSource);
++      }
+       refreshWindowMenus();
+     });
+   });
+@@ -253,6 +261,57 @@ bool ColorScreenApplication::closeView(ImageViewWindow *view) {
+   return view->close();
+ }
+ 
++/** Return whether DOCUMENT still has its original visible presentation. */
++bool ColorScreenApplication::isDocumentPresentationOpen(
++    MainWindow *document) const {
++  return document && !m_hiddenDocumentPresentations.contains(document) &&
++         !m_closingDocuments.contains(document);
++}
++
++/** Keep DOCUMENT alive as a hidden state owner while secondary views remain. */
++bool ColorScreenApplication::retainDocumentForOpenViews(MainWindow *document) {
++  if (!document || m_finalizingDocuments.contains(document) ||
++      m_closingDocuments.contains(document))
++    return false;
++
++  if (m_hiddenDocumentPresentations.contains(document))
++    return true;
++  if (!hasOpenViews(document))
++    return false;
++
++  m_hiddenDocumentPresentations.insert(document);
++  if (m_workspaceWindow && m_workspaceWindow->containsDocument(document))
++    m_workspaceWindow->prepareDocumentForClose(document);
++  else
++    document->hide();
++  refreshWindowMenus();
++  return true;
++}
++
++/** Approve closing VIEW and finalize its hidden document owner when it is last. */
++bool ColorScreenApplication::requestViewClose(ImageViewWindow *view) {
++  if (!view)
++    return false;
++  if (m_closingViews.contains(view))
++    return true;
++
++  MainWindow *source = view->sourceDocument();
++  if (source && m_hiddenDocumentPresentations.contains(source) &&
++      !hasOpenViews(source, view)) {
++    m_finalizingDocuments.insert(source);
++    const bool closed = source->close();
++    m_finalizingDocuments.remove(source);
++    if (!closed)
++      return false;
++    m_closingDocuments.insert(source);
++  }
++
++  m_closingViews.insert(view);
++  if (m_workspaceWindow && m_workspaceWindow->containsView(view))
++    m_workspaceWindow->prepareViewForClose(view);
++  return true;
++}
++
