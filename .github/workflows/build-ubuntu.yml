@@ -27,7 +27,34 @@ jobs:
         run: |
           git apply --check agent/focus-cli.patch
           git apply agent/focus-cli.patch
-          grep -q 'analyze-focus-areas' src/colorscreen/colorscreen.C
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/colorscreen/colorscreen.C')
+          text = path.read_text()
+          replacements = [
+              ('      fprintf (stderr, "      --fixed-focus-verification verify candidates without refitting global focus\\n");\n'
+               '      fprintf (stderr, "      --no-leave-one-out         skip N-1 stability fits\\n");',
+               '      fprintf (stderr, "      --fixed-focus-verification verify candidates without refitting global focus\\n");\n'
+               '      fprintf (stderr, "      --fixed-joint-position     keep verified local phases fixed in the joint focus solve\\n");\n'
+               '      fprintf (stderr, "      --no-leave-one-out         skip N-1 stability fits\\n");'),
+              ('  bool fixed_focus_verification = false;\n  uint64_t focus_flags',
+               '  bool fixed_focus_verification = false;\n  bool fixed_joint_position = false;\n  uint64_t focus_flags'),
+              ('      else if (arg == "--fixed-focus-verification")\n        fixed_focus_verification = true;\n'
+               '      else if (arg == "--no-leave-one-out")',
+               '      else if (arg == "--fixed-focus-verification")\n        fixed_focus_verification = true;\n'
+               '      else if (arg == "--fixed-joint-position")\n        fixed_joint_position = true;\n'
+               '      else if (arg == "--no-leave-one-out")'),
+              ('  if (!use_bw)\n    joint.flags |= finetune_uniform_image_layer;\n\n  finetune_focus_analysis_parameters',
+               '  if (!use_bw)\n    joint.flags |= finetune_uniform_image_layer;\n'
+               '  if (fixed_joint_position)\n    joint.flags &= ~finetune_position;\n\n  finetune_focus_analysis_parameters'),
+          ]
+          for old, new in replacements:
+              if text.count(old) != 1:
+                  raise SystemExit(f'expected one match, found {text.count(old)} for {old[:60]!r}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+          grep -q -- '--fixed-joint-position' src/colorscreen/colorscreen.C
       - name: Build CLI
         run: |
           CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure
