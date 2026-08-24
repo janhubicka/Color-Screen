@@ -11,6 +11,12 @@ jobs:
 
     runs-on: windows-latest
 
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPRESS: "true"
+      CCACHE_MAXSIZE: 500M
+
     strategy:
       matrix:
         include:
@@ -22,8 +28,19 @@ jobs:
     - uses: msys2/setup-msys2@v2
       with:
         msystem: ${{matrix.sys}}
-        update: true
-        install: make mingw-w64-${{matrix.env}}-gcc mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-pkg-config mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive mingw-w64-${{matrix.env}}-autotools  mingw-w64-${{matrix.env}}-fftw mingw-w64-${{matrix.env}}-qt6-base mingw-w64-${{matrix.env}}-qt6-tools mingw-w64-${{matrix.env}}-adwaita-icon-theme mingw-w64-${{matrix.env}}-qt6-svg mingw-w64-${{matrix.env}}-nsis mingw-w64-${{matrix.env}}-imagemagick mingw-w64-${{matrix.env}}-exiv2 mingw-w64-${{matrix.env}}-openjpeg2 mingw-w64-${{matrix.env}}-libpng
+        update: false
+        cache: true
+        install: make mingw-w64-${{matrix.env}}-gcc mingw-w64-${{matrix.env}}-ccache mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-pkg-config mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive mingw-w64-${{matrix.env}}-autotools  mingw-w64-${{matrix.env}}-fftw mingw-w64-${{matrix.env}}-qt6-base mingw-w64-${{matrix.env}}-qt6-tools mingw-w64-${{matrix.env}}-adwaita-icon-theme mingw-w64-${{matrix.env}}-qt6-svg mingw-w64-${{matrix.env}}-nsis mingw-w64-${{matrix.env}}-imagemagick mingw-w64-${{matrix.env}}-exiv2 mingw-w64-${{matrix.env}}-openjpeg2 mingw-w64-${{matrix.env}}-libpng
+    - name: Restore compiler cache
+      uses: actions/cache@v4
+      with:
+        path: .ccache
+        key: ccache-${{ runner.os }}-${{ matrix.sys }}${{ matrix.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
+        restore-keys: |
+          ccache-${{ runner.os }}-${{ matrix.sys }}${{ matrix.suffix }}-
+    - name: Reset compiler cache stats
+      shell: msys2 {0}
+      run: ccache --zero-stats
     - name: update autotools
       shell: msys2 {0}
       run: autoreconf -fiv
@@ -32,7 +49,7 @@ jobs:
       shell: msys2 {0}
       run: |
         export PATH="/${{matrix.sys}}/share/qt6/bin:$PATH"
-        CXXFLAGS="-Ofast -flto=auto ${{matrix.flags}}" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216" ./configure --enable-qtgui --prefix=/c/Color-Screen-install
+        CC="ccache gcc" CXX="ccache g++" CXXFLAGS="-Ofast -flto=auto ${{matrix.flags}}" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216" ./configure --enable-qtgui --prefix=/c/Color-Screen-install
     - name: generate icons
       shell: msys2 {0}
       run: |
@@ -139,3 +156,7 @@ jobs:
       with:
         name: portable-binary-${{matrix.sys}}${{matrix.suffix}}
         path: c:\Color-Screen-install\bin
+    - name: Compiler cache stats
+      if: always()
+      shell: msys2 {0}
+      run: ccache --show-stats
