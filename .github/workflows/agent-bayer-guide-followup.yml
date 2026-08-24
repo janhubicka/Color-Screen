@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/tmp-fix-bayer-guide-button
+          ref: agent/qtgui-monochrome-bayer-guide
           fetch-depth: 0
       - name: Apply follow-up
         shell: bash
@@ -97,21 +97,18 @@ jobs:
               raise SystemExit('setup guide block not found')
           text = text.replace(old, new, 1)
           old_call = '  InitialSetupGuideDialog dialog(analysis, this);'
-          new_call = '  InitialSetupGuideDialog dialog(this);'
           if old_call not in text:
               raise SystemExit('setup guide call not found')
-          text = text.replace(old_call, new_call, 1)
+          text = text.replace(old_call, '  InitialSetupGuideDialog dialog(this);', 1)
           path.write_text(text)
           PY
-          rm agent-bayer-guide-followup.patch
-          rm .github/workflows/agent-bayer-guide-followup.yml
           git diff --check
-      - name: Commit clean patched tree
+      - name: Commit and push feature branch
         shell: bash
         run: |
           set -euxo pipefail
           git config user.name 'OpenAI Agent'
           git config user.email 'agent@openai.com'
-          git add -A
+          git add src/qtgui/MainWindow.cpp
           git commit -m 'qtgui: simplify and fix Bayer setup guide' -m 'Shorten the monochrome Bayer recommendation for digitization users and remove detector statistics from the dialog. Use an accept-role button so Apply and reload closes the guide and reaches the existing demosaic reload path.'
-          git push origin HEAD:agent/tmp-fix-bayer-guide-button
+          git push origin HEAD:agent/qtgui-monochrome-bayer-guide
