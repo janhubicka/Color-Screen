@@ -1,0 +1,55 @@
+name: Agent publish MDI wrapper fix
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-publish-mdi-wrapper-fix'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Publish clean fix branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch origin main
+          git checkout -B agent/qtgui-fix-document-mdi-wrapper-detach origin/main
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/qtgui/WorkspaceWindow.cpp')
+          text = path.read_text()
+          old = '''  document->hide();
+            m_mdiArea->removeSubWindow(document);
+            m_mdiArea->removeSubWindow(subWindow);
+            subWindow->deleteLater();
+          '''
+          new = '''  document->hide();
+            // Removing the hosted widget leaves its QMdiSubWindow wrapper alive.
+            // Delete that wrapper exactly once below; removing the wrapper itself
+            // here would delete it immediately and make deleteLater() unsafe.
+            m_mdiArea->removeSubWindow(document);
+            subWindow->deleteLater();
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one document detach sequence, found {text.count(old)}')
+          text = text.replace(old, new)
+          path.write_text(text)
+          PY
+          git diff --check
+          test "$(git diff --name-only)" = "src/qtgui/WorkspaceWindow.cpp"
+          grep -q 'm_mdiArea->removeSubWindow(document);' src/qtgui/WorkspaceWindow.cpp
+          ! sed -n '/void WorkspaceWindow::takeDocumentFromWorkspace/,/void WorkspaceWindow::takeViewFromWorkspace/p' src/qtgui/WorkspaceWindow.cpp | grep -q 'removeSubWindow(subWindow)'
+          git config user.name 'OpenAI Agent'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/qtgui/WorkspaceWindow.cpp
+          git commit -m 'qtgui: avoid deleting MDI wrapper twice on detach'
+          git push --force-with-lease origin HEAD:agent/qtgui-fix-document-mdi-wrapper-detach
