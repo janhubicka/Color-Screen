@@ -1,0 +1,116 @@
+rified = 0;
++  for (auto &candidate : candidates)
++    {
++      candidate.fit = finetune (rparam, param, scan, { candidate.center },
++                                NULL, local, &progress);
++      if (candidate.fit.success)
++        verified++;
++      progress.inc_progress ();
++    }
++  printf ("Verified focus-area candidates: %zu/%zu\n", verified,
++          candidates.size ());
++
++  finetune_parameters joint = local;
++  joint.flags |= focus_flags | finetune_no_normalize
++                 | finetune_no_data_collection;
++  if (!use_bw)
++    joint.flags |= finetune_uniform_image_layer;
++  if (fixed_joint_position)
++    joint.flags &= ~finetune_position;
++
++  finetune_focus_analysis_parameters analysis_parameters;
++  analysis_parameters.selection.min_areas = min_areas;
++  analysis_parameters.selection.max_areas = max_areas;
++  if (use_bw)
++    analysis_parameters.selection.minimum_color_volume = 0;
++  analysis_parameters.leave_one_out = leave_one_out;
++  analysis_parameters.held_out = leave_one_out && !use_bw;
++
++  finetune_focus_analysis_result analysis;
++  if (!finetune_analyze_focus_areas (
++          rparam, param, scan, candidates, joint, analysis_parameters,
++          &analysis, &progress))
++    {
++      fprintf (stderr, "Focus-area joint analysis failed: %s\n",
++               analysis.err.c_str ());
++      return 1;
++    }
++
++  printf ("Selected focus areas: %zu\n", analysis.selected.size ());
++  for (size_t i = 0; i < analysis.selected.size (); i++)
++    {
++      const size_t index = analysis.selected[i];
++      const auto &candidate = candidates[index];
++      printf ("  area %zu candidate %zu center %.3f %.3f", i, index,
++              (double)candidate.center.x, (double)candidate.center.y);
++      if (candidate.fit.success)
++        {
++          if (focus_flags & finetune_scanner_mtf_sigma)
++            printf (" local-sigma %.6f",
++                    (double)candidate.fit.scanner_mtf_sigma);
++          if (focus_flags & finetune_scanner_mtf_defocus)
++            {
++              if (rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
++                printf (" local-defocus %.6f",
++                        (double)candidate.fit.scanner_mtf_defocus);
++              else
++                printf (" local-blur-diameter %.6f",
++                        (double)candidate.fit.scanner_mtf_blur_diameter);
++            }
++          printf (" badness %.8g contrast %.8g",
++                  (double)candidate.fit.badness,
++                  (double)candidate.fit.contrast);
++        }
++      printf ("\n");
++    }
++
++  printf ("Joint badness: %.12g\n", (double)analysis.joint_fit.badness);
++  if (focus_flags & finetune_scanner_mtf_sigma)
++    printf ("Joint scanner MTF sigma: %.9f px\n",
++            (double)analysis.joint_fit.scanner_mtf_sigma);
++  if (focus_flags & finetune_scanner_mtf_defocus)
++    {
++      if (rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
++        printf ("Joint scanner MTF defocus: %.9f mm\n",
++                (double)analysis.joint_fit.scanner_mtf_defocus);
++      else
++        printf ("Joint scanner MTF blur diameter: %.9f px\n",
++                (double)analysis.joint_fit.scanner_mtf_blur_diameter);
++    }
++
++  for (size_t i = 0; i < analysis.leave_one_out_fits.size (); i++)
++    {
++      const finetune_result &fit = analysis.leave_one_out_fits[i];
++      printf ("Leave-one-out %zu:", i);
++      if (focus_flags & finetune_scanner_mtf_sigma)
++        printf (" sigma %.9f", (double)fit.scanner_mtf_sigma);
++      if (focus_flags & finetune_scanner_mtf_defocus)
++        {
++          if (rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
++            printf (" defocus %.9f", (double)fit.scanner_mtf_defocus);
++          else
++            printf (" blur-diameter %.9f",
++                    (double)fit.scanner_mtf_blur_diameter);
++        }
++      printf (" badness %.12g\n", (double)fit.badness);
++    }
++  if (analysis.held_out_max_relative_badness >= 0)
++    printf ("Maximum held-out relative residual: %.12g\n",
++            (double)analysis.held_out_max_relative_badness);
++
++  return 0;
++}
++
+ /* Return screen channel C from result R.  */
+ static rgbdata
+ get_screen_channel (finetune_result &r, int c)
+@@ -4388,6 +4677,7 @@ main (int argc, char **argv)
+     {"analyze-backlight", [](int ac, char **av) { analyze_backlight (ac, av); return 0; }, ""},
+     {"analyze-scanner-blur", [](int ac, char **av) { return (int)analyze_scanner_blur (ac, av); }, ""},
+     {"finetune", [](int ac, char **av) { finetune (ac, av); return 0; }, ""},
++    {"analyze-focus-areas", [](int ac, char **av) { return analyze_focus_areas (ac, av); }, "focus-areas"},
+     {"export-lcc", [](int ac, char **av) { export_lcc (ac, av); return 0; }, ""},
+     {"dump-lcc", [](int ac, char **av) { return (int)dump_lcc (ac, av); }, ""},
+     {"stitch", [](int ac, char **av) { return stitch (ac, av); }, ""},
+diff --git a/src/libcolorscreen/focus-analysis-unittests.C b/src/libcolorscreen/focus-analysis-unittests.C
+index 229e
