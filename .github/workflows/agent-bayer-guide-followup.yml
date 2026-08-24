@@ -1,7 +1,7 @@
 name: Agent Bayer guide follow-up publisher
 
 on:
-  push:
+  pull_request:
     branches:
       - agent/tmp-fix-bayer-guide-button
 
@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   publish:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
