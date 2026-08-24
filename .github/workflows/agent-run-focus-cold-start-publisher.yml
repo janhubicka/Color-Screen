@@ -1,0 +1,104 @@
+name: Run focus cold-start publisher
+
+on:
+  pull_request:
+    branches:
+      - agent/tmp-focus-cold-start-base
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-focus-cold-start-publisher'
+    runs-on: ubuntu-24.04
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/focus-area-cold-start
+          fetch-depth: 0
+          path: repo
+
+      - name: Check out publisher payload
+        uses: actions/checkout@v4
+        with:
+          ref: agent/tmp-focus-cold-start-publisher
+          path: payload
+
+      - name: Extract and apply reviewed patch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('payload/.github/workflows/agent-publish-focus-cold-start.yml').read_text()
+          marker = "          python3 - <<'PY'\n"
+          start = source.index(marker) + len(marker)
+          end = source.index("\n          PY\n", start)
+          body = source[start:end]
+          lines = []
+          for line in body.splitlines():
+              if line.startswith('          '):
+                  line = line[10:]
+              lines.append(line)
+          Path('/tmp/apply-focus-cold-start.py').write_text('\n'.join(lines) + '\n')
+          PY
+          cd repo
+          test "$(git rev-parse HEAD)" = ef036dcd9b93aeb48a97d5dba64f5aa39140c24e
+          python3 /tmp/apply-focus-cold-start.py
+          git diff --check
+          test "$(git diff --name-only | sort)" = $'doc/focus-area-analysis.md\nsrc/libcolorscreen/focus-analysis-unittests.C\nsrc/libcolorscreen/focus-analysis.C\nsrc/qtgui/MainWindow.cpp'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev liblcms2-dev libgtk2.0-dev libfftw3-dev qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev libexiv2-dev build-essential libopenjp2-7-dev libpng-dev
+
+      - name: Configure and build
+        working-directory: repo
+        run: |
+          CXXFLAGS='-O2' CFLAGS='-O2' ./configure --enable-checking --enable-qtgui
+          make -j2
+
+      - name: Run focused regression
+        working-directory: repo
+        run: ./src/libcolorscreen/focus-analysis-unittests
+
+      - name: Commit and publish
+        working-directory: repo
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git diff --check
+          git add -- doc/focus-area-analysis.md src/libcolorscreen/focus-analysis.C src/libcolorscreen/focus-analysis-unittests.C src/qtgui/MainWindow.cpp
+          git diff --cached --check
+          git config user.name 'OpenAI Codex'
+          git config user.email 'noreply@openai.com'
+          git commit -F - <<'EOF'
+          focus: stabilize cold sigma/defocus area fits
+
+          A physical focus-area analysis that starts with both residual sigma
+          and defocus at zero sits at a constrained flat corner: both transfer
+          coordinates are even around zero. Stage that specific cold start by
+          fitting shared defocus first, then shared sigma, before releasing both
+          in the normal all-area joint fit. Existing nonzero MTF calibrations
+          keep the historical direct joint path.
+
+          Warm leave-one-out fits from the all-area capture transfer instead of
+          rediscovering the same lens state from project defaults.
+
+          Candidate verification now keeps global capture blur fixed and fits
+          only the local registration/quality/primary information needed for
+          selection; the requested blur coordinates are restored for the
+          selected joint solve. This removes many redundant one-area lens fits.
+
+          Add a physical Paget BW regression with Hurley capture metadata that
+          compares zero-model and warm-model initialization of the coupled
+          sigma/defocus solution.
+          EOF
+          git push origin HEAD:refs/heads/agent/focus-area-cold-start
