@@ -1,1 +1,1 @@
-Trigger the temporary Bayer guide follow-up publisher.
+Trigger the temporary Bayer guide follow-up publisher, attempt 2.
