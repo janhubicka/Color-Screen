@@ -30,6 +30,8 @@
 #include <QColorSpace>
 #include <QComboBox>
 #include <QDateTime> // Added QDateTime include
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QDockWidget> // Added
 #include "BacklightChartWidget.h"
@@ -142,6 +144,132 @@ namespace {
 ColorScreenApplication *documentApplication() {
   return dynamic_cast<ColorScreenApplication *>(QCoreApplication::instance());
 }
+
+/** Small extensible guide shown after an image is opened without parameter
+    data.  Later setup recommendations can be added as more rows without
+    changing the load/reload orchestration. */
+class InitialSetupGuideDialog final : public QDialog {
+public:
+  explicit InitialSetupGuideDialog(QWidget *parent, bool suggestBayer, bool suggestFStop, bool suggestPitch, bool suggestFill, bool suggestDPI, const colorscreen::image_data *scan)
+      : QDialog(parent) {
+    setWindowTitle(tr("Suggested image setup"));
+    setModal(true);
+
+    auto *layout = new QVBoxLayout(this);
+    
+    if (suggestBayer) {
+      auto *intro = new QLabel(
+          tr("This appears to be a monochromatic capture made with a Bayer-filter camera."),
+          this);
+      intro->setWordWrap(true);
+      layout->addWidget(intro);
+
+      m_monochromeBayer =
+          new QCheckBox(tr("Reload with Bayer-filter compensation"), this);
+      m_monochromeBayer->setChecked(true);
+      layout->addWidget(m_monochromeBayer);
+      
+      if (suggestFStop || suggestPitch || suggestFill || suggestDPI) {
+        auto *line = new QFrame(this);
+        line->setFrameShape(QFrame::HLine);
+        line->setFrameShadow(QFrame::Sunken);
+        layout->addWidget(line);
+      }
+    }
+    
+    if (suggestFStop || suggestPitch || suggestFill || suggestDPI) {
+      auto *intro2 = new QLabel(
+          tr("The following camera parameters were automatically detected:"), this);
+      intro2->setWordWrap(true);
+      layout->addWidget(intro2);
+    }
+    
+    if (suggestFStop) {
+      m_fstop = new QCheckBox(tr("Set nominal f-stop to f/%1").arg(scan->f_stop, 0, 'f', 1), this);
+      m_fstop->setChecked(true);
+      layout->addWidget(m_fstop);
+    }
+    
+    if (suggestPitch) {
+      int divisor = scan->width > 0 ? scan->width : 1;
+      double sensorWidth = divisor * scan->pixel_pitch / 1000.0;
+      QString sensorName = getSensorName(sensorWidth);
+      m_pitch = new QCheckBox(tr("Set sensor pixel pitch to %1 μm (Sensor size: %2)").arg(scan->pixel_pitch, 0, 'f', 2).arg(sensorName), this);
+      m_pitch->setChecked(true);
+      layout->addWidget(m_pitch);
+    }
+    
+    if (suggestFill) {
+      m_fill = new QCheckBox(tr("Set sensor fill factor to %1").arg(scan->sensor_fill_factor, 0, 'f', 3), this);
+      m_fill->setChecked(true);
+      layout->addWidget(m_fill);
+    }
+    
+    if (suggestDPI) {
+      m_dpi = new QCheckBox(tr("Set image resolution to %1 PPI").arg(scan->xdpi, 0, 'f', 1), this);
+      m_dpi->setChecked(true);
+      layout->addWidget(m_dpi);
+    }
+
+    auto *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    buttons->button(QDialogButtonBox::Ok)->setText(suggestBayer ? tr("Apply and reload") : tr("Apply"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(tr("Not now"));
+    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    layout->addWidget(buttons);
+  }
+
+  /** Return whether compensated monochrome Bayer loading was selected. */
+  bool useMonochromeBayerCorrection() const {
+    return m_monochromeBayer && m_monochromeBayer->isChecked();
+  }
+  
+  bool useFStop() const {
+    return m_fstop && m_fstop->isChecked();
+  }
+  
+  bool usePixelPitch() const {
+    return m_pitch && m_pitch->isChecked();
+  }
+
+  bool useFillFactor() const {
+    return m_fill && m_fill->isChecked();
+  }
+  
+  bool useDPI() const {
+    return m_dpi && m_dpi->isChecked();
+  }
+
+private:
+  QString getSensorName(double width_mm) const {
+    struct Preset { const char* name; double w; };
+    Preset presets[] = {
+        {"PhaseOne 54.0mm", 54.0},
+        {"PhaseOne 53.7mm", 53.7},
+        {"PhaseOne 53.4mm", 53.4},
+        {"Medium Format 43.8mm", 43.8},
+        {"Full Frame (36mm)", 36.0},
+        {"APS-H (28.3mm)", 28.3},
+        {"APS-C (23.0mm)", 23.0},
+        {"Micro Four Thirds (17.3mm)", 17.3},
+        {"1-inch (13.2mm)", 13.2},
+        {"1/1.7-inch (7.6mm)", 7.6},
+        {"1/2.5-inch (5.76mm)", 5.76}
+    };
+    for (const auto& p : presets) {
+        if (std::abs(width_mm - p.w) < 1.0)
+            return QString::fromUtf8(p.name);
+    }
+    return tr("Unknown, %1 mm width").arg(width_mm, 0, 'f', 1);
+  }
+
+  QCheckBox *m_monochromeBayer = nullptr;
+  QCheckBox *m_fstop = nullptr;
+  QCheckBox *m_pitch = nullptr;
+  QCheckBox *m_fill = nullptr;
+  QCheckBox *m_dpi = nullptr;
+};
 
 } // namespace
 
@@ -719,14 +847,7 @@ void MainWindow::setupUi() {
                          changeParameters(s, desc);
                        },
                        [this]() { return m_scan; },
-                       [this]() {
-                         if (!m_currentImageFile.isEmpty()) {
-                           loadFile(m_currentImageFile, true);
-                           if (ColorScreenApplication *application =
-                                   documentApplication())
-                             application->reloadSlantedEdgeReferences(this);
-                         }
-                       },
+                       [this]() { reloadCurrentImageWithDemosaic(); },
                        this);
 
   // Create Geometry Panel
@@ -2939,6 +3060,83 @@ void MainWindow::openRecentFile() {
     loadFile(fileName);
 }
 
+/** Reload the current scan with the selected demosaic mode.  Reloading clears
+   the undo stack after replacing image_data, so preserve the document's dirty
+   state explicitly when unsaved parameters preceded the reload. */
+void MainWindow::reloadCurrentImageWithDemosaic() {
+  if (m_currentImageFile.isEmpty())
+    return;
+  if (isDocumentModified())
+    m_recoveryDirty = true;
+  loadFile(m_currentImageFile, true);
+  if (ColorScreenApplication *application = documentApplication())
+    application->reloadSlantedEdgeReferences(this);
+}
+
+/** Offer the first post-load setup recommendation for a new image.  The guide
+   is deliberately conservative and currently changes only demosaicing; EXIF
+   metadata import and screen autodetection will be added independently. */
+void MainWindow::maybeOfferInitialSetupGuide(
+    const colorscreen::monochrome_bayer_analysis &analysis) {
+  if (!m_scan)
+    return;
+
+  bool suggestBayer = analysis.candidate &&
+      m_rparams.demosaic !=
+          colorscreen::image_data::demosaic_monochromatic_bayer_corrected;
+  bool suggestFStop = m_scan->f_stop > 0 &&
+      std::abs(m_scan->f_stop - m_rparams.sharpen.scanner_mtf.f_stop) > 0.01;
+  bool suggestPitch = m_scan->pixel_pitch > 0 &&
+      std::abs(m_scan->pixel_pitch - m_rparams.sharpen.scanner_mtf.pixel_pitch) > 0.001;
+  bool suggestFill = m_scan->sensor_fill_factor > 0 &&
+      std::abs(m_scan->sensor_fill_factor - m_rparams.sharpen.scanner_mtf.sensor_fill_factor) > 0.001;
+  bool suggestDPI = m_scan->xdpi > 0 &&
+      std::abs(m_scan->xdpi - m_rparams.sharpen.scanner_mtf.scan_dpi) > 0.1;
+
+  if (!suggestBayer && !suggestFStop && !suggestPitch && !suggestFill && !suggestDPI)
+    return;
+
+  InitialSetupGuideDialog dialog(this, suggestBayer, suggestFStop, suggestPitch, suggestFill, suggestDPI, m_scan.get());
+  if (dialog.exec() != QDialog::Accepted)
+    return;
+
+  ParameterState state = getCurrentState();
+  QStringList changes;
+  
+  if (suggestBayer && dialog.useMonochromeBayerCorrection()) {
+    state.rparams.demosaic =
+        colorscreen::image_data::demosaic_monochromatic_bayer_corrected;
+    changes << tr("Bayer compensation");
+  }
+  
+  if (suggestFStop && dialog.useFStop()) {
+    state.rparams.sharpen.scanner_mtf.f_stop = m_scan->f_stop;
+    changes << tr("f-stop");
+  }
+  
+  if (suggestPitch && dialog.usePixelPitch()) {
+    state.rparams.sharpen.scanner_mtf.pixel_pitch = m_scan->pixel_pitch;
+    changes << tr("pixel pitch");
+  }
+
+  if (suggestFill && dialog.useFillFactor()) {
+    state.rparams.sharpen.scanner_mtf.sensor_fill_factor = m_scan->sensor_fill_factor;
+    changes << tr("sensor fill factor");
+  }
+
+  if (suggestDPI && dialog.useDPI()) {
+    state.rparams.sharpen.scanner_mtf.scan_dpi = m_scan->xdpi;
+    changes << tr("image resolution");
+  }
+
+  if (!changes.isEmpty()) {
+    changeParameters(state, tr("Use autodetected %1").arg(changes.join(", ")));
+    if (suggestBayer && dialog.useMonochromeBayerCorrection()) {
+      reloadCurrentImageWithDemosaic();
+    }
+  }
+}
+
 /** Load an image file and optionally its associated .par parameter file.
    If SUPPRESSPARAMPROMPT is false, checks for a .par file alongside the
    image and offers to load it.  If the user declines or no .par file exists,
@@ -2951,6 +3149,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     return;
 
   m_imageLoadPending = true;
+  bool parameterDataLoaded = false;
   if (!suppressParamPrompt)
     m_recoveryDirty = false;
   m_currentImageFile = QFileInfo(fileName).absoluteFilePath();
@@ -2988,6 +3187,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                                  error ? QString::fromUtf8(error)
                                        : "Unknown error loading parameters.");
           } else {
+            parameterDataLoaded = true;
             m_prevScrToImgParams = m_scrToImgParams;
             m_prevDetectParams = m_detectParams;
 
@@ -3021,6 +3221,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     }
   }
 
+  const bool offerInitialGuide =
+      !suppressParamPrompt && !parameterDataLoaded;
+
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Opening image", 0);
   addProgress(progress);
@@ -3037,7 +3240,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
       new QFutureWatcher<std::pair<bool, QString>>(this);
   connect(
       watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
-      [this, watcher, tempScan, progress, fileName, isCsprj]() {
+      [this, watcher, tempScan, progress, fileName, isCsprj,
+       offerInitialGuide]() {
         std::pair<bool, QString> result = watcher->result();
         m_imageLoadPending = false;
         removeProgress(progress);
@@ -3076,6 +3280,14 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           addToRecentFiles(m_currentImageFile);
           saveRecoveryState();
           updateWindowTitle();
+
+          if (offerInitialGuide) {
+            const colorscreen::monochrome_bayer_analysis analysis =
+                m_scan->analyze_monochrome_bayer();
+            QTimer::singleShot(0, this, [this, analysis]() {
+              maybeOfferInitialSetupGuide(analysis);
+            });
+          }
 
           // Launch background tile loading for stitch projects.
           if (isCsprj && m_scan->stitch) {

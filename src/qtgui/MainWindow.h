@@ -321,6 +321,16 @@ private:
   /** Return whether undo state or recovered state differs from the last save. */
   bool isDocumentModified() const;
 
+  /** Reload the current image using the selected demosaic mode without
+      prompting for parameter data.  Existing unsaved parameter state remains
+      marked dirty across the asynchronous reload. */
+  void reloadCurrentImageWithDemosaic();
+
+  /** Offer conservative post-load setup guidance when ANALYSIS says the
+      normally demosaiced RAW is likely an achromatic Bayer capture. */
+  void maybeOfferInitialSetupGuide(
+      const colorscreen::monochrome_bayer_analysis &analysis);
+
   void setupUi();
   void createMenus();
   QRect getImageArea(QRect area);

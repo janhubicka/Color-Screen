@@ -37,8 +37,8 @@ const property_t image_data::demosaic_names[(int)demosaic_max]
      = {
   { "default", "Default", "Automatically choose demosaicing algorithm" },
   { "half", "Reduce image size to half and avoid demosaicing", "" },
-  { "monochromatic", "Monochromatic", "Assume that every pixel in the RAW file represents intensity of a monochromatic capture (disable deosaicing completely)." },
-  { "monochromatic_bayer_corrected", "Monochromatic with Bayer filter compensated", "Many monochromatic captures are still done through Bayer filter or with camera that sitll do in-camera processing assuming the Bayer filter.  In this case Monochromataic demosaicing leads to regular checkerboard pattern that is eliminated by this mode" },
+  { "monochromatic", "Monochromatic", "Assume that every pixel in the RAW file represents intensity of a monochromatic capture (disable demosaicing completely)." },
+  { "monochromatic_bayer_corrected", "Monochromatic with Bayer filter compensated", "Use native samples from a monochromatic capture made through a conventional Bayer filter and compensate the red/blue sensitivity relative to green. This removes the regular Bayer checkerboard without interpolating image detail." },
   { "linear", "Linear interpolation", "Easiest demosaicing algorithm" },
   { "VNG", "Variable number of gradients interpolation (VNG)", "Variable number of gradients (VNG)[6] interpolation computes gradients near the pixel of interest and uses the lower gradients (representing smoother and more similar parts of the image) to make an estimate. It is used in first versions of dcraw, and suffers from color artifacts." },
   { "PPG", "Pixel grouping (PPG)", "Pixel grouping (PPG)[7] uses assumptions about natural scenery in making estimates. It has fewer color artifacts on natural images than the Variable Number of Gradients method." },
@@ -855,10 +855,20 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
       *error = libraw_strerror (ret);
       return false;
     }
+  /* LibRaw reserves filter values below 1000 for special layouts: 0 is
+     full-color, 1 is Leaf Catchlight's 16x16 layout and 9 is Fuji X-Trans.
+     The compensation below relies specifically on a repeating 2x2 Bayer CFA.  */
+  m_img->standard_bayer_cfa = m_processor->imgdata.idata.filters >= 1000;
   if (!m_processor->imgdata.idata.filters)
     m_img->demosaiced_by = image_data::demosaic_max;
+  if (bayer_correction && !m_img->standard_bayer_cfa)
+    {
+      *error = "monochromatic Bayer compensation requires a standard 2x2 Bayer RAW image";
+      return false;
+    }
   m_img->f_stop = m_processor->imgdata.other.aperture;
   m_img->focal_length = m_processor->imgdata.other.focal_len;
+  m_img->camera_make = m_processor->imgdata.idata.make;
   m_img->camera_model = m_processor->imgdata.idata.model;
   m_img->lens = m_processor->imgdata.lens.Lens;
   if (m_processor->imgdata.lens.FocalLengthIn35mmFormat > 0)
@@ -882,6 +892,10 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
       *error = libraw_strerror (ret);
       return false;
     }
+  /* Save the full-resolution usable width before dcraw_process which may
+     halve dimensions in half-size mode.  This is needed to correct
+     FocalPlaneResolution-based pixel pitch for downsampled output.  */
+  m_img->full_res_width = m_processor->imgdata.sizes.width;
   if (progress)
     progress->set_task ("demosaicing", 1);
   if ((ret = m_processor->dcraw_process ()) != LIBRAW_SUCCESS)
@@ -1383,6 +1397,103 @@ image_data::load_part (int *permille, const char **error,
 	  pixel_pitch = 2.7 * 6400 / xdpi;
 	  sensor_fill_factor = 8 * ((xdpi * xdpi) / (6400.0*6400));
 	}
+
+      /* For cameras (not scanners), try to determine pixel pitch from
+	 EXIF metadata.  These methods only fire when no scanner-specific
+	 value has been set above.  */
+
+      /* Method 1: FocalPlaneXResolution gives the sensor pixel density
+	 directly.  This tag is written by many Canon, Nikon and Pentax
+	 DSLRs.  The unit tag (FocalPlaneResolutionUnit) is required to
+	 convert to physical dimensions.  For RAW files processed at
+	 reduced resolution (e.g. half-size demosaicing) the EXIF value
+	 still refers to the full sensor, so we scale by the ratio of
+	 full-resolution to output width.  */
+      if (pixel_pitch < 0
+	  && focal_plane_x_resolution > 0
+	  && focal_plane_resolution_unit > 0)
+	{
+	  double unit_to_um = 0;
+	  switch (focal_plane_resolution_unit)
+	    {
+	    case 2:
+	      unit_to_um = 25400.0;	/* inch -> µm.  */
+	      break;
+	    case 3:
+	      unit_to_um = 10000.0;	/* centimeter -> µm.  */
+	      break;
+	    case 4:
+	      unit_to_um = 1000.0;	/* millimeter -> µm.  */
+	      break;
+	    case 5:
+	      unit_to_um = 1.0;		/* micrometer -> µm.  */
+	      break;
+	    }
+	  if (unit_to_um > 0)
+	    {
+	      double native_pitch = unit_to_um / focal_plane_x_resolution;
+	      /* Correct for output resolution smaller than the native
+		 sensor (e.g. half-size demosaicing).  For TIFF/JPEG
+		 full_res_width is 0 and the ratio defaults to 1.  */
+	      double scale = (full_res_width > 0 && width > 0)
+			     ? (double)full_res_width / width
+			     : 1.0;
+	      pixel_pitch = native_pitch * scale;
+	    }
+	}
+
+      /* Method 2: Derive pixel pitch from the ratio of actual focal
+	 length to its 35mm-equivalent.  The crop factor gives the
+	 sensor diagonal relative to the 36×24 mm full-frame standard
+	 (diagonal ≈ 43.2666 mm).  Combined with the image aspect ratio,
+	 this yields the physical sensor width, and dividing by the
+	 output pixel count gives pixel pitch.  This method automatically
+	 adapts to reduced-resolution output.  */
+      if (pixel_pitch < 0
+	  && focal_length > 0
+	  && focal_length_in_35mm > 0
+	  && width > 0 && height > 0)
+	{
+	  double crop_factor = focal_length_in_35mm / focal_length;
+	  double diagonal_mm = 43.2666 / crop_factor;
+	  double aspect = (double)width / height;
+	  double sensor_width_mm
+	    = diagonal_mm * aspect / std::sqrt (1.0 + aspect * aspect);
+	  pixel_pitch = sensor_width_mm / width * 1000.0;
+	}
+
+      /* Method 3: Phase One medium format backs often lack standard
+	 focal plane resolution or 35mm-equivalent focal lengths in
+	 their EXIF. Since they use a few well-known sensors with
+	 distinct dimensions, we can infer pixel pitch from the image width.  */
+      if (pixel_pitch < 0
+	  && (camera_model.find ("Phase One") != std::string::npos
+	      || camera_model.find ("PhaseOne") != std::string::npos
+	      || camera_make.find ("Phase One") != std::string::npos
+	      || camera_make.find ("PhaseOne") != std::string::npos))
+	{
+	  int w = (full_res_width > 0) ? full_res_width : width;
+	  if (w >= 19000)
+	    pixel_pitch = 2.81;      /* 250MP (19236) IMX811 */
+	  else if (w >= 14000)
+	    pixel_pitch = 3.76;      /* 150MP (14204) */
+	  else if (w >= 11500)
+	    pixel_pitch = 4.6;       /* 100MP (11608) */
+	  else if (w >= 10200)
+	    pixel_pitch = 5.2;       /* 80MP (10328) */
+	  else if (w >= 8900)
+	    pixel_pitch = 6.0;       /* 60MP (8984) */
+	  else if (w >= 8200)
+	    pixel_pitch = 5.3;       /* 50MP (8280) */
+	  else if (w >= 7300)
+	    pixel_pitch = 6.0;       /* 40MP P40+ (7320) */
+	  else if (w >= 7200)
+	    pixel_pitch = 6.8;       /* 39MP P45+ (7216) */
+	  else if (w >= 6400)
+	    pixel_pitch = 6.8;       /* 31MP P30+ (6496) */
+	  else if (w >= 4000)
+	    pixel_pitch = 9.0;       /* 22MP/18MP/16MP P25/P21/P20 */
+	}
     }
   return ret;
 }
@@ -1608,6 +1719,98 @@ image_data::has_grayscale_or_ir () const
   return m_data != NULL;
 }
 
+/* Analyze whether the RGB channels are consistent with one monochromatic
+   signal observed through a conventional Bayer CFA.  The test samples at most
+   64x64 interior pixels, ignores clipped/dark samples, and uses affine-invariant
+   channel correlation so different camera gains and black offsets do not cause
+   a false negative.  Flat images are rejected because high correlation is not
+   meaningful without real tonal variation.  */
+monochrome_bayer_analysis
+image_data::analyze_monochrome_bayer () const
+{
+  monochrome_bayer_analysis result;
+  if (!standard_bayer_cfa || stitch || !m_rgbdata || width < 8 || height < 8
+      || maxval <= 0)
+    return result;
+
+  constexpr int max_axis_samples = 64;
+  const int nx = std::min (max_axis_samples, width - 4);
+  const int ny = std::min (max_axis_samples, height - 4);
+  const double low = maxval / 256.0;
+  const double high = maxval - low;
+  double sum[3] = { 0, 0, 0 };
+  double sum2[3] = { 0, 0, 0 };
+  double cross[3] = { 0, 0, 0 }; /* RG, RB, GB.  */
+
+  for (int sy = 0; sy < ny; sy++)
+    {
+      const int y = 2 + (ny == 1 ? 0 : sy * (height - 5) / (ny - 1));
+      const pixel *row = get_rgb_row (y);
+      for (int sx = 0; sx < nx; sx++)
+        {
+          const int x = 2 + (nx == 1 ? 0 : sx * (width - 5) / (nx - 1));
+          const pixel &p = row[x];
+          const double v[3] = { (double)p.r, (double)p.g, (double)p.b };
+          if (v[0] <= low || v[1] <= low || v[2] <= low
+              || v[0] >= high || v[1] >= high || v[2] >= high)
+            continue;
+          for (int c = 0; c < 3; c++)
+            {
+              sum[c] += v[c];
+              sum2[c] += v[c] * v[c];
+            }
+          cross[0] += v[0] * v[1];
+          cross[1] += v[0] * v[2];
+          cross[2] += v[1] * v[2];
+          result.samples++;
+        }
+    }
+
+  if (result.samples < 256)
+    return result;
+
+  const double n = result.samples;
+  double variance[3];
+  for (int c = 0; c < 3; c++)
+    variance[c] = std::max (0.0, sum2[c] / n - (sum[c] / n) * (sum[c] / n));
+
+  const double mean_variance = (variance[0] + variance[1] + variance[2]) / 3;
+  result.relative_signal_stddev = std::sqrt (mean_variance) / maxval;
+  if (result.relative_signal_stddev < 0.01)
+    return result;
+
+  const int ca[3] = { 0, 0, 1 };
+  const int cb[3] = { 1, 2, 2 };
+  double minimum_correlation = 1;
+  double maximum_relative_residual = 0;
+  for (int pair = 0; pair < 3; pair++)
+    {
+      const int a = ca[pair], b = cb[pair];
+      if (variance[a] <= 0 || variance[b] <= 0)
+        return result;
+      const double covariance
+          = cross[pair] / n - (sum[a] / n) * (sum[b] / n);
+      const double correlation
+          = std::clamp (covariance / std::sqrt (variance[a] * variance[b]),
+                        -1.0, 1.0);
+      minimum_correlation = std::min (minimum_correlation, correlation);
+      const double residual_fraction
+          = std::sqrt (std::max (0.0, 1 - correlation * correlation));
+      maximum_relative_residual
+          = std::max (maximum_relative_residual, residual_fraction);
+    }
+
+  result.minimum_correlation = minimum_correlation;
+  result.maximum_relative_residual = maximum_relative_residual;
+  /* Keep the automatic suggestion deliberately conservative.  Ordinary color
+     photographs often have correlated RGB luminance, but correlations this
+     close to one across all three channels are characteristic of an effectively
+     monochromatic capture.  */
+  result.candidate = minimum_correlation >= 0.995
+                     && maximum_relative_residual <= 0.10;
+  return result;
+}
+
 /* Set dimensions of the image to W x H.
    If ALLOCATE_RGB is true, allocate RGB data.
    If ALLOCATE_GRAYSCALE is true, allocate grayscale data.  */
@@ -1724,6 +1927,15 @@ image_data::load_exif (const char *name)
         focal_plane_y_resolution
             = it->toRational ().first / (double)it->toRational ().second;
 
+      it = exifData.findKey (
+          Exiv2::ExifKey ("Exif.Photo.FocalPlaneResolutionUnit"));
+      if (it != exifData.end () && it->count ())
+#if EXIV2_TEST_VERSION(0,27,99)
+        focal_plane_resolution_unit = it->toInt64 ();
+#else
+        focal_plane_resolution_unit = it->toLong ();
+#endif
+
       it = exifData.findKey (Exiv2::ExifKey ("Exif.Photo.FocalLength"));
       if (it != exifData.end () && it->count ())
         focal_length
@@ -1737,6 +1949,10 @@ image_data::load_exif (const char *name)
 #else
         focal_length_in_35mm = it->toLong ();
 #endif
+
+      it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.Make"));
+      if (it != exifData.end () && it->count ())
+        camera_make = it->value ().toString ();
 
       it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.Model"));
       if (it != exifData.end () && it->count ())

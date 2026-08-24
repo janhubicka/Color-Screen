@@ -443,6 +443,9 @@ void WorkspaceWindow::showTabbedDocuments() {
 
 /** Present attached documents as equally sized MDI tiles. */
 void WorkspaceWindow::tileDocuments() {
+  // In subwindow mode an activation must not promote a tile back to the
+  // maximized state inherited from tabbed presentation.
+  m_mdiArea->setOption(QMdiArea::DontMaximizeSubWindowOnActivation, true);
   m_mdiArea->setViewMode(QMdiArea::SubWindowView);
   for (QMdiSubWindow *subWindow : m_mdiArea->subWindowList())
     subWindow->showNormal();
@@ -451,6 +454,9 @@ void WorkspaceWindow::tileDocuments() {
 
 /** Present attached documents as cascading MDI subwindows. */
 void WorkspaceWindow::cascadeDocuments() {
+  // Cascaded windows use the same ordinary subwindow activation policy as
+  // tiled windows.
+  m_mdiArea->setOption(QMdiArea::DontMaximizeSubWindowOnActivation, true);
   m_mdiArea->setViewMode(QMdiArea::SubWindowView);
   for (QMdiSubWindow *subWindow : m_mdiArea->subWindowList())
     subWindow->showNormal();

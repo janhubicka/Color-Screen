@@ -15,6 +15,17 @@ namespace colorscreen
 class image_data_loader;
 class stitch_project;
 
+/* Statistics describing whether an RGB RAW rendering is consistent with one
+   monochromatic signal observed through the three Bayer filter colors.  */
+struct monochrome_bayer_analysis
+{
+  bool candidate = false;
+  unsigned int samples = 0;
+  double minimum_correlation = 0;
+  double maximum_relative_residual = 1;
+  double relative_signal_stddev = 0;
+};
+
 /* Scanned image descriptor.  */
 class image_data
 {
@@ -179,6 +190,10 @@ public:
 
   pure_attr DLL_PUBLIC bool has_rgb () const;
   pure_attr DLL_PUBLIC bool has_grayscale_or_ir () const;
+  /* Analyze a normally demosaiced RGB RAW image and return how closely its
+     channels follow one affine monochromatic signal.  Only conventional 2x2
+     Bayer RAW input is considered a candidate.  */
+  DLL_PUBLIC monochrome_bayer_analysis analyze_monochrome_bayer () const;
   pure_attr inline int_image_area
   get_area () const
   {
@@ -196,14 +211,27 @@ public:
   luminosity_t f_stop = -2;
   luminosity_t focal_plane_x_resolution = -2;
   luminosity_t focal_plane_y_resolution = -2;
+  /* EXIF FocalPlaneResolutionUnit (tag 0xA210):
+     2 = inch, 3 = centimeter, 4 = millimeter, 5 = micrometer.
+     -1 = unknown / not present.  */
+  int focal_plane_resolution_unit = -1;
   luminosity_t focal_length = -2;
   luminosity_t focal_length_in_35mm = -2;
   luminosity_t pixel_pitch = -2;
   luminosity_t sensor_fill_factor = -2;
+  /* Full-resolution image width before any demosaicing downscaling
+     (e.g. half-size mode).  Zero if not applicable or unknown.
+     Used to correct FocalPlaneResolution-based pixel pitch when
+     the output image is smaller than the native sensor.  */
+  int full_res_width = 0;
   std::array<luminosity_t, 4> wavelengths = { -2, -2, -2, -2 };
   int rotation = -1;
   int mirror = -1;
+  /* True when the RAW loader reported a conventional 2x2 Bayer CFA.
+     Special mosaics such as X-Trans and full-color RAW files are false.  */
+  bool standard_bayer_cfa = false;
   demosaicing_t demosaiced_by = demosaic_max;
+  std::string camera_make;
   std::string camera_model;
   std::string lens;
   std::string software;
