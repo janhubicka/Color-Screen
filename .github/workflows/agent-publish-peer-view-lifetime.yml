@@ -1,0 +1,52 @@
+name: Agent publish peer-view lifetime patch
+
+on:
+  push:
+    branches:
+      - agent/tmp-publish-peer-view-lifetime
+    paths:
+      - '.agent/READY-peer-view-lifetime'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Assemble patch
+        run: cat .agent/peer-view.patch.* > /tmp/peer-view.patch
+
+      - name: Publish clean branch
+        env:
+          BASE_SHA: ef036dcd9b93aeb48a97d5dba64f5aa39140c24e
+          TARGET_BRANCH: agent/qtgui-peer-view-window-lifetime
+        run: |
+          git checkout --detach "$BASE_SHA"
+          git switch -c "$TARGET_BRANCH"
+          git apply --check /tmp/peer-view.patch
+          git apply /tmp/peer-view.patch
+          git diff --check
+          git config user.name "OpenAI"
+          git config user.email "noreply@openai.com"
+          git add \
+            .agents/qtgui.md \
+            .github/workflows/build-ubuntu.yml \
+            src/qtgui/ColorScreenApplication.cpp \
+            src/qtgui/ColorScreenApplication.h \
+            src/qtgui/ImageViewWindow.cpp \
+            src/qtgui/ImageViewWindow.h \
+            src/qtgui/MainWindow.cpp \
+            src/qtgui/WorkspaceWindow.cpp \
+            src/qtgui/WorkspaceWindow.h \
+            src/qtgui/main.cpp
+          git commit -m "qtgui: make image views peer windows"
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+
+      - name: Remove temporary publisher branch
+        if: success()
+        run: git push origin --delete agent/tmp-publish-peer-view-lifetime || true
