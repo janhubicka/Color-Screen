@@ -1,0 +1,105 @@
+name: Agent publish smoke callback fix v2
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-publish-smoke-callback-fix'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Publish focused fix
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch origin main
+          git checkout -B agent/qtgui-defer-hidden-owner-close origin/main
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/qtgui/main.cpp')
+          text = path.read_text()
+
+          old = '  if (parser.isSet(newViewOption)) {\n'
+          new = '''  // The combined CI command runs New View and slanted-reference checks in one\n  // process. Track completion explicitly instead of relying on wall-clock\n  // delays that processEvents() can overtake on slow or instrumented builds.\n  const auto newViewSmokeDone =\n      std::make_shared<bool>(!parser.isSet(newViewOption));\n\n  if (parser.isSet(newViewOption)) {\n'''
+          assert text.count(old) == 1
+          text = text.replace(old, new, 1)
+
+          old = '    QTimer::singleShot(300, &app, [&app]() {\n'
+          new = '    QTimer::singleShot(300, &app, [&app, newViewSmokeDone]() {\n'
+          assert text.count(old) >= 1
+          text = text.replace(old, new, 1)
+
+          old = '''      ImageViewWindow *view = app.createViewWindow(source);\n      WorkspaceWindow *workspace = app.workspaceWindow();\n'''
+          new = '''      ImageViewWindow *view = app.createViewWindow(source);\n      QPointer<MainWindow> guardedSource(source);\n      QPointer<ImageViewWindow> guardedView(view);\n      WorkspaceWindow *workspace = app.workspaceWindow();\n'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''      app.detachView(view);\n      QCoreApplication::processEvents();\n      view->activateWindow();\n      QCoreApplication::processEvents();\n      QDockWidget *detachedInspector = view->findChild<QDockWidget *>(\n          QStringLiteral("SecondaryDocumentControlsDock"));\n'''
+          new = '''      app.detachView(view);\n      QCoreApplication::processEvents();\n      if (!guardedSource || !guardedView) {\n        qCritical() << "New View disappeared while detaching";\n        app.exit(14);\n        return;\n      }\n      guardedView->activateWindow();\n      QCoreApplication::processEvents();\n      if (!guardedSource || !guardedView) {\n        qCritical() << "New View disappeared while activating detached view";\n        app.exit(14);\n        return;\n      }\n      QDockWidget *detachedInspector = guardedView->findChild<QDockWidget *>(\n          QStringLiteral("SecondaryDocumentControlsDock"));\n'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''      app.attachView(view);\n      QCoreApplication::processEvents();\n      if (!workspace->containsView(view) ||\n'''
+          new = '''      app.attachView(view);\n      QCoreApplication::processEvents();\n      if (!guardedSource || !guardedView) {\n        qCritical() << "New View disappeared while reattaching";\n        app.exit(14);\n        return;\n      }\n      if (!workspace->containsView(guardedView) ||\n'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''      QPointer<MainWindow> guardedSource(source);\n      QPointer<ImageViewWindow> guardedView(view);\n      const int documentCount = documents.size();\n'''
+          new = '''      const int documentCount = documents.size();\n'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''      if (!app.closeView(view)) {\n        qCritical() << "Closing the final peer view was rejected unexpectedly";\n        app.exit(14);\n        return;\n      }\n      QTimer::singleShot(150, &app,\n                         [&app, guardedSource, guardedView, documentCount]() {\n        if (guardedSource || guardedView ||\n            app.documentWindows().size() != documentCount - 1) {\n          qCritical() << "Final peer view did not close its document owner";\n          app.exit(14);\n        }\n      });\n'''
+          new = '''      if (!app.closeView(view)) {\n        qCritical() << "Closing the final peer view was rejected unexpectedly";\n        app.exit(14);\n        return;\n      }\n\n      auto checkFinalPeerClose =\n          std::make_shared<std::function<void(int)>>();\n      *checkFinalPeerClose =\n          [&app, guardedSource, guardedView, documentCount, newViewSmokeDone,\n           checkFinalPeerClose](int attemptsLeft) {\n            if (guardedSource || guardedView ||\n                app.documentWindows().size() != documentCount - 1) {\n              if (attemptsLeft > 0) {\n                QTimer::singleShot(50, &app,\n                                   [checkFinalPeerClose, attemptsLeft]() {\n                  (*checkFinalPeerClose)(attemptsLeft - 1);\n                });\n                return;\n              }\n              qCritical() << "Final peer view did not close its document owner";\n              app.exit(14);\n              return;\n            }\n            *newViewSmokeDone = true;\n          };\n      QTimer::singleShot(0, &app, [checkFinalPeerClose]() {\n        (*checkFinalPeerClose)(40);\n      });\n'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''  if (parser.isSet(slantedReferenceOption)) {\n    // When both view smoke tests are requested, allow WA_DeleteOnClose from\n    // New View to complete before constructing the reference view.  This keeps\n    // the tests deterministic and also exercises the normal view-close path.\n    const int referenceSmokeDelay = parser.isSet(newViewOption) ? 700 : 350;\n    QTimer::singleShot(referenceSmokeDelay, &app, [&app]() {\n      const QList<MainWindow *> documents = app.documentWindows();\n      if (documents.isEmpty() || documents.front()->currentImageFile().isEmpty()) {\n        qCritical() << "Slanted reference smoke test requires a loaded image";\n        app.exit(15);\n        return;\n      }\n\n      MainWindow *source = documents.front();\n'''
+          new = '''  if (parser.isSet(slantedReferenceOption)) {\n    auto startReferenceSmoke =\n        std::make_shared<std::function<void(int)>>();\n    *startReferenceSmoke =\n        [&app, newViewSmokeDone, startReferenceSmoke](int attemptsLeft) {\n      if (!*newViewSmokeDone) {\n        if (attemptsLeft <= 0) {\n          qCritical() << "Slanted reference smoke test timed out waiting for "\n                         "New View to finish";\n          app.exit(15);\n          return;\n        }\n        QTimer::singleShot(100, &app,\n                           [startReferenceSmoke, attemptsLeft]() {\n          (*startReferenceSmoke)(attemptsLeft - 1);\n        });\n        return;\n      }\n\n      const QList<MainWindow *> documents = app.documentWindows();\n      MainWindow *source = nullptr;\n      for (MainWindow *document : documents) {\n        if (document && app.isDocumentPresentationOpen(document) &&\n            !document->currentImageFile().isEmpty()) {\n          source = document;\n          break;\n        }\n      }\n      if (!source) {\n        qCritical() << "Slanted reference smoke test requires a visible loaded image";\n        app.exit(15);\n        return;\n      }\n'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''      const int documentCount = documents.size();\n      const int tabCount = app.tabCount();\n      ImageViewWindow *reference = app.createSlantedEdgeReference(\n          source, source->currentImageFile());\n      if (!reference) {\n'''
+          new = '''      const int documentCount = documents.size();\n      const int tabCount = app.tabCount();\n      QPointer<MainWindow> guardedSource(source);\n      QPointer<ImageViewWindow> guardedReference(\n          app.createSlantedEdgeReference(source, source->currentImageFile()));\n      ImageViewWindow *reference = guardedReference.data();\n      if (!reference) {\n'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''      *checkReference = [&app, source, reference, documentCount, tabCount,\n                         checkReference](int attemptsLeft) {\n        if (reference && !reference->sharedImageData() && attemptsLeft > 0) {\n'''
+          new = '''      *checkReference = [&app, guardedSource, guardedReference, documentCount,\n                         tabCount, checkReference](int attemptsLeft) {\n        MainWindow *source = guardedSource.data();\n        ImageViewWindow *reference = guardedReference.data();\n        if (!source || !reference) {\n          qCritical() << "Slanted-edge reference disappeared while waiting for its image";\n          app.exit(15);\n          return;\n        }\n        if (!reference->sharedImageData() && attemptsLeft > 0) {\n'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''        *checkReload = [&app, source, reference, beforeReload, checkReload](\n                           int attemptsLeft) {\n          if (reference && reference->sharedImageData() == beforeReload &&\n              attemptsLeft > 0) {\n'''
+          new = '''        *checkReload = [&app, guardedSource, guardedReference, beforeReload,\n                        checkReload](int attemptsLeft) {\n          MainWindow *source = guardedSource.data();\n          ImageViewWindow *reference = guardedReference.data();\n          if (!source || !reference) {\n            qCritical() << "Slanted-edge reference disappeared during reload";\n            app.exit(15);\n            return;\n          }\n          if (reference->sharedImageData() == beforeReload &&\n              attemptsLeft > 0) {\n'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''          if (!reference || reference->sharedImageData() == beforeReload) {\n'''
+          new = '''          if (reference->sharedImageData() == beforeReload) {\n'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''      (*checkReference)(28);\n    });\n  }\n\n  if (parser.isSet(smokeTestOption)) {\n'''
+          new = '''      (*checkReference)(28);\n    };\n    QTimer::singleShot(350, &app, [startReferenceSmoke]() {\n      (*startReferenceSmoke)(80);\n    });\n  }\n\n  if (parser.isSet(smokeTestOption)) {\n'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+          git diff --check
+          test "$(git diff --name-only | tr '\n' ' ')" = "src/qtgui/main.cpp "
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/qtgui/main.cpp
+          git commit -m "qtgui: serialize combined view smoke tests"
+          git push --force origin HEAD:agent/qtgui-defer-hidden-owner-close
