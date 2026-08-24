@@ -1,0 +1,1 @@
+trigger publisher after workflow is present
