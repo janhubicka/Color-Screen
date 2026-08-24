@@ -8506,6 +8506,90 @@ test_demosaic ()
 }
 }
 
+/* Verify conservative detection of monochromatic data that was initially
+   rendered as RGB from a standard Bayer RAW file.  Channel gains/offsets and
+   small noise are allowed; real chromatic structure, flat data and non-Bayer
+   sources must not trigger the loading guide.  */
+static bool
+test_monochrome_bayer_analysis ()
+{
+  constexpr int width = 160, height = 120;
+  image_data image;
+  if (!image.set_dimensions (width, height, true, false))
+    return false;
+  image.standard_bayer_cfa = true;
+  unsigned int random_state = 17;
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      {
+        const double signal
+            = 8000 + 180 * x + 95 * y
+              + 3500 * sin (0.071 * x + 0.043 * y);
+        const int noise = (int)(fast_rand16 (&random_state) % 41) - 20;
+        image.put_rgb_pixel (
+            x, y,
+            { (image_data::gray)std::clamp (1200 + 0.78 * signal + noise,
+                                            0.0, 65535.0),
+              (image_data::gray)std::clamp (700 + 1.02 * signal - noise,
+                                            0.0, 65535.0),
+              (image_data::gray)std::clamp (1900 + 0.61 * signal + noise / 2,
+                                            0.0, 65535.0) });
+      }
+  monochrome_bayer_analysis analysis = image.analyze_monochrome_bayer ();
+  if (!analysis.candidate || analysis.samples < 256
+      || analysis.minimum_correlation < 0.995
+      || analysis.relative_signal_stddev < 0.01)
+    {
+      fprintf (stderr,
+               "Correlated monochrome Bayer data was rejected: n=%u corr=%g residual=%g signal=%g\n",
+               analysis.samples, analysis.minimum_correlation,
+               analysis.maximum_relative_residual,
+               analysis.relative_signal_stddev);
+      return false;
+    }
+
+  /* Add independent chromatic structure while retaining a common luminance
+     component.  This resembles an ordinary low-saturation color image and must
+     remain below the intentionally strict automatic threshold.  */
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      {
+        const double signal = 12000 + 150 * x + 110 * y;
+        const double red = signal + 7000 * sin (0.11 * x);
+        const double green = signal + 6500 * sin (0.09 * y + 0.7);
+        const double blue = signal + 6000 * sin (0.07 * x + 0.13 * y + 1.1);
+        image.put_rgb_pixel (
+            x, y,
+            { (image_data::gray)std::clamp (red, 0.0, 65535.0),
+              (image_data::gray)std::clamp (green, 0.0, 65535.0),
+              (image_data::gray)std::clamp (blue, 0.0, 65535.0) });
+      }
+  analysis = image.analyze_monochrome_bayer ();
+  if (analysis.candidate)
+    {
+      fprintf (stderr, "Chromatic Bayer data was classified as monochrome\n");
+      return false;
+    }
+
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      image.put_rgb_pixel (x, y, { 20000, 22000, 18000 });
+  if (image.analyze_monochrome_bayer ().candidate)
+    {
+      fprintf (stderr, "Flat Bayer data was classified as monochrome\n");
+      return false;
+    }
+
+  image.standard_bayer_cfa = false;
+  if (image.analyze_monochrome_bayer ().candidate)
+    {
+      fprintf (stderr, "Non-Bayer RGB data was classified as Bayer monochrome\n");
+      return false;
+    }
+  return true;
+}
+
+
 
 
 
@@ -8579,6 +8663,8 @@ main (int argc, char **argv)
       [] () { return test_weighted_matching (); } },
     { "denoising", "denoising tests", [] () { return test_denoise (); } },
     { "demosaic", "dufay and paget demosaicing tests", [] () { return test_demosaic (); } },
+    { "monochrome_bayer", "monochrome Bayer candidate analysis tests",
+      [] () { return test_monochrome_bayer_analysis (); } },
     { NULL, NULL, NULL }
   };
 

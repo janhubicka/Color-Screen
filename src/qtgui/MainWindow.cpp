@@ -30,6 +30,8 @@
 #include <QColorSpace>
 #include <QComboBox>
 #include <QDateTime> // Added QDateTime include
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QDockWidget> // Added
 #include "BacklightChartWidget.h"
@@ -142,6 +144,47 @@ namespace {
 ColorScreenApplication *documentApplication() {
   return dynamic_cast<ColorScreenApplication *>(QCoreApplication::instance());
 }
+
+/** Small extensible guide shown after an image is opened without parameter
+    data.  Later setup recommendations can be added as more rows without
+    changing the load/reload orchestration. */
+class InitialSetupGuideDialog final : public QDialog {
+public:
+  explicit InitialSetupGuideDialog(QWidget *parent = nullptr)
+      : QDialog(parent) {
+    setWindowTitle(tr("Suggested image setup"));
+    setModal(true);
+
+    auto *layout = new QVBoxLayout(this);
+    auto *intro = new QLabel(
+        tr("This appears to be a monochromatic capture made with a Bayer-filter "
+           "camera."),
+        this);
+    intro->setWordWrap(true);
+    layout->addWidget(intro);
+
+    m_monochromeBayer =
+        new QCheckBox(tr("Reload with Bayer-filter compensation"), this);
+    m_monochromeBayer->setChecked(true);
+    layout->addWidget(m_monochromeBayer);
+
+    auto *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    buttons->button(QDialogButtonBox::Ok)->setText(tr("Apply and reload"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(tr("Not now"));
+    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    layout->addWidget(buttons);
+  }
+
+  /** Return whether compensated monochrome Bayer loading was selected. */
+  bool useMonochromeBayerCorrection() const {
+    return m_monochromeBayer && m_monochromeBayer->isChecked();
+  }
+
+private:
+  QCheckBox *m_monochromeBayer = nullptr;
+};
 
 } // namespace
 
@@ -719,14 +762,7 @@ void MainWindow::setupUi() {
                          changeParameters(s, desc);
                        },
                        [this]() { return m_scan; },
-                       [this]() {
-                         if (!m_currentImageFile.isEmpty()) {
-                           loadFile(m_currentImageFile, true);
-                           if (ColorScreenApplication *application =
-                                   documentApplication())
-                             application->reloadSlantedEdgeReferences(this);
-                         }
-                       },
+                       [this]() { reloadCurrentImageWithDemosaic(); },
                        this);
 
   // Create Geometry Panel
@@ -2939,6 +2975,41 @@ void MainWindow::openRecentFile() {
     loadFile(fileName);
 }
 
+/** Reload the current scan with the selected demosaic mode.  Reloading clears
+   the undo stack after replacing image_data, so preserve the document's dirty
+   state explicitly when unsaved parameters preceded the reload. */
+void MainWindow::reloadCurrentImageWithDemosaic() {
+  if (m_currentImageFile.isEmpty())
+    return;
+  if (isDocumentModified())
+    m_recoveryDirty = true;
+  loadFile(m_currentImageFile, true);
+  if (ColorScreenApplication *application = documentApplication())
+    application->reloadSlantedEdgeReferences(this);
+}
+
+/** Offer the first post-load setup recommendation for a new image.  The guide
+   is deliberately conservative and currently changes only demosaicing; EXIF
+   metadata import and screen autodetection will be added independently. */
+void MainWindow::maybeOfferInitialSetupGuide(
+    const colorscreen::monochrome_bayer_analysis &analysis) {
+  if (!m_scan || !analysis.candidate ||
+      m_rparams.demosaic ==
+          colorscreen::image_data::demosaic_monochromatic_bayer_corrected)
+    return;
+
+  InitialSetupGuideDialog dialog(this);
+  if (dialog.exec() != QDialog::Accepted ||
+      !dialog.useMonochromeBayerCorrection())
+    return;
+
+  ParameterState state = getCurrentState();
+  state.rparams.demosaic =
+      colorscreen::image_data::demosaic_monochromatic_bayer_corrected;
+  changeParameters(state, tr("Use monochromatic Bayer compensation"));
+  reloadCurrentImageWithDemosaic();
+}
+
 /** Load an image file and optionally its associated .par parameter file.
    If SUPPRESSPARAMPROMPT is false, checks for a .par file alongside the
    image and offers to load it.  If the user declines or no .par file exists,
@@ -2951,6 +3022,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     return;
 
   m_imageLoadPending = true;
+  bool parameterDataLoaded = false;
   if (!suppressParamPrompt)
     m_recoveryDirty = false;
   m_currentImageFile = QFileInfo(fileName).absoluteFilePath();
@@ -2988,6 +3060,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                                  error ? QString::fromUtf8(error)
                                        : "Unknown error loading parameters.");
           } else {
+            parameterDataLoaded = true;
             m_prevScrToImgParams = m_scrToImgParams;
             m_prevDetectParams = m_detectParams;
 
@@ -3021,6 +3094,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     }
   }
 
+  const bool offerInitialGuide =
+      !suppressParamPrompt && !parameterDataLoaded;
+
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Opening image", 0);
   addProgress(progress);
@@ -3037,7 +3113,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
       new QFutureWatcher<std::pair<bool, QString>>(this);
   connect(
       watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
-      [this, watcher, tempScan, progress, fileName, isCsprj]() {
+      [this, watcher, tempScan, progress, fileName, isCsprj,
+       offerInitialGuide]() {
         std::pair<bool, QString> result = watcher->result();
         m_imageLoadPending = false;
         removeProgress(progress);
@@ -3076,6 +3153,15 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           addToRecentFiles(m_currentImageFile);
           saveRecoveryState();
           updateWindowTitle();
+
+          if (offerInitialGuide) {
+            const colorscreen::monochrome_bayer_analysis analysis =
+                m_scan->analyze_monochrome_bayer();
+            if (analysis.candidate)
+              QTimer::singleShot(0, this, [this, analysis]() {
+                maybeOfferInitialSetupGuide(analysis);
+              });
+          }
 
           // Launch background tile loading for stitch projects.
           if (isCsprj && m_scan->stitch) {
