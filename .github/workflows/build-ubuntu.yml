@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   build:
     strategy:
@@ -15,6 +19,11 @@ jobs:
           - { runner: ubuntu-24.04-arm, arch: arm64 }
     
     runs-on: ${{ matrix.runner }}
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     
     env:
       LC_ALL: C.UTF-8
@@ -29,10 +38,6 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
-    - name: Update
-      run: sudo apt-get update
-    - name: Install dependencies
-      run: sudo apt-get install -y libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev liblcms2-dev libgtk2.0-dev libfftw3-dev qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev libexiv2-dev build-essential ccache libopenjp2-7-dev libpng-dev
     - name: Restore compiler cache
       uses: actions/cache@v4
       with:
