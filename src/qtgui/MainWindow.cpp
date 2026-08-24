@@ -440,6 +440,18 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
    panel callbacks don't access freed data.  Finally cleans up any floating
    dock widgets that may hold detached chart views.  */
 MainWindow::~MainWindow() {
+  // QUndoStack clears its commands in its destructor and emits state-change
+  // signals, including cleanChanged.  If it is left as a QObject child, that
+  // destructor runs from QObject::~QObject(), after MainWindow members such as
+  // m_scan have already been destroyed.  The cleanChanged connection can then
+  // re-enter updateWindowTitle() and read those dead members.  Destroy the undo
+  // stack now, with signals blocked, while the complete MainWindow is alive.
+  if (m_undoStack) {
+    m_undoStack->blockSignals(true);
+    delete m_undoStack;
+    m_undoStack = nullptr;
+  }
+
   // Hide window first to avoid invalid accessibility/focus events during
   // destruction This is a known workaround for MacOS crashes on exit
   // (QTBUG-71850)
