@@ -2,7 +2,7 @@
    Copyright (C) 2014-2026 Jan Hubicka
    This file is part of Color-Screen.  */
 
-#include <include/sensitivity.h>
+#include "include/sensitivity.h"
 namespace colorscreen
 {
 const struct film_sensitivity::hd_curve_description

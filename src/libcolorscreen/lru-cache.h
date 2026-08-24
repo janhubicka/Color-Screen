@@ -7,7 +7,7 @@
 #include <condition_variable>
 #include <shared_mutex>
 #include <type_traits>
-#include <include/progress-info.h>
+#include "include/progress-info.h"
 #include "include/dllpublic.h"
 
 namespace colorscreen

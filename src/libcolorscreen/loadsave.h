@@ -1,7 +1,7 @@
 #ifndef LOADSAVE_H
 #define LOADSAVE_H
 #include <stdio.h>
-#include <include/base.h>
+#include "include/base.h"
 namespace colorscreen
 {
 bool expect_keyword (FILE *f, const char *);
