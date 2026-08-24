@@ -1,0 +1,155 @@
+ = NULL;
++  const char *error = NULL;
++  int max_candidates = 24;
++  int min_areas = 3;
++  int max_areas = 8;
++  int range = 4;
++  bool leave_one_out = true;
++  bool zero_focus_start = false;
++  bool force_bw = false;
++  bool force_rgb = false;
++  bool fixed_focus_verification = false;
++  bool fixed_joint_position = false;
++  /* Periodic focus areas do not separately identify physical sigma and
++     defocus.  Default to the useful calibrated-sigma workflow: preserve the
++     sigma from the parameter file and optimize defocus only.  */
++  uint64_t focus_flags = finetune_scanner_mtf_defocus;
++  subhelp = help_focus_areas;
++
++  for (int i = 0; i < argc; i++)
++    {
++      std::string_view arg (argv[i]);
++      if (parse_common_flags (argc, argv, &i))
++        ;
++      else if (parse_int_param (argc, argv, &i, "max-candidates",
++                                max_candidates, 3, 256))
++        ;
++      else if (parse_int_param (argc, argv, &i, "min-areas", min_areas, 2,
++                                64))
++        ;
++      else if (parse_int_param (argc, argv, &i, "max-areas", max_areas, 2,
++                                64))
++        ;
++      else if (parse_int_param (argc, argv, &i, "range", range, 1, 64))
++        ;
++      else if (arg == "--defocus-only")
++        focus_flags = finetune_scanner_mtf_defocus;
++      else if (arg == "--sigma-only")
++        focus_flags = finetune_scanner_mtf_sigma;
++      else if (arg == "--zero-focus-start")
++        zero_focus_start = true;
++      else if (arg == "--use-monochrome-channel")
++        force_bw = true;
++      else if (arg == "--use-rgb")
++        force_rgb = true;
++      else if (arg == "--fixed-focus-verification")
++        fixed_focus_verification = true;
++      else if (arg == "--fixed-joint-position")
++        fixed_joint_position = true;
++      else if (arg == "--no-leave-one-out")
++        leave_one_out = false;
++      else if (!infname)
++        infname = argv[i];
++      else if (!cspname)
++        cspname = argv[i];
++      else
++        print_help (argv[i]);
++    }
++
++  if (!infname || !cspname)
++    print_help ();
++  if (force_bw && force_rgb)
++    {
++      fprintf (stderr,
++               "--use-monochrome-channel and --use-rgb are mutually exclusive\n");
++      return 1;
++    }
++  if (max_areas < min_areas)
++    {
++      fprintf (stderr, "--max-areas must be at least --min-areas\n");
++      return 1;
++    }
++
++  file_progress_info progress (stdout, verbose, verbose_tasks);
++
++  /* Load parameters first so RAW decoding uses the same demosaic choice as
++     the GUI.  This is particularly important for monochromatic Bayer scans.  */
++  render_parameters rparam;
++  scr_to_img_parameters param;
++  FILE *in = fopen (cspname, "rt");
++  if (!in)
++    {
++      perror (cspname);
++      return 1;
++    }
++  if (!load_csp (in, &param, NULL, &rparam, NULL, &error))
++    {
++      fclose (in);
++      fprintf (stderr, "Cannot load %s: %s\n", cspname, error);
++      return 1;
++    }
++  fclose (in);
++
++  if (zero_focus_start)
++    {
++      rparam.sharpen.scanner_mtf.sigma = 0;
++      rparam.sharpen.scanner_mtf.defocus = 0;
++      rparam.sharpen.scanner_mtf.blur_diameter = 0;
++    }
++
++  image_data scan;
++  if (verbose)
++    printf ("Loading scan %s\n", infname);
++  if (!scan.load (infname, false, &error, &progress, rparam.demosaic))
++    {
++      fprintf (stderr, "Cannot load %s: %s\n", infname, error);
++      return 1;
++    }
++
++  bool use_bw = !scan.has_rgb () && scan.has_grayscale_or_ir ();
++  if (force_bw)
++    use_bw = true;
++  if (force_rgb)
++    use_bw = false;
++  if (use_bw && !scan.has_grayscale_or_ir ())
++    {
++      fprintf (stderr, "The scan has no monochrome/IR channel\n");
++      return 1;
++    }
++  if (!use_bw && !scan.has_rgb ())
++    {
++      fprintf (stderr, "The scan has no RGB channels\n");
++      return 1;
++    }
++
++  finetune_focus_area_image_search_parameters search;
++  search.search.max_candidates = max_candidates;
++  std::vector<finetune_focus_area_candidate> candidates;
++  std::string search_error;
++  if (!finetune_find_focus_area_candidates_in_image (
++          rparam, param, scan, search, &candidates, &progress, &search_error))
++    {
++      fprintf (stderr, "Focus-area search failed: %s\n",
++               search_error.c_str ());
++      return 1;
++    }
++  printf ("Focus-area candidates: %zu\n", candidates.size ());
++  if (candidates.size () < (size_t)min_areas)
++    {
++      fprintf (stderr, "Only %zu candidate areas found; need at least %d\n",
++               candidates.size (), min_areas);
++      return 1;
++    }
++
++  finetune_parameters local;
++  local.range = range;
++  local.ignore_outliers = 0;
++  local.flags = finetune_position | finetune_no_progress_report;
++  if (!fixed_focus_verification)
++    local.flags |= focus_flags;
++  if (use_bw)
++    local.flags |= finetune_bw | finetune_no_normalize
++                   | finetune_no_data_collection;
++
++  progress.set_task ("verifying focus areas", candidates.size ());
++  size_t ve
