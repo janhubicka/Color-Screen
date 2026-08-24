@@ -2,7 +2,7 @@ diff --git a/src/qtgui/main.cpp b/src/qtgui/main.cpp
 index baade16..0000000 100644
 --- a/src/qtgui/main.cpp
 +++ b/src/qtgui/main.cpp
-@@ -374,14 +374,15 @@ int main(int argc, char *argv[]) {
+@@ -374,12 +374,13 @@ int main(int argc, char *argv[]) {
        QMdiSubWindow *target =
            mdiArea->activeSubWindow() == first ? second : first;
        mdiArea->setActiveSubWindow(target);
@@ -24,9 +24,7 @@ index baade16..0000000 100644
 +      // Do not leave later smoke checks in a tiled workspace.
 +      workspace->showTabbedDocuments();
      });
-   }
- 
-@@ -678,8 +679,11 @@ int main(int argc, char *argv[]) {
+@@ -678,7 +679,9 @@ int main(int argc, char *argv[]) {
        coordinateState.scrToImg.coordinate2 = {0, 8};
        coordinateState.scrToImg.final_rotation = 12.5;
        coordinateState.scrToImg.final_mirror = true;
@@ -38,4 +36,3 @@ index baade16..0000000 100644
 +      source->applyState(coordinateState);
  
        auto basePresentation = coordinateState.rparams;
-       basePresentation.scan_rotation = 0;
