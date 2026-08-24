@@ -102,7 +102,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
       final_range = int_image_area (map.get_final_range (img.width, img.height));
     }
 
-  int final_xshift = final_range.x, final_yshift = final_range.y;
+  int final_xshift = -final_range.x, final_yshift = -final_range.y;
 
   tiff_writer_params tp;
   tp.parallel = true;

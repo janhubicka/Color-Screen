@@ -37,8 +37,8 @@ const property_t image_data::demosaic_names[(int)demosaic_max]
      = {
   { "default", "Default", "Automatically choose demosaicing algorithm" },
   { "half", "Reduce image size to half and avoid demosaicing", "" },
-  { "monochromatic", "Monochromatic", "Assume that every pixel in the RAW file represents intensity of a monochromatic capture (disable deosaicing completely)." },
-  { "monochromatic_bayer_corrected", "Monochromatic with Bayer filter compensated", "Many monochromatic captures are still done through Bayer filter or with camera that sitll do in-camera processing assuming the Bayer filter.  In this case Monochromataic demosaicing leads to regular checkerboard pattern that is eliminated by this mode" },
+  { "monochromatic", "Monochromatic", "Assume that every pixel in the RAW file represents intensity of a monochromatic capture (disable demosaicing completely)." },
+  { "monochromatic_bayer_corrected", "Monochromatic with Bayer filter compensated", "Use native samples from a monochromatic capture made through a conventional Bayer filter and compensate the red/blue sensitivity relative to green. This removes the regular Bayer checkerboard without interpolating image detail." },
   { "linear", "Linear interpolation", "Easiest demosaicing algorithm" },
   { "VNG", "Variable number of gradients interpolation (VNG)", "Variable number of gradients (VNG)[6] interpolation computes gradients near the pixel of interest and uses the lower gradients (representing smoother and more similar parts of the image) to make an estimate. It is used in first versions of dcraw, and suffers from color artifacts." },
   { "PPG", "Pixel grouping (PPG)", "Pixel grouping (PPG)[7] uses assumptions about natural scenery in making estimates. It has fewer color artifacts on natural images than the Variable Number of Gradients method." },
@@ -855,8 +855,17 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
       *error = libraw_strerror (ret);
       return false;
     }
+  /* LibRaw reserves filter values below 1000 for special layouts: 0 is
+     full-color, 1 is Leaf Catchlight's 16x16 layout and 9 is Fuji X-Trans.
+     The compensation below relies specifically on a repeating 2x2 Bayer CFA.  */
+  m_img->standard_bayer_cfa = m_processor->imgdata.idata.filters >= 1000;
   if (!m_processor->imgdata.idata.filters)
     m_img->demosaiced_by = image_data::demosaic_max;
+  if (bayer_correction && !m_img->standard_bayer_cfa)
+    {
+      *error = "monochromatic Bayer compensation requires a standard 2x2 Bayer RAW image";
+      return false;
+    }
   m_img->f_stop = m_processor->imgdata.other.aperture;
   m_img->focal_length = m_processor->imgdata.other.focal_len;
   m_img->camera_model = m_processor->imgdata.idata.model;
@@ -1606,6 +1615,98 @@ image_data::has_grayscale_or_ir () const
   if (stitch)
     return stitch->images[0][0].img->has_grayscale_or_ir ();
   return m_data != NULL;
+}
+
+/* Analyze whether the RGB channels are consistent with one monochromatic
+   signal observed through a conventional Bayer CFA.  The test samples at most
+   64x64 interior pixels, ignores clipped/dark samples, and uses affine-invariant
+   channel correlation so different camera gains and black offsets do not cause
+   a false negative.  Flat images are rejected because high correlation is not
+   meaningful without real tonal variation.  */
+monochrome_bayer_analysis
+image_data::analyze_monochrome_bayer () const
+{
+  monochrome_bayer_analysis result;
+  if (!standard_bayer_cfa || stitch || !m_rgbdata || width < 8 || height < 8
+      || maxval <= 0)
+    return result;
+
+  constexpr int max_axis_samples = 64;
+  const int nx = std::min (max_axis_samples, width - 4);
+  const int ny = std::min (max_axis_samples, height - 4);
+  const double low = maxval / 256.0;
+  const double high = maxval - low;
+  double sum[3] = { 0, 0, 0 };
+  double sum2[3] = { 0, 0, 0 };
+  double cross[3] = { 0, 0, 0 }; /* RG, RB, GB.  */
+
+  for (int sy = 0; sy < ny; sy++)
+    {
+      const int y = 2 + (ny == 1 ? 0 : sy * (height - 5) / (ny - 1));
+      const pixel *row = get_rgb_row (y);
+      for (int sx = 0; sx < nx; sx++)
+        {
+          const int x = 2 + (nx == 1 ? 0 : sx * (width - 5) / (nx - 1));
+          const pixel &p = row[x];
+          const double v[3] = { (double)p.r, (double)p.g, (double)p.b };
+          if (v[0] <= low || v[1] <= low || v[2] <= low
+              || v[0] >= high || v[1] >= high || v[2] >= high)
+            continue;
+          for (int c = 0; c < 3; c++)
+            {
+              sum[c] += v[c];
+              sum2[c] += v[c] * v[c];
+            }
+          cross[0] += v[0] * v[1];
+          cross[1] += v[0] * v[2];
+          cross[2] += v[1] * v[2];
+          result.samples++;
+        }
+    }
+
+  if (result.samples < 256)
+    return result;
+
+  const double n = result.samples;
+  double variance[3];
+  for (int c = 0; c < 3; c++)
+    variance[c] = std::max (0.0, sum2[c] / n - (sum[c] / n) * (sum[c] / n));
+
+  const double mean_variance = (variance[0] + variance[1] + variance[2]) / 3;
+  result.relative_signal_stddev = std::sqrt (mean_variance) / maxval;
+  if (result.relative_signal_stddev < 0.01)
+    return result;
+
+  const int ca[3] = { 0, 0, 1 };
+  const int cb[3] = { 1, 2, 2 };
+  double minimum_correlation = 1;
+  double maximum_relative_residual = 0;
+  for (int pair = 0; pair < 3; pair++)
+    {
+      const int a = ca[pair], b = cb[pair];
+      if (variance[a] <= 0 || variance[b] <= 0)
+        return result;
+      const double covariance
+          = cross[pair] / n - (sum[a] / n) * (sum[b] / n);
+      const double correlation
+          = std::clamp (covariance / std::sqrt (variance[a] * variance[b]),
+                        -1.0, 1.0);
+      minimum_correlation = std::min (minimum_correlation, correlation);
+      const double residual_fraction
+          = std::sqrt (std::max (0.0, 1 - correlation * correlation));
+      maximum_relative_residual
+          = std::max (maximum_relative_residual, residual_fraction);
+    }
+
+  result.minimum_correlation = minimum_correlation;
+  result.maximum_relative_residual = maximum_relative_residual;
+  /* Keep the automatic suggestion deliberately conservative.  Ordinary color
+     photographs often have correlated RGB luminance, but correlations this
+     close to one across all three channels are characteristic of an effectively
+     monochromatic capture.  */
+  result.candidate = minimum_correlation >= 0.995
+                     && maximum_relative_residual <= 0.10;
+  return result;
 }
 
 /* Set dimensions of the image to W x H.

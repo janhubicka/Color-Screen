@@ -176,9 +176,9 @@ void ScreenPanel::setupUi() {
   // Autodetect Regular Screen Button
   addButtonParameter("", "Autodetect regular screen", 
       [this]() { emit autodetectRequested(); },
-      [this](const ParameterState &) {
+      [this](const ParameterState &s) {
           auto img = m_imageGetter();
-          return img && img->has_rgb();
+          return img && (img->has_rgb() || s.scrToImg.type != colorscreen::Random);
       }, "Attempt to automatically identify the screen type and its orientation from the image content.");
 
   addSeparator("Regular screen");

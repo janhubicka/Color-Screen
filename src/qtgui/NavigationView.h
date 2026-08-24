@@ -3,6 +3,7 @@
 #include <QImage>
 #include <memory>
 // Include parameters definitions
+#include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/imagedata.h"
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
@@ -36,6 +37,7 @@ public:
     void updateParameters(colorscreen::render_parameters *rparams,
                          colorscreen::scr_to_img_parameters *scrToImg,
                          colorscreen::scr_detect_parameters *scrDetect);
+    void setCoordinateSpace(colorscreen::render_coordinate_space coordinates);
 
 public slots:
     void onViewStateChanged(QRectF visibleRect, double scale); // Connected to ImageWidget
@@ -100,4 +102,6 @@ private:
     colorscreen::int_optional_image_area m_lastScanCrop;
     int m_lastRotation = 0;
     bool m_lastMirror = false;
+    colorscreen::render_coordinate_space m_coordinateSpace =
+        colorscreen::render_scan_coordinates;
 };

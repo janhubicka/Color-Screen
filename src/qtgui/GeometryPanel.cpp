@@ -196,6 +196,26 @@ void GeometryPanel::setupUi() {
       [](ParameterState &s, int v){ s.scrToImg.scanner_type = (colorscreen::scanner_type)v; },
       nullptr, "Select the physical movement model of your scanner or camera rig. This defines how the perspective and lens distortions affects the image.");
 
+  addSeparator("Final image orientation");
+  auto hasFinalGeometry = [](const ParameterState &s) {
+      return s.scrToImg.type != colorscreen::Random;
+  };
+  addSliderParameter(
+      "Final rotation", -180.0, 180.0, 100.0, 2, "°", "",
+      [](const ParameterState &s) { return (double)s.scrToImg.final_rotation; },
+      [](ParameterState &s, double v) { s.scrToImg.final_rotation = v; },
+      1.0, hasFinalGeometry, false,
+      "Continuous rotation in degrees in the libcolorscreen final plane. "
+      "Unlike scan rotation this is not restricted to 90-degree steps and is "
+      "saved in the parameter file.");
+  addCheckboxParameter(
+      "Mirror final image",
+      [](const ParameterState &s) { return s.scrToImg.final_mirror; },
+      [](ParameterState &s, bool v) { s.scrToImg.final_mirror = v; },
+      hasFinalGeometry,
+      "Mirror the final-coordinate image horizontally before Final rotation. "
+      "This is part of geometry and is saved in the parameter file.");
+
   // Ensure Finetune widget is separate from Optimization group
   endGroup();
 

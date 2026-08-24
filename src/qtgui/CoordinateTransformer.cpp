@@ -1,16 +1,151 @@
 #include "CoordinateTransformer.h"
 #include <algorithm>
+#include <cmath>
+#include <mutex>
+#include <vector>
 
-CoordinateTransformer::CoordinateTransformer(const colorscreen::image_data* scan, const colorscreen::render_parameters& params) {
+namespace {
+
+/* Building a final-coordinate map is much more expensive than constructing a
+   CoordinateTransformer: get_final_range() walks the image boundary.  GUI code
+   intentionally creates short-lived transformers in point conversion helpers,
+   so keep the expensive immutable part shared across those instances. */
+struct FinalMappingCacheEntry {
+    int scanWidth = 0;
+    int scanHeight = 0;
+    colorscreen::scr_to_img_parameters params;
+    bool available = false;
+    std::shared_ptr<const colorscreen::scr_to_img> map;
+    colorscreen::int_image_area finalRange;
+};
+
+constexpr size_t kFinalMappingCacheSize = 16;
+std::mutex g_finalMappingCacheMutex;
+std::vector<std::shared_ptr<const FinalMappingCacheEntry>> g_finalMappingCache;
+thread_local std::weak_ptr<const FinalMappingCacheEntry> g_lastFinalMapping;
+
+bool finalMappingMatches(const FinalMappingCacheEntry &entry,
+                         int width, int height,
+                         const colorscreen::scr_to_img_parameters &params) {
+    return entry.scanWidth == width && entry.scanHeight == height
+           && entry.params == params;
+}
+
+std::shared_ptr<const FinalMappingCacheEntry>
+getFinalMapping(const colorscreen::image_data &scan,
+                const colorscreen::scr_to_img_parameters &params) {
+    const int width = scan.width;
+    const int height = scan.height;
+
+    /* This is the hot path for registration-point and overlay conversions.
+       Avoid even taking the global cache lock after the first lookup on a
+       thread while the geometry remains unchanged. */
+    if (auto last = g_lastFinalMapping.lock()) {
+        if (finalMappingMatches(*last, width, height, params))
+            return last;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_finalMappingCacheMutex);
+        for (auto it = g_finalMappingCache.rbegin();
+             it != g_finalMappingCache.rend(); ++it) {
+            if (finalMappingMatches(**it, width, height, params)) {
+                g_lastFinalMapping = *it;
+                return *it;
+            }
+        }
+    }
+
+    /* Compute outside the cache lock.  A renderer thread may be doing the same
+       work for the same newly changed geometry; allowing that rare duplicate
+       is preferable to blocking the GUI thread behind a boundary walk. */
+    auto built = std::make_shared<FinalMappingCacheEntry>();
+    built->scanWidth = width;
+    built->scanHeight = height;
+    built->params = params;
+
+    auto map = std::make_shared<colorscreen::scr_to_img>();
+    if (map->set_parameters(params, scan)) {
+        const colorscreen::int_image_area range(
+            map->get_final_range(width, height));
+        if (!range.empty_p()) {
+            built->available = true;
+            built->map = std::move(map);
+            built->finalRange = range;
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_finalMappingCacheMutex);
+        /* Another thread may have inserted the same geometry while we were
+           computing.  Reuse that canonical entry when possible. */
+        for (auto it = g_finalMappingCache.rbegin();
+             it != g_finalMappingCache.rend(); ++it) {
+            if (finalMappingMatches(**it, width, height, params)) {
+                g_lastFinalMapping = *it;
+                return *it;
+            }
+        }
+        g_finalMappingCache.push_back(built);
+        if (g_finalMappingCache.size() > kFinalMappingCacheSize)
+            g_finalMappingCache.erase(g_finalMappingCache.begin());
+    }
+
+    g_lastFinalMapping = built;
+    return built;
+}
+
+} // namespace
+
+CoordinateTransformer::CoordinateTransformer(
+    const colorscreen::image_data* scan,
+    const colorscreen::render_parameters& params,
+    const colorscreen::scr_to_img_parameters* scrToImg,
+    colorscreen::render_coordinate_space coordinates) {
     if (scan) {
         m_scanWidth = scan->width;
         m_scanHeight = scan->height;
     }
-    m_mirror = params.scan_mirror;
-    m_rotation = (int)params.scan_rotation % 4;
-    if (m_rotation < 0) m_rotation += 4;
-    
     m_scanCrop = params.get_scan_crop(m_scanWidth, m_scanHeight);
+    m_coordinates = coordinates;
+
+    /* scan_rotation, scan_mirror and scan_crop are presentation properties of
+       the digitized scan.  A final-coordinate canvas already has its own
+       continuous orientation in scr_to_img_parameters. */
+    auto useScanPresentation = [&]() {
+        m_mirror = params.scan_mirror;
+        m_rotation = (int)params.scan_rotation % 4;
+        if (m_rotation < 0)
+            m_rotation += 4;
+    };
+
+    if (coordinates == colorscreen::render_scan_coordinates) {
+        useScanPresentation();
+    } else if (coordinates == colorscreen::render_final_coordinates && scan) {
+        if (scan->stitch) {
+            /* Stitched image_data already exposes the common final viewport as
+               its only meaningful canvas. */
+            m_finalAvailable = true;
+        } else if (scrToImg && scrToImg->type != colorscreen::Random) {
+            const auto cached = getFinalMapping(*scan, *scrToImg);
+            if (cached->available) {
+                m_map = cached->map;
+                m_finalRange = cached->finalRange;
+                m_finalAvailable = true;
+            }
+        }
+
+        /* A failed final-coordinate request degrades exactly to an ordinary
+           scan view, including its presentation orientation. */
+        if (!m_finalAvailable) {
+            m_map.reset();
+            m_coordinates = colorscreen::render_scan_coordinates;
+            useScanPresentation();
+        }
+    } else if (coordinates == colorscreen::render_final_coordinates) {
+        m_coordinates = colorscreen::render_scan_coordinates;
+        useScanPresentation();
+    }
 }
 
 colorscreen::int_image_area CoordinateTransformer::getCrop() const {
@@ -21,107 +156,134 @@ QSize CoordinateTransformer::getScanSize() const {
     return QSize(m_scanWidth, m_scanHeight);
 }
 
+QSize CoordinateTransformer::transformedSize(double width, double height) const {
+    int w = std::max(0, (int)std::ceil(width));
+    int h = std::max(0, (int)std::ceil(height));
+    if (m_rotation == 1 || m_rotation == 3)
+        return QSize(h, w);
+    return QSize(w, h);
+}
+
 QSize CoordinateTransformer::getTransformedSize() const {
-    if (m_rotation == 1 || m_rotation == 3) {
-        return QSize(m_scanHeight, m_scanWidth);
+    if (m_coordinates == colorscreen::render_final_coordinates) {
+        if (m_map)
+            return transformedSize(m_finalRange.width, m_finalRange.height);
+        return transformedSize(m_scanWidth, m_scanHeight);
     }
-    return QSize(m_scanWidth, m_scanHeight);
+    return transformedSize(m_scanWidth, m_scanHeight);
+}
+
+colorscreen::int_image_area CoordinateTransformer::getRenderCrop() const {
+    if (m_coordinates == colorscreen::render_final_coordinates) {
+        if (m_map)
+            return colorscreen::int_image_area(0, 0, m_finalRange.width,
+                                               m_finalRange.height);
+        /* Stitched images already expose their final viewport as image_data. */
+        return colorscreen::int_image_area(0, 0, m_scanWidth, m_scanHeight);
+    }
+    return m_scanCrop;
 }
 
 QSize CoordinateTransformer::getTransformedCropSize() const {
-    colorscreen::int_image_area crop = getCrop();
-    if (m_rotation == 1 || m_rotation == 3) {
-        return QSize(crop.height, crop.width);
-    }
-    return QSize(crop.width, crop.height);
+    colorscreen::int_image_area crop = getRenderCrop();
+    return transformedSize(crop.width, crop.height);
 }
 
-colorscreen::point_t CoordinateTransformer::scanToTransformed(colorscreen::point_t scanPt) const {
-    if (m_scanWidth == 0 || m_scanHeight == 0) return scanPt;
-
-    // 1. Normalize
-    double px = scanPt.x / m_scanWidth;
-    double py = scanPt.y / m_scanHeight;
+colorscreen::point_t CoordinateTransformer::baseToTransformed(
+    colorscreen::point_t p, double baseWidth, double baseHeight) const {
+    if (baseWidth <= 0 || baseHeight <= 0) return p;
+    double px = p.x / baseWidth;
+    double py = p.y / baseHeight;
+    if (m_mirror) px = 1.0 - px;
     double u = 0, v = 0;
-
-    // 2. Mirror (Forward)
-    if (m_mirror) px = 1.0 - px;
-
-    // 3. Rotate (Forward)
-    if (m_rotation == 0) { u = px; v = py; }
-    else if (m_rotation == 1) { u = 1.0 - py; v = px; } // 90 CW
-    else if (m_rotation == 2) { u = 1.0 - px; v = 1.0 - py; } // 180
-    else if (m_rotation == 3) { u = py; v = 1.0 - px; } // 270 CW
-
-    // 4. Denormalize to Transformed Size
-    QSize ts = getTransformedSize();
-    return { u * ts.width(), v * ts.height() };
-}
-
-colorscreen::point_t CoordinateTransformer::transformedToScan(colorscreen::point_t transformedPt) const {
-    QSize ts = getTransformedSize();
-    if (ts.width() == 0 || ts.height() == 0) return transformedPt;
-
-    // 1. Normalize Transformed Coordinate
-    double u = transformedPt.x / ts.width();
-    double v = transformedPt.y / ts.height();
-
-    // 2. Un-Rotate
-    double px = 0, py = 0;
-    if (m_rotation == 0) { px = u; py = v; }
-    else if (m_rotation == 1) { px = v; py = 1.0 - u; }
-    else if (m_rotation == 2) { px = 1.0 - u; py = 1.0 - v; }
-    else if (m_rotation == 3) { px = 1.0 - v; py = u; }
-
-    // 3. Un-Mirror
-    if (m_mirror) px = 1.0 - px;
-
-    // 4. Denormalize to Scan Size
-    return { px * m_scanWidth, py * m_scanHeight };
-}
-
-colorscreen::point_t CoordinateTransformer::scanToTransformedCrop(colorscreen::point_t scanPt) const {
-    colorscreen::int_image_area crop = getCrop();
-    QSize ts = getTransformedCropSize();
-    if (ts.width() <= 0 || ts.height() <= 0) return {0,0};
-
-    // 1. Normalize relative to CROP
-    double px = (scanPt.x - crop.x) / crop.width;
-    double py = (scanPt.y - crop.y) / crop.height;
-    double u = 0, v = 0;
-
-    // 2. Mirror (Forward)
-    if (m_mirror) px = 1.0 - px;
-
-    // 3. Rotate (Forward)
     if (m_rotation == 0) { u = px; v = py; }
     else if (m_rotation == 1) { u = 1.0 - py; v = px; }
     else if (m_rotation == 2) { u = 1.0 - px; v = 1.0 - py; }
-    else if (m_rotation == 3) { u = py; v = 1.0 - px; }
-
-    // 4. Denormalize
-    return { u * ts.width(), v * ts.height() };
+    else { u = py; v = 1.0 - px; }
+    QSize ts = transformedSize(baseWidth, baseHeight);
+    return {u * ts.width(), v * ts.height()};
 }
 
-colorscreen::point_t CoordinateTransformer::transformedToScanCrop(colorscreen::point_t trPt) const {
-    QSize ts = getTransformedCropSize();
-    colorscreen::int_image_area crop = getCrop();
-    if (ts.width() <= 0 || ts.height() <= 0) return { (double)crop.x, (double)crop.y };
-
-    // 1. Normalize
-    double u = trPt.x / ts.width();
-    double v = trPt.y / ts.height();
-
-    // 2. Un-Rotate
+colorscreen::point_t CoordinateTransformer::transformedToBase(
+    colorscreen::point_t p, double baseWidth, double baseHeight) const {
+    QSize ts = transformedSize(baseWidth, baseHeight);
+    if (ts.width() <= 0 || ts.height() <= 0) return p;
+    double u = p.x / ts.width();
+    double v = p.y / ts.height();
     double px = 0, py = 0;
     if (m_rotation == 0) { px = u; py = v; }
     else if (m_rotation == 1) { px = v; py = 1.0 - u; }
     else if (m_rotation == 2) { px = 1.0 - u; py = 1.0 - v; }
-    else if (m_rotation == 3) { px = 1.0 - v; py = u; }
-
-    // 3. Un-Mirror
+    else { px = 1.0 - v; py = u; }
     if (m_mirror) px = 1.0 - px;
+    return {px * baseWidth, py * baseHeight};
+}
 
-    // 4. Denormalize to CROP rect
-    return { crop.x + px * crop.width, crop.y + py * crop.height };
+colorscreen::point_t CoordinateTransformer::scanToRender(
+    colorscreen::point_t scanPt) const {
+    if (m_coordinates != colorscreen::render_final_coordinates || !m_map)
+        return scanPt;
+    colorscreen::point_t p = m_map->img_to_final(scanPt);
+    p.x -= m_finalRange.x;
+    p.y -= m_finalRange.y;
+    return p;
+}
+
+colorscreen::point_t CoordinateTransformer::renderToScan(
+    colorscreen::point_t renderPt) const {
+    if (m_coordinates != colorscreen::render_final_coordinates || !m_map)
+        return renderPt;
+    renderPt.x += m_finalRange.x;
+    renderPt.y += m_finalRange.y;
+    return m_map->final_to_img(renderPt);
+}
+
+colorscreen::point_t CoordinateTransformer::scanToTransformed(
+    colorscreen::point_t scanPt) const {
+    colorscreen::point_t render = scanToRender(scanPt);
+    QSize base = (m_coordinates == colorscreen::render_final_coordinates && m_map)
+        ? QSize(m_finalRange.width, m_finalRange.height)
+        : QSize(m_scanWidth, m_scanHeight);
+    return baseToTransformed(render, base.width(), base.height());
+}
+
+colorscreen::point_t CoordinateTransformer::transformedToScan(
+    colorscreen::point_t transformedPt) const {
+    QSize base = (m_coordinates == colorscreen::render_final_coordinates && m_map)
+        ? QSize(m_finalRange.width, m_finalRange.height)
+        : QSize(m_scanWidth, m_scanHeight);
+    return renderToScan(transformedToBase(transformedPt,
+                                          base.width(), base.height()));
+}
+
+colorscreen::point_t CoordinateTransformer::scanToTransformedCrop(
+    colorscreen::point_t scanPt) const {
+    colorscreen::int_image_area crop = getRenderCrop();
+    colorscreen::point_t render = scanToRender(scanPt);
+    render.x -= crop.x;
+    render.y -= crop.y;
+    return baseToTransformed(render, crop.width, crop.height);
+}
+
+colorscreen::point_t CoordinateTransformer::transformedToScanCrop(
+    colorscreen::point_t transformedPt) const {
+    return renderToScan(transformedToRenderCrop(transformedPt));
+}
+
+colorscreen::point_t CoordinateTransformer::transformedToRenderCrop(
+    colorscreen::point_t transformedPt) const {
+    colorscreen::int_image_area crop = getRenderCrop();
+    colorscreen::point_t p = transformedToBase(transformedPt,
+                                                crop.width, crop.height);
+    p.x += crop.x;
+    p.y += crop.y;
+    return p;
+}
+
+colorscreen::point_t CoordinateTransformer::renderToTransformedCrop(
+    colorscreen::point_t renderPt) const {
+    colorscreen::int_image_area crop = getRenderCrop();
+    renderPt.x -= crop.x;
+    renderPt.y -= crop.y;
+    return baseToTransformed(renderPt, crop.width, crop.height);
 }

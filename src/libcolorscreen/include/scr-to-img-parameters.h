@@ -148,8 +148,10 @@ struct scr_to_img_parameters
   /* Perspective tilt in x and y coordinate in degrees.  */
   coord_t tilt_x = 0, tilt_y = 0;
 
-  /* Rotation from screen coordinates to final coordinates.  */
+  /* Rotation from screen coordinates to final coordinates, in degrees.  */
   coord_t final_rotation = 0;
+  /* Mirror the final coordinate plane horizontally before final rotation.  */
+  bool final_mirror = false;
   /* Angle of the screen X and Y axis in the final coordinates.  */
   coord_t final_angle = 90;
   /* Ratio of the X and Y axis in the final coordinates.  */
@@ -170,6 +172,7 @@ struct scr_to_img_parameters
            && coordinate2 == other.coordinate2
            && projection_distance == other.projection_distance
            && final_rotation == other.final_rotation
+           && final_mirror == other.final_mirror
            && final_angle == other.final_angle
            && final_ratio == other.final_ratio && tilt_x == other.tilt_x
            && tilt_y == other.tilt_y && type == other.type

@@ -27,8 +27,9 @@ public:
     ~Renderer() override;
     
 public slots:
-    void render(int reqId, double xOffset, double yOffset, double scale, int width, int height, 
-                colorscreen::render_parameters frameParams, 
+    void render(int reqId, double xOffset, double yOffset, double scale, int width, int height,
+                int coordinateSpace,
+                colorscreen::render_parameters frameParams,
                 std::shared_ptr<colorscreen::progress_info> progress,
                 const char* taskName = nullptr);
     

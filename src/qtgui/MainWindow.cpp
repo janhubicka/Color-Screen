@@ -30,6 +30,8 @@
 #include <QColorSpace>
 #include <QComboBox>
 #include <QDateTime> // Added QDateTime include
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QDockWidget> // Added
 #include "BacklightChartWidget.h"
@@ -205,6 +207,46 @@ bool focusAnalysisUsesMonochromeInput(const colorscreen::image_data &scan) {
         + std::max((long double)0, sumG2 / samples - meanG * meanG);
   return variance < (long double)5e-5;
 }
+/** Small extensible guide shown after an image is opened without parameter
+    data.  Later setup recommendations can be added as more rows without
+    changing the load/reload orchestration. */
+class InitialSetupGuideDialog final : public QDialog {
+public:
+  explicit InitialSetupGuideDialog(QWidget *parent = nullptr)
+      : QDialog(parent) {
+    setWindowTitle(tr("Suggested image setup"));
+    setModal(true);
+
+    auto *layout = new QVBoxLayout(this);
+    auto *intro = new QLabel(
+        tr("This appears to be a monochromatic capture made with a Bayer-filter "
+           "camera."),
+        this);
+    intro->setWordWrap(true);
+    layout->addWidget(intro);
+
+    m_monochromeBayer =
+        new QCheckBox(tr("Reload with Bayer-filter compensation"), this);
+    m_monochromeBayer->setChecked(true);
+    layout->addWidget(m_monochromeBayer);
+
+    auto *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    buttons->button(QDialogButtonBox::Ok)->setText(tr("Apply and reload"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(tr("Not now"));
+    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    layout->addWidget(buttons);
+  }
+
+  /** Return whether compensated monochrome Bayer loading was selected. */
+  bool useMonochromeBayerCorrection() const {
+    return m_monochromeBayer && m_monochromeBayer->isChecked();
+  }
+
+private:
+  QCheckBox *m_monochromeBayer = nullptr;
+};
 
 } // namespace
 
@@ -786,14 +828,7 @@ void MainWindow::setupUi() {
                          changeParameters(s, desc);
                        },
                        [this]() { return m_scan; },
-                       [this]() {
-                         if (!m_currentImageFile.isEmpty()) {
-                           loadFile(m_currentImageFile, true);
-                           if (ColorScreenApplication *application =
-                                   documentApplication())
-                             application->reloadSlantedEdgeReferences(this);
-                         }
-                       },
+                       [this]() { reloadCurrentImageWithDemosaic(); },
                        this);
 
   // Create Geometry Panel
@@ -1195,9 +1230,13 @@ void MainWindow::setupUi() {
   progressLayout->addWidget(m_cancelButton);
 
   m_progressLayout->addWidget(m_transientProgressRow);
+
+  QSizePolicy sp = m_transientProgressRow->sizePolicy();
+  sp.setRetainSizeWhenHidden(true);
+  m_transientProgressRow->setSizePolicy(sp);
+
   m_transientProgressRow->hide();
   statusBar->addPermanentWidget(m_progressContainer, 1);
-  m_progressContainer->setVisible(false);
 
   // Initialize manual selection tracking
   m_manuallySelectedProgressIndex = -1;
@@ -1306,6 +1345,46 @@ void MainWindow::createToolbar() {
           &MainWindow::onColorCheckBoxChanged);
   m_colorCheckBoxAction = m_toolbar->addWidget(m_colorCheckBox);
 
+  m_toolbar->addWidget(new QLabel(tr("Coordinates: "), m_toolbar));
+  m_coordinateComboBox = new QComboBox(m_toolbar);
+  m_coordinateComboBox->setObjectName(QStringLiteral("CoordinateSpaceCombo"));
+  m_coordinateComboBox->setToolTip(
+      tr("Choose raw scan geometry or geometrically corrected screen geometry"));
+  m_toolbar->addWidget(m_coordinateComboBox);
+  connect(m_coordinateComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, [this](int index) {
+            if (index < 0 || !m_imageWidget)
+              return;
+            const auto coordinates = static_cast<colorscreen::render_coordinate_space>(
+                m_coordinateComboBox->itemData(index).toInt());
+            if (!m_imageWidget->setCoordinateSpace(coordinates)) {
+              updateCoordinateSpaceControls();
+              return;
+            }
+            updateCoordinateSpaceControls();
+            if (m_navigationView)
+              m_navigationView->setCoordinateSpace(m_imageWidget->coordinateSpace());
+          });
+
+  m_finalRotationLabelAction = m_toolbar->addWidget(
+      new QLabel(tr("Final rotation: "), m_toolbar));
+  m_finalRotationSpinBox = new QDoubleSpinBox(m_toolbar);
+  m_finalRotationSpinBox->setObjectName(QStringLiteral("FinalRotationSpin"));
+  m_finalRotationSpinBox->setRange(-180.0, 180.0);
+  m_finalRotationSpinBox->setDecimals(2);
+  m_finalRotationSpinBox->setSingleStep(0.1);
+  m_finalRotationSpinBox->setSuffix(QStringLiteral("°"));
+  m_finalRotationSpinBox->setToolTip(
+      tr("Continuous rotation of the final-coordinate image; saved in the parameter file"));
+  m_finalRotationSpinAction = m_toolbar->addWidget(m_finalRotationSpinBox);
+  connect(m_finalRotationSpinBox, &QDoubleSpinBox::valueChanged, this,
+          [this](double degrees) {
+            if (m_imageWidget && m_imageWidget->coordinateSpace() ==
+                                     colorscreen::render_final_coordinates)
+              setDocumentFinalRotation(degrees);
+          });
+  updateCoordinateSpaceControls();
+
   m_toolbar->addSeparator();
 
   // Interaction Tools - Pan in View group
@@ -1326,18 +1405,18 @@ void MainWindow::createToolbar() {
   m_toolbar->addAction(m_zoom100Action);
   m_toolbar->addAction(m_zoomFitAction);
 
-  // Rotation
-  QAction *rotLeftAction = m_toolbar->addAction(
-      getSymbolicIcon(":/icons/rotate-left.svg"), "Rotate Left");
-  connect(rotLeftAction, &QAction::triggered, this, &MainWindow::rotateLeft);
-
-  QAction *rotRightAction = m_toolbar->addAction(
-      getSymbolicIcon(":/icons/rotate-right.svg"), "Rotate Right");
-  connect(rotRightAction, &QAction::triggered, this, &MainWindow::rotateRight);
-
-  if (m_mirrorAction) {
-    m_toolbar->addAction(m_mirrorAction);
+  // Scan quarter-turn actions are shared with the View menu.  Final mode
+  // hides them and exposes the continuous degree control above instead.
+  if (m_rotateLeftAction) {
+    m_rotateLeftAction->setIcon(getSymbolicIcon(":/icons/rotate-left.svg"));
+    m_toolbar->addAction(m_rotateLeftAction);
   }
+  if (m_rotateRightAction) {
+    m_rotateRightAction->setIcon(getSymbolicIcon(":/icons/rotate-right.svg"));
+    m_toolbar->addAction(m_rotateRightAction);
+  }
+  if (m_mirrorAction)
+    m_toolbar->addAction(m_mirrorAction);
 
   // === REGISTRATION GROUP ===
   QAction *regSeparator = m_toolbar->addSeparator();
@@ -1458,6 +1537,67 @@ void MainWindow::createToolbar() {
   addAction(exploreModeAction);
 }
 
+/** Rebuild the view-local Scan/Screen coordinate selector. */
+void MainWindow::updateCoordinateSpaceControls() {
+  if (!m_coordinateComboBox || !m_imageWidget)
+    return;
+  const bool stitched = m_scan && m_scan->stitch;
+  const bool hasFinal = stitched ||
+      (m_scan && m_scrToImgParams.type != colorscreen::Random);
+
+  m_coordinateComboBox->blockSignals(true);
+  m_coordinateComboBox->clear();
+  if (!stitched)
+    m_coordinateComboBox->addItem(tr("Scan coordinates"),
+        (int)colorscreen::render_scan_coordinates);
+  if (hasFinal)
+    m_coordinateComboBox->addItem(tr("Screen coordinates"),
+        (int)colorscreen::render_final_coordinates);
+
+  auto current = m_imageWidget->coordinateSpace();
+  if (stitched && current != colorscreen::render_final_coordinates) {
+    m_imageWidget->setCoordinateSpace(colorscreen::render_final_coordinates);
+    current = m_imageWidget->coordinateSpace();
+  } else if (!hasFinal && current == colorscreen::render_final_coordinates) {
+    m_imageWidget->setCoordinateSpace(colorscreen::render_scan_coordinates);
+    current = m_imageWidget->coordinateSpace();
+  }
+  int index = m_coordinateComboBox->findData((int)current);
+  if (index < 0 && m_coordinateComboBox->count())
+    index = 0;
+  if (index >= 0)
+    m_coordinateComboBox->setCurrentIndex(index);
+  m_coordinateComboBox->setEnabled(m_coordinateComboBox->count() > 1);
+  m_coordinateComboBox->blockSignals(false);
+
+  const bool finalCoordinates =
+      current == colorscreen::render_final_coordinates;
+  if (m_rotateLeftAction)
+    m_rotateLeftAction->setVisible(!finalCoordinates);
+  if (m_rotateRightAction)
+    m_rotateRightAction->setVisible(!finalCoordinates);
+  if (m_finalRotationLabelAction)
+    m_finalRotationLabelAction->setVisible(finalCoordinates);
+  if (m_finalRotationSpinAction)
+    m_finalRotationSpinAction->setVisible(finalCoordinates);
+  if (m_finalRotationSpinBox) {
+    m_finalRotationSpinBox->blockSignals(true);
+    m_finalRotationSpinBox->setValue(m_scrToImgParams.final_rotation);
+    m_finalRotationSpinBox->blockSignals(false);
+  }
+  if (m_mirrorAction) {
+    m_mirrorAction->blockSignals(true);
+    m_mirrorAction->setChecked(finalCoordinates ? m_scrToImgParams.final_mirror
+                                                : m_rparams.scan_mirror);
+    m_mirrorAction->blockSignals(false);
+    m_mirrorAction->setText(finalCoordinates ? tr("Mirror Final Image")
+                                             : tr("Mirror Horizontally"));
+    m_mirrorAction->setToolTip(finalCoordinates
+        ? tr("Mirror the final-coordinate image; saved in the parameter file")
+        : tr("Mirror the digital scan horizontally"));
+  }
+}
+
 /** Create keyboard shortcuts 1–0 mapped to the first 10 render modes.
    Each shortcut triggers the corresponding index in m_modeComboBox.
    Actions are initially disabled and enabled dynamically as modes
@@ -1525,11 +1665,17 @@ void MainWindow::rotateRight() {
 void MainWindow::onMirrorHorizontally(bool checked) {
   if (!m_scan)
     return;
-
   ParameterState newState = getCurrentState();
-  newState.rparams.scan_mirror = checked;
-
-  changeParameters(newState, "Mirror Horizontally");
+  if (m_imageWidget && m_imageWidget->coordinateSpace() ==
+                           colorscreen::render_final_coordinates) {
+    newState.scrToImg.final_mirror = !newState.scrToImg.final_mirror;
+    newState.scrToImg.final_rotation = -newState.scrToImg.final_rotation;
+    changeParameters(newState, "Mirror Final Image");
+  } else {
+    newState.rparams.scan_mirror = !newState.rparams.scan_mirror;
+    newState.rparams.scan_rotation = (4 - (int)newState.rparams.scan_rotation) % 4;
+    changeParameters(newState, "Mirror Horizontally");
+  }
 }
 
 /** Toggle fullscreen mode for the ImageWidget.
@@ -2422,14 +2568,14 @@ void MainWindow::updateProgressContainerVisibility() {
 
   const bool transientVisible =
       m_transientProgressRow && !m_transientProgressRow->isHidden();
-  m_progressContainer->setVisible(transientVisible);
+  // m_progressContainer->setVisible(transientVisible);
 }
 
 /** Periodically update transient progress and every dedicated long-task row. */
 void MainWindow::onProgressTimer() {
   if (m_activeProgresses.empty()) {
     m_transientProgressRow->hide();
-    m_progressContainer->hide();
+    // m_progressContainer->hide();
     m_currentlyDisplayedProgress.reset();
     m_manuallySelectedProgressIndex = -1;
     m_progressTimer->stop();
@@ -2744,9 +2890,17 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
   m_inspectorImageWidget = target;
 
   if (m_navigationView) {
+    m_navigationView->setCoordinateSpace(target->coordinateSpace());
     m_inspectorImageConnections.push_back(
         connect(target, &ImageWidget::viewStateChanged, m_navigationView,
                 &NavigationView::onViewStateChanged));
+    m_inspectorImageConnections.push_back(connect(
+        target, &ImageWidget::viewCoordinateSpaceChanged, this,
+        [this](int space) {
+          if (m_navigationView)
+            m_navigationView->setCoordinateSpace(
+                static_cast<colorscreen::render_coordinate_space>(space));
+        }));
   }
 
   // The primary ImageWidget already has the full document-editing signal
@@ -2889,6 +3043,41 @@ void MainWindow::openRecentFile() {
     loadFile(fileName);
 }
 
+/** Reload the current scan with the selected demosaic mode.  Reloading clears
+   the undo stack after replacing image_data, so preserve the document's dirty
+   state explicitly when unsaved parameters preceded the reload. */
+void MainWindow::reloadCurrentImageWithDemosaic() {
+  if (m_currentImageFile.isEmpty())
+    return;
+  if (isDocumentModified())
+    m_recoveryDirty = true;
+  loadFile(m_currentImageFile, true);
+  if (ColorScreenApplication *application = documentApplication())
+    application->reloadSlantedEdgeReferences(this);
+}
+
+/** Offer the first post-load setup recommendation for a new image.  The guide
+   is deliberately conservative and currently changes only demosaicing; EXIF
+   metadata import and screen autodetection will be added independently. */
+void MainWindow::maybeOfferInitialSetupGuide(
+    const colorscreen::monochrome_bayer_analysis &analysis) {
+  if (!m_scan || !analysis.candidate ||
+      m_rparams.demosaic ==
+          colorscreen::image_data::demosaic_monochromatic_bayer_corrected)
+    return;
+
+  InitialSetupGuideDialog dialog(this);
+  if (dialog.exec() != QDialog::Accepted ||
+      !dialog.useMonochromeBayerCorrection())
+    return;
+
+  ParameterState state = getCurrentState();
+  state.rparams.demosaic =
+      colorscreen::image_data::demosaic_monochromatic_bayer_corrected;
+  changeParameters(state, tr("Use monochromatic Bayer compensation"));
+  reloadCurrentImageWithDemosaic();
+}
+
 /** Load an image file and optionally its associated .par parameter file.
    If SUPPRESSPARAMPROMPT is false, checks for a .par file alongside the
    image and offers to load it.  If the user declines or no .par file exists,
@@ -2901,6 +3090,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     return;
 
   m_imageLoadPending = true;
+  bool parameterDataLoaded = false;
   if (!suppressParamPrompt)
     m_recoveryDirty = false;
   m_currentImageFile = QFileInfo(fileName).absoluteFilePath();
@@ -2938,6 +3128,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                                  error ? QString::fromUtf8(error)
                                        : "Unknown error loading parameters.");
           } else {
+            parameterDataLoaded = true;
             m_prevScrToImgParams = m_scrToImgParams;
             m_prevDetectParams = m_detectParams;
 
@@ -2971,6 +3162,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     }
   }
 
+  const bool offerInitialGuide =
+      !suppressParamPrompt && !parameterDataLoaded;
+
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Opening image", 0);
   addProgress(progress);
@@ -2987,7 +3181,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
       new QFutureWatcher<std::pair<bool, QString>>(this);
   connect(
       watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
-      [this, watcher, tempScan, progress, fileName, isCsprj]() {
+      [this, watcher, tempScan, progress, fileName, isCsprj,
+       offerInitialGuide]() {
         std::pair<bool, QString> result = watcher->result();
         m_imageLoadPending = false;
         removeProgress(progress);
@@ -3026,6 +3221,15 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           addToRecentFiles(m_currentImageFile);
           saveRecoveryState();
           updateWindowTitle();
+
+          if (offerInitialGuide) {
+            const colorscreen::monochrome_bayer_analysis analysis =
+                m_scan->analyze_monochrome_bayer();
+            if (analysis.candidate)
+              QTimer::singleShot(0, this, [this, analysis]() {
+                maybeOfferInitialSetupGuide(analysis);
+              });
+          }
 
           // Launch background tile loading for stitch projects.
           if (isCsprj && m_scan->stitch) {
@@ -3172,9 +3376,14 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
     if (panel)
       panel->updateUI();
   }
-  // Sync mirror action
+  // Sync the shared mirror action to the coordinate space of the primary view.
   if (m_mirrorAction) {
-    m_mirrorAction->setChecked(state.rparams.scan_mirror);
+    const bool finalCoordinates = m_imageWidget &&
+        m_imageWidget->coordinateSpace() == colorscreen::render_final_coordinates;
+    m_mirrorAction->blockSignals(true);
+    m_mirrorAction->setChecked(finalCoordinates ? state.scrToImg.final_mirror
+                                                : state.rparams.scan_mirror);
+    m_mirrorAction->blockSignals(false);
   }
 
   // Sync nonlinear checkbox in GeometryPanel
@@ -3199,6 +3408,7 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
       chart->setCorrection(state.rparams.scanner_blur_correction);
   }
 
+  updateCoordinateSpaceControls();
   emit documentStateChanged();
 }
 
@@ -3219,9 +3429,37 @@ void MainWindow::rotateDocumentLeft() { rotateLeft(); }
 /** Rotate the shared document right on behalf of a secondary view. */
 void MainWindow::rotateDocumentRight() { rotateRight(); }
 
-/** Change shared document mirroring on behalf of a secondary view. */
+/** Change shared scan mirroring on behalf of a secondary view. */
 void MainWindow::setDocumentMirror(bool checked) {
-  onMirrorHorizontally(checked);
+  if (!m_scan)
+    return;
+  ParameterState newState = getCurrentState();
+  if (newState.rparams.scan_mirror == checked)
+    return;
+  newState.rparams.scan_mirror = checked;
+  changeParameters(newState, "Mirror Horizontally");
+}
+
+/** Change continuous final rotation on behalf of an ordinary view. */
+void MainWindow::setDocumentFinalRotation(double degrees) {
+  if (!m_scan)
+    return;
+  ParameterState newState = getCurrentState();
+  if (newState.scrToImg.final_rotation == degrees)
+    return;
+  newState.scrToImg.final_rotation = degrees;
+  changeParameters(newState, "Set final rotation");
+}
+
+/** Change final-coordinate mirroring on behalf of an ordinary view. */
+void MainWindow::setDocumentFinalMirror(bool checked) {
+  if (!m_scan)
+    return;
+  ParameterState newState = getCurrentState();
+  if (newState.scrToImg.final_mirror == checked)
+    return;
+  newState.scrToImg.final_mirror = checked;
+  changeParameters(newState, "Mirror final image");
 }
 
 /** Create a snapshot of the current application parameters.
@@ -4821,6 +5059,12 @@ void MainWindow::onAutodetectScreen() {
     return;
   }
 
+  if (m_scrToImgParams.type != colorscreen::Random) {
+    m_autoAddPointsAfterCoordinates = true;
+    onAutodetectCoordinatesRequested();
+    return;
+  }
+
   // Create progress info
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Detecting screen", 1);
@@ -5117,8 +5361,10 @@ void MainWindow::onAutodetectCoordinatesFinished(
   if (progress)
     removeProgress(progress);
 
-  if (cancelled)
+  if (cancelled) {
+    m_autoAddPointsAfterCoordinates = false;
     return;
+  }
 
   if (success) {
     ParameterState oldState = getCurrentState();
@@ -5138,7 +5384,13 @@ void MainWindow::onAutodetectCoordinatesFinished(
 
     m_imageWidget->update();
     statusBar()->showMessage("Autodetect coordinates finished", 3000);
+
+    if (m_autoAddPointsAfterCoordinates) {
+      m_autoAddPointsAfterCoordinates = false;
+      onAutomaticallyAddPointsRequested(m_geometryPanel->finetuneAreaParams());
+    }
   } else {
+    m_autoAddPointsAfterCoordinates = false;
     QMessageBox::warning(this, "Autodetect Coordinates",
                          "Autodetect coordinates failed.");
   }

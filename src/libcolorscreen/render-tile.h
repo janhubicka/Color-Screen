@@ -3,6 +3,7 @@
    This file is part of Color-Screen.  */
 
 #include <stdlib.h>
+#include <algorithm>
 #include <pthread.h>
 #include <sys/time.h>
 #include <mutex>

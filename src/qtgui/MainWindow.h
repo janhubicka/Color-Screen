@@ -30,6 +30,7 @@ class QDockWidget; // Added
 class QToolBar;    // Added
 class QComboBox;   // Added
 class QCheckBox;   // Added
+class QDoubleSpinBox;
 class QVBoxLayout; // Added for Linearization tab
 class QLabel;
 class QProgressBar;
@@ -135,8 +136,14 @@ public:
   /** Rotate the shared document right from any attached view. */
   void rotateDocumentRight();
 
-  /** Set horizontal mirroring for the shared document from any view. */
+  /** Set horizontal scan mirroring for the shared document from any view. */
   void setDocumentMirror(bool checked);
+
+  /** Set continuous final-plane rotation from any ordinary view. */
+  void setDocumentFinalRotation(double degrees);
+
+  /** Set horizontal final-plane mirroring from any ordinary view. */
+  void setDocumentFinalMirror(bool checked);
 
   /** Restore this document from its per-window recovery directory. */
   bool restoreRecoveryState();
@@ -317,11 +324,22 @@ private:
   /** Return whether undo state or recovered state differs from the last save. */
   bool isDocumentModified() const;
 
+  /** Reload the current image using the selected demosaic mode without
+      prompting for parameter data.  Existing unsaved parameter state remains
+      marked dirty across the asynchronous reload. */
+  void reloadCurrentImageWithDemosaic();
+
+  /** Offer conservative post-load setup guidance when ANALYSIS says the
+      normally demosaiced RAW is likely an achromatic Bayer capture. */
+  void maybeOfferInitialSetupGuide(
+      const colorscreen::monochrome_bayer_analysis &analysis);
+
   void setupUi();
   void createMenus();
   QRect getImageArea(QRect area);
   void pivotViewport(int oldRot, int newRot);
   void createToolbar();  // New helper
+  void updateCoordinateSpaceControls();
   void createModeShortcuts(); // Create 1-0 hotkeys for modes
   void updateModeMenu(); // Updates combo box items
   QIcon renderScreenIcon(colorscreen::scr_type type);
@@ -450,6 +468,10 @@ private:
 
   QToolBar *m_toolbar;        // New toolbar
   QComboBox *m_modeComboBox;  // Mode selector
+  QComboBox *m_coordinateComboBox = nullptr; // Scan/final canvas selector
+  QDoubleSpinBox *m_finalRotationSpinBox = nullptr;
+  QAction *m_finalRotationLabelAction = nullptr;
+  QAction *m_finalRotationSpinAction = nullptr;
   QCheckBox *m_colorCheckBox; // Color checkbox (IR/RGB switch)
 
   // Core Data
@@ -461,6 +483,7 @@ private:
 
   std::function<void(QRect)> m_areaSelectionCallback = nullptr;
   ImageWidget::InteractionMode m_previousInteractionMode = ImageWidget::PanMode;
+  bool m_autoAddPointsAfterCoordinates = false;
 
 
   std::shared_ptr<colorscreen::image_data> m_scan;
