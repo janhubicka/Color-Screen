@@ -1341,6 +1341,28 @@ void MainWindow::setupUi() {
   m_manuallySelectedProgressIndex = -1;
 
   createToolbar(); // Initialize toolbar
+
+  // Add actions to ImageWidget so shortcuts work when it is a detached fullscreen window
+  // This must be done AFTER createMenus and createToolbar, since both initialize actions.
+  if (m_panAction) m_imageWidget->addAction(m_panAction);
+  if (m_selectAction) m_imageWidget->addAction(m_selectAction);
+  if (m_addPointAction) m_imageWidget->addAction(m_addPointAction);
+  if (m_setCenterAction) m_imageWidget->addAction(m_setCenterAction);
+  if (m_zoomInAction) m_imageWidget->addAction(m_zoomInAction);
+  if (m_zoomOutAction) m_imageWidget->addAction(m_zoomOutAction);
+  if (m_zoom100Action) m_imageWidget->addAction(m_zoom100Action);
+  if (m_zoomFitAction) m_imageWidget->addAction(m_zoomFitAction);
+  if (m_fullscreenAction) m_imageWidget->addAction(m_fullscreenAction);
+  if (m_selectAllAction) m_imageWidget->addAction(m_selectAllAction);
+  if (m_deselectAllAction) m_imageWidget->addAction(m_deselectAllAction);
+  if (m_deleteSelectedAction) m_imageWidget->addAction(m_deleteSelectedAction);
+  if (m_pruneMisplacedAction) m_imageWidget->addAction(m_pruneMisplacedAction);
+  if (m_rotateLeftAction) m_imageWidget->addAction(m_rotateLeftAction);
+  if (m_rotateRightAction) m_imageWidget->addAction(m_rotateRightAction);
+
+  // Note: exploreModeAction and mode shortcuts (1-0) are added dynamically in createToolbar/createModeShortcuts
+  // However, we should also add them. We will do this where they are created.
+
   setInspectorImageWidget(m_imageWidget);
 }
 
@@ -1634,6 +1656,7 @@ void MainWindow::createToolbar() {
     }
   });
   addAction(exploreModeAction);
+  if (m_imageWidget) m_imageWidget->addAction(exploreModeAction); // Add to ImageWidget for fullscreen
 }
 
 /** Rebuild the view-local Scan/Screen coordinate selector. */
@@ -1714,6 +1737,7 @@ void MainWindow::createModeShortcuts() {
       }
     });
     addAction(action);
+    if (m_imageWidget) m_imageWidget->addAction(action); // Add to ImageWidget for fullscreen
     m_modeActions.append(action);
   }
 }

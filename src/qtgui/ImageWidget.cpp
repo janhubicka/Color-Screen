@@ -1316,17 +1316,17 @@ void ImageWidget::handleExploreMove(QMouseEvent *event) {
       return;
   }
   
-  QPoint center = rect().center();
-  QPoint delta = event->pos() - center;
+  QPoint globalPos = event->globalPosition().toPoint();
+  QPoint delta = globalPos - m_exploreAnchorGlobal;
   if (delta.isNull()) return;
 
   // Accumulate target distance
   m_exploreTargetX -= delta.x() / m_scale;
   m_exploreTargetY -= delta.y() / m_scale;
   
-  // Warp mouse back to center immediately
+  // Warp mouse back to its anchor point directly in global coordinates
   m_ignoreNextMouseMove = true;
-  QCursor::setPos(mapToGlobal(center));
+  QCursor::setPos(m_exploreAnchorGlobal);
 }
 
 /**
@@ -1568,6 +1568,7 @@ void ImageWidget::wheelEvent(QWheelEvent *event) {
   m_exploreZoomSpeed = 0.15;
   m_zoomFocusCenter = false;
   m_panAnimationActive = false; // User took over with wheel
+  m_lastMousePos = event->position().toPoint();
 
   if (!m_exploreTimer->isActive()) {
       m_exploreTimer->start();
@@ -2248,8 +2249,10 @@ void ImageWidget::setExploreMode(bool enable) {
       m_exploreTargetX = m_viewX;
       m_exploreTargetY = m_viewY;
       m_exploreTargetScale = m_scale;
-      QCursor::setPos(mapToGlobal(rect().center()));
-      m_ignoreNextMouseMove = true;
+      
+      m_exploreAnchorGlobal = QCursor::pos();
+      m_ignoreNextMouseMove = false; // We don't warp initially, so don't ignore
+      
       m_exploreTimer->start();
       setFocus();
       emit interactionModeChanged(ExploreMode);
@@ -2294,9 +2297,8 @@ void ImageWidget::exploreTick() {
           focusX = width() / 2.0;
           focusY = height() / 2.0;
       } else {
-          QPoint p = mapFromGlobal(QCursor::pos());
-          focusX = p.x();
-          focusY = p.y();
+          focusX = m_lastMousePos.x();
+          focusY = m_lastMousePos.y();
       }
       
       double centerImgX = m_viewX + focusX / oldScale;

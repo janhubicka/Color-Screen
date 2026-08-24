@@ -431,6 +431,7 @@ private:
   
   // Interaction
   QPoint m_lastMousePos;
+  QPoint m_exploreAnchorGlobal;
   bool m_isDragging = false;
   InteractionMode m_interactionMode = PanMode;
   std::set<SelectedPoint> m_selectedPoints;
