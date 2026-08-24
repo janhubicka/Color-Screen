@@ -1,0 +1,84 @@
+name: Agent publish final-view close fix
+
+on:
+  push:
+    branches:
+      - agent/tmp-publish-final-view-close-fix
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Publish fix branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch origin main
+          git checkout -B agent/qtgui-defer-hidden-owner-close origin/main
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/qtgui/ColorScreenApplication.cpp')
+          text = path.read_text()
+          old = '''/** Approve closing VIEW and finalize its hidden document owner when it is last. */
+bool ColorScreenApplication::requestViewClose(ImageViewWindow *view) {
+  if (!view)
+    return false;
+  if (m_closingViews.contains(view))
+    return true;
+
+  MainWindow *source = view->sourceDocument();
+  if (source && m_hiddenDocumentPresentations.contains(source) &&
+      !hasOpenViews(source, view)) {
+    m_finalizingDocuments.insert(source);
+    const bool closed = source->close();
+    m_finalizingDocuments.remove(source);
+    if (!closed)
+      return false;
+    m_closingDocuments.insert(source);
+  }
+
+  m_closingViews.insert(view);
+  if (m_workspaceWindow && m_workspaceWindow->containsView(view))
+    m_workspaceWindow->prepareViewForClose(view);
+  return true;
+}
+'''
+          new = '''/** Approve closing VIEW; its destroyed handler finalizes a hidden owner if last. */
+bool ColorScreenApplication::requestViewClose(ImageViewWindow *view) {
+  if (!view)
+    return false;
+  if (m_closingViews.contains(view))
+    return true;
+
+  // Do not close a hidden document owner from inside the view's close event.
+  // With WA_DeleteOnClose that queues owner destruction before the MDI wrapper
+  // has finished closing the view, so owner teardown can race callbacks and
+  // chrome still owned by that view.  The destroyed handlers installed by
+  // createViewWindow() and createSlantedEdgeReference() already schedule
+  // closeHiddenDocumentWithoutViews(), guaranteeing that the peer is gone
+  // before its hidden owner is finalized.
+  m_closingViews.insert(view);
+  if (m_workspaceWindow && m_workspaceWindow->containsView(view))
+    m_workspaceWindow->prepareViewForClose(view);
+  return true;
+}
+'''
+          if old not in text:
+              raise SystemExit('requestViewClose source block did not match current main')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          git diff --check
+          git diff -- src/qtgui/ColorScreenApplication.cpp
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/qtgui/ColorScreenApplication.cpp
+          git commit -m "qtgui: defer hidden owner teardown until view closes"
+          git push --force origin HEAD:agent/qtgui-defer-hidden-owner-close
