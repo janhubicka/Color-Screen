@@ -368,14 +368,15 @@ int main(int argc, char *argv[]) {
       QMdiSubWindow *target =
           mdiArea->activeSubWindow() == first ? second : first;
       mdiArea->setActiveSubWindow(target);
-      QTimer::singleShot(100, &app, [mdiArea, first, second, firstPosition,
-                                     secondPosition, target, &app]() {
-        if (mdiArea->activeSubWindow() != target ||
-            first->pos() != firstPosition || second->pos() != secondPosition) {
-          qCritical() << "Activating a tiled document moved or swapped tiles";
-          app.exit(11);
-        }
-      });
+      if (mdiArea->activeSubWindow() != target ||
+          first->pos() != firstPosition || second->pos() != secondPosition) {
+        qCritical() << "Activating a tiled document moved or swapped tiles";
+        app.exit(11);
+        return;
+      }
+
+      // Do not leave later smoke checks in a tiled workspace.
+      workspace->showTabbedDocuments();
     });
   }
 
@@ -684,8 +685,10 @@ int main(int argc, char *argv[]) {
       coordinateState.scrToImg.coordinate2 = {0, 8};
       coordinateState.scrToImg.final_rotation = 12.5;
       coordinateState.scrToImg.final_mirror = true;
-      source->applySharedDocumentState(coordinateState,
-                                       QStringLiteral("Smoke screen coordinates"));
+      // This state exists only to exercise coordinate rendering below.  Do not
+      // put it on the undo stack: the final-view lifetime check later in this
+      // smoke path must exercise closing a clean document, not maybeSave().
+      source->applyState(coordinateState);
 
       auto basePresentation = coordinateState.rparams;
       basePresentation.scan_rotation = 0;
