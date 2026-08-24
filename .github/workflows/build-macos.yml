@@ -11,51 +11,31 @@ jobs:
 
     runs-on: macos-latest
 
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPRESS: "true"
+      CCACHE_MAXSIZE: 500M
+
     steps:
     - uses: actions/checkout@v4
-    - name: Install libtiff
-      run: brew install -v libtiff
-    - name: Install libjpeg-turbo
-      run: brew install -v libjpeg-turbo
-    - name: Install libzip
-      run: brew install -v libzip
-    - name: List libzip
-      run: brew list libzip
-    - name: Install libgsl
-      run: brew install -v gsl
-    - name: Install libraw
-      run: brew install -v libraw
-    - name: Install little-cms2
-      run: brew install -v little-cms2
-    - name: Install libomp
-      run: brew install -v libomp
-    - name: Install fftw
-      run: brew install -v fftw
-    - name: Install qt6
-      run: brew install -v qt6
-    - name: Install exiv2
-      run: brew install -v exiv2
-    - name: Install openjpeg
-      run: brew install -v openjpeg
-    - name: Install libpng
-      run: brew install -v libpng
-    - name: Install webp
-      run: brew install -v webp
-    - name: Install adwaita-icon-theme
-      run: brew install -v adwaita-icon-theme
-    - name: Link qt6
-      run: brew link qt6 --force
-
-    - name: Install dynlibbundler
-      run: brew install -v dylibbundler
-    - name: Bulid libzip
+    - name: Install dependencies
       run: |
-        #wget https://libzip.org/download/libzip-1.10.1.tar.xz
-        #tar xJvf libzip-1.10.1.tar.xz
-        #cd libzip-*
-        #cmake -DBUILD_SHARED_LIBS=OFF
-        #make
-        #find . -name libzip*.a
+        brew install \
+          libtiff libjpeg-turbo libzip gsl libraw little-cms2 libomp fftw \
+          qt6 exiv2 openjpeg libpng webp adwaita-icon-theme dylibbundler \
+          imagemagick ccache
+        brew link qt6 --force
+    - name: Restore compiler cache
+      uses: actions/cache@v4
+      with:
+        path: .ccache
+        key: ccache-${{ runner.os }}-${{ runner.arch }}-macos-${{ github.event.pull_request.head.sha || github.sha }}
+        restore-keys: |
+          ccache-${{ runner.os }}-${{ runner.arch }}-macos-
+    - name: Reset compiler cache stats
+      run: ccache --zero-stats
     - name: configure
       run: |
         export PATH="/opt/homebrew/opt/qt6/bin:/opt/homebrew/opt/qt/bin:$(brew --prefix qt6)/bin:$PATH"
@@ -86,7 +66,7 @@ jobs:
         echo "MOC=$MOC"
 
         # -fopenmp is rejected by Apple's clang. As a hack enable it by hand.
-        CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS=" -L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp " CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS  --enable-qtgui  MOC="$MOC"
+        CC="ccache clang" CXX="ccache clang++" CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS=" -L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp " ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS  --enable-qtgui  MOC="$MOC"
     - name: Upload config.log
       uses: actions/upload-artifact@v4
       if: always()
@@ -95,9 +75,9 @@ jobs:
         path: |
           config.log
     - name: make
-      run: make
+      run: make -j$(sysctl -n hw.logicalcpu)
     - name: make check
-      run: make check
+      run: make -j$(sysctl -n hw.logicalcpu) check
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
       if: always()
@@ -115,8 +95,6 @@ jobs:
       with:
         name: macOS-binary
         path: /tmp/Color-Screen-MacOS.tar.gz
-    - name: Install imagemagick
-      run: brew install -v imagemagick
 
     - name: Package App Bundle
       run: |
@@ -330,11 +308,11 @@ jobs:
           fi
         fi
         
-        CXXFLAGS="-O3 -ffast-math -Wall -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp -march=native" LDFLAGS="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS  --enable-qtgui --enable-checking --disable-static-link MOC="$MOC"
+        CC="ccache clang" CXX="ccache clang++" CXXFLAGS="-O3 -ffast-math -Wall -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp -march=native" LDFLAGS="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS  --enable-qtgui --enable-checking --disable-static-link MOC="$MOC"
     - name: make (checking enabled)
-      run: make
+      run: make -j$(sysctl -n hw.logicalcpu)
     - name: make check (checking enabled)
-      run: make check
+      run: make -j$(sysctl -n hw.logicalcpu) check
     - name: Upload Test Results (checking enabled)
       uses: actions/upload-artifact@v4
       if: always()
@@ -343,6 +321,9 @@ jobs:
         path: |
           testsuite/*.txt
           testsuite/*.log
+    - name: Compiler cache stats
+      if: always()
+      run: ccache --show-stats
 
     - name: Uninstall libgsl to break one of dependencies
       run: brew uninstall  gsl
