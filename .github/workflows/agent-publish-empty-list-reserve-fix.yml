@@ -1,0 +1,44 @@
+name: Agent publish empty-list reserve fix
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-publish-empty-list-reserve-fix'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Publish fix
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch origin agent/qtgui-defer-hidden-owner-close
+          git checkout -B agent/qtgui-defer-hidden-owner-close origin/agent/qtgui-defer-hidden-owner-close
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/qtgui/ColorScreenApplication.cpp')
+          text = path.read_text()
+          old_view = '''QList<ImageViewWindow *> ColorScreenApplication::viewWindows() {\n  pruneViewWindows();\n  QList<ImageViewWindow *> views;\n  views.reserve(m_viewWindows.size());\n  for (const QPointer<ImageViewWindow> &view : m_viewWindows) {\n'''
+          new_view = '''QList<ImageViewWindow *> ColorScreenApplication::viewWindows() {\n  pruneViewWindows();\n  QList<ImageViewWindow *> views;\n  for (const QPointer<ImageViewWindow> &view : m_viewWindows) {\n'''
+          old_doc = '''QList<MainWindow *> ColorScreenApplication::documentWindows() {\n  pruneDocumentWindows();\n  QList<MainWindow *> windows;\n  windows.reserve(m_documentWindows.size());\n  for (const QPointer<MainWindow> &window : m_documentWindows) {\n'''
+          new_doc = '''QList<MainWindow *> ColorScreenApplication::documentWindows() {\n  pruneDocumentWindows();\n  QList<MainWindow *> windows;\n  for (const QPointer<MainWindow> &window : m_documentWindows) {\n'''
+          if text.count(old_view) != 1 or text.count(old_doc) != 1:
+              raise SystemExit('expected list-copy source anchors did not match')
+          text = text.replace(old_view, new_view, 1).replace(old_doc, new_doc, 1)
+          path.write_text(text)
+          PY
+          git diff --check
+          test "$(git diff --name-only | wc -l)" -eq 1
+          test "$(git diff --name-only)" = "src/qtgui/ColorScreenApplication.cpp"
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/qtgui/ColorScreenApplication.cpp
+          git commit -m "qtgui: avoid zero-size QList reserve"
+          git push origin HEAD:agent/qtgui-defer-hidden-owner-close
