@@ -16,12 +16,93 @@ jobs:
         with:
           ref: agent/tmp-fix-bayer-guide-button
           fetch-depth: 0
-      - name: Apply and validate follow-up
+      - name: Apply follow-up
         shell: bash
         run: |
           set -euxo pipefail
-          git apply --check agent-bayer-guide-followup.patch
-          git apply agent-bayer-guide-followup.patch
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/qtgui/MainWindow.cpp')
+          text = path.read_text()
+          old = '''  InitialSetupGuideDialog(const colorscreen::monochrome_bayer_analysis &analysis,
+                          QWidget *parent = nullptr)
+      : QDialog(parent) {
+    setWindowTitle(tr("Suggested image setup"));
+    setModal(true);
+
+    auto *layout = new QVBoxLayout(this);
+    auto *intro = new QLabel(
+        tr("No parameter data was loaded for this image. Color-Screen found a "
+           "capture setting that may improve the reconstruction."),
+        this);
+    intro->setWordWrap(true);
+    layout->addWidget(intro);
+
+    m_monochromeBayer = new QCheckBox(
+        tr("Use monochromatic Bayer-filter compensation"), this);
+    m_monochromeBayer->setChecked(true);
+    m_monochromeBayer->setToolTip(
+        tr("Reload the RAW without color interpolation and compensate the "
+           "different Bayer-filter channel sensitivities."));
+    layout->addWidget(m_monochromeBayer);
+
+    auto *details = new QLabel(
+        tr("The RGB channels closely follow the same image signal (minimum "
+           "correlation %1, residual %2%). This is typical of a monochromatic "
+           "capture made with a conventional Bayer-filter camera. The suggested "
+           "mode keeps native sensor samples instead of interpolating color "
+           "detail.")
+            .arg(analysis.minimum_correlation, 0, 'f', 5)
+            .arg(analysis.maximum_relative_residual * 100.0, 0, 'f', 2),
+        this);
+    details->setWordWrap(true);
+    layout->addWidget(details);
+
+    auto *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Apply | QDialogButtonBox::Cancel, this);
+    buttons->button(QDialogButtonBox::Apply)->setText(tr("Apply and reload"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(tr("Not now"));
+    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    layout->addWidget(buttons);
+'''
+          new = '''  explicit InitialSetupGuideDialog(QWidget *parent = nullptr)
+      : QDialog(parent) {
+    setWindowTitle(tr("Suggested image setup"));
+    setModal(true);
+
+    auto *layout = new QVBoxLayout(this);
+    auto *intro = new QLabel(
+        tr("This appears to be a monochromatic capture made with a Bayer-filter "
+           "camera."),
+        this);
+    intro->setWordWrap(true);
+    layout->addWidget(intro);
+
+    m_monochromeBayer =
+        new QCheckBox(tr("Reload with Bayer-filter compensation"), this);
+    m_monochromeBayer->setChecked(true);
+    layout->addWidget(m_monochromeBayer);
+
+    auto *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    buttons->button(QDialogButtonBox::Ok)->setText(tr("Apply and reload"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(tr("Not now"));
+    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    layout->addWidget(buttons);
+'''
+          if old not in text:
+              raise SystemExit('setup guide block not found')
+          text = text.replace(old, new, 1)
+          old_call = '  InitialSetupGuideDialog dialog(analysis, this);'
+          new_call = '  InitialSetupGuideDialog dialog(this);'
+          if old_call not in text:
+              raise SystemExit('setup guide call not found')
+          text = text.replace(old_call, new_call, 1)
+          path.write_text(text)
+          PY
           rm agent-bayer-guide-followup.patch
           rm .github/workflows/agent-bayer-guide-followup.yml
           git diff --check
@@ -32,5 +113,5 @@ jobs:
           git config user.name 'OpenAI Agent'
           git config user.email 'agent@openai.com'
           git add -A
-          git commit -m 'qtgui: simplify and fix Bayer setup guide' -m 'Shorten the initial monochrome Bayer recommendation for digitization users and remove detector statistics from the dialog. Use an accept-role dialog button so Apply and reload actually closes the guide and reaches the existing demosaic reload path.'
+          git commit -m 'qtgui: simplify and fix Bayer setup guide' -m 'Shorten the monochrome Bayer recommendation for digitization users and remove detector statistics from the dialog. Use an accept-role button so Apply and reload closes the guide and reaches the existing demosaic reload path.'
           git push origin HEAD:agent/tmp-fix-bayer-guide-button
