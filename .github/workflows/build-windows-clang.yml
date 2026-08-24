@@ -29,6 +29,8 @@ jobs:
     - uses: msys2/setup-msys2@v2
       with:
         msystem: ${{matrix.sys}}
+        # windows-latest has C:\msys64 already; windows-11-arm does not yet.
+        release: ${{ matrix.sys == 'clangarm64' }}
         update: false
         cache: true
         install: >
