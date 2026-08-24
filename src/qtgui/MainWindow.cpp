@@ -150,7 +150,7 @@ ColorScreenApplication *documentApplication() {
     changing the load/reload orchestration. */
 class InitialSetupGuideDialog final : public QDialog {
 public:
-  explicit InitialSetupGuideDialog(QWidget *parent, bool suggestBayer, bool suggestFStop, bool suggestPitch, const colorscreen::image_data *scan)
+  explicit InitialSetupGuideDialog(QWidget *parent, bool suggestBayer, bool suggestFStop, bool suggestPitch, bool suggestFill, bool suggestDPI, const colorscreen::image_data *scan)
       : QDialog(parent) {
     setWindowTitle(tr("Suggested image setup"));
     setModal(true);
@@ -169,7 +169,7 @@ public:
       m_monochromeBayer->setChecked(true);
       layout->addWidget(m_monochromeBayer);
       
-      if (suggestFStop || suggestPitch) {
+      if (suggestFStop || suggestPitch || suggestFill || suggestDPI) {
         auto *line = new QFrame(this);
         line->setFrameShape(QFrame::HLine);
         line->setFrameShadow(QFrame::Sunken);
@@ -177,7 +177,7 @@ public:
       }
     }
     
-    if (suggestFStop || suggestPitch) {
+    if (suggestFStop || suggestPitch || suggestFill || suggestDPI) {
       auto *intro2 = new QLabel(
           tr("The following camera parameters were automatically detected:"), this);
       intro2->setWordWrap(true);
@@ -197,6 +197,18 @@ public:
       m_pitch = new QCheckBox(tr("Set sensor pixel pitch to %1 μm (Sensor size: %2)").arg(scan->pixel_pitch, 0, 'f', 2).arg(sensorName), this);
       m_pitch->setChecked(true);
       layout->addWidget(m_pitch);
+    }
+    
+    if (suggestFill) {
+      m_fill = new QCheckBox(tr("Set sensor fill factor to %1").arg(scan->sensor_fill_factor, 0, 'f', 3), this);
+      m_fill->setChecked(true);
+      layout->addWidget(m_fill);
+    }
+    
+    if (suggestDPI) {
+      m_dpi = new QCheckBox(tr("Set image resolution to %1 PPI").arg(scan->xdpi, 0, 'f', 1), this);
+      m_dpi->setChecked(true);
+      layout->addWidget(m_dpi);
     }
 
     auto *buttons = new QDialogButtonBox(
@@ -219,6 +231,14 @@ public:
   
   bool usePixelPitch() const {
     return m_pitch && m_pitch->isChecked();
+  }
+
+  bool useFillFactor() const {
+    return m_fill && m_fill->isChecked();
+  }
+  
+  bool useDPI() const {
+    return m_dpi && m_dpi->isChecked();
   }
 
 private:
@@ -247,6 +267,8 @@ private:
   QCheckBox *m_monochromeBayer = nullptr;
   QCheckBox *m_fstop = nullptr;
   QCheckBox *m_pitch = nullptr;
+  QCheckBox *m_fill = nullptr;
+  QCheckBox *m_dpi = nullptr;
 };
 
 } // namespace
@@ -3066,11 +3088,15 @@ void MainWindow::maybeOfferInitialSetupGuide(
       std::abs(m_scan->f_stop - m_rparams.sharpen.scanner_mtf.f_stop) > 0.01;
   bool suggestPitch = m_scan->pixel_pitch > 0 &&
       std::abs(m_scan->pixel_pitch - m_rparams.sharpen.scanner_mtf.pixel_pitch) > 0.001;
+  bool suggestFill = m_scan->sensor_fill_factor > 0 &&
+      std::abs(m_scan->sensor_fill_factor - m_rparams.sharpen.scanner_mtf.sensor_fill_factor) > 0.001;
+  bool suggestDPI = m_scan->xdpi > 0 &&
+      std::abs(m_scan->xdpi - m_rparams.sharpen.scanner_mtf.scan_dpi) > 0.1;
 
-  if (!suggestBayer && !suggestFStop && !suggestPitch)
+  if (!suggestBayer && !suggestFStop && !suggestPitch && !suggestFill && !suggestDPI)
     return;
 
-  InitialSetupGuideDialog dialog(this, suggestBayer, suggestFStop, suggestPitch, m_scan.get());
+  InitialSetupGuideDialog dialog(this, suggestBayer, suggestFStop, suggestPitch, suggestFill, suggestDPI, m_scan.get());
   if (dialog.exec() != QDialog::Accepted)
     return;
 
@@ -3091,6 +3117,16 @@ void MainWindow::maybeOfferInitialSetupGuide(
   if (suggestPitch && dialog.usePixelPitch()) {
     state.rparams.sharpen.scanner_mtf.pixel_pitch = m_scan->pixel_pitch;
     changes << tr("pixel pitch");
+  }
+
+  if (suggestFill && dialog.useFillFactor()) {
+    state.rparams.sharpen.scanner_mtf.sensor_fill_factor = m_scan->sensor_fill_factor;
+    changes << tr("sensor fill factor");
+  }
+
+  if (suggestDPI && dialog.useDPI()) {
+    state.rparams.sharpen.scanner_mtf.scan_dpi = m_scan->xdpi;
+    changes << tr("image resolution");
   }
 
   if (!changes.isEmpty()) {
