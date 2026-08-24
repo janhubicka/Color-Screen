@@ -1,0 +1,25 @@
+name: Agent source snapshot
+
+on:
+  pull_request:
+    branches:
+      - agent/tmp-source-multiview-equal
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: b4bdd9a151db3095f3bd56ed47b42104c2c76210
+          fetch-depth: 0
+      - name: Archive source
+        run: tar czf /tmp/colorscreen-current.tar.gz --exclude=.git .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-current-source
+          path: /tmp/colorscreen-current.tar.gz
+          retention-days: 1
