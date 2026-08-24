@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [ "main" ]
     paths:
-      - '.agent/READY-peer-view-base64'
+      - '.agent/READY-peer-view-raw2'
 
 permissions:
   contents: write
@@ -19,7 +19,13 @@ jobs:
           fetch-depth: 0
 
       - name: Assemble exact patch bytes
-        run: cat .agent/peer-view.b64.* | base64 --decode > /tmp/peer-view.patch
+        run: |
+          cat .agent/peer-view.patch.* > /tmp/peer-view.patch
+          # The first transport chunk accidentally duplicated the boundary blank
+          # line. Remove that one line, then require the exact locally-reviewed
+          # patch hash before applying anything.
+          sed -i '181d' /tmp/peer-view.patch
+          echo 'c9fa2d5c2728144789b7de6343e42bfc32445255b44df34e5af7b9ffa5c3cf8f  /tmp/peer-view.patch' | sha256sum -c -
 
       - name: Publish clean branch
         env:
