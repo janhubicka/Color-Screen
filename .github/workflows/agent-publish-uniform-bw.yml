@@ -34,6 +34,16 @@ jobs:
           expected=ca6a4eab9326623e49975c48b7c36957f56e5310
           test "$(git rev-parse HEAD)" = "$expected"
           cat ../transport/agent/focus-area-followup.patch.* > /tmp/focus-area-followup.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          patch = Path('/tmp/focus-area-followup.patch')
+          text = patch.read_text()
+          needle = "+             focus-analysis-unittests$(EXEEXT)\n all: config.h\n"
+          replacement = "+             focus-analysis-unittests$(EXEEXT)\n \n all: config.h\n"
+          if needle not in text:
+              raise SystemExit('expected Makefile.in patch context not found')
+          patch.write_text(text.replace(needle, replacement, 1))
+          PY
           git apply --check /tmp/focus-area-followup.patch
           git apply /tmp/focus-area-followup.patch
           git diff --check
