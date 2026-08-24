@@ -2069,7 +2069,8 @@ void MainWindow::createMenus() {
   QAction *closeAction = m_fileMenu->addAction("&Close Window");
   closeAction->setShortcut(QKeySequence::Close);
   closeAction->setShortcutContext(Qt::WindowShortcut);
-  closeAction->setToolTip("Close this image document window.");
+  closeAction->setToolTip(
+      "Close this view. The image remains open while another view exists.");
   connect(closeAction, &QAction::triggered, this, &QWidget::close);
 
   QAction *exitAction = m_fileMenu->addAction("E&xit");
@@ -3689,6 +3690,21 @@ bool MainWindow::maybeSave() {
    render, cancels only its background tasks, removes only its recovery data,
    and saves the shared preferred window layout.  */
 void MainWindow::closeEvent(QCloseEvent *event) {
+  if (m_closing) {
+    event->accept();
+    return;
+  }
+
+  // The primary MainWindow is also the document state owner.  Closing this
+  // presentation must not destroy that owner while peer ImageViewWindows still
+  // need its parameters, undo stack, workers, and recovery state.
+  if (ColorScreenApplication *application = documentApplication()) {
+    if (application->retainDocumentForOpenViews(this)) {
+      event->ignore();
+      return;
+    }
+  }
+
   // Check for unsaved changes
   if (!maybeSave()) {
     event->ignore();

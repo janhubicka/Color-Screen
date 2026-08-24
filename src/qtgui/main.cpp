@@ -85,7 +85,7 @@ int main(int argc, char *argv[]) {
 
   QCommandLineOption closeToEmptyTabOption(
       "smoke-test-close-to-empty-tab",
-      "Close all documents and require a fresh reusable empty tab");
+      "Close all documents and require the empty workspace shell to disappear");
   parser.addOption(closeToEmptyTabOption);
 
   QCommandLineOption expectedTabBarOption(
@@ -139,6 +139,11 @@ int main(int argc, char *argv[]) {
       "Create a secondary view and verify shared image and independent render mode");
   parser.addOption(newViewOption);
 
+  QCommandLineOption windowLifetimeOption(
+      "smoke-test-window-lifetime",
+      "Exercise peer-view lifetime, detached-window lifetime, and one-tab UI");
+  parser.addOption(windowLifetimeOption);
+
   QCommandLineOption slantedReferenceOption(
       "smoke-test-slanted-reference",
       "Open the current image as a separate slanted-edge reference view");
@@ -150,6 +155,12 @@ int main(int argc, char *argv[]) {
 
   parser.addPositionalArgument("image", "Image file(s) to open.", "[image...]");
   parser.process(app);
+
+  // Lifetime smoke tests need one extra event-loop turn after the last visible
+  // window closes so they can inspect the final object-manager state.
+  if (parser.isSet(closeToEmptyTabOption) ||
+      parser.isSet(windowLifetimeOption))
+    app.setQuitOnLastWindowClosed(false);
 
   if (parser.isSet(timeReportOption))
     colorscreen::time_report = true;
@@ -262,15 +273,15 @@ int main(int argc, char *argv[]) {
       const QList<MainWindow *> documents = app.documentWindows();
       for (MainWindow *document : documents)
         document->close();
-      QTimer::singleShot(0, &app, [&app]() {
-        QTimer::singleShot(0, &app, [&app]() {
-          const QList<MainWindow *> remaining = app.documentWindows();
-          if (remaining.size() != 1 || app.tabCount() != 1 ||
-              !remaining.front()->canReuseForOpen()) {
-            qCritical() << "Smoke test did not leave one reusable empty tab";
-            app.exit(5);
-          }
-        });
+      QTimer::singleShot(100, &app, [&app]() {
+        WorkspaceWindow *workspace = app.workspaceWindow();
+        if (!app.documentWindows().isEmpty() || !app.viewWindows().isEmpty() ||
+            app.tabCount() != 0 || (workspace && workspace->isVisible())) {
+          qCritical() << "Smoke test left an empty application workspace";
+          app.exit(5);
+          return;
+        }
+        app.exit(0);
       });
     });
   }
@@ -836,13 +847,108 @@ int main(int argc, char *argv[]) {
         return;
       }
 
-      app.closeView(view);
+      // The primary presentation is a peer of New View. Closing it must keep
+      // the logical document and shared image alive until this final view also
+      // closes. This simultaneously covers destruction of one loaded document
+      // while another independent image remains open.
+      QPointer<MainWindow> guardedSource(source);
+      QPointer<ImageViewWindow> guardedView(view);
+      const int documentCount = documents.size();
+      if (source->close() || !guardedSource || !guardedView ||
+          app.isDocumentPresentationOpen(source) ||
+          workspace->containsDocument(source) ||
+          !workspace->containsView(view) || view->sourceDocument() != source ||
+          view->sharedImageData() != sourceScan) {
+        qCritical() << "Closing the primary view destroyed or detached its peers";
+        app.exit(14);
+        return;
+      }
 
-      // Also exercise destruction of one loaded document while another remains
-      // live.  MainWindow owns QUndoStack as a QObject child; its destructor
-      // must not be allowed to signal back into an already-destroyed document.
-      if (documents.size() > 1)
-        documents.back()->close();
+      if (!app.closeView(view)) {
+        qCritical() << "Closing the final peer view was rejected unexpectedly";
+        app.exit(14);
+        return;
+      }
+      QTimer::singleShot(150, &app,
+                         [&app, guardedSource, guardedView, documentCount]() {
+        if (guardedSource || guardedView ||
+            app.documentWindows().size() != documentCount - 1) {
+          qCritical() << "Final peer view did not close its document owner";
+          app.exit(14);
+        }
+      });
+    });
+  }
+
+  if (parser.isSet(windowLifetimeOption)) {
+    QTimer::singleShot(300, &app, [&app]() {
+      const QList<MainWindow *> documents = app.documentWindows();
+      WorkspaceWindow *workspace = app.workspaceWindow();
+      if (documents.size() != 1 || !documents.front()->sharedImageData() ||
+          !workspace || app.tabCount() != 1 || !workspace->isTabBarVisible()) {
+        qCritical() << "Window lifetime smoke test requires one standard tab";
+        app.exit(16);
+        return;
+      }
+
+      MainWindow *source = documents.front();
+      app.detachDocument(source);
+      QCoreApplication::processEvents();
+      if (workspace->isVisible() || !source->isVisible() ||
+          !source->isWindow() || app.tabCount() != 0) {
+        qCritical() << "Detaching the sole image left a useless workspace shell";
+        app.exit(16);
+        return;
+      }
+
+      app.attachDocument(source);
+      QCoreApplication::processEvents();
+      if (!workspace->isVisible() || !workspace->containsDocument(source) ||
+          app.tabCount() != 1 || !workspace->isTabBarVisible()) {
+        qCritical() << "Reattaching the sole image did not restore a standard tab";
+        app.exit(16);
+        return;
+      }
+
+      ImageViewWindow *view = app.createViewWindow(source, true);
+      if (!view || !view->isWindow() || !view->isVisible()) {
+        qCritical() << "Could not create detached peer view";
+        app.exit(16);
+        return;
+      }
+
+      QPointer<MainWindow> guardedSource(source);
+      QPointer<ImageViewWindow> guardedView(view);
+      if (!workspace->close()) {
+        qCritical() << "Workspace close was rejected with a detached peer";
+        app.exit(16);
+        return;
+      }
+      QCoreApplication::processEvents();
+      if (workspace->isVisible() || !guardedSource || !guardedView ||
+          !guardedView->isVisible() ||
+          app.isDocumentPresentationOpen(guardedSource)) {
+        qCritical() << "Closing the workspace also closed its detached peer";
+        app.exit(16);
+        return;
+      }
+
+      if (!app.closeView(guardedView)) {
+        qCritical() << "Final detached peer did not accept close";
+        app.exit(16);
+        return;
+      }
+      QTimer::singleShot(150, &app,
+                         [&app, workspace, guardedSource, guardedView]() {
+        if (guardedSource || guardedView ||
+            !app.documentWindows().isEmpty() || !app.viewWindows().isEmpty() ||
+            (workspace && workspace->isVisible())) {
+          qCritical() << "Last application window did not release its document";
+          app.exit(16);
+          return;
+        }
+        app.exit(0);
+      });
     });
   }
 

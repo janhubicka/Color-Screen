@@ -83,7 +83,7 @@ public:
   /** Return true when the workspace currently uses document tabs. */
   bool isTabbedView() const;
 
-  /** Return whether the auto-hiding document tab bar is currently visible. */
+  /** Return whether Qt's standard document tab bar is currently visible. */
   bool isTabBarVisible() const;
 
   /** Restore/save only the outer workspace geometry. */
@@ -91,7 +91,7 @@ public:
   void saveWorkspaceGeometry() const;
 
 protected:
-  /** Close all documents through their normal save/cancel policy. */
+  /** Close only presentations hosted by this workspace. */
   void closeEvent(QCloseEvent *event) override;
 
   /** Reclaim the active document inspector when the workspace gets focus. */
@@ -121,6 +121,9 @@ private:
 
   /** Apply tab behavior that QMdiArea does not expose directly. */
   void configureTabBar();
+
+  /** Close the shell after its final hosted presentation has left. */
+  void scheduleCloseIfEmpty();
 
   /** Keep DOCUMENT's user-visible long tasks in the global status area. */
   void attachUserVisibleProgress(MainWindow *document);
