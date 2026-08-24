@@ -161,6 +161,51 @@ ColorScreenApplication *documentApplication() {
   return dynamic_cast<ColorScreenApplication *>(QCoreApplication::instance());
 }
 
+/** Choose the scalar/BW focus model for scans that have no native RGB data,
+    and for RGB files that merely store one monochrome scanner signal in
+    three gain-scaled channels.  Test raw scan chromaticity rather than the
+    reconstructed image layer: a monochrome additive-screen scan can still
+    reconstruct strongly coloured scene areas, which are exactly the areas
+    whose independent primary intensities we want for focus analysis. */
+bool focusAnalysisUsesMonochromeInput(const colorscreen::image_data &scan) {
+  if (!scan.has_rgb())
+    return scan.has_grayscale_or_ir();
+  if (scan.width <= 0 || scan.height <= 0)
+    return false;
+
+  const int xStep = std::max(1, scan.width / 32);
+  const int yStep = std::max(1, scan.height / 32);
+  const double darkThreshold
+      = static_cast<double>(std::max(1, scan.maxval)) * 0.02;
+  long double sumR = 0;
+  long double sumG = 0;
+  long double sumR2 = 0;
+  long double sumG2 = 0;
+  size_t samples = 0;
+  for (int y = yStep / 2; y < scan.height; y += yStep)
+    for (int x = xStep / 2; x < scan.width; x += xStep) {
+      const colorscreen::image_data::pixel pixel = scan.get_rgb_pixel(x, y);
+      const double total = static_cast<double>(pixel.r) + pixel.g + pixel.b;
+      if (total <= 3 * darkThreshold)
+        continue;
+      const long double r = pixel.r / total;
+      const long double g = pixel.g / total;
+      sumR += r;
+      sumG += g;
+      sumR2 += r * r;
+      sumG2 += g * g;
+      ++samples;
+    }
+  if (samples < 32)
+    return false;
+  const long double meanR = sumR / samples;
+  const long double meanG = sumG / samples;
+  const long double variance
+      = std::max((long double)0, sumR2 / samples - meanR * meanR)
+        + std::max((long double)0, sumG2 / samples - meanG * meanG);
+  return variance < (long double)5e-5;
+}
+
 } // namespace
 
 /** Construct one independent image-document window.
@@ -5361,17 +5406,12 @@ void MainWindow::clearFocusAreaAnalysis() {
     m_sharpnessPanel->setFocusAreaAnalysisState(0, m_focusAreaAnalysisRunning);
 }
 
-/** Find locally uniform RGB areas on an unadjusted interpolated reconstruction.
+/** Find locally uniform areas on an unadjusted interpolated reconstruction.
     The complete render/search pass runs outside the GUI thread and stores its
     result only in this MainWindow, preserving the document boundary. */
 void MainWindow::onFindFocusAreasRequested() {
   if (!m_scan || m_focusAreaAnalysisRunning)
     return;
-  if (!m_scan->has_rgb()) {
-    QMessageBox::warning(this, tr("Focus analysis areas"),
-                         tr("Automatic focus-area discovery requires RGB input."));
-    return;
-  }
 
   m_focusAreaAnalysisRunning = true;
   clearFocusAreaAnalysis();
@@ -5470,6 +5510,7 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
   const std::shared_ptr<colorscreen::image_data> scan = m_scan;
   const std::vector<colorscreen::finetune_focus_area_candidate> candidates
       = m_focusAreaCandidates;
+  const bool useMonochrome = focusAnalysisUsesMonochromeInput(*scan);
   auto *watcher = new QFutureWatcher<FocusAreaAnalyzeTaskResult>(this);
   connect(watcher, &QFutureWatcher<FocusAreaAnalyzeTaskResult>::finished, this,
           [this, watcher, progress, flags]() {
@@ -5570,13 +5611,18 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
           });
 
   watcher->setFuture(QtConcurrent::run(
-      [rparams, geometry, scan, candidates, progress, flags]() mutable {
+      [rparams, geometry, scan, candidates, progress, flags,
+       useMonochrome]() mutable {
         FocusAreaAnalyzeTaskResult result;
         result.candidates = candidates;
         colorscreen::finetune_parameters local;
         local.range = 4;
         local.ignore_outliers = 0;
         local.flags = flags | colorscreen::finetune_position;
+        if (useMonochrome)
+          local.flags |= colorscreen::finetune_bw
+              | colorscreen::finetune_no_normalize
+              | colorscreen::finetune_no_data_collection;
         for (auto &candidate : result.candidates) {
           if (progress->cancelled()) {
             result.cancelled = true;
@@ -5588,14 +5634,24 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
         }
 
         colorscreen::finetune_parameters joint = local;
-        joint.flags |= colorscreen::finetune_uniform_image_layer
-            | colorscreen::finetune_no_normalize
+        joint.flags |= colorscreen::finetune_no_normalize
             | colorscreen::finetune_no_data_collection;
+        if (!useMonochrome)
+          joint.flags |= colorscreen::finetune_uniform_image_layer;
         colorscreen::finetune_focus_analysis_parameters analysisParameters;
         analysisParameters.selection.min_areas = 3;
         analysisParameters.selection.max_areas = 8;
+        /* Full RGB rank is required to learn shared RGB screen-primary
+           responses, but it is not an identifiability condition for BW: each
+           BW area has its own three primary weights and only blur is shared.
+           Keep D-optimal ordering, but do not reject the best BW subset solely
+           because its cross-area colour Gram matrix is rank deficient. */
+        if (useMonochrome)
+          analysisParameters.selection.minimum_color_volume = 0;
         analysisParameters.leave_one_out = true;
-        analysisParameters.held_out = true;
+        /* Frozen RGB-primary held-out validation belongs to the RGB uniform
+           image-layer model.  BW still gets full leave-one-out stability. */
+        analysisParameters.held_out = !useMonochrome;
         result.success = colorscreen::finetune_analyze_focus_areas(
             rparams, geometry, *scan, result.candidates, joint,
             analysisParameters, &result.analysis, progress.get());
