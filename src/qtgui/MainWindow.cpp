@@ -440,6 +440,14 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
    panel callbacks don't access freed data.  Finally cleans up any floating
    dock widgets that may hold detached chart views.  */
 MainWindow::~MainWindow() {
+  // QObject-owned children are destroyed by QWidget/QObject only after this
+  // derived destructor has returned and MainWindow's C++ members have already
+  // been destroyed.  Some children, notably QUndoStack, emit signals from
+  // their destructors.  Do not let those late signals re-enter MainWindow
+  // slots such as updateWindowTitle(), which access document members that no
+  // longer exist at that stage of destruction.
+  QObject::disconnect(nullptr, nullptr, this, nullptr);
+
   // Hide window first to avoid invalid accessibility/focus events during
   // destruction This is a known workaround for MacOS crashes on exit
   // (QTBUG-71850)
