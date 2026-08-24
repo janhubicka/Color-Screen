@@ -1,0 +1,70 @@
+name: Publish focus identifiability patch
+
+on:
+  pull_request:
+    branches:
+      - agent/tmp-publish-focus-ident-base
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Check out publisher branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/tmp-publish-focus-ident-base
+          fetch-depth: 0
+
+      - name: Reconstruct and verify patch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat agent/focus-area-identifiability.part-* >/tmp/focus.patch
+          echo '9a7619963755470a2b56cb05bb2685369cc343f3d42d66255423a83350903309  /tmp/focus.patch' | sha256sum -c -
+
+      - name: Apply to current main and validate
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch origin main
+          git checkout --detach 7dabce31f66b5ee4e787fae3f02e70d9ab482a8e
+          git apply --check /tmp/focus.patch
+          git apply /tmp/focus.patch
+          git diff --check
+          CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure
+          make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
+          ./src/libcolorscreen/focus-analysis-unittests
+          make -C src/colorscreen -j$(nproc) colorscreen
+          ./src/colorscreen/colorscreen --help >/tmp/colorscreen-help.txt 2>&1 || true
+          grep -q 'analyze-focus-areas' /tmp/colorscreen-help.txt
+
+      - name: Commit and publish review branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git switch -c agent/focus-area-identifiability-cli
+          git add doc/focus-area-analysis.md \
+                  src/colorscreen/colorscreen.C \
+                  src/libcolorscreen/focus-analysis.C \
+                  src/libcolorscreen/focus-analysis-unittests.C \
+                  src/qtgui/MainWindow.cpp \
+                  src/qtgui/SharpnessPanel.cpp
+          test "$(git diff --cached --name-only | wc -l)" -eq 6
+          git diff --cached --check
+          git config user.name 'OpenAI Codex'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit \
+            -m 'focus: make area MTF fitting identifiable' \
+            -m 'Real Paget scans expose a sigma/defocus compensation ridge: cold, staged, and warm starts can converge to materially different parameter pairs with nearly the same residual. Multi-area periodic-screen fitting therefore cannot support a unique physical sigma/defocus decomposition.' \
+            -m 'Reject coupled physical sigma+defocus area fits and require one component to be calibrated or fixed. Add the analyze-focus-areas CLI with defocus-only as the calibrated-sigma default, expose reproducible area/leave-one-out diagnostics, guide Qt users toward one-parameter physical fits, and add a regression for the identifiability guard.' \
+            -m 'On the real Hurley Paget scan, a defocus-only fit with calibrated sigma gave about 0.269 mm joint defocus with a leave-one-out span of about 0.029 mm.'
+          git push origin HEAD:refs/heads/agent/focus-area-identifiability-cli
