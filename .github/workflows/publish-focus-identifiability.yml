@@ -29,7 +29,7 @@ jobs:
         run: |
           set -euxo pipefail
           cat agent/focus-area-identifiability.part-* >/tmp/focus.patch
-          echo '9a7619963755470a2b56cb05bb2685369cc343f3d42d66255423a83350903309  /tmp/focus.patch' | sha256sum -c -
+          echo '0fc71cf9a367124b2f91ca9f9b30aa05865df552572acf11c3f7abe5836f5f27  /tmp/focus.patch' | sha256sum -c -
 
       - name: Apply to current main and validate
         shell: bash
