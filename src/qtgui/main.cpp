@@ -660,8 +660,14 @@ int main(int argc, char *argv[]) {
     });
   }
 
+  // The combined CI command runs New View and slanted-reference checks in one
+  // process. Track completion explicitly instead of relying on wall-clock
+  // delays that processEvents() can overtake on slow or instrumented builds.
+  const auto newViewSmokeDone =
+      std::make_shared<bool>(!parser.isSet(newViewOption));
+
   if (parser.isSet(newViewOption)) {
-    QTimer::singleShot(300, &app, [&app]() {
+    QTimer::singleShot(300, &app, [&app, newViewSmokeDone]() {
       const QList<MainWindow *> documents = app.documentWindows();
       if (documents.isEmpty() || !documents.front()->sharedImageData()) {
         qCritical() << "New View smoke test requires a loaded document";
@@ -750,6 +756,8 @@ int main(int argc, char *argv[]) {
       }
       const int previousTabs = app.tabCount();
       ImageViewWindow *view = app.createViewWindow(source);
+      QPointer<MainWindow> guardedSource(source);
+      QPointer<ImageViewWindow> guardedView(view);
       WorkspaceWindow *workspace = app.workspaceWindow();
       if (!view || view->sourceDocument() != source ||
           view->sharedImageData() != sourceScan ||
@@ -777,9 +785,19 @@ int main(int argc, char *argv[]) {
 
       app.detachView(view);
       QCoreApplication::processEvents();
-      view->activateWindow();
+      if (!guardedSource || !guardedView) {
+        qCritical() << "New View disappeared while detaching";
+        app.exit(14);
+        return;
+      }
+      guardedView->activateWindow();
       QCoreApplication::processEvents();
-      QDockWidget *detachedInspector = view->findChild<QDockWidget *>(
+      if (!guardedSource || !guardedView) {
+        qCritical() << "New View disappeared while activating detached view";
+        app.exit(14);
+        return;
+      }
+      QDockWidget *detachedInspector = guardedView->findChild<QDockWidget *>(
           QStringLiteral("SecondaryDocumentControlsDock"));
       if (!view->isWindow() || !detachedInspector ||
           detachedInspector->isHidden() ||
@@ -792,7 +810,12 @@ int main(int argc, char *argv[]) {
 
       app.attachView(view);
       QCoreApplication::processEvents();
-      if (!workspace->containsView(view) ||
+      if (!guardedSource || !guardedView) {
+        qCritical() << "New View disappeared while reattaching";
+        app.exit(14);
+        return;
+      }
+      if (!workspace->containsView(guardedView) ||
           !workspaceInspector->isAncestorOf(inspector) ||
           source->inspectorImageWidget() != view->imageWidget()) {
         qCritical() << "Reattached New View did not restore shared panels";
@@ -854,8 +877,6 @@ int main(int argc, char *argv[]) {
       // the logical document and shared image alive until this final view also
       // closes. This simultaneously covers destruction of one loaded document
       // while another independent image remains open.
-      QPointer<MainWindow> guardedSource(source);
-      QPointer<ImageViewWindow> guardedView(view);
       const int documentCount = documents.size();
       if (source->close() || !guardedSource || !guardedView ||
           app.isDocumentPresentationOpen(source) ||
@@ -872,13 +893,29 @@ int main(int argc, char *argv[]) {
         app.exit(14);
         return;
       }
-      QTimer::singleShot(150, &app,
-                         [&app, guardedSource, guardedView, documentCount]() {
-        if (guardedSource || guardedView ||
-            app.documentWindows().size() != documentCount - 1) {
-          qCritical() << "Final peer view did not close its document owner";
-          app.exit(14);
-        }
+
+      auto checkFinalPeerClose =
+          std::make_shared<std::function<void(int)>>();
+      *checkFinalPeerClose =
+          [&app, guardedSource, guardedView, documentCount, newViewSmokeDone,
+           checkFinalPeerClose](int attemptsLeft) {
+            if (guardedSource || guardedView ||
+                app.documentWindows().size() != documentCount - 1) {
+              if (attemptsLeft > 0) {
+                QTimer::singleShot(50, &app,
+                                   [checkFinalPeerClose, attemptsLeft]() {
+                  (*checkFinalPeerClose)(attemptsLeft - 1);
+                });
+                return;
+              }
+              qCritical() << "Final peer view did not close its document owner";
+              app.exit(14);
+              return;
+            }
+            *newViewSmokeDone = true;
+          };
+      QTimer::singleShot(0, &app, [checkFinalPeerClose]() {
+        (*checkFinalPeerClose)(40);
       });
     });
   }
@@ -956,23 +993,44 @@ int main(int argc, char *argv[]) {
   }
 
   if (parser.isSet(slantedReferenceOption)) {
-    // When both view smoke tests are requested, allow WA_DeleteOnClose from
-    // New View to complete before constructing the reference view.  This keeps
-    // the tests deterministic and also exercises the normal view-close path.
-    const int referenceSmokeDelay = parser.isSet(newViewOption) ? 700 : 350;
-    QTimer::singleShot(referenceSmokeDelay, &app, [&app]() {
-      const QList<MainWindow *> documents = app.documentWindows();
-      if (documents.isEmpty() || documents.front()->currentImageFile().isEmpty()) {
-        qCritical() << "Slanted reference smoke test requires a loaded image";
-        app.exit(15);
+    auto startReferenceSmoke =
+        std::make_shared<std::function<void(int)>>();
+    *startReferenceSmoke =
+        [&app, newViewSmokeDone, startReferenceSmoke](int attemptsLeft) {
+      if (!*newViewSmokeDone) {
+        if (attemptsLeft <= 0) {
+          qCritical() << "Slanted reference smoke test timed out waiting for "
+                         "New View to finish";
+          app.exit(15);
+          return;
+        }
+        QTimer::singleShot(100, &app,
+                           [startReferenceSmoke, attemptsLeft]() {
+          (*startReferenceSmoke)(attemptsLeft - 1);
+        });
         return;
       }
 
-      MainWindow *source = documents.front();
+      const QList<MainWindow *> documents = app.documentWindows();
+      MainWindow *source = nullptr;
+      for (MainWindow *document : documents) {
+        if (document && app.isDocumentPresentationOpen(document) &&
+            !document->currentImageFile().isEmpty()) {
+          source = document;
+          break;
+        }
+      }
+      if (!source) {
+        qCritical() << "Slanted reference smoke test requires a visible loaded image";
+        app.exit(15);
+        return;
+      }
       const int documentCount = documents.size();
       const int tabCount = app.tabCount();
-      ImageViewWindow *reference = app.createSlantedEdgeReference(
-          source, source->currentImageFile());
+      QPointer<MainWindow> guardedSource(source);
+      QPointer<ImageViewWindow> guardedReference(
+          app.createSlantedEdgeReference(source, source->currentImageFile()));
+      ImageViewWindow *reference = guardedReference.data();
       if (!reference) {
         qCritical() << "Could not create slanted-edge reference view";
         app.exit(15);
@@ -981,9 +1039,16 @@ int main(int argc, char *argv[]) {
 
       auto checkReference =
           std::make_shared<std::function<void(int)>>();
-      *checkReference = [&app, source, reference, documentCount, tabCount,
-                         checkReference](int attemptsLeft) {
-        if (reference && !reference->sharedImageData() && attemptsLeft > 0) {
+      *checkReference = [&app, guardedSource, guardedReference, documentCount,
+                         tabCount, checkReference](int attemptsLeft) {
+        MainWindow *source = guardedSource.data();
+        ImageViewWindow *reference = guardedReference.data();
+        if (!source || !reference) {
+          qCritical() << "Slanted-edge reference disappeared while waiting for its image";
+          app.exit(15);
+          return;
+        }
+        if (!reference->sharedImageData() && attemptsLeft > 0) {
           QTimer::singleShot(250, &app, [checkReference, attemptsLeft]() {
             (*checkReference)(attemptsLeft - 1);
           });
@@ -1021,16 +1086,23 @@ int main(int argc, char *argv[]) {
         const auto beforeReload = reference->sharedImageData();
         app.reloadSlantedEdgeReferences(source);
         auto checkReload = std::make_shared<std::function<void(int)>>();
-        *checkReload = [&app, source, reference, beforeReload, checkReload](
-                           int attemptsLeft) {
-          if (reference && reference->sharedImageData() == beforeReload &&
+        *checkReload = [&app, guardedSource, guardedReference, beforeReload,
+                        checkReload](int attemptsLeft) {
+          MainWindow *source = guardedSource.data();
+          ImageViewWindow *reference = guardedReference.data();
+          if (!source || !reference) {
+            qCritical() << "Slanted-edge reference disappeared during reload";
+            app.exit(15);
+            return;
+          }
+          if (reference->sharedImageData() == beforeReload &&
               attemptsLeft > 0) {
             QTimer::singleShot(250, &app, [checkReload, attemptsLeft]() {
               (*checkReload)(attemptsLeft - 1);
             });
             return;
           }
-          if (!reference || reference->sharedImageData() == beforeReload) {
+          if (reference->sharedImageData() == beforeReload) {
             qCritical() << "Slanted-edge reference did not reload";
             app.exit(15);
             return;
@@ -1074,6 +1146,9 @@ int main(int argc, char *argv[]) {
         (*checkReload)(28);
       };
       (*checkReference)(28);
+    };
+    QTimer::singleShot(350, &app, [startReferenceSmoke]() {
+      (*startReferenceSmoke)(80);
     });
   }
 
