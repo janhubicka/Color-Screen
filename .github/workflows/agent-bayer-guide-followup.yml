@@ -1,0 +1,37 @@
+name: Agent Bayer guide follow-up publisher
+
+on:
+  push:
+    branches:
+      - agent/tmp-fix-bayer-guide-button
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/tmp-fix-bayer-guide-button
+          fetch-depth: 0
+      - name: Apply and validate follow-up
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git apply --check agent-bayer-guide-followup.patch
+          git apply agent-bayer-guide-followup.patch
+          rm agent-bayer-guide-followup.patch
+          rm .github/workflows/agent-bayer-guide-followup.yml
+          git diff --check
+      - name: Commit clean patched tree
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name 'OpenAI Agent'
+          git config user.email 'agent@openai.com'
+          git add -A
+          git commit -m 'qtgui: simplify and fix Bayer setup guide' -m 'Shorten the initial monochrome Bayer recommendation for digitization users and remove detector statistics from the dialog. Use an accept-role dialog button so Apply and reload actually closes the guide and reaches the existing demosaic reload path.'
+          git push origin HEAD:agent/tmp-fix-bayer-guide-button
