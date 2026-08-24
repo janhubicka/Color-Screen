@@ -942,8 +942,10 @@ void WorkspaceWindow::takeDocumentFromWorkspace(MainWindow *document) {
   }
 
   document->hide();
+  // Removing the hosted widget leaves its QMdiSubWindow wrapper alive.
+  // Delete that wrapper exactly once below; removing the wrapper itself
+  // here would delete it immediately and make deleteLater() unsafe.
   m_mdiArea->removeSubWindow(document);
-  m_mdiArea->removeSubWindow(subWindow);
   subWindow->deleteLater();
 
   document->setParent(nullptr);
