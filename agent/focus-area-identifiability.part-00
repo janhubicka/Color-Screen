@@ -1,0 +1,95 @@
+diff --git a/doc/focus-area-analysis.md b/doc/focus-area-analysis.md
+index 354dd46..ab03e4e 100644
+--- a/doc/focus-area-analysis.md
++++ b/doc/focus-area-analysis.md
+@@ -71,6 +71,28 @@ No universal numerical acceptance threshold is imposed: physical defocus,
+ empirical blur diameter, residual sigma, and legacy screen blur have different
+ units, and useful residual thresholds still need calibration on real scans.
+ 
++## Physical sigma and defocus identifiability
++
++Uniform periodic screen areas constrain the **combined** scanner transfer very
++well, but they do not in general contain enough independent spatial-frequency
++information to split that transfer uniquely into both residual Gaussian
++`sigma` and physical image-plane `defocus`.  On a real Paget scan, materially
++different sigma/defocus pairs produced essentially the same residual because
++the strong surviving screen harmonics sample only a small part of the MTF.
++The result then depends on the optimizer start even when every selected area is
++fitted simultaneously.
++
++For a physical diffraction model, multi-area focus analysis therefore refuses
++to optimize scanner-MTF `sigma` and `defocus` at the same time.  Calibrate or
++fix one component and optimize the other.  In particular, a slanted-edge MTF
++measurement can provide the residual sigma before the screen areas are used to
++fit defocus.  Conversely, keep defocus fixed when the purpose of the area fit
++is to estimate a residual sigma.
++
++This restriction is deliberate: choosing an arbitrary continuation or
++multistart winner would make the numerical residual slightly smaller while
++still reporting a physically non-identifiable decomposition.
++
+ ## Qt workflow
+ 
+ The Sharpness panel exposes **Find focus analysis areas** and **Analyze
+diff --git a/src/colorscreen/colorscreen.C b/src/colorscreen/colorscreen.C
+index 912c3ab..70aa4aa 100644
+--- a/src/colorscreen/colorscreen.C
++++ b/src/colorscreen/colorscreen.C
+@@ -20,6 +20,7 @@
+ #include "../libcolorscreen/include/analyze-scanner-blur.h"
+ #include "../libcolorscreen/include/dufaycolor.h"
+ #include "../libcolorscreen/include/finetune.h"
++#include "../libcolorscreen/include/focus-analysis.h"
+ #include "../libcolorscreen/include/histogram.h"
+ #include "../libcolorscreen/include/spectrum-to-xyz.h"
+ #include "../libcolorscreen/include/stitch.h"
+@@ -44,6 +45,7 @@ static enum subhelp {
+   help_stitch,
+   help_dump_patch_density,
+   help_finetune,
++  help_focus_areas,
+   help_lab,
+   help_read_chemcad_spectra,
+   help_has_regular_screen,
+@@ -331,6 +333,27 @@ print_help (char *err = NULL)
+                        "original and simultated tiles to <name>-y-x.tif\n");
+       fprintf (stderr, "      --simulate-infrared       simulate infrared layer\n");
+     }
++  if (subhelp == help_focus_areas || subhelp == help_basic)
++    {
++      fprintf (stderr, "  analyze-focus-areas <scan> <parameters> [<args>]\n");
++      fprintf (stderr, "    automatically find uniform areas and fit one shared focus model\n");
++    }
++  if (subhelp == help_focus_areas)
++    {
++      fprintf (stderr, "    Supported args:\n");
++      fprintf (stderr, "      --max-candidates=N         verify at most N discovered areas (default 24)\n");
++      fprintf (stderr, "      --min-areas=N              require at least N selected areas (default 3)\n");
++      fprintf (stderr, "      --max-areas=N              jointly fit at most N areas (default 8)\n");
++      fprintf (stderr, "      --range=N                  finetune half-range in screen periods (default 4)\n");
++      fprintf (stderr, "      --defocus-only             optimize scanner-MTF defocus (default)\n");
++      fprintf (stderr, "      --sigma-only               optimize residual scanner-MTF sigma instead\n");
++      fprintf (stderr, "      --zero-focus-start         zero sigma/defocus after loading parameters\n");
++      fprintf (stderr, "      --use-monochrome-channel   force BW/IR focus fitting\n");
++      fprintf (stderr, "      --use-rgb                  force RGB uniform-image-layer fitting\n");
++      fprintf (stderr, "      --fixed-focus-verification verify candidates without refitting global focus\n");
++      fprintf (stderr, "      --fixed-joint-position     keep verified local phases fixed in the joint focus solve\n");
++      fprintf (stderr, "      --no-leave-one-out         skip N-1 stability fits\n");
++    }
+   if (subhelp == help_lab || subhelp == help_basic)
+     {
+       fprintf (stderr, "  lab <subcommand>\n");
+@@ -2553,6 +2576,272 @@ digital_laboratory (int argc, char **argv)
+     print_help ();
+ }
+ 
++/* Implement automatic solid-area focus analysis from the command line.
++   This mirrors the Qt Sharpness-panel workflow: discover locally uniform
++   image-layer regions, verify them independently, choose a compact diverse
++   subset, then fit one shared capture-transfer model to every selected tile at
++   once.  */
++static int
++analyze_focus_areas (int argc, char **argv)
++{
++  const char *infname = NULL;
++  const char *cspname
