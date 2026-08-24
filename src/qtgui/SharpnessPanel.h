@@ -38,6 +38,10 @@ public:
   void updateFinetuneImages(const colorscreen::finetune_result& result);
   void reattachFinetuneImages(QWidget *widget);
   void setFocusAnalysisChecked(bool checked);
+  /** Update availability and summary text for automatic multi-area focus
+      analysis owned by the current document. */
+  void setFocusAreaAnalysisState(int candidateCount, bool running,
+                                 const QString &summary = QString());
   void setMeasureMtfChecked(bool checked);
   void setMeasureMtfEnabled(bool enabled);
 
@@ -57,6 +61,8 @@ signals:
   void detachFinetuneImagesRequested(QWidget *widget);
   void autodetectRequested();
   void focusAnalysisRequested(bool checked, uint64_t flags);
+  void findFocusAreasRequested();
+  void analyzeFocusAreasRequested(uint64_t flags);
   /** Ask the application to open another scan used only as a slanted-edge
       sharpness reference while keeping the current document parameters. */
   void openSlantedEdgeReferenceRequested();
@@ -100,6 +106,9 @@ private:
   double m_lastRedStripWidth = 0.0;
   double m_lastGreenStripWidth = 0.0;
   class QPushButton *m_analyzeAreaBtn = nullptr;
+  class QPushButton *m_findFocusAreasBtn = nullptr;
+  class QPushButton *m_analyzeFocusAreasBtn = nullptr;
+  class QLabel *m_focusAreaStatusLabel = nullptr;
   class QPushButton *m_measureMtfBtn = nullptr;
   class QPushButton *m_fitMtfBtn = nullptr;
   /** Queue dedicated to one-shot MTF fits so tile rendering stays responsive.  */

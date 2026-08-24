@@ -1,4 +1,5 @@
 #include "include/focus-analysis.h"
+#include "render-interpolate.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -52,7 +53,164 @@ set_analysis_error (finetune_focus_analysis_result *result,
   result->err = message;
 }
 
+static coord_t
+observed_color_norm (rgbdata color)
+{
+  const coord_t red = std::max ((luminosity_t)0, color.red);
+  const coord_t green = std::max ((luminosity_t)0, color.green);
+  const coord_t blue = std::max ((luminosity_t)0, color.blue);
+  return std::sqrt (red * red + green * green + blue * blue);
+}
+
+/* Copy scalar shared focus/blur state from FIT to RPARAM.  Return false for
+   the per-channel focus models, whose complete frozen transfer is not
+   representable in render_parameters.  */
+static bool
+freeze_focus_from_fit (render_parameters *rparam, uint64_t flags,
+                       const finetune_result &fit)
+{
+  if (!rparam || !fit.success)
+    return false;
+  if (flags & (finetune_screen_channel_blurs
+               | finetune_scanner_mtf_channel_defocus))
+    return false;
+  if ((flags & finetune_screen_blur) && my_isfinite (fit.screen_blur_radius))
+    rparam->screen_blur_radius = fit.screen_blur_radius;
+  if ((flags & finetune_scanner_mtf_sigma)
+      && my_isfinite (fit.scanner_mtf_sigma))
+    rparam->sharpen.scanner_mtf.sigma = fit.scanner_mtf_sigma;
+  if (flags & finetune_scanner_mtf_defocus)
+    {
+      if (rparam->sharpen.scanner_mtf.simulate_diffraction_p ())
+        {
+          if (!my_isfinite (fit.scanner_mtf_defocus))
+            return false;
+          rparam->sharpen.scanner_mtf.defocus = fit.scanner_mtf_defocus;
+        }
+      else
+        {
+          if (!my_isfinite (fit.scanner_mtf_blur_diameter))
+            return false;
+          rparam->sharpen.scanner_mtf.blur_diameter
+              = fit.scanner_mtf_blur_diameter;
+        }
+    }
+  if ((flags & finetune_strips) && my_isfinite (fit.red_strip_width)
+      && my_isfinite (fit.green_strip_width))
+    {
+      rparam->red_strip_width = fit.red_strip_width;
+      rparam->green_strip_width = fit.green_strip_width;
+    }
+  return true;
+}
+
 } // namespace
+
+bool
+finetune_find_focus_area_candidates_in_image (
+    const render_parameters &rparam, const scr_to_img_parameters &param,
+    const image_data &img,
+    const finetune_focus_area_image_search_parameters &parameters,
+    std::vector<finetune_focus_area_candidate> *candidates,
+    progress_info *progress, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!candidates)
+    return false;
+  candidates->clear ();
+  /* RENDER_INTERPOLATE reconstructs the image layer from either native RGB
+     or a monochrome/IR additive-screen scan.  Flatness belongs after screen
+     interpolation; do not pretend that a raw scalar scan is RGB.  */
+  if (!img.has_rgb () && !img.has_grayscale_or_ir ())
+    {
+      if (error)
+        *error = "automatic focus-area discovery requires image data";
+      return false;
+    }
+  if (param.type == Random || parameters.max_analysis_dimension < 32
+      || !my_isfinite (parameters.automatic_window_screen_periods)
+      || parameters.automatic_window_screen_periods <= 0)
+    {
+      if (error)
+        *error = "invalid focus-area image search parameters";
+      return false;
+    }
+
+  const int_image_area crop = rparam.get_image_area (img.width, img.height);
+  if (crop.width < 4 || crop.height < 4)
+    {
+      if (error)
+        *error = "focus-area search region is too small";
+      return false;
+    }
+  const coord_t step
+      = std::max ((coord_t)1,
+                  std::max ((coord_t)crop.width, (coord_t)crop.height)
+                      / parameters.max_analysis_dimension);
+  const int width = (int)std::floor (crop.width / step);
+  const int height = (int)std::floor (crop.height / step);
+  if (width < 2 || height < 2)
+    {
+      if (error)
+        *error = "focus-area search region is too narrow after downscaling";
+      return false;
+    }
+
+  render_parameters analysis_rparam = rparam;
+  analysis_rparam.sharpen.mode = sharpen_parameters::none;
+  analysis_rparam.sharpen.scanner_mtf_scale = 0;
+  render_interpolate renderer (param, img, analysis_rparam, 65535);
+  renderer.set_unadjusted ();
+  if (!renderer.precompute_img_range (crop, progress))
+    {
+      if (error)
+        *error = "failed to prepare interpolated focus-area image";
+      return false;
+    }
+  std::vector<rgbdata> data ((size_t)width * height);
+  if (!renderer.get_color_data (data.data (), { (coord_t)crop.x,
+                                                (coord_t)crop.y },
+                                width, height, step, progress))
+    {
+      if (error)
+        *error = "failed to sample interpolated focus-area image";
+      return false;
+    }
+
+  finetune_focus_area_search_parameters search = parameters.search;
+  search.origin = { crop.x + step * (coord_t)0.5,
+                    crop.y + step * (coord_t)0.5 };
+  search.xstep = search.ystep = step;
+  if (!search.window_width || !search.window_height)
+    {
+      const coord_t period
+          = std::max (std::hypot (param.coordinate1.x, param.coordinate1.y),
+                      std::hypot (param.coordinate2.x, param.coordinate2.y));
+      if (!my_isfinite (period) || period <= 0)
+        {
+          if (error)
+            *error = "invalid screen period for focus-area search";
+          return false;
+        }
+      const int automatic_window
+          = std::max (4, (int)std::ceil (
+                            period * parameters.automatic_window_screen_periods
+                            / step));
+      if (!search.window_width)
+        search.window_width = std::min (automatic_window, width);
+      if (!search.window_height)
+        search.window_height = std::min (automatic_window, height);
+    }
+  if (!finetune_find_focus_area_candidates (data.data (), width, height, width,
+                                             search, candidates))
+    {
+      if (error)
+        *error = "invalid flat-area detector parameters";
+      return false;
+    }
+  return !progress || !progress->cancelled ();
+}
 
 bool
 finetune_analyze_focus_areas (
@@ -155,6 +313,82 @@ finetune_analyze_focus_areas (
           if (!result->leave_one_out_fits.back ().err.empty ())
             result->err += ": " + result->leave_one_out_fits.back ().err;
           return false;
+        }
+    }
+
+  /* True held-out checking is defined for the RGB uniform-image-layer model.
+     Each omitted tile is allowed its local phase and three transmissions, but
+     not the shared focus transfer or screen-primary scanner responses.  */
+  if (analysis_parameters.held_out
+      && (fparams.flags & finetune_uniform_image_layer))
+    {
+      const uint64_t unsupported
+          = finetune_screen_channel_blurs
+            | finetune_scanner_mtf_channel_defocus | finetune_fog
+            | finetune_emulsion_blur | finetune_sharpening;
+      if (!(fparams.flags & unsupported))
+        {
+          result->held_out_fits.reserve (result->selected.size ());
+          result->held_out_relative_badness.reserve (result->selected.size ());
+          coord_t max_relative = 0;
+          for (size_t omitted = 0; omitted < result->selected.size (); omitted++)
+            {
+              const finetune_result &reference
+                  = result->leave_one_out_fits[omitted];
+              render_parameters held_rparam = rparam;
+              if (!freeze_focus_from_fit (&held_rparam, fparams.flags,
+                                          reference))
+                break;
+
+              finetune_parameters held_fparams = fparams;
+              held_fparams.interpolate_scanner_mtf_defocus = false;
+              held_fparams.flags
+                  &= ~(finetune_screen_blur | finetune_screen_channel_blurs
+                       | finetune_scanner_mtf_sigma
+                       | finetune_scanner_mtf_defocus
+                       | finetune_scanner_mtf_channel_defocus | finetune_strips
+                       | finetune_fog | finetune_emulsion_blur
+                       | finetune_sharpening);
+              held_fparams.flags
+                  |= finetune_uniform_image_layer
+                     | finetune_fixed_screen_colors | finetune_no_normalize
+                     | finetune_no_data_collection;
+
+              const size_t candidate_index = result->selected[omitted];
+              finetune_result start = candidates[candidate_index].fit;
+              start.screen_red = reference.screen_red;
+              start.screen_green = reference.screen_green;
+              start.screen_blue = reference.screen_blue;
+              std::vector<finetune_result> held_starts = { start };
+              finetune_result held = finetune (
+                  held_rparam, param, img,
+                  { candidates[candidate_index].center }, &held_starts,
+                  held_fparams, progress);
+              result->held_out_fits.push_back (std::move (held));
+              if (!result->held_out_fits.back ().success)
+                {
+                  result->err
+                      = "held-out focus-area evaluation failed for selected area "
+                        + std::to_string (omitted);
+                  if (!result->held_out_fits.back ().err.empty ())
+                    result->err += ": " + result->held_out_fits.back ().err;
+                  return false;
+                }
+              const coord_t norm
+                  = observed_color_norm (candidates[candidate_index].mean_color);
+              const coord_t relative
+                  = norm > 0 ? result->held_out_fits.back ().badness / norm
+                             : std::numeric_limits<coord_t>::max ();
+              result->held_out_relative_badness.push_back (relative);
+              max_relative = std::max (max_relative, relative);
+            }
+          if (result->held_out_fits.size () == result->selected.size ())
+            result->held_out_max_relative_badness = max_relative;
+          else
+            {
+              result->held_out_fits.clear ();
+              result->held_out_relative_badness.clear ();
+            }
         }
     }
 

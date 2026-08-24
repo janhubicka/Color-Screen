@@ -81,7 +81,13 @@ enum finetune_flags : uint64_t
      dim the red, green and blue screen primaries before capture blur.  This
      is intended for joint focus analysis of several differently coloured
      solid areas.  */
-  finetune_uniform_image_layer = 1 << 22
+  finetune_uniform_image_layer = 1 << 22,
+  /* Keep the scanner RGB responses to the three screen primaries fixed to
+     RESULTS[0].SCREEN_RED/GREEN/BLUE instead of re-estimating them.  This is
+     used by held-out focus validation: the shared response learned from the
+     retained tiles must not adapt to the omitted tile.  The flag is valid
+     only together with FINETUNE_UNIFORM_IMAGE_LAYER and requires RESULTS.  */
+  finetune_fixed_screen_colors = 1 << 23
 };
 
 /* Lightweight counters collected by FINETUNE.  Times use steady-clock
