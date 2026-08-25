@@ -1085,11 +1085,14 @@ void SharpnessPanel::updateMTFChart() {
   mtf_parameters chartParameters = state.rparams.sharpen.scanner_mtf;
   chartParameters.measured_mtf_idx = -1;
 
+  auto img = m_imageGetter();
+  const bool hasRgb = img ? img->has_rgb() : true;
+
   // Compute model curves with 100 steps for all channels.
   std::array<mtf_parameters::computed_mtf, 4> curves;
   for (int c = 0; c < 4; c++) {
       mtf_parameters p = chartParameters;
-      p.wavelength = p.get_channel_wavelength(c);
+      p.wavelength = p.get_channel_wavelength(c, hasRgb);
       curves[c] = p.compute_curves(100);
   }
 
@@ -1099,7 +1102,6 @@ void SharpnessPanel::updateMTFChart() {
         && chartParameters.can_simulate_diffraction_p();
   // Calculate screen frequency if applicable
   double screenFreq = -1;
-  auto img = m_imageGetter();
   if (img && state.scrToImg.type != colorscreen::Random) {
       colorscreen::scr_to_img scrToImgObj;
       scrToImgObj.set_parameters(state.scrToImg, *img);
@@ -1117,7 +1119,12 @@ void SharpnessPanel::updateMTFChart() {
   // Pass all measured MTF data if available
   const auto &scanner_mtf = state.rparams.sharpen.scanner_mtf;
   if (!scanner_mtf.measurements.empty()) {
-    m_mtfChart->setMeasuredMTF(scanner_mtf.measurements, {scanner_mtf.get_channel_wavelength (0), scanner_mtf.get_channel_wavelength (1), scanner_mtf.get_channel_wavelength (2), scanner_mtf.get_channel_wavelength (3)});
+    m_mtfChart->setMeasuredMTF(
+        scanner_mtf.measurements,
+        {scanner_mtf.get_channel_wavelength (0, hasRgb),
+         scanner_mtf.get_channel_wavelength (1, hasRgb),
+         scanner_mtf.get_channel_wavelength (2, hasRgb),
+         scanner_mtf.get_channel_wavelength (3, hasRgb)});
   } else {
     // No measured data, clear it
     m_mtfChart->setMeasuredMTF({}, {});

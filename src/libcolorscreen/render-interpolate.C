@@ -323,8 +323,8 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
       sharpen_parameters sharpen = m_params.sharpen;
       sharpen.usm_radius = m_params.screen_blur_radius * psize;
       sharpen.scanner_mtf_scale *= psize;
-      int img_layer_c = m_params.get_image_layer_channel(&m_img);
-      sharpen.scanner_mtf.wavelength = sharpen.scanner_mtf.get_channel_wavelength(img_layer_c);
+      sharpen.scanner_mtf.wavelength
+          = m_params.get_image_layer_wavelength (&m_img);
 
       if (sharpen.get_mode () != sharpen_parameters::none
           && m_params.collection_quality
@@ -349,8 +349,8 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
               sharpen_parameters sharpen = m_params.sharpen;
               sharpen.usm_radius = m_params.screen_blur_radius * psize;
               sharpen.scanner_mtf_scale *= psize;
-              int img_layer_c = m_params.get_image_layer_channel(&m_img);
-              sharpen.scanner_mtf.wavelength = sharpen.scanner_mtf.get_channel_wavelength(img_layer_c);
+              sharpen.scanner_mtf.wavelength
+                  = m_params.get_image_layer_wavelength (&m_img);
               screen_sampling sampling = screen_sampling::integrate_pixel;
               std::shared_ptr<screen> scr = get_screen (
                   m_scr_to_img.get_type (), false, false, sharpen,

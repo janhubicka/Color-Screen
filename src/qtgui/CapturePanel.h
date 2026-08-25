@@ -69,6 +69,8 @@ private:
     class QWidget *m_greenWavelengthWidget = nullptr;
     class QWidget *m_blueWavelengthWidget = nullptr;
     class QWidget *m_irWavelengthWidget = nullptr;
+    class QLabel *m_detectedWavelengthsValue = nullptr;
+    class QPushButton *m_useDetectedWavelengthsBtn = nullptr;
     class BacklightChartWidget *m_backlightWidget = nullptr;
     class QPushButton *m_cropBtn = nullptr;
 };

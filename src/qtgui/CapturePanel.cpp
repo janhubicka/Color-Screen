@@ -7,6 +7,7 @@
 #include <QFormLayout>
 #include <QSlider>
 #include <QDoubleSpinBox>
+#include <QStringList>
 #include "../libcolorscreen/include/scr-to-img.h"
 #include "../libcolorscreen/include/imagedata.h"
 #include "BacklightChartWidget.h"
@@ -48,6 +49,23 @@ void CapturePanel::setupUi()
         if (img && img->pixel_pitch > 0) {
             applyChange([img](ParameterState &s) { s.rparams.sharpen.scanner_mtf.pixel_pitch = img->pixel_pitch; }, "Use EXIF pixel pitch");
         }
+    };
+
+    auto onUseDetectedWavelengths = [this]() {
+        auto img = m_imageGetter();
+        if (!img)
+            return;
+        applyChange([img](ParameterState &s) {
+            const bool hasRgb = img->has_rgb();
+            const bool hasScalar = img->has_grayscale_or_ir();
+            for (int c = 0; c < 4; ++c) {
+                const bool present = c < 3 ? hasRgb : hasScalar;
+                const double wavelength = img->wavelengths[c];
+                if (present && colorscreen::my_isfinite(wavelength)
+                    && wavelength > 0)
+                    s.rparams.sharpen.scanner_mtf.wavelengths[c] = wavelength;
+            }
+        }, "Use detected wavelengths");
     };
 
     auto onUseMirror = [this]() {
@@ -347,13 +365,20 @@ void CapturePanel::setupUi()
         }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the blue channel.");
 
     m_irWavelengthWidget = addSliderParameter(
-        "IR wavelength", 700.0, 1100.0, 1.0, 0, "nm", "default (850nm)",
+        "IR wavelength", 380.0, 1100.0, 1.0, 0, "nm", "default (750nm)",
         [](const ParameterState &s) {
           return s.rparams.sharpen.scanner_mtf.wavelengths[3];
         },
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.wavelengths[3] = v;
-        }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the infrared channel.");
+        }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the scalar or infrared channel.");
+
+    // Detected scanner/camera wavelengths use the same explicit Use workflow
+    // as f-stop, pixel pitch, fill factor and resolution.
+    addValueWithUseButton(
+        "Detected wavelengths", &m_detectedWavelengthsValue,
+        &m_useDetectedWavelengthsBtn,
+        [onUseDetectedWavelengths]() { onUseDetectedWavelengths(); });
 
     auto updateInfoLabels = [this, sensorWidthSlider](const ParameterState &state) {
         auto img = m_imageGetter();
@@ -401,6 +426,43 @@ void CapturePanel::setupUi()
                     lab->setText("IR wavelength");
                 }
             }
+            if (auto spin = m_irWavelengthWidget->findChild<QDoubleSpinBox*>())
+                spin->setSpecialValueText(
+                    has_rgb ? "default (750nm)" : "default (550nm)");
+
+            QStringList detectedWavelengths;
+            bool wavelengthsDiffer = false;
+            static const char *channelNames[] = {"R", "G", "B", "IR"};
+            if (img) {
+                for (int c = 0; c < 4; ++c) {
+                    const bool present = c < 3 ? has_rgb : has_ir;
+                    const double wavelength = img->wavelengths[c];
+                    if (!present || !colorscreen::my_isfinite(wavelength)
+                        || wavelength <= 0)
+                        continue;
+                    if (has_rgb)
+                        detectedWavelengths
+                            << QString("%1 %2 nm")
+                                   .arg(channelNames[c])
+                                   .arg(wavelength, 0, 'f', 0);
+                    else
+                        detectedWavelengths
+                            << QString("%1 nm").arg(wavelength, 0, 'f', 0);
+                    wavelengthsDiffer
+                        |= std::abs(wavelength
+                                    - state.rparams.sharpen.scanner_mtf
+                                          .wavelengths[c])
+                           > 0.5;
+                }
+            }
+            const bool showDetectedWavelengths = !detectedWavelengths.isEmpty();
+            if (showDetectedWavelengths) {
+                m_detectedWavelengthsValue->setText(
+                    detectedWavelengths.join(", "));
+                m_useDetectedWavelengthsBtn->setVisible(wavelengthsDiffer);
+            }
+            setVisibleRow(m_detectedWavelengthsValue->parentWidget(),
+                          showDetectedWavelengths);
         }
 
         // 4. Image Resolution

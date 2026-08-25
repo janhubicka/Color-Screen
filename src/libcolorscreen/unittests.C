@@ -2836,6 +2836,46 @@ test_mtf_physical_model ()
       ok = false;
     }
 
+  /* Generic wavelength fallback depends on whether slot 3 is a real IR
+     companion to RGB or the only monochrome capture channel.  Explicit
+     per-channel and global wavelengths remain authoritative.  */
+  mtf_parameters wavelength_defaults;
+  if (wavelength_defaults.get_channel_wavelength (0, true) != 600
+      || wavelength_defaults.get_channel_wavelength (1, true) != 530
+      || wavelength_defaults.get_channel_wavelength (2, true) != 450
+      || wavelength_defaults.get_channel_wavelength (3, true) != 750
+      || wavelength_defaults.get_channel_wavelength (3, false) != 550)
+    {
+      fprintf (stderr, "Context-sensitive MTF wavelength defaults failed\n");
+      ok = false;
+    }
+  wavelength_defaults.wavelengths[3] = 810;
+  if (wavelength_defaults.get_channel_wavelength (3, true) != 810
+      || wavelength_defaults.get_channel_wavelength (3, false) != 810)
+    {
+      fprintf (stderr, "Explicit scalar wavelength did not override defaults\n");
+      ok = false;
+    }
+  wavelength_defaults.wavelengths[3] = 0;
+  wavelength_defaults.wavelength = 700;
+  if (wavelength_defaults.get_channel_wavelength (3, true) != 700
+      || wavelength_defaults.get_channel_wavelength (3, false) != 700)
+    {
+      fprintf (stderr, "Global narrow-band wavelength did not override defaults\n");
+      ok = false;
+    }
+  render_parameters default_render;
+  if (default_render.get_sharpen_parameters_for_channel (3, true)
+              .scanner_mtf.wavelength
+          != 750
+      || default_render.get_sharpen_parameters_for_channel (3, false)
+                 .scanner_mtf.wavelength
+             != 550)
+    {
+      fprintf (stderr, "Render channel specialization lost scalar defaults\n");
+      ok = false;
+    }
+
   const double expected_magnification = 0.27933543307086614;
   const double expected_effective_f_stop = 10.234683464566929;
   const double expected_cutoff = 0.48983765357177734;

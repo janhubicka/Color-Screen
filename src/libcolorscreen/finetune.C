@@ -964,7 +964,7 @@ public:
   /* Screen with emulsion.  */
   std::shared_ptr<screen> emulsion_scr;
   sharpen_parameters render_sharpen_params;
-  int img_layer_c = 1;
+  double img_layer_wavelength = 530;
 
   finetune_solver () {}
 
@@ -3109,7 +3109,7 @@ public:
           {
             sharpen_parameters sp = render_sharpen_params;
             sp.scanner_mtf_scale *= pixel_size;
-            sp.scanner_mtf.wavelength = sp.scanner_mtf.get_channel_wavelength(img_layer_c);
+            sp.scanner_mtf.wavelength = img_layer_wavelength;
             bool cache_hit = false;
             const auto cache_start
                 = profile ? std::chrono::steady_clock::now ()
@@ -5956,7 +5956,8 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
             solver.theight = theight;
             solver.pixel_size = pixel_size;
             solver.render_sharpen_params = rparam.sharpen;
-            solver.img_layer_c = rparam.get_image_layer_channel(imgp[0]);
+            solver.img_layer_wavelength
+                = rparam.get_image_layer_wavelength (imgp[0]);
             solver.collection_threshold = rparam.collection_threshold;
             solver.parallel = !(fparams.flags & finetune_no_progress_report);
             if (!solver.init_tile (0, cur_txmin, cur_tymin, bw, *mapp[0],
@@ -5997,6 +5998,8 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
       best_solver.theight = theight;
       best_solver.collection_threshold = rparam.collection_threshold;
       best_solver.render_sharpen_params = rparam.sharpen;
+      best_solver.img_layer_wavelength
+          = rparam.get_image_layer_wavelength (imgp[0]);
       best_solver.pixel_size = pixel_size;
       best_solver.parallel = !(fparams.flags & finetune_no_progress_report);
       for (int tileid = 0; tileid < n_tiles; tileid++)
@@ -6099,7 +6102,8 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                   solver.theight = theight;
                   solver.collection_threshold = rparam.collection_threshold;
                   solver.render_sharpen_params = rparam.sharpen;
-                  solver.img_layer_c = rparam.get_image_layer_channel(imgp[0]);
+                  solver.img_layer_wavelength
+                      = rparam.get_image_layer_wavelength (imgp[0]);
                   solver.pixel_size = pixel_size;
                   solver.parallel
                       = !(fparams.flags & finetune_no_progress_report);
@@ -7153,8 +7157,8 @@ render_screen (image_data &img, const scr_to_img_parameters &param,
   sharpen_parameters sharpen = rparam.sharpen;
   sharpen.usm_radius = rparam.screen_blur_radius * pixel_size;
   sharpen.scanner_mtf_scale *= pixel_size;
-  int img_layer_c = rparam.get_image_layer_channel(&img);
-  sharpen.scanner_mtf.wavelength = sharpen.scanner_mtf.get_channel_wavelength(img_layer_c);
+  sharpen.scanner_mtf.wavelength
+      = rparam.get_image_layer_wavelength (&img);
   screen_sampling sampling = screen_sampling::integrate_pixel;
   std::shared_ptr<screen> scr = render_to_scr::get_screen (
       param.type, false, false, sharpen, rparam.red_strip_width,
