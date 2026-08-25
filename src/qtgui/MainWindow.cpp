@@ -3203,45 +3203,67 @@ void MainWindow::maybeOfferInitialSetupGuide(
   if (!suggestBayer && !suggestFStop && !suggestPitch && !suggestFill && !suggestDPI)
     return;
 
-  InitialSetupGuideDialog dialog(this, suggestBayer, suggestFStop, suggestPitch, suggestFill, suggestDPI, m_scan.get());
-  if (dialog.exec() != QDialog::Accepted)
-    return;
+  // Do not run a stack-allocated child dialog with exec().  The nested event
+  // loop can process a close request for this MainWindow; QObject child
+  // destruction would then try to delete the stack object.  Keep the guide as
+  // an ordinary parent-owned, non-blocking dialog instead.  If this document
+  // closes first, Qt deletes the guide and automatically disconnects the
+  // accepted handler.
+  auto *dialog = new InitialSetupGuideDialog(
+      this, suggestBayer, suggestFStop, suggestPitch, suggestFill, suggestDPI,
+      m_scan.get());
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  connect(dialog, &QDialog::accepted, this,
+          [this, dialog, suggestBayer, suggestFStop, suggestPitch, suggestFill,
+           suggestDPI]() {
+            if (!m_scan)
+              return;
 
-  ParameterState state = getCurrentState();
-  QStringList changes;
-  
-  if (suggestBayer && dialog.useMonochromeBayerCorrection()) {
-    state.rparams.demosaic =
-        colorscreen::image_data::demosaic_monochromatic_bayer_corrected;
-    changes << tr("Bayer compensation");
-  }
-  
-  if (suggestFStop && dialog.useFStop()) {
-    state.rparams.sharpen.scanner_mtf.f_stop = m_scan->f_stop;
-    changes << tr("f-stop");
-  }
-  
-  if (suggestPitch && dialog.usePixelPitch()) {
-    state.rparams.sharpen.scanner_mtf.pixel_pitch = m_scan->pixel_pitch;
-    changes << tr("pixel pitch");
-  }
+            const bool useBayer =
+                suggestBayer && dialog->useMonochromeBayerCorrection();
+            const bool useFStop = suggestFStop && dialog->useFStop();
+            const bool usePitch = suggestPitch && dialog->usePixelPitch();
+            const bool useFill = suggestFill && dialog->useFillFactor();
+            const bool useDPI = suggestDPI && dialog->useDPI();
 
-  if (suggestFill && dialog.useFillFactor()) {
-    state.rparams.sharpen.scanner_mtf.sensor_fill_factor = m_scan->sensor_fill_factor;
-    changes << tr("sensor fill factor");
-  }
+            ParameterState state = getCurrentState();
+            QStringList changes;
 
-  if (suggestDPI && dialog.useDPI()) {
-    state.rparams.sharpen.scanner_mtf.scan_dpi = m_scan->xdpi;
-    changes << tr("image resolution");
-  }
+            if (useBayer) {
+              state.rparams.demosaic =
+                  colorscreen::image_data::demosaic_monochromatic_bayer_corrected;
+              changes << tr("Bayer compensation");
+            }
 
-  if (!changes.isEmpty()) {
-    changeParameters(state, tr("Use autodetected %1").arg(changes.join(", ")));
-    if (suggestBayer && dialog.useMonochromeBayerCorrection()) {
-      reloadCurrentImageWithDemosaic();
-    }
-  }
+            if (useFStop) {
+              state.rparams.sharpen.scanner_mtf.f_stop = m_scan->f_stop;
+              changes << tr("f-stop");
+            }
+
+            if (usePitch) {
+              state.rparams.sharpen.scanner_mtf.pixel_pitch = m_scan->pixel_pitch;
+              changes << tr("pixel pitch");
+            }
+
+            if (useFill) {
+              state.rparams.sharpen.scanner_mtf.sensor_fill_factor =
+                  m_scan->sensor_fill_factor;
+              changes << tr("sensor fill factor");
+            }
+
+            if (useDPI) {
+              state.rparams.sharpen.scanner_mtf.scan_dpi = m_scan->xdpi;
+              changes << tr("image resolution");
+            }
+
+            if (!changes.isEmpty()) {
+              changeParameters(
+                  state, tr("Use autodetected %1").arg(changes.join(", ")));
+              if (useBayer)
+                reloadCurrentImageWithDemosaic();
+            }
+          });
+  dialog->open();
 }
 
 /** Load an image file and optionally its associated .par parameter file.

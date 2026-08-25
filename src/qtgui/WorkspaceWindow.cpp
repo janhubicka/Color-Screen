@@ -347,7 +347,12 @@ MainWindow *WorkspaceWindow::currentDocument() const {
 
 /** Return the number of documents attached to the MDI workspace. */
 int WorkspaceWindow::tabCount() const {
-  return m_mdiArea->subWindowList().size();
+  int count = 0;
+  for (QMdiSubWindow *subWindow : m_mdiArea->subWindowList()) {
+    if (subWindow && subWindow->widget())
+      ++count;
+  }
+  return count;
 }
 
 /** Return whether DOCUMENT is attached to this workspace. */
@@ -604,11 +609,11 @@ void WorkspaceWindow::configureTabBar() {
     tabBar->setElideMode(Qt::ElideMiddle);
     tabBar->setContextMenuPolicy(Qt::CustomContextMenu);
 
-    if (m_tabBar != tabBar) {
-      if (m_tabBar)
-        m_tabBar->removeEventFilter(this);
+    if (m_tabBar.data() != tabBar) {
+      if (QObject *oldTabBar = m_tabBar.data())
+        oldTabBar->removeEventFilter(this);
       m_tabBar = tabBar;
-      m_tabBar->installEventFilter(this);
+      tabBar->installEventFilter(this);
     }
 
     if (tabBar->property("colorscreenConfigured").toBool())
@@ -659,12 +664,14 @@ void WorkspaceWindow::configureTabBar() {
 
 /** Close an empty workspace shell on the next event-loop turn. */
 void WorkspaceWindow::scheduleCloseIfEmpty() {
-  if (m_closing || !m_mdiArea || !m_mdiArea->subWindowList().isEmpty())
+  if (m_closing || !m_mdiArea || tabCount() != 0)
     return;
 
+  // Detached widgets leave an empty QMdiSubWindow wrapper queued for deferred
+  // deletion.  That wrapper is not a presentation and must not keep an empty
+  // workspace shell alive (or make tabCount() report a phantom tab).
   QTimer::singleShot(0, this, [this]() {
-    if (!m_closing && m_mdiArea && m_mdiArea->subWindowList().isEmpty() &&
-        isVisible())
+    if (!m_closing && m_mdiArea && tabCount() == 0 && isVisible())
       close();
   });
 }
@@ -984,7 +991,15 @@ void WorkspaceWindow::takeViewFromWorkspace(ImageViewWindow *view) {
 
 /** Detach a tab when it is dragged beyond the tab-bar docking margin. */
 bool WorkspaceWindow::eventFilter(QObject *watched, QEvent *event) {
-  if (watched != m_tabBar || !m_tabBar)
+  // QPointer<T>::data() casts QObject back to T.  During QObject teardown the
+  // internal QTabBar has already become a QWidget before QPointer is cleared,
+  // so keeping the event-filter identity as QPointer<QObject> avoids an invalid
+  // downcast while Qt switches MDI view modes.
+  if (watched != m_tabBar.data())
+    return QMainWindow::eventFilter(watched, event);
+
+  QTabBar *tabBar = qobject_cast<QTabBar *>(watched);
+  if (!tabBar)
     return QMainWindow::eventFilter(watched, event);
 
   switch (event->type()) {
@@ -992,7 +1007,7 @@ bool WorkspaceWindow::eventFilter(QObject *watched, QEvent *event) {
     auto *mouseEvent = static_cast<QMouseEvent *>(event);
     if (mouseEvent->button() == Qt::LeftButton) {
       m_dragWindow =
-          windowAtTab(m_tabBar->tabAt(mouseEvent->position().toPoint()));
+          windowAtTab(tabBar->tabAt(mouseEvent->position().toPoint()));
       m_dragStartGlobal = mouseEvent->globalPosition().toPoint();
     }
     break;
@@ -1007,8 +1022,8 @@ bool WorkspaceWindow::eventFilter(QObject *watched, QEvent *event) {
         QApplication::startDragDistance())
       break;
 
-    const QPoint localPosition = m_tabBar->mapFromGlobal(globalPosition);
-    const QRect dockingMargin = m_tabBar->rect().adjusted(-24, -32, 24, 32);
+    const QPoint localPosition = tabBar->mapFromGlobal(globalPosition);
+    const QRect dockingMargin = tabBar->rect().adjusted(-24, -32, 24, 32);
     if (dockingMargin.contains(localPosition))
       break;
 
