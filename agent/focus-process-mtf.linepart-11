@@ -1,0 +1,26 @@
+-      }, nullptr, "Included in the focus analyzer optimization loop. For multi-area physical-MTF analysis, keep Defocus fixed when optimizing Sigma.");
++      }, nullptr, "Included in the focus analyzer optimization loop. Multi-area analysis uses Sigma first as a monotone effective-MTF coordinate and may then refine Defocus while preserving the verified local screen phases.");
+ 
+   addCheckboxParameter(
+       "Optimize Defocus",
+@@ -982,7 +982,7 @@
+       [this](ParameterState &, bool v) {
+         if (v) m_finetuneFlags |= colorscreen::finetune_scanner_mtf_defocus;
+         else m_finetuneFlags &= ~colorscreen::finetune_scanner_mtf_defocus;
+-      }, nullptr, "Included in the focus analyzer optimization loop. For multi-area physical-MTF analysis, normally keep a slanted-edge Sigma calibration fixed and optimize Defocus only.");
++      }, nullptr, "Included in the focus analyzer optimization loop. When Sigma is also enabled, multi-area analysis fits the shared capture transfer in scalar blocks rather than one ill-conditioned Sigma/Defocus/phase simplex.");
+ 
+   m_analyzeAreaBtn = addToggleButtonParameter("", tr("Analyze area"), [this](bool checked) {
+     emit focusAnalysisRequested(checked, m_finetuneFlags);
+@@ -1005,8 +1005,9 @@
+   m_analyzeFocusAreasBtn->setToolTip(
+       tr("Verify the discovered regions independently, choose a "
+          "colour-diverse subset, fit one shared focus model, then run "
+-         "leave-one-out and held-out validation. Physical scanner-MTF "
+-         "sigma and defocus must be optimized one at a time."));
++         "leave-one-out and held-out validation. Local phase is verified "
++         "first and frozen during the shared MTF fit; the reported process-"
++         "screen MTF is the primary contrast-recovery diagnostic."));
+   connect(m_analyzeFocusAreasBtn, &QPushButton::clicked, this,
+           [this]() { emit analyzeFocusAreasRequested(m_finetuneFlags); });
+   if (m_currentGroupForm)
