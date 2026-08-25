@@ -261,7 +261,15 @@ jobs:
           ./configure --enable-checking --disable-static-link --enable-qtgui
     - name: Build AddressSanitizer variant
       shell: msys2 {0}
-      run: make -j$(nproc)
+      run: |
+        set -o pipefail
+        make -j$(nproc) 2>&1 | tee windows-asan-build.log
+    - name: Upload Windows ASan build log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-asan-build-log
+        path: windows-asan-build.log
     - name: Qt multi-window smoke test (AddressSanitizer)
       shell: msys2 {0}
       env:
