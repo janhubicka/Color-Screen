@@ -178,7 +178,7 @@ private:
   QDockWidget *m_userVisibleProgressDock = nullptr;
   QPointer<MainWindow> m_chromeDocument;
   QPointer<ImageViewWindow> m_chromeView;
-  QPointer<QTabBar> m_tabBar;
+  QPointer<QObject> m_tabBar;
   QPointer<QWidget> m_dragWindow;
   QPoint m_dragStartGlobal;
   bool m_closing = false;

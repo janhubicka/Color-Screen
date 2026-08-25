@@ -316,7 +316,6 @@ bool ColorScreenApplication::requestViewClose(ImageViewWindow *view) {
 QList<ImageViewWindow *> ColorScreenApplication::viewWindows() {
   pruneViewWindows();
   QList<ImageViewWindow *> views;
-  views.reserve(m_viewWindows.size());
   for (const QPointer<ImageViewWindow> &view : m_viewWindows) {
     if (view)
       views.append(view.data());
@@ -535,7 +534,6 @@ bool ColorScreenApplication::restoreRecoverySession() {
 QList<MainWindow *> ColorScreenApplication::documentWindows() {
   pruneDocumentWindows();
   QList<MainWindow *> windows;
-  windows.reserve(m_documentWindows.size());
   for (const QPointer<MainWindow> &window : m_documentWindows) {
     if (window)
       windows.append(window.data());
