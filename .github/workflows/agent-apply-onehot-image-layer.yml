@@ -1,4 +1,4 @@
-name: Agent fix one-hot render specialization
+name: Agent preserve native one-hot MTF specialization
 
 on:
   push:
@@ -17,28 +17,105 @@ jobs:
         with:
           ref: agent/onehot-image-layer-sharpening
           fetch-depth: 0
-      - name: Apply render corrections
+      - name: Apply scalar specialization correction
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('src/libcolorscreen/render.C')
+
+          p = Path('src/libcolorscreen/render-parameters.C')
           s = p.read_text()
-          old = '                  m_params.get_image_layer_sharpen_parameters (&m_img) };'
-          new = '                  m_params.get_sharpen_parameters_for_channel (channel) };'
+          old = '''  sharpen_parameters result;
+          if (selected_image_layer)
+            result = sharpen;
+          else if (native_channel >= 0)
+            result = get_sharpen_parameters_for_channel (native_channel, has_rgb);
+          else
+            {
+              result = sharpen;
+              if (result.scanner_mtf.use_measured_mtf ())
+                result.scanner_mtf.measured_mtf_idx = -1;
+            }
+
+          double wavelength = get_image_layer_wavelength (img);
+          if (result.scanner_mtf.use_measured_mtf ())
+            {
+              const mtf_measurement &measurement
+                  = result.scanner_mtf.measurements[result.scanner_mtf.measured_mtf_idx];
+              if (my_isfinite (measurement.wavelength) && measurement.wavelength > 0)
+                wavelength = measurement.wavelength;
+            }
+          if (my_isfinite (wavelength) && wavelength > 0)
+            result.scanner_mtf.wavelength = wavelength;
+          return result;
+          }'''.replace('          ', '', 1)
+          # Use the exact source block without relying on indentation manipulation.
+          old = '''  sharpen_parameters result;
+  if (selected_image_layer)
+    result = sharpen;
+  else if (native_channel >= 0)
+    result = get_sharpen_parameters_for_channel (native_channel, has_rgb);
+  else
+    {
+      result = sharpen;
+      if (result.scanner_mtf.use_measured_mtf ())
+        result.scanner_mtf.measured_mtf_idx = -1;
+    }
+
+  double wavelength = get_image_layer_wavelength (img);
+  if (result.scanner_mtf.use_measured_mtf ())
+    {
+      const mtf_measurement &measurement
+          = result.scanner_mtf.measurements[result.scanner_mtf.measured_mtf_idx];
+      if (my_isfinite (measurement.wavelength) && measurement.wavelength > 0)
+        wavelength = measurement.wavelength;
+    }
+  if (my_isfinite (wavelength) && wavelength > 0)
+    result.scanner_mtf.wavelength = wavelength;
+  return result;
+}'''
+          new = '''  if (!selected_image_layer && native_channel >= 0)
+    return get_sharpen_parameters_for_channel (native_channel, has_rgb);
+
+  sharpen_parameters result = sharpen;
+  if (!selected_image_layer && result.scanner_mtf.use_measured_mtf ())
+    result.scanner_mtf.measured_mtf_idx = -1;
+
+  double wavelength = get_image_layer_wavelength (img);
+  if (selected_image_layer && result.scanner_mtf.use_measured_mtf ())
+    {
+      const mtf_measurement &measurement
+          = result.scanner_mtf.measurements[result.scanner_mtf.measured_mtf_idx];
+      if (my_isfinite (measurement.wavelength) && measurement.wavelength > 0)
+        wavelength = measurement.wavelength;
+    }
+  if (my_isfinite (wavelength) && wavelength > 0)
+    result.scanner_mtf.wavelength = wavelength;
+  return result;
+}'''
           if s.count(old) != 1:
-              raise SystemExit(f'expected one scalar-channel specialization, found {s.count(old)}')
-          s = s.replace(old, new, 1)
-          old = '                    = (channel_holder->m_data[i] - dark) * weight;'
-          new = '                    = ((luminosity_t)channel_holder->m_data[i] - dark) * weight;'
+              raise SystemExit(f'render-parameters.C specialization block count {s.count(old)}')
+          p.write_text(s.replace(old, new, 1))
+
+          p = Path('doc/mtf-channel-domain-tracking.md')
+          s = p.read_text()
+          old = '''The one-hot test is exact rather than epsilon-based: any second nonzero mix
+          weight means that two different capture transfers contribute and must use the
+          general model below.'''.replace('          ', '')
+          new = '''The one-hot test is exact rather than epsilon-based: any second nonzero mix
+weight means that two different capture transfers contribute and must use a
+multi-channel model.  The one-channel simplification is valid regardless of
+capture provenance, including a transparency scanned with its viewing filter:
+for one selected scanner channel the same `H_c` filters the complete
+process-primary mixture, so convolution distributes over that sum.'''
           if s.count(old) != 1:
-              raise SystemExit(f'expected one cached-channel transform, found {s.count(old)}')
+              raise SystemExit(f'tracking one-hot paragraph count {s.count(old)}')
           s = s.replace(old, new, 1)
           p.write_text(s)
           PY
           git diff --check
-          git diff -- src/libcolorscreen/render.C
+          git diff -- src/libcolorscreen/render-parameters.C doc/mtf-channel-domain-tracking.md
           git config user.name "OpenAI Agent"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/libcolorscreen/render.C
-          git commit -m "render: keep one-hot channel reuse deterministic" -m "Use the selected native channel's sharpening parameters in the scalar-only one-hot path, matching the full RGB path regardless of cache state. Explicitly convert cached compact luminosity samples before applying image-layer dark and gain to avoid the intentionally ambiguous float/double conversion operators."
+          git add src/libcolorscreen/render-parameters.C doc/mtf-channel-domain-tracking.md
+          git commit -m "mtf: preserve native one-hot specialization" -m "Return native channel sharpening directly when a scalar image layer reduces exactly to one native channel, preserving the same measured-curve and wavelength precedence as ordinary channel sharpening. Reserve scalar measurement wavelength handling for explicit image-layer measurements and representative wavelength selection for genuine multi-channel mixtures.\n\nClarify that the one-channel simplification is exact even for viewing-filter captures because a single scanner-channel transfer distributes over the process-primary sum."
           git push origin HEAD:agent/onehot-image-layer-sharpening
