@@ -201,37 +201,33 @@ render_parameters::get_sharpen_parameters_for_channel (int channel,
 
 /* Return sharpening specialized for the scalar image layer of IMG.  A
    selected explicit image-layer measurement is authoritative.  A real native
-   scalar plane may otherwise use its channel-3 measurement.  A synthetic RGB
-   image layer is not any one native scanner channel: RGB capture of a
-   monochrome original needs only a weighted combination of scanner-channel
+   scalar plane may otherwise use its channel-3 measurement.  An exact one-hot
+   RGB mix inherits the selected native scanner channel, including its measured
+   curve and wavelength.  A genuine RGB mixture is not any one scanner channel:
+   RGB capture of a monochrome original needs a weighted combination of channel
    transfers, while a transparency captured with its viewing filter present
    requires process-primary spectral mixing before scanner-channel transfer.
-   Until those provenance-aware forward models exist, do not steal one native
+   Until those mixed-channel forward models exist, do not steal one native
    measured RGB curve; use the configured representative analytical transfer.  */
 sharpen_parameters
 render_parameters::get_image_layer_sharpen_parameters (const image_data *img) const
 {
-  const int channel = get_image_layer_channel (img);
+  const int native_channel = get_image_layer_native_channel (img);
   const bool has_rgb = !img || img->has_rgb ();
   const mtf_parameters &base_mtf = sharpen.scanner_mtf;
   const bool selected_image_layer
       = base_mtf.use_measured_mtf ()
         && base_mtf.measurements[base_mtf.measured_mtf_idx].image_layer;
 
-  sharpen_parameters result;
-  if (selected_image_layer)
-    result = sharpen;
-  else if (channel == 3)
-    result = get_sharpen_parameters_for_channel (3, has_rgb);
-  else
-    {
-      result = sharpen;
-      if (result.scanner_mtf.use_measured_mtf ())
-        result.scanner_mtf.measured_mtf_idx = -1;
-    }
+  if (!selected_image_layer && native_channel >= 0)
+    return get_sharpen_parameters_for_channel (native_channel, has_rgb);
+
+  sharpen_parameters result = sharpen;
+  if (!selected_image_layer && result.scanner_mtf.use_measured_mtf ())
+    result.scanner_mtf.measured_mtf_idx = -1;
 
   double wavelength = get_image_layer_wavelength (img);
-  if (result.scanner_mtf.use_measured_mtf ())
+  if (selected_image_layer && result.scanner_mtf.use_measured_mtf ())
     {
       const mtf_measurement &measurement
           = result.scanner_mtf.measurements[result.scanner_mtf.measured_mtf_idx];

@@ -344,6 +344,24 @@ public:
         [](Entry *) {},
         [&](Entry *e) { return get_new (e->params, progress); });
   }
+
+  /* Return a completed cached value for P without generating or waiting for
+     one.  A matching entry which is still being computed is deliberately
+     treated as a miss.  The returned shared pointer pins the cached value
+     against eviction while the caller uses it.  */
+  std::shared_ptr<T>
+  peek (const P &p, uint64_t *id = NULL)
+  {
+    std::shared_lock<std::shared_timed_mutex> guard (this->lock);
+    for (Entry *e = this->entries; e; e = e->next)
+      if (!e->computing && e->val && p == e->params)
+        {
+          if (id)
+            *id = e->id;
+          return e->val;
+        }
+    return nullptr;
+  }
 };
 
 /* Cache entry for tile-based data.  */

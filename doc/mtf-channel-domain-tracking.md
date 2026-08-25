@@ -98,14 +98,29 @@ measured curve, and the dynamic BW focus path could even enter the physical
 model without setting the scalar wavelength.  Scalar users now request one
 complete image-layer sharpening specialization.
 
-The specialization remains intentionally conservative for synthetic RGB image
-layers until capture provenance is represented reliably: it does not steal one
-native measured RGB curve and pretend that curve is the scalar transfer.
+The specialization remains intentionally conservative for genuine multi-channel
+synthetic RGB image layers until the corresponding forward model is available:
+it does not choose one native measured RGB curve and pretend that curve is the
+whole mixed scalar transfer.  Exact one-channel mixes are handled below.
 
 ### MTF-DOM-005 — Monochrome original captured through RGB channels
 
-**Status:** open optimization/correctness refinement for forward scalar models;
-full-image `render.C` is already correct.
+**Status:** partially fixed; exact one-channel mixes are handled, while general
+weighted multi-channel forward models remain open.
+
+An exact image-layer mix with only one nonzero RGB weight now inherits that
+native channel's measured/analytical MTF.  Full-image rendering sharpens only
+that channel when only the scalar image layer is requested; if the identical
+full RGB sharpening is already cached, a non-generating cache peek reuses it.
+When RGB output is requested explicitly, the normal three-channel pass remains
+the shared source for both RGB and the image layer.
+
+The one-hot test is exact rather than epsilon-based: any second nonzero mix
+weight means that two different capture transfers contribute and must use a
+multi-channel model.  The one-channel simplification is valid regardless of
+capture provenance, including a transparency scanned with its viewing filter:
+for one selected scanner channel the same `H_c` filters the complete
+process-primary mixture, so convolution distributes over that sum.
 
 For a monochrome original the ideal image layer `L(f)` is scalar.  Scanner
 channel `c` observes the same layer through a channel response/gain `a_c` and
@@ -203,7 +218,9 @@ wavelengths/curves for R, G, B and scalar image-layer data.  At minimum cover:
 - standalone grayscale receives the visible scalar fallback;
 - BW finetune and scalar periodic-screen paths carry the same specialized MTF
   state as direct scalar rendering;
-- monochrome RGB forward modelling matches a slow weighted per-channel
+- exact one-channel RGB mixes inherit the selected native MTF and scalar-only
+  rendering matches the full RGB sharpen-then-mix result, including cache reuse;
+- general monochrome RGB forward modelling matches a slow weighted per-channel
   reference without introducing process-primary colour mixing;
 - the eventual viewing-filter RGB model is compared against a slow reference
   with scanner response matrices that have strong off-diagonal terms.
