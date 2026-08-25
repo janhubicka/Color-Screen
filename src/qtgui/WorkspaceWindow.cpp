@@ -247,7 +247,6 @@ void WorkspaceWindow::removeDocument(MainWindow *document) {
   configureTabBar();
   scheduleCloseIfEmpty();
 }
-
 /** Embed secondary VIEW in the same MDI area as ordinary documents. */
 void WorkspaceWindow::addView(ImageViewWindow *view) {
   if (!view)
@@ -657,14 +656,14 @@ void WorkspaceWindow::configureTabBar() {
   });
 }
 
-/** Close an empty workspace shell on the next event-loop turn. */
+/** Hide an empty workspace immediately, then finalize the close asynchronously. */
 void WorkspaceWindow::scheduleCloseIfEmpty() {
   if (m_closing || !m_mdiArea || !m_mdiArea->subWindowList().isEmpty())
     return;
 
+  hide();
   QTimer::singleShot(0, this, [this]() {
-    if (!m_closing && m_mdiArea && m_mdiArea->subWindowList().isEmpty() &&
-        isVisible())
+    if (!m_closing && m_mdiArea && m_mdiArea->subWindowList().isEmpty())
       close();
   });
 }
