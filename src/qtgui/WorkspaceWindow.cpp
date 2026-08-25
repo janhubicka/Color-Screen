@@ -346,7 +346,12 @@ MainWindow *WorkspaceWindow::currentDocument() const {
 
 /** Return the number of documents attached to the MDI workspace. */
 int WorkspaceWindow::tabCount() const {
-  return m_mdiArea->subWindowList().size();
+  int count = 0;
+  for (QMdiSubWindow *subWindow : m_mdiArea->subWindowList()) {
+    if (documentForSubWindow(subWindow) || viewForSubWindow(subWindow))
+      ++count;
+  }
+  return count;
 }
 
 /** Return whether DOCUMENT is attached to this workspace. */
@@ -658,13 +663,31 @@ void WorkspaceWindow::configureTabBar() {
 
 /** Hide an empty workspace immediately, then finalize the close asynchronously. */
 void WorkspaceWindow::scheduleCloseIfEmpty() {
-  if (m_closing || !m_mdiArea || !m_mdiArea->subWindowList().isEmpty())
+  if (m_closing || !m_mdiArea)
     return;
 
+  auto hasHostedWindow = [this]() {
+    for (QMdiSubWindow *subWindow : m_mdiArea->subWindowList()) {
+      if (documentForSubWindow(subWindow) || viewForSubWindow(subWindow))
+        return true;
+    }
+    return false;
+  };
+
+  if (hasHostedWindow())
+    return;
+
+  // A detached presentation can leave an empty QMdiSubWindow wrapper pending
+  // deleteLater(). Hide based on hosted content, not wrapper lifetime.
   hide();
   QTimer::singleShot(0, this, [this]() {
-    if (!m_closing && m_mdiArea && m_mdiArea->subWindowList().isEmpty())
-      close();
+    if (m_closing || !m_mdiArea)
+      return;
+    for (QMdiSubWindow *subWindow : m_mdiArea->subWindowList()) {
+      if (documentForSubWindow(subWindow) || viewForSubWindow(subWindow))
+        return;
+    }
+    close();
   });
 }
 
@@ -715,7 +738,6 @@ void WorkspaceWindow::updateUserVisibleProgressDockVisibility() {
   }
   m_userVisibleProgressDock->setVisible(hasVisibleRows);
 }
-
 
 /** Present DOCUMENT's one inspector in the workspace for IMAGEWIDGET. */
 void WorkspaceWindow::installDocumentInspector(MainWindow *document,
@@ -936,7 +958,6 @@ void WorkspaceWindow::takeDocumentFromWorkspace(MainWindow *document) {
 
   releaseDocumentChrome(document, true);
   detachUserVisibleProgress(document);
-
   if (QWidget *inspector = document->workspaceInspectorWidget()) {
     m_inspectorStack->removeWidget(inspector);
     document->takeWorkspaceInspector();
