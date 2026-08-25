@@ -320,11 +320,10 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
       || m_precise_rgb)
     {
       coord_t psize = pixel_size ();
-      sharpen_parameters sharpen = m_params.sharpen;
+      sharpen_parameters sharpen
+          = m_params.get_image_layer_sharpen_parameters (&m_img);
       sharpen.usm_radius = m_params.screen_blur_radius * psize;
       sharpen.scanner_mtf_scale *= psize;
-      sharpen.scanner_mtf.wavelength
-          = m_params.get_image_layer_wavelength (&m_img);
 
       if (sharpen.get_mode () != sharpen_parameters::none
           && m_params.collection_quality
@@ -346,11 +345,10 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
           else
             {
               rgbdata cred, cgreen, cblue;
-              sharpen_parameters sharpen = m_params.sharpen;
+              sharpen_parameters sharpen
+                  = m_params.get_image_layer_sharpen_parameters (&m_img);
               sharpen.usm_radius = m_params.screen_blur_radius * psize;
               sharpen.scanner_mtf_scale *= psize;
-              sharpen.scanner_mtf.wavelength
-                  = m_params.get_image_layer_wavelength (&m_img);
               screen_sampling sampling = screen_sampling::integrate_pixel;
               std::shared_ptr<screen> scr = get_screen (
                   m_scr_to_img.get_type (), false, false, sharpen,

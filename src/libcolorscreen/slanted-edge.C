@@ -1563,6 +1563,7 @@ slanted_edge_mtf (const render_parameters &rparam, const image_data &img,
   measurement.name
       = params.name.empty () ? "Slanted edge MTF" : params.name;
   measurement.channel = params.channel;
+  measurement.image_layer = params.channel < 0;
   measurement.wavelength = params.wavelength;
   measurement.same_capture = params.same_capture;
 

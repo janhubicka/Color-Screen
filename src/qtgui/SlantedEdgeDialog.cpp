@@ -30,9 +30,13 @@ SlantedEdgeDialog::SlantedEdgeDialog(
 
   auto *mainLayout = new QVBoxLayout(this);
   auto *description = new QLabel(
-      tr("For RGB scans the default is to measure each native scanner channel "
-         "from the selected edge. The image layer can still be measured "
-         "directly when its RGB mixture is itself the quantity of interest."),
+      hasRgb
+          ? tr("For RGB scans the default is to measure each native scanner "
+               "channel from the selected edge. The image layer can still be "
+               "measured directly when its RGB mixture is itself the quantity "
+               "of interest.")
+          : tr("This scan has one monochrome capture channel. The image layer "
+               "is measured directly."),
       this);
   description->setWordWrap(true);
   mainLayout->addWidget(description);
@@ -62,7 +66,10 @@ SlantedEdgeDialog::SlantedEdgeDialog(
   m_sourceCombo->setToolTip(
       tr("Native channels are analyzed independently from the same ROI. "
          "Image layer measures the current grayscale/infrared or RGB mixture."));
-  form->addRow(tr("Measure:"), m_sourceCombo);
+  auto *sourceLabel = new QLabel(tr("Measure:"), this);
+  form->addRow(sourceLabel, m_sourceCombo);
+  sourceLabel->setVisible(hasRgb);
+  m_sourceCombo->setVisible(hasRgb);
 
   m_wavelengthSpin = new QDoubleSpinBox(this);
   m_wavelengthSpin->setRange(0.0, 2000.0);
@@ -72,10 +79,17 @@ SlantedEdgeDialog::SlantedEdgeDialog(
   m_wavelengthSpin->setSpecialValueText(tr("unknown"));
   m_wavelengthSpin->setValue(defaults.wavelength);
   m_wavelengthSpin->setToolTip(
-      tr("Optional wavelength for an image-layer measurement. Native-channel "
-         "measurements use the per-channel wavelengths from capture/MTF "
-         "settings; an unknown wavelength can be optimized later."));
-  form->addRow(tr("Image-layer wavelength:"), m_wavelengthSpin);
+      hasRgb
+          ? tr("Optional wavelength for an image-layer measurement. "
+               "Native-channel measurements use the per-channel wavelengths "
+               "from capture/MTF settings; an unknown wavelength can be "
+               "optimized later.")
+          : tr("Wavelength of this monochrome capture. Capture/MTF settings "
+               "provide the visible-light fallback when no measured value is "
+               "available."));
+  form->addRow(hasRgb ? tr("Image-layer wavelength:")
+                      : tr("Capture wavelength:"),
+               m_wavelengthSpin);
 
   m_sameCaptureCheck = new QCheckBox(
       tr("Same capture as previous measurement"), this);

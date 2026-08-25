@@ -35,12 +35,10 @@ public:
     sharpen_parameters sharpen;
     if (!m_preview)
       {
-	sharpen = m_params.sharpen;
+	sharpen = m_params.get_image_layer_sharpen_parameters (&m_img);
 	coord_t psize = pixel_size ();
 	sharpen.usm_radius = m_params.screen_blur_radius * psize;
 	sharpen.scanner_mtf_scale *= psize;
-	sharpen.scanner_mtf.wavelength
-	    = m_params.get_image_layer_wavelength (&m_img);
       }
     m_screen = get_screen (m_scr_to_img.get_type (), m_preview, 
 			   !m_color && !m_preview,

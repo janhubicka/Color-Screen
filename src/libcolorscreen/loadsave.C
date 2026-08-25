@@ -253,6 +253,9 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
                             "scanner_mtf_measurement_wavelength_nm: %.17g\n",
                             measurement.wavelength)
                        < 0
+                || fprintf (f, "scanner_mtf_measurement_image_layer: %s\n",
+                            bool_names[(int)measurement.image_layer])
+                       < 0
                 || fprintf (f, "scanner_mtf_measurement_same_capture: %s\n",
                             bool_names[(int)measurement.same_capture])
                        < 0
@@ -2236,6 +2239,26 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
           std::string n = read_escaped_string (f);
           if (rparam)
             rparam->sharpen.scanner_mtf.measurements[measurement].name = n;
+        }
+      else if (!strcmp (buf, "scanner_mtf_measurement_image_layer"))
+        {
+          if (measurement < 0)
+            {
+              *error
+                  = "scanner_mtf_measurement_image_layer specified without "
+                    "scanner_mtf_measurement";
+              return false;
+            }
+          bool *image_layer
+              = rparam
+                    ? &rparam->sharpen.scanner_mtf.measurements[measurement]
+                           .image_layer
+                    : nullptr;
+          if (!parse_bool (f, image_layer))
+            {
+              *error = "error parsing scanner_mtf_measurement_image_layer";
+              return false;
+            }
         }
       else if (!strcmp (buf, "scanner_mtf_measurement_same_capture"))
         {

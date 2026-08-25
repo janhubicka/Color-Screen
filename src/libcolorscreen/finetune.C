@@ -964,7 +964,7 @@ public:
   /* Screen with emulsion.  */
   std::shared_ptr<screen> emulsion_scr;
   sharpen_parameters render_sharpen_params;
-  double img_layer_wavelength = 530;
+  sharpen_parameters image_layer_sharpen_params;
 
   finetune_solver () {}
 
@@ -2769,9 +2769,11 @@ public:
   std::array<sharpen_parameters, 3>
   capture_sharpen_parameters (coord_t *v)
   {
+    const sharpen_parameters &base_sharpen
+        = tiles[0].color.empty () ? image_layer_sharpen_params
+                                  : render_sharpen_params;
     std::array<sharpen_parameters, 3> sp
-        = { render_sharpen_params, render_sharpen_params,
-            render_sharpen_params };
+        = { base_sharpen, base_sharpen, base_sharpen };
     for (int c = 0; c < 3; c++)
       {
         sp[c].scanner_mtf.sigma = get_scanner_mtf_sigma (v);
@@ -3107,9 +3109,10 @@ public:
           screen_revision++;
         if (tiles[tileid].last_screen_revision != screen_revision)
           {
-            sharpen_parameters sp = render_sharpen_params;
+            sharpen_parameters sp
+                = tiles[0].color.empty () ? image_layer_sharpen_params
+                                          : render_sharpen_params;
             sp.scanner_mtf_scale *= pixel_size;
-            sp.scanner_mtf.wavelength = img_layer_wavelength;
             bool cache_hit = false;
             const auto cache_start
                 = profile ? std::chrono::steady_clock::now ()
@@ -5956,8 +5959,8 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
             solver.theight = theight;
             solver.pixel_size = pixel_size;
             solver.render_sharpen_params = rparam.sharpen;
-            solver.img_layer_wavelength
-                = rparam.get_image_layer_wavelength (imgp[0]);
+            solver.image_layer_sharpen_params
+                = rparam.get_image_layer_sharpen_parameters (imgp[0]);
             solver.collection_threshold = rparam.collection_threshold;
             solver.parallel = !(fparams.flags & finetune_no_progress_report);
             if (!solver.init_tile (0, cur_txmin, cur_tymin, bw, *mapp[0],
@@ -5998,8 +6001,8 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
       best_solver.theight = theight;
       best_solver.collection_threshold = rparam.collection_threshold;
       best_solver.render_sharpen_params = rparam.sharpen;
-      best_solver.img_layer_wavelength
-          = rparam.get_image_layer_wavelength (imgp[0]);
+      best_solver.image_layer_sharpen_params
+          = rparam.get_image_layer_sharpen_parameters (imgp[0]);
       best_solver.pixel_size = pixel_size;
       best_solver.parallel = !(fparams.flags & finetune_no_progress_report);
       for (int tileid = 0; tileid < n_tiles; tileid++)
@@ -6102,8 +6105,8 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
                   solver.theight = theight;
                   solver.collection_threshold = rparam.collection_threshold;
                   solver.render_sharpen_params = rparam.sharpen;
-                  solver.img_layer_wavelength
-                      = rparam.get_image_layer_wavelength (imgp[0]);
+                  solver.image_layer_sharpen_params
+                      = rparam.get_image_layer_sharpen_parameters (imgp[0]);
                   solver.pixel_size = pixel_size;
                   solver.parallel
                       = !(fparams.flags & finetune_no_progress_report);
@@ -7154,11 +7157,10 @@ render_screen (image_data &img, const scr_to_img_parameters &param,
   if (!map.set_parameters (param, img))
     return false;
   coord_t pixel_size = map.pixel_size ({0, 0, width, height});
-  sharpen_parameters sharpen = rparam.sharpen;
+  sharpen_parameters sharpen
+      = rparam.get_image_layer_sharpen_parameters (&img);
   sharpen.usm_radius = rparam.screen_blur_radius * pixel_size;
   sharpen.scanner_mtf_scale *= pixel_size;
-  sharpen.scanner_mtf.wavelength
-      = rparam.get_image_layer_wavelength (&img);
   screen_sampling sampling = screen_sampling::integrate_pixel;
   std::shared_ptr<screen> scr = render_to_scr::get_screen (
       param.type, false, false, sharpen, rparam.red_strip_width,

@@ -19,12 +19,16 @@ struct mtf_measurement
 {
   /* Construct an empty unlabelled measurement.  */
   mtf_measurement ()
-      : channel (-1), wavelength (0), same_capture (false),
+      : channel (-1), image_layer (false), wavelength (0), same_capture (false),
         name ("Measured MTF")
   {
   }
-  /* Channel: -1 unknown, 0 red, 1 green, 2 blue, 3 IR  */
+  /* Channel: -1 unknown, 0 red, 1 green, 2 blue, 3 IR.  */
   int channel;
+  /* True when this curve measures the scalar image layer rather than one
+     native capture channel.  Keep this independent from CHANNEL: -1 still
+     represents a genuinely unlabelled/generic curve for compatibility.  */
+  bool image_layer;
   /* Wavelength in nanometers.  A positive value is authoritative for this
      measurement irrespective of CHANNEL.  Zero means unknown and permits a
      channel or capture-level wavelength to be used as a fallback.  */
@@ -73,8 +77,9 @@ struct mtf_measurement
   bool
   operator== (const mtf_measurement &o) const
   {
-    return channel == o.channel && wavelength == o.wavelength
-           && same_capture == o.same_capture && name == o.name
+    return channel == o.channel && image_layer == o.image_layer
+           && wavelength == o.wavelength && same_capture == o.same_capture
+           && name == o.name
            && m_data == o.m_data;
   }
 private:

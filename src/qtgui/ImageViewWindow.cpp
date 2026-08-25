@@ -679,7 +679,12 @@ void ImageViewWindow::onMeasureMtfRequested(bool checked) {
   const colorscreen::mtf_parameters &currentMtf =
       currentState.rparams.sharpen.scanner_mtf;
   colorscreen::slanted_edge_parameters defaults = m_slantedEdgeParameters;
-  if (defaults.wavelength <= 0) {
+  const bool hasRgb = m_scan->has_rgb();
+  const bool hasInfrared = m_scan->has_grayscale_or_ir();
+  if (!hasRgb) {
+    defaults.wavelength
+        = currentState.rparams.get_image_layer_wavelength(m_scan.get());
+  } else if (defaults.wavelength <= 0) {
     if (!currentMtf.measurements.empty() &&
         currentMtf.measurements.back().wavelength > 0)
       defaults.wavelength = currentMtf.measurements.back().wavelength;
@@ -687,8 +692,6 @@ void ImageViewWindow::onMeasureMtfRequested(bool checked) {
       defaults.wavelength = currentMtf.wavelength;
   }
 
-  const bool hasRgb = m_scan->has_rgb();
-  const bool hasInfrared = m_scan->has_grayscale_or_ir();
   SlantedEdgeDialog dialog(defaults, !currentMtf.measurements.empty(), hasRgb,
                            hasInfrared, this);
   if (dialog.exec() != QDialog::Accepted) {
