@@ -1,0 +1,35 @@
+name: Agent test one-hot image-layer sharpening
+
+on:
+  push:
+    branches:
+      - agent/tmp-onehot-image-layer-tests2
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  LC_ALL: C.UTF-8
+  LANG: C.UTF-8
+
+jobs:
+  focused:
+    strategy:
+      fail-fast: false
+      matrix:
+        opt: ["-O2", "-Ofast"]
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: CXXFLAGS="${{ matrix.opt }}" CFLAGS="${{ matrix.opt }}" ./configure --enable-checking --disable-qtgui --disable-gtkgui
+      - name: Build focused unit tests
+        run: make -j$(nproc) -C src/libcolorscreen unittests
+      - name: Run focused unit tests
+        run: ./src/libcolorscreen/unittests lru_cache channel_sharpening mtf_model
