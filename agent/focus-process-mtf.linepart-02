@@ -1,0 +1,76 @@
++  if (param.type <= Random || param.type >= max_scr_type
++      || !(scr_names[param.type].frequency > 0) || locations.empty ())
++    return -1;
++
++  scr_to_img map;
++  if (!map.set_parameters (param, img))
++    return -1;
++
++  std::vector<coord_t> pixel_sizes;
++  pixel_sizes.reserve (locations.size ());
++  for (point_t p : locations)
++    {
++      const point_t s0 = map.to_scr (p);
++      /* Match the pixel-size convention used by the existing screen-filter
++         and adaptive-focus code.  It measures one image-x pixel in screen
++         coordinates before multiplying by SCR_NAMES.frequency.  */
++      const coord_t size = s0.dist_from (map.to_scr ({ p.x + 1, p.y }));
++      if (my_isfinite (size) && size > 0)
++        pixel_sizes.push_back (size);
++    }
++  if (pixel_sizes.empty ())
++    return -1;
++  std::sort (pixel_sizes.begin (), pixel_sizes.end ());
++  const coord_t pixel_size = pixel_sizes[pixel_sizes.size () / 2];
++  const coord_t frequency = scr_names[param.type].frequency * pixel_size;
++  return my_isfinite (frequency) && frequency > 0 ? frequency : -1;
++}
++
++/* Evaluate the effective scanner/capture MTF represented by FIT at FREQ.
++   Finetune_result always exports fixed inactive scalar MTF coordinates as well
++   as the active one, so this also works for sigma-first coordinate-descent
++   stages.  RGB periodic-screen fitting uses the same 550 nm achromatic
++   convention as the forward finetune filter.  */
++static coord_t
++fit_process_screen_mtf (const render_parameters &rparam,
++                        const image_data &img, uint64_t flags,
++                        const finetune_result &fit, coord_t freq)
++{
++  if (!fit.success || !(freq > 0)
++      || !(flags & (finetune_scanner_mtf_sigma
++                    | finetune_scanner_mtf_defocus)))
++    return -1;
++
++  mtf_parameters mtf = rparam.sharpen.scanner_mtf;
++  if (my_isfinite (fit.scanner_mtf_sigma) && fit.scanner_mtf_sigma >= 0)
++    mtf.sigma = fit.scanner_mtf_sigma;
++  if (mtf.simulate_diffraction_p ())
++    {
++      if (my_isfinite (fit.scanner_mtf_defocus)
++          && fit.scanner_mtf_defocus >= 0)
++        mtf.defocus = fit.scanner_mtf_defocus;
++    }
++  else if (my_isfinite (fit.scanner_mtf_blur_diameter)
++           && fit.scanner_mtf_blur_diameter >= 0)
++    mtf.blur_diameter = fit.scanner_mtf_blur_diameter;
++
++  if (!(flags & finetune_bw) && img.has_rgb ())
++    mtf.wavelength = 550;
++  const coord_t value = mtf.system_mtf (freq);
++  return my_isfinite (value) && value >= 0 ? value : -1;
++}
++
+ /* Copy scalar shared focus/blur state from FIT to RPARAM.  Return false for
+    the per-channel focus models, whose complete frozen transfer is not
+    representable in render_parameters.  */
+@@ -104,6 +189,102 @@
+   return true;
+ }
+ 
++/* Fit the shared scanner MTF in small, well-conditioned blocks.  The local
++   registration supplied by candidate verification is deliberately fixed here:
++   allowing 2*N phase coordinates to move in the same simplex as focus made a
++   cold Paget fit settle near zero blur even when a much better effective MTF
++   solution existed.
++
++   When sigma and defocus are both requested, first use sigma as a monotone
