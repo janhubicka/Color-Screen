@@ -1,0 +1,44 @@
+name: Agent apply MTF image-layer provenance clarification
+
+on:
+  push:
+    branches:
+      - agent/tmp-mtf-image-layer-provenance-stage
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply reviewed provenance clarification
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp .github/agent-apply-mtf-provenance.py /tmp/agent-apply-mtf-provenance.py
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git reset --hard 86030d1ab46af2f3088dcf22a7b888ecc3f9af8c
+          git checkout -B agent/mtf-image-layer-domain-fixes
+          python3 /tmp/agent-apply-mtf-provenance.py
+          git diff --check
+
+          grep -q "Native infrared plane" doc/mtf-channel-domain-tracking.md
+          grep -q "Monochrome original captured through RGB channels" doc/mtf-channel-domain-tracking.md
+          grep -q "Viewing-filter transparency captured in RGB" doc/mtf-channel-domain-tracking.md
+          grep -q "Reliable image-layer capture provenance" doc/mtf-channel-domain-tracking.md
+          grep -q 'tr("Capture wavelength:")' src/qtgui/SlantedEdgeDialog.cpp
+          grep -q "saved_measurement.image_layer = true" src/libcolorscreen/unittests.C
+
+          git add doc/mtf-channel-domain-tracking.md \
+                  src/libcolorscreen/render-parameters.C \
+                  src/libcolorscreen/unittests.C \
+                  src/qtgui/SlantedEdgeDialog.cpp
+          git commit -m "mtf: clarify image-layer capture provenance" -m "Distinguish the four ways an image layer can enter the renderer: a native IR plane, a native visible grayscale plane, a synthetic RGB mix of one monochrome original, and a synthetic RGB mix of a transparency captured with its viewing filter present. Only the last case needs process-primary spectral mixing before scanner-channel transfer; monochrome RGB capture only needs a weighted combination of the native channel transfers.\n\nRefine the MTF domain tracking accordingly and record reliable capture provenance as a prerequisite before automatically selecting between those forward models. The existing capture_type enum has suggestive names but its capture-properties plumbing is not yet reliable enough to drive this choice.\n\nKeep PR #159 runtime behavior conservative: scalar specialization still refuses to steal one native RGB measured curve. Clarify that rationale in render-parameters.C, label the grayscale slanted-edge field as Capture wavelength, and exercise persistence of the explicit image-layer measurement bit in the existing project-file round-trip regression."
+          test -z "$(git status --porcelain)"
+          git log --oneline --decorate -5
+          git push origin HEAD:agent/mtf-image-layer-domain-fixes
