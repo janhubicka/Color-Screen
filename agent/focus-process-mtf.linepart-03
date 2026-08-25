@@ -1,0 +1,77 @@
++   effective-MTF coordinate while keeping the caller's current defocus.  A few
++   restarts are cheap and avoid scalar simplex termination on the shoulder of
++   the minimum.  Defocus is then allowed to improve the MTF shape with sigma
++   fixed; if it helps, sigma is polished again.  This deliberately treats the
++   exact sigma/defocus split as secondary to the process-screen transfer.  */
++static finetune_result
++fit_shared_focus (const render_parameters &rparam,
++                  const scr_to_img_parameters &param, const image_data &img,
++                  const std::vector<point_t> &locations,
++                  const std::vector<finetune_result> &starts,
++                  const finetune_parameters &requested, progress_info *progress)
++{
++  finetune_parameters base = requested;
++  base.flags &= ~finetune_position;
++
++  if (!coupled_scanner_mtf_focus_p (base.flags)
++      || !(base.flags & finetune_bw))
++    return finetune (rparam, param, img, locations, &starts, base, progress);
++
++  render_parameters working = rparam;
++  finetune_result best;
++
++  auto run_sigma = [&] (int max_restarts) {
++    finetune_parameters stage = base;
++    stage.flags &= ~finetune_scanner_mtf_defocus;
++    stage.interpolate_scanner_mtf_defocus = false;
++    for (int restart = 0; restart < max_restarts; restart++)
++      {
++        const coord_t old_sigma = working.sharpen.scanner_mtf.sigma;
++        finetune_result fit
++            = finetune (working, param, img, locations, &starts, stage, progress);
++        if (!fit.success)
++          return false;
++        if (progress && progress->cancelled ())
++          return false;
++
++        const bool improves
++            = !best.success || fit.badness <= best.badness + (coord_t)1e-10;
++        if (!improves)
++          break;
++        if (!freeze_focus_from_fit (&working, stage.flags, fit))
++          return false;
++        best = fit;
++
++        if (!my_isfinite (old_sigma)
++            || std::fabs (fit.scanner_mtf_sigma - old_sigma) < (coord_t)0.005)
++          break;
++      }
++    return true;
++  };
++
++  if (!run_sigma (3))
++    {
++      if (progress && progress->cancelled ())
++        return best;
++      /* Preserve the historical coupled solver as a failure fallback rather
++         than turning one failed scalar staging pass into a hard regression. */
++      return finetune (rparam, param, img, locations, &starts, base, progress);
++    }
++
++  finetune_parameters defocus_stage = base;
++  defocus_stage.flags &= ~finetune_scanner_mtf_sigma;
++  finetune_result defocus_fit
++      = finetune (working, param, img, locations, &starts, defocus_stage,
++                  progress);
++  if (defocus_fit.success && !(progress && progress->cancelled ())
++      && (!best.success
++          || defocus_fit.badness + (coord_t)1e-10 < best.badness))
++    {
++      const coord_t old_focus
++          = working.sharpen.scanner_mtf.simulate_diffraction_p ()
++                ? working.sharpen.scanner_mtf.defocus
++                : working.sharpen.scanner_mtf.blur_diameter;
++      if (freeze_focus_from_fit (&working, defocus_stage.flags, defocus_fit))
++        {
++          best = defocus_fit;
++          const coord_t new_focus
