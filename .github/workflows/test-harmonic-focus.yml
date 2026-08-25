@@ -44,6 +44,7 @@ jobs:
           git diff --check
           CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure --enable-qtgui
           make -j$(nproc)
+          make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
           ./src/libcolorscreen/focus-analysis-unittests
           ./src/colorscreen/colorscreen --help >/tmp/colorscreen-help.txt 2>&1 || true
           grep -q 'analyze-focus-areas' /tmp/colorscreen-help.txt
