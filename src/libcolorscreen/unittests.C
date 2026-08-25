@@ -5072,7 +5072,7 @@ test_lru_cache_concurrency ()
   uint64_t generated_id = 0, peeked_id = 0;
   if (peek_cache.peek (peek_key) || get_new_fast_calls != 0)
     {
-      printf ("LRU peek test FAIL: miss generated a value\\n");
+      printf ("LRU peek test FAIL: miss generated a value\n");
       ok = false;
     }
   std::shared_ptr<int> peek_value
@@ -5084,7 +5084,7 @@ test_lru_cache_concurrency ()
   if (!peek_value || *peek_value != 14 || peeked_id != generated_id
       || get_new_fast_calls != 1 || peek_cache.peek (missing_key))
     {
-      printf ("LRU peek test FAIL: completed lookup changed cache state\\n");
+      printf ("LRU peek test FAIL: completed lookup changed cache state\n");
       ok = false;
     }
   peek_value.reset ();
