@@ -3840,6 +3840,9 @@ test_mtf_physical_model ()
   saved_mtf.measured_mtf_idx = 0;
   mtf_measurement saved_measurement;
   saved_measurement.channel = 3;
+  /* A scalar image-layer measurement may originate from the native IR plane;
+     round-trip the domain bit independently of the native source channel.  */
+  saved_measurement.image_layer = true;
   saved_measurement.wavelength = 750.56789012345678;
   saved_measurement.same_capture = false;
   saved_measurement.name = "quoted \"IR\" measurement \\ path";

@@ -201,10 +201,13 @@ render_parameters::get_sharpen_parameters_for_channel (int channel,
 
 /* Return sharpening specialized for the scalar image layer of IMG.  A
    selected explicit image-layer measurement is authoritative.  A real native
-   scalar plane may otherwise use its channel-3 measurement.  An RGB-derived
-   scalar layer must not steal a native RGB measured curve; until the exact
-   spectral/spatial model is implemented it uses the configured analytical
-   representative wavelength instead.  */
+   scalar plane may otherwise use its channel-3 measurement.  A synthetic RGB
+   image layer is not any one native scanner channel: RGB capture of a
+   monochrome original needs only a weighted combination of scanner-channel
+   transfers, while a transparency captured with its viewing filter present
+   requires process-primary spectral mixing before scanner-channel transfer.
+   Until those provenance-aware forward models exist, do not steal one native
+   measured RGB curve; use the configured representative analytical transfer.  */
 sharpen_parameters
 render_parameters::get_image_layer_sharpen_parameters (const image_data *img) const
 {

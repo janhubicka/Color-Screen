@@ -79,10 +79,17 @@ SlantedEdgeDialog::SlantedEdgeDialog(
   m_wavelengthSpin->setSpecialValueText(tr("unknown"));
   m_wavelengthSpin->setValue(defaults.wavelength);
   m_wavelengthSpin->setToolTip(
-      tr("Optional wavelength for an image-layer measurement. Native-channel "
-         "measurements use the per-channel wavelengths from capture/MTF "
-         "settings; an unknown wavelength can be optimized later."));
-  form->addRow(tr("Image-layer wavelength:"), m_wavelengthSpin);
+      hasRgb
+          ? tr("Optional wavelength for an image-layer measurement. "
+               "Native-channel measurements use the per-channel wavelengths "
+               "from capture/MTF settings; an unknown wavelength can be "
+               "optimized later.")
+          : tr("Wavelength of this monochrome capture. Capture/MTF settings "
+               "provide the visible-light fallback when no measured value is "
+               "available."));
+  form->addRow(hasRgb ? tr("Image-layer wavelength:")
+                      : tr("Capture wavelength:"),
+               m_wavelengthSpin);
 
   m_sameCaptureCheck = new QCheckBox(
       tr("Same capture as previous measurement"), this);
