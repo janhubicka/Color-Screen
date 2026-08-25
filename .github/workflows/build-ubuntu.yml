@@ -134,7 +134,13 @@ jobs:
       run: ccache --show-stats
 
   checking:
-    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, arch: amd64 }
+          - { runner: ubuntu-24.04-arm, arch: arm64 }
+
+    runs-on: ${{ matrix.runner }}
     container:
       image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
       credentials:
@@ -147,24 +153,54 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .ccache
-        key: ccache-${{ runner.os }}-amd64-checking-${{ github.event.pull_request.head.sha || github.sha }}
+        key: ccache-${{ runner.os }}-${{ matrix.arch }}-checking-${{ github.event.pull_request.head.sha || github.sha }}
         restore-keys: |
-          ccache-${{ runner.os }}-amd64-checking-
-          ccache-${{ runner.os }}-amd64-
+          ccache-${{ runner.os }}-${{ matrix.arch }}-checking-
+          ccache-${{ runner.os }}-${{ matrix.arch }}-
     - name: Reset compiler cache stats
       run: ccache --zero-stats
 
     - name: configure with checking
-      run: CXXFLAGS="-Ofast  -march=native -fsanitize=address,undefined" CFLAGS="$CXXFLAGS" ./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui
+      run: |
+        SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined"
+        CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
+          ./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui
     - name: make (checking enabled)
       run: make -j$(nproc)
+    - name: Ensure virtual X server is available
+      run: |
+        if ! command -v xvfb-run >/dev/null 2>&1; then
+          apt-get update
+          apt-get install -y --no-install-recommends xauth xvfb
+          rm -rf /var/lib/apt/lists/*
+        fi
+    - name: Qt GUI smoke tests (sanitizers)
+      env:
+        ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:strict_string_checks=1
+        UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        QT_QPA_PLATFORM: xcb
+        QT_X11_NO_MITSHM: "1"
+      run: |
+        xvfb-run -a -s "-screen 0 1600x1200x24" \
+          ./src/qtgui/colorscreen-qt \
+            --smoke-test 30000 --smoke-test-expect-windows 2 \
+            --smoke-test-tile-activation-stable --smoke-test-menu-order \
+            --smoke-test-new-view --smoke-test-slanted-reference \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+
+        xvfb-run -a -s "-screen 0 1600x1200x24" \
+          ./src/qtgui/colorscreen-qt \
+            --smoke-test 20000 --smoke-test-expect-windows 1 \
+            --smoke-test-window-lifetime \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
     - name: make check (checking enabled)
       run: make -j$(nproc) check
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: testsuite-checking-amd64
+        name: testsuite-checking-${{ matrix.arch }}
         path: |
           testsuite/*.txt
           testsuite/*.log

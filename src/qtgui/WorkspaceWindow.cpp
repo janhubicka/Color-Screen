@@ -207,10 +207,11 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
   QPointer<QMdiSubWindow> guardedSubWindow(subWindow);
   connect(document, &QObject::destroyed, this,
           [this, guardedSubWindow]() {
-            if (guardedSubWindow) {
-              m_mdiArea->removeSubWindow(guardedSubWindow);
+            // The wrapper is owned by the MDI area. Scheduling its deletion is
+            // sufficient; removeSubWindow(QMdiSubWindow *) may delete it
+            // immediately and must not be followed by deleteLater().
+            if (guardedSubWindow)
               guardedSubWindow->deleteLater();
-            }
             QTimer::singleShot(0, this, [this]() {
               onSubWindowActivated(m_mdiArea->currentSubWindow());
               configureTabBar();
@@ -273,11 +274,12 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
   m_mdiArea->addSubWindow(subWindow);
 
   QPointer<ImageViewWindow> guardedView(view);
+  QPointer<QMdiSubWindow> guardedSubWindow(subWindow);
   connect(view, &QWidget::windowTitleChanged, this,
-          [this, guardedView, subWindow](const QString &title) {
-            if (!guardedView)
+          [this, guardedView, guardedSubWindow](const QString &title) {
+            if (!guardedView || !guardedSubWindow)
               return;
-            subWindow->setWindowTitle(title);
+            guardedSubWindow->setWindowTitle(title);
             if (m_chromeView == guardedView)
               setWindowTitle(title + tr(" — Color-Screen"));
             configureTabBar();
@@ -942,8 +944,10 @@ void WorkspaceWindow::takeDocumentFromWorkspace(MainWindow *document) {
   }
 
   document->hide();
+  // Removing the hosted widget leaves its QMdiSubWindow wrapper alive.
+  // Delete that wrapper exactly once below; removing the wrapper itself
+  // here would delete it immediately and make deleteLater() unsafe.
   m_mdiArea->removeSubWindow(document);
-  m_mdiArea->removeSubWindow(subWindow);
   subWindow->deleteLater();
 
   document->setParent(nullptr);
