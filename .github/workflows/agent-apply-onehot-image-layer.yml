@@ -1,4 +1,4 @@
-name: Agent repair one-hot image-layer test strings
+name: Agent normalize one-hot image-layer test strings
 
 on:
   push:
@@ -17,19 +17,20 @@ jobs:
         with:
           ref: agent/onehot-image-layer-sharpening
           fetch-depth: 0
-      - name: Repair escaped newlines and publish
+      - name: Normalize escaped newlines and publish
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p = Path('src/libcolorscreen/unittests.C')
           s = p.read_text()
-          replacements = {
-              'printf ("LRU peek test FAIL: miss generated a value\n");':
-                  'printf ("LRU peek test FAIL: miss generated a value\\\\n");',
-              'printf ("LRU peek test FAIL: completed lookup changed cache state\n");':
-                  'printf ("LRU peek test FAIL: completed lookup changed cache state\\\\n");',
-          }
-          for old, new in replacements.items():
+          bs = chr(92)
+          messages = [
+              'LRU peek test FAIL: miss generated a value',
+              'LRU peek test FAIL: completed lookup changed cache state',
+          ]
+          for message in messages:
+              old = 'printf ("' + message + bs + bs + 'n");'
+              new = 'printf ("' + message + bs + 'n");'
               if s.count(old) != 1:
                   raise SystemExit(f'expected one occurrence of {old!r}, found {s.count(old)}')
               s = s.replace(old, new, 1)
@@ -40,5 +41,5 @@ jobs:
           git config user.name "OpenAI Agent"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/libcolorscreen/unittests.C
-          git commit -m "test: fix LRU peek diagnostics"
+          git commit -m "test: normalize LRU peek diagnostics"
           git push origin HEAD:agent/onehot-image-layer-sharpening
