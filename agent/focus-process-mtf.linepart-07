@@ -1,0 +1,73 @@
++   even though the returned sigma/defocus split need not equal the synthetic
++   generating pair.  This is the quantity used to restore additive-screen
++   contrast during colour recovery.  */
++static bool
++test_coupled_physical_focus_recovers_process_mtf ()
++{
++  constexpr coord_t true_sigma = (coord_t)0.45;
++  constexpr coord_t true_defocus = (coord_t)0.18;
++  image_data image;
++  scr_to_img_parameters geometry;
++  std::vector<finetune_focus_area_candidate> candidates;
++  if (!build_physical_bw_focus_fixture (&image, &geometry, &candidates,
++                                        true_sigma, true_defocus))
++    return false;
++
+   render_parameters rparam;
++  rparam.gamma = 1;
+   rparam.sharpen.mode = sharpen_parameters::blur_deconvolution;
++  rparam.sharpen.scanner_mtf_scale = 1;
+   rparam.sharpen.scanner_mtf.model = mtf_model::physical_diffraction;
+-  rparam.sharpen.scanner_mtf.pixel_pitch = 3.76;
++  rparam.sharpen.scanner_mtf.scan_dpi = 1887;
+   rparam.sharpen.scanner_mtf.f_stop = 8;
+-  rparam.sharpen.scanner_mtf.scan_dpi = 2000;
++  rparam.sharpen.scanner_mtf.wavelength = 750;
++  rparam.sharpen.scanner_mtf.pixel_pitch = 3.760;
++  rparam.sharpen.scanner_mtf.sensor_fill_factor = 0;
++  rparam.sharpen.scanner_mtf.sigma = 0;
++  rparam.sharpen.scanner_mtf.defocus = 0;
+ 
+   finetune_parameters fparam;
+-  fparam.flags = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+-
+-  image_data image;
+-  scr_to_img_parameters geometry;
+-  std::vector<finetune_focus_area_candidate> candidates;
++  fparam.range = 2;
++  fparam.ignore_outliers = 0;
++  fparam.flags = finetune_position | finetune_scanner_mtf_sigma
++                 | finetune_scanner_mtf_defocus | finetune_bw
++                 | finetune_no_normalize | finetune_no_data_collection;
+   finetune_focus_analysis_parameters analysis;
++  analysis.selection.min_areas = 3;
++  analysis.selection.max_areas = 3;
++  analysis.selection.minimum_color_volume = 0;
++  analysis.leave_one_out = false;
++  analysis.held_out = false;
++
+   finetune_focus_analysis_result result;
+-  if (finetune_analyze_focus_areas (rparam, geometry, image, candidates,
+-                                    fparam, analysis, &result, nullptr))
++  if (!finetune_analyze_focus_areas (rparam, geometry, image, candidates,
++                                     fparam, analysis, &result, nullptr))
+     {
+-      fprintf (stderr, "Coupled physical sigma/defocus fit was accepted\n");
++      fprintf (stderr, "Physical process-MTF focus analysis failed: %s\n",
++               result.err.c_str ());
+       return false;
+     }
+-  if (result.err.find ("not separately identifiable") == std::string::npos)
++  if (!(result.process_screen_frequency > 0)
++      || !(result.process_screen_mtf > 0))
+     {
+-      fprintf (stderr, "Unexpected coupled-focus diagnostic: %s\n",
+-               result.err.c_str ());
++      fprintf (stderr, "Physical focus analysis did not report process MTF\n");
++      return false;
++    }
++
++  mtf_parameters truth = rparam.sharpen.scanner_mtf;
++  truth.sigma = true_sigma;
++  truth.defocus = true_defocus;
++  const coord_t expected = truth.system_mtf (result.process_screen_frequency);
