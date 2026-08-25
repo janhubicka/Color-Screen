@@ -30,9 +30,13 @@ SlantedEdgeDialog::SlantedEdgeDialog(
 
   auto *mainLayout = new QVBoxLayout(this);
   auto *description = new QLabel(
-      tr("For RGB scans the default is to measure each native scanner channel "
-         "from the selected edge. The image layer can still be measured "
-         "directly when its RGB mixture is itself the quantity of interest."),
+      hasRgb
+          ? tr("For RGB scans the default is to measure each native scanner "
+               "channel from the selected edge. The image layer can still be "
+               "measured directly when its RGB mixture is itself the quantity "
+               "of interest.")
+          : tr("This scan has one monochrome capture channel. The image layer "
+               "is measured directly."),
       this);
   description->setWordWrap(true);
   mainLayout->addWidget(description);
@@ -62,7 +66,10 @@ SlantedEdgeDialog::SlantedEdgeDialog(
   m_sourceCombo->setToolTip(
       tr("Native channels are analyzed independently from the same ROI. "
          "Image layer measures the current grayscale/infrared or RGB mixture."));
-  form->addRow(tr("Measure:"), m_sourceCombo);
+  auto *sourceLabel = new QLabel(tr("Measure:"), this);
+  form->addRow(sourceLabel, m_sourceCombo);
+  sourceLabel->setVisible(hasRgb);
+  m_sourceCombo->setVisible(hasRgb);
 
   m_wavelengthSpin = new QDoubleSpinBox(this);
   m_wavelengthSpin->setRange(0.0, 2000.0);
