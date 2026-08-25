@@ -142,8 +142,10 @@ render_parameters::get_sharpen_parameters_for_channel (int channel,
     {
       const int selected = mtf.measured_mtf_idx;
       const mtf_measurement &selected_measurement = mtf.measurements[selected];
-      if (selected_measurement.channel < 0
-          || selected_measurement.channel == channel)
+      if (selected_measurement.image_layer)
+        measurement_index = -1;
+      else if (selected_measurement.channel < 0
+               || selected_measurement.channel == channel)
         measurement_index = selected;
       else
         {
@@ -163,10 +165,11 @@ render_parameters::get_sharpen_parameters_for_channel (int channel,
               }
         }
 
-      /* An image-layer measurement intentionally applies to every channel.
+      /* Explicit image-layer measurements never apply to native channels.
          For native measurements, never deconvolve one channel using another
-         channel's measured transfer function.  If this capture group does not
-         contain CHANNEL, disabling the direct curve lets the configured
+         channel's measured transfer function.  Legacy unlabelled measurements
+         retain their historical generic behavior.  If this capture group does
+         not contain CHANNEL, disabling the direct curve lets the configured
          analytical/fallback model take over.  */
       mtf.measured_mtf_idx = measurement_index;
     }
@@ -193,6 +196,47 @@ render_parameters::get_sharpen_parameters_for_channel (int channel,
   if (my_isfinite (wavelength) && wavelength > 0)
     mtf.wavelength = wavelength;
 
+  return result;
+}
+
+/* Return sharpening specialized for the scalar image layer of IMG.  A
+   selected explicit image-layer measurement is authoritative.  A real native
+   scalar plane may otherwise use its channel-3 measurement.  An RGB-derived
+   scalar layer must not steal a native RGB measured curve; until the exact
+   spectral/spatial model is implemented it uses the configured analytical
+   representative wavelength instead.  */
+sharpen_parameters
+render_parameters::get_image_layer_sharpen_parameters (const image_data *img) const
+{
+  const int channel = get_image_layer_channel (img);
+  const bool has_rgb = !img || img->has_rgb ();
+  const mtf_parameters &base_mtf = sharpen.scanner_mtf;
+  const bool selected_image_layer
+      = base_mtf.use_measured_mtf ()
+        && base_mtf.measurements[base_mtf.measured_mtf_idx].image_layer;
+
+  sharpen_parameters result;
+  if (selected_image_layer)
+    result = sharpen;
+  else if (channel == 3)
+    result = get_sharpen_parameters_for_channel (3, has_rgb);
+  else
+    {
+      result = sharpen;
+      if (result.scanner_mtf.use_measured_mtf ())
+        result.scanner_mtf.measured_mtf_idx = -1;
+    }
+
+  double wavelength = get_image_layer_wavelength (img);
+  if (result.scanner_mtf.use_measured_mtf ())
+    {
+      const mtf_measurement &measurement
+          = result.scanner_mtf.measurements[result.scanner_mtf.measured_mtf_idx];
+      if (my_isfinite (measurement.wavelength) && measurement.wavelength > 0)
+        wavelength = measurement.wavelength;
+    }
+  if (my_isfinite (wavelength) && wavelength > 0)
+    result.scanner_mtf.wavelength = wavelength;
   return result;
 }
 

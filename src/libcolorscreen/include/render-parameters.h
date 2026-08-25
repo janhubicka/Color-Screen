@@ -435,6 +435,13 @@ struct render_parameters
   DLL_PUBLIC sharpen_parameters
   get_sharpen_parameters_for_channel (int channel, bool has_rgb = true) const;
 
+  /* Return capture sharpening specialized for the scalar image layer.  This
+     selects scalar/image-layer measured data and the effective visible/IR
+     wavelength without treating process-primary or scanner RGB indexes as the
+     same domain.  */
+  DLL_PUBLIC sharpen_parameters
+  get_image_layer_sharpen_parameters (const image_data *img) const;
+
   /***** Tile Adjustment (used to adjust parameters of individual tiles) *****/
 
   /* Adjustment parameters for a single tile.  */

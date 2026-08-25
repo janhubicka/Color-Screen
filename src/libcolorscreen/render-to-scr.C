@@ -363,10 +363,8 @@ render_to_scr::compute_screen_table (progress_info *progress)
           m_params.red_strip_width, m_params.green_strip_width, {} };
   if (m_params.scanner_blur_correction->get_mode () != scanner_blur_correction_parameters::blur_radius)
     {
-      p.sharpen = m_params.sharpen;
+      p.sharpen = m_params.get_image_layer_sharpen_parameters (&m_img);
       p.sharpen.scanner_mtf_scale *= pixel_size ();
-      p.sharpen.scanner_mtf.wavelength
-          = m_params.get_image_layer_wavelength (&m_img);
     }
   m_screen_table = screen_table_cache.get (p, progress, &m_screen_table_uid);
   return (bool)m_screen_table;
@@ -410,11 +408,10 @@ render_to_scr::simulate_screen (progress_info *progress)
     return;
   uint64_t screen_id;
   coord_t psize = pixel_size ();
-  sharpen_parameters sharpen = m_params.sharpen;
+  sharpen_parameters sharpen
+      = m_params.get_image_layer_sharpen_parameters (&m_img);
   sharpen.usm_radius = m_params.screen_blur_radius * psize;
   sharpen.scanner_mtf_scale *= psize;
-  sharpen.scanner_mtf.wavelength
-      = m_params.get_image_layer_wavelength (&m_img);
   screen_sampling sampling = screen_sampling::integrate_pixel;
   std::shared_ptr<screen> scr = get_screen (m_scr_to_img.get_type (), false,
 	       false,

@@ -69,7 +69,11 @@ render_simulate_process::precompute_all (progress_info *progress)
 			 m_params.green_strip_width, progress);
   if (!render_to_scr::precompute_all (PRECOMPUTE_RGB_IMAGE, progress))
     return false;
-  struct simulation_params p = {m_img.id, &m_img, this, m_params.gamma, m_scr_to_img.get_param (), m_params.sharpen};
+  sharpen_parameters image_layer_sharpen
+      = m_params.get_image_layer_sharpen_parameters (&m_img);
+  struct simulation_params p = {m_img.id, &m_img, this, m_params.gamma,
+                                m_scr_to_img.get_param (),
+                                image_layer_sharpen};
   p.sharpen.mode = sharpen_parameters::blur_deconvolution;
   m_simulated = simulation_cache.get (p, progress);
   return m_simulated.get() != NULL;

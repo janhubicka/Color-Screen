@@ -2876,6 +2876,54 @@ test_mtf_physical_model ()
       ok = false;
     }
 
+  /* Image-layer measurements and native-channel measurements are distinct
+     domains even though both live in the same MTF collection.  */
+  render_parameters domain_render;
+  mtf_measurement scalar_measurement;
+  scalar_measurement.channel = -1;
+  scalar_measurement.image_layer = true;
+  scalar_measurement.wavelength = 575;
+  scalar_measurement.add_value (0, 100);
+  scalar_measurement.add_value (0.1, 60);
+  scalar_measurement.add_value (0.2, 20);
+  domain_render.sharpen.scanner_mtf.measurements.push_back (
+      scalar_measurement);
+  domain_render.sharpen.scanner_mtf.measured_mtf_idx = 0;
+  if (domain_render.get_sharpen_parameters_for_channel (0)
+              .scanner_mtf.measured_mtf_idx
+          != -1
+      || domain_render.get_image_layer_sharpen_parameters (nullptr)
+                 .scanner_mtf.measured_mtf_idx
+             != 0
+      || domain_render.get_image_layer_sharpen_parameters (nullptr)
+                 .scanner_mtf.wavelength
+             != 575)
+    {
+      fprintf (stderr, "Image-layer measured MTF leaked into native RGB\n");
+      ok = false;
+    }
+
+  render_parameters native_domain_render;
+  mtf_measurement red_measurement;
+  red_measurement.channel = 0;
+  red_measurement.wavelength = 640;
+  red_measurement.add_value (0, 100);
+  red_measurement.add_value (0.1, 70);
+  red_measurement.add_value (0.2, 30);
+  native_domain_render.sharpen.scanner_mtf.measurements.push_back (
+      red_measurement);
+  native_domain_render.sharpen.scanner_mtf.measured_mtf_idx = 0;
+  if (native_domain_render.get_sharpen_parameters_for_channel (0)
+              .scanner_mtf.measured_mtf_idx
+          != 0
+      || native_domain_render.get_image_layer_sharpen_parameters (nullptr)
+                 .scanner_mtf.measured_mtf_idx
+             != -1)
+    {
+      fprintf (stderr, "Native RGB measured MTF leaked into image layer\n");
+      ok = false;
+    }
+
   const double expected_magnification = 0.27933543307086614;
   const double expected_effective_f_stop = 10.234683464566929;
   const double expected_cutoff = 0.48983765357177734;
