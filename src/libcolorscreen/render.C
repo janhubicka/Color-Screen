@@ -744,7 +744,7 @@ render::precompute_all (int flags, rgbdata patch_proportions,
                     m_backlight_correction.get (),
                     m_backlight_correction_id,
                     true },
-                  m_params.get_image_layer_sharpen_parameters (&m_img) };
+                  m_params.get_sharpen_parameters_for_channel (channel) };
           uint64_t channel_id = 0;
           std::shared_ptr<sharpened_data> channel_holder
               = gray_and_sharpened_data_cache.get (p, progress, &channel_id);
@@ -776,7 +776,7 @@ render::precompute_all (int flags, rgbdata patch_proportions,
 #pragma omp parallel for
               for (size_t i = 0; i < size; ++i)
                 m_image_layer[i]
-                    = (channel_holder->m_data[i] - dark) * weight;
+                    = ((luminosity_t)channel_holder->m_data[i] - dark) * weight;
               m_image_layer_id = lru_caches::get ();
             }
         }
