@@ -1,0 +1,68 @@
+-  uint64_t focus_flags = finetune_scanner_mtf_defocus;
++  bool fixed_focus_verification = true;
++  bool fixed_joint_position = true;
++  /* The shared-area solver treats sigma as the monotone effective-MTF
++     coordinate and then lets defocus refine the transfer shape.  Both are
++     enabled by default; their exact split is secondary to process-screen MTF. */
++  uint64_t focus_flags
++      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+   subhelp = help_focus_areas;
+ 
+   for (int i = 0; i < argc; i++)
+@@ -2631,6 +2632,8 @@
+         force_rgb = true;
+       else if (arg == "--fixed-focus-verification")
+         fixed_focus_verification = true;
++      else if (arg == "--refit-focus-verification")
++        fixed_focus_verification = false;
+       else if (arg == "--fixed-joint-position")
+         fixed_joint_position = true;
+       else if (arg == "--no-leave-one-out")
+@@ -2786,10 +2789,12 @@
+               (double)candidate.center.x, (double)candidate.center.y);
+       if (candidate.fit.success)
+         {
+-          if (focus_flags & finetune_scanner_mtf_sigma)
++          if (!fixed_focus_verification
++              && (focus_flags & finetune_scanner_mtf_sigma))
+             printf (" local-sigma %.6f",
+                     (double)candidate.fit.scanner_mtf_sigma);
+-          if (focus_flags & finetune_scanner_mtf_defocus)
++          if (!fixed_focus_verification
++              && (focus_flags & finetune_scanner_mtf_defocus))
+             {
+               if (rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
+                 printf (" local-defocus %.6f",
+@@ -2818,6 +2823,16 @@
+         printf ("Joint scanner MTF blur diameter: %.9f px\n",
+                 (double)analysis.joint_fit.scanner_mtf_blur_diameter);
+     }
++  if (analysis.process_screen_mtf >= 0)
++    printf ("Process-screen MTF: %.6f%% at %.9f cycles/pixel\n",
++            (double)(analysis.process_screen_mtf * 100),
++            (double)analysis.process_screen_frequency);
++  if (analysis.leave_one_out_process_screen_mtf_span >= 0)
++    printf ("Leave-one-out process-screen MTF span: %.6f percentage points\n",
++            (double)(analysis.leave_one_out_process_screen_mtf_span * 100));
++  if (analysis.leave_one_out_process_screen_mtf_max_delta >= 0)
++    printf ("Maximum leave-one-out process-screen MTF displacement: %.6f percentage points\n",
++            (double)(analysis.leave_one_out_process_screen_mtf_max_delta * 100));
+ 
+   for (size_t i = 0; i < analysis.leave_one_out_fits.size (); i++)
+     {
+--- a/src/qtgui/MainWindow.cpp
++++ b/src/qtgui/MainWindow.cpp
+@@ -5905,21 +5905,6 @@
+     return;
+   }
+ 
+-  const uint64_t coupledPhysicalFocus
+-      = colorscreen::finetune_scanner_mtf_sigma
+-      | colorscreen::finetune_scanner_mtf_defocus;
+-  if ((flags & coupledPhysicalFocus) == coupledPhysicalFocus
+-      && m_rparams.sharpen.scanner_mtf.simulate_diffraction_p()) {
+-    QMessageBox::information(
+-        this, tr("Focus analysis areas"),
+-        tr("Residual sigma and physical defocus are not separately "
+-           "identifiable from periodic focus areas. Fix or calibrate one "
+-           "and optimize only the other. Usually sigma is calibrated from "
