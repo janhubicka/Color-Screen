@@ -1,0 +1,98 @@
+--- a/src/libcolorscreen/focus-analysis-unittests.C
++++ b/src/libcolorscreen/focus-analysis-unittests.C
+@@ -5,6 +5,7 @@
+ #include <algorithm>
+ #include <array>
+ #include <cmath>
++#include <complex>
+ #include <cstdio>
+ #include <memory>
+ #include <vector>
+@@ -356,14 +357,34 @@
+   return true;
+ }
+ 
++/* Return the magnitude of one periodic-screen Fourier coefficient.  This
++   remains inside the unit-test executable so the regression does not depend
++   on exporting the internal MTF evaluator from libcolorscreen.  */
++static double
++screen_harmonic_magnitude (const screen &scr, int channel, int kx, int ky)
++{
++  std::complex<double> sum (0, 0);
++  for (int y = 0; y < screen::size; y++)
++    for (int x = 0; x < screen::size; x++)
++      {
++        const double angle
++            = -2.0 * M_PI * (kx * x + ky * y) / screen::size;
++        sum += (double)scr.mult[y][x][channel]
++               * std::complex<double> (std::cos (angle), std::sin (angle));
++      }
++  return std::abs (sum) / (screen::size * screen::size);
++}
++
+ /* Build a clean monochrome Paget fixture with a physical scanner MTF.  The
+    local primary intensities vary, but harmonic ratios within the red/green
+-   family are independent of those nuisance colours.  */
++   family are independent of those nuisance colours.  EXPECTED_CARRIER_MTF is
++   measured directly from the ideal and filtered periodic screens used to
++   synthesize the fixture.  */
+ static bool
+ build_physical_bw_harmonic_fixture (
+     image_data *image, scr_to_img_parameters *geometry,
+     std::vector<finetune_focus_area_candidate> *candidates,
+-    mtf_parameters *truth_mtf)
++    mtf_parameters *truth_mtf, coord_t *expected_carrier_mtf)
+ {
+   constexpr int width = 384;
+   constexpr int height = 128;
+@@ -409,6 +430,30 @@
+           source, channels, false, false))
+     return false;
+ 
++  /* Paget's red/green carrier has screen-space vector (1,1).  Use whichever
++     of those two ideal channel coefficients is stronger to avoid dividing by
++     a structural zero.  Since the capture transfer is shared by channels, the
++     filtered/ideal magnitude ratio is the carrier MTF used to generate the
++     image.  */
++  if (!expected_carrier_mtf)
++    return false;
++  int carrier_channel = 0;
++  double ideal_carrier = screen_harmonic_magnitude (source, 0, 1, 1);
++  const double green_carrier = screen_harmonic_magnitude (source, 1, 1, 1);
++  if (green_carrier > ideal_carrier)
++    {
++      carrier_channel = 1;
++      ideal_carrier = green_carrier;
++    }
++  if (!(ideal_carrier > 1e-9))
++    return false;
++  *expected_carrier_mtf
++      = screen_harmonic_magnitude (filtered, carrier_channel, 1, 1)
++        / ideal_carrier;
++  if (!my_isfinite (*expected_carrier_mtf)
++      || !(*expected_carrier_mtf > 0 && *expected_carrier_mtf <= 1))
++    return false;
++
+   for (int y = 0; y < height; y++)
+     for (int x = 0; x < width; x++)
+       {
+@@ -449,8 +494,9 @@
+   scr_to_img_parameters geometry;
+   std::vector<finetune_focus_area_candidate> candidates;
+   mtf_parameters truth;
++  coord_t expected = 0;
+   if (!build_physical_bw_harmonic_fixture (&image, &geometry, &candidates,
+-                                           &truth))
++                                           &truth, &expected))
+     return false;
+ 
+   render_parameters cold;
+@@ -488,8 +534,6 @@
+       fprintf (stderr, "Physical harmonic fit returned no carrier MTF\n");
+       return false;
+     }
+-  const coord_t expected
+-      = truth.system_mtf (cold_result.carrier_frequency);
+   if (std::fabs (cold_result.carrier_mtf - expected) > (coord_t)0.06)
+     {
+       fprintf (stderr,
