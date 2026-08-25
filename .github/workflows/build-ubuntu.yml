@@ -24,6 +24,7 @@ env:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - { runner: ubuntu-24.04, arch: amd64 }
@@ -135,6 +136,7 @@ jobs:
 
   checking:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - { runner: ubuntu-24.04, arch: amd64 }
@@ -167,33 +169,23 @@ jobs:
           ./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui
     - name: make (checking enabled)
       run: make -j$(nproc)
-    - name: Ensure virtual X server is available
-      run: |
-        if ! command -v xvfb-run >/dev/null 2>&1; then
-          apt-get update
-          apt-get install -y --no-install-recommends xauth xvfb
-          rm -rf /var/lib/apt/lists/*
-        fi
     - name: Qt GUI smoke tests (sanitizers)
       env:
         ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:strict_string_checks=1
         UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-        QT_QPA_PLATFORM: xcb
-        QT_X11_NO_MITSHM: "1"
+        QT_QPA_PLATFORM: offscreen
       run: |
-        xvfb-run -a -s "-screen 0 1600x1200x24" \
-          ./src/qtgui/colorscreen-qt \
-            --smoke-test 30000 --smoke-test-expect-windows 2 \
-            --smoke-test-tile-activation-stable --smoke-test-menu-order \
-            --smoke-test-new-view --smoke-test-slanted-reference \
-            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
-            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+        ./src/qtgui/colorscreen-qt \
+          --smoke-test 30000 --smoke-test-expect-windows 2 \
+          --smoke-test-tile-activation-stable --smoke-test-menu-order \
+          --smoke-test-new-view --smoke-test-slanted-reference \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
 
-        xvfb-run -a -s "-screen 0 1600x1200x24" \
-          ./src/qtgui/colorscreen-qt \
-            --smoke-test 20000 --smoke-test-expect-windows 1 \
-            --smoke-test-window-lifetime \
-            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+        ./src/qtgui/colorscreen-qt \
+          --smoke-test 20000 --smoke-test-expect-windows 1 \
+          --smoke-test-window-lifetime \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
     - name: make check (checking enabled)
       run: make -j$(nproc) check
     - name: Upload Test Results
