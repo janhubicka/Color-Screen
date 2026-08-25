@@ -1,0 +1,83 @@
++   an MTF estimator must recover sharpness without assuming a known scene
++   colour.  */
+ static bool
+-test_coupled_physical_focus_rejected ()
++build_physical_bw_focus_fixture (
++    image_data *image, scr_to_img_parameters *geometry,
++    std::vector<finetune_focus_area_candidate> *candidates,
++    coord_t true_sigma, coord_t true_defocus)
+ {
++  constexpr int width = 192;
++  constexpr int height = 64;
++  constexpr int regions = 3;
++  const rgbdata truth[regions]
++      = { { 0.80, 0.12, 0.08 }, { 0.10, 0.75, 0.20 },
++          { 0.10, 0.12, 0.80 } };
++  const point_t locations[regions]
++      = { { 32, 32 }, { 96, 32 }, { 160, 32 } };
++
++  if (!image->set_dimensions (width, height, false, true))
++    return false;
++  geometry->type = Paget;
++  geometry->center = { 0, 0 };
++  geometry->coordinate1 = { 8, 0 };
++  geometry->coordinate2 = { 0, 8 };
++  scr_to_img map;
++  if (!map.set_parameters (*geometry, *image))
++    return false;
++  const coord_t pixel_size = map.pixel_size ({ 0, 0, width, height });
++  if (!(pixel_size > 0))
++    return false;
++
++  screen source, filtered;
++  source.initialize (geometry->type);
++  sharpen_parameters transfer;
++  transfer.mode = sharpen_parameters::blur_deconvolution;
++  transfer.scanner_mtf_scale = pixel_size;
++  transfer.scanner_mtf.model = mtf_model::physical_diffraction;
++  transfer.scanner_mtf.scan_dpi = 1887;
++  transfer.scanner_mtf.f_stop = 8;
++  transfer.scanner_mtf.wavelength = 750;
++  transfer.scanner_mtf.pixel_pitch = 3.760;
++  transfer.scanner_mtf.sensor_fill_factor = 0;
++  transfer.scanner_mtf.sigma = true_sigma;
++  transfer.scanner_mtf.defocus = true_defocus;
++  sharpen_parameters *channels[3] = { &transfer, &transfer, &transfer };
++  if (!filtered.initialize_with_sharpen_parameters (
++          source, channels, false, false))
++    return false;
++
++  for (int y = 0; y < height; y++)
++    for (int x = 0; x < width; x++)
++      {
++        const int tileid = std::min (x / (width / regions), regions - 1);
++        const rgbdata screen_value = filtered.interpolated_mult (
++            map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 }));
++        luminosity_t value
++            = screen_value.red * truth[tileid].red
++              + screen_value.green * truth[tileid].green
++              + screen_value.blue * truth[tileid].blue;
++        value = std::clamp (value, (luminosity_t)0, (luminosity_t)1);
++        image->put_pixel (
++            x, y, (image_data::gray)(value * 65535 + (luminosity_t)0.5));
++      }
++
++  candidates->clear ();
++  for (int tileid = 0; tileid < regions; tileid++)
++    {
++      finetune_focus_area_candidate candidate;
++      candidate.center = locations[tileid];
++      candidate.mean_color = { 0.4, 0.4, 0.4 };
++      candidate.search_score = tileid;
++      candidate.fit.success = true;
++      candidate.fit.badness = (coord_t)0.01;
++      candidate.fit.contrast = (coord_t)0.2;
++      candidate.fit.color = truth[tileid];
++      candidate.fit.screen_coord_adjust = { 0, 0 };
++      candidate.fit.emulsion_coord_adjust = { 0, 0 };
++      candidates->push_back (candidate);
++    }
++  return true;
++}
++
++/* A cold coupled request should recover the effective process-screen transfer
