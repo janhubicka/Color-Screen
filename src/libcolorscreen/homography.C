@@ -6,6 +6,12 @@
 #include <cmath>
 #ifdef _OPENMP
 #include <omp.h>
+#else
+static inline int
+omp_get_thread_num ()
+{
+  return 0;
+}
 #endif
 #include "gsl-utils.h"
 #include "include/solver-parameters.h"
