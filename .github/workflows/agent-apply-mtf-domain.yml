@@ -1,0 +1,58 @@
+name: Agent apply MTF channel-domain fixes
+
+on:
+  push:
+    branches:
+      - agent/tmp-mtf-image-layer-domain-stage
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply reviewed patch to clean feature branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp .github/agent-apply-mtf-domain.py /tmp/agent-apply-mtf-domain.py
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git reset --hard 05494c725961233fab0651922b2ea9a5121f33ec
+          git checkout -B agent/mtf-image-layer-domain-fixes
+          python3 /tmp/agent-apply-mtf-domain.py
+          git diff --check
+          echo "Remaining explicit image-layer wavelength-only users:"
+          grep -R "get_image_layer_wavelength" -n src/libcolorscreen src/qtgui || true
+          echo "Obsolete finetune scalar wavelength field users:"
+          grep -n "img_layer_wavelength" src/libcolorscreen/finetune.C && exit 1 || true
+
+          git add doc/mtf-channel-domain-tracking.md
+          git commit -m "doc: track MTF channel domains" -m "Document the three distinct component domains used by capture processing: native scanner RGB channels, process-screen primaries, and the scalar image layer. Record the invariants that prevent wavelength and measured-MTF metadata from crossing those domains accidentally.\n\nTrack the already-correct native RGB sharpening path, the immediate scalar/image-layer fixes, and the still-open exact Fourier-domain model needed when scanner RGB transfer functions must be applied after process-primary spectral mixing. In particular, call out the current color-finetune process-primary/scanner-channel index crossing instead of papering over it with another representative-channel shortcut."
+
+          git add src/libcolorscreen/include/mtf-parameters.h \
+                  src/libcolorscreen/include/render-parameters.h \
+                  src/libcolorscreen/render-parameters.C \
+                  src/libcolorscreen/loadsave.C \
+                  src/libcolorscreen/slanted-edge.C \
+                  src/libcolorscreen/render-superposeimg.h \
+                  src/libcolorscreen/render-interpolate.C \
+                  src/libcolorscreen/render-to-scr.C \
+                  src/libcolorscreen/render-simulate.C \
+                  src/libcolorscreen/stitch-image.C \
+                  src/libcolorscreen/finetune.C \
+                  src/libcolorscreen/unittests.C
+          git commit -m "mtf: keep scalar image-layer transfer distinct" -m "Add explicit metadata for slanted-edge measurements made from the scalar image layer so such a curve cannot be reused as a native scanner R/G/B transfer. Preserve legacy unlabelled curves separately.\n\nIntroduce render_parameters::get_image_layer_sharpen_parameters() to specialize the complete scalar sharpening state, including measured-curve selection and wavelength. Use it in periodic-screen rendering, interpolation, simulation, stitching and BW finetune rather than changing only scanner_mtf.wavelength on a generic sharpening object. This fixes the dynamic BW focus path which could otherwise construct a physical transfer without installing the scalar wavelength, and prevents selected native RGB measured curves from leaking into scalar screen models.\n\nKeep the existing color-finetune process-primary/scanner-channel approximation unchanged for now; the tracking document records the exact Fourier-domain replacement as separate work. Add unit coverage proving explicit image-layer measured MTFs do not leak into native RGB and native RGB curves do not leak into RGB-derived scalar image layers."
+
+          git add src/qtgui/SlantedEdgeDialog.cpp \
+                  src/qtgui/MainWindow.cpp \
+                  src/qtgui/ImageViewWindow.cpp
+          git commit -m "qtgui: fix grayscale slanted-edge setup" -m "Hide the measurement-source selector when a scan has no native RGB channels because the image layer is the only available source. Give grayscale measurements the effective scalar capture wavelength from the current MTF parameters, including the 550 nm visible-light fallback, instead of presenting an unexplained unknown wavelength or reusing unrelated prior measurement metadata.\n\nApply the same defaulting rule in both the main document window and external slanted-edge reference views. RGB scans retain the existing native-channel versus image-layer choice and optional image-layer wavelength behavior."
+
+          test -z "$(git status --porcelain)"
+          git log --oneline --decorate -4
+          git push --force origin HEAD:agent/mtf-image-layer-domain-fixes
