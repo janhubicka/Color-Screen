@@ -34,7 +34,7 @@ jobs:
     - name: Install Clang OpenMP TSan runtime
       run: |
         apt-get update
-        apt-get install -y --no-install-recommends clang-18 libomp-18-dev
+        apt-get install -y --no-install-recommends clang-18 libclang-rt-18-dev libomp-18-dev
         test -f /usr/lib/llvm-18/lib/libarcher.so
         rm -rf /var/lib/apt/lists/*
     - name: Restore compiler cache
