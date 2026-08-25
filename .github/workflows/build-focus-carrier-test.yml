@@ -30,7 +30,7 @@ jobs:
           set -euxo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           base64 -d agent/focus-carrier.patch.gz.b64 | gzip -d >/tmp/focus-carrier.patch
-          echo '23c6e5c54a89da5d1c0826728ee7d07f3a4fe07331b48a6ca3be76c0df7ed928  /tmp/focus-carrier.patch' | sha256sum -c -
+          echo '13c022503a2a71f0e3bd89296c3d0a974ab26923138c31d6f592fa860b711c08  /tmp/focus-carrier.patch' | sha256sum -c -
           git apply --check /tmp/focus-carrier.patch
           git apply /tmp/focus-carrier.patch
           git diff --check
