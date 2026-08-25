@@ -1,0 +1,26 @@
+name: Agent rebase capture wavelength patch
+
+on:
+  push:
+    branches:
+      - agent/tmp-rebase-capture-wavelengths
+
+permissions:
+  contents: write
+
+jobs:
+  rebase:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Rebase review commit
+        shell: bash
+        run: |
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git reset --hard acb4cba9fb9ef84812057b4e06da88a864a21d84
+          git cherry-pick a78b4928597d1076dbbe8ee2af3a647f4524c2fc
+          git diff --check HEAD^ HEAD
+          git push --force origin HEAD:agent/capture-wavelength-defaults
