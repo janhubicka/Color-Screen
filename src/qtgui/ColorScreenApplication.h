@@ -94,7 +94,7 @@ public:
 
       PREFERREDWINDOW is reused for the first file only when it is still an
       untouched empty window; every remaining file receives a new MainWindow.
-      SUPPRESSPARAMPROMPT is used only by crash recovery.  */
+      SUPPRESSPARAMPROMPT is used by crash recovery and automated smoke tests to avoid interactive post-load prompts.  */
   void openFiles(const QStringList &fileNames,
                  MainWindow *preferredWindow = nullptr,
                  bool suppressParamPrompt = false);

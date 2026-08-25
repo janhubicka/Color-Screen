@@ -173,7 +173,7 @@ jobs:
       env:
         ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:strict_string_checks=1
         UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-        QT_QPA_PLATFORM: offscreen
+        QT_QPA_PLATFORM: minimal
       run: |
         ./src/qtgui/colorscreen-qt \
           --smoke-test 30000 --smoke-test-expect-windows 2 \

@@ -210,7 +210,7 @@ int main(int argc, char *argv[]) {
       !parser.isSet(smokeTestOption) && app.restoreRecoverySession();
   const QStringList images = parser.positionalArguments();
   if (!images.isEmpty())
-    app.openFiles(images);
+    app.openFiles(images, nullptr, parser.isSet(smokeTestOption));
   else if (!restoredSession && app.documentWindows().isEmpty())
     app.createDocumentWindow();
 
