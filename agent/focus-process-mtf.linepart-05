@@ -1,0 +1,80 @@
++     not to rediscover that decomposition N more times.  Keep its defocus/blur
++     coordinate fixed and refit the monotone residual sigma on each retained
++     subset.  */
++  if (coupled_scanner_mtf_focus_p (joint_fparams.flags)
++      && (joint_fparams.flags & finetune_bw))
++    {
++      constexpr uint64_t coupled
++          = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
++      if (!freeze_focus_from_fit (&loo_rparam, coupled, result->joint_fit))
++        {
++          result->err = "cannot freeze coupled focus for leave-one-out";
++          return false;
++        }
++      loo_fparams.flags &= ~finetune_scanner_mtf_defocus;
++      loo_fparams.interpolate_scanner_mtf_defocus = false;
++    }
++
+   result->leave_one_out_fits.reserve (result->selected.size ());
+   for (size_t omitted = 0; omitted < result->selected.size (); omitted++)
+     {
+@@ -322,8 +519,8 @@
+             subset_starts.push_back (starts[i]);
+           }
+ 
+-      finetune_result fit = finetune (rparam, param, img, subset_locations,
+-                                     &subset_starts, fparams, progress);
++      finetune_result fit = finetune (loo_rparam, param, img, subset_locations,
++                                     &subset_starts, loo_fparams, progress);
+       result->leave_one_out_fits.push_back (std::move (fit));
+       if (!result->leave_one_out_fits.back ().success)
+         {
+@@ -439,6 +636,37 @@
+         }
+     }
+ 
++  if (result->process_screen_mtf >= 0
++      && !result->leave_one_out_fits.empty ())
++    {
++      coord_t min_mtf = std::numeric_limits<coord_t>::max ();
++      coord_t max_mtf = -std::numeric_limits<coord_t>::max ();
++      coord_t max_delta = 0;
++      bool valid = true;
++      for (const finetune_result &fit : result->leave_one_out_fits)
++        {
++          const coord_t value = fit_process_screen_mtf (
++              rparam, img, joint_fparams.flags, fit,
++              result->process_screen_frequency);
++          if (!(value >= 0))
++            {
++              valid = false;
++              break;
++            }
++          min_mtf = std::min (min_mtf, value);
++          max_mtf = std::max (max_mtf, value);
++          max_delta
++              = std::max (max_delta,
++                          (coord_t)std::fabs (value
++                                             - result->process_screen_mtf));
++        }
++      if (valid)
++        {
++          result->leave_one_out_process_screen_mtf_span = max_mtf - min_mtf;
++          result->leave_one_out_process_screen_mtf_max_delta = max_delta;
++        }
++    }
++
+   result->success = true;
+   return true;
+ }
+--- a/src/libcolorscreen/focus-analysis-unittests.C
++++ b/src/libcolorscreen/focus-analysis-unittests.C
+@@ -356,37 +356,161 @@
+   return true;
+ }
+ 
+-/* Periodic focus areas constrain the combined transfer, not a unique split
+-   between residual Gaussian sigma and physical defocus.  Coupled physical
+-   fitting must therefore fail before doing an expensive image fit.  */
++/* Build an exact monochrome Paget capture with a known physical scanner
++   transfer.  The local primary intensities differ strongly between areas, so
