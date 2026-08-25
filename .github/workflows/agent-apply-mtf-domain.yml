@@ -37,6 +37,21 @@ jobs:
           '''
           if s.count(old) != 1:
               raise SystemExit('staging script interpolate block changed unexpectedly')
+          s = s.replace(old, new)
+
+          old = '''replace_all('src/libcolorscreen/finetune.C',
+          ''' + "'''" + '''            solver.render_sharpen_params = rparam.sharpen;\n            solver.img_layer_wavelength\n                = rparam.get_image_layer_wavelength (imgp[0]);\n''' + "'''" + ''',
+          ''' + "'''" + '''            solver.render_sharpen_params = rparam.sharpen;\n            solver.image_layer_sharpen_params\n                = rparam.get_image_layer_sharpen_parameters (imgp[0]);\n''' + "'''" + ''', 2)
+          '''
+          new = '''replace('src/libcolorscreen/finetune.C',
+          ''' + "'''" + '''            solver.render_sharpen_params = rparam.sharpen;\n            solver.img_layer_wavelength\n                = rparam.get_image_layer_wavelength (imgp[0]);\n''' + "'''" + ''',
+          ''' + "'''" + '''            solver.render_sharpen_params = rparam.sharpen;\n            solver.image_layer_sharpen_params\n                = rparam.get_image_layer_sharpen_parameters (imgp[0]);\n''' + "'''" + ''')
+          replace('src/libcolorscreen/finetune.C',
+          ''' + "'''" + '''                  solver.render_sharpen_params = rparam.sharpen;\n                  solver.img_layer_wavelength\n                      = rparam.get_image_layer_wavelength (imgp[0]);\n''' + "'''" + ''',
+          ''' + "'''" + '''                  solver.render_sharpen_params = rparam.sharpen;\n                  solver.image_layer_sharpen_params\n                      = rparam.get_image_layer_sharpen_parameters (imgp[0]);\n''' + "'''" + ''')
+          '''
+          if s.count(old) != 1:
+              raise SystemExit('staging script finetune solver block changed unexpectedly')
           p.write_text(s.replace(old, new))
           PY
           git config user.name "OpenAI Agent"
