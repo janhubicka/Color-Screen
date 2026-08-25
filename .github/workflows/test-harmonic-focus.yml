@@ -41,6 +41,8 @@ jobs:
           git checkout --detach fc7495c2969ceb45e23891a05e6f64c469f31c3a
           git apply --check /tmp/focus.patch
           git apply /tmp/focus.patch
+          git apply --check agent/harmonic-test-fix.patch
+          git apply agent/harmonic-test-fix.patch
           git diff --check
           CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure --enable-qtgui
           make -j$(nproc)
