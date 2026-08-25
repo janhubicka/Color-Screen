@@ -1,0 +1,78 @@
++              = working.sharpen.scanner_mtf.simulate_diffraction_p ()
++                    ? working.sharpen.scanner_mtf.defocus
++                    : working.sharpen.scanner_mtf.blur_diameter;
++          if (my_isfinite (old_focus) && my_isfinite (new_focus)
++              && std::fabs (new_focus - old_focus) >= (coord_t)0.0005)
++            run_sigma (2);
++        }
++    }
++
++  return best;
++}
++
+ } // namespace
+ 
+ bool
+@@ -232,24 +413,13 @@
+       return false;
+     }
+ 
+-  /* Periodic focus areas constrain the combined scanner transfer, but the
+-     residual Gaussian sigma and physical defocus can compensate for each
+-     other at the few harmonics that remain measurable in a real capture.
+-     A coupled fit can therefore report optimizer initialization rather than
+-     a separately identified physical decomposition.  Require one coordinate
+-     to be calibrated/fixed and fit only the other.  */
+-  constexpr uint64_t coupled_physical_focus
+-      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+-  if ((fparams.flags & coupled_physical_focus) == coupled_physical_focus
+-      && rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
+-    {
+-      set_analysis_error (
+-          result,
+-          "physical scanner MTF sigma and defocus are not separately "
+-          "identifiable from periodic focus areas; fix/calibrate one and "
+-          "optimize only the other");
+-      return false;
+-    }
++  /* Local registration is measured during candidate verification.  Re-fitting
++     every tile phase in the same simplex as the shared MTF is both redundant
++     and poorly conditioned: on the Hurley Paget scan it let phase absorb the
++     screen modulation and trapped a cold MTF fit close to zero blur.  Treat
++     registration and shared focus as separate blocks.  */
++  finetune_parameters joint_fparams = fparams;
++  joint_fparams.flags &= ~finetune_position;
+ 
+   if (!finetune_select_focus_areas (candidates, analysis_parameters.selection,
+                                     &result->selected,
+@@ -292,8 +462,8 @@
+       starts.push_back (candidates[index].fit);
+     }
+ 
+-  result->joint_fit
+-      = finetune (rparam, param, img, locations, &starts, fparams, progress);
++  result->joint_fit = fit_shared_focus (rparam, param, img, locations, starts,
++                                          joint_fparams, progress);
+   if (!result->joint_fit.success)
+     {
+       result->err = "joint focus-area fit failed";
+@@ -302,12 +472,39 @@
+       return false;
+     }
+ 
++  result->process_screen_frequency
++      = selected_process_screen_frequency (param, img, locations);
++  result->process_screen_mtf = fit_process_screen_mtf (
++      rparam, img, joint_fparams.flags, result->joint_fit,
++      result->process_screen_frequency);
++
+   if (!analysis_parameters.leave_one_out)
+     {
+       result->success = true;
+       return true;
+     }
+ 
++  render_parameters loo_rparam = rparam;
++  finetune_parameters loo_fparams = joint_fparams;
++  /* For a coupled BW fit the joint solution already chose a useful physical
++     decomposition.  Leave-one-out is intended to test the effective transfer,
