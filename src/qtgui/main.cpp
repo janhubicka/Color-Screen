@@ -24,6 +24,7 @@
 #include <QStyleFactory>
 #include <QStatusBar>
 #include <QTabBar>
+#include <QThreadPool>
 #include <QToolBar>
 #include <QTimer>
 
@@ -156,9 +157,9 @@ int main(int argc, char *argv[]) {
   parser.addPositionalArgument("image", "Image file(s) to open.", "[image...]");
   parser.process(app);
 
-  // Lifetime smoke tests need one extra event-loop turn after the last visible
-  // window closes so they can inspect the final object-manager state.
-  if (parser.isSet(closeToEmptyTabOption) ||
+  // Smoke tests need an explicit shutdown turn so queued widget destruction and
+  // QtConcurrent work can be drained before sanitizers inspect process state.
+  if (parser.isSet(smokeTestOption) || parser.isSet(closeToEmptyTabOption) ||
       parser.isSet(windowLifetimeOption))
     app.setQuitOnLastWindowClosed(false);
 
@@ -896,17 +897,20 @@ int main(int argc, char *argv[]) {
 
       auto checkFinalPeerClose =
           std::make_shared<std::function<void(int)>>();
+      const std::weak_ptr<std::function<void(int)>> weakCheckFinalPeerClose =
+          checkFinalPeerClose;
       *checkFinalPeerClose =
           [&app, guardedSource, guardedView, documentCount, newViewSmokeDone,
-           checkFinalPeerClose](int attemptsLeft) {
+           weakCheckFinalPeerClose](int attemptsLeft) {
             if (guardedSource || guardedView ||
                 app.documentWindows().size() != documentCount - 1) {
               if (attemptsLeft > 0) {
-                QTimer::singleShot(50, &app,
-                                   [checkFinalPeerClose, attemptsLeft]() {
-                  (*checkFinalPeerClose)(attemptsLeft - 1);
-                });
-                return;
+                if (auto retry = weakCheckFinalPeerClose.lock()) {
+                  QTimer::singleShot(50, &app, [retry, attemptsLeft]() {
+                    (*retry)(attemptsLeft - 1);
+                  });
+                  return;
+                }
               }
               qCritical() << "Final peer view did not close its document owner";
               app.exit(14);
@@ -995,8 +999,10 @@ int main(int argc, char *argv[]) {
   if (parser.isSet(slantedReferenceOption)) {
     auto startReferenceSmoke =
         std::make_shared<std::function<void(int)>>();
+    const std::weak_ptr<std::function<void(int)>> weakStartReferenceSmoke =
+        startReferenceSmoke;
     *startReferenceSmoke =
-        [&app, newViewSmokeDone, startReferenceSmoke](int attemptsLeft) {
+        [&app, newViewSmokeDone, weakStartReferenceSmoke](int attemptsLeft) {
       if (!*newViewSmokeDone) {
         if (attemptsLeft <= 0) {
           qCritical() << "Slanted reference smoke test timed out waiting for "
@@ -1004,10 +1010,14 @@ int main(int argc, char *argv[]) {
           app.exit(15);
           return;
         }
-        QTimer::singleShot(100, &app,
-                           [startReferenceSmoke, attemptsLeft]() {
-          (*startReferenceSmoke)(attemptsLeft - 1);
-        });
+        if (auto retry = weakStartReferenceSmoke.lock()) {
+          QTimer::singleShot(100, &app, [retry, attemptsLeft]() {
+            (*retry)(attemptsLeft - 1);
+          });
+          return;
+        }
+        qCritical() << "Slanted reference smoke retry expired unexpectedly";
+        app.exit(15);
         return;
       }
 
@@ -1039,8 +1049,10 @@ int main(int argc, char *argv[]) {
 
       auto checkReference =
           std::make_shared<std::function<void(int)>>();
+      const std::weak_ptr<std::function<void(int)>> weakCheckReference =
+          checkReference;
       *checkReference = [&app, guardedSource, guardedReference, documentCount,
-                         tabCount, checkReference](int attemptsLeft) {
+                         tabCount, weakCheckReference](int attemptsLeft) {
         MainWindow *source = guardedSource.data();
         ImageViewWindow *reference = guardedReference.data();
         if (!source || !reference) {
@@ -1049,10 +1061,12 @@ int main(int argc, char *argv[]) {
           return;
         }
         if (!reference->sharedImageData() && attemptsLeft > 0) {
-          QTimer::singleShot(250, &app, [checkReference, attemptsLeft]() {
-            (*checkReference)(attemptsLeft - 1);
-          });
-          return;
+          if (auto retry = weakCheckReference.lock()) {
+            QTimer::singleShot(250, &app, [retry, attemptsLeft]() {
+              (*retry)(attemptsLeft - 1);
+            });
+            return;
+          }
         }
 
         WorkspaceWindow *workspace = app.workspaceWindow();
@@ -1086,8 +1100,10 @@ int main(int argc, char *argv[]) {
         const auto beforeReload = reference->sharedImageData();
         app.reloadSlantedEdgeReferences(source);
         auto checkReload = std::make_shared<std::function<void(int)>>();
+        const std::weak_ptr<std::function<void(int)>> weakCheckReload =
+            checkReload;
         *checkReload = [&app, guardedSource, guardedReference, beforeReload,
-                        checkReload](int attemptsLeft) {
+                        weakCheckReload](int attemptsLeft) {
           MainWindow *source = guardedSource.data();
           ImageViewWindow *reference = guardedReference.data();
           if (!source || !reference) {
@@ -1097,10 +1113,12 @@ int main(int argc, char *argv[]) {
           }
           if (reference->sharedImageData() == beforeReload &&
               attemptsLeft > 0) {
-            QTimer::singleShot(250, &app, [checkReload, attemptsLeft]() {
-              (*checkReload)(attemptsLeft - 1);
-            });
-            return;
+            if (auto retry = weakCheckReload.lock()) {
+              QTimer::singleShot(250, &app, [retry, attemptsLeft]() {
+                (*retry)(attemptsLeft - 1);
+              });
+              return;
+            }
           }
           if (reference->sharedImageData() == beforeReload) {
             qCritical() << "Slanted-edge reference did not reload";
@@ -1160,10 +1178,27 @@ int main(int argc, char *argv[]) {
     qDebug() << "Smoke Test Mode: Will exit in" << duration << "ms...";
     QTimer::singleShot(duration, &app, [&app]() {
       app.closeAllDocumentWindows();
-      if (!app.documentWindows().isEmpty())
-        app.quit();
+      app.quit();
     });
   }
 
-  return app.exec();
+  // WorkspaceWindow deliberately survives Close while detached peer windows
+  // exist. Keep an explicit owner in main() so the hidden workspace cannot
+  // outlive QApplication teardown.
+  QPointer<WorkspaceWindow> workspaceOwner(app.workspaceWindow());
+  const int exitCode = app.exec();
+
+  if (parser.isSet(smokeTestOption)) {
+    // A smoke test can exit while a slanted-reference QtConcurrent load is
+    // finishing or while WA_DeleteOnClose widgets are queued for deletion.
+    // Drain both before LeakSanitizer inspects process state.
+    app.closeAllDocumentWindows();
+    QThreadPool::globalInstance()->waitForDone();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCoreApplication::processEvents();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  }
+
+  delete workspaceOwner.data();
+  return exitCode;
 }

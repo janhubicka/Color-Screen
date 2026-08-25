@@ -1,0 +1,259 @@
+name: Sanitizer builds
+
+on:
+  push:
+    branches: [ "main", "v1-branch", "Kimrova-bachelorRelease" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  thread-sanitizer:
+    name: ThreadSanitizer (Ubuntu amd64)
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      CC: "ccache gcc"
+      CXX: "ccache g++"
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPRESS: "true"
+      CCACHE_MAXSIZE: 500M
+    steps:
+    - uses: actions/checkout@v4
+    - name: Restore compiler cache
+      uses: actions/cache@v4
+      with:
+        path: .ccache
+        key: ccache-${{ runner.os }}-amd64-tsan-${{ github.event.pull_request.head.sha || github.sha }}
+        restore-keys: |
+          ccache-${{ runner.os }}-amd64-tsan-
+    - name: Reset compiler cache stats
+      run: ccache --zero-stats
+    - name: Configure with ThreadSanitizer
+      run: |
+        SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=thread"
+        CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
+          ./configure --enable-checking --disable-static-link --disable-openmp \
+          --disable-gtkgui --enable-qtgui
+    - name: Build ThreadSanitizer variant
+      run: make -j$(nproc)
+    - name: Qt multi-window smoke test (ThreadSanitizer)
+      env:
+        TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
+        QT_QPA_PLATFORM: offscreen
+      run: |
+        ./src/qtgui/colorscreen-qt \
+          --smoke-test 30000 --smoke-test-expect-windows 2 \
+          --smoke-test-tile-activation-stable --smoke-test-menu-order \
+          --smoke-test-new-view --smoke-test-slanted-reference \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+
+        ./src/qtgui/colorscreen-qt \
+          --smoke-test 20000 --smoke-test-expect-windows 1 \
+          --smoke-test-window-lifetime \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+    - name: Test ThreadSanitizer variant
+      env:
+        TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
+      run: make -j$(nproc) check
+    - name: Upload ThreadSanitizer test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: testsuite-tsan-amd64
+        path: |
+          testsuite/*.txt
+          testsuite/*.log
+          testsuite/*.par
+    - name: Compiler cache stats
+      if: always()
+      run: ccache --show-stats
+
+  macos-sanitizers:
+    name: ASan + UBSan (macOS)
+    runs-on: macos-latest
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPRESS: "true"
+      CCACHE_MAXSIZE: 500M
+    steps:
+    - uses: actions/checkout@v4
+    - name: Locate Homebrew cache
+      id: homebrew-cache
+      run: |
+        echo "path=$(brew --cache)" >> "$GITHUB_OUTPUT"
+        echo "image-version=${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
+    - name: Restore Homebrew download cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.homebrew-cache.outputs.path }}
+        key: homebrew-sanitizers-${{ runner.os }}-${{ runner.arch }}-${{ steps.homebrew-cache.outputs.image-version }}-${{ hashFiles('.github/workflows/sanitizers.yml') }}
+        restore-keys: |
+          homebrew-${{ runner.os }}-${{ runner.arch }}-${{ steps.homebrew-cache.outputs.image-version }}-
+          homebrew-${{ runner.os }}-${{ runner.arch }}-
+    - name: Install dependencies
+      run: |
+        brew install \
+          libtiff libjpeg-turbo libzip gsl libraw little-cms2 fftw \
+          qt6 exiv2 openjpeg libpng webp ccache
+        brew link qt6 --force
+    - name: Restore compiler cache
+      uses: actions/cache@v4
+      with:
+        path: .ccache
+        key: ccache-${{ runner.os }}-${{ runner.arch }}-asan-ubsan-${{ github.event.pull_request.head.sha || github.sha }}
+        restore-keys: |
+          ccache-${{ runner.os }}-${{ runner.arch }}-asan-ubsan-
+          ccache-${{ runner.os }}-${{ runner.arch }}-macos-
+    - name: Reset compiler cache stats
+      run: ccache --zero-stats
+    - name: Configure with ASan and UBSan
+      run: |
+        QT6_PREFIX=$(brew --prefix qt6)
+        BREW_PREFIX=$(brew --prefix)
+        export PATH="$QT6_PREFIX/bin:$PATH"
+        MOC=$(find "$QT6_PREFIX" -name moc -type f -perm +111 | head -n 1)
+        if [ -z "$MOC" ]; then
+          echo "Could not locate Qt moc" >&2
+          exit 1
+        fi
+        SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined -I$BREW_PREFIX/include"
+        CC="ccache clang" CXX="ccache clang++" \
+          CFLAGS="$SANITIZER_FLAGS" CXXFLAGS="$SANITIZER_FLAGS" \
+          LDFLAGS="-L$BREW_PREFIX/lib -fsanitize=address,undefined" \
+          ./configure --enable-checking --disable-static-link --disable-openmp \
+          --enable-qtgui MOC="$MOC"
+    - name: Build sanitizer variant
+      run: make -j$(sysctl -n hw.logicalcpu)
+    - name: Qt multi-window smoke test (ASan + UBSan)
+      env:
+        ASAN_OPTIONS: halt_on_error=1
+        UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        QT_QPA_PLATFORM: offscreen
+      run: |
+        ./src/qtgui/colorscreen-qt \
+          --smoke-test 30000 --smoke-test-expect-windows 2 \
+          --smoke-test-new-view --smoke-test-slanted-reference \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+
+        ./src/qtgui/colorscreen-qt \
+          --smoke-test 20000 --smoke-test-expect-windows 1 \
+          --smoke-test-window-lifetime \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+    - name: Test sanitizer variant
+      env:
+        ASAN_OPTIONS: halt_on_error=1
+        UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+      run: make -j$(sysctl -n hw.logicalcpu) check
+    - name: Upload sanitizer test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: testsuite-sanitizers-macos
+        path: |
+          testsuite/*.txt
+          testsuite/*.log
+          testsuite/*.par
+    - name: Compiler cache stats
+      if: always()
+      run: ccache --show-stats
+
+  windows-address-sanitizer:
+    name: AddressSanitizer (Windows clang64)
+    runs-on: windows-latest
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPRESS: "true"
+      CCACHE_MAXSIZE: 500M
+    steps:
+    - uses: actions/checkout@v4
+    - uses: msys2/setup-msys2@v2
+      with:
+        msystem: CLANG64
+        update: false
+        cache: true
+        install: >
+          make mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-ccache mingw-w64-clang-x86_64-libtiff
+          mingw-w64-clang-x86_64-libjpeg-turbo git mingw-w64-clang-x86_64-libraw
+          mingw-w64-clang-x86_64-lcms2 mingw-w64-clang-x86_64-libzip
+          mingw-w64-clang-x86_64-gsl diffutils autoconf-archive
+          mingw-w64-clang-x86_64-autotools mingw-w64-clang-x86_64-fftw
+          mingw-w64-clang-x86_64-qt6-base mingw-w64-clang-x86_64-qt6-tools
+          mingw-w64-clang-x86_64-adwaita-icon-theme mingw-w64-clang-x86_64-qt6-svg
+          mingw-w64-clang-x86_64-exiv2
+    - name: Restore compiler cache
+      uses: actions/cache@v4
+      with:
+        path: .ccache
+        key: ccache-${{ runner.os }}-clang64-asan-${{ github.event.pull_request.head.sha || github.sha }}
+        restore-keys: |
+          ccache-${{ runner.os }}-clang64-asan-
+          ccache-${{ runner.os }}-clang64-
+    - name: Reset compiler cache stats
+      shell: msys2 {0}
+      run: ccache --zero-stats
+    - name: Update autotools
+      shell: msys2 {0}
+      run: autoreconf -fiv
+    - name: Configure with AddressSanitizer
+      shell: msys2 {0}
+      run: |
+        export PATH="/clang64/share/qt6/bin:$PATH"
+        SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address"
+        CC="ccache clang" CXX="ccache clang++" AR=llvm-ar NM=llvm-nm \
+          STRIP=llvm-strip RANLIB=llvm-ranlib \
+          CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
+          LDFLAGS="-Wl,--stack,16777216 -fsanitize=address -lpthread" \
+          ./configure --enable-checking --disable-openmp --enable-qtgui
+    - name: Build AddressSanitizer variant
+      shell: msys2 {0}
+      run: make -j$(nproc)
+    - name: Qt multi-window smoke test (AddressSanitizer)
+      shell: msys2 {0}
+      env:
+        ASAN_OPTIONS: halt_on_error=1
+      run: |
+        ./src/qtgui/colorscreen-qt \
+          --smoke-test 30000 --smoke-test-expect-windows 2 \
+          --smoke-test-new-view --smoke-test-slanted-reference \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+
+        ./src/qtgui/colorscreen-qt \
+          --smoke-test 20000 --smoke-test-expect-windows 1 \
+          --smoke-test-window-lifetime \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+    - name: Test AddressSanitizer variant
+      shell: msys2 {0}
+      env:
+        ASAN_OPTIONS: halt_on_error=1
+      run: make -j$(nproc) check
+    - name: Upload sanitizer test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: testsuite-asan-windows-clang64
+        path: |
+          testsuite/*.txt
+          testsuite/*.log
+          testsuite/*.par
+    - name: Compiler cache stats
+      if: always()
+      shell: msys2 {0}
+      run: ccache --show-stats
