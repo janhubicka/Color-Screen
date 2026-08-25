@@ -115,8 +115,11 @@ When RGB output is requested explicitly, the normal three-channel pass remains
 the shared source for both RGB and the image layer.
 
 The one-hot test is exact rather than epsilon-based: any second nonzero mix
-weight means that two different capture transfers contribute and must use the
-general model below.
+weight means that two different capture transfers contribute and must use a
+multi-channel model.  The one-channel simplification is valid regardless of
+capture provenance, including a transparency scanned with its viewing filter:
+for one selected scanner channel the same `H_c` filters the complete
+process-primary mixture, so convolution distributes over that sum.
 
 For a monochrome original the ideal image layer `L(f)` is scalar.  Scanner
 channel `c` observes the same layer through a channel response/gain `a_c` and

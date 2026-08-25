@@ -219,20 +219,15 @@ render_parameters::get_image_layer_sharpen_parameters (const image_data *img) co
       = base_mtf.use_measured_mtf ()
         && base_mtf.measurements[base_mtf.measured_mtf_idx].image_layer;
 
-  sharpen_parameters result;
-  if (selected_image_layer)
-    result = sharpen;
-  else if (native_channel >= 0)
-    result = get_sharpen_parameters_for_channel (native_channel, has_rgb);
-  else
-    {
-      result = sharpen;
-      if (result.scanner_mtf.use_measured_mtf ())
-        result.scanner_mtf.measured_mtf_idx = -1;
-    }
+  if (!selected_image_layer && native_channel >= 0)
+    return get_sharpen_parameters_for_channel (native_channel, has_rgb);
+
+  sharpen_parameters result = sharpen;
+  if (!selected_image_layer && result.scanner_mtf.use_measured_mtf ())
+    result.scanner_mtf.measured_mtf_idx = -1;
 
   double wavelength = get_image_layer_wavelength (img);
-  if (result.scanner_mtf.use_measured_mtf ())
+  if (selected_image_layer && result.scanner_mtf.use_measured_mtf ())
     {
       const mtf_measurement &measurement
           = result.scanner_mtf.measurements[result.scanner_mtf.measured_mtf_idx];
