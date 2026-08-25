@@ -1,0 +1,62 @@
+name: Agent weighted image-layer transfer reference
+
+on:
+  push:
+    branches:
+      - agent/tmp-weighted-image-layer-stage
+
+permissions:
+  contents: write
+  packages: read
+
+env:
+  LC_ALL: C.UTF-8
+  LANG: C.UTF-8
+
+jobs:
+  patch-test-push:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout staging helper
+        uses: actions/checkout@v4
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/weighted-image-layer-transfer-reference
+          path: work
+          fetch-depth: 0
+      - name: Apply reviewed weighted-transfer patch
+        run: |
+          cp .agents/add_weighted_image_layer_transfer.py work/.add-weighted-transfer.py
+          cd work
+          python3 .add-weighted-transfer.py
+          rm .add-weighted-transfer.py
+          git diff --check
+          git diff -- src/libcolorscreen/screen.h src/libcolorscreen/screen.C src/libcolorscreen/unittests.C doc/mtf-channel-domain-tracking.md
+      - name: Build and test at O2
+        working-directory: work
+        run: |
+          CXXFLAGS="-O2" CFLAGS="-O2" ./configure --enable-checking --disable-qtgui --disable-gtkgui
+          make -j$(nproc) -C src/libcolorscreen unittests
+          ./src/libcolorscreen/unittests weighted_capture_transfer finetune_focus_cache mtf_model channel_sharpening
+      - name: Rebuild and test at Ofast
+        working-directory: work
+        run: |
+          make distclean
+          CXXFLAGS="-Ofast" CFLAGS="-Ofast" ./configure --enable-checking --disable-qtgui --disable-gtkgui
+          make -j$(nproc) -C src/libcolorscreen unittests
+          ./src/libcolorscreen/unittests weighted_capture_transfer finetune_focus_cache mtf_model channel_sharpening
+      - name: Commit validated patch
+        working-directory: work
+        run: |
+          git diff --check
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/libcolorscreen/screen.h src/libcolorscreen/screen.C src/libcolorscreen/unittests.C doc/mtf-channel-domain-tracking.md
+          git commit -m "mtf: add weighted monochrome capture reference" -m "Add an exact Fourier-domain reference for RGB capture of one monochrome image layer. Combine effective native scanner-channel transfers before the inverse FFT, validate it against a slow per-channel spatial reference, preserve exact one-hot reduction, and reject nonlinear anticipated Richardson-Lucy. Keep production provenance selection deferred so viewing-filter captures are not routed through the monochrome model."
+          git push origin HEAD:agent/weighted-image-layer-transfer-reference
