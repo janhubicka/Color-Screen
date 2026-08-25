@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   thread-sanitizer:
-    name: ThreadSanitizer (Ubuntu amd64)
+    name: ThreadSanitizer (Ubuntu amd64, Clang + OpenMP)
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
@@ -23,36 +23,90 @@ jobs:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
       PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-      CC: "ccache gcc"
-      CXX: "ccache g++"
+      CC: "ccache clang-18"
+      CXX: "ccache clang++-18"
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_COMPRESS: "true"
       CCACHE_MAXSIZE: 500M
     steps:
     - uses: actions/checkout@v4
+    - name: Install Clang OpenMP TSan runtime
+      run: |
+        apt-get update
+        apt-get install -y --no-install-recommends clang-18 libomp-18-dev
+        test -f /usr/lib/llvm-18/lib/libarcher.so
+        rm -rf /var/lib/apt/lists/*
     - name: Restore compiler cache
       uses: actions/cache@v4
       with:
         path: .ccache
-        key: ccache-${{ runner.os }}-amd64-tsan-${{ github.event.pull_request.head.sha || github.sha }}
+        key: ccache-${{ runner.os }}-amd64-tsan-clang18-${{ github.event.pull_request.head.sha || github.sha }}
         restore-keys: |
-          ccache-${{ runner.os }}-amd64-tsan-
+          ccache-${{ runner.os }}-amd64-tsan-clang18-
     - name: Reset compiler cache stats
       run: ccache --zero-stats
+    - name: Verify OpenMP-aware ThreadSanitizer runtime
+      run: |
+        cat >/tmp/tsan-openmp-smoke.cpp <<'EOF'
+        #include <omp.h>
+        #include <cstdio>
+
+        int main ()
+        {
+          int threads = 0;
+          double a = 0, b = 0;
+        #pragma omp parallel
+          {
+        #pragma omp single
+            threads = omp_get_num_threads ();
+          }
+        #pragma omp parallel for reduction(+ : a, b)
+          for (int i = 0; i < 100000; i++)
+            {
+              a += i;
+              b += 2 * i;
+            }
+          std::printf ("OpenMP threads: %d\n", threads);
+          return threads < 2 || !(a > 0) || !(b > 0);
+        }
+        EOF
+        clang++-18 -O1 -g -fno-omit-frame-pointer -fopenmp -fsanitize=thread \
+          /tmp/tsan-openmp-smoke.cpp -o /tmp/tsan-openmp-smoke
+        LD_LIBRARY_PATH=/usr/lib/llvm-18/lib:${LD_LIBRARY_PATH:-} \
+          OMP_NUM_THREADS=4 \
+          TSAN_OPTIONS=halt_on_error=1:ignore_noninstrumented_modules=1 \
+          /tmp/tsan-openmp-smoke
     - name: Configure with ThreadSanitizer
       run: |
         SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=thread"
-        CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
+        CC="ccache clang-18" CXX="ccache clang++-18" \
+          CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
+          LDFLAGS="-fsanitize=thread" \
           ./configure --enable-checking --disable-static-link \
           --disable-gtkgui --enable-qtgui
     - name: Build ThreadSanitizer variant
       run: make -j$(nproc)
-    # Ubuntu's distro Qt crashes in QPA/XCB initialization under TSan before
-    # Color-Screen code runs. GUI lifetime smoke remains covered by ASan/UBSan.
+    - name: Qt multi-window smoke test (ThreadSanitizer)
+      env:
+        OMP_NUM_THREADS: "4"
+        QT_QPA_PLATFORM: offscreen
+        TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:ignore_noninstrumented_modules=1
+      run: |
+        ./src/qtgui/colorscreen-qt \
+          --smoke-test 30000 --smoke-test-expect-windows 2 \
+          --smoke-test-new-view --smoke-test-slanted-reference \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+
+        ./src/qtgui/colorscreen-qt \
+          --smoke-test 20000 --smoke-test-expect-windows 1 \
+          --smoke-test-window-lifetime \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
     - name: Test ThreadSanitizer variant
       env:
-        TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
+        OMP_NUM_THREADS: "4"
+        TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:ignore_noninstrumented_modules=1
       run: make -j$(nproc) check
     - name: Upload ThreadSanitizer test results
       uses: actions/upload-artifact@v4
