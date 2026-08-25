@@ -1,4 +1,4 @@
-name: Agent apply one-hot image-layer sharpening
+name: Agent repair one-hot image-layer test strings
 
 on:
   push:
@@ -9,31 +9,36 @@ permissions:
   contents: write
 
 jobs:
-  apply:
+  repair:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout staging helpers
-        uses: actions/checkout@v4
       - name: Checkout target branch
         uses: actions/checkout@v4
         with:
           ref: agent/onehot-image-layer-sharpening
-          path: work
           fetch-depth: 0
-      - name: Apply reviewed patch
+      - name: Repair escaped newlines and publish
         run: |
-          python3 .agents/apply_onehot_image_layer.py work
-          cd work
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/libcolorscreen/unittests.C')
+          s = p.read_text()
+          replacements = {
+              'printf ("LRU peek test FAIL: miss generated a value\n");':
+                  'printf ("LRU peek test FAIL: miss generated a value\\\\n");',
+              'printf ("LRU peek test FAIL: completed lookup changed cache state\n");':
+                  'printf ("LRU peek test FAIL: completed lookup changed cache state\\\\n");',
+          }
+          for old, new in replacements.items():
+              if s.count(old) != 1:
+                  raise SystemExit(f'expected one occurrence of {old!r}, found {s.count(old)}')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
           git diff --check
-          test "$(git status --short | wc -l)" -eq 6
-          git status --short
+          git diff -- src/libcolorscreen/unittests.C
           git config user.name "OpenAI Agent"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add doc/mtf-channel-domain-tracking.md \
-                  src/libcolorscreen/include/render-parameters.h \
-                  src/libcolorscreen/lru-cache.h \
-                  src/libcolorscreen/render-parameters.C \
-                  src/libcolorscreen/render.C \
-                  src/libcolorscreen/unittests.C
-          git commit -m "render: specialize one-channel image-layer sharpening" -m "Recognize RGB-derived image layers whose mix has exactly one nonzero native channel and specialize their scalar MTF from that channel. Explicit scalar image-layer measurements remain authoritative, while any genuine multi-channel mix keeps the conservative representative-transfer behavior pending the general weighted model.\n\nAdd a non-generating LRU cache peek and use it in render::precompute_all so an image-layer-only one-hot request reuses completed full-RGB scanner sharpening when available. Otherwise sharpen only the selected native channel instead of paying for all three. Preserve sharpen-before-mix semantics by applying mix dark and gain after the channel filter; explicit RGB output continues to use the normal three-channel pass.\n\nExtend LRU and channel-sharpening regressions to cover pure peek behavior, exact one-hot detection, native MTF inheritance, scalar-vs-full-RGB numerical equivalence, and completed RGB cache reuse. Update the MTF channel-domain tracking document to mark the one-channel subset of MTF-DOM-005 complete while leaving general weighted RGB mixing and capture_type-driven policy for later work."
+          git add src/libcolorscreen/unittests.C
+          git commit -m "test: fix LRU peek diagnostics"
           git push origin HEAD:agent/onehot-image-layer-sharpening
