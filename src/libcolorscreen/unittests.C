@@ -5063,6 +5063,34 @@ test_lru_cache_concurrency ()
 	}
     }
 
+  /* A cache peek is a pure lookup: it must not generate a missing value, and
+     a completed value must be returned without another generator call.  */
+  lru_cache<test_params, int, get_new_test_fast, 2> peek_cache (
+      "test_peek_cache");
+  get_new_fast_calls = 0;
+  test_params peek_key = { 7 }, missing_key = { 8 };
+  uint64_t generated_id = 0, peeked_id = 0;
+  if (peek_cache.peek (peek_key) || get_new_fast_calls != 0)
+    {
+      printf ("LRU peek test FAIL: miss generated a value
+");
+      ok = false;
+    }
+  std::shared_ptr<int> peek_value
+      = peek_cache.get (peek_key, nullptr, &generated_id);
+  if (!peek_value || *peek_value != 14 || get_new_fast_calls != 1)
+    ok = false;
+  peek_value.reset ();
+  peek_value = peek_cache.peek (peek_key, &peeked_id);
+  if (!peek_value || *peek_value != 14 || peeked_id != generated_id
+      || get_new_fast_calls != 1 || peek_cache.peek (missing_key))
+    {
+      printf ("LRU peek test FAIL: completed lookup changed cache state
+");
+      ok = false;
+    }
+  peek_value.reset ();
+
   /* Verify true least-recently-used eviction.  The former comparison selected
      the newest free entry and therefore behaved as an MRU cache.  */
   lru_cache<test_params, int, get_new_test_fast, 2> eviction_cache (
@@ -6044,12 +6072,44 @@ test_channel_sharpening ()
       return false;
     }
 
-  /* An explicitly selected image-layer measurement retains the historical
-     behavior of supplying one transfer curve to all native channels.  */
+  /* An RGB-derived image layer with exactly one nonzero mix weight is exactly
+     one native scanner channel, so scalar MTF specialization must inherit that
+     channel's measured curve and wavelength.  A tiny second nonzero weight is
+     deliberately no longer one-hot.  */
+  render_parameters onehot_specialization = params;
+  onehot_specialization.mix_red = 0;
+  onehot_specialization.mix_green = 2;
+  onehot_specialization.mix_blue = 0;
+  if (onehot_specialization.get_image_layer_native_channel (&img) != 1
+      || onehot_specialization.get_image_layer_channel (&img) != 1
+      || onehot_specialization.get_image_layer_sharpen_parameters (&img)
+                 .scanner_mtf.measured_mtf_idx
+             != 1
+      || onehot_specialization.get_image_layer_sharpen_parameters (&img)
+                 .scanner_mtf.wavelength
+             != onehot_specialization.sharpen.scanner_mtf.wavelengths[1])
+    {
+      fprintf (stderr, "One-hot image layer did not inherit green MTF\n");
+      return false;
+    }
+  onehot_specialization.mix_blue = (luminosity_t)1e-6;
+  if (onehot_specialization.get_image_layer_native_channel (&img) != -1
+      || onehot_specialization.get_image_layer_channel (&img) != 1
+      || onehot_specialization.get_image_layer_sharpen_parameters (&img)
+                 .scanner_mtf.measured_mtf_idx
+             != -1)
+    {
+      fprintf (stderr, "Nonzero second mix channel was treated as one-hot\n");
+      return false;
+    }
+
+  /* A legacy unlabelled measurement retains its historical generic behavior
+     of supplying one transfer curve to all native channels.  Explicit
+     image-layer measurements are domain-labelled and are rejected here.  */
   render_parameters image_layer_params = params;
   mtf_measurement image_layer_measurement;
   image_layer_measurement.channel = -1;
-  image_layer_measurement.name = "image layer";
+  image_layer_measurement.name = "legacy unlabelled";
   for (int i = 0; i < 7; ++i)
     image_layer_measurement.add_value (i / 12.0, 100 - 8 * i);
   image_layer_params.sharpen.scanner_mtf.measurements.push_back (
@@ -6101,6 +6161,73 @@ test_channel_sharpening ()
                "Image layer was not mixed from sharpened RGB channels: "
                "expected %.12g got %.12g\n",
                expected_mix, actual_mix);
+      return false;
+    }
+
+  /* When only one native channel contributes, image-layer-only rendering must
+     sharpen just that channel unless the matching full RGB result is already
+     cached.  Use a unique SNR so the first request cannot hit the RGB cache
+     populated above.  Non-unit gain and nonzero mix-dark verify that those
+     operations remain after sharpening.  */
+  render_parameters onehot_params = params;
+  onehot_params.sharpen.scanner_snr = 211;
+  onehot_params.mix_red = 0;
+  onehot_params.mix_green = (luminosity_t)1.7;
+  onehot_params.mix_blue = 0;
+  onehot_params.mix_dark = { (luminosity_t)0.01, (luminosity_t)0.08,
+                             (luminosity_t)0.03 };
+
+  render onehot_scalar (img, onehot_params, 65535);
+  if (!onehot_scalar.precompute_all (PRECOMPUTE_IMAGE_LAYER, {1, 1, 1},
+                                     nullptr))
+    {
+      fprintf (stderr, "One-hot scalar sharpening precomputation failed\n");
+      return false;
+    }
+  const image_data::pixel raw_pixel = img.get_rgb_pixel (p.x, p.y);
+  const double raw_blue = (double)raw_pixel.b / img.maxval;
+  const double scalar_blue = onehot_scalar.get_linearized_data_blue (p);
+  if (fabs (scalar_blue - raw_blue) > 1e-7)
+    {
+      fprintf (stderr,
+               "One-hot scalar request unexpectedly materialized full RGB\n");
+      return false;
+    }
+
+  render onehot_full (img, onehot_params, 65535);
+  if (!onehot_full.precompute_all (
+          PRECOMPUTE_IMAGE_LAYER | PRECOMPUTE_RGB_IMAGE, {1, 1, 1}, nullptr))
+    {
+      fprintf (stderr, "One-hot full RGB sharpening precomputation failed\n");
+      return false;
+    }
+  const double scalar_only_value = onehot_scalar.get_unadjusted_data (p);
+  const double full_value = onehot_full.get_unadjusted_data (p);
+  const double full_blue = onehot_full.get_linearized_data_blue (p);
+  if (fabs (scalar_only_value - full_value) > 5e-5
+      || fabs (full_blue - raw_blue) < 1e-5)
+    {
+      fprintf (stderr,
+               "One-hot scalar/full RGB mismatch: scalar %.12g full %.12g, "
+               "blue raw %.12g sharpened %.12g\n",
+               scalar_only_value, full_value, raw_blue, full_blue);
+      return false;
+    }
+
+  /* Keep ONEHOT_FULL alive so its completed cache value is pinned.  A second
+     image-layer-only renderer should now peek that RGB result and reuse it,
+     which is observable through an unrelated native channel accessor.  */
+  render onehot_cached (img, onehot_params, 65535);
+  if (!onehot_cached.precompute_all (PRECOMPUTE_IMAGE_LAYER, {1, 1, 1},
+                                     nullptr))
+    {
+      fprintf (stderr, "Cached one-hot RGB reuse precomputation failed\n");
+      return false;
+    }
+  if (fabs (onehot_cached.get_unadjusted_data (p) - full_value) > 5e-5
+      || fabs (onehot_cached.get_linearized_data_blue (p) - full_blue) > 5e-5)
+    {
+      fprintf (stderr, "One-hot image layer did not reuse cached RGB result\n");
       return false;
     }
 

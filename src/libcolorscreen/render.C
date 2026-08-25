@@ -644,20 +644,23 @@ render::precompute_all (int flags, rgbdata patch_proportions,
   const bool ir_simulation
       = !m_img.has_grayscale_or_ir ()
         || (m_img.has_rgb () && m_params.ignore_infrared);
-
-  /* Scanner sharpening belongs to the native capture channels, before any
-     RGB mixture is formed.  Materialize the planes only when a caller needs
-     RGB output or when an RGB-derived image layer must be mixed afterwards.  */
-  const bool sharpen_rgb
+  const bool scanner_sharpening
       = m_img.has_rgb ()
-        && m_params.sharpen.get_mode () != sharpen_parameters::none
-        && (rgb_image_needed || (image_layer_needed && ir_simulation));
-  if (sharpen_rgb)
+        && m_params.sharpen.get_mode () != sharpen_parameters::none;
+  const int image_layer_native_channel
+      = image_layer_needed && ir_simulation
+            ? m_params.get_image_layer_native_channel (&m_img)
+            : -1;
+  const bool one_channel_rgb_image_layer
+      = image_layer_native_channel >= 0 && image_layer_native_channel < 3;
+
+  /* Scanner sharpening belongs to native capture channels, before any RGB
+     mixture is formed.  A genuine RGB mixture needs all three channels, but an
+     exact one-channel image-layer mix can avoid that work unless RGB output is
+     itself requested.  If the identical full RGB result already exists, reuse
+     it without starting another computation.  */
+  if (scanner_sharpening)
     {
-      /* Native scanner channels are filtered together as one RGB operation,
-         but each deconvolution channel retains its own measured/physical MTF.
-         The persistent result is interleaved because subsequent rendering
-         normally consumes all three components together.  */
       rgb_and_sharpen_params p
           = { { m_img.id,
                 &m_img,
@@ -674,17 +677,29 @@ render::precompute_all (int flags, rgbdata patch_proportions,
               { m_params.get_sharpen_parameters_for_channel (0),
                 m_params.get_sharpen_parameters_for_channel (1),
                 m_params.get_sharpen_parameters_for_channel (2) } };
-      m_rgb_image_holder = rgb_and_sharpened_data_cache.get (p, progress);
-      if (!m_rgb_image_holder)
+      const bool require_full_rgb
+          = rgb_image_needed
+            || (image_layer_needed && ir_simulation
+                && !one_channel_rgb_image_layer);
+      if (require_full_rgb)
+        m_rgb_image_holder = rgb_and_sharpened_data_cache.get (p, progress);
+      else if (image_layer_needed && ir_simulation
+               && one_channel_rgb_image_layer)
+        m_rgb_image_holder = rgb_and_sharpened_data_cache.peek (p);
+
+      if (m_rgb_image_holder)
+        {
+          m_rgb_image = m_rgb_image_holder->m_data;
+          if (colorscreen_checking)
+            assert (m_rgb_image);
+        }
+      else if (require_full_rgb)
         return false;
-      m_rgb_image = m_rgb_image_holder->m_data;
-      if (colorscreen_checking)
-        assert (m_rgb_image);
     }
 
   if (image_layer_needed)
     {
-      if (ir_simulation && sharpen_rgb)
+      if (ir_simulation && m_rgb_image)
         {
           /* RGB-derived image layers are mixed from already-sharpened native
              channels.  Mixing first and deconvolving afterwards would impose
@@ -707,6 +722,63 @@ render::precompute_all (int flags, rgbdata patch_proportions,
                           * m_params.mix_blue;
             }
           m_image_layer_id = lru_caches::get ();
+        }
+      else if (ir_simulation && scanner_sharpening
+               && one_channel_rgb_image_layer)
+        {
+          /* No full RGB result was requested or cached.  Sharpen only the
+             native channel which actually contributes to the image layer.
+             Keep mix-dark and gain after sharpening so this is equivalent to
+             the full RGB sharpen-then-mix path even for Wiener/RL filters.  */
+          const int channel = image_layer_native_channel;
+          gray_and_sharpen_params p
+              = { { m_img.id,
+                    &m_img,
+                    m_params.gamma,
+                    { m_img.to_linear[0], m_img.to_linear[1],
+                      m_img.to_linear[2] },
+                    rgbdata{0, 0, 0},
+                    channel == 0 ? 1.0f : 0.0f,
+                    channel == 1 ? 1.0f : 0.0f,
+                    channel == 2 ? 1.0f : 0.0f,
+                    m_backlight_correction.get (),
+                    m_backlight_correction_id,
+                    true },
+                  m_params.get_image_layer_sharpen_parameters (&m_img) };
+          uint64_t channel_id = 0;
+          std::shared_ptr<sharpened_data> channel_holder
+              = gray_and_sharpened_data_cache.get (p, progress, &channel_id);
+          if (!channel_holder)
+            return false;
+
+          const luminosity_t weight
+              = channel == 0 ? m_params.mix_red
+                : channel == 1 ? m_params.mix_green
+                               : m_params.mix_blue;
+          const luminosity_t dark
+              = channel == 0 ? m_params.mix_dark.red
+                : channel == 1 ? m_params.mix_dark.green
+                               : m_params.mix_dark.blue;
+          if (weight == 1 && dark == 0)
+            {
+              m_image_layer_holder = channel_holder;
+              m_image_layer = channel_holder->m_data;
+              m_image_layer_id = channel_id;
+            }
+          else
+            {
+              m_image_layer_holder
+                  = std::make_shared<sharpened_data> (m_img.width, m_img.height);
+              if (!m_image_layer_holder->m_data)
+                return false;
+              m_image_layer = m_image_layer_holder->m_data;
+              const size_t size = (size_t)m_img.width * m_img.height;
+#pragma omp parallel for
+              for (size_t i = 0; i < size; ++i)
+                m_image_layer[i]
+                    = (channel_holder->m_data[i] - dark) * weight;
+              m_image_layer_id = lru_caches::get ();
+            }
         }
       else
         {

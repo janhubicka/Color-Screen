@@ -201,17 +201,18 @@ render_parameters::get_sharpen_parameters_for_channel (int channel,
 
 /* Return sharpening specialized for the scalar image layer of IMG.  A
    selected explicit image-layer measurement is authoritative.  A real native
-   scalar plane may otherwise use its channel-3 measurement.  A synthetic RGB
-   image layer is not any one native scanner channel: RGB capture of a
-   monochrome original needs only a weighted combination of scanner-channel
+   scalar plane may otherwise use its channel-3 measurement.  An exact one-hot
+   RGB mix inherits the selected native scanner channel, including its measured
+   curve and wavelength.  A genuine RGB mixture is not any one scanner channel:
+   RGB capture of a monochrome original needs a weighted combination of channel
    transfers, while a transparency captured with its viewing filter present
    requires process-primary spectral mixing before scanner-channel transfer.
-   Until those provenance-aware forward models exist, do not steal one native
+   Until those mixed-channel forward models exist, do not steal one native
    measured RGB curve; use the configured representative analytical transfer.  */
 sharpen_parameters
 render_parameters::get_image_layer_sharpen_parameters (const image_data *img) const
 {
-  const int channel = get_image_layer_channel (img);
+  const int native_channel = get_image_layer_native_channel (img);
   const bool has_rgb = !img || img->has_rgb ();
   const mtf_parameters &base_mtf = sharpen.scanner_mtf;
   const bool selected_image_layer
@@ -221,8 +222,8 @@ render_parameters::get_image_layer_sharpen_parameters (const image_data *img) co
   sharpen_parameters result;
   if (selected_image_layer)
     result = sharpen;
-  else if (channel == 3)
-    result = get_sharpen_parameters_for_channel (3, has_rgb);
+  else if (native_channel >= 0)
+    result = get_sharpen_parameters_for_channel (native_channel, has_rgb);
   else
     {
       result = sharpen;
