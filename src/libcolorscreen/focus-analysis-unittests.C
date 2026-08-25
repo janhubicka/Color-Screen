@@ -356,6 +356,42 @@ test_bw_multitile_focus ()
   return true;
 }
 
+/* Periodic focus areas constrain the combined transfer, not a unique split
+   between residual Gaussian sigma and physical defocus.  Coupled physical
+   fitting must therefore fail before doing an expensive image fit.  */
+static bool
+test_coupled_physical_focus_rejected ()
+{
+  render_parameters rparam;
+  rparam.sharpen.mode = sharpen_parameters::blur_deconvolution;
+  rparam.sharpen.scanner_mtf.model = mtf_model::physical_diffraction;
+  rparam.sharpen.scanner_mtf.pixel_pitch = 3.76;
+  rparam.sharpen.scanner_mtf.f_stop = 8;
+  rparam.sharpen.scanner_mtf.scan_dpi = 2000;
+
+  finetune_parameters fparam;
+  fparam.flags = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+
+  image_data image;
+  scr_to_img_parameters geometry;
+  std::vector<finetune_focus_area_candidate> candidates;
+  finetune_focus_analysis_parameters analysis;
+  finetune_focus_analysis_result result;
+  if (finetune_analyze_focus_areas (rparam, geometry, image, candidates,
+                                    fparam, analysis, &result, nullptr))
+    {
+      fprintf (stderr, "Coupled physical sigma/defocus fit was accepted\n");
+      return false;
+    }
+  if (result.err.find ("not separately identifiable") == std::string::npos)
+    {
+      fprintf (stderr, "Unexpected coupled-focus diagnostic: %s\n",
+               result.err.c_str ());
+      return false;
+    }
+  return true;
+}
+
 static bool
 test_grayscale_image_search ()
 {
@@ -398,6 +434,7 @@ main ()
       || !test_sky_candidate_budget ()
       || !test_bw_selection_uses_primary_intensities ()
       || !test_bw_multitile_focus ()
+      || !test_coupled_physical_focus_rejected ()
       || !test_grayscale_image_search ())
     return 1;
   printf ("focus-analysis-unittests: PASS\n");
