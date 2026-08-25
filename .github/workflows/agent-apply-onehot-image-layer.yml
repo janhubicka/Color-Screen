@@ -25,7 +25,7 @@ jobs:
           python3 .agents/apply_onehot_image_layer.py work
           cd work
           git diff --check
-          test "$(git status --short | wc -l)" -eq 5
+          test "$(git status --short | wc -l)" -eq 6
           git status --short
           git config user.name "OpenAI Agent"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
