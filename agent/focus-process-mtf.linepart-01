@@ -1,0 +1,67 @@
++model and can estimate additional degradation introduced by the actual
++historical-object capture, for example cover glass or a small focus mismatch.
++The exact split between extra sigma and extra defocus remains secondary to the
++resulting carrier MTF.
++
++For coupled BW fits, leave-one-out validation freezes the joint defocus/compact
++blur coordinate and refits the monotone residual sigma on each retained subset.
++The resulting process-screen MTF span and maximum displacement measure whether
++the colour-recovery transfer itself is stable without repeatedly choosing a new
++physical decomposition.
+ 
+ ## Qt workflow
+ 
+--- a/src/libcolorscreen/include/focus-analysis.h
++++ b/src/libcolorscreen/include/focus-analysis.h
+@@ -53,6 +53,17 @@
+   std::vector<coord_t> held_out_relative_badness;
+   coord_t held_out_max_relative_badness = -1;
+ 
++  /* Effective capture transfer at the process-screen frequency used by the
++     reconstruction.  PROCESS_SCREEN_FREQUENCY is in cycles per scan pixel and
++     PROCESS_SCREEN_MTF is a unit-scale magnitude.  These are the primary
++     sharpness diagnostics for additive-screen colour recovery: the exact
++     sigma/defocus decomposition is secondary when several physical parameter
++     combinations produce the same useful screen contrast.  */
++  coord_t process_screen_frequency = -1;
++  coord_t process_screen_mtf = -1;
++  coord_t leave_one_out_process_screen_mtf_span = -1;
++  coord_t leave_one_out_process_screen_mtf_max_delta = -1;
++
+   /* Stability of the active scalar focus/blur parameter.  These fields stay
+      negative when FINETUNE_PARAMETERS does not optimize exactly one supported
+      scalar focus/blur parameter or when leave-one-out checking is disabled.
+--- a/src/libcolorscreen/focus-analysis.C
++++ b/src/libcolorscreen/focus-analysis.C
+@@ -1,4 +1,5 @@
+ #include "include/focus-analysis.h"
++#include "include/scr-to-img.h"
+ #include "render-interpolate.h"
+ #include <algorithm>
+ #include <cmath>
+@@ -62,6 +63,90 @@
+   return std::sqrt (red * red + green * green + blue * blue);
+ }
+ 
++/* Return true when both scalar scanner-MTF coordinates are requested.  The
++   process-screen objective cares primarily about their combined transfer;
++   fitting them as one large simplex together with all local phases proved
++   unnecessarily sensitive to initialization on real Paget scans.  */
++static bool
++coupled_scanner_mtf_focus_p (uint64_t flags)
++{
++  constexpr uint64_t coupled
++      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
++  return (flags & coupled) == coupled;
++}
++
++/* Estimate the process-screen spatial frequency around the selected areas.
++   SCR_NAMES stores frequency in cycles per screen-coordinate unit while the
++   local image-to-screen Jacobian converts one scan pixel to that unit.  Use a
++   median so mild lens distortion or one unusual selected location cannot move
++   the reported carrier frequency appreciably.  */
++static coord_t
++selected_process_screen_frequency (const scr_to_img_parameters &param,
++                                   const image_data &img,
++                                   const std::vector<point_t> &locations)
++{
