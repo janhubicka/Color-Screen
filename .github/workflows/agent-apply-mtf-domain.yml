@@ -20,6 +20,25 @@ jobs:
         run: |
           set -euxo pipefail
           cp .github/agent-apply-mtf-domain.py /tmp/agent-apply-mtf-domain.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('/tmp/agent-apply-mtf-domain.py')
+          s = p.read_text()
+          old = '''replace_all('src/libcolorscreen/render-interpolate.C',
+          ''' + "'''" + '''      sharpen_parameters sharpen = m_params.sharpen;\n      sharpen.usm_radius = m_params.screen_blur_radius * psize;\n      sharpen.scanner_mtf_scale *= psize;\n      sharpen.scanner_mtf.wavelength\n          = m_params.get_image_layer_wavelength (&m_img);\n''' + "'''" + ''',
+          ''' + "'''" + '''      sharpen_parameters sharpen\n          = m_params.get_image_layer_sharpen_parameters (&m_img);\n      sharpen.usm_radius = m_params.screen_blur_radius * psize;\n      sharpen.scanner_mtf_scale *= psize;\n''' + "'''" + ''', 2)
+          '''
+          new = '''replace('src/libcolorscreen/render-interpolate.C',
+          ''' + "'''" + '''      sharpen_parameters sharpen = m_params.sharpen;\n      sharpen.usm_radius = m_params.screen_blur_radius * psize;\n      sharpen.scanner_mtf_scale *= psize;\n      sharpen.scanner_mtf.wavelength\n          = m_params.get_image_layer_wavelength (&m_img);\n''' + "'''" + ''',
+          ''' + "'''" + '''      sharpen_parameters sharpen\n          = m_params.get_image_layer_sharpen_parameters (&m_img);\n      sharpen.usm_radius = m_params.screen_blur_radius * psize;\n      sharpen.scanner_mtf_scale *= psize;\n''' + "'''" + ''')
+          replace('src/libcolorscreen/render-interpolate.C',
+          ''' + "'''" + '''              sharpen_parameters sharpen = m_params.sharpen;\n              sharpen.usm_radius = m_params.screen_blur_radius * psize;\n              sharpen.scanner_mtf_scale *= psize;\n              sharpen.scanner_mtf.wavelength\n                  = m_params.get_image_layer_wavelength (&m_img);\n''' + "'''" + ''',
+          ''' + "'''" + '''              sharpen_parameters sharpen\n                  = m_params.get_image_layer_sharpen_parameters (&m_img);\n              sharpen.usm_radius = m_params.screen_blur_radius * psize;\n              sharpen.scanner_mtf_scale *= psize;\n''' + "'''" + ''')
+          '''
+          if s.count(old) != 1:
+              raise SystemExit('staging script interpolate block changed unexpectedly')
+          p.write_text(s.replace(old, new))
+          PY
           git config user.name "OpenAI Agent"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git reset --hard 05494c725961233fab0651922b2ea9a5121f33ec
