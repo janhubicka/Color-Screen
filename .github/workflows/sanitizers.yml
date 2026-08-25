@@ -44,7 +44,7 @@ jobs:
       run: |
         SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=thread"
         CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
-          ./configure --enable-checking --disable-static-link --disable-openmp \
+          ./configure --enable-checking --disable-static-link \
           --disable-gtkgui --enable-qtgui
     - name: Build ThreadSanitizer variant
       run: make -j$(nproc)
@@ -108,7 +108,7 @@ jobs:
     - name: Install dependencies
       run: |
         brew install \
-          libtiff libjpeg-turbo libzip gsl libraw little-cms2 fftw \
+          libtiff libjpeg-turbo libzip gsl libraw little-cms2 libomp fftw \
           qt6 exiv2 openjpeg libpng webp ccache
         brew link qt6 --force
     - name: Restore compiler cache
@@ -126,17 +126,27 @@ jobs:
         QT6_PREFIX=$(brew --prefix qt6)
         BREW_PREFIX=$(brew --prefix)
         export PATH="$QT6_PREFIX/bin:$PATH"
-        MOC=$(find "$QT6_PREFIX" -name moc -type f -perm +111 | head -n 1)
-        if [ -z "$MOC" ]; then
+        MOC_CANDIDATE=$(find "$QT6_PREFIX" -name moc -type f -perm +111 | head -n 1)
+        if [ -z "$MOC_CANDIDATE" ]; then
+          MOC_CANDIDATE=$(find "$BREW_PREFIX" -name moc -type f -perm +111 2>/dev/null | grep qt | head -n 1)
+        fi
+        if [ -z "$MOC_CANDIDATE" ]; then
+          QT6_BIN=$(pkg-config --variable=host_bins Qt6Core)
+          if [ -n "$QT6_BIN" ] && [ -x "$QT6_BIN/moc" ]; then
+            MOC_CANDIDATE="$QT6_BIN/moc"
+          fi
+        fi
+        if [ -z "$MOC_CANDIDATE" ]; then
           echo "Could not locate Qt moc" >&2
           exit 1
         fi
-        SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined -I$BREW_PREFIX/include"
+        export PATH="$(dirname "$MOC_CANDIDATE"):$PATH"
+        SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined -I$BREW_PREFIX/include -I$BREW_PREFIX/opt/libomp/include -Xclang=-fopenmp"
         CC="ccache clang" CXX="ccache clang++" \
           CFLAGS="$SANITIZER_FLAGS" CXXFLAGS="$SANITIZER_FLAGS" \
-          LDFLAGS="-L$BREW_PREFIX/lib -fsanitize=address,undefined" \
+          LDFLAGS="-L$BREW_PREFIX/lib -L$BREW_PREFIX/opt/libomp/lib -lomp -fsanitize=address,undefined" \
           ./configure --enable-checking --disable-static-link --disable-openmp \
-          --enable-qtgui MOC="$MOC"
+          --enable-qtgui MOC="$MOC_CANDIDATE"
     - name: Build sanitizer variant
       run: make -j$(sysctl -n hw.logicalcpu)
     - name: Qt multi-window smoke test (ASan + UBSan)
@@ -190,6 +200,7 @@ jobs:
         cache: true
         install: >
           make mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-ccache mingw-w64-clang-x86_64-libtiff
+          mingw-w64-clang-x86_64-llvm-openmp
           mingw-w64-clang-x86_64-libjpeg-turbo git mingw-w64-clang-x86_64-libraw
           mingw-w64-clang-x86_64-lcms2 mingw-w64-clang-x86_64-libzip
           mingw-w64-clang-x86_64-gsl diffutils autoconf-archive
@@ -219,8 +230,8 @@ jobs:
         CC="ccache clang" CXX="ccache clang++" AR=llvm-ar NM=llvm-nm \
           STRIP=llvm-strip RANLIB=llvm-ranlib \
           CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
-          LDFLAGS="-Wl,--stack,16777216 -fsanitize=address -lpthread" \
-          ./configure --enable-checking --disable-openmp --enable-qtgui
+          LDFLAGS="-Wl,--stack,16777216 -fsanitize=address -lomp -lpthread" \
+          ./configure --enable-checking --enable-qtgui
     - name: Build AddressSanitizer variant
       shell: msys2 {0}
       run: make -j$(nproc)
