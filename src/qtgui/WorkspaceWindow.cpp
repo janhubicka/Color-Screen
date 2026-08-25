@@ -604,11 +604,11 @@ void WorkspaceWindow::configureTabBar() {
     tabBar->setElideMode(Qt::ElideMiddle);
     tabBar->setContextMenuPolicy(Qt::CustomContextMenu);
 
-    if (m_tabBar != tabBar) {
-      if (m_tabBar)
-        m_tabBar->removeEventFilter(this);
-      m_tabBar = tabBar;
-      m_tabBar->installEventFilter(this);
+    if (m_tabBarEventTarget.data() != tabBar) {
+      if (m_tabBarEventTarget)
+        m_tabBarEventTarget->removeEventFilter(this);
+      m_tabBarEventTarget = tabBar;
+      tabBar->installEventFilter(this);
     }
 
     if (tabBar->property("colorscreenConfigured").toBool())
@@ -984,7 +984,16 @@ void WorkspaceWindow::takeViewFromWorkspace(ImageViewWindow *view) {
 
 /** Detach a tab when it is dragged beyond the tab-bar docking margin. */
 bool WorkspaceWindow::eventFilter(QObject *watched, QEvent *event) {
-  if (watched != m_tabBar || !m_tabBar)
+  if (watched != m_tabBarEventTarget.data())
+    return QMainWindow::eventFilter(watched, event);
+
+  // QMdiArea destroys and recreates its internal QTabBar when switching view
+  // modes. Event filters can still run after QTabBar's derived destructor has
+  // entered QWidget::~QWidget(), so a typed QPointer<QTabBar> downcast is
+  // undefined at that point. Keep only QObject identity persistently and cast
+  // the live event target back to QTabBar for real tab events.
+  QTabBar *tabBar = qobject_cast<QTabBar *>(watched);
+  if (!tabBar)
     return QMainWindow::eventFilter(watched, event);
 
   switch (event->type()) {
@@ -992,7 +1001,7 @@ bool WorkspaceWindow::eventFilter(QObject *watched, QEvent *event) {
     auto *mouseEvent = static_cast<QMouseEvent *>(event);
     if (mouseEvent->button() == Qt::LeftButton) {
       m_dragWindow =
-          windowAtTab(m_tabBar->tabAt(mouseEvent->position().toPoint()));
+          windowAtTab(tabBar->tabAt(mouseEvent->position().toPoint()));
       m_dragStartGlobal = mouseEvent->globalPosition().toPoint();
     }
     break;
@@ -1007,8 +1016,8 @@ bool WorkspaceWindow::eventFilter(QObject *watched, QEvent *event) {
         QApplication::startDragDistance())
       break;
 
-    const QPoint localPosition = m_tabBar->mapFromGlobal(globalPosition);
-    const QRect dockingMargin = m_tabBar->rect().adjusted(-24, -32, 24, 32);
+    const QPoint localPosition = tabBar->mapFromGlobal(globalPosition);
+    const QRect dockingMargin = tabBar->rect().adjusted(-24, -32, 24, 32);
     if (dockingMargin.contains(localPosition))
       break;
 
