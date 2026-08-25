@@ -20,7 +20,18 @@ jobs:
         run: |
           git config user.name "OpenAI Agent"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp .github/agent-resolve-capture-mainwindow.py /tmp/resolve-mainwindow.py
           git reset --hard acb4cba9fb9ef84812057b4e06da88a864a21d84
-          git cherry-pick a78b4928597d1076dbbe8ee2af3a647f4524c2fc
+          if git cherry-pick a78b4928597d1076dbbe8ee2af3a647f4524c2fc; then
+            echo "Cherry-pick no longer conflicted"
+          else
+            conflicts=$(git diff --name-only --diff-filter=U)
+            test "$conflicts" = "src/qtgui/MainWindow.cpp"
+            git checkout --ours src/qtgui/MainWindow.cpp
+            python3 /tmp/resolve-mainwindow.py
+            git add src/qtgui/MainWindow.cpp
+            GIT_EDITOR=true git cherry-pick --continue
+          fi
           git diff --check HEAD^ HEAD
+          git status --short
           git push --force origin HEAD:agent/capture-wavelength-defaults
