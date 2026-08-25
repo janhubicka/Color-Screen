@@ -1,0 +1,87 @@
+name: Test focus carrier-MTF patch
+
+on:
+  pull_request:
+    branches:
+      - agent/tmp-focus-carrier-base
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Check out payload branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/tmp-focus-carrier-base
+          fetch-depth: 0
+
+      - name: Reconstruct patch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          base64 -d agent/focus-carrier-aware.patch.gz.b64 | gunzip >/tmp/focus.patch
+          echo '87277e598897573e050d619f763d3cc1232ca419b52d9d887a33ed962464e990  /tmp/focus.patch' | sha256sum -c -
+
+      - name: Apply to exact mainline
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git checkout --detach 0bae4a574b4626225d2e1a7c1d98e291efb41d46
+          git apply --3way /tmp/focus.patch
+          git diff --check
+          git diff --stat
+
+      - name: Configure and build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure --enable-qtgui
+          make -j$(nproc)
+
+      - name: Focus analysis regression
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./src/libcolorscreen/focus-analysis-unittests
+          ./src/colorscreen/colorscreen --help >/tmp/colorscreen-help.txt 2>&1 || true
+          grep -q 'analyze-focus-areas' /tmp/colorscreen-help.txt
+
+      - name: Bundle CLI
+        shell: bash
+        run: |
+          set -euxo pipefail
+          exe=src/colorscreen/colorscreen
+          mkdir -p /tmp/focus-cli/lib
+          cp "$exe" /tmp/focus-cli/colorscreen.bin
+          ldd "$exe" | awk '/=> \/|^\// {for(i=1;i<=NF;i++) if ($i ~ /^\//) print $i}' | sort -u >/tmp/libs.txt
+          while read -r lib; do
+            base=$(basename "$lib")
+            case "$base" in
+              libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|ld-linux*.so.*) continue ;;
+            esac
+            cp -L "$lib" "/tmp/focus-cli/lib/$base"
+          done </tmp/libs.txt
+          cat >/tmp/focus-cli/colorscreen <<'EOF'
+          #!/bin/sh
+          here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+          LD_LIBRARY_PATH="$here/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" exec "$here/colorscreen.bin" "$@"
+          EOF
+          chmod +x /tmp/focus-cli/colorscreen
+          tar -C /tmp -czf /tmp/colorscreen-focus-carrier-cli.tar.gz focus-cli
+
+      - name: Upload CLI
+        uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-focus-carrier-cli
+          path: /tmp/colorscreen-focus-carrier-cli.tar.gz
+          retention-days: 1
