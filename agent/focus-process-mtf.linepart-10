@@ -1,0 +1,59 @@
+-           "a slanted-edge MTF measurement and only Defocus is enabled "
+-           "here."));
+-    return;
+-  }
+-
+   m_focusAreaAnalysisRunning = true;
+   if (m_sharpnessPanel)
+     m_sharpnessPanel->setFocusAreaAnalysisState(
+@@ -5968,6 +5953,20 @@
+             details << tr("Selected %1 of %2 verified candidates.")
+                            .arg(static_cast<int>(analysis.selected.size()))
+                            .arg(static_cast<int>(m_focusAreaCandidates.size()));
++            if (analysis.process_screen_mtf >= 0)
++              details << tr("Process-screen MTF: %1% at %2 cycles/pixel")
++                             .arg(analysis.process_screen_mtf * 100.0, 0, 'f', 2)
++                             .arg(analysis.process_screen_frequency, 0, 'g', 6);
++            if (analysis.leave_one_out_process_screen_mtf_span >= 0)
++              details << tr("Leave-one-out process-screen MTF span: %1 percentage points")
++                             .arg(analysis.leave_one_out_process_screen_mtf_span
++                                      * 100.0,
++                                  0, 'f', 2);
++            if (analysis.leave_one_out_process_screen_mtf_max_delta >= 0)
++              details << tr("Maximum process-screen MTF displacement: %1 percentage points")
++                             .arg(analysis.leave_one_out_process_screen_mtf_max_delta
++                                      * 100.0,
++                                  0, 'f', 2);
+             if (analysis.leave_one_out_focus_span >= 0)
+               details << tr("Leave-one-out focus span: %1")
+                              .arg(analysis.leave_one_out_focus_span, 0, 'g', 5);
+@@ -6043,7 +6042,10 @@
+         colorscreen::finetune_parameters local;
+         local.range = 4;
+         local.ignore_outliers = 0;
+-        local.flags = flags | colorscreen::finetune_position;
++        /* Candidate verification owns local registration.  Global MTF is
++           deliberately not fitted independently in every candidate. */
++        local.flags = colorscreen::finetune_position
++            | colorscreen::finetune_no_progress_report;
+         if (useMonochrome)
+           local.flags |= colorscreen::finetune_bw
+               | colorscreen::finetune_no_normalize
+@@ -6059,7 +6061,10 @@
+         }
+ 
+         colorscreen::finetune_parameters joint = local;
+-        joint.flags |= colorscreen::finetune_no_normalize
++        /* Preserve the verified per-area phase while fitting the shared MTF.
++           Simultaneously moving all phases and focus is badly conditioned. */
++        joint.flags &= ~colorscreen::finetune_position;
++        joint.flags |= flags | colorscreen::finetune_no_normalize
+             | colorscreen::finetune_no_data_collection;
+         if (!useMonochrome)
+           joint.flags |= colorscreen::finetune_uniform_image_layer;
+--- a/src/qtgui/SharpnessPanel.cpp
++++ b/src/qtgui/SharpnessPanel.cpp
+@@ -972,7 +972,7 @@
+       [this](ParameterState &, bool v) {
+         if (v) m_finetuneFlags |= colorscreen::finetune_scanner_mtf_sigma;
+         else m_finetuneFlags &= ~colorscreen::finetune_scanner_mtf_sigma;
