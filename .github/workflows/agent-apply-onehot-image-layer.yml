@@ -1,4 +1,4 @@
-name: Agent normalize one-hot image-layer test strings
+name: Agent make one-hot render cache-independent
 
 on:
   push:
@@ -17,29 +17,35 @@ jobs:
         with:
           ref: agent/onehot-image-layer-sharpening
           fetch-depth: 0
-      - name: Normalize escaped newlines and publish
+      - name: Use native channel transfer in scalar shortcut
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('src/libcolorscreen/unittests.C')
+          p = Path('src/libcolorscreen/render.C')
           s = p.read_text()
-          bs = chr(92)
-          messages = [
-              'LRU peek test FAIL: miss generated a value',
-              'LRU peek test FAIL: completed lookup changed cache state',
-          ]
-          for message in messages:
-              old = 'printf ("' + message + bs + bs + 'n");'
-              new = 'printf ("' + message + bs + 'n");'
-              if s.count(old) != 1:
-                  raise SystemExit(f'expected one occurrence of {old!r}, found {s.count(old)}')
-              s = s.replace(old, new, 1)
+          old = '''                  m_params.get_image_layer_sharpen_parameters (&m_img) };'''
+          new = '''                  m_params.get_sharpen_parameters_for_channel (channel) };'''
+          if s.count(old) != 1:
+              raise SystemExit(f'expected one scalar-channel specialization, found {s.count(old)}')
+          s = s.replace(old, new, 1)
+          old_comment = '''          /* No full RGB result was requested or cached.  Sharpen only the
+             native channel which actually contributes to the image layer.
+             Keep mix-dark and gain after sharpening so this is equivalent to
+             the full RGB sharpen-then-mix path even for Wiener/RL filters.  */'''
+          new_comment = '''          /* No full RGB result was requested or cached.  Sharpen only the
+             native channel which actually contributes to the image layer,
+             using the same native-channel transfer as the full RGB path so
+             cache state cannot change the result.  Keep mix-dark and gain
+             after sharpening so this remains equivalent for Wiener/RL.  */'''
+          if s.count(old_comment) != 1:
+              raise SystemExit('selected-channel comment anchor missing')
+          s = s.replace(old_comment, new_comment, 1)
           p.write_text(s)
           PY
           git diff --check
-          git diff -- src/libcolorscreen/unittests.C
+          git diff -- src/libcolorscreen/render.C
           git config user.name "OpenAI Agent"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/libcolorscreen/unittests.C
-          git commit -m "test: normalize LRU peek diagnostics"
+          git add src/libcolorscreen/render.C
+          git commit -m "render: keep one-hot cache reuse deterministic" -m "Use the selected native channel's sharpening parameters in the scalar-only one-hot path, exactly as the full RGB path does. This ensures that populating or evicting the RGB cache cannot change image-layer pixels when a separate scalar image-layer measurement is selected."
           git push origin HEAD:agent/onehot-image-layer-sharpening
