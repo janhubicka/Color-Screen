@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   thread-sanitizer:
-    name: ThreadSanitizer (Ubuntu amd64)
+    name: ThreadSanitizer (Ubuntu amd64, no OpenMP)
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
@@ -43,8 +43,12 @@ jobs:
     - name: Configure with ThreadSanitizer
       run: |
         SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=thread"
+        # Ubuntu's uninstrumented libgomp synchronization is invisible to GCC
+        # TSan: even a legal two-scalar OpenMP reduction is reported as a race.
+        # Keep TSan coverage for ordinary C/C++ threading; OpenMP remains
+        # exercised by the other checking and sanitizer jobs.
         CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
-          ./configure --enable-checking --disable-static-link \
+          ./configure --enable-checking --disable-static-link --disable-openmp \
           --disable-gtkgui --enable-qtgui
     - name: Build ThreadSanitizer variant
       run: make -j$(nproc)
