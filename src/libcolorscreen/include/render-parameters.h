@@ -1055,17 +1055,49 @@ private:
                                          rgbdata patch_proportions,
                                          xyz target_whitepoint = d50_white) const;
 public:
-  /* Return the scanner-channel slot used to model the scalar image layer.
-     RGB-derived image layers use green as the current representative channel.
-     A native scalar plane uses slot 3; whether its default wavelength is
-     infrared or visible is decided from the presence of RGB data.  */
-  int get_image_layer_channel (const image_data *img) const
+  /* Return the native capture channel which exactly supplies the scalar
+     image layer, or -1 when the layer is a genuine RGB mixture.  A real
+     grayscale/IR plane is channel 3.  For an RGB-derived layer, infer a native
+     channel only when exactly one finite mix weight is nonzero; the selected
+     weight may have any magnitude because gain does not change normalized
+     MTF.  Exact zero is intentional: even a tiny second-channel contribution
+     introduces another capture transfer.  */
+  int get_image_layer_native_channel (const image_data *img) const
   {
     if (!img)
-      return 1;
-    bool ir_sim = !img->has_grayscale_or_ir ()
-                  || (img->has_rgb () && ignore_infrared);
-    return ir_sim ? 1 : 3;
+      return -1;
+    const bool ir_sim = !img->has_grayscale_or_ir ()
+                        || (img->has_rgb () && ignore_infrared);
+    if (!ir_sim)
+      return 3;
+    if (!img->has_rgb ())
+      return -1;
+
+    const luminosity_t weights[3] = { mix_red, mix_green, mix_blue };
+    int channel = -1;
+    for (int c = 0; c < 3; ++c)
+      {
+        if (!my_isfinite ((double)weights[c]))
+          return -1;
+        if (weights[c] != 0)
+          {
+            if (channel >= 0)
+              return -1;
+            channel = c;
+          }
+      }
+    return channel;
+  }
+
+  /* Return the scanner-channel slot used to model the scalar image layer.
+     Exact one-channel RGB mixes use that native channel.  Genuine RGB mixtures
+     keep green as the current representative analytical channel.  A native
+     scalar plane uses slot 3; whether its default wavelength is infrared or
+     visible is decided from the presence of RGB data.  */
+  int get_image_layer_channel (const image_data *img) const
+  {
+    const int native_channel = get_image_layer_native_channel (img);
+    return native_channel >= 0 ? native_channel : 1;
   }
   /* Return the wavelength used by the current scalar image-layer model.  */
   double get_image_layer_wavelength (const image_data *img) const
