@@ -5905,6 +5905,21 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
     return;
   }
 
+  const uint64_t coupledPhysicalFocus
+      = colorscreen::finetune_scanner_mtf_sigma
+      | colorscreen::finetune_scanner_mtf_defocus;
+  if ((flags & coupledPhysicalFocus) == coupledPhysicalFocus
+      && m_rparams.sharpen.scanner_mtf.simulate_diffraction_p()) {
+    QMessageBox::information(
+        this, tr("Focus analysis areas"),
+        tr("Residual sigma and physical defocus are not separately "
+           "identifiable from periodic focus areas. Fix or calibrate one "
+           "and optimize only the other. Usually sigma is calibrated from "
+           "a slanted-edge MTF measurement and only Defocus is enabled "
+           "here."));
+    return;
+  }
+
   m_focusAreaAnalysisRunning = true;
   if (m_sharpnessPanel)
     m_sharpnessPanel->setFocusAreaAnalysisState(

@@ -71,6 +71,28 @@ No universal numerical acceptance threshold is imposed: physical defocus,
 empirical blur diameter, residual sigma, and legacy screen blur have different
 units, and useful residual thresholds still need calibration on real scans.
 
+## Physical sigma and defocus identifiability
+
+Uniform periodic screen areas constrain the **combined** scanner transfer very
+well, but they do not in general contain enough independent spatial-frequency
+information to split that transfer uniquely into both residual Gaussian
+`sigma` and physical image-plane `defocus`.  On a real Paget scan, materially
+different sigma/defocus pairs produced essentially the same residual because
+the strong surviving screen harmonics sample only a small part of the MTF.
+The result then depends on the optimizer start even when every selected area is
+fitted simultaneously.
+
+For a physical diffraction model, multi-area focus analysis therefore refuses
+to optimize scanner-MTF `sigma` and `defocus` at the same time.  Calibrate or
+fix one component and optimize the other.  In particular, a slanted-edge MTF
+measurement can provide the residual sigma before the screen areas are used to
+fit defocus.  Conversely, keep defocus fixed when the purpose of the area fit
+is to estimate a residual sigma.
+
+This restriction is deliberate: choosing an arbitrary continuation or
+multistart winner would make the numerical residual slightly smaller while
+still reporting a physically non-identifiable decomposition.
+
 ## Qt workflow
 
 The Sharpness panel exposes **Find focus analysis areas** and **Analyze

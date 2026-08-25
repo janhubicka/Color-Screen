@@ -232,6 +232,25 @@ finetune_analyze_focus_areas (
       return false;
     }
 
+  /* Periodic focus areas constrain the combined scanner transfer, but the
+     residual Gaussian sigma and physical defocus can compensate for each
+     other at the few harmonics that remain measurable in a real capture.
+     A coupled fit can therefore report optimizer initialization rather than
+     a separately identified physical decomposition.  Require one coordinate
+     to be calibrated/fixed and fit only the other.  */
+  constexpr uint64_t coupled_physical_focus
+      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+  if ((fparams.flags & coupled_physical_focus) == coupled_physical_focus
+      && rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
+    {
+      set_analysis_error (
+          result,
+          "physical scanner MTF sigma and defocus are not separately "
+          "identifiable from periodic focus areas; fix/calibrate one and "
+          "optimize only the other");
+      return false;
+    }
+
   if (!finetune_select_focus_areas (candidates, analysis_parameters.selection,
                                     &result->selected,
                                     &result->color_volume))
