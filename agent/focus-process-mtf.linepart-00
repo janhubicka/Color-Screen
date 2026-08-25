@@ -1,0 +1,52 @@
+--- a/doc/focus-area-analysis.md
++++ b/doc/focus-area-analysis.md
+@@ -71,27 +71,42 @@
+ empirical blur diameter, residual sigma, and legacy screen blur have different
+ units, and useful residual thresholds still need calibration on real scans.
+ 
+-## Physical sigma and defocus identifiability
++## Effective process-screen MTF and physical focus
+ 
+-Uniform periodic screen areas constrain the **combined** scanner transfer very
+-well, but they do not in general contain enough independent spatial-frequency
+-information to split that transfer uniquely into both residual Gaussian
+-`sigma` and physical image-plane `defocus`.  On a real Paget scan, materially
+-different sigma/defocus pairs produced essentially the same residual because
+-the strong surviving screen harmonics sample only a small part of the MTF.
+-The result then depends on the optimizer start even when every selected area is
+-fitted simultaneously.
+-
+-For a physical diffraction model, multi-area focus analysis therefore refuses
+-to optimize scanner-MTF `sigma` and `defocus` at the same time.  Calibrate or
+-fix one component and optimize the other.  In particular, a slanted-edge MTF
+-measurement can provide the residual sigma before the screen areas are used to
+-fit defocus.  Conversely, keep defocus fixed when the purpose of the area fit
+-is to estimate a residual sigma.
+-
+-This restriction is deliberate: choosing an arbitrary continuation or
+-multistart winner would make the numerical residual slightly smaller while
+-still reporting a physically non-identifiable decomposition.
++The sharpness quantity that matters most to additive-screen colour recovery is
++the capture transfer at the process-screen frequency.  Sigma and defocus are
++therefore a representation of the fitted transfer rather than the primary
++diagnostic.  Different physical parameter pairs are acceptable when they
++produce essentially the same useful modulation at the screen carrier.
++
++Candidate verification fits the local screen phase independently in each area.
++The shared focus fit then keeps those verified phases fixed.  This separation is
++important: moving all local phases in the same simplex as scanner MTF lets
++registration absorb part of the periodic modulation and can drive a cold focus
++fit toward an unrealistically sharp transfer.
++
++For monochrome/BW analysis with both scanner-MTF `sigma` and defocus requested,
++the shared fit uses small scalar blocks instead of one coupled simplex.  It
++first refines sigma, which is a monotone coordinate for the useful carrier MTF,
++with the caller's defocus fixed.  A few cheap scalar restarts avoid premature
++termination on a shallow shoulder.  Defocus is then allowed to improve the
++transfer shape with sigma fixed, followed by another sigma polish only when the
++defocus step genuinely improves the pixel residual.  The final result reports
++`process_screen_frequency` and `process_screen_mtf` explicitly.
++
++This works for both intended starting conditions.  With no slanted-edge
++calibration, the area fit estimates the useful transfer from a cold physical
++model.  With an existing MTF calibration, the same procedure starts from that
