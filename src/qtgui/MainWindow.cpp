@@ -212,7 +212,7 @@ bool focusAnalysisUsesMonochromeInput(const colorscreen::image_data &scan) {
     changing the load/reload orchestration. */
 class InitialSetupGuideDialog final : public QDialog {
 public:
-  explicit InitialSetupGuideDialog(QWidget *parent, bool suggestBayer, bool suggestFStop, bool suggestPitch, bool suggestFill, bool suggestDPI, const colorscreen::image_data *scan)
+  explicit InitialSetupGuideDialog(QWidget *parent, bool suggestBayer, bool suggestFStop, bool suggestPitch, bool suggestFill, bool suggestDPI, bool suggestWavelengths, const colorscreen::image_data *scan)
       : QDialog(parent) {
     setWindowTitle(tr("Suggested image setup"));
     setModal(true);
@@ -231,7 +231,8 @@ public:
       m_monochromeBayer->setChecked(true);
       layout->addWidget(m_monochromeBayer);
       
-      if (suggestFStop || suggestPitch || suggestFill || suggestDPI) {
+      if (suggestFStop || suggestPitch || suggestFill || suggestDPI
+          || suggestWavelengths) {
         auto *line = new QFrame(this);
         line->setFrameShape(QFrame::HLine);
         line->setFrameShadow(QFrame::Sunken);
@@ -239,9 +240,10 @@ public:
       }
     }
     
-    if (suggestFStop || suggestPitch || suggestFill || suggestDPI) {
+    if (suggestFStop || suggestPitch || suggestFill || suggestDPI
+          || suggestWavelengths) {
       auto *intro2 = new QLabel(
-          tr("The following camera parameters were automatically detected:"), this);
+          tr("The following capture parameters were automatically detected:"), this);
       intro2->setWordWrap(true);
       layout->addWidget(intro2);
     }
@@ -271,6 +273,32 @@ public:
       m_dpi = new QCheckBox(tr("Set image resolution to %1 PPI").arg(scan->xdpi, 0, 'f', 1), this);
       m_dpi->setChecked(true);
       layout->addWidget(m_dpi);
+    }
+
+    if (suggestWavelengths) {
+      QStringList values;
+      static const char *channelNames[] = {"R", "G", "B", "IR"};
+      for (int c = 0; c < 4; ++c) {
+        const bool present = c < 3 ? scan->has_rgb()
+                                   : scan->has_grayscale_or_ir();
+        const double wavelength = scan->wavelengths[c];
+        if (!present || !colorscreen::my_isfinite(wavelength)
+            || wavelength <= 0)
+          continue;
+        if (scan->has_rgb())
+          values << QString("%1 %2 nm")
+                        .arg(channelNames[c])
+                        .arg(wavelength, 0, 'f', 0);
+        else
+          values << QString("%1 nm").arg(wavelength, 0, 'f', 0);
+      }
+      m_wavelengths = new QCheckBox(
+          scan->has_rgb()
+              ? tr("Set detected channel wavelengths: %1").arg(values.join(", "))
+              : tr("Set capture wavelength to %1").arg(values.join(", ")),
+          this);
+      m_wavelengths->setChecked(true);
+      layout->addWidget(m_wavelengths);
     }
 
     auto *buttons = new QDialogButtonBox(
@@ -303,6 +331,10 @@ public:
     return m_dpi && m_dpi->isChecked();
   }
 
+  bool useWavelengths() const {
+    return m_wavelengths && m_wavelengths->isChecked();
+  }
+
 private:
   QString getSensorName(double width_mm) const {
     struct Preset { const char* name; double w; };
@@ -331,6 +363,7 @@ private:
   QCheckBox *m_pitch = nullptr;
   QCheckBox *m_fill = nullptr;
   QCheckBox *m_dpi = nullptr;
+  QCheckBox *m_wavelengths = nullptr;
 };
 
 } // namespace
@@ -3180,9 +3213,9 @@ void MainWindow::reloadCurrentImageWithDemosaic() {
     application->reloadSlantedEdgeReferences(this);
 }
 
-/** Offer the first post-load setup recommendation for a new image.  The guide
-   is deliberately conservative and currently changes only demosaicing; EXIF
-   metadata import and screen autodetection will be added independently. */
+/** Offer conservative post-load setup recommendations for a new image.
+   Detected capture metadata is copied only after explicit user confirmation;
+   loading an existing parameter file remains authoritative. */
 void MainWindow::maybeOfferInitialSetupGuide(
     const colorscreen::monochrome_bayer_analysis &analysis) {
   if (!m_scan)
@@ -3199,18 +3232,29 @@ void MainWindow::maybeOfferInitialSetupGuide(
       std::abs(m_scan->sensor_fill_factor - m_rparams.sharpen.scanner_mtf.sensor_fill_factor) > 0.001;
   bool suggestDPI = m_scan->xdpi > 0 &&
       std::abs(m_scan->xdpi - m_rparams.sharpen.scanner_mtf.scan_dpi) > 0.1;
+  bool suggestWavelengths = false;
+  for (int c = 0; c < 4; ++c) {
+    const bool present = c < 3 ? m_scan->has_rgb()
+                               : m_scan->has_grayscale_or_ir();
+    const double wavelength = m_scan->wavelengths[c];
+    if (present && colorscreen::my_isfinite(wavelength) && wavelength > 0
+        && std::abs(wavelength
+                    - m_rparams.sharpen.scanner_mtf.wavelengths[c]) > 0.5)
+      suggestWavelengths = true;
+  }
 
-  if (!suggestBayer && !suggestFStop && !suggestPitch && !suggestFill && !suggestDPI)
+  if (!suggestBayer && !suggestFStop && !suggestPitch && !suggestFill
+      && !suggestDPI && !suggestWavelengths)
     return;
 
   const std::shared_ptr<colorscreen::image_data> guideScan = m_scan;
   auto *dialog = new InitialSetupGuideDialog(
       this, suggestBayer, suggestFStop, suggestPitch, suggestFill,
-      suggestDPI, guideScan.get());
+      suggestDPI, suggestWavelengths, guideScan.get());
   connect(
       dialog, &QDialog::finished, this,
       [this, dialog, guideScan, suggestBayer, suggestFStop, suggestPitch,
-       suggestFill, suggestDPI](int result) {
+       suggestFill, suggestDPI, suggestWavelengths](int result) {
         if (result != QDialog::Accepted || !m_scan ||
             m_scan.get() != guideScan.get())
           return;
@@ -3246,6 +3290,18 @@ void MainWindow::maybeOfferInitialSetupGuide(
         if (suggestDPI && dialog->useDPI()) {
           state.rparams.sharpen.scanner_mtf.scan_dpi = guideScan->xdpi;
           changes << tr("image resolution");
+        }
+
+        if (suggestWavelengths && dialog->useWavelengths()) {
+          for (int c = 0; c < 4; ++c) {
+            const bool present = c < 3 ? guideScan->has_rgb()
+                                       : guideScan->has_grayscale_or_ir();
+            const double wavelength = guideScan->wavelengths[c];
+            if (present && colorscreen::my_isfinite(wavelength)
+                && wavelength > 0)
+              state.rparams.sharpen.scanner_mtf.wavelengths[c] = wavelength;
+          }
+          changes << tr("channel wavelengths");
         }
 
         if (changes.isEmpty())

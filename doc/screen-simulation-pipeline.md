@@ -486,6 +486,35 @@ For lens-limited 2000--5000 PPI captures this is usually secondary, but it
 should be measured against the highest screen harmonics that survive the
 capture MTF.
 
+### SIM-011 — RGB-derived image layers use one representative capture MTF
+
+**Severity:** physical-model limitation; potentially significant for strong
+chromatic focus differences
+
+**Status:** open; test and benchmark independently
+
+A true monochrome capture has one scalar transfer `H`.  By linearity, applying
+that same transfer to each screen-primary basis before mixing is equivalent to
+mixing the screen colours first and blurring the resulting scalar signal.
+This remains correct for a standalone visible-light grayscale scan and for a
+real infrared plane once the appropriate scalar wavelength is selected.
+
+An image layer synthesized from scanner RGB is different.  The physical signal
+is a weighted sum of scanner-channel responses after the screen primaries have
+passed through their scanner spectral sensitivities, and the red, green and
+blue scanner channels may have different capture transfers.  The current
+periodic-screen and finetune paths instead use one representative image-layer
+MTF (currently the green channel) for the complete scalar screen model.
+
+Before changing production behaviour, implement an exact Fourier-domain
+reference which forms the scanner-channel spectra from the three prepared
+screen-primary spectra, applies each channel's transfer, and only then performs
+the image-layer mix.  Compare recovered focus and residuals with the current
+representative-MTF shortcut and benchmark the additional FFT work.  The
+prepared finetune source already retains the three screen-primary spectra, so
+the exact reference may be substantially cheaper than a naive set of spatial
+convolutions.
+
 ## Numerical and cache invariants
 
 1. Optical and screen calculations are performed in linear light.

@@ -415,16 +415,23 @@ struct mtf_parameters
   DLL_PUBLIC int load_csv (FILE *in, std::string name, const char **error);
 
   /* Return configured wavelength for channel C, falling back to the global
-     narrow-band wavelength and then to approximate camera-channel peaks.  */
+     narrow-band wavelength and then to a generic capture default.  HAS_RGB
+     distinguishes a fourth infrared channel from a standalone monochrome
+     capture: the former defaults to near-IR while the latter defaults to
+     visible green light.  Scanner/camera metadata and explicit parameters
+     always override these defaults.  */
   double
-  get_channel_wavelength (int c) const
+  get_channel_wavelength (int c, bool has_rgb = true) const
   {
-    /* Approximate peaks of spectral sensitivity curves of Nikon D700.  */
-    static constexpr double default_wavelengths[] = {600, 530, 450, 850};
+    static constexpr double default_wavelengths[] = {600, 530, 450, 750};
+    if (c < 0 || c >= 4)
+      return wavelength > 0 ? wavelength : 550;
     if (wavelengths[c] > 0)
       return wavelengths[c];
     if (wavelength > 0)
       return wavelength;
+    if (c == 3 && !has_rgb)
+      return 550;
     return default_wavelengths[c];
   }
 private:

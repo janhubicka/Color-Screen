@@ -427,11 +427,13 @@ struct render_parameters
   sharpen_parameters sharpen;
 
   /* Return scanner sharpening parameters specialized for native CHANNEL
-     (0 red, 1 green, 2 blue, 3 infrared).  Direct measured MTF curves are
-     matched inside the selected same-capture group and analytical models use
-     the wavelength associated with the requested scanner channel.  */
+     (0 red, 1 green, 2 blue, 3 scalar/infrared).  HAS_RGB says whether the
+     fourth channel is an infrared companion to RGB; without RGB it is a
+     standalone monochrome capture and uses the visible-light fallback.
+     Direct measured MTF curves are matched inside the selected same-capture
+     group and analytical models use the corresponding wavelength.  */
   DLL_PUBLIC sharpen_parameters
-  get_sharpen_parameters_for_channel (int channel) const;
+  get_sharpen_parameters_for_channel (int channel, bool has_rgb = true) const;
 
   /***** Tile Adjustment (used to adjust parameters of individual tiles) *****/
 
@@ -1046,11 +1048,24 @@ private:
                                          rgbdata patch_proportions,
                                          xyz target_whitepoint = d50_white) const;
 public:
+  /* Return the scanner-channel slot used to model the scalar image layer.
+     RGB-derived image layers use green as the current representative channel.
+     A native scalar plane uses slot 3; whether its default wavelength is
+     infrared or visible is decided from the presence of RGB data.  */
   int get_image_layer_channel (const image_data *img) const
   {
-    if (!img) return 1;
-    bool ir_sim = !img->has_grayscale_or_ir () || (img->has_rgb () && ignore_infrared);
+    if (!img)
+      return 1;
+    bool ir_sim = !img->has_grayscale_or_ir ()
+                  || (img->has_rgb () && ignore_infrared);
     return ir_sim ? 1 : 3;
+  }
+  /* Return the wavelength used by the current scalar image-layer model.  */
+  double get_image_layer_wavelength (const image_data *img) const
+  {
+    const int channel = get_image_layer_channel (img);
+    return sharpen.scanner_mtf.get_channel_wavelength (
+        channel, !img || img->has_rgb ());
   }
 };
 }

@@ -125,9 +125,12 @@ const property_t render_parameters::demosaiced_scaling_names []  = {
 
 
 /* Return scanner sharpening parameters specialized for native CHANNEL.
-   CHANNEL is 0 for red, 1 for green, 2 for blue and 3 for infrared.  */
+   CHANNEL is 0 for red, 1 for green, 2 for blue and 3 for the scalar/IR
+   channel.  HAS_RGB distinguishes a true fourth IR channel from standalone
+   monochrome input when choosing a fallback wavelength.  */
 sharpen_parameters
-render_parameters::get_sharpen_parameters_for_channel (int channel) const
+render_parameters::get_sharpen_parameters_for_channel (int channel,
+                                                        bool has_rgb) const
 {
   sharpen_parameters result = sharpen;
   if (channel < 0 || channel >= 4)
@@ -185,6 +188,8 @@ render_parameters::get_sharpen_parameters_for_channel (int channel) const
           wavelength = measurement.wavelength;
           break;
         }
+  if (!(my_isfinite (wavelength) && wavelength > 0))
+    wavelength = mtf.get_channel_wavelength (channel, has_rgb);
   if (my_isfinite (wavelength) && wavelength > 0)
     mtf.wavelength = wavelength;
 
