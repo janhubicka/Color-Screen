@@ -1,0 +1,73 @@
+name: Test process-screen MTF patch
+
+on:
+  pull_request:
+    branches:
+      - agent/tmp-process-mtf-base
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/tmp-process-mtf-base
+          fetch-depth: 0
+      - name: Reconstruct patch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat agent/focus-process-mtf.linepart-* >/tmp/focus.patch
+          echo '51087869d01163321bdd7b41ce6048b8eb72db539eced8cdd4abfa50d7ccfd68  /tmp/focus.patch' | sha256sum -c -
+      - name: Apply and compile
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git checkout --detach 75215f993960a3f4ee2e6db7d8785d0de84fd00f
+          git apply --check /tmp/focus.patch
+          git apply /tmp/focus.patch
+          git diff --check
+          CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure --enable-qtgui
+          make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
+          ./src/libcolorscreen/focus-analysis-unittests
+          make -C src/colorscreen -j$(nproc) colorscreen
+          make -C src/qtgui -j$(nproc) colorscreen-qt
+          ./src/colorscreen/colorscreen --help >/tmp/colorscreen-help.txt 2>&1 || true
+          grep -q 'analyze-focus-areas' /tmp/colorscreen-help.txt
+      - name: Bundle CLI
+        shell: bash
+        run: |
+          set -euxo pipefail
+          exe=src/colorscreen/colorscreen
+          mkdir -p /tmp/process-mtf-cli/lib
+          cp "$exe" /tmp/process-mtf-cli/colorscreen.bin
+          ldd "$exe" | awk '/=> \/|^\// {for(i=1;i<=NF;i++) if ($i ~ /^\//) print $i}' | sort -u >/tmp/libs.txt
+          while read -r lib; do
+            base=$(basename "$lib")
+            case "$base" in
+              libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|ld-linux*.so.*) continue ;;
+            esac
+            cp -L "$lib" "/tmp/process-mtf-cli/lib/$base"
+          done </tmp/libs.txt
+          cat >/tmp/process-mtf-cli/colorscreen <<'EOF'
+          #!/bin/sh
+          here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+          LD_LIBRARY_PATH="$here/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" exec "$here/colorscreen.bin" "$@"
+          EOF
+          chmod +x /tmp/process-mtf-cli/colorscreen
+          tar -C /tmp -czf /tmp/colorscreen-process-mtf-cli.tar.gz process-mtf-cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-process-mtf-cli
+          path: /tmp/colorscreen-process-mtf-cli.tar.gz
+          retention-days: 1
