@@ -105,8 +105,9 @@ whole mixed scalar transfer.  Exact one-channel mixes are handled below.
 
 ### MTF-DOM-005 — Monochrome original captured through RGB channels
 
-**Status:** partially fixed; exact one-channel mixes are handled, while general
-weighted multi-channel forward models remain open.
+**Status:** exact one-channel production handling and an exact weighted Fourier
+reference are implemented; automatic production selection for general mixtures
+remains open.
 
 An exact image-layer mix with only one nonzero RGB weight now inherits that
 native channel's measured/analytical MTF.  Full-image rendering sharpens only
@@ -133,11 +134,23 @@ L_mix(f) = sum_c w_c a_c H_c(f) L(f)
 
 for scalar mix weights `w_c`.  No process-primary 3x3 colour matrix is needed.
 
-Where periodic screen simulation or BW finetune currently uses one
-representative analytical transfer for an RGB-derived monochrome layer, add an
-exact weighted-channel-transfer reference and compare it with the shortcut.
-This should be substantially cheaper than the viewing-filter model below and
-may often reduce to one combined Fourier transfer before the inverse FFT.
+`screen::initialize_with_weighted_capture_transfer()` now provides the exact
+Fourier-domain reference for this case.  Its input coefficients are effective
+native scanner-channel weights (for example `w_c a_c` above).  It constructs
+each contributing native-channel transfer, forms their normalized weighted sum
+in Fourier space, and applies that one scalar transfer to all three
+process-primary basis spectra before the inverse FFT.  A regression compares
+this path with the deliberately slow reference that filters the whole basis
+three times and mixes the spatial results afterwards; it also verifies exact
+reduction to the previous one-channel case.  Anticipated Richardson-Lucy is
+rejected because that iteration is nonlinear and cannot be collapsed into one
+Fourier transfer.
+
+Production periodic simulation/BW finetune still uses the representative
+scalar specialization for genuine multi-channel RGB-derived layers.  Wiring the
+new reference into those callers requires reliable capture provenance and the
+effective native-channel gains: it must not become an automatic shortcut for a
+viewing-filter transparency, whose model is MTF-DOM-006.
 
 ### MTF-DOM-006 — Viewing-filter transparency captured in RGB
 

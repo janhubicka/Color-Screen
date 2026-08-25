@@ -141,6 +141,20 @@ public:
       const screen_filter_source &source,
       sharpen_parameters *sharpen[3], bool anticipate_sharpening,
       bool parallel = true, screen_filter_profile *profile = nullptr);
+  /* Apply one scalar transfer formed as the normalized weighted sum of
+     three native scanner/capture-channel transfers to every process-primary
+     spectrum in SOURCE.  CAPTURE_WEIGHTS are effective scalar coefficients
+     (for example w_c * a_c for a monochrome RGB capture), not process-primary
+     weights.  This is the exact linear model for RGB capture of one
+     monochrome image layer; it deliberately does not perform viewing-filter
+     process-primary/scanner-response mixing.  Anticipated Richardson-Lucy is
+     nonlinear and therefore cannot be collapsed into one Fourier transfer.  */
+  nodiscard_attr bool
+  initialize_with_weighted_capture_transfer (
+      const screen_filter_source &source,
+      sharpen_parameters *capture[3], rgbdata capture_weights,
+      bool anticipate_sharpening, bool parallel = true,
+      screen_filter_profile *profile = nullptr);
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
   void strip (coord_t first_strip_width, coord_t second_strip_width, int color1, int color2, int color3);
