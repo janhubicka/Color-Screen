@@ -34,8 +34,9 @@ jobs:
     - name: Install Clang OpenMP TSan runtime
       run: |
         apt-get update
-        apt-get install -y --no-install-recommends clang-18 libclang-rt-18-dev libomp-18-dev
+        apt-get install -y --no-install-recommends clang-18 libclang-rt-18-dev libomp-18-dev llvm-18
         test -f /usr/lib/llvm-18/lib/libarcher.so
+        test -x /usr/bin/llvm-symbolizer-18
         rm -rf /var/lib/apt/lists/*
     - name: Restore compiler cache
       uses: actions/cache@v4
@@ -75,7 +76,9 @@ jobs:
           /tmp/tsan-openmp-smoke.cpp -o /tmp/tsan-openmp-smoke
         LD_LIBRARY_PATH=/usr/lib/llvm-18/lib:${LD_LIBRARY_PATH:-} \
           OMP_NUM_THREADS=4 \
-          TSAN_OPTIONS=halt_on_error=1:ignore_noninstrumented_modules=1 \
+          OMP_TOOL=enabled \
+          OMP_TOOL_LIBRARIES=/usr/lib/llvm-18/lib/libarcher.so \
+          TSAN_OPTIONS=halt_on_error=1:ignore_noninstrumented_modules=1:external_symbolizer_path=/usr/bin/llvm-symbolizer-18 \
           /tmp/tsan-openmp-smoke
     - name: Configure with ThreadSanitizer
       run: |
@@ -93,7 +96,9 @@ jobs:
     - name: Test ThreadSanitizer variant
       env:
         OMP_NUM_THREADS: "4"
-        TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:ignore_noninstrumented_modules=1
+        OMP_TOOL: enabled
+        OMP_TOOL_LIBRARIES: /usr/lib/llvm-18/lib/libarcher.so
+        TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:ignore_noninstrumented_modules=1:external_symbolizer_path=/usr/bin/llvm-symbolizer-18
       run: make -j$(nproc) check
     - name: Upload ThreadSanitizer test results
       uses: actions/upload-artifact@v4
