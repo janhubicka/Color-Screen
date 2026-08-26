@@ -1,0 +1,183 @@
+1;
++}
++
++/* Evaluate the scanner/system MTF represented by RPARAM at the process-screen
++   carrier.  RGB finetuning uses one achromatic periodic-screen transfer at
++   550 nm, matching FINETUNE's capture_sharpen_parameters path.  */
++static coord_t
++screen_frequency_mtf (const render_parameters &rparam, uint64_t flags,
++                      const image_data &img, coord_t frequency)
++{
++  if (!(my_isfinite (frequency) && frequency > 0))
++    return -1;
++  mtf_parameters mtf = rparam.sharpen.scanner_mtf;
++  if (!(flags & finetune_bw) && img.has_rgb ())
++    mtf.wavelength = 550;
++  const coord_t value = mtf.system_mtf (frequency);
++  return my_isfinite (value) && value >= 0 ? value : -1;
++}
++
++static bool
++better_focus_fit (const finetune_result &candidate,
++                  const finetune_result &best)
++{
++  if (!candidate.success || !my_isfinite (candidate.badness))
++    return false;
++  return !best.success || !my_isfinite (best.badness)
++         || candidate.badness < best.badness;
++}
++
++/* Run the coupled physical sigma+defocus fit from a stable scalar basin.
++
++   At a cold physical start both coordinates are flat near zero and a direct
++   high-dimensional simplex can settle on an arbitrary compensation basin.
++   First solve the same all-area pixel objective in the sigma-only and
++   defocus-only subspaces, keep the better scalar solution, then release both
++   coordinates from that point.  The scalar solution itself remains a valid
++   candidate: if releasing the second coordinate does not improve the actual
++   pixel objective, keep the simpler transfer.  Existing nonzero calibration
++   is naturally retained as the start of both scalar solves; no one-sided
++   constraint is imposed, so a historical screen may fit slightly sharper or
++   blurrier than a separate focus target.  */
++static finetune_result
++fit_coupled_physical_focus (
++    const render_parameters &rparam, const scr_to_img_parameters &param,
++    const image_data &img, const std::vector<point_t> &locations,
++    const std::vector<finetune_result> &starts,
++    const finetune_parameters &fparams, progress_info *progress)
++{
++  finetune_result best;
++  render_parameters best_rparam = rparam;
++  bool have_scalar_seed = false;
++
++  for (uint64_t active : { (uint64_t)finetune_scanner_mtf_sigma,
++                           (uint64_t)finetune_scanner_mtf_defocus })
++    {
++      finetune_parameters scalar = fparams;
++      scalar.interpolate_scanner_mtf_defocus = false;
++      scalar.flags &= ~(finetune_scanner_mtf_sigma
++                        | finetune_scanner_mtf_defocus);
++      scalar.flags |= active;
++      finetune_result fit
++          = finetune (rparam, param, img, locations, &starts, scalar, progress);
++      if (!better_focus_fit (fit, best))
++        continue;
++      render_parameters seeded = rparam;
++      if (!freeze_focus_from_fit (&seeded, scalar.flags, fit))
++        continue;
++      best = std::move (fit);
++      best_rparam = seeded;
++      have_scalar_seed = true;
++    }
++
++  /* If both scalar searches failed, retain the historical direct behavior as
++     a last-resort diagnostic rather than converting a recoverable fit into an
++     analysis failure.  */
++  if (!have_scalar_seed)
++    return finetune (rparam, param, img, locations, &starts, fparams, progress);
++
++  finetune_parameters coupled = fparams;
++  coupled.interpolate_scanner_mtf_defocus = false;
++  finetune_result released
++      = finetune (best_rparam, param, img, locations, &starts, coupled,
++                  progress);
++  if (better_focus_fit (released, best))
++    best = std::move (released);
++  return best;
++}
++
+ } // namespace
+ 
+ bool
+@@ -232,24 +339,11 @@ finetune_analyze_focus_areas (
+       return false;
+     }
+ 
+-  /* Periodic focus areas constrain the combined scanner transfer, but the
+-     residual Gaussian sigma and physical defocus can compensate for each
+-     other at the few harmonics that remain measurable in a real capture.
+-     A coupled fit can therefore report optimizer initialization rather than
+-     a separately identified physical decomposition.  Require one coordinate
+-     to be calibrated/fixed and fit only the other.  */
+   constexpr uint64_t coupled_physical_focus
+       = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+-  if ((fparams.flags & coupled_physical_focus) == coupled_physical_focus
+-      && rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
+-    {
+-      set_analysis_error (
+-          result,
+-          "physical scanner MTF sigma and defocus are not separately "
+-          "identifiable from periodic focus areas; fix/calibrate one and "
+-          "optimize only the other");
+-      return false;
+-    }
++  const bool coupled_physical
++      = (fparams.flags & coupled_physical_focus) == coupled_physical_focus
++        && rparam.sharpen.scanner_mtf.simulate_diffraction_p ();
+ 
+   if (!finetune_select_focus_areas (candidates, analysis_parameters.selection,
+                                     &result->selected,
+@@ -292,8 +386,17 @@ finetune_analyze_focus_areas (
+       starts.push_back (candidates[index].fit);
+     }
+ 
+-  result->joint_fit
+-      = finetune (rparam, param, img, locations, &starts, fparams, progress);
++  result->screen_frequency = focus_screen_frequency (param, img);
++  result->initial_screen_mtf
++      = screen_frequency_mtf (rparam, fparams.flags, img,
++                              result->screen_frequency);
++
++  if (coupled_physical)
++    result->joint_fit = fit_coupled_physical_focus (
++        rparam, param, img, locations, starts, fparams, progress);
++  else
++    result->joint_fit
++        = finetune (rparam, param, img, locations, &starts, fparams, progress);
+   if (!result->joint_fit.success)
+     {
+       result->err = "joint focus-area fit failed";
+@@ -302,6 +405,12 @@ finetune_analyze_focus_areas (
+       return false;
+     }
+ 
++  render_parameters joint_rparam = rparam;
++  if (freeze_focus_from_fit (&joint_rparam, fparams.flags, result->joint_fit))
++    result->joint_screen_mtf
++        = screen_frequency_mtf (joint_rparam, fparams.flags, img,
++                                result->screen_frequency);
++
+   if (!analysis_parameters.leave_one_out)
+     {
+       result->success = true;
+@@ -322,7 +431,9 @@ finetune_analyze_focus_areas (
+             subset_starts.push_back (starts[i]);
+           }
+ 
+-      finetune_result fit = finetune (rparam, param, img, subset_locations,
++      render_parameters leave_rparam = rparam;
++      freeze_focus_from_fit (&leave_rparam, fparams.flags, result->joint_fit);
++      finetune_result fit = finetune (leave_rparam, param, img, subset_locations,
+                                      &subset_starts, fparams, progress);
+       result->leave_one_out_fits.push_back (std::move (fit));
+       if (!result->leave_one_out_fits.back ().success)
+diff --git a/src/libcolorscreen/include/focus-analysis.h b/src/libcolorscreen/include/focus-analysis.h
+index 07f7e54..30437c8 100644
+--- a/src/libcolorscreen/include/focus-analysis.h
++++ b/src/libcolorscreen/include/focus-analysis.h
+@@ -45,6 +45,15 @@ struct finetune_focus_analysis_result
+   std::vector<size_t> selected;
+   coord_t color_volume = 0;
+   finetune_result joint_fit;
++
++  /* Process-screen carrier frequency used by focus analysis and the effective
++     system MTF at that frequency before and after the joint fit.  These are
++     the quantities that matter directly for restoring screen modulation.
++     Negative values mean that the geometry/model did not provide a usable
++     carrier measurement.  */
++  coord_t screen_frequency = -1;
++  coord_t initial_screen_mtf = -1;
++  coord_t joint_screen_mtf = -1;
+   std::vector<finetune_result> leave_one_out_fits;
+   /* Entry I evaluates SELECTED[I] after the shared model was learned without
+      that tile.  RELATIVE_BADNESS divides the raw objective by the observed
