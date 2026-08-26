@@ -38,6 +38,8 @@ jobs:
           echo '6c20c4d435d8fae1d8d7711de9051d6479a241f025f3b66d1082a3fe27beb306  /tmp/focus.patch' | sha256sum -c -
           echo '391494b7eff5193b34bd9406a15ad462c119a69624f0e0b6ff6e2d4fe9855806  agent/focus-carrier-test-link-fix.patch' | sha256sum -c -
           echo '69b7408038d476dfc94563d4515defd8125587b4c8c2ae5c9847e4df7e17876c  agent/focus-carrier-probe-phase-fix.patch' | sha256sum -c -
+          cp agent/focus-carrier-test-link-fix.patch /tmp/focus-carrier-test-link-fix.patch
+          cp agent/focus-carrier-probe-phase-fix.patch /tmp/focus-carrier-probe-phase-fix.patch
       - name: Apply and validate
         shell: bash
         run: |
@@ -45,8 +47,8 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git checkout --detach 5b4e956d023dd42618ccbae9078f42f97300f6c5
           git apply /tmp/focus.patch
-          git apply agent/focus-carrier-test-link-fix.patch
-          git apply agent/focus-carrier-probe-phase-fix.patch
+          git apply /tmp/focus-carrier-test-link-fix.patch
+          git apply /tmp/focus-carrier-probe-phase-fix.patch
           git diff --check
           CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure >/dev/null
           make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests >/dev/null
