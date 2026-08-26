@@ -2,55 +2,88 @@
 
 #include <QObject>
 #include <QImage>
-#include <atomic>
-#include <memory> // Added for std::shared_ptr
-#include <QFuture>
-#include <QList>
-#include "../libcolorscreen/include/imagedata.h" // Replaces part of colorscreen.h
-#include "../libcolorscreen/include/render-parameters.h" // Replaces part of colorscreen.h
-#include "../libcolorscreen/include/render-type-parameters.h" // Added as per instruction
-#include "../libcolorscreen/include/scr-to-img-parameters.h" // Replaces scr-to-img.h and part of colorscreen.h
-#include "../libcolorscreen/include/scr-detect-parameters.h" // Replaces part of colorscreen.h
-#include "../libcolorscreen/include/progress-info.h" // Added for colorscreen::progress_info
-
-#include <QMutex>
+#include <condition_variable>
+#include <cstddef>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
+#include <utility>
+#include "../libcolorscreen/include/imagedata.h"
+#include "../libcolorscreen/include/render-parameters.h"
+#include "../libcolorscreen/include/render-type-parameters.h"
+#include "../libcolorscreen/include/scr-to-img-parameters.h"
+#include "../libcolorscreen/include/scr-detect-parameters.h"
+#include "../libcolorscreen/include/progress-info.h"
 
 class Renderer : public QObject
 {
     Q_OBJECT
 public:
-    explicit Renderer(std::shared_ptr<colorscreen::image_data> scan, 
+    explicit Renderer(std::shared_ptr<colorscreen::image_data> scan,
                       const colorscreen::render_parameters &rparams,
                       const colorscreen::scr_to_img_parameters &scrToImg,
                       const colorscreen::scr_detect_parameters &scrDetect,
                       const colorscreen::render_type_parameters &renderType);
     ~Renderer() override;
-    
-public slots:
-    void render(int reqId, double xOffset, double yOffset, double scale, int width, int height,
-                int coordinateSpace,
-                colorscreen::render_parameters frameParams,
-                std::shared_ptr<colorscreen::progress_info> progress,
-                const char* taskName = nullptr);
-    
+
+    /**
+     * Publish a complete render request before waking the renderer thread.
+     *
+     * Qt's queued metacall storage lives in an uninstrumented Qt library.  If
+     * a non-trivial render_parameters object is copied through that storage,
+     * ThreadSanitizer cannot see the event-queue synchronization and reports a
+     * race between constructing the queued argument and consuming it.  Keep
+     * the actual request in our own mutex-protected storage and queue only the
+     * integer request id instead.
+     */
+    bool enqueueRender(int reqId, double xOffset, double yOffset, double scale,
+                       int width, int height, int coordinateSpace,
+                       const colorscreen::render_parameters &frameParams,
+                       std::shared_ptr<colorscreen::progress_info> progress,
+                       const char *taskName = nullptr);
+
+    /** Thread-safe update of the renderer's cached parameter snapshot. */
     void updateParameters(const colorscreen::render_parameters &rparams,
-                         const colorscreen::scr_to_img_parameters &scrToImg,
-                         const colorscreen::scr_detect_parameters &scrDetect,
-                         const colorscreen::render_type_parameters &renderType);
+                          const colorscreen::scr_to_img_parameters &scrToImg,
+                          const colorscreen::scr_detect_parameters &scrDetect,
+                          const colorscreen::render_type_parameters &renderType);
+
+public slots:
+    /** Consume a request previously published by enqueueRender(). */
+    void render(int reqId);
 
 signals:
-    void imageReady(int reqId, QImage image, double xOffset, double yOffset, double scale, bool success);
+    void imageReady(int reqId, QImage image, double xOffset, double yOffset,
+                    double scale, bool success);
 
 private:
+    struct RenderRequest {
+        double xOffset = 0;
+        double yOffset = 0;
+        double scale = 1;
+        int width = 0;
+        int height = 0;
+        int coordinateSpace = 0;
+        colorscreen::render_parameters frameParams;
+        colorscreen::scr_to_img_parameters scrToImg;
+        colorscreen::scr_detect_parameters scrDetect;
+        colorscreen::render_type_parameters renderType;
+        std::shared_ptr<colorscreen::progress_info> progress;
+        const char *taskName = nullptr;
+    };
+
     std::shared_ptr<colorscreen::image_data> m_scan;
-    
-    // Parameters protected by mutex
-    mutable QMutex m_mutex;
-    colorscreen::render_parameters m_rparams; 
+
+    // Protect both cached renderer state and the cross-thread request handoff.
+    mutable std::mutex m_mutex;
+    colorscreen::render_parameters m_rparams;
     colorscreen::scr_to_img_parameters m_scrToImg;
     colorscreen::scr_detect_parameters m_scrDetect;
     colorscreen::render_type_parameters m_renderType;
-    
-    // Futures of active rendering tasks
-    QList<QFuture<void>> m_activeFutures;
+    std::unordered_map<int, RenderRequest> m_pendingRenders;
+
+    void finishRenderTask();
+    std::mutex m_activeMutex;
+    std::condition_variable m_activeCondition;
+    std::size_t m_activeTasks = 0;
 };

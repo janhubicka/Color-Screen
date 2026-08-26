@@ -9,7 +9,11 @@
 #include <QWidget>
 #include "ScalableImageLabel.h"
 #include <QTimer>
+#include <condition_variable>
+#include <cstddef>
 #include <memory>
+#include <mutex>
+#include <unordered_map>
 #include <vector>
 #include <QMap> 
 
@@ -68,6 +72,7 @@ signals:
 
 private slots:
   void onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData);
+  void finishTileRender(int reqId);
 
   virtual std::vector<std::pair<colorscreen::render_screen_tile_type, QString>>
   getTileTypes() const = 0;
@@ -95,6 +100,12 @@ private:
 
   int m_lastRenderedTileSize = 0;
   TaskQueue m_renderQueue;
+
+  std::mutex m_workerMutex;
+  std::condition_variable m_workerCondition;
+  std::unordered_map<int, TileRenderResult> m_completedRenders;
+  std::size_t m_activeRenderWorkers = 0;
+  bool m_destroying = false;
 };
 
 #endif // TILE_PREVIEW_PANEL_H

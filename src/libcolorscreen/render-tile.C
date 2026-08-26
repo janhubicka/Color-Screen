@@ -257,11 +257,12 @@ render_to_scr::render_tile (render_type_parameters rtparam,
         return true;
     }
 
-  /* Do not render out of scan area; it is slow.  */
-  if (stats == -1)
-    stats = getenv ("CSSTATS") != NULL;
+  /* Do not render out of scan area; it is slow.  Function-local static
+     initialization is synchronized by C++, so concurrent GUI render tasks do
+     not race while discovering whether statistics are enabled.  */
+  static const bool stats_enabled = getenv ("CSSTATS") != NULL;
   struct timeval start_time;
-  if (stats)
+  if (stats_enabled)
     gettimeofday (&start_time, NULL);
   bool ok = true;
   const bool lock_p = false;
@@ -330,8 +331,12 @@ render_to_scr::render_tile (render_type_parameters rtparam,
     default:
       abort ();
     }
-  if (stats)
+  if (stats_enabled)
     {
+      /* CSSTATS is diagnostic output only.  Serialize its shared timing state,
+         not rendering itself.  */
+      static std::mutex stats_lock;
+      std::lock_guard<std::mutex> stats_guard (stats_lock);
       struct timeval end_time;
       static struct timeval prev_time;
       static bool prev_time_set = true;

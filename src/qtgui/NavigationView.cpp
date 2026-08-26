@@ -172,16 +172,9 @@ void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::pro
 
     m_currentProgress = progress;
 
-    bool result = QMetaObject::invokeMethod(
-      m_renderer, "render", Qt::QueuedConnection,
-      Q_ARG(int, reqId),      
-      Q_ARG(double, 0.0), 
-      Q_ARG(double, 0.0), 
-      Q_ARG(double, scale), Q_ARG(int, targetW), Q_ARG(int, targetH),
-      Q_ARG(int, (int)m_coordinateSpace),
-      Q_ARG(colorscreen::render_parameters, data.params),
-      Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress),
-      Q_ARG(const char*, "Rendering navigation"));
+    bool result = m_renderer->enqueueRender(
+        reqId, 0.0, 0.0, scale, targetW, targetH, (int)m_coordinateSpace,
+        data.params, progress, "Rendering navigation");
       
     if (!result) {
         m_renderQueue.reportFinished(reqId, false);
@@ -204,15 +197,11 @@ void NavigationView::updateParameters(
   }
 
   if (m_renderer) {
-    QMetaObject::invokeMethod(
-        m_renderer, "updateParameters", Qt::QueuedConnection,
-        Q_ARG(colorscreen::render_parameters, *m_rparams),
-        Q_ARG(colorscreen::scr_to_img_parameters,
-              m_scrToImg ? *m_scrToImg : colorscreen::scr_to_img_parameters()),
-        Q_ARG(colorscreen::scr_detect_parameters,
-              m_scrDetect ? *m_scrDetect
-                          : colorscreen::scr_detect_parameters()),
-        Q_ARG(colorscreen::render_type_parameters, m_renderType));
+    m_renderer->updateParameters(
+        *m_rparams,
+        m_scrToImg ? *m_scrToImg : colorscreen::scr_to_img_parameters(),
+        m_scrDetect ? *m_scrDetect : colorscreen::scr_detect_parameters(),
+        m_renderType);
   }
 
   if (m_rparams && (!(m_rparams->scan_crop == m_lastScanCrop) ||

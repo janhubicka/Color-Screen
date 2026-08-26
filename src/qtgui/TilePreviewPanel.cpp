@@ -1,4 +1,5 @@
 #include "TilePreviewPanel.h"
+#include "SynchronizedRunnable.h"
 #include "../libcolorscreen/include/scr-to-img.h"
 #include <QDebug>
 #include <QFormLayout>
@@ -6,7 +7,6 @@
 #include <QLabel>
 #include <QResizeEvent>
 #include <QScrollArea>
-#include <QtConcurrent>
 #include <QColorSpace>
 
 using namespace colorscreen;
@@ -170,6 +170,11 @@ TilePreviewPanel::TilePreviewPanel(StateGetter stateGetter,
 }
 
 TilePreviewPanel::~TilePreviewPanel() {
+  {
+    std::lock_guard<std::mutex> locker(m_workerMutex);
+    m_destroying = true;
+  }
+
   // Stop any pending update timer and disconnect it
   if (m_updateTimer) {
       m_updateTimer->stop();
@@ -180,8 +185,15 @@ TilePreviewPanel::~TilePreviewPanel() {
 
   // Disconnect queue first so it doesn't send signals to us during cancel
   m_renderQueue.disconnect(this);
-  // Cancel any running or pending render tasks
+  // Cancel any running or pending render tasks, then keep this QObject
+  // alive until every project-published QThreadPool worker has returned.
   m_renderQueue.cancelAll();
+  {
+    std::unique_lock<std::mutex> locker(m_workerMutex);
+    m_workerCondition.wait(
+        locker, [this]() { return m_activeRenderWorkers == 0; });
+    m_completedRenders.clear();
+  }
   
   // Explicitly delete UI children created by this class
   // This ensures they are destroyed while 'this' is still a TilePreviewPanel
@@ -379,45 +391,58 @@ void TilePreviewPanel::onTriggerRender(int reqId, std::shared_ptr<colorscreen::p
 
   onTileUpdateScheduled();
 
-  // Start background render
-  QFuture<TileRenderResult> future = QtConcurrent::run(
-        renderTilesGeneric,
-        req.state,
-        req.scanWidth,
-        req.scanHeight,
-        reqId, // Pass reqId as generation
-        req.tileSize,
-        req.pixelSize,
-        req.tileTypes,
-        progress
-  );
+  {
+    std::lock_guard<std::mutex> locker(m_workerMutex);
+    ++m_activeRenderWorkers;
+  }
 
-  // Monitor it
-  // We create a new watcher for each job to support concurrency handled by queue
-  QFutureWatcher<TileRenderResult> *watcher = new QFutureWatcher<TileRenderResult>(this);
-  connect(watcher, &QFutureWatcher<TileRenderResult>::finished, this, [this, watcher, reqId](){
-      TileRenderResult result = watcher->result();
+  runSynchronized(
+      [this, state = std::move(req.state), scanWidth = req.scanWidth,
+       scanHeight = req.scanHeight, reqId, tileSize = req.tileSize,
+       pixelSize = req.pixelSize, tileTypes = std::move(req.tileTypes),
+       progress = std::move(progress)]() mutable {
+        TileRenderResult result = renderTilesGeneric(
+            std::move(state), scanWidth, scanHeight, reqId, tileSize, pixelSize,
+            std::move(tileTypes), std::move(progress));
 
-      // Update UI if successful
-      if (result.success) {
-          if (result.tiles.size() == m_tileLabels.size()) {
-              for (size_t i = 0; i < m_tileLabels.size(); ++i) {
-                  const QImage& img = result.tiles[i];
-                  if (!img.isNull())
-                      m_tileLabels[i]->setPixmap(QPixmap::fromImage(img));
-              }
-          }
-      } else {
-          // Failed or cancelled
-          m_lastRenderedTileSize = 0; // Force retry
+        std::lock_guard<std::mutex> locker(m_workerMutex);
+        m_completedRenders.insert_or_assign(reqId, std::move(result));
+        if (!m_destroying) {
+          // Publish only the integer request id through uninstrumented Qt.
+          QMetaObject::invokeMethod(this, "finishTileRender",
+                                    Qt::QueuedConnection, Q_ARG(int, reqId));
+        }
+        if (m_activeRenderWorkers > 0)
+          --m_activeRenderWorkers;
+        m_workerCondition.notify_all();
+      });
+}
+
+void TilePreviewPanel::finishTileRender(int reqId) {
+  TileRenderResult result;
+  {
+    std::lock_guard<std::mutex> locker(m_workerMutex);
+    auto it = m_completedRenders.find(reqId);
+    if (it == m_completedRenders.end())
+      return;
+    result = std::move(it->second);
+    m_completedRenders.erase(it);
+  }
+
+  if (result.success) {
+    if (result.tiles.size() == m_tileLabels.size()) {
+      for (size_t i = 0; i < m_tileLabels.size(); ++i) {
+        const QImage &img = result.tiles[i];
+        if (!img.isNull())
+          m_tileLabels[i]->setPixmap(QPixmap::fromImage(img));
       }
+    }
+  } else {
+    // Failed or cancelled: force a retry on the next update.
+    m_lastRenderedTileSize = 0;
+  }
 
-      m_renderQueue.reportFinished(reqId, result.success);
-
-      watcher->deleteLater();
-  });
-
-  watcher->setFuture(future);
+  m_renderQueue.reportFinished(reqId, result.success);
 }
 
 void TilePreviewPanel::performTileRender() {

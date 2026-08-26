@@ -361,18 +361,11 @@ void ImageWidget::updateParameters(
 
   // Update renderer's cached parameters if it exists
   if (m_renderer) {
-    QMetaObject::invokeMethod(
-        m_renderer, "updateParameters", Qt::QueuedConnection,
-        Q_ARG(colorscreen::render_parameters,
-              m_rparams ? *m_rparams : colorscreen::render_parameters()),
-        Q_ARG(colorscreen::scr_to_img_parameters,
-              m_scrToImg ? *m_scrToImg : colorscreen::scr_to_img_parameters()),
-        Q_ARG(colorscreen::scr_detect_parameters,
-              m_scrDetect ? *m_scrDetect
-                          : colorscreen::scr_detect_parameters()),
-        Q_ARG(colorscreen::render_type_parameters,
-              m_renderType ? *m_renderType
-                           : colorscreen::render_type_parameters()));
+    m_renderer->updateParameters(
+        m_rparams ? *m_rparams : colorscreen::render_parameters(),
+        m_scrToImg ? *m_scrToImg : colorscreen::scr_to_img_parameters(),
+        m_scrDetect ? *m_scrDetect : colorscreen::scr_detect_parameters(),
+        m_renderType ? *m_renderType : colorscreen::render_type_parameters());
   }
 
   // Selective invalidation: only dirty if scrToImg parameters changed.
@@ -2422,17 +2415,9 @@ void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progre
     
     progress->set_task ("Invoking renderer", 1);
     // Trigger generic render
-    bool result = QMetaObject::invokeMethod(m_renderer, "render", Qt::QueuedConnection,
-                              Q_ARG(int, reqId),
-                              Q_ARG(double, data.xOffset),
-                              Q_ARG(double, data.yOffset),
-                              Q_ARG(double, data.scale),
-                              Q_ARG(int, data.w),
-                              Q_ARG(int, data.h),
-                              Q_ARG(int, (int)m_coordinateSpace),
-                              Q_ARG(colorscreen::render_parameters, data.params),
-                              Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress),
-                              Q_ARG(const char*, "Rendering image"));
+    bool result = m_renderer->enqueueRender(
+        reqId, data.xOffset, data.yOffset, data.scale, data.w, data.h,
+        (int)m_coordinateSpace, data.params, progress, "Rendering image");
     
     if (!result) {
         m_renderQueue.reportFinished(reqId, false);
