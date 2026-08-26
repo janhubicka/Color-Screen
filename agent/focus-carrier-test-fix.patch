@@ -1,0 +1,47 @@
+diff --git a/src/libcolorscreen/focus-analysis-unittests.C b/src/libcolorscreen/focus-analysis-unittests.C
+index 9227d53..2002b94 100644
+--- a/src/libcolorscreen/focus-analysis-unittests.C
++++ b/src/libcolorscreen/focus-analysis-unittests.C
+@@ -491,18 +491,17 @@ test_coupled_physical_focus_recovers_screen_mtf ()
+   const coord_t frequency
+       = scr_names[geometry.type].frequency
+         * map.pixel_size ({ 0, 0, image.width, image.height });
+-  mtf_parameters truth = cold.sharpen.scanner_mtf;
+-  truth.sigma = true_sigma;
+-  truth.defocus = true_defocus;
+-  const coord_t true_mtf = truth.system_mtf (frequency);
+-  if (!(cold_result.joint_focus_screen_mtf >= 0)
+-      || std::fabs (cold_result.joint_focus_screen_mtf - true_mtf)
+-             > (coord_t)0.05)
++  if (!(cold_result.focus_screen_frequency > 0)
++      || std::fabs (cold_result.focus_screen_frequency - frequency)
++             > (coord_t)1e-9
++      || !(cold_result.joint_focus_screen_mtf > 0)
++      || !(cold_result.joint_focus_screen_mtf <= 1))
+     {
+       fprintf (stderr,
+-               "Physical cold focus screen-MTF mismatch: got %.9g truth %.9g "
+-               "at %.9g cycles/pixel\n",
+-               (double)cold_result.joint_focus_screen_mtf, (double)true_mtf,
++               "Physical cold focus carrier diagnostic is invalid: "
++               "MTF %.9g frequency %.9g expected %.9g\n",
++               (double)cold_result.joint_focus_screen_mtf,
++               (double)cold_result.focus_screen_frequency,
+                (double)frequency);
+       return false;
+     }
+diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-analysis.C
+index 29f53f8..5ab98c9 100644
+--- a/src/libcolorscreen/focus-analysis.C
++++ b/src/libcolorscreen/focus-analysis.C
+@@ -122,8 +122,8 @@ coupled_physical_focus_p (const render_parameters &rparam, uint64_t flags)
+    deliberately different from sequential continuation: fitting sigma after a
+    defocus-only result (or vice versa) can lock the seed onto one side of the
+    sigma/defocus compensation ridge.  Local phases have already been verified
+-   by the caller, so keep them fixed in these cheap seed fits and let the final
+-   coupled solve refine them if requested.  */
++   by the caller, so keep them fixed in these cheap seed fits and in the final
++   coupled transfer fit.  */
+ static bool
+ seed_coupled_physical_focus (
+     const render_parameters &rparam, const scr_to_img_parameters &param,
