@@ -1,0 +1,78 @@
+diff --git a/src/qtgui/MainWindow.cpp b/src/qtgui/MainWindow.cpp
+index 07e1a20..b01ae3b 100644
+--- a/src/qtgui/MainWindow.cpp
++++ b/src/qtgui/MainWindow.cpp
+@@ -5977,21 +5977,6 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
+     return;
+   }
+ 
+-  const uint64_t coupledPhysicalFocus
+-      = colorscreen::finetune_scanner_mtf_sigma
+-      | colorscreen::finetune_scanner_mtf_defocus;
+-  if ((flags & coupledPhysicalFocus) == coupledPhysicalFocus
+-      && m_rparams.sharpen.scanner_mtf.simulate_diffraction_p()) {
+-    QMessageBox::information(
+-        this, tr("Focus analysis areas"),
+-        tr("Residual sigma and physical defocus are not separately "
+-           "identifiable from periodic focus areas. Fix or calibrate one "
+-           "and optimize only the other. Usually sigma is calibrated from "
+-           "a slanted-edge MTF measurement and only Defocus is enabled "
+-           "here."));
+-    return;
+-  }
+-
+   m_focusAreaAnalysisRunning = true;
+   if (m_sharpnessPanel)
+     m_sharpnessPanel->setFocusAreaAnalysisState(
+@@ -6040,6 +6025,18 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
+             details << tr("Selected %1 of %2 verified candidates.")
+                            .arg(static_cast<int>(analysis.selected.size()))
+                            .arg(static_cast<int>(m_focusAreaCandidates.size()));
++            if (analysis.screen_frequency > 0
++                && analysis.joint_screen_mtf >= 0) {
++              details << tr("Screen carrier: %1 cycles/pixel")
++                             .arg(analysis.screen_frequency, 0, 'g', 6);
++              if (analysis.initial_screen_mtf >= 0)
++                details << tr("Carrier MTF: %1% → %2%")
++                               .arg(analysis.initial_screen_mtf * 100, 0, 'g', 5)
++                               .arg(analysis.joint_screen_mtf * 100, 0, 'g', 5);
++              else
++                details << tr("Carrier MTF: %1%")
++                               .arg(analysis.joint_screen_mtf * 100, 0, 'g', 5);
++            }
+             if (analysis.leave_one_out_focus_span >= 0)
+               details << tr("Leave-one-out focus span: %1")
+                              .arg(analysis.leave_one_out_focus_span, 0, 'g', 5);
+@@ -6115,7 +6112,7 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
+         colorscreen::finetune_parameters local;
+         local.range = 4;
+         local.ignore_outliers = 0;
+-        local.flags = flags | colorscreen::finetune_position;
++        local.flags = colorscreen::finetune_position;
+         if (useMonochrome)
+           local.flags |= colorscreen::finetune_bw
+               | colorscreen::finetune_no_normalize
+@@ -6131,7 +6128,7 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
+         }
+ 
+         colorscreen::finetune_parameters joint = local;
+-        joint.flags |= colorscreen::finetune_no_normalize
++        joint.flags |= flags | colorscreen::finetune_no_normalize
+             | colorscreen::finetune_no_data_collection;
+         if (!useMonochrome)
+           joint.flags |= colorscreen::finetune_uniform_image_layer;
+diff --git a/src/qtgui/SharpnessPanel.cpp b/src/qtgui/SharpnessPanel.cpp
+index 0b3419c..1cd1f26 100644
+--- a/src/qtgui/SharpnessPanel.cpp
++++ b/src/qtgui/SharpnessPanel.cpp
+@@ -1005,8 +1005,8 @@ void SharpnessPanel::setupUi() {
+   m_analyzeFocusAreasBtn->setToolTip(
+       tr("Verify the discovered regions independently, choose a "
+          "colour-diverse subset, fit one shared focus model, then run "
+-         "leave-one-out and held-out validation. Physical scanner-MTF "
+-         "sigma and defocus must be optimized one at a time."));
++         "leave-one-out and held-out validation. Coupled physical sigma + "
++         "defocus uses scalar basin searches before the final joint fit."));
+   connect(m_analyzeFocusAreasBtn, &QPushButton::clicked, this,
+           [this]() { emit analyzeFocusAreasRequested(m_finetuneFlags); });
+   if (m_currentGroupForm)
