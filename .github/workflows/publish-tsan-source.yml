@@ -34,22 +34,20 @@ jobs:
           git reset --hard "$base"
           git apply /tmp/tsan-source.patch
 
-          expected=$(cat <<'EOF'
-src/libcolorscreen/render-scr-detect.C
-src/libcolorscreen/render-tile.C
-src/qtgui/ImageViewWindow.cpp
-src/qtgui/ImageViewWindow.h
-src/qtgui/ImageWidget.cpp
-src/qtgui/NavigationView.cpp
-src/qtgui/Renderer.cpp
-src/qtgui/Renderer.h
-src/qtgui/SynchronizedRunnable.h
-src/qtgui/TilePreviewPanel.cpp
-src/qtgui/TilePreviewPanel.h
-EOF
-          )
-          actual=$(git diff --name-only | sort)
-          test "$actual" = "$expected"
+          printf '%s\n' \
+            src/libcolorscreen/render-scr-detect.C \
+            src/libcolorscreen/render-tile.C \
+            src/qtgui/ImageViewWindow.cpp \
+            src/qtgui/ImageViewWindow.h \
+            src/qtgui/ImageWidget.cpp \
+            src/qtgui/NavigationView.cpp \
+            src/qtgui/Renderer.cpp \
+            src/qtgui/Renderer.h \
+            src/qtgui/SynchronizedRunnable.h \
+            src/qtgui/TilePreviewPanel.cpp \
+            src/qtgui/TilePreviewPanel.h > /tmp/expected-files
+          git diff --name-only | sort > /tmp/actual-files
+          diff -u /tmp/expected-files /tmp/actual-files
 
           grep -q 'enqueueRender' src/qtgui/Renderer.h
           grep -q 'runSynchronized' src/qtgui/Renderer.cpp
