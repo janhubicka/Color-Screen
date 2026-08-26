@@ -28,7 +28,65 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          cat agent/focus-carrier-v2-*.b64 | tr -d '\n' | base64 -d >/tmp/focus-carrier.patch
+          for spec in \
+            '00 0e5154b465a5c4ca68e65d72f2f46fb2b80e400f' \
+            '01 0d65721a074723e452d87a73176d1f65cfd9393d' \
+            '03 edbfe075b283891dd6be71bf9da9addd493dfa5a' \
+            '04 4a956ddb9fbd609ae2feb9d90b069eaf3c4c5911' \
+            '05 d3c0e4012db11d06448d98d8339b4c0b1ddf9e8d'; do
+            set -- $spec
+            test "$(git hash-object agent/focus-carrier-v2-$1.b64)" = "$2"
+            cp "agent/focus-carrier-v2-$1.b64" "/tmp/c$1"
+          done
+
+          # The transport API duplicated chunk 02 once. Pick the exact 7800-byte half.
+          head -c 7800 agent/focus-carrier-v2-02.b64 >/tmp/c02a
+          tail -c 7800 agent/focus-carrier-v2-02.b64 >/tmp/c02b
+          if test "$(git hash-object /tmp/c02a)" = 58b19fd66748455363105fa37311d5a42dbad4cf; then
+            cp /tmp/c02a /tmp/c02
+          elif test "$(git hash-object /tmp/c02b)" = 58b19fd66748455363105fa37311d5a42dbad4cf; then
+            cp /tmp/c02b /tmp/c02
+          else
+            echo 'Neither half of chunk 02 matches the local source' >&2
+            exit 1
+          fi
+
+          # Repair at most one mangled base64 character in the final short chunk.
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          p = Path('agent/focus-carrier-v2-06.b64')
+          data = bytearray(p.read_bytes())
+          target = '5c85bd61ee75392c3587b0fff72376223a92579d'
+          def blob_sha(b):
+              h = hashlib.sha1()
+              h.update(b'blob ' + str(len(b)).encode() + b'\0')
+              h.update(b)
+              return h.hexdigest()
+          if blob_sha(data) != target:
+              alphabet = b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
+              found = None
+              for i, old in enumerate(data):
+                  for c in alphabet:
+                      if c == old:
+                          continue
+                      data[i] = c
+                      if blob_sha(data) == target:
+                          found = (i, old, c)
+                          break
+                  data[i] = old
+                  if found:
+                      break
+              if not found:
+                  raise SystemExit('chunk 06 is not a one-character transport error')
+              i, old, c = found
+              data[i] = c
+              print(f'repaired chunk 06 byte {i}: {chr(old)} -> {chr(c)}')
+          Path('/tmp/c06').write_bytes(data)
+          assert blob_sha(data) == target
+          PY
+
+          cat /tmp/c00 /tmp/c01 /tmp/c02 /tmp/c03 /tmp/c04 /tmp/c05 /tmp/c06 | base64 -d >/tmp/focus-carrier.patch
           echo '6c20c4d435d8fae1d8d7711de9051d6479a241f025f3b66d1082a3fe27beb306  /tmp/focus-carrier.patch' | sha256sum -c -
 
       - name: Apply and test
