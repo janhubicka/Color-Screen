@@ -42,6 +42,8 @@ jobs:
           git checkout --detach beedd746497d729045dc2728bbf16db3d6fb281a
           git apply --check /tmp/focus.patch
           git apply /tmp/focus.patch
+          git apply --check agent/focus-carrier-test-fix.patch
+          git apply agent/focus-carrier-test-fix.patch
           git diff --check
           git diff --stat
 
