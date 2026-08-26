@@ -48,7 +48,7 @@ jobs:
           test "$(git hash-object /tmp/c06)" = 5c85bd61ee75392c3587b0fff72376223a92579d
           cat /tmp/c00 /tmp/c01 /tmp/c02 /tmp/c03 /tmp/c04 /tmp/c05 /tmp/c06 | base64 -d >/tmp/focus-carrier.patch
           echo '6c20c4d435d8fae1d8d7711de9051d6479a241f025f3b66d1082a3fe27beb306  /tmp/focus-carrier.patch' | sha256sum -c -
-      - name: Apply and diagnose
+      - name: Apply, test and build CLI
         shell: bash
         run: |
           set -euo pipefail
@@ -57,25 +57,39 @@ jobs:
           git apply --check /tmp/focus-carrier.patch
           git apply /tmp/focus-carrier.patch
           git diff --check
-          if ! CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure >/tmp/config.log 2>&1; then
-            echo '=== CONFIGURE FAILURE ==='; tail -100 /tmp/config.log; exit 1
-          fi
-          if ! make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests >/tmp/build.log 2>&1; then
-            echo '=== BUILD FAILURE ==='
-            grep -E -C3 'error:|undefined reference|collect2:|make.*Error' /tmp/build.log || true
-            tail -120 /tmp/build.log
-            exit 1
-          fi
-          if ! ./src/libcolorscreen/focus-analysis-unittests >/tmp/test.log 2>&1; then
-            echo '=== UNIT TEST FAILURE ==='; cat /tmp/test.log; exit 1
-          fi
-          if ! make -C src/colorscreen -j$(nproc) colorscreen >/tmp/cli-build.log 2>&1; then
-            echo '=== CLI BUILD FAILURE ==='
-            grep -E -C3 'error:|undefined reference|collect2:|make.*Error' /tmp/cli-build.log || true
-            tail -120 /tmp/cli-build.log
-            exit 1
-          fi
+          CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure >/tmp/config.log 2>&1
+          make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests >/tmp/build.log 2>&1
+          ./src/libcolorscreen/focus-analysis-unittests | tee /tmp/test.log
+          make -C src/colorscreen -j$(nproc) colorscreen >/tmp/cli-build.log 2>&1
           ./src/colorscreen/colorscreen --help >/tmp/help.txt 2>&1 || true
           grep -q -- '--sigma-and-defocus' /tmp/help.txt
-          grep -q 'process-screen carrier MTF' /tmp/help.txt
+          grep -q 'screen-carrier MTF' /tmp/help.txt
           echo 'FOCUS CARRIER PATCH VALIDATION PASS'
+      - name: Build portable CLI bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/focus-cli/bin /tmp/focus-cli/lib
+          bin=src/colorscreen/.libs/colorscreen
+          test -x "$bin" || bin=src/colorscreen/colorscreen
+          cp -L "$bin" /tmp/focus-cli/bin/colorscreen
+          objs=("$bin")
+          if test -f src/libcolorscreen/.libs/libcolorscreen.so.2; then objs+=(src/libcolorscreen/.libs/libcolorscreen.so.2); fi
+          for obj in "${objs[@]}"; do ldd "$obj" | awk '{for(i=1;i<=NF;i++) if ($i ~ /^\//) {print $i; break}}'; done | sort -u >/tmp/libs.txt
+          while read -r lib; do cp -L "$lib" "/tmp/focus-cli/lib/$(basename "$lib")"; done </tmp/libs.txt
+          if test -f src/libcolorscreen/.libs/libcolorscreen.so.2; then cp -L src/libcolorscreen/.libs/libcolorscreen.so.2 /tmp/focus-cli/lib/libcolorscreen.so.2; fi
+          cat >/tmp/focus-cli/colorscreen <<'EOF'
+          #!/bin/sh
+          here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+          export LD_LIBRARY_PATH="$here/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          exec "$here/bin/colorscreen" "$@"
+          EOF
+          chmod +x /tmp/focus-cli/colorscreen
+          /tmp/focus-cli/colorscreen --help >/tmp/bundle-help.txt 2>&1 || true
+          grep -q -- '--sigma-and-defocus' /tmp/bundle-help.txt
+      - name: Upload portable CLI
+        uses: actions/upload-artifact@v4
+        with:
+          name: focus-carrier-cli
+          path: /tmp/focus-cli
+          retention-days: 3
