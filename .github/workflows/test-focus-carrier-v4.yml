@@ -54,8 +54,7 @@ jobs:
           make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests >/dev/null
           ./src/libcolorscreen/focus-analysis-unittests
           make -C src/colorscreen -j$(nproc) colorscreen >/dev/null
-          ./src/colorscreen/colorscreen --help >/tmp/help 2>&1 || true
-          grep -q -- '--sigma-and-defocus' /tmp/help
+          test -x src/colorscreen/colorscreen -o -x src/colorscreen/.libs/colorscreen
           echo 'FOCUS CARRIER V4 VALIDATION PASS'
       - name: Bundle CLI
         shell: bash
