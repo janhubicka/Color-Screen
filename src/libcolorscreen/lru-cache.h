@@ -2,10 +2,10 @@
 #define LRU_CACHE_H
 #include <mutex>
 #include <chrono>
+#include <thread>
 #include <atomic>
 #include <memory>
 #include <condition_variable>
-#include <shared_mutex>
 #include <type_traits>
 #include "include/progress-info.h"
 #include "include/dllpublic.h"
@@ -47,13 +47,13 @@ extern class lru_caches lru_caches;
    - Derived: The final cache class (CRTP) used to fetch base configuration
 
    Synchronization Model:
-   The cache uses a combination of a global lock (std::shared_timed_mutex) and 
-   per-entry state ("computing" flag) to ensure thread-safety while maximizing 
-   concurrency.
+   The cache uses a combination of a global lock (std::mutex) and per-entry
+   state ("computing" flag) to ensure thread-safety while allowing expensive
+   cache entries to be generated concurrently.
 
    1. Lock Granularity: The global "lock" protects the integrity of the linked list
-      ("entries") and metadata (last_used, id). Using shared_timed_mutex allows
-      concurrent lookup attempts while waiting for long-running computations.
+      ("entries") and metadata (last_used, id). Cache metadata access is short and
+      serialized; long-running value computation happens without holding the lock.
 
    2. Non-blocking Computation: To prevent the cache from stalling the entire
       application during a long "get_new" call, the implementation:
@@ -73,9 +73,9 @@ extern class lru_caches lru_caches;
         - Premature Reuse: The "computing" flag ensures that "prune()" or lookup
           logic for "longest_unused" will skip entries currently being generated
           or updated out-of-lock.
-        - Task Cancellation: All wait loops (both for the global lock and the
-          condition variable) periodically wake up (333ms) to check if the
-          caller has requested task cancellation via the "progress" object.  */
+        - Task Cancellation: A cancellable caller polls while waiting for the
+          global mutex or another thread's computation, so cancellation remains
+          observable without timed pthread synchronization primitives.  */
 
 /* Base structure for cache entries. 
    P is the parameter type.
@@ -96,14 +96,13 @@ struct lru_entry_base
    F is the computing flag to be reset.
    M is the mutex used for synchronization.
    C is the condition variable to notify waiting threads.  */
-template <typename Mutex>
 struct computing_guard
 {
   bool &flag;
-  Mutex &mutex;
-  std::condition_variable_any &cond;
+  std::mutex &mutex;
+  std::condition_variable &cond;
   bool active;
-  computing_guard (bool &f, Mutex &m, std::condition_variable_any &c)
+  computing_guard (bool &f, std::mutex &m, std::condition_variable &c)
       : flag (f), mutex (m), cond (c), active (true)
   {
   }
@@ -111,7 +110,7 @@ struct computing_guard
   {
     if (active)
       {
-        std::unique_lock<Mutex> guard (mutex);
+        std::unique_lock<std::mutex> guard (mutex);
         flag = false;
         cond.notify_all ();
       }
@@ -139,8 +138,8 @@ class abstract_lru_cache
 protected:
   Entry *entries;
   int cache_size;
-  std::shared_timed_mutex lock;
-  std::condition_variable_any cond;
+  std::mutex lock;
+  std::condition_variable cond;
   const char *name;
 
   /* Initialize the cache with a NAME and BASE_SIZE.  */
@@ -178,11 +177,22 @@ protected:
     if (progress)
       progress->wait ("unlocking cache");
 
-    std::unique_lock<std::shared_timed_mutex> guard (lock, std::defer_lock);
-    while (!guard.try_lock_for (std::chrono::milliseconds (333)))
+    std::unique_lock<std::mutex> guard (lock, std::defer_lock);
+    if (!progress)
+      guard.lock ();
+    else
       {
-        if (progress && progress->cancel_requested ())
-          return NULL;
+        /* Do not use timed mutex acquisition here.  Some supported libstdc++
+           versions implement it with pthread clock-lock APIs which LLVM TSan
+           does not recognize as synchronization.  Cache metadata critical
+           sections are short, so polling try_lock() preserves cancellation
+           without relying on those timed primitives.  */
+        while (!guard.try_lock ())
+          {
+            if (progress->cancel_requested ())
+              return NULL;
+            std::this_thread::sleep_for (std::chrono::milliseconds (1));
+          }
       }
     time++;
 
@@ -197,13 +207,21 @@ protected:
               {
                 uint64_t id_val = e->id;
                 if (progress)
-                  progress->wait ("waiting for other thread to finish computation");
-                if (cond.wait_for (guard, std::chrono::milliseconds (333))
-                    == std::cv_status::timeout)
                   {
-                    if (progress && progress->cancel_requested ())
+                    progress->wait ("waiting for other thread to finish computation");
+                    /* Timed condition-variable waits have the same TSan issue
+                       as timed mutex acquisition on older libstdc++.  Poll only
+                       for cancellable callers; ordinary callers can wait on the
+                       condition variable without a timeout.  */
+                    guard.unlock ();
+                    std::this_thread::sleep_for (std::chrono::milliseconds (1));
+                    guard.lock ();
+                    if (progress->cancel_requested ())
                       return NULL;
                   }
+                else
+                  cond.wait (guard);
+
                 bool found = false;
                 for (Entry *e2 = entries; e2; e2 = e2->next)
                   if (e2 == e && e2->id == id_val)
@@ -253,7 +271,7 @@ protected:
     guard.unlock ();
     std::shared_ptr<T> ret_val;
     {
-      computing_guard<std::shared_timed_mutex> cguard (e->computing, lock, cond);
+      computing_guard cguard (e->computing, lock, cond);
       std::unique_ptr<T> val = fetch_func (e);
       guard.lock ();
       e->val = std::move (val);
@@ -285,7 +303,7 @@ public:
   void
   prune ()
   {
-    std::unique_lock<std::shared_timed_mutex> guard (lock);
+    std::unique_lock<std::mutex> guard (lock);
     Entry **e;
     for (e = &entries; *e;)
       {
@@ -306,7 +324,7 @@ public:
   void
   increase_capacity (int n)
   {
-    std::unique_lock<std::shared_timed_mutex> guard (lock);
+    std::unique_lock<std::mutex> guard (lock);
     cache_size = n * Derived::base_size_const;
   }
 };
@@ -352,7 +370,7 @@ public:
   std::shared_ptr<T>
   peek (const P &p, uint64_t *id = NULL)
   {
-    std::shared_lock<std::shared_timed_mutex> guard (this->lock);
+    std::unique_lock<std::mutex> guard (this->lock);
     for (Entry *e = this->entries; e; e = e->next)
       if (!e->computing && e->val && p == e->params)
         {
