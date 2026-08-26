@@ -1,0 +1,37 @@
+name: Agent status bar patch transport arm64
+
+on:
+  push:
+    branches:
+      - agent/statusbar-transport-arm
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/statusbar-transport-arm
+          path: transport
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/share-statusbar-per-window
+          fetch-depth: 0
+          path: work
+      - name: Reuse the reviewed patch script
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from textwrap import dedent
+          workflow = Path('transport/.github/workflows/agent-statusbar-transport.yml').read_text()
+          marker = '        run: |\n'
+          if workflow.count(marker) != 1:
+              raise SystemExit('could not locate transport script')
+          Path('/tmp/apply-statusbar.sh').write_text(dedent(workflow.split(marker, 1)[1]))
+          PY
+          cd work
+          bash /tmp/apply-statusbar.sh
