@@ -6,6 +6,7 @@ on:
       - agent/tmp-focus-carrier-build-base
   pull_request:
     branches:
+      - main
       - agent/tmp-focus-carrier-build-base
 
 permissions:
