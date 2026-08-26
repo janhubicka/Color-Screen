@@ -1,0 +1,38 @@
+name: Agent status bar patch transport Windows
+
+on:
+  push:
+    branches:
+      - agent/statusbar-transport-windows
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/statusbar-transport-windows
+          path: transport
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/share-statusbar-per-window
+          fetch-depth: 0
+          path: work
+      - name: Reuse the reviewed patch script
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from textwrap import dedent
+          workflow = Path('transport/.github/workflows/agent-statusbar-transport.yml').read_text()
+          marker = '        run: |\n'
+          if workflow.count(marker) != 1:
+              raise SystemExit('could not locate transport script')
+          script = dedent(workflow.split(marker, 1)[1]).replace('python3 -', 'python -')
+          Path('apply-statusbar.sh').write_text(script)
+          PY
+          cd work
+          bash ../apply-statusbar.sh
