@@ -165,6 +165,11 @@ jobs:
     - name: configure with checking
       run: |
         SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined"
+        # Avoid x86_64 copy relocations for Qt data symbols such as
+        # QCoreApplication::self, which otherwise leaves qGuiApp null in QPA startup.
+        if [ "${{ matrix.arch }}" = "amd64" ]; then
+          SANITIZER_FLAGS="$SANITIZER_FLAGS -mno-direct-extern-access"
+        fi
         CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
           ./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui
     - name: make (checking enabled)
