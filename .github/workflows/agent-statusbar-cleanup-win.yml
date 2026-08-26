@@ -1,0 +1,51 @@
+name: Agent status bar cleanup transport Windows
+
+on:
+  push:
+    branches:
+      - agent/statusbar-cleanup-transport-win
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/share-statusbar-per-window
+          fetch-depth: 0
+      - name: Apply cleanup
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          for path in ('src/qtgui/MainWindow.cpp', 'src/qtgui/ImageViewWindow.cpp'):
+              replace_once(
+                  path,
+                  '''    if (!localMessage.isEmpty())\n      sharedStatusBar->showMessage(localMessage);\n  }\n}\n''',
+                  '''    if (!localMessage.isEmpty())\n      sharedStatusBar->showMessage(localMessage);\n    localStatusBar->clearMessage();\n  }\n}\n''')
+
+          replace_once(
+              'src/qtgui/WorkspaceWindow.cpp',
+              '  QPointer<MainWindow> guardedDocument(document);\n  QPointer<QMdiSubWindow> guardedSubWindow(subWindow);\n',
+              '  QPointer<QMdiSubWindow> guardedSubWindow(subWindow);\n')
+          PY
+
+          git diff --check
+          git config user.name "OpenAI"
+          git config user.email "openai@users.noreply.github.com"
+          git add src/qtgui/MainWindow.cpp src/qtgui/ImageViewWindow.cpp src/qtgui/WorkspaceWindow.cpp
+          git commit -m "qtgui: clear private status state on attach" \
+                     -m "After transferring any pre-attach message to the workspace status bar, clear the hidden private bar so detaching cannot revive stale status text. Also remove the now-unused document guard left behind by the deleted message-forwarding connection."
+          git push origin HEAD:agent/share-statusbar-per-window
