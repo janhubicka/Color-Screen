@@ -119,9 +119,17 @@ jobs:
           --disable-gtkgui --enable-qtgui
     - name: Build ThreadSanitizer variant
       run: make -j$(nproc)
-    # Ubuntu's distro Qt still fails during the QPA smoke test under TSan with
-    # Clang/libomp/Archer. Qt lifetime smoke remains covered by ASan/UBSan;
-    # keep this lane on the OpenMP-heavy test suite where TSan is reliable.
+    - name: Qt GUI smoke probe (ThreadSanitizer)
+      env:
+        OMP_NUM_THREADS: "4"
+        OMP_TOOL: enabled
+        OMP_TOOL_LIBRARIES: /usr/lib/llvm-18/lib/libarcher.so
+        TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:ignore_noninstrumented_modules=1:external_symbolizer_path=/usr/bin/llvm-symbolizer-18
+      run: |
+        top_builddir="$PWD" srcdir="$PWD/testsuite" \
+          sh testsuite/qt-tsan-smoke-probe.test
+    # Keep the full OpenMP-heavy test suite after the GUI probe so both GUI
+    # concurrency and library/CLI coverage use the same TSan environment.
     - name: Test ThreadSanitizer variant
       env:
         OMP_NUM_THREADS: "4"
