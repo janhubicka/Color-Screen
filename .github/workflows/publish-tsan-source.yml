@@ -23,6 +23,9 @@ jobs:
         run: |
           set -euxo pipefail
           base=544655741cbc3f05185bb05e0a4988caad95467e
+          cp src/qtgui/SynchronizedRunnable.h /tmp/SynchronizedRunnable.h
+          test "$(git hash-object /tmp/SynchronizedRunnable.h)" = 2a76525bfcab985958d765eae2ac9ff5aeafe40e
+
           python3 .github/ci/apply-tsan-render-handoff.py
           python3 .github/ci/apply-tsan-render-stats.py
           python3 .github/ci/apply-tsan-qtpool.py
@@ -33,6 +36,7 @@ jobs:
 
           git reset --hard "$base"
           git apply /tmp/tsan-source.patch
+          cp /tmp/SynchronizedRunnable.h src/qtgui/SynchronizedRunnable.h
 
           printf '%s\n' \
             src/libcolorscreen/render-scr-detect.C \
