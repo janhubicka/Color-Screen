@@ -165,6 +165,11 @@ jobs:
     - name: configure with checking
       run: |
         SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined"
+        # Avoid x86_64 copy relocations for Qt data symbols such as
+        # QCoreApplication::self, which otherwise leaves qGuiApp null in QPA startup.
+        if [ "${{ matrix.arch }}" = "amd64" ]; then
+          SANITIZER_FLAGS="$SANITIZER_FLAGS -mno-direct-extern-access"
+        fi
         CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
           ./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui
     - name: make (checking enabled)
@@ -173,18 +178,16 @@ jobs:
       env:
         ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:strict_string_checks=1
         UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-        QT_QPA_PLATFORM: xcb
+        QT_QPA_PLATFORM: offscreen
       run: |
-        # Qt 6's minimal/offscreen QPA plugins can crash in screenAdded()
-        # during ASan startup on amd64. Give Qt a real virtual X screen.
-        xvfb-run -a ./src/qtgui/colorscreen-qt \
+        ./src/qtgui/colorscreen-qt \
           --smoke-test 30000 --smoke-test-expect-windows 2 \
           --smoke-test-tile-activation-stable --smoke-test-menu-order \
           --smoke-test-new-view --smoke-test-slanted-reference \
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
 
-        xvfb-run -a ./src/qtgui/colorscreen-qt \
+        ./src/qtgui/colorscreen-qt \
           --smoke-test 20000 --smoke-test-expect-windows 1 \
           --smoke-test-window-lifetime \
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
