@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: publish-tsan-source
+  cancel-in-progress: true
+
 jobs:
   publish:
     runs-on: ubuntu-24.04
@@ -53,6 +57,7 @@ jobs:
             src/qtgui/TilePreviewPanel.h > /tmp/expected-files
           git diff --name-only | sort > /tmp/actual-files
           diff -u /tmp/expected-files /tmp/actual-files
+          git diff --check
 
           grep -q 'enqueueRender' src/qtgui/Renderer.h
           grep -q 'runSynchronized' src/qtgui/Renderer.cpp
@@ -61,17 +66,93 @@ jobs:
           grep -q 'stats_enabled' src/libcolorscreen/render-tile.C
           grep -q 'dead timing work' src/libcolorscreen/render-scr-detect.C
 
-      - name: Publish clean branch
+      - name: Publish clean branch through Git data API
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
         shell: bash
         run: |
-          set -euxo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git switch -c agent/fix-tsan-render-handoffs
-          git add src
-          git diff --cached --check
-          git diff --cached --name-only | sort > /tmp/staged-files
-          diff -u /tmp/expected-files /tmp/staged-files
-          git commit -m 'Fix TSan races in async render handoffs'
-          test "$(git rev-list --count 544655741cbc3f05185bb05e0a4988caad95467e..HEAD)" = 1
-          git push origin HEAD:refs/heads/agent/fix-tsan-render-handoffs
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          repository = os.environ["REPOSITORY"]
+          token = os.environ["GH_TOKEN"]
+          api = f"https://api.github.com/repos/{repository}"
+          base = "544655741cbc3f05185bb05e0a4988caad95467e"
+          branch = "agent/fix-tsan-render-handoffs"
+
+          expected = {
+              "src/libcolorscreen/render-scr-detect.C": "8a199d0c030ef5ca5faa6791669b43a41cbb3236",
+              "src/libcolorscreen/render-tile.C": "fa661f2d245efd750fb1bd02261151b1ee460e9c",
+              "src/qtgui/ImageViewWindow.cpp": "d7cc9dd6402062f42a6279dc310538f12c2c109c",
+              "src/qtgui/ImageViewWindow.h": "bb21aa430f7dd987f3a61afef6a564d3e932e497",
+              "src/qtgui/ImageWidget.cpp": "b7f520f536efcdcca88cbcc3154efc7a3892feed",
+              "src/qtgui/NavigationView.cpp": "f986a2df8d11ff11d9621aff5bfd8aa390f00531",
+              "src/qtgui/Renderer.cpp": "2b83972b3148d1c72f9ef00edb2ed2ac0c34ec99",
+              "src/qtgui/Renderer.h": "5f08f5aa52b087cc8b8bf508accd5cacdc705d22",
+              "src/qtgui/SynchronizedRunnable.h": "2a76525bfcab985958d765eae2ac9ff5aeafe40e",
+              "src/qtgui/TilePreviewPanel.cpp": "46ce335a631d3b0330b93a589fec168abdcd4ca7",
+              "src/qtgui/TilePreviewPanel.h": "7e04c28417dee32f8505fadea59badd383c69b18",
+          }
+
+          def request(method, path, payload=None):
+              data = None if payload is None else json.dumps(payload).encode("utf-8")
+              req = urllib.request.Request(
+                  api + path,
+                  data=data,
+                  method=method,
+                  headers={
+                      "Accept": "application/vnd.github+json",
+                      "Authorization": f"Bearer {token}",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                      "User-Agent": "color-screen-tsan-source-publisher",
+                      "Content-Type": "application/json",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req) as response:
+                      return json.load(response)
+              except urllib.error.HTTPError as exc:
+                  body = exc.read().decode("utf-8", "replace")
+                  raise RuntimeError(f"GitHub API {method} {path} failed: {exc.code}: {body}") from exc
+
+          tree_entries = []
+          for path, expected_sha in expected.items():
+              with open(path, "rb") as source:
+                  content = base64.b64encode(source.read()).decode("ascii")
+              blob = request("POST", "/git/blobs", {"content": content, "encoding": "base64"})
+              actual_sha = blob["sha"]
+              if actual_sha != expected_sha:
+                  raise RuntimeError(f"{path}: blob {actual_sha} != validated {expected_sha}")
+              tree_entries.append({"path": path, "mode": "100644", "type": "blob", "sha": actual_sha})
+              print(f"validated {path} {actual_sha}")
+
+          base_commit = request("GET", f"/git/commits/{base}")
+          tree = request("POST", "/git/trees", {"base_tree": base_commit["tree"]["sha"], "tree": tree_entries})
+          commit = request("POST", "/git/commits", {
+              "message": "Fix TSan races in async render handoffs",
+              "tree": tree["sha"],
+              "parents": [base],
+          })
+
+          try:
+              request("POST", "/git/refs", {"ref": f"refs/heads/{branch}", "sha": commit["sha"]})
+              published_sha = commit["sha"]
+          except RuntimeError as exc:
+              if "422" not in str(exc):
+                  raise
+              existing = request("GET", f"/git/ref/heads/{branch}")
+              published_sha = existing["object"]["sha"]
+              existing_commit = request("GET", f"/git/commits/{published_sha}")
+              if existing_commit["tree"]["sha"] != tree["sha"]:
+                  raise RuntimeError(f"existing {branch} has a different tree")
+              if not existing_commit.get("parents") or existing_commit["parents"][0]["sha"] != base:
+                  raise RuntimeError(f"existing {branch} is not based directly on {base}")
+
+          print(f"published {branch} at {published_sha}, tree {tree['sha']}")
+          PY
