@@ -213,6 +213,50 @@ fill improves from 79.01% screen coverage / 1,726,273 patches to 84.00% /
 mask, Tile01 remains exactly 93.46% / 2,040,920 patches before and after the
 change because the fallback is disabled.
 
+### DG-027 — slow strip contrast tested an accumulator strip mode zeroed
+
+**Severity:** high correctness/performance
+
+**Status:** fixed
+
+Slow image-domain confirmation samples an expected Dufay-like strip and the two
+neighboring square rows.  In strip mode those neighboring-row samples are stored
+in `bestouter_ud`; left/right samples are folded into `bestinner`, after which
+`bestouter_lr` is deliberately reset to zero.  The final acceptance test still
+compared `bestinner` with `bestouter_lr * min_patch_contrast`.  Consequently any
+strip with a positive inner signal passed the slow contrast gate regardless of
+the measured neighboring-row dye fraction.
+
+Use the accumulator selected by the sampling geometry: `bestouter_ud` for a
+strip and the historical `bestouter_lr` for non-strip patches.  Sampling
+locations, `min_patch_contrast`, displacement search, priority calculation,
+fast hard-strip confirmation, DG-026 soft-strip confirmation, and all non-strip
+acceptance behavior are unchanged.
+
+On the full-resolution NGS00428 controls in combined fast+slow mode, the stricter
+slow strip test changes little useful coverage: Tile05 at detector mask 0/0
+moves from 88.77% to 88.71% screen coverage and 3,398,865 to 3,393,568 patches;
+Tile01 moves from 93.51% to 93.37% and keeps its real raster-free corner.  With
+the historical 2/3 mask, Tile05 changes from 98.70% to 98.63% and only 371 of
+about 3.78 million patches disappear; Tile01 scan coverage remains 56.02% versus
+56.01% with fewer than one thousand of about 2.14 million patches removed.
+Local wall and flood timings vary substantially between repeated full-resolution
+runs, so they are not used as a compatibility criterion.
+
+Slow-only Tile05 becomes deliberately much more selective: accepted patches fall
+from 2,288,129 to 1,551,816 and scan coverage from 59.78% to 40.66%.  This shows
+that the old path relied heavily on strips that did not meet its nominal 2x
+contrast requirement; it is not presented as an improvement in slow-only scan
+coverage.  The repository's real Nikon Dufay integration suite nevertheless
+passes all six cases after the correction, including its dedicated slow-only
+`min-screen-percentage=80` test, and the Capture One stitched Dufay suite also
+passes all six cases.  The normal combined detector therefore retains its real
+regression gates while the slow path now enforces the contrast it already
+measures.
+
+The next blur-robustness target remains geometry-gated square-patch/`unknown`
+continuity rather than another relaxation of strip classification.
+
 ### DG-010 — predicted patch lookup samples only one rounded pixel
 
 **Severity:** high
