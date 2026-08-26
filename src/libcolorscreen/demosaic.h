@@ -2220,7 +2220,10 @@ protected:
 
        After this phase, the dominating channel is fully populated.
        ================================================================ */
-#pragma omp parallel for schedule(dynamic, 16)
+    /* The neighbour refinement is intentionally in-place, matching the
+       AMaZE reference algorithm.  Later sites can therefore observe weights
+       already refined at earlier sites.  This is a loop-carried dependency,
+       so the refinement pass must remain serial and in row-major order.  */
     for (int y = 0; y < h; y++)
       {
         if (progress && progress->cancel_requested ())
@@ -2239,13 +2242,31 @@ protected:
                 return hv_wt[std::clamp (yy, 0, h - 1) * w
                              + std::clamp (xx, 0, w - 1)];
               };
-            luminosity_t hv_wt_alt = (hw (x - 1, y - 1) + hw (x + 1, y - 1)
-                                      + hw (x - 1, y + 1) + hw (x + 1, y + 1))
-                                     * (luminosity_t)0.25;
+            luminosity_t hv_wt_alt
+                = (hw (x - 1, y - 1) + hw (x + 1, y - 1)
+                   + hw (x - 1, y + 1) + hw (x + 1, y + 1))
+                  * (luminosity_t)0.25;
 
             if (my_abs ((luminosity_t)0.5 - hv_wt[idx])
                 < my_abs ((luminosity_t)0.5 - hv_wt_alt))
               hv_wt[idx] = hv_wt_alt;
+          }
+      }
+    if (progress && progress->cancelled ())
+      return false;
+
+    /* Once the weights are final, each output pixel is independent.  */
+#pragma omp parallel for schedule(dynamic, 16)
+    for (int y = 0; y < h; y++)
+      {
+        if (progress && progress->cancel_requested ())
+          continue;
+        for (int x = 0; x < w; x++)
+          {
+            if (GEOMETRY::demosaic_entry_color (x, y) == ah_green)
+              continue;
+
+            int idx = y * w + x;
 
             /* Blend vertical and horizontal color differences.  */
             luminosity_t dgrb
@@ -2285,7 +2306,10 @@ protected:
        ================================================================ */
     if (progress)
       progress->set_task ("demosaicing (amaze: remaining channels)", h);
-#pragma omp parallel for schedule(dynamic, 16)
+    /* hamilton_adams_interpolate_color() obtains edge samples through
+       dch(), which clamps out-of-range coordinates.  At the image border
+       those reads can alias channels populated by another iteration, so
+       keep this pass serial until edge sampling is separated from output.  */
     for (int y = 0; y < h; y++)
       {
         if (progress && progress->cancel_requested ())
