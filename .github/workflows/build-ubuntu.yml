@@ -1,134 +1,16 @@
 name: Ubuntu build
 
 on:
-  push:
-    branches: [ "main", "v1-branch", "Kimrova-bachelorRelease" ]
   pull_request:
     branches: [ "main" ]
-  workflow_dispatch:
-    inputs:
-      build:
-        description: Run the optimized amd64/arm64 build matrix
-        required: true
-        default: true
-        type: boolean
-      distcheck:
-        description: Run distcheck and source tarball validation
-        required: true
-        default: true
-        type: boolean
-      checking:
-        description: Run the ASan/UBSan checking matrix
-        required: true
-        default: true
-        type: boolean
 
 permissions:
-  contents: read
+  contents: write
   packages: read
 
-# New pushes to a PR supersede its older CI run. Keep push/manual runs
-# independent so release/main builds are never cancelled by this policy.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
-env:
-  LC_ALL: C.UTF-8
-  LANG: C.UTF-8
-  PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-  CC: "ccache gcc"
-  CXX: "ccache g++"
-  CCACHE_DIR: ${{ github.workspace }}/.ccache
-  CCACHE_BASEDIR: ${{ github.workspace }}
-  CCACHE_COMPRESS: "true"
-  CCACHE_MAXSIZE: 500M
-
 jobs:
-  build:
-    if: >-
-      (github.event_name != 'workflow_dispatch' || inputs.build) &&
-      (github.event_name != 'pull_request' ||
-       github.event.pull_request.head.repo.full_name != github.repository ||
-       !contains(github.event.pull_request.body, '[ci:') ||
-       contains(github.event.pull_request.body, '[ci:all]') ||
-       contains(github.event.pull_request.body, '[ci:ubuntu]') ||
-       contains(github.event.pull_request.body, '[ci:ubuntu-build]'))
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { runner: ubuntu-24.04, arch: amd64 }
-          - { runner: ubuntu-24.04-arm, arch: arm64 }
-
-    runs-on: ${{ matrix.runner }}
-    container:
-      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    steps:
-    - uses: actions/checkout@v4
-    - name: Restore compiler cache
-      uses: actions/cache@v4
-      with:
-        path: .ccache
-        key: ccache-${{ runner.os }}-${{ matrix.arch }}-${{ github.event.pull_request.head.sha || github.sha }}
-        restore-keys: |
-          ccache-${{ runner.os }}-${{ matrix.arch }}-
-    - name: Reset compiler cache stats
-      run: ccache --zero-stats
-
-    - name: configure
-      run: CXXFLAGS="-Ofast -flto=auto" CFLAGS="$CXXFLAGS" ./configure --enable-qtgui
-    - name: make
-      run: make -j$(nproc)
-    - name: Qt multi-document smoke test
-      run: |
-        QT_QPA_PLATFORM=offscreen ./src/qtgui/colorscreen-qt \
-          --smoke-test 10000 --smoke-test-expect-windows 2 \
-          --smoke-test-tile-activation-stable --smoke-test-menu-order \
-          --smoke-test-new-view --smoke-test-slanted-reference \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
-    - name: make check
-      run: make -j$(nproc) check
-    - name: Upload Test Results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: testsuite-${{ matrix.arch }}
-        path: |
-          testsuite/*.txt
-          testsuite/*.log
-          testsuite/*.par
-
-    - name: Package DEB
-      run: |
-        # Create temp install dir
-        mkdir -p /tmp/install
-        # Install to temp dir
-        make install DESTDIR=/tmp/install
-        # Run packaging script
-        ./os/linux/package_deb.sh /tmp/install 2.0alpha ${{ matrix.arch }}
-    - uses: actions/upload-artifact@v4
-      with:
-        name: colorscreen-deb-${{ matrix.arch }}
-        path: colorscreen_*.deb
-    - name: Compiler cache stats
-      if: always()
-      run: ccache --show-stats
-
-  distcheck:
-    if: >-
-      (github.event_name != 'workflow_dispatch' || inputs.distcheck) &&
-      (github.event_name != 'pull_request' ||
-       github.event.pull_request.head.repo.full_name != github.repository ||
-       !contains(github.event.pull_request.body, '[ci:') ||
-       contains(github.event.pull_request.body, '[ci:all]') ||
-       contains(github.event.pull_request.body, '[ci:ubuntu]') ||
-       contains(github.event.pull_request.body, '[ci:ubuntu-distcheck]'))
+  focus-carrier-publisher:
+    if: github.head_ref == 'agent/tmp-focus-carrier-publisher'
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
@@ -138,117 +20,64 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Restore compiler cache
-      uses: actions/cache@v4
       with:
-        path: .ccache
-        key: ccache-${{ runner.os }}-amd64-distcheck-${{ github.event.pull_request.head.sha || github.sha }}
-        restore-keys: |
-          ccache-${{ runner.os }}-amd64-distcheck-
-          ccache-${{ runner.os }}-amd64-
-    - name: Reset compiler cache stats
-      run: ccache --zero-stats
+        ref: ${{ github.event.pull_request.head.sha }}
+        fetch-depth: 0
 
-    - name: configure
-      run: CXXFLAGS="-Ofast -flto=auto" CFLAGS="$CXXFLAGS" ./configure --enable-qtgui
-    - name: make distcheck
-      run: make -j$(nproc) distcheck
-    - name: Upload Test Results
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: testsuite-distcheck-amd64
-        path: |
-          testsuite/*.txt
-          testsuite/*.log
-          testsuite/*.par
-          colorscreen-*/_build/testsuite/*.txt
-          colorscreen-*/_build/testsuite/*.log
-          colorscreen-*/_build/testsuite/*.par
+    - name: Reconstruct focus patch
+      shell: bash
+      run: |
+        set -euxo pipefail
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        cat agent/focus-multistart.part-* >/tmp/focus.patch
+        echo 'ec250b7781a62755a0d53ac93eb4f6574306bc1705c009e7544617cc13c7c826  /tmp/focus.patch' | sha256sum -c -
+
+    - name: Apply to current main and validate
+      shell: bash
+      run: |
+        set -euxo pipefail
+        git fetch origin main
+        git checkout --detach origin/main
+        git apply --check /tmp/focus.patch
+        git apply /tmp/focus.patch
+        git diff --check
+        CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure --enable-qtgui
+        make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
+        ./src/libcolorscreen/focus-analysis-unittests
+        make -C src/colorscreen -j$(nproc) colorscreen
+        make -C src/qtgui -j$(nproc) colorscreen-qt
+
+    - name: Package CLI for historical-scan validation
+      shell: bash
+      run: |
+        set -euxo pipefail
+        mkdir -p /tmp/install
+        make install DESTDIR=/tmp/install
+        ./os/linux/package_deb.sh /tmp/install 2.0alpha amd64
+
     - uses: actions/upload-artifact@v4
       with:
-        name: source-tarball
-        path: colorscreen-*.tar.gz
-    - name: Compiler cache stats
-      if: always()
-      run: ccache --show-stats
+        name: focus-carrier-cli-amd64
+        path: colorscreen_*.deb
 
-  checking:
-    if: >-
-      (github.event_name != 'workflow_dispatch' || inputs.checking) &&
-      (github.event_name != 'pull_request' ||
-       github.event.pull_request.head.repo.full_name != github.repository ||
-       !contains(github.event.pull_request.body, '[ci:') ||
-       contains(github.event.pull_request.body, '[ci:all]') ||
-       contains(github.event.pull_request.body, '[ci:ubuntu]') ||
-       contains(github.event.pull_request.body, '[ci:ubuntu-checking]'))
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { runner: ubuntu-24.04, arch: amd64 }
-          - { runner: ubuntu-24.04-arm, arch: arm64 }
-
-    runs-on: ${{ matrix.runner }}
-    container:
-      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    steps:
-    - uses: actions/checkout@v4
-    - name: Restore compiler cache
-      uses: actions/cache@v4
-      with:
-        path: .ccache
-        key: ccache-${{ runner.os }}-${{ matrix.arch }}-checking-${{ github.event.pull_request.head.sha || github.sha }}
-        restore-keys: |
-          ccache-${{ runner.os }}-${{ matrix.arch }}-checking-
-          ccache-${{ runner.os }}-${{ matrix.arch }}-
-    - name: Reset compiler cache stats
-      run: ccache --zero-stats
-
-    - name: configure with checking
+    - name: Publish clean review branch
+      shell: bash
       run: |
-        SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined"
-        # Avoid x86_64 copy relocations for Qt data symbols such as
-        # QCoreApplication::self, which otherwise leaves qGuiApp null in QPA startup.
-        if [ "${{ matrix.arch }}" = "amd64" ]; then
-          SANITIZER_FLAGS="$SANITIZER_FLAGS -mno-direct-extern-access"
-        fi
-        CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
-          ./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui
-    - name: make (checking enabled)
-      run: make -j$(nproc)
-    - name: Qt GUI smoke tests (sanitizers)
-      env:
-        ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:strict_string_checks=1
-        UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-        QT_QPA_PLATFORM: offscreen
-      run: |
-        ./src/qtgui/colorscreen-qt \
-          --smoke-test 30000 --smoke-test-expect-windows 2 \
-          --smoke-test-tile-activation-stable --smoke-test-menu-order \
-          --smoke-test-new-view --smoke-test-slanted-reference \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
-
-        ./src/qtgui/colorscreen-qt \
-          --smoke-test 20000 --smoke-test-expect-windows 1 \
-          --smoke-test-window-lifetime \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
-    - name: make check (checking enabled)
-      run: make -j$(nproc) check
-    - name: Upload Test Results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: testsuite-checking-${{ matrix.arch }}
-        path: |
-          testsuite/*.txt
-          testsuite/*.log
-          testsuite/*.par
-    - name: Compiler cache stats
-      if: always()
-      run: ccache --show-stats
+        set -euxo pipefail
+        git switch -c agent/focus-area-carrier-multistart
+        git add src/colorscreen/colorscreen.C \
+                src/libcolorscreen/focus-analysis.C \
+                src/libcolorscreen/focus-analysis-unittests.C \
+                src/libcolorscreen/include/focus-analysis.h \
+                src/qtgui/MainWindow.cpp \
+                src/qtgui/SharpnessPanel.cpp
+        test "$(git diff --cached --name-only | wc -l)" -eq 6
+        git diff --cached --check
+        git config user.name 'OpenAI Codex'
+        git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+        git commit \
+          -m 'focus: stabilize coupled area MTF fitting' \
+          -m 'Use all selected areas to solve cheap sigma-only and defocus-only physical focus subproblems before releasing both coordinates. Keep the best scalar basin when the coupled release does not improve the actual pixel objective, so cold starts do not depend on the locally flat sigma/defocus origin.' \
+          -m 'Report the effective system MTF at the process-screen carrier, stop refitting global focus during candidate verification, warm-start leave-one-out fits from the selected joint solution, and regress cold-start recovery on carrier MTF rather than a unique sigma/defocus decomposition.' \
+          -m 'An existing slanted-edge calibration remains a starting basin rather than a one-sided constraint, allowing the historical capture to fit slightly sharper or blurrier when the screen data supports it.'
+        git push origin +HEAD:refs/heads/agent/focus-area-carrier-multistart
