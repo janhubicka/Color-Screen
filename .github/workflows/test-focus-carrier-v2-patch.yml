@@ -45,18 +45,18 @@ jobs:
           git diff --check
           git diff --stat
 
-      - name: Configure and build
+      - name: Configure focused build
         shell: bash
         run: |
           set -euxo pipefail
           CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure --enable-qtgui
-          make -j$(nproc)
+          make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
+          make -C src/colorscreen -j$(nproc) colorscreen
 
       - name: Focus analysis regression
         shell: bash
         run: |
           set -euxo pipefail
-          make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
           ./src/libcolorscreen/focus-analysis-unittests
           ./src/colorscreen/colorscreen --help >/tmp/colorscreen-help.txt 2>&1 || true
           grep -q 'analyze-focus-areas' /tmp/colorscreen-help.txt
