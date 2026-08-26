@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     container:
       image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
       credentials:
@@ -38,54 +38,32 @@ jobs:
             test "$(git hash-object agent/focus-carrier-v2-$1.b64)" = "$2"
             cp "agent/focus-carrier-v2-$1.b64" "/tmp/c$1"
           done
-
-          # The transport API duplicated chunk 02 once. Pick the exact 7800-byte half.
           head -c 7800 agent/focus-carrier-v2-02.b64 >/tmp/c02a
           tail -c 7800 agent/focus-carrier-v2-02.b64 >/tmp/c02b
-          if test "$(git hash-object /tmp/c02a)" = 58b19fd66748455363105fa37311d5a42dbad4cf; then
-            cp /tmp/c02a /tmp/c02
-          elif test "$(git hash-object /tmp/c02b)" = 58b19fd66748455363105fa37311d5a42dbad4cf; then
-            cp /tmp/c02b /tmp/c02
-          else
-            echo 'Neither half of chunk 02 matches the local source' >&2
-            exit 1
-          fi
-
-          # Repair at most one mangled base64 character in the final short chunk.
+          if test "$(git hash-object /tmp/c02a)" = 58b19fd66748455363105fa37311d5a42dbad4cf; then cp /tmp/c02a /tmp/c02;
+          elif test "$(git hash-object /tmp/c02b)" = 58b19fd66748455363105fa37311d5a42dbad4cf; then cp /tmp/c02b /tmp/c02;
+          else echo 'Neither half of chunk 02 matches' >&2; exit 1; fi
           python3 - <<'PY'
           from pathlib import Path
           import hashlib
-          p = Path('agent/focus-carrier-v2-06.b64')
-          data = bytearray(p.read_bytes())
+          data = bytearray(Path('agent/focus-carrier-v2-06.b64').read_bytes())
           target = '5c85bd61ee75392c3587b0fff72376223a92579d'
           def blob_sha(b):
-              h = hashlib.sha1()
-              h.update(b'blob ' + str(len(b)).encode() + b'\0')
-              h.update(b)
-              return h.hexdigest()
+              h = hashlib.sha1(); h.update(b'blob ' + str(len(b)).encode() + b'\0'); h.update(b); return h.hexdigest()
           if blob_sha(data) != target:
               alphabet = b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
               found = None
               for i, old in enumerate(data):
                   for c in alphabet:
-                      if c == old:
-                          continue
+                      if c == old: continue
                       data[i] = c
-                      if blob_sha(data) == target:
-                          found = (i, old, c)
-                          break
+                      if blob_sha(data) == target: found = (i, old, c); break
                   data[i] = old
-                  if found:
-                      break
-              if not found:
-                  raise SystemExit('chunk 06 is not a one-character transport error')
-              i, old, c = found
-              data[i] = c
-              print(f'repaired chunk 06 byte {i}: {chr(old)} -> {chr(c)}')
-          Path('/tmp/c06').write_bytes(data)
-          assert blob_sha(data) == target
+                  if found: break
+              if not found: raise SystemExit('chunk 06 is not a one-character transport error')
+              i, old, c = found; data[i] = c; print(f'repaired chunk 06 byte {i}: {chr(old)} -> {chr(c)}')
+          Path('/tmp/c06').write_bytes(data); assert blob_sha(data) == target
           PY
-
           cat /tmp/c00 /tmp/c01 /tmp/c02 /tmp/c03 /tmp/c04 /tmp/c05 /tmp/c06 | base64 -d >/tmp/focus-carrier.patch
           echo '6c20c4d435d8fae1d8d7711de9051d6479a241f025f3b66d1082a3fe27beb306  /tmp/focus-carrier.patch' | sha256sum -c -
 
@@ -115,18 +93,10 @@ jobs:
           test -x "$bin" || bin=src/colorscreen/colorscreen
           cp -L "$bin" /tmp/focus-cli/bin/colorscreen
           objs=("$bin")
-          if test -f src/libcolorscreen/.libs/libcolorscreen.so.2; then
-            objs+=(src/libcolorscreen/.libs/libcolorscreen.so.2)
-          fi
-          for obj in "${objs[@]}"; do
-            ldd "$obj" | awk '{for(i=1;i<=NF;i++) if ($i ~ /^\//) {print $i; break}}'
-          done | sort -u >/tmp/libs.txt
-          while read -r lib; do
-            cp -L "$lib" "/tmp/focus-cli/lib/$(basename "$lib")"
-          done </tmp/libs.txt
-          if test -f src/libcolorscreen/.libs/libcolorscreen.so.2; then
-            cp -L src/libcolorscreen/.libs/libcolorscreen.so.2 /tmp/focus-cli/lib/libcolorscreen.so.2
-          fi
+          if test -f src/libcolorscreen/.libs/libcolorscreen.so.2; then objs+=(src/libcolorscreen/.libs/libcolorscreen.so.2); fi
+          for obj in "${objs[@]}"; do ldd "$obj" | awk '{for(i=1;i<=NF;i++) if ($i ~ /^\//) {print $i; break}}'; done | sort -u >/tmp/libs.txt
+          while read -r lib; do cp -L "$lib" "/tmp/focus-cli/lib/$(basename "$lib")"; done </tmp/libs.txt
+          if test -f src/libcolorscreen/.libs/libcolorscreen.so.2; then cp -L src/libcolorscreen/.libs/libcolorscreen.so.2 /tmp/focus-cli/lib/libcolorscreen.so.2; fi
           cat >/tmp/focus-cli/colorscreen <<'EOF'
           #!/bin/sh
           here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -140,6 +110,6 @@ jobs:
       - name: Upload portable CLI
         uses: actions/upload-artifact@v4
         with:
-          name: focus-carrier-cli-arm
+          name: focus-carrier-cli
           path: /tmp/focus-cli
           retention-days: 3
