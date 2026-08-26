@@ -1,0 +1,50 @@
+name: Agent dcraw AHD patch transport
+
+on:
+  push:
+    branches:
+      - agent/dcraw-ahd-worksharing-transport
+
+permissions:
+  contents: write
+
+jobs:
+  transport:
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply dcraw AHD work-sharing fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/libcolorscreen/demosaic.h')
+          s = path.read_text()
+          start = s.index('ahd_interpolation_dominating_channel_dcraw (progress_info *progress)')
+          end = s.index('ahd_interpolation_remaining_channels_dcraw (progress_info *progress)', start)
+          section = s[start:end]
+          old = '#pragma omp parallel shared'
+          count = section.count(old)
+          if count != 4:
+              raise SystemExit(f'expected 4 malformed dcraw AHD parallel regions, found {count}')
+          section = section.replace(old, '#pragma omp parallel for shared')
+          s = s[:start] + section + s[end:]
+          path.write_text(s)
+          PY
+          git diff --check
+          git diff -- src/libcolorscreen/demosaic.h
+
+      - name: Commit source patch
+        shell: bash
+        run: |
+          git config user.name 'OpenAI Agent'
+          git config user.email 'noreply@openai.com'
+          git switch -C agent/fix-dcraw-ahd-openmp-worksharing
+          git add src/libcolorscreen/demosaic.h
+          git commit -m 'demosaic: fix dcraw AHD OpenMP work sharing' -m 'The dcraw AHD implementation had four omp parallel regions followed by ordinary for loops. Every OpenMP worker therefore traversed the entire image and concurrently wrote the same scratch or output elements.\n\nUse omp parallel for for the directional-green, RGB/Lab preparation, homogeneity-score, and final-selection loops. Each iteration writes a disjoint element and only reads stable input or scratch data, so normal OpenMP work sharing is safe and preserves the intended parallelism.\n\nThis removes the same malformed OpenMP pattern identified in the generic Hamilton-Adams/AHD paths.'
+          git push --force origin HEAD:agent/fix-dcraw-ahd-openmp-worksharing
