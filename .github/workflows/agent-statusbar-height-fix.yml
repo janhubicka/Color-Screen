@@ -1,0 +1,66 @@
+name: Agent shared status bar height fix
+
+on:
+  push:
+    branches:
+      - agent/statusbar-cleanup-transport
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/shared-statusbar-per-window
+          fetch-depth: 0
+      - name: Keep shared status bar height stable across tabs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'src/qtgui/WorkspaceWindow.cpp',
+              '''  if (QWidget *statusWidget = document->workspaceStatusWidget()) {\n    if (statusWidget->parentWidget() != m_workspaceProgressArea) {\n''',
+              '''  if (QWidget *statusWidget = document->workspaceStatusWidget()) {\n    // The transient progress controls determine the normal one-line status\n    // height.  Preserve that height even when a secondary-view tab is active\n    // and no document progress widget is installed in the shared line.\n    m_workspaceProgressArea->setMinimumHeight(\n        qMax(m_workspaceProgressArea->minimumHeight(),\n             statusWidget->minimumHeight()));\n    if (statusWidget->parentWidget() != m_workspaceProgressArea) {\n''')
+
+          replace_once(
+              'src/qtgui/main.cpp',
+              '''      const int previousTabs = app.tabCount();\n      ImageViewWindow *view = app.createViewWindow(source);\n      QPointer<MainWindow> guardedSource(source);\n      QPointer<ImageViewWindow> guardedView(view);\n      WorkspaceWindow *workspace = app.workspaceWindow();\n      if (!view || view->sourceDocument() != source ||\n''',
+              '''      const int previousTabs = app.tabCount();\n      WorkspaceWindow *workspace = app.workspaceWindow();\n      QStatusBar *workspaceStatus = workspace ? workspace->statusBar() : nullptr;\n      const int primaryStatusHeight =\n          workspaceStatus ? workspaceStatus->height() : -1;\n      ImageViewWindow *view = app.createViewWindow(source);\n      QPointer<MainWindow> guardedSource(source);\n      QPointer<ImageViewWindow> guardedView(view);\n      QCoreApplication::processEvents();\n      if (!view || view->sourceDocument() != source ||\n''')
+
+          replace_once(
+              'src/qtgui/main.cpp',
+              '''          !workspace || !workspace->containsView(view) ||\n          app.tabCount() != previousTabs + 1 || view->isWindow()) {\n        qCritical() << "New View was not added as a shared-image workspace tab";\n''',
+              '''          !workspace || !workspace->containsView(view) ||\n          app.tabCount() != previousTabs + 1 || view->isWindow() ||\n          !workspaceStatus || workspaceStatus->height() != primaryStatusHeight) {\n        qCritical() << "New View was not added as a stable shared-image "\n                       "workspace tab; status height"\n                    << (workspaceStatus ? workspaceStatus->height() : -1)\n                    << "expected" << primaryStatusHeight;\n''')
+
+          replace_once(
+              'src/qtgui/main.cpp',
+              '''      if (!workspace->containsView(guardedView) ||\n          !workspaceInspector->isAncestorOf(inspector) ||\n          source->inspectorImageWidget() != view->imageWidget()) {\n        qCritical() << "Reattached New View did not restore shared panels";\n''',
+              '''      if (!workspace->containsView(guardedView) ||\n          !workspaceInspector->isAncestorOf(inspector) ||\n          source->inspectorImageWidget() != view->imageWidget() ||\n          !workspaceStatus || workspaceStatus->height() != primaryStatusHeight) {\n        qCritical() << "Reattached New View did not restore shared panels "\n                       "without resizing the status bar";\n''')
+
+          replace_once(
+              '.github/workflows/build-ubuntu.yml',
+              '''          --smoke-test-tile-activation-stable --smoke-test-menu-order \\\n          --smoke-test-new-view --smoke-test-slanted-reference \\\n''',
+              '''          --smoke-test-tile-activation-stable --smoke-test-menu-order \\\n          --smoke-test-global-statusbar --smoke-test-new-view \\\n          --smoke-test-slanted-reference \\\n''')
+          PY
+
+          git diff --check
+          git diff --stat
+          git config user.name "OpenAI"
+          git config user.email "openai@users.noreply.github.com"
+          git add src/qtgui/WorkspaceWindow.cpp src/qtgui/main.cpp .github/workflows/build-ubuntu.yml
+          git commit -m "qtgui: keep shared status bar height stable" \
+                     -m "Retain the transient progress row's minimum height in the workspace progress area so switching to a secondary-view tab cannot shrink the shared status bar. Exercise the main-to-New-View switch and reattach path in the GUI smoke test, and enable the shared-status assertion in targeted Ubuntu CI."
+          git push origin HEAD:agent/shared-statusbar-per-window
