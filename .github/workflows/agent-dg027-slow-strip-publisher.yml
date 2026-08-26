@@ -1,0 +1,103 @@
+name: Agent DG027 slow strip publisher
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.event.pull_request.head.ref == 'agent/dg027-slow-strip-publish-20260826'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/scr-detect-slow-strip-contrast
+          fetch-depth: 0
+      - name: Apply measured slow strip contrast fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          geo = Path('src/libcolorscreen/scr-detect-geometry.C')
+          text = geo.read_text()
+          old = '''  coord_t dist = (bestcx - x) * (bestcx - x) + (bestcy - y) * (bestcy - y);
+  if (bestinner <= 0 || bestinner < bestouter_lr * min_contrast) {
+'''
+          new = '''  coord_t dist = (bestcx - x) * (bestcx - x) + (bestcy - y) * (bestcy - y);
+  /* Strip sampling measures the neighboring rows in BESTOUTER_UD and folds
+     left/right samples into BESTINNER above.  Do not test BESTOUTER_LR here:
+     strip mode intentionally resets it to zero.  */
+  luminosity_t contrast_outer = strip ? bestouter_ud : bestouter_lr;
+  if (bestinner <= 0 || bestinner < contrast_outer * min_contrast) {
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'slow strip gate: expected one match, found {text.count(old)}')
+          geo.write_text(text.replace(old, new, 1))
+
+          doc = Path('doc/scr-detect-geometry-tracking.md')
+          text = doc.read_text()
+          marker = '### DG-010 — predicted patch lookup samples only one rounded pixel\n'
+          if text.count(marker) != 1:
+              raise SystemExit(f'DG-010 marker: expected one match, found {text.count(marker)}')
+          section = '''### DG-027 — slow strip contrast tested an accumulator strip mode zeroed
+
+**Severity:** high correctness/performance
+
+**Status:** fixed
+
+Slow image-domain confirmation samples an expected Dufay-like strip and the two
+neighboring square rows.  In strip mode those neighboring-row samples are stored
+in `bestouter_ud`; left/right samples are folded into `bestinner`, after which
+`bestouter_lr` is deliberately reset to zero.  The final acceptance test still
+compared `bestinner` with `bestouter_lr * min_patch_contrast`.  Consequently any
+strip with a positive inner signal passed the slow contrast gate regardless of
+the measured neighboring-row dye fraction.
+
+Use the accumulator selected by the sampling geometry: `bestouter_ud` for a
+strip and the historical `bestouter_lr` for non-strip patches.  Sampling
+locations, `min_patch_contrast`, displacement search, priority calculation,
+fast hard-strip confirmation, DG-026 soft-strip confirmation, and all non-strip
+acceptance behavior are unchanged.
+
+On the full-resolution NGS00428 controls in combined fast+slow mode, the stricter
+slow strip test changes little useful coverage: Tile05 at detector mask 0/0
+moves from 88.77% to 88.71% screen coverage and 3,398,865 to 3,393,568 patches;
+Tile01 moves from 93.51% to 93.37% and keeps its real raster-free corner.  With
+the historical 2/3 mask, Tile05 changes from 98.70% to 98.63% and only 371 of
+about 3.78 million patches disappear; Tile01 scan coverage remains 56.02% versus
+56.01% with fewer than one thousand of about 2.14 million patches removed.
+Local wall and flood timings vary substantially between repeated full-resolution
+runs, so they are not used as a compatibility criterion.
+
+Slow-only Tile05 becomes deliberately much more selective: accepted patches fall
+from 2,288,129 to 1,551,816 and scan coverage from 59.78% to 40.66%.  This shows
+that the old path relied heavily on strips that did not meet its nominal 2x
+contrast requirement; it is not presented as an improvement in slow-only scan
+coverage.  The repository's real Nikon Dufay integration suite nevertheless
+passes all six cases after the correction, including its dedicated slow-only
+`min-screen-percentage=80` test, and the Capture One stitched Dufay suite also
+passes all six cases.  The normal combined detector therefore retains its real
+regression gates while the slow path now enforces the contrast it already
+measures.
+
+The next blur-robustness target remains geometry-gated square-patch/`unknown`
+continuity rather than another relaxation of strip classification.
+
+'''
+          doc.write_text(text.replace(marker, section + marker, 1))
+          PY
+          git diff --check
+          changed="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n' doc/scr-detect-geometry-tracking.md src/libcolorscreen/scr-detect-geometry.C)"
+          test "$changed" = "$expected" || { printf 'unexpected changed files:\n%s\n' "$changed"; exit 1; }
+          git config user.name OpenAI
+          git config user.email noreply@openai.com
+          git add doc/scr-detect-geometry-tracking.md src/libcolorscreen/scr-detect-geometry.C
+          git commit -m 'detect: enforce slow Dufay strip contrast' \
+            -m 'Slow strip sampling stores neighboring-row dye fractions in bestouter_ud and folds left/right samples into the strip interior before zeroing bestouter_lr. The acceptance gate nevertheless compared against the zeroed left/right accumulator, so any positive strip passed min_patch_contrast. Select bestouter_ud for strip acceptance while retaining the historical bestouter_lr gate for non-strip patches. Sampling geometry, contrast thresholds, priorities, hard strips, DG-026 soft strips, and square-patch confirmation are unchanged.' \
+            -m 'Full-resolution NGS00428 combined-mode coverage changes only marginally: Tile05 0/0 88.77% to 88.71%, Tile01 0/0 93.51% to 93.37%, and the historical 2/3 controls remain within 0.07 percentage point. Slow-only Tile05 becomes intentionally more selective, exposing how much weak strip evidence the old gate admitted. Both six-case real Dufay integration suites pass, including the Nikon slow-only coverage gate. Record the correction and measurements as DG-027.'
+          git push origin HEAD:agent/scr-detect-slow-strip-contrast
