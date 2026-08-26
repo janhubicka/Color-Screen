@@ -982,16 +982,35 @@ int main(int argc, char *argv[]) {
         app.exit(16);
         return;
       }
-      QTimer::singleShot(150, &app,
-                         [&app, workspace, guardedSource, guardedView]() {
-        if (guardedSource || guardedView ||
-            !app.documentWindows().isEmpty() || !app.viewWindows().isEmpty() ||
-            (workspace && workspace->isVisible())) {
-          qCritical() << "Last application window did not release its document";
-          app.exit(16);
-          return;
-        }
-        app.exit(0);
+
+      auto checkFinalCleanup =
+          std::make_shared<std::function<void(int)>>();
+      const std::weak_ptr<std::function<void(int)>> weakCheckFinalCleanup =
+          checkFinalCleanup;
+      *checkFinalCleanup =
+          [&app, workspace, guardedSource, guardedView,
+           weakCheckFinalCleanup](int attemptsLeft) {
+            if (guardedSource || guardedView ||
+                !app.documentWindows().isEmpty() ||
+                !app.viewWindows().isEmpty() ||
+                (workspace && workspace->isVisible())) {
+              if (attemptsLeft > 0) {
+                if (auto retry = weakCheckFinalCleanup.lock()) {
+                  QTimer::singleShot(50, &app, [retry, attemptsLeft]() {
+                    (*retry)(attemptsLeft - 1);
+                  });
+                  return;
+                }
+              }
+              qCritical()
+                  << "Last application window did not release its document";
+              app.exit(16);
+              return;
+            }
+            app.exit(0);
+          };
+      QTimer::singleShot(0, &app, [checkFinalCleanup]() {
+        (*checkFinalCleanup)(40);
       });
     });
   }
