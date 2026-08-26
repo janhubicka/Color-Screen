@@ -1,0 +1,139 @@
+name: Agent TSan Qt smoke probe
+
+on:
+  push:
+    branches:
+      - agent/tsan-gui-probe
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  tsan-qt-smoke:
+    name: TSan Qt smoke probe
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      CC: clang-18
+      CXX: clang++-18
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang OpenMP TSan runtime and QPA test helpers
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            clang-18 libclang-rt-18-dev libomp-18-dev llvm-18 xvfb xauth
+          test -f /usr/lib/llvm-18/lib/libarcher.so
+          test -x /usr/bin/llvm-symbolizer-18
+          rm -rf /var/lib/apt/lists/*
+
+      - name: Configure with ThreadSanitizer
+        run: |
+          SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=thread"
+          CC=clang-18 CXX=clang++-18 \
+            CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
+            LDFLAGS="-fsanitize=thread" \
+            ./configure --enable-checking --disable-static-link \
+              --disable-gtkgui --enable-qtgui
+
+      - name: Build ThreadSanitizer variant
+        run: make -j$(nproc)
+
+      - name: Probe Qt smoke test under ThreadSanitizer
+        env:
+          OMP_NUM_THREADS: "4"
+          OMP_TOOL: enabled
+          OMP_TOOL_LIBRARIES: /usr/lib/llvm-18/lib/libarcher.so
+          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:ignore_noninstrumented_modules=1:external_symbolizer_path=/usr/bin/llvm-symbolizer-18
+        run: |
+          IMAGE="$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+
+          run_pair () {
+            platform="$1"
+            prefix="$2"
+            log="$3"
+            echo "===== $platform ====="
+            set +e
+            if [ -n "$prefix" ]; then
+              $prefix env QT_QPA_PLATFORM="$platform" \
+                ./src/qtgui/colorscreen-qt \
+                  --smoke-test 30000 --smoke-test-expect-windows 2 \
+                  --smoke-test-new-view --smoke-test-slanted-reference \
+                  "$IMAGE" "$IMAGE" >"$log" 2>&1
+            else
+              QT_QPA_PLATFORM="$platform" \
+                ./src/qtgui/colorscreen-qt \
+                  --smoke-test 30000 --smoke-test-expect-windows 2 \
+                  --smoke-test-new-view --smoke-test-slanted-reference \
+                  "$IMAGE" "$IMAGE" >"$log" 2>&1
+            fi
+            first_rc=$?
+            if [ "$first_rc" -eq 0 ]; then
+              if [ -n "$prefix" ]; then
+                $prefix env QT_QPA_PLATFORM="$platform" \
+                  ./src/qtgui/colorscreen-qt \
+                    --smoke-test 20000 --smoke-test-expect-windows 1 \
+                    --smoke-test-window-lifetime \
+                    "$IMAGE" >>"$log" 2>&1
+              else
+                QT_QPA_PLATFORM="$platform" \
+                  ./src/qtgui/colorscreen-qt \
+                    --smoke-test 20000 --smoke-test-expect-windows 1 \
+                    --smoke-test-window-lifetime \
+                    "$IMAGE" >>"$log" 2>&1
+              fi
+              second_rc=$?
+            else
+              second_rc=125
+            fi
+            set -e
+            cat "$log"
+            if grep -q "WARNING: ThreadSanitizer" "$log"; then
+              echo "TSAN_REPORT_$platform=1"
+              return 66
+            fi
+            if [ "$first_rc" -eq 0 ] && [ "$second_rc" -eq 0 ]; then
+              echo "SMOKE_OK_$platform=1"
+              return 0
+            fi
+            echo "SMOKE_FAILED_$platform first=$first_rc second=$second_rc"
+            return 1
+          }
+
+          set +e
+          run_pair offscreen "" /tmp/tsan-qt-offscreen.log
+          offscreen_rc=$?
+          run_pair minimal "" /tmp/tsan-qt-minimal.log
+          minimal_rc=$?
+          run_pair xcb "xvfb-run -a" /tmp/tsan-qt-xcb.log
+          xcb_rc=$?
+          set -e
+
+          echo "probe results: offscreen=$offscreen_rc minimal=$minimal_rc xcb=$xcb_rc"
+          if [ "$offscreen_rc" -eq 66 ] || [ "$minimal_rc" -eq 66 ] || [ "$xcb_rc" -eq 66 ]; then
+            echo "Qt GUI reached Color-Screen under TSan and produced a ThreadSanitizer report."
+            exit 66
+          fi
+          if [ "$offscreen_rc" -eq 0 ] || [ "$minimal_rc" -eq 0 ] || [ "$xcb_rc" -eq 0 ]; then
+            echo "At least one Qt QPA backend completed both TSan smoke tests."
+            exit 0
+          fi
+          echo "No Qt QPA backend completed the smoke test under TSan."
+          exit 1
+
+      - name: Upload Qt TSan probe logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsan-qt-smoke-probe
+          path: /tmp/tsan-qt-*.log
+          if-no-files-found: warn
