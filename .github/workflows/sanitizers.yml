@@ -38,13 +38,13 @@ jobs:
 
     - name: Apply renderer race fixes
       run: |
-        pwd
         python3 .github/ci/apply-tsan-render-handoff.py
         python3 .github/ci/apply-tsan-render-stats.py
         grep -q 'enqueueRender' src/qtgui/Renderer.h
         grep -q 'm_renderer->enqueueRender' src/qtgui/ImageWidget.cpp
         grep -q 'm_renderer->enqueueRender' src/qtgui/NavigationView.cpp
-        grep -q 'std::atomic<int> stats' src/libcolorscreen/render-tile.h
+        grep -q 'stats_enabled' src/libcolorscreen/render-tile.C
+        grep -q 'dead timing work' src/libcolorscreen/render-scr-detect.C
 
     - name: Install Clang OpenMP TSan runtime
       run: |
@@ -144,5 +144,5 @@ jobs:
           src/qtgui/Renderer.cpp
           src/qtgui/ImageWidget.cpp
           src/qtgui/NavigationView.cpp
-          src/libcolorscreen/render-tile.h
           src/libcolorscreen/render-tile.C
+          src/libcolorscreen/render-scr-detect.C
