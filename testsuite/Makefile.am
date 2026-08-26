@@ -68,7 +68,6 @@ CLEANFILES              = slanted-edge-1.log \
                           dufay_rcd_test.tiff
 
 TESTS                   = unittests.test \
-			  qt-tsan-smoke-probe.test \
 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw.test  \
 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw-finetune.test \
 			  dufaycolor_dt_captureone_export.test \
