@@ -1,0 +1,46 @@
+name: Agent dcraw AHD patch transport Windows
+
+on:
+  push:
+    branches:
+      - agent/dcraw-ahd-worksharing-transport-windows
+
+permissions:
+  contents: write
+
+jobs:
+  transport:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply dcraw AHD work-sharing fix
+        shell: pwsh
+        run: |
+          $path = 'src/libcolorscreen/demosaic.h'
+          $s = [System.IO.File]::ReadAllText($path)
+          $start = $s.IndexOf('ahd_interpolation_dominating_channel_dcraw (progress_info *progress)')
+          $end = $s.IndexOf('ahd_interpolation_remaining_channels_dcraw (progress_info *progress)', $start)
+          if ($start -lt 0 -or $end -lt 0) { throw 'dcraw AHD function markers not found' }
+          $section = $s.Substring($start, $end - $start)
+          $old = '#pragma omp parallel shared'
+          $count = ([regex]::Matches($section, [regex]::Escape($old))).Count
+          if ($count -ne 4) { throw "expected 4 malformed dcraw AHD parallel regions, found $count" }
+          $section = $section.Replace($old, '#pragma omp parallel for shared')
+          $out = $s.Substring(0, $start) + $section + $s.Substring($end)
+          [System.IO.File]::WriteAllText($path, $out, (New-Object System.Text.UTF8Encoding($false)))
+          git diff --check
+          git diff -- src/libcolorscreen/demosaic.h
+
+      - name: Commit source patch
+        shell: pwsh
+        run: |
+          git config user.name 'OpenAI Agent'
+          git config user.email 'noreply@openai.com'
+          git switch -C agent/fix-dcraw-ahd-openmp-worksharing
+          git add src/libcolorscreen/demosaic.h
+          git commit -m 'demosaic: fix dcraw AHD OpenMP work sharing' -m 'The dcraw AHD implementation had four omp parallel regions followed by ordinary for loops. Every OpenMP worker therefore traversed the entire image and concurrently wrote the same scratch or output elements. Use omp parallel for for the directional-green, RGB/Lab preparation, homogeneity-score, and final-selection loops. Each iteration writes a disjoint element and only reads stable input or scratch data, so normal OpenMP work sharing is safe and preserves the intended parallelism.'
+          git push origin HEAD:agent/fix-dcraw-ahd-openmp-worksharing
