@@ -455,7 +455,7 @@ protected:
   generic_dominating_channel (progress_info *progress)
   {
     int w = m_area.width, h = m_area.height;
-#pragma omp parallel shared(progress, h, w) default(none)
+#pragma omp parallel for shared(progress, h, w) default(none)
     for (int y = 0; y < h; y++)
       {
         if (!progress || !progress->cancel_requested ())
@@ -600,7 +600,7 @@ protected:
   generic_interpolation_remaining_channels (progress_info *progress)
   {
     int w = m_area.width, h = m_area.height;
-#pragma omp parallel shared(progress, h, w) default(none)
+    /* Clamped edge samples can alias output, so keep this pass serial.  */
     for (int y = 0; y < h; y++)
       {
         if (!progress || !progress->cancel_requested ())
@@ -905,7 +905,7 @@ protected:
           progress->set_task ("smoothening noisy areas in the dominating "
                               "channel (hamilton-adams)",
                               h);
-#pragma omp parallel shared(progress, h, w, predA) default(none)
+        /* Smoothing updates values read by neighbors; keep row-major order.  */
         for (int y = 1; y < h - 1; y++)
           {
             if (!progress || !progress->cancel_requested ())
@@ -1008,7 +1008,7 @@ protected:
     int h = m_area.height, w = m_area.width;
     if (progress)
       progress->set_task ("demosaicing remaining chanels (hamilton-adams)", h);
-#pragma omp parallel shared(progress, h, w) default(none)
+    /* dch() clamps edge reads, so keep this output pass serial.  */
     for (int y = 0; y < h; y++)
       {
         if (!progress || !progress->cancel_requested ())
@@ -1173,7 +1173,7 @@ protected:
     std::vector<luminosity_t> green_h (w * h);
     std::vector<luminosity_t> green_v (w * h);
 
-#pragma omp parallel shared(progress, h, w, green_h, green_v) default(none)
+#pragma omp parallel for shared(progress, h, w, green_h, green_v) default(none)
     for (int y = 0; y < h; y++)
       {
         if (!progress || !progress->cancel_requested ())
@@ -1227,8 +1227,7 @@ protected:
         rgb_h.resize (w * h);
         rgb_v.resize (w * h);
 
-#pragma omp parallel shared(progress, h, w, rgb_h, rgb_v, green_h,            \
-                                green_v) default(none)
+#pragma omp parallel for shared(progress, h, w, rgb_h, rgb_v, green_h, green_v) default(none)
         for (int y = 0; y < h; y++)
           {
             if (!progress || !progress->cancel_requested ())
@@ -1276,8 +1275,7 @@ protected:
     std::vector<luminosity_t> h_scores (w * h, 0);
     std::vector<luminosity_t> v_scores (w * h, 0);
 
-#pragma omp parallel shared(progress, h, w, green_h, green_v, lab_h, lab_v,   \
-                                h_scores, v_scores) default(none)
+#pragma omp parallel for shared(progress, h, w, green_h, green_v, lab_h, lab_v, h_scores, v_scores) default(none)
     for (int y = 0; y < h; y++)
       {
         if (!progress || !progress->cancel_requested ())
@@ -1366,8 +1364,7 @@ protected:
             }
       }
 
-#pragma omp parallel shared(progress, h, w, predA, green_h, green_v,          \
-                                h_scores, v_scores) default(none)
+    /* predA uses packed bytes; keep the bitmap-writing decision pass serial.  */
     for (int y = 0; y < h; y++)
       {
         if (!progress || !progress->cancel_requested ())
@@ -1438,7 +1435,7 @@ protected:
           progress->set_task ("smoothening noisy areas in the dominating "
                               "channel (ahd)",
                               h);
-#pragma omp parallel shared(progress, h, w, predA) default(none)
+        /* Smoothing reads neighboring values this pass can update; serialize.  */
         for (int y = 1; y < h - 1; y++)
           {
             if (!progress || !progress->cancel_requested ())
@@ -1479,7 +1476,7 @@ protected:
     int h = m_area.height, w = m_area.width;
     if (progress)
       progress->set_task ("demosaicing remaining channels (ahd)", h);
-#pragma omp parallel shared(progress, h, w) default(none)
+    /* Remaining-channel dch() edge reads can alias output; serialize.  */
     for (int y = 0; y < h; y++)
       {
         if (!progress || !progress->cancel_requested ())
