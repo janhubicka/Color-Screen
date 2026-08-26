@@ -1230,7 +1230,11 @@ bool confirm(const render_scr_detect *render, point_t coordinate1,
       std::max(std::max(bestouter_ud, (luminosity_t)0.00001), bestouter_lr),
       bestouter_corners);
   coord_t dist = (bestcx - x) * (bestcx - x) + (bestcy - y) * (bestcy - y);
-  if (bestinner <= 0 || bestinner < bestouter_lr * min_contrast) {
+  /* Strip sampling measures the neighboring rows in BESTOUTER_UD and folds
+     left/right samples into BESTINNER above.  Do not test BESTOUTER_LR here:
+     strip mode intentionally resets it to zero.  */
+  luminosity_t contrast_outer = strip ? bestouter_ud : bestouter_lr;
+  if (bestinner <= 0 || bestinner < contrast_outer * min_contrast) {
     if (verbose_confirm)
       printf("FAILED: given:%f %f best:%f %f inner:%f outer:%f %f ratio: "
              "%f color:%i min:%f\n",
