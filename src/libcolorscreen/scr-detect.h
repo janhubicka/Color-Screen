@@ -70,7 +70,7 @@ class color_class_map
 {
 public:
   constexpr color_class_map ()
-  : data (NULL), width (0), height (0)
+  : data (NULL), width (0), height (0), rowstride (0)
   {
   }
   void
@@ -78,7 +78,11 @@ public:
   {
     if (data)
       abort ();
-    data = (unsigned char *)calloc (x * y + 3 / 4, 1);
+    /* set_class updates one packed byte with read-modify-write operations.
+       Keep image rows byte-aligned so independently classified OpenMP rows
+       never share the byte straddling a row boundary.  */
+    rowstride = (x + 3) / 4;
+    data = (unsigned char *)calloc (rowstride * y, 1);
     width = x;
     height = y;
     if (!data)
@@ -92,19 +96,19 @@ public:
   void
   set_class (int x, int y, scr_detect::color_class c)
   {
-    unsigned int pos = x + y * width;
+    unsigned int pos = x;
     unsigned char cc = ((unsigned char)c) << ((pos % 4u) * 2);
     unsigned char cm = ~(((unsigned char)3) << ((pos % 4u) * 2));
-    data[pos / 4u] &= cm;
-    data[pos / 4u] |= cc;
+    data[y * rowstride + pos / 4u] &= cm;
+    data[y * rowstride + pos / 4u] |= cc;
   }
   pure_attr scr_detect::color_class
   get_class (int x, int y) const
   {
     if (x < 0 || y < 0 || x >= width || y>= height)
       return scr_detect::unknown;
-    unsigned int pos = x + y * width;
-    return (scr_detect::color_class)((data[pos / 4u] >> ((pos % 4u) * 2)) & 3);
+    unsigned int pos = x;
+    return (scr_detect::color_class)((data[y * rowstride + pos / 4u] >> ((pos % 4u) * 2)) & 3);
   }
   void
   get_color (int x, int y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
@@ -137,7 +141,7 @@ public:
     return t == scr_detect::blue /*|| t == scr_detect::unknown*/;
   }
   unsigned char *data;
-  int width, height;
+  int width, height, rowstride;
 private:
 };
 }
