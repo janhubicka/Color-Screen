@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     container:
       image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
       credentials:
@@ -82,6 +82,6 @@ jobs:
       - name: Upload portable CLI
         uses: actions/upload-artifact@v4
         with:
-          name: focus-carrier-cli
+          name: focus-carrier-cli-arm
           path: /tmp/focus-cli
           retention-days: 3
