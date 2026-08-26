@@ -1,0 +1,14 @@
+--- a/src/libcolorscreen/focus-analysis.C
++++ b/src/libcolorscreen/focus-analysis.C
+@@ -280,8 +280,9 @@
+   probe_rparam.sharpen.scanner_mtf.sigma = 0;
+   probe_rparam.sharpen.scanner_mtf.defocus = 0;
+   finetune_parameters probe_params = fparams;
+-  probe_params.flags &= ~finetune_scanner_mtf_defocus;
+-  probe_params.flags |= finetune_scanner_mtf_sigma | finetune_position;
++  probe_params.flags
++      &= ~(finetune_scanner_mtf_defocus | finetune_position);
++  probe_params.flags |= finetune_scanner_mtf_sigma;
+   probe_params.interpolate_scanner_mtf_defocus = false;
+   finetune_result probe = finetune (probe_rparam, param, img, locations,
+                                     &starts, probe_params, progress);
