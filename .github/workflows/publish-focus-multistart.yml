@@ -1,9 +1,9 @@
 name: Publish focus carrier multistart patch
 
 on:
-  pull_request:
+  push:
     branches:
-      - agent/tmp-focus-multistart-base
+      - agent/tmp-focus-multistart-trigger
 
 permissions:
   contents: write
