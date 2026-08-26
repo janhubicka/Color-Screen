@@ -41,9 +41,11 @@ jobs:
         python3 .github/ci/apply-tsan-render-handoff.py
         python3 .github/ci/apply-tsan-render-stats.py
         python3 .github/ci/apply-tsan-qtpool.py
+        python3 .github/ci/apply-tsan-tilepreview.py
         grep -q 'enqueueRender' src/qtgui/Renderer.h
         grep -q 'runSynchronized' src/qtgui/Renderer.cpp
         grep -q 'finishReferenceLoad' src/qtgui/ImageViewWindow.cpp
+        grep -q 'finishTileRender' src/qtgui/TilePreviewPanel.cpp
         grep -q 'stats_enabled' src/libcolorscreen/render-tile.C
         grep -q 'dead timing work' src/libcolorscreen/render-scr-detect.C
 
@@ -148,5 +150,7 @@ jobs:
           src/qtgui/NavigationView.cpp
           src/qtgui/ImageViewWindow.h
           src/qtgui/ImageViewWindow.cpp
+          src/qtgui/TilePreviewPanel.h
+          src/qtgui/TilePreviewPanel.cpp
           src/libcolorscreen/render-tile.C
           src/libcolorscreen/render-scr-detect.C
