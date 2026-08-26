@@ -1,7 +1,7 @@
 name: TEMP build focus multistart CLI
 
 on:
-  pull_request:
+  push:
     branches:
       - agent/tmp-focus-multistart-build-base
 
