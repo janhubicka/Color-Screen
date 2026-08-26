@@ -27,6 +27,10 @@ jobs:
       PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       CC: "ccache clang-18"
       CXX: "ccache clang++-18"
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPRESS: "true"
+      CCACHE_MAXSIZE: 500M
     steps:
     - uses: actions/checkout@v4
       with:
@@ -49,6 +53,17 @@ jobs:
         test -f /usr/lib/llvm-18/lib/libarcher.so
         test -x /usr/bin/llvm-symbolizer-18
         rm -rf /var/lib/apt/lists/*
+
+    - name: Restore compiler cache
+      uses: actions/cache@v4
+      with:
+        path: .ccache
+        key: ccache-${{ runner.os }}-amd64-tsan-clang18-${{ github.event.pull_request.head.sha || github.sha }}
+        restore-keys: |
+          ccache-${{ runner.os }}-amd64-tsan-clang18-
+
+    - name: Reset compiler cache stats
+      run: ccache --zero-stats
 
     - name: Verify OpenMP-aware ThreadSanitizer runtime
       run: |
@@ -114,6 +129,10 @@ jobs:
         OMP_TOOL_LIBRARIES: /usr/lib/llvm-18/lib/libarcher.so
         TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:ignore_noninstrumented_modules=1:external_symbolizer_path=/usr/bin/llvm-symbolizer-18
       run: make -j$(nproc) check
+
+    - name: Compiler cache stats
+      if: always()
+      run: ccache --show-stats
 
     - name: Upload validated source
       if: always()
