@@ -48,6 +48,7 @@ jobs:
           test "$(git hash-object /tmp/c06)" = 5c85bd61ee75392c3587b0fff72376223a92579d
           cat /tmp/c00 /tmp/c01 /tmp/c02 /tmp/c03 /tmp/c04 /tmp/c05 /tmp/c06 | base64 -d >/tmp/focus-carrier.patch
           echo '6c20c4d435d8fae1d8d7711de9051d6479a241f025f3b66d1082a3fe27beb306  /tmp/focus-carrier.patch' | sha256sum -c -
+          echo '391494b7eff5193b34bd9406a15ad462c119a69624f0e0b6ff6e2d4fe9855806  agent/focus-carrier-test-link-fix.patch' | sha256sum -c -
       - name: Apply, test and build CLI
         shell: bash
         run: |
@@ -56,6 +57,8 @@ jobs:
           git checkout --detach 5b4e956d023dd42618ccbae9078f42f97300f6c5
           git apply --check /tmp/focus-carrier.patch
           git apply /tmp/focus-carrier.patch
+          git apply --check agent/focus-carrier-test-link-fix.patch
+          git apply agent/focus-carrier-test-link-fix.patch
           git diff --check
           CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure >/tmp/config.log 2>&1
           make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests >/tmp/build.log 2>&1
