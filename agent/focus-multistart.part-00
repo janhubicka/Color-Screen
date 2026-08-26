@@ -118,8 +118,11 @@ index 3896ff6..7784201 100644
 +    return false;
 +  geometry->type = Paget;
 +  geometry->center = { 0, 0 };
-+  geometry->coordinate1 = { 8, 0 };
-+  geometry->coordinate2 = { 0, 8 };
++  /* Match the roughly 17-pixel Paget period of the historical Hurley scan.
++     The focus-area estimator is intended to recover the screen-carrier MTF,
++     not an aggressively undersampled near-Nyquist synthetic carrier.  */
++  geometry->coordinate1 = { 17, 0 };
++  geometry->coordinate2 = { 0, 17 };
 +  scr_to_img map;
 +  if (!map.set_parameters (*geometry, *image))
 +    return false;
