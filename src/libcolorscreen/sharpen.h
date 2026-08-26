@@ -50,7 +50,7 @@ do_unsharp_mask(mem_O *out, T data, P param, int width, int height, int clen, lu
     luminosity_t *rotated_cmatrix = (luminosity_t *)malloc (clen * sizeof (luminosity_t));
 #ifdef _OPENMP
     int tn = !parallel ? 0 : omp_get_thread_num ();
-    int threads = !parallel ? 1 : omp_get_max_threads ();
+    int threads = !parallel ? 1 : omp_get_num_threads ();
 #else
     int tn = 0;
     int threads = 1;
