@@ -4318,7 +4318,7 @@ protected:
     std::vector<luminosity_t> green_h (w * h);
     std::vector<luminosity_t> green_v (w * h);
 
-#pragma omp parallel shared(progress, h, w, range, green_h,                   \
+#pragma omp parallel for shared(progress, h, w, range, green_h,                   \
                                 green_v) default(none)
     for (int y = 0; y < h; y++)
       {
@@ -4365,7 +4365,7 @@ protected:
     std::vector<cie_lab> lab_h (w * h, cie_lab (xyz (0, 0, 0), srgb_white));
     std::vector<cie_lab> lab_v (w * h, cie_lab (xyz (0, 0, 0), srgb_white));
 
-#pragma omp parallel shared(progress, h, w, range, rgb_h, rgb_v, lab_h,       \
+#pragma omp parallel for shared(progress, h, w, range, rgb_h, rgb_v, lab_h,       \
                                 lab_v, green_h, green_v,                      \
                                 srgb_white) default(none)
     for (int y = 0; y < h; y++)
@@ -4412,7 +4412,7 @@ protected:
     std::vector<int> homo_h (w * h, 0);
     std::vector<int> homo_v (w * h, 0);
 
-#pragma omp parallel shared(progress, h, w, lab_h, lab_v, homo_h,             \
+#pragma omp parallel for shared(progress, h, w, lab_h, lab_v, homo_h,             \
                                 homo_v) default(none)
     for (int y = 0; y < h; y++)
       {
@@ -4468,7 +4468,7 @@ protected:
     if (progress && progress->cancelled ())
       return false;
 
-#pragma omp parallel shared(progress, h, w, rgb_h, rgb_v, homo_h,             \
+#pragma omp parallel for shared(progress, h, w, rgb_h, rgb_v, homo_h,             \
                                 homo_v) default(none)
     for (int y = 0; y < h; y++)
       {
