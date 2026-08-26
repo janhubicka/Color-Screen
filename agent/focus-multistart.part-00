@@ -1,0 +1,131 @@
+diff --git a/src/colorscreen/colorscreen.C b/src/colorscreen/colorscreen.C
+index 70aa4aa..8bf7168 100644
+--- a/src/colorscreen/colorscreen.C
++++ b/src/colorscreen/colorscreen.C
+@@ -345,8 +345,9 @@ print_help (char *err = NULL)
+       fprintf (stderr, "      --min-areas=N              require at least N selected areas (default 3)\n");
+       fprintf (stderr, "      --max-areas=N              jointly fit at most N areas (default 8)\n");
+       fprintf (stderr, "      --range=N                  finetune half-range in screen periods (default 4)\n");
+-      fprintf (stderr, "      --defocus-only             optimize scanner-MTF defocus (default)\n");
+-      fprintf (stderr, "      --sigma-only               optimize residual scanner-MTF sigma instead\n");
++      fprintf (stderr, "      --sigma-and-defocus        jointly optimize sigma + defocus (default)\n");
++      fprintf (stderr, "      --defocus-only             optimize scanner-MTF defocus only\n");
++      fprintf (stderr, "      --sigma-only               optimize residual scanner-MTF sigma only\n");
+       fprintf (stderr, "      --zero-focus-start         zero sigma/defocus after loading parameters\n");
+       fprintf (stderr, "      --use-monochrome-channel   force BW/IR focus fitting\n");
+       fprintf (stderr, "      --use-rgb                  force RGB uniform-image-layer fitting\n");
+@@ -2597,10 +2598,12 @@ analyze_focus_areas (int argc, char **argv)
+   bool force_rgb = false;
+   bool fixed_focus_verification = false;
+   bool fixed_joint_position = false;
+-  /* Periodic focus areas do not separately identify physical sigma and
+-     defocus.  Default to the useful calibrated-sigma workflow: preserve the
+-     sigma from the parameter file and optimize defocus only.  */
+-  uint64_t focus_flags = finetune_scanner_mtf_defocus;
++  /* Coupled physical focus uses scalar sigma-only / defocus-only basin
++     searches internally before both coordinates are released.  This keeps a
++     cold start stable while still allowing an existing MTF calibration to be
++     adjusted in either direction.  */
++  uint64_t focus_flags
++      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+   subhelp = help_focus_areas;
+ 
+   for (int i = 0; i < argc; i++)
+@@ -2619,6 +2622,9 @@ analyze_focus_areas (int argc, char **argv)
+         ;
+       else if (parse_int_param (argc, argv, &i, "range", range, 1, 64))
+         ;
++      else if (arg == "--sigma-and-defocus")
++        focus_flags
++            = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+       else if (arg == "--defocus-only")
+         focus_flags = finetune_scanner_mtf_defocus;
+       else if (arg == "--sigma-only")
+@@ -2732,8 +2738,10 @@ analyze_focus_areas (int argc, char **argv)
+   local.range = range;
+   local.ignore_outliers = 0;
+   local.flags = finetune_position | finetune_no_progress_report;
+-  if (!fixed_focus_verification)
+-    local.flags |= focus_flags;
++  /* Candidate verification estimates local phase/primary intensities only.
++     Scanner focus is global and is fitted after area selection; refitting it
++     independently here is both expensive and a poor source of joint starts. */
++  (void)fixed_focus_verification;
+   if (use_bw)
+     local.flags |= finetune_bw | finetune_no_normalize
+                    | finetune_no_data_collection;
+@@ -2806,6 +2814,16 @@ analyze_focus_areas (int argc, char **argv)
+     }
+ 
+   printf ("Joint badness: %.12g\n", (double)analysis.joint_fit.badness);
++  if (analysis.screen_frequency > 0 && analysis.joint_screen_mtf >= 0)
++    {
++      printf ("Process-screen frequency: %.9f cycles/pixel\n",
++              (double)analysis.screen_frequency);
++      if (analysis.initial_screen_mtf >= 0)
++        printf ("Initial system MTF at screen frequency: %.6f%%\n",
++                (double)analysis.initial_screen_mtf * 100);
++      printf ("Fitted system MTF at screen frequency: %.6f%%\n",
++              (double)analysis.joint_screen_mtf * 100);
++    }
+   if (focus_flags & finetune_scanner_mtf_sigma)
+     printf ("Joint scanner MTF sigma: %.9f px\n",
+             (double)analysis.joint_fit.scanner_mtf_sigma);
+diff --git a/src/libcolorscreen/focus-analysis-unittests.C b/src/libcolorscreen/focus-analysis-unittests.C
+index 3896ff6..5867791 100644
+--- a/src/libcolorscreen/focus-analysis-unittests.C
++++ b/src/libcolorscreen/focus-analysis-unittests.C
+@@ -1,6 +1,7 @@
+ #include "include/focus-analysis.h"
+ #include "finetune-int.h"
+ #include "include/scr-to-img.h"
++#include "include/scr-to-img-parameters.h"
+ #include "screen.h"
+ #include <algorithm>
+ #include <array>
+@@ -356,37 +357,149 @@ test_bw_multitile_focus ()
+   return true;
+ }
+ 
+-/* Periodic focus areas constrain the combined transfer, not a unique split
+-   between residual Gaussian sigma and physical defocus.  Coupled physical
+-   fitting must therefore fail before doing an expensive image fit.  */
++/* Build a monochrome Paget fixture filtered by a physical scanner MTF.
++   The exact split between sigma and defocus is deliberately not the regression
++   target; focus-area analysis must recover the effective transfer at the
++   process-screen carrier from a cold start.  */
+ static bool
+-test_coupled_physical_focus_rejected ()
++build_bw_physical_focus_fixture (
++    image_data *image, scr_to_img_parameters *geometry,
++    std::vector<finetune_focus_area_candidate> *candidates,
++    mtf_parameters *truth_mtf, coord_t *carrier_mtf)
+ {
+-  render_parameters rparam;
+-  rparam.sharpen.mode = sharpen_parameters::blur_deconvolution;
+-  rparam.sharpen.scanner_mtf.model = mtf_model::physical_diffraction;
+-  rparam.sharpen.scanner_mtf.pixel_pitch = 3.76;
+-  rparam.sharpen.scanner_mtf.f_stop = 8;
+-  rparam.sharpen.scanner_mtf.scan_dpi = 2000;
++  constexpr int width = 384;
++  constexpr int height = 96;
++  constexpr int regions = 3;
++  const rgbdata truth[regions]
++      = { { 0.80, 0.12, 0.08 }, { 0.10, 0.75, 0.20 },
++          { 0.10, 0.12, 0.80 } };
++  const point_t locations[regions]
++      = { { 64, 48 }, { 192, 48 }, { 320, 48 } };
+ 
+-  finetune_parameters fparam;
+-  fparam.flags = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
++  if (!image->set_dimensions (width, height, false, true))
++    return false;
++  geometry->type = Paget;
++  geometry->center = { 0, 0 };
++  geometry->coordinate1 = { 8, 0 };
++  geometry->coordinate2 = { 0, 8 };
++
++  scr_to_img map;
++  if (!map.set_parameters (*geometry, *image))
++    return false;
++  const coord_t pixel_size = map.pixel_size ({ 0, 0, 
