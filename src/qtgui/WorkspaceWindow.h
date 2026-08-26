@@ -3,6 +3,8 @@
 #include <QMainWindow>
 #include <QPoint>
 #include <QPointer>
+#include <QShowEvent>
+#include <QStatusBar>
 
 class MainWindow;
 class ImageViewWindow;
@@ -100,6 +102,22 @@ protected:
 
   /** Implement drag-out tab detachment while preserving ordinary tab moves. */
   bool eventFilter(QObject *watched, QEvent *event) override;
+
+  /** Freeze the shared status line at its initial document-control height.
+
+      The first show occurs after the active document's transient progress
+      widget has been installed. Secondary views do not own such a widget, so
+      without this floor Qt would shrink the same shared QStatusBar when one of
+      those tabs becomes active. */
+  void showEvent(QShowEvent *event) override {
+    QMainWindow::showEvent(event);
+    QStatusBar *bar = QMainWindow::statusBar();
+    if (!bar)
+      return;
+    const int stableHeight = qMax(bar->height(), bar->sizeHint().height());
+    if (stableHeight > bar->minimumHeight())
+      bar->setMinimumHeight(stableHeight);
+  }
 
 private:
   /** Return the MDI wrapper for DOCUMENT, or nullptr when detached. */
