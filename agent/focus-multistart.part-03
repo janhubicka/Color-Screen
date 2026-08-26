@@ -1,0 +1,153 @@
+                                     &result->selected,
+@@ -293,7 +446,7 @@ finetune_analyze_focus_areas (
+     }
+ 
+   result->joint_fit
+-      = finetune (rparam, param, img, locations, &starts, fparams, progress);
++      = fit_shared_focus (rparam, param, img, locations, starts, fparams, progress);
+   if (!result->joint_fit.success)
+     {
+       result->err = "joint focus-area fit failed";
+@@ -302,6 +455,11 @@ finetune_analyze_focus_areas (
+       return false;
+     }
+ 
++  if (process_screen_frequency (param, img, &result->screen_frequency))
++    result->joint_screen_mtf
++        = fit_screen_mtf (rparam, fparams.flags, result->joint_fit,
++                          result->screen_frequency);
++
+   if (!analysis_parameters.leave_one_out)
+     {
+       result->success = true;
+@@ -322,9 +480,17 @@ finetune_analyze_focus_areas (
+             subset_starts.push_back (starts[i]);
+           }
+ 
+-      finetune_result fit = finetune (rparam, param, img, subset_locations,
+-                                     &subset_starts, fparams, progress);
++      render_parameters subset_rparam = rparam;
++      seed_scanner_mtf_from_fit (&subset_rparam, fparams.flags,
++                                 result->joint_fit);
++      finetune_result fit
++          = finetune (subset_rparam, param, img, subset_locations,
++                      &subset_starts, fparams, progress);
+       result->leave_one_out_fits.push_back (std::move (fit));
++      if (result->screen_frequency > 0)
++        result->leave_one_out_screen_mtf.push_back (fit_screen_mtf (
++            rparam, fparams.flags, result->leave_one_out_fits.back (),
++            result->screen_frequency));
+       if (!result->leave_one_out_fits.back ().success)
+         {
+           result->err = "leave-one-out focus-area fit failed for selected area "
+@@ -411,6 +577,35 @@ finetune_analyze_focus_areas (
+         }
+     }
+ 
++  if (result->joint_screen_mtf >= 0
++      && result->leave_one_out_screen_mtf.size ()
++             == result->leave_one_out_fits.size ()
++      && !result->leave_one_out_screen_mtf.empty ())
++    {
++      coord_t min_mtf = std::numeric_limits<coord_t>::max ();
++      coord_t max_mtf = -std::numeric_limits<coord_t>::max ();
++      coord_t max_delta = 0;
++      bool valid = true;
++      for (coord_t value : result->leave_one_out_screen_mtf)
++        {
++          if (!my_isfinite (value) || value < 0)
++            {
++              valid = false;
++              break;
++            }
++          min_mtf = std::min (min_mtf, value);
++          max_mtf = std::max (max_mtf, value);
++          max_delta = std::max (
++              max_delta,
++              (coord_t)std::fabs (value - result->joint_screen_mtf));
++        }
++      if (valid)
++        {
++          result->leave_one_out_screen_mtf_span = max_mtf - min_mtf;
++          result->leave_one_out_screen_mtf_max_delta = max_delta;
++        }
++    }
++
+   coord_t joint_focus;
+   if (focus_scalar (rparam, fparams.flags, result->joint_fit, &joint_focus))
+     {
+diff --git a/src/libcolorscreen/include/focus-analysis.h b/src/libcolorscreen/include/focus-analysis.h
+index 07f7e54..405d73c 100644
+--- a/src/libcolorscreen/include/focus-analysis.h
++++ b/src/libcolorscreen/include/focus-analysis.h
+@@ -45,7 +45,15 @@ struct finetune_focus_analysis_result
+   std::vector<size_t> selected;
+   coord_t color_volume = 0;
+   finetune_result joint_fit;
++  /* Process-screen carrier frequency in image cycles/pixel and the system
++     MTF of JOINT_FIT at that frequency.  These are the sharpness quantities
++     most directly relevant to restoring additive-screen modulation.  */
++  coord_t screen_frequency = -1;
++  coord_t joint_screen_mtf = -1;
+   std::vector<finetune_result> leave_one_out_fits;
++  std::vector<coord_t> leave_one_out_screen_mtf;
++  coord_t leave_one_out_screen_mtf_span = -1;
++  coord_t leave_one_out_screen_mtf_max_delta = -1;
+   /* Entry I evaluates SELECTED[I] after the shared model was learned without
+      that tile.  RELATIVE_BADNESS divides the raw objective by the observed
+      mean-colour norm, matching the candidate quality normalization.  */
+diff --git a/src/qtgui/MainWindow.cpp b/src/qtgui/MainWindow.cpp
+index ebdbf70..26d5fa1 100644
+--- a/src/qtgui/MainWindow.cpp
++++ b/src/qtgui/MainWindow.cpp
+@@ -6003,20 +6003,6 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
+     return;
+   }
+ 
+-  const uint64_t coupledPhysicalFocus
+-      = colorscreen::finetune_scanner_mtf_sigma
+-      | colorscreen::finetune_scanner_mtf_defocus;
+-  if ((flags & coupledPhysicalFocus) == coupledPhysicalFocus
+-      && m_rparams.sharpen.scanner_mtf.simulate_diffraction_p()) {
+-    QMessageBox::information(
+-        this, tr("Focus analysis areas"),
+-        tr("Residual sigma and physical defocus are not separately "
+-           "identifiable from periodic focus areas. Fix or calibrate one "
+-           "and optimize only the other. Usually sigma is calibrated from "
+-           "a slanted-edge MTF measurement and only Defocus is enabled "
+-           "here."));
+-    return;
+-  }
+ 
+   m_focusAreaAnalysisRunning = true;
+   if (m_sharpnessPanel)
+@@ -6073,6 +6059,10 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
+               details << tr("Maximum leave-one-out displacement: %1")
+                              .arg(analysis.leave_one_out_focus_max_delta, 0,
+                                   'g', 5);
++            if (analysis.leave_one_out_screen_mtf_span >= 0)
++              details << tr("Leave-one-out process-screen MTF span: %1 percentage points")
++                             .arg(analysis.leave_one_out_screen_mtf_span * 100,
++                                  0, 'g', 5);
+             if (analysis.held_out_max_relative_badness >= 0)
+               details << tr("Maximum held-out relative residual: %1")
+                              .arg(analysis.held_out_max_relative_badness, 0,
+@@ -6092,6 +6082,11 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
+                                .arg(analysis.joint_fit.scanner_mtf_blur_diameter,
+                                     0, 'g', 5);
+             }
++            if (analysis.screen_frequency > 0
++                && analysis.joint_screen_mtf >= 0)
++              details << tr("Process-screen MTF: %1% at %2 cycles/pixel")
++                             .arg(analysis.joint_screen_mtf * 100, 0, 'g', 5)
++                             .arg(analysis.screen_frequency, 0, 'g', 6);
+             const QString summary = details.join(QStringLiteral("\n"));
+             if (m_sharpnessPanel)
+               m_sharpnessPanel->setFocusAreaAnalysisState(
+@@ -6141,7 +6136,15 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
+         colorscreen::finetune_parameters local;
+         local.range = 4;
+         local.ignore_outliers = 0;
+-        local.flags = flags | colorscreen::finetune_position;
++        const uint64_t coupledFocus
++            = colorscreen::finetune_scanner_mtf_sigma
