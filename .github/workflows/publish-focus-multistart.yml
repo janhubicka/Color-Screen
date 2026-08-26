@@ -1,0 +1,112 @@
+name: Publish focus carrier multistart patch
+
+on:
+  pull_request:
+    branches:
+      - agent/tmp-focus-multistart-base
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  validate-publish:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Check out patch transport
+        uses: actions/checkout@v4
+        with:
+          ref: agent/tmp-focus-multistart-base
+          fetch-depth: 0
+
+      - name: Reconstruct patch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat agent/focus-multistart.part-* >/tmp/focus.patch
+          echo 'db75c74c1d875b6a451a9de38c6ca4c3d44cadcc6382c2a758c2c608f9670e14  /tmp/focus.patch' | sha256sum -c -
+
+      - name: Apply to current main and validate
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git fetch origin main
+          git checkout --detach 0470dafe0b28345ec9b0358a84647271480c554e
+          git apply --check /tmp/focus.patch
+          git apply /tmp/focus.patch
+          git diff --check
+
+          rm -rf /tmp/colorscreen-focus-build
+          mkdir -p /tmp/colorscreen-focus-build
+          cd /tmp/colorscreen-focus-build
+          CFLAGS='-O2 -g -Wall -Wextra' \
+          CXXFLAGS='-O2 -g -Wall -Wextra' \
+            "$GITHUB_WORKSPACE/configure" --enable-checking
+          make -C src/libcolorscreen -j"$(nproc)" focus-analysis-unittests
+          ./src/libcolorscreen/focus-analysis-unittests
+          make -C src/colorscreen -j"$(nproc)" colorscreen
+          ./src/colorscreen/colorscreen analyze-focus-areas --help >/tmp/focus-help.txt 2>&1 || true
+          grep -q 'scalar-seeded multistart' /tmp/focus-help.txt
+
+      - name: Commit clean feature branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          cd "$GITHUB_WORKSPACE"
+          git switch -c agent/focus-area-carrier-multistart
+          git add src/colorscreen/colorscreen.C \
+                  src/libcolorscreen/focus-analysis.C \
+                  src/libcolorscreen/include/focus-analysis.h \
+                  src/libcolorscreen/focus-analysis-unittests.C \
+                  src/qtgui/MainWindow.cpp \
+                  src/qtgui/SharpnessPanel.cpp
+          test "$(git diff --cached --name-only | wc -l)" -eq 6
+          git diff --cached --check
+          git config user.name 'OpenAI Codex'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit \
+            -m 'focus: seed coupled area MTF fits robustly' \
+            -m 'Multi-area focus analysis is primarily used to recover the capture transfer at the additive-screen carrier frequency. Residual Gaussian sigma and physical defocus can trade off there, but direct coupled cold starts were converging to poor local basins with the wrong carrier attenuation.' \
+            -m 'Allow coupled physical sigma+defocus fitting again. Seed it with cheap scalar continuation: sigma-only always, plus defocus-only for a true zero/zero cold start, then release both coordinates from the better scalar basin. Existing MTF calibration remains a warm starting basin rather than a one-sided constraint. Leave-one-out fits warm-start from the final shared solution instead of repeating the full multistart.' \
+            -m 'Report the process-screen frequency and effective system MTF in the library, CLI and Qt diagnostics, and add a synthetic physical Paget cold-start regression that checks recovered carrier MTF rather than demanding a unique sigma/defocus decomposition.'
+          git push origin HEAD:refs/heads/agent/focus-area-carrier-multistart
+
+      - name: Package exact CLI
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BUILD=/tmp/colorscreen-focus-build
+          BIN="$BUILD/src/colorscreen/.libs/colorscreen"
+          if test ! -x "$BIN"; then
+            BIN="$BUILD/src/colorscreen/colorscreen"
+          fi
+          test -x "$BIN"
+          rm -rf /tmp/focus-cli
+          mkdir -p /tmp/focus-cli/lib
+          cp -L "$BIN" /tmp/focus-cli/colorscreen.bin
+          ldd "$BIN" | awk '/=> \/|^\// { for (i=1;i<=NF;i++) if ($i ~ /^\//) print $i }' | sort -u >/tmp/focus-libs.txt
+          while read -r lib; do
+            test -f "$lib" && cp -L "$lib" /tmp/focus-cli/lib/
+          done </tmp/focus-libs.txt
+          cat >/tmp/focus-cli/colorscreen <<'EOF'
+          #!/bin/sh
+          DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+          export LD_LIBRARY_PATH="$DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          exec "$DIR/colorscreen.bin" "$@"
+          EOF
+          chmod +x /tmp/focus-cli/colorscreen
+          tar czf /tmp/focus-multistart-cli.tar.gz -C /tmp focus-cli
+
+      - name: Upload exact CLI
+        uses: actions/upload-artifact@v4
+        with:
+          name: focus-multistart-cli
+          path: /tmp/focus-multistart-cli.tar.gz
+          if-no-files-found: error
