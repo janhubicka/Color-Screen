@@ -65,6 +65,9 @@ private:
         int height = 0;
         int coordinateSpace = 0;
         colorscreen::render_parameters frameParams;
+        colorscreen::scr_to_img_parameters scrToImg;
+        colorscreen::scr_detect_parameters scrDetect;
+        colorscreen::render_type_parameters renderType;
         std::shared_ptr<colorscreen::progress_info> progress;
         const char *taskName = nullptr;
     };
