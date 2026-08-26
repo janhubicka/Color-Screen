@@ -156,28 +156,4 @@
  
 -      finetune_result fit = finetune (rparam, param, img, subset_locations,
 +      render_parameters leave_rparam = rparam;
-+      freeze_focus_from_fit (&leave_rparam, fparams.flags, result->joint_fit);
-+      finetune_result fit = finetune (leave_rparam, param, img, subset_locations,
-                                      &subset_starts, fparams, progress);
-       result->leave_one_out_fits.push_back (std::move (fit));
-       if (!result->leave_one_out_fits.back ().success)
-diff --git a/src/libcolorscreen/include/focus-analysis.h b/src/libcolorscreen/include/focus-analysis.h
-index 07f7e54..30437c8 100644
---- a/src/libcolorscreen/include/focus-analysis.h
-+++ b/src/libcolorscreen/include/focus-analysis.h
-@@ -45,6 +45,15 @@ struct finetune_focus_analysis_result
-   std::vector<size_t> selected;
-   coord_t color_volume = 0;
-   finetune_result joint_fit;
-+
-+  /* Process-screen carrier frequency used by focus analysis and the effective
-+     system MTF at that frequency before and after the joint fit.  These are
-+     the quantities that matter directly for restoring screen modulation.
-+     Negative values mean that the geometry/model did not provide a usable
-+     carrier measurement.  */
-+  coord_t screen_frequency = -1;
-+  coord_t initial_screen_mtf = -1;
-+  coord_t joint_screen_mtf = -1;
-   std::vector<finetune_result> leave_one_out_fits;
-   /* Entry I evaluates SELECTED[I] after the shared model was learned without
-      that tile.  RELATIVE_BADNESS divides the raw objective by the observed
++      freeze_focu
