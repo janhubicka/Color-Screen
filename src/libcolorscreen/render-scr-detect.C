@@ -338,11 +338,9 @@ render_scr_detect::render_tile (render_type_parameters &rtparam,
   bool ok = true;
   if (width <= 0 || height <= 0)
     return true;
-  if (stats == -1)
-    stats = getenv ("CSSTATS") != nullptr;
-  struct timeval start_time;
-  if (stats)
-    gettimeofday (&start_time, nullptr);
+  /* The old CSSTATS lazy initialization here was process-shared mutable
+     state, but this timer was never consumed.  Avoid both the race and the
+     dead timing work.  */
   if (progress)
     progress->set_task ("precomputing", 1);
   scr_to_img_parameters dummy;

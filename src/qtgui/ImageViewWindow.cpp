@@ -7,6 +7,7 @@
 #include "NavigationView.h"
 #include "SharpnessPanel.h"
 #include "SlantedEdgeDialog.h"
+#include "SynchronizedRunnable.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -18,7 +19,6 @@
 #include <QDoubleSpinBox>
 #include <QEvent>
 #include <QFileInfo>
-#include <QFutureWatcher>
 #include <QIcon>
 #include <QKeySequence>
 #include <QLabel>
@@ -31,7 +31,6 @@
 #include <QToolBar>
 #include <QVBoxLayout>
 #include <QVariant>
-#include <QtConcurrent>
 
 #include <algorithm>
 
@@ -138,7 +137,14 @@ ImageViewWindow::ImageViewWindow(MainWindow *document, int viewNumber,
 
 
 /** Destroy a secondary view without taking the document-owned inspector with it. */
-ImageViewWindow::~ImageViewWindow() { releaseDocumentInspector(); }
+ImageViewWindow::~ImageViewWindow() {
+  {
+    std::unique_lock<std::mutex> locker(m_referenceLoadMutex);
+    m_referenceLoadCondition.wait(
+        locker, [this]() { return !m_referenceWorkerActive; });
+  }
+  releaseDocumentInspector();
+}
 
 /** Return the document whose state this secondary view follows. */
 MainWindow *ImageViewWindow::sourceDocument() const { return m_document.data(); }
@@ -412,45 +418,74 @@ void ImageViewWindow::loadReferenceImage(const QString &fileName) {
   auto scan = std::make_shared<colorscreen::image_data>();
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Opening slanted edge reference", 0);
-  auto *watcher = new QFutureWatcher<std::pair<bool, QString>>(this);
-  connect(watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
-          [this, watcher, scan]() {
-            const auto result = watcher->result();
-            watcher->deleteLater();
-            m_referenceLoadPending = false;
-            if (!result.first) {
-              QMessageBox::critical(
-                  this, tr("Error Loading Slanted Edge Reference"),
-                  result.second.isEmpty() ? tr("Failed to load image.")
-                                          : result.second);
-              close();
-              return;
-            }
-
-            m_scan = scan;
-            rebuildModeList();
-            updateViewControls();
-            updateImageParameters(true);
-            if (m_sharpnessPanel)
-              m_sharpnessPanel->updateUI();
-            setWindowTitle(tr("%1 — Slanted edge reference")
-                               .arg(QFileInfo(m_referenceFile).fileName()));
-            statusBar()->showMessage(
-                tr("Slanted-edge reference — sharpness parameters are shared"));
-          });
-
   const QString path = m_referenceFile;
-  QFuture<std::pair<bool, QString>> future = QtConcurrent::run(
-      [scan, path, progress, demosaic]() {
-        const char *error = nullptr;
-        colorscreen::sub_task task(progress.get());
-        const bool ok = scan->load(path.toUtf8().constData(), true, &error,
-                                   progress.get(), demosaic);
-        return std::make_pair(ok,
-                              !ok && error ? QString::fromUtf8(error)
-                                           : QString());
-      });
-  watcher->setFuture(future);
+
+  {
+    std::lock_guard<std::mutex> locker(m_referenceLoadMutex);
+    m_referenceWorkerActive = true;
+    m_referenceLoadOk = false;
+    m_referenceLoadError.clear();
+    m_pendingReferenceScan.reset();
+  }
+
+  runSynchronized([this, scan, path, progress, demosaic]() {
+    const char *error = nullptr;
+    colorscreen::sub_task task(progress.get());
+    const bool ok = scan->load(path.toUtf8().constData(), true, &error,
+                               progress.get(), demosaic);
+    const QString message =
+        !ok && error ? QString::fromUtf8(error) : QString();
+
+    {
+      std::lock_guard<std::mutex> locker(m_referenceLoadMutex);
+      m_referenceLoadOk = ok;
+      m_referenceLoadError = message;
+      m_pendingReferenceScan = scan;
+    }
+
+    // The queued Qt call carries no non-trivial payload.  The result itself is
+    // published through m_referenceLoadMutex, which TSan can observe.
+    QMetaObject::invokeMethod(this, "finishReferenceLoad",
+                              Qt::QueuedConnection);
+
+    {
+      std::lock_guard<std::mutex> locker(m_referenceLoadMutex);
+      m_referenceWorkerActive = false;
+    }
+    m_referenceLoadCondition.notify_all();
+  });
+}
+
+void ImageViewWindow::finishReferenceLoad() {
+  std::shared_ptr<colorscreen::image_data> scan;
+  bool ok = false;
+  QString error;
+  {
+    std::lock_guard<std::mutex> locker(m_referenceLoadMutex);
+    ok = m_referenceLoadOk;
+    error = m_referenceLoadError;
+    scan = std::move(m_pendingReferenceScan);
+  }
+
+  m_referenceLoadPending = false;
+  if (!ok) {
+    QMessageBox::critical(this, tr("Error Loading Slanted Edge Reference"),
+                          error.isEmpty() ? tr("Failed to load image.")
+                                          : error);
+    close();
+    return;
+  }
+
+  m_scan = std::move(scan);
+  rebuildModeList();
+  updateViewControls();
+  updateImageParameters(true);
+  if (m_sharpnessPanel)
+    m_sharpnessPanel->updateUI();
+  setWindowTitle(tr("%1 — Slanted edge reference")
+                     .arg(QFileInfo(m_referenceFile).fileName()));
+  statusBar()->showMessage(
+      tr("Slanted-edge reference — sharpness parameters are shared"));
 }
 
 /** Reload the external reference with the document's current demosaic mode. */

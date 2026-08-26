@@ -8,7 +8,9 @@
 #include <QPointer>
 #include <QRect>
 #include <QString>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 class ImageWidget;
@@ -137,6 +139,9 @@ private slots:
   /** Consume a selected rectangle when reference MTF measurement is active. */
   void onReferenceAreaSelected(QRect area);
 
+  /** Consume the mutex-published result of an asynchronous reference load. */
+  void finishReferenceLoad();
+
 private:
   /** Build the compact image-view UI and view-local toolbar/menu actions. */
   void setupUi();
@@ -190,6 +195,12 @@ private:
   bool m_slantedEdgeReference = false;
   bool m_referenceLoadPending = false;
   QString m_referenceFile;
+  std::mutex m_referenceLoadMutex;
+  std::condition_variable m_referenceLoadCondition;
+  bool m_referenceWorkerActive = false;
+  bool m_referenceLoadOk = false;
+  QString m_referenceLoadError;
+  std::shared_ptr<colorscreen::image_data> m_pendingReferenceScan;
 
   std::shared_ptr<colorscreen::image_data> m_scan;
   colorscreen::render_parameters m_rparams;
