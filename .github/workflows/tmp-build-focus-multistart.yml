@@ -1,0 +1,58 @@
+name: TEMP build focus multistart CLI
+
+on:
+  pull_request:
+    branches:
+      - agent/tmp-focus-multistart-build-base
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/tmp-focus-multistart-build-base
+          fetch-depth: 0
+
+      - name: Apply and validate patch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          cat agent/focus-multistart.part-* >/tmp/focus.patch
+          echo 'ec250b7781a62755a0d53ac93eb4f6574306bc1705c009e7544617cc13c7c826  /tmp/focus.patch' | sha256sum -c -
+          git checkout --detach beedd746497d729045dc2728bbf16db3d6fb281a
+          git apply --check /tmp/focus.patch
+          git apply /tmp/focus.patch
+          git diff --check
+          CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure
+          make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
+          ./src/libcolorscreen/focus-analysis-unittests
+          make -C src/colorscreen -j$(nproc) colorscreen
+
+      - name: Package CLI files
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/focus-cli/lib
+          BIN=src/colorscreen/colorscreen
+          if ! file "$BIN" | grep -q ELF; then BIN=src/colorscreen/.libs/colorscreen; fi
+          cp "$BIN" /tmp/focus-cli/colorscreen.bin
+          ldd "$BIN" > /tmp/focus-cli/ldd.txt
+          awk '/=> \/.*\(/ {print $3} /^\// {print $1}' /tmp/focus-cli/ldd.txt | sort -u > /tmp/focus-cli/libs.txt
+          while read lib; do cp -L "$lib" /tmp/focus-cli/lib/; done < /tmp/focus-cli/libs.txt
+          tar -C /tmp -czf /tmp/focus-multistart-cli.tar.gz focus-cli
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: focus-multistart-cli
+          path: /tmp/focus-multistart-cli.tar.gz
