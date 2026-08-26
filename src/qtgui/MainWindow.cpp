@@ -368,6 +368,32 @@ private:
 
 } // namespace
 
+/** Return the one status bar belonging to the current top-level window. */
+QStatusBar *MainWindow::statusBar() const {
+  return m_workspaceStatusBar ? m_workspaceStatusBar.data()
+                              : QMainWindow::statusBar();
+}
+
+/** Return this document's private status bar, regardless of attachment. */
+QStatusBar *MainWindow::standaloneStatusBar() const {
+  return QMainWindow::statusBar();
+}
+
+/** Share STATUSBAR with every tab in the enclosing workspace window. */
+void MainWindow::setWorkspaceStatusBar(QStatusBar *sharedStatusBar) {
+  if (m_workspaceStatusBar.data() == sharedStatusBar)
+    return;
+
+  QStatusBar *localStatusBar = QMainWindow::statusBar();
+  const QString localMessage = localStatusBar->currentMessage();
+  m_workspaceStatusBar = sharedStatusBar;
+  if (sharedStatusBar) {
+    localStatusBar->hide();
+    if (!localMessage.isEmpty())
+      sharedStatusBar->showMessage(localMessage);
+  }
+}
+
 /** Construct one independent image-document window.
    Registers Qt meta-types needed for cross-thread signal/slot connections,
    sets up the UI (panels, docks, toolbar, menus), assigns the document's

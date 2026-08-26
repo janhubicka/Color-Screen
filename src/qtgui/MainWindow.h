@@ -28,6 +28,7 @@ class QSplitter;
 class QTabWidget;
 class QDockWidget; // Added
 class QToolBar;    // Added
+class QStatusBar;
 class QComboBox;   // Added
 class QCheckBox;   // Added
 class QDoubleSpinBox;
@@ -160,6 +161,19 @@ public:
   /** Return the document-specific toolbar while this document is attached to
       the shared workspace. */
   QToolBar *workspaceToolBar() const { return m_toolbar; }
+
+  /** Return the status bar for this presentation's current top-level window.
+
+      All attached document tabs return the enclosing WorkspaceWindow status
+      bar.  A detached document returns its private QMainWindow status bar. */
+  QStatusBar *statusBar() const;
+
+  /** Return the private status bar used only by a detached document window. */
+  QStatusBar *standaloneStatusBar() const;
+
+  /** Route status operations to STATUSBAR while this document is attached.
+      Passing nullptr restores routing to the private detached-window bar. */
+  void setWorkspaceStatusBar(QStatusBar *statusBar);
 
   /** Return the document-owned navigation/parameter panel column. */
   QWidget *workspaceInspectorWidget() const { return m_rightColumn; }
@@ -453,6 +467,7 @@ private:
 
   QSplitter *m_mainSplitter;
   QByteArray m_workspaceSplitterState;
+  QPointer<QStatusBar> m_workspaceStatusBar;
   bool m_workspaceEmbedded = false;
   QList<int> m_splitterSizesBeforeFullscreen; // Save splitter state before fullscreen
 

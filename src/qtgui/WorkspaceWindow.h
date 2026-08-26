@@ -24,7 +24,8 @@ class QWidget;
     presentation: tabs by default, MDI subwindows for tile/cascade layouts, and
     explicit detachment into normal top-level windows.  The active document
     supplies the shared menu bar, toolbar, and inspector so document tabs appear
-    directly below the toolbar. */
+    directly below the toolbar; the shell owns one status bar shared by every
+    attached tab. */
 class WorkspaceWindow final : public QMainWindow {
 public:
   explicit WorkspaceWindow(QWidget *parent = nullptr);
@@ -137,7 +138,7 @@ private:
   /** Put DOCUMENT's shared inspector in the workspace and target IMAGEWIDGET. */
   void installDocumentInspector(MainWindow *document, ImageWidget *imageWidget);
 
-  /** Show DOCUMENT's menus, toolbar, inspector, and transient status as the
+  /** Show DOCUMENT's menus, toolbar, inspector, and transient progress as the
       active workspace chrome. */
   void installDocumentChrome(MainWindow *document);
 
@@ -153,7 +154,7 @@ private:
   /** Detach VIEW into a top-level window through the application manager. */
   void detachView(ImageViewWindow *view);
 
-  /** Show VIEW's menu, toolbar and status message in the shared shell. */
+  /** Show VIEW's menu and toolbar in the shared shell. */
   void installViewChrome(ImageViewWindow *view);
 
   /** Return VIEW's shared chrome to its own window. */

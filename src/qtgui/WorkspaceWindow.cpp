@@ -176,6 +176,7 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
 
   document->hide();
   document->prepareForWorkspaceEmbedding();
+  document->setWorkspaceStatusBar(statusBar());
 
   if (QWidget *inspector = document->workspaceInspectorWidget()) {
     m_inspectorStack->addWidget(inspector);
@@ -194,16 +195,6 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
   m_mdiArea->addSubWindow(subWindow);
 
   QPointer<MainWindow> guardedDocument(document);
-  connect(document->statusBar(), &QStatusBar::messageChanged, this,
-          [this, guardedDocument](const QString &message) {
-            if (!guardedDocument || m_chromeDocument != guardedDocument)
-              return;
-            if (message.isEmpty())
-              statusBar()->clearMessage();
-            else
-              statusBar()->showMessage(message);
-          });
-
   QPointer<QMdiSubWindow> guardedSubWindow(subWindow);
   connect(document, &QObject::destroyed, this,
           [this, guardedSubWindow]() {
@@ -258,6 +249,7 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
 
   view->hide();
   view->prepareForWorkspaceEmbedding();
+  view->setWorkspaceStatusBar(statusBar());
   if (QWidget *inspector = view->workspaceInspectorWidget()) {
     if (m_inspectorStack->indexOf(inspector) < 0)
       m_inspectorStack->addWidget(inspector);
@@ -283,16 +275,6 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
               setWindowTitle(title + tr(" — Color-Screen"));
             configureTabBar();
           });
-  connect(view->statusBar(), &QStatusBar::messageChanged, this,
-          [this, guardedView](const QString &message) {
-            if (!guardedView || m_chromeView != guardedView)
-              return;
-            if (message.isEmpty())
-              statusBar()->clearMessage();
-            else
-              statusBar()->showMessage(message);
-          });
-
   connect(subWindow, &QObject::destroyed, this, [this]() {
     QTimer::singleShot(0, this, [this]() {
       onSubWindowActivated(m_mdiArea->currentSubWindow());
@@ -786,18 +768,12 @@ void WorkspaceWindow::installDocumentChrome(MainWindow *document) {
   if (QWidget *statusWidget = document->workspaceStatusWidget()) {
     if (statusWidget->parentWidget() != m_workspaceProgressArea) {
       const bool explicitlyHidden = statusWidget->isHidden();
-      document->statusBar()->removeWidget(statusWidget);
+      document->standaloneStatusBar()->removeWidget(statusWidget);
       statusWidget->setParent(m_workspaceProgressArea);
       m_workspaceProgressLayout->addWidget(statusWidget);
       statusWidget->setVisible(!explicitlyHidden);
     }
   }
-
-  const QString message = document->statusBar()->currentMessage();
-  if (message.isEmpty())
-    statusBar()->clearMessage();
-  else
-    statusBar()->showMessage(message);
 
   document->refreshWindowMenu();
   setWindowTitle(document->documentDisplayName() + tr(" — Color-Screen"));
@@ -822,15 +798,18 @@ void WorkspaceWindow::releaseDocumentChrome(MainWindow *document,
     if (statusWidget->parentWidget() == m_workspaceProgressArea) {
       const bool explicitlyHidden = statusWidget->isHidden();
       m_workspaceProgressLayout->removeWidget(statusWidget);
-      document->statusBar()->addPermanentWidget(statusWidget, 1);
+      document->standaloneStatusBar()->addPermanentWidget(statusWidget, 1);
       statusWidget->setVisible(!explicitlyHidden);
     }
-    document->statusBar()->setVisible(showInWindow);
+    document->standaloneStatusBar()->setVisible(showInWindow);
   }
+  if (showInWindow)
+    document->setWorkspaceStatusBar(nullptr);
 
   document->menuBar()->setVisible(showInWindow);
   if (m_chromeDocument == document) {
-    statusBar()->clearMessage();
+    if (showInWindow)
+      statusBar()->clearMessage();
     menuBar()->clear();
     m_chromeDocument.clear();
   }
@@ -882,11 +861,6 @@ void WorkspaceWindow::installViewChrome(ImageViewWindow *view) {
   } else {
     installDocumentInspector(view->sourceDocument(), view->imageWidget());
   }
-  const QString message = view->statusBar()->currentMessage();
-  if (message.isEmpty())
-    statusBar()->clearMessage();
-  else
-    statusBar()->showMessage(message);
   setWindowTitle(view->windowTitle() + tr(" — Color-Screen"));
 }
 
@@ -904,9 +878,12 @@ void WorkspaceWindow::releaseViewChrome(ImageViewWindow *view,
   }
 
   view->menuBar()->setVisible(showInWindow);
-  view->statusBar()->setVisible(showInWindow);
+  view->standaloneStatusBar()->setVisible(showInWindow);
+  if (showInWindow)
+    view->setWorkspaceStatusBar(nullptr);
   if (m_chromeView == view) {
-    statusBar()->clearMessage();
+    if (showInWindow)
+      statusBar()->clearMessage();
     menuBar()->clear();
     m_inspectorDock->setWindowTitle(tr("Document Controls"));
     m_chromeView.clear();

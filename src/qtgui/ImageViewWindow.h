@@ -21,6 +21,7 @@ class QCheckBox;
 class QCloseEvent;
 class QComboBox;
 class QDockWidget;
+class QStatusBar;
 class QToolBar;
 
 /** Lightweight secondary view of one MainWindow document.
@@ -71,6 +72,15 @@ public:
 
   /** Return this view's toolbar while it is hosted by WorkspaceWindow. */
   QToolBar *workspaceToolBar() const { return m_toolbar; }
+
+  /** Return the status bar for this view's current top-level window. */
+  QStatusBar *statusBar() const;
+
+  /** Return the private status bar used only while this view is detached. */
+  QStatusBar *standaloneStatusBar() const;
+
+  /** Route status operations to STATUSBAR while this view is attached. */
+  void setWorkspaceStatusBar(QStatusBar *statusBar);
 
   /** Hide top-level chrome before this QMainWindow becomes an MDI child. */
   void prepareForWorkspaceEmbedding();
@@ -175,6 +185,7 @@ private:
   QDockWidget *m_referenceInspectorDock = nullptr;
   QDockWidget *m_documentInspectorDock = nullptr;
   QWidget *m_documentInspectorHost = nullptr;
+  QPointer<QStatusBar> m_workspaceStatusBar;
   bool m_workspaceEmbedded = false;
   bool m_slantedEdgeReference = false;
   bool m_referenceLoadPending = false;

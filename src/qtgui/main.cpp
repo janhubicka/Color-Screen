@@ -127,7 +127,7 @@ int main(int argc, char *argv[]) {
 
   QCommandLineOption globalStatusBarOption(
       "smoke-test-global-statusbar",
-      "Require the active document to use the workspace status bar");
+      "Require every attached tab to share the workspace status bar");
   parser.addOption(globalStatusBarOption);
 
   QCommandLineOption userVisibleProgressOption(
@@ -525,20 +525,57 @@ int main(int argc, char *argv[]) {
       QWidget *progress = document ? document->workspaceStatusWidget() : nullptr;
       if (!workspaceStatus || !document || !progress ||
           !workspaceStatus->isAncestorOf(progress) ||
-          document->statusBar()->isVisible()) {
-        qCritical() << "Active document is not using the global status bar";
+          document->statusBar() != workspaceStatus ||
+          document->standaloneStatusBar()->isVisible()) {
+        qCritical() << "Active document is not using the shared window status bar";
         app.exit(11);
         return;
+      }
+
+      MainWindow *inactiveDocument = nullptr;
+      for (MainWindow *candidate : app.documentWindows()) {
+        if (!candidate || !workspace->containsDocument(candidate))
+          continue;
+        if (candidate->statusBar() != workspaceStatus ||
+            candidate->standaloneStatusBar()->isVisible()) {
+          qCritical() << "Attached document has a private status bar";
+          app.exit(11);
+          return;
+        }
+        if (candidate != document && !inactiveDocument)
+          inactiveDocument = candidate;
+      }
+      for (ImageViewWindow *view : app.viewWindows()) {
+        if (view && workspace->containsView(view) &&
+            (view->statusBar() != workspaceStatus ||
+             view->standaloneStatusBar()->isVisible())) {
+          qCritical() << "Attached secondary view has a private status bar";
+          app.exit(11);
+          return;
+        }
       }
 
       const QString marker = QStringLiteral("workspace-status-smoke");
       document->statusBar()->showMessage(marker);
       QCoreApplication::processEvents();
       if (workspaceStatus->currentMessage() != marker) {
-        qCritical() << "Document status message was not mirrored globally";
+        qCritical() << "Document status message did not reach shared status bar";
         app.exit(11);
+        return;
       }
-      document->statusBar()->clearMessage();
+
+      if (inactiveDocument) {
+        const QString inactiveMarker =
+            QStringLiteral("workspace-status-inactive-tab-smoke");
+        inactiveDocument->statusBar()->showMessage(inactiveMarker);
+        QCoreApplication::processEvents();
+        if (workspaceStatus->currentMessage() != inactiveMarker) {
+          qCritical() << "Inactive tab did not share the window status bar";
+          app.exit(11);
+          return;
+        }
+      }
+      workspaceStatus->clearMessage();
     });
   }
 
