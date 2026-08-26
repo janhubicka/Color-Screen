@@ -5,13 +5,42 @@ on:
     branches: [ "main", "v1-branch", "Kimrova-bachelorRelease" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      tsan:
+        description: Run ThreadSanitizer on Ubuntu amd64
+        required: true
+        default: true
+        type: boolean
+      macos:
+        description: Run ASan + UBSan on macOS
+        required: true
+        default: true
+        type: boolean
+      windows_asan:
+        description: Run AddressSanitizer on Windows clang64
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
   packages: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   thread-sanitizer:
+    if: >-
+      (github.event_name != 'workflow_dispatch' || inputs.tsan) &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name != github.repository ||
+       !contains(github.event.pull_request.body, '[ci:') ||
+       contains(github.event.pull_request.body, '[ci:all]') ||
+       contains(github.event.pull_request.body, '[ci:sanitizers]') ||
+       contains(github.event.pull_request.body, '[ci:tsan]'))
     name: ThreadSanitizer (Ubuntu amd64, Clang + OpenMP)
     runs-on: ubuntu-24.04
     container:
@@ -114,6 +143,14 @@ jobs:
       run: ccache --show-stats
 
   macos-sanitizers:
+    if: >-
+      (github.event_name != 'workflow_dispatch' || inputs.macos) &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name != github.repository ||
+       !contains(github.event.pull_request.body, '[ci:') ||
+       contains(github.event.pull_request.body, '[ci:all]') ||
+       contains(github.event.pull_request.body, '[ci:sanitizers]') ||
+       contains(github.event.pull_request.body, '[ci:macos-sanitizers]'))
     name: ASan + UBSan (macOS)
     runs-on: macos-latest
     env:
@@ -216,6 +253,14 @@ jobs:
       run: ccache --show-stats
 
   windows-address-sanitizer:
+    if: >-
+      (github.event_name != 'workflow_dispatch' || inputs.windows_asan) &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name != github.repository ||
+       !contains(github.event.pull_request.body, '[ci:') ||
+       contains(github.event.pull_request.body, '[ci:all]') ||
+       contains(github.event.pull_request.body, '[ci:sanitizers]') ||
+       contains(github.event.pull_request.body, '[ci:windows-asan]'))
     name: AddressSanitizer (Windows clang64)
     runs-on: windows-latest
     steps:
