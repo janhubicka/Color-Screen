@@ -44,6 +44,32 @@ QIcon viewIcon(const char *resource) {
 
 } // namespace
 
+/** Return the one status bar belonging to the current top-level window. */
+QStatusBar *ImageViewWindow::statusBar() const {
+  return m_workspaceStatusBar ? m_workspaceStatusBar.data()
+                              : QMainWindow::statusBar();
+}
+
+/** Return this view's private status bar, regardless of attachment. */
+QStatusBar *ImageViewWindow::standaloneStatusBar() const {
+  return QMainWindow::statusBar();
+}
+
+/** Share STATUSBAR with every tab in the enclosing workspace window. */
+void ImageViewWindow::setWorkspaceStatusBar(QStatusBar *sharedStatusBar) {
+  if (m_workspaceStatusBar.data() == sharedStatusBar)
+    return;
+
+  QStatusBar *localStatusBar = QMainWindow::statusBar();
+  const QString localMessage = localStatusBar->currentMessage();
+  m_workspaceStatusBar = sharedStatusBar;
+  if (sharedStatusBar) {
+    localStatusBar->hide();
+    if (!localMessage.isEmpty())
+      sharedStatusBar->showMessage(localMessage);
+  }
+}
+
 /** Construct one secondary, display-only view of DOCUMENT. */
 ImageViewWindow::ImageViewWindow(MainWindow *document, int viewNumber,
                                  QWidget *parent)

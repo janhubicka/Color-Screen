@@ -65,11 +65,14 @@ document viewport and must never expose a nested `QMdiSubWindow` frame.
 The workspace is a `QMainWindow`: the active document toolbar is installed in
 its top toolbar area, therefore document tabs naturally appear below it. The
 active document's navigation/parameter column is shown in the shared inspector
-dock. The workspace also owns the one visible status bar. The active document's
-progress controls are temporarily moved into it and that document's status
-messages are mirrored there; inactive documents keep their private status state
-hidden until activated. Inactive documents retain their complete processing and
-undo state.
+dock. The workspace owns the one status bar for the whole top-level window.
+Every attached `MainWindow` and `ImageViewWindow` routes `statusBar()` directly
+to that same `QStatusBar`; tabs must not keep private status-message state or
+mirror messages when activation changes. Only detached top-level windows use
+their private status bars. The active document's transient progress controls are
+temporarily moved into the shared status line, while dedicated long-running task
+rows remain in the workspace task strip. Inactive documents retain their complete
+processing and undo state.
 
 **Window → Arrange Images** switches the same live documents between tabbed,
 tiled, and cascaded MDI views using `setViewMode()`, `tileSubWindows()`, and
