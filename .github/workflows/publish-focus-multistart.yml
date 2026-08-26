@@ -29,7 +29,7 @@ jobs:
         run: |
           set -euxo pipefail
           cat agent/focus-multistart.part-* >/tmp/focus.patch
-          echo 'db75c74c1d875b6a451a9de38c6ca4c3d44cadcc6382c2a758c2c608f9670e14  /tmp/focus.patch' | sha256sum -c -
+          echo 'abe5534695c8fb756f4a418695c9817a38299bcd5e7aaa35c756e1129c3b2864  /tmp/focus.patch' | sha256sum -c -
 
       - name: Apply to current main and validate
         shell: bash
