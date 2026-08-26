@@ -1,0 +1,51 @@
+name: Test focus carrier patch ARM
+
+on:
+  pull_request:
+    branches: [agent/tmp-focus-carrier-publish-base]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/tmp-focus-carrier-publish-base
+          fetch-depth: 0
+      - name: Reconstruct and test
+        shell: bash
+        run: |
+          set -euo pipefail
+          for spec in '00 0e5154b465a5c4ca68e65d72f2f46fb2b80e400f' '01 0d65721a074723e452d87a73176d1f65cfd9393d' '03 edbfe075b283891dd6be71bf9da9addd493dfa5a' '04 4a956ddb9fbd609ae2feb9d90b069eaf3c4c5911' '05 d3c0e4012db11d06448d98d8339b4c0b1ddf9e8d' '06a d2c137459ea0ef35de4eb9a336922f90410699ac' '06b deb191a0e14bf867342e16ed5e3ff79ccef96b22'; do
+            set -- $spec; test "$(git hash-object agent/focus-carrier-v2-$1.b64)" = "$2"; cp "agent/focus-carrier-v2-$1.b64" "/tmp/c$1";
+          done
+          head -c 7800 agent/focus-carrier-v2-02.b64 >/tmp/c02a
+          tail -c 7800 agent/focus-carrier-v2-02.b64 >/tmp/c02b
+          if test "$(git hash-object /tmp/c02a)" = 58b19fd66748455363105fa37311d5a42dbad4cf; then cp /tmp/c02a /tmp/c02; else cp /tmp/c02b /tmp/c02; fi
+          test "$(git hash-object /tmp/c02)" = 58b19fd66748455363105fa37311d5a42dbad4cf
+          cat /tmp/c06a /tmp/c06b >/tmp/c06
+          test "$(git hash-object /tmp/c06)" = 5c85bd61ee75392c3587b0fff72376223a92579d
+          cat /tmp/c00 /tmp/c01 /tmp/c02 /tmp/c03 /tmp/c04 /tmp/c05 /tmp/c06 | base64 -d >/tmp/focus.patch
+          echo '6c20c4d435d8fae1d8d7711de9051d6479a241f025f3b66d1082a3fe27beb306  /tmp/focus.patch' | sha256sum -c -
+          echo '391494b7eff5193b34bd9406a15ad462c119a69624f0e0b6ff6e2d4fe9855806  agent/focus-carrier-test-link-fix.patch' | sha256sum -c -
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git checkout --detach 5b4e956d023dd42618ccbae9078f42f97300f6c5
+          git apply /tmp/focus.patch
+          git apply agent/focus-carrier-test-link-fix.patch
+          git diff --check
+          CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure >/dev/null
+          make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests >/dev/null
+          ./src/libcolorscreen/focus-analysis-unittests
+          make -C src/colorscreen -j$(nproc) colorscreen >/dev/null
+          ./src/colorscreen/colorscreen --help >/tmp/help 2>&1 || true
+          grep -q -- '--sigma-and-defocus' /tmp/help
+          echo 'ARM FOCUS CARRIER VALIDATION PASS'
