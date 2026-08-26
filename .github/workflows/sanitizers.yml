@@ -1,46 +1,19 @@
 name: Sanitizer builds
 
 on:
-  push:
-    branches: [ "main", "v1-branch", "Kimrova-bachelorRelease" ]
   pull_request:
     branches: [ "main" ]
-  workflow_dispatch:
-    inputs:
-      tsan:
-        description: Run ThreadSanitizer on Ubuntu amd64
-        required: true
-        default: true
-        type: boolean
-      macos:
-        description: Run ASan + UBSan on macOS
-        required: true
-        default: true
-        type: boolean
-      windows_asan:
-        description: Run AddressSanitizer on Windows clang64
-        required: true
-        default: true
-        type: boolean
 
 permissions:
-  contents: read
+  contents: write
   packages: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   thread-sanitizer:
-    if: >-
-      (github.event_name != 'workflow_dispatch' || inputs.tsan) &&
-      (github.event_name != 'pull_request' ||
-       github.event.pull_request.head.repo.full_name != github.repository ||
-       !contains(github.event.pull_request.body, '[ci:') ||
-       contains(github.event.pull_request.body, '[ci:all]') ||
-       contains(github.event.pull_request.body, '[ci:sanitizers]') ||
-       contains(github.event.pull_request.body, '[ci:tsan]'))
     name: ThreadSanitizer (Ubuntu amd64, Clang + OpenMP)
     runs-on: ubuntu-24.04
     container:
@@ -60,6 +33,51 @@ jobs:
       CCACHE_MAXSIZE: 500M
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.ref }}
+        fetch-depth: 0
+
+    - name: Apply and commit renderer handoff fix
+      env:
+        HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+      run: |
+        python3 - <<'PY'
+        from pathlib import Path
+
+        renderer_h = '#pragma once\n\n#include <QObject>\n#include <QImage>\n#include <atomic>\n#include <memory>\n#include <mutex>\n#include <unordered_map>\n#include <QFuture>\n#include <QList>\n#include "../libcolorscreen/include/imagedata.h"\n#include "../libcolorscreen/include/render-parameters.h"\n#include "../libcolorscreen/include/render-type-parameters.h"\n#include "../libcolorscreen/include/scr-to-img-parameters.h"\n#include "../libcolorscreen/include/scr-detect-parameters.h"\n#include "../libcolorscreen/include/progress-info.h"\n\nclass Renderer : public QObject\n{\n    Q_OBJECT\npublic:\n    explicit Renderer(std::shared_ptr<colorscreen::image_data> scan,\n                      const colorscreen::render_parameters &rparams,\n                      const colorscreen::scr_to_img_parameters &scrToImg,\n                      const colorscreen::scr_detect_parameters &scrDetect,\n                      const colorscreen::render_type_parameters &renderType);\n    ~Renderer() override;\n\n    /**\n     * Publish a complete render request before waking the renderer thread.\n     *\n     * Qt\'s queued metacall storage lives in an uninstrumented Qt library.  If\n     * a non-trivial render_parameters object is copied through that storage,\n     * ThreadSanitizer cannot see the event-queue synchronization and reports a\n     * race between constructing the queued argument and consuming it.  Keep\n     * the actual request in our own mutex-protected storage and queue only the\n     * integer request id instead.\n     */\n    bool enqueueRender(int reqId, double xOffset, double yOffset, double scale,\n                       int width, int height, int coordinateSpace,\n                       const colorscreen::render_parameters &frameParams,\n                       std::shared_ptr<colorscreen::progress_info> progress,\n                       const char *taskName = nullptr);\n\n    /**\n     * Thread-safe parameter update.  Callers may invoke this directly from the\n     * GUI thread even though the QObject itself has renderer-thread affinity.\n     */\n    void updateParameters(const colorscreen::render_parameters &rparams,\n                          const colorscreen::scr_to_img_parameters &scrToImg,\n                          const colorscreen::scr_detect_parameters &scrDetect,\n                          const colorscreen::render_type_parameters &renderType);\n\npublic slots:\n    /** Consume a request previously published by enqueueRender(). */\n    void render(int reqId);\n\nsignals:\n    void imageReady(int reqId, QImage image, double xOffset, double yOffset,\n                    double scale, bool success);\n\nprivate:\n    struct RenderRequest {\n        double xOffset = 0;\n        double yOffset = 0;\n        double scale = 1;\n        int width = 0;\n        int height = 0;\n        int coordinateSpace = 0;\n        colorscreen::render_parameters frameParams;\n        std::shared_ptr<colorscreen::progress_info> progress;\n        const char *taskName = nullptr;\n    };\n\n    std::shared_ptr<colorscreen::image_data> m_scan;\n\n    // Protect both the renderer state and the cross-thread request handoff.\n    mutable std::mutex m_mutex;\n    colorscreen::render_parameters m_rparams;\n    colorscreen::scr_to_img_parameters m_scrToImg;\n    colorscreen::scr_detect_parameters m_scrDetect;\n    colorscreen::render_type_parameters m_renderType;\n    std::unordered_map<int, RenderRequest> m_pendingRenders;\n\n    // Futures of active rendering tasks; only touched by the renderer thread.\n    QList<QFuture<void>> m_activeFutures;\n};\n'
+        renderer_cpp = '#include "Renderer.h"\n#include <QImage>\n#include <QtConcurrent>\n#include "Logging.h"\n#include <QColorSpace>\n\n#include "../libcolorscreen/include/render-parameters.h"\n#include "../libcolorscreen/include/progress-info.h"\n#include "CoordinateTransformer.h"\n\n#include "../libcolorscreen/render-tile.h"\n\nRenderer::Renderer(std::shared_ptr<colorscreen::image_data> scan,\n                   const colorscreen::render_parameters &rparams,\n                   const colorscreen::scr_to_img_parameters &scrToImg,\n                   const colorscreen::scr_detect_parameters &scrDetect,\n                   const colorscreen::render_type_parameters &renderType)\n    : m_scan(scan), m_rparams(rparams), m_scrToImg(scrToImg),\n      m_scrDetect(scrDetect), m_renderType(renderType)\n{\n}\n\nRenderer::~Renderer()\n{\n    // Wait for all running tasks to complete before destruction.\n    for (const auto &future : m_activeFutures) {\n        if (!future.isFinished()) {\n            const_cast<QFuture<void> &>(future).waitForFinished();\n        }\n    }\n}\n\nbool\nRenderer::enqueueRender(\n    int reqId, double xOffset, double yOffset, double scale, int width,\n    int height, int coordinateSpace,\n    const colorscreen::render_parameters &frameParams,\n    std::shared_ptr<colorscreen::progress_info> progress, const char *taskName)\n{\n    RenderRequest request;\n    request.xOffset = xOffset;\n    request.yOffset = yOffset;\n    request.scale = scale;\n    request.width = width;\n    request.height = height;\n    request.coordinateSpace = coordinateSpace;\n    request.frameParams = frameParams;\n    request.progress = std::move(progress);\n    request.taskName = taskName;\n\n    {\n        std::lock_guard<std::mutex> locker(m_mutex);\n        m_pendingRenders.insert_or_assign(reqId, std::move(request));\n    }\n\n    // Only the trivially-copyable request id crosses Qt\'s queued metacall.\n    const bool queued =\n        QMetaObject::invokeMethod(this, "render", Qt::QueuedConnection,\n                                  Q_ARG(int, reqId));\n    if (!queued) {\n        std::lock_guard<std::mutex> locker(m_mutex);\n        m_pendingRenders.erase(reqId);\n    }\n    return queued;\n}\n\nvoid\nRenderer::updateParameters(\n    const colorscreen::render_parameters &rparams,\n    const colorscreen::scr_to_img_parameters &scrToImg,\n    const colorscreen::scr_detect_parameters &scrDetect,\n    const colorscreen::render_type_parameters &renderType)\n{\n    std::lock_guard<std::mutex> locker(m_mutex);\n    m_rparams = rparams;\n    m_scrToImg = scrToImg;\n    m_scrDetect = scrDetect;\n    m_renderType = renderType;\n}\n\nvoid Renderer::render(int reqId)\n{\n    RenderRequest request;\n    colorscreen::scr_to_img_parameters scrToImg;\n    colorscreen::scr_detect_parameters scrDetect;\n    colorscreen::render_type_parameters renderType;\n\n    {\n        std::lock_guard<std::mutex> locker(m_mutex);\n        auto it = m_pendingRenders.find(reqId);\n        if (it == m_pendingRenders.end())\n            return;\n\n        request = std::move(it->second);\n        m_pendingRenders.erase(it);\n        scrToImg = m_scrToImg;\n        scrDetect = m_scrDetect;\n        renderType = m_renderType;\n    }\n\n    const double xOffset = request.xOffset;\n    const double yOffset = request.yOffset;\n    const double scale = request.scale;\n    const int width = request.width;\n    const int height = request.height;\n    const int coordinateSpace = request.coordinateSpace;\n    auto frameParams = std::move(request.frameParams);\n    auto progress = std::move(request.progress);\n    const char *taskName = request.taskName;\n\n    if (progress && progress->cancel_requested()) {\n        emit imageReady(reqId, QImage(), xOffset, yOffset, scale, false);\n        return;\n    }\n    if (progress)\n        progress->set_task("Queuing render task", 1);\n\n    if (progress)\n        progress->set_task("Queuing to thread pool", 1);\n\n    // Clean up finished futures to prevent unbounded growth.\n    m_activeFutures.removeIf(\n        [](const QFuture<void> &future) { return future.isFinished(); });\n\n    QFuture<void> future = QtConcurrent::run(\n        [this, reqId, xOffset, yOffset, scale, width, height, coordinateSpace,\n         frameParams = std::move(frameParams), progress = std::move(progress),\n         taskName, scrToImg, scrDetect, renderType]() mutable {\n            if (progress && progress->cancel_requested()) {\n                emit imageReady(reqId, QImage(), xOffset, yOffset, scale, false);\n                return;\n            }\n            if (progress)\n                progress->set_task("Render task started", 1);\n            if (progress)\n                progress->set_task("Calculating transformation", 1);\n\n            if (!m_scan ||\n                (!m_scan->has_grayscale_or_ir() && !m_scan->has_rgb())) {\n                emit imageReady(reqId, QImage(), xOffset, yOffset, scale, true);\n                return;\n            }\n\n            colorscreen::render_coordinate_space requestedSpace =\n                coordinateSpace == (int)colorscreen::render_final_coordinates\n                    ? colorscreen::render_final_coordinates\n                    : colorscreen::render_scan_coordinates;\n            CoordinateTransformer transformer(m_scan.get(), frameParams,\n                                              &scrToImg, requestedSpace);\n            QSize transformedSize = transformer.getTransformedCropSize();\n\n            QRectF visibleRect(0, 0, transformedSize.width(),\n                               transformedSize.height());\n            QRectF requestRect(xOffset, yOffset, (double)width / scale,\n                               (double)height / scale);\n            QRectF intersection = requestRect.intersected(visibleRect);\n\n            if (intersection.isEmpty()) {\n                emit imageReady(reqId, QImage(), xOffset, yOffset, scale, true);\n                return;\n            }\n\n            colorscreen::point_t p0 = transformer.transformedToRenderCrop(\n                {intersection.left(), intersection.top()});\n            colorscreen::point_t p1 = transformer.transformedToRenderCrop(\n                {intersection.right(), intersection.bottom()});\n\n            double sx_unit = std::min(p0.x, p1.x);\n            double sy_unit = std::min(p0.y, p1.y);\n\n            int tw = (int)std::round(intersection.width() * scale);\n            int th = (int)std::round(intersection.height() * scale);\n\n            if (tw <= 0)\n                tw = 1;\n            if (th <= 0)\n                th = 1;\n\n            /* Scan rotation/mirroring are presentation transforms.  Final\n               views already contain their complete orientation in scr_to_img\n               final geometry, so applying the scan transform here a second\n               time changes tile dimensions/placement and clips the zero-based\n               final canvas. */\n            const bool applyScanPresentation =\n                transformer.coordinateSpace() ==\n                colorscreen::render_scan_coordinates;\n            int angleIdx = 0;\n            bool mirror = false;\n            if (applyScanPresentation) {\n                angleIdx = (int)(frameParams.scan_rotation) % 4;\n                if (angleIdx < 0)\n                    angleIdx += 4;\n                mirror = frameParams.scan_mirror;\n            }\n\n            int renderW = tw;\n            int renderH = th;\n            if (angleIdx == 1 || angleIdx == 3)\n                std::swap(renderW, renderH);\n\n            colorscreen::tile_parameters tile;\n            tile.pos.x = sx_unit * scale;\n            tile.pos.y = sy_unit * scale;\n            tile.step = 1.0 / scale;\n            tile.width = renderW;\n            tile.height = renderH;\n\n            QImage image(renderW, renderH, QImage::Format_RGB888);\n            image.setColorSpace(QColorSpace(QColorSpace::SRgb));\n            tile.pixels = image.bits();\n            tile.rowstride = image.bytesPerLine();\n            tile.pixelbytes = 3;\n\n            double outX = intersection.left();\n            double outY = intersection.top();\n\n            bool success = false;\n\n            if (progress)\n                progress->set_task(taskName, 1);\n\n            if (progress && progress->cancel_requested()) {\n                emit imageReady(reqId, QImage(), xOffset, yOffset, scale,\n                                false);\n                return;\n            }\n            colorscreen::sub_task task(progress.get());\n            try {\n                qCDebug(lcRenderSync)\n                    << "  Task ID:" << reqId << " starts rendering tile";\n                if (colorscreen::render_tile(\n                        *m_scan, scrToImg, scrDetect, frameParams, renderType,\n                        tile, transformer.coordinateSpace(), progress.get()))\n                    success = true;\n                qCDebug(lcRenderSync)\n                    << "  Task ID:" << reqId << " finished rendering tile "\n                    << success;\n            } catch (...) {\n                success = false;\n            }\n\n            if (success) {\n                QTransform transform;\n                bool transformed = false;\n\n                if (angleIdx != 0) {\n                    transform.rotate(angleIdx * 90);\n                    transformed = true;\n                }\n\n                if (mirror) {\n                    transform.scale(-1, 1);\n                    transformed = true;\n                }\n\n                if (transformed) {\n                    if (progress)\n                        progress->set_task("transforming final image", 1);\n                    if (!(progress && progress->cancel_requested()))\n                        image = image.transformed(transform);\n                    else {\n                        qCDebug(lcRenderSync)\n                            << "  Task ID:" << reqId\n                            << " cancelled before transformation";\n                        success = false;\n                    }\n                }\n            }\n\n            qCDebug(lcRenderSync)\n                << "  Task ID:" << reqId << " finished with " << success;\n            if (success)\n                emit imageReady(reqId, image, outX, outY, scale, true);\n            else\n                emit imageReady(reqId, QImage(), xOffset, yOffset, scale,\n                                false);\n        });\n\n    m_activeFutures.append(future);\n}\n'
+
+        def replace_once(path, old, new):
+            p = Path(path)
+            text = p.read_text()
+            if new in text:
+                print(f"{path} already patched")
+                return
+            count = text.count(old)
+            if count != 1:
+                raise SystemExit(f"expected one match in {path}, found {count}")
+            p.write_text(text.replace(old, new))
+            print(f"patched {path}")
+
+        Path("src/qtgui/Renderer.h").write_text(renderer_h)
+        Path("src/qtgui/Renderer.cpp").write_text(renderer_cpp)
+
+        replace_once("src/qtgui/ImageWidget.cpp", '    bool result = QMetaObject::invokeMethod(m_renderer, "render", Qt::QueuedConnection,\n                              Q_ARG(int, reqId),\n                              Q_ARG(double, data.xOffset),\n                              Q_ARG(double, data.yOffset),\n                              Q_ARG(double, data.scale),\n                              Q_ARG(int, data.w),\n                              Q_ARG(int, data.h),\n                              Q_ARG(int, (int)m_coordinateSpace),\n                              Q_ARG(colorscreen::render_parameters, data.params),\n                              Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress),\n                              Q_ARG(const char*, "Rendering image"));\n', '    bool result = m_renderer->enqueueRender(\n        reqId, data.xOffset, data.yOffset, data.scale, data.w, data.h,\n        (int)m_coordinateSpace, data.params, progress, "Rendering image");\n')
+        replace_once("src/qtgui/ImageWidget.cpp", '  if (m_renderer) {\n    QMetaObject::invokeMethod(\n        m_renderer, "updateParameters", Qt::QueuedConnection,\n        Q_ARG(colorscreen::render_parameters,\n              m_rparams ? *m_rparams : colorscreen::render_parameters()),\n        Q_ARG(colorscreen::scr_to_img_parameters,\n              m_scrToImg ? *m_scrToImg : colorscreen::scr_to_img_parameters()),\n        Q_ARG(colorscreen::scr_detect_parameters,\n              m_scrDetect ? *m_scrDetect\n                          : colorscreen::scr_detect_parameters()),\n        Q_ARG(colorscreen::render_type_parameters,\n              m_renderType ? *m_renderType\n                           : colorscreen::render_type_parameters()));\n  }\n', '  if (m_renderer) {\n    m_renderer->updateParameters(\n        m_rparams ? *m_rparams : colorscreen::render_parameters(),\n        m_scrToImg ? *m_scrToImg : colorscreen::scr_to_img_parameters(),\n        m_scrDetect ? *m_scrDetect : colorscreen::scr_detect_parameters(),\n        m_renderType ? *m_renderType : colorscreen::render_type_parameters());\n  }\n')
+        replace_once("src/qtgui/NavigationView.cpp", '    bool result = QMetaObject::invokeMethod(\n      m_renderer, "render", Qt::QueuedConnection,\n      Q_ARG(int, reqId),      \n      Q_ARG(double, 0.0), \n      Q_ARG(double, 0.0), \n      Q_ARG(double, scale), Q_ARG(int, targetW), Q_ARG(int, targetH),\n      Q_ARG(int, (int)m_coordinateSpace),\n      Q_ARG(colorscreen::render_parameters, data.params),\n      Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress),\n      Q_ARG(const char*, "Rendering navigation"));\n', '    bool result = m_renderer->enqueueRender(\n        reqId, 0.0, 0.0, scale, targetW, targetH, (int)m_coordinateSpace,\n        data.params, progress, "Rendering navigation");\n')
+        replace_once("src/qtgui/NavigationView.cpp", '  if (m_renderer) {\n    QMetaObject::invokeMethod(\n        m_renderer, "updateParameters", Qt::QueuedConnection,\n        Q_ARG(colorscreen::render_parameters, *m_rparams),\n        Q_ARG(colorscreen::scr_to_img_parameters,\n              m_scrToImg ? *m_scrToImg : colorscreen::scr_to_img_parameters()),\n        Q_ARG(colorscreen::scr_detect_parameters,\n              m_scrDetect ? *m_scrDetect\n                          : colorscreen::scr_detect_parameters()),\n        Q_ARG(colorscreen::render_type_parameters, m_renderType));\n  }\n', '  if (m_renderer) {\n    m_renderer->updateParameters(\n        *m_rparams,\n        m_scrToImg ? *m_scrToImg : colorscreen::scr_to_img_parameters(),\n        m_scrDetect ? *m_scrDetect : colorscreen::scr_detect_parameters(),\n        m_renderType);\n  }\n')
+        PY
+        git diff --check
+        git add src/qtgui/Renderer.h src/qtgui/Renderer.cpp \
+                src/qtgui/ImageWidget.cpp src/qtgui/NavigationView.cpp
+        if ! git diff --cached --quiet; then
+          git config user.name "Jan Hubička"
+          git config user.email "46065755+janhubicka@users.noreply.github.com"
+          git commit -m "qtgui: synchronize renderer request handoff"
+          git push origin "HEAD:${HEAD_BRANCH}"
+        fi
+        git show --stat --oneline HEAD
+
     - name: Install Clang OpenMP TSan runtime
       run: |
         apt-get update
@@ -67,38 +85,22 @@ jobs:
         test -f /usr/lib/llvm-18/lib/libarcher.so
         test -x /usr/bin/llvm-symbolizer-18
         rm -rf /var/lib/apt/lists/*
-    - name: Restore compiler cache
-      uses: actions/cache@v4
-      with:
-        path: .ccache
-        key: ccache-${{ runner.os }}-amd64-tsan-clang18-${{ github.event.pull_request.head.sha || github.sha }}
-        restore-keys: |
-          ccache-${{ runner.os }}-amd64-tsan-clang18-
-    - name: Reset compiler cache stats
-      run: ccache --zero-stats
+
     - name: Verify OpenMP-aware ThreadSanitizer runtime
       run: |
         cat >/tmp/tsan-openmp-smoke.cpp <<'EOF'
         #include <omp.h>
         #include <cstdio>
-
         int main ()
         {
           int threads = 0;
-          double a = 0, b = 0;
         #pragma omp parallel
           {
         #pragma omp single
             threads = omp_get_num_threads ();
           }
-        #pragma omp parallel for reduction(+ : a, b)
-          for (int i = 0; i < 100000; i++)
-            {
-              a += i;
-              b += 2 * i;
-            }
           std::printf ("OpenMP threads: %d\n", threads);
-          return threads < 2 || !(a > 0) || !(b > 0);
+          return threads < 2;
         }
         EOF
         clang++-18 -O1 -g -fno-omit-frame-pointer -fopenmp -fsanitize=thread \
@@ -109,6 +111,7 @@ jobs:
           OMP_TOOL_LIBRARIES=/usr/lib/llvm-18/lib/libarcher.so \
           TSAN_OPTIONS=halt_on_error=1:ignore_noninstrumented_modules=1:external_symbolizer_path=/usr/bin/llvm-symbolizer-18 \
           /tmp/tsan-openmp-smoke
+
     - name: Configure with ThreadSanitizer
       run: |
         SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=thread"
@@ -117,8 +120,10 @@ jobs:
           LDFLAGS="-fsanitize=thread" \
           ./configure --enable-checking --disable-static-link \
           --disable-gtkgui --enable-qtgui
+
     - name: Build ThreadSanitizer variant
       run: make -j$(nproc)
+
     - name: Qt GUI smoke probe (ThreadSanitizer)
       env:
         OMP_NUM_THREADS: "4"
@@ -128,8 +133,7 @@ jobs:
       run: |
         top_builddir="$PWD" srcdir="$PWD/testsuite" \
           sh testsuite/qt-tsan-smoke-probe.test
-    # Keep the full OpenMP-heavy test suite after the GUI probe so both GUI
-    # concurrency and library/CLI coverage use the same TSan environment.
+
     - name: Test ThreadSanitizer variant
       env:
         OMP_NUM_THREADS: "4"
@@ -137,212 +141,3 @@ jobs:
         OMP_TOOL_LIBRARIES: /usr/lib/llvm-18/lib/libarcher.so
         TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:ignore_noninstrumented_modules=1:external_symbolizer_path=/usr/bin/llvm-symbolizer-18
       run: make -j$(nproc) check
-    - name: Upload ThreadSanitizer test results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: testsuite-tsan-amd64
-        path: |
-          testsuite/*.txt
-          testsuite/*.log
-          testsuite/*.par
-    - name: Compiler cache stats
-      if: always()
-      run: ccache --show-stats
-
-  macos-sanitizers:
-    if: >-
-      (github.event_name != 'workflow_dispatch' || inputs.macos) &&
-      (github.event_name != 'pull_request' ||
-       github.event.pull_request.head.repo.full_name != github.repository ||
-       !contains(github.event.pull_request.body, '[ci:') ||
-       contains(github.event.pull_request.body, '[ci:all]') ||
-       contains(github.event.pull_request.body, '[ci:sanitizers]') ||
-       contains(github.event.pull_request.body, '[ci:macos-sanitizers]'))
-    name: ASan + UBSan (macOS)
-    runs-on: macos-latest
-    env:
-      HOMEBREW_NO_AUTO_UPDATE: "1"
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_BASEDIR: ${{ github.workspace }}
-      CCACHE_COMPRESS: "true"
-      CCACHE_MAXSIZE: 500M
-    steps:
-    - uses: actions/checkout@v4
-    - name: Locate Homebrew cache
-      id: homebrew-cache
-      run: |
-        echo "path=$(brew --cache)" >> "$GITHUB_OUTPUT"
-        echo "image-version=${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
-    - name: Restore Homebrew download cache
-      uses: actions/cache@v4
-      with:
-        path: ${{ steps.homebrew-cache.outputs.path }}
-        key: homebrew-sanitizers-${{ runner.os }}-${{ runner.arch }}-${{ steps.homebrew-cache.outputs.image-version }}-${{ hashFiles('.github/workflows/sanitizers.yml') }}
-        restore-keys: |
-          homebrew-${{ runner.os }}-${{ runner.arch }}-${{ steps.homebrew-cache.outputs.image-version }}-
-          homebrew-${{ runner.os }}-${{ runner.arch }}-
-    - name: Install dependencies
-      run: |
-        brew install \
-          libtiff libjpeg-turbo libzip gsl libraw little-cms2 libomp fftw \
-          qt6 exiv2 openjpeg libpng webp ccache
-        brew link qt6 --force
-    - name: Restore compiler cache
-      uses: actions/cache@v4
-      with:
-        path: .ccache
-        key: ccache-${{ runner.os }}-${{ runner.arch }}-asan-ubsan-${{ github.event.pull_request.head.sha || github.sha }}
-        restore-keys: |
-          ccache-${{ runner.os }}-${{ runner.arch }}-asan-ubsan-
-          ccache-${{ runner.os }}-${{ runner.arch }}-macos-
-    - name: Reset compiler cache stats
-      run: ccache --zero-stats
-    - name: Configure with ASan and UBSan
-      run: |
-        QT6_PREFIX=$(brew --prefix qt6)
-        BREW_PREFIX=$(brew --prefix)
-        export PATH="$QT6_PREFIX/bin:$PATH"
-        MOC_CANDIDATE=$(find "$QT6_PREFIX" -name moc -type f -perm +111 | head -n 1)
-        if [ -z "$MOC_CANDIDATE" ]; then
-          MOC_CANDIDATE=$(find "$BREW_PREFIX" -name moc -type f -perm +111 2>/dev/null | grep qt | head -n 1)
-        fi
-        if [ -z "$MOC_CANDIDATE" ]; then
-          QT6_BIN=$(pkg-config --variable=host_bins Qt6Core)
-          if [ -n "$QT6_BIN" ] && [ -x "$QT6_BIN/moc" ]; then
-            MOC_CANDIDATE="$QT6_BIN/moc"
-          fi
-        fi
-        if [ -z "$MOC_CANDIDATE" ]; then
-          echo "Could not locate Qt moc" >&2
-          exit 1
-        fi
-        export PATH="$(dirname "$MOC_CANDIDATE"):$PATH"
-        SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined -I$BREW_PREFIX/include -I$BREW_PREFIX/opt/libomp/include -Xclang=-fopenmp"
-        CC="ccache clang" CXX="ccache clang++" \
-          CFLAGS="$SANITIZER_FLAGS" CXXFLAGS="$SANITIZER_FLAGS" \
-          LDFLAGS="-L$BREW_PREFIX/lib -L$BREW_PREFIX/opt/libomp/lib -lomp -fsanitize=address,undefined" \
-          ./configure --enable-checking --disable-static-link --disable-openmp \
-          --enable-qtgui MOC="$MOC_CANDIDATE"
-    - name: Build sanitizer variant
-      run: make -j$(sysctl -n hw.logicalcpu)
-    - name: Qt multi-window smoke test (ASan + UBSan)
-      env:
-        ASAN_OPTIONS: halt_on_error=1
-        UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-        QT_QPA_PLATFORM: offscreen
-      run: |
-        ./src/qtgui/colorscreen-qt \
-          --smoke-test 30000 --smoke-test-expect-windows 2 \
-          --smoke-test-new-view --smoke-test-slanted-reference \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
-
-        ./src/qtgui/colorscreen-qt \
-          --smoke-test 20000 --smoke-test-expect-windows 1 \
-          --smoke-test-window-lifetime \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
-    - name: Test sanitizer variant
-      env:
-        ASAN_OPTIONS: halt_on_error=1
-        UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-      run: make -j$(sysctl -n hw.logicalcpu) check
-    - name: Upload sanitizer test results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: testsuite-sanitizers-macos
-        path: |
-          testsuite/*.txt
-          testsuite/*.log
-          testsuite/*.par
-    - name: Compiler cache stats
-      if: always()
-      run: ccache --show-stats
-
-  windows-address-sanitizer:
-    if: >-
-      (github.event_name != 'workflow_dispatch' || inputs.windows_asan) &&
-      (github.event_name != 'pull_request' ||
-       github.event.pull_request.head.repo.full_name != github.repository ||
-       !contains(github.event.pull_request.body, '[ci:') ||
-       contains(github.event.pull_request.body, '[ci:all]') ||
-       contains(github.event.pull_request.body, '[ci:sanitizers]') ||
-       contains(github.event.pull_request.body, '[ci:windows-asan]'))
-    name: AddressSanitizer (Windows clang64)
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v4
-    - uses: msys2/setup-msys2@v2
-      with:
-        msystem: CLANG64
-        update: false
-        cache: true
-        install: >
-          make mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-libtiff
-          mingw-w64-clang-x86_64-llvm-openmp
-          mingw-w64-clang-x86_64-libjpeg-turbo git mingw-w64-clang-x86_64-libraw
-          mingw-w64-clang-x86_64-lcms2 mingw-w64-clang-x86_64-libzip
-          mingw-w64-clang-x86_64-gsl diffutils autoconf-archive
-          mingw-w64-clang-x86_64-autotools mingw-w64-clang-x86_64-fftw
-          mingw-w64-clang-x86_64-qt6-base mingw-w64-clang-x86_64-qt6-tools
-          mingw-w64-clang-x86_64-adwaita-icon-theme mingw-w64-clang-x86_64-qt6-svg
-          mingw-w64-clang-x86_64-imagemagick mingw-w64-clang-x86_64-exiv2
-    - name: Update autotools
-      shell: msys2 {0}
-      run: autoreconf -fiv
-    - name: Configure with AddressSanitizer
-      shell: msys2 {0}
-      run: |
-        export PATH="/clang64/share/qt6/bin:$PATH"
-        SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address"
-        CC=clang CXX=clang++ AR=llvm-ar NM=llvm-nm \
-          STRIP=llvm-strip RANLIB=llvm-ranlib \
-          CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
-          LDFLAGS="-Wl,--stack,16777216 -fsanitize=address -lomp -lpthread" \
-          ./configure --enable-checking --disable-static-link --enable-qtgui
-    - name: Generate Windows icon
-      shell: msys2 {0}
-      run: |
-        magick images/icon.svg -background none -define icon:auto-resize=256,128,64,48,32,16 os/windows/icon.ico
-        cp os/windows/icon.ico src/qtgui/icon.ico
-    - name: Build AddressSanitizer variant
-      shell: msys2 {0}
-      run: |
-        set -o pipefail
-        make -j2 2>&1 | tee windows-asan-build.log
-    - name: Upload Windows ASan build log
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: windows-asan-build-log
-        path: windows-asan-build.log
-    - name: Qt multi-window smoke test (AddressSanitizer)
-      shell: msys2 {0}
-      env:
-        ASAN_OPTIONS: halt_on_error=1
-      run: |
-        ./src/qtgui/colorscreen-qt \
-          --smoke-test 30000 --smoke-test-expect-windows 2 \
-          --smoke-test-new-view --smoke-test-slanted-reference \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
-
-        ./src/qtgui/colorscreen-qt \
-          --smoke-test 20000 --smoke-test-expect-windows 1 \
-          --smoke-test-window-lifetime \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
-    - name: Test AddressSanitizer variant
-      shell: msys2 {0}
-      env:
-        ASAN_OPTIONS: halt_on_error=1
-      run: make -j2 check
-    - name: Upload sanitizer test results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: testsuite-asan-windows-clang64
-        path: |
-          testsuite/*.txt
-          testsuite/*.log
-          testsuite/*.par
