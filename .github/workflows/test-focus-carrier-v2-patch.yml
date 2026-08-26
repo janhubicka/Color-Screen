@@ -32,6 +32,7 @@ jobs:
         run: |
           set -euxo pipefail
           base64 -d agent/focus-carrier-aware.patch.gz.b64 | gunzip >/tmp/focus.patch
+          cp agent/focus-carrier-test-fix.patch /tmp/focus-fix.patch
           echo 'e61ce652cd3b667259ddf98d9d0e7b8f70b72f3cffed8b87c2961efa73cc332a  /tmp/focus.patch' | sha256sum -c -
 
       - name: Apply to exact mainline
@@ -42,8 +43,8 @@ jobs:
           git checkout --detach beedd746497d729045dc2728bbf16db3d6fb281a
           git apply --check /tmp/focus.patch
           git apply /tmp/focus.patch
-          git apply --check agent/focus-carrier-test-fix.patch
-          git apply agent/focus-carrier-test-fix.patch
+          git apply --check /tmp/focus-fix.patch
+          git apply /tmp/focus-fix.patch
           git diff --check
           git diff --stat
 
