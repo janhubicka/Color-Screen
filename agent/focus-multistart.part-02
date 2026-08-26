@@ -1,0 +1,166 @@
++  mtf_parameters mtf = rparam.sharpen.scanner_mtf;
++  if ((flags & finetune_scanner_mtf_sigma)
++      && my_isfinite (fit.scanner_mtf_sigma))
++    mtf.sigma = fit.scanner_mtf_sigma;
++  if (flags & finetune_scanner_mtf_defocus)
++    {
++      if (mtf.simulate_diffraction_p ())
++        {
++          if (!my_isfinite (fit.scanner_mtf_defocus))
++            return -1;
++          mtf.defocus = fit.scanner_mtf_defocus;
++        }
++      else
++        {
++          if (!my_isfinite (fit.scanner_mtf_blur_diameter))
++            return -1;
++          mtf.blur_diameter = fit.scanner_mtf_blur_diameter;
++        }
++    }
++  const coord_t value = mtf.system_mtf (frequency);
++  return my_isfinite (value) ? value : (coord_t)-1;
++}
++
++/* Copy the active scalar scanner-MTF coordinates from FIT into RPARAM so a
++   subsequent coupled solve starts in the basin found by a scalar solve.  */
++static bool
++seed_scanner_mtf_from_fit (render_parameters *rparam, uint64_t flags,
++                           const finetune_result &fit)
++{
++  if (!rparam || !fit.success)
++    return false;
++  if ((flags & finetune_scanner_mtf_sigma)
++      && my_isfinite (fit.scanner_mtf_sigma))
++    rparam->sharpen.scanner_mtf.sigma = fit.scanner_mtf_sigma;
++  if (flags & finetune_scanner_mtf_defocus)
++    {
++      if (rparam->sharpen.scanner_mtf.simulate_diffraction_p ())
++        {
++          if (!my_isfinite (fit.scanner_mtf_defocus))
++            return false;
++          rparam->sharpen.scanner_mtf.defocus = fit.scanner_mtf_defocus;
++        }
++      else
++        {
++          if (!my_isfinite (fit.scanner_mtf_blur_diameter))
++            return false;
++          rparam->sharpen.scanner_mtf.blur_diameter
++              = fit.scanner_mtf_blur_diameter;
++        }
++    }
++  return true;
++}
++
++/* Run the shared focus fit.  Physical sigma and defocus are strongly
++   correlated at a periodic screen's few useful harmonics, and a direct
++   two-dimensional cold start can settle in a poor local basin.  When both are
++   requested, cheaply solve each scalar coordinate first, use the better
++   scalar result to seed the full coupled fit, and retain the direct coupled
++   result as a competing basin when it is already better.  The final choice is
++   still made by the original pixel-domain objective; the scalar fits only
++   provide robust initialization.  */
++static finetune_result
++fit_shared_focus (const render_parameters &rparam,
++                  const scr_to_img_parameters &param, const image_data &img,
++                  const std::vector<point_t> &locations,
++                  const std::vector<finetune_result> &starts,
++                  const finetune_parameters &fparams, progress_info *progress)
++{
++  constexpr uint64_t coupled
++      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
++  if ((fparams.flags & coupled) != coupled
++      || !rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
++    return finetune (rparam, param, img, locations, &starts, fparams, progress);
++
++  /* Sigma-only is a particularly useful continuation coordinate: it has a
++     smooth monotone MTF and, on a true cold start, reliably moves away from
++     the flat (sigma,defocus)=(0,0) corner.  With an existing calibration it
++     also keeps us in that capture's basin before the coupled refinement is
++     released.  */
++  finetune_parameters sigma_params = fparams;
++  sigma_params.flags &= ~finetune_scanner_mtf_defocus;
++  finetune_result sigma_fit = finetune (rparam, param, img, locations, &starts,
++                                       sigma_params, progress);
++  if (progress && progress->cancelled ())
++    return sigma_fit;
++
++  const bool cold_start
++      = (!my_isfinite (rparam.sharpen.scanner_mtf.sigma)
++         || rparam.sharpen.scanner_mtf.sigma <= (coord_t)1e-8)
++        && (!my_isfinite (rparam.sharpen.scanner_mtf.defocus)
++            || rparam.sharpen.scanner_mtf.defocus <= (coord_t)1e-8);
++
++  /* At a physical cold start also probe defocus alone.  This costs one scalar
++     solve but protects against screen types/captures where defocus is the
++     better route out of the origin.  For a calibrated warm start avoid this
++     extra solve: sigma-only already anchors the existing MTF shape and the
++     following coupled fit is free to move both coordinates.  */
++  finetune_result defocus_fit;
++  if (cold_start || !sigma_fit.success)
++    {
++      finetune_parameters defocus_params = fparams;
++      defocus_params.flags &= ~finetune_scanner_mtf_sigma;
++      defocus_fit = finetune (rparam, param, img, locations, &starts,
++                              defocus_params, progress);
++      if (progress && progress->cancelled ())
++        return defocus_fit;
++    }
++
++  const finetune_result *scalar = nullptr;
++  uint64_t scalar_flags = 0;
++  if (sigma_fit.success
++      && (!defocus_fit.success || sigma_fit.badness <= defocus_fit.badness))
++    {
++      scalar = &sigma_fit;
++      scalar_flags = finetune_scanner_mtf_sigma;
++    }
++  else if (defocus_fit.success)
++    {
++      scalar = &defocus_fit;
++      scalar_flags = finetune_scanner_mtf_defocus;
++    }
++
++  if (!scalar)
++    return finetune (rparam, param, img, locations, &starts, fparams, progress);
++
++  render_parameters seeded = rparam;
++  if (!seed_scanner_mtf_from_fit (&seeded, scalar_flags, *scalar))
++    return *scalar;
++  finetune_result refined
++      = finetune (seeded, param, img, locations, &starts, fparams, progress);
++
++  /* The scalar solution is already a complete physical MTF (the inactive
++     coordinate retains its input value), so keep it if releasing the second
++     coordinate failed or made the original pixel objective worse.  */
++  if (!refined.success || scalar->badness <= refined.badness)
++    return *scalar;
++  return refined;
++}
++
+ static coord_t
+ observed_color_norm (rgbdata color)
+ {
+@@ -232,24 +403,6 @@ finetune_analyze_focus_areas (
+       return false;
+     }
+ 
+-  /* Periodic focus areas constrain the combined scanner transfer, but the
+-     residual Gaussian sigma and physical defocus can compensate for each
+-     other at the few harmonics that remain measurable in a real capture.
+-     A coupled fit can therefore report optimizer initialization rather than
+-     a separately identified physical decomposition.  Require one coordinate
+-     to be calibrated/fixed and fit only the other.  */
+-  constexpr uint64_t coupled_physical_focus
+-      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+-  if ((fparams.flags & coupled_physical_focus) == coupled_physical_focus
+-      && rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
+-    {
+-      set_analysis_error (
+-          result,
+-          "physical scanner MTF sigma and defocus are not separately "
+-          "identifiable from periodic focus areas; fix/calibrate one and "
+-          "optimize only the other");
+-      return false;
+-    }
+ 
+   if (!finetune_select_focus_areas (candidates, analysis_parameters.selection,
