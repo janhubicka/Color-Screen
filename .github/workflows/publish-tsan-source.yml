@@ -1,0 +1,73 @@
+name: Publish validated TSan source patch
+
+on:
+  push:
+    branches:
+      - agent/tsan-render-handoff-validate
+    paths:
+      - .github/workflows/publish-tsan-source.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Materialize validated source patch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          base=544655741cbc3f05185bb05e0a4988caad95467e
+          python3 .github/ci/apply-tsan-render-handoff.py
+          python3 .github/ci/apply-tsan-render-stats.py
+          python3 .github/ci/apply-tsan-qtpool.py
+          python3 .github/ci/apply-tsan-tilepreview.py
+
+          git diff --binary "$base" -- src > /tmp/tsan-source.patch
+          test -s /tmp/tsan-source.patch
+
+          git reset --hard "$base"
+          git apply /tmp/tsan-source.patch
+
+          expected=$(cat <<'EOF'
+src/libcolorscreen/render-scr-detect.C
+src/libcolorscreen/render-tile.C
+src/qtgui/ImageViewWindow.cpp
+src/qtgui/ImageViewWindow.h
+src/qtgui/ImageWidget.cpp
+src/qtgui/NavigationView.cpp
+src/qtgui/Renderer.cpp
+src/qtgui/Renderer.h
+src/qtgui/SynchronizedRunnable.h
+src/qtgui/TilePreviewPanel.cpp
+src/qtgui/TilePreviewPanel.h
+EOF
+          )
+          actual=$(git diff --name-only | sort)
+          test "$actual" = "$expected"
+
+          grep -q 'enqueueRender' src/qtgui/Renderer.h
+          grep -q 'runSynchronized' src/qtgui/Renderer.cpp
+          grep -q 'finishReferenceLoad' src/qtgui/ImageViewWindow.cpp
+          grep -q 'finishTileRender' src/qtgui/TilePreviewPanel.cpp
+          grep -q 'stats_enabled' src/libcolorscreen/render-tile.C
+          grep -q 'dead timing work' src/libcolorscreen/render-scr-detect.C
+
+      - name: Publish clean branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c agent/fix-tsan-render-handoffs
+          git add src
+          git diff --cached --check
+          test -z "$(git status --porcelain | grep -v '^M  src/' || true)"
+          git commit -m 'Fix TSan races in async render handoffs'
+          test "$(git rev-list --count 544655741cbc3f05185bb05e0a4988caad95467e..HEAD)" = 1
+          git push origin HEAD:refs/heads/agent/fix-tsan-render-handoffs
