@@ -1,0 +1,84 @@
+## -*- sh -*-
+## Temporary probe for Qt GUI smoke coverage under ThreadSanitizer.
+
+if test -z "$srcdir"; then
+    srcdir=`echo "$0" | sed 's,[^/]*$,,'`
+    test "$srcdir" = "$0" && srcdir=.
+    test -z "$srcdir" && srcdir=.
+    test "${VERBOSE+set}" != set && VERBOSE=1
+fi
+
+echo 1..1
+
+GUI="$top_builddir/src/qtgui/colorscreen-qt"
+IMAGE="$srcdir/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+
+run_pair ()
+{
+    platform="$1"
+    log="qt-tsan-smoke-${platform}.probe.log"
+
+    echo "# Trying Qt QPA backend: $platform"
+    if test "$platform" = xcb; then
+        xvfb-run -a env QT_QPA_PLATFORM=xcb "$GUI" \
+          --smoke-test 30000 --smoke-test-expect-windows 2 \
+          --smoke-test-new-view --smoke-test-slanted-reference \
+          "$IMAGE" "$IMAGE" >"$log" 2>&1
+    else
+        env QT_QPA_PLATFORM="$platform" "$GUI" \
+          --smoke-test 30000 --smoke-test-expect-windows 2 \
+          --smoke-test-new-view --smoke-test-slanted-reference \
+          "$IMAGE" "$IMAGE" >"$log" 2>&1
+    fi
+    first_rc=$?
+
+    if grep -q 'WARNING: ThreadSanitizer' "$log"; then
+        cat "$log"
+        return 66
+    fi
+    if test "$first_rc" -ne 0; then
+        cat "$log"
+        return 1
+    fi
+
+    if test "$platform" = xcb; then
+        xvfb-run -a env QT_QPA_PLATFORM=xcb "$GUI" \
+          --smoke-test 20000 --smoke-test-expect-windows 1 \
+          --smoke-test-window-lifetime \
+          "$IMAGE" >>"$log" 2>&1
+    else
+        env QT_QPA_PLATFORM="$platform" "$GUI" \
+          --smoke-test 20000 --smoke-test-expect-windows 1 \
+          --smoke-test-window-lifetime \
+          "$IMAGE" >>"$log" 2>&1
+    fi
+    second_rc=$?
+
+    if grep -q 'WARNING: ThreadSanitizer' "$log"; then
+        cat "$log"
+        return 66
+    fi
+    if test "$second_rc" -ne 0; then
+        cat "$log"
+        return 1
+    fi
+
+    cat "$log"
+    return 0
+}
+
+for platform in offscreen minimal xcb; do
+    run_pair "$platform"
+    rc=$?
+    if test "$rc" -eq 66; then
+        echo "not ok 1 - Qt GUI reaches Color-Screen but ThreadSanitizer reports a race ($platform)"
+        exit 1
+    fi
+    if test "$rc" -eq 0; then
+        echo "ok 1 - Qt GUI smoke runs under ThreadSanitizer ($platform)"
+        exit 0
+    fi
+done
+
+echo "not ok 1 - no Qt QPA backend can complete the GUI smoke test under ThreadSanitizer"
+exit 1
