@@ -13,94 +13,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  materialize-review-branch:
-    name: Materialize validated GUI TSan review branch
-    if: github.event.action == 'reopened' && github.event.pull_request.number == 206
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-      actions: read
-    steps:
-    - name: Check out final review branch
-      uses: actions/checkout@v4
-      with:
-        ref: agent/fix-gui-tsan-races
-        fetch-depth: 0
-
-    - name: Download exact green-tested source artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: tsan-render-handoff-source
-        path: /tmp/validated-source
-        repository: janhubicka/Color-Screen
-        run-id: 33011846158
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Materialize clean review commit
-      shell: bash
-      run: |
-        set -euxo pipefail
-
-        cp /tmp/validated-source/qtgui/Renderer.h src/qtgui/Renderer.h
-        cp /tmp/validated-source/qtgui/Renderer.cpp src/qtgui/Renderer.cpp
-        cp /tmp/validated-source/qtgui/ImageWidget.cpp src/qtgui/ImageWidget.cpp
-        cp /tmp/validated-source/qtgui/NavigationView.cpp src/qtgui/NavigationView.cpp
-        cp /tmp/validated-source/qtgui/ImageViewWindow.h src/qtgui/ImageViewWindow.h
-        cp /tmp/validated-source/qtgui/ImageViewWindow.cpp src/qtgui/ImageViewWindow.cpp
-        cp /tmp/validated-source/qtgui/TilePreviewPanel.h src/qtgui/TilePreviewPanel.h
-        cp /tmp/validated-source/qtgui/TilePreviewPanel.cpp src/qtgui/TilePreviewPanel.cpp
-        cp /tmp/validated-source/qtgui/SynchronizedRunnable.h src/qtgui/SynchronizedRunnable.h
-        cp /tmp/validated-source/libcolorscreen/render-tile.C src/libcolorscreen/render-tile.C
-        cp /tmp/validated-source/libcolorscreen/render-scr-detect.C src/libcolorscreen/render-scr-detect.C
-
-        test "$(git hash-object src/qtgui/Renderer.h)" = 5f08f5aa52b087cc8b8bf508accd5cacdc705d22
-        test "$(git hash-object src/qtgui/Renderer.cpp)" = 2b83972b3148d1c72f9ef00edb2ed2ac0c34ec99
-        test "$(git hash-object src/qtgui/ImageWidget.cpp)" = b7f520f536efcdcca88cbcc3154efc7a3892feed
-        test "$(git hash-object src/qtgui/NavigationView.cpp)" = f986a2df8d11ff11d9621aff5bfd8aa390f00531
-        test "$(git hash-object src/qtgui/ImageViewWindow.h)" = bb21aa430f7dd987f3a61afef6a564d3e932e497
-        test "$(git hash-object src/qtgui/ImageViewWindow.cpp)" = d7cc9dd6402062f42a6279dc310538f12c2c109c
-        test "$(git hash-object src/qtgui/TilePreviewPanel.h)" = 7e04c28417dee32f8505fadea59badd383c69b18
-        test "$(git hash-object src/qtgui/TilePreviewPanel.cpp)" = 46ce335a631d3b0330b93a589fec168abdcd4ca7
-        test "$(git hash-object src/qtgui/SynchronizedRunnable.h)" = 2a76525bfcab985958d765eae2ac9ff5aeafe40e
-        test "$(git hash-object src/libcolorscreen/render-tile.C)" = fa661f2d245efd750fb1bd02261151b1ee460e9c
-        test "$(git hash-object src/libcolorscreen/render-scr-detect.C)" = 8a199d0c030ef5ca5faa6791669b43a41cbb3236
-
-        git mv testsuite/qt-tsan-smoke-probe.test testsuite/qt-tsan-smoke.test
-        python3 - <<'PY'
-        from pathlib import Path
-
-        p = Path('testsuite/qt-tsan-smoke.test')
-        s = p.read_text()
-        s = s.replace('## Temporary probe for Qt GUI smoke coverage under ThreadSanitizer.',
-                      '## Qt GUI smoke coverage under ThreadSanitizer.')
-        s = s.replace('qt-tsan-smoke-${platform}.probe.log',
-                      'qt-tsan-smoke-${platform}.log')
-        p.write_text(s)
-
-        p = Path('.github/workflows/sanitizers.yml')
-        s = p.read_text()
-        s = s.replace('Qt GUI smoke probe (ThreadSanitizer)',
-                      'Qt GUI smoke test (ThreadSanitizer)')
-        s = s.replace('testsuite/qt-tsan-smoke-probe.test',
-                      'testsuite/qt-tsan-smoke.test')
-        p.write_text(s)
-
-        p = Path('src/qtgui/Makefile.am')
-        s = p.read_text()
-        old = 'ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h'
-        new = 'ParameterPanel.h ParameterState.h Renderer.h SynchronizedRunnable.h SharpnessPanel.h'
-        if old not in s:
-            raise SystemExit('Could not locate Renderer.h in EXTRA_DIST')
-        p.write_text(s.replace(old, new, 1))
-        PY
-
-        git diff --check
-        git config user.name "Jan Hubička"
-        git config user.email "46065755+janhubicka@users.noreply.github.com"
-        git add -A
-        git commit -m "qtgui: make threaded rendering TSan-visible" -m "Publish renderer requests and worker results through project-owned C++ mutexes so ThreadSanitizer can observe the happens-before edges hidden inside distro Qt. Replace QtConcurrent task publication in renderer, reference-image, and tile-preview paths with synchronized QRunnable handoffs while preserving QThreadPool and OpenMP parallelism. Also make CSSTATS bookkeeping thread-safe and promote the GUI TSan probe to permanent smoke coverage."
-        git push origin HEAD:agent/fix-gui-tsan-races
-
   thread-sanitizer:
     name: ThreadSanitizer (Ubuntu amd64, Clang + OpenMP)
     runs-on: ubuntu-24.04
@@ -120,22 +32,15 @@ jobs:
       CCACHE_COMPRESS: "true"
       CCACHE_MAXSIZE: 500M
     steps:
-    - uses: actions/checkout@v4
+    - name: Check out final PR207 branch
+      uses: actions/checkout@v4
       with:
-        ref: ${{ github.event.pull_request.head.ref }}
+        ref: agent/fix-tsan-render-handoffs
 
-    - name: Apply renderer race fixes
+    - name: Verify final review head
       run: |
-        python3 .github/ci/apply-tsan-render-handoff.py
-        python3 .github/ci/apply-tsan-render-stats.py
-        python3 .github/ci/apply-tsan-qtpool.py
-        python3 .github/ci/apply-tsan-tilepreview.py
-        grep -q 'enqueueRender' src/qtgui/Renderer.h
-        grep -q 'runSynchronized' src/qtgui/Renderer.cpp
-        grep -q 'finishReferenceLoad' src/qtgui/ImageViewWindow.cpp
-        grep -q 'finishTileRender' src/qtgui/TilePreviewPanel.cpp
-        grep -q 'stats_enabled' src/libcolorscreen/render-tile.C
-        grep -q 'dead timing work' src/libcolorscreen/render-scr-detect.C
+        test "$(git rev-parse HEAD)" = "1ce4eee222e6f1a4aa7aa7f3dcbc02220eb87596"
+        git diff --check 544655741cbc3f05185bb05e0a4988caad95467e..HEAD
 
     - name: Install Clang OpenMP TSan runtime
       run: |
@@ -149,7 +54,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .ccache
-        key: ccache-${{ runner.os }}-amd64-tsan-clang18-${{ github.event.pull_request.head.sha || github.sha }}
+        key: ccache-${{ runner.os }}-amd64-tsan-clang18-pr207-final
         restore-keys: |
           ccache-${{ runner.os }}-amd64-tsan-clang18-
 
@@ -195,23 +100,14 @@ jobs:
       run: make -j$(nproc)
 
     - name: Qt GUI smoke test (ThreadSanitizer)
-      shell: bash
       env:
         OMP_NUM_THREADS: "4"
         OMP_TOOL: enabled
         OMP_TOOL_LIBRARIES: /usr/lib/llvm-18/lib/libarcher.so
-        TSAN_OPTIONS: halt_on_error=0:second_deadlock_stack=1:ignore_noninstrumented_modules=1:external_symbolizer_path=/usr/bin/llvm-symbolizer-18
+        TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:ignore_noninstrumented_modules=1:external_symbolizer_path=/usr/bin/llvm-symbolizer-18
       run: |
-        set -o pipefail
         top_builddir="$PWD" srcdir="$PWD/testsuite" \
-          sh testsuite/qt-tsan-smoke-probe.test 2>&1 | tee tsan-gui-smoke.log
-
-    - name: Upload GUI ThreadSanitizer smoke log
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: tsan-gui-smoke-log
-        path: tsan-gui-smoke.log
+          sh testsuite/qt-tsan-smoke-probe.test
 
     - name: Test ThreadSanitizer variant
       env:
@@ -224,21 +120,3 @@ jobs:
     - name: Compiler cache stats
       if: always()
       run: ccache --show-stats
-
-    - name: Upload validated source
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: tsan-render-handoff-source
-        path: |
-          src/qtgui/SynchronizedRunnable.h
-          src/qtgui/Renderer.h
-          src/qtgui/Renderer.cpp
-          src/qtgui/ImageWidget.cpp
-          src/qtgui/NavigationView.cpp
-          src/qtgui/ImageViewWindow.h
-          src/qtgui/ImageViewWindow.cpp
-          src/qtgui/TilePreviewPanel.h
-          src/qtgui/TilePreviewPanel.cpp
-          src/libcolorscreen/render-tile.C
-          src/libcolorscreen/render-scr-detect.C
