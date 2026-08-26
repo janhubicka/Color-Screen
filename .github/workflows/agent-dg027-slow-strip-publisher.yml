@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   publish:
-    runs-on: macos-latest
+    runs-on: ubuntu-24.04-arm
     env:
       SCRIPT_B64: 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
     steps:
@@ -21,7 +21,7 @@ jobs:
       - name: Apply measured source and tracker update
         shell: bash
         run: |
-          printf '%s' "$SCRIPT_B64" | base64 -D | gzip -d > /tmp/apply-dg027.py
+          printf '%s' "$SCRIPT_B64" | base64 -d | gzip -d > /tmp/apply-dg027.py
           python3 /tmp/apply-dg027.py
           git diff --check
           changed="$(git diff --name-only | sort)"
