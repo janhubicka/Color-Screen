@@ -868,6 +868,155 @@ test_finetune_focus_areas ()
 }
 
 bool
+test_weighted_image_layer_capture_transfer ()
+{
+  std::array<sharpen_parameters, 3> capture;
+  for (int c = 0; c < 3; c++)
+    {
+      capture[c].mode = sharpen_parameters::wiener_deconvolution;
+      capture[c].scanner_snr = (luminosity_t)(80 + 40 * c);
+      capture[c].scanner_mtf.model = mtf_model::empirical_fallback;
+      capture[c].scanner_mtf.sensor_fill_factor = 0;
+      capture[c].scanner_mtf.sigma = (luminosity_t)(0.55 + 0.45 * c);
+      capture[c].scanner_mtf.blur_diameter
+          = (luminosity_t)(0.25 + 0.55 * c);
+      capture[c].scanner_mtf_scale = (luminosity_t)0.012345;
+    }
+  sharpen_parameters *channels[3]
+      = { &capture[0], &capture[1], &capture[2] };
+
+  screen source;
+  source.initialize (Paget);
+  screen_filter_source prepared;
+  if (!source.prepare_filter_source (prepared))
+    return false;
+
+  const rgbdata weights = { (luminosity_t)0.19,
+                            (luminosity_t)0.33,
+                            (luminosity_t)0.48 };
+  const double weight_sum
+      = (double)weights.red + (double)weights.green + (double)weights.blue;
+
+  /* Check both the pure forward capture transfer and the linear
+     sharpen-before-mix case used by Wiener deconvolution.  */
+  for (bool anticipate_sharpening : { false, true })
+    {
+      screen combined;
+      screen_filter_profile profile;
+      if (!combined.initialize_with_weighted_capture_transfer (
+              prepared, channels, weights, anticipate_sharpening, false,
+              &profile))
+        {
+          fprintf (stderr,
+                   "Weighted monochrome capture-transfer construction failed\n");
+          return false;
+        }
+      if (profile.screen_forward_ffts != 0
+          || profile.screen_inverse_ffts != 3
+          || profile.empirical_focus_transfer_builds != 3)
+        {
+          fprintf (stderr,
+                   "Weighted transfer used %llu source forward, %llu inverse, "
+                   "and %llu empirical transfer builds\n",
+                   (unsigned long long)profile.screen_forward_ffts,
+                   (unsigned long long)profile.screen_inverse_ffts,
+                   (unsigned long long)profile.empirical_focus_transfer_builds);
+          return false;
+        }
+
+      std::array<std::unique_ptr<screen>, 3> separate;
+      for (int capture_channel = 0; capture_channel < 3; capture_channel++)
+        {
+          std::array<sharpen_parameters, 3> same
+              = { capture[capture_channel], capture[capture_channel],
+                  capture[capture_channel] };
+          sharpen_parameters *same_channels[3]
+              = { &same[0], &same[1], &same[2] };
+          separate[capture_channel] = std::make_unique<screen> ();
+          if (!separate[capture_channel]->initialize_with_sharpen_parameters (
+                  prepared, same_channels, anticipate_sharpening, false))
+            return false;
+        }
+
+      double max_delta = 0;
+      for (int y = 0; y < screen::size; y++)
+        for (int x = 0; x < screen::size; x++)
+          for (int primary = 0; primary < 3; primary++)
+            {
+              double reference = 0;
+              for (int capture_channel = 0; capture_channel < 3;
+                   capture_channel++)
+                reference
+                    += (double)weights[capture_channel]
+                       * separate[capture_channel]->mult[y][x][primary];
+              reference /= weight_sum;
+              max_delta
+                  = std::max (max_delta,
+                              fabs ((double)combined.mult[y][x][primary]
+                                    - reference));
+            }
+      if (max_delta > 2e-6)
+        {
+          fprintf (stderr,
+                   "Weighted Fourier transfer differs from slow per-channel "
+                   "reference by %.12g\n",
+                   max_delta);
+          return false;
+        }
+
+      /* Scaling a one-hot coefficient must not change the transfer.  This
+         connects the general reference directly to the exact one-channel
+         specialization merged in the previous step.  */
+      screen one_hot;
+      const rgbdata green_only = { 0, (luminosity_t)7.25, 0 };
+      if (!one_hot.initialize_with_weighted_capture_transfer (
+              prepared, channels, green_only, anticipate_sharpening, false))
+        return false;
+      luminosity_t delta = 0;
+      if (!one_hot.almost_equal_p (*separate[1], &delta,
+                                   (luminosity_t)2e-7))
+        {
+          fprintf (stderr,
+                   "Weighted one-hot transfer differs from native green by %g\n",
+                   (double)delta);
+          return false;
+        }
+    }
+
+  /* Normalizing the scalar transfer is undefined for no response or a
+     cancelling signed mix, and non-finite weights must never enter FFT state.  */
+  screen invalid;
+  if (invalid.initialize_with_weighted_capture_transfer (
+          prepared, channels, { 0, 0, 0 }, false, false)
+      || invalid.initialize_with_weighted_capture_transfer (
+          prepared, channels, { 1, -1, 0 }, false, false)
+      || invalid.initialize_with_weighted_capture_transfer (
+          prepared, channels, { test_runtime_nan_luminosity (), 0, 1 },
+          false, false))
+    {
+      fprintf (stderr, "Invalid weighted capture coefficients were accepted\n");
+      return false;
+    }
+
+  /* Richardson-Lucy is nonlinear, so only its forward-capture part may use
+     the combined Fourier reference.  */
+  std::array<sharpen_parameters, 3> rl = capture;
+  rl[0].mode = sharpen_parameters::richardson_lucy_deconvolution;
+  rl[0].richardson_lucy_iterations = 3;
+  sharpen_parameters *rl_channels[3] = { &rl[0], &rl[1], &rl[2] };
+  if (invalid.initialize_with_weighted_capture_transfer (
+          prepared, rl_channels, { 1, 0, 0 }, true, false)
+      || !invalid.initialize_with_weighted_capture_transfer (
+          prepared, rl_channels, { 1, 0, 0 }, false, false))
+    {
+      fprintf (stderr, "Weighted transfer mishandled Richardson-Lucy mode\n");
+      return false;
+    }
+
+  return true;
+}
+
+bool
 test_finetune_focus_screen_cache ()
 {
   std::array<sharpen_parameters, 3> sharpen;
@@ -8833,6 +8982,9 @@ main (int argc, char **argv)
     { "finetune_focus_areas",
       "solid focus-area search and diverse-subset tests",
       [] () { return test_finetune_focus_areas (); } },
+    { "weighted_capture_transfer",
+      "weighted monochrome RGB capture-transfer tests",
+      [] () { return test_weighted_image_layer_capture_transfer (); } },
     { "finetune_focus_cache", "exact finetune focus-screen cache tests",
       [] () { return test_finetune_focus_screen_cache (); } },
     { "scanner_blur_correction", "scanner blur correction table tests",

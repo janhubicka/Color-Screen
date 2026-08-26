@@ -15,6 +15,7 @@
 #include <complex>
 #include <math.h>
 #include <memory>
+#include <limits>
 namespace colorscreen
 {
 /* TODO: Work out in what cases using floats is good.  */
@@ -2303,6 +2304,113 @@ screen::initialize_with_sharpen_parameters (
       if (all)
         break;
     }
+  return true;
+}
+
+
+/* Apply a normalized weighted sum of native scanner-channel transfers to all
+   three process-primary spectra in SOURCE.  This models an RGB capture of a
+   single underlying monochrome image layer:
+
+     H_eff(f) = sum_c q_c H_c(f) / sum_c q_c,
+
+   where Q contains the effective scalar capture coefficients (for example
+   mix weight times native-channel gain).  Combining the transfers before the
+   inverse FFT is exactly equivalent to filtering the same scalar signal in
+   each native channel and mixing the results afterwards, while requiring only
+   three inverse FFTs for the process-primary basis.
+
+   This is intentionally not the viewing-filter colour model: no scanner
+   response/process-primary matrix is applied here.  Richardson-Lucy is
+   nonlinear when anticipated and cannot be represented by one H_EFF.  */
+bool
+screen::initialize_with_weighted_capture_transfer (
+    const screen_filter_source &source, sharpen_parameters *capture[3],
+    rgbdata capture_weights, bool anticipate_sharpening, bool parallel,
+    screen_filter_profile *profile)
+{
+  if (!source.m_impl)
+    return false;
+
+  double weight_sum = 0;
+  double weight_scale = 0;
+  for (int c = 0; c < 3; c++)
+    {
+      const double weight = capture_weights[c];
+      if (!my_isfinite (weight))
+        return false;
+      weight_sum += weight;
+      weight_scale += my_fabs (weight);
+      if (weight != 0
+          && (!capture[c]
+              || (anticipate_sharpening
+                  && capture[c]->get_mode ()
+                         == sharpen_parameters::richardson_lucy_deconvolution)))
+        return false;
+    }
+
+  /* A scalar transfer with zero DC response has no meaningful unit-DC
+     normalization.  Reject near-cancellation as well as the exact all-zero
+     case so arbitrary signed mix weights cannot amplify roundoff.  */
+  const double threshold
+      = std::numeric_limits<double>::epsilon ()
+        * std::max (1.0, weight_scale) * 32;
+  if (!my_isfinite (weight_sum) || weight_scale == 0
+      || my_fabs (weight_sum) <= threshold)
+    return false;
+
+  memcpy (add, source.m_impl->add, sizeof (add));
+  auto combined = fft_alloc_complex<screen_fft_t> (
+      screen::size * fft_size);
+  auto channel_filter = fft_alloc_complex<screen_fft_t> (
+      screen::size * fft_size);
+  for (int i = 0; i < screen::size * fft_size; i++)
+    {
+      combined[i][0] = 0;
+      combined[i][1] = 0;
+    }
+
+  for (int c = 0; c < 3; c++)
+    {
+      const screen_fft_t weight
+          = (screen_fft_t)((double)capture_weights[c] / weight_sum);
+      if (weight == 0)
+        continue;
+      sharpen_parameters::sharpen_mode mode;
+      if (!build_periodic_filter (
+              channel_filter.get (), *capture[c], anticipate_sharpening,
+              parallel, true, profile, &mode))
+        return false;
+      assert (mode != sharpen_parameters::richardson_lucy_deconvolution);
+      for (int i = 0; i < screen::size * fft_size; i++)
+        {
+          combined[i][0] += weight * channel_filter[i][0];
+          combined[i][1] += weight * channel_filter[i][1];
+        }
+    }
+
+  /* BUILD_PERIODIC_FILTER gives every contributing channel exact unit DC
+     before FFT normalization.  Renormalize the weighted sum once more to make
+     the same invariant exact after finite-precision accumulation.  */
+  const screen_fft_t data_scale
+      = 1.0 / ((screen_fft_t)screen::size * (screen_fft_t)screen::size);
+  if (!my_isfinite (combined[0][0])
+      || my_fabs (combined[0][0]) < (screen_fft_t)1e-30)
+    return false;
+  const screen_fft_t dc_scale = data_scale / combined[0][0];
+  if (!my_isfinite (dc_scale))
+    return false;
+  if (dc_scale != 1)
+    for (int i = 0; i < screen::size * fft_size; i++)
+      {
+        combined[i][0] *= dc_scale;
+        combined[i][1] *= dc_scale;
+      }
+
+  initialize_with_2D_fft_precomputed<screen_fft_t> (
+      *this, source.m_impl->spectrum, combined.get (), 0, 2);
+  if (profile)
+    profile->screen_inverse_ffts += 3;
   return true;
 }
 
