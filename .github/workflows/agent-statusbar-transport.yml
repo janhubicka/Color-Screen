@@ -1,0 +1,143 @@
+name: Agent status bar patch transport
+
+on:
+  push:
+    branches:
+      - agent/statusbar-transport-macos
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/share-statusbar-per-window
+          fetch-depth: 0
+      - name: Apply shared status bar patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, found {count}: {old[:100]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'src/qtgui/MainWindow.h',
+              'class QDockWidget; // Added\nclass QToolBar;    // Added\nclass QComboBox;   // Added\n',
+              'class QDockWidget; // Added\nclass QToolBar;    // Added\nclass QStatusBar;\nclass QComboBox;   // Added\n')
+          replace_once(
+              'src/qtgui/MainWindow.h',
+              '  QToolBar *workspaceToolBar() const { return m_toolbar; }\n\n  /** Return the document-owned navigation/parameter panel column. */\n',
+              '''  QToolBar *workspaceToolBar() const { return m_toolbar; }\n\n  /** Return the status bar for this presentation's current top-level window.\n\n      All attached document tabs return the enclosing WorkspaceWindow status\n      bar.  A detached document returns its private QMainWindow status bar. */\n  QStatusBar *statusBar() const;\n\n  /** Return the private status bar used only by a detached document window. */\n  QStatusBar *standaloneStatusBar() const;\n\n  /** Route status operations to STATUSBAR while this document is attached.\n      Passing nullptr restores routing to the private detached-window bar. */\n  void setWorkspaceStatusBar(QStatusBar *statusBar);\n\n  /** Return the document-owned navigation/parameter panel column. */\n''')
+          replace_once(
+              'src/qtgui/MainWindow.h',
+              '  QByteArray m_workspaceSplitterState;\n  bool m_workspaceEmbedded = false;\n',
+              '  QByteArray m_workspaceSplitterState;\n  QPointer<QStatusBar> m_workspaceStatusBar;\n  bool m_workspaceEmbedded = false;\n')
+          replace_once(
+              'src/qtgui/MainWindow.cpp',
+              '} // namespace\n\n/** Construct one independent image-document window.\n',
+              '''} // namespace\n\n/** Return the one status bar belonging to the current top-level window. */\nQStatusBar *MainWindow::statusBar() const {\n  return m_workspaceStatusBar ? m_workspaceStatusBar.data()\n                              : QMainWindow::statusBar();\n}\n\n/** Return this document's private status bar, regardless of attachment. */\nQStatusBar *MainWindow::standaloneStatusBar() const {\n  return QMainWindow::statusBar();\n}\n\n/** Share STATUSBAR with every tab in the enclosing workspace window. */\nvoid MainWindow::setWorkspaceStatusBar(QStatusBar *sharedStatusBar) {\n  if (m_workspaceStatusBar.data() == sharedStatusBar)\n    return;\n\n  QStatusBar *localStatusBar = QMainWindow::statusBar();\n  const QString localMessage = localStatusBar->currentMessage();\n  m_workspaceStatusBar = sharedStatusBar;\n  if (sharedStatusBar) {\n    localStatusBar->hide();\n    if (!localMessage.isEmpty())\n      sharedStatusBar->showMessage(localMessage);\n  }\n}\n\n/** Construct one independent image-document window.\n''')
+
+          replace_once(
+              'src/qtgui/ImageViewWindow.h',
+              'class QDockWidget;\nclass QToolBar;\n',
+              'class QDockWidget;\nclass QStatusBar;\nclass QToolBar;\n')
+          replace_once(
+              'src/qtgui/ImageViewWindow.h',
+              '  QToolBar *workspaceToolBar() const { return m_toolbar; }\n\n  /** Hide top-level chrome before this QMainWindow becomes an MDI child. */\n',
+              '''  QToolBar *workspaceToolBar() const { return m_toolbar; }\n\n  /** Return the status bar for this view's current top-level window. */\n  QStatusBar *statusBar() const;\n\n  /** Return the private status bar used only while this view is detached. */\n  QStatusBar *standaloneStatusBar() const;\n\n  /** Route status operations to STATUSBAR while this view is attached. */\n  void setWorkspaceStatusBar(QStatusBar *statusBar);\n\n  /** Hide top-level chrome before this QMainWindow becomes an MDI child. */\n''')
+          replace_once(
+              'src/qtgui/ImageViewWindow.h',
+              '  QWidget *m_documentInspectorHost = nullptr;\n  bool m_workspaceEmbedded = false;\n',
+              '  QWidget *m_documentInspectorHost = nullptr;\n  QPointer<QStatusBar> m_workspaceStatusBar;\n  bool m_workspaceEmbedded = false;\n')
+          replace_once(
+              'src/qtgui/ImageViewWindow.cpp',
+              '} // namespace\n\n/** Construct one secondary, display-only view of DOCUMENT. */\n',
+              '''} // namespace\n\n/** Return the one status bar belonging to the current top-level window. */\nQStatusBar *ImageViewWindow::statusBar() const {\n  return m_workspaceStatusBar ? m_workspaceStatusBar.data()\n                              : QMainWindow::statusBar();\n}\n\n/** Return this view's private status bar, regardless of attachment. */\nQStatusBar *ImageViewWindow::standaloneStatusBar() const {\n  return QMainWindow::statusBar();\n}\n\n/** Share STATUSBAR with every tab in the enclosing workspace window. */\nvoid ImageViewWindow::setWorkspaceStatusBar(QStatusBar *sharedStatusBar) {\n  if (m_workspaceStatusBar.data() == sharedStatusBar)\n    return;\n\n  QStatusBar *localStatusBar = QMainWindow::statusBar();\n  const QString localMessage = localStatusBar->currentMessage();\n  m_workspaceStatusBar = sharedStatusBar;\n  if (sharedStatusBar) {\n    localStatusBar->hide();\n    if (!localMessage.isEmpty())\n      sharedStatusBar->showMessage(localMessage);\n  }\n}\n\n/** Construct one secondary, display-only view of DOCUMENT. */\n''')
+
+          replace_once(
+              'src/qtgui/WorkspaceWindow.cpp',
+              '  document->hide();\n  document->prepareForWorkspaceEmbedding();\n\n  if (QWidget *inspector = document->workspaceInspectorWidget()) {\n',
+              '  document->hide();\n  document->prepareForWorkspaceEmbedding();\n  document->setWorkspaceStatusBar(statusBar());\n\n  if (QWidget *inspector = document->workspaceInspectorWidget()) {\n')
+          replace_once(
+              'src/qtgui/WorkspaceWindow.cpp',
+              '''  QPointer<MainWindow> guardedDocument(document);\n  connect(document->statusBar(), &QStatusBar::messageChanged, this,\n          [this, guardedDocument](const QString &message) {\n            if (!guardedDocument || m_chromeDocument != guardedDocument)\n              return;\n            if (message.isEmpty())\n              statusBar()->clearMessage();\n            else\n              statusBar()->showMessage(message);\n          });\n\n''',
+              '  QPointer<MainWindow> guardedDocument(document);\n')
+          replace_once(
+              'src/qtgui/WorkspaceWindow.cpp',
+              '  view->hide();\n  view->prepareForWorkspaceEmbedding();\n  if (QWidget *inspector = view->workspaceInspectorWidget()) {\n',
+              '  view->hide();\n  view->prepareForWorkspaceEmbedding();\n  view->setWorkspaceStatusBar(statusBar());\n  if (QWidget *inspector = view->workspaceInspectorWidget()) {\n')
+          replace_once(
+              'src/qtgui/WorkspaceWindow.cpp',
+              '''  connect(view->statusBar(), &QStatusBar::messageChanged, this,\n          [this, guardedView](const QString &message) {\n            if (!guardedView || m_chromeView != guardedView)\n              return;\n            if (message.isEmpty())\n              statusBar()->clearMessage();\n            else\n              statusBar()->showMessage(message);\n          });\n\n''',
+              '')
+          replace_once(
+              'src/qtgui/WorkspaceWindow.cpp',
+              '      document->statusBar()->removeWidget(statusWidget);\n',
+              '      document->standaloneStatusBar()->removeWidget(statusWidget);\n')
+          replace_once(
+              'src/qtgui/WorkspaceWindow.cpp',
+              '''\n  const QString message = document->statusBar()->currentMessage();\n  if (message.isEmpty())\n    statusBar()->clearMessage();\n  else\n    statusBar()->showMessage(message);\n''',
+              '')
+          replace_once(
+              'src/qtgui/WorkspaceWindow.cpp',
+              '''      m_workspaceProgressLayout->removeWidget(statusWidget);\n      document->statusBar()->addPermanentWidget(statusWidget, 1);\n      statusWidget->setVisible(!explicitlyHidden);\n    }\n    document->statusBar()->setVisible(showInWindow);\n  }\n\n  document->menuBar()->setVisible(showInWindow);\n  if (m_chromeDocument == document) {\n    statusBar()->clearMessage();\n''',
+              '''      m_workspaceProgressLayout->removeWidget(statusWidget);\n      document->standaloneStatusBar()->addPermanentWidget(statusWidget, 1);\n      statusWidget->setVisible(!explicitlyHidden);\n    }\n    document->standaloneStatusBar()->setVisible(showInWindow);\n  }\n  if (showInWindow)\n    document->setWorkspaceStatusBar(nullptr);\n\n  document->menuBar()->setVisible(showInWindow);\n  if (m_chromeDocument == document) {\n    if (showInWindow)\n      statusBar()->clearMessage();\n''')
+          replace_once(
+              'src/qtgui/WorkspaceWindow.cpp',
+              '''  } else {\n    installDocumentInspector(view->sourceDocument(), view->imageWidget());\n  }\n  const QString message = view->statusBar()->currentMessage();\n  if (message.isEmpty())\n    statusBar()->clearMessage();\n  else\n    statusBar()->showMessage(message);\n  setWindowTitle(view->windowTitle() + tr(" — Color-Screen"));\n''',
+              '''  } else {\n    installDocumentInspector(view->sourceDocument(), view->imageWidget());\n  }\n  setWindowTitle(view->windowTitle() + tr(" — Color-Screen"));\n''')
+          replace_once(
+              'src/qtgui/WorkspaceWindow.cpp',
+              '''  view->menuBar()->setVisible(showInWindow);\n  view->statusBar()->setVisible(showInWindow);\n  if (m_chromeView == view) {\n    statusBar()->clearMessage();\n''',
+              '''  view->menuBar()->setVisible(showInWindow);\n  view->standaloneStatusBar()->setVisible(showInWindow);\n  if (showInWindow)\n    view->setWorkspaceStatusBar(nullptr);\n  if (m_chromeView == view) {\n    if (showInWindow)\n      statusBar()->clearMessage();\n''')
+
+          replace_once(
+              'src/qtgui/main.cpp',
+              '      "Require the active document to use the workspace status bar");\n',
+              '      "Require every attached tab to share the workspace status bar");\n')
+          replace_once(
+              'src/qtgui/main.cpp',
+              '''      WorkspaceWindow *workspace = app.workspaceWindow();\n      MainWindow *document = workspace ? workspace->currentDocument() : nullptr;\n      QStatusBar *workspaceStatus = workspace ? workspace->statusBar() : nullptr;\n      QWidget *progress = document ? document->workspaceStatusWidget() : nullptr;\n      if (!workspaceStatus || !document || !progress ||\n          !workspaceStatus->isAncestorOf(progress) ||\n          document->statusBar()->isVisible()) {\n        qCritical() << "Active document is not using the global status bar";\n        app.exit(11);\n        return;\n      }\n\n      const QString marker = QStringLiteral("workspace-status-smoke");\n      document->statusBar()->showMessage(marker);\n      QCoreApplication::processEvents();\n      if (workspaceStatus->currentMessage() != marker) {\n        qCritical() << "Document status message was not mirrored globally";\n        app.exit(11);\n      }\n      document->statusBar()->clearMessage();\n''',
+              '''      WorkspaceWindow *workspace = app.workspaceWindow();\n      MainWindow *document = workspace ? workspace->currentDocument() : nullptr;\n      QStatusBar *workspaceStatus = workspace ? workspace->statusBar() : nullptr;\n      QWidget *progress = document ? document->workspaceStatusWidget() : nullptr;\n      if (!workspaceStatus || !document || !progress ||\n          !workspaceStatus->isAncestorOf(progress) ||\n          document->statusBar() != workspaceStatus ||\n          document->standaloneStatusBar()->isVisible()) {\n        qCritical() << "Active document is not using the shared window status bar";\n        app.exit(11);\n        return;\n      }\n\n      MainWindow *inactiveDocument = nullptr;\n      for (MainWindow *candidate : app.documentWindows()) {\n        if (!candidate || !workspace->containsDocument(candidate))\n          continue;\n        if (candidate->statusBar() != workspaceStatus ||\n            candidate->standaloneStatusBar()->isVisible()) {\n          qCritical() << "Attached document has a private status bar";\n          app.exit(11);\n          return;\n        }\n        if (candidate != document && !inactiveDocument)\n          inactiveDocument = candidate;\n      }\n      for (ImageViewWindow *view : app.viewWindows()) {\n        if (view && workspace->containsView(view) &&\n            (view->statusBar() != workspaceStatus ||\n             view->standaloneStatusBar()->isVisible())) {\n          qCritical() << "Attached secondary view has a private status bar";\n          app.exit(11);\n          return;\n        }\n      }\n\n      const QString marker = QStringLiteral("workspace-status-smoke");\n      document->statusBar()->showMessage(marker);\n      QCoreApplication::processEvents();\n      if (workspaceStatus->currentMessage() != marker) {\n        qCritical() << "Document status message did not reach shared status bar";\n        app.exit(11);\n        return;\n      }\n\n      if (inactiveDocument) {\n        const QString inactiveMarker =\n            QStringLiteral("workspace-status-inactive-tab-smoke");\n        inactiveDocument->statusBar()->showMessage(inactiveMarker);\n        QCoreApplication::processEvents();\n        if (workspaceStatus->currentMessage() != inactiveMarker) {\n          qCritical() << "Inactive tab did not share the window status bar";\n          app.exit(11);\n          return;\n        }\n      }\n      workspaceStatus->clearMessage();\n''')
+
+          replace_once(
+              '.agents/qtgui.md',
+              '''dock. The workspace also owns the one visible status bar. The active document's\nprogress controls are temporarily moved into it and that document's status\nmessages are mirrored there; inactive documents keep their private status state\nhidden until activated. Inactive documents retain their complete processing and\nundo state.\n''',
+              '''dock. The workspace owns the one status bar for the whole top-level window.\nEvery attached `MainWindow` and `ImageViewWindow` routes `statusBar()` directly\nto that same `QStatusBar`; tabs must not keep private status-message state or\nmirror messages when activation changes. Only detached top-level windows use\ntheir private status bars. The active document's transient progress controls are\ntemporarily moved into the shared status line, while dedicated long-running task\nrows remain in the workspace task strip. Inactive documents retain their complete\nprocessing and undo state.\n''')
+          replace_once(
+              'src/qtgui/WorkspaceWindow.h',
+              '''    presentation: tabs by default, MDI subwindows for tile/cascade layouts, and\n    explicit detachment into normal top-level windows.  The active document\n    supplies the shared menu bar, toolbar, and inspector so document tabs appear\n    directly below the toolbar. */\n''',
+              '''    presentation: tabs by default, MDI subwindows for tile/cascade layouts, and\n    explicit detachment into normal top-level windows.  The active document\n    supplies the shared menu bar, toolbar, and inspector so document tabs appear\n    directly below the toolbar; the shell owns one status bar shared by every\n    attached tab. */\n''')
+          replace_once(
+              'src/qtgui/WorkspaceWindow.h',
+              '''  /** Show DOCUMENT's menus, toolbar, inspector, and transient status as the\n      active workspace chrome. */\n''',
+              '''  /** Show DOCUMENT's menus, toolbar, inspector, and transient progress as the\n      active workspace chrome. */\n''')
+          replace_once(
+              'src/qtgui/WorkspaceWindow.h',
+              '  /** Show VIEW\'s menu, toolbar and status message in the shared shell. */\n',
+              '  /** Show VIEW\'s menu and toolbar in the shared shell. */\n')
+          PY
+
+          git diff --check
+          git diff --stat
+
+          git config user.name "OpenAI"
+          git config user.email "openai@users.noreply.github.com"
+          git add src/qtgui/MainWindow.h src/qtgui/MainWindow.cpp \
+                  src/qtgui/ImageViewWindow.h src/qtgui/ImageViewWindow.cpp \
+                  src/qtgui/WorkspaceWindow.h src/qtgui/WorkspaceWindow.cpp \
+                  src/qtgui/main.cpp .agents/qtgui.md
+          git commit -m "qtgui: share one status bar per workspace window" \
+                     -m "Route statusBar() for every attached document and secondary view directly to the WorkspaceWindow status bar. Keep each QMainWindow's private bar only for detached presentation, and remove the active-tab message mirroring layer so status timers and updates belong to the top-level window rather than a tab." \
+                     -m "Preserve the existing transient-progress reparenting and dedicated long-task strip, and extend the GUI smoke test to verify pointer identity for all attached tabs plus status updates from an inactive document."
+          git push origin HEAD:agent/share-statusbar-per-window
