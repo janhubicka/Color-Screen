@@ -76,6 +76,8 @@ jobs:
           /tmp/tsan-openmp-smoke.cpp -o /tmp/tsan-openmp-smoke
         LD_LIBRARY_PATH=/usr/lib/llvm-18/lib:${LD_LIBRARY_PATH:-} \
           OMP_NUM_THREADS=4 \
+          OMP_TOOL=enabled \
+          OMP_TOOL_LIBRARIES=/usr/lib/llvm-18/lib/libarcher.so \
           TSAN_OPTIONS=halt_on_error=1:ignore_noninstrumented_modules=1:external_symbolizer_path=/usr/bin/llvm-symbolizer-18 \
           /tmp/tsan-openmp-smoke
     - name: Configure with ThreadSanitizer
@@ -94,6 +96,8 @@ jobs:
     - name: Test ThreadSanitizer variant
       env:
         OMP_NUM_THREADS: "4"
+        OMP_TOOL: enabled
+        OMP_TOOL_LIBRARIES: /usr/lib/llvm-18/lib/libarcher.so
         TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:ignore_noninstrumented_modules=1:external_symbolizer_path=/usr/bin/llvm-symbolizer-18
       run: make -j$(nproc) check
     - name: Upload ThreadSanitizer test results
