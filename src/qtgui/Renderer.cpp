@@ -48,6 +48,12 @@ Renderer::enqueueRender(
 
     {
         std::lock_guard<std::mutex> locker(m_mutex);
+        // Snapshot the cached renderer state together with the request.  A
+        // later GUI update must not overtake an already-enqueued frame and mix
+        // parameter generations before the renderer thread consumes its id.
+        request.scrToImg = m_scrToImg;
+        request.scrDetect = m_scrDetect;
+        request.renderType = m_renderType;
         m_pendingRenders.insert_or_assign(reqId, std::move(request));
     }
 
@@ -87,9 +93,6 @@ void Renderer::finishRenderTask()
 void Renderer::render(int reqId)
 {
     RenderRequest request;
-    colorscreen::scr_to_img_parameters scrToImg;
-    colorscreen::scr_detect_parameters scrDetect;
-    colorscreen::render_type_parameters renderType;
 
     {
         std::lock_guard<std::mutex> locker(m_mutex);
@@ -99,9 +102,6 @@ void Renderer::render(int reqId)
 
         request = std::move(it->second);
         m_pendingRenders.erase(it);
-        scrToImg = m_scrToImg;
-        scrDetect = m_scrDetect;
-        renderType = m_renderType;
     }
 
     const double xOffset = request.xOffset;
@@ -111,6 +111,9 @@ void Renderer::render(int reqId)
     const int height = request.height;
     const int coordinateSpace = request.coordinateSpace;
     auto frameParams = std::move(request.frameParams);
+    auto scrToImg = std::move(request.scrToImg);
+    auto scrDetect = std::move(request.scrDetect);
+    auto renderType = std::move(request.renderType);
     auto progress = std::move(request.progress);
     const char *taskName = request.taskName;
 
@@ -132,7 +135,8 @@ void Renderer::render(int reqId)
     runSynchronized(
         [this, reqId, xOffset, yOffset, scale, width, height, coordinateSpace,
          frameParams = std::move(frameParams), progress = std::move(progress),
-         taskName, scrToImg, scrDetect, renderType]() mutable {
+         taskName, scrToImg = std::move(scrToImg),
+         scrDetect = std::move(scrDetect), renderType = std::move(renderType)]() mutable {
             struct CompletionGuard {
                 Renderer *renderer;
                 ~CompletionGuard() { renderer->finishRenderTask(); }
