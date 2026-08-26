@@ -1,6 +1,9 @@
 name: TEMP focus carrier build
 
 on:
+  push:
+    branches:
+      - agent/tmp-focus-carrier-build-base
   pull_request:
     branches:
       - agent/tmp-focus-carrier-build-base
@@ -67,11 +70,11 @@ jobs:
           while read -r lib; do
             test -f "$lib" && cp -L "$lib" focus-cli/lib/
           done </tmp/libs.txt
-          cat >focus-cli/colorscreen <<'EOF'
+          cat >focus-cli/colorscreen <<'WRAPPER'
           #!/bin/sh
           DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
           LD_LIBRARY_PATH="$DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" exec "$DIR/colorscreen.bin" "$@"
-          EOF
+          WRAPPER
           chmod +x focus-cli/colorscreen
           tar czf focus-cli.tar.gz focus-cli
 
