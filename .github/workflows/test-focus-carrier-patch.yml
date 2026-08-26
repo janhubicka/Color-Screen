@@ -33,7 +33,9 @@ jobs:
             '01 0d65721a074723e452d87a73176d1f65cfd9393d' \
             '03 edbfe075b283891dd6be71bf9da9addd493dfa5a' \
             '04 4a956ddb9fbd609ae2feb9d90b069eaf3c4c5911' \
-            '05 d3c0e4012db11d06448d98d8339b4c0b1ddf9e8d'; do
+            '05 d3c0e4012db11d06448d98d8339b4c0b1ddf9e8d' \
+            '06a d2c137459ea0ef35de4eb9a336922f90410699ac' \
+            '06b deb191a0e14bf867342e16ed5e3ff79ccef96b22'; do
             set -- $spec
             test "$(git hash-object agent/focus-carrier-v2-$1.b64)" = "$2"
             cp "agent/focus-carrier-v2-$1.b64" "/tmp/c$1"
@@ -43,27 +45,8 @@ jobs:
           if test "$(git hash-object /tmp/c02a)" = 58b19fd66748455363105fa37311d5a42dbad4cf; then cp /tmp/c02a /tmp/c02;
           elif test "$(git hash-object /tmp/c02b)" = 58b19fd66748455363105fa37311d5a42dbad4cf; then cp /tmp/c02b /tmp/c02;
           else echo 'Neither half of chunk 02 matches' >&2; exit 1; fi
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib
-          data = bytearray(Path('agent/focus-carrier-v2-06.b64').read_bytes())
-          target = '5c85bd61ee75392c3587b0fff72376223a92579d'
-          def blob_sha(b):
-              h = hashlib.sha1(); h.update(b'blob ' + str(len(b)).encode() + b'\0'); h.update(b); return h.hexdigest()
-          if blob_sha(data) != target:
-              alphabet = b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
-              found = None
-              for i, old in enumerate(data):
-                  for c in alphabet:
-                      if c == old: continue
-                      data[i] = c
-                      if blob_sha(data) == target: found = (i, old, c); break
-                  data[i] = old
-                  if found: break
-              if not found: raise SystemExit('chunk 06 is not a one-character transport error')
-              i, old, c = found; data[i] = c; print(f'repaired chunk 06 byte {i}: {chr(old)} -> {chr(c)}')
-          Path('/tmp/c06').write_bytes(data); assert blob_sha(data) == target
-          PY
+          cat /tmp/c06a /tmp/c06b >/tmp/c06
+          test "$(git hash-object /tmp/c06)" = 5c85bd61ee75392c3587b0fff72376223a92579d
           cat /tmp/c00 /tmp/c01 /tmp/c02 /tmp/c03 /tmp/c04 /tmp/c05 /tmp/c06 | base64 -d >/tmp/focus-carrier.patch
           echo '6c20c4d435d8fae1d8d7711de9051d6479a241f025f3b66d1082a3fe27beb306  /tmp/focus-carrier.patch' | sha256sum -c -
 
