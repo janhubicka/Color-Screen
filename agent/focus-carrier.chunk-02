@@ -1,0 +1,175 @@
+der_parameters *rparam, uint64_t flags,
+   return true;
+ }
+ 
++/* Return the process-screen carrier frequency in scan cycles/pixel.  This is
++   the frequency whose contrast most directly controls additive-screen colour
++   separation.  */
++static coord_t
++process_screen_frequency (const scr_to_img_parameters &param,
++                          const image_data &img)
++{
++  if (param.type < 0 || param.type >= max_scr_type)
++    return -1;
++  scr_to_img map;
++  if (!map.set_parameters (param, img))
++    return -1;
++  const coord_t pixel_size
++      = map.pixel_size ({ 0, 0, img.width, img.height });
++  const coord_t frequency = scr_names[param.type].frequency * pixel_size;
++  return my_isfinite (frequency) && frequency > 0 ? frequency : -1;
++}
++
++/* Evaluate the scanner MTF represented by FIT at FREQUENCY.  The physical
++   sigma/defocus decomposition may be weakly identified by a periodic screen,
++   but their combined transfer at this frequency is the quantity needed for
++   restoring screen modulation.  */
++static coord_t
++fit_screen_mtf (const render_parameters &rparam, const image_data &img,
++                uint64_t flags, const finetune_result &fit,
++                coord_t frequency)
++{
++  if (!fit.success || !(frequency > 0) || !my_isfinite (frequency))
++    return -1;
++  mtf_parameters mtf = rparam.sharpen.scanner_mtf;
++  if ((flags & finetune_scanner_mtf_sigma)
++      && my_isfinite (fit.scanner_mtf_sigma)
++      && fit.scanner_mtf_sigma >= 0)
++    mtf.sigma = fit.scanner_mtf_sigma;
++  if (flags & finetune_scanner_mtf_defocus)
++    {
++      if (mtf.simulate_diffraction_p ())
++        {
++          if (!my_isfinite (fit.scanner_mtf_defocus)
++              || fit.scanner_mtf_defocus < 0)
++            return -1;
++          mtf.defocus = fit.scanner_mtf_defocus;
++        }
++      else
++        {
++          if (!my_isfinite (fit.scanner_mtf_blur_diameter)
++              || fit.scanner_mtf_blur_diameter < 0)
++            return -1;
++          mtf.blur_diameter = fit.scanner_mtf_blur_diameter;
++        }
++    }
++  /* RGB finetune uses one achromatic periodic-screen filter at 550 nm.  Match
++     that forward model when reporting its effective carrier MTF.  BW/IR keeps
++     the wavelength from the capture parameters.  */
++  if (!(flags & finetune_bw) && img.has_rgb ())
++    mtf.wavelength = 550;
++  const coord_t value = mtf.system_mtf (frequency);
++  return my_isfinite (value) && value >= 0 ? value : -1;
++}
++
++static bool
++coupled_physical_focus_p (const render_parameters &rparam, uint64_t flags)
++{
++  constexpr uint64_t coupled
++      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
++  return (flags & coupled) == coupled
++         && rparam.sharpen.scanner_mtf.simulate_diffraction_p ();
++}
++
++/* Run the coupled physical fit from more than one useful basin.  The direct
++   zero/near-zero sigma+defocus start is poorly conditioned.  A cheap scalar
++   prefit first measures the amount of screen modulation loss with either a
++   Gaussian or physical-defocus coordinate while verified local phases stay
++   fixed.  The better scalar fit seeds a second coupled fit.  We then start one
++   final full fit (including requested phase refinement) from the better
++   coupled basin.
++
++   This deliberately does not prefer a particular sigma/defocus split: the
++   pixel objective chooses the representation, while callers can compare the
++   resulting effective process-screen MTF directly.  */
++static finetune_result
++multistart_coupled_physical_focus (
++    const render_parameters &rparam, const scr_to_img_parameters &param,
++    const image_data &img, const std::vector<point_t> &locations,
++    const std::vector<finetune_result> &starts,
++    const finetune_parameters &fparams, progress_info *progress)
++{
++  finetune_parameters fixed = fparams;
++  fixed.flags &= ~finetune_position;
++  fixed.flags |= finetune_no_progress_report;
++
++  /* First establish scalar effective-blur seeds.  Gaussian sigma is cheap and
++     can represent arbitrary attenuation at the carrier.  Physical defocus is
++     also tried, using the existing dense interpolation cache when a useful
++     first-lobe range can be derived.  */
++  struct scalar_seed
++  {
++    bool valid = false;
++    finetune_result fit;
++    render_parameters rparam;
++  };
++  scalar_seed best_scalar;
++
++  auto consider_scalar = [&] (finetune_parameters scalar) {
++    finetune_result fit
++        = finetune (rparam, param, img, locations, &starts, scalar, progress);
++    if (!fit.success || !my_isfinite (fit.badness))
++      return;
++    render_parameters seed = rparam;
++    if (!freeze_focus_from_fit (&seed, scalar.flags, fit))
++      return;
++    if (!best_scalar.valid || fit.badness < best_scalar.fit.badness)
++      {
++        best_scalar.valid = true;
++        best_scalar.fit = fit;
++        best_scalar.rparam = seed;
++      }
++  };
++
++  finetune_parameters sigma_only = fixed;
++  sigma_only.flags &= ~finetune_scanner_mtf_defocus;
++  sigma_only.interpolate_scanner_mtf_defocus = false;
++  consider_scalar (sigma_only);
++  if (progress && progress->cancelled ())
++    return finetune_result ();
++
++  finetune_parameters defocus_only = fixed;
++  defocus_only.flags &= ~finetune_scanner_mtf_sigma;
++  const coord_t frequency = process_screen_frequency (param, img);
++  mtf_parameters focus_mtf = rparam.sharpen.scanner_mtf;
++  if (!(fparams.flags & finetune_bw) && img.has_rgb ())
++    focus_mtf.wavelength = 550;
++  coord_t interpolation_max = 0;
++  if (frequency > 0
++      && finetune_useful_defocus_limit (focus_mtf, frequency, (coord_t)0.05,
++                                        (coord_t)20, &interpolation_max))
++    {
++      defocus_only.interpolate_scanner_mtf_defocus = true;
++      defocus_only.scanner_mtf_defocus_interpolation_max = interpolation_max;
++      defocus_only.scanner_mtf_defocus_interpolation_nodes
++          = std::max (17, std::min (33,
++                  defocus_only.scanner_mtf_defocus_interpolation_nodes));
++    }
++  consider_scalar (defocus_only);
++  if (progress && progress->cancelled ())
++    return finetune_result ();
++
++  auto coupled_from = [&] (const render_parameters &seed) {
++    return finetune (seed, param, img, locations, &starts, fixed, progress);
++  };
++
++  finetune_result direct = coupled_from (rparam);
++  render_parameters best_seed = rparam;
++  finetune_result best = direct;
++  bool have_best = direct.success && my_isfinite (direct.badness);
++  if (have_best)
++    freeze_focus_from_fit (&best_seed, fixed.flags, direct);
++
++  if (best_scalar.valid && !(progress && progress->cancelled ()))
++    {
++      finetune_result seeded = coupled_from (best_scalar.rparam);
++      if (seeded.success && my_isfinite (seeded.badness)
++          && (!have_best || seeded.badness < best.badness))
++        {
++          have_best = true;
++          best = seeded;
++          best_seed = best_scalar.rparam;
++          freeze_focus_from_fit (&best_seed, fixed.flags, seeded);
++        }
++    }
++  if (!have_best || (progres
