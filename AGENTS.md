@@ -65,6 +65,56 @@ The project uses GitHub Actions for automated testing. Workflows are defined in 
 - **macOS**: Apple Silicon and Intel builds.
 - **Windows**: MSYS2/MinGW-w64 builds.
 
+#### Selecting CI on agent pull requests
+
+Pull requests run the full CI set by default. For a focused iteration on a
+same-repository branch, put one or more CI selectors in the pull-request body.
+As soon as any `[ci:...]` token is present, the primary PR workflows run only
+the matching lanes. Fork pull requests ignore selectors and always run full CI.
+
+Workflow selectors:
+
+- `[ci:all]` - explicitly run every primary CI workflow.
+- `[ci:ubuntu]` - all Ubuntu build, distcheck, and checking jobs.
+- `[ci:macos]` - the regular macOS build/package/checking workflow.
+- `[ci:windows]` - the GCC/MSYS2 Windows build matrix.
+- `[ci:windows-clang]` - the Clang/MSYS2 Windows build matrix.
+- `[ci:sanitizers]` - all dedicated sanitizer jobs.
+
+For narrower Ubuntu or sanitizer work, use:
+
+- `[ci:ubuntu-build]`, `[ci:ubuntu-distcheck]`, or
+  `[ci:ubuntu-checking]`.
+- `[ci:tsan]`, `[ci:macos-sanitizers]`, or `[ci:windows-asan]`.
+
+Selectors can be combined. For example, a PR body containing
+
+```text
+[ci:ubuntu-checking]
+[ci:windows-asan]
+```
+
+runs only the Ubuntu ASan/UBSan checking matrix and the Windows ASan job from
+the primary PR workflows. The Ubuntu CI-image workflow remains controlled by
+its own narrow path filters.
+
+Selectors apply only to `pull_request` events. Pushes to `main` and release
+branches still run their normal complete workflows. The main platform
+workflows also support `workflow_dispatch`; Ubuntu and the sanitizer workflow
+provide boolean inputs for selecting their major job groups when running
+manually.
+
+Use focused selectors while diagnosing a platform-specific failure or when the
+user explicitly wants a narrow CI run. Before requesting merge, normally make
+sure the final head revision has had full CI coverage: remove the selectors
+before the final PR synchronization, or manually run all skipped workflows.
+Do not invent selector names: an unknown `[ci:...]` token still activates
+selective mode and can therefore skip every primary job on a same-repository PR.
+
+PR workflows also use concurrency cancellation. A new commit to the same PR
+cancels older in-progress/queued runs of that workflow; do not rely on results
+from a superseded run.
+
 ## Agent container build and test setup
 
 The ChatGPT/agent execution container is normally Debian 13 (trixie), amd64.

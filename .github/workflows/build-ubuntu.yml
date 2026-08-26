@@ -5,10 +5,33 @@ on:
     branches: [ "main", "v1-branch", "Kimrova-bachelorRelease" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      build:
+        description: Run the optimized amd64/arm64 build matrix
+        required: true
+        default: true
+        type: boolean
+      distcheck:
+        description: Run distcheck and source tarball validation
+        required: true
+        default: true
+        type: boolean
+      checking:
+        description: Run the ASan/UBSan checking matrix
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
   packages: read
+
+# New pushes to a PR supersede its older CI run. Keep push/manual runs
+# independent so release/main builds are never cancelled by this policy.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   LC_ALL: C.UTF-8
@@ -23,6 +46,14 @@ env:
 
 jobs:
   build:
+    if: >-
+      (github.event_name != 'workflow_dispatch' || inputs.build) &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name != github.repository ||
+       !contains(github.event.pull_request.body, '[ci:') ||
+       contains(github.event.pull_request.body, '[ci:all]') ||
+       contains(github.event.pull_request.body, '[ci:ubuntu]') ||
+       contains(github.event.pull_request.body, '[ci:ubuntu-build]'))
     strategy:
       fail-fast: false
       matrix:
@@ -90,6 +121,14 @@ jobs:
       run: ccache --show-stats
 
   distcheck:
+    if: >-
+      (github.event_name != 'workflow_dispatch' || inputs.distcheck) &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name != github.repository ||
+       !contains(github.event.pull_request.body, '[ci:') ||
+       contains(github.event.pull_request.body, '[ci:all]') ||
+       contains(github.event.pull_request.body, '[ci:ubuntu]') ||
+       contains(github.event.pull_request.body, '[ci:ubuntu-distcheck]'))
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
@@ -135,6 +174,14 @@ jobs:
       run: ccache --show-stats
 
   checking:
+    if: >-
+      (github.event_name != 'workflow_dispatch' || inputs.checking) &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name != github.repository ||
+       !contains(github.event.pull_request.body, '[ci:') ||
+       contains(github.event.pull_request.body, '[ci:all]') ||
+       contains(github.event.pull_request.body, '[ci:ubuntu]') ||
+       contains(github.event.pull_request.body, '[ci:ubuntu-checking]'))
     strategy:
       fail-fast: false
       matrix:
