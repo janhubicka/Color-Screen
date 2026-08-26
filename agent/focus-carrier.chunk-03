@@ -1,0 +1,165 @@
+s && progress->cancelled ()))
++    return best;
++
++  /* Re-enable any requested local phase refinement only after the global MTF
++     basin is established.  If the larger simplex fails or numerically walks to
++     a worse objective, the fixed-phase solution remains a valid joint fit.  */
++  finetune_result full
++      = finetune (best_seed, param, img, locations, &starts, fparams, progress);
++  if (full.success && my_isfinite (full.badness)
++      && full.badness <= best.badness * (coord_t)1.002)
++    return full;
++  return best;
++}
++
+ } // namespace
+ 
+ bool
+@@ -232,25 +418,6 @@ finetune_analyze_focus_areas (
+       return false;
+     }
+ 
+-  /* Periodic focus areas constrain the combined scanner transfer, but the
+-     residual Gaussian sigma and physical defocus can compensate for each
+-     other at the few harmonics that remain measurable in a real capture.
+-     A coupled fit can therefore report optimizer initialization rather than
+-     a separately identified physical decomposition.  Require one coordinate
+-     to be calibrated/fixed and fit only the other.  */
+-  constexpr uint64_t coupled_physical_focus
+-      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+-  if ((fparams.flags & coupled_physical_focus) == coupled_physical_focus
+-      && rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
+-    {
+-      set_analysis_error (
+-          result,
+-          "physical scanner MTF sigma and defocus are not separately "
+-          "identifiable from periodic focus areas; fix/calibrate one and "
+-          "optimize only the other");
+-      return false;
+-    }
+-
+   if (!finetune_select_focus_areas (candidates, analysis_parameters.selection,
+                                     &result->selected,
+                                     &result->color_volume))
+@@ -292,8 +459,12 @@ finetune_analyze_focus_areas (
+       starts.push_back (candidates[index].fit);
+     }
+ 
+-  result->joint_fit
+-      = finetune (rparam, param, img, locations, &starts, fparams, progress);
++  if (coupled_physical_focus_p (rparam, fparams.flags))
++    result->joint_fit = multistart_coupled_physical_focus (
++        rparam, param, img, locations, starts, fparams, progress);
++  else
++    result->joint_fit
++        = finetune (rparam, param, img, locations, &starts, fparams, progress);
+   if (!result->joint_fit.success)
+     {
+       result->err = "joint focus-area fit failed";
+@@ -302,6 +473,10 @@ finetune_analyze_focus_areas (
+       return false;
+     }
+ 
++  result->screen_frequency = process_screen_frequency (param, img);
++  result->joint_screen_mtf = fit_screen_mtf (
++      rparam, img, fparams.flags, result->joint_fit, result->screen_frequency);
++
+   if (!analysis_parameters.leave_one_out)
+     {
+       result->success = true;
+@@ -322,8 +497,12 @@ finetune_analyze_focus_areas (
+             subset_starts.push_back (starts[i]);
+           }
+ 
+-      finetune_result fit = finetune (rparam, param, img, subset_locations,
+-                                     &subset_starts, fparams, progress);
++      render_parameters leave_one_out_rparam = rparam;
++      freeze_focus_from_fit (&leave_one_out_rparam, fparams.flags,
++                             result->joint_fit);
++      finetune_result fit = finetune (leave_one_out_rparam, param, img,
++                                     subset_locations, &subset_starts, fparams,
++                                     progress);
+       result->leave_one_out_fits.push_back (std::move (fit));
+       if (!result->leave_one_out_fits.back ().success)
+         {
+@@ -411,6 +590,33 @@ finetune_analyze_focus_areas (
+         }
+     }
+ 
++  if (result->joint_screen_mtf >= 0 && !result->leave_one_out_fits.empty ())
++    {
++      coord_t min_mtf = std::numeric_limits<coord_t>::max ();
++      coord_t max_mtf = -std::numeric_limits<coord_t>::max ();
++      coord_t max_delta = 0;
++      bool valid = true;
++      for (const finetune_result &fit : result->leave_one_out_fits)
++        {
++          const coord_t mtf = fit_screen_mtf (
++              rparam, img, fparams.flags, fit, result->screen_frequency);
++          if (!(mtf >= 0) || !my_isfinite (mtf))
++            {
++              valid = false;
++              break;
++            }
++          min_mtf = std::min (min_mtf, mtf);
++          max_mtf = std::max (max_mtf, mtf);
++          max_delta = std::max (
++              max_delta, (coord_t)std::fabs (mtf - result->joint_screen_mtf));
++        }
++      if (valid)
++        {
++          result->leave_one_out_screen_mtf_span = max_mtf - min_mtf;
++          result->leave_one_out_screen_mtf_max_delta = max_delta;
++        }
++    }
++
+   coord_t joint_focus;
+   if (focus_scalar (rparam, fparams.flags, result->joint_fit, &joint_focus))
+     {
+diff --git a/src/libcolorscreen/include/focus-analysis.h b/src/libcolorscreen/include/focus-analysis.h
+index 07f7e54..af2501f 100644
+--- a/src/libcolorscreen/include/focus-analysis.h
++++ b/src/libcolorscreen/include/focus-analysis.h
+@@ -53,6 +53,17 @@ struct finetune_focus_analysis_result
+   std::vector<coord_t> held_out_relative_badness;
+   coord_t held_out_max_relative_badness = -1;
+ 
++  /* Effective scanner MTF at the process-screen carrier frequency.  This is
++     the quantity focus-area analysis ultimately needs for restoring screen
++     modulation during colour recovery.  SCREEN_FREQUENCY is in cycles per
++     scan pixel.  JOINT_SCREEN_MTF and leave-one-out diagnostics are fractions
++     in 0..1.  They are available for scanner-MTF fits even when sigma and
++     defocus are both active and therefore not separately identifiable.  */
++  coord_t screen_frequency = -1;
++  coord_t joint_screen_mtf = -1;
++  coord_t leave_one_out_screen_mtf_span = -1;
++  coord_t leave_one_out_screen_mtf_max_delta = -1;
++
+   /* Stability of the active scalar focus/blur parameter.  These fields stay
+      negative when FINETUNE_PARAMETERS does not optimize exactly one supported
+      scalar focus/blur parameter or when leave-one-out checking is disabled.
+diff --git a/src/qtgui/MainWindow.cpp b/src/qtgui/MainWindow.cpp
+index 07e1a20..2ac6e42 100644
+--- a/src/qtgui/MainWindow.cpp
++++ b/src/qtgui/MainWindow.cpp
+@@ -5977,21 +5977,6 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
+     return;
+   }
+ 
+-  const uint64_t coupledPhysicalFocus
+-      = colorscreen::finetune_scanner_mtf_sigma
+-      | colorscreen::finetune_scanner_mtf_defocus;
+-  if ((flags & coupledPhysicalFocus) == coupledPhysicalFocus
+-      && m_rparams.sharpen.scanner_mtf.simulate_diffraction_p()) {
+-    QMessageBox::information(
+-        this, tr("Focus analysis areas"),
+-        tr("Residual sigma and physical defocus are not separately "
+-           "identifiable from periodic focus areas. Fix or calibrate one "
+-           "and optimize only the other. Usually sigma is calibrated from "
+-           "a slanted-edge MTF measurement and only Defocus is enabled "
+-           "here."));
+-    return;
+-  }
+-
+   m_focusAreaAnalysisRunning = true;
+   if (m_sharpnessPane
