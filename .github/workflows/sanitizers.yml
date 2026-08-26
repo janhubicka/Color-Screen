@@ -89,14 +89,23 @@ jobs:
       run: make -j$(nproc)
 
     - name: Qt GUI smoke test (ThreadSanitizer)
+      shell: bash
       env:
         OMP_NUM_THREADS: "4"
         OMP_TOOL: enabled
         OMP_TOOL_LIBRARIES: /usr/lib/llvm-18/lib/libarcher.so
         TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:ignore_noninstrumented_modules=1:external_symbolizer_path=/usr/bin/llvm-symbolizer-18
       run: |
+        set -o pipefail
         top_builddir="$PWD" srcdir="$PWD/testsuite" \
-          sh testsuite/qt-tsan-smoke-probe.test
+          sh testsuite/qt-tsan-smoke-probe.test 2>&1 | tee tsan-gui-smoke.log
+
+    - name: Upload GUI ThreadSanitizer smoke log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: tsan-gui-smoke-log
+        path: tsan-gui-smoke.log
 
     - name: Test ThreadSanitizer variant
       env:
