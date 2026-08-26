@@ -202,6 +202,63 @@ bool confirm_strip(const color_class_map *color_map, coord_t x, coord_t y,
   return true;
 }
 
+/* Confirm a predicted strip from continuous adjusted color when the hard
+   class-map component test fails.  Geometry already fixes the strip position
+   and direction, so compare the expected dye fraction at three points along
+   the strip with the same samples on the two neighboring rows.  This fallback
+   does not search or recolor the class map.  The caller additionally requires
+   the destination square patch to pass fast geometric confirmation before the
+   flood frontier can grow through this softer observation.  */
+static bool
+confirm_strip_color (const render_scr_detect *render, point_t coordinate1,
+                     point_t coordinate2, coord_t x, coord_t y,
+                     scr_detect::color_class c, luminosity_t min_contrast,
+                     int *priority)
+{
+  luminosity_t inner = 0;
+  luminosity_t outer1 = 0;
+  luminosity_t outer2 = 0;
+  const coord_t outer_offset = (coord_t)3 / 8;
+  for (int i = -1; i <= 1; i++)
+    {
+      coord_t along = (coord_t)i / 4;
+      point_t center = { x + along * coordinate1.x,
+                         y + along * coordinate1.y };
+      point_t p1 = { center.x - outer_offset * coordinate2.x,
+                     center.y - outer_offset * coordinate2.y };
+      point_t p2 = { center.x + outer_offset * coordinate2.x,
+                     center.y + outer_offset * coordinate2.y };
+      /* The hard class map is pixel based too.  Use nearest pixels here so the
+         fast fallback does not introduce a second interpolation model.  */
+      center.x = my_floor (center.x + (coord_t)0.5);
+      center.y = my_floor (center.y + (coord_t)0.5);
+      p1.x = my_floor (p1.x + (coord_t)0.5);
+      p1.y = my_floor (p1.y + (coord_t)0.5);
+      p2.x = my_floor (p2.x + (coord_t)0.5);
+      p2.y = my_floor (p2.y + (coord_t)0.5);
+      rgbdata ci = render->get_normalized_pixel_img (center);
+      rgbdata c1 = render->get_normalized_pixel_img (p1);
+      rgbdata c2 = render->get_normalized_pixel_img (p2);
+      inner += ci[(int)c];
+      outer1 += c1[(int)c];
+      outer2 += c2[(int)c];
+    }
+  inner /= 3;
+  luminosity_t outer = std::max (outer1, outer2) / 3;
+  outer = std::max (outer, (luminosity_t)0.00001);
+  if (!(inner > outer * min_contrast))
+    return false;
+  if (inner > outer * 8 * min_contrast)
+    *priority = 3;
+  else if (inner > outer * 4 * min_contrast)
+    *priority = 2;
+  else if (inner > outer * 2 * min_contrast)
+    *priority = 1;
+  else
+    *priority = 0;
+  return true;
+}
+
 const int npatches = 5;
 
 /* Image-space center of one classified screen patch.  */
@@ -1255,7 +1312,8 @@ static solver_parameters::point_color diagonal_coordinates_to_color(int x,
    Return null when the candidate cannot cover the required screen area
    consistently.  */
 std::unique_ptr<screen_map> flood_fill(
-    FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t greeny,
+    FILE *report_file, bool slow, bool fast, bool soft_strip_color,
+    coord_t greenx, coord_t greeny,
     const scr_to_img_parameters &param, const image_data &img,
     const render_scr_detect *render, const color_class_map *color_map,
     solver_parameters *sparam, bitmap_2d *visited, int *npatches,
@@ -1421,21 +1479,37 @@ std::unique_ptr<screen_map> flood_fill(
       // search range should be 1/2 but 1/3 seems to work better in
       // practice. Maybe it is because we look into orthogonal bounding
       // box of the area we really should compute.
+#define fpatch(x, y, t, priority)                                              \
+  (fast && confirm_patch(report_file, color_map, x, y, t, min_patch_size,      \
+                         max_patch_size, max_distance, &ix, &iy, &priority,    \
+                         visited))
+#define spatch(x, y, t, priority)                                              \
+  (slow && confirm(render, param.coordinate1, param.coordinate2, x, y, t,      \
+                   color_map->width, color_map->height, max_distance, &ix,     \
+                   &iy, &priority, 1.0f / 3.0f, 0.5f, 0.5f, false, false,      \
+                   dsparams->min_patch_contrast))
 #define cpatch(x, y, t, priority)                                              \
-  ((fast && confirm_patch(report_file, color_map, x, y, t, min_patch_size,     \
-                          max_patch_size, max_distance, &ix, &iy, &priority,   \
-                          visited)) ||                                         \
-   (slow && confirm(render, param.coordinate1, param.coordinate2, x, y, t,     \
-                    color_map->width, color_map->height, max_distance, &ix,    \
-                    &iy, &priority, 1.0f / 3.0f, 0.5f, 0.5f, false, false,     \
-                    dsparams->min_patch_contrast)))
-#define cstrip(x, y, t, priority)                                              \
-  ((fast &&                                                                    \
-    confirm_strip(color_map, x, y, t, min_patch_size, &priority, visited)) ||  \
-   (slow && confirm(render, param.coordinate1, param.coordinate2, x, y, t,     \
-                    color_map->width, color_map->height, max_distance, &ix,    \
-                    &iy, &priority, 1.0f / 3.0f, 0.5f, 0.5f, true, false,      \
-                    dsparams->min_patch_contrast)))
+  (fpatch(x, y, t, priority) || spatch(x, y, t, priority))
+#define hstrip(x, y, t, priority)                                              \
+  (fast && confirm_strip(color_map, x, y, t, min_patch_size, &priority,        \
+                         visited))
+#define sstrip(x, y, t, priority)                                              \
+  (slow && confirm(render, param.coordinate1, param.coordinate2, x, y, t,      \
+                   color_map->width, color_map->height, max_distance, &ix,     \
+                   &iy, &priority, 1.0f / 3.0f, 0.5f, 0.5f, true, false,       \
+                   dsparams->min_patch_contrast))
+#define softstrip(x, y, t, priority)                                           \
+  (fast && soft_strip_color &&                                                 \
+   confirm_strip_color(render, param.coordinate1, param.coordinate2, x, y, t,  \
+                       dsparams->min_patch_contrast, &priority))
+/* Preserve the historical hard-strip control flow.  A hard strip remains
+   decisive.  Only a missing hard strip may use continuous color, and that
+   route must also confirm the destination square through the fast path.  */
+#define crow(sx, sy, px, py, t, pt, priority, priority2)                       \
+  (hstrip(sx, sy, t, priority)                                                 \
+       ? cpatch(px, py, pt, priority2)                                         \
+       : ((softstrip(sx, sy, t, priority) && fpatch(px, py, pt, priority2)) || \
+          (sstrip(sx, sy, t, priority) && cpatch(px, py, pt, priority2))))
       if (!map->known_p({e.scr_x - 1, e.scr_y}) &&
           cpatch(e.img_x - param.coordinate1.x / 2,
                  e.img_y - param.coordinate1.y / 2,
@@ -1455,27 +1529,34 @@ std::unique_ptr<screen_map> flood_fill(
         nfound++;
       }
       if (!map->known_p({e.scr_x, e.scr_y - 1}) &&
-          cstrip(e.img_x - param.coordinate2.x / 2,
-                 e.img_y - param.coordinate2.y / 2, my_red, priority) &&
-          cpatch(e.img_x - param.coordinate2.x, e.img_y - param.coordinate2.y,
-                 (e.scr_x & 1) ? my_blue : my_green, priority2)) {
+          crow(e.img_x - param.coordinate2.x / 2,
+               e.img_y - param.coordinate2.y / 2,
+               e.img_x - param.coordinate2.x, e.img_y - param.coordinate2.y,
+               my_red, (e.scr_x & 1) ? my_blue : my_green, priority,
+               priority2)) {
         map->safe_set_coord({e.scr_x, e.scr_y - 1}, {ix, iy});
         queue.insert((struct queue_entry){e.scr_x, e.scr_y - 1, ix, iy},
                      std::min(priority, priority2));
         nfound++;
       }
       if (!map->known_p({e.scr_x, e.scr_y + 1}) &&
-          cstrip(e.img_x + param.coordinate2.x / 2,
-                 e.img_y + param.coordinate2.y / 2, my_red, priority) &&
-          cpatch(e.img_x + param.coordinate2.x, e.img_y + param.coordinate2.y,
-                 (e.scr_x & 1) ? my_blue : my_green, priority2)) {
+          crow(e.img_x + param.coordinate2.x / 2,
+               e.img_y + param.coordinate2.y / 2,
+               e.img_x + param.coordinate2.x, e.img_y + param.coordinate2.y,
+               my_red, (e.scr_x & 1) ? my_blue : my_green, priority,
+               priority2)) {
         map->safe_set_coord({e.scr_x, e.scr_y + 1}, {ix, iy});
         queue.insert((struct queue_entry){e.scr_x, e.scr_y + 1, ix, iy},
                      std::min(priority, priority2));
         nfound++;
       }
-#undef cstrip
+#undef crow
+#undef softstrip
+#undef sstrip
+#undef hstrip
 #undef cpatch
+#undef spatch
+#undef fpatch
     } else {
       /* Blue patches are smaller.  */
       int blue_min_patch_size = (min_patch_size + 1) / 2;
@@ -2050,8 +2131,11 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
                 stage_start = stats.start_timer();
                 smap =
                     flood_fill(report_file, dsparams->slow_floodfill,
-                               dsparams->fast_floodfill, sparam.points[0].img.x,
-                               sparam.points[0].img.y, param, img, render.get(),
+                               dsparams->fast_floodfill,
+                               !(dparam.sharpen_radius > 0
+                                 && dparam.sharpen_amount > 0),
+                               sparam.points[0].img.x, sparam.points[0].img.y,
+                               param, img, render.get(),
                                this_cmap, NULL /*sparam*/, &visited,
                                &ret.patches_found, dsparams, progress,
                                &flood_failure);

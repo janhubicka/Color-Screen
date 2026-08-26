@@ -130,7 +130,7 @@ classified-patch diagnostics now have defined predicted center values.
 
 **Severity:** high
 
-**Status:** partially fixed by DG-025; broader class-map continuity remains open
+**Status:** partially fixed by DG-025 and DG-026; broader class-map continuity remains open
 
 `find_patch()` uses eight-connected equality in the thresholded color-class
 map.  Blur can join neighboring elements diagonally, split one element into
@@ -170,6 +170,48 @@ much slower by expanding the slow-confirmation frontier.  A one-pixel same-class
 seed search and a conservative unknown-hole rule recovered little coverage and
 added work.  The geometry-conditioned fragment rule is the first tested variant
 that improves both coverage and normal fast+slow runtime.
+
+### DG-026 — hard strip classes discard useful geometric color evidence
+
+**Severity:** high robustness/performance
+
+**Status:** fixed for unsharpened Dufay-like flood fill
+
+The hard color map deliberately favors purity: after scanner colors are mapped
+into the optimized three-dye coordinates, `classify_adjusted_color()` assigns a
+class only when one coordinate exceeds the sum of the other two times
+`min_ratio` (normally 1).  This gives clean connected components, but a blurred
+narrow strip can become `unknown` even when its expected dye is still clearly
+stronger at the strip position.
+
+Do not globally loosen this purity gate.  On NGS00428 Tile05 at detector mask
+0/0, reducing `min_ratio` to 0.9 improved fast-only screen coverage from 79.01%
+to 81.81%, and 0.8 reached 84.03%; lower values expanded the search sharply.
+The 0.8 result is essentially the same coverage reached by the local strip
+fallback, but it changes every pixel in the component graph and therefore has a
+substantially larger false-positive and performance surface.
+
+Fast Dufay-like row growth now keeps the hard component test as its first path.
+Only when that strip component is absent, and only when legacy detector
+sharpening is disabled, it samples the continuous normalized dye fraction at
+three positions along the already predicted strip and at corresponding points
+on both neighboring rows.  The expected dye must beat the stronger neighboring
+row by `min_patch_contrast`.  Even then, the row is accepted through this soft
+strip observation only if the destination square patch passes the existing fast
+geometric component confirmation.  A failed soft observation falls through to
+the historical slow image-domain confirmation when that path is enabled.
+
+This keeps the color map itself unchanged and prevents soft strip evidence from
+opening a slow-confirmation frontier by itself.  It also makes the compatibility
+behavior explicit: any active legacy preclassification unsharp mask disables
+the new fallback, so the normal 2/3 path follows the historical control flow.
+
+On the same optimized local build, NGS00428 Tile05 at 0/0 with fast-only flood
+fill improves from 79.01% screen coverage / 1,726,273 patches to 84.00% /
+1,835,339 patches.  Tile01 moves only from 62.99% / 1,359,400 to 63.58% /
+1,372,414, preserving the real raster-free corner.  With the historical 2/3
+mask, Tile01 remains exactly 93.46% / 2,040,920 patches before and after the
+change because the fallback is disabled.
 
 ### DG-010 — predicted patch lookup samples only one rounded pixel
 
@@ -489,6 +531,14 @@ falls 11.7%; Tile01 preserves the real raster-free border while flood time falls
 not recover the remaining Tile05 coverage gap or the strip/unknown-pixel part of
 DG-009.
 
+DG-026 then isolates the strip part without changing the global hard class map.
+Fast-only 0/0 detection on Tile05 rises from 79.01% to 84.00% screen coverage;
+Tile01 changes only from 62.99% to 63.58%.  A global `min_ratio` experiment
+reached similar Tile05 coverage at 0.8, but because it changes the entire
+component graph it is not adopted.  The remaining gap is therefore primarily
+about square-patch/unknown continuity and the quality/cost of the slow fallback,
+not a reason to make all hard pixel classes less selective.
+
 The corpus should contain, for every available screen family:
 
 - sharp scans that currently succeed, including rotations and perspective;
@@ -527,8 +577,9 @@ heuristic becomes the default:
 
 1. Expand DG-019 across Batch 08 with `testsuite/benchmark-screen-detection.py`,
    including representative negative/no-screen images and repeated timing runs.
-2. Continue DG-009 on the remaining unknown-pixel and strip-fragmentation gap;
-   DG-025 handles only geometry-consistent small square-patch fragments.
+2. Continue DG-009 on remaining square-patch/unknown continuity.  DG-025 handles
+   geometry-consistent small square fragments and DG-026 handles soft Dufay-like
+   strip evidence without globally relaxing the hard color map.
 3. Revisit the bounded neighborhood search in DG-010 only when a real scan
    still fails at a correctly rounded predicted center.
 4. Introduce robust partial-grid scoring (DG-011) if isolated missing elements
