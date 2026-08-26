@@ -1,0 +1,171 @@
++  std::array<sharpen_parameters, 3> sharpen;
++  sharpen_parameters *channels[3]
++      = { &sharpen[0], &sharpen[1], &sharpen[2] };
++  for (int c = 0; c < 3; c++)
++    {
++      sharpen[c].mode = sharpen_parameters::none;
++      sharpen[c].scanner_mtf = *truth_mtf;
++      sharpen[c].scanner_mtf_scale = pixel_size;
++    }
++  if (!blurred.initialize_with_sharpen_parameters (source, channels, false,
++                                                   false))
++    return false;
++
++  for (int y = 0; y < height; y++)
++    for (int x = 0; x < width; x++)
++      {
++        const int tileid = std::min (x / (width / regions), regions - 1);
++        const rgbdata screen_value = blurred.interpolated_mult (
++            map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 }));
++        luminosity_t value
++            = screen_value.red * truth[tileid].red
++              + screen_value.green * truth[tileid].green
++              + screen_value.blue * truth[tileid].blue;
++        value = std::clamp (value, (luminosity_t)0, (luminosity_t)1);
++        image->put_pixel (
++            x, y, (image_data::gray)(value * 65535 + (luminosity_t)0.5));
++      }
+ 
++  candidates->clear ();
++  for (int tileid = 0; tileid < regions; tileid++)
++    {
++      finetune_focus_area_candidate candidate;
++      candidate.center = locations[tileid];
++      candidate.mean_color = { 0.4, 0.4, 0.4 };
++      candidate.search_score = (coord_t)tileid * (coord_t)0.001;
++      candidate.fit.success = true;
++      candidate.fit.badness = (coord_t)0.01;
++      candidate.fit.contrast = (coord_t)0.2;
++      candidate.fit.color = truth[tileid];
++      candidate.fit.screen_coord_adjust = { 0, 0 };
++      candidate.fit.emulsion_coord_adjust = { 0, 0 };
++      candidate.fit.scanner_mtf_sigma = 0;
++      candidate.fit.scanner_mtf_defocus = 0;
++      candidates->push_back (candidate);
++    }
++  return true;
++}
++
++/* A physical (sigma,defocus) cold start must no longer be rejected.  Scalar
++   continuation should get the coupled fit into a basin whose process-screen
++   MTF is close to the transfer used to synthesize the tiles.  The exact split
++   between sigma and defocus is intentionally not asserted.  */
++static bool
++test_coupled_physical_focus_cold_start ()
++{
+   image_data image;
+   scr_to_img_parameters geometry;
+   std::vector<finetune_focus_area_candidate> candidates;
++  mtf_parameters truth_mtf;
++  if (!build_bw_physical_focus_fixture (&image, &geometry, &candidates,
++                                        &truth_mtf))
++    return false;
++
++  render_parameters rparam;
++  rparam.gamma = 1;
++  rparam.sharpen.mode = sharpen_parameters::none;
++  rparam.sharpen.scanner_mtf = truth_mtf;
++  rparam.sharpen.scanner_mtf.sigma = 0;
++  rparam.sharpen.scanner_mtf.defocus = 0;
++  rparam.sharpen.scanner_mtf_scale = 1;
++
++  finetune_parameters fparam;
++  fparam.range = 2;
++  fparam.ignore_outliers = 0;
++  fparam.flags = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus
++                 | finetune_bw | finetune_no_normalize
++                 | finetune_no_data_collection;
++
+   finetune_focus_analysis_parameters analysis;
++  analysis.selection.min_areas = analysis.selection.max_areas = 3;
++  analysis.selection.minimum_color_volume = 0;
++  analysis.leave_one_out = false;
++  analysis.held_out = false;
++
+   finetune_focus_analysis_result result;
+-  if (finetune_analyze_focus_areas (rparam, geometry, image, candidates,
+-                                    fparam, analysis, &result, nullptr))
++  if (!finetune_analyze_focus_areas (rparam, geometry, image, candidates,
++                                     fparam, analysis, &result, nullptr))
++    {
++      fprintf (stderr, "Coupled physical cold-start fit failed: %s\n",
++               result.err.c_str ());
++      return false;
++    }
++  if (!(result.screen_frequency > 0) || !(result.joint_screen_mtf > 0))
+     {
+-      fprintf (stderr, "Coupled physical sigma/defocus fit was accepted\n");
++      fprintf (stderr, "Coupled focus fit did not report screen-frequency MTF\n");
+       return false;
+     }
+-  if (result.err.find ("not separately identifiable") == std::string::npos)
++  const coord_t expected = truth_mtf.system_mtf (result.screen_frequency);
++  if (std::fabs (result.joint_screen_mtf - expected) > (coord_t)0.08)
+     {
+-      fprintf (stderr, "Unexpected coupled-focus diagnostic: %s\n",
+-               result.err.c_str ());
++      fprintf (stderr,
++               "Coupled focus carrier MTF mismatch: got %.6f expected %.6f "
++               "at %.6f cycles/pixel (sigma %.6f defocus %.6f)\n",
++               (double)result.joint_screen_mtf, (double)expected,
++               (double)result.screen_frequency,
++               (double)result.joint_fit.scanner_mtf_sigma,
++               (double)result.joint_fit.scanner_mtf_defocus);
+       return false;
+     }
+   return true;
+@@ -434,7 +548,7 @@ main ()
+       || !test_sky_candidate_budget ()
+       || !test_bw_selection_uses_primary_intensities ()
+       || !test_bw_multitile_focus ()
+-      || !test_coupled_physical_focus_rejected ()
++      || !test_coupled_physical_focus_cold_start ()
+       || !test_grayscale_image_search ())
+     return 1;
+   printf ("focus-analysis-unittests: PASS\n");
+diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-analysis.C
+index d335b1d..b38f6bc 100644
+--- a/src/libcolorscreen/focus-analysis.C
++++ b/src/libcolorscreen/focus-analysis.C
+@@ -1,5 +1,6 @@
+ #include "include/focus-analysis.h"
+ #include "render-interpolate.h"
++#include "include/scr-to-img.h"
+ #include <algorithm>
+ #include <cmath>
+ #include <limits>
+@@ -53,6 +54,176 @@ set_analysis_error (finetune_focus_analysis_result *result,
+   result->err = message;
+ }
+ 
++
++/* Return the process-screen carrier frequency in image cycles/pixel.  The
++   screen-type table stores cycles per screen coordinate; PIXEL_SIZE converts
++   that to image-pixel frequency using the same mapping as adaptive focus.  */
++static bool
++process_screen_frequency (const scr_to_img_parameters &param,
++                          const image_data &img, coord_t *frequency)
++{
++  if (!frequency || param.type < 0 || param.type >= max_scr_type)
++    return false;
++  scr_to_img map;
++  if (!map.set_parameters (param, img.width, img.height))
++    return false;
++  const coord_t pixel_size
++      = map.pixel_size ({ 0, 0, img.width, img.height });
++  const coord_t value = scr_names[param.type].frequency * pixel_size;
++  if (!my_isfinite (value) || value <= 0)
++    return false;
++  *frequency = value;
++  return true;
++}
++
++/* Evaluate the scanner/camera system MTF represented by FIT at FREQUENCY.
++   FIT stores only the active coordinates, while the other physical metadata
++   comes from RPARAM.  */
++static coord_t
++fit_screen_mtf (const render_parameters &rparam, uint64_t flags,
++                const finetune_result &fit, coord_t frequency)
++{
++  if (!fit.success || !my_isfinite (frequency) || frequency <= 0)
++    return -1;
