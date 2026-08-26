@@ -213,11 +213,6 @@ jobs:
   windows-address-sanitizer:
     name: AddressSanitizer (Windows clang64)
     runs-on: windows-latest
-    env:
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_BASEDIR: ${{ github.workspace }}
-      CCACHE_COMPRESS: "true"
-      CCACHE_MAXSIZE: 500M
     steps:
     - uses: actions/checkout@v4
     - uses: msys2/setup-msys2@v2
@@ -226,7 +221,7 @@ jobs:
         update: false
         cache: true
         install: >
-          make mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-ccache mingw-w64-clang-x86_64-libtiff
+          make mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-libtiff
           mingw-w64-clang-x86_64-llvm-openmp
           mingw-w64-clang-x86_64-libjpeg-turbo git mingw-w64-clang-x86_64-libraw
           mingw-w64-clang-x86_64-lcms2 mingw-w64-clang-x86_64-libzip
@@ -235,17 +230,6 @@ jobs:
           mingw-w64-clang-x86_64-qt6-base mingw-w64-clang-x86_64-qt6-tools
           mingw-w64-clang-x86_64-adwaita-icon-theme mingw-w64-clang-x86_64-qt6-svg
           mingw-w64-clang-x86_64-exiv2
-    - name: Restore compiler cache
-      uses: actions/cache@v4
-      with:
-        path: .ccache
-        key: ccache-${{ runner.os }}-clang64-asan-${{ github.event.pull_request.head.sha || github.sha }}
-        restore-keys: |
-          ccache-${{ runner.os }}-clang64-asan-
-          ccache-${{ runner.os }}-clang64-
-    - name: Reset compiler cache stats
-      shell: msys2 {0}
-      run: ccache --zero-stats
     - name: Update autotools
       shell: msys2 {0}
       run: autoreconf -fiv
@@ -254,7 +238,7 @@ jobs:
       run: |
         export PATH="/clang64/share/qt6/bin:$PATH"
         SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address"
-        CC="ccache clang" CXX="ccache clang++" AR=llvm-ar NM=llvm-nm \
+        CC=clang CXX=clang++ AR=llvm-ar NM=llvm-nm \
           STRIP=llvm-strip RANLIB=llvm-ranlib \
           CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
           LDFLAGS="-Wl,--stack,16777216 -fsanitize=address -lomp -lpthread" \
@@ -263,7 +247,7 @@ jobs:
       shell: msys2 {0}
       run: |
         set -o pipefail
-        make -j$(nproc) 2>&1 | tee windows-asan-build.log
+        make -j2 2>&1 | tee windows-asan-build.log
     - name: Upload Windows ASan build log
       if: always()
       uses: actions/upload-artifact@v4
@@ -289,7 +273,7 @@ jobs:
       shell: msys2 {0}
       env:
         ASAN_OPTIONS: halt_on_error=1
-      run: make -j$(nproc) check
+      run: make -j2 check
     - name: Upload sanitizer test results
       uses: actions/upload-artifact@v4
       if: always()
@@ -299,7 +283,3 @@ jobs:
           testsuite/*.txt
           testsuite/*.log
           testsuite/*.par
-    - name: Compiler cache stats
-      if: always()
-      shell: msys2 {0}
-      run: ccache --show-stats
