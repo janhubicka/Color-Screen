@@ -37,6 +37,7 @@ jobs:
           git reset --hard "$base"
           git apply /tmp/tsan-source.patch
           cp /tmp/SynchronizedRunnable.h src/qtgui/SynchronizedRunnable.h
+          git add -N src/qtgui/SynchronizedRunnable.h
 
           printf '%s\n' \
             src/libcolorscreen/render-scr-detect.C \
@@ -69,7 +70,8 @@ jobs:
           git switch -c agent/fix-tsan-render-handoffs
           git add src
           git diff --cached --check
-          test -z "$(git status --porcelain | grep -v '^M  src/' || true)"
+          git diff --cached --name-only | sort > /tmp/staged-files
+          diff -u /tmp/expected-files /tmp/staged-files
           git commit -m 'Fix TSan races in async render handoffs'
           test "$(git rev-list --count 544655741cbc3f05185bb05e0a4988caad95467e..HEAD)" = 1
           git push origin HEAD:refs/heads/agent/fix-tsan-render-handoffs
