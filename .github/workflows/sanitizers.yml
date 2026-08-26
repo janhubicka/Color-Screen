@@ -32,13 +32,15 @@ jobs:
       with:
         ref: ${{ github.event.pull_request.head.ref }}
 
-    - name: Apply renderer handoff fix
+    - name: Apply renderer race fixes
       run: |
         pwd
         python3 .github/ci/apply-tsan-render-handoff.py
+        python3 .github/ci/apply-tsan-render-stats.py
         grep -q 'enqueueRender' src/qtgui/Renderer.h
         grep -q 'm_renderer->enqueueRender' src/qtgui/ImageWidget.cpp
         grep -q 'm_renderer->enqueueRender' src/qtgui/NavigationView.cpp
+        grep -q 'std::atomic<int> stats' src/libcolorscreen/render-tile.h
 
     - name: Install Clang OpenMP TSan runtime
       run: |
@@ -114,3 +116,5 @@ jobs:
           src/qtgui/Renderer.cpp
           src/qtgui/ImageWidget.cpp
           src/qtgui/NavigationView.cpp
+          src/libcolorscreen/render-tile.h
+          src/libcolorscreen/render-tile.C
