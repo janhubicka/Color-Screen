@@ -1,0 +1,62 @@
+l)
+     m_sharpnessPanel->setFocusAreaAnalysisState(
+@@ -6040,6 +6025,15 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
+             details << tr("Selected %1 of %2 verified candidates.")
+                            .arg(static_cast<int>(analysis.selected.size()))
+                            .arg(static_cast<int>(m_focusAreaCandidates.size()));
++            if (analysis.screen_frequency > 0
++                && analysis.joint_screen_mtf >= 0)
++              details << tr("Process-screen MTF at %1 cycles/pixel: %2%")
++                             .arg(analysis.screen_frequency, 0, 'g', 6)
++                             .arg(analysis.joint_screen_mtf * 100, 0, 'g', 5);
++            if (analysis.leave_one_out_screen_mtf_span >= 0)
++              details << tr("Leave-one-out process-screen MTF span: %1 percentage points")
++                             .arg(analysis.leave_one_out_screen_mtf_span * 100,
++                                  0, 'g', 5);
+             if (analysis.leave_one_out_focus_span >= 0)
+               details << tr("Leave-one-out focus span: %1")
+                              .arg(analysis.leave_one_out_focus_span, 0, 'g', 5);
+@@ -6115,7 +6109,11 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
+         colorscreen::finetune_parameters local;
+         local.range = 4;
+         local.ignore_outliers = 0;
+-        local.flags = flags | colorscreen::finetune_position;
++        /* Candidate verification establishes local phase/colour starts.
++           Re-fitting the global lens MTF independently in every candidate is
++           both expensive and misleading; the selected areas estimate it
++           together below. */
++        local.flags = colorscreen::finetune_position;
+         if (useMonochrome)
+           local.flags |= colorscreen::finetune_bw
+               | colorscreen::finetune_no_normalize
+@@ -6131,7 +6129,7 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
+         }
+ 
+         colorscreen::finetune_parameters joint = local;
+-        joint.flags |= colorscreen::finetune_no_normalize
++        joint.flags |= flags | colorscreen::finetune_no_normalize
+             | colorscreen::finetune_no_data_collection;
+         if (!useMonochrome)
+           joint.flags |= colorscreen::finetune_uniform_image_layer;
+diff --git a/src/qtgui/SharpnessPanel.cpp b/src/qtgui/SharpnessPanel.cpp
+index 0b3419c..dcdfef4 100644
+--- a/src/qtgui/SharpnessPanel.cpp
++++ b/src/qtgui/SharpnessPanel.cpp
+@@ -972,7 +972,7 @@ void SharpnessPanel::setupUi() {
+       [this](ParameterState &, bool v) {
+         if (v) m_finetuneFlags |= colorscreen::finetune_scanner_mtf_sigma;
+         else m_finetuneFlags &= ~colorscreen::finetune_scanner_mtf_sigma;
+-      }, nullptr, "Included in the focus analyzer optimization loop. For multi-area physical-MTF analysis, keep Defocus fixed when optimizing Sigma.");
++      }, nullptr, "Included in the focus analyzer optimization loop. Multi-area analysis may optimize Sigma and Defocus together; it uses scalar-seeded starts and reports their combined process-screen MTF, which is the quantity used for colour restoration.");
+ 
+   addCheckboxParameter(
+       "Optimize Defocus",
+@@ -982,7 +982,7 @@ void SharpnessPanel::setupUi() {
+       [this](ParameterState &, bool v) {
+         if (v) m_finetuneFlags |= colorscreen::finetune_scanner_mtf_defocus;
+         else m_finetuneFlags &= ~colorscreen::finetune_scanner_mtf_defocus;
+-      }, nullptr, "Included in the focus analyzer optimization loop. For multi-area physical-MTF analysis, normally keep a slanted-edge Sigma calibration fixed and optimize Defocus only.");
++      }, nullptr, "Included in the focus analyzer optimization loop. With an existing MTF calibration the current Sigma/Defocus values are retained as one starting basin; without one, multi-area analysis also builds scalar blur seeds before the coupled fit.");
+ 
+   m_analyzeAreaBtn = addToggleButtonParameter("", tr("Analyze area"), [this](bool checked) {
+     emit focusAnalysisRequested(checked, m_finetuneFlags);
