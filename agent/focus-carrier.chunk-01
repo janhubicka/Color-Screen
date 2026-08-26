@@ -1,0 +1,166 @@
+>type);
++  sharpen_parameters transfer;
++  transfer.mode = sharpen_parameters::blur_deconvolution;
++  transfer.scanner_mtf_scale = pixel_size;
++  transfer.scanner_mtf.model = mtf_model::physical_diffraction;
++  transfer.scanner_mtf.scan_dpi = 1887;
++  transfer.scanner_mtf.f_stop = 8;
++  transfer.scanner_mtf.wavelength = 750;
++  transfer.scanner_mtf.pixel_pitch = 3.760;
++  transfer.scanner_mtf.sensor_fill_factor = 0;
++  transfer.scanner_mtf.sigma = true_sigma;
++  transfer.scanner_mtf.defocus = true_defocus;
++  sharpen_parameters *channels[3] = { &transfer, &transfer, &transfer };
++  if (!filtered.initialize_with_sharpen_parameters (
++          source, channels, false, false))
++    return false;
++
++  for (int y = 0; y < height; y++)
++    for (int x = 0; x < width; x++)
++      {
++        const int tileid = std::min (x / (width / regions), regions - 1);
++        const rgbdata screen_value = filtered.interpolated_mult (
++            map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 }));
++        luminosity_t value
++            = screen_value.red * truth[tileid].red
++              + screen_value.green * truth[tileid].green
++              + screen_value.blue * truth[tileid].blue;
++        value = std::clamp (value, (luminosity_t)0, (luminosity_t)1);
++        image->put_pixel (
++            x, y, (image_data::gray)(value * 65535 + (luminosity_t)0.5));
++      }
++
++  candidates->clear ();
++  for (int tileid = 0; tileid < regions; tileid++)
++    {
++      finetune_focus_area_candidate candidate;
++      candidate.center = locations[tileid];
++      candidate.mean_color = { 0.4, 0.4, 0.4 };
++      candidate.search_score = tileid;
++      candidate.fit.success = true;
++      candidate.fit.badness = (coord_t)0.01;
++      candidate.fit.contrast = (coord_t)0.2;
++      candidate.fit.color = truth[tileid];
++      candidate.fit.screen_coord_adjust = { 0, 0 };
++      candidate.fit.emulsion_coord_adjust = { 0, 0 };
++      candidates->push_back (candidate);
++    }
++  return true;
++}
++
++static bool
++test_coupled_physical_focus_recovers_carrier_mtf ()
++{
++  constexpr coord_t true_sigma = (coord_t)0.55;
++  constexpr coord_t true_defocus = (coord_t)0.18;
+   image_data image;
+   scr_to_img_parameters geometry;
+   std::vector<finetune_focus_area_candidate> candidates;
++  if (!build_physical_bw_focus_fixture (&image, &geometry, &candidates,
++                                        true_sigma, true_defocus))
++    return false;
++
++  render_parameters cold;
++  cold.gamma = 1;
++  cold.sharpen.mode = sharpen_parameters::blur_deconvolution;
++  cold.sharpen.scanner_mtf_scale = 1;
++  cold.sharpen.scanner_mtf.model = mtf_model::physical_diffraction;
++  cold.sharpen.scanner_mtf.scan_dpi = 1887;
++  cold.sharpen.scanner_mtf.f_stop = 8;
++  cold.sharpen.scanner_mtf.wavelength = 750;
++  cold.sharpen.scanner_mtf.pixel_pitch = 3.760;
++  cold.sharpen.scanner_mtf.sensor_fill_factor = 0;
++  cold.sharpen.scanner_mtf.sigma = 0;
++  cold.sharpen.scanner_mtf.defocus = 0;
++
++  finetune_parameters fparam;
++  fparam.range = 2;
++  fparam.ignore_outliers = 0;
++  fparam.flags = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus
++                 | finetune_bw | finetune_no_normalize
++                 | finetune_no_data_collection;
+   finetune_focus_analysis_parameters analysis;
+-  finetune_focus_analysis_result result;
+-  if (finetune_analyze_focus_areas (rparam, geometry, image, candidates,
+-                                    fparam, analysis, &result, nullptr))
++  analysis.selection.min_areas = 3;
++  analysis.selection.max_areas = 3;
++  analysis.selection.minimum_color_volume = 0;
++  analysis.leave_one_out = false;
++  analysis.held_out = false;
++
++  finetune_focus_analysis_result cold_result;
++  if (!finetune_analyze_focus_areas (cold, geometry, image, candidates,
++                                     fparam, analysis, &cold_result, nullptr))
+     {
+-      fprintf (stderr, "Coupled physical sigma/defocus fit was accepted\n");
++      fprintf (stderr, "Physical cold-start focus analysis failed: %s\n",
++               cold_result.err.c_str ());
+       return false;
+     }
+-  if (result.err.find ("not separately identifiable") == std::string::npos)
++
++  render_parameters warm = cold;
++  warm.sharpen.scanner_mtf.sigma = true_sigma;
++  warm.sharpen.scanner_mtf.defocus = true_defocus;
++  finetune_focus_analysis_result warm_result;
++  if (!finetune_analyze_focus_areas (warm, geometry, image, candidates,
++                                     fparam, analysis, &warm_result, nullptr))
+     {
+-      fprintf (stderr, "Unexpected coupled-focus diagnostic: %s\n",
+-               result.err.c_str ());
++      fprintf (stderr, "Physical warm-start focus analysis failed: %s\n",
++               warm_result.err.c_str ());
++      return false;
++    }
++
++  mtf_parameters truth = cold.sharpen.scanner_mtf;
++  truth.sigma = true_sigma;
++  truth.defocus = true_defocus;
++  const coord_t true_mtf = truth.system_mtf (cold_result.screen_frequency);
++  printf ("physical focus carrier %.6f cold %.6f warm %.6f "
++          "cold sigma/defocus %.6f/%.6f warm %.6f/%.6f\n",
++          (double)true_mtf, (double)cold_result.joint_screen_mtf,
++          (double)warm_result.joint_screen_mtf,
++          (double)cold_result.joint_fit.scanner_mtf_sigma,
++          (double)cold_result.joint_fit.scanner_mtf_defocus,
++          (double)warm_result.joint_fit.scanner_mtf_sigma,
++          (double)warm_result.joint_fit.scanner_mtf_defocus);
++
++  if (!(cold_result.screen_frequency > 0)
++      || !(cold_result.joint_screen_mtf >= 0)
++      || !(warm_result.joint_screen_mtf >= 0)
++      || std::fabs (cold_result.joint_screen_mtf - true_mtf) > (coord_t)0.06
++      || std::fabs (warm_result.joint_screen_mtf - true_mtf) > (coord_t)0.06
++      || std::fabs (cold_result.joint_screen_mtf
++                    - warm_result.joint_screen_mtf) > (coord_t)0.04)
++    {
++      fprintf (stderr,
++               "Physical focus carrier MTF depends on initialization: "
++               "truth %.9g cold %.9g warm %.9g\n",
++               (double)true_mtf, (double)cold_result.joint_screen_mtf,
++               (double)warm_result.joint_screen_mtf);
+       return false;
+     }
+   return true;
+@@ -434,7 +570,7 @@ main ()
+       || !test_sky_candidate_budget ()
+       || !test_bw_selection_uses_primary_intensities ()
+       || !test_bw_multitile_focus ()
+-      || !test_coupled_physical_focus_rejected ()
++      || !test_coupled_physical_focus_recovers_carrier_mtf ()
+       || !test_grayscale_image_search ())
+     return 1;
+   printf ("focus-analysis-unittests: PASS\n");
+diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-analysis.C
+index d335b1d..e19ba0d 100644
+--- a/src/libcolorscreen/focus-analysis.C
++++ b/src/libcolorscreen/focus-analysis.C
+@@ -1,4 +1,6 @@
+ #include "include/focus-analysis.h"
++#include "finetune-int.h"
++#include "include/scr-to-img.h"
+ #include "render-interpolate.h"
+ #include <algorithm>
+ #include <cmath>
+@@ -104,6 +106,190 @@ freeze_focus_from_fit (ren
