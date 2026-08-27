@@ -1,0 +1,118 @@
+())
++    {
++      if (best_seed_kind)
++        *best_seed_kind = 0;
++      return finetune (rparam, param, img, locations, &starts, fparams, progress);
++    }
++
++  finetune_result best;
++  if (best_seed_kind)
++    *best_seed_kind = -1;
++  consider_joint_fit (rparam, param, img, locations, starts, fparams, progress,
++                      &best, best_seed_kind, 0);
++
++  struct scalar_seed
++  {
++    bool success = false;
++    coord_t badness = std::numeric_limits<coord_t>::max ();
++    render_parameters rparam;
++    int kind = 0;
++  };
++  scalar_seed scalar[2];
++  const uint64_t scalar_flags[2]
++      = { finetune_scanner_mtf_sigma, finetune_scanner_mtf_defocus };
++  for (int which = 0; which < 2; which++)
++    {
++      finetune_parameters one = fparams;
++      one.flags &= ~coupled;
++      one.flags |= scalar_flags[which];
++      finetune_result fit
++          = finetune (rparam, param, img, locations, &starts, one, progress);
++      if (!fit.success || !my_isfinite (fit.badness))
++        continue;
++      scalar[which].success = true;
++      scalar[which].badness = fit.badness;
++      scalar[which].rparam = rparam;
++      scalar[which].kind = which + 1;
++      if (!freeze_focus_from_fit (&scalar[which].rparam, one.flags, fit))
++        scalar[which].success = false;
++    }
++
++  /* Release both coordinates from the better scalar basin first.  Usually one
++     of these already captures the process-screen attenuation and this avoids
++     paying for two equally poor coupled searches.  If it does not beat the
++     loaded start, try the other basin as a fallback.  */
++  int first = 0, second = 1;
++  if ((!scalar[first].success && scalar[second].success)
++      || (scalar[first].success && scalar[second].success
++          && scalar[second].badness < scalar[first].badness))
++    std::swap (first, second);
++  if (scalar[first].success)
++    consider_joint_fit (scalar[first].rparam, param, img, locations, starts,
++                        fparams, progress, &best, best_seed_kind,
++                        scalar[first].kind);
++  if (scalar[second].success
++      && (!best.success || scalar[second].badness < best.badness))
++    consider_joint_fit (scalar[second].rparam, param, img, locations, starts,
++                        fparams, progress, &best, best_seed_kind,
++                        scalar[second].kind);
++  return best;
++}
++
+ } // namespace
+ 
+ bool
+@@ -232,25 +385,6 @@ finetune_analyze_focus_areas (
+       return false;
+     }
+ 
+-  /* Periodic focus areas constrain the combined scanner transfer, but the
+-     residual Gaussian sigma and physical defocus can compensate for each
+-     other at the few harmonics that remain measurable in a real capture.
+-     A coupled fit can therefore report optimizer initialization rather than
+-     a separately identified physical decomposition.  Require one coordinate
+-     to be calibrated/fixed and fit only the other.  */
+-  constexpr uint64_t coupled_physical_focus
+-      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+-  if ((fparams.flags & coupled_physical_focus) == coupled_physical_focus
+-      && rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
+-    {
+-      set_analysis_error (
+-          result,
+-          "physical scanner MTF sigma and defocus are not separately "
+-          "identifiable from periodic focus areas; fix/calibrate one and "
+-          "optimize only the other");
+-      return false;
+-    }
+-
+   if (!finetune_select_focus_areas (candidates, analysis_parameters.selection,
+                                     &result->selected,
+                                     &result->color_volume))
+@@ -292,8 +426,12 @@ finetune_analyze_focus_areas (
+       starts.push_back (candidates[index].fit);
+     }
+ 
+-  result->joint_fit
+-      = finetune (rparam, param, img, locations, &starts, fparams, progress);
++  result->screen_frequency = process_screen_frequency (param, img);
++  result->joint_fit = multistart_joint_focus_fit (
++      rparam, param, img, locations, starts, fparams, progress,
++      &result->joint_seed_kind);
++  result->joint_screen_mtf = fit_system_mtf (
++      rparam, img, fparams.flags, result->joint_fit, result->screen_frequency);
+   if (!result->joint_fit.success)
+     {
+       result->err = "joint focus-area fit failed";
+@@ -322,8 +460,12 @@ finetune_analyze_focus_areas (
+             subset_starts.push_back (starts[i]);
+           }
+ 
+-      finetune_result fit = finetune (rparam, param, img, subset_locations,
++      render_parameters subset_rparam = rparam;
++      freeze_focus_from_fit (&subset_rparam, fparams.flags, result->joint_fit);
++      finetune_result fit = finetune (subset_rparam, param, img, subset_locations,
+                                      &subset_starts, fparams, progress);
++      result->leave_one_out_screen_mtf.push_back (fit_system_mtf (
++          rparam, img, fparams.flags, fit, result->screen_frequency));
+       result->leave_one_out_fits.push_back (std::move (fit));
+       if (!result->leave_one_out
