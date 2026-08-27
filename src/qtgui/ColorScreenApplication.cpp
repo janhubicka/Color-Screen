@@ -258,7 +258,11 @@ bool ColorScreenApplication::closeView(ImageViewWindow *view) {
     return false;
   if (m_workspaceWindow && m_workspaceWindow->containsView(view))
     return m_workspaceWindow->closeView(view);
-  return view->close();
+
+  const bool closed = view->close();
+  if (closed)
+    view->deleteLater();
+  return closed;
 }
 
 /** Return whether DOCUMENT still has its original visible presentation. */
@@ -298,15 +302,30 @@ bool ColorScreenApplication::requestViewClose(ImageViewWindow *view) {
   MainWindow *source = view->sourceDocument();
   if (source && m_hiddenDocumentPresentations.contains(source) &&
       !hasOpenViews(source, view)) {
+    // Enter the logical closing state before calling QWidget::close().  The
+    // close path can run nested Qt callbacks, so publishing the state after
+    // close() returns leaves a window where the source and final view still
+    // look live to those callbacks.
+    m_closingViews.insert(view);
+    m_closingDocuments.insert(source);
     m_finalizingDocuments.insert(source);
     const bool closed = source->close();
     m_finalizingDocuments.remove(source);
-    if (!closed)
+    if (!closed) {
+      m_closingDocuments.remove(source);
+      m_closingViews.remove(view);
       return false;
-    m_closingDocuments.insert(source);
+    }
+
+    m_hiddenDocumentPresentations.remove(source);
+    // Do not rely solely on WA_DeleteOnClose for a hidden top-level document.
+    // In particular, the Windows ASan lifetime test reaches this path after
+    // the workspace has already been closed.  Queue destruction explicitly.
+    source->deleteLater();
+  } else {
+    m_closingViews.insert(view);
   }
 
-  m_closingViews.insert(view);
   if (m_workspaceWindow && m_workspaceWindow->containsView(view))
     m_workspaceWindow->prepareViewForClose(view);
   return true;
@@ -859,12 +878,17 @@ void ColorScreenApplication::closeAllDocumentWindows() {
   for (MainWindow *document : documents) {
     if (!document || m_closingDocuments.contains(document))
       continue;
+
+    m_closingDocuments.insert(document);
     m_finalizingDocuments.insert(document);
     const bool closed = document->close();
     m_finalizingDocuments.remove(document);
-    if (!closed)
+    if (!closed) {
+      m_closingDocuments.remove(document);
       return;
-    m_closingDocuments.insert(document);
+    }
+    m_hiddenDocumentPresentations.remove(document);
+    document->deleteLater();
   }
 
   if (m_workspaceWindow && m_workspaceWindow->tabCount() == 0)
@@ -926,14 +950,17 @@ void ColorScreenApplication::closeHiddenDocumentWithoutViews(
       m_closingDocuments.contains(document) || hasOpenViews(document))
     return;
 
+  m_closingDocuments.insert(document);
   m_finalizingDocuments.insert(document);
   const bool closed = document->close();
   m_finalizingDocuments.remove(document);
   if (closed) {
-    m_closingDocuments.insert(document);
+    m_hiddenDocumentPresentations.remove(document);
+    document->deleteLater();
     return;
   }
 
+  m_closingDocuments.remove(document);
   // An externally destroyed final view cannot be restored after a close veto.
   // Reopen the primary presentation instead of leaving an invisible document.
   m_hiddenDocumentPresentations.remove(document);
