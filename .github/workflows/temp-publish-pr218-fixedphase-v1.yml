@@ -1,0 +1,86 @@
+name: TEMP publish PR218 fixed-phase
+
+on:
+  pull_request:
+    branches:
+      - agent/tmp-pr218-fixedphase-publish-base
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Check out staging base
+        uses: actions/checkout@v4
+        with:
+          ref: agent/tmp-pr218-fixedphase-publish-base
+          fetch-depth: 0
+
+      - name: Save and verify patch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp agent/pr218-fixedphase.patch /tmp/pr218-fixedphase.patch
+          echo 'acd48c88521351c0d600fc4744717e2808a0bd25f2d8bfc3e649b837807d579b  /tmp/pr218-fixedphase.patch' | sha256sum -c -
+
+      - name: Apply to PR218 and validate
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git fetch origin agent/focus-area-carrier-multistart main
+          git checkout --detach d6698273c01a7efe18b96ac053032ab425213797
+          git apply --check /tmp/pr218-fixedphase.patch
+          git apply /tmp/pr218-fixedphase.patch
+          git diff --check
+          CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure
+          make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
+          ./src/libcolorscreen/focus-analysis-unittests
+          make -C src/colorscreen -j$(nproc) colorscreen
+          ./src/colorscreen/colorscreen analyze-focus-areas --help >/tmp/help.txt 2>&1 || true
+          grep -q -- '--refit-focus-verification' /tmp/help.txt
+
+      - name: Package exact tested CLI
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/focus-cli/lib
+          cp src/colorscreen/colorscreen /tmp/focus-cli/colorscreen.bin
+          ldd src/colorscreen/colorscreen | tee /tmp/focus-cli/ldd.txt
+          awk '/=> \/[^ ]+/ {print $3} /^\/[a-zA-Z0-9_]/ {print $1}' /tmp/focus-cli/ldd.txt | sort -u | while read -r lib; do
+            test -f "$lib" && cp -L "$lib" /tmp/focus-cli/lib/ || true
+          done
+          tar -C /tmp -czf /tmp/colorscreen-pr218-fixedphase.tar.gz focus-cli
+
+      - name: Commit to PR218 branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git switch -c pr218-fixedphase-publish
+          git add src/libcolorscreen/focus-analysis.C \
+                  src/qtgui/MainWindow.cpp \
+                  src/colorscreen/colorscreen.C
+          test "$(git diff --cached --name-only | wc -l)" -eq 3
+          git diff --cached --check
+          git config user.name 'OpenAI Codex'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'focus: keep MTF basin search fixed-phase' \
+            -m 'Candidate verification already determines local screen phase. Keep phase fixed while comparing loaded, sigma-only, and defocus-only physical-MTF basins, then run one full coupled phase-refining solve from the winning basin.' \
+            -m 'Make candidate verification phase/color-only by default in Qt and the CLI, with an explicit diagnostic option to refit focus per candidate. This removes repeated global MTF solves without changing the final simultaneous selected-area model.'
+          git push origin HEAD:refs/heads/agent/focus-area-carrier-multistart
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-pr218-fixedphase
+          path: /tmp/colorscreen-pr218-fixedphase.tar.gz
+          if-no-files-found: error
+          retention-days: 2
