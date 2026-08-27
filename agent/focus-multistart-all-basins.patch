@@ -1,16 +1,14 @@
 diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-analysis.C
 --- a/src/libcolorscreen/focus-analysis.C
 +++ b/src/libcolorscreen/focus-analysis.C
-@@ -196,7 +196,6 @@ multistart_joint_focus_fit (
+@@ -196,11 +196,37 @@ multistart_joint_focus_fit (
+   if (scalar[first].success)
+     consider_joint_fit (scalar[first].rparam, param, img, locations, starts,
                          fparams, progress, &best, best_seed_kind,
                          scalar[first].kind);
 -  if (scalar[second].success
 -      && (!best.success || scalar[second].badness < best.badness))
 +  if (scalar[second].success)
-     consider_joint_fit (scalar[second].rparam, param, img, locations, starts,
-                         fparams, progress, &best, best_seed_kind,
-                         scalar[second].kind);
-@@ -204,6 +203,34 @@ multistart_joint_focus_fit (
      consider_joint_fit (scalar[second].rparam, param, img, locations, starts,
                          fparams, progress, &best, best_seed_kind,
                          scalar[second].kind);
