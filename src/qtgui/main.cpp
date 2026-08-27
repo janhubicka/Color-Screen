@@ -13,6 +13,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDockWidget>
+#include <QFile>
 #include <QIcon>
 #include <QPalette>
 #include <QPushButton>
@@ -25,6 +26,7 @@
 #include <QStatusBar>
 #include <QTabBar>
 #include <QThreadPool>
+#include <QTextStream>
 #include <QToolBar>
 #include <QTimer>
 
@@ -1046,6 +1048,16 @@ int main(int argc, char *argv[]) {
               }
               qCritical()
                   << "Last application window did not release its document";
+              QFile trace(QStringLiteral("testsuite/window-lifetime.log"));
+              if (trace.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                QTextStream output(&trace);
+                output << "source=" << bool(guardedSource)
+                       << " view=" << bool(guardedView)
+                       << " documents=" << app.documentWindows().size()
+                       << " views=" << app.viewWindows().size()
+                       << " workspace-visible="
+                       << bool(workspace && workspace->isVisible()) << '\n';
+              }
               app.exit(16);
               return;
             }
