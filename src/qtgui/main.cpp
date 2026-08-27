@@ -13,7 +13,6 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDockWidget>
-#include <QFile>
 #include <QIcon>
 #include <QPalette>
 #include <QPushButton>
@@ -26,7 +25,6 @@
 #include <QStatusBar>
 #include <QTabBar>
 #include <QThreadPool>
-#include <QTextStream>
 #include <QToolBar>
 #include <QTimer>
 
@@ -964,22 +962,27 @@ int main(int argc, char *argv[]) {
   }
 
   if (parser.isSet(windowLifetimeOption)) {
-    QTimer::singleShot(300, &app, [&app]() {
-      const auto recordLifetimePhase = [](const char *phase) {
-        QFile trace(QStringLiteral("testsuite/window-lifetime.log"));
-        if (trace.open(QIODevice::WriteOnly | QIODevice::Text))
-          QTextStream(&trace) << phase << '\n';
-      };
-      recordLifetimePhase("started");
+    auto startWindowLifetime =
+        std::make_shared<std::function<void(int)>>();
+    const std::weak_ptr<std::function<void(int)>> weakStartWindowLifetime =
+        startWindowLifetime;
+    *startWindowLifetime = [&app, weakStartWindowLifetime](int attemptsLeft) {
       const QList<MainWindow *> documents = app.documentWindows();
       WorkspaceWindow *workspace = app.workspaceWindow();
       if (documents.size() != 1 || !documents.front()->sharedImageData() ||
           !workspace || app.tabCount() != 1 || !workspace->isTabBarVisible()) {
+        if (attemptsLeft > 0) {
+          if (auto retry = weakStartWindowLifetime.lock()) {
+            QTimer::singleShot(250, &app, [retry, attemptsLeft]() {
+              (*retry)(attemptsLeft - 1);
+            });
+            return;
+          }
+        }
         qCritical() << "Window lifetime smoke test requires one standard tab";
         app.exit(16);
         return;
       }
-      recordLifetimePhase("initial-tab-ok");
 
       MainWindow *source = documents.front();
       app.detachDocument(source);
@@ -990,7 +993,6 @@ int main(int argc, char *argv[]) {
         app.exit(16);
         return;
       }
-      recordLifetimePhase("detach-ok");
 
       app.attachDocument(source);
       QCoreApplication::processEvents();
@@ -1000,7 +1002,6 @@ int main(int argc, char *argv[]) {
         app.exit(16);
         return;
       }
-      recordLifetimePhase("reattach-ok");
 
       ImageViewWindow *view = app.createViewWindow(source, true);
       if (!view || !view->isWindow() || !view->isVisible()) {
@@ -1008,7 +1009,6 @@ int main(int argc, char *argv[]) {
         app.exit(16);
         return;
       }
-      recordLifetimePhase("detached-view-ok");
 
       QPointer<MainWindow> guardedSource(source);
       QPointer<ImageViewWindow> guardedView(view);
@@ -1017,7 +1017,6 @@ int main(int argc, char *argv[]) {
         app.exit(16);
         return;
       }
-      recordLifetimePhase("workspace-close-ok");
       QCoreApplication::processEvents();
       if (workspace->isVisible() || !guardedSource || !guardedView ||
           !guardedView->isVisible() ||
@@ -1026,7 +1025,6 @@ int main(int argc, char *argv[]) {
         app.exit(16);
         return;
       }
-      recordLifetimePhase("final-view-close-accepted");
 
       if (!app.closeView(guardedView)) {
         qCritical() << "Final detached peer did not accept close";
@@ -1039,7 +1037,7 @@ int main(int argc, char *argv[]) {
       const std::weak_ptr<std::function<void(int)>>
           weakCheckFinalDetachedClose = checkFinalDetachedClose;
       *checkFinalDetachedClose =
-          [&app, workspace, guardedSource, guardedView, recordLifetimePhase,
+          [&app, workspace, guardedSource, guardedView,
            weakCheckFinalDetachedClose](int attemptsLeft) {
             // WA_DeleteOnClose is intentionally asynchronous.  In particular,
             // ASan can make the Windows event loop reach this check before Qt
@@ -1060,25 +1058,17 @@ int main(int argc, char *argv[]) {
               }
               qCritical()
                   << "Last application window did not release its document";
-              QFile trace(QStringLiteral("testsuite/window-lifetime.log"));
-              if (trace.open(QIODevice::WriteOnly | QIODevice::Text)) {
-                QTextStream output(&trace);
-                output << "source=" << bool(guardedSource)
-                       << " view=" << bool(guardedView)
-                       << " documents=" << app.documentWindows().size()
-                       << " views=" << app.viewWindows().size()
-                       << " workspace-visible="
-                       << bool(workspace && workspace->isVisible()) << '\n';
-              }
               app.exit(16);
               return;
             }
-            recordLifetimePhase("final-destruction-ok");
             app.exit(0);
           };
       QTimer::singleShot(0, &app, [checkFinalDetachedClose]() {
         (*checkFinalDetachedClose)(40);
       });
+    };
+    QTimer::singleShot(300, &app, [startWindowLifetime]() {
+      (*startWindowLifetime)(40);
     });
   }
 
