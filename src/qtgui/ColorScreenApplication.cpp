@@ -144,8 +144,15 @@ ImageViewWindow *ColorScreenApplication::createViewWindow(MainWindow *source,
     m_closingViews.remove(view);
     QTimer::singleShot(0, this, [this, guardedSource]() {
       pruneViewWindows();
-      if (guardedSource)
-        closeHiddenDocumentWithoutViews(guardedSource);
+      if (guardedSource) {
+        // A final detached view approves its hidden document's close before
+        // the view itself disappears.  Destroy the borrower first, then the
+        // document whose inspector and state it may still reference.
+        if (m_closingDocuments.contains(guardedSource.data()))
+          guardedSource->deleteLater();
+        else
+          closeHiddenDocumentWithoutViews(guardedSource);
+      }
       refreshWindowMenus();
     });
   });
@@ -187,7 +194,10 @@ ImageViewWindow *ColorScreenApplication::createSlantedEdgeReference(
       pruneViewWindows();
       if (guardedSource) {
         saveSlantedEdgeReferenceRecovery(guardedSource);
-        closeHiddenDocumentWithoutViews(guardedSource);
+        if (m_closingDocuments.contains(guardedSource.data()))
+          guardedSource->deleteLater();
+        else
+          closeHiddenDocumentWithoutViews(guardedSource);
       }
       refreshWindowMenus();
     });
@@ -309,7 +319,13 @@ bool ColorScreenApplication::requestViewClose(ImageViewWindow *view) {
     m_closingViews.insert(view);
     m_closingDocuments.insert(source);
     m_finalizingDocuments.insert(source);
+    // Closing the hidden owner is also the save-policy check for the final
+    // view.  Suppress WA_DeleteOnClose for this call: the view still borrows
+    // document-owned UI and must be destroyed before its owner.
+    const bool deleteOnClose = source->testAttribute(Qt::WA_DeleteOnClose);
+    source->setAttribute(Qt::WA_DeleteOnClose, false);
     const bool closed = source->close();
+    source->setAttribute(Qt::WA_DeleteOnClose, deleteOnClose);
     m_finalizingDocuments.remove(source);
     if (!closed) {
       m_closingDocuments.remove(source);
@@ -318,10 +334,8 @@ bool ColorScreenApplication::requestViewClose(ImageViewWindow *view) {
     }
 
     m_hiddenDocumentPresentations.remove(source);
-    // Do not rely solely on WA_DeleteOnClose for a hidden top-level document.
-    // In particular, the Windows ASan lifetime test reaches this path after
-    // the workspace has already been closed.  Queue destruction explicitly.
-    source->deleteLater();
+    // The view's destroyed callback queues the document after the borrower
+    // has released all document-owned UI.
   } else {
     m_closingViews.insert(view);
   }
