@@ -965,6 +965,12 @@ int main(int argc, char *argv[]) {
 
   if (parser.isSet(windowLifetimeOption)) {
     QTimer::singleShot(300, &app, [&app]() {
+      const auto recordLifetimePhase = [](const char *phase) {
+        QFile trace(QStringLiteral("testsuite/window-lifetime.log"));
+        if (trace.open(QIODevice::WriteOnly | QIODevice::Text))
+          QTextStream(&trace) << phase << '\n';
+      };
+      recordLifetimePhase("started");
       const QList<MainWindow *> documents = app.documentWindows();
       WorkspaceWindow *workspace = app.workspaceWindow();
       if (documents.size() != 1 || !documents.front()->sharedImageData() ||
@@ -973,6 +979,7 @@ int main(int argc, char *argv[]) {
         app.exit(16);
         return;
       }
+      recordLifetimePhase("initial-tab-ok");
 
       MainWindow *source = documents.front();
       app.detachDocument(source);
@@ -983,6 +990,7 @@ int main(int argc, char *argv[]) {
         app.exit(16);
         return;
       }
+      recordLifetimePhase("detach-ok");
 
       app.attachDocument(source);
       QCoreApplication::processEvents();
@@ -992,6 +1000,7 @@ int main(int argc, char *argv[]) {
         app.exit(16);
         return;
       }
+      recordLifetimePhase("reattach-ok");
 
       ImageViewWindow *view = app.createViewWindow(source, true);
       if (!view || !view->isWindow() || !view->isVisible()) {
@@ -999,6 +1008,7 @@ int main(int argc, char *argv[]) {
         app.exit(16);
         return;
       }
+      recordLifetimePhase("detached-view-ok");
 
       QPointer<MainWindow> guardedSource(source);
       QPointer<ImageViewWindow> guardedView(view);
@@ -1007,6 +1017,7 @@ int main(int argc, char *argv[]) {
         app.exit(16);
         return;
       }
+      recordLifetimePhase("workspace-close-ok");
       QCoreApplication::processEvents();
       if (workspace->isVisible() || !guardedSource || !guardedView ||
           !guardedView->isVisible() ||
@@ -1015,6 +1026,7 @@ int main(int argc, char *argv[]) {
         app.exit(16);
         return;
       }
+      recordLifetimePhase("final-view-close-accepted");
 
       if (!app.closeView(guardedView)) {
         qCritical() << "Final detached peer did not accept close";
@@ -1027,7 +1039,7 @@ int main(int argc, char *argv[]) {
       const std::weak_ptr<std::function<void(int)>>
           weakCheckFinalDetachedClose = checkFinalDetachedClose;
       *checkFinalDetachedClose =
-          [&app, workspace, guardedSource, guardedView,
+          [&app, workspace, guardedSource, guardedView, recordLifetimePhase,
            weakCheckFinalDetachedClose](int attemptsLeft) {
             // WA_DeleteOnClose is intentionally asynchronous.  In particular,
             // ASan can make the Windows event loop reach this check before Qt
@@ -1061,6 +1073,7 @@ int main(int argc, char *argv[]) {
               app.exit(16);
               return;
             }
+            recordLifetimePhase("final-destruction-ok");
             app.exit(0);
           };
       QTimer::singleShot(0, &app, [checkFinalDetachedClose]() {
