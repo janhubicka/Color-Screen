@@ -1,0 +1,11 @@
+diff --git a/src/libcolorscreen/focus-analysis-unittests.C b/src/libcolorscreen/focus-analysis-unittests.C
+--- a/src/libcolorscreen/focus-analysis-unittests.C
++++ b/src/libcolorscreen/focus-analysis-unittests.C
+@@ -431,6 +431,7 @@ test_coupled_physical_focus_recovers_screen_mtf ()
+       candidate.fit.success = true;
+       candidate.fit.badness = (coord_t)0.01;
+       candidate.fit.contrast = (coord_t)0.2;
++      candidate.fit.color = truth[i];
+       candidate.fit.screen_coord_adjust = { 0, 0 };
+       candidate.fit.emulsion_coord_adjust = { 0, 0 };
+       candidates.push_back (candidate);
