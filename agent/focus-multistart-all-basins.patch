@@ -1,3 +1,13 @@
+diff --git a/src/colorscreen/colorscreen.C b/src/colorscreen/colorscreen.C
+--- a/src/colorscreen/colorscreen.C
++++ b/src/colorscreen/colorscreen.C
+@@ -335,5 +335,6 @@ print_help (char *err = NULL)
+   if (subhelp == help_focus_areas || subhelp == help_basic)
+     {
+       fprintf (stderr, "  analyze-focus-areas <scan> <parameters> [<args>]\n");
+       fprintf (stderr, "    automatically find uniform areas and fit one shared focus model\n");
++      fprintf (stderr, "    default focus mode: --sigma-defocus\n");
+     }
 diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-analysis.C
 --- a/src/libcolorscreen/focus-analysis.C
 +++ b/src/libcolorscreen/focus-analysis.C
