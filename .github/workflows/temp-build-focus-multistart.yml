@@ -1,9 +1,9 @@
 name: TEMP validate PR218 fixed-phase multistart
 
 on:
-  pull_request:
+  push:
     branches:
-      - agent/tmp-focus-mtf-multistart-build
+      - agent/tmp-focus-mtf-fixedphase-trigger2
 
 permissions:
   contents: write
@@ -29,7 +29,7 @@ jobs:
         run: |
           set -euxo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          test "$(git rev-parse HEAD)" = 421b13d03c3850fe4fcf2c51febc0afc814b24b9
+          test "$(git rev-parse HEAD)" = d6698273c01a7efe18b96ac053032ab425213797
           python3 - <<'PY'
           from pathlib import Path
 
@@ -107,12 +107,11 @@ multistart_joint_focus_fit (
       }
   };
 
-  /* Sigma has a useful first-order direction even from a cold physical start. */
   consider_scalar_seed (0, rparam);
-
-  /* Defocus is even at exact focus, so add a couple of optics-scaled nonzero
-     starts when the loaded value is exactly at that boundary.  */
   consider_scalar_seed (1, rparam);
+
+  /* Physical defocus is even at exact focus.  Add two optics-scaled nonzero
+     starts so the defocus-only prefit can leave the cold boundary.  */
   constexpr coord_t cold_epsilon = (coord_t)1e-8;
   if (my_isfinite (rparam.sharpen.scanner_mtf.defocus)
       && rparam.sharpen.scanner_mtf.defocus >= 0
@@ -139,15 +138,14 @@ multistart_joint_focus_fit (
           }
     }
 
-  /* Turn each one-dimensional explanation into a fully coupled fixed-phase
-     candidate, so every retained solution exports both physical coordinates. */
+  /* Convert each scalar explanation into a fully coupled fixed-phase
+     candidate, so all retained solutions export both physical coordinates. */
   for (int which = 0; which < 2; which++)
     if (scalar[which].success)
       consider_fixed_coupled (scalar[which].rparam, which + 1);
 
   if (!best_fixed.success)
     return best_fixed;
-
   if (best_seed_kind)
     *best_seed_kind = fixed_seed_kind;
 
@@ -168,7 +166,7 @@ multistart_joint_focus_fit (
 
           path = Path('src/qtgui/MainWindow.cpp')
           text = path.read_text()
-          old = ('        local.flags = flags | colorscreen::finetune_position;\n')
+          old = '        local.flags = flags | colorscreen::finetune_position;\n'
           new = ('        /* Candidate verification determines local phase/colour only.\n'
                  '           Scanner MTF is shared and is fitted after area selection. */\n'
                  '        local.flags = colorscreen::finetune_position;\n')
