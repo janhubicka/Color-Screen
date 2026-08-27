@@ -39,8 +39,8 @@ jobs:
           git fetch origin main
           test "$(git rev-parse origin/main)" = a86ac611846419ace3934ac8f46752b5e8abb4a8
           git checkout --detach a86ac611846419ace3934ac8f46752b5e8abb4a8
-          git apply --check /tmp/focus.patch
-          git apply /tmp/focus.patch
+          git apply --recount --check /tmp/focus.patch
+          git apply --recount /tmp/focus.patch
           git diff --check
           CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure
           make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
