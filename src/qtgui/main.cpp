@@ -962,11 +962,23 @@ int main(int argc, char *argv[]) {
   }
 
   if (parser.isSet(windowLifetimeOption)) {
-    QTimer::singleShot(300, &app, [&app]() {
+    auto startWindowLifetime =
+        std::make_shared<std::function<void(int)>>();
+    const std::weak_ptr<std::function<void(int)>> weakStartWindowLifetime =
+        startWindowLifetime;
+    *startWindowLifetime = [&app, weakStartWindowLifetime](int attemptsLeft) {
       const QList<MainWindow *> documents = app.documentWindows();
       WorkspaceWindow *workspace = app.workspaceWindow();
       if (documents.size() != 1 || !documents.front()->sharedImageData() ||
           !workspace || app.tabCount() != 1 || !workspace->isTabBarVisible()) {
+        if (attemptsLeft > 0) {
+          if (auto retry = weakStartWindowLifetime.lock()) {
+            QTimer::singleShot(250, &app, [retry, attemptsLeft]() {
+              (*retry)(attemptsLeft - 1);
+            });
+            return;
+          }
+        }
         qCritical() << "Window lifetime smoke test requires one standard tab";
         app.exit(16);
         return;
@@ -1019,17 +1031,44 @@ int main(int argc, char *argv[]) {
         app.exit(16);
         return;
       }
-      QTimer::singleShot(150, &app,
-                         [&app, workspace, guardedSource, guardedView]() {
-        if (guardedSource || guardedView ||
-            !app.documentWindows().isEmpty() || !app.viewWindows().isEmpty() ||
-            (workspace && workspace->isVisible())) {
-          qCritical() << "Last application window did not release its document";
-          app.exit(16);
-          return;
-        }
-        app.exit(0);
+
+      auto checkFinalDetachedClose =
+          std::make_shared<std::function<void(int)>>();
+      const std::weak_ptr<std::function<void(int)>>
+          weakCheckFinalDetachedClose = checkFinalDetachedClose;
+      *checkFinalDetachedClose =
+          [&app, workspace, guardedSource, guardedView,
+           weakCheckFinalDetachedClose](int attemptsLeft) {
+            // WA_DeleteOnClose is intentionally asynchronous.  In particular,
+            // ASan can make the Windows event loop reach this check before Qt
+            // has handled the queued widget destruction.
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            QCoreApplication::processEvents();
+            if (guardedSource || guardedView ||
+                !app.documentWindows().isEmpty() ||
+                !app.viewWindows().isEmpty() ||
+                (workspace && workspace->isVisible())) {
+              if (attemptsLeft > 0) {
+                if (auto retry = weakCheckFinalDetachedClose.lock()) {
+                  QTimer::singleShot(50, &app, [retry, attemptsLeft]() {
+                    (*retry)(attemptsLeft - 1);
+                  });
+                  return;
+                }
+              }
+              qCritical()
+                  << "Last application window did not release its document";
+              app.exit(16);
+              return;
+            }
+            app.exit(0);
+          };
+      QTimer::singleShot(0, &app, [checkFinalDetachedClose]() {
+        (*checkFinalDetachedClose)(40);
       });
+    };
+    QTimer::singleShot(300, &app, [startWindowLifetime]() {
+      (*startWindowLifetime)(40);
     });
   }
 
