@@ -1,0 +1,6 @@
+led physical Sigma/"
++         "Defocus fits use robust scalar-prefit starts and report the "
++         "process-screen MTF relevant to colour recovery."));
+   connect(m_analyzeFocusAreasBtn, &QPushButton::clicked, this,
+           [this]() { emit analyzeFocusAreasRequested(m_finetuneFlags); });
+   if (m_currentGroupForm)
