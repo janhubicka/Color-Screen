@@ -45,7 +45,16 @@ struct finetune_focus_analysis_result
   std::vector<size_t> selected;
   coord_t color_volume = 0;
   finetune_result joint_fit;
+  /* Process-screen carrier frequency in scan cycles/pixel and the effective
+     system MTF measured there.  Coupled physical sigma+defocus analysis first
+     measures TARGET_SCREEN_MTF with a canonical sigma-only probe, then chooses
+     the physical decomposition along that fixed-MTF contour.  */
+  coord_t screen_frequency = -1;
+  coord_t target_screen_mtf = -1;
+  coord_t joint_screen_mtf = -1;
+  int contour_evaluations = 0;
   std::vector<finetune_result> leave_one_out_fits;
+  std::vector<coord_t> leave_one_out_target_screen_mtf;
   /* Entry I evaluates SELECTED[I] after the shared model was learned without
      that tile.  RELATIVE_BADNESS divides the raw objective by the observed
      mean-colour norm, matching the candidate quality normalization.  */
@@ -62,6 +71,11 @@ struct finetune_focus_analysis_result
      blur diameter and millimetres for physical scanner-MTF defocus.  */
   coord_t leave_one_out_focus_span = -1;
   coord_t leave_one_out_focus_max_delta = -1;
+  /* Stability of the effective system MTF at SCREEN_FREQUENCY.  Unlike the
+     scalar-focus diagnostics these remain meaningful when sigma and physical
+     defocus are both active.  */
+  coord_t leave_one_out_screen_mtf_span = -1;
+  coord_t leave_one_out_screen_mtf_max_delta = -1;
   std::string err;
 };
 

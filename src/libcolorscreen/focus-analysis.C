@@ -1,4 +1,6 @@
 #include "include/focus-analysis.h"
+#include "include/scr-to-img.h"
+#include "include/scr-to-img-parameters.h"
 #include "render-interpolate.h"
 #include <algorithm>
 #include <cmath>
@@ -102,6 +104,317 @@ freeze_focus_from_fit (render_parameters *rparam, uint64_t flags,
       rparam->green_strip_width = fit.green_strip_width;
     }
   return true;
+}
+
+/* Return the process-screen carrier frequency in scan cycles per pixel.  The
+   same definition is used by adaptive focus interpolation: SCR_NAMES gives
+   cycles per screen coordinate and PIXEL_SIZE converts image pixels back to
+   screen coordinates.  */
+static bool
+focus_screen_frequency (const scr_to_img_parameters &param,
+                        const image_data &img, coord_t *frequency)
+{
+  if (!frequency || param.type == Random)
+    return false;
+  scr_to_img map;
+  if (!map.set_parameters (param, img))
+    return false;
+  const coord_t pixel_size
+      = map.pixel_size ({ 0, 0, img.width, img.height });
+  const coord_t value = scr_names[param.type].frequency * pixel_size;
+  if (!my_isfinite (value) || value <= 0)
+    return false;
+  *frequency = value;
+  return true;
+}
+
+/* Return the scanner-MTF parameters exactly as the periodic-screen focus
+   forward model interprets them.  RGB fitting uses one achromatic screen
+   transfer at 550 nm; BW/IR fitting keeps the capture wavelength supplied by
+   the caller.  */
+static mtf_parameters
+focus_mtf_parameters (const render_parameters &rparam, const image_data &img,
+                      uint64_t flags)
+{
+  mtf_parameters mtf = rparam.sharpen.scanner_mtf;
+  if (!(flags & finetune_bw) && img.has_rgb ())
+    mtf.wavelength = 550;
+  return mtf;
+}
+
+/* Return system MTF at FREQUENCY after applying the scalar scanner-MTF values
+   exported by FIT.  */
+static coord_t
+focus_fit_mtf (const render_parameters &rparam, const image_data &img,
+               uint64_t flags, const finetune_result &fit,
+               coord_t frequency)
+{
+  if (!fit.success || !my_isfinite (frequency) || frequency <= 0)
+    return -1;
+  mtf_parameters mtf = focus_mtf_parameters (rparam, img, flags);
+  if ((flags & finetune_scanner_mtf_sigma)
+      && my_isfinite (fit.scanner_mtf_sigma)
+      && fit.scanner_mtf_sigma >= 0)
+    mtf.sigma = fit.scanner_mtf_sigma;
+  if (flags & finetune_scanner_mtf_defocus)
+    {
+      if (mtf.simulate_diffraction_p ())
+        {
+          if (!my_isfinite (fit.scanner_mtf_defocus)
+              || fit.scanner_mtf_defocus < 0)
+            return -1;
+          mtf.defocus = fit.scanner_mtf_defocus;
+        }
+      else
+        {
+          if (!my_isfinite (fit.scanner_mtf_blur_diameter)
+              || fit.scanner_mtf_blur_diameter < 0)
+            return -1;
+          mtf.blur_diameter = fit.scanner_mtf_blur_diameter;
+        }
+    }
+  const coord_t value = mtf.system_mtf (frequency);
+  return my_isfinite (value) && value >= 0 ? value : -1;
+}
+
+/* Find the first nonnegative physical defocus whose system MTF at FREQUENCY
+   reaches TARGET.  Defocus OTFs can acquire later lobes, so scan from perfect
+   focus and bracket the first crossing rather than assuming global
+   monotonicity.  */
+static bool
+first_defocus_for_screen_mtf (mtf_parameters mtf, coord_t frequency,
+                              coord_t target, coord_t *defocus)
+{
+  if (!defocus || !mtf.simulate_diffraction_p () || !my_isfinite (frequency)
+      || frequency <= 0 || !my_isfinite (target) || target <= 0
+      || target > 1)
+    return false;
+
+  mtf.defocus = 0;
+  const coord_t sharp = mtf.system_mtf (frequency);
+  if (!my_isfinite (sharp) || sharp < target)
+    return false;
+  const coord_t tolerance
+      = std::numeric_limits<coord_t>::epsilon () * 128;
+  if (my_fabs (sharp - target) <= tolerance)
+    {
+      *defocus = 0;
+      return true;
+    }
+
+  constexpr coord_t hard_max = 20;
+  constexpr int samples = 4096;
+  coord_t previous = 0;
+  for (int i = 1; i <= samples; i++)
+    {
+      const coord_t t = (coord_t)i / samples;
+      const coord_t current = hard_max * t * t;
+      mtf.defocus = current;
+      const coord_t value = mtf.system_mtf (frequency);
+      if (!my_isfinite (value))
+        return false;
+      if (value <= target)
+        {
+          coord_t low = previous;
+          coord_t high = current;
+          for (int iteration = 0; iteration < 60; iteration++)
+            {
+              const coord_t middle = (low + high) * (coord_t)0.5;
+              mtf.defocus = middle;
+              const coord_t middle_mtf = mtf.system_mtf (frequency);
+              if (!my_isfinite (middle_mtf))
+                return false;
+              if (middle_mtf > target)
+                low = middle;
+              else
+                high = middle;
+            }
+          *defocus = high;
+          return true;
+        }
+      previous = current;
+    }
+  return false;
+}
+
+/* Fit a coupled physical scanner MTF while making the process-screen carrier
+   contrast the primary invariant.
+
+   A free sigma+defocus pixel fit has a broad compensation valley and can move
+   to a solution with a materially different carrier MTF.  Instead first fit a
+   canonical cold sigma-only model.  Its system MTF at the known process-screen
+   frequency is the effective contrast loss measured by the historical scan.
+   Then evaluate several sigma/defocus decompositions on exactly that MTF
+   contour, refitting local phase and image-layer intensities at each point.
+   Pixel residual chooses the MTF shape along the contour, but cannot trade
+   away the carrier contrast that colour recovery needs.  */
+static finetune_result
+fit_coupled_physical_focus_at_screen_mtf (
+    const render_parameters &rparam, const scr_to_img_parameters &param,
+    const image_data &img, const std::vector<point_t> &locations,
+    const std::vector<finetune_result> &starts,
+    const finetune_parameters &fparams, coord_t screen_frequency,
+    coord_t *target_screen_mtf, int *contour_evaluations,
+    progress_info *progress)
+{
+  finetune_result failure;
+  if (target_screen_mtf)
+    *target_screen_mtf = -1;
+  if (contour_evaluations)
+    *contour_evaluations = 0;
+
+  constexpr uint64_t coupled
+      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+  if ((fparams.flags & coupled) != coupled
+      || !rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
+    {
+      failure.err = "coupled physical focus contour requested for non-physical model";
+      return failure;
+    }
+
+  /* Use one canonical sharp physical baseline to measure carrier attenuation.
+     This deliberately does not inherit a previous sigma/defocus calibration:
+     an existing slanted-edge model is a useful decomposition prior, not the
+     historical plate's carrier measurement.  */
+  render_parameters probe_rparam = rparam;
+  probe_rparam.sharpen.scanner_mtf.sigma = 0;
+  probe_rparam.sharpen.scanner_mtf.defocus = 0;
+  finetune_parameters probe_params = fparams;
+  probe_params.flags
+      &= ~(finetune_scanner_mtf_defocus | finetune_position);
+  probe_params.flags |= finetune_scanner_mtf_sigma;
+  probe_params.interpolate_scanner_mtf_defocus = false;
+  finetune_result probe = finetune (probe_rparam, param, img, locations,
+                                    &starts, probe_params, progress);
+  if (!probe.success)
+    {
+      failure.err = "screen-frequency sigma probe failed";
+      if (!probe.err.empty ())
+        failure.err += ": " + probe.err;
+      return failure;
+    }
+  if (!my_isfinite (probe.scanner_mtf_sigma)
+      || probe.scanner_mtf_sigma < 0)
+    {
+      failure.err = "screen-frequency sigma probe returned invalid sigma";
+      return failure;
+    }
+
+  mtf_parameters probe_mtf
+      = focus_mtf_parameters (probe_rparam, img, fparams.flags);
+  probe_mtf.sigma = probe.scanner_mtf_sigma;
+  probe_mtf.defocus = 0;
+  const coord_t target = probe_mtf.system_mtf (screen_frequency);
+  if (!my_isfinite (target) || target <= 0 || target > 1)
+    {
+      failure.err = "screen-frequency sigma probe returned invalid MTF";
+      return failure;
+    }
+  if (target_screen_mtf)
+    *target_screen_mtf = target;
+
+  /* The sigma-only endpoint already has the desired MTF and has optimized the
+     same local phase/intensity nuisance variables, so it is a valid first
+     contour candidate without another expensive fit.  */
+  probe.scanner_mtf_defocus = 0;
+  finetune_result best = probe;
+  coord_t best_badness = probe.badness;
+  int evaluations = 1;
+
+  std::vector<coord_t> sigmas;
+  static constexpr coord_t fractions[]
+      = { 0, (coord_t)0.125, (coord_t)0.25, (coord_t)0.5,
+          (coord_t)0.75, (coord_t)0.875, 1 };
+  for (coord_t fraction : fractions)
+    sigmas.push_back (probe.scanner_mtf_sigma * fraction);
+  const coord_t current_sigma = rparam.sharpen.scanner_mtf.sigma;
+  if (my_isfinite (current_sigma) && current_sigma >= 0
+      && current_sigma <= probe.scanner_mtf_sigma)
+    sigmas.push_back (current_sigma);
+  std::sort (sigmas.begin (), sigmas.end ());
+  sigmas.erase (std::unique (sigmas.begin (), sigmas.end (),
+                            [] (coord_t a, coord_t b) {
+                              return my_fabs (a - b) <= (coord_t)1e-7;
+                            }),
+                sigmas.end ());
+
+  finetune_parameters fixed_params = fparams;
+  fixed_params.flags &= ~coupled;
+  /* Refit local phase on every contour point.  Otherwise an MTF candidate can
+     lose merely because its phase was inherited from a differently blurred
+     verification fit.  */
+  fixed_params.flags |= finetune_position;
+  fixed_params.interpolate_scanner_mtf_defocus = false;
+
+  for (coord_t sigma : sigmas)
+    {
+      if (progress && progress->cancelled ())
+        {
+          failure.err = "cancelled";
+          return failure;
+        }
+      if (my_fabs (sigma - probe.scanner_mtf_sigma) <= (coord_t)1e-7)
+        continue;
+
+      mtf_parameters mtf
+          = focus_mtf_parameters (rparam, img, fparams.flags);
+      mtf.sigma = sigma;
+      coord_t defocus = 0;
+      if (!first_defocus_for_screen_mtf (mtf, screen_frequency, target,
+                                         &defocus))
+        continue;
+
+      render_parameters candidate_rparam = rparam;
+      candidate_rparam.sharpen.scanner_mtf.sigma = sigma;
+      candidate_rparam.sharpen.scanner_mtf.defocus = defocus;
+      finetune_result candidate
+          = finetune (candidate_rparam, param, img, locations, &starts,
+                      fixed_params, progress);
+      evaluations++;
+      if (!candidate.success || !my_isfinite (candidate.badness)
+          || candidate.badness < 0)
+        continue;
+      candidate.scanner_mtf_sigma = sigma;
+      candidate.scanner_mtf_defocus = defocus;
+      candidate.scanner_mtf_blur_diameter
+          = candidate_rparam.sharpen.scanner_mtf.blur_diameter;
+      if (!best.success || candidate.badness < best_badness)
+        {
+          best = std::move (candidate);
+          best_badness = best.badness;
+        }
+    }
+
+  if (contour_evaluations)
+    *contour_evaluations = evaluations;
+  return best;
+}
+
+/* Run one selected-area joint fit.  Coupled physical sigma+defocus uses the
+   carrier-preserving contour estimator above; every other model keeps the
+   ordinary FINETUNE path.  */
+static finetune_result
+fit_selected_focus_areas (
+    const render_parameters &rparam, const scr_to_img_parameters &param,
+    const image_data &img, const std::vector<point_t> &locations,
+    const std::vector<finetune_result> &starts,
+    const finetune_parameters &fparams, coord_t screen_frequency,
+    coord_t *target_screen_mtf, int *contour_evaluations,
+    progress_info *progress)
+{
+  constexpr uint64_t coupled
+      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+  if ((fparams.flags & coupled) == coupled
+      && rparam.sharpen.scanner_mtf.simulate_diffraction_p ()
+      && my_isfinite (screen_frequency) && screen_frequency > 0)
+    return fit_coupled_physical_focus_at_screen_mtf (
+        rparam, param, img, locations, starts, fparams, screen_frequency,
+        target_screen_mtf, contour_evaluations, progress);
+  if (target_screen_mtf)
+    *target_screen_mtf = -1;
+  if (contour_evaluations)
+    *contour_evaluations = 1;
+  return finetune (rparam, param, img, locations, &starts, fparams, progress);
 }
 
 } // namespace
@@ -232,25 +545,6 @@ finetune_analyze_focus_areas (
       return false;
     }
 
-  /* Periodic focus areas constrain the combined scanner transfer, but the
-     residual Gaussian sigma and physical defocus can compensate for each
-     other at the few harmonics that remain measurable in a real capture.
-     A coupled fit can therefore report optimizer initialization rather than
-     a separately identified physical decomposition.  Require one coordinate
-     to be calibrated/fixed and fit only the other.  */
-  constexpr uint64_t coupled_physical_focus
-      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
-  if ((fparams.flags & coupled_physical_focus) == coupled_physical_focus
-      && rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
-    {
-      set_analysis_error (
-          result,
-          "physical scanner MTF sigma and defocus are not separately "
-          "identifiable from periodic focus areas; fix/calibrate one and "
-          "optimize only the other");
-      return false;
-    }
-
   if (!finetune_select_focus_areas (candidates, analysis_parameters.selection,
                                     &result->selected,
                                     &result->color_volume))
@@ -292,8 +586,12 @@ finetune_analyze_focus_areas (
       starts.push_back (candidates[index].fit);
     }
 
-  result->joint_fit
-      = finetune (rparam, param, img, locations, &starts, fparams, progress);
+  coord_t screen_frequency = -1;
+  focus_screen_frequency (param, img, &screen_frequency);
+  result->screen_frequency = screen_frequency;
+  result->joint_fit = fit_selected_focus_areas (
+      rparam, param, img, locations, starts, fparams, screen_frequency,
+      &result->target_screen_mtf, &result->contour_evaluations, progress);
   if (!result->joint_fit.success)
     {
       result->err = "joint focus-area fit failed";
@@ -301,6 +599,11 @@ finetune_analyze_focus_areas (
         result->err += ": " + result->joint_fit.err;
       return false;
     }
+
+  if (screen_frequency > 0)
+    result->joint_screen_mtf
+        = focus_fit_mtf (rparam, img, fparams.flags, result->joint_fit,
+                         screen_frequency);
 
   if (!analysis_parameters.leave_one_out)
     {
@@ -322,8 +625,13 @@ finetune_analyze_focus_areas (
             subset_starts.push_back (starts[i]);
           }
 
-      finetune_result fit = finetune (rparam, param, img, subset_locations,
-                                     &subset_starts, fparams, progress);
+      coord_t subset_target_mtf = -1;
+      int subset_evaluations = 0;
+      finetune_result fit = fit_selected_focus_areas (
+          rparam, param, img, subset_locations, subset_starts, fparams,
+          screen_frequency, &subset_target_mtf, &subset_evaluations, progress);
+      if (subset_target_mtf >= 0)
+        result->leave_one_out_target_screen_mtf.push_back (subset_target_mtf);
       result->leave_one_out_fits.push_back (std::move (fit));
       if (!result->leave_one_out_fits.back ().success)
         {
@@ -408,6 +716,35 @@ finetune_analyze_focus_areas (
               result->held_out_fits.clear ();
               result->held_out_relative_badness.clear ();
             }
+        }
+    }
+
+  if (screen_frequency > 0 && result->joint_screen_mtf >= 0
+      && !result->leave_one_out_fits.empty ())
+    {
+      coord_t min_mtf = std::numeric_limits<coord_t>::max ();
+      coord_t max_mtf = -std::numeric_limits<coord_t>::max ();
+      coord_t max_delta = 0;
+      bool valid = true;
+      for (const finetune_result &fit : result->leave_one_out_fits)
+        {
+          const coord_t value
+              = focus_fit_mtf (rparam, img, fparams.flags, fit,
+                               screen_frequency);
+          if (value < 0)
+            {
+              valid = false;
+              break;
+            }
+          min_mtf = std::min (min_mtf, value);
+          max_mtf = std::max (max_mtf, value);
+          max_delta = std::max (
+              max_delta, (coord_t)my_fabs (value - result->joint_screen_mtf));
+        }
+      if (valid)
+        {
+          result->leave_one_out_screen_mtf_span = max_mtf - min_mtf;
+          result->leave_one_out_screen_mtf_max_delta = max_delta;
         }
     }
 

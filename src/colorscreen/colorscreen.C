@@ -345,12 +345,14 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --min-areas=N              require at least N selected areas (default 3)\n");
       fprintf (stderr, "      --max-areas=N              jointly fit at most N areas (default 8)\n");
       fprintf (stderr, "      --range=N                  finetune half-range in screen periods (default 4)\n");
-      fprintf (stderr, "      --defocus-only             optimize scanner-MTF defocus (default)\n");
-      fprintf (stderr, "      --sigma-only               optimize residual scanner-MTF sigma instead\n");
+      fprintf (stderr, "      --defocus-only             optimize scanner-MTF defocus only\n");
+      fprintf (stderr, "      --sigma-only               optimize residual scanner-MTF sigma only\n");
+      fprintf (stderr, "      --sigma-and-defocus        optimize both while preserving screen-carrier MTF (default)\n");
       fprintf (stderr, "      --zero-focus-start         zero sigma/defocus after loading parameters\n");
       fprintf (stderr, "      --use-monochrome-channel   force BW/IR focus fitting\n");
       fprintf (stderr, "      --use-rgb                  force RGB uniform-image-layer fitting\n");
-      fprintf (stderr, "      --fixed-focus-verification verify candidates without refitting global focus\n");
+      fprintf (stderr, "      --fixed-focus-verification verify candidates without refitting global focus (default)\n");
+      fprintf (stderr, "      --refit-focus-verification refit focus in each candidate (diagnostic)\n");
       fprintf (stderr, "      --fixed-joint-position     keep verified local phases fixed in the joint focus solve\n");
       fprintf (stderr, "      --no-leave-one-out         skip N-1 stability fits\n");
     }
@@ -2595,12 +2597,13 @@ analyze_focus_areas (int argc, char **argv)
   bool zero_focus_start = false;
   bool force_bw = false;
   bool force_rgb = false;
-  bool fixed_focus_verification = false;
+  bool fixed_focus_verification = true;
   bool fixed_joint_position = false;
-  /* Periodic focus areas do not separately identify physical sigma and
-     defocus.  Default to the useful calibrated-sigma workflow: preserve the
-     sigma from the parameter file and optimize defocus only.  */
-  uint64_t focus_flags = finetune_scanner_mtf_defocus;
+  /* The useful observable is the process-screen carrier transfer.  Coupled
+     physical fitting measures that transfer first and only then chooses a
+     sigma/defocus decomposition along the same-MTF contour.  */
+  uint64_t focus_flags
+      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
   subhelp = help_focus_areas;
 
   for (int i = 0; i < argc; i++)
@@ -2623,6 +2626,11 @@ analyze_focus_areas (int argc, char **argv)
         focus_flags = finetune_scanner_mtf_defocus;
       else if (arg == "--sigma-only")
         focus_flags = finetune_scanner_mtf_sigma;
+      else if (arg == "--sigma-and-defocus")
+        focus_flags = finetune_scanner_mtf_sigma
+                      | finetune_scanner_mtf_defocus;
+      else if (arg == "--refit-focus-verification")
+        fixed_focus_verification = false;
       else if (arg == "--zero-focus-start")
         zero_focus_start = true;
       else if (arg == "--use-monochrome-channel")
@@ -2778,6 +2786,17 @@ analyze_focus_areas (int argc, char **argv)
     }
 
   printf ("Selected focus areas: %zu\n", analysis.selected.size ());
+  if (analysis.screen_frequency > 0 && analysis.joint_screen_mtf >= 0)
+    {
+      printf ("Process-screen frequency: %.9f cycles/pixel\n",
+              (double)analysis.screen_frequency);
+      printf ("Process-screen system MTF: %.6f%%\n",
+              (double)(analysis.joint_screen_mtf * 100));
+      if (analysis.target_screen_mtf >= 0)
+        printf ("Carrier-MTF target: %.6f%% (%d contour evaluations)\n",
+                (double)(analysis.target_screen_mtf * 100),
+                analysis.contour_evaluations);
+    }
   for (size_t i = 0; i < analysis.selected.size (); i++)
     {
       const size_t index = analysis.selected[i];
@@ -2838,6 +2857,10 @@ analyze_focus_areas (int argc, char **argv)
   if (analysis.held_out_max_relative_badness >= 0)
     printf ("Maximum held-out relative residual: %.12g\n",
             (double)analysis.held_out_max_relative_badness);
+  if (analysis.leave_one_out_screen_mtf_span >= 0)
+    printf ("Leave-one-out screen-MTF span: %.6f percentage points; max delta %.6f\n",
+            (double)(analysis.leave_one_out_screen_mtf_span * 100),
+            (double)(analysis.leave_one_out_screen_mtf_max_delta * 100));
 
   return 0;
 }

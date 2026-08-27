@@ -356,37 +356,185 @@ test_bw_multitile_focus ()
   return true;
 }
 
-/* Periodic focus areas constrain the combined transfer, not a unique split
-   between residual Gaussian sigma and physical defocus.  Coupled physical
-   fitting must therefore fail before doing an expensive image fit.  */
+/* Build a monochrome Paget fixture with a known physical capture transfer.
+   The three regions have different primary weights but share one scanner MTF. */
 static bool
-test_coupled_physical_focus_rejected ()
+build_physical_bw_focus_fixture (
+    image_data *image, scr_to_img_parameters *geometry,
+    std::vector<finetune_focus_area_candidate> *candidates,
+    coord_t true_sigma, coord_t true_defocus)
 {
-  render_parameters rparam;
-  rparam.sharpen.mode = sharpen_parameters::blur_deconvolution;
-  rparam.sharpen.scanner_mtf.model = mtf_model::physical_diffraction;
-  rparam.sharpen.scanner_mtf.pixel_pitch = 3.76;
-  rparam.sharpen.scanner_mtf.f_stop = 8;
-  rparam.sharpen.scanner_mtf.scan_dpi = 2000;
+  constexpr int width = 192;
+  constexpr int height = 64;
+  constexpr int regions = 3;
+  const rgbdata truth[regions]
+      = { { 0.80, 0.12, 0.08 }, { 0.10, 0.75, 0.20 },
+          { 0.10, 0.12, 0.80 } };
+  const point_t locations[regions]
+      = { { 32, 32 }, { 96, 32 }, { 160, 32 } };
 
-  finetune_parameters fparam;
-  fparam.flags = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+  if (!image->set_dimensions (width, height, false, true))
+    return false;
+  geometry->type = Paget;
+  geometry->center = { 0, 0 };
+  geometry->coordinate1 = { 8, 0 };
+  geometry->coordinate2 = { 0, 8 };
+  scr_to_img map;
+  if (!map.set_parameters (*geometry, *image))
+    return false;
+  const coord_t pixel_size = map.pixel_size ({ 0, 0, width, height });
+  if (!(pixel_size > 0))
+    return false;
 
+  screen source, filtered;
+  source.initialize (geometry->type);
+  sharpen_parameters transfer;
+  transfer.mode = sharpen_parameters::blur_deconvolution;
+  transfer.scanner_mtf_scale = pixel_size;
+  transfer.scanner_mtf.model = mtf_model::physical_diffraction;
+  transfer.scanner_mtf.scan_dpi = 1887;
+  transfer.scanner_mtf.f_stop = 8;
+  transfer.scanner_mtf.wavelength = 750;
+  transfer.scanner_mtf.pixel_pitch = 3.760;
+  transfer.scanner_mtf.sensor_fill_factor = 0;
+  transfer.scanner_mtf.sigma = true_sigma;
+  transfer.scanner_mtf.defocus = true_defocus;
+  sharpen_parameters *channels[3] = { &transfer, &transfer, &transfer };
+  if (!filtered.initialize_with_sharpen_parameters (
+          source, channels, false, false))
+    return false;
+
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      {
+        const int tileid = std::min (x / (width / regions), regions - 1);
+        const rgbdata screen_value = filtered.interpolated_mult (
+            map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 }));
+        luminosity_t value
+            = screen_value.red * truth[tileid].red
+              + screen_value.green * truth[tileid].green
+              + screen_value.blue * truth[tileid].blue;
+        value = std::clamp (value, (luminosity_t)0, (luminosity_t)1);
+        image->put_pixel (
+            x, y, (image_data::gray)(value * 65535 + (luminosity_t)0.5));
+      }
+
+  candidates->clear ();
+  for (int tileid = 0; tileid < regions; tileid++)
+    {
+      finetune_focus_area_candidate candidate;
+      candidate.center = locations[tileid];
+      candidate.mean_color = { 0.4, 0.4, 0.4 };
+      candidate.search_score = tileid;
+      candidate.fit.success = true;
+      candidate.fit.badness = (coord_t)0.01;
+      candidate.fit.contrast = (coord_t)0.2;
+      candidate.fit.color = truth[tileid];
+      candidate.fit.screen_coord_adjust = { 0, 0 };
+      candidate.fit.emulsion_coord_adjust = { 0, 0 };
+      candidates->push_back (candidate);
+    }
+  return true;
+}
+
+/* Coupled physical focus is allowed to choose different sigma/defocus
+   decompositions, but cold and warm starts must recover the same effective
+   MTF at the Paget carrier. */
+static bool
+test_coupled_physical_focus_preserves_carrier ()
+{
+  constexpr coord_t true_sigma = (coord_t)0.45;
+  constexpr coord_t true_defocus = (coord_t)0.18;
   image_data image;
   scr_to_img_parameters geometry;
   std::vector<finetune_focus_area_candidate> candidates;
+  if (!build_physical_bw_focus_fixture (&image, &geometry, &candidates,
+                                        true_sigma, true_defocus))
+    return false;
+
+  render_parameters cold;
+  cold.gamma = 1;
+  cold.sharpen.mode = sharpen_parameters::blur_deconvolution;
+  cold.sharpen.scanner_mtf_scale = 1;
+  cold.sharpen.scanner_mtf.model = mtf_model::physical_diffraction;
+  cold.sharpen.scanner_mtf.scan_dpi = 1887;
+  cold.sharpen.scanner_mtf.f_stop = 8;
+  cold.sharpen.scanner_mtf.wavelength = 750;
+  cold.sharpen.scanner_mtf.pixel_pitch = 3.760;
+  cold.sharpen.scanner_mtf.sensor_fill_factor = 0;
+  cold.sharpen.scanner_mtf.sigma = 0;
+  cold.sharpen.scanner_mtf.defocus = 0;
+
+  finetune_parameters fparam;
+  fparam.range = 2;
+  fparam.ignore_outliers = 0;
+  fparam.flags = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus
+                 | finetune_bw | finetune_no_normalize
+                 | finetune_no_data_collection;
   finetune_focus_analysis_parameters analysis;
-  finetune_focus_analysis_result result;
-  if (finetune_analyze_focus_areas (rparam, geometry, image, candidates,
-                                    fparam, analysis, &result, nullptr))
+  analysis.selection.min_areas = 3;
+  analysis.selection.max_areas = 3;
+  analysis.selection.minimum_color_volume = 0;
+  analysis.leave_one_out = false;
+  analysis.held_out = false;
+
+  finetune_focus_analysis_result cold_result;
+  if (!finetune_analyze_focus_areas (cold, geometry, image, candidates,
+                                     fparam, analysis, &cold_result, nullptr))
     {
-      fprintf (stderr, "Coupled physical sigma/defocus fit was accepted\n");
+      fprintf (stderr, "Physical cold-start focus analysis failed: %s\n",
+               cold_result.err.c_str ());
       return false;
     }
-  if (result.err.find ("not separately identifiable") == std::string::npos)
+
+  render_parameters warm = cold;
+  warm.sharpen.scanner_mtf.sigma = true_sigma;
+  warm.sharpen.scanner_mtf.defocus = true_defocus;
+  finetune_focus_analysis_result warm_result;
+  if (!finetune_analyze_focus_areas (warm, geometry, image, candidates,
+                                     fparam, analysis, &warm_result, nullptr))
     {
-      fprintf (stderr, "Unexpected coupled-focus diagnostic: %s\n",
-               result.err.c_str ());
+      fprintf (stderr, "Physical warm-start focus analysis failed: %s\n",
+               warm_result.err.c_str ());
+      return false;
+    }
+
+  const coord_t start_delta
+      = std::fabs (cold_result.joint_screen_mtf
+                   - warm_result.joint_screen_mtf);
+
+  printf ("physical carrier MTF cold %.6f warm %.6f; "
+          "cold sigma/defocus %.6f/%.6f warm %.6f/%.6f\n",
+          (double)cold_result.joint_screen_mtf,
+          (double)warm_result.joint_screen_mtf,
+          (double)cold_result.joint_fit.scanner_mtf_sigma,
+          (double)cold_result.joint_fit.scanner_mtf_defocus,
+          (double)warm_result.joint_fit.scanner_mtf_sigma,
+          (double)warm_result.joint_fit.scanner_mtf_defocus);
+
+  /* SYSTEM_MTF is intentionally not part of the exported libcolorscreen ABI,
+     so this standalone test checks the public invariant directly: cold and
+     warm decompositions must report the same finite carrier transfer and each
+     chosen decomposition must lie on its measured carrier-MTF contour.  The
+     real-scan regression below the library test compares that transfer with
+     the independent Hurley slanted-edge calibration.  */
+  if (!std::isfinite ((double)cold_result.joint_screen_mtf)
+      || !std::isfinite ((double)warm_result.joint_screen_mtf)
+      || cold_result.joint_screen_mtf <= 0 || cold_result.joint_screen_mtf > 1
+      || warm_result.joint_screen_mtf <= 0 || warm_result.joint_screen_mtf > 1
+      || cold_result.contour_evaluations < 2
+      || warm_result.contour_evaluations < 2
+      || start_delta > (coord_t)0.01
+      || std::fabs (cold_result.target_screen_mtf
+                    - cold_result.joint_screen_mtf) > (coord_t)1e-6
+      || std::fabs (warm_result.target_screen_mtf
+                    - warm_result.joint_screen_mtf) > (coord_t)1e-6)
+    {
+      fprintf (stderr,
+               "Physical focus failed to preserve carrier MTF: cold %.9g "
+               "warm %.9g delta %.9g\n",
+               (double)cold_result.joint_screen_mtf,
+               (double)warm_result.joint_screen_mtf, (double)start_delta);
       return false;
     }
   return true;
@@ -434,7 +582,7 @@ main ()
       || !test_sky_candidate_budget ()
       || !test_bw_selection_uses_primary_intensities ()
       || !test_bw_multitile_focus ()
-      || !test_coupled_physical_focus_rejected ()
+      || !test_coupled_physical_focus_preserves_carrier ()
       || !test_grayscale_image_search ())
     return 1;
   printf ("focus-analysis-unittests: PASS\n");
