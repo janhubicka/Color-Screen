@@ -1,21 +1,7 @@
 diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-analysis.C
 --- a/src/libcolorscreen/focus-analysis.C
 +++ b/src/libcolorscreen/focus-analysis.C
-@@ -181,10 +181,10 @@ multistart_joint_focus_fit (
-     }
- 
--  /* Release both coordinates from the better scalar basin first.  Usually one
--     of these already captures the process-screen attenuation and this avoids
--     paying for two equally poor coupled searches.  If it does not beat the
--     loaded start, try the other basin as a fallback.  */
-+  /* Release both coordinates from each successful scalar basin.  Scalar and
-+     coupled residuals live in different parameter spaces, so a scalar basin
-+     that ranks second can still converge to the best released sigma/defocus
-+     solution and must not be pruned before the coupled comparison.  */
-   int first = 0, second = 1;
-   if ((!scalar[first].success && scalar[second].success)
-       || (scalar[first].success && scalar[second].success
-@@ -196,8 +196,7 @@ multistart_joint_focus_fit (
+@@ -196,7 +196,6 @@ multistart_joint_focus_fit (
                          fparams, progress, &best, best_seed_kind,
                          scalar[first].kind);
 -  if (scalar[second].success
