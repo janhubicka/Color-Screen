@@ -435,6 +435,11 @@ test_coupled_physical_focus_recovers_screen_mtf ()
   rparam.sharpen.mode = sharpen_parameters::none;
   rparam.sharpen.scanner_mtf_scale = 1;
   rparam.sharpen.scanner_mtf = capture.scanner_mtf;
+  /* Exercise the same image-layer channel specialization used by
+     a standalone IR/BW capture: the global wavelength is unknown,
+     while channel 3 supplies the authoritative 750 nm value.  */
+  rparam.sharpen.scanner_mtf.wavelength = 0;
+  rparam.sharpen.scanner_mtf.wavelengths[3] = 750;
   rparam.sharpen.scanner_mtf.sigma = 0;
   rparam.sharpen.scanner_mtf.defocus = 0;
 

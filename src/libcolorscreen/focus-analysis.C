@@ -133,7 +133,10 @@ fit_system_mtf (const render_parameters &rparam, const image_data &img,
 {
   if (!fit.success || !(frequency > 0))
     return -1;
-  mtf_parameters mtf = rparam.sharpen.scanner_mtf;
+  mtf_parameters mtf
+      = (flags & finetune_bw)
+            ? rparam.get_image_layer_sharpen_parameters (&img).scanner_mtf
+            : rparam.sharpen.scanner_mtf;
   if ((flags & finetune_scanner_mtf_sigma)
       && my_isfinite (fit.scanner_mtf_sigma))
     mtf.sigma = fit.scanner_mtf_sigma;
@@ -253,7 +256,10 @@ multistart_joint_focus_fit (
       && rparam.sharpen.scanner_mtf.defocus >= 0
       && rparam.sharpen.scanner_mtf.defocus <= cold_epsilon)
     {
-      mtf_parameters focus_mtf = rparam.sharpen.scanner_mtf;
+      mtf_parameters focus_mtf
+          = (fparams.flags & finetune_bw)
+                ? rparam.get_image_layer_sharpen_parameters (&img).scanner_mtf
+                : rparam.sharpen.scanner_mtf;
       if (!(fparams.flags & finetune_bw) && img.has_rgb ())
         focus_mtf.wavelength = 550;
       const coord_t frequency = process_screen_frequency (param, img);
@@ -317,7 +323,12 @@ multistart_joint_focus_fit (
       && rparam.sharpen.scanner_mtf.defocus >= 0
       && rparam.sharpen.scanner_mtf.defocus <= cold_focus_epsilon)
     {
-      mtf_parameters stage_mtf = scalar[0].rparam.sharpen.scanner_mtf;
+      mtf_parameters stage_mtf
+          = (fparams.flags & finetune_bw)
+                ? scalar[0].rparam
+                      .get_image_layer_sharpen_parameters (&img)
+                      .scanner_mtf
+                : scalar[0].rparam.sharpen.scanner_mtf;
       if (!(fparams.flags & finetune_bw) && img.has_rgb ())
         stage_mtf.wavelength = 550;
       const coord_t frequency = process_screen_frequency (param, img);
