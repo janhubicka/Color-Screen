@@ -50,24 +50,40 @@ jobs:
           p = Path('src/libcolorscreen/focus-analysis.C')
           s = p.read_text()
           anchor = '  int first = 0, second = 1;\n'
-          combined = '''  /* The two scalar optima also define a useful interior seed.  Either scalar
-             fit by itself leaves the other even transfer coordinate at the zero
-             boundary, where a coupled simplex can have little first-order leverage.
-             Combining both fitted coordinates lifts that boundary degeneracy before
-             the full coupled comparison.  */
-            if (scalar[0].success && scalar[1].success)
+          fan = '''  /* From a genuinely cold physical start, the scalar optima are opposite
+             endpoints of the sigma/defocus compensation valley.  Sample a small fan
+             between them before releasing both coordinates.  Unlike combining the
+             full endpoints, convex mixtures do not double-count the carrier loss and
+             move the simplex off both even zero boundaries.  */
+            const coord_t cold_epsilon = (coord_t)1e-8;
+            if (scalar[0].success && scalar[1].success
+                && rparam.sharpen.scanner_mtf.sigma <= cold_epsilon
+                && rparam.sharpen.scanner_mtf.defocus <= cold_epsilon)
               {
-                render_parameters interior = scalar[0].rparam;
-                interior.sharpen.scanner_mtf.defocus
+                const coord_t sigma_endpoint
+                    = scalar[0].rparam.sharpen.scanner_mtf.sigma;
+                const coord_t defocus_endpoint
                     = scalar[1].rparam.sharpen.scanner_mtf.defocus;
-                consider_joint_fit (interior, param, img, locations, starts, fparams,
-                                    progress, &best, best_seed_kind, 3);
+                fprintf (stderr, "focus scalar endpoints sigma %.9g defocus %.9g\\n",
+                         (double)sigma_endpoint, (double)defocus_endpoint);
+                static constexpr coord_t fractions[]
+                    = { (coord_t)0.25, (coord_t)0.5, (coord_t)0.75 };
+                for (coord_t fraction : fractions)
+                  {
+                    render_parameters interior = rparam;
+                    interior.sharpen.scanner_mtf.sigma
+                        = sigma_endpoint * fraction;
+                    interior.sharpen.scanner_mtf.defocus
+                        = defocus_endpoint * ((coord_t)1 - fraction);
+                    consider_joint_fit (interior, param, img, locations, starts,
+                                        fparams, progress, &best, best_seed_kind, 3);
+                  }
               }
 
           '''
           if s.count(anchor) != 1:
-              raise SystemExit(f'focus combined-seed anchor count {s.count(anchor)}')
-          p.write_text(s.replace(anchor, combined + anchor, 1))
+              raise SystemExit(f'focus fan anchor count {s.count(anchor)}')
+          p.write_text(s.replace(anchor, fan + anchor, 1))
 
           p = Path('src/libcolorscreen/focus-analysis-unittests.C')
           s = p.read_text()
