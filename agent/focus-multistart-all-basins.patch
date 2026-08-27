@@ -1,7 +1,7 @@
 diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-analysis.C
 --- a/src/libcolorscreen/focus-analysis.C
 +++ b/src/libcolorscreen/focus-analysis.C
-@@ -196,11 +196,40 @@ multistart_joint_focus_fit (
+@@ -196,11 +196,49 @@ multistart_joint_focus_fit (
    if (scalar[first].success)
      consider_joint_fit (scalar[first].rparam, param, img, locations, starts,
                          fparams, progress, &best, best_seed_kind,
@@ -17,6 +17,11 @@ diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-anal
 +      && rparam.sharpen.scanner_mtf.defocus >= 0
 +      && rparam.sharpen.scanner_mtf.defocus <= cold_epsilon)
 +    {
++      fprintf (stderr,
++               "focus stage input defocus %.9g scalar-badness %.9g best %.9g\n",
++               (double)scalar[1].rparam.sharpen.scanner_mtf.defocus,
++               (double)scalar[1].badness,
++               best.success ? (double)best.badness : -1.0);
 +      finetune_parameters sigma_stage = fparams;
 +      sigma_stage.flags &= ~coupled;
 +      sigma_stage.flags |= finetune_scanner_mtf_sigma;
@@ -24,11 +29,20 @@ diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-anal
 +      finetune_result fit
 +          = finetune (scalar[1].rparam, param, img, locations, &starts,
 +                      sigma_stage, progress);
++      fprintf (stderr,
++               "focus stage sigma success %d badness %.9g sigma %.9g result-defocus %.9g\n",
++               fit.success ? 1 : 0, (double)fit.badness,
++               (double)fit.scanner_mtf_sigma,
++               (double)fit.scanner_mtf_defocus);
 +      if (fit.success && my_isfinite (fit.badness))
 +        {
 +          render_parameters staged = scalar[1].rparam;
 +          if (freeze_focus_from_fit (&staged, sigma_stage.flags, fit))
 +            {
++              fprintf (stderr,
++                       "focus stage frozen sigma %.9g defocus %.9g\n",
++                       (double)staged.sharpen.scanner_mtf.sigma,
++                       (double)staged.sharpen.scanner_mtf.defocus);
 +              fit.scanner_mtf_defocus = staged.sharpen.scanner_mtf.defocus;
 +              if (!best.success || fit.badness < best.badness)
 +                {
