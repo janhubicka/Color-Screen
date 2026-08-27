@@ -352,7 +352,8 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --zero-focus-start         zero sigma/defocus after loading parameters\n");
       fprintf (stderr, "      --use-monochrome-channel   force BW/IR focus fitting\n");
       fprintf (stderr, "      --use-rgb                  force RGB uniform-image-layer fitting\n");
-      fprintf (stderr, "      --fixed-focus-verification verify candidates without refitting global focus\n");
+      fprintf (stderr, "      --fixed-focus-verification verify candidates without refitting global focus (default)\n");
+      fprintf (stderr, "      --refit-focus-verification refit focus in each candidate (diagnostic)\n");
       fprintf (stderr, "      --fixed-joint-position     keep verified local phases fixed in the joint focus solve\n");
       fprintf (stderr, "      --no-leave-one-out         skip N-1 stability fits\n");
     }
@@ -2597,7 +2598,7 @@ analyze_focus_areas (int argc, char **argv)
   bool zero_focus_start = false;
   bool force_bw = false;
   bool force_rgb = false;
-  bool fixed_focus_verification = false;
+  bool fixed_focus_verification = true;
   bool fixed_joint_position = false;
   /* The process-screen transfer, rather than a unique sigma/defocus split,
      is the quantity needed for colour recovery.  Coupled fitting uses scalar
@@ -2637,6 +2638,8 @@ analyze_focus_areas (int argc, char **argv)
         force_rgb = true;
       else if (arg == "--fixed-focus-verification")
         fixed_focus_verification = true;
+      else if (arg == "--refit-focus-verification")
+        fixed_focus_verification = false;
       else if (arg == "--fixed-joint-position")
         fixed_joint_position = true;
       else if (arg == "--no-leave-one-out")

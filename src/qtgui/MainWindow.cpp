@@ -6131,7 +6131,9 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
         colorscreen::finetune_parameters local;
         local.range = 4;
         local.ignore_outliers = 0;
-        local.flags = flags | colorscreen::finetune_position;
+        /* Candidate verification determines local phase/colour only.
+           Scanner MTF is shared and is fitted after area selection. */
+        local.flags = colorscreen::finetune_position;
         if (useMonochrome)
           local.flags |= colorscreen::finetune_bw
               | colorscreen::finetune_no_normalize
@@ -6147,7 +6149,7 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
         }
 
         colorscreen::finetune_parameters joint = local;
-        joint.flags |= colorscreen::finetune_no_normalize
+        joint.flags |= flags | colorscreen::finetune_no_normalize
             | colorscreen::finetune_no_data_collection;
         if (!useMonochrome)
           joint.flags |= colorscreen::finetune_uniform_image_layer;

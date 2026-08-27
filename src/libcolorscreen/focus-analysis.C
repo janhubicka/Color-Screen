@@ -207,10 +207,16 @@ multistart_joint_focus_fit (
       return finetune (rparam, param, img, locations, &starts, fparams, progress);
     }
 
+  /* Candidate verification already learned local screen phase.  Keep all
+     basin-search fits fixed-phase; only the winning basin gets one final
+     phase-refining coupled solve.  */
+  finetune_parameters fixed = fparams;
+  fixed.flags &= ~finetune_position;
+
   finetune_result best;
   if (best_seed_kind)
     *best_seed_kind = -1;
-  consider_joint_fit (rparam, param, img, locations, starts, fparams, progress,
+  consider_joint_fit (rparam, param, img, locations, starts, fixed, progress,
                       &best, best_seed_kind, 0);
 
   struct scalar_seed
@@ -226,7 +232,7 @@ multistart_joint_focus_fit (
       = { finetune_scanner_mtf_sigma, finetune_scanner_mtf_defocus };
   auto consider_scalar_seed = [&] (int which,
                                            const render_parameters &seed) {
-    finetune_parameters one = fparams;
+    finetune_parameters one = fixed;
     one.flags &= ~coupled;
     one.flags |= scalar_flags[which];
     finetune_result fit
@@ -306,11 +312,11 @@ multistart_joint_focus_fit (
     std::swap (first, second);
   if (scalar[first].success)
     consider_joint_fit (scalar[first].rparam, param, img, locations, starts,
-                        fparams, progress, &best, best_seed_kind,
+                        fixed, progress, &best, best_seed_kind,
                         scalar[first].kind);
   if (scalar[second].success)
     consider_joint_fit (scalar[second].rparam, param, img, locations, starts,
-                        fparams, progress, &best, best_seed_kind,
+                        fixed, progress, &best, best_seed_kind,
                         scalar[second].kind);
 
   /* A cold defocus coordinate cannot leave zero by local first-order
@@ -347,7 +353,7 @@ multistart_joint_focus_fit (
             finetune_result fit;
           } staged;
 
-          finetune_parameters defocus_stage = fparams;
+          finetune_parameters defocus_stage = fixed;
           defocus_stage.flags &= ~coupled;
           defocus_stage.flags |= finetune_scanner_mtf_defocus;
           static constexpr coord_t fractions[]
@@ -385,7 +391,7 @@ multistart_joint_focus_fit (
 
               /* Polish sigma with the recovered nonzero defocus fixed before
                  finally releasing both physical transfer coordinates.  */
-              finetune_parameters sigma_stage = fparams;
+              finetune_parameters sigma_stage = fixed;
               sigma_stage.flags &= ~coupled;
               sigma_stage.flags |= finetune_scanner_mtf_sigma;
               sigma_stage.interpolate_scanner_mtf_defocus = false;
@@ -406,11 +412,25 @@ multistart_joint_focus_fit (
                             *best_seed_kind = scalar[0].kind;
                         }
                       consider_joint_fit (
-                          polished, param, img, locations, starts, fparams,
+                          polished, param, img, locations, starts, fixed,
                           progress, &best, best_seed_kind, scalar[0].kind);
                     }
                 }
             }
+        }
+    }
+
+  if (best.success && (fparams.flags & finetune_position))
+    {
+      render_parameters final_seed = rparam;
+      if (freeze_focus_from_fit (&final_seed, fparams.flags, best))
+        {
+          finetune_result refined
+              = finetune (final_seed, param, img, locations, &starts, fparams,
+                          progress);
+          if (refined.success && my_isfinite (refined.badness)
+              && refined.badness <= best.badness)
+            best = std::move (refined);
         }
     }
   return best;
