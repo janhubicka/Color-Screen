@@ -60,6 +60,8 @@ jobs:
               finetune_parameters one = fparams;
               one.flags &= ~coupled;
               one.flags |= scalar_flags[which];
+              if (scalar_flags[which] == finetune_scanner_mtf_sigma)
+                one.interpolate_scanner_mtf_defocus = false;
               finetune_result fit
                   = finetune (seed, param, img, locations, &starts, one, progress);
               if (!fit.success || !my_isfinite (fit.badness))
@@ -67,6 +69,10 @@ jobs:
               render_parameters frozen = seed;
               if (!freeze_focus_from_fit (&frozen, one.flags, fit))
                 return;
+              if (!(one.flags & finetune_scanner_mtf_sigma))
+                fit.scanner_mtf_sigma = frozen.sharpen.scanner_mtf.sigma;
+              if (!(one.flags & finetune_scanner_mtf_defocus))
+                fit.scanner_mtf_defocus = frozen.sharpen.scanner_mtf.defocus;
               if (!scalar[which].success || fit.badness < scalar[which].badness)
                 {
                   scalar[which].success = true;
@@ -83,9 +89,11 @@ jobs:
                at zero has no first-order direction.  Seed nonzero defocus starts
                from the same optics-derived useful range as adaptive focusing.  */
             constexpr coord_t cold_epsilon = (coord_t)1e-8;
-            if (my_isfinite (rparam.sharpen.scanner_mtf.defocus)
-                && rparam.sharpen.scanner_mtf.defocus >= 0
-                && rparam.sharpen.scanner_mtf.defocus <= cold_epsilon)
+            const bool cold_defocus
+                = my_isfinite (rparam.sharpen.scanner_mtf.defocus)
+                  && rparam.sharpen.scanner_mtf.defocus >= 0
+                  && rparam.sharpen.scanner_mtf.defocus <= cold_epsilon;
+            if (cold_defocus)
               {
                 mtf_parameters focus_mtf = rparam.sharpen.scanner_mtf;
                 if (!(fparams.flags & finetune_bw) && img.has_rgb ())
@@ -110,10 +118,46 @@ jobs:
                   }
               }
 
-            /* A scalar prefit is already a fully evaluated feasible point of the
-               coupled parameter space.  Retain it as a candidate before asking
-               the released simplex to improve it; a failed release must not
-               discard a better seed solution.  */
+            struct staged_seed
+            {
+              bool success = false;
+              coord_t badness = std::numeric_limits<coord_t>::max ();
+              render_parameters rparam;
+              finetune_result fit;
+            } staged;
+
+            /* Once a cold nonzero defocus basin is found, hold it fixed and fit
+               sigma.  This moves the second even transfer coordinate off its zero
+               boundary before the coupled release.  Keep the evaluated staged
+               result itself: a subsequent coupled simplex is allowed to improve
+               it, but not to erase a better feasible point.  */
+            if (cold_defocus && scalar[1].success)
+              {
+                finetune_parameters sigma_stage = fparams;
+                sigma_stage.flags &= ~coupled;
+                sigma_stage.flags |= finetune_scanner_mtf_sigma;
+                sigma_stage.interpolate_scanner_mtf_defocus = false;
+                finetune_result fit
+                    = finetune (scalar[1].rparam, param, img, locations, &starts,
+                                sigma_stage, progress);
+                if (fit.success && my_isfinite (fit.badness))
+                  {
+                    render_parameters frozen = scalar[1].rparam;
+                    if (freeze_focus_from_fit (&frozen, sigma_stage.flags, fit))
+                      {
+                        fit.scanner_mtf_defocus
+                            = frozen.sharpen.scanner_mtf.defocus;
+                        staged.success = true;
+                        staged.badness = fit.badness;
+                        staged.rparam = std::move (frozen);
+                        staged.fit = std::move (fit);
+                      }
+                  }
+              }
+
+            /* Scalar and staged prefits are fully evaluated feasible points of
+               the coupled parameter space.  Retain them before asking released
+               simplexes to improve them.  */
             for (int which = 0; which < 2; which++)
               if (scalar[which].success
                   && (!best.success || scalar[which].fit.badness < best.badness))
@@ -122,6 +166,16 @@ jobs:
                   if (best_seed_kind)
                     *best_seed_kind = scalar[which].kind;
                 }
+            if (staged.success
+                && (!best.success || staged.fit.badness < best.badness))
+              {
+                best = staged.fit;
+                if (best_seed_kind)
+                  *best_seed_kind = 3;
+              }
+            if (staged.success)
+              consider_joint_fit (staged.rparam, param, img, locations, starts,
+                                  fparams, progress, &best, best_seed_kind, 3);
 
           '''
           start = s.find('  for (int which = 0; which < 2; which++)\n')
@@ -161,6 +215,34 @@ jobs:
                   raise SystemExit(f'diagnostic anchor count {s.count(old)} for {old!r}')
               s = s.replace(old, replacement, 1)
           p.write_text(s)
+
+          p = Path('src/libcolorscreen/include/focus-analysis.h')
+          s = p.read_text()
+          old = '''  /* Coupled physical fit start that won by final joint badness: 0 loaded
+     calibration, 1 sigma-only scalar seed, 2 defocus-only scalar seed.  */
+'''
+          new = '''  /* Coupled physical fit start that won by final joint badness: 0 loaded
+     calibration, 1 sigma-only scalar seed, 2 defocus-only scalar seed,
+     3 defocus-then-sigma staged seed.  */
+'''
+          if s.count(old) != 1:
+              raise SystemExit('focus seed-kind comment anchor mismatch')
+          p.write_text(s.replace(old, new, 1))
+
+          p = Path('src/colorscreen/colorscreen.C')
+          s = p.read_text()
+          old = '''      const char *seed = analysis.joint_seed_kind == 1 ? "sigma-only"
+                         : analysis.joint_seed_kind == 2 ? "defocus-only"
+                                                        : "loaded";
+'''
+          new = '''      const char *seed = analysis.joint_seed_kind == 1 ? "sigma-only"
+                         : analysis.joint_seed_kind == 2 ? "defocus-only"
+                         : analysis.joint_seed_kind == 3 ? "defocus-sigma"
+                                                        : "loaded";
+'''
+          if s.count(old) != 1:
+              raise SystemExit('CLI seed-label anchor mismatch')
+          p.write_text(s.replace(old, new, 1))
           PY
           git diff --check
           printf '%s\n' \
@@ -202,7 +284,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit \
             -m 'focus: stabilize coupled carrier MTF fits' \
-            -m 'Use the periodic focus-area pixel objective to select among the loaded calibration and scalar-seeded coupled basins. Preserve a fully evaluated scalar seed as a feasible coupled candidate so a released simplex cannot discard a better solution.' \
-            -m 'Cold physical defocus is an even-function boundary, so derive a useful defocus range from the process-screen carrier and try a few nonzero defocus-only starts before releasing both coordinates. Keep both scalar basins in the final coupled comparison.' \
-            -m 'Report effective process-screen MTF in CLI and Qt diagnostics, warm-start leave-one-out validation from the shared fit, and cover cold versus calibrated starts with a synthetic physical Paget regression.'
+            -m 'Use the periodic focus-area pixel objective to select among the loaded calibration and scalar-seeded physical-MTF basins. Cold physical defocus is an even-function boundary, so seed nonzero defocus starts from the optics-derived useful range.' \
+            -m 'Continue a recovered cold defocus basin by fitting sigma with defocus fixed, retain every evaluated scalar/staged solution before attempting a coupled release, and compare all released basins by the same all-area objective. This prevents a later simplex from discarding a better feasible carrier-transfer solution.' \
+            -m 'Report effective process-screen MTF and seed provenance in diagnostics, warm-start leave-one-out validation from the shared fit, and cover cold versus calibrated starts with a synthetic physical Paget regression.'
           git push origin HEAD:refs/heads/agent/focus-area-carrier-multistart
