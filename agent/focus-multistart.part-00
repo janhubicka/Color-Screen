@@ -1,0 +1,147 @@
+--- a/src/libcolorscreen/focus-analysis.C
++++ b/src/libcolorscreen/focus-analysis.C
+@@ -1,5 +1,6 @@
+ #include "include/focus-analysis.h"
+ #include "render-interpolate.h"
++#include "include/scr-to-img.h"
+ #include <algorithm>
+ #include <cmath>
+ #include <limits>
+@@ -104,6 +105,71 @@
+   return true;
+ }
+ 
++/* Return the process-screen carrier in image cycles/pixel.  The screen table
++   stores the carrier in screen-coordinate units; SCR_TO_IMG::PIXEL_SIZE maps
++   one image pixel back into those units.  */
++static coord_t
++process_screen_frequency (const scr_to_img_parameters &param,
++                          const image_data &img)
++{
++  if (param.type < 0 || param.type >= max_scr_type)
++    return -1;
++  scr_to_img map;
++  if (!map.set_parameters (param, img))
++    return -1;
++  const coord_t pixel_size
++      = map.pixel_size ({ 0, 0, img.width, img.height });
++  const coord_t frequency = scr_names[param.type].frequency * pixel_size;
++  return my_isfinite (frequency) && frequency > 0 ? frequency : -1;
++}
++
++/* Evaluate the scanner/camera transfer represented by FIT at FREQUENCY.
++   RGB finetuning uses the same achromatic 550 nm periodic-screen transfer as
++   the forward model; monochrome/IR keeps the wavelength from RPARAM.  */
++static coord_t
++process_screen_mtf (const render_parameters &rparam, const image_data &img,
++                    uint64_t flags, coord_t frequency,
++                    const finetune_result *fit = nullptr)
++{
++  if (!(frequency > 0) || !my_isfinite (frequency))
++    return -1;
++  mtf_parameters mtf = rparam.sharpen.scanner_mtf;
++  if (fit && fit->success)
++    {
++      if ((flags & finetune_scanner_mtf_sigma)
++          && my_isfinite (fit->scanner_mtf_sigma)
++          && fit->scanner_mtf_sigma >= 0)
++        mtf.sigma = fit->scanner_mtf_sigma;
++      if (flags & finetune_scanner_mtf_defocus)
++        {
++          if (mtf.simulate_diffraction_p ())
++            {
++              if (my_isfinite (fit->scanner_mtf_defocus)
++                  && fit->scanner_mtf_defocus >= 0)
++                mtf.defocus = fit->scanner_mtf_defocus;
++            }
++          else if (my_isfinite (fit->scanner_mtf_blur_diameter)
++                   && fit->scanner_mtf_blur_diameter >= 0)
++            mtf.blur_diameter = fit->scanner_mtf_blur_diameter;
++        }
++    }
++  if (!(flags & finetune_bw) && img.has_rgb ())
++    mtf.wavelength = 550;
++  const coord_t value = mtf.system_mtf (frequency);
++  return my_isfinite (value) ? value : -1;
++}
++
++/* Copy the scalar scanner-MTF coordinates represented by FIT into a starting
++   render state.  */
++static render_parameters
++seed_focus_from_fit (const render_parameters &base, uint64_t flags,
++                     const finetune_result &fit)
++{
++  render_parameters seeded = base;
++  freeze_focus_from_fit (&seeded, flags, fit);
++  return seeded;
++}
++
+ } // namespace
+ 
+ bool
+@@ -232,25 +298,6 @@
+       return false;
+     }
+ 
+-  /* Periodic focus areas constrain the combined scanner transfer, but the
+-     residual Gaussian sigma and physical defocus can compensate for each
+-     other at the few harmonics that remain measurable in a real capture.
+-     A coupled fit can therefore report optimizer initialization rather than
+-     a separately identified physical decomposition.  Require one coordinate
+-     to be calibrated/fixed and fit only the other.  */
+-  constexpr uint64_t coupled_physical_focus
+-      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+-  if ((fparams.flags & coupled_physical_focus) == coupled_physical_focus
+-      && rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
+-    {
+-      set_analysis_error (
+-          result,
+-          "physical scanner MTF sigma and defocus are not separately "
+-          "identifiable from periodic focus areas; fix/calibrate one and "
+-          "optimize only the other");
+-      return false;
+-    }
+-
+   if (!finetune_select_focus_areas (candidates, analysis_parameters.selection,
+                                     &result->selected,
+                                     &result->color_volume))
+@@ -292,8 +339,60 @@
+       starts.push_back (candidates[index].fit);
+     }
+ 
+-  result->joint_fit
+-      = finetune (rparam, param, img, locations, &starts, fparams, progress);
++  result->process_screen_frequency = process_screen_frequency (param, img);
++  result->initial_process_screen_mtf
++      = process_screen_mtf (rparam, img, fparams.flags,
++                            result->process_screen_frequency);
++
++  /* With both residual sigma and scalar defocus free, a zero/default start is
++     a particularly poor simplex corner: both transfer coordinates are locally
++     flat there and can enter different compensation basins.  Use the already
++     verified local phases to make a cheap fixed-phase basin search.  One seed
++     is the caller's current MTF (important for a slanted-edge calibration); a
++     second is obtained by fitting sigma alone.  Release sigma+defocus only
++     after choosing the lower-residual fixed-phase basin, then do one normal
++     joint fit with all caller-requested nuisance parameters free.
++
++     The decomposition is secondary: the result below also records the actual
++     process-screen carrier MTF, which is the quantity directly used to restore
++     additive-screen contrast.  */
++  constexpr uint64_t coupled_scalar_mtf
++      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
++  const bool coupled
++      = (fparams.flags & coupled_scalar_mtf) == coupled_scalar_mtf
++        && !(fparams.flags & finetune_scanner_mtf_channel_defocus);
++
++  render_parameters final_start_rparam = rparam;
++  if (coupled)
++    {
++      finetune_parameters fixed = fparams;
++      fixed.flags &= ~finetune_position;
++      finetune_result best_fixed
++          = finetune (rparam, param, img, locations, &starts, fixed, progress);
++
++      finetune_parameters sigma_only = fixed;
++      sigma_only.flags &= ~finetune_scanner_mtf_defocus;
++      finetune_result sigma_
