@@ -1,0 +1,239 @@
+105,120 @@ freeze_focus_from_fit (render_parameters *rparam, uint64_t flags,
+   return true;
+ }
+ 
++/* Return the process-screen carrier frequency in image cycles/pixel.  This is
++   the frequency whose contrast most directly controls additive-screen colour
++   recovery.  */
++static coord_t
++process_screen_frequency (const scr_to_img_parameters &param,
++                          const image_data &img)
++{
++  if (param.type < 0 || param.type >= max_scr_type)
++    return -1;
++  scr_to_img map;
++  if (!map.set_parameters (param, img))
++    return -1;
++  const coord_t pixel_size
++      = map.pixel_size ({ 0, 0, img.width, img.height });
++  const coord_t frequency = scr_names[param.type].frequency * pixel_size;
++  return my_isfinite (frequency) && frequency > 0 ? frequency : -1;
++}
++
++/* Evaluate the fitted scanner/camera transfer at the process-screen carrier.
++   RGB periodic-screen finetuning currently uses the same achromatic 550 nm
++   transfer as CAPTURE_SHARPEN_PARAMETERS, so mirror that convention here.  */
++static coord_t
++process_screen_mtf (const render_parameters &rparam, uint64_t flags,
++                    const finetune_result &fit, coord_t frequency,
++                    const image_data &img)
++{
++  if (!(frequency > 0) || !fit.success)
++    return -1;
++  render_parameters fitted = rparam;
++  if (!freeze_focus_from_fit (&fitted, flags, fit))
++    return -1;
++  mtf_parameters mtf = fitted.sharpen.scanner_mtf;
++  if (!(flags & finetune_bw) && img.has_rgb ())
++    mtf.wavelength = 550;
++  const coord_t value = mtf.system_mtf (frequency);
++  return my_isfinite (value) ? value : -1;
++}
++
++/* Coupled physical sigma/defocus optimization has a flat corner at zero and
++   multiple compensation basins.  Use the cheap one-dimensional fits to enter
++   sensible basins, then release both parameters and keep the best exact joint
++   pixel fit.  The decomposition may remain non-unique; the resulting carrier
++   MTF is reported separately because that is the quantity needed by colour
++   recovery.  */
++static finetune_result
++multistart_joint_focus (const render_parameters &rparam,
++                        const scr_to_img_parameters &param,
++                        const image_data &img,
++                        const std::vector<point_t> &locations,
++                        const std::vector<finetune_result> &starts,
++                        const finetune_parameters &fparams,
++                        progress_info *progress)
++{
++  constexpr uint64_t coupled
++      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
++  if ((fparams.flags & coupled) != coupled
++      || !rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
++    return finetune (rparam, param, img, locations, &starts, fparams, progress);
++
++  struct seed_fit
++  {
++    finetune_result fit;
++    uint64_t flag;
++  };
++  std::vector<seed_fit> seeds;
++  seeds.reserve (2);
++  for (uint64_t flag : { (uint64_t)finetune_scanner_mtf_sigma,
++                         (uint64_t)finetune_scanner_mtf_defocus })
++    {
++      finetune_parameters scalar = fparams;
++      scalar.flags &= ~coupled;
++      scalar.flags |= flag;
++      finetune_result fit
++          = finetune (rparam, param, img, locations, &starts, scalar, progress);
++      if (fit.success && my_isfinite (fit.badness))
++        seeds.push_back ({ std::move (fit), flag });
++    }
++
++  if (seeds.empty ())
++    return finetune (rparam, param, img, locations, &starts, fparams, progress);
++  std::sort (seeds.begin (), seeds.end (),
++             [] (const seed_fit &a, const seed_fit &b) {
++               return a.fit.badness < b.fit.badness;
++             });
++
++  finetune_result best;
++  bool have_best = false;
++  /* Usually the best scalar basin is enough.  Also try the second basin when
++     it is competitive; this catches captures where sigma and defocus trade
++     roles without multiplying the expensive coupled work unnecessarily.  */
++  const coord_t second_seed_ratio = (coord_t)1.03;
++  const size_t attempts
++      = seeds.size () > 1
++                && seeds[1].fit.badness
++                       <= seeds[0].fit.badness * second_seed_ratio
++            ? 2
++            : 1;
++  for (size_t i = 0; i < attempts; i++)
++    {
++      render_parameters seeded = rparam;
++      if (!freeze_focus_from_fit (&seeded, seeds[i].flag, seeds[i].fit))
++        continue;
++      finetune_result fit
++          = finetune (seeded, param, img, locations, &starts, fparams, progress);
++      if (fit.success && my_isfinite (fit.badness)
++          && (!have_best || fit.badness < best.badness))
++        {
++          best = std::move (fit);
++          have_best = true;
++        }
++    }
++  return have_best ? best : seeds.front ().fit;
++}
++
+ } // namespace
+ 
+ bool
+@@ -232,25 +347,6 @@ finetune_analyze_focus_areas (
+       return false;
+     }
+ 
+-  /* Periodic focus areas constrain the combined scanner transfer, but the
+-     residual Gaussian sigma and physical defocus can compensate for each
+-     other at the few harmonics that remain measurable in a real capture.
+-     A coupled fit can therefore report optimizer initialization rather than
+-     a separately identified physical decomposition.  Require one coordinate
+-     to be calibrated/fixed and fit only the other.  */
+-  constexpr uint64_t coupled_physical_focus
+-      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+-  if ((fparams.flags & coupled_physical_focus) == coupled_physical_focus
+-      && rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
+-    {
+-      set_analysis_error (
+-          result,
+-          "physical scanner MTF sigma and defocus are not separately "
+-          "identifiable from periodic focus areas; fix/calibrate one and "
+-          "optimize only the other");
+-      return false;
+-    }
+-
+   if (!finetune_select_focus_areas (candidates, analysis_parameters.selection,
+                                     &result->selected,
+                                     &result->color_volume))
+@@ -292,8 +388,9 @@ finetune_analyze_focus_areas (
+       starts.push_back (candidates[index].fit);
+     }
+ 
+-  result->joint_fit
+-      = finetune (rparam, param, img, locations, &starts, fparams, progress);
++  result->screen_frequency = process_screen_frequency (param, img);
++  result->joint_fit = multistart_joint_focus (
++      rparam, param, img, locations, starts, fparams, progress);
+   if (!result->joint_fit.success)
+     {
+       result->err = "joint focus-area fit failed";
+@@ -301,6 +398,9 @@ finetune_analyze_focus_areas (
+         result->err += ": " + result->joint_fit.err;
+       return false;
+     }
++  result->joint_screen_mtf
++      = process_screen_mtf (rparam, fparams.flags, result->joint_fit,
++                            result->screen_frequency, img);
+ 
+   if (!analysis_parameters.leave_one_out)
+     {
+@@ -322,7 +422,9 @@ finetune_analyze_focus_areas (
+             subset_starts.push_back (starts[i]);
+           }
+ 
+-      finetune_result fit = finetune (rparam, param, img, subset_locations,
++      render_parameters leave_rparam = rparam;
++      freeze_focus_from_fit (&leave_rparam, fparams.flags, result->joint_fit);
++      finetune_result fit = finetune (leave_rparam, param, img, subset_locations,
+                                      &subset_starts, fparams, progress);
+       result->leave_one_out_fits.push_back (std::move (fit));
+       if (!result->leave_one_out_fits.back ().success)
+@@ -335,6 +437,38 @@ finetune_analyze_focus_areas (
+         }
+     }
+ 
++  if (result->joint_screen_mtf >= 0)
++    {
++      result->leave_one_out_screen_mtf.reserve (
++          result->leave_one_out_fits.size ());
++      coord_t min_mtf = std::numeric_limits<coord_t>::max ();
++      coord_t max_mtf = -std::numeric_limits<coord_t>::max ();
++      coord_t max_delta = 0;
++      bool valid = true;
++      for (const finetune_result &fit : result->leave_one_out_fits)
++        {
++          const coord_t value = process_screen_mtf (
++              rparam, fparams.flags, fit, result->screen_frequency, img);
++          if (!(value >= 0))
++            {
++              valid = false;
++              break;
++            }
++          result->leave_one_out_screen_mtf.push_back (value);
++          min_mtf = std::min (min_mtf, value);
++          max_mtf = std::max (max_mtf, value);
++          max_delta = std::max (
++              max_delta, (coord_t)std::fabs (value - result->joint_screen_mtf));
++        }
++      if (valid && !result->leave_one_out_screen_mtf.empty ())
++        {
++          result->leave_one_out_screen_mtf_span = max_mtf - min_mtf;
++          result->leave_one_out_screen_mtf_max_delta = max_delta;
++        }
++      else
++        result->leave_one_out_screen_mtf.clear ();
++    }
++
+   /* True held-out checking is defined for the RGB uniform-image-layer model.
+      Each omitted tile is allowed its local phase and three transmissions, but
+      not the shared focus transfer or screen-primary scanner responses.  */
+diff --git a/src/libcolorscreen/include/focus-analysis.h b/src/libcolorscreen/include/focus-analysis.h
+index 07f7e54..a6cc5c8 100644
+--- a/src/libcolorscreen/include/focus-analysis.h
++++ b/src/libcolorscreen/include/focus-analysis.h
+@@ -45,7 +45,15 @@ struct finetune_focus_analysis_result
+   std::vector<size_t> selected;
+   coord_t color_volume = 0;
+   finetune_result joint_fit;
++  /* Process-screen carrier frequency in image cycles/pixel and the fitted
++     scanner/camera MTF magnitude at that frequency.  This is the transfer
++     most directly relevant to additive-screen colour recovery.  */
++  coord_t screen_frequency = -1;
++  coord_t joint_screen_mtf = -1;
+   std::vector<finetune_result> leave_one_out_fits;
++  std::vector<coord_t> leave_one_out_screen_mtf;
++  coord_t leave_one_out_screen_mtf_span = -1;
++  coord_t leave_one_out_screen_mtf_max_delta = -1;
+   /* Entry I evaluates SELECTED[I] after the shared model was learned without
+      that tile.  RELATIVE_BADNESS divides the raw objective by the observed
+      mean-colour 
