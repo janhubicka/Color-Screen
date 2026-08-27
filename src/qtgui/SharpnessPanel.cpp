@@ -972,7 +972,7 @@ void SharpnessPanel::setupUi() {
       [this](ParameterState &, bool v) {
         if (v) m_finetuneFlags |= colorscreen::finetune_scanner_mtf_sigma;
         else m_finetuneFlags &= ~colorscreen::finetune_scanner_mtf_sigma;
-      }, nullptr, "Included in the focus analyzer optimization loop. For multi-area physical-MTF analysis, keep Defocus fixed when optimizing Sigma.");
+      }, nullptr, "Included in the focus analyzer optimization loop. Multi-area analysis can fit Sigma and Defocus together using scalar-prefit basin seeds; the process-screen MTF is the primary diagnostic.");
 
   addCheckboxParameter(
       "Optimize Defocus",
@@ -982,7 +982,7 @@ void SharpnessPanel::setupUi() {
       [this](ParameterState &, bool v) {
         if (v) m_finetuneFlags |= colorscreen::finetune_scanner_mtf_defocus;
         else m_finetuneFlags &= ~colorscreen::finetune_scanner_mtf_defocus;
-      }, nullptr, "Included in the focus analyzer optimization loop. For multi-area physical-MTF analysis, normally keep a slanted-edge Sigma calibration fixed and optimize Defocus only.");
+      }, nullptr, "Included in the focus analyzer optimization loop. Multi-area analysis preserves a loaded MTF calibration as one start while also testing scalar Sigma/Defocus basins.");
 
   m_analyzeAreaBtn = addToggleButtonParameter("", tr("Analyze area"), [this](bool checked) {
     emit focusAnalysisRequested(checked, m_finetuneFlags);
@@ -1005,8 +1005,9 @@ void SharpnessPanel::setupUi() {
   m_analyzeFocusAreasBtn->setToolTip(
       tr("Verify the discovered regions independently, choose a "
          "colour-diverse subset, fit one shared focus model, then run "
-         "leave-one-out and held-out validation. Physical scanner-MTF "
-         "sigma and defocus must be optimized one at a time."));
+         "leave-one-out and held-out validation. Coupled physical Sigma/"
+         "Defocus fits use robust scalar-prefit starts and report the "
+         "process-screen MTF relevant to colour recovery."));
   connect(m_analyzeFocusAreasBtn, &QPushButton::clicked, this,
           [this]() { emit analyzeFocusAreasRequested(m_finetuneFlags); });
   if (m_currentGroupForm)

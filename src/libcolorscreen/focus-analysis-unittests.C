@@ -356,37 +356,142 @@ test_bw_multitile_focus ()
   return true;
 }
 
-/* Periodic focus areas constrain the combined transfer, not a unique split
-   between residual Gaussian sigma and physical defocus.  Coupled physical
-   fitting must therefore fail before doing an expensive image fit.  */
+/* Coupled physical fitting does not need a unique sigma/defocus split, but
+   it must recover the effective transfer at the process-screen carrier from a
+   cold start.  */
 static bool
-test_coupled_physical_focus_rejected ()
+test_coupled_physical_focus_recovers_screen_mtf ()
 {
-  render_parameters rparam;
-  rparam.sharpen.mode = sharpen_parameters::blur_deconvolution;
-  rparam.sharpen.scanner_mtf.model = mtf_model::physical_diffraction;
-  rparam.sharpen.scanner_mtf.pixel_pitch = 3.76;
-  rparam.sharpen.scanner_mtf.f_stop = 8;
-  rparam.sharpen.scanner_mtf.scan_dpi = 2000;
-
-  finetune_parameters fparam;
-  fparam.flags = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+  constexpr int width = 384;
+  constexpr int height = 96;
+  constexpr int regions = 3;
+  const point_t locations[regions]
+      = { { 64, 48 }, { 192, 48 }, { 320, 48 } };
+  const rgbdata truth[regions]
+      = { { 0.80, 0.12, 0.08 }, { 0.10, 0.75, 0.20 },
+          { 0.10, 0.12, 0.80 } };
 
   image_data image;
+  if (!image.set_dimensions (width, height, false, true))
+    return false;
   scr_to_img_parameters geometry;
+  geometry.type = Paget;
+  geometry.center = { 0, 0 };
+  geometry.coordinate1 = { 8, 0 };
+  geometry.coordinate2 = { 0, 8 };
+  scr_to_img map;
+  if (!map.set_parameters (geometry, image))
+    return false;
+  const coord_t pixel_size = map.pixel_size ({ 0, 0, width, height });
+  sharpen_parameters capture;
+  capture.mode = sharpen_parameters::none;
+  capture.scanner_mtf_scale = pixel_size;
+  capture.scanner_mtf.model = mtf_model::physical_diffraction;
+  capture.scanner_mtf.pixel_pitch = 3.76;
+  capture.scanner_mtf.f_stop = 8;
+  capture.scanner_mtf.scan_dpi = 2000;
+  capture.scanner_mtf.wavelength = 750;
+  capture.scanner_mtf.sigma = (coord_t)0.70;
+  capture.scanner_mtf.defocus = (coord_t)0.16;
+  screen source, filtered;
+  source.initialize (Paget);
+  sharpen_parameters *sp[3] = { &capture, &capture, &capture };
+  if (!filtered.initialize_with_sharpen_parameters (source, sp, false, false))
+    return false;
+
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      {
+        const int tileid = std::min (x / (width / regions), regions - 1);
+        const rgbdata screen_value = filtered.interpolated_mult (
+            map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 }));
+        luminosity_t value
+            = screen_value.red * truth[tileid].red
+              + screen_value.green * truth[tileid].green
+              + screen_value.blue * truth[tileid].blue;
+        value = std::clamp (value, (luminosity_t)0, (luminosity_t)1);
+        image.put_pixel (
+            x, y, (image_data::gray)(value * 65535 + (luminosity_t)0.5));
+      }
+
   std::vector<finetune_focus_area_candidate> candidates;
-  finetune_focus_analysis_parameters analysis;
-  finetune_focus_analysis_result result;
-  if (finetune_analyze_focus_areas (rparam, geometry, image, candidates,
-                                    fparam, analysis, &result, nullptr))
+  for (int i = 0; i < regions; i++)
     {
-      fprintf (stderr, "Coupled physical sigma/defocus fit was accepted\n");
+      finetune_focus_area_candidate candidate;
+      candidate.center = locations[i];
+      candidate.mean_color = truth[i];
+      candidate.search_score = (coord_t)i * (coord_t)0.001;
+      candidate.fit.success = true;
+      candidate.fit.badness = (coord_t)0.01;
+      candidate.fit.contrast = (coord_t)0.2;
+      candidate.fit.color = truth[i];
+      candidate.fit.screen_coord_adjust = { 0, 0 };
+      candidate.fit.emulsion_coord_adjust = { 0, 0 };
+      candidates.push_back (candidate);
+    }
+
+  render_parameters rparam;
+  rparam.gamma = 1;
+  rparam.sharpen.mode = sharpen_parameters::none;
+  rparam.sharpen.scanner_mtf_scale = 1;
+  rparam.sharpen.scanner_mtf = capture.scanner_mtf;
+  rparam.sharpen.scanner_mtf.sigma = 0;
+  rparam.sharpen.scanner_mtf.defocus = 0;
+
+  finetune_parameters fparam;
+  fparam.range = 2;
+  fparam.ignore_outliers = 0;
+  fparam.flags = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus
+                 | finetune_bw | finetune_no_normalize
+                 | finetune_no_data_collection;
+  finetune_focus_analysis_parameters analysis;
+  analysis.selection.min_areas = 3;
+  analysis.selection.max_areas = 3;
+  analysis.selection.minimum_color_volume = 0;
+  analysis.leave_one_out = false;
+  analysis.held_out = false;
+
+  finetune_focus_analysis_result cold;
+  if (!finetune_analyze_focus_areas (rparam, geometry, image, candidates,
+                                     fparam, analysis, &cold, nullptr))
+    {
+      fprintf (stderr, "Cold coupled physical focus fit failed: %s\n",
+               cold.err.c_str ());
       return false;
     }
-  if (result.err.find ("not separately identifiable") == std::string::npos)
+
+  /* Use the exact forward-model capture parameters as a good warm basin, then
+     require the cold multi-start fit to recover the same effective carrier
+     transfer.  This tests the quantity needed for colour recovery without
+     depending on the non-exported low-level MTF evaluator in this executable. */
+  render_parameters warm_rparam = rparam;
+  warm_rparam.sharpen.scanner_mtf.sigma = capture.scanner_mtf.sigma;
+  warm_rparam.sharpen.scanner_mtf.defocus = capture.scanner_mtf.defocus;
+  finetune_focus_analysis_result warm;
+  if (!finetune_analyze_focus_areas (warm_rparam, geometry, image, candidates,
+                                     fparam, analysis, &warm, nullptr))
     {
-      fprintf (stderr, "Unexpected coupled-focus diagnostic: %s\n",
-               result.err.c_str ());
+      fprintf (stderr, "Warm coupled physical focus fit failed: %s\n",
+               warm.err.c_str ());
+      return false;
+    }
+  if (!(cold.joint_screen_mtf > 0) || !(warm.joint_screen_mtf > 0)
+      || std::fabs (cold.joint_screen_mtf - warm.joint_screen_mtf)
+             > (coord_t)0.04)
+    {
+      fprintf (stderr,
+               "Cold/warm carrier MTF mismatch: cold %.6f warm %.6f "
+               "(cold badness %.9g sigma %.6f defocus %.6f seed %d; "
+               "warm badness %.9g sigma %.6f defocus %.6f seed %d)\n",
+               (double)cold.joint_screen_mtf, (double)warm.joint_screen_mtf,
+               (double)cold.joint_fit.badness,
+               (double)cold.joint_fit.scanner_mtf_sigma,
+               (double)cold.joint_fit.scanner_mtf_defocus,
+               cold.joint_seed_kind,
+               (double)warm.joint_fit.badness,
+               (double)warm.joint_fit.scanner_mtf_sigma,
+               (double)warm.joint_fit.scanner_mtf_defocus,
+               warm.joint_seed_kind);
       return false;
     }
   return true;
@@ -434,7 +539,7 @@ main ()
       || !test_sky_candidate_budget ()
       || !test_bw_selection_uses_primary_intensities ()
       || !test_bw_multitile_focus ()
-      || !test_coupled_physical_focus_rejected ()
+      || !test_coupled_physical_focus_recovers_screen_mtf ()
       || !test_grayscale_image_search ())
     return 1;
   printf ("focus-analysis-unittests: PASS\n");

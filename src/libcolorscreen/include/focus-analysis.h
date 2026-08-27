@@ -45,7 +45,15 @@ struct finetune_focus_analysis_result
   std::vector<size_t> selected;
   coord_t color_volume = 0;
   finetune_result joint_fit;
+  /* Process-screen carrier frequency and system MTF represented by JOINT_FIT.
+     This is the transfer value directly relevant to restoring screen contrast. */
+  coord_t screen_frequency = -1;
+  coord_t joint_screen_mtf = -1;
+  /* Coupled physical fit start that won by final joint badness: 0 loaded
+     calibration, 1 sigma-only scalar seed, 2 defocus-only scalar seed.  */
+  int joint_seed_kind = -1;
   std::vector<finetune_result> leave_one_out_fits;
+  std::vector<coord_t> leave_one_out_screen_mtf;
   /* Entry I evaluates SELECTED[I] after the shared model was learned without
      that tile.  RELATIVE_BADNESS divides the raw objective by the observed
      mean-colour norm, matching the candidate quality normalization.  */
