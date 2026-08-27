@@ -1,7 +1,7 @@
 diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-analysis.C
 --- a/src/libcolorscreen/focus-analysis.C
 +++ b/src/libcolorscreen/focus-analysis.C
-@@ -196,11 +196,37 @@ multistart_joint_focus_fit (
+@@ -196,11 +196,40 @@ multistart_joint_focus_fit (
    if (scalar[first].success)
      consider_joint_fit (scalar[first].rparam, param, img, locations, starts,
                          fparams, progress, &best, best_seed_kind,
@@ -12,7 +12,10 @@ diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-anal
      consider_joint_fit (scalar[second].rparam, param, img, locations, starts,
                          fparams, progress, &best, best_seed_kind,
                          scalar[second].kind);
-+  if (scalar[1].success && cold_defocus)
++  if (scalar[1].success
++      && my_isfinite (rparam.sharpen.scanner_mtf.defocus)
++      && rparam.sharpen.scanner_mtf.defocus >= 0
++      && rparam.sharpen.scanner_mtf.defocus <= cold_epsilon)
 +    {
 +      finetune_parameters sigma_stage = fparams;
 +      sigma_stage.flags &= ~coupled;
