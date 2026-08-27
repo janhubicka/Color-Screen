@@ -1,0 +1,208 @@
+diff --git a/src/colorscreen/colorscreen.C b/src/colorscreen/colorscreen.C
+index 70aa4aa..6aae1f8 100644
+--- a/src/colorscreen/colorscreen.C
++++ b/src/colorscreen/colorscreen.C
+@@ -345,8 +345,9 @@ print_help (char *err = NULL)
+       fprintf (stderr, "      --min-areas=N              require at least N selected areas (default 3)\n");
+       fprintf (stderr, "      --max-areas=N              jointly fit at most N areas (default 8)\n");
+       fprintf (stderr, "      --range=N                  finetune half-range in screen periods (default 4)\n");
+-      fprintf (stderr, "      --defocus-only             optimize scanner-MTF defocus (default)\n");
+-      fprintf (stderr, "      --sigma-only               optimize residual scanner-MTF sigma instead\n");
++      fprintf (stderr, "      --both                     optimize residual sigma and defocus (default)\n");
++      fprintf (stderr, "      --defocus-only             optimize scanner-MTF defocus only\n");
++      fprintf (stderr, "      --sigma-only               optimize residual scanner-MTF sigma only\n");
+       fprintf (stderr, "      --zero-focus-start         zero sigma/defocus after loading parameters\n");
+       fprintf (stderr, "      --use-monochrome-channel   force BW/IR focus fitting\n");
+       fprintf (stderr, "      --use-rgb                  force RGB uniform-image-layer fitting\n");
+@@ -2597,10 +2598,12 @@ analyze_focus_areas (int argc, char **argv)
+   bool force_rgb = false;
+   bool fixed_focus_verification = false;
+   bool fixed_joint_position = false;
+-  /* Periodic focus areas do not separately identify physical sigma and
+-     defocus.  Default to the useful calibrated-sigma workflow: preserve the
+-     sigma from the parameter file and optimize defocus only.  */
+-  uint64_t focus_flags = finetune_scanner_mtf_defocus;
++  /* The physical decomposition may be weakly identified, but the shared
++     process-screen transfer is the quantity needed for colour recovery.
++     Coupled analysis uses scalar sigma/defocus fits as inexpensive basin
++     seeds before releasing both parameters.  */
++  uint64_t focus_flags = finetune_scanner_mtf_sigma
++                         | finetune_scanner_mtf_defocus;
+   subhelp = help_focus_areas;
+ 
+   for (int i = 0; i < argc; i++)
+@@ -2619,6 +2622,9 @@ analyze_focus_areas (int argc, char **argv)
+         ;
+       else if (parse_int_param (argc, argv, &i, "range", range, 1, 64))
+         ;
++      else if (arg == "--both")
++        focus_flags = finetune_scanner_mtf_sigma
++                      | finetune_scanner_mtf_defocus;
+       else if (arg == "--defocus-only")
+         focus_flags = finetune_scanner_mtf_defocus;
+       else if (arg == "--sigma-only")
+@@ -2732,7 +2738,12 @@ analyze_focus_areas (int argc, char **argv)
+   local.range = range;
+   local.ignore_outliers = 0;
+   local.flags = finetune_position | finetune_no_progress_report;
+-  if (!fixed_focus_verification)
++  const uint64_t coupled_focus = finetune_scanner_mtf_sigma
++                                 | finetune_scanner_mtf_defocus;
++  /* Coupled sigma/defocus is a global lens/capture model.  Do not solve that
++     expensive, poorly conditioned pair independently for every candidate;
++     candidate verification only needs local phase/colour starts.  */
++  if (!fixed_focus_verification && focus_flags != coupled_focus)
+     local.flags |= focus_flags;
+   if (use_bw)
+     local.flags |= finetune_bw | finetune_no_normalize
+@@ -2806,6 +2817,10 @@ analyze_focus_areas (int argc, char **argv)
+     }
+ 
+   printf ("Joint badness: %.12g\n", (double)analysis.joint_fit.badness);
++  if (analysis.screen_frequency > 0 && analysis.joint_screen_mtf >= 0)
++    printf ("Process-screen carrier: %.9f cycles/pixel, MTF %.6f%%\n",
++            (double)analysis.screen_frequency,
++            (double)(analysis.joint_screen_mtf * 100));
+   if (focus_flags & finetune_scanner_mtf_sigma)
+     printf ("Joint scanner MTF sigma: %.9f px\n",
+             (double)analysis.joint_fit.scanner_mtf_sigma);
+@@ -2833,8 +2848,15 @@ analyze_focus_areas (int argc, char **argv)
+             printf (" blur-diameter %.9f",
+                     (double)fit.scanner_mtf_blur_diameter);
+         }
++      if (i < analysis.leave_one_out_screen_mtf.size ())
++        printf (" carrier-mtf %.6f%%",
++                (double)(analysis.leave_one_out_screen_mtf[i] * 100));
+       printf (" badness %.12g\n", (double)fit.badness);
+     }
++  if (analysis.leave_one_out_screen_mtf_span >= 0)
++    printf ("Leave-one-out carrier MTF span: %.6f percentage points; max delta %.6f\n",
++            (double)(analysis.leave_one_out_screen_mtf_span * 100),
++            (double)(analysis.leave_one_out_screen_mtf_max_delta * 100));
+   if (analysis.held_out_max_relative_badness >= 0)
+     printf ("Maximum held-out relative residual: %.12g\n",
+             (double)analysis.held_out_max_relative_badness);
+diff --git a/src/libcolorscreen/focus-analysis-unittests.C b/src/libcolorscreen/focus-analysis-unittests.C
+index 3896ff6..648037e 100644
+--- a/src/libcolorscreen/focus-analysis-unittests.C
++++ b/src/libcolorscreen/focus-analysis-unittests.C
+@@ -356,37 +356,83 @@ test_bw_multitile_focus ()
+   return true;
+ }
+ 
+-/* Periodic focus areas constrain the combined transfer, not a unique split
+-   between residual Gaussian sigma and physical defocus.  Coupled physical
+-   fitting must therefore fail before doing an expensive image fit.  */
++/* Coupled physical focus analysis must escape the flat sigma=defocus=0
++   corner, and the result must expose the process-screen transfer even when the
++   physical sigma/defocus decomposition is not unique.  */
+ static bool
+-test_coupled_physical_focus_rejected ()
++test_coupled_physical_focus_multistart ()
+ {
++  image_data image;
++  scr_to_img_parameters geometry;
++  std::vector<point_t> locations;
++  if (!build_bw_focus_fixture (&image, &geometry, &locations))
++    return false;
++
+   render_parameters rparam;
++  rparam.gamma = 1;
+   rparam.sharpen.mode = sharpen_parameters::blur_deconvolution;
++  rparam.sharpen.scanner_mtf_scale = 1;
+   rparam.sharpen.scanner_mtf.model = mtf_model::physical_diffraction;
+   rparam.sharpen.scanner_mtf.pixel_pitch = 3.76;
+   rparam.sharpen.scanner_mtf.f_stop = 8;
+   rparam.sharpen.scanner_mtf.scan_dpi = 2000;
+-
+-  finetune_parameters fparam;
+-  fparam.flags = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+-
+-  image_data image;
+-  scr_to_img_parameters geometry;
++  rparam.sharpen.scanner_mtf.wavelength = 750;
++  rparam.sharpen.scanner_mtf.sigma = 0;
++  rparam.sharpen.scanner_mtf.defocus = 0;
++
++  finetune_parameters local;
++  local.range = 2;
++  local.ignore_outliers = 0;
++  local.flags = finetune_position | finetune_bw | finetune_no_normalize
++                | finetune_no_data_collection;
+   std::vector<finetune_focus_area_candidate> candidates;
++  for (point_t location : locations)
++    {
++      finetune_focus_area_candidate candidate;
++      candidate.center = location;
++      candidate.mean_color = { 0.4, 0.4, 0.4 };
++      candidate.fit
++          = finetune (rparam, geometry, image, { location }, nullptr, local,
++                      nullptr);
++      if (!candidate.fit.success)
++        {
++          fprintf (stderr, "Coupled-focus candidate verification failed: %s\n",
++                   candidate.fit.err.c_str ());
++          return false;
++        }
++      candidate.search_score = candidates.size ();
++      candidates.push_back (std::move (candidate));
++    }
++
++  finetune_parameters joint = local;
++  joint.flags &= ~finetune_position;
++  joint.flags |= finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+   finetune_focus_analysis_parameters analysis;
++  analysis.selection.min_areas = analysis.selection.max_areas = 3;
++  analysis.selection.minimum_color_volume = 0;
++  analysis.leave_one_out = false;
++  analysis.held_out = false;
++
+   finetune_focus_analysis_result result;
+-  if (finetune_analyze_focus_areas (rparam, geometry, image, candidates,
+-                                    fparam, analysis, &result, nullptr))
++  if (!finetune_analyze_focus_areas (rparam, geometry, image, candidates,
++                                     joint, analysis, &result, nullptr))
+     {
+-      fprintf (stderr, "Coupled physical sigma/defocus fit was accepted\n");
++      fprintf (stderr, "Coupled physical focus fit failed: %s\n",
++               result.err.c_str ());
+       return false;
+     }
+-  if (result.err.find ("not separately identifiable") == std::string::npos)
++  if (!(result.screen_frequency > 0) || !(result.joint_screen_mtf > 0)
++      || result.joint_screen_mtf > 1
++      || !std::isfinite ((double)result.joint_fit.scanner_mtf_sigma)
++      || !std::isfinite ((double)result.joint_fit.scanner_mtf_defocus))
+     {
+-      fprintf (stderr, "Unexpected coupled-focus diagnostic: %s\n",
+-               result.err.c_str ());
++      fprintf (stderr,
++               "Invalid coupled-focus result: sigma %.9g defocus %.9g "
++               "freq %.9g mtf %.9g\n",
++               (double)result.joint_fit.scanner_mtf_sigma,
++               (double)result.joint_fit.scanner_mtf_defocus,
++               (double)result.screen_frequency,
++               (double)result.joint_screen_mtf);
+       return false;
+     }
+   return true;
+@@ -434,7 +480,7 @@ main ()
+       || !test_sky_candidate_budget ()
+       || !test_bw_selection_uses_primary_intensities ()
+       || !test_bw_multitile_focus ()
+-      || !test_coupled_physical_focus_rejected ()
++      || !test_coupled_physical_focus_multistart ()
+       || !test_grayscale_image_search ())
+     return 1;
+   printf ("focus-analysis-unittests: PASS\n");
+diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-analysis.C
+index d335b1d..4e294c3 100644
+--- a/src/libcolorscreen/focus-analysis.C
++++ b/src/libcolorscreen/focus-analysis.C
+@@ -1,4 +1,5 @@
+ #include "include/focus-analysis.h"
++#include "include/scr-to-img.h"
+ #include "render-interpolate.h"
+ #include <algorithm>
+ #include <cmath>
+@@ -104,6 +
