@@ -44,6 +44,35 @@ jobs:
           git apply /tmp/focus-candidate-color.patch
           git apply --check /tmp/focus-all-basins.patch
           git apply /tmp/focus-all-basins.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/libcolorscreen/focus-analysis-unittests.C')
+          s = p.read_text()
+          old = '''               "(cold sigma %.6f defocus %.6f seed %d; "
+               "warm sigma %.6f defocus %.6f seed %d)\\n",
+               (double)cold.joint_screen_mtf, (double)warm.joint_screen_mtf,
+               (double)cold.joint_fit.scanner_mtf_sigma,
+          '''
+          new = '''               "(cold badness %.9g sigma %.6f defocus %.6f seed %d; "
+               "warm badness %.9g sigma %.6f defocus %.6f seed %d)\\n",
+               (double)cold.joint_screen_mtf, (double)warm.joint_screen_mtf,
+               (double)cold.joint_fit.badness,
+               (double)cold.joint_fit.scanner_mtf_sigma,
+          '''
+          if old not in s:
+              raise SystemExit('cold diagnostic anchor not found')
+          s = s.replace(old, new, 1)
+          old = '''               cold.joint_seed_kind,
+               (double)warm.joint_fit.scanner_mtf_sigma,
+          '''
+          new = '''               cold.joint_seed_kind,
+               (double)warm.joint_fit.badness,
+               (double)warm.joint_fit.scanner_mtf_sigma,
+          '''
+          if old not in s:
+              raise SystemExit('warm diagnostic anchor not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
           git diff --check
 
       - name: Build and run focused tests
