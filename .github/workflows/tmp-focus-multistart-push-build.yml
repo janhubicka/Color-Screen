@@ -30,13 +30,14 @@ jobs:
           set -euxo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           cat agent/focus-multistart.patch.part-* >/tmp/focus.patch
+          cp agent/focus-multistart-fix.patch /tmp/focus-fix.patch
           echo '51d28c73086610228990902ef8ab0a0df3280fb372f265d1aa2c0d92c944a4ce  /tmp/focus.patch' | sha256sum -c -
-          echo '3a8958b03078e0f27ead2c2643a1119520fd3f39972acc5830b68c2db06e3380  agent/focus-multistart-fix.patch' | sha256sum -c -
+          echo '3a8958b03078e0f27ead2c2643a1119520fd3f39972acc5830b68c2db06e3380  /tmp/focus-fix.patch' | sha256sum -c -
           git checkout --detach a86ac611846419ace3934ac8f46752b5e8abb4a8
           git apply --check /tmp/focus.patch
           git apply /tmp/focus.patch
-          git apply --check agent/focus-multistart-fix.patch
-          git apply agent/focus-multistart-fix.patch
+          git apply --check /tmp/focus-fix.patch
+          git apply /tmp/focus-fix.patch
           git diff --check
 
       - name: Build and test
