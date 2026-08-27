@@ -1,1 +1,1 @@
-trigger PR218 BW fix
+trigger PR218 fixed-phase speed
