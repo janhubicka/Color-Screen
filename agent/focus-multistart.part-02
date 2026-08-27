@@ -1,0 +1,124 @@
+n the joint focus solve\n");
+       fprintf (stderr, "      --no-leave-one-out         skip N-1 stability fits\n");
+     }
+@@ -2595,12 +2596,13 @@
+   bool zero_focus_start = false;
+   bool force_bw = false;
+   bool force_rgb = false;
+-  bool fixed_focus_verification = false;
++  bool fixed_focus_verification = true;
+   bool fixed_joint_position = false;
+-  /* Periodic focus areas do not separately identify physical sigma and
+-     defocus.  Default to the useful calibrated-sigma workflow: preserve the
+-     sigma from the parameter file and optimize defocus only.  */
+-  uint64_t focus_flags = finetune_scanner_mtf_defocus;
++  /* The shared capture transfer is the quantity of interest.  Coupled fitting
++     uses fixed-phase scalar pre-fits internally to avoid the poor zero-focus
++     basin while preserving an existing MTF calibration as another seed. */
++  uint64_t focus_flags
++      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+   subhelp = help_focus_areas;
+ 
+   for (int i = 0; i < argc; i++)
+@@ -2619,6 +2621,9 @@
+         ;
+       else if (parse_int_param (argc, argv, &i, "range", range, 1, 64))
+         ;
++      else if (arg == "--coupled")
++        focus_flags
++            = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+       else if (arg == "--defocus-only")
+         focus_flags = finetune_scanner_mtf_defocus;
+       else if (arg == "--sigma-only")
+@@ -2806,6 +2811,20 @@
+     }
+ 
+   printf ("Joint badness: %.12g\n", (double)analysis.joint_fit.badness);
++  if (analysis.process_screen_frequency > 0
++      && analysis.joint_process_screen_mtf >= 0)
++    {
++      printf ("Process-screen frequency: %.9f cycles/pixel\n",
++              (double)analysis.process_screen_frequency);
++      if (analysis.initial_process_screen_mtf >= 0)
++        printf ("Initial process-screen MTF: %.6f%%\n",
++                (double)analysis.initial_process_screen_mtf * 100);
++      printf ("Joint process-screen MTF: %.6f%%\n",
++              (double)analysis.joint_process_screen_mtf * 100);
++      if (analysis.leave_one_out_process_screen_mtf_span >= 0)
++        printf ("Leave-one-out process-screen MTF span: %.6f percentage points\n",
++                (double)analysis.leave_one_out_process_screen_mtf_span * 100);
++    }
+   if (focus_flags & finetune_scanner_mtf_sigma)
+     printf ("Joint scanner MTF sigma: %.9f px\n",
+             (double)analysis.joint_fit.scanner_mtf_sigma);
+--- a/src/qtgui/MainWindow.cpp
++++ b/src/qtgui/MainWindow.cpp
+@@ -5977,21 +5977,6 @@
+     return;
+   }
+ 
+-  const uint64_t coupledPhysicalFocus
+-      = colorscreen::finetune_scanner_mtf_sigma
+-      | colorscreen::finetune_scanner_mtf_defocus;
+-  if ((flags & coupledPhysicalFocus) == coupledPhysicalFocus
+-      && m_rparams.sharpen.scanner_mtf.simulate_diffraction_p()) {
+-    QMessageBox::information(
+-        this, tr("Focus analysis areas"),
+-        tr("Residual sigma and physical defocus are not separately "
+-           "identifiable from periodic focus areas. Fix or calibrate one "
+-           "and optimize only the other. Usually sigma is calibrated from "
+-           "a slanted-edge MTF measurement and only Defocus is enabled "
+-           "here."));
+-    return;
+-  }
+-
+   m_focusAreaAnalysisRunning = true;
+   if (m_sharpnessPanel)
+     m_sharpnessPanel->setFocusAreaAnalysisState(
+@@ -6051,6 +6036,17 @@
+               details << tr("Maximum held-out relative residual: %1")
+                              .arg(analysis.held_out_max_relative_badness, 0,
+                                   'g', 5);
++            if (analysis.joint_process_screen_mtf >= 0
++                && analysis.process_screen_frequency > 0)
++              details << tr("Process-screen MTF at %1 cycles/pixel: %2%")
++                             .arg(analysis.process_screen_frequency, 0, 'g', 6)
++                             .arg(analysis.joint_process_screen_mtf * 100, 0,
++                                  'g', 5);
++            if (analysis.leave_one_out_process_screen_mtf_span >= 0)
++              details << tr("Leave-one-out process-screen MTF span: %1 percentage points")
++                             .arg(analysis.leave_one_out_process_screen_mtf_span
++                                      * 100,
++                                  0, 'g', 5);
+             if ((flags & colorscreen::finetune_scanner_mtf_sigma)
+                 && analysis.joint_fit.scanner_mtf_sigma >= 0)
+               details << tr("Residual MTF sigma: %1 px")
+@@ -6115,7 +6111,9 @@
+         colorscreen::finetune_parameters local;
+         local.range = 4;
+         local.ignore_outliers = 0;
+-        local.flags = flags | colorscreen::finetune_position;
++        /* Candidate verification determines local phase/colour only.  The
++           capture MTF is global and is fitted after area selection. */
++        local.flags = colorscreen::finetune_position;
+         if (useMonochrome)
+           local.flags |= colorscreen::finetune_bw
+               | colorscreen::finetune_no_normalize
+@@ -6131,7 +6129,7 @@
+         }
+ 
+         colorscreen::finetune_parameters joint = local;
+-        joint.flags |= colorscreen::finetune_no_normalize
++        joint.flags |= flags | colorscreen::finetune_no_normalize
+             | colorscreen::finetune_no_data_collection;
+         if (!useMonochrome)
+           joint.flags |= colorscreen::finetune_uniform_image_layer;
+--- a/src/qtgui/SharpnessPanel.cpp
++++ b/src/qtgui/SharpnessPanel.cpp
+@@ -972,7 +972,7 @@
+       [this](ParameterState &, bool v) {
+         if (v) m_finetuneFlags |= colorscreen::finetune_scanner_mtf_sigma;
+         else m_finetuneFlags &= ~colorscreen::finetune_scanner_mtf_sigma;
+-      }, nullptr, "Included in the focus analyzer optimization loop. For multi-area physical-MTF analysis, keep Defocus fixed when optimizing Sigma.");
++      }, nullptr, "Included in the focus analyzer optimization loop. Multi-area analysis can optimize Sigma and Defocus together; it uses scalar pre-fits to avoid the poor zero-focus basin.");
+ 
