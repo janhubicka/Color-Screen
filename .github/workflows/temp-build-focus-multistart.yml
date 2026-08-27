@@ -53,9 +53,8 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p /tmp/focus-cli/lib
-          cp src/colorscreen/.libs/colorscreen /tmp/focus-cli/colorscreen.bin
-          cp -L src/libcolorscreen/.libs/libcolorscreen.so* /tmp/focus-cli/lib/
-          LD_LIBRARY_PATH="$PWD/src/libcolorscreen/.libs" ldd src/colorscreen/.libs/colorscreen | tee /tmp/focus-cli/ldd.txt
+          cp src/colorscreen/colorscreen /tmp/focus-cli/colorscreen.bin
+          ldd src/colorscreen/colorscreen | tee /tmp/focus-cli/ldd.txt
           awk '/=> \/[^ ]+/ {print $3} /^\/[a-zA-Z0-9_]/ {print $1}' /tmp/focus-cli/ldd.txt | sort -u | while read -r lib; do
             test -f "$lib" && cp -L "$lib" /tmp/focus-cli/lib/ || true
           done
