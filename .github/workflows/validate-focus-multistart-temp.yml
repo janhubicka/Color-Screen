@@ -1,4 +1,4 @@
-name: Validate focus multistart patch
+name: Validate and publish focus multistart patch
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
       - agent/tmp-focus-multistart-validation-base-20260827
 
 permissions:
-  contents: read
+  contents: write
   packages: read
 
 jobs:
@@ -32,6 +32,8 @@ jobs:
           cp agent/focus-multistart-testfix.patch /tmp/focus-testfix.patch
           cp agent/focus-multistart-candidate-color.patch /tmp/focus-candidate-color.patch
           cp agent/focus-multistart-all-basins.patch /tmp/focus-all-basins.patch
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = a86ac611846419ace3934ac8f46752b5e8abb4a8
           git checkout --detach a86ac611846419ace3934ac8f46752b5e8abb4a8
           git apply /tmp/focus.patch
           git apply /tmp/focus-testfix.patch
@@ -126,7 +128,19 @@ jobs:
           end = s.find('  /* Release both coordinates', start)
           if start < 0 or end < 0:
               raise SystemExit(f'scalar-loop markers {start} {end}')
-          p.write_text(s[:start] + new + s[end:])
+          s = s[:start] + new + s[end:]
+          old_comment = '''  /* Release both coordinates from the better scalar basin first.  Usually one
+             of these already captures the process-screen attenuation and this avoids
+             paying for two equally poor coupled searches.  If it does not beat the
+             loaded start, try the other basin as a fallback.  */
+          '''
+          new_comment = '''  /* Release both coordinates from every successful scalar basin.  Scalar and
+             coupled residuals come from different parameter spaces, so scalar rank
+             must not prune a basin before the released all-area comparison.  */
+          '''
+          if old_comment in s:
+              s = s.replace(old_comment, new_comment, 1)
+          p.write_text(s)
 
           p = Path('src/libcolorscreen/focus-analysis-unittests.C')
           s = p.read_text()
@@ -149,6 +163,15 @@ jobs:
           p.write_text(s)
           PY
           git diff --check
+          printf '%s\n' \
+            src/colorscreen/colorscreen.C \
+            src/libcolorscreen/focus-analysis-unittests.C \
+            src/libcolorscreen/focus-analysis.C \
+            src/libcolorscreen/include/focus-analysis.h \
+            src/qtgui/MainWindow.cpp \
+            src/qtgui/SharpnessPanel.cpp | sort >/tmp/expected-files
+          git diff --name-only | sort >/tmp/actual-files
+          diff -u /tmp/expected-files /tmp/actual-files
 
       - name: Build and run focused tests
         shell: bash
@@ -161,3 +184,25 @@ jobs:
           ./src/colorscreen/colorscreen --help >/tmp/colorscreen-help.txt 2>&1 || true
           grep -q 'analyze-focus-areas' /tmp/colorscreen-help.txt
           grep -q 'sigma-defocus' /tmp/colorscreen-help.txt
+
+      - name: Commit and push clean feature branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git switch -c agent/focus-area-carrier-multistart
+          git add src/colorscreen/colorscreen.C \
+                  src/libcolorscreen/focus-analysis.C \
+                  src/libcolorscreen/include/focus-analysis.h \
+                  src/libcolorscreen/focus-analysis-unittests.C \
+                  src/qtgui/MainWindow.cpp \
+                  src/qtgui/SharpnessPanel.cpp
+          test "$(git diff --cached --name-only | wc -l)" -eq 6
+          git diff --cached --check
+          git config user.name 'OpenAI Codex'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit \
+            -m 'focus: stabilize coupled carrier MTF fits' \
+            -m 'Use the periodic focus-area pixel objective to select among the loaded calibration and scalar-seeded coupled basins. Preserve a fully evaluated scalar seed as a feasible coupled candidate so a released simplex cannot discard a better solution.' \
+            -m 'Cold physical defocus is an even-function boundary, so derive a useful defocus range from the process-screen carrier and try a few nonzero defocus-only starts before releasing both coordinates. Keep both scalar basins in the final coupled comparison.' \
+            -m 'Report effective process-screen MTF in CLI and Qt diagnostics, warm-start leave-one-out validation from the shared fit, and cover cold versus calibrated starts with a synthetic physical Paget regression.'
+          git push origin HEAD:refs/heads/agent/focus-area-carrier-multistart
