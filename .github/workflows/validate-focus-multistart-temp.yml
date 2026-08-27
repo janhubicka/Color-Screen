@@ -100,19 +100,7 @@ jobs:
           '''
           if s.count(staged_anchor) != 1:
               raise SystemExit(f'focus staged anchor count {s.count(staged_anchor)}')
-          s = s.replace(staged_anchor, staged + staged_anchor, 1)
-          old_comment = '''  /* Release both coordinates from the better scalar basin first.  Usually one
-             of these already captures the process-screen attenuation and this avoids
-             paying for two equally poor coupled searches.  If it does not beat the
-             loaded start, try the other basin as a fallback.  */
-          '''
-          new_comment = '''  /* Release both coordinates from every successful scalar basin.  Scalar and
-             coupled residuals live in different parameter spaces, so a scalar basin
-             that ranks second can still become the best released solution.  */
-          '''
-          if s.count(old_comment) != 1:
-              raise SystemExit(f'focus scalar comment count {s.count(old_comment)}')
-          p.write_text(s.replace(old_comment, new_comment, 1))
+          p.write_text(s.replace(staged_anchor, staged + staged_anchor, 1))
 
           p = Path('src/libcolorscreen/focus-analysis-unittests.C')
           s = p.read_text()
