@@ -1,7 +1,7 @@
 diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-analysis.C
 --- a/src/libcolorscreen/focus-analysis.C
 +++ b/src/libcolorscreen/focus-analysis.C
-@@ -196,11 +196,54 @@ multistart_joint_focus_fit (
+@@ -196,11 +196,106 @@ multistart_joint_focus_fit (
    if (scalar[first].success)
      consider_joint_fit (scalar[first].rparam, param, img, locations, starts,
                          fparams, progress, &best, best_seed_kind,
@@ -12,47 +12,99 @@ diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-anal
      consider_joint_fit (scalar[second].rparam, param, img, locations, starts,
                          fparams, progress, &best, best_seed_kind,
                          scalar[second].kind);
-+  if (scalar[1].success
++
++  /* A cold defocus coordinate cannot leave zero by local first-order
++     exploration.  First obtain the sigma-only explanation, then explore
++     nonzero physical-defocus starts with that sigma held fixed.  This follows
++     the compensation valley from an identifiable axis into its interior.  */
++  constexpr coord_t cold_focus_epsilon = (coord_t)1e-8;
++  if (scalar[0].success
 +      && my_isfinite (rparam.sharpen.scanner_mtf.defocus)
 +      && rparam.sharpen.scanner_mtf.defocus >= 0
-+      && rparam.sharpen.scanner_mtf.defocus <= cold_epsilon)
++      && rparam.sharpen.scanner_mtf.defocus <= cold_focus_epsilon)
 +    {
-+      fprintf (stderr,
-+               "focus stage input defocus %.9g scalar-badness %.9g best %.9g\n",
-+               (double)scalar[1].rparam.sharpen.scanner_mtf.defocus,
-+               (double)scalar[1].badness,
-+               best.success ? (double)best.badness : -1.0);
-+      finetune_parameters sigma_stage = fparams;
-+      sigma_stage.flags &= ~coupled;
-+      sigma_stage.flags |= finetune_scanner_mtf_sigma;
-+      sigma_stage.interpolate_scanner_mtf_defocus = false;
-+      finetune_result fit
-+          = finetune (scalar[1].rparam, param, img, locations, &starts,
-+                      sigma_stage, progress);
-+      fprintf (stderr,
-+               "focus stage sigma success %d badness %.9g sigma %.9g result-defocus %.9g\n",
-+               fit.success ? 1 : 0, (double)fit.badness,
-+               (double)fit.scanner_mtf_sigma,
-+               (double)fit.scanner_mtf_defocus);
-+      if (fit.success && my_isfinite (fit.badness))
++      mtf_parameters stage_mtf = scalar[0].rparam.sharpen.scanner_mtf;
++      if (!(fparams.flags & finetune_bw) && img.has_rgb ())
++        stage_mtf.wavelength = 550;
++      const coord_t frequency = process_screen_frequency (param, img);
++      coord_t useful_limit = 0;
++      if (frequency > 0
++          && finetune_useful_defocus_limit (
++              stage_mtf, frequency, (coord_t)0.05, (coord_t)20,
++              &useful_limit)
++          && useful_limit > cold_focus_epsilon)
 +        {
-+          render_parameters staged = scalar[1].rparam;
-+          if (freeze_focus_from_fit (&staged, sigma_stage.flags, fit))
++          struct staged_seed
++          {
++            bool success = false;
++            coord_t badness = std::numeric_limits<coord_t>::max ();
++            render_parameters rparam;
++            finetune_result fit;
++          } staged;
++
++          finetune_parameters defocus_stage = fparams;
++          defocus_stage.flags &= ~coupled;
++          defocus_stage.flags |= finetune_scanner_mtf_defocus;
++          static constexpr coord_t fractions[]
++              = { (coord_t)0.125, (coord_t)0.25, (coord_t)0.5,
++                  (coord_t)0.75 };
++          for (coord_t fraction : fractions)
 +            {
-+              fprintf (stderr,
-+                       "focus stage frozen sigma %.9g defocus %.9g\n",
-+                       (double)staged.sharpen.scanner_mtf.sigma,
-+                       (double)staged.sharpen.scanner_mtf.defocus);
-+              fit.scanner_mtf_defocus = staged.sharpen.scanner_mtf.defocus;
-+              if (!best.success || fit.badness < best.badness)
++              render_parameters seed = scalar[0].rparam;
++              seed.sharpen.scanner_mtf.defocus = useful_limit * fraction;
++              finetune_result fit
++                  = finetune (seed, param, img, locations, &starts,
++                              defocus_stage, progress);
++              if (!fit.success || !my_isfinite (fit.badness))
++                continue;
++              render_parameters frozen = seed;
++              if (!freeze_focus_from_fit (&frozen, defocus_stage.flags, fit))
++                continue;
++              if (!staged.success || fit.badness < staged.badness)
 +                {
-+                  best = fit;
-+                  if (best_seed_kind)
-+                    *best_seed_kind = scalar[1].kind;
++                  staged.success = true;
++                  staged.badness = fit.badness;
++                  staged.rparam = std::move (frozen);
++                  staged.fit = std::move (fit);
 +                }
-+              consider_joint_fit (staged, param, img, locations, starts,
-+                                  fparams, progress, &best, best_seed_kind,
-+                                  scalar[1].kind);
++            }
++
++          if (staged.success)
++            {
++              if (!best.success || staged.fit.badness < best.badness)
++                {
++                  best = staged.fit;
++                  if (best_seed_kind)
++                    *best_seed_kind = scalar[0].kind;
++                }
++
++              /* Polish sigma with the recovered nonzero defocus fixed before
++                 finally releasing both physical transfer coordinates.  */
++              finetune_parameters sigma_stage = fparams;
++              sigma_stage.flags &= ~coupled;
++              sigma_stage.flags |= finetune_scanner_mtf_sigma;
++              sigma_stage.interpolate_scanner_mtf_defocus = false;
++              finetune_result fit
++                  = finetune (staged.rparam, param, img, locations, &starts,
++                              sigma_stage, progress);
++              if (fit.success && my_isfinite (fit.badness))
++                {
++                  render_parameters polished = staged.rparam;
++                  if (freeze_focus_from_fit (&polished, sigma_stage.flags, fit))
++                    {
++                      fit.scanner_mtf_defocus
++                          = polished.sharpen.scanner_mtf.defocus;
++                      if (!best.success || fit.badness < best.badness)
++                        {
++                          best = fit;
++                          if (best_seed_kind)
++                            *best_seed_kind = scalar[0].kind;
++                        }
++                      consider_joint_fit (
++                          polished, param, img, locations, starts, fparams,
++                          progress, &best, best_seed_kind, scalar[0].kind);
++                    }
++                }
 +            }
 +        }
 +    }
