@@ -49,41 +49,93 @@ jobs:
 
           p = Path('src/libcolorscreen/focus-analysis.C')
           s = p.read_text()
-          anchor = '  int first = 0, second = 1;\n'
-          fan = '''  /* From a genuinely cold physical start, the scalar optima are opposite
-             endpoints of the sigma/defocus compensation valley.  Sample a small fan
-             between them before releasing both coordinates.  Unlike combining the
-             full endpoints, convex mixtures do not double-count the carrier loss and
-             move the simplex off both even zero boundaries.  */
-            const coord_t cold_epsilon = (coord_t)1e-8;
-            if (scalar[0].success && scalar[1].success
-                && rparam.sharpen.scanner_mtf.sigma <= cold_epsilon
-                && rparam.sharpen.scanner_mtf.defocus <= cold_epsilon)
-              {
-                const coord_t sigma_endpoint
-                    = scalar[0].rparam.sharpen.scanner_mtf.sigma;
-                const coord_t defocus_endpoint
-                    = scalar[1].rparam.sharpen.scanner_mtf.defocus;
-                fprintf (stderr, "focus scalar endpoints sigma %.9g defocus %.9g\\n",
-                         (double)sigma_endpoint, (double)defocus_endpoint);
-                static constexpr coord_t fractions[]
-                    = { (coord_t)0.25, (coord_t)0.5, (coord_t)0.75 };
-                for (coord_t fraction : fractions)
-                  {
-                    render_parameters interior = rparam;
-                    interior.sharpen.scanner_mtf.sigma
-                        = sigma_endpoint * fraction;
-                    interior.sharpen.scanner_mtf.defocus
-                        = defocus_endpoint * ((coord_t)1 - fraction);
-                    consider_joint_fit (interior, param, img, locations, starts,
-                                        fparams, progress, &best, best_seed_kind, 3);
-                  }
-              }
+          include_anchor = '#include "include/focus-analysis.h"\n'
+          if s.count(include_anchor) != 1:
+              raise SystemExit('focus include anchor mismatch')
+          s = s.replace(include_anchor,
+                        include_anchor + '#include "finetune-int.h"\n', 1)
+
+          old = '''  for (int which = 0; which < 2; which++)
+            {
+              finetune_parameters one = fparams;
+              one.flags &= ~coupled;
+              one.flags |= scalar_flags[which];
+              finetune_result fit
+                  = finetune (rparam, param, img, locations, &starts, one, progress);
+              if (!fit.success || !my_isfinite (fit.badness))
+                continue;
+              scalar[which].success = true;
+              scalar[which].badness = fit.badness;
+              scalar[which].rparam = rparam;
+              scalar[which].kind = which + 1;
+              if (!freeze_focus_from_fit (&scalar[which].rparam, one.flags, fit))
+                scalar[which].success = false;
+            }
 
           '''
-          if s.count(anchor) != 1:
-              raise SystemExit(f'focus fan anchor count {s.count(anchor)}')
-          p.write_text(s.replace(anchor, fan + anchor, 1))
+          new = '''  auto consider_scalar_seed = [&] (int which,
+                                                   const render_parameters &seed) {
+            finetune_parameters one = fparams;
+            one.flags &= ~coupled;
+            one.flags |= scalar_flags[which];
+            finetune_result fit
+                = finetune (seed, param, img, locations, &starts, one, progress);
+            if (!fit.success || !my_isfinite (fit.badness))
+              return;
+            render_parameters frozen = seed;
+            if (!freeze_focus_from_fit (&frozen, one.flags, fit))
+              return;
+            if (!scalar[which].success || fit.badness < scalar[which].badness)
+              {
+                scalar[which].success = true;
+                scalar[which].badness = fit.badness;
+                scalar[which].rparam = std::move (frozen);
+                scalar[which].kind = which + 1;
+              }
+          };
+          for (int which = 0; which < 2; which++)
+            consider_scalar_seed (which, rparam);
+
+          /* Physical defocus is even at exact focus, so a simplex initialized
+             at zero has no first-order direction and can report zero without
+             ever exploring the defocus basin.  Reuse the adaptive-focus range
+             definition to seed a few nonzero, optics-scaled defocus starts.  */
+          constexpr coord_t cold_epsilon = (coord_t)1e-8;
+          if (rparam.sharpen.scanner_mtf.defocus <= cold_epsilon)
+            {
+              mtf_parameters focus_mtf = rparam.sharpen.scanner_mtf;
+              if (!(fparams.flags & finetune_bw) && img.has_rgb ())
+                focus_mtf.wavelength = 550;
+              const coord_t frequency = process_screen_frequency (param, img);
+              coord_t useful_limit = 0;
+              if (frequency > 0
+                  && finetune_useful_defocus_limit (
+                      focus_mtf, frequency, (coord_t)0.05, (coord_t)20,
+                      &useful_limit)
+                  && useful_limit > cold_epsilon)
+                {
+                  fprintf (stderr, "focus useful defocus limit %.9g\\n",
+                           (double)useful_limit);
+                  static constexpr coord_t fractions[]
+                      = { (coord_t)0.125, (coord_t)0.25, (coord_t)0.5 };
+                  for (coord_t fraction : fractions)
+                    {
+                      render_parameters seed = rparam;
+                      seed.sharpen.scanner_mtf.defocus
+                          = useful_limit * fraction;
+                      consider_scalar_seed (1, seed);
+                    }
+                }
+            }
+          if (scalar[1].success)
+            fprintf (stderr, "focus selected defocus scalar %.9g badness %.9g\\n",
+                     (double)scalar[1].rparam.sharpen.scanner_mtf.defocus,
+                     (double)scalar[1].badness);
+
+          '''
+          if s.count(old) != 1:
+              raise SystemExit(f'scalar-loop anchor count {s.count(old)}')
+          p.write_text(s.replace(old, new, 1))
 
           p = Path('src/libcolorscreen/focus-analysis-unittests.C')
           s = p.read_text()
