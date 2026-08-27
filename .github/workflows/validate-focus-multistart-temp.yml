@@ -48,30 +48,23 @@ jobs:
           from pathlib import Path
           p = Path('src/libcolorscreen/focus-analysis-unittests.C')
           s = p.read_text()
-          old = '''               "(cold sigma %.6f defocus %.6f seed %d; "
-               "warm sigma %.6f defocus %.6f seed %d)\\n",
-               (double)cold.joint_screen_mtf, (double)warm.joint_screen_mtf,
-               (double)cold.joint_fit.scanner_mtf_sigma,
-          '''
-          new = '''               "(cold badness %.9g sigma %.6f defocus %.6f seed %d; "
-               "warm badness %.9g sigma %.6f defocus %.6f seed %d)\\n",
-               (double)cold.joint_screen_mtf, (double)warm.joint_screen_mtf,
-               (double)cold.joint_fit.badness,
-               (double)cold.joint_fit.scanner_mtf_sigma,
-          '''
-          if old not in s:
-              raise SystemExit('cold diagnostic anchor not found')
-          s = s.replace(old, new, 1)
-          old = '''               cold.joint_seed_kind,
-               (double)warm.joint_fit.scanner_mtf_sigma,
-          '''
-          new = '''               cold.joint_seed_kind,
-               (double)warm.joint_fit.badness,
-               (double)warm.joint_fit.scanner_mtf_sigma,
-          '''
-          if old not in s:
-              raise SystemExit('warm diagnostic anchor not found')
-          p.write_text(s.replace(old, new, 1))
+          replacements = [
+              ('"(cold sigma %.6f defocus %.6f seed %d; "',
+               '"(cold badness %.9g sigma %.6f defocus %.6f seed %d; "'),
+              ('"warm sigma %.6f defocus %.6f seed %d)\\n",',
+               '"warm badness %.9g sigma %.6f defocus %.6f seed %d)\\n",'),
+              ('(double)cold.joint_screen_mtf, (double)warm.joint_screen_mtf,\n',
+               '(double)cold.joint_screen_mtf, (double)warm.joint_screen_mtf,\n'
+               '               (double)cold.joint_fit.badness,\n'),
+              ('cold.joint_seed_kind,\n',
+               'cold.joint_seed_kind,\n'
+               '               (double)warm.joint_fit.badness,\n'),
+          ]
+          for old, new in replacements:
+              if s.count(old) != 1:
+                  raise SystemExit(f'diagnostic anchor count {s.count(old)} for {old!r}')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
           PY
           git diff --check
 
