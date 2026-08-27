@@ -1,4 +1,4 @@
-name: TEMP build focus multistart
+name: TEMP validate PR218 BW carrier MTF
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
   packages: read
 
 jobs:
-  build:
+  validate:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
@@ -18,56 +18,112 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Check out staging branch
+      - name: Check out PR218 branch
         uses: actions/checkout@v4
         with:
-          ref: agent/tmp-focus-mtf-multistart-build
+          ref: agent/focus-area-carrier-multistart
           fetch-depth: 0
 
-      - name: Reconstruct patch
-        shell: bash
-        run: |
-          set -euxo pipefail
-          cat agent/focus-multistart.part-* >/tmp/focus.patch
-          sha256sum /tmp/focus.patch
-
-      - name: Apply to current main and test
+      - name: Specialize BW carrier MTF to image layer
         shell: bash
         run: |
           set -euxo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git fetch origin main
-          test "$(git rev-parse origin/main)" = a86ac611846419ace3934ac8f46752b5e8abb4a8
-          git checkout --detach a86ac611846419ace3934ac8f46752b5e8abb4a8
-          git apply --recount --check /tmp/focus.patch
-          git apply --recount /tmp/focus.patch
+          test "$(git rev-parse HEAD)" = ffae4749049c0dfd171293daf0fd148582510d4f
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/libcolorscreen/focus-analysis.C')
+          text = path.read_text()
+          replacements = [
+              (
+                  '  mtf_parameters mtf = rparam.sharpen.scanner_mtf;\n',
+                  '  mtf_parameters mtf\n'
+                  '      = (flags & finetune_bw)\n'
+                  '            ? rparam.get_image_layer_sharpen_parameters (&img).scanner_mtf\n'
+                  '            : rparam.sharpen.scanner_mtf;\n',
+              ),
+              (
+                  '      mtf_parameters focus_mtf = rparam.sharpen.scanner_mtf;\n',
+                  '      mtf_parameters focus_mtf\n'
+                  '          = (fparams.flags & finetune_bw)\n'
+                  '                ? rparam.get_image_layer_sharpen_parameters (&img).scanner_mtf\n'
+                  '                : rparam.sharpen.scanner_mtf;\n',
+              ),
+              (
+                  '      mtf_parameters stage_mtf = scalar[0].rparam.sharpen.scanner_mtf;\n',
+                  '      mtf_parameters stage_mtf\n'
+                  '          = (fparams.flags & finetune_bw)\n'
+                  '                ? scalar[0].rparam\n'
+                  '                      .get_image_layer_sharpen_parameters (&img)\n'
+                  '                      .scanner_mtf\n'
+                  '                : scalar[0].rparam.sharpen.scanner_mtf;\n',
+              ),
+          ]
+          for old, new in replacements:
+              count = text.count(old)
+              assert count == 1, (old, count)
+              text = text.replace(old, new)
+          path.write_text(text)
+
+          path = Path('src/libcolorscreen/focus-analysis-unittests.C')
+          text = path.read_text()
+          old = ('  rparam.sharpen.scanner_mtf = capture.scanner_mtf;\n'
+                 '  rparam.sharpen.scanner_mtf.sigma = 0;\n')
+          new = ('  rparam.sharpen.scanner_mtf = capture.scanner_mtf;\n'
+                 '  /* Exercise the same image-layer channel specialization used by\n'
+                 '     a standalone IR/BW capture: the global wavelength is unknown,\n'
+                 '     while channel 3 supplies the authoritative 750 nm value.  */\n'
+                 '  rparam.sharpen.scanner_mtf.wavelength = 0;\n'
+                 '  rparam.sharpen.scanner_mtf.wavelengths[3] = 750;\n'
+                 '  rparam.sharpen.scanner_mtf.sigma = 0;\n')
+          count = text.count(old)
+          assert count == 1, count
+          path.write_text(text.replace(old, new))
+          PY
           git diff --check
+
+      - name: Build and test
+        shell: bash
+        run: |
+          set -euxo pipefail
           CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure
           make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
           ./src/libcolorscreen/focus-analysis-unittests
           make -C src/colorscreen -j$(nproc) colorscreen
           ./src/colorscreen/colorscreen analyze-focus-areas --help >/tmp/help.txt 2>&1 || true
-          grep -q -- '--coupled' /tmp/help.txt
-          grep -q 'process-screen' src/libcolorscreen/focus-analysis.C
+          grep -q -- '--sigma-defocus' /tmp/help.txt
 
-      - name: Publish clean review branch
+      - name: Package portable CLI
         shell: bash
         run: |
           set -euxo pipefail
-          git switch -c agent/focus-area-mtf-multistart
-          git add src/libcolorscreen/focus-analysis.C \
-                  src/libcolorscreen/include/focus-analysis.h \
-                  src/libcolorscreen/focus-analysis-unittests.C \
-                  src/colorscreen/colorscreen.C \
-                  src/qtgui/MainWindow.cpp \
-                  src/qtgui/SharpnessPanel.cpp
-          test "$(git diff --cached --name-only | wc -l)" -eq 6
-          git diff --cached --check
+          mkdir -p /tmp/focus-cli/lib
+          cp src/colorscreen/colorscreen /tmp/focus-cli/colorscreen.bin
+          ldd src/colorscreen/colorscreen | tee /tmp/focus-cli/ldd.txt
+          awk '/=> \/[^ ]+/ {print $3} /^\/[a-zA-Z0-9_]/ {print $1}' /tmp/focus-cli/ldd.txt | sort -u | while read -r lib; do
+            test -f "$lib" && cp -L "$lib" /tmp/focus-cli/lib/ || true
+          done
+          tar -C /tmp -czf /tmp/colorscreen-pr218-bw-mtf.tar.gz focus-cli
+
+      - name: Commit fix to PR218
+        shell: bash
+        run: |
+          set -euxo pipefail
           git config user.name 'OpenAI Codex'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit \
-            -m 'focus: stabilize coupled area MTF fitting' \
-            -m 'Periodic focus areas primarily constrain the effective transfer at the process-screen carrier. Preserve the simultaneous selected-area pixel model, but avoid the poor zero sigma/defocus basin by comparing the caller calibration with a fixed-phase sigma-only prefit before releasing the normal coupled solve.' \
-            -m 'Keep candidate verification local to phase/color, warm leave-one-out fits from the all-area solution, and report the process-screen carrier MTF and its leave-one-out stability explicitly in the library, CLI, and Qt UI.' \
-            -m 'On the Hurley scan at 750 nm, cold and calibrated starts converge to about 63.7% and 65.8% carrier MTF respectively versus 64.6% from the slanted-edge reference, while reaching essentially identical pixel residuals.'
-          git push origin HEAD:refs/heads/agent/focus-area-mtf-multistart
+          git add src/libcolorscreen/focus-analysis.C \
+                  src/libcolorscreen/focus-analysis-unittests.C
+          git diff --cached --check
+          git commit -m 'focus: honor image-layer MTF in BW carrier fits' \
+            -m 'Use the same image-layer-specialized scanner MTF as finetune when reporting BW process-screen transfer and when deriving cold physical-defocus seed ranges. This preserves per-channel capture wavelength metadata such as IR channel 3.' \
+            -m 'Make the synthetic physical Paget regression use channel-3 750 nm with no global wavelength so this domain specialization is covered.'
+          git push origin HEAD:refs/heads/agent/focus-area-carrier-multistart
+
+      - name: Upload exact tested CLI
+        uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-pr218-bw-mtf
+          path: /tmp/colorscreen-pr218-bw-mtf.tar.gz
+          if-no-files-found: error
+          retention-days: 2
