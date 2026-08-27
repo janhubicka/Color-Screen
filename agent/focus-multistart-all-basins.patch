@@ -10,3 +10,36 @@ diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-anal
      consider_joint_fit (scalar[second].rparam, param, img, locations, starts,
                          fparams, progress, &best, best_seed_kind,
                          scalar[second].kind);
+@@ -204,6 +203,34 @@ multistart_joint_focus_fit (
+     consider_joint_fit (scalar[second].rparam, param, img, locations, starts,
+                         fparams, progress, &best, best_seed_kind,
+                         scalar[second].kind);
++  if (scalar[1].success && cold_defocus)
++    {
++      finetune_parameters sigma_stage = fparams;
++      sigma_stage.flags &= ~coupled;
++      sigma_stage.flags |= finetune_scanner_mtf_sigma;
++      sigma_stage.interpolate_scanner_mtf_defocus = false;
++      finetune_result fit
++          = finetune (scalar[1].rparam, param, img, locations, &starts,
++                      sigma_stage, progress);
++      if (fit.success && my_isfinite (fit.badness))
++        {
++          render_parameters staged = scalar[1].rparam;
++          if (freeze_focus_from_fit (&staged, sigma_stage.flags, fit))
++            {
++              fit.scanner_mtf_defocus = staged.sharpen.scanner_mtf.defocus;
++              if (!best.success || fit.badness < best.badness)
++                {
++                  best = fit;
++                  if (best_seed_kind)
++                    *best_seed_kind = scalar[1].kind;
++                }
++              consider_joint_fit (staged, param, img, locations, starts,
++                                  fparams, progress, &best, best_seed_kind,
++                                  scalar[1].kind);
++            }
++        }
++    }
+   return best;
+ }
