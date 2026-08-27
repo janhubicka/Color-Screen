@@ -29,7 +29,7 @@ jobs:
         run: |
           set -euxo pipefail
           cp agent/pr218-fixedphase.patch /tmp/pr218-fixedphase.patch
-          echo 'acd48c88521351c0d600fc4744717e2808a0bd25f2d8bfc3e649b837807d579b  /tmp/pr218-fixedphase.patch' | sha256sum -c -
+          echo '95a2b7a27e563ae3ae614e4298787aa34f0cc8871a160bd41f2219851667f6ff  /tmp/pr218-fixedphase.patch' | sha256sum -c -
 
       - name: Apply to PR218 and validate
         shell: bash
@@ -73,7 +73,7 @@ jobs:
           git config user.name 'OpenAI Codex'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'focus: keep MTF basin search fixed-phase' \
-            -m 'Candidate verification already determines local screen phase. Keep phase fixed while comparing loaded, sigma-only, and defocus-only physical-MTF basins, then run one full coupled phase-refining solve from the winning basin.' \
+            -m 'Candidate verification already determines local screen phase. Keep all physical-MTF basin searches fixed-phase, including the staged sigma-to-defocus cold continuation, then run one full coupled phase-refining solve from the winning basin.' \
             -m 'Make candidate verification phase/color-only by default in Qt and the CLI, with an explicit diagnostic option to refit focus per candidate. This removes repeated global MTF solves without changing the final simultaneous selected-area model.'
           git push origin HEAD:refs/heads/agent/focus-area-carrier-multistart
 
