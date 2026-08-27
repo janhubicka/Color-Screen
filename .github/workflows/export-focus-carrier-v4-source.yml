@@ -1,0 +1,53 @@
+name: Export focus carrier v4 source
+
+on:
+  pull_request:
+    branches: [agent/tmp-focus-carrier-publish-base]
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/tmp-focus-carrier-publish-base
+          fetch-depth: 0
+      - name: Reconstruct and export applied source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          for spec in '00 0e5154b465a5c4ca68e65d72f2f46fb2b80e400f' '01 0d65721a074723e452d87a73176d1f65cfd9393d' '03 edbfe075b283891dd6be71bf9da9addd493dfa5a' '04 4a956ddb9fbd609ae2feb9d90b069eaf3c4c5911' '05 d3c0e4012db11d06448d98d8339b4c0b1ddf9e8d' '06a d2c137459ea0ef35de4eb9a336922f90410699ac' '06b deb191a0e14bf867342e16ed5e3ff79ccef96b22'; do
+            set -- $spec
+            test "$(git hash-object agent/focus-carrier-v2-$1.b64)" = "$2"
+            cp "agent/focus-carrier-v2-$1.b64" "/tmp/c$1"
+          done
+          head -c 7800 agent/focus-carrier-v2-02.b64 >/tmp/c02a
+          tail -c 7800 agent/focus-carrier-v2-02.b64 >/tmp/c02b
+          if test "$(git hash-object /tmp/c02a)" = 58b19fd66748455363105fa37311d5a42dbad4cf; then cp /tmp/c02a /tmp/c02; else cp /tmp/c02b /tmp/c02; fi
+          test "$(git hash-object /tmp/c02)" = 58b19fd66748455363105fa37311d5a42dbad4cf
+          cat /tmp/c06a /tmp/c06b >/tmp/c06
+          test "$(git hash-object /tmp/c06)" = 5c85bd61ee75392c3587b0fff72376223a92579d
+          cat /tmp/c00 /tmp/c01 /tmp/c02 /tmp/c03 /tmp/c04 /tmp/c05 /tmp/c06 | base64 -d >/tmp/focus.patch
+          echo '6c20c4d435d8fae1d8d7711de9051d6479a241f025f3b66d1082a3fe27beb306  /tmp/focus.patch' | sha256sum -c -
+          cp agent/focus-carrier-test-link-fix.patch /tmp/test-link.patch
+          cp agent/focus-carrier-probe-phase-fix.patch /tmp/phase-fix.patch
+          echo '391494b7eff5193b34bd9406a15ad462c119a69624f0e0b6ff6e2d4fe9855806  /tmp/test-link.patch' | sha256sum -c -
+          echo '69b7408038d476dfc94563d4515defd8125587b4c8c2ae5c9847e4df7e17876c  /tmp/phase-fix.patch' | sha256sum -c -
+          git checkout --detach 5b4e956d023dd42618ccbae9078f42f97300f6c5
+          git apply /tmp/focus.patch
+          git apply /tmp/test-link.patch
+          git apply /tmp/phase-fix.patch
+          git diff --check
+          git switch -c agent/focus-carrier-v4-source-export
+          git add src doc
+          git diff --cached --name-only
+          test -n "$(git diff --cached --name-only)"
+          git config user.name 'OpenAI Codex'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'temp: export applied focus carrier v4 source'
+          git push --force origin HEAD:refs/heads/agent/focus-carrier-v4-source-export
