@@ -1,0 +1,27 @@
+diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-analysis.C
+--- a/src/libcolorscreen/focus-analysis.C
++++ b/src/libcolorscreen/focus-analysis.C
+@@ -131,7 +131,10 @@ process_screen_mtf (const render_parameters &rparam, uint64_t flags,
+                     const finetune_result &fit, coord_t frequency,
+                     const image_data &img)
+ {
+-  if (!(frequency > 0) || !fit.success)
++  const uint64_t scanner_focus = finetune_scanner_mtf_sigma
++                                 | finetune_scanner_mtf_defocus
++                                 | finetune_scanner_mtf_channel_defocus;
++  if (!(frequency > 0) || !fit.success || !(flags & scanner_focus))
+     return -1;
+   render_parameters fitted = rparam;
+   if (!freeze_focus_from_fit (&fitted, flags, fit))
+diff --git a/src/libcolorscreen/focus-analysis-unittests.C b/src/libcolorscreen/focus-analysis-unittests.C
+--- a/src/libcolorscreen/focus-analysis-unittests.C
++++ b/src/libcolorscreen/focus-analysis-unittests.C
+@@ -409,6 +409,8 @@ test_coupled_physical_focus_multistart ()
+   joint.flags |= finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+   finetune_focus_analysis_parameters analysis;
+   analysis.selection.min_areas = analysis.selection.max_areas = 3;
++  analysis.selection.min_contrast = 0;
++  analysis.selection.max_quality_ratio = 1000;
+   analysis.selection.minimum_color_volume = 0;
+   analysis.leave_one_out = false;
+   analysis.held_out = false;
