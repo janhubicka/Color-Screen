@@ -1,0 +1,56 @@
+diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-analysis.C
+--- a/src/libcolorscreen/focus-analysis.C
++++ b/src/libcolorscreen/focus-analysis.C
+@@ -158,6 +158,20 @@ consider_joint_fit (const render_parameters &rparam,
+     }
+ }
+ 
++/* At the exact physical (sigma,defocus) origin both transfer coordinates have
++   weak first-order simplex information.  The one-dimensional fits are useful
++   not only as direct joint seeds but also as coordinate-continuation anchors:
++   fit one axis, hold it fixed while fitting the other, then release both.  */
++static bool
++cold_physical_focus_start_p (const render_parameters &rparam)
++{
++  const coord_t sigma = rparam.sharpen.scanner_mtf.sigma;
++  const coord_t defocus = rparam.sharpen.scanner_mtf.defocus;
++  constexpr coord_t epsilon = (coord_t)1e-8;
++  return my_isfinite (sigma) && my_isfinite (defocus) && sigma >= 0
++         && defocus >= 0 && sigma <= epsilon && defocus <= epsilon;
++}
++
+ /* Coupled physical sigma/defocus fitting is poorly conditioned from a single
+    start, especially at the exact (0,0) boundary.  Use the cheap one-dimensional
+    sigma-only and defocus-only fits to locate useful basins, then release both
+@@ -213,6 +227,30 @@ multistart_joint_focus_fit (
+         scalar[which].success = false;
+     }
+ 
++  /* A cold origin needs a little more continuation than simply releasing both
++     variables at an axis optimum.  Cross-fit the other coordinate while the
++     first one stays fixed, then let the coupled simplex polish that staged
++     point.  Try both orders because sigma and defocus have different transfer
++     shapes even when they produce similar carrier attenuation.  */
++  if (cold_physical_focus_start_p (rparam))
++    for (int which = 0; which < 2; which++)
++      if (scalar[which].success)
++        {
++          render_parameters staged = scalar[which].rparam;
++          finetune_parameters cross = fparams;
++          cross.flags &= ~coupled;
++          cross.flags |= scalar_flags[1 - which];
++          if (scalar_flags[1 - which] == finetune_scanner_mtf_sigma)
++            cross.interpolate_scanner_mtf_defocus = false;
++          finetune_result fit = finetune (staged, param, img, locations,
++                                         &starts, cross, progress);
++          if (!fit.success || !my_isfinite (fit.badness)
++              || !freeze_focus_from_fit (&staged, cross.flags, fit))
++            continue;
++          consider_joint_fit (staged, param, img, locations, starts, fparams,
++                              progress, &best, best_seed_kind,
++                              scalar[which].kind);
++        }
++
+   /* Release both coordinates from the better scalar basin first.  Usually one
+      of these already captures the process-screen attenuation and this avoids
+      paying for two equally poor coupled searches.  If it does not beat the
