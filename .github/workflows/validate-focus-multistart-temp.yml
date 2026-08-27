@@ -1,7 +1,7 @@
 name: Validate and publish focus multistart patch
 
 on:
-  pull_request:
+  push:
     branches:
       - agent/tmp-focus-multistart-validation-base-20260827
 
@@ -183,17 +183,6 @@ jobs:
           if start < 0 or end < 0:
               raise SystemExit(f'scalar-loop markers {start} {end}')
           s = s[:start] + new + s[end:]
-          old_comment = '''  /* Release both coordinates from the better scalar basin first.  Usually one
-             of these already captures the process-screen attenuation and this avoids
-             paying for two equally poor coupled searches.  If it does not beat the
-             loaded start, try the other basin as a fallback.  */
-          '''
-          new_comment = '''  /* Release both coordinates from every successful scalar basin.  Scalar and
-             coupled residuals come from different parameter spaces, so scalar rank
-             must not prune a basin before the released all-area comparison.  */
-          '''
-          if old_comment in s:
-              s = s.replace(old_comment, new_comment, 1)
           p.write_text(s)
 
           p = Path('src/libcolorscreen/focus-analysis-unittests.C')
