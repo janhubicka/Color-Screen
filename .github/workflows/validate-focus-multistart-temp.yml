@@ -29,11 +29,14 @@ jobs:
           set -euxo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           cat agent/focus-multistart.part-* >/tmp/focus.patch
+          cp agent/focus-multistart-testfix.patch /tmp/focus-testfix.patch
+          cp agent/focus-multistart-candidate-color.patch /tmp/focus-candidate-color.patch
+          cp agent/focus-multistart-all-basins.patch /tmp/focus-all-basins.patch
           git checkout --detach a86ac611846419ace3934ac8f46752b5e8abb4a8
           git apply /tmp/focus.patch
-          git apply agent/focus-multistart-testfix.patch
-          git apply agent/focus-multistart-candidate-color.patch
-          git apply agent/focus-multistart-all-basins.patch
+          git apply /tmp/focus-testfix.patch
+          git apply /tmp/focus-candidate-color.patch
+          git apply /tmp/focus-all-basins.patch
           python3 - <<'PY'
           from pathlib import Path
 
