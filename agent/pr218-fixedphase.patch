@@ -1,0 +1,337 @@
+--- a/src/libcolorscreen/focus-analysis.C
++++ b/src/libcolorscreen/focus-analysis.C
+@@ -161,29 +161,6 @@
+   return my_isfinite (value) ? value : (coord_t)-1;
+ }
+ 
+-/* Run one shared all-area fit from RPARAM and keep the better successful
+-   result.  */
+-static void
+-consider_joint_fit (const render_parameters &rparam,
+-                    const scr_to_img_parameters &param, const image_data &img,
+-                    const std::vector<point_t> &locations,
+-                    const std::vector<finetune_result> &starts,
+-                    const finetune_parameters &fparams, progress_info *progress,
+-                    finetune_result *best, int *best_seed_kind,
+-                    int seed_kind)
+-{
+-  finetune_result fit
+-      = finetune (rparam, param, img, locations, &starts, fparams, progress);
+-  if (!fit.success || !my_isfinite (fit.badness))
+-    return;
+-  if (!best->success || fit.badness < best->badness)
+-    {
+-      *best = std::move (fit);
+-      if (best_seed_kind)
+-        *best_seed_kind = seed_kind;
+-    }
+-}
+-
+ /* Coupled physical sigma/defocus fitting is poorly conditioned from a single
+    start, especially at the exact (0,0) boundary.  Use the cheap one-dimensional
+    sigma-only and defocus-only fits to locate useful basins, then release both
+@@ -207,26 +184,42 @@
+       return finetune (rparam, param, img, locations, &starts, fparams, progress);
+     }
+ 
+-  finetune_result best;
+-  if (best_seed_kind)
+-    *best_seed_kind = -1;
+-  consider_joint_fit (rparam, param, img, locations, starts, fparams, progress,
+-                      &best, best_seed_kind, 0);
++  /* Candidate verification already learned local screen phase.  Keep those
++     nuisance coordinates frozen while locating a good sigma/defocus basin;
++     only the winning basin pays for one full phase-refining coupled solve.  */
++  finetune_parameters fixed = fparams;
++  fixed.flags &= ~finetune_position;
++
++  finetune_result best_fixed;
++  int fixed_seed_kind = -1;
++  auto consider_fixed_coupled = [&] (const render_parameters &seed,
++                                      int seed_kind) {
++    finetune_result fit
++        = finetune (seed, param, img, locations, &starts, fixed, progress);
++    if (!fit.success || !my_isfinite (fit.badness))
++      return;
++    if (!best_fixed.success || fit.badness < best_fixed.badness)
++      {
++        best_fixed = std::move (fit);
++        fixed_seed_kind = seed_kind;
++      }
++  };
++
++  /* Preserve a loaded/slanted-edge calibration as a competing basin.  */
++  consider_fixed_coupled (rparam, 0);
+ 
+   struct scalar_seed
+   {
+     bool success = false;
+     coord_t badness = std::numeric_limits<coord_t>::max ();
+     render_parameters rparam;
+-    finetune_result fit;
+-    int kind = 0;
+   };
+   scalar_seed scalar[2];
+   const uint64_t scalar_flags[2]
+       = { finetune_scanner_mtf_sigma, finetune_scanner_mtf_defocus };
+   auto consider_scalar_seed = [&] (int which,
+-                                           const render_parameters &seed) {
+-    finetune_parameters one = fparams;
++                                    const render_parameters &seed) {
++    finetune_parameters one = fixed;
+     one.flags &= ~coupled;
+     one.flags |= scalar_flags[which];
+     finetune_result fit
+@@ -241,16 +234,14 @@
+         scalar[which].success = true;
+         scalar[which].badness = fit.badness;
+         scalar[which].rparam = std::move (frozen);
+-        scalar[which].fit = std::move (fit);
+-        scalar[which].kind = which + 1;
+       }
+   };
+-  for (int which = 0; which < 2; which++)
+-    consider_scalar_seed (which, rparam);
+ 
+-  /* Physical defocus is even at exact focus, so a simplex initialized
+-     at zero has no first-order direction.  Seed nonzero defocus starts
+-     from the same optics-derived useful range as adaptive focusing.  */
++  consider_scalar_seed (0, rparam);
++  consider_scalar_seed (1, rparam);
++
++  /* Physical defocus is even at exact focus.  Add two optics-scaled nonzero
++     starts so the defocus-only prefit can leave the cold boundary.  */
+   constexpr coord_t cold_epsilon = (coord_t)1e-8;
+   if (my_isfinite (rparam.sharpen.scanner_mtf.defocus)
+       && rparam.sharpen.scanner_mtf.defocus >= 0
+@@ -269,151 +260,37 @@
+               focus_mtf, frequency, (coord_t)0.05, (coord_t)20,
+               &useful_limit)
+           && useful_limit > cold_epsilon)
+-        {
+-          static constexpr coord_t fractions[]
+-              = { (coord_t)0.125, (coord_t)0.25, (coord_t)0.5 };
+-          for (coord_t fraction : fractions)
+-            {
+-              render_parameters seed = rparam;
+-              seed.sharpen.scanner_mtf.defocus
+-                  = useful_limit * fraction;
+-              consider_scalar_seed (1, seed);
+-            }
+-        }
++        for (coord_t fraction : { (coord_t)0.25, (coord_t)0.5 })
++          {
++            render_parameters seed = rparam;
++            seed.sharpen.scanner_mtf.defocus = useful_limit * fraction;
++            consider_scalar_seed (1, seed);
++          }
+     }
+ 
+-  /* A scalar prefit is already a fully evaluated feasible point of the
+-     coupled parameter space.  Retain it as a candidate before asking
+-     the released simplex to improve it; a failed release must not
+-     discard a better seed solution.  */
++  /* Convert each scalar explanation into a fully coupled fixed-phase
++     candidate, so all retained solutions export both physical coordinates.  */
+   for (int which = 0; which < 2; which++)
+-    if (scalar[which].success
+-        && (!best.success || scalar[which].fit.badness < best.badness))
+-      {
+-        best = scalar[which].fit;
+-        if (best_seed_kind)
+-          *best_seed_kind = scalar[which].kind;
+-      }
++    if (scalar[which].success)
++      consider_fixed_coupled (scalar[which].rparam, which + 1);
+ 
+-  /* Release both coordinates from the better scalar basin first.  Usually one
+-     of these already captures the process-screen attenuation and this avoids
+-     paying for two equally poor coupled searches.  If it does not beat the
+-     loaded start, try the other basin as a fallback.  */
+-  int first = 0, second = 1;
+-  if ((!scalar[first].success && scalar[second].success)
+-      || (scalar[first].success && scalar[second].success
+-          && scalar[second].badness < scalar[first].badness))
+-    std::swap (first, second);
+-  if (scalar[first].success)
+-    consider_joint_fit (scalar[first].rparam, param, img, locations, starts,
+-                        fparams, progress, &best, best_seed_kind,
+-                        scalar[first].kind);
+-  if (scalar[second].success)
+-    consider_joint_fit (scalar[second].rparam, param, img, locations, starts,
+-                        fparams, progress, &best, best_seed_kind,
+-                        scalar[second].kind);
+-
+-  /* A cold defocus coordinate cannot leave zero by local first-order
+-     exploration.  First obtain the sigma-only explanation, then explore
+-     nonzero physical-defocus starts with that sigma held fixed.  This follows
+-     the compensation valley from an identifiable axis into its interior.  */
+-  constexpr coord_t cold_focus_epsilon = (coord_t)1e-8;
+-  if (scalar[0].success
+-      && my_isfinite (rparam.sharpen.scanner_mtf.defocus)
+-      && rparam.sharpen.scanner_mtf.defocus >= 0
+-      && rparam.sharpen.scanner_mtf.defocus <= cold_focus_epsilon)
+-    {
+-      mtf_parameters stage_mtf
+-          = (fparams.flags & finetune_bw)
+-                ? scalar[0].rparam
+-                      .get_image_layer_sharpen_parameters (&img)
+-                      .scanner_mtf
+-                : scalar[0].rparam.sharpen.scanner_mtf;
+-      if (!(fparams.flags & finetune_bw) && img.has_rgb ())
+-        stage_mtf.wavelength = 550;
+-      const coord_t frequency = process_screen_frequency (param, img);
+-      coord_t useful_limit = 0;
+-      if (frequency > 0
+-          && finetune_useful_defocus_limit (
+-              stage_mtf, frequency, (coord_t)0.05, (coord_t)20,
+-              &useful_limit)
+-          && useful_limit > cold_focus_epsilon)
+-        {
+-          struct staged_seed
+-          {
+-            bool success = false;
+-            coord_t badness = std::numeric_limits<coord_t>::max ();
+-            render_parameters rparam;
+-            finetune_result fit;
+-          } staged;
+-
+-          finetune_parameters defocus_stage = fparams;
+-          defocus_stage.flags &= ~coupled;
+-          defocus_stage.flags |= finetune_scanner_mtf_defocus;
+-          static constexpr coord_t fractions[]
+-              = { (coord_t)0.125, (coord_t)0.25, (coord_t)0.5,
+-                  (coord_t)0.75 };
+-          for (coord_t fraction : fractions)
+-            {
+-              render_parameters seed = scalar[0].rparam;
+-              seed.sharpen.scanner_mtf.defocus = useful_limit * fraction;
+-              finetune_result fit
+-                  = finetune (seed, param, img, locations, &starts,
+-                              defocus_stage, progress);
+-              if (!fit.success || !my_isfinite (fit.badness))
+-                continue;
+-              render_parameters frozen = seed;
+-              if (!freeze_focus_from_fit (&frozen, defocus_stage.flags, fit))
+-                continue;
+-              if (!staged.success || fit.badness < staged.badness)
+-                {
+-                  staged.success = true;
+-                  staged.badness = fit.badness;
+-                  staged.rparam = std::move (frozen);
+-                  staged.fit = std::move (fit);
+-                }
+-            }
+-
+-          if (staged.success)
+-            {
+-              if (!best.success || staged.fit.badness < best.badness)
+-                {
+-                  best = staged.fit;
+-                  if (best_seed_kind)
+-                    *best_seed_kind = scalar[0].kind;
+-                }
+-
+-              /* Polish sigma with the recovered nonzero defocus fixed before
+-                 finally releasing both physical transfer coordinates.  */
+-              finetune_parameters sigma_stage = fparams;
+-              sigma_stage.flags &= ~coupled;
+-              sigma_stage.flags |= finetune_scanner_mtf_sigma;
+-              sigma_stage.interpolate_scanner_mtf_defocus = false;
+-              finetune_result fit
+-                  = finetune (staged.rparam, param, img, locations, &starts,
+-                              sigma_stage, progress);
+-              if (fit.success && my_isfinite (fit.badness))
+-                {
+-                  render_parameters polished = staged.rparam;
+-                  if (freeze_focus_from_fit (&polished, sigma_stage.flags, fit))
+-                    {
+-                      fit.scanner_mtf_defocus
+-                          = polished.sharpen.scanner_mtf.defocus;
+-                      if (!best.success || fit.badness < best.badness)
+-                        {
+-                          best = fit;
+-                          if (best_seed_kind)
+-                            *best_seed_kind = scalar[0].kind;
+-                        }
+-                      consider_joint_fit (
+-                          polished, param, img, locations, starts, fparams,
+-                          progress, &best, best_seed_kind, scalar[0].kind);
+-                    }
+-                }
+-            }
+-        }
+-    }
+-  return best;
++  if (!best_fixed.success)
++    return best_fixed;
++  if (best_seed_kind)
++    *best_seed_kind = fixed_seed_kind;
++
++  if (!(fparams.flags & finetune_position))
++    return best_fixed;
++
++  render_parameters final_seed = rparam;
++  if (!freeze_focus_from_fit (&final_seed, fparams.flags, best_fixed))
++    return best_fixed;
++  finetune_result refined
++      = finetune (final_seed, param, img, locations, &starts, fparams, progress);
++  if (!refined.success || !my_isfinite (refined.badness)
++      || refined.badness > best_fixed.badness)
++    return best_fixed;
++  return refined;
+ }
+ 
+ } // namespace
+--- a/src/qtgui/MainWindow.cpp
++++ b/src/qtgui/MainWindow.cpp
+@@ -6131,7 +6131,9 @@
+         colorscreen::finetune_parameters local;
+         local.range = 4;
+         local.ignore_outliers = 0;
+-        local.flags = flags | colorscreen::finetune_position;
++        /* Candidate verification determines local phase/colour only.
++           Scanner MTF is shared and is fitted after area selection. */
++        local.flags = colorscreen::finetune_position;
+         if (useMonochrome)
+           local.flags |= colorscreen::finetune_bw
+               | colorscreen::finetune_no_normalize
+@@ -6147,7 +6149,7 @@
+         }
+ 
+         colorscreen::finetune_parameters joint = local;
+-        joint.flags |= colorscreen::finetune_no_normalize
++        joint.flags |= flags | colorscreen::finetune_no_normalize
+             | colorscreen::finetune_no_data_collection;
+         if (!useMonochrome)
+           joint.flags |= colorscreen::finetune_uniform_image_layer;
+--- a/src/colorscreen/colorscreen.C
++++ b/src/colorscreen/colorscreen.C
+@@ -352,7 +352,8 @@
+       fprintf (stderr, "      --zero-focus-start         zero sigma/defocus after loading parameters\n");
+       fprintf (stderr, "      --use-monochrome-channel   force BW/IR focus fitting\n");
+       fprintf (stderr, "      --use-rgb                  force RGB uniform-image-layer fitting\n");
+-      fprintf (stderr, "      --fixed-focus-verification verify candidates without refitting global focus\n");
++      fprintf (stderr, "      --fixed-focus-verification verify candidates without refitting global focus (default)\n");
++      fprintf (stderr, "      --refit-focus-verification refit focus in each candidate (diagnostic)\n");
+       fprintf (stderr, "      --fixed-joint-position     keep verified local phases fixed in the joint focus solve\n");
+       fprintf (stderr, "      --no-leave-one-out         skip N-1 stability fits\n");
+     }
+@@ -2597,7 +2598,7 @@
+   bool zero_focus_start = false;
+   bool force_bw = false;
+   bool force_rgb = false;
+-  bool fixed_focus_verification = false;
++  bool fixed_focus_verification = true;
+   bool fixed_joint_position = false;
+   /* The process-screen transfer, rather than a unique sigma/defocus split,
+      is the quantity needed for colour recovery.  Coupled fitting uses scalar
+@@ -2637,6 +2638,8 @@
+         force_rgb = true;
+       else if (arg == "--fixed-focus-verification")
+         fixed_focus_verification = true;
++      else if (arg == "--refit-focus-verification")
++        fixed_focus_verification = false;
+       else if (arg == "--fixed-joint-position")
+         fixed_joint_position = true;
+       else if (arg == "--no-leave-one-out")
