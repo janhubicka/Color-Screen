@@ -33,7 +33,6 @@ jobs:
           cp agent/focus-multistart-testfix.patch /tmp/focus-testfix.patch
           cp agent/focus-multistart-candidate-color.patch /tmp/focus-candidate-color.patch
           cp agent/focus-multistart-all-basins.patch /tmp/focus-all-basins.patch
-          cp agent/focus-multistart-staged-seeds.patch /tmp/focus-staged-seeds.patch
           echo '2d1dfef543d30209bb9589513f73023bdd67dfae25263a9fbdc1f0f94b13301a  /tmp/focus.patch' | sha256sum -c -
           echo '6a13d363b53870f63deca59c0a8f893290ba56fceb68e90ba75e73a52fa1ddf2  /tmp/focus-testfix.patch' | sha256sum -c -
           git checkout --detach a86ac611846419ace3934ac8f46752b5e8abb4a8
@@ -45,10 +44,66 @@ jobs:
           git apply /tmp/focus-candidate-color.patch
           git apply --check /tmp/focus-all-basins.patch
           git apply /tmp/focus-all-basins.patch
-          git apply --check /tmp/focus-staged-seeds.patch
-          git apply /tmp/focus-staged-seeds.patch
           python3 - <<'PY'
           from pathlib import Path
+
+          p = Path('src/libcolorscreen/focus-analysis.C')
+          s = p.read_text()
+          anchor = '''/* Coupled physical sigma/defocus fitting is poorly conditioned from a single
+             start, especially at the exact (0,0) boundary.  Use the cheap one-dimensional
+          '''
+          helper = '''/* At the exact physical (sigma,defocus) origin both transfer coordinates have
+             weak first-order simplex information.  The one-dimensional fits are useful
+             not only as direct joint seeds but also as coordinate-continuation anchors:
+             fit one axis, hold it fixed while fitting the other, then release both.  */
+          static bool
+          cold_physical_focus_start_p (const render_parameters &rparam)
+          {
+            const coord_t sigma = rparam.sharpen.scanner_mtf.sigma;
+            const coord_t defocus = rparam.sharpen.scanner_mtf.defocus;
+            constexpr coord_t epsilon = (coord_t)1e-8;
+            return my_isfinite (sigma) && my_isfinite (defocus) && sigma >= 0
+                   && defocus >= 0 && sigma <= epsilon && defocus <= epsilon;
+          }
+
+          '''
+          if s.count(anchor) != 1:
+              raise SystemExit(f'focus helper anchor count {s.count(anchor)}')
+          s = s.replace(anchor, helper + anchor, 1)
+
+          release = '''  /* Release both coordinates from the better scalar basin first.  Usually one
+             of these already captures the process-screen attenuation and this avoids
+          '''
+          staged = '''  /* A cold origin needs a little more continuation than simply releasing both
+             variables at an axis optimum.  Cross-fit the other coordinate while the
+             first one stays fixed, then let the coupled simplex polish that staged
+             point.  Try both orders because sigma and defocus have different transfer
+             shapes even when they produce similar carrier attenuation.  */
+            if (cold_physical_focus_start_p (rparam))
+              for (int which = 0; which < 2; which++)
+                if (scalar[which].success)
+                  {
+                    render_parameters staged = scalar[which].rparam;
+                    finetune_parameters cross = fparams;
+                    cross.flags &= ~coupled;
+                    cross.flags |= scalar_flags[1 - which];
+                    if (scalar_flags[1 - which] == finetune_scanner_mtf_sigma)
+                      cross.interpolate_scanner_mtf_defocus = false;
+                    finetune_result fit = finetune (staged, param, img, locations,
+                                                   &starts, cross, progress);
+                    if (!fit.success || !my_isfinite (fit.badness)
+                        || !freeze_focus_from_fit (&staged, cross.flags, fit))
+                      continue;
+                    consider_joint_fit (staged, param, img, locations, starts, fparams,
+                                        progress, &best, best_seed_kind,
+                                        scalar[which].kind);
+                  }
+
+          '''
+          if s.count(release) != 1:
+              raise SystemExit(f'focus staged anchor count {s.count(release)}')
+          p.write_text(s.replace(release, staged + release, 1))
+
           p = Path('src/libcolorscreen/focus-analysis-unittests.C')
           s = p.read_text()
           replacements = [
