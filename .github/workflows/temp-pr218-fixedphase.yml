@@ -1,0 +1,236 @@
+name: TEMP PR218 fixed-phase validation
+
+on:
+  push:
+    branches:
+      - agent/focus-area-carrier-multistart
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/focus-area-carrier-multistart
+          fetch-depth: 0
+
+      - name: Make basin search fixed-phase
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          test "$(git rev-parse HEAD^)" = 421b13d03c3850fe4fcf2c51febc0afc814b24b9
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/libcolorscreen/focus-analysis.C')
+          text = path.read_text()
+          start = text.index('static finetune_result\nmultistart_joint_focus_fit (')
+          end = text.index('\n}\n\n} // namespace', start) + 2
+          replacement = r'''static finetune_result
+multistart_joint_focus_fit (
+    const render_parameters &rparam, const scr_to_img_parameters &param,
+    const image_data &img, const std::vector<point_t> &locations,
+    const std::vector<finetune_result> &starts, const finetune_parameters &fparams,
+    progress_info *progress, int *best_seed_kind)
+{
+  constexpr uint64_t coupled
+      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+  if ((fparams.flags & coupled) != coupled
+      || !rparam.sharpen.scanner_mtf.simulate_diffraction_p ())
+    {
+      if (best_seed_kind)
+        *best_seed_kind = 0;
+      return finetune (rparam, param, img, locations, &starts, fparams, progress);
+    }
+
+  /* Candidate verification already learned local screen phase.  Keep those
+     nuisance coordinates frozen while locating a good sigma/defocus basin;
+     only the winning basin pays for one full phase-refining coupled solve.  */
+  finetune_parameters fixed = fparams;
+  fixed.flags &= ~finetune_position;
+
+  finetune_result best_fixed;
+  int fixed_seed_kind = -1;
+  auto consider_fixed_coupled = [&] (const render_parameters &seed,
+                                      int seed_kind) {
+    finetune_result fit
+        = finetune (seed, param, img, locations, &starts, fixed, progress);
+    if (!fit.success || !my_isfinite (fit.badness))
+      return;
+    if (!best_fixed.success || fit.badness < best_fixed.badness)
+      {
+        best_fixed = std::move (fit);
+        fixed_seed_kind = seed_kind;
+      }
+  };
+
+  /* Preserve a loaded/slanted-edge calibration as a competing basin.  */
+  consider_fixed_coupled (rparam, 0);
+
+  struct scalar_seed
+  {
+    bool success = false;
+    coord_t badness = std::numeric_limits<coord_t>::max ();
+    render_parameters rparam;
+  };
+  scalar_seed scalar[2];
+  const uint64_t scalar_flags[2]
+      = { finetune_scanner_mtf_sigma, finetune_scanner_mtf_defocus };
+  auto consider_scalar_seed = [&] (int which,
+                                    const render_parameters &seed) {
+    finetune_parameters one = fixed;
+    one.flags &= ~coupled;
+    one.flags |= scalar_flags[which];
+    finetune_result fit
+        = finetune (seed, param, img, locations, &starts, one, progress);
+    if (!fit.success || !my_isfinite (fit.badness))
+      return;
+    render_parameters frozen = seed;
+    if (!freeze_focus_from_fit (&frozen, one.flags, fit))
+      return;
+    if (!scalar[which].success || fit.badness < scalar[which].badness)
+      {
+        scalar[which].success = true;
+        scalar[which].badness = fit.badness;
+        scalar[which].rparam = std::move (frozen);
+      }
+  };
+
+  consider_scalar_seed (0, rparam);
+  consider_scalar_seed (1, rparam);
+
+  /* Physical defocus is even at exact focus.  Add two optics-scaled nonzero
+     starts so the defocus-only prefit can leave the cold boundary.  */
+  constexpr coord_t cold_epsilon = (coord_t)1e-8;
+  if (my_isfinite (rparam.sharpen.scanner_mtf.defocus)
+      && rparam.sharpen.scanner_mtf.defocus >= 0
+      && rparam.sharpen.scanner_mtf.defocus <= cold_epsilon)
+    {
+      mtf_parameters focus_mtf
+          = (fparams.flags & finetune_bw)
+                ? rparam.get_image_layer_sharpen_parameters (&img).scanner_mtf
+                : rparam.sharpen.scanner_mtf;
+      if (!(fparams.flags & finetune_bw) && img.has_rgb ())
+        focus_mtf.wavelength = 550;
+      const coord_t frequency = process_screen_frequency (param, img);
+      coord_t useful_limit = 0;
+      if (frequency > 0
+          && finetune_useful_defocus_limit (
+              focus_mtf, frequency, (coord_t)0.05, (coord_t)20,
+              &useful_limit)
+          && useful_limit > cold_epsilon)
+        for (coord_t fraction : { (coord_t)0.25, (coord_t)0.5 })
+          {
+            render_parameters seed = rparam;
+            seed.sharpen.scanner_mtf.defocus = useful_limit * fraction;
+            consider_scalar_seed (1, seed);
+          }
+    }
+
+  /* Convert each scalar explanation into a fully coupled fixed-phase
+     candidate, so all retained solutions export both physical coordinates. */
+  for (int which = 0; which < 2; which++)
+    if (scalar[which].success)
+      consider_fixed_coupled (scalar[which].rparam, which + 1);
+
+  if (!best_fixed.success)
+    return best_fixed;
+  if (best_seed_kind)
+    *best_seed_kind = fixed_seed_kind;
+
+  if (!(fparams.flags & finetune_position))
+    return best_fixed;
+
+  render_parameters final_seed = rparam;
+  if (!freeze_focus_from_fit (&final_seed, fparams.flags, best_fixed))
+    return best_fixed;
+  finetune_result refined
+      = finetune (final_seed, param, img, locations, &starts, fparams, progress);
+  if (!refined.success || !my_isfinite (refined.badness)
+      || refined.badness > best_fixed.badness)
+    return best_fixed;
+  return refined;
+}'''
+          path.write_text(text[:start] + replacement + text[end:])
+
+          path = Path('src/qtgui/MainWindow.cpp')
+          text = path.read_text()
+          old = '        local.flags = flags | colorscreen::finetune_position;\n'
+          new = ('        /* Candidate verification determines local phase/colour only.\n'
+                 '           Scanner MTF is shared and is fitted after area selection. */\n'
+                 '        local.flags = colorscreen::finetune_position;\n')
+          assert text.count(old) == 1
+          text = text.replace(old, new)
+          old = ('        joint.flags |= colorscreen::finetune_no_normalize\n'
+                 '            | colorscreen::finetune_no_data_collection;\n')
+          new = ('        joint.flags |= flags | colorscreen::finetune_no_normalize\n'
+                 '            | colorscreen::finetune_no_data_collection;\n')
+          assert text.count(old) == 1
+          path.write_text(text.replace(old, new))
+
+          path = Path('src/colorscreen/colorscreen.C')
+          text = path.read_text()
+          old = '  bool fixed_focus_verification = false;\n'
+          new = '  bool fixed_focus_verification = true;\n'
+          assert text.count(old) == 1
+          path.write_text(text.replace(old, new))
+          PY
+          git diff --check
+
+      - name: Build and test
+        shell: bash
+        run: |
+          set -euxo pipefail
+          CXXFLAGS='-O2 -g' CFLAGS='-O2 -g' ./configure
+          make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
+          ./src/libcolorscreen/focus-analysis-unittests
+          make -C src/colorscreen -j$(nproc) colorscreen
+          ./src/colorscreen/colorscreen analyze-focus-areas --help >/tmp/help.txt 2>&1 || true
+          grep -q -- '--sigma-defocus' /tmp/help.txt
+
+      - name: Package exact tested CLI
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/focus-cli/lib
+          cp src/colorscreen/colorscreen /tmp/focus-cli/colorscreen.bin
+          ldd src/colorscreen/colorscreen | tee /tmp/focus-cli/ldd.txt
+          awk '/=> \/[^ ]+/ {print $3} /^\/[a-zA-Z0-9_]/ {print $1}' /tmp/focus-cli/ldd.txt | sort -u | while read -r lib; do
+            test -f "$lib" && cp -L "$lib" /tmp/focus-cli/lib/ || true
+          done
+          tar -C /tmp -czf /tmp/colorscreen-pr218-fixed-phase.tar.gz focus-cli
+
+      - name: Commit source changes and delete this workflow
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name 'OpenAI Codex'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/libcolorscreen/focus-analysis.C \
+                  src/colorscreen/colorscreen.C \
+                  src/qtgui/MainWindow.cpp
+          git rm .github/workflows/temp-pr218-fixedphase.yml
+          git diff --cached --check
+          git commit -m 'focus: keep multistart basin search fixed-phase' \
+            -m 'Candidate verification already determines local screen phase. Keep phase fixed while comparing the loaded, sigma-only, and defocus-only physical MTF basins, then run one full coupled phase-refining solve from the winning basin.' \
+            -m 'Verify candidates without refitting the global scanner MTF in Qt and by default in the CLI. This removes repeated global focus solves from both candidate verification and multistart seeding.'
+          git push origin HEAD:refs/heads/agent/focus-area-carrier-multistart
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-pr218-fixed-phase
+          path: /tmp/colorscreen-pr218-fixed-phase.tar.gz
+          if-no-files-found: error
+          retention-days: 2
