@@ -18,8 +18,7 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Check out validation base
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: agent/tmp-focus-multistart-validation-base-20260827
           fetch-depth: 0
@@ -30,30 +29,20 @@ jobs:
           set -euxo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           cat agent/focus-multistart.part-* >/tmp/focus.patch
-          cp agent/focus-multistart-testfix.patch /tmp/focus-testfix.patch
-          cp agent/focus-multistart-candidate-color.patch /tmp/focus-candidate-color.patch
-          cp agent/focus-multistart-all-basins.patch /tmp/focus-all-basins.patch
-          echo '2d1dfef543d30209bb9589513f73023bdd67dfae25263a9fbdc1f0f94b13301a  /tmp/focus.patch' | sha256sum -c -
-          echo '6a13d363b53870f63deca59c0a8f893290ba56fceb68e90ba75e73a52fa1ddf2  /tmp/focus-testfix.patch' | sha256sum -c -
           git checkout --detach a86ac611846419ace3934ac8f46752b5e8abb4a8
-          git apply --check /tmp/focus.patch
           git apply /tmp/focus.patch
-          git apply --check /tmp/focus-testfix.patch
-          git apply /tmp/focus-testfix.patch
-          git apply --check /tmp/focus-candidate-color.patch
-          git apply /tmp/focus-candidate-color.patch
-          git apply --check /tmp/focus-all-basins.patch
-          git apply /tmp/focus-all-basins.patch
+          git apply agent/focus-multistart-testfix.patch
+          git apply agent/focus-multistart-candidate-color.patch
+          git apply agent/focus-multistart-all-basins.patch
           python3 - <<'PY'
           from pathlib import Path
 
           p = Path('src/libcolorscreen/focus-analysis.C')
           s = p.read_text()
-          include_anchor = '#include "include/focus-analysis.h"\n'
-          if s.count(include_anchor) != 1:
+          anchor = '#include "include/focus-analysis.h"\n'
+          if s.count(anchor) != 1:
               raise SystemExit('focus include anchor mismatch')
-          s = s.replace(include_anchor,
-                        include_anchor + '#include "finetune-int.h"\n', 1)
+          s = s.replace(anchor, anchor + '#include "finetune-int.h"\n', 1)
 
           new = '''  auto consider_scalar_seed = [&] (int which,
                                                      const render_parameters &seed) {
@@ -79,9 +68,8 @@ jobs:
               consider_scalar_seed (which, rparam);
 
             /* Physical defocus is even at exact focus, so a simplex initialized
-               at zero has no first-order direction and can report zero without
-               ever exploring the defocus basin.  Reuse the adaptive-focus range
-               definition to seed a few nonzero, optics-scaled defocus starts.  */
+               at zero has no first-order direction.  Seed nonzero defocus starts
+               from the same optics-derived useful range as adaptive focusing.  */
             constexpr coord_t cold_epsilon = (coord_t)1e-8;
             if (my_isfinite (rparam.sharpen.scanner_mtf.defocus)
                 && rparam.sharpen.scanner_mtf.defocus >= 0
@@ -111,11 +99,21 @@ jobs:
                       }
                   }
               }
-            if (scalar[1].success)
-              fprintf (stderr,
-                       "focus selected defocus scalar %.9g badness %.9g\\n",
-                       (double)scalar[1].rparam.sharpen.scanner_mtf.defocus,
-                       (double)scalar[1].badness);
+
+            /* Each scalar optimum leaves the other even transfer coordinate on
+               its zero boundary.  Combine the independently fitted coordinates
+               to form an interior coupled start before releasing both.  */
+            if (scalar[0].success && scalar[1].success)
+              {
+                render_parameters combined = scalar[0].rparam;
+                combined.sharpen.scanner_mtf.defocus
+                    = scalar[1].rparam.sharpen.scanner_mtf.defocus;
+                fprintf (stderr, "focus combined start sigma %.9g defocus %.9g\\n",
+                         (double)combined.sharpen.scanner_mtf.sigma,
+                         (double)combined.sharpen.scanner_mtf.defocus);
+                consider_joint_fit (combined, param, img, locations, starts,
+                                    fparams, progress, &best, best_seed_kind, 3);
+              }
 
           '''
           start = s.find('  for (int which = 0; which < 2; which++)\n')
@@ -138,10 +136,10 @@ jobs:
                'cold.joint_seed_kind,\n'
                '               (double)warm.joint_fit.badness,\n'),
           ]
-          for old, new in replacements:
+          for old, replacement in replacements:
               if s.count(old) != 1:
                   raise SystemExit(f'diagnostic anchor count {s.count(old)} for {old!r}')
-              s = s.replace(old, new, 1)
+              s = s.replace(old, replacement, 1)
           p.write_text(s)
           PY
           git diff --check
@@ -157,36 +155,3 @@ jobs:
           ./src/colorscreen/colorscreen --help >/tmp/colorscreen-help.txt 2>&1 || true
           grep -q 'analyze-focus-areas' /tmp/colorscreen-help.txt
           grep -q 'sigma-defocus' /tmp/colorscreen-help.txt
-
-      - name: Package portable CLI
-        shell: bash
-        run: |
-          set -euxo pipefail
-          B=/tmp/focus-cli
-          mkdir -p "$B/lib"
-          cp src/colorscreen/.libs/colorscreen "$B/colorscreen.bin"
-          cp -L src/libcolorscreen/.libs/libcolorscreen.so.2.0.0 "$B/lib/"
-          ln -s libcolorscreen.so.2.0.0 "$B/lib/libcolorscreen.so.2"
-          ln -s libcolorscreen.so.2.0.0 "$B/lib/libcolorscreen.so"
-          for exe in src/colorscreen/.libs/colorscreen src/libcolorscreen/.libs/libcolorscreen.so.2.0.0; do
-            ldd "$exe" | awk '/=> \/.*\(/ {print $3} /^\// {print $1}' | while read -r lib; do
-              test -f "$lib" && cp -L -n "$lib" "$B/lib/" || true
-            done
-          done
-          cat >"$B/colorscreen" <<'EOF'
-          #!/bin/sh
-          HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-          export LD_LIBRARY_PATH="$HERE/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          exec "$HERE/colorscreen.bin" "$@"
-          EOF
-          sed -i 's/^          //' "$B/colorscreen"
-          chmod +x "$B/colorscreen" "$B/colorscreen.bin"
-          "$B/colorscreen" --help >/tmp/bundle-help.txt 2>&1 || true
-          grep -q 'analyze-focus-areas' /tmp/bundle-help.txt
-
-      - name: Upload portable CLI
-        uses: actions/upload-artifact@v4
-        with:
-          name: focus-multistart-cli
-          path: /tmp/focus-cli
-          retention-days: 3
