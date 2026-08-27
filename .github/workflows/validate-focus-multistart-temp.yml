@@ -47,6 +47,12 @@ jobs:
               raise SystemExit('focus include anchor mismatch')
           s = s.replace(anchor, anchor + '#include "finetune-int.h"\n', 1)
 
+          struct_anchor = '''    coord_t badness = std::numeric_limits<coord_t>::max ();\n    render_parameters rparam;\n'''
+          if s.count(struct_anchor) != 1:
+              raise SystemExit('scalar struct anchor mismatch')
+          s = s.replace(struct_anchor,
+                        '''    coord_t badness = std::numeric_limits<coord_t>::max ();\n    render_parameters rparam;\n    finetune_result fit;\n''', 1)
+
           new = '''  auto consider_scalar_seed = [&] (int which,
                                                      const render_parameters &seed) {
               finetune_parameters one = fparams;
@@ -64,6 +70,7 @@ jobs:
                   scalar[which].success = true;
                   scalar[which].badness = fit.badness;
                   scalar[which].rparam = std::move (frozen);
+                  scalar[which].fit = std::move (fit);
                   scalar[which].kind = which + 1;
                 }
             };
@@ -89,8 +96,6 @@ jobs:
                         &useful_limit)
                     && useful_limit > cold_epsilon)
                   {
-                    fprintf (stderr, "focus useful defocus limit %.9g\\n",
-                             (double)useful_limit);
                     static constexpr coord_t fractions[]
                         = { (coord_t)0.125, (coord_t)0.25, (coord_t)0.5 };
                     for (coord_t fraction : fractions)
@@ -103,20 +108,18 @@ jobs:
                   }
               }
 
-            /* Each scalar optimum leaves the other even transfer coordinate on
-               its zero boundary.  Combine the independently fitted coordinates
-               to form an interior coupled start before releasing both.  */
-            if (scalar[0].success && scalar[1].success)
-              {
-                render_parameters combined = scalar[0].rparam;
-                combined.sharpen.scanner_mtf.defocus
-                    = scalar[1].rparam.sharpen.scanner_mtf.defocus;
-                fprintf (stderr, "focus combined start sigma %.9g defocus %.9g\\n",
-                         (double)combined.sharpen.scanner_mtf.sigma,
-                         (double)combined.sharpen.scanner_mtf.defocus);
-                consider_joint_fit (combined, param, img, locations, starts,
-                                    fparams, progress, &best, best_seed_kind, 3);
-              }
+            /* A scalar prefit is already a fully evaluated feasible point of the
+               coupled parameter space.  Retain it as a candidate before asking
+               the released simplex to improve it; a failed release must not
+               discard a better seed solution.  */
+            for (int which = 0; which < 2; which++)
+              if (scalar[which].success
+                  && (!best.success || scalar[which].fit.badness < best.badness))
+                {
+                  best = scalar[which].fit;
+                  if (best_seed_kind)
+                    *best_seed_kind = scalar[which].kind;
+                }
 
           '''
           start = s.find('  for (int which = 0; which < 2; which++)\n')
