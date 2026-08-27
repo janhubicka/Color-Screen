@@ -1,0 +1,92 @@
+
+   addCheckboxParameter(
+       "Optimize Defocus",
+@@ -982,7 +982,7 @@
+       [this](ParameterState &, bool v) {
+         if (v) m_finetuneFlags |= colorscreen::finetune_scanner_mtf_defocus;
+         else m_finetuneFlags &= ~colorscreen::finetune_scanner_mtf_defocus;
+-      }, nullptr, "Included in the focus analyzer optimization loop. For multi-area physical-MTF analysis, normally keep a slanted-edge Sigma calibration fixed and optimize Defocus only.");
++      }, nullptr, "Included in the focus analyzer optimization loop. Existing slanted-edge MTF parameters are treated as a useful starting basin, not as a hard bound.");
+ 
+   m_analyzeAreaBtn = addToggleButtonParameter("", tr("Analyze area"), [this](bool checked) {
+     emit focusAnalysisRequested(checked, m_finetuneFlags);
+@@ -1005,8 +1005,9 @@
+   m_analyzeFocusAreasBtn->setToolTip(
+       tr("Verify the discovered regions independently, choose a "
+          "colour-diverse subset, fit one shared focus model, then run "
+-         "leave-one-out and held-out validation. Physical scanner-MTF "
+-         "sigma and defocus must be optimized one at a time."));
++         "leave-one-out and held-out validation. The result reports the "
++         "process-screen carrier MTF explicitly because that transfer "
++         "controls additive-grid contrast restoration."));
+   connect(m_analyzeFocusAreasBtn, &QPushButton::clicked, this,
+           [this]() { emit analyzeFocusAreasRequested(m_finetuneFlags); });
+   if (m_currentGroupForm)
+--- a/src/libcolorscreen/focus-analysis-unittests.C
++++ b/src/libcolorscreen/focus-analysis-unittests.C
+@@ -155,6 +155,14 @@
+                (double)result.leave_one_out_focus_max_delta);
+       return false;
+     }
++  if (!(result.process_screen_frequency > 0)
++      || !(result.initial_process_screen_mtf >= 0)
++      || !(result.joint_process_screen_mtf >= 0)
++      || !(result.leave_one_out_process_screen_mtf_span >= 0))
++    {
++      fprintf (stderr, "Missing process-screen MTF diagnostics\n");
++      return false;
++    }
+ 
+   /* Candidate ordering must not materially change the common focus estimate.
+      The selection routine is deterministic and the joint model is symmetric
+@@ -356,42 +364,6 @@
+   return true;
+ }
+ 
+-/* Periodic focus areas constrain the combined transfer, not a unique split
+-   between residual Gaussian sigma and physical defocus.  Coupled physical
+-   fitting must therefore fail before doing an expensive image fit.  */
+-static bool
+-test_coupled_physical_focus_rejected ()
+-{
+-  render_parameters rparam;
+-  rparam.sharpen.mode = sharpen_parameters::blur_deconvolution;
+-  rparam.sharpen.scanner_mtf.model = mtf_model::physical_diffraction;
+-  rparam.sharpen.scanner_mtf.pixel_pitch = 3.76;
+-  rparam.sharpen.scanner_mtf.f_stop = 8;
+-  rparam.sharpen.scanner_mtf.scan_dpi = 2000;
+-
+-  finetune_parameters fparam;
+-  fparam.flags = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
+-
+-  image_data image;
+-  scr_to_img_parameters geometry;
+-  std::vector<finetune_focus_area_candidate> candidates;
+-  finetune_focus_analysis_parameters analysis;
+-  finetune_focus_analysis_result result;
+-  if (finetune_analyze_focus_areas (rparam, geometry, image, candidates,
+-                                    fparam, analysis, &result, nullptr))
+-    {
+-      fprintf (stderr, "Coupled physical sigma/defocus fit was accepted\n");
+-      return false;
+-    }
+-  if (result.err.find ("not separately identifiable") == std::string::npos)
+-    {
+-      fprintf (stderr, "Unexpected coupled-focus diagnostic: %s\n",
+-               result.err.c_str ());
+-      return false;
+-    }
+-  return true;
+-}
+-
+ static bool
+ test_grayscale_image_search ()
+ {
+@@ -434,7 +406,6 @@
+       || !test_sky_candidate_budget ()
+       || !test_bw_selection_uses_primary_intensities ()
+       || !test_bw_multitile_focus ()
+-      || !test_coupled_physical_focus_rejected ()
+       || !test_grayscale_image_search ())
+     return 1;
+   printf ("focus-analysis-unittests: PASS\n");
