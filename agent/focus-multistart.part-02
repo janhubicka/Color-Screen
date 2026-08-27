@@ -1,0 +1,124 @@
+.6f "
++               "(sigma %.6f defocus %.6f seed %d)\n",
++               (double)result.joint_screen_mtf, (double)expected_mtf,
++               (double)result.joint_fit.scanner_mtf_sigma,
++               (double)result.joint_fit.scanner_mtf_defocus,
++               result.joint_seed_kind);
+       return false;
+     }
+   return true;
+@@ -434,7 +520,7 @@ main ()
+       || !test_sky_candidate_budget ()
+       || !test_bw_selection_uses_primary_intensities ()
+       || !test_bw_multitile_focus ()
+-      || !test_coupled_physical_focus_rejected ()
++      || !test_coupled_physical_focus_recovers_screen_mtf ()
+       || !test_grayscale_image_search ())
+     return 1;
+   printf ("focus-analysis-unittests: PASS\n");
+diff --git a/src/libcolorscreen/focus-analysis.C b/src/libcolorscreen/focus-analysis.C
+index d335b1d..7b580d0 100644
+--- a/src/libcolorscreen/focus-analysis.C
++++ b/src/libcolorscreen/focus-analysis.C
+@@ -1,4 +1,5 @@
+ #include "include/focus-analysis.h"
++#include "include/scr-to-img.h"
+ #include "render-interpolate.h"
+ #include <algorithm>
+ #include <cmath>
+@@ -104,6 +105,158 @@ freeze_focus_from_fit (render_parameters *rparam, uint64_t flags,
+   return true;
+ }
+ 
++/* Return the process-screen carrier frequency in cycles per image pixel.
++   This matches adaptive scanner-blur analysis and therefore the frequency
++   whose contrast matters most to additive-screen colour recovery.  */
++static coord_t
++process_screen_frequency (const scr_to_img_parameters &param,
++                          const image_data &img)
++{
++  if (param.type < 0 || param.type >= max_scr_type)
++    return -1;
++  scr_to_img map;
++  if (!map.set_parameters (param, img))
++    return -1;
++  const coord_t pixel_size
++      = map.pixel_size ({ 0, 0, img.width, img.height });
++  const coord_t frequency = scr_names[param.type].frequency * pixel_size;
++  return my_isfinite (frequency) && frequency > 0 ? frequency : (coord_t)-1;
++}
++
++/* Evaluate the scanner system MTF represented by FIT at FREQUENCY.  The RGB
++   periodic-screen finetuner uses the same achromatic 550 nm convention.  */
++static coord_t
++fit_system_mtf (const render_parameters &rparam, const image_data &img,
++                uint64_t flags, const finetune_result &fit,
++                coord_t frequency)
++{
++  if (!fit.success || !(frequency > 0))
++    return -1;
++  mtf_parameters mtf = rparam.sharpen.scanner_mtf;
++  if ((flags & finetune_scanner_mtf_sigma)
++      && my_isfinite (fit.scanner_mtf_sigma))
++    mtf.sigma = fit.scanner_mtf_sigma;
++  if (flags & finetune_scanner_mtf_defocus)
++    {
++      if (mtf.simulate_diffraction_p ())
++        {
++          if (!my_isfinite (fit.scanner_mtf_defocus))
++            return -1;
++          mtf.defocus = fit.scanner_mtf_defocus;
++        }
++      else
++        {
++          if (!my_isfinite (fit.scanner_mtf_blur_diameter))
++            return -1;
++          mtf.blur_diameter = fit.scanner_mtf_blur_diameter;
++        }
++    }
++  if (!(flags & finetune_bw) && img.has_rgb ())
++    mtf.wavelength = 550;
++  const coord_t value = mtf.system_mtf (frequency);
++  return my_isfinite (value) ? value : (coord_t)-1;
++}
++
++/* Run one shared all-area fit from RPARAM and keep the better successful
++   result.  */
++static void
++consider_joint_fit (const render_parameters &rparam,
++                    const scr_to_img_parameters &param, const image_data &img,
++                    const std::vector<point_t> &locations,
++                    const std::vector<finetune_result> &starts,
++                    const finetune_parameters &fparams, progress_info *progress,
++                    finetune_result *best, int *best_seed_kind,
++                    int seed_kind)
++{
++  finetune_result fit
++      = finetune (rparam, param, img, locations, &starts, fparams, progress);
++  if (!fit.success || !my_isfinite (fit.badness))
++    return;
++  if (!best->success || fit.badness < best->badness)
++    {
++      *best = std::move (fit);
++      if (best_seed_kind)
++        *best_seed_kind = seed_kind;
++    }
++}
++
++/* Coupled physical sigma/defocus fitting is poorly conditioned from a single
++   start, especially at the exact (0,0) boundary.  Use the cheap one-dimensional
++   sigma-only and defocus-only fits to locate useful basins, then release both
++   coordinates and select by the actual all-area pixel residual.  The loaded
++   calibration remains a competing start, so a good slanted-edge model can be
++   adjusted rather than discarded.  */
++static finetune_result
++multistart_joint_focus_fit (
++    const render_parameters &rparam, const scr_to_img_parameters &param,
++    const image_data &img, const std::vector<point_t> &locations,
++    const std::vector<finetune_result> &starts, const finetune_parameters &fparams,
++    progress_info *progress, int *best_seed_kind)
++{
++  constexpr uint64_t coupled
++      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
++  if ((fparams.flags & coupled) != coupled
++      || !rparam.sharpen.scanner_mtf.simulate_diffraction_p 
