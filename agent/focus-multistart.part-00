@@ -7,7 +7,7 @@
  #include <algorithm>
  #include <cmath>
  #include <limits>
-@@ -104,6 +105,71 @@
+@@ -104,6 +105,75 @@
    return true;
  }
  
@@ -30,8 +30,10 @@
 +}
 +
 +/* Evaluate the scanner/camera transfer represented by FIT at FREQUENCY.
-+   RGB finetuning uses the same achromatic 550 nm periodic-screen transfer as
-+   the forward model; monochrome/IR keeps the wavelength from RPARAM.  */
++   Monochrome/BW uses exactly the image-layer-specialized transfer used by
++   FINETUNE, including its capture-channel wavelength.  RGB forward fitting
++   has channel-dependent transfers; its scalar diagnostic uses the configured
++   representative analytical transfer at 550 nm.  */
 +static coord_t
 +process_screen_mtf (const render_parameters &rparam, const image_data &img,
 +                    uint64_t flags, coord_t frequency,
@@ -39,7 +41,10 @@
 +{
 +  if (!(frequency > 0) || !my_isfinite (frequency))
 +    return -1;
-+  mtf_parameters mtf = rparam.sharpen.scanner_mtf;
++  mtf_parameters mtf
++      = (flags & finetune_bw)
++            ? rparam.get_image_layer_sharpen_parameters (&img).scanner_mtf
++            : rparam.sharpen.scanner_mtf;
 +  if (fit && fit->success)
 +    {
 +      if ((flags & finetune_scanner_mtf_sigma)
@@ -79,7 +84,7 @@
  } // namespace
  
  bool
-@@ -232,25 +298,6 @@
+@@ -232,25 +302,6 @@
        return false;
      }
  
@@ -105,7 +110,7 @@
    if (!finetune_select_focus_areas (candidates, analysis_parameters.selection,
                                      &result->selected,
                                      &result->color_volume))
-@@ -292,8 +339,60 @@
+@@ -292,8 +343,60 @@
        starts.push_back (candidates[index].fit);
      }
  
