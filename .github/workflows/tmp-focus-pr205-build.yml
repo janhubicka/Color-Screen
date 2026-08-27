@@ -27,10 +27,11 @@ jobs:
           set -euxo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git fetch origin main agent/tmp-focus-carrier-publisher
+          : >/tmp/focus.patch
           for n in 00 01 02 03; do
             git show "origin/agent/tmp-focus-carrier-publisher:agent/focus-multistart.part-$n" >>/tmp/focus.patch
           done
-          echo 'ec250b7781a62755a0d53ac93eb4f6574306bc1705c009e7544617cc13c7c826  /tmp/focus.patch' | sha256sum -c -
+          sha256sum /tmp/focus.patch
           git checkout --detach origin/main
           git apply --check /tmp/focus.patch
           git apply /tmp/focus.patch
