@@ -34,15 +34,15 @@ jobs:
           set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           cp .github/agent-new-view-second-delta.patch /tmp/new-view-second-delta.patch
-          echo "a94100b5db14fe4f78646d7a2dc40dfd022d030bb421ce5d02c0a0b07511d8f1  /tmp/new-view-second-delta.patch" | sha256sum -c -
+          echo "faad85b9603a4a56e7461e423e9f387e90b13874f95db62a758ac8b8f5a2678e  /tmp/new-view-second-delta.patch" | sha256sum -c -
           git checkout --detach 96adf6ec8816033460d8aef8d4f8dc122e01d6c6
           git apply --check /tmp/new-view-second-delta.patch
           git apply /tmp/new-view-second-delta.patch
           git diff --check
       - name: Configure Qt checking build
-        run: ./configure --enable-checking --disable-static-link --disable-gtkgui --enable-qtgui
+        run: ./configure --enable-checking --disable-static-link --disable-gtkgui --enable-qtgui > /tmp/configure.log 2>&1 || { tail -200 /tmp/configure.log; exit 1; }
       - name: Build Qt GUI
-        run: make -j$(nproc)
+        run: make -j$(nproc) > /tmp/build.log 2>&1 || { tail -200 /tmp/build.log; exit 1; }
       - name: Stop keeps current image
         run: |
           set -euo pipefail
@@ -52,6 +52,7 @@ jobs:
             "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
             "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
       - name: Tiled reference MTF detach
+        if: always()
         run: |
           set -euo pipefail
           ./src/qtgui/colorscreen-qt \
