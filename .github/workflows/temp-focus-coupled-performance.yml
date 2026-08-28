@@ -26,6 +26,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+          cp src/libcolorscreen/focus-analysis-unittests.C /tmp/focus-analysis-unittests.C.orig
           python3 - <<'PY'
           from pathlib import Path
           p = Path('src/libcolorscreen/focus-analysis-unittests.C')
@@ -91,8 +92,6 @@ jobs:
           assert s.count(old) == 1
           p.write_text(s.replace(old, new))
           PY
-          git diff --check
-          git diff -- src/libcolorscreen/finetune.C
           make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
 
       - name: Benchmark prepared-source path
@@ -111,6 +110,6 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          git checkout -- src/libcolorscreen/focus-analysis-unittests.C
+          cp /tmp/focus-analysis-unittests.C.orig src/libcolorscreen/focus-analysis-unittests.C
           make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
           ./src/libcolorscreen/focus-analysis-unittests
