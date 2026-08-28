@@ -1,0 +1,39 @@
+name: Agent clean new-view parity publisher
+
+on:
+  pull_request:
+    branches: [ "agent/tmp-new-view-source-base-20260828" ]
+
+permissions:
+  contents: write
+
+jobs:
+  clean-publish:
+    if: github.head_ref == 'agent/tmp-new-view-source-trigger-20260828'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Rebuild clean feature branch from the validated patch commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            git fetch origin agent/new-view-parity || true
+            candidate=$(git rev-parse --verify --quiet FETCH_HEAD || true)
+            if [ -n "$candidate" ] && git show "$candidate:src/qtgui/ImageViewWindow.cpp" 2>/dev/null | grep -q supportsDocumentTools; then
+              git checkout --detach "$candidate"
+              git rm -f --ignore-unmatch NEW_VIEW_PARITY_READY branch-probe.txt
+              if ! git diff --cached --quiet; then
+                git config user.name OpenAI
+                git config user.email noreply@openai.com
+                git commit -m 'chore: remove temporary branch probes'
+              fi
+              git push --force origin HEAD:agent/new-view-parity
+              exit 0
+            fi
+            sleep 2
+          done
+          echo 'clean feature branch was not published' >&2
+          exit 1
