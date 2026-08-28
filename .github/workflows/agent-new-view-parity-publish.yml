@@ -36,4 +36,4 @@ jobs:
             -m "Make ordinary secondary views expose the document Edit and Registration menus and reuse the same document-owned canvas toolbar actions as the primary presentation while preserving view-local render, Color/IR, coordinate, zoom, and pan state." \
             -m "Route shared canvas actions through the ImageWidget currently presenting the document inspector. Pending crop, generic-area, measurement, and registration tools move between compatible ordinary views of the same loaded scan, leaving the previous canvas in Pan mode. Explicitly reject inspector routing to widgets displaying a different image, such as slanted-edge reference views." \
             -m "Fix area-selection and registration handlers that still hard-coded the primary ImageWidget, keep the Color QWidgetAction visible in secondary toolbars, and add New View smoke coverage for menu/toolbar parity plus Measure/Crop transfer."
-          git push --force origin HEAD:agent/new-view-parity
+          git push --force origin HEAD:refs/heads/agent/new-view-parity
