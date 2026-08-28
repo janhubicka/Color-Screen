@@ -32,6 +32,7 @@ jobs:
       - name: Apply exact final product patch
         run: |
           set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           cp .github/agent-new-view-final.patch.gz /tmp/new-view-final.patch.gz
           echo "5ae301f2684e5397f03f612dd63a161b2cf649b89c396c7329baefc94d10c307  /tmp/new-view-final.patch.gz" | sha256sum -c -
           gzip -dc /tmp/new-view-final.patch.gz > /tmp/new-view-final.patch
@@ -53,7 +54,6 @@ jobs:
             "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
             "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
       - name: Tiled reference MTF detach
-        if: always()
         run: |
           set -euo pipefail
           ./src/qtgui/colorscreen-qt \
