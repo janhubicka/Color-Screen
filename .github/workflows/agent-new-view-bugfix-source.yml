@@ -1,0 +1,28 @@
+name: Agent new-view bugfix source
+
+on:
+  pull_request:
+    branches: [ "agent/tmp-new-view-bugfix-source-base-20260828" ]
+
+permissions:
+  contents: read
+
+jobs:
+  archive:
+    if: github.head_ref == 'agent/tmp-new-view-bugfix-source-trigger-20260828'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Archive exact New View branch source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach be60f1565bad1a2f71e2ba9243dca1c9875bd16e
+          test "$(git rev-parse HEAD)" = "be60f1565bad1a2f71e2ba9243dca1c9875bd16e"
+          tar --exclude=.git -czf /tmp/colorscreen-new-view-bugfix-source.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: new-view-bugfix-source
+          path: /tmp/colorscreen-new-view-bugfix-source.tar.gz
