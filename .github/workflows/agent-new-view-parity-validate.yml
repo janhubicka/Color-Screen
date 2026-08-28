@@ -1,0 +1,29 @@
+name: Agent new-view parity validator
+
+on:
+  pull_request:
+    branches: [ "agent/tmp-new-view-source-base-20260828" ]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: github.head_ref == 'agent/tmp-new-view-source-trigger-20260828'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: janhubicka/Color-Screen
+          ref: agent/new-view-parity
+      - name: Check patch shape and syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check HEAD^ HEAD
+          grep -q 'supportsDocumentTools' src/qtgui/ImageViewWindow.cpp
+          grep -q 'populateDocumentMenu(editMenu' src/qtgui/ImageViewWindow.cpp
+          grep -q 'populateDocumentMenu(registrationMenu' src/qtgui/ImageViewWindow.cpp
+          grep -q 'm_colorCheckBoxAction->setVisible' src/qtgui/ImageViewWindow.cpp
+          grep -q 'transferInteractionMode' src/qtgui/MainWindow.cpp
+          git show --stat --oneline --decorate HEAD
