@@ -97,8 +97,9 @@ jobs:
           s = p.read_text()
           old = 'false, profile, &mode))'
           new = 'true, profile, &mode))'
-          # These are the two ordinary periodic-screen analytical overloads.
-          assert s.count(old) == 2
+          # One ordinary periodic-screen overload still uses the support/wrap
+          # path; the prepared-source overloads already request direct transfer.
+          assert s.count(old) == 1
           p.write_text(s.replace(old, new))
           PY
           make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
