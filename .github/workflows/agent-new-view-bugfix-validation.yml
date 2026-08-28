@@ -27,31 +27,31 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - name: Configure Qt checking build
+        with:
+          fetch-depth: 0
+      - name: Apply exact final product patch
         run: |
           set -euo pipefail
-          ./configure --enable-checking --disable-static-link --disable-gtkgui --enable-qtgui
+          cp .github/agent-new-view-final.patch.gz /tmp/new-view-final.patch.gz
+          echo "5ae301f2684e5397f03f612dd63a161b2cf649b89c396c7329baefc94d10c307  /tmp/new-view-final.patch.gz" | sha256sum -c -
+          gzip -dc /tmp/new-view-final.patch.gz > /tmp/new-view-final.patch
+          echo "3c7cc9e27b95569a6fb654f19b5d3d1a18b977b5e157511cd306d624f46356bb  /tmp/new-view-final.patch" | sha256sum -c -
+          git checkout --detach be60f1565bad1a2f71e2ba9243dca1c9875bd16e
+          git apply --check /tmp/new-view-final.patch
+          git apply /tmp/new-view-final.patch
+          git diff --check
+      - name: Configure Qt checking build
+        run: ./configure --enable-checking --disable-static-link --disable-gtkgui --enable-qtgui
       - name: Build Qt GUI
         run: make -j$(nproc)
-      - name: Diagnose Stop/current-image regression
-        continue-on-error: true
+      - name: Stop keeps current image
         run: |
           set -euo pipefail
-          args=(
-            --smoke-test 20000 --smoke-test-expect-windows 2
-            --smoke-test-user-visible-progress
+          ./src/qtgui/colorscreen-qt \
+            --smoke-test 20000 --smoke-test-expect-windows 2 \
+            --smoke-test-user-visible-progress \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
             "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
-            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
-          )
-          if command -v gdb >/dev/null 2>&1; then
-            gdb -q -batch \
-              -ex 'set pagination off' \
-              -ex run \
-              -ex 'thread apply all bt full' \
-              --args ./src/qtgui/colorscreen-qt "${args[@]}"
-          else
-            ./src/qtgui/colorscreen-qt "${args[@]}"
-          fi
       - name: Tiled reference MTF detach
         if: always()
         run: |
