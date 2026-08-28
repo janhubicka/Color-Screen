@@ -1,0 +1,393 @@
+name: Agent new-view parity publisher
+
+on:
+  pull_request:
+    branches: [ "agent/tmp-new-view-source-base-20260828" ]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-new-view-source-trigger-20260828'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply ordinary-view chrome and tool-routing fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach 98f53b934e1dadf655d0be1e2510aa4484614a04
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}: {old[:80]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          def function_bounds(text, needle):
+              start = text.find(needle)
+              if start < 0:
+                  return None
+              brace = text.find('{', start)
+              if brace < 0:
+                  raise SystemExit(f"missing function body after {needle}")
+              depth = 0
+              for pos in range(brace, len(text)):
+                  if text[pos] == '{':
+                      depth += 1
+                  elif text[pos] == '}':
+                      depth -= 1
+                      if depth == 0:
+                          return start, brace, pos
+              raise SystemExit(f"unterminated function body after {needle}")
+
+          # ImageViewWindow API: explicit compatibility check plus reusable chrome helpers.
+          replace_once(
+              'src/qtgui/ImageViewWindow.h',
+              'class QDockWidget;\nclass QStatusBar;',
+              'class QDockWidget;\nclass QMenu;\nclass QStatusBar;')
+          replace_once(
+              'src/qtgui/ImageViewWindow.h',
+              '  bool isSlantedEdgeReference() const { return m_slantedEdgeReference; }\n\n  /** Return the inspector presented for this view.',
+              '  bool isSlantedEdgeReference() const { return m_slantedEdgeReference; }\n\n'
+              '  /** Return whether this view displays the source document scan and may\n'
+              '      therefore receive the document\'s editing/measurement tools. */\n'
+              '  bool supportsDocumentTools() const;\n\n'
+              '  /** Return the inspector presented for this view.')
+          replace_once(
+              'src/qtgui/ImageViewWindow.h',
+              '  /** Build the compact image-view UI and view-local toolbar/menu actions. */\n  void setupUi();\n\n  /** Build the reduced Sharpness-only inspector for a reference image. */',
+              '  /** Build the compact image-view UI and view-local toolbar/menu actions. */\n'
+              '  void setupUi();\n\n'
+              '  /** Copy SOURCE document actions from the named top-level menu. */\n'
+              '  void populateDocumentMenu(QMenu *target, const QString &title);\n\n'
+              '  /** Add document actions missing from this view-local toolbar. */\n'
+              '  void populateDocumentToolbar();\n\n'
+              '  /** Build the reduced Sharpness-only inspector for a reference image. */')
+          replace_once(
+              'src/qtgui/ImageViewWindow.h',
+              '  QCheckBox *m_colorCheckBox = nullptr;\n  QAction *m_rotateLeftAction = nullptr;',
+              '  QCheckBox *m_colorCheckBox = nullptr;\n'
+              '  QAction *m_colorCheckBoxAction = nullptr;\n'
+              '  QAction *m_rotateLeftAction = nullptr;')
+
+          replace_once(
+              'src/qtgui/ImageViewWindow.cpp',
+              '#include <QSignalBlocker>\n#include <QSplitter>',
+              '#include <QSet>\n#include <QSignalBlocker>\n#include <QSplitter>')
+          replace_once(
+              'src/qtgui/ImageViewWindow.cpp',
+              '#include <QVariant>\n',
+              '#include <QVariant>\n#include <QWidgetAction>\n')
+          replace_once(
+              'src/qtgui/ImageViewWindow.cpp',
+              'QIcon viewIcon(const char *resource) {\n  return QIcon(QString::fromLatin1(resource));\n}\n',
+              'QIcon viewIcon(const char *resource) {\n'
+              '  return QIcon(QString::fromLatin1(resource));\n'
+              '}\n\n'
+              '/** Return a menu/action title without mnemonic markers. */\n'
+              'QString normalizedMenuTitle(QString title) {\n'
+              '  title.remove(QLatin1Char(\'&\'));\n'
+              '  return title.trimmed();\n'
+              '}\n')
+          replace_once(
+              'src/qtgui/ImageViewWindow.cpp',
+              'MainWindow *ImageViewWindow::sourceDocument() const { return m_document.data(); }\n\n/** Return the inspector appropriate for this secondary view. */',
+              'MainWindow *ImageViewWindow::sourceDocument() const { return m_document.data(); }\n\n'
+              '/** Return whether ordinary document tools are valid for this view. */\n'
+              'bool ImageViewWindow::supportsDocumentTools() const {\n'
+              '  return !m_slantedEdgeReference && m_document && m_scan &&\n'
+              '         m_scan == m_document->sharedImageData();\n'
+              '}\n\n'
+              '/** Return the inspector appropriate for this secondary view. */')
+          replace_once(
+              'src/qtgui/ImageViewWindow.cpp',
+              'QWidget *ImageViewWindow::workspaceInspectorWidget() const {\n  if (m_slantedEdgeReference)\n    return m_referenceInspector;\n  return m_document ? m_document->workspaceInspectorWidget() : nullptr;\n}\n\n/** Build the standard compact toolbar and menus for a secondary image view. */',
+              'QWidget *ImageViewWindow::workspaceInspectorWidget() const {\n'
+              '  if (m_slantedEdgeReference)\n'
+              '    return m_referenceInspector;\n'
+              '  return m_document ? m_document->workspaceInspectorWidget() : nullptr;\n'
+              '}\n\n'
+              '/** Copy actions from TITLE in the source document into TARGET. */\n'
+              'void ImageViewWindow::populateDocumentMenu(QMenu *target,\n'
+              '                                                 const QString &title) {\n'
+              '  if (!target || !m_document || m_slantedEdgeReference)\n'
+              '    return;\n\n'
+              '  QMenu *source = nullptr;\n'
+              '  const QString wanted = normalizedMenuTitle(title);\n'
+              '  for (QAction *action : m_document->menuBar()->actions()) {\n'
+              '    if (normalizedMenuTitle(action->text()) == wanted) {\n'
+              '      source = action->menu();\n'
+              '      break;\n'
+              '    }\n'
+              '  }\n'
+              '  if (!source)\n'
+              '    return;\n\n'
+              '  bool haveAction = false;\n'
+              '  bool separatorPending = false;\n'
+              '  for (QAction *action : source->actions()) {\n'
+              '    if (action->isSeparator()) {\n'
+              '      separatorPending = haveAction;\n'
+              '      continue;\n'
+              '    }\n'
+              '    if (separatorPending)\n'
+              '      target->addSeparator();\n'
+              '    target->addAction(action);\n'
+              '    haveAction = true;\n'
+              '    separatorPending = false;\n'
+              '  }\n'
+              '}\n\n'
+              '/** Add document toolbar actions not already represented locally. */\n'
+              'void ImageViewWindow::populateDocumentToolbar() {\n'
+              '  if (!m_toolbar || !m_document || m_slantedEdgeReference)\n'
+              '    return;\n'
+              '  QToolBar *source = m_document->workspaceToolBar();\n'
+              '  if (!source)\n'
+              '    return;\n\n'
+              '  QSet<QString> localTitles;\n'
+              '  QSet<QString> localShortcuts;\n'
+              '  for (QAction *action : m_toolbar->actions()) {\n'
+              '    if (action->isSeparator())\n'
+              '      continue;\n'
+              '    const QString title = normalizedMenuTitle(action->text());\n'
+              '    if (!title.isEmpty())\n'
+              '      localTitles.insert(title);\n'
+              '    const QString shortcut =\n'
+              '        action->shortcut().toString(QKeySequence::PortableText);\n'
+              '    if (!shortcut.isEmpty())\n'
+              '      localShortcuts.insert(shortcut);\n'
+              '  }\n\n'
+              '  bool addedAny = false;\n'
+              '  bool separatorPending = false;\n'
+              '  for (QAction *action : source->actions()) {\n'
+              '    if (qobject_cast<QWidgetAction *>(action))\n'
+              '      continue;\n'
+              '    if (action->isSeparator()) {\n'
+              '      separatorPending = addedAny;\n'
+              '      continue;\n'
+              '    }\n'
+              '    const QString title = normalizedMenuTitle(action->text());\n'
+              '    const QString shortcut =\n'
+              '        action->shortcut().toString(QKeySequence::PortableText);\n'
+              '    if ((!title.isEmpty() && localTitles.contains(title)) ||\n'
+              '        (!shortcut.isEmpty() && localShortcuts.contains(shortcut)))\n'
+              '      continue;\n'
+              '    if (separatorPending && !m_toolbar->actions().isEmpty())\n'
+              '      m_toolbar->addSeparator();\n'
+              '    m_toolbar->addAction(action);\n'
+              '    addedAny = true;\n'
+              '    separatorPending = false;\n'
+              '  }\n'
+              '}\n\n'
+              '/** Build the standard compact toolbar and menus for a secondary image view. */')
+          replace_once(
+              'src/qtgui/ImageViewWindow.cpp',
+              '  m_colorCheckBox = new QCheckBox(tr("Color"), m_toolbar);\n  m_toolbar->addWidget(m_colorCheckBox);',
+              '  m_colorCheckBox = new QCheckBox(tr("Color"), m_toolbar);\n'
+              '  m_colorCheckBox->setObjectName(QStringLiteral("ViewColorToggle"));\n'
+              '  m_colorCheckBoxAction = m_toolbar->addWidget(m_colorCheckBox);')
+          replace_once(
+              'src/qtgui/ImageViewWindow.cpp',
+              '  connect(pan, &QAction::triggered, m_imageWidget,\n          [this]() { m_imageWidget->setInteractionMode(ImageWidget::PanMode); });',
+              '  connect(pan, &QAction::triggered, m_imageWidget,\n'
+              '          [this]() { m_imageWidget->setInteractionMode(ImageWidget::PanMode); });\n'
+              '  connect(m_imageWidget, &ImageWidget::interactionModeChanged, pan,\n'
+              '          [pan](ImageWidget::InteractionMode mode) {\n'
+              '            pan->setChecked(mode == ImageWidget::PanMode);\n'
+              '          });')
+          replace_once(
+              'src/qtgui/ImageViewWindow.cpp',
+              '  }\n\n  QMenu *fileMenu = menuBar()->addMenu(tr("&File"));',
+              '  }\n\n'
+              '  populateDocumentToolbar();\n\n'
+              '  QMenu *fileMenu = menuBar()->addMenu(tr("&File"));')
+          replace_once(
+              'src/qtgui/ImageViewWindow.cpp',
+              '  });\n\n  QMenu *viewMenu = menuBar()->addMenu(tr("&View"));',
+              '  });\n\n'
+              '  if (!m_slantedEdgeReference) {\n'
+              '    QMenu *editMenu = menuBar()->addMenu(tr("&Edit"));\n'
+              '    populateDocumentMenu(editMenu, tr("Edit"));\n'
+              '    editMenu->menuAction()->setVisible(!editMenu->actions().isEmpty());\n'
+              '  }\n\n'
+              '  QMenu *viewMenu = menuBar()->addMenu(tr("&View"));')
+          replace_once(
+              'src/qtgui/ImageViewWindow.cpp',
+              '    viewMenu->addAction(m_mirrorAction);\n  }\n\n  QMenu *windowMenu = menuBar()->addMenu(tr("&Window"));',
+              '    viewMenu->addAction(m_mirrorAction);\n'
+              '  }\n\n'
+              '  if (!m_slantedEdgeReference) {\n'
+              '    QMenu *registrationMenu = menuBar()->addMenu(tr("&Registration"));\n'
+              '    populateDocumentMenu(registrationMenu, tr("Registration"));\n'
+              '    registrationMenu->menuAction()->setVisible(\n'
+              '        !registrationMenu->actions().isEmpty());\n'
+              '  }\n\n'
+              '  QMenu *windowMenu = menuBar()->addMenu(tr("&Window"));')
+          replace_once(
+              'src/qtgui/ImageViewWindow.cpp',
+              '  m_colorCheckBox->blockSignals(true);\n  m_colorCheckBox->setVisible(hasRgb);\n  m_colorCheckBox->setEnabled(hasRgb && supportsSwitch);',
+              '  m_colorCheckBox->blockSignals(true);\n'
+              '  m_colorCheckBox->setVisible(hasRgb);\n'
+              '  if (m_colorCheckBoxAction)\n'
+              '    m_colorCheckBoxAction->setVisible(hasRgb);\n'
+              '  m_colorCheckBox->setEnabled(hasRgb && supportsSwitch);')
+
+          # Only ordinary views presenting the exact source scan may borrow tools.
+          replace_once(
+              'src/qtgui/WorkspaceWindow.cpp',
+              '  if (QWidget *inspector = view->workspaceInspectorWidget()) {\n    if (m_inspectorStack->indexOf(inspector) < 0\n      m_inspectorStack->addWidget(inspector);\n    inspector->hide();\n  }',
+              '  if (view->isSlantedEdgeReference() || view->supportsDocumentTools()) {\n'
+              '    if (QWidget *inspector = view->workspaceInspectorWidget()) {\n'
+              '      if (m_inspectorStack->indexOf(inspector) < 0)\n'
+              '        m_inspectorStack->addWidget(inspector);\n'
+              '      inspector->hide();\n'
+              '    }\n'
+              '  }')
+
+          # The exact source contains the closing parenthesis above; tolerate the
+          # normal form if the compact replacement did not match.
+          workspace = Path('src/qtgui/WorkspaceWindow.cpp')
+          ws = workspace.read_text()
+          bad = ('  if (QWidget *inspector = view->workspaceInspectorWidget()) {\n'
+                 '    if (m_inspectorStack->indexOf(inspector) < 0)\n'
+                 '      m_inspectorStack->addWidget(inspector);\n'
+                 '    inspector->hide();\n'
+                 '  }')
+          good = ('  if (view->isSlantedEdgeReference() || view->supportsDocumentTools()) {\n'
+                  '    if (QWidget *inspector = view->workspaceInspectorWidget()) {\n'
+                  '      if (m_inspectorStack->indexOf(inspector) < 0)\n'
+                  '        m_inspectorStack->addWidget(inspector);\n'
+                  '      inspector->hide();\n'
+                  '    }\n'
+                  '  }')
+          if bad in ws:
+              ws = ws.replace(bad, good, 1)
+          workspace.write_text(ws)
+
+          ws = workspace.read_text()
+          replacements = [
+              ('  } else if (MainWindow *document = view->sourceDocument()) {\n    document->setInspectorImageWidget(document->primaryImageWidget());\n  }',
+               '  } else if (view->supportsDocumentTools()) {\n    if (MainWindow *document = view->sourceDocument())\n      document->setInspectorImageWidget(document->primaryImageWidget());\n  }'),
+              ('  } else {\n    installDocumentInspector(view->sourceDocument(), view->imageWidget());\n  }\n  setWindowTitle(view->windowTitle() + tr(" — Color-Screen"));',
+               '  } else if (view->supportsDocumentTools()) {\n    installDocumentInspector(view->sourceDocument(), view->imageWidget());\n  } else {\n    m_inspectorDock->hide();\n  }\n  setWindowTitle(view->windowTitle() + tr(" — Color-Screen"));'),
+              ('      if (!view->isSlantedEdgeReference())\n        installDocumentInspector(view->sourceDocument(), view->imageWidget());',
+               '      if (view->supportsDocumentTools())\n        installDocumentInspector(view->sourceDocument(), view->imageWidget());'),
+              ('  } else if (MainWindow *document = view->sourceDocument()) {\n    if (QWidget *inspector = document->workspaceInspectorWidget()) {',
+               '  } else if (view->supportsDocumentTools()) {\n    if (MainWindow *document = view->sourceDocument()) {\n      if (QWidget *inspector = document->workspaceInspectorWidget()) {'),
+              ('      document->takeWorkspaceInspector();\n    }\n  }\n  view->hide();',
+               '        document->takeWorkspaceInspector();\n      }\n    }\n  }\n  view->hide();'),
+              ('  else if (m_chromeView && !m_chromeView->isSlantedEdgeReference())\n    installDocumentInspector(m_chromeView->sourceDocument(),\n                             m_chromeView->imageWidget());',
+               '  else if (m_chromeView && m_chromeView->supportsDocumentTools())\n    installDocumentInspector(m_chromeView->sourceDocument(),\n                             m_chromeView->imageWidget());'),
+          ]
+          for old, new in replacements:
+              if old not in ws:
+                  raise SystemExit(f'WorkspaceWindow.cpp missing expected block: {old[:100]!r}')
+              ws = ws.replace(old, new, 1)
+          workspace.write_text(ws)
+
+          # Move the selected interaction mode with the document inspector.  The
+          # WorkspaceWindow compatibility gate guarantees TARGET is another
+          # ordinary presentation of the same loaded scan.
+          main_cpp = Path('src/qtgui/MainWindow.cpp')
+          text = main_cpp.read_text()
+          bounds = function_bounds(text, 'void MainWindow::setInspectorImageWidget(')
+          if not bounds:
+              raise SystemExit('setInspectorImageWidget not found')
+          start, brace, end = bounds
+          body = text[brace + 1:end]
+          marker = '\n  if (!target)\n    return;\n'
+          if marker not in body:
+              raise SystemExit('setInspectorImageWidget target guard not found')
+          body = body.replace(
+              marker,
+              marker +
+              '\n  ImageWidget *previousTarget = inspectorImageWidget();\n'
+              '  const ImageWidget::InteractionMode requestedMode =\n'
+              '      previousTarget ? previousTarget->interactionMode()\n'
+              '                     : ImageWidget::PanMode;\n'
+              '  bool transferInteractionMode =\n'
+              '      previousTarget && previousTarget != target && m_scan;\n'
+              '  if (requestedMode == ImageWidget::GenericAreaMode &&\n'
+              '      !m_areaSelectionCallback)\n'
+              '    transferInteractionMode = false;\n',
+              1)
+          body += (
+              '\n  if (transferInteractionMode) {\n'
+              '    // A selected tool belongs to the document presentation, not to\n'
+              '    // the tab that happened to be active when it was toggled.\n'
+              '    previousTarget->setInteractionMode(ImageWidget::PanMode);\n'
+              '    target->setInteractionMode(requestedMode);\n'
+              '  }\n')
+          text = text[:brace + 1] + body + text[end:]
+
+          # Interactive actions and coordinate conversion always use the ordinary
+          # view currently presenting the shared inspector.
+          def retarget_function(source, needle):
+              bounds = function_bounds(source, needle)
+              if not bounds:
+                  return source
+              start, brace, end = bounds
+              body = source[brace + 1:end]
+              body = body.replace('m_imageWidget->', 'inspectorImageWidget()->')
+              return source[:brace + 1] + body + source[end:]
+
+          for needle in [
+              'void MainWindow::onZoomIn()',
+              'void MainWindow::onZoomOut()',
+              'void MainWindow::onZoom100()',
+              'void MainWindow::onZoomFit()',
+              'void MainWindow::onAddSpotModeRequested(',
+              'void MainWindow::onRegistrationPointsToggled(',
+              'void MainWindow::onSelectAll()',
+              'void MainWindow::onDeselectAll()',
+              'void MainWindow::onDeleteSelected()',
+              'void MainWindow::onPruneMisplaced()',
+              'void MainWindow::onCropRequested()',
+              'QRect MainWindow::getImageArea(',
+              'void MainWindow::startAreaSelection(',
+              'void MainWindow::saveInteractionMode()',
+              'void MainWindow::restoreInteractionMode()',
+              'void MainWindow::onMeasureRequested()',
+          ]:
+              text = retarget_function(text, needle)
+
+          text = text.replace('m_imageWidget->setInteractionMode(',
+                              'inspectorImageWidget()->setInteractionMode(')
+          text = text.replace('m_imageWidget->interactionMode()',
+                              'inspectorImageWidget()->interactionMode()')
+          main_cpp.write_text(text)
+
+          # Record the invariant in the Qt GUI architecture notes.
+          docs = Path('.agents/qtgui.md')
+          doc = docs.read_text()
+          old = ('Navigation and panel tools that act on an image\n'
+                 '(crop/area selection, measurement, geometry visualization, and registration\n'
+                 'interaction) target the ordinary view currently presenting the inspector.')
+          new = (old + '\nPending area-selection and distance-measurement tools follow activation between\n'
+                 'ordinary views of the same loaded scan.  A secondary presentation must pass\n'
+                 'an explicit shared-scan compatibility check before it may borrow those tools;\n'
+                 'specialized reference views keep their own tool model.  Ordinary New Views\n'
+                 'also expose the document Edit/Registration actions and mirror the document\n'
+                 'toolbar actions that are not replaced by view-local mode, Color/IR, coordinate,\n'
+                 'zoom, and rotation controls.')
+          if old not in doc:
+              raise SystemExit('qtgui documentation invariant not found')
+          docs.write_text(doc.replace(old, new, 1))
+          PY
+          git diff --check
+          git status --short
+          test -n "$(git diff --name-only)"
+          git config user.name OpenAI
+          git config user.email noreply@openai.com
+          git add src/qtgui/ImageViewWindow.h src/qtgui/ImageViewWindow.cpp \
+                  src/qtgui/MainWindow.cpp src/qtgui/WorkspaceWindow.cpp \
+                  .agents/qtgui.md
+          git commit -m "qtgui: make ordinary views full document peers" -m "Give ordinary New View presentations the document's Edit and Registration actions and mirror missing non-widget toolbar actions while retaining view-local rendering controls.  Keep the Color/IR widget action explicitly visible when supported.\n\nMove the selected interaction mode when the shared inspector changes ordinary views, so pending area and distance tools can be completed in another tab without reactivating the source view.  Gate document-tool borrowing on the secondary view displaying the exact shared document scan, preserving the specialized slanted-edge tool model."
+          git push --force origin HEAD:agent/new-view-parity
