@@ -1,8 +1,8 @@
 diff --git a/.agents/qtgui.md b/.agents/qtgui.md
-index 5323ce3..2922d37 100644
+index 5323ce3..a858456 100644
 --- a/.agents/qtgui.md
 +++ b/.agents/qtgui.md
-@@ -71,10 +71,13 @@ to that same `QStatusBar`; tabs must not keep private status-message state or
+@@ -71,10 +71,14 @@ to that same `QStatusBar`; tabs must not keep private status-message state or
  mirror messages when activation changes. Only detached top-level windows use
  their private status bars. The active document's transient progress controls are
  temporarily moved into the shared status line, while dedicated long-running task
@@ -10,18 +10,19 @@ index 5323ce3..2922d37 100644
 -those global task rows must never change the active MDI image merely because a
 -focused task button or the task dock disappears. Inactive documents retain their
 -complete processing and undo state.
-+rows remain in the workspace task strip. Before a focused Stop/Cancel control
-+is disabled or its row is removed, return keyboard focus to the image
-+presentation that is currently active. Showing, stopping, completing, or removing
-+a global task must never let Qt focus fallback select another MDI child (in
-+particular the first tab), and an inactive document's task must never steal focus
-+from the current image. Inactive documents retain their complete processing and
-+undo state.
++rows remain in the workspace task strip. Their Stop/Cancel buttons use
++`Qt::TabFocus`: keyboard users can reach them, but a mouse click must not steal
++keyboard focus from the active MDI image. Before a keyboard-focused task control
++is disabled or its row is removed, return focus to the image presentation that is
++currently active. Showing, stopping, completing, or removing a global task must
++never let Qt focus fallback select another MDI child (in particular the first
++tab), and an inactive document's task must never steal focus from the current
++image. Inactive documents retain their complete processing and undo state.
  
  **Window → Arrange Images** switches the same live documents between tabbed,
  tiled, and cascaded MDI views using `setViewMode()`, `tileSubWindows()`, and
 diff --git a/src/qtgui/MainWindow.cpp b/src/qtgui/MainWindow.cpp
-index 439fc53..813fbc9 100644
+index 439fc53..d9b427c 100644
 --- a/src/qtgui/MainWindow.cpp
 +++ b/src/qtgui/MainWindow.cpp
 @@ -9,6 +9,7 @@
@@ -32,7 +33,18 @@ index 439fc53..813fbc9 100644
  #include "CoordinateOptimizationWorker.h"
  #include "DetectScreenWorker.h"
  #include "FinetuneWorker.h"
-@@ -2641,6 +2642,30 @@ std::vector<ProgressEntry *> MainWindow::transientProgresses() {
+@@ -2608,6 +2609,10 @@ void MainWindow::registerProgress(
+ 
+     entry.rowActionButton = new QPushButton(
+         action == ProgressAction::Stop ? tr("Stop") : tr("Cancel"), entry.row);
++    // Keep mouse clicks on a workspace-global task from taking keyboard focus
++    // away from the active MDI image. Keyboard users can still Tab to the
++    // control and activate it normally.
++    entry.rowActionButton->setFocusPolicy(Qt::TabFocus);
+     entry.rowActionButton->setProperty(
+         "progressAction",
+         action == ProgressAction::Stop ? QStringLiteral("stop")
+@@ -2641,6 +2646,30 @@ std::vector<ProgressEntry *> MainWindow::transientProgresses() {
    return result;
  }
  
@@ -63,7 +75,7 @@ index 439fc53..813fbc9 100644
  /** Remove a completed or terminated background task from progress tracking. */
  void MainWindow::removeProgress(
      std::shared_ptr<colorscreen::progress_info> info) {
-@@ -2653,6 +2678,7 @@ void MainWindow::removeProgress(
+@@ -2653,6 +2682,7 @@ void MainWindow::removeProgress(
        if (!it->userVisible)
          removedTransientIndex = transientIndex;
        if (it->row) {
@@ -71,7 +83,18 @@ index 439fc53..813fbc9 100644
          m_userVisibleProgressLayout->removeWidget(it->row);
          it->row->deleteLater();
        }
-@@ -2885,6 +2911,15 @@ void MainWindow::requestProgressTermination(
+@@ -2810,6 +2840,10 @@ void MainWindow::onProgressTimer() {
+     updateProgressWidgets(entry, entry.rowLabel, entry.rowProgressBar,
+                           entry.title);
+     if (entry.rowActionButton && entry.info->pool_cancel()) {
++      // Cancellation can also be requested externally. If a keyboard user had
++      // focused this control, move focus back to the current image before the
++      // disabled button makes Qt choose a fallback MDI child.
++      releaseUserVisibleProgressFocus(entry.row);
+       entry.rowActionButton->setText(entry.action == ProgressAction::Stop
+                                          ? tr("Stopping...")
+                                          : tr("Cancelling..."));
+@@ -2885,6 +2919,15 @@ void MainWindow::requestProgressTermination(
        return;
    }
  
@@ -102,10 +125,10 @@ index 63b2c7c..31c1ac9 100644
    void updateProgressContainerVisibility();
  
 diff --git a/src/qtgui/WorkspaceWindow.cpp b/src/qtgui/WorkspaceWindow.cpp
-index 26ec42d..fb4066c 100644
+index 26ec42d..4c19c8d 100644
 --- a/src/qtgui/WorkspaceWindow.cpp
 +++ b/src/qtgui/WorkspaceWindow.cpp
-@@ -718,35 +718,38 @@ void WorkspaceWindow::updateUserVisibleProgressDockVisibility() {
+@@ -718,35 +718,41 @@ void WorkspaceWindow::updateUserVisibleProgressDockVisibility() {
        break;
      }
    }
@@ -119,6 +142,13 @@ index 26ec42d..fb4066c 100644
 -  // task row is destroyed.
 -  QMdiSubWindow *current = m_mdiArea ? m_mdiArea->activeSubWindow() : nullptr;
 -  if (!current && m_mdiArea)
+-    current = m_mdiArea->currentSubWindow();
+-  const QPointer<QMdiSubWindow> guardedCurrent(current);
+-  QWidget *focusWidget = QApplication::focusWidget();
+-  const bool taskStripHadFocus =
+-      focusWidget && m_userVisibleProgressStack &&
+-      (focusWidget == m_userVisibleProgressStack ||
+-       m_userVisibleProgressStack->isAncestorOf(focusWidget));
 +/** Return keyboard focus from CONTROL in the global task strip to the current
 +    image without allowing focus fallback to select another MDI child. */
 +bool WorkspaceWindow::restoreFocusFromTaskControl(QWidget *control) {
@@ -126,25 +156,16 @@ index 26ec42d..fb4066c 100644
 +      (control != m_userVisibleProgressStack &&
 +       !m_userVisibleProgressStack->isAncestorOf(control)))
 +    return false;
-+
-+  QMdiSubWindow *current = m_mdiArea->activeSubWindow();
-+  if (!current)
-     current = m_mdiArea->currentSubWindow();
--  const QPointer<QMdiSubWindow> guardedCurrent(current);
--  QWidget *focusWidget = QApplication::focusWidget();
--  const bool taskStripHadFocus =
--      focusWidget && m_userVisibleProgressStack &&
--      (focusWidget == m_userVisibleProgressStack ||
--       m_userVisibleProgressStack->isAncestorOf(focusWidget));
-+  if (!current)
-+    return false;
  
 -  m_userVisibleProgressDock->setVisible(hasVisibleRows);
-+  ImageWidget *image = nullptr;
-+  if (MainWindow *document = documentForSubWindow(current))
-+    image = document->primaryImageWidget();
-+  else if (ImageViewWindow *view = viewForSubWindow(current))
-+    image = view->imageWidget();
++  // currentSubWindow() is the MDI presentation the user selected. Prefer it
++  // over Qt's focus-derived activeSubWindow(), which may already be changing
++  // while focus moves out of the task strip.
++  QMdiSubWindow *current = m_mdiArea->currentSubWindow();
++  if (!current)
++    current = m_mdiArea->activeSubWindow();
++  if (!current)
++    return false;
  
 -  if (guardedCurrent && m_mdiArea &&
 -      m_mdiArea->subWindowList().contains(guardedCurrent.data())) {
@@ -156,6 +177,12 @@ index 26ec42d..fb4066c 100644
 -      else
 -        guardedCurrent->setFocus(Qt::OtherFocusReason);
 -    }
++  ImageWidget *image = nullptr;
++  if (MainWindow *document = documentForSubWindow(current))
++    image = document->primaryImageWidget();
++  else if (ImageViewWindow *view = viewForSubWindow(current))
++    image = view->imageWidget();
++
 +  if (image) {
 +    image->setFocus(Qt::OtherFocusReason);
 +    return true;
@@ -184,7 +211,7 @@ index 4d898c4..76b40d1 100644
    void restoreWorkspaceGeometry();
    void saveWorkspaceGeometry() const;
 diff --git a/src/qtgui/main.cpp b/src/qtgui/main.cpp
-index 01649e9..ae04cc7 100644
+index 01649e9..1e6c708 100644
 --- a/src/qtgui/main.cpp
 +++ b/src/qtgui/main.cpp
 @@ -582,12 +582,32 @@ int main(int argc, char *argv[]) {
@@ -223,9 +250,26 @@ index 01649e9..ae04cc7 100644
          app.exit(13);
          return;
        }
-@@ -701,11 +721,17 @@ int main(int argc, char *argv[]) {
-       stopButton->setFocus(Qt::OtherFocusReason);
+@@ -698,14 +718,33 @@ int main(int argc, char *argv[]) {
+         return;
+       }
+ 
+-      stopButton->setFocus(Qt::OtherFocusReason);
++      // Reproduce a mouse Stop click. Dedicated task controls must not accept
++      // mouse focus, otherwise focusing a workspace-global dock can make
++      // QMdiArea select another child before the click handler even runs.
++      if (stopButton->focusPolicy() != Qt::TabFocus) {
++        qCritical() << "Dedicated Stop button unexpectedly accepts mouse focus";
++        app.exit(13);
++        return;
++      }
++      stopDocument->primaryImageWidget()->setFocus(Qt::OtherFocusReason);
        QCoreApplication::processEvents();
++      if (workspace->currentDocument() != stopDocument) {
++        qCritical() << "Focusing Stop task image changed the active document";
++        app.exit(13);
++        return;
++      }
        stopButton->click();
 +      QCoreApplication::processEvents();
        if (!stopProgress->pool_cancel()) {
@@ -241,7 +285,7 @@ index 01649e9..ae04cc7 100644
        stopDocument->removeProgress(stopProgress);
        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
        QCoreApplication::processEvents();
-@@ -729,6 +755,9 @@ int main(int argc, char *argv[]) {
+@@ -729,6 +768,9 @@ int main(int argc, char *argv[]) {
          app.exit(13);
          return;
        }
@@ -251,7 +295,7 @@ index 01649e9..ae04cc7 100644
      });
    }
  
-@@ -1237,7 +1266,15 @@ int main(int argc, char *argv[]) {
+@@ -1237,7 +1279,15 @@ int main(int argc, char *argv[]) {
            break;
          }
        }
