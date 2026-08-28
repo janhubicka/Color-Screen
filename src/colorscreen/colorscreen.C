@@ -337,6 +337,7 @@ print_help (char *err = NULL)
     {
       fprintf (stderr, "  analyze-focus-areas <scan> <parameters> [<args>]\n");
       fprintf (stderr, "    automatically find uniform areas and fit one shared focus model\n");
+      fprintf (stderr, "    default focus mode: --sigma-defocus\n");
     }
   if (subhelp == help_focus_areas)
     {
@@ -345,12 +346,14 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --min-areas=N              require at least N selected areas (default 3)\n");
       fprintf (stderr, "      --max-areas=N              jointly fit at most N areas (default 8)\n");
       fprintf (stderr, "      --range=N                  finetune half-range in screen periods (default 4)\n");
-      fprintf (stderr, "      --defocus-only             optimize scanner-MTF defocus (default)\n");
-      fprintf (stderr, "      --sigma-only               optimize residual scanner-MTF sigma instead\n");
+      fprintf (stderr, "      --sigma-defocus            optimize residual sigma and physical defocus (default)\n");
+      fprintf (stderr, "      --defocus-only             optimize scanner-MTF defocus only\n");
+      fprintf (stderr, "      --sigma-only               optimize residual scanner-MTF sigma only\n");
       fprintf (stderr, "      --zero-focus-start         zero sigma/defocus after loading parameters\n");
       fprintf (stderr, "      --use-monochrome-channel   force BW/IR focus fitting\n");
       fprintf (stderr, "      --use-rgb                  force RGB uniform-image-layer fitting\n");
-      fprintf (stderr, "      --fixed-focus-verification verify candidates without refitting global focus\n");
+      fprintf (stderr, "      --fixed-focus-verification verify candidates without refitting global focus (default)\n");
+      fprintf (stderr, "      --refit-focus-verification refit focus in each candidate (diagnostic)\n");
       fprintf (stderr, "      --fixed-joint-position     keep verified local phases fixed in the joint focus solve\n");
       fprintf (stderr, "      --no-leave-one-out         skip N-1 stability fits\n");
     }
@@ -2595,12 +2598,13 @@ analyze_focus_areas (int argc, char **argv)
   bool zero_focus_start = false;
   bool force_bw = false;
   bool force_rgb = false;
-  bool fixed_focus_verification = false;
+  bool fixed_focus_verification = true;
   bool fixed_joint_position = false;
-  /* Periodic focus areas do not separately identify physical sigma and
-     defocus.  Default to the useful calibrated-sigma workflow: preserve the
-     sigma from the parameter file and optimize defocus only.  */
-  uint64_t focus_flags = finetune_scanner_mtf_defocus;
+  /* The process-screen transfer, rather than a unique sigma/defocus split,
+     is the quantity needed for colour recovery.  Coupled fitting uses scalar
+     sigma-only and defocus-only prefits as robust basin seeds.  */
+  uint64_t focus_flags
+      = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
   subhelp = help_focus_areas;
 
   for (int i = 0; i < argc; i++)
@@ -2619,6 +2623,9 @@ analyze_focus_areas (int argc, char **argv)
         ;
       else if (parse_int_param (argc, argv, &i, "range", range, 1, 64))
         ;
+      else if (arg == "--sigma-defocus")
+        focus_flags
+            = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus;
       else if (arg == "--defocus-only")
         focus_flags = finetune_scanner_mtf_defocus;
       else if (arg == "--sigma-only")
@@ -2631,6 +2638,8 @@ analyze_focus_areas (int argc, char **argv)
         force_rgb = true;
       else if (arg == "--fixed-focus-verification")
         fixed_focus_verification = true;
+      else if (arg == "--refit-focus-verification")
+        fixed_focus_verification = false;
       else if (arg == "--fixed-joint-position")
         fixed_joint_position = true;
       else if (arg == "--no-leave-one-out")
@@ -2806,6 +2815,21 @@ analyze_focus_areas (int argc, char **argv)
     }
 
   printf ("Joint badness: %.12g\n", (double)analysis.joint_fit.badness);
+  if (analysis.screen_frequency > 0)
+    printf ("Process-screen frequency: %.9f cycles/pixel\n",
+            (double)analysis.screen_frequency);
+  if (analysis.joint_screen_mtf >= 0)
+    printf ("Joint process-screen MTF: %.6f%%\n",
+            (double)analysis.joint_screen_mtf * 100);
+  if ((focus_flags & (finetune_scanner_mtf_sigma
+                      | finetune_scanner_mtf_defocus))
+      == (finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus))
+    {
+      const char *seed = analysis.joint_seed_kind == 1 ? "sigma-only"
+                         : analysis.joint_seed_kind == 2 ? "defocus-only"
+                                                        : "loaded";
+      printf ("Joint coupled-fit seed: %s\n", seed);
+    }
   if (focus_flags & finetune_scanner_mtf_sigma)
     printf ("Joint scanner MTF sigma: %.9f px\n",
             (double)analysis.joint_fit.scanner_mtf_sigma);
@@ -2833,6 +2857,10 @@ analyze_focus_areas (int argc, char **argv)
             printf (" blur-diameter %.9f",
                     (double)fit.scanner_mtf_blur_diameter);
         }
+      if (i < analysis.leave_one_out_screen_mtf.size ()
+          && analysis.leave_one_out_screen_mtf[i] >= 0)
+        printf (" screen-mtf %.6f%%",
+                (double)analysis.leave_one_out_screen_mtf[i] * 100);
       printf (" badness %.12g\n", (double)fit.badness);
     }
   if (analysis.held_out_max_relative_badness >= 0)

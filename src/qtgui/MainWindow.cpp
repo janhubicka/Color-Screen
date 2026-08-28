@@ -6003,20 +6003,6 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
     return;
   }
 
-  const uint64_t coupledPhysicalFocus
-      = colorscreen::finetune_scanner_mtf_sigma
-      | colorscreen::finetune_scanner_mtf_defocus;
-  if ((flags & coupledPhysicalFocus) == coupledPhysicalFocus
-      && m_rparams.sharpen.scanner_mtf.simulate_diffraction_p()) {
-    QMessageBox::information(
-        this, tr("Focus analysis areas"),
-        tr("Residual sigma and physical defocus are not separately "
-           "identifiable from periodic focus areas. Fix or calibrate one "
-           "and optimize only the other. Usually sigma is calibrated from "
-           "a slanted-edge MTF measurement and only Defocus is enabled "
-           "here."));
-    return;
-  }
 
   m_focusAreaAnalysisRunning = true;
   if (m_sharpnessPanel)
@@ -6077,6 +6063,10 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
               details << tr("Maximum held-out relative residual: %1")
                              .arg(analysis.held_out_max_relative_badness, 0,
                                   'g', 5);
+            if (analysis.screen_frequency > 0 && analysis.joint_screen_mtf >= 0)
+              details << tr("Process-screen MTF at %1 cycles/pixel: %2%")
+                             .arg(analysis.screen_frequency, 0, 'g', 6)
+                             .arg(analysis.joint_screen_mtf * 100, 0, 'g', 5);
             if ((flags & colorscreen::finetune_scanner_mtf_sigma)
                 && analysis.joint_fit.scanner_mtf_sigma >= 0)
               details << tr("Residual MTF sigma: %1 px")
@@ -6141,7 +6131,9 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
         colorscreen::finetune_parameters local;
         local.range = 4;
         local.ignore_outliers = 0;
-        local.flags = flags | colorscreen::finetune_position;
+        /* Candidate verification determines local phase/colour only.
+           Scanner MTF is shared and is fitted after area selection. */
+        local.flags = colorscreen::finetune_position;
         if (useMonochrome)
           local.flags |= colorscreen::finetune_bw
               | colorscreen::finetune_no_normalize
@@ -6157,7 +6149,7 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
         }
 
         colorscreen::finetune_parameters joint = local;
-        joint.flags |= colorscreen::finetune_no_normalize
+        joint.flags |= flags | colorscreen::finetune_no_normalize
             | colorscreen::finetune_no_data_collection;
         if (!useMonochrome)
           joint.flags |= colorscreen::finetune_uniform_image_layer;
