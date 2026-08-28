@@ -26,17 +26,15 @@ jobs:
           git apply /tmp/stop.patch
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('.github/workflows/sanitizers.yml')
-          s=p.read_text()
-          mac='''        ./src/qtgui/colorscreen-qt \\\n          --smoke-test 20000 --smoke-test-expect-windows 1 \\\n          --smoke-test-window-lifetime \\\n          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"\n'''
-          mac_new=mac+'''\n        ./src/qtgui/colorscreen-qt \\\n          --smoke-test 20000 --smoke-test-expect-windows 2 \\\n          --smoke-test-user-visible-progress \\\n          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \\\n          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"\n'''
-          assert s.count(mac) == 1
-          s=s.replace(mac,mac_new,1)
-          win='''        ./src/qtgui/colorscreen-qt \\\n          --smoke-test 20000 --smoke-test-expect-windows 1 \\\n          --smoke-test-window-lifetime \\\n          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"\n'''
-          # second occurrence after mac replacement belongs to Windows
-          assert s.count(win) == 1
-          win_new=win+'''\n        ./src/qtgui/colorscreen-qt \\\n          --smoke-test 20000 --smoke-test-expect-windows 2 \\\n          --smoke-test-user-visible-progress \\\n          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \\\n          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"\n'''
-          s=s.replace(win,win_new,1)
+          p = Path('.github/workflows/sanitizers.yml')
+          s = p.read_text()
+          command = '''\n        ./src/qtgui/colorscreen-qt \\\n          --smoke-test 20000 --smoke-test-expect-windows 2 \\\n          --smoke-test-user-visible-progress \\\n          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \\\n          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"\n'''
+          mac_anchor = '    - name: Test sanitizer variant\n'
+          win_anchor = '    - name: Test AddressSanitizer variant\n'
+          assert s.count(mac_anchor) == 1
+          assert s.count(win_anchor) == 1
+          s = s.replace(mac_anchor, command + mac_anchor, 1)
+          s = s.replace(win_anchor, command + win_anchor, 1)
           p.write_text(s)
           PY
           git diff --check
