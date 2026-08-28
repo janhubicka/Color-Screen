@@ -66,10 +66,13 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          for i in 1 2; do
-            /usr/bin/time -f "BASELINE_${i} real=%e user=%U sys=%S maxrss=%M" \
-              ./src/libcolorscreen/focus-analysis-unittests
-          done
+          python3 - <<'PY'
+          import subprocess, time
+          for i in range(1, 3):
+              start = time.perf_counter()
+              subprocess.run(['./src/libcolorscreen/focus-analysis-unittests'], check=True)
+              print(f'BASELINE_{i} real={time.perf_counter() - start:.6f}', flush=True)
+          PY
 
       - name: Enable exact prepared source for sigma fits
         shell: bash
@@ -96,10 +99,13 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          for i in 1 2; do
-            /usr/bin/time -f "PREPARED_${i} real=%e user=%U sys=%S maxrss=%M" \
-              ./src/libcolorscreen/focus-analysis-unittests
-          done
+          python3 - <<'PY'
+          import subprocess, time
+          for i in range(1, 3):
+              start = time.perf_counter()
+              subprocess.run(['./src/libcolorscreen/focus-analysis-unittests'], check=True)
+              print(f'PREPARED_{i} real={time.perf_counter() - start:.6f}', flush=True)
+          PY
 
       - name: Run complete focus-analysis regression
         shell: bash
