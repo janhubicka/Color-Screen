@@ -75,13 +75,15 @@ jobs:
               print(f'BASELINE_{i} real={time.perf_counter() - start:.6f}', flush=True)
           PY
 
-      - name: Enable one exact direct physical focus model
+      - name: Use one direct analytical periodic MTF model
         shell: bash
         run: |
           set -euxo pipefail
           python3 - <<'PY'
           from pathlib import Path
 
+          # Reuse the prepared ideal-screen spectra for both sigma and defocus
+          # fits.  This makes scalar and coupled focus stages use the same path.
           p = Path('src/libcolorscreen/finetune.C')
           s = p.read_text()
           old = '''    return optimize_scanner_mtf_defocus && !optimize_scanner_mtf_sigma
@@ -93,26 +95,17 @@ jobs:
           assert s.count(old) == 1
           p.write_text(s.replace(old, new))
 
-          # The old synthetic truth was itself generated through the general
-          # PSF-support path.  Generate the same physical parameters through
-          # the exact periodic Fourier-series path that the optimized solver
-          # uses, so truth and fitted objective share one physical model.
-          p = Path('src/libcolorscreen/focus-analysis-unittests.C')
+          # The ordinary periodic-screen analytical path currently goes through
+          # PSF support estimation/wrapping while the prepared path applies the
+          # analytical OTF directly.  Make both analytical paths use the exact
+          # direct Fourier transfer so synthetic capture generation, ordinary
+          # rendering, scalar fits and coupled fits share one forward model.
+          p = Path('src/libcolorscreen/screen.C')
           s = p.read_text()
-          old = '''  screen source, filtered;
-          source.initialize (Paget);
-          sharpen_parameters *sp[3] = { &capture, &capture, &capture };
-          if (!filtered.initialize_with_sharpen_parameters (source, sp, false, false))
-            return false;'''
-          new = '''  screen source, filtered;
-          source.initialize (Paget);
-          screen_filter_source prepared_source;
-          if (!source.prepare_filter_source (prepared_source))
-            return false;
-          sharpen_parameters *sp[3] = { &capture, &capture, &capture };
-          if (!filtered.initialize_with_sharpen_parameters (
-                  prepared_source, sp, false, false))
-            return false;'''
+          old = '''                fft.get (), *sharpen[c], anticipate_sharpening, parallel,
+                false, profile, &mode))'''
+          new = '''                fft.get (), *sharpen[c], anticipate_sharpening, parallel,
+                true, profile, &mode))'''
           assert s.count(old) == 1
           p.write_text(s.replace(old, new))
           PY
@@ -130,32 +123,11 @@ jobs:
               print(f'DIRECT_{i} real={time.perf_counter() - start:.6f}', flush=True)
           PY
 
-      - name: Run complete focus-analysis regression on unified model
+      - name: Run complete focus-analysis regression unchanged
         shell: bash
         run: |
           set -euxo pipefail
           cp /tmp/focus-analysis-unittests.C.orig src/libcolorscreen/focus-analysis-unittests.C
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('src/libcolorscreen/focus-analysis-unittests.C')
-          s = p.read_text()
-          old = '''  screen source, filtered;
-          source.initialize (Paget);
-          sharpen_parameters *sp[3] = { &capture, &capture, &capture };
-          if (!filtered.initialize_with_sharpen_parameters (source, sp, false, false))
-            return false;'''
-          new = '''  screen source, filtered;
-          source.initialize (Paget);
-          screen_filter_source prepared_source;
-          if (!source.prepare_filter_source (prepared_source))
-            return false;
-          sharpen_parameters *sp[3] = { &capture, &capture, &capture };
-          if (!filtered.initialize_with_sharpen_parameters (
-                  prepared_source, sp, false, false))
-            return false;'''
-          assert s.count(old) == 1
-          p.write_text(s.replace(old, new))
-          PY
           make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
           ./src/libcolorscreen/focus-analysis-unittests
 
@@ -163,17 +135,19 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          cp src/libcolorscreen/unittests.C /tmp/unittests.C.orig
           python3 - <<'PY'
           from pathlib import Path
           p = Path('src/libcolorscreen/unittests.C')
           s = p.read_text()
           old = '''      physical[c].scanner_mtf.sensor_fill_factor = 1;
-          physical[c].scanner_mtf_scale = (luminosity_t)0.12;'''
-          new = '''      physical[c].scanner_mtf.sensor_fill_factor = 1;
-          physical[c].scanner_mtf.sigma = (luminosity_t)0.70;
-          physical[c].scanner_mtf_scale = (luminosity_t)0.12;'''
+              physical[c].scanner_mtf_scale'''
+          if s.count(old) != 1:
+              old = '''      physical[c].scanner_mtf.sensor_fill_factor = 1;
+              physical[c].scanner_mtf_scale'''.replace('              ', '      ')
           assert s.count(old) == 1
+          new = old.replace(
+              'physical[c].scanner_mtf_scale',
+              'physical[c].scanner_mtf.sigma = (luminosity_t)0.70;\n      physical[c].scanner_mtf_scale')
           p.write_text(s.replace(old, new))
           PY
           make -C src/libcolorscreen -j$(nproc) unittests
