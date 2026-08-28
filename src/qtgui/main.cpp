@@ -582,12 +582,32 @@ int main(int argc, char *argv[]) {
   }
 
   if (parser.isSet(userVisibleProgressOption)) {
-    QTimer::singleShot(250, &app, [&app]() {
+    auto startProgressSmoke = std::make_shared<std::function<void(int)>>();
+    const std::weak_ptr<std::function<void(int)>> weakStartProgressSmoke =
+        startProgressSmoke;
+    *startProgressSmoke =
+        [&app, weakStartProgressSmoke](int attemptsLeft) {
       WorkspaceWindow *workspace = app.workspaceWindow();
       const QList<MainWindow *> documents = app.documentWindows();
-      if (!workspace || documents.size() < 2) {
+      bool loaded = documents.size() >= 2;
+      for (MainWindow *document : documents) {
+        if (document && !document->currentImageFile().isEmpty() &&
+            !document->sharedImageData()) {
+          loaded = false;
+          break;
+        }
+      }
+      if (!workspace || !loaded) {
+        if (attemptsLeft > 0) {
+          if (auto retry = weakStartProgressSmoke.lock()) {
+            QTimer::singleShot(100, &app, [retry, attemptsLeft]() {
+              (*retry)(attemptsLeft - 1);
+            });
+            return;
+          }
+        }
         qCritical()
-            << "User-visible progress smoke test requires two documents";
+            << "User-visible progress smoke test requires two ready documents";
         app.exit(13);
         return;
       }
@@ -698,11 +718,30 @@ int main(int argc, char *argv[]) {
         return;
       }
 
-      stopButton->setFocus(Qt::OtherFocusReason);
+      // Reproduce a mouse Stop click. Dedicated task controls must not accept
+      // mouse focus, otherwise focusing a workspace-global dock can make
+      // QMdiArea select another child before the click handler even runs.
+      if (stopButton->focusPolicy() != Qt::TabFocus) {
+        qCritical() << "Dedicated Stop button unexpectedly accepts mouse focus";
+        app.exit(13);
+        return;
+      }
+      stopDocument->primaryImageWidget()->setFocus(Qt::OtherFocusReason);
       QCoreApplication::processEvents();
+      if (workspace->currentDocument() != stopDocument) {
+        qCritical() << "Focusing Stop task image changed the active document";
+        app.exit(13);
+        return;
+      }
       stopButton->click();
+      QCoreApplication::processEvents();
       if (!stopProgress->pool_cancel()) {
         qCritical() << "Stop progress action did not request termination";
+        app.exit(13);
+        return;
+      }
+      if (workspace->currentDocument() != stopDocument) {
+        qCritical() << "Pressing Stop changed the active document";
         app.exit(13);
         return;
       }
@@ -729,6 +768,9 @@ int main(int argc, char *argv[]) {
         app.exit(13);
         return;
       }
+        };
+    QTimer::singleShot(250, &app, [startProgressSmoke]() {
+      (*startProgressSmoke)(80);
     });
   }
 
@@ -1237,7 +1279,15 @@ int main(int argc, char *argv[]) {
           break;
         }
       }
-      if (!source) {
+      if (!source || !source->sharedImageData()) {
+        if (attemptsLeft > 0) {
+          if (auto retry = weakStartReferenceSmoke.lock()) {
+            QTimer::singleShot(100, &app, [retry, attemptsLeft]() {
+              (*retry)(attemptsLeft - 1);
+            });
+            return;
+          }
+        }
         qCritical() << "Slanted reference smoke test requires a visible loaded image";
         app.exit(15);
         return;

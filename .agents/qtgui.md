@@ -71,10 +71,14 @@ to that same `QStatusBar`; tabs must not keep private status-message state or
 mirror messages when activation changes. Only detached top-level windows use
 their private status bars. The active document's transient progress controls are
 temporarily moved into the shared status line, while dedicated long-running task
-rows remain in the workspace task strip. Showing, stopping, or removing one of
-those global task rows must never change the active MDI image merely because a
-focused task button or the task dock disappears. Inactive documents retain their
-complete processing and undo state.
+rows remain in the workspace task strip. Their Stop/Cancel buttons use
+`Qt::TabFocus`: keyboard users can reach them, but a mouse click must not steal
+keyboard focus from the active MDI image. Before a keyboard-focused task control
+is disabled or its row is removed, return focus to the image presentation that is
+currently active. Showing, stopping, completing, or removing a global task must
+never let Qt focus fallback select another MDI child (in particular the first
+tab), and an inactive document's task must never steal focus from the current
+image. Inactive documents retain their complete processing and undo state.
 
 **Window → Arrange Images** switches the same live documents between tabbed,
 tiled, and cascaded MDI views using `setViewMode()`, `tileSubWindows()`, and
