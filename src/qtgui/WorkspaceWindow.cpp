@@ -718,7 +718,35 @@ void WorkspaceWindow::updateUserVisibleProgressDockVisibility() {
       break;
     }
   }
+
+  // Showing or hiding the global task strip relayouts the workspace.  If the
+  // focused Stop/Cancel button is about to disappear, some Qt platform plugins
+  // can choose the first MDI child as the replacement focus widget.  Preserve
+  // the active image and deliberately return keyboard focus there before the
+  // task row is destroyed.
+  QMdiSubWindow *current = m_mdiArea ? m_mdiArea->activeSubWindow() : nullptr;
+  if (!current && m_mdiArea)
+    current = m_mdiArea->currentSubWindow();
+  const QPointer<QMdiSubWindow> guardedCurrent(current);
+  QWidget *focusWidget = QApplication::focusWidget();
+  const bool taskStripHadFocus =
+      focusWidget && m_userVisibleProgressStack &&
+      (focusWidget == m_userVisibleProgressStack ||
+       m_userVisibleProgressStack->isAncestorOf(focusWidget));
+
   m_userVisibleProgressDock->setVisible(hasVisibleRows);
+
+  if (guardedCurrent && m_mdiArea &&
+      m_mdiArea->subWindowList().contains(guardedCurrent.data())) {
+    if (m_mdiArea->activeSubWindow() != guardedCurrent.data())
+      m_mdiArea->setActiveSubWindow(guardedCurrent.data());
+    if (taskStripHadFocus) {
+      if (QWidget *hosted = guardedCurrent->widget())
+        hosted->setFocus(Qt::OtherFocusReason);
+      else
+        guardedCurrent->setFocus(Qt::OtherFocusReason);
+    }
+  }
 }
 
 /** Present DOCUMENT's one inspector in the workspace for IMAGEWIDGET. */

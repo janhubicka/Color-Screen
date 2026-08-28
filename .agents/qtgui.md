@@ -71,8 +71,10 @@ to that same `QStatusBar`; tabs must not keep private status-message state or
 mirror messages when activation changes. Only detached top-level windows use
 their private status bars. The active document's transient progress controls are
 temporarily moved into the shared status line, while dedicated long-running task
-rows remain in the workspace task strip. Inactive documents retain their complete
-processing and undo state.
+rows remain in the workspace task strip. Showing, stopping, or removing one of
+those global task rows must never change the active MDI image merely because a
+focused task button or the task dock disappears. Inactive documents retain their
+complete processing and undo state.
 
 **Window → Arrange Images** switches the same live documents between tabbed,
 tiled, and cascaded MDI views using `setViewMode()`, `tileSubWindows()`, and
@@ -128,9 +130,12 @@ uses the source `MainWindow` as the authoritative parameter/undo/recovery
 model. It never owns or suggests another `.par` file. Its inspector keeps the
 standard `NavigationView` above a single **Sharpness** tab, and rendering is
 limited to **Original digital capture** and **Image layer**. Measurements are
-applied through the source document's undoable parameter path. **Reload and
-demosaic** reloads both the source scan and every associated slanted-edge
-reference from its own filename using the current demosaic mode.
+applied through the source document's undoable parameter path. Detachable
+Sharpness diagnostics (MTF, dot spread, finetune images, and adaptive-sharpening
+charts) are presentation owned by that reference view and detach into its own
+floating docks; they must never be handed to the source document's diagnostic
+docks. **Reload and demosaic** reloads both the source scan and every associated
+slanted-edge reference from its own filename using the current demosaic mode.
 
 **Window → New View** creates another MDI view of the same document. Ordinary
 views present the same complete Navigation + parameter-panel inspector as the

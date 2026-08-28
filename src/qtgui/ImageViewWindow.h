@@ -149,6 +149,12 @@ private:
   /** Build the reduced Sharpness-only inspector for a reference image. */
   void setupReferenceInspector();
 
+  /** Create view-owned floating docks for detachable Sharpness diagnostics. */
+  void setupReferenceChartDocks();
+
+  /** Reattach any floating reference diagnostics before view teardown. */
+  void restoreReferenceChartDocks();
+
   /** Move the owning document's full inspector into a detached ordinary view. */
   void claimDocumentInspector();
 
@@ -189,6 +195,10 @@ private:
   MultiLineTabWidget *m_referenceTabs = nullptr;
   SharpnessPanel *m_sharpnessPanel = nullptr;
   QDockWidget *m_referenceInspectorDock = nullptr;
+  QDockWidget *m_referenceMtfDock = nullptr;
+  QDockWidget *m_referenceDotSpreadDock = nullptr;
+  QDockWidget *m_referenceFinetuneDock = nullptr;
+  QDockWidget *m_referenceAdaptiveDock = nullptr;
   QDockWidget *m_documentInspectorDock = nullptr;
   QWidget *m_documentInspectorHost = nullptr;
   QPointer<QStatusBar> m_workspaceStatusBar;

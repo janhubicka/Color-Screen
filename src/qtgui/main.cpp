@@ -2,6 +2,7 @@
 #include "MainWindow.h"
 #include "ImageViewWindow.h"
 #include "ImageWidget.h"
+#include "SharpnessPanel.h"
 #include "CoordinateTransformer.h"
 #include "WorkspaceWindow.h"
 #include "progress-info.h"
@@ -686,16 +687,48 @@ int main(int argc, char *argv[]) {
         return;
       }
 
-      stopButton->click();
-      cancelButton->click();
-      if (!stopProgress->pool_cancel() || !cancelProgress->pool_cancel()) {
-        qCritical() << "Dedicated progress actions did not request termination";
+      // Reproduce the real Stop path with the task owner as the current tab.
+      // Removing the focused task row must not make QMdiArea fall back to the
+      // first document.
+      workspace->activateDocument(stopDocument);
+      QCoreApplication::processEvents();
+      if (workspace->currentDocument() != stopDocument) {
+        qCritical() << "Could not activate Stop task owner before termination";
         app.exit(13);
         return;
       }
 
+      stopButton->setFocus(Qt::OtherFocusReason);
+      QCoreApplication::processEvents();
+      stopButton->click();
+      if (!stopProgress->pool_cancel()) {
+        qCritical() << "Stop progress action did not request termination";
+        app.exit(13);
+        return;
+      }
       stopDocument->removeProgress(stopProgress);
+      QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+      QCoreApplication::processEvents();
+      if (workspace->currentDocument() != stopDocument) {
+        qCritical() << "Stopping a task changed the active document";
+        app.exit(13);
+        return;
+      }
+
+      cancelButton->click();
+      if (!cancelProgress->pool_cancel()) {
+        qCritical() << "Cancel progress action did not request termination";
+        app.exit(13);
+        return;
+      }
       cancelDocument->removeProgress(cancelProgress);
+      QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+      QCoreApplication::processEvents();
+      if (workspace->currentDocument() != stopDocument) {
+        qCritical() << "Removing another document's task changed the active document";
+        app.exit(13);
+        return;
+      }
     });
   }
 
@@ -1270,6 +1303,54 @@ int main(int argc, char *argv[]) {
           app.exit(15);
           return;
         }
+
+        // Reproduce the MTF-detach failure with the source and specialized
+        // reference visible as MDI tiles.  The reference owns its Sharpness
+        // panel, so the detached chart must be adopted by a dock belonging to
+        // that view rather than disappearing from the detachable section.
+        workspace->tileDocuments();
+        workspace->activateView(reference);
+        QCoreApplication::processEvents();
+        SharpnessPanel *sharpness =
+            reference->workspaceInspectorWidget()->findChild<SharpnessPanel *>();
+        QWidget *mtfChart = sharpness ? sharpness->getMTFChartWidget() : nullptr;
+        QWidget *mtfSection = mtfChart ? mtfChart->parentWidget() : nullptr;
+        QPushButton *detachMtf = nullptr;
+        if (mtfSection) {
+          for (QPushButton *button : mtfSection->findChildren<QPushButton *>()) {
+            if (button && button->text() == QStringLiteral("Detach")) {
+              detachMtf = button;
+              break;
+            }
+          }
+        }
+        if (!sharpness || !mtfChart || !detachMtf) {
+          qCritical() << "Could not locate reference MTF detachable section";
+          app.exit(15);
+          return;
+        }
+        detachMtf->click();
+        QCoreApplication::processEvents();
+        QDockWidget *mtfDock = reference->findChild<QDockWidget *>(
+            QStringLiteral("SlantedEdgeMTFChartDock"));
+        if (!mtfDock || !mtfDock->isVisible() || !mtfDock->isFloating() ||
+            !mtfDock->widget() || !mtfDock->isAncestorOf(mtfChart)) {
+          qCritical() << "Reference MTF chart disappeared instead of detaching";
+          app.exit(15);
+          return;
+        }
+        mtfDock->close();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QCoreApplication::processEvents();
+        if (mtfDock->widget() ||
+            !reference->workspaceInspectorWidget()->isAncestorOf(mtfChart)) {
+          qCritical() << "Reference MTF chart did not reattach after dock close";
+          app.exit(15);
+          return;
+        }
+        workspace->showTabbedDocuments();
+        workspace->activateView(reference);
+        QCoreApplication::processEvents();
 
         const auto beforeReload = reference->sharedImageData();
         app.reloadSlantedEdgeReferences(source);
