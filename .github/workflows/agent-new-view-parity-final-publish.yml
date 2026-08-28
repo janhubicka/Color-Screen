@@ -1,0 +1,144 @@
+name: Agent final new-view parity publisher
+
+on:
+  pull_request:
+    branches: [ "agent/tmp-new-view-source-base-20260828" ]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-new-view-source-trigger-20260828'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Let earlier clean publishers settle
+        run: sleep 90
+      - uses: actions/checkout@v4
+        with:
+          repository: janhubicka/Color-Screen
+          ref: agent/new-view-parity
+          fetch-depth: 0
+      - name: Ensure cross-document persistent-tool handoff is present
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q supportsDocumentTools src/qtgui/ImageViewWindow.cpp
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def bounds(text, needle):
+              start = text.find(needle)
+              if start < 0: raise RuntimeError(f'missing {needle}')
+              brace = text.find('{', start)
+              depth = 0
+              for pos in range(brace, len(text)):
+                  if text[pos] == '{': depth += 1
+                  elif text[pos] == '}':
+                      depth -= 1
+                      if depth == 0: return start, brace, pos
+              raise RuntimeError(f'unterminated {needle}')
+
+          hp = Path('src/qtgui/MainWindow.h')
+          h = hp.read_text()
+          if 'transferableInteractionMode() const' not in h:
+              anchor = '  void setInspectorImageWidget(ImageWidget *imageWidget);'
+              if anchor not in h:
+                  anchor = '  ImageWidget *inspectorImageWidget() const;'
+              if anchor not in h: raise RuntimeError('inspector API anchor missing')
+              h = h.replace(anchor, anchor +
+                  '\n\n  /** Export a persistent canvas mode for another document tab. */\n'
+                  '  int transferableInteractionMode() const;\n\n'
+                  '  /** Activate an exported mode when the loaded image accepts it. */\n'
+                  '  bool tryActivateTransferredInteractionMode(int encodedMode);', 1)
+          hp.write_text(h)
+
+          cp = Path('src/qtgui/MainWindow.cpp')
+          c = cp.read_text()
+          if 'int MainWindow::transferableInteractionMode() const' not in c:
+              insertion = c.find('void MainWindow::setInspectorImageWidget(')
+              if insertion < 0: raise RuntimeError('setInspectorImageWidget missing')
+              methods = r'''/** Export a persistent interaction mode for a different document tab. */
+int MainWindow::transferableInteractionMode() const {
+  ImageWidget *widget = inspectorImageWidget();
+  if (!widget || !m_scan || m_areaSelectionCallback)
+    return -1;
+  return static_cast<int>(widget->interactionMode());
+}
+
+/** Activate an interaction mode exported by another loaded document. */
+bool MainWindow::tryActivateTransferredInteractionMode(int encodedMode) {
+  ImageWidget *widget = inspectorImageWidget();
+  if (!widget || !m_scan || encodedMode < 0 || m_areaSelectionCallback)
+    return false;
+  const auto mode = static_cast<ImageWidget::InteractionMode>(encodedMode);
+  widget->setInteractionMode(mode);
+  return widget->interactionMode() == mode;
+}
+
+'''
+              c = c[:insertion] + methods + c[insertion:]
+          cp.write_text(c)
+
+          wp = Path('src/qtgui/WorkspaceWindow.cpp')
+          w = wp.read_text()
+          _, b, e = bounds(w, 'void WorkspaceWindow::onSubWindowActivated(')
+          body = w[b + 1:e]
+          if 'sourceToolDocument' not in body:
+              release = body.find('releaseCurrentChrome();')
+              if release < 0: raise RuntimeError('releaseCurrentChrome call missing')
+              line = body.rfind('\n', 0, release) + 1
+              capture = r'''  MainWindow *sourceToolDocument = m_chromeDocument;
+  if (!sourceToolDocument && m_chromeView &&
+      m_chromeView->supportsDocumentTools())
+    sourceToolDocument = m_chromeView->sourceDocument();
+  const int transferredMode = sourceToolDocument
+                                  ? sourceToolDocument->transferableInteractionMode()
+                                  : -1;
+  auto transferToolTo = [sourceToolDocument, transferredMode](
+                            MainWindow *destination) {
+    if (destination && destination != sourceToolDocument && transferredMode >= 0)
+      destination->tryActivateTransferredInteractionMode(transferredMode);
+  };
+
+'''
+              body = body[:line] + capture + body[line:]
+              document_call = 'installDocumentChrome(window);'
+              pos = body.find(document_call)
+              if pos < 0: raise RuntimeError('document chrome install missing')
+              end = pos + len(document_call)
+              indent = body[body.rfind('\n', 0, pos) + 1:pos]
+              body = body[:end] + '\n' + indent + 'transferToolTo(window);' + body[end:]
+              view_call = 'installViewChrome(view);'
+              pos = body.find(view_call)
+              if pos < 0: raise RuntimeError('view chrome install missing')
+              end = pos + len(view_call)
+              indent = body[body.rfind('\n', 0, pos) + 1:pos]
+              body = (body[:end] + '\n' + indent +
+                      'if (view->supportsDocumentTools())\n' + indent +
+                      '  transferToolTo(view->sourceDocument());' + body[end:])
+          w = w[:b + 1] + body + w[e:]
+          wp.write_text(w)
+
+          dp = Path('.agents/qtgui.md')
+          d = dp.read_text()
+          if ('Pending area-selection and distance-measurement tools follow activation' in d and
+              'Across different document tabs' not in d):
+              end = ('retaining view-local render, Color/IR, coordinate, zoom, and rotation controls.')
+              if end not in d: raise RuntimeError('view invariant ending missing')
+              d = d.replace(end, end +
+                  '\nAcross different document tabs, persistent canvas modes may follow activation\n'
+                  'when the destination has a loaded image and accepts the mode. Callback-based\n'
+                  'one-shot area operations remain attached to their originating document.', 1)
+          dp.write_text(d)
+          PY
+          git diff --check
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name OpenAI
+          git config user.email noreply@openai.com
+          git add .agents/qtgui.md src/qtgui/MainWindow.h \
+                  src/qtgui/MainWindow.cpp src/qtgui/WorkspaceWindow.cpp
+          git commit -m "qtgui: carry persistent tools across document tabs" -m "Preserve the active persistent ImageWidget mode while replacing workspace chrome and ask the destination MainWindow to activate it after its inspector is installed. The destination must have a loaded image and must accept the mode.\n\nCallback-backed one-shot area operations remain local because their callbacks are document-specific; specialized views remain excluded by the shared-scan compatibility gate."
+          git push --force-with-lease origin HEAD:agent/new-view-parity
