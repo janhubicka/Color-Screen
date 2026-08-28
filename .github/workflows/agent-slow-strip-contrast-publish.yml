@@ -1,0 +1,44 @@
+name: Agent slow strip contrast publisher
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/slow-strip-contrast-publish-20260828'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply slow-strip correctness fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach da843e66888f1b295dcb8505345ba999dd56ebf8
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/libcolorscreen/scr-detect-geometry.C')
+          s = p.read_text()
+          old = '  if (bestinner <= 0 || bestinner < bestouter_lr * min_contrast) {'
+          new = '  if (bestinner <= 0 ||\n              bestinner < (strip ? bestouter : bestouter_lr) * min_contrast) {'
+          if s.count(old) != 1:
+              raise SystemExit('slow strip contrast gate did not match exactly once')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git diff --check
+          test "$(git diff --name-only)" = "src/libcolorscreen/scr-detect-geometry.C"
+          git config user.name OpenAI
+          git config user.email noreply@openai.com
+          git add src/libcolorscreen/scr-detect-geometry.C
+          git commit -m "detect: enforce slow strip contrast"
+          git push --force origin HEAD:agent/scr-detect-slow-strip-contrast
+          tar --exclude=.git -czf /tmp/colorscreen-slow-strip-source.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: slow-strip-source
+          path: /tmp/colorscreen-slow-strip-source.tar.gz
