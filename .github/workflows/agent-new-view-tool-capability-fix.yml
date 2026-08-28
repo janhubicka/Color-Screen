@@ -1,0 +1,119 @@
+name: Agent transferred-tool capability fix
+
+on:
+  pull_request:
+    branches: [ "agent/tmp-new-view-source-base-20260828" ]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-new-view-source-trigger-20260828'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Let all preceding publishers settle
+        run: sleep 210
+      - uses: actions/checkout@v4
+        with:
+          repository: janhubicka/Color-Screen
+          ref: agent/new-view-parity
+          fetch-depth: 0
+      - name: Replay the equivalent enabled action in the destination document
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def bounds(text, needle):
+              start = text.find(needle)
+              if start < 0: raise RuntimeError(f'missing {needle}')
+              brace = text.find('{', start)
+              depth = 0
+              for pos in range(brace, len(text)):
+                  if text[pos] == '{': depth += 1
+                  elif text[pos] == '}':
+                      depth -= 1
+                      if depth == 0: return start, brace, pos
+              raise RuntimeError(f'unterminated {needle}')
+
+          path = Path('src/qtgui/MainWindow.cpp')
+          text = path.read_text()
+          if '#include <QActionGroup>' not in text:
+              text = text.replace('#include <QAction>',
+                                  '#include <QAction>\n#include <QActionGroup>', 1)
+
+          start, brace, end = bounds(text, 'int MainWindow::transferableInteractionMode() const')
+          export_body = r'''
+  ImageWidget *widget = inspectorImageWidget();
+  if (!widget || !m_scan || m_areaSelectionCallback)
+    return -1;
+
+  // The exclusive group containing Pan is the persistent canvas-tool group.
+  // Encode its checked-action index so another MainWindow can replay the
+  // equivalent local QAction and therefore reuse its own enablement checks.
+  if (m_panAction) {
+    if (QActionGroup *group = m_panAction->actionGroup()) {
+      const int index = group->actions().indexOf(group->checkedAction());
+      if (index >= 0)
+        return -2 - index;
+    }
+  }
+  return static_cast<int>(widget->interactionMode());
+'''
+          text = text[:brace + 1] + export_body + text[end:]
+
+          start, brace, end = bounds(text, 'bool MainWindow::tryActivateTransferredInteractionMode(')
+          import_body = r'''
+  ImageWidget *widget = inspectorImageWidget();
+  if (!widget || !m_scan || encodedMode == -1 || m_areaSelectionCallback)
+    return false;
+
+  if (encodedMode <= -2) {
+    if (!m_panAction || !m_panAction->actionGroup())
+      return false;
+    QActionGroup *group = m_panAction->actionGroup();
+    const int index = -encodedMode - 2;
+    const QList<QAction *> actions = group->actions();
+    if (index < 0 || index >= actions.size())
+      return false;
+    QAction *action = actions.at(index);
+    if (!action || !action->isEnabled())
+      return false;
+    action->trigger();
+    return group->checkedAction() == action;
+  }
+
+  const auto mode = static_cast<ImageWidget::InteractionMode>(encodedMode);
+  widget->setInteractionMode(mode);
+  return widget->interactionMode() == mode;
+'''
+          text = text[:brace + 1] + import_body + text[end:]
+          text = text.replace('transferredMode >= 0', 'transferredMode != -1')
+          path.write_text(text)
+
+          workspace = Path('src/qtgui/WorkspaceWindow.cpp')
+          w = workspace.read_text().replace('transferredMode >= 0',
+                                             'transferredMode != -1')
+          workspace.write_text(w)
+
+          docs = Path('.agents/qtgui.md')
+          d = docs.read_text()
+          old = ('when the destination has a loaded image and accepts the mode. Callback-based')
+          new = ('when the destination has a loaded image and its equivalent local QAction is enabled.\n'
+                 'The destination action is replayed so its own image-type checks and setup run. Callback-based')
+          if old in d:
+              d = d.replace(old, new, 1)
+          docs.write_text(d)
+          PY
+          git diff --check
+          git config user.name OpenAI
+          git config user.email noreply@openai.com
+          git add .agents/qtgui.md src/qtgui/MainWindow.cpp \
+                  src/qtgui/WorkspaceWindow.cpp
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "qtgui: validate transferred tools through destination actions" -m "Encode the checked action in the persistent canvas-tool group and replay the equivalent action in the destination MainWindow. The destination action must be enabled, so its own loaded-image/type checks and setup govern whether the tool can follow tab activation.\n\nRetain the direct ImageWidget-mode fallback for persistent modes not represented by that action group, and continue excluding callback-backed one-shot area operations."
+          git push --force-with-lease origin HEAD:agent/new-view-parity
