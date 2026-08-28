@@ -22,11 +22,13 @@ run_pair ()
     if test "$platform" = xcb; then
         xvfb-run -a env QT_QPA_PLATFORM=xcb "$GUI" \
           --smoke-test 30000 --smoke-test-expect-windows 2 \
+          --smoke-test-tile-activation-stable --smoke-test-menu-order \
           --smoke-test-new-view --smoke-test-slanted-reference \
           "$IMAGE" "$IMAGE" >"$log" 2>&1
     else
         env QT_QPA_PLATFORM="$platform" "$GUI" \
           --smoke-test 30000 --smoke-test-expect-windows 2 \
+          --smoke-test-tile-activation-stable --smoke-test-menu-order \
           --smoke-test-new-view --smoke-test-slanted-reference \
           "$IMAGE" "$IMAGE" >"$log" 2>&1
     fi

@@ -234,6 +234,7 @@ jobs:
       run: |
         ./src/qtgui/colorscreen-qt \
           --smoke-test 30000 --smoke-test-expect-windows 2 \
+          --smoke-test-tile-activation-stable --smoke-test-menu-order \
           --smoke-test-new-view --smoke-test-slanted-reference \
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
@@ -322,6 +323,15 @@ jobs:
       env:
         ASAN_OPTIONS: halt_on_error=1
       run: |
+        # Keep the native MDI mode-switch probe in its own process on Windows.
+        # Combining it with the detached-view smoke triggers a Qt crash before
+        # AddressSanitizer can produce a diagnostic.
+        ./src/qtgui/colorscreen-qt \
+          --smoke-test 10000 --smoke-test-expect-windows 2 \
+          --smoke-test-tile-activation-stable --smoke-test-menu-order \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+
         ./src/qtgui/colorscreen-qt \
           --smoke-test 30000 --smoke-test-expect-windows 2 \
           --smoke-test-new-view --smoke-test-slanted-reference \
