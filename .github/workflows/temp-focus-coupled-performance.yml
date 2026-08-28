@@ -82,8 +82,6 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          # Reuse the prepared ideal-screen spectra for both sigma and defocus
-          # fits.  This makes scalar and coupled focus stages use the same path.
           p = Path('src/libcolorscreen/finetune.C')
           s = p.read_text()
           old = '''    return optimize_scanner_mtf_defocus && !optimize_scanner_mtf_sigma
@@ -95,18 +93,15 @@ jobs:
           assert s.count(old) == 1
           p.write_text(s.replace(old, new))
 
-          # The ordinary periodic-screen analytical path currently goes through
-          # PSF support estimation/wrapping while the prepared path applies the
-          # analytical OTF directly.  Make both analytical paths use the exact
-          # direct Fourier transfer so synthetic capture generation, ordinary
-          # rendering, scalar fits and coupled fits share one forward model.
           p = Path('src/libcolorscreen/screen.C')
           s = p.read_text()
           old = '''                fft.get (), *sharpen[c], anticipate_sharpening, parallel,
                 false, profile, &mode))'''
           new = '''                fft.get (), *sharpen[c], anticipate_sharpening, parallel,
                 true, profile, &mode))'''
-          assert s.count(old) == 1
+          # There are two ordinary periodic-screen overloads.  Keep both on the
+          # same exact analytical transfer as the prepared-source overloads.
+          assert s.count(old) == 2
           p.write_text(s.replace(old, new))
           PY
           make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
@@ -139,15 +134,21 @@ jobs:
           from pathlib import Path
           p = Path('src/libcolorscreen/unittests.C')
           s = p.read_text()
-          old = '''      physical[c].scanner_mtf.sensor_fill_factor = 1;
-              physical[c].scanner_mtf_scale'''
-          if s.count(old) != 1:
-              old = '''      physical[c].scanner_mtf.sensor_fill_factor = 1;
-              physical[c].scanner_mtf_scale'''.replace('              ', '      ')
+          old = '''      physical[c].scanner_mtf.model = mtf_model::physical_diffraction;
+              physical[c].scanner_mtf.scan_dpi = 4000;
+              physical[c].scanner_mtf.f_stop = 8;
+              physical[c].scanner_mtf.wavelength = 550;
+              physical[c].scanner_mtf.pixel_pitch = 3.76;
+              physical[c].scanner_mtf.sensor_fill_factor = 1;
+              physical[c].scanner_mtf_scale = (luminosity_t)0.12;'''
+          # Python heredoc indentation above is part of YAML; normalize it to
+          # the source's six-space continuation indentation.
+          old = old.replace('\n              ', '\n      ')
           assert s.count(old) == 1
           new = old.replace(
-              'physical[c].scanner_mtf_scale',
-              'physical[c].scanner_mtf.sigma = (luminosity_t)0.70;\n      physical[c].scanner_mtf_scale')
+              '      physical[c].scanner_mtf.sensor_fill_factor = 1;\n',
+              '      physical[c].scanner_mtf.sensor_fill_factor = 1;\n'
+              '      physical[c].scanner_mtf.sigma = (luminosity_t)0.70;\n')
           p.write_text(s.replace(old, new))
           PY
           make -C src/libcolorscreen -j$(nproc) unittests
