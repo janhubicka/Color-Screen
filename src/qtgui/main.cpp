@@ -961,9 +961,11 @@ int main(int argc, char *argv[]) {
       bool hasIconOnlyRotation = false;
       if (QToolBar *toolbar = view->workspaceToolBar()) {
         for (QAction *action : toolbar->actions()) {
-          if (action->text() == QObject::tr("Zoom In") && !action->icon().isNull())
+          const QString actionText =
+              QString(action->text()).remove(QLatin1Char('&'));
+          if (actionText == QObject::tr("Zoom In") && !action->icon().isNull())
             hasIconOnlyZoom = true;
-          if (action->text() == QObject::tr("Rotate Right") && !action->icon().isNull())
+          if (actionText == QObject::tr("Rotate Right") && !action->icon().isNull())
             hasIconOnlyRotation = true;
         }
       }
