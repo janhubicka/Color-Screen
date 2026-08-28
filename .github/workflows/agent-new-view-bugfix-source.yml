@@ -1,28 +1,37 @@
-name: Agent new-view bugfix source
+name: Agent new-view bugfix publisher
 
 on:
   pull_request:
     branches: [ "agent/tmp-new-view-bugfix-source-base-20260828" ]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  archive:
+  publish:
     if: github.head_ref == 'agent/tmp-new-view-bugfix-source-trigger-20260828'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Archive exact New View branch source
+      - name: Verify and publish New View bugfixes
         shell: bash
         run: |
           set -euo pipefail
+          echo "51761e305282d1923458decbbfbdfc6dbd1ebbf7872f83df685eb3372ee8a316  .github/agent-new-view-bugfix.patch.gz" | sha256sum -c -
+          gzip -dc .github/agent-new-view-bugfix.patch.gz > /tmp/new-view-bugfix.patch
+          echo "7b534c2808968c8e389e65d9e45c901822c64f543c50ba3e14bfa370572a048a  /tmp/new-view-bugfix.patch" | sha256sum -c -
           git checkout --detach be60f1565bad1a2f71e2ba9243dca1c9875bd16e
-          test "$(git rev-parse HEAD)" = "be60f1565bad1a2f71e2ba9243dca1c9875bd16e"
-          tar --exclude=.git -czf /tmp/colorscreen-new-view-bugfix-source.tar.gz .
-      - uses: actions/upload-artifact@v4
-        with:
-          name: new-view-bugfix-source
-          path: /tmp/colorscreen-new-view-bugfix-source.tar.gz
+          git apply --check /tmp/new-view-bugfix.patch
+          git apply /tmp/new-view-bugfix.patch
+          git diff --check
+          test "$(git diff --name-only)" = $'.agents/qtgui.md\nsrc/qtgui/ImageViewWindow.cpp\nsrc/qtgui/ImageViewWindow.h\nsrc/qtgui/WorkspaceWindow.cpp\nsrc/qtgui/main.cpp'
+          git config user.name OpenAI
+          git config user.email noreply@openai.com
+          git add .agents/qtgui.md src/qtgui/ImageViewWindow.cpp src/qtgui/ImageViewWindow.h src/qtgui/WorkspaceWindow.cpp src/qtgui/main.cpp
+          git commit -m "qtgui: keep task focus and reference diagnostics local" \
+            -m "Preserve the active QMdiSubWindow when the workspace-global long-task strip changes visibility. If a Stop or Cancel control owns keyboard focus while its task row is removed, return focus to the current image instead of letting Qt select the first MDI child." \
+            -m "Give slanted-edge reference Sharpness panels their own floating diagnostic docks. MTF, dot-spread, finetune-image, and adaptive-sharpening detach actions now stay owned by the specialized reference view and reattach safely when their docks close or the view is destroyed." \
+            -m "Extend the GUI smoke coverage to terminate a focused Stop task without changing the current document and to detach/reattach the reference MTF chart while source and reference are tiled."
+          git push origin HEAD:refs/heads/agent/new-view-parity
