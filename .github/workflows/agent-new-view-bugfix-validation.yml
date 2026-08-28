@@ -29,15 +29,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Apply exact final product patch
+      - name: Apply exact final delta
         run: |
           set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          gzip -dc .github/agent-new-view-final.patch.gz > /tmp/new-view-final.patch
-          echo "89fea5719c6045119047c8ee0b5a932bc3baa864f6d90b77951a3864077af163  /tmp/new-view-final.patch" | sha256sum -c -
-          git checkout --detach be60f1565bad1a2f71e2ba9243dca1c9875bd16e
-          git apply --check /tmp/new-view-final.patch
-          git apply /tmp/new-view-final.patch
+          cp .github/agent-new-view-second-delta.patch /tmp/new-view-second-delta.patch
+          echo "a94100b5db14fe4f78646d7a2dc40dfd022d030bb421ce5d02c0a0b07511d8f1  /tmp/new-view-second-delta.patch" | sha256sum -c -
+          git checkout --detach 96adf6ec8816033460d8aef8d4f8dc122e01d6c6
+          git apply --check /tmp/new-view-second-delta.patch
+          git apply /tmp/new-view-second-delta.patch
           git diff --check
       - name: Configure Qt checking build
         run: ./configure --enable-checking --disable-static-link --disable-gtkgui --enable-qtgui
