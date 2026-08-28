@@ -1,0 +1,25 @@
+name: Agent new-view source transport
+
+on:
+  pull_request:
+    branches: [ "agent/tmp-new-view-source-base-20260828" ]
+
+permissions:
+  contents: read
+
+jobs:
+  archive:
+    if: github.head_ref == 'agent/tmp-new-view-source-trigger-20260828'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive exact source revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          tar --exclude=.git -czf /tmp/colorscreen-new-view-source.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: new-view-source
+          path: /tmp/colorscreen-new-view-source.tar.gz
