@@ -1,0 +1,40 @@
+name: Agent clean new-view parity publisher v2
+
+on:
+  pull_request:
+    branches: [ "agent/tmp-new-view-source-base-20260828" ]
+
+permissions:
+  contents: write
+
+jobs:
+  clean-publish:
+    if: github.head_ref == 'agent/tmp-new-view-source-trigger-20260828'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Remove probe files from the published review branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            if git fetch origin agent/new-view-parity; then
+              candidate=$(git rev-parse FETCH_HEAD)
+              if git show "$candidate:src/qtgui/ImageViewWindow.cpp" 2>/dev/null | grep -q supportsDocumentTools; then
+                git checkout --detach "$candidate"
+                git rm -f --ignore-unmatch NEW_VIEW_PARITY_READY branch-probe.txt DO_NOT_KEEP
+                if ! git diff --cached --quiet; then
+                  git config user.name OpenAI
+                  git config user.email noreply@openai.com
+                  git commit -m 'chore: remove temporary branch probes'
+                fi
+                git push --force origin HEAD:agent/new-view-parity
+                exit 0
+              fi
+            fi
+            sleep 2
+          done
+          echo 'clean review branch was not available' >&2
+          exit 1
