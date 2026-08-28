@@ -1,0 +1,326 @@
+inspectorImageWidget();
++            if (image && image->coordinateSpace() ==
++                             colorscreen::render_final_coordinates)
+               setDocumentFinalRotation(degrees);
+           });
+   updateCoordinateSpaceControls();
+@@ -1644,30 +1650,33 @@ void MainWindow::createToolbar() {
+ 
+   connect(m_panAction, &QAction::toggled, this, [this](bool checked) {
+     if (checked)
+-      m_imageWidget->setInteractionMode(ImageWidget::PanMode);
++      if (ImageWidget *image = inspectorImageWidget())
++        image->setInteractionMode(ImageWidget::PanMode);
+   });
+   connect(m_selectAction, &QAction::toggled, this, [this](bool checked) {
+     if (checked) {
+-      m_imageWidget->setInteractionMode(ImageWidget::SelectMode);
+-      // Auto-enable registration points visibility
+-      if (!m_imageWidget->registrationPointsVisible()) {
+-        m_imageWidget->setShowRegistrationPoints(true);
++      if (ImageWidget *image = inspectorImageWidget()) {
++        image->setInteractionMode(ImageWidget::SelectMode);
++        // Auto-enable registration points visibility
++        if (!image->registrationPointsVisible())
++          image->setShowRegistrationPoints(true);
+       }
+     }
+   });
+   connect(m_addPointAction, &QAction::toggled, this, [this](bool checked) {
+     if (checked) {
+-      m_imageWidget->setInteractionMode(ImageWidget::AddPointMode);
+-      // Auto-enable registration points visibility
+-      if (!m_imageWidget->registrationPointsVisible()) {
+-        m_imageWidget->setShowRegistrationPoints(true);
++      if (ImageWidget *image = inspectorImageWidget()) {
++        image->setInteractionMode(ImageWidget::AddPointMode);
++        // Auto-enable registration points visibility
++        if (!image->registrationPointsVisible())
++          image->setShowRegistrationPoints(true);
+       }
+     }
+   });
+   connect(m_setCenterAction, &QAction::toggled, this, [this](bool checked) {
+-    if (checked) {
+-      m_imageWidget->setInteractionMode(ImageWidget::SetCenterMode);
+-    }
++    if (checked)
++      if (ImageWidget *image = inspectorImageWidget())
++        image->setInteractionMode(ImageWidget::SetCenterMode);
+     m_lockRelativeCoordinatesAction->setVisible(checked);
+     m_optimizeCoordinatesAction->setVisible(checked);
+   });
+@@ -1718,6 +1727,42 @@ void MainWindow::createToolbar() {
+   if (m_imageWidget) m_imageWidget->addAction(exploreModeAction); // Add to ImageWidget for fullscreen
+ }
+ 
++/** Add the shared document canvas actions to an ordinary New View toolbar. */
++void MainWindow::appendOrdinaryViewToolActions(QToolBar *toolbar) {
++  if (!toolbar)
++    return;
++
++  if (m_panAction)
++    toolbar->addAction(m_panAction);
++  if (m_zoomInAction)
++    toolbar->addAction(m_zoomInAction);
++  if (m_zoomOutAction)
++    toolbar->addAction(m_zoomOutAction);
++  if (m_zoom100Action)
++    toolbar->addAction(m_zoom100Action);
++  if (m_zoomFitAction)
++    toolbar->addAction(m_zoomFitAction);
++  if (m_rotateLeftAction)
++    toolbar->addAction(m_rotateLeftAction);
++  if (m_rotateRightAction)
++    toolbar->addAction(m_rotateRightAction);
++  if (m_mirrorAction)
++    toolbar->addAction(m_mirrorAction);
++  for (QAction *action : m_registrationActions)
++    if (action)
++      toolbar->addAction(action);
++}
++
++/** Return the document-owned Edit menu action shared by ordinary views. */
++QAction *MainWindow::ordinaryViewEditMenuAction() const {
++  return m_editMenu ? m_editMenu->menuAction() : nullptr;
++}
++
++/** Return the document-owned Registration menu action shared by ordinary views. */
++QAction *MainWindow::ordinaryViewRegistrationMenuAction() const {
++  return m_registrationMenu ? m_registrationMenu->menuAction() : nullptr;
++}
++
+ /** Rebuild the view-local Scan/Screen coordinate selector. */
+ void MainWindow::updateCoordinateSpaceControls() {
+   if (!m_coordinateComboBox || !m_imageWidget)
+@@ -1753,10 +1798,6 @@ void MainWindow::updateCoordinateSpaceControls() {
+ 
+   const bool finalCoordinates =
+       current == colorscreen::render_final_coordinates;
+-  if (m_rotateLeftAction)
+-    m_rotateLeftAction->setVisible(!finalCoordinates);
+-  if (m_rotateRightAction)
+-    m_rotateRightAction->setVisible(!finalCoordinates);
+   if (m_finalRotationLabelAction)
+     m_finalRotationLabelAction->setVisible(finalCoordinates);
+   if (m_finalRotationSpinAction)
+@@ -1766,17 +1807,11 @@ void MainWindow::updateCoordinateSpaceControls() {
+     m_finalRotationSpinBox->setValue(m_scrToImgParams.final_rotation);
+     m_finalRotationSpinBox->blockSignals(false);
+   }
+-  if (m_mirrorAction) {
+-    m_mirrorAction->blockSignals(true);
+-    m_mirrorAction->setChecked(finalCoordinates ? m_scrToImgParams.final_mirror
+-                                                : m_rparams.scan_mirror);
+-    m_mirrorAction->blockSignals(false);
+-    m_mirrorAction->setText(finalCoordinates ? tr("Mirror Final Image")
+-                                             : tr("Mirror Horizontally"));
+-    m_mirrorAction->setToolTip(finalCoordinates
+-        ? tr("Mirror the final-coordinate image; saved in the parameter file")
+-        : tr("Mirror the digital scan horizontally"));
+-  }
++
++  // Rotate/mirror are document-owned actions also shown in ordinary New View
++  // toolbars. Their state follows the view currently presenting the inspector,
++  // not necessarily the primary canvas whose coordinate combo lives here.
++  syncInspectorViewActions();
+ }
+ 
+ /** Create keyboard shortcuts 1–0 mapped to the first 10 render modes.
+@@ -1848,8 +1883,9 @@ void MainWindow::onMirrorHorizontally(bool checked) {
+   if (!m_scan)
+     return;
+   ParameterState newState = getCurrentState();
+-  if (m_imageWidget && m_imageWidget->coordinateSpace() ==
+-                           colorscreen::render_final_coordinates) {
++  ImageWidget *image = inspectorImageWidget();
++  if (image && image->coordinateSpace() ==
++                   colorscreen::render_final_coordinates) {
+     newState.scrToImg.final_mirror = !newState.scrToImg.final_mirror;
+     newState.scrToImg.final_rotation = -newState.scrToImg.final_rotation;
+     changeParameters(newState, "Mirror Final Image");
+@@ -2167,16 +2203,16 @@ void MainWindow::createMenus() {
+       QApplication::closeAllWindows();
+   });
+ 
+-  QMenu *editMenu = menuBar()->addMenu("&Edit");
++  m_editMenu = menuBar()->addMenu("&Edit");
+   QAction *undoAction = m_undoStack->createUndoAction(this, tr("&Undo"));
+   undoAction->setIcon(QIcon::fromTheme("edit-undo-symbolic"));
+   undoAction->setShortcut(QKeySequence::Undo);
+-  editMenu->addAction(undoAction);
++  m_editMenu->addAction(undoAction);
+ 
+   QAction *redoAction = m_undoStack->createRedoAction(this, tr("&Redo"));
+   redoAction->setIcon(QIcon::fromTheme("edit-redo-symbolic"));
+   redoAction->setShortcut(QKeySequence::Redo);
+-  editMenu->addAction(redoAction);
++  m_editMenu->addAction(redoAction);
+ 
+   // View Menu
+   m_viewMenu = menuBar()->addMenu("&View");
+@@ -2282,8 +2318,11 @@ void MainWindow::createMenus() {
+   m_lockRelativeCoordinatesAction->setToolTip(
+       "Maintain relative positions of registration points when the grid size "
+       "changes.");
+-  connect(m_lockRelativeCoordinatesAction, &QAction::toggled, m_imageWidget,
+-          &ImageWidget::setLockRelativeCoordinates);
++  connect(m_lockRelativeCoordinatesAction, &QAction::toggled, this,
++          [this](bool checked) {
++            if (ImageWidget *image = inspectorImageWidget())
++              image->setLockRelativeCoordinates(checked);
++          });
+   m_registrationMenu->addAction(m_lockRelativeCoordinatesAction);
+ 
+   m_registrationPointsAction =
+@@ -3061,17 +3100,97 @@ void MainWindow::restoreWorkspaceInspector() {
+   m_rightColumn->show();
+ }
+ 
+-/** Route the shared inspector's navigation and editing gestures to IMAGEWIDGET. */
++/** Return true when IMAGEWIDGET is an ordinary presentation of this scan. */
++bool MainWindow::acceptsInspectorImageWidget(ImageWidget *imageWidget) const {
++  if (!imageWidget)
++    return false;
++  if (imageWidget == m_imageWidget)
++    return true;
++  return m_scan && imageWidget->sharedImageData() == m_scan;
++}
++
++/** Synchronize shared interaction actions with MODE in the active view. */
++void MainWindow::syncInspectorInteractionActions(ImageWidget::InteractionMode mode) {
++  if (m_panAction) {
++    const QSignalBlocker blocker(m_panAction);
++    m_panAction->setChecked(mode == ImageWidget::PanMode);
++  }
++  if (m_selectAction) {
++    const QSignalBlocker blocker(m_selectAction);
++    m_selectAction->setChecked(mode == ImageWidget::SelectMode);
++  }
++  if (m_addPointAction) {
++    const QSignalBlocker blocker(m_addPointAction);
++    m_addPointAction->setChecked(mode == ImageWidget::AddPointMode);
++  }
++  if (m_setCenterAction) {
++    const QSignalBlocker blocker(m_setCenterAction);
++    m_setCenterAction->setChecked(mode == ImageWidget::SetCenterMode);
++  }
++  if (m_lockRelativeCoordinatesAction)
++    m_lockRelativeCoordinatesAction->setVisible(mode == ImageWidget::SetCenterMode);
++  if (m_optimizeCoordinatesAction)
++    m_optimizeCoordinatesAction->setVisible(mode == ImageWidget::SetCenterMode);
++  if (m_capturePanel)
++    m_capturePanel->setCropChecked(mode == ImageWidget::CropMode);
++}
++
++/** Synchronize coordinate-dependent shared actions with the active view. */
++void MainWindow::syncInspectorViewActions() {
++  ImageWidget *image = inspectorImageWidget();
++  if (!image)
++    return;
++
++  const bool finalCoordinates =
++      image->coordinateSpace() == colorscreen::render_final_coordinates;
++  if (m_rotateLeftAction)
++    m_rotateLeftAction->setVisible(!finalCoordinates);
++  if (m_rotateRightAction)
++    m_rotateRightAction->setVisible(!finalCoordinates);
++  if (m_mirrorAction) {
++    const QSignalBlocker blocker(m_mirrorAction);
++    m_mirrorAction->setChecked(finalCoordinates ? m_scrToImgParams.final_mirror
++                                                : m_rparams.scan_mirror);
++    m_mirrorAction->setText(finalCoordinates ? tr("Mirror Final Image")
++                                             : tr("Mirror Horizontally"));
++    m_mirrorAction->setToolTip(finalCoordinates
++        ? tr("Mirror the final-coordinate image; saved in the parameter file")
++        : tr("Mirror the digital scan horizontally"));
++  }
++}
++
++/** Route the shared inspector's navigation and editing gestures to IMAGEWIDGET.
++    Pending document tools follow between ordinary views of the same loaded scan.
++    A view presenting a different image (for example a slanted-edge reference)
++    is deliberately rejected rather than receiving an incompatible operation. */
+ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
+   ImageWidget *target = imageWidget ? imageWidget : m_imageWidget;
+-  if (!target)
++  if (!acceptsInspectorImageWidget(target))
+     return;
+ 
++  ImageWidget *previous = inspectorImageWidget();
++  const ImageWidget::InteractionMode previousMode =
++      previous ? previous->interactionMode() : ImageWidget::PanMode;
++  const bool transferTool =
++      previous && previous != target && acceptsInspectorImageWidget(previous) &&
++      previousMode != ImageWidget::PanMode &&
++      previousMode != ImageWidget::ExploreMode;
++
+   for (const QMetaObject::Connection &connection : m_inspectorImageConnections)
+     disconnect(connection);
+   m_inspectorImageConnections.clear();
+   m_inspectorImageWidget = target;
+ 
++  // A selected document tool belongs to the document operation, not to the
++  // canvas that happened to be active when it was armed. Move it to the newly
++  // active compatible view and leave the old view harmlessly in Pan mode.
++  if (transferTool) {
++    m_switchingInspectorImage = true;
++    previous->setInteractionMode(ImageWidget::PanMode);
++    target->setInteractionMode(previousMode);
++    m_switchingInspectorImage = false;
++  }
++
+   if (m_navigationView) {
+     m_navigationView->setCoordinateSpace(target->coordinateSpace());
+     m_inspectorImageConnections.push_back(
+@@ -3083,6 +3202,7 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
+           if (m_navigationView)
+             m_navigationView->setCoordinateSpace(
+                 static_cast<colorscreen::render_coordinate_space>(space));
++          syncInspectorViewActions();
+         }));
+   }
+ 
+@@ -3154,19 +3274,35 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
+     m_inspectorImageConnections.push_back(connect(
+         target, &ImageWidget::interactionModeChanged, this,
+         [this](ImageWidget::InteractionMode mode) {
+-          if (m_capturePanel)
+-            m_capturePanel->setCropChecked(mode == ImageWidget::CropMode);
++          syncInspectorInteractionActions(mode);
++          if (!m_switchingInspectorImage && sender() == inspectorImageWidget() &&
++              mode != ImageWidget::GenericAreaMode && m_areaSelectionCallback) {
++            m_areaSelectionCallback = nullptr;
++            if (m_imageLayerPanel) {
++              m_imageLayerPanel->setNeutralAreaChecked(false);
++              m_imageLayerPanel->setInfraredAreaChecked(false);
++              m_imageLayerPanel->setDarkAreaChecked(false);
++              m_imageLayerPanel->updateUI();
++            }
++            if (m_colorPanel) {
++              m_colorPanel->setNeutralAreaChecked(false);
++              m_colorPanel->setAutoLevelsChecked(false);
++              m_colorPanel->updateUI();
++            }
++          }
+         }));
+   }
+ 
++  syncInspectorInteractionActions(target->interactionMode());
++  syncInspectorViewActions();
+   if (m_registrationPointsAction) {
+     const QSignalBlocker blocker(m_registrationPointsAction);
+     m_registrationPointsAction->setChecked(target->registrationPointsVisible());
+   }
+-  if (m_geometryPanel) {
++  if (m_geometryPanel)
+     m_geometryPanel->setRegistrationPointsVisible(
+         target->registrationPointsVisible());
+-  }
++  updateRegistrationActions();
+   updateFocusAreaOverlays();
+ }
+ 
+@@ -4079,23 +4215,20 @@ void MainWindow::saveRecentParams() {
+ 
+ /** Zoom in by 25% with 

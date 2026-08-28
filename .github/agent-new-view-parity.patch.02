@@ -1,0 +1,346 @@
+smooth animation.  */
+ void MainWindow::onZoomIn() {
+-  if (m_imageWidget) {
+-    m_imageWidget->smoothZoomBy(1.25);
+-  }
++  if (ImageWidget *image = inspectorImageWidget())
++    image->smoothZoomBy(1.25);
+ }
+ 
+ /** Zoom out by ~10% with smooth animation.  */
+ void MainWindow::onZoomOut() {
+-  if (m_imageWidget) {
+-    m_imageWidget->smoothZoomBy(1.0 / 1.1); // Zoom out by 10%
+-  }
++  if (ImageWidget *image = inspectorImageWidget())
++    image->smoothZoomBy(1.0 / 1.1); // Zoom out by 10%
+ }
+ 
+ /** Zoom to 100% (1:1 pixel scale) with smooth animation.  */
+ void MainWindow::onZoom100() {
+-  if (m_imageWidget) {
+-    m_imageWidget->smoothZoomTo(1.0, true);
+-  }
++  if (ImageWidget *image = inspectorImageWidget())
++    image->smoothZoomTo(1.0, true);
+ }
+ /** Toggle nonlinear mesh corrections.
+    When enabling: if no mesh exists yet, triggers a full geometry
+@@ -4120,14 +4253,14 @@ void MainWindow::onNonlinearToggled(bool checked) {
+ 
+ /** Zoom to fit the entire image in the viewer with smooth animation.  */
+ void MainWindow::onZoomFit() {
+-  if (m_imageWidget) {
+-    m_imageWidget->smoothFitToView();
+-  }
++  if (ImageWidget *image = inspectorImageWidget())
++    image->smoothFitToView();
+ }
+ 
+ /** Toggle visibility of registration points in the ImageWidget.  */
+ void MainWindow::onRegistrationPointsToggled(bool checked) {
+-  m_imageWidget->setShowRegistrationPoints(checked);
++  if (ImageWidget *image = inspectorImageWidget())
++    image->setShowRegistrationPoints(checked);
+ }
+ 
+ /** Request a geometry optimisation via the solver queue.
+@@ -4412,13 +4545,22 @@ void MainWindow::clearRecoveryFiles() {
+     QDir(m_recoveryDir).removeRecursively();
+ }
+ /** Select all registration points in the ImageWidget.  */
+-void MainWindow::onSelectAll() { m_imageWidget->selectAll(); }
++void MainWindow::onSelectAll() {
++  if (ImageWidget *image = inspectorImageWidget())
++    image->selectAll();
++}
+ 
+ /** Clear the current registration point selection.  */
+-void MainWindow::onDeselectAll() { m_imageWidget->clearSelection(); }
++void MainWindow::onDeselectAll() {
++  if (ImageWidget *image = inspectorImageWidget())
++    image->clearSelection();
++}
+ 
+ /** Delete all currently selected registration points.  */
+-void MainWindow::onDeleteSelected() { m_imageWidget->deleteSelectedPoints(); }
++void MainWindow::onDeleteSelected() {
++  if (ImageWidget *image = inspectorImageWidget())
++    image->deleteSelectedPoints();
++}
+ 
+ /** Remove registration points with high error from the selection.
+    Builds a histogram of point-to-predicted-position distances, finds
+@@ -4426,11 +4568,11 @@ void MainWindow::onDeleteSelected() { m_imageWidget->deleteSelectedPoints(); }
+    exceeding that threshold.  Pushes an undo command and triggers
+    auto-solver if enabled.  */
+ void MainWindow::onPruneMisplaced() {
+-  if (!m_scan || !m_imageWidget) {
++  ImageWidget *image = inspectorImageWidget();
++  if (!m_scan || !image)
+     return;
+-  }
+ 
+-  const auto &selectedPoints = m_imageWidget->selectedPoints();
++  const auto &selectedPoints = image->selectedPoints();
+   if (selectedPoints.empty()) {
+     return;
+   }
+@@ -4531,7 +4673,8 @@ void MainWindow::onPruneMisplaced() {
+ 
+   // Trigger auto solver if enabled
+   if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
+-    size_t count = m_imageWidget->registrationPointCount();
++    ImageWidget *image = inspectorImageWidget();
++    size_t count = image ? image->registrationPointCount() : 0;
+     if (count >= (size_t)colorscreen::solver_parameters::min_points(m_scrToImgParams.type)) {
+       onOptimizeGeometry(true);
+     }
+@@ -4545,10 +4688,10 @@ void MainWindow::onPruneMisplaced() {
+    and calls GeometryPanel::updateRegistrationPointInfo() to refresh
+    the panel's status display.  */
+ void MainWindow::updateRegistrationActions() {
+-  bool hasPoints = m_imageWidget &&
+-                   m_imageWidget->registrationPointsVisible() &&
+-                   m_imageWidget->registrationPointCount() > 0;
+-  bool hasSelection = m_imageWidget && !m_imageWidget->selectedPoints().empty();
++  ImageWidget *image = inspectorImageWidget();
++  bool hasPoints = image && image->registrationPointsVisible() &&
++                   image->registrationPointCount() > 0;
++  bool hasSelection = image && !image->selectedPoints().empty();
+ 
+   // Disable selection actions if registration points aren't visible
+   if (m_selectAllAction) {
+@@ -4584,7 +4727,7 @@ void MainWindow::updateRegistrationActions() {
+   }
+ 
+   // Disable/enable optimize geometry and select all based on point count
+-  size_t count = m_imageWidget ? m_imageWidget->registrationPointCount() : 0;
++  size_t count = image ? image->registrationPointCount() : 0;
+   int min_points = colorscreen::solver_parameters::min_points(m_scrToImgParams.type);
+   if (m_selectAllAction) {
+     m_selectAllAction->setEnabled(count > 0);
+@@ -4924,16 +5067,17 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
+    Maps all four corners through ImageWidget::widgetToImage (which
+    accounts for rotation, zoom, and pan), finds the axis-aligned
+    bounding box, and clamps it to the scan dimensions.  */
+-QRect MainWindow::getImageArea(QRect area) {
+-  if (!m_scan)
++QRect MainWindow::getImageArea(QRect area, ImageWidget *imageWidget) {
++  ImageWidget *image = imageWidget ? imageWidget : inspectorImageWidget();
++  if (!m_scan || !image)
+     return QRect();
+ 
+   // Convert widget coordinates to image coordinates
+   // Get the four corners and find min/max
+-  colorscreen::point_t p1 = inspectorImageWidget()->widgetToImage(area.topLeft());
+-  colorscreen::point_t p2 = inspectorImageWidget()->widgetToImage(area.topRight());
+-  colorscreen::point_t p3 = inspectorImageWidget()->widgetToImage(area.bottomLeft());
+-  colorscreen::point_t p4 = inspectorImageWidget()->widgetToImage(area.bottomRight());
++  colorscreen::point_t p1 = image->widgetToImage(area.topLeft());
++  colorscreen::point_t p2 = image->widgetToImage(area.topRight());
++  colorscreen::point_t p3 = image->widgetToImage(area.bottomLeft());
++  colorscreen::point_t p4 = image->widgetToImage(area.bottomRight());
+ 
+   // Find bounding box in image coordinates
+   int xmin = std::min({p1.x, p2.x, p3.x, p4.x});
+@@ -4958,15 +5102,17 @@ QRect MainWindow::getImageArea(QRect area) {
+    - SelectMode/AddPointMode: launches a FinetuneWorker to find
+      registration points in the selected area.  */
+ void MainWindow::onAreaSelected(QRect area) {
+-  if (!m_scan) {
++  ImageWidget *image = qobject_cast<ImageWidget *>(sender());
++  if (!image)
++    image = inspectorImageWidget();
++  if (!m_scan || !image || image != inspectorImageWidget())
+     return;
+-  }
+ 
+-  QRect imgArea = getImageArea(area);
++  QRect imgArea = getImageArea(area, image);
+   if (imgArea.width() <= 0 || imgArea.height() <= 0)
+     return;
+ 
+-  if (m_imageWidget->interactionMode() == ImageWidget::GenericAreaMode) {
++  if (image->interactionMode() == ImageWidget::GenericAreaMode) {
+     auto cb = m_areaSelectionCallback;
+     m_areaSelectionCallback =
+         nullptr; // Clear first so interactionModeChanged doesn't uncheck
+@@ -4978,10 +5124,10 @@ void MainWindow::onAreaSelected(QRect area) {
+     return;
+   }
+ 
+-  if (m_imageWidget->interactionMode() == ImageWidget::CropMode) {
++  if (image->interactionMode() == ImageWidget::CropMode) {
+     // Preserve center
+     colorscreen::point_t center =
+-        m_imageWidget->widgetToImage(m_imageWidget->rect().center());
++        image->widgetToImage(image->rect().center());
+ 
+     ParameterState state = getCurrentState();
+     state.rparams.scan_crop.x = imgArea.x();
+@@ -4993,7 +5139,7 @@ void MainWindow::onAreaSelected(QRect area) {
+     changeParameters(state, "Set Crop Area");
+ 
+     // Keep center
+-    m_imageWidget->centerOn(center);
++    image->centerOn(center);
+ 
+     restoreInteractionMode();
+     statusBar()->clearMessage();
+@@ -6397,6 +6543,9 @@ void MainWindow::onMeasureRequested() {
+    enters the physical distance and unit to compute the scan DPI.
+    If accepted, updates scan_dpi in the parameter state.  */
+ void MainWindow::onDistanceMeasured(colorscreen::point_t p1, colorscreen::point_t p2) {
++  if (ImageWidget *image = qobject_cast<ImageWidget *>(sender()))
++    if (image != inspectorImageWidget())
++      return;
+   restoreInteractionMode();
+   statusBar()->clearMessage();
+ 
+diff --git a/src/qtgui/MainWindow.h b/src/qtgui/MainWindow.h
+index 69456de..63b2c7c 100644
+--- a/src/qtgui/MainWindow.h
++++ b/src/qtgui/MainWindow.h
+@@ -24,6 +24,7 @@
+ #include <set>
+ #include <vector>
+ 
++class QAction;
+ class QSplitter;
+ class QTabWidget;
+ class QDockWidget; // Added
+@@ -131,6 +132,17 @@ public:
+     return m_renderTypeParams;
+   }
+ 
++  /** Add the document-owned canvas actions to an ordinary secondary toolbar.
++      These actions route through inspectorImageWidget(), so only the active
++      ordinary presentation executes them. */
++  void appendOrdinaryViewToolActions(QToolBar *toolbar);
++
++  /** Return the shared Edit menu action for ordinary secondary views. */
++  QAction *ordinaryViewEditMenuAction() const;
++
++  /** Return the shared Registration menu action for ordinary secondary views. */
++  QAction *ordinaryViewRegistrationMenuAction() const;
++
+   /** Rotate the shared document left from any attached view. */
+   void rotateDocumentLeft();
+ 
+@@ -350,7 +362,7 @@ private:
+ 
+   void setupUi();
+   void createMenus();
+-  QRect getImageArea(QRect area);
++  QRect getImageArea(QRect area, ImageWidget *imageWidget = nullptr);
+   void pivotViewport(int oldRot, int newRot);
+   void createToolbar();  // New helper
+   void updateCoordinateSpaceControls();
+@@ -392,6 +404,15 @@ private:
+    */
+   void restoreInteractionMode();
+ 
++  /** Synchronize shared toolbar/menu tool state with the active ordinary view. */
++  void syncInspectorInteractionActions(ImageWidget::InteractionMode mode);
++
++  /** Synchronize coordinate-dependent shared actions with the active view. */
++  void syncInspectorViewActions();
++
++  /** Return true when IMAGEWIDGET presents this document's current scan. */
++  bool acceptsInspectorImageWidget(ImageWidget *imageWidget) const;
++
+   void updateWindowTitle(); // Helper to update window title
+   /** Refresh focus-analysis rectangles in the ordinary view currently
+       presenting this document's inspector. */
+@@ -417,6 +438,7 @@ private:
+   void saveRecentParams();
+ 
+   QMenu *m_fileMenu;
++  QMenu *m_editMenu;
+   QMenu *m_viewMenu; // Added
+   QMenu *m_modeMenu;
+   QMenu *m_windowMenu;
+@@ -499,6 +521,7 @@ private:
+   std::function<void(QRect)> m_areaSelectionCallback = nullptr;
+   ImageWidget::InteractionMode m_previousInteractionMode = ImageWidget::PanMode;
+   bool m_autoAddPointsAfterCoordinates = false;
++  bool m_switchingInspectorImage = false;
+ 
+ 
+   std::shared_ptr<colorscreen::image_data> m_scan;
+diff --git a/src/qtgui/main.cpp b/src/qtgui/main.cpp
+index 47f1392..e71ccb3 100644
+--- a/src/qtgui/main.cpp
++++ b/src/qtgui/main.cpp
+@@ -8,6 +8,7 @@
+ 
+ #include <QAction>
+ #include <QColor>
++#include <QCheckBox>
+ #include <QCommandLineOption>
+ #include <QCommandLineParser>
+ #include <QCoreApplication>
+@@ -821,6 +822,101 @@ int main(int argc, char *argv[]) {
+         return;
+       }
+ 
++      // Ordinary New Views must expose the same document-editing chrome as the
++      // primary presentation while keeping render/color/coordinate controls
++      // view-local. In particular Edit and Registration may not disappear.
++      QStringList viewMenus;
++      for (QAction *action : view->menuBar()->actions())
++        viewMenus << QString(action->text()).remove('&');
++      const QStringList expectedViewMenus = {QStringLiteral("File"),
++                                             QStringLiteral("Edit"),
++                                             QStringLiteral("View"),
++                                             QStringLiteral("Registration"),
++                                             QStringLiteral("Window"),
++                                             QStringLiteral("Help")};
++      if (viewMenus != expectedViewMenus) {
++        qCritical() << "New View menu chrome differs from an ordinary document"
++                    << viewMenus;
++        app.exit(14);
++        return;
++      }
++
++      QCheckBox *viewColorToggle = nullptr;
++      bool hasSelectTool = false;
++      bool hasAddPointTool = false;
++      if (QToolBar *toolbar = view->workspaceToolBar()) {
++        for (QCheckBox *checkBox : toolbar->findChildren<QCheckBox *>())
++          if (checkBox->text() == QObject::tr("Color"))
++            viewColorToggle = checkBox;
++        for (QAction *action : toolbar->actions()) {
++          if (action->text() == QObject::tr("Select"))
++            hasSelectTool = true;
++          if (action->text() == QObject::tr("Add Point"))
++            hasAddPointTool = true;
++        }
++      }
++      if (!viewColorToggle ||
++          (sourceScan->has_rgb() && viewColorToggle->isHidden()) ||
++          !hasSelectTool || !hasAddPointTool) {
++        qCritical() << "New View toolbar is missing ordinary document controls";
++        app.exit(14);
++        return;
++      }
++
++      // One-shot canvas tools belong to the document operation, not to the
++      // canvas that happened to be active when they were armed. Verify that
++      // distance and area tools migrate to another ordinary view of the same
++      // loaded image and leave the old view inert.
++      workspace->activateDocument(source);
++      QCoreApplication::processEvents();
++      if (!QMetaObject::invokeMethod(source, "onMeasureRequested",
++                                     Qt::DirectConnection) ||
++          source->primaryImageWidget()->interactionMode() !=
++              ImageWidget::MeasureMode) {
++        qCritical() << "Could not arm Measure in the primary view";
++        app.exit(14);
++        return;
++      }
++      workspace->activateView(view);
++      QCoreApplication::processEvents();
++      if (source->inspectorImageWidget() != view->imageWidget() ||
++          view-

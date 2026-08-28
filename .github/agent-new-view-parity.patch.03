@@ -1,0 +1,40 @@
+>imageWidget()->interactionMode() != ImageWidget::MeasureMode ||
++          source->primaryImageWidget()->interactionMode() !=
++              ImageWidget::PanMode) {
++        qCritical() << "Measure tool did not follow the active ordinary view";
++        app.exit(14);
++        return;
++      }
++      view->imageWidget()->setInteractionMode(ImageWidget::PanMode);
++
++      workspace->activateDocument(source);
++      QCoreApplication::processEvents();
++      if (!QMetaObject::invokeMethod(source, "onCropRequested",
++                                     Qt::DirectConnection) ||
++          source->primaryImageWidget()->interactionMode() !=
++              ImageWidget::CropMode) {
++        qCritical() << "Could not arm Crop in the primary view";
++        app.exit(14);
++        return;
++      }
++      workspace->activateView(view);
++      QCoreApplication::processEvents();
++      if (source->inspectorImageWidget() != view->imageWidget() ||
++          view->imageWidget()->interactionMode() != ImageWidget::CropMode ||
++          source->primaryImageWidget()->interactionMode() !=
++              ImageWidget::PanMode) {
++        qCritical() << "Area-selection tool did not follow the active ordinary view";
++        app.exit(14);
++        return;
++      }
++      if (!QMetaObject::invokeMethod(source, "onCropRequested",
++                                     Qt::DirectConnection) ||
++          view->imageWidget()->interactionMode() != ImageWidget::PanMode) {
++        qCritical() << "Could not cancel transferred Crop tool";
++        app.exit(14);
++        return;
++      }
++
+       app.detachView(view);
+       QCoreApplication::processEvents();
+       if (!guardedSource || !guardedView) {
