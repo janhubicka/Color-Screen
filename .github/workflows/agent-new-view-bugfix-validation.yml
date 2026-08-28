@@ -1,101 +1,47 @@
-name: Agent New View bugfix validation
+name: Agent Stop-focus validation publisher
 
 on:
   pull_request:
     branches: [ "agent/tmp-new-view-bugfix-validation-base-20260828" ]
 
 permissions:
-  contents: read
-  packages: read
+  contents: write
 
 jobs:
-  focused-gui-smoke:
+  publish:
     if: github.head_ref == 'agent/tmp-new-view-bugfix-validation-trigger-20260828'
     runs-on: ubuntu-24.04
-    container:
-      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    env:
-      LC_ALL: C.UTF-8
-      LANG: C.UTF-8
-      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    defaults:
-      run:
-        shell: bash
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Apply exact final delta
+      - name: Publish exact Stop-focus validation branch
+        shell: bash
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          cp .github/agent-new-view-second-delta.patch /tmp/new-view-second-delta.patch
-          echo "faad85b9603a4a56e7461e423e9f387e90b13874f95db62a758ac8b8f5a2678e  /tmp/new-view-second-delta.patch" | sha256sum -c -
+          cp .github/agent-new-view-second-delta.patch /tmp/stop.patch
+          echo "faad85b9603a4a56e7461e423e9f387e90b13874f95db62a758ac8b8f5a2678e  /tmp/stop.patch" | sha256sum -c -
           git checkout --detach 96adf6ec8816033460d8aef8d4f8dc122e01d6c6
-          git apply --check /tmp/new-view-second-delta.patch
-          git apply /tmp/new-view-second-delta.patch
+          git apply --check /tmp/stop.patch
+          git apply /tmp/stop.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/sanitizers.yml')
+          s=p.read_text()
+          mac='''        ./src/qtgui/colorscreen-qt \\\n          --smoke-test 20000 --smoke-test-expect-windows 1 \\\n          --smoke-test-window-lifetime \\\n          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"\n'''
+          mac_new=mac+'''\n        ./src/qtgui/colorscreen-qt \\\n          --smoke-test 20000 --smoke-test-expect-windows 2 \\\n          --smoke-test-user-visible-progress \\\n          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \\\n          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"\n'''
+          assert s.count(mac) == 1
+          s=s.replace(mac,mac_new,1)
+          win='''        ./src/qtgui/colorscreen-qt \\\n          --smoke-test 20000 --smoke-test-expect-windows 1 \\\n          --smoke-test-window-lifetime \\\n          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"\n'''
+          # second occurrence after mac replacement belongs to Windows
+          assert s.count(win) == 1
+          win_new=win+'''\n        ./src/qtgui/colorscreen-qt \\\n          --smoke-test 20000 --smoke-test-expect-windows 2 \\\n          --smoke-test-user-visible-progress \\\n          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \\\n          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"\n'''
+          s=s.replace(win,win_new,1)
+          p.write_text(s)
+          PY
           git diff --check
-      - name: Configure Qt checking build
-        run: ./configure --enable-checking --disable-static-link --disable-gtkgui --enable-qtgui > /tmp/configure.log 2>&1 || { tail -200 /tmp/configure.log; exit 1; }
-      - name: Build Qt GUI
-        run: make -j$(nproc) > /tmp/build.log 2>&1 || { tail -200 /tmp/build.log; exit 1; }
-      - name: Stop keeps current image
-        run: |
-          set -euo pipefail
-          GUI=./src/qtgui/colorscreen-qt
-          IMAGE="$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
-          for platform in offscreen minimal xcb; do
-            log="/tmp/stop-${platform}.log"
-            set +e
-            if [ "$platform" = xcb ]; then
-              xvfb-run -a env QT_QPA_PLATFORM=xcb "$GUI" \
-                --smoke-test 20000 --smoke-test-expect-windows 2 \
-                --smoke-test-user-visible-progress "$IMAGE" "$IMAGE" >"$log" 2>&1
-            else
-              env QT_QPA_PLATFORM="$platform" "$GUI" \
-                --smoke-test 20000 --smoke-test-expect-windows 2 \
-                --smoke-test-user-visible-progress "$IMAGE" "$IMAGE" >"$log" 2>&1
-            fi
-            rc=$?
-            set -e
-            if [ "$rc" -eq 0 ]; then
-              cat "$log"
-              echo "Stop regression passed with QPA backend $platform"
-              exit 0
-            fi
-            echo "Stop regression backend $platform failed with $rc"
-            cat "$log"
-          done
-          exit 1
-      - name: Tiled reference MTF detach
-        if: always()
-        run: |
-          set -euo pipefail
-          GUI=./src/qtgui/colorscreen-qt
-          IMAGE="$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
-          for platform in offscreen minimal xcb; do
-            log="/tmp/mtf-${platform}.log"
-            set +e
-            if [ "$platform" = xcb ]; then
-              xvfb-run -a env QT_QPA_PLATFORM=xcb "$GUI" \
-                --smoke-test 30000 --smoke-test-expect-windows 1 \
-                --smoke-test-slanted-reference "$IMAGE" >"$log" 2>&1
-            else
-              env QT_QPA_PLATFORM="$platform" "$GUI" \
-                --smoke-test 30000 --smoke-test-expect-windows 1 \
-                --smoke-test-slanted-reference "$IMAGE" >"$log" 2>&1
-            fi
-            rc=$?
-            set -e
-            if [ "$rc" -eq 0 ]; then
-              cat "$log"
-              echo "Reference MTF regression passed with QPA backend $platform"
-              exit 0
-            fi
-            echo "Reference MTF backend $platform failed with $rc"
-            cat "$log"
-          done
-          exit 1
+          git config user.name OpenAI
+          git config user.email noreply@openai.com
+          git add .agents/qtgui.md src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h src/qtgui/WorkspaceWindow.cpp src/qtgui/WorkspaceWindow.h src/qtgui/main.cpp .github/workflows/sanitizers.yml
+          git commit -m "qtgui: keep task controls from changing active image"
+          git push --force origin HEAD:refs/heads/agent/tmp-stop-focus-validation-product-20260828
