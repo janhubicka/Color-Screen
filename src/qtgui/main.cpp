@@ -8,6 +8,7 @@
 
 #include <QAction>
 #include <QColor>
+#include <QCheckBox>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
@@ -817,6 +818,101 @@ int main(int argc, char *argv[]) {
           source->inspectorImageWidget() != view->imageWidget()) {
         qCritical() << "New View does not present the owning document's full "
                        "inspector and Navigation/panel controls";
+        app.exit(14);
+        return;
+      }
+
+      // Ordinary New Views must expose the same document-editing chrome as the
+      // primary presentation while keeping render/color/coordinate controls
+      // view-local. In particular Edit and Registration may not disappear.
+      QStringList viewMenus;
+      for (QAction *action : view->menuBar()->actions())
+        viewMenus << QString(action->text()).remove('&');
+      const QStringList expectedViewMenus = {QStringLiteral("File"),
+                                             QStringLiteral("Edit"),
+                                             QStringLiteral("View"),
+                                             QStringLiteral("Registration"),
+                                             QStringLiteral("Window"),
+                                             QStringLiteral("Help")};
+      if (viewMenus != expectedViewMenus) {
+        qCritical() << "New View menu chrome differs from an ordinary document"
+                    << viewMenus;
+        app.exit(14);
+        return;
+      }
+
+      QCheckBox *viewColorToggle = nullptr;
+      bool hasSelectTool = false;
+      bool hasAddPointTool = false;
+      if (QToolBar *toolbar = view->workspaceToolBar()) {
+        for (QCheckBox *checkBox : toolbar->findChildren<QCheckBox *>())
+          if (checkBox->text() == QObject::tr("Color"))
+            viewColorToggle = checkBox;
+        for (QAction *action : toolbar->actions()) {
+          if (action->text() == QObject::tr("Select"))
+            hasSelectTool = true;
+          if (action->text() == QObject::tr("Add Point"))
+            hasAddPointTool = true;
+        }
+      }
+      if (!viewColorToggle ||
+          (sourceScan->has_rgb() && viewColorToggle->isHidden()) ||
+          !hasSelectTool || !hasAddPointTool) {
+        qCritical() << "New View toolbar is missing ordinary document controls";
+        app.exit(14);
+        return;
+      }
+
+      // One-shot canvas tools belong to the document operation, not to the
+      // canvas that happened to be active when they were armed. Verify that
+      // distance and area tools migrate to another ordinary view of the same
+      // loaded image and leave the old view inert.
+      workspace->activateDocument(source);
+      QCoreApplication::processEvents();
+      if (!QMetaObject::invokeMethod(source, "onMeasureRequested",
+                                     Qt::DirectConnection) ||
+          source->primaryImageWidget()->interactionMode() !=
+              ImageWidget::MeasureMode) {
+        qCritical() << "Could not arm Measure in the primary view";
+        app.exit(14);
+        return;
+      }
+      workspace->activateView(view);
+      QCoreApplication::processEvents();
+      if (source->inspectorImageWidget() != view->imageWidget() ||
+          view->imageWidget()->interactionMode() != ImageWidget::MeasureMode ||
+          source->primaryImageWidget()->interactionMode() !=
+              ImageWidget::PanMode) {
+        qCritical() << "Measure tool did not follow the active ordinary view";
+        app.exit(14);
+        return;
+      }
+      view->imageWidget()->setInteractionMode(ImageWidget::PanMode);
+
+      workspace->activateDocument(source);
+      QCoreApplication::processEvents();
+      if (!QMetaObject::invokeMethod(source, "onCropRequested",
+                                     Qt::DirectConnection) ||
+          source->primaryImageWidget()->interactionMode() !=
+              ImageWidget::CropMode) {
+        qCritical() << "Could not arm Crop in the primary view";
+        app.exit(14);
+        return;
+      }
+      workspace->activateView(view);
+      QCoreApplication::processEvents();
+      if (source->inspectorImageWidget() != view->imageWidget() ||
+          view->imageWidget()->interactionMode() != ImageWidget::CropMode ||
+          source->primaryImageWidget()->interactionMode() !=
+              ImageWidget::PanMode) {
+        qCritical() << "Area-selection tool did not follow the active ordinary view";
+        app.exit(14);
+        return;
+      }
+      if (!QMetaObject::invokeMethod(source, "onCropRequested",
+                                     Qt::DirectConnection) ||
+          view->imageWidget()->interactionMode() != ImageWidget::PanMode) {
+        qCritical() << "Could not cancel transferred Crop tool";
         app.exit(14);
         return;
       }

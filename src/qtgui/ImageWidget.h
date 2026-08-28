@@ -160,6 +160,11 @@ public:
    */
   void setInteractionMode(InteractionMode mode);
 
+  /** Return the scan currently displayed by this widget. */
+  std::shared_ptr<colorscreen::image_data> sharedImageData() const {
+    return m_scan;
+  }
+
   struct SelectedPoint {
     size_t index;
     enum Type { RegistrationPoint } type;

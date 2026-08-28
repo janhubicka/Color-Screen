@@ -153,7 +153,10 @@ MainWindow *ImageViewWindow::sourceDocument() const { return m_document.data(); 
 QWidget *ImageViewWindow::workspaceInspectorWidget() const {
   if (m_slantedEdgeReference)
     return m_referenceInspector;
-  return m_document ? m_document->workspaceInspectorWidget() : nullptr;
+  if (!m_document || !m_imageWidget ||
+      m_imageWidget->sharedImageData() != m_document->sharedImageData())
+    return nullptr;
+  return m_document->workspaceInspectorWidget();
 }
 
 /** Build the standard compact toolbar and menus for a secondary image view. */
@@ -177,7 +180,7 @@ void ImageViewWindow::setupUi() {
           this, &ImageViewWindow::onModeChanged);
 
   m_colorCheckBox = new QCheckBox(tr("Color"), m_toolbar);
-  m_toolbar->addWidget(m_colorCheckBox);
+  m_colorCheckBoxAction = m_toolbar->addWidget(m_colorCheckBox);
   connect(m_colorCheckBox, &QCheckBox::toggled, this,
           &ImageViewWindow::onColorChanged);
 
@@ -211,51 +214,65 @@ void ImageViewWindow::setupUi() {
 
   m_toolbar->addSeparator();
 
-  QAction *pan = m_toolbar->addAction(viewIcon(":/icons/hand.svg"), tr("Pan"));
+  QAction *pan = new QAction(viewIcon(":/icons/hand.svg"), tr("Pan"), this);
+  if (m_slantedEdgeReference || !m_document)
+    m_toolbar->addAction(pan);
   pan->setCheckable(true);
   pan->setChecked(true);
   pan->setShortcut(QKeySequence(QStringLiteral("P")));
   connect(pan, &QAction::triggered, m_imageWidget,
           [this]() { m_imageWidget->setInteractionMode(ImageWidget::PanMode); });
+  connect(m_imageWidget, &ImageWidget::interactionModeChanged, this,
+          [pan](ImageWidget::InteractionMode mode) {
+            const QSignalBlocker blocker(pan);
+            pan->setChecked(mode == ImageWidget::PanMode);
+          });
 
   QAction *zoomIn =
-      m_toolbar->addAction(viewIcon(":/icons/zoom-in.svg"), tr("Zoom In"));
+      new QAction(viewIcon(":/icons/zoom-in.svg"), tr("Zoom In"), this);
+  if (m_slantedEdgeReference || !m_document)
+    m_toolbar->addAction(zoomIn);
   zoomIn->setShortcut(QKeySequence::ZoomIn);
   connect(zoomIn, &QAction::triggered, m_imageWidget,
           [this]() { m_imageWidget->smoothZoomBy(1.25); });
   QAction *zoomOut =
-      m_toolbar->addAction(viewIcon(":/icons/zoom-out.svg"), tr("Zoom Out"));
+      new QAction(viewIcon(":/icons/zoom-out.svg"), tr("Zoom Out"), this);
+  if (m_slantedEdgeReference || !m_document)
+    m_toolbar->addAction(zoomOut);
   zoomOut->setShortcut(QKeySequence::ZoomOut);
   connect(zoomOut, &QAction::triggered, m_imageWidget,
           [this]() { m_imageWidget->smoothZoomBy(0.8); });
   QAction *zoom100 =
-      m_toolbar->addAction(viewIcon(":/icons/zoom-100.svg"), tr("Zoom 1:1"));
+      new QAction(viewIcon(":/icons/zoom-100.svg"), tr("Zoom 1:1"), this);
+  if (m_slantedEdgeReference || !m_document)
+    m_toolbar->addAction(zoom100);
   zoom100->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
   connect(zoom100, &QAction::triggered, m_imageWidget,
           [this]() { m_imageWidget->smoothZoomTo(1.0); });
   QAction *fit =
-      m_toolbar->addAction(viewIcon(":/icons/zoom-fit.svg"), tr("Fit"));
+      new QAction(viewIcon(":/icons/zoom-fit.svg"), tr("Fit"), this);
+  if (m_slantedEdgeReference || !m_document)
+    m_toolbar->addAction(fit);
   fit->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
   connect(fit, &QAction::triggered, m_imageWidget, &ImageWidget::smoothFitToView);
 
   if (!m_slantedEdgeReference) {
-    m_toolbar->addSeparator();
-    m_rotateLeftAction = m_toolbar->addAction(viewIcon(":/icons/rotate-left.svg"),
-                                              tr("Rotate Left"));
+    m_rotateLeftAction = new QAction(viewIcon(":/icons/rotate-left.svg"),
+                                     tr("Rotate Left"), this);
     m_rotateLeftAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
     connect(m_rotateLeftAction, &QAction::triggered, this, [this]() {
       if (m_document)
         m_document->rotateDocumentLeft();
     });
-    m_rotateRightAction = m_toolbar->addAction(viewIcon(":/icons/rotate-right.svg"),
-                                               tr("Rotate Right"));
+    m_rotateRightAction = new QAction(viewIcon(":/icons/rotate-right.svg"),
+                                      tr("Rotate Right"), this);
     m_rotateRightAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
     connect(m_rotateRightAction, &QAction::triggered, this, [this]() {
       if (m_document)
         m_document->rotateDocumentRight();
     });
-    m_mirrorAction = m_toolbar->addAction(viewIcon(":/icons/mirror.svg"),
-                                          tr("Mirror Horizontally"));
+    m_mirrorAction = new QAction(viewIcon(":/icons/mirror.svg"),
+                                 tr("Mirror Horizontally"), this);
     m_mirrorAction->setCheckable(true);
     connect(m_mirrorAction, &QAction::toggled, this, [this](bool checked) {
       if (!m_document || !m_imageWidget)
@@ -268,6 +285,9 @@ void ImageViewWindow::setupUi() {
     });
   }
 
+  if (!m_slantedEdgeReference && m_document)
+    m_document->appendOrdinaryViewToolActions(m_toolbar);
+
   QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
   QAction *closeView = fileMenu->addAction(tr("&Close View"));
   closeView->setShortcut(QKeySequence::Close);
@@ -278,6 +298,10 @@ void ImageViewWindow::setupUi() {
     else
       close();
   });
+
+  if (!m_slantedEdgeReference && m_document)
+    if (QAction *edit = m_document->ordinaryViewEditMenuAction())
+      menuBar()->addAction(edit);
 
   QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
   viewMenu->addAction(pan);
@@ -292,6 +316,11 @@ void ImageViewWindow::setupUi() {
     viewMenu->addAction(m_rotateRightAction);
     viewMenu->addAction(m_mirrorAction);
   }
+
+  if (!m_slantedEdgeReference && m_document)
+    if (QAction *registration =
+            m_document->ordinaryViewRegistrationMenuAction())
+      menuBar()->addAction(registration);
 
   QMenu *windowMenu = menuBar()->addMenu(tr("&Window"));
   connect(windowMenu, &QMenu::aboutToShow, this, [this, windowMenu]() {
@@ -587,6 +616,8 @@ void ImageViewWindow::updateViewControls() {
       prop.flags & render_type_property::SUPPORTS_IR_RGB_SWITCH;
 
   m_colorCheckBox->blockSignals(true);
+  if (m_colorCheckBoxAction)
+    m_colorCheckBoxAction->setVisible(hasRgb);
   m_colorCheckBox->setVisible(hasRgb);
   m_colorCheckBox->setEnabled(hasRgb && supportsSwitch);
   m_colorCheckBox->setChecked(hasRgb && m_renderTypeParams.color);
@@ -692,6 +723,9 @@ void ImageViewWindow::onCoordinateChanged(int index) {
       m_coordinateComboBox->itemData(index).toInt());
   m_imageWidget->setCoordinateSpace(coordinates);
   updateViewControls();
+  if (!m_slantedEdgeReference && m_document &&
+      m_document->inspectorImageWidget() == m_imageWidget)
+    m_document->setInspectorImageWidget(m_imageWidget);
 }
 
 colorscreen::render_coordinate_space ImageViewWindow::coordinateSpace() const {
@@ -706,6 +740,8 @@ bool ImageViewWindow::setCoordinateSpace(
     return false;
   const bool ok = m_imageWidget->setCoordinateSpace(coordinates);
   updateViewControls();
+  if (m_document && m_document->inspectorImageWidget() == m_imageWidget)
+    m_document->setInspectorImageWidget(m_imageWidget);
   return ok && m_imageWidget->coordinateSpace() == coordinates;
 }
 
@@ -894,7 +930,9 @@ void ImageViewWindow::onReferenceAreaSelected(QRect widgetArea) {
 /** Present the source document's full inspector in this detached ordinary view. */
 void ImageViewWindow::claimDocumentInspector() {
   if (m_slantedEdgeReference || m_workspaceEmbedded || !m_document ||
-      !m_documentInspectorHost || !m_documentInspectorDock)
+      !m_documentInspectorHost || !m_documentInspectorDock ||
+      !m_imageWidget || m_imageWidget->sharedImageData() !=
+                            m_document->sharedImageData())
     return;
 
   QWidget *inspector = m_document->takeWorkspaceInspector();

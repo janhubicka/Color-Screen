@@ -136,12 +136,19 @@ reference from its own filename using the current demosaic mode.
 views present the same complete Navigation + parameter-panel inspector as the
 primary view; the document owns one inspector instance and the active ordinary
 view merely presents it, so panel state, undo routing, and detached diagnostic
-widgets are never duplicated. Navigation and panel tools that act on an image
-(crop/area selection, measurement, geometry visualization, and registration
-interaction) target the ordinary view currently presenting the inspector.
-Detached ordinary views host that same inspector locally while active and return
-it to the workspace/primary window on activation changes. Views share the image and document geometry while render mode, Color/IR
-choice, coordinate-space choice, zoom, and pan remain view-local. Scan views
+widgets are never duplicated. Ordinary views also expose the document's Edit
+and Registration menus and the same canvas-tool toolbar actions as the primary
+presentation; render mode, Color/IR, and coordinate controls remain view-local.
+Navigation and panel tools that act on an image (crop/area selection, distance
+measurement, geometry visualization, and registration interaction) target the
+ordinary view currently presenting the inspector. If such a tool is armed and
+another ordinary view of the same loaded scan is activated, transfer the tool to
+that view and return the old canvas to Pan. Never transfer a document operation
+to a specialized/reference view or any ImageWidget whose loaded image differs
+from the document scan. Detached ordinary views host that same inspector locally
+while active and return it to the workspace/primary window on activation changes.
+Views share the image and document geometry while render mode, Color/IR choice,
+coordinate-space choice, zoom, and pan remain view-local. Scan views
 apply the shared scan crop, quarter-turn rotation, and scan mirror. Screen/final
 views must not layer those presentation transforms over libcolorscreen's final
 plane; they use the continuous `scr_to_img_parameters::final_rotation` and

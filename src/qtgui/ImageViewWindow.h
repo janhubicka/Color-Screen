@@ -180,6 +180,7 @@ private:
   QAction *m_finalRotationLabelAction = nullptr;
   QAction *m_finalRotationSpinAction = nullptr;
   QCheckBox *m_colorCheckBox = nullptr;
+  QAction *m_colorCheckBoxAction = nullptr;
   QAction *m_rotateLeftAction = nullptr;
   QAction *m_rotateRightAction = nullptr;
   QAction *m_mirrorAction = nullptr;
