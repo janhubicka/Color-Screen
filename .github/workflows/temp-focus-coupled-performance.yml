@@ -1,0 +1,110 @@
+name: TEMP coupled focus performance
+
+on:
+  push:
+    branches:
+      - agent/tmp-focus-coupled-performance-20260828
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare focused benchmark harness
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/libcolorscreen/focus-analysis-unittests.C')
+          s = p.read_text()
+          old = '''int
+          main ()
+          {
+            if (!test_joint_focus_analysis ()
+                || !test_sky_candidate_budget ()
+                || !test_bw_selection_uses_primary_intensities ()
+                || !test_bw_multitile_focus ()
+                || !test_coupled_physical_focus_recovers_screen_mtf ()
+                || !test_grayscale_image_search ())
+              return 1;
+            printf ("focus-analysis-unittests: PASS\\n");
+            return 0;
+          }'''
+          new = '''int
+          main ()
+          {
+            if (!test_coupled_physical_focus_recovers_screen_mtf ())
+              return 1;
+            printf ("focus-analysis-coupled-benchmark: PASS\\n");
+            return 0;
+          }'''
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, new))
+          PY
+
+      - name: Build baseline
+        shell: bash
+        run: |
+          set -euxo pipefail
+          CXXFLAGS='-Ofast -march=native -g' CFLAGS="$CXXFLAGS" ./configure
+          make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
+
+      - name: Benchmark baseline slow path
+        shell: bash
+        run: |
+          set -euxo pipefail
+          for i in 1 2; do
+            /usr/bin/time -f "BASELINE_${i} real=%e user=%U sys=%S maxrss=%M" \
+              ./src/libcolorscreen/focus-analysis-unittests
+          done
+
+      - name: Enable exact prepared source for sigma fits
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/libcolorscreen/finetune.C')
+          s = p.read_text()
+          old = '''    return optimize_scanner_mtf_defocus && !optimize_scanner_mtf_sigma
+                     && !optimize_scanner_mtf_channel_defocus && !optimize_strips
+                     && focus_screen_cache_eligible_p ()'''
+          new = '''    return (optimize_scanner_mtf_defocus || optimize_scanner_mtf_sigma)
+                     && !optimize_scanner_mtf_channel_defocus && !optimize_strips
+                     && focus_screen_cache_eligible_p ()'''
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, new))
+          PY
+          git diff --check
+          git diff -- src/libcolorscreen/finetune.C
+          make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
+
+      - name: Benchmark prepared-source path
+        shell: bash
+        run: |
+          set -euxo pipefail
+          for i in 1 2; do
+            /usr/bin/time -f "PREPARED_${i} real=%e user=%U sys=%S maxrss=%M" \
+              ./src/libcolorscreen/focus-analysis-unittests
+          done
+
+      - name: Run complete focus-analysis regression
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git checkout -- src/libcolorscreen/focus-analysis-unittests.C
+          make -C src/libcolorscreen -j$(nproc) focus-analysis-unittests
+          ./src/libcolorscreen/focus-analysis-unittests
