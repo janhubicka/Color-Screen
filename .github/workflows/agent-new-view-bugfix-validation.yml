@@ -1,0 +1,47 @@
+name: Agent New View bugfix validation
+
+on:
+  pull_request:
+    branches: [ "agent/tmp-new-view-bugfix-validation-base-20260828" ]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  focused-gui-smoke:
+    if: github.head_ref == 'agent/tmp-new-view-bugfix-validation-trigger-20260828'
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Qt checking build
+        run: |
+          set -euo pipefail
+          ./configure --enable-checking --disable-static-link --disable-gtkgui --enable-qtgui
+      - name: Build Qt GUI
+        run: make -j$(nproc)
+      - name: Stop keeps current image
+        run: |
+          set -euo pipefail
+          ./src/qtgui/colorscreen-qt \
+            --smoke-test 20000 --smoke-test-expect-windows 2 \
+            --smoke-test-user-visible-progress \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+      - name: Tiled reference MTF detach
+        run: |
+          set -euo pipefail
+          ./src/qtgui/colorscreen-qt \
+            --smoke-test 30000 --smoke-test-expect-windows 1 \
+            --smoke-test-slanted-reference \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
