@@ -1,0 +1,55 @@
+name: Agent new-view parity publisher v2
+
+on:
+  pull_request:
+    branches: [ "agent/tmp-new-view-source-base-20260828" ]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-new-view-source-trigger-20260828'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply and publish corrected patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show HEAD:.github/workflows/agent-new-view-parity-publish.yml > /tmp/publisher.yml
+          git checkout --detach 98f53b934e1dadf655d0be1e2510aa4484614a04
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('/tmp/publisher.yml').read_text()
+          marker = "          python3 - <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          PY\n", start)
+          code = textwrap.dedent(workflow[start:end])
+
+          # The first publisher had one deliberately superseded exact-match
+          # attempt before its tolerant implementation of the same addView
+          # change.  Drop only that attempt and execute the remaining patch.
+          obsolete = code.index('# Only ordinary views presenting the exact source scan may borrow tools.')
+          tolerant = code.index('# The exact source contains the closing parenthesis above;', obsolete)
+          code = code[:obsolete] + code[tolerant:]
+          exec(compile(code, '<new-view-parity-patch>', 'exec'))
+          PY
+          git diff --check
+          test "$(git diff --name-only | sort)" = "$(printf '%s\n' \
+            .agents/qtgui.md \
+            src/qtgui/ImageViewWindow.cpp \
+            src/qtgui/ImageViewWindow.h \
+            src/qtgui/MainWindow.cpp \
+            src/qtgui/WorkspaceWindow.cpp | sort)"
+          git config user.name OpenAI
+          git config user.email noreply@openai.com
+          git add .agents/qtgui.md src/qtgui/ImageViewWindow.cpp \
+                  src/qtgui/ImageViewWindow.h src/qtgui/MainWindow.cpp \
+                  src/qtgui/WorkspaceWindow.cpp
+          git commit -m "qtgui: make ordinary views full document peers" -m "Give ordinary New View presentations the document's Edit and Registration actions and mirror missing non-widget toolbar actions while retaining view-local rendering controls. Keep the Color/IR widget action explicitly visible when supported.\n\nMove the selected interaction mode when the shared inspector changes ordinary views, so pending area and distance tools can be completed in another tab without reactivating the source view. Gate document-tool borrowing on the secondary view displaying the exact shared document scan, preserving the specialized slanted-edge tool model."
+          git push --force origin HEAD:agent/new-view-parity
