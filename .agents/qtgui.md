@@ -71,8 +71,14 @@ to that same `QStatusBar`; tabs must not keep private status-message state or
 mirror messages when activation changes. Only detached top-level windows use
 their private status bars. The active document's transient progress controls are
 temporarily moved into the shared status line, while dedicated long-running task
-rows remain in the workspace task strip. Inactive documents retain their complete
-processing and undo state.
+rows remain in the workspace task strip. Their Stop/Cancel buttons use
+`Qt::TabFocus`: keyboard users can reach them, but a mouse click must not steal
+keyboard focus from the active MDI image. Before a keyboard-focused task control
+is disabled or its row is removed, return focus to the image presentation that is
+currently active. Showing, stopping, completing, or removing a global task must
+never let Qt focus fallback select another MDI child (in particular the first
+tab), and an inactive document's task must never steal focus from the current
+image. Inactive documents retain their complete processing and undo state.
 
 **Window → Arrange Images** switches the same live documents between tabbed,
 tiled, and cascaded MDI views using `setViewMode()`, `tileSubWindows()`, and
@@ -128,20 +134,30 @@ uses the source `MainWindow` as the authoritative parameter/undo/recovery
 model. It never owns or suggests another `.par` file. Its inspector keeps the
 standard `NavigationView` above a single **Sharpness** tab, and rendering is
 limited to **Original digital capture** and **Image layer**. Measurements are
-applied through the source document's undoable parameter path. **Reload and
-demosaic** reloads both the source scan and every associated slanted-edge
-reference from its own filename using the current demosaic mode.
+applied through the source document's undoable parameter path. Detachable
+Sharpness diagnostics (MTF, dot spread, finetune images, and adaptive-sharpening
+charts) are presentation owned by that reference view and detach into its own
+floating docks; they must never be handed to the source document's diagnostic
+docks. **Reload and demosaic** reloads both the source scan and every associated
+slanted-edge reference from its own filename using the current demosaic mode.
 
 **Window → New View** creates another MDI view of the same document. Ordinary
 views present the same complete Navigation + parameter-panel inspector as the
 primary view; the document owns one inspector instance and the active ordinary
 view merely presents it, so panel state, undo routing, and detached diagnostic
-widgets are never duplicated. Navigation and panel tools that act on an image
-(crop/area selection, measurement, geometry visualization, and registration
-interaction) target the ordinary view currently presenting the inspector.
-Detached ordinary views host that same inspector locally while active and return
-it to the workspace/primary window on activation changes. Views share the image and document geometry while render mode, Color/IR
-choice, coordinate-space choice, zoom, and pan remain view-local. Scan views
+widgets are never duplicated. Ordinary views also expose the document's Edit
+and Registration menus and the same canvas-tool toolbar actions as the primary
+presentation; render mode, Color/IR, and coordinate controls remain view-local.
+Navigation and panel tools that act on an image (crop/area selection, distance
+measurement, geometry visualization, and registration interaction) target the
+ordinary view currently presenting the inspector. If such a tool is armed and
+another ordinary view of the same loaded scan is activated, transfer the tool to
+that view and return the old canvas to Pan. Never transfer a document operation
+to a specialized/reference view or any ImageWidget whose loaded image differs
+from the document scan. Detached ordinary views host that same inspector locally
+while active and return it to the workspace/primary window on activation changes.
+Views share the image and document geometry while render mode, Color/IR choice,
+coordinate-space choice, zoom, and pan remain view-local. Scan views
 apply the shared scan crop, quarter-turn rotation, and scan mirror. Screen/final
 views must not layer those presentation transforms over libcolorscreen's final
 plane; they use the continuous `scr_to_img_parameters::final_rotation` and

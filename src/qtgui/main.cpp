@@ -2,12 +2,14 @@
 #include "MainWindow.h"
 #include "ImageViewWindow.h"
 #include "ImageWidget.h"
+#include "SharpnessPanel.h"
 #include "CoordinateTransformer.h"
 #include "WorkspaceWindow.h"
 #include "progress-info.h"
 
 #include <QAction>
 #include <QColor>
+#include <QCheckBox>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
@@ -580,12 +582,32 @@ int main(int argc, char *argv[]) {
   }
 
   if (parser.isSet(userVisibleProgressOption)) {
-    QTimer::singleShot(250, &app, [&app]() {
+    auto startProgressSmoke = std::make_shared<std::function<void(int)>>();
+    const std::weak_ptr<std::function<void(int)>> weakStartProgressSmoke =
+        startProgressSmoke;
+    *startProgressSmoke =
+        [&app, weakStartProgressSmoke](int attemptsLeft) {
       WorkspaceWindow *workspace = app.workspaceWindow();
       const QList<MainWindow *> documents = app.documentWindows();
-      if (!workspace || documents.size() < 2) {
+      bool loaded = documents.size() >= 2;
+      for (MainWindow *document : documents) {
+        if (document && !document->currentImageFile().isEmpty() &&
+            !document->sharedImageData()) {
+          loaded = false;
+          break;
+        }
+      }
+      if (!workspace || !loaded) {
+        if (attemptsLeft > 0) {
+          if (auto retry = weakStartProgressSmoke.lock()) {
+            QTimer::singleShot(100, &app, [retry, attemptsLeft]() {
+              (*retry)(attemptsLeft - 1);
+            });
+            return;
+          }
+        }
         qCritical()
-            << "User-visible progress smoke test requires two documents";
+            << "User-visible progress smoke test requires two ready documents";
         app.exit(13);
         return;
       }
@@ -685,16 +707,70 @@ int main(int argc, char *argv[]) {
         return;
       }
 
-      stopButton->click();
-      cancelButton->click();
-      if (!stopProgress->pool_cancel() || !cancelProgress->pool_cancel()) {
-        qCritical() << "Dedicated progress actions did not request termination";
+      // Reproduce the real Stop path with the task owner as the current tab.
+      // Removing the focused task row must not make QMdiArea fall back to the
+      // first document.
+      workspace->activateDocument(stopDocument);
+      QCoreApplication::processEvents();
+      if (workspace->currentDocument() != stopDocument) {
+        qCritical() << "Could not activate Stop task owner before termination";
         app.exit(13);
         return;
       }
 
+      // Reproduce a mouse Stop click. Dedicated task controls must not accept
+      // mouse focus, otherwise focusing a workspace-global dock can make
+      // QMdiArea select another child before the click handler even runs.
+      if (stopButton->focusPolicy() != Qt::TabFocus) {
+        qCritical() << "Dedicated Stop button unexpectedly accepts mouse focus";
+        app.exit(13);
+        return;
+      }
+      stopDocument->primaryImageWidget()->setFocus(Qt::OtherFocusReason);
+      QCoreApplication::processEvents();
+      if (workspace->currentDocument() != stopDocument) {
+        qCritical() << "Focusing Stop task image changed the active document";
+        app.exit(13);
+        return;
+      }
+      stopButton->click();
+      QCoreApplication::processEvents();
+      if (!stopProgress->pool_cancel()) {
+        qCritical() << "Stop progress action did not request termination";
+        app.exit(13);
+        return;
+      }
+      if (workspace->currentDocument() != stopDocument) {
+        qCritical() << "Pressing Stop changed the active document";
+        app.exit(13);
+        return;
+      }
       stopDocument->removeProgress(stopProgress);
+      QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+      QCoreApplication::processEvents();
+      if (workspace->currentDocument() != stopDocument) {
+        qCritical() << "Stopping a task changed the active document";
+        app.exit(13);
+        return;
+      }
+
+      cancelButton->click();
+      if (!cancelProgress->pool_cancel()) {
+        qCritical() << "Cancel progress action did not request termination";
+        app.exit(13);
+        return;
+      }
       cancelDocument->removeProgress(cancelProgress);
+      QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+      QCoreApplication::processEvents();
+      if (workspace->currentDocument() != stopDocument) {
+        qCritical() << "Removing another document's task changed the active document";
+        app.exit(13);
+        return;
+      }
+        };
+    QTimer::singleShot(250, &app, [startProgressSmoke]() {
+      (*startProgressSmoke)(80);
     });
   }
 
@@ -821,6 +897,101 @@ int main(int argc, char *argv[]) {
         return;
       }
 
+      // Ordinary New Views must expose the same document-editing chrome as the
+      // primary presentation while keeping render/color/coordinate controls
+      // view-local. In particular Edit and Registration may not disappear.
+      QStringList viewMenus;
+      for (QAction *action : view->menuBar()->actions())
+        viewMenus << QString(action->text()).remove('&');
+      const QStringList expectedViewMenus = {QStringLiteral("File"),
+                                             QStringLiteral("Edit"),
+                                             QStringLiteral("View"),
+                                             QStringLiteral("Registration"),
+                                             QStringLiteral("Window"),
+                                             QStringLiteral("Help")};
+      if (viewMenus != expectedViewMenus) {
+        qCritical() << "New View menu chrome differs from an ordinary document"
+                    << viewMenus;
+        app.exit(14);
+        return;
+      }
+
+      QCheckBox *viewColorToggle = nullptr;
+      bool hasSelectTool = false;
+      bool hasAddPointTool = false;
+      if (QToolBar *toolbar = view->workspaceToolBar()) {
+        for (QCheckBox *checkBox : toolbar->findChildren<QCheckBox *>())
+          if (checkBox->text() == QObject::tr("Color"))
+            viewColorToggle = checkBox;
+        for (QAction *action : toolbar->actions()) {
+          if (action->text() == QObject::tr("Select"))
+            hasSelectTool = true;
+          if (action->text() == QObject::tr("Add Point"))
+            hasAddPointTool = true;
+        }
+      }
+      if (!viewColorToggle ||
+          (sourceScan->has_rgb() && viewColorToggle->isHidden()) ||
+          !hasSelectTool || !hasAddPointTool) {
+        qCritical() << "New View toolbar is missing ordinary document controls";
+        app.exit(14);
+        return;
+      }
+
+      // One-shot canvas tools belong to the document operation, not to the
+      // canvas that happened to be active when they were armed. Verify that
+      // distance and area tools migrate to another ordinary view of the same
+      // loaded image and leave the old view inert.
+      workspace->activateDocument(source);
+      QCoreApplication::processEvents();
+      if (!QMetaObject::invokeMethod(source, "onMeasureRequested",
+                                     Qt::DirectConnection) ||
+          source->primaryImageWidget()->interactionMode() !=
+              ImageWidget::MeasureMode) {
+        qCritical() << "Could not arm Measure in the primary view";
+        app.exit(14);
+        return;
+      }
+      workspace->activateView(view);
+      QCoreApplication::processEvents();
+      if (source->inspectorImageWidget() != view->imageWidget() ||
+          view->imageWidget()->interactionMode() != ImageWidget::MeasureMode ||
+          source->primaryImageWidget()->interactionMode() !=
+              ImageWidget::PanMode) {
+        qCritical() << "Measure tool did not follow the active ordinary view";
+        app.exit(14);
+        return;
+      }
+      view->imageWidget()->setInteractionMode(ImageWidget::PanMode);
+
+      workspace->activateDocument(source);
+      QCoreApplication::processEvents();
+      if (!QMetaObject::invokeMethod(source, "onCropRequested",
+                                     Qt::DirectConnection) ||
+          source->primaryImageWidget()->interactionMode() !=
+              ImageWidget::CropMode) {
+        qCritical() << "Could not arm Crop in the primary view";
+        app.exit(14);
+        return;
+      }
+      workspace->activateView(view);
+      QCoreApplication::processEvents();
+      if (source->inspectorImageWidget() != view->imageWidget() ||
+          view->imageWidget()->interactionMode() != ImageWidget::CropMode ||
+          source->primaryImageWidget()->interactionMode() !=
+              ImageWidget::PanMode) {
+        qCritical() << "Area-selection tool did not follow the active ordinary view";
+        app.exit(14);
+        return;
+      }
+      if (!QMetaObject::invokeMethod(source, "onCropRequested",
+                                     Qt::DirectConnection) ||
+          view->imageWidget()->interactionMode() != ImageWidget::PanMode) {
+        qCritical() << "Could not cancel transferred Crop tool";
+        app.exit(14);
+        return;
+      }
+
       app.detachView(view);
       QCoreApplication::processEvents();
       if (!guardedSource || !guardedView) {
@@ -865,9 +1036,11 @@ int main(int argc, char *argv[]) {
       bool hasIconOnlyRotation = false;
       if (QToolBar *toolbar = view->workspaceToolBar()) {
         for (QAction *action : toolbar->actions()) {
-          if (action->text() == QObject::tr("Zoom In") && !action->icon().isNull())
+          const QString actionText =
+              QString(action->text()).remove(QLatin1Char('&'));
+          if (actionText == QObject::tr("Zoom In") && !action->icon().isNull())
             hasIconOnlyZoom = true;
-          if (action->text() == QObject::tr("Rotate Right") && !action->icon().isNull())
+          if (actionText == QObject::tr("Rotate Right") && !action->icon().isNull())
             hasIconOnlyRotation = true;
         }
       }
@@ -1106,7 +1279,15 @@ int main(int argc, char *argv[]) {
           break;
         }
       }
-      if (!source) {
+      if (!source || !source->sharedImageData()) {
+        if (attemptsLeft > 0) {
+          if (auto retry = weakStartReferenceSmoke.lock()) {
+            QTimer::singleShot(100, &app, [retry, attemptsLeft]() {
+              (*retry)(attemptsLeft - 1);
+            });
+            return;
+          }
+        }
         qCritical() << "Slanted reference smoke test requires a visible loaded image";
         app.exit(15);
         return;
@@ -1172,6 +1353,54 @@ int main(int argc, char *argv[]) {
           app.exit(15);
           return;
         }
+
+        // Reproduce the MTF-detach failure with the source and specialized
+        // reference visible as MDI tiles.  The reference owns its Sharpness
+        // panel, so the detached chart must be adopted by a dock belonging to
+        // that view rather than disappearing from the detachable section.
+        workspace->tileDocuments();
+        workspace->activateView(reference);
+        QCoreApplication::processEvents();
+        SharpnessPanel *sharpness =
+            reference->workspaceInspectorWidget()->findChild<SharpnessPanel *>();
+        QWidget *mtfChart = sharpness ? sharpness->getMTFChartWidget() : nullptr;
+        QWidget *mtfSection = mtfChart ? mtfChart->parentWidget() : nullptr;
+        QPushButton *detachMtf = nullptr;
+        if (mtfSection) {
+          for (QPushButton *button : mtfSection->findChildren<QPushButton *>()) {
+            if (button && button->text() == QStringLiteral("Detach")) {
+              detachMtf = button;
+              break;
+            }
+          }
+        }
+        if (!sharpness || !mtfChart || !detachMtf) {
+          qCritical() << "Could not locate reference MTF detachable section";
+          app.exit(15);
+          return;
+        }
+        detachMtf->click();
+        QCoreApplication::processEvents();
+        QDockWidget *mtfDock = reference->findChild<QDockWidget *>(
+            QStringLiteral("SlantedEdgeMTFChartDock"));
+        if (!mtfDock || !mtfDock->isVisible() || !mtfDock->isFloating() ||
+            !mtfDock->widget() || !mtfDock->isAncestorOf(mtfChart)) {
+          qCritical() << "Reference MTF chart disappeared instead of detaching";
+          app.exit(15);
+          return;
+        }
+        mtfDock->close();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QCoreApplication::processEvents();
+        if (mtfDock->widget() ||
+            !reference->workspaceInspectorWidget()->isAncestorOf(mtfChart)) {
+          qCritical() << "Reference MTF chart did not reattach after dock close";
+          app.exit(15);
+          return;
+        }
+        workspace->showTabbedDocuments();
+        workspace->activateView(reference);
+        QCoreApplication::processEvents();
 
         const auto beforeReload = reference->sharedImageData();
         app.reloadSlantedEdgeReferences(source);

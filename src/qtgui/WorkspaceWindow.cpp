@@ -721,6 +721,40 @@ void WorkspaceWindow::updateUserVisibleProgressDockVisibility() {
   m_userVisibleProgressDock->setVisible(hasVisibleRows);
 }
 
+/** Return keyboard focus from CONTROL in the global task strip to the current
+    image without allowing focus fallback to select another MDI child. */
+bool WorkspaceWindow::restoreFocusFromTaskControl(QWidget *control) {
+  if (!control || !m_mdiArea || !m_userVisibleProgressStack ||
+      (control != m_userVisibleProgressStack &&
+       !m_userVisibleProgressStack->isAncestorOf(control)))
+    return false;
+
+  // currentSubWindow() is the MDI presentation the user selected. Prefer it
+  // over Qt's focus-derived activeSubWindow(), which may already be changing
+  // while focus moves out of the task strip.
+  QMdiSubWindow *current = m_mdiArea->currentSubWindow();
+  if (!current)
+    current = m_mdiArea->activeSubWindow();
+  if (!current)
+    return false;
+
+  ImageWidget *image = nullptr;
+  if (MainWindow *document = documentForSubWindow(current))
+    image = document->primaryImageWidget();
+  else if (ImageViewWindow *view = viewForSubWindow(current))
+    image = view->imageWidget();
+
+  if (image) {
+    image->setFocus(Qt::OtherFocusReason);
+    return true;
+  }
+  if (QWidget *hosted = current->widget()) {
+    hosted->setFocus(Qt::OtherFocusReason);
+    return true;
+  }
+  return false;
+}
+
 /** Present DOCUMENT's one inspector in the workspace for IMAGEWIDGET. */
 void WorkspaceWindow::installDocumentInspector(MainWindow *document,
                                                ImageWidget *imageWidget) {

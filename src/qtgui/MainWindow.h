@@ -24,6 +24,7 @@
 #include <set>
 #include <vector>
 
+class QAction;
 class QSplitter;
 class QTabWidget;
 class QDockWidget; // Added
@@ -130,6 +131,17 @@ public:
   colorscreen::render_type_parameters viewRenderTypeParameters() const {
     return m_renderTypeParams;
   }
+
+  /** Add the document-owned canvas actions to an ordinary secondary toolbar.
+      These actions route through inspectorImageWidget(), so only the active
+      ordinary presentation executes them. */
+  void appendOrdinaryViewToolActions(QToolBar *toolbar);
+
+  /** Return the shared Edit menu action for ordinary secondary views. */
+  QAction *ordinaryViewEditMenuAction() const;
+
+  /** Return the shared Registration menu action for ordinary secondary views. */
+  QAction *ordinaryViewRegistrationMenuAction() const;
 
   /** Rotate the shared document left from any attached view. */
   void rotateDocumentLeft();
@@ -350,7 +362,7 @@ private:
 
   void setupUi();
   void createMenus();
-  QRect getImageArea(QRect area);
+  QRect getImageArea(QRect area, ImageWidget *imageWidget = nullptr);
   void pivotViewport(int oldRot, int newRot);
   void createToolbar();  // New helper
   void updateCoordinateSpaceControls();
@@ -392,6 +404,15 @@ private:
    */
   void restoreInteractionMode();
 
+  /** Synchronize shared toolbar/menu tool state with the active ordinary view. */
+  void syncInspectorInteractionActions(ImageWidget::InteractionMode mode);
+
+  /** Synchronize coordinate-dependent shared actions with the active view. */
+  void syncInspectorViewActions();
+
+  /** Return true when IMAGEWIDGET presents this document's current scan. */
+  bool acceptsInspectorImageWidget(ImageWidget *imageWidget) const;
+
   void updateWindowTitle(); // Helper to update window title
   /** Refresh focus-analysis rectangles in the ordinary view currently
       presenting this document's inspector. */
@@ -417,6 +438,7 @@ private:
   void saveRecentParams();
 
   QMenu *m_fileMenu;
+  QMenu *m_editMenu;
   QMenu *m_viewMenu; // Added
   QMenu *m_modeMenu;
   QMenu *m_windowMenu;
@@ -499,6 +521,7 @@ private:
   std::function<void(QRect)> m_areaSelectionCallback = nullptr;
   ImageWidget::InteractionMode m_previousInteractionMode = ImageWidget::PanMode;
   bool m_autoAddPointsAfterCoordinates = false;
+  bool m_switchingInspectorImage = false;
 
 
   std::shared_ptr<colorscreen::image_data> m_scan;
@@ -608,6 +631,9 @@ private:
   void requestProgressTermination(
       const std::shared_ptr<colorscreen::progress_info> &info,
       ProgressAction action);
+
+  /** Return focus from a disappearing long-task row to an image canvas. */
+  void releaseUserVisibleProgressFocus(QWidget *row);
 
   /** Synchronize visibility of the outer progress container. */
   void updateProgressContainerVisibility();

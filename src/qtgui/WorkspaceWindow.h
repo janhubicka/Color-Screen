@@ -89,6 +89,10 @@ public:
   /** Return whether Qt's standard document tab bar is currently visible. */
   bool isTabBarVisible() const;
 
+  /** Move focus from CONTROL in the global task strip back to the currently
+      active image presentation without changing the active MDI child. */
+  bool restoreFocusFromTaskControl(QWidget *control);
+
   /** Restore/save only the outer workspace geometry. */
   void restoreWorkspaceGeometry();
   void saveWorkspaceGeometry() const;
