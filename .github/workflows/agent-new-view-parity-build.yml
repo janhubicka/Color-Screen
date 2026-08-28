@@ -1,0 +1,65 @@
+name: Agent new-view parity build
+
+on:
+  pull_request:
+    branches: [ "agent/tmp-new-view-source-base-20260828" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.head_ref == 'agent/tmp-new-view-source-trigger-20260828'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Wait for publisher and check out review branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if git ls-remote https://github.com/janhubicka/Color-Screen.git refs/heads/agent/new-view-parity | grep -q .; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo 'published branch did not appear' >&2
+          exit 1
+      - uses: actions/checkout@v4
+        with:
+          repository: janhubicka/Color-Screen
+          ref: agent/new-view-parity
+          fetch-depth: 0
+      - name: Install Qt build dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            autoconf automake libtool make g++ pkg-config xvfb \
+            qt6-base-dev qt6-svg-dev libgl1-mesa-dev \
+            libfftw3-dev libgsl-dev libturbojpeg0-dev liblcms2-dev \
+            libraw-dev libzip-dev libexiv2-dev libtiff-dev \
+            liblensfun-dev libavcodec-dev libavformat-dev libavutil-dev \
+            libswscale-dev
+      - name: Configure and build Qt GUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          autoreconf -fi
+          mkdir build-agent
+          cd build-agent
+          CFLAGS='-O2 -g -Wall -Wextra' \
+          CXXFLAGS='-O2 -g -Wall -Wextra' \
+            ../configure --enable-qtgui --disable-gtkgui --enable-checking \
+              --disable-shared --enable-static --disable-static-link
+          make -j2
+      - name: Run multi-view smoke checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd build-agent
+          gui=$(find src/qtgui -maxdepth 2 -type f -perm -111 \
+                  \( -name 'colorscreen-qt' -o -name 'colorscreen' \) | head -n1)
+          test -n "$gui"
+          xvfb-run -a "$gui" --smoke-test-new-view
+          xvfb-run -a "$gui" --smoke-test-menu-order
+          xvfb-run -a "$gui" --smoke-test-tile-activation-stable
