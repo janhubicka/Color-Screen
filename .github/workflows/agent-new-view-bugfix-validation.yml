@@ -33,9 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          cp .github/agent-new-view-final.patch.gz /tmp/new-view-final.patch.gz
-          echo "88cf96bf816c5abc109cc511e6b9c8aac3ed4bfb6c0ccdeb43a745f212692224  /tmp/new-view-final.patch.gz" | sha256sum -c -
-          gzip -dc /tmp/new-view-final.patch.gz > /tmp/new-view-final.patch
+          gzip -dc .github/agent-new-view-final.patch.gz > /tmp/new-view-final.patch
           echo "89fea5719c6045119047c8ee0b5a932bc3baa864f6d90b77951a3864077af163  /tmp/new-view-final.patch" | sha256sum -c -
           git checkout --detach be60f1565bad1a2f71e2ba9243dca1c9875bd16e
           git apply --check /tmp/new-view-final.patch
