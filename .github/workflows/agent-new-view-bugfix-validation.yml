@@ -21,7 +21,6 @@ jobs:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
       PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-      QT_QPA_PLATFORM: offscreen
     defaults:
       run:
         shell: bash
@@ -46,16 +45,57 @@ jobs:
       - name: Stop keeps current image
         run: |
           set -euo pipefail
-          ./src/qtgui/colorscreen-qt \
-            --smoke-test 20000 --smoke-test-expect-windows 2 \
-            --smoke-test-user-visible-progress \
-            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
-            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+          GUI=./src/qtgui/colorscreen-qt
+          IMAGE="$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+          for platform in offscreen minimal xcb; do
+            log="/tmp/stop-${platform}.log"
+            set +e
+            if [ "$platform" = xcb ]; then
+              xvfb-run -a env QT_QPA_PLATFORM=xcb "$GUI" \
+                --smoke-test 20000 --smoke-test-expect-windows 2 \
+                --smoke-test-user-visible-progress "$IMAGE" "$IMAGE" >"$log" 2>&1
+            else
+              env QT_QPA_PLATFORM="$platform" "$GUI" \
+                --smoke-test 20000 --smoke-test-expect-windows 2 \
+                --smoke-test-user-visible-progress "$IMAGE" "$IMAGE" >"$log" 2>&1
+            fi
+            rc=$?
+            set -e
+            if [ "$rc" -eq 0 ]; then
+              cat "$log"
+              echo "Stop regression passed with QPA backend $platform"
+              exit 0
+            fi
+            echo "Stop regression backend $platform failed with $rc"
+            cat "$log"
+          done
+          exit 1
       - name: Tiled reference MTF detach
         if: always()
         run: |
           set -euo pipefail
-          ./src/qtgui/colorscreen-qt \
-            --smoke-test 30000 --smoke-test-expect-windows 1 \
-            --smoke-test-slanted-reference \
-            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+          GUI=./src/qtgui/colorscreen-qt
+          IMAGE="$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+          for platform in offscreen minimal xcb; do
+            log="/tmp/mtf-${platform}.log"
+            set +e
+            if [ "$platform" = xcb ]; then
+              xvfb-run -a env QT_QPA_PLATFORM=xcb "$GUI" \
+                --smoke-test 30000 --smoke-test-expect-windows 1 \
+                --smoke-test-slanted-reference "$IMAGE" >"$log" 2>&1
+            else
+              env QT_QPA_PLATFORM="$platform" "$GUI" \
+                --smoke-test 30000 --smoke-test-expect-windows 1 \
+                --smoke-test-slanted-reference "$IMAGE" >"$log" 2>&1
+            fi
+            rc=$?
+            set -e
+            if [ "$rc" -eq 0 ]; then
+              cat "$log"
+              echo "Reference MTF regression passed with QPA backend $platform"
+              exit 0
+            fi
+            echo "Reference MTF backend $platform failed with $rc"
+            cat "$log"
+          done
+          exit 1
