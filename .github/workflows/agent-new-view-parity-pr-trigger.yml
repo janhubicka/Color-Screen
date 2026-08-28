@@ -1,0 +1,15 @@
+name: Agent new-view parity PR trigger
+
+on:
+  pull_request:
+    branches: [ "agent/tmp-new-view-source-base-20260828" ]
+
+permissions:
+  contents: read
+
+jobs:
+  marker:
+    if: github.head_ref == 'agent/tmp-new-view-source-trigger-20260828'
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo final checks triggered
