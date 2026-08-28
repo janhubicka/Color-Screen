@@ -9,6 +9,7 @@
 #include "AdaptiveSharpeningWorker.h"
 #include "ColorOptimizerWorker.h"
 #include "ColorScreenApplication.h"
+#include "WorkspaceWindow.h"
 #include "CoordinateOptimizationWorker.h"
 #include "DetectScreenWorker.h"
 #include "FinetuneWorker.h"
@@ -2608,6 +2609,10 @@ void MainWindow::registerProgress(
 
     entry.rowActionButton = new QPushButton(
         action == ProgressAction::Stop ? tr("Stop") : tr("Cancel"), entry.row);
+    // Keep mouse clicks on a workspace-global task from taking keyboard focus
+    // away from the active MDI image. Keyboard users can still Tab to the
+    // control and activate it normally.
+    entry.rowActionButton->setFocusPolicy(Qt::TabFocus);
     entry.rowActionButton->setProperty(
         "progressAction",
         action == ProgressAction::Stop ? QStringLiteral("stop")
@@ -2641,6 +2646,30 @@ std::vector<ProgressEntry *> MainWindow::transientProgresses() {
   return result;
 }
 
+/** Move keyboard focus away from ROW before a visible task control is disabled
+    or destroyed.  Attached task rows live in WorkspaceWindow, so focus returns
+    to whichever image presentation is currently active rather than to this
+    task's owning document. */
+void MainWindow::releaseUserVisibleProgressFocus(QWidget *row) {
+  QWidget *focus = QApplication::focusWidget();
+  if (!row || !focus || (focus != row && !row->isAncestorOf(focus)))
+    return;
+
+  if (m_workspaceEmbedded) {
+    if (ColorScreenApplication *application = documentApplication()) {
+      if (WorkspaceWindow *workspace = application->workspaceWindow()) {
+        if (workspace->restoreFocusFromTaskControl(focus))
+          return;
+      }
+    }
+  }
+
+  if (ImageWidget *image = inspectorImageWidget())
+    image->setFocus(Qt::OtherFocusReason);
+  else
+    setFocus(Qt::OtherFocusReason);
+}
+
 /** Remove a completed or terminated background task from progress tracking. */
 void MainWindow::removeProgress(
     std::shared_ptr<colorscreen::progress_info> info) {
@@ -2653,6 +2682,7 @@ void MainWindow::removeProgress(
       if (!it->userVisible)
         removedTransientIndex = transientIndex;
       if (it->row) {
+        releaseUserVisibleProgressFocus(it->row);
         m_userVisibleProgressLayout->removeWidget(it->row);
         it->row->deleteLater();
       }
@@ -2810,6 +2840,10 @@ void MainWindow::onProgressTimer() {
     updateProgressWidgets(entry, entry.rowLabel, entry.rowProgressBar,
                           entry.title);
     if (entry.rowActionButton && entry.info->pool_cancel()) {
+      // Cancellation can also be requested externally. If a keyboard user had
+      // focused this control, move focus back to the current image before the
+      // disabled button makes Qt choose a fallback MDI child.
+      releaseUserVisibleProgressFocus(entry.row);
       entry.rowActionButton->setText(entry.action == ProgressAction::Stop
                                          ? tr("Stopping...")
                                          : tr("Cancelling..."));
@@ -2883,6 +2917,15 @@ void MainWindow::requestProgressTermination(
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     if (ret != QMessageBox::Yes)
       return;
+  }
+
+  // A mouse click gives the Stop/Cancel button keyboard focus.  Move that
+  // focus to the currently active image before cancel() can synchronously
+  // finish the worker or before disabling the button makes Qt choose another
+  // MDI child as the fallback focus widget.
+  for (ProgressEntry &entry : m_activeProgresses) {
+    if (entry.info == info && entry.row)
+      releaseUserVisibleProgressFocus(entry.row);
   }
 
   info->cancel();

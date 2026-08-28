@@ -632,6 +632,9 @@ private:
       const std::shared_ptr<colorscreen::progress_info> &info,
       ProgressAction action);
 
+  /** Return focus from a disappearing long-task row to an image canvas. */
+  void releaseUserVisibleProgressFocus(QWidget *row);
+
   /** Synchronize visibility of the outer progress container. */
   void updateProgressContainerVisibility();
 
