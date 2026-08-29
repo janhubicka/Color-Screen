@@ -2,100 +2,28 @@ name: Agent Qt MDI cleanup publisher
 
 on:
   push:
-    branches: [ "agent/tmp-mdi-cleanup-publish-base-20260829" ]
-  pull_request:
-    branches: [ "agent/tmp-mdi-cleanup-publish-base-20260829" ]
+    branches:
+      - agent/tmp-mdi-cleanup-publish-base-20260829
 
 permissions:
   contents: write
-  packages: read
 
 jobs:
   publish:
-    if: github.event_name == 'push' || github.head_ref == 'agent/tmp-mdi-cleanup-publish-trigger2-20260829'
     runs-on: ubuntu-24.04
-    container:
-      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    env:
-      LC_ALL: C.UTF-8
-      LANG: C.UTF-8
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Publish explicit detachable-section registry
-        shell: bash
         run: |
-          set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          set -e
           git config user.name OpenAI
           git config user.email noreply@openai.com
+          cp .github/agent-mdi-section-registry-fix.py /tmp/agent-mdi-section-registry-fix.py
           git fetch origin agent/qtgui-mdi-shell-cleanup
           git checkout -B agent/qtgui-mdi-shell-cleanup origin/agent/qtgui-mdi-shell-cleanup
-          python3 - <<'PY'
-          from pathlib import Path
-
-          h = Path('src/qtgui/ParameterPanel.h')
-          text = h.read_text()
-          text = text.replace('#include <QList>\n', '')
-          old = '''  // Qt 6.11 requires Q_OBJECT for QObject::findChildren<T>(). Lightweight
-  // implementation-only helpers such as DetachableSection intentionally do not
-  // need meta-object data, so filter QWidget children with C++ RTTI instead.
-  template <typename T> QList<T> findChildren() const {
-    QList<T> matches;
-    for (QWidget *child : QObject::findChildren<QWidget *>()) {
-      if (T typedChild = dynamic_cast<T>(child))
-        matches.append(typedChild);
-    }
-    return matches;
-  }
-
-'''
-          if old not in text:
-              raise SystemExit('ParameterPanel findChildren helper not found')
-          text = text.replace(old, '''  // Host propagation must not depend on QObject parenting: layouts can reparent
-  // detachable sections as inspectors move between presentations.
-  std::vector<std::function<void(QMainWindow *)>> m_detachableHostUpdaters;
-
-''')
-          h.write_text(text)
-
-          cpp = Path('src/qtgui/ParameterPanel.cpp')
-          text = cpp.read_text()
-          old = '''void ParameterPanel::setDetachableHost(QMainWindow *host) {
-  m_detachableHost = host;
-  for (DetachableSection *section : findChildren<DetachableSection *>())
-    section->setHost(host);
-}
-'''
-          if old not in text:
-              raise SystemExit('setDetachableHost implementation not found')
-          text = text.replace(old, '''void ParameterPanel::setDetachableHost(QMainWindow *host) {
-  m_detachableHost = host;
-  for (const auto &updateHost : m_detachableHostUpdaters)
-    updateHost(host);
-}
-''')
-          old = '''  return new DetachableSection(title, content, std::move(beforeDetach),
-                               m_detachableHost.data());
-'''
-          if old not in text:
-              raise SystemExit('createDetachableSection implementation not found')
-          text = text.replace(old, '''  auto *section = new DetachableSection(title, content, std::move(beforeDetach),
-                                        m_detachableHost.data(), this);
-  QPointer<DetachableSection> guardedSection(section);
-  m_detachableHostUpdaters.push_back(
-      [guardedSection](QMainWindow *host) {
-        if (guardedSection)
-          guardedSection->setHost(host);
-      });
-  return section;
-''')
-          cpp.write_text(text)
-          PY
+          python3 /tmp/agent-mdi-section-registry-fix.py
           git diff --check
           git add src/qtgui/ParameterPanel.h src/qtgui/ParameterPanel.cpp
           git commit -m "qtgui: track detachable sections independently of layout"
