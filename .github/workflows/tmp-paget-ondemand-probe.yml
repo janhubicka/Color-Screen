@@ -1,0 +1,155 @@
+name: TEMP on-demand Paget pruning experiment
+
+on:
+  push:
+    branches:
+      - agent/tmp-paget-ondemand-probe-20260829
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/scr-detect-primary-separation
+          fetch-depth: 0
+
+      - name: Configure optimized detector build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          test "$(git rev-parse HEAD)" = d159ffbdf3f717b96f9edf9e6a8d6f77eec76509
+          CFLAGS='-O2 -g' CXXFLAGS='-O2 -g' ./configure --disable-gtkgui --disable-qtgui --disable-static-link
+          make -C src/libcolorscreen -j2 unittests
+          make -C src/colorscreen -j2 colorscreen
+          ./src/libcolorscreen/unittests discovery
+
+      - name: Benchmark baseline
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf /tmp/paget-ondemand && mkdir -p /tmp/paget-ondemand/baseline
+          for n in 1 2 3; do
+            python3 testsuite/benchmark-screen-detection.py \
+              --colorscreen ./src/colorscreen/colorscreen --threads 4 \
+              --screen-type Dufay --scanner-type fixed-lens --gamma 1 \
+              --mode legacy-2-3,2,3,both --mode unsharpened-0-0,0,0,both \
+              --csv "/tmp/paget-ondemand/baseline/run-${n}.csv" \
+              --output-dir "/tmp/paget-ondemand/baseline/run-${n}" \
+              testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif
+          done
+
+      - name: Apply on-demand pruned Paget probe
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/libcolorscreen/scr-detect-geometry.C')
+          s = p.read_text()
+
+          old = '''int find_patch(const color_class_map &color_map, scr_detect::color_class c,\n               int x, int y, int max_patch_size, int_point_t *entries,\n               bitmap_2d *visited, bool permanent) {'''
+          new = '''template <typename ColorMap>\nint find_patch(const ColorMap &color_map, scr_detect::color_class c,\n               int x, int y, int max_patch_size, int_point_t *entries,\n               bitmap_2d *visited, bool permanent) {'''
+          if s.count(old) != 1: raise SystemExit('find_patch signature mismatch')
+          s = s.replace(old, new, 1)
+
+          old = '''int\nfind_predicted_patch (const color_class_map &color_map,\n                      scr_detect::color_class c, coord_t x, coord_t y,'''
+          new = '''template <typename ColorMap>\nint\nfind_predicted_patch (const ColorMap &color_map,\n                      scr_detect::color_class c, coord_t x, coord_t y,'''
+          if s.count(old) != 1: raise SystemExit('find_predicted_patch signature mismatch')
+          s = s.replace(old, new, 1)
+
+          marker = '''struct patch_info {\n  coord_t x, y;\n};\n'''
+          addition = '''struct patch_info {\n  coord_t x, y;\n};\n\n/* Read the Paget boundary-pruned classification directly from the base\n   render map.  This presents exactly the get_class/width/height interface\n   used by the initial-grid search without materializing an image-wide copy. */\nclass pruned_color_class_map_view {\npublic:\n  explicit pruned_color_class_map_view(const render_scr_detect &render,\n                                       int width, int height)\n      : m_render(render), width(width), height(height) {}\n\n  pure_attr scr_detect::color_class get_class(int x, int y) const noexcept {\n    return m_render.classify_pixel({x, y});\n  }\n\n  const render_scr_detect &m_render;\n  int width;\n  int height;\n};\n'''
+          if s.count(marker) != 1: raise SystemExit('patch_info marker mismatch')
+          s = s.replace(marker, addition, 1)
+
+          old = '''bool try_guess_paget_screen(FILE *report_file, const color_class_map &color_map,\n                            solver_parameters &sparam, int x, int y,\n                            bitmap_2d *visited) {'''
+          new = '''template <typename ColorMap>\nbool try_guess_paget_screen_impl(FILE *report_file, const ColorMap &color_map,\n                                 solver_parameters &sparam, int x, int y,\n                                 bitmap_2d *visited) {'''
+          if s.count(old) != 1: raise SystemExit('Paget signature mismatch')
+          s = s.replace(old, new, 1)
+
+          end_marker = '''  return true;\n}\n\n/* Verify a classified patch of color C near X, Y in COLOR_MAP.'''
+          wrapper = '''  return true;\n}\n\nbool try_guess_paget_screen(FILE *report_file, const color_class_map &color_map,\n                            solver_parameters &sparam, int x, int y,\n                            bitmap_2d *visited) {\n  return try_guess_paget_screen_impl(report_file, color_map, sparam, x, y,\n                                     visited);\n}\n\n/* Verify a classified patch of color C near X, Y in COLOR_MAP.'''
+          if s.count(end_marker) != 1: raise SystemExit('Paget end marker mismatch')
+          s = s.replace(end_marker, wrapper, 1)
+
+          old = '''        /* In Paget/Finlay screens, blue patches touch at their corners.\n           The separately materialized class map was intended to enforce\n           boundaries between them, but small blue patches may disappear.\n           Keep both this map and the renderer's original map as candidates.  */\n        if (try_paget_finlay) {\n          detection_stats::time_point stage_start = stats.start_timer();\n          stats.classmap_builds++;\n          std::unique_ptr<color_class_map> new_cmap(new color_class_map);\n          cmap = std::move(new_cmap);\n          cmap->allocate(img.width, img.height);\n          if (progress)\n            progress->set_task("pruning screen", img.height);\n#pragma omp parallel for default(none) shared(progress, img, cmap, render)\n          for (int y = 0; y < img.height; y++) {\n            if (!progress || !progress->cancel_requested())\n              for (int x = 0; x < img.width; x++)\n                cmap->set_class(x, y, render->classify_pixel({x, y}));\n            if (progress)\n              progress->inc_progress();\n          }\n          stats.add_time(&stats.classmap_ms, stage_start);\n          if (progress && progress->cancel_requested()) {\n            stats.result = "cancelled";\n            if (progress)\n              progress->pop();\n            return ret;\n          }\n        }\n'''
+          new = '''        /* Paget/Finlay needs a boundary-pruned map because diagonal blue\n           patches otherwise touch.  Probe initial grids through the identical\n           on-demand classifier and materialize the full map only after such a\n           grid has actually been found. */\n        auto ensure_paget_cmap = [&]() -> bool {\n          if (cmap)\n            return true;\n          detection_stats::time_point stage_start = stats.start_timer();\n          stats.classmap_builds++;\n          cmap = std::make_unique<color_class_map>();\n          cmap->allocate(img.width, img.height);\n          if (progress)\n            progress->set_task("pruning screen", img.height);\n#pragma omp parallel for default(none) shared(progress, img, cmap, render)\n          for (int y = 0; y < img.height; y++) {\n            if (!progress || !progress->cancel_requested())\n              for (int x = 0; x < img.width; x++)\n                cmap->set_class(x, y, render->classify_pixel({x, y}));\n            if (progress)\n              progress->inc_progress();\n          }\n          stats.add_time(&stats.classmap_ms, stage_start);\n          if (progress && progress->cancel_requested()) {\n            cmap.reset();\n            stats.result = "cancelled";\n            return false;\n          }\n          return true;\n        };\n        pruned_color_class_map_view pruned_paget_map(*render, img.width,\n                                                     img.height);\n'''
+          if s.count(old) != 1: raise SystemExit('unconditional map block mismatch')
+          s = s.replace(old, new, 1)
+
+          old = '''              } else if (try_paget_finlay &&\n                         try_guess_paget_screen(\n                             report_file,\n                             cmap ? *cmap : *render->get_color_class_map(),\n                             sparam, x, y, &visited_paget)) {\n                current_type = type == Finlay ? Finlay : Paget;\n                this_cmap = cmap ? cmap.get() : render->get_color_class_map();\n              } else if (try_paget_finlay && cmap &&\n                         try_guess_paget_screen(\n                             report_file, *render->get_color_class_map(),\n                             sparam, x, y, &visited_paget2)) {\n                current_type = type == Finlay ? Finlay : Paget;\n                this_cmap = render->get_color_class_map();\n              }\n'''
+          new = '''              } else if (try_paget_finlay &&\n                         try_guess_paget_screen_impl(\n                             report_file, pruned_paget_map, sparam, x, y,\n                             &visited_paget)) {\n                if (!ensure_paget_cmap()) {\n                  if (progress)\n                    progress->pop();\n                  return ret;\n                }\n                current_type = type == Finlay ? Finlay : Paget;\n                this_cmap = cmap.get();\n              } else if (try_paget_finlay &&\n                         try_guess_paget_screen(\n                             report_file, *render->get_color_class_map(),\n                             sparam, x, y, &visited_paget2)) {\n                current_type = type == Finlay ? Finlay : Paget;\n                this_cmap = render->get_color_class_map();\n              }\n'''
+          if s.count(old) != 1: raise SystemExit('Paget candidate block mismatch')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git diff --check
+          make -C src/libcolorscreen -j2 unittests
+          make -C src/colorscreen -j2 colorscreen
+          ./src/libcolorscreen/unittests discovery
+
+      - name: Benchmark patched detector
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/paget-ondemand/patched
+          for n in 1 2 3; do
+            python3 testsuite/benchmark-screen-detection.py \
+              --colorscreen ./src/colorscreen/colorscreen --threads 4 \
+              --screen-type Dufay --scanner-type fixed-lens --gamma 1 \
+              --mode legacy-2-3,2,3,both --mode unsharpened-0-0,0,0,both \
+              --csv "/tmp/paget-ondemand/patched/run-${n}.csv" \
+              --output-dir "/tmp/paget-ondemand/patched/run-${n}" \
+              testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif
+          done
+
+      - name: Compare exact behavior and timings
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import csv, statistics
+          root=Path('/tmp/paget-ondemand')
+          def rows(side,mode):
+              out=[]
+              for p in sorted((root/side).glob('run-*.csv')):
+                  with p.open(newline='') as f:
+                      out += [r for r in csv.DictReader(f) if r['mode']==mode]
+              return out
+          stable=('exit_code','success','type','scan_coverage_percent',
+                  'screen_coverage_percent','regions','seed_pixels','initial_grids',
+                  'initial_solver_failures','flood_attempts','flood_failures',
+                  'patches','last_flood_failure','color_opt_failures',
+                  'precompute_failures','rgb_precomputes',
+                  'legacy_preclassification_sharpening')
+          for mode in ('legacy-2-3','unsharpened-0-0'):
+              b,p=rows('baseline',mode),rows('patched',mode)
+              for i,(br,pr) in enumerate(zip(b,p),1):
+                  for field in stable:
+                      if br[field]!=pr[field]:
+                          raise SystemExit(f'{mode} repeat {i}: {field} {br[field]} -> {pr[field]}')
+              print(mode,'classmap_builds',[r['classmap_builds'] for r in b],'->',[r['classmap_builds'] for r in p])
+              for field in ('classmap_ms','detector_total_ms'):
+                  bv=[float(r[field]) for r in b]; pv=[float(r[field]) for r in p]
+                  print(mode,field,bv,'->',pv,'median',statistics.median(bv),'->',statistics.median(pv))
+              name=f'dufaycolor_nikon_coolsan9000ED_4000DPI_raw-{mode}.par'
+              if (root/'baseline'/'run-1'/name).read_bytes() != (root/'patched'/'run-1'/name).read_bytes():
+                  raise SystemExit(f'{mode}: generated parameter file changed')
+          PY
+
+      - name: Run six-case real Dufay integration regression
+        shell: bash
+        run: |
+          set -euxo pipefail
+          make -C testsuite check TESTS=dufaycolor_nikon_coolsan9000ED_4000DPI_raw.test
