@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   publish:
-    if: github.head_ref == 'agent/tmp-mdi-cleanup-publish-trigger-20260829'
+    if: github.head_ref == 'agent/tmp-mdi-cleanup-publish-trigger2-20260829'
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
