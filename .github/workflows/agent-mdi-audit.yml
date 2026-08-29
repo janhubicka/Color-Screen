@@ -1,0 +1,27 @@
+name: Agent Qt multi-document audit
+
+on:
+  pull_request:
+    branches: [ "agent/tmp-mdi-audit-base-20260829" ]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    if: github.head_ref == 'agent/tmp-mdi-audit-trigger-20260829'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Inventory detachable UI and progress ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== createDetachableSection call sites ==='
+          grep -R -n 'createDetachableSection' src/qtgui || true
+          echo '=== detach signals and reattach methods ==='
+          grep -R -n -E 'detach[A-Za-z0-9_]*Requested|reattach[A-Za-z0-9_]*' src/qtgui || true
+          echo '=== workspace progress movement ==='
+          grep -R -n -E 'workspaceStatusWidget|workspaceProgress|ProgressContainer' src/qtgui/WorkspaceWindow.* src/qtgui/MainWindow.* || true
