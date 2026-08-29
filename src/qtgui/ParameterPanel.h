@@ -3,6 +3,7 @@
 
 #include "ParameterState.h"
 #include <QComboBox>
+#include <QList>
 #include <QPointer>
 #include <QString>
 #include <QToolButton>
@@ -188,6 +189,18 @@ protected:
 
   std::vector<std::function<void(const ParameterState &)>> m_paramUpdaters;
   std::vector<std::function<void()>> m_widgetStateUpdaters;
+
+  // Qt 6.11 requires Q_OBJECT for QObject::findChildren<T>(). Lightweight
+  // implementation-only helpers such as DetachableSection intentionally do not
+  // need meta-object data, so filter QWidget children with C++ RTTI instead.
+  template <typename T> QList<T> findChildren() const {
+    QList<T> matches;
+    for (QWidget *child : QObject::findChildren<QWidget *>()) {
+      if (T typedChild = dynamic_cast<T>(child))
+        matches.append(typedChild);
+    }
+    return matches;
+  }
 
   virtual void onParametersRefreshed(const ParameterState &state) {}
 };
