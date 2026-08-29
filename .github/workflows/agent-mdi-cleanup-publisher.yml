@@ -1,0 +1,43 @@
+name: Agent Qt MDI cleanup publisher
+
+on:
+  pull_request:
+    branches: [ "agent/tmp-mdi-cleanup-publish-base-20260829" ]
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-mdi-cleanup-publish-trigger-20260829'
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply, build, and publish cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          cp .github/agent-mdi-cleanup.py /tmp/agent-mdi-cleanup.py
+          git checkout --detach 1e86951d644dfb76f1d26b6342f53d8470d3e5bc
+          python3 /tmp/agent-mdi-cleanup.py
+          git diff --check
+          ./configure --enable-checking --disable-static-link --disable-gtkgui --enable-qtgui > /tmp/configure.log 2>&1 || { tail -200 /tmp/configure.log; exit 1; }
+          make -j$(nproc) > /tmp/build.log 2>&1 || { tail -300 /tmp/build.log; exit 1; }
+          git config user.name OpenAI
+          git config user.email noreply@openai.com
+          git add .agents/qtgui.md src/qtgui
+          git commit -m "qtgui: make workspace chrome and panel detachment uniform"
+          git push --force origin HEAD:refs/heads/agent/qtgui-mdi-shell-cleanup
