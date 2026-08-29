@@ -1,6 +1,8 @@
 name: Agent Qt MDI cleanup publisher
 
 on:
+  push:
+    branches: [ "agent/tmp-mdi-cleanup-publish-base-20260829" ]
   pull_request:
     branches: [ "agent/tmp-mdi-cleanup-publish-base-20260829" ]
 
@@ -10,7 +12,7 @@ permissions:
 
 jobs:
   publish:
-    if: github.head_ref == 'agent/tmp-mdi-cleanup-publish-trigger2-20260829'
+    if: github.event_name == 'push' || github.head_ref == 'agent/tmp-mdi-cleanup-publish-trigger2-20260829'
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
