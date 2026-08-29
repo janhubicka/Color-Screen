@@ -1,0 +1,33 @@
+name: Agent PR230 fix publisher
+
+on:
+  pull_request:
+    branches: [ "agent/tmp-pr230-fix-base-20260829" ]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-pr230-fix-trigger-20260829'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply and publish PR230 fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .github/agent-pr230-fix.py /tmp/agent-pr230-fix.py
+          git checkout --detach fc6aded0091e4014ef113b89f9d74a3262a908bc
+          python3 /tmp/agent-pr230-fix.py
+          git diff --check
+          git config user.name OpenAI
+          git config user.email noreply@openai.com
+          git add .agents/qtgui.md src/qtgui
+          git commit -m "qtgui: fix reference detachment and view File menu" \
+            -m "Keep the unified ParameterPanel detachable-section lifecycle while allowing specialized inspectors to pin their logical QMainWindow host. Pin slanted-edge Sharpness diagnostics to the reference ImageViewWindow so tiled reference MTF detachment remains stable." \
+            -m "Mirror the source document File menu in secondary views while substituting Close View for Close Window, restoring Open, Save Parameters, Render, and Exit without duplicating document state." \
+            -m "Extend GUI smoke coverage for File-menu parity and reference-owned generic MTF docks, and document the specialized-host rule."
+          git push --force origin HEAD:refs/heads/agent/qtgui-mdi-shell-cleanup
