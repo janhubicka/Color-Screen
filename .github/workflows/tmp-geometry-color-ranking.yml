@@ -1,0 +1,170 @@
+name: TEMP geometry color-ranking experiment
+
+on:
+  push:
+    branches:
+      - agent/tmp-geometry-color-ranking-20260829
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/scr-detect-primary-separation
+          fetch-depth: 0
+
+      - name: Configure optimized CLI build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          test "$(git rev-parse HEAD)" = d159ffbdf3f717b96f9edf9e6a8d6f77eec76509
+          CFLAGS='-O2 -g' CXXFLAGS='-O2 -g' ./configure --disable-gtkgui --disable-qtgui --disable-static-link
+          make -C src/libcolorscreen -j2 unittests
+          make -C src/colorscreen -j2 colorscreen
+          ./src/libcolorscreen/unittests discovery
+
+      - name: Benchmark baseline
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf /tmp/geometry-ranking
+          mkdir -p /tmp/geometry-ranking/baseline
+          for n in 1 2 3; do
+            python3 testsuite/benchmark-screen-detection.py \
+              --colorscreen ./src/colorscreen/colorscreen \
+              --threads 4 --screen-type Dufay --scanner-type fixed-lens --gamma 1 \
+              --mode legacy-2-3,2,3,both --mode unsharpened-0-0,0,0,both \
+              --csv "/tmp/geometry-ranking/baseline/run-${n}.csv" \
+              --output-dir "/tmp/geometry-ranking/baseline/run-${n}" \
+              testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif
+          done
+
+      - name: Apply color-ranking experiment
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/libcolorscreen/scr-detect-colors.C')
+          text = path.read_text()
+
+          old = '''  sort (pixels.begin (), pixels.end (), compare_priorities);\n  int pos = pixels.size () / 2;\n  luminosity_t min_density = pixels[pos].orig_color.red + pixels[pos].orig_color.green + pixels[pos].orig_color.blue;\n  //printf ("\\n min density %f\\n", min_density);\n\n'''
+          new = '''  /* Only the brighter half of this region can contribute process-color\n     samples below.  Find the same median-density cutoff in linear average\n     time, then discard pixels which all three later rankings would skip.\n     Keep SAMPLE_LIMIT based on the original region size so sample counts are\n     unchanged.  */\n  const size_t original_pixel_count = pixels.size ();\n  const size_t sample_limit = original_pixel_count / 1000;\n  auto density = [] (const entry &e)\n    {\n      return e.orig_color.red + e.orig_color.green + e.orig_color.blue;\n    };\n  auto median = pixels.begin () + original_pixel_count / 2;\n  std::nth_element (pixels.begin (), median, pixels.end (),\n                    [&] (const entry &a, const entry &b)\n                    {\n                      return density (a) < density (b);\n                    });\n  luminosity_t min_density = density (*median);\n  pixels.erase (std::remove_if (pixels.begin (), pixels.end (),\n                                [&] (const entry &e)\n                                {\n                                  return density (e) < min_density;\n                                }),\n                pixels.end ());\n  //printf ("\\n min density %f\\n", min_density);\n\n'''
+          if text.count(old) != 1:
+              raise SystemExit(f'median block match count: {text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old_break = '''      if (reds.size () > pixels.size () / 1000)\n\tbreak;'''
+          new_break = '''      if (reds.size () > sample_limit)\n\tbreak;'''
+          if text.count(old_break) != 1:
+              raise SystemExit('red sample-limit block mismatch')
+          text = text.replace(old_break, new_break, 1)
+
+          old_break = '''      if (greens.size () > pixels.size () / 1000)\n\tbreak;'''
+          new_break = '''      if (greens.size () > sample_limit)\n\tbreak;'''
+          if text.count(old_break) != 1:
+              raise SystemExit('green sample-limit block mismatch')
+          text = text.replace(old_break, new_break, 1)
+
+          old_break = '''      if (blues.size () > pixels.size () / 1000)\n\tbreak;'''
+          new_break = '''      if (blues.size () > sample_limit)\n\tbreak;'''
+          if text.count(old_break) != 1:
+              raise SystemExit('blue sample-limit block mismatch')
+          text = text.replace(old_break, new_break, 1)
+
+          path.write_text(text)
+          PY
+          git diff --check
+          git diff -- src/libcolorscreen/scr-detect-colors.C
+
+      - name: Rebuild and run discovery regression
+        shell: bash
+        run: |
+          set -euxo pipefail
+          make -C src/libcolorscreen -j2 unittests
+          make -C src/colorscreen -j2 colorscreen
+          ./src/libcolorscreen/unittests discovery
+
+      - name: Benchmark patched optimizer
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/geometry-ranking/patched
+          for n in 1 2 3; do
+            python3 testsuite/benchmark-screen-detection.py \
+              --colorscreen ./src/colorscreen/colorscreen \
+              --threads 4 --screen-type Dufay --scanner-type fixed-lens --gamma 1 \
+              --mode legacy-2-3,2,3,both --mode unsharpened-0-0,0,0,both \
+              --csv "/tmp/geometry-ranking/patched/run-${n}.csv" \
+              --output-dir "/tmp/geometry-ranking/patched/run-${n}" \
+              testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif
+          done
+
+      - name: Compare outputs and summarize timings
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import csv
+          import statistics
+
+          root = Path('/tmp/geometry-ranking')
+          rows = {'baseline': {}, 'patched': {}}
+          for variant in rows:
+              for csv_path in sorted((root / variant).glob('run-*.csv')):
+                  with csv_path.open(newline='') as f:
+                      for row in csv.DictReader(f):
+                          rows[variant].setdefault(row['mode'], []).append(row)
+
+          for mode in ('legacy-2-3', 'unsharpened-0-0'):
+              b = rows['baseline'][mode]
+              p = rows['patched'][mode]
+              if [r['success'] for r in b] != [r['success'] for r in p]:
+                  raise SystemExit(f'{mode}: success state changed')
+              for field in ('type', 'scan_coverage_percent', 'screen_coverage_percent',
+                            'regions', 'seed_pixels', 'initial_grids',
+                            'flood_attempts', 'flood_failures', 'patches'):
+                  if b[0][field] != p[0][field]:
+                      raise SystemExit(
+                          f'{mode}: detector result changed in {field}: '
+                          f'{b[0][field]} -> {p[0][field]}')
+              bt = [float(r['optimize_colors_ms']) for r in b]
+              pt = [float(r['optimize_colors_ms']) for r in p]
+              bw = [float(r['detector_total_ms']) for r in b]
+              pw = [float(r['detector_total_ms']) for r in p]
+              print(f'{mode}: optimize_colors baseline={bt} patched={pt}')
+              print(f'{mode}: optimize_colors median {statistics.median(bt):.3f} -> '
+                    f'{statistics.median(pt):.3f} ms')
+              print(f'{mode}: detector total baseline={bw} patched={pw}')
+              print(f'{mode}: detector total median {statistics.median(bw):.3f} -> '
+                    f'{statistics.median(pw):.3f} ms')
+
+          # Parameter files from the first successful run must remain byte-identical.
+          for mode in ('legacy-2-3', 'unsharpened-0-0'):
+              bpar = root / 'baseline' / 'run-1' / f'dufaycolor_nikon_coolsan9000ED_4000DPI_raw-{mode}.par'
+              ppar = root / 'patched' / 'run-1' / f'dufaycolor_nikon_coolsan9000ED_4000DPI_raw-{mode}.par'
+              if bpar.exists() != ppar.exists():
+                  raise SystemExit(f'{mode}: parameter-file existence changed')
+              if bpar.exists() and bpar.read_bytes() != ppar.read_bytes():
+                  raise SystemExit(f'{mode}: generated parameter file changed')
+          PY
+
+      - name: Run focused real Dufay integration test
+        shell: bash
+        run: |
+          set -euxo pipefail
+          top_builddir="$PWD" srcdir="$PWD/testsuite" \
+            sh testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.test
