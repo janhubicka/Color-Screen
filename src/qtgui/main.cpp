@@ -1616,6 +1616,12 @@ int main(int argc, char *argv[]) {
     int duration = parser.value(smokeTestOption).toInt(&converted);
     if (!converted || duration <= 0)
       duration = 5000;
+    // New View and slanted-reference checks deliberately run serially because
+    // both manipulate shared document presentation. Sanitizer builds,
+    // especially ARM64 ASan, need more than the ordinary 30-second smoke
+    // window; do not let the cleanup timer destroy their widgets mid-check.
+    if (parser.isSet(newViewOption) && parser.isSet(slantedReferenceOption))
+      duration = qMax(duration, 60000);
     qDebug() << "Smoke Test Mode: Will exit in" << duration << "ms...";
     QTimer::singleShot(duration, &app, [&app]() {
       app.closeAllDocumentWindows();
