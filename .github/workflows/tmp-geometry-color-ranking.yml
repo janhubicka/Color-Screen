@@ -34,20 +34,117 @@ jobs:
           make -C src/colorscreen -j2 colorscreen
           ./src/libcolorscreen/unittests discovery
 
-      - name: Benchmark baseline
+      - name: Generate deterministic no-screen controls
         shell: bash
         run: |
           set -euxo pipefail
           rm -rf /tmp/geometry-ranking
+          mkdir -p /tmp/geometry-ranking/controls
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct
+
+          width = 1200
+          height = 1200
+          out = Path('/tmp/geometry-ranking/controls')
+
+          def write_rgb_tiff(path, pixel):
+              tags = 10
+              ifd_size = 2 + tags * 12 + 4
+              bits_offset = 8 + ifd_size
+              pixel_offset = (bits_offset + 6 + 3) & ~3
+              byte_count = width * height * 3
+
+              entries = []
+              def short(tag, value):
+                  entries.append(struct.pack('<HHI', tag, 3, 1) +
+                                 struct.pack('<H', value) + b'\0\0')
+              def long(tag, value):
+                  entries.append(struct.pack('<HHII', tag, 4, 1, value))
+
+              long(256, width)
+              long(257, height)
+              entries.append(struct.pack('<HHII', 258, 3, 3, bits_offset))
+              short(259, 1)
+              short(262, 2)
+              long(273, pixel_offset)
+              short(277, 3)
+              long(278, height)
+              long(279, byte_count)
+              short(284, 1)
+              entries.sort(key=lambda e: struct.unpack_from('<H', e)[0])
+
+              with path.open('wb') as f:
+                  f.write(b'II')
+                  f.write(struct.pack('<H', 42))
+                  f.write(struct.pack('<I', 8))
+                  f.write(struct.pack('<H', tags))
+                  for entry in entries:
+                      f.write(entry)
+                  f.write(struct.pack('<I', 0))
+                  f.write(struct.pack('<HHH', 8, 8, 8))
+                  while f.tell() < pixel_offset:
+                      f.write(b'\0')
+                  row = bytearray(width * 3)
+                  for y in range(height):
+                      for x in range(width):
+                          r, g, b = pixel(x, y)
+                          i = x * 3
+                          row[i:i+3] = bytes((r, g, b))
+                      f.write(row)
+
+          def base_value(x, y):
+              h = (x * 2246822519 + y * 3266489917 + (x ^ (y << 7))) & 0xffffffff
+              h ^= h >> 15
+              h = (h * 2246822519) & 0xffffffff
+              h ^= h >> 13
+              return (h >> 8) & 255
+
+          write_rgb_tiff(out / 'grayscale.tif',
+                         lambda x, y: (base_value(x, y),) * 3)
+
+          def low_chroma(x, y):
+              v = base_value(x, y)
+              return (max(0, min(255, v + ((x + y) % 3 - 1))),
+                      v,
+                      max(0, min(255, v + ((2 * x + y) % 3 - 1))))
+          write_rgb_tiff(out / 'low-chroma.tif', low_chroma)
+
+          def colorful(x, y):
+              h = (x * 73856093) ^ (y * 19349663) ^ ((x // 37) * 83492791)
+              h &= 0xffffffff
+              h ^= h >> 16
+              h = (h * 0x7feb352d) & 0xffffffff
+              h ^= h >> 15
+              h = (h * 0x846ca68b) & 0xffffffff
+              h ^= h >> 16
+              return (h & 255, (h >> 8) & 255, (h >> 16) & 255)
+          write_rgb_tiff(out / 'colorful-noise.tif', colorful)
+          PY
+          ls -lh /tmp/geometry-ranking/controls/*.tif
+
+      - name: Benchmark baseline
+        shell: bash
+        run: |
+          set -euxo pipefail
           mkdir -p /tmp/geometry-ranking/baseline
           for n in 1 2 3; do
             python3 testsuite/benchmark-screen-detection.py \
               --colorscreen ./src/colorscreen/colorscreen \
               --threads 4 --screen-type Dufay --scanner-type fixed-lens --gamma 1 \
               --mode legacy-2-3,2,3,both --mode unsharpened-0-0,0,0,both \
-              --csv "/tmp/geometry-ranking/baseline/run-${n}.csv" \
-              --output-dir "/tmp/geometry-ranking/baseline/run-${n}" \
+              --csv "/tmp/geometry-ranking/baseline/real-${n}.csv" \
+              --output-dir "/tmp/geometry-ranking/baseline/real-${n}" \
               testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif
+            python3 testsuite/benchmark-screen-detection.py \
+              --colorscreen ./src/colorscreen/colorscreen \
+              --threads 4 --screen-type Dufay --scanner-type fixed-lens --gamma 1 \
+              --mode legacy-2-3,2,3,both --mode unsharpened-0-0,0,0,both \
+              --csv "/tmp/geometry-ranking/baseline/negative-${n}.csv" \
+              --output-dir "/tmp/geometry-ranking/baseline/negative-${n}" \
+              /tmp/geometry-ranking/controls/grayscale.tif \
+              /tmp/geometry-ranking/controls/low-chroma.tif \
+              /tmp/geometry-ranking/controls/colorful-noise.tif
           done
 
       - name: Apply color-ranking experiment
@@ -66,23 +163,12 @@ jobs:
               raise SystemExit(f'median block match count: {text.count(old)}')
           text = text.replace(old, new, 1)
 
-          old_break = '''      if (reds.size () > pixels.size () / 1000)\n\tbreak;'''
-          new_break = '''      if (reds.size () > sample_limit)\n\tbreak;'''
-          if text.count(old_break) != 1:
-              raise SystemExit('red sample-limit block mismatch')
-          text = text.replace(old_break, new_break, 1)
-
-          old_break = '''      if (greens.size () > pixels.size () / 1000)\n\tbreak;'''
-          new_break = '''      if (greens.size () > sample_limit)\n\tbreak;'''
-          if text.count(old_break) != 1:
-              raise SystemExit('green sample-limit block mismatch')
-          text = text.replace(old_break, new_break, 1)
-
-          old_break = '''      if (blues.size () > pixels.size () / 1000)\n\tbreak;'''
-          new_break = '''      if (blues.size () > sample_limit)\n\tbreak;'''
-          if text.count(old_break) != 1:
-              raise SystemExit('blue sample-limit block mismatch')
-          text = text.replace(old_break, new_break, 1)
+          for color in ('reds', 'greens', 'blues'):
+              old_break = f'''      if ({color}.size () > pixels.size () / 1000)\n\tbreak;'''
+              new_break = f'''      if ({color}.size () > sample_limit)\n\tbreak;'''
+              if text.count(old_break) != 1:
+                  raise SystemExit(f'{color} sample-limit block mismatch')
+              text = text.replace(old_break, new_break, 1)
 
           path.write_text(text)
           PY
@@ -107,9 +193,18 @@ jobs:
               --colorscreen ./src/colorscreen/colorscreen \
               --threads 4 --screen-type Dufay --scanner-type fixed-lens --gamma 1 \
               --mode legacy-2-3,2,3,both --mode unsharpened-0-0,0,0,both \
-              --csv "/tmp/geometry-ranking/patched/run-${n}.csv" \
-              --output-dir "/tmp/geometry-ranking/patched/run-${n}" \
+              --csv "/tmp/geometry-ranking/patched/real-${n}.csv" \
+              --output-dir "/tmp/geometry-ranking/patched/real-${n}" \
               testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif
+            python3 testsuite/benchmark-screen-detection.py \
+              --colorscreen ./src/colorscreen/colorscreen \
+              --threads 4 --screen-type Dufay --scanner-type fixed-lens --gamma 1 \
+              --mode legacy-2-3,2,3,both --mode unsharpened-0-0,0,0,both \
+              --csv "/tmp/geometry-ranking/patched/negative-${n}.csv" \
+              --output-dir "/tmp/geometry-ranking/patched/negative-${n}" \
+              /tmp/geometry-ranking/controls/grayscale.tif \
+              /tmp/geometry-ranking/controls/low-chroma.tif \
+              /tmp/geometry-ranking/controls/colorful-noise.tif
           done
 
       - name: Compare outputs and summarize timings
@@ -122,49 +217,64 @@ jobs:
           import statistics
 
           root = Path('/tmp/geometry-ranking')
-          rows = {'baseline': {}, 'patched': {}}
-          for variant in rows:
-              for csv_path in sorted((root / variant).glob('run-*.csv')):
+
+          def load(variant):
+              grouped = {}
+              for csv_path in sorted((root / variant).glob('*.csv')):
                   with csv_path.open(newline='') as f:
                       for row in csv.DictReader(f):
-                          rows[variant].setdefault(row['mode'], []).append(row)
+                          key = (Path(row['scan']).name, row['mode'])
+                          grouped.setdefault(key, []).append(row)
+              return grouped
 
-          for mode in ('legacy-2-3', 'unsharpened-0-0'):
-              b = rows['baseline'][mode]
-              p = rows['patched'][mode]
-              if [r['success'] for r in b] != [r['success'] for r in p]:
-                  raise SystemExit(f'{mode}: success state changed')
-              for field in ('type', 'scan_coverage_percent', 'screen_coverage_percent',
-                            'regions', 'seed_pixels', 'initial_grids',
-                            'flood_attempts', 'flood_failures', 'patches'):
-                  if b[0][field] != p[0][field]:
-                      raise SystemExit(
-                          f'{mode}: detector result changed in {field}: '
-                          f'{b[0][field]} -> {p[0][field]}')
+          baseline = load('baseline')
+          patched = load('patched')
+          if baseline.keys() != patched.keys():
+              raise SystemExit('baseline/patched benchmark key sets differ')
+
+          stable_fields = (
+              'exit_code', 'success', 'type', 'scan_coverage_percent',
+              'screen_coverage_percent', 'regions', 'seed_pixels',
+              'initial_grids', 'initial_solver_failures', 'flood_attempts',
+              'flood_failures', 'patches', 'last_flood_failure',
+              'color_opt_failures', 'precompute_failures', 'classmap_builds',
+              'rgb_precomputes', 'legacy_preclassification_sharpening')
+
+          for key in sorted(baseline):
+              b = baseline[key]
+              p = patched[key]
+              if len(b) != len(p):
+                  raise SystemExit(f'{key}: repeat counts differ')
+              for i, (br, pr) in enumerate(zip(b, p), 1):
+                  for field in stable_fields:
+                      if br[field] != pr[field]:
+                          raise SystemExit(
+                              f'{key} repeat {i}: {field} changed: '
+                              f'{br[field]} -> {pr[field]}')
+
               bt = [float(r['optimize_colors_ms']) for r in b]
               pt = [float(r['optimize_colors_ms']) for r in p]
               bw = [float(r['detector_total_ms']) for r in b]
               pw = [float(r['detector_total_ms']) for r in p]
-              print(f'{mode}: optimize_colors baseline={bt} patched={pt}')
-              print(f'{mode}: optimize_colors median {statistics.median(bt):.3f} -> '
+              print(f'{key}: optimize_colors baseline={bt} patched={pt}')
+              print(f'{key}: optimize_colors median {statistics.median(bt):.3f} -> '
                     f'{statistics.median(pt):.3f} ms')
-              print(f'{mode}: detector total baseline={bw} patched={pw}')
-              print(f'{mode}: detector total median {statistics.median(bw):.3f} -> '
+              print(f'{key}: detector total baseline={bw} patched={pw}')
+              print(f'{key}: detector total median {statistics.median(bw):.3f} -> '
                     f'{statistics.median(pw):.3f} ms')
 
-          # Parameter files from the first successful run must remain byte-identical.
+          real = 'dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif'
           for mode in ('legacy-2-3', 'unsharpened-0-0'):
-              bpar = root / 'baseline' / 'run-1' / f'dufaycolor_nikon_coolsan9000ED_4000DPI_raw-{mode}.par'
-              ppar = root / 'patched' / 'run-1' / f'dufaycolor_nikon_coolsan9000ED_4000DPI_raw-{mode}.par'
-              if bpar.exists() != ppar.exists():
-                  raise SystemExit(f'{mode}: parameter-file existence changed')
-              if bpar.exists() and bpar.read_bytes() != ppar.read_bytes():
-                  raise SystemExit(f'{mode}: generated parameter file changed')
+              bpar = root / 'baseline' / 'real-1' / f'dufaycolor_nikon_coolsan9000ED_4000DPI_raw-{mode}.par'
+              ppar = root / 'patched' / 'real-1' / f'dufaycolor_nikon_coolsan9000ED_4000DPI_raw-{mode}.par'
+              if not bpar.exists() or not ppar.exists():
+                  raise SystemExit(f'{mode}: expected real-screen parameter file missing')
+              if bpar.read_bytes() != ppar.read_bytes():
+                  raise SystemExit(f'{mode}: generated real-screen parameter file changed')
           PY
 
       - name: Run focused real Dufay integration test
         shell: bash
         run: |
           set -euxo pipefail
-          top_builddir="$PWD" srcdir="$PWD/testsuite" \
-            sh testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.test
+          make -C testsuite check TESTS=dufaycolor_nikon_coolsan9000ED_4000DPI_raw.test
