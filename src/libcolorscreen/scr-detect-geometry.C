@@ -1909,6 +1909,9 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
   assert(empty.gamma != 0 || img.to_linear[0].size());
   ret.mesh_trans = NULL;
   ret.success = false;
+  /* Failure statistics copy PATCHES_FOUND even when no flood fill ever ran.
+     Keep that report value deterministic until flood_fill() writes a count.  */
+  ret.patches_found = 0;
   ret.known_patches = NULL;
   ret.smap = NULL;
   ret.param.type = type;
