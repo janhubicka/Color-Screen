@@ -220,6 +220,7 @@ private:
   QToolButton *m_workspaceProgressPreviousButton = nullptr;
   QToolButton *m_workspaceProgressNextButton = nullptr;
   QList<QPointer<MainWindow>> m_progressDocuments;
+  QList<QPointer<MainWindow>> m_progressSignalDocuments;
   QPointer<MainWindow> m_displayedProgressDocument;
   QWidget *m_userVisibleProgressStack = nullptr;
   QVBoxLayout *m_userVisibleProgressLayout = nullptr;

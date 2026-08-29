@@ -791,9 +791,27 @@ int main(int argc, char *argv[]) {
   // delays that processEvents() can overtake on slow or instrumented builds.
   const auto newViewSmokeDone =
       std::make_shared<bool>(!parser.isSet(newViewOption));
+  const auto slantedReferenceSmokeDone =
+      std::make_shared<bool>(!parser.isSet(slantedReferenceOption));
+  const bool completionManagedSmoke =
+      parser.isSet(smokeTestOption) &&
+      (parser.isSet(newViewOption) || parser.isSet(slantedReferenceOption)) &&
+      !parser.isSet(userVisibleProgressOption) &&
+      !parser.isSet(windowLifetimeOption) &&
+      !parser.isSet(closeToEmptyTabOption);
+  const auto maybeFinishStructuredSmoke =
+      std::make_shared<std::function<void()>>();
+  *maybeFinishStructuredSmoke =
+      [&app, newViewSmokeDone, slantedReferenceSmokeDone,
+       completionManagedSmoke]() {
+        if (completionManagedSmoke && *newViewSmokeDone &&
+            *slantedReferenceSmokeDone)
+          QTimer::singleShot(0, &app, [&app]() { app.quit(); });
+      };
 
   if (parser.isSet(newViewOption)) {
-    QTimer::singleShot(300, &app, [&app, newViewSmokeDone]() {
+    QTimer::singleShot(300, &app,
+                       [&app, newViewSmokeDone, maybeFinishStructuredSmoke]() {
       const QList<MainWindow *> documents = app.documentWindows();
       if (documents.isEmpty() || !documents.front()->sharedImageData()) {
         qCritical() << "New View smoke test requires a loaded document";
@@ -1147,7 +1165,7 @@ int main(int argc, char *argv[]) {
           checkFinalPeerClose;
       *checkFinalPeerClose =
           [&app, guardedSource, guardedView, documentCount, newViewSmokeDone,
-           weakCheckFinalPeerClose](int attemptsLeft) {
+           maybeFinishStructuredSmoke, weakCheckFinalPeerClose](int attemptsLeft) {
             if (guardedSource || guardedView ||
                 app.documentWindows().size() != documentCount - 1) {
               if (attemptsLeft > 0) {
@@ -1163,6 +1181,7 @@ int main(int argc, char *argv[]) {
               return;
             }
             *newViewSmokeDone = true;
+            (*maybeFinishStructuredSmoke)();
           };
       QTimer::singleShot(0, &app, [checkFinalPeerClose]() {
         (*checkFinalPeerClose)(40);
@@ -1287,7 +1306,8 @@ int main(int argc, char *argv[]) {
     const std::weak_ptr<std::function<void(int)>> weakStartReferenceSmoke =
         startReferenceSmoke;
     *startReferenceSmoke =
-        [&app, newViewSmokeDone, weakStartReferenceSmoke](int attemptsLeft) {
+        [&app, newViewSmokeDone, slantedReferenceSmokeDone,
+         maybeFinishStructuredSmoke, weakStartReferenceSmoke](int attemptsLeft) {
       if (!*newViewSmokeDone) {
         if (attemptsLeft <= 0) {
           qCritical() << "Slanted reference smoke test timed out waiting for "
@@ -1345,7 +1365,9 @@ int main(int argc, char *argv[]) {
       const std::weak_ptr<std::function<void(int)>> weakCheckReference =
           checkReference;
       *checkReference = [&app, guardedSource, guardedReference, documentCount,
-                         tabCount, weakCheckReference](int attemptsLeft) {
+                         tabCount, slantedReferenceSmokeDone,
+                         maybeFinishStructuredSmoke,
+                         weakCheckReference](int attemptsLeft) {
         MainWindow *source = guardedSource.data();
         ImageViewWindow *reference = guardedReference.data();
         if (!source || !reference) {
@@ -1415,8 +1437,8 @@ int main(int argc, char *argv[]) {
           return;
         }
 
-        // processEvents() may run the overall smoke shutdown timer on very slow
-        // sanitizer builds. Never retain raw child pointers across that turn.
+        // Teardown can be queued by another presentation operation while this
+        // check yields to Qt. Never retain raw child pointers across that turn.
         QPointer<SharpnessPanel> guardedSharpness(sharpness);
         QPointer<QWidget> guardedMtfChart(mtfChart);
         QPointer<QWidget> guardedMtfSection(mtfSection);
@@ -1544,6 +1566,7 @@ int main(int argc, char *argv[]) {
         const std::weak_ptr<std::function<void(int)>> weakCheckReload =
             checkReload;
         *checkReload = [&app, guardedSource, guardedReference, beforeReload,
+                        slantedReferenceSmokeDone, maybeFinishStructuredSmoke,
                         weakCheckReload](int attemptsLeft) {
           MainWindow *source = guardedSource.data();
           ImageViewWindow *reference = guardedReference.data();
@@ -1601,6 +1624,8 @@ int main(int argc, char *argv[]) {
           }
           for (ImageViewWindow *view : references)
             app.closeView(view);
+          *slantedReferenceSmokeDone = true;
+          (*maybeFinishStructuredSmoke)();
         };
         (*checkReload)(28);
       };
@@ -1616,17 +1641,25 @@ int main(int argc, char *argv[]) {
     int duration = parser.value(smokeTestOption).toInt(&converted);
     if (!converted || duration <= 0)
       duration = 5000;
-    // New View and slanted-reference checks deliberately run serially because
-    // both manipulate shared document presentation. Sanitizer builds,
-    // especially ARM64 ASan, need more than the ordinary 30-second smoke
-    // window; do not let the cleanup timer destroy their widgets mid-check.
-    if (parser.isSet(newViewOption) && parser.isSet(slantedReferenceOption))
+    // New View and slanted-reference checks manipulate shared presentation
+    // serially. Give their watchdog enough room under instrumentation, but
+    // successful structured checks quit immediately when they are complete.
+    if (completionManagedSmoke && parser.isSet(newViewOption) &&
+        parser.isSet(slantedReferenceOption))
       duration = qMax(duration, 60000);
-    qDebug() << "Smoke Test Mode: Will exit in" << duration << "ms...";
-    QTimer::singleShot(duration, &app, [&app]() {
-      app.closeAllDocumentWindows();
-      app.quit();
-    });
+    qDebug() << "Smoke Test Mode: watchdog is" << duration << "ms";
+    QTimer::singleShot(
+        duration, &app,
+        [&app, completionManagedSmoke, newViewSmokeDone,
+         slantedReferenceSmokeDone]() {
+          if (completionManagedSmoke &&
+              (!*newViewSmokeDone || !*slantedReferenceSmokeDone)) {
+            qCritical() << "Structured GUI smoke test timed out before completion";
+            app.exit(17);
+            return;
+          }
+          app.quit();
+        });
   }
 
   // WorkspaceWindow deliberately survives Close while detached peer windows

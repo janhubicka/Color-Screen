@@ -750,7 +750,19 @@ void WorkspaceWindow::attachDocumentProgress(MainWindow *document) {
           qMax(progress->minimumHeight(), progress->sizeHint().height()));
       statusBar()->setMinimumHeight(stableHeight);
     }
+  }
 
+  bool signalsConnected = false;
+  for (const QPointer<MainWindow> &candidate :
+       std::as_const(m_progressSignalDocuments)) {
+    if (candidate == document) {
+      signalsConnected = true;
+      break;
+    }
+  }
+
+  if (!signalsConnected) {
+    m_progressSignalDocuments.append(document);
     QPointer<MainWindow> guardedDocument(document);
     connect(document, &MainWindow::transientProgressVisibilityChanged, this,
             [this, guardedDocument](bool visible) {
@@ -770,6 +782,13 @@ void WorkspaceWindow::attachDocumentProgress(MainWindow *document) {
            it != m_progressDocuments.end();) {
         if (it->isNull())
           it = m_progressDocuments.erase(it);
+        else
+          ++it;
+      }
+      for (auto it = m_progressSignalDocuments.begin();
+           it != m_progressSignalDocuments.end();) {
+        if (it->isNull())
+          it = m_progressSignalDocuments.erase(it);
         else
           ++it;
       }
