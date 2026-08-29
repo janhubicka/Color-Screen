@@ -438,7 +438,6 @@ void ImageViewWindow::setupReferenceInspector() {
           m_document->applySharedDocumentState(state, description);
       },
       [this]() { return m_scan; }, m_referenceTabs);
-  m_sharpnessPanel->setDetachableHost(this);
   m_referenceTabs->addTab(m_sharpnessPanel, tr("Sharpness"));
 
   connect(m_sharpnessPanel,

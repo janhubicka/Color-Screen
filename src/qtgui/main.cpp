@@ -1417,14 +1417,18 @@ int main(int argc, char *argv[]) {
         }
         detachMtf->click();
         QCoreApplication::processEvents();
+        QMainWindow *mtfHost =
+            qobject_cast<QMainWindow *>(mtfSection->window());
         QDockWidget *mtfDock = nullptr;
-        for (QDockWidget *candidate : reference->findChildren<QDockWidget *>()) {
-          if (candidate && candidate->property("detachablePanel").toBool() &&
-              candidate->property("detachableTitle").toString() ==
-                  QStringLiteral("MTF Chart") &&
-              candidate->isAncestorOf(mtfChart)) {
-            mtfDock = candidate;
-            break;
+        if (mtfHost) {
+          for (QDockWidget *candidate : mtfHost->findChildren<QDockWidget *>()) {
+            if (candidate && candidate->property("detachablePanel").toBool() &&
+                candidate->property("detachableTitle").toString() ==
+                    QStringLiteral("MTF Chart") &&
+                candidate->isAncestorOf(mtfChart)) {
+              mtfDock = candidate;
+              break;
+            }
           }
         }
         if (!mtfDock || !mtfDock->isVisible() || !mtfDock->isFloating() ||

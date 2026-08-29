@@ -140,12 +140,12 @@ limited to **Original digital capture** and **Image layer**. Measurements are
 applied through the source document's undoable parameter path. Every panel section created by `ParameterPanel::createDetachableSection()` owns
 its own standard floating-dock lifecycle. This is the only detach implementation:
 document windows, ordinary views, and specialized reference views do not create
-parallel chart docks or probe nested layouts during reattachment. By default a detached
-section follows the top-level window currently presenting its inspector and always
-returns its content when closed. Specialized inspectors may pin that same generic
-dock lifecycle to their logical presentation; slanted-edge Sharpness sections use
-the reference `ImageViewWindow` as that host. This keeps reference diagnostics
-presentation-owned without reintroducing panel-specific dock wiring. **Reload and demosaic** reloads both the source scan and every associated
+parallel chart docks or probe nested layouts during reattachment. A detached section follows the actual top-level window currently presenting its
+inspector and always returns its content when closed. This rule applies uniformly
+to document, ordinary-view, and slanted-edge reference inspectors: while embedded,
+the workspace owns their floating docks; after detaching a presentation, that
+presentation window becomes the dock host. This avoids nested `QMainWindow` dock
+ownership without reintroducing panel-specific wiring. **Reload and demosaic** reloads both the source scan and every associated
 slanted-edge reference from its own filename using the current demosaic mode.
 
 **Window → New View** creates another MDI view of the same document. Ordinary
