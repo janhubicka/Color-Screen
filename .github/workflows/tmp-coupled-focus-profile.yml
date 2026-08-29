@@ -1,0 +1,56 @@
+name: TEMP coupled focus profile
+
+on:
+  push:
+    branches:
+      - agent/tmp-coupled-focus-profile-20260829
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  profile:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      CC: "ccache gcc"
+      CXX: "ccache g++"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure optimized build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          export CXXFLAGS="-Ofast -flto=auto"
+          export CFLAGS="$CXXFLAGS"
+          ./configure --enable-qtgui
+      - name: Apply profiling instrumentation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 agent/profile-coupled-focus.py
+          git diff --check
+      - name: Build focused regression
+        shell: bash
+        run: |
+          set -euxo pipefail
+          make -C src/libcolorscreen -j"$(nproc)" focus-analysis-unittests
+      - name: Run coupled focus profile
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          import subprocess, time, sys
+          start = time.perf_counter()
+          p = subprocess.run(["./src/libcolorscreen/focus-analysis-unittests"])
+          print(f"PROFILE_TOTAL_SECONDS={time.perf_counter()-start:.6f}")
+          sys.exit(p.returncode)
+          PY
