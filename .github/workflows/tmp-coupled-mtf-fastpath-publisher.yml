@@ -31,19 +31,28 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          CXXFLAGS="-Ofast -flto=auto" CFLAGS="$CXXFLAGS" ./configure --enable-qtgui
-      - name: Build baseline
+          export CXXFLAGS="-Ofast -flto=auto"
+          export CFLAGS="$CXXFLAGS"
+          ./configure --enable-qtgui
+      - name: Build baseline focus test
         shell: bash
         run: |
           set -euxo pipefail
-          make -j"$(nproc)"
           make -C src/libcolorscreen -j"$(nproc)" focus-analysis-unittests
       - name: Benchmark baseline coupled focus regression
         shell: bash
         run: |
           set -euxo pipefail
-          /usr/bin/time -f 'BASELINE_SECONDS=%e' \
-            ./src/libcolorscreen/focus-analysis-unittests 2>&1 | tee /tmp/baseline-focus.log
+          python3 - <<'PY'
+          import subprocess
+          import sys
+          import time
+          start = time.perf_counter()
+          result = subprocess.run(["./src/libcolorscreen/focus-analysis-unittests"])
+          elapsed = time.perf_counter() - start
+          print(f"BASELINE_SECONDS={elapsed:.6f}", flush=True)
+          sys.exit(result.returncode)
+          PY
       - name: Apply exact coupled fast path
         shell: bash
         run: |
@@ -61,8 +70,16 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          /usr/bin/time -f 'OPTIMIZED_SECONDS=%e' \
-            ./src/libcolorscreen/focus-analysis-unittests 2>&1 | tee /tmp/optimized-focus.log
+          python3 - <<'PY'
+          import subprocess
+          import sys
+          import time
+          start = time.perf_counter()
+          result = subprocess.run(["./src/libcolorscreen/focus-analysis-unittests"])
+          elapsed = time.perf_counter() - start
+          print(f"OPTIMIZED_SECONDS={elapsed:.6f}", flush=True)
+          sys.exit(result.returncode)
+          PY
       - name: Run low-level transfer regressions
         shell: bash
         run: |
