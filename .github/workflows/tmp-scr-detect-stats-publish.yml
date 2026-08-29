@@ -1,0 +1,136 @@
+name: TEMP publish detector stats initialization fix
+
+on:
+  push:
+    branches:
+      - agent/tmp-scr-detect-stats-publish-20260829
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/scr-detect-stats-init
+          fetch-depth: 0
+
+      - name: Apply failure-telemetry initialization fix
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          test "$(git rev-parse HEAD)" = 1e86951d644dfb76f1d26b6342f53d8470d3e5bc
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/libcolorscreen/scr-detect-geometry.C')
+          text = path.read_text()
+          old = '''  ret.mesh_trans = NULL;\n  ret.success = false;\n  ret.known_patches = NULL;\n'''
+          new = '''  ret.mesh_trans = NULL;\n  ret.success = false;\n  /* Failure statistics copy PATCHES_FOUND even when no flood fill ever ran.\n     Keep that report value deterministic until flood_fill() writes a count.  */\n  ret.patches_found = 0;\n  ret.known_patches = NULL;\n'''
+          if text.count(old) != 1:
+              raise SystemExit(f'result initialization anchor count: {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+
+          tracker = Path('doc/scr-detect-geometry-tracking.md')
+          text = tracker.read_text()
+          marker = '### DG-015 — color optimization can rebuild image-wide state for every search cell\n'
+          if text.count(marker) != 1:
+              raise SystemExit('DG-015 marker missing')
+          note = '''**DG-014 telemetry follow-up (2026-08-29).**  Failed detections copied\n`detected_screen::patches_found` into the final statistics record even when no\nflood fill had run, but the result field itself was not initialized.  Initialize\nit to zero with the other failure-safe result state so negative-corpus reports\nno longer contain stack garbage in `patches=`.  Successful flood fills continue\nto overwrite the field with their measured patch count.\n\n'''
+          tracker.write_text(text.replace(marker, note + marker, 1))
+          PY
+          git diff --check
+          git diff -- src/libcolorscreen/scr-detect-geometry.C doc/scr-detect-geometry-tracking.md
+
+      - name: Configure optimized detector build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          CFLAGS='-O2 -g' CXXFLAGS='-O2 -g' ./configure \
+            --disable-gtkgui --disable-qtgui --disable-static-link
+          make -C src/libcolorscreen -j2 unittests
+          make -C src/colorscreen -j2 colorscreen
+          ./src/libcolorscreen/unittests discovery
+
+      - name: Verify deterministic failed-detection patch count
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/stats-negative
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct
+          width = height = 1200
+          path = Path('/tmp/stats-negative/grayscale.tif')
+          tags = 10
+          ifd_size = 2 + tags * 12 + 4
+          bits_offset = 8 + ifd_size
+          pixel_offset = (bits_offset + 9) & ~3
+          byte_count = width * height * 3
+          entries = []
+          def short(tag, value):
+              entries.append(struct.pack('<HHI', tag, 3, 1) + struct.pack('<H', value) + b'\0\0')
+          def long(tag, value):
+              entries.append(struct.pack('<HHII', tag, 4, 1, value))
+          long(256, width); long(257, height)
+          entries.append(struct.pack('<HHII', 258, 3, 3, bits_offset))
+          short(259, 1); short(262, 2); long(273, pixel_offset)
+          short(277, 3); long(278, height); long(279, byte_count); short(284, 1)
+          entries.sort(key=lambda e: struct.unpack_from('<H', e)[0])
+          with path.open('wb') as f:
+              f.write(b'II'); f.write(struct.pack('<H', 42)); f.write(struct.pack('<I', 8))
+              f.write(struct.pack('<H', tags))
+              for entry in entries: f.write(entry)
+              f.write(struct.pack('<I', 0)); f.write(struct.pack('<HHH', 8, 8, 8))
+              while f.tell() < pixel_offset: f.write(b'\0')
+              row = bytearray(width * 3)
+              for y in range(height):
+                  for x in range(width):
+                      h = (x * 2246822519 + y * 3266489917 + (x ^ (y << 7))) & 0xffffffff
+                      h ^= h >> 15; h = (h * 2246822519) & 0xffffffff; h ^= h >> 13
+                      v = (h >> 8) & 255
+                      i = x * 3; row[i:i+3] = bytes((v, v, v))
+                  f.write(row)
+          PY
+          python3 testsuite/benchmark-screen-detection.py \
+            --colorscreen ./src/colorscreen/colorscreen --threads 4 \
+            --screen-type Dufay --scanner-type fixed-lens --gamma 1 \
+            --mode unsharpened-0-0,0,0,both \
+            --csv /tmp/stats-negative/result.csv \
+            --output-dir /tmp/stats-negative/output \
+            /tmp/stats-negative/grayscale.tif
+          python3 - <<'PY'
+          import csv
+          with open('/tmp/stats-negative/result.csv', newline='') as f:
+              row = next(csv.DictReader(f))
+          print(row)
+          if row['success'] != '0':
+              raise SystemExit('negative control unexpectedly detected a screen')
+          if row['patches'] != '0':
+              raise SystemExit(f"failed detection reported patches={row['patches']} instead of 0")
+          PY
+
+      - name: Commit clean product change
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git diff --check
+          test "$(git diff --name-only | sort)" = "$(printf '%s\n' \
+            doc/scr-detect-geometry-tracking.md \
+            src/libcolorscreen/scr-detect-geometry.C | sort)"
+          git config user.name OpenAI
+          git config user.email noreply@openai.com
+          git add doc/scr-detect-geometry-tracking.md \
+                  src/libcolorscreen/scr-detect-geometry.C
+          git commit -m "detect: initialize failed patch telemetry" \
+            -m "Regular-screen failure reporting copies detected_screen::patches_found into the DG-014 statistics summary even when no flood fill has run. Initialize the field to zero with the other failure-safe result state so no-initial-grid and early-failure reports cannot expose an indeterminate stack value. Successful flood fills still overwrite the count normally.\n\nValidate with the synthetic discovery unit group and a deterministic 1200x1200 screenless grayscale control, which must fail detection and report patches=0. Record the telemetry-only correction in the geometry tracker."
+          git push origin HEAD:agent/scr-detect-stats-init
