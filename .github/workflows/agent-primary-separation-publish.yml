@@ -1,0 +1,167 @@
+name: Agent primary separation publisher
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/primary-separation-publish-20260829'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/scr-detect-primary-separation
+          fetch-depth: 0
+      - name: Apply measured detector patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path('src/libcolorscreen/scr-detect-colors.C')
+          text = source.read_text()
+          marker = '''bool
+          compare_priorities(struct entry &e1, struct entry &e2)
+          {
+            return e2.priority < e1.priority;
+          }
+
+          }
+          '''.replace('          ', '')
+          replacement = '''bool
+          compare_priorities(struct entry &e1, struct entry &e2)
+          {
+            return e2.priority < e1.priority;
+          }
+
+          /* Regions whose optimized process colors are closer than this cannot
+             provide three useful color classes for regular-screen detection.  */
+          constexpr luminosity_t minimum_screen_primary_separation =
+              (luminosity_t)0.1;
+
+          /* Return the Euclidean distance between unit-length scanner RGB colors A
+             and B.  Degenerate or non-finite colors have zero separation.  */
+          luminosity_t
+          primary_distance (rgbdata a, rgbdata b)
+          {
+            luminosity_t alen2 =
+                a.red * a.red + a.green * a.green + a.blue * a.blue;
+            luminosity_t blen2 =
+                b.red * b.red + b.green * b.green + b.blue * b.blue;
+            if (!(alen2 > (luminosity_t)0) || !(blen2 > (luminosity_t)0)
+                || !my_isfinite (alen2) || !my_isfinite (blen2))
+              return 0;
+            a *= 1 / my_sqrt (alen2);
+            b *= 1 / my_sqrt (blen2);
+            rgbdata d = a - b;
+            return my_sqrt (d.red * d.red + d.green * d.green + d.blue * d.blue);
+          }
+
+          /* Return the smallest distance between unit-length optimized primaries in
+             P.  Subtract the optimized black point first so exposure and black level
+             do not affect the comparison.  */
+          luminosity_t
+          minimum_primary_separation (const scr_detect_parameters &p)
+          {
+            rgbdata red = p.red - p.black;
+            rgbdata green = p.green - p.black;
+            rgbdata blue = p.blue - p.black;
+            return std::min (primary_distance (red, green),
+                             std::min (primary_distance (red, blue),
+                                       primary_distance (green, blue)));
+          }
+
+          }
+          '''.replace('          ', '')
+          if text.count(marker) != 1:
+              raise SystemExit('primary helper insertion marker did not match')
+          text = text.replace(marker, replacement, 1)
+
+          old = '''  optimize_screen_colors (param, reds.data (), reds.size (), greens.data (), greens.size (), blues.data (), blues.size (), progress, report);
+          return true;
+          '''.replace('          ', '')
+          new = '''  optimize_screen_colors (param, reds.data (), reds.size (), greens.data (),
+                                  greens.size (), blues.data (), blues.size (), progress,
+                                  report);
+            luminosity_t separation = minimum_primary_separation (*param);
+            if (report)
+              fprintf (report,
+                       "optimized screen primary separation: %f (minimum %f)\\n",
+                       (double)separation,
+                       (double)minimum_screen_primary_separation);
+            if (separation < minimum_screen_primary_separation)
+              {
+                if (report)
+                  fprintf (report,
+                           "screen primaries are too close; skipping search region.\\n");
+                return false;
+              }
+            return true;
+          '''.replace('          ', '')
+          if text.count(old) != 1:
+              raise SystemExit('area optimizer return marker did not match')
+          source.write_text(text.replace(old, new, 1))
+
+          tracker = Path('doc/scr-detect-geometry-tracking.md')
+          text = tracker.read_text()
+          marker = '### DG-015 — color optimization can rebuild image-wide state for every search cell\n'
+          if text.count(marker) != 1:
+              raise SystemExit('DG-015 tracker marker did not match')
+          section = '''### DG-028 — collapsed optimized primaries trigger impossible grid searches
+
+          **Severity:** high failure-time/performance
+
+          **Status:** fixed first-stage rejection
+
+          Per-region color optimization runs before the expensive image-wide adjusted-RGB,
+          color-class-map, and lattice-search work.  On images without an additive screen,
+          the fitted red, green, and blue process colors often collapse to nearly the same
+          scanner RGB direction.  Continuing with such a color basis cannot produce three
+          useful screen classes and wastes the rest of that search-region attempt.
+
+          Subtract the optimized black point from each fitted primary, normalize the three
+          scanner-RGB vectors to unit length, and measure their minimum pairwise Euclidean
+          distance.  Reject only the current search region when that separation is below
+          0.10.  Degenerate or non-finite primary vectors count as zero separation.  The
+          detector still advances to later regions, so a raster-free border or a locally
+          low-chroma part of a real screen scan cannot reject the whole image.  Existing
+          `color_opt_failures` telemetry counts these early exits.
+
+          The threshold is intentionally conservative.  The difficult NGS00428 Tile01 and
+          Tile05 scans measure approximately 0.321 and 0.410 respectively, and the real
+          Nikon Dufay integration fixture measures approximately 1.328.  Their generated
+          parameter files are unchanged with the guard enabled, and synthetic Finlay and
+          Dufay discovery tests continue to pass.
+
+          On deterministic 1200 by 1200 no-screen controls in the optimized local build,
+          the region guard reduces failure wall time as follows:
+
+          | input | baseline | guarded | regions rejected early |
+          | --- | ---: | ---: | ---: |
+          | grayscale | 0.79 s | 0.44 s | 36 / 36 |
+          | low-chroma color | 1.70 s | 0.95 s | 36 / 36 |
+          | colorful no-screen texture | 1.59 s | 1.02 s | 29 / 36 |
+
+          The colorful control deliberately continues through the seven regions whose
+          scene colors are sufficiently separated; this is a cheap impossibility test,
+          not a replacement for lattice validation.  DG-015 remains open for broader
+          reuse of image-wide detector state across regions that survive this gate.
+
+          '''.replace('          ', '')
+          tracker.write_text(text.replace(marker, section + marker, 1))
+          PY
+
+          git diff --check
+          changed="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n' doc/scr-detect-geometry-tracking.md src/libcolorscreen/scr-detect-colors.C | sort)"
+          test "$changed" = "$expected"
+
+          git config user.name "OpenAI"
+          git config user.email "noreply@openai.com"
+          git add doc/scr-detect-geometry-tracking.md src/libcolorscreen/scr-detect-colors.C
+          git commit -m "detect: reject collapsed color fits before grid search" -m "Per-region screen-color optimization can fit nearly identical red, green, and blue primaries on scans without an additive raster. Continuing from such a fit rebuilds adjusted RGB and the full color-class map and then performs a lattice search even though the fitted color basis cannot supply three distinct screen classes.\n\nSubtract the optimized black point from each primary, normalize the resulting scanner-RGB vectors, and reject only the current search region when the minimum pairwise distance is below 0.10. Treat degenerate or non-finite primaries as zero separation. Do not abort the whole image: later regions remain available for scans with raster-free borders or locally weak color. Existing color_opt_failures telemetry records the early exit.\n\nThe cutoff is conservative relative to measured screen scans: NGS00428 Tile01 is about 0.321, Tile05 about 0.410, and the real Nikon Dufay fixture about 1.328. Their generated parameter files are unchanged. Synthetic Finlay and Dufay discovery also pass.\n\nOn 1200x1200 screenless controls the guard reduces failure wall time from 0.79s to 0.44s for grayscale, 1.70s to 0.95s for low-chroma color, and 1.59s to 1.02s for a colorful texture; the latter rejects 29 of 36 regions early and leaves the remaining colorful regions to normal lattice validation. Record the measured fast-fail behavior as DG-028."
+          git push origin HEAD:agent/scr-detect-primary-separation
