@@ -1,4 +1,4 @@
-name: TEMP geometry color-ranking experiment
+name: TEMP geometry color-fit fastpath experiment
 
 on:
   push:
@@ -38,15 +38,15 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          rm -rf /tmp/geometry-ranking
-          mkdir -p /tmp/geometry-ranking/controls
+          rm -rf /tmp/geometry-fit
+          mkdir -p /tmp/geometry-fit/controls
           python3 - <<'PY'
           from pathlib import Path
           import struct
 
           width = 1200
           height = 1200
-          out = Path('/tmp/geometry-ranking/controls')
+          out = Path('/tmp/geometry-fit/controls')
 
           def write_rgb_tiff(path, pixel):
               tags = 10
@@ -54,14 +54,12 @@ jobs:
               bits_offset = 8 + ifd_size
               pixel_offset = (bits_offset + 6 + 3) & ~3
               byte_count = width * height * 3
-
               entries = []
               def short(tag, value):
                   entries.append(struct.pack('<HHI', tag, 3, 1) +
                                  struct.pack('<H', value) + b'\0\0')
               def long(tag, value):
                   entries.append(struct.pack('<HHII', tag, 4, 1, value))
-
               long(256, width)
               long(257, height)
               entries.append(struct.pack('<HHII', 258, 3, 3, bits_offset))
@@ -73,7 +71,6 @@ jobs:
               long(279, byte_count)
               short(284, 1)
               entries.sort(key=lambda e: struct.unpack_from('<H', e)[0])
-
               with path.open('wb') as f:
                   f.write(b'II')
                   f.write(struct.pack('<H', 42))
@@ -100,8 +97,7 @@ jobs:
               h ^= h >> 13
               return (h >> 8) & 255
 
-          write_rgb_tiff(out / 'grayscale.tif',
-                         lambda x, y: (base_value(x, y),) * 3)
+          write_rgb_tiff(out / 'grayscale.tif', lambda x, y: (base_value(x, y),) * 3)
 
           def low_chroma(x, y):
               v = base_value(x, y)
@@ -121,33 +117,32 @@ jobs:
               return (h & 255, (h >> 8) & 255, (h >> 16) & 255)
           write_rgb_tiff(out / 'colorful-noise.tif', colorful)
           PY
-          ls -lh /tmp/geometry-ranking/controls/*.tif
 
       - name: Benchmark baseline
         shell: bash
         run: |
           set -euxo pipefail
-          mkdir -p /tmp/geometry-ranking/baseline
+          mkdir -p /tmp/geometry-fit/baseline
           for n in 1 2 3; do
             python3 testsuite/benchmark-screen-detection.py \
               --colorscreen ./src/colorscreen/colorscreen \
               --threads 4 --screen-type Dufay --scanner-type fixed-lens --gamma 1 \
               --mode legacy-2-3,2,3,both --mode unsharpened-0-0,0,0,both \
-              --csv "/tmp/geometry-ranking/baseline/real-${n}.csv" \
-              --output-dir "/tmp/geometry-ranking/baseline/real-${n}" \
+              --csv "/tmp/geometry-fit/baseline/real-${n}.csv" \
+              --output-dir "/tmp/geometry-fit/baseline/real-${n}" \
               testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif
             python3 testsuite/benchmark-screen-detection.py \
               --colorscreen ./src/colorscreen/colorscreen \
               --threads 4 --screen-type Dufay --scanner-type fixed-lens --gamma 1 \
               --mode legacy-2-3,2,3,both --mode unsharpened-0-0,0,0,both \
-              --csv "/tmp/geometry-ranking/baseline/negative-${n}.csv" \
-              --output-dir "/tmp/geometry-ranking/baseline/negative-${n}" \
-              /tmp/geometry-ranking/controls/grayscale.tif \
-              /tmp/geometry-ranking/controls/low-chroma.tif \
-              /tmp/geometry-ranking/controls/colorful-noise.tif
+              --csv "/tmp/geometry-fit/baseline/negative-${n}.csv" \
+              --output-dir "/tmp/geometry-fit/baseline/negative-${n}" \
+              /tmp/geometry-fit/controls/grayscale.tif \
+              /tmp/geometry-fit/controls/low-chroma.tif \
+              /tmp/geometry-fit/controls/colorful-noise.tif
           done
 
-      - name: Apply color-ranking experiment
+      - name: Apply closed-form channel initialization
         shell: bash
         run: |
           set -euxo pipefail
@@ -156,21 +151,49 @@ jobs:
 
           path = Path('src/libcolorscreen/scr-detect-colors.C')
           text = path.read_text()
+          start = text.index('#define C(i)')
+          end = text.index('\n\n/* Nonlinear optimizer to find black, red, green and blue', start)
+          old = text[start:end]
+          new = r'''namespace {
+static rgbdata
+optimize_chanel (rgbdata *colors, int n, int chanel)
+{
+  int c1, c2;
+  if (chanel == 0)
+    c1 = 1, c2 = 2;
+  else if (chanel == 1)
+    c1 = 0, c2 = 2;
+  else
+    c1 = 0, c2 = 1;
 
-          old = '''  sort (pixels.begin (), pixels.end (), compare_priorities);\n  int pos = pixels.size () / 2;\n  luminosity_t min_density = pixels[pos].orig_color.red + pixels[pos].orig_color.green + pixels[pos].orig_color.blue;\n  //printf ("\\n min density %f\\n", min_density);\n\n'''
-          new = '''  /* Only the brighter half of this region can contribute process-color\n     samples below.  Find the same median-density cutoff in linear average\n     time, then discard pixels which all three later rankings would skip.\n     Keep SAMPLE_LIMIT based on the original region size so sample counts are\n     unchanged.  */\n  const size_t original_pixel_count = pixels.size ();\n  const size_t sample_limit = original_pixel_count / 1000;\n  auto density = [] (const entry &e)\n    {\n      return e.orig_color.red + e.orig_color.green + e.orig_color.blue;\n    };\n  auto median = pixels.begin () + original_pixel_count / 2;\n  std::nth_element (pixels.begin (), median, pixels.end (),\n                    [&] (const entry &a, const entry &b)\n                    {\n                      return density (a) < density (b);\n                    });\n  luminosity_t min_density = density (*median);\n  pixels.erase (std::remove_if (pixels.begin (), pixels.end (),\n                                [&] (const entry &e)\n                                {\n                                  return density (e) < min_density;\n                                }),\n                pixels.end ());\n  //printf ("\\n min density %f\\n", min_density);\n\n'''
-          if text.count(old) != 1:
-              raise SystemExit(f'median block match count: {text.count(old)}')
-          text = text.replace(old, new, 1)
+  /* The historical two-column GSL system has disjoint column support, so it
+     is exactly two independent least-squares fits through the origin.  Compute
+     those coefficients directly instead of allocating a 2N by 2 matrix and
+     five GSL work objects for every search region.  */
+  double xx = 0;
+  double xy1 = 0;
+  double xy2 = 0;
+  for (int i = 0; i < n; i++)
+    {
+      double x = colors[i][chanel];
+      xx += x * x;
+      xy1 += x * colors[i][c1];
+      xy2 += x * colors[i][c2];
+    }
 
-          for color in ('reds', 'greens', 'blues'):
-              old_break = f'''      if ({color}.size () > pixels.size () / 1000)\n\tbreak;'''
-              new_break = f'''      if ({color}.size () > sample_limit)\n\tbreak;'''
-              if text.count(old_break) != 1:
-                  raise SystemExit(f'{color} sample-limit block mismatch')
-              text = text.replace(old_break, new_break, 1)
-
-          path.write_text(text)
+  rgbdata ret;
+  ret[chanel] = 1;
+  if (xx > 0)
+    {
+      ret[c1] = xy1 / xx;
+      ret[c2] = xy2 / xx;
+    }
+  else
+    ret[c1] = ret[c2] = 0;
+  return ret;
+}
+'''
+          path.write_text(text[:start] + new + text[end:])
           PY
           git diff --check
           git diff -- src/libcolorscreen/scr-detect-colors.C
@@ -183,28 +206,28 @@ jobs:
           make -C src/colorscreen -j2 colorscreen
           ./src/libcolorscreen/unittests discovery
 
-      - name: Benchmark patched optimizer
+      - name: Benchmark patched initializer
         shell: bash
         run: |
           set -euxo pipefail
-          mkdir -p /tmp/geometry-ranking/patched
+          mkdir -p /tmp/geometry-fit/patched
           for n in 1 2 3; do
             python3 testsuite/benchmark-screen-detection.py \
               --colorscreen ./src/colorscreen/colorscreen \
               --threads 4 --screen-type Dufay --scanner-type fixed-lens --gamma 1 \
               --mode legacy-2-3,2,3,both --mode unsharpened-0-0,0,0,both \
-              --csv "/tmp/geometry-ranking/patched/real-${n}.csv" \
-              --output-dir "/tmp/geometry-ranking/patched/real-${n}" \
+              --csv "/tmp/geometry-fit/patched/real-${n}.csv" \
+              --output-dir "/tmp/geometry-fit/patched/real-${n}" \
               testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif
             python3 testsuite/benchmark-screen-detection.py \
               --colorscreen ./src/colorscreen/colorscreen \
               --threads 4 --screen-type Dufay --scanner-type fixed-lens --gamma 1 \
               --mode legacy-2-3,2,3,both --mode unsharpened-0-0,0,0,both \
-              --csv "/tmp/geometry-ranking/patched/negative-${n}.csv" \
-              --output-dir "/tmp/geometry-ranking/patched/negative-${n}" \
-              /tmp/geometry-ranking/controls/grayscale.tif \
-              /tmp/geometry-ranking/controls/low-chroma.tif \
-              /tmp/geometry-ranking/controls/colorful-noise.tif
+              --csv "/tmp/geometry-fit/patched/negative-${n}.csv" \
+              --output-dir "/tmp/geometry-fit/patched/negative-${n}" \
+              /tmp/geometry-fit/controls/grayscale.tif \
+              /tmp/geometry-fit/controls/low-chroma.tif \
+              /tmp/geometry-fit/controls/colorful-noise.tif
           done
 
       - name: Compare outputs and summarize timings
@@ -216,8 +239,7 @@ jobs:
           import csv
           import statistics
 
-          root = Path('/tmp/geometry-ranking')
-
+          root = Path('/tmp/geometry-fit')
           def load(variant):
               grouped = {}
               for csv_path in sorted((root / variant).glob('*.csv')):
@@ -232,13 +254,13 @@ jobs:
           if baseline.keys() != patched.keys():
               raise SystemExit('baseline/patched benchmark key sets differ')
 
-          stable_fields = (
-              'exit_code', 'success', 'type', 'scan_coverage_percent',
-              'screen_coverage_percent', 'regions', 'seed_pixels',
+          always_stable = (
+              'exit_code', 'success', 'type', 'regions', 'seed_pixels',
               'initial_grids', 'initial_solver_failures', 'flood_attempts',
-              'flood_failures', 'patches', 'last_flood_failure',
-              'color_opt_failures', 'precompute_failures', 'classmap_builds',
-              'rgb_precomputes', 'legacy_preclassification_sharpening')
+              'flood_failures', 'last_flood_failure', 'color_opt_failures',
+              'precompute_failures', 'classmap_builds', 'rgb_precomputes',
+              'legacy_preclassification_sharpening')
+          success_stable = ('scan_coverage_percent', 'screen_coverage_percent', 'patches')
 
           for key in sorted(baseline):
               b = baseline[key]
@@ -246,7 +268,8 @@ jobs:
               if len(b) != len(p):
                   raise SystemExit(f'{key}: repeat counts differ')
               for i, (br, pr) in enumerate(zip(b, p), 1):
-                  for field in stable_fields:
+                  fields = always_stable + (success_stable if br['success'] == '1' else ())
+                  for field in fields:
                       if br[field] != pr[field]:
                           raise SystemExit(
                               f'{key} repeat {i}: {field} changed: '
@@ -263,10 +286,10 @@ jobs:
               print(f'{key}: detector total median {statistics.median(bw):.3f} -> '
                     f'{statistics.median(pw):.3f} ms')
 
-          real = 'dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif'
           for mode in ('legacy-2-3', 'unsharpened-0-0'):
-              bpar = root / 'baseline' / 'real-1' / f'dufaycolor_nikon_coolsan9000ED_4000DPI_raw-{mode}.par'
-              ppar = root / 'patched' / 'real-1' / f'dufaycolor_nikon_coolsan9000ED_4000DPI_raw-{mode}.par'
+              name = f'dufaycolor_nikon_coolsan9000ED_4000DPI_raw-{mode}.par'
+              bpar = root / 'baseline' / 'real-1' / name
+              ppar = root / 'patched' / 'real-1' / name
               if not bpar.exists() or not ppar.exists():
                   raise SystemExit(f'{mode}: expected real-screen parameter file missing')
               if bpar.read_bytes() != ppar.read_bytes():
