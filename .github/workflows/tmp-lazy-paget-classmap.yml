@@ -1,0 +1,137 @@
+name: TEMP lazy Paget class-map experiment
+
+on:
+  push:
+    branches:
+      - agent/tmp-lazy-paget-classmap-20260829
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/scr-detect-primary-separation
+          fetch-depth: 0
+
+      - name: Configure optimized detector build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          test "$(git rev-parse HEAD)" = d159ffbdf3f717b96f9edf9e6a8d6f77eec76509
+          CFLAGS='-O2 -g' CXXFLAGS='-O2 -g' ./configure --disable-gtkgui --disable-qtgui --disable-static-link
+          make -C src/libcolorscreen -j2 unittests
+          make -C src/colorscreen -j2 colorscreen
+          ./src/libcolorscreen/unittests discovery
+
+      - name: Benchmark baseline Dufay
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf /tmp/lazy-paget && mkdir -p /tmp/lazy-paget/baseline
+          for n in 1 2 3; do
+            python3 testsuite/benchmark-screen-detection.py \
+              --colorscreen ./src/colorscreen/colorscreen --threads 4 \
+              --screen-type Dufay --scanner-type fixed-lens --gamma 1 \
+              --mode legacy-2-3,2,3,both --mode unsharpened-0-0,0,0,both \
+              --csv "/tmp/lazy-paget/baseline/run-${n}.csv" \
+              --output-dir "/tmp/lazy-paget/baseline/run-${n}" \
+              testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif
+          done
+
+      - name: Apply lazy secondary Paget map
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/libcolorscreen/scr-detect-geometry.C')
+          s = p.read_text()
+          old = '''        /* In Paget/Finlay screens, blue patches touch at their corners.\n           The separately materialized class map was intended to enforce\n           boundaries between them, but small blue patches may disappear.\n           Keep both this map and the renderer's original map as candidates.  */\n        if (try_paget_finlay) {\n          detection_stats::time_point stage_start = stats.start_timer();\n          stats.classmap_builds++;\n          std::unique_ptr<color_class_map> new_cmap(new color_class_map);\n          cmap = std::move(new_cmap);\n          cmap->allocate(img.width, img.height);\n          if (progress)\n            progress->set_task("pruning screen", img.height);\n#pragma omp parallel for default(none) shared(progress, img, cmap, render)\n          for (int y = 0; y < img.height; y++) {\n            if (!progress || !progress->cancel_requested())\n              for (int x = 0; x < img.width; x++)\n                cmap->set_class(x, y, render->classify_pixel({x, y}));\n            if (progress)\n              progress->inc_progress();\n          }\n          stats.add_time(&stats.classmap_ms, stage_start);\n          if (progress && progress->cancel_requested()) {\n            stats.result = "cancelled";\n            if (progress)\n              progress->pop();\n            return ret;\n          }\n        }\n'''
+          new = '''        /* Paget/Finlay also uses a boundary-pruned copy of the base class map.\n           CLASSIFY_PIXEL can only preserve a base class or turn it unknown, so\n           that map cannot make a non-green seed usable by try_guess_paget_screen.\n           Build the image-wide copy only when the first actually green seed has\n           failed the Dufay-family candidates and therefore needs Paget testing.  */\n        auto ensure_paget_cmap = [&]() -> bool {\n          if (cmap)\n            return true;\n          detection_stats::time_point stage_start = stats.start_timer();\n          stats.classmap_builds++;\n          cmap = std::make_unique<color_class_map>();\n          cmap->allocate(img.width, img.height);\n          if (progress)\n            progress->set_task("pruning screen", img.height);\n#pragma omp parallel for default(none) shared(progress, img, cmap, render)\n          for (int y = 0; y < img.height; y++) {\n            if (!progress || !progress->cancel_requested())\n              for (int x = 0; x < img.width; x++)\n                cmap->set_class(x, y, render->classify_pixel({x, y}));\n            if (progress)\n              progress->inc_progress();\n          }\n          stats.add_time(&stats.classmap_ms, stage_start);\n          if (progress && progress->cancel_requested()) {\n            cmap.reset();\n            stats.result = "cancelled";\n            return false;\n          }\n          return true;\n        };\n'''
+          if s.count(old) != 1:
+              raise SystemExit(f'Paget map block count {s.count(old)}')
+          s = s.replace(old, new, 1)
+
+          old = '''              } else if (try_paget_finlay &&\n                         try_guess_paget_screen(\n                             report_file,\n                             cmap ? *cmap : *render->get_color_class_map(),\n                             sparam, x, y, &visited_paget)) {\n                current_type = type == Finlay ? Finlay : Paget;\n                this_cmap = cmap ? cmap.get() : render->get_color_class_map();\n              } else if (try_paget_finlay && cmap &&\n                         try_guess_paget_screen(\n                             report_file, *render->get_color_class_map(),\n                             sparam, x, y, &visited_paget2)) {\n'''
+          new = '''              } else if (try_paget_finlay &&\n                         render->get_color_class_map()->get_class(x, y) ==\n                             scr_detect::green &&\n                         ensure_paget_cmap() &&\n                         try_guess_paget_screen(report_file, *cmap, sparam, x, y,\n                                                &visited_paget)) {\n                current_type = type == Finlay ? Finlay : Paget;\n                this_cmap = cmap.get();\n              } else if (try_paget_finlay && cmap &&\n                         render->get_color_class_map()->get_class(x, y) ==\n                             scr_detect::green &&\n                         try_guess_paget_screen(\n                             report_file, *render->get_color_class_map(),\n                             sparam, x, y, &visited_paget2)) {\n'''
+          if s.count(old) != 1:
+              raise SystemExit(f'Paget candidate block count {s.count(old)}')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git diff --check
+          git diff -- src/libcolorscreen/scr-detect-geometry.C
+
+      - name: Rebuild and run discovery regression
+        shell: bash
+        run: |
+          set -euxo pipefail
+          make -C src/libcolorscreen -j2 unittests
+          make -C src/colorscreen -j2 colorscreen
+          ./src/libcolorscreen/unittests discovery
+
+      - name: Benchmark patched Dufay
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/lazy-paget/patched
+          for n in 1 2 3; do
+            python3 testsuite/benchmark-screen-detection.py \
+              --colorscreen ./src/colorscreen/colorscreen --threads 4 \
+              --screen-type Dufay --scanner-type fixed-lens --gamma 1 \
+              --mode legacy-2-3,2,3,both --mode unsharpened-0-0,0,0,both \
+              --csv "/tmp/lazy-paget/patched/run-${n}.csv" \
+              --output-dir "/tmp/lazy-paget/patched/run-${n}" \
+              testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif
+          done
+
+      - name: Compare behavior and timings
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import csv, statistics
+          root = Path('/tmp/lazy-paget')
+          def rows(side, mode):
+              out=[]
+              for path in sorted((root/side).glob('run-*.csv')):
+                  with path.open(newline='') as f:
+                      out += [r for r in csv.DictReader(f) if r['mode']==mode]
+              return out
+          stable = ('exit_code','success','type','scan_coverage_percent',
+                    'screen_coverage_percent','regions','seed_pixels','initial_grids',
+                    'initial_solver_failures','flood_attempts','flood_failures',
+                    'patches','last_flood_failure','color_opt_failures',
+                    'precompute_failures','rgb_precomputes',
+                    'legacy_preclassification_sharpening')
+          for mode in ('legacy-2-3','unsharpened-0-0'):
+              b,p=rows('baseline',mode),rows('patched',mode)
+              for i,(br,pr) in enumerate(zip(b,p),1):
+                  for field in stable:
+                      if br[field] != pr[field]:
+                          raise SystemExit(f'{mode} repeat {i}: {field} {br[field]} -> {pr[field]}')
+              print(mode, 'classmap builds', [r['classmap_builds'] for r in b], '->', [r['classmap_builds'] for r in p])
+              for field in ('classmap_ms','detector_total_ms'):
+                  bv=[float(r[field]) for r in b]; pv=[float(r[field]) for r in p]
+                  print(mode, field, bv, '->', pv, 'median', statistics.median(bv), '->', statistics.median(pv))
+              name=f'dufaycolor_nikon_coolsan9000ED_4000DPI_raw-{mode}.par'
+              if (root/'baseline'/'run-1'/name).read_bytes() != (root/'patched'/'run-1'/name).read_bytes():
+                  raise SystemExit(f'{mode}: generated parameter file changed')
+          PY
+
+      - name: Run six-case real Dufay integration regression
+        shell: bash
+        run: |
+          set -euxo pipefail
+          make -C testsuite check TESTS=dufaycolor_nikon_coolsan9000ED_4000DPI_raw.test
